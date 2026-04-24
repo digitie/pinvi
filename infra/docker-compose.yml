@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.5
+    container_name: tripmate-postgres
+    environment:
+      POSTGRES_DB: tripmate
+      POSTGRES_USER: tripmate
+      POSTGRES_PASSWORD: tripmate_dev_password
+    ports:
+      - "55432:5432"
+    volumes:
+      - tripmate_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  tripmate_postgres_data:

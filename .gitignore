@@ -1,5 +1,9 @@
 # dependencies
 node_modules/
+.venv/
+apps/api/.venv/
+apps/api/.venv-wsl/
+*.egg-info/
 
 # Next.js
 .next/
@@ -20,8 +24,19 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# python
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# local scratch data
+.tmp/
+testset/
