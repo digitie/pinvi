@@ -9,9 +9,42 @@ from app.models.address import (
     RegionRawVWorldBoundary,
     RegionServingBoundary,
 )
+from app.models.etl import AdminNotification, EtlRunLog, TelegramSystemNotificationOutbox
+from app.models.fuel import (
+    FuelRawAvgPrice,
+    FuelRawLowestStation,
+    FuelRawOpiNetRegionCode,
+    FuelRegionLegalDongMapping,
+    FuelServingAvgPrice,
+    FuelServingLowestStation,
+    FuelServingOpiNetRegionCode,
+)
+from app.models.rest_area import (
+    RestAreaRawMaster,
+    RestAreaRawOilPrice,
+    RestAreaRawService,
+    RestAreaServingMaster,
+    RestAreaServingOilPrice,
+    RestAreaServingService,
+)
 from app.models.session import UserSession
+from app.models.tour import KmaRecommendedTourCourse, TourCourseRawKmaPoint
 from app.models.trip import Trip, TripDay
 from app.models.user import User
+from app.models.weather import (
+    AirQualityRawForecast,
+    AirQualityRawSidoMeasurement,
+    AirQualityRawStation,
+    AirQualityServingForecast,
+    AirQualityServingSidoMeasurement,
+    AirQualityServingStation,
+    WeatherKmaAlertStationCode,
+    WeatherRawKmaAlert,
+    WeatherRawShortTerm,
+    WeatherServingKmaAlert,
+    WeatherServingShortTerm,
+    WeatherShortTermGridMapping,
+)
 
 __all__ = [
     "AddressCodeStandard",
@@ -20,11 +53,41 @@ __all__ = [
     "AddressRawJusoRoadAddress",
     "AddressServingJusoRelatedJibun",
     "AddressServingJusoRoadAddress",
+    "AdminNotification",
+    "EtlRunLog",
+    "FuelRawAvgPrice",
+    "FuelRawLowestStation",
+    "FuelRawOpiNetRegionCode",
+    "FuelRegionLegalDongMapping",
+    "FuelServingAvgPrice",
+    "FuelServingLowestStation",
+    "FuelServingOpiNetRegionCode",
+    "KmaRecommendedTourCourse",
+    "RestAreaRawMaster",
+    "RestAreaRawOilPrice",
+    "RestAreaRawService",
+    "RestAreaServingMaster",
+    "RestAreaServingOilPrice",
+    "RestAreaServingService",
     "RegionBoundaryImportBatch",
     "RegionRawVWorldBoundary",
     "RegionServingBoundary",
+    "TelegramSystemNotificationOutbox",
+    "TourCourseRawKmaPoint",
     "Trip",
     "TripDay",
     "User",
     "UserSession",
+    "WeatherShortTermGridMapping",
+    "WeatherRawShortTerm",
+    "WeatherServingShortTerm",
+    "WeatherKmaAlertStationCode",
+    "WeatherRawKmaAlert",
+    "WeatherServingKmaAlert",
+    "AirQualityRawStation",
+    "AirQualityServingStation",
+    "AirQualityRawForecast",
+    "AirQualityServingForecast",
+    "AirQualityRawSidoMeasurement",
+    "AirQualityServingSidoMeasurement",
 ]

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
-import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +16,7 @@ from shapely.validation import make_valid
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.etl.archive import safe_extract_zip
 from app.etl.juso.legal_dong_loader import _derive_sido_code, _derive_sigungu_code
 from app.models.address import (
     AddressCodeStandard,
@@ -194,8 +194,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _extract_zip(source_path: Path, extract_dir: Path) -> None:
-    with zipfile.ZipFile(source_path) as archive:
-        archive.extractall(extract_dir)
+    safe_extract_zip(source_path, extract_dir)
 
 
 def _find_shapefile_base(extract_dir: Path, layer_code: str) -> Path:

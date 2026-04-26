@@ -2,7 +2,7 @@
 
 TripMate는 대한민국 국내 여행 계획을 지도, 일정, 지역 데이터, Telegram 알림과 함께 관리하는 웹앱입니다.
 
-현재 저장소는 Phase 1 백엔드/DB 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic 초기 migration이 있습니다. Airflow와 배포 스크립트는 아직 구현 전입니다.
+현재 저장소는 Phase 1 백엔드/DB/ETL 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic migration, 주소/Juso/VWorld ETL 기반이 있습니다. Airflow 로컬 런타임은 Docker Compose로 실행할 수 있고, 배포 스크립트는 아직 구현 전입니다.
 
 ## 현재 구조
 
@@ -15,15 +15,15 @@ docs/
   decisions/        # 아키텍처 결정 기록
   execplan/         # 단계별 실행 계획
   runbooks/         # 개발/운영 절차
+dags/               # Airflow DAG
 infra/
-  docker-compose.yml # Postgres/PostGIS 로컬 DB
+  docker-compose.yml # Postgres/PostGIS와 Airflow 로컬 스택
 skills/             # 프로젝트 보조 지침
 ```
 
 향후 목표 구조:
 
 ```text
-dags/               # Airflow DAG
 packages/shared/    # 공용 타입, 스키마, 상수
 scripts/            # bootstrap, test, deploy, backup
 ```
@@ -34,9 +34,9 @@ scripts/            # bootstrap, test, deploy, backup
 - npm
 - Python 3.12 이상
 - uv 권장
-- Docker 또는 Docker Desktop
+- WSL2 + Docker 또는 Docker Desktop
 
-Airflow와 ODROID 배포 스크립트는 아직 준비되지 않았습니다.
+Docker, backend test, Alembic migration, Airflow 검증은 WSL2 Ubuntu에서 실행합니다. ODROID 배포 스크립트는 아직 준비되지 않았습니다.
 
 ## 로컬 실행
 
@@ -66,32 +66,35 @@ npm run build
 API 의존성 설치 후:
 
 ```bash
-cd apps/api
-uv sync --group dev
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
 ```
 
 ## 로컬 DB
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
 API migration:
 
 ```bash
-cd apps/api
-uv run alembic upgrade head
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run alembic upgrade head"
 ```
 
 API 실행:
 
 ```bash
-cd apps/api
-uv run uvicorn app.main:app --reload
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload"
+```
+
+Airflow 로컬 런타임:
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
 ```
 
 ## 제품 원칙
@@ -109,8 +112,10 @@ uv run uvicorn app.main:app --reload
 
 - [구현 계획](docs/execplan/korea-tripmate-implementation-plan.md)
 - [아키텍처 기준선](docs/architecture.md)
+- [유가 데이터 스키마](docs/architecture/fuel-schema.md)
 - [데이터 소스 기준](docs/data-sources.md)
 - [Telegram 연동](docs/integrations/telegram.md)
 - [Gemini 연동](docs/integrations/gemini.md)
 - [로컬 개발 runbook](docs/runbooks/local-dev.md)
+- [ETL 운영 안내](docs/runbooks/etl.md)
 - [초기 아키텍처 ADR](docs/decisions/20260418-initial-architecture.md)

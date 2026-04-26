@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.models.mixins import TimestampMixin, utc_now
+from app.models.mixins import TimestampMixin, kst_now
 
 
 class AddressRawJusoRoadAddress(Base):
@@ -37,7 +37,7 @@ class AddressRawJusoRoadAddress(Base):
     effective_date: Mapped[str] = mapped_column(String(8), nullable=False)
     change_reason_code: Mapped[str] = mapped_column(String(2), nullable=False)
     raw_line: Mapped[str] = mapped_column(Text, nullable=False)
-    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now)
+    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=kst_now)
 
 
 class AddressServingJusoRoadAddress(TimestampMixin, Base):
@@ -111,7 +111,7 @@ class AddressRawJusoRelatedJibun(Base):
     building_sub_no: Mapped[str] = mapped_column(String(16), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
     raw_line: Mapped[str] = mapped_column(Text, nullable=False)
-    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now)
+    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=kst_now)
 
 
 class AddressServingJusoRelatedJibun(TimestampMixin, Base):
@@ -212,7 +212,7 @@ class AddressRawLegalDongCode(Base):
     source_deleted_date: Mapped[str | None] = mapped_column(String(10))
     previous_legal_dong_code: Mapped[str | None] = mapped_column(String(10))
     raw_line: Mapped[str] = mapped_column(Text, nullable=False)
-    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now)
+    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=kst_now)
 
 
 class RegionBoundaryImportBatch(TimestampMixin, Base):
@@ -261,7 +261,7 @@ class RegionRawVWorldBoundary(Base):
         Geometry("MULTIPOLYGON", srid=5179, spatial_index=False),
         nullable=False,
     )
-    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now)
+    ingested_at: Mapped[datetime] = mapped_column(nullable=False, default=kst_now)
 
 
 class RegionServingBoundary(TimestampMixin, Base):

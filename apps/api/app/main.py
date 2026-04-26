@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.routes.health import router as health_router
+from app.api.routes.regions import router as regions_router
 from app.core.config import get_settings
 
 
@@ -13,6 +14,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.enable_docs else None,
     )
     app.include_router(health_router)
+    app.include_router(regions_router)
     return app
 
 

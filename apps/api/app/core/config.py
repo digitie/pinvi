@@ -18,6 +18,11 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://tripmate:tripmate_dev_password@localhost:55432/tripmate"
     )
     session_cookie_name: str = "tripmate_session"
+    airflow_download_dir: str = ".tmp/airflow-downloads"
+    etl_config_path: str = "config/etl-datasets.json"
+    data_go_service_key: str | None = None
+    opinet_api_key: str | None = None
+    expressway_api_key: str | None = None
 
     @property
     def enable_docs(self) -> bool:

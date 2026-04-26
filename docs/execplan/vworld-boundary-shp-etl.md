@@ -44,11 +44,33 @@ loader가 사용하는 DBF 필드:
 
 `region_serving_boundary.address_code_standard_code`는 `address_code_standard.legal_dong_code`에 대한 nullable FK다. 일부 SHP polygon이 최신 코드 기준 테이블에 없는 값을 가질 수 있으므로, 코드 매칭이 없다는 이유만으로 적재가 실패하면 안 된다.
 
+## 운영 적재 command
+
+관리자 UI가 생기기 전까지 운영자는 backend command로 ZIP 파일을 적재한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/python -m app.cli.vworld_boundary /path/to/N3A_G0010000.zip /path/to/N3A_G0100000.zip /path/to/N3A_G0110000.zip"
+```
+
+- command module: `app.cli.vworld_boundary`
+- ZIP 파일명으로 layer를 판정한다.
+- 적재 성공/실패는 `etl_run_logs`에 기록한다.
+- 실패 시 `admin_notifications`, `telegram_system_notification_outbox`에 알림 준비 row를 남긴다.
+
 ## 질의 정책
 
 - point-in-polygon은 `region_serving_boundary.geom`에 대해 `ST_Covers`를 사용한다.
 - 반경 내 행정구역 조회는 serving geometry와 query point를 EPSG:5179로 변환한 뒤 `ST_DWithin`을 사용한다. 이렇게 해야 radius 단위를 meter로 해석할 수 있다.
 - API와 지도 응답 좌표는 EPSG:4326을 사용한다.
+
+## API 준비
+
+추가된 API:
+
+- `GET /regions/covering-point`
+- `GET /regions/within-radius`
+
+상세 계약은 `docs/api/regions.md`를 따른다.
 
 ## 검증
 

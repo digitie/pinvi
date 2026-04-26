@@ -68,7 +68,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && . .venv-wsl/bin/activate 
 Airflow DAG contract check:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_airflow_legal_dong_dag.py"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_airflow_dags.py"
 ```
 
 ## 로컬 DB
@@ -125,11 +125,20 @@ curl http://localhost:8000/health
 curl http://localhost:8000/health/db
 ```
 
+## Airflow 로컬 스택
+
+Airflow는 Docker Compose로 실행한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
+```
+
+상세 운영 방법은 `docs/runbooks/etl.md`를 따른다.
+
 ## 아직 없는 로컬 스택
 
 다음 항목은 계획에만 있으며 아직 실행할 수 없다.
 
-- Airflow Docker Compose
 - Playwright E2E
 - ODROID 배포 스크립트
 

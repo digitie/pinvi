@@ -1,6 +1,12 @@
-# Architecture Baseline
+# 아키텍처 기준선
 
-주소/Juso/법정동코드/VWorld 경계 스키마의 상세 기준은 `docs/architecture/address-schema.md`를 따른다.
+주소 체계, Juso/법정동코드/VWorld 경계 스키마, 다른 데이터셋과의 주소 매핑 기준은 `docs/architecture/address-schema.md`를 따른다.
+OpiNet 유가 스키마의 상세 기준은 `docs/architecture/fuel-schema.md`를 따른다.
+OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/architecture/opinet-region-mapping.md`를 따른다.
+한국도로공사 휴게소 스키마의 상세 기준은 `docs/architecture/rest-area-schema.md`를 따른다.
+날씨와 대기질 스키마의 상세 기준은 `docs/architecture/weather-air-quality-schema.md`를 따른다.
+기상청 추천 관광코스 스키마의 상세 기준은 `docs/architecture/kma-tour-course-schema.md`를 따른다.
+Airflow ETL 운영 흐름과 로그/알림 기반은 `docs/runbooks/etl.md`와 `docs/execplan/etl-runtime-and-address-ops.md`를 따른다.
 
 ## 현재 상태
 
@@ -14,12 +20,12 @@ apps/web
   tsconfig.json
   eslint.config.mjs
 apps/api
-  app/              # FastAPI app, routes, settings, DB, models
-  alembic/          # migration environment and initial core migration
-  tests/            # backend tests
-  pyproject.toml    # backend dependencies and tooling
+  app/              # FastAPI 앱, route, 설정, DB, model
+  alembic/          # migration 환경과 migration 파일
+  tests/            # backend test
+  pyproject.toml    # backend 의존성과 도구 설정
 infra
-  docker-compose.yml # Postgres/PostGIS local database
+  docker-compose.yml # Postgres/PostGIS와 Airflow 로컬 스택
 ```
 
 루트 `package.json`은 npm workspaces 진입점으로 사용한다.
@@ -71,6 +77,8 @@ docs                # 문서, runbook, ADR, 실행 계획
 - 장소는 사용자 표시 이름, 좌표, 정규화 주소, 행정구역 코드, provider 참조를 분리해 저장한다.
 - Google/Naver/Kakao 원문 전체를 장기 저장 가능한 데이터로 가정하지 않는다.
 - 외부 데이터 소스, 캐시 키, 갱신 주기, raw/serving 테이블 정책은 `docs/data-sources.md`를 단일 기준으로 따른다.
+- DB에 저장하는 timezone-aware datetime은 KST(`Asia/Seoul`) 기준이다. 앱의 PostgreSQL 세션은 연결 시 `SET TIME ZONE 'Asia/Seoul'`을 실행한다.
+- 코드에서 저장용 현재 시각을 만들 때는 KST helper를 사용한다.
 - 날씨/유가 화면은 serving 테이블을 우선 조회한다.
 - “반경 nkm” 리포트는 엄밀한 원형 거리 계산이 아니라 행정구역 기반 근사일 수 있다.
 - Gemini Deep Research는 사용자 개인 API 키 입력 구조로 설계한다. 상세는 `docs/integrations/gemini.md`를 따른다.
@@ -87,7 +95,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 - 권위 있는 공간 필터링은 PostGIS에서 수행한다.
 - 위도/경도 표시는 `lat`, `lng` 이름을 사용한다.
 - 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용한다.
-- 행정구역 raw 레이어는 원본 EPSG:5186 geometry를 그대로 보존한다.
+- 행정구역 raw 레이어는 V-WORLD 원본 EPSG:5179 geometry를 그대로 보존한다.
 - 행정구역 serving 레이어는 지도 표시와 API 응답을 위해 EPSG:4326 변환본을 둔다.
 - 행정구역 point-in-polygon 판정은 PostGIS에서 수행한다.
 - 웹 지도 출력과 API 응답은 EPSG:4326을 사용한다.
@@ -109,7 +117,6 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 - 인증 API
 - Kakao 지도 연동
-- Airflow DAG
 - Telegram 발송
 - Gemini Deep Research
 - PWA manifest/service worker

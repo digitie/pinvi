@@ -150,6 +150,7 @@ DAG import 시점에는 DB나 data.go.kr에 접근하지 않는다. 실제 backe
 
 ## 남은 연결 작업
 
-- Airflow Docker Compose/webserver/scheduler/worker 컨테이너는 아직 없다. Airflow runtime 스택을 추가할 때 이 `dags/` 폴더를 mount한다.
 - 관리자 페이지 업로드 방식은 legacy/manual fallback으로만 유지한다.
-- 운영 설정 파일에 dataset별 retry interval/count를 넣을 때 `legal_dong_code_standard` 항목을 추가한다.
+- Airflow runtime은 `infra/docker-compose.yml`에 연결됐다.
+- 운영 설정 파일 `config/etl-datasets.json`에 `legal_dong_code_standard` 항목이 있다.
+- 실제 운영 모니터링 UI와 Telegram 발송 worker는 후속 작업이다.
