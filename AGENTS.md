@@ -88,6 +88,16 @@
 
 사용자가 명시적으로 생략을 지시하지 않는 한, 테스트와 문서화를 빼지 않는다.
 
+## 로컬 실행 환경 원칙
+
+- Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 **반드시 WSL2 Ubuntu 환경에서 실행**한다.
+- Windows PowerShell은 파일 확인, 간단한 Git 상태 확인, 문서 읽기 같은 보조 작업에만 사용한다.
+- Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다. 예시는 다음처럼 WSL2로 감싼다.
+  - `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d"`
+  - `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/python -m pytest"`
+- 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
+- WSL2 경로는 현재 저장소 기준 `/mnt/f/dev/mapplan`을 기본으로 사용한다.
+
 ## 코딩 전 영향 확인
 
 다음 중 하나라도 관련되면 해당 문서/skill과 모듈 경계를 먼저 읽는다:
@@ -200,6 +210,8 @@ CI 기대치:
 
 기능, 구조, 운영 동작, 데이터 출처, 배포 방식이 바뀌면 문서도 함께 바뀌어야 한다.
 
+모든 프로젝트 문서는 **한국어로 작성**한다. 문서 제목, 설명 문장, 실행 계획, runbook, ADR은 한국어를 기본으로 한다. 코드 식별자, 테이블명, 컬럼명, 명령어, API endpoint, provider 고유 명칭처럼 원문 보존이 필요한 기술 용어만 영어를 허용한다.
+
 관련 시 항상 갱신:
 
 - `README.md`: 설치/실행/로컬 개발 변화
@@ -240,18 +252,18 @@ CI 기대치:
 
 백엔드:
 
-- install: `uv sync` 또는 저장소 표준 명령
-- dev: `uv run uvicorn app.main:app --reload`
-- lint: `uv run ruff check .`
-- format check: `uv run ruff format --check .`
-- typecheck: `uv run mypy .`
-- test: `uv run pytest`
+- install: WSL2에서 `cd /mnt/f/dev/mapplan/apps/api && uv sync` 또는 저장소 표준 명령
+- dev: WSL2에서 `uv run uvicorn app.main:app --reload`
+- lint: WSL2에서 `uv run ruff check .`
+- format check: WSL2에서 `uv run ruff format --check .`
+- typecheck: WSL2에서 `uv run mypy .`
+- test: WSL2에서 `uv run pytest`
 
 Airflow / infra:
 
-- 로컬 스택: `docker compose up -d`
-- 로그: `docker compose logs --tail=200`
-- DB migrate: 저장소의 마이그레이션 명령 사용
+- 로컬 스택: WSL2에서 `docker compose up -d`
+- 로그: WSL2에서 `docker compose logs --tail=200`
+- DB migrate: WSL2에서 저장소의 마이그레이션 명령 사용
 - deploy: `scripts/` 하위의 체크인된 스크립트를 우선 사용
 
 명령이 존재하는지 확인하지 않고 가정하지 않는다.

@@ -6,6 +6,8 @@
 - 로컬 개발: WSL2 + Ubuntu 24.04
 - 배포 대상: SSH 접속 가능한 ODROID M1S
 - 서비스 실행: 저장소가 다르게 정의하지 않으면 Docker Compose 사용
+- Docker와 Docker Compose 명령은 로컬에서도 WSL2 Ubuntu에서 실행한다.
+- Windows PowerShell에서 Docker 명령을 직접 실행하지 않는다.
 
 ## 배포 관련 필수 산출물
 - 저장소에 포함된 deploy script

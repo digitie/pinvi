@@ -1,4 +1,12 @@
-# Local Development Runbook
+# 로컬 개발 실행 안내
+
+## 기본 원칙
+
+- 로컬 Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
+- Windows PowerShell은 문서 확인, Git 상태 확인, 간단한 파일 탐색 같은 보조 작업에만 사용한다.
+- Docker 명령을 Windows PowerShell에서 직접 실행하지 않는다.
+- 이 저장소의 WSL2 경로는 `/mnt/f/dev/mapplan`을 기준으로 한다.
+- 프로젝트 문서는 한국어로 작성한다. 코드 식별자, 명령어, 테이블명, API endpoint, provider 고유 명칭은 원문을 유지할 수 있다.
 
 ## 현재 가능한 작업
 
@@ -42,15 +50,14 @@ npm --workspace apps/web run build
 API:
 
 ```bash
-cd apps/api
-uv sync --group dev
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
 ```
 
-WSL 기준 API 검사:
+`uv`가 WSL2에 없고 `.venv-wsl` 가상환경을 사용할 때:
 
 ```bash
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && python3 -m venv .venv-wsl"
@@ -66,10 +73,10 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && . .venv-wsl/bin/activate 
 
 ## 로컬 DB
 
-Postgres/PostGIS는 다음 명령으로 실행한다.
+Postgres/PostGIS는 WSL2에서 다음 명령으로 실행한다.
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d"
 ```
 
 TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`를 사용한다.
@@ -77,14 +84,21 @@ TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`
 DB health check:
 
 ```bash
-docker compose -f infra/docker-compose.yml ps
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml ps"
 ```
 
 Migration:
 
 ```bash
-cd apps/api
-uv run alembic upgrade head
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run alembic upgrade head"
+```
+
+빈 DB 기준 migration upgrade를 검증할 때:
+
+```bash
+wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exists tripmate_migration_check && docker exec tripmate-postgres createdb -U tripmate -O tripmate tripmate_migration_check"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:tripmate_dev_password@localhost:55432/tripmate_migration_check' uv run alembic upgrade head"
+wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exists tripmate_migration_check"
 ```
 
 ## PostgreSQL 마이그레이션 체크리스트
@@ -101,8 +115,7 @@ uv run alembic upgrade head
 API 실행:
 
 ```bash
-cd apps/api
-uv run uvicorn app.main:app --reload
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload"
 ```
 
 API health check:
@@ -128,6 +141,6 @@ curl http://localhost:8000/health/db
 
 ## 운영 환경 메모
 
-- 현재 웹앱 기준선은 Windows PowerShell에서 검증했다.
-- 백엔드와 Docker 스택이 추가되면 로컬 개발 표준은 WSL2 + Docker로 맞춘다.
+- 웹앱만 다루는 npm 명령은 Windows 또는 WSL2에서 실행할 수 있으나, backend와 Docker 스택이 관련되면 WSL2를 표준으로 한다.
+- 백엔드와 Docker 스택의 로컬 개발 표준은 WSL2 + Docker다.
 - ODROID M1S 배포 절차는 `scripts/deploy.sh`와 `docs/runbooks/deploy.md`가 생길 때 별도로 검증한다.
