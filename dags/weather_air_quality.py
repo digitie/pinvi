@@ -12,6 +12,7 @@ from airflow.decorators import dag, task
 
 WEATHER_SHORT_TERM_DAG_ID = "weather_short_term_sigungu_grid"
 WEATHER_ALERT_DAG_ID = "weather_kma_alert"
+WEATHER_MID_TERM_DAG_ID = "weather_mid_term_nationwide"
 AIR_QUALITY_STATION_DAG_ID = "air_quality_station_daily"
 AIR_QUALITY_FORECAST_DAG_ID = "air_quality_forecast_daily"
 AIR_QUALITY_MEASUREMENT_DAG_ID = "air_quality_sido_measurement_hourly"
@@ -39,6 +40,7 @@ from app.core.etl_config import get_etl_dataset_config  # noqa: E402
 
 _SHORT_TERM_CONFIG = get_etl_dataset_config("weather_short_term")
 _ALERT_CONFIG = get_etl_dataset_config("weather_kma_alert")
+_MID_TERM_CONFIG = get_etl_dataset_config("weather_mid_term")
 _AIR_STATION_CONFIG = get_etl_dataset_config("air_quality_station")
 _AIR_FORECAST_CONFIG = get_etl_dataset_config("air_quality_forecast")
 _AIR_MEASUREMENT_CONFIG = get_etl_dataset_config("air_quality_sido_measurement")
@@ -129,6 +131,32 @@ def weather_kma_alert() -> None:
         )
 
     load_alerts("{{ ts }}")
+
+
+@dag(
+    dag_id=WEATHER_MID_TERM_DAG_ID,
+    description="기상청 중기예보 공식 구역코드 전체를 주기 수집한다.",
+    schedule=_MID_TERM_CONFIG.schedule,
+    start_date=datetime(2026, 5, 1, tzinfo=ZoneInfo("Asia/Seoul")),
+    catchup=False,
+    max_active_runs=1,
+    default_args={
+        "owner": "tripmate",
+        "retries": _MID_TERM_CONFIG.retry_max_attempts,
+        "retry_delay": timedelta(seconds=_MID_TERM_CONFIG.retry_interval_seconds),
+    },
+    tags=["tripmate", "weather", "kma", "mid-term"],
+)
+def weather_mid_term_nationwide() -> None:
+    @task(task_id="load_weather_mid_term")
+    def load_mid_term(logical_datetime_iso: str) -> dict[str, Any]:
+        return _run_logged_task(
+            dataset_key="weather_mid_term",
+            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            load=_load_mid_term,
+        )
+
+    load_mid_term("{{ ts }}")
 
 
 @dag(
@@ -353,6 +381,13 @@ def _load_alerts(session: Any, collected_at: datetime) -> Any:
     )
 
 
+def _load_mid_term(session: Any, collected_at: datetime) -> Any:
+    from app.etl.weather.client import KmaWeatherApiClient
+    from app.etl.weather.loader import load_mid_term_weather
+
+    return load_mid_term_weather(session, KmaWeatherApiClient(), collected_at=collected_at)
+
+
 def _load_air_quality_stations(session: Any, collected_at: datetime) -> Any:
     from app.etl.weather.client import AirKoreaApiClient
     from app.etl.weather.loader import load_air_quality_stations
@@ -392,6 +427,7 @@ def _load_kma_tour_course(session: Any, collected_at: datetime) -> Any:
 
 weather_short_term_sigungu_grid()
 weather_kma_alert()
+weather_mid_term_nationwide()
 air_quality_station_daily()
 air_quality_forecast_daily()
 air_quality_sido_measurement_hourly()

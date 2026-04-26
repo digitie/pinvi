@@ -112,6 +112,7 @@ def test_weather_air_quality_airflow_dag_contracts(monkeypatch: Any) -> None:
     assert [kwargs["dag_id"] for kwargs in dag_kwargs_list] == [
         "weather_short_term_sigungu_grid",
         "weather_kma_alert",
+        "weather_mid_term_nationwide",
         "air_quality_station_daily",
         "air_quality_forecast_daily",
         "air_quality_sido_measurement_hourly",
@@ -120,6 +121,7 @@ def test_weather_air_quality_airflow_dag_contracts(monkeypatch: Any) -> None:
     assert [kwargs["schedule"] for kwargs in dag_kwargs_list] == [
         "*/30 * * * *",
         "*/30 * * * *",
+        "20 6,18 * * *",
         "20 4 * * *",
         "15 5,11,17,23 * * *",
         "25 * * * *",
@@ -128,19 +130,28 @@ def test_weather_air_quality_airflow_dag_contracts(monkeypatch: Any) -> None:
     assert all(str(kwargs["start_date"].tzinfo) == "Asia/Seoul" for kwargs in dag_kwargs_list)
     assert all(kwargs["catchup"] is False for kwargs in dag_kwargs_list)
     assert all(kwargs["max_active_runs"] == 1 for kwargs in dag_kwargs_list)
-    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [3, 3, 3, 3, 3, 3]
+    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+    ]
     assert [
         kwargs["default_args"]["retry_delay"].total_seconds() for kwargs in dag_kwargs_list
-    ] == [300, 300, 1800, 600, 600, 1800]
+    ] == [300, 300, 600, 1800, 600, 600, 1800]
     assert captured["task_kwargs"] == [
         {"task_id": "load_weather_short_term"},
         {"task_id": "load_weather_kma_alerts"},
+        {"task_id": "load_weather_mid_term"},
         {"task_id": "load_air_quality_stations"},
         {"task_id": "load_air_quality_forecasts"},
         {"task_id": "load_air_quality_sido_measurements"},
         {"task_id": "load_kma_recommended_tour_course"},
     ]
-    assert captured["task_invocation_count"] == 6
+    assert captured["task_invocation_count"] == 7
     parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
     assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
 

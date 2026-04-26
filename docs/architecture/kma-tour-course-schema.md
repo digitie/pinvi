@@ -13,7 +13,7 @@
 - 기상청 관광코스별 관광지 상세 날씨 조회서비스 참고문서의 관광코스 지점 CSV
 - 공공데이터포털: `https://www.data.go.kr/data/15056912/openapi.do`
 
-현재 구현은 OpenAPI의 관광지별 날씨 응답이 아니라, 코스/관광지 기준정보 CSV/ZIP을 DB화한다. OpenAPI `getTourStnVilageFcst1`는 승인 확인만 완료했다. 코스별 상세 날씨는 전체 관광코스 전국 주기 수집 대상이 아니라, 사용자 저장 장소 또는 여행 장소 주변 중심으로 cache/수집하는 후속 기능으로 둔다.
+현재 구현은 코스/관광지 기준정보 CSV/ZIP을 DB화하고, OpenAPI `getTourStnVilageFcst1`는 사용자 저장 장소 또는 여행 장소 주변 target을 기준으로 cache/수집하는 loader까지 제공한다. 코스별 상세 날씨는 전체 관광코스를 전국 주기 수집하지 않는다. 사용자 저장 장소/여행 장소 도메인이 연결되면 그 좌표를 target으로 넘겨 주변 관광코스만 갱신한다.
 
 ## 파일과 인코딩
 
@@ -106,6 +106,52 @@ unique 기준:
 
 - `source_file_hash`, `spot_id`
 
+### `tour_course_raw_kma_spot_weather`
+
+기상청 관광코스별 관광지 상세 날씨 OpenAPI 응답 raw row를 저장한다.
+
+주요 컬럼:
+
+- `endpoint`: `getTourStnVilageFcst1`
+- `course_id`
+- `spot_id`
+- `base_date`, `base_time`
+- `forecast_date`, `forecast_time`
+- `category_code`
+- `raw_payload`
+- `response_hash`
+- `collected_at`
+
+raw는 주변 target에 의해 호출된 관광코스별 응답을 그대로 보존한다. 같은 응답이 반복 수집되어도 감사와 재처리를 위해 raw row는 append한다.
+
+### `tour_course_serving_kma_spot_weather`
+
+앱/API 조회용 관광코스 상세 날씨 cache 테이블이다.
+
+unique 기준:
+
+- `course_id`, `spot_id`, `base_date`, `base_time`, `forecast_date`, `forecast_time`, `category_code`
+
+주요 컬럼:
+
+- `source_file_hash`
+- `theme_category_code`
+- `course_id`, `spot_id`, `spot_name`
+- `longitude`, `latitude`
+- `legal_dong_code`, `sigungu_code`, `sido_code`
+- `base_date`, `base_time`
+- `forecast_date`, `forecast_time`
+- `category_code`
+- `category_name`
+- `normalized_category`
+- `value`
+- `unit`
+- `raw_payload`
+- `collected_at`
+
+이 테이블은 사용자 저장 장소 또는 여행 장소 주변 관광코스를 빠르게 보여주기 위한 cache다. `legal_dong_code`, `sigungu_code`, `sido_code`는 관광코스 CSV 적재 시 좌표 기반 point-in-polygon으로 얻은 값을 그대로 복사한다. 이 단계에서도 V-WORLD reverse geocoding이나 Juso 상세 주소 key 매핑은 수행하지 않는다.
+`spot_id`, `base_date`, `forecast_date` 같은 provider 필드는 응답에 따라 null일 수 있으므로 serving unique 제약은 PostgreSQL `NULLS NOT DISTINCT`로 둔다. 같은 course/category/time cache가 null 값 때문에 중복 저장되는 일을 막기 위함이다.
+
 ## 테마 매핑
 
 원천 `theme_category_code`와 `theme_name`은 항상 보존한다.
@@ -165,6 +211,8 @@ DAG:
 
 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 DAG는 skip한다. 파일은 운영자가 Airflow 컨테이너에서 접근 가능한 경로에 업로드하거나 배치한다.
 
+관광코스 상세 날씨는 현재 Airflow 정기 DAG로 전체 수집하지 않는다. 저장 장소/여행 장소 도메인이 구현된 뒤, 해당 좌표 목록을 target으로 넘기는 cache 갱신 task를 별도 연결한다.
+
 ## 검증
 
 추가된 테스트:
@@ -185,3 +233,5 @@ DAG:
 - V-WORLD reverse geocoding과 Juso 상세 주소 key 매핑을 수행하지 않는지 확인
 - `TH05` → `history_tradition` 매핑
 - `marker_source_type` 고정값
+- 관광코스 상세 날씨가 전체 코스 전국 수집이 아니라 주변 target 중심으로만 cache되는지 확인
+- 상세 날씨 raw/serving upsert와 KST `collected_at` 저장

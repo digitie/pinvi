@@ -53,6 +53,52 @@ class KmaWeatherApiClient:
             },
         )
 
+    def fetch_ultra_short_forecast(
+        self,
+        *,
+        nx: int,
+        ny: int,
+        base_date: str | None = None,
+        base_time: str | None = None,
+    ) -> list[dict[str, Any]]:
+        resolved_date, resolved_time = _resolve_ultra_short_forecast_base_time(
+            base_date,
+            base_time,
+        )
+        return self._fetch_all(
+            "/VilageFcstInfoService_2.0/getUltraSrtFcst",
+            {
+                "dataType": "JSON",
+                "base_date": resolved_date,
+                "base_time": resolved_time,
+                "nx": str(nx),
+                "ny": str(ny),
+            },
+        )
+
+    def fetch_village_forecast(
+        self,
+        *,
+        nx: int,
+        ny: int,
+        base_date: str | None = None,
+        base_time: str | None = None,
+    ) -> list[dict[str, Any]]:
+        resolved_date, resolved_time = _resolve_village_forecast_base_time(
+            base_date,
+            base_time,
+        )
+        return self._fetch_all(
+            "/VilageFcstInfoService_2.0/getVilageFcst",
+            {
+                "dataType": "JSON",
+                "base_date": resolved_date,
+                "base_time": resolved_time,
+                "nx": str(nx),
+                "ny": str(ny),
+            },
+        )
+
     def fetch_weather_warnings(self, *, from_date: date, to_date: date) -> list[dict[str, Any]]:
         return self._fetch_all(
             "/WthrWrnInfoService/getWthrWrnList",
@@ -82,6 +128,69 @@ class KmaWeatherApiClient:
                 "dataType": "JSON",
                 "fromTmFc": from_date.strftime("%Y%m%d"),
                 "toTmFc": to_date.strftime("%Y%m%d"),
+            },
+        )
+
+    def fetch_mid_outlook(
+        self,
+        *,
+        stn_id: str,
+        tm_fc: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            "/MidFcstInfoService/getMidFcst",
+            {
+                "dataType": "JSON",
+                "stnId": stn_id,
+                "tmFc": tm_fc or _resolve_mid_tm_fc(),
+            },
+        )
+
+    def fetch_mid_land_forecast(
+        self,
+        *,
+        reg_id: str,
+        tm_fc: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            "/MidFcstInfoService/getMidLandFcst",
+            {
+                "dataType": "JSON",
+                "regId": reg_id,
+                "tmFc": tm_fc or _resolve_mid_tm_fc(),
+            },
+        )
+
+    def fetch_mid_temperature(
+        self,
+        *,
+        reg_id: str,
+        tm_fc: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            "/MidFcstInfoService/getMidTa",
+            {
+                "dataType": "JSON",
+                "regId": reg_id,
+                "tmFc": tm_fc or _resolve_mid_tm_fc(),
+            },
+        )
+
+    def fetch_tour_spot_weather(
+        self,
+        *,
+        course_id: str,
+        current_date: str | None = None,
+        hour: str | None = None,
+    ) -> list[dict[str, Any]]:
+        resolved_date, resolved_hour = _resolve_tour_weather_time(current_date, hour)
+        return self._fetch_all(
+            "/TourStnInfoService1/getTourStnVilageFcst1",
+            {
+                "dataType": "JSON",
+                "CURRENT_DATE": resolved_date,
+                "HOUR": resolved_hour,
+                "COURSE_ID": course_id,
             },
         )
 
@@ -239,6 +348,52 @@ def _resolve_ultra_short_base_time(
         return base_date, base_time
     now = datetime.now(KST) - timedelta(hours=1)
     return now.strftime("%Y%m%d"), f"{now.hour:02d}00"
+
+
+def _resolve_ultra_short_forecast_base_time(
+    base_date: str | None,
+    base_time: str | None,
+) -> tuple[str, str]:
+    if base_date and base_time:
+        return base_date, base_time
+    now = datetime.now(KST) - timedelta(minutes=45)
+    minute = 30 if now.minute >= 30 else 0
+    return now.strftime("%Y%m%d"), f"{now.hour:02d}{minute:02d}"
+
+
+def _resolve_village_forecast_base_time(
+    base_date: str | None,
+    base_time: str | None,
+) -> tuple[str, str]:
+    if base_date and base_time:
+        return base_date, base_time
+    now = datetime.now(KST) - timedelta(minutes=20)
+    base_hours = [2, 5, 8, 11, 14, 17, 20, 23]
+    selected_hour = max((hour for hour in base_hours if hour <= now.hour), default=23)
+    selected_date = now
+    if selected_hour == 23 and now.hour < 2:
+        selected_date = now - timedelta(days=1)
+    return selected_date.strftime("%Y%m%d"), f"{selected_hour:02d}00"
+
+
+def _resolve_mid_tm_fc() -> str:
+    now = datetime.now(KST) - timedelta(minutes=40)
+    if now.hour >= 18:
+        return now.strftime("%Y%m%d") + "1800"
+    if now.hour >= 6:
+        return now.strftime("%Y%m%d") + "0600"
+    previous = now - timedelta(days=1)
+    return previous.strftime("%Y%m%d") + "1800"
+
+
+def _resolve_tour_weather_time(
+    current_date: str | None,
+    hour: str | None,
+) -> tuple[str, str]:
+    if current_date and hour:
+        return current_date, hour
+    now = datetime.now(KST) - timedelta(hours=1)
+    return now.strftime("%Y%m%d"), f"{now.hour:02d}"
 
 
 def _coerce_int(value: Any, *, default: int) -> int:

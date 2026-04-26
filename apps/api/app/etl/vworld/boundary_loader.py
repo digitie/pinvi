@@ -138,6 +138,8 @@ def load_vworld_boundary_zip(
             raw_boundaries.append(raw_boundary)
             serving_inputs.append((raw_boundary, record, serving_geometry))
 
+        reader.close()
+
         session.add_all(raw_boundaries)
         session.flush()
 

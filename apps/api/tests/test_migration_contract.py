@@ -145,3 +145,24 @@ def test_weather_air_quality_tour_migration_links_to_address_standard() -> None:
     assert "fk_krt_legal_dong_code" in migration
     assert "uq_wsst_endpoint_grid_time_category" in migration
     assert "uq_krt_course_file_spot" in migration
+
+
+def test_mid_term_weather_migration_keeps_provider_codes_separate_from_address_codes() -> None:
+    migration = Path(
+        "alembic/versions/20260426_0011_weather_mid_term_and_tour_weather.py"
+    ).read_text(encoding="utf-8")
+
+    assert "weather_mid_forecast_region" in migration
+    assert "weather_mid_region_address_mapping" in migration
+    assert "weather_raw_mid_term" in migration
+    assert "weather_serving_mid_term" in migration
+    assert "provider_region_id" in migration
+    assert "sido_code" in migration
+    assert "sigungu_code" in migration
+    assert "legal_dong_code_prefix" in migration
+    assert "fk_wmram_forecast_region" in migration
+    assert "tour_course_raw_kma_spot_weather" in migration
+    assert "tour_course_serving_kma_spot_weather" in migration
+    assert "no2_grade" in migration
+    assert "pm10_flag" in migration
+    assert migration.count("postgresql_nulls_not_distinct=True") == 2

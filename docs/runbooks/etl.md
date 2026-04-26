@@ -139,6 +139,7 @@ Airflow DAG:
 
 - `weather_short_term`: `*/30 * * * *`, 5분 간격 3회 retry
 - `weather_kma_alert`: `*/30 * * * *`, 5분 간격 3회 retry
+- `weather_mid_term`: `20 6,18 * * *`, 10분 간격 3회 retry
 - `air_quality_station`: `20 4 * * *`, 30분 간격 3회 retry
 - `air_quality_forecast`: `15 5,11,17,23 * * *`, 10분 간격 3회 retry
 - `air_quality_sido_measurement`: `25 * * * *`, 10분 간격 3회 retry
@@ -146,8 +147,9 @@ Airflow DAG:
 
 Airflow DAG:
 
-- `weather_short_term_sigungu_grid`: VWorld 시군구 경계에서 대표 격자를 만들고 기상청 초단기실황을 수집한다.
+- `weather_short_term_sigungu_grid`: VWorld 시군구 경계에서 대표 격자를 만들고 기상청 초단기실황, 초단기예보, 단기예보를 수집한다.
 - `weather_kma_alert`: 기상특보, 기상정보, 기상속보를 Telegram 알림 원천으로 수집한다.
+- `weather_mid_term_nationwide`: `config/kma-mid-term-regions.json`의 기상청 중기예보 구역 seed와 주소 mapping을 적재하고 `getMidFcst`, `getMidLandFcst`, `getMidTa`를 전국 구역 단위로 수집한다.
 - `air_quality_station_daily`: AirKorea 측정소 목록을 수집하고 좌표를 법정동 경계와 매핑한다.
 - `air_quality_forecast_daily`: AirKorea 미세먼지/오존 예보통보를 수집한다.
 - `air_quality_sido_measurement_hourly`: AirKorea 시도별 실시간 측정값을 수집한다.
@@ -160,6 +162,7 @@ Airflow DAG:
 - AirKorea 대기오염정보는 일 500회 제한이다. 기본값은 `air_quality_sido_measurement` 408회/일과 `air_quality_forecast` 12회/일로 약 420회/일이다. 반복 retry가 발생하면 제한을 넘을 수 있으므로 DAG 주기 완화 또는 일시정지를 먼저 검토한다.
 - 기상특보/정보/속보는 좌표/주소가 없으므로 지도 마커에 표시하지 않는다. Telegram 여행 알림에만 활용한다.
 - `kma_recommended_tour_course_annual`은 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 skip한다. 이 skip은 장애가 아니라 운영 파일이 아직 준비되지 않은 상태다.
+- 관광코스별 상세 날씨는 전체 코스를 정기 수집하지 않는다. 저장 장소/여행 장소 도메인이 연결된 뒤 해당 좌표 target 주변 관광코스만 cache 갱신 task로 호출한다.
 
 ## VWorld SHP 수동 적재
 

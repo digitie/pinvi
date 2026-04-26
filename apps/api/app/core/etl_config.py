@@ -121,6 +121,15 @@ DEFAULT_ETL_DATASET_CONFIGS: dict[str, EtlDatasetRuntimeConfig] = {
         failure_telegram_notification_enabled=True,
         freshness_target_minutes=60,
     ),
+    "weather_mid_term": EtlDatasetRuntimeConfig(
+        dataset_key="weather_mid_term",
+        schedule="20 6,18 * * *",
+        retry_interval_seconds=600,
+        retry_max_attempts=3,
+        failure_admin_notification_enabled=True,
+        failure_telegram_notification_enabled=True,
+        freshness_target_minutes=1440,
+    ),
     "air_quality_station": EtlDatasetRuntimeConfig(
         dataset_key="air_quality_station",
         schedule="20 4 * * *",

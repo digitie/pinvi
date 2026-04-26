@@ -54,6 +54,7 @@ def test_rest_area_etl_dataset_configs_match_collection_policy() -> None:
 def test_weather_and_air_quality_etl_dataset_configs_respect_quota_policy() -> None:
     short_term_config = etl_config.get_etl_dataset_config("weather_short_term")
     alert_config = etl_config.get_etl_dataset_config("weather_kma_alert")
+    mid_term_config = etl_config.get_etl_dataset_config("weather_mid_term")
     station_config = etl_config.get_etl_dataset_config("air_quality_station")
     forecast_config = etl_config.get_etl_dataset_config("air_quality_forecast")
     measurement_config = etl_config.get_etl_dataset_config("air_quality_sido_measurement")
@@ -65,6 +66,9 @@ def test_weather_and_air_quality_etl_dataset_configs_respect_quota_policy() -> N
     assert alert_config.schedule == "*/30 * * * *"
     assert alert_config.retry_interval_seconds == 300
     assert alert_config.freshness_target_minutes == 60
+    assert mid_term_config.schedule == "20 6,18 * * *"
+    assert mid_term_config.retry_interval_seconds == 600
+    assert mid_term_config.freshness_target_minutes == 1440
     assert station_config.schedule == "20 4 * * *"
     assert station_config.retry_interval_seconds == 1800
     assert station_config.freshness_target_minutes == 10080

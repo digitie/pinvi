@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -17,7 +19,10 @@ from app.etl.weather.loader import (
     load_air_quality_sido_measurements,
     load_air_quality_stations,
     load_kma_alerts,
+    load_mid_term_weather,
     load_short_term_weather_for_grids,
+    resolve_mid_term_region_mappings_for_address,
+    seed_kma_mid_term_regions,
 )
 from app.geospatial.kma_grid import wgs84_to_kma_grid
 from app.models.address import (
@@ -34,9 +39,13 @@ from app.models.weather import (
     AirQualityServingSidoMeasurement,
     AirQualityServingStation,
     WeatherKmaAlertStationCode,
+    WeatherMidForecastRegion,
+    WeatherMidRegionAddressMapping,
     WeatherRawKmaAlert,
+    WeatherRawMidTerm,
     WeatherRawShortTerm,
     WeatherServingKmaAlert,
+    WeatherServingMidTerm,
     WeatherServingShortTerm,
     WeatherShortTermGridMapping,
 )
@@ -67,6 +76,32 @@ class FakeKmaWeatherClient:
             },
         ]
 
+    def fetch_ultra_short_forecast(self, *, nx: int, ny: int) -> list[dict[str, str]]:
+        assert (nx, ny) == (60, 127)
+        return [
+            {
+                "baseDate": "20260426",
+                "baseTime": "1230",
+                "fcstDate": "20260426",
+                "fcstTime": "1400",
+                "category": "SKY",
+                "fcstValue": "1",
+            }
+        ]
+
+    def fetch_village_forecast(self, *, nx: int, ny: int) -> list[dict[str, str]]:
+        assert (nx, ny) == (60, 127)
+        return [
+            {
+                "baseDate": "20260426",
+                "baseTime": "1100",
+                "fcstDate": "20260427",
+                "fcstTime": "0900",
+                "category": "TMP",
+                "fcstValue": "18",
+            }
+        ]
+
     def fetch_weather_warnings(self, *, from_date: date, to_date: date) -> list[dict[str, str]]:
         assert from_date == date(2026, 4, 25)
         assert to_date == date(2026, 4, 26)
@@ -95,6 +130,36 @@ class FakeKmaWeatherClient:
         self, *, from_date: date, to_date: date
     ) -> list[dict[str, str]]:
         return []
+
+    def fetch_mid_outlook(self, *, stn_id: str) -> list[dict[str, str]]:
+        assert stn_id == "108"
+        return [{"stnId": "108", "tmFc": "202604260600", "wfSv": "전국 대체로 맑음"}]
+
+    def fetch_mid_land_forecast(self, *, reg_id: str) -> list[dict[str, str]]:
+        assert reg_id == "11B00000"
+        return [
+            {
+                "regId": "11B00000",
+                "tmFc": "202604260600",
+                "wf3Am": "맑음",
+                "wf3Pm": "구름많음",
+                "rnSt3Am": "10",
+                "rnSt3Pm": "20",
+                "wf8": "흐림",
+                "rnSt8": "40",
+            }
+        ]
+
+    def fetch_mid_temperature(self, *, reg_id: str) -> list[dict[str, str]]:
+        assert reg_id == "11B10101"
+        return [
+            {
+                "regId": "11B10101",
+                "tmFc": "202604260600",
+                "taMin3": "12",
+                "taMax3": "23",
+            }
+        ]
 
 
 class FakeAirKoreaClient:
@@ -139,9 +204,19 @@ class FakeAirKoreaClient:
                 "pm25Value": "14",
                 "pm25Grade": "2",
                 "no2Value": "0.020",
+                "no2Grade": "2",
                 "o3Value": "0.030",
+                "o3Grade": "2",
                 "coValue": "0.4",
+                "coGrade": "1",
                 "so2Value": "0.003",
+                "so2Grade": "1",
+                "pm10Flag": "",
+                "pm25Flag": "",
+                "no2Flag": "",
+                "o3Flag": "",
+                "coFlag": "",
+                "so2Flag": "",
             }
         ]
 
@@ -162,15 +237,18 @@ def test_short_term_loader_stores_raw_and_upserts_serving_with_kst_datetime(
     ).all()
 
     assert result.requested_grid_count == 1
-    assert result.raw_row_count == 2
-    assert result.serving_row_count == 2
+    assert result.requested_endpoint_count == 3
+    assert result.raw_row_count == 4
+    assert result.serving_row_count == 4
     assert result.skipped_row_count == 1
     assert db_session.scalar(select(WeatherRawShortTerm)) is not None
     assert [
         (row.category_code, row.normalized_category, row.value, row.unit) for row in serving_rows
     ] == [
         ("REH", "humidity", "48", "%"),
+        ("SKY", "sky", "1", None),
         ("T1H", "temperature", "21.4", "deg_c"),
+        ("TMP", "temperature", "18", "deg_c"),
     ]
     assert serving_rows[0].observed_at == datetime(2026, 4, 26, 12, 0, tzinfo=KST)
 
@@ -219,6 +297,114 @@ def test_kma_alert_loader_stores_station_codes_and_alert_rows(db_session: Sessio
         ("109", "서울"),
     ]
     assert [row.alert_type for row in serving_rows] == ["information", "warning"]
+
+
+def test_mid_term_region_seed_and_loader_keep_reg_id_separate_from_address_codes(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "kma-mid-term-regions.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "source_version": "test-guide",
+                "provider": "kma",
+                "regions": [
+                    {
+                        "endpoint": "getMidFcst",
+                        "region_kind": "outlook_station",
+                        "provider_region_id": "108",
+                        "region_name": "전국",
+                    },
+                    {
+                        "endpoint": "getMidLandFcst",
+                        "region_kind": "land",
+                        "provider_region_id": "11B00000",
+                        "region_name": "서울ㆍ인천ㆍ경기도",
+                    },
+                    {
+                        "endpoint": "getMidTa",
+                        "region_kind": "temperature",
+                        "provider_region_id": "11B10101",
+                        "region_name": "서울",
+                    },
+                ],
+                "mappings": [
+                    {
+                        "endpoint": "getMidLandFcst",
+                        "provider_region_kind": "land",
+                        "provider_region_id": "11B00000",
+                        "sido_code": "1100000000",
+                        "mapping_method": "exact",
+                        "priority": 10,
+                    },
+                    {
+                        "endpoint": "getMidTa",
+                        "provider_region_kind": "temperature",
+                        "provider_region_id": "11B10101",
+                        "sido_code": "1100000000",
+                        "mapping_method": "exact",
+                        "priority": 10,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    seed_result = seed_kma_mid_term_regions(
+        db_session,
+        config_path=config_path,
+        collected_at=datetime(2026, 4, 26, 13, 0, tzinfo=KST),
+    )
+    load_result = load_mid_term_weather(
+        db_session,
+        FakeKmaWeatherClient(),  # type: ignore[arg-type]
+        config_path=config_path,
+        collected_at=datetime(2026, 4, 26, 13, 5, tzinfo=KST),
+    )
+    db_session.commit()
+
+    land_region = db_session.scalar(
+        select(WeatherMidForecastRegion).where(
+            WeatherMidForecastRegion.provider_region_id == "11B00000"
+        )
+    )
+    mapping = db_session.scalar(select(WeatherMidRegionAddressMapping))
+    land_forecast = db_session.scalar(
+        select(WeatherServingMidTerm)
+        .where(WeatherServingMidTerm.provider_region_id == "11B00000")
+        .where(WeatherServingMidTerm.forecast_slot == "am")
+    )
+    temp_forecast = db_session.scalar(
+        select(WeatherServingMidTerm).where(WeatherServingMidTerm.provider_region_id == "11B10101")
+    )
+
+    assert seed_result.region_count == 3
+    assert seed_result.mapping_count == 2
+    assert load_result.requested_region_count == 3
+    assert load_result.raw_row_count == 3
+    assert load_result.serving_row_count >= 4
+    assert db_session.scalar(select(WeatherRawMidTerm)) is not None
+    assert land_region is not None
+    assert land_region.provider_region_id != "1100000000"
+    assert mapping is not None
+    assert mapping.sido_code == "1100000000"
+    assert mapping.provider_region_id == "11B00000"
+    resolved_mappings = resolve_mid_term_region_mappings_for_address(
+        db_session,
+        legal_dong_code="1111010100",
+    )
+    assert {item.provider_region_id for item in resolved_mappings} == {"11B00000", "11B10101"}
+    assert land_forecast is not None
+    assert land_forecast.forecast_date == date(2026, 4, 29)
+    assert land_forecast.weather_summary == "맑음"
+    assert land_forecast.rain_probability == "10"
+    assert land_forecast.mapping_method == "exact"
+    assert temp_forecast is not None
+    assert temp_forecast.min_temperature == "12"
+    assert temp_forecast.max_temperature == "23"
 
 
 def test_air_quality_station_loader_maps_station_coordinates_to_legal_dong(
@@ -280,6 +466,10 @@ def test_air_quality_forecast_and_measurement_loaders_store_serving_rows(
     assert forecast.inform_code == "PM10"
     assert measurement is not None
     assert measurement.pm25_value == "14"
+    assert measurement.no2_grade == "2"
+    assert measurement.o3_grade == "2"
+    assert measurement.co_grade == "1"
+    assert measurement.so2_grade == "1"
 
 
 def test_data_go_clients_require_service_key() -> None:

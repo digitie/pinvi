@@ -960,7 +960,7 @@ FK 불일치 처리:
 
 `weather_short_term`:
 
-- 기상청 초단기실황은 DFS 격자 `nx`, `ny` 기준이다.
+- 기상청 초단기실황/초단기예보/단기예보는 DFS 격자 `nx`, `ny` 기준이다.
 - TripMate는 VWorld 시군구 경계의 `ST_PointOnSurface` 대표점을 만들고, 이를 KMA DFS 격자로 변환한다.
 - mapping row는 `weather_short_term_grid_mapping`에 저장한다.
 - 초기 기본은 시군구 단위다. 장소 좌표 기반 상세 격자는 후속 구현에서 추가한다.
@@ -981,7 +981,7 @@ FK 불일치 처리:
 
 `weather_mid_term`:
 
-- API 승인은 확인했고, 매핑 정책은 확정했다.
+- 중기예보 구역 seed, 주소 mapping table, raw/serving schema, loader, DAG를 구현했다.
 - `regId`는 기상청 중기예보 API가 요구하는 예보구역코드다.
 - `regId`는 단기예보 DFS 격자 `nx`, `ny`도 아니고 Juso 법정동코드도 아니다.
 - 공식 중기예보 구역코드를 별도 테이블에 저장하고, TripMate 시도/시군구/법정동 코드와의 연결은 명시적 mapping table로 관리한다.

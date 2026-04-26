@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -182,6 +184,134 @@ class WeatherServingKmaAlert(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class WeatherMidForecastRegion(TimestampMixin, Base):
+    __tablename__ = "weather_mid_forecast_region"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "endpoint",
+            "region_kind",
+            "provider_region_id",
+            name="uq_wmfr_provider_endpoint_kind_region",
+        ),
+        Index("ix_wmfr_kind_region", "region_kind", "provider_region_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="kma")
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    region_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_region_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    region_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    parent_region_id: Mapped[str | None] = mapped_column(String(20))
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class WeatherMidRegionAddressMapping(TimestampMixin, Base):
+    __tablename__ = "weather_mid_region_address_mapping"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["provider", "endpoint", "provider_region_kind", "provider_region_id"],
+            [
+                "weather_mid_forecast_region.provider",
+                "weather_mid_forecast_region.endpoint",
+                "weather_mid_forecast_region.region_kind",
+                "weather_mid_forecast_region.provider_region_id",
+            ],
+            name="fk_wmram_forecast_region",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "provider",
+            "endpoint",
+            "provider_region_kind",
+            "provider_region_id",
+            "sido_code",
+            "sigungu_code",
+            "legal_dong_code_prefix",
+            name="uq_wmram_provider_region_address_scope",
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index("ix_wmram_sido_sigungu", "sido_code", "sigungu_code"),
+        Index("ix_wmram_region", "provider_region_kind", "provider_region_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="kma")
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_region_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_region_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    sido_code: Mapped[str | None] = mapped_column(String(10))
+    sigungu_code: Mapped[str | None] = mapped_column(String(10))
+    legal_dong_code_prefix: Mapped[str | None] = mapped_column(String(10))
+    mapping_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    valid_from: Mapped[str | None] = mapped_column(String(8))
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class WeatherRawMidTerm(Base):
+    __tablename__ = "weather_raw_mid_term"
+    __table_args__ = (
+        Index("ix_wrmt_endpoint_region_tm", "endpoint", "provider_region_id", "tm_fc"),
+        Index("ix_wrmt_response_hash", "response_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    region_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_region_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    tm_fc: Mapped[str | None] = mapped_column(String(20))
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    response_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )
+
+
+class WeatherServingMidTerm(TimestampMixin, Base):
+    __tablename__ = "weather_serving_mid_term"
+    __table_args__ = (
+        UniqueConstraint(
+            "endpoint",
+            "region_kind",
+            "provider_region_id",
+            "tm_fc",
+            "forecast_date",
+            "forecast_slot",
+            name="uq_wsmt_endpoint_region_forecast_slot",
+        ),
+        Index("ix_wsmt_region_date", "provider_region_id", "forecast_date"),
+        Index("ix_wsmt_date_slot", "forecast_date", "forecast_slot"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    region_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_region_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_region_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    tm_fc: Mapped[str] = mapped_column(String(20), nullable=False)
+    forecast_date: Mapped[date] = mapped_column(Date, nullable=False)
+    forecast_slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    weather_summary: Mapped[str | None] = mapped_column(String(255))
+    rain_probability: Mapped[str | None] = mapped_column(String(20))
+    min_temperature: Mapped[str | None] = mapped_column(String(20))
+    max_temperature: Mapped[str | None] = mapped_column(String(20))
+    mapping_method: Mapped[str | None] = mapped_column(String(40))
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fallback_reason: Mapped[str | None] = mapped_column(String(255))
+    display_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AirQualityRawStation(Base):
     __tablename__ = "air_quality_raw_station"
     __table_args__ = (
@@ -326,8 +456,18 @@ class AirQualityServingSidoMeasurement(TimestampMixin, Base):
     pm25_value: Mapped[str | None] = mapped_column(String(20))
     pm25_grade: Mapped[str | None] = mapped_column(String(20))
     no2_value: Mapped[str | None] = mapped_column(String(20))
+    no2_grade: Mapped[str | None] = mapped_column(String(20))
     o3_value: Mapped[str | None] = mapped_column(String(20))
+    o3_grade: Mapped[str | None] = mapped_column(String(20))
     co_value: Mapped[str | None] = mapped_column(String(20))
+    co_grade: Mapped[str | None] = mapped_column(String(20))
     so2_value: Mapped[str | None] = mapped_column(String(20))
+    so2_grade: Mapped[str | None] = mapped_column(String(20))
+    pm10_flag: Mapped[str | None] = mapped_column(String(20))
+    pm25_flag: Mapped[str | None] = mapped_column(String(20))
+    no2_flag: Mapped[str | None] = mapped_column(String(20))
+    o3_flag: Mapped[str | None] = mapped_column(String(20))
+    co_flag: Mapped[str | None] = mapped_column(String(20))
+    so2_flag: Mapped[str | None] = mapped_column(String(20))
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     session_cookie_name: str = "tripmate_session"
     airflow_download_dir: str = ".tmp/airflow-downloads"
     etl_config_path: str = "config/etl-datasets.json"
+    kma_mid_term_region_config_path: str = "config/kma-mid-term-regions.json"
     data_go_service_key: str | None = None
     opinet_api_key: str | None = None
     expressway_api_key: str | None = None

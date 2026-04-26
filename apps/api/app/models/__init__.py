@@ -28,7 +28,12 @@ from app.models.rest_area import (
     RestAreaServingService,
 )
 from app.models.session import UserSession
-from app.models.tour import KmaRecommendedTourCourse, TourCourseRawKmaPoint
+from app.models.tour import (
+    KmaRecommendedTourCourse,
+    TourCourseRawKmaPoint,
+    TourCourseRawKmaSpotWeather,
+    TourCourseServingKmaSpotWeather,
+)
 from app.models.trip import Trip, TripDay
 from app.models.user import User
 from app.models.weather import (
@@ -39,9 +44,13 @@ from app.models.weather import (
     AirQualityServingSidoMeasurement,
     AirQualityServingStation,
     WeatherKmaAlertStationCode,
+    WeatherMidForecastRegion,
+    WeatherMidRegionAddressMapping,
     WeatherRawKmaAlert,
+    WeatherRawMidTerm,
     WeatherRawShortTerm,
     WeatherServingKmaAlert,
+    WeatherServingMidTerm,
     WeatherServingShortTerm,
     WeatherShortTermGridMapping,
 )
@@ -74,6 +83,8 @@ __all__ = [
     "RegionServingBoundary",
     "TelegramSystemNotificationOutbox",
     "TourCourseRawKmaPoint",
+    "TourCourseRawKmaSpotWeather",
+    "TourCourseServingKmaSpotWeather",
     "Trip",
     "TripDay",
     "User",
@@ -84,6 +95,10 @@ __all__ = [
     "WeatherKmaAlertStationCode",
     "WeatherRawKmaAlert",
     "WeatherServingKmaAlert",
+    "WeatherMidForecastRegion",
+    "WeatherMidRegionAddressMapping",
+    "WeatherRawMidTerm",
+    "WeatherServingMidTerm",
     "AirQualityRawStation",
     "AirQualityServingStation",
     "AirQualityRawForecast",
