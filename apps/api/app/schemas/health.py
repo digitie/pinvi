@@ -9,4 +9,3 @@ class HealthResponse(BaseModel):
 class DatabaseHealthResponse(BaseModel):
     status: str
     database: str
-

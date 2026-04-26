@@ -6,6 +6,7 @@ from hashlib import sha256
 from pathlib import Path
 
 JUSO_ROAD_ADDRESS_FIELD_COUNT = 24
+JUSO_RELATED_JIBUN_FIELD_COUNT = 14
 JUSO_DELIMITER_CANDIDATES = ("|", "\t")
 SOURCE_YEAR_MONTH_PATTERN = re.compile(r"(?P<year_month>\d{6})")
 
@@ -29,11 +30,11 @@ def _decode_juso_bytes(raw_bytes: bytes) -> tuple[str, str]:
     raise UnicodeDecodeError("juso", b"", 0, 1, "unable to decode Juso address file")
 
 
-def _detect_delimiter(line: str) -> str:
+def _detect_delimiter(line: str, *, expected_field_count: int) -> str:
     matched_delimiters = [
         delimiter
         for delimiter in JUSO_DELIMITER_CANDIDATES
-        if len(line.split(delimiter)) == JUSO_ROAD_ADDRESS_FIELD_COUNT
+        if len(line.split(delimiter)) == expected_field_count
     ]
 
     if len(matched_delimiters) != 1:
@@ -116,6 +117,51 @@ class JusoRoadAddressRecord:
 
 
 @dataclass(frozen=True)
+class JusoRelatedJibunRecord:
+    road_address_management_no: str
+    legal_dong_code: str
+    sido_name: str
+    sigungu_name: str
+    legal_eupmyeondong_name: str
+    legal_ri_name: str | None
+    mountain_yn: str
+    jibun_main_no: str
+    jibun_sub_no: str
+    road_name_code: str
+    underground_yn: str
+    building_main_no: str
+    building_sub_no: str
+    note: str | None
+    raw_line: str
+
+    @classmethod
+    def from_line(cls, line: str, *, delimiter: str) -> JusoRelatedJibunRecord:
+        fields = line.split(delimiter)
+        if len(fields) != JUSO_RELATED_JIBUN_FIELD_COUNT:
+            raise ValueError(
+                f"Expected {JUSO_RELATED_JIBUN_FIELD_COUNT} fields, got {len(fields)} fields."
+            )
+
+        return cls(
+            road_address_management_no=_clean(fields[0]),
+            legal_dong_code=_clean(fields[1]),
+            sido_name=_clean(fields[2]),
+            sigungu_name=_clean(fields[3]),
+            legal_eupmyeondong_name=_clean(fields[4]),
+            legal_ri_name=_clean_optional(fields[5]),
+            mountain_yn=_clean(fields[6]),
+            jibun_main_no=_clean(fields[7]),
+            jibun_sub_no=_clean(fields[8]),
+            road_name_code=_clean(fields[9]),
+            underground_yn=_clean(fields[10]),
+            building_main_no=_clean(fields[11]),
+            building_sub_no=_clean(fields[12]),
+            note=_clean_optional(fields[13]),
+            raw_line=line,
+        )
+
+
+@dataclass(frozen=True)
 class ParsedJusoRoadAddressFile:
     source_path: Path
     source_file_name: str
@@ -126,21 +172,24 @@ class ParsedJusoRoadAddressFile:
     rows: list[JusoRoadAddressRecord]
 
 
+@dataclass(frozen=True)
+class ParsedJusoRelatedJibunFile:
+    source_path: Path
+    source_file_name: str
+    source_year_month: str
+    file_hash: str
+    encoding: str
+    delimiter: str
+    rows: list[JusoRelatedJibunRecord]
+
+
 def parse_juso_road_address_file(
     path: Path | str,
     *,
     source_year_month: str | None = None,
 ) -> ParsedJusoRoadAddressFile:
-    source_path = Path(path)
-    raw_bytes = source_path.read_bytes()
-    decoded_text, encoding = _decode_juso_bytes(raw_bytes)
-    file_hash = sha256(raw_bytes).hexdigest()
-
-    lines = [line.rstrip("\r") for line in decoded_text.splitlines() if line.strip()]
-    if not lines:
-        raise ValueError(f"Juso address file is empty: {source_path}")
-
-    delimiter = _detect_delimiter(lines[0])
+    source_path, lines, encoding, file_hash = _read_juso_lines(path)
+    delimiter = _detect_delimiter(lines[0], expected_field_count=JUSO_ROAD_ADDRESS_FIELD_COUNT)
     rows = [JusoRoadAddressRecord.from_line(line, delimiter=delimiter) for line in lines]
 
     return ParsedJusoRoadAddressFile(
@@ -152,3 +201,34 @@ def parse_juso_road_address_file(
         delimiter=delimiter,
         rows=rows,
     )
+
+
+def parse_juso_related_jibun_file(
+    path: Path | str,
+    *,
+    source_year_month: str | None = None,
+) -> ParsedJusoRelatedJibunFile:
+    source_path, lines, encoding, file_hash = _read_juso_lines(path)
+    delimiter = _detect_delimiter(lines[0], expected_field_count=JUSO_RELATED_JIBUN_FIELD_COUNT)
+    rows = [JusoRelatedJibunRecord.from_line(line, delimiter=delimiter) for line in lines]
+
+    return ParsedJusoRelatedJibunFile(
+        source_path=source_path,
+        source_file_name=source_path.name,
+        source_year_month=source_year_month or derive_source_year_month(source_path),
+        file_hash=file_hash,
+        encoding=encoding,
+        delimiter=delimiter,
+        rows=rows,
+    )
+
+
+def _read_juso_lines(path: Path | str) -> tuple[Path, list[str], str, str]:
+    source_path = Path(path)
+    raw_bytes = source_path.read_bytes()
+    decoded_text, encoding = _decode_juso_bytes(raw_bytes)
+    file_hash = sha256(raw_bytes).hexdigest()
+    lines = [line.rstrip("\r") for line in decoded_text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError(f"Juso address file is empty: {source_path}")
+    return source_path, lines, encoding, file_hash

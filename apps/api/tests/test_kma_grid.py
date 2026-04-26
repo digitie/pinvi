@@ -51,4 +51,3 @@ def test_wgs84_to_kma_grid_rejects_invalid_coordinate() -> None:
 def test_kma_grid_to_wgs84_rejects_invalid_grid() -> None:
     with pytest.raises(ValueError, match="nx"):
         kma_grid_to_wgs84(nx=0, ny=127)
-

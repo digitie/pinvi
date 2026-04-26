@@ -1,2 +1,1 @@
 """TripMate API package."""
-

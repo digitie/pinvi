@@ -1,7 +1,14 @@
 from app.db.base import Base
 from app.models import (
     AddressCodeStandard,
+    AddressRawJusoRelatedJibun,
     AddressRawJusoRoadAddress,
+    AddressRawLegalDongCode,
+    AddressServingJusoRelatedJibun,
+    AddressServingJusoRoadAddress,
+    RegionBoundaryImportBatch,
+    RegionRawVWorldBoundary,
+    RegionServingBoundary,
     Trip,
     TripDay,
     User,
@@ -12,7 +19,14 @@ from app.models import (
 def test_initial_core_tables_are_registered() -> None:
     expected_tables = {
         AddressCodeStandard.__tablename__,
+        AddressRawLegalDongCode.__tablename__,
+        AddressRawJusoRelatedJibun.__tablename__,
         AddressRawJusoRoadAddress.__tablename__,
+        AddressServingJusoRelatedJibun.__tablename__,
+        AddressServingJusoRoadAddress.__tablename__,
+        RegionBoundaryImportBatch.__tablename__,
+        RegionRawVWorldBoundary.__tablename__,
+        RegionServingBoundary.__tablename__,
         User.__tablename__,
         UserSession.__tablename__,
         Trip.__tablename__,

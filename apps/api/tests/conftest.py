@@ -68,8 +68,10 @@ def postgres_test_database_url() -> Generator[str, None, None]:
             "`docker compose -f infra/docker-compose.yml up -d`."
         ) from exc
 
-    test_database_url = make_url(admin_database_url).set(database=database_name).render_as_string(
-        hide_password=False
+    test_database_url = (
+        make_url(admin_database_url)
+        .set(database=database_name)
+        .render_as_string(hide_password=False)
     )
 
     alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))

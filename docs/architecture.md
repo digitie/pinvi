@@ -1,5 +1,7 @@
 # Architecture Baseline
 
+주소/Juso/법정동코드/VWorld 경계 스키마의 상세 기준은 `docs/architecture/address-schema.md`를 따른다.
+
 ## 현재 상태
 
 현재 저장소에는 `apps/web`의 Next.js 웹앱과 `apps/api`의 FastAPI 백엔드 골격이 있다.

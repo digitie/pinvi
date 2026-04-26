@@ -39,4 +39,5 @@ Thumbs.db
 
 # local scratch data
 .tmp/
+dataset/
 testset/

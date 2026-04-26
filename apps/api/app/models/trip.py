@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from datetime import date
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, String, UniqueConstraint
@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 
 class Trip(TimestampMixin, Base):
     __tablename__ = "trips"
-    __table_args__ = (
-        CheckConstraint("end_date >= start_date", name="date_range_order"),
-    )
+    __table_args__ = (CheckConstraint("end_date >= start_date", name="date_range_order"),)
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
@@ -34,8 +32,8 @@ class Trip(TimestampMixin, Base):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_status: Mapped[str] = mapped_column(String(32), default="idea", nullable=False)
 
-    user: Mapped["User"] = relationship(back_populates="trips")
-    days: Mapped[list["TripDay"]] = relationship(
+    user: Mapped[User] = relationship(back_populates="trips")
+    days: Mapped[list[TripDay]] = relationship(
         back_populates="trip",
         cascade="all, delete-orphan",
         order_by="TripDay.day_index",
@@ -61,4 +59,3 @@ class TripDay(TimestampMixin, Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
 
     trip: Mapped[Trip] = relationship(back_populates="days")
-

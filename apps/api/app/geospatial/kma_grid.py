@@ -123,9 +123,7 @@ def _projection() -> _Projection:
     )
 
     origin_radius = tan(pi * 0.25 + origin_latitude * 0.5)
-    origin_radius = (
-        scaled_earth_radius * projection_factor / pow(origin_radius, cone_constant)
-    )
+    origin_radius = scaled_earth_radius * projection_factor / pow(origin_radius, cone_constant)
 
     return _Projection(
         scaled_earth_radius=scaled_earth_radius,
@@ -151,4 +149,3 @@ def _validate_grid(nx: int, ny: int) -> None:
     if ny < 1:
         msg = f"ny must be positive: {ny}"
         raise ValueError(msg)
-

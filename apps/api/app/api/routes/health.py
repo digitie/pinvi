@@ -19,4 +19,3 @@ def health() -> HealthResponse:
 def database_health(db: Annotated[Session, Depends(get_db)]) -> DatabaseHealthResponse:
     db.execute(text("SELECT 1"))
     return DatabaseHealthResponse(status="ok", database="ok")
-

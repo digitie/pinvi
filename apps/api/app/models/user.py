@@ -24,12 +24,11 @@ class User(TimestampMixin, Base):
     display_name: Mapped[str | None] = mapped_column(String(80))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    sessions: Mapped[list["UserSession"]] = relationship(
+    sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    trips: Mapped[list["Trip"]] = relationship(
+    trips: Mapped[list[Trip]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
-
