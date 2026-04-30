@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
+from geoalchemy2 import Geometry
 from sqlalchemy import (
     Boolean,
     Date,
@@ -118,6 +119,137 @@ class WeatherServingShortTerm(TimestampMixin, Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class WeatherBeachLocation(TimestampMixin, Base):
+    __tablename__ = "weather_beach_location"
+    __table_args__ = (
+        UniqueConstraint("provider", "beach_num", name="uq_wbl_provider_beach_num"),
+        Index("ix_wbl_map_feature_id", "map_feature_id"),
+        Index("ix_wbl_legal_dong", "legal_dong_code"),
+        Index("ix_wbl_sigungu", "sigungu_code"),
+        Index("ix_wbl_geom", "geom", postgresql_using="gist"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="kma")
+    beach_num: Mapped[str] = mapped_column(String(8), nullable=False)
+    beach_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    map_feature_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("map_features.id", name="fk_wbl_map_feature_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    nx: Mapped[int] = mapped_column(Integer, nullable=False)
+    ny: Mapped[int] = mapped_column(Integer, nullable=False)
+    longitude: Mapped[Decimal] = mapped_column(Numeric(12, 8), nullable=False)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(12, 8), nullable=False)
+    geom: Mapped[Any] = mapped_column(
+        Geometry("POINT", srid=4326, spatial_index=False),
+        nullable=False,
+    )
+    legal_dong_code: Mapped[str | None] = mapped_column(
+        String(10),
+        ForeignKey(
+            "address_code_standard.legal_dong_code",
+            name="fk_wbl_legal_dong_code",
+            ondelete="SET NULL",
+        ),
+    )
+    sigungu_code: Mapped[str | None] = mapped_column(String(10))
+    sido_code: Mapped[str | None] = mapped_column(String(10))
+    road_name_code: Mapped[str | None] = mapped_column(String(12))
+    road_address_management_no: Mapped[str | None] = mapped_column(String(64))
+    address_mapping_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class WeatherRawBeach(Base):
+    __tablename__ = "weather_raw_beach"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "endpoint",
+            "beach_num",
+            "response_hash",
+            name="uq_wrb_provider_endpoint_beach_hash",
+        ),
+        Index("ix_wrb_endpoint_beach_collected", "endpoint", "beach_num", "collected_at"),
+        Index("ix_wrb_response_hash", "response_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="kma")
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    beach_num: Mapped[str] = mapped_column(String(8), nullable=False)
+    request_params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    response_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )
+
+
+class WeatherServingBeach(TimestampMixin, Base):
+    __tablename__ = "weather_serving_beach"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "endpoint",
+            "beach_num",
+            "source_record_key",
+            "category_code",
+            name="uq_wsb_provider_endpoint_key_category",
+        ),
+        Index("ix_wsb_beach_location_id", "beach_location_id"),
+        Index("ix_wsb_map_feature_id", "map_feature_id"),
+        Index("ix_wsb_beach_category", "beach_num", "category_code"),
+        Index("ix_wsb_forecast_at", "forecast_at"),
+        Index("ix_wsb_observed_at", "observed_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    beach_location_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "weather_beach_location.id",
+            name="fk_wsb_beach_location_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    map_feature_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("map_features.id", name="fk_wsb_map_feature_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="kma")
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    beach_num: Mapped[str] = mapped_column(String(8), nullable=False)
+    source_record_key: Mapped[str] = mapped_column(String(180), nullable=False)
+    base_date: Mapped[str | None] = mapped_column(String(8))
+    base_time: Mapped[str | None] = mapped_column(String(4))
+    forecast_date: Mapped[str | None] = mapped_column(String(8))
+    forecast_time: Mapped[str | None] = mapped_column(String(4))
+    source_observed_time: Mapped[str | None] = mapped_column(String(20))
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    forecast_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    category_code: Mapped[str] = mapped_column(String(24), nullable=False)
+    category_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    normalized_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    value: Mapped[str] = mapped_column(String(80), nullable=False)
+    unit: Mapped[str | None] = mapped_column(String(24))
+    station_name: Mapped[str | None] = mapped_column(String(120))
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
 class WeatherKmaAlertStationCode(TimestampMixin, Base):
     __tablename__ = "weather_kma_alert_station_code"
 
@@ -164,6 +296,7 @@ class WeatherServingKmaAlert(TimestampMixin, Base):
             name="uq_wska_type_station_fc_seq_title",
         ),
         Index("ix_wska_alert_type_tm", "alert_type", "tm_fc"),
+        Index("ix_wska_stn_id", "stn_id"),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)

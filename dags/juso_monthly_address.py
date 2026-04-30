@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import asdict
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -71,11 +72,68 @@ def _is_airflow_retry_exhausted() -> bool:
     return True
 
 
+def _current_airflow_datetime() -> datetime:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    value = (
+        context.get("logical_date")
+        or context.get("data_interval_start")
+        or context.get("run_after")
+    )
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
+def _current_dag_conf() -> dict[str, Any]:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return {}
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return {}
+
+    dag_run = context.get("dag_run")
+    conf = getattr(dag_run, "conf", None)
+    if isinstance(conf, dict):
+        return conf
+    return {}
+
+
+def _source_year_month_override_from_conf(conf: dict[str, Any]) -> str | None:
+    value = conf.get("source_year_month")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r"\d{6}", value):
+        raise ValueError("source_year_month conf must be a YYYYMM string.")
+    month = int(value[4:6])
+    if month < 1 or month > 12:
+        raise ValueError("source_year_month conf month must be between 01 and 12.")
+    return value
+
+
 @dag(
     dag_id=DAG_ID,
     description="Juso 도로명주소 한글 전체분과 관련 지번 TXT를 월 1회 갱신한다.",
     schedule=_RUNTIME_CONFIG.schedule,
-    start_date=datetime(2026, 5, 10, tzinfo=ZoneInfo("Asia/Seoul")),
+    start_date=datetime(2026, 1, 1, tzinfo=ZoneInfo("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
     default_args={
@@ -87,10 +145,11 @@ def _is_airflow_retry_exhausted() -> bool:
 )
 def juso_monthly_address_dataset() -> None:
     @task(task_id="download_and_load_juso_monthly_address")
-    def download_and_load(logical_date_iso: str) -> dict[str, Any]:
+    def download_and_load() -> dict[str, Any]:
         database_url = os.environ["TRIPMATE_DATABASE_URL"]
         download_dir = Path(os.environ.get("TRIPMATE_AIRFLOW_DOWNLOAD_DIR", DEFAULT_DOWNLOAD_DIR))
-        logical_date = date.fromisoformat(logical_date_iso)
+        logical_date = _current_airflow_datetime().astimezone(ZoneInfo("Asia/Seoul")).date()
+        source_year_month_override = _source_year_month_override_from_conf(_current_dag_conf())
 
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
@@ -99,6 +158,7 @@ def juso_monthly_address_dataset() -> None:
         from app.models.etl import EtlRunLog
         from app.services.etl_runtime import (
             create_etl_run_log,
+            has_successful_run,
             mark_etl_run_failed,
             mark_etl_run_skipped,
             mark_etl_run_success,
@@ -110,22 +170,41 @@ def juso_monthly_address_dataset() -> None:
 
         try:
             with session_factory() as log_session:
-                should_skip, run_key, reason = should_skip_juso_monthly_update(
-                    log_session,
-                    logical_date=logical_date,
-                    dataset_key=DATASET_KEY,
-                )
+                if source_year_month_override is None:
+                    should_skip, run_key, reason = should_skip_juso_monthly_update(
+                        log_session,
+                        logical_date=logical_date,
+                        dataset_key=DATASET_KEY,
+                    )
+                    run_type = "scheduled"
+                else:
+                    run_key = source_year_month_override
+                    should_skip = has_successful_run(
+                        log_session,
+                        dataset_key=DATASET_KEY,
+                        run_key=run_key,
+                    )
+                    reason = (
+                        f"{run_key} Juso 월간 갱신은 이미 성공했다."
+                        if should_skip
+                        else f"{run_key} Juso 월간 주소 데이터 수동 적재"
+                    )
+                    run_type = "manual"
                 run_log = create_etl_run_log(
                     log_session,
                     dataset_key=DATASET_KEY,
                     run_key=run_key,
-                    run_type="scheduled",
+                    run_type=run_type,
                     trigger_date=logical_date,
                     config=_RUNTIME_CONFIG,
                 )
                 run_log_id = run_log.id
                 if should_skip:
-                    payload = {"run_key": run_key, "reason": reason}
+                    payload = {
+                        "run_key": run_key,
+                        "reason": reason,
+                        "source_year_month_override": source_year_month_override,
+                    }
                     mark_etl_run_skipped(run_log, message=reason, extra=payload)
                     log_session.commit()
                     return payload
@@ -142,6 +221,7 @@ def juso_monthly_address_dataset() -> None:
 
                 payload = _json_ready(asdict(result))
                 payload["download_dir"] = str(download_dir)
+                payload["source_year_month_override"] = source_year_month_override
                 with session_factory() as log_session:
                     run_log = log_session.get(EtlRunLog, run_log_id)
                     if run_log is None:
@@ -172,7 +252,7 @@ def juso_monthly_address_dataset() -> None:
         finally:
             engine.dispose()
 
-    download_and_load("{{ ds }}")
+    download_and_load()
 
 
 juso_monthly_address_dataset()

@@ -76,6 +76,30 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
+def _current_airflow_datetime() -> datetime:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    value = (
+        context.get("logical_date")
+        or context.get("data_interval_start")
+        or context.get("run_after")
+    )
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
 @dag(
     dag_id=REGION_DAG_ID,
     description="OpiNet areaCode.do 지역코드를 수집하고 Juso 법정동 기준 시도/시군구와 매핑한다.",
@@ -92,14 +116,14 @@ def _json_ready(value: Any) -> Any:
 )
 def opinet_region_code_quarterly() -> None:
     @task(task_id="load_opinet_region_codes")
-    def load_region_codes(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_region_codes() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=REGION_DATASET_KEY,
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_region_codes,
         )
 
-    load_region_codes("{{ ts }}")
+    load_region_codes()
 
 
 @dag(
@@ -118,14 +142,14 @@ def opinet_region_code_quarterly() -> None:
 )
 def opinet_avg_price_daily() -> None:
     @task(task_id="load_opinet_avg_prices")
-    def load_avg_prices(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_avg_prices() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=AVG_PRICE_DATASET_KEY,
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_avg_prices,
         )
 
-    load_avg_prices("{{ ts }}")
+    load_avg_prices()
 
 
 @dag(
@@ -146,14 +170,14 @@ def opinet_avg_price_daily() -> None:
 )
 def opinet_lowest_station_daily() -> None:
     @task(task_id="load_opinet_lowest_stations_for_all_sigungu")
-    def load_lowest_stations(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_lowest_stations() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=LOWEST_STATION_DATASET_KEY,
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_lowest_stations_for_all_sigungu,
         )
 
-    load_lowest_stations("{{ ts }}")
+    load_lowest_stations()
 
 
 def _run_logged_task(

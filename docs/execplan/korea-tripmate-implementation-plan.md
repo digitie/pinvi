@@ -64,7 +64,7 @@
 - `npm run lint`
 - `npm run typecheck`
 - `npm run build`
-- `npm --workspace apps/web run dev -- --port 3001` 후 HTTP 200 smoke
+- `npm run dev` 후 `http://localhost:3001` HTTP 200 smoke
 
 완료 조건:
 
@@ -122,13 +122,19 @@
 
 목표: 비회원 사용 불가 원칙을 API와 UI에 적용한다.
 
+스키마 기준: `docs/architecture/user-trip-schema.md`
+
 작업:
 
 - 이메일 기반 회원가입/로그인/로그아웃 API를 만든다.
+- 이메일 인증 token과 인증 메일 발송 흐름을 만든다.
 - httpOnly cookie 기반 서버 세션을 구현한다.
 - 세션 cookie에는 opaque token만 저장하고, DB에는 해시된 세션 토큰과 만료 시각을 저장한다.
 - 비밀번호 해시 정책을 문서화한다.
+- 초대 참여자의 첫 비밀번호 설정 흐름을 만든다.
+- 관리자 사용자 목록/추가/삭제/비밀번호 초기화 API를 만든다.
 - 사용자 정보 조회/수정 API를 만든다.
+- 사용자 상세정보 테이블과 API를 만든다.
 - 인가 dependency를 추가한다.
 - 웹에 로그인, 회원가입, 사용자 정보 수정 화면을 추가한다.
 - 인증이 필요한 화면 접근 제어를 구현한다.
@@ -140,6 +146,10 @@
 - 중복 이메일 실패 테스트
 - 잘못된 비밀번호 실패 테스트
 - 사용자 정보 수정 인가 테스트
+- 이메일 인증 token 만료/재사용 방지 테스트
+- 초대 참여자 첫 비밀번호 설정 테스트
+- 관리자 비밀번호 초기화 테스트
+- token 원문과 SMTP secret이 DB/로그에 남지 않는지 확인하는 테스트
 - Playwright 로그인 및 사용자 정보 수정 smoke
 
 완료 조건:

@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.etl.weather.client import AirKoreaApiClient, KmaWeatherApiClient
+from app.etl.weather.client import AirKoreaApiClient, DataGoApiError, KmaWeatherApiClient
 from app.geospatial.kma_grid import wgs84_to_kma_grid
 from app.models.address import RegionServingBoundary
 from app.models.weather import (
@@ -83,6 +83,7 @@ class WeatherShortTermLoadResult:
     raw_row_count: int
     serving_row_count: int
     skipped_row_count: int
+    fetch_error_count: int
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,7 @@ class AirQualitySidoMeasurementLoadResult:
     requested_sido_count: int
     raw_row_count: int
     serving_row_count: int
+    skipped_row_count: int
 
 
 @dataclass(frozen=True)
@@ -284,10 +286,17 @@ def load_short_term_weather_for_grids(
     raw_count = 0
     serving_count = 0
     skipped_count = 0
+    fetch_error_count = 0
     for nx, ny in grids:
-        for endpoint, rows in _fetch_short_term_rows(
-            client, nx=nx, ny=ny, endpoints=requested_endpoints
-        ):
+        for endpoint in requested_endpoints:
+            try:
+                rows = _fetch_short_term_endpoint(client, nx=nx, ny=ny, endpoint=endpoint)
+            except DataGoApiError:
+                raise
+            except Exception:
+                fetch_error_count += 1
+                skipped_count += 1
+                continue
             for row in rows:
                 category_code = _optional_text(row, "category")
                 if not category_code:
@@ -328,6 +337,8 @@ def load_short_term_weather_for_grids(
                     collected_at=resolved_collected_at,
                 )
                 serving_count += 1
+    if grids and fetch_error_count == len(grids) * len(requested_endpoints):
+        raise RuntimeError("KMA short-term weather fetch failed for all grids and endpoints.")
     session.flush()
     return WeatherShortTermLoadResult(
         requested_grid_count=len(grids),
@@ -335,27 +346,33 @@ def load_short_term_weather_for_grids(
         raw_row_count=raw_count,
         serving_row_count=serving_count,
         skipped_row_count=skipped_count,
+        fetch_error_count=fetch_error_count,
     )
 
 
-def _fetch_short_term_rows(
+def _fetch_short_term_endpoint(
     client: KmaWeatherApiClient,
     *,
     nx: int,
     ny: int,
-    endpoints: tuple[str, ...],
-) -> list[tuple[str, list[dict[str, Any]]]]:
-    rows: list[tuple[str, list[dict[str, Any]]]] = []
-    for endpoint in endpoints:
-        if endpoint == KMA_ULTRA_SHORT_NOWCAST_ENDPOINT:
-            rows.append((endpoint, client.fetch_ultra_short_nowcast(nx=nx, ny=ny)))
-        elif endpoint == KMA_ULTRA_SHORT_FORECAST_ENDPOINT:
-            rows.append((endpoint, client.fetch_ultra_short_forecast(nx=nx, ny=ny)))
-        elif endpoint == KMA_VILLAGE_FORECAST_ENDPOINT:
-            rows.append((endpoint, client.fetch_village_forecast(nx=nx, ny=ny)))
-        else:
-            raise ValueError(f"Unsupported short-term weather endpoint: {endpoint}")
-    return rows
+    endpoint: str,
+) -> list[dict[str, Any]]:
+    if endpoint == KMA_ULTRA_SHORT_NOWCAST_ENDPOINT:
+        return _ensure_api_rows(
+            client.fetch_ultra_short_nowcast(nx=nx, ny=ny),
+            context=endpoint,
+        )
+    if endpoint == KMA_ULTRA_SHORT_FORECAST_ENDPOINT:
+        return _ensure_api_rows(
+            client.fetch_ultra_short_forecast(nx=nx, ny=ny),
+            context=endpoint,
+        )
+    if endpoint == KMA_VILLAGE_FORECAST_ENDPOINT:
+        return _ensure_api_rows(
+            client.fetch_village_forecast(nx=nx, ny=ny),
+            context=endpoint,
+        )
+    raise ValueError(f"Unsupported short-term weather endpoint: {endpoint}")
 
 
 def load_kma_alerts(
@@ -387,14 +404,19 @@ def load_kma_alerts(
     raw_count = 0
     serving_count = 0
     seen_station_ids: set[str] = set()
+    station_cache: dict[str, WeatherKmaAlertStationCode] = {}
     for endpoint, alert_type, rows in endpoint_rows:
         for row in rows:
             stn_id = _optional_text(row, "stnId")
             if stn_id:
                 seen_station_ids.add(stn_id)
-                _upsert_alert_station(
-                    session, stn_id=stn_id, row=row, collected_at=resolved_collected_at
-                )
+                if stn_id not in station_cache:
+                    station_cache[stn_id] = _upsert_alert_station(
+                        session,
+                        stn_id=stn_id,
+                        row=row,
+                        collected_at=resolved_collected_at,
+                    )
             raw_payload = dict(row)
             title = _optional_text(row, "title")
             tm_fc = _optional_text(row, "tmFc")
@@ -450,14 +472,14 @@ def seed_kma_mid_term_regions(
         endpoint = _required_text(region, "endpoint")
         region_kind = _required_text(region, "region_kind")
         provider_region_id = _required_text(region, "provider_region_id")
-        existing = session.scalar(
+        existing_region = session.scalar(
             select(WeatherMidForecastRegion)
             .where(WeatherMidForecastRegion.provider == provider)
             .where(WeatherMidForecastRegion.endpoint == endpoint)
             .where(WeatherMidForecastRegion.region_kind == region_kind)
             .where(WeatherMidForecastRegion.provider_region_id == provider_region_id)
         )
-        values = {
+        region_values: dict[str, Any] = {
             "region_name": _required_text(region, "region_name"),
             "parent_region_id": _optional_text(region, "parent_region_id"),
             "source_version": source_version,
@@ -465,19 +487,19 @@ def seed_kma_mid_term_regions(
             "collected_at": resolved_collected_at,
             "is_active": True,
         }
-        if existing is None:
+        if existing_region is None:
             session.add(
                 WeatherMidForecastRegion(
                     provider=provider,
                     endpoint=endpoint,
                     region_kind=region_kind,
                     provider_region_id=provider_region_id,
-                    **values,
+                    **region_values,
                 )
             )
         else:
-            for key, value in values.items():
-                setattr(existing, key, value)
+            for key, value in region_values.items():
+                setattr(existing_region, key, value)
         region_count += 1
 
     session.flush()
@@ -487,7 +509,7 @@ def seed_kma_mid_term_regions(
         endpoint = _required_text(mapping, "endpoint")
         provider_region_kind = _required_text(mapping, "provider_region_kind")
         provider_region_id = _required_text(mapping, "provider_region_id")
-        existing = session.scalar(
+        existing_mapping = session.scalar(
             select(WeatherMidRegionAddressMapping)
             .where(WeatherMidRegionAddressMapping.provider == provider)
             .where(WeatherMidRegionAddressMapping.endpoint == endpoint)
@@ -503,7 +525,7 @@ def seed_kma_mid_term_regions(
                 == _optional_text(mapping, "legal_dong_code_prefix")
             )
         )
-        values = {
+        mapping_values: dict[str, Any] = {
             "sido_code": _optional_text(mapping, "sido_code"),
             "sigungu_code": _optional_text(mapping, "sigungu_code"),
             "legal_dong_code_prefix": _optional_text(mapping, "legal_dong_code_prefix"),
@@ -514,19 +536,19 @@ def seed_kma_mid_term_regions(
             "raw_payload": mapping,
             "is_active": True,
         }
-        if existing is None:
+        if existing_mapping is None:
             session.add(
                 WeatherMidRegionAddressMapping(
                     provider=provider,
                     endpoint=endpoint,
                     provider_region_kind=provider_region_kind,
                     provider_region_id=provider_region_id,
-                    **values,
+                    **mapping_values,
                 )
             )
         else:
-            for key, value in values.items():
-                setattr(existing, key, value)
+            for key, value in mapping_values.items():
+                setattr(existing_mapping, key, value)
         mapping_count += 1
 
     session.flush()
@@ -643,15 +665,24 @@ def load_air_quality_stations(
     raw_count = 0
     serving_count = 0
     mapped_count = 0
-    for sido_name in sido_names or KST_SIDO_NAMES:
-        for row in client.fetch_station_list(sido_name=sido_name):
+    station_requests: list[tuple[str | None, list[dict[str, Any]]]]
+    if sido_names is None:
+        station_requests = [(None, client.fetch_station_list())]
+    else:
+        station_requests = [
+            (sido_name, client.fetch_station_list(sido_name=sido_name))
+            for sido_name in sido_names
+        ]
+    for requested_sido_name, rows in station_requests:
+        for row in rows:
             station_name = _required_text(row, "stationName")
             mang_name = _optional_text(row, "mangName")
+            resolved_sido_name = requested_sido_name or _infer_sido_name(row)
             raw_payload = dict(row)
             session.add(
                 AirQualityRawStation(
                     endpoint=AIRKOREA_STATION_ENDPOINT,
-                    request_sido_name=sido_name,
+                    request_sido_name=resolved_sido_name,
                     station_name=station_name,
                     mang_name=mang_name,
                     raw_payload=raw_payload,
@@ -663,7 +694,7 @@ def load_air_quality_stations(
             mapped = _upsert_air_quality_station(
                 session,
                 row=raw_payload,
-                request_sido_name=sido_name,
+                request_sido_name=resolved_sido_name,
                 station_name=station_name,
                 mang_name=mang_name,
                 collected_at=resolved_collected_at,
@@ -731,10 +762,14 @@ def load_air_quality_sido_measurements(
     requested_sidos = sido_names or KST_SIDO_NAMES
     raw_count = 0
     serving_count = 0
+    skipped_count = 0
     for sido_name in requested_sidos:
         for row in client.fetch_sido_measurements(sido_name=sido_name):
-            station_name = _required_text(row, "stationName")
-            data_time = _required_text(row, "dataTime")
+            station_name = _optional_text(row, "stationName")
+            data_time = _optional_text(row, "dataTime")
+            if station_name is None:
+                skipped_count += 1
+                continue
             raw_payload = dict(row)
             session.add(
                 AirQualityRawSidoMeasurement(
@@ -748,6 +783,9 @@ def load_air_quality_sido_measurements(
                 )
             )
             raw_count += 1
+            if data_time is None:
+                skipped_count += 1
+                continue
             _upsert_air_quality_measurement(
                 session,
                 row=raw_payload,
@@ -762,6 +800,7 @@ def load_air_quality_sido_measurements(
         requested_sido_count=len(requested_sidos),
         raw_row_count=raw_count,
         serving_row_count=serving_count,
+        skipped_row_count=skipped_count,
     )
 
 
@@ -770,11 +809,20 @@ def _fetch_mid_term_rows(
     region: WeatherMidForecastRegion,
 ) -> list[dict[str, Any]]:
     if region.region_kind == "outlook_station":
-        return client.fetch_mid_outlook(stn_id=region.provider_region_id)
+        return _ensure_api_rows(
+            client.fetch_mid_outlook(stn_id=region.provider_region_id),
+            context=KMA_MID_OUTLOOK_ENDPOINT,
+        )
     if region.region_kind == "land":
-        return client.fetch_mid_land_forecast(reg_id=region.provider_region_id)
+        return _ensure_api_rows(
+            client.fetch_mid_land_forecast(reg_id=region.provider_region_id),
+            context=KMA_MID_LAND_ENDPOINT,
+        )
     if region.region_kind == "temperature":
-        return client.fetch_mid_temperature(reg_id=region.provider_region_id)
+        return _ensure_api_rows(
+            client.fetch_mid_temperature(reg_id=region.provider_region_id),
+            context=KMA_MID_TEMPERATURE_ENDPOINT,
+        )
     raise ValueError(f"Unsupported KMA mid-term region kind: {region.region_kind}")
 
 
@@ -1071,7 +1119,7 @@ def _upsert_air_quality_station(
     session: Session,
     *,
     row: dict[str, Any],
-    request_sido_name: str,
+    request_sido_name: str | None,
     station_name: str,
     mang_name: str | None,
     collected_at: datetime,
@@ -1111,6 +1159,16 @@ def _upsert_air_quality_station(
         for key, value in values.items():
             setattr(existing, key, value)
     return boundary is not None
+
+
+def _infer_sido_name(row: dict[str, Any]) -> str | None:
+    address = _optional_text(row, "addr")
+    if address is None:
+        return None
+    for sido_name in KST_SIDO_NAMES:
+        if address.startswith(sido_name):
+            return sido_name
+    return None
 
 
 def _upsert_air_quality_forecast(
@@ -1247,6 +1305,12 @@ def _load_mid_term_region_config(config_path: Path | str | None) -> dict[str, An
         if not isinstance(raw, dict):
             raise ValueError("KMA mid-term region config must be a JSON object.")
         return raw
+    container_path = Path("/opt/tripmate/config/kma-mid-term-regions.json")
+    if config_path is None and container_path.exists():
+        raw = json.loads(container_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("KMA mid-term region config must be a JSON object.")
+        return raw
     return {"provider": "kma", "source_version": "empty", "regions": [], "mappings": []}
 
 
@@ -1265,6 +1329,17 @@ def _required_text(row: dict[str, Any], key: str) -> str:
     if value is None:
         raise ValueError(f"weather row is missing required field {key}.")
     return value
+
+
+def _ensure_api_rows(value: object, *, context: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise DataGoApiError(f"weather API response for {context} must be a list.")
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(value, start=1):
+        if not isinstance(row, dict):
+            raise DataGoApiError(f"weather API response for {context} row {index} is invalid.")
+        rows.append({str(key): row_value for key, row_value in row.items()})
+    return rows
 
 
 def _optional_text(row: dict[str, Any], key: str) -> str | None:

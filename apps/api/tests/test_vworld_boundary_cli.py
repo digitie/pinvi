@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.cli.vworld_boundary import import_vworld_boundary_archives
-from app.models.address import AddressCodeStandard
+from app.models.address import AddressCodeStandard, RegionServingBoundary
 from app.models.etl import AdminNotification, EtlRunLog, TelegramSystemNotificationOutbox
 
 KOREA_UNIFIED_PRJ = (
@@ -39,11 +39,13 @@ def test_import_vworld_boundary_archives_records_etl_log(
 
     with session_factory() as verify_session:
         run_log = verify_session.scalar(select(EtlRunLog))
+        serving_boundary_count = verify_session.query(RegionServingBoundary).count()
         assert len(results) == 1
         assert run_log is not None
         assert run_log.dataset_key == "vworld_boundary_upload"
         assert run_log.run_key == "N3A_G0110000"
         assert run_log.status == "success"
+        assert serving_boundary_count == 1
 
 
 def test_import_vworld_boundary_archives_persists_failure_log(

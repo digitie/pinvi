@@ -267,7 +267,10 @@ class RegionRawVWorldBoundary(Base):
 class RegionServingBoundary(TimestampMixin, Base):
     __tablename__ = "region_serving_boundary"
     __table_args__ = (
+        Index("ix_rsb_address_code_standard_code", "address_code_standard_code"),
+        Index("ix_rsb_import_batch_id", "import_batch_id"),
         Index("ix_rsb_level_code", "boundary_level", "region_code"),
+        Index("ix_rsb_raw_boundary_id", "raw_boundary_id"),
         Index("ix_rsb_sido_code", "sido_code"),
         Index("ix_rsb_sigungu_code", "sigungu_code"),
         Index("ix_rsb_legal_dong_code", "legal_dong_code"),

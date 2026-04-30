@@ -1,4 +1,14 @@
-from sqlalchemy import DateTime, UniqueConstraint
+from typing import cast
+
+from geoalchemy2 import Geometry
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    PrimaryKeyConstraint,
+    Table,
+    UniqueConstraint,
+)
 
 from app.db.base import Base
 from app.models import (
@@ -15,7 +25,22 @@ from app.models import (
     AirQualityServingForecast,
     AirQualityServingSidoMeasurement,
     AirQualityServingStation,
+    AreaDetail,
+    BeachIndexForecast,
+    BeachObservation,
+    BeachProfile,
+    BeachProviderRef,
+    BeachSourceRecord,
+    BeachWaterQualityMeasurement,
+    ContentFeatureLink,
+    ContentItem,
+    ContentMedia,
+    ContentSourceLink,
+    ContentTag,
+    EmailVerificationToken,
     EtlRunLog,
+    EventDetail,
+    FeatureMappingCandidate,
     FuelRawAvgPrice,
     FuelRawLowestStation,
     FuelRawOpiNetRegionCode,
@@ -24,6 +49,19 @@ from app.models import (
     FuelServingLowestStation,
     FuelServingOpiNetRegionCode,
     KmaRecommendedTourCourse,
+    MapFeature,
+    MapFeatureMedia,
+    MapFeatureProviderRef,
+    MapFeatureSourceLink,
+    MapFeatureTag,
+    MapFeatureWebLink,
+    MediaAsset,
+    NoticeDetail,
+    OceanActivityIndexForecast,
+    OceanActivityIndexLocation,
+    OceanActivityIndexSourceRecord,
+    PlaceCategory,
+    PlaceDetail,
     RegionBoundaryImportBatch,
     RegionRawVWorldBoundary,
     RegionServingBoundary,
@@ -33,20 +71,30 @@ from app.models import (
     RestAreaServingMaster,
     RestAreaServingOilPrice,
     RestAreaServingService,
+    RouteDetail,
+    RouteWaypoint,
+    SourceRecord,
+    Tag,
     TelegramSystemNotificationOutbox,
     TourCourseRawKmaPoint,
     TourCourseRawKmaSpotWeather,
     TourCourseServingKmaSpotWeather,
+    TourRawPublicCulturalFestival,
+    TourServingPublicCulturalFestival,
     Trip,
     TripDay,
+    TripPlanItem,
     User,
     UserSession,
+    WeatherBeachLocation,
     WeatherKmaAlertStationCode,
     WeatherMidForecastRegion,
     WeatherMidRegionAddressMapping,
+    WeatherRawBeach,
     WeatherRawKmaAlert,
     WeatherRawMidTerm,
     WeatherRawShortTerm,
+    WeatherServingBeach,
     WeatherServingKmaAlert,
     WeatherServingMidTerm,
     WeatherServingShortTerm,
@@ -63,6 +111,13 @@ def test_initial_core_tables_are_registered() -> None:
         AddressServingJusoRelatedJibun.__tablename__,
         AddressServingJusoRoadAddress.__tablename__,
         AdminNotification.__tablename__,
+        BeachIndexForecast.__tablename__,
+        BeachObservation.__tablename__,
+        BeachProfile.__tablename__,
+        BeachProviderRef.__tablename__,
+        BeachSourceRecord.__tablename__,
+        BeachWaterQualityMeasurement.__tablename__,
+        EmailVerificationToken.__tablename__,
         EtlRunLog.__tablename__,
         FuelRawAvgPrice.__tablename__,
         FuelRawLowestStation.__tablename__,
@@ -72,6 +127,31 @@ def test_initial_core_tables_are_registered() -> None:
         FuelServingLowestStation.__tablename__,
         FuelServingOpiNetRegionCode.__tablename__,
         KmaRecommendedTourCourse.__tablename__,
+        AreaDetail.__tablename__,
+        ContentFeatureLink.__tablename__,
+        ContentItem.__tablename__,
+        ContentMedia.__tablename__,
+        ContentSourceLink.__tablename__,
+        ContentTag.__tablename__,
+        EventDetail.__tablename__,
+        FeatureMappingCandidate.__tablename__,
+        MapFeature.__tablename__,
+        MapFeatureMedia.__tablename__,
+        MapFeatureProviderRef.__tablename__,
+        MapFeatureSourceLink.__tablename__,
+        MapFeatureTag.__tablename__,
+        MapFeatureWebLink.__tablename__,
+        MediaAsset.__tablename__,
+        NoticeDetail.__tablename__,
+        OceanActivityIndexForecast.__tablename__,
+        OceanActivityIndexLocation.__tablename__,
+        OceanActivityIndexSourceRecord.__tablename__,
+        PlaceCategory.__tablename__,
+        PlaceDetail.__tablename__,
+        RouteDetail.__tablename__,
+        RouteWaypoint.__tablename__,
+        SourceRecord.__tablename__,
+        Tag.__tablename__,
         RestAreaRawMaster.__tablename__,
         RestAreaRawOilPrice.__tablename__,
         RestAreaRawService.__tablename__,
@@ -85,13 +165,19 @@ def test_initial_core_tables_are_registered() -> None:
         TourCourseRawKmaPoint.__tablename__,
         TourCourseRawKmaSpotWeather.__tablename__,
         TourCourseServingKmaSpotWeather.__tablename__,
+        TourRawPublicCulturalFestival.__tablename__,
+        TourServingPublicCulturalFestival.__tablename__,
         User.__tablename__,
         UserSession.__tablename__,
         Trip.__tablename__,
         TripDay.__tablename__,
+        TripPlanItem.__tablename__,
+        WeatherBeachLocation.__tablename__,
         WeatherKmaAlertStationCode.__tablename__,
+        WeatherRawBeach.__tablename__,
         WeatherRawKmaAlert.__tablename__,
         WeatherRawShortTerm.__tablename__,
+        WeatherServingBeach.__tablename__,
         WeatherServingKmaAlert.__tablename__,
         WeatherMidForecastRegion.__tablename__,
         WeatherMidRegionAddressMapping.__tablename__,
@@ -125,9 +211,30 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
     fuel_station_timestamp_type = FuelServingLowestStation.__table__.c.timestamp.type
     weather_collected_at_type = WeatherServingShortTerm.__table__.c.collected_at.type
     weather_mid_collected_at_type = WeatherServingMidTerm.__table__.c.collected_at.type
+    weather_beach_location_collected_at_type = WeatherBeachLocation.__table__.c.collected_at.type
+    weather_raw_beach_collected_at_type = WeatherRawBeach.__table__.c.collected_at.type
+    weather_serving_beach_collected_at_type = WeatherServingBeach.__table__.c.collected_at.type
     air_quality_collected_at_type = AirQualityServingSidoMeasurement.__table__.c.collected_at.type
     tour_collected_at_type = KmaRecommendedTourCourse.__table__.c.collected_at.type
     tour_weather_collected_at_type = TourCourseServingKmaSpotWeather.__table__.c.collected_at.type
+    public_festival_collected_at_type = (
+        TourServingPublicCulturalFestival.__table__.c.collected_at.type
+    )
+    place_first_seen_at_type = MapFeature.__table__.c.first_seen_at.type
+    place_source_collected_at_type = SourceRecord.__table__.c.imported_at.type
+    email_token_expires_at_type = EmailVerificationToken.__table__.c.expires_at.type
+    trip_item_starts_at_type = TripPlanItem.__table__.c.starts_at.type
+    trip_item_ends_at_type = TripPlanItem.__table__.c.ends_at.type
+    beach_profile_collected_at_type = BeachProfile.__table__.c.collected_at.type
+    beach_source_collected_at_type = BeachSourceRecord.__table__.c.collected_at.type
+    beach_observation_collected_at_type = BeachObservation.__table__.c.collected_at.type
+    beach_index_collected_at_type = BeachIndexForecast.__table__.c.collected_at.type
+    beach_quality_collected_at_type = BeachWaterQualityMeasurement.__table__.c.collected_at.type
+    ocean_location_collected_at_type = OceanActivityIndexLocation.__table__.c.collected_at.type
+    ocean_source_collected_at_type = OceanActivityIndexSourceRecord.__table__.c.collected_at.type
+    ocean_forecast_collected_at_type = OceanActivityIndexForecast.__table__.c.collected_at.type
+    ocean_forecast_start_at_type = OceanActivityIndexForecast.__table__.c.activity_start_at.type
+    ocean_forecast_end_at_type = OceanActivityIndexForecast.__table__.c.activity_end_at.type
 
     assert isinstance(started_at_type, DateTime)
     assert isinstance(finished_at_type, DateTime)
@@ -136,9 +243,28 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
     assert isinstance(fuel_station_timestamp_type, DateTime)
     assert isinstance(weather_collected_at_type, DateTime)
     assert isinstance(weather_mid_collected_at_type, DateTime)
+    assert isinstance(weather_beach_location_collected_at_type, DateTime)
+    assert isinstance(weather_raw_beach_collected_at_type, DateTime)
+    assert isinstance(weather_serving_beach_collected_at_type, DateTime)
     assert isinstance(air_quality_collected_at_type, DateTime)
     assert isinstance(tour_collected_at_type, DateTime)
     assert isinstance(tour_weather_collected_at_type, DateTime)
+    assert isinstance(public_festival_collected_at_type, DateTime)
+    assert isinstance(place_first_seen_at_type, DateTime)
+    assert isinstance(place_source_collected_at_type, DateTime)
+    assert isinstance(email_token_expires_at_type, DateTime)
+    assert isinstance(trip_item_starts_at_type, DateTime)
+    assert isinstance(trip_item_ends_at_type, DateTime)
+    assert isinstance(beach_profile_collected_at_type, DateTime)
+    assert isinstance(beach_source_collected_at_type, DateTime)
+    assert isinstance(beach_observation_collected_at_type, DateTime)
+    assert isinstance(beach_index_collected_at_type, DateTime)
+    assert isinstance(beach_quality_collected_at_type, DateTime)
+    assert isinstance(ocean_location_collected_at_type, DateTime)
+    assert isinstance(ocean_source_collected_at_type, DateTime)
+    assert isinstance(ocean_forecast_collected_at_type, DateTime)
+    assert isinstance(ocean_forecast_start_at_type, DateTime)
+    assert isinstance(ocean_forecast_end_at_type, DateTime)
     assert started_at_type.timezone is True
     assert finished_at_type.timezone is True
     assert sent_at_type.timezone is True
@@ -146,24 +272,105 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
     assert fuel_station_timestamp_type.timezone is True
     assert weather_collected_at_type.timezone is True
     assert weather_mid_collected_at_type.timezone is True
+    assert weather_beach_location_collected_at_type.timezone is True
+    assert weather_raw_beach_collected_at_type.timezone is True
+    assert weather_serving_beach_collected_at_type.timezone is True
     assert air_quality_collected_at_type.timezone is True
     assert tour_collected_at_type.timezone is True
     assert tour_weather_collected_at_type.timezone is True
+    assert public_festival_collected_at_type.timezone is True
+    assert place_first_seen_at_type.timezone is True
+    assert place_source_collected_at_type.timezone is True
+    assert email_token_expires_at_type.timezone is True
+    assert trip_item_starts_at_type.timezone is True
+    assert trip_item_ends_at_type.timezone is True
+    assert beach_profile_collected_at_type.timezone is True
+    assert beach_source_collected_at_type.timezone is True
+    assert beach_observation_collected_at_type.timezone is True
+    assert beach_index_collected_at_type.timezone is True
+    assert beach_quality_collected_at_type.timezone is True
+    assert ocean_location_collected_at_type.timezone is True
+    assert ocean_source_collected_at_type.timezone is True
+    assert ocean_forecast_collected_at_type.timezone is True
+    assert ocean_forecast_start_at_type.timezone is True
+    assert ocean_forecast_end_at_type.timezone is True
 
 
 def test_nullable_unique_constraints_use_postgresql_nulls_not_distinct() -> None:
+    weather_mapping_table = WeatherMidRegionAddressMapping.__table__
+    tour_weather_table = TourCourseServingKmaSpotWeather.__table__
+
+    assert isinstance(weather_mapping_table, Table)
+    assert isinstance(tour_weather_table, Table)
+
     weather_mapping_constraint = next(
         constraint
-        for constraint in WeatherMidRegionAddressMapping.__table__.constraints
+        for constraint in weather_mapping_table.constraints
         if isinstance(constraint, UniqueConstraint)
         and constraint.name == "uq_wmram_provider_region_address_scope"
     )
     tour_weather_constraint = next(
         constraint
-        for constraint in TourCourseServingKmaSpotWeather.__table__.constraints
+        for constraint in tour_weather_table.constraints
         if isinstance(constraint, UniqueConstraint)
         and constraint.name == "uq_tcskw_course_spot_time_category"
     )
 
     assert weather_mapping_constraint.dialect_options["postgresql"]["nulls_not_distinct"] is True
     assert tour_weather_constraint.dialect_options["postgresql"]["nulls_not_distinct"] is True
+
+
+def test_geometry_columns_have_explicit_srid_and_gist_index() -> None:
+    for table in Base.metadata.tables.values():
+        geometry_columns = [column for column in table.c if isinstance(column.type, Geometry)]
+
+        for column in geometry_columns:
+            geometry_type = column.type
+            assert isinstance(geometry_type, Geometry)
+            assert geometry_type.srid in {4326, 5179}
+            assert geometry_type.spatial_index is False
+            assert any(
+                column.name in index.columns
+                and index.dialect_options["postgresql"].get("using") == "gist"
+                for index in table.indexes
+            ), f"{table.name}.{column.name} needs an explicit GiST index"
+
+
+def test_foreign_key_columns_have_covering_indexes() -> None:
+    for table in Base.metadata.tables.values():
+        covering_column_sets = [
+            tuple(column.name for column in index.columns) for index in table.indexes
+        ]
+        covering_column_sets.extend(
+            tuple(column.name for column in constraint.columns)
+            for constraint in table.constraints
+            if isinstance(constraint, PrimaryKeyConstraint | UniqueConstraint)
+        )
+
+        for constraint in table.constraints:
+            if not isinstance(constraint, ForeignKeyConstraint):
+                continue
+
+            fk_columns = tuple(column.name for column in constraint.columns)
+            assert any(
+                indexed_columns[: len(fk_columns)] == fk_columns
+                for indexed_columns in covering_column_sets
+            ), f"{table.name}.{constraint.name} needs a covering index"
+
+
+def test_place_check_constraint_names_match_migration_contract() -> None:
+    category_table = cast(Table, PlaceCategory.__table__)
+    place_table = cast(Table, MapFeature.__table__)
+    category_checks = {
+        constraint.name
+        for constraint in category_table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    place_checks = {
+        constraint.name
+        for constraint in place_table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert "ck_place_category_code_format" in category_checks
+    assert "ck_map_features_not_self_parent" in place_checks

@@ -166,3 +166,167 @@ def test_mid_term_weather_migration_keeps_provider_codes_separate_from_address_c
     assert "no2_grade" in migration
     assert "pm10_flag" in migration
     assert migration.count("postgresql_nulls_not_distinct=True") == 2
+
+
+def test_database_architecture_index_migration_adds_missing_fk_indexes() -> None:
+    migration = Path("alembic/versions/20260427_0012_database_architecture_indexes.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ix_admin_notifications_etl_run_log_id" in migration
+    assert "ix_tg_sys_outbox_etl_run_log_id" in migration
+    assert "ix_rsb_address_code_standard_code" in migration
+    assert "ix_rsb_import_batch_id" in migration
+    assert "ix_rsb_raw_boundary_id" in migration
+    assert "ix_wska_stn_id" in migration
+
+
+def test_default_admin_seed_migration_uses_hashed_password_and_admin_flags() -> None:
+    migration = Path("alembic/versions/20260427_0013_seed_default_admin.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "admin@ad.min" in migration
+    assert "pbkdf2_sha256" in migration
+    assert "is_admin" in migration
+    assert "is_privileged" in migration
+    assert "password_hash" in migration
+    assert "VALUES ('admin'" not in migration
+
+
+def test_place_canonical_migration_creates_public_data_place_tables() -> None:
+    migration = Path("alembic/versions/20260427_0015_place_canonical_tables.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'down_revision: str | None = "20260427_0013"' in migration
+    assert "place_categories" in migration
+    assert "places" in migration
+    assert "place_source_records" in migration
+    assert "place_source_links" in migration
+    assert "place_provider_refs" in migration
+    assert "place_web_links" in migration
+    assert "source_specific_attributes" in migration
+    assert "fk_places_legal_dong_code" in migration
+    assert "fk_places_primary_category_code" in migration
+    assert "uq_place_provider_refs_provider_dataset_place" in migration
+    assert "postgresql_nulls_not_distinct=True" in migration
+    assert "03030201" in migration
+    assert "01040201" in migration
+    assert "ix_places_geom" in migration
+
+
+def test_user_registration_migration_adds_profile_and_email_tokens() -> None:
+    migration = Path("alembic/versions/20260427_0016_user_registration_profile.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "email_verification_tokens" in migration
+    assert "account_status" in migration
+    assert "system_role" in migration
+    assert "birth_year_month" in migration
+    assert "residence_sigungu_code" in migration
+    assert "fk_users_residence_sigungu_code" in migration
+    assert "fk_users_created_by_user_id" in migration
+    assert "token_hash" in migration
+    assert "token_value" not in migration
+    assert "plain_token" not in migration
+
+
+def test_public_cultural_festival_migration_keeps_raw_serving_and_address_keys() -> None:
+    migration = Path("alembic/versions/20260428_0017_public_cultural_festival.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tour_raw_public_cultural_festival" in migration
+    assert "tour_serving_public_cultural_festival" in migration
+    assert "uq_trpcf_provider_source_hash" in migration
+    assert "uq_tspcf_provider_source_record" in migration
+    assert "place_join_key" in migration
+    assert "road_name_code" in migration
+    assert "road_address_management_no" in migration
+    assert "fk_tspcf_legal_dong_code" in migration
+    assert "POINT" in migration
+    assert "srid=4326" in migration
+    assert "ix_tspcf_geom" in migration
+
+
+def test_map_feature_replacement_migration_links_trip_items_to_features() -> None:
+    migration = Path("alembic/versions/20260429_0021_map_feature_schema.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "trip_plan_items" in migration
+    assert "resource_type" in migration
+    assert "map_feature_id" in migration
+    assert "festival_id" in migration
+    assert "fk_tpi_map_feature_id" in migration
+    assert "ck_tpi_resource_type" in migration
+    assert "ck_tpi_map_feature_type_match" in migration
+    assert "ck_tpi_single_fk_resource" in migration
+
+
+def test_map_feature_replacement_migration_links_beach_weather_to_features() -> None:
+    migration = Path("alembic/versions/20260429_0021_map_feature_schema.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "weather_beach_location" in migration
+    assert "weather_serving_beach" in migration
+    assert "map_features" in migration
+    assert "fk_wbl_map_feature_id" in migration
+    assert "fk_wsb_map_feature_id" in migration
+    assert "ix_wbl_map_feature_id" in migration
+    assert "ix_wsb_map_feature_id" in migration
+
+
+def test_integrated_beach_source_migration_keeps_profile_refs_and_measurements() -> None:
+    migration = Path("alembic/versions/20260428_0020_beach_domain_tables.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "beach_profiles" in migration
+    assert "beach_provider_refs" in migration
+    assert "beach_source_records" in migration
+    assert "beach_observations" in migration
+    assert "beach_index_forecasts" in migration
+    assert "beach_water_quality_measurements" in migration
+    assert "fk_beach_profiles_legal_dong_code" in migration
+    assert "uq_beach_provider_refs_provider_dataset_id" in migration
+    assert "uq_beach_source_records_provider_dataset_record_hash" in migration
+    assert "uq_beach_observations_provider_beach_time" in migration
+    assert "uq_beach_index_forecasts_provider_beach_date_slot" in migration
+    assert "uq_beach_water_quality_measurements_provider_source_key" in migration
+    assert "POINT" in migration
+    assert "srid=4326" in migration
+    assert "ix_beach_profiles_geom" in migration
+
+
+def test_map_feature_replacement_migration_retargets_beach_profiles() -> None:
+    migration = Path("alembic/versions/20260429_0021_map_feature_schema.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "beach_profiles" in migration
+    assert "map_feature_id" in migration
+    assert "fk_beach_profiles_map_feature_id" in migration
+    assert "ix_beach_profiles_map_feature_id" in migration
+
+
+def test_ocean_activity_index_migration_keeps_raw_location_and_forecast_layers() -> None:
+    migration = Path("alembic/versions/20260429_0022_ocean_activity_index_tables.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ocean_activity_index_locations" in migration
+    assert "ocean_activity_index_source_records" in migration
+    assert "ocean_activity_index_forecasts" in migration
+    assert "fk_oail_legal_dong_code" in migration
+    assert "fk_oaif_location_id" in migration
+    assert "fk_oaif_source_record_id" in migration
+    assert "uq_oail_provider_dataset_location" in migration
+    assert "uq_oaisr_provider_dataset_record_hash" in migration
+    assert "uq_oaif_provider_location_date_slot_time" in migration
+    assert "POINT" in migration
+    assert "srid=4326" in migration
+    assert "ix_oail_geom" in migration

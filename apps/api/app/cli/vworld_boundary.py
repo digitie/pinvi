@@ -52,7 +52,7 @@ def import_vworld_boundary_archive(
     try:
         with session_factory() as load_session:
             result = load_vworld_boundary_zip(load_session, source_path)
-        load_session.commit()
+            load_session.commit()
 
         with session_factory() as log_session:
             resolved_run_log = log_session.get(EtlRunLog, run_log_id)

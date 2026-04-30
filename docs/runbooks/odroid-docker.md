@@ -1,0 +1,79 @@
+# ODROID Docker 운영 안내
+
+## 범위
+
+ODROID M1S Ubuntu 24.04에서 TripMate PostgreSQL/PostGIS와 Airflow ETL 런타임을 Docker Compose로 실행하기 위한 기준이다. 실제 원격 배포 자동화, 무중단 배포, rollback은 아직 별도 `scripts/deploy.sh`로 분리되지 않았다.
+
+## 전제
+
+- OS: Ubuntu 24.04
+- Docker Engine과 Docker Compose plugin 설치
+- 저장소 checkout 경로 예: `/opt/tripmate`
+- 운영 비밀값은 서버 로컬 `.env`에 저장하고 Git에 포함하지 않는다.
+- `dataset/` 하위에는 운영자가 직접 확보한 VWorld SHP ZIP, 법정동코드 CSV, 기상청 관광코스 파일 등을 둔다.
+
+필수 `.env` 예:
+
+```text
+TRIPMATE_DATA_GO_SERVICE_KEY=...
+TRIPMATE_OPINET_API_KEY=...
+TRIPMATE_EXPRESSWAY_API_KEY=...
+```
+
+실제 값을 문서, 이슈, 로그에 남기지 않는다.
+
+## 시작
+
+ODROID에서 직접 실행:
+
+```bash
+cd /opt/tripmate
+scripts/odroid-docker-start.sh
+```
+
+스크립트가 하는 일:
+
+- Linux 환경과 Docker Compose plugin 존재 여부를 확인한다.
+- `.env`가 없으면 중단한다.
+- `.tmp/airflow-downloads`, `.tmp/airflow-logs`, `dataset/` 디렉터리를 만든다.
+- `AIRFLOW_UID` 기본값을 현재 사용자 UID로 잡는다.
+- `infra/docker-compose.yml`의 Postgres/PostGIS, Airflow postgres, redis, webserver, scheduler, dag-processor, worker를 빌드/기동한다.
+
+## Migration
+
+현재 migration은 WSL2 또는 ODROID에서 수동으로 실행한다. ODROID에서는 실행 중인 Airflow 이미지 안에서 실행하는 방식을 우선한다. Airflow 이미지에는 Alembic Python 패키지는 있지만 `alembic` CLI entrypoint가 없을 수 있으므로 Python API로 호출한다.
+
+```bash
+cd /opt/tripmate
+docker compose -f infra/docker-compose.yml exec -T airflow-scheduler bash -lc \
+  'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
+```
+
+## 운영 주의
+
+- 배포 시 프론트엔드 외부 포트와 백엔드 API 외부 포트는 아직 미정이다. ODROID/reverse proxy 배포 기준이 정해지기 전까지 `3000`, `8000`, `13082`, `18082`를 운영 포트로 문서화하거나 스크립트에 고정하지 않는다.
+- 컨테이너 내부 포트가 Web `3000`, API `8000`인 것과 운영자가 접속할 외부 host/reverse proxy 포트는 별개다.
+- ODROID에서는 CPU와 I/O 여유가 PC보다 작다. 전국 SHP 적재, Juso 전체 파일 적재, OpiNet 전국 시군구 최저가 수집은 동시에 여러 개 돌리지 않는다.
+- Juso 전체 주소 파일은 압축 해제 후 1GB 이상이 될 수 있다. loader는 streaming inspect와 5,000건 단위 batch insert를 사용하므로, 운영 중 메모리가 급증하면 이전 코드나 다른 분기에서 ORM `add_all` 방식이 되살아나지 않았는지 먼저 확인한다.
+- Juso 초기 적재 또는 복구는 공개가 확인된 월을 Airflow conf `source_year_month`로 명시한다. 매월 10일 전에는 직전 월 파일이 없을 수 있다.
+- `max_active_runs=1`은 DAG 단위 중복 실행을 줄이기 위한 기본 안전장치다.
+- Airflow worker가 장시간 task 중 재전달되지 않도록 `AIRFLOW__CELERY_BROKER_TRANSPORT_OPTIONS__VISIBILITY_TIMEOUT`을 둔다. 더 긴 task가 생기면 이 값을 runbook에 남기고 조정한다.
+- 운영 schedule은 `config/etl-datasets.json`을 사용한다. 장시간 검증용 `config/etl-datasets.soak.json`은 ODROID 운영 기본값으로 쓰지 않는다.
+- `docker compose config` 출력에는 `.env` 값이 펼쳐질 수 있으므로 공유하지 않는다.
+
+## 상태 확인
+
+```bash
+cd /opt/tripmate
+docker compose -f infra/docker-compose.yml ps
+scripts/etl-soak-status.sh
+```
+
+`scripts/etl-soak-status.sh`는 이름은 soak지만 앱 DB와 Airflow metadata DB의 ETL 상태를 조회하므로 운영 점검에도 쓸 수 있다. 단, 6시간 soak 경과 marker가 없는 경우 해당 줄은 무시한다.
+
+## 후속 보완
+
+- 원격 배포용 `scripts/deploy.sh`
+- DB backup/restore용 `scripts/backup-db.sh`, `scripts/restore-db.sh`
+- Airflow DAG별 리소스 제한과 worker concurrency 운영값
+- 장시간 적재 작업을 위한 ODROID swap, storage health 점검 절차

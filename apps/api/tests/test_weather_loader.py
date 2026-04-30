@@ -162,6 +162,11 @@ class FakeKmaWeatherClient:
         ]
 
 
+class PartiallyFailingKmaWeatherClient(FakeKmaWeatherClient):
+    def fetch_ultra_short_forecast(self, *, nx: int, ny: int) -> list[dict[str, str]]:
+        raise RuntimeError("provider timeout")
+
+
 class FakeAirKoreaClient:
     def fetch_station_list(self, *, sido_name: str | None = None) -> list[dict[str, str]]:
         assert sido_name == "서울"
@@ -241,6 +246,7 @@ def test_short_term_loader_stores_raw_and_upserts_serving_with_kst_datetime(
     assert result.raw_row_count == 4
     assert result.serving_row_count == 4
     assert result.skipped_row_count == 1
+    assert result.fetch_error_count == 0
     assert db_session.scalar(select(WeatherRawShortTerm)) is not None
     assert [
         (row.category_code, row.normalized_category, row.value, row.unit) for row in serving_rows
@@ -251,6 +257,27 @@ def test_short_term_loader_stores_raw_and_upserts_serving_with_kst_datetime(
         ("TMP", "temperature", "18", "deg_c"),
     ]
     assert serving_rows[0].observed_at == datetime(2026, 4, 26, 12, 0, tzinfo=KST)
+
+
+def test_short_term_weather_loader_keeps_partial_grid_results_on_fetch_error(
+    db_session: Session,
+) -> None:
+    result = load_short_term_weather_for_grids(
+        db_session,
+        PartiallyFailingKmaWeatherClient(),  # type: ignore[arg-type]
+        grids=[(60, 127)],
+        collected_at=datetime(2026, 4, 26, 12, 40, tzinfo=KST),
+    )
+    db_session.commit()
+
+    serving_rows = db_session.scalars(select(WeatherServingShortTerm)).all()
+
+    assert result.requested_endpoint_count == 3
+    assert result.raw_row_count == 3
+    assert result.serving_row_count == 3
+    assert result.skipped_row_count == 2
+    assert result.fetch_error_count == 1
+    assert len(serving_rows) == 3
 
 
 def test_sigungu_boundary_mapping_builds_kma_grid_mapping(db_session: Session) -> None:
@@ -297,6 +324,36 @@ def test_kma_alert_loader_stores_station_codes_and_alert_rows(db_session: Sessio
         ("109", "서울"),
     ]
     assert [row.alert_type for row in serving_rows] == ["information", "warning"]
+
+
+def test_kma_alert_loader_deduplicates_station_codes_within_one_run(
+    db_session: Session,
+) -> None:
+    class DuplicateStationClient(FakeKmaWeatherClient):
+        def fetch_weather_infos(self, *, from_date: date, to_date: date) -> list[dict[str, str]]:
+            return [
+                {
+                    "stnId": "108",
+                    "stnNm": "전국",
+                    "title": "기상정보",
+                    "tmFc": "202604261200",
+                    "tmSeq": "2",
+                }
+            ]
+
+    result = load_kma_alerts(
+        db_session,
+        DuplicateStationClient(),  # type: ignore[arg-type]
+        from_date=date(2026, 4, 25),
+        to_date=date(2026, 4, 26),
+        collected_at=datetime(2026, 4, 26, 12, 10, tzinfo=KST),
+    )
+    db_session.commit()
+
+    assert result.raw_row_count == 2
+    assert result.serving_row_count == 2
+    assert result.station_count == 1
+    assert db_session.scalars(select(WeatherKmaAlertStationCode)).all()[0].stn_id == "108"
 
 
 def test_mid_term_region_seed_and_loader_keep_reg_id_separate_from_address_codes(
@@ -435,6 +492,41 @@ def test_air_quality_station_loader_maps_station_coordinates_to_legal_dong(
     assert station.mapping_method == "postgis_point_in_polygon"
 
 
+def test_air_quality_station_loader_fetches_all_stations_by_default(
+    db_session: Session,
+) -> None:
+    class AllStationClient:
+        def fetch_station_list(self, *, sido_name: str | None = None) -> list[dict[str, str]]:
+            assert sido_name is None
+            return [
+                {
+                    "stationName": "중구",
+                    "mangName": "도시대기",
+                    "addr": "서울 중구 덕수궁길 15",
+                    "dmX": "37.580400",
+                    "dmY": "126.970700",
+                    "item": "SO2, CO, O3, NO2, PM10, PM2.5",
+                    "year": "1995",
+                }
+            ]
+
+    result = load_air_quality_stations(
+        db_session,
+        AllStationClient(),  # type: ignore[arg-type]
+        collected_at=datetime(2026, 4, 26, 12, 20, tzinfo=KST),
+    )
+    db_session.commit()
+
+    station = db_session.scalar(select(AirQualityServingStation))
+    raw = db_session.scalar(select(AirQualityRawStation))
+
+    assert result.raw_row_count == 1
+    assert station is not None
+    assert station.sido_name == "서울"
+    assert raw is not None
+    assert raw.request_sido_name == "서울"
+
+
 def test_air_quality_forecast_and_measurement_loaders_store_serving_rows(
     db_session: Session,
 ) -> None:
@@ -460,6 +552,7 @@ def test_air_quality_forecast_and_measurement_loaders_store_serving_rows(
     assert measurement_result.requested_sido_count == 1
     assert measurement_result.raw_row_count == 1
     assert measurement_result.serving_row_count == 1
+    assert measurement_result.skipped_row_count == 0
     assert db_session.scalar(select(AirQualityRawForecast)) is not None
     assert db_session.scalar(select(AirQualityRawSidoMeasurement)) is not None
     assert forecast is not None
@@ -470,6 +563,44 @@ def test_air_quality_forecast_and_measurement_loaders_store_serving_rows(
     assert measurement.o3_grade == "2"
     assert measurement.co_grade == "1"
     assert measurement.so2_grade == "1"
+
+
+def test_air_quality_measurement_loader_skips_missing_data_time(
+    db_session: Session,
+) -> None:
+    class MissingDataTimeClient:
+        def fetch_sido_measurements(self, *, sido_name: str) -> list[dict[str, str | None]]:
+            assert sido_name == "test-sido"
+            return [
+                {
+                    "stationName": "valid-station",
+                    "dataTime": "2026-04-26 12:00",
+                    "pm25Value": "14",
+                },
+                {
+                    "stationName": "missing-time-station",
+                    "dataTime": None,
+                    "pm25Value": None,
+                },
+            ]
+
+    result = load_air_quality_sido_measurements(
+        db_session,
+        MissingDataTimeClient(),  # type: ignore[arg-type]
+        sido_names=["test-sido"],
+        collected_at=datetime(2026, 4, 26, 12, 35, tzinfo=KST),
+    )
+    db_session.commit()
+
+    assert result.raw_row_count == 2
+    assert result.serving_row_count == 1
+    assert result.skipped_row_count == 1
+    assert db_session.scalar(select(AirQualityRawSidoMeasurement).where(
+        AirQualityRawSidoMeasurement.station_name == "missing-time-station"
+    )) is not None
+    assert db_session.scalar(select(AirQualityServingSidoMeasurement).where(
+        AirQualityServingSidoMeasurement.station_name == "missing-time-station"
+    )) is None
 
 
 def test_data_go_clients_require_service_key() -> None:
@@ -507,6 +638,32 @@ def test_kma_client_treats_no_data_response_as_empty() -> None:
 
     assert rows == []
     assert seen_requests[0].url.params["ServiceKey"] == "local-test-key"
+
+
+def test_airkorea_client_extracts_list_items() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL_CODE"},
+                    "body": {
+                        "items": [
+                            {"informCode": "PM10", "dataTime": "2026-04-30"},
+                            {"informCode": "PM25", "dataTime": "2026-04-30"},
+                        ],
+                        "totalCount": 2,
+                    },
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as http_client:
+        client = AirKoreaApiClient(service_key="local-test-key", client=http_client)
+        rows = client.fetch_forecast_dispatches(inform_code="PM10")
+
+    assert [row["informCode"] for row in rows] == ["PM10", "PM25"]
 
 
 def _add_address_code_and_boundary(

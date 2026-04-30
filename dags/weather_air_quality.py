@@ -10,6 +10,13 @@ from zoneinfo import ZoneInfo
 
 from airflow.decorators import dag, task
 
+try:
+    from airflow.exceptions import AirflowSkipException
+except Exception:
+
+    class AirflowSkipException(Exception):
+        pass
+
 WEATHER_SHORT_TERM_DAG_ID = "weather_short_term_sigungu_grid"
 WEATHER_ALERT_DAG_ID = "weather_kma_alert"
 WEATHER_MID_TERM_DAG_ID = "weather_mid_term_nationwide"
@@ -81,6 +88,30 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
+def _current_airflow_datetime() -> datetime:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    value = (
+        context.get("logical_date")
+        or context.get("data_interval_start")
+        or context.get("run_after")
+    )
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
 @dag(
     dag_id=WEATHER_SHORT_TERM_DAG_ID,
     description="기상청 초단기실황을 활성화된 시군구 대표 격자 단위로 수집한다.",
@@ -97,14 +128,14 @@ def _json_ready(value: Any) -> Any:
 )
 def weather_short_term_sigungu_grid() -> None:
     @task(task_id="load_weather_short_term")
-    def load_short_term(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_short_term() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="weather_short_term",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_short_term,
         )
 
-    load_short_term("{{ ts }}")
+    load_short_term()
 
 
 @dag(
@@ -123,14 +154,14 @@ def weather_short_term_sigungu_grid() -> None:
 )
 def weather_kma_alert() -> None:
     @task(task_id="load_weather_kma_alerts")
-    def load_alerts(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_alerts() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="weather_kma_alert",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_alerts,
         )
 
-    load_alerts("{{ ts }}")
+    load_alerts()
 
 
 @dag(
@@ -149,14 +180,14 @@ def weather_kma_alert() -> None:
 )
 def weather_mid_term_nationwide() -> None:
     @task(task_id="load_weather_mid_term")
-    def load_mid_term(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_mid_term() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="weather_mid_term",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_mid_term,
         )
 
-    load_mid_term("{{ ts }}")
+    load_mid_term()
 
 
 @dag(
@@ -175,14 +206,14 @@ def weather_mid_term_nationwide() -> None:
 )
 def air_quality_station_daily() -> None:
     @task(task_id="load_air_quality_stations")
-    def load_stations(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_stations() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="air_quality_station",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_air_quality_stations,
         )
 
-    load_stations("{{ ts }}")
+    load_stations()
 
 
 @dag(
@@ -201,14 +232,14 @@ def air_quality_station_daily() -> None:
 )
 def air_quality_forecast_daily() -> None:
     @task(task_id="load_air_quality_forecasts")
-    def load_forecasts(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_forecasts() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="air_quality_forecast",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_air_quality_forecasts,
         )
 
-    load_forecasts("{{ ts }}")
+    load_forecasts()
 
 
 @dag(
@@ -227,14 +258,14 @@ def air_quality_forecast_daily() -> None:
 )
 def air_quality_sido_measurement_hourly() -> None:
     @task(task_id="load_air_quality_sido_measurements")
-    def load_measurements(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_measurements() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="air_quality_sido_measurement",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_air_quality_measurements,
         )
 
-    load_measurements("{{ ts }}")
+    load_measurements()
 
 
 @dag(
@@ -253,14 +284,14 @@ def air_quality_sido_measurement_hourly() -> None:
 )
 def kma_recommended_tour_course_annual() -> None:
     @task(task_id="load_kma_recommended_tour_course")
-    def load_tour_course(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_tour_course() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key="kma_recommended_tour_course",
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_kma_tour_course,
         )
 
-    load_tour_course("{{ ts }}")
+    load_tour_course()
 
 
 def _run_logged_task(
@@ -279,6 +310,7 @@ def _run_logged_task(
     from app.services.etl_runtime import (
         create_etl_run_log,
         mark_etl_run_failed,
+        mark_etl_run_skipped,
         mark_etl_run_success,
     )
 
@@ -319,6 +351,18 @@ def _run_logged_task(
                 )
                 log_session.commit()
             return payload
+        except AirflowSkipException as exc:
+            with session_factory() as log_session:
+                resolved_run_log = log_session.get(EtlRunLog, run_log_id)
+                if resolved_run_log is None:
+                    raise RuntimeError(f"ETL run log not found: {run_log_id}") from exc
+                mark_etl_run_skipped(
+                    resolved_run_log,
+                    message=str(exc),
+                    extra={"skip_reason": type(exc).__name__},
+                )
+                log_session.commit()
+            raise
         except Exception as exc:
             retry_exhausted = _is_airflow_retry_exhausted()
             with session_factory() as log_session:
@@ -412,8 +456,6 @@ def _load_air_quality_measurements(session: Any, collected_at: datetime) -> Any:
 
 
 def _load_kma_tour_course(session: Any, collected_at: datetime) -> Any:
-    from airflow.exceptions import AirflowSkipException
-
     from app.etl.tour.kma_tour_course import load_kma_tour_course_file
 
     source_path = os.environ.get("TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH")

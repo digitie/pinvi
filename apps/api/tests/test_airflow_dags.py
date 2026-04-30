@@ -6,6 +6,8 @@ import types
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 
 def test_legal_dong_code_airflow_dag_contract(monkeypatch: Any) -> None:
     captured = _load_dag_with_fake_airflow(monkeypatch, "legal_dong_code_standard.py")
@@ -156,6 +158,204 @@ def test_weather_air_quality_airflow_dag_contracts(monkeypatch: Any) -> None:
     assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
 
 
+def test_kma_beach_weather_airflow_dag_contracts(monkeypatch: Any) -> None:
+    captured = _load_dag_with_fake_airflow(monkeypatch, "kma_beach_weather.py")
+
+    dag_kwargs_list = captured["dag_kwargs_list"]
+
+    assert [kwargs["dag_id"] for kwargs in dag_kwargs_list] == [
+        "kma_beach_catalog_annual",
+        "kma_beach_ultra_short_forecast_hourly",
+        "kma_beach_village_forecast_3hourly",
+        "kma_beach_wave_height_hourly",
+        "kma_beach_water_temperature_hourly",
+        "kma_beach_tide_sun_daily",
+    ]
+    assert [kwargs["schedule"] for kwargs in dag_kwargs_list] == [
+        "0 4 15 5 *",
+        "45 * * 6,7,8 *",
+        "20 2,5,8,11,14,17,20,23 * 6,7,8 *",
+        "35 * * 6,7,8 *",
+        "40 * * 6,7,8 *",
+        "10 5 * 6,7,8 *",
+    ]
+    assert all(str(kwargs["start_date"].tzinfo) == "Asia/Seoul" for kwargs in dag_kwargs_list)
+    assert all(kwargs["catchup"] is False for kwargs in dag_kwargs_list)
+    assert all(kwargs["max_active_runs"] == 1 for kwargs in dag_kwargs_list)
+    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [3, 3, 3, 3, 3, 3]
+    assert [
+        kwargs["default_args"]["retry_delay"].total_seconds() for kwargs in dag_kwargs_list
+    ] == [1800, 300, 600, 300, 300, 600]
+    assert captured["task_kwargs"] == [
+        {"task_id": "load_kma_beach_catalog"},
+        {"task_id": "load_kma_beach_ultra_short_forecasts"},
+        {"task_id": "load_kma_beach_village_forecasts"},
+        {"task_id": "load_kma_beach_wave_heights"},
+        {"task_id": "load_kma_beach_water_temperatures"},
+        {"task_id": "load_kma_beach_tide_sun"},
+    ]
+    assert captured["task_invocation_count"] == 6
+    parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
+    assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
+
+
+def test_integrated_beach_sources_airflow_dag_contracts(monkeypatch: Any) -> None:
+    monkeypatch.setenv("TRIPMATE_KHOA_API_KEY", "test-key")
+    captured = _load_dag_with_fake_airflow(monkeypatch, "beach_sources.py")
+
+    dag_kwargs_list = captured["dag_kwargs_list"]
+
+    assert [kwargs["dag_id"] for kwargs in dag_kwargs_list] == [
+        "khoa_beach_observation_hourly",
+        "khoa_beach_index_forecast_twice_daily",
+        "mof_beach_info_annual",
+        "mof_beach_water_quality_annual",
+    ]
+    assert [kwargs["schedule"] for kwargs in dag_kwargs_list] == [
+        "20 * * * *",
+        "30 6,18 * * *",
+        "0 4 15 5 *",
+        "20 4 15 5 *",
+    ]
+    assert all(str(kwargs["start_date"].tzinfo) == "Asia/Seoul" for kwargs in dag_kwargs_list)
+    assert all(kwargs["catchup"] is False for kwargs in dag_kwargs_list)
+    assert all(kwargs["max_active_runs"] == 1 for kwargs in dag_kwargs_list)
+    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [3, 0, 3, 3]
+    assert [
+        kwargs["default_args"]["retry_delay"].total_seconds() for kwargs in dag_kwargs_list
+    ] == [300, 600, 1800, 1800]
+    assert captured["task_kwargs"] == [
+        {"task_id": "load_khoa_beach_observations"},
+        {"task_id": "load_khoa_beach_index_forecasts"},
+        {"task_id": "load_mof_beach_info"},
+        {"task_id": "load_mof_beach_water_quality"},
+    ]
+    assert captured["task_invocation_count"] == 4
+    parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
+    assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
+
+
+def test_integrated_beach_sources_khoa_dags_are_manual_when_key_is_missing(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("TRIPMATE_KHOA_API_KEY", raising=False)
+    monkeypatch.delenv("TRIPMATE_DATA_GO_SERVICE_KEY", raising=False)
+    captured = _load_dag_with_fake_airflow(monkeypatch, "beach_sources.py")
+
+    assert [kwargs["schedule"] for kwargs in captured["dag_kwargs_list"][:2]] == [
+        None,
+        None,
+    ]
+
+
+def test_integrated_beach_index_uses_data_go_key_when_khoa_key_is_missing(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("TRIPMATE_KHOA_API_KEY", raising=False)
+    monkeypatch.setenv("TRIPMATE_DATA_GO_SERVICE_KEY", "test-key")
+    captured = _load_dag_with_fake_airflow(monkeypatch, "beach_sources.py")
+
+    assert [kwargs["schedule"] for kwargs in captured["dag_kwargs_list"][:2]] == [
+        None,
+        "30 6,18 * * *",
+    ]
+
+
+def test_ocean_indices_airflow_dag_contracts(monkeypatch: Any) -> None:
+    monkeypatch.setenv("TRIPMATE_DATA_GO_SERVICE_KEY", "test-key")
+    captured = _load_dag_with_fake_airflow(monkeypatch, "ocean_indices.py")
+
+    dag_kwargs_list = captured["dag_kwargs_list"]
+
+    assert [kwargs["dag_id"] for kwargs in dag_kwargs_list] == [
+        "khoa_mudflat_index_forecast_twice_daily",
+        "khoa_sea_split_index_forecast_twice_daily",
+    ]
+    assert [kwargs["schedule"] for kwargs in dag_kwargs_list] == [
+        "40 6,18 * * *",
+        "50 6,18 * * *",
+    ]
+    assert all(str(kwargs["start_date"].tzinfo) == "Asia/Seoul" for kwargs in dag_kwargs_list)
+    assert all(kwargs["catchup"] is False for kwargs in dag_kwargs_list)
+    assert all(kwargs["max_active_runs"] == 1 for kwargs in dag_kwargs_list)
+    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [0, 0]
+    assert [
+        kwargs["default_args"]["retry_delay"].total_seconds() for kwargs in dag_kwargs_list
+    ] == [600, 600]
+    assert captured["task_kwargs"] == [
+        {"task_id": "load_khoa_mudflat_index_forecasts"},
+        {"task_id": "load_khoa_sea_split_index_forecasts"},
+    ]
+    assert captured["task_invocation_count"] == 2
+    parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
+    assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
+
+
+def test_ocean_indices_dags_are_manual_when_key_is_missing(monkeypatch: Any) -> None:
+    monkeypatch.delenv("TRIPMATE_KHOA_API_KEY", raising=False)
+    monkeypatch.delenv("TRIPMATE_DATA_GO_SERVICE_KEY", raising=False)
+    captured = _load_dag_with_fake_airflow(monkeypatch, "ocean_indices.py")
+
+    assert [kwargs["schedule"] for kwargs in captured["dag_kwargs_list"]] == [None, None]
+
+
+def test_public_cultural_festival_airflow_dag_contract(monkeypatch: Any) -> None:
+    captured = _load_dag_with_fake_airflow(monkeypatch, "public_cultural_festival.py")
+
+    dag_kwargs = captured["dag_kwargs"]
+    assert captured["module"].DAG_ID == "public_cultural_festival_quarterly"
+    assert dag_kwargs["dag_id"] == "public_cultural_festival_quarterly"
+    assert dag_kwargs["schedule"] == "35 4 12 2,5,8,11 *"
+    assert str(dag_kwargs["start_date"].tzinfo) == "Asia/Seoul"
+    assert dag_kwargs["catchup"] is False
+    assert dag_kwargs["max_active_runs"] == 1
+    assert dag_kwargs["default_args"]["retries"] == 3
+    assert dag_kwargs["default_args"]["retry_delay"].total_seconds() == 1800
+    assert captured["task_kwargs"] == [{"task_id": "load_public_cultural_festivals"}]
+    assert captured["task_function_name"] == "load_dataset"
+    assert captured["task_invoked_during_dag_build"] is True
+    parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
+    assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
+
+
+def test_public_places_airflow_dag_contracts(monkeypatch: Any) -> None:
+    captured = _load_dag_with_fake_airflow(monkeypatch, "public_places.py")
+
+    dag_kwargs_list = captured["dag_kwargs_list"]
+
+    assert [kwargs["dag_id"] for kwargs in dag_kwargs_list] == [
+        "public_arboretum_basic_annual",
+        "public_tourist_information_center_annual",
+        "public_recreation_forest_semiannual",
+        "public_museum_art_gallery_annual",
+        "public_campground_daily",
+    ]
+    assert [kwargs["schedule"] for kwargs in dag_kwargs_list] == [
+        "5 4 5 7 *",
+        "10 4 5 7 *",
+        "15 4 15 1,7 *",
+        "25 4 15 7 *",
+        "45 4 * * *",
+    ]
+    assert all(str(kwargs["start_date"].tzinfo) == "Asia/Seoul" for kwargs in dag_kwargs_list)
+    assert all(kwargs["catchup"] is False for kwargs in dag_kwargs_list)
+    assert all(kwargs["max_active_runs"] == 1 for kwargs in dag_kwargs_list)
+    assert [kwargs["default_args"]["retries"] for kwargs in dag_kwargs_list] == [3, 3, 3, 3, 3]
+    assert [
+        kwargs["default_args"]["retry_delay"].total_seconds() for kwargs in dag_kwargs_list
+    ] == [1800, 1800, 1800, 1800, 1800]
+    assert captured["task_kwargs"] == [
+        {"task_id": "load_public_arboretum_basic"},
+        {"task_id": "load_public_tourist_information_center"},
+        {"task_id": "load_public_recreation_forest"},
+        {"task_id": "load_public_museum_art_gallery"},
+        {"task_id": "load_public_campground"},
+    ]
+    assert captured["task_invocation_count"] == 5
+    parsed = captured["module"]._parse_airflow_datetime("2026-05-01T04:00:00+09:00")
+    assert parsed.strftime("%Y%m%dT%H%M%S") == "20260501T040000"
+
+
 def test_airflow_retry_exhaustion_uses_task_instance(monkeypatch: Any) -> None:
     captured = _load_dag_with_fake_airflow(monkeypatch, "juso_monthly_address.py")
 
@@ -177,6 +377,19 @@ def test_airflow_retry_exhaustion_uses_task_instance(monkeypatch: Any) -> None:
 
     sdk_any.get_current_context = lambda: {"ti": ExhaustedTaskInstance()}
     assert captured["module"]._is_airflow_retry_exhausted() is True
+
+
+def test_juso_monthly_address_accepts_manual_source_year_month_conf(monkeypatch: Any) -> None:
+    captured = _load_dag_with_fake_airflow(monkeypatch, "juso_monthly_address.py")
+    module = captured["module"]
+
+    assert module._source_year_month_override_from_conf({}) is None
+    assert module._source_year_month_override_from_conf({"source_year_month": "202603"}) == "202603"
+
+    with pytest.raises(ValueError, match="YYYYMM"):
+        module._source_year_month_override_from_conf({"source_year_month": "2026-03"})
+    with pytest.raises(ValueError, match="between 01 and 12"):
+        module._source_year_month_override_from_conf({"source_year_month": "202613"})
 
 
 def _load_dag_with_fake_airflow(monkeypatch: Any, file_name: str) -> dict[str, Any]:

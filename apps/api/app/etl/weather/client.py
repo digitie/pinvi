@@ -328,6 +328,8 @@ def _extract_rows(payload: dict[str, Any], endpoint: str) -> tuple[list[dict[str
         return [], 0
     total_count = _coerce_int(body.get("totalCount"), default=0)
     items = body.get("items")
+    if isinstance(items, list):
+        return [row for row in items if isinstance(row, dict)], total_count or len(items)
     if not isinstance(items, dict):
         return [], total_count
     raw_item = items.get("item")

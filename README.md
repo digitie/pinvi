@@ -2,13 +2,13 @@
 
 TripMate는 대한민국 국내 여행 계획을 지도, 일정, 지역 데이터, Telegram 알림과 함께 관리하는 웹앱입니다.
 
-현재 저장소는 Phase 1 백엔드/DB/ETL 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic migration, 주소/Juso/VWorld ETL 기반이 있습니다. Airflow 로컬 런타임은 Docker Compose로 실행할 수 있고, 배포 스크립트는 아직 구현 전입니다.
+현재 저장소는 Phase 1 백엔드/DB/ETL 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js + Tailwind CSS 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic migration, 주소/Juso/VWorld/유가/휴게소/날씨 ETL 기반이 있습니다. Airflow 로컬 런타임은 Docker Compose로 실행할 수 있고, 장시간 ETL 검증과 ODROID Docker 실행을 위한 기본 스크립트가 `scripts/`에 있습니다.
 
 ## 현재 구조
 
 ```text
 apps/
-  web/              # Next.js App Router 웹앱
+  web/              # Next.js App Router + Tailwind CSS 웹앱
   api/              # FastAPI 백엔드 골격
 docs/
   architecture.md   # 현재/목표 아키텍처 기준선
@@ -36,21 +36,38 @@ scripts/            # bootstrap, test, deploy, backup
 - uv 권장
 - WSL2 + Docker 또는 Docker Desktop
 
-Docker, backend test, Alembic migration, Airflow 검증은 WSL2 Ubuntu에서 실행합니다. ODROID 배포 스크립트는 아직 준비되지 않았습니다.
+명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && ..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Airflow 검증은 반드시 WSL2에서 실행합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
 
 ## 로컬 실행
 
+TripMate 직접 개발 표준 포트는 다음과 같습니다. `3000`과 `8000`은 이 환경의 다른 서비스가 사용할 수 있으므로 TripMate 확인 주소로 쓰지 않습니다.
+
+| 구분 | 프론트엔드 | 백엔드 API | 비고 |
+| --- | --- | --- | --- |
+| 직접 개발 | `http://localhost:3001` | `http://localhost:8001` | `npm run dev`와 `uvicorn --port 8001` 기준 |
+| 앱 Docker smoke | `http://127.0.0.1:13082` | `http://127.0.0.1:18082` | 로컬 컨테이너 검증 전용 host 포트 |
+| 배포 | 미정 | 미정 | ODROID/reverse proxy 기준 포트는 아직 결정하지 않았다 |
+
 ```bash
-npm install
-npm run dev
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm install"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다.
+브라우저에서 `http://localhost:3001`을 엽니다.
+관리자 화면은 `http://localhost:3001/admin/login`에서 접속합니다. 개발 기본 계정은 `admin@ad.min` / `admin`이며, API migration을 먼저 적용해야 합니다.
+
+관리자 화면과 API를 Docker 이미지 기준으로 검증하려면 다음 명령을 사용합니다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh --keep-running"
+```
+
+성공 후 접속 주소는 `http://127.0.0.1:13082/admin/login`입니다.
 
 웹앱만 직접 실행하려면 다음 명령도 사용할 수 있습니다.
 
 ```bash
-npm --workspace apps/web run dev
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run dev"
 ```
 
 ## 검사
@@ -58,9 +75,9 @@ npm --workspace apps/web run dev
 웹앱:
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run build"
 ```
 
 API 의존성 설치 후:
@@ -88,7 +105,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run alembic upgrade he
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 Airflow 로컬 런타임:
@@ -96,6 +113,15 @@ Airflow 로컬 런타임:
 ```bash
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
 ```
+
+ETL 장시간 검증용 초기화와 실행:
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-status.sh"
+```
+
+이 명령은 Docker volume을 삭제하므로 로컬/검증 DB에서만 사용합니다. 20시간보다 긴 ETL 주기는 `config/etl-datasets.soak.json`으로 임시 12시간 이내 schedule을 사용합니다.
 
 ## 제품 원칙
 
@@ -118,4 +144,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-com
 - [Gemini 연동](docs/integrations/gemini.md)
 - [로컬 개발 runbook](docs/runbooks/local-dev.md)
 - [ETL 운영 안내](docs/runbooks/etl.md)
+- [관리자 화면 운영 안내](docs/runbooks/admin.md)
+- [앱 Docker 이미지와 smoke 테스트](docs/runbooks/docker-app.md)
+- [ODROID Docker 운영 안내](docs/runbooks/odroid-docker.md)
 - [초기 아키텍처 ADR](docs/decisions/20260418-initial-architecture.md)

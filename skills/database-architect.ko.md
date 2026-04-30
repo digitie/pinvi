@@ -1,129 +1,104 @@
 ---
 name: database-architect
-description: "DB 설계 풀 파이프라인. 데이터 모델링→마이그레이션→인덱싱→쿼리 최적화→보안 검증을 에이전트 팀이 협업하여 수행한다. 'DB 설계해줘', '데이터베이스 모델링', '테이블 설계', 'ERD', '마이그레이션', '쿼리 최적화', '인덱스 설계', 'SQL 스키마', 'PostgreSQL 설계', 'MySQL 설계' 등 DB 설계 전반에 이 스킬을 사용한다. 기존 스키마가 있는 경우에도 최적화나 보안 감사를 지원한다. 단, 실제 DB 서버 설치/운영, 클라우드 인프라 프로비저닝, 모니터링 대시보드 구축은 이 스킬의 범위가 아니다."
+description: "TripMate의 PostgreSQL/PostGIS DB 설계, SQLAlchemy 2 모델, GeoAlchemy2 공간 컬럼, Alembic migration, 인덱스, 제약조건, DB 테스트를 작성·리뷰할 때 사용한다. DB 스키마 변경, 마이그레이션 추가, 주소/장소/날씨/유가/휴게소 ETL 저장 구조, 공간 쿼리, FK/unique/index 정합성, timezone 저장 정책 검토에 적용한다."
 ---
 
-# Database Architect — DB 설계 풀 파이프라인
+# Skill: 데이터베이스 아키텍트
 
-DB의 모델링→마이그레이션→인덱싱→쿼리 최적화→보안 검증을 에이전트 팀이 협업하여 한 번에 수행한다.
+TripMate의 DB 작업은 PostgreSQL + PostGIS + SQLAlchemy 2 + GeoAlchemy2 + Alembic 기준으로 설계하고 검증한다.
 
-## 실행 모드
+## 먼저 확인할 문서
 
-**에이전트 팀** — 5명이 SendMessage로 직접 통신하며 교차 검증한다.
+- 전체 구조: `docs/architecture.md`
+- 주소 기준: `docs/architecture/address-schema.md`
+- 장소 기준: `docs/architecture/place-schema.md`
+- 데이터 소스 정책: `docs/data-sources.md`
+- ETL 운영: `docs/runbooks/etl.md`
+- 공간 규칙: `skills/geospatial-postgis.ko.md`
+- 테스트 기준: `skills/testing-and-qa.ko.md`
 
-## 에이전트 구성
+## 핵심 원칙
 
-| 에이전트 | 파일 | 역할 | 타입 |
-|---------|------|------|------|
-| data-modeler | `.claude/agents/data-modeler.md` | ERD, 정규화, 관계 설계 | general-purpose |
-| migration-manager | `.claude/agents/migration-manager.md` | DDL, 버전관리, 롤백 | general-purpose |
-| performance-analyst | `.claude/agents/performance-analyst.md` | 인덱싱, 쿼리 최적화 | general-purpose |
-| security-auditor | `.claude/agents/security-auditor.md` | 접근 제어, 암호화, 감사 | general-purpose |
-| integration-reviewer | `.claude/agents/integration-reviewer.md` | 정합성, 운영 준비성 검증 | general-purpose |
+- ORM 모델, Alembic migration, 테스트 fixture가 같은 계약을 말해야 한다.
+- DB 스키마 변경은 migration 없이 모델만 바꾸지 않는다.
+- 대량 공공데이터는 raw와 serving 레이어를 분리한다.
+- 외부 provider 원문 저장 정책은 `docs/data-sources.md`를 따른다.
+- 모든 주소 코드, provider 코드, 카테고리 코드는 선행 0 보존을 위해 문자열로 저장한다.
+- DB datetime은 timezone-aware `timestamptz`로 저장하고 KST 정책을 지킨다.
+- app 시작 시점에 몰래 스키마를 변경하지 않는다.
 
-## 워크플로우
+## SQLAlchemy 모델 기준
 
-### Phase 1: 준비 (오케스트레이터 직접 수행)
+- SQLAlchemy 2 스타일 `Mapped[]`, `mapped_column()`을 사용한다.
+- 공통 생성/수정 시각은 기존 mixin 패턴을 따른다.
+- FK는 이름을 명시하고, 삭제 동작(`CASCADE`, `SET NULL`, 제한)을 의도적으로 고른다.
+- FK 컬럼에는 명시 인덱스 또는 FK 컬럼으로 시작하는 covering index를 둔다.
+- nullable은 migration과 모델이 일치해야 한다.
+- JSONB는 원천 재처리나 provider payload처럼 구조가 달라질 수 있는 데이터에만 제한적으로 사용한다.
+- 상태값은 의미 있는 문자열 enum 후보를 문서화하고, 임의 문자열 확산을 피한다.
 
-1. 사용자 입력에서 추출한다:
-   - **도메인**: 어떤 서비스의 DB인가
-   - **DBMS**: PostgreSQL / MySQL / MongoDB / DynamoDB
-   - **핵심 엔티티**: 주요 데이터 대상
-   - **예상 규모** (선택): 데이터 건수, TPS
-   - **기존 파일** (선택): 기존 스키마, ERD, SQL 등
-2. `_workspace/` 디렉토리를 프로젝트 루트에 생성한다
-3. 입력을 정리하여 `_workspace/00_input.md`에 저장한다
-4. 기존 파일이 있으면 `_workspace/`에 복사하고 해당 Phase를 건너뛴다
-5. 요청 범위에 따라 **실행 모드를 결정**한다
+## PostGIS 기준
 
-### Phase 2: 팀 구성 및 실행
+- 공간 컬럼은 SRID를 반드시 명시한다.
+- 원천 경계 데이터는 원천 SRID를 보존하고, 앱/지도/API용 serving geometry는 EPSG:4326을 둔다.
+- 공간 컬럼은 `spatial_index=False`로 선언하고 Alembic에서 GiST 인덱스를 명시 생성한다.
+- 좌표는 DB/PostGIS에서 `lon`, `lat`, `ST_MakePoint(lon, lat)` 순서를 사용한다.
+- 행정구역 point-in-polygon은 PostGIS를 기준으로 한다.
+- 정확한 거리 검색이 아니라 행정구역 기반 근사면 문서와 UI에서 근사라고 쓴다.
 
-| 순서 | 작업 | 담당 | 의존 | 산출물 |
-|------|------|------|------|--------|
-| 1 | 데이터 모델링 | data-modeler | 없음 | `_workspace/01_data_model.md` |
-| 2 | 마이그레이션 생성 | migration-manager | 작업 1 | `_workspace/02_migration.sql`, `02_migration_plan.md` |
-| 3a | 성능 최적화 | performance-analyst | 작업 1, 2 | `_workspace/03_performance.md` |
-| 3b | 보안 검증 | security-auditor | 작업 1, 2 | `_workspace/04_security.md` |
-| 4 | 통합 리뷰 | integration-reviewer | 작업 2, 3a, 3b | `_workspace/05_review_report.md` |
+## Alembic migration 기준
 
-작업 3a(성능)와 3b(보안)는 **병렬 실행**한다.
+- revision ID, down_revision, upgrade/downgrade를 모두 확인한다.
+- `CREATE EXTENSION IF NOT EXISTS postgis`는 초기 migration에 두고, downgrade에서 extension을 함부로 drop하지 않는다.
+- geometry 컬럼, SRID, GiST 인덱스는 migration에서 명시한다.
+- FK/unique/check/index 이름을 안정적으로 붙인다.
+- nullable unique에 `NULL`을 같은 값처럼 취급해야 하면 PostgreSQL `NULLS NOT DISTINCT` 사용 여부를 테스트한다.
+- 대형 테이블에 인덱스를 추가할 때 운영 lock 위험을 검토하고 문서화한다.
+- destructive migration은 백업/복구/재처리 계획이 없으면 만들지 않는다.
 
-**팀원 간 소통 흐름:**
-- data-modeler 완료 → migration-manager에게 DDL 기반 전달, performance-analyst에게 액세스 패턴 전달, security-auditor에게 민감 데이터 전달
-- migration-manager 완료 → performance-analyst에게 인덱스 DDL 전달, security-auditor에게 권한 DDL 전달
-- performance-analyst ↔ security-auditor: 성능 최적화가 보안을 훼손하지 않는지 상호 검증
-- integration-reviewer는 모든 산출물을 교차 검증. 🔴 필수 수정 발견 시 해당 에이전트에게 수정 요청 → 재작업 → 재검증 (최대 2회)
+## 리뷰 체크리스트
 
-### Phase 3: 통합 및 최종 산출물
+DB 작업 후 반드시 아래를 점검한다.
 
-리뷰 보고서를 기반으로 최종 산출물을 정리한다:
+- 모델 테이블명과 migration 테이블명이 일치한다.
+- 컬럼 타입, 길이, nullable, 기본값이 모델과 migration에서 일치한다.
+- FK 대상 테이블과 컬럼이 존재한다.
+- FK 컬럼에 인덱스가 있다.
+- unique 제약이 ETL 멱등성 기준과 맞다.
+- raw/serving 테이블의 목적이 섞이지 않았다.
+- 공간 컬럼은 SRID와 GiST 인덱스를 가진다.
+- timestamp 컬럼은 timezone-aware다.
+- provider 원문 장기 저장 금지 정책을 위반하지 않는다.
+- 기존 여행/주소 참조가 깨지는 delete/update를 하지 않는다.
 
-1. `_workspace/` 내 모든 파일을 확인한다
-2. 리뷰 보고서의 🔴 필수 수정이 모두 반영되었는지 확인한다
-3. 최종 요약을 사용자에게 보고한다
+## 테스트 기준
 
-## 작업 규모별 모드
+DB 관련 변경에는 최소한 다음 중 해당 항목을 추가하거나 갱신한다.
 
-| 사용자 요청 패턴 | 실행 모드 | 투입 에이전트 |
-|----------------|----------|-------------|
-| "DB 설계해줘", "풀 설계" | **풀 파이프라인** | 5명 전원 |
-| "ERD만 그려줘", "테이블 설계만" | **모델링 모드** | data-modeler + integration-reviewer |
-| "이 스키마 최적화해줘" (기존 SQL) | **최적화 모드** | performance-analyst + integration-reviewer |
-| "DB 보안 감사해줘" (기존 DB) | **보안 모드** | security-auditor + integration-reviewer |
-| "이 스키마 리뷰해줘" | **리뷰 모드** | integration-reviewer 단독 |
+- migration contract test: migration 파일에 핵심 테이블/컬럼/제약/인덱스가 있는지 확인.
+- model metadata test: `Base.metadata`에 모델이 등록되고, timezone/SRID/FK/index 계약이 맞는지 확인.
+- loader idempotency test: 같은 원천 데이터를 두 번 적재해도 중복이 생기지 않는지 확인.
+- FK mismatch test: skip/log 정책이 문서대로 동작하는지 확인.
+- Alembic upgrade 검증: WSL2 Docker Postgres에서 `alembic upgrade head`.
+- 필요한 경우 downgrade 후 upgrade 재검증.
 
-**기존 파일 활용**: 사용자가 스키마, ERD 등을 제공하면 해당 단계를 건너뛴다.
+권장 명령:
 
-## 데이터 전달 프로토콜
+아래 명령은 Windows PowerShell에서 실행하더라도 WSL2를 감싸는 형태를 우선한다. 이미 WSL2 shell 안에 있다면 `wsl.exe -e bash -lc` 부분을 빼고 같은 작업 디렉터리에서 실행한다.
 
-| 전략 | 방식 | 용도 |
-|------|------|------|
-| 파일 기반 | `_workspace/` 디렉토리 | 주요 산출물 저장 및 공유 |
-| 메시지 기반 | SendMessage | 실시간 핵심 정보 전달, 수정 요청 |
-| 태스크 기반 | TaskCreate/TaskUpdate | 진행 상황 추적, 의존 관계 관리 |
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/pytest"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/alembic upgrade head"
+```
 
-파일명 컨벤션: `{순번}_{에이전트}_{산출물}.{확장자}`
+## 금지 사항
 
-## 에러 핸들링
-
-| 에러 유형 | 전략 |
-|----------|------|
-| DBMS 미지정 | PostgreSQL을 기본으로, 다른 DBMS 호환 노트 추가 |
-| 도메인 정보 부족 | 데이터 모델러가 일반 패턴으로 시작, 가정 사항 명시 |
-| 에이전트 실패 | 1회 재시도 → 실패 시 해당 산출물 없이 진행, 리뷰에 누락 명시 |
-| 리뷰에서 🔴 발견 | 해당 에이전트에 수정 요청 → 재작업 → 재검증 (최대 2회) |
-| 기존 스키마 파싱 실패 | 수동 분석 후 데이터 모델 재구성 |
-
-## 테스트 시나리오
-
-### 정상 흐름
-**프롬프트**: "이커머스 플랫폼의 PostgreSQL DB를 설계해줘. 사용자, 상품, 주문, 결제, 리뷰 테이블이 필요해. 일 주문 10만 건 예상"
-**기대 결과**:
-- 모델: 5개 핵심 테이블 + 중간 테이블, 3NF 정규화, ERD
-- 마이그레이션: 순차적 DDL + 롤백 스크립트 + 시드 데이터
-- 성능: 인덱스 전략, 주요 쿼리 최적화, 파티셔닝 설계
-- 보안: RBAC, PII 암호화, 감사 로깅, 백업 전략
-- 리뷰: 정합성 매트릭스 전항목 확인
-
-### 기존 파일 활용 흐름
-**프롬프트**: "이 SQL 스키마의 성능을 최적화해줘" + SQL 파일
-**기대 결과**:
-- 기존 스키마를 `_workspace/02_migration.sql`로 복사
-- 최적화 모드: performance-analyst + integration-reviewer 투입
-- data-modeler, migration-manager, security-auditor 건너뜀
-
-### 에러 흐름
-**프롬프트**: "DB 설계해줘, 블로그 플랫폼"
-**기대 결과**:
-- 규모/DBMS 미정 → data-modeler가 PostgreSQL + 블로그 표준 엔티티(Post, User, Comment, Tag) 추론
-- 풀 파이프라인 모드로 실행
-- 리뷰 보고서에 "요구사항 추론 기반 설계" 명시
-
-## 에이전트별 확장 스킬
-
-개별 에이전트의 도메인 전문성을 강화하는 확장 스킬:
-
-| 스킬 | 대상 에이전트 | 역할 |
-|------|-------------|------|
-| `normalization-patterns` | data-modeler | 1NF~BCNF 판별, 비정규화 전략, 도메인별 ERD 템플릿 |
-| `query-optimization-catalog` | performance-analyst | 인덱스 전략, EXPLAIN 분석, N+1 해결, 파티셔닝 |
+- SRID 없는 geometry 컬럼을 만들지 않는다.
+- 공간 검색 대상 컬럼에 GiST 인덱스를 빼지 않는다.
+- FK 컬럼을 인덱스 없이 방치하지 않는다.
+- `lat`, `lng`만 저장하고 PostGIS geometry를 생략하지 않는다.
+- provider 원문 전체를 정책 없이 장기 저장하지 않는다.
+- 비밀값, API key, token 원문을 DB/로그/test fixture에 넣지 않는다.

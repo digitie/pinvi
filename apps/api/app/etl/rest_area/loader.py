@@ -64,6 +64,12 @@ class _FuelPriceSpec:
     fuel_type: str
 
 
+@dataclass(frozen=True)
+class _RestAreaMasterLookup:
+    codes: set[str]
+    name_keys: dict[tuple[str, str | None, str | None], str]
+
+
 FUEL_PRICE_FIELDS = (
     _FuelPriceSpec("gasolinePrice", "휘발유", "gasoline"),
     _FuelPriceSpec("diselPrice", "경유", "diesel"),
@@ -139,7 +145,7 @@ def load_rest_area_oil_prices(
     resolved_collected_at = _resolve_collected_at(collected_at)
     snapshot_date = resolved_collected_at.date()
     rows = client.fetch_rest_area_oil_prices()
-    valid_svar_codes = _load_master_codes(session)
+    master_lookup = _load_master_lookup(session)
     raw_count = 0
     serving_count = 0
     skipped = 0
@@ -169,7 +175,8 @@ def load_rest_area_oil_prices(
         )
         raw_count += 1
 
-        if not service_area_code2 or service_area_code2 not in valid_svar_codes:
+        svar_cd = _resolve_master_svar_cd(row, service_area_code2, master_lookup)
+        if svar_cd is None:
             skipped += 1
             mismatch_logger.write(row=row, reason="missing_rest_area_master_fk")
             continue
@@ -181,7 +188,7 @@ def load_rest_area_oil_prices(
             _upsert_oil_price(
                 session,
                 row=row,
-                svar_cd=service_area_code2,
+                svar_cd=svar_cd,
                 fuel_spec=fuel_spec,
                 price=price,
                 snapshot_date=snapshot_date,
@@ -209,7 +216,7 @@ def load_rest_area_services(
     resolved_collected_at = _resolve_collected_at(collected_at)
     snapshot_date = resolved_collected_at.date()
     rows = client.fetch_rest_area_services()
-    valid_svar_codes = _load_master_codes(session)
+    master_lookup = _load_master_lookup(session)
     raw_count = 0
     serving_count = 0
     skipped = 0
@@ -244,7 +251,8 @@ def load_rest_area_services(
         )
         raw_count += 1
 
-        if not service_area_code2 or service_area_code2 not in valid_svar_codes:
+        svar_cd = _resolve_master_svar_cd(row, service_area_code2, master_lookup)
+        if svar_cd is None:
             skipped += 1
             mismatch_logger.write(row=row, reason="missing_rest_area_master_fk")
             continue
@@ -254,7 +262,7 @@ def load_rest_area_services(
             provider_service_code = _service_code_from_name(service_name)
             session.add(
                 RestAreaServingService(
-                    svar_cd=service_area_code2,
+                    svar_cd=svar_cd,
                     provider_service_area_code=_optional_text(row, "serviceAreaCode"),
                     route_code=_optional_text(row, "routeCode"),
                     route_name=_optional_text(row, "routeName"),
@@ -456,12 +464,78 @@ def _upsert_oil_price(
     return existing
 
 
-def _load_master_codes(session: Session) -> set[str]:
-    return set(
-        session.scalars(
-            select(RestAreaServingMaster.svar_cd).where(RestAreaServingMaster.is_active.is_(True))
-        ).all()
+def _load_master_lookup(session: Session) -> _RestAreaMasterLookup:
+    rows = session.execute(
+        select(
+            RestAreaServingMaster.svar_cd,
+            RestAreaServingMaster.name,
+            RestAreaServingMaster.route_name,
+            RestAreaServingMaster.direction,
+        ).where(RestAreaServingMaster.is_active.is_(True))
+    ).all()
+    codes: set[str] = set()
+    name_keys: dict[tuple[str, str | None, str | None], str] = {}
+    ambiguous_keys: set[tuple[str, str | None, str | None]] = set()
+    for svar_cd, name, route_name, direction in rows:
+        codes.add(svar_cd)
+        key = _rest_area_match_key(name, route_name, direction)
+        if key is None or key in ambiguous_keys:
+            continue
+        existing = name_keys.get(key)
+        if existing is not None and existing != svar_cd:
+            name_keys.pop(key, None)
+            ambiguous_keys.add(key)
+            continue
+        name_keys[key] = svar_cd
+    return _RestAreaMasterLookup(codes=codes, name_keys=name_keys)
+
+
+def _resolve_master_svar_cd(
+    row: dict[str, Any],
+    service_area_code2: str | None,
+    lookup: _RestAreaMasterLookup,
+) -> str | None:
+    if service_area_code2 and service_area_code2 in lookup.codes:
+        return service_area_code2
+    key = _rest_area_match_key(
+        _optional_text(row, "serviceAreaName"),
+        _optional_text(row, "routeName"),
+        _optional_text(row, "direction"),
     )
+    if key is None:
+        return None
+    return lookup.name_keys.get(key)
+
+
+def _rest_area_match_key(
+    name: str | None,
+    route_name: str | None,
+    direction: str | None,
+) -> tuple[str, str | None, str | None] | None:
+    normalized_name = _normalize_rest_area_name(name)
+    if normalized_name is None:
+        return None
+    return (
+        normalized_name,
+        _normalize_match_text(route_name),
+        _normalize_match_text(direction),
+    )
+
+
+def _normalize_rest_area_name(value: str | None) -> str | None:
+    normalized = _normalize_match_text(value)
+    if normalized is None:
+        return None
+    for suffix in ("휴게소", "주유소", "LPG충전소", "충전소"):
+        normalized = normalized.replace(suffix, "")
+    return normalized or None
+
+
+def _normalize_match_text(value: str | None) -> str | None:
+    text = _optional_text_from_value(value)
+    if text is None:
+        return None
+    return re.sub(r"\s+", "", text)
 
 
 def _source_key(row: dict[str, Any]) -> str:

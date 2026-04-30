@@ -4,8 +4,8 @@ from dataclasses import asdict
 from datetime import date
 from typing import Any
 
-from sqlalchemy import exists, select
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, select, update
+from sqlalchemy.orm import Session, object_session
 
 from app.core.etl_config import EtlDatasetRuntimeConfig, get_etl_dataset_config
 from app.core.redaction import redact_sensitive_text
@@ -54,6 +54,7 @@ def create_etl_run_log(
     config: EtlDatasetRuntimeConfig | None = None,
 ) -> EtlRunLog:
     runtime_config = config or get_etl_dataset_config(dataset_key)
+    _close_previous_started_runs(session, dataset_key=dataset_key, run_key=run_key)
     run_log = EtlRunLog(
         dataset_key=dataset_key,
         run_key=run_key,
@@ -71,6 +72,29 @@ def create_etl_run_log(
     return run_log
 
 
+def _close_previous_started_runs(
+    session: Session,
+    *,
+    dataset_key: str,
+    run_key: str | None,
+) -> None:
+    statement = (
+        update(EtlRunLog)
+        .where(EtlRunLog.dataset_key == dataset_key)
+        .where(EtlRunLog.status == ETL_STATUS_STARTED)
+        .values(
+            status=ETL_STATUS_SKIPPED,
+            finished_at=kst_now(),
+            message="후속 ETL 실행으로 미완료 started 로그를 종료 처리했다.",
+        )
+    )
+    if run_key is None:
+        statement = statement.where(EtlRunLog.run_key.is_(None))
+    else:
+        statement = statement.where(EtlRunLog.run_key == run_key)
+    session.execute(statement)
+
+
 def mark_etl_run_success(
     run_log: EtlRunLog,
     *,
@@ -82,6 +106,7 @@ def mark_etl_run_success(
     run_log.message = message
     if extra is not None:
         run_log.extra = {**run_log.extra, **extra}
+    _resolve_previous_failure_notifications(run_log)
 
 
 def mark_etl_run_skipped(
@@ -95,6 +120,7 @@ def mark_etl_run_skipped(
     run_log.message = message
     if extra is not None:
         run_log.extra = {**run_log.extra, **extra}
+    _resolve_previous_failure_notifications(run_log)
 
 
 def mark_etl_run_failed(
@@ -156,8 +182,73 @@ def mark_etl_run_failed(
         )
 
 
+def _resolve_previous_failure_notifications(run_log: EtlRunLog) -> None:
+    session = object_session(run_log)
+    if session is None:
+        return
+
+    session.execute(
+        update(AdminNotification)
+        .where(AdminNotification.dataset_key == run_log.dataset_key)
+        .where(AdminNotification.is_resolved.is_(False))
+        .values(is_resolved=True)
+    )
+    session.execute(
+        update(TelegramSystemNotificationOutbox)
+        .where(TelegramSystemNotificationOutbox.dataset_key == run_log.dataset_key)
+        .where(TelegramSystemNotificationOutbox.status == "pending")
+        .values(
+            status="cancelled",
+            error_message=f"후속 ETL 성공으로 취소됨: {run_log.id}",
+        )
+    )
+
+
+def reconcile_recovered_failure_notifications(session: Session) -> int:
+    """Resolve stale ETL failure notifications after a later non-failed run."""
+    failed_run = EtlRunLog.__table__.alias("failed_run")
+    recovered_run = EtlRunLog.__table__.alias("recovered_run")
+    recovered_exists = (
+        select(recovered_run.c.id)
+        .where(recovered_run.c.dataset_key == AdminNotification.dataset_key)
+        .where(recovered_run.c.status.in_([ETL_STATUS_SUCCESS, ETL_STATUS_SKIPPED]))
+        .where(recovered_run.c.finished_at.is_not(None))
+        .where(recovered_run.c.finished_at > failed_run.c.finished_at)
+        .where(failed_run.c.id == AdminNotification.etl_run_log_id)
+        .exists()
+    )
+    notification_statement = (
+        update(AdminNotification)
+        .where(AdminNotification.is_resolved.is_(False))
+        .where(recovered_exists)
+        .values(is_resolved=True)
+    )
+    notification_result = session.execute(notification_statement)
+    outbox_statement = (
+        update(TelegramSystemNotificationOutbox)
+        .where(TelegramSystemNotificationOutbox.status == "pending")
+        .where(
+            select(recovered_run.c.id)
+            .where(recovered_run.c.dataset_key == TelegramSystemNotificationOutbox.dataset_key)
+            .where(recovered_run.c.status.in_([ETL_STATUS_SUCCESS, ETL_STATUS_SKIPPED]))
+            .where(recovered_run.c.finished_at.is_not(None))
+            .where(recovered_run.c.finished_at > failed_run.c.finished_at)
+            .where(failed_run.c.id == TelegramSystemNotificationOutbox.etl_run_log_id)
+            .exists()
+        )
+        .values(status="cancelled", error_message="후속 ETL 회복 상태로 취소됨")
+    )
+    session.execute(outbox_statement)
+    return int(notification_result.rowcount or 0)
+
+
 def juso_run_key_for_date(logical_date: date) -> str:
-    return f"{logical_date.year:04d}{logical_date.month:02d}"
+    target_year = logical_date.year
+    target_month = logical_date.month - 1
+    if target_month == 0:
+        target_year -= 1
+        target_month = 12
+    return f"{target_year:04d}{target_month:02d}"
 
 
 def should_skip_juso_monthly_update(

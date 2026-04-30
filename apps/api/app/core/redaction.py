@@ -37,6 +37,8 @@ def redact_sensitive_text(
     settings = get_settings()
     configured_secret_values = (
         settings.data_go_service_key,
+        settings.khoa_api_key,
+        settings.mof_beach_service_key,
         settings.opinet_api_key,
         settings.expressway_api_key,
     )

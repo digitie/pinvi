@@ -77,6 +77,30 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
+def _current_airflow_datetime() -> datetime:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    value = (
+        context.get("logical_date")
+        or context.get("data_interval_start")
+        or context.get("run_after")
+    )
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
 @dag(
     dag_id=MASTER_DAG_ID,
     description="한국도로공사 휴게소 기본정보를 월 1회 수집한다.",
@@ -93,14 +117,14 @@ def _json_ready(value: Any) -> Any:
 )
 def rest_area_master_monthly() -> None:
     @task(task_id="load_rest_area_master")
-    def load_master(logical_datetime_iso: str) -> dict[str, Any]:
+    def load_master() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=MASTER_DATASET_KEY,
-            logical_datetime=_parse_airflow_datetime(logical_datetime_iso),
+            logical_datetime=_current_airflow_datetime(),
             load=_load_master,
         )
 
-    load_master("{{ ts }}")
+    load_master()
 
 
 @dag(
@@ -119,11 +143,10 @@ def rest_area_master_monthly() -> None:
 )
 def rest_area_oil_price_daily() -> None:
     @task(task_id="load_rest_area_oil_prices")
-    def load_oil_prices(logical_datetime_iso: str) -> dict[str, Any]:
-        logical_datetime = _parse_airflow_datetime(logical_datetime_iso)
+    def load_oil_prices() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=OIL_PRICE_DATASET_KEY,
-            logical_datetime=logical_datetime,
+            logical_datetime=_current_airflow_datetime(),
             load=lambda session, run_key, collected_at: _load_oil_prices(
                 session,
                 run_key,
@@ -131,7 +154,7 @@ def rest_area_oil_price_daily() -> None:
             ),
         )
 
-    load_oil_prices("{{ ts }}")
+    load_oil_prices()
 
 
 @dag(
@@ -150,11 +173,10 @@ def rest_area_oil_price_daily() -> None:
 )
 def rest_area_service_monthly() -> None:
     @task(task_id="load_rest_area_services")
-    def load_services(logical_datetime_iso: str) -> dict[str, Any]:
-        logical_datetime = _parse_airflow_datetime(logical_datetime_iso)
+    def load_services() -> dict[str, Any]:
         return _run_logged_task(
             dataset_key=SERVICE_DATASET_KEY,
-            logical_datetime=logical_datetime,
+            logical_datetime=_current_airflow_datetime(),
             load=lambda session, run_key, collected_at: _load_services(
                 session,
                 run_key,
@@ -162,7 +184,7 @@ def rest_area_service_monthly() -> None:
             ),
         )
 
-    load_services("{{ ts }}")
+    load_services()
 
 
 def _run_logged_task(

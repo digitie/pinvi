@@ -9,6 +9,8 @@
 - `weather_short_term`: 기상청 초단기실황, 초단기예보, 단기예보
 - `weather_kma_alert`: 기상청 기상특보, 기상정보, 기상속보
 - `weather_mid_term`: 기상청 중기예보. `regId`/`stnId`는 기상청 provider region code로 보존하고 TripMate 주소 코드와는 명시적 mapping table로 연결한다.
+- `kma_beach_catalog`: 기상청 전국 해수욕장 위치 카탈로그. 내부 표준 장소(`places`)와 1:1로 연결한다.
+- `kma_beach_ultra_short_forecast`, `kma_beach_village_forecast`, `kma_beach_wave_height`, `kma_beach_water_temperature`, `kma_beach_tide_sun`: 해수욕장별 예보/파고/수온/조석/일출일몰
 - `air_quality_station`: AirKorea 측정소 목록
 - `air_quality_forecast`: AirKorea 미세먼지/오존 예보통보
 - `air_quality_sido_measurement`: AirKorea 시도별 실시간 측정값
@@ -44,6 +46,12 @@ AirKorea 두 API는 일 500회 제한을 전제로 설계했다.
 | `weather_short_term` | `weather_short_term_sigungu_grid` | 30분 | 활성 격자 수 × 48회/일 | 초기 기본값은 시군구 대표 격자다. |
 | `weather_kma_alert` | `weather_kma_alert` | 30분 | 3개 endpoint × 48회/일 | 지도 마커로 쓰지 않고 Telegram 알림 원천으로 사용한다. |
 | `weather_mid_term` | `weather_mid_term_nationwide` | 하루 2회 | 공식 중기예보 구역코드 수 × 2회/일 | 여행 일정이 단기예보 범위를 벗어날 때 사용한다. 사용자 수에 따라 호출량이 늘지 않게 전국 구역을 주기 수집한다. |
+| `kma_beach_catalog` | `kma_beach_catalog_annual` | 매년 5월 15일 04:00 | 참고문서 ZIP 1회/년 | 해수욕장 시즌 전 위치 카탈로그를 장소 DB와 다시 맞춘다. |
+| `kma_beach_ultra_short_forecast` | `kma_beach_ultra_short_forecast_hourly` | 6~8월 매시 45분 | 활성 해수욕장 수 × 24회/일 | 초단기예보 1시간 패턴에 맞춘다. |
+| `kma_beach_village_forecast` | `kma_beach_village_forecast_3hourly` | 6~8월 하루 8회 | 활성 해수욕장 수 × 8회/일 | 단기예보 3시간 패턴에 맞춘다. |
+| `kma_beach_wave_height` | `kma_beach_wave_height_hourly` | 6~8월 매시 35분 | 활성 해수욕장 수 × 24회/일 | 직전 정시 파고 관측값을 조회한다. |
+| `kma_beach_water_temperature` | `kma_beach_water_temperature_hourly` | 6~8월 매시 40분 | 활성 해수욕장 수 × 24회/일 | 직전 정시 수온 관측값을 조회한다. |
+| `kma_beach_tide_sun` | `kma_beach_tide_sun_daily` | 6~8월 매일 05:10 | 활성 해수욕장 수 × 2 endpoint/일 | 조석과 일출/일몰을 일 단위로 저장한다. |
 | `air_quality_station` | `air_quality_station_daily` | 매일 04:20 | 17개 시도 × 1회/일 | `getMsrstnList`, 일 500회 제한 대비 여유가 크다. |
 | `air_quality_forecast` | `air_quality_forecast_daily` | 하루 4회 | 3개 항목 × 4회/일 | PM10, PM25, O3 예보통보를 수집한다. |
 | `air_quality_sido_measurement` | `air_quality_sido_measurement_hourly` | 매시 25분 | 17개 시도 × 24회/일 = 408회/일 | AirKorea 대기오염정보 일 500회 제한 안에 들어가도록 시간 단위로 제한한다. |
@@ -120,6 +128,69 @@ unique 기준:
 
 미확인 category는 적재를 막지 않고 `normalized_category = 'unknown'`으로 저장한다.
 `collected_at`은 KST 기준 timezone-aware datetime으로 저장한다.
+
+### `weather_beach_location`
+
+기상청 해수욕장 카탈로그와 내부 표준 지도 객체(`map_features`)를 연결하는 위치 테이블이다.
+
+주요 컬럼:
+
+- `provider`: `kma`
+- `beach_num`: 기상청 해수욕장 번호. 참고문서 xlsx의 `순번`
+- `beach_name`
+- `map_feature_id`: `map_features.id` FK
+- `nx`, `ny`: 기상청 DFS 격자
+- `longitude`, `latitude`, `geom`: EPSG:4326 표준 좌표
+- `legal_dong_code`: V-WORLD 법정동 경계 point-in-polygon 결과
+- `road_name_code`, `road_address_management_no`: 같은 법정동 내 Juso 건물명 정확 일치가 1건일 때만 채운다.
+- `address_mapping_method`: `juso_building_name_in_legal_dong`, `postgis_point_in_polygon`, `postgis_nearest_boundary_5km`, `unmapped`
+- `source_file_name`, `source_file_hash`, `source_row_number`
+- `raw_payload`
+- `collected_at`
+- `is_active`
+
+해수욕장 좌표가 해상/모래사장 쪽으로 찍혀 법정동 polygon 밖일 수 있으므로, point-in-polygon 실패 시 약 5km 이내 가장 가까운 법정동 경계를 보조 매핑으로 사용한다. 좌표만으로 도로명주소코드나 도로명주소관리번호를 만들지 않는다. 원천 xlsx에 주소가 없으므로 매칭 근거가 부족하면 null로 둔다.
+
+### `weather_raw_beach`
+
+해수욕장 날씨 API 요청 단위 raw snapshot이다.
+
+주요 컬럼:
+
+- `provider`: `kma`
+- `endpoint`: `getUltraSrtFcstBeach`, `getVilageFcstBeach`, `getWhBuoyBeach`, `getTwBuoyBeach`, `getTideInfoBeach`, `getSunInfoBeach`
+- `beach_num`
+- `request_params`
+- `raw_payload`: 요청 파라미터와 `items` 배열을 함께 저장
+- `response_hash`
+- `collected_at`
+
+unique 기준은 `provider + endpoint + beach_num + response_hash`다. 같은 응답을 retry로 다시 받아도 raw 중복 저장을 막는다.
+
+### `weather_serving_beach`
+
+앱/API 조회용 해수욕장 날씨 정규화 테이블이다.
+
+unique 기준:
+
+- `provider`, `endpoint`, `beach_num`, `source_record_key`, `category_code`
+
+주요 컬럼:
+
+- `beach_location_id`: `weather_beach_location.id` FK
+- `map_feature_id`: `map_features.id` FK
+- `base_date`, `base_time`
+- `forecast_date`, `forecast_time`
+- `source_observed_time`
+- `observed_at`, `forecast_at`
+- `category_code`, `category_name`, `normalized_category`
+- `value`, `unit`
+- `station_name`: 조석 관측소명/ID처럼 endpoint별 보강 정보
+- `raw_payload`
+- `collected_at`
+- `is_active`
+
+초단기/단기예보 category는 기존 단기예보 category spec을 재사용한다. 파고는 `WH/wave_height/m`, 수온은 `TW/water_temperature/deg_c`, 조위는 `TIDE/tide_level/cm`, 일출/일몰은 `SUNRISE`, `SUNSET`으로 저장한다. 파고/수온/조위/일출일몰 응답의 `-`, `:`, 빈 시각처럼 관측·이벤트 시각이 없는 무자료 표시는 raw에만 보존하고 serving row로 승격하지 않는다.
 
 ### `weather_kma_alert_station_code`
 

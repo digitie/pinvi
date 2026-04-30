@@ -1,16 +1,29 @@
 # 아키텍처 기준선
 
 주소 체계, Juso/법정동코드/VWorld 경계 스키마, 다른 데이터셋과의 주소 매핑 기준은 `docs/architecture/address-schema.md`를 따른다.
+사용자, 이메일 인증, 여행 참여자, 여행 장소 스키마의 상세 기준안은 `docs/architecture/user-trip-schema.md`를 따른다.
+내부 표준 장소, 장소 카테고리, provider 장소 참조, 여행 방문 장소와의 연결 기준은 `docs/architecture/place-schema.md`를 따른다.
+장소·행사·경로·구역·지도 공지를 하나의 지도 객체로 수렴시키는 후속 통합 스키마 설계안은 `docs/architecture/map-feature-schema.md`를 따른다.
+공공데이터 기반 수목원·휴양림·박물관·미술관·캠핑장 장소 ETL과 표준 장소 적재 기준은 `docs/architecture/public-place-etl-schema.md`를 따른다.
 OpiNet 유가 스키마의 상세 기준은 `docs/architecture/fuel-schema.md`를 따른다.
 OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/architecture/opinet-region-mapping.md`를 따른다.
 한국도로공사 휴게소 스키마의 상세 기준은 `docs/architecture/rest-area-schema.md`를 따른다.
 날씨와 대기질 스키마의 상세 기준은 `docs/architecture/weather-air-quality-schema.md`를 따른다.
+해수욕장 통합 도메인 스키마의 상세 기준은 `docs/architecture/beach-schema.md`를 따른다.
 기상청 추천 관광코스 스키마의 상세 기준은 `docs/architecture/kma-tour-course-schema.md`를 따른다.
+공공데이터포털 전국문화축제표준데이터 스키마는 `docs/architecture/public-cultural-festival-schema.md`를 따른다.
+한국천문연구원 날짜·천문 정보 설계는 `docs/architecture/kasi-calendar-schema.md`를 따른다.
+provider adapter 라이브러리 분리 기준은 `docs/architecture/provider-adapter-library.md`를 따른다.
+지도 마커와 로그인 화면 디자인 기준은 `docs/architecture/map-marker-design.md`를 따른다.
+TripMate MCP 도구 설계는 `docs/architecture/mcp-tools.md`를 따른다.
+YouTube 국내여행 정보 수집과 Gemini 기반 장소 후보 추출 설계는 `docs/architecture/youtube-travel-intelligence.md`를 따른다.
 Airflow ETL 운영 흐름과 로그/알림 기반은 `docs/runbooks/etl.md`와 `docs/execplan/etl-runtime-and-address-ops.md`를 따른다.
 
 ## 현재 상태
 
-현재 저장소에는 `apps/web`의 Next.js 웹앱과 `apps/api`의 FastAPI 백엔드 골격이 있다.
+현재 저장소에는 `apps/web`의 Next.js + Tailwind CSS 웹앱과 `apps/api`의 FastAPI 백엔드 골격이 있다.
+관리자 전용 화면은 `/admin/login`, `/admin` 경로에 있으며, ETL로 적재한 테이블을 조회하는 내부 운영 도구이다. 상세는 `docs/runbooks/admin.md`와 `docs/api/admin.md`를 따른다.
+로그인 전 공개 화면에서 사용하는 축제/해수욕장 조회 API는 `docs/api/public.md`를 따른다.
 
 ```text
 apps/web
@@ -52,7 +65,7 @@ uv run alembic upgrade head
 ## 목표 구조
 
 ```text
-apps/web            # Next.js + React + TypeScript + PWA
+apps/web            # Next.js + React + TypeScript + Tailwind CSS + PWA
 apps/api            # FastAPI + SQLAlchemy 2 + GeoAlchemy2
 packages/shared     # 공용 타입, API 계약, 상수
 dags                # Airflow DAG
@@ -63,7 +76,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 ## 주요 경계
 
-- 웹앱은 사용자 흐름, 지도 상호작용, PWA UX를 담당한다.
+- 웹앱은 사용자 흐름, 지도 상호작용, Tailwind CSS 기반 화면 스타일링, PWA UX를 담당한다.
 - API는 인증, 인가, 여행 도메인 규칙, provider adapter, Telegram, Gemini 실행 요청을 담당한다.
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Airflow는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
@@ -74,6 +87,8 @@ docs                # 문서, runbook, ADR, 실행 계획
 - 사용자 로그인 식별자는 이메일이다.
 - 인증은 httpOnly cookie 기반 서버 세션으로 시작한다. 세션 cookie에는 opaque token만 넣고, 서버는 해시된 세션 토큰과 만료 시각을 저장한다.
 - 모든 사용자 소유 리소스는 `user_id` 인가 검사를 통과해야 한다.
+- 사용자 권한은 시스템 역할과 여행별 역할을 분리한다. 관리자는 시스템 역할이고, 여행 작성자/참여자는 여행별 멤버십으로 판단한다.
+- 초대된 참여자는 `invited` 상태의 사용자로 먼저 생성하고, 첫 로그인 때 비밀번호를 설정한다.
 - 장소는 사용자 표시 이름, 좌표, 정규화 주소, 행정구역 코드, provider 참조를 분리해 저장한다.
 - Google/Naver/Kakao 원문 전체를 장기 저장 가능한 데이터로 가정하지 않는다.
 - 외부 데이터 소스, 캐시 키, 갱신 주기, raw/serving 테이블 정책은 `docs/data-sources.md`를 단일 기준으로 따른다.
@@ -113,9 +128,12 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 세션 cookie에는 opaque token만 담는 것을 전제로 하며, DB에는 `session_token_hash`만 저장한다.
 
+사용자/여행 도메인의 다음 목표 스키마는 `docs/architecture/user-trip-schema.md`의 설계안을 따른다. 현재 `users`, `sessions`, `trips`, `trip_days`는 최소 구현 상태이므로 Phase 2~3에서 migration으로 확장해야 한다.
+
 ## 아직 구현되지 않은 것
 
-- 인증 API
+- 일반 사용자 인증 API
+- 관리자 사용자 관리 API
 - Kakao 지도 연동
 - Telegram 발송
 - Gemini Deep Research

@@ -22,8 +22,11 @@ x-airflow-common: &airflow-common
     TRIPMATE_DATABASE_URL: postgresql+psycopg://tripmate:tripmate_dev_password@postgres:5432/tripmate
     TRIPMATE_AIRFLOW_DOWNLOAD_DIR: /opt/tripmate/.tmp/airflow-downloads
     TRIPMATE_AIRFLOW_LOG_DIR: /opt/tripmate/.tmp/airflow-logs
-    TRIPMATE_ETL_CONFIG_PATH: /opt/tripmate/config/etl-datasets.json
+    TRIPMATE_ETL_CONFIG_PATH: ${TRIPMATE_ETL_CONFIG_PATH:-/opt/tripmate/config/etl-datasets.json}
+    TRIPMATE_KMA_MID_TERM_REGION_CONFIG_PATH: /opt/tripmate/config/kma-mid-term-regions.json
     TRIPMATE_DATA_GO_SERVICE_KEY: ${TRIPMATE_DATA_GO_SERVICE_KEY:-}
+    TRIPMATE_KHOA_API_KEY: ${TRIPMATE_KHOA_API_KEY:-}
+    TRIPMATE_MOF_BEACH_SERVICE_KEY: ${TRIPMATE_MOF_BEACH_SERVICE_KEY:-}
     TRIPMATE_OPINET_API_KEY: ${TRIPMATE_OPINET_API_KEY:-}
     TRIPMATE_EXPRESSWAY_API_KEY: ${TRIPMATE_EXPRESSWAY_API_KEY:-}
     TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH: ${TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH:-}
@@ -31,6 +34,7 @@ x-airflow-common: &airflow-common
     - ../dags:/opt/airflow/dags:ro
     - ../apps/api:/opt/tripmate/apps/api:ro
     - ../config:/opt/tripmate/config:ro
+    - ../dataset:/opt/tripmate/dataset:ro
     - ../.tmp/airflow-downloads:/opt/tripmate/.tmp/airflow-downloads
     - ../.tmp/airflow-logs:/opt/tripmate/.tmp/airflow-logs
     - airflow_logs:/opt/airflow/logs

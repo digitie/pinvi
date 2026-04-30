@@ -109,6 +109,31 @@ class DuplicateMasterExpresswayClient(FakeExpresswayClient):
         ]
 
 
+class OffsetOilStationCodeExpresswayClient:
+    def fetch_rest_area_master(self) -> list[dict[str, str]]:
+        return [
+            {
+                "serviceAreaCode": "A00001",
+                "serviceAreaCode2": "000001",
+                "serviceAreaName": "\uc11c\uc6b8\ub9cc\ub0a8(\ubd80\uc0b0)\ud734\uac8c\uc18c",
+                "routeName": "\uacbd\ubd80\uc120",
+                "direction": "\ubd80\uc0b0",
+            }
+        ]
+
+    def fetch_rest_area_oil_prices(self) -> list[dict[str, str]]:
+        return [
+            {
+                "serviceAreaCode": "B00001",
+                "serviceAreaCode2": "000002",
+                "serviceAreaName": "\uc11c\uc6b8\ub9cc\ub0a8(\ubd80\uc0b0)\uc8fc\uc720\uc18c",
+                "routeName": "\uacbd\ubd80\uc120",
+                "direction": "\ubd80\uc0b0",
+                "gasolinePrice": "1,900\uc6d0",
+            }
+        ]
+
+
 def test_rest_area_master_loader_stores_raw_and_serving_rows(db_session: Session) -> None:
     result = load_rest_area_master(
         db_session,
@@ -192,6 +217,29 @@ def test_rest_area_oil_loader_skips_fk_mismatch_and_writes_jsonl(
             "source_key": "999999",
         }
     ]
+
+
+def test_rest_area_oil_loader_maps_offset_station_code_by_name_route_direction(
+    db_session: Session,
+) -> None:
+    client = OffsetOilStationCodeExpresswayClient()
+    load_rest_area_master(db_session, client)  # type: ignore[arg-type]
+
+    result = load_rest_area_oil_prices(
+        db_session,
+        client,  # type: ignore[arg-type]
+        collected_at=datetime(2026, 4, 26, 6, 10, tzinfo=KST),
+    )
+    db_session.commit()
+
+    serving_row = db_session.scalar(select(RestAreaServingOilPrice))
+
+    assert result.raw_row_count == 1
+    assert result.serving_row_count == 1
+    assert result.skipped_row_count == 0
+    assert serving_row is not None
+    assert serving_row.svar_cd == "000001"
+    assert serving_row.price_per_liter_krw == 1900
 
 
 def test_rest_area_oil_loader_keeps_multiple_daily_snapshots(db_session: Session) -> None:

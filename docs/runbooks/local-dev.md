@@ -2,8 +2,9 @@
 
 ## 기본 원칙
 
+- 저장소 명령은 WSL2 Ubuntu에서 실행하는 것을 최우선으로 한다.
 - 로컬 Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
-- Windows PowerShell은 문서 확인, Git 상태 확인, 간단한 파일 탐색 같은 보조 작업에만 사용한다.
+- Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 문서 확인, Git 상태 확인, 간단한 파일 탐색 같은 보조 작업에만 사용한다.
 - Docker 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - 이 저장소의 WSL2 경로는 `/mnt/f/dev/mapplan`을 기준으로 한다.
 - 프로젝트 문서는 한국어로 작성한다. 코드 식별자, 명령어, 테이블명, API endpoint, provider 고유 명칭은 원문을 유지할 수 있다.
@@ -12,39 +13,60 @@
 
 현재는 Next.js 웹앱과 FastAPI API 골격을 로컬 실행할 수 있다.
 
+## TripMate 포트 기준
+
+`3000`과 `8000`은 이 개발 환경에서 다른 서비스가 사용할 수 있으므로 TripMate의 확인 주소로 쓰지 않는다. 브라우저나 API client가 해당 포트를 보고 있다면 TripMate가 아니라 다른 서비스를 보고 있을 가능성이 높다.
+
+| 구분 | 프론트엔드 | 백엔드 API | 설명 |
+| --- | --- | --- | --- |
+| 직접 개발 | `http://localhost:3001` | `http://localhost:8001` | Next.js dev server와 `uvicorn` 직접 실행 기준 |
+| 앱 Docker smoke | `http://127.0.0.1:13082` | `http://127.0.0.1:18082` | `infra/docker-compose.app.yml`의 host 포트 기준 |
+| 배포 | 미정 | 미정 | ODROID/reverse proxy 포트는 아직 결정하지 않는다 |
+
+주의: 컨테이너 내부 포트는 Web `3000`, API `8000`을 계속 쓸 수 있다. 이 값은 컨테이너 안쪽 포트이며, 로컬 브라우저에서 접근할 host 포트와 구분한다.
+
 ```bash
-npm install
-npm run dev
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm install"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 ```
 
 기본 주소:
 
 ```text
-http://localhost:3000
+http://localhost:3001
 ```
 
-이미 3000 포트를 사용 중이면 다른 포트를 지정한다.
+API 서버는 별도 터미널에서 `8001`로 실행한다.
 
 ```bash
-npm --workspace apps/web run dev -- --port 3001
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
+
+웹 포트나 API 포트를 임시로 바꿀 때는 두 값을 함께 맞춘다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8011 npm exec --workspace apps/web -- next dev --hostname 0.0.0.0 --port 3011"
+```
+
+웹 client의 기본 API URL은 `http://localhost:8001`이다. 명시적인 `NEXT_PUBLIC_TRIPMATE_API_URL` 설정이 있으면 그 값을 우선한다.
 
 ## 검사 명령
 
 웹앱:
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run build"
 ```
 
 웹앱 workspace를 직접 대상으로 실행할 수도 있다.
 
 ```bash
-npm --workspace apps/web run lint
-npm --workspace apps/web run typecheck
-npm --workspace apps/web run build
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run build"
 ```
 
 API:
@@ -115,14 +137,14 @@ wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exist
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 API health check:
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/health/db
+curl http://localhost:8001/health
+curl http://localhost:8001/health/db
 ```
 
 ## Airflow 로컬 스택
@@ -135,12 +157,28 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-com
 
 상세 운영 방법은 `docs/runbooks/etl.md`를 따른다.
 
+## 로컬 ETL 장시간 검증
+
+DB를 초기화하고 로컬 기준 파일을 적재한 뒤 Airflow DAG를 장시간 검증할 때는 아래 스크립트를 사용한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-status.sh"
+```
+
+주의:
+
+- 이 스크립트는 `docker compose down -v`로 TripMate 앱 DB와 Airflow metadata DB volume을 삭제한다.
+- `--yes`가 없으면 실행하지 않는다.
+- 기본 운영 schedule은 바꾸지 않고, 검증용으로만 `TRIPMATE_ETL_CONFIG_PATH=/opt/tripmate/config/etl-datasets.soak.json`을 사용한다.
+- `dataset/` 하위의 `국토교통부_법정동코드_*.csv`, `N3A_G0010000.zip`, `N3A_G0100000.zip`, `N3A_G0110000.zip`이 있으면 migration 직후 먼저 적재한다.
+- `dataset/`은 Git에 포함하지 않는 로컬 운영 파일 보관소다.
+
 ## 아직 없는 로컬 스택
 
 다음 항목은 계획에만 있으며 아직 실행할 수 없다.
 
 - Playwright E2E
-- ODROID 배포 스크립트
 
 ## 다음 기준선 작업
 
@@ -150,6 +188,6 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-com
 
 ## 운영 환경 메모
 
-- 웹앱만 다루는 npm 명령은 Windows 또는 WSL2에서 실행할 수 있으나, backend와 Docker 스택이 관련되면 WSL2를 표준으로 한다.
+- 웹앱만 다루는 npm 명령도 WSL2를 우선한다. Windows 실행은 WSL2에서 Node/npm 사용이 불가능한 예외 상황에서만 선택한다.
 - 백엔드와 Docker 스택의 로컬 개발 표준은 WSL2 + Docker다.
-- ODROID M1S 배포 절차는 `scripts/deploy.sh`와 `docs/runbooks/deploy.md`가 생길 때 별도로 검증한다.
+- ODROID M1S Docker 실행 절차는 `scripts/odroid-docker-start.sh`와 `docs/runbooks/odroid-docker.md`를 따른다. 실제 원격 배포/rollback 스크립트는 `scripts/deploy.sh`가 생길 때 별도로 검증한다.

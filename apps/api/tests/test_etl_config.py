@@ -59,6 +59,19 @@ def test_weather_and_air_quality_etl_dataset_configs_respect_quota_policy() -> N
     forecast_config = etl_config.get_etl_dataset_config("air_quality_forecast")
     measurement_config = etl_config.get_etl_dataset_config("air_quality_sido_measurement")
     tour_config = etl_config.get_etl_dataset_config("kma_recommended_tour_course")
+    beach_catalog_config = etl_config.get_etl_dataset_config("kma_beach_catalog")
+    beach_ultra_config = etl_config.get_etl_dataset_config("kma_beach_ultra_short_forecast")
+    beach_village_config = etl_config.get_etl_dataset_config("kma_beach_village_forecast")
+    beach_wave_config = etl_config.get_etl_dataset_config("kma_beach_wave_height")
+    beach_water_config = etl_config.get_etl_dataset_config("kma_beach_water_temperature")
+    beach_tide_sun_config = etl_config.get_etl_dataset_config("kma_beach_tide_sun")
+    khoa_observation_config = etl_config.get_etl_dataset_config("khoa_beach_observation")
+    khoa_index_config = etl_config.get_etl_dataset_config("khoa_beach_index_forecast")
+    mudflat_config = etl_config.get_etl_dataset_config("khoa_mudflat_index_forecast")
+    sea_split_config = etl_config.get_etl_dataset_config("khoa_sea_split_index_forecast")
+    mof_beach_info_config = etl_config.get_etl_dataset_config("mof_beach_info")
+    mof_quality_config = etl_config.get_etl_dataset_config("mof_beach_water_quality")
+    public_festival_config = etl_config.get_etl_dataset_config("public_cultural_festival")
 
     assert short_term_config.schedule == "*/30 * * * *"
     assert short_term_config.retry_interval_seconds == 300
@@ -81,6 +94,72 @@ def test_weather_and_air_quality_etl_dataset_configs_respect_quota_policy() -> N
     assert tour_config.schedule == "0 5 1 3 *"
     assert tour_config.retry_interval_seconds == 1800
     assert tour_config.freshness_target_minutes == 525600
+    assert beach_catalog_config.schedule == "0 4 15 5 *"
+    assert beach_catalog_config.retry_interval_seconds == 1800
+    assert beach_catalog_config.freshness_target_minutes == 525600
+    assert beach_ultra_config.schedule == "45 * * 6,7,8 *"
+    assert beach_ultra_config.retry_interval_seconds == 300
+    assert beach_ultra_config.freshness_target_minutes == 120
+    assert beach_village_config.schedule == "20 2,5,8,11,14,17,20,23 * 6,7,8 *"
+    assert beach_village_config.retry_interval_seconds == 600
+    assert beach_village_config.freshness_target_minutes == 360
+    assert beach_wave_config.schedule == "35 * * 6,7,8 *"
+    assert beach_wave_config.retry_interval_seconds == 300
+    assert beach_wave_config.freshness_target_minutes == 120
+    assert beach_water_config.schedule == "40 * * 6,7,8 *"
+    assert beach_water_config.retry_interval_seconds == 300
+    assert beach_water_config.freshness_target_minutes == 120
+    assert beach_tide_sun_config.schedule == "10 5 * 6,7,8 *"
+    assert beach_tide_sun_config.retry_interval_seconds == 600
+    assert beach_tide_sun_config.freshness_target_minutes == 1440
+    assert khoa_observation_config.schedule == "20 * * * *"
+    assert khoa_observation_config.retry_interval_seconds == 300
+    assert khoa_observation_config.freshness_target_minutes == 120
+    assert khoa_index_config.schedule == "30 6,18 * * *"
+    assert khoa_index_config.retry_interval_seconds == 600
+    assert khoa_index_config.retry_max_attempts == 0
+    assert khoa_index_config.freshness_target_minutes == 720
+    assert mudflat_config.schedule == "40 6,18 * * *"
+    assert mudflat_config.retry_interval_seconds == 600
+    assert mudflat_config.retry_max_attempts == 0
+    assert mudflat_config.freshness_target_minutes == 720
+    assert sea_split_config.schedule == "50 6,18 * * *"
+    assert sea_split_config.retry_interval_seconds == 600
+    assert sea_split_config.retry_max_attempts == 0
+    assert sea_split_config.freshness_target_minutes == 720
+    assert mof_beach_info_config.schedule == "0 4 15 5 *"
+    assert mof_beach_info_config.retry_interval_seconds == 1800
+    assert mof_beach_info_config.freshness_target_minutes == 525600
+    assert mof_quality_config.schedule == "20 4 15 5 *"
+    assert mof_quality_config.retry_interval_seconds == 1800
+    assert mof_quality_config.freshness_target_minutes == 525600
+    assert public_festival_config.schedule == "35 4 12 2,5,8,11 *"
+    assert public_festival_config.retry_interval_seconds == 1800
+    assert public_festival_config.freshness_target_minutes == 133920
+
+
+def test_public_place_etl_dataset_configs_follow_source_update_cycles() -> None:
+    arboretum_config = etl_config.get_etl_dataset_config("public_arboretum_basic")
+    tourist_info_config = etl_config.get_etl_dataset_config("public_tourist_information_center")
+    forest_config = etl_config.get_etl_dataset_config("public_recreation_forest")
+    museum_config = etl_config.get_etl_dataset_config("public_museum_art_gallery")
+    campground_config = etl_config.get_etl_dataset_config("public_campground")
+
+    assert arboretum_config.schedule == "5 4 5 7 *"
+    assert arboretum_config.retry_interval_seconds == 1800
+    assert arboretum_config.freshness_target_minutes == 525600
+    assert tourist_info_config.schedule == "10 4 5 7 *"
+    assert tourist_info_config.retry_interval_seconds == 1800
+    assert tourist_info_config.freshness_target_minutes == 525600
+    assert forest_config.schedule == "15 4 15 1,7 *"
+    assert forest_config.retry_interval_seconds == 1800
+    assert forest_config.freshness_target_minutes == 262800
+    assert museum_config.schedule == "25 4 15 7 *"
+    assert museum_config.retry_interval_seconds == 1800
+    assert museum_config.freshness_target_minutes == 525600
+    assert campground_config.schedule == "45 4 * * *"
+    assert campground_config.retry_interval_seconds == 1800
+    assert campground_config.freshness_target_minutes == 2880
 
 
 def test_etl_dataset_config_can_be_overridden_by_json_file(

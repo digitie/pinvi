@@ -49,6 +49,7 @@ class AdminNotification(TimestampMixin, Base):
         Index("ix_admin_notifications_scope", "recipient_scope"),
         Index("ix_admin_notifications_unread", "is_read"),
         Index("ix_admin_notifications_dataset_key", "dataset_key"),
+        Index("ix_admin_notifications_etl_run_log_id", "etl_run_log_id"),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -71,6 +72,7 @@ class TelegramSystemNotificationOutbox(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_tg_sys_outbox_status", "status"),
         Index("ix_tg_sys_outbox_dataset_key", "dataset_key"),
+        Index("ix_tg_sys_outbox_etl_run_log_id", "etl_run_log_id"),
     )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)

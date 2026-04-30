@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import asdict
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -71,6 +71,30 @@ def _is_airflow_retry_exhausted() -> bool:
     return True
 
 
+def _current_airflow_datetime() -> datetime:
+    try:
+        from airflow.sdk import get_current_context
+    except Exception:
+        try:
+            from airflow.operators.python import get_current_context
+        except Exception:
+            return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    try:
+        context = get_current_context()
+    except Exception:
+        return datetime.now(ZoneInfo("Asia/Seoul"))
+
+    value = (
+        context.get("logical_date")
+        or context.get("data_interval_start")
+        or context.get("run_after")
+    )
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
 @dag(
     dag_id=DAG_ID,
     description="Download data.go.kr legal-dong code CSV and refresh TripMate code standard.",
@@ -87,7 +111,7 @@ def _is_airflow_retry_exhausted() -> bool:
 )
 def legal_dong_code_standard_quarterly() -> None:
     @task(task_id="download_and_load_legal_dong_code_standard")
-    def download_and_load(logical_date_iso: str) -> dict[str, Any]:
+    def download_and_load() -> dict[str, Any]:
         database_url = os.environ["TRIPMATE_DATABASE_URL"]
         download_dir = Path(os.environ.get("TRIPMATE_AIRFLOW_DOWNLOAD_DIR", DEFAULT_DOWNLOAD_DIR))
 
@@ -107,7 +131,7 @@ def legal_dong_code_standard_quarterly() -> None:
 
         engine = create_engine(database_url, pool_pre_ping=True)
         session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-        logical_date = date.fromisoformat(logical_date_iso)
+        logical_date = _current_airflow_datetime().astimezone(ZoneInfo("Asia/Seoul")).date()
 
         try:
             with session_factory() as log_session:
@@ -163,7 +187,7 @@ def legal_dong_code_standard_quarterly() -> None:
         finally:
             engine.dispose()
 
-    download_and_load("{{ ds }}")
+    download_and_load()
 
 
 legal_dong_code_standard_quarterly()
