@@ -2,17 +2,34 @@
 
 ## 현재 상태
 
-인증 API는 Phase 2에서 구현한다. Phase 1에서는 인증을 위한 DB 기반만 추가되어 있다.
+일반 사용자 인증 API는 Phase 2에서 단계적으로 구현한다. 현재는 가입 요청을 저장하는 `POST /auth/register`와 httpOnly cookie 기반 `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`가 구현되어 있다. 이메일 인증 링크 소비 endpoint는 아직 구현 전이다.
+사용자, 이메일 인증, 초대 참여자, 관리자 사용자 관리의 목표 DB 스키마는 `docs/architecture/user-trip-schema.md`를 따른다.
 
 현재 존재하는 테이블:
 
 - `users`
 - `sessions`
+- `email_verification_tokens`
 
-현재 존재하는 endpoint:
+현재 존재하는 공통 endpoint:
 
 - `GET /health`
 - `GET /health/db`
+
+현재 존재하는 일반 사용자 endpoint:
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+
+현재 존재하는 관리자 인증 endpoint:
+
+- `POST /admin/auth/login`
+- `POST /admin/auth/logout`
+- `GET /admin/auth/me`
+
+관리자 API 상세는 `docs/api/admin.md`를 따른다. 일반 사용자 로그인 화면은 `/login`이며 관리자 로그인 화면과 분리한다.
 
 ## 인증 방식
 
@@ -26,15 +43,134 @@ TripMate는 httpOnly cookie 기반 서버 세션으로 시작한다.
 - 세션 cookie에는 난수 기반 opaque token만 저장한다.
 - DB에는 세션 token 원문이 아니라 `session_token_hash`만 저장한다.
 - 로그아웃은 서버 세션의 `revoked_at`을 기록하는 방식으로 처리한다.
+- 가입 시 이메일 인증을 요구한다.
+- 일반 로그인은 현재 `account_status = active`, `is_active = true`인 사용자만 허용한다.
+- 초대 참여자는 첫 로그인 때 비밀번호를 설정한다.
+- 관리자 비밀번호 초기화는 임시 비밀번호 발급이 아니라 reset link 발송 방식으로 처리한다.
+- SMTP/Gmail credential 원문은 DB에 저장하지 않고 secret reference만 저장한다.
+
+## Endpoint
+
+### `POST /auth/register`
+
+일반 사용자 가입 요청을 생성한다. 현재 단계에서는 이메일 발송 provider가 연결되어 있지 않으므로, 사용자는 `pending_email_verification` 상태로 저장되고 `email_verification_tokens.token_hash`만 DB에 남긴다. 원문 token은 DB에 저장하지 않는다.
+
+요청:
+
+```json
+{
+  "email": "planner@example.com",
+  "password": "strong-password-1",
+  "nickname": "여행자",
+  "name": "홍길동",
+  "birth_year_month": "199001",
+  "gender": "no_answer",
+  "residence_sigungu_code": "1111000000"
+}
+```
+
+필수:
+
+- `email`
+- `password`
+- `nickname`
+- `name`
+
+선택:
+
+- `birth_year_month`: `YYYYMM`
+- `gender`: `female`, `male`, `non_binary`, `no_answer`
+- `residence_sigungu_code`: `address_code_standard.legal_dong_code`에 존재하는 활성 시군구 코드
+
+응답:
+
+```json
+{
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "email": "planner@example.com",
+    "nickname": "여행자",
+    "name": "홍길동",
+    "account_status": "pending_email_verification",
+    "system_role": "planner",
+    "email_verification_required": true,
+    "verification_email_dispatched": false
+  }
+}
+```
+
+오류:
+
+- `409 Conflict`: 이미 가입된 이메일
+- `422 Unprocessable Entity`: 입력값 형식 오류 또는 존재하지 않는 거주지 시군구 코드
+
+### `POST /auth/login`
+
+일반 사용자 로그인이다. 관리자 로그인과 같은 `sessions` 테이블, 같은 `tripmate_session` httpOnly cookie 구조를 사용한다. 차이는 `/auth/login`은 일반 사용자용이고, `/admin/auth/login`은 관리자 권한을 추가로 요구한다는 점이다.
+
+요청:
+
+```json
+{
+  "email": "planner@example.com",
+  "password": "strong-password-1"
+}
+```
+
+응답:
+
+```json
+{
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "email": "planner@example.com",
+    "display_name": "여행자",
+    "nickname": "여행자",
+    "name": "홍길동",
+    "account_status": "active",
+    "system_role": "planner",
+    "email_verified_at": "2026-04-28T09:00:00+09:00",
+    "is_admin": false,
+    "is_privileged": false
+  }
+}
+```
+
+동작:
+
+- 이메일은 소문자로 정규화해 조회한다.
+- 비밀번호 hash 검증에 실패하면 `401 Unauthorized`를 반환한다.
+- 이메일 인증 전 계정(`pending_email_verification`), 초대 수락 전 계정(`invited`), 비활성/삭제 계정은 로그인할 수 없다.
+- cookie에는 원문 session token을 담고 DB에는 `session_token_hash`만 저장한다.
+- 사용자 세션 기본 만료는 `TRIPMATE_USER_SESSION_HOURS` 설정을 따른다. 현재 기본값은 14일이다.
+
+### `GET /auth/me`
+
+현재 일반 사용자 세션을 확인한다. 유효한 `tripmate_session` cookie가 없으면 `401 Unauthorized`를 반환한다.
+
+### `POST /auth/logout`
+
+현재 cookie의 session token hash를 찾아 `sessions.revoked_at`을 기록하고 cookie를 삭제한다.
 
 ## 계획 중인 endpoint
 
 ```text
-POST /auth/register
-POST /auth/login
-POST /auth/logout
-GET /users/me
+POST /auth/verify-email
+POST /auth/password-reset/request
+POST /auth/password-reset/confirm
 PATCH /users/me
+GET /users/me/private-profile
+PATCH /users/me/private-profile
+```
+
+관리자용 사용자 관리 endpoint 초안:
+
+```text
+GET /admin/users
+POST /admin/users
+PATCH /admin/users/{user_id}
+DELETE /admin/users/{user_id}
+POST /admin/users/{user_id}/password-reset
 ```
 
 ## 공통 오류 방향
@@ -49,13 +185,16 @@ PATCH /users/me
 
 ## 테스트 기준
 
-Phase 2 구현 시 최소 테스트:
+최소 테스트:
 
 - 회원가입 정상 경로
 - 중복 이메일 실패
 - 로그인 정상 경로
 - 잘못된 비밀번호 실패
 - 로그아웃 후 세션 무효화
+- 이메일 인증 전 로그인/접근 제한
+- 초대 참여자의 첫 비밀번호 설정
+- 관리자 비밀번호 초기화 token 발급
 - 사용자 정보 수정 인가 검사
 - 세션 token 원문이 DB와 로그에 남지 않는지 확인
-
+- 이메일 인증/reset token 원문이 DB와 로그에 남지 않는지 확인

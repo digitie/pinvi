@@ -53,8 +53,10 @@ pip install -e . pytest ruff mypy httpx
 Run the API:
 
 ```bash
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
+
+TripMate 직접 로컬 개발은 API 포트 `8001`, 웹 포트 `3001`을 사용한다. 이 workspace에서는 다른 로컬 서비스가 `8000`을 사용할 수 있으므로 host-facing API 확인 포트로 쓰지 않는다.
 
 Run checks:
 

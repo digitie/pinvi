@@ -1,0 +1,10 @@
+.env
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+.venv-wsl
+__pycache__
+tests
+tripmate_api.egg-info
+*.log

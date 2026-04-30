@@ -1,0 +1,8 @@
+geoalchemy2>=0.18,<1
+httpx>=0.28,<1
+psycopg[binary]>=3.3,<4
+psycopg2-binary>=2.9,<3
+pydantic-settings>=2.12,<3
+pyproj>=3.7,<4
+pyshp>=2.3,<3
+shapely>=2.1,<3

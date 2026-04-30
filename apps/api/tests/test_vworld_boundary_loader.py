@@ -3,6 +3,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+import pytest
 import shapefile
 from pyproj import Transformer
 from sqlalchemy import func, select
@@ -213,6 +214,23 @@ def test_vworld_boundary_loader_rejects_unknown_zip_name(
         assert "Unsupported VWorld boundary ZIP name" in str(exc)
     else:
         raise AssertionError("Expected unsupported ZIP name to fail.")
+
+
+def test_vworld_boundary_loader_rejects_zip_path_traversal(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    zip_path = tmp_path / "N3A_G0110000.zip"
+    escaped_path = tmp_path.parent / "N3A_G0110000.shp"
+    if escaped_path.exists():
+        escaped_path.unlink()
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("../N3A_G0110000.shp", "not a shapefile")
+
+    with pytest.raises(ValueError, match="Unsafe ZIP member path"):
+        load_vworld_boundary_zip(db_session, zip_path)
+
+    assert not escaped_path.exists()
 
 
 def _add_address_code(db_session: Session) -> None:

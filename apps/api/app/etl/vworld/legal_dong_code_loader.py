@@ -5,15 +5,16 @@ import hashlib
 import html
 import re
 import tempfile
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.etl.archive import safe_extract_zip
 from app.etl.juso.legal_dong_loader import (
     _derive_code_level,
     _derive_sido_code,
@@ -29,6 +30,8 @@ DATA_GO_REQUEST_HEADERS = {
     "User-Agent": "TripMate-ETL/0.1 (+https://www.data.go.kr/)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+DATA_GO_SERVICE_KEY_QUERY_NAME = "serviceKey"
+DATA_GO_SERVICE_KEY_REDACTION = "***"
 
 FIELD_LEGAL_DONG_CODE = "\ubc95\uc815\ub3d9\ucf54\ub4dc"
 FIELD_SIDO_NAME = "\uc2dc\ub3c4\uba85"
@@ -102,6 +105,7 @@ def download_latest_legal_dong_code_csv(
     download_dir: Path | str,
     *,
     page_url: str = DATA_GO_LEGAL_DONG_PAGE_URL,
+    service_key: str | None = None,
     client: httpx.Client | None = None,
 ) -> LegalDongCodeDownloadResult:
     target_dir = Path(download_dir)
@@ -117,10 +121,14 @@ def download_latest_legal_dong_code_csv(
         page_response = resolved_client.get(page_url)
         page_response.raise_for_status()
         download_url = _extract_data_go_content_url(page_response.text, page_url)
+        request_download_url = _with_data_go_service_key(
+            download_url,
+            _resolve_data_go_service_key(service_key),
+        )
 
-        file_response = resolved_client.get(download_url)
+        file_response = resolved_client.get(request_download_url)
         file_response.raise_for_status()
-        file_name = _resolve_download_file_name(file_response, download_url)
+        file_name = _resolve_download_file_name(file_response, request_download_url)
         file_path = target_dir / file_name
         file_path.write_bytes(file_response.content)
     finally:
@@ -129,7 +137,7 @@ def download_latest_legal_dong_code_csv(
 
     return LegalDongCodeDownloadResult(
         page_url=page_url,
-        download_url=download_url,
+        download_url=_redact_data_go_service_key(request_download_url),
         file_path=file_path,
         source_file_hash=_sha256_file(file_path),
     )
@@ -161,8 +169,7 @@ def load_legal_dong_code_zip(
     source_path = Path(zip_path)
     with tempfile.TemporaryDirectory(prefix="tripmate-lawd-cd-") as temporary_directory:
         extract_dir = Path(temporary_directory)
-        with zipfile.ZipFile(source_path) as archive:
-            archive.extractall(extract_dir)
+        safe_extract_zip(source_path, extract_dir)
         csv_path = _find_csv_file(extract_dir)
         return load_legal_dong_code_csv(
             session,
@@ -280,6 +287,58 @@ def _extract_data_go_content_url(page_html: str, page_url: str) -> str:
     if match is None:
         raise ValueError("data.go.kr page does not contain a structured contentUrl.")
     return urljoin(page_url, html.unescape(match.group("url")))
+
+
+def _resolve_data_go_service_key(service_key: str | None) -> str | None:
+    if service_key is not None:
+        value = service_key.strip()
+    else:
+        value = (get_settings().data_go_service_key or "").strip()
+    return value or None
+
+
+def _with_data_go_service_key(download_url: str, service_key: str | None) -> str:
+    if not service_key:
+        return download_url
+
+    split_url = urlsplit(download_url)
+    query_items = parse_qsl(split_url.query, keep_blank_values=True)
+    if any(key.lower() == DATA_GO_SERVICE_KEY_QUERY_NAME.lower() for key, _ in query_items):
+        return download_url
+
+    query_items.append((DATA_GO_SERVICE_KEY_QUERY_NAME, service_key))
+    return urlunsplit(
+        (
+            split_url.scheme,
+            split_url.netloc,
+            split_url.path,
+            urlencode(query_items),
+            split_url.fragment,
+        )
+    )
+
+
+def _redact_data_go_service_key(download_url: str) -> str:
+    split_url = urlsplit(download_url)
+    query_items = parse_qsl(split_url.query, keep_blank_values=True)
+    redacted_items = [
+        (
+            key,
+            DATA_GO_SERVICE_KEY_REDACTION
+            if key.lower() == DATA_GO_SERVICE_KEY_QUERY_NAME.lower()
+            else value,
+        )
+        for key, value in query_items
+    ]
+    return urlunsplit(
+        (
+            split_url.scheme,
+            split_url.netloc,
+            split_url.path,
+            urlencode(redacted_items),
+            split_url.fragment,
+        )
+    )
 
 
 def _resolve_download_file_name(response: httpx.Response, download_url: str) -> str:

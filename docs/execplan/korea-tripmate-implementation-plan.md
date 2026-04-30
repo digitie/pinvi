@@ -37,7 +37,7 @@
 10. Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 장소 초안을 먼저 구현하고, Kakao Local API 검색 adapter는 API/cache 계약 이후 붙인다.
 11. Telegram bot token 실제 값은 환경변수에 두고 DB에는 `telegram_bot_token_ref`만 저장한다.
 12. 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용한다.
-13. 행정구역 raw 레이어는 EPSG:5186 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
+13. 행정구역 raw 레이어는 EPSG:5179 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
 14. Gemini Deep Research는 사용자 개인 API 키 입력 구조로 설계하고, 키 원문은 일반 DB에 평문 저장하지 않는다.
 
 ## 4. 단계별 구현 계획
@@ -64,7 +64,7 @@
 - `npm run lint`
 - `npm run typecheck`
 - `npm run build`
-- `npm --workspace apps/web run dev -- --port 3001` 후 HTTP 200 smoke
+- `npm run dev` 후 `http://localhost:3001` HTTP 200 smoke
 
 완료 조건:
 
@@ -122,13 +122,19 @@
 
 목표: 비회원 사용 불가 원칙을 API와 UI에 적용한다.
 
+스키마 기준: `docs/architecture/user-trip-schema.md`
+
 작업:
 
 - 이메일 기반 회원가입/로그인/로그아웃 API를 만든다.
+- 이메일 인증 token과 인증 메일 발송 흐름을 만든다.
 - httpOnly cookie 기반 서버 세션을 구현한다.
 - 세션 cookie에는 opaque token만 저장하고, DB에는 해시된 세션 토큰과 만료 시각을 저장한다.
 - 비밀번호 해시 정책을 문서화한다.
+- 초대 참여자의 첫 비밀번호 설정 흐름을 만든다.
+- 관리자 사용자 목록/추가/삭제/비밀번호 초기화 API를 만든다.
 - 사용자 정보 조회/수정 API를 만든다.
+- 사용자 상세정보 테이블과 API를 만든다.
 - 인가 dependency를 추가한다.
 - 웹에 로그인, 회원가입, 사용자 정보 수정 화면을 추가한다.
 - 인증이 필요한 화면 접근 제어를 구현한다.
@@ -140,6 +146,10 @@
 - 중복 이메일 실패 테스트
 - 잘못된 비밀번호 실패 테스트
 - 사용자 정보 수정 인가 테스트
+- 이메일 인증 token 만료/재사용 방지 테스트
+- 초대 참여자 첫 비밀번호 설정 테스트
+- 관리자 비밀번호 초기화 테스트
+- token 원문과 SMTP secret이 DB/로그에 남지 않는지 확인하는 테스트
 - Playwright 로그인 및 사용자 정보 수정 smoke
 
 완료 조건:
@@ -220,9 +230,9 @@
 작업:
 
 - 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP로 확정한다.
-- `region_raw_boundary`는 원본 SHP의 EPSG:5186 geometry를 그대로 적재한다.
+- `region_raw_boundary`는 원본 SHP의 EPSG:5179 geometry를 그대로 적재한다.
 - `region_serving_boundary`는 웹 지도/API 조회용 EPSG:4326 변환본으로 생성한다.
-- 원본 보존, SHP 갱신 비교, 재처리는 raw EPSG:5186 레이어 기준으로 수행한다.
+- 원본 보존, SHP 갱신 비교, 재처리는 raw EPSG:5179 레이어 기준으로 수행한다.
 - 웹 지도 출력과 API 응답은 EPSG:4326을 사용한다.
 - 행정구역 point-in-polygon 판정은 PostGIS에서 수행한다.
 - 좌표 순서와 거리 단위 정책을 `docs/architecture.md`와 API 문서에 기록한다.
@@ -430,7 +440,7 @@
 
 - 모든 사용자 소유 리소스는 `user_id` 기반 인가 검사를 거친다.
 - 위치 좌표는 lat/lng 표시와 geometry 저장의 좌표 순서를 혼동하지 않도록 명시한다.
-- 행정구역 raw geometry는 EPSG:5186, serving geometry는 EPSG:4326으로 분리한다.
+- 행정구역 raw geometry는 EPSG:5179, serving geometry는 EPSG:4326으로 분리한다.
 - 외부 provider 원문은 TTL 캐시에만 저장한다.
 - Google/Naver/Kakao 원문 데이터의 장기 저장 가능 여부를 임의로 확정하지 않는다.
 - Gemini 생성 결과는 provider 원천 데이터와 다른 테이블/타입으로 관리한다.

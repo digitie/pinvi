@@ -12,7 +12,7 @@ Accepted
 
 - `docs/data-sources.md`를 외부 데이터 소스와 저장 정책의 단일 기준 문서로 유지한다.
 - V-WORLD `법정구역정보` SHP는 행정구역 경계 원천 데이터로 사용한다.
-- 행정구역 raw 레이어는 EPSG:5186 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
+- 행정구역 raw 레이어는 EPSG:5179 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
 - V-WORLD Geocoder API 2.0 응답 주소/결과 원문은 기본적으로 DB에 저장하지 않는다.
 - 행정구역 매핑은 Geocoder 저장 대신 PostGIS point-in-polygon을 우선 사용한다.
 - 한국도로공사 OpenAPI 응답은 raw snapshot으로 보관할 수 있으나, 앱/API 조회는 serving 테이블만 사용한다.

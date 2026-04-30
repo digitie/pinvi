@@ -58,7 +58,8 @@ Juso 주소 데이터의 첫 구현 단위는 다음 세 가지다.
 - 관련 지번 unique key는 `road_address_management_no + legal_dong_code + mountain_yn + jibun_main_no + jibun_sub_no`다.
 - PostgreSQL identifier 63 byte 제한을 피하기 위해 긴 FK/index 이름은 명시적으로 짧게 작성한다.
 - migration 제약 관련 실무 규칙은 `docs/decisions/20260425-postgres-migration-constraints.md`에 기록했다.
-- 이 구현 단위는 아직 여행/장소 FK 연결, 매월 10일 skip 정책, ETL retry/alert 설정까지 포함하지 않는다.
+- 여행/장소 FK 연결은 아직 후속 작업이다.
+- 매월 10일 이후 실행, 여행계획 날짜 skip, ETL retry/alert 기반은 `juso_monthly_address_dataset` DAG와 공통 ETL 로그 테이블에 반영됐다.
 
 ## 검증
 
@@ -72,3 +73,22 @@ Juso 주소 데이터의 첫 구현 단위는 다음 세 가지다.
 - `download -> extract -> road-address load -> related-jibun load` pipeline integration test
 - model metadata test
 - migration contract test
+
+## Airflow DAG
+
+- DAG 파일: `dags/juso_monthly_address.py`
+- DAG id: `juso_monthly_address_dataset`
+- schedule: `0 4 10-31 * *`
+- retry: `config/etl-datasets.json`의 `juso_road_address_korean` 설정을 따른다.
+
+task 내부 skip 조건:
+
+- 실행일이 10일 이전이면 skip
+- 같은 `YYYYMM` run key가 이미 성공했으면 skip
+- 실행일이 DB 여행계획 날짜에 포함되면 skip
+
+성공/skip/실패 기록:
+
+- `etl_run_logs`
+- retry 소진 실패 시 `admin_notifications`
+- retry 소진 실패 시 `telegram_system_notification_outbox`

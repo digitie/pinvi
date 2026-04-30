@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   color-scheme: light;
   --ink: #17211c;
@@ -139,7 +141,7 @@ h1 {
   color: var(--accent-strong);
 }
 
-ol {
+.routePreview ol {
   display: grid;
   gap: 0;
   margin: 0;
@@ -147,28 +149,28 @@ ol {
   list-style: none;
 }
 
-li {
+.routePreview li {
   display: grid;
   grid-template-columns: 64px 1fr;
   gap: 16px;
   padding: 20px;
 }
 
-li + li {
+.routePreview li + li {
   border-top: 1px solid var(--line);
 }
 
-time {
+.routePreview time {
   color: var(--accent);
   font-weight: 800;
 }
 
-li strong,
-li span {
+.routePreview li strong,
+.routePreview li span {
   display: block;
 }
 
-li span {
+.routePreview li span {
   margin-top: 6px;
   color: var(--muted);
   line-height: 1.5;
@@ -209,23 +211,23 @@ li span {
   overflow: hidden;
 }
 
-article {
+.modules article {
   min-height: 260px;
   padding: 24px;
   background: #fffdf8;
 }
 
-article span {
+.modules article span {
   color: var(--accent);
   font-weight: 800;
 }
 
-article h3 {
+.modules article h3 {
   margin: 48px 0 16px;
   font-size: 1.35rem;
 }
 
-article p,
+.modules article p,
 .brief p {
   color: var(--muted);
   line-height: 1.7;
@@ -269,7 +271,7 @@ article p,
     flex-direction: column;
   }
 
-  li {
+  .routePreview li {
     grid-template-columns: 1fr;
   }
 }

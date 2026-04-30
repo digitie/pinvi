@@ -151,6 +151,17 @@ def test_parse_juso_road_address_file_detects_tab_delimiter(tmp_path: Path) -> N
     assert parsed.delimiter == "\t"
 
 
+def test_parse_juso_road_address_file_uses_unknown_effective_date_sentinel(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "202604_rnaddrkor_blank_effective_date.txt"
+    source_file.write_text(_build_juso_row(effective_date=""), encoding="utf-8")
+
+    parsed = parse_juso_road_address_file(source_file)
+
+    assert parsed.rows[0].effective_date == "00000000"
+
+
 def test_parse_juso_road_address_file_rejects_invalid_field_count(tmp_path: Path) -> None:
     source_file = tmp_path / "202604_rnaddrkor_invalid.txt"
     source_file.write_text("a|b|c", encoding="utf-8")
