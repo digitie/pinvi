@@ -13,7 +13,9 @@ TripMate의 KTO TourAPI 연동은 `pykrtourapi`를 직접 사용한다. TripMate
 
 현재 반영 commit:
 
-- `pykrtourapi`: `8d8416d4ca865071f94060b5c07fa46ae3f46916`
+- `pykrtourapi`: `6fd0601ad01d6cdef59ca3d46cb1df3b6b697e59`
+
+확인 결과 `8d8416d4..6fd0601a` 구간은 pykrtourapi 런타임 API 변경 없이 문서만 확장한 업데이트다. TripMate 코드는 기존 `KrTourApiClient`, `TourApiHubClient`, Pydantic `TourApiModel` 계약을 유지한다.
 
 ## TripMate 쪽 원칙
 
@@ -24,6 +26,8 @@ TripMate의 KTO TourAPI 연동은 `pykrtourapi`를 직접 사용한다. TripMate
 - `areaCode`, `sigunguCode`, `lDongRegnCd`, `lDongSignguCd`를 TripMate `legal_dong_code`와 혼동하지 않는다.
 
 ## pykrtourapi 저장소에 줄 Codex 지시문
+
+아래 지시문은 아직 pykrtourapi에 부족한 기능을 보강하기 위한 것이다. TripMate backend에는 이 기능들을 대체하는 adapter를 만들지 않는다.
 
 ### 1. 요청/응답 provenance 추가
 
