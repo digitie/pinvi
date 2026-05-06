@@ -975,6 +975,10 @@ Juso key 매핑 우선순위:
 수집:
 
 - 방식: OpenAPI
+- Python client: `pykrtourapi`의 `KrTourApiClient`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 만들지 않는다.
+- API 계약 문서: `docs/api/kto-tourapi.md`
+- 운영 runbook: `docs/runbooks/kto-tourapi.md`
+- 설정값: `TRIPMATE_KTO_SERVICE_KEY`, `TRIPMATE_KTO_MOBILE_APP`, `TRIPMATE_KTO_MOBILE_OS`, `TRIPMATE_KTO_TIMEOUT_SECONDS`, `TRIPMATE_KTO_MAX_RETRIES`
 - 기본 응답 형식: `_type=json`
 - 필수 공통 파라미터: `serviceKey`, `MobileOS`, `MobileApp`
 - 기본 조회는 사용자가 이미 저장한 장소를 기준으로 수행한다.
@@ -1000,6 +1004,8 @@ Juso key 매핑 우선순위:
 - `overview`, `detailIntro2`, `detailInfo2`, `detailImage2`를 조회했다면 각 endpoint의 return field 전체를 별도 detail snapshot으로 저장한다.
 - 이미지 바이너리는 저장하지 않는다. API가 반환한 이미지 URL, 저작권 코드, 관련 메타데이터는 return field로 저장한다.
 - KTO `KorService2`는 공공 관광정보 원천으로 취급하므로 “응답값 전체 저장”을 허용한다. 이 예외는 Kakao/Naver/Google 같은 일반 장소 provider 원문 장기 저장 정책에 적용하지 않는다.
+- `pykrtourapi` `Page.raw`와 item별 `raw`를 저장 기준으로 삼되, request provenance metadata가 부족한 경우 TripMate 래퍼를 새로 만들지 말고 `pykrtourapi`에 metadata 지원을 upstream한다.
+- 현재 `pykrtourapi` 응답 객체는 Pydantic model이므로 후속 저장 로직은 `model_dump()`와 `raw` payload를 함께 사용할 수 있다.
 
 코드 정책:
 
@@ -1057,6 +1063,7 @@ Juso key 매핑 우선순위:
 
 수집:
 
+- Python client: `pykrtourapi`의 `TourApiHubClient`를 직접 사용한다. typed model이 부족한 영역은 TripMate adapter로 보완하지 않고 `pykrtourapi`에 upstream한다.
 - 방식: OpenAPI
 - 기본 응답 형식: `_type=json`
 - 기준월 `baseYm`을 명시해 월 단위 snapshot으로 관리한다.

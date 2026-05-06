@@ -62,6 +62,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Airflow는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.
+- KTO TourAPI 조회는 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 두지 않고, 부족한 endpoint별 typed model이나 provenance metadata는 `pykrtourapi`에 upstream한다.
 
 ## 데이터 원칙
 

@@ -12,6 +12,7 @@ dependencies = [
   "fastapi>=0.124.0",
   "geoalchemy2>=0.18.0",
   "httpx>=0.28.0",
+  "pykrtourapi @ git+https://github.com/digitie/pykrtourapi.git@8d8416d4ca865071f94060b5c07fa46ae3f46916",
   "pyproj>=3.7.0",
   "pyshp>=2.3.1",
   "psycopg[binary]>=3.3.0",

@@ -57,6 +57,18 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run mypy ."
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
 ```
 
+KTO TourAPI 로컬 설정은 커밋하지 않는 `apps/api/.env`에 둔다. 인증키는 공공데이터포털 decoding 인증키를 사용한다.
+
+```bash
+TRIPMATE_KTO_SERVICE_KEY=공공데이터포털_decoding_인증키
+TRIPMATE_KTO_MOBILE_APP=TripMate
+TRIPMATE_KTO_MOBILE_OS=WEB
+TRIPMATE_KTO_TIMEOUT_SECONDS=10
+TRIPMATE_KTO_MAX_RETRIES=2
+```
+
+KTO 호출 코드는 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
+
 `uv`가 WSL2에 없고 `.venv-wsl` 가상환경을 사용할 때:
 
 ```bash

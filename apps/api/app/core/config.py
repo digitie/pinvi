@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     )
     session_cookie_name: str = "tripmate_session"
 
+    kto_service_key: str | None = None
+    kto_mobile_app: str = "TripMate"
+    kto_mobile_os: str = "WEB"
+    kto_timeout_seconds: float = 10.0
+    kto_max_retries: int = 2
+
     @property
     def enable_docs(self) -> bool:
         return self.environment != "production"

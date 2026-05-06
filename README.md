@@ -74,6 +74,14 @@ uv run mypy .
 uv run pytest
 ```
 
+KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `pykrtourapi` client를 직접 사용합니다.
+
+```bash
+TRIPMATE_KTO_SERVICE_KEY=공공데이터포털_decoding_인증키
+TRIPMATE_KTO_MOBILE_APP=TripMate
+TRIPMATE_KTO_MOBILE_OS=WEB
+```
+
 ## 로컬 DB
 
 ```bash
@@ -110,6 +118,8 @@ uv run uvicorn app.main:app --reload
 - [구현 계획](docs/execplan/korea-tripmate-implementation-plan.md)
 - [아키텍처 기준선](docs/architecture.md)
 - [데이터 소스 기준](docs/data-sources.md)
+- [KTO TourAPI 계약](docs/api/kto-tourapi.md)
+- [KTO TourAPI runbook](docs/runbooks/kto-tourapi.md)
 - [Telegram 연동](docs/integrations/telegram.md)
 - [Gemini 연동](docs/integrations/gemini.md)
 - [로컬 개발 runbook](docs/runbooks/local-dev.md)
