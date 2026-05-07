@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -703,37 +704,59 @@ def _upsert_place_source_record(
     raw_hash: str,
     collected_at: datetime,
 ) -> tuple[SourceRecord, bool]:
+    lookup_filters = (
+        SourceRecord.provider == KMA_BEACH_PROVIDER,
+        SourceRecord.dataset_key == KMA_BEACH_CATALOG_DATASET_KEY,
+        SourceRecord.source_entity_type == "place",
+        SourceRecord.source_entity_id == entry.beach_num,
+        SourceRecord.raw_payload_hash == raw_hash,
+    )
     existing = session.scalar(
-        select(SourceRecord).where(
-            SourceRecord.provider == KMA_BEACH_PROVIDER,
-            SourceRecord.dataset_key == KMA_BEACH_CATALOG_DATASET_KEY,
-            SourceRecord.source_entity_type == "place",
-            SourceRecord.source_entity_id == entry.beach_num,
-            SourceRecord.raw_payload_hash == raw_hash,
-        )
+        select(SourceRecord).where(*lookup_filters)
     )
     if existing is not None:
         return existing, False
-    source_record = SourceRecord(
-        dataset_key=KMA_BEACH_CATALOG_DATASET_KEY,
-        provider=KMA_BEACH_PROVIDER,
-        source_entity_type="place",
-        source_entity_id=entry.beach_num,
-        source_version=entry.source_file_hash,
-        raw_name=entry.beach_name,
-        raw_address=None,
-        raw_longitude=entry.longitude,
-        raw_latitude=entry.latitude,
-        raw_geom=_point(entry.longitude, entry.latitude),
-        raw_data=entry.raw_payload,
-        raw_payload_hash=raw_hash,
-        fetched_at=collected_at,
-        imported_at=collected_at,
-        expires_at=None,
+    inserted_id = session.scalar(
+        pg_insert(SourceRecord)
+        .values(
+            dataset_key=KMA_BEACH_CATALOG_DATASET_KEY,
+            provider=KMA_BEACH_PROVIDER,
+            source_entity_type="place",
+            source_entity_id=entry.beach_num,
+            source_version=entry.source_file_hash,
+            raw_name=entry.beach_name,
+            raw_address=None,
+            raw_longitude=entry.longitude,
+            raw_latitude=entry.latitude,
+            raw_geom=_point(entry.longitude, entry.latitude),
+            raw_data=entry.raw_payload,
+            raw_payload_hash=raw_hash,
+            fetched_at=collected_at,
+            imported_at=collected_at,
+            expires_at=None,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                SourceRecord.provider,
+                SourceRecord.dataset_key,
+                SourceRecord.source_entity_type,
+                SourceRecord.source_entity_id,
+                SourceRecord.raw_payload_hash,
+            ]
+        )
+        .returning(SourceRecord.id)
     )
-    session.add(source_record)
-    session.flush()
-    return source_record, True
+    if inserted_id is not None:
+        source_record = session.get(SourceRecord, inserted_id)
+        if source_record is None:
+            raise KmaBeachWeatherError(f"Inserted source record not found: {inserted_id}")
+        return source_record, True
+    existing = session.scalar(select(SourceRecord).where(*lookup_filters))
+    if existing is None:
+        raise KmaBeachWeatherError(
+            "KMA beach catalog source record conflict was reported but no row was visible."
+        )
+    return existing, False
 
 
 def _upsert_place(

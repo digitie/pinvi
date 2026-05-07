@@ -120,6 +120,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - 월간 Juso는 공개일 전에는 직전 월 파일이 없을 수 있다. 초기 DB 구축 또는 복구는 DAG conf `{"source_year_month":"YYYYMM"}`로 공개가 확인된 월을 명시한다.
 - 같은 데이터셋에서 후속 success가 발생하면 이전 실패 관리자 알림과 Telegram pending outbox가 자동 resolved/cancelled 되는지 확인한다. 실패 알림이 계속 남아 있으면 운영자가 이미 조치한 장애가 반복 알림으로 보일 수 있다.
 - KMA/KHOA/MOF 해수욕장 DAG는 시작 시 KMA 해수욕장 catalog profile을 공유하므로 서로 다른 DAG가 동시에 같은 해수욕장을 만들 수 있다. `beach_profiles`, `beach_provider_refs`, `beach_source_records`는 PostgreSQL unique constraint 기반 `ON CONFLICT DO NOTHING` 경로를 유지해 동시 실행 경합을 흡수한다.
+- KMA 해수욕장 날씨 DAG가 빈 catalog를 동시에 감지하면 같은 KMA catalog `source_records`를 만들 수 있으므로, catalog loader의 `source_records` insert도 동일하게 unique constraint 기반 `ON CONFLICT DO NOTHING` 경로를 유지한다.
 
 ## 시간대 기준
 
