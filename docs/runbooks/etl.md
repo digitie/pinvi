@@ -411,6 +411,10 @@ ETL 실패 메시지와 outbox payload는 `serviceKey`, `apiKey`, `token` 계열
 - 로그인 화면의 `/public/festivals/monthly` API는 이 serving 테이블만 조회한다.
 - 지도 marker 색상과 icon은 `docs/architecture/map-marker-design.md`의 축제 source type 기준을 따른다.
 
+## KMA short-term request pacing
+
+`weather_short_term` can issue hundreds of KMA VilageFcst requests in one run because it fetches three endpoints for each active sigungu grid. Airflow uses `TRIPMATE_KMA_SHORT_TERM_REQUEST_DELAY_SECONDS` for this DAG only, defaulting to `1.0` second between KMA requests. Keep the value nonzero in Docker/ODROID soak or production-like runs to reduce provider HTTP 429 responses; set it to `0` only for controlled local tests with mocked providers.
+
 ## 반복 오류 방지
 
 - Docker 명령은 WSL2에서 실행한다.

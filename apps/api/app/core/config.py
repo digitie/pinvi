@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     etl_config_path: str = "config/etl-datasets.json"
     kma_mid_term_region_config_path: str = "config/kma-mid-term-regions.json"
     data_go_service_key: str | None = None
+    kma_short_term_request_delay_seconds: float = 1.0
     khoa_api_key: str | None = None
     mof_beach_service_key: str | None = None
     opinet_api_key: str | None = None

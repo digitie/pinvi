@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -28,12 +29,15 @@ class KmaWeatherApiClient:
         service_key: str | None = None,
         base_url: str = KMA_BASE_URL,
         client: httpx.Client | None = None,
+        request_delay_seconds: float | None = None,
     ) -> None:
         self._service_key = (
             service_key if service_key is not None else get_settings().data_go_service_key
         )
         self._base_url = base_url.rstrip("/")
         self._client = client
+        self._request_delay_seconds = max(0.0, float(request_delay_seconds or 0.0))
+        self._last_request_monotonic: float | None = None
 
     def fetch_ultra_short_nowcast(
         self,
@@ -218,6 +222,7 @@ class KmaWeatherApiClient:
         callback: Callable[[], list[dict[str, Any]]],
     ) -> list[dict[str, Any]]:
         try:
+            self._wait_for_request_slot()
             return callback()
         except KmaError as exc:
             if exc.result_code in {"03", "NO_DATA"}:
@@ -225,6 +230,17 @@ class KmaWeatherApiClient:
             raise DataGoApiError(str(exc)) from exc
         except ValueError as exc:
             raise DataGoApiError(str(exc)) from exc
+
+    def _wait_for_request_slot(self) -> None:
+        if self._request_delay_seconds <= 0:
+            return
+        now = time.monotonic()
+        if self._last_request_monotonic is not None:
+            elapsed = now - self._last_request_monotonic
+            if elapsed < self._request_delay_seconds:
+                time.sleep(self._request_delay_seconds - elapsed)
+                now = time.monotonic()
+        self._last_request_monotonic = now
 
 
 def _items_from_pykma_body(

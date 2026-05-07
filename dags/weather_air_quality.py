@@ -17,6 +17,7 @@ except Exception:
     class AirflowSkipException(Exception):
         pass
 
+
 WEATHER_SHORT_TERM_DAG_ID = "weather_short_term_sigungu_grid"
 WEATHER_ALERT_DAG_ID = "weather_kma_alert"
 WEATHER_MID_TERM_DAG_ID = "weather_mid_term_nationwide"
@@ -394,6 +395,7 @@ def _parse_airflow_datetime(value: str) -> datetime:
 
 
 def _load_short_term(session: Any, collected_at: datetime) -> Any:
+    from app.core.config import get_settings
     from app.etl.weather.client import KmaWeatherApiClient
     from app.etl.weather.loader import (
         build_sigungu_weather_grid_mappings_from_boundaries,
@@ -404,9 +406,10 @@ def _load_short_term(session: Any, collected_at: datetime) -> Any:
     existing_count = session.query(WeatherShortTermGridMapping).filter_by(is_active=True).count()
     if existing_count == 0:
         build_sigungu_weather_grid_mappings_from_boundaries(session)
+    settings = get_settings()
     return load_short_term_weather_for_active_mappings(
         session,
-        KmaWeatherApiClient(),
+        KmaWeatherApiClient(request_delay_seconds=settings.kma_short_term_request_delay_seconds),
         collected_at=collected_at,
     )
 

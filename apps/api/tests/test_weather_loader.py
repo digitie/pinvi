@@ -13,6 +13,7 @@ from pykma import wgs84_to_kma_grid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.etl.weather import client as weather_client_module
 from app.etl.weather.client import AirKoreaApiClient, DataGoApiError, KmaWeatherApiClient
 from app.etl.weather.loader import (
     build_sigungu_weather_grid_mappings_from_boundaries,
@@ -703,6 +704,47 @@ def test_kma_client_delegates_explicit_short_term_call_to_pykma() -> None:
             "ny": "127",
         }
     ]
+
+
+def test_kma_client_throttles_configured_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen_requests: list[httpx.Request] = []
+    current_time = [100.0]
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "header": {"resultCode": "03", "resultMsg": "NO_DATA"},
+                    "body": {"items": {"item": []}, "totalCount": 0},
+                }
+            },
+        )
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        current_time[0] += seconds
+
+    monkeypatch.setattr(weather_client_module.time, "monotonic", lambda: current_time[0])
+    monkeypatch.setattr(weather_client_module.time, "sleep", fake_sleep)
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as http_client:
+        client = KmaWeatherApiClient(
+            service_key="local-test-key",
+            client=http_client,
+            request_delay_seconds=2.5,
+        )
+        client.fetch_weather_infos(from_date=date(2026, 4, 25), to_date=date(2026, 4, 26))
+        client.fetch_weather_breaking_news(
+            from_date=date(2026, 4, 25),
+            to_date=date(2026, 4, 26),
+        )
+
+    assert len(seen_requests) == 2
+    assert sleeps == [2.5]
 
 
 def test_airkorea_client_extracts_list_items() -> None:
