@@ -155,6 +155,20 @@ date -u +"%Y-%m-%dT%H:%M:%SZ" > "${SOAK_DIR}/started-at-iso"
 printf '%s\n' "${DURATION_HOURS}" > "${SOAK_DIR}/duration-hours"
 printf '%s\n' "${CHECK_INTERVAL_MINUTES}" > "${SOAK_DIR}/check-interval-minutes"
 
+KEEPALIVE_HOURS=$((DURATION_HOURS + 1))
+if command -v setsid >/dev/null 2>&1; then
+  setsid -f "${ROOT_DIR}/scripts/docker-keepalive.sh" \
+    --duration-hours "${KEEPALIVE_HOURS}" \
+    --interval-seconds 15 \
+    >> "${SOAK_DIR}/docker-keepalive.log" 2>&1
+else
+  nohup "${ROOT_DIR}/scripts/docker-keepalive.sh" \
+    --duration-hours "${KEEPALIVE_HOURS}" \
+    --interval-seconds 15 \
+    >> "${SOAK_DIR}/docker-keepalive.log" 2>&1 &
+fi
+echo "Docker keepalive를 ${KEEPALIVE_HOURS}시간 동안 백그라운드로 시작했습니다."
+
 "${ROOT_DIR}/scripts/etl-soak-trigger-all.sh"
 "${ROOT_DIR}/scripts/etl-soak-status.sh" | tee "${SOAK_DIR}/initial-status.log"
 

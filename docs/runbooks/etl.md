@@ -107,6 +107,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - 법정동코드 로컬 파일 적재는 `app.cli.legal_dong_code`로 ETL 실행 로그와 실패 알림까지 같은 방식으로 기록한다.
 - 상태 점검은 앱 DB와 Airflow metadata DB를 모두 조회한다.
 - `scripts/etl-soak-monitor.sh`는 각 10분 점검 로그를 `.tmp/etl-soak/status-*.log`에 남기고 최신 로그를 `.tmp/etl-soak/latest-status.log`로 복사한다.
+- `scripts/docker-keepalive.sh`는 Docker Desktop/WSL2 검증 중 유휴 상태로 Docker daemon이 내려가는 환경을 막기 위해 짧은 `docker ps` 호출을 반복한다. `scripts/etl-soak-reset-and-start.sh`는 soak 목표 시간보다 1시간 길게 keepalive를 자동 실행한다.
 
 반복 오류 방지:
 
