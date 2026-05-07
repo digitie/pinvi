@@ -35,7 +35,8 @@ scripts/odroid-docker-start.sh
 
 - Linux 환경과 Docker Compose plugin 존재 여부를 확인한다.
 - `.env`가 없으면 중단한다.
-- `.tmp/airflow-downloads`, `.tmp/airflow-logs`, `dataset/` 디렉터리를 만든다.
+- Ubuntu라면 24.04 기준과 다른 버전일 때 경고한다.
+- `.tmp/airflow-downloads`, `.tmp/airflow-logs`, `.tmp/backups`, `dataset/` 디렉터리를 만든다.
 - `AIRFLOW_UID` 기본값을 현재 사용자 UID로 잡는다.
 - `infra/docker-compose.yml`의 Postgres/PostGIS, Airflow postgres, redis, webserver, scheduler, dag-processor, worker를 빌드/기동한다.
 
@@ -45,8 +46,30 @@ scripts/odroid-docker-start.sh
 
 ```bash
 cd /opt/tripmate
-docker compose -f infra/docker-compose.yml exec -T airflow-scheduler bash -lc \
-  'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
+scripts/odroid-docker-migrate.sh
+```
+
+## DB 백업과 복구
+
+운영 변경 전에는 서버 로컬에 백업을 남긴다. 백업 파일은 Git에 포함하지 않는 `.tmp/backups/` 아래에 생성한다.
+
+```bash
+cd /opt/tripmate
+scripts/backup-db.sh
+```
+
+특정 파일명으로 백업하려면:
+
+```bash
+cd /opt/tripmate
+scripts/backup-db.sh --output .tmp/backups/tripmate-before-etl.dump
+```
+
+복구는 기존 DB object를 덮어쓰는 작업이므로 점검 창에서 실행한다.
+
+```bash
+cd /opt/tripmate
+scripts/restore-db.sh --yes --input .tmp/backups/tripmate-before-etl.dump
 ```
 
 ## 운영 주의
@@ -74,6 +97,5 @@ scripts/etl-soak-status.sh
 ## 후속 보완
 
 - 원격 배포용 `scripts/deploy.sh`
-- DB backup/restore용 `scripts/backup-db.sh`, `scripts/restore-db.sh`
 - Airflow DAG별 리소스 제한과 worker concurrency 운영값
 - 장시간 적재 작업을 위한 ODROID swap, storage health 점검 절차

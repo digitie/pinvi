@@ -24,7 +24,7 @@ tripmate-api:local
 tripmate-web:local
 ```
 
-API 이미지는 `python:3.12-slim` 기반으로 빌드하며, health check용 `curl`을 포함한다. Web 이미지는 `node:22-bookworm-slim` 기반 multi-stage build를 사용한다.
+API 이미지는 `python:3.12-slim` 기반으로 빌드하며, health check용 `curl`과 pinned Git 의존성 설치용 `git`을 포함한다. Web 이미지는 `node:22-bookworm-slim` 기반 multi-stage build를 사용한다.
 
 ## 포트
 

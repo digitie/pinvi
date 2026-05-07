@@ -103,6 +103,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - `dataset/`은 Airflow 컨테이너에 read-only로 mount된다.
 - 법정동코드 로컬 파일 적재는 `app.cli.legal_dong_code`로 ETL 실행 로그와 실패 알림까지 같은 방식으로 기록한다.
 - 상태 점검은 앱 DB와 Airflow metadata DB를 모두 조회한다.
+- `scripts/etl-soak-monitor.sh`는 각 10분 점검 로그를 `.tmp/etl-soak/status-*.log`에 남기고 최신 로그를 `.tmp/etl-soak/latest-status.log`로 복사한다.
 
 반복 오류 방지:
 

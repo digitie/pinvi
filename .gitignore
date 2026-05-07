@@ -41,3 +41,5 @@ Thumbs.db
 .tmp/
 dataset/
 testset/
+refdocs/
+test-results/

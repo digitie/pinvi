@@ -52,6 +52,7 @@ while true; do
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   log_path="${SOAK_DIR}/status-${stamp}.log"
   "${ROOT_DIR}/scripts/etl-soak-status.sh" | tee "${log_path}"
+  cp "${log_path}" "${SOAK_DIR}/latest-status.log"
   if (( now >= deadline )); then
     echo "soak 목표 시간에 도달했습니다: ${DURATION_HOURS}시간"
     exit 0

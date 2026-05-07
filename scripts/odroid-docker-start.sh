@@ -11,6 +11,14 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 1
 fi
 
+if [[ -r /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  if [[ "${ID:-}" == "ubuntu" && "${VERSION_ID:-}" != "24.04" ]]; then
+    echo "주의: 기준 환경은 Ubuntu 24.04입니다. 현재 VERSION_ID=${VERSION_ID:-unknown}" >&2
+  fi
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker 명령을 찾지 못했습니다." >&2
   exit 1
@@ -27,7 +35,7 @@ if [[ ! -f .env ]]; then
 fi
 
 export AIRFLOW_UID="${AIRFLOW_UID:-$(id -u)}"
-mkdir -p .tmp/airflow-downloads .tmp/airflow-logs dataset
+mkdir -p .tmp/airflow-downloads .tmp/airflow-logs .tmp/backups dataset
 
 "${COMPOSE[@]}" up -d --build postgres airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker
 "${COMPOSE[@]}" ps
