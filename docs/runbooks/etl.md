@@ -87,6 +87,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - 6시간보다 긴 주기는 검증용 config에서 1시간 이내로 낮춘다.
 - KHOA 해수욕지수, 갯벌체험지수, 바다갈라짐 체험지수는 하루 2회 quota라 검증 중에도 12시간 주기를 유지하고 retry를 0으로 둔다.
 - AirKorea 일 500회 제한은 운영 config 기준으로 설계했다. soak config도 과도한 호출을 만들지 않도록 `air_quality_sido_measurement`는 시간 단위, station/tour/월간성 데이터는 12시간 단위로 제한한다.
+- `weather_short_term`은 시군구 대표 격자 264개와 endpoint 3개를 호출하므로 한 번에 약 800회 요청이 발생한다. 6시간 soak config에서는 KMA HTTP 429를 줄이기 위해 매시 25분 1회로 제한한다.
 - 기상청 관광코스 파일 경로 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 관광코스 DAG skip은 정상 상태다.
 - ETL 실패는 Airflow retry 소진 뒤 `etl_run_logs`, `admin_notifications`, `telegram_system_notification_outbox`에 남아야 한다.
 
@@ -225,7 +226,7 @@ Airflow DAG:
 
 구현된 데이터셋 설정:
 
-- `weather_short_term`: `*/30 * * * *`, 5분 간격 3회 retry
+- `weather_short_term`: `*/30 * * * *`, 5분 간격 3회 retry. 6시간 soak config는 KMA quota 보호를 위해 `25 * * * *`를 사용한다.
 - `weather_kma_alert`: `*/30 * * * *`, 5분 간격 3회 retry
 - `weather_mid_term`: `20 6,18 * * *`, 10분 간격 3회 retry
 - `air_quality_station`: `20 4 * * *`, 30분 간격 3회 retry
