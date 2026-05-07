@@ -81,6 +81,14 @@ class FakeOpiNetClient:
         ]
 
 
+class EmptyOpiNetClient(FakeOpiNetClient):
+    def fetch_region_codes(self, *, area_code: str | None = None) -> list[dict[str, str]]:
+        return []
+
+    def fetch_avg_all_prices(self) -> list[dict[str, str]]:
+        return []
+
+
 def test_opinet_region_loader_maps_provider_codes_to_address_standard(
     db_session: Session,
 ) -> None:
@@ -116,6 +124,17 @@ def test_opinet_region_loader_maps_provider_codes_to_address_standard(
     ]
 
 
+def test_opinet_region_loader_rejects_zero_row_provider_response(
+    db_session: Session,
+) -> None:
+    with pytest.raises(OpiNetApiError, match="zero sido rows"):
+        load_opinet_region_codes(
+            db_session,
+            EmptyOpiNetClient(),  # type: ignore[arg-type]
+            collected_at=datetime(2026, 4, 26, 6, 0, tzinfo=KST),
+        )
+
+
 def test_opinet_avg_loader_stores_supported_fuels_and_daily_summary(
     db_session: Session,
 ) -> None:
@@ -145,6 +164,17 @@ def test_opinet_avg_loader_stores_supported_fuels_and_daily_summary(
         ("gasoline", Decimal("1674.12")),
         ("premium_gasoline", Decimal("1890.00")),
     ]
+
+
+def test_opinet_avg_loader_rejects_zero_row_provider_response(
+    db_session: Session,
+) -> None:
+    with pytest.raises(OpiNetApiError, match="zero rows"):
+        load_opinet_avg_prices(
+            db_session,
+            EmptyOpiNetClient(),  # type: ignore[arg-type]
+            collected_at=datetime(2026, 4, 26, 6, 30, tzinfo=KST),
+        )
 
 
 def test_opinet_lowest_station_loader_uses_address_mapping_for_nearby_summary(

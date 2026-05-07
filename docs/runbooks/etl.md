@@ -182,6 +182,7 @@ Airflow DAG:
 - `fuel_lowest_station`의 사용자용 평균값은 특정 OpiNet 시군구 지역의 최저가 TOP 후보 평균이다. 실제 반경 평균이나 지역 전체 평균가가 아니므로 UI/API에 "주변 평균"과 "최저가 후보 평균"을 함께 표현한다.
 - OpiNet 지역코드는 Juso 법정동코드와 다르므로 `fuel_region_legal_dong_mapping`을 통해 연결한다.
 - `opinet_lowest_station_daily`는 `fuel_region_code` 매핑 결과가 있어야 실행 가능하다. 매핑된 시군구가 없으면 retry 후 실패 로그와 관리자 알림으로 이어진다.
+- OpiNet `areaCode.do`와 `avgAllPrice.do`가 HTTP 200이지만 `RESULT.OIL` 0건을 반환하면 정상 success로 보지 않고 provider/key 상태 오류로 실패시킨다. 이때 인증키 승인 범위와 OpiNet 포털 응답을 먼저 확인한다.
 - provider API 호출 부하를 사용자 수와 분리하기 위해 `fuel_lowest_station`은 on-demand 호출이 아니라 전국 시군구 전체 주기 수집을 기본값으로 한다. 다른 공공/외부 데이터도 가능하면 같은 원칙을 적용한다.
 
 수동 적재 command:
@@ -216,6 +217,7 @@ Airflow DAG:
 - FK 불일치 row는 `<TRIPMATE_AIRFLOW_LOG_DIR>/etl/rest_area_fk_mismatch/<dataset>/<run_key>.jsonl`에 남긴다. 이 로그는 운영자가 삭제하기 전까지 보관한다.
 - 한국도로공사 인증 query parameter는 `key`다. 실패 로그, Telegram outbox, 문서 예시에 실제 인증키를 남기지 않는다.
 - `rest_area_oil_price` provider field의 `diselPrice` 오탈자는 provider 원문 field명이므로 코드에서 그대로 사용한다.
+- `rest_area_oil_price`의 가격 field는 provider가 `X` 같은 무자료 표기를 줄 수 있으므로 pykex typed price parser를 우회해 raw row를 저장한 뒤 TripMate loader에서 `None`으로 정규화한다.
 
 ### 날씨와 대기질 데이터셋
 

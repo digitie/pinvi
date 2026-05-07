@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from kex_openapi import KexClient, Page
@@ -93,6 +93,23 @@ def _collect_kex_rows(fetch_page: Callable[[int], Page[Any]]) -> list[dict[str, 
     raise RuntimeError("pykex pagination exceeded guard for rest area dataset.")
 
 
+def _fetch_rest_area_fuel_price_page(client: KexClient, *, page_no: int) -> Page[Any]:
+    raw_page_fetcher = getattr(client, "_page_ex", None)
+    if callable(raw_page_fetcher):
+        return cast(
+            Page[Any],
+            raw_page_fetcher(
+                "/openapi/business/curStateStation",
+                {
+                    "numOfRows": KEX_PAGE_SIZE,
+                    "pageNo": page_no,
+                },
+                dict,
+            ),
+        )
+    return client.restarea.fuel_prices(num_of_rows=KEX_PAGE_SIZE, page_no=page_no)
+
+
 def _kex_item_raw(item: object) -> dict[str, Any]:
     if isinstance(item, dict):
         return dict(item)
@@ -175,10 +192,7 @@ def load_rest_area_oil_prices(
     resolved_collected_at = _resolve_collected_at(collected_at)
     snapshot_date = resolved_collected_at.date()
     rows = _collect_kex_rows(
-        lambda page_no: client.restarea.fuel_prices(
-            num_of_rows=KEX_PAGE_SIZE,
-            page_no=page_no,
-        )
+        lambda page_no: _fetch_rest_area_fuel_price_page(client, page_no=page_no)
     )
     master_lookup = _load_master_lookup(session)
     raw_count = 0

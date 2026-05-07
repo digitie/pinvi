@@ -156,6 +156,41 @@ class OffsetOilStationCodeKexClient(FakeKexClient):
         ]
 
 
+class RawFuelPriceKexClient(FakeKexClient):
+    def _page_ex(
+        self,
+        path: str,
+        params: dict[str, object],
+        parser: object,
+    ) -> _FakeKexPage:
+        assert path == "/openapi/business/curStateStation"
+        assert params["numOfRows"] == 1000
+        assert params["pageNo"] == 1
+        assert parser is dict
+        rows = self._fuel_price_rows()
+        return _FakeKexPage(items=tuple(rows), total_count=len(rows))
+
+    def fuel_prices(self, *args: object, **kwargs: object) -> _FakeKexPage:
+        raise AssertionError("rest area oil loader should use raw fuel price rows")
+
+    def _fuel_price_rows(self) -> list[dict[str, str]]:
+        return [
+            {
+                "serviceAreaCode": "B00001",
+                "serviceAreaCode2": "000001",
+                "serviceAreaName": "raw-price-station",
+                "routeCode": "0010",
+                "routeName": "raw-route",
+                "direction": "up",
+                "oilCompany": "AD",
+                "lpgYn": "X",
+                "gasolinePrice": "X",
+                "diselPrice": "1,880원",
+                "lpgPrice": "X",
+            }
+        ]
+
+
 def test_rest_area_master_loader_stores_raw_and_serving_rows(db_session: Session) -> None:
     result = load_rest_area_master(
         db_session,
@@ -262,6 +297,27 @@ def test_rest_area_oil_loader_maps_offset_station_code_by_name_route_direction(
     assert serving_row is not None
     assert serving_row.svar_cd == "000001"
     assert serving_row.price_per_liter_krw == 1900
+
+
+def test_rest_area_oil_loader_uses_raw_rows_for_provider_x_prices(
+    db_session: Session,
+) -> None:
+    client = RawFuelPriceKexClient()
+    load_rest_area_master(db_session, client)  # type: ignore[arg-type]
+
+    result = load_rest_area_oil_prices(
+        db_session,
+        client,  # type: ignore[arg-type]
+        collected_at=datetime(2026, 4, 26, 6, 10, tzinfo=KST),
+    )
+    db_session.commit()
+
+    serving_rows = db_session.scalars(select(RestAreaServingOilPrice)).all()
+
+    assert result.raw_row_count == 1
+    assert result.serving_row_count == 1
+    assert serving_rows[0].fuel_type == "diesel"
+    assert serving_rows[0].price_per_liter_krw == 1880
 
 
 def test_rest_area_oil_loader_keeps_multiple_daily_snapshots(db_session: Session) -> None:

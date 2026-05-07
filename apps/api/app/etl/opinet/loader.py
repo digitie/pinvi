@@ -13,7 +13,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.etl.juso.legal_dong_loader import _derive_sido_code, _derive_sigungu_code
-from app.etl.opinet.client import OPINET_FUEL_SPECS, OpiNetApiClient, OpiNetFuelSpec
+from app.etl.opinet.client import (
+    OPINET_FUEL_SPECS,
+    OpiNetApiClient,
+    OpiNetApiError,
+    OpiNetFuelSpec,
+)
 from app.models.address import AddressCodeStandard
 from app.models.fuel import (
     FuelRawAvgPrice,
@@ -63,6 +68,8 @@ def load_opinet_region_codes(
     region_payloads: list[dict[str, Any]] = []
 
     sido_rows = client.fetch_region_codes()
+    if not sido_rows:
+        raise OpiNetApiError("OpiNet areaCode.do returned zero sido rows.")
     for sido_row in sido_rows:
         sido_code = _required_text(sido_row, "AREA_CD")
         raw_rows.append(
@@ -99,6 +106,9 @@ def load_opinet_region_codes(
                     "parent_provider_region_code": sido_code,
                 }
             )
+
+    if not region_payloads:
+        raise OpiNetApiError("OpiNet areaCode.do returned zero region rows.")
 
     session.add_all(raw_rows)
     mappings = _build_region_mappings(session, region_payloads)
@@ -167,6 +177,8 @@ def load_opinet_avg_prices(
 ) -> OpiNetAvgPriceLoadResult:
     resolved_collected_at = _resolve_collected_at(collected_at)
     rows = client.fetch_avg_all_prices()
+    if not rows:
+        raise OpiNetApiError("OpiNet avgAllPrice.do returned zero rows.")
     skipped = 0
     raw_count = 0
     serving_count = 0
