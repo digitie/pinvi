@@ -747,6 +747,65 @@ def test_kma_client_throttles_configured_requests(monkeypatch: pytest.MonkeyPatc
     assert sleeps == [2.5]
 
 
+def test_kma_client_retries_rate_limited_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen_requests: list[httpx.Request] = []
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        if len(seen_requests) == 1:
+            return httpx.Response(429)
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL_CODE"},
+                    "body": {
+                        "items": {
+                            "item": {
+                                "baseDate": "20260507",
+                                "baseTime": "1200",
+                                "category": "T1H",
+                                "obsrValue": "22.1",
+                            }
+                        },
+                        "pageNo": 1,
+                        "numOfRows": 1000,
+                        "totalCount": 1,
+                    },
+                }
+            },
+        )
+
+    monkeypatch.setattr(weather_client_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as http_client:
+        client = KmaWeatherApiClient(
+            service_key="local-test-key",
+            client=http_client,
+            rate_limit_max_retries=1,
+            rate_limit_retry_backoff_seconds=30,
+        )
+        rows = client.fetch_ultra_short_nowcast(
+            nx=60,
+            ny=127,
+            base_date="20260507",
+            base_time="1200",
+        )
+
+    assert len(seen_requests) == 2
+    assert sleeps == [30]
+    assert rows == [
+        {
+            "baseDate": "20260507",
+            "baseTime": "1200",
+            "category": "T1H",
+            "obsrValue": "22.1",
+        }
+    ]
+
+
 def test_airkorea_client_extracts_list_items() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

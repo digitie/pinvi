@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     kma_mid_term_region_config_path: str = "config/kma-mid-term-regions.json"
     data_go_service_key: str | None = None
     kma_short_term_request_delay_seconds: float = 1.0
+    kma_short_term_rate_limit_max_retries: int = 2
+    kma_short_term_rate_limit_backoff_seconds: float = 300.0
     khoa_api_key: str | None = None
     mof_beach_service_key: str | None = None
     opinet_api_key: str | None = None

@@ -87,7 +87,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - 6시간보다 긴 주기는 검증용 config에서 1시간 이내로 낮춘다.
 - KHOA 해수욕지수, 갯벌체험지수, 바다갈라짐 체험지수는 하루 2회 quota라 검증 중에도 12시간 주기를 유지하고 retry를 0으로 둔다.
 - AirKorea 일 500회 제한은 운영 config 기준으로 설계했다. soak config도 과도한 호출을 만들지 않도록 `air_quality_sido_measurement`는 시간 단위, station/tour/월간성 데이터는 12시간 단위로 제한한다.
-- `weather_short_term`은 시군구 대표 격자 264개와 endpoint 3개를 호출하므로 한 번에 약 800회 요청이 발생한다. 6시간 soak config에서는 KMA HTTP 429를 줄이기 위해 매시 25분 1회로 제한한다.
+- `weather_short_term`은 시군구 대표 격자 264개와 endpoint 3개를 호출하므로 한 번에 약 800회 요청이 발생한다. 6시간 soak config에서는 KMA HTTP 429를 줄이기 위해 매시 25분 1회로 제한한다. HTTP 429가 발생하면 Airflow task 실패로 넘기기 전에 `TRIPMATE_KMA_SHORT_TERM_RATE_LIMIT_MAX_RETRIES`, `TRIPMATE_KMA_SHORT_TERM_RATE_LIMIT_BACKOFF_SECONDS` 설정으로 같은 provider 요청을 task 안에서 식힌 뒤 재시도한다.
 - 기상청 관광코스 파일 경로 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 관광코스 DAG skip은 정상 상태다.
 - ETL 실패는 Airflow retry 소진 뒤 `etl_run_logs`, `admin_notifications`, `telegram_system_notification_outbox`에 남아야 한다.
 
@@ -413,7 +413,7 @@ ETL 실패 메시지와 outbox payload는 `serviceKey`, `apiKey`, `token` 계열
 
 ## KMA short-term request pacing
 
-`weather_short_term` can issue hundreds of KMA VilageFcst requests in one run because it fetches three endpoints for each active sigungu grid. Airflow uses `TRIPMATE_KMA_SHORT_TERM_REQUEST_DELAY_SECONDS` for this DAG only, defaulting to `1.0` second between KMA requests. Keep the value nonzero in Docker/ODROID soak or production-like runs to reduce provider HTTP 429 responses; set it to `0` only for controlled local tests with mocked providers.
+`weather_short_term` can issue hundreds of KMA VilageFcst requests in one run because it fetches three endpoints for each active sigungu grid. Airflow uses `TRIPMATE_KMA_SHORT_TERM_REQUEST_DELAY_SECONDS` for this DAG only, defaulting to `1.0` second between KMA requests. When the provider returns HTTP 429, the DAG retries the same request in-process with `TRIPMATE_KMA_SHORT_TERM_RATE_LIMIT_MAX_RETRIES` and `TRIPMATE_KMA_SHORT_TERM_RATE_LIMIT_BACKOFF_SECONDS` before allowing Airflow to mark the task failed. Keep pacing and 429 backoff nonzero in Docker/ODROID soak or production-like runs; set them to `0` only for controlled local tests with mocked providers.
 
 ## 반복 오류 방지
 

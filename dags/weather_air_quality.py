@@ -409,7 +409,11 @@ def _load_short_term(session: Any, collected_at: datetime) -> Any:
     settings = get_settings()
     return load_short_term_weather_for_active_mappings(
         session,
-        KmaWeatherApiClient(request_delay_seconds=settings.kma_short_term_request_delay_seconds),
+        KmaWeatherApiClient(
+            request_delay_seconds=settings.kma_short_term_request_delay_seconds,
+            rate_limit_max_retries=settings.kma_short_term_rate_limit_max_retries,
+            rate_limit_retry_backoff_seconds=settings.kma_short_term_rate_limit_backoff_seconds,
+        ),
         collected_at=collected_at,
     )
 

@@ -30,6 +30,8 @@ class KmaWeatherApiClient:
         base_url: str = KMA_BASE_URL,
         client: httpx.Client | None = None,
         request_delay_seconds: float | None = None,
+        rate_limit_max_retries: int | None = None,
+        rate_limit_retry_backoff_seconds: float | None = None,
     ) -> None:
         self._service_key = (
             service_key if service_key is not None else get_settings().data_go_service_key
@@ -37,6 +39,11 @@ class KmaWeatherApiClient:
         self._base_url = base_url.rstrip("/")
         self._client = client
         self._request_delay_seconds = max(0.0, float(request_delay_seconds or 0.0))
+        self._rate_limit_max_retries = max(0, int(rate_limit_max_retries or 0))
+        self._rate_limit_retry_backoff_seconds = max(
+            0.0,
+            float(rate_limit_retry_backoff_seconds or 0.0),
+        )
         self._last_request_monotonic: float | None = None
 
     def fetch_ultra_short_nowcast(
@@ -221,15 +228,28 @@ class KmaWeatherApiClient:
         self,
         callback: Callable[[], list[dict[str, Any]]],
     ) -> list[dict[str, Any]]:
-        try:
-            self._wait_for_request_slot()
-            return callback()
-        except KmaError as exc:
-            if exc.result_code in {"03", "NO_DATA"}:
-                return []
-            raise DataGoApiError(str(exc)) from exc
-        except ValueError as exc:
-            raise DataGoApiError(str(exc)) from exc
+        retry_count = 0
+        while True:
+            try:
+                self._wait_for_request_slot()
+                return callback()
+            except KmaError as exc:
+                if exc.result_code in {"03", "NO_DATA"}:
+                    return []
+                if self._should_retry_rate_limit(exc, retry_count=retry_count):
+                    retry_count += 1
+                    self._sleep_for_rate_limit_retry()
+                    continue
+                raise DataGoApiError(str(exc)) from exc
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if self._should_retry_rate_limit_status(status_code, retry_count=retry_count):
+                    retry_count += 1
+                    self._sleep_for_rate_limit_retry()
+                    continue
+                raise DataGoApiError(f"KMA request failed with HTTP {status_code}") from exc
+            except ValueError as exc:
+                raise DataGoApiError(str(exc)) from exc
 
     def _wait_for_request_slot(self) -> None:
         if self._request_delay_seconds <= 0:
@@ -241,6 +261,28 @@ class KmaWeatherApiClient:
                 time.sleep(self._request_delay_seconds - elapsed)
                 now = time.monotonic()
         self._last_request_monotonic = now
+
+    def _should_retry_rate_limit(self, exc: KmaError, *, retry_count: int) -> bool:
+        return self._should_retry_rate_limit_status(
+            exc.status_code,
+            retry_count=retry_count,
+            failure_kind=exc.failure_kind,
+        )
+
+    def _should_retry_rate_limit_status(
+        self,
+        status_code: int | None,
+        *,
+        retry_count: int,
+        failure_kind: str | None = None,
+    ) -> bool:
+        if retry_count >= self._rate_limit_max_retries:
+            return False
+        return status_code == 429 or failure_kind == "rate_limit"
+
+    def _sleep_for_rate_limit_retry(self) -> None:
+        if self._rate_limit_retry_backoff_seconds > 0:
+            time.sleep(self._rate_limit_retry_backoff_seconds)
 
 
 def _items_from_pykma_body(
