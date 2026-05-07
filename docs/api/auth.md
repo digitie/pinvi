@@ -23,6 +23,19 @@
 - `POST /auth/logout`
 - `GET /auth/me`
 
+계획 중인 소셜 로그인 endpoint:
+
+- `GET /auth/oauth/providers`
+- `GET /auth/oauth/{provider}/start`
+- `GET /auth/oauth/{provider}/callback`
+- `POST /auth/oauth/{provider}/link`
+- `DELETE /auth/oauth/{provider}`
+
+계획 중인 소셜 로그인 테이블:
+
+- `user_oauth_accounts`
+- `oauth_login_states`
+
 현재 존재하는 관리자 인증 endpoint:
 
 - `POST /admin/auth/login`
@@ -48,6 +61,113 @@ TripMate는 httpOnly cookie 기반 서버 세션으로 시작한다.
 - 초대 참여자는 첫 로그인 때 비밀번호를 설정한다.
 - 관리자 비밀번호 초기화는 임시 비밀번호 발급이 아니라 reset link 발송 방식으로 처리한다.
 - SMTP/Gmail credential 원문은 DB에 저장하지 않고 secret reference만 저장한다.
+- Google/Naver/Kakao 로그인은 provider token을 TripMate 세션으로 쓰지 않는다.
+- 소셜 로그인 callback 성공 후에도 기존 `tripmate_session` httpOnly cookie와 `sessions.session_token_hash`를 사용한다.
+- provider 고유 식별자는 `user_oauth_accounts(provider, provider_user_id)`에 저장한다.
+- 기존 이메일 계정과 provider 계정은 자동 연결하지 않는다.
+- provider access token, refresh token, id token 원문은 DB와 로그에 저장하지 않는다.
+
+## 소셜 로그인 계획
+
+상세 설계와 provider별 scope, endpoint, 보안 기준은 `docs/integrations/social-login.md`를 따른다. provider identity 연결 결정은 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
+
+지원 대상 provider:
+
+| Provider | TripMate key | 사용자 식별 필드 | 이메일 인증 처리 |
+| --- | --- | --- | --- |
+| Google | `google` | `sub` | `email_verified = true`일 때 provider 인증을 신뢰 |
+| Naver | `naver` | `response.id` | 명시적 verified flag가 없으므로 초기 구현은 TripMate 이메일 인증 요구 |
+| Kakao | `kakao` | `id` | `is_email_valid = true` 및 `is_email_verified = true`일 때 provider 인증을 신뢰 |
+
+소셜 로그인 성공 흐름:
+
+1. `/login`의 provider 버튼이 `GET /auth/oauth/{provider}/start?return_to=/trips`로 top-level navigation한다.
+2. API는 난수 `state`를 만들고 hash만 `oauth_login_states`에 저장한다.
+3. 사용자는 provider 인증/동의 화면을 거쳐 `GET /auth/oauth/{provider}/callback`으로 돌아온다.
+4. API는 `state`, 만료, provider 일치를 검증하고 authorization code를 token으로 교환한다.
+5. API는 provider profile을 조회하고 `provider_user_id`를 기준으로 `user_oauth_accounts`를 찾는다.
+6. 이미 연결된 계정이면 기존 사용자로 `tripmate_session`을 발급한다.
+7. 연결된 계정이 없고 현재 TripMate 세션이 있으면 명시적 연결 흐름으로 처리한다.
+8. 연결된 계정이 없고 같은 이메일 사용자가 없으면 provider 이메일 신뢰 정책에 따라 신규 사용자를 만들 수 있다.
+9. 같은 이메일 사용자가 이미 있으면 자동 연결하지 않고 `/login?oauth_error=account_link_required&provider=...`로 돌려보낸다.
+
+소셜 로그인 오류 redirect:
+
+```text
+/login?oauth_error=provider_disabled&provider=google
+/login?oauth_error=provider_denied&provider=naver
+/login?oauth_error=state_expired&provider=kakao
+/login?oauth_error=email_required&provider=kakao
+/login?oauth_error=email_unverified&provider=naver
+/login?oauth_error=account_link_required&provider=google
+/login?oauth_error=oauth_temporary_failure&provider=kakao
+```
+
+사용자 UI는 위 내부 코드를 조치 가능한 한국어 메시지로 변환한다. provider 원문 오류, token, profile raw payload는 화면과 로그에 그대로 노출하지 않는다.
+
+### `GET /auth/oauth/providers`
+
+로그인 화면에서 사용 가능한 provider 목록을 조회한다.
+
+응답:
+
+```json
+{
+  "providers": [
+    {
+      "provider": "google",
+      "display_name": "Google",
+      "enabled": true
+    },
+    {
+      "provider": "naver",
+      "display_name": "Naver",
+      "enabled": true
+    },
+    {
+      "provider": "kakao",
+      "display_name": "Kakao",
+      "enabled": true
+    }
+  ]
+}
+```
+
+### `GET /auth/oauth/{provider}/start`
+
+provider authorization URL로 redirect한다.
+
+요청 query:
+
+| 이름 | 필수 | 설명 |
+| --- | --- | --- |
+| `return_to` | N | 성공 후 이동할 TripMate 상대 경로. 기본 `/trips` |
+| `mode` | N | `login` 또는 `link`. 기본 `login` |
+
+오류:
+
+- `404 Not Found`: 지원하지 않는 provider
+- `503 Service Unavailable`: provider 설정 누락
+- `422 Unprocessable Entity`: 외부 URL 등 허용되지 않는 `return_to`
+
+### `GET /auth/oauth/{provider}/callback`
+
+provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 `return_to`로 redirect한다. 실패하면 `/login?oauth_error=...&provider=...`로 redirect한다.
+
+이 endpoint는 일반 JSON API라기보다 브라우저 redirect endpoint다.
+
+### `POST /auth/oauth/{provider}/link`
+
+로그인된 사용자가 provider 계정을 명시적으로 연결할 때 사용한다. 구현은 `start?mode=link`와 callback에서 처리해도 되지만, API 계약상 현재 사용자 세션이 필요한 연결 기능으로 둔다.
+
+### `DELETE /auth/oauth/{provider}`
+
+로그인된 사용자가 provider 연결을 해제한다.
+
+해제 제한:
+
+- 비밀번호가 없고 연결된 provider가 하나뿐이면 해제할 수 없다.
+- 다른 사용자에게 연결된 provider 계정은 해제할 수 없다.
 
 ## Endpoint
 
@@ -161,6 +281,11 @@ POST /auth/password-reset/confirm
 PATCH /users/me
 GET /users/me/private-profile
 PATCH /users/me/private-profile
+GET /auth/oauth/providers
+GET /auth/oauth/{provider}/start
+GET /auth/oauth/{provider}/callback
+POST /auth/oauth/{provider}/link
+DELETE /auth/oauth/{provider}
 ```
 
 관리자용 사용자 관리 endpoint 초안:
@@ -198,3 +323,8 @@ POST /admin/users/{user_id}/password-reset
 - 사용자 정보 수정 인가 검사
 - 세션 token 원문이 DB와 로그에 남지 않는지 확인
 - 이메일 인증/reset token 원문이 DB와 로그에 남지 않는지 확인
+- 소셜 로그인 state mismatch/만료/재사용 실패
+- Google/Naver/Kakao provider profile 정규화
+- 기존 이메일 계정과 provider 계정 자동 연결 방지
+- provider-only 사용자의 password login 실패
+- provider token 원문이 DB와 로그에 남지 않는지 확인

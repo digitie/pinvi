@@ -60,5 +60,6 @@
 - 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경(WSL2/Windows)을 보고한다.
 - 유사한 실수가 반복되면 원인과 재발방지 기준을 관련 문서/runbook/skill에 남긴다.
 - Docker, Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic 검증은 WSL2에서 실행한다.
+- Windows PowerShell로 한국어 문서를 읽을 때는 깨짐 방지를 위해 `Get-Content -Encoding UTF8` 또는 동등한 UTF-8 명시 옵션을 사용한다.
 - 보안/인증/DB/공간/Airflow/Telegram/외부 API/PWA/Gemini 변경은 관련 문서와 모듈 경계를 먼저 읽는다.
 - 제품 의사결정이 저장소에서 추론 불가능할 때만 멈추고 묻고, 그 외에는 안전한 가정을 문서에 남긴다.

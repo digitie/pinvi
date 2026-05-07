@@ -28,12 +28,27 @@ Desktop:
 
 - 좌측: 축제 정보 패널
 - 우측: 로그인 정보 패널
-- 로그인 정보에는 이메일, 비밀번호, 로그인 버튼, 비밀번호 찾기, 회원가입 링크를 둔다.
+- 로그인 정보에는 이메일, 비밀번호, 로그인 버튼, Google/Naver/Kakao 소셜 로그인 버튼, 비밀번호 찾기, 회원가입 링크를 둔다.
 
 Mobile:
 
 - 상단: 로그인 정보
 - 하단: 축제 정보
+
+소셜 로그인 버튼:
+
+- 이메일 로그인 버튼 아래에 `또는` 구분선을 두고 Google, Naver, Kakao 버튼을 세로로 배치한다.
+- 버튼 높이는 48px 이상, radius는 8px, 너비는 form과 같은 full-width를 사용한다.
+- 버튼 label은 `Google로 계속하기`, `Naver로 계속하기`, `Kakao로 계속하기`처럼 provider와 행동을 함께 말한다.
+- 접근성 label은 화면 label과 같은 의미를 유지한다. icon만 있는 버튼으로 만들지 않는다.
+- Google 버튼은 흰 배경, 얇은 border, near-black text를 기본으로 한다.
+- Naver 버튼은 `#03C75A` 배경과 흰 text를 기본으로 한다.
+- Kakao 버튼은 `#FEE500` 배경과 near-black text를 기본으로 한다.
+- provider 공식 brand asset을 사용할 수 있으면 self-host하고, 외부 CDN hotlink는 하지 않는다.
+- provider client secret이나 REST API key는 프론트엔드 코드와 `NEXT_PUBLIC_*` 환경변수에 넣지 않는다.
+- 버튼 클릭은 API start endpoint로 top-level navigation한다. `fetch`로 OAuth flow를 시작하지 않는다.
+- provider 설정이 없으면 production에서는 버튼을 숨기고, local/dev에서는 disabled 상태와 설정 누락을 확인할 수 있게 한다.
+- 관리자 로그인 화면에는 소셜 로그인 버튼을 넣지 않는다.
 
 축제 정보:
 

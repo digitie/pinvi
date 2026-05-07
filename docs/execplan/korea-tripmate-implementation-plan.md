@@ -34,11 +34,12 @@
 7. Telegram 발송 대상은 사용자 소유 리소스로 분리하고, 여행별 최대 3개 연결 제한을 도메인과 UI에서 모두 강제한다.
 8. Gemini Deep Research는 수동 버튼 실행, 재사용 가능한 결과, 출처 추적을 기본으로 둔다.
 9. 인증은 httpOnly cookie 기반 서버 세션으로 시작한다.
-10. Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 장소 초안을 먼저 구현하고, Kakao Local API 검색 adapter는 API/cache 계약 이후 붙인다.
-11. Telegram bot token 실제 값은 환경변수에 두고 DB에는 `telegram_bot_token_ref`만 저장한다.
-12. 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용한다.
-13. 행정구역 raw 레이어는 EPSG:5179 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
-14. Gemini Deep Research는 사용자 개인 API 키 입력 구조로 설계하고, 키 원문은 일반 DB에 평문 저장하지 않는다.
+10. Google/Naver/Kakao 소셜 로그인은 provider token을 앱 세션으로 쓰지 않고, `user_oauth_accounts` 연결 뒤 기존 서버 세션을 발급한다.
+11. Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 장소 초안을 먼저 구현하고, Kakao Local API 검색 adapter는 API/cache 계약 이후 붙인다.
+12. Telegram bot token 실제 값은 환경변수에 두고 DB에는 `telegram_bot_token_ref`만 저장한다.
+13. 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용한다.
+14. 행정구역 raw 레이어는 EPSG:5179 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
+15. Gemini Deep Research는 사용자 개인 API 키 입력 구조로 설계하고, 키 원문은 일반 DB에 평문 저장하지 않는다.
 
 ## 4. 단계별 구현 계획
 
@@ -127,6 +128,12 @@
 작업:
 
 - 이메일 기반 회원가입/로그인/로그아웃 API를 만든다.
+- Google/Naver/Kakao 소셜 로그인은 `docs/execplan/social-login-providers.md`에 따라 별도 구현 단위로 진행한다.
+- `/login` 화면에 Google/Naver/Kakao 소셜 로그인 버튼을 추가한다.
+- `user_oauth_accounts`와 `oauth_login_states` migration을 추가한다.
+- provider callback 성공 후 기존 `tripmate_session` cookie를 발급한다.
+- provider token 원문을 DB/로그에 저장하지 않는 테스트를 추가한다.
+- 기존 이메일 계정과 provider 계정 자동 연결 방지 정책을 테스트한다.
 - 이메일 인증 token과 인증 메일 발송 흐름을 만든다.
 - httpOnly cookie 기반 서버 세션을 구현한다.
 - 세션 cookie에는 opaque token만 저장하고, DB에는 해시된 세션 토큰과 만료 시각을 저장한다.
@@ -147,6 +154,9 @@
 - 잘못된 비밀번호 실패 테스트
 - 사용자 정보 수정 인가 테스트
 - 이메일 인증 token 만료/재사용 방지 테스트
+- 소셜 로그인 state 만료/재사용 방지 테스트
+- Google/Naver/Kakao provider profile 정규화 테스트
+- 기존 이메일 계정과 provider 계정 자동 연결 방지 테스트
 - 초대 참여자 첫 비밀번호 설정 테스트
 - 관리자 비밀번호 초기화 테스트
 - token 원문과 SMTP secret이 DB/로그에 남지 않는지 확인하는 테스트

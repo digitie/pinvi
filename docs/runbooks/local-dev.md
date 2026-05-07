@@ -91,6 +91,45 @@ TRIPMATE_KTO_MAX_RETRIES=2
 
 KTO 호출 코드는 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
 
+## 소셜 로그인 로컬 설정 계획
+
+Google/Naver/Kakao 소셜 로그인은 아직 구현 전이다. 구현 후에는 `docs/integrations/social-login.md`와 `docs/execplan/social-login-providers.md`를 기준으로 아래 값을 `apps/api/.env`에 둔다. 실제 secret 값은 커밋하지 않는다.
+
+```bash
+TRIPMATE_WEB_BASE_URL=http://localhost:3001
+TRIPMATE_OAUTH_CALLBACK_BASE_URL=http://localhost:8001
+TRIPMATE_GOOGLE_OAUTH_CLIENT_ID=Google_OAuth_client_id
+TRIPMATE_GOOGLE_OAUTH_CLIENT_SECRET=Google_OAuth_client_secret
+TRIPMATE_NAVER_OAUTH_CLIENT_ID=Naver_client_id
+TRIPMATE_NAVER_OAUTH_CLIENT_SECRET=Naver_client_secret
+TRIPMATE_KAKAO_OAUTH_REST_API_KEY=Kakao_REST_API_key
+TRIPMATE_KAKAO_OAUTH_CLIENT_SECRET=Kakao_client_secret_if_enabled
+TRIPMATE_OAUTH_STATE_TTL_SECONDS=600
+TRIPMATE_OAUTH_HTTP_TIMEOUT_SECONDS=5
+```
+
+로컬 provider console callback URI:
+
+```text
+http://localhost:8001/auth/oauth/google/callback
+http://localhost:8001/auth/oauth/naver/callback
+http://localhost:8001/auth/oauth/kakao/callback
+```
+
+Docker app smoke 기준 callback URI:
+
+```text
+http://127.0.0.1:18082/auth/oauth/google/callback
+http://127.0.0.1:18082/auth/oauth/naver/callback
+http://127.0.0.1:18082/auth/oauth/kakao/callback
+```
+
+주의:
+
+- provider client secret은 `apps/web/.env.local`이나 `NEXT_PUBLIC_*` 변수에 넣지 않는다.
+- provider access token, refresh token, id token 원문은 DB, 로그, fixture에 저장하지 않는다.
+- 배포 도메인이 정해지면 provider console의 redirect URI와 ODROID runbook을 함께 갱신한다.
+
 `uv`가 WSL2에 없고 `.venv-wsl` 가상환경을 사용할 때:
 
 ```bash

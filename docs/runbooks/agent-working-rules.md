@@ -42,6 +42,7 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 - 저장소에서 실행하는 명령은 WSL2 Ubuntu를 최우선 실행 환경으로 한다.
 - Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 반드시 WSL2 Ubuntu에서 실행한다.
 - Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 파일 확인, 간단한 Git 상태 확인, 문서 읽기 같은 보조 작업에만 사용한다.
+- Windows PowerShell로 한국어 문서나 skill을 읽을 때는 기본 인코딩을 가정하지 말고 `Get-Content -Encoding UTF8 -Path ...`처럼 UTF-8을 명시한다. 한글이 깨져 보이면 내용을 근거로 판단하지 말고 UTF-8로 다시 읽은 뒤 작업한다.
 - Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
 - WSL2 경로는 현재 저장소 기준 `/mnt/f/dev/mapplan`을 기본으로 사용한다.
@@ -51,6 +52,13 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 ```bash
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d"
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/python -m pytest"
+```
+
+PowerShell에서 문서 확인 예시:
+
+```powershell
+Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\docs\runbooks\agent-working-rules.md'
+Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\skills\documentation-and-adrs.ko.md'
 ```
 
 ## 코딩 전 영향 확인

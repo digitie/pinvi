@@ -9,6 +9,7 @@
 ## 핵심 요구사항
 
 - 사용자는 이메일로 로그인한다.
+- Google/Naver/Kakao 소셜 로그인은 provider 고유 사용자와 TripMate 사용자를 별도 연결 테이블로 묶는다.
 - 비회원 사용은 지원하지 않는다.
 - 사용자 등급은 관리자, 여행계획 작성자, 참여자로 시작하되 추후 세분화될 수 있어야 한다.
 - 여행계획 작성자는 직접 가입하고 로그인할 수 있다.
@@ -41,6 +42,7 @@
 ```mermaid
 erDiagram
   users ||--o{ user_sessions : owns
+  users ||--o{ user_oauth_accounts : links
   users ||--o| user_private_profiles : has
   users ||--o{ email_verification_tokens : receives
   users ||--o{ password_reset_tokens : receives
@@ -100,6 +102,7 @@ erDiagram
 - 현재 일반 가입자는 `account_status = pending_email_verification`, `system_role = planner`로 생성된다.
 - 현재 일반 로그인은 `account_status = active`, `is_active = true`인 사용자만 허용한다. 가입 직후 이메일 인증 전 계정은 로그인할 수 없다.
 - 참여자 초대 흐름은 아직 구현 전이므로 `password_hash`는 현재 non-null이다. 초대 참여자 첫 비밀번호 설정을 구현할 때 nullable 전환을 별도 migration으로 검토한다.
+- Google/Naver/Kakao provider-only 계정을 구현할 때도 `password_hash` nullable 전환이 필요하다. 이 경우 비밀번호 로그인 service는 `password_hash IS NULL` 사용자를 로그인 실패로 처리해야 한다.
 
 ### `user_profiles`
 
@@ -146,6 +149,74 @@ erDiagram
 | `updated_at` | timestamptz | Y | 수정 시각 |
 
 세션 cookie에는 token 원문만 담고 DB에는 해시만 저장한다.
+
+## 소셜 로그인
+
+소셜 로그인 상세 정책은 `docs/integrations/social-login.md`를 따른다. provider identity 연결 결정은 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
+
+### `user_oauth_accounts`
+
+Google/Naver/Kakao provider 계정과 TripMate 사용자를 연결한다. provider token을 저장하는 테이블이 아니다.
+
+| 컬럼 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `id` | UUID PK | Y | 연결 row ID |
+| `user_id` | UUID FK | Y | TripMate 사용자 |
+| `provider` | varchar(32) | Y | `google`, `naver`, `kakao` |
+| `provider_user_id` | varchar(255) | Y | provider 고유 사용자 ID. Google `sub`, Naver `response.id`, Kakao `id` |
+| `provider_email` | varchar(320) | N | provider가 반환한 이메일 snapshot. unique 기준으로 쓰지 않음 |
+| `provider_email_verified` | boolean | Y | provider 이메일 검증 여부 또는 TripMate가 신뢰하기로 한 여부 |
+| `display_name_snapshot` | varchar(120) | N | 연결 당시 provider 표시 이름 |
+| `linked_at` | timestamptz | Y | 최초 연결 시각 |
+| `last_login_at` | timestamptz | N | 이 provider로 마지막 로그인한 시각 |
+| `created_at` | timestamptz | Y | 생성 시각 |
+| `updated_at` | timestamptz | Y | 수정 시각 |
+
+권장 제약:
+
+- `provider IN ('google', 'naver', 'kakao')`.
+- `(provider, provider_user_id)` unique.
+- `(user_id, provider)` unique.
+- `user_id` FK는 `ON DELETE CASCADE`.
+- `provider_email`에는 검색용 index를 둘 수 있지만, 계정 연결의 단일 진실원으로 쓰지 않는다.
+
+동작 기준:
+
+- provider access token, refresh token, id token 원문은 저장하지 않는다.
+- 기존 이메일 사용자가 있으면 자동 연결하지 않고 명시적 연결 흐름을 요구한다.
+- provider-only 사용자는 `password_hash = NULL`일 수 있다.
+- 비밀번호가 없고 연결된 provider가 하나뿐인 사용자는 마지막 provider 연결을 해제할 수 없다.
+
+### `oauth_login_states`
+
+OAuth start와 callback 사이의 CSRF 방지, nonce, PKCE 검증 상태를 짧게 보관한다.
+
+| 컬럼 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `id` | UUID PK | Y | state row ID |
+| `provider` | varchar(32) | Y | `google`, `naver`, `kakao` |
+| `mode` | varchar(16) | Y | `login`, `link` |
+| `state_hash` | varchar(128) unique | Y | 원문 state의 hash. 원문 저장 금지 |
+| `nonce_hash` | varchar(128) | N | OIDC nonce hash. 원문 저장 금지 |
+| `pkce_code_verifier_hash` | varchar(128) | N | PKCE code verifier hash. 원문은 짧은 만료의 httpOnly cookie에 둔다 |
+| `return_to_path` | varchar(255) | Y | 성공 후 이동할 TripMate 내부 상대 경로 |
+| `expires_at` | timestamptz | Y | 권장 10분 이하 |
+| `consumed_at` | timestamptz | N | callback 처리 완료 시각 |
+| `created_at` | timestamptz | Y | 생성 시각 |
+| `updated_at` | timestamptz | Y | 수정 시각 |
+
+권장 제약:
+
+- `provider IN ('google', 'naver', 'kakao')`.
+- `mode IN ('login', 'link')`.
+- `state_hash` unique.
+- `return_to_path`는 service layer에서 `/`로 시작하는 내부 상대 경로만 허용한다.
+- 만료/소비된 state는 재사용할 수 없다.
+
+정리 정책:
+
+- callback 성공/실패 모두 `consumed_at`을 기록한다.
+- 만료 state는 주기적으로 삭제하거나 운영 정리 task에서 제거한다.
 
 ## 이메일 인증과 비밀번호 초기화
 
