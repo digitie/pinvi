@@ -711,9 +711,7 @@ def _upsert_place_source_record(
         SourceRecord.source_entity_id == entry.beach_num,
         SourceRecord.raw_payload_hash == raw_hash,
     )
-    existing = session.scalar(
-        select(SourceRecord).where(*lookup_filters)
-    )
+    existing = session.scalar(select(SourceRecord).where(*lookup_filters))
     if existing is not None:
         return existing, False
     inserted_id = session.scalar(
