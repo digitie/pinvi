@@ -90,7 +90,7 @@ wait_for_completed() {
   local exit_code
   local attempt
   for attempt in $(seq 1 90); do
-    container_id="$("${COMPOSE[@]}" ps -q "${service}")"
+    container_id="$("${COMPOSE[@]}" ps -a -q "${service}")"
     if [[ -n "${container_id}" ]]; then
       status="$(docker inspect -f '{{.State.Status}}' "${container_id}")"
       exit_code="$(docker inspect -f '{{.State.ExitCode}}' "${container_id}")"
@@ -116,14 +116,14 @@ wait_for_healthy airflow-redis
 wait_for_completed airflow-init
 
 echo "Alembic migration을 빈 DB에 적용합니다."
-"${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
+"${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
   'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
 
 LEGAL_CODE_CSV="$(find "${ROOT_DIR}/dataset" -maxdepth 1 -type f -name '*법정동코드*.csv' | sort | tail -n 1 || true)"
 if [[ -n "${LEGAL_CODE_CSV}" ]]; then
   LEGAL_CODE_CONTAINER_PATH="/opt/tripmate/dataset/$(basename "${LEGAL_CODE_CSV}")"
   echo "법정동코드 기준 CSV를 적재합니다: $(basename "${LEGAL_CODE_CSV}")"
-  "${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
+  "${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
     "cd /opt/tripmate/apps/api && python -m app.cli.legal_dong_code '${LEGAL_CODE_CONTAINER_PATH}'"
 else
   echo "dataset/ 하위에서 법정동코드 CSV를 찾지 못했습니다. legal_dong_code_standard DAG 다운로드에 의존합니다." >&2
@@ -136,7 +136,7 @@ VWorld_ZIPS=(
 )
 if [[ -f "${ROOT_DIR}/dataset/N3A_G0010000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0100000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0110000.zip" ]]; then
   echo "VWorld 행정경계 SHP ZIP 3종을 적재합니다."
-  "${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
+  "${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
     "cd /opt/tripmate/apps/api && python -m app.cli.vworld_boundary ${VWorld_ZIPS[*]}"
 else
   echo "dataset/ 하위에서 VWorld SHP ZIP 3종을 모두 찾지 못했습니다. 경계 기반 ETL 일부가 빈 결과가 될 수 있습니다." >&2
