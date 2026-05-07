@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -120,6 +121,25 @@ def test_load_legacy_vworld_zip_retains_missing_existing_codes_for_fk_safety(
     assert retained.source_status == "missing_from_latest_download"
 
 
+def test_load_legacy_vworld_zip_rejects_path_traversal(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    zip_path = tmp_path / "LSCT_LAWDCD_20250201.zip"
+    escaped_path = tmp_path.parent / "escaped.csv"
+    if escaped_path.exists():
+        escaped_path.unlink()
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(
+            "../escaped.csv", "법정동코드,법정동명,폐지여부\n1100000000,서울특별시,존재"
+        )
+
+    with pytest.raises(ValueError, match="Unsafe ZIP member path"):
+        load_legal_dong_code_zip(db_session, zip_path)
+
+    assert not escaped_path.exists()
+
+
 def test_download_latest_legal_dong_code_csv_uses_data_go_content_url(tmp_path: Path) -> None:
     csv_bytes = _data_go_csv_text(
         [("1100000000", "서울특별시", "", "", "", "11", "1988-04-23", "", "")]
@@ -149,6 +169,71 @@ def test_download_latest_legal_dong_code_csv_uses_data_go_content_url(tmp_path: 
     assert result.download_url.startswith("https://www.data.go.kr/cmm/cmm/fileDownload.do")
     assert result.file_path.name == "legal_dong.csv"
     assert result.file_path.read_bytes() == csv_bytes
+
+
+def test_download_latest_legal_dong_code_csv_uses_service_key_without_leaking_it(
+    tmp_path: Path,
+) -> None:
+    csv_bytes = _data_go_csv_text(
+        [("1100000000", "서울특별시", "", "", "", "11", "1988-04-23", "", "")]
+    ).encode()
+    requested_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if str(request.url) == DATA_GO_LEGAL_DONG_PAGE_URL:
+            return httpx.Response(
+                200,
+                text='{"contentUrl":"https://www.data.go.kr/cmm/cmm/fileDownload.do?x=1"}',
+            )
+        return httpx.Response(200, content=csv_bytes)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    result = download_latest_legal_dong_code_csv(
+        tmp_path,
+        service_key="secret-service-key",
+        client=client,
+    )
+
+    assert "serviceKey=secret-service-key" in requested_urls[1]
+    assert "secret-service-key" not in result.download_url
+    assert "serviceKey=%2A%2A%2A" in result.download_url
+
+
+def test_download_latest_legal_dong_code_csv_redacts_existing_service_key(
+    tmp_path: Path,
+) -> None:
+    csv_bytes = _data_go_csv_text(
+        [("1100000000", "서울특별시", "", "", "", "11", "1988-04-23", "", "")]
+    ).encode()
+    requested_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if str(request.url) == DATA_GO_LEGAL_DONG_PAGE_URL:
+            return httpx.Response(
+                200,
+                text=(
+                    '{"contentUrl":"https://www.data.go.kr/cmm/cmm/fileDownload.do?'
+                    'serviceKey=embedded-secret&x=1"}'
+                ),
+            )
+        return httpx.Response(200, content=csv_bytes)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    result = download_latest_legal_dong_code_csv(
+        tmp_path,
+        service_key="configured-secret",
+        client=client,
+    )
+
+    assert requested_urls[1].count("serviceKey=") == 1
+    assert "embedded-secret" in requested_urls[1]
+    assert "embedded-secret" not in result.download_url
+    assert "configured-secret" not in result.download_url
+    assert "serviceKey=%2A%2A%2A" in result.download_url
 
 
 def test_load_latest_legal_dong_code_from_data_go_downloads_and_loads(

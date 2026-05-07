@@ -11,7 +11,7 @@ This package currently provides the Phase 1 backend baseline:
 - `/health/db`
 - SQLAlchemy 2 base/session setup
 - Alembic migration setup
-- KMA DFS weather grid conversion helper
+- pykma 기반 KMA weather public API 계약과 DFS grid conversion
 - Juso road-address parser and legal-dong code loader
 - pyopinet 기반 OpiNet 유가 adapter
 - pykrtourapi 기반 KTO TourAPI client 설정 경계
@@ -91,8 +91,10 @@ fallback으로 읽는다.
 Run the API:
 
 ```bash
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
+
+TripMate 직접 로컬 개발은 API 포트 `8001`, 웹 포트 `3001`을 사용한다. 이 workspace에서는 다른 로컬 서비스가 `8000`을 사용할 수 있으므로 host-facing API 확인 포트로 쓰지 않는다.
 
 Run checks:
 
@@ -101,6 +103,12 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy .
 uv run pytest
+```
+
+KMA 단기/중기/특보 data.go.kr 호출과 DFS 격자 변환은 adapter 없이 `pykma` 공개 API를 직접 사용한다. 로컬 KMA 격자 변환 구현은 두지 않는다.
+
+```bash
+uv run pytest -q tests/test_kma_grid.py tests/test_weather_loader.py -k "kma or weather"
 ```
 
 Run migrations:

@@ -1,6 +1,12 @@
 import pytest
-
-from app.geospatial.kma_grid import kma_grid_to_wgs84, wgs84_to_kma_grid
+from pykma import (
+    GridPoint,
+    LatLon,
+    kma_grid_to_wgs84,
+    make_cache_key,
+    sanitize_request_params,
+    wgs84_to_kma_grid,
+)
 
 
 @pytest.mark.parametrize(
@@ -19,6 +25,7 @@ def test_wgs84_to_kma_grid_matches_known_kma_examples(
 ) -> None:
     point = wgs84_to_kma_grid(latitude=latitude, longitude=longitude)
 
+    assert isinstance(point, GridPoint)
     assert point.nx == expected_nx
     assert point.ny == expected_ny
 
@@ -39,15 +46,32 @@ def test_kma_grid_to_wgs84_matches_known_kma_examples(
 ) -> None:
     point = kma_grid_to_wgs84(nx=nx, ny=ny)
 
+    assert isinstance(point, LatLon)
     assert point.latitude == pytest.approx(expected_latitude, abs=1e-12)
     assert point.longitude == pytest.approx(expected_longitude, abs=1e-12)
 
 
 def test_wgs84_to_kma_grid_rejects_invalid_coordinate() -> None:
-    with pytest.raises(ValueError, match="latitude"):
+    with pytest.raises(ValueError, match="lat"):
         wgs84_to_kma_grid(latitude=91.0, longitude=127.0)
 
 
 def test_kma_grid_to_wgs84_rejects_invalid_grid() -> None:
     with pytest.raises(ValueError, match="nx"):
         kma_grid_to_wgs84(nx=0, ny=127)
+
+
+def test_pykma_cache_key_sanitizes_kma_credentials() -> None:
+    params = {
+        "ServiceKey": "secret",
+        "service_key": "also-secret",
+        "base_date": "20260507",
+        "nx": 60,
+        "ny": 127,
+    }
+
+    assert sanitize_request_params(params) == {"base_date": "20260507", "nx": 60, "ny": 127}
+    cache_key = make_cache_key("getUltraSrtNcst", params)
+
+    assert "secret" not in cache_key
+    assert cache_key.startswith("pykma:v1:")

@@ -1,0 +1,53 @@
+services:
+  app-postgres:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: tripmate
+      POSTGRES_USER: tripmate
+      POSTGRES_PASSWORD: tripmate_dev_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  app-api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    image: tripmate-api:local
+    environment:
+      TRIPMATE_DATABASE_URL: postgresql+psycopg://tripmate:tripmate_dev_password@app-postgres:5432/tripmate
+      TRIPMATE_CORS_ORIGINS: '["http://localhost:${TRIPMATE_WEB_PORT:-13082}","http://127.0.0.1:${TRIPMATE_WEB_PORT:-13082}"]'
+    ports:
+      - "${TRIPMATE_API_PORT:-18082}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+
+  app-web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_TRIPMATE_API_URL: ${NEXT_PUBLIC_TRIPMATE_API_URL:-http://127.0.0.1:18082}
+    image: tripmate-web:local
+    environment:
+      NEXT_PUBLIC_TRIPMATE_API_URL: ${NEXT_PUBLIC_TRIPMATE_API_URL:-http://127.0.0.1:18082}
+    ports:
+      - "${TRIPMATE_WEB_PORT:-13082}:3000"
+    restart: unless-stopped
+    depends_on:
+      app-api:
+        condition: service_healthy
+
+volumes:
+  app_postgres_data:

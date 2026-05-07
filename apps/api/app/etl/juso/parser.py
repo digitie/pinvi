@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -18,6 +19,10 @@ def _clean(value: str) -> str:
 def _clean_optional(value: str) -> str | None:
     cleaned = _clean(value)
     return cleaned or None
+
+
+def _clean_effective_date(value: str) -> str:
+    return _clean(value) or "00000000"
 
 
 def _decode_juso_bytes(raw_bytes: bytes) -> tuple[str, str]:
@@ -106,7 +111,7 @@ class JusoRoadAddressRecord:
             administrative_dong_name=_clean_optional(fields[15]),
             postal_code=_clean_optional(fields[16]),
             previous_road_address=_clean_optional(fields[17]),
-            effective_date=_clean(fields[18]),
+            effective_date=_clean_effective_date(fields[18]),
             apartment_yn=_clean_optional(fields[19]),
             change_reason_code=_clean(fields[20]),
             building_registry_name=_clean_optional(fields[21]),
@@ -183,22 +188,39 @@ class ParsedJusoRelatedJibunFile:
     rows: list[JusoRelatedJibunRecord]
 
 
+@dataclass(frozen=True)
+class InspectedJusoFile:
+    source_path: Path
+    source_file_name: str
+    source_year_month: str
+    file_hash: str
+    encoding: str
+    delimiter: str
+    row_count: int
+
+
 def parse_juso_road_address_file(
     path: Path | str,
     *,
     source_year_month: str | None = None,
 ) -> ParsedJusoRoadAddressFile:
-    source_path, lines, encoding, file_hash = _read_juso_lines(path)
-    delimiter = _detect_delimiter(lines[0], expected_field_count=JUSO_ROAD_ADDRESS_FIELD_COUNT)
-    rows = [JusoRoadAddressRecord.from_line(line, delimiter=delimiter) for line in lines]
+    inspected = inspect_juso_road_address_file(path, source_year_month=source_year_month)
+    rows = [
+        record
+        for _, record in iter_juso_road_address_records(
+            inspected.source_path,
+            encoding=inspected.encoding,
+            delimiter=inspected.delimiter,
+        )
+    ]
 
     return ParsedJusoRoadAddressFile(
-        source_path=source_path,
-        source_file_name=source_path.name,
-        source_year_month=source_year_month or derive_source_year_month(source_path),
-        file_hash=file_hash,
-        encoding=encoding,
-        delimiter=delimiter,
+        source_path=inspected.source_path,
+        source_file_name=inspected.source_file_name,
+        source_year_month=inspected.source_year_month,
+        file_hash=inspected.file_hash,
+        encoding=inspected.encoding,
+        delimiter=inspected.delimiter,
         rows=rows,
     )
 
@@ -208,19 +230,114 @@ def parse_juso_related_jibun_file(
     *,
     source_year_month: str | None = None,
 ) -> ParsedJusoRelatedJibunFile:
-    source_path, lines, encoding, file_hash = _read_juso_lines(path)
-    delimiter = _detect_delimiter(lines[0], expected_field_count=JUSO_RELATED_JIBUN_FIELD_COUNT)
-    rows = [JusoRelatedJibunRecord.from_line(line, delimiter=delimiter) for line in lines]
+    inspected = inspect_juso_related_jibun_file(path, source_year_month=source_year_month)
+    rows = [
+        record
+        for _, record in iter_juso_related_jibun_records(
+            inspected.source_path,
+            encoding=inspected.encoding,
+            delimiter=inspected.delimiter,
+        )
+    ]
 
     return ParsedJusoRelatedJibunFile(
+        source_path=inspected.source_path,
+        source_file_name=inspected.source_file_name,
+        source_year_month=inspected.source_year_month,
+        file_hash=inspected.file_hash,
+        encoding=inspected.encoding,
+        delimiter=inspected.delimiter,
+        rows=rows,
+    )
+
+
+def inspect_juso_road_address_file(
+    path: Path | str,
+    *,
+    source_year_month: str | None = None,
+) -> InspectedJusoFile:
+    return _inspect_juso_file(
+        path,
+        source_year_month=source_year_month,
+        expected_field_count=JUSO_ROAD_ADDRESS_FIELD_COUNT,
+    )
+
+
+def inspect_juso_related_jibun_file(
+    path: Path | str,
+    *,
+    source_year_month: str | None = None,
+) -> InspectedJusoFile:
+    return _inspect_juso_file(
+        path,
+        source_year_month=source_year_month,
+        expected_field_count=JUSO_RELATED_JIBUN_FIELD_COUNT,
+    )
+
+
+def iter_juso_road_address_records(
+    path: Path | str,
+    *,
+    encoding: str,
+    delimiter: str,
+) -> Iterator[tuple[int, JusoRoadAddressRecord]]:
+    for row_number, line in _iter_juso_lines(path, encoding=encoding):
+        yield row_number, JusoRoadAddressRecord.from_line(line, delimiter=delimiter)
+
+
+def iter_juso_related_jibun_records(
+    path: Path | str,
+    *,
+    encoding: str,
+    delimiter: str,
+) -> Iterator[tuple[int, JusoRelatedJibunRecord]]:
+    for row_number, line in _iter_juso_lines(path, encoding=encoding):
+        yield row_number, JusoRelatedJibunRecord.from_line(line, delimiter=delimiter)
+
+
+def _inspect_juso_file(
+    path: Path | str,
+    *,
+    source_year_month: str | None,
+    expected_field_count: int,
+) -> InspectedJusoFile:
+    source_path = Path(path)
+    file_hash = sha256()
+    first_line: bytes | None = None
+    row_count = 0
+    with source_path.open("rb") as file:
+        for raw_line in file:
+            file_hash.update(raw_line)
+            if not raw_line.strip():
+                continue
+            row_count += 1
+            if first_line is None:
+                first_line = raw_line.rstrip(b"\r\n")
+    if first_line is None:
+        raise ValueError(f"Juso address file is empty: {source_path}")
+    decoded_first_line, encoding = _decode_juso_bytes(first_line)
+    delimiter = _detect_delimiter(decoded_first_line, expected_field_count=expected_field_count)
+    return InspectedJusoFile(
         source_path=source_path,
         source_file_name=source_path.name,
         source_year_month=source_year_month or derive_source_year_month(source_path),
-        file_hash=file_hash,
+        file_hash=file_hash.hexdigest(),
         encoding=encoding,
         delimiter=delimiter,
-        rows=rows,
+        row_count=row_count,
     )
+
+
+def _iter_juso_lines(path: Path | str, *, encoding: str) -> Iterator[tuple[int, str]]:
+    source_path = Path(path)
+    row_number = 0
+    with source_path.open("r", encoding=encoding, newline="") as file:
+        for line in file:
+            text = line.rstrip("\n").rstrip("\r")
+            if not text.strip():
+                continue
+            row_number += 1
+            yield row_number, text
 
 
 def _read_juso_lines(path: Path | str) -> tuple[Path, list[str], str, str]:

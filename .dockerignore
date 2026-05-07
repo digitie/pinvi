@@ -1,0 +1,14 @@
+.git
+.tmp
+dataset
+**/.next
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/.venv-wsl
+**/__pycache__
+**/node_modules
+**/tripmate_api.egg-info
+*.log
+*.tsbuildinfo
