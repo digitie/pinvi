@@ -45,6 +45,8 @@ Windows 또는 WSL2에서 backend test를 실행할 때는 앱 DB URL이 `localh
 `docker compose config` 출력에는 환경변수 값이 펼쳐질 수 있으므로, 결과를 이슈/문서/로그에 그대로 붙이지 않는다.
 `.env` 파일은 UTF-8 without BOM으로 저장한다. BOM이 붙으면 일부 도구에서 첫 환경변수 이름을 잘못 읽을 수 있다.
 
+Airflow 이미지는 DAG task가 mount된 backend ETL 코드를 직접 import하므로 `infra/airflow/requirements.txt`에 backend ETL과 같은 pinned provider client(`pykma`, `pykex`, `pyopinet`, `pykrtourapi`)를 포함한다. Git URL 의존성을 설치하기 위해 Airflow Dockerfile은 build 단계에서 `git`을 설치한다.
+
 ## 6시간 ETL soak 검증
 
 장시간 ETL 안정성을 검증할 때는 기본 운영 config를 직접 바꾸지 않는다. 대신 `config/etl-datasets.soak.json`을 Airflow 컨테이너 환경변수 `TRIPMATE_ETL_CONFIG_PATH`로 주입한다. 현재 표준 soak는 6시간, 10분 점검이다.
