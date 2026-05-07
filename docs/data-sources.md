@@ -261,6 +261,7 @@ serving 추가 필드:
 보완 필요:
 
 - 실제 응답 필드명과 좌표계 확인
+- `pykex`에는 아직 `weather_rest_area` 전용 메서드가 없다. 구현 전 실제 응답 샘플을 기준으로 `pykex`에 endpoint와 모델 또는 raw wrapper를 먼저 추가한다.
 
 ## 5. Fuel
 
@@ -268,17 +269,29 @@ serving 추가 필드:
 
 - OpiNet API 키는 백엔드 설정 파일의 설정 항목으로 둔다.
 - 실제 키 값은 소스 코드에 하드코딩하지 않고 환경변수 또는 secret store로 주입한다.
+- OpiNet 호출은 `pyopinet`의 `opinet` 패키지를 감싼 backend adapter를 통해 수행한다.
+- 현재 backend 의존성은 `apps/api/pyproject.toml`의
+  `opinet @ git+https://github.com/digitie/pyopinet.git@ee4998eec98deabc69edc40f76fda1aa6ad4519a`로 고정한다.
+- TripMate adapter 위치는 `apps/api/app/etl/fuel/opinet_adapter.py`다.
+- API 키와 호출 옵션은 `TRIPMATE_OPINET_API_KEY`, `TRIPMATE_OPINET_TIMEOUT_SECONDS`,
+  `TRIPMATE_OPINET_MAX_RETRIES`, `TRIPMATE_OPINET_RETRY_BACKOFF_SECONDS` 설정으로 주입한다.
 - API 오류, quota 초과, 빈 응답은 백엔드 설정 파일의 데이터셋별 ETL retry 설정을 따른다. 기본값은 5분 간격 최대 3회 retry다.
 - 설정된 retry 이후에도 실패하면 해당 DAG run에 실패 건을 기록하고 다음 schedule로 넘긴다.
 - 실패 시 기존 serving 데이터가 있으면 삭제하지 않는다.
 - 유종 enum은 `gasoline`, `premium_gasoline`, `diesel`, `lpg`다.
 - OpiNet provider fuel code와 provider 코드명은 변환하지 않고 원문 값을 함께 보존한다.
 - 앱 내부 조회와 필터는 provider fuel code를 위 유종 enum으로 mapping한 값을 사용한다.
+- pyopinet `ProductCode.KEROSENE`의 `C004`는 provider code/name을 보존하되, TripMate 내부
+  `fuel_type` enum에는 매핑하지 않는다.
 - 가격 단위는 원/L다.
 - 가격 기준일/기준시각은 `timestamp` 필드에 저장한다. 원천이 날짜와 시각을 분리 제공하면 적재 시 적절한 timezone 기준으로 timestamp로 변환한다.
 - 평균가와 최저가 응답은 모두 저장한다.
 - 평균가/최저가/지역코드 API의 응답 필드는 raw와 serving에 모두 보존한다. serving에서는 주요 조회용 필드만 별도 column으로 정규화하고, 전체 provider field는 JSON payload로 함께 보존한다.
 - OpiNet 지역코드는 법정동코드와 mapping한다. mapping은 별도 테이블로 관리하고, OpiNet 조회/캐시 key에는 provider region code를 그대로 사용한다.
+- pyopinet의 `FuelType`, ProductCode mapping, normalized record, `AreaCode` helper,
+  Station 좌표/상품 context를 우선 사용한다.
+- pyopinet의 시도 prefix 매핑은 시도 2자리 변환에만 사용한다. 시군구 4자리 provider code와
+  법정동코드의 상세 매핑은 `fuel_region_legal_dong_mapping`에서 관리한다.
 
 ### 5.1 `fuel_avg_price`
 
@@ -292,6 +305,7 @@ serving 추가 필드:
 - 한국석유공사 전국 주유소 평균가격
 - https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=4
 - API 정보 PDF: `https://drive.google.com/file/d/1eL1UonpVCdfPe8Mx5SSmflIYx2ZjnWrf/view?usp=drive_link`
+- pyopinet method: `OpinetClient.get_national_average_price()`
 
 수집:
 
@@ -311,9 +325,11 @@ serving 추가 필드:
 저장 정책:
 
 - 평균가 응답의 모든 return field를 저장한다.
-- provider fuel code와 provider 코드명은 원문 그대로 저장한다.
+- provider fuel code와 provider 코드명은 pyopinet normalized field와 raw payload를 기준으로 원문 그대로 저장한다.
 - 내부 `fuel_type`은 `gasoline`, `premium_gasoline`, `diesel`, `lpg` 중 하나로 정규화한다.
 - 가격은 원/L로 저장한다.
+- 현재 backend adapter는 pyopinet의 `date`, `float`, enum 변환 결과를 받아 `price_timestamp`를
+  `Asia/Seoul` 자정 기준 datetime으로 정규화한다.
 
 ### 5.2 `fuel_lowest_station`
 
@@ -326,6 +342,8 @@ serving 추가 필드:
 - 한국석유공사 지역별 최저가 주유소 TOP20
 - https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=2
 - API 정보 PDF: `https://drive.google.com/file/d/1eL1UonpVCdfPe8Mx5SSmflIYx2ZjnWrf/view?usp=drive_link`
+- pyopinet method: `OpinetClient.get_lowest_price_top20()`
+- 주변 주유소 후보 조회가 필요하면 pyopinet `OpinetClient.search_stations_around()`를 사용한다.
 
 수집:
 
@@ -343,14 +361,20 @@ serving 추가 필드:
 저장 정책:
 
 - 최저가 응답의 모든 return field를 저장한다.
-- provider fuel code와 provider 코드명은 원문 그대로 저장한다.
+- provider fuel code와 provider 코드명은 pyopinet normalized field와 raw payload를 기준으로 원문 그대로 저장한다.
+- `lowTop10.do`/`aroundAll.do` 응답에 `PRODNM`이 없으면 provider fuel code는 요청 context로 보존하되,
+  provider fuel name은 `None`일 수 있다.
 - 내부 `fuel_type`은 `gasoline`, `premium_gasoline`, `diesel`, `lpg` 중 하나로 정규화한다.
 - 가격은 원/L로 저장한다.
 - 가격 기준일/기준시각은 `timestamp` 필드에 저장한다.
+- provider station id는 pyopinet `Station.provider_station_id`를 사용한다.
+- 좌표는 pyopinet `Station.coordinates`의 WGS84 `lon`/`lat`과 KATEC `x`/`y`를 함께 보존한다.
+- provider 응답에 `TRADE_DT`/`TRADE_TM`이 있으면 pyopinet `Station.trade_date`/`trade_time`을
+  `Asia/Seoul` 기준 timestamp로 정규화한다.
 
 보완 필요:
 
-- station stable id 존재 여부와 없을 때의 내부 key 생성 규칙
+- provider 응답에서 가격 기준일/기준시각을 얻는 경우의 DB 저장 column 확정
 
 ### 5.3 `fuel_region_code`
 
@@ -364,6 +388,7 @@ serving 추가 필드:
 - 한국석유공사 지역코드
 - https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=5
 - API 정보 PDF: `https://drive.google.com/file/d/1eL1UonpVCdfPe8Mx5SSmflIYx2ZjnWrf/view?usp=drive_link`
+- pyopinet method: `OpinetClient.get_area_codes()`
 
 수집:
 
@@ -385,10 +410,11 @@ serving 추가 필드:
 - OpiNet 지역코드는 fuel 데이터셋 내부 provider 기준 코드로 원문 그대로 보존한다.
 - 유가 API 조회와 캐시 key에는 OpiNet region code를 그대로 사용한다.
 - 앱의 지역 기반 조회와 다른 데이터셋 join에는 mapping된 `legal_dong_code`를 사용한다.
+- 현재 backend adapter는 pyopinet `AreaCode.code_level`, `parent_sido_code`,
+  `bjd_sido_prefix`를 사용한다.
 
 보완 필요:
 
-- 지역코드 응답 필드명과 active/inactive 상태 표시 여부 확인
 - 사라진 region code, 이름 변경, 행정구역 개편 시 처리 정책
 
 ## 6. Region
@@ -658,16 +684,21 @@ SHP 필드:
 공통 정책:
 
 - 한국도로공사 OpenAPI 응답 row 전체는 raw snapshot으로 보관한다.
+- 한국도로공사 OpenAPI 호출은 `kex-openapi`의 `kex_openapi.KexClient`를 직접 사용한다.
+- TripMate backend에는 한국도로공사 전용 adapter/wrapper를 두지 않는다. TripMate에 필요한 endpoint, 모델, enum, 변환 보강은 먼저 `pykex`에 반영한다.
+- 현재 backend 의존성은 `apps/api/pyproject.toml`의 `kex-openapi @ git+https://github.com/digitie/pykex.git@329d5a1219a8f41a83448d619a33fcaf6da23f13`을 따른다.
+- API 키와 호출 옵션은 `TRIPMATE_KEX_EX_API_KEY`, `TRIPMATE_KEX_GO_API_KEY`, `TRIPMATE_KEX_TIMEOUT_SECONDS`, `TRIPMATE_KEX_MAX_RETRIES`, `TRIPMATE_KEX_RETRY_BACKOFF_SECONDS` 설정으로 주입한다.
+- 기존 로컬 설정명인 `TRIPMATE_EXPRESSWAY_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`도 fallback으로 읽는다.
 - raw에는 최소한 `provider`, `endpoint`, `source_api_id`, `source_key`, `collected_at`, `source_snapshot_date`, `response_hash`, `payload_json`을 둔다.
 - 앱/API 조회는 serving 테이블을 사용한다.
 - serving에는 앱에서 직접 조회하는 안정 필드만 정규화한다. provider 원문 전체를 serving 도메인 필드로 펼치지 않는다.
 - raw를 직접 도메인 로직의 단일 진실원으로 쓰지 않는다.
-- 한 번에 100개를 초과해 요청하지 않는다.
+- 한 번에 100개를 초과해 요청하지 않는다. `pykex` 메서드 기본값이 더 크더라도 TripMate ETL에서는 `num_of_rows=100`을 명시한다.
 - pagination은 응답 건수가 page size보다 작거나 0이면 종료한다.
 - 방어적으로 max page guard를 둔다.
 - `rest_area_oil_price` / `rest_area_svcs`에서 FK 불일치가 발생하면 raw 적재는 보존하고 serving row는 skip한다.
 - FK 불일치 row는 Airflow task log와 별도로 `logs/etl/rest_area_fk_mismatch/<dataset>/<dag_run_id>.jsonl`에 JSON Lines로 남긴다.
-- FK 불일치 로그에는 최소한 `dataset`, `dag_id`, `run_id`, `source_endpoint`, `source_key`, `serviceAreaCode2`, `collected_at`, `reason`을 기록한다.
+- FK 불일치 로그에는 최소한 `dataset`, `dag_id`, `run_id`, `source_endpoint`, `source_key`, `serviceAreaCode`, `collected_at`, `reason`을 기록한다.
 - FK 불일치는 DAG 실패로 즉시 중단하지 않고 skip count metric으로 남긴다. 단, 오류율 임계치를 넘으면 DAG를 실패 처리한다.
 
 ### 7.1 `rest_area_master`
@@ -678,9 +709,16 @@ SHP 필드:
 
 출처:
 
-- 한국도로공사_고속도로휴게소코드정보(하이쉼마루)
-- API 안내: `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0615`
-- 공공데이터포털: `https://www.data.go.kr/data/15062047/openapi.do`
+- pykex: `KexClient.restarea.route_facilities()`
+- 한국도로공사_노선별 휴게시설 현황
+- Request URL: `https://data.ex.co.kr/openapi/business/serviceAreaRoute`
+- 관련 후보: 한국도로공사_고속도로휴게소코드정보(하이쉼마루), API 안내 `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0615`, 공공데이터포털 `https://www.data.go.kr/data/15062047/openapi.do`
+
+비고:
+
+- 2026-05-07 기준 `pykex`는 `RestAreaRouteFacility` 모델로 `serviceAreaCode`, `serviceAreaCode2`, `serviceAreaName`, `routeCode`, `routeName`, `direction`, `telNo`, `svarAddr`, `brand`, `convenience`, `maintenanceYn`, `truckSaYn`, `batchMenu`를 노출한다.
+- 실제 live 응답에서 `serviceAreaName`이 비어 있는 row와 `X` boolean flag가 확인되어 `pykex`에서 허용한다.
+- 하이쉼마루 코드정보 `apiId=0615`의 실제 Request URL과 응답 샘플은 별도 live 검증 후 `pykex`에 추가한다. 그 전까지 TripMate 구현은 `route_facilities()`를 master 후보 소스로 사용한다.
 
 수집:
 
@@ -693,12 +731,12 @@ SHP 필드:
 
 권장 key:
 
-- `svar_cd`: 휴게소 코드
+- `svar_cd`: `pykex` `RestAreaRouteFacility.service_area_code` / provider `serviceAreaCode`
 
 serving 필드 예:
 
-- `svar_cd`: 휴게소 코드
-- `name`: 휴게소명
+- `svar_cd`: `service_area_code`
+- `name`: `service_area_name`
 - `direction`
 - `route_code`
 - `route_name`
@@ -718,8 +756,10 @@ serving 필드 예:
 
 출처:
 
+- pykex: `KexClient.restarea.fuel_prices()`
 - 한국도로공사_주유소별 가격,업체 현황
 - API 안내: `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0312`
+- Request URL: `https://data.ex.co.kr/openapi/business/curStateStation`
 
 수집:
 
@@ -733,15 +773,15 @@ serving 필드 예:
 
 join:
 
-- `serviceAreaCode2`를 `rest_area_serving_master.svar_cd`와 연결한다.
+- `serviceAreaCode`를 `rest_area_serving_master.svar_cd`와 연결한다.
 - FK 불일치 시 raw는 저장하고 serving row는 skip한다.
 - skip된 row는 `logs/etl/rest_area_fk_mismatch/rest_area_oil_price/<dag_run_id>.jsonl`에 별도로 기록한다.
 
 serving 필드 예:
 
 - `rest_area_id`
-- `serviceAreaCode2`
-- `station_name`
+- `serviceAreaCode`
+- `station_name`: `pykex` `RestAreaFuelPrice.service_area_name`
 - `provider_fuel_code`
 - `provider_fuel_name`
 - `fuel_type`: `gasoline`, `premium_gasoline`, `diesel`, `lpg`, `unknown`
@@ -756,7 +796,7 @@ serving 필드 예:
 - provider 기준시각이 있으면 `price_at`에 저장한다.
 - provider 기준시각이 없으면 `price_at = collected_at`으로 저장하고 `price_time_source = collected_at`으로 남긴다.
 - 가격 단위는 원/L로 해석한다. 단, provider 문서나 샘플에서 단위가 달라지면 schema drift 로그를 남기고 serving 반영을 중단한다.
-- provider 유종 코드/명칭은 그대로 보존하고, 앱 내부 표시는 `fuel_type` enum을 사용한다.
+- `pykex` `RestAreaFuelPrice`는 현재 `gasoline_price`, `diesel_price`, `lpg_price`를 컬럼형 가격으로 노출한다. serving 단계에서 유종별 row로 펼칠 때 provider 유종 코드/명칭은 TripMate 내부 상수로 명시하고, 앱 내부 표시는 `fuel_type` enum을 사용한다.
 
 ### 7.3 `rest_area_svcs`
 
@@ -766,8 +806,14 @@ serving 필드 예:
 
 출처:
 
+- pykex: `KexClient.restarea.convenience_facilities()`
 - 한국도로공사_노선별, 방향별 휴게소 편의시설 현황
 - API 안내: `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0316`
+- Request URL: `https://data.ex.co.kr/openapi/business/conveniServiceArea`
+
+비고:
+
+- 2026-05-07 기준 `pykex` live test는 통과했지만, 실제 응답 schema 승격 전까지 이 endpoint를 `Page[dict]`로 반환한다.
 
 수집:
 
@@ -780,14 +826,14 @@ serving 필드 예:
 
 join:
 
-- `serviceAreaCode2`를 `rest_area_serving_master.svar_cd`와 연결한다.
+- `serviceAreaCode`를 `rest_area_serving_master.svar_cd`와 연결한다.
 - FK 불일치 시 raw는 저장하고 serving row는 skip한다.
 - skip된 row는 `logs/etl/rest_area_fk_mismatch/rest_area_svcs/<dag_run_id>.jsonl`에 별도로 기록한다.
 
 serving 필드 예:
 
 - `rest_area_id`
-- `serviceAreaCode2`
+- `serviceAreaCode`
 - `provider_service_code`
 - `provider_service_name`
 - `display_name`
@@ -978,9 +1024,9 @@ Juso key 매핑 우선순위:
 - Python client: `pykrtourapi`의 `KrTourApiClient`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 만들지 않는다.
 - API 계약 문서: `docs/api/kto-tourapi.md`
 - 운영 runbook: `docs/runbooks/kto-tourapi.md`
-- 설정값: `TRIPMATE_KTO_SERVICE_KEY`, `TRIPMATE_KTO_MOBILE_APP`, `TRIPMATE_KTO_MOBILE_OS`, `TRIPMATE_KTO_TIMEOUT_SECONDS`, `TRIPMATE_KTO_MAX_RETRIES`
 - 기본 응답 형식: `_type=json`
 - 필수 공통 파라미터: `serviceKey`, `MobileOS`, `MobileApp`
+- 설정값: `TRIPMATE_KTO_SERVICE_KEY`, `TRIPMATE_KTO_MOBILE_APP`, `TRIPMATE_KTO_MOBILE_OS`, `TRIPMATE_KTO_TIMEOUT_SECONDS`, `TRIPMATE_KTO_MAX_RETRIES`
 - 기본 조회는 사용자가 이미 저장한 장소를 기준으로 수행한다.
 - 좌표 기반 후보는 저장한 장소의 좌표를 `locationBasedList2`의 `mapX`, `mapY`로 전달하고 `radius=15000`으로 조회한다.
 - 지역 기반 후보는 저장한 장소 좌표를 geocode한 주소에서 시도/시군구를 얻고, 이를 KTO 지역/시군구 코드로 변환해 `areaBasedList2`에 전달한다.
@@ -1063,8 +1109,8 @@ Juso key 매핑 우선순위:
 
 수집:
 
-- Python client: `pykrtourapi`의 `TourApiHubClient`를 직접 사용한다. typed model이 부족한 영역은 TripMate adapter로 보완하지 않고 `pykrtourapi`에 upstream한다.
 - 방식: OpenAPI
+- Python client: `pykrtourapi`의 `TourApiHubClient`를 직접 사용한다. typed model이 부족한 영역은 TripMate adapter로 보완하지 않고 `pykrtourapi`에 upstream한다.
 - 기본 응답 형식: `_type=json`
 - 기준월 `baseYm`을 명시해 월 단위 snapshot으로 관리한다.
 - `areaCd`, `signguCd`는 포함 XLSX의 `areaCd`, `sigunguCd`를 기준으로 한다. API 문서의 `signguCd`와 XLSX의 `sigunguCd` 표기 차이는 같은 TourAPI 시군구 코드로 정규화하되, 법정동코드로 취급하지 않는다.
@@ -1543,9 +1589,9 @@ data.go.kr `국토교통부_전국 법정동`:
 - `weather_short_term`: `weather_short_term_grid_mapping`, category code mapping, raw/serving schema, `nx + ny + base_date + base_time` cache key 구현
 - `weather_mid_term`: `kma_mid_land_region_mapping`, `kma_mid_temperature_region_mapping`, fallback metadata, raw/serving schema 구현
 - `weather_rest_area`: 실제 응답 샘플 기준 필드명과 좌표계 확인
-- `fuel_avg_price`: 평균가 모든 return field 저장, 원/L 가격, `timestamp`, provider fuel code/code name 보존, 내부 유종 enum mapping, raw/serving schema 구현
-- `fuel_lowest_station`: 최저가 모든 return field 저장, TOP20 좌표/주소 저장 범위, station stable id, provider fuel code/code name 보존, 내부 유종 enum mapping 구현
-- `fuel_region_code`: 시도/시군구 코드 계층 수집, OpiNet region code 기준 테이블, `fuel_region_legal_dong_mapping` 구현
+- `fuel_avg_price`: pyopinet `NormalizedFuelAverage` 기반 provider code/name 보존, 내부 유종 enum mapping, `Asia/Seoul` 기준 날짜 정규화 adapter 구현 완료. 남은 일은 raw/serving schema와 DB 적재 구현이다.
+- `fuel_lowest_station`: pyopinet `NormalizedFuelStation` 기반 TOP20/주변 주유소 adapter, station id, 좌표, 주소, provider code/name, 선택적 가격 기준시각 보존 구현 완료. 남은 일은 raw/serving schema와 DB 적재 구현이다.
+- `fuel_region_code`: pyopinet `NormalizedFuelRegionCode` 기반 시도/시군구 code adapter와 시도 prefix 법정동 매핑 구현 완료. 남은 일은 `fuel_region_legal_dong_mapping` DB schema와 시군구 상세 매핑 적재 구현이다.
 - `etl_dataset_config`: 데이터셋별 schedule, retry 간격/횟수, 실패 임계치, 관리자 페이지 알림 여부, Telegram 알림 여부를 담는 백엔드 설정 파일 schema와 loader 구현
 - `etl_admin_notifications`: retry 소진/skip/실패 알림을 관리자 로그인 시 표시하는 알림 테이블 구현
 - `etl_telegram_notifications`: retry 소진 실패를 관리자 권한 사용자 Telegram target으로 발송하고, 일반 권한 사용자에게는 시스템 에러/로그를 보내지 않는 작업 구현
@@ -1556,9 +1602,9 @@ data.go.kr `국토교통부_전국 법정동`:
 - `juso_road_address_korean`: 매월 10일 이후 전체 주소 ZIP 다운로드, `rnaddrkor_*.txt` raw/staging/serving 교체, code 문자열 보존, 주소 저장 테이블 공통 FK/검증 정책 구현
 - `juso_related_jibun`: 매월 10일 이후 `jibun_rnaddrkor_*.txt` raw/serving 적재, 도로명주소관리번호 연계 구현
 - `place`/주소 저장 도메인: 주소 FK nullable 설계와 저장 당시 주소 snapshot 필드 구현
-- `rest_area_master`: raw 전체 row snapshot, serving 안정 필드, 월 1회 snapshot 정책 구현
-- `rest_area_oil_price`: raw 전체 row snapshot, serving 안정 필드, 가격 기준시각 정책, provider 유종 코드/명칭 보존, 내부 유종 enum 구현
-- `rest_area_svcs`: raw 전체 row snapshot, serving 안정 필드, provider 편의시설 코드/명칭 보존, 한국어 표시명 mapping 구현
+- `rest_area_master`: pykex `KexClient.restarea.route_facilities()` 계약 테스트 완료. 남은 일은 raw 전체 row snapshot, serving 안정 필드, 월 1회 snapshot 정책 구현이다.
+- `rest_area_oil_price`: pykex `KexClient.restarea.fuel_prices()` 계약 테스트 완료. 남은 일은 raw 전체 row snapshot, serving 안정 필드, 가격 기준시각 정책, 유종별 row 전개, 내부 유종 enum 구현이다.
+- `rest_area_svcs`: pykex `KexClient.restarea.convenience_facilities()` raw row 계약 테스트 완료. 남은 일은 실제 응답 샘플 기반 schema 승격 여부 결정, raw 전체 row snapshot, serving 안정 필드, provider 편의시설 코드/명칭 보존, 한국어 표시명 mapping 구현이다.
 - `kma_recommended_tour_course`: 확정 serving 필드, `theme_category_code` 원본 보존, 내부 `theme_category` enum mapping, `unknown` fallback, `cp949`/`ms949` CSV decoding, raw CSV row, file hash, EPSG:4326 `lat`/`lng`, V-WORLD reverse geocoding, Juso 주소 기준 key 매핑 구현
 - `vworld_reverse_geocoding`: quota 설정 없이 호출하고, provider call 실패 시 5회 고정 retry, 실패 로그, 필요 시 UI 알림을 남기는 adapter 구현
 - `kma_recommended_tour_course` UI: “기상청 추천 여행코스” marker source style 구분값, 같은 `테마분류` 목록 링크, `코스순서` 정렬 구현
@@ -1589,10 +1635,10 @@ data.go.kr `국토교통부_전국 법정동`:
 - 여행 정보 포함 데이터 실패 시 데이터 대신 사용자용 에러 메시지가 발송되는지 테스트 추가
 - 관리자 권한 사용자의 여행 알림에는 여행 정보와 시스템 에러/로그 요약이 함께 포함되는지 테스트 추가
 - 관리자/권리자 구분 필드 기반 관리자 페이지 접근 제어와 Telegram 알림 대상 선정 테스트 추가
-- OpiNet 지역코드 계층 수집과 법정동코드 mapping table 테스트 추가
+- OpiNet pyopinet `AreaCode` helper 재사용 단위 테스트 추가 완료. 남은 일은 DB mapping table 테스트다.
 - OpiNet API 실패 시 관리자 ETL retry 설정을 적용하고 기본값은 5분 간격 3회로 동작하는 테스트 추가
-- OpiNet 평균가/최저가 모든 return field 저장, 원/L 가격, `timestamp` 변환 테스트 추가
-- 유종 enum `gasoline`/`premium_gasoline`/`diesel`/`lpg`와 provider code/code name 보존 테스트 추가
+- OpiNet 평균가/최저가 adapter의 원/L 가격, 날짜 정규화, provider code/code name 보존 테스트 추가 완료. 남은 일은 raw/serving DB persistence 테스트다.
+- 유종 enum `gasoline`/`premium_gasoline`/`diesel`/`lpg`와 provider code/code name 보존 단위 테스트 추가 완료.
 - PostGIS point-in-polygon 경계 테스트 추가
 - 법정동 경계 polygon SRID, invalid geometry, point-in-polygon, `legal_dong_code` 매핑 테스트 추가
 - 휴게소 oil/svcs FK 불일치 skip과 별도 JSONL 로그파일 생성 테스트 추가

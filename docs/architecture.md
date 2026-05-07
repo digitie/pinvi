@@ -62,7 +62,10 @@ docs                # 문서, runbook, ADR, 실행 계획
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Airflow는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.
+- OpiNet 유가 조회는 pyopinet `opinet` 패키지를 감싼 backend adapter에서 수행하고,
+  서비스/ETL 경계에는 TripMate 정규화 레코드만 전달한다.
 - KTO TourAPI 조회는 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 두지 않고, 부족한 endpoint별 typed model이나 provenance metadata는 `pykrtourapi`에 upstream한다.
+- 한국도로공사 OpenAPI 조회는 `pykex`의 `kex_openapi.KexClient`를 직접 사용한다. TripMate backend에는 한국도로공사 adapter/gateway 래퍼를 두지 않고, 부족한 휴게소/교통 endpoint나 typed model은 `pykex`에 upstream한다.
 
 ## 데이터 원칙
 

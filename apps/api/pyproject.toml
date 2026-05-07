@@ -12,6 +12,8 @@ dependencies = [
   "fastapi>=0.124.0",
   "geoalchemy2>=0.18.0",
   "httpx>=0.28.0",
+  "kex-openapi @ git+https://github.com/digitie/pykex.git@329d5a1219a8f41a83448d619a33fcaf6da23f13",
+  "opinet @ git+https://github.com/digitie/pyopinet.git@ee4998eec98deabc69edc40f76fda1aa6ad4519a",
   "pykrtourapi @ git+https://github.com/digitie/pykrtourapi.git@6fd0601ad01d6cdef59ca3d46cb1df3b6b697e59",
   "pyproj>=3.7.0",
   "pyshp>=2.3.1",
@@ -47,6 +49,7 @@ strict = true
 warn_unused_ignores = true
 warn_return_any = true
 disallow_any_generics = false
+exclude = "^\\.venv(-wsl)?/"
 
 [[tool.mypy.overrides]]
 module = ["shapefile", "shapely.*"]

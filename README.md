@@ -82,6 +82,15 @@ TRIPMATE_KTO_MOBILE_APP=TripMate
 TRIPMATE_KTO_MOBILE_OS=WEB
 ```
 
+한국도로공사 OpenAPI를 로컬에서 호출하려면 `apps/api/.env`에 `pykex`용 키를 둡니다. 호출 코드는 `kex_openapi.KexClient`를 직접 사용합니다.
+
+```bash
+TRIPMATE_KEX_EX_API_KEY=data.ex.co.kr_인증키
+TRIPMATE_KEX_GO_API_KEY=data.go.kr_decoding_인증키
+```
+
+기존 로컬 이름인 `TRIPMATE_EXPRESSWAY_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`도 계속 읽습니다.
+
 ## 로컬 DB
 
 ```bash
