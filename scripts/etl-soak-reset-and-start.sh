@@ -61,7 +61,7 @@ done
 
 echo "Docker volume을 초기화하고 soak용 Airflow stack을 시작합니다."
 "${COMPOSE[@]}" down -v --remove-orphans
-"${COMPOSE[@]}" up -d --build postgres airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker
+"${COMPOSE[@]}" up -d --build postgres airflow-postgres airflow-redis airflow-init
 
 wait_for_healthy() {
   local service="$1"
@@ -83,20 +83,47 @@ wait_for_healthy() {
   return 1
 }
 
+wait_for_completed() {
+  local service="$1"
+  local container_id
+  local status
+  local exit_code
+  local attempt
+  for attempt in $(seq 1 90); do
+    container_id="$("${COMPOSE[@]}" ps -q "${service}")"
+    if [[ -n "${container_id}" ]]; then
+      status="$(docker inspect -f '{{.State.Status}}' "${container_id}")"
+      exit_code="$(docker inspect -f '{{.State.ExitCode}}' "${container_id}")"
+      if [[ "${status}" == "exited" && "${exit_code}" == "0" ]]; then
+        echo "${service}: completed"
+        return 0
+      fi
+      if [[ "${status}" == "exited" && "${exit_code}" != "0" ]]; then
+        echo "${service}가 실패했습니다(exit=${exit_code})." >&2
+        "${COMPOSE[@]}" logs --tail=200 "${service}" >&2
+        return 1
+      fi
+    fi
+    sleep 10
+  done
+  echo "${service}가 제한 시간 안에 완료되지 못했습니다." >&2
+  return 1
+}
+
 wait_for_healthy postgres
-wait_for_healthy airflow-webserver
-wait_for_healthy airflow-scheduler
-wait_for_healthy airflow-worker
+wait_for_healthy airflow-postgres
+wait_for_healthy airflow-redis
+wait_for_completed airflow-init
 
 echo "Alembic migration을 빈 DB에 적용합니다."
-"${COMPOSE[@]}" exec -T airflow-scheduler bash -lc \
+"${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
   'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
 
 LEGAL_CODE_CSV="$(find "${ROOT_DIR}/dataset" -maxdepth 1 -type f -name '*법정동코드*.csv' | sort | tail -n 1 || true)"
 if [[ -n "${LEGAL_CODE_CSV}" ]]; then
   LEGAL_CODE_CONTAINER_PATH="/opt/tripmate/dataset/$(basename "${LEGAL_CODE_CSV}")"
   echo "법정동코드 기준 CSV를 적재합니다: $(basename "${LEGAL_CODE_CSV}")"
-  "${COMPOSE[@]}" exec -T airflow-scheduler bash -lc \
+  "${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
     "cd /opt/tripmate/apps/api && python -m app.cli.legal_dong_code '${LEGAL_CODE_CONTAINER_PATH}'"
 else
   echo "dataset/ 하위에서 법정동코드 CSV를 찾지 못했습니다. legal_dong_code_standard DAG 다운로드에 의존합니다." >&2
@@ -109,11 +136,19 @@ VWorld_ZIPS=(
 )
 if [[ -f "${ROOT_DIR}/dataset/N3A_G0010000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0100000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0110000.zip" ]]; then
   echo "VWorld 행정경계 SHP ZIP 3종을 적재합니다."
-  "${COMPOSE[@]}" exec -T airflow-scheduler bash -lc \
+  "${COMPOSE[@]}" run --rm --no-deps --entrypoint bash airflow-scheduler -lc \
     "cd /opt/tripmate/apps/api && python -m app.cli.vworld_boundary ${VWorld_ZIPS[*]}"
 else
   echo "dataset/ 하위에서 VWorld SHP ZIP 3종을 모두 찾지 못했습니다. 경계 기반 ETL 일부가 빈 결과가 될 수 있습니다." >&2
 fi
+
+echo "Migration과 기준 파일 적재가 끝난 뒤 Airflow scheduler/worker를 시작합니다."
+"${COMPOSE[@]}" up -d airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker
+
+wait_for_healthy airflow-webserver
+wait_for_healthy airflow-scheduler
+wait_for_healthy airflow-dag-processor
+wait_for_healthy airflow-worker
 
 date -u +%s > "${SOAK_DIR}/started-at"
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "${SOAK_DIR}/started-at-iso"

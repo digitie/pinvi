@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -904,19 +905,46 @@ def _add_source_record(
     )
     if existing is not None:
         return _SourceRecordResult(record=existing, created=False)
-    record = BeachSourceRecord(
-        provider=provider,
-        dataset_key=dataset_key,
-        endpoint=endpoint,
-        source_record_id=source_record_id,
-        request_params=request_params,
-        raw_payload=payload,
-        response_hash=response_hash,
-        collected_at=collected_at,
+    inserted_id = session.scalar(
+        pg_insert(BeachSourceRecord)
+        .values(
+            provider=provider,
+            dataset_key=dataset_key,
+            endpoint=endpoint,
+            source_record_id=source_record_id,
+            request_params=request_params,
+            raw_payload=payload,
+            response_hash=response_hash,
+            collected_at=collected_at,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                BeachSourceRecord.provider,
+                BeachSourceRecord.dataset_key,
+                BeachSourceRecord.source_record_id,
+                BeachSourceRecord.response_hash,
+            ]
+        )
+        .returning(BeachSourceRecord.id)
     )
-    session.add(record)
-    session.flush()
-    return _SourceRecordResult(record=record, created=True)
+    if inserted_id is not None:
+        record = session.get(BeachSourceRecord, inserted_id)
+        if record is None:
+            raise BeachSourceEtlError(f"Inserted beach source record not found: {inserted_id}")
+        return _SourceRecordResult(record=record, created=True)
+    record = session.scalar(
+        select(BeachSourceRecord).where(
+            BeachSourceRecord.provider == provider,
+            BeachSourceRecord.dataset_key == dataset_key,
+            BeachSourceRecord.source_record_id == source_record_id,
+            BeachSourceRecord.response_hash == response_hash,
+        )
+    )
+    if record is None:
+        raise BeachSourceEtlError(
+            "Beach source record conflict was reported but the existing row was not visible."
+        )
+    return _SourceRecordResult(record=record, created=False)
 
 
 def _upsert_observation(
@@ -1093,33 +1121,49 @@ def _upsert_beach_profile(
         existing = _find_profile_by_name_location(session, display_name, longitude, latitude)
     created = False
     if existing is None:
-        existing = BeachProfile(
-            canonical_key=_profile_canonical_key(
-                display_name, longitude, latitude, provider, provider_beach_id
-            ),
-            display_name=display_name,
-            normalized_name=_normalize_search_text(display_name),
-            representative_provider=provider,
-            representative_dataset_key=dataset_key,
-            longitude=longitude,
-            latitude=latitude,
-            geom=_point_or_none(longitude, latitude),
-            legal_dong_code=mapping.legal_dong_code,
-            sigungu_code=mapping.sigungu_code,
-            sido_code=mapping.sido_code,
-            road_name_code=mapping.road_name_code,
-            road_address_management_no=mapping.road_address_management_no,
-            road_address=mapping.road_address,
-            address_snapshot=mapping.address_snapshot,
-            address_mapping_method=mapping.method,
-            source_specific_attributes=_compact_dict(source_attributes),
-            collected_at=collected_at,
-            map_feature_id=map_feature_id,
-            is_active=True,
+        canonical_key = _profile_canonical_key(
+            display_name, longitude, latitude, provider, provider_beach_id
         )
-        session.add(existing)
-        session.flush()
-        created = True
+        inserted_id = session.scalar(
+            pg_insert(BeachProfile)
+            .values(
+                canonical_key=canonical_key,
+                display_name=display_name,
+                normalized_name=_normalize_search_text(display_name),
+                representative_provider=provider,
+                representative_dataset_key=dataset_key,
+                longitude=longitude,
+                latitude=latitude,
+                geom=_point_or_none(longitude, latitude),
+                legal_dong_code=mapping.legal_dong_code,
+                sigungu_code=mapping.sigungu_code,
+                sido_code=mapping.sido_code,
+                road_name_code=mapping.road_name_code,
+                road_address_management_no=mapping.road_address_management_no,
+                road_address=mapping.road_address,
+                address_snapshot=mapping.address_snapshot,
+                address_mapping_method=mapping.method,
+                source_specific_attributes=_compact_dict(source_attributes),
+                collected_at=collected_at,
+                map_feature_id=map_feature_id,
+                is_active=True,
+            )
+            .on_conflict_do_nothing(index_elements=[BeachProfile.canonical_key])
+            .returning(BeachProfile.id)
+        )
+        if inserted_id is not None:
+            existing = session.get(BeachProfile, inserted_id)
+            if existing is None:
+                raise BeachSourceEtlError(f"Inserted beach profile not found: {inserted_id}")
+            created = True
+        else:
+            existing = session.scalar(
+                select(BeachProfile).where(BeachProfile.canonical_key == canonical_key)
+            )
+            if existing is None:
+                raise BeachSourceEtlError(
+                    "Beach profile conflict was reported but the existing row was not visible."
+                )
     else:
         if existing.map_feature_id is None and map_feature_id is not None:
             existing.map_feature_id = map_feature_id
@@ -1176,14 +1220,39 @@ def _upsert_provider_ref(
         "last_fetched_at": fetched_at,
     }
     if existing is None:
-        existing = BeachProviderRef(
-            provider=provider,
-            provider_dataset_key=dataset_key,
-            provider_beach_id=provider_beach_id,
-            **values,
+        inserted_id = session.scalar(
+            pg_insert(BeachProviderRef)
+            .values(
+                provider=provider,
+                provider_dataset_key=dataset_key,
+                provider_beach_id=provider_beach_id,
+                **values,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    BeachProviderRef.provider,
+                    BeachProviderRef.provider_dataset_key,
+                    BeachProviderRef.provider_beach_id,
+                ]
+            )
+            .returning(BeachProviderRef.id)
         )
-        session.add(existing)
-        return existing, True
+        if inserted_id is not None:
+            existing = session.get(BeachProviderRef, inserted_id)
+            if existing is None:
+                raise BeachSourceEtlError(f"Inserted beach provider ref not found: {inserted_id}")
+            return existing, True
+        existing = session.scalar(
+            select(BeachProviderRef).where(
+                BeachProviderRef.provider == provider,
+                BeachProviderRef.provider_dataset_key == dataset_key,
+                BeachProviderRef.provider_beach_id == provider_beach_id,
+            )
+        )
+        if existing is None:
+            raise BeachSourceEtlError(
+                "Beach provider ref conflict was reported but the existing row was not visible."
+            )
     for key, value in values.items():
         setattr(existing, key, value)
     return existing, False

@@ -9,7 +9,11 @@ import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from test_kma_beach_weather_loader import _seed_legal_boundary, _seed_road_address
+from test_kma_beach_weather_loader import (
+    FakeBeachCatalogClient,
+    _seed_legal_boundary,
+    _seed_road_address,
+)
 
 from app.db.session import get_db
 from app.etl.beach import sources as beach_source_module
@@ -21,6 +25,7 @@ from app.etl.beach.sources import (
     load_mof_beach_info,
     load_mof_beach_water_quality,
 )
+from app.etl.weather.beach import load_beach_catalog
 from app.main import create_app
 from app.models.beach import (
     BeachIndexForecast,
@@ -297,6 +302,40 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
     assert beach_payload["latest_water_quality"]["suitability"] == "적합"
     assert beach_payload["upcoming_index_forecasts"][0]["total_index"] == "좋음"
     assert sorted(beach_payload["source_providers"]) == ["data_go_kr", "khoa"]
+
+
+def test_kma_beach_profile_sync_is_idempotent(
+    db_session: Session,
+) -> None:
+    _seed_legal_boundary(db_session)
+    _seed_road_address(db_session)
+    load_beach_catalog(
+        db_session,
+        FakeBeachCatalogClient(),
+        collected_at=datetime(2026, 5, 15, 4, 0, tzinfo=KST),
+    )
+
+    first_result = beach_source_module.sync_kma_beach_profiles(
+        db_session,
+        collected_at=datetime(2026, 5, 15, 5, 0, tzinfo=KST),
+    )
+    second_result = beach_source_module.sync_kma_beach_profiles(
+        db_session,
+        collected_at=datetime(2026, 5, 15, 5, 5, tzinfo=KST),
+    )
+    db_session.commit()
+
+    profiles = db_session.scalars(select(BeachProfile)).all()
+    provider_refs = db_session.scalars(select(BeachProviderRef)).all()
+
+    assert first_result.profile_upsert_count == 1
+    assert first_result.provider_ref_upsert_count == 1
+    assert second_result.profile_upsert_count == 0
+    assert second_result.provider_ref_upsert_count == 0
+    assert len(profiles) == 1
+    assert len(provider_refs) == 1
+    assert provider_refs[0].provider == "kma"
+    assert provider_refs[0].provider_dataset_key == "kma_beach_catalog"
 
 
 def _build_client(db_session: Session) -> TestClient:

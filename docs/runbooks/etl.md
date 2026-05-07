@@ -72,10 +72,11 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 검증 스크립트 동작:
 
 - `docker compose down -v --remove-orphans`로 로컬/검증용 DB volume을 초기화한다.
-- Airflow와 TripMate Postgres를 다시 올린다.
-- 실행 중인 `airflow-scheduler` 컨테이너 안에서 `apps/api` Alembic migration을 `head`까지 적용한다.
+- TripMate Postgres, Airflow metadata Postgres, Redis, `airflow-init`만 먼저 올린다.
+- Airflow scheduler/worker를 시작하기 전에 일회성 Airflow image container에서 `apps/api` Alembic migration을 `head`까지 적용한다.
 - `dataset/` 하위에 법정동코드 CSV가 있으면 `python -m app.cli.legal_dong_code`로 먼저 적재한다.
 - `dataset/` 하위에 VWorld SHP ZIP 3종이 있으면 `python -m app.cli.vworld_boundary`로 먼저 적재한다.
+- migration과 기준 파일 적재가 끝난 뒤 Airflow webserver, scheduler, dag-processor, worker를 시작한다.
 - Airflow 검증 대상 DAG를 unpause하고 같은 soak run suffix로 수동 trigger한다.
 - 시작 시각은 `.tmp/etl-soak/started-at`에 UTC epoch으로 기록한다.
 - Juso 초기 적재는 공개 패턴을 감안해 매월 10일 전에는 두 달 전, 10일 이후에는 직전 월을 `source_year_month` conf로 넘긴다. 필요하면 `TRIPMATE_JUSO_SOAK_SOURCE_YEAR_MONTH=YYYYMM`으로 명시 override한다.
@@ -109,13 +110,15 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 
 반복 오류 방지:
 
+- 빈 DB soak에서는 Airflow scheduler/worker를 migration과 기준 파일 적재 전에 시작하지 않는다. DAG schedule이 즉시 실행되면 `etl_run_logs` 등 앱 schema 생성 전에 task가 DB를 조회해 실패한다.
 - Airflow 이미지에 Alembic package가 있어도 `alembic` CLI 또는 `python -m alembic`이 항상 동작하는 것은 아니다. migration 자동화는 `python -c "from alembic.config import main; main(argv=['upgrade', 'head'])"` 형태를 사용한다.
-- 이미 올라온 로컬 스택에서 migration과 수동 ETL 적재를 할 때는 `docker compose run airflow-init`보다 `docker compose exec airflow-scheduler`를 우선한다. `run`은 의도치 않은 service 재생성을 유발할 수 있다.
+- 이미 올라온 로컬 스택에서 migration과 수동 ETL 적재를 할 때는 `docker compose run airflow-init`보다 실행 중인 Airflow service 또는 명시적 일회성 Airflow image container를 사용한다. 빈 DB soak처럼 scheduler를 아직 띄우면 안 되는 단계에서는 `docker compose run --rm --no-deps --entrypoint bash airflow-scheduler -lc ...`를 사용한다.
 - 수동 import command는 성공 로그만으로 검증하지 않는다. VWorld SHP처럼 loader 결과가 성공이어도 DB commit 위치가 잘못되면 serving table이 0건일 수 있으므로 row count 검증을 함께 한다.
 - Airflow 3.2 TaskFlow에서는 기존 `{{ ts }}`, `{{ ds }}` Jinja 변수가 task 인자 렌더링 시점에 없을 수 있다. DAG task는 Jinja 문자열 인자를 받지 말고 실행 시점 context에서 logical date 또는 run_after를 읽는다.
 - 대용량 ETL에서 ORM object를 수백만 개 `add_all`로 누적하지 않는다. Juso처럼 GB 단위 TXT를 다룰 때는 streaming parser, hash/row_count inspect, Core batch insert, serving batch 재구성을 기본값으로 한다.
 - 월간 Juso는 공개일 전에는 직전 월 파일이 없을 수 있다. 초기 DB 구축 또는 복구는 DAG conf `{"source_year_month":"YYYYMM"}`로 공개가 확인된 월을 명시한다.
 - 같은 데이터셋에서 후속 success가 발생하면 이전 실패 관리자 알림과 Telegram pending outbox가 자동 resolved/cancelled 되는지 확인한다. 실패 알림이 계속 남아 있으면 운영자가 이미 조치한 장애가 반복 알림으로 보일 수 있다.
+- KMA/KHOA/MOF 해수욕장 DAG는 시작 시 KMA 해수욕장 catalog profile을 공유하므로 서로 다른 DAG가 동시에 같은 해수욕장을 만들 수 있다. `beach_profiles`, `beach_provider_refs`, `beach_source_records`는 PostgreSQL unique constraint 기반 `ON CONFLICT DO NOTHING` 경로를 유지해 동시 실행 경합을 흡수한다.
 
 ## 시간대 기준
 
