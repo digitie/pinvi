@@ -170,6 +170,6 @@ unique:
 - Alembic migration `20260428_0020` 적용
 - `Beach*` 모델이 metadata에 등록
 - ETL loader idempotency 테스트 통과
-- Airflow DAG contract 테스트 통과
+- Dagster job contract 테스트 통과
 - `GET /public/beaches` 통합 응답 테스트 통과
 - `docs/data-sources/beach-sources.md`와 구현 스케줄 동기화

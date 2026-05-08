@@ -12,6 +12,7 @@ import {
   type AdminManagedUser,
   type AdminUser,
 } from "../api";
+import { getDagsterAdminUrl } from "../config";
 
 const accountStatusOptions = [
   { value: "", label: "전체 상태" },
@@ -28,6 +29,8 @@ const roleOptions = [
   { value: "planner", label: "여행계획 작성자" },
   { value: "participant", label: "참여자" },
 ];
+
+const dagsterAdminUrl = getDagsterAdminUrl();
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -163,6 +166,16 @@ export default function AdminUsersPage() {
               <TableIcon />
               데이터
             </Link>
+            <a
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800"
+              href={dagsterAdminUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <WorkflowIcon />
+              Dagster
+              <ExternalLinkIcon />
+            </a>
             <span className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
               {adminUser?.email}
             </span>
@@ -443,6 +456,34 @@ function TableIcon() {
   return (
     <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
       <path d="M4 5h16M4 12h16M4 19h16M8 5v14" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function WorkflowIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M6 6h4v4H6V6ZM14 14h4v4h-4v-4ZM10 8h2a4 4 0 0 1 4 4v2M8 10v2a4 4 0 0 0 4 4h2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" className="size-3" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M14 4h6v6M20 4l-9 9M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
     </svg>
   );
 }

@@ -6,12 +6,14 @@
 
 - 직접 개발 관리자 로그인: `http://localhost:3001/admin/login`
 - 직접 개발 관리자 데이터 브라우저: `http://localhost:3001/admin`
+- 직접 개발 Dagster 관리 화면: `http://localhost:23000`
 - 직접 개발 API 기본 URL: `http://localhost:8001`
 - 앱 Docker smoke 관리자 로그인: `http://127.0.0.1:13082/admin/login`
 - 앱 Docker smoke API 기본 URL: `http://127.0.0.1:18082`
 - 배포 프론트엔드/API 외부 포트: 미정
 
 프론트엔드에서 API 주소를 바꿔야 하면 `NEXT_PUBLIC_TRIPMATE_API_URL` 환경변수를 설정한다.
+관리자 화면의 Dagster 버튼 주소를 바꿔야 하면 `NEXT_PUBLIC_TRIPMATE_DAGSTER_URL` 환경변수를 설정한다.
 `3000`과 `8000`은 다른 로컬 서비스가 사용할 수 있으므로 TripMate 확인 주소로 쓰지 않는다.
 
 ```bash
@@ -20,6 +22,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 ```
 
 현재 웹 client의 기본 API URL은 `http://localhost:8001`이다. 임시 포트를 쓰는 경우에만 웹 실행 시 `NEXT_PUBLIC_TRIPMATE_API_URL`을 함께 지정한다.
+관리자 화면의 Dagster 버튼 기본 URL은 `http://localhost:23000`이다.
 
 ## 기본 개발 계정
 
@@ -92,6 +95,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 - 컬럼 정렬.
 - 페이지 크기 `50`, `100`, `200`, `500` 선택.
 - 기본 페이지 크기 `100`.
+- Dagster 관리 화면 새 탭 열기.
 
 조회 대상에서 제외하는 테이블:
 
@@ -108,6 +112,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 - DB에는 세션 token 원문이 아니라 hash만 저장한다.
 - 기본 계정과 기본 비밀번호는 운영 비밀값으로 간주하지 않는다. 운영 배포 전 반드시 교체한다.
 - 관리자 화면은 내부 운영 도구이므로 외부 공개 배포 시 reverse proxy, 네트워크 접근 제어, HTTPS, secure cookie 설정을 함께 점검한다.
+- Dagster 관리 화면은 별도 서비스다. 관리자 화면 버튼은 진입 링크만 제공하므로 운영 배포 시 Dagster 자체 접근 제어와 reverse proxy 정책을 별도로 둔다.
 - 일반 사용자 로그인은 `/admin/login`을 재사용하지 않는다.
 
 ## 검증 명령

@@ -31,12 +31,12 @@
 - Go Camping, 전국문화축제표준데이터, 전국관광안내소표준데이터, 전국휴양림표준데이터, 전국박물관미술관정보표준데이터는 `TRIPMATE_DATA_GO_SERVICE_KEY`를 사용한다.
 - 2026-04-29에 운영자가 제공한 data.go.kr 인증키를 로컬 검증 환경의 `.env`와 `apps/api/.env`에 반영했다. 인증키 원문은 Git, 문서, 로그에 저장하지 않는다.
 
-로컬 WSL2 검증에서는 data.go.kr 표준 OpenAPI가 인증키 없이 연결 리셋될 수 있고, localdata CSV URL은 403이 발생할 수 있다. 이 경우 코드를 임의로 우회하지 말고 운영 인증키, 네트워크, 상류 방화벽 정책을 먼저 확인한다. 스키마, 정규화, 멱등성은 mock transport와 fixture 기반 테스트로 검증하고, 운영 반영 전에는 실제 인증키가 주입된 Airflow 환경에서 1건 smoke run을 별도로 수행한다.
+로컬 WSL2 검증에서는 data.go.kr 표준 OpenAPI가 인증키 없이 연결 리셋될 수 있고, localdata CSV URL은 403이 발생할 수 있다. 이 경우 코드를 임의로 우회하지 말고 운영 인증키, 네트워크, 상류 방화벽 정책을 먼저 확인한다. 스키마, 정규화, 멱등성은 mock transport와 fixture 기반 테스트로 검증하고, 운영 반영 전에는 실제 인증키가 주입된 Dagster 환경에서 1건 smoke run을 별도로 수행한다.
 
 2026-04-27 WSL2 smoke 결과와 2026-04-29 조치:
 
 - `public_arboretum_basic`: 공공데이터포털 파일 다운로드 성공, 70건 적재 성공, smoke DB에 법정동 경계가 없어 법정동 매핑 0건.
-- `public_recreation_forest`, `public_museum_art_gallery`: 기존 키로 `SERVICE KEY IS NOT REGISTERED ERROR`를 반환했다. 2026-04-29에 새 data.go.kr 키를 반영했으며, Airflow smoke run으로 재검증한다.
+- `public_recreation_forest`, `public_museum_art_gallery`: 기존 키로 `SERVICE KEY IS NOT REGISTERED ERROR`를 반환했다. 2026-04-29에 새 data.go.kr 키를 반영했으며, Dagster smoke run으로 재검증한다.
 - `public_campground`: LocalData CSV URL이 403을 반환했다. 2026-04-29에 Go Camping API로 전환했으며, 동일한 `TRIPMATE_DATA_GO_SERVICE_KEY`로 재검증한다.
 
 ## DB 테이블
@@ -187,9 +187,9 @@ Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과
 
 주소 문자열로 Juso key fuzzy matching은 하지 않는다. 현재 기준은 좌표 기반 법정동 매핑이다. 도로명코드, 도로명주소관리번호 연결은 후속 기능에서 명확한 Juso key 매칭 정책이 생기면 추가한다.
 
-## Airflow DAG
+## Dagster job
 
-파일: `dags/public_places.py`
+파일: `apps/api/app/dagster_etl/registry.py`
 
 - `public_arboretum_basic_annual`
 - `public_tourist_information_center_annual`
@@ -197,7 +197,7 @@ Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과
 - `public_museum_art_gallery_annual`
 - `public_campground_daily`
 
-각 DAG는 기존 ETL 공통 실행 로그를 사용한다.
+각 job는 기존 ETL 공통 실행 로그를 사용한다.
 
 - 성공: `etl_run_logs.status = success`
 - 실패: retry 설정에 따라 재시도
@@ -215,7 +215,7 @@ Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과
 - `apps/api/tests/test_public_data_place_loader.py`
 - `apps/api/tests/test_model_metadata.py`
 - `apps/api/tests/test_migration_contract.py`
-- `apps/api/tests/test_airflow_dags.py`
+- `apps/api/tests/test_dagster_etl.py`
 - `apps/api/tests/test_etl_config.py`
 
 검증한 내용:
@@ -232,4 +232,4 @@ Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과
 - 좌표 기반 법정동 point-in-polygon 매핑
 - 장소 geometry SRID와 GiST index
 - FK column covering index
-- Airflow DAG schedule, retry, KST start date
+- Dagster job schedule, retry, KST start date

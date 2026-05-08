@@ -1,6 +1,6 @@
 # OpiNet 유가 데이터 소스
 
-이 문서는 OpiNet 유가 API 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/opinet/client.py`, `apps/api/app/etl/opinet/loader.py`, `dags/opinet_fuel.py`, `docs/architecture/fuel-schema.md`, `docs/architecture/opinet-region-mapping.md`다.
+이 문서는 OpiNet 유가 API 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/opinet/client.py`, `apps/api/app/etl/opinet/loader.py`, `apps/api/app/dagster_etl/registry.py`, `docs/architecture/fuel-schema.md`, `docs/architecture/opinet-region-mapping.md`다.
 
 ## 공통
 
@@ -37,7 +37,7 @@ Python client:
 | --- | --- |
 | 설명 URL | `https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=5` |
 | 구현 URL | `https://www.opinet.co.kr/api/areaCode.do` |
-| DAG | `opinet_region_code_quarterly` |
+| job | `opinet_region_code_quarterly` |
 | 수집 시각 | 1/4/7/10월 1일 04:00 KST |
 | 목적 | OpiNet 시도/시군구 provider code를 TripMate 법정동 시도/시군구 코드와 매핑 |
 
@@ -69,7 +69,7 @@ Python client:
 | --- | --- |
 | 설명 URL | `https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=4` |
 | 구현 URL | `https://www.opinet.co.kr/api/avgAllPrice.do` |
-| DAG | `opinet_avg_price_daily` |
+| job | `opinet_avg_price_daily` |
 | 수집 시각 | 매일 05:20, 13:20, 21:20 KST |
 | 목적 | 전국 평균 유가 snapshot |
 
@@ -101,7 +101,7 @@ Python client:
 | --- | --- |
 | 설명 URL | `https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=2` |
 | 구현 URL | `https://www.opinet.co.kr/api/lowTop10.do` |
-| DAG | `opinet_lowest_station_daily` |
+| job | `opinet_lowest_station_daily` |
 | 수집 시각 | 매일 05:40, 13:40, 21:40 KST |
 | 목적 | 매핑된 전국 시군구별 최저가 주유소 후보 cache |
 

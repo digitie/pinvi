@@ -242,7 +242,7 @@ def test_rest_area_oil_loader_skips_fk_mismatch_and_writes_jsonl(
         FakeKexClient(),  # type: ignore[arg-type]
         collected_at=datetime(2026, 4, 26, 6, 10, tzinfo=KST),
         fk_mismatch_log_dir=tmp_path,
-        run_id="dag-run-1",
+        run_id="dagster-run-1",
     )
     db_session.commit()
 
@@ -250,7 +250,7 @@ def test_rest_area_oil_loader_skips_fk_mismatch_and_writes_jsonl(
     serving_rows = db_session.scalars(
         select(RestAreaServingOilPrice).order_by(RestAreaServingOilPrice.provider_fuel_code)
     ).all()
-    log_path = tmp_path / "rest_area_oil_price" / "dag-run-1.jsonl"
+    log_path = tmp_path / "rest_area_oil_price" / "dagster-run-1.jsonl"
     logged = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
 
     assert result.raw_row_count == 2
@@ -378,7 +378,7 @@ def test_rest_area_service_loader_splits_convenience_and_skips_fk_mismatch(
         FakeKexClient(),  # type: ignore[arg-type]
         collected_at=datetime(2026, 4, 26, 6, 20, tzinfo=KST),
         fk_mismatch_log_dir=tmp_path,
-        run_id="dag-run-2",
+        run_id="dagster-run-2",
     )
     db_session.commit()
 
@@ -386,7 +386,7 @@ def test_rest_area_service_loader_splits_convenience_and_skips_fk_mismatch(
     serving_rows = db_session.scalars(
         select(RestAreaServingService).order_by(RestAreaServingService.provider_service_name)
     ).all()
-    log_path = tmp_path / "rest_area_svcs" / "dag-run-2.jsonl"
+    log_path = tmp_path / "rest_area_svcs" / "dagster-run-2.jsonl"
 
     assert result.raw_row_count == 2
     assert result.serving_row_count == 2

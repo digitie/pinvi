@@ -5,6 +5,7 @@ import hashlib
 import html
 import re
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
@@ -118,7 +119,7 @@ def download_latest_legal_dong_code_csv(
         timeout=30.0,
     )
     try:
-        page_response = resolved_client.get(page_url)
+        page_response = _get_with_retries(resolved_client, page_url)
         page_response.raise_for_status()
         download_url = _extract_data_go_content_url(page_response.text, page_url)
         request_download_url = _with_data_go_service_key(
@@ -126,7 +127,7 @@ def download_latest_legal_dong_code_csv(
             _resolve_data_go_service_key(service_key),
         )
 
-        file_response = resolved_client.get(request_download_url)
+        file_response = _get_with_retries(resolved_client, request_download_url)
         file_response.raise_for_status()
         file_name = _resolve_download_file_name(file_response, request_download_url)
         file_path = target_dir / file_name
@@ -141,6 +142,27 @@ def download_latest_legal_dong_code_csv(
         file_path=file_path,
         source_file_hash=_sha256_file(file_path),
     )
+
+
+def _get_with_retries(
+    client: httpx.Client,
+    url: str,
+    *,
+    max_attempts: int = 3,
+    backoff_seconds: float = 1.0,
+) -> httpx.Response:
+    last_error: httpx.HTTPError | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return client.get(url)
+        except httpx.HTTPError as exc:
+            last_error = exc
+            if attempt == max_attempts:
+                raise
+            time.sleep(backoff_seconds * attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("HTTP retry loop ended without a response.")
 
 
 def load_latest_legal_dong_code_from_data_go(

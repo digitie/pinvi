@@ -37,11 +37,11 @@
 - 중복 저장 방지와 idempotency를 테스트한다.
 - cache hit/miss, 수집 윈도우, 수집 건수를 로그에 남긴다.
 - 휴게소 oil/svcs FK 불일치는 raw 적재를 보존하고 serving 단계에서 skip한다.
-- skip된 FK 불일치 row는 Airflow task log와 별도 JSONL 로그파일에 남긴다.
+- skip된 FK 불일치 row는 Dagster job log와 별도 JSONL 로그파일에 남긴다.
 
 ## 완료 기준
 
-- `docs/data-sources.md`와 schema/adapter/DAG/test가 일치한다.
+- `docs/data-sources.md`와 schema/adapter/Dagster job/test가 일치한다.
 - 장기 저장 필드와 TTL 캐시 필드가 분리되어 있다.
 - provider 원문 데이터가 서비스 로직의 단일 진실원이 아니다.
 - 테스트 없이 데이터 정책 변경을 완료하지 않는다.

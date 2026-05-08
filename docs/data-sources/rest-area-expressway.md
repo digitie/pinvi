@@ -1,6 +1,6 @@
 # 한국도로공사 휴게소 데이터 소스
 
-이 문서는 한국도로공사 OpenAPI 인수인계 기준이다. 관련 구현은 `apps/api/app/core/kex.py`, `apps/api/app/etl/rest_area/loader.py`, `dags/rest_area.py`, `docs/architecture/rest-area-schema.md`다.
+이 문서는 한국도로공사 OpenAPI 인수인계 기준이다. 관련 구현은 `apps/api/app/core/kex.py`, `apps/api/app/etl/rest_area/loader.py`, `apps/api/app/dagster_etl/registry.py`, `docs/architecture/rest-area-schema.md`다.
 
 ## 공통
 
@@ -33,7 +33,7 @@
 | 설명 URL | `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0615` |
 | 공공데이터포털 | `https://www.data.go.kr/data/15062047/openapi.do` |
 | 구현 URL | `https://data.ex.co.kr/openapi/business/serviceAreaRoute` |
-| DAG | `rest_area_master_monthly` |
+| job | `rest_area_master_monthly` |
 | 수집 시각 | 매월 1일 04:10 KST |
 | source API id | `0615` |
 
@@ -66,7 +66,7 @@
 | --- | --- |
 | 설명 URL | `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0312` |
 | 구현 URL | `https://data.ex.co.kr/openapi/business/curStateStation` |
-| DAG | `rest_area_oil_price_daily` |
+| job | `rest_area_oil_price_daily` |
 | 수집 시각 | 매일 06:10, 18:10 KST |
 | source API id | `0312` |
 
@@ -89,7 +89,7 @@
 - raw는 `rest_area_raw_oil_price`에 항상 저장한다.
 - serving은 master FK가 맞는 row만 `rest_area_serving_oil_price`에 유종별로 펼쳐 저장한다.
 - 가격 단위는 `KRW_PER_LITER`다.
-- master FK 불일치는 JSONL 로그로 남긴다. 기본 경로는 `/opt/tripmate/.tmp/airflow-logs/etl/rest_area_fk_mismatch`다.
+- master FK 불일치는 JSONL 로그로 남긴다. 기본 경로는 `/opt/tripmate/.tmp/dagster-logs/etl/rest_area_fk_mismatch`다.
 - 2026-04-26 live smoke 기준 `curStateStation`의 `serviceAreaCode2`가 master와 교집합이 없는 문제가 관측되어 raw 보존 + serving skip 정책을 유지한다.
 
 ## `rest_area_svcs`
@@ -98,7 +98,7 @@
 | --- | --- |
 | 설명 URL | `https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0316` |
 | 구현 URL | `https://data.ex.co.kr/openapi/business/conveniServiceArea` |
-| DAG | `rest_area_service_monthly` |
+| job | `rest_area_service_monthly` |
 | 수집 시각 | 매월 1일 04:30 KST |
 | source API id | `0316` |
 

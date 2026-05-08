@@ -11,15 +11,15 @@
 - 법정동은 V-WORLD 법정동 경계 `ST_Covers`를 우선하고, 해안 좌표가 경계 밖이면 약 5km 이내 가장 가까운 법정동을 보조 매핑한다.
 - 도로명주소코드와 도로명주소관리번호는 같은 법정동의 Juso 건물명 정확 일치가 1건일 때만 채운다.
 - 날씨 응답은 `weather_raw_beach`와 `weather_serving_beach`로 분리한다.
-- Airflow DAG는 자료 제공 주기와 해수욕장 운영 시즌을 반영해 6~8월 중심으로 운영한다.
+- Dagster job/schedule은 자료 제공 주기와 해수욕장 운영 시즌을 반영해 6~8월 중심으로 운영한다.
 
 ## 구현 상태
 
 - 완료: SQLAlchemy 모델과 Alembic migration `20260428_0019_kma_beach_weather_tables.py`
 - 완료: `apps/api/app/etl/weather/beach.py` 카탈로그/날씨 client와 loader
-- 완료: `dags/kma_beach_weather.py` 6개 DAG
+- 완료: `apps/api/app/dagster_etl/registry.py`에 해수욕장 날씨 job 6개 등록
 - 완료: `config/etl-datasets.json`, `config/etl-datasets.soak.json` dataset 설정
-- 완료: loader, Airflow contract, ETL config, model metadata, migration contract 테스트
+- 완료: loader, Dagster contract, ETL config, model metadata, migration contract 테스트
 - 완료: 공식 API 문서와 내부 구현 기준 문서화
 
 ## 운영 메모
@@ -31,7 +31,7 @@
 
 ## 검증
 
-- WSL2: `.venv-wsl/bin/ruff check app/models/weather.py app/etl/weather/beach.py app/core/etl_config.py tests/test_kma_beach_weather_loader.py tests/test_airflow_dags.py tests/test_etl_config.py tests/test_etl_soak_config.py tests/test_model_metadata.py tests/test_migration_contract.py ../../dags/kma_beach_weather.py`
-- WSL2: `.venv-wsl/bin/python -m pytest tests/test_kma_beach_weather_loader.py tests/test_airflow_dags.py tests/test_etl_config.py tests/test_etl_soak_config.py tests/test_model_metadata.py tests/test_migration_contract.py`
+- WSL2: `.venv-wsl/bin/ruff check app/models/weather.py app/etl/weather/beach.py app/core/etl_config.py app/dagster_etl tests/test_kma_beach_weather_loader.py tests/test_dagster_etl.py tests/test_etl_config.py tests/test_etl_soak_config.py tests/test_model_metadata.py tests/test_migration_contract.py`
+- WSL2: `.venv-wsl/bin/python -m pytest tests/test_kma_beach_weather_loader.py tests/test_dagster_etl.py tests/test_etl_config.py tests/test_etl_soak_config.py tests/test_model_metadata.py tests/test_migration_contract.py`
 - WSL2: `.venv-wsl/bin/python -m alembic upgrade head`
 - PowerShell: `git diff --check`

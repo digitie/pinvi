@@ -8,7 +8,7 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/etl-soak-trigger-all.sh
 
-soak 검증 대상 Airflow DAG를 unpause하고 같은 suffix로 1회 수동 trigger한다.
+soak 검증 대상 Dagster job을 같은 suffix 기준으로 1회 수동 실행한다.
 USAGE
 }
 
@@ -19,7 +19,10 @@ fi
 
 cd "${ROOT_DIR}"
 
-REQUIRED_DAGS=(
+SOAK_DIR="${ROOT_DIR}/.tmp/etl-soak"
+mkdir -p "${SOAK_DIR}"
+
+REQUIRED_JOBS=(
   legal_dong_code_standard_quarterly
   juso_monthly_address_dataset
   opinet_region_code_quarterly
@@ -51,7 +54,7 @@ REQUIRED_DAGS=(
   public_campground_daily
 )
 
-DAGS=("${REQUIRED_DAGS[@]}")
+JOBS=("${REQUIRED_JOBS[@]}")
 
 env_file_has_value() {
   local key="$1"
@@ -59,30 +62,30 @@ env_file_has_value() {
 }
 
 if env_file_has_value TRIPMATE_KHOA_API_KEY; then
-  DAGS+=(
+  JOBS+=(
     khoa_beach_observation_hourly
     khoa_beach_index_forecast_twice_daily
     khoa_mudflat_index_forecast_twice_daily
     khoa_sea_split_index_forecast_twice_daily
   )
 else
-  echo "TRIPMATE_KHOA_API_KEY가 없어 KHOA 지수/관측 DAG 4개는 이번 수동 trigger에서 제외합니다." >&2
+  echo "TRIPMATE_KHOA_API_KEY가 없어 KHOA 지수/관측 job 4개는 이번 수동 실행에서 제외합니다." >&2
 fi
 
-run_airflow() {
-  "${COMPOSE[@]}" exec -T airflow-scheduler airflow "$@"
+run_dagster() {
+  "${COMPOSE[@]}" exec -T dagster "$@"
 }
 
-wait_for_dag() {
-  local dag_id="$1"
+wait_for_job() {
+  local job_id="$1"
   local attempt
   for attempt in $(seq 1 60); do
-    if run_airflow dags list | awk '{print $1}' | grep -Fxq "${dag_id}"; then
+    if run_dagster dagster job list -m app.dagster_etl.definitions | grep -Fq "${job_id}"; then
       return 0
     fi
     sleep 10
   done
-  echo "DAG ${dag_id}를 Airflow에서 찾지 못했습니다." >&2
+  echo "Dagster job ${job_id}를 찾지 못했습니다." >&2
   return 1
 }
 
@@ -99,17 +102,25 @@ if [[ -z "${JUSO_SOURCE_YEAR_MONTH}" ]]; then
   )"
 fi
 
-for dag_id in "${DAGS[@]}"; do
-  wait_for_dag "${dag_id}"
-  run_airflow dags unpause "${dag_id}" >/dev/null || true
-  if [[ "${dag_id}" == "juso_monthly_address_dataset" ]]; then
-    run_airflow dags trigger "${dag_id}" \
-      --run-id "manual__soak__${RUN_SUFFIX}__${dag_id}" \
-      --conf "{\"source_year_month\":\"${JUSO_SOURCE_YEAR_MONTH}\"}"
+for job_id in "${JOBS[@]}"; do
+  wait_for_job "${job_id}"
+  if [[ "${job_id}" == "juso_monthly_address_dataset" ]]; then
+    config_path="${SOAK_DIR}/juso-run-config-${RUN_SUFFIX}.yaml"
+    cat > "${config_path}" <<YAML
+ops:
+  download_and_load_juso_monthly_address:
+    config:
+      run_type: manual
+      source_year_month: "${JUSO_SOURCE_YEAR_MONTH}"
+YAML
+    run_dagster dagster job execute \
+      -m app.dagster_etl.definitions \
+      -j "${job_id}" \
+      -c "/opt/tripmate/.tmp/etl-soak/$(basename "${config_path}")"
   else
-    run_airflow dags trigger "${dag_id}" --run-id "manual__soak__${RUN_SUFFIX}__${dag_id}"
+    run_dagster dagster job execute -m app.dagster_etl.definitions -j "${job_id}"
   fi
 done
 
-echo "Triggered ${#DAGS[@]} DAGs for soak run ${RUN_SUFFIX}."
+echo "Executed ${#JOBS[@]} Dagster jobs for soak run ${RUN_SUFFIX}."
 echo "Juso manual source_year_month=${JUSO_SOURCE_YEAR_MONTH}"

@@ -34,8 +34,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-export AIRFLOW_UID="${AIRFLOW_UID:-$(id -u)}"
-mkdir -p .tmp/airflow-downloads .tmp/airflow-logs .tmp/backups dataset
+mkdir -p .tmp/dagster-downloads .tmp/dagster-logs .tmp/etl-soak .tmp/backups dataset
 
-"${COMPOSE[@]}" up -d --build postgres airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker
+"${COMPOSE[@]}" up -d --build postgres dagster
 "${COMPOSE[@]}" ps

@@ -118,4 +118,4 @@
 - raw row 중복 방지와 serving upsert idempotency를 검증한다.
 - 도로명주소 exact match, 지번주소 exact match, 좌표 fallback, unmapped를 각각 테스트한다.
 - `event_status`가 KST 수집일 기준으로 계산되는지 테스트한다.
-- Airflow DAG import smoke와 `config/etl-datasets.json` 계약을 검증한다.
+- Dagster job import smoke와 `config/etl-datasets.json` 계약을 검증한다.

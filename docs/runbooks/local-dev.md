@@ -3,11 +3,12 @@
 ## 기본 원칙
 
 - 저장소 명령은 WSL2 Ubuntu에서 실행하는 것을 최우선으로 한다.
-- 로컬 Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
+- 로컬 Docker, Docker Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
 - Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 문서 확인, Git 상태 확인, 간단한 파일 탐색 같은 보조 작업에만 사용한다.
 - Docker 명령을 Windows PowerShell에서 직접 실행하지 않는다.
+- `rg` 검색은 PowerShell `rg.exe`를 쓰지 않는다. WSL에서도 WindowsApps 경로가 먼저 잡힐 수 있으므로 `PATH=/usr/local/bin:/usr/bin:/bin rg ...`처럼 WSL native ripgrep만 사용한다.
 - Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/mapplan`이다. 검증 명령은 이 NTFS 경로에서 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/mapplan` 미러에서 실행한다.
-- 테스트, 빌드, lint, typecheck, formatter, backend test, Alembic, Airflow 검증 전에는 `/mnt/f/dev/mapplan`에서 WSL 미러로 동기화하고, 명령 완료 후에는 WSL 미러의 변경을 `/mnt/f/dev/mapplan`으로 다시 복사한다.
+- 테스트, 빌드, lint, typecheck, formatter, backend test, Alembic, Dagster 검증 전에는 `/mnt/f/dev/mapplan`에서 WSL 미러로 동기화하고, 명령 완료 후에는 WSL 미러의 변경을 `/mnt/f/dev/mapplan`으로 다시 복사한다.
 - 프로젝트 문서는 한국어로 작성한다. 코드 식별자, 명령어, 테이블명, API endpoint, provider 고유 명칭은 원문을 유지할 수 있다.
 
 ## WSL 내부 볼륨 미러
@@ -39,6 +40,17 @@ wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --excl
 ```
 
 명령이 의도적으로 파일 삭제나 rename을 만들었다면 `git status --short`로 변경 범위를 확인한 뒤 삭제까지 현재 프로젝트 디렉토리에 반영한다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
+
+## 검색 명령
+
+PowerShell의 `rg.exe`는 권한 문제로 실패한 사례가 반복됐으므로 사용하지 않는다. WSL 기본 `PATH`도 WindowsApps의 Codex 번들 `rg`를 먼저 잡을 수 있으므로, 검색할 때는 Windows 경로를 제거한 WSL native ripgrep만 사용한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n '검색어' docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
+```
+
+`PATH=/usr/local/bin:/usr/bin:/bin command -v rg`가 비어 있으면 WSL에 `ripgrep`이 없는 상태다. 이 경우 PowerShell `rg.exe`로 우회하지 말고 WSL에 `ripgrep`을 설치하거나, 설치가 불가능한 경우에만 `git grep`/`grep`을 fallback으로 사용한다.
 
 ## 현재 가능한 작업
 
@@ -169,10 +181,10 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bi
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_juso_parser.py tests/test_juso_download.py tests/test_juso_legal_dong_loader.py tests/test_juso_address_dataset_loader.py tests/test_juso_pipeline.py tests/test_legal_dong_code_loader.py tests/test_vworld_boundary_loader.py tests/test_model_metadata.py tests/test_migration_contract.py"
 ```
 
-Airflow DAG contract check:
+Dagster ETL contract check:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_airflow_dags.py"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_dagster_etl.py"
 ```
 
 ## 로컬 DB
@@ -229,19 +241,25 @@ curl http://localhost:8001/health
 curl http://localhost:8001/health/db
 ```
 
-## Airflow 로컬 스택
+## Dagster 로컬 스택
 
-Airflow는 Docker Compose로 실행한다.
+Dagster는 Docker Compose로 실행한다. TripMate 로컬 Compose는 Dagster UI와 daemon을 같은 `dagster` service에서 함께 띄운다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d postgres dagster"
+```
+
+Dagster UI:
+
+```text
+http://localhost:23000
 ```
 
 상세 운영 방법은 `docs/runbooks/etl.md`를 따른다.
 
 ## 로컬 ETL 장시간 검증
 
-DB를 초기화하고 로컬 기준 파일을 적재한 뒤 Airflow DAG를 장시간 검증할 때는 아래 스크립트를 사용한다.
+DB를 초기화하고 로컬 기준 파일을 적재한 뒤 Dagster job을 장시간 검증할 때는 아래 스크립트를 사용한다.
 
 ```bash
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
@@ -250,7 +268,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status
 
 주의:
 
-- 이 스크립트는 `docker compose down -v`로 TripMate 앱 DB와 Airflow metadata DB volume을 삭제한다.
+- 이 스크립트는 `docker compose down -v`로 TripMate 앱 DB와 Dagster local state volume을 삭제한다.
 - `--yes`가 없으면 실행하지 않는다.
 - 기본 운영 schedule은 바꾸지 않고, 검증용으로만 `TRIPMATE_ETL_CONFIG_PATH=/opt/tripmate/config/etl-datasets.soak.json`을 사용한다.
 - `dataset/` 하위의 `국토교통부_법정동코드_*.csv`, `N3A_G0010000.zip`, `N3A_G0100000.zip`, `N3A_G0110000.zip`이 있으면 migration 직후 먼저 적재한다.

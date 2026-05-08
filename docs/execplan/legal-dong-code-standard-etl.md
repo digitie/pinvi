@@ -49,7 +49,7 @@ Source:
 
 ## 수집 주기
 
-- Airflow 또는 동일 역할의 scheduler에서 3개월에 1번 실행한다.
+- Dagster schedule에서 3개월에 1번 실행한다.
 - 기준 권장일: 2월/5월/8월/11월 15일 새벽 04:30 KST.
 - 실패 재시도 정책은 데이터셋별 ETL 설정을 따른다.
 - 현재 backend 함수는 페이지 HTML을 열고 JSON-LD의 `contentUrl`을 찾아 최신 CSV를 내려받는다.
@@ -133,24 +133,23 @@ VWorld SHP loader:
 - `apps/api/tests/test_legal_dong_code_loader.py`
 - `apps/api/tests/test_vworld_boundary_loader.py`
 
-## Airflow DAG
+## Dagster job
 
-분기별 DAG는 `dags/legal_dong_code_standard.py`에 있다.
+분기별 job은 `apps/api/app/dagster_etl/registry.py`에 있다.
 
-- DAG id: `legal_dong_code_standard_quarterly`
+- job name: `legal_dong_code_standard_quarterly`
 - schedule: `30 4 15 2,5,8,11 *`
 - 의미: 2월, 5월, 8월, 11월 15일 04:30 KST 실행
 - catchup: 비활성화
-- max active runs: 1
 - 기본 retry: 5분 간격 3회
 - 필수 환경변수: `TRIPMATE_DATABASE_URL`
-- 선택 환경변수: `TRIPMATE_AIRFLOW_DOWNLOAD_DIR`
+- 선택 환경변수: `TRIPMATE_DAGSTER_DOWNLOAD_DIR`
 
-DAG import 시점에는 DB나 data.go.kr에 접근하지 않는다. 실제 backend import, CSV 다운로드, DB write는 task body 안에서 실행한다.
+Dagster definition import 시점에는 DB나 data.go.kr에 접근하지 않는다. 실제 backend import, CSV 다운로드, DB write는 op body 안에서 실행한다.
 
 ## 남은 연결 작업
 
 - 관리자 페이지 업로드 방식은 legacy/manual fallback으로만 유지한다.
-- Airflow runtime은 `infra/docker-compose.yml`에 연결됐다.
+- Dagster runtime은 `infra/docker-compose.yml`에 연결됐다.
 - 운영 설정 파일 `config/etl-datasets.json`에 `legal_dong_code_standard` 항목이 있다.
 - 실제 운영 모니터링 UI와 Telegram 발송 worker는 후속 작업이다.

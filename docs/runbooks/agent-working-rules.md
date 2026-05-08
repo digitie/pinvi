@@ -8,7 +8,7 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 
 개발 단계:
 
-1. 사용자 인증/관리, 여행 계획 CRUD, Airflow 기반 데이터 수집, Telegram 알림
+1. 사용자 인증/관리, 여행 계획 CRUD, Dagster 기반 데이터 수집, Telegram 알림
 2. 지도 UX 고도화, 사용자 정의 마커, 주변 정보 제공
 3. 예산/물품 관리 등 고급 여행 계획 기능 확장
 
@@ -40,10 +40,13 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 ## 로컬 실행 환경
 
 - 저장소에서 실행하는 명령은 WSL2 Ubuntu를 최우선 실행 환경으로 한다.
-- Docker, Docker Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic migration 검증은 반드시 WSL2 Ubuntu에서 실행한다.
+- Docker, Docker Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic migration 검증은 반드시 WSL2 Ubuntu에서 실행한다.
 - Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 파일 확인, 간단한 Git 상태 확인, 문서 읽기 같은 보조 작업에만 사용한다.
 - Windows PowerShell로 한국어 문서나 skill을 읽을 때는 기본 인코딩을 가정하지 말고 `Get-Content -Encoding UTF8 -Path ...`처럼 UTF-8을 명시한다. 한글이 깨져 보이면 내용을 근거로 판단하지 말고 UTF-8로 다시 읽은 뒤 작업한다.
 - Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다.
+- 파일/문자열 검색은 PowerShell `rg.exe`를 사용하지 않는다. 이 환경에서는 권한 문제로 실패하거나 WSL `PATH`가 WindowsApps의 Codex 번들 `rg`를 먼저 잡을 수 있다.
+- 검색 명령은 Windows 경로를 뺀 WSL native ripgrep으로 실행한다: `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n '패턴' 경로"`.
+- WSL native ripgrep이 없으면 PowerShell `rg.exe`로 우회하지 말고 WSL 안에 `ripgrep`을 설치하거나, 설치가 불가능한 경우에만 `git grep`/`grep` fallback을 사용하고 그 사유를 보고한다.
 - 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
 - Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/mapplan`이다. 이 경로는 동기화 원본으로 쓰고, 검증 명령의 작업 디렉토리로 직접 쓰지 않는다.
 - 테스트, 빌드, lint, typecheck, formatter, backend test처럼 파일을 많이 읽는 검증 명령은 `/mnt/f/dev/mapplan`에서 직접 실행하지 않는다. WSL 내부 볼륨의 미러 경로 `~/tripmate-workspaces/mapplan`에서 실행한다.
@@ -64,6 +67,13 @@ Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\docs\runbooks\agent-working-rul
 Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\skills\documentation-and-adrs.ko.md'
 ```
 
+검색 예시:
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n 'Dagster|Telegram' docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
+```
+
 WSL 내부 볼륨 테스트 미러는 아래 방식으로 운용한다. 초기 생성은 필요할 때 한 번만 수행하고, 이후에는 `rsync`로 현재 작업 내용을 덮어쓴다. `.git`은 미러 안의 로컬 Git 상태를 유지하기 위해 동기화 대상에서 제외한다.
 
 ```bash
@@ -82,7 +92,7 @@ WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 
 - 인증/보안
 - DB 스키마/마이그레이션
 - 공간 질의 / 지도 로직
-- Airflow 파이프라인
+- Dagster 파이프라인
 - Telegram 발송
 - 외부 API 쿼터/캐시
 - PWA / 모바일 UX
@@ -125,7 +135,7 @@ WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 
 
 - 모든 외부 데이터셋 및 OpenAPI 사용은 `docs/data-sources.md`를 단일 기준 문서로 따른다.
 - 새로운 외부 데이터 소스를 도입할 경우 구현 전에 `docs/data-sources.md`를 먼저 업데이트한다.
-- 데이터 구조, Airflow DAG, adapter, 캐시 정책, 테스트는 `docs/data-sources.md`와 동기화되어야 한다.
+- 데이터 구조, Dagster job, adapter, 캐시 정책, 테스트는 `docs/data-sources.md`와 동기화되어야 한다.
 - 데이터 저장 정책이나 약관이 불명확한 경우 최소 저장 원칙을 적용하고 제한 사항을 문서에 명시한다.
 
 ### 공간 데이터
@@ -217,7 +227,7 @@ CI 기대치:
 
 - `apps/web/` - Next.js 프론트엔드
 - `apps/api/` - FastAPI 백엔드
-- `dags/` - Airflow DAG
+- `apps/api/app/dagster_etl/` - Dagster job/schedule 정의
 - `packages/shared/` - 공용 타입/스키마/상수
 - `infra/` - docker, reverse proxy, deployment, compose
 - `scripts/` - bootstrap, test, deploy, backup 등 헬퍼
@@ -246,9 +256,9 @@ CI 기대치:
 - typecheck: WSL2에서 `uv run mypy .`
 - test: WSL2에서 `uv run pytest`
 
-Airflow / infra:
+Dagster / infra:
 
-- 로컬 스택: WSL2에서 `cd ~/tripmate-workspaces/mapplan && docker compose up -d`
+- 로컬 스택: WSL2에서 `docker compose up -d postgres dagster`
 - 로그: WSL2에서 `docker compose logs --tail=200`
 - DB migrate: WSL2에서 저장소의 마이그레이션 명령 사용
 - deploy: `scripts/` 하위의 체크인된 스크립트를 우선 사용

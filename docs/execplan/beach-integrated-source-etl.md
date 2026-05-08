@@ -12,7 +12,8 @@
 
 - `beach_profiles`, `beach_provider_refs`, `beach_source_records`
 - `beach_observations`, `beach_index_forecasts`, `beach_water_quality_measurements`
-- `dags/beach_sources.py`
+- `apps/api/app/dagster_etl/registry.py`
+- `apps/api/app/dagster_etl/loaders.py`
 - 공개 API `/public/beaches`, `/public/beaches/map-markers`, `/public/beaches/{beach_id}`
 - 문서: `docs/data-sources/beach-sources.md`, `docs/architecture/beach-schema.md`, `docs/api/public.md`, `docs/runbooks/etl.md`
 
@@ -21,7 +22,7 @@
 - [x] 공식 API 설명/첨부문서 기준 확인
 - [x] DB migration 작성
 - [x] ETL client/loader 작성
-- [x] Airflow DAG 작성
+- [x] Dagster job/schedule 작성
 - [x] 공개 조회 API 작성
 - [x] 단위/계약 테스트 추가
 - [x] 문서 갱신

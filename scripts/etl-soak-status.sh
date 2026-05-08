@@ -43,29 +43,10 @@ run_sql() {
   "${COMPOSE[@]}" exec -T postgres psql -U tripmate -d tripmate -v ON_ERROR_STOP=1 "$@"
 }
 
-run_airflow_sql() {
-  "${COMPOSE[@]}" exec -T airflow-postgres psql -U airflow -d airflow -v ON_ERROR_STOP=1 "$@"
-}
-
 show_elapsed
 run_or_warn "Docker Compose 상태" "${COMPOSE[@]}" ps
-run_or_warn "Airflow DAG 목록" "${COMPOSE[@]}" exec -T airflow-scheduler airflow dags list
-
-run_or_warn "Airflow failed/running DAG run" run_airflow_sql <<'SQL'
-SELECT dag_id, run_id, state, start_date, end_date
-FROM dag_run
-WHERE state IN ('failed', 'running')
-ORDER BY start_date DESC NULLS LAST
-LIMIT 50;
-SQL
-
-run_or_warn "Airflow failed/up_for_retry task instance" run_airflow_sql <<'SQL'
-SELECT dag_id, task_id, run_id, state, try_number, start_date, end_date
-FROM task_instance
-WHERE state IN ('failed', 'up_for_retry')
-ORDER BY start_date DESC NULLS LAST
-LIMIT 50;
-SQL
+run_or_warn "Dagster job 목록" "${COMPOSE[@]}" exec -T dagster dagster job list -m app.dagster_etl.definitions
+run_or_warn "Dagster 최근 로그" "${COMPOSE[@]}" logs --tail=120 dagster
 
 run_or_warn "ETL 실행 로그 요약" run_sql <<'SQL'
 SELECT

@@ -16,12 +16,12 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-if [[ -z "$("${COMPOSE[@]}" ps -q airflow-scheduler)" ]]; then
-  echo "airflow-scheduler가 실행 중이 아닙니다. 먼저 scripts/odroid-docker-start.sh를 실행하세요." >&2
+if [[ -z "$("${COMPOSE[@]}" ps -q dagster)" ]]; then
+  echo "dagster가 실행 중이 아닙니다. 먼저 scripts/odroid-docker-start.sh를 실행하세요." >&2
   exit 1
 fi
 
-"${COMPOSE[@]}" exec -T airflow-scheduler bash -lc \
-  'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
+"${COMPOSE[@]}" exec -T dagster bash -lc \
+  'cd /app && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
 
 echo "Alembic migration 완료: head"

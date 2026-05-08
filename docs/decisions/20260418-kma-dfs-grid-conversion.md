@@ -22,7 +22,7 @@ TripMate는 여행 장소 좌표와 행정구역 중심 좌표를 날씨 수집 
 
 ## 결과/영향
 
-- 날씨 adapter와 Airflow DAG는 외부 geocoder 저장 없이 장소 좌표를 기상청 격자로 변환할 수 있다.
+- 날씨 adapter와 Dagster job은 외부 geocoder 저장 없이 장소 좌표를 기상청 격자로 변환할 수 있다.
 - 행정구역 중심좌표 → 격자 mapping table은 이 유틸을 사용해 생성할 수 있다.
 - 중기예보 권역 mapping은 아직 DS-004의 남은 보완 항목이다.
 

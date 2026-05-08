@@ -6,7 +6,7 @@
 검증 가능하고, 회귀에 강하며, 리뷰하기 쉬운 변경을 만든다.
 
 ## 실행 환경 원칙
-- backend test, DB integration test, geospatial test, ETL/DAG test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
+- backend test, DB integration test, geospatial test, ETL/Dagster job test, Alembic migration 검증은 WSL2 Ubuntu에서 실행한다.
 - PostgreSQL/PostGIS와 Docker Compose가 필요한 검증은 Windows PowerShell이 아니라 WSL2에서 실행한다.
 - 최종 요약에는 실행 명령과 함께 WSL2에서 실행했는지 명시한다.
 
@@ -15,7 +15,7 @@
    - UI 전용
    - API 전용
    - DB / migration
-   - ETL / DAG
+   - ETL / Dagster job
    - 크로스스택 흐름
 2. 테스트 케이스를 먼저 정리한다.
 3. 가장 좁은 테스트부터 추가한다.

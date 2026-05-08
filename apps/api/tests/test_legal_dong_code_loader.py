@@ -171,6 +171,40 @@ def test_download_latest_legal_dong_code_csv_uses_data_go_content_url(tmp_path: 
     assert result.file_path.read_bytes() == csv_bytes
 
 
+def test_download_latest_legal_dong_code_csv_retries_transient_connection_reset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csv_bytes = _data_go_csv_text(
+        [("1100000000", "서울특별시", "", "", "", "11", "1988-04-23", "", "")]
+    ).encode()
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            raise httpx.ConnectError("[Errno 104] Connection reset by peer")
+        if str(request.url) == DATA_GO_LEGAL_DONG_PAGE_URL:
+            return httpx.Response(
+                200,
+                text=(
+                    '<script type="application/ld+json">'
+                    '{"contentUrl":"https://www.data.go.kr/cmm/cmm/fileDownload.do?'
+                    'atchFileId=FILE_1&fileDetailSn=1&insertDataPrcus=N"}'
+                    "</script>"
+                ),
+            )
+        return httpx.Response(200, content=csv_bytes)
+
+    monkeypatch.setattr("app.etl.vworld.legal_dong_code_loader.time.sleep", lambda _: None)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    result = download_latest_legal_dong_code_csv(tmp_path, client=client)
+
+    assert calls.count(DATA_GO_LEGAL_DONG_PAGE_URL) == 2
+    assert result.file_path.read_bytes() == csv_bytes
+
+
 def test_download_latest_legal_dong_code_csv_uses_service_key_without_leaking_it(
     tmp_path: Path,
 ) -> None:

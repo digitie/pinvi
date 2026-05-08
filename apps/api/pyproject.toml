@@ -9,6 +9,8 @@ description = "FastAPI backend for TripMate"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.17.0",
+  "dagster>=1.13.0,<2",
+  "dagster-webserver>=1.13.0,<2",
   "fastapi>=0.124.0",
   "geoalchemy2>=0.18.0",
   "httpx>=0.28.0",
@@ -42,6 +44,9 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "live: tests that call real external data providers and require explicit opt-in",
+]
 
 [tool.mypy]
 python_version = "3.12"

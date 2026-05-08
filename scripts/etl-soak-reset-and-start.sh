@@ -9,8 +9,8 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/etl-soak-reset-and-start.sh --yes [--duration-hours 6] [--check-interval-minutes 10]
 
-로컬/검증용 Docker volume을 삭제하고 TripMate DB, Airflow DB를 새로 만든 뒤
-migration, 로컬 기준 파일 적재, Airflow DAG trigger를 수행한다.
+로컬/검증용 Docker volume을 삭제하고 TripMate DB와 Dagster 런타임을 새로 만든 뒤
+migration, 로컬 기준 파일 적재, Dagster job trigger를 수행한다.
 운영 DB에서 실행하지 않는다.
 USAGE
 }
@@ -42,10 +42,9 @@ done
 
 cd "${ROOT_DIR}"
 
-export AIRFLOW_UID="${AIRFLOW_UID:-$(id -u)}"
 export TRIPMATE_ETL_CONFIG_PATH="${TRIPMATE_ETL_CONFIG_PATH:-/opt/tripmate/config/etl-datasets.soak.json}"
 
-mkdir -p .tmp/airflow-downloads .tmp/airflow-logs "${SOAK_DIR}"
+mkdir -p .tmp/dagster-downloads .tmp/dagster-logs "${SOAK_DIR}"
 
 if [[ ! -f .env ]]; then
   echo ".env 파일이 없습니다. API 인증키를 저장한 뒤 다시 실행하세요." >&2
@@ -59,9 +58,9 @@ for key in TRIPMATE_DATA_GO_SERVICE_KEY TRIPMATE_OPINET_API_KEY TRIPMATE_EXPRESS
   fi
 done
 
-echo "Docker volume을 초기화하고 soak용 Airflow stack을 시작합니다."
+echo "Docker volume을 초기화하고 soak용 Dagster stack을 준비합니다."
 "${COMPOSE[@]}" down -v --remove-orphans
-"${COMPOSE[@]}" up -d --build postgres airflow-postgres airflow-redis airflow-init
+"${COMPOSE[@]}" up -d --build postgres
 
 wait_for_healthy() {
   local service="$1"
@@ -111,22 +110,19 @@ wait_for_completed() {
 }
 
 wait_for_healthy postgres
-wait_for_healthy airflow-postgres
-wait_for_healthy airflow-redis
-wait_for_completed airflow-init
 
 echo "Alembic migration을 빈 DB에 적용합니다."
-"${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
-  'cd /opt/tripmate/apps/api && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
+"${COMPOSE[@]}" run --rm --no-deps dagster bash -lc \
+  'cd /app && python -c "from alembic.config import main; main(argv=[\"upgrade\", \"head\"])"'
 
 LEGAL_CODE_CSV="$(find "${ROOT_DIR}/dataset" -maxdepth 1 -type f -name '*법정동코드*.csv' | sort | tail -n 1 || true)"
 if [[ -n "${LEGAL_CODE_CSV}" ]]; then
   LEGAL_CODE_CONTAINER_PATH="/opt/tripmate/dataset/$(basename "${LEGAL_CODE_CSV}")"
   echo "법정동코드 기준 CSV를 적재합니다: $(basename "${LEGAL_CODE_CSV}")"
-  "${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
-    "cd /opt/tripmate/apps/api && python -m app.cli.legal_dong_code '${LEGAL_CODE_CONTAINER_PATH}'"
+  "${COMPOSE[@]}" run --rm --no-deps dagster bash -lc \
+    "cd /app && python -m app.cli.legal_dong_code '${LEGAL_CODE_CONTAINER_PATH}'"
 else
-  echo "dataset/ 하위에서 법정동코드 CSV를 찾지 못했습니다. legal_dong_code_standard DAG 다운로드에 의존합니다." >&2
+  echo "dataset/ 하위에서 법정동코드 CSV를 찾지 못했습니다. legal_dong_code_standard Dagster job 다운로드에 의존합니다." >&2
 fi
 
 VWorld_ZIPS=(
@@ -136,19 +132,16 @@ VWorld_ZIPS=(
 )
 if [[ -f "${ROOT_DIR}/dataset/N3A_G0010000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0100000.zip" && -f "${ROOT_DIR}/dataset/N3A_G0110000.zip" ]]; then
   echo "VWorld 행정경계 SHP ZIP 3종을 적재합니다."
-  "${COMPOSE[@]}" run --rm --no-deps airflow-scheduler bash -lc \
-    "cd /opt/tripmate/apps/api && python -m app.cli.vworld_boundary ${VWorld_ZIPS[*]}"
+  "${COMPOSE[@]}" run --rm --no-deps dagster bash -lc \
+    "cd /app && python -m app.cli.vworld_boundary ${VWorld_ZIPS[*]}"
 else
   echo "dataset/ 하위에서 VWorld SHP ZIP 3종을 모두 찾지 못했습니다. 경계 기반 ETL 일부가 빈 결과가 될 수 있습니다." >&2
 fi
 
-echo "Migration과 기준 파일 적재가 끝난 뒤 Airflow scheduler/worker를 시작합니다."
-"${COMPOSE[@]}" up -d airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker
+echo "Migration과 기준 파일 적재가 끝난 뒤 Dagster UI/daemon을 시작합니다."
+"${COMPOSE[@]}" up -d dagster
 
-wait_for_healthy airflow-webserver
-wait_for_healthy airflow-scheduler
-wait_for_healthy airflow-dag-processor
-wait_for_healthy airflow-worker
+wait_for_healthy dagster
 
 date -u +%s > "${SOAK_DIR}/started-at"
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "${SOAK_DIR}/started-at-iso"

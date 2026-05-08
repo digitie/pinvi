@@ -18,7 +18,7 @@ provider adapter 라이브러리 분리 기준은 `docs/architecture/provider-ad
 Google/Naver/Kakao 소셜 로그인 통합 기준은 `docs/integrations/social-login.md`와 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
 TripMate MCP 도구 설계는 `docs/architecture/mcp-tools.md`를 따른다.
 YouTube 국내여행 정보 수집과 Gemini 기반 장소 후보 추출 설계는 `docs/architecture/youtube-travel-intelligence.md`를 따른다.
-Airflow ETL 운영 흐름과 로그/알림 기반은 `docs/runbooks/etl.md`와 `docs/execplan/etl-runtime-and-address-ops.md`를 따른다.
+Dagster ETL 운영 흐름과 로그/알림 기반은 `docs/runbooks/etl.md`와 `docs/execplan/dagster-etl-migration.md`를 따른다.
 
 ## 현재 상태
 
@@ -39,7 +39,7 @@ apps/api
   tests/            # backend test
   pyproject.toml    # backend 의존성과 도구 설정
 infra
-  docker-compose.yml # Postgres/PostGIS와 Airflow 로컬 스택
+  docker-compose.yml # Postgres/PostGIS와 Dagster 로컬 스택
 ```
 
 루트 `package.json`은 npm workspaces 진입점으로 사용한다.
@@ -69,7 +69,8 @@ uv run alembic upgrade head
 apps/web            # Next.js + React + TypeScript + Tailwind CSS + PWA
 apps/api            # FastAPI + SQLAlchemy 2 + GeoAlchemy2
 packages/shared     # 공용 타입, API 계약, 상수
-dags                # Airflow DAG
+apps/api/app/dagster_etl
+                    # Dagster job/schedule 정의
 infra               # Docker Compose, Postgres/PostGIS, reverse proxy
 scripts             # bootstrap, test, deploy, backup/restore
 docs                # 문서, runbook, ADR, 실행 계획
@@ -80,7 +81,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 - 웹앱은 사용자 흐름, 지도 상호작용, Tailwind CSS 기반 화면 스타일링, PWA UX를 담당한다.
 - API는 인증, 인가, 여행 도메인 규칙, provider adapter, Telegram, Gemini 실행 요청을 담당한다.
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
-- Airflow는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
+- Dagster는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.
 - OpiNet 유가 조회는 pyopinet `opinet` 패키지를 감싼 backend adapter에서 수행하고,
   서비스/ETL 경계에는 TripMate 정규화 레코드만 전달한다.

@@ -7,7 +7,7 @@
 - `apps/web`: Next.js + React + TypeScript + PWA
 - `apps/api`: FastAPI + SQLAlchemy 2 + GeoAlchemy2
 - `packages/shared`: 공용 타입, API 계약, 상수
-- `dags`: Airflow 데이터 수집 DAG
+- `apps/api/app/dagster_etl`: Dagster 데이터 수집 job/schedule 정의
 - `infra`: Docker Compose, Postgres/PostGIS, reverse proxy, 운영 설정
 - `scripts`: 로컬 bootstrap, 테스트, 배포, 백업/복구
 - `docs`: 아키텍처, API, 데이터 출처, runbook, ADR, 실행 계획
@@ -20,7 +20,7 @@
 - 루트 `package.json`은 npm workspaces 진입점이며 `dev`, `build`, `lint`, `typecheck` 스크립트를 웹앱 workspace로 위임한다.
 - `README.md`, `docs/PROJECT_BRIEF.md`, `docs/architecture.md`, `docs/runbooks/local-dev.md`, 초기 ADR 문서가 있다.
 - `docs/data-sources.md`가 외부 데이터 소스, 캐시, raw/serving 저장 정책의 단일 기준 문서다.
-- 백엔드, 데이터베이스, Airflow, Docker, Playwright, 테스트 구조는 아직 없다.
+- 백엔드, 데이터베이스, Dagster, Docker, Playwright, 테스트 구조는 단계적으로 구현 중이다.
 - 웹앱 첫 화면의 깨진 한글 문구는 정리됐다.
 
 ## 3. 핵심 결정
@@ -262,20 +262,20 @@
 - 공간 질의는 PostGIS를 우선 사용한다.
 - 근사 동작이 문서와 UI에 명확히 표현된다.
 
-### Phase 6. Airflow ETL, 날씨, 유가 캐시
+### Phase 6. Dagster ETL, 날씨, 유가 캐시
 
 목표: 외부 API 반복 호출을 줄이고 저장된 지역 데이터를 우선 사용하는 데이터 파이프라인을 만든다.
 
 작업:
 
-- `dags` 구조를 추가한다.
-- Airflow용 Docker 설정을 추가한다.
+- `apps/api/app/dagster_etl` 구조를 추가한다.
+- Dagster용 Docker 설정을 추가한다.
 - 새 데이터 소스나 cache key가 필요하면 구현 전에 `docs/data-sources.md`를 먼저 갱신한다.
 - 기상청 단기/초단기 예보용 WGS84 ↔ DFS `nx`,`ny` 변환은 `pykma.wgs84_to_kma_grid()`와 `pykma.kma_grid_to_wgs84()`를 직접 사용한다.
-- 날씨 수집 DAG를 만든다.
-- 유가 수집 DAG를 만든다.
+- 날씨 수집 job을 만든다.
+- 유가 수집 job을 만든다.
 - raw 적재 테이블과 serving 테이블을 분리한다.
-- source, schedule, freshness target, retry policy, 저장 대상 테이블을 DAG 문서에 기록한다.
+- source, schedule, freshness target, retry policy, 저장 대상 테이블을 job 문서에 기록한다.
 - cache hit/miss와 수집 윈도우 로그를 남긴다.
 - `docs/runbooks/etl.md`를 작성한다.
 
@@ -284,7 +284,7 @@
 - 파서 unit test
 - 멱등성 테스트
 - stale-cache fallback 테스트
-- DAG import test
+- job import test
 - 샘플 데이터 serving query 테스트
 
 완료 조건:
@@ -507,7 +507,7 @@
 - 외부 API 쿼터 초과: timeout, backoff, quota guard, stale-cache fallback 적용.
 - Telegram 발송 실패: 실패 사유 분류, last status 저장, 검증 플로우 제공.
 - 모바일 UX 저하: Playwright 모바일 smoke와 수동 지도 대체 메뉴 제공.
-- ODROID 리소스 제약: 컨테이너 수, DB 백업, Airflow 스케줄, 로그 보존 정책을 runbook에서 제한한다.
+- ODROID 리소스 제약: 컨테이너 수, DB 백업, Dagster 스케줄, 로그 보존 정책을 runbook에서 제한한다.
 
 ## 10. 다음 구현 단위 추천
 

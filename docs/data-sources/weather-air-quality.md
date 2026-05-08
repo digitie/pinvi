@@ -1,6 +1,6 @@
 # 날씨/대기질 데이터 소스
 
-이 문서는 기상청(data.go.kr)과 AirKorea(data.go.kr) 연동을 인수인계하기 위한 상세 기준이다. 관련 구현은 `apps/api/app/etl/weather/client.py`, `apps/api/app/etl/weather/loader.py`, `dags/weather_air_quality.py`, `config/kma-mid-term-regions.json`이다.
+이 문서는 기상청(data.go.kr)과 AirKorea(data.go.kr) 연동을 인수인계하기 위한 상세 기준이다. 관련 구현은 `apps/api/app/etl/weather/client.py`, `apps/api/app/etl/weather/loader.py`, `apps/api/app/dagster_etl/registry.py`, `config/kma-mid-term-regions.json`이다.
 
 ## 공통 구현
 
@@ -30,18 +30,18 @@
 | 응답 타입 | `dataType=JSON` |
 | 공식 갱신주기 표기 | data.go.kr 페이지는 `실시간`으로 표시한다. 서비스 설명은 초단기예보 1시간, 단기예보 3시간, 조석/일출일몰/파고/수온을 제공한다고 명시한다. |
 | 확인일 | 2026-04-28 |
-| 구현 파일 | `apps/api/app/etl/weather/beach.py`, `dags/kma_beach_weather.py` |
+| 구현 파일 | `apps/api/app/etl/weather/beach.py`, `apps/api/app/dagster_etl/registry.py` |
 
 TripMate dataset과 수집 주기:
 
-| dataset | DAG | 수집 시각(KST) | 근거/패턴 |
+| dataset | job | 수집 시각(KST) | 근거/패턴 |
 | --- | --- | --- | --- |
 | `kma_beach_catalog` | `kma_beach_catalog_annual` | 매년 5월 15일 04:00 | 참고문서 ZIP의 `위경도.xlsx`를 해수욕장 시즌 전 1회 갱신한다. |
 | `kma_beach_ultra_short_forecast` | `kma_beach_ultra_short_forecast_hourly` | 6/7/8월 매시 45분 | 초단기예보 제공 간격 1시간에 맞춘다. 기준시각은 수집시각 -45분, 분은 00/30으로 내린다. |
 | `kma_beach_village_forecast` | `kma_beach_village_forecast_3hourly` | 6/7/8월 02/05/08/11/14/17/20/23시 20분 | 단기예보 3시간 발표 패턴에 맞춘다. 기준시각은 수집시각 -20분 후 최근 발표시각이다. |
 | `kma_beach_wave_height` | `kma_beach_wave_height_hourly` | 6/7/8월 매시 35분 | 관측성 파고 데이터는 `searchTime=YYYYMMDDHH00`로 직전 정시를 조회한다. |
 | `kma_beach_water_temperature` | `kma_beach_water_temperature_hourly` | 6/7/8월 매시 40분 | 관측성 수온 데이터는 `searchTime=YYYYMMDDHH00`로 직전 정시를 조회한다. |
-| `kma_beach_tide_sun` | `kma_beach_tide_sun_daily` | 6/7/8월 매일 05:10 | 조석은 활용가이드상 6~8월 제공이다. 일출/일몰은 일 단위 정보이므로 같은 일일 DAG에서 함께 수집한다. |
+| `kma_beach_tide_sun` | `kma_beach_tide_sun_daily` | 6/7/8월 매일 05:10 | 조석은 활용가이드상 6~8월 제공이다. 일출/일몰은 일 단위 정보이므로 같은 일일 job에서 함께 수집한다. |
 
 카탈로그 파일:
 
@@ -102,7 +102,7 @@ Endpoint와 요청 파라미터:
 운영 주의:
 
 - 해수욕장 날씨 API는 전국 해수욕장 수만큼 반복 호출하므로 사용자 요청마다 직접 호출하지 않는다.
-- 6~8월 외에는 기본 DAG가 동작하지 않는다. 비시즌 미리보기나 관리자 수동 재수집이 필요하면 Airflow에서 수동 trigger한다.
+- 6~8월 외에는 기본 job가 동작하지 않는다. 비시즌 미리보기나 관리자 수동 재수집이 필요하면 Dagster에서 수동 trigger한다.
 - 위치 카탈로그 다운로드는 인증키 없이 참고문서 ZIP을 받지만, 날씨 endpoint 호출은 data.go.kr service key를 외부로 전송한다.
 
 ## 기상청 단기/초단기 예보
@@ -112,7 +112,7 @@ Endpoint와 요청 파라미터:
 | 설명 URL | `https://www.data.go.kr/data/15084084/openapi.do` |
 | 서비스 | 기상청 단기예보 조회서비스 |
 | TripMate dataset | `weather_short_term` |
-| DAG | `weather_short_term_sigungu_grid` |
+| job | `weather_short_term_sigungu_grid` |
 | 수집 시각 | 30분마다 |
 | 수집 범위 | `weather_short_term_grid_mapping`의 active 시군구 대표 격자 |
 
@@ -167,9 +167,9 @@ Endpoint와 구현 URL:
 | --- | --- |
 | 설명 URL | `https://www.data.go.kr/data/15000415/openapi.do` |
 | TripMate dataset | `weather_kma_alert` |
-| DAG | `weather_kma_alert` |
+| job | `weather_kma_alert` |
 | 수집 시각 | 30분마다 |
-| 조회 window | DAG logical date 기준으로 loader 호출 시 `from_date`, `to_date`를 넘긴다. |
+| 조회 window | job logical date 기준으로 loader 호출 시 `from_date`, `to_date`를 넘긴다. |
 
 Endpoint와 요청 파라미터:
 
@@ -196,7 +196,7 @@ Endpoint와 요청 파라미터:
 | --- | --- |
 | 설명 URL | `https://www.data.go.kr/data/15059468/openapi.do` |
 | TripMate dataset | `weather_mid_term` |
-| DAG | `weather_mid_term_nationwide` |
+| job | `weather_mid_term_nationwide` |
 | 수집 시각 | 매일 06:20, 18:20 KST |
 | region 기준 | `config/kma-mid-term-regions.json` |
 
@@ -237,7 +237,7 @@ Endpoint와 요청 파라미터:
 | --- | --- |
 | 설명 URL | `https://www.data.go.kr/data/15073877/openapi.do` |
 | TripMate dataset | `air_quality_station` |
-| DAG | `air_quality_station_daily` |
+| job | `air_quality_station_daily` |
 | 수집 시각 | 매일 04:20 KST |
 | 수집 범위 | 서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주 |
 
@@ -272,7 +272,7 @@ Endpoint와 요청 파라미터:
 | --- | --- |
 | 설명 URL | `https://www.data.go.kr/data/15073861/openapi.do` |
 | TripMate dataset | `air_quality_forecast` |
-| DAG | `air_quality_forecast_daily` |
+| job | `air_quality_forecast_daily` |
 | 수집 시각 | 매일 05:15, 11:15, 17:15, 23:15 KST |
 | 수집 코드 | `PM10`, `PM25`, `O3` |
 
@@ -303,7 +303,7 @@ Endpoint와 요청 파라미터:
 | --- | --- |
 | 설명 URL | `https://www.data.go.kr/data/15073861/openapi.do` |
 | TripMate dataset | `air_quality_sido_measurement` |
-| DAG | `air_quality_sido_measurement_hourly` |
+| job | `air_quality_sido_measurement_hourly` |
 | 수집 시각 | 매시 25분 |
 
 요청 파라미터:
@@ -333,5 +333,5 @@ Endpoint와 요청 파라미터:
 
 운영 주의:
 
-- AirKorea 호출 한도는 낮게 잡고 실패 retry가 반복되면 DAG 주기를 완화한다.
+- AirKorea 호출 한도는 낮게 잡고 실패 retry가 반복되면 job 주기를 완화한다.
 - 대기질 측정값은 실시간성 데이터라 UI는 stale 표시를 해야 한다.

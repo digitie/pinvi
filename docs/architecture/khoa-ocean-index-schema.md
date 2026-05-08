@@ -120,17 +120,17 @@ unique 기준:
 - 시간대가 `"10:00~13:00, 22:00~23:00"`처럼 문자열이면 문자열 hash를 key로 쓴다.
 - 아무 시간 정보가 없으면 `all_day`로 저장한다.
 
-## Airflow DAG
+## Dagster job
 
-파일: `dags/ocean_indices.py`
+파일: `apps/api/app/dagster_etl/registry.py`
 
 - `khoa_mudflat_index_forecast_twice_daily`
 - `khoa_sea_split_index_forecast_twice_daily`
 
 공통 동작:
 
-- `TRIPMATE_KHOA_API_KEY` 또는 `TRIPMATE_DATA_GO_SERVICE_KEY`가 없으면 DAG schedule은 `None`으로 비활성화된다.
-- 수동 실행 중에도 인증키가 없으면 `AirflowSkipException`으로 skip한다.
+- `TRIPMATE_KHOA_API_KEY` 또는 `TRIPMATE_DATA_GO_SERVICE_KEY`가 없으면 job schedule은 `None`으로 비활성화된다.
+- 수동 실행 중에도 인증키가 없으면 `TripMateEtlSkip`으로 skip한다.
 - 실행 로그는 `etl_run_logs`에 남긴다.
 - retry 소진 시 관리자 알림과 권리자 Telegram 시스템 알림 outbox를 생성한다.
 
@@ -147,7 +147,7 @@ unique 기준:
 테스트 파일:
 
 - `apps/api/tests/test_khoa_ocean_index_loader.py`
-- `apps/api/tests/test_airflow_dags.py`
+- `apps/api/tests/test_dagster_etl.py`
 - `apps/api/tests/test_etl_config.py`
 - `apps/api/tests/test_model_metadata.py`
 - `apps/api/tests/test_migration_contract.py`
@@ -161,4 +161,4 @@ unique 기준:
 - 비구조화 체험 시간 문자열의 `activity_time_text`/`activity_time_key` 보존
 - SRID 4326 geometry와 GiST index
 - FK covering index
-- DAG schedule, retry, KST start date, 인증키 없는 환경의 manual schedule
+- job schedule, retry, KST start date, 인증키 없는 환경의 manual schedule

@@ -5,7 +5,7 @@
 ## 공통 원칙
 
 - 지리 범위는 대한민국으로 한정한다.
-- 사용자 화면 요청마다 외부 API를 직접 호출하지 않고, 가능한 한 Airflow ETL 또는 명시적 cache miss 흐름으로 수집한다.
+- 사용자 화면 요청마다 외부 API를 직접 호출하지 않고, 가능한 한 Dagster ETL 또는 명시적 cache miss 흐름으로 수집한다.
 - 공공데이터 raw payload는 재처리, diff, schema drift 감지를 위해 저장할 수 있다.
 - Kakao/Naver/Google 같은 일반 장소 provider 원문 전체는 장기 저장하지 않는다.
 - 앱/API/UI는 raw가 아니라 serving table 또는 내부 표준 지도 객체(`map_features`)를 우선 사용한다.
@@ -34,9 +34,9 @@
 
 ## 구현된 수집 스케줄 요약
 
-모든 cron은 KST 기준이며 값은 `config/etl-datasets.json`과 Airflow DAG가 단일 구현 기준이다.
+모든 cron은 KST 기준이며 값은 `config/etl-datasets.json`과 Dagster job/schedule이 단일 구현 기준이다.
 
-| dataset key | DAG | 주기/시각 |
+| dataset key | Dagster job | 주기/시각 |
 | --- | --- | --- |
 | `legal_dong_code_standard` | `legal_dong_code_standard_quarterly` | 2/5/8/11월 15일 04:30 |
 | `juso_road_address_korean` | `juso_monthly_address_dataset` | 매월 10-31일 04:00, 해당 월 성공분 있으면 skip |

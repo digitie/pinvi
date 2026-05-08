@@ -18,13 +18,13 @@ Accepted
 - 한국도로공사 OpenAPI 응답은 raw snapshot으로 보관할 수 있으나, 앱/API 조회는 serving 테이블만 사용한다.
 - `weather_rest_area`는 휴게소 master와 매칭하지 않는 독립 날씨 데이터로 둔다.
 - 휴게소 oil/svcs 데이터의 FK 불일치는 raw 적재를 보존하고 serving 단계에서 skip한다.
-- FK 불일치로 skip된 row는 Airflow task log와 별도 JSON Lines 로그파일에 기록한다.
+- FK 불일치로 skip된 row는 Dagster job log와 별도 JSON Lines 로그파일에 기록한다.
 
 ## 대안
 
 - Geocoder 결과를 주소 보강 데이터로 저장: 구현은 편하지만 V-WORLD 저장 정책과 충돌할 수 있다.
 - 휴게소 OpenAPI 결과를 도메인 테이블에 그대로 저장: 빠르지만 raw/serving 경계가 흐려지고 재처리/품질 검사가 어렵다.
-- oil/svcs FK 불일치 시 DAG 즉시 실패: 데이터 정합성은 강하지만 상류 데이터 일시 오류에 취약하다.
+- oil/svcs FK 불일치 시 ETL job 즉시 실패: 데이터 정합성은 강하지만 상류 데이터 일시 오류에 취약하다.
 - oil/svcs FK 불일치를 quarantine 테이블에 저장: DB에서 추적하기는 쉽지만 현재 요구 범위보다 무겁고 serving schema가 불필요하게 늘어난다.
 
 ## 결과/영향

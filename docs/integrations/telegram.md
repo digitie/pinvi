@@ -72,7 +72,7 @@ TripMate는 여행별 Telegram 알림 대상을 최대 3개까지 연결한다. 
 - 일반 권한 사용자 Telegram에는 여행 정보만 발송하고 시스템 에러/로그 정보는 포함하지 않는다.
 - 날씨, 유가, 주변 정보처럼 여행 정보에 포함되는 데이터 생성이 실패하면 해당 데이터 섹션을 생략하지 않고 사용자용 에러 메시지로 대체한다.
 - 사용자용 에러 메시지에는 dataset key, stack trace, raw response body, API key, token, 내부 로그 경로를 포함하지 않는다.
-- 관리자용 메시지에는 dataset key, DAG/run id, 실패 단계, retry 횟수, 마지막 오류 분류, stale serving 사용 여부, 내부 로그 참조 id 또는 경로를 포함할 수 있다.
+- 관리자용 메시지에는 dataset key, Dagster job/run id, 실패 단계, retry 횟수, 마지막 오류 분류, stale serving 사용 여부, 내부 로그 참조 id 또는 경로를 포함할 수 있다.
 
 ## 운영/ETL 알림
 
@@ -81,7 +81,7 @@ TripMate는 여행별 Telegram 알림 대상을 최대 3개까지 연결한다. 
 - 일반 권한 사용자 Telegram에는 운영/ETL 시스템 에러와 로그 정보를 발송하지 않는다.
 - 관리자/권리자 권한은 앱 UI가 아니라 pgAdmin 등 DB 관리 도구로 사용자 구분 필드에 부여한다.
 - 관리자 권한 사용자에게 활성 Telegram target이 없으면 Telegram 발송은 건너뛰고 관리자 페이지 알림과 실패 로그만 남긴다.
-- 운영 알림 메시지에는 dataset key, DAG/run id, 실패 단계, retry 횟수, 마지막 오류 분류, 기존 serving 사용 여부, 내부 로그 참조 id 또는 경로를 포함할 수 있다.
+- 운영 알림 메시지에는 dataset key, Dagster job/run id, 실패 단계, retry 횟수, 마지막 오류 분류, 기존 serving 사용 여부, 내부 로그 참조 id 또는 경로를 포함할 수 있다.
 - token 원문, API key, 원본 응답 body 전체는 운영 알림에 포함하지 않는다.
 
 ## 보안

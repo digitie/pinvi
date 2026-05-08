@@ -97,7 +97,7 @@ OpiNet region code와 Juso 기준 코드의 매핑 상태를 추적하는 보조
 
 ## 주기 수집 대상
 
-`fuel_lowest_station`은 사용자 요청 시 on-demand 호출하지 않는다. 사용자 수가 늘수록 provider API call이 함께 늘어나는 구조를 피하기 위해, 매핑된 전국 시군구 전체를 Airflow가 주기 수집한다.
+`fuel_lowest_station`은 사용자 요청 시 on-demand 호출하지 않는다. 사용자 수가 늘수록 provider API call이 함께 늘어나는 구조를 피하기 위해, 매핑된 전국 시군구 전체를 Dagster가 주기 수집한다.
 
 수집 대상 조건:
 

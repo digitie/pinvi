@@ -44,7 +44,7 @@ Google 문서 기준으로 중요한 제약은 다음이다.
 ```mermaid
 flowchart LR
   user["사용자/관리자"] --> orchestrator["Main AI Agent<br/>Orchestrator"]
-  scheduler["Airflow 또는 별도 스케줄러"] --> monitor["Monitoring & Media MCP"]
+  scheduler["Dagster 또는 별도 스케줄러"] --> monitor["Monitoring & Media MCP"]
   orchestrator --> monitor
   monitor --> yt["YouTube RSS / YouTube Data API"]
   orchestrator --> gemini["Gemini API<br/>YouTube URL file_uri"]

@@ -1,6 +1,6 @@
 # 관광/축제 데이터 소스
 
-이 문서는 기상청 관광코스와 전국문화축제표준데이터 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/tour/*`, `apps/api/app/etl/weather/client.py`, `dags/weather_air_quality.py`, `dags/public_cultural_festival.py`다.
+이 문서는 기상청 관광코스와 전국문화축제표준데이터 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/tour/*`, `apps/api/app/etl/weather/client.py`, `apps/api/app/dagster_etl/registry.py`다.
 
 ## 기상청 추천 관광코스 CSV
 
@@ -10,7 +10,7 @@
 | 참고 문서 | `https://www.data.go.kr/cmm/cmm/fileDownload.do?atchFileId=FILE_000000002889827&fileDetailSn=1` |
 | 원천 파일 | `기상청27_관광코스별_관광지_상세설명서.zip` 내부 `기상청27_관광코스별_관광지_지점정보.csv` |
 | 구현 방식 | 자동 다운로드 없음. `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`에 배치한 CSV/ZIP을 적재 |
-| DAG | `kma_recommended_tour_course_annual` |
+| job | `kma_recommended_tour_course_annual` |
 | 수집 시각 | 매년 3월 1일 05:00 KST |
 
 CSV 출력 필드:
@@ -89,7 +89,7 @@ category 정규화:
 | base URL | `https://api.data.go.kr/openapi` |
 | 구현 URL | `https://api.data.go.kr/openapi/tn_pubr_public_cltur_fstvl_api` |
 | TripMate dataset | `public_cultural_festival` |
-| DAG | `public_cultural_festival_quarterly` |
+| job | `public_cultural_festival_quarterly` |
 | 공식 갱신 | 분기. 공공데이터포털 확인일 2026-04-28 기준 `갱신주기: 분기`, `수정일: 2026-02-10` |
 | 병합 패턴 | 포털 안내상 개별 기관 데이터는 매월 초 전국 단위로 병합되며, 시점에 따라 일부 시차가 있다 |
 | 수집 시각 | 2/5/8/11월 12일 04:35 KST |

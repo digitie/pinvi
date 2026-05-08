@@ -10,7 +10,7 @@
 - Maki icon asset을 `apps/web/public/maki/`에 둔다.
 - provider adapter 라이브러리 분리 기준을 문서화한다.
 - 한국천문연구원 특일/음양력/출몰시각 API 설계를 문서화한다.
-- data.go.kr 전국문화축제표준데이터 raw/serving DB, loader, DAG, public API를 구현한다.
+- data.go.kr 전국문화축제표준데이터 raw/serving DB, loader, Dagster job, public API를 구현한다.
 - `/login` 사용자 로그인 화면을 만든다.
 
 ## 제외 범위
@@ -27,7 +27,7 @@
 2. Maki icon asset 다운로드
 3. 축제 raw/serving SQLAlchemy 모델과 Alembic migration 추가
 4. 축제 ETL client/loader 구현
-5. Airflow DAG와 ETL config 연결
+5. Dagster job/schedule와 ETL config 연결
 6. public monthly festival API 추가
 7. `/login` 화면 구현
 8. backend test, migration upgrade, frontend typecheck/lint/build 검증

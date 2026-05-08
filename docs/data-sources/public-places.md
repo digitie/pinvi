@@ -1,6 +1,6 @@
 # 공공 장소 데이터 소스
 
-이 문서는 공공데이터포털/LocalData 기반 표준 장소 적재 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/places/public_data_places.py`, `dags/public_places.py`, `docs/architecture/public-place-etl-schema.md`, `docs/architecture/place-schema.md`다.
+이 문서는 공공데이터포털/LocalData 기반 표준 장소 적재 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/places/public_data_places.py`, `apps/api/app/dagster_etl/registry.py`, `docs/architecture/public-place-etl-schema.md`, `docs/architecture/place-schema.md`다.
 
 ## 공통 적재 방식
 
@@ -37,7 +37,7 @@
 
 - Go Camping, 전국문화축제표준데이터, 전국관광안내소표준데이터, 전국휴양림표준데이터, 전국박물관미술관정보표준데이터는 모두 `TRIPMATE_DATA_GO_SERVICE_KEY`를 사용한다.
 - 2026-04-29에 운영자가 제공한 data.go.kr 인증키를 로컬 `.env`와 `apps/api/.env`에 반영했다. 인증키 원문은 Git, 문서, 로그에 저장하지 않는다.
-- 표준 OpenAPI는 정상 키에서도 간헐적 TCP reset이 관측됐다. 구현은 요청 단위 짧은 retry 후 실패를 Airflow retry로 넘긴다.
+- 표준 OpenAPI는 정상 키에서도 간헐적 TCP reset이 관측됐다. 구현은 요청 단위 짧은 retry 후 실패를 Dagster retry로 넘긴다.
 
 ## `public_arboretum_basic`
 
@@ -46,7 +46,7 @@
 | 설명 URL | `https://www.data.go.kr/data/15109934/fileData.do?recommendDataYn=Y` |
 | source mode | `data_go_file_page` |
 | 구현 다운로드 | 설명 페이지 HTML의 `contentUrl` |
-| DAG | `public_arboretum_basic_annual` |
+| job | `public_arboretum_basic_annual` |
 | 공식 갱신 | 저빈도 파일 데이터 |
 | TripMate 수집 | 매년 7월 5일 04:05 KST |
 | override | `TRIPMATE_ARBORETUM_BASIC_CSV_PATH` 또는 `TRIPMATE_ARBORETUM_BASIC_CSV_URL`이 있으면 그 값을 우선 사용 |
@@ -90,7 +90,7 @@
 | 설명 URL | `https://www.data.go.kr/data/15013112/standard.do` |
 | 구현 URL | `https://api.data.go.kr/openapi/tn_pubr_public_trsmic_api` |
 | source mode | `data_go_standard_api` |
-| DAG | `public_tourist_information_center_annual` |
+| job | `public_tourist_information_center_annual` |
 | 공식 갱신 | 연간. 개별 기관 파일은 월초 병합으로 시차가 있을 수 있음 |
 | TripMate 수집 | 매년 7월 5일 04:10 KST |
 
@@ -143,7 +143,7 @@
 | 설명 URL | `https://www.data.go.kr/data/15013111/standard.do` |
 | 구현 URL | `https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api` |
 | source mode | `data_go_standard_api` |
-| DAG | `public_recreation_forest_semiannual` |
+| job | `public_recreation_forest_semiannual` |
 | 공식 갱신 | 반기 |
 | TripMate 수집 | 1/7월 15일 04:15 KST |
 
@@ -186,7 +186,7 @@
 | 설명 URL | `https://www.data.go.kr/data/15017323/standard.do` |
 | 구현 URL | `https://api.data.go.kr/openapi/tn_pubr_public_museum_artgr_info_api` |
 | source mode | `data_go_standard_api` |
-| DAG | `public_museum_art_gallery_annual` |
+| job | `public_museum_art_gallery_annual` |
 | 공식 갱신 | 연간 |
 | TripMate 수집 | 매년 7월 15일 04:25 KST |
 
@@ -231,7 +231,7 @@
 | 설명 URL | `https://www.data.go.kr/data/15101933/openapi.do` |
 | 구현 URL | `http://apis.data.go.kr/B551011/GoCamping/basedList` |
 | source mode | `go_camping_api` |
-| DAG | `public_campground_daily` |
+| job | `public_campground_daily` |
 | 공식 갱신 | 실시간 |
 | TripMate 수집 | 매일 04:45 KST |
 

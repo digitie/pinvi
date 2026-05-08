@@ -1,6 +1,6 @@
 # 주소/행정구역 데이터 소스
 
-이 문서는 Juso 주소 DB, data.go.kr 법정동코드, V-WORLD 행정경계 SHP를 인수인계하기 위한 상세 기준이다. 관련 구현은 `apps/api/app/etl/juso/*`, `apps/api/app/etl/vworld/*`, `dags/juso_monthly_address.py`, `dags/legal_dong_code_standard.py`, `apps/api/app/cli/vworld_boundary.py`다.
+이 문서는 Juso 주소 DB, data.go.kr 법정동코드, V-WORLD 행정경계 SHP를 인수인계하기 위한 상세 기준이다. 관련 구현은 `apps/api/app/etl/juso/*`, `apps/api/app/etl/vworld/*`, `apps/api/app/dagster_etl/registry.py`, `apps/api/app/cli/vworld_boundary.py`다.
 
 ## 전체 관계
 

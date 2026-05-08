@@ -23,7 +23,7 @@
 | 모델 | `apps/api/app/models/beach.py` |
 | 마이그레이션 | `apps/api/alembic/versions/20260428_0020_beach_domain_tables.py` |
 | ETL loader/client | `apps/api/app/etl/beach/sources.py` |
-| Airflow DAG | `dags/beach_sources.py` |
+| Dagster job | `apps/api/app/dagster_etl/registry.py` |
 | 공개 조회 API | `apps/api/app/api/routes/public.py` |
 | 응답 스키마 | `apps/api/app/schemas/public.py` |
 | 테스트 | `apps/api/tests/test_beach_source_loader.py` |
@@ -189,7 +189,7 @@ Query parameter:
 | --- | --- | --- | --- |
 | `serviceKey` | 필수 | 환경변수 | KHOA 인증키. 저장 시 `***`로 마스킹. 전송 시 decoded key는 URL encoding하고, 이미 percent-encoding된 key는 이중 인코딩하지 않는다. |
 | `type` | 필수 | `json` | `json` 또는 `xml` |
-| `reqDate` | 선택 | `YYYYMMDD` | 요청일시. DAG logical date를 사용 |
+| `reqDate` | 선택 | `YYYYMMDD` | 요청일시. job logical date를 사용 |
 | `pageNo` | 선택 | `1` | 기본 1 |
 | `numOfRows` | 선택 | `300` | 공식 최대 300 |
 | `include` | 선택 | 미사용 | provider 필터 |
@@ -214,10 +214,10 @@ Query parameter:
 
 ### 운영 주의
 
-- 공식 설명상 현재 일자 기준 7일 예측정보를 제공한다. “오늘 기준 앞으로 1년” 범위 전체를 한 번에 받는 API가 아니라, 앞으로 1년 동안 Airflow가 갱신 주기에 맞춰 계속 수집하는 방식이다.
-- 포털 갱신주기는 실시간이지만 지도/여행 계획용 캐시 데이터이므로 기본 DAG는 하루 2회만 호출한다.
+- 공식 설명상 현재 일자 기준 7일 예측정보를 제공한다. “오늘 기준 앞으로 1년” 범위 전체를 한 번에 받는 API가 아니라, 앞으로 1년 동안 Dagster가 갱신 주기에 맞춰 계속 수집하는 방식이다.
+- 포털 갱신주기는 실시간이지만 지도/여행 계획용 캐시 데이터이므로 기본 job는 하루 2회만 호출한다.
 - 갯벌체험지수와 바다갈라짐 체험지수는 해수욕장 통합 테이블이 아니라 `ocean_activity_index_*` 테이블에 저장한다. 상세 스키마는 `docs/architecture/khoa-ocean-index-schema.md`를 참고한다.
-- 2026-04-30 운영 검증에서 `fcstBeachv2`는 `TRIPMATE_KHOA_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`, `reqDate` 지정/미지정 모두 HTTP 500을 반환했다. 2026-04-30 22:36 KST에 `TRIPMATE_KHOA_API_KEY`를 명시적으로 percent-encoded query 값으로 만들어 다시 실행해도 HTTP 500 `Unexpected errors`였다. `SERVICE KEY IS NOT REGISTERED`가 아니라 provider gateway 오류/승인 상태 문제로 분류하고, endpoint가 정상화되면 같은 DAG를 재실행한다.
+- 2026-04-30 운영 검증에서 `fcstBeachv2`는 `TRIPMATE_KHOA_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`, `reqDate` 지정/미지정 모두 HTTP 500을 반환했다. 2026-04-30 22:36 KST에 `TRIPMATE_KHOA_API_KEY`를 명시적으로 percent-encoded query 값으로 만들어 다시 실행해도 HTTP 500 `Unexpected errors`였다. `SERVICE KEY IS NOT REGISTERED`가 아니라 provider gateway 오류/승인 상태 문제로 분류하고, endpoint가 정상화되면 같은 job를 재실행한다.
 
 ## 3. 해양수산부 해수욕장 수질적합 여부 서비스
 
@@ -248,7 +248,7 @@ Query parameter:
 | `numOfRows` | 선택 | `300` | 페이지 크기 |
 | `resultType` | 선택 | `json` | 기본은 XML이나 구현은 JSON 사용 |
 | `SIDO_NM` | 필수 | `부산`, `인천` 등 | 시도명 |
-| `RES_YEAR` | 필수 | DAG logical date 연도와 직전 연도 | 조사연도 |
+| `RES_YEAR` | 필수 | job logical date 연도와 직전 연도 | 조사연도 |
 
 수집 시도명 목록:
 
@@ -331,9 +331,9 @@ Query parameter:
 - `weather_beach_location.map_feature_id`가 있으면 `beach_profiles.map_feature_id`에 보존한다.
 - 공개 API는 `beach_profiles.map_feature_id`로 `weather_serving_beach`의 최신 category 값을 함께 반환한다.
 
-## Airflow DAG와 스케줄
+## Dagster job와 스케줄
 
-| dataset key | DAG | 주기 | 근거 |
+| dataset key | job | 주기 | 근거 |
 | --- | --- | --- | --- |
 | `khoa_beach_observation` | `khoa_beach_observation_hourly` | 매시 20분 | KHOA 수정주기 `상시`, 356건×24회 = 10,000건/일 미만 |
 | `khoa_beach_index_forecast` | `khoa_beach_index_forecast_twice_daily` | 매일 06:30, 18:30 | data.go.kr gateway KHOA v2 API. 포털 갱신주기는 실시간이나 캐시 정책상 하루 2회 |
@@ -355,6 +355,6 @@ Query parameter:
 
 - KHOA 생활해양예보지수 v2 API는 포털 quota가 충분하지만 사용자 화면 요청마다 직접 호출하지 않는다. 해수욕/갯벌/바다갈라짐 지수는 하루 2회 DB 캐시를 기본으로 한다.
 - MOF 두 API는 포털 화면과 첨부문서의 갱신주기 표기가 다르다. 현재는 첨부문서의 `년 1회`를 신뢰한다.
-- 수질 API는 시즌 전 현재 연도 데이터가 비어 있을 수 있다. Airflow는 현재 연도와 직전 연도를 함께 수집하고, 공개 API는 조사일자 기준 최신 row를 보여준다.
+- 수질 API는 시즌 전 현재 연도 데이터가 비어 있을 수 있다. Dagster는 현재 연도와 직전 연도를 함께 수집하고, 공개 API는 조사일자 기준 최신 row를 보여준다.
 - Juso 도로명주소 serving table이 비어 있으면 도로명주소코드 매핑은 0건이 정상이다. Juso 적재 후 해수욕장 ETL을 다시 실행한다.
-- 별도 사용자 지시 전까지 MCP 구현은 하지 않는다. 해수욕장 API 수집은 Airflow ETL로만 유지한다.
+- 별도 사용자 지시 전까지 MCP 구현은 하지 않는다. 해수욕장 API 수집은 Dagster ETL로만 유지한다.

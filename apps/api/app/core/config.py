@@ -24,7 +24,8 @@ class Settings(BaseSettings):
         "http://localhost:3001",
         "http://127.0.0.1:3001",
     ]
-    airflow_download_dir: str = ".tmp/airflow-downloads"
+    dagster_download_dir: str = ".tmp/dagster-downloads"
+    dagster_log_dir: str = ".tmp/dagster-logs"
     etl_config_path: str = "config/etl-datasets.json"
     kma_mid_term_region_config_path: str = "config/kma-mid-term-regions.json"
     data_go_service_key: str | None = None
