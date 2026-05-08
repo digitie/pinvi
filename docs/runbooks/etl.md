@@ -111,6 +111,12 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose --env-file .env -f 
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-reset-and-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
 ```
 
+현재 터미널을 점유하지 않고 백그라운드로 시작하려면 아래 wrapper를 사용한다. 이 wrapper는 이전 soak marker를 지우고 `reset-start.log`, `monitor.log`, pid 파일을 `.tmp/etl-soak/`에 남긴다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-background-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
+```
+
 상태 확인:
 
 ```bash
