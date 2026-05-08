@@ -24,6 +24,13 @@ TRIPMATE_EXPRESSWAY_API_KEY=...
 
 ## 시작
 
+먼저 Docker/OS/.env/디스크/Compose 구성을 점검한다. 이 명령은 secret 값을 펼친 compose config 전체를 출력하지 않고 service 이름만 확인한다.
+
+```bash
+cd /opt/tripmate
+scripts/odroid-docker-doctor.sh
+```
+
 ODROID에서 직접 실행:
 
 ```bash
@@ -38,6 +45,13 @@ scripts/odroid-docker-start.sh
 - Ubuntu라면 24.04 기준과 다른 버전일 때 경고한다.
 - `.tmp/dagster-downloads`, `.tmp/dagster-logs`, `.tmp/etl-soak`, `.tmp/backups`, `dataset/` 디렉터리를 만든다.
 - `infra/docker-compose.yml`의 Postgres/PostGIS와 `dagster` service를 빌드/기동한다.
+- Postgres와 Dagster가 healthy/running 상태가 될 때까지 기다리고, 실패하면 최근 로그를 출력한다.
+
+Dagster UI 기본 host port:
+
+```text
+http://localhost:23000
+```
 
 ## Migration
 
@@ -91,6 +105,25 @@ scripts/etl-soak-status.sh
 ```
 
 `scripts/etl-soak-status.sh`는 이름은 soak지만 앱 DB의 ETL 실행 로그와 Dagster service 상태를 함께 조회하므로 운영 점검에도 쓸 수 있다. 단, 6시간 soak 경과 marker가 없는 경우 해당 줄은 무시한다.
+
+## 관리자 화면 확인
+
+운영 포트/reverse proxy 기준이 확정되기 전까지 관리자 API/Web은 `infra/docker-compose.yml`의 `admin` profile로만 임시 기동한다. 이 profile은 같은 Postgres를 보므로 ETL 적재 데이터가 관리자 데이터 브라우저에 보이는지 확인할 수 있다.
+
+```bash
+cd /opt/tripmate
+scripts/admin-etl-data-smoke-test.sh --keep-running
+```
+
+기본 확인 주소:
+
+```text
+admin web: http://127.0.0.1:13082/admin/login
+api health: http://127.0.0.1:18082/health
+dagster: http://127.0.0.1:23000
+```
+
+ODROID에서는 API/Web/Dagster를 장시간 동시에 띄우면 CPU와 I/O 여유가 줄어든다. 데이터 확인이 끝난 뒤 계속 서비스할 목적이 아니라면 `docker compose -f infra/docker-compose.yml stop web api && docker compose -f infra/docker-compose.yml rm -f web api`로 관리자 profile service만 정리한다.
 
 ## 후속 보완
 

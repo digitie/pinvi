@@ -11,7 +11,9 @@ TripMate 앱 컨테이너 검증은 WSL2 Ubuntu에서 실행한다. Windows Powe
 - `apps/api/Dockerfile`: FastAPI API 이미지.
 - `apps/web/Dockerfile`: Next.js production 웹 이미지.
 - `infra/docker-compose.app.yml`: API, Web, PostGIS 앱 스택.
+- `infra/docker-compose.yml`: ETL Postgres/Dagster stack. `admin` profile을 켜면 같은 ETL DB를 보는 API/Web 관리자 화면을 추가로 띄운다.
 - `scripts/docker-app-smoke-test.sh`: 이미지 빌드, DB migration, API/Web smoke 테스트 자동화.
+- `scripts/admin-etl-data-smoke-test.sh`: ETL DB에 적재된 데이터를 관리자 API/Web에서 조회할 수 있는지 확인한다.
 - `.dockerignore`: 루트 build context에서 `.next`, `node_modules`, `.venv`, `.tmp`, `dataset` 등을 제외한다.
 - `apps/api/.dockerignore`: API 이미지 build context에서 로컬 가상환경과 테스트 캐시를 제외한다.
 
@@ -80,6 +82,26 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh -
 7. `GET /admin/login` 웹 응답을 확인한다.
 8. 기본 관리자 계정으로 `POST /admin/auth/login`을 호출한다.
 9. 관리자 cookie로 `GET /admin/datasets`를 호출하고 기본 페이지 크기와 제외 테이블 정책을 확인한다.
+
+## ETL DB 관리자 데이터 smoke
+
+ETL soak 후 관리자 페이지가 실제 ETL DB를 보는지 확인할 때는 별도 smoke DB가 아니라 `infra/docker-compose.yml`의 Postgres를 그대로 사용한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/admin-etl-data-smoke-test.sh --keep-running"
+```
+
+검증 항목:
+
+- `postgres` service health
+- `api`, `web` service build/start
+- `GET /admin/login` 웹 응답
+- 기본 관리자 로그인 API
+- `GET /admin/datasets`에서 ETL 테이블 노출 및 `users`, `sessions` 제외
+- `GET /admin/datasets/etl_run_logs/rows` row 조회
+- 적재 완료 후에는 `etl_run_logs`와 하나 이상의 ETL serving/source table row count가 0보다 큰지 확인
+
+초기 migration만 확인하는 상황에서는 `--allow-empty`를 붙인다. 검증 후 컨테이너를 남기지 않으려면 `--keep-running`을 빼면 되며, 이때 `api`/`web`만 정리하고 ETL Postgres/Dagster는 유지한다.
 
 ## 수동 명령
 

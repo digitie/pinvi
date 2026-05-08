@@ -117,6 +117,12 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-reset-and-start.s
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-status.sh"
 ```
 
+10분 단위 strict 모니터:
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-monitor.sh --duration-hours 6 --check-interval-minutes 10 --strict"
+```
+
 수동 실행:
 
 ```bash
@@ -138,10 +144,18 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 
 - 이 스크립트는 DB를 삭제하므로 운영 DB에서 사용하지 않는다.
 - 6시간보다 긴 주기는 검증용 config에서 1시간 이내로 낮춘다.
-- KHOA 해수욕지수, 갯벌체험지수, 바다갈라짐 체험지수는 하루 2회 quota라 검증 중에도 12시간 주기를 유지하고 retry를 0으로 둔다.
+- KHOA 해수욕지수, 갯벌체험지수, 바다갈라짐 체험지수도 soak config에서는 1시간 이내로 낮춘다. quota 소진 위험이 있으면 `TRIPMATE_KHOA_API_KEY`를 빼서 schedule 생성을 막고 수동 실행 결과만 확인한다.
 - AirKorea 일 500회 제한은 운영 config 기준으로 설계했다. retry가 반복되면 제한을 넘을 수 있으므로 job 일시정지 또는 주기 완화를 먼저 검토한다.
 - `weather_short_term`은 시군구 대표 격자 264개와 endpoint 3개를 호출하므로 한 번에 약 800회 요청이 발생한다. soak config에서는 KMA HTTP 429를 줄이기 위해 매시 25분 1회로 제한한다.
 - 기상청 관광코스 파일 경로 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 관광코스 job skip은 정상 상태다.
+
+관리자 페이지가 ETL DB를 제대로 보는지 확인하려면 같은 compose stack의 optional admin profile을 사용한다.
+
+```bash
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/admin-etl-data-smoke-test.sh --keep-running"
+```
+
+이 스크립트는 `infra/docker-compose.yml`의 `postgres`를 그대로 쓰며 `api`, `web` service만 admin profile로 추가 기동한다. 기본 관리자 계정으로 로그인 API를 호출하고, `/admin/datasets`, `/admin/datasets/etl_run_logs/rows`, `/admin/login` 웹 응답을 확인한다. 검증 후 브라우저에서는 `http://127.0.0.1:13082/admin/login`과 `http://127.0.0.1:23000`을 같이 확인한다.
 
 장시간 검증 중 10분 단위로 확인할 항목:
 

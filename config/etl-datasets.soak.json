@@ -185,7 +185,7 @@
       "freshness_target_minutes": 360
     },
     "khoa_beach_index_forecast": {
-      "schedule": "30 */12 * * *",
+      "schedule": "30 * * * *",
       "retry_interval_seconds": 600,
       "retry_max_attempts": 0,
       "failure_admin_notification_enabled": true,
@@ -193,7 +193,7 @@
       "freshness_target_minutes": 720
     },
     "khoa_mudflat_index_forecast": {
-      "schedule": "40 */12 * * *",
+      "schedule": "40 * * * *",
       "retry_interval_seconds": 600,
       "retry_max_attempts": 0,
       "failure_admin_notification_enabled": true,
@@ -201,7 +201,7 @@
       "freshness_target_minutes": 720
     },
     "khoa_sea_split_index_forecast": {
-      "schedule": "50 */12 * * *",
+      "schedule": "50 * * * *",
       "retry_interval_seconds": 600,
       "retry_max_attempts": 0,
       "failure_admin_notification_enabled": true,
