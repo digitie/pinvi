@@ -60,6 +60,8 @@
 - 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경(WSL2/Windows)을 보고한다.
 - 유사한 실수가 반복되면 원인과 재발방지 기준을 관련 문서/runbook/skill에 남긴다.
 - Docker, Compose, PostgreSQL/PostGIS, Airflow, backend test, Alembic 검증은 WSL2에서 실행한다.
+- WSL2 테스트/검증은 NTFS 경로(`/mnt/f/dev/mapplan`)에서 직접 실행하지 않고 WSL 내부 볼륨의 미러(`~/tripmate-workspaces/mapplan`)에서 실행한다.
+- 테스트/검증 명령 전에는 현재 프로젝트 디렉토리의 변경을 WSL 미러로 동기화하고, 명령이 끝날 때마다 WSL 미러의 변경을 현재 프로젝트 디렉토리로 다시 복사한다.
 - Windows PowerShell로 한국어 문서를 읽을 때는 깨짐 방지를 위해 `Get-Content -Encoding UTF8` 또는 동등한 UTF-8 명시 옵션을 사용한다.
 - 보안/인증/DB/공간/Airflow/Telegram/외부 API/PWA/Gemini 변경은 관련 문서와 모듈 경계를 먼저 읽는다.
 - 제품 의사결정이 저장소에서 추론 불가능할 때만 멈추고 묻고, 그 외에는 안전한 가정을 문서에 남긴다.

@@ -45,13 +45,16 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 - Windows PowerShell로 한국어 문서나 skill을 읽을 때는 기본 인코딩을 가정하지 말고 `Get-Content -Encoding UTF8 -Path ...`처럼 UTF-8을 명시한다. 한글이 깨져 보이면 내용을 근거로 판단하지 말고 UTF-8로 다시 읽은 뒤 작업한다.
 - Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
-- WSL2 경로는 현재 저장소 기준 `/mnt/f/dev/mapplan`을 기본으로 사용한다.
+- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/mapplan`이다. 이 경로는 동기화 원본으로 쓰고, 검증 명령의 작업 디렉토리로 직접 쓰지 않는다.
+- 테스트, 빌드, lint, typecheck, formatter, backend test처럼 파일을 많이 읽는 검증 명령은 `/mnt/f/dev/mapplan`에서 직접 실행하지 않는다. WSL 내부 볼륨의 미러 경로 `~/tripmate-workspaces/mapplan`에서 실행한다.
+- 검증 명령 전에는 현재 프로젝트 디렉토리(`/mnt/f/dev/mapplan`)의 내용을 WSL 미러로 동기화하고, 명령이 완료될 때마다 WSL 미러의 변경 내용을 현재 프로젝트 디렉토리로 다시 복사한다.
+- 현재 프로젝트 디렉토리(`F:\dev\mapplan`)를 최종 원본으로 보고, WSL 미러는 빠른 실행용 작업 복제본으로 다룬다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
 
 예시:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/python -m pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && .venv-wsl/bin/python -m pytest"
 ```
 
 PowerShell에서 문서 확인 예시:
@@ -60,6 +63,17 @@ PowerShell에서 문서 확인 예시:
 Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\docs\runbooks\agent-working-rules.md'
 Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\skills\documentation-and-adrs.ko.md'
 ```
+
+WSL 내부 볼륨 테스트 미러는 아래 방식으로 운용한다. 초기 생성은 필요할 때 한 번만 수행하고, 이후에는 `rsync`로 현재 작업 내용을 덮어쓴다. `.git`은 미러 안의 로컬 Git 상태를 유지하기 위해 동기화 대상에서 제외한다.
+
+```bash
+wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/mapplan ~/tripmate-workspaces/mapplan"
+wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/mapplan/ ~/tripmate-workspaces/mapplan/"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
+wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/mapplan/ /mnt/f/dev/mapplan/"
+```
+
+WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 만든 경우에는 `git status --short`로 변경 범위를 확인한 뒤 해당 삭제를 현재 프로젝트 디렉토리에 반영한다. 기본 되돌림 복사는 사용자 동시 편집을 지우지 않도록 `--delete`를 쓰지 않는다.
 
 ## 코딩 전 영향 확인
 
@@ -213,19 +227,19 @@ CI 기대치:
 
 ## 선호 명령어
 
-실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL2 경로(`/mnt/f/dev/mapplan`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다.
+실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL 내부 미러 경로(`~/tripmate-workspaces/mapplan`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다. 명령 전후 동기화는 이 문서의 WSL 내부 볼륨 테스트 미러 절차를 따른다.
 
 현재 프론트엔드:
 
-- install: WSL2에서 `cd /mnt/f/dev/mapplan && npm install`
-- dev: WSL2에서 `cd /mnt/f/dev/mapplan && npm run dev`
-- lint: WSL2에서 `cd /mnt/f/dev/mapplan && npm run lint`
-- typecheck: WSL2에서 `cd /mnt/f/dev/mapplan && npm run typecheck`
-- build: WSL2에서 `cd /mnt/f/dev/mapplan && npm run build`
+- install: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm install`
+- dev: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run dev`
+- lint: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run lint`
+- typecheck: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run typecheck`
+- build: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run build`
 
 백엔드:
 
-- install: WSL2에서 `cd /mnt/f/dev/mapplan/apps/api && uv sync` 또는 저장소 표준 명령
+- install: WSL2에서 `cd ~/tripmate-workspaces/mapplan/apps/api && uv sync` 또는 저장소 표준 명령
 - dev: WSL2에서 `uv run uvicorn app.main:app --reload`
 - lint: WSL2에서 `uv run ruff check .`
 - format check: WSL2에서 `uv run ruff format --check .`
@@ -234,7 +248,7 @@ CI 기대치:
 
 Airflow / infra:
 
-- 로컬 스택: WSL2에서 `docker compose up -d`
+- 로컬 스택: WSL2에서 `cd ~/tripmate-workspaces/mapplan && docker compose up -d`
 - 로그: WSL2에서 `docker compose logs --tail=200`
 - DB migrate: WSL2에서 저장소의 마이그레이션 명령 사용
 - deploy: `scripts/` 하위의 체크인된 스크립트를 우선 사용
