@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -433,7 +434,7 @@ class WeatherServingMidTerm(TimestampMixin, Base):
     tm_fc: Mapped[str] = mapped_column(String(20), nullable=False)
     forecast_date: Mapped[date] = mapped_column(Date, nullable=False)
     forecast_slot: Mapped[str] = mapped_column(String(16), nullable=False)
-    weather_summary: Mapped[str | None] = mapped_column(String(255))
+    weather_summary: Mapped[str | None] = mapped_column(Text)
     rain_probability: Mapped[str | None] = mapped_column(String(20))
     min_temperature: Mapped[str | None] = mapped_column(String(20))
     max_temperature: Mapped[str | None] = mapped_column(String(20))

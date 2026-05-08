@@ -163,6 +163,14 @@ class FakeKmaWeatherClient:
         ]
 
 
+class LongMidOutlookKmaWeatherClient(FakeKmaWeatherClient):
+    long_summary = " ".join(["전국 중기예보 장문 요약"] * 60)
+
+    def fetch_mid_outlook(self, *, stn_id: str) -> list[dict[str, str]]:
+        assert stn_id == "108"
+        return [{"stnId": "108", "tmFc": "202604260600", "wfSv": self.long_summary}]
+
+
 class PartiallyFailingKmaWeatherClient(FakeKmaWeatherClient):
     def fetch_ultra_short_forecast(self, *, nx: int, ny: int) -> list[dict[str, str]]:
         raise RuntimeError("provider timeout")
@@ -463,6 +471,47 @@ def test_mid_term_region_seed_and_loader_keep_reg_id_separate_from_address_codes
     assert temp_forecast is not None
     assert temp_forecast.min_temperature == "12"
     assert temp_forecast.max_temperature == "23"
+
+
+def test_mid_term_loader_accepts_long_outlook_summary(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "kma-mid-term-regions.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "source_version": "test-guide",
+                "provider": "kma",
+                "regions": [
+                    {
+                        "endpoint": "getMidFcst",
+                        "region_kind": "outlook_station",
+                        "provider_region_id": "108",
+                        "region_name": "전국",
+                    }
+                ],
+                "mappings": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    load_result = load_mid_term_weather(
+        db_session,
+        LongMidOutlookKmaWeatherClient(),  # type: ignore[arg-type]
+        config_path=config_path,
+        collected_at=datetime(2026, 4, 26, 13, 5, tzinfo=KST),
+    )
+    db_session.commit()
+
+    forecast = db_session.scalar(select(WeatherServingMidTerm))
+
+    assert load_result.serving_row_count == 1
+    assert forecast is not None
+    assert forecast.weather_summary == LongMidOutlookKmaWeatherClient.long_summary
+    assert len(forecast.weather_summary) > 255
 
 
 def test_air_quality_station_loader_maps_station_coordinates_to_legal_dong(
