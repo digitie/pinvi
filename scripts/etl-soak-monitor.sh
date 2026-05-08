@@ -94,10 +94,27 @@ SQL
       -v ON_ERROR_STOP=1 \
       -v started_epoch="${started_epoch}" <<'SQL'
 SELECT count(*)
-FROM admin_notifications
-WHERE source = 'etl'
-  AND is_resolved = false
-  AND created_at >= to_timestamp(:started_epoch);
+FROM admin_notifications AS notification
+LEFT JOIN LATERAL (
+  SELECT
+    status,
+    extra
+  FROM etl_run_logs
+  WHERE dataset_key = notification.dataset_key
+    AND started_at >= notification.created_at
+  ORDER BY started_at DESC NULLS LAST, id DESC
+  LIMIT 1
+) AS latest_after_notification ON true
+WHERE notification.source = 'etl'
+  AND notification.is_resolved = false
+  AND notification.created_at >= to_timestamp(:started_epoch)
+  AND NOT (
+    latest_after_notification.status IN ('started', 'success', 'skipped')
+    OR (
+      latest_after_notification.status = 'failed'
+      AND coalesce((latest_after_notification.extra ->> 'retry_exhausted')::boolean, true) = false
+    )
+  );
 SQL
   )"
 
