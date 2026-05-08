@@ -36,7 +36,9 @@ scripts/            # bootstrap, test, deploy, backup
 - uv 권장
 - WSL2 + Docker 또는 Docker Desktop
 
-명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && ..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Airflow 검증은 반드시 WSL2에서 실행합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
+명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Airflow 검증은 반드시 WSL2에서 실행합니다. NTFS 경로(`/mnt/f/dev/mapplan`)에서 테스트를 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/mapplan` 미러에서 실행한 뒤, 명령 완료마다 변경 내용을 현재 프로젝트 디렉토리로 복사합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
+
+WSL 미러 초기화와 동기화 절차는 [로컬 개발 runbook](docs/runbooks/local-dev.md)을 따릅니다.
 
 ## 로컬 실행
 
@@ -49,8 +51,8 @@ TripMate 직접 개발 표준 포트는 다음과 같습니다. `3000`과 `8000`
 | 배포 | 미정 | 미정 | ODROID/reverse proxy 기준 포트는 아직 결정하지 않았다 |
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm install"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm install"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run dev"
 ```
 
 브라우저에서 `http://localhost:3001`을 엽니다.
@@ -59,7 +61,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run dev"
 관리자 화면과 API를 Docker 이미지 기준으로 검증하려면 다음 명령을 사용합니다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/docker-app-smoke-test.sh --keep-running"
 ```
 
 성공 후 접속 주소는 `http://127.0.0.1:13082/admin/login`입니다.
@@ -67,7 +69,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh -
 웹앱만 직접 실행하려면 다음 명령도 사용할 수 있습니다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/web run dev"
 ```
 
 ## 검사
@@ -75,19 +77,19 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm --workspace apps/web run dev"
 웹앱:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run lint"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run typecheck"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run build"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run typecheck"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run build"
 ```
 
 API 의존성 설치 후:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv sync --group dev"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run pytest"
 ```
 
 KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `pykrtourapi` client를 직접 사용합니다.
@@ -110,32 +112,32 @@ TRIPMATE_KEX_GO_API_KEY=data.go.kr_decoding_인증키
 ## 로컬 DB
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d postgres"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
 API migration:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run alembic upgrade head"
 ```
 
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 Airflow 로컬 런타임:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d airflow-postgres airflow-redis airflow-init airflow-webserver airflow-scheduler airflow-dag-processor airflow-worker"
 ```
 
 ETL 장시간 검증용 초기화와 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-status.sh"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status.sh"
 ```
 
 이 명령은 Docker volume을 삭제하므로 로컬/검증 DB에서만 사용합니다. 20시간보다 긴 ETL 주기는 `config/etl-datasets.soak.json`으로 임시 12시간 이내 schedule을 사용합니다.
