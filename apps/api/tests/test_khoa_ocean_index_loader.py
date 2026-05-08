@@ -5,6 +5,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from test_public_data_place_loader import _seed_legal_boundary
@@ -90,6 +91,30 @@ def test_khoa_ocean_index_client_fetches_data_go_gateway_rows(monkeypatch: Any) 
     assert "serviceKey=test-key%3D%3D" in str(requests[0].url)
     assert "%253D" not in str(requests[0].url)
     assert requests[0].url.params["reqDate"] == "20260501"
+
+
+def test_khoa_ocean_index_client_redacts_service_key_on_http_error() -> None:
+    secret = "secret-key%3D%3D"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, request=request, text="temporary provider failure")
+
+    client = KhoaOceanIndexClient(
+        service_key=secret,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(ocean_module.KhoaOceanIndexError) as exc_info:
+        client.fetch_rows(
+            ocean_module.KHOA_OCEAN_INDEX_DATASETS[KHOA_MUDFLAT_INDEX_DATASET_KEY],
+            req_date=date(2026, 5, 1),
+        )
+
+    message = str(exc_info.value)
+    assert "khoa_mudflat_index_forecast request failed" in message
+    assert "serviceKey=***" in message
+    assert secret not in message
+    assert "secret-key" not in message
 
 
 def test_khoa_ocean_index_loader_maps_coordinate_and_is_idempotent(

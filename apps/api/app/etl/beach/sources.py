@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.redaction import redact_sensitive_text
 from app.models.address import AddressServingJusoRoadAddress, RegionServingBoundary
 from app.models.beach import (
     BeachIndexForecast,
@@ -155,7 +156,13 @@ class KhoaBeachObservationClient:
         client = self._client or httpx.Client(timeout=30.0, follow_redirects=True)
         try:
             response = client.get(KHOA_BEACH_OBSERVATION_URL, params=params)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                raise BeachSourceEtlError(
+                    f"KHOA beach observation request failed: {message}"
+                ) from None
             payload = response.json()
         finally:
             if owns_client:
@@ -209,7 +216,13 @@ class KhoaBeachIndexClient:
         client = self._client or httpx.Client(timeout=30.0, follow_redirects=True)
         try:
             response = client.get(_data_go_url_with_service_key(KHOA_BEACH_INDEX_URL, params))
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                raise BeachSourceEtlError(
+                    f"KHOA beach index request failed: {message}"
+                ) from None
             payload = response.json()
         finally:
             if owns_client:
@@ -868,7 +881,11 @@ def _fetch_paginated_data_go_rows(
                 "numOfRows": str(MAX_PAGE_SIZE),
             }
             response = resolved_client.get(url, params=params)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                raise BeachSourceEtlError(f"{error_label} request failed: {message}") from None
             payload = response.json()
             if not isinstance(payload, dict):
                 raise BeachSourceEtlError(f"{error_label} response is not an object.")

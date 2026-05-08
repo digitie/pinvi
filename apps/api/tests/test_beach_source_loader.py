@@ -6,6 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from test_kma_beach_weather_loader import (
 from app.db.session import get_db
 from app.etl.beach import sources as beach_source_module
 from app.etl.beach.sources import (
+    BeachSourceEtlError,
     KhoaBeachIndexClient,
     KhoaBeachObservationClient,
     load_khoa_beach_index_forecasts,
@@ -188,6 +190,27 @@ def test_khoa_beach_index_client_uses_data_go_gateway_endpoint(monkeypatch: Any)
     assert "serviceKey=test-key%3D%3D" in str(requests[0].url)
     assert "%253D" not in str(requests[0].url)
     assert requests[0].url.params["reqDate"] == "20260501"
+
+
+def test_khoa_beach_index_client_redacts_service_key_on_http_error() -> None:
+    secret = "secret-key%3D%3D"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, request=request, text="temporary provider failure")
+
+    client = KhoaBeachIndexClient(
+        service_key=secret,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(BeachSourceEtlError) as exc_info:
+        client.fetch_index_forecast_rows(req_date=date(2026, 5, 1))
+
+    message = str(exc_info.value)
+    assert "KHOA beach index request failed" in message
+    assert "serviceKey=***" in message
+    assert secret not in message
+    assert "secret-key" not in message
 
 
 def test_khoa_beach_observation_client_accepts_top_level_observatory_list() -> None:

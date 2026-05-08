@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.redaction import redact_sensitive_text
 from app.models.address import RegionServingBoundary
 from app.models.ocean import (
     OceanActivityIndexForecast,
@@ -177,7 +178,13 @@ class KhoaOceanIndexClient:
                     params["reqDate"] = req_date.strftime("%Y%m%d")
                 url = f"{self._base_url}/{definition.endpoint_path}"
                 response = client.get(_data_go_url_with_service_key(url, params))
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                    raise KhoaOceanIndexError(
+                        f"{definition.dataset_key} request failed: {message}"
+                    ) from None
                 payload = response.json()
                 if not isinstance(payload, dict):
                     raise KhoaOceanIndexError(
