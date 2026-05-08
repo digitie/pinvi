@@ -136,7 +136,7 @@ required_etl_tables = {
     "rest_area_serving_master",
     "weather_serving_short_term",
     "air_quality_serving_station",
-    "places",
+    "map_features",
 }
 missing = sorted(required_etl_tables - table_names)
 assert not missing, f"missing expected admin ETL tables: {missing}"
