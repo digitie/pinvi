@@ -62,6 +62,7 @@ Python client:
 - `fuel_raw_opinet_region_code`에 원문 row를 보존한다.
 - `fuel_serving_opinet_region_code`에는 `provider_region_code`, `provider_region_name`, `region_level`, `parent_provider_region_code`, `address_code_standard_code`, `mapping_status`, `confidence`를 저장한다.
 - 지역명 정규화와 `address_code_standard`를 사용해 provider code를 법정동 시도/시군구 코드에 연결한다.
+- OpiNet `areaCode.do`가 일시적으로 0건을 반환해도 `fuel_serving_opinet_region_code`에 freshness target 안의 활성 cache가 있으면 Dagster wrapper는 실패 대신 `skipped`로 기록한다. 순수 loader는 0건 응답을 계속 오류로 유지해 schema drift와 신규 환경의 빈 cache를 놓치지 않는다.
 
 ## `fuel_avg_price`
 

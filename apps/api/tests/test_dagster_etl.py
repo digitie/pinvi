@@ -19,6 +19,7 @@ from app.dagster_etl.definitions import (
     build_dagster_schedule,
     build_run_config,
 )
+from app.dagster_etl.loaders import load_opinet_region_codes as load_opinet_region_codes_dataset
 from app.dagster_etl.registry import ALL_ETL_SPECS
 from app.dagster_etl.runtime import (
     DagsterEtlRun,
@@ -33,8 +34,10 @@ from app.dagster_etl.runtime import (
     schedule_requires_any_env,
     source_year_month_override_from_config,
 )
+from app.etl.opinet.client import OpiNetApiError
 from app.etl.vworld.legal_dong_code_loader import download_latest_legal_dong_code_csv
 from app.models.etl import AdminNotification, EtlRunLog, TelegramSystemNotificationOutbox
+from app.models.fuel import FuelServingOpiNetRegionCode
 from app.services.etl_runtime import create_etl_run_log, mark_etl_run_success
 
 KST = ZoneInfo("Asia/Seoul")
@@ -255,6 +258,34 @@ def test_execute_etl_spec_skip_writes_skipped_log_without_notification(
     assert _scalar_count(postgres_test_database_url, AdminNotification) == 0
 
 
+def test_opinet_region_dataset_uses_fresh_cache_on_zero_provider_response(
+    monkeypatch: Any,
+    db_session: Session,
+) -> None:
+    _add_cached_opinet_region(db_session, collected_at=datetime(2026, 5, 8, 4, 0, tzinfo=KST))
+    _make_opinet_region_source_return_zero(monkeypatch)
+
+    with pytest.raises(TripMateEtlSkip, match="using 1 cached region code rows"):
+        load_opinet_region_codes_dataset(
+            db_session,
+            _dagster_run_for_test(logical_datetime=datetime(2026, 5, 8, 5, 0, tzinfo=KST)),
+        )
+
+
+def test_opinet_region_dataset_raises_when_zero_provider_response_has_stale_cache(
+    monkeypatch: Any,
+    db_session: Session,
+) -> None:
+    _add_cached_opinet_region(db_session, collected_at=datetime(2026, 1, 1, 12, 0, tzinfo=KST))
+    _make_opinet_region_source_return_zero(monkeypatch)
+
+    with pytest.raises(OpiNetApiError, match="zero sido rows"):
+        load_opinet_region_codes_dataset(
+            db_session,
+            _dagster_run_for_test(logical_datetime=datetime(2026, 5, 8, 5, 0, tzinfo=KST)),
+        )
+
+
 def test_execute_etl_spec_failed_retry_does_not_notify_until_exhausted(
     monkeypatch: Any,
     postgres_test_database_url: str,
@@ -363,6 +394,46 @@ def test_live_data_go_legal_dong_download_smoke(tmp_path: Path) -> None:
     if settings.data_go_service_key:
         assert settings.data_go_service_key not in result.download_url
     assert result.download_url.startswith("https://")
+
+
+def _dagster_run_for_test(*, logical_datetime: datetime) -> DagsterEtlRun:
+    return DagsterEtlRun(
+        dataset_key="fuel_region_code",
+        run_key=logical_datetime.strftime("%Y%m%dT%H%M%S"),
+        run_type="scheduled",
+        trigger_date=logical_datetime.date(),
+        logical_datetime=logical_datetime,
+        op_config={},
+    )
+
+
+def _add_cached_opinet_region(db_session: Session, *, collected_at: datetime) -> None:
+    db_session.add(
+        FuelServingOpiNetRegionCode(
+            provider_region_code="01",
+            provider_region_name="서울",
+            region_level="sido",
+            parent_provider_region_code=None,
+            address_code_standard_code=None,
+            mapping_status="unmatched",
+            mapping_source="test",
+            raw_payload={"AREA_CD": "01", "AREA_NM": "서울"},
+            collected_at=collected_at,
+            is_active=True,
+        )
+    )
+    db_session.flush()
+
+
+def _make_opinet_region_source_return_zero(monkeypatch: Any) -> None:
+    from app.etl.opinet import client as opinet_client_module
+    from app.etl.opinet import loader as opinet_loader_module
+
+    def fake_load_region_codes(*_args: Any, **_kwargs: Any) -> object:
+        raise OpiNetApiError("OpiNet areaCode.do returned zero sido rows.")
+
+    monkeypatch.setattr(opinet_client_module, "OpiNetApiClient", lambda: object())
+    monkeypatch.setattr(opinet_loader_module, "load_opinet_region_codes", fake_load_region_codes)
 
 
 def _fake_spec(

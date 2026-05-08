@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.etl_config import get_etl_dataset_config
 from app.dagster_etl.runtime import (
     DagsterEtlRun,
     TripMateEtlSkip,
@@ -49,11 +51,68 @@ def load_juso_monthly_address(session: Session, run: DagsterEtlRun) -> Any:
 
 
 def load_opinet_region_codes(session: Session, run: DagsterEtlRun) -> Any:
-    _ = run
-    from app.etl.opinet.client import OpiNetApiClient
-    from app.etl.opinet.loader import load_opinet_region_codes
+    from app.etl.opinet.client import OpiNetApiClient, OpiNetApiError
+    from app.etl.opinet.loader import load_opinet_region_codes as load_region_codes
 
-    return load_opinet_region_codes(session, OpiNetApiClient())
+    try:
+        return load_region_codes(session, OpiNetApiClient(), collected_at=run.collected_at)
+    except OpiNetApiError as exc:
+        cache_status = _fresh_opinet_region_cache_status(session, run.collected_at, exc)
+        if cache_status is not None:
+            raise TripMateEtlSkip(
+                "OpiNet areaCode.do returned zero rows; "
+                f"using {cache_status['active_region_count']} cached region code rows "
+                f"collected at {cache_status['latest_collected_at']}."
+            ) from exc
+        raise
+
+
+def _fresh_opinet_region_cache_status(
+    session: Session,
+    reference_time: datetime,
+    error: BaseException,
+) -> dict[str, object] | None:
+    if "areaCode.do returned zero" not in str(error):
+        return None
+
+    from app.models.fuel import FuelServingOpiNetRegionCode
+
+    active_region_count = session.scalar(
+        select(func.count())
+        .select_from(FuelServingOpiNetRegionCode)
+        .where(FuelServingOpiNetRegionCode.is_active.is_(True))
+    )
+    if not active_region_count:
+        return None
+
+    latest_collected_at = session.scalar(
+        select(func.max(FuelServingOpiNetRegionCode.collected_at)).where(
+            FuelServingOpiNetRegionCode.is_active.is_(True)
+        )
+    )
+    if not isinstance(latest_collected_at, datetime):
+        return None
+
+    freshness_target_minutes = get_etl_dataset_config(
+        "fuel_region_code"
+    ).freshness_target_minutes
+    if freshness_target_minutes is not None:
+        comparable_latest = _align_timezone(latest_collected_at, reference_time)
+        if comparable_latest < reference_time - timedelta(minutes=freshness_target_minutes):
+            return None
+
+    return {
+        "active_region_count": active_region_count,
+        "latest_collected_at": latest_collected_at.isoformat(),
+    }
+
+
+def _align_timezone(value: datetime, reference: datetime) -> datetime:
+    if value.tzinfo is None and reference.tzinfo is not None:
+        return value.replace(tzinfo=reference.tzinfo)
+    if value.tzinfo is not None and reference.tzinfo is not None:
+        return value.astimezone(reference.tzinfo)
+    return value
 
 
 def load_opinet_avg_prices(session: Session, run: DagsterEtlRun) -> Any:

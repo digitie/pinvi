@@ -153,7 +153,8 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-trigger-all.sh"
 - 이 스크립트는 DB를 삭제하므로 운영 DB에서 사용하지 않는다.
 - 6시간보다 긴 주기는 검증용 config에서 1시간 이내로 낮춘다.
 - KHOA 해수욕지수, 갯벌체험지수, 바다갈라짐 체험지수도 soak config에서는 1시간 이내로 낮춘다. quota 소진 위험이 있으면 `TRIPMATE_KHOA_API_KEY`를 빼서 schedule 생성을 막고 수동 실행 결과만 확인한다.
-- KHOA 지수 계열은 data.go.kr gateway가 일시적으로 HTTP 500을 돌려줄 수 있으므로 soak config에서도 retry 2회를 둔다. retry가 모두 소진된 실패만 관리자/Telegram 알림으로 본다.
+- KHOA 지수 계열은 data.go.kr gateway가 일시적으로 HTTP 500을 돌려줄 수 있으므로 soak config에서는 10분 간격 36회 retry window를 둔다. retry가 모두 소진된 실패만 관리자/Telegram 알림으로 본다.
+- OpiNet `fuel_region_code`는 provider가 일시적으로 `areaCode.do` 0건을 반환해도 freshness target 안의 기존 활성 지역코드 cache가 있으면 실패 대신 skipped 회복 상태로 기록한다. 기존 cache가 없거나 freshness가 만료되면 schema drift/인증 문제일 수 있으므로 실패로 둔다.
 - AirKorea 일 500회 제한은 운영 config 기준으로 설계했다. retry가 반복되면 제한을 넘을 수 있으므로 job 일시정지 또는 주기 완화를 먼저 검토한다.
 - `weather_short_term`은 시군구 대표 격자 264개와 endpoint 3개를 호출하므로 한 번에 약 800회 요청이 발생한다. soak config에서는 KMA HTTP 429를 줄이기 위해 매시 25분 1회로 제한한다.
 - 기상청 관광코스 파일 경로 `TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH`가 없으면 관광코스 job skip은 정상 상태다.
