@@ -79,8 +79,10 @@ run_dagster() {
 wait_for_job() {
   local job_id="$1"
   local attempt
+  local job_list
   for attempt in $(seq 1 60); do
-    if run_dagster dagster job list -m app.dagster_etl.definitions | grep -Fq "${job_id}"; then
+    job_list="$(run_dagster dagster job list -m app.dagster_etl.definitions)"
+    if grep -Fq "Job: ${job_id}" <<<"${job_list}"; then
       return 0
     fi
     sleep 10
@@ -104,6 +106,7 @@ fi
 
 for job_id in "${JOBS[@]}"; do
   wait_for_job "${job_id}"
+  echo "Executing Dagster job: ${job_id}"
   if [[ "${job_id}" == "juso_monthly_address_dataset" ]]; then
     config_path="${SOAK_DIR}/juso-run-config-${RUN_SUFFIX}.yaml"
     cat > "${config_path}" <<YAML
