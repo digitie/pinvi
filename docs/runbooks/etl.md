@@ -129,6 +129,8 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-status.sh"
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/etl-soak-monitor.sh --duration-hours 6 --check-interval-minutes 10 --strict"
 ```
 
+`--strict`는 `retry_exhausted=true`인 최신 실패와 미해결 ETL 관리자 알림을 실패로 본다. Dagster retry가 남아 있는 transient 실패는 상태 로그에는 남기되 soak를 즉시 중단하지 않는다.
+
 수동 실행:
 
 ```bash
