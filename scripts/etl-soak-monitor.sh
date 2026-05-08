@@ -72,6 +72,7 @@ WITH latest AS (
   SELECT
     dataset_key,
     status,
+    extra,
     row_number() OVER (
       PARTITION BY dataset_key
       ORDER BY started_at DESC NULLS LAST, id DESC
@@ -79,7 +80,11 @@ WITH latest AS (
   FROM etl_run_logs
   WHERE started_at >= to_timestamp(:started_epoch)
 )
-SELECT count(*) FROM latest WHERE rn = 1 AND status = 'failed';
+SELECT count(*)
+FROM latest
+WHERE rn = 1
+  AND status = 'failed'
+  AND coalesce((extra ->> 'retry_exhausted')::boolean, true);
 SQL
   )"
 
@@ -105,6 +110,7 @@ WITH latest AS (
     run_key,
     run_type,
     status,
+    extra,
     left(coalesce(message, error_message, ''), 220) AS message,
     started_at,
     finished_at,
@@ -116,7 +122,9 @@ WITH latest AS (
 )
 SELECT dataset_key, run_key, run_type, status, message, started_at, finished_at
 FROM latest
-WHERE rn = 1 AND status = 'failed'
+WHERE rn = 1
+  AND status = 'failed'
+  AND coalesce((extra ->> 'retry_exhausted')::boolean, true)
 ORDER BY dataset_key;
 
 SELECT dataset_key, severity, title, left(message, 220) AS message, created_at
