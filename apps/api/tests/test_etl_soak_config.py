@@ -42,21 +42,21 @@ def test_soak_config_shortens_long_running_dataset_schedules(
         )
         assert (
             etl_config.get_etl_dataset_config("khoa_beach_index_forecast").retry_max_attempts
-            == 2
+            == 36
         )
         assert etl_config.get_etl_dataset_config("khoa_mudflat_index_forecast").schedule == (
             "40 * * * *"
         )
         assert (
             etl_config.get_etl_dataset_config("khoa_mudflat_index_forecast").retry_max_attempts
-            == 2
+            == 36
         )
         assert etl_config.get_etl_dataset_config("khoa_sea_split_index_forecast").schedule == (
             "50 * * * *"
         )
         assert (
             etl_config.get_etl_dataset_config("khoa_sea_split_index_forecast").retry_max_attempts
-            == 2
+            == 36
         )
         assert etl_config.get_etl_dataset_config("mof_beach_info").schedule == ("12 * * * *")
         assert etl_config.get_etl_dataset_config("mof_beach_water_quality").schedule == (
