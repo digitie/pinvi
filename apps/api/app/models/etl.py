@@ -4,10 +4,22 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.schema import conv
 
 from app.db.base import Base
 from app.models.mixins import TimestampMixin, kst_now
@@ -88,3 +100,77 @@ class TelegramSystemNotificationOutbox(TimestampMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class ApiCallLog(Base):
+    __tablename__ = "api_call_log"
+    __table_args__ = (
+        Index("ix_api_call_log_occurred_brin", "occurred_at", postgresql_using="brin"),
+        Index("ix_api_call_log_provider_time", "provider", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )
+
+
+class EmailQueue(Base):
+    __tablename__ = "email_queue"
+    __table_args__ = (
+        CheckConstraint(
+            "template IN ('verify', 'reset', 'invite', 'system')",
+            name=conv("ck_email_queue_template"),
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'sending', 'sent', 'failed')",
+            name=conv("ck_email_queue_status"),
+        ),
+        CheckConstraint("attempts >= 0", name=conv("ck_email_queue_attempts")),
+        Index("ix_email_queue_status_queued", "status", "queued_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    to_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    queued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+    __table_args__ = (
+        Index("ix_admin_audit_log_admin_time", "admin_user_id", "occurred_at"),
+        Index("ix_admin_audit_log_target", "target_type", "target_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    admin_user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_admin_audit_log_admin_user", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    target_type: Mapped[str | None] = mapped_column(Text)
+    target_id: Mapped[str | None] = mapped_column(Text)
+    diff: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )

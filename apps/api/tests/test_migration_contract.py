@@ -330,3 +330,28 @@ def test_ocean_activity_index_migration_keeps_raw_location_and_forecast_layers()
     assert "POINT" in migration
     assert "srid=4326" in migration
     assert "ix_oail_geom" in migration
+
+
+def test_library_spec_v3_schema_migration_adds_db_schema_tables() -> None:
+    migration = Path("alembic/versions/20260513_0024_library_spec_v3_schema.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "CREATE EXTENSION IF NOT EXISTS postgis_topology" in migration
+    assert "CREATE EXTENSION IF NOT EXISTS pgcrypto" in migration
+    assert "user_consents" in migration
+    assert "refresh_tokens" in migration
+    assert "bjd_lookup" in migration
+    assert "features" in migration
+    assert "price_points" in migration
+    assert "price_values" in migration
+    assert "weather_observations" in migration
+    assert "trip_members" in migration
+    assert "trip_pois" in migration
+    assert "trip_share_tokens" in migration
+    assert "admin_audit_log" in migration
+    assert "api_call_log" in migration
+    assert "email_queue" in migration
+    assert "fk_trip_pois_trip_day" in migration
+    assert "ix_features_coord" in migration
+    assert 'postgresql_using="brin"' in migration

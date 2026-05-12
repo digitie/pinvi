@@ -175,13 +175,13 @@ class _OpinetClientLike(Protocol):
     def get_area_codes(self, sido: str | None = None) -> Sequence[_AreaCodeLike]: ...
 
 
-def build_pyopinet_client(settings: Settings | None = None) -> _OpinetClientLike:
+def build_opinet_client(settings: Settings | None = None) -> _OpinetClientLike:
     resolved_settings = settings or get_settings()
     try:
         from opinet import OpinetClient
     except ModuleNotFoundError as exc:
         raise OpinetAdapterError(
-            "pyopinet(opinet) dependency is not installed.",
+            "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
         ) from exc
@@ -198,11 +198,11 @@ def build_pyopinet_client(settings: Settings | None = None) -> _OpinetClientLike
     )
 
 
-def build_pyopinet_fuel_adapter(settings: Settings | None = None) -> PyOpinetFuelAdapter:
-    return PyOpinetFuelAdapter(build_pyopinet_client(settings))
+def build_opinet_fuel_adapter(settings: Settings | None = None) -> OpinetFuelAdapter:
+    return OpinetFuelAdapter(build_opinet_client(settings))
 
 
-class PyOpinetFuelAdapter:
+class OpinetFuelAdapter:
     def __init__(self, client: object) -> None:
         self._client = cast(_OpinetClientLike, client)
 
@@ -308,7 +308,7 @@ def provider_product_code_for_fuel_type(fuel_type: FuelType) -> str:
         from opinet import fuel_type_to_product_code
     except ModuleNotFoundError as exc:
         raise OpinetAdapterError(
-            "pyopinet(opinet) dependency is not installed.",
+            "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
         ) from exc
@@ -320,7 +320,7 @@ def fuel_type_from_provider_product_code(provider_product_code: object) -> FuelT
         from opinet import product_code_to_fuel_type
     except ModuleNotFoundError as exc:
         raise OpinetAdapterError(
-            "pyopinet(opinet) dependency is not installed.",
+            "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
         ) from exc
@@ -428,7 +428,7 @@ def _pyopinet_sort_order(sort: FuelStationSort) -> object:
         from opinet import SortOrder
     except ModuleNotFoundError as exc:
         raise OpinetAdapterError(
-            "pyopinet(opinet) dependency is not installed.",
+            "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
         ) from exc
@@ -459,3 +459,8 @@ def _map_opinet_exception(dataset: str, exc: Exception) -> OpinetAdapterError:
     else:
         kind = OpinetFailureKind.UPSTREAM
     return OpinetAdapterError(str(exc), kind=kind, dataset=dataset)
+
+
+build_pyopinet_client = build_opinet_client
+build_pyopinet_fuel_adapter = build_opinet_fuel_adapter
+PyOpinetFuelAdapter = OpinetFuelAdapter

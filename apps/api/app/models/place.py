@@ -102,6 +102,140 @@ class SourceRecord(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class BjdLookup(Base):
+    __tablename__ = "bjd_lookup"
+    __table_args__ = (
+        Index(
+            "ix_bjd_lookup_sido_trgm",
+            "sido",
+            postgresql_using="gin",
+            postgresql_ops={"sido": "gin_trgm_ops"},
+        ),
+    )
+
+    bjd_code: Mapped[str] = mapped_column(String(10), primary_key=True)
+    sido: Mapped[str] = mapped_column(Text, nullable=False)
+    sigungu: Mapped[str | None] = mapped_column(Text)
+    eupmyeondong: Mapped[str | None] = mapped_column(Text)
+    ri: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at_src: Mapped[date | None] = mapped_column(Date)
+    deleted_at_src: Mapped[date | None] = mapped_column(Date)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=kst_now
+    )
+
+
+class Feature(Base):
+    __tablename__ = "features"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('place', 'event', 'notice', 'price', 'weather', 'route', 'area')",
+            name=conv("ck_features_kind"),
+        ),
+        CheckConstraint(
+            "status IN ('active', 'hidden', 'broken')",
+            name=conv("ck_features_status"),
+        ),
+        Index("ix_features_coord", "coord", postgresql_using="gist"),
+        Index("ix_features_geom", "geom", postgresql_using="gist"),
+        Index("ix_features_kind_category", "kind", "category"),
+        Index("ix_features_parent", "parent_feature_id"),
+        Index("ix_features_sibling_group", "sibling_group_id"),
+        Index("ix_features_bjd_code", "bjd_code"),
+        Index(
+            "ix_features_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+    )
+
+    feature_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    bjd_code: Mapped[str | None] = mapped_column(
+        String(10),
+        ForeignKey("bjd_lookup.bjd_code", name="fk_features_bjd_code", ondelete="SET NULL"),
+    )
+    coord: Mapped[Any] = mapped_column(
+        Geometry("POINT", srid=4326, spatial_index=False),
+        nullable=False,
+    )
+    geom: Mapped[Any | None] = mapped_column(
+        Geometry("GEOMETRY", srid=4326, spatial_index=False),
+    )
+    address_road: Mapped[str | None] = mapped_column(Text)
+    address_jibun: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_feature_id: Mapped[str | None] = mapped_column(
+        String(120),
+        ForeignKey("features.feature_id", name="fk_features_parent", ondelete="SET NULL"),
+    )
+    sibling_group_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    urls: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    marker_icon: Mapped[str] = mapped_column(Text, nullable=False)
+    marker_color: Mapped[str] = mapped_column(String(16), nullable=False)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    raw_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=kst_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=kst_now
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PricePoint(Base):
+    __tablename__ = "price_points"
+
+    feature_id: Mapped[str] = mapped_column(
+        String(120),
+        ForeignKey("features.feature_id", name="fk_price_points_feature", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    price_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3650)
+
+
+class PriceValue(Base):
+    __tablename__ = "price_values"
+    __table_args__ = (Index("ix_price_values_observed_at", "observed_at", postgresql_using="brin"),)
+
+    feature_id: Mapped[str] = mapped_column(
+        String(120),
+        ForeignKey("price_points.feature_id", name="fk_price_values_feature", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    item_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KRW")
+
+
+class WeatherObservation(Base):
+    __tablename__ = "weather_observations"
+    __table_args__ = (
+        CheckConstraint(
+            "forecast_kind IN ('nowcast', 'short', 'mid', 'observed', 'warning')",
+            name=conv("ck_weather_observations_kind"),
+        ),
+        Index("ix_weather_obs_valid_at", "valid_at", postgresql_using="brin"),
+    )
+
+    feature_id: Mapped[str] = mapped_column(
+        String(120),
+        ForeignKey("features.feature_id", name="fk_weather_obs_feature", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    forecast_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    valid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+
 class MapFeature(TimestampMixin, Base):
     __tablename__ = "map_features"
     __table_args__ = (

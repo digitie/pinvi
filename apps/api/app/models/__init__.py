@@ -17,7 +17,14 @@ from app.models.beach import (
     BeachSourceRecord,
     BeachWaterQualityMeasurement,
 )
-from app.models.etl import AdminNotification, EtlRunLog, TelegramSystemNotificationOutbox
+from app.models.etl import (
+    AdminAuditLog,
+    AdminNotification,
+    ApiCallLog,
+    EmailQueue,
+    EtlRunLog,
+    TelegramSystemNotificationOutbox,
+)
 from app.models.fuel import (
     FuelRawAvgPrice,
     FuelRawLowestStation,
@@ -34,12 +41,14 @@ from app.models.ocean import (
 )
 from app.models.place import (
     AreaDetail,
+    BjdLookup,
     ContentFeatureLink,
     ContentItem,
     ContentMedia,
     ContentSourceLink,
     ContentTag,
     EventDetail,
+    Feature,
     FeatureMappingCandidate,
     MapFeature,
     MapFeatureMedia,
@@ -51,10 +60,13 @@ from app.models.place import (
     NoticeDetail,
     PlaceCategory,
     PlaceDetail,
+    PricePoint,
+    PriceValue,
     RouteDetail,
     RouteWaypoint,
     SourceRecord,
     Tag,
+    WeatherObservation,
 )
 from app.models.rest_area import (
     RestAreaRawMaster,
@@ -64,7 +76,7 @@ from app.models.rest_area import (
     RestAreaServingOilPrice,
     RestAreaServingService,
 )
-from app.models.session import UserSession
+from app.models.session import RefreshToken, UserSession
 from app.models.tour import (
     KmaRecommendedTourCourse,
     TourCourseRawKmaPoint,
@@ -73,8 +85,8 @@ from app.models.tour import (
     TourRawPublicCulturalFestival,
     TourServingPublicCulturalFestival,
 )
-from app.models.trip import Trip, TripDay, TripPlanItem
-from app.models.user import EmailVerificationToken, User
+from app.models.trip import Trip, TripDay, TripMember, TripPlanItem, TripPoi, TripShareToken
+from app.models.user import EmailVerificationToken, User, UserConsent
 from app.models.weather import (
     AirQualityRawForecast,
     AirQualityRawSidoMeasurement,
@@ -104,15 +116,20 @@ __all__ = [
     "AddressRawJusoRoadAddress",
     "AddressServingJusoRelatedJibun",
     "AddressServingJusoRoadAddress",
+    "AdminAuditLog",
     "AdminNotification",
+    "ApiCallLog",
     "BeachIndexForecast",
     "BeachObservation",
     "BeachProfile",
     "BeachProviderRef",
     "BeachSourceRecord",
     "BeachWaterQualityMeasurement",
+    "BjdLookup",
     "EtlRunLog",
+    "EmailQueue",
     "EmailVerificationToken",
+    "Feature",
     "FuelRawAvgPrice",
     "FuelRawLowestStation",
     "FuelRawOpiNetRegionCode",
@@ -142,6 +159,9 @@ __all__ = [
     "OceanActivityIndexSourceRecord",
     "PlaceCategory",
     "PlaceDetail",
+    "PricePoint",
+    "PriceValue",
+    "RefreshToken",
     "RouteDetail",
     "RouteWaypoint",
     "SourceRecord",
@@ -163,9 +183,14 @@ __all__ = [
     "TourServingPublicCulturalFestival",
     "Trip",
     "TripDay",
+    "TripMember",
     "TripPlanItem",
+    "TripPoi",
+    "TripShareToken",
     "User",
+    "UserConsent",
     "UserSession",
+    "WeatherObservation",
     "WeatherBeachLocation",
     "WeatherShortTermGridMapping",
     "WeatherRawShortTerm",

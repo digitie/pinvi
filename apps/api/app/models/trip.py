@@ -10,20 +10,23 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.schema import conv
 
 from app.core.json_types import JsonValue
 from app.db.base import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, kst_now
 
 if TYPE_CHECKING:
     from app.models.place import MapFeature
@@ -33,7 +36,10 @@ if TYPE_CHECKING:
 
 class Trip(TimestampMixin, Base):
     __tablename__ = "trips"
-    __table_args__ = (CheckConstraint("end_date >= start_date", name="date_range_order"),)
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date", name="date_range_order"),
+        Index("ix_trips_leader_id", "leader_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
@@ -42,13 +48,20 @@ class Trip(TimestampMixin, Base):
         index=True,
         nullable=False,
     )
+    leader_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_trips_leader_id", ondelete="CASCADE"),
+    )
     title: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str | None] = mapped_column(Text)
     destination: Mapped[str] = mapped_column(String(120), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    fuel_types: Mapped[list[str] | None] = mapped_column(ARRAY(String(40)))
     planning_status: Mapped[str] = mapped_column(String(32), default="idea", nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped[User] = relationship(back_populates="trips")
+    user: Mapped[User] = relationship(back_populates="trips", foreign_keys=[user_id])
     days: Mapped[list[TripDay]] = relationship(
         back_populates="trip",
         cascade="all, delete-orphan",
@@ -156,3 +169,130 @@ class TripPlanItem(TimestampMixin, Base):
     trip_day: Mapped[TripDay] = relationship(back_populates="items")
     map_feature: Mapped[MapFeature | None] = relationship()
     festival: Mapped[TourServingPublicCulturalFestival | None] = relationship()
+
+
+class TripMember(Base):
+    __tablename__ = "trip_members"
+    __table_args__ = (
+        CheckConstraint(
+            "user_id IS NOT NULL OR invited_email IS NOT NULL",
+            name=conv("ck_trip_members_identity"),
+        ),
+        CheckConstraint("role IN ('companion')", name=conv("ck_trip_members_role")),
+        CheckConstraint(
+            "invited_birth_yyyymm IS NULL OR invited_birth_yyyymm ~ '^[0-9]{6}$'",
+            name=conv("ck_trip_members_birth_yyyymm"),
+        ),
+        Index("ix_trip_members_trip_user", "trip_id", "user_id"),
+        Index("ix_trip_members_user", "user_id"),
+        Index(
+            "uq_trip_members_trip_user",
+            "trip_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_trip_members_trip_email",
+            "trip_id",
+            "invited_email",
+            unique=True,
+            postgresql_where=text("invited_email IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    trip_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("trips.id", name="fk_trip_members_trip_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_trip_members_user_id", ondelete="CASCADE"),
+    )
+    invited_email: Mapped[str | None] = mapped_column(CITEXT)
+    invited_nickname: Mapped[str | None] = mapped_column(Text)
+    invited_gender: Mapped[str | None] = mapped_column(String(32))
+    invited_birth_yyyymm: Mapped[str | None] = mapped_column(String(6))
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="companion")
+    invited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=kst_now
+    )
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TripPoi(TimestampMixin, Base):
+    __tablename__ = "trip_pois"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["trip_id", "day_index"],
+            ["trip_days.trip_id", "trip_days.day_index"],
+            name="fk_trip_pois_trip_day",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("version >= 1", name=conv("ck_trip_pois_version")),
+        Index("ix_trip_pois_trip_day_sort", "trip_id", "day_index", "sort_order"),
+        Index("ix_trip_pois_feature", "feature_id"),
+        Index("ix_trip_pois_added_by", "added_by_user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    trip_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("trips.id", name="fk_trip_pois_trip_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    day_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    sort_order: Mapped[str] = mapped_column(String(80), nullable=False)
+    feature_id: Mapped[str | None] = mapped_column(
+        String(120),
+        ForeignKey("features.feature_id", name="fk_trip_pois_feature_id", ondelete="SET NULL"),
+    )
+    feature_link_broken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snapshot: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
+    custom_marker_color: Mapped[str | None] = mapped_column(String(16))
+    custom_marker_icon: Mapped[str | None] = mapped_column(Text)
+    added_by_user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_trip_pois_added_by", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    memo: Mapped[str | None] = mapped_column(Text)
+    budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    actual_spent: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KRW")
+    user_url: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class TripShareToken(Base):
+    __tablename__ = "trip_share_tokens"
+    __table_args__ = (
+        CheckConstraint("permission IN ('view')", name=conv("ck_trip_share_tokens_permission")),
+        Index(
+            "ix_trip_share_tokens_active_trip",
+            "trip_id",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+        Index("ix_trip_share_tokens_created_by", "created_by"),
+    )
+
+    token: Mapped[str] = mapped_column(String(43), primary_key=True)
+    trip_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("trips.id", name="fk_trip_share_tokens_trip_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_by: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_trip_share_tokens_created_by", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    permission: Mapped[str] = mapped_column(String(20), nullable=False, default="view")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=kst_now
+    )
