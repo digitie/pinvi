@@ -2,8 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { registerUser, SignupApiError, type RegisteredUser } from "./api";
+import { useMutation } from "@tanstack/react-query";
+import { FormEvent } from "react";
+import { useSignupPageStore } from "../shared/stores";
+import { registerUser, type RegisterUserInput } from "./api";
 
 const genderOptions = [
   { value: "", label: "선택 안 함" },
@@ -14,47 +16,43 @@ const genderOptions = [
 ];
 
 export default function SignupPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [name, setName] = useState("");
-  const [birthYearMonth, setBirthYearMonth] = useState("");
-  const [gender, setGender] = useState("");
-  const [residenceSigunguCode, setResidenceSigunguCode] = useState("");
-  const [createdUser, setCreatedUser] = useState<RegisteredUser | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    birthYearMonth,
+    email,
+    gender,
+    name,
+    nickname,
+    password,
+    resetSignupPassword,
+    residenceSigunguCode,
+    setSignupField,
+  } = useSignupPageStore();
+
+  const signupMutation = useMutation({
+    mutationFn: (input: RegisterUserInput) => registerUser(input),
+    onSuccess: () => {
+      resetSignupPassword();
+    },
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setErrorMessage(null);
-    setCreatedUser(null);
-    setIsSubmitting(true);
-
-    try {
-      const response = await registerUser({
-        email,
-        password,
-        nickname,
-        name,
-        birth_year_month: normalizeOptionalValue(birthYearMonth),
-        gender: normalizeOptionalValue(gender),
-        residence_sigungu_code: normalizeOptionalValue(residenceSigunguCode),
-      });
-      setCreatedUser(response.user);
-      setPassword("");
-    } catch (error) {
-      if (error instanceof SignupApiError) {
-        setErrorMessage(error.message);
-      } else if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("가입 요청을 처리하지 못했다.");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    signupMutation.reset();
+    signupMutation.mutate({
+      email,
+      password,
+      nickname,
+      name,
+      birth_year_month: normalizeOptionalValue(birthYearMonth),
+      gender: normalizeOptionalValue(gender),
+      residence_sigungu_code: normalizeOptionalValue(residenceSigunguCode),
+    });
   }
+
+  const createdUser = signupMutation.data?.user ?? null;
+  const errorMessage = signupMutation.error
+    ? getErrorMessage(signupMutation.error, "가입 요청을 처리하지 못했다.")
+    : null;
 
   return (
     <main className="min-h-svh bg-white text-[#222222]">
@@ -96,7 +94,7 @@ export default function SignupPage() {
                   type="email"
                   autoComplete="email"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => setSignupField("email", event.target.value)}
                   required
                 />
               </label>
@@ -109,7 +107,7 @@ export default function SignupPage() {
                   autoComplete="new-password"
                   value={password}
                   minLength={8}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => setSignupField("password", event.target.value)}
                   required
                 />
               </label>
@@ -120,7 +118,7 @@ export default function SignupPage() {
                   className="h-14 w-full rounded-lg border border-[#dddddd] bg-white px-4 text-base outline-none transition focus:border-[#222222]"
                   value={nickname}
                   maxLength={80}
-                  onChange={(event) => setNickname(event.target.value)}
+                  onChange={(event) => setSignupField("nickname", event.target.value)}
                   required
                 />
               </label>
@@ -131,7 +129,7 @@ export default function SignupPage() {
                   className="h-14 w-full rounded-lg border border-[#dddddd] bg-white px-4 text-base outline-none transition focus:border-[#222222]"
                   value={name}
                   maxLength={80}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) => setSignupField("name", event.target.value)}
                   required
                 />
               </label>
@@ -145,7 +143,7 @@ export default function SignupPage() {
                   pattern="[0-9]{6}"
                   placeholder="YYYYMM"
                   maxLength={6}
-                  onChange={(event) => setBirthYearMonth(event.target.value)}
+                  onChange={(event) => setSignupField("birthYearMonth", event.target.value)}
                 />
               </label>
 
@@ -154,7 +152,7 @@ export default function SignupPage() {
                 <select
                   className="h-14 w-full rounded-lg border border-[#dddddd] bg-white px-4 text-base outline-none transition focus:border-[#222222]"
                   value={gender}
-                  onChange={(event) => setGender(event.target.value)}
+                  onChange={(event) => setSignupField("gender", event.target.value)}
                 >
                   {genderOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -175,7 +173,7 @@ export default function SignupPage() {
                   pattern="[0-9]{10}"
                   placeholder="예: 1111000000"
                   maxLength={10}
-                  onChange={(event) => setResidenceSigunguCode(event.target.value)}
+                  onChange={(event) => setSignupField("residenceSigunguCode", event.target.value)}
                 />
               </label>
             </div>
@@ -198,10 +196,10 @@ export default function SignupPage() {
             <button
               className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#ff385c] px-5 text-base font-semibold text-white transition active:bg-[#e00b41] disabled:cursor-not-allowed disabled:bg-[#ffd1da]"
               type="submit"
-              disabled={isSubmitting}
+              disabled={signupMutation.isPending}
             >
               <UserPlusIcon />
-              {isSubmitting ? "가입 처리 중" : "가입하기"}
+              {signupMutation.isPending ? "가입 처리 중" : "가입하기"}
             </button>
           </form>
         </section>
@@ -213,6 +211,13 @@ export default function SignupPage() {
 function normalizeOptionalValue(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function UserPlusIcon() {

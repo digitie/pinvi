@@ -2,13 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  fetchFestivalMonthly,
-  loginUser,
-  type FestivalMonthlyResponse,
-  type FestivalSummary,
-} from "./api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { FormEvent } from "react";
+import { queryKeys } from "../shared/query-keys";
+import { useLoginPageStore } from "../shared/stores";
+import { fetchFestivalMonthly, loginUser, type FestivalSummary } from "./api";
 
 const monthLabels = [
   "1월",
@@ -61,69 +59,50 @@ const fallbackFestivals: FestivalSummary[] = [
 ];
 
 export default function LoginPage() {
-  const initialDate = useMemo(() => getKstYearMonth(), []);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [year] = useState(initialDate.year);
-  const [selectedMonth, setSelectedMonth] = useState(initialDate.month);
-  const [festivalPayload, setFestivalPayload] = useState<FestivalMonthlyResponse | null>(null);
-  const [isFestivalLoading, setIsFestivalLoading] = useState(true);
-  const [festivalError, setFestivalError] = useState<string | null>(null);
-  const [loginMessage, setLoginMessage] = useState<string | null>(null);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
+  const {
+    clearLoginFeedback,
+    email,
+    loginMessage,
+    password,
+    resetLoginPassword,
+    selectedMonth,
+    setLoginField,
+    setLoginMessage,
+    setSelectedMonth,
+    year,
+  } = useLoginPageStore();
 
-  useEffect(() => {
-    let ignore = false;
+  const festivalQuery = useQuery({
+    queryKey: queryKeys.public.festivalMonthly(year, selectedMonth),
+    queryFn: () => fetchFestivalMonthly(year, selectedMonth),
+  });
 
-    async function loadFestivals() {
-      setIsFestivalLoading(true);
-      setFestivalError(null);
-      try {
-        const payload = await fetchFestivalMonthly(year, selectedMonth);
-        if (!ignore) {
-          setFestivalPayload(payload);
-        }
-      } catch {
-        if (!ignore) {
-          setFestivalPayload(null);
-          setFestivalError(null);
-        }
-      } finally {
-        if (!ignore) {
-          setIsFestivalLoading(false);
-        }
-      }
-    }
-
-    void loadFestivals();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedMonth, year]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsLoginSubmitting(true);
-    setLoginError(null);
-    setLoginMessage(null);
-    try {
-      const payload = await loginUser(email, password);
+  const loginMutation = useMutation({
+    mutationFn: () => loginUser(email, password),
+    onMutate: () => {
+      clearLoginFeedback();
+    },
+    onSuccess: (payload) => {
       const displayName =
         payload.user.nickname ?? payload.user.display_name ?? payload.user.name ?? payload.user.email;
       setLoginMessage(`${displayName}님, 로그인되었습니다.`);
-      setPassword("");
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "로그인 요청에 실패했다.");
-    } finally {
-      setIsLoginSubmitting(false);
-    }
+      resetLoginPassword();
+    },
+  });
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    loginMutation.reset();
+    loginMutation.mutate();
   }
 
-  const festivals = festivalPayload?.festivals.length
-    ? festivalPayload.festivals
-    : fallbackFestivals;
+  const festivalPayload = festivalQuery.data ?? null;
+  const festivalError = null;
+  const isFestivalLoading = festivalQuery.isPending;
+  const loginError = loginMutation.error
+    ? getErrorMessage(loginMutation.error, "로그인 요청에 실패했다.")
+    : null;
+  const festivals = festivalPayload?.festivals.length ? festivalPayload.festivals : fallbackFestivals;
   const monthSummaries =
     festivalPayload?.months ??
     Array.from({ length: 12 }, (_, index) => ({
@@ -244,7 +223,7 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => setLoginField("email", event.target.value)}
                 required
               />
             </label>
@@ -256,7 +235,7 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => setLoginField("password", event.target.value)}
                 required
               />
             </label>
@@ -275,9 +254,9 @@ export default function LoginPage() {
             <button
               className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-lg bg-[#ff385c] px-5 text-base font-semibold text-white transition active:bg-[#e00b41] disabled:cursor-not-allowed disabled:opacity-60"
               type="submit"
-              disabled={isLoginSubmitting}
+              disabled={loginMutation.isPending}
             >
-              {isLoginSubmitting ? "확인 중" : "로그인"}
+              {loginMutation.isPending ? "확인 중" : "로그인"}
             </button>
 
             <div className="mt-5 flex items-center justify-between gap-3 text-sm font-semibold text-[#222222]">
@@ -293,17 +272,6 @@ export default function LoginPage() {
       </section>
     </main>
   );
-}
-
-function getKstYearMonth(): { year: number; month: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "numeric",
-  }).formatToParts(new Date());
-  const year = Number(parts.find((part) => part.type === "year")?.value ?? "2026");
-  const month = Number(parts.find((part) => part.type === "month")?.value ?? "1");
-  return { year, month };
 }
 
 function seasonForMonth(month: number): {
@@ -362,6 +330,13 @@ function formatShortDate(value: string | null): string {
     return "일정 확인 중";
   }
   return value.replaceAll("-", ".");
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function SearchIcon() {

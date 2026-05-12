@@ -1,35 +1,36 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AdminApiError, loginAdmin } from "../api";
+import { queryKeys } from "../../shared/query-keys";
+import { useAdminLoginStore } from "../../shared/stores";
+import { loginAdmin } from "../api";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@ad.min");
-  const [password, setPassword] = useState("admin");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
+  const { email, password, resetAdminLoginPassword, setAdminLoginField } = useAdminLoginStore();
+
+  const loginMutation = useMutation({
+    mutationFn: () => loginAdmin(email, password),
+    onSuccess: () => {
+      resetAdminLoginPassword();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.root() });
+      router.replace("/admin");
+    },
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setErrorMessage(null);
-    setIsSubmitting(true);
-
-    try {
-      await loginAdmin(email, password);
-      router.replace("/admin");
-    } catch (error) {
-      if (error instanceof AdminApiError) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("관리자 로그인 처리 중 오류가 발생했다.");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    loginMutation.reset();
+    loginMutation.mutate();
   }
+
+  const errorMessage = loginMutation.error
+    ? getErrorMessage(loginMutation.error, "관리자 로그인 처리 중 오류가 발생했다.")
+    : null;
 
   return (
     <main className="min-h-svh bg-[#f5f1e8] text-stone-950">
@@ -65,7 +66,7 @@ export default function AdminLoginPage() {
                 type="email"
                 value={email}
                 autoComplete="username"
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => setAdminLoginField("email", event.target.value)}
                 required
               />
             </label>
@@ -77,7 +78,7 @@ export default function AdminLoginPage() {
                 type="password"
                 value={password}
                 autoComplete="current-password"
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => setAdminLoginField("password", event.target.value)}
                 required
               />
             </label>
@@ -91,16 +92,23 @@ export default function AdminLoginPage() {
             <button
               className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-teal-800 px-4 text-sm font-black text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:bg-stone-300"
               type="submit"
-              disabled={isSubmitting}
+              disabled={loginMutation.isPending}
             >
               <KeyIcon />
-              {isSubmitting ? "확인 중" : "관리자 로그인"}
+              {loginMutation.isPending ? "확인 중" : "관리자 로그인"}
             </button>
           </form>
         </div>
       </section>
     </main>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function KeyIcon() {

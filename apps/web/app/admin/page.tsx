@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,50 +10,94 @@ import {
   fetchAdminDatasets,
   fetchAdminMe,
   logoutAdmin,
-  type AdminDatasetColumn,
   type AdminDatasetRow,
-  type AdminDatasetRowsResponse,
-  type AdminDatasetSummary,
   type AdminJsonValue,
-  type AdminUser,
 } from "./api";
 import { getDagsterAdminUrl } from "./config";
-
-type SubmittedFilter = {
-  column: string;
-  value: string;
-};
+import { queryKeys } from "../shared/query-keys";
+import { useAdminDataBrowserStore } from "../shared/stores";
 
 const dagsterAdminUrl = getDagsterAdminUrl();
 
 export default function AdminDataBrowserPage() {
   const router = useRouter();
-  const [user, setUser] = useState<AdminUser | null>(null);
-  const [datasets, setDatasets] = useState<AdminDatasetSummary[]>([]);
-  const [pageSizeOptions, setPageSizeOptions] = useState<number[]>([50, 100, 200, 500]);
-  const [selectedTable, setSelectedTable] = useState("");
-  const [rowsPayload, setRowsPayload] = useState<AdminDatasetRowsResponse | null>(null);
-  const [search, setSearch] = useState("");
-  const [submittedSearch, setSubmittedSearch] = useState("");
-  const [filterColumn, setFilterColumn] = useState("");
-  const [filterValue, setFilterValue] = useState("");
-  const [submittedFilter, setSubmittedFilter] = useState<SubmittedFilter>({
-    column: "",
-    value: "",
+  const queryClient = useQueryClient();
+  const {
+    applySearchAndFilter: applySearchAndFilterState,
+    changeSort,
+    datasetSearch,
+    filterColumn,
+    filterValue,
+    initializeDatasetSelection,
+    limit,
+    page,
+    search,
+    selectDataset: selectDatasetState,
+    selectedTable,
+    setDatasetSearch,
+    setFilterColumn,
+    setFilterValue,
+    setLimit,
+    setPage,
+    setSearch,
+    setSortBy,
+    setSortDir,
+    sortBy,
+    sortDir,
+    submittedFilter,
+    submittedSearch,
+  } = useAdminDataBrowserStore();
+
+  const adminMeQuery = useQuery({
+    queryKey: queryKeys.admin.me(),
+    queryFn: fetchAdminMe,
+    retry: false,
   });
-  const [sortBy, setSortBy] = useState("");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(100);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRowsLoading, setIsRowsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [datasetSearch, setDatasetSearch] = useState("");
+  const datasetsQuery = useQuery({
+    queryKey: queryKeys.admin.datasets(),
+    queryFn: fetchAdminDatasets,
+    retry: false,
+  });
+
+  const user = adminMeQuery.data ?? null;
+  const datasets = useMemo(
+    () => datasetsQuery.data?.datasets ?? [],
+    [datasetsQuery.data?.datasets],
+  );
+  const pageSizeOptions = datasetsQuery.data?.page_size_options ?? [50, 100, 200, 500];
+
+  const rowsQueryInput = useMemo(
+    () => ({
+      page,
+      limit,
+      search: submittedSearch,
+      sortBy,
+      sortDir,
+      filter: submittedFilter,
+    }),
+    [limit, page, sortBy, sortDir, submittedFilter, submittedSearch],
+  );
+
+  const rowsQuery = useQuery({
+    queryKey: queryKeys.admin.datasetRows(selectedTable, rowsQueryInput),
+    queryFn: () => fetchAdminDatasetRows(selectedTable, rowsQueryInput),
+    enabled: Boolean(selectedTable),
+    retry: false,
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: logoutAdmin,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: queryKeys.admin.root() });
+      router.replace("/admin/login");
+    },
+  });
 
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.table_name === selectedTable) ?? null,
     [datasets, selectedTable],
   );
+  const rowsPayload = rowsQuery.data ?? null;
   const visibleDatasets = useMemo(() => {
     const normalized = datasetSearch.trim().toLowerCase();
     if (!normalized) {
@@ -63,132 +108,41 @@ export default function AdminDataBrowserPage() {
   const displayColumns = rowsPayload?.columns ?? selectedDataset?.columns ?? [];
   const pageCount = rowsPayload ? Math.max(1, Math.ceil(rowsPayload.total / rowsPayload.limit)) : 1;
 
-  function resetDatasetState(dataset: AdminDatasetSummary | null) {
-    setSelectedTable(dataset?.table_name ?? "");
-    setSortBy(dataset?.columns.find((column) => column.sortable)?.name ?? "");
-    setFilterColumn(dataset?.columns.find((column) => column.filterable)?.name ?? "");
-    setFilterValue("");
-    setSubmittedFilter({ column: "", value: "" });
-    setSearch("");
-    setSubmittedSearch("");
-    setPage(1);
-  }
+  useEffect(() => {
+    if (datasetsQuery.data) {
+      initializeDatasetSelection(
+        datasetsQuery.data.datasets[0] ?? null,
+        datasetsQuery.data.default_page_size,
+      );
+    }
+  }, [datasetsQuery.data, initializeDatasetSelection]);
 
   useEffect(() => {
-    let ignore = false;
-
-    async function loadInitialData() {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const [me, datasetPayload] = await Promise.all([fetchAdminMe(), fetchAdminDatasets()]);
-        if (ignore) {
-          return;
-        }
-
-        setUser(me);
-        setDatasets(datasetPayload.datasets);
-        setPageSizeOptions(datasetPayload.page_size_options);
-        setLimit(datasetPayload.default_page_size);
-        resetDatasetState(datasetPayload.datasets[0] ?? null);
-      } catch (error) {
-        if (error instanceof AdminApiError && error.status === 401) {
-          router.replace("/admin/login");
-          return;
-        }
-        setErrorMessage(getErrorMessage(error));
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      }
+    if (
+      isUnauthorized(adminMeQuery.error) ||
+      isUnauthorized(datasetsQuery.error) ||
+      isUnauthorized(rowsQuery.error)
+    ) {
+      router.replace("/admin/login");
     }
+  }, [adminMeQuery.error, datasetsQuery.error, router, rowsQuery.error]);
 
-    void loadInitialData();
+  const isLoading = adminMeQuery.isPending || datasetsQuery.isPending;
+  const isRowsLoading = rowsQuery.isFetching;
+  const queryError = adminMeQuery.error ?? datasetsQuery.error ?? rowsQuery.error ?? logoutMutation.error;
+  const errorMessage = queryError && !isUnauthorized(queryError) ? getErrorMessage(queryError) : null;
 
-    return () => {
-      ignore = true;
-    };
-  }, [router]);
-
-  useEffect(() => {
-    if (!selectedTable) {
-      return;
-    }
-
-    let ignore = false;
-
-    async function loadRows() {
-      setIsRowsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const payload = await fetchAdminDatasetRows(selectedTable, {
-          page,
-          limit,
-          search: submittedSearch,
-          sortBy,
-          sortDir,
-          filter: submittedFilter,
-        });
-        if (!ignore) {
-          setRowsPayload(payload);
-        }
-      } catch (error) {
-        if (error instanceof AdminApiError && error.status === 401) {
-          router.replace("/admin/login");
-          return;
-        }
-        if (!ignore) {
-          setRowsPayload(null);
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (!ignore) {
-          setIsRowsLoading(false);
-        }
-      }
-    }
-
-    void loadRows();
-
-    return () => {
-      ignore = true;
-    };
-  }, [limit, page, router, selectedTable, sortBy, sortDir, submittedFilter, submittedSearch]);
-
-  function applySearchAndFilter(event: FormEvent<HTMLFormElement>) {
+  function handleSearchAndFilter(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPage(1);
-    setSubmittedSearch(search);
-    setSubmittedFilter({
-      column: filterColumn,
-      value: filterValue,
-    });
+    applySearchAndFilterState();
   }
 
-  async function handleLogout() {
-    await logoutAdmin();
-    router.replace("/admin/login");
+  function handleLogout() {
+    logoutMutation.mutate();
   }
 
   function selectDataset(tableName: string) {
-    resetDatasetState(datasets.find((dataset) => dataset.table_name === tableName) ?? null);
-    setRowsPayload(null);
-  }
-
-  function changeSort(column: AdminDatasetColumn) {
-    if (!column.sortable) {
-      return;
-    }
-    if (sortBy === column.name) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(column.name);
-      setSortDir("asc");
-    }
-    setPage(1);
+    selectDatasetState(datasets.find((dataset) => dataset.table_name === tableName) ?? null);
   }
 
   if (isLoading) {
@@ -303,7 +257,7 @@ export default function AdminDataBrowserPage() {
                 </p>
               </div>
 
-              <form className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_minmax(160px,1fr)_88px]" onSubmit={applySearchAndFilter}>
+              <form className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_180px_minmax(160px,1fr)_88px]" onSubmit={handleSearchAndFilter}>
                 <label className="block">
                   <span className="mb-1 block text-xs font-black text-stone-600">전체 검색</span>
                   <input
@@ -356,7 +310,6 @@ export default function AdminDataBrowserPage() {
                   value={sortBy}
                   onChange={(event) => {
                     setSortBy(event.target.value);
-                    setPage(1);
                   }}
                 >
                   {selectedDataset?.columns
@@ -376,7 +329,6 @@ export default function AdminDataBrowserPage() {
                   type="button"
                   onClick={() => {
                     setSortDir("asc");
-                    setPage(1);
                   }}
                 >
                   오름차순
@@ -388,7 +340,6 @@ export default function AdminDataBrowserPage() {
                   type="button"
                   onClick={() => {
                     setSortDir("desc");
-                    setPage(1);
                   }}
                 >
                   내림차순
@@ -401,7 +352,6 @@ export default function AdminDataBrowserPage() {
                   value={limit}
                   onChange={(event) => {
                     setLimit(Number(event.target.value));
-                    setPage(1);
                   }}
                 >
                   {pageSizeOptions.map((option) => (
@@ -415,10 +365,8 @@ export default function AdminDataBrowserPage() {
                 className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-700 transition hover:border-stone-500"
                 type="button"
                 onClick={() => {
-                  setRowsPayload(null);
-                  setPage(1);
-                  setSubmittedSearch(search);
-                  setSubmittedFilter({ column: filterColumn, value: filterValue });
+                  applySearchAndFilterState();
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.admin.datasetRowsRoot() });
                 }}
               >
                 <RefreshIcon />
@@ -502,7 +450,7 @@ export default function AdminDataBrowserPage() {
                 className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 disabled={page <= 1 || isRowsLoading}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                onClick={() => setPage(Math.max(1, page - 1))}
               >
                 <ChevronLeftIcon />
                 이전
@@ -511,7 +459,7 @@ export default function AdminDataBrowserPage() {
                 className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 disabled={page >= pageCount || isRowsLoading}
-                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                onClick={() => setPage(Math.min(pageCount, page + 1))}
               >
                 다음
                 <ChevronRightIcon />
@@ -550,6 +498,10 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "관리자 데이터를 불러오지 못했다.";
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof AdminApiError && error.status === 401;
 }
 
 function SearchIcon() {

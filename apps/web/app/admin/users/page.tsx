@@ -1,7 +1,8 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   AdminApiError,
@@ -9,10 +10,12 @@ import {
   fetchAdminUsers,
   logoutAdmin,
   updateAdminUser,
-  type AdminManagedUser,
-  type AdminUser,
+  type AdminUpdateUserInput,
+  type AdminUserListResponse,
 } from "../api";
 import { getDagsterAdminUrl } from "../config";
+import { queryKeys } from "../../shared/query-keys";
+import { useAdminUsersStore } from "../../shared/stores";
 
 const accountStatusOptions = [
   { value: "", label: "전체 상태" },
@@ -34,120 +37,104 @@ const dagsterAdminUrl = getDagsterAdminUrl();
 
 export default function AdminUsersPage() {
   const router = useRouter();
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
-  const [users, setUsers] = useState<AdminManagedUser[]>([]);
-  const [search, setSearch] = useState("");
-  const [submittedSearch, setSubmittedSearch] = useState("");
-  const [accountStatus, setAccountStatus] = useState("");
-  const [submittedAccountStatus, setSubmittedAccountStatus] = useState("");
-  const [systemRole, setSystemRole] = useState("");
-  const [submittedSystemRole, setSubmittedSystemRole] = useState("");
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isMutatingUserId, setIsMutatingUserId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const {
+    accountStatus,
+    applyFilters: applyFiltersState,
+    limit,
+    page,
+    search,
+    setAccountStatus,
+    setLimit,
+    setPage,
+    setSearch,
+    setSystemRole,
+    submittedAccountStatus,
+    submittedSearch,
+    submittedSystemRole,
+    systemRole,
+  } = useAdminUsersStore();
 
+  const adminMeQuery = useQuery({
+    queryKey: queryKeys.admin.me(),
+    queryFn: fetchAdminMe,
+    retry: false,
+  });
+
+  const usersQueryInput = useMemo(
+    () => ({
+      page,
+      limit,
+      search: submittedSearch,
+      accountStatus: submittedAccountStatus,
+      systemRole: submittedSystemRole,
+    }),
+    [limit, page, submittedAccountStatus, submittedSearch, submittedSystemRole],
+  );
+
+  const usersQuery = useQuery({
+    queryKey: queryKeys.admin.users(usersQueryInput),
+    queryFn: () => fetchAdminUsers(usersQueryInput),
+    retry: false,
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: logoutAdmin,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: queryKeys.admin.root() });
+      router.replace("/admin/login");
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ mode, userId }: { mode: "activate" | "disable" | "verify"; userId: string }) =>
+      updateAdminUser(userId, buildUpdateUserInput(mode)),
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData<AdminUserListResponse>(
+        queryKeys.admin.users(usersQueryInput),
+        (current) =>
+          current
+            ? {
+                ...current,
+                users: current.users.map((user) =>
+                  user.id === updatedUser.id ? updatedUser : user,
+                ),
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.usersRoot() });
+    },
+  });
+
+  const adminUser = adminMeQuery.data ?? null;
+  const users = usersQuery.data?.users ?? [];
+  const total = usersQuery.data?.total ?? 0;
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / limit)), [limit, total]);
+  const isLoading = usersQuery.isPending;
+  const isMutatingUserId = updateUserMutation.isPending
+    ? updateUserMutation.variables?.userId ?? null
+    : null;
+  const queryError =
+    adminMeQuery.error ?? usersQuery.error ?? logoutMutation.error ?? updateUserMutation.error;
+  const errorMessage = queryError && !isUnauthorized(queryError) ? getErrorMessage(queryError) : null;
 
   useEffect(() => {
-    let ignore = false;
-
-    async function loadAdmin() {
-      try {
-        const me = await fetchAdminMe();
-        if (!ignore) {
-          setAdminUser(me);
-        }
-      } catch (error) {
-        if (error instanceof AdminApiError && error.status === 401) {
-          router.replace("/admin/login");
-          return;
-        }
-        if (!ignore) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      }
+    if (isUnauthorized(adminMeQuery.error) || isUnauthorized(usersQuery.error)) {
+      router.replace("/admin/login");
     }
-
-    void loadAdmin();
-    return () => {
-      ignore = true;
-    };
-  }, [router]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadUsers() {
-      setIsLoading(true);
-      setErrorMessage(null);
-      try {
-        const response = await fetchAdminUsers({
-          page,
-          limit,
-          search: submittedSearch,
-          accountStatus: submittedAccountStatus,
-          systemRole: submittedSystemRole,
-        });
-        if (!ignore) {
-          setUsers(response.users);
-          setTotal(response.total);
-        }
-      } catch (error) {
-        if (error instanceof AdminApiError && error.status === 401) {
-          router.replace("/admin/login");
-          return;
-        }
-        if (!ignore) {
-          setErrorMessage(getErrorMessage(error));
-          setUsers([]);
-          setTotal(0);
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadUsers();
-    return () => {
-      ignore = true;
-    };
-  }, [limit, page, router, submittedAccountStatus, submittedSearch, submittedSystemRole]);
+  }, [adminMeQuery.error, router, usersQuery.error]);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPage(1);
-    setSubmittedSearch(search);
-    setSubmittedAccountStatus(accountStatus);
-    setSubmittedSystemRole(systemRole);
+    applyFiltersState();
   }
 
-  async function handleLogout() {
-    await logoutAdmin();
-    router.replace("/admin/login");
+  function handleLogout() {
+    logoutMutation.mutate();
   }
 
-  async function mutateUser(userId: string, mode: "activate" | "disable" | "verify") {
-    setIsMutatingUserId(userId);
-    setErrorMessage(null);
-    try {
-      const input =
-        mode === "activate"
-          ? { account_status: "active", email_verified: true }
-          : mode === "disable"
-            ? { account_status: "disabled" }
-            : { email_verified: true };
-      const updatedUser = await updateAdminUser(userId, input);
-      setUsers((current) => current.map((user) => (user.id === userId ? updatedUser : user)));
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setIsMutatingUserId(null);
-    }
+  function mutateUser(userId: string, mode: "activate" | "disable" | "verify") {
+    updateUserMutation.mutate({ mode, userId });
   }
 
   return (
@@ -240,7 +227,6 @@ export default function AdminUsersPage() {
               value={limit}
               onChange={(event) => {
                 setLimit(Number(event.target.value));
-                setPage(1);
               }}
             >
               {[50, 100, 200].map((option) => (
@@ -362,7 +348,7 @@ export default function AdminUsersPage() {
                 className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold disabled:opacity-40"
                 type="button"
                 disabled={page <= 1 || isLoading}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                onClick={() => setPage(Math.max(1, page - 1))}
               >
                 이전
               </button>
@@ -370,7 +356,7 @@ export default function AdminUsersPage() {
                 className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold disabled:opacity-40"
                 type="button"
                 disabled={page >= pageCount || isLoading}
-                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                onClick={() => setPage(Math.min(pageCount, page + 1))}
               >
                 다음
               </button>
@@ -437,6 +423,20 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "사용자 정보를 불러오지 못했다.";
+}
+
+function buildUpdateUserInput(mode: "activate" | "disable" | "verify"): AdminUpdateUserInput {
+  if (mode === "activate") {
+    return { account_status: "active", email_verified: true };
+  }
+  if (mode === "disable") {
+    return { account_status: "disabled" };
+  }
+  return { email_verified: true };
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof AdminApiError && error.status === 401;
 }
 
 function SearchIcon() {
