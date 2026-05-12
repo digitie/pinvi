@@ -61,7 +61,7 @@ def test_kma_grid_to_wgs84_rejects_invalid_grid() -> None:
         kma_grid_to_wgs84(nx=0, ny=127)
 
 
-def test_pykma_cache_key_sanitizes_kma_credentials() -> None:
+def test_kma_cache_key_sanitizes_kma_credentials() -> None:
     params = {
         "ServiceKey": "secret",
         "service_key": "also-secret",
@@ -74,4 +74,4 @@ def test_pykma_cache_key_sanitizes_kma_credentials() -> None:
     cache_key = make_cache_key("getUltraSrtNcst", params)
 
     assert "secret" not in cache_key
-    assert cache_key.startswith("pykma:v1:")
+    assert cache_key.startswith("kma:v1:")

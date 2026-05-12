@@ -50,7 +50,7 @@ class _FakeKexSession:
         return _FakeKexResponse(self.payload)
 
 
-def test_kex_client_factory_returns_pykex_client_without_adapter_layer() -> None:
+def test_kex_client_factory_returns_krex_client_without_adapter_layer() -> None:
     client = build_kex_client(
         Settings(
             kex_ex_api_key="dummy-ex-key",
@@ -93,7 +93,7 @@ def test_kex_client_factory_requires_tripmate_prefixed_key() -> None:
         )
 
 
-def test_pykex_restarea_route_facilities_preserve_master_key_fields() -> None:
+def test_krex_restarea_route_facilities_preserve_master_key_fields() -> None:
     session = _FakeKexSession(
         _ex_payload(
             {
@@ -128,7 +128,7 @@ def test_pykex_restarea_route_facilities_preserve_master_key_fields() -> None:
     assert page.items[0].is_truck_rest_area is False
 
 
-def test_pykex_restarea_fuel_prices_parse_provider_prices_directly() -> None:
+def test_krex_restarea_fuel_prices_parse_provider_prices_directly() -> None:
     session = _FakeKexSession(
         _ex_payload(
             [
@@ -168,7 +168,7 @@ def test_pykex_restarea_fuel_prices_parse_provider_prices_directly() -> None:
     assert page.items[0].lpg_price == 1010
 
 
-def test_pykex_convenience_facilities_keep_raw_rows_until_schema_is_verified() -> None:
+def test_krex_convenience_facilities_keep_raw_rows_until_schema_is_verified() -> None:
     session = _FakeKexSession(_ex_payload([{"serviceAreaCode": "A0001", "facilityCode": "BABY"}]))
     client = KexClient(ex_api_key="dummy-ex-key", session=session, retry_backoff=0)
 

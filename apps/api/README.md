@@ -11,11 +11,11 @@ This package currently provides the Phase 1 backend baseline:
 - `/health/db`
 - SQLAlchemy 2 base/session setup
 - Alembic migration setup
-- pykma 기반 KMA weather public API 계약과 DFS grid conversion
+- python-kma-api 기반 KMA weather public API 계약과 DFS grid conversion
 - Juso road-address parser and legal-dong code loader
-- pyopinet 기반 OpiNet 유가 adapter
+- python-opinet-api 기반 OpiNet 유가 adapter
 - visitkorea 기반 KTO TourAPI client 설정 경계
-- pykex 기반 한국도로공사 KEX OpenAPI client 설정 경계
+- python-krex-api 기반 한국도로공사 KEX OpenAPI client 설정 경계
 - Initial core tables:
   - `users`
   - `sessions`
@@ -53,7 +53,7 @@ python3 -m venv .venv-wsl
 pip install -e . pytest ruff mypy httpx
 ```
 
-OpiNet 유가 adapter는 pyopinet의 `opinet` 패키지를 사용한다. 로컬 키는 커밋하지 않는
+OpiNet 유가 adapter는 python-opinet-api의 `opinet` 패키지를 사용한다. 로컬 키는 커밋하지 않는
 `.env`에 아래처럼 둔다.
 
 ```bash
@@ -74,7 +74,7 @@ TRIPMATE_KTO_TIMEOUT_SECONDS=10
 TRIPMATE_KTO_MAX_RETRIES=2
 ```
 
-한국도로공사 OpenAPI는 adapter 없이 `pykex`의 `KexClient`를 직접 사용한다. 로컬 키는
+한국도로공사 OpenAPI는 adapter 없이 `python-krex-api`의 `krex.KexClient`를 직접 사용한다. 로컬 키는
 `.env`에 아래처럼 둔다.
 
 ```bash
@@ -105,7 +105,7 @@ uv run mypy .
 uv run pytest
 ```
 
-KMA 단기/중기/특보 data.go.kr 호출과 DFS 격자 변환은 adapter 없이 `pykma` 공개 API를 직접 사용한다. 로컬 KMA 격자 변환 구현은 두지 않는다.
+KMA 단기/중기/특보 data.go.kr 호출과 DFS 격자 변환은 adapter 없이 `python-kma-api`의 `kma` 공개 API를 직접 사용한다. 로컬 KMA 격자 변환 구현은 두지 않는다.
 
 ```bash
 uv run pytest -q tests/test_kma_grid.py tests/test_weather_loader.py -k "kma or weather"
@@ -133,13 +133,13 @@ cd apps/api
 pytest -q tests/test_kto_visitkorea.py
 ```
 
-Run the pykex integration contract test in WSL:
+Run the python-krex-api integration contract test in WSL:
 
 ```bash
 cd apps/api
 . .venv-wsl/bin/activate
-pip install -e /mnt/f/dev/pykex
-pytest -q tests/test_kex_pykex.py
+pip install -e /mnt/f/dev/python-krex-api
+pytest -q tests/test_kex_krex.py
 ```
 
 KTO 연동 세부 계약과 운영 절차는 `docs/api/kto-tourapi.md`, `docs/runbooks/kto-tourapi.md`를 따른다.

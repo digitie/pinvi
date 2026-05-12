@@ -700,7 +700,7 @@ def test_kma_client_treats_no_data_response_as_empty() -> None:
     assert seen_requests[0].url.params["ServiceKey"] == "local-test-key"
 
 
-def test_kma_client_delegates_explicit_short_term_call_to_pykma() -> None:
+def test_kma_client_delegates_explicit_short_term_call_to_kma() -> None:
     seen_requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

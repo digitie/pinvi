@@ -60,8 +60,8 @@ class KmaWeatherApiClient:
                 "getUltraSrtNcst",
                 {"base_date": base_date, "base_time": base_time, "nx": nx, "ny": ny},
             )
-        return self._call_pykma(
-            lambda: _items_from_pykma_body(
+        return self._call_kma(
+            lambda: _items_from_kma_body(
                 self._forecast_client().now(nx=nx, ny=ny).raw,
                 endpoint="getUltraSrtNcst",
             )
@@ -81,7 +81,7 @@ class KmaWeatherApiClient:
                 "getUltraSrtFcst",
                 {"base_date": base_date, "base_time": base_time, "nx": nx, "ny": ny},
             )
-        return self._call_pykma(
+        return self._call_kma(
             lambda: [
                 dict(item.raw) for item in self._forecast_client().forecast_short(nx=nx, ny=ny)
             ]
@@ -101,7 +101,7 @@ class KmaWeatherApiClient:
                 "getVilageFcst",
                 {"base_date": base_date, "base_time": base_time, "nx": nx, "ny": ny},
             )
-        return self._call_pykma(
+        return self._call_kma(
             lambda: [dict(item.raw) for item in self._forecast_client().forecast(nx=nx, ny=ny)]
         )
 
@@ -213,10 +213,10 @@ class KmaWeatherApiClient:
                 num_of_rows=MAX_PAGE_SIZE,
                 max_pages=MAX_PAGE_GUARD,
             ):
-                rows.extend(_items_from_pykma_body(body, endpoint=f"{service}/{operation}"))
+                rows.extend(_items_from_kma_body(body, endpoint=f"{service}/{operation}"))
             return rows
 
-        return self._call_pykma(collect_pages)
+        return self._call_kma(collect_pages)
 
     def _required_service_key(self) -> str:
         api_key = (self._service_key or "").strip()
@@ -224,7 +224,7 @@ class KmaWeatherApiClient:
             raise DataGoApiError("data.go.kr service key is not configured.")
         return api_key
 
-    def _call_pykma(
+    def _call_kma(
         self,
         callback: Callable[[], list[dict[str, Any]]],
     ) -> list[dict[str, Any]]:
@@ -285,7 +285,7 @@ class KmaWeatherApiClient:
             time.sleep(self._rate_limit_retry_backoff_seconds)
 
 
-def _items_from_pykma_body(
+def _items_from_kma_body(
     body: Mapping[str, Any],
     *,
     endpoint: str,
