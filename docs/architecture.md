@@ -85,7 +85,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.
 - OpiNet 유가 조회는 pyopinet `opinet` 패키지를 감싼 backend adapter에서 수행하고,
   서비스/ETL 경계에는 TripMate 정규화 레코드만 전달한다.
-- KTO TourAPI 조회는 `pykrtourapi`의 `KrTourApiClient`, `TourApiHubClient`, typed `related_tour`, pagination helper, `Page.context`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 두지 않고, 새 endpoint별 typed model이 부족할 때만 `pykrtourapi`에 upstream한다.
+- KTO TourAPI 조회는 `visitkorea`의 `KrTourApiClient`, `TourApiHubClient`, typed `related_tour`, pagination helper, `Page.context`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 두지 않고, 새 endpoint별 typed model이 부족할 때만 `visitkorea`에 upstream한다.
 - 한국도로공사 OpenAPI 조회는 `pykex`의 `kex_openapi.KexClient`를 직접 사용한다. TripMate backend에는 한국도로공사 adapter/gateway 래퍼를 두지 않고, 부족한 휴게소/교통 endpoint나 typed model은 `pykex`에 upstream한다.
 - 기상청 단기/중기/특보 data.go.kr 조회와 DFS 격자 변환은 `pykma`의 `KmaClient`, `DataGoKrClient`, `wgs84_to_kma_grid`, `kma_grid_to_wgs84`, metadata/cache helper를 직접 사용한다. TripMate backend에는 KMA adapter/gateway 래퍼를 두지 않고, 부족한 endpoint별 typed model이나 pagination 편의 API는 `pykma`에 upstream한다.
 

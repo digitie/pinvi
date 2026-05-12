@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pykrtourapi import KrTourApiClient, MobileOS, TourApiAuthError, TourApiHubClient
+from visitkorea import KrTourApiClient, MobileOS, TourApiAuthError, TourApiHubClient
 
 from app.core.config import Settings, get_settings
 

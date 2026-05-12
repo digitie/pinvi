@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 import pytest
-from kex_openapi import (
+from krex import (
     KexAuthError,
     KexClient,
     RestAreaFuelPrice,

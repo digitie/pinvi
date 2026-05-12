@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from geoalchemy2.elements import WKTElement
-from pykma import wgs84_to_kma_grid
+from kma import wgs84_to_kma_grid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

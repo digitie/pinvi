@@ -132,7 +132,7 @@ TRIPMATE_KTO_TIMEOUT_SECONDS=10
 TRIPMATE_KTO_MAX_RETRIES=2
 ```
 
-KTO 호출 코드는 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
+KTO 호출 코드는 `visitkorea`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
 
 ## 소셜 로그인 로컬 설정 계획
 

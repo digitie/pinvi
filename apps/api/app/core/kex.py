@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from kex_openapi import KexAuthError, KexClient
+from krex import KexAuthError, KexClient
 
 from app.core.config import Settings, get_settings
 

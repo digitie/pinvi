@@ -27,7 +27,7 @@
 | 유가 | `docs/data-sources/fuel-opinet.md` | OpiNet 지역코드, 전국 평균가, 시군구 최저가 구현 |
 | 휴게소 | `docs/data-sources/rest-area-expressway.md` | 한국도로공사 휴게소 기본정보, 유가, 편의시설 구현 |
 | 관광/축제 | `docs/data-sources/tour-festival.md` | KMA 관광코스 CSV/상세날씨, 전국문화축제 구현 |
-| KTO TourAPI | `docs/api/kto-tourapi.md` | pykrtourapi client 설정 경계와 직접 사용 계약 구현 |
+| KTO TourAPI | `docs/api/kto-tourapi.md` | visitkorea client 설정 경계와 직접 사용 계약 구현 |
 | 공공 장소 | `docs/data-sources/public-places.md` | 수목원/휴양림/박물관미술관/캠핑장 표준 장소 적재 구현 |
 | Provider 정책/TODO | `docs/data-sources/provider-policy-and-todo.md` | Kakao/Naver/Google 저장 정책, KASI/MCP/후속 API TODO |
 | YouTube 여행 정보 | `docs/architecture/youtube-travel-intelligence.md` | 구현 전 설계/TODO. Gemini YouTube URL 분석과 MCP 분리 구조 |

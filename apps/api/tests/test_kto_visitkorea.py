@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
-from pykrtourapi import (
+from visitkorea import (
     ContentType,
     KrTourApiClient,
     RelatedTourItem,
@@ -50,7 +50,7 @@ class _FakeTourApiSession:
         return self._responses.pop(0)
 
 
-def test_kto_client_factory_returns_pykrtourapi_clients_without_adapter_layer() -> None:
+def test_kto_client_factory_returns_visitkorea_clients_without_adapter_layer() -> None:
     settings = Settings(
         kto_service_key="dummy-kto-key",
         kto_mobile_app="TripMate-Test",
@@ -76,7 +76,7 @@ def test_kto_client_factory_requires_tripmate_prefixed_service_key() -> None:
         build_kto_kor_client(Settings(kto_service_key=None))
 
 
-def test_pykrtourapi_location_query_preserves_tourapi_fields_and_coordinate_order() -> None:
+def test_visitkorea_location_query_preserves_tourapi_fields_and_coordinate_order() -> None:
     session = _FakeTourApiSession(
         _FakeTourApiResponse(
             _tour_payload(
@@ -137,7 +137,7 @@ def test_pykrtourapi_location_query_preserves_tourapi_fields_and_coordinate_orde
     assert copyright_display_info(page.items[0].copyright_division_code).code == "Type1"
 
 
-def test_pykrtourapi_related_tour_helper_returns_typed_records_without_tripmate_adapter() -> None:
+def test_visitkorea_related_tour_helper_returns_typed_records_without_tripmate_adapter() -> None:
     session = _FakeTourApiSession(
         _FakeTourApiResponse(
             _tour_payload(
@@ -191,7 +191,7 @@ def test_pykrtourapi_related_tour_helper_returns_typed_records_without_tripmate_
     assert "serviceKey" not in page.context.request_params
 
 
-def test_pykrtourapi_pagination_and_display_helpers_are_used_directly() -> None:
+def test_visitkorea_pagination_and_display_helpers_are_used_directly() -> None:
     session = _FakeTourApiSession(
         [
             _FakeTourApiResponse(
@@ -232,7 +232,7 @@ def test_pykrtourapi_pagination_and_display_helpers_are_used_directly() -> None:
     assert clean_tourapi_html("<p>첫 줄<br>둘째 줄</p>") == "첫 줄\n둘째 줄"
 
 
-def test_pykrtourapi_exception_metadata_is_available_without_tripmate_mapping() -> None:
+def test_visitkorea_exception_metadata_is_available_without_tripmate_mapping() -> None:
     session = _FakeTourApiSession(
         _FakeTourApiResponse({"message": "traffic limit"}, status_code=429)
     )

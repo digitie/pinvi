@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from pykma import wgs84_to_kma_grid
+from kma import wgs84_to_kma_grid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 

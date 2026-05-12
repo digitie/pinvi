@@ -7,7 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from pykma import DataGoKrClient, KmaClient, KmaError
+from kma import DataGoKrClient, KmaClient, KmaError
 
 from app.core.config import get_settings
 

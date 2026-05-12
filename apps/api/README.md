@@ -14,7 +14,7 @@ This package currently provides the Phase 1 backend baseline:
 - pykma 기반 KMA weather public API 계약과 DFS grid conversion
 - Juso road-address parser and legal-dong code loader
 - pyopinet 기반 OpiNet 유가 adapter
-- pykrtourapi 기반 KTO TourAPI client 설정 경계
+- visitkorea 기반 KTO TourAPI client 설정 경계
 - pykex 기반 한국도로공사 KEX OpenAPI client 설정 경계
 - Initial core tables:
   - `users`
@@ -63,7 +63,7 @@ TRIPMATE_OPINET_MAX_RETRIES=2
 TRIPMATE_OPINET_RETRY_BACKOFF_SECONDS=0.5
 ```
 
-KTO TourAPI는 adapter 없이 `pykrtourapi`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다.
+KTO TourAPI는 adapter 없이 `visitkorea`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다.
 로컬 키는 `.env`에 아래처럼 둔다.
 
 ```bash
@@ -125,12 +125,12 @@ cd apps/api
 pytest -q tests/test_juso_parser.py tests/test_juso_legal_dong_loader.py
 ```
 
-Run the pykrtourapi integration contract test in WSL:
+Run the visitkorea integration contract test in WSL:
 
 ```bash
 cd apps/api
 . .venv-wsl/bin/activate
-pytest -q tests/test_kto_pykrtourapi.py
+pytest -q tests/test_kto_visitkorea.py
 ```
 
 Run the pykex integration contract test in WSL:

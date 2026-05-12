@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from kex_openapi import KexClient, Page
+from krex import KexClient, Page
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -90,7 +90,7 @@ def _collect_kex_rows(fetch_page: Callable[[int], Page[Any]]) -> list[dict[str, 
             return rows
         if len(page_rows) < KEX_PAGE_SIZE:
             return rows
-    raise RuntimeError("pykex pagination exceeded guard for rest area dataset.")
+    raise RuntimeError("krex pagination exceeded guard for rest area dataset.")
 
 
 def _fetch_rest_area_fuel_price_page(client: KexClient, *, page_no: int) -> Page[Any]:
@@ -116,7 +116,7 @@ def _kex_item_raw(item: object) -> dict[str, Any]:
     raw = getattr(item, "raw", None)
     if isinstance(raw, dict):
         return dict(raw)
-    raise TypeError(f"pykex rest area item does not expose raw payload: {type(item)!r}")
+    raise TypeError(f"krex rest area item does not expose raw payload: {type(item)!r}")
 
 
 def load_rest_area_master(

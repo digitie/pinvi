@@ -95,7 +95,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run mypy ."
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run pytest"
 ```
 
-KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `pykrtourapi` client를 직접 사용합니다.
+KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `visitkorea` client를 직접 사용합니다.
 
 ```bash
 TRIPMATE_KTO_SERVICE_KEY=공공데이터포털_decoding_인증키

@@ -1,5 +1,5 @@
 import pytest
-from pykma import (
+from kma import (
     GridPoint,
     LatLon,
     kma_grid_to_wgs84,
