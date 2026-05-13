@@ -153,6 +153,13 @@ export default function AdminUsersPage() {
               <TableIcon />
               데이터
             </Link>
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800"
+              href="/admin/data"
+            >
+              <TableIcon />
+              CRUD
+            </Link>
             <a
               className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800"
               href={dagsterAdminUrl}

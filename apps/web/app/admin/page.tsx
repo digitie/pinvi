@@ -51,6 +51,34 @@ const KEY_DATASET_GROUPS = [
     tables: ["beach_source_records", "beach_provider_refs"],
   },
   {
+    label: "OpiNet Fuel",
+    tables: [
+      "fuel_raw_opinet_region_code",
+      "fuel_raw_avg_price",
+      "fuel_raw_lowest_station",
+      "fuel_serving_avg_price",
+      "fuel_serving_lowest_station",
+    ],
+  },
+  {
+    label: "KEX Rest Area",
+    tables: [
+      "rest_area_raw_master",
+      "rest_area_raw_oil_price",
+      "rest_area_raw_service",
+      "rest_area_serving_master",
+    ],
+  },
+  {
+    label: "VWorld Address",
+    tables: [
+      "region_raw_vworld_boundary",
+      "region_serving_boundary",
+      "address_code_standard",
+      "address_serving_juso_road_address",
+    ],
+  },
+  {
     label: "Beach Domain",
     tables: [
       "beach_profiles",
@@ -271,6 +299,13 @@ export default function AdminDataBrowserPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500"
+              href="/admin/data"
+            >
+              <DatabaseIcon />
+              CRUD
+            </Link>
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500"
               href="/admin/users"
             >
               <UsersIcon />
@@ -308,7 +343,7 @@ export default function AdminDataBrowserPage() {
               <div>
                 <p className="text-xs font-black uppercase text-teal-800">priority datasets</p>
                 <p className="mt-1 text-sm font-semibold text-stone-600">
-                  Feature, POI, raw source, Dagster ETL, API, email, and audit state
+                  Feature, POI, beach, OpiNet, KEX, VWorld, Dagster ETL, API, email, and audit state
                 </p>
               </div>
               <a
@@ -771,6 +806,20 @@ function UsersIcon() {
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" />
       <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function DatabaseIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3Zm0 0v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
     </svg>
   );
 }

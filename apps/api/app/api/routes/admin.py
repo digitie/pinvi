@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -14,6 +15,11 @@ from app.models.user import User
 from app.schemas.admin import (
     AdminDatasetListResponse,
     AdminDatasetRowsResponse,
+    AdminEntityDeleteResponse,
+    AdminEntityDetailResponse,
+    AdminEntityKind,
+    AdminEntityListResponse,
+    AdminEntityUpsertRequest,
     AdminLoginRequest,
     AdminLoginResponse,
     AdminManagedUserResponse,
@@ -35,8 +41,19 @@ from app.services.admin_data_browser import (
     list_admin_datasets,
     query_admin_dataset_rows,
 )
+from app.services.admin_entity_crud import (
+    AdminEntityNotFoundError,
+    AdminEntityValidationError,
+    create_admin_entity,
+    delete_admin_entity,
+    get_admin_entity_detail,
+    list_admin_entities,
+    update_admin_entity,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+ENTITY_QUERY_PARAM_NAMES = {"page", "limit", "search"}
 
 
 def require_admin_user(
@@ -220,6 +237,144 @@ def update_admin_user(
     db.commit()
     db.refresh(target)
     return _to_managed_user_response(target)
+
+
+@router.get("/entities/{entity}", response_model=AdminEntityListResponse)
+def get_admin_entity_list(
+    entity: AdminEntityKind,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    search: str | None = None,
+) -> AdminEntityListResponse:
+    filters = {
+        key: value
+        for key, value in request.query_params.multi_items()
+        if key not in ENTITY_QUERY_PARAM_NAMES and value
+    }
+    try:
+        result = list_admin_entities(
+            db,
+            entity=entity,
+            page=page,
+            limit=limit,
+            search=search,
+            filters=filters,
+        )
+    except AdminEntityValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return AdminEntityListResponse.model_validate(result)
+
+
+@router.get("/entities/{entity}/{item_id}", response_model=AdminEntityDetailResponse)
+def get_admin_entity_item(
+    entity: AdminEntityKind,
+    item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+) -> AdminEntityDetailResponse:
+    try:
+        result = get_admin_entity_detail(db, entity=entity, item_id=item_id)
+    except AdminEntityValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AdminEntityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return AdminEntityDetailResponse.model_validate(result)
+
+
+@router.post(
+    "/entities/{entity}",
+    response_model=AdminEntityDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_admin_entity_item(
+    entity: AdminEntityKind,
+    payload: AdminEntityUpsertRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+) -> AdminEntityDetailResponse:
+    try:
+        item_id = create_admin_entity(db, entity=entity, values=payload.values)
+        db.commit()
+        result = get_admin_entity_detail(db, entity=entity, item_id=item_id)
+    except AdminEntityValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AdminEntityNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="관리자 CRUD 저장 중 제약 조건이 충돌했다.",
+        ) from exc
+    return AdminEntityDetailResponse.model_validate(result)
+
+
+@router.patch("/entities/{entity}/{item_id}", response_model=AdminEntityDetailResponse)
+def update_admin_entity_item(
+    entity: AdminEntityKind,
+    item_id: str,
+    payload: AdminEntityUpsertRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> AdminEntityDetailResponse:
+    try:
+        updated_id = update_admin_entity(
+            db,
+            entity=entity,
+            item_id=item_id,
+            values=payload.values,
+            current_user=current_user,
+        )
+        db.commit()
+        result = get_admin_entity_detail(db, entity=entity, item_id=updated_id)
+    except AdminEntityValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AdminEntityNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="관리자 CRUD 저장 중 제약 조건이 충돌했다.",
+        ) from exc
+    return AdminEntityDetailResponse.model_validate(result)
+
+
+@router.delete("/entities/{entity}/{item_id}", response_model=AdminEntityDeleteResponse)
+def delete_admin_entity_item(
+    entity: AdminEntityKind,
+    item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> AdminEntityDeleteResponse:
+    try:
+        deleted_id = delete_admin_entity(
+            db,
+            entity=entity,
+            item_id=item_id,
+            current_user=current_user,
+        )
+        db.commit()
+    except AdminEntityValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AdminEntityNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="관리자 CRUD 삭제 중 제약 조건이 충돌했다.",
+        ) from exc
+    return AdminEntityDeleteResponse(entity=entity, id=deleted_id, status="deleted")
 
 
 @router.get("/datasets", response_model=AdminDatasetListResponse)

@@ -1,4 +1,9 @@
-import type { AdminDatasetRowsQuery, AdminUserListQuery } from "../admin/api";
+import type {
+  AdminDatasetRowsQuery,
+  AdminEntityKind,
+  AdminEntityListQuery,
+  AdminUserListQuery,
+} from "../admin/api";
 
 export const queryKeys = {
   public: {
@@ -35,5 +40,18 @@ export const queryKeys = {
         query.accountStatus,
         query.systemRole,
       ] as const,
+    entitiesRoot: () => ["admin", "entities"] as const,
+    entityList: (entity: AdminEntityKind, query: AdminEntityListQuery) =>
+      [
+        "admin",
+        "entities",
+        entity,
+        query.page,
+        query.limit,
+        query.search,
+        JSON.stringify(query.filters),
+      ] as const,
+    entityDetail: (entity: AdminEntityKind, itemId: string) =>
+      ["admin", "entities", entity, itemId] as const,
   },
 };

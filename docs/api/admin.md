@@ -1,6 +1,6 @@
 # 관리자 API
 
-관리자 API는 일반 사용자 로그인과 분리된 내부 운영용 API이다. 현재 구현 범위는 관리자 전용 로그인, ETL/공공데이터 테이블 조회용 데이터 브라우저, 가입 사용자 관리이다.
+관리자 API는 일반 사용자 로그인과 분리된 내부 운영용 API이다. 현재 구현 범위는 관리자 전용 로그인, ETL/공공데이터 테이블 조회용 데이터 브라우저, 가입 사용자 관리, 사용자/features/trips/POI CRUD 콘솔이다.
 
 ## 인증
 
@@ -182,6 +182,78 @@ Query parameter:
 - `401 Unauthorized`: 관리자 access token 없음.
 - `404 Not Found`: 대상 사용자 없음.
 
+### `GET /admin/entities/{entity}`
+
+관리자 CRUD 콘솔(`/admin/data`)에서 사용자, feature, 여행, POI 목록을 같은 응답 shape로 조회한다.
+
+지원 entity:
+
+- `users`
+- `features`
+- `trips`
+- `pois`
+
+공통 Query parameter:
+
+- `page`: 1부터 시작한다.
+- `limit`: 1~100. 관리자 CRUD 화면 기본값은 25이다.
+- `search`: entity별 주요 문자열/UUID 부분 일치 검색.
+
+Entity별 추가 필터:
+
+- `users`: `account_status`, `system_role`
+- `features`: `feature_id`, `kind`, `status`
+- `trips`: `user_id`, `planning_status`
+- `pois`: `trip_id`, `feature_id`, `user_id`
+
+응답 항목은 UI가 데이터 연계를 바로 따라갈 수 있도록 `links`, `related` 조회용 query, 지도 미리보기용 `map` 좌표를 포함한다.
+
+### `GET /admin/entities/{entity}/{item_id}`
+
+단일 항목 상세와 연관 그룹을 조회한다.
+
+예: feature 상세는 해당 feature를 참조하는 POI 그룹을 반환하고, POI 상세는 trip/user/feature 링크를 반환한다.
+
+### `POST /admin/entities/{entity}`
+
+테스트 및 운영 확인용 데이터를 생성한다.
+
+요청:
+
+```json
+{
+  "values": {
+    "feature_id": "admin:test-beach",
+    "kind": "place",
+    "name": "관리자 테스트 해변",
+    "category": "beach",
+    "longitude": 129.16,
+    "latitude": 35.16,
+    "status": "active"
+  }
+}
+```
+
+동작 기준:
+
+- `trips` 생성 시 `start_date`~`end_date` 범위의 `trip_days`를 자동 생성한다. 관리자 테스트 생성은 최대 31일이다.
+- `pois` 생성 시 `trip_id`, `day_index`가 실제 `trip_days`와 맞아야 한다.
+- `pois.feature_id`가 있으면 feature snapshot을 기본 생성한다.
+- `features` 생성/수정은 PostGIS `POINT(lon lat)` 좌표를 갱신한다.
+
+### `PATCH /admin/entities/{entity}/{item_id}`
+
+단일 항목을 수정한다. 자기 자신의 관리자 권한 제거/비활성화는 차단한다.
+
+### `DELETE /admin/entities/{entity}/{item_id}`
+
+삭제 동작:
+
+- `users`: `account_status=deleted`, `is_active=false`로 소프트 삭제.
+- `features`: `status=hidden`, `deleted_at` 기록.
+- `trips`: `planning_status=archived`, `deleted_at` 기록.
+- `pois`: 테스트 데이터 정리를 위해 실제 행 삭제.
+
 ### `GET /admin/datasets`
 
 관리자 데이터 브라우저에서 조회할 수 있는 테이블 목록을 반환한다.
@@ -190,6 +262,7 @@ Query parameter:
 
 - `users`, `sessions`, `trips`, `trip_days`는 제외한다.
 - ETL로 적재한 주소, 경계, 유가, 휴게소, 날씨, 관광코스, 실행 로그 계열 테이블을 조회 대상으로 둔다.
+- raw/serving 확인 우선 그룹은 beach/KHOA, OpiNet 유가, KEX 휴게소, VWorld/주소, Dagster, API/email/audit 테이블을 포함한다.
 - 테이블별 row count와 컬럼 메타데이터를 함께 반환한다.
 - 기본 페이지 크기는 `100`이다.
 - 허용 페이지 크기는 `50`, `100`, `200`, `500`이다.
@@ -258,8 +331,10 @@ Query parameter:
 - 알 수 없는 테이블 조회 차단.
 - 가입 사용자 목록 검색과 상태 변경.
 - 관리자가 자기 자신의 관리자 권한을 제거하지 못하는지 확인.
+- `/admin/entities/*` CRUD, 검색, 필터, 연관 링크, 지도 좌표 응답.
 
 현재 관련 테스트:
 
 - `apps/api/tests/test_admin_api.py`
+- `apps/api/tests/test_admin_entities_api.py`
 - `apps/api/tests/test_migration_contract.py`

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.core.json_types import JsonValue
+
+AdminEntityKind = Literal["users", "features", "trips", "pois"]
 
 
 class AdminLoginRequest(BaseModel):
@@ -99,3 +102,59 @@ class AdminUpdateUserRequest(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=80)
     name: str | None = Field(default=None, min_length=1, max_length=80)
     email_verified: bool | None = None
+
+
+class AdminEntityLink(BaseModel):
+    entity: AdminEntityKind
+    relation: str
+    id: str | None = None
+    label: str
+    query: dict[str, str] = Field(default_factory=dict)
+
+
+class AdminEntityMapPoint(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class AdminEntityItem(BaseModel):
+    entity: AdminEntityKind
+    id: str
+    label: str
+    subtitle: str | None = None
+    status: str | None = None
+    fields: dict[str, JsonValue] = Field(default_factory=dict)
+    links: list[AdminEntityLink] = Field(default_factory=list)
+    map: AdminEntityMapPoint | None = None
+
+
+class AdminEntityListResponse(BaseModel):
+    entity: AdminEntityKind
+    items: list[AdminEntityItem]
+    page: int
+    limit: int
+    total: int
+
+
+class AdminEntityRelatedGroup(BaseModel):
+    label: str
+    entity: AdminEntityKind
+    query: dict[str, str] = Field(default_factory=dict)
+    count: int
+    sample: list[AdminEntityItem] = Field(default_factory=list)
+
+
+class AdminEntityDetailResponse(BaseModel):
+    entity: AdminEntityKind
+    item: AdminEntityItem
+    related: list[AdminEntityRelatedGroup] = Field(default_factory=list)
+
+
+class AdminEntityUpsertRequest(BaseModel):
+    values: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class AdminEntityDeleteResponse(BaseModel):
+    entity: AdminEntityKind
+    id: str
+    status: str

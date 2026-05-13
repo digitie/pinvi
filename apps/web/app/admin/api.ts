@@ -113,6 +113,69 @@ export type AdminUpdateUserInput = {
   email_verified?: boolean;
 };
 
+export type AdminEntityKind = "users" | "features" | "trips" | "pois";
+
+export type AdminEntityLink = {
+  entity: AdminEntityKind;
+  relation: string;
+  id: string | null;
+  label: string;
+  query: Record<string, string>;
+};
+
+export type AdminEntityMapPoint = {
+  latitude: number;
+  longitude: number;
+};
+
+export type AdminEntityItem = {
+  entity: AdminEntityKind;
+  id: string;
+  label: string;
+  subtitle: string | null;
+  status: string | null;
+  fields: Record<string, AdminJsonValue>;
+  links: AdminEntityLink[];
+  map: AdminEntityMapPoint | null;
+};
+
+export type AdminEntityListResponse = {
+  entity: AdminEntityKind;
+  items: AdminEntityItem[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+export type AdminEntityRelatedGroup = {
+  label: string;
+  entity: AdminEntityKind;
+  query: Record<string, string>;
+  count: number;
+  sample: AdminEntityItem[];
+};
+
+export type AdminEntityDetailResponse = {
+  entity: AdminEntityKind;
+  item: AdminEntityItem;
+  related: AdminEntityRelatedGroup[];
+};
+
+export type AdminEntityDeleteResponse = {
+  entity: AdminEntityKind;
+  id: string;
+  status: string;
+};
+
+export type AdminEntityListQuery = {
+  page: number;
+  limit: number;
+  search: string;
+  filters: Record<string, string>;
+};
+
+export type AdminEntityUpsertInput = Record<string, AdminJsonValue>;
+
 export class AdminApiError extends Error {
   status: number;
   payload: unknown;
@@ -206,6 +269,72 @@ export async function updateAdminUser(
     await adminFetch(`/admin/users/${encodeURIComponent(userId)}`, {
       method: "PATCH",
       body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function fetchAdminEntityList(
+  entity: AdminEntityKind,
+  query: AdminEntityListQuery,
+): Promise<AdminEntityListResponse> {
+  const params = new URLSearchParams({
+    page: String(query.page),
+    limit: String(query.limit),
+  });
+  if (query.search.trim()) {
+    params.set("search", query.search.trim());
+  }
+  for (const [key, value] of Object.entries(query.filters)) {
+    if (value.trim()) {
+      params.set(key, value.trim());
+    }
+  }
+  return parseAdminEntityListResponse(
+    await adminFetch(`/admin/entities/${entity}?${params.toString()}`),
+  );
+}
+
+export async function fetchAdminEntityDetail(
+  entity: AdminEntityKind,
+  itemId: string,
+): Promise<AdminEntityDetailResponse> {
+  return parseAdminEntityDetailResponse(
+    await adminFetch(`/admin/entities/${entity}/${encodeURIComponent(itemId)}`),
+  );
+}
+
+export async function createAdminEntity(
+  entity: AdminEntityKind,
+  values: AdminEntityUpsertInput,
+): Promise<AdminEntityDetailResponse> {
+  return parseAdminEntityDetailResponse(
+    await adminFetch(`/admin/entities/${entity}`, {
+      method: "POST",
+      body: JSON.stringify({ values }),
+    }),
+  );
+}
+
+export async function updateAdminEntity(
+  entity: AdminEntityKind,
+  itemId: string,
+  values: AdminEntityUpsertInput,
+): Promise<AdminEntityDetailResponse> {
+  return parseAdminEntityDetailResponse(
+    await adminFetch(`/admin/entities/${entity}/${encodeURIComponent(itemId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ values }),
+    }),
+  );
+}
+
+export async function deleteAdminEntity(
+  entity: AdminEntityKind,
+  itemId: string,
+): Promise<AdminEntityDeleteResponse> {
+  return parseAdminEntityDeleteResponse(
+    await adminFetch(`/admin/entities/${entity}/${encodeURIComponent(itemId)}`, {
+      method: "DELETE",
     }),
   );
 }
@@ -340,6 +469,88 @@ function parseAdminManagedUser(payload: unknown): AdminManagedUser {
   };
 }
 
+function parseAdminEntityListResponse(payload: unknown): AdminEntityListResponse {
+  const record = requireRecord(payload, "관리자 엔티티 목록 응답");
+  return {
+    entity: parseAdminEntityKind(record.entity),
+    items: requireArray(record.items, "items").map(parseAdminEntityItem),
+    page: requireNumber(record.page, "page"),
+    limit: requireNumber(record.limit, "limit"),
+    total: requireNumber(record.total, "total"),
+  };
+}
+
+function parseAdminEntityDetailResponse(payload: unknown): AdminEntityDetailResponse {
+  const record = requireRecord(payload, "관리자 엔티티 상세 응답");
+  return {
+    entity: parseAdminEntityKind(record.entity),
+    item: parseAdminEntityItem(record.item),
+    related: requireArray(record.related, "related").map(parseAdminEntityRelatedGroup),
+  };
+}
+
+function parseAdminEntityDeleteResponse(payload: unknown): AdminEntityDeleteResponse {
+  const record = requireRecord(payload, "관리자 엔티티 삭제 응답");
+  return {
+    entity: parseAdminEntityKind(record.entity),
+    id: requireString(record.id, "id"),
+    status: requireString(record.status, "status"),
+  };
+}
+
+function parseAdminEntityRelatedGroup(payload: unknown): AdminEntityRelatedGroup {
+  const record = requireRecord(payload, "관리자 엔티티 연관 응답");
+  return {
+    label: requireString(record.label, "label"),
+    entity: parseAdminEntityKind(record.entity),
+    query: parseStringRecord(record.query, "query"),
+    count: requireNumber(record.count, "count"),
+    sample: requireArray(record.sample, "sample").map(parseAdminEntityItem),
+  };
+}
+
+function parseAdminEntityItem(payload: unknown): AdminEntityItem {
+  const record = requireRecord(payload, "관리자 엔티티 항목 응답");
+  const mapValue = record.map;
+  return {
+    entity: parseAdminEntityKind(record.entity),
+    id: requireString(record.id, "id"),
+    label: requireString(record.label, "label"),
+    subtitle: optionalString(record.subtitle, "subtitle"),
+    status: optionalString(record.status, "status"),
+    fields: parseJsonRecord(record.fields, "fields"),
+    links: requireArray(record.links, "links").map(parseAdminEntityLink),
+    map: mapValue === null ? null : parseAdminEntityMapPoint(mapValue),
+  };
+}
+
+function parseAdminEntityLink(payload: unknown): AdminEntityLink {
+  const record = requireRecord(payload, "관리자 엔티티 링크 응답");
+  return {
+    entity: parseAdminEntityKind(record.entity),
+    relation: requireString(record.relation, "relation"),
+    id: optionalString(record.id, "id"),
+    label: requireString(record.label, "label"),
+    query: parseStringRecord(record.query, "query"),
+  };
+}
+
+function parseAdminEntityMapPoint(payload: unknown): AdminEntityMapPoint {
+  const record = requireRecord(payload, "관리자 엔티티 지도 좌표 응답");
+  return {
+    latitude: requireNumber(record.latitude, "latitude"),
+    longitude: requireNumber(record.longitude, "longitude"),
+  };
+}
+
+function parseAdminEntityKind(payload: unknown): AdminEntityKind {
+  const value = requireString(payload, "entity");
+  if (value === "users" || value === "features" || value === "trips" || value === "pois") {
+    return value;
+  }
+  throw new AdminResponseShapeError(`지원하지 않는 관리자 엔티티다: ${value}`);
+}
+
 function parseAdminDatasetColumn(payload: unknown): AdminDatasetColumn {
   const record = requireRecord(payload, "관리자 데이터셋 컬럼 응답");
   return {
@@ -369,6 +580,27 @@ function requireRecord(value: unknown, context: string): Record<string, unknown>
     return value as Record<string, unknown>;
   }
   throw new AdminResponseShapeError(`${context} 형식이 객체가 아니다.`);
+}
+
+function parseJsonRecord(value: unknown, fieldName: string): Record<string, AdminJsonValue> {
+  const record = requireRecord(value, fieldName);
+  const parsed: Record<string, AdminJsonValue> = {};
+  for (const [key, item] of Object.entries(record)) {
+    if (!isAdminJsonValue(item)) {
+      throw new AdminResponseShapeError(`${fieldName}.${key} 값이 JSON 형태가 아니다.`);
+    }
+    parsed[key] = item;
+  }
+  return parsed;
+}
+
+function parseStringRecord(value: unknown, fieldName: string): Record<string, string> {
+  const record = requireRecord(value, fieldName);
+  const parsed: Record<string, string> = {};
+  for (const [key, item] of Object.entries(record)) {
+    parsed[key] = requireString(item, `${fieldName}.${key}`);
+  }
+  return parsed;
 }
 
 function requireArray(value: unknown, fieldName: string): unknown[] {

@@ -36,6 +36,28 @@ a {
   text-decoration: none;
 }
 
+@layer components {
+  .admin-top-button {
+    @apply inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500;
+  }
+
+  .admin-input {
+    @apply h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10;
+  }
+
+  .admin-th {
+    @apply whitespace-nowrap border-b border-r border-stone-200 px-3 py-2 text-xs font-black text-stone-600 last:border-r-0;
+  }
+
+  .admin-td {
+    @apply max-w-[280px] border-b border-r border-stone-200 px-3 py-2 align-top text-stone-700 last:border-r-0;
+  }
+
+  .admin-page-button {
+    @apply inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-700 transition hover:border-stone-500 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+}
+
 .shell {
   min-height: 100svh;
 }
