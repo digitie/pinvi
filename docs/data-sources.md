@@ -60,7 +60,7 @@
 | `kma_beach_wave_height` | `kma_beach_wave_height_hourly` | 6/7/8월 매시 35분 |
 | `kma_beach_water_temperature` | `kma_beach_water_temperature_hourly` | 6/7/8월 매시 40분 |
 | `kma_beach_tide_sun` | `kma_beach_tide_sun_daily` | 6/7/8월 매일 05:10 |
-| `khoa_beach_observation` | `khoa_beach_observation_hourly` | 매시 20분 |
+| `khoa_beach_observation` | `khoa_beach_observation_twice_daily` | 매일 06:20, 18:20 |
 | `khoa_beach_index_forecast` | `khoa_beach_index_forecast_twice_daily` | 매일 06:30, 18:30 |
 | `khoa_mudflat_index_forecast` | `khoa_mudflat_index_forecast_twice_daily` | 매일 06:40, 18:40 |
 | `khoa_sea_split_index_forecast` | `khoa_sea_split_index_forecast_twice_daily` | 매일 06:50, 18:50 |

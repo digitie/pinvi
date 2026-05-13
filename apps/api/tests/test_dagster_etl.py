@@ -78,7 +78,7 @@ def test_dagster_schedules_match_dataset_config_and_kst_timezone(monkeypatch: An
     }
 
     disabled_without_keys = {
-        "khoa_beach_observation_hourly_schedule",
+        "khoa_beach_observation_twice_daily_schedule",
         "khoa_beach_index_forecast_twice_daily_schedule",
         "khoa_mudflat_index_forecast_twice_daily_schedule",
         "khoa_sea_split_index_forecast_twice_daily_schedule",
@@ -109,7 +109,7 @@ def test_key_gated_dagster_schedules_become_active_when_key_exists(monkeypatch: 
     assert "khoa_beach_index_forecast_twice_daily_schedule" in schedule_names
     assert "khoa_mudflat_index_forecast_twice_daily_schedule" in schedule_names
     assert "khoa_sea_split_index_forecast_twice_daily_schedule" in schedule_names
-    assert "khoa_beach_observation_hourly_schedule" not in schedule_names
+    assert "khoa_beach_observation_twice_daily_schedule" not in schedule_names
 
 
 def test_schedule_run_config_passes_logical_datetime_to_op() -> None:

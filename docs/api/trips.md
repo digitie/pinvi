@@ -4,7 +4,7 @@
 
 ## 인증
 
-여행 계획 API는 일반 사용자 httpOnly cookie 세션을 요구한다. `POST /auth/login`으로 받은 `tripmate_session` cookie가 필요하다.
+여행 계획 API는 일반 사용자 httpOnly JWT cookie 세션을 요구한다. `POST /auth/login`으로 받은 `tripmate_access` cookie가 필요하며, 만료 시 프론트엔드는 `tripmate_refresh`로 `/auth/refresh`를 호출해 access token을 갱신한다.
 
 현재 인가 기준:
 

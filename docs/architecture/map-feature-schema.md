@@ -683,7 +683,14 @@ Kakao/Naver/Google 원문 전체는 장기 저장하지 않는다. `source_recor
 - `width IS NULL OR width > 0`
 - `height IS NULL OR height > 0`
 
-외부 이미지 URL은 provider 약관과 라이선스를 확인해야 한다. 장기 저장이 가능한 이미지는 `storage_key` 기반 내부 object storage로 옮기고, 그렇지 않은 이미지는 링크/썸네일 정책을 별도로 둔다.
+외부 이미지 URL은 provider 약관과 라이선스를 확인해야 한다. 장기 저장이 가능한 이미지는 RustFS(S3 compatible object storage)에 저장하고, `storage_key`에는 RustFS bucket 내부 object key를 기록한다. 그렇지 않은 이미지는 링크/썸네일 정책을 별도로 둔다.
+
+RustFS 기준:
+
+- 파일 본문은 Postgres에 저장하지 않는다.
+- API는 `POST /storage/upload-urls`에서 presigned PUT URL을 발급한다.
+- object key는 `user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}` 형식을 기본으로 한다.
+- 공개 URL은 저장값이 아니라 `storage_key`에서 파생되는 값으로 본다. CDN 또는 public reverse proxy가 없으면 도메인 API가 presigned GET URL을 발급한다.
 
 ### 링크 테이블
 

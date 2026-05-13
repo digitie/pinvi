@@ -22,6 +22,11 @@ x-dagster-common: &dagster-common
     TRIPMATE_OPINET_API_KEY: ${TRIPMATE_OPINET_API_KEY:-}
     TRIPMATE_EXPRESSWAY_API_KEY: ${TRIPMATE_EXPRESSWAY_API_KEY:-}
     TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH: ${TRIPMATE_KMA_TOUR_COURSE_SOURCE_PATH:-}
+    TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9000
+    TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:${TRIPMATE_RUSTFS_PORT:-19000}
+    TRIPMATE_RUSTFS_BUCKET: ${TRIPMATE_RUSTFS_BUCKET:-tripmate-media}
+    TRIPMATE_RUSTFS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+    TRIPMATE_RUSTFS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
   volumes:
     - ../apps/api:/app
     - ../config:/opt/tripmate/config:ro
@@ -33,6 +38,8 @@ x-dagster-common: &dagster-common
   depends_on:
     postgres:
       condition: service_healthy
+    rustfs-init:
+      condition: service_completed_successfully
 
 services:
   postgres:
@@ -76,6 +83,41 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: tripmate-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    command: ["--address", ":9000", "--console-enable", "/data"]
+    ports:
+      - "${TRIPMATE_RUSTFS_PORT:-19000}:9000"
+      - "${TRIPMATE_RUSTFS_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - tripmate_rustfs_data:/data
+    restart: unless-stopped
+
+  rustfs-init:
+    image: minio/mc:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
+      TRIPMATE_RUSTFS_BUCKET: ${TRIPMATE_RUSTFS_BUCKET:-tripmate-media}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 30); do
+          if mc alias set rustfs http://rustfs:9000 "$$RUSTFS_ACCESS_KEY" "$$RUSTFS_SECRET_KEY"; then
+            mc mb -p "rustfs/$$TRIPMATE_RUSTFS_BUCKET" || true
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+    depends_on:
+      - rustfs
+
   api:
     profiles: ["admin"]
     build:
@@ -86,6 +128,11 @@ services:
       PYTHONPATH: /app
       TRIPMATE_DATABASE_URL: postgresql+psycopg://tripmate:tripmate_dev_password@postgres:5432/tripmate
       TRIPMATE_CORS_ORIGINS: '["http://localhost:${TRIPMATE_WEB_PORT:-13082}","http://127.0.0.1:${TRIPMATE_WEB_PORT:-13082}"]'
+      TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9000
+      TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:${TRIPMATE_RUSTFS_PORT:-19000}
+      TRIPMATE_RUSTFS_BUCKET: ${TRIPMATE_RUSTFS_BUCKET:-tripmate-media}
+      TRIPMATE_RUSTFS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      TRIPMATE_RUSTFS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
     ports:
       - "${TRIPMATE_API_PORT:-18082}:8000"
     healthcheck:
@@ -98,6 +145,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
 
   web:
     profiles: ["admin"]
@@ -120,4 +169,5 @@ services:
 
 volumes:
   tripmate_postgres_data:
+  tripmate_rustfs_data:
   dagster_home:

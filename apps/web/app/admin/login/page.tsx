@@ -1,31 +1,49 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FormEvent } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { queryKeys } from "../../shared/query-keys";
-import { useAdminLoginStore } from "../../shared/stores";
 import { loginAdmin } from "../api";
+
+const adminLoginFormSchema = z.object({
+  email: z.string().trim().email("이메일 형식을 확인해 주세요."),
+  password: z.string().min(1, "비밀번호를 입력해 주세요."),
+});
+
+type AdminLoginFormValues = z.infer<typeof adminLoginFormSchema>;
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { email, password, resetAdminLoginPassword, setAdminLoginField } = useAdminLoginStore();
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+    reset,
+  } = useForm<AdminLoginFormValues>({
+    resolver: zodResolver(adminLoginFormSchema),
+    defaultValues: {
+      email: "admin@ad.min",
+      password: "admin",
+    },
+  });
 
   const loginMutation = useMutation({
-    mutationFn: () => loginAdmin(email, password),
-    onSuccess: () => {
-      resetAdminLoginPassword();
+    mutationFn: (input: AdminLoginFormValues) => loginAdmin(input.email, input.password),
+    onSuccess: (_payload, variables) => {
+      reset({ email: variables.email, password: "" });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.root() });
       router.replace("/admin");
     },
   });
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submitLogin(values: AdminLoginFormValues) {
     loginMutation.reset();
-    loginMutation.mutate();
+    loginMutation.mutate(values);
   }
 
   const errorMessage = loginMutation.error
@@ -53,7 +71,7 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="flex items-center bg-white px-6 py-10 shadow-[0_0_80px_rgba(28,25,23,0.1)] sm:px-10 lg:px-12">
-          <form className="w-full" onSubmit={handleSubmit}>
+          <form className="w-full" onSubmit={handleSubmit(submitLogin)}>
             <div className="mb-8">
               <h2 className="mb-2 text-2xl font-black text-stone-950">로그인</h2>
               <p className="text-sm text-stone-500">기본 개발 계정은 문서 기준값을 사용한다.</p>
@@ -64,11 +82,15 @@ export default function AdminLoginPage() {
               <input
                 className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
                 type="email"
-                value={email}
                 autoComplete="username"
-                onChange={(event) => setAdminLoginField("email", event.target.value)}
-                required
+                aria-invalid={errors.email ? "true" : "false"}
+                {...register("email")}
               />
+              {errors.email ? (
+                <span className="mt-2 block text-sm font-semibold text-red-800">
+                  {errors.email.message}
+                </span>
+              ) : null}
             </label>
 
             <label className="mb-6 block">
@@ -76,11 +98,15 @@ export default function AdminLoginPage() {
               <input
                 className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
                 type="password"
-                value={password}
                 autoComplete="current-password"
-                onChange={(event) => setAdminLoginField("password", event.target.value)}
-                required
+                aria-invalid={errors.password ? "true" : "false"}
+                {...register("password")}
               />
+              {errors.password ? (
+                <span className="mt-2 block text-sm font-semibold text-red-800">
+                  {errors.password.message}
+                </span>
+              ) : null}
             </label>
 
             {errorMessage ? (

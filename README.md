@@ -130,6 +130,14 @@ API 실행:
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
+이메일 인증 메일을 실제 발송하려면 Resend 설정을 추가합니다. Free 플랜 기준과 DNS/API key 준비 절차는 [Resend 이메일 연동](docs/integrations/resend.md)을 따릅니다.
+
+```bash
+TRIPMATE_RESEND_API_KEY=re_xxxxxxxxx
+TRIPMATE_RESEND_FROM_EMAIL="TripMate <no-reply@mail.example.com>"
+TRIPMATE_WEB_BASE_URL=http://localhost:3001
+```
+
 Dagster 로컬 런타임:
 
 ```bash
@@ -168,6 +176,9 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status
 - [KTO TourAPI runbook](docs/runbooks/kto-tourapi.md)
 - [Telegram 연동](docs/integrations/telegram.md)
 - [Gemini 연동](docs/integrations/gemini.md)
+- [Resend 이메일 연동](docs/integrations/resend.md)
+- [RustFS 파일 스토리지 API](docs/api/storage.md)
+- [RustFS 파일 스토리지 운영 안내](docs/runbooks/file-storage.md)
 - [로컬 개발 runbook](docs/runbooks/local-dev.md)
 - [ETL 운영 안내](docs/runbooks/etl.md)
 - [관리자 화면 운영 안내](docs/runbooks/admin.md)

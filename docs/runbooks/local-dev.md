@@ -68,6 +68,8 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin 
 
 주의: 컨테이너 내부 포트는 Web `3000`, API `8000`을 계속 쓸 수 있다. 이 값은 컨테이너 안쪽 포트이며, 로컬 브라우저에서 접근할 host 포트와 구분한다.
 
+RustFS 파일 스토리지는 로컬 Docker에서 S3 API `http://127.0.0.1:19000`, console `http://127.0.0.1:19001`을 사용한다. 이미지와 첨부 파일 업로드 흐름은 `docs/runbooks/file-storage.md`를 따른다.
+
 ```bash
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm install"
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run dev"
@@ -134,6 +136,14 @@ TRIPMATE_KTO_MAX_RETRIES=2
 
 KTO 호출 코드는 `visitkorea`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
 
+이메일 인증 메일을 로컬에서 실제 발송하려면 Resend 설정을 `apps/api/.env`에 둔다. API key와 DNS/domain 준비 절차는 `docs/integrations/resend.md`를 따른다.
+
+```bash
+TRIPMATE_RESEND_API_KEY=re_xxxxxxxxx
+TRIPMATE_RESEND_FROM_EMAIL="TripMate <no-reply@mail.example.com>"
+TRIPMATE_WEB_BASE_URL=http://localhost:3001
+```
+
 ## 소셜 로그인 로컬 설정 계획
 
 Google/Naver/Kakao 소셜 로그인은 아직 구현 전이다. 구현 후에는 `docs/integrations/social-login.md`와 `docs/execplan/social-login-providers.md`를 기준으로 아래 값을 `apps/api/.env`에 둔다. 실제 secret 값은 커밋하지 않는다.
@@ -195,7 +205,7 @@ Postgres/PostGIS는 WSL2에서 다음 명령으로 실행한다.
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d"
 ```
 
-TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`를 사용한다.
+TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`를 사용한다. 같은 compose stack은 RustFS도 함께 띄우며, `rustfs-init`가 `tripmate-media` bucket을 생성한다.
 
 DB health check:
 
@@ -283,7 +293,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status
 ## 다음 기준선 작업
 
 1. `scripts/bootstrap-local.sh`와 `scripts/test-local.sh`를 추가한다.
-2. 인증 API 구현과 `docs/api/auth.md` 계약을 실제 엔드포인트에 맞춰 확장한다.
+2. 비밀번호 재설정과 소셜 로그인 구현 전 `docs/api/auth.md` 계약을 다시 확인한다.
 3. `places`와 provider cache schema를 추가하기 전에 `docs/data-sources.md`를 확인한다.
 
 ## 운영 환경 메모

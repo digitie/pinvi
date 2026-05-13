@@ -1,7 +1,24 @@
 "use client";
 
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -11,6 +28,7 @@ import {
   fetchAdminMe,
   logoutAdmin,
   type AdminDatasetRow,
+  type AdminDatasetSummary,
   type AdminJsonValue,
 } from "./api";
 import { getDagsterAdminUrl } from "./config";
@@ -18,6 +36,38 @@ import { queryKeys } from "../shared/query-keys";
 import { useAdminDataBrowserStore } from "../shared/stores";
 
 const dagsterAdminUrl = getDagsterAdminUrl();
+
+const KEY_DATASET_GROUPS = [
+  {
+    label: "Feature DB",
+    tables: ["features", "map_features", "place_details"],
+  },
+  {
+    label: "POI DB",
+    tables: ["trip_pois", "trip_share_tokens"],
+  },
+  {
+    label: "Beach Raw",
+    tables: ["beach_source_records", "beach_provider_refs"],
+  },
+  {
+    label: "Beach Domain",
+    tables: [
+      "beach_profiles",
+      "beach_observations",
+      "beach_index_forecasts",
+      "beach_water_quality_measurements",
+    ],
+  },
+  {
+    label: "Dagster ETL",
+    tables: ["etl_run_logs", "admin_notifications", "telegram_system_notification_outbox"],
+  },
+  {
+    label: "Ops Raw",
+    tables: ["api_call_log", "email_queue", "admin_audit_log"],
+  },
+] as const;
 
 export default function AdminDataBrowserPage() {
   const router = useRouter();
@@ -64,6 +114,11 @@ export default function AdminDataBrowserPage() {
     () => datasetsQuery.data?.datasets ?? [],
     [datasetsQuery.data?.datasets],
   );
+  const [datasetOrder, setDatasetOrder] = useState<string[]>([]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const pageSizeOptions = datasetsQuery.data?.page_size_options ?? [50, 100, 200, 500];
 
   const rowsQueryInput = useMemo(
@@ -98,13 +153,45 @@ export default function AdminDataBrowserPage() {
     [datasets, selectedTable],
   );
   const rowsPayload = rowsQuery.data ?? null;
+  const datasetMap = useMemo(
+    () => new Map(datasets.map((dataset) => [dataset.table_name, dataset])),
+    [datasets],
+  );
+  const keyDatasetGroups = useMemo(
+    () =>
+      KEY_DATASET_GROUPS.map((group) => ({
+        ...group,
+        datasets: group.tables
+          .map((tableName) => datasetMap.get(tableName))
+          .filter((dataset): dataset is AdminDatasetSummary => Boolean(dataset)),
+      })).filter((group) => group.datasets.length > 0),
+    [datasetMap],
+  );
+  const datasetTableNames = useMemo(
+    () => datasets.map((dataset) => dataset.table_name),
+    [datasets],
+  );
+  const normalizedDatasetOrder = useMemo(() => {
+    const retained = datasetOrder.filter((tableName) => datasetMap.has(tableName));
+    const additions = datasetTableNames.filter((tableName) => !retained.includes(tableName));
+    return [...retained, ...additions];
+  }, [datasetMap, datasetOrder, datasetTableNames]);
+  const orderedDatasets = useMemo(() => {
+    return normalizedDatasetOrder
+      .map((tableName) => datasetMap.get(tableName))
+      .filter((dataset): dataset is AdminDatasetSummary => Boolean(dataset));
+  }, [datasetMap, normalizedDatasetOrder]);
   const visibleDatasets = useMemo(() => {
     const normalized = datasetSearch.trim().toLowerCase();
     if (!normalized) {
-      return datasets;
+      return orderedDatasets;
     }
-    return datasets.filter((dataset) => dataset.table_name.toLowerCase().includes(normalized));
-  }, [datasets, datasetSearch]);
+    return orderedDatasets.filter((dataset) => dataset.table_name.toLowerCase().includes(normalized));
+  }, [datasetSearch, orderedDatasets]);
+  const visibleDatasetIds = useMemo(
+    () => visibleDatasets.map((dataset) => dataset.table_name),
+    [visibleDatasets],
+  );
   const displayColumns = rowsPayload?.columns ?? selectedDataset?.columns ?? [];
   const pageCount = rowsPayload ? Math.max(1, Math.ceil(rowsPayload.total / rowsPayload.limit)) : 1;
 
@@ -143,6 +230,22 @@ export default function AdminDataBrowserPage() {
 
   function selectDataset(tableName: string) {
     selectDatasetState(datasets.find((dataset) => dataset.table_name === tableName) ?? null);
+  }
+
+  function handleDatasetDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const oldIndex = normalizedDatasetOrder.indexOf(activeId);
+    const newIndex = normalizedDatasetOrder.indexOf(overId);
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+    setDatasetOrder(arrayMove(normalizedDatasetOrder, oldIndex, newIndex));
   }
 
   if (isLoading) {
@@ -198,6 +301,63 @@ export default function AdminDataBrowserPage() {
         </div>
       </header>
 
+      {keyDatasetGroups.length > 0 ? (
+        <section className="border-b border-stone-200 bg-stone-50">
+          <div className="mx-auto flex max-w-[1720px] flex-col gap-3 px-4 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase text-teal-800">priority datasets</p>
+                <p className="mt-1 text-sm font-semibold text-stone-600">
+                  Feature, POI, raw source, Dagster ETL, API, email, and audit state
+                </p>
+              </div>
+              <a
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500"
+                href={dagsterAdminUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <WorkflowIcon />
+                Dagster status
+                <ExternalLinkIcon />
+              </a>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {keyDatasetGroups.map((group) => (
+                <div className="border border-stone-200 bg-white p-3" key={group.label}>
+                  <p className="text-xs font-black uppercase text-stone-500">{group.label}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {group.datasets.map((dataset) => (
+                      <button
+                        className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+                          dataset.table_name === selectedTable
+                            ? "border-teal-800 bg-teal-800 text-white"
+                            : "border-stone-300 bg-white text-stone-800 hover:border-stone-500"
+                        }`}
+                        key={dataset.table_name}
+                        type="button"
+                        onClick={() => selectDataset(dataset.table_name)}
+                      >
+                        <span>{dataset.table_name}</span>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-xs ${
+                            dataset.table_name === selectedTable
+                              ? "bg-white/15 text-white"
+                              : "bg-stone-100 text-stone-500"
+                          }`}
+                        >
+                          {dataset.row_count.toLocaleString("ko-KR")}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <div className="mx-auto grid max-w-[1720px] grid-cols-1 gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="min-h-[calc(100svh-120px)] border border-stone-200 bg-white">
           <div className="border-b border-stone-200 p-4">
@@ -216,29 +376,22 @@ export default function AdminDataBrowserPage() {
             </div>
           </div>
           <div className="max-h-[calc(100svh-220px)] overflow-y-auto p-2">
-            {visibleDatasets.map((dataset) => (
-              <button
-                className={`mb-1 flex w-full items-center justify-between gap-3 rounded-md px-3 py-3 text-left text-sm transition ${
-                  dataset.table_name === selectedTable
-                    ? "bg-teal-800 text-white"
-                    : "text-stone-700 hover:bg-stone-100"
-                }`}
-                key={dataset.table_name}
-                type="button"
-                onClick={() => selectDataset(dataset.table_name)}
-              >
-                <span className="min-w-0 truncate font-bold">{dataset.table_name}</span>
-                <span
-                  className={`shrink-0 rounded px-2 py-1 text-xs font-black ${
-                    dataset.table_name === selectedTable
-                      ? "bg-white/15 text-white"
-                      : "bg-stone-100 text-stone-500"
-                  }`}
-                >
-                  {dataset.row_count.toLocaleString("ko-KR")}
-                </span>
-              </button>
-            ))}
+            <DndContext
+              collisionDetection={closestCenter}
+              sensors={sensors}
+              onDragEnd={handleDatasetDragEnd}
+            >
+              <SortableContext items={visibleDatasetIds} strategy={verticalListSortingStrategy}>
+                {visibleDatasets.map((dataset) => (
+                  <SortableDatasetButton
+                    dataset={dataset}
+                    isSelected={dataset.table_name === selectedTable}
+                    key={dataset.table_name}
+                    onSelect={selectDataset}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         </aside>
 
@@ -472,6 +625,60 @@ export default function AdminDataBrowserPage() {
   );
 }
 
+function SortableDatasetButton({
+  dataset,
+  isSelected,
+  onSelect,
+}: {
+  dataset: AdminDatasetSummary;
+  isSelected: boolean;
+  onSelect: (tableName: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: dataset.table_name,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`mb-1 flex w-full items-stretch overflow-hidden rounded-md text-sm transition ${
+        isSelected ? "bg-teal-800 text-white" : "text-stone-700 hover:bg-stone-100"
+      }`}
+    >
+      <button
+        className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-3 text-left"
+        type="button"
+        onClick={() => onSelect(dataset.table_name)}
+      >
+        <span className="min-w-0 truncate font-bold">{dataset.table_name}</span>
+        <span
+          className={`shrink-0 rounded px-2 py-1 text-xs font-black ${
+            isSelected ? "bg-white/15 text-white" : "bg-stone-100 text-stone-500"
+          }`}
+        >
+          {dataset.row_count.toLocaleString("ko-KR")}
+        </span>
+      </button>
+      <button
+        className={`flex w-10 shrink-0 items-center justify-center border-l ${
+          isSelected ? "border-white/15 text-white/80" : "border-stone-200 text-stone-400"
+        }`}
+        type="button"
+        aria-label={`${dataset.table_name} 순서 이동`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
+    </div>
+  );
+}
+
 function formatCell(value: AdminJsonValue | undefined): string {
   if (value === null || value === undefined) {
     return "";
@@ -512,6 +719,19 @@ function SearchIcon() {
         stroke="currentColor"
         strokeLinecap="round"
         strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="3"
       />
     </svg>
   );

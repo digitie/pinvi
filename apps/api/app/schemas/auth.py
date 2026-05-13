@@ -17,6 +17,12 @@ class RegisterUserRequest(BaseModel):
         pattern=r"^(female|male|non_binary|no_answer)$",
     )
     residence_sigungu_code: str | None = Field(default=None, pattern=r"^[0-9]{10}$")
+    tos_agreed: bool = False
+    privacy_agreed: bool = False
+    demographic_use_agreed: bool = False
+    location_use_agreed: bool = False
+    marketing_agreed: bool = False
+    consent_version: str = Field(default="2026-05-13", min_length=1, max_length=80)
 
 
 class RegisteredUserResponse(BaseModel):
@@ -25,6 +31,7 @@ class RegisteredUserResponse(BaseModel):
     nickname: str
     name: str
     account_status: str
+    status: str
     system_role: str
     email_verification_required: bool
     verification_email_dispatched: bool
@@ -46,6 +53,7 @@ class AuthenticatedUserResponse(BaseModel):
     nickname: str | None
     name: str | None
     account_status: str
+    status: str
     system_role: str
     email_verified_at: datetime | None
     is_admin: bool
@@ -53,6 +61,24 @@ class AuthenticatedUserResponse(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    user: AuthenticatedUserResponse
+    token_type: str
+    access_token_expires_at: datetime
+    refresh_token_expires_at: datetime
+
+
+class RefreshTokenResponse(BaseModel):
+    user: AuthenticatedUserResponse
+    token_type: str
+    access_token_expires_at: datetime
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=512)
+
+
+class VerifyEmailResponse(BaseModel):
+    status: str
     user: AuthenticatedUserResponse
 
 

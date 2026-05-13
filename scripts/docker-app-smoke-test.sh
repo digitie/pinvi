@@ -6,6 +6,8 @@ COMPOSE_FILE="${ROOT_DIR}/infra/docker-compose.app.yml"
 PROJECT_NAME="${TRIPMATE_DOCKER_PROJECT:-tripmate-app-smoke}"
 API_PORT="${TRIPMATE_API_PORT:-18082}"
 WEB_PORT="${TRIPMATE_WEB_PORT:-13082}"
+RUSTFS_PORT="${TRIPMATE_RUSTFS_PORT:-19000}"
+RUSTFS_CONSOLE_PORT="${TRIPMATE_RUSTFS_CONSOLE_PORT:-19001}"
 KEEP_RUNNING=false
 
 if [[ "${1:-}" == "--keep-running" ]]; then
@@ -108,14 +110,17 @@ trap cleanup EXIT
 
 export TRIPMATE_API_PORT="${API_PORT}"
 export TRIPMATE_WEB_PORT="${WEB_PORT}"
+export TRIPMATE_RUSTFS_PORT="${RUSTFS_PORT}"
+export TRIPMATE_RUSTFS_CONSOLE_PORT="${RUSTFS_CONSOLE_PORT}"
 export NEXT_PUBLIC_TRIPMATE_API_URL="${NEXT_PUBLIC_TRIPMATE_API_URL:-http://127.0.0.1:${API_PORT}}"
 
 cd "${ROOT_DIR}"
 
 compose down -v --remove-orphans >/dev/null 2>&1 || true
 compose build app-api app-web
-compose up -d app-postgres
+compose up -d app-postgres app-rustfs
 wait_for_container_health app-postgres
+compose up app-rustfs-init
 compose run --rm app-api alembic upgrade head
 compose up -d app-api app-web
 wait_for_container_health app-api
@@ -125,3 +130,5 @@ admin_api_smoke
 echo "docker app smoke passed"
 echo "web: http://127.0.0.1:${WEB_PORT}/admin/login"
 echo "api: http://127.0.0.1:${API_PORT}/health"
+echo "rustfs: http://127.0.0.1:${RUSTFS_PORT}"
+echo "rustfs console: http://127.0.0.1:${RUSTFS_CONSOLE_PORT}"

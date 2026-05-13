@@ -2,9 +2,9 @@
 
 ## 목적
 
-TripMate 일반 사용자 로그인 화면(`/login`)에 Google, Naver, Kakao 간편 로그인 버튼을 추가하고, 각 provider의 OAuth/OIDC 결과를 기존 httpOnly cookie 기반 서버 세션으로 연결한다.
+TripMate 일반 사용자 로그인 화면(`/login`)에 Google, Naver, Kakao 간편 로그인 버튼을 추가하고, 각 provider의 OAuth/OIDC 결과를 기존 httpOnly cookie 기반 TripMate JWT 세션으로 연결한다.
 
-이 문서는 구현 전 기준이다. 현재 저장소에는 이메일/비밀번호 기반 `POST /auth/login`과 `tripmate_session` 서버 세션이 있으며, 소셜 로그인 endpoint, DB 테이블, 화면 버튼은 아직 구현되지 않았다.
+이 문서는 구현 전 기준이다. 현재 저장소에는 이메일/비밀번호 기반 `POST /auth/login`, `tripmate_access`/`tripmate_refresh` cookie, refresh token hash를 보관하는 `sessions` 테이블이 있으며, 소셜 로그인 endpoint, DB 테이블, 화면 버튼은 아직 구현되지 않았다.
 
 ## 핵심 결정
 
@@ -12,7 +12,7 @@ TripMate 일반 사용자 로그인 화면(`/login`)에 Google, Naver, Kakao 간
 - provider 고유 사용자는 `users`에 직접 섞지 않고 `user_oauth_accounts`에서 연결한다.
 - provider access token과 refresh token은 초기 구현에서 장기 저장하지 않는다.
 - OAuth callback에서 provider token은 프로필 조회에만 사용하고 즉시 폐기한다.
-- 로그인 완료 후에는 기존과 동일한 `tripmate_session` httpOnly cookie를 발급한다.
+- 로그인 완료 후에는 기존과 동일한 `tripmate_access`, `tripmate_refresh` httpOnly cookie를 발급한다.
 - 기존 이메일 계정과 provider 계정은 자동 병합하지 않는다. 같은 이메일이 이미 있으면 기존 세션으로 로그인한 뒤 명시적으로 연결하게 한다.
 - 신규 provider-only 사용자를 지원하려면 `users.password_hash`를 nullable로 전환하는 migration이 필요하다.
 - 관리자 로그인(`/admin/login`)에는 Google/Naver/Kakao 버튼을 추가하지 않는다.
@@ -184,7 +184,7 @@ Query:
 6. 연결 row가 없고 현재 TripMate 세션이 있으면 현재 사용자에 provider를 연결한다.
 7. 연결 row가 없고 같은 이메일의 `users`가 없으며 provider 이메일 신뢰 조건을 만족하면 신규 사용자를 만든 뒤 연결한다.
 8. 같은 이메일의 `users`가 이미 있으면 자동 연결하지 않고 `account_link_required`로 `/login`에 돌려보낸다.
-9. `tripmate_session` cookie를 발급하고 `return_to`로 redirect한다.
+9. `tripmate_access`, `tripmate_refresh` cookie를 발급하고 `return_to`로 redirect한다.
 
 실패 redirect:
 
@@ -203,7 +203,7 @@ callback은 JSON 응답보다 redirect를 기본으로 한다. 사용자는 prov
 
 원칙:
 
-- 현재 `tripmate_session`이 필요하다.
+- 현재 `tripmate_access`가 필요하다.
 - 이미 다른 사용자에게 연결된 provider 계정은 연결할 수 없다.
 - 한 사용자에게 같은 provider는 하나만 연결한다.
 
@@ -213,7 +213,7 @@ callback은 JSON 응답보다 redirect를 기본으로 한다. 사용자는 prov
 
 원칙:
 
-- 현재 `tripmate_session`이 필요하다.
+- 현재 `tripmate_access`가 필요하다.
 - 비밀번호가 없고 연결된 provider가 하나뿐인 사용자는 해제할 수 없다. 먼저 비밀번호 설정 또는 다른 provider 연결이 필요하다.
 - provider access token을 저장하지 않는 초기 구현에서는 provider 측 연결 해제 API까지 호출하지 않는다. 사용자가 provider 콘솔에서 앱 연결을 해제할 수 있음을 안내한다.
 
@@ -317,7 +317,7 @@ http://127.0.0.1:18082/auth/oauth/kakao/callback
 - Google `sub`, Kakao `id`, Naver `response.id`가 provider unique key로 저장되는지 확인.
 - 기존 이메일 사용자가 있으면 자동 연결하지 않는지 확인.
 - 신규 provider-only 사용자 생성 시 `password_hash` 없이 password login이 불가능한지 확인.
-- 세션 cookie에는 기존 opaque token만 담고 DB에는 hash만 저장되는지 확인.
+- access/refresh cookie에는 JWT를 담고 DB에는 refresh token hash만 저장되는지 확인.
 - provider token 원문이 DB와 로그에 남지 않는지 확인.
 
 프론트엔드:

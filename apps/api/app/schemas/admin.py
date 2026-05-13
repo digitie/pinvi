@@ -23,6 +23,15 @@ class AdminUserResponse(BaseModel):
 
 class AdminLoginResponse(BaseModel):
     user: AdminUserResponse
+    token_type: str
+    access_token_expires_at: datetime
+    refresh_token_expires_at: datetime
+
+
+class AdminRefreshTokenResponse(BaseModel):
+    user: AdminUserResponse
+    token_type: str
+    access_token_expires_at: datetime
 
 
 class AdminDatasetColumn(BaseModel):

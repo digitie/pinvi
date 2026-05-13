@@ -17,15 +17,17 @@ from app.schemas.admin import (
     AdminLoginRequest,
     AdminLoginResponse,
     AdminManagedUserResponse,
+    AdminRefreshTokenResponse,
     AdminUpdateUserRequest,
     AdminUserListResponse,
     AdminUserResponse,
 )
 from app.services.admin_auth import (
     authenticate_admin,
-    create_session_token,
-    get_admin_user_by_session_token,
-    revoke_session_token,
+    get_user_by_access_token,
+    issue_auth_tokens,
+    refresh_access_token,
+    revoke_refresh_token,
 )
 from app.services.admin_data_browser import (
     DEFAULT_PAGE_SIZE,
@@ -42,8 +44,13 @@ def require_admin_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     settings = get_settings()
-    token = request.cookies.get(settings.session_cookie_name)
-    user = get_admin_user_by_session_token(db, token)
+    user = get_user_by_access_token(
+        db,
+        request.cookies.get(settings.access_token_cookie_name),
+        secret_key=settings.jwt_secret_key,
+        issuer=settings.jwt_issuer,
+        require_admin=True,
+    )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,22 +73,51 @@ def login_admin(
             detail="관리자 계정 또는 비밀번호가 올바르지 않다.",
         )
 
-    token, _ = create_session_token(
+    tokens = issue_auth_tokens(
         db,
         user_id=user.id,
-        expires_in_hours=settings.admin_session_hours,
+        secret_key=settings.jwt_secret_key,
+        issuer=settings.jwt_issuer,
+        access_token_minutes=settings.access_token_minutes,
+        refresh_token_days=settings.refresh_token_days,
     )
     db.commit()
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=token,
-        max_age=settings.admin_session_hours * 60 * 60,
-        httponly=True,
-        secure=settings.environment == "production",
-        samesite="lax",
-        path="/",
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+    return AdminLoginResponse(
+        user=_to_admin_user_response(user),
+        token_type="Bearer",
+        access_token_expires_at=tokens.access_token_expires_at,
+        refresh_token_expires_at=tokens.refresh_token_expires_at,
     )
-    return AdminLoginResponse(user=_to_admin_user_response(user))
+
+
+@router.post("/auth/refresh", response_model=AdminRefreshTokenResponse)
+def refresh_admin_login(
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminRefreshTokenResponse:
+    settings = get_settings()
+    result = refresh_access_token(
+        db,
+        request.cookies.get(settings.refresh_token_cookie_name),
+        secret_key=settings.jwt_secret_key,
+        issuer=settings.jwt_issuer,
+        access_token_minutes=settings.access_token_minutes,
+        require_admin=True,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="다시 로그인이 필요하다."
+        )
+
+    db.commit()
+    _set_access_cookie(response, result.access_token)
+    return AdminRefreshTokenResponse(
+        user=_to_admin_user_response(result.user),
+        token_type="Bearer",
+        access_token_expires_at=result.access_token_expires_at,
+    )
 
 
 @router.post("/auth/logout")
@@ -91,9 +127,9 @@ def logout_admin(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, str]:
     settings = get_settings()
-    revoke_session_token(db, request.cookies.get(settings.session_cookie_name))
+    revoke_refresh_token(db, request.cookies.get(settings.refresh_token_cookie_name))
     db.commit()
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    _delete_auth_cookies(response)
     return {"status": "ok"}
 
 
@@ -242,6 +278,39 @@ def _to_admin_user_response(user: User) -> AdminUserResponse:
         is_admin=user.is_admin,
         is_privileged=user.is_privileged,
     )
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    _set_access_cookie(response, access_token)
+    settings = get_settings()
+    response.set_cookie(
+        key=settings.refresh_token_cookie_name,
+        value=refresh_token,
+        max_age=settings.refresh_token_days * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        path="/",
+    )
+
+
+def _set_access_cookie(response: Response, access_token: str) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        key=settings.access_token_cookie_name,
+        value=access_token,
+        max_age=settings.access_token_minutes * 60,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        path="/",
+    )
+
+
+def _delete_auth_cookies(response: Response) -> None:
+    settings = get_settings()
+    response.delete_cookie(settings.access_token_cookie_name, path="/")
+    response.delete_cookie(settings.refresh_token_cookie_name, path="/")
 
 
 def _to_managed_user_response(user: User) -> AdminManagedUserResponse:

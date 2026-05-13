@@ -1,29 +1,42 @@
+import { z } from "zod";
+
 import { fetchApi } from "../shared/api-base";
 
-export type RegisterUserInput = {
-  email: string;
-  password: string;
-  nickname: string;
-  name: string;
-  birth_year_month: string | null;
-  gender: string | null;
-  residence_sigungu_code: string | null;
-};
+export const registerUserInputSchema = z.object({
+  email: z.string().trim().email("이메일 형식을 확인해 주세요."),
+  password: z.string().min(8, "비밀번호는 8자 이상이어야 합니다.").max(128),
+  nickname: z.string().trim().min(1, "닉네임을 입력해 주세요.").max(80),
+  name: z.string().trim().min(1, "이름을 입력해 주세요.").max(80),
+  birth_year_month: z.string().regex(/^[0-9]{6}$/).nullable(),
+  gender: z.enum(["female", "male", "non_binary", "no_answer"]).nullable(),
+  residence_sigungu_code: z.string().regex(/^[0-9]{10}$/).nullable(),
+  tos_agreed: z.boolean(),
+  privacy_agreed: z.boolean(),
+  demographic_use_agreed: z.boolean(),
+  location_use_agreed: z.boolean(),
+  marketing_agreed: z.boolean(),
+  consent_version: z.string().min(1).max(80),
+});
 
-export type RegisteredUser = {
-  id: string;
-  email: string;
-  nickname: string;
-  name: string;
-  account_status: string;
-  system_role: string;
-  email_verification_required: boolean;
-  verification_email_dispatched: boolean;
-};
+const registeredUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  nickname: z.string(),
+  name: z.string(),
+  account_status: z.string(),
+  status: z.string(),
+  system_role: z.string(),
+  email_verification_required: z.boolean(),
+  verification_email_dispatched: z.boolean(),
+});
 
-export type RegisterUserResponse = {
-  user: RegisteredUser;
-};
+const registerUserResponseSchema = z.object({
+  user: registeredUserSchema,
+});
+
+export type RegisterUserInput = z.infer<typeof registerUserInputSchema>;
+export type RegisteredUser = z.infer<typeof registeredUserSchema>;
+export type RegisterUserResponse = z.infer<typeof registerUserResponseSchema>;
 
 export class SignupApiError extends Error {
   status: number;
@@ -45,10 +58,11 @@ export class SignupResponseShapeError extends Error {
 }
 
 export async function registerUser(input: RegisterUserInput): Promise<RegisterUserResponse> {
+  const requestInput = registerUserInputSchema.parse(input);
   const response = await fetchApi("/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(requestInput),
   });
   const payload = await readJsonPayload(response);
 
@@ -73,49 +87,13 @@ async function readJsonPayload(response: Response): Promise<unknown> {
 }
 
 function parseRegisterUserResponse(payload: unknown): RegisterUserResponse {
-  const record = requireRecord(payload, "가입 응답");
-  return { user: parseRegisteredUser(record.user) };
-}
-
-function parseRegisteredUser(payload: unknown): RegisteredUser {
-  const record = requireRecord(payload, "가입 사용자 응답");
-  return {
-    id: requireString(record.id, "id"),
-    email: requireString(record.email, "email"),
-    nickname: requireString(record.nickname, "nickname"),
-    name: requireString(record.name, "name"),
-    account_status: requireString(record.account_status, "account_status"),
-    system_role: requireString(record.system_role, "system_role"),
-    email_verification_required: requireBoolean(
-      record.email_verification_required,
-      "email_verification_required",
-    ),
-    verification_email_dispatched: requireBoolean(
-      record.verification_email_dispatched,
-      "verification_email_dispatched",
-    ),
-  };
-}
-
-function requireRecord(value: unknown, context: string): Record<string, unknown> {
-  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+  const result = registerUserResponseSchema.safeParse(payload);
+  if (result.success) {
+    return result.data;
   }
-  throw new SignupResponseShapeError(`${context} 형식이 객체가 아니다.`);
-}
-
-function requireString(value: unknown, fieldName: string): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  throw new SignupResponseShapeError(`${fieldName} 형식이 문자열이 아니다.`);
-}
-
-function requireBoolean(value: unknown, fieldName: string): boolean {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  throw new SignupResponseShapeError(`${fieldName} 형식이 boolean이 아니다.`);
+  const issue = result.error.issues[0];
+  const path = issue?.path.length ? ` (${issue.path.join(".")})` : "";
+  throw new SignupResponseShapeError(`가입 응답 형식이 올바르지 않다${path}.`);
 }
 
 function extractErrorMessage(payload: unknown): string | null {

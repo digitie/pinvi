@@ -17,9 +17,12 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://tripmate:tripmate_dev_password@localhost:55432/tripmate"
     )
-    session_cookie_name: str = "tripmate_session"
-    admin_session_hours: int = 12
-    user_session_hours: int = 24 * 14
+    access_token_cookie_name: str = "tripmate_access"
+    refresh_token_cookie_name: str = "tripmate_refresh"
+    jwt_secret_key: str = "tripmate-local-jwt-secret-change-me"
+    jwt_issuer: str = "tripmate-api"
+    access_token_minutes: int = 15
+    refresh_token_days: int = 7
     cors_origins: list[str] = [
         "http://localhost:3001",
         "http://127.0.0.1:3001",
@@ -52,6 +55,28 @@ class Settings(BaseSettings):
     kma_tour_course_source_path: str | None = None
     arboretum_basic_csv_url: str | None = None
     arboretum_basic_csv_path: str | None = None
+    web_base_url: str = "http://localhost:3001"
+    resend_api_key: str | None = None
+    resend_from_email: str | None = None
+    resend_timeout_seconds: float = 5.0
+    email_verification_path: str = "/verify-email"
+    rustfs_endpoint_url: str = "http://localhost:9000"
+    rustfs_public_endpoint_url: str | None = None
+    rustfs_public_base_url: str | None = None
+    rustfs_region: str = "us-east-1"
+    rustfs_bucket: str = "tripmate-media"
+    rustfs_access_key_id: str | None = None
+    rustfs_secret_access_key: str | None = None
+    rustfs_presigned_url_expires_seconds: int = Field(default=900, ge=60, le=86_400)
+    rustfs_max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    rustfs_allowed_content_types: list[str] = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "video/mp4",
+        "application/pdf",
+    ]
 
     @property
     def enable_docs(self) -> bool:

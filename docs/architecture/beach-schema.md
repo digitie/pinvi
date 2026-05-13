@@ -77,6 +77,20 @@ unique:
 
 `request_params`에는 인증키를 `***`로 저장한다. raw payload에는 provider 응답을 보존해 재처리와 schema drift 확인에 사용한다.
 
+## `features` projection
+
+Dagster beach ETL은 raw/domain 저장 후 `beach_profiles`를 `features`에 투영한다.
+
+- `feature_id`: `beach:{beach_profiles.id}`
+- `kind`: `place`
+- `category`: `beach`
+- `coord`, `geom`: `beach_profiles.longitude/latitude`
+- `detail.latest_observation`: 최신 KHOA 관측값
+- `detail.upcoming_index_forecasts`: 가까운 KHOA 해수욕지수 예보
+- `raw_refs`: KHOA/MOF/KMA provider reference 목록
+
+KHOA observation/index ETL은 12시간 캐시 창 안에서는 provider API를 다시 호출하지 않고 기존 raw/domain row를 재사용한다. 기본 Dagster 일정은 관측 06:20/18:20, 지수 06:30/18:30이다.
+
 ## `beach_observations`
 
 KHOA 해수욕장 관측값이다.

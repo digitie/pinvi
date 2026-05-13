@@ -12,6 +12,40 @@ services:
       retries: 20
     restart: unless-stopped
 
+  app-rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    command: ["--address", ":9000", "--console-enable", "/data"]
+    ports:
+      - "${TRIPMATE_RUSTFS_PORT:-19000}:9000"
+      - "${TRIPMATE_RUSTFS_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - app_rustfs_data:/data
+    restart: unless-stopped
+
+  app-rustfs-init:
+    image: minio/mc:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
+      TRIPMATE_RUSTFS_BUCKET: ${TRIPMATE_RUSTFS_BUCKET:-tripmate-media}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 30); do
+          if mc alias set rustfs http://app-rustfs:9000 "$$RUSTFS_ACCESS_KEY" "$$RUSTFS_SECRET_KEY"; then
+            mc mb -p "rustfs/$$TRIPMATE_RUSTFS_BUCKET" || true
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+    depends_on:
+      - app-rustfs
+
   app-api:
     build:
       context: ../apps/api
@@ -20,6 +54,11 @@ services:
     environment:
       TRIPMATE_DATABASE_URL: postgresql+psycopg://tripmate:tripmate_dev_password@app-postgres:5432/tripmate
       TRIPMATE_CORS_ORIGINS: '["http://localhost:${TRIPMATE_WEB_PORT:-13082}","http://127.0.0.1:${TRIPMATE_WEB_PORT:-13082}"]'
+      TRIPMATE_RUSTFS_ENDPOINT_URL: http://app-rustfs:9000
+      TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:${TRIPMATE_RUSTFS_PORT:-19000}
+      TRIPMATE_RUSTFS_BUCKET: ${TRIPMATE_RUSTFS_BUCKET:-tripmate-media}
+      TRIPMATE_RUSTFS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-tripmate-dev-access}
+      TRIPMATE_RUSTFS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-tripmate-dev-secret-change-me}
     ports:
       - "${TRIPMATE_API_PORT:-18082}:8000"
     healthcheck:
@@ -32,6 +71,8 @@ services:
     depends_on:
       app-postgres:
         condition: service_healthy
+      app-rustfs-init:
+        condition: service_completed_successfully
 
   app-web:
     build:
@@ -53,3 +94,4 @@ services:
 
 volumes:
   app_postgres_data:
+  app_rustfs_data:

@@ -139,7 +139,7 @@ erDiagram
 | --- | --- | --- | --- |
 | `id` | UUID PK | Y | 세션 ID |
 | `user_id` | UUID FK | Y | 사용자 |
-| `session_token_hash` | varchar(128) unique | Y | cookie에 담는 opaque token의 해시 |
+| `session_token_hash` | varchar(128) unique | Y | refresh token JWT 원문의 해시 |
 | `expires_at` | timestamptz | Y | 만료 시각 |
 | `revoked_at` | timestamptz | N | 로그아웃/강제 만료 시각 |
 | `last_seen_at` | timestamptz | N | 마지막 사용 시각 |
@@ -476,7 +476,7 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 | `map_feature_id` | UUID FK nullable | N | 내부 표준 지도 객체 `map_features.id`. 지도 클릭/수동 입력처럼 아직 표준 객체가 없으면 비워둘 수 있음 |
 | `trip_id` | UUID FK | Y | 여행 |
 | `trip_day_id` | UUID FK nullable | N | 특정 날짜에 배치된 경우 |
-| `sort_order` | integer | Y | 날짜 안 장소 순서 |
+| `sort_order` | text collate "C" | Y | 날짜 안 장소 순서. Fractional/LexoRank 계열 문자열이라 PostgreSQL locale 정렬을 쓰지 않고 ASCII byte 순서를 고정한다. |
 | `display_name` | varchar(160) | Y | 사용자가 정한 이름 |
 | `place_name` | varchar(160) | N | 상호명/원천 이름 |
 | `memo` | text | N | 사용자 메모 |

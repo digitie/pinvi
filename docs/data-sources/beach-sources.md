@@ -127,7 +127,7 @@ Query parameter:
 | API 수정일 | 2025-03-01 |
 | 공식 갱신주기 | 상시 |
 | 사용자 제공 quota | 10,000건/일 |
-| 구현 주기 | 매시 20분 |
+| 구현 주기 | 매일 06:20, 18:20 |
 | 예상 호출량 | 메타데이터 1회 + 관측소 약 356건/시간. 일 8,544건 수준으로 10,000건/일 미만 |
 | 인증 환경변수 | `TRIPMATE_KHOA_API_KEY` |
 
@@ -335,7 +335,7 @@ Query parameter:
 
 | dataset key | job | 주기 | 근거 |
 | --- | --- | --- | --- |
-| `khoa_beach_observation` | `khoa_beach_observation_hourly` | 매시 20분 | KHOA 수정주기 `상시`, 356건×24회 = 10,000건/일 미만 |
+| `khoa_beach_observation` | `khoa_beach_observation_twice_daily` | 매일 06:20, 18:20 | Dagster는 하루 2회만 관측 상세 API를 호출하고 12시간 캐시 안에서는 기존 raw/domain row를 재사용한다. |
 | `khoa_beach_index_forecast` | `khoa_beach_index_forecast_twice_daily` | 매일 06:30, 18:30 | data.go.kr gateway KHOA v2 API. 포털 갱신주기는 실시간이나 캐시 정책상 하루 2회 |
 | `khoa_mudflat_index_forecast` | `khoa_mudflat_index_forecast_twice_daily` | 매일 06:40, 18:40 | data.go.kr gateway KHOA v2 API. `ocean_activity_index_*`에 저장 |
 | `khoa_sea_split_index_forecast` | `khoa_sea_split_index_forecast_twice_daily` | 매일 06:50, 18:50 | data.go.kr gateway KHOA v2 API. `ocean_activity_index_*`에 저장 |

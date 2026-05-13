@@ -112,9 +112,9 @@ def test_weather_and_air_quality_etl_dataset_configs_respect_quota_policy() -> N
     assert beach_tide_sun_config.schedule == "10 5 * 6,7,8 *"
     assert beach_tide_sun_config.retry_interval_seconds == 600
     assert beach_tide_sun_config.freshness_target_minutes == 1440
-    assert khoa_observation_config.schedule == "20 * * * *"
+    assert khoa_observation_config.schedule == "20 6,18 * * *"
     assert khoa_observation_config.retry_interval_seconds == 300
-    assert khoa_observation_config.freshness_target_minutes == 120
+    assert khoa_observation_config.freshness_target_minutes == 720
     assert khoa_index_config.schedule == "30 6,18 * * *"
     assert khoa_index_config.retry_interval_seconds == 600
     assert khoa_index_config.retry_max_attempts == 0

@@ -107,7 +107,7 @@ def test_visitkorea_location_query_preserves_tourapi_fields_and_coordinate_order
     )
 
     page = client.location_based_list(
-        coordinate=Wgs84Coordinate(longitude=126.9769, latitude=37.5796),
+        coordinate=Wgs84Coordinate(lon=126.9769, lat=37.5796),
         radius=15_000,
         content_type_id=ContentType.TOURIST_ATTRACTION,
     )
@@ -130,7 +130,7 @@ def test_visitkorea_location_query_preserves_tourapi_fields_and_coordinate_order
     assert page.items[0].addr2 is None
     assert page.items[0].map_x == 126.9769
     assert page.items[0].map_y == 37.5796
-    assert page.items[0].coordinate == Wgs84Coordinate(longitude=126.9769, latitude=37.5796)
+    assert page.items[0].coordinate == Wgs84Coordinate(lon=126.9769, lat=37.5796)
     assert page.items[0].model_dump()["title"] == "경복궁"
     assert page.items[0].model_dump(mode="json")["modified_time"] == "2026-04-30T11:22:33+09:00"
     assert page.items[0].raw["cpyrhtDivCd"] == "Type1"

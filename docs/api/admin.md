@@ -4,12 +4,15 @@
 
 ## 인증
 
-관리자 로그인도 TripMate 기본 인증 원칙과 같이 httpOnly cookie 기반 서버 세션을 사용한다.
+관리자 로그인도 TripMate 기본 인증 원칙과 같이 httpOnly cookie 기반 JWT access/refresh token을 사용한다.
 
 - 로그인 endpoint: `POST /admin/auth/login`
-- 세션 cookie 이름: `tripmate_session`
-- cookie 값: 난수 기반 opaque token
-- DB 저장값: `sessions.session_token_hash`
+- access token 재발급 endpoint: `POST /admin/auth/refresh`
+- access token cookie 이름: `tripmate_access`
+- refresh token cookie 이름: `tripmate_refresh`
+- access token 기본 만료: 15분
+- refresh token 기본 만료: 7일
+- DB 저장값: refresh token의 `sessions.session_token_hash`
 - 기본 관리자 seed: Alembic `20260427_0013_seed_default_admin.py`
 - 기본 개발 계정: `admin@ad.min`
 - 기본 개발 비밀번호: `admin`
@@ -52,19 +55,46 @@
     "display_name": "TripMate 관리자",
     "is_admin": true,
     "is_privileged": true
-  }
+  },
+  "token_type": "Bearer",
+  "access_token_expires_at": "2026-05-13T01:15:00+00:00",
+  "refresh_token_expires_at": "2026-05-20T01:00:00+00:00"
 }
 ```
 
-성공 시 `tripmate_session` httpOnly cookie를 설정한다.
+성공 시 `tripmate_access`, `tripmate_refresh` httpOnly cookie를 설정한다.
 
 오류:
 
 - `401 Unauthorized`: 계정이 없거나, 비밀번호가 틀리거나, 관리자 권한이 아니다.
 
+### `POST /admin/auth/refresh`
+
+관리자 refresh token이 유효하면 새 access token을 발급하고 `tripmate_access` cookie를 다시 설정한다.
+
+응답:
+
+```json
+{
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "email": "admin@ad.min",
+    "display_name": "TripMate 관리자",
+    "is_admin": true,
+    "is_privileged": true
+  },
+  "token_type": "Bearer",
+  "access_token_expires_at": "2026-05-13T01:15:00+00:00"
+}
+```
+
+오류:
+
+- `401 Unauthorized`: refresh token 없음, 만료, 폐기, hash 불일치, 관리자 권한 없음.
+
 ### `POST /admin/auth/logout`
 
-현재 cookie의 세션을 revoke 처리하고 cookie를 제거한다.
+현재 refresh token에 연결된 세션을 revoke 처리하고 access/refresh cookie를 제거한다.
 
 응답:
 
@@ -80,7 +110,7 @@
 
 오류:
 
-- `401 Unauthorized`: 관리자 세션이 없거나 만료/폐기되었다.
+- `401 Unauthorized`: 관리자 access token이 없거나 만료/폐기되었다.
 
 ### `GET /admin/users`
 
@@ -149,7 +179,7 @@ Query parameter:
 오류:
 
 - `400 Bad Request`: 자기 자신의 관리자 권한 제거 또는 비활성화 시도.
-- `401 Unauthorized`: 관리자 세션 없음.
+- `401 Unauthorized`: 관리자 access token 없음.
 - `404 Not Found`: 대상 사용자 없음.
 
 ### `GET /admin/datasets`
@@ -212,7 +242,7 @@ Query parameter:
 
 오류:
 
-- `401 Unauthorized`: 관리자 세션 없음.
+- `401 Unauthorized`: 관리자 access token 없음.
 - `404 Not Found`: 조회 대상이 아니거나 존재하지 않는 테이블.
 
 ## 테스트 기준
@@ -220,6 +250,7 @@ Query parameter:
 관리자 API 변경 시 최소한 다음을 확인한다.
 
 - 기본 관리자 계정으로 로그인, `me`, 로그아웃 흐름.
+- 관리자 refresh token으로 access token 재발급.
 - 비관리자 계정 로그인 차단.
 - 잘못된 비밀번호 차단.
 - 데이터셋 목록에서 사용자/세션/여행 테이블 제외.

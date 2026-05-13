@@ -776,8 +776,9 @@ def test_kma_client_throttles_configured_requests(monkeypatch: pytest.MonkeyPatc
         sleeps.append(seconds)
         current_time[0] += seconds
 
-    monkeypatch.setattr(weather_client_module.time, "monotonic", lambda: current_time[0])
-    monkeypatch.setattr(weather_client_module.time, "sleep", fake_sleep)
+    weather_time = weather_client_module.time  # type: ignore[attr-defined]
+    monkeypatch.setattr(weather_time, "monotonic", lambda: current_time[0])
+    monkeypatch.setattr(weather_time, "sleep", fake_sleep)
 
     transport = httpx.MockTransport(handler)
     with httpx.Client(transport=transport) as http_client:
@@ -826,7 +827,8 @@ def test_kma_client_retries_rate_limited_requests(monkeypatch: pytest.MonkeyPatc
             },
         )
 
-    monkeypatch.setattr(weather_client_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    weather_time = weather_client_module.time  # type: ignore[attr-defined]
+    monkeypatch.setattr(weather_time, "sleep", lambda seconds: sleeps.append(seconds))
 
     transport = httpx.MockTransport(handler)
     with httpx.Client(transport=transport) as http_client:

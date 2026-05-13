@@ -10,8 +10,8 @@ TripMate 앱 컨테이너 검증은 WSL2 Ubuntu에서 실행한다. Windows Powe
 
 - `apps/api/Dockerfile`: FastAPI API 이미지.
 - `apps/web/Dockerfile`: Next.js production 웹 이미지.
-- `infra/docker-compose.app.yml`: API, Web, PostGIS 앱 스택.
-- `infra/docker-compose.yml`: ETL Postgres/Dagster stack. `admin` profile을 켜면 같은 ETL DB를 보는 API/Web 관리자 화면을 추가로 띄운다.
+- `infra/docker-compose.app.yml`: API, Web, PostGIS, RustFS 앱 스택.
+- `infra/docker-compose.yml`: ETL Postgres/Dagster/RustFS stack. `admin` profile을 켜면 같은 ETL DB를 보는 API/Web 관리자 화면을 추가로 띄운다.
 - `scripts/docker-app-smoke-test.sh`: 이미지 빌드, DB migration, API/Web smoke 테스트 자동화.
 - `scripts/admin-etl-data-smoke-test.sh`: ETL DB에 적재된 데이터를 관리자 API/Web에서 조회할 수 있는지 확인한다.
 - `.dockerignore`: 루트 build context에서 `.next`, `node_modules`, `.venv`, `.tmp`, `dataset` 등을 제외한다.
@@ -47,6 +47,14 @@ api: http://127.0.0.1:18082
 
 Web 컨테이너 내부는 `3000`, API 컨테이너 내부는 `8000`을 사용한다. 이 내부 포트는 host 포트 `13082`, `18082`와 다르다.
 
+RustFS smoke 포트:
+
+```text
+S3 API: http://127.0.0.1:19000
+Console: http://127.0.0.1:19001
+Bucket: tripmate-media
+```
+
 포트를 바꾸려면 다음 환경변수를 사용한다.
 
 ```bash
@@ -76,12 +84,13 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh -
 1. `infra/docker-compose.app.yml` 기준 기존 smoke 스택을 정리한다.
 2. `tripmate-api:local`, `tripmate-web:local` 이미지를 빌드한다.
 3. `app-postgres` PostGIS 컨테이너를 시작하고 health check를 기다린다.
-4. API 이미지로 `alembic upgrade head`를 명시적으로 실행한다.
-5. `app-api`, `app-web` 컨테이너를 시작한다.
-6. `GET /health` API health check를 기다린다.
-7. `GET /admin/login` 웹 응답을 확인한다.
-8. 기본 관리자 계정으로 `POST /admin/auth/login`을 호출한다.
-9. 관리자 cookie로 `GET /admin/datasets`를 호출하고 기본 페이지 크기와 제외 테이블 정책을 확인한다.
+4. `app-rustfs`를 시작하고 `app-rustfs-init`로 `tripmate-media` bucket을 준비한다.
+5. API 이미지로 `alembic upgrade head`를 명시적으로 실행한다.
+6. `app-api`, `app-web` 컨테이너를 시작한다.
+7. `GET /health` API health check를 기다린다.
+8. `GET /admin/login` 웹 응답을 확인한다.
+9. 기본 관리자 계정으로 `POST /admin/auth/login`을 호출한다.
+10. 관리자 cookie로 `GET /admin/datasets`를 호출하고 기본 페이지 크기와 제외 테이블 정책을 확인한다.
 
 ## ETL DB 관리자 데이터 smoke
 
@@ -109,7 +118,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/admin-etl-data-smoke-test.
 
 ```bash
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml build app-api app-web"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-postgres"
+wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init"
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head"
 wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web"
 ```

@@ -489,7 +489,7 @@ def _create_trip_collaboration_tables() -> None:
         ),
         sa.Column("trip_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("day_index", sa.Integer(), nullable=False),
-        sa.Column("sort_order", sa.String(length=80), nullable=False),
+        sa.Column("sort_order", sa.String(length=80, collation="C"), nullable=False),
         sa.Column("feature_id", sa.String(length=120)),
         sa.Column("feature_link_broken_at", sa.DateTime(timezone=True)),
         sa.Column(

@@ -2,10 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FormEvent } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { queryKeys } from "../shared/query-keys";
 import { useLoginPageStore } from "../shared/stores";
+import { getApiBaseUrlCandidates } from "../shared/api-base";
 import { fetchFestivalMonthly, loginUser, type FestivalSummary } from "./api";
 
 const monthLabels = [
@@ -58,19 +61,40 @@ const fallbackFestivals: FestivalSummary[] = [
   },
 ];
 
+const oauthProviders = [
+  { provider: "google", label: "Google" },
+  { provider: "naver", label: "Naver" },
+  { provider: "kakao", label: "Kakao" },
+] as const;
+
+const loginFormSchema = z.object({
+  email: z.string().trim().email("이메일 형식을 확인해 주세요."),
+  password: z.string().min(1, "비밀번호를 입력해 주세요."),
+});
+
+type LoginFormValues = z.infer<typeof loginFormSchema>;
+
 export default function LoginPage() {
   const {
     clearLoginFeedback,
-    email,
     loginMessage,
-    password,
-    resetLoginPassword,
     selectedMonth,
-    setLoginField,
     setLoginMessage,
     setSelectedMonth,
     year,
   } = useLoginPageStore();
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+    reset,
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
   const festivalQuery = useQuery({
     queryKey: queryKeys.public.festivalMonthly(year, selectedMonth),
@@ -78,22 +102,21 @@ export default function LoginPage() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: () => loginUser(email, password),
+    mutationFn: (input: LoginFormValues) => loginUser(input.email, input.password),
     onMutate: () => {
       clearLoginFeedback();
     },
-    onSuccess: (payload) => {
+    onSuccess: (payload, variables) => {
       const displayName =
         payload.user.nickname ?? payload.user.display_name ?? payload.user.name ?? payload.user.email;
       setLoginMessage(`${displayName}님, 로그인되었습니다.`);
-      resetLoginPassword();
+      reset({ email: variables.email, password: "" });
     },
   });
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submitLogin(values: LoginFormValues) {
     loginMutation.reset();
-    loginMutation.mutate();
+    loginMutation.mutate(values);
   }
 
   const festivalPayload = festivalQuery.data ?? null;
@@ -110,6 +133,7 @@ export default function LoginPage() {
       count: index + 1 === selectedMonth ? fallbackFestivals.length : 0,
     }));
   const season = seasonForMonth(selectedMonth);
+  const apiBaseUrl = getApiBaseUrlCandidates()[0];
 
   return (
     <main className="min-h-svh bg-white text-[#222222]">
@@ -210,7 +234,7 @@ export default function LoginPage() {
         </section>
 
         <section className="order-1 flex min-h-[44svh] items-center justify-center px-5 py-8 sm:px-8 lg:order-2 lg:min-h-svh lg:px-12">
-          <form className="w-full max-w-[420px]" onSubmit={handleSubmit}>
+          <form className="w-full max-w-[420px]" onSubmit={handleSubmit(submitLogin)}>
             <div className="mb-8">
               <p className="text-sm font-semibold text-[#ff385c]">Login</p>
               <h2 className="mt-3 text-[2rem] font-semibold tracking-normal">다시 여행을 이어갑니다.</h2>
@@ -222,10 +246,14 @@ export default function LoginPage() {
                 className="h-14 w-full rounded-lg border border-[#dddddd] bg-white px-4 text-base outline-none transition focus:border-[#222222] focus:ring-2 focus:ring-[#222222]"
                 type="email"
                 autoComplete="email"
-                value={email}
-                onChange={(event) => setLoginField("email", event.target.value)}
-                required
+                aria-invalid={errors.email ? "true" : "false"}
+                {...register("email")}
               />
+              {errors.email ? (
+                <span className="mt-2 block text-sm font-semibold text-[#c13515]">
+                  {errors.email.message}
+                </span>
+              ) : null}
             </label>
 
             <label className="mt-4 block">
@@ -234,10 +262,14 @@ export default function LoginPage() {
                 className="h-14 w-full rounded-lg border border-[#dddddd] bg-white px-4 text-base outline-none transition focus:border-[#222222] focus:ring-2 focus:ring-[#222222]"
                 type="password"
                 autoComplete="current-password"
-                value={password}
-                onChange={(event) => setLoginField("password", event.target.value)}
-                required
+                aria-invalid={errors.password ? "true" : "false"}
+                {...register("password")}
               />
+              {errors.password ? (
+                <span className="mt-2 block text-sm font-semibold text-[#c13515]">
+                  {errors.password.message}
+                </span>
+              ) : null}
             </label>
 
             {loginMessage ? (
@@ -258,6 +290,24 @@ export default function LoginPage() {
             >
               {loginMutation.isPending ? "확인 중" : "로그인"}
             </button>
+
+            <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase text-[#929292]">
+              <span className="h-px flex-1 bg-[#dddddd]" />
+              <span>OAuth</span>
+              <span className="h-px flex-1 bg-[#dddddd]" />
+            </div>
+
+            <div className="grid gap-2">
+              {oauthProviders.map((provider) => (
+                <a
+                  className="inline-flex h-12 items-center justify-center rounded-lg border border-[#dddddd] bg-white px-4 text-sm font-semibold text-[#222222] transition hover:border-[#222222]"
+                  href={`${apiBaseUrl}/auth/oauth/${provider.provider}/start?return_to=/trips`}
+                  key={provider.provider}
+                >
+                  {provider.label}
+                </a>
+              ))}
+            </div>
 
             <div className="mt-5 flex items-center justify-between gap-3 text-sm font-semibold text-[#222222]">
               <button className="underline underline-offset-4" type="button">

@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-일반 사용자 인증 API는 Phase 2에서 단계적으로 구현한다. 현재는 가입 요청을 저장하는 `POST /auth/register`와 httpOnly cookie 기반 `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`가 구현되어 있다. 이메일 인증 링크 소비 endpoint는 아직 구현 전이다.
+일반 사용자 인증 API는 이메일 가입, 이메일 인증, JWT cookie 로그인, access token 재발급, 로그아웃, 현재 사용자 조회를 제공한다.
 사용자, 이메일 인증, 초대 참여자, 관리자 사용자 관리의 목표 DB 스키마는 `docs/architecture/user-trip-schema.md`를 따른다.
 
 현재 존재하는 테이블:
@@ -20,7 +20,9 @@
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/refresh`
 - `POST /auth/logout`
+- `POST /auth/verify-email`
 - `GET /auth/me`
 
 계획 중인 소셜 로그인 endpoint:
@@ -39,6 +41,7 @@
 현재 존재하는 관리자 인증 endpoint:
 
 - `POST /admin/auth/login`
+- `POST /admin/auth/refresh`
 - `POST /admin/auth/logout`
 - `GET /admin/auth/me`
 
@@ -46,23 +49,26 @@
 
 ## 인증 방식
 
-TripMate는 httpOnly cookie 기반 서버 세션으로 시작한다.
+TripMate는 httpOnly cookie에 담긴 JWT access/refresh token을 사용한다. Access token은 15분, refresh token은 7일이 기본값이다.
 
 원칙:
 
 - 사용자 로그인 식별자는 이메일이다.
 - 이메일은 중복될 수 없다.
 - 비밀번호는 평문 저장하지 않고 안전한 password hash만 저장한다.
-- 세션 cookie에는 난수 기반 opaque token만 저장한다.
-- DB에는 세션 token 원문이 아니라 `session_token_hash`만 저장한다.
-- 로그아웃은 서버 세션의 `revoked_at`을 기록하는 방식으로 처리한다.
+- access token cookie 이름은 `tripmate_access`이다.
+- refresh token cookie 이름은 `tripmate_refresh`이다.
+- JWT 원문은 DB에 저장하지 않는다.
+- DB에는 refresh token hash만 `sessions.session_token_hash`에 저장한다.
+- 로그아웃은 refresh token hash에 연결된 `sessions.revoked_at`을 기록하는 방식으로 처리한다.
 - 가입 시 이메일 인증을 요구한다.
 - 일반 로그인은 현재 `account_status = active`, `is_active = true`인 사용자만 허용한다.
+- 이메일 인증 전 계정은 `pending_email_verification` 상태로 생성되고 `/auth/verify-email` 성공 시 `active`로 전환된다.
 - 초대 참여자는 첫 로그인 때 비밀번호를 설정한다.
 - 관리자 비밀번호 초기화는 임시 비밀번호 발급이 아니라 reset link 발송 방식으로 처리한다.
-- SMTP/Gmail credential 원문은 DB에 저장하지 않고 secret reference만 저장한다.
+- 이메일 발송은 Resend를 사용한다. 운영 준비 항목은 `docs/integrations/resend.md`를 따른다.
 - Google/Naver/Kakao 로그인은 provider token을 TripMate 세션으로 쓰지 않는다.
-- 소셜 로그인 callback 성공 후에도 기존 `tripmate_session` httpOnly cookie와 `sessions.session_token_hash`를 사용한다.
+- 소셜 로그인 callback 성공 후에도 TripMate JWT cookie와 `sessions.session_token_hash`를 사용한다.
 - provider 고유 식별자는 `user_oauth_accounts(provider, provider_user_id)`에 저장한다.
 - 기존 이메일 계정과 provider 계정은 자동 연결하지 않는다.
 - provider access token, refresh token, id token 원문은 DB와 로그에 저장하지 않는다.
@@ -86,7 +92,7 @@ TripMate는 httpOnly cookie 기반 서버 세션으로 시작한다.
 3. 사용자는 provider 인증/동의 화면을 거쳐 `GET /auth/oauth/{provider}/callback`으로 돌아온다.
 4. API는 `state`, 만료, provider 일치를 검증하고 authorization code를 token으로 교환한다.
 5. API는 provider profile을 조회하고 `provider_user_id`를 기준으로 `user_oauth_accounts`를 찾는다.
-6. 이미 연결된 계정이면 기존 사용자로 `tripmate_session`을 발급한다.
+6. 이미 연결된 계정이면 기존 사용자로 TripMate JWT cookie를 발급한다.
 7. 연결된 계정이 없고 현재 TripMate 세션이 있으면 명시적 연결 흐름으로 처리한다.
 8. 연결된 계정이 없고 같은 이메일 사용자가 없으면 provider 이메일 신뢰 정책에 따라 신규 사용자를 만들 수 있다.
 9. 같은 이메일 사용자가 이미 있으면 자동 연결하지 않고 `/login?oauth_error=account_link_required&provider=...`로 돌려보낸다.
@@ -152,7 +158,7 @@ provider authorization URL로 redirect한다.
 
 ### `GET /auth/oauth/{provider}/callback`
 
-provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 `return_to`로 redirect한다. 실패하면 `/login?oauth_error=...&provider=...`로 redirect한다.
+provider callback이다. 성공하면 `tripmate_access`, `tripmate_refresh` cookie를 설정하고 `return_to`로 redirect한다. 실패하면 `/login?oauth_error=...&provider=...`로 redirect한다.
 
 이 endpoint는 일반 JSON API라기보다 브라우저 redirect endpoint다.
 
@@ -173,7 +179,7 @@ provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 
 
 ### `POST /auth/register`
 
-일반 사용자 가입 요청을 생성한다. 현재 단계에서는 이메일 발송 provider가 연결되어 있지 않으므로, 사용자는 `pending_email_verification` 상태로 저장되고 `email_verification_tokens.token_hash`만 DB에 남긴다. 원문 token은 DB에 저장하지 않는다.
+일반 사용자 가입 요청을 생성한다. 사용자는 `pending_email_verification` 상태로 저장되고 `email_verification_tokens.token_hash`만 DB에 남긴다. 원문 token은 DB에 저장하지 않는다. Resend 설정이 완료되어 있으면 인증 메일을 발송하고, 설정이 없으면 사용자 생성만 완료한다.
 
 요청:
 
@@ -226,7 +232,7 @@ provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 
 
 ### `POST /auth/login`
 
-일반 사용자 로그인이다. 관리자 로그인과 같은 `sessions` 테이블, 같은 `tripmate_session` httpOnly cookie 구조를 사용한다. 차이는 `/auth/login`은 일반 사용자용이고, `/admin/auth/login`은 관리자 권한을 추가로 요구한다는 점이다.
+일반 사용자 로그인이다. 관리자 로그인과 같은 `sessions` 테이블을 사용하되, 브라우저에는 `tripmate_access`, `tripmate_refresh` httpOnly cookie를 설정한다. 차이는 `/auth/login`은 일반 사용자용이고, `/admin/auth/login`은 관리자 권한을 추가로 요구한다는 점이다.
 
 요청:
 
@@ -252,7 +258,10 @@ provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 
     "email_verified_at": "2026-04-28T09:00:00+09:00",
     "is_admin": false,
     "is_privileged": false
-  }
+  },
+  "token_type": "Bearer",
+  "access_token_expires_at": "2026-05-13T01:15:00+00:00",
+  "refresh_token_expires_at": "2026-05-20T01:00:00+00:00"
 }
 ```
 
@@ -261,21 +270,86 @@ provider callback이다. 성공하면 `tripmate_session` cookie를 설정하고 
 - 이메일은 소문자로 정규화해 조회한다.
 - 비밀번호 hash 검증에 실패하면 `401 Unauthorized`를 반환한다.
 - 이메일 인증 전 계정(`pending_email_verification`), 초대 수락 전 계정(`invited`), 비활성/삭제 계정은 로그인할 수 없다.
-- cookie에는 원문 session token을 담고 DB에는 `session_token_hash`만 저장한다.
-- 사용자 세션 기본 만료는 `TRIPMATE_USER_SESSION_HOURS` 설정을 따른다. 현재 기본값은 14일이다.
+- access token 만료는 `TRIPMATE_ACCESS_TOKEN_MINUTES` 설정을 따른다. 기본값은 15분이다.
+- refresh token 만료는 `TRIPMATE_REFRESH_TOKEN_DAYS` 설정을 따른다. 기본값은 7일이다.
+- refresh token 원문은 cookie에만 담고 DB에는 hash만 저장한다.
+
+### `POST /auth/refresh`
+
+`tripmate_refresh` cookie가 유효하면 새 access token을 발급하고 `tripmate_access` cookie를 다시 설정한다. refresh token은 현재 회전하지 않는다.
+
+응답:
+
+```json
+{
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "email": "planner@example.com",
+    "display_name": "여행자",
+    "nickname": "여행자",
+    "name": "홍길동",
+    "account_status": "active",
+    "system_role": "planner",
+    "email_verified_at": "2026-04-28T09:00:00+09:00",
+    "is_admin": false,
+    "is_privileged": false
+  },
+  "token_type": "Bearer",
+  "access_token_expires_at": "2026-05-13T01:15:00+00:00"
+}
+```
+
+오류:
+
+- `401 Unauthorized`: refresh token 없음, 만료, 폐기, hash 불일치, 비활성 계정.
 
 ### `GET /auth/me`
 
-현재 일반 사용자 세션을 확인한다. 유효한 `tripmate_session` cookie가 없으면 `401 Unauthorized`를 반환한다.
+현재 일반 사용자 access token을 확인한다. 유효한 `tripmate_access` cookie가 없으면 `401 Unauthorized`를 반환한다.
 
 ### `POST /auth/logout`
 
-현재 cookie의 session token hash를 찾아 `sessions.revoked_at`을 기록하고 cookie를 삭제한다.
+현재 refresh token hash를 찾아 `sessions.revoked_at`을 기록하고 `tripmate_access`, `tripmate_refresh` cookie를 삭제한다.
+
+### `POST /auth/verify-email`
+
+가입 인증 메일의 token을 소비한다. token hash가 `email_verification_tokens`에 존재하고 만료/소비 전이면 사용자의 `email_verified_at`, `email_verified`, `account_status`를 갱신한다.
+
+요청:
+
+```json
+{
+  "token": "email-verification-token"
+}
+```
+
+응답:
+
+```json
+{
+  "status": "ok",
+  "user": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "email": "planner@example.com",
+    "display_name": "여행자",
+    "nickname": "여행자",
+    "name": "홍길동",
+    "account_status": "active",
+    "system_role": "planner",
+    "email_verified_at": "2026-05-13T10:00:00+09:00",
+    "is_admin": false,
+    "is_privileged": false
+  }
+}
+```
+
+오류:
+
+- `422 Unprocessable Entity`: token이 없거나 만료/소비/불일치 상태.
 
 ## 계획 중인 endpoint
 
 ```text
-POST /auth/verify-email
 POST /auth/password-reset/request
 POST /auth/password-reset/confirm
 PATCH /users/me
@@ -315,13 +389,15 @@ POST /admin/users/{user_id}/password-reset
 - 회원가입 정상 경로
 - 중복 이메일 실패
 - 로그인 정상 경로
+- refresh token으로 access token 재발급
 - 잘못된 비밀번호 실패
 - 로그아웃 후 세션 무효화
+- 이메일 인증 링크 소비 후 active 전환
 - 이메일 인증 전 로그인/접근 제한
 - 초대 참여자의 첫 비밀번호 설정
 - 관리자 비밀번호 초기화 token 발급
 - 사용자 정보 수정 인가 검사
-- 세션 token 원문이 DB와 로그에 남지 않는지 확인
+- refresh token 원문이 DB와 로그에 남지 않는지 확인
 - 이메일 인증/reset token 원문이 DB와 로그에 남지 않는지 확인
 - 소셜 로그인 state mismatch/만료/재사용 실패
 - Google/Naver/Kakao provider profile 정규화

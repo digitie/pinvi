@@ -14,7 +14,7 @@ TripMate의 로그인 후 기본 UI는 TREK의 `My Trips` 대시보드와 `Trip 
 - 예외적으로 지도 marker 색상은 `airbnb-marker-palette.html`의 16색 팔레트가 `DESIGN.md`보다 우선한다. marker shape, shadow, radius는 `DESIGN.md`의 부드러운 Airbnb 계열 룩을 유지한다.
 - 지도 marker glyph는 Mapbox Maki icon을 내려받아 self-host한 SVG asset을 사용한다. CDN hotlink, 임의 SVG 직접 제작, Mapbox GL 의존성 추가는 하지 않는다.
 - TripMate는 대한민국 국내 여행 앱이다. 해외 여행/비회원 모드/외부 provider 원문 장기 저장을 기본 범위로 넣지 않는다.
-- 일반 사용자 로그인 식별자는 이메일이고, 인증은 httpOnly cookie 기반 서버 세션을 사용한다.
+- 일반 사용자 로그인 식별자는 이메일이고, 인증은 httpOnly cookie 기반 JWT access/refresh token을 사용한다.
 - Kakao JavaScript app key는 브라우저 노출 가능 키로 `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`를 쓴다.
 - Kakao REST API key, Telegram bot token, Gemini API key, 비밀번호 원문은 브라우저 bundle, 일반 DB, 로그에 저장하지 않는다.
 - 장소 추가는 Kakao 검색 결과 선택과 지도 클릭 입력을 모두 지원한다.

@@ -222,7 +222,7 @@ ALL_ETL_SPECS: tuple[EtlJobSpec, ...] = (
         failure_message="해수욕장 날씨 ETL 실패: {dataset_key}",
     ),
     EtlJobSpec(
-        job_name="khoa_beach_observation_hourly",
+        job_name="khoa_beach_observation_twice_daily",
         op_name="load_khoa_beach_observations",
         dataset_key="khoa_beach_observation",
         description="KHOA 해수욕장 최신 수온·파고·풍향풍속 관측값을 시간 단위로 수집한다.",

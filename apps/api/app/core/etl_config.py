@@ -222,12 +222,12 @@ DEFAULT_ETL_DATASET_CONFIGS: dict[str, EtlDatasetRuntimeConfig] = {
     ),
     "khoa_beach_observation": EtlDatasetRuntimeConfig(
         dataset_key="khoa_beach_observation",
-        schedule="20 * * * *",
+        schedule="20 6,18 * * *",
         retry_interval_seconds=300,
         retry_max_attempts=3,
         failure_admin_notification_enabled=True,
         failure_telegram_notification_enabled=True,
-        freshness_target_minutes=120,
+        freshness_target_minutes=720,
     ),
     "khoa_beach_index_forecast": EtlDatasetRuntimeConfig(
         dataset_key="khoa_beach_index_forecast",

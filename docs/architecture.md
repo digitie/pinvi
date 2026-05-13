@@ -18,6 +18,7 @@ provider adapter 라이브러리 분리 기준은 `docs/architecture/provider-ad
 Google/Naver/Kakao 소셜 로그인 통합 기준은 `docs/integrations/social-login.md`와 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
 TripMate MCP 도구 설계는 `docs/architecture/mcp-tools.md`를 따른다.
 YouTube 국내여행 정보 수집과 Gemini 기반 장소 후보 추출 설계는 `docs/architecture/youtube-travel-intelligence.md`를 따른다.
+이미지와 첨부 파일 저장은 RustFS 기반 object storage를 사용하며, API 계약은 `docs/api/storage.md`, 운영 절차는 `docs/runbooks/file-storage.md`를 따른다.
 Dagster ETL 운영 흐름과 로그/알림 기반은 `docs/runbooks/etl.md`와 `docs/execplan/dagster-etl-migration.md`를 따른다.
 
 ## 현재 상태
@@ -92,8 +93,9 @@ docs                # 문서, runbook, ADR, 실행 계획
 ## 데이터 원칙
 
 - 사용자 로그인 식별자는 이메일이다.
-- 인증은 httpOnly cookie 기반 서버 세션으로 시작한다. 세션 cookie에는 opaque token만 넣고, 서버는 해시된 세션 토큰과 만료 시각을 저장한다.
-- Google/Naver/Kakao 소셜 로그인도 provider token을 앱 세션으로 쓰지 않고, callback 검증 후 기존 `tripmate_session` 서버 세션을 발급한다.
+- 인증은 httpOnly cookie 기반 JWT access/refresh token을 사용한다. Access token 기본 만료는 15분, refresh token 기본 만료는 7일이다.
+- DB에는 refresh token 원문이 아니라 hash와 만료 시각만 `sessions`에 저장한다.
+- Google/Naver/Kakao 소셜 로그인도 provider token을 앱 세션으로 쓰지 않고, callback 검증 후 기존 `tripmate_access`, `tripmate_refresh` cookie로 수렴시킨다.
 - provider 고유 사용자는 `users`에 직접 컬럼으로 넣지 않고 `user_oauth_accounts` 연결 테이블로 관리한다.
 - 기존 이메일 계정과 provider 계정은 자동 병합하지 않는다.
 - 모든 사용자 소유 리소스는 `user_id` 인가 검사를 통과해야 한다.
@@ -110,8 +112,8 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 ## 초기 구현 순서 결정
 
-- 인증: httpOnly cookie 기반 서버 세션을 사용한다. access/refresh token 조합은 모바일 네이티브 앱이나 외부 API 클라이언트가 필요해질 때 재검토한다.
-- 소셜 로그인: Google/Naver/Kakao 버튼은 `/login`에만 추가하고, provider OAuth 결과는 `user_oauth_accounts` 연결 뒤 기존 서버 세션으로 수렴시킨다.
+- 인증: httpOnly cookie 기반 JWT access/refresh token을 사용한다. 이메일 인증은 필수이며 인증 메일은 Resend로 발송한다.
+- 소셜 로그인: Google/Naver/Kakao 버튼은 `/login`에만 추가하고, provider OAuth 결과는 `user_oauth_accounts` 연결 뒤 기존 JWT cookie 흐름으로 수렴시킨다.
 - 지도: Kakao JavaScript SDK 기반 지도 UI와 지도 클릭 장소 초안을 먼저 구현한다. Kakao Local API 검색 adapter는 `docs/data-sources.md`의 저장/캐시 정책과 API 계약을 먼저 확정한 뒤 추가한다.
 - Telegram: DB에는 `telegram_bot_token_ref`만 저장한다. 상세는 `docs/integrations/telegram.md`를 따른다.
 - Gemini: 사용자 개인 키를 입력받는다. 상세는 `docs/integrations/gemini.md`를 따른다.
@@ -137,14 +139,13 @@ docs                # 문서, runbook, ADR, 실행 계획
 - `trips`
 - `trip_days`
 
-세션 cookie에는 opaque token만 담는 것을 전제로 하며, DB에는 `session_token_hash`만 저장한다.
+인증 cookie에는 JWT를 담고, DB에는 refresh token hash인 `session_token_hash`만 저장한다.
 
 사용자/여행 도메인의 다음 목표 스키마는 `docs/architecture/user-trip-schema.md`의 설계안을 따른다. 현재 `users`, `sessions`, `trips`, `trip_days`는 최소 구현 상태이므로 Phase 2~3에서 migration으로 확장해야 한다.
 
 ## 아직 구현되지 않은 것
 
-- 이메일 인증 링크 소비, 비밀번호 재설정, Google/Naver/Kakao 소셜 로그인 등 인증 확장
-- 관리자 사용자 관리 API 확장
+- 비밀번호 재설정, Google/Naver/Kakao 소셜 로그인 등 인증 확장
 - Kakao 지도 연동
 - Telegram 발송
 - Gemini Deep Research

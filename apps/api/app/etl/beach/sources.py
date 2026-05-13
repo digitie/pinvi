@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import html
+import importlib
 import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, cast
 from urllib.parse import quote, urlencode
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -29,6 +31,7 @@ from app.models.beach import (
     BeachSourceRecord,
     BeachWaterQualityMeasurement,
 )
+from app.models.place import BjdLookup, Feature
 from app.models.weather import WeatherBeachLocation
 
 KST = ZoneInfo("Asia/Seoul")
@@ -65,6 +68,7 @@ COASTAL_SIDO_NAMES = (
 )
 MAX_PAGE_SIZE = 300
 MAX_PAGE_GUARD = 1000
+KHOA_BEACH_CACHE_FRESHNESS_MINUTES = 720
 _WHITESPACE_RE = re.compile(r"\s+")
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _HTTP_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
@@ -117,6 +121,11 @@ class KhoaBeachObservationClient:
         self._client = client
 
     def fetch_observatory_list(self) -> list[dict[str, Any]]:
+        if self._client is None:
+            pykhoa_rows = _pykhoa_beach_observatory_rows()
+            if pykhoa_rows:
+                return pykhoa_rows
+
         owns_client = self._client is None
         client = self._client or httpx.Client(timeout=30.0, follow_redirects=True)
         try:
@@ -146,6 +155,24 @@ class KhoaBeachObservationClient:
         api_key = (self._service_key or "").strip()
         if not api_key:
             raise BeachSourceEtlError("KHOA API key is not configured.")
+        request_params = {
+            "DataType": "beach",
+            "ServiceKey": "***",
+            "BeachCode": beach_code,
+            "ResultType": "json",
+        }
+        if self._client is None:
+            pykhoa_client = _pykhoa_client(api_key)
+            if pykhoa_client is not None:
+                try:
+                    result = pykhoa_client.beach_search(beach_code, include_address=True)
+                except Exception as exc:
+                    message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                    raise BeachSourceEtlError(
+                        f"python-khoa-api beach search request failed: {message}"
+                    ) from exc
+                return request_params, _row_from_pykhoa_beach_search_result(result)
+
         params = {
             "DataType": "beach",
             "ServiceKey": api_key,
@@ -170,15 +197,7 @@ class KhoaBeachObservationClient:
         if not isinstance(payload, dict):
             raise BeachSourceEtlError("KHOA beach observation response is not an object.")
         row = _extract_first_row(cast(dict[str, Any], payload))
-        return (
-            {
-                "DataType": "beach",
-                "ServiceKey": "***",
-                "BeachCode": beach_code,
-                "ResultType": "json",
-            },
-            row,
-        )
+        return request_params, row
 
 
 class KhoaBeachIndexClient:
@@ -212,6 +231,31 @@ class KhoaBeachIndexClient:
         }
         if req_date is not None:
             params["reqDate"] = req_date.strftime("%Y%m%d")
+        if self._client is None:
+            pykhoa_client = _pykhoa_client(api_key)
+            if pykhoa_client is not None:
+                try:
+                    page = pykhoa_client.beach_index(
+                        req_date=req_date,
+                        num_of_rows=MAX_PAGE_SIZE,
+                        validate_required=False,
+                    )
+                except Exception as exc:
+                    message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
+                    raise BeachSourceEtlError(
+                        f"python-khoa-api beach index request failed: {message}"
+                    ) from exc
+                request_params = {
+                    **{str(key): str(value) for key, value in page.request_params.items()},
+                    "serviceKey": "***",
+                    "type": "json",
+                    "pageNo": "1",
+                    "numOfRows": str(MAX_PAGE_SIZE),
+                }
+                if req_date is not None:
+                    request_params["reqDate"] = req_date.strftime("%Y%m%d")
+                return request_params, _rows_from_pykhoa_beach_index_page(page)
+
         owns_client = self._client is None
         client = self._client or httpx.Client(timeout=30.0, follow_redirects=True)
         try:
@@ -220,9 +264,7 @@ class KhoaBeachIndexClient:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 message = redact_sensitive_text(str(exc), extra_secret_values=(api_key,))
-                raise BeachSourceEtlError(
-                    f"KHOA beach index request failed: {message}"
-                ) from None
+                raise BeachSourceEtlError(f"KHOA beach index request failed: {message}") from None
             payload = response.json()
         finally:
             if owns_client:
@@ -249,6 +291,102 @@ def _data_go_service_key_query_value(service_key: str) -> str:
     if _PERCENT_ENCODED_RE.search(stripped):
         return stripped
     return quote(stripped, safe="")
+
+
+def _pykhoa_client(api_key: str) -> Any | None:
+    try:
+        module = importlib.import_module("khoa")
+    except ImportError:
+        return None
+    client_factory = getattr(module, "KhoaClient", None)
+    if client_factory is None:
+        return None
+    return client_factory(api_key=api_key, timeout=30.0)
+
+
+def _pykhoa_beach_observatory_rows() -> list[dict[str, Any]]:
+    try:
+        module = importlib.import_module("khoa")
+    except ImportError:
+        return []
+    get_observatories = getattr(module, "get_beach_observatories", None)
+    if get_observatories is None:
+        return []
+    return [_row_from_pykhoa_observatory(item) for item in get_observatories()]
+
+
+def _row_from_pykhoa_observatory(observatory: Any) -> dict[str, Any]:
+    return _compact_dict(
+        {
+            "id": _attr_text(observatory, "id"),
+            "name": _attr_text(observatory, "name"),
+            "data_type": _attr_text(observatory, "data_type") or "BEACH",
+            "lat": _attr_value(observatory, "lat", "latitude"),
+            "lon": _attr_value(observatory, "lon", "longitude"),
+            "legal_dong_code": _attr_text(observatory, "legal_dong_code"),
+            "road_address_management_no": _attr_text(observatory, "road_address_code"),
+            "road_name_code": _attr_text(observatory, "road_name_code"),
+            "road_address": _attr_text(observatory, "road_address"),
+            "jibun_address": _attr_text(observatory, "parcel_address"),
+            "address_source": _attr_text(observatory, "address_source"),
+        }
+    )
+
+
+def _row_from_pykhoa_beach_search_result(result: Any) -> dict[str, Any] | None:
+    observations = list(getattr(result, "observations", ()) or ())
+    if not observations:
+        return None
+    observation = observations[0]
+    row = dict(getattr(observation, "raw", {}) or {})
+    row.update(
+        _compact_dict(
+            {
+                "beach_code": _attr_text(result, "id"),
+                "beach_name": _attr_text(result, "name"),
+                "obs_post_name": _attr_text(result, "obs_post_name"),
+                "lat": _attr_value(result, "lat"),
+                "lon": _attr_value(result, "lon"),
+                "road_address": _attr_text(result, "road_address"),
+                "jibun_address": _attr_text(result, "parcel_address"),
+                "address_source": _attr_text(result, "address_source"),
+            }
+        )
+    )
+    return row
+
+
+def _rows_from_pykhoa_beach_index_page(page: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for place in getattr(page, "items", ()) or ():
+        for forecast in getattr(place, "forecasts", ()) or ():
+            row = dict(getattr(forecast, "raw", {}) or {})
+            row.update(
+                _compact_dict(
+                    {
+                        "placeCode": _attr_text(place, "id"),
+                        "bbchNm": _attr_text(place, "name"),
+                        "lat": _attr_value(place, "lat", "latitude"),
+                        "lot": _attr_value(place, "lon", "longitude"),
+                        "road_address": _attr_text(place, "road_address"),
+                        "jibun_address": _attr_text(place, "parcel_address"),
+                        "address_source": _attr_text(place, "address_source"),
+                    }
+                )
+            )
+            rows.append(row)
+    return rows
+
+
+def _attr_value(value: Any, *names: str) -> Any:
+    for name in names:
+        if hasattr(value, name):
+            return getattr(value, name)
+    return None
+
+
+def _attr_text(value: Any, *names: str) -> str | None:
+    return _text(_attr_value(value, *names))
 
 
 class MofBeachInfoClient:
@@ -335,6 +473,8 @@ class KhoaBeachObservationLoadResult:
     raw_row_count: int
     observation_row_count: int
     profile_upsert_count: int
+    feature_upsert_count: int
+    api_cache_hit_count: int
     mapped_legal_dong_count: int
     road_address_mapped_count: int
     skipped_row_count: int
@@ -345,6 +485,8 @@ class BeachIndexForecastLoadResult:
     raw_row_count: int
     forecast_row_count: int
     profile_upsert_count: int
+    feature_upsert_count: int
+    api_cache_hit_count: int
     mapped_legal_dong_count: int
     skipped_row_count: int
 
@@ -441,6 +583,94 @@ def sync_kma_beach_profiles(
     )
 
 
+def sync_beach_profiles_to_features(
+    session: Session,
+    *,
+    collected_at: datetime | None = None,
+) -> int:
+    resolved_collected_at = _resolve_collected_at(collected_at)
+    profiles = session.scalars(
+        select(BeachProfile)
+        .where(BeachProfile.is_active.is_(True))
+        .where(BeachProfile.longitude.is_not(None))
+        .where(BeachProfile.latitude.is_not(None))
+        .order_by(BeachProfile.display_name, BeachProfile.id)
+    ).all()
+    upsert_count = 0
+    for profile in profiles:
+        if profile.longitude is None or profile.latitude is None:
+            continue
+        feature_id = f"beach:{profile.id}"
+        provider_refs = session.scalars(
+            select(BeachProviderRef)
+            .where(BeachProviderRef.beach_id == profile.id)
+            .order_by(BeachProviderRef.provider, BeachProviderRef.provider_dataset_key)
+        ).all()
+        latest_observation = session.scalar(
+            select(BeachObservation)
+            .where(BeachObservation.beach_id == profile.id)
+            .where(BeachObservation.is_active.is_(True))
+            .order_by(BeachObservation.observed_at.desc())
+            .limit(1)
+        )
+        upcoming_forecasts = session.scalars(
+            select(BeachIndexForecast)
+            .where(BeachIndexForecast.beach_id == profile.id)
+            .where(BeachIndexForecast.is_active.is_(True))
+            .where(BeachIndexForecast.forecast_date >= resolved_collected_at.date())
+            .order_by(BeachIndexForecast.forecast_date, BeachIndexForecast.forecast_slot)
+            .limit(8)
+        ).all()
+
+        values = {
+            "kind": "place",
+            "name": profile.display_name,
+            "bjd_code": _feature_bjd_code(session, profile.legal_dong_code),
+            "coord": _point(profile.longitude, profile.latitude),
+            "geom": _point(profile.longitude, profile.latitude),
+            "address_road": profile.road_address,
+            "address_jibun": _feature_jibun_address(profile),
+            "category": "beach",
+            "parent_feature_id": None,
+            "sibling_group_id": None,
+            "urls": _json_ready(
+                _compact_dict(
+                    {
+                        "homepage": profile.homepage_url,
+                        "image": profile.image_url,
+                    }
+                )
+            ),
+            "marker_icon": "waves",
+            "marker_color": "#0f766e",
+            "detail": _beach_feature_detail(
+                profile,
+                latest_observation=latest_observation,
+                upcoming_forecasts=upcoming_forecasts,
+                synced_at=resolved_collected_at,
+            ),
+            "raw_refs": _beach_feature_raw_refs(provider_refs),
+            "status": "active",
+            "updated_at": resolved_collected_at,
+            "deleted_at": None,
+        }
+        existing = session.get(Feature, feature_id)
+        if existing is None:
+            session.add(
+                Feature(
+                    feature_id=feature_id,
+                    created_at=resolved_collected_at,
+                    **values,
+                )
+            )
+        else:
+            for key, value in values.items():
+                setattr(existing, key, value)
+        upsert_count += 1
+    session.flush()
+    return upsert_count
+
+
 def load_khoa_beach_observations(
     session: Session,
     client: KhoaBeachObservationClientProtocol,
@@ -457,6 +687,7 @@ def load_khoa_beach_observations(
     mapped_count = 0
     road_mapped_count = 0
     skipped_count = 0
+    api_cache_hit_count = 0
 
     for catalog_row in catalog_rows:
         beach_code = _text(catalog_row.get("id"))
@@ -500,6 +731,13 @@ def load_khoa_beach_observations(
             url=KHOA_BEACH_OBSERVATION_URL,
             fetched_at=resolved_collected_at,
         )
+        if _has_fresh_khoa_observation_cache(
+            session,
+            provider_beach_id=beach_code,
+            reference_time=resolved_collected_at,
+        ):
+            api_cache_hit_count += 1
+            continue
         request_params, observation_row = client.fetch_observation(beach_code)
         requested_count += 1
         if observation_row is None:
@@ -536,12 +774,15 @@ def load_khoa_beach_observations(
         observation_count += 1
 
     session.flush()
+    feature_count = sync_beach_profiles_to_features(session, collected_at=resolved_collected_at)
     return KhoaBeachObservationLoadResult(
         catalog_count=len(catalog_rows),
         requested_beach_count=requested_count,
         raw_row_count=raw_count,
         observation_row_count=observation_count,
         profile_upsert_count=profile_count,
+        feature_upsert_count=feature_count,
+        api_cache_hit_count=api_cache_hit_count,
         mapped_legal_dong_count=mapped_count,
         road_address_mapped_count=road_mapped_count,
         skipped_row_count=skipped_count,
@@ -557,6 +798,21 @@ def load_khoa_beach_index_forecasts(
 ) -> BeachIndexForecastLoadResult:
     resolved_collected_at = _resolve_collected_at(collected_at)
     sync_kma_beach_profiles(session, collected_at=resolved_collected_at)
+    if _has_fresh_khoa_index_cache(
+        session,
+        req_date=req_date,
+        reference_time=resolved_collected_at,
+    ):
+        feature_count = sync_beach_profiles_to_features(session, collected_at=resolved_collected_at)
+        return BeachIndexForecastLoadResult(
+            raw_row_count=0,
+            forecast_row_count=0,
+            profile_upsert_count=0,
+            feature_upsert_count=feature_count,
+            api_cache_hit_count=1,
+            mapped_legal_dong_count=0,
+            skipped_row_count=0,
+        )
     request_params, rows = client.fetch_index_forecast_rows(req_date=req_date)
     raw_count = 0
     forecast_count = 0
@@ -643,10 +899,13 @@ def load_khoa_beach_index_forecasts(
         forecast_count += 1
 
     session.flush()
+    feature_count = sync_beach_profiles_to_features(session, collected_at=resolved_collected_at)
     return BeachIndexForecastLoadResult(
         raw_row_count=raw_count,
         forecast_row_count=forecast_count,
         profile_upsert_count=profile_count,
+        feature_upsert_count=feature_count,
+        api_cache_hit_count=0,
         mapped_legal_dong_count=mapped_count,
         skipped_row_count=skipped_count,
     )
@@ -848,6 +1107,173 @@ def load_mof_beach_water_quality(
         mapped_legal_dong_count=mapped_count,
         skipped_row_count=skipped_count,
     )
+
+
+def _has_fresh_khoa_observation_cache(
+    session: Session,
+    *,
+    provider_beach_id: str,
+    reference_time: datetime,
+) -> bool:
+    cutoff = reference_time - timedelta(minutes=KHOA_BEACH_CACHE_FRESHNESS_MINUTES)
+    cached_id = session.scalar(
+        select(BeachObservation.id)
+        .where(BeachObservation.provider == KHOA_PROVIDER)
+        .where(BeachObservation.provider_dataset_key == KHOA_BEACH_OBSERVATION_DATASET_KEY)
+        .where(BeachObservation.provider_beach_id == provider_beach_id)
+        .where(BeachObservation.collected_at > cutoff)
+        .where(BeachObservation.is_active.is_(True))
+        .limit(1)
+    )
+    return cached_id is not None
+
+
+def _has_fresh_khoa_index_cache(
+    session: Session,
+    *,
+    req_date: date | None,
+    reference_time: datetime,
+) -> bool:
+    target_date = req_date or reference_time.date()
+    cutoff = reference_time - timedelta(minutes=KHOA_BEACH_CACHE_FRESHNESS_MINUTES)
+    cached_id = session.scalar(
+        select(BeachIndexForecast.id)
+        .where(BeachIndexForecast.provider == KHOA_PROVIDER)
+        .where(BeachIndexForecast.provider_dataset_key == KHOA_BEACH_INDEX_DATASET_KEY)
+        .where(BeachIndexForecast.forecast_date == target_date)
+        .where(BeachIndexForecast.collected_at > cutoff)
+        .where(BeachIndexForecast.is_active.is_(True))
+        .limit(1)
+    )
+    return cached_id is not None
+
+
+def _feature_jibun_address(profile: BeachProfile) -> str | None:
+    if profile.address_snapshot and profile.address_snapshot != profile.road_address:
+        return profile.address_snapshot
+    return None
+
+
+def _feature_bjd_code(session: Session, legal_dong_code: str | None) -> str | None:
+    if legal_dong_code is None:
+        return None
+    bjd_code = session.scalar(
+        select(BjdLookup.bjd_code)
+        .where(BjdLookup.bjd_code == legal_dong_code)
+        .where(BjdLookup.is_active.is_(True))
+        .limit(1)
+    )
+    return bjd_code
+
+
+def _beach_feature_detail(
+    profile: BeachProfile,
+    *,
+    latest_observation: BeachObservation | None,
+    upcoming_forecasts: Sequence[BeachIndexForecast],
+    synced_at: datetime,
+) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        _json_ready(
+            _compact_dict(
+                {
+                    "domain": "beach",
+                    "source_table": "beach_profiles",
+                    "beach_profile_id": profile.id,
+                    "canonical_key": profile.canonical_key,
+                    "representative_provider": profile.representative_provider,
+                    "representative_dataset_key": profile.representative_dataset_key,
+                    "address_mapping_method": profile.address_mapping_method,
+                    "road_address_management_no": profile.road_address_management_no,
+                    "road_name_code": profile.road_name_code,
+                    "sigungu_code": profile.sigungu_code,
+                    "sido_code": profile.sido_code,
+                    "beach_width_m": profile.beach_width_m,
+                    "beach_length_m": profile.beach_length_m,
+                    "beach_material": profile.beach_material,
+                    "homepage_name": profile.homepage_name,
+                    "emergency_contact": profile.emergency_contact,
+                    "source_specific_attributes": profile.source_specific_attributes or {},
+                    "latest_observation": _feature_observation_detail(latest_observation),
+                    "upcoming_index_forecasts": [
+                        _feature_forecast_detail(forecast) for forecast in upcoming_forecasts
+                    ],
+                    "feature_synced_at": synced_at,
+                }
+            )
+        ),
+    )
+
+
+def _feature_observation_detail(observation: BeachObservation | None) -> dict[str, Any] | None:
+    if observation is None:
+        return None
+    return cast(
+        dict[str, Any],
+        _json_ready(
+            _compact_dict(
+                {
+                    "observed_at": observation.observed_at,
+                    "collected_at": observation.collected_at,
+                    "provider": observation.provider,
+                    "provider_dataset_key": observation.provider_dataset_key,
+                    "provider_beach_id": observation.provider_beach_id,
+                    "observation_station_name": observation.observation_station_name,
+                    "tide": observation.tide,
+                    "wave_height_m": observation.wave_height_m,
+                    "water_temperature_c": observation.water_temperature_c,
+                    "wind_speed_ms": observation.wind_speed_ms,
+                    "wind_direction": observation.wind_direction,
+                    "forecast_status": observation.forecast_status or {},
+                    "quota_snapshot": observation.quota_snapshot,
+                }
+            )
+        ),
+    )
+
+
+def _feature_forecast_detail(forecast: BeachIndexForecast) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        _json_ready(
+            _compact_dict(
+                {
+                    "forecast_date": forecast.forecast_date,
+                    "forecast_slot": forecast.forecast_slot,
+                    "collected_at": forecast.collected_at,
+                    "provider": forecast.provider,
+                    "provider_dataset_key": forecast.provider_dataset_key,
+                    "provider_place_code": forecast.provider_place_code,
+                    "index_score": forecast.index_score,
+                    "total_index": forecast.total_index,
+                    "max_wave_height_m": forecast.max_wave_height_m,
+                    "avg_water_temperature_c": forecast.avg_water_temperature_c,
+                    "avg_air_temperature_c": forecast.avg_air_temperature_c,
+                    "max_wind_speed_ms": forecast.max_wind_speed_ms,
+                }
+            )
+        ),
+    )
+
+
+def _beach_feature_raw_refs(provider_refs: Sequence[BeachProviderRef]) -> list[dict[str, Any]]:
+    return [
+        _json_ready(
+            _compact_dict(
+                {
+                    "provider": ref.provider,
+                    "dataset_key": ref.provider_dataset_key,
+                    "provider_beach_id": ref.provider_beach_id,
+                    "stable_name": ref.stable_name,
+                    "stable_address": ref.stable_address,
+                    "url": ref.url,
+                    "last_fetched_at": ref.last_fetched_at,
+                }
+            )
+        )
+        for ref in provider_refs
+    ]
 
 
 @dataclass(frozen=True)
@@ -1662,6 +2088,20 @@ def _hash_payload(payload: Mapping[str, Any]) -> str:
 
 def _compact_dict(values: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_ready(item) for key, item in value.items() if item is not None}
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return [_json_ready(item) for item in value]
+    return value
 
 
 def _address_rank(method: str | None) -> int:

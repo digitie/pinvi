@@ -37,11 +37,15 @@ from app.models.beach import (
     BeachSourceRecord,
     BeachWaterQualityMeasurement,
 )
+from app.models.place import Feature
 
 KST = ZoneInfo("Asia/Seoul")
 
 
 class FakeKhoaBeachObservationClient:
+    def __init__(self) -> None:
+        self.observation_call_count = 0
+
     def fetch_observatory_list(self) -> list[dict[str, Any]]:
         return [
             {
@@ -54,6 +58,7 @@ class FakeKhoaBeachObservationClient:
         ]
 
     def fetch_observation(self, beach_code: str) -> tuple[dict[str, str], dict[str, Any] | None]:
+        self.observation_call_count += 1
         return (
             {"BeachCode": beach_code, "ServiceKey": "***", "ResultType": "json"},
             {
@@ -73,11 +78,15 @@ class FakeKhoaBeachObservationClient:
 
 
 class FakeKhoaBeachIndexClient:
+    def __init__(self) -> None:
+        self.forecast_call_count = 0
+
     def fetch_index_forecast_rows(
         self,
         *,
         req_date: date | None = None,
     ) -> tuple[dict[str, str], list[dict[str, Any]]]:
+        self.forecast_call_count += 1
         forecast_date = req_date or date(2026, 5, 1)
         return (
             {"serviceKey": "***", "type": "json", "pageNo": "1", "numOfRows": "300"},
@@ -257,9 +266,11 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
 
     collected_at = datetime(2026, 5, 1, 10, 0, tzinfo=KST)
     forecast_date = datetime.now(KST).date() + timedelta(days=1)
+    observation_client = FakeKhoaBeachObservationClient()
+    index_client = FakeKhoaBeachIndexClient()
     observation_result = load_khoa_beach_observations(
         db_session,
-        FakeKhoaBeachObservationClient(),
+        observation_client,
         collected_at=collected_at,
     )
     info_result = load_mof_beach_info(
@@ -270,8 +281,14 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
     )
     index_result = load_khoa_beach_index_forecasts(
         db_session,
-        FakeKhoaBeachIndexClient(),
+        index_client,
         collected_at=collected_at,
+        req_date=forecast_date,
+    )
+    cached_index_result = load_khoa_beach_index_forecasts(
+        db_session,
+        index_client,
+        collected_at=collected_at + timedelta(hours=1),
         req_date=forecast_date,
     )
     quality_result = load_mof_beach_water_quality(
@@ -283,12 +300,13 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
     )
     second_observation_result = load_khoa_beach_observations(
         db_session,
-        FakeKhoaBeachObservationClient(),
-        collected_at=collected_at,
+        observation_client,
+        collected_at=collected_at + timedelta(hours=1),
     )
     db_session.commit()
 
     profile = db_session.scalar(select(BeachProfile))
+    feature = db_session.scalar(select(Feature).where(Feature.category == "beach"))
     provider_refs = db_session.scalars(select(BeachProviderRef)).all()
     source_records = db_session.scalars(select(BeachSourceRecord)).all()
     observations = db_session.scalars(select(BeachObservation)).all()
@@ -296,10 +314,20 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
     quality_rows = db_session.scalars(select(BeachWaterQualityMeasurement)).all()
 
     assert observation_result.raw_row_count == 1
+    assert observation_result.feature_upsert_count == 1
+    assert observation_result.api_cache_hit_count == 0
     assert second_observation_result.raw_row_count == 0
+    assert second_observation_result.requested_beach_count == 0
+    assert second_observation_result.api_cache_hit_count == 1
     assert info_result.source_record_count == 1
     assert index_result.forecast_row_count == 1
+    assert index_result.feature_upsert_count == 1
+    assert index_result.api_cache_hit_count == 0
+    assert cached_index_result.forecast_row_count == 0
+    assert cached_index_result.api_cache_hit_count == 1
     assert quality_result.measurement_row_count == 1
+    assert observation_client.observation_call_count == 1
+    assert index_client.forecast_call_count == 1
     assert profile is not None
     assert profile.display_name == "테스트 해수욕장"
     assert profile.legal_dong_code == "1111010100"
@@ -312,6 +340,19 @@ def test_integrated_beach_sources_share_profile_and_are_queryable(
     assert len(observations) == 1
     assert len(forecasts) == 1
     assert len(quality_rows) == 1
+    assert feature is not None
+    assert feature.kind == "place"
+    assert feature.name == profile.display_name
+    assert feature.detail is not None
+    assert feature.detail["domain"] == "beach"
+    assert feature.detail["latest_observation"]["water_temperature_c"] == "21.500"
+    assert feature.detail["upcoming_index_forecasts"][0]["total_index"] == "좋음"
+    assert {ref["dataset_key"] for ref in feature.raw_refs} == {
+        "khoa_beach_observation",
+        "khoa_beach_index_forecast",
+        "mof_beach_info",
+        "mof_beach_water_quality",
+    }
 
     client = _build_client(db_session)
     response = client.get("/public/beaches", params={"query": "테스트", "limit": 10})

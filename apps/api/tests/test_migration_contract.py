@@ -353,5 +353,6 @@ def test_library_spec_v3_schema_migration_adds_db_schema_tables() -> None:
     assert "api_call_log" in migration
     assert "email_queue" in migration
     assert "fk_trip_pois_trip_day" in migration
+    assert 'sa.String(length=80, collation="C")' in migration
     assert "ix_features_coord" in migration
     assert 'postgresql_using="brin"' in migration

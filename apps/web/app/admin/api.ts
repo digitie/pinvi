@@ -18,6 +18,9 @@ export type AdminUser = {
 
 export type AdminLoginResponse = {
   user: AdminUser;
+  token_type: string;
+  access_token_expires_at: string;
+  refresh_token_expires_at: string;
 };
 
 export type AdminLogoutResponse = {
@@ -242,7 +245,18 @@ async function readJsonPayload(response: Response): Promise<unknown> {
 
 function parseAdminLoginResponse(payload: unknown): AdminLoginResponse {
   const record = requireRecord(payload, "관리자 로그인 응답");
-  return { user: parseAdminUser(record.user) };
+  return {
+    user: parseAdminUser(record.user),
+    token_type: requireString(record.token_type, "token_type"),
+    access_token_expires_at: requireString(
+      record.access_token_expires_at,
+      "access_token_expires_at",
+    ),
+    refresh_token_expires_at: requireString(
+      record.refresh_token_expires_at,
+      "refresh_token_expires_at",
+    ),
+  };
 }
 
 function parseAdminLogoutResponse(payload: unknown): AdminLogoutResponse {

@@ -244,7 +244,7 @@ class TripPoi(TimestampMixin, Base):
         nullable=False,
     )
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    sort_order: Mapped[str] = mapped_column(String(80), nullable=False)
+    sort_order: Mapped[str] = mapped_column(String(80, collation="C"), nullable=False)
     feature_id: Mapped[str | None] = mapped_column(
         String(120),
         ForeignKey("features.feature_id", name="fk_trip_pois_feature_id", ondelete="SET NULL"),

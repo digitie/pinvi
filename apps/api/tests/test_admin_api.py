@@ -22,8 +22,18 @@ def test_admin_login_me_and_logout_flow(db_session: Session) -> None:
     )
 
     assert login_response.status_code == 200
-    assert login_response.json()["user"]["email"] == "admin@ad.min"
-    assert client.cookies.get("tripmate_session")
+    payload = login_response.json()
+    assert payload["user"]["email"] == "admin@ad.min"
+    assert payload["token_type"] == "Bearer"
+    assert payload["access_token_expires_at"]
+    assert payload["refresh_token_expires_at"]
+    assert client.cookies.get("tripmate_access")
+    assert client.cookies.get("tripmate_refresh")
+
+    refresh_response = client.post("/admin/auth/refresh")
+
+    assert refresh_response.status_code == 200
+    assert refresh_response.json()["user"]["email"] == "admin@ad.min"
 
     me_response = client.get("/admin/auth/me")
 
@@ -64,7 +74,15 @@ def test_admin_dataset_list_exposes_etl_tables_and_hides_user_tables(db_session:
     assert response.status_code == 200
     payload = response.json()
     table_names = {dataset["table_name"] for dataset in payload["datasets"]}
+    assert "features" in table_names
+    assert "trip_pois" in table_names
+    assert "beach_profiles" in table_names
+    assert "beach_source_records" in table_names
+    assert "beach_index_forecasts" in table_names
     assert "etl_run_logs" in table_names
+    assert "api_call_log" in table_names
+    assert "email_queue" in table_names
+    assert "admin_audit_log" in table_names
     assert "fuel_serving_avg_price" in table_names
     assert "ocean_activity_index_locations" in table_names
     assert "ocean_activity_index_source_records" in table_names
@@ -129,6 +147,9 @@ def test_admin_users_list_and_update_signup_user(db_session: Session) -> None:
             "password": "strong-password-1",
             "nickname": "여행자",
             "name": "홍길동",
+            "tos_agreed": True,
+            "privacy_agreed": True,
+            "consent_version": "2026-05-13",
         },
     )
     _login(client)

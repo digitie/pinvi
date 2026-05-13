@@ -6,12 +6,12 @@ Planned. 이 문서는 구현 전 기술 계획과 TODO 목록이다. 현재 코
 
 ## 목표
 
-일반 사용자 로그인 화면(`/login`)에 Google, Naver, Kakao 로그인 버튼을 추가하고, provider 인증 성공 후 기존 `tripmate_session` httpOnly cookie 서버 세션으로 TripMate에 로그인시킨다.
+일반 사용자 로그인 화면(`/login`)에 Google, Naver, Kakao 로그인 버튼을 추가하고, provider 인증 성공 후 기존 `tripmate_access`, `tripmate_refresh` httpOnly cookie JWT 세션으로 TripMate에 로그인시킨다.
 
 ## 반드시 지킬 조건
 
 - 사용자 로그인 식별자는 계속 이메일이다.
-- 인증 완료 후 앱 세션은 기존 `sessions.session_token_hash` 기반 서버 세션을 사용한다.
+- 인증 완료 후 앱 세션은 기존 JWT cookie와 `sessions.session_token_hash` 기반 refresh token hash를 사용한다.
 - provider access token, refresh token, id token 원문은 일반 DB와 로그에 저장하지 않는다.
 - 기존 이메일 계정과 provider 계정은 자동 연결하지 않는다.
 - provider 고유 식별자는 이메일이 아니라 provider subject id를 사용한다.
@@ -184,7 +184,7 @@ TODO:
 - Naver는 초기 구현에서 별도 TripMate 이메일 인증이 필요하다.
 - 신규 provider-only 사용자는 `system_role = planner`, `account_status`는 provider 이메일 신뢰 정책에 따라 `active` 또는 `pending_email_verification`으로 만든다.
 - provider-only 사용자의 `password_hash`는 `NULL`로 둔다.
-- 기존 `create_session_token`을 재사용해 `tripmate_session` cookie를 발급한다.
+- 기존 JWT 발급 함수를 재사용해 `tripmate_access`, `tripmate_refresh` cookie를 발급한다.
 
 완료 조건:
 
@@ -305,7 +305,7 @@ TODO:
 
 - `/login`에 Google/Naver/Kakao 로그인 버튼이 있다.
 - provider별 start/callback이 동작한다.
-- 성공 시 기존 `tripmate_session` cookie가 발급된다.
+- 성공 시 기존 `tripmate_access`, `tripmate_refresh` cookie가 발급된다.
 - `user_oauth_accounts`에 provider subject가 저장된다.
 - provider token 원문은 DB와 로그에 저장되지 않는다.
 - 기존 이메일 계정은 자동 연결되지 않는다.
