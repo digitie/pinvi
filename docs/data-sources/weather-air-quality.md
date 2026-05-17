@@ -19,6 +19,15 @@
 - `response.body.items.item`이 dict면 1건, list면 여러 건으로 해석한다.
 - `totalCount`와 현재 누적 row 수를 비교해 pagination을 종료한다.
 
+## Feature weather 통합 기준
+
+TripMate feature에 붙는 weather context는 `python-krtour-map`의 `WeatherValue` 계약을 따른다. provider별 wrapper/adapter를 만들지 않고 `python-kma-api`, `python-krforest-api`, `python-krex-api`, `python-krairport-api` 등 각 라이브러리의 public client와 typed model을 직접 사용한다.
+
+- `forecast_style`: provider 원천값의 성격. `observed`, `nowcast`, `ultra_short`, `short`, `mid`, `index`, `advisory`
+- `timeline_bucket`: KMA식 조회 카테고리. `ultra_short`, `short`, `mid`
+
+관측값은 예보로 포장하지 않는다. KREX 휴게소 최신 날씨와 KRForest 산악기상은 `forecast_style='observed'`, `timeline_bucket='ultra_short'`로 저장한다. 산림청 산불위험/산사태 위험 같은 지수는 `forecast_style='index'` 또는 `advisory`, `timeline_bucket='short'`로 저장한다.
+
 ## 기상청 전국 해수욕장 날씨
 
 | 항목 | 내용 |

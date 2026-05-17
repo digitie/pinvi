@@ -10,8 +10,6 @@ from krtour_map import (
     FeatureStatus,
     FeatureUrls,
     RawDataRef,
-    WeatherValue,
-    make_source_record_key,
 )
 from krtour_map import (
     ProviderSyncState as KrtourProviderSyncState,
@@ -21,7 +19,7 @@ from krtour_map import (
 )
 
 from app.models.etl import ProviderSyncState
-from app.models.place import MapFeature, MapFeatureWeatherValue, SourceRecord
+from app.models.place import MapFeature, SourceRecord
 
 
 class KrtourMapContractError(ValueError):
@@ -57,15 +55,18 @@ def map_feature_to_krtour_feature(
             longitude=_decimal_to_float(feature.longitude, field_name="longitude"),
             latitude=_decimal_to_float(feature.latitude, field_name="latitude"),
         ),
-        address=Address(
-            road_address=feature.road_address,
-            jibun_address=feature.jibun_address,
-            bjd_code=feature.legal_dong_code,
-            sido_code=feature.sido_code,
-            sigungu_code=feature.sigungu_code,
-            road_name_code=feature.road_name_code,
-            road_address_management_no=feature.road_address_management_no,
-        ),
+        address=Address.from_mapping(
+            {
+                "road_address": feature.road_address,
+                "jibun_address": feature.jibun_address,
+                "legal_dong_code": feature.legal_dong_code,
+                "sido_code": feature.sido_code,
+                "sigungu_code": feature.sigungu_code,
+                "road_name_code": feature.road_name_code,
+                "road_name_address_code": feature.road_address_management_no,
+            }
+        )
+        or Address(),
         category=feature.category_name or feature.category_code or feature.feature_type,
         urls=FeatureUrls(homepage=feature.website_url),
         marker_icon=str(extra.get("marker_icon") or feature.feature_type),
@@ -106,42 +107,6 @@ def raw_ref_from_source_record(record: SourceRecord, *, source_role: str = "prim
         source_role=source_role,
         fetched_at=record.fetched_at,
         payload_hash=record.raw_payload_hash,
-    )
-
-
-def weather_value_to_krtour_value(
-    value: MapFeatureWeatherValue,
-    *,
-    feature_id: str,
-    source_record: SourceRecord | None = None,
-) -> WeatherValue:
-    source_record_key = None
-    if source_record is not None:
-        source_record_key = make_source_record_key(
-            provider=source_record.provider,
-            dataset_key=source_record.dataset_key,
-            source_entity_type=source_record.source_entity_type,
-            source_entity_id=source_record.source_entity_id,
-            raw_payload_hash=source_record.raw_payload_hash,
-        )
-
-    return WeatherValue(
-        feature_id=feature_id,
-        provider=value.provider,
-        weather_domain=value.weather_domain,
-        forecast_style=value.forecast_style,
-        source_record_key=source_record_key,
-        issued_at=value.issued_at,
-        valid_at=value.valid_at,
-        observed_at=value.observed_at,
-        metric_key=value.metric_key,
-        metric_name=value.metric_name,
-        value_number=value.value_number,
-        value_text=value.value_text,
-        unit=value.unit,
-        severity=value.severity,
-        payload=value.payload,
-        collected_at=value.collected_at,
     )
 
 

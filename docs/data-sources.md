@@ -23,6 +23,7 @@
 | --- | --- | --- |
 | 주소/행정구역 | `docs/data-sources/address-region.md` | Juso 월간 도로명주소, data.go.kr 법정동코드, V-WORLD SHP 적재 구현 |
 | 날씨/대기질 | `docs/data-sources/weather-air-quality.md` | 기상청 단기/중기/특보/해수욕장 날씨, AirKorea 측정소/예보/시도 측정 구현 |
+| feature 날씨 정규화 | `docs/architecture/weather-air-quality-schema.md` | KMA식 `timeline_bucket`과 provider 원천 `forecast_style` 분리 기준 정리 |
 | 해수욕장 통합 | `docs/data-sources/beach-sources.md` | KHOA 해수욕장 관측/해수욕지수, 해양수산부 해수욕장정보/수질적합, KMA 해수욕장 날씨 통합 조회 구현 |
 | 해양 체험지수 | `docs/architecture/khoa-ocean-index-schema.md` | KHOA 갯벌체험지수/바다갈라짐 체험지수 구현 |
 | 유가 | `docs/data-sources/fuel-opinet.md` | OpiNet 지역코드, 전국 평균가, 시군구 최저가 구현 |

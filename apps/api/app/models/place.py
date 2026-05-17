@@ -29,11 +29,9 @@ from sqlalchemy.schema import conv
 from app.core.krtour_map_contract import (
     FEATURE_KIND_VALUES,
     FEATURE_STATUS_VALUES,
-    FORECAST_STYLE_VALUES,
     MAP_FEATURE_STATUS_VALUES,
     MAP_FEATURE_TYPE_VALUES,
     SOURCE_ROLE_VALUES,
-    WEATHER_DOMAIN_VALUES,
     sql_in_values,
 )
 from app.db.base import Base
@@ -794,72 +792,6 @@ class MapFeatureOverride(Base):
         DateTime(timezone=True), nullable=False, default=kst_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=kst_now
-    )
-
-
-class MapFeatureWeatherValue(Base):
-    __tablename__ = "map_feature_weather_values"
-    __table_args__ = (
-        CheckConstraint(
-            f"weather_domain IN {sql_in_values(WEATHER_DOMAIN_VALUES)}",
-            name=conv("ck_map_feature_weather_values_domain"),
-        ),
-        CheckConstraint(
-            f"forecast_style IN {sql_in_values(FORECAST_STYLE_VALUES)}",
-            name=conv("ck_map_feature_weather_values_style"),
-        ),
-        UniqueConstraint(
-            "feature_id",
-            "provider",
-            "weather_domain",
-            "forecast_style",
-            "metric_key",
-            "issued_at",
-            "valid_at",
-            "observed_at",
-            name="uq_map_feature_weather_values_feature_provider_time",
-            postgresql_nulls_not_distinct=True,
-        ),
-        Index("ix_map_feature_weather_values_feature_valid", "feature_id", "valid_at"),
-        Index("ix_map_feature_weather_values_provider_domain", "provider", "weather_domain"),
-        Index("ix_map_feature_weather_values_valid_at", "valid_at", postgresql_using="brin"),
-        Index("ix_map_feature_weather_values_observed_at", "observed_at", postgresql_using="brin"),
-        Index("ix_map_feature_weather_values_source", "source_record_id"),
-    )
-
-    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
-    feature_id: Mapped[UUID] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey(
-            "map_features.id",
-            name="fk_map_feature_weather_values_feature_id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-    )
-    provider: Mapped[str] = mapped_column(String(40), nullable=False)
-    weather_domain: Mapped[str] = mapped_column(String(40), nullable=False)
-    forecast_style: Mapped[str] = mapped_column(String(32), nullable=False)
-    source_record_id: Mapped[UUID | None] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey(
-            "source_records.id",
-            name="fk_map_feature_weather_values_source_record_id",
-            ondelete="SET NULL",
-        ),
-    )
-    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    metric_key: Mapped[str] = mapped_column(String(80), nullable=False)
-    metric_name: Mapped[str | None] = mapped_column(String(120))
-    value_number: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
-    value_text: Mapped[str | None] = mapped_column(String(120))
-    unit: Mapped[str | None] = mapped_column(String(24))
-    severity: Mapped[str | None] = mapped_column(String(32))
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    collected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=kst_now
     )
 

@@ -111,107 +111,6 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "map_feature_weather_values",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            nullable=False,
-            server_default=sa.text("gen_random_uuid()"),
-        ),
-        sa.Column("feature_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("provider", sa.String(length=40), nullable=False),
-        sa.Column("weather_domain", sa.String(length=40), nullable=False),
-        sa.Column("forecast_style", sa.String(length=32), nullable=False),
-        sa.Column("source_record_id", postgresql.UUID(as_uuid=True)),
-        sa.Column("issued_at", sa.DateTime(timezone=True)),
-        sa.Column("valid_at", sa.DateTime(timezone=True)),
-        sa.Column("observed_at", sa.DateTime(timezone=True)),
-        sa.Column("metric_key", sa.String(length=80), nullable=False),
-        sa.Column("metric_name", sa.String(length=120)),
-        sa.Column("value_number", sa.Numeric(14, 4)),
-        sa.Column("value_text", sa.String(length=120)),
-        sa.Column("unit", sa.String(length=24)),
-        sa.Column("severity", sa.String(length=32)),
-        sa.Column(
-            "payload",
-            postgresql.JSONB(),
-            nullable=False,
-            server_default=sa.text("'{}'::jsonb"),
-        ),
-        sa.Column(
-            "collected_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.CheckConstraint(
-            "weather_domain IN ("
-            "'kma_ultra_short_nowcast', 'kma_ultra_short_forecast', 'kma_short_forecast', "
-            "'kma_mid_forecast', 'rest_area_weather', 'airport_weather', "
-            "'tourist_spot_weather', 'air_quality', 'beach_marine'"
-            ")",
-            name="ck_map_feature_weather_values_domain",
-        ),
-        sa.CheckConstraint(
-            "forecast_style IN ('nowcast', 'ultra_short', 'short', 'mid', 'observed', "
-            "'index', 'advisory')",
-            name="ck_map_feature_weather_values_style",
-        ),
-        sa.ForeignKeyConstraint(
-            ["feature_id"],
-            ["map_features.id"],
-            name="fk_map_feature_weather_values_feature_id",
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(
-            ["source_record_id"],
-            ["source_records.id"],
-            name="fk_map_feature_weather_values_source_record_id",
-            ondelete="SET NULL",
-        ),
-        sa.PrimaryKeyConstraint("id", name="pk_map_feature_weather_values"),
-        sa.UniqueConstraint(
-            "feature_id",
-            "provider",
-            "weather_domain",
-            "forecast_style",
-            "metric_key",
-            "issued_at",
-            "valid_at",
-            "observed_at",
-            name="uq_map_feature_weather_values_feature_provider_time",
-            postgresql_nulls_not_distinct=True,
-        ),
-    )
-    op.create_index(
-        "ix_map_feature_weather_values_feature_valid",
-        "map_feature_weather_values",
-        ["feature_id", "valid_at"],
-    )
-    op.create_index(
-        "ix_map_feature_weather_values_provider_domain",
-        "map_feature_weather_values",
-        ["provider", "weather_domain"],
-    )
-    op.create_index(
-        "ix_map_feature_weather_values_valid_at",
-        "map_feature_weather_values",
-        ["valid_at"],
-        postgresql_using="brin",
-    )
-    op.create_index(
-        "ix_map_feature_weather_values_observed_at",
-        "map_feature_weather_values",
-        ["observed_at"],
-        postgresql_using="brin",
-    )
-    op.create_index(
-        "ix_map_feature_weather_values_source",
-        "map_feature_weather_values",
-        ["source_record_id"],
-    )
-
-    op.create_table(
         "provider_sync_state",
         sa.Column(
             "id",
@@ -275,22 +174,6 @@ def downgrade() -> None:
     op.drop_index("ix_provider_sync_state_status_next", table_name="provider_sync_state")
     op.drop_index("ix_provider_sync_state_provider_dataset", table_name="provider_sync_state")
     op.drop_table("provider_sync_state")
-
-    op.drop_index("ix_map_feature_weather_values_source", table_name="map_feature_weather_values")
-    op.drop_index(
-        "ix_map_feature_weather_values_observed_at",
-        table_name="map_feature_weather_values",
-    )
-    op.drop_index("ix_map_feature_weather_values_valid_at", table_name="map_feature_weather_values")
-    op.drop_index(
-        "ix_map_feature_weather_values_provider_domain",
-        table_name="map_feature_weather_values",
-    )
-    op.drop_index(
-        "ix_map_feature_weather_values_feature_valid",
-        table_name="map_feature_weather_values",
-    )
-    op.drop_table("map_feature_weather_values")
 
     op.drop_index("ix_map_feature_overrides_reviewer", table_name="map_feature_overrides")
     op.drop_index("ix_map_feature_overrides_status", table_name="map_feature_overrides")

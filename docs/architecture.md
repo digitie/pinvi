@@ -82,7 +82,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 - 웹앱은 사용자 흐름, 지도 상호작용, Tailwind CSS 기반 화면 스타일링, PWA UX를 담당한다.
 - API는 인증, 인가, 여행 도메인 규칙, provider library 직접 호출, Telegram, Gemini 실행 요청을 담당한다.
-- 지도 feature 계약과 provider 결과 정규화의 공통 타입은 `python-krtour-map`을 기준으로 두고, TripMate는 DB repository와 API 조립을 담당한다.
+- 지도 feature 계약, provider 결과 정규화, feature/source/weather/price 저장 schema는 `python-krtour-map`을 기준으로 두고, TripMate는 사용자/여행 제품 DB와 API 조립을 담당한다.
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Dagster는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.

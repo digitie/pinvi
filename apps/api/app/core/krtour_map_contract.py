@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from krtour_map import FeatureKind, FeatureStatus, ForecastStyle, SourceRole, WeatherDomain
+from krtour_map import (
+    FeatureKind,
+    FeatureStatus,
+    ForecastStyle,
+    SourceRole,
+    WeatherDomain,
+)
 
 FEATURE_KIND_VALUES = tuple(kind.value for kind in FeatureKind)
 FEATURE_STATUS_VALUES = tuple(

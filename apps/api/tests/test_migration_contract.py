@@ -260,15 +260,9 @@ def test_provider_source_weather_state_migration_tracks_direct_library_sources()
     assert "source_role" in migration
     assert "ck_map_feature_source_links_role" in migration
     assert "map_feature_overrides" in migration
-    assert "map_feature_weather_values" in migration
     assert "provider_sync_state" in migration
-    assert "uq_map_feature_weather_values_feature_provider_time" in migration
-    assert "postgresql_nulls_not_distinct=True" in migration
     assert "uq_provider_sync_state_provider_dataset_scope" in migration
-    assert "rest_area_weather" in migration
-    assert "airport_weather" in migration
-    assert "tourist_spot_weather" in migration
-    assert "beach_marine" in migration
+    assert "map_feature_weather_values" not in migration
 
 
 def test_map_feature_replacement_migration_links_trip_items_to_features() -> None:

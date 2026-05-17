@@ -29,6 +29,8 @@
 - 날씨/유가 리포트는 실시간 API 연타 대신 저장된 지역 데이터와 ETL 캐시를 우선한다.
 - “반경 nkm” 리포트는 행정구역 기반 근사일 수 있으며 UI/문서에서 근사라고 밝힌다.
 - Gemini Deep Research는 사용자 개인 API 키 입력 구조이고 버튼 기반 수동 실행을 기본으로 한다.
+- 외부 provider 연동은 wrapper/adapter/gateway를 새로 만들지 않고, 안정된 `python-*-api` public client와 typed model을 직접 사용한다.
+- public API가 부족하면 TripMate에 우회 계층을 만들기 전에 해당 `python-*-api` 라이브러리의 endpoint, pagination, cursor, exception, raw payload 계약을 먼저 안정화한다.
 
 ## MCP 상태
 - MCP 구현은 TODO로만 유지한다.
@@ -55,6 +57,7 @@
 - 배포/ODROID: `skills/deployment-wsl2-odroid.ko.md`
 
 ## 작업 원칙
+- 외부 API 관련 작업은 다른 구현보다 먼저 provider 직접 사용 원칙을 확인하고 문서/코드에 반영한 뒤 진행한다.
 - 단순 작업이 아니면 영향 범위, 관련 문서/skill, API/DB/도메인/실패 동작, 테스트를 먼저 확인한다.
 - 여러 파일, 마이그레이션, 서비스 경계를 건드리면 `docs/execplan/<task-name>.md`를 작성 또는 갱신한다.
 - 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경(WSL2/Windows)을 보고한다.

@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from krtour_map import make_source_record_key
+from krtour_map import WeatherValue, make_source_record_key
 from sqlalchemy import CheckConstraint
 
 from app.core.krtour_map_contract import (
@@ -14,13 +14,17 @@ from app.core.krtour_map_contract import (
     WEATHER_DOMAIN_VALUES,
 )
 from app.models.etl import ProviderSyncState
-from app.models.place import MapFeature, MapFeatureSourceLink, MapFeatureWeatherValue, SourceRecord
+from app.models.place import MapFeature, MapFeatureSourceLink, SourceRecord
+from app.services.krtour_map_feature_store import (
+    feature_weather_values,
+    krtour_map_feature_metadata,
+    weather_insert_values,
+)
 from app.services.krtour_map_contract import (
     map_feature_to_krtour_feature,
     provider_sync_state_to_krtour_state,
     raw_ref_from_source_record,
     source_record_to_krtour_source,
-    weather_value_to_krtour_value,
 )
 
 
@@ -29,21 +33,15 @@ def test_map_feature_constraints_follow_krtour_map_contract_values() -> None:
     source_role_constraint = _check_constraint_sql(
         MapFeatureSourceLink, "ck_map_feature_source_links_role"
     )
-    weather_domain_constraint = _check_constraint_sql(
-        MapFeatureWeatherValue, "ck_map_feature_weather_values_domain"
-    )
-    forecast_style_constraint = _check_constraint_sql(
-        MapFeatureWeatherValue, "ck_map_feature_weather_values_style"
-    )
 
     for value in MAP_FEATURE_TYPE_VALUES:
         assert f"'{value}'" in feature_type_constraint
     for value in SOURCE_ROLE_VALUES:
         assert f"'{value}'" in source_role_constraint
-    for value in WEATHER_DOMAIN_VALUES:
-        assert f"'{value}'" in weather_domain_constraint
-    for value in FORECAST_STYLE_VALUES:
-        assert f"'{value}'" in forecast_style_constraint
+    assert "feature_weather_values" in krtour_map_feature_metadata().tables
+    assert "map_feature_weather_values" not in krtour_map_feature_metadata().tables
+    assert WEATHER_DOMAIN_VALUES
+    assert FORECAST_STYLE_VALUES
 
 
 def test_map_feature_can_export_to_krtour_feature_contract() -> None:
@@ -74,7 +72,7 @@ def test_map_feature_can_export_to_krtour_feature_contract() -> None:
     assert exported.feature_id == "place-001"
     assert exported.kind == "place"
     assert exported.coord.longitude == 126.972
-    assert exported.address.bjd_code == "1117010100"
+    assert exported.address.legal_dong_code == "1117010100"
     assert exported.urls.homepage is not None
     assert exported.marker_icon == "train"
 
@@ -109,18 +107,25 @@ def test_source_record_contract_normalizes_provider_and_raw_ref() -> None:
     assert raw_ref.payload_hash == "payload-hash"
 
 
-def test_weather_and_sync_state_export_to_krtour_contracts() -> None:
+def test_weather_uses_krtour_map_feature_db_and_sync_state_exports() -> None:
     now = datetime(2026, 5, 17, 9, 0, tzinfo=ZoneInfo("Asia/Seoul"))
-    weather = MapFeatureWeatherValue(
+    weather = WeatherValue(
+        feature_id="place-001",
         provider="kma",
         weather_domain="kma_short_forecast",
         forecast_style="short",
+        timeline_bucket="short",
         metric_key="TMP",
+        source_metric_key="TMP",
+        source_metric_name="temperature",
         metric_name="기온",
         value_number=Decimal("22.5"),
         unit="C",
         issued_at=now,
         valid_at=now,
+        valid_from=now,
+        valid_until=now,
+        normalization_version="weather-feature-v1",
         payload={"category": "TMP"},
         collected_at=now,
     )
@@ -133,11 +138,14 @@ def test_weather_and_sync_state_export_to_krtour_contracts() -> None:
         updated_at=now,
     )
 
-    exported_weather = weather_value_to_krtour_value(weather, feature_id="place-001")
+    row = weather_insert_values(weather)
     exported_state = provider_sync_state_to_krtour_state(sync_state)
 
-    assert exported_weather.provider == "python-kma-api"
-    assert exported_weather.identity()[0] == "place-001"
+    assert feature_weather_values.name == "feature_weather_values"
+    assert row["provider"] == "python-kma-api"
+    assert row["timeline_bucket"] == "short"
+    assert row["source_metric_key"] == "TMP"
+    assert row["normalization_version"] == "weather-feature-v1"
     assert exported_state.provider == "python-kma-api"
     assert exported_state.identity() == ("python-kma-api", "short_forecast", "grid:60,127")
 
