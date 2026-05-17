@@ -50,7 +50,7 @@ from visitkorea import Wgs84Coordinate
 
 client = build_kto_kor_client()
 page = client.location_based_list(
-    coordinate=Wgs84Coordinate(longitude=126.9769, latitude=37.5796),
+    coordinate=Wgs84Coordinate(lat=37.5796, lon=126.9769),
     radius=15000,
     num_of_rows=3,
 )

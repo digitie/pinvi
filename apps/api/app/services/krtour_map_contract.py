@@ -52,8 +52,8 @@ def map_feature_to_krtour_feature(
         kind=feature.feature_type,
         name=feature.display_name or feature.name,
         coord=Coordinate(
-            longitude=_decimal_to_float(feature.longitude, field_name="longitude"),
-            latitude=_decimal_to_float(feature.latitude, field_name="latitude"),
+            lat=_decimal_to_float(feature.latitude, field_name="latitude"),
+            lon=_decimal_to_float(feature.longitude, field_name="longitude"),
         ),
         address=Address.from_mapping(
             {

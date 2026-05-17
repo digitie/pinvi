@@ -4,7 +4,13 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from krtour_map import WeatherValue, make_source_record_key
+from krtour_map import (
+    PricePoint,
+    PriceValue,
+    ProviderSyncState as KrtourProviderSyncState,
+    WeatherValue,
+    make_source_record_key,
+)
 from sqlalchemy import CheckConstraint
 
 from app.core.config import Settings
@@ -16,18 +22,27 @@ from app.core.krtour_map_contract import (
 )
 from app.models.etl import ProviderSyncState
 from app.models.place import MapFeature, MapFeatureSourceLink, SourceRecord
-from app.services.krtour_map_feature_store import (
-    feature_weather_values,
-    initialize_krtour_map_feature_db,
-    krtour_map_feature_db_settings,
-    krtour_map_feature_metadata,
-    weather_insert_values,
-)
 from app.services.krtour_map_contract import (
     map_feature_to_krtour_feature,
     provider_sync_state_to_krtour_state,
     raw_ref_from_source_record,
     source_record_to_krtour_source,
+)
+from app.services.krtour_map_feature_store import (
+    data_integrity_violations,
+    dedup_review_queue,
+    feature_overrides,
+    feature_weather_values,
+    initialize_krtour_map_feature_db,
+    krtour_map_feature_db_settings,
+    krtour_map_feature_metadata,
+    price_point_insert_values,
+    price_points,
+    price_value_insert_values,
+    price_values,
+    provider_sync_state,
+    provider_sync_state_insert_values,
+    weather_insert_values,
 )
 
 
@@ -42,6 +57,12 @@ def test_map_feature_constraints_follow_krtour_map_contract_values() -> None:
     for value in SOURCE_ROLE_VALUES:
         assert f"'{value}'" in source_role_constraint
     assert "feature_weather_values" in krtour_map_feature_metadata().tables
+    assert "price_points" in krtour_map_feature_metadata().tables
+    assert "price_values" in krtour_map_feature_metadata().tables
+    assert "provider_sync_state" in krtour_map_feature_metadata().tables
+    assert "feature_overrides" in krtour_map_feature_metadata().tables
+    assert "dedup_review_queue" in krtour_map_feature_metadata().tables
+    assert "data_integrity_violations" in krtour_map_feature_metadata().tables
     assert "map_feature_weather_values" not in krtour_map_feature_metadata().tables
     assert WEATHER_DOMAIN_VALUES
     assert FORECAST_STYLE_VALUES
@@ -151,6 +172,36 @@ def test_weather_uses_krtour_map_feature_db_and_sync_state_exports() -> None:
     assert row["normalization_version"] == "weather-feature-v1"
     assert exported_state.provider == "python-kma-api"
     assert exported_state.identity() == ("python-kma-api", "short_forecast", "grid:60,127")
+
+
+def test_latest_krtour_map_tables_are_imported_directly() -> None:
+    now = datetime(2026, 5, 17, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    point = PricePoint(feature_id="price-001", price_category="fuel", retention_days=3650)
+    price = PriceValue(
+        feature_id="price-001",
+        item_key="gasoline",
+        observed_at=now,
+        value=Decimal("1699"),
+        payload_hash="price-hash",
+    )
+    sync_state = KrtourProviderSyncState(
+        provider="kma",
+        dataset_key="short_forecast",
+        sync_scope="grid:60,127",
+        cursor={"base_date": "20260517"},
+        updated_at=now,
+    )
+
+    assert price_points.name == "price_points"
+    assert price_values.name == "price_values"
+    assert provider_sync_state.name == "provider_sync_state"
+    assert feature_overrides.name == "feature_overrides"
+    assert dedup_review_queue.name == "dedup_review_queue"
+    assert data_integrity_violations.name == "data_integrity_violations"
+
+    assert price_point_insert_values(point)["retention_days"] == 3650
+    assert price_value_insert_values(price)["currency"] == "KRW"
+    assert provider_sync_state_insert_values(sync_state)["provider"] == "python-kma-api"
 
 
 def test_feature_db_initializes_from_tripmate_settings() -> None:

@@ -35,7 +35,7 @@ from visitkorea import ContentType, Wgs84Coordinate, clean_tourapi_html, copyrig
 
 kor_client = build_kto_kor_client()
 page = kor_client.location_based_list(
-    coordinate=Wgs84Coordinate(longitude=126.9769, latitude=37.5796),
+    coordinate=Wgs84Coordinate(lat=37.5796, lon=126.9769),
     radius=15000,
     content_type_id=ContentType.TOURIST_ATTRACTION,
 )
