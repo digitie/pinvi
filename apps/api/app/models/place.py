@@ -37,6 +37,23 @@ from app.core.krtour_map_contract import (
 from app.db.base import Base
 from app.models.mixins import TimestampMixin, kst_now
 
+OUTDOOR_FEATURE_KIND_VALUES = (
+    "national_park",
+    "mountain",
+    "recreation_forest",
+    "arboretum",
+    "forest_trail",
+    "hiking_trail",
+    "trekking_course",
+    "forest_education",
+    "kid_forest",
+    "village_forest",
+    "campground",
+    "outdoor_support",
+    "unknown",
+)
+OUTDOOR_FEATURE_ROLE_VALUES = ("primary", "support", "safety", "enrichment")
+
 
 class PlaceCategory(TimestampMixin, Base):
     __tablename__ = "place_categories"
@@ -552,7 +569,8 @@ class AreaDetail(TimestampMixin, Base):
         CheckConstraint(
             "area_kind IN ("
             "'national_park', 'beach', 'tourism_zone', "
-            "'market_area', 'restricted_area'"
+            "'market_area', 'restricted_area', 'mountain', "
+            "'recreation_forest', 'arboretum', 'forest_area', 'trail_area'"
             ")",
             name=conv("ck_area_details_area_kind"),
         ),
@@ -579,6 +597,56 @@ class AreaDetail(TimestampMixin, Base):
     area_size_m2: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
     is_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     restriction_note: Mapped[str | None] = mapped_column(Text)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class OutdoorFeatureProfile(TimestampMixin, Base):
+    __tablename__ = "outdoor_feature_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            f"outdoor_kind IN {sql_in_values(OUTDOOR_FEATURE_KIND_VALUES)}",
+            name=conv("ck_outdoor_feature_profiles_kind"),
+        ),
+        CheckConstraint(
+            f"feature_role IN {sql_in_values(OUTDOOR_FEATURE_ROLE_VALUES)}",
+            name=conv("ck_outdoor_feature_profiles_role"),
+        ),
+        CheckConstraint(
+            "confidence IS NULL OR confidence BETWEEN 0 AND 100",
+            name=conv("ck_outdoor_feature_profiles_confidence"),
+        ),
+        Index("ix_outdoor_feature_profiles_kind_role", "outdoor_kind", "feature_role"),
+        Index(
+            "ix_outdoor_feature_profiles_source",
+            "source_provider",
+            "source_dataset_key",
+        ),
+        Index("ix_outdoor_feature_profiles_updated_at", "updated_at"),
+    )
+
+    feature_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "map_features.id",
+            name="fk_outdoor_feature_profiles_feature_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
+    outdoor_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    feature_role: Mapped[str] = mapped_column(String(32), nullable=False, default="primary")
+    source_provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_dataset_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_dataset_name: Mapped[str | None] = mapped_column(String(255))
+    confidence: Mapped[int | None] = mapped_column(SmallInteger)
+    difficulty: Mapped[str | None] = mapped_column(String(32))
+    distance_m: Mapped[int | None] = mapped_column(Integer)
+    duration_min: Mapped[int | None] = mapped_column(Integer)
+    elevation_gain_m: Mapped[int | None] = mapped_column(Integer)
+    recommended_season: Mapped[str | None] = mapped_column(Text)
+    reservation_url: Mapped[str | None] = mapped_column(Text)
+    safety_note: Mapped[str | None] = mapped_column(Text)
+    data_quality_note: Mapped[str | None] = mapped_column(Text)
     extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 

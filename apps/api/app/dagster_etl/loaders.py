@@ -93,9 +93,7 @@ def _fresh_opinet_region_cache_status(
     if not isinstance(latest_collected_at, datetime):
         return None
 
-    freshness_target_minutes = get_etl_dataset_config(
-        "fuel_region_code"
-    ).freshness_target_minutes
+    freshness_target_minutes = get_etl_dataset_config("fuel_region_code").freshness_target_minutes
     if freshness_target_minutes is not None:
         comparable_latest = _align_timezone(latest_collected_at, reference_time)
         if comparable_latest < reference_time - timedelta(minutes=freshness_target_minutes):
@@ -392,6 +390,35 @@ def load_public_place_dataset_by_key(session: Session, run: DagsterEtlRun) -> An
     )
 
 
+def load_krforest_outdoor_feature_dataset(session: Session, run: DagsterEtlRun) -> Any:
+    if not _has_krforest_key():
+        raise TripMateEtlSkip(
+            "KRFOREST/TRIPMATE_DATA_GO service key가 없어 산림 feature ETL을 건너뜁니다."
+        )
+
+    from krforest import ForestClient
+
+    from app.etl.outdoor.forest_features import load_default_krforest_outdoor_features
+
+    return load_default_krforest_outdoor_features(
+        session,
+        ForestClient.from_env(),
+        collected_at=run.collected_at,
+    )
+
+
+def load_krmois_outdoor_license_dataset(session: Session, run: DagsterEtlRun) -> Any:
+    from mois import LocalDataFileClient
+
+    from app.etl.outdoor.forest_features import load_default_mois_outdoor_license_features
+
+    return load_default_mois_outdoor_license_features(
+        session,
+        LocalDataFileClient(),
+        collected_at=run.collected_at,
+    )
+
+
 def _load_kma_beach_weather_endpoint(session: Session, run: DagsterEtlRun, endpoint: str) -> Any:
     from app.etl.weather.beach import KmaBeachWeatherClient, load_beach_weather_for_active_locations
     from app.models.weather import WeatherBeachLocation
@@ -411,6 +438,17 @@ def _load_kma_beach_weather_endpoint(session: Session, run: DagsterEtlRun, endpo
 def _has_khoa_or_data_go_key() -> bool:
     return bool(
         os.environ.get("TRIPMATE_KHOA_API_KEY") or os.environ.get("TRIPMATE_DATA_GO_SERVICE_KEY")
+    )
+
+
+def _has_krforest_key() -> bool:
+    return bool(
+        os.environ.get("KRFOREST_SERVICE_KEY")
+        or os.environ.get("PYKRFOREST_SERVICE_KEY")
+        or os.environ.get("KFS_SERVICE_KEY")
+        or os.environ.get("FOREST_SERVICE_KEY")
+        or os.environ.get("DATA_GO_SERVICE_KEY")
+        or os.environ.get("TRIPMATE_DATA_GO_SERVICE_KEY")
     )
 
 

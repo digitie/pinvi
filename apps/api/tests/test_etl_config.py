@@ -162,6 +162,18 @@ def test_public_place_etl_dataset_configs_follow_source_update_cycles() -> None:
     assert campground_config.freshness_target_minutes == 2880
 
 
+def test_outdoor_feature_etl_dataset_configs_follow_source_update_cycles() -> None:
+    krforest_config = etl_config.get_etl_dataset_config("krforest_outdoor_feature")
+    krmois_config = etl_config.get_etl_dataset_config("krmois_outdoor_license")
+
+    assert krforest_config.schedule == "30 4 20 3,9 *"
+    assert krforest_config.retry_interval_seconds == 1800
+    assert krforest_config.freshness_target_minutes == 262800
+    assert krmois_config.schedule == "50 4 20 3,6,9,12 *"
+    assert krmois_config.retry_interval_seconds == 1800
+    assert krmois_config.freshness_target_minutes == 133920
+
+
 def test_etl_dataset_config_can_be_overridden_by_json_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

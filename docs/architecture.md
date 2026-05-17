@@ -5,6 +5,7 @@
 내부 표준 장소, 장소 카테고리, provider 장소 참조, 여행 방문 장소와의 연결 기준은 `docs/architecture/place-schema.md`를 따른다.
 장소·행사·경로·구역·지도 공지를 하나의 feature 계약으로 수렴시키는 기준은 `python-krtour-map`의 [Feature model](https://github.com/digitie/python-krtour-map/blob/main/docs/feature-model.md)을 따른다. TripMate 안의 `docs/architecture/map-feature-schema.md`는 이관 링크만 남긴다.
 공공데이터 기반 수목원·휴양림·박물관·미술관·캠핑장 장소 ETL과 표준 장소 적재 기준은 `docs/architecture/public-place-etl-schema.md`를 따른다.
+산림청/행정안전부 기반 산·휴양림·수목원·등산로·숲길 outdoor feature DB 기준은 `docs/architecture/outdoor-feature-db.md`를 따른다.
 OpiNet 유가 스키마의 상세 기준은 `docs/architecture/fuel-schema.md`를 따른다.
 OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/architecture/opinet-region-mapping.md`를 따른다.
 한국도로공사 휴게소 스키마의 상세 기준은 `docs/architecture/rest-area-schema.md`를 따른다.

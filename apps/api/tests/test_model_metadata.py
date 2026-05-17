@@ -66,6 +66,7 @@ from app.models import (
     OceanActivityIndexForecast,
     OceanActivityIndexLocation,
     OceanActivityIndexSourceRecord,
+    OutdoorFeatureProfile,
     PlaceCategory,
     PlaceDetail,
     PricePoint,
@@ -164,6 +165,7 @@ def test_initial_core_tables_are_registered() -> None:
         MapFeatureWebLink.__tablename__,
         MediaAsset.__tablename__,
         NoticeDetail.__tablename__,
+        OutdoorFeatureProfile.__tablename__,
         OceanActivityIndexForecast.__tablename__,
         OceanActivityIndexLocation.__tablename__,
         OceanActivityIndexSourceRecord.__tablename__,
@@ -298,6 +300,8 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
         ProviderSyncState.__table__.c.last_error_at.type,
         ProviderSyncState.__table__.c.created_at.type,
         ProviderSyncState.__table__.c.updated_at.type,
+        OutdoorFeatureProfile.__table__.c.created_at.type,
+        OutdoorFeatureProfile.__table__.c.updated_at.type,
     ]
 
     assert isinstance(started_at_type, DateTime)

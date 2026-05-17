@@ -354,4 +354,34 @@ ALL_ETL_SPECS: tuple[EtlJobSpec, ...] = (
         success_message="공공 장소 ETL 성공: {dataset_key}",
         failure_message="공공 장소 ETL 실패: {dataset_key}",
     ),
+    EtlJobSpec(
+        job_name="krforest_outdoor_feature_semiannual",
+        op_name="load_krforest_outdoor_features",
+        dataset_key="krforest_outdoor_feature",
+        description=(
+            "krforest-api로 산림청 휴양림·수목원·숲길·등산로 공간자료를 feature DB에 반영한다."
+        ),
+        tags=("tripmate", "outdoor", "forest", "krforest", "feature"),
+        loader=loaders.load_krforest_outdoor_feature_dataset,
+        success_message="산림 feature ETL 성공: {dataset_key}",
+        failure_message="산림 feature ETL 실패: {dataset_key}",
+        schedule_enabled=schedule_requires_any_env(
+            "KRFOREST_SERVICE_KEY",
+            "PYKRFOREST_SERVICE_KEY",
+            "KFS_SERVICE_KEY",
+            "FOREST_SERVICE_KEY",
+            "DATA_GO_SERVICE_KEY",
+            "TRIPMATE_DATA_GO_SERVICE_KEY",
+        ),
+    ),
+    EtlJobSpec(
+        job_name="krmois_outdoor_license_quarterly",
+        op_name="load_krmois_outdoor_license_features",
+        dataset_key="krmois_outdoor_license",
+        description=("krmois-api localdata 인허가 파일로 캠핑장·휴양업 보조 feature를 수집한다."),
+        tags=("tripmate", "outdoor", "localdata", "krmois", "feature"),
+        loader=loaders.load_krmois_outdoor_license_dataset,
+        success_message="산림 보조 인허가 ETL 성공: {dataset_key}",
+        failure_message="산림 보조 인허가 ETL 실패: {dataset_key}",
+    ),
 )

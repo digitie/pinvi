@@ -252,9 +252,9 @@ def test_public_cultural_festival_migration_keeps_raw_serving_and_address_keys()
 
 
 def test_provider_source_weather_state_migration_tracks_direct_library_sources() -> None:
-    migration = Path(
-        "alembic/versions/20260516_0025_provider_source_weather_state.py"
-    ).read_text(encoding="utf-8")
+    migration = Path("alembic/versions/20260516_0025_provider_source_weather_state.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'down_revision: str | None = "20260513_0024"' in migration
     assert "source_role" in migration
@@ -263,6 +263,27 @@ def test_provider_source_weather_state_migration_tracks_direct_library_sources()
     assert "provider_sync_state" in migration
     assert "uq_provider_sync_state_provider_dataset_scope" in migration
     assert "map_feature_weather_values" not in migration
+
+
+def test_outdoor_feature_profile_migration_supports_forest_place_area_route() -> None:
+    migration = Path("alembic/versions/20260518_0026_outdoor_feature_profiles.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'down_revision: str | None = "20260516_0025"' in migration
+    assert "outdoor_feature_profiles" in migration
+    assert "fk_outdoor_feature_profiles_feature_id" in migration
+    assert "ix_outdoor_feature_profiles_kind_role" in migration
+    assert "ix_outdoor_feature_profiles_source" in migration
+    assert "ALTER COLUMN geom TYPE geometry(Geometry, 4326)" in migration
+    assert '"address"' in migration
+    assert "nullable=True" in migration
+    assert "national_park" in migration
+    assert "mountain" in migration
+    assert "hiking_trail" in migration
+    assert "trekking_course" in migration
+    assert "ck_area_details_area_kind" in migration
+    assert "02010101" in migration
 
 
 def test_map_feature_replacement_migration_links_trip_items_to_features() -> None:

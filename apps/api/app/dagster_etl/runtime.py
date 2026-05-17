@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from uuid import UUID
 
 from krtour_map.dagster import (
@@ -12,7 +13,6 @@ from krtour_map.dagster import (
     EtlJobSpec,
     EtlLoader,
     EtlRunIdentity,
-    EtlSkip as TripMateEtlSkip,
     JsonValue,
     ScheduleEnabled,
     default_identity,
@@ -25,11 +25,13 @@ from krtour_map.dagster import (
     schedule_requires_any_env,
     source_year_month_override_from_config,
 )
+from krtour_map.dagster import (
+    EtlSkip as TripMateEtlSkip,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.etl_config import get_etl_dataset_config
-from app.core.json_types import JsonValue
 from app.models.etl import EtlRunLog
 from app.services.etl_runtime import (
     create_etl_run_log,

@@ -328,6 +328,24 @@ DEFAULT_ETL_DATASET_CONFIGS: dict[str, EtlDatasetRuntimeConfig] = {
         failure_telegram_notification_enabled=True,
         freshness_target_minutes=2880,
     ),
+    "krforest_outdoor_feature": EtlDatasetRuntimeConfig(
+        dataset_key="krforest_outdoor_feature",
+        schedule="30 4 20 3,9 *",
+        retry_interval_seconds=1800,
+        retry_max_attempts=3,
+        failure_admin_notification_enabled=True,
+        failure_telegram_notification_enabled=True,
+        freshness_target_minutes=262800,
+    ),
+    "krmois_outdoor_license": EtlDatasetRuntimeConfig(
+        dataset_key="krmois_outdoor_license",
+        schedule="50 4 20 3,6,9,12 *",
+        retry_interval_seconds=1800,
+        retry_max_attempts=3,
+        failure_admin_notification_enabled=True,
+        failure_telegram_notification_enabled=True,
+        freshness_target_minutes=133920,
+    ),
 }
 
 

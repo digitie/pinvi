@@ -31,6 +31,7 @@
 | 관광/축제 | `docs/data-sources/tour-festival.md` | KMA 관광코스 CSV/상세날씨, 전국문화축제 구현 |
 | KTO TourAPI | `docs/api/kto-tourapi.md` | visitkorea client 설정 경계와 직접 사용 계약 구현 |
 | 공공 장소 | `docs/data-sources/public-places.md` | 수목원/휴양림/박물관미술관/캠핑장 표준 장소 적재 구현 |
+| 산림·등산 feature | `docs/architecture/outdoor-feature-db.md` | krforest 산·휴양림·수목원·등산로·숲길과 krmois 캠핑장/휴양업 보조 feature 적재 구현 |
 | Provider 정책/TODO | `docs/data-sources/provider-policy-and-todo.md` | Kakao/Naver/Google 저장 정책, KASI/MCP/후속 API TODO |
 | YouTube 여행 정보 | `docs/architecture/youtube-travel-intelligence.md` | 구현 전 설계/TODO. Gemini YouTube URL 분석과 MCP 분리 구조 |
 
@@ -74,6 +75,8 @@
 | `public_recreation_forest` | `public_recreation_forest_semiannual` | 1/7월 15일 04:15 |
 | `public_museum_art_gallery` | `public_museum_art_gallery_annual` | 매년 7월 15일 04:25 |
 | `public_campground` | `public_campground_daily` | 매일 04:45 |
+| `krforest_outdoor_feature` | `krforest_outdoor_feature_semiannual` | 3/9월 20일 04:30 |
+| `krmois_outdoor_license` | `krmois_outdoor_license_quarterly` | 3/6/9/12월 20일 04:50 |
 
 ## 공통 요청/응답 처리
 
@@ -94,6 +97,7 @@
 - KHOA 해양 체험지수 스키마: `docs/architecture/khoa-ocean-index-schema.md`
 - 기상청 관광코스 스키마: `docs/architecture/kma-tour-course-schema.md`
 - 공공 장소 ETL 스키마: `docs/architecture/public-place-etl-schema.md`
+- 산림·등산 outdoor feature DB: `docs/architecture/outdoor-feature-db.md`
 - Provider library 직접 사용 기준: [`python-krtour-map/docs/provider-contract.md`](https://github.com/digitie/python-krtour-map/blob/main/docs/provider-contract.md)
 - python-krtour-map 통합 기준: [`python-krtour-map/docs/tripmate-integration.md`](https://github.com/digitie/python-krtour-map/blob/main/docs/tripmate-integration.md)
 
