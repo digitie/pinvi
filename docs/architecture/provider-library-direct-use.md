@@ -18,6 +18,8 @@ TripMate는 provider별 adapter, gateway, wrapper를 새로 만들지 않는다.
 | --- | --- | --- |
 | `python-kraddr-base` | `kraddr.base` | 주소/좌표/category 공통 DTO와 code value 사용 |
 | `python-krtour-map` | `krtour_map` | feature/source/weather 저장소 계약. `kraddr.base` 자료형을 직접 재노출하고 별도 category 사본을 만들지 않음 |
+
+Dagster는 실행 위치와 가공 계약을 분리한다. API 수집 후 feature/source/weather/price로 가공하는 run context, job spec, logical time/config helper는 `krtour_map.dagster`를 사용하고, TripMate는 Dagster process, schedule 실행, DB session 주입, 실행 로그와 알림만 맡는다.
 | `python-kraddr-geo` | `kraddr.geo` | Juso 검색, 주소 TXT 적재, PostGIS 기반 주소/경계 조회 |
 | `python-vworld-api` | `vworld` | VWorld geocoder, boundary, OGC 조회 |
 | `python-krmois-api` | `mois` | 인허가/공공장소 원천 feature 후보 |

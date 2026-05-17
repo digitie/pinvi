@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from krtour_map import WeatherValue, make_source_record_key
 from sqlalchemy import CheckConstraint
 
+from app.core.config import Settings
 from app.core.krtour_map_contract import (
     FORECAST_STYLE_VALUES,
     MAP_FEATURE_TYPE_VALUES,
@@ -17,6 +18,8 @@ from app.models.etl import ProviderSyncState
 from app.models.place import MapFeature, MapFeatureSourceLink, SourceRecord
 from app.services.krtour_map_feature_store import (
     feature_weather_values,
+    initialize_krtour_map_feature_db,
+    krtour_map_feature_db_settings,
     krtour_map_feature_metadata,
     weather_insert_values,
 )
@@ -148,6 +151,19 @@ def test_weather_uses_krtour_map_feature_db_and_sync_state_exports() -> None:
     assert row["normalization_version"] == "weather-feature-v1"
     assert exported_state.provider == "python-kma-api"
     assert exported_state.identity() == ("python-kma-api", "short_forecast", "grid:60,127")
+
+
+def test_feature_db_initializes_from_tripmate_settings() -> None:
+    settings = Settings(database_url="sqlite+pysqlite:///:memory:")
+
+    feature_settings = krtour_map_feature_db_settings(settings)
+    context = initialize_krtour_map_feature_db(settings)
+    try:
+        assert feature_settings.database_url == settings.database_url
+        assert context.engine.dialect.name == "sqlite"
+        assert "feature_weather_values" in krtour_map_feature_metadata().tables
+    finally:
+        context.dispose()
 
 
 def _check_constraint_sql(model: type[object], constraint_name: str) -> str:
