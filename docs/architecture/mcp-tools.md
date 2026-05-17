@@ -41,7 +41,7 @@
 5. 추출 후보를 Kakao/Naver/Google 같은 일반 장소 provider에 즉시 질의하지 않는다. provider 정책이 정리되기 전까지는 내부 주소 DB와 기존 장소 DB만 사용한다.
 6. 주소 문자열이 있으면 Juso 도로명/지번 exact match를 시도한다.
 7. 좌표가 있으면 V-WORLD 법정동 경계 point-in-polygon으로 법정동코드를 찾는다.
-8. 기존 `map_features`와 같은 이름/주소/좌표 후보가 있으면 연결 후보로 표시한다.
+8. 기존 `python-krtour-map` feature와 같은 이름/주소/좌표 후보가 있으면 연결 후보로 표시한다.
 9. `dry_run=false`이고 권한이 확인된 경우에만 장소 후보를 pending 상태로 저장한다.
 
 저장 정책:

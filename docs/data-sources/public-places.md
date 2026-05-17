@@ -12,8 +12,8 @@
 | file page 방식 | data.go.kr HTML에서 `contentUrl`을 찾아 CSV/ZIP 다운로드 |
 | Go Camping 방식 | `http://apis.data.go.kr/B551011/GoCamping/basedList` 직접 호출 |
 | localdata 방식 | 과거 고정 CSV URL 직접 다운로드 방식. 2026-04-29부터 기본 수집 경로에서 제외 |
-| raw 저장 | `source_records`에 dataset key, provider, source_entity_id, raw payload hash |
-| 표준 장소 | `map_features`, `place_details`, `map_feature_provider_refs`, `map_feature_source_links`, `map_feature_web_links` |
+| raw 저장 | `python-krtour-map` `SourceRecord`에 dataset key, provider, source_entity_id, raw payload hash |
+| 표준 장소 | `python-krtour-map` `Feature`, `SourceRecord`, `SourceLink` 계약 |
 | 좌표 기준 | EPSG:4326 `longitude`, `latitude`; 과거 LocalData CSV 일부 TM 좌표는 EPSG:5174에서 변환 가능 |
 
 공통 필수 출력 필드:
@@ -31,7 +31,7 @@
 - `homepage_url`은 scheme이 없고 도메인처럼 보이면 `https://`를 붙인다.
 - 좌표가 있으면 V-WORLD 법정동 경계 `ST_Covers`로 `legal_dong_code`, `sigungu_code`, `sido_code`를 채운다.
 - 운영상태가 `closed`면 `is_searchable=false`, `is_map_visible=false`로 둔다.
-- source-specific long-tail 필드는 `place_details.extra`에 둔다.
+- source-specific long-tail 필드는 `Feature.detail`에 둔다.
 
 인증:
 
@@ -132,9 +132,9 @@
 
 운영 주의:
 
-- 관광안내소는 지도에 올릴 수 있는 공공 장소이므로 `map_features(feature_type='place')`와 `place_details(place_kind='tourist_spot')`로 적재한다.
+- 관광안내소는 지도에 올릴 수 있는 공공 장소이므로 `python-krtour-map` place feature로 적재한다.
 - 도로명코드/도로명주소관리번호는 아직 주소 문자열 기반 fuzzy matching을 하지 않으므로 채우지 않는다. 좌표가 있으면 법정동 경계 point-in-polygon으로 `legal_dong_code`만 매핑한다.
-- 관리자 데이터 브라우저는 SQLAlchemy metadata 기반으로 테이블을 나열하므로 별도 UI 등록 없이 `map_features`, `place_details`, `source_records`, `map_feature_provider_refs`에서 조회된다.
+- 관리자 데이터 브라우저는 SQLAlchemy metadata 기반으로 테이블을 나열하므로 feature/source 세부 table은 `python-krtour-map` metadata를 통해 조회한다.
 
 ## `public_recreation_forest`
 

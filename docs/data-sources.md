@@ -8,7 +8,7 @@
 - 사용자 화면 요청마다 외부 API를 직접 호출하지 않고, 가능한 한 Dagster ETL 또는 명시적 cache miss 흐름으로 수집한다.
 - 공공데이터 raw payload는 재처리, diff, schema drift 감지를 위해 저장할 수 있다.
 - Kakao/Naver/Google 같은 일반 장소 provider 원문 전체는 장기 저장하지 않는다.
-- 앱/API/UI는 raw가 아니라 serving table 또는 내부 표준 지도 객체(`map_features`)를 우선 사용한다.
+- 앱/API/UI는 raw가 아니라 serving table 또는 `python-krtour-map` feature를 우선 사용한다.
 - provider 응답을 공통 지도 feature, source trace, weather/price value로 바꾸는 계약은 `python-krtour-map`을 기준으로 한다.
 - 축제처럼 기간성이 강한 이벤트 데이터는 일반 장소와 자동 병합하지 않고 별도 serving table을 유지한다. 여행계획에서는 `trip_plan_items`가 장소, 축제, 향후 경로형 리소스를 연결한다.
 - API key, bot token, 개인 API key는 DB/로그/문서 예시에 원문을 남기지 않는다.
@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | 주소/행정구역 | `docs/data-sources/address-region.md` | Juso 월간 도로명주소, data.go.kr 법정동코드, V-WORLD SHP 적재 구현 |
 | 날씨/대기질 | `docs/data-sources/weather-air-quality.md` | 기상청 단기/중기/특보/해수욕장 날씨, AirKorea 측정소/예보/시도 측정 구현 |
-| feature 날씨 정규화 | `docs/architecture/weather-air-quality-schema.md` | KMA식 `timeline_bucket`과 provider 원천 `forecast_style` 분리 기준 정리 |
+| feature 날씨 정규화 | [`python-krtour-map/docs/weather-feature-normalization.md`](https://github.com/digitie/python-krtour-map/blob/main/docs/weather-feature-normalization.md) | KMA식 `timeline_bucket`과 provider 원천 `forecast_style` 분리 기준 정리 |
 | 해수욕장 통합 | `docs/data-sources/beach-sources.md` | KHOA 해수욕장 관측/해수욕지수, 해양수산부 해수욕장정보/수질적합, KMA 해수욕장 날씨 통합 조회 구현 |
 | 해양 체험지수 | `docs/architecture/khoa-ocean-index-schema.md` | KHOA 갯벌체험지수/바다갈라짐 체험지수 구현 |
 | 유가 | `docs/data-sources/fuel-opinet.md` | OpiNet 지역코드, 전국 평균가, 시군구 최저가 구현 |
@@ -94,8 +94,8 @@
 - KHOA 해양 체험지수 스키마: `docs/architecture/khoa-ocean-index-schema.md`
 - 기상청 관광코스 스키마: `docs/architecture/kma-tour-course-schema.md`
 - 공공 장소 ETL 스키마: `docs/architecture/public-place-etl-schema.md`
-- Provider library 직접 사용 기준: `docs/architecture/provider-library-direct-use.md`
-- python-krtour-map 통합 기준: `docs/architecture/krtour-map-library.md`
+- Provider library 직접 사용 기준: [`python-krtour-map/docs/provider-contract.md`](https://github.com/digitie/python-krtour-map/blob/main/docs/provider-contract.md)
+- python-krtour-map 통합 기준: [`python-krtour-map/docs/tripmate-integration.md`](https://github.com/digitie/python-krtour-map/blob/main/docs/tripmate-integration.md)
 
 ## MCP 상태
 

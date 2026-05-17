@@ -7,7 +7,7 @@
 목표는 다음과 같다.
 
 - 공공데이터 원천 레코드는 재처리와 diff 검증을 위해 보존한다.
-- 사용자 검색, 지도, 여행 장소 연결은 `map_features(feature_type='place')` 표준 지도 객체를 기준으로 한다.
+- 사용자 검색, 지도, 여행 장소 연결은 `python-krtour-map` feature 계약을 기준으로 한다.
 - 모든 장소에 공통으로 쓰이는 필드는 typed column으로 승격한다.
 - 특정 장소 유형에만 의미 있는 필드는 JSONB로 보관한다.
 - 장소 자동 병합은 보수적으로 하고, 같은 공공데이터 dataset과 같은 source id만 멱등 upsert 기준으로 사용한다.
@@ -54,77 +54,25 @@ TripMate 8자리 장소 카테고리 코드 테이블이다. 이번 구현에서
 
 마이그레이션 seed가 기본이며, 테스트 fixture처럼 테이블이 truncate되는 환경을 고려해 loader도 필요한 카테고리를 보강한다.
 
-### `map_features`
+### Feature projection
 
-앱 검색, 지도 노출, 여행 장소 연결에 쓰는 내부 표준 지도 객체 테이블이다. 공공 장소 ETL row는 `feature_type='place'`로 적재하고 장소 상세는 `place_details`에 둔다.
+공공 장소 ETL row를 feature로 승격하는 DTO, source trace, 저장 schema는 `python-krtour-map`의 [Feature model](https://github.com/digitie/python-krtour-map/blob/main/docs/feature-model.md)과 [Postgres schema](https://github.com/digitie/python-krtour-map/blob/main/docs/postgres-schema.md)을 따른다.
 
-공통 typed column:
+공공데이터포털 데이터는 장기 저장 가능한 공공 원천으로 보고 raw payload를 보관할 수 있다. Kakao/Naver/Google 같은 상업 provider raw 전체와는 정책이 다르다.
 
-- 이름: `name`, `display_name`, `normalized_name`
-- 분류: `feature_type`, `category_code`, `place_details.place_kind`
-- 주소: `legal_dong_code`, `road_name_code`, `admin_dong_code`, `road_address_management_no`, `address`, `road_address`, `jibun_address`
-- 좌표: `longitude`, `latitude`, `geom geometry(Point, 4326)`
-- 운영/검증: `status`, `place_details.operation_status`, `place_details.verification_status`, `place_details.quality_score`
-- 노출 제어: `is_visible`, `status`
-- 연락처/일자: `phone`, `website_url`, `place_details.opened_on`, `place_details.closed_on`
-- long-tail JSON: `place_details.extra`
-
-`legal_dong_code`는 `address_code_standard.legal_dong_code`를 참조한다. 좌표가 있으면 V-WORLD 법정동 경계 serving layer에 대해 PostGIS `ST_Covers`로 point-in-polygon 판정한다.
-
-`is_visible` 기본 기준:
-
-- 폐업 상태가 아니다.
-- 법정동코드가 매핑됐다.
-- 카테고리가 `00000000`이 아니다.
-
-### `source_records`
-
-원천 레코드를 보존한다.
-
-- `dataset_key`
-- `provider`
-- `source_entity_type`
-- `source_entity_id`
-- `source_version`
-- `raw_data`
-- `raw_payload_hash`
-- `fetched_at`
-- `imported_at`
-
-공공데이터포털 데이터는 장기 저장 가능한 공공 원천으로 보고 raw payload를 보관한다. Kakao/Naver/Google 같은 상업 provider raw 전체와는 정책이 다르다.
-
-### `map_feature_provider_refs`
-
-공공데이터 원천과 내부 장소를 연결하는 provider 참조다.
-
-공공데이터에는 전역 고유 ID가 없는 경우가 많으므로 다음 값을 조합해 `source_entity_id`를 만든다.
-
-- dataset key
-- 장소명
-- 주소
-- 좌표
-- 제공기관코드 또는 관리기관명
-
-이 값의 SHA-1 hash를 source id로 사용한다. 같은 데이터셋의 같은 source id는 같은 장소로 upsert한다.
+공공데이터에는 전역 고유 ID가 없는 경우가 많으므로 `source_entity_id`는 dataset key, 장소명, 주소, 좌표, 제공기관코드 또는 관리기관명을 조합해 만든다. 같은 데이터셋의 같은 source id는 같은 feature로 upsert한다.
 
 주의할 점:
 
 - 공공데이터에 안정적인 전역 ID가 없는 데이터셋은 상류에서 장소명, 주소, 좌표를 정정하면 source id가 바뀔 수 있다.
-- 이 경우 기존 장소를 무리하게 자동 병합하지 않고 새 provider ref로 적재한다.
-- 나중에 운영 화면에서 중복 후보를 검토하거나, dataset별 더 안정적인 원천 ID가 확인되면 그 필드만 `source_record_id` 생성 규칙에 추가한다.
+- 이 경우 기존 feature를 무리하게 자동 병합하지 않고 새 source trace로 적재한다.
+- 나중에 운영 화면에서 중복 후보를 검토하거나, dataset별 더 안정적인 원천 ID가 확인되면 그 필드만 source id 생성 규칙에 추가한다.
 - 좌표나 주소가 조금 바뀐 레코드를 이름 유사도만으로 자동 병합하면 서로 다른 장소를 합칠 위험이 있으므로 현재는 하지 않는다.
-
-### `map_feature_source_links`
-
-어떤 원천 레코드가 어떤 표준 장소에 기여했는지 연결한다. 현재 공공 장소 ETL은 `match_method = provider_dataset_source_id`, `confidence = 100`으로 연결한다.
-
-### `map_feature_web_links`
-
-공식 홈페이지가 있으면 `link_type = official`로 저장한다. URL이 `www.example.com`처럼 scheme 없이 들어오면 `https://`를 붙인다.
+- 공식 홈페이지가 있으면 `Feature.urls.homepage` 또는 `Feature.detail.links`로 정규화한다. URL이 `www.example.com`처럼 scheme 없이 들어오면 `https://`를 붙인다.
 
 ## JSONB 사용 기준
 
-`place_details.extra`는 특정 장소군에서만 의미 있는 정보를 보관한다.
+`Feature.detail`은 특정 장소군에서만 의미 있는 정보를 보관한다.
 
 예:
 
@@ -153,7 +101,7 @@ TripMate 8자리 장소 카테고리 코드 테이블이다. 이번 구현에서
 관광안내소:
 
 - 전국관광안내소표준데이터는 `01060101`(관광 > 관광안내 > 관광안내소 > 공공 관광안내소)로 고정한다.
-- 원천의 `안내소위치명`, 운영시간, 외국어 안내 가능 여부, 부가서비스 정보는 `place_details.extra`에 보관한다.
+- 원천의 `안내소위치명`, 운영시간, 외국어 안내 가능 여부, 부가서비스 정보는 `Feature.detail`에 보관한다.
 
 휴양림:
 
@@ -183,7 +131,7 @@ TripMate 8자리 장소 카테고리 코드 테이블이다. 이번 구현에서
 
 수목원, 휴양림, 박물관, 미술관은 위도/경도를 EPSG:4326으로 받는 것을 기본으로 한다.
 
-Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과거 LocalData CSV처럼 “보정계수 안 들어간 Bessel 중부원점TM(EPSG:5174)” 좌표가 들어온 row도 ETL은 `pyproj`로 EPSG:5174 좌표를 EPSG:4326으로 변환한 뒤 `map_features.longitude`, `map_features.latitude`, `map_features.geom`에 저장할 수 있다.
+Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과거 LocalData CSV처럼 “보정계수 안 들어간 Bessel 중부원점TM(EPSG:5174)” 좌표가 들어온 row도 ETL은 `pyproj`로 EPSG:5174 좌표를 EPSG:4326으로 변환한 뒤 `python-krtour-map` feature 좌표로 저장할 수 있다.
 
 주소 문자열로 Juso key fuzzy matching은 하지 않는다. 현재 기준은 좌표 기반 법정동 매핑이다. 도로명코드, 도로명주소관리번호 연결은 후속 기능에서 명확한 Juso key 매칭 정책이 생기면 추가한다.
 
@@ -224,7 +172,7 @@ Go Camping API는 `mapX`, `mapY`를 EPSG:4326 경도/위도로 제공한다. 과
 - 공공데이터포털 파일 다운로드 페이지의 `contentUrl` 추출
 - 전국관광안내소표준데이터의 공식 OpenAPI path `tn_pubr_public_trsmic_api`
 - ZIP 내부 cp949 CSV 읽기
-- 휴양림 row를 `map_features`와 `place_details`로 승격하고 특화 필드는 JSONB에 보존
+- 휴양림 row를 `python-krtour-map` feature로 승격하고 특화 필드는 `Feature.detail`에 보존
 - 같은 source row 반복 적재 시 raw/source record 중복 방지
 - 수목원, 관광안내소, 휴양림, 박물관, 미술관, 캠핑장 카테고리 매핑
 - 캠핑장 EPSG:5174 좌표를 EPSG:4326으로 변환

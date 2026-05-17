@@ -3,7 +3,7 @@
 주소 체계, Juso/법정동코드/VWorld 경계 스키마, 다른 데이터셋과의 주소 매핑 기준은 `docs/architecture/address-schema.md`를 따른다.
 사용자, 이메일 인증, 여행 참여자, 여행 장소 스키마의 상세 기준안은 `docs/architecture/user-trip-schema.md`를 따른다.
 내부 표준 장소, 장소 카테고리, provider 장소 참조, 여행 방문 장소와의 연결 기준은 `docs/architecture/place-schema.md`를 따른다.
-장소·행사·경로·구역·지도 공지를 하나의 지도 객체로 수렴시키는 후속 통합 스키마 설계안은 `docs/architecture/map-feature-schema.md`를 따른다.
+장소·행사·경로·구역·지도 공지를 하나의 feature 계약으로 수렴시키는 기준은 `python-krtour-map`의 [Feature model](https://github.com/digitie/python-krtour-map/blob/main/docs/feature-model.md)을 따른다. TripMate 안의 `docs/architecture/map-feature-schema.md`는 이관 링크만 남긴다.
 공공데이터 기반 수목원·휴양림·박물관·미술관·캠핑장 장소 ETL과 표준 장소 적재 기준은 `docs/architecture/public-place-etl-schema.md`를 따른다.
 OpiNet 유가 스키마의 상세 기준은 `docs/architecture/fuel-schema.md`를 따른다.
 OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/architecture/opinet-region-mapping.md`를 따른다.
@@ -13,8 +13,8 @@ OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/
 기상청 추천 관광코스 스키마의 상세 기준은 `docs/architecture/kma-tour-course-schema.md`를 따른다.
 공공데이터포털 전국문화축제표준데이터 스키마는 `docs/architecture/public-cultural-festival-schema.md`를 따른다.
 한국천문연구원 날짜·천문 정보 설계는 `docs/architecture/kasi-calendar-schema.md`를 따른다.
-provider library 직접 사용 기준은 `docs/architecture/provider-library-direct-use.md`를 따른다.
-지도 feature 공통 DTO, source trace, provider canonical name, debug fixture replay 기준은 `docs/architecture/krtour-map-library.md`와 하부 라이브러리 `python-krtour-map` 문서를 따른다.
+provider library 직접 사용 기준은 `python-krtour-map`의 [Provider contract](https://github.com/digitie/python-krtour-map/blob/main/docs/provider-contract.md)를 따른다. TripMate 안의 `docs/architecture/provider-library-direct-use.md`는 이관 링크만 남긴다.
+지도 feature 공통 DTO, source trace, provider canonical name, debug fixture replay 기준은 하부 라이브러리 `python-krtour-map` 문서를 따른다.
 지도 마커와 로그인 화면 디자인 기준은 `docs/architecture/map-marker-design.md`를 따른다.
 Google/Naver/Kakao 소셜 로그인 통합 기준은 `docs/integrations/social-login.md`와 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
 TripMate MCP 도구 설계는 `docs/architecture/mcp-tools.md`를 따른다.
@@ -82,7 +82,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 - 웹앱은 사용자 흐름, 지도 상호작용, Tailwind CSS 기반 화면 스타일링, PWA UX를 담당한다.
 - API는 인증, 인가, 여행 도메인 규칙, provider library 직접 호출, Telegram, Gemini 실행 요청을 담당한다.
-- 지도 feature 계약, provider 결과 정규화, feature/source/weather/price 저장 schema는 `python-krtour-map`을 기준으로 두고, TripMate는 사용자/여행 제품 DB와 API 조립을 담당한다.
+- 지도 feature 계약, provider 결과 정규화, feature/source/weather/price 저장 schema는 `python-krtour-map`을 기준으로 두고, TripMate는 사용자/여행계획/POI 제품 DB와 API 조립을 담당한다.
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Dagster는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.

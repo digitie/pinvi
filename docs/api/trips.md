@@ -53,7 +53,7 @@
 | --- | --- | --- |
 | `resource_type` | Y | `place`, `event`, `route`, `area`, `notice`, `festival`, `trail`, `scenic_road`, `custom` |
 | `sort_order` | N | 날짜 안 표시 순서. 생략하면 마지막 다음 순서로 자동 부여 |
-| `map_feature_id` | 조건부 | `resource_type`이 `place`, `event`, `route`, `area`, `notice`일 때 내부 `map_features.id` |
+| `map_feature_id` | 조건부 | `resource_type`이 `place`, `event`, `route`, `area`, `notice`일 때 `python-krtour-map` feature id |
 | `festival_id` | 조건부 | `resource_type=festival`일 때 `tour_serving_public_cultural_festival.id` |
 | `resource_key` | 조건부 | 아직 전용 테이블이 없는 `trail`, `scenic_road`, `route` 같은 미래 리소스의 임시 key |
 | `title_snapshot` | 조건부 | 미래 리소스 또는 직접 입력 항목에는 필수. 장소/축제는 원천 이름을 기본값으로 사용 |
@@ -99,7 +99,7 @@
 현재 테이블은 `trip_plan_items`다.
 
 - `trip_plan_items.trip_day_id -> trip_days.id`
-- `trip_plan_items.map_feature_id -> map_features.id`
+- `trip_plan_items.map_feature_id -> python-krtour-map features.feature_id`
 - `trip_plan_items.festival_id -> tour_serving_public_cultural_festival.id`
 
 지도 객체와 축제 FK는 서로 동시에 채우지 않는다. 나중에 축제 외에도 둘레길, 드라이브 코스, 경로형 데이터가 추가될 수 있으므로, 일정 타임라인은 `trip_place`처럼 장소 전용 이름이 아니라 `trip_plan_items`로 둔다.

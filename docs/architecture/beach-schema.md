@@ -1,13 +1,13 @@
 # 해수욕장 통합 스키마
 
-해수욕장 정보는 일반 지도 객체(`map_features`)와 축제 데이터와 다른 형태로 관리한다. 해수욕장은 여행 일정에 추가될 수 있는 리소스지만, 수온·파고·해수욕지수·수질 적합 여부처럼 장소 자체가 아닌 계절성/관측성 데이터가 함께 붙는다. 따라서 통합 기준은 `beach_profiles`이며, 필요할 때만 `map_features.id`를 nullable `map_feature_id`로 연결한다.
+해수욕장 정보는 `python-krtour-map` feature와 축제 데이터와 다른 형태로 관리한다. 해수욕장은 여행 일정에 추가될 수 있는 리소스지만, 수온·파고·해수욕지수·수질 적합 여부처럼 장소 자체가 아닌 계절성/관측성 데이터가 함께 붙는다. 따라서 TripMate의 통합 기준은 `beach_profiles`이며, 필요할 때만 feature id를 nullable `map_feature_id`로 연결한다.
 
 ## 설계 원칙
 
-- `map_features`는 사용자 검색과 일반 지도 객체 저장의 표준 사전이다.
+- 공통 feature 계약은 `python-krtour-map`의 [Feature model](https://github.com/digitie/python-krtour-map/blob/main/docs/feature-model.md)을 따른다.
 - `beach_profiles`는 해수욕장 도메인 사전이다.
-- 기상청 해수욕장 카탈로그처럼 이미 `map_features(feature_type='place')`로 승격된 원천은 `map_feature_id`로 연결한다.
-- KHOA/해양수산부 원천은 먼저 `beach_profiles`로 적재하고, 자동으로 `map_features`를 만들지 않는다.
+- 기상청 해수욕장 카탈로그처럼 이미 place feature로 승격된 원천은 `map_feature_id`로 연결한다.
+- KHOA/해양수산부 원천은 먼저 `beach_profiles`로 적재하고, 자동으로 feature를 만들지 않는다.
 - provider 원문은 `beach_source_records`에 저장하되 인증키는 마스킹한다.
 - 도로명주소코드는 Juso 건물명 정확 일치 1건일 때만 채운다.
 - 좌표는 EPSG:4326 `longitude`, `latitude` 순서로 표준화한다.
@@ -16,7 +16,7 @@
 
 ```mermaid
 erDiagram
-  map_features ||--o{ beach_profiles : "optional map_feature_id"
+  features ||--o{ beach_profiles : "optional map_feature_id"
   beach_profiles ||--o{ beach_provider_refs : "referenced_by"
   beach_profiles ||--o{ beach_observations : "has"
   beach_profiles ||--o{ beach_index_forecasts : "has"
@@ -35,7 +35,7 @@ erDiagram
 - `id`: UUID PK
 - `canonical_key`: 이름+좌표 또는 provider id 기반 내부 key
 - `display_name`, `normalized_name`
-- `map_feature_id`: nullable FK. 기존 `map_features`와 연결할 때만 사용
+- `map_feature_id`: nullable feature id. 기존 feature와 연결할 때만 사용
 - `representative_provider`, `representative_dataset_key`
 - `longitude`, `latitude`, `geom`
 - `legal_dong_code`, `sigungu_code`, `sido_code`
@@ -77,9 +77,9 @@ unique:
 
 `request_params`에는 인증키를 `***`로 저장한다. raw payload에는 provider 응답을 보존해 재처리와 schema drift 확인에 사용한다.
 
-## `features` projection
+## `python-krtour-map` feature projection
 
-Dagster beach ETL은 raw/domain 저장 후 `beach_profiles`를 `features`에 투영한다.
+Dagster beach ETL은 raw/domain 저장 후 필요할 때 `beach_profiles`를 `python-krtour-map`의 `features`에 투영한다.
 
 - `feature_id`: `beach:{beach_profiles.id}`
 - `kind`: `place`
