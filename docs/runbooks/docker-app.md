@@ -1,4 +1,4 @@
-# 앱 Docker 이미지와 smoke 테스트
+﻿# 앱 Docker 이미지와 smoke 테스트
 
 TripMate 앱 컨테이너 검증은 WSL2 Ubuntu에서 실행한다. Windows PowerShell에서 Docker 명령을 직접 실행하지 않는다.
 
@@ -70,13 +70,13 @@ NEXT_PUBLIC_TRIPMATE_API_URL=http://127.0.0.1:18092
 전체 smoke 테스트:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/docker-app-smoke-test.sh"
 ```
 
 테스트 후 컨테이너를 유지하려면:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
 ```
 
 이 스크립트는 다음을 수행한다.
@@ -97,7 +97,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/docker-app-smoke-test.sh -
 ETL soak 후 관리자 페이지가 실제 ETL DB를 보는지 확인할 때는 별도 smoke DB가 아니라 `infra/docker-compose.yml`의 Postgres를 그대로 사용한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/admin-etl-data-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/admin-etl-data-smoke-test.sh --keep-running"
 ```
 
 검증 항목:
@@ -117,24 +117,24 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && scripts/admin-etl-data-smoke-test.
 문제를 좁혀 볼 때는 아래 순서로 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml build app-api app-web"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml build app-api app-web"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web"
 ```
 
 상태 확인:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml ps"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml logs --tail=200 app-api"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml logs --tail=200 app-web"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml ps"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml logs --tail=200 app-api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml logs --tail=200 app-web"
 ```
 
 정리:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans"
 ```
 
 ## 관리자 화면 smoke 확인

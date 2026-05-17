@@ -1,8 +1,8 @@
-# visitkorea 기반 TourAPI 연동 실행 계획
+﻿# visitkorea 기반 TourAPI 연동 실행 계획
 
 ## 목표
 
-TripMate의 KTO TourAPI 연동은 `visitkorea`를 직접 사용한다. TripMate backend에는 adapter/gateway 래퍼를 만들지 않고, 설정과 DB 저장 경계만 둔다. TourAPI 호출, 파라미터 검증, 응답 파싱, 오류 분류, provider raw 보존에 필요한 공통 동작은 `visitkorea` 저장소에서 구현한다.
+TripMate의 KTO TourAPI 연동은 `visitkorea`를 직접 사용한다. TripMate backend에는 중간 계층을 만들지 않고, 설정과 DB 저장 경계만 둔다. TourAPI 호출, 파라미터 검증, 응답 파싱, 오류 분류, provider raw 보존에 필요한 공통 동작은 `visitkorea` 저장소에서 구현한다.
 
 ## 이번 변경 범위
 
@@ -15,7 +15,7 @@ TripMate의 KTO TourAPI 연동은 `visitkorea`를 직접 사용한다. TripMate 
 
 - `visitkorea`: `dc855cb177c9a7842400957f5574760b85e71347`
 
-최신 visitkorea는 TripMate가 요청했던 `Page.context`, typed `related_tour`, pagination helper, exception metadata, `cpyrhtDivCd`/HTML 표시 helper를 public API로 제공한다. TripMate 코드는 별도 KTO adapter 없이 이 API를 직접 사용한다.
+최신 visitkorea는 TripMate가 요청했던 `Page.context`, typed `related_tour`, pagination helper, exception metadata, `cpyrhtDivCd`/HTML 표시 helper를 public API로 제공한다. TripMate 코드는 별도 KTO 중간 계층 없이 이 API를 직접 사용한다.
 
 ## TripMate 쪽 원칙
 
@@ -41,7 +41,7 @@ TripMate의 KTO TourAPI 연동은 `visitkorea`를 직접 사용한다. TripMate 
 visitkorea 저장소에서 작업해줘.
 
 목표:
-- TripMate가 <서비스명>/<operation명>을 adapter 없이 직접 사용할 수 있도록 typed model과 service helper를 추가해.
+- TripMate가 <서비스명>/<operation명>을 중간 계층 없이 직접 사용할 수 있도록 typed model과 service helper를 추가해.
 
 요구사항:
 - 공식 TourAPI field를 보존하는 Pydantic frozen model을 추가하고 `raw`를 유지해.
@@ -53,7 +53,7 @@ visitkorea 저장소에서 작업해줘.
 
 ## 검증 계획
 
-- WSL2에서 `cd /mnt/f/dev/mapplan/apps/api && uv sync --group dev`
+- WSL2에서 `cd /mnt/f/dev/tripmate/apps/api && uv sync --group dev`
 - WSL2에서 `uv run ruff check .`
 - WSL2에서 `uv run ruff format --check .`
 - WSL2에서 `uv run mypy .`

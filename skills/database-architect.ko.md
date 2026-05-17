@@ -1,4 +1,4 @@
----
+﻿---
 name: database-architect
 description: "TripMate의 PostgreSQL/PostGIS DB 설계, SQLAlchemy 2 모델, GeoAlchemy2 공간 컬럼, Alembic migration, 인덱스, 제약조건, DB 테스트를 작성·리뷰할 때 사용한다. DB 스키마 변경, 마이그레이션 추가, 주소/장소/날씨/유가/휴게소 ETL 저장 구조, 공간 쿼리, FK/unique/index 정합성, timezone 저장 정책 검토에 적용한다."
 ---
@@ -87,11 +87,11 @@ DB 관련 변경에는 최소한 다음 중 해당 항목을 추가하거나 갱
 아래 명령은 Windows PowerShell에서 실행하더라도 WSL2를 감싸는 형태를 우선한다. 이미 WSL2 shell 안에 있다면 `wsl.exe -e bash -lc` 부분을 빼고 같은 작업 디렉터리에서 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/pytest"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && .venv-wsl/bin/alembic upgrade head"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/pytest"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/alembic upgrade head"
 ```
 
 ## 금지 사항

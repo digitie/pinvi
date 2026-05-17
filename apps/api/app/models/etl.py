@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -53,6 +54,37 @@ class EtlRunLog(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     log_file_path: Mapped[str | None] = mapped_column(String(500))
     extra: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+
+class ProviderSyncState(TimestampMixin, Base):
+    __tablename__ = "provider_sync_state"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'paused', 'failed')",
+            name=conv("ck_provider_sync_state_status"),
+        ),
+        UniqueConstraint(
+            "provider",
+            "dataset_key",
+            "sync_scope",
+            name="uq_provider_sync_state_provider_dataset_scope",
+        ),
+        Index("ix_provider_sync_state_provider_dataset", "provider", "dataset_key"),
+        Index("ix_provider_sync_state_status_next", "status", "next_run_after"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    dataset_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    sync_scope: Mapped[str] = mapped_column(String(160), nullable=False, default="global")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    cursor: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_run_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class AdminNotification(TimestampMixin, Base):

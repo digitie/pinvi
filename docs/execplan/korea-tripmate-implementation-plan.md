@@ -1,8 +1,8 @@
-# 대한민국 전용 TripMate 구현 계획
+﻿# 대한민국 전용 TripMate 구현 계획
 
 ## 1. 목적
 
-이 문서는 현재 `F:\dev\mapplan` 저장소를 대한민국 전용 여행 계획 웹앱으로 확장하기 위한 실행 계획이다. 현재 저장소는 `apps/web`에 Next.js 웹앱을 둔 npm workspaces 구조이며, 목표 아키텍처는 다음 경계를 가진다.
+이 문서는 현재 `F:\dev\tripmate` 저장소를 대한민국 전용 여행 계획 웹앱으로 확장하기 위한 실행 계획이다. 현재 저장소는 `apps/web`에 Next.js 웹앱을 둔 npm workspaces 구조이며, 목표 아키텍처는 다음 경계를 가진다.
 
 - `apps/web`: Next.js + React + TypeScript + PWA
 - `apps/api`: FastAPI + SQLAlchemy 2 + GeoAlchemy2
@@ -35,7 +35,7 @@
 8. Gemini Deep Research는 수동 버튼 실행, 재사용 가능한 결과, 출처 추적을 기본으로 둔다.
 9. 인증은 httpOnly cookie 기반 JWT access/refresh token을 사용한다.
 10. Google/Naver/Kakao 소셜 로그인은 provider token을 앱 세션으로 쓰지 않고, `user_oauth_accounts` 연결 뒤 기존 JWT cookie 세션을 발급한다.
-11. Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 장소 초안을 먼저 구현하고, Kakao Local API 검색 adapter는 API/cache 계약 이후 붙인다.
+11. Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 장소 초안을 먼저 구현하고, Kakao Local API 검색 client/source는 API/cache 계약 이후 붙인다.
 12. Telegram bot token 실제 값은 환경변수에 두고 DB에는 `telegram_bot_token_ref`만 저장한다.
 13. 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용한다.
 14. 행정구역 raw 레이어는 EPSG:5179 원본을 보존하고, serving 레이어는 EPSG:4326 변환본을 둔다.
@@ -212,11 +212,11 @@
 
 - `docs/api/places.md`에 검색 후보와 내부 장소 저장 계약을 작성한다.
 - `docs/data-sources.md`에 Kakao Local API cache key, TTL, 저장 제한을 확정한다.
-- Kakao Local API adapter를 백엔드에 추가한다.
+- Kakao Local API client를 백엔드에 추가한다.
 - provider 후보를 내부 정규화 스키마로 변환한다.
 - `provider_response_cache`에 TTL 기반 원문 캐시만 저장한다.
 - Google/Naver 데이터 저장 제한을 코드 주석과 문서에 반영한다.
-- Naver/Google 후보 조합은 약관/정책 검토가 완료될 때까지 adapter 인터페이스만 열어두고 기본 구현에서 제외한다.
+- Naver/Google 후보 조합은 약관/정책 검토가 완료될 때까지 provider client 계약만 열어두고 기본 구현에서 제외한다.
 
 검증:
 
@@ -271,7 +271,7 @@
 - `apps/api/app/dagster_etl` 구조를 추가한다.
 - Dagster용 Docker 설정을 추가한다.
 - 새 데이터 소스나 cache key가 필요하면 구현 전에 `docs/data-sources.md`를 먼저 갱신한다.
-- 기상청 단기/초단기 예보용 WGS84 ↔ DFS `nx`,`ny` 변환은 `pykma.wgs84_to_kma_grid()`와 `pykma.kma_grid_to_wgs84()`를 직접 사용한다.
+- 기상청 단기/초단기 예보용 WGS84 ↔ DFS `nx`,`ny` 변환은 `kma.wgs84_to_kma_grid()`와 `kma.kma_grid_to_wgs84()`를 직접 사용한다.
 - 날씨 수집 job을 만든다.
 - 유가 수집 job을 만든다.
 - raw 적재 테이블과 serving 테이블을 분리한다.
@@ -329,7 +329,7 @@
 - Gemini API 키 원문은 일반 DB와 로그에 저장하지 않는다.
 - 사용자/실행 결과 테이블에는 secret reference, masked fingerprint, 검증 상태만 저장한다.
 - 실제 키는 secret store 또는 암호화된 비밀 저장 계층에서 읽는다.
-- Gemini 실행 adapter를 만든다.
+- Gemini 실행 client를 만든다.
 - 수동 실행 endpoint를 만든다.
 - prompt, model, 실행 시각, 입력 컨텍스트 요약, 결과 섹션, 출처, 에러 상태를 저장한다.
 - 동일 입력의 최근 결과 재사용 옵션을 제공한다.

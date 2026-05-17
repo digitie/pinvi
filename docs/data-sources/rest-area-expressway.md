@@ -1,4 +1,4 @@
-# 한국도로공사 휴게소 데이터 소스
+﻿# 한국도로공사 휴게소 데이터 소스
 
 이 문서는 한국도로공사 OpenAPI 인수인계 기준이다. 관련 구현은 `apps/api/app/core/kex.py`, `apps/api/app/etl/rest_area/loader.py`, `apps/api/app/dagster_etl/registry.py`, `docs/architecture/rest-area-schema.md`다.
 
@@ -9,13 +9,13 @@
 | base URL | `https://data.ex.co.kr/openapi` |
 | 인증 파라미터 | `key` |
 | 응답 타입 | `type=json` |
-| 호출 라이브러리 | `pykex`의 `KexClient` 직접 사용 |
+| 호출 라이브러리 | `python-krex-api`의 `KexClient` 직접 사용 |
 | 환경변수 | `TRIPMATE_KEX_EX_API_KEY`, fallback `TRIPMATE_EXPRESSWAY_API_KEY` |
 | timeout | `TRIPMATE_KEX_TIMEOUT_SECONDS`, 기본 10초 |
-| page size | `pykex` 호출당 최대 1000 |
+| page size | `python-krex-api` 호출당 최대 1000 |
 | pagination guard | 1000 page |
 | 응답 row | root `list` |
-| 실패 처리 | `pykex`가 한국도로공사 오류 코드를 예외로 분류 |
+| 실패 처리 | `python-krex-api`가 한국도로공사 오류 코드를 예외로 분류 |
 
 공통 요청 파라미터:
 

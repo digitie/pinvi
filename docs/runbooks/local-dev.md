@@ -1,4 +1,4 @@
-# 로컬 개발 실행 안내
+﻿# 로컬 개발 실행 안내
 
 ## 기본 원칙
 
@@ -7,36 +7,36 @@
 - Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 문서 확인, Git 상태 확인, 간단한 파일 탐색 같은 보조 작업에만 사용한다.
 - Docker 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - `rg` 검색은 PowerShell `rg.exe`를 쓰지 않는다. WSL에서도 WindowsApps 경로가 먼저 잡힐 수 있으므로 `PATH=/usr/local/bin:/usr/bin:/bin rg ...`처럼 WSL native ripgrep만 사용한다.
-- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/mapplan`이다. 검증 명령은 이 NTFS 경로에서 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/mapplan` 미러에서 실행한다.
-- 테스트, 빌드, lint, typecheck, formatter, backend test, Alembic, Dagster 검증 전에는 `/mnt/f/dev/mapplan`에서 WSL 미러로 동기화하고, 명령 완료 후에는 WSL 미러의 변경을 `/mnt/f/dev/mapplan`으로 다시 복사한다.
+- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/tripmate`이다. 검증 명령은 이 NTFS 경로에서 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/tripmate` 미러에서 실행한다.
+- 테스트, 빌드, lint, typecheck, formatter, backend test, Alembic, Dagster 검증 전에는 `/mnt/f/dev/tripmate`에서 WSL 미러로 동기화하고, 명령 완료 후에는 WSL 미러의 변경을 `/mnt/f/dev/tripmate`으로 다시 복사한다.
 - 프로젝트 문서는 한국어로 작성한다. 코드 식별자, 명령어, 테이블명, API endpoint, provider 고유 명칭은 원문을 유지할 수 있다.
 
 ## WSL 내부 볼륨 미러
 
-NTFS에 있는 `/mnt/f/dev/mapplan`에서 테스트를 직접 실행하면 파일 접근이 느리다. 검증 명령은 WSL ext4 내부 경로 `~/tripmate-workspaces/mapplan`에서 실행한다. 현재 프로젝트 디렉토리(`F:\dev\mapplan`)를 최종 원본으로 두고, WSL 미러는 빠른 테스트용 복제본으로 다룬다.
+NTFS에 있는 `/mnt/f/dev/tripmate`에서 테스트를 직접 실행하면 파일 접근이 느리다. 검증 명령은 WSL ext4 내부 경로 `~/tripmate-workspaces/tripmate`에서 실행한다. 현재 프로젝트 디렉토리(`F:\dev\tripmate`)를 최종 원본으로 두고, WSL 미러는 빠른 테스트용 복제본으로 다룬다.
 
 초기 생성은 필요할 때 한 번만 수행한다.
 
 ```bash
-wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/mapplan ~/tripmate-workspaces/mapplan"
+wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/tripmate ~/tripmate-workspaces/tripmate"
 ```
 
 검증 명령을 실행하기 전에는 현재 프로젝트 디렉토리의 변경을 WSL 미러로 보낸다.
 
 ```bash
-wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/mapplan/ ~/tripmate-workspaces/mapplan/"
+wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/tripmate/ ~/tripmate-workspaces/tripmate/"
 ```
 
 검증 명령은 WSL 미러에서 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
 ```
 
 명령이 완료되면 WSL 미러의 변경을 현재 프로젝트 디렉토리로 복사한다. 이 되돌림 복사는 동시 편집 파일을 지우지 않도록 기본적으로 `--delete`를 쓰지 않는다.
 
 ```bash
-wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/mapplan/ /mnt/f/dev/mapplan/"
+wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/tripmate/ /mnt/f/dev/tripmate/"
 ```
 
 명령이 의도적으로 파일 삭제나 rename을 만들었다면 `git status --short`로 변경 범위를 확인한 뒤 삭제까지 현재 프로젝트 디렉토리에 반영한다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
@@ -46,8 +46,8 @@ wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --excl
 PowerShell의 `rg.exe`는 권한 문제로 실패한 사례가 반복됐으므로 사용하지 않는다. WSL 기본 `PATH`도 WindowsApps의 Codex 번들 `rg`를 먼저 잡을 수 있으므로, 검색할 때는 Windows 경로를 제거한 WSL native ripgrep만 사용한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n '검색어' docs apps/api"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n '검색어' docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
 ```
 
 `PATH=/usr/local/bin:/usr/bin:/bin command -v rg`가 비어 있으면 WSL에 `ripgrep`이 없는 상태다. 이 경우 PowerShell `rg.exe`로 우회하지 말고 WSL에 `ripgrep`을 설치하거나, 설치가 불가능한 경우에만 `git grep`/`grep`을 fallback으로 사용한다.
@@ -71,8 +71,8 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin 
 RustFS 파일 스토리지는 로컬 Docker에서 S3 API `http://127.0.0.1:19000`, console `http://127.0.0.1:19001`을 사용한다. 이미지와 첨부 파일 업로드 흐름은 `docs/runbooks/file-storage.md`를 따른다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm install"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm install"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run dev"
 ```
 
 기본 주소:
@@ -84,14 +84,14 @@ http://localhost:3001
 API 서버는 별도 터미널에서 `8001`로 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 웹 포트나 API 포트를 임시로 바꿀 때는 두 값을 함께 맞춘다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8011 npm exec --workspace apps/web -- next dev --hostname 0.0.0.0 --port 3011"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8011"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8011 npm exec --workspace apps/web -- next dev --hostname 0.0.0.0 --port 3011"
 ```
 
 웹 client의 기본 API URL은 `http://localhost:8001`이다. 명시적인 `NEXT_PUBLIC_TRIPMATE_API_URL` 설정이 있으면 그 값을 우선한다.
@@ -101,27 +101,27 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && NEXT_PUBLIC_TRIPMATE_AP
 웹앱:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run typecheck"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run build"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run build"
 ```
 
 웹앱 workspace를 직접 대상으로 실행할 수도 있다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/web run lint"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/web run typecheck"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/web run build"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run typecheck"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run build"
 ```
 
 API:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv sync --group dev"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run pytest"
 ```
 
 KTO TourAPI 로컬 설정은 커밋하지 않는 `apps/api/.env`에 둔다. 인증키는 공공데이터포털 decoding 인증키를 사용한다.
@@ -134,7 +134,7 @@ TRIPMATE_KTO_TIMEOUT_SECONDS=10
 TRIPMATE_KTO_MAX_RETRIES=2
 ```
 
-KTO 호출 코드는 `visitkorea`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO adapter/gateway 래퍼를 만들지 않는다.
+KTO 호출 코드는 `visitkorea`의 `KrTourApiClient`와 `TourApiHubClient`를 직접 사용한다. TripMate backend에 별도 KTO 중간 계층을 만들지 않는다.
 
 이메일 인증 메일을 로컬에서 실제 발송하려면 Resend 설정을 `apps/api/.env`에 둔다. API key와 DNS/domain 준비 절차는 `docs/integrations/resend.md`를 따른다.
 
@@ -186,15 +186,15 @@ http://127.0.0.1:18082/auth/oauth/kakao/callback
 `uv`가 WSL2에 없고 `.venv-wsl` 가상환경을 사용할 때:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && python3 -m venv .venv-wsl"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pip install -e . pytest ruff mypy httpx"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_juso_parser.py tests/test_juso_download.py tests/test_juso_legal_dong_loader.py tests/test_juso_address_dataset_loader.py tests/test_juso_pipeline.py tests/test_legal_dong_code_loader.py tests/test_vworld_boundary_loader.py tests/test_model_metadata.py tests/test_migration_contract.py"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && python3 -m venv .venv-wsl"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && . .venv-wsl/bin/activate && pip install -e . pytest ruff mypy httpx"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_juso_parser.py tests/test_juso_download.py tests/test_juso_legal_dong_loader.py tests/test_juso_address_dataset_loader.py tests/test_juso_pipeline.py tests/test_legal_dong_code_loader.py tests/test_vworld_boundary_loader.py tests/test_model_metadata.py tests/test_migration_contract.py"
 ```
 
 Dagster ETL contract check:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_dagster_etl.py"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_dagster_etl.py"
 ```
 
 ## 로컬 DB
@@ -202,7 +202,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && . .venv-wsl/bi
 Postgres/PostGIS는 WSL2에서 다음 명령으로 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d"
 ```
 
 TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`를 사용한다. 같은 compose stack은 RustFS도 함께 띄우며, `rustfs-init`가 `tripmate-media` bucket을 생성한다.
@@ -210,20 +210,20 @@ TripMate 로컬 DB 포트는 다른 스택과 충돌을 피하기 위해 `55432`
 DB health check:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml ps"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml ps"
 ```
 
 Migration:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run alembic upgrade head"
 ```
 
 빈 DB 기준 migration upgrade를 검증할 때:
 
 ```bash
 wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exists tripmate_migration_check && docker exec tripmate-postgres createdb -U tripmate -O tripmate tripmate_migration_check"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:tripmate_dev_password@localhost:55432/tripmate_migration_check' uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:tripmate_dev_password@localhost:55432/tripmate_migration_check' uv run alembic upgrade head"
 wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exists tripmate_migration_check"
 ```
 
@@ -241,7 +241,7 @@ wsl.exe -e bash -lc "docker exec tripmate-postgres dropdb -U tripmate --if-exist
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 API health check:
@@ -256,7 +256,7 @@ curl http://localhost:8001/health/db
 Dagster는 Docker Compose로 실행한다. TripMate 로컬 Compose는 Dagster UI와 daemon을 같은 `dagster` service에서 함께 띄운다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d postgres dagster"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
 ```
 
 Dagster UI:
@@ -272,8 +272,8 @@ http://localhost:23000
 DB를 초기화하고 로컬 기준 파일을 적재한 뒤 Dagster job을 장시간 검증할 때는 아래 스크립트를 사용한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status.sh"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-status.sh"
 ```
 
 주의:

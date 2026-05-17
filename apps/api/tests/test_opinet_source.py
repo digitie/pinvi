@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, time
 
@@ -20,14 +20,14 @@ from opinet import (
 )
 
 from app.core.config import Settings
-from app.etl.fuel.opinet_adapter import (
+from app.etl.fuel.opinet_source import (
     FuelRegionCodeLevel,
     FuelStationSort,
     FuelType,
-    OpinetAdapterError,
     OpinetFailureKind,
-    PyOpinetFuelAdapter,
-    build_pyopinet_client,
+    OpinetFuelSource,
+    OpinetSourceError,
+    build_opinet_client,
     fuel_type_from_provider_product_code,
     provider_product_code_for_fuel_type,
 )
@@ -103,7 +103,7 @@ def test_product_code_mapping_keeps_tripmate_enum_scope_and_provider_code() -> N
     assert fuel_type_from_provider_product_code("C004") is None
 
 
-def test_national_average_prices_are_normalized_from_pyopinet_rows() -> None:
+def test_national_average_prices_are_normalized_from_python_opinet_api_rows() -> None:
     client = _FakeOpinetClient(
         averages=[
             OpinetAvgPrice(
@@ -124,9 +124,9 @@ def test_national_average_prices_are_normalized_from_pyopinet_rows() -> None:
             ),
         ]
     )
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    rows = adapter.get_national_average_prices()
+    rows = source.get_national_average_prices()
 
     assert rows[0].provider == "opinet"
     assert rows[0].provider_endpoint == "avgAllPrice.do"
@@ -136,17 +136,17 @@ def test_national_average_prices_are_normalized_from_pyopinet_rows() -> None:
     assert rows[0].price == 1710.42
     assert rows[0].diff == -0.8
     assert rows[0].price_timestamp.isoformat() == "2026-05-06T00:00:00+09:00"
-    assert rows[0].pyopinet_payload["product_code"] == "B027"
+    assert rows[0].provider_payload["product_code"] == "B027"
     assert rows[1].provider_fuel_code == "C004"
     assert rows[1].fuel_type is None
 
 
-def test_lowest_price_stations_pass_region_and_limit_to_pyopinet() -> None:
+def test_lowest_price_stations_pass_region_and_limit_to_python_opinet_api() -> None:
     station = _station_row(distance_m=None, product_code=OpinetProductCode.DIESEL)
     client = _FakeOpinetClient(stations=[station])
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    rows = adapter.get_lowest_price_stations(
+    rows = source.get_lowest_price_stations(
         FuelType.DIESEL,
         limit=7,
         region_code="0113",
@@ -163,16 +163,16 @@ def test_lowest_price_stations_pass_region_and_limit_to_pyopinet() -> None:
     assert rows[0].price_timestamp is None
     assert rows[0].lon == 127.0276
     assert rows[0].lat == 37.4979
-    assert rows[0].pyopinet_payload["brand"] == "SKE"
+    assert rows[0].provider_payload["brand"] == "SKE"
 
 
 def test_search_stations_around_uses_wgs84_lon_lat_and_sort_code() -> None:
     client = _FakeOpinetClient(
         stations=[_station_row(distance_m=482.4, product_code=OpinetProductCode.GASOLINE)]
     )
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    rows = adapter.search_stations_around(
+    rows = source.search_stations_around(
         lon=127.0276,
         lat=37.4979,
         radius_m=3000,
@@ -202,9 +202,9 @@ def test_region_codes_keep_opinet_code_and_bjd_sido_mapping() -> None:
             ),
         ]
     )
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    rows = adapter.get_region_codes()
+    rows = source.get_region_codes()
 
     assert client.area_calls == [None]
     assert rows[0].provider_region_code == "01"
@@ -219,29 +219,29 @@ def test_region_codes_keep_opinet_code_and_bjd_sido_mapping() -> None:
 
 def test_region_code_rejects_unexpected_provider_code_shape() -> None:
     client = _FakeOpinetClient(areas=[OpinetAreaCode(code="001", name="잘못된 코드")])
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    with pytest.raises(OpinetAdapterError) as exc_info:
-        adapter.get_region_codes()
+    with pytest.raises(OpinetSourceError) as exc_info:
+        source.get_region_codes()
 
     assert exc_info.value.kind == OpinetFailureKind.INVALID_PARAMETER
     assert exc_info.value.dataset == "fuel_region_code"
 
 
-def test_pyopinet_error_is_mapped_to_dataset_failure_kind() -> None:
-    adapter = PyOpinetFuelAdapter(
+def test_python_opinet_api_error_is_mapped_to_dataset_failure_kind() -> None:
+    source = OpinetFuelSource(
         _FailingOpinetClient(),
     )
 
-    with pytest.raises(OpinetAdapterError) as exc_info:
-        adapter.get_national_average_prices()
+    with pytest.raises(OpinetSourceError) as exc_info:
+        source.get_national_average_prices()
 
     assert exc_info.value.kind == OpinetFailureKind.RATE_LIMIT
     assert exc_info.value.dataset == "fuel_avg_price"
 
 
-def test_build_pyopinet_client_imports_configured_dependency_without_network_call() -> None:
-    client = build_pyopinet_client(
+def test_build_opinet_client_imports_configured_dependency_without_network_call() -> None:
+    client = build_opinet_client(
         Settings(
             opinet_api_key="dummy-key",
             opinet_timeout_seconds=1.5,
@@ -266,14 +266,14 @@ def test_station_trade_context_is_normalized_to_kst_timestamp() -> None:
             )
         ]
     )
-    adapter = PyOpinetFuelAdapter(client)
+    source = OpinetFuelSource(client)
 
-    rows = adapter.get_lowest_price_stations(FuelType.DIESEL, limit=1)
+    rows = source.get_lowest_price_stations(FuelType.DIESEL, limit=1)
 
     assert rows[0].provider_fuel_name == "provider diesel"
     assert rows[0].price_timestamp is not None
     assert rows[0].price_timestamp.isoformat() == "2026-05-06T14:56:18+09:00"
-    assert rows[0].pyopinet_payload["TRADE_DT"] == "20260506"
+    assert rows[0].provider_payload["TRADE_DT"] == "20260506"
 
 
 def _station_row(

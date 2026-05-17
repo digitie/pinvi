@@ -1,4 +1,4 @@
-# Provider 라이브러리 기준과 축제 로그인 화면 실행 계획
+﻿# Provider 라이브러리 기준과 축제 로그인 화면 실행 계획
 
 ## 배경
 
@@ -8,7 +8,7 @@
 
 - `DESIGN.md`와 `airbnb-marker-palette.html` 기준을 문서화한다.
 - Maki icon asset을 `apps/web/public/maki/`에 둔다.
-- provider adapter 라이브러리 분리 기준을 문서화한다.
+- provider library 직접 사용 기준을 문서화한다.
 - 한국천문연구원 특일/음양력/출몰시각 API 설계를 문서화한다.
 - data.go.kr 전국문화축제표준데이터 raw/serving DB, loader, Dagster job, public API를 구현한다.
 - `/login` 사용자 로그인 화면을 만든다.
@@ -34,7 +34,7 @@
 
 ## 향후 TODO
 
-- provider adapter를 별도 repository/package로 분리
+- provider library 공개 인터페이스를 별도 repository/package에서 안정화
 - `opinet`, `visitkorea`, `kma apihub`, `vworld`, `juso.go.kr`, 도로공사, `airkorea`, 한국천문연구원 API를 통합 metadata contract로 재정리
 - 행정안전부 문화 카테고리 데이터: 숙박, 민박, 박물관/미술관, 전통사찰, 한옥체험업, 관광숙박업, 농어촌민박업, 영화상영관, 관광펜션업, 전문휴양업, 관광유람선업, 공연장, 일반야영장, 종합휴양업, 관광공연장업, 테마파크업, 일반테마파크업, 지방문화원, 영화상영업, 종합테마파크업, 관광궤도업, 공중화장실정보, 생활_골프장, 건강_약국, 건강_의료법인, 건강_의원, 생활_목욕장업, 전국온천현황
 - 건강보험심사평가원 병원정보(`opendata.hira.or.kr`)

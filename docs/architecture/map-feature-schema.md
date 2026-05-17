@@ -842,3 +842,23 @@ API에서는 `feature_type`별 response schema를 분리한다. 하나의 거대
 4. 해수욕장처럼 점과 구역 성격이 모두 있는 데이터는 현재 point 원천이면 `place`, polygon 원천이 들어오면 `area`로 승격한다.
 5. `notice`는 geometry가 있는 지도 공지만 다룬다. 관리자 시스템 에러와 ETL 실패 알림은 운영 알림 테이블에 둔다.
 6. 기존 `places`는 즉시 `map_features`로 대체한다. 신규 코드와 API는 `places.id`가 아니라 `map_features.id` 또는 도메인별 `map_feature_id`를 사용한다.
+
+## 2026-05-16 provider 원천/보정 보강
+
+TripMate는 provider별 adapter/wrapper 계층을 만들지 않고, `python-*-api` 라이브러리 공개 client와 typed model을 직접 사용한다. 중복 수정을 줄여야 하면 앱에 우회 계층을 쌓지 않고 해당 라이브러리의 public interface를 빠르게 안정화한다.
+
+새 provider 보강은 다음 DB 계약을 사용한다.
+
+- `map_feature_source_links.source_role`: `base_address`, `base_coordinate`, `primary`, `enrichment`, `correction`, `duplicate_candidate`, `media`, `weather_context`로 원천 역할을 구분한다.
+- `map_feature_overrides`: KRMOIS 등 1차 원천 값을 운영자가 수정/보강한 기록을 provider, dataset, source row, field path 단위로 저장한다.
+- `map_feature_weather_values`: feature별 날씨/대기질/해양 값을 KMA 예보 스타일에 맞춰 저장한다.
+- `provider_sync_state`: VisitKorea 행사 증분, MCST/Forest/KHOA 주기 수집 cursor와 실패 상태를 저장한다.
+
+주소/좌표 기반은 `python-kraddr-geo`와 `python-vworld-api`가 제공한다. 이 값은 feature 생성의 기반이지만 실질적인 영업/장소 원천은 `python-krmois-api` 인허가 데이터부터 시작한다. KRMOIS에 없거나 보완이 필요한 정보만 다른 provider로 추가한다.
+
+예시:
+
+- VisitKorea 축제는 KRMOIS에 없으므로 `feature_type='event'`와 `event_details(event_kind='festival')` 후보로 저장하고, 증분 cursor는 `provider_sync_state(provider='visitkorea', dataset_key='event')`에 둔다.
+- MCST 카페/독립서점은 KRMOIS에 이미 있을 가능성이 높으므로 신규 feature보다 `map_feature_overrides` 보강을 우선한다.
+- KHOA 해수욕장은 KRMOIS에 없으면 `place` 또는 `area`로 추가하고, 해양/해수욕장 날씨 값은 `map_feature_weather_values`에 둔다.
+- KRForest 휴양림은 KRMOIS feature가 있으면 보강하고 없으면 `place`/`area` 후보로 추가한다. 트래킹, 둘레길, 국립공원은 `route`와 `area` 비중이 높다.

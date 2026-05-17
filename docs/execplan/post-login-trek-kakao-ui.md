@@ -1,4 +1,4 @@
-# 로그인 후 TREK 차용 UI와 Kakao 지도 구현 계획
+﻿# 로그인 후 TREK 차용 UI와 Kakao 지도 구현 계획
 
 ## 한 줄 결정
 
@@ -342,7 +342,7 @@ apps/api/app/models/trip.py
 apps/api/app/models/place.py
 apps/api/tests/test_trip_workspace_api.py
 apps/api/tests/test_place_search_api.py
-apps/api/tests/test_kakao_local_adapter.py
+apps/api/tests/test_kakao_local_source.py
 ```
 
 새 route 파일을 추가하면 `apps/api/app/main.py`의 router 등록 패턴을 확인하고 기존 방식에 맞춘다.
@@ -2144,7 +2144,7 @@ export type WorkspaceState = {
 - Kakao Local 호출 결과를 TripMate 후보로 반환.
 - reverse geocode에서 PostGIS 행정구역 조회와 Kakao fallback 조합.
 
-### Kakao Local adapter 오류 분류
+### Kakao Local client 오류 분류
 
 권장 오류:
 
@@ -2222,17 +2222,17 @@ Codex가 할 일:
 검증:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run lint"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && npm run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run typecheck"
 ```
 
 백엔드 변경이 있으면:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run pytest"
 ```
 
 ### Phase B. 여행 상세 shell
@@ -2300,7 +2300,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan/apps/api && uv run pytest"
 
 - `GET /places/search`.
 - `GET /places/reverse-geocode`.
-- Kakao Local adapter.
+- Kakao Local client.
 - TTL cache 정책.
 - provider raw response 장기 저장 방지 test.
 
@@ -2553,7 +2553,7 @@ gemini-panel
 - Pydantic schema로 request/response 고정.
 - SQLAlchemy model/migration/test fixture 정합성 확인.
 - KST timezone-aware datetime 유지.
-- provider adapter timeout/error/cache 구현.
+- provider library timeout/error/cache 계약 구현.
 - `ruff`, `mypy`, `pytest`, migration 검증 실행.
 
 문서:

@@ -1,4 +1,4 @@
-# Skill: 데이터 정책 적용
+﻿# Skill: 데이터 정책 적용
 
 외부 장소 provider, 공공데이터, OpenAPI, 캐시, raw/serving 저장 정책이 관련되면 이 skill을 사용한다.
 
@@ -13,7 +13,7 @@
 1. 변경하려는 데이터 소스, provider, API, 캐시 키를 식별한다.
 2. `docs/data-sources.md`에 source, schedule/freshness, cache key, TTL, raw/serving 저장 구조가 있는지 확인한다.
 3. 누락되어 있으면 구현 전에 `docs/data-sources.md`를 먼저 갱신한다.
-4. 외부 API 호출은 adapter/gateway 계층 뒤에 둔다.
+4. 외부 API 호출은 공용 provider library의 공개 client를 직접 사용한다.
 5. 서비스 로직과 UI는 내부 정규화 데이터 또는 serving 데이터에만 의존하게 한다.
 6. provider 원문 응답이 필요하면 TTL 캐시에만 저장한다.
 7. 약관이 불명확한 필드는 장기 저장하지 않고 문서에 “법무/정책 확인 필요”를 남긴다.
@@ -41,7 +41,7 @@
 
 ## 완료 기준
 
-- `docs/data-sources.md`와 schema/adapter/Dagster job/test가 일치한다.
+- `docs/data-sources.md`와 schema/provider library/Dagster job/test가 일치한다.
 - 장기 저장 필드와 TTL 캐시 필드가 분리되어 있다.
 - provider 원문 데이터가 서비스 로직의 단일 진실원이 아니다.
 - 테스트 없이 데이터 정책 변경을 완료하지 않는다.

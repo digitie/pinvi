@@ -1,8 +1,10 @@
-# TripMate
+﻿# TripMate
 
 TripMate는 대한민국 국내 여행 계획을 지도, 일정, 지역 데이터, Telegram 알림과 함께 관리하는 웹앱입니다.
 
 현재 저장소는 Phase 1 백엔드/DB/ETL 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js + Tailwind CSS 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic migration, 주소/Juso/VWorld/유가/휴게소/날씨 ETL 기반이 있습니다. Dagster 로컬 런타임은 Docker Compose로 실행할 수 있고, 장시간 ETL 검증과 ODROID Docker 실행을 위한 기본 스크립트가 `scripts/`에 있습니다.
+
+지도 feature 공통 DTO, provider source trace, weather/price value 정규화, debug fixture replay 기준은 하부 라이브러리 `python-krtour-map`으로 분리한다. TripMate는 해당 계약을 사용해 DB 저장, API 응답 조립, Admin 검수 workflow를 담당한다.
 
 ## 현재 구조
 
@@ -37,7 +39,7 @@ scripts/            # bootstrap, test, deploy, backup
 - uv 권장
 - WSL2 + Docker 또는 Docker Desktop
 
-명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Dagster 검증은 반드시 WSL2에서 실행합니다. NTFS 경로(`/mnt/f/dev/mapplan`)에서 테스트를 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/mapplan` 미러에서 실행한 뒤, 명령 완료마다 변경 내용을 현재 프로젝트 디렉토리로 복사합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
+명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Dagster 검증은 반드시 WSL2에서 실행합니다. NTFS 경로(`/mnt/f/dev/tripmate`)에서 테스트를 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/tripmate` 미러에서 실행한 뒤, 명령 완료마다 변경 내용을 현재 프로젝트 디렉토리로 복사합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
 
 WSL 미러 초기화와 동기화 절차는 [로컬 개발 runbook](docs/runbooks/local-dev.md)을 따릅니다.
 
@@ -54,8 +56,8 @@ TripMate 직접 개발 표준 포트는 다음과 같습니다. `3000`과 `8000`
 Dagster 관리 UI는 로컬에서 `http://localhost:23000`을 사용한다. 관리자 화면의 Dagster 버튼 주소는 `NEXT_PUBLIC_TRIPMATE_DAGSTER_URL`로 바꿀 수 있다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm install"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm install"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run dev"
 ```
 
 브라우저에서 `http://localhost:3001`을 엽니다.
@@ -64,7 +66,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run dev"
 관리자 화면과 API를 Docker 이미지 기준으로 검증하려면 다음 명령을 사용합니다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/docker-app-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
 ```
 
 성공 후 접속 주소는 `http://127.0.0.1:13082/admin/login`입니다.
@@ -72,7 +74,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/docker-app-smok
 웹앱만 직접 실행하려면 다음 명령도 사용할 수 있습니다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/web run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run dev"
 ```
 
 ## 검사
@@ -80,19 +82,19 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm --workspace apps/we
 웹앱:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run typecheck"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run build"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run build"
 ```
 
 API 의존성 설치 후:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv sync --group dev"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run pytest"
 ```
 
 KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `visitkorea` client를 직접 사용합니다.
@@ -103,7 +105,7 @@ TRIPMATE_KTO_MOBILE_APP=TripMate
 TRIPMATE_KTO_MOBILE_OS=WEB
 ```
 
-한국도로공사 OpenAPI를 로컬에서 호출하려면 `apps/api/.env`에 `pykex`용 키를 둡니다. 호출 코드는 `kex_openapi.KexClient`를 직접 사용합니다.
+한국도로공사 OpenAPI를 로컬에서 호출하려면 `apps/api/.env`에 `python-krex-api`용 키를 둡니다. 호출 코드는 `kex_openapi.KexClient`를 직접 사용합니다.
 
 ```bash
 TRIPMATE_KEX_EX_API_KEY=data.ex.co.kr_인증키
@@ -115,19 +117,19 @@ TRIPMATE_KEX_GO_API_KEY=data.go.kr_decoding_인증키
 ## 로컬 DB
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d postgres"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
 API migration:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run alembic upgrade head"
 ```
 
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 이메일 인증 메일을 실제 발송하려면 Resend 설정을 추가합니다. Free 플랜 기준과 DNS/API key 준비 절차는 [Resend 이메일 연동](docs/integrations/resend.md)을 따릅니다.
@@ -141,7 +143,7 @@ TRIPMATE_WEB_BASE_URL=http://localhost:3001
 Dagster 로컬 런타임:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d postgres dagster"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
 ```
 
 Dagster UI는 `http://localhost:23000`에서 확인합니다.
@@ -149,8 +151,8 @@ Dagster UI는 `http://localhost:23000`에서 확인합니다.
 ETL 장시간 검증용 초기화와 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-reset-and-start.sh --yes"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status.sh"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-status.sh"
 ```
 
 이 명령은 Docker volume을 삭제하므로 로컬/검증 DB에서만 사용합니다. 20시간보다 긴 ETL 주기는 `config/etl-datasets.soak.json`으로 임시 12시간 이내 schedule을 사용합니다.
@@ -163,6 +165,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status
 - 장소 추가는 검색 결과 선택과 지도 클릭 입력을 모두 지원합니다.
 - Kakao Map을 기본 지도 표면으로 사용합니다.
 - 외부 장소 provider 원문은 장기 저장하지 않고, 내부 정규화 필드와 TTL 캐시를 분리합니다.
+- provider 응답을 공통 지도 feature로 바꾸는 계약은 `python-krtour-map`을 기준으로 하며, TripMate 전용 provider wrapper를 새로 늘리지 않습니다.
 - 날씨/유가 리포트는 외부 API 실시간 연타보다 저장된 지역 데이터와 ETL 캐시를 우선합니다.
 - 여행별 Telegram 알림 대상은 최대 3개입니다.
 
@@ -170,6 +173,7 @@ wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && scripts/etl-soak-status
 
 - [구현 계획](docs/execplan/korea-tripmate-implementation-plan.md)
 - [아키텍처 기준선](docs/architecture.md)
+- [python-krtour-map 통합 기준](docs/architecture/krtour-map-library.md)
 - [유가 데이터 스키마](docs/architecture/fuel-schema.md)
 - [데이터 소스 기준](docs/data-sources.md)
 - [KTO TourAPI 계약](docs/api/kto-tourapi.md)

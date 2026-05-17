@@ -1,4 +1,4 @@
-# 데이터 소스 기준
+﻿# 데이터 소스 기준
 
 이 문서는 TripMate 외부 데이터 소스의 색인이다. 상세 API 계약은 `docs/data-sources/` 하위의 소스별 문서를 필요할 때만 읽는다.
 
@@ -9,6 +9,7 @@
 - 공공데이터 raw payload는 재처리, diff, schema drift 감지를 위해 저장할 수 있다.
 - Kakao/Naver/Google 같은 일반 장소 provider 원문 전체는 장기 저장하지 않는다.
 - 앱/API/UI는 raw가 아니라 serving table 또는 내부 표준 지도 객체(`map_features`)를 우선 사용한다.
+- provider 응답을 공통 지도 feature, source trace, weather/price value로 바꾸는 계약은 `python-krtour-map`을 기준으로 한다.
 - 축제처럼 기간성이 강한 이벤트 데이터는 일반 장소와 자동 병합하지 않고 별도 serving table을 유지한다. 여행계획에서는 `trip_plan_items`가 장소, 축제, 향후 경로형 리소스를 연결한다.
 - API key, bot token, 개인 API key는 DB/로그/문서 예시에 원문을 남기지 않는다.
 - 모든 수집 시각은 KST(`Asia/Seoul`) 기준 timezone-aware `collected_at`으로 저장한다.
@@ -92,7 +93,8 @@
 - KHOA 해양 체험지수 스키마: `docs/architecture/khoa-ocean-index-schema.md`
 - 기상청 관광코스 스키마: `docs/architecture/kma-tour-course-schema.md`
 - 공공 장소 ETL 스키마: `docs/architecture/public-place-etl-schema.md`
-- Provider adapter 분리 기준: `docs/architecture/provider-adapter-library.md`
+- Provider library 직접 사용 기준: `docs/architecture/provider-library-direct-use.md`
+- python-krtour-map 통합 기준: `docs/architecture/krtour-map-library.md`
 
 ## MCP 상태
 

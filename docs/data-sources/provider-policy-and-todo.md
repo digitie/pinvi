@@ -1,4 +1,4 @@
-# Provider 정책과 TODO
+﻿# Provider 정책과 TODO
 
 이 문서는 현재 구현되지 않았거나 제한적으로만 쓰는 provider/API의 정책과 TODO를 모은다. 구현된 ETL 상세는 다른 `docs/data-sources/*.md` 문서를 따른다.
 
@@ -7,7 +7,7 @@
 현재 상태:
 
 - Kakao Map JavaScript SDK는 지도 UX의 기본 지도 provider로 계획되어 있다.
-- Kakao Local API 장소 검색 adapter는 제품 불변조건상 우선 provider지만, 현재 문서 기준에서는 실제 adapter 구현 전 계약 정리 단계다.
+- Kakao Local API 장소 검색 client/source는 제품 불변조건상 우선 provider지만, 현재 문서 기준에서는 실제 client/source 구현 전 계약 정리 단계다.
 - Naver/Google/일반 검색 조합은 정책 검토 후 확장한다.
 
 저장 정책:

@@ -1,4 +1,4 @@
-# OpiNet 유가 데이터 소스
+﻿# OpiNet 유가 데이터 소스
 
 이 문서는 OpiNet 유가 API 인수인계 기준이다. 관련 구현은 `apps/api/app/etl/opinet/client.py`, `apps/api/app/etl/opinet/loader.py`, `apps/api/app/dagster_etl/registry.py`, `docs/architecture/fuel-schema.md`, `docs/architecture/opinet-region-mapping.md`다.
 
@@ -17,9 +17,9 @@
 Python client:
 
 - TripMate backend 의존성은 `apps/api/pyproject.toml`의
-  `opinet @ git+https://github.com/digitie/pyopinet.git@ee4998eec98deabc69edc40f76fda1aa6ad4519a`로 고정한다.
-- `pyopinet`의 `OpinetClient`, `FuelType`, `ProductCode`, `SortOrder`, normalized DTO, `AreaCode` helper, KATEC/WGS84 좌표 객체를 우선 재사용한다.
-- `Station.trade_datetime()`은 pyopinet `ee4998eec98deabc69edc40f76fda1aa6ad4519a`부터 `to_normalized(endpoint="unknown")`를 거치지 않고 station의 `trade_date`/`trade_time`으로 KST 기준 datetime을 직접 만든다.
+  `opinet @ git+https://github.com/digitie/python-opinet-api.git@ee4998eec98deabc69edc40f76fda1aa6ad4519a`로 고정한다.
+- `python-opinet-api`의 `OpinetClient`, `FuelType`, `ProductCode`, `SortOrder`, normalized DTO, `AreaCode` helper, KATEC/WGS84 좌표 객체를 우선 재사용한다.
+- `Station.trade_datetime()`은 python-opinet-api `ee4998eec98deabc69edc40f76fda1aa6ad4519a`부터 `to_normalized(endpoint="unknown")`를 거치지 않고 station의 `trade_date`/`trade_time`으로 KST 기준 datetime을 직접 만든다.
 - `StationDetail.to_normalized()`와 `NormalizedFuelStationDetail`은 주유소 상세/유종별 가격 행을 저장할 때 사용한다.
 
 지원 유종:

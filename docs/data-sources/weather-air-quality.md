@@ -1,4 +1,4 @@
-# 날씨/대기질 데이터 소스
+﻿# 날씨/대기질 데이터 소스
 
 이 문서는 기상청(data.go.kr)과 AirKorea(data.go.kr) 연동을 인수인계하기 위한 상세 기준이다. 관련 구현은 `apps/api/app/etl/weather/client.py`, `apps/api/app/etl/weather/loader.py`, `apps/api/app/dagster_etl/registry.py`, `config/kma-mid-term-regions.json`이다.
 
@@ -13,7 +13,7 @@
 | timeout | 30초 | 30초 |
 | raw 저장 | endpoint, 기준시각, request key, raw payload, response hash | endpoint, request key, raw payload, response hash |
 
-공통 응답 wrapper:
+공통 응답 모델:
 
 - `response.header.resultCode/resultMsg`가 정상 코드가 아니면 실패 처리한다.
 - `response.body.items.item`이 dict면 1건, list면 여러 건으로 해석한다.
@@ -157,7 +157,7 @@ Endpoint와 구현 URL:
 
 내부 정규화:
 
-- WGS84 좌표는 `pykma.wgs84_to_kma_grid()`로 DFS 격자에 변환한다. TripMate에는 KMA용 adapter/gateway 래퍼를 두지 않고, 기상청 단기/중기/특보 data.go.kr 호출은 `pykma.KmaClient`와 `pykma.DataGoKrClient` 공개 API를 직접 사용한다.
+- WGS84 좌표는 `kma.wgs84_to_kma_grid()`로 DFS 격자에 변환한다. TripMate에는 KMA용 중간 계층을 두지 않고, 기상청 단기/중기/특보 data.go.kr 호출은 `kma.KmaClient`와 `kma.DataGoKrClient` 공개 API를 직접 사용한다.
 - 시군구 대표 격자는 V-WORLD 시군구 경계의 `ST_PointOnSurface`를 사용한다.
 - serving category는 `category_name`, `normalized_category`, `unit`으로 보강한다.
 

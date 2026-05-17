@@ -14,6 +14,7 @@ dependencies = [
   "fastapi>=0.124.0",
   "geoalchemy2>=0.18.0",
   "httpx>=0.28.0",
+  "python-krtour-map @ git+https://github.com/digitie/python-krtour-map.git@a49b574dc9c934b0eea7a6a8bc8a38674e3110aa",
   "python-krex-api @ git+https://github.com/digitie/python-krex-api.git@0829503f0db6939fcf77b5efd2962e8c8a96807f",
   "python-opinet-api @ git+https://github.com/digitie/python-opinet-api.git@16c41d6b8bbb709badd22cfbfa873445c27717a5",
   "python-kma-api @ git+https://github.com/digitie/python-kma-api.git@9300e37ea4369539f68959c4f87486943bd9df7e",

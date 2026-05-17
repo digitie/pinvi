@@ -1,4 +1,4 @@
-# ADR: MVP 범위 정리와 보류 항목
+﻿# ADR: MVP 범위 정리와 보류 항목
 
 ## 상태
 
@@ -32,7 +32,7 @@ MVP에서 다음을 제외한다.
 
 - 인증 세션 방식은 httpOnly cookie 기반 서버 세션으로 시작한다.
 - Telegram bot token은 환경변수에 실제 값을 두고 DB에는 secret reference만 저장한다.
-- Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 입력을 먼저 구현하고, Kakao Local API 검색 adapter는 API/cache 계약 이후 붙인다.
+- Kakao 지도는 JavaScript SDK 지도 UI와 지도 클릭 입력을 먼저 구현하고, Kakao Local API 검색 client/source는 API/cache 계약 이후 붙인다.
 - 행정구역 원천 데이터는 V-WORLD `법정구역정보` SHP를 사용하고 raw EPSG:5179, serving EPSG:4326을 분리한다.
 - Gemini API 키는 사용자 개인 키 입력 구조로 설계한다.
 

@@ -1,4 +1,4 @@
-# 에이전트 작업 규칙
+﻿# 에이전트 작업 규칙
 
 이 문서는 `AGENTS.md`에서 분리한 세부 작업 기준이다. 루트 파일은 항상 읽고, 이 문서는 작업이 해당 주제에 닿을 때만 읽는다.
 
@@ -45,42 +45,42 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 - Windows PowerShell로 한국어 문서나 skill을 읽을 때는 기본 인코딩을 가정하지 말고 `Get-Content -Encoding UTF8 -Path ...`처럼 UTF-8을 명시한다. 한글이 깨져 보이면 내용을 근거로 판단하지 말고 UTF-8로 다시 읽은 뒤 작업한다.
 - Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - 파일/문자열 검색은 PowerShell `rg.exe`를 사용하지 않는다. 이 환경에서는 권한 문제로 실패하거나 WSL `PATH`가 WindowsApps의 Codex 번들 `rg`를 먼저 잡을 수 있다.
-- 검색 명령은 Windows 경로를 뺀 WSL native ripgrep으로 실행한다: `wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n '패턴' 경로"`.
+- 검색 명령은 Windows 경로를 뺀 WSL native ripgrep으로 실행한다: `wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n '패턴' 경로"`.
 - WSL native ripgrep이 없으면 PowerShell `rg.exe`로 우회하지 말고 WSL 안에 `ripgrep`을 설치하거나, 설치가 불가능한 경우에만 `git grep`/`grep` fallback을 사용하고 그 사유를 보고한다.
 - 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
-- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/mapplan`이다. 이 경로는 동기화 원본으로 쓰고, 검증 명령의 작업 디렉토리로 직접 쓰지 않는다.
-- 테스트, 빌드, lint, typecheck, formatter, backend test처럼 파일을 많이 읽는 검증 명령은 `/mnt/f/dev/mapplan`에서 직접 실행하지 않는다. WSL 내부 볼륨의 미러 경로 `~/tripmate-workspaces/mapplan`에서 실행한다.
-- 검증 명령 전에는 현재 프로젝트 디렉토리(`/mnt/f/dev/mapplan`)의 내용을 WSL 미러로 동기화하고, 명령이 완료될 때마다 WSL 미러의 변경 내용을 현재 프로젝트 디렉토리로 다시 복사한다.
-- 현재 프로젝트 디렉토리(`F:\dev\mapplan`)를 최종 원본으로 보고, WSL 미러는 빠른 실행용 작업 복제본으로 다룬다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
+- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/tripmate`이다. 이 경로는 동기화 원본으로 쓰고, 검증 명령의 작업 디렉토리로 직접 쓰지 않는다.
+- 테스트, 빌드, lint, typecheck, formatter, backend test처럼 파일을 많이 읽는 검증 명령은 `/mnt/f/dev/tripmate`에서 직접 실행하지 않는다. WSL 내부 볼륨의 미러 경로 `~/tripmate-workspaces/tripmate`에서 실행한다.
+- 검증 명령 전에는 현재 프로젝트 디렉토리(`/mnt/f/dev/tripmate`)의 내용을 WSL 미러로 동기화하고, 명령이 완료될 때마다 WSL 미러의 변경 내용을 현재 프로젝트 디렉토리로 다시 복사한다.
+- 현재 프로젝트 디렉토리(`F:\dev\tripmate`)를 최종 원본으로 보고, WSL 미러는 빠른 실행용 작업 복제본으로 다룬다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
 
 예시:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && docker compose -f infra/docker-compose.yml up -d"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan/apps/api && .venv-wsl/bin/python -m pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && .venv-wsl/bin/python -m pytest"
 ```
 
 PowerShell에서 문서 확인 예시:
 
 ```powershell
-Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\docs\runbooks\agent-working-rules.md'
-Get-Content -Encoding UTF8 -Path 'F:\dev\mapplan\skills\documentation-and-adrs.ko.md'
+Get-Content -Encoding UTF8 -Path 'F:\dev\tripmate\docs\runbooks\agent-working-rules.md'
+Get-Content -Encoding UTF8 -Path 'F:\dev\tripmate\skills\documentation-and-adrs.ko.md'
 ```
 
 검색 예시:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg -n 'Dagster|Telegram' docs apps/api"
-wsl.exe -e bash -lc "cd /mnt/f/dev/mapplan && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n 'Dagster|Telegram' docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
 ```
 
 WSL 내부 볼륨 테스트 미러는 아래 방식으로 운용한다. 초기 생성은 필요할 때 한 번만 수행하고, 이후에는 `rsync`로 현재 작업 내용을 덮어쓴다. `.git`은 미러 안의 로컬 Git 상태를 유지하기 위해 동기화 대상에서 제외한다.
 
 ```bash
-wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/mapplan ~/tripmate-workspaces/mapplan"
-wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/mapplan/ ~/tripmate-workspaces/mapplan/"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/mapplan && npm run lint"
-wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/mapplan/ /mnt/f/dev/mapplan/"
+wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/tripmate ~/tripmate-workspaces/tripmate"
+wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/tripmate/ ~/tripmate-workspaces/tripmate/"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
+wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/tripmate/ /mnt/f/dev/tripmate/"
 ```
 
 WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 만든 경우에는 `git status --short`로 변경 범위를 확인한 뒤 해당 삭제를 현재 프로젝트 디렉토리에 반영한다. 기본 되돌림 복사는 사용자 동시 편집을 지우지 않도록 `--delete`를 쓰지 않는다.
@@ -109,7 +109,7 @@ WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 
 - `Any`, TypeScript `as` 캐스팅, Python `cast`/`type: ignore`는 불가피한 라이브러리 경계에만 좁게 사용하고, 도메인 서비스 public return type이나 React state type으로 퍼뜨리지 않는다.
 - FastAPI 라우터는 얇게 유지하고, 실제 규칙은 서비스 계층으로 이동한다.
 - React 컴포넌트에 비즈니스 로직을 과도하게 넣지 않는다.
-- 외부 API 연동은 adapter/gateway 계층 뒤에 둔다.
+- 외부 API 연동은 공용 provider library의 공개 client를 직접 사용한다.
 - 반복 ETL/API 작업에는 캐시와 멱등성을 설계한다.
 - 숨은 전역 상태를 피한다.
 - 공간 로직은 SRID, 좌표 순서, 단위 변환, polygon/point 처리 규칙을 명시한다.
@@ -135,7 +135,7 @@ WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 
 
 - 모든 외부 데이터셋 및 OpenAPI 사용은 `docs/data-sources.md`를 단일 기준 문서로 따른다.
 - 새로운 외부 데이터 소스를 도입할 경우 구현 전에 `docs/data-sources.md`를 먼저 업데이트한다.
-- 데이터 구조, Dagster job, adapter, 캐시 정책, 테스트는 `docs/data-sources.md`와 동기화되어야 한다.
+- 데이터 구조, Dagster job, provider client/source, 캐시 정책, 테스트는 `docs/data-sources.md`와 동기화되어야 한다.
 - 데이터 저장 정책이나 약관이 불명확한 경우 최소 저장 원칙을 적용하고 제한 사항을 문서에 명시한다.
 
 ### 공간 데이터
@@ -237,19 +237,19 @@ CI 기대치:
 
 ## 선호 명령어
 
-실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL 내부 미러 경로(`~/tripmate-workspaces/mapplan`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다. 명령 전후 동기화는 이 문서의 WSL 내부 볼륨 테스트 미러 절차를 따른다.
+실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL 내부 미러 경로(`~/tripmate-workspaces/tripmate`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다. 명령 전후 동기화는 이 문서의 WSL 내부 볼륨 테스트 미러 절차를 따른다.
 
 현재 프론트엔드:
 
-- install: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm install`
-- dev: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run dev`
-- lint: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run lint`
-- typecheck: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run typecheck`
-- build: WSL2에서 `cd ~/tripmate-workspaces/mapplan && npm run build`
+- install: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm install`
+- dev: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run dev`
+- lint: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run lint`
+- typecheck: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run typecheck`
+- build: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run build`
 
 백엔드:
 
-- install: WSL2에서 `cd ~/tripmate-workspaces/mapplan/apps/api && uv sync` 또는 저장소 표준 명령
+- install: WSL2에서 `cd ~/tripmate-workspaces/tripmate/apps/api && uv sync` 또는 저장소 표준 명령
 - dev: WSL2에서 `uv run uvicorn app.main:app --reload`
 - lint: WSL2에서 `uv run ruff check .`
 - format check: WSL2에서 `uv run ruff format --check .`

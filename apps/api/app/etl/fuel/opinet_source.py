@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -38,7 +38,7 @@ class OpinetFailureKind(StrEnum):
     CONFIGURATION = "configuration"
 
 
-class OpinetAdapterError(RuntimeError):
+class OpinetSourceError(RuntimeError):
     def __init__(
         self,
         message: str,
@@ -62,7 +62,7 @@ class NormalizedFuelAverage:
     price_timestamp: datetime
     price: float
     diff: float
-    pyopinet_payload: dict[str, object]
+    provider_payload: dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ class NormalizedFuelStation:
     lon: float
     lat: float
     distance_m: float | None
-    pyopinet_payload: dict[str, object]
+    provider_payload: dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +96,7 @@ class NormalizedFuelRegionCode:
     code_level: FuelRegionCodeLevel
     parent_provider_region_code: str | None
     legal_dong_sido_prefix: str
-    pyopinet_payload: dict[str, object]
+    provider_payload: dict[str, object]
 
 
 class _AveragePriceLike(Protocol):
@@ -180,7 +180,7 @@ def build_opinet_client(settings: Settings | None = None) -> _OpinetClientLike:
     try:
         from opinet import OpinetClient
     except ModuleNotFoundError as exc:
-        raise OpinetAdapterError(
+        raise OpinetSourceError(
             "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
@@ -198,11 +198,11 @@ def build_opinet_client(settings: Settings | None = None) -> _OpinetClientLike:
     )
 
 
-def build_opinet_fuel_adapter(settings: Settings | None = None) -> OpinetFuelAdapter:
-    return OpinetFuelAdapter(build_opinet_client(settings))
+def build_opinet_fuel_source(settings: Settings | None = None) -> OpinetFuelSource:
+    return OpinetFuelSource(build_opinet_client(settings))
 
 
-class OpinetFuelAdapter:
+class OpinetFuelSource:
     def __init__(self, client: object) -> None:
         self._client = cast(_OpinetClientLike, client)
 
@@ -248,7 +248,7 @@ class OpinetFuelAdapter:
         sort: FuelStationSort = FuelStationSort.PRICE,
     ) -> list[NormalizedFuelStation]:
         provider_fuel_code = provider_product_code_for_fuel_type(fuel_type)
-        provider_sort = _pyopinet_sort_order(sort)
+        provider_sort = _opinet_sort_order(sort)
         return self._call(
             "fuel_station_around",
             lambda: [
@@ -285,7 +285,7 @@ class OpinetFuelAdapter:
             code_level=code_level,
             parent_provider_region_code=normalized.parent_sido_code,
             legal_dong_sido_prefix=normalized.bjd_sido_prefix,
-            pyopinet_payload=_payload_from_raw(
+            provider_payload=_payload_from_raw(
                 normalized.raw,
                 code=normalized.provider_region_code,
                 name=normalized.provider_region_name,
@@ -297,7 +297,7 @@ class OpinetFuelAdapter:
     def _call[T](self, dataset: str, operation: Callable[[], T]) -> T:
         try:
             return operation()
-        except OpinetAdapterError:
+        except OpinetSourceError:
             raise
         except Exception as exc:
             raise _map_opinet_exception(dataset, exc) from exc
@@ -307,7 +307,7 @@ def provider_product_code_for_fuel_type(fuel_type: FuelType) -> str:
     try:
         from opinet import fuel_type_to_product_code
     except ModuleNotFoundError as exc:
-        raise OpinetAdapterError(
+        raise OpinetSourceError(
             "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
@@ -319,19 +319,19 @@ def fuel_type_from_provider_product_code(provider_product_code: object) -> FuelT
     try:
         from opinet import product_code_to_fuel_type
     except ModuleNotFoundError as exc:
-        raise OpinetAdapterError(
+        raise OpinetSourceError(
             "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
         ) from exc
     try:
-        pyopinet_fuel_type = product_code_to_fuel_type(_value(provider_product_code))
+        opinet_fuel_type = product_code_to_fuel_type(_value(provider_product_code))
     except Exception as exc:
         if exc.__class__.__name__ == "OpinetInvalidParameterError":
             return None
         raise
     try:
-        return FuelType(str(pyopinet_fuel_type.value))
+        return FuelType(str(opinet_fuel_type.value))
     except ValueError:
         return None
 
@@ -345,12 +345,12 @@ def _normalize_average_price(row: _AveragePriceLike) -> NormalizedFuelAverage:
         provider_endpoint="avgAllPrice.do",
         provider_fuel_code=provider_fuel_code,
         provider_fuel_name=provider_fuel_name,
-        fuel_type=_tripmate_fuel_type_from_pyopinet(normalized.fuel_type),
+        fuel_type=_fuel_type_from_opinet(normalized.fuel_type),
         trade_date=normalized.trade_date,
         price_timestamp=normalized.price_datetime(),
         price=normalized.price,
         diff=normalized.diff,
-        pyopinet_payload=_payload_from_raw(
+        provider_payload=_payload_from_raw(
             normalized.raw,
             trade_date=normalized.trade_date.isoformat(),
             product_code=provider_fuel_code,
@@ -369,7 +369,7 @@ def _normalize_station(
 ) -> NormalizedFuelStation:
     normalized = row.to_normalized(endpoint=provider_endpoint)
     provider_fuel_code = normalized.provider_product_code or provider_fuel_code
-    fuel_type = _tripmate_fuel_type_from_pyopinet(normalized.fuel_type)
+    fuel_type = _fuel_type_from_opinet(normalized.fuel_type)
     if fuel_type is None:
         fuel_type = fuel_type_from_provider_product_code(provider_fuel_code)
     trade_datetime = normalized.trade_datetime()
@@ -391,7 +391,7 @@ def _normalize_station(
         lon=normalized.lon,
         lat=normalized.lat,
         distance_m=normalized.distance_m,
-        pyopinet_payload=_payload_from_raw(
+        provider_payload=_payload_from_raw(
             normalized.raw,
             uni_id=normalized.provider_station_id,
             name=normalized.provider_station_name,
@@ -416,18 +416,18 @@ def _value(value: object) -> str:
     return str(raw_value)
 
 
-def _tripmate_fuel_type_from_pyopinet(pyopinet_fuel_type: object) -> FuelType | None:
+def _fuel_type_from_opinet(opinet_fuel_type: object) -> FuelType | None:
     try:
-        return FuelType(_value(pyopinet_fuel_type))
+        return FuelType(_value(opinet_fuel_type))
     except ValueError:
         return None
 
 
-def _pyopinet_sort_order(sort: FuelStationSort) -> object:
+def _opinet_sort_order(sort: FuelStationSort) -> object:
     try:
         from opinet import SortOrder
     except ModuleNotFoundError as exc:
-        raise OpinetAdapterError(
+        raise OpinetSourceError(
             "python-opinet-api(opinet) dependency is not installed.",
             kind=OpinetFailureKind.CONFIGURATION,
             dataset="fuel",
@@ -444,7 +444,7 @@ def _payload_from_raw(raw: Mapping[str, object], **fallback: object) -> dict[str
     return payload
 
 
-def _map_opinet_exception(dataset: str, exc: Exception) -> OpinetAdapterError:
+def _map_opinet_exception(dataset: str, exc: Exception) -> OpinetSourceError:
     class_name = exc.__class__.__name__
     if class_name == "OpinetAuthError":
         kind = OpinetFailureKind.AUTH
@@ -458,9 +458,4 @@ def _map_opinet_exception(dataset: str, exc: Exception) -> OpinetAdapterError:
         kind = OpinetFailureKind.NETWORK
     else:
         kind = OpinetFailureKind.UPSTREAM
-    return OpinetAdapterError(str(exc), kind=kind, dataset=dataset)
-
-
-build_pyopinet_client = build_opinet_client
-build_pyopinet_fuel_adapter = build_opinet_fuel_adapter
-PyOpinetFuelAdapter = OpinetFuelAdapter
+    return OpinetSourceError(str(exc), kind=kind, dataset=dataset)

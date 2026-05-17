@@ -1,4 +1,4 @@
-# 아키텍처 기준선
+﻿# 아키텍처 기준선
 
 주소 체계, Juso/법정동코드/VWorld 경계 스키마, 다른 데이터셋과의 주소 매핑 기준은 `docs/architecture/address-schema.md`를 따른다.
 사용자, 이메일 인증, 여행 참여자, 여행 장소 스키마의 상세 기준안은 `docs/architecture/user-trip-schema.md`를 따른다.
@@ -13,7 +13,8 @@ OpiNet provider 지역코드와 Juso 시군구 코드의 매핑 기준은 `docs/
 기상청 추천 관광코스 스키마의 상세 기준은 `docs/architecture/kma-tour-course-schema.md`를 따른다.
 공공데이터포털 전국문화축제표준데이터 스키마는 `docs/architecture/public-cultural-festival-schema.md`를 따른다.
 한국천문연구원 날짜·천문 정보 설계는 `docs/architecture/kasi-calendar-schema.md`를 따른다.
-provider adapter 라이브러리 분리 기준은 `docs/architecture/provider-adapter-library.md`를 따른다.
+provider library 직접 사용 기준은 `docs/architecture/provider-library-direct-use.md`를 따른다.
+지도 feature 공통 DTO, source trace, provider canonical name, debug fixture replay 기준은 `docs/architecture/krtour-map-library.md`와 하부 라이브러리 `python-krtour-map` 문서를 따른다.
 지도 마커와 로그인 화면 디자인 기준은 `docs/architecture/map-marker-design.md`를 따른다.
 Google/Naver/Kakao 소셜 로그인 통합 기준은 `docs/integrations/social-login.md`와 `docs/decisions/20260508-social-login-provider-identity.md`를 따른다.
 TripMate MCP 도구 설계는 `docs/architecture/mcp-tools.md`를 따른다.
@@ -80,15 +81,17 @@ docs                # 문서, runbook, ADR, 실행 계획
 ## 주요 경계
 
 - 웹앱은 사용자 흐름, 지도 상호작용, Tailwind CSS 기반 화면 스타일링, PWA UX를 담당한다.
-- API는 인증, 인가, 여행 도메인 규칙, provider adapter, Telegram, Gemini 실행 요청을 담당한다.
+- API는 인증, 인가, 여행 도메인 규칙, provider library 직접 호출, Telegram, Gemini 실행 요청을 담당한다.
+- 지도 feature 계약과 provider 결과 정규화의 공통 타입은 `python-krtour-map`을 기준으로 두고, TripMate는 DB repository와 API 조립을 담당한다.
 - Postgres/PostGIS는 권위 있는 사용자/여행/장소/공간 데이터를 저장한다.
 - Dagster는 공공데이터와 외부 API 데이터를 수집하고 raw/serving 테이블을 갱신한다.
 - 외부 provider 원문 응답은 TTL 캐시에만 저장하고, UI와 도메인 로직은 내부 정규화 스키마를 사용한다.
-- OpiNet 유가 조회는 pyopinet `opinet` 패키지를 감싼 backend adapter에서 수행하고,
-  서비스/ETL 경계에는 TripMate 정규화 레코드만 전달한다.
-- KTO TourAPI 조회는 `visitkorea`의 `KrTourApiClient`, `TourApiHubClient`, typed `related_tour`, pagination helper, `Page.context`를 직접 사용한다. TripMate backend에는 KTO adapter/gateway 래퍼를 두지 않고, 새 endpoint별 typed model이 부족할 때만 `visitkorea`에 upstream한다.
-- 한국도로공사 OpenAPI 조회는 `pykex`의 `kex_openapi.KexClient`를 직접 사용한다. TripMate backend에는 한국도로공사 adapter/gateway 래퍼를 두지 않고, 부족한 휴게소/교통 endpoint나 typed model은 `pykex`에 upstream한다.
-- 기상청 단기/중기/특보 data.go.kr 조회와 DFS 격자 변환은 `pykma`의 `KmaClient`, `DataGoKrClient`, `wgs84_to_kma_grid`, `kma_grid_to_wgs84`, metadata/cache helper를 직접 사용한다. TripMate backend에는 KMA adapter/gateway 래퍼를 두지 않고, 부족한 endpoint별 typed model이나 pagination 편의 API는 `pykma`에 upstream한다.
+- OpiNet 유가 조회는 `python-opinet-api`의 `opinet` 공개 client를 직접 사용한다. TripMate 쪽 `app.etl.fuel.opinet_source`는 provider model을 DB 저장용 레코드로 옮기는 source 경계만 담당한다.
+- KTO TourAPI 조회는 `python-visitkorea-api`의 `KrTourApiClient`, `TourApiHubClient`, typed `related_tour`, pagination helper, `Page.context`를 직접 사용한다. 새 endpoint별 typed model이 부족할 때만 `python-visitkorea-api`에 upstream한다.
+- 한국도로공사 OpenAPI 조회는 `python-krex-api`의 `kex_openapi.KexClient`를 직접 사용한다. 부족한 휴게소/교통 endpoint나 typed model은 `python-krex-api`에 upstream한다.
+- 기상청 단기/중기/특보 data.go.kr 조회와 DFS 격자 변환은 `python-kma-api`의 `KmaClient`, `DataGoKrClient`, `wgs84_to_kma_grid`, `kma_grid_to_wgs84`, metadata/cache helper를 직접 사용한다. 부족한 endpoint별 typed model이나 pagination 편의 API는 `python-kma-api`에 upstream한다.
+- provider별 중간 계층은 만들지 않는다. 반복 수정을 줄여야 할 때는 앱에 우회 계층을 추가하지 않고 해당 라이브러리 공개 인터페이스를 빠르게 안정화한다. adapter/wrapper 증식은 코드 직관성과 유지보수성을 떨어뜨리므로 절대 지양하며, 계약이 바뀐 호출부는 감싸지 않고 관련 코드를 직접 수정한다.
+- feature DTO, source role, weather domain/style, fixture replay 같은 중복되기 쉬운 계약은 TripMate 문서에 상세 재정의하지 않고 `python-krtour-map` 쪽 canonical 문서를 링크한다.
 
 ## 데이터 원칙
 
@@ -114,7 +117,7 @@ docs                # 문서, runbook, ADR, 실행 계획
 
 - 인증: httpOnly cookie 기반 JWT access/refresh token을 사용한다. 이메일 인증은 필수이며 인증 메일은 Resend로 발송한다.
 - 소셜 로그인: Google/Naver/Kakao 버튼은 `/login`에만 추가하고, provider OAuth 결과는 `user_oauth_accounts` 연결 뒤 기존 JWT cookie 흐름으로 수렴시킨다.
-- 지도: Kakao JavaScript SDK 기반 지도 UI와 지도 클릭 장소 초안을 먼저 구현한다. Kakao Local API 검색 adapter는 `docs/data-sources.md`의 저장/캐시 정책과 API 계약을 먼저 확정한 뒤 추가한다.
+- 지도: Kakao JavaScript SDK 기반 지도 UI와 지도 클릭 장소 초안을 먼저 구현한다. Kakao Local API 검색은 `docs/data-sources.md`의 저장/캐시 정책과 API 계약을 먼저 확정한 뒤 직접 호출 경계로 추가한다.
 - Telegram: DB에는 `telegram_bot_token_ref`만 저장한다. 상세는 `docs/integrations/telegram.md`를 따른다.
 - Gemini: 사용자 개인 키를 입력받는다. 상세는 `docs/integrations/gemini.md`를 따른다.
 

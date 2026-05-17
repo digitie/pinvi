@@ -56,9 +56,11 @@ from app.models import (
     KmaRecommendedTourCourse,
     MapFeature,
     MapFeatureMedia,
+    MapFeatureOverride,
     MapFeatureProviderRef,
     MapFeatureSourceLink,
     MapFeatureTag,
+    MapFeatureWeatherValue,
     MapFeatureWebLink,
     MediaAsset,
     NoticeDetail,
@@ -69,6 +71,7 @@ from app.models import (
     PlaceDetail,
     PricePoint,
     PriceValue,
+    ProviderSyncState,
     RefreshToken,
     RegionBoundaryImportBatch,
     RegionRawVWorldBoundary,
@@ -155,9 +158,11 @@ def test_initial_core_tables_are_registered() -> None:
         FeatureMappingCandidate.__tablename__,
         MapFeature.__tablename__,
         MapFeatureMedia.__tablename__,
+        MapFeatureOverride.__tablename__,
         MapFeatureProviderRef.__tablename__,
         MapFeatureSourceLink.__tablename__,
         MapFeatureTag.__tablename__,
+        MapFeatureWeatherValue.__tablename__,
         MapFeatureWebLink.__tablename__,
         MediaAsset.__tablename__,
         NoticeDetail.__tablename__,
@@ -166,6 +171,7 @@ def test_initial_core_tables_are_registered() -> None:
         OceanActivityIndexSourceRecord.__tablename__,
         PlaceCategory.__tablename__,
         PlaceDetail.__tablename__,
+        ProviderSyncState.__tablename__,
         PricePoint.__tablename__,
         PriceValue.__tablename__,
         RefreshToken.__tablename__,
@@ -285,6 +291,19 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
         EmailQueue.__table__.c.queued_at.type,
         EmailQueue.__table__.c.sent_at.type,
         AdminAuditLog.__table__.c.occurred_at.type,
+        MapFeatureOverride.__table__.c.reviewed_at.type,
+        MapFeatureOverride.__table__.c.created_at.type,
+        MapFeatureOverride.__table__.c.updated_at.type,
+        MapFeatureWeatherValue.__table__.c.issued_at.type,
+        MapFeatureWeatherValue.__table__.c.valid_at.type,
+        MapFeatureWeatherValue.__table__.c.observed_at.type,
+        MapFeatureWeatherValue.__table__.c.collected_at.type,
+        ProviderSyncState.__table__.c.last_success_at.type,
+        ProviderSyncState.__table__.c.last_attempt_at.type,
+        ProviderSyncState.__table__.c.next_run_after.type,
+        ProviderSyncState.__table__.c.last_error_at.type,
+        ProviderSyncState.__table__.c.created_at.type,
+        ProviderSyncState.__table__.c.updated_at.type,
     ]
 
     assert isinstance(started_at_type, DateTime)
@@ -353,9 +372,11 @@ def test_etl_datetime_columns_are_timezone_aware() -> None:
 def test_nullable_unique_constraints_use_postgresql_nulls_not_distinct() -> None:
     weather_mapping_table = WeatherMidRegionAddressMapping.__table__
     tour_weather_table = TourCourseServingKmaSpotWeather.__table__
+    map_feature_weather_table = MapFeatureWeatherValue.__table__
 
     assert isinstance(weather_mapping_table, Table)
     assert isinstance(tour_weather_table, Table)
+    assert isinstance(map_feature_weather_table, Table)
 
     weather_mapping_constraint = next(
         constraint
@@ -369,9 +390,18 @@ def test_nullable_unique_constraints_use_postgresql_nulls_not_distinct() -> None
         if isinstance(constraint, UniqueConstraint)
         and constraint.name == "uq_tcskw_course_spot_time_category"
     )
+    map_feature_weather_constraint = next(
+        constraint
+        for constraint in map_feature_weather_table.constraints
+        if isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_map_feature_weather_values_feature_provider_time"
+    )
 
     assert weather_mapping_constraint.dialect_options["postgresql"]["nulls_not_distinct"] is True
     assert tour_weather_constraint.dialect_options["postgresql"]["nulls_not_distinct"] is True
+    assert (
+        map_feature_weather_constraint.dialect_options["postgresql"]["nulls_not_distinct"] is True
+    )
 
 
 def test_geometry_columns_have_explicit_srid_and_gist_index() -> None:
