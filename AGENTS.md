@@ -43,7 +43,7 @@
 - 아키텍처: `docs/architecture.md`, `docs/decisions/`
 - 데이터 소스/저장 정책: `docs/data-sources.md`
 - Telegram/Gemini: `docs/integrations/telegram.md`, `docs/integrations/gemini.md`
-- 로컬 개발/운영: `docs/runbooks/local-dev.md`, `docs/runbooks/etl.md`
+- 로컬 개발/운영: `docs/runbooks/local-dev.md`, `docs/runbooks/wsl-ext4-workflow.md`, `docs/runbooks/etl.md`
 - API 계약: `docs/api/*.md`
 
 ## Skill 라우팅
@@ -62,10 +62,11 @@
 - 여러 파일, 마이그레이션, 서비스 경계를 건드리면 `docs/execplan/<task-name>.md`를 작성 또는 갱신한다.
 - 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경(WSL2/Windows)을 보고한다.
 - 유사한 실수가 반복되면 원인과 재발방지 기준을 관련 문서/runbook/skill에 남긴다.
-- Docker, Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic 검증은 WSL2에서 실행한다.
-- 검색은 PowerShell `rg.exe`를 사용하지 않는다. 권한 문제와 WindowsApps 경로 오염을 피하기 위해 `wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg ..."`처럼 WSL native `rg`만 사용한다.
-- WSL2 테스트/검증은 NTFS 경로(`/mnt/f/dev/tripmate`)에서 직접 실행하지 않고 WSL 내부 볼륨의 미러(`~/tripmate-workspaces/tripmate`)에서 실행한다.
-- 테스트/검증 명령 전에는 현재 프로젝트 디렉토리의 변경을 WSL 미러로 동기화하고, 명령이 끝날 때마다 WSL 미러의 변경을 현재 프로젝트 디렉토리로 다시 복사한다.
+- Docker, Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic 검증은 WSL2 ext4 원본 작업본(`/home/digitie/dev/tripmate`)에서 실행한다.
+- `F:\dev\tripmate`와 `/mnt/f/dev/tripmate`는 Windows 도구 확인을 위한 export 경로로만 사용하고 Git/test/build/lint/Docker/Dagster 작업 디렉토리로 쓰지 않는다.
+- 검색은 PowerShell `rg.exe`를 사용하지 않는다. 권한 문제와 WindowsApps 경로 오염을 피하기 위해 `wsl.exe -e bash -lc "cd ~/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg ..."`처럼 WSL native `rg`만 사용한다.
+- 의미 있는 변경 후 Windows 경로에서 확인이 필요하면 `docs/runbooks/wsl-ext4-workflow.md`의 export 절차로 ext4 원본을 NTFS로 내보낸다. 사용자 제공 파일을 가져오는 경우를 제외하고 NTFS에서 ext4로 역동기화하지 않는다.
+- Git stage/commit/push는 ext4 원본 작업본 기준으로 수행한다. WSL Git push가 credential 문제를 일으키면 Windows Git을 UNC ext4 경로(`\\wsl.localhost\Ubuntu\home\digitie\dev\tripmate`)에 대해 실행한다.
 - Windows PowerShell로 한국어 문서를 읽을 때는 깨짐 방지를 위해 `Get-Content -Encoding UTF8` 또는 동등한 UTF-8 명시 옵션을 사용한다.
 - 보안/인증/DB/공간/Dagster/Telegram/외부 API/PWA/Gemini 변경은 관련 문서와 모듈 경계를 먼저 읽는다.
 - 제품 의사결정이 저장소에서 추론 불가능할 때만 멈추고 묻고, 그 외에는 안전한 가정을 문서에 남긴다.

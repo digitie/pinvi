@@ -1,4 +1,4 @@
-﻿# visitkorea 기반 TourAPI 연동 실행 계획
+# visitkorea 기반 TourAPI 연동 실행 계획
 
 ## 목표
 
@@ -53,7 +53,7 @@ visitkorea 저장소에서 작업해줘.
 
 ## 검증 계획
 
-- WSL2에서 `cd /mnt/f/dev/tripmate/apps/api && uv sync --group dev`
+- WSL2에서 `cd ~/dev/tripmate/apps/api && uv sync --group dev`
 - WSL2에서 `uv run ruff check .`
 - WSL2에서 `uv run ruff format --check .`
 - WSL2에서 `uv run mypy .`

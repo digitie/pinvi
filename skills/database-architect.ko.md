@@ -84,14 +84,14 @@ DB 관련 변경에는 최소한 다음 중 해당 항목을 추가하거나 갱
 
 권장 명령:
 
-아래 명령은 Windows PowerShell에서 실행하더라도 WSL2를 감싸는 형태를 우선한다. 이미 WSL2 shell 안에 있다면 `wsl.exe -e bash -lc` 부분을 빼고 같은 작업 디렉터리에서 실행한다.
+아래 명령은 WSL2 ext4 원본 작업본(`~/dev/tripmate`) 기준으로 실행한다. Windows PowerShell에서 실행하더라도 WSL2를 감싸는 형태를 우선한다. 이미 WSL2 shell 안에 있다면 `wsl.exe -e bash -lc` 부분을 빼고 같은 작업 디렉터리에서 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/pytest"
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/ruff check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/ruff format --check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/mypy ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/pytest"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/alembic upgrade head"
 ```
 
 ## 금지 사항

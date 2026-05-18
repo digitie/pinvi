@@ -44,7 +44,7 @@
 - 프로젝트 문서는 한국어로 작성한다.
 - 코드 식별자, 테이블명, 컬럼명, 명령어, API endpoint, provider 고유 명칭처럼 원문 보존이 필요한 기술 용어만 영어를 허용한다.
 - 실제 명령과 경로를 넣는다.
-- Docker, backend test, Alembic, Dagster 관련 명령은 WSL2 기준 명령으로 적고, 테스트/검증 예시는 WSL 내부 미러(`~/tripmate-workspaces/tripmate`) 실행과 명령 전후 동기화를 기본으로 적는다.
+- Docker, backend test, Alembic, Dagster 관련 명령은 WSL2 ext4 원본 작업본(`~/dev/tripmate`) 기준으로 적는다. Windows 경로가 필요할 때만 `docs/runbooks/wsl-ext4-workflow.md`의 NTFS export 절차를 함께 적는다.
 - 가정을 명시한다.
 - 배포된 기능을 TODO만 적고 끝내지 않는다.
 - 제약과 근사 동작을 숨기지 않는다.

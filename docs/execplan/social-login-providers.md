@@ -1,4 +1,4 @@
-﻿# Google/Naver/Kakao 소셜 로그인 실행 계획
+# Google/Naver/Kakao 소셜 로그인 실행 계획
 
 ## 상태
 
@@ -264,13 +264,13 @@ TODO:
 권장 명령:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run lint"
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run typecheck"
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run pytest"
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run alembic upgrade head"
 ```
 
 ### Phase H. 문서와 운영

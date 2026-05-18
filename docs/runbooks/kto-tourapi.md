@@ -1,4 +1,4 @@
-﻿# KTO TourAPI 운영 Runbook
+# KTO TourAPI 운영 Runbook
 
 ## 목적
 
@@ -19,7 +19,7 @@ TRIPMATE_KTO_MAX_RETRIES=2
 의존성은 WSL2에서 설치한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pip install -e ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pip install -e ."
 ```
 
 ## 검증
@@ -27,16 +27,16 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate
 KTO 계약 테스트는 실제 외부 API를 호출하지 않는다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_kto_visitkorea.py"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q tests/test_kto_visitkorea.py"
 ```
 
 전체 backend 검사:
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && ruff check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && ruff format --check ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && mypy ."
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q"
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && ruff check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && ruff format --check ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && mypy ."
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && pytest -q"
 ```
 
 ## 수동 smoke 예시
@@ -44,7 +44,7 @@ wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate
 운영 키가 있는 로컬 환경에서만 실행한다. 출력에는 인증키가 포함되지 않게 한다.
 
 ```bash
-wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && . .venv-wsl/bin/activate && python - <<'PY'
+wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && . .venv-wsl/bin/activate && python - <<'PY'
 from app.core.kto import build_kto_kor_client
 from visitkorea import Wgs84Coordinate
 
