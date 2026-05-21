@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
+from app.api.routes.notice import router as notice_router
 from app.api.routes.public import router as public_router
 from app.api.routes.regions import router as regions_router
 from app.api.routes.storage import router as storage_router
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(health_router)
+    app.include_router(notice_router)
     app.include_router(public_router)
     app.include_router(regions_router)
     app.include_router(storage_router)

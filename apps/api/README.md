@@ -88,6 +88,19 @@ TRIPMATE_KEX_RETRY_BACKOFF_SECONDS=0.5
 기존 로컬 `.env`의 `TRIPMATE_EXPRESSWAY_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`도
 fallback으로 읽는다.
 
+`python-krtour-map`은 별도 REST 서비스가 아니라 같은 프로세스에서 import하는 feature 라이브러리다.
+TripMate는 `krtour_map.*` 함수, DTO, job spec, DB helper를 직접 호출하고 base URL/OpenAPI client를
+만들지 않는다. TripMate 제품 DB에는 사용자 여행, 공지 plan/poi, 복사된 POI snapshot 같은 앱 도메인만
+저장한다.
+
+관리자 공지 plan/poi:
+
+- `notice_plans`, `notice_pois`는 국가유산투어, 수목원 투어, 추천관광지100선 같은 관리자 추천 원본이다.
+- 생성/수정/삭제는 `/admin/notice-plans` 관리자 API에서만 가능하다.
+- 일반 사용자는 published 공지를 `/notice-plans`에서 조회하고, 전체 또는 선택 POI를 자신의 여행으로 복사한다.
+- `starts_on`/`ends_on`은 행사 날짜다. 둘 다 없으면 기간 없는 공지이며, 복사된 `trips.start_date/end_date`도
+  `NULL`로 유지한다.
+
 Run the API:
 
 ```bash

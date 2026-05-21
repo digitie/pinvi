@@ -647,10 +647,9 @@ def _create_trip(db: Session, values: Mapping[str, JsonValue]) -> Trip:
     user = db.get(User, user_id)
     if user is None:
         raise AdminEntityValidationError("여행 소유 사용자를 찾을 수 없다.")
-    start_date = _require_date(values, "start_date")
-    end_date = _require_date(values, "end_date")
-    if end_date < start_date:
-        raise AdminEntityValidationError("여행 종료일은 시작일보다 빠를 수 없다.")
+    start_date = _optional_date(values, "start_date")
+    end_date = _optional_date(values, "end_date")
+    _validate_trip_period(start_date, end_date)
     _validate_trip_span(start_date, end_date)
     leader_id = _optional_uuid(values, "leader_id") or user_id
     trip = Trip(
@@ -690,11 +689,10 @@ def _update_trip(db: Session, item_id: str, values: Mapping[str, JsonValue]) -> 
     if "destination" in values:
         trip.destination = _require_str(values, "destination", max_length=120)
     if "start_date" in values:
-        trip.start_date = _require_date(values, "start_date")
+        trip.start_date = _optional_date(values, "start_date")
     if "end_date" in values:
-        trip.end_date = _require_date(values, "end_date")
-    if trip.end_date < trip.start_date:
-        raise AdminEntityValidationError("여행 종료일은 시작일보다 빠를 수 없다.")
+        trip.end_date = _optional_date(values, "end_date")
+    _validate_trip_period(trip.start_date, trip.end_date)
     _validate_trip_span(trip.start_date, trip.end_date)
     if "fuel_types" in values:
         trip.fuel_types = _string_list(values, "fuel_types")
@@ -876,7 +874,8 @@ def _trip_item(db: Session, trip: Trip) -> AdminEntityItemData:
     user = db.get(User, trip.user_id)
     day_count = _count_rows(db, select(TripDay).where(TripDay.trip_id == trip.id))
     poi_count = _count_rows(db, select(TripPoi).where(TripPoi.trip_id == trip.id))
-    subtitle = f"{trip.destination} / {trip.start_date.isoformat()}~{trip.end_date.isoformat()}"
+    period = _trip_period_label(trip)
+    subtitle = f"{trip.destination} / {period}"
     return {
         "entity": "trips",
         "id": str(trip.id),
@@ -891,8 +890,8 @@ def _trip_item(db: Session, trip: Trip) -> AdminEntityItemData:
             "title": trip.title,
             "name": trip.name,
             "destination": trip.destination,
-            "start_date": trip.start_date.isoformat(),
-            "end_date": trip.end_date.isoformat(),
+            "start_date": trip.start_date.isoformat() if trip.start_date else None,
+            "end_date": trip.end_date.isoformat() if trip.end_date else None,
             "fuel_types": _json_value(trip.fuel_types or []),
             "planning_status": trip.planning_status,
             "day_count": day_count,
@@ -1018,7 +1017,10 @@ def _ensure_trip_days(db: Session, trip: Trip) -> None:
     existing = {
         day.day_index for day in db.scalars(select(TripDay).where(TripDay.trip_id == trip.id)).all()
     }
-    day_count = (trip.end_date - trip.start_date).days + 1
+    if trip.start_date is None or trip.end_date is None:
+        day_count = 1
+    else:
+        day_count = (trip.end_date - trip.start_date).days + 1
     for offset in range(day_count):
         day_index = offset + 1
         if day_index in existing:
@@ -1027,13 +1029,22 @@ def _ensure_trip_days(db: Session, trip: Trip) -> None:
             TripDay(
                 trip_id=trip.id,
                 day_index=day_index,
-                date=trip.start_date + timedelta(days=offset),
+                date=trip.start_date + timedelta(days=offset) if trip.start_date else None,
             )
         )
     db.flush()
 
 
-def _validate_trip_span(start_date: date, end_date: date) -> None:
+def _validate_trip_period(start_date: date | None, end_date: date | None) -> None:
+    if (start_date is None) != (end_date is None):
+        raise AdminEntityValidationError("여행 시작일과 종료일은 둘 다 있거나 둘 다 없어야 한다.")
+    if start_date is not None and end_date is not None and end_date < start_date:
+        raise AdminEntityValidationError("여행 종료일은 시작일보다 빠를 수 없다.")
+
+
+def _validate_trip_span(start_date: date | None, end_date: date | None) -> None:
+    if start_date is None or end_date is None:
+        return
     if (end_date - start_date).days + 1 > MAX_TRIP_DAY_SPAN:
         raise AdminEntityValidationError("관리자 테스트 여행은 최대 31일까지 만들 수 있다.")
 
@@ -1125,6 +1136,12 @@ def _iso(value: object | None) -> str | None:
     return str(value)
 
 
+def _trip_period_label(trip: Trip) -> str:
+    if trip.start_date is None or trip.end_date is None:
+        return "기간 없음"
+    return f"{trip.start_date.isoformat()}~{trip.end_date.isoformat()}"
+
+
 def _decimal_text(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
@@ -1203,9 +1220,16 @@ def _parse_uuid(value: str, field_name: str) -> UUID:
 
 
 def _require_date(values: Mapping[str, JsonValue], key: str) -> date:
-    value = _optional_str(values, key, max_length=10)
+    value = _optional_date(values, key)
     if value is None:
         raise AdminEntityValidationError(f"{key} 값이 필요하다.")
+    return value
+
+
+def _optional_date(values: Mapping[str, JsonValue], key: str) -> date | None:
+    value = _optional_str(values, key, max_length=10)
+    if value is None:
+        return None
     try:
         return date.fromisoformat(value)
     except ValueError as exc:

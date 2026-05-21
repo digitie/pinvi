@@ -88,7 +88,16 @@ from app.models.tour import (
     TourRawPublicCulturalFestival,
     TourServingPublicCulturalFestival,
 )
-from app.models.trip import Trip, TripDay, TripMember, TripPlanItem, TripPoi, TripShareToken
+from app.models.trip import (
+    NoticePlan,
+    NoticePoi,
+    Trip,
+    TripDay,
+    TripMember,
+    TripPlanItem,
+    TripPoi,
+    TripShareToken,
+)
 from app.models.user import EmailVerificationToken, User, UserConsent
 from app.models.weather import (
     AirQualityRawForecast,
@@ -158,6 +167,8 @@ __all__ = [
     "MapFeatureWebLink",
     "MediaAsset",
     "NoticeDetail",
+    "NoticePlan",
+    "NoticePoi",
     "OutdoorFeatureProfile",
     "OceanActivityIndexForecast",
     "OceanActivityIndexLocation",

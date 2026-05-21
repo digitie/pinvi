@@ -8,9 +8,16 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.routes.notice import (
+    _notice_pois,
+    _pois_by_plan,
+    _to_notice_plan_response,
+    _to_notice_poi_response,
+)
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.mixins import kst_now
+from app.models.trip import NoticePlan, NoticePoi
 from app.models.user import User
 from app.schemas.admin import (
     AdminDatasetListResponse,
@@ -27,6 +34,15 @@ from app.schemas.admin import (
     AdminUpdateUserRequest,
     AdminUserListResponse,
     AdminUserResponse,
+)
+from app.schemas.notice import (
+    AdminNoticePlanCreate,
+    AdminNoticePlanUpdate,
+    AdminNoticePoiCreate,
+    AdminNoticePoiUpdate,
+    NoticePlanListResponse,
+    NoticePlanResponse,
+    NoticePoiResponse,
 )
 from app.services.admin_auth import (
     authenticate_admin,
@@ -74,6 +90,209 @@ def require_admin_user(
             detail="관리자 로그인이 필요하다.",
         )
     return user
+
+
+@router.get("/notice-plans", response_model=NoticePlanListResponse)
+def list_admin_notice_plans(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+    category: str | None = Query(default=None, max_length=80),
+    published: bool | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> NoticePlanListResponse:
+    query = select(NoticePlan).where(NoticePlan.deleted_at.is_(None))
+    if category:
+        query = query.where(NoticePlan.category == category)
+    if published is not None:
+        query = query.where(NoticePlan.is_published.is_(published))
+
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    plans = db.scalars(
+        query.order_by(NoticePlan.updated_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    ).all()
+    pois_by_plan = _pois_by_plan(db, [plan.id for plan in plans])
+    return NoticePlanListResponse(
+        items=[_to_notice_plan_response(plan, pois_by_plan.get(plan.id, [])) for plan in plans],
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/notice-plans",
+    response_model=NoticePlanResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_admin_notice_plan(
+    payload: AdminNoticePlanCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> NoticePlanResponse:
+    _ensure_notice_slug_available(db, payload.slug)
+    plan = NoticePlan(
+        slug=payload.slug,
+        title=payload.title,
+        category=payload.category,
+        summary=payload.summary,
+        source_name=payload.source_name,
+        destination=payload.destination,
+        starts_on=payload.starts_on,
+        ends_on=payload.ends_on,
+        is_published=payload.is_published,
+        created_by_admin_id=current_user.id,
+        updated_by_admin_id=current_user.id,
+        version=1,
+    )
+    db.add(plan)
+    db.flush()
+    pois = [_notice_poi_from_payload(plan.id, poi) for poi in payload.pois]
+    for poi in pois:
+        db.add(poi)
+    db.commit()
+    return _to_notice_plan_response(plan, pois)
+
+
+@router.get("/notice-plans/{plan_id}", response_model=NoticePlanResponse)
+def get_admin_notice_plan(
+    plan_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+) -> NoticePlanResponse:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    return _to_notice_plan_response(plan, _notice_pois(db, plan.id))
+
+
+@router.patch("/notice-plans/{plan_id}", response_model=NoticePlanResponse)
+def update_admin_notice_plan(
+    plan_id: UUID,
+    payload: AdminNoticePlanUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> NoticePlanResponse:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    fields = payload.model_fields_set
+    starts_on = payload.starts_on if "starts_on" in fields else plan.starts_on
+    ends_on = payload.ends_on if "ends_on" in fields else plan.ends_on
+    _validate_notice_period(starts_on, ends_on)
+
+    changed = False
+    for field in (
+        "slug",
+        "title",
+        "category",
+        "summary",
+        "source_name",
+        "destination",
+        "starts_on",
+        "ends_on",
+        "is_published",
+    ):
+        if field not in fields:
+            continue
+        value = getattr(payload, field)
+        if field == "slug" and value is not None:
+            _ensure_notice_slug_available(db, value, exclude_plan_id=plan.id)
+        if getattr(plan, field) != value:
+            setattr(plan, field, value)
+            changed = True
+    if changed:
+        _touch_notice_plan(plan, current_user.id)
+
+    db.commit()
+    return _to_notice_plan_response(plan, _notice_pois(db, plan.id))
+
+
+@router.delete("/notice-plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_notice_plan(
+    plan_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> None:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    now = kst_now()
+    plan.deleted_at = now
+    plan.updated_at = now
+    plan.updated_by_admin_id = current_user.id
+    plan.version += 1
+    db.commit()
+
+
+@router.post(
+    "/notice-plans/{plan_id}/pois",
+    response_model=NoticePoiResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_admin_notice_poi(
+    plan_id: UUID,
+    payload: AdminNoticePoiCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> NoticePoiResponse:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    poi = _notice_poi_from_payload(plan.id, payload)
+    db.add(poi)
+    _touch_notice_plan(plan, current_user.id)
+    db.commit()
+    return _to_notice_poi_response(poi)
+
+
+@router.patch("/notice-plans/{plan_id}/pois/{poi_id}", response_model=NoticePoiResponse)
+def update_admin_notice_poi(
+    plan_id: UUID,
+    poi_id: UUID,
+    payload: AdminNoticePoiUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> NoticePoiResponse:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    poi = _admin_notice_poi_or_404(db, plan.id, poi_id)
+    changed = False
+    for field in (
+        "day_index",
+        "sort_order",
+        "feature_id",
+        "map_feature_id",
+        "snapshot",
+        "memo",
+        "budget",
+        "currency",
+        "user_url",
+        "custom_marker_color",
+        "custom_marker_icon",
+    ):
+        if field not in payload.model_fields_set:
+            continue
+        value = getattr(payload, field)
+        if getattr(poi, field) != value:
+            setattr(poi, field, value)
+            changed = True
+    if changed:
+        poi.version += 1
+        poi.updated_at = kst_now()
+        _touch_notice_plan(plan, current_user.id)
+    db.commit()
+    return _to_notice_poi_response(poi)
+
+
+@router.delete("/notice-plans/{plan_id}/pois/{poi_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_notice_poi(
+    plan_id: UUID,
+    poi_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> None:
+    plan = _admin_notice_plan_or_404(db, plan_id)
+    poi = _admin_notice_poi_or_404(db, plan.id, poi_id)
+    now = kst_now()
+    poi.deleted_at = now
+    poi.updated_at = now
+    poi.version += 1
+    _touch_notice_plan(plan, current_user.id)
+    db.commit()
 
 
 @router.post("/auth/login", response_model=AdminLoginResponse)
@@ -433,6 +652,73 @@ def _to_admin_user_response(user: User) -> AdminUserResponse:
         is_admin=user.is_admin,
         is_privileged=user.is_privileged,
     )
+
+
+def _admin_notice_plan_or_404(db: Session, plan_id: UUID) -> NoticePlan:
+    plan = db.get(NoticePlan, plan_id)
+    if plan is None or plan.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="공지 계획을 찾을 수 없다.")
+    return plan
+
+
+def _admin_notice_poi_or_404(db: Session, plan_id: UUID, poi_id: UUID) -> NoticePoi:
+    poi = db.get(NoticePoi, poi_id)
+    if poi is None or poi.notice_plan_id != plan_id or poi.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="공지 POI를 찾을 수 없다.")
+    return poi
+
+
+def _ensure_notice_slug_available(
+    db: Session,
+    slug: str,
+    *,
+    exclude_plan_id: UUID | None = None,
+) -> None:
+    query = select(NoticePlan.id).where(
+        NoticePlan.slug == slug,
+        NoticePlan.deleted_at.is_(None),
+    )
+    if exclude_plan_id is not None:
+        query = query.where(NoticePlan.id != exclude_plan_id)
+    if db.scalar(query) is not None:
+        raise HTTPException(status_code=409, detail="이미 사용 중인 공지 계획 slug다.")
+
+
+def _notice_poi_from_payload(plan_id: UUID, payload: AdminNoticePoiCreate) -> NoticePoi:
+    return NoticePoi(
+        notice_plan_id=plan_id,
+        day_index=payload.day_index,
+        sort_order=payload.sort_order,
+        feature_id=payload.feature_id,
+        map_feature_id=payload.map_feature_id,
+        snapshot=payload.snapshot,
+        memo=payload.memo,
+        budget=payload.budget,
+        currency=payload.currency,
+        user_url=payload.user_url,
+        custom_marker_color=payload.custom_marker_color,
+        custom_marker_icon=payload.custom_marker_icon,
+        version=1,
+    )
+
+
+def _touch_notice_plan(plan: NoticePlan, admin_id: UUID) -> None:
+    plan.updated_by_admin_id = admin_id
+    plan.updated_at = kst_now()
+    plan.version += 1
+
+
+def _validate_notice_period(starts_on, ends_on) -> None:
+    if (starts_on is None) != (ends_on is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="starts_on과 ends_on은 둘 다 있거나 둘 다 없어야 한다.",
+        )
+    if starts_on is not None and ends_on is not None and ends_on < starts_on:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="공지 계획 종료일은 시작일보다 빠를 수 없다.",
+        )
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:

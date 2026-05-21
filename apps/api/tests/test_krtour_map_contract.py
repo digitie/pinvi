@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from krtour_map import (
     PricePoint,
     PriceValue,
-    ProviderSyncState as KrtourProviderSyncState,
     WeatherValue,
     make_source_record_key,
+)
+from krtour_map import (
+    ProviderSyncState as KrtourProviderSyncState,
 )
 from sqlalchemy import CheckConstraint
 
@@ -22,6 +25,7 @@ from app.core.krtour_map_contract import (
 )
 from app.models.etl import ProviderSyncState
 from app.models.place import MapFeature, MapFeatureSourceLink, SourceRecord
+from app.services.krtour_map import feature_to_tripmate_snapshot
 from app.services.krtour_map_contract import (
     map_feature_to_krtour_feature,
     provider_sync_state_to_krtour_state,
@@ -215,6 +219,43 @@ def test_feature_db_initializes_from_tripmate_settings() -> None:
         assert "feature_weather_values" in krtour_map_feature_metadata().tables
     finally:
         context.dispose()
+
+
+def test_tripmate_krtour_map_adapter_is_function_based_not_rest_client() -> None:
+    adapter = Path("app/services/krtour_map.py").read_text(encoding="utf-8")
+    docs = Path("../../docs/architecture/krtour-map-library.md").read_text(encoding="utf-8")
+
+    assert "get_feature(feature_id)" in docs
+    assert "REST API" in docs
+    assert "base_url" not in adapter
+    assert "requests" not in adapter
+    assert "aiohttp" not in adapter
+    assert "httpx" not in adapter
+
+
+def test_krtour_map_feature_snapshot_conversion_uses_dto_shape() -> None:
+    class FeatureDto:
+        def model_dump(self, mode: str) -> dict:
+            assert mode == "json"
+            return {
+                "feature_id": "heritage:seoul:1",
+                "name": "국가유산",
+                "category": "heritage",
+                "coord": {"longitude": 126.978, "latitude": 37.566},
+                "address": {"road_address": "서울특별시"},
+                "marker_icon": "museum",
+                "marker_color": "#4466aa",
+                "urls": {"homepage": "https://example.test"},
+                "detail": {"kind": "tour"},
+                "raw_refs": [{"provider": "python-krheritage-api"}],
+            }
+
+    snapshot = feature_to_tripmate_snapshot(FeatureDto())
+
+    assert snapshot["source"] == "python-krtour-map"
+    assert snapshot["feature_id"] == "heritage:seoul:1"
+    assert snapshot["longitude"] == 126.978
+    assert snapshot["raw_refs"] == [{"provider": "python-krheritage-api"}]
 
 
 def _check_constraint_sql(model: type[object], constraint_name: str) -> str:

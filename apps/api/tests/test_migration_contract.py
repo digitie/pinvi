@@ -233,6 +233,19 @@ def test_user_registration_migration_adds_profile_and_email_tokens() -> None:
     assert "plain_token" not in migration
 
 
+def test_notice_plan_migration_adds_admin_templates_and_periodless_trips() -> None:
+    migration = Path("alembic/versions/20260521_0027_notice_plans.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "notice_plans" in migration
+    assert "notice_pois" in migration
+    assert "start_date IS NULL AND end_date IS NULL" in migration
+    assert "op.alter_column(\"trip_days\", \"date\"" in migration
+    assert "fk_notice_plans_created_by_admin_id" in migration
+    assert "fk_notice_pois_map_feature_id" in migration
+
+
 def test_public_cultural_festival_migration_keeps_raw_serving_and_address_keys() -> None:
     migration = Path("alembic/versions/20260428_0017_public_cultural_festival.py").read_text(
         encoding="utf-8"

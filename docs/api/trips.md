@@ -12,6 +12,22 @@
 - 관리자는 운영 확인 목적상 추가할 수 있다.
 - 여행 참여자/편집자 권한 테이블은 아직 구현 전이므로, owner/editor/member 세부 인가는 후속 구현에서 `trip_members` 기준으로 확장한다.
 
+## 관리자 공지 plan/poi 복사
+
+관리자가 만든 추천 코스 원본은 `/admin/notice-plans`에서만 생성/수정/삭제한다. 일반 사용자는
+published 공지를 아래 endpoint로 조회하고 자신의 여행으로 복사한다.
+
+- `GET /notice-plans`
+- `GET /notice-plans/{plan_id}`
+- `POST /notice-plans/{plan_id}/copy`
+
+복사 요청에서 `poi_ids`를 생략하면 전체 POI를 복사하고, 지정하면 선택한 POI만 복사한다. `target_trip_id`를
+생략하면 새 여행을 만든다. 공지 plan에 `starts_on`/`ends_on`이 없으면 새 여행도 기간 없음으로 생성되고
+`trip_days.date`는 `NULL`인 day 1부터 시작한다.
+
+`python-krtour-map` feature 참조는 REST 호출이 아니라 라이브러리 함수/DTO 경계로 다룬다. TripMate는
+공지/여행 POI에 안정적인 `feature_id`와 복사 시점 snapshot을 저장한다.
+
 ## `POST /trips/{trip_id}/days/{trip_day_id}/items`
 
 여행 날짜에 일정 항목을 추가한다. 이 endpoint는 지도 객체, 축제, 향후 둘레길/드라이브 코스 같은 리소스를 같은 일정 타임라인에 올릴 수 있도록 `resource_type`을 둔다.
@@ -53,7 +69,7 @@
 | --- | --- | --- |
 | `resource_type` | Y | `place`, `event`, `route`, `area`, `notice`, `festival`, `trail`, `scenic_road`, `custom` |
 | `sort_order` | N | 날짜 안 표시 순서. 생략하면 마지막 다음 순서로 자동 부여 |
-| `map_feature_id` | 조건부 | `resource_type`이 `place`, `event`, `route`, `area`, `notice`일 때 `python-krtour-map` feature id |
+| `map_feature_id` | 조건부 | `resource_type`이 `place`, `event`, `route`, `area`, `notice`일 때 TripMate `map_features.id` |
 | `festival_id` | 조건부 | `resource_type=festival`일 때 `tour_serving_public_cultural_festival.id` |
 | `resource_key` | 조건부 | 아직 전용 테이블이 없는 `trail`, `scenic_road`, `route` 같은 미래 리소스의 임시 key |
 | `title_snapshot` | 조건부 | 미래 리소스 또는 직접 입력 항목에는 필수. 장소/축제는 원천 이름을 기본값으로 사용 |
@@ -99,7 +115,7 @@
 현재 테이블은 `trip_plan_items`다.
 
 - `trip_plan_items.trip_day_id -> trip_days.id`
-- `trip_plan_items.map_feature_id -> python-krtour-map features.feature_id`
+- `trip_plan_items.map_feature_id -> map_features.id`
 - `trip_plan_items.festival_id -> tour_serving_public_cultural_festival.id`
 
 지도 객체와 축제 FK는 서로 동시에 채우지 않는다. 나중에 축제 외에도 둘레길, 드라이브 코스, 경로형 데이터가 추가될 수 있으므로, 일정 타임라인은 `trip_place`처럼 장소 전용 이름이 아니라 `trip_plan_items`로 둔다.

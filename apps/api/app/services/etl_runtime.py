@@ -22,7 +22,11 @@ ETL_STATUS_FAILED = "failed"
 
 def has_trip_on_date(session: Session, target_date: date) -> bool:
     statement = select(
-        exists().where(Trip.start_date <= target_date).where(Trip.end_date >= target_date)
+        exists()
+        .where(Trip.start_date.is_not(None))
+        .where(Trip.end_date.is_not(None))
+        .where(Trip.start_date <= target_date)
+        .where(Trip.end_date >= target_date)
     )
     return bool(session.scalar(statement))
 

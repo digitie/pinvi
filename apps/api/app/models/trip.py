@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -37,7 +38,11 @@ if TYPE_CHECKING:
 class Trip(TimestampMixin, Base):
     __tablename__ = "trips"
     __table_args__ = (
-        CheckConstraint("end_date >= start_date", name="date_range_order"),
+        CheckConstraint(
+            "(start_date IS NULL AND end_date IS NULL) OR "
+            "(start_date IS NOT NULL AND end_date IS NOT NULL AND end_date >= start_date)",
+            name="date_range_order",
+        ),
         Index("ix_trips_leader_id", "leader_id"),
     )
 
@@ -55,8 +60,8 @@ class Trip(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     name: Mapped[str | None] = mapped_column(Text)
     destination: Mapped[str] = mapped_column(String(120), nullable=False)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
     fuel_types: Mapped[list[str] | None] = mapped_column(ARRAY(String(40)))
     planning_status: Mapped[str] = mapped_column(String(32), default="idea", nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -85,7 +90,7 @@ class TripDay(TimestampMixin, Base):
         nullable=False,
     )
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False)
+    date: Mapped[date | None] = mapped_column(Date)
 
     trip: Mapped[Trip] = relationship(back_populates="days")
     items: Mapped[list[TripPlanItem]] = relationship(
@@ -264,6 +269,84 @@ class TripPoi(TimestampMixin, Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KRW")
     user_url: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class NoticePlan(TimestampMixin, Base):
+    __tablename__ = "notice_plans"
+    __table_args__ = (
+        CheckConstraint(
+            "(starts_on IS NULL AND ends_on IS NULL) OR "
+            "(starts_on IS NOT NULL AND ends_on IS NOT NULL AND ends_on >= starts_on)",
+            name=conv("ck_notice_plans_date_range"),
+        ),
+        Index(
+            "uq_notice_plans_slug_active",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("ix_notice_plans_published", "is_published", "updated_at"),
+        Index("ix_notice_plans_category", "category", "updated_at"),
+        Index("ix_notice_plans_created_by_admin", "created_by_admin_id"),
+        Index("ix_notice_plans_updated_by_admin", "updated_by_admin_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(160), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    source_name: Mapped[str | None] = mapped_column(String(200))
+    destination: Mapped[str | None] = mapped_column(String(120))
+    starts_on: Mapped[date | None] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by_admin_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_notice_plans_created_by_admin_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    updated_by_admin_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_notice_plans_updated_by_admin_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NoticePoi(TimestampMixin, Base):
+    __tablename__ = "notice_pois"
+    __table_args__ = (
+        CheckConstraint("day_index >= 1", name=conv("ck_notice_pois_day_index")),
+        CheckConstraint("version >= 1", name=conv("ck_notice_pois_version")),
+        Index("ix_notice_pois_plan_sort", "notice_plan_id", "day_index", "sort_order"),
+        Index("ix_notice_pois_feature", "feature_id"),
+        Index("ix_notice_pois_map_feature", "map_feature_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    notice_plan_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("notice_plans.id", name="fk_notice_pois_notice_plan_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    day_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    sort_order: Mapped[str] = mapped_column(String(80, collation="C"), nullable=False)
+    feature_id: Mapped[str | None] = mapped_column(String(120))
+    map_feature_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("map_features.id", name="fk_notice_pois_map_feature_id", ondelete="SET NULL"),
+    )
+    snapshot: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
+    memo: Mapped[str | None] = mapped_column(Text)
+    budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KRW")
+    user_url: Mapped[str | None] = mapped_column(Text)
+    custom_marker_color: Mapped[str | None] = mapped_column(String(16))
+    custom_marker_icon: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TripShareToken(Base):

@@ -340,8 +340,8 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 | `owner_user_id` | UUID FK | Y | 최초 작성자 또는 현재 소유자 |
 | `title` | varchar(120) | Y | 여행 제목 |
 | `destination_summary` | varchar(120) | N | 대표 목적지 텍스트 |
-| `start_date` | date | Y | 시작일 |
-| `end_date` | date | Y | 종료일 |
+| `start_date` | date | N | 시작일. 기간 없는 관리자 공지 plan을 복사한 여행은 `NULL` |
+| `end_date` | date | N | 종료일. `start_date`와 둘 다 있거나 둘 다 없음 |
 | `planning_status` | varchar(32) | Y | `idea`, `planning`, `confirmed`, `completed`, `archived` |
 | `created_at` | timestamptz | Y | 생성 시각 |
 | `updated_at` | timestamptz | Y | 수정 시각 |
@@ -357,7 +357,7 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 | `id` | UUID PK | Y | 여행 일자 ID |
 | `trip_id` | UUID FK | Y | 여행 |
 | `day_index` | integer | Y | 1부터 시작 |
-| `date` | date | Y | 실제 날짜 |
+| `date` | date | N | 실제 날짜. 기간 없는 여행의 기본 day는 `NULL` |
 | `created_at` | timestamptz | Y | 생성 시각 |
 | `updated_at` | timestamptz | Y | 수정 시각 |
 
@@ -366,6 +366,16 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 - `(trip_id, date)` unique.
 - `(trip_id, day_index)` unique.
 - `day_index >= 1`.
+
+### 관리자 공지 plan/poi
+
+`notice_plans`, `notice_pois`는 국가유산투어, 수목원 투어, 추천관광지100선 같은 관리자 추천 원본이다.
+일반 사용자 UI/API는 published 공지를 읽고 전체 또는 선택 POI를 자신의 여행으로 복사할 수만 있다.
+원본 생성/수정/삭제는 관리자 API(`/admin/notice-plans`)에서만 가능하다.
+
+`notice_plans.starts_on`, `notice_plans.ends_on`은 행사 날짜다. 둘 다 없으면 기간 없음으로 취급한다.
+복사 시 원본 POI snapshot은 `trip_pois.snapshot`에 복사되어 원천 feature가 바뀌어도 사용자 여행 표시가
+즉시 깨지지 않게 한다.
 
 ### `trip_members`
 
