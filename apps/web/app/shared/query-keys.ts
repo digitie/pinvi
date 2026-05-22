@@ -2,6 +2,7 @@ import type {
   AdminDatasetRowsQuery,
   AdminEntityKind,
   AdminEntityListQuery,
+  AdminRustfsObjectQuery,
   AdminUserListQuery,
 } from "../admin/api";
 
@@ -53,5 +54,7 @@ export const queryKeys = {
       ] as const,
     entityDetail: (entity: AdminEntityKind, itemId: string) =>
       ["admin", "entities", entity, itemId] as const,
+    rustfsObjects: (query: AdminRustfsObjectQuery) =>
+      ["admin", "rustfs", "objects", query.prefix, query.limit, query.continuationToken] as const,
   },
 };

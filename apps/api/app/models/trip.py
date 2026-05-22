@@ -349,6 +349,84 @@ class NoticePoi(TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PlanPoiAttachment(TimestampMixin, Base):
+    __tablename__ = "plan_poi_attachments"
+    __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(trip_id, trip_poi_id, notice_plan_id, notice_poi_id) = 1",
+            name=conv("ck_plan_poi_attachments_single_target"),
+        ),
+        CheckConstraint(
+            "role IN ('attachment', 'image', 'document', 'reference')",
+            name=conv("ck_plan_poi_attachments_role"),
+        ),
+        CheckConstraint("byte_size > 0", name=conv("ck_plan_poi_attachments_byte_size")),
+        CheckConstraint("sort_order >= 0", name=conv("ck_plan_poi_attachments_sort_order")),
+        Index("ix_plan_poi_attachments_trip", "trip_id", "sort_order"),
+        Index("ix_plan_poi_attachments_trip_poi", "trip_poi_id", "sort_order"),
+        Index("ix_plan_poi_attachments_notice_plan", "notice_plan_id", "sort_order"),
+        Index("ix_plan_poi_attachments_notice_poi", "notice_poi_id", "sort_order"),
+        Index("ix_plan_poi_attachments_source", "source_attachment_id"),
+        Index("ix_plan_poi_attachments_storage_key", "bucket", "storage_key"),
+        Index("ix_plan_poi_attachments_uploaded_by", "uploaded_by_user_id"),
+        Index(
+            "ix_plan_poi_attachments_active",
+            "deleted_at",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
+    trip_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("trips.id", name="fk_plan_poi_attachments_trip_id", ondelete="CASCADE"),
+    )
+    trip_poi_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("trip_pois.id", name="fk_plan_poi_attachments_trip_poi_id", ondelete="CASCADE"),
+    )
+    notice_plan_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "notice_plans.id",
+            name="fk_plan_poi_attachments_notice_plan_id",
+            ondelete="CASCADE",
+        ),
+    )
+    notice_poi_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "notice_pois.id",
+            name="fk_plan_poi_attachments_notice_poi_id",
+            ondelete="CASCADE",
+        ),
+    )
+    source_attachment_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "plan_poi_attachments.id",
+            name="fk_plan_poi_attachments_source_attachment_id",
+            ondelete="SET NULL",
+        ),
+    )
+    bucket: Mapped[str] = mapped_column(String(80), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    public_url: Mapped[str | None] = mapped_column(Text)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="attachment")
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploaded_by_user_id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_plan_poi_attachments_uploaded_by_user_id"),
+        nullable=False,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class TripShareToken(Base):
     __tablename__ = "trip_share_tokens"
     __table_args__ = (

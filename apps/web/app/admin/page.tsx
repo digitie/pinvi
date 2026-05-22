@@ -311,6 +311,13 @@ export default function AdminDataBrowserPage() {
               <UsersIcon />
               사용자
             </Link>
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500"
+              href="/admin/files"
+            >
+              <DatabaseIcon />
+              파일
+            </Link>
             <a
               className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 transition hover:border-stone-500"
               href={dagsterAdminUrl}

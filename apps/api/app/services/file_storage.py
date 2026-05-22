@@ -3,15 +3,26 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import SplitResult, quote, urlencode, urlsplit, urlunsplit
+from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
+from xml.etree import ElementTree
 
 from app.core.config import Settings
 
-StorageUploadPurpose = Literal["media_asset", "avatar", "trip_attachment"]
+StorageUploadPurpose = Literal[
+    "media_asset",
+    "avatar",
+    "trip_attachment",
+    "plan_attachment",
+    "poi_attachment",
+    "notice_plan_attachment",
+    "notice_poi_attachment",
+]
 
 _SAFE_BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 _SAFE_EXTENSION_RE = re.compile(r"^[A-Za-z0-9]{1,12}$")
@@ -33,6 +44,10 @@ class FileStorageConfigurationError(RuntimeError):
     """Raised when RustFS storage is not configured."""
 
 
+class FileStorageHttpError(RuntimeError):
+    """Raised when RustFS returns an unusable S3-compatible response."""
+
+
 @dataclass(frozen=True)
 class PresignedUpload:
     bucket: str
@@ -41,6 +56,24 @@ class PresignedUpload:
     headers: dict[str, str]
     expires_at: datetime
     public_url: str | None
+
+
+@dataclass(frozen=True)
+class RustfsObject:
+    key: str
+    size: int | None = None
+    last_modified: datetime | None = None
+    etag: str | None = None
+    storage_class: str | None = None
+
+
+@dataclass(frozen=True)
+class RustfsObjectListing:
+    bucket: str
+    prefix: str
+    objects: tuple[RustfsObject, ...]
+    is_truncated: bool
+    next_continuation_token: str | None
 
 
 class RustfsStorage:
@@ -144,6 +177,44 @@ class RustfsStorage:
             return None
         return f"{self.public_base_url}/{quote(storage_key, safe='/')}"
 
+    def list_objects(
+        self,
+        *,
+        prefix: str = "",
+        max_keys: int = 100,
+        continuation_token: str | None = None,
+        bucket: str | None = None,
+    ) -> RustfsObjectListing:
+        self._ensure_configured()
+        self._validate_bucket()
+        if max_keys <= 0 or max_keys > 1000:
+            raise FileStorageError("max_keys must be between 1 and 1000.")
+
+        target_bucket = bucket or self.bucket
+        query = {
+            "list-type": "2",
+            "max-keys": str(max_keys),
+        }
+        if prefix:
+            query["prefix"] = prefix
+        if continuation_token:
+            query["continuation-token"] = continuation_token
+
+        body = self._request("GET", f"/{quote(target_bucket, safe='')}", query=query)
+        return _parse_list_objects(body, bucket=target_bucket, prefix=prefix)
+
+    def delete_object(self, storage_key: str, *, bucket: str | None = None) -> None:
+        self._ensure_configured()
+        self._validate_bucket()
+        normalized_key = storage_key.strip().lstrip("/")
+        if not normalized_key:
+            raise FileStorageError("storage_key is required.")
+        target_bucket = bucket or self.bucket
+        self._request(
+            "DELETE",
+            f"/{quote(target_bucket, safe='')}/{quote(normalized_key, safe='/')}",
+        )
+
     def _ensure_configured(self) -> None:
         if not self.is_configured:
             raise FileStorageConfigurationError("RustFS access key and secret key are required.")
@@ -225,6 +296,95 @@ class RustfsStorage:
         signed_query = _canonical_query_string({**query_parameters, "X-Amz-Signature": signature})
         return urlunsplit((endpoint.scheme, endpoint.netloc, canonical_uri, signed_query, ""))
 
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: Mapping[str, str] | None = None,
+    ) -> bytes:
+        if self.access_key_id is None or self.secret_access_key is None:
+            raise FileStorageConfigurationError("RustFS credentials are required.")
+
+        endpoint = urlsplit(self.endpoint_url)
+        if not endpoint.scheme or not endpoint.netloc:
+            raise FileStorageConfigurationError("RustFS endpoint URL must include scheme and host.")
+
+        normalized_path = f"{endpoint.path.rstrip('/')}{path}" if endpoint.path else path
+        query_dict = dict(query or {})
+        url = urlunsplit(
+            (endpoint.scheme, endpoint.netloc, normalized_path, urlencode(query_dict), "")
+        )
+        request = Request(url, method=method)
+        for key, value in self._signed_headers(
+            method=method,
+            endpoint=endpoint,
+            path=normalized_path,
+            query=query_dict,
+        ).items():
+            request.add_header(key, value)
+
+        try:
+            with urlopen(request, timeout=10.0) as response:  # noqa: S310
+                body: bytes = response.read()
+                return body
+        except OSError as exc:
+            raise FileStorageHttpError(str(exc)) from exc
+
+    def _signed_headers(
+        self,
+        *,
+        method: str,
+        endpoint: SplitResult,
+        path: str,
+        query: Mapping[str, str],
+    ) -> dict[str, str]:
+        if self.access_key_id is None or self.secret_access_key is None:
+            raise FileStorageConfigurationError("RustFS credentials are required.")
+
+        now = datetime.now(UTC)
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+        credential_scope = f"{date_stamp}/{self.region}/s3/aws4_request"
+        headers = {
+            "host": endpoint.netloc,
+            "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+            "x-amz-date": amz_date,
+        }
+        signed_headers = ";".join(sorted(headers))
+        canonical_request = "\n".join(
+            [
+                method,
+                quote(path, safe="/"),
+                _canonical_query_string(query),
+                "".join(f"{name}:{headers[name]}\n" for name in sorted(headers)),
+                signed_headers,
+                "UNSIGNED-PAYLOAD",
+            ]
+        )
+        string_to_sign = "\n".join(
+            [
+                "AWS4-HMAC-SHA256",
+                amz_date,
+                credential_scope,
+                hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+            ]
+        )
+        signing_key = _signature_key(
+            secret_access_key=self.secret_access_key,
+            date_stamp=date_stamp,
+            region=self.region,
+        )
+        signature = hmac.new(
+            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        authorization = (
+            "AWS4-HMAC-SHA256 "
+            f"Credential={self.access_key_id}/{credential_scope}, "
+            f"SignedHeaders={signed_headers}, Signature={signature}"
+        )
+        return {**headers, "authorization": authorization}
+
 
 def _safe_extension(filename: str) -> str:
     name = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
@@ -247,9 +407,9 @@ def _canonical_object_path(endpoint_path: str, bucket: str, storage_key: str) ->
     )
 
 
-def _canonical_query_string(parameters: dict[str, str]) -> str:
+def _canonical_query_string(parameters: Mapping[str, str]) -> str:
     return "&".join(
-        f"{quote(key, safe='-_.~')}={quote(value, safe='-_.~')}"
+        f"{quote(str(key), safe='-_.~')}={quote(str(value), safe='-_.~')}"
         for key, value in sorted(parameters.items())
     )
 
@@ -267,3 +427,58 @@ def _signature_key(*, secret_access_key: str, date_stamp: str, region: str) -> b
 
 def _sign(key: bytes, message: str) -> bytes:
     return hmac.new(key, message.encode("utf-8"), hashlib.sha256).digest()
+
+
+def _parse_list_objects(body: bytes, *, bucket: str, prefix: str) -> RustfsObjectListing:
+    root = ElementTree.fromstring(body)
+    objects: list[RustfsObject] = []
+    for node in _findall(root, "Contents"):
+        key = _findtext(node, "Key")
+        if not key:
+            continue
+        objects.append(
+            RustfsObject(
+                key=key,
+                size=_int_or_none(_findtext(node, "Size")),
+                last_modified=_datetime_or_none(_findtext(node, "LastModified")),
+                etag=(_findtext(node, "ETag") or "").strip('"') or None,
+                storage_class=_findtext(node, "StorageClass"),
+            )
+        )
+    return RustfsObjectListing(
+        bucket=bucket,
+        prefix=prefix,
+        objects=tuple(objects),
+        is_truncated=(_findtext(root, "IsTruncated") or "").lower() == "true",
+        next_continuation_token=_findtext(root, "NextContinuationToken"),
+    )
+
+
+def _findall(root: ElementTree.Element, tag: str) -> list[ElementTree.Element]:
+    return root.findall(f".//{{*}}{tag}") or root.findall(f".//{tag}")
+
+
+def _findtext(root: ElementTree.Element, tag: str) -> str | None:
+    value = root.findtext(f".//{{*}}{tag}") or root.findtext(f".//{tag}")
+    if value is None:
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _int_or_none(value: str | None) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value))
+    except ValueError:
+        return None
+
+
+def _datetime_or_none(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None

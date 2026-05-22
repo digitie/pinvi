@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.json_types import JsonValue
+from app.schemas.attachment import PlanPoiAttachmentResponse
 
 
 class NoticePoiBase(BaseModel):
@@ -46,7 +48,7 @@ class NoticePlanDates(BaseModel):
     ends_on: date | None = None
 
     @model_validator(mode="after")
-    def validate_period(self):
+    def validate_period(self) -> Self:
         if (self.starts_on is None) != (self.ends_on is None):
             raise ValueError("starts_on and ends_on must both be set or both be omitted")
         if (
@@ -92,6 +94,7 @@ class NoticePoiResponse(NoticePoiBase):
     version: int
     created_at: datetime
     updated_at: datetime
+    attachments: list[PlanPoiAttachmentResponse] = Field(default_factory=list)
 
 
 class NoticePlanResponse(NoticePlanDates):
@@ -106,6 +109,7 @@ class NoticePlanResponse(NoticePlanDates):
     version: int
     created_at: datetime
     updated_at: datetime
+    attachments: list[PlanPoiAttachmentResponse] = Field(default_factory=list)
     pois: list[NoticePoiResponse] = Field(default_factory=list)
 
 

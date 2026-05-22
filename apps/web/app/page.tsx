@@ -1,3 +1,5 @@
+import { UserAttachmentWorkbench } from "./shared/user-attachment-workbench";
+
 const sampleStops = [
   {
     time: "09:30",
@@ -78,6 +80,8 @@ export default function Home() {
           </article>
         </div>
       </section>
+
+      <UserAttachmentWorkbench />
 
       <section className="brief" id="brief">
         <p className="sectionLabel">Next build target</p>

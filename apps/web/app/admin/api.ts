@@ -176,6 +176,29 @@ export type AdminEntityListQuery = {
 
 export type AdminEntityUpsertInput = Record<string, AdminJsonValue>;
 
+export type AdminRustfsObject = {
+  key: string;
+  size: number | null;
+  last_modified: string | null;
+  etag: string | null;
+  storage_class: string | null;
+  public_url: string | null;
+};
+
+export type AdminRustfsObjectListResponse = {
+  bucket: string;
+  prefix: string;
+  objects: AdminRustfsObject[];
+  is_truncated: boolean;
+  next_continuation_token: string | null;
+};
+
+export type AdminRustfsObjectQuery = {
+  prefix: string;
+  limit: number;
+  continuationToken?: string | null;
+};
+
 export class AdminApiError extends Error {
   status: number;
   payload: unknown;
@@ -339,6 +362,26 @@ export async function deleteAdminEntity(
   );
 }
 
+export async function fetchAdminRustfsObjects(
+  query: AdminRustfsObjectQuery,
+): Promise<AdminRustfsObjectListResponse> {
+  const params = new URLSearchParams({
+    prefix: query.prefix,
+    limit: String(query.limit),
+  });
+  if (query.continuationToken) {
+    params.set("continuation_token", query.continuationToken);
+  }
+  return parseAdminRustfsObjectListResponse(
+    await adminFetch(`/admin/rustfs/objects?${params.toString()}`),
+  );
+}
+
+export async function deleteAdminRustfsObject(key: string): Promise<void> {
+  const params = new URLSearchParams({ key });
+  await adminFetch(`/admin/rustfs/objects?${params.toString()}`, { method: "DELETE" });
+}
+
 async function adminFetch(path: string, init: RequestInit = {}): Promise<unknown> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) {
@@ -498,6 +541,32 @@ function parseAdminEntityDeleteResponse(payload: unknown): AdminEntityDeleteResp
   };
 }
 
+function parseAdminRustfsObjectListResponse(payload: unknown): AdminRustfsObjectListResponse {
+  const record = requireRecord(payload, "RustFS 객체 목록 응답");
+  return {
+    bucket: requireString(record.bucket, "bucket"),
+    prefix: requireString(record.prefix, "prefix"),
+    objects: requireArray(record.objects, "objects").map(parseAdminRustfsObject),
+    is_truncated: requireBoolean(record.is_truncated, "is_truncated"),
+    next_continuation_token: optionalString(
+      record.next_continuation_token,
+      "next_continuation_token",
+    ),
+  };
+}
+
+function parseAdminRustfsObject(payload: unknown): AdminRustfsObject {
+  const record = requireRecord(payload, "RustFS 객체 응답");
+  return {
+    key: requireString(record.key, "key"),
+    size: optionalNumber(record.size, "size"),
+    last_modified: optionalString(record.last_modified, "last_modified"),
+    etag: optionalString(record.etag, "etag"),
+    storage_class: optionalString(record.storage_class, "storage_class"),
+    public_url: optionalString(record.public_url, "public_url"),
+  };
+}
+
 function parseAdminEntityRelatedGroup(payload: unknown): AdminEntityRelatedGroup {
   const record = requireRecord(payload, "관리자 엔티티 연관 응답");
   return {
@@ -622,6 +691,13 @@ function optionalString(value: unknown, fieldName: string): string | null {
     return null;
   }
   return requireString(value, fieldName);
+}
+
+function optionalNumber(value: unknown, fieldName: string): number | null {
+  if (value === null) {
+    return null;
+  }
+  return requireNumber(value, fieldName);
 }
 
 function requireNumber(value: unknown, fieldName: string): number {

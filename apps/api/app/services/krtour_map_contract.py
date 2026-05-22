@@ -68,7 +68,7 @@ def map_feature_to_krtour_feature(
         )
         or Address(),
         category=feature.category_name or feature.category_code or feature.feature_type,
-        urls=FeatureUrls(homepage=feature.website_url),
+        urls=_feature_urls(homepage=feature.website_url),
         marker_icon=str(extra.get("marker_icon") or feature.feature_type),
         marker_color=str(extra.get("marker_color") or "#2f6fed"),
         parent_feature_id=str(feature.parent_feature_id) if feature.parent_feature_id else None,
@@ -142,3 +142,7 @@ def _decimal_to_float(value: Decimal, *, field_name: str) -> float:
 
 def _without_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}
+
+
+def _feature_urls(*, homepage: str | None) -> FeatureUrls:
+    return FeatureUrls.model_validate(_without_none({"homepage": homepage}))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -17,7 +18,7 @@ from app.api.routes.notice import (
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.mixins import kst_now
-from app.models.trip import NoticePlan, NoticePoi
+from app.models.trip import NoticePlan, NoticePoi, PlanPoiAttachment
 from app.models.user import User
 from app.schemas.admin import (
     AdminDatasetListResponse,
@@ -35,6 +36,11 @@ from app.schemas.admin import (
     AdminUserListResponse,
     AdminUserResponse,
 )
+from app.schemas.attachment import (
+    PlanPoiAttachmentCreateRequest,
+    PlanPoiAttachmentListResponse,
+    PlanPoiAttachmentResponse,
+)
 from app.schemas.notice import (
     AdminNoticePlanCreate,
     AdminNoticePlanUpdate,
@@ -44,6 +50,7 @@ from app.schemas.notice import (
     NoticePlanResponse,
     NoticePoiResponse,
 )
+from app.schemas.storage import StorageObjectListResponse, StorageObjectResponse
 from app.services.admin_auth import (
     authenticate_admin,
     get_user_by_access_token,
@@ -65,6 +72,22 @@ from app.services.admin_entity_crud import (
     get_admin_entity_detail,
     list_admin_entities,
     update_admin_entity,
+)
+from app.services.file_storage import (
+    FileStorageConfigurationError,
+    FileStorageError,
+    FileStorageHttpError,
+    RustfsStorage,
+)
+from app.services.plan_poi_attachment import (
+    AttachmentNotFoundError,
+    create_notice_plan_attachment,
+    create_notice_poi_attachment,
+    delete_notice_plan_attachment,
+    delete_notice_poi_attachment,
+    list_notice_plan_attachments,
+    list_notice_poi_attachments,
+    to_attachment_response,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -221,6 +244,70 @@ def delete_admin_notice_plan(
     db.commit()
 
 
+@router.get(
+    "/notice-plans/{plan_id}/attachments",
+    response_model=PlanPoiAttachmentListResponse,
+)
+def get_admin_notice_plan_attachments(
+    plan_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+) -> PlanPoiAttachmentListResponse:
+    try:
+        attachments = list_notice_plan_attachments(db, plan_id=plan_id)
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _attachment_list_response(attachments)
+
+
+@router.post(
+    "/notice-plans/{plan_id}/attachments",
+    response_model=PlanPoiAttachmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_admin_notice_plan_attachment(
+    plan_id: UUID,
+    payload: PlanPoiAttachmentCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> PlanPoiAttachmentResponse:
+    try:
+        attachment = create_notice_plan_attachment(
+            db,
+            current_user=current_user,
+            plan_id=plan_id,
+            payload=payload,
+        )
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    plan = db.get(NoticePlan, plan_id)
+    if plan is not None:
+        _touch_notice_plan(plan, current_user.id)
+    db.commit()
+    db.refresh(attachment)
+    return to_attachment_response(attachment)
+
+
+@router.delete(
+    "/notice-plans/{plan_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_admin_notice_plan_attachment(
+    plan_id: UUID,
+    attachment_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> None:
+    try:
+        delete_notice_plan_attachment(db, plan_id=plan_id, attachment_id=attachment_id)
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    plan = db.get(NoticePlan, plan_id)
+    if plan is not None:
+        _touch_notice_plan(plan, current_user.id)
+    db.commit()
+
+
 @router.post(
     "/notice-plans/{plan_id}/pois",
     response_model=NoticePoiResponse,
@@ -293,6 +380,142 @@ def delete_admin_notice_poi(
     poi.version += 1
     _touch_notice_plan(plan, current_user.id)
     db.commit()
+
+
+@router.get(
+    "/notice-plans/{plan_id}/pois/{poi_id}/attachments",
+    response_model=PlanPoiAttachmentListResponse,
+)
+def get_admin_notice_poi_attachments(
+    plan_id: UUID,
+    poi_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_admin_user)],
+) -> PlanPoiAttachmentListResponse:
+    try:
+        attachments = list_notice_poi_attachments(db, plan_id=plan_id, poi_id=poi_id)
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _attachment_list_response(attachments)
+
+
+@router.post(
+    "/notice-plans/{plan_id}/pois/{poi_id}/attachments",
+    response_model=PlanPoiAttachmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_admin_notice_poi_attachment(
+    plan_id: UUID,
+    poi_id: UUID,
+    payload: PlanPoiAttachmentCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> PlanPoiAttachmentResponse:
+    try:
+        attachment = create_notice_poi_attachment(
+            db,
+            current_user=current_user,
+            plan_id=plan_id,
+            poi_id=poi_id,
+            payload=payload,
+        )
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    plan = db.get(NoticePlan, plan_id)
+    poi = db.get(NoticePoi, poi_id)
+    if poi is not None:
+        poi.version += 1
+        poi.updated_at = kst_now()
+    if plan is not None:
+        _touch_notice_plan(plan, current_user.id)
+    db.commit()
+    db.refresh(attachment)
+    return to_attachment_response(attachment)
+
+
+@router.delete(
+    "/notice-plans/{plan_id}/pois/{poi_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_admin_notice_poi_attachment(
+    plan_id: UUID,
+    poi_id: UUID,
+    attachment_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin_user)],
+) -> None:
+    try:
+        delete_notice_poi_attachment(
+            db,
+            plan_id=plan_id,
+            poi_id=poi_id,
+            attachment_id=attachment_id,
+        )
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    plan = db.get(NoticePlan, plan_id)
+    poi = db.get(NoticePoi, poi_id)
+    if poi is not None:
+        poi.version += 1
+        poi.updated_at = kst_now()
+    if plan is not None:
+        _touch_notice_plan(plan, current_user.id)
+    db.commit()
+
+
+@router.get("/rustfs/objects", response_model=StorageObjectListResponse)
+def get_admin_rustfs_objects(
+    _: Annotated[User, Depends(require_admin_user)],
+    prefix: Annotated[str, Query(max_length=1024)] = "",
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    continuation_token: Annotated[str | None, Query(max_length=2048)] = None,
+) -> StorageObjectListResponse:
+    storage = RustfsStorage.from_settings(get_settings())
+    try:
+        listing = storage.list_objects(
+            prefix=prefix,
+            max_keys=limit,
+            continuation_token=continuation_token,
+        )
+    except FileStorageConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except FileStorageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileStorageHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return StorageObjectListResponse(
+        bucket=listing.bucket,
+        prefix=listing.prefix,
+        objects=[
+            StorageObjectResponse(
+                key=item.key,
+                size=item.size,
+                last_modified=item.last_modified,
+                etag=item.etag,
+                storage_class=item.storage_class,
+                public_url=storage.public_object_url(item.key),
+            )
+            for item in listing.objects
+        ],
+        is_truncated=listing.is_truncated,
+        next_continuation_token=listing.next_continuation_token,
+    )
+
+
+@router.delete("/rustfs/objects", status_code=status.HTTP_204_NO_CONTENT)
+def remove_admin_rustfs_object(
+    _: Annotated[User, Depends(require_admin_user)],
+    key: Annotated[str, Query(min_length=1, max_length=1024)],
+) -> None:
+    storage = RustfsStorage.from_settings(get_settings())
+    try:
+        storage.delete_object(key)
+    except FileStorageConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except FileStorageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileStorageHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/auth/login", response_model=AdminLoginResponse)
@@ -654,6 +877,15 @@ def _to_admin_user_response(user: User) -> AdminUserResponse:
     )
 
 
+def _attachment_list_response(
+    attachments: list[PlanPoiAttachment],
+) -> PlanPoiAttachmentListResponse:
+    return PlanPoiAttachmentListResponse(
+        items=[to_attachment_response(attachment) for attachment in attachments],
+        total=len(attachments),
+    )
+
+
 def _admin_notice_plan_or_404(db: Session, plan_id: UUID) -> NoticePlan:
     plan = db.get(NoticePlan, plan_id)
     if plan is None or plan.deleted_at is not None:
@@ -708,7 +940,7 @@ def _touch_notice_plan(plan: NoticePlan, admin_id: UUID) -> None:
     plan.version += 1
 
 
-def _validate_notice_period(starts_on, ends_on) -> None:
+def _validate_notice_period(starts_on: date | None, ends_on: date | None) -> None:
     if (starts_on is None) != (ends_on is None):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

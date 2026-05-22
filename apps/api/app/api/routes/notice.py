@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import require_current_user
 from app.db.session import get_db
-from app.models.trip import NoticePlan, NoticePoi
+from app.models.trip import NoticePlan, NoticePoi, PlanPoiAttachment
 from app.models.user import User
 from app.schemas.notice import (
     NoticePlanCopyRequest,
@@ -22,6 +22,11 @@ from app.services.notice_plan import (
     NoticePlanAccessDeniedError,
     NoticePlanNotFoundError,
     copy_notice_plan_to_trip,
+)
+from app.services.plan_poi_attachment import (
+    attachments_by_notice_plan,
+    attachments_by_notice_poi,
+    to_attachment_response,
 )
 
 router = APIRouter(prefix="/notice-plans", tags=["notice-plans"])
@@ -49,9 +54,20 @@ def list_notice_plans(
         .limit(limit)
     ).all()
     pois_by_plan = _pois_by_plan(db, [plan.id for plan in plans])
+    plan_attachments = attachments_by_notice_plan(db, [plan.id for plan in plans])
+    poi_ids = [poi.id for pois in pois_by_plan.values() for poi in pois]
+    poi_attachments = attachments_by_notice_poi(db, poi_ids)
 
     return NoticePlanListResponse(
-        items=[_to_notice_plan_response(plan, pois_by_plan.get(plan.id, [])) for plan in plans],
+        items=[
+            _to_notice_plan_response(
+                plan,
+                pois_by_plan.get(plan.id, []),
+                attachments=plan_attachments.get(plan.id, []),
+                poi_attachments_by_poi=poi_attachments,
+            )
+            for plan in plans
+        ],
         total=total,
         page=page,
         limit=limit,
@@ -65,7 +81,13 @@ def get_notice_plan(
     _: Annotated[User, Depends(require_current_user)],
 ) -> NoticePlanResponse:
     plan = _published_notice_plan_or_404(db, plan_id)
-    return _to_notice_plan_response(plan, _notice_pois(db, plan.id))
+    pois = _notice_pois(db, plan.id)
+    return _to_notice_plan_response(
+        plan,
+        pois,
+        attachments=attachments_by_notice_plan(db, [plan.id]).get(plan.id, []),
+        poi_attachments_by_poi=attachments_by_notice_poi(db, [poi.id for poi in pois]),
+    )
 
 
 @router.post("/{plan_id}/copy", response_model=NoticePlanCopyResponse)
@@ -123,7 +145,15 @@ def _pois_by_plan(db: Session, plan_ids: list[UUID]) -> dict[UUID, list[NoticePo
     return grouped
 
 
-def _to_notice_plan_response(plan: NoticePlan, pois: list[NoticePoi]) -> NoticePlanResponse:
+def _to_notice_plan_response(
+    plan: NoticePlan,
+    pois: list[NoticePoi],
+    *,
+    attachments: list[PlanPoiAttachment] | None = None,
+    poi_attachments_by_poi: dict[UUID, list[PlanPoiAttachment]] | None = None,
+) -> NoticePlanResponse:
+    resolved_attachments = attachments or []
+    resolved_poi_attachments = poi_attachments_by_poi or {}
     return NoticePlanResponse(
         id=plan.id,
         slug=plan.slug,
@@ -138,11 +168,19 @@ def _to_notice_plan_response(plan: NoticePlan, pois: list[NoticePoi]) -> NoticeP
         version=plan.version,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
-        pois=[_to_notice_poi_response(poi) for poi in pois],
+        attachments=[to_attachment_response(attachment) for attachment in resolved_attachments],
+        pois=[
+            _to_notice_poi_response(poi, resolved_poi_attachments.get(poi.id, []))
+            for poi in pois
+        ],
     )
 
 
-def _to_notice_poi_response(poi: NoticePoi) -> NoticePoiResponse:
+def _to_notice_poi_response(
+    poi: NoticePoi,
+    attachments: list[PlanPoiAttachment] | None = None,
+) -> NoticePoiResponse:
+    resolved_attachments = attachments or []
     return NoticePoiResponse(
         id=poi.id,
         notice_plan_id=poi.notice_plan_id,
@@ -160,4 +198,5 @@ def _to_notice_poi_response(poi: NoticePoi) -> NoticePoiResponse:
         version=poi.version,
         created_at=poi.created_at,
         updated_at=poi.updated_at,
+        attachments=[to_attachment_response(attachment) for attachment in resolved_attachments],
     )

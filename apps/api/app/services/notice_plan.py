@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -11,6 +11,7 @@ from app.models.place import Feature
 from app.models.trip import NoticePlan, NoticePoi, Trip, TripDay, TripPoi
 from app.models.user import User
 from app.schemas.notice import NoticePlanCopyRequest, NoticePlanCopyResponse
+from app.services.plan_poi_attachment import copy_notice_attachments_to_trip
 
 
 class NoticePlanError(Exception):
@@ -43,6 +44,7 @@ def copy_notice_plan_to_trip(
         created_trip = False
 
     copied_ids: list[UUID] = []
+    notice_poi_to_trip_poi: dict[UUID, UUID] = {}
     for index, poi in enumerate(pois, start=1):
         feature_id = _copyable_feature_id(db, poi.feature_id)
         broken_at = None if feature_id is not None or poi.feature_id is None else kst_now()
@@ -71,6 +73,15 @@ def copy_notice_plan_to_trip(
         db.add(copied)
         db.flush()
         copied_ids.append(copied.id)
+        notice_poi_to_trip_poi[poi.id] = copied.id
+
+    copy_notice_attachments_to_trip(
+        db,
+        current_user=current_user,
+        notice_plan_id=notice_plan.id,
+        target_trip_id=trip.id,
+        notice_poi_to_trip_poi=notice_poi_to_trip_poi,
+    )
 
     db.commit()
     return NoticePlanCopyResponse(
@@ -156,7 +167,7 @@ def _event_day_count(trip: Trip) -> int:
     return (trip.end_date - trip.start_date).days + 1
 
 
-def _trip_day_date(trip: Trip, offset: int):
+def _trip_day_date(trip: Trip, offset: int) -> date | None:
     if trip.start_date is None or trip.end_date is None:
         return None
     day = trip.start_date + timedelta(days=offset)

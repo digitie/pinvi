@@ -5,7 +5,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-StorageUploadPurpose = Literal["media_asset", "avatar", "trip_attachment"]
+StorageUploadPurpose = Literal[
+    "media_asset",
+    "avatar",
+    "trip_attachment",
+    "plan_attachment",
+    "poi_attachment",
+    "notice_plan_attachment",
+    "notice_poi_attachment",
+]
 
 
 class StorageUploadUrlRequest(BaseModel):
@@ -24,3 +32,20 @@ class StorageUploadUrlResponse(BaseModel):
     expires_at: datetime
     max_upload_bytes: int
     public_url: str | None
+
+
+class StorageObjectResponse(BaseModel):
+    key: str
+    size: int | None
+    last_modified: datetime | None
+    etag: str | None
+    storage_class: str | None
+    public_url: str | None
+
+
+class StorageObjectListResponse(BaseModel):
+    bucket: str
+    prefix: str
+    objects: list[StorageObjectResponse]
+    is_truncated: bool
+    next_continuation_token: str | None

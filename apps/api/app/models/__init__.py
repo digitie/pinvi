@@ -91,6 +91,7 @@ from app.models.tour import (
 from app.models.trip import (
     NoticePlan,
     NoticePoi,
+    PlanPoiAttachment,
     Trip,
     TripDay,
     TripMember,
@@ -169,6 +170,7 @@ __all__ = [
     "NoticeDetail",
     "NoticePlan",
     "NoticePoi",
+    "PlanPoiAttachment",
     "OutdoorFeatureProfile",
     "OceanActivityIndexForecast",
     "OceanActivityIndexLocation",

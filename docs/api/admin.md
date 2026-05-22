@@ -1,6 +1,6 @@
 # 관리자 API
 
-관리자 API는 일반 사용자 로그인과 분리된 내부 운영용 API이다. 현재 구현 범위는 관리자 전용 로그인, ETL/공공데이터 테이블 조회용 데이터 브라우저, 가입 사용자 관리, 사용자/features/trips/POI CRUD 콘솔이다.
+관리자 API는 일반 사용자 로그인과 분리된 내부 운영용 API이다. 현재 구현 범위는 관리자 전용 로그인, ETL/공공데이터 테이블 조회용 데이터 브라우저, 가입 사용자 관리, 사용자/features/trips/POI CRUD 콘솔, 공지 plan/POI 첨부 파일 관리, RustFS 객체 관리이다.
 
 ## 인증
 
@@ -213,6 +213,79 @@ Entity별 추가 필터:
 단일 항목 상세와 연관 그룹을 조회한다.
 
 예: feature 상세는 해당 feature를 참조하는 POI 그룹을 반환하고, POI 상세는 trip/user/feature 링크를 반환한다.
+
+### 관리자 공지 plan/POI 첨부
+
+관리자 공지 plan과 공지 POI에는 RustFS 파일을 첨부할 수 있다. 파일 본문은 먼저 `POST /storage/upload-urls`로 받은 presigned PUT URL에 업로드하고, 업로드가 끝난 뒤 아래 endpoint로 DB 메타데이터를 등록한다.
+
+공지 plan 첨부:
+
+```http
+GET /admin/notice-plans/{plan_id}/attachments
+POST /admin/notice-plans/{plan_id}/attachments
+DELETE /admin/notice-plans/{plan_id}/attachments/{attachment_id}
+```
+
+공지 POI 첨부:
+
+```http
+GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments
+POST /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments
+DELETE /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments/{attachment_id}
+```
+
+요청:
+
+```json
+{
+  "bucket": "tripmate-media",
+  "storage_key": "user-uploads/notice_plan_attachment/{admin_user_id}/2026/05/{uuid}.pdf",
+  "original_filename": "국가유산투어 안내.pdf",
+  "content_type": "application/pdf",
+  "byte_size": 204800,
+  "public_url": null,
+  "role": "document",
+  "description": "공지 plan 안내 문서",
+  "sort_order": 0
+}
+```
+
+첨부를 추가하거나 삭제하면 공지 plan의 `updated_at`, `updated_by_admin_id`, `version`도 갱신한다. 공지 POI 첨부를 추가하거나 삭제하면 해당 공지 POI의 `version`도 증가한다.
+
+### 관리자 RustFS 객체 관리
+
+관리자는 RustFS bucket 안의 object를 조회하고 삭제할 수 있다. 이 endpoint는 API 서버가 내부 RustFS endpoint로 S3 호환 서명 요청을 보내며, 브라우저가 RustFS credential을 직접 알 필요가 없다.
+
+```http
+GET /admin/rustfs/objects?prefix=user-uploads/&limit=100
+DELETE /admin/rustfs/objects?key=user-uploads/notice_plan_attachment/...
+```
+
+응답:
+
+```json
+{
+  "bucket": "tripmate-media",
+  "prefix": "user-uploads/",
+  "objects": [
+    {
+      "key": "user-uploads/notice_plan_attachment/.../guide.pdf",
+      "size": 204800,
+      "last_modified": "2026-05-22T09:00:00+00:00",
+      "etag": "abc123",
+      "storage_class": "STANDARD",
+      "public_url": null
+    }
+  ],
+  "is_truncated": false,
+  "next_continuation_token": null
+}
+```
+
+주의:
+
+- 첨부 endpoint의 `DELETE`는 DB 연결 해제이고, RustFS object 삭제가 아니다.
+- `/admin/rustfs/objects` 삭제는 object 본문 hard delete다. 공지 첨부가 사용자 여행으로 복사되어 같은 `storage_key`를 공유할 수 있으므로 삭제 전 참조 row를 확인한다.
 
 ### `POST /admin/entities/{entity}`
 

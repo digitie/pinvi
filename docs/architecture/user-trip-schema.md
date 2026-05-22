@@ -377,6 +377,10 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 복사 시 원본 POI snapshot은 `trip_pois.snapshot`에 복사되어 원천 feature가 바뀌어도 사용자 여행 표시가
 즉시 깨지지 않게 한다.
 
+공지 plan/POI 첨부 파일은 `plan_poi_attachments`에 저장한다. 공지를 사용자 여행으로 복사할 때는 첨부 row도
+사용자 여행 plan/POI 대상으로 복사하고, RustFS object 본문은 복제하지 않는다. 복사된 row의
+`source_attachment_id`는 원본 공지 첨부 row를 가리킨다.
+
 ### `trip_members`
 
 여행별 참여자와 권한을 저장한다.
@@ -473,6 +477,46 @@ Gmail을 사용할 경우 일반 계정 비밀번호를 저장하지 않는다. 
 2. 프론트엔드는 `GET /public/festivals/map-markers`로 축제 마커를 표시한다.
 3. 마커 클릭 시 `GET /public/festivals/{festival_id}`로 상세를 표시한다.
 4. 상세의 “추가” 버튼에서 사용자가 여행 날짜를 고르면 `resource_type = festival`, `festival_id = ...`로 `trip_plan_items`를 만든다.
+
+### `plan_poi_attachments`
+
+사용자 여행 plan/POI와 관리자 공지 plan/POI에 연결되는 RustFS 첨부 메타데이터 테이블이다. 파일 본문은
+RustFS bucket에 저장하고, DB에는 object key와 표시/감사용 메타데이터만 남긴다.
+
+| 컬럼 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `id` | UUID PK | Y | 첨부 row ID |
+| `trip_id` | UUID FK nullable | N | 사용자 여행 plan 첨부 대상 |
+| `trip_poi_id` | UUID FK nullable | N | 사용자 여행 POI 첨부 대상 |
+| `notice_plan_id` | UUID FK nullable | N | 관리자 공지 plan 첨부 대상 |
+| `notice_poi_id` | UUID FK nullable | N | 관리자 공지 POI 첨부 대상 |
+| `source_attachment_id` | UUID FK nullable | N | 공지 첨부를 사용자 여행으로 복사한 경우 원본 첨부 row |
+| `bucket` | varchar(80) | Y | RustFS bucket. 기본값은 `tripmate-media` |
+| `storage_key` | varchar(1024) | Y | RustFS object key |
+| `original_filename` | varchar(255) | Y | 업로드 원본 파일명 |
+| `content_type` | varchar(255) | Y | 검증된 MIME type |
+| `byte_size` | integer | Y | 파일 크기 byte |
+| `public_url` | text | N | public base URL을 설정했을 때의 파생 URL |
+| `checksum_sha256` | varchar(64) | N | client가 계산해 보낼 수 있는 파일 SHA-256 |
+| `role` | varchar(40) | Y | `attachment`, `image`, `document`, `reference` |
+| `description` | text | N | 표시용 설명 |
+| `sort_order` | integer | Y | 대상 안 표시 순서 |
+| `uploaded_by_user_id` | UUID FK | Y | 업로드를 수행한 사용자. 관리자도 사용자 row를 사용 |
+| `deleted_at` | timestamptz | N | 대상과 파일 연결 해제 시각 |
+| `created_at`, `updated_at` | timestamptz | Y | 생성/수정 시각 |
+
+제약:
+
+- `trip_id`, `trip_poi_id`, `notice_plan_id`, `notice_poi_id` 중 정확히 하나만 채운다.
+- `byte_size > 0`.
+- `sort_order >= 0`.
+- `role`은 허용 목록으로 제한한다.
+
+삭제 정책:
+
+- 사용자/API 첨부 삭제는 DB row의 `deleted_at`만 채운다.
+- RustFS object hard delete는 관리자 파일 관리 UI에서 별도로 수행한다.
+- 공지 첨부가 여러 사용자 여행 row로 복사될 수 있으므로 object 삭제와 DB row 삭제를 한 transaction처럼 묶지 않는다.
 
 ## 여행 장소
 

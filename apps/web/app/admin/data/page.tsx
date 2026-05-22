@@ -372,6 +372,10 @@ export default function AdminDataCrudPage() {
               <UsersIcon />
               사용자 관리
             </Link>
+            <Link className="admin-top-button" href="/admin/files">
+              <DatabaseIcon />
+              파일 관리
+            </Link>
             <a className="admin-top-button" href={dagsterAdminUrl} rel="noreferrer" target="_blank">
               <WorkflowIcon />
               Dagster
