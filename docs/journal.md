@@ -43,9 +43,10 @@ ADR-016).
 
 `maplibre-vworld-js`는 사용자가 보유한 내부 라이브러리 (`F:\dev\maplibre-vworld-js`,
 Antigravity 2.0 + Gemini 3.1 Pro로 작성). VWorld + MapLibre GL JS 선언형 React
-통합. `VWorldMap` / `MarkerClusterer` / `PolygonArea` / `RouteLine` + TripMate
-도메인 마커 (`PlaceMarker` / `PriceMarker` / `WeatherMarker`) 14개 컴포넌트
-이미 제공.
+통합. `VWorldMap` / `ClusterLayer` / `PolygonArea` / `RouteLine` / `Popup` +
+도메인 마커 (`PlaceMarker` / `PriceMarker` / `WeatherMarker`) generic primitive
+제공 (이후 리팩터로 `MarkerClusterer` → `ClusterLayer`, `MapPopup` → `Popup`
+이름 변경, TripMate 전용 wrapper / 팔레트는 라이브러리에서 제거).
 
 **신규 파일**:
 

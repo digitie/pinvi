@@ -82,7 +82,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-vworld-api` | VWorld geocoder / 경계 |
 | `python-krairport-api` | 한국공항공사 공항 / 항공편 |
 | `python-kraddr-gop` | 우편번호 / 도로명 base |
-| `maplibre-vworld-js` | **TripMate 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + Polygon + RouteLine + MarkerClusterer 내장. `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
+| `maplibre-vworld-js` | **TripMate 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + `PolygonArea` + `RouteLine` + `ClusterLayer` + `Popup` generic primitive 제공 (TripMate 도메인 wrapper / 16색 팔레트 상수는 라이브러리에 없음 — `apps/web/lib`에서 직접 구현). `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
 
 상세 사용 정책은 `python-krtour-map`의 `docs/external-apis.md`와 본 저장소의
 `docs/krtour-map-integration.md`.
