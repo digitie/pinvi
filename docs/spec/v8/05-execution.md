@@ -9,7 +9,7 @@
 | 1 | vworld 법정동코드 파일 | vworld.kr txt 사용 | `python-kraddr-geo`가 임포트 (L장 / `python-krtour-map` ADR-006) |
 | 2 | 참여자 동의 UI | 프로필 입력 시 통합. 필수/선택 분리 | G-5 4 분리 동의 (`docs/spec/v8/02-backend.md` §4.2) |
 | 3 | 소셜 로그인 매칭 | 이메일 인증 방식. verify 후만 활성/연결 | G-4 안전 매칭 (F-3) |
-| 4 | 카카오맵 SDK | `react-kakao-maps-sdk` 직접 사용 | I-2 컴포넌트 + 일 호출 한도 관리 |
+| 4 | ~~카카오맵 SDK~~ → **maplibre-vworld-js** (ADR-015로 정정) | `maplibre-vworld-js` (VWorld + MapLibre GL JS) 직접 사용 | 좌표 lon-lat 일관 + 선언형 + 16색 마커 + Place/Price/Weather 마커 라이브러리에 내장 |
 | 5 | 운영 환경 | Odroid M1S + Ubuntu 24.04 + Docker. 셀프호스팅 | N-7 (`docs/spec/v8/00-infrastructure.md` §2.1) |
 | 6 | 이메일 발송 | Resend (React Email + SPF/DKIM/DMARC + webhook) | G-6 (`docs/spec/v8/02-backend.md` §4.3) |
 
@@ -72,7 +72,7 @@ DoD: ETL/회원가입/여행 동작 검증을 Admin으로 완료.
 
 ### Sprint 4 (2~3주) — 지도 + 사용자 UI
 
-- 카카오맵 어댑터 (`react-kakao-maps-sdk`)
+- 지도 어댑터 (`maplibre-vworld-js` — ADR-015)
 - viewport 기반 feature 로딩 + 클러스터링 (I-4)
 - POI D&D + 양방향 패널 (I-5)
 - 16색 팔레트 + maki 아이콘 (I-6)

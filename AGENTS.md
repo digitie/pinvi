@@ -1,5 +1,26 @@
 # AGENTS.md
 
+## AI 에이전트 도구 지원 — `AGENTS.md` 단일 진실
+
+본 저장소는 **여러 AI 코딩 도구를 모두 지원**한다:
+
+| 도구 | 1차 진입 파일 |
+|------|-------------|
+| **Claude Code / Claude Agent SDK** | `CLAUDE.md` → `AGENTS.md` → `SKILL.md` |
+| **OpenAI Codex (CLI)** | `AGENTS.md` |
+| **Google Antigravity (Gemini)** | `AGENTS.md` |
+| **Cursor / Copilot (도메인 작업)** | `AGENTS.md` + `SKILL.md` |
+
+각 도구가 처음 읽는 파일이 다르므로 **두 파일 (`AGENTS.md` + `CLAUDE.md`)이 항상
+같은 결정·룰·식별자를 반영**해야 한다 (ADR-016).
+
+- `AGENTS.md` 갱신 시 `CLAUDE.md`의 "1쪽 진입 요약" 동기 갱신 — 필수
+- `CLAUDE.md` 갱신 시 `AGENTS.md` 본문 + 진입 절차표 동기 갱신 — 필수
+- `SKILL.md` (도메인 어휘 / DO NOT)는 같은 갱신 PR에 포함될 가능성 높음 — 함께 검토
+
+**ADR-016 핵심**: 어떤 AI 도구가 진입하더라도 같은 결정을 적용할 수 있도록 두
+파일 사이의 fact drift 방지.
+
 ## 문서 언어 정책
 
 본 저장소의 모든 Markdown 문서는 한국어로 작성한다. 공식 API 필드명, 코드 식별자,
@@ -61,7 +82,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-vworld-api` | VWorld geocoder / 경계 |
 | `python-krairport-api` | 한국공항공사 공항 / 항공편 |
 | `python-kraddr-gop` | 우편번호 / 도로명 base |
-| `maplibre-vworld-js` | VWorld + maplibre-gl 통합 (지도 클라이언트) |
+| `maplibre-vworld-js` | **TripMate 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + Polygon + RouteLine + MarkerClusterer 내장. `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
 
 상세 사용 정책은 `python-krtour-map`의 `docs/external-apis.md`와 본 저장소의
 `docs/krtour-map-integration.md`.

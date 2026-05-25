@@ -24,8 +24,8 @@
 | HTTP | **`fetch`** + 공용 wrapper (`lib/api/client.ts`) | 인증 토큰 자동 부착 |
 | D&D (웹) | **dnd-kit** | |
 | D&D (모바일) | `react-native-draggable-flatlist` | |
-| 지도 (웹) | **`react-kakao-maps-sdk`** | SPEC V8 A-1 결정 #4 |
-| 지도 (모바일) | `react-native-maps` + Kakao 모듈 또는 WebView 임베드 | v2 결정 후보 |
+| 지도 (웹) | **`maplibre-vworld-js`** (VWorld + MapLibre GL JS) | ADR-015 (SPEC V8 A-1 #4 superseded) |
+| 지도 (모바일) | `maplibre-react-native` + VWorld 또는 WebView 임베드 | v2 결정 후보 |
 | 아이콘 | **Mapbox Maki 8** + Lucide (UI 일반 아이콘) | maki는 `apps/web/public/maki/` |
 | 날짜 | **date-fns** | 공용. `date-fns-tz`로 KST aware |
 | WebSocket | **native WebSocket API** | 공용 wrapper `lib/websocket.ts` |
@@ -593,7 +593,7 @@ apps/web/app/                    apps/mobile/app/
 | Zustand store (auth / ui / selected-poi / map-viewport) | Sprint 1~2 | `packages/state` |
 | `useUserLocation` 공용 hook | Sprint 2 | `packages/hooks/src/useUserLocation.ts` + 웹 어댑터 |
 | Admin 콘솔 (`apps/web/app/admin/...`) | Sprint 3 | shadcn/ui DataTable / FilterBar |
-| 지도 + react-kakao-maps-sdk | Sprint 4 | `apps/web/components/map/*` + `apps/web/lib/kakao.ts` |
+| 지도 + maplibre-vworld-js | Sprint 4 | `apps/web/components/map/*` + `apps/web/lib/kakao.ts` |
 | Notice plan UI (사용자 listing + copy 다이얼로그) | Sprint 4 | `apps/web/app/(app)/notice-plans/...` |
 | Notice plan UI (Admin 작성기) | Sprint 6 | `apps/web/app/admin/notice-plans/...` |
 | WebSocket 클라이언트 (공용 wrapper) | Sprint 5 | `packages/api-client/src/websocket.ts` |

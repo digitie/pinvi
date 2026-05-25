@@ -21,7 +21,7 @@
 | 상태(서버) | **TanStack Query v5** (공용 `packages/api-client`) |
 | 폼 | **React Hook Form** + **Zod** resolver (schema는 공용 `packages/schemas`) |
 | D&D (웹) | dnd-kit |
-| 지도 (웹) | react-kakao-maps-sdk (직접 wrapping 안 함, SPEC V8 A-1 #4) |
+| 지도 (웹) | **`maplibre-vworld-js`** (VWorld + MapLibre GL JS) — ADR-015로 SPEC V8 A-1 #4 (Kakao Maps SDK) superseded |
 | 마커 | 16색 팔레트 P-01~P-16 + maki 아이콘 (`docs/design/marker-palette.md`) |
 | 디자인 톤 | 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html` (단일 기준) |
 
@@ -77,7 +77,7 @@ apps/web/
 │   ├── admin/{DataTable,FilterBar,KeyValueGrid,JsonViewer}.tsx
 │   └── marker/                       # 16색 팔레트 사용
 ├── lib/
-│   ├── kakao.ts
+│   ├── vworldMap.ts
 │   ├── websocket.ts
 │   └── markerPalette.ts
 ├── stores/
@@ -231,7 +231,7 @@ default 상수 fallback.
 | `apps/web` scaffolding | Sprint 1 | `apps/web/package.json` + App Router skeleton |
 | 로그인/가입/verify UI (G-2 와이어프레임) | Sprint 1 | `apps/web/app/(auth)/...` |
 | Trip 대시보드 + 미래/과거 아코디언 (I-2) | Sprint 4 | `apps/web/app/(app)/page.tsx` |
-| 지도 + react-kakao-maps-sdk (I-2 ~ I-5) | Sprint 4 | `apps/web/components/map/...` |
+| 지도 + maplibre-vworld-js (I-2 ~ I-5) | Sprint 4 | `apps/web/components/map/...` |
 | 16색 팔레트 + maki (I-6) | Sprint 4 | `apps/web/lib/markerPalette.ts` |
 | viewport 로딩 + 클러스터 (I-4) | Sprint 4 | `apps/web/components/map/ViewportFeatureLayer.tsx` |
 | 우클릭 메뉴 (I-7) | Sprint 4 | `apps/web/components/map/RightClickMenu.tsx` |

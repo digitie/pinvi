@@ -3,6 +3,12 @@
 이 문서는 AI 에이전트가 본 저장소에서 작업할 때의 행동 지침이다. `AGENTS.md`,
 `SKILL.md`와 함께 읽는다.
 
+> **도구 호환성** (ADR-016): 본 저장소는 Claude / Codex / Antigravity / Cursor /
+> Copilot 등 여러 AI 코딩 도구를 지원한다. 각 도구의 1차 진입 파일이 다르므로
+> (`CLAUDE.md` ≠ `AGENTS.md`) **두 파일은 같은 결정·룰·식별자를 반영**해야 한다.
+> 한 쪽 갱신 시 다른 쪽도 동기 갱신 — 본 가이드 §3의 ADR 작성 규약에 동기
+> 체크리스트가 포함됨.
+
 ## 1. 첫 5분 진입 프로토콜
 
 새 세션이 들어오면 이 순서로 컨텍스트를 확보한다:
@@ -149,6 +155,8 @@ ADR-NNN — `docs/data-model.md`에 Trip ↔ POI 첨부 경계 정리.
 - [ ] `docs/journal.md` 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" 갱신
 - [ ] (`python-krtour-map`와 경계 변경이면) 그 저장소에 mirror ADR 또는 cross-ref
+- [ ] **AGENTS.md / CLAUDE.md 동기** — 진입 가이드·식별자·DO NOT에 영향 있으면
+      두 파일 모두 갱신 (ADR-016). 진입 절차 표 / 의존 스택 / 빠른 검색 표 동기 검토
 
 ### 7.2 docs 신규/수정
 

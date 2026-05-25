@@ -161,7 +161,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 
 **외부 통합**
 - 인덱스: [`docs/integrations/README.md`](docs/integrations/README.md)
-- Resend / 소셜 로그인 / Gemini / Telegram / Kakao Map / Sentry / Loki
+- Resend / 소셜 로그인 (Google/Naver/Kakao OAuth) / Gemini / Telegram / [maplibre-vworld-js](docs/integrations/maplibre-vworld.md) / Sentry / Loki
 
 **규약 (코딩 / DB / 테스트)**
 - 인덱스: [`docs/conventions/README.md`](docs/conventions/README.md)

@@ -36,6 +36,8 @@
 - [x] T-018 — docs/conventions/ 6개 + README (완료: 2026-05-26)
 - [x] T-019 — docs/architecture/ 5개 추가 + data-sources/README (완료: 2026-05-26)
 - [x] T-020 — AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) (완료: 2026-05-26)
+- [x] T-021 — `docs/integrations/maplibre-vworld.md` 신규 + Kakao 전면 교체 (ADR-015) (완료: 2026-05-26)
+- [x] T-022 — `AGENTS.md` ↔ `CLAUDE.md` 동기 룰 (ADR-016 — Codex/Antigravity 대응) (완료: 2026-05-26)
 
 ## 보류
 
