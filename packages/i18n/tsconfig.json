@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*", "messages/**/*"]
+}

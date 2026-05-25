@@ -1,0 +1,21 @@
+{
+  "name": "@tripmate/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zod schema 공용 — API I/O + 폼 validator. Next.js / Expo 모두 import.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

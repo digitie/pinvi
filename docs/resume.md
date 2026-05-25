@@ -34,6 +34,7 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - [x] docs/conventions/ 6개 신규 (coding-style/database/testing/geospatial/normalization + README) — T-018
 - [x] docs/architecture/ 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract) — T-019
 - [x] AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) — T-020
+- [x] Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 — T-023
 - [ ] Sprint 1 진입 PR (apps + packages scaffolding) — T-030 (대기)
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
@@ -56,6 +57,13 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - ADR-014: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리
 - ADR-015: 지도 클라이언트 변경 (Kakao Maps SDK → `maplibre-vworld-js`)
 - ADR-016: AI 에이전트 도구 다중 지원 — `AGENTS.md` ↔ `CLAUDE.md` 동기 정책
+
+## 운영 지시
+
+- Sprint 4 완료 전까지 새 PR은 `docs/runbooks/pr-review-sprint4.md` 기준으로
+  리뷰 → 상세 코멘트 → 코드 수정 → 기반 라이브러리 sync → 검증 → 머지를 반복한다.
+- `.github/workflows/codex-pr-monitor.yml`이 5분마다 열린 PR을 감시하고, 최신 head
+  SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
 
 ## 차단 사유 / 결정 대기
 

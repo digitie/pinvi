@@ -1,0 +1,25 @@
+{
+  "name": "@tripmate/state",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TripMate Zustand store 공용 — storage adapter 주입형 (localStorage / AsyncStorage).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zustand": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

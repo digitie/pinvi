@@ -82,7 +82,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-vworld-api` | VWorld geocoder / 경계 |
 | `python-krairport-api` | 한국공항공사 공항 / 항공편 |
 | `python-kraddr-gop` | 우편번호 / 도로명 base |
-| `maplibre-vworld-js` | **TripMate 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + Polygon + RouteLine + MarkerClusterer 내장. `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
+| `maplibre-vworld-js` | **TripMate 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + `PolygonArea` + `RouteLine` + `ClusterLayer` + `Popup` generic primitive 제공 (TripMate 도메인 wrapper / 16색 팔레트 상수는 라이브러리에 없음 — `apps/web/lib`에서 직접 구현). `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
 
 상세 사용 정책은 `python-krtour-map`의 `docs/external-apis.md`와 본 저장소의
 `docs/krtour-map-integration.md`.
@@ -160,6 +160,19 @@ PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다.
 
 브랜치 명명: `feat/<topic>` / `fix/<topic>` / `chore/<topic>` / `docs/<topic>` /
 `refactor/<topic>` / `adr/<short>` / `agent/<id>/<topic>` (다중 에이전트 병행).
+
+### Sprint 4까지 PR 리뷰·수정·머지 운영
+
+Sprint 4 완료 전까지 새 PR이 올라오거나 draft가 `ready_for_review`로 전환되면
+`docs/runbooks/pr-review-sprint4.md`를 따른다. `.github/workflows/codex-pr-monitor.yml`은
+5분마다 열린 PR을 감시하고, 최신 head SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
+
+- 리뷰 후 상세 코멘트를 남기고, 필요한 코드 수정까지 직접 수행한다.
+- 변경량 최소화보다 Sprint 1~4를 버틸 장기 설계 정합성을 우선한다.
+- 올바른 수정 위치가 `python-krtour-map`, `maplibre-vworld-js`, `python-kraddr-*`,
+  provider 라이브러리라면 해당 저장소 PR을 먼저 만들고 머지한 뒤 TripMate를 sync한다.
+- TripMate PR merge는 차단 코멘트, 검증, 문서/journal/resume, 기반 라이브러리 sync가
+  끝난 뒤 수행한다.
 
 ## 코드 작성 금지 (현 단계)
 

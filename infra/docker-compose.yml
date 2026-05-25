@@ -1,0 +1,80 @@
+# TripMate dev compose — PostgreSQL/PostGIS + RustFS + (옵션) Dagster.
+# `docs/runbooks/local-dev.md` §8.
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.5-alpine
+    container_name: tripmate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tripmate
+      POSTGRES_PASSWORD: tripmate_dev_password
+      POSTGRES_DB: tripmate
+    ports:
+      - "55432:5432"
+    volumes:
+      - tripmate-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: tripmate-rustfs
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: tripmate-dev-access
+      RUSTFS_SECRET_KEY: tripmate-dev-secret-change-me
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - tripmate-rustfs:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rustfs-init:
+    image: minio/mc:latest
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://rustfs:9000 tripmate-dev-access tripmate-dev-secret-change-me;
+      mc mb -p local/tripmate-media || true;
+      "
+
+  # Sprint 5에서 활성화. Sprint 1은 컨테이너 정의만.
+  dagster:
+    profiles: ["etl"]
+    build:
+      context: ..
+      dockerfile: apps/etl/Dockerfile
+    container_name: tripmate-dagster
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_dev_password@postgres:5432/tripmate
+      TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9000
+      TRIPMATE_RUSTFS_BUCKET: tripmate-media
+      DAGSTER_HOME: /opt/tripmate/.tmp/dagster
+    ports:
+      - "23000:3000"
+    volumes:
+      - ../apps/etl:/opt/tripmate/apps/etl
+      - tripmate-dagster:/opt/tripmate/.tmp/dagster
+
+volumes:
+  tripmate-pgdata:
+  tripmate-rustfs:
+  tripmate-dagster:

@@ -1,0 +1,73 @@
+name: api
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api.yml"
+      - "pyproject.toml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api.yml"
+
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5-alpine
+        env:
+          POSTGRES_USER: tripmate
+          POSTGRES_PASSWORD: tripmate_ci_password
+          POSTGRES_DB: tripmate_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tripmate -d tripmate_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format check
+        run: ruff format --check .
+
+      - name: mypy --strict
+        run: mypy --strict app
+
+      - name: pytest (unit)
+        env:
+          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
+          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+        run: pytest tests/unit -q
+
+      - name: Alembic migration sanity (PostGIS 컨테이너에 실제 적용)
+        env:
+          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
+          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+        run: alembic upgrade head

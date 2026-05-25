@@ -38,6 +38,13 @@
 - [x] T-020 — AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) (완료: 2026-05-26)
 - [x] T-021 — `docs/integrations/maplibre-vworld.md` 신규 + Kakao 전면 교체 (ADR-015) (완료: 2026-05-26)
 - [x] T-022 — `AGENTS.md` ↔ `CLAUDE.md` 동기 룰 (ADR-016 — Codex/Antigravity 대응) (완료: 2026-05-26)
+- [x] T-023 — Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 (완료: 2026-05-25)
+- [x] T-030 — Sprint 1 monorepo 루트 + packages/* skeleton (완료: 2026-05-26)
+- [x] T-031 — Sprint 1 apps/api FastAPI + Alembic + Auth 뼈대 (완료: 2026-05-26)
+- [x] T-032 — Sprint 1 apps/web Next.js + auth 화면 (완료: 2026-05-26)
+- [x] T-033 — Sprint 1 apps/etl Dagster placeholder (완료: 2026-05-26)
+- [x] T-034 — Sprint 1 infra/docker-compose + scripts + CI workflow 3개 (완료: 2026-05-26)
+- [x] T-035 — Sprint 1 PR 생성 (완료: 2026-05-26)
 
 ## 보류
 

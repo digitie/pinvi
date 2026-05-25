@@ -1,0 +1,26 @@
+{
+  "name": "tripmate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TripMate v2 — 한국 여행 계획·기록·공유 애플리케이션",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  }
+}

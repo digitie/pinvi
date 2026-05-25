@@ -1,0 +1,19 @@
+{
+  "name": "@tripmate/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TripMate 메시지 카탈로그 — next-intl (웹) + i18n-js (모바일 v2) 공유.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ko": "./messages/ko.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

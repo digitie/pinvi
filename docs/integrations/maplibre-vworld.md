@@ -42,9 +42,9 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 | 선언형 API | 명령형 `map.panTo()` 등 혼용 | **순수 선언형 (props만)** |
 | 좌표 순서 | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — TripMate 표준과 일치 |
 | 마커 | `MapMarker` (이미지 src) | React Portal 컴포넌트 직접 주입 |
-| 클러스터링 | supercluster 별도 구현 | `MarkerClusterer` 내장 (KDBush) |
+| 클러스터링 | supercluster 별도 구현 | `ClusterLayer` 내장 (KDBush) |
 | Polygon/Route | 별도 구현 | `PolygonArea`, `RouteLine` 내장 |
-| 16색 팔레트 매핑 | TripMate에서 props 매핑 | 동일 (다만 마커 컴포넌트는 라이브러리 제공) |
+| 16색 팔레트 매핑 | TripMate가 직접 구현 | TripMate가 직접 구현 (이전 `TRIPMATE_MARKER_PALETTE` / `TripmateFeatureLayer` 라이브러리에서 제거됨 — generic primitive만 제공) |
 | Local 검색 | Kakao Local API (server) | **없음** — TripMate `/search` 라이브러리 경유 |
 | 경로 안내 | Kakao 모빌리티 길찾기 | **없음** — Sprint 6 OR-Tools 직선 거리 또는 라이브러리 경유 |
 
@@ -52,7 +52,7 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 
 - 좌표 순서 일관 (`(lng, lat)` 전체 stack)
 - 선언형 — `useEffect`로 명령형 호출 불필요
-- 16색 마커 + Maki 아이콘 + Place/Price/Weather 마커가 **이미 라이브러리에 있음**
+- Maki 아이콘 + 클러스터링 + Polygon/RouteLine generic primitive 제공 — TripMate 도메인(16색 팔레트, Place/Price/Weather 매핑)은 `apps/web/lib`에서 어댑터로 구성
 - VWorld는 국토부 공식 — provider 위탁자 명시 간소화 (국내)
 - 오프라인 캐싱 제한 없음 (PWA v2 후보 활성화)
 
@@ -81,7 +81,8 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 ### 3.3 키 redact
 
 라이브러리가 `redactVWorldUrl(url)` 헬퍼를 export. URL에서 키 segment를 `***`로
-마스킹. Sentry / Loki / structlog에 자동 적용:
+마스킹. `string | undefined` 모두 입력 가능 (overload — undefined 입력 시
+undefined 반환). Sentry / Loki / structlog에 자동 적용:
 
 ```ts
 import { redactVWorldUrl } from 'maplibre-vworld';
@@ -89,8 +90,13 @@ import { redactVWorldUrl } from 'maplibre-vworld';
 const redacted = redactVWorldUrl(error.url);
 // "https://api.vworld.kr/req/wmts/.../tile.png?key=***"
 
+// undefined 안전 — 별도 가드 불필요
+const maybe = redactVWorldUrl(maybeUndefinedUrl); // string | undefined
+
 Sentry.captureException(error, { tags: { url: redacted } });
 ```
+
+> 이전 `redactVWorldTileUrl` 별칭은 제거됨 — `redactVWorldUrl`로 통합.
 
 ## 4. TripMate 사용 패턴
 
@@ -100,7 +106,7 @@ Sentry.captureException(error, { tags: { url: redacted } });
 // apps/web/components/map/MapView.tsx
 'use client';
 import dynamic from 'next/dynamic';
-import type { VWorldMapErrorInfo } from 'maplibre-vworld';
+import type maplibregl from 'maplibre-gl';
 import 'maplibre-vworld/style.css';
 
 const VWorldMap = dynamic(
@@ -114,15 +120,16 @@ const PlaceMarker = dynamic(
 );
 
 export function MapView({ initialCenter, pois }: Props) {
+  // `center` 는 필수 prop — 기본값(서울) 없음. 미정 시 caller에서 결정.
   return (
     <VWorldMap
       apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY!}
       layerType="Base"
       center={initialCenter}
       zoom={14}
-      onMapClick={(e) => handleMapClick(e.lngLat)}
-      onMapError={(e) => trackMapError(e)}
-      tileErrorThreshold={5}
+      onClick={(e) => handleMapClick(e.lngLat)}              // raw MapMouseEvent
+      onError={(e: maplibregl.ErrorEvent) => trackMapError(e)} // raw maplibregl error
+      onMoveEnd={(e) => setBounds(e.target.getBounds())}      // raw MapLibreEvent
       animateCameraChanges
     >
       {pois.map((poi) => (
@@ -138,29 +145,42 @@ export function MapView({ initialCenter, pois }: Props) {
 }
 ```
 
+> **변경 요약** (이전 API → 새 API)
+> - `onMapClick` → `onClick`, `onMapLoad` → `onLoad`, `onMapError` → `onError`, `onMapContextMenu` → `onContextMenu`
+> - `onViewportChange` 제거 → 필요한 시점별로 `onMoveEnd` / `onZoomEnd` / `onIdle` (각각 raw `MapLibreEvent`) 분리
+> - `showNavigationControl` / `showGeolocateControl` / `showScaleControl` → `navigation` / `geolocate` / `scale`
+> - `tileErrorThreshold` prop 제거 — 타일 에러 카운트는 TripMate가 직접 (`onError` 누적) 관리
+> - `center` 가 필수 prop (기본값 서울 좌표 제거됨)
+> - 콜백에 전달되는 인자가 wrapper 타입(`VWorldMapErrorInfo` / `VWorldMapContextMenuInfo` / `VWorldViewportInfo`)이 아니라 **raw MapLibre 이벤트** 그대로
+
 ### 4.2 viewport 변경 → feature fetch
 
-선언형 API라 viewport bounds 변경은 라이브러리가 emit하는 이벤트 또는
-`onMoveEnd` prop (미구현 시 라이브러리에 PR — §6.1 참고).
+`onMoveEnd` / `onZoomEnd` / `onIdle` 는 모두 raw `MapLibreEvent` 를 전달.
+viewport 정보는 `e.target.getBounds()` / `getZoom()` 등으로 직접 추출.
 
 ```tsx
-// 기대 사용 패턴 (라이브러리 측 보강 필요 항목)
 <VWorldMap
-  onMoveEnd={(viewport) => {
-    setBounds(viewport.bounds);     // zustand store
+  onMoveEnd={(e) => {
+    const bounds = e.target.getBounds();   // maplibregl.LngLatBounds
+    setBounds({
+      sw: bounds.getSouthWest().toArray(), // [lng, lat]
+      ne: bounds.getNorthEast().toArray(),
+    });
   }}
+  onZoomEnd={(e) => setZoom(e.target.getZoom())}
 >
 ```
 
 `setBounds`가 TanStack Query 키 invalidate → `/features/in-bounds` 호출.
+debounce 250ms + AbortController 는 TripMate 측에서 (라이브러리는 raw 이벤트만).
 
 ### 4.3 클러스터링
 
 ```tsx
-import { MarkerClusterer, ClusterMarker } from 'maplibre-vworld';
+import { ClusterLayer, ClusterMarker } from 'maplibre-vworld';
 
 <VWorldMap ...>
-  <MarkerClusterer
+  <ClusterLayer
     points={features.map((f) => ({
       id: f.feature_id,
       lngLat: [f.coord.longitude, f.coord.latitude],
@@ -179,7 +199,8 @@ import { MarkerClusterer, ClusterMarker } from 'maplibre-vworld';
 </VWorldMap>
 ```
 
-라이브러리가 viewport culling + KDBush. 10만 건 즉시 병합.
+라이브러리가 viewport culling + KDBush. 10만 건 즉시 병합. (이전 이름
+`MarkerClusterer` → `ClusterLayer` 로 변경됨.)
 
 ### 4.4 Polygon (area feature)
 
@@ -205,13 +226,17 @@ import { RouteLine } from 'maplibre-vworld';
 <VWorldMap ...>
   <RouteLine
     id={`route-${trail.feature_id}`}
-    data={trail.geom}                    // GeoJSON LineString
+    coordinates={trail.geom.coordinates}  // [lng, lat][] — GeoJSON LineString coords
     color="#00897B"                       // P-06 청록
-    lineDasharray={[4, 4]}
+    width={4}                              // prev `lineWidth`
+    dashArray={[4, 4]}                     // prev `lineDasharray`
     onClick={() => selectTrail(trail)}
   />
 </VWorldMap>
 ```
+
+> `data` prop은 제거됨 — `coordinates: [lng, lat][]` 만 받음. GeoJSON
+> LineString 그대로 넣고 싶다면 `.coordinates` 만 추출.
 
 ### 4.6 transformRequest 프록시
 
@@ -236,7 +261,10 @@ proxy endpoint (`/api/vworld-proxy`) 추가 필요 (Sprint 4 결정).
 
 ## 5. 16색 팔레트 + Maki 매핑
 
-`docs/design/marker-palette.md`의 P-01~P-16과 라이브러리 마커 컴포넌트 연결:
+`docs/design/marker-palette.md`의 P-01~P-16과 라이브러리 마커 컴포넌트 연결.
+라이브러리는 generic primitive만 export — TripMate 팔레트(`TRIPMATE_MARKER_PALETTE`
+/ `TRIPMATE_CATEGORY_MARKERS` / `resolveTripmateMarkerStyle`)와 도메인 wrapper
+(`TripmateFeatureLayer`)는 **`apps/web/lib`에서 직접 구현**한다.
 
 ```ts
 // apps/web/lib/markerAdapter.ts
@@ -261,7 +289,7 @@ export function renderPoiMarker(poi: Poi) {
       return (
         <MakiMarker
           lngLat={lngLat}
-          icon={poi.custom_marker_icon ?? poi.feature_snapshot.marker_icon}
+          icon={poi.custom_marker_icon ?? poi.feature_snapshot.marker_icon ?? 'marker'}
           color={palette.hex}
           size="medium"
         />
@@ -269,6 +297,9 @@ export function renderPoiMarker(poi: Poi) {
   }
 }
 ```
+
+> `MakiMarker` props 변경 — 이전 `iconName` / `fallbackIcon` 두 prop이
+> `icon: string` 하나로 통합. fallback이 필요하면 caller에서 `??` 로 결정.
 
 ## 6. 라이브러리 측 보강 필요 항목 (TripMate가 요청할 PR)
 
@@ -280,9 +311,8 @@ wrapper 만들지 않고 라이브러리에 보강).
 
 | 기능 | 사용처 | 현재 상태 |
 |------|--------|----------|
-| `onMoveEnd(viewport)` callback | viewport feature fetch trigger | ❓ 미확인 — 필요 시 라이브러리 PR |
-| `onZoomEnd(zoom)` | zoom별 cluster_unit 결정 | ❓ |
-| `onBoundsChange(bounds)` | TanStack Query invalidation | ❓ |
+| `onMoveEnd` / `onZoomEnd` / `onIdle` callback | viewport feature fetch trigger / cluster_unit 결정 | ✅ 제공 (raw `MapLibreEvent`) |
+| viewport state subscription | TanStack Query invalidation | ✅ `useMapSelector(selector)` 로 zoom/bounds 등 구독 가능 |
 
 debounce는 TripMate 측에서 (250ms + AbortController).
 
@@ -291,13 +321,13 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 | 기능 | 사용처 | 현재 상태 |
 |------|--------|----------|
 | `<UserLocationMarker lngLat accuracy_m />` | `useUserLocation` hook 결과 표시 | ❓ — `<PulsingMarker>`로 대체 가능? |
-| `flyToUserLocation` prop pattern | "내 위치로 이동" 버튼 | 선언형이라 `center` prop 변경으로 가능 |
+| `flyToUserLocation` prop pattern | "내 위치로 이동" 버튼 | ✅ 선언형 `center` prop 변경 또는 `flyToOptions` 사용 |
 
 ### 6.3 우클릭 메뉴
 
 | 기능 | 사용처 | 현재 상태 |
 |------|--------|----------|
-| `onContextMenu(e)` 지도 우클릭 | 우클릭 메뉴 (계획 추가/주변/날씨/요청) | ❓ — `onMapClick`만 확인됨 |
+| `onContextMenu(e)` 지도 우클릭 | 우클릭 메뉴 (계획 추가/주변/날씨/요청) | ✅ 제공 (raw `MapMouseEvent`) |
 | `<MakiMarker onContextMenu>` 마커 우클릭 | 마커 색/아이콘 변경 메뉴 | ❓ |
 
 ### 6.4 Place / Price / Weather 마커 props 확장
@@ -315,7 +345,7 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 | 기능 | 비고 |
 |------|------|
 | 마커 hover tooltip | 이름 / 카테고리 표시 |
-| 마커 click popup | 마커 옆 카드 — 사진 / 메모 / [상세 보기] |
+| 마커 click popup | `Popup` 컴포넌트 제공 (이전 `MapPopup` 에서 이름 변경) |
 | 양방향 연동 — 패널 ↔ 마커 selection | `selectedId` prop으로 강조 |
 
 ### 6.6 카메라 / 애니메이션 제어
@@ -338,8 +368,9 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 | 기능 | 비고 |
 |------|------|
 | `LngLatSchema` zod | 이미 export — TripMate `packages/schemas`에서 import |
-| `KoreaBoundsSchema` (대한민국 좌표 범위) | 신규 — `docs/architecture/user-location.md` §10 |
+| 한국 좌표 범위 검증 | `makeBoundedLngLatSchema([124, 132], [33, 43])` factory 로 직접 생성 (이전 `KoreaLngLatSchema` / `KoreaBoundsSchema` / `KOREA_LNG_RANGE` / `KOREA_LAT_RANGE` 상수는 라이브러리에서 제거됨 — TripMate 측에서 1회 생성해 재사용) |
 | `BBoxSchema` | viewport bounds 검증 |
+| Point 스키마 확장 | `PointSchema` (이전 `BasePointDataSchema`) / `extendPointSchema` (이전 `createPointDataSchema`) — TripMate POI 스키마 정의에 활용 |
 
 ### 6.9 SSR / hydration
 
@@ -357,15 +388,37 @@ v2 후보. VWorld TOS 확인 후 라이브러리에 PWA 가이드 추가:
 - IndexedDB 타일 캐시 (TOS 허용 시)
 - 오프라인 fallback layer
 
-### 6.11 TripMate 도메인에 특화된 hook
+### 6.11 TripMate 도메인에 특화된 hook / 컴포넌트
 
-라이브러리는 generic — TripMate domain은 `apps/web/lib/`에 어댑터:
+라이브러리는 generic primitive(`VWorldMap` / `MakiMarker` / `ClusterLayer` /
+`Popup` / `PolygonArea` / `RouteLine`)만 export. **TripMate 도메인 wrapper
+(`TripmateFeatureLayer`)와 팔레트 상수(`TRIPMATE_MARKER_PALETTE` /
+`TRIPMATE_CATEGORY_MARKERS` / `resolveTripmateMarkerStyle`)는 라이브러리에서
+제거되었으므로 `apps/web/lib`에서 직접 구현**한다.
+
+라이브러리가 제공하는 hook:
+
+| Hook | 반환 | 용도 |
+|------|------|------|
+| `useMap()` | `MapLibreMap \| null` 직접 반환 | 명령형 fallback (대부분 props로 충분, 마지막 수단) |
+| `useMapLoaded()` | `boolean` | style/타일 로드 완료 시점 — 마커 mount 조건 |
+| `useMapSelector(selector)` | selector 결과 | zoom/bounds 등 derived state subscription (useSyncExternalStore 기반) |
+| `useEvent(handler)` | stable callback | 리렌더 안 타는 이벤트 핸들러 |
+
+이전 `useMapContext()` 는 제거, `useMap()` 시그니처가 `{ map, semanticZoomThreshold }`
+객체가 아닌 `MapLibreMap | null` 직접 반환으로 바뀜.
+
+저레벨 store 접근이 필요한 경우 `MapStore` / `MapStoreSnapshot` / `MapStoreContext`
+export 도 사용 가능 (DevTools, custom selector 등).
 
 ```ts
-// apps/web/lib/featureLayer.ts
+// apps/web/lib/featureLayer.ts — TripMate가 직접 구현 (라이브러리는 generic primitive만 제공)
 import { useFeaturesInBounds } from '@tripmate/api-client';
+import { useMapSelector } from 'maplibre-vworld';
 
-export function useFeatureMarkers(bounds, zoom, kinds) {
+export function useFeatureMarkers(kinds: FeatureKind[]) {
+  const bounds = useMapSelector((s) => s.bounds);
+  const zoom = useMapSelector((s) => s.zoom);
   const { data } = useFeaturesInBounds({ bounds, zoom, kinds });
   return data?.items.map((item) => ({
     id: item.feature_id,

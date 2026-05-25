@@ -457,13 +457,18 @@
   - 라이브러리는 git URL pin 또는 npm 배포로 `apps/web`이 직접 import
   - TripMate에 wrapper class 만들지 않음 (ADR-005 mirror) — 부족 기능은
     `maplibre-vworld-js` 저장소에 PR
-  - 라이브러리에 이미 있는 `PlaceMarker` / `PriceMarker` / `WeatherMarker` /
-    `MarkerClusterer` / `PolygonArea` / `RouteLine` 컴포넌트 직접 사용
+  - 라이브러리에 있는 `PlaceMarker` / `PriceMarker` / `WeatherMarker` /
+    `ClusterLayer` (이전 `MarkerClusterer`) / `PolygonArea` / `RouteLine` /
+    `Popup` (이전 `MapPopup`) generic primitive 직접 사용
   - 16색 팔레트 (P-01 ~ P-16) hex 값을 라이브러리 마커 컴포넌트에 props로 전달
+  - **TripMate 도메인 wrapper (`TripmateFeatureLayer`)와 팔레트 상수
+    (`TRIPMATE_MARKER_PALETTE` / `TRIPMATE_CATEGORY_MARKERS` /
+    `resolveTripmateMarkerStyle`)는 라이브러리에 두지 않고 `apps/web/lib`에서
+    직접 구현** — 라이브러리는 generic primitive에 한정
 - **근거**:
   - 좌표 순서 일관 — `(lng, lat)` 전체 stack
   - 선언형 React — `useEffect`로 명령형 호출 불필요
-  - TripMate 도메인 마커 (Place/Price/Weather) 라이브러리에 내장
+  - 마커 / 클러스터 / Popup / Polygon / RouteLine generic primitive 라이브러리에 내장 (TripMate 도메인 매핑은 `apps/web/lib`에서 어댑터)
   - VWorld는 국토교통부 공식 — 위탁자 명시 간소 (국내)
   - 카카오맵 SDK 오프라인 캐싱 약관 제약 회피 (PWA v2 후보 활성화)
   - 같은 진영 (Antigravity / 내부 자산) — wrapper 추가 없이 직접 의존 가능
