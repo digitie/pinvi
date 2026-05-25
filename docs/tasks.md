@@ -18,11 +18,13 @@
 - [x] T-000 — git v1 보존 + main v2 재시작 (완료: 2026-05-25)
 - [x] T-001 — README / CLAUDE / AGENTS / SKILL (완료: 2026-05-25)
 - [x] T-002 — docs/architecture / agent-guide / dev-environment (완료: 2026-05-25)
-- [x] T-003 — docs/decisions (ADR-001 ~ ADR-009) (완료: 2026-05-25)
+- [x] T-003 — docs/decisions (ADR-001 ~ ADR-010) (완료: 2026-05-25)
 - [x] T-004 — docs/journal / resume / tasks (완료: 2026-05-25)
 - [x] T-005 — docs/data-model / postgres-schema / test-strategy (완료: 2026-05-25)
 - [x] T-006 — docs/krtour-map-integration (완료: 2026-05-25)
-- [x] T-007 — docs/sprints/README + SPRINT-1 (완료: 2026-05-25)
+- [x] T-007 — docs/sprints/README + SPRINT-1~6 (완료: 2026-05-25)
+- [x] T-008 — docs/spec/v8/ 6편 적용 노트 (완료: 2026-05-25)
+- [x] T-009 — docs/design/marker-palette + 루트 DESIGN.md/airbnb-marker-palette.html 복원 (완료: 2026-05-25)
 
 ## 보류
 
@@ -40,4 +42,4 @@
 
 | PR | 제목 | merge 일 | 비고 |
 |----|------|---------|------|
-| (v2의 첫 PR — 본 골격) | docs: bootstrap v2 skeleton | (대기) | T-000 ~ T-007 묶음 |
+| (v2의 첫 PR — 본 골격) | docs: bootstrap v2 skeleton + SPEC V8 reflect | (대기) | T-000 ~ T-009 묶음 |

@@ -6,12 +6,16 @@ TripMate v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으
 | Sprint | 파일 | 상태 | 목표 |
 |--------|------|------|------|
 | Sprint 1 | [SPRINT-1.md](./SPRINT-1.md) | **proposed** (사용자 진입 승인 대기) | 모노레포 scaffolding + DB schema + 핵심 인증 |
-| Sprint 2 | (작성 예정) | proposed | 사용자 도메인 (Trip / POI 첨부) + 라이브러리 최소 연계 |
-| Sprint 3 | (작성 예정) | proposed | Admin 콘솔 + Notice plan + Storage API |
-| Sprint 4 | (작성 예정) | proposed | Dagster asset 통합 + 첫 provider 적재 검증 |
-| Sprint 5 | (작성 예정) | proposed | UI 완성도 + Telegram/Gemini/Resend + Odroid 배포 |
+| Sprint 2 | [SPRINT-2.md](./SPRINT-2.md) | proposed | 도메인 API + DB (Trip / POI / 4 분리 동의 / Resend / 위치 감사) |
+| Sprint 3 | [SPRINT-3.md](./SPRINT-3.md) | proposed | Admin 콘솔 + RBAC + audit chain + seed |
+| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | proposed | 지도 UI + 카카오맵 + 라이브러리 read |
+| Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed | 실시간 WebSocket + Dagster ETL + Loki + dedup-review |
+| Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + 카테고리 매핑 + LBS 신고 + 법무 |
 
-순서는 잠정안. 사용자 review 후 SPRINT-N.md를 한 건씩 박는다.
+SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞** — 데이터
+흐름 검증 후 지도 작업 (원본 결정).
+
+자세한 SPEC V8 6편 적용 노트는 `docs/spec/v8/`.
 
 ## Sprint 진입 게이트 (공통)
 

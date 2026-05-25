@@ -2,7 +2,13 @@
 
 본 문서는 TripMate(`apps/api` + `apps/etl`)가 `python-krtour-map`을 import해서
 사용하는 표준 패턴이다. ADR-002 (함수 직접 호출) + ADR-003 (schema 책임 분담)
-+ ADR-005 (provider 어댑터 wrapper 금지) 기준.
++ ADR-005 (provider 어댑터 wrapper 금지) + ADR-010 (SPEC V8 채택) 기준.
+
+SPEC V8 cross-reference:
+
+- 01-data.md §1 (책임 분담 표) / §3 (라이브러리 위임 항목)
+- 02-backend.md §2 (라이브러리 의존) / §5.4 (Feature/지도 API)
+- 04-admin.md §2 M-15 (`/admin/features/{id}/sources` 등 라이브러리 schema 가시화)
 
 `python-krtour-map` 측의 ADR-022 (`from krtour.map import ...` namespace),
 ADR-020 (디버그 UI 별도 패키지), ADR-006 (wrapper 생성 금지)을 함께 참고.

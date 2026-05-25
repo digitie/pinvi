@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Airbnb-style Map Marker Palette · 16 colors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f7;
+    --text: #222222;
+    --text-2: #6a6a6a;
+    --text-3: #929292;
+    --border: rgba(0,0,0,0.08);
+    --rausch: #FF385C;
+    --shadow-card:
+      rgba(0,0,0,0.02) 0px 0px 0px 1px,
+      rgba(0,0,0,0.04) 0px 2px 6px,
+      rgba(0,0,0,0.10) 0px 4px 8px;
+    --shadow-hover:
+      rgba(0,0,0,0.04) 0px 0px 0px 1px,
+      rgba(0,0,0,0.08) 0px 6px 16px,
+      rgba(0,0,0,0.12) 0px 16px 32px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ─── Header ────────────────────────────────────────── */
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  header.hero {
+    padding: 72px 0 40px;
+    position: relative;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--rausch);
+    margin: 0 0 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 1.5px;
+    background: var(--rausch);
+  }
+
+  h1.display {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(38px, 7vw, 76px);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    margin: 0 0 20px;
+    max-width: 820px;
+  }
+  h1.display em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--rausch);
+  }
+
+  .lede {
+    font-size: 17px;
+    color: var(--text-2);
+    max-width: 580px;
+    margin: 0;
+    line-height: 1.55;
+  }
+
+  /* ─── Toolbar ────────────────────────────────────────── */
+  .toolbar {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+    margin: 32px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    z-index: 50;
+  }
+
+  .toolbar-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+
+  .seg {
+    display: inline-flex;
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .seg button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    letter-spacing: -0.005em;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active {
+    background: var(--text);
+    color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  }
+
+  .spacer { flex: 1; }
+
+  .count {
+    font-size: 13px;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .count strong {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  /* ─── Grid ────────────────────────────────────────── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    padding: 32px 0 48px;
+  }
+  @media (min-width: 600px) {
+    .grid { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  }
+  @media (min-width: 900px) {
+    .grid { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  }
+
+  .card {
+    position: relative;
+    background: white;
+    border-radius: 20px;
+    padding: 28px 16px 22px;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+                box-shadow 0.22s ease;
+    overflow: hidden;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-hover);
+  }
+  .card:active { transform: translateY(-1px) scale(0.99); }
+
+  .num {
+    position: absolute;
+    top: 14px;
+    left: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-3);
+    letter-spacing: 0.06em;
+  }
+
+  .copy-icon {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    width: 14px; height: 14px;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .card:hover .copy-icon { opacity: 1; }
+
+  /* Marker visualizations */
+  .marker-stage {
+    height: 100px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+
+  .pin {
+    width: 60px;
+    height: 78px;
+    filter:
+      drop-shadow(0 6px 8px rgba(0,0,0,0.10))
+      drop-shadow(0 2px 4px rgba(0,0,0,0.08));
+    transition: transform 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .card:hover .pin {
+    transform: translateY(-4px);
+  }
+  .pin svg { width: 100%; height: 100%; display: block; }
+
+  .dot-marker {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    margin-bottom: 12px;
+    box-shadow:
+      0 0 0 4px white,
+      0 0 0 5px rgba(0,0,0,0.1),
+      0 8px 16px rgba(0,0,0,0.1);
+    transition: transform 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .card:hover .dot-marker { transform: scale(1.08); }
+
+  .pill-marker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: white;
+    color: var(--text);
+    font-weight: 700;
+    font-size: 13.5px;
+    letter-spacing: -0.005em;
+    box-shadow: var(--shadow-card);
+    transition: all 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+    margin-bottom: 14px;
+  }
+  .pill-marker .pill-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .card:hover .pill-marker {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+  }
+  .card.pill-mode:hover .pill-marker {
+    background: var(--card-color);
+    color: white;
+  }
+  .card.pill-mode:hover .pill-dot {
+    background: white !important;
+  }
+
+  /* Mode toggling */
+  .marker-stage > * { display: none; }
+  body[data-style="pin"] .marker-stage > .pin { display: block; }
+  body[data-style="dot"] .marker-stage > .dot-marker { display: block; }
+  body[data-style="pill"] .marker-stage > .pill-marker { display: inline-flex; }
+
+  body[data-style="pill"] .card { padding-top: 32px; }
+  body[data-style="pill"] .card.pill-mode { /* marker-stage already there */ }
+
+  .name {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 3px;
+    letter-spacing: -0.01em;
+  }
+
+  .hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-2);
+    margin: 0 0 6px;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+  }
+
+  .use {
+    font-size: 11px;
+    color: var(--text-3);
+    margin: 0;
+    font-weight: 500;
+  }
+
+  /* ─── Map preview ──────────────────────────────────── */
+  .map-section {
+    padding: 56px 0 80px;
+    border-top: 1px solid var(--border);
+  }
+
+  .map-section h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(28px, 4vw, 40px);
+    letter-spacing: -0.025em;
+    margin: 0 0 8px;
+  }
+  .map-section h2 em {
+    font-style: italic;
+    font-weight: 500;
+    color: var(--rausch);
+  }
+
+  .map-section .lede {
+    margin-bottom: 32px;
+  }
+
+  .mini-map {
+    background:
+      radial-gradient(ellipse at 70% 40%, rgba(180, 210, 195, 0.55) 0%, transparent 45%),
+      radial-gradient(ellipse at 20% 75%, rgba(195, 215, 225, 0.6) 0%, transparent 50%),
+      linear-gradient(135deg, #eef2f4 0%, #e2e9ec 60%, #e8edf0 100%);
+    border-radius: 28px;
+    height: 420px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Faux roads */
+  .mini-map svg.roads {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    opacity: 0.7;
+  }
+
+  .mini-map .label {
+    position: absolute;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(70, 80, 85, 0.55);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .map-pin {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    transition: transform 0.4s cubic-bezier(0.34, 1.5, 0.64, 1);
+    cursor: pointer;
+    animation: drop 0.6s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  }
+  .map-pin:hover {
+    transform: translate(-50%, -100%) scale(1.15);
+    z-index: 10;
+  }
+  .map-pin svg {
+    width: 32px; height: 40px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.18))
+            drop-shadow(0 1px 2px rgba(0,0,0,0.12));
+    display: block;
+  }
+
+  @keyframes drop {
+    0% { transform: translate(-50%, -200%); opacity: 0; }
+    100% { transform: translate(-50%, -100%); opacity: 1; }
+  }
+
+  /* ─── Toast ────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    background: var(--text);
+    color: white;
+    padding: 14px 22px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    box-shadow: 0 16px 32px rgba(0,0,0,0.2);
+    transition: transform 0.45s cubic-bezier(0.34, 1.5, 0.64, 1);
+    z-index: 100;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast .toast-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--rausch);
+  }
+  .toast code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    background: rgba(255,255,255,0.12);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  /* ─── Footer ────────────────────────────────────────── */
+  footer.foot {
+    border-top: 1px solid var(--border);
+    padding: 28px 0 56px;
+    color: var(--text-3);
+    font-size: 12.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer.foot strong {
+    color: var(--text-2);
+    font-weight: 700;
+  }
+</style>
+</head>
+<body data-style="pin">
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">For Airbnb-style Maps</p>
+    <h1 class="display">Sixteen markers,<br>one <em>warm</em> palette.</h1>
+    <p class="lede">Airbnb의 따뜻한 톤과 라우쉬 레드 철학을 따르는 지도 마커용 컬러 16종. 카드를 탭하면 HEX가 클립보드로 복사됩니다.</p>
+  </header>
+
+  <div class="toolbar">
+    <span class="toolbar-label">Style</span>
+    <div class="seg" id="seg">
+      <button data-style="pin" class="active">Pin</button>
+      <button data-style="dot">Dot</button>
+      <button data-style="pill">Price Pill</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="count"><strong>16</strong> colors</span>
+  </div>
+
+  <main class="grid" id="grid"></main>
+
+  <section class="map-section">
+    <h2>On the <em>map</em>.</h2>
+    <p class="lede">실제 지도 위에서 어떻게 보이는지 확인하세요. 다양한 명도·채도 분포로 인접 마커도 또렷하게 구분됩니다.</p>
+    <div class="mini-map" id="miniMap">
+      <svg class="roads" viewBox="0 0 1000 420" preserveAspectRatio="none">
+        <g stroke="white" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.85">
+          <path d="M -20 80 C 200 60, 400 120, 600 100 S 900 80, 1020 110"/>
+          <path d="M -20 220 C 250 180, 500 250, 750 210 S 1020 200, 1020 200"/>
+          <path d="M -20 340 C 200 320, 500 380, 800 340 S 1020 320, 1020 330"/>
+        </g>
+        <g stroke="white" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.5">
+          <path d="M 120 -10 L 140 440"/>
+          <path d="M 380 -10 C 360 200, 400 280, 380 440"/>
+          <path d="M 620 -10 L 640 440"/>
+          <path d="M 850 -10 C 870 180, 830 300, 870 440"/>
+        </g>
+      </svg>
+      <span class="label" style="left: 8%; top: 12%;">Riverside Park</span>
+      <span class="label" style="left: 65%; top: 38%;">Old Town</span>
+      <span class="label" style="left: 28%; top: 78%;">Harbor District</span>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span><strong>Airbnb-inspired</strong> · 16-marker palette · v1.0</span>
+    <span>Click any swatch to copy the HEX</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast">
+  <span class="toast-dot" id="toastDot"></span>
+  <span>Copied</span>
+  <code id="toastCode">#FF385C</code>
+</div>
+
+<script>
+  const colors = [
+    { name: 'Rausch',     hex: '#FF385C', use: '시그니처 / 추천' },
+    { name: 'Coral',      hex: '#FF7E5F', use: '선셋 코랄' },
+    { name: 'Terracotta', hex: '#D2603A', use: '자연 / 투어' },
+    { name: 'Amber',      hex: '#E89B3C', use: '음식 / 맛집' },
+    { name: 'Saffron',    hex: '#D9A441', use: '문화 / 전시' },
+    { name: 'Olive',      hex: '#8B9D52', use: '차분한 자연' },
+    { name: 'Sage',       hex: '#7BA889', use: '소프트 그린' },
+    { name: 'Forest',     hex: '#2A9D7F', use: '액티비티' },
+    { name: 'Teal',       hex: '#3A8B96', use: '바다 / 수상' },
+    { name: 'Sky',        hex: '#428BFF', use: 'Airbnb Blue' },
+    { name: 'Indigo',     hex: '#3D5A80', use: '시티' },
+    { name: 'Lavender',   hex: '#A78AC0', use: '소프트 라벤더' },
+    { name: 'Luxe',       hex: '#460479', use: 'Luxe 시그니처' },
+    { name: 'Plus',       hex: '#92174D', use: 'Plus 시그니처' },
+    { name: 'Berry',      hex: '#B83A65', use: '베리 핑크' },
+    { name: 'Charcoal',   hex: '#3F3F3F', use: 'Default 카테고리' },
+  ];
+
+  const pinSvg = (color) => `
+    <svg viewBox="0 0 60 78" xmlns="http://www.w3.org/2000/svg">
+      <path d="M30 3 C14.5 3, 3 14.5, 3 30 C3 50, 30 75, 30 75 C30 75, 57 50, 57 30 C57 14.5, 45.5 3, 30 3 Z"
+            fill="${color}" stroke="white" stroke-width="2.5" stroke-linejoin="round"/>
+      <circle cx="30" cy="28" r="8.5" fill="white"/>
+    </svg>
+  `;
+
+  const grid = document.getElementById('grid');
+  colors.forEach((c, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.setProperty('--card-color', c.hex);
+    card.classList.add('pill-mode');
+    card.dataset.hex = c.hex;
+    card.dataset.name = c.name;
+    card.innerHTML = `
+      <span class="num">${String(i + 1).padStart(2, '0')}</span>
+      <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <div class="marker-stage">
+        <div class="pin">${pinSvg(c.hex)}</div>
+        <div class="dot-marker" style="background:${c.hex}"></div>
+        <div class="pill-marker">
+          <span class="pill-dot" style="background:${c.hex}"></span>
+          <span>₩ ${(120 + i * 40)},000</span>
+        </div>
+      </div>
+      <p class="name">${c.name}</p>
+      <p class="hex">${c.hex.toUpperCase()}</p>
+      <p class="use">${c.use}</p>
+    `;
+    card.addEventListener('click', () => copyHex(c.hex, c.name));
+    grid.appendChild(card);
+  });
+
+  // Toast / clipboard
+  const toast = document.getElementById('toast');
+  const toastDot = document.getElementById('toastDot');
+  const toastCode = document.getElementById('toastCode');
+  let toastTimer;
+
+  function copyHex(hex, name) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(hex).catch(() => {});
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = hex;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    toastDot.style.background = hex;
+    toastCode.textContent = hex.toUpperCase();
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
+  }
+
+  // Style toggle
+  document.querySelectorAll('#seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#seg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.dataset.style = btn.dataset.style;
+    });
+  });
+
+  // Mini map - place all 16 pins with staggered animation
+  const miniMap = document.getElementById('miniMap');
+  const positions = [
+    { x: 14, y: 32 }, { x: 26, y: 60 }, { x: 38, y: 22 }, { x: 50, y: 48 },
+    { x: 62, y: 28 }, { x: 18, y: 78 }, { x: 72, y: 66 }, { x: 42, y: 72 },
+    { x: 80, y: 38 }, { x: 88, y: 78 }, { x: 32, y: 50 }, { x: 56, y: 80 },
+    { x: 74, y: 18 }, { x: 8,  y: 50 }, { x: 92, y: 52 }, { x: 50, y: 16 }
+  ];
+  colors.forEach((c, i) => {
+    const pin = document.createElement('div');
+    pin.className = 'map-pin';
+    pin.style.left = positions[i].x + '%';
+    pin.style.top  = positions[i].y + '%';
+    pin.style.animationDelay = (i * 60) + 'ms';
+    pin.title = `${c.name} · ${c.hex}`;
+    pin.innerHTML = pinSvg(c.hex);
+    pin.addEventListener('click', () => copyHex(c.hex, c.name));
+    miniMap.appendChild(pin);
+  });
+</script>
+
+</body>
+</html>
