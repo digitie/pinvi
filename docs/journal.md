@@ -2,6 +2,65 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-26 02:00 (claude)
+
+**작업**: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리 + AI agent
+friendly 보강 (ADR-014).
+
+**컨텍스트**: 사용자 요청. v2 골격 + SPEC V8 + frontend/location/notice 반영
+이후, v1의 9개월 운영 자산을 빠짐없이 v2 문서로 가져오고 문서 일관성 정리.
+
+**v1 전수 조사** (`docs/v1-to-v2-mapping.md`):
+
+- v1 docs/ 84개 (api/architecture/data-sources/decisions/execplan/integrations/
+  runbooks/skills/PROJECT_BRIEF), apps/api 80+, apps/web 30+, scripts 13, infra 2
+- ✅ / 🚚 / 📋 / ⛔ / 🆕 상태로 매핑
+
+**신규 작성** (본 PR — ~30 파일):
+
+- `docs/api/` 11개: README / common / auth / users / trips / pois / features /
+  notice-plans / storage / admin / public / regions / health / websocket
+- `docs/integrations/` 9개: README / resend / social-login / gemini / telegram /
+  kakao-map / sentry / loki
+- `docs/runbooks/` 7개: README / local-dev / docker-app / etl / admin /
+  file-storage / odroid-docker
+- `docs/compliance/` 4개: README / lbs-act / pipa / data-policy
+- `docs/conventions/` 6개: README / coding-style / database / testing /
+  geospatial / normalization
+- `docs/architecture/` 5개 추가: map-marker-design / youtube-travel-intelligence /
+  mcp-tools / dagster-etl-bridge / api-contract
+- `docs/data-sources/README.md` — cross-ref 인덱스
+- `docs/v1-to-v2-mapping.md` — 매핑 매트릭스
+
+**기존 문서 갱신**:
+
+- `README.md` — 문서 인덱스 전면 강화 (역할별 그룹)
+- `AGENTS.md` — "AI Agent 작업 진입 절차" 섹션 신규 + 작업 종류별 진입 문서표
+- `CLAUDE.md` — §7 빠른 문서 검색 표 추가
+- `docs/decisions.md` — ADR-014 박음
+
+**결정**:
+
+- v1 자산 cherry-pick X — 본 문서 + schema 정합성 기준으로 재작성 (특히
+  notice_plans Sprint 2 재작성 결정 — ADR-013 mirror)
+- v1의 `apps/api/app/etl/`, `dagster_etl/`, `core/{kex,kto}.py`,
+  `services/krtour_map_*` 는 모두 폐기 (ADR-005 / ADR-006 mirror)
+- v1 `docs/data-sources/*` 8개는 모두 라이브러리 위임 — 본 저장소는 인덱스만
+- `pyXyz` 짧은 alias 사용 금지 (canonical `python-xyz-api`만)
+- AI agent 진입 절차를 AGENTS.md / CLAUDE.md에 명시
+
+**일관성 점검**:
+
+- TripMate vs `python-krtour-map` 책임 분담을 모든 신규 문서에 명시
+- WSL 미러 모델 (ADR-004)이 모든 runbook에 일관 반영
+- 환경변수 `TRIPMATE_*` prefix 일관
+- 좌표 lon-lat 순서 일관
+- 시간 KST aware 일관
+- audit log chain (content_hash) 일관
+- 동의 4 분리 일관
+
+**다음**: PR 작성 후 사용자 review.
+
 ## 2026-05-25 23:30 (claude)
 
 **작업**: Frontend 스택 상세 + Expo 공용 패키지 + 위치 정보 사양 + v1 notice POI

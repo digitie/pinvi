@@ -28,6 +28,14 @@
 - [x] T-010 — docs/architecture/frontend.md (Next.js + Expo 공용 monorepo) (완료: 2026-05-25)
 - [x] T-011 — docs/architecture/user-location.md (Geolocation + expo-location) (완료: 2026-05-25)
 - [x] T-012 — docs/architecture/notice-plans.md (v1 추천 plan 이전) (완료: 2026-05-25)
+- [x] T-013 — v1 자산 전수 조사 + 매핑 매트릭스 (`docs/v1-to-v2-mapping.md`) (완료: 2026-05-26)
+- [x] T-014 — docs/api/ 11개 + README + common (완료: 2026-05-26)
+- [x] T-015 — docs/integrations/ 9개 + README (완료: 2026-05-26)
+- [x] T-016 — docs/runbooks/ 7개 + README (완료: 2026-05-26)
+- [x] T-017 — docs/compliance/ 4개 + README (완료: 2026-05-26)
+- [x] T-018 — docs/conventions/ 6개 + README (완료: 2026-05-26)
+- [x] T-019 — docs/architecture/ 5개 추가 + data-sources/README (완료: 2026-05-26)
+- [x] T-020 — AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) (완료: 2026-05-26)
 
 ## 보류
 

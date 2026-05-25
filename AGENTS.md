@@ -105,6 +105,33 @@ PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다.
 
 본 우선순위가 충돌하면 1번이 이긴다. 새 결정은 ADR로 박는다.
 
+## AI Agent 작업 진입 절차
+
+새 세션 시작 시 정확히 이 순서로:
+
+1. **`CLAUDE.md`** — 1쪽 진입 요약 (저장소 정체성 + 현 단계)
+2. **본 파일 `AGENTS.md`** — 작업 룰, DO NOT, 책임 경계
+3. **`SKILL.md`** — 도메인 어휘 + 자주 묻는 작업 표
+4. **`docs/agent-guide.md`** — 결정·기록 5종 + ADR 규약 + PR 워크플로
+5. **`docs/sprints/README.md`** — 현재 Sprint 위치 확인
+6. **`docs/resume.md`** — "다음 한 작업" + 진척도
+7. **`docs/journal.md` 최신 3건** — 직전 컨텍스트
+
+작업 종류별 다음 진입 문서:
+
+| 작업 종류 | 추가 진입 문서 |
+|----------|----------------|
+| API endpoint 신규/수정 | `docs/api/<domain>.md` → `docs/api/common.md` → `docs/data-model.md` |
+| DB schema 변경 | `docs/postgres-schema.md` → `docs/conventions/database.md` → `docs/data-model.md` |
+| 라이브러리 (`python-krtour-map`) 호출 | `docs/krtour-map-integration.md` → 라이브러리 저장소 `docs/agent-guide.md` |
+| 외부 통합 (Resend/OAuth/Telegram/Gemini) | `docs/integrations/<service>.md` → `docs/compliance/data-policy.md` |
+| Frontend UI | `docs/architecture/frontend.md` → `docs/design/marker-palette.md` → 루트 `DESIGN.md` |
+| Admin 콘솔 | `docs/api/admin.md` → `docs/runbooks/admin.md` → `docs/spec/v8/04-admin.md` |
+| ETL asset | `docs/runbooks/etl.md` → `docs/architecture/dagster-etl-bridge.md` |
+| 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
+| 컴플라이언스 (PII/위치) | `docs/compliance/{lbs-act,pipa}.md` → `docs/architecture/user-location.md` |
+| 테스트 작성 | `docs/conventions/testing.md` → 해당 도메인 문서 |
+
 ## 작업 단위 / 커밋 / PR
 
 `docs/agent-guide.md` §7 (변경 분류별 체크리스트)과 §7.5 (PR 워크플로) 따른다.

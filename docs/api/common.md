@@ -1,0 +1,270 @@
+# API 공통 규약
+
+본 문서는 TripMate HTTP API의 공통 규약을 정의한다. 모든 endpoint 문서는 본 문서를
+참조하고, 본 규약에서 벗어나면 그 endpoint 문서에 명시한다.
+
+## 1. Base URL / 환경별
+
+| 환경 | URL |
+|------|-----|
+| 로컬 dev | `http://localhost:8001` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:18082` |
+| 스테이징 | TBD (Sprint 6) |
+| 운영 | TBD (Sprint 6, Cloudflare Tunnel 후보) |
+
+OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
+
+## 2. 응답 형식
+
+### 2.1 성공
+
+```jsonc
+{
+  "data": { /* resource or list */ },
+  "meta": {
+    "cursor": "...",      // pagination 시
+    "has_more": true,     // pagination 시
+    "total": 100,         // Admin 일부에서만
+    "version": 42         // optimistic lock 대상
+  }
+}
+```
+
+`meta`는 필요 없으면 생략. 단일 리소스 응답은 `data`에 객체, 목록은 배열.
+
+### 2.2 실패
+
+```jsonc
+{
+  "error": {
+    "code": "EMAIL_NOT_VERIFIED",
+    "message": "이메일 인증이 필요합니다.",
+    "details": { /* validation errors per field, optional */ }
+  }
+}
+```
+
+`message`는 한국어. `code`는 머신 읽기용 (대문자 + 언더스코어). `details`는
+`VALIDATION_ERROR`에서 필드별 에러 배열 형태로 사용.
+
+### 2.3 표준 에러 코드
+
+| Code | HTTP | 상황 |
+|------|------|------|
+| `AUTH_INVALID_CREDENTIALS` | 401 | 이메일/비밀번호 불일치 |
+| `EMAIL_NOT_VERIFIED` | 401 | 미인증 상태 로그인 시도. body에 `verification_email_dispatched` |
+| `EMAIL_ALREADY_USED` | 409 | 가입 시 이메일 중복 |
+| `TOKEN_EXPIRED` | 401 | access/refresh 만료 |
+| `TOKEN_INVALID` | 401 | 서명 불일치/위변조 |
+| `PERMISSION_DENIED` | 403 | RBAC 거부. Admin은 의도적으로 404로 변환 가능 |
+| `RESOURCE_NOT_FOUND` | 404 | 단일 리소스 없음 |
+| `VERSION_CONFLICT` | 409 | optimistic lock `If-Match` 불일치 |
+| `RATE_LIMITED` | 429 | SlowAPI 한도 초과 |
+| `VALIDATION_ERROR` | 422 | Pydantic 검증 실패. `details`에 필드별 |
+| `INTERNAL_ERROR` | 500 | 처리 중 예외 (Sentry로 전달) |
+| `SERVICE_UNAVAILABLE` | 503 | 외부 의존 (Resend/RustFS) 실패 |
+
+도메인별 추가 코드는 각 API 문서에 명시.
+
+## 3. 인증
+
+### 3.1 Cookie 기반 (사용자 + Admin)
+
+| Cookie | 용도 | 속성 |
+|--------|------|------|
+| `tripmate_access` | JWT access | HttpOnly, Secure, SameSite=Lax, 15분 |
+| `tripmate_refresh` | refresh handle (opaque) | HttpOnly, Secure, SameSite=Lax, 7일 |
+
+- DB에는 access 토큰을 저장하지 않음 (stateless JWT).
+- `tripmate_refresh`는 `app.user_sessions`에 hash로만 저장
+  (`session_token_hash`). DB row에 `revoked_at` 채우면 즉시 폐기.
+- 로그아웃: 클라이언트 cookie 삭제 + 서버 `revoked_at=now()`.
+- refresh rotation은 v1.0 단계에서 보류 (Sprint 6 ADR로 확정).
+- Admin은 동일 cookie 사용 (별도 admin 도메인 없음). 권한 검사는 서버 dependency.
+
+### 3.2 OAuth state nonce
+
+OAuth callback 시 CSRF 차단:
+
+- `app.oauth_login_states.state_hash` (TTL 10분, `oauth_state_ttl_seconds`)
+- nonce, PKCE code_verifier도 hash로만 저장
+
+자세히는 `docs/integrations/social-login.md`.
+
+### 3.3 Bearer 토큰 (선택)
+
+CLI / 외부 도구가 access를 직접 사용하려면 `Authorization: Bearer <jwt>` 헤더.
+브라우저는 cookie 우선.
+
+## 4. 시간 / 좌표
+
+### 4.1 시간
+
+- DB: `timestamptz` (UTC 저장)
+- 응용 변환: KST (`Asia/Seoul`) — Python `zoneinfo`
+- 응답 JSON: ISO 8601 + offset, 예: `"2026-05-25T14:30:00+09:00"`
+- 요청 입력: ISO 8601 (offset 포함 권장). offset 없으면 KST로 해석.
+
+### 4.2 좌표
+
+- 입력/응답: **`(longitude, latitude)`** 순서. EPSG:4326.
+- 응답 단일 좌표: `{"longitude": 127.0, "latitude": 37.5}` 또는
+  GeoJSON `{"type": "Point", "coordinates": [127.0, 37.5]}`.
+- 응답 좌표 정밀도: 소수점 4자리 (~10m) — 사용자 위치(SPEC V8 O-3)는 4자리 제한,
+  POI feature 좌표는 6자리 가능.
+- bbox: `{"sw": [lng, lat], "ne": [lng, lat]}` 또는 query `sw_lng,sw_lat,ne_lng,ne_lat`.
+
+### 4.3 위치 감사
+
+좌표를 query/body에 받는 endpoint는 자동으로 `app.location_access_log`에 적재
+(`docs/architecture/user-location.md`). 클라이언트가 별도 처리 X.
+
+## 5. Pagination
+
+### 5.1 cursor 기반 (기본)
+
+```http
+GET /trips?limit=20&cursor=eyJ1cGRhdGVkX2F0Ijoi...
+```
+
+```jsonc
+{
+  "data": [/* ... */],
+  "meta": {
+    "cursor": "next-cursor-token",
+    "has_more": true
+  }
+}
+```
+
+- `cursor`는 opaque (base64로 JSON 인코딩). 클라이언트는 분석하지 않음.
+- 마지막 페이지는 `has_more: false`, `cursor`는 생략 또는 `null`.
+- `limit` 기본 20, 최대 100.
+
+### 5.2 page/limit 기반 (Admin 일부)
+
+Admin 화면처럼 페이지 점프가 필요한 경우만:
+
+```http
+GET /admin/users?page=3&limit=100
+```
+
+```jsonc
+{
+  "data": [/* ... */],
+  "meta": {
+    "page": 3,
+    "limit": 100,
+    "total": 287,
+    "total_pages": 3
+  }
+}
+```
+
+`limit`은 `50, 100, 200, 500` 중 선택 (Admin UI 표준).
+
+## 6. Optimistic Lock — `If-Match`
+
+POI / Trip / NoticePlan PATCH 요청은 `If-Match: <version>` 헤더 필수:
+
+```http
+PATCH /trips/{trip_id}/pois/{poi_id}
+If-Match: 42
+Content-Type: application/json
+
+{"user_note": "..."}
+```
+
+- 서버: 현재 `version` ≠ `If-Match` → `409 VERSION_CONFLICT` (현재 row 반환)
+- 클라이언트: "동반자 X가 변경했습니다. 새 값으로 갱신할까요?" 다이얼로그
+- 성공 시 `version = version + 1`, WebSocket broadcast
+
+## 7. 검색 / 필터 / 정렬 (Admin)
+
+`/admin/{resource}` 목록 endpoint는 SPEC V8 M-9 검색 문법 사용:
+
+```http
+GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
+```
+
+자세히는 [admin.md](./admin.md) §검색.
+
+## 8. Rate Limit
+
+| 카테고리 | 한도 | 키 |
+|---------|------|-----|
+| 로그인 / 가입 / 재설정 / verify | 분당 5회 | IP + 이메일 |
+| OAuth start / callback | 분당 10회 | IP |
+| `/storage/upload-urls` | 분당 30회 | user_id |
+| `/features/in-bounds` | 분당 60회 | user_id |
+| 그 외 | 분당 120회 | user_id |
+| 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token |
+
+초과 시 `429 RATE_LIMITED` + `Retry-After` 헤더.
+
+SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
+
+## 9. Webhook
+
+| Path | 발신자 | 검증 |
+|------|--------|------|
+| `POST /webhooks/resend` | Resend | Svix 서명 (`Resend-Signature` 헤더) |
+| `POST /webhooks/oauth/{provider}/callback` | Google/Naver/Kakao | state + PKCE |
+| (v2) `POST /webhooks/telegram/{trip_id}` | Telegram bot | HMAC |
+| (v2) `POST /webhooks/gemini/job` | 사용자 키 호출 콜백 | idempotency_key |
+
+서명 검증 실패 시 `401`. 페이로드 raw는 `app.api_call_log`에 저장하지 않음
+(`hash`만).
+
+## 10. CORS
+
+| 환경 | 허용 Origin |
+|------|------------|
+| 로컬 dev | `http://localhost:3001`, `http://127.0.0.1:3001` |
+| Docker smoke | `http://127.0.0.1:13082` |
+| 스테이징 | TBD |
+| 운영 | TBD |
+
+`Access-Control-Allow-Credentials: true` (cookie 전송).
+
+## 11. CSP / 보안 헤더
+
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
+  https://dapi.kakao.com https://t1.daumcdn.net; img-src 'self' data: https://...;
+  connect-src 'self' http://localhost:8001 https://api.resend.com`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: geolocation=(self)` (위치 권한 origin)
+- `X-Frame-Options: DENY` (Admin Dagit 임베드 예외는 별도)
+
+## 12. 로깅 / 추적
+
+- 모든 요청에 `X-Request-Id` UUID 생성 (요청 헤더에 있으면 그대로 사용)
+- structlog 미들웨어가 `request_id`, `user_id`, `path`, `method`, `status`,
+  `latency_ms`를 자동 로깅
+- 위치 좌표 / 비밀번호 / 토큰은 `before_send` PII 마스킹 (Sentry / Loki 양쪽)
+- Admin debug `/admin/debug/request/{id}` 페이지에서 추적
+
+## 13. 버전 관리
+
+- 본 v1.0 단계: URL prefix는 `/` (예: `/auth/login`). 향후 v2 도입 시 `/v1`,
+  `/v2` 분기 ADR로 결정.
+- 응답 셰입 BREAKING은 ADR + CHANGELOG. Deprecation 경로는 `Deprecation`,
+  `Sunset` HTTP 헤더 사용.
+
+## 14. AI agent를 위한 구현 체크리스트
+
+새 endpoint를 구현할 때:
+
+- [ ] 본 문서 + 해당 도메인 API 문서 + `docs/data-model.md` 확인
+- [ ] Pydantic schema (`apps/api/app/schemas/`) + Zod schema (`packages/schemas/`)
+      두 곳에 동일 정의
+- [ ] 서비스 (`apps/api/app/services/`)에 비즈니스 로직 (라우터에 직접 박지 X)
+- [ ] 라우터 (`apps/api/app/api/v1/`) + dependency (인증/RBAC)
+- [ ] 미들웨어 자동 적용 확인 (request_id, location_audit, api_call_log,
+      admin_audit if admin route)
+- [ ] 통합 테스트 `apps/api/tests/integration/test_<route>.py`
+- [ ] OpenAPI export (코드 작성 단계 진입 후 자동) — 변경 시 `.github/workflows/openapi.yml`에서 drift 검사
+- [ ] 관련 문서 갱신: 본 API 문서 + `docs/journal.md` + (도메인 변경 시)
+      `docs/data-model.md`
