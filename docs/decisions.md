@@ -218,7 +218,55 @@
   특화.
 - **후속**: AGENTS.md "문서 언어 정책"에 박힘.
 
+## ADR-010: SPEC V8 6편 채택 + 책임 분담 정정 반영
+
+- **상태**: accepted
+- **날짜**: 2026-05-25
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: 외부에서 제공된 "여행 계획 서비스 SW 개발 명세서 V8" 6부작
+  (`spec_v8_0_infrastructure` ~ `spec_v8_5_execution`)이 v1 시점에 작성되어
+  `python-krtour-map` 분리 이전의 단일 모노레포 가정을 일부 포함한다. 다만
+  원본의 후속 메모(M~R, 2026-05-16 ~ 2026-05-20)에는 이미 같은 책임 분리
+  결정이 들어 있다. v2 골격 작성 후 본 SPEC을 어떻게 반영할지 결정 필요.
+- **결정**:
+  - SPEC V8 6편을 TripMate v2의 작업 기준으로 채택한다.
+  - 본 저장소에 `docs/spec/v8/` 디렉토리 신설 후 6편 적용 노트 작성 — 원본의
+    의도를 v2 책임 분담(ADR-001/002/003)으로 재정리한다.
+  - 단일 모노레포 가정 부분(예: `feature.features` schema가 TripMate 안에 있다는
+    문장)은 후속 메모와 ADR-003에 따라 `python-krtour-map`이 소유하는 것으로
+    재해석. 원본을 수정하지 않고 본 저장소의 적용 노트에서 정리.
+  - SPEC V8의 Sprint 1~6 계획(P장)을 본 저장소의 `docs/sprints/SPRINT-*.md`로
+    가져온다. Sprint 3(Admin)이 Sprint 4(지도)보다 앞이라는 원본 결정 유지.
+  - SPEC V8 N-7.2의 "WSL ext4 직접 작업본 + NTFS export" 모델은 ADR-004의 "WSL
+    미러 단일 모델"로 정정 (v1 운영 중 발견한 양방향 동기 모호함 해소).
+  - 16색 마커 팔레트(I-6)와 Airbnb 디자인 reference(`DESIGN.md` /
+    `airbnb-marker-palette.html`)를 v1에서 가져와 `docs/design/`에 박는다.
+- **근거**:
+  - SPEC V8은 v1 시점의 작성이지만 도메인 정의/API/Admin/Sprint 계획이 매우
+    구체적 — v2가 이를 모두 새로 작성할 필요 없다.
+  - 원본의 후속 메모가 이미 책임 분리를 반영 — 추가 큰 결정 없이 적용 가능.
+  - python-krtour-map과 정합 유지를 위해 본 저장소도 같은 분리 원칙을 박는다.
+- **결과 (긍정)**:
+  - Sprint 1~6 계획이 즉시 가용 — 별도 plan 작성 비용 없음.
+  - API 명세 + DB schema 골격이 명확.
+  - 위치정보법 / PIPA 컴플라이언스 항목이 명시됨.
+- **결과 (부정)**:
+  - SPEC V8의 일부 도메인 모델 문장이 책임 분리 이전 표현으로 남아 있어 본
+    저장소 적용 노트가 cross-reference로 정리해야 한다.
+  - 원본의 docx는 외부 저장소에 두고 본 저장소는 적용 노트만 가짐 — 원본
+    갱신 시 동기 비용.
+- **후속**:
+  - `docs/spec/v8/{README, 00-infrastructure, 01-data, 02-backend, 03-frontend,
+    04-admin, 05-execution}.md` 신규 작성 (본 PR).
+  - `docs/sprints/SPRINT-{2,3,4,5,6}.md` 신규 작성 (본 PR).
+  - `docs/design/marker-palette.md` 신규 + 저장소 루트 `DESIGN.md` /
+    `airbnb-marker-palette.html` 복원 (본 PR).
+  - `docs/data-model.md`, `docs/postgres-schema.md`, `docs/architecture.md`,
+    `docs/krtour-map-integration.md` 갱신 — SPEC V8 후속 메모와 정합.
+  - 원본 docx는 운영자가 `refdocs/` 또는 외부에 보관. 본 저장소 git에는
+    포함하지 않음.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-010**
+- 다음 신규 ADR = **ADR-011**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
