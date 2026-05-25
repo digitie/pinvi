@@ -38,7 +38,12 @@
 - `apps/web/components/map/{MapView,ViewportFeatureLayer,ClusterLayer,PoiMarkerLayer,SelectedPoiPopup,RightClickMenu,SearchOverlay}.tsx`
 - `apps/web/components/poi/{PoiList,PoiCard,PoiActionsMenu}.tsx`
 - `apps/web/components/trip/{TripHeader,CompanionAvatars,DayList,DayCard,DayActionsMenu}.tsx`
-- `apps/web/lib/{kakao,markerPalette,featureQueryKeys}.ts`
+- 사용자 notice plan UI (`docs/architecture/notice-plans.md`):
+  - `apps/web/app/(app)/notice-plans/page.tsx` (카테고리 탭 + 카드 그리드)
+  - `apps/web/app/(app)/notice-plans/[planId]/page.tsx` (상세 + 지도 + day별 POI)
+  - `apps/web/components/notice/CopyNoticePlanDialog.tsx` (POI 선택 + 새 trip/기존 trip 선택)
+- `apps/web/components/map/MyLocationButton.tsx` (지도 "내 위치로 이동", `useUserLocation`)
+- `apps/web/lib/{kakao,markerPalette,featureQueryKeys,locationAdapter}.ts`
 - `apps/web/stores/{tripStore,mapViewportStore,selectedPoiStore}.ts`
 - `apps/web/public/maki/*.svg` (vendor 8 ~ 14개)
 
@@ -60,6 +65,9 @@
 - 02-backend.md §5.4 (H-4 Feature/지도 API)
 - 02-backend.md §6 (라이브러리 호출 패턴)
 - 01-data.md §3 (라이브러리 위임 항목)
+- `docs/architecture/frontend.md` (Next.js + Expo 공용 패키지 구조)
+- `docs/architecture/user-location.md` §4.1 (지도 "내 위치로 이동" 버튼)
+- `docs/architecture/notice-plans.md` (사용자 listing + copy 다이얼로그)
 
 ## 카카오맵 일 호출 한도 보호
 

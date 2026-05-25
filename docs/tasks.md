@@ -25,6 +25,9 @@
 - [x] T-007 — docs/sprints/README + SPRINT-1~6 (완료: 2026-05-25)
 - [x] T-008 — docs/spec/v8/ 6편 적용 노트 (완료: 2026-05-25)
 - [x] T-009 — docs/design/marker-palette + 루트 DESIGN.md/airbnb-marker-palette.html 복원 (완료: 2026-05-25)
+- [x] T-010 — docs/architecture/frontend.md (Next.js + Expo 공용 monorepo) (완료: 2026-05-25)
+- [x] T-011 — docs/architecture/user-location.md (Geolocation + expo-location) (완료: 2026-05-25)
+- [x] T-012 — docs/architecture/notice-plans.md (v1 추천 plan 이전) (완료: 2026-05-25)
 
 ## 보류
 

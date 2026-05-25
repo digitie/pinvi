@@ -66,11 +66,19 @@
 - `infra/docker-compose.app.yml` (운영 차분)
 - `infra/odroid/README.md` (배포 절차 placeholder)
 
-### 2.5 패키지 `packages`
+### 2.5 패키지 `packages` (Next.js / Expo 공용 — `docs/architecture/frontend.md` §2)
 
-- `packages/ui/package.json` (placeholder, 빈 export)
-- `packages/map-marker-react/package.json` (`@krtour/map-marker-react` 의 thin
-  wrapper, ADR-016 후 활성화)
+- `packages/schemas/` — Zod schema 공용 (User / Trip / POI / Feature / NoticePlan / Auth)
+- `packages/api-client/` — fetch wrapper + TanStack Query keys + endpoints
+- `packages/state/` — Zustand store (storage adapter 주입형)
+- `packages/design-tokens/` — Airbnb 톤 토큰 + 16색 팔레트 + Tailwind preset
+  (DESIGN.md / `airbnb-marker-palette.html` 기준)
+- `packages/hooks/` — `useUserLocation` 등 공용 React hook (RN 호환)
+- `packages/i18n/` — next-intl + i18n-js 공유 메시지 카탈로그 (ko 기본)
+- `packages/map-marker-react/` placeholder (`@krtour/map-marker-react` thin
+  wrapper, Sprint 4 활성화)
+
+본 Sprint는 패키지 skeleton만 박는다 (실제 export는 Sprint 1~2에서 점진 추가).
 
 ### 2.6 CI
 

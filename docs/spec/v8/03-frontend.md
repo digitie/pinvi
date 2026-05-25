@@ -2,18 +2,30 @@
 
 원본: `spec_v8_3_frontend.docx` (I 프론트엔드 + J 실시간).
 
+> 본 노트는 SPEC V8의 frontend 결정 채택을 정리한다. **본 저장소의 본격
+> Frontend 아키텍처는 [`docs/architecture/frontend.md`](../../architecture/frontend.md)**:
+> Next.js 15 + shadcn/ui + Tailwind + React Hook Form + Zod + Zustand +
+> TanStack Query 스택, DESIGN.md / `airbnb-marker-palette.html` 디자인 톤,
+> Next.js / Expo 공용 `packages/*` monorepo 구조, Expo 대응 로드맵을 다룬다.
+> 사용자 위치 정보는 [`docs/architecture/user-location.md`](../../architecture/user-location.md).
+
 ## 1. 스택 채택
 
 | 계층 | 채택 |
 |------|------|
-| 프레임워크 | Next.js 15 (App Router) + React 19 |
-| 상태(클라이언트) | Zustand |
-| 상태(서버) | TanStack Query v5 |
-| 폼 | React Hook Form + Zod |
-| D&D | dnd-kit |
-| 스타일 | Tailwind |
-| 지도 | react-kakao-maps-sdk (직접 wrapping 안 함) |
+| 프레임워크 (웹) | **Next.js 15** (App Router) + **React 19** |
+| 프레임워크 (모바일, v2) | **Expo SDK 53+** (React Native + Expo Router) |
+| UI 컴포넌트 (웹) | **shadcn/ui** + Radix Primitives (Tailwind 기반 vendoring) |
+| 스타일 | **Tailwind CSS 3.4+** (NativeWind로 모바일 공유) |
+| 상태(클라이언트) | **Zustand** (공용 `packages/state`) |
+| 상태(서버) | **TanStack Query v5** (공용 `packages/api-client`) |
+| 폼 | **React Hook Form** + **Zod** resolver (schema는 공용 `packages/schemas`) |
+| D&D (웹) | dnd-kit |
+| 지도 (웹) | react-kakao-maps-sdk (직접 wrapping 안 함, SPEC V8 A-1 #4) |
 | 마커 | 16색 팔레트 P-01~P-16 + maki 아이콘 (`docs/design/marker-palette.md`) |
+| 디자인 톤 | 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html` (단일 기준) |
+
+자세한 스택·디자인 토큰·공용 패키지 구조는 [`docs/architecture/frontend.md`](../../architecture/frontend.md).
 
 `apps/web` 구조 (Sprint 1 진입 PR로 박음):
 
