@@ -140,10 +140,20 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - Postgres schema: `docs/postgres-schema.md`
 - 테스트 전략: `docs/test-strategy.md`
 - `python-krtour-map` 연계: `docs/krtour-map-integration.md`
+- Frontend 아키텍처 (Next.js + Expo 공용): `docs/architecture/frontend.md`
+- 사용자 위치 정보 (Geolocation + expo-location): `docs/architecture/user-location.md`
+- Notice plan 도메인 (추천 여행 + 첨부): `docs/architecture/notice-plans.md`
+- 마커 팔레트 (16색 + maki): `docs/design/marker-palette.md`
+- SPEC V8 적용 노트: `docs/spec/v8/`
 - 의사결정 (ADR): `docs/decisions.md`
 - 작업 일지: `docs/journal.md`
 - 진척도/다음 작업: `docs/resume.md`
 - 백로그: `docs/tasks.md`
+
+루트 디자인 reference:
+
+- `DESIGN.md` — Airbnb 디자인 시스템 톤 (v2 v1.0 임시 기준)
+- `airbnb-marker-palette.html` — 16색 마커 시각 미리보기 (브라우저에서 직접 열기)
 
 ## 라이선스
 

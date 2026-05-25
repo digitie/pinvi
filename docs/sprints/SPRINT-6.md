@@ -33,6 +33,12 @@
 - `apps/web/app/admin/feature-requests/page.tsx`
 - `apps/web/app/admin/category-mapping/page.tsx`
 - `apps/web/components/admin/CategoryMappingEditor.tsx` (P-01~P-16 색상 + maki 선택)
+- Admin notice plan 작성기 (`docs/architecture/notice-plans.md`):
+  - `apps/web/app/admin/notice-plans/page.tsx` (목록)
+  - `apps/web/app/admin/notice-plans/[planId]/page.tsx` (편집)
+  - `apps/web/app/admin/notice-plans/new/page.tsx` (생성)
+  - `apps/web/components/admin/NoticePoiEditor.tsx`
+  - 첨부 업로드 + 미리보기 (`POST /storage/upload-urls` + presigned PUT)
 
 ### 컴플라이언스
 

@@ -266,7 +266,134 @@
   - 원본 docx는 운영자가 `refdocs/` 또는 외부에 보관. 본 저장소 git에는
     포함하지 않음.
 
+## ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
+
+- **상태**: accepted
+- **날짜**: 2026-05-25
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: SPEC V8은 Next.js 15 + Zustand + TanStack Query + RHF + Zod +
+  dnd-kit + Tailwind를 권장하지만 (1) UI 컴포넌트 라이브러리(shadcn/ui 등)
+  미지정, (2) 디자인 톤(Airbnb DESIGN.md / airbnb-marker-palette.html)과의 결합
+  방식 미지정, (3) 추후 Expo 모바일 앱 추가 가능성 미반영. 사용자가 (a) 스택
+  상세 (shadcn/ui 포함) 명시, (b) DESIGN.md / 팔레트 톤·UX 따름 명시, (c)
+  Next.js / Expo 공용 코드(주요 로직 + 데이터 정의) 구조 명시, (d) Expo 프론트
+  구성 명시를 요청.
+- **결정**:
+  - 웹: Next.js 15 + React 19 + **shadcn/ui** + Tailwind + Zustand + TanStack
+    Query v5 + React Hook Form + Zod + dnd-kit + react-kakao-maps-sdk
+  - 모바일 (v2): Expo SDK 53+ + Expo Router + NativeWind (Tailwind for RN) +
+    동일 Zustand / TanStack Query / RHF + Zod (공용)
+  - 디자인 톤: 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html`을
+    v1.0의 단일 기준으로 사용 (TripMate 자체 브랜드 확정 시 ADR로 교체)
+  - 공용 코드 위치: `packages/{schemas,api-client,state,design-tokens,hooks,i18n}`
+    — Zod schema / 데이터 정의 / API 클라이언트 / 상태 store / 디자인 토큰 /
+    공용 hook / 메시지 카탈로그를 모든 앱이 import
+  - 플랫폼 어댑터 패턴: 스토리지(localStorage/AsyncStorage), 위치(navigator/
+    expo-location), 지도(kakao-maps-sdk/react-native-maps) 등은 `apps/*/lib/`에
+    두고, 공용 코드는 어댑터를 함수 인자로 받음
+  - `packages/*`에서 DOM / Node / next/* / react-native/* import 금지
+    (ESLint `no-restricted-imports`)
+- **근거**:
+  - shadcn/ui는 Tailwind 기반 vendoring 모델 — DESIGN.md의 Airbnb 톤을 컴포넌트
+    레벨에서 customizing하기 적합 (vendored copy를 직접 수정 가능)
+  - 공용 패키지를 처음부터 박으면 Expo 추가 시 큰 재작성 없이 점진 전환 가능
+  - Zod schema가 단일 진실 — API 응답 파싱 / 폼 validator / 타입 정의 한 곳
+  - SPEC V8 C-4 (v2/장기) "푸시 알림 → Web Push API"를 앞당겨 실제 모바일 앱
+    까지의 경로를 v1.0 단계부터 박음
+- **결과 (긍정)**:
+  - 디자인 톤이 명시적 — 진입 에이전트가 추측하지 않음
+  - 공용 패키지가 v1.0에 박혀 있어 Expo 추가 시 비용 적음
+  - 스택이 사용자 요구와 일치 (React/Next.js/TanStack Query/Zod/Zustand/RHF/
+    shadcn/ui/Tailwind)
+- **결과 (부정)**:
+  - 모노레포 패키지 관리 비용 — npm workspaces / TypeScript project references
+  - v1.0 단계에서는 `packages/*`가 부분적으로만 사용 — 의도된 over-engineering
+- **후속**:
+  - `docs/architecture/frontend.md` 신규 (본 PR)
+  - `docs/design/marker-palette.md`에 P-01~P-16 박힘
+  - Sprint 1에 `packages/*` skeleton 등록
+  - Sprint 1~2에 공용 schema / api-client / state 활성화
+  - Expo `apps/mobile`은 v1.0 출시 후 별도 Sprint M-1 (Mobile)에서 추가
+
+## ADR-012: 사용자 위치 정보 획득 — Geolocation + expo-location + 공용 hook
+
+- **상태**: accepted
+- **날짜**: 2026-05-25
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: SPEC V8은 위치정보법(O-1 LBS 신고, O-2 4 분리 동의, O-3 감사
+  로그 chain)을 명시하지만 클라이언트 측 위치 획득 메커니즘이 구체적이지 않음.
+  사용자가 "프론트엔드 웹/앱에서 사용자 위치 정보를 얻어옴을 기능 사양에 명시"
+  요청.
+- **결정**:
+  - 웹: `navigator.geolocation` (HTTPS 필수, Secure Context)
+  - 모바일: `expo-location` (foreground only, v1.0 — background는 v2 후보)
+  - 공용 hook: `packages/hooks/src/useUserLocation.ts` — `LocationAdapter`를
+    인자로 받는 추상화. 웹/모바일이 각자의 어댑터를 주입
+  - 동의: `app.user_consents.consent_type = 'location_collection'` (G-5의 4
+    필수 동의 중 하나)
+  - 권한 prompt: 사용자 명시 액션 (지도 진입 / "내 위치" 버튼) 후에만 호출
+  - 좌표 서버 전송 시 `app.location_access_log` content_hash chain 자동 적재
+    (`location_audit` 미들웨어)
+  - fallback chain: 동의 X → UI 비활성 / 권한 거부 → viewport 중심점 → 거주
+    시군구 → 서울 시청
+  - 좌표 정밀도 제한: 6자리 → UI 표시는 4자리 (~10m)까지
+  - 좌표는 일반 로그(Loki / Sentry)에 적재하지 않고 `location_access_log`에만
+  - CPO 권한만 `location_access_log` SELECT
+- **근거**:
+  - 위치정보법 / PIPA 위반 시 형사 처벌 + 매출 3% (최대 10%) 과징금
+  - audit chain (prev_hash + content_hash)으로 변조 검증
+  - 공용 hook으로 웹/모바일 동일 사용 패턴 → 추후 코드 중복 회피
+- **결과 (긍정)**: 컴플라이언스 정합 + Expo 추가 시 위치 코드 재사용
+- **결과 (부정)**: 클라이언트마다 어댑터를 구현해야 함 (cost는 1회성)
+- **후속**: `docs/architecture/user-location.md` 신규. Sprint 2 진입 시
+  `useUserLocation` 활성화 + `location_audit` 미들웨어 박음.
+
+## ADR-013: Notice plan (추천 여행) 도메인 v1에서 v2로 이전 + "notice" 명명 분리
+
+- **상태**: accepted
+- **날짜**: 2026-05-25
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: v1 (`v1` 브랜치 마지막)에 9개월 운영한 추천 여행 plan 도메인이
+  존재:
+  - `notice_plans` (Admin이 작성한 추천 여행)
+  - `notice_pois` (해당 plan의 POI)
+  - `plan_poi_attachments` (단일 테이블 4 대상 — trip / trip_poi / notice_plan /
+    notice_poi 첨부)
+  - `POST /notice-plans/{id}/copy` (사용자 trip으로 복사)
+  - `docs/architecture/plan-poi-attachments.md`
+  사용자가 "v1에서 notice poi 관련 문서/코드 확인해서 보강할 것" 요청. 또한
+  같은 단어 "notice"가 두 개의 별개 개념에 쓰여 혼동:
+  1. **notice feature** — 지도 위 공지/자연현상 (SPEC V8 D-10, kind=notice,
+     `python-krtour-map` 소유)
+  2. **notice plan** — Admin이 작성한 추천 여행 plan (TripMate `app` schema)
+- **결정**:
+  - v1의 추천 여행 plan 도메인을 v2로 가져온다. 본 저장소 `app` schema에
+    `app.notice_plans` + `app.notice_pois` + `app.plan_poi_attachments` 도입.
+  - **v1 코드를 cherry-pick하지 않고 본 저장소의 schema 정합성 + SPEC V8 E-6
+    (COLLATE "C") + import-linter 계약에 맞춰 재작성**한다.
+  - 명명 정정: "notice plan" (TripMate 도메인) vs "notice feature" (라이브러리
+    도메인) — 모든 신규 문서에서 두 개념을 명시적으로 구분.
+  - v1 컬럼 `position INT` (trip_pois)는 v2의 `sort_order TEXT COLLATE "C"`로
+    교체 (SPEC V8 E-6 Critical).
+  - v1의 `map_feature_id UUID` 컬럼은 v2에서 제거 후보 (라이브러리 `feature_id
+    TEXT`만 reference).
+  - 단일 테이블 4 대상 모델은 v1과 동일하게 유지 (`num_nonnulls(...) = 1`
+    CHECK).
+  - RustFS 설정은 v1 환경변수 패턴 그대로 유지.
+- **근거**:
+  - v1에서 사용자 가시 동작이 안정적 — 운영 검증된 도메인
+  - 코드 재작성이 cherry-pick보다 schema 정합성 안전
+  - 명명 분리로 향후 혼동 비용 절감 (notice feature와 직관적으로 구분)
+- **결과 (긍정)**: v1 자산의 가치 보존 + v2 schema 정합
+- **결과 (부정)**: v1 → v2 재작성 비용 (Sprint 2에서 박음)
+- **후속**:
+  - `docs/architecture/notice-plans.md` 신규 (본 PR)
+  - `docs/data-model.md` § (Trip / POI 다음에) notice plan 도메인 추가
+  - Sprint 2 Alembic `0007_notice_plans.py` + `0008_plan_poi_attachments.py`
+  - Sprint 4에 사용자 listing + copy 다이얼로그 UI
+  - Sprint 6에 Admin notice plan 작성기 UI
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-011**
+- 다음 신규 ADR = **ADR-014**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

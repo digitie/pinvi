@@ -95,20 +95,21 @@ forbidden_modules = [
 ]
 ```
 
-### 2.2 프론트(`apps/web`)
+### 2.2 프론트(`apps/web` + Expo `apps/mobile` 공용 패키지)
 
-App Router 기준. 다음 경계:
+자세한 스택·디자인 토큰·공용 패키지 구조는 [`docs/architecture/frontend.md`](architecture/frontend.md).
 
-```
-app/<route>/page.tsx           ← Server/Client component
-app/<route>/api.ts             ← TripMate API fetch wrappers (Server Action or RSC fetch)
-app/shared/{stores,query-keys, query-provider, api-base}.ts
-app/admin/                     ← Admin 콘솔 (RBAC dependency 별도 처리)
-```
+핵심:
 
+- Next.js 15 (App Router) + React 19 + shadcn/ui + Tailwind + Zustand +
+  TanStack Query v5 + React Hook Form + Zod
+- DESIGN.md / `airbnb-marker-palette.html` 디자인 톤 단일 기준
+- **`packages/{schemas,api-client,state,design-tokens,hooks,i18n}`** 공용 코드
+  — Expo `apps/mobile`(v2)이 그대로 import
 - 클라이언트가 외부 API를 직접 호출하지 않는다 (모두 백엔드 경유).
-- `maplibre-gl` 인스턴스는 lazy load + dynamic import로 SSR 영향 차단.
-- TanStack Query keys는 `app/shared/query-keys.ts`에 집중 관리.
+- 카카오맵 SDK는 lazy load + dynamic import로 SSR 영향 차단.
+- 위치 정보는 [`useUserLocation`](architecture/user-location.md) 공용 hook +
+  웹/모바일 어댑터.
 
 ### 2.3 ETL(`apps/etl`, Dagster)
 

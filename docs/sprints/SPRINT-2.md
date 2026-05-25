@@ -28,14 +28,27 @@
   `location_access_log` + `admin_audit_log` chain
 - `apps/api/alembic/versions/0005_email_queue.py`
 - `apps/api/alembic/versions/0006_api_call_log.py`
-- `apps/api/app/models/{trip,poi,companion,share_link,consent,location_audit,email,api_call}.py`
-- `apps/api/app/schemas/{trip,poi,consent,share_link}.py`
-- `apps/api/app/services/{trip,poi,consent,email_service,oauth_google,location_audit_hash}.py`
-- `apps/api/app/api/v1/{trips,pois,oauth}.py`
+- `apps/api/alembic/versions/0007_notice_plans.py` — `notice_plans` +
+  `notice_pois` (v1에서 가져옴, `docs/architecture/notice-plans.md`)
+- `apps/api/alembic/versions/0008_plan_poi_attachments.py` — 단일 테이블 4 대상
+  (`trip_id` / `trip_poi_id` / `notice_plan_id` / `notice_poi_id`) + RustFS 메타
+- `apps/api/app/models/{trip,poi,companion,share_link,consent,location_audit,email,api_call,notice_plan,attachment}.py`
+- `apps/api/app/schemas/{trip,poi,consent,share_link,notice,attachment}.py`
+- `apps/api/app/services/{trip,poi,consent,email_service,oauth_google,location_audit_hash,notice_plan,plan_poi_attachment,rustfs_presigner}.py`
+- `apps/api/app/api/v1/{trips,pois,oauth,notice_plans,storage}.py`
 - `apps/api/app/middleware/{location_audit,api_call_logging}.py`
 - `apps/api/app/webhooks/resend.py`
 - `emails/{verify_email,reset_password,trip_invite,share_link_notice}.tsx`
   (React Email) — 빌드 정적 HTML export
+
+### 프론트엔드 / 공용 패키지
+
+- `packages/schemas/src/{user,trip,poi,consent,notice-plan,attachment,location}.ts` 활성화
+- `packages/api-client/src/endpoints/{auth,users,trips,pois,notice-plans,storage}.ts`
+- `packages/state/src/{auth-store,consent-store,ui-store}.ts`
+- `packages/hooks/src/useUserLocation.ts` + `apps/web/lib/locationAdapter.ts`
+- `apps/web/app/(auth)/.../consent.tsx` — 4 분리 동의 UI
+- `apps/web/app/(app)/profile/consents/page.tsx` — 동의 이력 + 위치 사용 내역
 
 ### 테스트
 
@@ -61,6 +74,9 @@
 - 01-data.md §2.1 (E-2 user_consents)
 - 01-data.md §2.4 (O-3 위치 감사)
 - 01-data.md §2.6 (M-6 email_queue, api_call_log)
+- `docs/architecture/notice-plans.md` (v1에서 가져온 추천 plan + 첨부)
+- `docs/architecture/user-location.md` (위치 동의 + Geolocation hook)
+- `docs/architecture/frontend.md` §4 (공용 schema/api-client/state)
 
 ## 미해결
 
