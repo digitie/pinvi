@@ -2,14 +2,17 @@
 
 ## 현재 상태
 
-v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/ADR만.
-
-`main`은 v2 골격 + SPEC V8 적용 노트가 박힌 상태. `v1`은 직전 9개월 작업 보존.
+**Sprint 2 PR 작성 중.** Sprint 1 머지 완료 — `apps/{api,web,etl}` + `packages/*`
+scaffolding 박힘. Sprint 2 본 PR은 도메인 API + DB (trips/pois COLLATE C + 4 분리
+동의 + Resend webhook + 위치 감사 + Storage presigned) 추가.
 
 ## 다음 한 작업
 
-사용자 review → SPEC V8 반영분을 본 PR(docs/bootstrap-v2-skeleton)에 추가
-커밋 후 push. 그 후 Sprint 1 진입 승인 시 `apps/{api,web,etl}` scaffolding 첫 PR.
+Sprint 2 PR push → 머지 대기 → Sprint 3 (Admin 콘솔 + RBAC + audit chain integration
++ seed) 진입.
+
+소셜 OAuth 라우터 본격 구현은 Sprint 2 후속 또는 Sprint 3 시작 PR로 분리 (schema·
+model·migration은 본 PR에 포함).
 
 ## 진척도
 

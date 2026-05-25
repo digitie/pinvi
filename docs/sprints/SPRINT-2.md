@@ -1,6 +1,6 @@
 # SPRINT-2 — 도메인 API + DB
 
-- **상태**: proposed
+- **상태**: in-progress (본 PR로 핵심 scaffolding 완료, 머지 후 후속 OAuth · Notice copy · 통합 테스트)
 - **선행**: Sprint 1 DoD 완료
 - **목표**: Trip / POI / 4 분리 동의 / Resend 이메일 / 위치 감사 로그 / 소셜
   로그인까지 — UI 없이 API + DB 흐름이 통과해야 한다.

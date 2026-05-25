@@ -2,10 +2,12 @@
 
 ## 진행 중
 
-- (없음)
+- (없음) — Sprint 2 PR 작성 중
 
 ## 다음 (우선순위 순)
 
+- [ ] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed)
+- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + maplibre-vworld 통합)
 - [ ] T-010 — Sprint 1 진입 PR (`apps/{api,web,etl}` + `infra/` + `packages/`
       scaffolding). 사용자 승인 후 시작. 자세히는 `docs/sprints/SPRINT-1.md`.
 - [ ] T-011 — ADR-010 인증 토큰 모델 (cookie session vs JWT)

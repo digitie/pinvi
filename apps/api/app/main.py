@@ -17,6 +17,7 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging, get_logger
+from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 
@@ -42,6 +43,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+app.add_middleware(LocationAuditMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
