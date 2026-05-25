@@ -1,71 +1,186 @@
-﻿# AGENTS.md
+# AGENTS.md
 
-## 역할
-- 이 파일은 Codex/agent가 항상 읽는 최소 지침이다.
-- 세부 규칙은 작업 주제에 맞는 문서와 skill을 필요할 때만 읽는다.
-- 루트 기준과 하위 문서가 충돌하면 아래 우선순위를 따른다.
+## 문서 언어 정책
+
+본 저장소의 모든 Markdown 문서는 한국어로 작성한다. 공식 API 필드명, 코드 식별자,
+명령, URL, 라이브러리·제공자 영어, 환경변수처럼 그대로 보존해야 하는 값만 영어를
+유지한다. 신규 문서는 기존 문서 모두 동일 규칙을 우선한다.
+
+## 정체성
+
+본 저장소(GitHub 이름 `tripmate`)는 **한국 여행 계획·기록·공유 애플리케이션**의
+모노레포다. 백엔드(FastAPI) / 프론트엔드(Next.js) / ETL(Dagster) / 인프라
+manifest / 문서가 들어 있다.
+
+본 앱은 지도 feature 도메인을 직접 소유하지 않는다. 지도 feature(place /
+event / notice / price / weather / route / area) 정규화·저장은 별 저장소
+`python-krtour-map`이 소유하고, TripMate는 그 라이브러리를 **함수 직접 호출**
+(REST 없음)로 사용한다.
+
+이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. master(main)는 v2 사양으로 처음부터
+다시 구현한다(ADR-001).
+
+## 식별자 (일동 방지)
+
+| 항목 | 값 |
+|------|----|
+| GitHub 저장소 이름 | `tripmate` |
+| 백엔드 import (계획) | `from tripmate.api import ...`, `from tripmate.etl import ...` |
+| 프론트 패키지 (계획) | `apps/web` (Next.js App Router) |
+| 환경변수 prefix | `TRIPMATE_*` |
+| PostgreSQL DB 이름 (개발) | `tripmate` |
+| Postgres schema (자체) | `app`, `ops` (TripMate 소유) |
+| Postgres schema (`python-krtour-map` 소유) | `feature`, `provider_sync` |
+| 객체 저장소 | RustFS (S3 호환) — `app` 도메인 첨부 + `feature` 미디어 분리 버킷 |
+| Dagster code location | `apps/etl` |
+| Admin 콘솔 | `apps/web/app/admin/` |
+| 운영 노드 | Odroid M1S (Ubuntu 24.04 + Docker Compose) |
+
+## 의존 라이브러리 (별 저장소)
+
+| 저장소 | 역할 |
+|--------|------|
+| `python-krtour-map` | 지도 feature 정규화·저장 (함수 라이브러리) |
+| `python-kraddr-base` | 한국 행정구역 / 카테고리 base |
+| `python-kraddr-geo` | 주소 · 법정동 · 지오코딩 |
+| `python-visitkorea-api` | 한국관광공사 API (축제·관광지·국가유산 후보) |
+| `python-kma-api` | 기상청 단기/중기/실황/특보 |
+| `python-airkorea-api` | 환경공단 대기질 |
+| `python-opinet-api` | 한국석유공사 유가 |
+| `python-krex-api` | 한국도로공사 휴게소·고속도로 |
+| `python-khoa-api` | 국립해양조사원 해양 지수 / 해수욕장 |
+| `python-knps-api` | 국립공원공단 트래킹 / 안전 |
+| `python-krmois-api` | 행정안전부 지방행정 / 인허가 LOCALDATA |
+| `python-krforest-api` | 산림청 휴양림 / 수목원 |
+| `python-krheritage-api` | 국가유산청 문화재 |
+| `python-kasi-api` | 한국천문연구원 일출·일몰·달 |
+| `python-krbluelink-api` | 블루링크 (차량) |
+| `python-mcst-api` | 문화체육관광부 |
+| `python-mois-api` | 행정안전부 base |
+| `python-datagokr-api` | data.go.kr generic |
+| `python-vworld-api` | VWorld geocoder / 경계 |
+| `python-krairport-api` | 한국공항공사 공항 / 항공편 |
+| `python-kraddr-gop` | 우편번호 / 도로명 base |
+| `maplibre-vworld-js` | VWorld + maplibre-gl 통합 (지도 클라이언트) |
+
+상세 사용 정책은 `python-krtour-map`의 `docs/external-apis.md`와 본 저장소의
+`docs/krtour-map-integration.md`.
+
+## 개발 환경 정책 (PC, WSL)
+
+PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다. NTFS 마운트에서
+직접 `git`/`pytest`/`docker`/`npm`을 실행하지 않는다 — 파일 권한, inotify,
+심볼릭 링크, 빠른 I/O 성능 모두 저하된다.
+
+- **코드/가상환경/git**: WSL ext4 미러 (`~/tripmate-workspaces/tripmate/`).
+- **데이터(`dataset/`, `refdocs/`)**: NTFS의 프로젝트 디렉토리 (예:
+  `/mnt/f/dev/tripmate/dataset/`). MOIS localdata zip, krheritage SHP, fixture
+  대용량은 모두 NTFS. ext4 작업 디렉토리에는 심볼릭 링크 또는 NTFS 직접 참조.
+- **테스트**: 단위 테스트 픽스처는 소량으로 ext4. 통합/e2e는 NTFS `dataset/`/
+  `refdocs/`를 reference.
+- **카피 정책**: 작업이 끝나면 ext4 → NTFS로 rsync. Git source of truth는 ext4.
+
+자세한 절차는 `docs/dev-environment.md`. Windows 재설치 후 옵션 인수인계는
+`docs/windows-reinstall-recovery.md`에 함께 둔다 (코드 작성 단계 진입 시 작성).
+
+작업 흐름:
+
+- WSL2 미러 디렉토리(`~/tripmate-workspaces/tripmate`)에서 실행할 명령은
+  `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && ..."` 형태로 감싼다.
+- 명령 실행 전후로 현재 프로젝트 디렉토리(`F:\dev\tripmate`)와 WSL 미러를 동기한다.
+- PowerShell `rg.exe`를 사용하지 않는다. 권한 문제와 WindowsApps 경로 오염을 피하기
+  위해 `wsl.exe -e bash -lc "... rg ..."`로 WSL native `rg`만 사용한다.
+- Windows PowerShell로 한국어 문서를 읽을 때는 `Get-Content -Encoding UTF8`을 명시한다.
 
 ## 지시 우선순위
-1. 사용자 요청
-2. 이 `AGENTS.md`
-3. `/docs` 하위의 관련 설계/운영 문서
-4. `/skills` 하위의 관련 skill 문서
-5. 기존 코드베이스 규칙
-6. 최소한의, 되돌릴 수 있는 가정
 
-## 프로젝트 기준
-- TripMate는 대한민국 국내 여행을 일정, 장소, 지도, 지역 데이터, Telegram 알림으로 관리하는 로그인 기반 웹앱이다.
-- 해외 데이터, 비회원 모드, 외부 provider 원문 장기 저장은 기본 범위가 아니다.
-- 프론트엔드: Next.js, React, TypeScript, Tailwind CSS, PWA, Kakao Map.
-- 백엔드/데이터: FastAPI, SQLAlchemy 2, GeoAlchemy2, PostgreSQL/PostGIS, Dagster, Shapely.
-- 로컬 개발은 WSL2 Ubuntu 기준이며 프론트엔드 `3001`, 백엔드 `8001`을 쓴다. 배포 포트는 미정이다.
+1. **`docs/decisions.md`의 accepted ADR** — 이미 박힌 결정. 충돌하면 멈추고
+   ADR을 superseded로 갱신할지 사용자에게 묻는다.
+2. **본 파일 `AGENTS.md`** — 작업 규칙.
+3. **`SKILL.md`** — 도메인 어휘, DO NOT.
+4. **`docs/agent-guide.md`** — 작업·문서화 가이드 (커밋/PR/체크리스트).
+5. **`docs/sprints/SPRINT-N.md`** — 현재 Sprint의 진입/산출물/DoD.
+6. **개별 문서** — `docs/architecture.md`, `docs/data-model.md`, ...
+7. **이전 작업 일지 (`docs/journal.md`)** — 컨텍스트.
 
-## 핵심 불변 조건
-- 로그인 식별자는 이메일이며 인증은 httpOnly cookie 기반 서버 세션으로 시작한다.
-- Telegram 알림 대상은 사용자 소유 리소스로 저장하고 여행별 최대 3개만 참조한다.
-- Telegram bot token, Gemini API key, 비밀번호 원문은 일반 DB/로그에 저장하지 않는다.
-- 장소 추가는 Kakao 검색 결과 선택과 지도 클릭 입력을 모두 지원한다.
-- 장소 후보는 Kakao 우선, Naver/Google/일반 검색 확장은 정책 검토 후 진행한다.
-- 날씨/유가 리포트는 실시간 API 연타 대신 저장된 지역 데이터와 ETL 캐시를 우선한다.
-- “반경 nkm” 리포트는 행정구역 기반 근사일 수 있으며 UI/문서에서 근사라고 밝힌다.
-- Gemini Deep Research는 사용자 개인 API 키 입력 구조이고 버튼 기반 수동 실행을 기본으로 한다.
-- 외부 provider 연동은 wrapper/adapter/gateway를 새로 만들지 않고, 안정된 `python-*-api` public client와 typed model을 직접 사용한다.
-- public API가 부족하면 TripMate에 우회 계층을 만들기 전에 해당 `python-*-api` 라이브러리의 endpoint, pagination, cursor, exception, raw payload 계약을 먼저 안정화한다.
+본 우선순위가 충돌하면 1번이 이긴다. 새 결정은 ADR로 박는다.
 
-## MCP 상태
-- MCP 구현은 TODO로만 유지한다.
-- `youtube_place_mcp`와 `address_code_lookup_mcp`는 별도 명시 지시가 있기 전까지 설계/구현/스캐폴딩하지 않는다.
-- 관련 판단은 `docs/runbooks/agent-working-rules.md`와 해당 execplan에 남긴다.
+## 작업 단위 / 커밋 / PR
 
-## 문서 라우팅
-- 공통 작업 규칙: `docs/runbooks/agent-working-rules.md`
-- 전체 계획: `docs/execplan/korea-tripmate-implementation-plan.md`
-- 아키텍처: `docs/architecture.md`, `docs/decisions/`
-- 데이터 소스/저장 정책: `docs/data-sources.md`
-- Telegram/Gemini: `docs/integrations/telegram.md`, `docs/integrations/gemini.md`
-- 로컬 개발/운영: `docs/runbooks/local-dev.md`, `docs/runbooks/etl.md`
-- API 계약: `docs/api/*.md`
+`docs/agent-guide.md` §7 (변경 분류별 체크리스트)과 §7.5 (PR 워크플로) 따른다.
+**main 직접 push 금지** (ADR-001 후속). 모든 변경은 feature branch + PR.
 
-## Skill 라우팅
-- 테스트/QA: `skills/testing-and-qa.ko.md`
-- 코딩 스타일/타입 안정성: `skills/coding-style.ko.md`
-- DB/마이그레이션: `skills/database-architect.ko.md`
-- 문서/ADR: `skills/documentation-and-adrs.ko.md`
-- 데이터 정책: `skills/data-policy.ko.md`
-- 공간/PostGIS: `skills/geospatial-postgis.ko.md`
-- Dagster/ETL: `skills/dagster-etl.ko.md`
-- 배포/ODROID: `skills/deployment-wsl2-odroid.ko.md`
+브랜치 명명: `feat/<topic>` / `fix/<topic>` / `chore/<topic>` / `docs/<topic>` /
+`refactor/<topic>` / `adr/<short>` / `agent/<id>/<topic>` (다중 에이전트 병행).
 
-## 작업 원칙
-- 외부 API 관련 작업은 다른 구현보다 먼저 provider 직접 사용 원칙을 확인하고 문서/코드에 반영한 뒤 진행한다.
-- 단순 작업이 아니면 영향 범위, 관련 문서/skill, API/DB/도메인/실패 동작, 테스트를 먼저 확인한다.
-- 여러 파일, 마이그레이션, 서비스 경계를 건드리면 `docs/execplan/<task-name>.md`를 작성 또는 갱신한다.
-- 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경(WSL2/Windows)을 보고한다.
+## 코드 작성 금지 (현 단계)
+
+설계·문서화 단계에서는 `apps/`, `packages/`, `infra/`에 코드를 작성하지 않는다.
+허용되는 변경:
+
+- `docs/` 신규/수정
+- `AGENTS.md`, `SKILL.md`, `CLAUDE.md`, `README.md`
+- `.env.example` 추가
+- `.gitignore`, `.gitattributes`, `LICENSE`
+- Sprint 1 진입 PR에 한해 `apps/` scaffolding과 `packages/` placeholder 허용
+
+코드 작성 요청이 들어오면:
+
+1. 사용자 의도 명확화 (어떤 컴포넌트/계층/엔드포인트인지)
+2. ADR이 필요한지 확인
+3. 테스트 우선 작성 (`docs/test-strategy.md` 참고)
+4. 구현
+5. 통합 테스트 + (DB 닿는 경우) EXPLAIN 검증
+6. journal + resume + decisions/CHANGELOG (해당 시)
+
+## 작업 흐름 룰 요약
+
+- 명확한 의도가 없으면 추측하지 말고 `AskUserQuestion`(4지선다 + Other) 사용.
+- 여러 파일·DB schema·서비스 경계를 건드리면 `docs/execplan/<task-name>.md`를
+  작성/갱신한다.
+- 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경
+  (WSL2/Windows)을 보고한다.
 - 유사한 실수가 반복되면 원인과 재발방지 기준을 관련 문서/runbook/skill에 남긴다.
-- Docker, Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic 검증은 WSL2에서 실행한다.
-- 검색은 PowerShell `rg.exe`를 사용하지 않는다. 권한 문제와 WindowsApps 경로 오염을 피하기 위해 `wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg ..."`처럼 WSL native `rg`만 사용한다.
-- WSL2 테스트/검증은 NTFS 경로(`/mnt/f/dev/tripmate`)에서 직접 실행하지 않고 WSL 내부 볼륨의 미러(`~/tripmate-workspaces/tripmate`)에서 실행한다.
-- 테스트/검증 명령 전에는 현재 프로젝트 디렉토리의 변경을 WSL 미러로 동기화하고, 명령이 끝날 때마다 WSL 미러의 변경을 현재 프로젝트 디렉토리로 다시 복사한다.
-- Windows PowerShell로 한국어 문서를 읽을 때는 깨짐 방지를 위해 `Get-Content -Encoding UTF8` 또는 동등한 UTF-8 명시 옵션을 사용한다.
-- 보안/인증/DB/공간/Dagster/Telegram/외부 API/PWA/Gemini 변경은 관련 문서와 모듈 경계를 먼저 읽는다.
-- 제품 의사결정이 저장소에서 추론 불가능할 때만 멈추고 묻고, 그 외에는 안전한 가정을 문서에 남긴다.
+- Docker, Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic 검증은
+  WSL2에서 실행한다.
+- 보안/인증/DB/공간/Dagster/Telegram/외부 API/PWA/Gemini/소셜 로그인 변경은
+  관련 문서와 모듈 경계를 먼저 읽는다.
+- 제품 의사결정이 저장소에서 추론 불가능할 때만 멈추고 묻고, 그 외에는 안전한
+  가정을 문서에 남긴다.
+- 정합성 게이트(Coverage, OpenAPI drift, lint, mypy, lint-imports)는 코드 작성
+  단계 진입 후 CI에 박는다.
+
+## 책임 경계 (TripMate vs `python-krtour-map`)
+
+### TripMate 책임 (본 저장소)
+
+- 사용자/세션/인증 (이메일·소셜·OAuth)
+- 여행 계획 도메인 (Trip, Day, POI 첨부, Notice plan, 공유)
+- Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
+- 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
+- Dagster orchestration (`python-krtour-map`의 collect/load 함수를 asset으로 호출)
+- 파일 스토리지(RustFS) 운영 API
+- 외부 통합 (Telegram, Gemini, Resend, 소셜 로그인 provider)
+
+### `python-krtour-map` 책임 (별 저장소, 함수 라이브러리)
+
+- Feature 정규화 / `feature_id` 생성 / SourceRecord 관리
+- Postgres schema `feature` / `provider_sync` 의 DDL과 raw SQL
+- Provider 원천 → DTO 변환 (KMA, VisitKorea, OpiNet, MOIS, ...)
+- Record Linkage / dedup queue
+- 지도 좌표·CRS 정책 (`coord_5179` 반경 검색 등)
+- Coverage / 정합성 / OpenAPI gate (자체 CI)
+
+본 저장소의 코드가 위 책임을 침범하지 않는지 모든 PR에서 자가 검토한다.
+
+## 신규 ADR 작성 시
+
+`docs/decisions.md`에 ADR-NNN 추가. `python-krtour-map`의 ADR과 충돌·연계가
+있으면 양쪽 ADR이 서로 참조한다 (예: `참조: krtour-map ADR-022`). 본 저장소의
+ADR 다음 번호는 `docs/decisions.md` 끝을 참고.
+
+## 참고
+
+- Skill 라우팅, 커밋 규약, PR 본문, 핸드오프 프로토콜은 `docs/agent-guide.md`.
+- 자주 묻는 작업, 도메인 어휘, DO NOT 22항은 `SKILL.md`.
+- 한 줄 진입 요약은 `CLAUDE.md`.

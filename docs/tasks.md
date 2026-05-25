@@ -1,0 +1,43 @@
+# tasks.md — 백로그
+
+## 진행 중
+
+- (없음)
+
+## 다음 (우선순위 순)
+
+- [ ] T-010 — Sprint 1 진입 PR (`apps/{api,web,etl}` + `infra/` + `packages/`
+      scaffolding). 사용자 승인 후 시작. 자세히는 `docs/sprints/SPRINT-1.md`.
+- [ ] T-011 — ADR-010 인증 토큰 모델 (cookie session vs JWT)
+- [ ] T-012 — ADR-011 Admin RBAC 모델
+- [ ] T-013 — ADR-012 소셜 로그인 provider 정책
+- [ ] T-014 — ADR-013 RustFS 버킷 분리 정책
+
+## 완료
+
+- [x] T-000 — git v1 보존 + main v2 재시작 (완료: 2026-05-25)
+- [x] T-001 — README / CLAUDE / AGENTS / SKILL (완료: 2026-05-25)
+- [x] T-002 — docs/architecture / agent-guide / dev-environment (완료: 2026-05-25)
+- [x] T-003 — docs/decisions (ADR-001 ~ ADR-009) (완료: 2026-05-25)
+- [x] T-004 — docs/journal / resume / tasks (완료: 2026-05-25)
+- [x] T-005 — docs/data-model / postgres-schema / test-strategy (완료: 2026-05-25)
+- [x] T-006 — docs/krtour-map-integration (완료: 2026-05-25)
+- [x] T-007 — docs/sprints/README + SPRINT-1 (완료: 2026-05-25)
+
+## 보류
+
+- [ ] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 후보)
+- [ ] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 후보)
+- [ ] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 후보)
+- [ ] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 후보)
+- [ ] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 후보)
+- [ ] T-105 — v1의 Trip + POI Attachment 도메인 v2로 이식 (Sprint 3 후보)
+- [ ] T-106 — Telegram 통합 (Sprint 4 후보)
+- [ ] T-107 — Gemini 통합 (Sprint 4 후보)
+- [ ] T-108 — Odroid M1S 배포 자동화 (Sprint 5 후보)
+
+## 머지 히스토리 (참고)
+
+| PR | 제목 | merge 일 | 비고 |
+|----|------|---------|------|
+| (v2의 첫 PR — 본 골격) | docs: bootstrap v2 skeleton | (대기) | T-000 ~ T-007 묶음 |

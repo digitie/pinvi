@@ -1,0 +1,378 @@
+# postgres-schema.md — `app` schema 골격
+
+본 문서는 `tripmate` PostgreSQL 데이터베이스의 `app` schema DDL 골격이다. 실제
+DDL은 Alembic migration이 박는다 (코드 작성 단계 진입 후 `apps/api/alembic/
+versions/...`).
+
+다른 schema:
+
+- `feature`, `provider_sync` — `python-krtour-map` 소유. 그쪽 저장소의
+  `docs/postgres-schema.md` 참고.
+- `ops` — Dagster run/event storage. Dagster가 자체 관리. TripMate는 `app.import_jobs`
+  로 도메인 관점의 메타만 둔다.
+- `x_extension` — PostGIS / pg_trgm / pgcrypto.
+
+## 1. 부트스트랩
+
+```sql
+CREATE SCHEMA IF NOT EXISTS app;
+CREATE SCHEMA IF NOT EXISTS ops;
+CREATE SCHEMA IF NOT EXISTS x_extension;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA x_extension;
+CREATE EXTENSION IF NOT EXISTS pg_trgm  SCHEMA x_extension;
+
+-- 접속 시 search_path
+ALTER ROLE tripmate SET search_path TO public, x_extension;
+
+-- updated_at trigger (공통)
+CREATE OR REPLACE FUNCTION app.touch_updated_at()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+```
+
+## 2. 사용자 / 인증
+
+### 2.1 `app.users`
+
+```sql
+CREATE TABLE app.users (
+  user_id          uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  email            text NOT NULL,
+  email_verified_at timestamptz,
+  display_name     text,
+  avatar_url       text,
+  status           text NOT NULL DEFAULT 'active',
+  roles            text[] NOT NULL DEFAULT '{}',
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT users_email_lower_chk CHECK (email = lower(email))
+);
+
+CREATE UNIQUE INDEX users_email_uk ON app.users (email);
+CREATE INDEX users_status_idx ON app.users (status) WHERE status <> 'active';
+CREATE INDEX users_roles_gin_idx ON app.users USING gin (roles);
+
+CREATE TRIGGER users_touch_updated_at
+BEFORE UPDATE ON app.users
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+### 2.2 `app.user_oauth_identities`
+
+```sql
+CREATE TABLE app.user_oauth_identities (
+  identity_id      uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  user_id          uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  provider         text NOT NULL,
+  provider_user_id text NOT NULL,
+  provider_email   text,
+  linked_at        timestamptz NOT NULL DEFAULT now(),
+  last_login_at    timestamptz,
+  UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX user_oauth_user_idx ON app.user_oauth_identities (user_id);
+```
+
+### 2.3 `app.user_sessions`
+
+```sql
+CREATE TABLE app.user_sessions (
+  session_id   uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  expires_at   timestamptz NOT NULL,
+  revoked_at   timestamptz,
+  ip           inet,
+  user_agent   text
+);
+
+CREATE INDEX user_sessions_active_idx
+  ON app.user_sessions (user_id, expires_at)
+  WHERE revoked_at IS NULL;
+```
+
+### 2.4 `app.user_email_verifications`
+
+```sql
+CREATE TABLE app.user_email_verifications (
+  verification_id uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  user_id         uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  token_hash      text NOT NULL,
+  email           text NOT NULL,
+  purpose         text NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  expires_at      timestamptz NOT NULL,
+  used_at         timestamptz
+);
+
+CREATE INDEX user_email_verifications_pending_idx
+  ON app.user_email_verifications (user_id, purpose)
+  WHERE used_at IS NULL;
+```
+
+## 3. 여행 계획
+
+### 3.1 `app.trips`
+
+```sql
+CREATE TABLE app.trips (
+  trip_id           uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  owner_user_id     uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  title             text NOT NULL,
+  description       text,
+  start_date        date NOT NULL,
+  end_date          date NOT NULL,
+  region_hint       text,
+  cover_attachment_id uuid,
+  visibility        text NOT NULL DEFAULT 'private',
+  status            text NOT NULL DEFAULT 'draft',
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trips_dates_chk CHECK (end_date >= start_date),
+  CONSTRAINT trips_visibility_chk CHECK (visibility IN ('private', 'unlisted', 'public')),
+  CONSTRAINT trips_status_chk CHECK (status IN ('draft', 'planned', 'in_progress', 'completed', 'archived'))
+);
+
+CREATE INDEX trips_owner_status_idx ON app.trips (owner_user_id, status, start_date DESC);
+CREATE INDEX trips_public_idx ON app.trips (start_date DESC) WHERE visibility = 'public';
+
+CREATE TRIGGER trips_touch_updated_at
+BEFORE UPDATE ON app.trips
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+### 3.2 `app.trip_days`
+
+```sql
+CREATE TABLE app.trip_days (
+  day_id    uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id   uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  day_index int NOT NULL,
+  date      date,
+  title     text,
+  note      text,
+  UNIQUE (trip_id, day_index),
+  CONSTRAINT trip_days_index_chk CHECK (day_index >= 0)
+);
+
+CREATE INDEX trip_days_trip_idx ON app.trip_days (trip_id, day_index);
+```
+
+### 3.3 `app.trip_day_pois`
+
+```sql
+CREATE TABLE app.trip_day_pois (
+  attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  day_id               uuid NOT NULL REFERENCES app.trip_days(day_id) ON DELETE CASCADE,
+  position             int NOT NULL,
+  feature_id           text NOT NULL,   -- feature.features.feature_id 참조 (FK 없음)
+  feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  planned_arrival_at   timestamptz,
+  planned_departure_at timestamptz,
+  user_note            text,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (day_id, position),
+  CONSTRAINT trip_day_pois_position_chk CHECK (position >= 0)
+);
+
+CREATE INDEX trip_day_pois_feature_idx ON app.trip_day_pois (feature_id);
+
+CREATE TRIGGER trip_day_pois_touch_updated_at
+BEFORE UPDATE ON app.trip_day_pois
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+### 3.4 `app.trip_companions`
+
+```sql
+CREATE TABLE app.trip_companions (
+  companion_id  uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id       uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  user_id       uuid REFERENCES app.users(user_id),
+  display_name  text,
+  role          text NOT NULL DEFAULT 'viewer',
+  joined_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trip_companions_role_chk CHECK (role IN ('co_owner', 'editor', 'viewer'))
+);
+
+CREATE INDEX trip_companions_trip_idx ON app.trip_companions (trip_id);
+CREATE INDEX trip_companions_user_idx ON app.trip_companions (user_id) WHERE user_id IS NOT NULL;
+```
+
+### 3.5 `app.trip_share_links`
+
+```sql
+CREATE TABLE app.trip_share_links (
+  share_id   uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id    uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  token      text NOT NULL UNIQUE,
+  visibility text NOT NULL DEFAULT 'view_only',
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trip_share_links_visibility_chk CHECK (visibility IN ('view_only', 'comment', 'edit'))
+);
+
+CREATE INDEX trip_share_links_trip_idx ON app.trip_share_links (trip_id);
+```
+
+## 4. 첨부
+
+### 4.1 `app.attachments`
+
+```sql
+CREATE TABLE app.attachments (
+  attachment_id      uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  owner_user_id      uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  bucket             text NOT NULL,
+  object_key         text NOT NULL,
+  mime_type          text NOT NULL,
+  byte_size          bigint NOT NULL CHECK (byte_size >= 0),
+  display_name       text,
+  category           text,
+  linked_entity_kind text,
+  linked_entity_id   uuid,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (bucket, object_key)
+);
+
+CREATE INDEX attachments_owner_idx ON app.attachments (owner_user_id, created_at DESC);
+CREATE INDEX attachments_linked_idx ON app.attachments (linked_entity_kind, linked_entity_id)
+  WHERE linked_entity_kind IS NOT NULL;
+```
+
+## 5. 공지 (Notice plan)
+
+### 5.1 `app.notice_plans`
+
+```sql
+CREATE TABLE app.notice_plans (
+  notice_id   uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  title       text NOT NULL,
+  body        text NOT NULL,
+  category    text NOT NULL DEFAULT 'general',
+  priority    int  NOT NULL DEFAULT 0,
+  starts_at   timestamptz NOT NULL,
+  ends_at     timestamptz,
+  status      text NOT NULL DEFAULT 'draft',
+  created_by  uuid NOT NULL REFERENCES app.users(user_id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT notice_plans_status_chk CHECK (status IN ('draft', 'scheduled', 'active', 'archived')),
+  CONSTRAINT notice_plans_dates_chk CHECK (ends_at IS NULL OR ends_at >= starts_at)
+);
+
+CREATE INDEX notice_plans_active_idx ON app.notice_plans (status, starts_at DESC);
+
+CREATE TRIGGER notice_plans_touch_updated_at
+BEFORE UPDATE ON app.notice_plans
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+### 5.2 `app.notice_plan_audiences`
+
+```sql
+CREATE TABLE app.notice_plan_audiences (
+  audience_id    uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  notice_id      uuid NOT NULL REFERENCES app.notice_plans(notice_id) ON DELETE CASCADE,
+  audience_kind  text NOT NULL,
+  audience_value text,
+  CONSTRAINT notice_plan_audiences_kind_chk CHECK (audience_kind IN ('all', 'role', 'user', 'region'))
+);
+
+CREATE INDEX notice_plan_audiences_notice_idx ON app.notice_plan_audiences (notice_id);
+```
+
+## 6. 운영 / 로그
+
+### 6.1 `app.admin_audit_logs`
+
+```sql
+CREATE TABLE app.admin_audit_logs (
+  log_id        bigserial PRIMARY KEY,
+  admin_user_id uuid REFERENCES app.users(user_id),
+  action        text NOT NULL,
+  entity_kind   text,
+  entity_id     text,
+  before        jsonb,
+  after         jsonb,
+  ip            inet,
+  user_agent    text,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX admin_audit_logs_created_brin
+  ON app.admin_audit_logs USING brin (created_at);
+CREATE INDEX admin_audit_logs_entity_idx
+  ON app.admin_audit_logs (entity_kind, entity_id)
+  WHERE entity_kind IS NOT NULL;
+```
+
+### 6.2 `app.import_jobs`
+
+```sql
+CREATE TABLE app.import_jobs (
+  job_id      uuid PRIMARY KEY,                -- Dagster run_id mapping
+  kind        text NOT NULL,
+  state       text NOT NULL DEFAULT 'queued',
+  started_at  timestamptz,
+  ended_at    timestamptz,
+  payload     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  result      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error       jsonb,
+  CONSTRAINT import_jobs_state_chk CHECK (state IN ('queued', 'running', 'success', 'failed'))
+);
+
+CREATE INDEX import_jobs_kind_state_idx ON app.import_jobs (kind, state);
+CREATE INDEX import_jobs_started_idx ON app.import_jobs (started_at DESC) WHERE started_at IS NOT NULL;
+```
+
+## 7. 권한 / 보안
+
+- DB 사용자 `tripmate`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
+  CRUD. 단 `feature`, `provider_sync`의 DDL은 `python-krtour-map` Alembic으로만 실행.
+- 운영에서는 별도 read-only 사용자 `tripmate_ro`를 두어 BI/모니터링에 사용.
+- 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
+- `app.admin_audit_logs`는 append-only — DELETE 막는 trigger 또는 권한 분리.
+
+## 8. 데이터 보존 / GDPR / 탈퇴
+
+- `app.users.status = 'deleted'`일 때 PII 마스킹 잡 schedule (Dagster):
+  - `email` → `deleted-<user_id>@example.invalid`
+  - `display_name` → `null`
+  - `avatar_url` → `null`
+  - 관련 세션 / verification token 일괄 `revoked_at = now()`.
+- `app.attachments`는 RustFS 객체와 함께 hard-delete (사용자 명시 요청 시).
+- 로그(`admin_audit_logs`)는 90일 보관 후 cold storage 이전 (운영 ADR로 결정).
+
+## 9. 마이그레이션 운영
+
+- 두 Alembic이 같은 DB를 친다 — 실행 순서:
+  1. `python-krtour-map alembic upgrade head` (feature/provider_sync)
+  2. `tripmate alembic upgrade head` (app/ops)
+- 충돌 가능 항목: schema 이름 / 확장 설치 / 함수 정의.
+- 가능한 한 본 schema에서 `feature` schema 객체를 참조하지 않는다 (FK 없음).
+- backfill은 별도 Dagster job으로 분리 — DDL migration에 데이터 변환 섞지 않음.
+
+## 10. v1 → v2 마이그레이션 매핑
+
+v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
+
+| v1 migration | v2 ADR | 비고 |
+|--------------|--------|------|
+| 0001 initial_core (user/session/trip 기본) | T-105 (대기) | 컬럼 정렬은 본 §2~§3 골격 사용 |
+| 0023 widen mid-term weather summary | (`python-krtour-map`에 이관) | feature schema 소유 |
+| 0024 library spec v3 schema | (`python-krtour-map`에 이관) | feature schema |
+| 0025 provider_source_weather_state | (`python-krtour-map`에 이관) | provider_sync |
+| 0026 outdoor_feature_profiles | (`python-krtour-map`에 이관) | feature schema |
+| 0027 notice_plans | T-102 (대기) | 본 §5 골격 사용 |
+| 0028 plan_poi_attachments | T-105 (대기) | 본 §3.3 골격 사용 |
+
+자세한 매핑은 v2 코드 작성 단계에서 ADR로 박는다.

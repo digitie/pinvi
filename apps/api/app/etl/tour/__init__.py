@@ -1,1 +1,0 @@
-"""Tour point ETL helpers."""

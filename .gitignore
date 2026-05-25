@@ -1,45 +1,73 @@
-# dependencies
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.installed.cfg
+
+# venv
 .venv/
+.venv-wsl/
+venv/
+env/
 apps/api/.venv/
 apps/api/.venv-wsl/
-*.egg-info/
 
-# Next.js
+# Node
+node_modules/
 .next/
 out/
 tsconfig.tsbuildinfo
-
-# production
-build/
-dist/
-
-# environment
-.env
-.env*.local
-
-# logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# python
-__pycache__/
-*.py[cod]
+# caches
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.import_linter_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 
-# OS / editor
+# IDE / OS
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
 
-# local scratch data
-.tmp/
+# Office / Word lock files
+~$*
+*.tmp
+
+# env / secrets
+.env
+.env*.local
+
+# data / artifacts (kept on NTFS, not in git per dev-environment 정책)
 dataset/
 testset/
 refdocs/
 test-results/
+data/
+artifacts/
+*.log
+
+# Local tool state
+.dagster/
+.tmp/
+
+# Agent local state
+.codex_tmp/
+
+# Build outputs
+build/
+dist/
