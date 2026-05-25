@@ -26,7 +26,15 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - [x] docs/architecture/frontend.md (Next.js + Expo 공용 monorepo) — T-010
 - [x] docs/architecture/user-location.md (Geolocation + expo-location) — T-011
 - [x] docs/architecture/notice-plans.md (v1 추천 plan 도메인 이전) — T-012
-- [ ] Sprint 1 진입 PR (apps + packages scaffolding) — T-020 (대기)
+- [x] v1 자산 전수 조사 + 매핑 매트릭스 (`docs/v1-to-v2-mapping.md`) — T-013
+- [x] docs/api/ 11개 신규 (auth/users/trips/pois/features/notice-plans/storage/admin/public/regions/health/websocket + README + common) — T-014
+- [x] docs/integrations/ 9개 신규 (resend/social-login/gemini/telegram/kakao-map/sentry/loki + README) — T-015
+- [x] docs/runbooks/ 7개 신규 (local-dev/docker-app/etl/admin/file-storage/odroid-docker + README) — T-016
+- [x] docs/compliance/ 4개 신규 (lbs-act/pipa/data-policy + README) — T-017
+- [x] docs/conventions/ 6개 신규 (coding-style/database/testing/geospatial/normalization + README) — T-018
+- [x] docs/architecture/ 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract) — T-019
+- [x] AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) — T-020
+- [ ] Sprint 1 진입 PR (apps + packages scaffolding) — T-030 (대기)
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
@@ -45,6 +53,7 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
 - ADR-012: 사용자 위치 정보 획득 (Geolocation + expo-location)
 - ADR-013: Notice plan 도메인 v1 → v2 이전 + 명명 분리
+- ADR-014: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리
 
 ## 차단 사유 / 결정 대기
 

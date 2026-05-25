@@ -69,3 +69,25 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 `pytest -q` + `ruff check` + `mypy --strict` (`apps/api`) + `npm run
 lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시).
+
+## 7. 빠른 문서 검색
+
+| 무엇을 하려는가 | 어디 보나 |
+|---------------|----------|
+| API endpoint 구현 / 변경 | `docs/api/<도메인>.md` + `docs/api/common.md` |
+| DB schema 변경 | `docs/postgres-schema.md` + `docs/conventions/database.md` |
+| 라이브러리 호출 | `docs/krtour-map-integration.md` |
+| 외부 통합 (이메일/OAuth/AI) | `docs/integrations/<서비스>.md` |
+| Frontend UI | `docs/architecture/frontend.md` + `DESIGN.md` |
+| Admin 콘솔 | `docs/api/admin.md` + `docs/runbooks/admin.md` |
+| ETL asset | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md` |
+| 사용자 위치 사용 | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md` |
+| Notice plan (추천 여행) | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md` |
+| 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
+| 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
+| 테스트 작성 | `docs/conventions/testing.md` |
+| Sprint 작업 | `docs/sprints/SPRINT-<N>.md` |
+| 결정 / ADR | `docs/decisions.md` |
+| v1과 비교 | `docs/v1-to-v2-mapping.md` |
+
+자세한 진입 순서는 `AGENTS.md` "AI Agent 작업 진입 절차".

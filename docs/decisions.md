@@ -393,7 +393,52 @@
   - Sprint 4에 사용자 listing + copy 다이얼로그 UI
   - Sprint 6에 Admin notice plan 작성기 UI
 
+## ADR-014: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리
+
+- **상태**: accepted
+- **날짜**: 2026-05-25
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: v2 골격 작성 후 v1의 9개월 운영 자산 (docs 50+ / apps/api / apps/web /
+  scripts / config / skills 등)이 v2에 부분적으로만 반영됨. 사용자가 "v1 코드와
+  문서를 전반적으로 확인해서 v2에 반영할 수 있는 부분 중 아직 안된 것은 일단
+  빠짐없이 반영하고 그 후 문서의 일관성, 문서간 충돌여부를 확인해서 정리. 또한
+  AI Agent가 작업할 수 있도록 문서의 상세함과 명확함을 보완"을 요청.
+- **결정**:
+  1. v1 자산 전수 조사 → `docs/v1-to-v2-mapping.md` 매핑 매트릭스 작성
+  2. 누락된 영역을 본 PR로 일괄 신규 작성:
+     - `docs/api/` 11개 (README/common/auth/users/trips/pois/features/notice-plans/storage/admin/public/regions/health/websocket)
+     - `docs/integrations/` 9개 (README/resend/social-login/gemini/telegram/kakao-map/sentry/loki)
+     - `docs/runbooks/` 7개 (README/local-dev/docker-app/etl/admin/file-storage/odroid-docker)
+     - `docs/compliance/` 4개 (README/lbs-act/pipa/data-policy)
+     - `docs/conventions/` 6개 (README/coding-style/database/testing/geospatial/normalization)
+     - `docs/architecture/` 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract)
+     - `docs/data-sources/README.md` 인덱스 + cross-ref
+  3. ADR-005 / ADR-001 / ADR-004 일관성 점검 — 모든 신규 문서가 책임 분담 (TripMate
+     vs `python-krtour-map`) 명시
+  4. AI agent 진입 절차 강화 — `AGENTS.md` + `CLAUDE.md`에 작업 종류별 진입 문서표
+  5. 명명 일관성: `pyXyz` 짧은 alias 사용 금지 → `python-xyz-api` canonical
+- **근거**:
+  - v1의 9개월 운영 노하우를 v2로 가져오지 않으면 같은 결정을 반복
+  - AI agent가 본 저장소 단일 진입점에서 모든 도메인 작업을 시작할 수 있어야 함
+  - 문서 일관성 결여는 책임 분담 (TripMate vs 라이브러리) 오인의 가장 큰 원인
+- **결과 (긍정)**:
+  - AI agent가 한 PR에서 작업 진입에 필요한 모든 문서를 찾을 수 있음
+  - v1 자산 (특히 notice_plans / plan_poi_attachments / oauth flow / Resend
+    템플릿 / Telegram target / RustFS shared / Sentry PII 마스킹)이 명문화됨
+  - 컴플라이언스 (LBS / PIPA) 박힘 — Sprint 6 출시 직전 체크 가능
+- **결과 (부정)**:
+  - 본 PR 문서량 큼 (~30 신규 파일) — review 비용 증가
+  - 일부 문서는 design-only (구현 placeholder) — 코드 작성 단계에서 추가 갱신 필요
+- **후속**:
+  - 본 PR 머지 후 Sprint 1 진입 PR (`apps/{api,web,etl}` + `packages/*`
+    scaffolding) 작성
+  - Sprint별 진입 시 본 문서 디테일을 코드에 맞춰 검증
+  - `docs/v1-to-v2-mapping.md`를 살아 있는 문서로 유지 — 새 v1 자산 발견 또는
+    v2 작업 진행 시 상태 갱신
+  - `docs/conventions/{coding-style,database,testing}.md`을 PR 템플릿에 cross-ref
+  - 추후 메이저 변경 시 본 ADR superseded 처리
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-014**
+- 다음 신규 ADR = **ADR-015**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

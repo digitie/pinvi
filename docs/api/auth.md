@@ -1,0 +1,357 @@
+# 인증 API (`/auth/*`)
+
+이메일 가입 + verify + JWT 로그인 + Google / Naver / Kakao OAuth + 비밀번호 재설정.
+공통 규약은 [`common.md`](./common.md). 소셜 로그인 흐름 디테일은
+[`docs/integrations/social-login.md`](../integrations/social-login.md).
+
+## 1. 모델
+
+| 테이블 | 용도 |
+|--------|------|
+| `app.users` | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only) |
+| `app.user_sessions` | refresh 토큰 hash + IP/UA + 만료/폐기 |
+| `app.user_email_verifications` | verify/reset 토큰 (해시만 저장) |
+| `app.user_oauth_identities` | provider + provider_user_id (Google sub / Naver response.id / Kakao id) |
+| `app.user_consents` | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...) |
+| `app.oauth_login_states` | OAuth state/nonce/PKCE hash, TTL 10분 |
+
+자세히는 `docs/data-model.md` + `docs/postgres-schema.md`.
+
+## 2. 이메일 가입 / verify
+
+### 2.1 `POST /auth/register`
+
+```http
+POST /auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "MinLen8...",
+  "nickname": "user-nick"
+}
+```
+
+응답 201:
+
+```jsonc
+{
+  "data": {
+    "user": {
+      "user_id": "uuid",
+      "email": "user@example.com",
+      "status": "pending_verification",
+      "email_verified_at": null
+    },
+    "verification_email_dispatched": true
+  }
+}
+```
+
+- Argon2id로 `password_hash` 저장 (passlib 또는 `argon2-cffi`)
+- `app.user_email_verifications` row + Resend로 verify 메일 발송
+  (`TRIPMATE_RESEND_API_KEY` 미설정 시 console-log 모드)
+- Resend HTTP 오류 → `503 SERVICE_UNAVAILABLE` + 트랜잭션 롤백
+  (`verification_email_dispatched: false`)
+
+에러:
+
+- `409 EMAIL_ALREADY_USED` — 동일 email 활성 row 있음
+- `422 VALIDATION_ERROR` — 형식/길이/약한 비밀번호
+- `429 RATE_LIMITED`
+
+### 2.2 `POST /auth/verify-email`
+
+```http
+POST /auth/verify-email
+Content-Type: application/json
+
+{ "token": "<43-char URL-safe base64>" }
+```
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "user": { "user_id": "...", "email": "...", "email_verified_at": "..." },
+    "access_token_dispatched": true   // cookie도 함께 발급
+  }
+}
+```
+
+Set-Cookie: `tripmate_access`, `tripmate_refresh`.
+
+- `app.user_email_verifications` 검증 (해시 비교 + `expires_at > now()` + `used_at IS NULL`)
+- 성공 시 `users.email_verified_at = now()`, `users.status = 'pending_profile'`
+- `used_at = now()` 마킹 (재사용 차단)
+- 인증 메일 만료/사용됨 → `422 VALIDATION_ERROR` (`details.token = "expired"`)
+
+### 2.3 `POST /auth/verify-email/resend`
+
+```http
+POST /auth/verify-email/resend
+Content-Type: application/json
+
+{ "email": "user@example.com" }
+```
+
+- 이메일 존재 여부에 관계없이 `200 OK` (계정 enumeration 차단)
+- 미인증 user가 있으면 새 verify 토큰 발급 + 발송, 직전 토큰 `used_at = now()`로 폐기
+- Rate limit: 분당 1회 per email
+
+## 3. 로그인 / 로그아웃 / refresh
+
+### 3.1 `POST /auth/login`
+
+```http
+POST /auth/login
+Content-Type: application/json
+
+{ "email": "user@example.com", "password": "..." }
+```
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "user": { "user_id": "...", "email": "...", "status": "active", "roles": ["user"] }
+  }
+}
+```
+
+Set-Cookie 두 개.
+
+에러:
+
+- `401 AUTH_INVALID_CREDENTIALS` — 이메일 X 또는 비밀번호 X. user enumeration 차단 위해 동일 메시지
+- `401 EMAIL_NOT_VERIFIED` — body에 `verification_email_dispatched: bool`, 재발송 옵션 안내
+- `403 PERMISSION_DENIED` — `users.status = 'disabled'`
+
+### 3.2 `POST /auth/refresh`
+
+```http
+POST /auth/refresh
+Cookie: tripmate_refresh=<opaque>
+```
+
+응답 200: 새 `tripmate_access` cookie + 동일 `tripmate_refresh` (rotation은 v1.0 보류).
+
+- 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` → 새 JWT
+- 폐기됨 / 만료됨 → `401 TOKEN_EXPIRED` (cookie 삭제)
+
+### 3.3 `POST /auth/logout`
+
+```http
+POST /auth/logout
+Cookie: tripmate_refresh=...
+```
+
+응답 204. `app.user_sessions.revoked_at = now()` + Set-Cookie로 두 cookie 삭제.
+
+### 3.4 `GET /auth/me`
+
+```http
+GET /auth/me
+Cookie: tripmate_access=...
+```
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "user_id": "...",
+    "email": "...",
+    "nickname": "...",
+    "avatar_url": "...",
+    "status": "active",
+    "roles": ["user"],
+    "email_verified_at": "...",
+    "consents": [
+      { "consent_type": "tos", "agreed_at": "...", "version": "v1.0" },
+      { "consent_type": "location_collection", "agreed_at": "...", "withdrawn_at": null, "version": "v1.0" }
+    ],
+    "oauth_identities": [
+      { "provider": "google", "provider_email": "...", "linked_at": "...", "last_login_at": "..." }
+    ]
+  }
+}
+```
+
+## 4. 프로필 완성
+
+### 4.1 `POST /auth/profile/complete`
+
+회원가입 후 동의 + 닉네임/아바타/선택 정보 입력 (status `pending_profile` → `active`).
+
+```http
+POST /auth/profile/complete
+Content-Type: application/json
+Cookie: tripmate_access=...
+
+{
+  "nickname": "user-nick",
+  "avatar_kind": "default" | "upload",
+  "avatar_attachment_id": "uuid",   // upload면 storage 먼저 거침
+  "gender": "female" | "male" | "non_binary" | "no_answer",
+  "birth_year_month": "199003",     // YYYYMM (선택)
+  "residence_sigungu_code": "11680", // 시군구 코드 (선택)
+  "consents": [
+    { "consent_type": "tos", "version": "v1.0" },
+    { "consent_type": "privacy", "version": "v1.0" },
+    { "consent_type": "lbs_tos", "version": "v1.0" },
+    { "consent_type": "location_collection", "version": "v1.0" },
+    { "consent_type": "demographic_use", "version": "v1.0" },     // 선택
+    { "consent_type": "marketing", "version": "v1.0" }            // 선택
+  ]
+}
+```
+
+- 필수 동의 4건 (`tos`, `privacy`, `lbs_tos`, `location_collection`) 누락 → `422`
+- 선택 정보(`gender`, `birth_year_month`, `residence_sigungu_code`)는 `demographic_use`
+  동의 있을 때만 저장. 미동의 + 입력 → `422` (UI 토스트로 처리)
+- 성공 시 `users.status = 'active'`
+
+## 5. 비밀번호 재설정
+
+### 5.1 `POST /auth/password/reset-request`
+
+```http
+POST /auth/password/reset-request
+Content-Type: application/json
+
+{ "email": "user@example.com" }
+```
+
+응답 200 (enumeration 차단으로 항상). 메일 발송은 user 있을 때만.
+
+### 5.2 `POST /auth/password/reset`
+
+```http
+POST /auth/password/reset
+Content-Type: application/json
+
+{ "token": "<43-char>", "new_password": "..." }
+```
+
+- 토큰 검증 + `password_hash` 갱신 + 모든 `user_sessions` `revoked_at = now()` (로그아웃 전체)
+- 응답 200, Set-Cookie 두 개 (자동 로그인)
+
+## 6. Google / Naver / Kakao OAuth
+
+자세한 흐름은 [`docs/integrations/social-login.md`](../integrations/social-login.md).
+
+### 6.1 `GET /auth/oauth/providers`
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "providers": [
+      { "name": "google", "enabled": true },
+      { "name": "naver", "enabled": true },
+      { "name": "kakao", "enabled": true }
+    ]
+  }
+}
+```
+
+`enabled`는 환경변수 (`TRIPMATE_<PROVIDER>_OAUTH_CLIENT_ID` 존재 여부).
+
+### 6.2 `GET /auth/oauth/{provider}/start`
+
+```http
+GET /auth/oauth/google/start?return_to=/trips&mode=login
+```
+
+- `provider`: `google` | `naver` | `kakao`
+- `mode`: `login` (기본) | `link` (기존 user에 provider 연결)
+- `return_to`: TripMate 내부 경로만 허용 (allowlist), `/`로 시작
+- 302 redirect → provider 인증 페이지
+- `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분)
+
+### 6.3 `GET /auth/oauth/{provider}/callback`
+
+```http
+GET /auth/oauth/google/callback?code=...&state=...
+```
+
+처리:
+
+1. `state` hash 검증 + `expires_at > now()` + `consumed_at IS NULL`
+2. `code` → access token 교환 (provider 별 endpoint)
+3. provider userinfo 호출 → `provider_user_id`, `email`, `email_verified`
+4. `app.user_oauth_identities` 조회/upsert
+5. 로그인 / 신규 가입 분기:
+   - Google `email_verified=true` → 자동 user 생성 또는 기존 user 연결
+   - Naver → `email_verified` 없음. 신규는 별도 verify 메일 발송 후 연결
+   - Kakao `is_email_valid && is_email_verified` → Google과 동일 처리
+
+응답:
+
+- 성공: 302 → `${return_to}` + Set-Cookie 두 개
+- 실패: 302 → `/login?error=<code>&error_description=...`
+  - `provider_disabled` / `provider_denied` / `state_expired` / `state_invalid` /
+    `email_required` / `email_unverified` / `account_link_required` /
+    `provider_profile_failed` / `oauth_temporary_failure`
+
+### 6.4 `POST /auth/oauth/{provider}/link`
+
+기존 user 계정에 provider 연결 (이미 로그인 상태).
+
+```http
+POST /auth/oauth/google/link
+Content-Type: application/json
+Cookie: tripmate_access=...
+
+{ "return_to": "/profile" }
+```
+
+응답 200: `{ "data": { "redirect_url": "..." } }`. 클라이언트가 top-level
+navigation.
+
+### 6.5 `DELETE /auth/oauth/{provider}`
+
+```http
+DELETE /auth/oauth/google
+Cookie: tripmate_access=...
+```
+
+- 비밀번호 설정돼 있어야 (`password_hash IS NOT NULL`) — 소셜-only는 거부
+- `app.user_oauth_identities` row 삭제 + `admin_audit_log`/`app` audit 기록
+- 응답 204
+
+## 7. 탈퇴
+
+### 7.1 `DELETE /auth/me`
+
+```http
+DELETE /auth/me
+Cookie: tripmate_access=...
+Content-Type: application/json
+
+{ "confirm": "DELETE" }
+```
+
+- 리더인 trip이 있으면 `410 GONE` + `{"error": {"code": "TRIPS_OWNED",
+  "details": {"trip_ids": [...]}}}` 안내 ("trip 이관 또는 삭제 먼저")
+- 성공: `users.status = 'deleted'`, PII 마스킹 잡 schedule, 모든 session revoke,
+  `app.admin_audit_log` + `app.user_consents` `withdrawn_at` 일괄 갱신
+
+## 8. 작업 체크리스트 (AI agent)
+
+새 인증 endpoint 추가 시:
+
+- [ ] `apps/api/app/schemas/auth.py` Pydantic 추가
+- [ ] `packages/schemas/src/auth.ts` Zod 추가
+- [ ] `apps/api/app/services/auth/<feature>.py` 비즈니스 로직
+- [ ] `apps/api/app/api/v1/auth.py` 라우터
+- [ ] 통합 테스트 `apps/api/tests/integration/test_auth_<feature>.py`
+- [ ] (OAuth) `apps/api/app/services/oauth/<provider>.py` httpx 호출
+- [ ] (이메일) `apps/api/app/services/email_service.py` template + queue
+- [ ] Sentry `before_send` PII 마스킹 확인 (이메일/비밀번호/token)
+- [ ] Rate limit 적용
+- [ ] 본 문서 + `common.md` 표준 에러 코드 갱신
