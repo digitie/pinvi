@@ -39,24 +39,25 @@ TripMate는 대한민국 전용 여행 계획 웹앱이다. 제품 방향은 구
 
 ## 로컬 실행 환경
 
-- 저장소에서 실행하는 명령은 WSL2 Ubuntu의 ext4 원본 작업본(`/home/digitie/dev/tripmate`)을 최우선 실행 환경으로 한다.
-- Docker, Docker Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic migration 검증은 반드시 WSL2 Ubuntu의 ext4 원본 작업본에서 실행한다.
+- 저장소에서 실행하는 명령은 WSL2 Ubuntu를 최우선 실행 환경으로 한다.
+- Docker, Docker Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic migration 검증은 반드시 WSL2 Ubuntu에서 실행한다.
 - Windows PowerShell은 WSL2 명령을 감싸서 실행하거나, 파일 확인, 간단한 Git 상태 확인, 문서 읽기 같은 보조 작업에만 사용한다.
 - Windows PowerShell로 한국어 문서나 skill을 읽을 때는 기본 인코딩을 가정하지 말고 `Get-Content -Encoding UTF8 -Path ...`처럼 UTF-8을 명시한다. 한글이 깨져 보이면 내용을 근거로 판단하지 말고 UTF-8로 다시 읽은 뒤 작업한다.
 - Docker 관련 명령을 Windows PowerShell에서 직접 실행하지 않는다.
 - 파일/문자열 검색은 PowerShell `rg.exe`를 사용하지 않는다. 이 환경에서는 권한 문제로 실패하거나 WSL `PATH`가 WindowsApps의 Codex 번들 `rg`를 먼저 잡을 수 있다.
-- 검색 명령은 Windows 경로를 뺀 WSL native ripgrep으로 실행한다: `wsl.exe -e bash -lc "cd ~/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n '패턴' 경로"`.
+- 검색 명령은 Windows 경로를 뺀 WSL native ripgrep으로 실행한다: `wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n '패턴' 경로"`.
 - WSL native ripgrep이 없으면 PowerShell `rg.exe`로 우회하지 말고 WSL 안에 `ripgrep`을 설치하거나, 설치가 불가능한 경우에만 `git grep`/`grep` fallback을 사용하고 그 사유를 보고한다.
 - 테스트 결과를 보고할 때는 Windows에서 실행했는지 WSL2에서 실행했는지 함께 구분한다.
-- Windows 쪽 경로(`F:\dev\tripmate`, WSL mount `/mnt/f/dev/tripmate`)는 export 대상이다. 이 경로를 Git, 테스트, 빌드, lint, typecheck, formatter, backend test의 작업 디렉토리로 직접 쓰지 않는다.
-- 검증 명령은 WSL ext4 원본 작업본 `~/dev/tripmate`에서 실행한다. Windows 경로에서 확인이 필요하면 [WSL ext4 workflow](wsl-ext4-workflow.md)에 따라 ext4 원본을 NTFS로 export한다.
-- Git stage/commit/push는 ext4 원본 작업본 기준으로 수행한다. WSL Git push가 credential 문제를 일으키면 Windows Git을 UNC ext4 경로(`\\wsl.localhost\Ubuntu\home\digitie\dev\tripmate`)에 대해 실행한다.
+- Windows 쪽 현재 저장소의 WSL2 mount 경로는 `/mnt/f/dev/tripmate`이다. 이 경로는 동기화 원본으로 쓰고, 검증 명령의 작업 디렉토리로 직접 쓰지 않는다.
+- 테스트, 빌드, lint, typecheck, formatter, backend test처럼 파일을 많이 읽는 검증 명령은 `/mnt/f/dev/tripmate`에서 직접 실행하지 않는다. WSL 내부 볼륨의 미러 경로 `~/tripmate-workspaces/tripmate`에서 실행한다.
+- 검증 명령 전에는 현재 프로젝트 디렉토리(`/mnt/f/dev/tripmate`)의 내용을 WSL 미러로 동기화하고, 명령이 완료될 때마다 WSL 미러의 변경 내용을 현재 프로젝트 디렉토리로 다시 복사한다.
+- 현재 프로젝트 디렉토리(`F:\dev\tripmate`)를 최종 원본으로 보고, WSL 미러는 빠른 실행용 작업 복제본으로 다룬다. Git stage/commit/push는 별도 지시가 없으면 현재 프로젝트 디렉토리에서 수행한다.
 
 예시:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose -f infra/docker-compose.yml up -d"
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/python -m pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && .venv-wsl/bin/python -m pytest"
 ```
 
 PowerShell에서 문서 확인 예시:
@@ -69,17 +70,20 @@ Get-Content -Encoding UTF8 -Path 'F:\dev\tripmate\skills\documentation-and-adrs.
 검색 예시:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n 'Dagster|Telegram' docs apps/api"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg -n 'Dagster|Telegram' docs apps/api"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && PATH=/usr/local/bin:/usr/bin:/bin rg --files docs apps/api"
 ```
 
-TripMate의 canonical WSL workflow는 [WSL ext4 workflow](wsl-ext4-workflow.md)이다. 기존의 `F:\dev\tripmate` 원본 + `~/tripmate-workspaces/tripmate` 테스트 미러 방식은 더 이상 사용하지 않는다. 필요한 경우 ext4 원본을 NTFS export 경로로 내보낸다.
+WSL 내부 볼륨 테스트 미러는 아래 방식으로 운용한다. 초기 생성은 필요할 때 한 번만 수행하고, 이후에는 `rsync`로 현재 작업 내용을 덮어쓴다. `.git`은 미러 안의 로컬 Git 상태를 유지하기 위해 동기화 대상에서 제외한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' --exclude='__pycache__/' ./ /mnt/f/dev/tripmate/"
+wsl.exe -e bash -lc "mkdir -p ~/tripmate-workspaces && git clone /mnt/f/dev/tripmate ~/tripmate-workspaces/tripmate"
+wsl.exe -e bash -lc "rsync -a --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' /mnt/f/dev/tripmate/ ~/tripmate-workspaces/tripmate/"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
+wsl.exe -e bash -lc "rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.venv/' --exclude='.venv-wsl/' --exclude='.pytest_cache/' --exclude='.mypy_cache/' --exclude='.ruff_cache/' ~/tripmate-workspaces/tripmate/ /mnt/f/dev/tripmate/"
 ```
 
-`--delete`는 export mirror를 ext4 원본과 맞추기 위한 옵션이다. 실행 전 대상 경로가 `/mnt/f/dev/tripmate`인지 확인한다. NTFS export 쪽에 사용자가 별도로 만든 파일을 보존해야 하면 `--delete`를 빼고 변경 범위를 확인한다.
+WSL 미러에서 실행한 명령이 의도적으로 파일 삭제나 rename을 만든 경우에는 `git status --short`로 변경 범위를 확인한 뒤 해당 삭제를 현재 프로젝트 디렉토리에 반영한다. 기본 되돌림 복사는 사용자 동시 편집을 지우지 않도록 `--delete`를 쓰지 않는다.
 
 ## 코딩 전 영향 확인
 
@@ -233,19 +237,19 @@ CI 기대치:
 
 ## 선호 명령어
 
-실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL ext4 원본 경로(`~/dev/tripmate`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다. Windows 경로 확인이 필요할 때만 [WSL ext4 workflow](wsl-ext4-workflow.md)의 NTFS export 절차를 따른다.
+실제 저장소와 다를 수 있으므로 먼저 확인한 뒤 사용한다. 명령 예시는 특별한 이유가 없으면 WSL 내부 미러 경로(`~/tripmate-workspaces/tripmate`)와 `wsl.exe -e bash -lc "..."` 형태를 우선한다. 명령 전후 동기화는 이 문서의 WSL 내부 볼륨 테스트 미러 절차를 따른다.
 
 현재 프론트엔드:
 
-- install: WSL2에서 `cd ~/dev/tripmate && npm install`
-- dev: WSL2에서 `cd ~/dev/tripmate && npm run dev`
-- lint: WSL2에서 `cd ~/dev/tripmate && npm run lint`
-- typecheck: WSL2에서 `cd ~/dev/tripmate && npm run typecheck`
-- build: WSL2에서 `cd ~/dev/tripmate && npm run build`
+- install: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm install`
+- dev: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run dev`
+- lint: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run lint`
+- typecheck: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run typecheck`
+- build: WSL2에서 `cd ~/tripmate-workspaces/tripmate && npm run build`
 
 백엔드:
 
-- install: WSL2에서 `cd ~/dev/tripmate/apps/api && uv sync` 또는 저장소 표준 명령
+- install: WSL2에서 `cd ~/tripmate-workspaces/tripmate/apps/api && uv sync` 또는 저장소 표준 명령
 - dev: WSL2에서 `uv run uvicorn app.main:app --reload`
 - lint: WSL2에서 `uv run ruff check .`
 - format check: WSL2에서 `uv run ruff format --check .`

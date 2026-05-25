@@ -1,4 +1,4 @@
-# VWorld 경계 SHP ETL 실행 계획
+﻿# VWorld 경계 SHP ETL 실행 계획
 
 ## 목표
 
@@ -49,7 +49,7 @@ loader가 사용하는 DBF 필드:
 관리자 UI가 생기기 전까지 운영자는 backend command로 ZIP 파일을 적재한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/python -m app.cli.vworld_boundary /path/to/N3A_G0010000.zip /path/to/N3A_G0100000.zip /path/to/N3A_G0110000.zip"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/python -m app.cli.vworld_boundary /path/to/N3A_G0010000.zip /path/to/N3A_G0100000.zip /path/to/N3A_G0110000.zip"
 ```
 
 - command module: `app.cli.vworld_boundary`

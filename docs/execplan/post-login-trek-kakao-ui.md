@@ -1,4 +1,4 @@
-# 로그인 후 TREK 차용 UI와 Kakao 지도 구현 계획
+﻿# 로그인 후 TREK 차용 UI와 Kakao 지도 구현 계획
 
 ## 한 줄 결정
 
@@ -2222,17 +2222,17 @@ Codex가 할 일:
 검증:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run lint"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run typecheck"
 ```
 
 백엔드 변경이 있으면:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run pytest"
 ```
 
 ### Phase B. 여행 상세 shell

@@ -1,11 +1,11 @@
-# ETL 운영 안내
+﻿# ETL 운영 안내
 
 ## 로컬 Dagster 실행
 
 모든 Docker 명령은 WSL2 Ubuntu에서 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
 ```
 
 Dagster UI:
@@ -98,7 +98,7 @@ ops:
 CLI smoke:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose --env-file .env -f infra/docker-compose.yml exec -T dagster dagster job list -m app.dagster_etl.definitions"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose --env-file .env -f infra/docker-compose.yml exec -T dagster dagster job list -m app.dagster_etl.definitions"
 ```
 
 ## 6시간 ETL soak 검증
@@ -108,25 +108,25 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose --env-file .env -f infr
 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-reset-and-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/etl-soak-reset-and-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
 ```
 
 현재 터미널을 점유하지 않고 백그라운드로 시작하려면 아래 wrapper를 사용한다. 이 wrapper는 이전 soak marker를 지우고 `reset-start.log`, `monitor.log`, pid 파일을 `.tmp/etl-soak/`에 남긴다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-background-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/etl-soak-background-start.sh --yes --duration-hours 6 --check-interval-minutes 10"
 ```
 
 상태 확인:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-status.sh"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/etl-soak-status.sh"
 ```
 
 10분 단위 strict 모니터:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-monitor.sh --duration-hours 6 --check-interval-minutes 10 --strict"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/etl-soak-monitor.sh --duration-hours 6 --check-interval-minutes 10 --strict"
 ```
 
 `--strict`는 `retry_exhausted=true`인 최신 실패와 미해결 ETL 관리자 알림을 실패로 본다. Dagster retry가 남아 있는 transient 실패는 상태 로그에는 남기되 soak를 즉시 중단하지 않는다.
@@ -134,7 +134,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-monitor.sh --duration
 수동 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-trigger-all.sh"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/etl-soak-trigger-all.sh"
 ```
 
 검증 스크립트 동작:
@@ -162,7 +162,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-trigger-all.sh"
 관리자 페이지가 ETL DB를 제대로 보는지 확인하려면 같은 compose stack의 optional admin profile을 사용한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/admin-etl-data-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/admin-etl-data-smoke-test.sh --keep-running"
 ```
 
 이 스크립트는 `infra/docker-compose.yml`의 `postgres`를 그대로 쓰며 `api`, `web` service만 admin profile로 추가 기동한다. 기본 관리자 계정으로 로그인 API를 호출하고, `/admin/datasets`, `/admin/datasets/etl_run_logs/rows`, `/admin/login` 웹 응답을 확인한다. 검증 후 브라우저에서는 `http://127.0.0.1:13082/admin/login`과 `http://127.0.0.1:23000`을 같이 확인한다.
@@ -182,7 +182,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/admin-etl-data-smoke-test.sh -
 실제 provider 호출은 명시 opt-in으로만 실행한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && TRIPMATE_LIVE_ETL_TESTS=1 uv run pytest -q tests/test_dagster_etl.py -m live"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && TRIPMATE_LIVE_ETL_TESTS=1 uv run pytest -q tests/test_dagster_etl.py -m live"
 ```
 
 현재 live smoke는 data.go.kr 법정동코드 파일 다운로드를 수행한다. 인증키 원문은 테스트 출력과 저장 payload에 남기지 않는다.
@@ -192,7 +192,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && TRIPMATE_LIVE_ETL_TESTS=1 uv 
 VWorld SHP는 Dagster가 자동 다운로드하지 않는다. 운영자가 ZIP 파일을 확보한 뒤 backend command로 적재한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run python -m app.cli.vworld_boundary /path/to/N3A_G0010000.zip /path/to/N3A_G0100000.zip /path/to/N3A_G0110000.zip"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && uv run python -m app.cli.vworld_boundary /path/to/N3A_G0010000.zip /path/to/N3A_G0100000.zip /path/to/N3A_G0110000.zip"
 ```
 
 지원 파일명:

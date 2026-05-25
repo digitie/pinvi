@@ -39,9 +39,9 @@ scripts/            # bootstrap, test, deploy, backup
 - uv 권장
 - WSL2 + Docker 또는 Docker Desktop
 
-명령 실행은 WSL2 Ubuntu의 ext4 원본 작업본(`/home/digitie/dev/tripmate`)을 기준으로 합니다. Windows PowerShell에서는 가능한 한 같은 WSL shell 안에서 작업하거나 `wsl.exe -e bash -lc "..."` 형태로 묶어서 실행하고, Docker, backend test, Alembic migration, Dagster 검증은 반드시 WSL2 ext4 작업본에서 실행합니다. NTFS 경로(`F:\dev\tripmate`, `/mnt/f/dev/tripmate`)는 Windows 도구 확인을 위한 export 대상으로만 사용합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
+명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Dagster 검증은 반드시 WSL2에서 실행합니다. NTFS 경로(`/mnt/f/dev/tripmate`)에서 테스트를 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/tripmate` 미러에서 실행한 뒤, 명령 완료마다 변경 내용을 현재 프로젝트 디렉토리로 복사합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
 
-WSL ext4 원본 작업본과 NTFS export 절차는 [WSL ext4 workflow](docs/runbooks/wsl-ext4-workflow.md)와 [로컬 개발 runbook](docs/runbooks/local-dev.md)을 따릅니다.
+WSL 미러 초기화와 동기화 절차는 [로컬 개발 runbook](docs/runbooks/local-dev.md)을 따릅니다.
 
 ## 로컬 실행
 
@@ -56,8 +56,8 @@ TripMate 직접 개발 표준 포트는 다음과 같습니다. `3000`과 `8000`
 Dagster 관리 UI는 로컬에서 `http://localhost:23000`을 사용한다. 관리자 화면의 Dagster 버튼 주소는 `NEXT_PUBLIC_TRIPMATE_DAGSTER_URL`로 바꿀 수 있다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm install"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm install"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run dev"
 ```
 
 브라우저에서 `http://localhost:3001`을 엽니다.
@@ -66,7 +66,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run dev"
 관리자 화면과 API를 Docker 이미지 기준으로 검증하려면 다음 명령을 사용합니다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
 ```
 
 성공 후 접속 주소는 `http://127.0.0.1:13082/admin/login`입니다.
@@ -74,7 +74,7 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/docker-app-smoke-test.sh --kee
 웹앱만 직접 실행하려면 다음 명령도 사용할 수 있습니다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm --workspace apps/web run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run dev"
 ```
 
 ## 검사
@@ -82,19 +82,19 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && npm --workspace apps/web run dev"
 웹앱:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run lint"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run typecheck"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run build"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run build"
 ```
 
 API 의존성 설치 후:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv sync --group dev"
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run pytest"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv sync --group dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff format --check ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run mypy ."
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run pytest"
 ```
 
 KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `visitkorea` client를 직접 사용합니다.
@@ -117,19 +117,19 @@ TRIPMATE_KEX_GO_API_KEY=data.go.kr_decoding_인증키
 ## 로컬 DB
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
 API migration:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run alembic upgrade head"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run alembic upgrade head"
 ```
 
 API 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 이메일 인증 메일을 실제 발송하려면 Resend 설정을 추가합니다. Free 플랜 기준과 DNS/API key 준비 절차는 [Resend 이메일 연동](docs/integrations/resend.md)을 따릅니다.
@@ -143,7 +143,7 @@ TRIPMATE_WEB_BASE_URL=http://localhost:3001
 Dagster 로컬 런타임:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
 ```
 
 Dagster UI는 `http://localhost:23000`에서 확인합니다.
@@ -151,8 +151,8 @@ Dagster UI는 `http://localhost:23000`에서 확인합니다.
 ETL 장시간 검증용 초기화와 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-reset-and-start.sh --yes"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-status.sh"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-reset-and-start.sh --yes"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-status.sh"
 ```
 
 이 명령은 Docker volume을 삭제하므로 로컬/검증 DB에서만 사용합니다. 20시간보다 긴 ETL 주기는 `config/etl-datasets.soak.json`으로 임시 12시간 이내 schedule을 사용합니다.
@@ -183,7 +183,6 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/etl-soak-status.sh"
 - [Resend 이메일 연동](docs/integrations/resend.md)
 - [RustFS 파일 스토리지 API](docs/api/storage.md)
 - [RustFS 파일 스토리지 운영 안내](docs/runbooks/file-storage.md)
-- [WSL ext4 workflow](docs/runbooks/wsl-ext4-workflow.md)
 - [로컬 개발 runbook](docs/runbooks/local-dev.md)
 - [ETL 운영 안내](docs/runbooks/etl.md)
 - [관리자 화면 운영 안내](docs/runbooks/admin.md)

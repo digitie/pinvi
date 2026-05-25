@@ -18,8 +18,8 @@
 `3000`과 `8000`은 다른 로컬 서비스가 사용할 수 있으므로 TripMate 확인 주소로 쓰지 않는다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run dev"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run dev"
 ```
 
 현재 웹 client의 기본 API URL은 `http://localhost:8001`이다. 임시 포트를 쓰는 경우에만 웹 실행 시 `NEXT_PUBLIC_TRIPMATE_API_URL`을 함께 지정한다.
@@ -43,7 +43,7 @@ password: admin
 Docker 이미지 기준으로 관리자 화면을 검증하려면 `docs/runbooks/docker-app.md`의 smoke 테스트를 우선 사용한다.
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
 ```
 
 성공하면 다음 주소에서 관리자 화면을 확인할 수 있다.
@@ -55,19 +55,19 @@ http://127.0.0.1:13082/admin/login
 PostgreSQL/PostGIS 실행:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
 API migration:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/alembic upgrade head"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/alembic upgrade head"
 ```
 
 API 서버:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
 ```
 
 관리자 화면에서 `NetworkError when attempting to fetch resource.` 또는 빈 데이터셋 목록처럼 보이면 먼저 `8001`에 TripMate API가 떠 있는지 확인한다.
@@ -81,7 +81,7 @@ wsl.exe -e bash -lc "curl -fsS http://localhost:8001/health"
 웹 서버:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run dev"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run dev"
 ```
 
 ## 화면 기능
@@ -124,19 +124,19 @@ wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run dev"
 백엔드:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/ruff check app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py alembic/versions/20260427_0013_seed_default_admin.py"
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/ruff format --check app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py alembic/versions/20260427_0013_seed_default_admin.py"
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/mypy app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py"
-wsl.exe -e bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/pytest tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py -q"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff check app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py alembic/versions/20260427_0013_seed_default_admin.py"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/ruff format --check app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py alembic/versions/20260427_0013_seed_default_admin.py"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/mypy app/api/routes/admin.py app/services/admin_auth.py app/services/admin_data_browser.py app/services/admin_entity_crud.py app/schemas/admin.py tests/test_admin_api.py tests/test_admin_entities_api.py"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/pytest tests/test_admin_api.py tests/test_admin_entities_api.py tests/test_migration_contract.py -q"
 ```
 
 프론트엔드:
 
 ```bash
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run lint"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run typecheck"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run test"
-wsl.exe -e bash -lc "cd ~/dev/tripmate && npm run build"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run lint"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run typecheck"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run test"
+wsl.exe -e bash -lc "cd /mnt/f/dev/tripmate && npm run build"
 ```
 
 ## 반복 실수 방지

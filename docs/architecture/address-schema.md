@@ -1,4 +1,4 @@
-# 주소 체계와 DB 스키마
+﻿# 주소 체계와 DB 스키마
 
 이 문서는 TripMate의 현재 주소 체계, PostgreSQL/PostGIS 스키마, 외부 데이터셋과의 매핑 방식, 검증 방법을 설명한다.
 
@@ -1040,8 +1040,8 @@ pytest fixture 동작:
 주요 검증 명령:
 
 ```bash
-wsl bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/python -m pytest"
-wsl bash -lc "cd ~/dev/tripmate/apps/api && .venv-wsl/bin/python -m alembic upgrade head"
+wsl bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/python -m pytest"
+wsl bash -lc "cd /mnt/f/dev/tripmate/apps/api && .venv-wsl/bin/python -m alembic upgrade head"
 ```
 
 ### 주소 parser 테스트 데이터
