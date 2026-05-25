@@ -288,6 +288,20 @@ EOF
 - merge commit 제목: PR 제목과 동일하게.
 - merge 후 feature branch는 `gh` UI 또는 `git push origin --delete <branch>`로 삭제.
 
+### 8.5.1 Sprint 4까지 PR 리뷰·수정·머지 운영
+
+Sprint 4 완료 전까지 새 PR 또는 `ready_for_review` 전환 PR은
+`docs/runbooks/pr-review-sprint4.md`를 따른다. `.github/workflows/codex-pr-monitor.yml`은
+5분마다 열린 PR을 감시하고, 최신 head SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
+
+- 자동 리뷰 코멘트는 1차 신호다. 에이전트는 별도로 변경분을 읽고 상세 리뷰를 남긴다.
+- 리뷰에서 끝내지 않고 필요한 코드 수정, 테스트 보강, 문서 갱신까지 수행한다.
+- 변경량 최소화보다 장기 설계 정합성을 우선한다. 특히 Sprint 4 지도/UI 작업을
+  어렵게 만드는 단기 구조는 PR 안에서 바로잡는다.
+- 올바른 수정 위치가 기반 라이브러리라면 TripMate에 wrapper를 만들지 않는다.
+  라이브러리 PR → merge → TripMate sync 순서로 처리한다.
+- 모든 차단 코멘트, 검증 결과, 기반 라이브러리 PR 링크가 정리된 뒤 merge한다.
+
 ### 8.6 main 직접 push 차단
 
 GitHub branch protection (운영자 수동 설정):

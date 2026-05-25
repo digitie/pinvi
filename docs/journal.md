@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-25 22:27 (codex)
+
+**작업**: Sprint 4까지 새 PR을 리뷰 → 상세 코멘트 → 코드 수정 → 기반 라이브러리
+sync → 검증 → 머지하는 운영 지시를 문서화하고 자동 리뷰 프롬프트 및 5분 주기
+PR 감시 workflow 보강.
+
+**변경 파일**:
+
+- `.github/workflows/codex-pr-review.yml` — PR 자동 리뷰 프롬프트를 장기 설계 관점,
+  기반 라이브러리 sync, 상세 코멘트 구조 중심으로 보강 + head SHA 리뷰 마커 추가
+- `.github/workflows/codex-pr-monitor.yml` — 5분마다 열린 PR을 감시하고 최신 head
+  SHA 리뷰 마커가 없으면 Codex 리뷰 코멘트 작성
+- `docs/runbooks/pr-review-sprint4.md` — Sprint 4까지 반복할 PR 운영 runbook 신규
+- `AGENTS.md`, `CLAUDE.md`, `docs/agent-guide.md` — 새 PR 운영 지시 cross-reference
+- `docs/resume.md`, `docs/tasks.md` — 운영 지시와 완료 항목 반영
+
+**결정**: 변경량 최소화보다 Sprint 1~4 장기 설계 정합성을 우선한다. 올바른 수정
+위치가 기반 라이브러리이면 TripMate wrapper로 덮지 않고 라이브러리 PR → 머지 →
+TripMate sync 순서로 처리한다.
+
+**발견**: Codex 앱의 자동화/모니터 도구는 현재 노출되지 않았고, GitHub PR 조작
+도구만 노출된다. 따라서 지속 감시는 GitHub Actions schedule workflow로 구현했다.
+
+**다음**: 새 PR이 올라오면 `docs/runbooks/pr-review-sprint4.md` 절차로 리뷰와
+수정/머지 진행.
+
 ## 2026-05-26 13:00 (claude)
 
 **작업**: 지도 클라이언트를 내부 라이브러리 `maplibre-vworld-js`로 전환

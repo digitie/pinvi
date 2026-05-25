@@ -41,6 +41,14 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 6. `docs/journal.md` 최신 3건
 7. 관련 ADR (`docs/decisions.md`)
 
+## 3.1 Sprint 4까지 PR 운영
+
+새 PR이 올라오거나 draft가 `ready_for_review`로 전환되면
+`docs/runbooks/pr-review-sprint4.md`를 따른다. 리뷰 후 상세 코멘트를 남기고,
+필요한 코드 수정·기반 라이브러리 PR·TripMate sync·검증·머지까지 이어간다.
+변경량 최소화보다 Sprint 1~4를 버틸 설계 정합성을 우선한다.
+`.github/workflows/codex-pr-monitor.yml`이 5분마다 열린 PR을 감시한다.
+
 ## 4. 의존 스택 (v2 확정 골격)
 
 - 백엔드: Python 3.12 / FastAPI / Uvicorn / SQLAlchemy 2 async / asyncpg /
