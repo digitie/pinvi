@@ -1,7 +1,13 @@
 # SKILL — TripMate 에이전트 매뉴얼
 
-> 이 파일은 당신(AI 에이전트)이 작업을 시작하기 전 반드시 읽어야 한다.
-> 1회만 읽으면 30분 이상의 디버깅을 줄일 수 있다.
+> 이 파일은 당신(AI 에이전트 — Claude / Codex / Antigravity / Cursor / Copilot
+> 누구든)이 작업을 시작하기 전 반드시 읽어야 한다. 1회만 읽으면 30분 이상의
+> 디버깅을 줄일 수 있다.
+>
+> 도구별 1차 진입:
+> - **Claude** — `CLAUDE.md` → `AGENTS.md` → 본 파일
+> - **Codex / Antigravity** — `AGENTS.md` → 본 파일
+> - 두 진입 파일(`AGENTS.md` + `CLAUDE.md`)은 항상 같은 결정을 반영 (ADR-016).
 
 ## 1. 정체성
 

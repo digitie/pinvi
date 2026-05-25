@@ -54,6 +54,8 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - ADR-012: 사용자 위치 정보 획득 (Geolocation + expo-location)
 - ADR-013: Notice plan 도메인 v1 → v2 이전 + 명명 분리
 - ADR-014: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리
+- ADR-015: 지도 클라이언트 변경 (Kakao Maps SDK → `maplibre-vworld-js`)
+- ADR-016: AI 에이전트 도구 다중 지원 — `AGENTS.md` ↔ `CLAUDE.md` 동기 정책
 
 ## 차단 사유 / 결정 대기
 

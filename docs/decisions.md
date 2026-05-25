@@ -438,7 +438,103 @@
   - `docs/conventions/{coding-style,database,testing}.md`을 PR 템플릿에 cross-ref
   - 추후 메이저 변경 시 본 ADR superseded 처리
 
+## ADR-015: 지도 클라이언트 변경 — Kakao Maps SDK → `maplibre-vworld-js`
+
+- **상태**: accepted (ADR-011 frontend 스택의 지도 항목 정정 — SPEC V8 A-1 #4
+  채택 superseded)
+- **날짜**: 2026-05-26
+- **결정자**: 사용자
+- **컨텍스트**: SPEC V8 A-1 #4 + ADR-011은 `react-kakao-maps-sdk`를 채택했지만,
+  사용자가 내부 라이브러리 `maplibre-vworld-js` (Antigravity 2.0 + Gemini 3.1
+  Pro로 만든 VWorld + MapLibre GL JS 선언형 React 통합)를 이미 보유하고 있어
+  지도 클라이언트를 전환.
+- **결정**:
+  - 지도 SDK를 `maplibre-vworld-js`로 변경
+  - 환경변수 `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` / `KAKAO_REST_API_KEY` 제거 →
+    `NEXT_PUBLIC_VWORLD_API_KEY`만 사용
+  - `apps/web/lib/coordAdapter.ts` (`(lat, lng)` 변환 어댑터) 제거 — VWorld는
+    `(lng, lat)` GeoJSON 순서를 따르므로 TripMate stack과 일관
+  - 라이브러리는 git URL pin 또는 npm 배포로 `apps/web`이 직접 import
+  - TripMate에 wrapper class 만들지 않음 (ADR-005 mirror) — 부족 기능은
+    `maplibre-vworld-js` 저장소에 PR
+  - 라이브러리에 이미 있는 `PlaceMarker` / `PriceMarker` / `WeatherMarker` /
+    `MarkerClusterer` / `PolygonArea` / `RouteLine` 컴포넌트 직접 사용
+  - 16색 팔레트 (P-01 ~ P-16) hex 값을 라이브러리 마커 컴포넌트에 props로 전달
+- **근거**:
+  - 좌표 순서 일관 — `(lng, lat)` 전체 stack
+  - 선언형 React — `useEffect`로 명령형 호출 불필요
+  - TripMate 도메인 마커 (Place/Price/Weather) 라이브러리에 내장
+  - VWorld는 국토교통부 공식 — 위탁자 명시 간소 (국내)
+  - 카카오맵 SDK 오프라인 캐싱 약관 제약 회피 (PWA v2 후보 활성화)
+  - 같은 진영 (Antigravity / 내부 자산) — wrapper 추가 없이 직접 의존 가능
+- **결과 (긍정)**:
+  - 좌표 어댑터 제거 → 코드 단순화
+  - WebGL GPU 렌더링 (60fps fractional zoom)
+  - 16색 + Maki 통합 더 자연스러움
+  - 사용 / 보강 권한이 TripMate 측에 있음 (내부 라이브러리)
+- **결과 (부정)**:
+  - Kakao Local 검색이 빠짐 — `/search` 구현은 `python-krtour-map`의 검색
+    함수로 대체 (또는 라이브러리 추가)
+  - Kakao 모빌리티 길찾기가 빠짐 — Sprint 6 일정 최적화는 OR-Tools 직선 거리 +
+    라이브러리 PR로 대응
+  - VWorld 일 호출 한도 + 도메인 화이트리스트는 새로 학습 필요
+- **후속**:
+  - `docs/integrations/maplibre-vworld.md` 신규 (본 PR)
+  - `docs/integrations/kakao-map.md` 폐기 표시 (본 PR)
+  - `docs/architecture/frontend.md` / `map-marker-design.md` / `user-location.md`
+    / `api/features.md` / `api/common.md` / `spec/v8/{00,03,05}.md` /
+    `sprints/SPRINT-{1,4}.md` / `runbooks/docker-app.md` /
+    `compliance/{data-policy,pipa}.md` / `conventions/geospatial.md` /
+    `integrations/{sentry,loki}.md` 모두 본 PR로 갱신
+  - 라이브러리 부족 기능은 `docs/integrations/maplibre-vworld.md` §6에 카탈로그
+    유지 → 발견 시 `maplibre-vworld-js` 저장소에 PR
+
+## ADR-016: AI 에이전트 도구 다중 지원 — `AGENTS.md` ↔ `CLAUDE.md` 동기 정책
+
+- **상태**: accepted
+- **날짜**: 2026-05-26
+- **결정자**: 사용자
+- **컨텍스트**: 본 저장소는 Claude Code 외에 OpenAI Codex / Google Antigravity /
+  Cursor / Copilot 등 여러 AI 코딩 도구로도 작업한다. Claude는 `CLAUDE.md`를
+  1차 진입으로 보지만 Codex / Antigravity는 `AGENTS.md`를 1차로 본다. 한 쪽만
+  갱신하면 도구별로 다른 결정·식별자가 반영되어 fact drift 발생.
+- **결정**:
+  - 본 저장소의 진입 가이드는 두 파일 (`AGENTS.md` + `CLAUDE.md`)이 **항상 같은
+    결정·룰·식별자를 반영**한다.
+  - 한 파일 갱신 시 다른 파일도 같은 PR 내에서 동기 갱신 — `docs/agent-guide.md`
+    §7.1 PR 체크리스트에 항목 추가.
+  - 도구별 1차 진입:
+    - **Claude Code / Claude Agent SDK** — `CLAUDE.md` → `AGENTS.md` → `SKILL.md`
+    - **OpenAI Codex (CLI)** — `AGENTS.md` → `SKILL.md`
+    - **Google Antigravity (Gemini)** — `AGENTS.md` → `SKILL.md`
+    - **Cursor / Copilot** — `AGENTS.md` + `SKILL.md`
+  - `SKILL.md`는 도메인 어휘 / DO NOT 카탈로그로 공통 — 두 진입 파일이 모두
+    참조.
+  - `CLAUDE.md` 첫 줄에 "다른 AI 도구 호환성" 안내 박힘.
+  - `AGENTS.md` 진입 절차 첫 섹션에 도구별 1차 진입 표 박힘.
+  - 사용자 / 다른 도구가 `.codex/agents/<role>.md` 같은 별도 파일을 두면 본
+    저장소의 `AGENTS.md`에 위임하는 1쪽 stub만 둔다 (v1에서 했던 것처럼 별도
+    rule 전체를 옮기지 않는다).
+- **근거**:
+  - 도구 다양화는 막을 수 없음 — TripMate 자체도 Antigravity로 만든
+    `maplibre-vworld-js` (ADR-015)를 사용
+  - fact drift는 운영 사고의 흔한 원인 (특히 식별자 / 환경변수 / 정책 충돌)
+  - 두 파일 동기는 PR 리뷰 시점에 자연스럽게 강제 가능
+- **결과 (긍정)**:
+  - 도구 변경 시 새 가이드 작성 비용 없음 — 기존 파일이 모두 호환
+  - PR 체크리스트로 동기 강제 — drift 가능성 낮음
+- **결과 (부정)**:
+  - PR마다 두 파일 함께 갱신해야 함 — 약간의 오버헤드
+  - `CLAUDE.md` 1쪽 분량 유지하면서 `AGENTS.md` 본문과 일치해야 — 요약 갱신
+    누락 시 drift
+- **후속**:
+  - `AGENTS.md` 머리에 "AI 에이전트 도구 지원 — `AGENTS.md` 단일 진실" 섹션 박음
+  - `CLAUDE.md` 머리에 호환성 안내 박음
+  - `SKILL.md` 진입 안내에 도구별 표 박음
+  - `docs/agent-guide.md` 머리에 동기 룰 박음 + §7.1 체크리스트
+  - 향후 도구 추가 시 본 ADR superseded 또는 항목 추가
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-015**
+- 다음 신규 ADR = **ADR-017**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

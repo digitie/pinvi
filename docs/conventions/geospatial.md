@@ -23,12 +23,14 @@
   ```
 - PostGIS: `ST_MakePoint(lon, lat)` 항상
 - GeoJSON: `coordinates: [lon, lat]`
-- 예외: Kakao SDK `kakao.maps.LatLng(lat, lng)` — UI 어댑터에서만 변환
+- **TripMate stack 전체가 `(lng, lat)` 일관** — `maplibre-vworld-js`는 GeoJSON 순서를 따르므로 어댑터 불필요 (ADR-015)
 
 ```ts
 // apps/web/lib/coordAdapter.ts
-export function toKakaoLatLng(c: { longitude: number; latitude: number }) {
-  return new kakao.maps.LatLng(c.latitude, c.longitude);
+// maplibre-vworld-js는 [lng, lat] 순서를 직접 받으므로 어댑터 불필요
+// (ADR-015 — Kakao Map의 (lat, lng) 어댑터 패턴 폐기)
+export function toLngLatTuple(c: { longitude: number; latitude: number }): [number, number] {
+  return [c.longitude, c.latitude];
 }
 ```
 
@@ -89,7 +91,7 @@ TripMate 측에서:
 
 - [ ] lon-lat 순서 일관 (API + Zod + Pydantic + PostGIS + GeoJSON)
 - [ ] SRID 명시 (4326)
-- [ ] Kakao SDK 어댑터에서만 lat-lng 변환
+- [ ] (`maplibre-vworld-js` 기본 — Kakao SDK lat-lng 어댑터는 제거됨, ADR-015)
 - [ ] 사용자 위치 정밀도 4자리 (UI)
 - [ ] 좌표 범위 검증 (대한민국)
 - [ ] "정확한 반경" 표현 안 함 — "근사"

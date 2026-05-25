@@ -129,7 +129,7 @@ async def add_request_id(request, call_next):
 # 사용
 log = structlog.get_logger()
 log.info("trip.poi.added", trip_id=trip_id, poi_count=10)
-log.warning("external_api.slow", api="kakao", duration_ms=1200)
+log.warning("external_api.slow", api="vworld", duration_ms=1200)
 ```
 
 JSON 출력 예시:

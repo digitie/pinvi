@@ -35,7 +35,7 @@
 |--------|----------|------|
 | 이메일 | Resend | `docs/integrations/resend.md` |
 | 소셜 로그인 | Google / Naver / Kakao OAuth | `docs/integrations/social-login.md` |
-| 지도 SDK + Local 검색 | Kakao Maps + Kakao Local | `docs/integrations/kakao-map.md` |
+| 지도 SDK | `maplibre-vworld-js` (VWorld + MapLibre GL JS, ADR-015) | `docs/integrations/maplibre-vworld.md` |
 | AI Research (사용자 키) | Google Gemini | `docs/integrations/gemini.md` |
 | 알림 | Telegram Bot | `docs/integrations/telegram.md` |
 | 에러 추적 | Sentry | `docs/integrations/sentry.md` |

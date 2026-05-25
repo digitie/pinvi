@@ -24,7 +24,7 @@ Cookie: tripmate_access=...
 ```
 
 - `sw_lng, sw_lat, ne_lng, ne_lat`: bbox (EPSG:4326)
-- `zoom`: 7~22 (Kakao map zoom level)
+- `zoom`: 7~19 (`maplibre-vworld-js`의 VWorld 타일 한계 — Satellite/Hybrid는 z18까지)
 - `kinds`: `place,event,notice,price,weather,route,area` 중 콤마 구분
 - zoom별 클러스터 자동 (SPEC V8 I-4):
   - `zoom < 7`: 시도 단위

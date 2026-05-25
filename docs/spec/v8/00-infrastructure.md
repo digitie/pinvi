@@ -72,7 +72,7 @@ ADR-004에 기록되어 있다.
 - JWT secret 최소 32 bytes
 - HTTPS 강제 + HSTS 1년
 - CORS 화이트리스트
-- CSP: `script-src 'self' + Kakao Map CDN`. inline script 금지 (nonce)
+- CSP: `script-src 'self'` + `connect-src 'self' https://api.vworld.kr` (`maplibre-vworld-js` 사용, ADR-015). inline script 금지 (nonce)
 - Rate limit (SlowAPI): 로그인/가입/재설정 IP+이메일 기준 분당 5회
 - Admin 작업 audit log: `app.admin_audit_log` (TripMate 소유)
 

@@ -8,7 +8,7 @@
 |------|------|
 | [lbs-act.md](./lbs-act.md) | 위치정보법 (LBS 신고 + 별도 동의 + 6개월 감사 로그) |
 | [pipa.md](./pipa.md) | 개인정보보호법 2024 (과징금 + 침해 통지 + Privacy by Design) |
-| [data-policy.md](./data-policy.md) | 외부 provider 데이터 정책 (Kakao/Naver/Google/VWorld/Juso 등) |
+| [data-policy.md](./data-policy.md) | 외부 provider 데이터 정책 (VWorld/Naver/Google/Juso 등) |
 
 ## 2. 책임 / 출시 직전 체크 (Sprint 6)
 

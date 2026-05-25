@@ -4,7 +4,7 @@
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` 라이브러리 read 활성화
 - **DoD**:
-  - 카카오맵 어댑터 (`react-kakao-maps-sdk`) 통합
+  - 지도 어댑터 (`maplibre-vworld-js`) 통합 — VWorld + MapLibre GL JS (ADR-015)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)
   - POI D&D + 양방향 패널 (`useSelectedPoiStore`)
   - 16색 팔레트 + maki 아이콘 (`apps/web/lib/markerPalette.ts`)
@@ -43,7 +43,7 @@
   - `apps/web/app/(app)/notice-plans/[planId]/page.tsx` (상세 + 지도 + day별 POI)
   - `apps/web/components/notice/CopyNoticePlanDialog.tsx` (POI 선택 + 새 trip/기존 trip 선택)
 - `apps/web/components/map/MyLocationButton.tsx` (지도 "내 위치로 이동", `useUserLocation`)
-- `apps/web/lib/{kakao,markerPalette,featureQueryKeys,locationAdapter}.ts`
+- `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
 - `apps/web/stores/{tripStore,mapViewportStore,selectedPoiStore}.ts`
 - `apps/web/public/maki/*.svg` (vendor 8 ~ 14개)
 
@@ -55,7 +55,7 @@
 
 ### ADR
 
-- ADR-NNN: 지도 클라이언트 정책 (`react-kakao-maps-sdk` + 직접 wrapping 금지)
+- ADR-015 (이미 박힘): 지도 클라이언트 `maplibre-vworld-js` + wrapping 금지 (TripMate는 직접 사용 + 부족 기능은 라이브러리에 PR)
 - ADR-NNN: viewport 클러스터링 전략 (서버측 + 디바운스 250ms)
 - ADR-NNN: feature_snapshot 동기화 정책 (라이브러리 변경 시 cache 갱신)
 

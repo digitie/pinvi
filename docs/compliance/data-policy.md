@@ -1,6 +1,6 @@
 # 외부 Provider 데이터 정책
 
-Kakao / Naver / Google / VWorld / Juso 등 외부 provider TOS 준수 정책.
+VWorld / Naver / Google / Juso / Kakao OAuth 등 외부 provider TOS 준수 정책.
 v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 
 > **scope 주의**: 한국 공공 API 데이터(KMA/KHOA/OpiNet/KREX/KRMOIS 등) ETL 적재
@@ -19,16 +19,15 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 
 ## 2. Provider별 정책
 
-### 2.1 Kakao Map SDK + Kakao Local API
+### 2.1 VWorld 지도 (`maplibre-vworld-js` 경유, ADR-015)
 
-- **오프라인 캐싱 약관상 금지** (지도 타일)
-- 서비스 워커 `NetworkOnly` 강제 (PWA v2 후보)
-- 일 호출 한도 Kakao 콘솔에서 확인 후 클라이언트 viewport 디바운스 + cache
-  (`docs/integrations/kakao-map.md` §3)
-- 도메인 화이트리스트 (콘솔)
-- `KAKAO_REST_API_KEY` server-only, `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` 브라우저 (origin
-  화이트리스트로 보호)
-- 로그에 raw 응답 / full query / 키 미포함
+- 지도 클라이언트는 내부 라이브러리 `maplibre-vworld-js` 사용 (Kakao Maps SDK 폐기)
+- VWorld API 키는 `NEXT_PUBLIC_VWORLD_API_KEY` (브라우저 노출, origin 화이트리스트로 보호)
+- VWorld 개발자 센터 (`www.vworld.kr`)에서 허용 도메인 등록 필수
+- 일 호출 한도는 VWorld 콘솔에서 확인 — 클라이언트 viewport 250ms 디바운스 + 1분 캐시
+- 로그에 키 미포함 — 라이브러리의 `redactVWorldUrl()` 헬퍼 사용
+  (`docs/integrations/maplibre-vworld.md` §3.3)
+- TripMate 자체 wrapper 만들지 않음 (ADR-005) — 부족 기능은 라이브러리에 PR
 
 ### 2.2 Naver / Google / Kakao OAuth
 
@@ -113,9 +112,9 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 
 ## 5. 다중 provider 결합 금지
 
-- **Google Maps Content와 Kakao Map UI 결합 X** (Google TOS)
+- **Google Maps Content와 VWorld 지도 결합 X** (Google TOS)
 - Naver 검색 결과와 다른 지도 결합은 케이스별 검토
-- 위탁자 별 응답은 사용자에 명시 (예: "Kakao Local 결과")
+- 위탁자 별 응답은 사용자에 명시 (예: "VWorld 지도 — 국토교통부")
 
 ## 6. 로깅 / 마스킹
 

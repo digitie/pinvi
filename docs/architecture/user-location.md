@@ -208,8 +208,8 @@ export default function MapPage() {
 
 다음 사용처는 좌표를 서버에 보내지 않고 **클라이언트 내부에서만** 처리:
 
-- 지도 초기 중심점 (Kakao map `setCenter` 호출)
-- "내 위치로 이동" 버튼 (Kakao map `flyTo`)
+- 지도 초기 중심점 (`<VWorldMap center={...} />` prop 갱신 — `maplibre-vworld-js` 선언형)
+- "내 위치로 이동" 버튼 (`center` / `zoom` prop 갱신 + `animateCameraChanges` smooth)
 - 사용자에게 보여주는 distance label (현재 위치 ↔ POI)
   - 거리 계산은 클라이언트 측 `haversine(lat1, lng1, lat2, lng2)`
   - POI 좌표는 이미 라이브러리로부터 받은 값

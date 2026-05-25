@@ -136,7 +136,7 @@ Sentry.init({
     return event;
   },
   ignoreErrors: [
-    "kakao is not defined",
+    // (legacy) "kakao is not defined" — Kakao SDK 사용 시. ADR-015로 maplibre-vworld-js로 교체 후 불필요
     "ResizeObserver loop",
     /Network request failed/,
   ],

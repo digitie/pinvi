@@ -18,7 +18,7 @@ RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-
 | `TRIPMATE_WEB_PORT` | `13082` |
 | `TRIPMATE_API_PORT` | `18082` |
 | `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:18082` |
-| `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | (선택) |
+| `NEXT_PUBLIC_VWORLD_API_KEY` | `maplibre-vworld-js` 지도 SDK용 (ADR-015). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록 |
 | 기타 `TRIPMATE_*` | 일반 `.env`와 동일 |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).

@@ -3,6 +3,10 @@
 이 파일은 Claude(Claude Code, Claude Agent SDK)가 가장 먼저 읽어야 할 1쪽 요약이다.
 정식 정책·결정은 `AGENTS.md`, `SKILL.md`, `docs/decisions.md`가 갖는다.
 
+> **다른 AI 도구 호환성** (ADR-016): Codex / Antigravity 등은 `AGENTS.md`를 1차
+> 진입으로 사용한다. 본 파일과 `AGENTS.md`는 같은 결정·룰·식별자를 반영해야
+> 한다 — 한 쪽 갱신 시 다른 쪽도 동기 갱신 필수.
+
 ## 1. 이 저장소가 하는 일
 
 `TripMate`는 한국 여행 계획·기록·공유 애플리케이션이다. 한국 공공 API에서 모은
@@ -39,11 +43,12 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 
 ## 4. 의존 스택 (v2 확정 골격)
 
-- 백엔드: Python 3.11+ / FastAPI / Uvicorn / SQLAlchemy 2 async / asyncpg /
+- 백엔드: Python 3.12 / FastAPI / Uvicorn / SQLAlchemy 2 async / asyncpg /
   Pydantic v2 / httpx + tenacity / Alembic / Dagster / `python-krtour-map`
   (함수 라이브러리)
-- 프론트엔드: Next.js (App Router) + React 18 + TanStack Query + zustand +
-  maplibre-gl + `@krtour/map-marker-react` (npm)
+- 프론트엔드: Next.js 15 (App Router) + React 19 + TanStack Query v5 + Zustand +
+  React Hook Form + Zod + shadcn/ui + Tailwind + **`maplibre-vworld-js`**
+  (VWorld + MapLibre GL JS, ADR-015)
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
   / Docker Compose / Odroid M1S (운영 single node)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
@@ -79,6 +84,7 @@ lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 | 라이브러리 호출 | `docs/krtour-map-integration.md` |
 | 외부 통합 (이메일/OAuth/AI) | `docs/integrations/<서비스>.md` |
 | Frontend UI | `docs/architecture/frontend.md` + `DESIGN.md` |
+| 지도 (`maplibre-vworld-js`) | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md` |
 | Admin 콘솔 | `docs/api/admin.md` + `docs/runbooks/admin.md` |
 | ETL asset | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md` |
 | 사용자 위치 사용 | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md` |

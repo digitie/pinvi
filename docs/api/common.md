@@ -231,8 +231,8 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
-  https://dapi.kakao.com https://t1.daumcdn.net; img-src 'self' data: https://...;
-  connect-src 'self' http://localhost:8001 https://api.resend.com`
+  ; img-src 'self' data: https://api.vworld.kr https://...;
+  connect-src 'self' http://localhost:8001 https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(self)` (위치 권한 origin)

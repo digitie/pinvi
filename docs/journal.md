@@ -2,6 +2,76 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-26 13:00 (claude)
+
+**작업**: 지도 클라이언트를 내부 라이브러리 `maplibre-vworld-js`로 전환
+(ADR-015) + AI 에이전트 도구 다중 지원 (`AGENTS.md` ↔ `CLAUDE.md` 동기 정책,
+ADR-016).
+
+**컨텍스트**: 사용자 두 요청:
+
+1. "kakao map 쪽은 내부 라이브러리인 maplibre-vworld-js로 대체. 관련 내용 변경
+   하고, 추가로 maplibre-vworld-js에 필요한 기능을 정리한 문서를 만들 것."
+2. "CLAUDE.md 외 codex와 antigravity 에서도 대응할 수 있도록 AGENTS.md도 항상
+   함께 수정."
+
+`maplibre-vworld-js`는 사용자가 보유한 내부 라이브러리 (`F:\dev\maplibre-vworld-js`,
+Antigravity 2.0 + Gemini 3.1 Pro로 작성). VWorld + MapLibre GL JS 선언형 React
+통합. `VWorldMap` / `MarkerClusterer` / `PolygonArea` / `RouteLine` + TripMate
+도메인 마커 (`PlaceMarker` / `PriceMarker` / `WeatherMarker`) 14개 컴포넌트
+이미 제공.
+
+**신규 파일**:
+
+- `docs/integrations/maplibre-vworld.md` — 라이브러리 식별자 + 환경변수 +
+  사용 패턴 + 16색 매핑 + 라이브러리 보강 필요 카탈로그 (§6)
+
+**갱신 (Kakao → maplibre-vworld-js)**:
+
+- `docs/integrations/kakao-map.md` — 폐기 표시 + 이전 가이드 표
+- `docs/integrations/README.md` — 인덱스
+- `docs/architecture/frontend.md` — 스택 표
+- `docs/architecture/map-marker-design.md` — Mapbox token 정책
+- `docs/architecture/user-location.md` — `setCenter` / `flyTo` → 선언형 prop
+- `docs/api/features.md` — zoom 7~19 (VWorld 한계) / Kakao 한도 → VWorld 한도
+- `docs/api/common.md` — CSP `connect-src` VWorld 추가
+- `docs/spec/v8/00-infrastructure.md` — CSP
+- `docs/spec/v8/03-frontend.md` — 스택 채택 표
+- `docs/spec/v8/05-execution.md` — A-1 #4 결정 정정
+- `docs/sprints/SPRINT-4.md` — 지도 어댑터 / ADR 후보 → ADR-015
+- `docs/runbooks/docker-app.md` — 환경변수
+- `docs/compliance/data-policy.md` — Kakao Map TOS → VWorld
+- `docs/compliance/pipa.md` — 위탁자 (VWorld 추가, Kakao는 OAuth만)
+- `docs/conventions/geospatial.md` — Kakao lat-lng 어댑터 폐기
+- `docs/integrations/sentry.md` / `loki.md` — Kakao 언급 정정
+- `docs/data-sources/README.md` — 지도 SDK 항목
+- `docs/compliance/README.md` — provider 목록
+- `README.md` — 의존 라이브러리
+
+**ADR 추가**:
+
+- **ADR-015** 지도 클라이언트 변경 (Kakao Maps SDK → `maplibre-vworld-js`)
+- **ADR-016** AI 에이전트 도구 다중 지원 — `AGENTS.md` ↔ `CLAUDE.md` 동기 정책
+
+**진입 가이드 강화**:
+
+- `AGENTS.md` 머리 — "AI 에이전트 도구 지원 — `AGENTS.md` 단일 진실" 섹션 +
+  도구별 1차 진입 표 (Claude / Codex / Antigravity / Cursor)
+- `CLAUDE.md` 머리 — 호환성 안내 추가
+- `SKILL.md` 머리 — 도구별 진입 안내
+- `docs/agent-guide.md` 머리 — 동기 룰 + §7.1 PR 체크리스트에 동기 항목 추가
+
+**결정**:
+
+- 라이브러리에 `wrapper class` 만들지 않음 (ADR-005 mirror) — 부족 기능 발견
+  시 `maplibre-vworld-js` 저장소에 PR
+- 좌표 변환 어댑터 (`apps/web/lib/coordAdapter.ts`) 제거 — VWorld는 GeoJSON
+  순서 `(lng, lat)` 그대로
+- Kakao Local 검색 / 모빌리티 길찾기는 라이브러리 함수 (`python-krtour-map.search`)
+  또는 OR-Tools 직선 거리로 대체
+
+**다음**: PR 생성.
+
 ## 2026-05-26 02:00 (claude)
 
 **작업**: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리 + AI agent

@@ -92,7 +92,8 @@ Dagster job 일 1회:
 | Resend | 미국 (AWS) | 이메일 발송 |
 | Sentry | 미국 | 에러 추적 |
 | Naver | 국내 | OAuth 인증 |
-| Kakao | 국내 | OAuth 인증 + 지도 SDK + Local API |
+| Kakao | 국내 | OAuth 인증 (지도 SDK / Local API는 v2에서 미사용 — ADR-015) |
+| VWorld (국토교통부) | 국내 (정부) | 지도 SDK 타일 — `maplibre-vworld-js` 경유 |
 | Telegram | 글로벌 (LU) | 알림 봇 (사용자 선택) |
 | BackBlaze B2 (v2) | 미국 | 백업 저장 (운영자 결정 시) |
 
