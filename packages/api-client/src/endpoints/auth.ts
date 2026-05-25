@@ -6,7 +6,7 @@ import {
   VerifyEmailRequestSchema,
 } from '@tripmate/schemas';
 import { z } from 'zod';
-import type { ApiClient } from '../client.js';
+import type { ApiClient } from '../client';
 
 export const authApi = (client: ApiClient) => ({
   register: (body: z.infer<typeof RegisterRequestSchema>) =>

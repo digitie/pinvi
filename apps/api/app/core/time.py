@@ -5,7 +5,7 @@ DB는 UTC `timestamptz` 저장, 응용 변환은 KST. `docs/conventions/coding-s
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
@@ -16,4 +16,4 @@ def kst_now() -> datetime:
 
 
 def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)

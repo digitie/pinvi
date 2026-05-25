@@ -3,8 +3,8 @@ export {
   CoordSchema,
   SuccessEnvelopeSchema,
   ErrorEnvelopeSchema,
-} from './common.js';
-export type { Coord, ErrorEnvelope } from './common.js';
+} from './common';
+export type { Coord, ErrorEnvelope } from './common';
 
 export {
   RegisterRequestSchema,
@@ -12,15 +12,15 @@ export {
   VerifyEmailRequestSchema,
   LoginRequestSchema,
   AuthUserSchema,
-} from './auth.js';
-export type { RegisterRequest, AuthUser } from './auth.js';
+} from './auth';
+export type { RegisterRequest, AuthUser } from './auth';
 
 export {
   ConsentTypeSchema,
   UserConsentSchema,
   ProfileCompleteRequestSchema,
-} from './user.js';
-export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user.js';
+} from './user';
+export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user';
 
-export { HealthResponseSchema, HealthDbResponseSchema } from './health.js';
-export type { HealthResponse } from './health.js';
+export { HealthResponseSchema, HealthDbResponseSchema } from './health';
+export type { HealthResponse } from './health';

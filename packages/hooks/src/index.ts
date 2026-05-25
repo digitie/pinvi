@@ -1,12 +1,12 @@
-export { useDebounce } from './useDebounce.js';
+export { useDebounce } from './useDebounce';
 export {
   useUserLocation,
   LocationError,
-} from './useUserLocation.js';
+} from './useUserLocation';
 export type {
   UserLocation,
   LocationOptions,
   LocationErrorCode,
   LocationAdapter,
   UseUserLocationOptions,
-} from './useUserLocation.js';
+} from './useUserLocation';

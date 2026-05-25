@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.core.config import settings
 from app.core.deps import DbSession
@@ -63,9 +62,7 @@ def _clear_session_cookies(response: Response) -> None:
     status_code=status.HTTP_201_CREATED,
     response_model=Envelope[RegisterResponse],
 )
-async def register(
-    body: RegisterRequest, db: DbSession
-) -> Envelope[RegisterResponse]:
+async def register(body: RegisterRequest, db: DbSession) -> Envelope[RegisterResponse]:
     try:
         result = await register_user(
             db,
@@ -84,7 +81,10 @@ async def register(
             user=UserResponse(
                 user_id=result.user.user_id,
                 email=result.user.email,
-                status=result.user.status,  # type: ignore[arg-type]
+                status=cast(
+                    Literal["pending_verification", "pending_profile", "active", "disabled"],
+                    result.user.status,
+                ),
                 email_verified_at=result.user.email_verified_at,
             ),
             verification_email_dispatched=result.verification_email_dispatched,
@@ -146,13 +146,13 @@ async def logout(response: Response) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _to_auth_user(user) -> AuthUser:  # type: ignore[no-untyped-def]
+def _to_auth_user(user: Any) -> AuthUser:
     return AuthUser(
         user_id=user.user_id,
         email=user.email,
         nickname=user.nickname,
         avatar_url=user.avatar_url,
         status=user.status,
-        roles=user.roles,
+        roles=cast(list[Literal["user", "admin", "operator", "cpo"]], user.roles),
         email_verified_at=user.email_verified_at,
     )

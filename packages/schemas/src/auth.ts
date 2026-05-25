@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common.js';
+import { Iso8601Schema } from './common';
 
 /** 회원가입 요청. `docs/api/auth.md` §2.1. */
 export const RegisterRequestSchema = z.object({

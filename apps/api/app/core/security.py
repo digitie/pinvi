@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -39,25 +39,27 @@ def create_access_token(
     extra: dict[str, Any] | None = None,
     expires_minutes: int | None = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=expires_minutes or settings.tripmate_access_token_minutes
+    token_minutes = (
+        settings.tripmate_access_token_minutes if expires_minutes is None else expires_minutes
     )
+    expire = datetime.now(UTC) + timedelta(minutes=token_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
         "exp": expire,
-        "iat": datetime.now(timezone.utc),
+        "iat": datetime.now(UTC),
         "typ": "access",
     }
     if extra:
         payload.update(extra)
-    return jwt.encode(payload, settings.tripmate_jwt_secret_key, algorithm=_ALGORITHM)
+    return cast(str, jwt.encode(payload, settings.tripmate_jwt_secret_key, algorithm=_ALGORITHM))
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     try:
-        return jwt.decode(token, settings.tripmate_jwt_secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.tripmate_jwt_secret_key, algorithms=[_ALGORITHM])
     except JWTError as exc:
         raise InvalidTokenError(str(exc)) from exc
+    return cast(dict[str, Any], payload)
 
 
 class InvalidTokenError(Exception):

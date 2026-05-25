@@ -9,12 +9,11 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import context
-
 from app.core.config import settings
 from app.db.base import metadata
 
@@ -45,6 +44,8 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
+    connection.execute(text("CREATE SCHEMA IF NOT EXISTS x_extension"))
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

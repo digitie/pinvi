@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     tripmate_database_pool_size: int = 10
 
     # JWT / 세션
-    tripmate_jwt_secret_key: str = Field(default="tripmate-local-jwt-secret-change-me", min_length=32)
+    tripmate_jwt_secret_key: str = Field(
+        default="tripmate-local-jwt-secret-change-me", min_length=32
+    )
     tripmate_access_token_minutes: int = 15
     tripmate_refresh_token_days: int = 7
     tripmate_admin_session_ttl: int = 3600
@@ -67,7 +69,7 @@ class Settings(BaseSettings):
 
     # 운영 부트스트랩
     tripmate_bootstrap_admin_email: str = "admin@ad.min"
-    tripmate_bootstrap_admin_password: str = "admin"
+    tripmate_bootstrap_admin_password: str = ""
 
     # Feature flag
     tripmate_enable_seed: bool = False

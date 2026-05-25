@@ -1,2 +1,2 @@
-export { createAuthStore } from './auth-store.js';
-export { useUiStore } from './ui-store.js';
+export { createAuthStore } from './auth-store';
+export { useUiStore } from './ui-store';

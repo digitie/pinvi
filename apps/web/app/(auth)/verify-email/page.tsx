@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
 
 const apiClient = new ApiClient({
@@ -10,6 +10,23 @@ const apiClient = new ApiClient({
 });
 
 export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyEmailPending />}>
+      <VerifyEmailContent />
+    </Suspense>
+  );
+}
+
+function VerifyEmailPending() {
+  return (
+    <div className="space-y-6 text-sm">
+      <h1 className="text-2xl font-bold text-ink">이메일 인증</h1>
+      <p className="text-muted">인증 처리 중입니다…</p>
+    </div>
+  );
+}
+
+function VerifyEmailContent() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get('token');

@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,7 +83,7 @@ async def register_user(
         user_id=user.user_id,
         token_hash=_hash_token(raw_token),
         purpose="signup",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
     )
     db.add(verification)
     await db.commit()
@@ -112,25 +112,24 @@ async def verify_email(db: AsyncSession, *, token: str) -> User:
     )
     if row is None:
         raise VerificationTokenInvalidError("토큰이 잘못되었습니다.")
-    if row.expires_at < datetime.now(timezone.utc):
+    if row.expires_at < datetime.now(UTC):
         raise VerificationTokenInvalidError("토큰이 만료되었습니다.")
 
     user = await db.scalar(select(User).where(User.user_id == row.user_id))
     if user is None:
         raise VerificationTokenInvalidError("사용자가 존재하지 않습니다.")
 
-    user.email_verified_at = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
+    user.email_verified_at = now
     user.status = "pending_profile"
-    row.used_at = datetime.now(timezone.utc)
+    row.used_at = now
     await db.commit()
     await db.refresh(user)
     return user
 
 
 async def authenticate(db: AsyncSession, *, email: str, password: str) -> User:
-    user = await db.scalar(
-        select(User).where(User.email == email, User.deleted_at.is_(None))
-    )
+    user = await db.scalar(select(User).where(User.email == email, User.deleted_at.is_(None)))
     if user is None or not user.password_hash:
         raise InvalidCredentialsError("이메일 또는 비밀번호가 올바르지 않습니다.")
     if not verify_password(password, user.password_hash):

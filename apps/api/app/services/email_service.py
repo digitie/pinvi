@@ -38,7 +38,7 @@ async def send_verification_email(
 
     # 실제 발송 — Sprint 2에서 Webhook + queue 추가
     try:
-        import resend  # type: ignore[import-not-found]
+        import resend
 
         resend.api_key = settings.tripmate_resend_api_key
         response = resend.Emails.send(
@@ -52,7 +52,7 @@ async def send_verification_email(
         )
         log.info("email.sent", resend_id=response.get("id"), **payload)
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.error("email.send_failed", error=str(exc), **payload)
         return False
 

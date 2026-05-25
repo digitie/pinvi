@@ -27,7 +27,7 @@ async def health_db(
     start = time.perf_counter()
     try:
         await db.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={

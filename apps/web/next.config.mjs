@@ -11,9 +11,6 @@ const nextConfig = {
     '@tripmate/hooks',
     '@tripmate/i18n',
   ],
-  experimental: {
-    typedRoutes: false,
-  },
 };
 
 export default nextConfig;

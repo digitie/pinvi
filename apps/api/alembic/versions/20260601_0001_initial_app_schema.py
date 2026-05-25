@@ -90,8 +90,12 @@ def upgrade() -> None:
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("deleted_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.PrimaryKeyConstraint("user_id", name="pk_users"),
         sa.UniqueConstraint("email", name="uq_users_email"),
         sa.CheckConstraint(
@@ -131,8 +135,12 @@ def upgrade() -> None:
         sa.Column("revoked_at", sa.DateTime(timezone=True)),
         sa.Column("user_agent", sa.String(length=512)),
         sa.Column("ip_address", postgresql.INET()),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.PrimaryKeyConstraint("session_id", name="pk_user_sessions"),
         sa.UniqueConstraint("session_token_hash", name="uq_user_sessions_session_token_hash"),
         sa.ForeignKeyConstraint(
@@ -167,8 +175,12 @@ def upgrade() -> None:
         sa.Column("purpose", sa.String(length=32), nullable=False, server_default="signup"),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.PrimaryKeyConstraint("verification_id", name="pk_user_email_verifications"),
         sa.UniqueConstraint("token_hash", name="uq_user_email_verifications_token_hash"),
         sa.ForeignKeyConstraint(
@@ -198,10 +210,16 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("consent_type", sa.String(length=32), nullable=False),
         sa.Column("version", sa.String(length=32), nullable=False),
-        sa.Column("agreed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "agreed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.Column("withdrawn_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.PrimaryKeyConstraint("user_id", "consent_type", "version", name="pk_user_consents"),
         sa.ForeignKeyConstraint(
             ["user_id"],

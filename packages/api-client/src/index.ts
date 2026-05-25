@@ -1,4 +1,4 @@
-export { ApiClient, ApiError } from './client.js';
-export type { ApiClientOptions } from './client.js';
-export { queryKeys } from './query-keys.js';
-export { authApi } from './endpoints/auth.js';
+export { ApiClient, ApiError } from './client';
+export type { ApiClientOptions } from './client';
+export { queryKeys } from './query-keys';
+export { authApi } from './endpoints/auth';

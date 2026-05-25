@@ -23,7 +23,12 @@ def build_error(
     return body
 
 
-async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=build_error("INTERNAL_ERROR", "서버 오류가 발생했습니다."),
+        )
     detail = exc.detail
     if isinstance(detail, dict) and "code" in detail and "message" in detail:
         body = {"error": detail}
@@ -35,9 +40,12 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
     return JSONResponse(status_code=exc.status_code, content=body)
 
 
-async def validation_exception_handler(
-    _: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, RequestValidationError):
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=build_error("INTERNAL_ERROR", "서버 오류가 발생했습니다."),
+        )
     details: dict[str, Any] = {"errors": exc.errors()}
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

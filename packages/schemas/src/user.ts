@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common.js';
+import { Iso8601Schema } from './common';
 
 /** 4 분리 동의 (위치정보법 + PIPA). `docs/compliance/lbs-act.md` §2.1. */
 export const ConsentTypeSchema = z.enum([

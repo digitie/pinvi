@@ -8,4 +8,4 @@ def test_definitions_load() -> None:
 
     # Sprint 1 — asset 없음
     assert defs is not None
-    assert defs.get_asset_graph().asset_nodes == []
+    assert list(defs.resolve_asset_graph().asset_nodes) == []
