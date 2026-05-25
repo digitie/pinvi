@@ -23,20 +23,28 @@ v2 설계 단계 (Sprint 1 진입 직전). 코드 작성 금지. 문서/계약/A
 - [x] docs/sprints/README + SPRINT-1 ~ SPRINT-6 — T-007
 - [x] docs/spec/v8/ 6편 적용 노트 — T-008
 - [x] docs/design/marker-palette + 루트 DESIGN.md / airbnb-marker-palette.html 복원 — T-009
-- [ ] Sprint 1 진입 PR (apps scaffolding) — T-010 (대기)
+- [x] docs/architecture/frontend.md (Next.js + Expo 공용 monorepo) — T-010
+- [x] docs/architecture/user-location.md (Geolocation + expo-location) — T-011
+- [x] docs/architecture/notice-plans.md (v1 추천 plan 도메인 이전) — T-012
+- [ ] Sprint 1 진입 PR (apps + packages scaffolding) — T-020 (대기)
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
-- ADR-011 (Sprint 1): 인증 토큰 모델 (cookie session vs JWT) — SPEC V8 02-backend §1 잠정 JWT 15m/7d
-- ADR-012 (Sprint 1): Admin RBAC `roles TEXT[]` 모델 (SPEC V8 M-14 정정 반영)
-- ADR-013 (Sprint 2): 소셜 로그인 provider (Google 우선, Kakao/Naver는 v2)
-- ADR-014 (Sprint 2): `email_queue` worker 패턴 (PostgreSQL `SKIP LOCKED`)
-- ADR-015 (Sprint 2): 4 분리 동의 + `location_access_log` content_hash chain
-- ADR-016 (Sprint 4): 지도 클라이언트 `react-kakao-maps-sdk` + wrapping 금지
-- ADR-017 (Sprint 4): viewport 클러스터링 (zoom < 7/11/14)
-- ADR-018 (Sprint 5): WebSocket broker 모델 (단일 프로세스 in-memory)
-- ADR-019 (Sprint 5): Dagster code location 분리(apps/etl) 활성화
+- ADR-014 (Sprint 1): 인증 토큰 모델 (cookie session vs JWT) — SPEC V8 02-backend §1 잠정 JWT 15m/7d
+- ADR-015 (Sprint 1): Admin RBAC `roles TEXT[]` 모델 (SPEC V8 M-14 정정 반영)
+- ADR-016 (Sprint 2): 소셜 로그인 provider (Google 우선, Kakao/Naver는 v2)
+- ADR-017 (Sprint 2): `email_queue` worker 패턴 (PostgreSQL `SKIP LOCKED`)
+- ADR-018 (Sprint 4): viewport 클러스터링 (zoom < 7/11/14)
+- ADR-019 (Sprint 5): WebSocket broker 모델 (단일 프로세스 in-memory)
 - ADR-020 (Sprint 6): OR-Tools 일정 최적화 분기 (POI ≤10/11-20/20+)
+
+## 박힌 ADR
+
+- ADR-001 ~ ADR-009: v2 시작 결정
+- ADR-010: SPEC V8 채택
+- ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
+- ADR-012: 사용자 위치 정보 획득 (Geolocation + expo-location)
+- ADR-013: Notice plan 도메인 v1 → v2 이전 + 명명 분리
 
 ## 차단 사유 / 결정 대기
 

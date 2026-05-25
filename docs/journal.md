@@ -2,6 +2,78 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-25 23:30 (claude)
+
+**작업**: Frontend 스택 상세 + Expo 공용 패키지 + 위치 정보 사양 + v1 notice POI
+도메인 보강.
+
+**컨텍스트**: 사용자 요청 3가지:
+
+1. Frontend는 React/Next.js/TanStack Query/Zod/Zustand/RHF/shadcn/ui/Tailwind 기반
+   임을 상세 명시. DESIGN.md / palette HTML의 색상톤·UX 따름. 추후 Expo 대응을
+   위해 주요 로직 + 데이터 정의 코드를 Next.js / Expo 공용으로 작성. Expo 프론트
+   구성도 명시.
+2. v1에서 notice POI 관련 문서/코드 확인해서 보강.
+3. 웹/앱에서 사용자 위치 정보 획득을 기능 사양에 명시.
+
+v1 탐색 결과: `notice_plans` 도메인은 SPEC V8 D-10의 `notice` feature와 **완전히
+다른 개념**. v1 `notice_plans`는 Admin이 작성한 **추천 여행 plan** (사용자가 자기
+trip으로 copy 가능). 같은 단어를 쓰는 두 개념이 v2에서 혼동되지 않도록 명명을
+분리.
+
+**신규 파일**:
+
+- `docs/architecture/frontend.md` — Next.js + Expo 공용 monorepo 구조,
+  `packages/{schemas,api-client,state,design-tokens,hooks,i18n}`, shadcn/ui +
+  Tailwind 통합, Airbnb 톤 디자인 토큰, 컴포넌트별 가이드, React Native
+  Compatibility 룰
+- `docs/architecture/user-location.md` — `navigator.geolocation` /
+  `expo-location` 어댑터 추상화, `useUserLocation` 공용 hook, 4 분리 동의
+  연계, content_hash chain 적재, fallback chain, UI 가이드
+- `docs/architecture/notice-plans.md` — 추천 여행 plan 도메인 (v1에서 가져옴),
+  `notice_plans` + `notice_pois` + `plan_poi_attachments` 단일 테이블 4 대상,
+  copy 흐름, RustFS 정합, "notice plan ≠ notice feature" 명명 분리
+
+**갱신**:
+
+- `docs/decisions.md` — ADR-011 (Frontend 스택 + Expo 공용), ADR-012 (위치
+  정보), ADR-013 (Notice plan 이전 + 명명 분리)
+- `docs/spec/v8/03-frontend.md` — 스택 표 갱신 (shadcn/ui 명시) + 새 문서
+  cross-reference
+- `docs/sprints/SPRINT-1.md` — `packages/*` skeleton 등록 항목 박음
+- `docs/sprints/SPRINT-2.md` — notice_plans / plan_poi_attachments Alembic,
+  공용 schema/api-client/state/hooks 활성화, 4 분리 동의 UI + 위치 audit
+- `docs/sprints/SPRINT-4.md` — 사용자 notice plan listing + copy 다이얼로그 +
+  지도 "내 위치로 이동" 버튼
+- `docs/sprints/SPRINT-6.md` — Admin notice plan 작성기 UI
+- `README.md`, `SKILL.md` — 새 문서 cross-reference + 도메인 어휘
+  (Notice plan / Notice feature / Plan POI attachment)
+- `docs/architecture.md` §2.2 — Frontend 섹션을 새 `architecture/frontend.md`
+  로 위임 + 공용 패키지 + 위치 hook 명시
+
+**v1에서 확인한 자산** (`v1` 브랜치):
+
+- `apps/api/alembic/versions/20260521_0027_notice_plans.py`
+- `apps/api/alembic/versions/20260522_0028_plan_poi_attachments.py`
+- `apps/api/app/models/trip.py` (`NoticePlan`, `NoticePoi`, `PlanPoiAttachment`)
+- `apps/api/app/schemas/notice.py`
+- `apps/api/app/services/notice_plan.py` (copy 흐름)
+- `apps/api/app/services/plan_poi_attachment.py`
+- `apps/api/app/api/routes/notice.py`
+- `apps/api/tests/test_notice_plans_api.py`
+- `docs/architecture/plan-poi-attachments.md`
+
+**결정**:
+
+- shadcn/ui + Tailwind 채택 — DESIGN.md Airbnb 톤을 컴포넌트 레벨에서 customizing
+- `packages/*` 공용 패키지를 v1.0 단계부터 박아 Expo 추가 비용 최소화
+- 좌표 서버 전송 시 audit chain 자동 적재. 좌표 정밀도는 UI에 4자리 (~10m) 까지만
+- v1 notice plan 도메인은 cherry-pick 안 함 — schema 정합성 위해 재작성 (Sprint 2)
+- "notice plan" (TripMate) vs "notice feature" (라이브러리) 명명 명시 분리
+
+**다음**: PR #5에 추가 커밋 후 push. Sprint 1 진입 승인 시 `apps/` + `packages/`
+scaffolding.
+
 ## 2026-05-25 22:00 (claude)
 
 **작업**: SPEC V8 6편 반영 + v1 자산 일부 복원.

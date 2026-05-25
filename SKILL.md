@@ -187,14 +187,17 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 
 | 작업 | 시작 파일 |
 |------|-----------|
-| 새 사용자 도메인 필드 추가 | `apps/api/app/schemas/<entity>.py` → `models/<entity>.py` → `services/<entity>.py` → `api/routes/<entity>.py` + Alembic |
-| 새 Admin CRUD 추가 | `services/admin_entity_crud.py`에 entity 등록 → 라우터 + UI `apps/web/app/admin/<entity>/page.tsx` |
+| 새 사용자 도메인 필드 추가 | `packages/schemas/src/<entity>.ts` (Zod) + `apps/api/app/schemas/<entity>.py` → `models/<entity>.py` → `services/<entity>.py` → `api/routes/<entity>.py` + Alembic |
+| 새 Admin CRUD 추가 | `services/admin_entity_crud.py`에 entity 등록 → 라우터 + UI `apps/web/app/admin/<entity>/page.tsx` (shadcn/ui DataTable) |
 | 새 외부 API 통합 (provider) | **`python-krtour-map`에 PR** (raw → DTO + 적재). 본 저장소에는 Dagster asset만 추가 |
 | 새 Dagster asset 추가 | `apps/etl/assets/<name>.py`에서 `AsyncKrtourMapClient` 함수 호출 + `definitions.py`에 등록 |
 | 새 알림 채널 추가 (Telegram/이메일/푸시) | `apps/api/app/services/<channel>.py` + webhook 라우터 + 환경변수 |
 | Postgres `app` schema 변경 | `apps/api/alembic/versions/...` migration + `docs/postgres-schema.md` 갱신 |
 | `feature`/`provider_sync` schema 변경 | **`python-krtour-map`에서 작업**. 본 저장소는 사용 측 코드만 갱신 |
 | 새 RustFS 버킷 추가 | `apps/api/app/services/file_storage.py` + 환경변수 + Admin UI |
+| 새 frontend 화면 추가 | `packages/schemas/`에 Zod → `packages/api-client/`에 endpoint → `apps/web/app/<route>/page.tsx` (shadcn/ui + Airbnb 톤 — `docs/architecture/frontend.md`) |
+| 위치 정보 사용처 추가 | `packages/hooks/src/useUserLocation.ts` 활용 + 동의 확인 + `app.location_access_log` 자동 적재 (`docs/architecture/user-location.md`) |
+| 새 notice plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. **notice plan ≠ notice feature** |
 
 ## 6. 도메인 어휘
 
@@ -211,6 +214,9 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | Dataset key | provider 내 sub-dataset 식별자 (`search_list`, `gis_spca`, ...) |
 | `app` schema | TripMate 도메인 (사용자/여행계획/공지/첨부) |
 | `feature` schema | `python-krtour-map` 소유 (Feature/SourceRecord/SourceLink/...) |
+| Notice plan | Admin이 만든 추천 여행 plan (`app.notice_plans`). 사용자 trip으로 copy 가능 |
+| Notice feature | 지도 위 공지·자연현상 feature (라이브러리 소유, kind=notice). **Notice plan과 별개 개념** |
+| Plan POI attachment | 단일 테이블 `plan_poi_attachments` (trip / trip_poi / notice_plan / notice_poi 중 정확히 하나 채움) |
 | RustFS | S3 호환 객체 저장소. TripMate `app` 첨부 + `python-krtour-map` 미디어 분리 |
 | Soak test | ETL 장시간(20시간±) 검증. `scripts/etl-soak-*.sh` (v1 자산, v2에서 재정비) |
 | WSL 미러 | `~/tripmate-workspaces/tripmate` — WSL ext4 작업본. NTFS와 명시적 동기 |
