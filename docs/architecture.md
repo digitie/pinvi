@@ -5,6 +5,8 @@
 (Dagster)을 담고, 지도 feature 도메인은 별 저장소 `python-krtour-map`을
 **함수 라이브러리**로 import해서 사용한다.
 
+SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 자체 정리.
+
 ## 1. 큰 그림
 
 ```

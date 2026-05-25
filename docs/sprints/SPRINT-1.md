@@ -136,7 +136,16 @@ PR 사이에 의존이 있으면 base branch를 명시 (`gh pr create --base fea
 - [ ] `docs/resume.md`의 "다음 한 작업" → Sprint 2 진입
 - [ ] `docs/sprints/SPRINT-2.md` 활성화 (proposed → active)
 - [ ] CI workflow 3개 main에서 green
-- [ ] Odroid 배포는 본 Sprint에서 다루지 않음 — Sprint 5
+- [ ] Odroid 배포는 본 Sprint에서 다루지 않음 — Sprint 6
+
+## 8. SPEC V8 정합
+
+- 00-infrastructure.md §2 (Sentry/Loki 초기 통합 — 본 Sprint는 Sentry만, Loki는 Sprint 5)
+- 01-data.md §2.1 ~ §2.2 (`app.users`, `user_email_verifications`)
+- 02-backend.md §1 (FastAPI 스택)
+- 02-backend.md §4 (G장 회원가입 — 본 Sprint는 일반 가입+verify까지, Resend/소셜은 Sprint 2)
+- 03-frontend.md §1 (Next.js 스택)
+- 05-execution.md §3 (Sprint 1)
 
 ## 8. 관련 파일
 

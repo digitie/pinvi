@@ -58,7 +58,7 @@
 | `display_name` | `text` | nullable |
 | `avatar_url` | `text` | RustFS 또는 OAuth 공급자 URL |
 | `status` | `text` | `active` / `suspended` / `deleted` |
-| `roles` | `text[]` | 예: `['admin', 'editor']`. 기본 `[]` |
+| `roles` | `text[]` | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']` |
 | `created_at` | `timestamptz` NOT NULL DEFAULT now() | KST aware는 응용에서 변환 |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT now() | trigger |
 
@@ -134,18 +134,22 @@
 
 #### `app.trip_day_pois`
 
-POI 첨부 — feature 도메인 `feature_id` reference + 사용자 메모.
+POI 첨부 — feature 도메인 `feature_id` reference + 사용자 메모. **순서는
+LexoRank fractional indexing + COLLATE "C"** (SPEC V8 E-6 Critical).
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
 | `attachment_id` | `uuid` (PK) | |
 | `day_id` | `uuid` NOT NULL → `app.trip_days` | |
-| `position` | `int` NOT NULL | day 내 순서 (0부터) |
+| `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank. JS ASCII와 PG 정렬을 맞추기 위해 C 콜레이션 강제 |
 | `feature_id` | `text` NOT NULL | `feature.features.feature_id` 참조 (제약 없음) |
 | `feature_snapshot` | `jsonb` | denormalized 캐시 (이름/좌표/카테고리) |
+| `custom_marker_color` | `text` | P-01~P-16 (사용자 override) |
+| `custom_marker_icon` | `text` | maki id (사용자 override) |
 | `planned_arrival_at` | `timestamptz` | KST aware |
 | `planned_departure_at` | `timestamptz` | |
 | `user_note` | `text` | markdown |
+| `version` | `int` | optimistic lock — `PATCH` 시 `If-Match` 헤더 (SPEC V8 J-2) |
 | `created_at`, `updated_at` | `timestamptz` | |
 
 `feature_snapshot`은 적재 시점의 정보를 보존하는 캐시 — 라이브러리 schema가
@@ -330,9 +334,119 @@ app schema (TripMate)
 `app`은 `feature`를 컬럼 값(`feature_id`)으로만 참조한다. 외래키 없음. join은
 응용에서 처리.
 
-## 8. 향후 확장 후보 (ADR 후보)
+## 8. SPEC V8 추가 테이블 (`app` schema)
+
+SPEC V8 #4 M-6, M-14 + #0 O장에서 도입한 추가 테이블. 자세한 DDL은
+`postgres-schema.md`.
+
+### 8.1 `app.user_consents`
+
+4 분리 동의 + 철회 (SPEC V8 G-5):
+
+| 컬럼 | 비고 |
+|------|------|
+| `user_id` (FK + PK) | |
+| `consent_type` (PK) | `tos` / `privacy` / `lbs_tos` / `location_collection` / `marketing` / `demographic_use` |
+| `version` (PK) | 약관 버전 |
+| `agreed_at` | |
+| `withdrawn_at` | 철회 시. 위치 동의 철회 → 위치 기록 즉시 삭제 + 위치 기능 비활성 |
+
+### 8.2 `app.location_access_log` (위치정보법 O-3)
+
+`content_hash` chain:
+
+| 컬럼 | 비고 |
+|------|------|
+| `id` (PK, bigserial) | |
+| `user_id` | |
+| `occurred_at` | |
+| `endpoint`, `purpose` | 호출 컨텍스트 |
+| `lat`, `lng` | 호출 시 사용자 좌표 (있을 때만) |
+| `request_id` | X-Request-Id 매칭 |
+| `ip_hash` | SHA-256(IP) — 원본 IP 직접 저장 X |
+| `prev_hash`, `content_hash` | 직전 row content_hash + 현재 row 표현 → SHA-256 → chain |
+
+- 6개월 retention (Dagster job)
+- CPO 권한만 SELECT (`roles` 검사 + RBAC dependency)
+
+### 8.3 `app.email_queue` (SPEC V8 M-6 / G-6)
+
+Resend 통합:
+
+| 컬럼 | 비고 |
+|------|------|
+| `id` (uuid) | |
+| `to_email` | CITEXT |
+| `template` | `verify` / `reset` / `invite` / `system` / `share_link` 등 |
+| `payload` | jsonb — react-email props |
+| `status` | `pending` / `sent` / `delivered` / `bounced` / `complained` / `failed` |
+| `resend_id` | Resend 측 이메일 ID — Resend 대시보드 deep link |
+| `bounce_type` | `hard` / `soft` |
+| `attempts`, `last_error` | |
+
+### 8.4 `app.api_call_log` (SPEC V8 M-6)
+
+외부 API 호출 로그:
+
+| 컬럼 | 비고 |
+|------|------|
+| `provider` | `python-kma-api` 등 canonical 이름 |
+| `endpoint`, `status`, `latency_ms`, `error` | |
+| `occurred_at` | BRIN index + `(provider, occurred_at DESC)` |
+
+### 8.5 `app.feature_requests` (SPEC V8 H-6)
+
+사용자 feature 추가 요청:
+
+| 컬럼 | 비고 |
+|------|------|
+| `request_id` (uuid PK) | |
+| `requester_user_id` | |
+| `coord`, `name`, `categories` | 요청 내용 |
+| `status` | `queued` / `approved` / `rejected` |
+| `processed_at`, `processed_by` | |
+
+승인 시 라이브러리 적재 trigger (Sprint 6).
+
+### 8.6 `app.category_mappings` (SPEC V8 I-6 / M-2)
+
+카테고리 → maki 아이콘 + 16색 매핑:
+
+| 컬럼 | 비고 |
+|------|------|
+| `category_key` (PK) | 라이브러리 마스터 카테고리 |
+| `maki_icon` | |
+| `marker_color` | `P-01` ~ `P-16` |
+| `display_name_ko` | |
+| `updated_by`, `updated_at` | Admin 편집 audit |
+
+### 8.7 `app.data_integrity_violations` (SPEC V8 M-11)
+
+`/admin/integrity` 1차 소스:
+
+| 컬럼 | 비고 |
+|------|------|
+| `id` (bigserial PK) | |
+| `rule_key` | `orphan_poi`, `sort_order_duplicate`, ... |
+| `entity_kind`, `entity_id` | |
+| `details` | jsonb |
+| `detected_at`, `resolved_at` | |
+| `auto_fixable` | bool |
+
+### 8.8 `app.admin_audit_log` (보강)
+
+SPEC V8 O-6 / M-14에 따라 컬럼 추가:
+
+| 추가 컬럼 | 비고 |
+|------|------|
+| `access_reason` | 위험 액션 시 강제 입력 |
+| `target_pii_fields` | text[] — 접근한 PII 필드 목록 |
+| `prev_hash`, `content_hash` | chain (audit log chain 깨짐 → 즉시 CPO 알림) |
+
+## 9. 향후 확장 후보 (ADR 후보)
 
 - ADR-NNN: 사용자 직접 입력 POI (feature가 없는 자유 메모) 모델
 - ADR-NNN: 여행 일정 자동 생성 (Gemini integration)
 - ADR-NNN: 동행자 공유 권한 모델 상세화 (ACL/RBAC)
 - ADR-NNN: 사용자 활동 로그 (시간순 timeline view)
+- ADR-NNN: GPX 업로드 (route feature 사용자 생성)

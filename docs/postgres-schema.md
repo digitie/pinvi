@@ -12,6 +12,8 @@ versions/...`).
   로 도메인 관점의 메타만 둔다.
 - `x_extension` — PostGIS / pg_trgm / pgcrypto.
 
+SPEC V8 cross-reference: spec/v8/01-data.md §2 (TripMate가 박는 항목 매핑).
+
 ## 1. 부트스트랩
 
 ```sql
@@ -170,18 +172,22 @@ CREATE INDEX trip_days_trip_idx ON app.trip_days (trip_id, day_index);
 CREATE TABLE app.trip_day_pois (
   attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
   day_id               uuid NOT NULL REFERENCES app.trip_days(day_id) ON DELETE CASCADE,
-  position             int NOT NULL,
-  feature_id           text NOT NULL,   -- feature.features.feature_id 참조 (FK 없음)
+  sort_order           text COLLATE "C" NOT NULL,    -- SPEC V8 E-6 (Critical) — LexoRank
+  feature_id           text NOT NULL,                 -- feature.features.feature_id 참조 (FK 없음)
   feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  custom_marker_color  text,                          -- 사용자 override (P-01..P-16)
+  custom_marker_icon   text,                          -- 사용자 override (maki id)
   planned_arrival_at   timestamptz,
   planned_departure_at timestamptz,
   user_note            text,
+  version              int NOT NULL DEFAULT 1,        -- optimistic lock (SPEC V8 J-2)
   created_at           timestamptz NOT NULL DEFAULT now(),
-  updated_at           timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (day_id, position),
-  CONSTRAINT trip_day_pois_position_chk CHECK (position >= 0)
+  updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
+-- 정렬·중복 방지: ASCII 바이트 순서 강제 (en_US.utf8 정렬과 다름)
+CREATE UNIQUE INDEX trip_day_pois_day_sort_uk
+  ON app.trip_day_pois (day_id, sort_order COLLATE "C");
 CREATE INDEX trip_day_pois_feature_idx ON app.trip_day_pois (feature_id);
 
 CREATE TRIGGER trip_day_pois_touch_updated_at
