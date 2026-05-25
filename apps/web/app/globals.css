@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard 한글 폰트 (CDN — 운영은 self-host 권장) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
+:root {
+  --tm-nav-h: 56px;
+  --tm-trip-tab-h: 44px;
+  --tm-panel-w-left: 340px;
+  --tm-panel-w-right: 320px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: #ffffff;
+  color: #222222;
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', system-ui, -apple-system, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,36 @@
+{
+  "Auth": {
+    "loginTitle": "로그인",
+    "signupTitle": "회원가입",
+    "email": "이메일",
+    "password": "비밀번호",
+    "nickname": "닉네임",
+    "loginButton": "로그인",
+    "signupButton": "회원가입",
+    "verifyTitle": "이메일 인증",
+    "verifyDescription": "이메일을 확인해 주세요. 인증 링크를 클릭하면 가입이 완료됩니다.",
+    "resendButton": "인증 메일 다시 보내기",
+    "googleStart": "Google로 시작",
+    "naverStart": "네이버 로그인",
+    "kakaoStart": "카카오 로그인",
+    "errorInvalidCredentials": "이메일 또는 비밀번호가 올바르지 않습니다.",
+    "errorEmailNotVerified": "이메일 인증이 필요합니다.",
+    "errorEmailAlreadyUsed": "이미 가입된 이메일입니다.",
+    "errorRateLimited": "잠시 후 다시 시도해 주세요."
+  },
+  "Common": {
+    "loading": "불러오는 중...",
+    "cancel": "취소",
+    "confirm": "확인",
+    "save": "저장",
+    "delete": "삭제",
+    "next": "다음",
+    "previous": "이전"
+  },
+  "Trip": {
+    "myTrips": "내 여행",
+    "future": "예정된 여행",
+    "past": "지난 여행",
+    "createTrip": "새 여행 만들기"
+  }
+}

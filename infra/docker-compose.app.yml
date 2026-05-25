@@ -1,0 +1,73 @@
+# TripMate app smoke compose — API + Web + Postgres + RustFS.
+# `docs/runbooks/docker-app.md`.
+
+services:
+  app-postgres:
+    image: postgis/postgis:16-3.5-alpine
+    environment:
+      POSTGRES_USER: tripmate
+      POSTGRES_PASSWORD: tripmate_app_smoke
+      POSTGRES_DB: tripmate
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app-rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: tripmate-dev-access
+      RUSTFS_SECRET_KEY: tripmate-dev-secret-change-me
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app-rustfs-init:
+    image: minio/mc:latest
+    depends_on:
+      app-rustfs:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://app-rustfs:9000 tripmate-dev-access tripmate-dev-secret-change-me;
+      mc mb -p local/tripmate-media || true;
+      "
+
+  app-api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: tripmate-api:local
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      app-rustfs:
+        condition: service_healthy
+    environment:
+      TRIPMATE_ENVIRONMENT: smoke
+      TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_app_smoke@app-postgres:5432/tripmate
+      TRIPMATE_JWT_SECRET_KEY: tripmate-smoke-jwt-secret-32-bytes-minimum
+      TRIPMATE_RESEND_API_KEY: ""
+      TRIPMATE_RUSTFS_ENDPOINT_URL: http://app-rustfs:9000
+      TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:19000
+      TRIPMATE_RUSTFS_BUCKET: tripmate-media
+      TRIPMATE_CORS_ALLOWED_ORIGINS: '["http://127.0.0.1:13082"]'
+    ports:
+      - "${TRIPMATE_API_PORT:-18082}:8000"
+
+  app-web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_TRIPMATE_API_URL: http://127.0.0.1:${TRIPMATE_API_PORT:-18082}
+    image: tripmate-web:local
+    depends_on:
+      - app-api
+    ports:
+      - "${TRIPMATE_WEB_PORT:-13082}:3000"

@@ -1,0 +1,58 @@
+"""표준 API 에러 응답.
+
+`docs/api/common.md` §2.2.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+
+def build_error(
+    code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"error": {"code": code, "message": message}}
+    if details:
+        body["error"]["details"] = details
+    return body
+
+
+async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
+    detail = exc.detail
+    if isinstance(detail, dict) and "code" in detail and "message" in detail:
+        body = {"error": detail}
+    else:
+        body = build_error(
+            code=_default_code_for_status(exc.status_code),
+            message=str(detail),
+        )
+    return JSONResponse(status_code=exc.status_code, content=body)
+
+
+async def validation_exception_handler(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
+    details: dict[str, Any] = {"errors": exc.errors()}
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=build_error("VALIDATION_ERROR", "요청이 올바르지 않습니다.", details),
+    )
+
+
+def _default_code_for_status(http_status: int) -> str:
+    return {
+        400: "VALIDATION_ERROR",
+        401: "TOKEN_INVALID",
+        403: "PERMISSION_DENIED",
+        404: "RESOURCE_NOT_FOUND",
+        409: "VERSION_CONFLICT",
+        422: "VALIDATION_ERROR",
+        429: "RATE_LIMITED",
+        503: "SERVICE_UNAVAILABLE",
+    }.get(http_status, "INTERNAL_ERROR")
