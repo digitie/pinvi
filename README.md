@@ -1,191 +1,150 @@
-﻿# TripMate
+# TripMate
 
-TripMate는 대한민국 국내 여행 계획을 지도, 일정, 지역 데이터, Telegram 알림과 함께 관리하는 웹앱입니다.
+`TripMate`는 한국 여행 계획·기록·공유 애플리케이션이다. 한국 공공 API에서 모은
+지도/날씨/이벤트/가격/공지/경로/구역 데이터를 사용해 사용자가 여행 계획을 세우고,
+이동 중 컨텍스트(날씨/혼잡/이벤트)를 확인하고, 결과를 기록·공유하도록 돕는다.
 
-현재 저장소는 Phase 1 백엔드/DB/ETL 기준선 단계입니다. 실행 가능한 웹앱은 `apps/web`의 Next.js + Tailwind CSS 앱이며, `apps/api`에는 FastAPI 골격, SQLAlchemy 모델, Alembic migration, 주소/Juso/VWorld/유가/휴게소/날씨 ETL 기반이 있습니다. Dagster 로컬 런타임은 Docker Compose로 실행할 수 있고, 장시간 ETL 검증과 ODROID Docker 실행을 위한 기본 스크립트가 `scripts/`에 있습니다.
+> **현재 상태 (v2 설계 단계 — Sprint 1 진입 직전)**: master/main 브랜치는 v2
+> 사양으로 새로 시작했다. 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 본 단계는
+> **문서/계약/결정 전용**이며 별도 요청 전까지 코드를 작성하지 않는다. 자세히는
+> `CLAUDE.md`, `AGENTS.md`, `docs/sprints/README.md`.
 
-지도 feature 공통 DTO, provider source trace, weather/price value 정규화, debug fixture replay 기준은 하부 라이브러리 `python-krtour-map`으로 분리한다. TripMate는 해당 계약을 사용해 API 응답 조립과 Admin 검수 workflow를 담당하고, 사용자/여행계획/POI 제품 DB를 관리한다.
+## 정체성
 
-## 현재 구조
+- **GitHub 저장소**: `tripmate`
+- **백엔드 import (계획)**: `from tripmate.api import ...`, `from tripmate.etl import ...`
+- **프론트엔드 패키지 (계획)**: `apps/web` (Next.js App Router)
+- **환경변수 prefix**: `TRIPMATE_*`
+- **PostgreSQL DB 이름 (개발)**: `tripmate`
+- **Postgres schema (계획)**: `app`, `feature`, `provider_sync`, `ops`, `x_extension`
+  (`feature`/`provider_sync` 영역은 `python-krtour-map`이 소유. `app`은 TripMate
+  도메인 — 사용자/여행 계획/POI 첨부/공유 등)
 
-```text
+## 구성
+
+TripMate는 **monorepo**다. 코드 작성 단계 진입 시 다음 구조로 박는다 (Sprint 1).
+
+```
 apps/
-  web/              # Next.js App Router + Tailwind CSS 웹앱
-  api/              # FastAPI 백엔드 골격
-docs/
-  architecture.md   # 현재/목표 아키텍처 기준선
-  decisions/        # 아키텍처 결정 기록
-  execplan/         # 단계별 실행 계획
-  runbooks/         # 개발/운영 절차
-apps/api/app/dagster_etl/
-                    # Dagster job/schedule 정의
-infra/
-  docker-compose.yml # Postgres/PostGIS와 Dagster 로컬 스택
-skills/             # 프로젝트 보조 지침
+  api/      — FastAPI 백엔드 (인증, 여행 계획, 관리자, Storage, Dagster bridge)
+  web/      — Next.js 사용자 UI + Admin
+  etl/      — Dagster definitions/jobs/schedules (provider 적재 orchestration)
+packages/   — 공유 TS 패키지 (UI/마커/타입)
+infra/      — docker-compose, deployment manifests
+docs/       — 본 저장소의 결정·기록·계약
 ```
 
-향후 목표 구조:
+핵심 의존:
 
-```text
-packages/shared/    # 공용 타입, 스키마, 상수
-scripts/            # bootstrap, test, deploy, backup
+- **`python-krtour-map`** (별 저장소 `F:\dev\python-krtour-map`, PyPI/Git URL pin):
+  지도 feature 정규화·저장 함수 라이브러리. TripMate는 함수 직접 호출로 사용
+  (REST 없음 — ADR-003 mirrored from `python-krtour-map` 측).
+- **`python-*-api`** (별 저장소들): KMA, VisitKorea, OpiNet, MOIS, KREX, KHOA,
+  국가유산, 산림청 등 한국 공공 API 클라이언트.
+- **`python-kraddr-geo`**: 주소·법정동·시군구 정규화/지오코딩.
+- 인프라: PostgreSQL 16 + PostGIS 3.5 / SQLAlchemy 2 async / asyncpg / Pydantic
+  v2 / FastAPI + Uvicorn / httpx + tenacity / Alembic / Dagster / Next.js +
+  TanStack Query + zustand / RustFS (S3 호환 객체 저장소).
+
+## TripMate ↔ `python-krtour-map`
+
+```python
+# apps/api/app/etl/festival_asset.py (예시)
+from krtour.map import AsyncKrtourMapClient
+
+async with AsyncKrtourMapClient(
+    engine=tripmate_async_engine,
+    file_store=tripmate_rustfs_store,
+    kraddr_geo_client=tripmate_kraddr_client,
+) as client:
+    features = await client.features_in_bounds(bbox, kinds=["place", "event"])
 ```
 
-## 요구 사항
+`python-krtour-map`은 어떤 resource(engine, S3 client, provider client,
+geocoder)도 스스로 만들지 않고 TripMate에서 주입받는다. HTTP/REST는 사용하지
+않는다. 자세히는 `docs/krtour-map-integration.md`.
 
-- Node.js 22 계열 권장
-- npm
-- Python 3.12 이상
-- uv 권장
-- WSL2 + Docker 또는 Docker Desktop
+## 책임 / 비책임 요약
 
-명령 실행은 WSL2 Ubuntu를 최우선으로 합니다. Windows PowerShell에서는 가능한 한 `wsl.exe -e bash -lc "..."` 형태로 감싸서 실행하고, Docker, backend test, Alembic migration, Dagster 검증은 반드시 WSL2에서 실행합니다. NTFS 경로(`/mnt/f/dev/tripmate`)에서 테스트를 직접 실행하지 않고 WSL 내부 볼륨의 `~/tripmate-workspaces/tripmate` 미러에서 실행한 뒤, 명령 완료마다 변경 내용을 현재 프로젝트 디렉토리로 복사합니다. ODROID M1S는 Ubuntu 24.04 + Docker Compose plugin 환경을 기준으로 합니다.
+### 책임
 
-WSL 미러 초기화와 동기화 절차는 [로컬 개발 runbook](docs/runbooks/local-dev.md)을 따릅니다.
+- 사용자/세션/인증 (이메일·소셜·OAuth)
+- 여행 계획 도메인 (Trip, Day, POI 첨부, Notice plan, 공유)
+- Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
+- 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
+- Dagster orchestration (`python-krtour-map`의 collect/load 함수를 asset으로 호출)
+- 파일 스토리지(RustFS) 운영 API
+- 외부 통합 (Telegram, Gemini, Resend, 소셜 로그인 provider)
 
-## 로컬 실행
+### 비책임 (`python-krtour-map`이 소유)
 
-TripMate 직접 개발 표준 포트는 다음과 같습니다. `3000`과 `8000`은 이 환경의 다른 서비스가 사용할 수 있으므로 TripMate 확인 주소로 쓰지 않습니다.
+- Feature 정규화 / `feature_id` 생성 / SourceRecord 관리
+- Postgres schema `feature` / `provider_sync` 의 DDL과 raw SQL
+- Provider 원천 → DTO 변환 (KMA, VisitKorea, OpiNet, MOIS, ...)
+- Record Linkage / dedup queue
+- 지도 좌표·CRS 정책 (`coord_5179` 반경 검색 등)
 
-| 구분 | 프론트엔드 | 백엔드 API | 비고 |
-| --- | --- | --- | --- |
-| 직접 개발 | `http://localhost:3001` | `http://localhost:8001` | `npm run dev`와 `uvicorn --port 8001` 기준 |
-| 앱 Docker smoke | `http://127.0.0.1:13082` | `http://127.0.0.1:18082` | 로컬 컨테이너 검증 전용 host 포트 |
-| 배포 | 미정 | 미정 | ODROID/reverse proxy 기준 포트는 아직 결정하지 않았다 |
+자세한 책임 경계는 `docs/architecture.md`, `docs/krtour-map-integration.md`.
 
-Dagster 관리 UI는 로컬에서 `http://localhost:23000`을 사용한다. 관리자 화면의 Dagster 버튼 주소는 `NEXT_PUBLIC_TRIPMATE_DAGSTER_URL`로 바꿀 수 있다.
+## 빠른 시작 (코드 작성 단계 이후)
 
 ```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm install"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run dev"
+# WSL ext4 작업 디렉토리
+cd ~/dev/tripmate
+
+# 시스템 의존성
+sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
+
+# 백엔드 (uv 권장)
+uv venv && uv pip install -e "apps/api[dev,providers]"
+uv pip install -e "git+https://github.com/digitie/python-krtour-map@<sha>#egg=python-krtour-map"
+
+# 프론트엔드
+npm install
+npm --workspace apps/web run dev      # http://localhost:3001
+
+# 인프라
+docker compose -f infra/docker-compose.yml up -d postgres rustfs
+
+# Alembic (앱 도메인)
+uv run --package apps/api alembic upgrade head
+
+# python-krtour-map alembic은 그 저장소에서 실행 (feature schema 소유)
+
+# 테스트
+pytest apps/api/tests -q
+npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 ```
 
-브라우저에서 `http://localhost:3001`을 엽니다.
-관리자 화면은 `http://localhost:3001/admin/login`에서 접속합니다. 개발 기본 계정은 `admin@ad.min` / `admin`이며, API migration을 먼저 적용해야 합니다.
+현 단계(v2 설계)는 위 명령이 의미 있는 산출물을 만들지 않는다. 코드 작성
+요청이 들어오면 Sprint 1 PR로 위 절차를 부트스트랩한다.
 
-관리자 화면과 API를 Docker 이미지 기준으로 검증하려면 다음 명령을 사용합니다.
+## 문서 지도
 
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/docker-app-smoke-test.sh --keep-running"
-```
+진입 순서 (5~10분):
 
-성공 후 접속 주소는 `http://127.0.0.1:13082/admin/login`입니다.
+1. `CLAUDE.md` — 1쪽 진입 요약
+2. `AGENTS.md` — 지시 우선순위, DO NOT
+3. `SKILL.md` — 도메인 어휘, 자주 묻는 작업
+4. `docs/sprints/README.md` — Sprint 1~N 계획
+5. `docs/architecture.md` — 의존 방향, 책임 경계
+6. `docs/resume.md` — 다음 한 작업
+7. `docs/journal.md` 최신 3건 — 직전 컨텍스트
+8. 관련 ADR (`docs/decisions.md`)
 
-웹앱만 직접 실행하려면 다음 명령도 사용할 수 있습니다.
+상세 문서:
 
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm --workspace apps/web run dev"
-```
+- 작업·문서화 가이드: `docs/agent-guide.md`
+- 개발 환경: `docs/dev-environment.md`
+- 데이터 모델 (app 도메인): `docs/data-model.md`
+- Postgres schema: `docs/postgres-schema.md`
+- 테스트 전략: `docs/test-strategy.md`
+- `python-krtour-map` 연계: `docs/krtour-map-integration.md`
+- 의사결정 (ADR): `docs/decisions.md`
+- 작업 일지: `docs/journal.md`
+- 진척도/다음 작업: `docs/resume.md`
+- 백로그: `docs/tasks.md`
 
-## 검사
+## 라이선스
 
-웹앱:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run lint"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run typecheck"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && npm run build"
-```
-
-API 의존성 설치 후:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv sync --group dev"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run ruff format --check ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run mypy ."
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run pytest"
-```
-
-KTO TourAPI를 로컬에서 호출하려면 `apps/api/.env`에 공공데이터포털 decoding 인증키를 둡니다. 호출 코드는 `visitkorea` client를 직접 사용합니다.
-
-```bash
-TRIPMATE_KTO_SERVICE_KEY=공공데이터포털_decoding_인증키
-TRIPMATE_KTO_MOBILE_APP=TripMate
-TRIPMATE_KTO_MOBILE_OS=WEB
-```
-
-한국도로공사 OpenAPI를 로컬에서 호출하려면 `apps/api/.env`에 `python-krex-api`용 키를 둡니다. 호출 코드는 `kex_openapi.KexClient`를 직접 사용합니다.
-
-```bash
-TRIPMATE_KEX_EX_API_KEY=data.ex.co.kr_인증키
-TRIPMATE_KEX_GO_API_KEY=data.go.kr_decoding_인증키
-```
-
-기존 로컬 이름인 `TRIPMATE_EXPRESSWAY_API_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY`도 계속 읽습니다.
-
-## 로컬 DB
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres"
-```
-
-API migration:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run alembic upgrade head"
-```
-
-API 실행:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate/apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
-```
-
-이메일 인증 메일을 실제 발송하려면 Resend 설정을 추가합니다. Free 플랜 기준과 DNS/API key 준비 절차는 [Resend 이메일 연동](docs/integrations/resend.md)을 따릅니다.
-
-```bash
-TRIPMATE_RESEND_API_KEY=re_xxxxxxxxx
-TRIPMATE_RESEND_FROM_EMAIL="TripMate <no-reply@mail.example.com>"
-TRIPMATE_WEB_BASE_URL=http://localhost:3001
-```
-
-Dagster 로컬 런타임:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && docker compose -f infra/docker-compose.yml up -d postgres dagster"
-```
-
-Dagster UI는 `http://localhost:23000`에서 확인합니다.
-
-ETL 장시간 검증용 초기화와 실행:
-
-```bash
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-reset-and-start.sh --yes"
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && scripts/etl-soak-status.sh"
-```
-
-이 명령은 Docker volume을 삭제하므로 로컬/검증 DB에서만 사용합니다. 20시간보다 긴 ETL 주기는 `config/etl-datasets.soak.json`으로 임시 12시간 이내 schedule을 사용합니다.
-
-## 제품 원칙
-
-- 대한민국 국내 여행만 1차 범위로 다룹니다.
-- 비회원 사용은 지원하지 않습니다.
-- 로그인 식별자는 이메일입니다.
-- 장소 추가는 검색 결과 선택과 지도 클릭 입력을 모두 지원합니다.
-- Kakao Map을 기본 지도 표면으로 사용합니다.
-- 외부 장소 provider 원문은 장기 저장하지 않고, 내부 정규화 필드와 TTL 캐시를 분리합니다.
-- provider 응답을 공통 지도 feature로 바꾸는 계약은 `python-krtour-map`을 기준으로 하며, TripMate 전용 provider wrapper를 새로 늘리지 않습니다.
-- 날씨/유가 리포트는 외부 API 실시간 연타보다 저장된 지역 데이터와 ETL 캐시를 우선합니다.
-- 여행별 Telegram 알림 대상은 최대 3개입니다.
-
-## 관련 문서
-
-- [구현 계획](docs/execplan/korea-tripmate-implementation-plan.md)
-- [아키텍처 기준선](docs/architecture.md)
-- [python-krtour-map 통합 기준](docs/architecture/krtour-map-library.md)
-- [유가 데이터 스키마](docs/architecture/fuel-schema.md)
-- [데이터 소스 기준](docs/data-sources.md)
-- [KTO TourAPI 계약](docs/api/kto-tourapi.md)
-- [KTO TourAPI runbook](docs/runbooks/kto-tourapi.md)
-- [Telegram 연동](docs/integrations/telegram.md)
-- [Gemini 연동](docs/integrations/gemini.md)
-- [Resend 이메일 연동](docs/integrations/resend.md)
-- [RustFS 파일 스토리지 API](docs/api/storage.md)
-- [RustFS 파일 스토리지 운영 안내](docs/runbooks/file-storage.md)
-- [로컬 개발 runbook](docs/runbooks/local-dev.md)
-- [ETL 운영 안내](docs/runbooks/etl.md)
-- [관리자 화면 운영 안내](docs/runbooks/admin.md)
-- [앱 Docker 이미지와 smoke 테스트](docs/runbooks/docker-app.md)
-- [ODROID Docker 운영 안내](docs/runbooks/odroid-docker.md)
-- [초기 아키텍처 ADR](docs/decisions/20260418-initial-architecture.md)
+별도 명시 전까지 비공개(사내). `LICENSE`는 v2 코드 작성 단계 진입 시 결정.

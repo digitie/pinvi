@@ -1,1 +1,0 @@
-"""Outdoor feature ETL package."""
