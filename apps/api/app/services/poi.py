@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -118,7 +118,7 @@ async def update_poi(
 
 
 async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
-    poi.deleted_at = datetime.now(timezone.utc)
+    poi.deleted_at = datetime.now(UTC)
     await db.commit()
 
 
@@ -149,7 +149,7 @@ async def reorder_pois(
 
     try:
         await db.commit()
-    except Exception as exc:  # noqa: BLE001 — PG UNIQUE 위반 등
+    except Exception as exc:  # PG UNIQUE 위반 등
         await db.rollback()
         raise SortOrderConflictError(str(exc)) from exc
 

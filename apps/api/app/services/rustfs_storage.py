@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
 from app.schemas.storage import AttachmentPurpose, UploadUrlResponse
@@ -49,7 +49,7 @@ def build_storage_key(
     user_id: uuid.UUID,
     filename: str,
 ) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
     object_uuid = uuid.uuid4().hex
     return (
@@ -83,7 +83,7 @@ def make_upload_url(
         settings, "tripmate_rustfs_public_endpoint_url", "http://127.0.0.1:19000"
     )
     storage_key = build_storage_key(purpose=purpose, user_id=user_id, filename=filename)
-    expires = datetime.now(timezone.utc) + timedelta(
+    expires = datetime.now(UTC) + timedelta(
         seconds=getattr(settings, "tripmate_rustfs_presigned_url_expires_seconds", 900)
     )
     upload_url = f"{public_endpoint}/{bucket}/{storage_key}?X-Amz-Signature=PLACEHOLDER"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ async def record_consents(
     consents: list[ConsentItem],
 ) -> list[UserConsent]:
     """주어진 동의 항목을 추가. 동일 (user, type, version)이면 idempotent."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows: list[UserConsent] = []
     for item in consents:
         existing = await db.scalar(
@@ -80,7 +80,7 @@ async def withdraw_consent(
     rows = list(result.scalars())
     if not rows:
         raise ConsentNotFoundError(f"동의 항목이 없습니다: {consent_type}")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for row in rows:
         row.withdrawn_at = now
 

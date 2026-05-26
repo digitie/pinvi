@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import structlog
@@ -79,7 +79,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
                     request_id=uuid.UUID(request_id),
                     ip_hash=ip_hash,
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("location_audit.append_failed", error=str(exc))
 
         return response
@@ -121,7 +121,7 @@ async def _append_log(
         select(LocationAccessLog).order_by(LocationAccessLog.log_id.desc()).limit(1)
     )
     prev_hash = last.content_hash if last else GENESIS_HASH
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "user_id": str(user_id),
         "occurred_at": now.isoformat(),

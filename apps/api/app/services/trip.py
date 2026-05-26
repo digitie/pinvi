@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,8 +115,8 @@ async def invite_companion(
         user_id=user_id,
         invited_nickname=display_name,
         role=role,
-        invited_at=datetime.now(timezone.utc),
-        joined_at=datetime.now(timezone.utc) if user_id else None,
+        invited_at=datetime.now(UTC),
+        joined_at=datetime.now(UTC) if user_id else None,
     )
     db.add(companion)
     await db.commit()
@@ -157,7 +157,7 @@ async def revoke_share_link(
     if share is None:
         raise TripNotFoundError("공유 토큰을 찾을 수 없습니다.")
     if share.revoked_at is None:
-        share.revoked_at = datetime.now(timezone.utc)
+        share.revoked_at = datetime.now(UTC)
         await db.commit()
 
 
