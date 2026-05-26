@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-26 22:00 (claude)
+
+**작업**: Sprint 3 진입 — Admin RBAC + audit chain + 사용자 목록/상세 + force-verify/disable + 이메일 큐 + 감사 로그 chain 검증 + 13페이지 frontend skeleton.
+
+**Backend** (`apps/api/app/`):
+- `core/rbac.py` — `require_role()` 의존성. 미권한 → **404** (존재 자체 숨김, SPEC V8 M-4)
+- `services/admin_audit.py` — `append_admin_audit()` (prev_hash + content_hash 자동 계산, append-only trigger 호환)
+- `services/admin_users.py` — `force_verify` / `disable_user` / `list_users` / `mask_email`
+- `schemas/admin.py` — AdminUserSummary (마스킹) / AdminUserDetail (정식) / AdminActionRequest (사유 필수) / AdminAuditEntry / AdminPagedResponse
+- `api/v1/admin/users.py` — GET `/admin/users` (page/limit/status_filter), GET `/admin/users/{id}`, POST `{id}/force-verify`, POST `{id}/disable`
+- `api/v1/admin/audit.py` — GET `/admin/audit` + GET `/admin/audit/verify-chain` (cpo 권한 전용)
+- `api/v1/admin/emails.py` — GET `/admin/emails` (status_filter) + POST `{id}/resend`
+- `api/v1/__init__.py` — `admin_router` 통합
+
+**Frontend** (`apps/web/`):
+- `app/(admin)/admin/layout.tsx` — 사이드바 13개 + `/auth/me` RBAC guard (admin/operator/cpo 외 → /admin/login)
+- `app/(admin)/admin/login/page.tsx` — admin role 검증 후 router push
+- `app/(admin)/admin/page.tsx` — 대시보드 8 카드 placeholder
+- `app/(admin)/admin/users/page.tsx` — DataTable + status filter + pagination
+- `app/(admin)/admin/users/[user_id]/page.tsx` — 상세 + force-verify/disable 다이얼로그 (access_reason 필수)
+- `app/(admin)/admin/emails/page.tsx` — DataTable + status filter + 재발송 버튼
+- `app/(admin)/admin/audit/page.tsx` — DataTable + chain 검증 버튼
+- `app/(admin)/admin/{trips,features,pois,etl,api-calls,feature-requests,category-mapping,seed,reset}/page.tsx` — Placeholder (Sprint 4~6 결선)
+- `components/admin/{AdminPage,DataTable,Placeholder}.tsx` — 공통 chrome
+
+**packages**:
+- `packages/schemas/src/admin.ts` — Admin Zod 스키마 + envelope
+- `packages/api-client/src/endpoints/admin.ts` — listUsers/getUser/forceVerify/disableUser/listAudit/verifyChain/listEmails/resendEmail
+- `packages/design-tokens/{tailwind-preset.cjs,src/colors.ts}` — `error-bg` / `success-text` / `success-bg` 시맨틱 색 추가
+
+**테스트**: `tests/unit/test_admin_users.py` (mask_email), `tests/unit/test_admin_audit_hash.py` (chain 안정성/연결).
+
+**제약 유지**: GitHub CI/CD 없음 (local WSL only). main 직접 push 금지 (PR-only).
+
+---
+
 ## 2026-05-26 17:00 (claude)
 
 **작업**: Sprint 2 진입 — 도메인 API + DB + 4 분리 동의 + Resend webhook + 위치 감사 + Storage presigned.

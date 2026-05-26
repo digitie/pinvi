@@ -64,3 +64,22 @@ export type {
   UploadUrlResponse,
   AttachmentCreate,
 } from './storage';
+
+export {
+  AdminUserSummarySchema,
+  AdminUserDetailSchema,
+  AdminActionRequestSchema,
+  AdminAuditEntrySchema,
+  AdminPagedResponseSchema,
+  AdminEmailEntrySchema,
+  AdminChainVerifySchema,
+} from './admin';
+export type {
+  AdminUserSummary,
+  AdminUserDetail,
+  AdminActionRequest,
+  AdminAuditEntry,
+  AdminPagedResponse,
+  AdminEmailEntry,
+  AdminChainVerify,
+} from './admin';
