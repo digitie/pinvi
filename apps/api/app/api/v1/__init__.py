@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import auth, healthz, pois, storage, trips, users
+from app.api.v1.admin import admin_router
 from app.webhooks import resend as resend_webhook
 
 api_router = APIRouter()
@@ -13,3 +14,4 @@ api_router.include_router(trips.router)
 api_router.include_router(pois.router)
 api_router.include_router(storage.router)
 api_router.include_router(resend_webhook.router)
+api_router.include_router(admin_router)

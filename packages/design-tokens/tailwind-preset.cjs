@@ -31,6 +31,9 @@ module.exports = {
         'muted-soft': '#929292',
         // 시맨틱
         'error-text': '#c13515',
+        'error-bg': '#fdecea',
+        'success-text': '#1b873f',
+        'success-bg': '#e6f4ea',
         'legal-link': '#428bff',
         // 16색 마커
         marker: {

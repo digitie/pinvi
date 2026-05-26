@@ -32,6 +32,9 @@ export const colors = {
   // 시맨틱
   'error-text': '#c13515',
   'error-text-hover': '#b32505',
+  'error-bg': '#fdecea',
+  'success-text': '#1b873f',
+  'success-bg': '#e6f4ea',
   'legal-link': '#428bff',
 
   // 스크림

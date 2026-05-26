@@ -2,17 +2,16 @@
 
 ## 현재 상태
 
-**Sprint 2 PR 작성 중.** Sprint 1 머지 완료 — `apps/{api,web,etl}` + `packages/*`
-scaffolding 박힘. Sprint 2 본 PR은 도메인 API + DB (trips/pois COLLATE C + 4 분리
-동의 + Resend webhook + 위치 감사 + Storage presigned) 추가.
+**Sprint 3 PR 작성 중.** Sprint 2 머지 완료 (`feat/sprint-2-domain` → main).
+Sprint 3 본 PR은 Admin 콘솔: RBAC dep + admin_audit chain + 사용자 목록/상세 +
+force-verify/disable + 이메일 큐 + 감사 로그 chain 검증 + 13페이지 frontend skeleton.
 
 ## 다음 한 작업
 
-Sprint 2 PR push → 머지 대기 → Sprint 3 (Admin 콘솔 + RBAC + audit chain integration
-+ seed) 진입.
+Sprint 3 PR push → 머지 대기 → Sprint 4 (지도 + maplibre-vworld + 사용자 UI) 진입.
 
-소셜 OAuth 라우터 본격 구현은 Sprint 2 후속 또는 Sprint 3 시작 PR로 분리 (schema·
-model·migration은 본 PR에 포함).
+운영 지시 변경: **GitHub CI/CD 사용 금지** — 검증은 local WSL only.
+`.github/workflows/`는 모두 삭제됨.
 
 ## 진척도
 
