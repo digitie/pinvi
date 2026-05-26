@@ -1,0 +1,64 @@
+"""Trip Pydantic schema — `docs/api/trips.md`."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+from typing import Literal
+
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+
+class TripBase(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    region_hint: str | None = Field(default=None, max_length=120)
+    start_date: date | None = None
+    end_date: date | None = None
+    visibility: Literal["private", "unlisted", "public"] = "private"
+
+
+class TripCompanionInvite(BaseModel):
+    email: EmailStr
+    display_name: str | None = Field(default=None, max_length=80)
+    role: Literal["co_owner", "editor", "viewer"] = "editor"
+
+
+class TripCreate(TripBase):
+    companions: list[TripCompanionInvite] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_date_range(self) -> TripCreate:
+        if self.start_date is None and self.end_date is None:
+            return self
+        if self.start_date is None or self.end_date is None:
+            raise ValueError("start_date와 end_date는 동시에 채워지거나 동시에 비어야 합니다.")
+        if self.end_date < self.start_date:
+            raise ValueError("end_date는 start_date 이후여야 합니다.")
+        return self
+
+
+class TripUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    region_hint: str | None = Field(default=None, max_length=120)
+    cover_attachment_id: uuid.UUID | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    visibility: Literal["private", "unlisted", "public"] | None = None
+    status: Literal["draft", "planned", "in_progress", "completed", "archived"] | None = None
+
+
+class TripResponse(BaseModel):
+    trip_id: uuid.UUID
+    owner_user_id: uuid.UUID
+    title: str
+    description: str | None
+    region_hint: str | None
+    start_date: date | None
+    end_date: date | None
+    visibility: Literal["private", "unlisted", "public"]
+    status: Literal["draft", "planned", "in_progress", "completed", "archived"]
+    version: int
+    created_at: datetime
+    updated_at: datetime

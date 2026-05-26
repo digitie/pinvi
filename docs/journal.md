@@ -2,6 +2,55 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-26 17:00 (claude)
+
+**작업**: Sprint 2 진입 — 도메인 API + DB + 4 분리 동의 + Resend webhook + 위치 감사 + Storage presigned.
+
+**신규 Alembic** (`apps/api/alembic/versions/20260602_*`):
+- `0001_trips_and_share` — `trips` + `trip_companions` + `trip_share_links`
+- `0002_pois_collate_c` — `trip_days` + `trip_day_pois` (`sort_order TEXT COLLATE "C"`, SPEC V8 E-6 Critical)
+- `0003_audit_chain` — `location_access_log` + `admin_audit_log` (content_hash chain + append-only trigger)
+- `0004_email_queue_and_api_log` — `email_queue` + `api_call_log` + `user_oauth_identities` + `oauth_login_states`
+- `0005_notice_plans_and_attachments` — `notice_plans` + `notice_pois` + `plan_poi_attachments` (단일 테이블 4 대상)
+
+**신규 모델**: trip / trip_day / poi / companion / share_link / audit / email_queue / api_call_log / oauth_identity / notice_plan / attachment
+
+**신규 Pydantic schema**: trip / poi / consent / share_link / notice / storage / oauth.
+**신규 Zod schema** (공용): trip / poi / notice-plan / storage.
+
+**신규 services**:
+- `hash_chain` — content_hash + GENESIS_HASH
+- `lexorank` — between/before/after (POI sort_order, COLLATE "C" 일관)
+- `trip` — CRUD + 동반자 + 공유 토큰 발급/revoke + optimistic lock
+- `poi` — CRUD + reorder + sort_order conflict 처리
+- `consent` — 4 분리 동의 + demographic 부작용 (`gender`/`birth_year_month`/`residence_sigungu_code` NULL)
+- `rustfs_storage` — presigned PUT URL 생성 (실서명은 Sprint 5)
+
+**신규 미들웨어**:
+- `location_audit` — 좌표 query 자동 detect + `app.location_access_log` chain 적재
+- `api_call_logging` — httpx event_hook → `app.api_call_log`
+
+**신규 라우터**:
+- `/trips` + `/trips/{id}` (CRUD, If-Match) + `/trips/{id}/share-tokens`
+- `/trips/{id}/pois` (CRUD) + `/trips/{id}/pois/reorder` (LexoRank batch)
+- `/users/me/profile/complete` + `/users/me/consents` + withdraw
+- `/storage/upload-urls` (presigned PUT)
+- `/webhooks/resend` (Svix 서명은 Sprint 5에 실 검증)
+
+**프론트**:
+- `apps/web/lib/locationAdapter.ts` — `navigator.geolocation` LocationAdapter
+- `apps/web/app/(auth)/profile-complete/page.tsx` — 4 분리 동의 UI + (선택) demographic 항목
+
+**단위 테스트**: hash_chain (chain link 검증) / lexorank / consent schema (필수 동의 누락 / demographic 부작용) / storage keys
+
+**보류 (Sprint 2 후속 PR 또는 Sprint 3 시작 PR로 분리)**:
+- Google / Naver / Kakao OAuth start/callback 라우터 (모델·schema·migration 박혀 있음)
+- Resend Webhook Svix 서명 (Sprint 5)
+- Notice plan copy 흐름 (라우터 미작성, schema·model만)
+- 통합 테스트 (PostGIS testcontainer + Alembic + httpx ASGI) — DoD pytest sanity는 단위만
+
+**다음**: PR push + 머지 대기 → Sprint 3 (Admin 콘솔 + RBAC + audit chain integration + seed) 진입.
+
 ## 2026-05-26 13:00 (claude)
 
 **작업**: 지도 클라이언트를 내부 라이브러리 `maplibre-vworld-js`로 전환

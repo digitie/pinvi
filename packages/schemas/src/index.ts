@@ -24,3 +24,43 @@ export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user';
 
 export { HealthResponseSchema, HealthDbResponseSchema } from './health';
 export type { HealthResponse } from './health';
+
+export {
+  TripCreateSchema,
+  TripUpdateSchema,
+  TripResponseSchema,
+  TripStatusSchema,
+  TripVisibilitySchema,
+  TripCompanionInviteSchema,
+} from './trip';
+export type { TripCreate, TripResponse, TripStatus, TripVisibility } from './trip';
+
+export {
+  PoiCreateSchema,
+  PoiUpdateSchema,
+  PoiReorderRequestSchema,
+  PoiResponseSchema,
+} from './poi';
+export type { PoiCreate, PoiResponse } from './poi';
+
+export {
+  NoticePoiSchema,
+  NoticePlanResponseSchema,
+  NoticePlanCopyRequestSchema,
+  NoticePlanCopyResponseSchema,
+} from './notice-plan';
+export type { NoticePoi, NoticePlan } from './notice-plan';
+
+export {
+  AttachmentPurposeSchema,
+  UploadUrlRequestSchema,
+  UploadUrlResponseSchema,
+  AttachmentCreateSchema,
+  AttachmentRoleSchema,
+} from './storage';
+export type {
+  AttachmentPurpose,
+  UploadUrlRequest,
+  UploadUrlResponse,
+  AttachmentCreate,
+} from './storage';

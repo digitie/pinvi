@@ -25,4 +25,20 @@ class Base(DeclarativeBase):
 
 # 모델 import — Alembic autogenerate에 필요.
 # (각 모듈이 Base를 상속하면 metadata에 자동 등록됨)
-from app.models import session, user, user_consent, user_email_verification  # noqa: E402,F401
+from app.models import (  # noqa: E402,F401
+    api_call_log,
+    attachment,
+    audit,
+    companion,
+    email_queue,
+    notice_plan,
+    oauth_identity,
+    poi,
+    session,
+    share_link,
+    trip,
+    trip_day,
+    user,
+    user_consent,
+    user_email_verification,
+)
