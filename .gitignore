@@ -68,6 +68,9 @@ artifacts/
 # Agent local state
 .codex_tmp/
 
+# CodeGraph 인덱스 (ADR-017) — SQLite + FTS5, worktree마다 별개
+.codegraph/
+
 # Build outputs
 build/
 dist/

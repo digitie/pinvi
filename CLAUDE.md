@@ -6,6 +6,11 @@
 > **다른 AI 도구 호환성** (ADR-016): Codex / Antigravity 등은 `AGENTS.md`를 1차
 > 진입으로 사용한다. 본 파일과 `AGENTS.md`는 같은 결정·룰·식별자를 반영해야
 > 한다 — 한 쪽 갱신 시 다른 쪽도 동기 갱신 필수.
+>
+> **Worktree + CodeGraph** (ADR-017): Claude Code는 `geo-claude` 전용 worktree
+> (예: `F:/dev/tripmate-geo-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
+> 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> main`),
+> `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
 
 ## 1. 이 저장소가 하는 일
 
@@ -74,6 +79,9 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
    ADR-022).
 5. **WSL ext4 미러를 거치지 않고 NTFS에서 직접 테스트/Docker 실행 금지** —
    `docs/dev-environment.md`의 미러 절차 준수.
+6. **trunk** (`F:/dev/tripmate`, `~/tripmate-workspaces/tripmate`) **에 AI 도구가
+   체크아웃 / 편집 금지** — Claude는 `geo-claude` worktree에서만 작업 (ADR-017,
+   `docs/runbooks/codegraph-worktrees.md`).
 
 전체 룰은 `SKILL.md` §4, `AGENTS.md`.
 
@@ -98,6 +106,7 @@ lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 | 사용자 위치 사용 | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md` |
 | Notice plan (추천 여행) | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md` |
 | 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
+| Worktree + CodeGraph 운영 | `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
 | 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
 | 테스트 작성 | `docs/conventions/testing.md` |
 | Sprint 작업 | `docs/sprints/SPRINT-<N>.md` |

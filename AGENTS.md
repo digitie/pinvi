@@ -89,6 +89,27 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 
 ## 개발 환경 정책 (PC, WSL)
 
+### Worktree + CodeGraph (ADR-017)
+
+본 저장소는 AI 도구마다 **고정 worktree**를 둔다. trunk(`F:/dev/tripmate` 또는
+`~/tripmate-workspaces/tripmate`)는 사람이 직접 만지는 checkout이며, AI 도구는
+trunk를 절대 편집하지 않는다.
+
+| AI 도구 | worktree 이름 | 예시 경로 |
+|---------|--------------|----------|
+| Claude Code | `geo-claude` | `F:/dev/tripmate-geo-claude` |
+| OpenAI Codex (CLI / VS Code) | `geo-codex` | `F:/dev/tripmate-geo-codex` |
+| Google Antigravity 2.0 | `geo-antigravity` | `F:/dev/tripmate-geo-antigravity` |
+
+- **worktree는 영속** — 작업마다 새로 만들지 않는다.
+- **작업마다 브랜치만 새로**: `git fetch && git switch -c agent/<agent>-<task> main`.
+- **CodeGraph** (`colbymchenry/codegraph`) 인덱스는 worktree마다 1회
+  `codegraph init -i`, 이후 task 시작 시 `codegraph sync`.
+- `.codegraph/` 디렉터리는 `.gitignore` 박힘 (로컬 SQLite, 머신/worktree마다 별개).
+- 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
+
+### WSL ext4 미러
+
 PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다. NTFS 마운트에서
 직접 `git`/`pytest`/`docker`/`npm`을 실행하지 않는다 — 파일 권한, inotify,
 심볼릭 링크, 빠른 I/O 성능 모두 저하된다.
@@ -159,7 +180,8 @@ PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다.
 **main 직접 push 금지** (ADR-001 후속). 모든 변경은 feature branch + PR.
 
 브랜치 명명: `feat/<topic>` / `fix/<topic>` / `chore/<topic>` / `docs/<topic>` /
-`refactor/<topic>` / `adr/<short>` / `agent/<id>/<topic>` (다중 에이전트 병행).
+`refactor/<topic>` / `adr/<short>` / `agent/<agent>-<topic>` (ADR-017 worktree
+정책 — `agent` = `claude` / `codex` / `antigravity`).
 
 ### Sprint 4까지 PR 리뷰·수정·머지 운영
 
