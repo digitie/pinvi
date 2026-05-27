@@ -9,7 +9,8 @@
 >
 > **Worktree + CodeGraph** (ADR-017): Claude Code는 `geo-claude` 전용 worktree
 > (예: `F:/dev/tripmate-geo-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
-> 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> main`),
+> 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> origin/main`
+> — 로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용),
 > `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
 >
 > **CodeGraph Commands**
