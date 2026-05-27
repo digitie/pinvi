@@ -2,16 +2,33 @@
 
 ## 현재 상태
 
-**Sprint 3 PR 작성 중.** Sprint 2 머지 완료 (`feat/sprint-2-domain` → main).
-Sprint 3 본 PR은 Admin 콘솔: RBAC dep + admin_audit chain + 사용자 목록/상세 +
-force-verify/disable + 이메일 큐 + 감사 로그 chain 검증 + 13페이지 frontend skeleton.
+**Sprint 1~3 모두 머지 완료** (PR #9 / #10 / #11). ADR-017 (codegraph + worktree)
+도 머지 (PR #12). 본 PR (Sprint 4~6 plan 정밀화 + ADR-018~023 + 신규 architecture
+/ runbook 문서)이 다음.
 
 ## 다음 한 작업
 
-Sprint 3 PR push → 머지 대기 → Sprint 4 (지도 + maplibre-vworld + 사용자 UI) 진입.
+본 PR 머지 → **Sprint 4 진입 PR 시작** (`agent/claude-sprint-4-map` 브랜치):
 
-운영 지시 변경: **GitHub CI/CD 사용 금지** — 검증은 local WSL only.
-`.github/workflows/`는 모두 삭제됨.
+1. **GitHub Actions workflow 5개 복원** (ADR-021) — api.yml / web.yml / etl.yml
+   / codex-pr-review.yml / codex-pr-monitor.yml
+2. **`apps/api/app/etl_bridge/krtour_map.py`** + features API 활성화
+3. **지도 UI 본격 구현** — `apps/web/components/map/*` + `apps/web/lib/vworldMap.ts`
+4. **`maplibre-vworld-js` 라이브러리 PR** (§5.1) — 사용 중 부족 기능 발견 시
+   라이브러리 저장소에 PR
+5. **POI D&D + 16색 팔레트 + 우클릭 메뉴**
+6. **Sprint 4 DoD + 종료 체크리스트 통과** → `v0.1.0` git tag
+
+자세히는 `docs/sprints/SPRINT-4.md`.
+
+## 릴리즈 로드맵
+
+| 버전 | Sprint | ETA | 핵심 |
+|------|--------|-----|------|
+| `v0.1.0` | Sprint 4 | 다음 | 지도 + maplibre-vworld finalize + CI/CD 재활성 |
+| `v0.2.0` | Sprint 5 | +1 | 실시간 + ETL + Grafana embed + Backup 1차 |
+| `v1.0.0` | Sprint 6 | +2 | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
+| `v1.1.0+` | post-Sprint 6 | 후속 | PWA / 푸시 / tripmate-ai-companion (별 repo) |
 
 ## 진척도
 

@@ -1,8 +1,11 @@
-# SPRINT-4 — 지도 + 사용자 UI
+# SPRINT-4 — 지도 + 사용자 UI + v0.1.0 릴리즈
 
 - **상태**: proposed
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` 라이브러리 read 활성화
+  + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
+- **릴리즈**: `v0.1.0` (Sprint 4 종료 시 tag). 사용자 대면 지도/여행 흐름 첫
+  사용 가능한 상태. 자세히는 `docs/release-plan.md` (Sprint README 참고).
 - **DoD**:
   - 지도 어댑터 (`maplibre-vworld-js`) 통합 — VWorld + MapLibre GL JS (ADR-015)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)
@@ -13,6 +16,13 @@
   - `python-krtour-map` `AsyncKrtourMapClient` lifespan 통합 — `GET
     /features/in-bounds`가 라이브러리 호출
   - `apps/api/app/etl_bridge/krtour_map.py` DI helper 활성화
+  - **GitHub Actions CI/CD 재활성화** (ADR-021) — Sprint 1~3 동안 비활성이었음.
+    api/web/etl workflow + PR 자동 리뷰 + lint/typecheck/test 게이트 복원.
+  - **`maplibre-vworld-js` 공통 기능 PR 머지 완료** —
+    `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"
+    모두 라이브러리에 머지된 후에만 v0.1.0 tag. TripMate 전용 항목은 본 저장소에
+    구현.
+  - `v0.1.0` git tag + GitHub Release notes.
 
 ## 산출물
 
@@ -81,5 +91,79 @@
 - [ ] DoD 모두 통과
 - [ ] 사용자가 PC와 모바일에서 가입 → 여행 생성 → POI 추가 → 지도 확인 가능
 - [ ] `python-krtour-map` 통합 e2e 통과
+- [ ] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5)
+- [ ] **GitHub Actions CI/CD 모든 workflow green** (ADR-021)
 - [ ] `docs/journal.md` Sprint 4 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 5
+- [ ] **`v0.1.0` git tag 생성 + GitHub Release notes 작성** (§6)
+
+## 5. `maplibre-vworld-js` 라이브러리 PR / TripMate 전용 분류
+
+본 Sprint의 v0.1.0 게이트는 라이브러리 ↔ TripMate 책임 분리에 달려 있다.
+
+### 5.1 라이브러리 PR 항목 (공통 기능, `maplibre-vworld-js`에 박는다)
+
+`docs/integrations/maplibre-vworld.md` §6.1~§6.9에 카탈로그. v0.1.0 전까지
+라이브러리에 PR 후 머지 완료:
+
+- viewport 이벤트 emitter (§6.1)
+- 사용자 위치 marker primitive (§6.2)
+- 우클릭 메뉴 hook (§6.3)
+- Place / Price / Weather marker generic props 확장 (§6.4)
+- Popup / Tooltip primitive (§6.5)
+- 카메라 / 애니메이션 선언형 API (§6.6)
+- 거리 측정 helper (§6.7)
+- 좌표 validation (§6.8)
+- SSR / hydration 안정화 (§6.9)
+
+**판정 기준**: "어떤 지도 앱에서도 쓸 수 있는 일반 기능"이면 라이브러리. TripMate
+도메인 (16색 팔레트 매핑 / POI dnd 비즈니스 룰 / Notice plan copy) 이면 TripMate.
+
+### 5.2 TripMate 전용 (라이브러리에 박지 않는다)
+
+- 16색 팔레트 → 카테고리 매핑 (`apps/web/lib/markerPalette.ts` + `app.category_mappings`)
+- POI D&D 비즈니스 룰 (LexoRank reorder, optimistic lock)
+- Notice plan copy 다이얼로그
+- Trip 대시보드 UI
+- 사용자 동의 확인 후 위치 권한 요청 흐름 (`useUserLocation` + 4 분리 동의)
+- `feature_link_broken_at` 처리 (라이브러리 위임된 feature가 사라졌을 때)
+
+### 5.3 책임 경계 점검 절차
+
+본 Sprint 중간 (50% 시점)에 사용자 + AI agent가 함께 카탈로그를 훑고
+재분류 — "이건 사실 공통 기능 아닌가?" 항목은 5.2에서 5.1로 이동 후 라이브러리
+PR 생성.
+
+## 6. v0.1.0 릴리즈 절차
+
+1. Sprint 4 DoD + 종료 체크리스트 모두 통과
+2. `maplibre-vworld-js` 신규 버전 npm 또는 git tag 발행 (라이브러리 측 PR 머지 후)
+3. TripMate `package.json` `maplibre-vworld-js` 버전 pin 갱신
+4. `pnpm install` / `npm install` + lockfile 갱신 commit
+5. `CHANGELOG.md` 작성 — 사용자 대면 기능 위주
+6. `git tag -a v0.1.0 -m "v0.1.0 — 지도 + 여행 + Admin 기본기능"`
+7. `git push origin v0.1.0`
+8. GitHub Releases 생성 — CHANGELOG 본문 첨부
+9. `docs/journal.md`에 v0.1.0 출시 엔트리
+10. `docs/resume.md` "현재 상태" → "v0.1.0 출시 완료. Sprint 5 진입 대기"
+
+## 7. GitHub Actions CI/CD 재활성화 (ADR-021)
+
+Sprint 1~3 동안 사용자 지시로 비활성이었음 (PR #10 직전 변경). 본 Sprint 시작과
+함께 부활.
+
+### 7.1 복원 대상 workflow
+
+`.github/workflows/` 신규 / 복원:
+
+- `api.yml` — `apps/api` ruff + mypy --strict + pytest -q
+- `web.yml` — `apps/web` lint + typecheck + 단위 테스트
+- `etl.yml` — `apps/etl` ruff + mypy + dagster definitions validation (Sprint 5에 정식 활성)
+- `codex-pr-review.yml` — PR 자동 리뷰 트리거 (`docs/runbooks/pr-review-sprint4.md`)
+- `codex-pr-monitor.yml` — 5분 주기 PR 감시
+
+### 7.2 운영 룰
+
+- PR이 열리면 위 workflow 모두 green이어야 머지 가능 (branch protection)
+- workflow 실패는 머지 차단 — fix 후 재시도. `--no-verify` / hook 우회 금지
+  (`AGENTS.md` Git Safety Protocol)

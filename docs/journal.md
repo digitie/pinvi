@@ -2,6 +2,53 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-27 13:30 (claude)
+
+**작업**: Sprint 4~6 plan 정밀화 + 릴리즈 마일스톤 (v0.1.0 / v0.2.0 / v1.0.0)
++ ADR-018~023 6건 박음. AI agent가 본 문서들만 보고 자율 진행 가능하도록 상세화.
+
+**컨텍스트**: 사용자 8개 지시 일괄 반영:
+
+1. 외부 인터페이스 MCP 서버 — 마지막 Sprint (Sprint 6, v1.0)에 포함 (ADR-019)
+2. 지도 = `maplibre-vworld-js` — 공통 기능 라이브러리 PR / TripMate 전용 분리 명시,
+   v0.1.0 게이트 (Sprint 4)
+3. GitHub Actions CI/CD 재활성 — Sprint 4 진입 시 (ADR-021, 이전 비활성 결정 뒤집기)
+4. T100~T106, T108 진행, T107 보류 — Gemini 별 repo로 분리 (ADR-020)
+5. T108 하드웨어 확장 — N150 16GB / NVMe 1TB / Ubuntu 26.04 + Odroid 병행 (ADR-023)
+6. 한국 전용 geofencing — Cloudflare WAF + nginx geo + FastAPI middleware 3중
+   안전망 (ADR-018)
+7. Backup/Restore + UI — 핫스왑 패턴 (ADR-022)
+8. Admin Grafana iframe embed — `/admin/grafana` (Sprint 5)
+
+**신규 / 갱신 파일**:
+
+- `docs/decisions.md` — ADR-018 ~ ADR-023 6건 박음
+- `docs/sprints/README.md` — 릴리즈 마일스톤 표 + Sprint 1~3 머지 표시
+- `docs/sprints/SPRINT-4.md` — v0.1.0 closure + CI/CD 재활성 + §5 라이브러리
+  PR / TripMate 전용 분류 + §6 v0.1.0 절차 + §7 workflow 복원
+- `docs/sprints/SPRINT-5.md` — Grafana embed + Backup/Restore 1차 + v0.2.0 tag
+- `docs/sprints/SPRINT-6.md` — MCP 외부 인터페이스 + Backup UI 핫스왑 + T108
+  Odroid+N150 + Korean geofencing + T-107 defer + E2E 9 시나리오 (기존 6 + 3
+  신규) + v1.0.0 tag
+- `docs/tasks.md` — T-100~T-106 상태 갱신 + T-107 deferred + T-108 확장 +
+  신규 T-109~T-114 backlog
+- `docs/architecture/mcp-server.md` 신규 — ADR-019 1차 reference
+- `docs/architecture/korea-only-policy.md` 신규 — ADR-018 1차 reference
+- `docs/architecture/backup-restore.md` 신규 — ADR-022 1차 reference
+- `docs/runbooks/mcp-server.md` 신규 — 토큰 발급 / 운영 / 트러블슈팅
+- `docs/runbooks/korea-only.md` 신규 — Cloudflare WAF + nginx geo 설정 +
+  GeoIP 갱신
+- `docs/runbooks/backup-restore.md` 신규 — backup / restore / 핫스왑 절차
+- `docs/runbooks/grafana-admin-embed.md` 신규 — Grafana iframe + CSP
+- `docs/runbooks/README.md` — 새 runbook 5개 인덱스 갱신
+- `docs/integrations/maplibre-vworld.md` — §6에 책임 분류 (라이브러리 PR / TripMate
+  전용 / 분류 변경 절차) 추가
+- `CLAUDE.md` — 현 단계 갱신 + §7 인덱스에 4개 신규 문서 추가
+- `AGENTS.md` — 릴리즈 로드맵 표 신설
+
+**다음**: PR 생성. 머지 후 사용자 결정 — Sprint 4 진입 PR 시작 (지도 + CI/CD
+복원).
+
 ## 2026-05-26 23:30 (claude)
 
 **작업**: ADR-017 박음 — CodeGraph 인덱스 + agent별 고정 worktree 운영. 별 PR로

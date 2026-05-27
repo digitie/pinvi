@@ -303,6 +303,18 @@ export function renderPoiMarker(poi: Poi) {
 
 ## 6. 라이브러리 측 보강 필요 항목 (TripMate가 요청할 PR)
 
+> **카탈로그는 라이브러리 저장소가 source of truth**: `maplibre-vworld-js` 저장소의
+> [`docs/consumer-feature-catalog.md`](https://github.com/digitie/maplibre-vworld-js/blob/main/docs/consumer-feature-catalog.md)
+> 가 §1 (라이브러리 PR 대상 10항목) + §2 (소비자 전용 - 라이브러리 거부 항목)을
+> 박는다. 본 §6 / §6.1~§6.11은 TripMate가 실제 사용하며 마주친 부족 기능의
+> snapshot 메모로만 유지. 분류 / 상태의 단일 진실은 라이브러리 doc.
+>
+> **v0.1.0 게이트** (Sprint 4 종료 시): 라이브러리 카탈로그 §1의 "PR 필요" 항목이
+> 모두 머지된 후에만 v0.1.0 tag (`docs/sprints/SPRINT-4.md` §5).
+>
+> **TripMate 전용 항목**: 라이브러리 카탈로그 §2 참고. 본 저장소가 직접 구현
+> (`apps/web/lib/markerPalette.ts` 등). 라이브러리에 박지 않는다.
+
 본 라이브러리에 다음 기능이 **부족할 가능성** — 사용 중 발견되면
 `maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출 (ADR-005 mirror: TripMate에
 wrapper 만들지 않고 라이브러리에 보강).

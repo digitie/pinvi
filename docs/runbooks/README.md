@@ -13,12 +13,15 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 | [admin.md](./admin.md) | Admin 콘솔 운영 (RBAC / seed / 시나리오) | 3 |
 | [file-storage.md](./file-storage.md) | RustFS 운영 + python-krtour-map 공유 | 2 |
 | [odroid-docker.md](./odroid-docker.md) | Odroid M1S 배포 + ARM64 빌드 | 6 |
-| [backup-restore.md](./backup-restore.md) | pg_dump + WAL + RustFS snapshot | 6 |
-| [deploy.md](./deploy.md) | 배포 절차 + rollback | 6 |
+| [backup-restore.md](./backup-restore.md) | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6 |
+| [deploy.md](./deploy.md) | 배포 절차 + rollback (Odroid + N150, ADR-023) | 6 |
 | [observability.md](./observability.md) | Sentry + Loki + Grafana 운영 | 5 |
 | [security-incident.md](./security-incident.md) | 인시던트 대응 + PIPA 통지 | 6 |
 | [codegraph-worktrees.md](./codegraph-worktrees.md) | CodeGraph + agent별 고정 worktree (ADR-017) | 0 (상시) |
 | [pr-review-sprint4.md](./pr-review-sprint4.md) | Sprint 4까지 PR 리뷰·머지 운영 | 1~4 |
+| [mcp-server.md](./mcp-server.md) | TripMate MCP 외부 인터페이스 운영 (ADR-019) | 6 |
+| [korea-only.md](./korea-only.md) | 한국 전용 geofencing 3중 안전망 (ADR-018) | 6 |
+| [grafana-admin-embed.md](./grafana-admin-embed.md) | Admin Grafana iframe embed | 5 |
 
 ## 2. 공통 정책
 
