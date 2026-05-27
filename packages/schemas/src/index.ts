@@ -83,3 +83,29 @@ export type {
   AdminEmailEntry,
   AdminChainVerify,
 } from './admin';
+
+export {
+  FeatureKindSchema,
+  BBoxSchema,
+  MarkerColorSchema,
+  FeatureSummarySchema,
+  FeatureClusterSchema,
+  FeaturesInBoundsResponseSchema,
+  FeatureDetailSchema,
+  WeatherTimepointSchema,
+  FeatureWeatherCardSchema,
+  FeatureRequestCreateSchema,
+  FeatureRequestResponseSchema,
+} from './feature';
+export type {
+  FeatureKind,
+  BBox,
+  FeatureSummary,
+  FeatureCluster,
+  FeaturesInBoundsResponse,
+  FeatureDetail,
+  WeatherTimepoint,
+  FeatureWeatherCard,
+  FeatureRequestCreate,
+  FeatureRequestResponse,
+} from './feature';
