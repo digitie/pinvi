@@ -126,7 +126,9 @@ async def krtour_map_lifespan(app: FastAPI) -> AsyncIterator[None]:
     client: KrtourMapClient | None = None
     try:
         # NOTE: 라이브러리 Sprint 2가 채울 진입점. ready 전에는 ImportError.
-        from krtour.map.client import AsyncKrtourMapClient  # type: ignore[attr-defined]
+        from krtour.map.client import (  # type: ignore[import-not-found,attr-defined,unused-ignore]
+            AsyncKrtourMapClient,
+        )
     except ImportError:
         logger.warning(
             "python-krtour-map client not available — features API will return 503. "
