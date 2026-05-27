@@ -560,7 +560,9 @@
     - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/tripmate-geo-<agent>`,
       WSL `~/tripmate-workspaces/geo-<agent>`).
   - **작업 단위는 worktree가 아니라 branch**:
-    - 새 작업 시작 시 같은 worktree 안에서 `git fetch && git switch -c agent/<agent>-<task> main`.
+    - 새 작업 시작 시 같은 worktree 안에서 `git fetch && git switch -c agent/<agent>-<task> origin/main`.
+      (로컬 `main` ref는 trunk가 점유 — worktree에서는 `origin/main`을 직접 기준 ref로 쓴다.
+      자세한 사유는 `docs/runbooks/codegraph-worktrees.md` §3.3.)
     - 즉 worktree는 영속, 브랜치만 task마다 새로.
   - **CodeGraph**:
     - worktree마다 **1회** `codegraph init -i` (interactive — `npx

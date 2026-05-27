@@ -102,7 +102,9 @@ trunk를 절대 편집하지 않는다.
 | Google Antigravity 2.0 | `geo-antigravity` | `F:/dev/tripmate-geo-antigravity` |
 
 - **worktree는 영속** — 작업마다 새로 만들지 않는다.
-- **작업마다 브랜치만 새로**: `git fetch && git switch -c agent/<agent>-<task> main`.
+- **작업마다 브랜치만 새로**: `git fetch && git switch -c agent/<agent>-<task> origin/main`
+  (로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용 —
+  `docs/runbooks/codegraph-worktrees.md` §3.3).
 - **CodeGraph** (`colbymchenry/codegraph`) 인덱스는 worktree마다 1회
   `codegraph init -i`, 이후 task 시작 시 `codegraph sync`.
 - `.codegraph/` 디렉터리는 `.gitignore` 박힘 (로컬 SQLite, 머신/worktree마다 별개).
