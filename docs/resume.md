@@ -2,22 +2,38 @@
 
 ## 현재 상태
 
-**Sprint 1~3 모두 머지 완료** (PR #9 / #10 / #11). ADR-017 (codegraph + worktree)
-도 머지 (PR #12). 본 PR (Sprint 4~6 plan 정밀화 + ADR-018~023 + 신규 architecture
-/ runbook 문서)이 다음.
+**Sprint 4 진입 PR-A 작성 중**. Sprint 1~3 머지 완료. ADR-017 (codegraph) +
+PR #14 (Sprint 4~6 plan) + PR #25 (라이브러리 consumer catalog) 모두 머지.
+본 PR-A는 GitHub Actions workflow 5개 복원 (ADR-021) — Sprint 4 본격 코드 PR의
+전제 조건.
 
 ## 다음 한 작업
 
-본 PR 머지 → **Sprint 4 진입 PR 시작** (`agent/claude-sprint-4-map` 브랜치):
+본 PR-A 머지 → 사용자가 GitHub UI에서:
 
-1. **GitHub Actions workflow 5개 복원** (ADR-021) — api.yml / web.yml / etl.yml
-   / codex-pr-review.yml / codex-pr-monitor.yml
-2. **`apps/api/app/etl_bridge/krtour_map.py`** + features API 활성화
-3. **지도 UI 본격 구현** — `apps/web/components/map/*` + `apps/web/lib/vworldMap.ts`
-4. **`maplibre-vworld-js` 라이브러리 PR** (§5.1) — 사용 중 부족 기능 발견 시
-   라이브러리 저장소에 PR
-5. **POI D&D + 16색 팔레트 + 우클릭 메뉴**
-6. **Sprint 4 DoD + 종료 체크리스트 통과** → `v0.1.0` git tag
+1. `OPENAI_API_KEY` secret 등록 (`docs/runbooks/secrets.md`)
+2. branch protection 활성 (`.github/workflows/README.md` §branch protection)
+
+→ **Sprint 4 PR-B (백엔드)** 시작:
+
+1. `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
+2. `apps/api/app/api/v1/features.py` — `GET /features/in-bounds`, `{id}`,
+   `{id}/weather`, `/search`, `/nearby`, `POST /features/requests`
+3. `apps/api/app/services/cluster_query.py` — zoom별 `bjd_lookup` /
+   `ST_ClusterDBSCAN`
+4. `apps/api/app/services/trip_view_builder.py` — `app` ↔ `feature` join
+
+이후 **PR-C (프론트엔드)**:
+
+- `apps/web/components/map/*` (MapView, ViewportFeatureLayer, ClusterLayer, ...)
+- `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
+- Trip 대시보드 + notice plan UI
+
+이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)**:
+
+- `maplibre-vworld-js` 라이브러리 PR 항목 머지 sync
+- E2E 시나리오 통과
+- `v0.1.0` git tag + GitHub Release notes
 
 자세히는 `docs/sprints/SPRINT-4.md`.
 

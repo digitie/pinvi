@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-27 15:00 (claude)
+
+**작업**: Sprint 4 진입 PR-A — GitHub Actions workflow 5개 복원 (ADR-021).
+Sprint 1~3 동안 비활성이었던 CI/CD 부활.
+
+**컨텍스트**: PR #14 (Sprint 4~6 plan)에서 ADR-021로 결정 박힘. 본 PR이 실제
+workflow YAML을 복원하는 첫 단계. Sprint 4 본격 코드 구현 (features API + 지도
+UI) 은 후속 PR.
+
+**복원 / 신규**:
+
+- `.github/workflows/api.yml` 복원 — ruff + format check + mypy --strict +
+  pytest + alembic upgrade (PostGIS service container)
+- `.github/workflows/web.yml` 복원 — npm ci + lint + typecheck + build
+- `.github/workflows/etl.yml` 복원 — ruff + pytest (placeholder, Sprint 5 본격)
+- `.github/workflows/codex-pr-review.yml` 복원 — PR open/ready_for_review 자동
+  Codex 리뷰 + 코멘트 (`docs/runbooks/pr-review-sprint4.md`)
+- `.github/workflows/codex-pr-monitor.yml` 복원 — 5분 cron으로 review 마커
+  없는 PR 재리뷰
+- `.github/workflows/README.md` 신규 — workflow 인덱스 + branch protection
+  설정 안내
+- `docs/runbooks/secrets.md` 신규 — GitHub Actions secret 카탈로그
+  (`OPENAI_API_KEY` 등)
+
+**복원 source**: `git show dd11f04~1:.github/workflows/<file>` — Sprint 1 머지
+직전 (커밋 `dd11f04` "chore: remove GitHub Actions workflows") 의 직전 상태.
+
+**다음**: PR 머지 → 사용자가 GitHub UI에서 (1) `OPENAI_API_KEY` secret 등록 +
+(2) branch protection 활성 → Sprint 4 본격 코드 PR (PR-B 백엔드 / PR-C 프론트엔드).
+
+
+
 ## 2026-05-27 13:30 (claude)
 
 **작업**: Sprint 4~6 plan 정밀화 + 릴리즈 마일스톤 (v0.1.0 / v0.2.0 / v1.0.0)
