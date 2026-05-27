@@ -2,6 +2,48 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-27 16:00 (claude)
+
+**작업**: Sprint 4 진입 PR-B — 백엔드 features API + lifespan + cluster_query +
+trip_view_builder.
+
+**컨텍스트**: PR-A (#15) 머지 후 후속. `python-krtour-map` 라이브러리 client는
+아직 Sprint 2 라이브러리측 placeholder (실 구현 없음) — TripMate는 Protocol 정의 +
+lazy import 패턴으로 인터페이스 박음. 실 client 주입은 라이브러리 ready 시 후속 PR-B2.
+
+**신규 / 갱신**:
+
+- `apps/api/app/etl_bridge/__init__.py` 신규 디렉토리
+- `apps/api/app/etl_bridge/krtour_map.py` 신규 — `KrtourMapClient` Protocol (8 메서드)
+  + `krtour_map_lifespan` FastAPI lifespan (lazy import, 라이브러리 미주입 시 503)
+  + `KrtourMapClientDep` 의존성 alias
+- `apps/api/app/schemas/feature.py` 신규 — Coord / BBox / FeatureSummary /
+  FeatureCluster / FeaturesInBoundsResponse / FeatureDetail / WeatherTimepoint /
+  FeatureWeatherCard / FeatureRequestCreate / FeatureRequestResponse
+- `apps/api/app/api/v1/features.py` 신규 — 6 endpoint (in-bounds / nearby /
+  search / get / weather / POST requests)
+- `apps/api/app/services/cluster_query.py` 신규 — zoom → mode (sido / sigungu /
+  dbscan / individual) + 각 모드 PostGIS raw SQL. TripDayPoi `attachment_id` PK +
+  `(trip_id, day_index)` FK 정합
+- `apps/api/app/services/trip_view_builder.py` 신규 — `app.trips ↔ feature.feature`
+  batch join (N+1 회피) + `feature_link_broken_at` 처리
+- `apps/api/app/main.py` — lifespan 합성 (기존 + krtour_map_lifespan)
+- `apps/api/app/api/v1/__init__.py` — features router 등록
+- `packages/schemas/src/feature.ts` 신규 — Zod 11개 schema, 한국 범위 검증 (ADR-018)
+- `packages/api-client/src/endpoints/feature.ts` 신규 — 6 endpoint client
+- 테스트: `tests/unit/test_feature_schemas.py` (Pydantic validation) +
+  `tests/unit/test_cluster_query.py` (zoom → mode 매트릭스)
+
+**제약 / 책임 분리**:
+- TripMate는 wrapper 만들지 않음 (ADR-005) — Protocol은 type contract라 OK
+- 라이브러리 client는 lifespan에서 lazy import — placeholder 상태에서는
+  ImportError → `None` 으로 두고 503 fallback
+- 사용자 데이터 (trip / poi) join은 TripMate 책임, feature 데이터는 라이브러리
+  batch 호출
+
+**다음**: 본 PR 머지 → Sprint 4 PR-C (프론트엔드 — apps/web/components/map/* +
+지도 lib) → PR-D (라이브러리 PR sync + E2E + v0.1.0 tag).
+
 ## 2026-05-27 15:00 (claude)
 
 **작업**: Sprint 4 진입 PR-A — GitHub Actions workflow 5개 복원 (ADR-021).

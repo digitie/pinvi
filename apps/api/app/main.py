@@ -17,6 +17,7 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging, get_logger
+from app.etl_bridge.krtour_map import krtour_map_lifespan
 from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
@@ -30,7 +31,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         version=__version__,
         environment=settings.tripmate_environment,
     )
-    yield
+    # python-krtour-map client lifespan (ADR-002) — 라이브러리 ready 전이면 client=None
+    async with krtour_map_lifespan(app):
+        yield
     log.info("tripmate.api.stop")
 
 
