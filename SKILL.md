@@ -186,6 +186,10 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
     직접 import하지 않는다.
 20. **`apps/web`에서 외부 API 키 직접 호출 금지** — 모든 외부 호출은 백엔드
     경유. 클라이언트는 TripMate API만 호출.
+21. **컴포넌트 / 함수 / 서비스를 영향도 평가 없이 수정 금지** (ADR-017) — 수정
+    전 `codegraph_explore`로 관련 심볼 source + 호출 관계를 한 번에 본다. 보조:
+    `codegraph_impact` (반경) / `codegraph_callers` (호출자) / `codegraph_trace`
+    (경로). grep / Read fan-out으로 같은 일을 재현하지 않는다.
 
 전체 룰은 추가될 수 있다. 작업 중 발견하면 ADR과 함께 본 §4에 추가.
 
@@ -204,6 +208,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | 새 frontend 화면 추가 | `packages/schemas/`에 Zod → `packages/api-client/`에 endpoint → `apps/web/app/<route>/page.tsx` (shadcn/ui + Airbnb 톤 — `docs/architecture/frontend.md`) |
 | 위치 정보 사용처 추가 | `packages/hooks/src/useUserLocation.ts` 활용 + 동의 확인 + `app.location_access_log` 자동 적재 (`docs/architecture/user-location.md`) |
 | 새 notice plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. **notice plan ≠ notice feature** |
+| 기존 함수 / 컴포넌트 수정 (영향도 평가) | **`codegraph_explore`** 1차 → 필요 시 `codegraph_impact` (반경) / `codegraph_callers` (호출자). 답이 인덱스에서 나오면 Read 생략 (ADR-017) |
+| CodeGraph 인덱스가 stale로 의심 | `codegraph status` → `codegraph sync` → 안 풀리면 `codegraph index --force` |
 
 ## 6. 도메인 어휘
 

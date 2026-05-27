@@ -11,6 +11,16 @@
 > (예: `F:/dev/tripmate-geo-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
 > 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> main`),
 > `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
+>
+> **CodeGraph Commands**
+> - 인덱싱 초기화: `codegraph init -i` (worktree마다 1회)
+> - 동기화 상태 확인: `codegraph status`
+> - 새 task 시작 시: `codegraph sync`
+>
+> **Code Style & Rules** — 컴포넌트 / 함수 / 서비스를 수정하기 전 반드시 CodeGraph
+> 의 `codegraph_explore` 도구로 영향도를 먼저 평가한다. grep / Read fan-out 대신
+> 한 번의 MCP 호출로 관련 심볼 source + 호출 관계를 본다. 보조: `codegraph_impact`
+> (반경) / `codegraph_callers` (호출자) / `codegraph_trace` (경로).
 
 ## 1. 이 저장소가 하는 일
 

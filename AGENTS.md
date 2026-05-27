@@ -108,6 +108,32 @@ trunk를 절대 편집하지 않는다.
 - `.codegraph/` 디렉터리는 `.gitignore` 박힘 (로컬 SQLite, 머신/worktree마다 별개).
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
+#### CodeGraph Commands
+
+| 명령 | 용도 | 주기 |
+|------|------|------|
+| `codegraph init -i` | 인덱싱 초기화 (interactive) | worktree마다 1회 |
+| `codegraph sync` | 변경 incremental 반영 | 새 task 시작 시 |
+| `codegraph status` | 동기화 상태 확인 (last_sync, count) | 의심될 때 |
+| `codegraph query <name>` | 심볼 빠른 lookup | 수시 |
+
+#### Code Style & Rules — 영향도 먼저, 수정은 나중에
+
+**컴포넌트 / 함수 / 서비스를 수정하기 전 반드시 CodeGraph의 `codegraph_explore`
+도구로 영향도를 먼저 평가**한다. grep / Read fan-out 대신 한 번의 MCP 호출로
+관련 심볼 source + 호출 관계를 가져온다.
+
+| 의도 | 1차 도구 |
+|------|---------|
+| 컴포넌트를 만지기 전 주변 파악 | `codegraph_explore` |
+| 이 함수 바꾸면 무엇이 깨지나 | `codegraph_impact` |
+| X가 Y에 어떻게 도달하나 | `codegraph_trace` |
+| 단일 심볼 정의 / 호출자 | `codegraph_context` |
+| 심볼 이름 lookup | `codegraph_search` |
+
+답이 인덱스에서 나오면 파일을 다시 Read 하지 않는다 (반환된 소스가 권위).
+세부 표·트러블슈팅은 `docs/runbooks/codegraph-worktrees.md` §1.6.
+
 ### WSL ext4 미러
 
 PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다. NTFS 마운트에서

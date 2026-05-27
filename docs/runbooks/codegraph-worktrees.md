@@ -153,6 +153,44 @@ codegraph query AdminUserSummary --limit 5
 
 문제 없으면 setup 끝.
 
+## 1.6 명령 치트시트 + 작업 룰
+
+| 명령 | 용도 | 주기 |
+|------|------|------|
+| `codegraph init -i` | **인덱싱 초기화** (interactive 진행률) | worktree마다 1회 |
+| `codegraph sync` | 변경 incremental 반영 | 새 task 시작 시 / 큰 git switch 후 |
+| `codegraph status` | **동기화 상태 확인** (last_sync, node/edge count) | 의심될 때 |
+| `codegraph query <name>` | 심볼 이름으로 빠른 lookup | 수시 |
+| `codegraph index --force` | 전체 재빌드 (최후 수단) | stale 의심 + sync 실패 시 |
+
+### 1.6.1 코드 수정 룰 — 영향도 평가 먼저
+
+**컴포넌트 / 함수 / 서비스를 수정하기 전에 반드시 `codegraph_explore`로 영향도를
+먼저 평가**한다. grep / Read fan-out 대신 한 번의 MCP 호출로 관련 심볼 소스 +
+호출 관계를 가져온다.
+
+| 의도 | 1차 도구 | 보조 도구 |
+|------|---------|----------|
+| 컴포넌트 / 모듈을 만지기 전 주변 파악 | **`codegraph_explore`** | `codegraph_context` |
+| 이 함수 바꾸면 무엇이 깨지나 | `codegraph_impact` | `codegraph_callers` |
+| X가 Y에 어떻게 도달하나 | `codegraph_trace` | — |
+| 단일 심볼 정의 / 호출자 한 번에 | `codegraph_context` | — |
+| 심볼 이름으로 빠른 lookup | `codegraph_search` | `codegraph_node` |
+
+`codegraph_explore`는 budget-capped 단일 호출 — 여러 관련 심볼의 source를 파일별로
+묶어서 반환한다. 답이 인덱스에서 나오면 **파일을 다시 Read 하지 않는다** (반환된
+소스가 권위).
+
+CLI에서 확인하고 싶다면:
+
+```bash
+codegraph status                            # 인덱스 신선도
+codegraph callers <Symbol>                  # 호출자 트리
+codegraph callees <Symbol>                  # 호출 대상
+codegraph impact <Symbol> --depth 2         # 영향 반경
+codegraph context "Admin 사용자 force-verify 흐름"  # 작업 컨텍스트 빌드
+```
+
 ## 2. 작업 흐름 — task마다 반복
 
 ### 2.1 새 task 시작
