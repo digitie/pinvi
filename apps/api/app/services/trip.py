@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,8 +39,8 @@ async def create_trip(
     title: str,
     description: str | None,
     region_hint: str | None,
-    start_date,
-    end_date,
+    start_date: date | None,
+    end_date: date | None,
     visibility: str,
 ) -> Trip:
     trip = Trip(
@@ -83,7 +84,7 @@ async def update_trip(
     *,
     trip: Trip,
     expected_version: int,
-    patch: dict,
+    patch: dict[str, Any],
 ) -> Trip:
     if trip.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")

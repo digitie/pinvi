@@ -73,7 +73,7 @@ def _to_entry(r: EmailQueue) -> EmailQueueEntry:
         email_id=r.email_id,
         to_email=r.to_email,
         template=r.template,
-        status=r.status,  # type: ignore[arg-type]
+        status=r.status,
         attempts=r.attempts,
         last_error=r.last_error,
         resend_id=r.resend_id,

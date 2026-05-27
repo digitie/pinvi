@@ -161,7 +161,7 @@ async def create_share_token(
         ShareLinkResponse(
             share_id=share.share_id,
             trip_id=share.trip_id,
-            visibility=share.visibility,  # type: ignore[arg-type]
+            visibility=share.visibility,
             token=raw,
             url=url,
             expires_at=share.expires_at,

@@ -37,7 +37,7 @@ async def complete_profile(
     return Envelope.of(
         [
             ConsentResponse(
-                consent_type=row.consent_type,  # type: ignore[arg-type]
+                consent_type=row.consent_type,
                 version=row.version,
                 agreed_at=row.agreed_at,
                 withdrawn_at=row.withdrawn_at,
@@ -55,7 +55,7 @@ async def get_consents(
     return Envelope.of(
         [
             ConsentResponse(
-                consent_type=row.consent_type,  # type: ignore[arg-type]
+                consent_type=row.consent_type,
                 version=row.version,
                 agreed_at=row.agreed_at,
                 withdrawn_at=row.withdrawn_at,
