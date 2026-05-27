@@ -175,6 +175,17 @@ PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다.
 
 본 우선순위가 충돌하면 1번이 이긴다. 새 결정은 ADR로 박는다.
 
+## 릴리즈 로드맵
+
+| 버전 | Sprint | 핵심 |
+|------|--------|------|
+| `v0.1.0` | Sprint 4 | 지도 + `maplibre-vworld-js` finalize + CI/CD 재활성 (ADR-021) |
+| `v0.2.0` | Sprint 5 | 실시간 + ETL + Grafana embed + Backup 1차 (ADR-022) |
+| `v1.0.0` | Sprint 6 | MCP 외부 인터페이스 (ADR-019) + Backup UI 핫스왑 + Korean geofencing (ADR-018) + T108 N150 병행 (ADR-023) + LBS + 법무 |
+| `v1.1.0+` | post-Sprint 6 | PWA / 푸시 / `tripmate-ai-companion` (ADR-020) |
+
+자세히는 `docs/sprints/README.md`.
+
 ## AI Agent 작업 진입 절차
 
 새 세션 시작 시 정확히 이 순서로:

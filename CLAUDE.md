@@ -36,13 +36,15 @@
 
 ## 2. 현 단계
 
-**v2 설계 단계 (Sprint 1 진입 직전)**. v1은 `v1` 브랜치 보존, main은 새로
-시작. **별도 요청 전까지 코드 작성 금지** — 사용자가 Sprint 1 진입을 승인하면
-첫 PR로 `apps/` scaffolding이 들어간다. 본 단계 산출물은 문서/계약/결정뿐이다.
+**Sprint 1~3 머지 완료**. Sprint 4 진입 대기 (지도 + 사용자 UI → **v0.1.0** 출시).
+이후 Sprint 5 (실시간 + ETL + Grafana embed + Backup 1차 → **v0.2.0**) → Sprint
+6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
+배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: 본 저장소의 ADR은 `docs/decisions.md`에 누적된다. v2 시작 ADR-001 ~
-초기 핵심 ADR이 박혀 있다. `python-krtour-map`의 ADR과는 별개로 관리하되,
-계약 경계가 겹치면 양쪽 ADR이 서로 참조한다.
+ADR 현황: ADR-001 ~ **ADR-023**. 최근 박힘: ADR-017 (codegraph + worktree),
+ADR-018 (한국 전용), ADR-019 (MCP 외부 인터페이스), ADR-020 (Gemini 별도 repo),
+ADR-021 (CI/CD 재활성), ADR-022 (Backup 핫스왑), ADR-023 (Odroid + N150 병행).
+다음 신규 = ADR-024.
 
 v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `infra/`,
 `scripts/`, `skills/`. v2가 가져오는 항목은 ADR로 한 건씩 박는다.
@@ -116,7 +118,12 @@ lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 | ETL asset | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md` |
 | 사용자 위치 사용 | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md` |
 | Notice plan (추천 여행) | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md` |
-| 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
+| 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` (Sprint 6에 N150 병행 — ADR-023) |
+| 릴리즈 마일스톤 | `docs/sprints/README.md` (v0.1.0 / v0.2.0 / v1.0.0 표) |
+| MCP 외부 인터페이스 | `docs/architecture/mcp-server.md` + `docs/runbooks/mcp-server.md` (ADR-019, Sprint 6) |
+| 한국 전용 geofencing | `docs/architecture/korea-only-policy.md` + `docs/runbooks/korea-only.md` (ADR-018, Sprint 6) |
+| Backup / Restore | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6) |
+| Admin Grafana embed | `docs/runbooks/grafana-admin-embed.md` (Sprint 5) |
 | Worktree + CodeGraph 운영 | `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
 | 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
 | 테스트 작성 | `docs/conventions/testing.md` |

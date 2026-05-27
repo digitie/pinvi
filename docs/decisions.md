@@ -598,7 +598,285 @@
   - `CLAUDE.md` / `AGENTS.md`에 worktree 정책 reference (본 PR)
   - 향후 도구 추가 시 본 ADR에 worktree 이름 추가 (ADR-016과 동일 운영).
 
+## ADR-018: 한국 전용 서비스 — geofencing 3중 안전망
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: TripMate v1은 한국 사용자만 대상. 한국 공공 API (VWorld / KMA /
+  VisitKorea 등) TOS가 한국 도메인 / IP 제한을 두는 항목이 있고, LBS 사업자
+  신고도 국내 대상 한정. 해외 IP는 차단해 트래픽 / API 한도 / 법적 리스크를
+  통째로 줄인다.
+- **결정**:
+  - **3중 안전망** (어느 하나가 뚫려도 다음이 막음):
+    1. **Cloudflare WAF rule** — "Country ≠ KR → Block 451". 가장 외곽.
+    2. **nginx `geo` 모듈 + GeoIP2 DB** — `infra/nginx/geo-kr.conf`로
+       비KR `return 451`. 컨테이너 단계.
+    3. **FastAPI middleware** (`apps/api/app/middleware/geofence.py`) —
+       `X-Real-IP` 또는 `CF-Connecting-IP` 헤더 기준 MaxMind 또는
+       `python-vworld-api`의 행정구역 조회로 검증. 응용 단계 fallback.
+  - **차단 응답**: HTTP 451 (Unavailable For Legal Reasons) + landing page
+    안내 (한/영) — "TripMate는 한국 거주자 전용 서비스입니다."
+  - **예외**: admin / cpo role 사용자는 비KR에서도 접근 허용 (운영자 출장 등).
+    `geofence.py`에서 인증된 사용자 role 확인 후 우회.
+  - **VPN / Tor**: Cloudflare WAF에서 known VPN/Tor exit node도 차단 옵션
+    적용. 위 3중 안전망 위에서 동작.
+  - **모니터링**: 451 응답 카운트 → Loki + Grafana 대시보드.
+- **근거**:
+  - VWorld TOS: 국내 서비스 한정 권장
+  - LBS 사업자 신고: 국내 사용자 대상으로 신청
+  - 외부 API 일 호출 한도 보호 (KMA / VisitKorea 등)
+  - 결제 / 환불 / 법무 부담 최소화
+- **결과 (긍정)**:
+  - API 호출 / DB 부하 / 보안 위협 모두 감소
+  - PIPA / LBS 컴플라이언스 단순화
+  - VWorld / 카카오 / KMA TOS 위반 가능성 차단
+- **결과 (부정)**:
+  - 해외 거주 한국인 → 차단됨 (불편). 추후 인증 사용자에 한해 IP 무관 허용
+    옵션 검토.
+  - GeoIP DB 갱신 주기 관리 필요 (월 1회)
+  - Cloudflare 무료 플랜 한도 내 운영
+- **후속**:
+  - `docs/architecture/korea-only-policy.md` — 절차 / 예외 / 모니터링 (본 PR)
+  - `docs/runbooks/korea-only.md` — Cloudflare WAF rule 설정 / nginx geo
+    설정 / GeoIP DB 갱신 cron (본 PR)
+  - Sprint 6에 구현 (DoD에 포함)
+  - 해외 진출 결정 시 본 ADR superseded — 동시 결정 PR 필수
+- **참조**: SPRINT-6 DoD, `docs/compliance/lbs-act.md`
+
+## ADR-019: TripMate MCP 외부 인터페이스 서빙 (read-only)
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: AI agent (Claude Code / Codex / Antigravity / 사용자 본인의
+  Claude Desktop 등)가 TripMate 데이터를 직접 query할 수 있으면 trip planning
+  loop가 짧아진다 — "내 부산 여행에 추가할 카페 추천" / "다음 주 일정 보여줘"
+  등을 사용자가 AI 도구에 직접 물어볼 수 있다. MCP (Model Context Protocol,
+  Anthropic 표준)는 이런 외부 노출의 사실상 표준 포맷.
+- **결정**:
+  - TripMate가 **MCP 서버를 노출**한다 (Sprint 6, v1.0에 포함).
+  - **트랜스포트**: stdio + SSE 둘 다 지원. stdio는 Claude Desktop 로컬, SSE
+    는 Claude Code remote MCP / web client. (`apps/api/app/mcp/server.py`)
+  - **인증**: 전용 MCP 토큰 (JWT scope=`mcp:read`). 일반 `tripmate_access`
+    cookie 토큰과 분리 — MCP 토큰은 long-lived (30일 default, 무한대 옵션) +
+    사용자가 `/users/me/mcp/tokens`에서 발급 / 회수.
+  - **tools (1차)** — 모두 **read-only**:
+    - `list_trips` — 본인 trip 목록
+    - `get_trip(trip_id)` — trip + POI + day 트리
+    - `list_pois(trip_id, day_index?)` — POI 필터
+    - `search_features(q, kind?, bounds?)` — feature 검색 (라이브러리 read 위임)
+    - `get_user_profile` — 본인 프로필 (마스킹 적용)
+  - **mutating tool은 v1.1 이후 검토** — MCP 인증 보안 검증 + 사용자 UX 패턴
+    파악 후. (예: `add_poi_to_trip` / `optimize_day`)
+  - **rate limit**: 사용자당 60 calls/min — admin_audit_log + api_call_log에
+    기록.
+  - **scope 확장 정책**: ADR-019 amendment 또는 후속 ADR.
+- **근거**:
+  - Anthropic MCP 표준 — Claude / Codex 양쪽 지원. (Antigravity / Cursor /
+    opencode도 차츰 지원)
+  - 본 저장소가 codegraph로 이미 MCP를 사용 중 (ADR-017) → 운영 친숙
+  - read-only 1차로 시작 → 보안 / UX 검증 후 확장
+- **결과 (긍정)**:
+  - 사용자가 AI 도구로 trip planning 자연어 query 가능
+  - 외부 챗봇 / 자동화 통합 길 열림
+  - MCP token은 일반 cookie 토큰과 분리 → blast radius 제한
+- **결과 (부정)**:
+  - MCP 표준 자체가 빠르게 진화 — breaking change 추적 비용
+  - 토큰 leak 시 사용자 trip 전체 노출 — 사용자 교육 필요
+  - 신규 도메인 / port 노출 → 보안 surface 증가
+- **후속**:
+  - `docs/architecture/mcp-server.md` — 트랜스포트 / 인증 / tool 상세 (본 PR)
+  - `docs/runbooks/mcp-server.md` — 토큰 발급 / 회수 / 모니터링 (본 PR)
+  - Sprint 6 DoD에 포함. 본격 구현은 별 PR.
+  - mutating tool은 v1.1 ADR-019-amend로 결정.
+- **참조**: ADR-017 (codegraph MCP), `docs/runbooks/codegraph-worktrees.md`
+
+## ADR-020: T-107 (Gemini AI Companion) 별도 서비스 분리
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: 원래 backlog T-107은 본 저장소에 Gemini 통합 (Sprint 4 후보).
+  하지만 AI provider (Gemini / Claude / GPT)는 빠르게 진화하고 모델 변경 /
+  rate limit / 비용 / 책임 분리 측면에서 본 서비스와 lifecycle이 다르다. 또
+  본 저장소가 한국 전용 (ADR-018)인 반면 AI API는 글로벌 (US/EU 호스팅).
+- **결정**:
+  - T-107을 본 저장소에서 **제거**. 별 repo `tripmate-ai-companion` (또는
+    사용자 지정 명)로 분리.
+  - **통신 패턴**: 로컬 docker-to-docker 호출 — `tripmate-ai-companion`이
+    별도 컨테이너로 동일 호스트(Odroid / N150)에서 실행, TripMate API는
+    `http://ai-companion:8000/...`으로 호출.
+  - **인터페이스**: HTTP API + MCP 토큰 (ADR-019 재사용 가능) 두 가지 지원.
+  - **AI provider**: Gemini / Claude / Codex 중 사용자 선택. 별 repo의
+    내부 결정.
+  - **본 저장소의 통합**: `docs/integrations/ai-companion.md` 신규 — 호출
+    컨트랙트 + 헬스체크 + 재시도 / 회로 차단.
+  - `apps/api/app/services/ai_companion_client.py` (Sprint 6) — httpx +
+    tenacity wrapper.
+- **근거**:
+  - AI provider lifecycle / 비용 / 법적 책임을 본 서비스와 분리
+  - 한국 전용 정책 (ADR-018)과 글로벌 AI API의 호스팅 위치 충돌 회피
+  - 사용자가 provider 교체 시 본 저장소 영향 최소화
+  - MCP 외부 인터페이스 (ADR-019) 재사용 가능
+- **결과 (긍정)**:
+  - 책임 경계 명확
+  - AI 모델 / provider 변경이 본 서비스 배포에 영향 없음
+  - 본 저장소 PR 수 / 복잡도 감소
+- **결과 (부정)**:
+  - 별 repo 신설 / 운영 부담
+  - docker-to-docker 호출 leg 추가 (latency / failure mode)
+  - 두 repo CI/CD 동기 필요
+- **후속**:
+  - 별 repo 생성 — 사용자 결정 시점 / 명명
+  - `docs/integrations/ai-companion.md` 신규 (Sprint 6 진입 시)
+  - `docs/tasks.md`에서 T-107 → "deferred to `tripmate-ai-companion` repo"
+- **참조**: ADR-019 (MCP), ADR-018 (한국 전용)
+
+## ADR-021: GitHub Actions CI/CD 재활성화
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: Sprint 1~3 진행 중 사용자 지시 "깃헙 ci / cd 쓰지마"로 PR #10
+  직전 모든 `.github/workflows/`를 삭제했었다. Sprint 4 진입 시 사용자 결정
+  뒤집힘 — 운영 가시화 / 정합성 게이트 / Sprint 4 이후 회귀 방지를 위해
+  CI/CD 부활.
+- **결정**:
+  - **Sprint 4 진입 PR**에서 `.github/workflows/` 5개 workflow 복원:
+    - `api.yml` — `apps/api` ruff + mypy --strict + pytest -q + alembic check
+    - `web.yml` — `apps/web` lint + typecheck + 단위 테스트 + Playwright (smoke)
+    - `etl.yml` — `apps/etl` ruff + mypy + dagster validate (Sprint 5 본격 활성)
+    - `codex-pr-review.yml` — PR auto review trigger
+    - `codex-pr-monitor.yml` — 5분 주기 PR 감시
+  - **branch protection**: PR 머지에 모든 workflow green 필수 — main에 적용.
+  - **secret 관리**: GitHub Actions secrets에 TRIPMATE_DATABASE_URL_TEST
+    (postgres CI 인스턴스용) / RESEND_API_KEY_TEST / 등. 본 저장소 secret 목록은
+    `docs/runbooks/local-dev.md`와 별 secret 카탈로그에 명시.
+  - **로컬 검증 병행**: WSL에서 `pytest` / `ruff` / `npm run lint`는 계속 1차
+    검증. GitHub Actions는 2차 안전망.
+  - **AI agent 자동 리뷰**: codex-pr-review가 PR open / sync 이벤트에 자동
+    review 코멘트 생성. 이건 ADR-016 / `docs/runbooks/pr-review-sprint4.md`
+    와 함께.
+- **근거**:
+  - Sprint 4 이후 산출물이 커지면서 회귀 가능성 ↑
+  - 한 명의 AI agent + 사용자만으로는 모든 PR 정합성 검증 어려움
+  - GitHub Actions는 무료 플랜 한도 내에서 충분
+- **결과 (긍정)**:
+  - 모든 PR이 동일 게이트 통과 → 회귀 방지
+  - 사용자 + AI agent가 코드 변경에만 집중 가능
+- **결과 (부정)**:
+  - GitHub Actions 비용 (초기 무료 한도 후 유료 가능)
+  - workflow 자체 유지보수 부담
+  - secret 관리 절차 추가
+- **후속**:
+  - Sprint 4 진입 PR에 `.github/workflows/` 복원
+  - `docs/runbooks/pr-review-sprint4.md` 갱신 — workflow status 확인 절차
+  - secret 카탈로그 — `docs/runbooks/secrets.md` 신규 (Sprint 5)
+- **참조**: ADR-007 (PR-only), `docs/runbooks/pr-review-sprint4.md`
+
+## ADR-022: Backup / Restore 핫스왑 정책
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: Sprint 6 DoD에 "백업 + 복구 훈련 1회"가 있고 SPEC V8도 RTO 1h
+  / RPO 24h 요구. 단순 pg_restore는 다운타임 발생 — 핫스왑 패턴 (블루-그린
+  유사)으로 복구 중 트래픽 무중단을 목표.
+- **결정**:
+  - **2단계 구현**:
+    - **Sprint 5 (1차)**: `scripts/backup-db.sh` + `scripts/restore-db.sh`
+      + `POST /admin/backup/snapshot` (manual trigger). UI는 없음.
+    - **Sprint 6 (finalize)**: Backup/Restore UI + 핫스왑 워크플로
+      (`/admin/backup` 페이지).
+  - **Backup**:
+    - `pg_dump --format=custom --jobs=2` → `app` + `app.audit` schema만
+      (라이브러리 schema는 `python-krtour-map`이 별도 백업).
+    - 결과 파일을 RustFS (`backup` 버킷) + 옵션으로 외부 (BackBlaze B2 또는
+      NAS) 미러.
+    - **자동**: 매일 03:00 KST (Dagster schedule 또는 systemd timer).
+    - **수동**: `POST /admin/backup/snapshot` (admin role 전용, audit log).
+  - **Restore (핫스왑)**:
+    - 1. `pg_restore`를 **신규 DB instance** 또는 **신규 schema**에 적용
+      (구체 정책은 Sprint 6 구현 시 PoC 후 결정).
+    - 2. 신규 DB / schema가 healthy하면 app `DATABASE_URL` cut-over
+      (rolling restart).
+    - 3. 구 DB / schema는 7일 보존 후 자동 삭제.
+    - 핫스왑 중 사용자 트래픽은 신규 DB로만 — 다운타임 최소.
+  - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
+    훈련 (read-only mode + 가족 베타 사용자에게 안내).
+  - **모니터링**: backup 성공/실패 → admin_audit_log + Grafana 대시보드.
+    RPO 위반 시 알림.
+- **근거**:
+  - SPEC V8 RTO 1h / RPO 24h 요구
+  - 사용자 데이터 (PII / trip / 동의 이력) 보호가 최우선
+  - 무중단 복구는 사용자 신뢰 / 운영 부담 모두 줄임
+- **결과 (긍정)**:
+  - 복구 시 다운타임 최소 (~분 단위)
+  - 분기 훈련으로 절차 / 도구 검증
+  - admin UI로 운영자가 직접 트리거 가능
+- **결과 (부정)**:
+  - 구현 복잡도 ↑ (단순 pg_restore 대비)
+  - 임시로 구/신규 DB 모두 보유 → 디스크 2배
+  - cut-over 중 `app.audit_log` chain 손상 가능성 (Sprint 6 PoC에서 검증)
+- **후속**:
+  - `docs/runbooks/backup-restore.md` 신규 (본 PR) — 절차 + 트러블슈팅
+  - `docs/architecture/backup-restore.md` 신규 — 핫스왑 아키텍처
+  - Sprint 5: 1차 구현. Sprint 6: 핫스왑 finalize + UI + 훈련
+- **참조**: SPEC V8 §운영, `docs/runbooks/odroid-docker.md`
+
+## ADR-023: 운영 하드웨어 확장 — Odroid M1S + N150 16GB 병행
+
+- **상태**: accepted
+- **날짜**: 2026-05-27
+- **결정자**: 사용자
+- **컨텍스트**: 원래 운영 환경은 Odroid M1S (ARM64, Ubuntu 24.04, ADR
+  들에서 single node 가정). 사용자가 신규 박스 N150 16GB / NVMe 1TB /
+  Ubuntu 26.04 도입 검토. Odroid를 폐기하지 않고 **병행 운영**으로 결정.
+- **결정**:
+  - **두 노드 병행**:
+    - **Odroid M1S** (ARM64) — 기존 위치. dev/staging 또는 백업 운영.
+    - **N150 16GB + NVMe 1TB** (x86_64) — primary 운영. Ubuntu 26.04 LTS.
+  - **이미지**: `apps/api/Dockerfile`을 multi-platform build로 — `linux/amd64`
+    + `linux/arm64`. GitHub Actions에서 `docker buildx`로 두 플랫폼 빌드 후
+    GHCR push.
+  - **데이터 동기**:
+    - Postgres streaming replication: N150이 primary, Odroid가 replica
+      (또는 standby).
+    - RustFS는 N150이 primary, Odroid가 mirror (rsync 또는 RustFS native).
+  - **장애 fail-over**:
+    - 단순 DNS / nginx upstream switch (수동 1차, 자동화는 v1.1).
+  - **선택 기준 (사용자 작업 환경에서)**:
+    - 평상시 트래픽 / 일 호출 한도 / Dagster ETL 부하 → N150이 처리
+    - Odroid는 hot standby + 분기 fail-over 훈련
+  - **운영 비용 / 전력**: Odroid는 저전력 (5W) → 야간 / 비상시 단독 운영도
+    가능. N150은 일반 전력.
+  - **N150 환경 사전 검토 항목** (사용자가 도입 전 확인할 것):
+    - Ubuntu 26.04 (예정 또는 BETA — 시점 따라 24.04 LTS fallback)
+    - PostgreSQL 16 + PostGIS 3.5 호환
+    - Docker / Compose 24+ 호환
+    - NVMe 1TB 가용 IOPS (random 4k 80K+ 권장 — Dagster + Postgres bg)
+    - 16GB RAM 사용량 ceiling (api 2GB + web 1GB + postgres 4GB + dagster
+      2GB + rustfs 1GB + grafana/loki 1.5GB + 여유 4.5GB)
+- **근거**:
+  - 운영 안정성 / 장애 복구 시간 ↓
+  - Odroid 자산 활용 + N150 신규 자원의 보강 효과
+  - 멀티 플랫폼 빌드 = 향후 다른 ARM SBC / x86 NUC 등에도 호환
+- **결과 (긍정)**:
+  - 단일 노드 장애가 서비스 중단으로 이어지지 않음
+  - 신규 기능 (Dagster ETL / Grafana / MCP 서버) 부하 흡수
+- **결과 (부정)**:
+  - 운영 / 모니터링 복잡도 ↑
+  - 두 노드의 OS / 패키지 / 시간 동기화 부담
+  - 멀티 플랫폼 이미지 빌드 CI 시간 ↑
+- **후속**:
+  - `infra/n150/README.md` 신규 (Sprint 6) — 배포 절차
+  - `docs/runbooks/odroid-docker.md` 갱신 — N150 병행 시 변경점
+  - `apps/api/Dockerfile` multi-platform (Sprint 4 CI 활성화 시 함께)
+  - 사용자 N150 도입 시점 / 사양 확정 후 본 ADR amendment
+- **참조**: ADR-022 (백업), `docs/runbooks/odroid-docker.md`
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-018**
+- 다음 신규 ADR = **ADR-024**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

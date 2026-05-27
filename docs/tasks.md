@@ -50,15 +50,36 @@
 
 ## 보류
 
-- [ ] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 후보)
-- [ ] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 후보)
-- [ ] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 후보)
-- [ ] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 후보)
-- [ ] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 후보)
-- [ ] T-105 — v1의 Trip + POI Attachment 도메인 v2로 이식 (Sprint 3 후보)
-- [ ] T-106 — Telegram 통합 (Sprint 4 후보)
-- [ ] T-107 — Gemini 통합 (Sprint 4 후보)
-- [ ] T-108 — Odroid M1S 배포 자동화 (Sprint 5 후보)
+- [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
+- [x] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 schema/model
+  완료, 라우터 본격 구현은 Sprint 4)
+- [x] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 schema/model 완료, 라우터
+  Sprint 6)
+- [x] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 완료, presigned PUT)
+- [x] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 완료, PR #11)
+- [ ] T-105 — v1의 Trip + POI Attachment 도메인 v2로 이식 (Sprint 4 진행)
+- [ ] T-106 — Telegram 통합 (Sprint 4 진행 — 신규 trip / 동반자 초대 알림 채널)
+- [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
+  `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
+  (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
+- [ ] T-108 — 운영 배포 자동화 (Sprint 6) — **Odroid M1S + N150 16GB 양쪽**
+  (ADR-023). multi-platform Docker 빌드 + 두 노드 streaming replication.
+
+### Sprint 5~6 (v0.2.0 / v1.0) 신규 backlog
+
+- [ ] T-109 — 한국 전용 geofencing 3중 안전망 (ADR-018, Sprint 6) —
+  Cloudflare WAF + nginx geo + FastAPI middleware. KR 외 IP → 451.
+- [ ] T-110 — Admin Grafana iframe embed (ADR-022 보조, Sprint 5) —
+  `/admin/grafana` + anonymous viewer + frame-ancestors CSP.
+- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
+  + RestoreHotswapDialog. Sprint 5의 backup script + endpoint 위에 UI + 핫스왑
+  워크플로 finalize.
+- [ ] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
+  `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
+- [ ] T-113 — `tripmate-ai-companion` 별 repo 신설 (ADR-020) — T-107 후속.
+  사용자가 repo 명 / provider 확정 후 진입.
+- [ ] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — 5개 workflow +
+  branch protection. Sprint 1~3 동안 비활성이었음.
 
 ## 머지 히스토리 (참고)
 

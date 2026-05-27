@@ -301,7 +301,65 @@ export function renderPoiMarker(poi: Poi) {
 > `MakiMarker` props 변경 — 이전 `iconName` / `fallbackIcon` 두 prop이
 > `icon: string` 하나로 통합. fallback이 필요하면 caller에서 `??` 로 결정.
 
-## 6. 라이브러리 측 보강 필요 항목 (TripMate가 요청할 PR)
+## 6. 책임 분류 — 라이브러리 PR vs TripMate 전용
+
+본 §6은 **v0.1.0 릴리즈 게이트** (Sprint 4 종료 시) 의 1차 reference.
+`docs/sprints/SPRINT-4.md` §5와 정합.
+
+### 6.0 분류 기준
+
+| 분류 | 판정 기준 | 위치 |
+|------|----------|------|
+| **라이브러리 PR** | "어떤 지도 앱에서도 쓸 수 있는 일반 기능" — 좌표 / 마커 / 이벤트 / popup 등 SDK 표준 영역 | `maplibre-vworld-js` 저장소에 PR |
+| **TripMate 전용** | TripMate 도메인 룰 / 데이터 모델 / 권한 / 16색 팔레트 매핑 / 사용자 UX | 본 저장소 `apps/web/lib/` 또는 `apps/web/components/` |
+
+**v0.1.0 게이트**: §6.1~§6.9의 "라이브러리 PR" 분류 항목이 모두 머지된 후에만
+v0.1.0 tag.
+
+### 6.A 라이브러리 PR 항목 (요약, v0.1.0 차단 사유)
+
+| 항목 | §  | 현재 상태 | 비고 |
+|------|-----|----------|------|
+| viewport 이벤트 | 6.1 | ✅ 제공 | TripMate는 debounce만 |
+| 사용자 위치 marker | 6.2 | ❓ `PulsingMarker` 가능 여부 확인 필요 | PR 후보 |
+| 우클릭 메뉴 | 6.3 | ✅ 지도 / ❓ 마커 | 마커 `onContextMenu` 확인 |
+| Place/Price/Weather marker props | 6.4 | 부분 | EventMarker / NoticeMarker 신설 PR |
+| Popup / Tooltip | 6.5 | ✅ | TripMate는 colocation만 |
+| 카메라 / 애니메이션 | 6.6 | ✅ 선언형 | 추가 ❓ — flyOver 필요 시 PR |
+| 거리 측정 | 6.7 | ❓ 확인 필요 | `<MeasureLine>` PR |
+| 좌표 검증 | 6.8 | ✅ generic factory | TripMate는 `KoreaLngLatSchema` 생성 |
+| SSR / hydration | 6.9 | ✅ | 안정성 확인 |
+
+각 항목의 PR 상태는 `maplibre-vworld-js` 저장소의 PR 목록과 cross-link.
+
+### 6.B TripMate 전용 (라이브러리에 박지 않는다)
+
+본 항목들은 v0.1.0 게이트에 라이브러리 PR 요구하지 **않는다**:
+
+- **16색 팔레트 → 카테고리 매핑** (`apps/web/lib/markerPalette.ts` +
+  `app.category_mappings` DB) — 도메인 데이터
+- **POI D&D 비즈니스 룰** (LexoRank reorder, optimistic lock, 동시편집
+  conflict) — TripMate 도메인
+- **Notice plan copy 다이얼로그** — TripMate 도메인
+- **Trip 대시보드 UI** (미래/과거 아코디언, 동반자 아바타) — TripMate 도메인
+- **사용자 동의 확인 후 위치 권한 요청 흐름** (`useUserLocation` + 4 분리 동의,
+  ADR-012) — 한국 LBS 법규
+- **`feature_link_broken_at` 처리** (라이브러리에 위임된 feature 사라졌을 때) —
+  TripMate ↔ 라이브러리 책임 경계 처리
+- **CSP / proxy 정책** — TripMate 보안 설정 (별 라이브러리 영역 아님)
+
+### 6.C 분류 변경 절차
+
+본 Sprint 4 진행 중 "이 항목 사실 공통 기능 아닌가?" 발견 시:
+
+1. 본 §6.A / §6.B 표 갱신
+2. 라이브러리 PR 분류라면 `maplibre-vworld-js`에 PR 생성
+3. v0.1.0 게이트에 영향 — `docs/sprints/SPRINT-4.md` §5에 반영
+4. 사용자 / AI agent 사이의 의견 일치 후 분류 변경
+
+---
+
+## 6.x 라이브러리 측 보강 필요 항목 (TripMate가 요청할 PR)
 
 본 라이브러리에 다음 기능이 **부족할 가능성** — 사용 중 발견되면
 `maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출 (ADR-005 mirror: TripMate에

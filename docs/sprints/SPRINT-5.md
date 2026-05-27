@@ -1,9 +1,11 @@
-# SPRINT-5 — 실시간 + ETL + 운영 가시화
+# SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
 - **상태**: proposed
-- **선행**: Sprint 4 DoD 완료
+- **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨)
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Loki/Grafana + Admin
-  운영 화면 (Record Linkage, provider sync, integrity, debug logs)
+  운영 화면 (Record Linkage, provider sync, integrity, debug logs) +
+  **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint, UI는 Sprint 6)**
+- **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -21,6 +23,12 @@
   - `/admin/debug/logs` Loki LogQL WebSocket stream
   - `/admin/debug/request/{id}` X-Request-Id 타임라인
   - Loki + Promtail + Grafana 컨테이너 활성
+  - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,
+    `docs/runbooks/grafana-admin-embed.md`)
+  - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
+    pg_restore. 핫스왑 워크플로 design은 Sprint 6에서 finalize (ADR-022).
+  - **`POST /admin/backup/snapshot`** — manual trigger (admin role) → backup
+    file 생성 + RustFS 또는 외부 위치로 upload + admin_audit_log 기록
 
 ## 산출물
 
@@ -29,9 +37,11 @@
 - `apps/api/app/api/v1/ws.py` (FastAPI WebSocket)
 - `apps/api/app/services/realtime_broker.py` (단일 프로세스 in-memory broker)
 - `apps/api/app/services/optimistic_lock.py`
-- `apps/api/app/api/v1/admin/{etl,dedup_review,provider_sync,integrity,debug}.py`
+- `apps/api/app/api/v1/admin/{etl,dedup_review,provider_sync,integrity,debug,grafana,backup}.py`
 - `apps/api/app/services/admin/loki_stream.py` (LogQL WebSocket)
 - `apps/api/app/services/admin/request_trace.py` (X-Request-Id 조합)
+- `apps/api/app/services/backup_service.py` — pg_dump trigger + RustFS upload +
+  audit. `scripts/backup-db.sh` 호출 wrapper.
 
 ### ETL (`apps/etl`, 신규 디렉토리)
 
@@ -55,13 +65,22 @@
 - `apps/web/app/admin/provider-sync/page.tsx`
 - `apps/web/app/admin/integrity/page.tsx`
 - `apps/web/app/admin/debug/{logs,request/[id]}/page.tsx`
+- `apps/web/app/admin/grafana/page.tsx` — Grafana iframe (anonymous viewer URL
+  + `frame-ancestors` CSP 허용, `docs/runbooks/grafana-admin-embed.md`)
+- `apps/web/app/admin/backup/page.tsx` — manual snapshot trigger 버튼 (UI 본격은
+  Sprint 6, 본 Sprint는 trigger + 결과 표시만)
 
 ### 인프라
 
 - `infra/docker-compose.yml` Loki/Promtail/Grafana 추가
 - `infra/promtail/config.yml`
 - `infra/loki/local-config.yaml`
+- `infra/grafana/{provisioning,dashboards}/` — anonymous viewer + 기본 dashboard
+  (API p95 latency / DB pool / WS 연결 / ETL 자산 상태)
 - `apps/api/app/core/logging.py` structlog JSON 활성화
+- `scripts/backup-db.sh` — pg_dump --custom → 결과를 RustFS + 옵션 외부 NAS로
+- `scripts/restore-db.sh` — pg_restore. 본 Sprint는 manual / SSH only. 핫스왑
+  자동화는 Sprint 6 (ADR-022 finalize)
 
 ### 테스트
 
@@ -78,6 +97,9 @@
 - ADR-NNN: optimistic lock + `If-Match` 정책
 - ADR-NNN: Dagster asset → `AsyncKrtourMapClient` 호출 표준
 - ADR-NNN: Loki retention 정책 (7일, Odroid 용량)
+- ADR-022 (참조): Backup/Restore 핫스왑 정책 — 본 Sprint는 script + endpoint만,
+  Sprint 6에서 UI + 핫스왑 finalize
+- ADR-NNN: Grafana anonymous viewer + frame-ancestors CSP (admin embed)
 
 ## SPEC V8 매핑
 
@@ -103,5 +125,9 @@
 - [ ] WebSocket 동시 편집 5명 시뮬레이션 통과
 - [ ] Dagster 4 asset 첫 적재 통과
 - [ ] Loki LogQL stream Admin에서 확인
+- [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
+- [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
+- [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**
+- [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 6
