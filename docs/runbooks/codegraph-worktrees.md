@@ -84,6 +84,54 @@ codegraph install --target=auto --location=global
 
 > Claude Code는 본 명령 후 재시작 1회 필요. Codex / Antigravity도 동일.
 
+#### 1.3.1 Claude Code 수동 wiring (`~/.claude.json`)
+
+`codegraph install`이 동작하지 않거나 (네트워크 / 권한 문제) 정확히 어떻게 박히는지
+보고 싶다면 직접:
+
+```jsonc
+// ~/.claude.json
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@colbymchenry/codegraph", "serve", "--mcp"]
+    }
+  }
+}
+```
+
+- 글로벌 설치 (`npm install -g @colbymchenry/codegraph`) 이미 했다면 더 간단한
+  `command: "codegraph", args: ["serve", "--mcp"]`도 동작. npx 형태는 글로벌
+  설치 없이도 재현 가능하므로 새 머신 / 동료 setup용 snippet으로 권장.
+- 잘못된 형태 주의: `args: [..., "mcp"]` (mcp 단독 서브커맨드)는 codegraph CLI에
+  없음. **반드시 `serve --mcp`**.
+
+권한 자동 허용 (선택, 매 호출마다 prompt 안 뜨게):
+
+```jsonc
+// ~/.claude/settings.json
+{
+  "permissions": {
+    "allow": [
+      "mcp__codegraph__codegraph_search",
+      "mcp__codegraph__codegraph_context",
+      "mcp__codegraph__codegraph_trace",
+      "mcp__codegraph__codegraph_explore",
+      "mcp__codegraph__codegraph_callers",
+      "mcp__codegraph__codegraph_callees",
+      "mcp__codegraph__codegraph_impact",
+      "mcp__codegraph__codegraph_node",
+      "mcp__codegraph__codegraph_status",
+      "mcp__codegraph__codegraph_files"
+    ]
+  }
+}
+```
+
+수정 후 **Claude Code 재시작 1회** 필요.
+
 ### 1.4 worktree마다 CodeGraph 인덱스 초기화 (1회)
 
 worktree마다 **딱 한 번**:
