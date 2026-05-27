@@ -11,9 +11,11 @@ from app.schemas.storage import AttachmentPurpose, UploadUrlResponse
 
 
 def _allowed_content_types() -> set[str]:
-    raw = settings.tripmate_rustfs_allowed_content_types if hasattr(
-        settings, "tripmate_rustfs_allowed_content_types"
-    ) else None
+    raw = (
+        settings.tripmate_rustfs_allowed_content_types
+        if hasattr(settings, "tripmate_rustfs_allowed_content_types")
+        else None
+    )
     if not raw:
         return {
             "image/jpeg",
@@ -52,10 +54,7 @@ def build_storage_key(
     now = datetime.now(UTC)
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
     object_uuid = uuid.uuid4().hex
-    return (
-        f"user-uploads/{purpose}/{user_id}/"
-        f"{now.year:04d}/{now.month:02d}/{object_uuid}.{suffix}"
-    )
+    return f"user-uploads/{purpose}/{user_id}/{now.year:04d}/{now.month:02d}/{object_uuid}.{suffix}"
 
 
 def make_upload_url(

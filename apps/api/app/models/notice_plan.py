@@ -45,7 +45,9 @@ class NoticePlan(Base, TimestampMixin):
     destination: Mapped[str | None] = mapped_column(String(120))
     starts_on: Mapped[date | None] = mapped_column(Date())
     ends_on: Mapped[date | None] = mapped_column(Date())
-    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_published: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_by_admin_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("app.users.user_id", ondelete="RESTRICT"),

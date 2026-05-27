@@ -57,12 +57,8 @@ async def create_trip(
     return trip
 
 
-async def get_trip_for_user(
-    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
-) -> Trip:
-    trip = await db.scalar(
-        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None))
-    )
+async def get_trip_for_user(db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID) -> Trip:
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
     if trip.owner_user_id != user_id and not await _is_companion(db, trip_id, user_id):
@@ -146,9 +142,7 @@ async def issue_share_link(
     return share, raw_token
 
 
-async def revoke_share_link(
-    db: AsyncSession, *, share_id: uuid.UUID, trip_id: uuid.UUID
-) -> None:
+async def revoke_share_link(db: AsyncSession, *, share_id: uuid.UUID, trip_id: uuid.UUID) -> None:
     share = await db.scalar(
         select(TripShareLink).where(
             TripShareLink.share_id == share_id, TripShareLink.trip_id == trip_id
@@ -161,9 +155,7 @@ async def revoke_share_link(
         await db.commit()
 
 
-async def _is_companion(
-    db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID
-) -> bool:
+async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     row = await db.scalar(
         select(TripCompanion.companion_id).where(
             TripCompanion.trip_id == trip_id,

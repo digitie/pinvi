@@ -63,7 +63,9 @@ async def verify_chain(
             broken_at = row.log_id
             break
         prev = row.content_hash
-    return Envelope.of({"valid": broken_at is None, "broken_at": broken_at, "rows_checked": len(rows)})
+    return Envelope.of(
+        {"valid": broken_at is None, "broken_at": broken_at, "rows_checked": len(rows)}
+    )
 
 
 def _to_entry(r: AdminAuditLog) -> AdminAuditEntry:

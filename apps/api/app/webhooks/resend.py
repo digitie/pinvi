@@ -27,9 +27,7 @@ async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
 
     # 서명 검증 — Sprint 5에 활성화
     if settings.tripmate_resend_webhook_secret:
-        signature = request.headers.get("Resend-Signature") or request.headers.get(
-            "svix-signature"
-        )
+        signature = request.headers.get("Resend-Signature") or request.headers.get("svix-signature")
         if not signature:
             log.warning("resend_webhook.missing_signature")
 
@@ -57,9 +55,7 @@ async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
         )
     elif event_type == "email.complained":
         await db.execute(
-            update(EmailQueue)
-            .where(EmailQueue.email_id == entity_ref)
-            .values(status="complained")
+            update(EmailQueue).where(EmailQueue.email_id == entity_ref).values(status="complained")
         )
 
     await db.commit()

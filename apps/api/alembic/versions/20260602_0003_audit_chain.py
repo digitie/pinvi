@@ -112,8 +112,7 @@ def upgrade() -> None:
         schema="app",
     )
     op.execute(
-        "CREATE INDEX ix_admin_audit_log_occurred "
-        "ON app.admin_audit_log USING brin (occurred_at)"
+        "CREATE INDEX ix_admin_audit_log_occurred ON app.admin_audit_log USING brin (occurred_at)"
     )
     op.create_index(
         "ix_admin_audit_log_resource",

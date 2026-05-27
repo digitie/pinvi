@@ -33,9 +33,7 @@ async def complete_profile(
     db: DbSession,
 ) -> Envelope[list[ConsentResponse]]:
     # 사용자 모델 갱신은 별 service에서 (Sprint 2 후속 — 본 endpoint는 동의 + 닉네임만)
-    rows = await record_consents(
-        db, user_id=uuid.UUID(current_user_id), consents=body.consents
-    )
+    rows = await record_consents(db, user_id=uuid.UUID(current_user_id), consents=body.consents)
     return Envelope.of(
         [
             ConsentResponse(

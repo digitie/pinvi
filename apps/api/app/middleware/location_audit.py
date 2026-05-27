@@ -50,9 +50,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return response
 
-        user_id_str = request.headers.get("X-User-Id") or getattr(
-            request.state, "user_id", None
-        )
+        user_id_str = request.headers.get("X-User-Id") or getattr(request.state, "user_id", None)
         if user_id_str is None:
             return response
 

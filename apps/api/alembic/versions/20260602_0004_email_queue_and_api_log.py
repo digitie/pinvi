@@ -248,9 +248,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_oauth_login_states_active", table_name="oauth_login_states", schema="app"
-    )
+    op.drop_index("ix_oauth_login_states_active", table_name="oauth_login_states", schema="app")
     op.drop_table("oauth_login_states", schema="app")
     op.drop_table("user_oauth_identities", schema="app")
     op.drop_index("ix_api_call_log_provider_time", table_name="api_call_log", schema="app")

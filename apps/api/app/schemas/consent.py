@@ -46,9 +46,7 @@ class ProfileCompleteRequest(BaseModel):
             or self.birth_year_month is not None
             or self.residence_sigungu_code is not None
         ):
-            raise ValueError(
-                "성별 / 생년월 / 거주지 입력 시 demographic_use 동의가 필요합니다."
-            )
+            raise ValueError("성별 / 생년월 / 거주지 입력 시 demographic_use 동의가 필요합니다.")
         return self
 
 
