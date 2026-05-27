@@ -539,7 +539,64 @@
   - `docs/agent-guide.md` 머리에 동기 룰 박음 + §7.1 체크리스트
   - 향후 도구 추가 시 본 ADR superseded 또는 항목 추가
 
+## ADR-017: CodeGraph 인덱스 + agent별 고정 worktree 운영
+
+- **상태**: accepted
+- **날짜**: 2026-05-26
+- **결정자**: 사용자
+- **컨텍스트**: AGENTS.md / CLAUDE.md 동기 정책 (ADR-016)으로 Claude Code / OpenAI
+  Codex / Google Antigravity 2.0 + Gemini 3.1 Pro 세 도구가 본 저장소를 동시에
+  편집한다. 도구마다 별도 worktree를 쓰지 않으면 (1) 같은 디렉터리에 두 도구가
+  체크아웃 충돌, (2) `.next` / `.venv` / IDE 캐시 / 인덱스가 서로 덮어쓰기,
+  (3) AI 도구마다 작업 흐름·체크아웃 상태가 불투명해진다. 동시에 `colbymchenry/
+  codegraph`는 SQLite 기반 코드 지식 그래프로 Claude Code의 grep / Read fan-out
+  비용을 ~35% / 70% 줄여준다 (저자 벤치). codegraph는 worktree마다 `.codegraph/`
+  로컬 인덱스를 두며 1회 init 후 incremental sync로 유지된다.
+- **결정**:
+  - **agent별 고정 worktree**:
+    - Claude Code → worktree 이름 `geo-claude` (예: `F:/dev/tripmate-geo-claude`)
+    - OpenAI Codex (CLI / VS Code) → `geo-codex`
+    - Google Antigravity 2.0 → `geo-antigravity`
+    - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/tripmate-geo-<agent>`,
+      WSL `~/tripmate-workspaces/geo-<agent>`).
+  - **작업 단위는 worktree가 아니라 branch**:
+    - 새 작업 시작 시 같은 worktree 안에서 `git fetch && git switch -c agent/<agent>-<task> main`.
+    - 즉 worktree는 영속, 브랜치만 task마다 새로.
+  - **CodeGraph**:
+    - worktree마다 **1회** `codegraph init -i` (interactive — `npx
+      @colbymchenry/codegraph` 또는 글로벌 `codegraph init -i`).
+    - 이후 task 시작 시 `codegraph sync` (incremental).
+    - `.codegraph/` 디렉터리는 `.gitignore`에 박힘 (로컬 SQLite, 머신 / worktree
+      마다 별개).
+  - **사람이 직접 만지는 trunk** `F:/dev/tripmate` (메인 checkout)은 자유.
+    AI 도구는 절대 trunk를 직접 만지지 않고 각자의 worktree만 사용.
+  - **runbook** `docs/runbooks/codegraph-worktrees.md`가 1차 reference.
+- **근거**:
+  - 도구 동시 사용은 ADR-016이 이미 인정. 별 worktree 없이 운영하면 fact drift가
+    아니라 file drift / lock 충돌이 직접 발생한다.
+  - codegraph는 100% 로컬 (네트워크 호출 없음), MIT, 한 번 init 후 `codegraph
+    sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
+  - branch만 새로 따는 패턴은 worktree create / delete 비용을 0으로 만든다.
+  - `.codegraph/`를 ignore하면 도구 / OS / worktree마다 인덱스가 격리되어
+    충돌이 발생하지 않는다 (SQLite WAL 파일 포함).
+- **결과 (긍정)**:
+  - AI 도구마다 동시에 무관한 task 진행 가능 (Claude는 Sprint 3 Admin, Codex는
+    Sprint 4 지도 prep 등). 충돌은 PR 머지 시점에만 발생.
+  - codegraph 인덱스로 Claude Code의 Explore sub-agent 비용 ↓.
+  - 새 task 시 90초 setup → `git fetch && git switch -c ... && codegraph sync`.
+- **결과 (부정)**:
+  - worktree 3개 추가 디스크 사용 (Next.js `.next` 캐시 등 포함 시 worktree당
+    ~수 GB). 단 `.gitignore` 항목은 worktree 간 공유 안 됨 — 사용자가 신경 쓸 것.
+  - codegraph 인덱스 worktree마다 별개 = 디스크 추가. 단 `.codegraph/` 크기는
+    저장소 코드 size의 ~10% 수준 (저자 사양).
+  - 첫 init 1회 비용 (대형 monorepo는 5~15분).
+- **후속**:
+  - `docs/runbooks/codegraph-worktrees.md` 작성 (본 PR)
+  - `.gitignore`에 `.codegraph/` 추가 (본 PR)
+  - `CLAUDE.md` / `AGENTS.md`에 worktree 정책 reference (본 PR)
+  - 향후 도구 추가 시 본 ADR에 worktree 이름 추가 (ADR-016과 동일 운영).
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-017**
+- 다음 신규 ADR = **ADR-018**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

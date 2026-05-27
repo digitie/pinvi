@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-26 23:30 (claude)
+
+**작업**: ADR-017 박음 — CodeGraph 인덱스 + agent별 고정 worktree 운영. 별 PR로
+분리 (Sprint 3 admin PR과 무관).
+
+**컨텍스트**: 사용자 지시:
+
+- Claude Code / OpenAI Codex / Google Antigravity 2.0 세 도구가 동시 편집 →
+  고정 worktree로 격리 (`geo-claude` / `geo-codex` / `geo-antigravity`).
+- 작업마다 worktree 새로 만들지 않고 **브랜치만** 새로 (`git fetch && git
+  switch -c agent/<agent>-<task> main`).
+- `colbymchenry/codegraph`로 의미 인덱스 — worktree마다 1회 `codegraph init -i`,
+  이후 task 시작 시 `codegraph sync`.
+- `.codegraph/`는 `.gitignore`.
+
+**신규 / 갱신**:
+
+- `docs/decisions.md` — ADR-017 박음
+- `docs/runbooks/codegraph-worktrees.md` 신규 — 1회 setup + task 흐름 + 도구별
+  메모 + trunk 관계
+- `docs/runbooks/README.md` — 인덱스 갱신
+- `.gitignore` — `.codegraph/` 추가
+- `CLAUDE.md` — 머리 호환성 박스에 worktree 정책 추가 + DO NOT #6 (trunk 직접
+  편집 금지) + §7 빠른 문서 검색에 runbook 추가
+- `AGENTS.md` — "개발 환경 정책" 머리에 Worktree + CodeGraph 섹션 + 브랜치 명명
+  컨벤션 갱신 (`agent/<agent>-<task>`)
+
+**다음**: PR 생성 후 머지 → 실제 codegraph 설치 + geo-claude worktree 생성 +
+init -i 실행.
+
 ## 2026-05-26 22:00 (claude)
 
 **작업**: Sprint 3 진입 — Admin RBAC + audit chain + 사용자 목록/상세 + force-verify/disable + 이메일 큐 + 감사 로그 chain 검증 + 13페이지 frontend skeleton.
