@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,8 +39,8 @@ async def create_trip(
     title: str,
     description: str | None,
     region_hint: str | None,
-    start_date,
-    end_date,
+    start_date: date | None,
+    end_date: date | None,
     visibility: str,
 ) -> Trip:
     trip = Trip(
@@ -57,12 +58,8 @@ async def create_trip(
     return trip
 
 
-async def get_trip_for_user(
-    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
-) -> Trip:
-    trip = await db.scalar(
-        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None))
-    )
+async def get_trip_for_user(db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID) -> Trip:
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
     if trip.owner_user_id != user_id and not await _is_companion(db, trip_id, user_id):
@@ -87,7 +84,7 @@ async def update_trip(
     *,
     trip: Trip,
     expected_version: int,
-    patch: dict,
+    patch: dict[str, Any],
 ) -> Trip:
     if trip.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
@@ -146,9 +143,7 @@ async def issue_share_link(
     return share, raw_token
 
 
-async def revoke_share_link(
-    db: AsyncSession, *, share_id: uuid.UUID, trip_id: uuid.UUID
-) -> None:
+async def revoke_share_link(db: AsyncSession, *, share_id: uuid.UUID, trip_id: uuid.UUID) -> None:
     share = await db.scalar(
         select(TripShareLink).where(
             TripShareLink.share_id == share_id, TripShareLink.trip_id == trip_id
@@ -161,9 +156,7 @@ async def revoke_share_link(
         await db.commit()
 
 
-async def _is_companion(
-    db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID
-) -> bool:
+async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     row = await db.scalar(
         select(TripCompanion.companion_id).where(
             TripCompanion.trip_id == trip_id,

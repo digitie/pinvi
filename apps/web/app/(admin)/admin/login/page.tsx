@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LoginRequestSchema } from '@tripmate/schemas';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
@@ -12,6 +12,14 @@ const apiClient = new ApiClient({
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 
 export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginForm />
+    </Suspense>
+  );
+}
+
+function AdminLoginForm() {
   const router = useRouter();
   const search = useSearchParams();
   const reason = search.get('reason');

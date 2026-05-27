@@ -29,9 +29,7 @@ class SortOrderConflictError(PoiError):
     code = "SORT_ORDER_CONFLICT"
 
 
-async def ensure_trip_day(
-    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int
-) -> TripDay:
+async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> TripDay:
     day = await db.scalar(
         select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
     )
@@ -73,9 +71,7 @@ async def create_poi(
     return poi
 
 
-async def get_poi(
-    db: AsyncSession, *, attachment_id: uuid.UUID, trip_id: uuid.UUID
-) -> TripDayPoi:
+async def get_poi(db: AsyncSession, *, attachment_id: uuid.UUID, trip_id: uuid.UUID) -> TripDayPoi:
     poi = await db.scalar(
         select(TripDayPoi).where(
             TripDayPoi.attachment_id == attachment_id,

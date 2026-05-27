@@ -22,6 +22,7 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 | [mcp-server.md](./mcp-server.md) | TripMate MCP 외부 인터페이스 운영 (ADR-019) | 6 |
 | [korea-only.md](./korea-only.md) | 한국 전용 geofencing 3중 안전망 (ADR-018) | 6 |
 | [grafana-admin-embed.md](./grafana-admin-embed.md) | Admin Grafana iframe embed | 5 |
+| [secrets.md](./secrets.md) | GitHub Actions secrets 카탈로그 (ADR-021) | 4 (상시) |
 
 ## 2. 공통 정책
 

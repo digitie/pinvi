@@ -34,7 +34,7 @@ def _to_summary(u: User) -> AdminUserSummary:
         user_id=u.user_id,
         email_masked=mask_email(u.email),
         nickname=u.nickname,
-        status=u.status,  # type: ignore[arg-type]
+        status=u.status,
         roles=u.roles,
         email_verified_at=u.email_verified_at,
         created_at=u.created_at,
@@ -46,7 +46,7 @@ def _to_detail(u: User) -> AdminUserDetail:
     return AdminUserDetail(
         **base.model_dump(),
         email=u.email,
-        email_status=u.email_status,  # type: ignore[arg-type]
+        email_status=u.email_status,
         is_active=u.is_active,
     )
 

@@ -165,9 +165,7 @@ def upgrade() -> None:
         ),
         schema="app",
     )
-    op.create_index(
-        "ix_trip_companions_trip", "trip_companions", ["trip_id"], schema="app"
-    )
+    op.create_index("ix_trip_companions_trip", "trip_companions", ["trip_id"], schema="app")
     op.create_index(
         "ix_trip_companions_user",
         "trip_companions",

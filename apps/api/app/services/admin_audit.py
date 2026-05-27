@@ -29,9 +29,7 @@ async def append_admin_audit(
     request_id: uuid.UUID,
 ) -> AdminAuditLog:
     """audit row append (append-only trigger 보장)."""
-    last = await db.scalar(
-        select(AdminAuditLog).order_by(AdminAuditLog.log_id.desc()).limit(1)
-    )
+    last = await db.scalar(select(AdminAuditLog).order_by(AdminAuditLog.log_id.desc()).limit(1))
     prev_hash = last.content_hash if last else GENESIS_HASH
     now = datetime.now(UTC)
     ip_hash = sha256_hex(ip_hash_input or "")

@@ -33,9 +33,7 @@ class Trip(Base, TimestampMixin):
     start_date: Mapped[date | None] = mapped_column(Date())
     end_date: Mapped[date | None] = mapped_column(Date())
     fuel_types: Mapped[list[str] | None] = mapped_column(ARRAY(String(16)))
-    visibility: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="private"
-    )
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, server_default="private")
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="draft")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

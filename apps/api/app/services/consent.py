@@ -57,9 +57,7 @@ async def record_consents(
     return rows
 
 
-async def list_user_consents(
-    db: AsyncSession, *, user_id: uuid.UUID
-) -> list[UserConsent]:
+async def list_user_consents(db: AsyncSession, *, user_id: uuid.UUID) -> list[UserConsent]:
     result = await db.execute(
         select(UserConsent).where(UserConsent.user_id == user_id).order_by(UserConsent.agreed_at)
     )

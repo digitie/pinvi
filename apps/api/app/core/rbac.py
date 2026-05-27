@@ -23,9 +23,7 @@ def require_role(*allowed: Role) -> Callable[[CurrentUserId, DbSession], Awaitab
     """`require_role("admin")` / `require_role("admin", "operator")` 등 사용."""
 
     async def dependency(current_user_id: CurrentUserId, db: DbSession) -> User:
-        user = await db.scalar(
-            select(User).where(User.user_id == uuid.UUID(current_user_id))
-        )
+        user = await db.scalar(select(User).where(User.user_id == uuid.UUID(current_user_id)))
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

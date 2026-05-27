@@ -20,9 +20,7 @@ class AdminUserNotFoundError(AdminUserError):
     code = "RESOURCE_NOT_FOUND"
 
 
-async def force_verify(
-    db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID
-) -> User:
+async def force_verify(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID) -> User:
     """email_verified_at 강제 설정 (디버그)."""
     user = await db.scalar(select(User).where(User.user_id == user_id))
     if user is None or actor_id == user_id:
@@ -35,9 +33,7 @@ async def force_verify(
     return user
 
 
-async def disable_user(
-    db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID
-) -> User:
+async def disable_user(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID) -> User:
     user = await db.scalar(select(User).where(User.user_id == user_id))
     if user is None or actor_id == user_id:
         raise AdminUserNotFoundError("Not found.")

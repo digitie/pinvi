@@ -32,9 +32,7 @@ class TripShareLink(Base, TimestampMixin):
         ForeignKey("app.users.user_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    visibility: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="view_only"
-    )
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, server_default="view_only")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

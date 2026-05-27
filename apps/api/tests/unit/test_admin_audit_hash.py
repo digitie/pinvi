@@ -13,7 +13,10 @@ def test_admin_audit_payload_canonical() -> None:
         "resource_type": "user",
         "resource_id": "00000000-0000-0000-0000-000000000002",
         "before_state": {"status": "pending_verification"},
-        "after_state": {"status": "pending_profile", "email_verified_at": "2026-05-26T00:00:00+00:00"},
+        "after_state": {
+            "status": "pending_profile",
+            "email_verified_at": "2026-05-26T00:00:00+00:00",
+        },
         "access_reason": "테스트",
         "target_pii_fields": ["email"],
         "ip_hash": "a" * 64,

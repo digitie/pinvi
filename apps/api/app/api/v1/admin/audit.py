@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -31,11 +31,11 @@ async def list_audit_log(
     return Envelope.of([_to_entry(r) for r in rows])
 
 
-@router.get("/verify-chain", response_model=Envelope[dict])
+@router.get("/verify-chain", response_model=Envelope[dict[str, Any]])
 async def verify_chain(
     _admin: Annotated[User, Depends(require_role("cpo"))],
     db: DbSession,
-) -> Envelope[dict]:
+) -> Envelope[dict[str, Any]]:
     """admin_audit_log chain 검증 — 깨진 row가 있으면 첫 위치 반환."""
     result = await db.execute(select(AdminAuditLog).order_by(AdminAuditLog.log_id))
     rows = list(result.scalars())
@@ -63,7 +63,9 @@ async def verify_chain(
             broken_at = row.log_id
             break
         prev = row.content_hash
-    return Envelope.of({"valid": broken_at is None, "broken_at": broken_at, "rows_checked": len(rows)})
+    return Envelope.of(
+        {"valid": broken_at is None, "broken_at": broken_at, "rows_checked": len(rows)}
+    )
 
 
 def _to_entry(r: AdminAuditLog) -> AdminAuditEntry:
