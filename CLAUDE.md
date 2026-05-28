@@ -7,8 +7,8 @@
 > 진입으로 사용한다. 본 파일과 `AGENTS.md`는 같은 결정·룰·식별자를 반영해야
 > 한다 — 한 쪽 갱신 시 다른 쪽도 동기 갱신 필수.
 >
-> **Worktree + CodeGraph** (ADR-017): Claude Code는 `geo-claude` 전용 worktree
-> (예: `F:/dev/tripmate-geo-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
+> **Worktree + CodeGraph** (ADR-017): Claude Code는 `tripmate-claude` 전용 worktree
+> (예: `F:/dev/tripmate-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
 > 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> origin/main`
 > — 로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용),
 > `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
@@ -93,7 +93,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 5. **WSL ext4 미러를 거치지 않고 NTFS에서 직접 테스트/Docker 실행 금지** —
    `docs/dev-environment.md`의 미러 절차 준수.
 6. **trunk** (`F:/dev/tripmate`, `~/tripmate-workspaces/tripmate`) **에 AI 도구가
-   체크아웃 / 편집 금지** — Claude는 `geo-claude` worktree에서만 작업 (ADR-017,
+   체크아웃 / 편집 금지** — Claude는 `tripmate-claude` worktree에서만 작업 (ADR-017,
    `docs/runbooks/codegraph-worktrees.md`).
 
 전체 룰은 `SKILL.md` §4, `AGENTS.md`.

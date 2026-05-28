@@ -97,9 +97,9 @@ trunk를 절대 편집하지 않는다.
 
 | AI 도구 | worktree 이름 | 예시 경로 |
 |---------|--------------|----------|
-| Claude Code | `geo-claude` | `F:/dev/tripmate-geo-claude` |
-| OpenAI Codex (CLI / VS Code) | `geo-codex` | `F:/dev/tripmate-geo-codex` |
-| Google Antigravity 2.0 | `geo-antigravity` | `F:/dev/tripmate-geo-antigravity` |
+| Claude Code | `tripmate-claude` | `F:/dev/tripmate-claude` |
+| OpenAI Codex (CLI / VS Code) | `tripmate-codex` | `F:/dev/tripmate-codex` |
+| Google Antigravity 2.0 | `tripmate-antigravity` | `F:/dev/tripmate-antigravity` |
 
 - **worktree는 영속** — 작업마다 새로 만들지 않는다.
 - **작업마다 브랜치만 새로**: `git fetch && git switch -c agent/<agent>-<task> origin/main`
