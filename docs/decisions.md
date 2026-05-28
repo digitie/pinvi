@@ -543,6 +543,9 @@
 
 - **상태**: accepted
 - **날짜**: 2026-05-26
+- **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `tripmate-` 변경
+  (`geo-claude` → `tripmate-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/tripmate-<agent>`.
+  실제 worktree 디렉터리는 `git worktree move`로 rename.
 - **결정자**: 사용자
 - **컨텍스트**: AGENTS.md / CLAUDE.md 동기 정책 (ADR-016)으로 Claude Code / OpenAI
   Codex / Google Antigravity 2.0 + Gemini 3.1 Pro 세 도구가 본 저장소를 동시에
@@ -554,11 +557,11 @@
   로컬 인덱스를 두며 1회 init 후 incremental sync로 유지된다.
 - **결정**:
   - **agent별 고정 worktree**:
-    - Claude Code → worktree 이름 `geo-claude` (예: `F:/dev/tripmate-geo-claude`)
-    - OpenAI Codex (CLI / VS Code) → `geo-codex`
-    - Google Antigravity 2.0 → `geo-antigravity`
-    - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/tripmate-geo-<agent>`,
-      WSL `~/tripmate-workspaces/geo-<agent>`).
+    - Claude Code → worktree 이름 `tripmate-claude` (예: `F:/dev/tripmate-claude`)
+    - OpenAI Codex (CLI / VS Code) → `tripmate-codex`
+    - Google Antigravity 2.0 → `tripmate-antigravity`
+    - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/tripmate-<agent>`,
+      WSL `~/tripmate-workspaces/tripmate-<agent>`).
   - **작업 단위는 worktree가 아니라 branch**:
     - 새 작업 시작 시 같은 worktree 안에서 `git fetch && git switch -c agent/<agent>-<task> origin/main`.
       (로컬 `main` ref는 trunk가 점유 — worktree에서는 `origin/main`을 직접 기준 ref로 쓴다.

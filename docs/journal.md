@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-05-27 16:30 (claude)
+
+**작업**: worktree 이름 prefix `geo-` → `tripmate-` 변경 (ADR-017 amendment).
+
+**컨텍스트**: 사용자 지시. `geo-claude` / `geo-codex` / `geo-antigravity` →
+`tripmate-claude` / `tripmate-codex` / `tripmate-antigravity`. 경로 예시도
+`F:/dev/tripmate-<agent>` + WSL `~/tripmate-workspaces/tripmate-<agent>`.
+
+**갱신 파일** (정의 문서 4개 — journal 과거 엔트리는 사실 기록이라 유지):
+- `docs/decisions.md` — ADR-017 본문 + amendment 노트
+- `docs/runbooks/codegraph-worktrees.md` — 전 구간 경로/이름
+- `AGENTS.md` — worktree 표 + DO NOT
+- `CLAUDE.md` — 머리 박스 + DO NOT #6
+
+**후속**: 본 PR 머지 후 trunk에서 실제 worktree 디렉터리 rename —
+`git worktree move ../tripmate-geo-claude ../tripmate-claude`.
+
+
 ## 2026-05-27 16:00 (claude)
 
 **작업**: Sprint 4 진입 PR-B — 백엔드 features API + lifespan + cluster_query +
