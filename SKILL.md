@@ -77,8 +77,9 @@ pytest apps/api/tests -q
 pytest apps/api/tests/integration -q
 ```
 
-현 단계(v2 설계)는 위 명령이 의미 있는 산출물을 만들지 않는다. 코드 작성 요청이
-들어오면 위 절차로 부트스트랩한다.
+현재 저장소는 Sprint 1~3 산출물과 Sprint 4 준비/진행용 구현이 함께 존재한다.
+실행 전에는 `docs/resume.md`, `docs/runbooks/local-dev.md`, 관련 Sprint 문서를
+먼저 확인한다.
 
 ## 3. 디렉토리 지도 (계획)
 
@@ -250,27 +251,24 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 
 새 세션이 들어오면 이 순서로 읽는다:
 
-1. `README.md` — 정체성, 빠른 시작, 문서 지도
-2. `CLAUDE.md` — 1쪽 진입 요약
-3. `AGENTS.md` — 작업 룰
-4. 본 파일 `SKILL.md` — DO NOT, 도메인 어휘
+1. 도구별 1차 진입 파일
+   - Claude: `CLAUDE.md`
+   - Codex / Antigravity / Cursor / Copilot: `AGENTS.md`
+2. `AGENTS.md` — 작업 룰
+3. 본 파일 `SKILL.md` — DO NOT, 도메인 어휘
+4. `docs/agent-guide.md` — 기록·ADR·PR 워크플로
 5. `docs/sprints/README.md` — Sprint 1~N 계획
-6. `docs/architecture.md` — 책임 경계
-7. `docs/resume.md` — "다음 한 작업"
-8. `docs/journal.md` 최신 3건 — 직전 컨텍스트
+6. `docs/resume.md` — 현재 상태와 다음 한 작업
+7. `docs/journal.md` 최신 3건 — 직전 컨텍스트
+8. `README.md` — 저장소 정체성과 문서 지도
 9. 관련 ADR (`docs/decisions.md`)
 
-## 9. 코드 작성 금지 (현 단계)
+## 9. 현재 단계 메모
 
-설계·문서화 단계에서는 `apps/`, `packages/`, `infra/`에 코드를 작성하지 않는다.
-별도의 코드 작성 요청이 있을 때까지 본 저장소는 **문서·계약·결정의 저장소**다.
+초기 문서화 단계의 "코드 작성 금지" 규칙은 더 이상 현재 상태를 설명하지 않는다.
+현 기준선은 Sprint 1~3 머지 완료, Sprint 4 준비/진행 단계다.
 
-**해제 시점**: 사용자의 Sprint 1 진입 승인 → 첫 PR에 `apps/{api,web,etl}` +
-`infra/docker-compose.yml` + `packages/` scaffolding이 들어간다. 자세히는
-`docs/sprints/SPRINT-1.md`.
-
-**현재 허용된 예외**:
-
-- `.env.example` placeholder
-- `pyproject.toml` skeleton (의존성 placeholder, lint 계약 박기)
-- `apps/web/package.json` skeleton (코드 작성 단계 진입 직전 PR로 박기)
+- 코드 변경 가능 범위와 책임 경계는 `AGENTS.md`의 "현재 단계 정책"을 따른다.
+- 구현 우선순위는 `docs/resume.md`, `docs/tasks.md`, `docs/sprints/SPRINT-4.md`를
+  함께 본다.
+- `python-krtour-map` 책임 범위를 넘는 기능은 이 저장소에서 직접 구현하지 않는다.
