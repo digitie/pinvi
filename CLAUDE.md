@@ -41,7 +41,8 @@
 
 ## 2. 현 단계
 
-**Sprint 1~3 머지 완료**. Sprint 4 진입 대기 (지도 + 사용자 UI → **v0.1.0** 출시).
+**Sprint 1~3 머지 완료**. 현재 기준선은 Sprint 4 준비/진행 단계다
+(지도 + 사용자 UI + `maplibre-vworld-js` + CI/CD 재활성 → **v0.1.0** 출시).
 이후 Sprint 5 (실시간 + ETL + Grafana embed + Backup 1차 → **v0.2.0**) → Sprint
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.

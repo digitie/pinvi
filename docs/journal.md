@@ -36,6 +36,36 @@ Read로 교차검증 후 판단한다.
 
 **후속**: 본 PR(journal) 머지 + 머지된 로컬 브랜치 정리.
 
+## 2026-06-01 10:20 (codex)
+
+**작업**: 기준 문서 정합성 복구. Sprint 상태, 진입 절차, backlog 추적 문서의
+시점 불일치를 정리.
+
+**컨텍스트**: `README.md`는 여전히 "Sprint 1 진입 직전 / 문서 전용"으로 남아
+있었고, `AGENTS.md`는 코드 작성 금지 규칙을 현재형으로 유지했다. 반면 실제
+저장소에는 Sprint 1~3 산출물, Sprint 4 workflow, features API 구현이 이미 있다.
+`resume.md`와 `tasks.md`도 최신 `journal.md`보다 과거 시점을 가리켰다.
+
+**갱신 파일**:
+- `docs/execplan/doc-sync-2026-06-01.md` — 문서 정합성 복구 범위 기록
+- `README.md` — 현재 상태를 Sprint 4 기준선으로 갱신, 진입 순서 정리
+- `AGENTS.md` — stale한 "코드 작성 금지"를 현재 단계 정책으로 교체
+- `CLAUDE.md` — 현 단계 설명을 Sprint 4 준비/진행으로 갱신
+- `SKILL.md` — quick start 주석과 첫 5분 진입 프로토콜 정합화
+- `docs/agent-guide.md` — 도구별 1차 진입 파일 기준으로 프로토콜 재정렬
+- `docs/resume.md` — PR-A/T-030 등 stale 항목 제거, 다음 작업 재기록
+- `docs/tasks.md` — Sprint 4 backlog 중심으로 재정렬, 완료/진행 항목 수정
+- `docs/architecture/frontend.md` — `apps/web/lib/kakao.ts` 구 경로 참조 제거
+
+**결정**: 최신 기준선은 "Sprint 1~3 머지 완료 + Sprint 4 준비/진행"으로 본다.
+진행 추적은 `resume.md` 단독이 아니라 `resume.md` + `tasks.md` + `journal.md`
+교차 확인이 필요하다.
+
+**발견**: 문서 drift의 대부분은 상태 문구가 실제 merge 이후 갱신되지 않은 데서
+생겼다. 신규 ADR보다 상태 추적 문서의 정기 정리가 먼저 필요하다.
+
+**다음**: secret / branch protection 실제 적용 여부를 확인하고 Sprint 4 open item을
+merge 상태 기준으로 다시 쪼갠다.
 
 ## 2026-05-27 16:30 (claude)
 

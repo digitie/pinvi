@@ -4,10 +4,10 @@
 지도/날씨/이벤트/가격/공지/경로/구역 데이터를 사용해 사용자가 여행 계획을 세우고,
 이동 중 컨텍스트(날씨/혼잡/이벤트)를 확인하고, 결과를 기록·공유하도록 돕는다.
 
-> **현재 상태 (v2 설계 단계 — Sprint 1 진입 직전)**: master/main 브랜치는 v2
-> 사양으로 새로 시작했다. 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 본 단계는
-> **문서/계약/결정 전용**이며 별도 요청 전까지 코드를 작성하지 않는다. 자세히는
-> `CLAUDE.md`, `AGENTS.md`, `docs/sprints/README.md`.
+> **현재 상태 (Sprint 4 준비/진행 단계)**: Sprint 1~3는 머지 완료, 현재 기준선은
+> 지도 UI + `maplibre-vworld-js` 통합 + CI/CD 재활성화가 포함된 Sprint 4다.
+> 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 상태 추적은 `docs/resume.md`,
+> `docs/tasks.md`, `docs/sprints/README.md`를 우선한다.
 
 ## 정체성
 
@@ -22,7 +22,8 @@
 
 ## 구성
 
-TripMate는 **monorepo**다. 코드 작성 단계 진입 시 다음 구조로 박는다 (Sprint 1).
+TripMate는 **monorepo**다. 현재 저장소는 아래 구조를 이미 사용 중이며 Sprint별로
+구현을 확장한다.
 
 ```
 apps/
@@ -116,19 +117,21 @@ pytest apps/api/tests -q
 npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 ```
 
-현 단계(v2 설계)는 위 명령이 의미 있는 산출물을 만들지 않는다. 코드 작성
-요청이 들어오면 Sprint 1 PR로 위 절차를 부트스트랩한다.
+현재는 Sprint 4 기준선 문서와 일부 구현이 함께 존재한다. 정확한 실행 전제와
+진척도는 `docs/runbooks/local-dev.md`, `docs/resume.md`, 각 Sprint 문서를 함께 본다.
 
 ## 문서 지도
 
 진입 순서 (5~10분):
 
-1. `CLAUDE.md` — 1쪽 진입 요약
+1. 도구별 1차 진입 파일 확인
+   - Claude: `CLAUDE.md`
+   - Codex / Antigravity / Cursor / Copilot: `AGENTS.md`
 2. `AGENTS.md` — 지시 우선순위, DO NOT
 3. `SKILL.md` — 도메인 어휘, 자주 묻는 작업
-4. `docs/sprints/README.md` — Sprint 1~N 계획
-5. `docs/architecture.md` — 의존 방향, 책임 경계
-6. `docs/resume.md` — 다음 한 작업
+4. `docs/agent-guide.md` — 기록·ADR·PR 워크플로
+5. `docs/sprints/README.md` — Sprint 1~N 계획
+6. `docs/resume.md` — 현재 상태와 다음 한 작업
 7. `docs/journal.md` 최신 3건 — 직전 컨텍스트
 8. 관련 ADR (`docs/decisions.md`)
 
@@ -138,6 +141,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - 작업·문서화 가이드: [`docs/agent-guide.md`](docs/agent-guide.md)
 - 개발 환경: [`docs/dev-environment.md`](docs/dev-environment.md)
 - v1 → v2 자산 매핑: [`docs/v1-to-v2-mapping.md`](docs/v1-to-v2-mapping.md)
+- 현재 상태 추적: [`docs/resume.md`](docs/resume.md) / [`docs/tasks.md`](docs/tasks.md)
 
 **아키텍처**
 - 큰 그림: [`docs/architecture.md`](docs/architecture.md)
