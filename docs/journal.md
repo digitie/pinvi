@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-01 (claude)
+
+**작업**: 문서 정합성 점검 + git 실행 정책 / `.codegraph` ignore 명시 (PR #19, #20).
+
+**컨텍스트**: 사용자의 "문서 정합성 확인 + 보완 + git Windows 버전 명시 +
+`.codegraph` gitignore" 지시. Windows worktree(`F:/dev/tripmate-claude`, NTFS)에서
+작업.
+
+**반영 (유효)**:
+- **git 실행 정책** — Windows worktree(NTFS)에서 git 명령은 Windows 버전
+  git(`git.exe`) 사용, WSL git으로 `/mnt/f` NTFS 경로 조작 금지. pytest/docker/
+  npm은 기존대로 WSL ext4 미러(ADR-004) 유지. `CLAUDE.md` worktree 블록 +
+  `AGENTS.md` worktree/WSL 섹션 + `docs/decisions.md` ADR-017 amendment(2026-05-31)에
+  동기 반영 (ADR-016 준수).
+- **`.codegraph/` ignore** — `.gitignore`에 이미 반영(71~72행, ADR-017 후속)됨을
+  확인. 변경 불필요 — ADR-017 amendment에 명시.
+- **`docs/decisions.md`** — ADR-017 블록 안에 잘못 들어가 있던 `다음 신규 =
+  ADR-024.` 중복 라인 제거. 정식 `## 다음 ADR 번호` 섹션(파일 끝)은 유지.
+- **`CLAUDE.md` §5** — "가장 중요한 5개" → "6개" (실제 6개 룰 나열에 맞춰 정정).
+
+**정정 기록 (중요)**: PR #19/#20 작업 중 "literal `\n` 직렬화 손상 10개 문서"로
+오판해 변환을 수행했으나, **실제 손상이 아니었음**. 원인은 Windows MSYS `grep`이
+`\n` 패턴을 개행으로 해석해 정상 문서를 손상으로 표시한 도구 아티팩트.
+ripgrep / `od -c` / Read 교차검증 결과 모든 문서는 처음부터 정상 마크다운이며
+실내용 변경 없음. 따라서 PR #19/#20 커밋 메시지의 "literal \n 복구" 문구는
+부정확 — 실질 변경은 위 git 정책 / 중복 제거 / 카운트 정정뿐. 또한 #19에 실수로
+포함된 임시 스크립트 `_verify.js`는 #20에서 제거.
+
+**교훈**: NTFS worktree에서 텍스트 패턴 검사는 MSYS `grep` 대신 ripgrep(Grep
+도구)을 쓴다. `\n` 같은 메타문자 카운트는 도구별 해석 차이가 크므로 `od -c` /
+Read로 교차검증 후 판단한다.
+
+**후속**: 본 PR(journal) 머지 + 머지된 로컬 브랜치 정리.
+
+
 ## 2026-05-27 16:30 (claude)
 
 **작업**: worktree 이름 prefix `geo-` → `tripmate-` 변경 (ADR-017 amendment).
