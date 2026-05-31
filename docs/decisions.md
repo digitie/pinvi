@@ -546,6 +546,11 @@
 - **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `tripmate-` 변경
   (`geo-claude` → `tripmate-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/tripmate-<agent>`.
   실제 worktree 디렉터리는 `git worktree move`로 rename.
+- **amendment (2026-05-31)**: Windows worktree(NTFS, 예: `F:/dev/tripmate-claude`)에서
+  git 명령은 **Windows 버전 git (`git.exe`)** 으로 실행한다 (사용자 지시). WSL git으로
+  `/mnt/f/...` NTFS 경로를 조작하지 않는다 — 권한·I/O 성능·CRLF 변환 문제. pytest /
+  docker / npm 등 나머지 실행은 ADR-004대로 WSL ext4 미러를 유지한다 (git만 예외).
+  `.codegraph/`는 본 ADR 후속(`.gitignore`)에 이미 반영됨.
 - **결정자**: 사용자
 - **컨텍스트**: AGENTS.md / CLAUDE.md 동기 정책 (ADR-016)으로 Claude Code / OpenAI
   Codex / Google Antigravity 2.0 + Gemini 3.1 Pro 세 도구가 본 저장소를 동시에
