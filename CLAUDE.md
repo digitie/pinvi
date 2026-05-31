@@ -13,6 +13,11 @@
 > — 로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용),
 > `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
 >
+> **Git 실행** (ADR-017): Windows worktree(`F:/dev/tripmate-claude`, NTFS)에서
+> git 명령은 **Windows 버전 git (`git.exe`)** 으로 실행한다. WSL git으로
+> `/mnt/f/...` NTFS 경로를 조작하지 않는다 (권한·성능·CRLF 문제). pytest /
+> docker / npm 등 나머지 실행은 기존대로 WSL ext4 미러 (ADR-004).
+>
 > **CodeGraph Commands**
 > - 인덱싱 초기화: `codegraph init -i` (worktree마다 1회)
 > - 동기화 상태 확인: `codegraph status`
@@ -79,7 +84,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
   / Docker Compose / Odroid M1S (운영 single node)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
 
-## 5. 절대 금지 (가장 중요한 5개)
+## 5. 절대 금지 (가장 중요한 6개)
 
 1. **main에 직접 push 금지** — 모든 변경은 feature branch + PR.
 2. **`python-krtour-map`의 `feature`/`provider_sync` schema에 TripMate가

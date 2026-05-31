@@ -108,6 +108,10 @@ trunk를 절대 편집하지 않는다.
 - **CodeGraph** (`colbymchenry/codegraph`) 인덱스는 worktree마다 1회
   `codegraph init -i`, 이후 task 시작 시 `codegraph sync`.
 - `.codegraph/` 디렉터리는 `.gitignore` 박힘 (로컬 SQLite, 머신/worktree마다 별개).
+- **Git 실행**: Windows worktree(`F:/dev/tripmate-<agent>`, NTFS)에서 git 명령은
+  **Windows 버전 git (`git.exe`)** 으로 실행한다 (ADR-017). WSL git으로 `/mnt/f/...`
+  NTFS 경로를 조작하지 않는다 — 권한·성능·CRLF 문제. pytest / docker / npm 등
+  나머지 실행은 WSL ext4 미러 (ADR-004).
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
 #### CodeGraph Commands
@@ -139,8 +143,9 @@ trunk를 절대 편집하지 않는다.
 ### WSL ext4 미러
 
 PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다. NTFS 마운트에서
-직접 `git`/`pytest`/`docker`/`npm`을 실행하지 않는다 — 파일 권한, inotify,
-심볼릭 링크, 빠른 I/O 성능 모두 저하된다.
+직접 `pytest`/`docker`/`npm`을 실행하지 않는다 — 파일 권한, inotify,
+심볼릭 링크, 빠른 I/O 성능 모두 저하된다. **단 `git`은 예외** — Windows
+worktree(NTFS)에서는 Windows 버전 git (`git.exe`)을 사용한다 (ADR-017).
 
 - **코드/가상환경/git**: WSL ext4 미러 (`~/tripmate-workspaces/tripmate/`).
 - **데이터(`dataset/`, `refdocs/`)**: NTFS의 프로젝트 디렉토리 (예:
