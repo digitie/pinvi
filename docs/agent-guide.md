@@ -338,12 +338,16 @@ GitHub branch protection (운영자 수동 설정):
 5. 통합 테스트 + (DB 닿는 경우) EXPLAIN 검증
 6. journal + resume
 
-## 10. WSL ext4 미러 vs NTFS 작업 흐름
+## 10. NTFS worktree (git) + WSL ext4 테스트 미러 (ADR-024)
 
-- `git`, `pytest`, `ruff`, `mypy`, `docker`, `npm`은 WSL ext4 미러
-  (`~/tripmate-workspaces/tripmate`)에서.
-- `dataset/`, `refdocs/`는 NTFS에 두고 ext4 미러에 심볼릭 링크.
-- 명령 실행 전후로 NTFS ↔ WSL 미러 동기 (`docs/dev-environment.md` 참고).
+- **편집 / branch / commit / push / PR**: NTFS worktree `F:/dev/tripmate-<agent>`에서
+  **Windows git(`git.exe`)으로만**.
+- **`pytest` / `ruff` / `mypy` / `docker` / `npm` 등 무거운 실행**: WSL ext4 미러
+  `~/tripmate-workspaces/tripmate-<agent>`에서. **미러에서 commit/push 금지.**
+- **rsync는 NTFS → ext4 단방향**. `dataset/`·`refdocs/`는 NTFS 원본을 ext4 미러에
+  심볼릭 링크로 참조(ext4에서 변경 금지).
+- "어떤 순서로 무엇을 치는가"는 `docs/agent-workflow.md`(런북), 셋업·함정 전체는
+  `docs/dev-environment.md`(ADR-024), 반복 실패는 `docs/agent-failure-patterns.md`.
 
 ## 11. 도움이 안 될 때
 

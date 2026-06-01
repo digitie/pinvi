@@ -324,6 +324,8 @@ WSL2 설치 → §4 시스템 패키지 → trunk clone + worktree 재생성
 
 ## 참고
 
+- `docs/agent-workflow.md` — "어떤 순서로 무엇을 치는가" 런북 (본 문서의 실행 요약).
+- `docs/agent-failure-patterns.md` — 반복되는 환경/도구 실패와 재발 방지.
 - ADR-024 — NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러.
 - ADR-017 — agent별 고정 worktree + Windows git.exe.
 - ADR-004 — 미러 모델(디스크/경로). source-of-truth 주장은 ADR-024가 supersede.

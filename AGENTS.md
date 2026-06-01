@@ -95,11 +95,11 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 `~/tripmate-workspaces/tripmate`)는 사람이 직접 만지는 checkout이며, AI 도구는
 trunk를 절대 편집하지 않는다.
 
-| AI 도구 | worktree 이름 | 예시 경로 |
-|---------|--------------|----------|
-| Claude Code | `tripmate-claude` | `F:/dev/tripmate-claude` |
-| OpenAI Codex (CLI / VS Code) | `tripmate-codex` | `F:/dev/tripmate-codex` |
-| Google Antigravity 2.0 | `tripmate-antigravity` | `F:/dev/tripmate-antigravity` |
+| AI 도구 | worktree 이름 | 예시 경로 | idle branch |
+|---------|--------------|----------|-------------|
+| Claude Code | `tripmate-claude` | `F:/dev/tripmate-claude` | `agent/claude-idle` |
+| OpenAI Codex (CLI / VS Code) | `tripmate-codex` | `F:/dev/tripmate-codex` | `agent/codex-idle` |
+| Google Antigravity 2.0 | `tripmate-antigravity` | `F:/dev/tripmate-antigravity` | `agent/antigravity-idle` |
 
 - **worktree는 영속** — 작업마다 새로 만들지 않는다.
 - **작업마다 브랜치만 새로**: `git fetch && git switch -c agent/<agent>-<task> origin/main`
@@ -219,7 +219,8 @@ git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 
 | Admin 콘솔 | `docs/api/admin.md` → `docs/runbooks/admin.md` → `docs/spec/v8/04-admin.md` |
 | ETL asset | `docs/runbooks/etl.md` → `docs/architecture/dagster-etl-bridge.md` |
 | 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
-| 개발 환경 셋업 / 검증 실행 (NTFS git + WSL 미러) | `docs/dev-environment.md` (ADR-024) → `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
+| 개발 환경 셋업 / 검증 실행 (NTFS git + WSL 미러) | `docs/agent-workflow.md` (런북) → `docs/dev-environment.md` (ADR-024) → `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
+| 환경/도구 실패가 의심될 때 | `docs/agent-failure-patterns.md` (WSL git·런처·escape·통합테스트 함정) |
 | 컴플라이언스 (PII/위치) | `docs/compliance/{lbs-act,pipa}.md` → `docs/architecture/user-location.md` |
 | 테스트 작성 | `docs/conventions/testing.md` → 해당 도메인 문서 |
 

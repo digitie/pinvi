@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-01 (claude) — 에이전트 환경 문서를 python-kraddr-geo에 정렬
+
+**작업**: 개발 환경 문서 구조를 별 저장소 `python-kraddr-geo`의 성숙한 3-doc 패턴에
+맞춰 정렬 (사용자 지시 "python kraddr geo에 맞춰").
+
+**배경**: ADR-024로 환경 모델은 확정했으나, kraddr-geo는 그 위에 (1)
+`dev-environment.md`(reference) + (2) `agent-workflow.md`("무엇을 치는가" 런북) +
+(3) `agent-failure-patterns.md`(반복 실패 카탈로그) 3단 구조 + `agent/<agent>-idle`
+idle 브랜치 컨벤션을 갖고 있었다. tripmate는 (1)만 있고 idle 브랜치는 `-init`이었다.
+
+**신규/정렬**:
+- `docs/agent-failure-patterns.md` 신규 — kraddr-geo 패턴 포팅 + 이번 세션 실측:
+  WSL git on NTFS worktree 포인터 혼용, 명령 런처/대량 병렬 backlog, MSYS `grep`의
+  `\n` 오해석(정상 문서를 손상으로 오판 → ripgrep/`od -c` 교차검증), async alembic
+  미커밋 + pytest-asyncio 루프/풀.
+- `docs/agent-workflow.md` 신규 — 두 위치 표 + 함정 먼저(git.exe/PATH/TMP) + 작업
+  루프 + 붙여넣기 체크리스트. 스크립트(`agent_env.sh` 등) 대신 수동 명령(사용자
+  결정: 스크립트 없이 문서 절차만).
+- **idle 브랜치 `agent/<agent>-init` → `-idle`** (kraddr-geo 통일). worktree 생성을
+  Windows git.exe로 하라는 caveat 추가(WSL 생성 시 `/mnt/f` 포인터 사고).
+- AGENTS.md worktree 표에 idle branch 열 추가, AGENTS/CLAUDE/dev-environment/
+  agent-guide §10에서 신규 2개 문서 cross-link. agent-guide §10의 구 모델 문구
+  (양방향 sync) 교체.
+
+**검증**: 내부 링크 점검(깨진 참조 0), `-init` 잔존 0, 신규 문서 2개 + 수정 5개.
+
+**다음**: 본 PR 머지 → 각 에이전트가 `docs/agent-workflow.md` 따라 진입.
+
+
 ## 2026-06-01 (claude) — 개발 환경 모델 확정 (ADR-024)
 
 **작업**: NTFS git + WSL 개발/테스트 환경에서 에이전트(특히 codex)가 반복적으로
