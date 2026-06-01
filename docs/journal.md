@@ -2,6 +2,43 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-01 (claude) — 개발 환경 모델 확정 (ADR-024)
+
+**작업**: NTFS git + WSL 개발/테스트 환경에서 에이전트(특히 codex)가 반복적으로
+헤매던 문제의 근본 원인을 잡고, 따라 할 수 있는 절차로 문서화 (사용자 지시,
+`python-kraddr-geo` 문서 참고).
+
+**근본 원인**: `docs/dev-environment.md`가 구 모델(ADR-004: "WSL ext4가 표준 작업
+위치 / Git source of truth는 ext4 / 양방향 rsync")을 그대로 서술하는데, ADR-017 +
+AGENTS/CLAUDE는 신 모델(NTFS worktree + Windows git.exe)을 말해 **문서 간 모순**이
+있었다. 그래서 에이전트가 "어디서 commit?"을 헤맸다. 실제 증거:
+- codex worktree `.git` = `gitdir: /mnt/f/dev/tripmate/.git/worktrees/tripmate-codex`
+  (WSL 생성), claude worktree = `gitdir: F:/dev/tripmate/.git/worktrees/tripmate-geo-claude`
+  (Windows 생성, 게다가 stale `-geo-` 이름). 환경 혼용 시 `fatal: not a git
+  repository` / `prunable` → 잘못된 prune으로 worktree 삭제 위험.
+
+**결정·문서**:
+- **ADR-024 신설** — NTFS worktree = git source of truth(Windows git.exe) / WSL ext4
+  = 일회용 테스트 미러(단방향 rsync, commit 금지). ADR-004의 source-of-truth 주장만
+  supersede(디스크/경로는 유지). 다음 ADR 번호 024→025.
+- **`docs/dev-environment.md` 전면 재작성** — §0에 codex가 겪은 함정 4종(포인터
+  혼용 / source 모호 / WSL PATH 오염 / TMP=Windows Temp)과 대책, §1~§12에 레이아웃·
+  worktree·미러 rsync·셋업·PATH·검증 게이트·DB·체크리스트. `python-kraddr-geo`와
+  동일 패턴.
+- **AGENTS.md / CLAUDE.md 동기**(ADR-016) — 모순됐던 "Git source of truth는 ext4"
+  문구 교체, 진입 절차표·§7 인덱스에 dev-environment 행 추가.
+- **`docs/runbooks/codegraph-worktrees.md`** — §3.6 Windows/WSL git 포인터 함정 +
+  `git worktree repair` 복구 절차 추가, ADR-024 참조.
+
+**검증**: 내부 문서 링크 점검(깨진 참조 0), ADR 번호 정합(024 박힘/다음 025),
+AGENTS↔CLAUDE 동기 확인.
+
+**사용자 액션 권장(문서 밖)**: claude worktree의 stale 포인터(`tripmate-geo-claude`)는
+trunk에서 `git worktree repair F:\dev\tripmate-claude`로 교정하면 깔끔하다.
+
+**다음**: 본 PR 머지 → 각 에이전트가 `docs/dev-environment.md` 따라 미러 재셋업.
+
+
 ## 2026-06-01 (claude) — Sprint 2 핵심 DoD 마감
 
 **작업**: Sprint 2 잔여 구현 — Google OAuth(G-4 안전 매칭) + Notice plan → trip

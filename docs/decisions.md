@@ -884,7 +884,71 @@
   - 사용자 N150 도입 시점 / 사양 확정 후 본 ADR amendment
 - **참조**: ADR-022 (백업), `docs/runbooks/odroid-docker.md`
 
+## ADR-024: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러
+
+- **상태**: accepted (ADR-004의 "Git source of truth는 WSL ext4" 부분을 supersede.
+  ADR-017 worktree 정책을 개발 환경 모델로 확정)
+- **날짜**: 2026-06-01
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: ADR-017로 AI 도구(Claude / Codex / Antigravity)마다 NTFS에 고정
+  worktree(`F:/dev/tripmate-<agent>`)를 두고, NTFS worktree에서 git을 Windows 버전
+  git(`git.exe`)으로 실행하기로 했다. 그런데 `docs/dev-environment.md`는 여전히
+  ADR-004 시절의 구 모델("WSL ext4 미러가 표준 작업 위치", "Git source of truth는
+  ext4", commit은 ext4 한 쪽에서만, 양방향 rsync)을 서술하고 있었다. 두 모델이
+  공존하면서 다음 실제 사고가 반복됐다:
+  - **worktree 포인터 환경 혼용**: codex worktree의 `.git`는
+    `gitdir: /mnt/f/dev/tripmate/.git/worktrees/tripmate-codex`(WSL에서 생성),
+    claude worktree는 `gitdir: F:/dev/tripmate/.git/worktrees/...`(Windows에서
+    생성)로 절대경로 표기가 환경별로 달랐다. 같은 worktree를 다른 환경 git으로
+    다루면 `fatal: not a git repository` / `git worktree list`에서 `prunable`로
+    표시되고, 그 상태로 `git worktree prune`을 돌리면 살아있는 worktree 등록까지
+    지워질 수 있다.
+  - **source of truth 모호**: "ext4에서 commit" vs "NTFS worktree에서 commit"이
+    문서마다 달라, 에이전트가 양방향 rsync 후 어느 쪽을 push 기준으로 삼을지
+    헤맸다. 특히 rsync 왕복 중 파일 일부에 중복/오염이 섞이는 사고가 있었다.
+  - **WSL에서 Windows 도구 PATH 오염**: `npm`/`git`이 `/mnt/c/...`의 Windows
+    shim으로 잡혀 `node: not found`, UNC 경로 경고, 잘못된 경로 전달이 발생.
+  같은 NTFS+WSL 혼용 문제를 별 저장소 `python-kraddr-geo`가 ADR-041로 이미
+  해결했고(동일 패턴), 본 저장소도 그 패턴으로 통일한다.
+- **결정**:
+  - **git source of truth = NTFS worktree**. 코드 편집 / branch / commit / push /
+    PR은 NTFS worktree(`F:/dev/tripmate-<agent>`)에서 Windows git(`git.exe`)으로만
+    수행한다. ADR-004의 "Git source of truth는 ext4" 문장은 **supersede**.
+  - **WSL ext4 = 일회용 테스트 미러**. 의존성 설치(`uv`/`pip`/`npm`), 테스트
+    (`pytest`/통합), Docker, 장기 실행(`uvicorn`)은 ext4 미러
+    (`~/tripmate-workspaces/tripmate-<agent>`)에서 수행한다. **미러에서는 commit /
+    push 하지 않는다.**
+  - **rsync는 단방향(NTFS → ext4)**. 작업/검증 직전 NTFS worktree → ext4 미러로
+    `rsync -a --delete` 복사. 검증 중 발견한 수정은 **NTFS worktree에 직접 반영**
+    하고 다시 단방향 sync한다. ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지
+    않는다(포매터가 ext4에서 파일을 고쳤을 때만, 그 파일에 한해 NTFS로 단방향
+    sync-back 후 `git diff`로 확인).
+  - **worktree는 환경 전용**: 각 worktree의 git은 한 환경에서만 다룬다. 같은
+    worktree를 Windows git과 WSL git으로 번갈아 조작하지 않는다. `git worktree
+    prune`은 그 worktree를 운용하는 환경에서만 실행한다. 환경을 바꿔야 하면 먼저
+    `git worktree repair <경로>`로 포인터를 그 환경 기준으로 맞춘다.
+  - **데이터(`dataset/`, `refdocs/`)**는 NTFS 원본을 기준으로 두고 ext4 미러에서는
+    절대경로 또는 심볼릭 링크로 참조한다(ext4에서 변경 금지).
+- **근거**:
+  - NTFS worktree를 단일 git 기준으로 두면 "어디서 commit?" 모호함이 사라진다.
+    Windows 탐색기 / IDE에서 같은 파일을 그대로 본다.
+  - ext4를 실행 전용 일회용으로 두면 양방향 동기의 오염 위험이 사라지고, 미러는
+    언제든 폐기·재생성 가능하다(I/O·inotify·권한은 ext4가 우월).
+  - `python-kraddr-geo` ADR-041과 동일 패턴 → 도구·저장소 간 일관.
+- **결과 (긍정)**: 환경 모델 단일화. codex/antigravity도 같은 절차를 따른다.
+  worktree prune 사고·rsync 오염·git.exe vs WSL git 혼용이 문서로 차단된다.
+- **결과 (부정)**: 작업 직전 단방향 rsync 1회가 필요. ext4에서 포맷한 파일은
+  NTFS로 sync-back 후 diff 확인하는 한 단계가 추가된다.
+- **후속**:
+  - `docs/dev-environment.md` 신 모델로 전면 재작성 (본 PR).
+  - `AGENTS.md` "WSL ext4 미러" 섹션 + `CLAUDE.md` worktree 블록 동기 (ADR-016).
+  - `docs/runbooks/codegraph-worktrees.md`에 Windows/WSL git 포인터 함정 절 +
+    ADR-024 참조 추가.
+- **참조**: ADR-004(미러 모델 — 디스크/경로는 유지, source-of-truth 주장만
+  supersede), ADR-017(worktree + git.exe), `python-kraddr-map` 진영
+  `python-kraddr-geo` ADR-041, `docs/dev-environment.md`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-024**
+- 다음 신규 ADR = **ADR-025**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
