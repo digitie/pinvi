@@ -49,10 +49,10 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-023**. 최근 박힘: ADR-017 (codegraph + worktree),
-ADR-018 (한국 전용), ADR-019 (MCP 외부 인터페이스), ADR-020 (Gemini 별도 repo),
-ADR-021 (CI/CD 재활성), ADR-022 (Backup 핫스왑), ADR-023 (Odroid + N150 병행).
-다음 신규 = ADR-024.
+ADR 현황: ADR-001 ~ **ADR-025**. 최근 박힘: ADR-021 (CI/CD 재활성), ADR-022
+(Backup 핫스왑), ADR-023 (Odroid + N150 병행), ADR-024 (NTFS worktree=git source
+of truth + WSL ext4 일회용 미러), ADR-025 (geocoding은 kraddr-geo v2 REST 직접).
+다음 신규 = ADR-026.
 
 v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `infra/`,
 `scripts/`, `skills/`. v2가 가져오는 항목은 ADR로 한 건씩 박는다.

@@ -154,6 +154,10 @@ async def get_krtour_map_client() -> AsyncKrtourMapClient:
   provider client를 라이브러리에 주입한다.
 - 라이브러리는 어떤 resource도 스스로 생성하지 않는다.
 - TripMate ↔ 라이브러리 사이에 HTTP는 없다.
+- 위 `kraddr_geo_client` 주입은 **krtour-map의 적재(write) 시 주소 보강용**이다
+  (krtour-map 내부 책임, 그쪽 ADR-006). **사용자 대면 geocoding(조회)** 은 이와
+  별개로 `kraddr-geo` v2 REST를 직접 HTTP 호출한다 (ADR-025,
+  `docs/integrations/kraddr-geo.md`). 두 경로를 혼동하지 않는다.
 - 디버그 UI (`krtour-map-debug-ui`)는 별도 패키지. TripMate는 의존하지 않는다.
   운영자가 별도로 띄울 수 있다.
 
