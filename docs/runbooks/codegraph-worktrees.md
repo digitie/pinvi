@@ -23,8 +23,12 @@ F:/dev/tripmate-antigravity  ← Google Antigravity 2.0 전용 worktree (영속)
 - AI 도구는 **절대 trunk** (`F:/dev/tripmate`)를 직접 만지지 않는다 — 각자
   worktree만 사용.
 
-> macOS / Linux는 경로만 다르고 절차 동일. WSL을 쓰는 경우는 `~/tripmate-workspaces/tripmate-<agent>`
-> 패턴 권장 (`docs/dev-environment.md` ADR-004 미러 정책 호환).
+> **환경 모델 (ADR-024)**: NTFS worktree(`F:/dev/tripmate-<agent>`)가 git source of
+> truth이고 git은 Windows git(`git.exe`)으로만 다룬다. WSL ext4
+> (`~/tripmate-workspaces/tripmate-<agent>`)는 의존성·테스트·docker 전용 **일회용
+> 미러**(commit 금지, NTFS→ext4 단방향 rsync)다. 셋업·검증 절차는
+> `docs/dev-environment.md`. 같은 worktree를 Windows git과 WSL git으로 번갈아
+> 다루지 않는다(§3.6 git 포인터 함정).
 
 ## 1. 1회 setup — worktree + CodeGraph init
 
@@ -330,6 +334,39 @@ git worktree remove ../tripmate-codex --force
 
 다시 살릴 때는 `§1.2 ~ §1.4` 재실행.
 
+### 3.6 Windows/WSL git 포인터 혼용 함정 (codex가 겪은 사고)
+
+각 worktree의 `.git` 파일과 `.git/worktrees/<name>/gitdir`에는 worktree를 **만든
+환경 기준의 절대경로**가 기록된다. WSL에서 만들면 `gitdir:
+/mnt/f/dev/tripmate/.git/worktrees/tripmate-codex`처럼 마운트 경로가, Windows
+git에서 만들면 `gitdir: F:/dev/tripmate/.git/worktrees/...`처럼 드라이브 경로가
+들어간다. 같은 폴더라도 두 표기가 다르므로 **다른 환경 git으로 같은 worktree를
+다루면**:
+
+```
+fatal: not a git repository
+# git worktree list 에는 해당 worktree가 prunable 로 표시됨
+```
+
+**이 상태에서 `git worktree prune`을 그대로 돌리면 살아있는 worktree 등록까지
+지워질 수 있다.** 바로 prune하지 않는다.
+
+원칙(ADR-024): 각 worktree는 **한 환경 전용**으로 운용한다. TripMate에서는 NTFS
+worktree의 git을 **Windows git(`git.exe`)으로만** 다룬다. WSL에서 `/mnt/f/dev/
+tripmate-<agent>`에 `git`을 실행하지 않는다(ext4 미러는 git 대상이 아니다).
+
+복구가 필요하면 실제로 사용할 환경에서 포인터를 그 환경 기준으로 맞춘다(`.git`과
+admin `gitdir` 양방향):
+
+```powershell
+# Windows PowerShell — trunk에서
+git worktree repair F:\dev\tripmate-claude
+git worktree list          # prunable 사라졌는지 확인
+```
+
+repair로 살아있는 worktree를 먼저 valid 상태로 만든 뒤에만, 폴더가 실제로 사라진
+등록을 표적 prune한다. `prune`은 **그 worktree를 운용하는 환경에서만** 실행한다.
+
 ## 4. AI 도구별 메모
 
 ### 4.1 Claude Code (`tripmate-claude`)
@@ -362,8 +399,10 @@ checkout하지 않는다. trunk와 worktree는 같은 `.git`을 공유하므로 
 
 ## 6. 참고
 
-- ADR-017 — `docs/decisions.md`
+- ADR-017 — `docs/decisions.md` (agent별 고정 worktree + Windows git.exe)
+- ADR-024 — NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러
 - ADR-016 — AI 에이전트 도구 다중 지원 (AGENTS.md ↔ CLAUDE.md)
-- ADR-004 — WSL 미러 모델 (디스크 / 경로 정책)
+- ADR-004 — WSL 미러 모델 (디스크 / 경로). source-of-truth 주장은 ADR-024가 supersede
+- `docs/dev-environment.md` — 셋업·검증·rsync·PATH 함정 전체 절차 (ADR-024)
 - `colbymchenry/codegraph` — https://github.com/colbymchenry/codegraph
   (Docs: https://colbymchenry.github.io/codegraph/)

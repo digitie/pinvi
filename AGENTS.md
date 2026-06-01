@@ -140,32 +140,36 @@ trunk를 절대 편집하지 않는다.
 답이 인덱스에서 나오면 파일을 다시 Read 하지 않는다 (반환된 소스가 권위).
 세부 표·트러블슈팅은 `docs/runbooks/codegraph-worktrees.md` §1.6.
 
-### WSL ext4 미러
+### NTFS worktree (git) + WSL ext4 테스트 미러 (ADR-024)
 
-PC 개발은 **WSL ext4** 또는 **WSL 미러 디렉토리**에서 수행한다. NTFS 마운트에서
-직접 `pytest`/`docker`/`npm`을 실행하지 않는다 — 파일 권한, inotify,
-심볼릭 링크, 빠른 I/O 성능 모두 저하된다. **단 `git`은 예외** — Windows
-worktree(NTFS)에서는 Windows 버전 git (`git.exe`)을 사용한다 (ADR-017).
+환경 모델은 **NTFS worktree = git source of truth, WSL ext4 = 일회용 테스트 미러**다
+(ADR-024가 ADR-004의 "source of truth는 ext4" 주장을 supersede). 구 모델("ext4가
+표준 작업 위치 / 양방향 rsync")은 폐기됐다 — 혼용 시 codex가 겪은 worktree 포인터
+사고·source-of-truth 모호가 재발한다.
 
-- **코드/가상환경/git**: WSL ext4 미러 (`~/tripmate-workspaces/tripmate/`).
-- **데이터(`dataset/`, `refdocs/`)**: NTFS의 프로젝트 디렉토리 (예:
-  `/mnt/f/dev/tripmate/dataset/`). MOIS localdata zip, krheritage SHP, fixture
-  대용량은 모두 NTFS. ext4 작업 디렉토리에는 심볼릭 링크 또는 NTFS 직접 참조.
-- **테스트**: 단위 테스트 픽스처는 소량으로 ext4. 통합/e2e는 NTFS `dataset/`/
-  `refdocs/`를 reference.
-- **카피 정책**: 작업이 끝나면 ext4 → NTFS로 rsync. Git source of truth는 ext4.
+- **git / 편집 / commit / push / PR**: NTFS worktree `F:/dev/tripmate-<agent>`에서
+  **Windows git(`git.exe`)으로만**. 같은 worktree를 WSL git으로 다루지 않는다
+  (포인터가 환경별 절대경로로 박혀 `fatal: not a git repository` / `prunable` →
+  잘못된 `prune`으로 살아있는 worktree 삭제 위험).
+- **의존성 설치·`pytest`·`docker`·장기 실행**: WSL ext4 미러
+  `~/tripmate-workspaces/tripmate-<agent>`에서. 파일 권한·inotify·I/O가 ext4에서
+  우월. **미러에서 commit/push 하지 않는다.**
+- **rsync는 단방향 (NTFS → ext4)**: 작업/검증 직전 `rsync -a --delete`로 미러 갱신.
+  수정은 NTFS worktree에 반영하고 다시 단방향 sync. ext4에서 포매터가 고친 파일만
+  예외적으로 그 파일에 한해 ext4 → NTFS sync-back 후 `git diff` 확인.
+- **데이터(`dataset/`, `refdocs/`)**: NTFS 원본 기준. ext4 미러에서는 심볼릭 링크/
+  절대경로로 참조하고 변경하지 않는다.
+- **WSL PATH 오염 금지**: WSL에서 `npm`/`node`/`git`/`rg`가 `/mnt/c/...` Windows
+  shim으로 잡히면 안 된다(`command -v`로 확인). 검색은 WSL native `rg`만.
+- **Playwright/브라우저 e2e**: Windows Node/브라우저에서만. WSL에서는 백엔드 검증 +
+  Linux Node lint/typecheck/build까지.
 
-자세한 절차는 `docs/dev-environment.md`. Windows 재설치 후 옵션 인수인계는
-`docs/windows-reinstall-recovery.md`에 함께 둔다 (코드 작성 단계 진입 시 작성).
+절차·명령·함정 전체는 `docs/dev-environment.md`(ADR-024), worktree 생성·CodeGraph·
+git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 reference다.
 
-작업 흐름:
-
-- WSL2 미러 디렉토리(`~/tripmate-workspaces/tripmate`)에서 실행할 명령은
-  `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && ..."` 형태로 감싼다.
-- 명령 실행 전후로 현재 프로젝트 디렉토리(`F:\dev\tripmate`)와 WSL 미러를 동기한다.
-- PowerShell `rg.exe`를 사용하지 않는다. 권한 문제와 WindowsApps 경로 오염을 피하기
-  위해 `wsl.exe -e bash -lc "... rg ..."`로 WSL native `rg`만 사용한다.
-- Windows PowerShell로 한국어 문서를 읽을 때는 `Get-Content -Encoding UTF8`을 명시한다.
+- WSL 명령은 `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-<agent> && ..."`로 감싼다.
+- PowerShell `rg.exe` 금지 — `wsl.exe -e bash -lc "... rg ..."`로 WSL native `rg`만.
+- PowerShell로 한국어 문서를 읽을 때는 `Get-Content -Encoding UTF8`을 명시한다.
 
 ## 지시 우선순위
 
@@ -215,6 +219,7 @@ worktree(NTFS)에서는 Windows 버전 git (`git.exe`)을 사용한다 (ADR-017)
 | Admin 콘솔 | `docs/api/admin.md` → `docs/runbooks/admin.md` → `docs/spec/v8/04-admin.md` |
 | ETL asset | `docs/runbooks/etl.md` → `docs/architecture/dagster-etl-bridge.md` |
 | 인프라 / 배포 | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` |
+| 개발 환경 셋업 / 검증 실행 (NTFS git + WSL 미러) | `docs/dev-environment.md` (ADR-024) → `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
 | 컴플라이언스 (PII/위치) | `docs/compliance/{lbs-act,pipa}.md` → `docs/architecture/user-location.md` |
 | 테스트 작성 | `docs/conventions/testing.md` → 해당 도메인 문서 |
 

@@ -13,10 +13,12 @@
 > — 로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용),
 > `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
 >
-> **Git 실행** (ADR-017): Windows worktree(`F:/dev/tripmate-claude`, NTFS)에서
-> git 명령은 **Windows 버전 git (`git.exe`)** 으로 실행한다. WSL git으로
-> `/mnt/f/...` NTFS 경로를 조작하지 않는다 (권한·성능·CRLF 문제). pytest /
-> docker / npm 등 나머지 실행은 기존대로 WSL ext4 미러 (ADR-004).
+> **개발 환경** (ADR-024): **NTFS worktree = git source of truth**(`F:/dev/tripmate-claude`)
+> — 편집/commit/push/PR은 여기서 **Windows git(`git.exe`)으로만**. WSL git으로
+> `/mnt/f/...` 같은 worktree를 다루지 않는다(포인터 환경 혼용 → `prunable`/prune
+> 사고). **WSL ext4 미러**(`~/tripmate-workspaces/tripmate-claude`)는 의존성·
+> `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). **rsync는 NTFS→ext4
+> 단방향**. 절차·함정은 `docs/dev-environment.md`.
 >
 > **CodeGraph Commands**
 > - 인덱싱 초기화: `codegraph init -i` (worktree마다 1회)
@@ -96,8 +98,9 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 4. **`from krtour_map import ...` (flat) 사용 금지** — 항상
    `from krtour.map import ...` (PEP 420 namespace, `python-krtour-map`
    ADR-022).
-5. **WSL ext4 미러를 거치지 않고 NTFS에서 직접 테스트/Docker 실행 금지** —
-   `docs/dev-environment.md`의 미러 절차 준수.
+5. **NTFS에서 직접 테스트/Docker 실행 금지 + ext4 미러에서 commit 금지** — 테스트·
+   docker·의존성은 WSL ext4 미러, git/commit/push는 NTFS worktree. rsync는 NTFS→ext4
+   단방향 (ADR-024, `docs/dev-environment.md`).
 6. **trunk** (`F:/dev/tripmate`, `~/tripmate-workspaces/tripmate`) **에 AI 도구가
    체크아웃 / 편집 금지** — Claude는 `tripmate-claude` worktree에서만 작업 (ADR-017,
    `docs/runbooks/codegraph-worktrees.md`).
@@ -131,6 +134,7 @@ lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 | Backup / Restore | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6) |
 | Admin Grafana embed | `docs/runbooks/grafana-admin-embed.md` (Sprint 5) |
 | Worktree + CodeGraph 운영 | `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
+| 개발 환경 (NTFS git + WSL 테스트 미러) | `docs/dev-environment.md` (ADR-024) |
 | 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
 | 테스트 작성 | `docs/conventions/testing.md` |
 | Sprint 작업 | `docs/sprints/SPRINT-<N>.md` |
