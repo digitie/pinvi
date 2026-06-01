@@ -213,7 +213,8 @@ git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 
 |----------|----------------|
 | API endpoint 신규/수정 | `docs/api/<domain>.md` → `docs/api/common.md` → `docs/data-model.md` |
 | DB schema 변경 | `docs/postgres-schema.md` → `docs/conventions/database.md` → `docs/data-model.md` |
-| 라이브러리 (`python-krtour-map`) 호출 | `docs/krtour-map-integration.md` → 라이브러리 저장소 `docs/agent-guide.md` |
+| 라이브러리 (`python-krtour-map`) 호출 — feature 데이터 | `docs/krtour-map-integration.md` → 라이브러리 저장소 `docs/agent-guide.md` |
+| Geocoding (주소/좌표/행정구역) — kraddr-geo v2 REST 직접 | `docs/integrations/kraddr-geo.md` (ADR-025) → `docs/architecture/geocoding-open-decisions.md` |
 | 외부 통합 (Resend/OAuth/Telegram/Gemini) | `docs/integrations/<service>.md` → `docs/compliance/data-policy.md` |
 | Frontend UI | `docs/architecture/frontend.md` → `docs/design/marker-palette.md` → 루트 `DESIGN.md` |
 | Admin 콘솔 | `docs/api/admin.md` → `docs/runbooks/admin.md` → `docs/spec/v8/04-admin.md` |

@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-02 (claude) — geocoding을 kraddr-geo v2 REST 직접 호출로 (ADR-025)
+
+**작업**: krtour-map / kraddr-geo 문서를 확인하고, TripMate geocoding을 kraddr-geo
+v2 REST API 직접 접근으로 문서화 (사용자 지시 "geocoding 관련 기능은 kraddr geo v2
+api에 직접 접근"). 문서화만, 코드 변경 없음.
+
+**핵심 발견(경계)**: TripMate 외부 데이터 의존이 두 갈래인데 문서가 이를 뭉뚱그려
+region/주소를 krtour-map 함수 경유로 서술하고 있었다.
+1. Feature 데이터(place/event/weather/...) → krtour-map **함수 직접 호출**(ADR-002).
+2. Geocoding/주소/행정구역 → **kraddr-geo v2 REST HTTP 직접**(사용자 지시).
+   kraddr-geo는 이미 `POST /v2/{geocode,reverse,search}` candidate 표면 제공, krtour-map도
+   자기 ETL 적재 때 이 v2를 HTTP로 쓴다(그쪽 ADR-006) → v2가 geocoding 공식 표면.
+
+**신규/변경**:
+- ADR-025 신설 — 사용자 대면 geocoding은 kraddr-geo v2 REST 직접. feature는 종전
+  함수 호출 유지. region도 v2(reverse `include_region` / search `type=district`)로
+  수렴. VWorld/juso 직접 호출 금지(kraddr-geo 내부). 다음 ADR 025→026.
+- `docs/integrations/kraddr-geo.md` 신규 — v2 3개 endpoint 정확한 req/resp, 좌표
+  `(lon,lat)`·코드 규약, httpx client 주입+lifespan, `/geo/*` 노출 endpoint, 캐싱·
+  rate-limit, 위치 감사(`/geo/reverse`), 에러 graceful degrade, 사용처 매핑, AI agent
+  구현 체크리스트, 환경변수.
+- `docs/architecture/geocoding-open-decisions.md` 신규 — 사용자 판단 대기 8건
+  (D1 regions 처리 / D2 fallback=api / D3 캐시 / D4 quantize / D5 within-radius /
+  D6 MCP / D7 network·auth / D8 precision 활용). 각 잠정 기본값으로 구현 막지 않음.
+- `docs/api/regions.md` 정정(krtour-map 경유 → kraddr-geo v2), `user-location.md`
+  역지오코딩 region label + `reverse_geocode` purpose 추가, `krtour-map-integration.md`
+  경계 명시. CLAUDE/AGENTS 인덱스에 geocoding 행.
+
+**의사결정 별도화**: 사용자 지시대로 열린 결정은 `geocoding-open-decisions.md`에
+모으고 잠정값으로 진행(되돌리기 비용 있는 선택만 가시화).
+
+**다음**: 본 PR 머지 → Sprint 4 PR-B2(features) 또는 geocoding `/geo/*` 구현 시
+본 문서 기준. open-decisions D1~D8은 사용자 확정 시 ADR로 박음.
+
+
 ## 2026-06-01 (claude) — 에이전트 환경 문서를 python-kraddr-geo에 정렬
 
 **작업**: 개발 환경 문서 구조를 별 저장소 `python-kraddr-geo`의 성숙한 3-doc 패턴에

@@ -948,7 +948,62 @@
   supersede), ADR-017(worktree + git.exe), `python-kraddr-map` 진영
   `python-kraddr-geo` ADR-041, `docs/dev-environment.md`.
 
+## ADR-025: 사용자 대면 geocoding은 `python-kraddr-geo` v2 REST API 직접 호출
+
+- **상태**: accepted
+- **날짜**: 2026-06-02
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: TripMate는 두 종류의 외부 도메인 데이터를 쓴다.
+  1. **Feature 데이터**(place/event/notice/price/weather/route/area) — `python-
+     krtour-map`을 **함수 직접 호출**(in-process, ADR-002)로.
+  2. **Geocoding/주소**(주소→좌표 geocode, 좌표→주소 reverse, 주소/장소 search,
+     행정구역 region 조회) — 사용자가 "geocoding 관련 기능은 kraddr-geo v2 API에
+     직접 접근"하라고 지시.
+  그런데 기존 문서(`docs/api/regions.md`, `docs/krtour-map-integration.md`)는
+  region/주소 조회를 **krtour-map 함수 호출 경유**로 서술해, 지시와 어긋났다.
+  한편 `python-kraddr-geo`는 이미 v2 REST API(`POST /v2/geocode|reverse|search`,
+  candidate 목록 표면)를 제공하고, krtour-map도 자기 ETL 적재 시 이 v2 REST를
+  HTTP로 호출한다(krtour-map `address-geocoding.md`, ADR-006). 즉 v2 REST가
+  geocoding의 공식 표면이다.
+- **결정**:
+  - **TripMate 사용자 대면 geocoding은 `kraddr-geo` v2 REST API를 직접 HTTP 호출**
+    한다. `apps/api`가 `httpx.AsyncClient`로 `POST /v2/geocode|reverse|search`를
+    부른다. krtour-map을 경유하지 않는다.
+    - 신설 endpoint(예): `GET /geo/search`, `GET /geo/reverse`, `GET /geo/geocode`
+      — TripMate가 v2 candidate를 자기 응답 셰입(`{data, meta}`)으로 래핑.
+  - **Feature 데이터는 종전대로 krtour-map 함수 호출**(ADR-002) — 본 결정과 무관.
+  - **경계**: TripMate는 kraddr-geo의 **v2 REST 표면만** 의존한다. python 패키지
+    (`kraddr.geo`) in-process import나 DB 직접 접근을 사용자 대면 경로에서 쓰지
+    않는다(krtour-map이 ETL 내부에서 쓰는 것과 별개). v1 vworld-호환 표면(`/v1/
+    address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
+  - **region 조회**(시도/시군구/법정동)도 v2로 수렴: 좌표→행정구역은 `POST
+    /v2/reverse`(`include_region=true`)의 `candidates[].region`, 행정구역 검색은
+    `POST /v2/search`(`type="district"`)로 처리한다. 기존 `regions.md`의 krtour-map
+    경유 서술은 본 ADR로 정정한다.
+  - **VWorld/juso/epost 등 외부 API 직접 호출 금지** — 모두 kraddr-geo REST 내부
+    책임(`fallback="api"`). TripMate는 v2 응답만 신뢰.
+- **근거**:
+  - 사용자 지시 + kraddr-geo가 이미 v2 REST를 공식 표면으로 제공.
+  - geocoding은 feature 적재와 lifecycle/배포가 다르다(별 서비스로 기동 가능,
+    HTTP 경계가 자연스럽다). 함수 호출로 묶으면 krtour-map에 불필요한 결합.
+  - krtour-map과 동일한 v2 표면을 공유 → 좌표·코드 해석 일관(같은 `(lon,lat)`,
+    같은 region 코드 체계).
+- **결과 (긍정)**: geocoding 의존이 명확한 HTTP 경계 1개로 단순화. krtour-map
+  버전과 독립적으로 geocoding 진화. 캐싱/rate-limit을 TripMate가 자기 경계에서 관리.
+- **결과 (부정)**: in-process 함수 호출 대비 HTTP hop(직렬화·네트워크). 단 같은
+  호스트(docker network)면 무시 가능. kraddr-geo REST 서비스가 reachable해야 함
+  (healthz 의존).
+- **후속**:
+  - `docs/integrations/kraddr-geo.md` 신규 — v2 endpoint 계약 + httpx client 주입 +
+    환경변수 + 캐싱 + 에러 매핑 + 위치 감사 + 사용처 + AI agent 체크리스트 (본 PR).
+  - `docs/api/regions.md` 정정 — krtour-map 경유 → kraddr-geo v2 직접.
+  - `docs/architecture/user-location.md` — 역지오코딩 region label 경로를 v2 reverse로.
+  - `docs/krtour-map-integration.md` — geocoding은 본 경계 밖임을 명시.
+  - 열린 결정은 `docs/architecture/geocoding-open-decisions.md`에 별도 정리(본 PR).
+- **참조**: ADR-002(krtour-map 함수 호출), ADR-003(schema 책임), `python-krtour-map`
+  `docs/address-geocoding.md`·ADR-006, `python-kraddr-geo` `docs/api-reference/v2/*`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-025**
+- 다음 신규 ADR = **ADR-026**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

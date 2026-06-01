@@ -224,6 +224,11 @@ export default function MapPage() {
 - `GET /features/in-bounds?...` (좌표 자체는 viewport bounds지만 `purpose=viewport_query`로 적재)
 - `GET /features/{id}/weather?lat=&lng=` (좌표 기반 보정 시)
 
+- `GET /geo/reverse?lon=&lat=` — "내 위치"/지도 클릭 → 행정구역·주소 label
+  (kraddr-geo v2 `POST /v2/reverse`, ADR-025 / `docs/integrations/kraddr-geo.md`).
+  `purpose=reverse_geocode`로 적재. 역지오코딩은 krtour-map이 아니라 kraddr-geo
+  v2 REST 직접이다.
+
 서버 미들웨어 `apps/api/app/middleware/location_audit.py`:
 
 ```python
@@ -255,6 +260,7 @@ async def location_audit(request: Request, call_next):
 - `/features/nearby` → `'nearby_attractions'`
 - `/features/in-bounds` → `'viewport_query'`
 - `/features/{id}/weather` → `'weather_at_coord'`
+- `/geo/reverse` → `'reverse_geocode'` (kraddr-geo v2, ADR-025)
 - 그 외 좌표 포함 endpoint → `'feature_request'`
 
 content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `docs/spec/v8/00-infrastructure.md` §3.3).
