@@ -161,7 +161,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 ### 7.1 로컬 dev
 
 ```bash
-cd ~/tripmate-workspaces/tripmate/apps/etl
+cd ~/tripmate-workspaces/tripmate-codex/apps/etl
 uv venv .venv --python 3.12
 uv pip install -e .
 uv run dagster dev   # UI + daemon http://localhost:23000

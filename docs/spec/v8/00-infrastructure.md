@@ -43,20 +43,21 @@
 - 운영(Odroid)은 arm64 manifest 자동 선택
 - 단일 arch 빌드 → "exec format error"로 컨테이너 안 뜸 — 사고 사례로 ADR에 명시 후보
 
-### 2.3 WSL 미러 작업 흐름
+### 2.3 NTFS worktree + WSL 테스트 미러
 
-ADR-004로 박힌 v2의 단일 모델. SPEC V8의 N-7.2 "WSL ext4 직접 작업본 + NTFS
-export"와 차이가 있다 — v2는 **NTFS 작업 + WSL 미러 실행**.
+ADR-024로 확정된 v2의 단일 모델. SPEC V8의 N-7.2 "WSL ext4 직접 작업본 + NTFS
+export"와 차이가 있다 — v2는 **NTFS worktree에서 git/편집/commit**, **WSL ext4
+미러에서 테스트/Docker 실행**.
 
-| SPEC V8 원본 | v2 채택 (ADR-004) |
+| SPEC V8 원본 | v2 채택 (ADR-024) |
 |------|------|
-| 코드는 ext4 `~/projects/trip-service` | 코드는 NTFS `F:\dev\tripmate` + WSL 미러 `~/tripmate-workspaces/tripmate` |
+| 코드는 ext4 `~/projects/trip-service` | 코드는 agent별 NTFS worktree `F:\dev\tripmate-<agent>`, 실행은 WSL 미러 `~/tripmate-workspaces/tripmate-<agent>` |
 | 산출물(tar)은 NTFS `/mnt/c/Users/Me/artifacts/` | 산출물은 ext4 build/, 배포 시 scp 또는 GHCR pull |
 | Windows 손상 시 산출물 NTFS 보존 | git origin이 단일 진실 공급원, 산출물은 임시 |
 
 SPEC V8 N-7.2의 "코드 ext4 / 산출물 NTFS" 모델은 v1에서 운영 중 NTFS ↔ ext4
 양방향 동기 모호함이 발생해 v2에서 단순화했다. 본 정정은 `docs/decisions.md`
-ADR-004에 기록되어 있다.
+ADR-024에 기록되어 있다.
 
 ### 2.4 i18n (N-1)
 
@@ -233,5 +234,5 @@ PR 템플릿에 통합:
 - `docs/architecture.md` §5 운영 환경 / §6 보안
 - `docs/dev-environment.md` §4 PostgreSQL+PostGIS
 - `docs/postgres-schema.md` §2.4 `user_consents` / `location_access_log`
-- `docs/decisions.md` ADR-004 (WSL 미러) / ADR-007 (PR-only)
+- `docs/decisions.md` ADR-024 (NTFS git + WSL 테스트 미러) / ADR-007 (PR-only)
 - `docs/sprints/SPRINT-1.md` ~ `SPRINT-6.md`

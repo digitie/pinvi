@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-02 (codex) — 최신 main 기준 문서 충돌 정정
+
+**작업**: 최신 `origin/main`(PR #27 이후)에서 문서를 다시 검토하고 ADR-024 개발
+환경 모델, ADR-015 지도 클라이언트, ADR-025 geocoding 경계와 충돌하는 잔여 표현을
+정정.
+
+**변경 파일**:
+- `README.md`, `AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `docs/agent-guide.md`
+- `docs/runbooks/local-dev.md`, `docs/runbooks/README.md`, `docs/runbooks/etl.md`
+- `docs/architecture.md`, `docs/api/features.md`
+- `docs/conventions/coding-style.md`, `docs/conventions/testing.md`
+- `docs/sprints/SPRINT-1.md`, `docs/sprints/SPRINT-4.md`
+- `docs/spec/v8/00-infrastructure.md`
+- `docs/execplan/doc-review-2026-06-02.md`, `docs/resume.md`, `docs/tasks.md`
+
+**결정**: 신규 ADR은 만들지 않음. 기존 accepted ADR-015/024/025를 문서 전반에
+적용하는 정합성 수정.
+
+**발견**: `docs/runbooks/local-dev.md`와 `docs/agent-guide.md`에 ADR-024 이전의
+"WSL 미러에서 git/commit" 모델과 "코드 작성 금지 단계" 문구가 남아 있었다.
+`docs/architecture.md`에는 React 18 / Kakao SDK / `@krtour/map-marker-react` 시절
+표현이 남아 있었고, 진입 문서에는 ADR-023 이전의 Odroid 단일 노드 표기가 남아
+있었다.
+
+**다음**: PR 머지 후 실제 다음 작업은 `docs/resume.md`의 Sprint 2 잔여 마감 또는
+Sprint 4 PR-B2(features client readiness) 후보 중 선택.
+
 ## 2026-06-02 (claude) — geocoding을 kraddr-geo v2 REST 직접 호출로 (ADR-025)
 
 **작업**: krtour-map / kraddr-geo 문서를 확인하고, TripMate geocoding을 kraddr-geo

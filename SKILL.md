@@ -35,7 +35,7 @@
 | Postgres schema (`python-krtour-map` 소유) | `feature`, `provider_sync` |
 | Dagster code location | `apps/etl` |
 | Admin 콘솔 | `apps/web/app/admin/` |
-| 운영 노드 | Odroid M1S (Ubuntu 24.04 + Docker Compose) |
+| 운영 노드 | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose) |
 
 ### 개발 환경 (PC, WSL) — ADR-024
 
@@ -105,7 +105,10 @@ apps/
 
 packages/                    ← 공유 TS 패키지 (필요 시)
   ui/
-  map-marker-react/          ← @krtour/map-marker-react 의 thin wrapper (선택)
+  schemas/                   ← Zod schema 공용
+  api-client/                ← fetch wrapper + query keys
+  design-tokens/             ← 16색 팔레트 + Tailwind preset
+  hooks/                     ← useUserLocation 등 공용 React hook
 
 infra/
   docker-compose.yml         ← 개발용

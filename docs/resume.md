@@ -15,6 +15,9 @@ git.exe) / WSL ext4=일회용 테스트 미러. 셋업·검증·함정 절차는
 `kraddr-geo` v2 REST API 직접 호출(`docs/integrations/kraddr-geo.md`), feature
 데이터는 krtour-map 함수 호출 유지. 열린 결정 8건은
 `docs/architecture/geocoding-open-decisions.md`(잠정값으로 진행).
+**문서 충돌 정정** (2026-06-02 codex) — `agent-guide`, `local-dev`, `architecture`
+등에 남아 있던 ADR-024 이전 WSL git 모델, ADR-015 이전 Kakao/marker-wrapper 표현,
+ADR-025 이전 `kraddr.geo` in-process 검색 표현을 정정.
 
 ## 다음 한 작업
 
@@ -74,6 +77,7 @@ git.exe) / WSL ext4=일회용 테스트 미러. 셋업·검증·함정 절차는
 - [x] AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) — T-020
 - [x] Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 — T-023
 - [x] Sprint 1 진입 PR (apps + packages scaffolding) — T-030
+- [x] 최신 main 기준 문서 충돌 정정 — T-064
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

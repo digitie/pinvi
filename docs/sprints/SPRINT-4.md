@@ -79,11 +79,13 @@
 - `docs/architecture/user-location.md` §4.1 (지도 "내 위치로 이동" 버튼)
 - `docs/architecture/notice-plans.md` (사용자 listing + copy 다이얼로그)
 
-## 카카오맵 일 호출 한도 보호
+## 지도 호출량 / viewport 보호
 
 - viewport debounce 250ms + AbortController 취소
 - 동일 bounding box + zoom 1분 캐시 (TanStack Query)
-- 카카오 모빌리티 길찾기는 일정 최적화에서만 (Sprint 6)
+- VWorld tile/API 호출은 도메인 등록 + 브라우저 HTTP 캐싱 정책을 따른다.
+- 길찾기는 Sprint 6 일정 최적화에서 OR-Tools 직선 거리 또는 라이브러리 기능으로
+  분리한다.
 - 일 호출 한도 도달 시 fallback: PostGIS 직선 거리 표시
 
 ## 종료 체크리스트

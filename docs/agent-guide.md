@@ -103,29 +103,24 @@ PR은 불완전하다.
 # resume.md
 
 ## 현재 상태
-v2 설계 단계. 코드 작성 금지. 문서/계약/ADR만.
+Sprint 1~3 머지 완료. Sprint 4 준비/진행 단계.
 
 ## 다음 한 작업
-ADR-NNN — `docs/data-model.md`에 Trip ↔ POI 첨부 경계 정리.
+Sprint 4 PR-B2 — `python-krtour-map` 실 client 주입 + features read 동작 검증.
 
 ## 진척도
 - [x] README / AGENTS / CLAUDE / SKILL
 - [x] docs/architecture, agent-guide, dev-environment
-- [x] docs/decisions(ADR-001~006)
-- [ ] docs/data-model (app 도메인)
-- [ ] docs/postgres-schema (app schema DDL 인덱스)
-- [ ] docs/test-strategy (단위/통합/e2e 경계)
-- [ ] docs/krtour-map-integration (DI helper 패턴)
-- [ ] docs/sprints/SPRINT-1.md (코드 작성 단계 진입 PR plan)
-- [ ] 코드 작성 단계 진입 검토
+- [x] docs/decisions(ADR-001~025)
+- [x] Sprint 1~3 merge
+- [ ] Sprint 4 map UI + `maplibre-vworld-js` integration
 
 ## 다음 ADR 후보
-- ADR-NNN: 인증 토큰 정책 (cookie vs JWT)
-- ADR-NNN: Admin RBAC 모델
-- ADR-NNN: Dagster code location 분리 (apps/etl)
+- ADR-026: 기능 read API와 `python-krtour-map` 실제 client readiness 경계
+- ADR-027: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
 
 ## 차단 사유 / 결정 대기
-- (없음)
+- GitHub secret / branch protection 실제 적용 상태 미확인
 ```
 
 ## 6. tasks.md 형식
@@ -195,14 +190,17 @@ ADR-NNN — `docs/data-model.md`에 Trip ↔ POI 첨부 경계 정리.
 ## 8. PR 워크플로 (필수)
 
 main에 직접 push 금지. 모든 변경은 feature branch + PR.
+Git source of truth는 NTFS worktree이며, branch/commit/push는 Windows
+`git.exe`로 수행한다(ADR-024). WSL ext4 미러는 테스트·Docker·장기 실행 전용이고
+commit/push 금지.
 
 ### 8.1 시작
 
-```bash
-cd ~/tripmate-workspaces/tripmate
-git checkout main
-git pull origin main
-git checkout -b feat/<topic>      # 또는 fix/, chore/, docs/, refactor/, adr/
+```powershell
+cd F:\dev\tripmate-codex
+git fetch origin
+git switch -c agent/codex-<task> origin/main
+codegraph sync
 ```
 
 ### 8.2 작업
@@ -224,7 +222,7 @@ git checkout -b feat/<topic>      # 또는 fix/, chore/, docs/, refactor/, adr/
 
 - 작업 단위로 `docs/journal.md`, `docs/resume.md`, (필요 시) `docs/decisions.md`,
   `CHANGELOG.md` 갱신.
-- 단위 테스트 + lint + typecheck + (코드 작성 단계 후) import-linter 통과 확인.
+- 단위 테스트 + lint + typecheck + import-linter 통과 확인(해당 계층만).
 
 ### 8.3 PR 작성
 
@@ -265,7 +263,6 @@ gh pr create --title "<scope>: <imperative summary (≤70자)>" --body "$(cat <<
 - (외부 issue/spec 링크)
 - (`python-krtour-map` 측 mirror PR)
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
@@ -319,24 +316,17 @@ GitHub branch protection (운영자 수동 설정):
 복사). 다음 에이전트/사람은 PR URL과 `docs/resume.md`만 보면 바로 인수받을 수
 있다.
 
-## 9. 코드 작성 금지 단계 (현재)
+## 9. 현재 단계 정책
 
-본 단계에서는 `apps/`, `packages/`, `infra/`에 코드를 작성하지 않는다. 허용되는
-변경:
+초기 v2 bootstrap의 "코드 작성 금지" 규칙은 Sprint 1 진입 전 임시 제약이었다.
+현재 기준선은 **Sprint 1~3 머지 완료, Sprint 4 준비/진행 단계**다.
 
-- `docs/` 신규/수정
-- `AGENTS.md`, `SKILL.md`, `CLAUDE.md`, `README.md`
-- `.env.example` 추가
-- `.gitignore`, `.gitattributes`, `LICENSE`
-
-코드 작성 요청이 들어오면:
-
-1. 사용자 의도 명확화 (어떤 컴포넌트/계층/엔드포인트인지)
-2. ADR이 필요한지 확인
-3. 테스트 우선 작성 (`docs/test-strategy.md` 우선순위)
-4. 구현
-5. 통합 테스트 + (DB 닿는 경우) EXPLAIN 검증
-6. journal + resume
+- `apps/`, `packages/`, `infra/`, `docs/` 변경이 가능하다.
+- 변경 범위는 accepted ADR, 현재 Sprint 목표, TripMate vs `python-krtour-map`
+  책임 경계를 넘지 않는다.
+- 의미 있는 변경은 테스트와 `docs/journal.md` / `docs/resume.md` / `docs/tasks.md`
+  중 관련 추적 문서 갱신을 포함한다.
+- 보안/인증/DB/공간/Dagster/외부 API 변경은 관련 ADR과 도메인 문서를 먼저 읽는다.
 
 ## 10. NTFS worktree (git) + WSL ext4 테스트 미러 (ADR-024)
 

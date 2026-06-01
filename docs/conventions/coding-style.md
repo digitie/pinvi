@@ -13,7 +13,9 @@ v1 `skills/coding-style.ko.md` 정리 + 본 저장소 컨텍스트.
   경계에만
 - 모든 datetime은 timezone-aware (UTC 저장 + KST 응용 변환)
 - 모든 좌표는 EPSG:4326, `(longitude, latitude)` 순서 (`docs/conventions/geospatial.md`)
-- WSL 미러에서 모든 명령 실행 (`docs/runbooks/local-dev.md`)
+- git/commit/push는 NTFS worktree에서 Windows `git.exe`로 실행하고, 테스트·Docker·
+  의존성 설치는 WSL ext4 테스트 미러에서 실행한다 (`docs/runbooks/local-dev.md`,
+  ADR-024)
 
 ## 2. Python (FastAPI / Pydantic v2 / SQLAlchemy 2)
 

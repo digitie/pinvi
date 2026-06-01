@@ -224,7 +224,9 @@ Cookie: tripmate_access=...
 }
 ```
 
-라이브러리 호출: `AsyncKrtourMapClient.search(q, viewport)` + `kraddr.geo.search(q)`.
+호출 경계: feature 검색은 `AsyncKrtourMapClient.search(q, viewport)`로, 주소 후보는
+`kraddr-geo` v2 REST search로 조회한다(ADR-025). 사용자 대면 검색 경로에서
+`kraddr.geo` in-process import나 krtour-map 경유 geocoding을 쓰지 않는다.
 
 ## 3. 응답 정책
 
