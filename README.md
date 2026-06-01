@@ -87,11 +87,11 @@ geocoder)도 스스로 만들지 않고 TripMate에서 주입받는다. HTTP/RES
 
 자세한 책임 경계는 `docs/architecture.md`, `docs/krtour-map-integration.md`.
 
-## 빠른 시작 (코드 작성 단계 이후)
+## 빠른 시작
 
 ```bash
-# WSL ext4 작업 디렉토리
-cd ~/dev/tripmate
+# WSL ext4 테스트 미러 (의존성/테스트 전용; git/commit/push는 NTFS worktree)
+cd ~/tripmate-workspaces/tripmate-codex
 
 # 시스템 의존성
 sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
@@ -118,7 +118,8 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 ```
 
 현재는 Sprint 4 기준선 문서와 일부 구현이 함께 존재한다. 정확한 실행 전제와
-진척도는 `docs/runbooks/local-dev.md`, `docs/resume.md`, 각 Sprint 문서를 함께 본다.
+진척도는 `docs/agent-workflow.md`, `docs/dev-environment.md`,
+`docs/runbooks/local-dev.md`, `docs/resume.md`, 각 Sprint 문서를 함께 본다.
 
 ## 문서 지도
 
@@ -139,7 +140,9 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 
 **진입 / 작업 가이드**
 - 작업·문서화 가이드: [`docs/agent-guide.md`](docs/agent-guide.md)
-- 개발 환경: [`docs/dev-environment.md`](docs/dev-environment.md)
+- 개발 환경: [`docs/agent-workflow.md`](docs/agent-workflow.md) /
+  [`docs/dev-environment.md`](docs/dev-environment.md) /
+  [`docs/agent-failure-patterns.md`](docs/agent-failure-patterns.md)
 - v1 → v2 자산 매핑: [`docs/v1-to-v2-mapping.md`](docs/v1-to-v2-mapping.md)
 - 현재 상태 추적: [`docs/resume.md`](docs/resume.md) / [`docs/tasks.md`](docs/tasks.md)
 

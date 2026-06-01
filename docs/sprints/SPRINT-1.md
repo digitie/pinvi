@@ -75,8 +75,9 @@
   (DESIGN.md / `airbnb-marker-palette.html` 기준)
 - `packages/hooks/` — `useUserLocation` 등 공용 React hook (RN 호환)
 - `packages/i18n/` — next-intl + i18n-js 공유 메시지 카탈로그 (ko 기본)
-- `packages/map-marker-react/` placeholder (`@krtour/map-marker-react` thin
-  wrapper, Sprint 4 활성화)
+- 지도 전용 React wrapper 패키지는 만들지 않는다. Sprint 4 지도 UI는
+  `apps/web`이 `maplibre-vworld-js`를 직접 import하고, TripMate 전용 팔레트/쿼리
+  helper만 `apps/web/lib`에 둔다(ADR-015).
 
 본 Sprint는 패키지 skeleton만 박는다 (실제 export는 Sprint 1~2에서 점진 추가).
 

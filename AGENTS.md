@@ -55,7 +55,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | 객체 저장소 | RustFS (S3 호환) — `app` 도메인 첨부 + `feature` 미디어 분리 버킷 |
 | Dagster code location | `apps/etl` |
 | Admin 콘솔 | `apps/web/app/admin/` |
-| 운영 노드 | Odroid M1S (Ubuntu 24.04 + Docker Compose) |
+| 운영 노드 | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose) |
 
 ## 의존 라이브러리 (별 저장소)
 
@@ -111,7 +111,7 @@ trunk를 절대 편집하지 않는다.
 - **Git 실행**: Windows worktree(`F:/dev/tripmate-<agent>`, NTFS)에서 git 명령은
   **Windows 버전 git (`git.exe`)** 으로 실행한다 (ADR-017). WSL git으로 `/mnt/f/...`
   NTFS 경로를 조작하지 않는다 — 권한·성능·CRLF 문제. pytest / docker / npm 등
-  나머지 실행은 WSL ext4 미러 (ADR-004).
+  나머지 실행은 WSL ext4 테스트 미러 (ADR-024).
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
 #### CodeGraph Commands

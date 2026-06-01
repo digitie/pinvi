@@ -25,11 +25,12 @@ SPEC V8 N-5 정리.
 6. UI smoke (해당 화면 있으면)
 7. e2e 시나리오 (사용자 가시 흐름)
 
-## 3. WSL2 mandatory
+## 3. 실행 위치
 
-- 백엔드 / DB / geospatial / ETL / Alembic 검증은 WSL2 미러에서 실행
-- Windows PowerShell에서 직접 X
-- `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate && pytest apps/api/tests -q"`
+- 백엔드 / DB / geospatial / ETL / Alembic 검증은 WSL2 ext4 테스트 미러에서 실행
+  (ADR-024). NTFS worktree에서 직접 `pytest`/Docker를 돌리지 않는다.
+- git/commit/push는 NTFS worktree에서 Windows `git.exe`로만 수행한다.
+- 예: `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && pytest apps/api/tests -q"`
 
 ## 4. 백엔드 단위 테스트
 

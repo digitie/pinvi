@@ -7,7 +7,7 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 
 | 파일 | 범위 | Sprint |
 |------|------|--------|
-| [local-dev.md](./local-dev.md) | WSL 미러 작업 흐름 + 포트 + 명령 카탈로그 | 1 |
+| [local-dev.md](./local-dev.md) | NTFS git + WSL 테스트 미러 명령 카탈로그 | 1 |
 | [docker-app.md](./docker-app.md) | App 컨테이너 smoke test (`docker-compose.app.yml`) | 1 |
 | [etl.md](./etl.md) | Dagster `apps/etl` 운영 + soak | 5 |
 | [admin.md](./admin.md) | Admin 콘솔 운영 (RBAC / seed / 시나리오) | 3 |
@@ -28,8 +28,12 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 
 ### 2.1 작업 흐름
 
-모든 명령은 **WSL 미러** (`~/tripmate-workspaces/tripmate`)에서 실행 (ADR-004).
-NTFS 작업 디렉토리는 명령 전후 rsync로 동기. 자세히는 [local-dev.md](./local-dev.md).
+git / 편집 / commit / push / PR은 **NTFS worktree**
+(`F:/dev/tripmate-<agent>`)에서 Windows `git.exe`로 실행한다(ADR-024). 테스트,
+Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
+(`~/tripmate-workspaces/tripmate-<agent>`)에서 실행하고, 미러에서는 commit/push하지
+않는다. 자세한 순서는 [agent-workflow](../agent-workflow.md)와
+[local-dev.md](./local-dev.md)를 따른다.
 
 ### 2.2 포트 규약
 
@@ -76,6 +80,6 @@ NTFS 작업 디렉토리는 명령 전후 rsync로 동기. 자세히는 [local-d
 
 ## 4. v1 자산 활용
 
-v1 `docs/runbooks/*.md`의 운영 노하우를 본 디렉토리로 가져옴. WSL ext4 직접
-작업본 → WSL 미러 변경 (ADR-004), provider 어댑터 제거 (ADR-005), Dagster 위치
-변경 (ADR-006)을 반영해 재작성.
+v1 `docs/runbooks/*.md`의 운영 노하우를 본 디렉토리로 가져옴. provider 어댑터
+제거(ADR-005), Dagster 위치 변경(ADR-006), NTFS git + WSL 테스트 미러 모델
+(ADR-024)을 반영해 재작성.

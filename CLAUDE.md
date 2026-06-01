@@ -84,7 +84,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
   React Hook Form + Zod + shadcn/ui + Tailwind + **`maplibre-vworld-js`**
   (VWorld + MapLibre GL JS, ADR-015)
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
-  / Docker Compose / Odroid M1S (운영 single node)
+  / Docker Compose / N150 16GB + Odroid M1S 병행 운영 (ADR-023)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
 
 ## 5. 절대 금지 (가장 중요한 6개)
