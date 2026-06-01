@@ -41,24 +41,20 @@ F:/dev/tripmate-antigravity  ← Google Antigravity 2.0 전용 worktree (영속)
 ### 1.2 agent별 worktree 생성
 
 ```powershell
-# Windows PowerShell — trunk 위치에서 실행
+# Windows PowerShell — trunk 위치에서 Windows git.exe 로 생성 (권장)
+cd F:\dev\tripmate
 git fetch origin
-git worktree add ../tripmate-claude     -b agent/claude-init     origin/main
-git worktree add ../tripmate-codex      -b agent/codex-init      origin/main
-git worktree add ../tripmate-antigravity -b agent/antigravity-init origin/main
+git worktree add ../tripmate-claude      -b agent/claude-idle      origin/main
+git worktree add ../tripmate-codex       -b agent/codex-idle       origin/main
+git worktree add ../tripmate-antigravity -b agent/antigravity-idle origin/main
 ```
 
-```bash
-# WSL bash
-cd ~/tripmate-workspaces/tripmate
-git fetch origin
-git worktree add ../tripmate-claude     -b agent/claude-init     origin/main
-git worktree add ../tripmate-codex      -b agent/codex-init      origin/main
-git worktree add ../tripmate-antigravity -b agent/antigravity-init origin/main
-```
-
-- `agent/<agent>-init` 브랜치는 첫 dummy. 실제 task 시작 시 새 브랜치로 갈아탄다
-  (`§2.1`).
+- **worktree는 Windows git(`git.exe`)으로 생성**한다. WSL에서 `/mnt/f/...`에
+  `git worktree add`로 만들면 `.git`/`gitdir` 포인터가 `/mnt/f/...`로 박혀, 이후
+  Windows git이 `prunable`로 보고 잘못 prune할 수 있다(ADR-024, §3.6). 포인터가
+  이미 환경별로 갈렸으면 `git worktree repair <경로>`로 맞춘다.
+- idle 브랜치는 **`agent/<agent>-idle`** (kraddr-geo 컨벤션과 통일). 첫 dummy일 뿐,
+  실제 task 시작 시 새 브랜치로 갈아탄다(§2.1).
 - worktree 자체는 영속 — 사용자가 `git worktree remove`로 직접 제거하지 않는 한
   유지.
 
@@ -404,5 +400,7 @@ checkout하지 않는다. trunk와 worktree는 같은 `.git`을 공유하므로 
 - ADR-016 — AI 에이전트 도구 다중 지원 (AGENTS.md ↔ CLAUDE.md)
 - ADR-004 — WSL 미러 모델 (디스크 / 경로). source-of-truth 주장은 ADR-024가 supersede
 - `docs/dev-environment.md` — 셋업·검증·rsync·PATH 함정 전체 절차 (ADR-024)
+- `docs/agent-workflow.md` — "어떤 순서로 무엇을 치는가" 런북
+- `docs/agent-failure-patterns.md` — WSL git·런처·escape·통합테스트 반복 실패
 - `colbymchenry/codegraph` — https://github.com/colbymchenry/codegraph
   (Docs: https://colbymchenry.github.io/codegraph/)

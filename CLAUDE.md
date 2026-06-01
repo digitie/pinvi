@@ -134,7 +134,8 @@ lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
 | Backup / Restore | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6) |
 | Admin Grafana embed | `docs/runbooks/grafana-admin-embed.md` (Sprint 5) |
 | Worktree + CodeGraph 운영 | `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
-| 개발 환경 (NTFS git + WSL 테스트 미러) | `docs/dev-environment.md` (ADR-024) |
+| 개발 환경 (NTFS git + WSL 테스트 미러) | `docs/agent-workflow.md` (런북) + `docs/dev-environment.md` (ADR-024) |
+| 환경/도구 실패 패턴 | `docs/agent-failure-patterns.md` |
 | 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
 | 테스트 작성 | `docs/conventions/testing.md` |
 | Sprint 작업 | `docs/sprints/SPRINT-<N>.md` |
