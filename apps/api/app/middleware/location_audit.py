@@ -83,6 +83,13 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _coord_str(value: Decimal | None) -> str | None:
+    """Numeric(9,6) 저장 표현과 일치하도록 6자리로 quantize (chain 재검증용)."""
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.000001")))
+
+
 def _classify_purpose(path: str) -> str | None:
     if path in PURPOSE_BY_PATH:
         return PURPOSE_BY_PATH[path]
@@ -125,8 +132,11 @@ async def _append_log(
         "occurred_at": now.isoformat(),
         "endpoint": endpoint,
         "purpose": purpose,
-        "lat": str(lat) if lat is not None else None,
-        "lng": str(lng) if lng is not None else None,
+        # lat/lng 는 Numeric(9,6) 컬럼 — DB 가 6자리로 정규화(`37.566500`)하므로
+        # 저장 후 재계산해도 일치하도록 hash 입력도 6자리로 quantize 한다.
+        # (감사 체인은 저장된 row 만으로 재검증 가능해야 한다.)
+        "lat": _coord_str(lat),
+        "lng": _coord_str(lng),
         "request_id": str(request_id),
         "ip_hash": ip_hash,
     }

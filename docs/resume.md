@@ -2,22 +2,36 @@
 
 ## 현재 상태
 
-**Sprint 4 준비/진행 기준선 정리 필요**. Sprint 1~3는 머지 완료, Sprint 4 관련
-문서·workflow·일부 구현은 저장소에 존재하지만 `resume.md`와 `tasks.md`가 최신
-`journal.md`를 따라가지 못하고 있다. 현재 우선순위는 진행 추적 문서 정합성 회복과
-Sprint 4 backlog 재정렬이다.
+**Sprint 2 핵심 DoD 마감 완료** (2026-06-01). OAuth G-4 + Notice copy + 통합
+테스트 27개 green. Sprint 1~3 + Sprint 4 PR-A(#15 CI 복원) / PR-B(#16 features
+API scaffolding) 머지 완료. 통합 테스트 harness(PostGIS testcontainer)가
+`apps/api/tests/integration` 에 박힘 — 이후 백엔드 검증의 기반. async alembic 의
+DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`). 진행 추적 문서 정합성은
+`resume.md` + `tasks.md` + `journal.md` 교차 확인이 기준(codex 2026-06-01 정리).
 
 ## 다음 한 작업
 
-GitHub Actions secret / branch protection의 실제 적용 상태를 확인하고,
-Sprint 4 open item을 merge 상태 기준으로 다시 쪼갠다.
+우선순위 후보:
 
-세부 확인 순서:
+1. **Sprint 2 잔여 마감** (`docs/sprints/SPRINT-2.md` "잔여" 절):
+   - `email_queue` SKIP LOCKED worker + 비밀번호 재설정 메일 흐름
+   - `api_call_log` 미들웨어 통합 테스트
+   - CI(`api.yml`)에 `tests/integration` 스텝 추가 검토
+2. **Sprint 4 PR-B2** — `python-krtour-map` 실 client 주입 → `/features/in-bounds`
+   동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
+   - `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
+   - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
+3. **운영 확인** — GitHub Actions secret(`docs/runbooks/secrets.md`) / branch
+   protection(`.github/workflows/README.md`) 실제 적용 상태 점검.
 
-1. `docs/runbooks/secrets.md` 기준으로 필수 secret 등록 여부 재확인
-2. `.github/workflows/README.md` 기준 branch protection 적용 여부 확인
-3. `docs/tasks.md`에서 Sprint 4 open item을 구현/운영/라이브러리 의존으로 분리
-4. `docs/sprints/SPRINT-4.md`와 `docs/tasks.md` 사이의 남은 항목 명칭 일치 확인
+이후 **PR-C (프론트엔드)**:
+
+- `apps/web/components/map/*` (MapView, ViewportFeatureLayer, ClusterLayer, ...)
+- `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
+- Trip 대시보드 + notice plan UI
+
+이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)** — 자세히는
+`docs/sprints/SPRINT-4.md`.
 
 ## 릴리즈 로드맵
 

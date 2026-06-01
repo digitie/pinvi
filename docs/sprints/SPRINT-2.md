@@ -1,6 +1,7 @@
 # SPRINT-2 — 도메인 API + DB
 
-- **상태**: in-progress (본 PR로 핵심 scaffolding 완료, 머지 후 후속 OAuth · Notice copy · 통합 테스트)
+- **상태**: 핵심 DoD 충족 (도메인 API + DB + OAuth G-4 + Notice copy + 통합 테스트
+  27개 green). 잔여 항목은 아래 "잔여" 절 (1건은 Sprint 4 의존으로 블록).
 - **선행**: Sprint 1 DoD 완료
 - **목표**: Trip / POI / 4 분리 동의 / Resend 이메일 / 위치 감사 로그 / 소셜
   로그인까지 — UI 없이 API + DB 흐름이 통과해야 한다.
@@ -78,15 +79,45 @@
 - `docs/architecture/user-location.md` (위치 동의 + Geolocation hook)
 - `docs/architecture/frontend.md` §4 (공용 schema/api-client/state)
 
-## 미해결
+## 진행 결과 (2026-06-01)
 
-- Resend 도메인 인증 (SPF/DKIM/DMARC) — 실제 도메인 확정 필요
-- Google OAuth client id/secret — 도메인 확정 후
+DoD 항목별:
+
+- [x] `app.trips` / `trip_days` / `trip_day_pois` (COLLATE "C") + 공유 토큰 Alembic
+  — 0001~0005 적용 + 실 PostGIS 통합 테스트 검증.
+- [x] `POST /trips`, `/trips/{id}/pois`, `/pois/reorder` — `test_trips_api.py` /
+  `test_pois_reorder.py` (낙관적 락 + COLLATE "C" UNIQUE 충돌 → 409).
+- [x] 4 분리 동의 + 철회 부작용 — `test_consent_flow.py` (`PUT /users/me/consents`,
+  `DELETE /users/me/consents/{type}` 신규 REST endpoint).
+- [x] Google OAuth 안전 매칭 (G-4) — `oauth_google.resolve_google_login` +
+  `test_oauth_google.py` (login / 안전 연결 / 미인증 비연결 / 신규).
+- [x] Notice plan → trip copy (ADR-013) — `notice_plan.copy_plan_to_trip` +
+  `notice_plans.py` 라우터 + `test_notice_plan_copy.py`.
+- [x] Webhook `/webhooks/resend` — delivered / bounced / complained
+  (`test_resend_webhook.py`). **Svix 서명 실검증은 Sprint 5** (기존 결정 유지).
+- [x] `app.location_access_log` content_hash chain — `test_location_audit_chain.py`.
+- [x] `pytest tests/integration` — **27 passed** (PostGIS testcontainer harness).
+
+부수 수정:
+- **`alembic/env.py`**: async 마이그레이션 경로에서 DDL 트랜잭션이 커밋되지 않던
+  잠재 버그 수정 (`connection.commit()` 추가). CI 는 exit code 만 봐서 미검출이었음.
+- `services/poi.py`: sort_order UNIQUE 위반을 `SortOrderConflictError`(409)로 변환.
+
+## 잔여 (후속 PR)
+
+- [ ] **위치 감사 자동 적재 via `/features/in-bounds`** — 미들웨어/체인 로직은 완료·
+  검증됐으나 endpoint 자동 트리거는 `python-krtour-map` client 주입(**Sprint 4
+  PR-B**) 의존. Sprint 4에서 e2e 연결.
+- [ ] **`email_queue` SKIP LOCKED worker** + 비밀번호 재설정 메일 흐름.
+- [ ] `app.api_call_log` 미들웨어 통합 테스트 (미들웨어 자체는 존재).
+- [ ] Resend 도메인 인증 (SPF/DKIM/DMARC) — 실제 도메인 확정 필요.
+- [ ] Google OAuth client id/secret + 콜백 HTTP 교환 e2e — 도메인 확정 후.
 
 ## 종료 체크리스트
 
-- [ ] DoD 모두 통과
-- [ ] `docs/journal.md` Sprint 2 종료 엔트리
-- [ ] `docs/resume.md` "다음 한 작업" → Sprint 3
-- [ ] CI 3 워크플로 main green
-- [ ] SPEC V8 #2 §G/H 항목 모두 박힘
+- [x] 핵심 DoD 통과 (위 항목별 표; 잔여 명시)
+- [x] `docs/journal.md` Sprint 2 엔트리
+- [x] `docs/resume.md` 갱신
+- [ ] CI 워크플로 main green (본 PR 머지 후 Actions 확인 — `tests/integration` CI
+  스텝 추가는 후속)
+- [x] SPEC V8 #2 §G/H 핵심 항목 박힘 (OAuth G-4 / Trip·POI H / 동의 G)
