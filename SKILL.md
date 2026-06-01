@@ -37,21 +37,21 @@
 | Admin 콘솔 | `apps/web/app/admin/` |
 | 운영 노드 | Odroid M1S (Ubuntu 24.04 + Docker Compose) |
 
-### 개발 환경 (PC, WSL)
+### 개발 환경 (PC, WSL) — ADR-024
 
-- **코드/가상환경/git**: WSL ext4 미러 (`~/tripmate-workspaces/tripmate/`).
-  NTFS 마운트에서 직접 작업하지 않는다.
-- **데이터(`dataset/`, `refdocs/`)**: NTFS 프로젝트 디렉토리 (`/mnt/f/dev/
-  tripmate/dataset/` 등). ext4 미러는 심볼릭 링크 또는 NTFS 직접 참조.
-- **테스트**: 단위 테스트 픽스처는 소량으로 ext4. 통합/e2e는 NTFS `dataset/` /
-  `refdocs/`를 reference.
-- **카피 정책**: 명령 전후 NTFS ↔ WSL 미러 동기 (rsync). Git source of truth는
-  WSL ext4.
+- **git / 편집 / commit / PR**: NTFS worktree (`F:/dev/tripmate-<agent>`)에서
+  **Windows git(`git.exe`)으로만**. 여기가 git source of truth.
+- **의존성 설치 / `pytest` / `docker` / 장기 실행**: WSL ext4 **일회용 테스트
+  미러** (`~/tripmate-workspaces/tripmate-<agent>`). 미러에서 commit/push 금지.
+- **rsync는 NTFS → ext4 단방향**. 수정은 NTFS worktree에 반영 후 다시 단방향 sync.
+- **데이터(`dataset/`, `refdocs/`)**: NTFS 원본. ext4 미러는 심볼릭 링크/절대경로 참조.
+- 절차·함정 전체는 `docs/dev-environment.md` + `docs/agent-workflow.md`,
+  반복 실패는 `docs/agent-failure-patterns.md`.
 
 ## 2. 빠른 시작 (코드 작성 단계 이후)
 
 ```bash
-cd ~/tripmate-workspaces/tripmate                           # WSL ext4 미러
+cd ~/tripmate-workspaces/tripmate-claude                    # WSL ext4 테스트 미러 (의존성/테스트 전용; git은 NTFS worktree)
 sudo apt install -y libgdal-dev gdal-bin libpq-dev          # 시스템 의존성
 
 # 백엔드 (uv 권장)
@@ -153,7 +153,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 5. **`python-krtour-map`의 `AsyncKrtourMapClient` wrapper 신규 생성 금지** —
    직접 사용. `KrtourMapGateway` 같은 어댑터 클래스 금지.
 6. **NTFS에서 직접 `pytest`/`docker`/`npm` 실행 금지** — WSL ext4 미러에서
-   실행. PowerShell `rg.exe` 금지 (WSL native `rg`만).
+   실행. 단 **git은 예외** — NTFS worktree에서 Windows `git.exe`로만 (ADR-024).
+   ext4 미러에서 commit/push 금지. PowerShell `rg.exe` 금지 (WSL native `rg`만).
 7. **좌표 순서 혼동 금지** — 모든 외부 인터페이스는 `(lon, lat)`. 라이브러리
    DTO와 동일.
 8. **카테고리/마커 매핑 하드코드 금지** — `python-krtour-map`의 카테고리 표 사용.
@@ -232,7 +233,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | Plan POI attachment | 단일 테이블 `plan_poi_attachments` (trip / trip_poi / notice_plan / notice_poi 중 정확히 하나 채움) |
 | RustFS | S3 호환 객체 저장소. TripMate `app` 첨부 + `python-krtour-map` 미디어 분리 |
 | Soak test | ETL 장시간(20시간±) 검증. `scripts/etl-soak-*.sh` (v1 자산, v2에서 재정비) |
-| WSL 미러 | `~/tripmate-workspaces/tripmate` — WSL ext4 작업본. NTFS와 명시적 동기 |
+| WSL 테스트 미러 | `~/tripmate-workspaces/tripmate-<agent>` — ext4 일회용 실행 사본(테스트/docker). git은 NTFS worktree (ADR-024) |
 
 추가 도메인 어휘는 `docs/data-model.md` §용어 사전에 정렬.
 
