@@ -593,7 +593,7 @@ apps/web/app/                    apps/mobile/app/
 | Zustand store (auth / ui / selected-poi / map-viewport) | Sprint 1~2 | `packages/state` |
 | `useUserLocation` 공용 hook | Sprint 2 | `packages/hooks/src/useUserLocation.ts` + 웹 어댑터 |
 | Admin 콘솔 (`apps/web/app/admin/...`) | Sprint 3 | shadcn/ui DataTable / FilterBar |
-| 지도 + maplibre-vworld-js | Sprint 4 | `apps/web/components/map/*` + `apps/web/lib/kakao.ts` |
+| 지도 + maplibre-vworld-js | Sprint 4 | `apps/web/components/map/*` + `apps/web/lib/{vworldMap,locationAdapter}.ts` |
 | Notice plan UI (사용자 listing + copy 다이얼로그) | Sprint 4 | `apps/web/app/(app)/notice-plans/...` |
 | Notice plan UI (Admin 작성기) | Sprint 6 | `apps/web/app/admin/notice-plans/...` |
 | WebSocket 클라이언트 (공용 wrapper) | Sprint 5 | `packages/api-client/src/websocket.ts` |

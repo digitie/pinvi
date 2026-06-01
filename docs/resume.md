@@ -6,7 +6,8 @@
 테스트 27개 green. Sprint 1~3 + Sprint 4 PR-A(#15 CI 복원) / PR-B(#16 features
 API scaffolding) 머지 완료. 통합 테스트 harness(PostGIS testcontainer)가
 `apps/api/tests/integration` 에 박힘 — 이후 백엔드 검증의 기반. async alembic 의
-DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
+DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`). 진행 추적 문서 정합성은
+`resume.md` + `tasks.md` + `journal.md` 교차 확인이 기준(codex 2026-06-01 정리).
 
 ## 다음 한 작업
 
@@ -20,6 +21,8 @@ DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
    동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
    - `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
+3. **운영 확인** — GitHub Actions secret(`docs/runbooks/secrets.md`) / branch
+   protection(`.github/workflows/README.md`) 실제 적용 상태 점검.
 
 이후 **PR-C (프론트엔드)**:
 
@@ -27,13 +30,8 @@ DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
 - `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
 - Trip 대시보드 + notice plan UI
 
-이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)**:
-
-- `maplibre-vworld-js` 라이브러리 PR 항목 머지 sync
-- E2E 시나리오 통과
-- `v0.1.0` git tag + GitHub Release notes
-
-자세히는 `docs/sprints/SPRINT-4.md`.
+이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)** — 자세히는
+`docs/sprints/SPRINT-4.md`.
 
 ## 릴리즈 로드맵
 
@@ -68,17 +66,13 @@ DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
 - [x] docs/architecture/ 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract) — T-019
 - [x] AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) — T-020
 - [x] Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 — T-023
-- [ ] Sprint 1 진입 PR (apps + packages scaffolding) — T-030 (대기)
+- [x] Sprint 1 진입 PR (apps + packages scaffolding) — T-030
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
-- ADR-014 (Sprint 1): 인증 토큰 모델 (cookie session vs JWT) — SPEC V8 02-backend §1 잠정 JWT 15m/7d
-- ADR-015 (Sprint 1): Admin RBAC `roles TEXT[]` 모델 (SPEC V8 M-14 정정 반영)
-- ADR-016 (Sprint 2): 소셜 로그인 provider (Google 우선, Kakao/Naver는 v2)
-- ADR-017 (Sprint 2): `email_queue` worker 패턴 (PostgreSQL `SKIP LOCKED`)
-- ADR-018 (Sprint 4): viewport 클러스터링 (zoom < 7/11/14)
-- ADR-019 (Sprint 5): WebSocket broker 모델 (단일 프로세스 in-memory)
-- ADR-020 (Sprint 6): OR-Tools 일정 최적화 분기 (POI ≤10/11-20/20+)
+- ADR-024: Sprint 4 진행 추적 문서 정규화 (`resume.md` / `tasks.md` / `journal.md`)
+- ADR-025: 기능 read API와 `python-krtour-map` 실제 client readiness 경계 명문화
+- ADR-026: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
 
 ## 박힌 ADR
 
@@ -100,5 +94,5 @@ DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
 
 ## 차단 사유 / 결정 대기
 
-- 사용자 review 후 SPEC V8 반영분 push
-- Sprint 1 진입 승인 시 `apps/` scaffolding PR 시작
+- GitHub secret / branch protection의 실제 적용 상태 미확인
+- Sprint 4 backlog 중 merge 완료 / 미완료 구분을 `tasks.md`에 재기록 필요

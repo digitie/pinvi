@@ -2,18 +2,12 @@
 
 ## 진행 중
 
-- (없음) — Sprint 2 PR 작성 중
+- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
 
 ## 다음 (우선순위 순)
 
-- [ ] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed)
-- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + maplibre-vworld 통합)
-- [ ] T-010 — Sprint 1 진입 PR (`apps/{api,web,etl}` + `infra/` + `packages/`
-      scaffolding). 사용자 승인 후 시작. 자세히는 `docs/sprints/SPRINT-1.md`.
-- [ ] T-011 — ADR-010 인증 토큰 모델 (cookie session vs JWT)
-- [ ] T-012 — ADR-011 Admin RBAC 모델
-- [ ] T-013 — ADR-012 소셜 로그인 provider 정책
-- [ ] T-014 — ADR-013 RustFS 버킷 분리 정책
+- [ ] T-062 — GitHub Actions secret / branch protection 적용 상태 확인
+- [ ] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
 
 ## 완료
 
@@ -47,6 +41,8 @@
 - [x] T-033 — Sprint 1 apps/etl Dagster placeholder (완료: 2026-05-26)
 - [x] T-034 — Sprint 1 infra/docker-compose + scripts + CI workflow 3개 (완료: 2026-05-26)
 - [x] T-035 — Sprint 1 PR 생성 (완료: 2026-05-26)
+- [x] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed) (완료: 2026-05-26)
+- [x] T-061 — Sprint 4 진행 추적 문서 정합화 (`resume.md` / `tasks.md` / `journal.md`) (완료: 2026-06-01)
 
 ## 보류
 
@@ -57,8 +53,6 @@
   Sprint 6)
 - [x] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 완료, presigned PUT)
 - [x] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 완료, PR #11)
-- [ ] T-105 — v1의 Trip + POI Attachment 도메인 v2로 이식 (Sprint 4 진행)
-- [ ] T-106 — Telegram 통합 (Sprint 4 진행 — 신규 trip / 동반자 초대 알림 채널)
 - [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
   `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
   (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
@@ -78,11 +72,14 @@
   `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
 - [ ] T-113 — `tripmate-ai-companion` 별 repo 신설 (ADR-020) — T-107 후속.
   사용자가 repo 명 / provider 확정 후 진입.
-- [ ] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — 5개 workflow +
-  branch protection. Sprint 1~3 동안 비활성이었음.
+- [x] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — workflow 파일 복원 완료.
+  남은 운영 확인은 T-062에서 추적.
 
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |
 |----|------|---------|------|
-| (v2의 첫 PR — 본 골격) | docs: bootstrap v2 skeleton + SPEC V8 reflect | (대기) | T-000 ~ T-009 묶음 |
+| PR #9 | Sprint 1 진입 PR | 2026-05-26 | T-030 ~ T-035 |
+| PR #10 | Sprint 2 진입 PR | 2026-05-26 | 사용자/Trip/POI/동의/Storage |
+| PR #11 | Sprint 3 진입 PR | 2026-05-26 | Admin + RBAC + audit chain |
+| PR #14 | docs: Sprint 4~6 plan + ADR-018~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |

@@ -13,15 +13,17 @@
 
 새 세션이 들어오면 이 순서로 컨텍스트를 확보한다:
 
-1. `README.md` — 정체성, 빠른 시작, 문서 지도
-2. `CLAUDE.md` — 1쪽 진입 요약
-3. `AGENTS.md` — 작업 룰
-4. `SKILL.md` — DO NOT, 도메인 어휘
-5. `docs/sprints/README.md` — Sprint 1~N 계획
-6. `docs/architecture.md` — 책임 경계 (TripMate vs `python-krtour-map`)
-7. `docs/resume.md` — "다음 한 작업"
-8. `docs/journal.md` 최신 3건 — 직전 컨텍스트
-9. 관련 ADR (`docs/decisions.md`)
+1. 도구별 1차 진입 파일
+   - Claude: `CLAUDE.md`
+   - Codex / Antigravity / Cursor / Copilot: `AGENTS.md`
+2. `AGENTS.md` — 작업 룰
+3. `SKILL.md` — DO NOT, 도메인 어휘
+4. `docs/sprints/README.md` — Sprint 1~N 계획
+5. `docs/resume.md` — 현재 상태와 다음 한 작업
+6. `docs/journal.md` 최신 3건 — 직전 컨텍스트
+7. `docs/decisions.md` — 관련 ADR
+8. `README.md` — 저장소 정체성, 빠른 시작, 문서 지도
+9. `docs/architecture.md` — 책임 경계 (TripMate vs `python-krtour-map`)
 
 5~10분 안에 위 9개를 훑으면 거의 모든 작업의 정합성 판단이 가능하다.
 
