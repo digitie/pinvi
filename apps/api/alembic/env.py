@@ -66,6 +66,10 @@ async def run_async_migrations() -> None:
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        # SQLAlchemy 2.0 AsyncConnection 은 commit 없이 블록을 빠져나가면 DDL 을
+        # 롤백한다 — context.begin_transaction() 만으로는 외부 async 트랜잭션이
+        # 커밋되지 않아 테이블이 사라진다. 명시적 commit 필수.
+        await connection.commit()
     await connectable.dispose()
 
 

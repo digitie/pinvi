@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.poi import TripDayPoi
@@ -66,7 +67,12 @@ async def create_poi(
         added_by_user_id=added_by_user_id,
     )
     db.add(poi)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        # (trip_id, day_index, sort_order COLLATE "C") UNIQUE 위반
+        raise SortOrderConflictError("같은 위치(sort_order)에 이미 POI가 있습니다.") from exc
     await db.refresh(poi)
     return poi
 

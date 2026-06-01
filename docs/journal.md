@@ -2,6 +2,50 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-01 (claude) — Sprint 2 핵심 DoD 마감
+
+**작업**: Sprint 2 잔여 구현 — Google OAuth(G-4 안전 매칭) + Notice plan → trip
+copy(ADR-013) + 통합 테스트 harness/스위트 (사용자 지시 "Sprint 2 완료").
+
+**컨텍스트**: Sprint 2 코드는 머지돼 있었으나 (1) OAuth service/route, (2) Notice
+plan service/route/copy, (3) `tests/integration` 이 비어 있었음 — 모델/스키마/
+마이그레이션은 이미 존재. 본 작업이 service+route+test 계층을 채움.
+
+**신규**:
+- `app/services/oauth_google.py` — G-4 안전 매칭(기존 identity 로그인 / Google
+  `email_verified=true` + 동일 이메일 로컬계정 → 안전 연결 / 미인증 → 비연결 신규,
+  provider-namespaced email 로 UNIQUE 충돌 회피) + state·PKCE + HTTP 분리.
+- `app/api/v1/oauth.py` — `/auth/oauth/google/{start,callback}` + `/providers` + unlink.
+- `app/services/notice_plan.py` — published listing/상세 + `copy_plan_to_trip`
+  (notice_pois → trip_day_pois, LexoRank append, plan_poi_attachments 복제) + seed helper.
+- `app/api/v1/notice_plans.py` — listing / 상세 / `POST /{id}/copy`.
+- `app/api/v1/users.py` — `PUT /users/me/consents`, `DELETE /.../{type}` REST endpoint.
+- `tests/integration/` — conftest harness + 7개 파일 27 테스트.
+
+**부수 버그 수정**:
+- **`alembic/env.py`** — async 마이그레이션이 DDL 트랜잭션을 커밋하지 않던 잠재
+  버그(`AsyncConnection` 가 commit 없이 롤백). `connection.commit()` 추가.
+  testcontainer 로 실제 테이블 생성 검증 중 발견 — CI 는 exit code 만 봐서 미검출.
+- `services/poi.py` — sort_order UNIQUE 위반 → `SortOrderConflictError`(409).
+
+**검증** (WSL ext4 미러 + Docker PostGIS, git=Windows git.exe — ADR-017):
+- `pytest tests/unit` → 53 passed
+- `pytest tests/integration` → **27 passed** (postgis/postgis:16-3.5-alpine)
+- `ruff check` / `ruff format --check` / `mypy --strict app` → 통과
+
+**잔여(후속)**: 위치 감사 자동 적재 e2e(`/features/in-bounds` — Sprint 4 krtour
+client 의존), `email_queue` SKIP LOCKED worker + 비밀번호 재설정, `api_call_log`
+미들웨어 통합 테스트. 상세 `docs/sprints/SPRINT-2.md` "잔여" 절.
+
+**교훈**: testcontainers + async alembic 은 마이그레이션이 실제로 커밋되는지
+(테이블 count) 까지 확인할 것 — exit code 만으로는 부족. pytest-asyncio
+function-loop 에서는 엔진을 함수 스코프 + NullPool 로 만들어야 "another operation
+in progress" / "Future attached to different loop" 를 피한다.
+
+**다음**: 본 PR 머지 → 실질 다음은 Sprint 4 PR-B2 (krtour client + 위치 감사 e2e)
+또는 PR-C (프론트엔드) — `docs/resume.md`.
+
+
 ## 2026-06-01 (claude)
 
 **작업**: 문서 정합성 점검 + git 실행 정책 / `.codegraph` ignore 명시 (PR #19, #20).

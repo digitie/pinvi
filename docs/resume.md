@@ -2,26 +2,24 @@
 
 ## 현재 상태
 
-**Sprint 4 진입 PR-A 작성 중**. Sprint 1~3 머지 완료. ADR-017 (codegraph) +
-PR #14 (Sprint 4~6 plan) + PR #25 (라이브러리 consumer catalog) 모두 머지.
-본 PR-A는 GitHub Actions workflow 5개 복원 (ADR-021) — Sprint 4 본격 코드 PR의
-전제 조건.
+**Sprint 2 핵심 DoD 마감 완료** (2026-06-01). OAuth G-4 + Notice copy + 통합
+테스트 27개 green. Sprint 1~3 + Sprint 4 PR-A(#15 CI 복원) / PR-B(#16 features
+API scaffolding) 머지 완료. 통합 테스트 harness(PostGIS testcontainer)가
+`apps/api/tests/integration` 에 박힘 — 이후 백엔드 검증의 기반. async alembic 의
+DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`).
 
 ## 다음 한 작업
 
-본 PR-A 머지 → 사용자가 GitHub UI에서:
+우선순위 후보:
 
-1. `OPENAI_API_KEY` secret 등록 (`docs/runbooks/secrets.md`)
-2. branch protection 활성 (`.github/workflows/README.md` §branch protection)
-
-→ **Sprint 4 PR-B (백엔드)** 시작:
-
-1. `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
-2. `apps/api/app/api/v1/features.py` — `GET /features/in-bounds`, `{id}`,
-   `{id}/weather`, `/search`, `/nearby`, `POST /features/requests`
-3. `apps/api/app/services/cluster_query.py` — zoom별 `bjd_lookup` /
-   `ST_ClusterDBSCAN`
-4. `apps/api/app/services/trip_view_builder.py` — `app` ↔ `feature` join
+1. **Sprint 2 잔여 마감** (`docs/sprints/SPRINT-2.md` "잔여" 절):
+   - `email_queue` SKIP LOCKED worker + 비밀번호 재설정 메일 흐름
+   - `api_call_log` 미들웨어 통합 테스트
+   - CI(`api.yml`)에 `tests/integration` 스텝 추가 검토
+2. **Sprint 4 PR-B2** — `python-krtour-map` 실 client 주입 → `/features/in-bounds`
+   동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
+   - `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
+   - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
 
 이후 **PR-C (프론트엔드)**:
 
