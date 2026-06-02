@@ -62,8 +62,13 @@ uv pip install -e "git+https://github.com/digitie/python-krtour-map@<sha>#egg=py
 npm install
 scripts/dev-up.sh                                           # API 9021 / Web 9022 / Dagster 9023
 
-# 인프라
+# 인프라 (RustFS API 9003 / console 9004)
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
+
+# Docker app build/run/smoke
+npm run docker:app:smoke
+
+# krtour-map 독립 프로그램은 별 저장소에서 실행 (API 9011 / admin 9012)
 
 # Alembic (app schema만)
 uv run --package apps/api alembic upgrade head

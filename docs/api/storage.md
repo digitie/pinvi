@@ -16,8 +16,8 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부 메타 등
 
 | 환경변수 | 예시 | 비고 |
 |---------|------|------|
-| `TRIPMATE_RUSTFS_ENDPOINT_URL` | `http://rustfs:9000` | API 컨테이너 → RustFS 내부 |
-| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | `http://127.0.0.1:19000` | 브라우저 → RustFS (presigned host) |
+| `TRIPMATE_RUSTFS_ENDPOINT_URL` | `http://rustfs:9003` | API 컨테이너 → RustFS 내부 |
+| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | `http://127.0.0.1:9003` | 브라우저 → RustFS (presigned host) |
 | `TRIPMATE_RUSTFS_BUCKET` | `tripmate-media` | |
 | `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | `tripmate-dev-access` | |
 | `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | (secret) | |
@@ -70,7 +70,7 @@ Cookie: tripmate_access=...
     "method": "PUT",
     "bucket": "tripmate-media",
     "storage_key": "user-uploads/trip_attachment/<user_id>/2026/05/<uuid>.jpg",
-    "upload_url": "http://127.0.0.1:19000/tripmate-media/user-uploads/...?X-Amz-Signature=...",
+    "upload_url": "http://127.0.0.1:9003/tripmate-media/user-uploads/...?X-Amz-Signature=...",
     "headers": {
       "Content-Type": "image/jpeg",
       "x-amz-content-sha256": "UNSIGNED-PAYLOAD"

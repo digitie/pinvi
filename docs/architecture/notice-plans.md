@@ -228,7 +228,7 @@ presigned PUT: `AWS4-HMAC-SHA256` + `UNSIGNED-PAYLOAD`.
 관리자 ListObjectsV2 / DeleteObject 호환.
 
 `python-krtour-map`이 RustFS feature media에 같은 컨테이너를 쓰면 endpoint/keys를
-공유. 두 compose가 동시에 19000/19001을 점유하지 않도록 한 쪽만 실행 (v1
+공유. 두 compose가 동시에 9003/9004을 점유하지 않도록 한 쪽만 실행 (v1
 운영 노트).
 
 ## 7. SPEC V8 정합

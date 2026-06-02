@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-03 (codex) — RustFS 9003/9004 + Docker app 스크립트
+
+**작업**: 사용자 지시로 RustFS 저장소 포트를 API `9003`, console `9004`로 고정하고,
+krtour-map 독립 프로그램 포트를 API `9011`, admin `9012`로 문서화. 또한
+`python-kraddr-geo`의 `scripts/docker_app.sh` 패턴을 참고해 TripMate Docker app
+build/run/smoke 스크립트를 추가.
+
+**변경**:
+- `infra/docker-compose.yml`, `infra/docker-compose.app.yml` — RustFS 내부/host API
+  포트를 `9003`, console 포트를 `9004`로 통일. API/Dagster 내부 endpoint도
+  `rustfs:9003` / `app-rustfs:9003`로 정렬.
+- `scripts/docker-app.sh` 신규 — `build`, `up`, `down`, `reset`, `status`,
+  `logs`, `migrate`, `smoke` 지원. 시작 전 API `9021`, Web `9022`, RustFS
+  `9003`/`9004` 점유 컨테이너/프로세스를 정리.
+- `scripts/docker-app-smoke-test.sh` — `scripts/docker-app.sh smoke` 호환 wrapper로
+  단순화.
+- `.env.example`, `package.json`, `README.md`, `SKILL.md`,
+  `docs/runbooks/{docker-app,file-storage,etl,README}.md`, `docs/api/storage.md` —
+  RustFS 포트와 Docker app 실행 방법 동기화.
+- `AGENTS.md`, `CLAUDE.md` — 고정 포트 정책에 RustFS `9003`/`9004`와 Docker app
+  스크립트 사용 원칙, krtour-map `9011`/`9012` 포트 추가.
+- `docs/krtour-map-integration.md`, `.env.example` — krtour-map API/Admin base URL을
+  `9011`/`9012`로 정리하고 예전 debug UI 포트 언급 제거.
+
+**검증**: WSL ext4 미러에 sync 후 `scripts/docker-app.sh smoke --keep-running` 통과.
+이미지 빌드, RustFS `/health/live`, Alembic `upgrade head`, API `/health`, API
+`/health/db`, Web `/`, RustFS health 응답을 확인했다. Postgres 초기화 race는
+Alembic 재시도 루프로 흡수했고, `lsof`가 9022 리스너를 못 잡는 경우를 위해
+`fuser` fallback을 보강했다.
+
 ## 2026-06-02 (codex) — 로컬 dev 포트 9021/9022/9023 고정
 
 **작업**: 사용자 지시로 로컬 개발 포트 원칙을 고정. API는 `9021`, Web은 `9022`,
