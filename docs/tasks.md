@@ -6,8 +6,8 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-062 — GitHub Actions secret / branch protection 적용 상태 확인
 - [ ] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
+- [ ] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
 
 ## 완료
 
@@ -34,7 +34,8 @@
 - [x] T-020 — AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) (완료: 2026-05-26)
 - [x] T-021 — `docs/integrations/maplibre-vworld.md` 신규 + Kakao 전면 교체 (ADR-015) (완료: 2026-05-26)
 - [x] T-022 — `AGENTS.md` ↔ `CLAUDE.md` 동기 룰 (ADR-016 — Codex/Antigravity 대응) (완료: 2026-05-26)
-- [x] T-023 — Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 (완료: 2026-05-25)
+- [x] T-023 — Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 5분 주기 PR 감시 (완료: 2026-05-25,
+  2026-06-02부터 API key 없는 review reminder 방식)
 - [x] T-030 — Sprint 1 monorepo 루트 + packages/* skeleton (완료: 2026-05-26)
 - [x] T-031 — Sprint 1 apps/api FastAPI + Alembic + Auth 뼈대 (완료: 2026-05-26)
 - [x] T-032 — Sprint 1 apps/web Next.js + auth 화면 (완료: 2026-05-26)
@@ -43,6 +44,8 @@
 - [x] T-035 — Sprint 1 PR 생성 (완료: 2026-05-26)
 - [x] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed) (완료: 2026-05-26)
 - [x] T-061 — Sprint 4 진행 추적 문서 정합화 (`resume.md` / `tasks.md` / `journal.md`) (완료: 2026-06-01)
+- [x] T-062 — GitHub Actions secret / branch protection 적용 상태 확인 (완료:
+  2026-06-02, Actions secret 0개 정책 확인 + `main-pr-only` ruleset 적용)
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
 
 ## 보류
@@ -74,7 +77,7 @@
 - [ ] T-113 — `tripmate-ai-companion` 별 repo 신설 (ADR-020) — T-107 후속.
   사용자가 repo 명 / provider 확정 후 진입.
 - [x] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — workflow 파일 복원 완료.
-  남은 운영 확인은 T-062에서 추적.
+  운영 확인은 T-062에서 완료. required status check 후속은 T-065.
 
 ## 머지 히스토리 (참고)
 

@@ -9,43 +9,70 @@
 | [api.yml](./api.yml) | `apps/api/**` PR / push | ruff + ruff format check + mypy --strict + pytest (unit) + alembic upgrade (PostGIS service) | 4+ |
 | [web.yml](./web.yml) | `apps/web/**` / `packages/**` PR / push | lint (next + ESLint) + tsc --noEmit + next build | 4+ |
 | [etl.yml](./etl.yml) | `apps/etl/**` PR / push | ruff check + Dagster definitions load test (placeholder, Sprint 5 본격) | 5+ |
-| [codex-pr-review.yml](./codex-pr-review.yml) | PR opened / ready_for_review | Codex action으로 자동 review 코멘트 (ADR-016, `docs/runbooks/pr-review-sprint4.md`) | 4+ |
-| [codex-pr-monitor.yml](./codex-pr-monitor.yml) | 5분 cron | 머지되지 않은 PR 중 최신 head SHA에 review 마커 없는 것 재리뷰 | 4+ |
+| [codex-pr-review.yml](./codex-pr-review.yml) | PR opened / ready_for_review | 외부 API key 없이 review 필요 체크리스트 + head SHA 마커 댓글 | 4+ |
+| [codex-pr-monitor.yml](./codex-pr-monitor.yml) | 5분 cron | 머지되지 않은 PR 중 최신 head SHA에 review reminder 마커가 없으면 알림 댓글 | 4+ |
 
 ## 필요 secret
 
-`docs/runbooks/secrets.md` 참고. 핵심:
+`docs/runbooks/secrets.md` 참고. 2026-06-02 현재 필수 GitHub Actions secret은 없다.
 
-- `OPENAI_API_KEY` — codex-pr-review / codex-pr-monitor 가 사용 (Codex action)
-- (CI postgres 인스턴스는 service container — secret 불필요)
+- GitHub Actions에서 외부 LLM API key를 사용하지 않는다.
+- `OPENAI_API_KEY`는 등록하지 않으며 앞으로도 사용하지 않는다.
+- CI postgres 인스턴스는 service container라 secret이 필요 없다.
+
+## T-062 실제 점검 (2026-06-02)
+
+`gh`로 확인한 실제 상태:
+
+- Actions repository secret: `0`개.
+- classic `main` branch protection: 없음 (`GET /branches/main/protection` → 404).
+- repository ruleset: `main-pr-only` 적용됨(id `17146781`, enforcement `active`,
+  `current_user_can_bypass=never`).
+  - PR 필수, 승인 수 0, squash merge만 허용
+  - required linear history
+  - force push 차단
+  - branch deletion 차단
+- 최근 `api` / `web` / `etl` workflow는 PR 또는 push에서 성공 이력이 있음.
+- 기존 `Codex PR Review` 실패 원인은 `openai/codex-action@v1`의 server info 파일
+  누락이며, API key를 쓰지 않는 방침과도 충돌했다. 본 PR에서 외부 API 호출을 제거.
 
 ## branch protection
 
-main에 다음 정책 박는다 (GitHub Settings → Branches → Add rule):
+main에 다음 정책을 박는다 (GitHub Settings → Rulesets 또는 Branches):
 
 - **Require a pull request before merging** — ON
-- **Require status checks to pass before merging** — ON
-  - `api / lint-typecheck-test`
-  - `web / lint-typecheck-build`
-  - `etl / sanity` (해당 경로 변경 시만)
-- **Require branches to be up to date before merging** — ON
-- **Require linear history** — ON (squash merge 강제)
-- **Do not allow bypassing the above settings** — ON (admin 포함)
+- **Require linear history** — ON (squash merge 기본)
+- **Block force pushes** — ON
+- **Block deletions** — ON
+- **Do not allow bypassing the above settings** — ON (가능하면 admin 포함)
 
-설정은 본 PR 머지 후 사용자가 직접 GitHub UI에서 활성.
+required status check는 아직 활성화하지 않는다. 현재 `api` / `web` / `etl`은
+path-filtered workflow라서 docs-only PR에서는 check 자체가 생성되지 않는다. 이 상태로
+required check에 묶으면 PR이 `Expected` 상태에 갇힐 수 있다. 항상 실행되는 aggregate
+gate workflow를 만든 뒤 다음 항목을 required check로 추가한다.
+
+- `api / lint-typecheck-test`
+- `web / lint-typecheck-build`
+- `etl / sanity`
+
+필요 시 추가 정책:
+
+- **Require branches to be up to date before merging** — aggregate gate 도입 뒤 ON 검토
+
+설정 변경 이력은 `docs/journal.md`와 본 파일의 T-062 섹션에 기록한다.
 
 ## 운영
 
 - workflow 실패 → 머지 차단. 절대 `--no-verify` / hook 우회 금지 (AGENTS.md Git
   Safety Protocol).
-- codex review는 자동 — 본 review 코멘트가 PR open 후 ~수 분 내 박힘. 사용자 /
-  Claude는 그 위에 추가 review.
+- review reminder는 자동 — 실제 리뷰는 사용자 / 에이전트가
+  `docs/runbooks/pr-review-sprint4.md` 기준으로 수행하고 PR에 결과를 남긴다.
 - GitHub Actions 무료 한도 초과 시 알림 (사용자 결정 — 유료 전환 또는 self-hosted
   runner).
 
 ## 참조
 
 - ADR-021 — CI/CD 재활성
-- ADR-016 — AI 에이전트 동기 (codex-pr-review 본문 prompt와 정합)
+- ADR-016 — AI 에이전트 동기
 - `docs/runbooks/pr-review-sprint4.md` — PR 리뷰 운영
 - `docs/runbooks/secrets.md` — secret 카탈로그

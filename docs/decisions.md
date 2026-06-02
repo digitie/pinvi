@@ -746,6 +746,15 @@
 - **상태**: accepted
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
+- **amendment (2026-06-02)**: GitHub Actions에서 외부 LLM API key를 사용하지
+  않는다. `OPENAI_API_KEY`는 등록하지 않고 앞으로도 쓰지 않는다(사용자 지시).
+  `codex-pr-review.yml` / `codex-pr-monitor.yml`은 `openai/codex-action` 호출을
+  제거하고, PR마다 리뷰 필요 체크리스트와 head SHA 마커만 남긴다. 실제 리뷰는
+  `docs/runbooks/pr-review-sprint4.md` 기준으로 에이전트 또는 사람이 로컬/connector/
+  `gh`를 사용해 수행한다.
+- **amendment (2026-06-02)**: 프론트엔드 실행(`next dev`), lint/typecheck/build,
+  Vitest는 WSL ext4 테스트 미러에서 수행한다. Playwright 기반 브라우저 e2e만
+  Windows Node/브라우저에서 실행한다. e2e 대상 dev server는 WSL에서 띄운다.
 - **컨텍스트**: Sprint 1~3 진행 중 사용자 지시 "깃헙 ci / cd 쓰지마"로 PR #10
   직전 모든 `.github/workflows/`를 삭제했었다. Sprint 4 진입 시 사용자 결정
   뒤집힘 — 운영 가시화 / 정합성 게이트 / Sprint 4 이후 회귀 방지를 위해
@@ -753,19 +762,20 @@
 - **결정**:
   - **Sprint 4 진입 PR**에서 `.github/workflows/` 5개 workflow 복원:
     - `api.yml` — `apps/api` ruff + mypy --strict + pytest -q + alembic check
-    - `web.yml` — `apps/web` lint + typecheck + 단위 테스트 + Playwright (smoke)
+    - `web.yml` — `apps/web` lint + typecheck + build
     - `etl.yml` — `apps/etl` ruff + mypy + dagster validate (Sprint 5 본격 활성)
-    - `codex-pr-review.yml` — PR auto review trigger
-    - `codex-pr-monitor.yml` — 5분 주기 PR 감시
-  - **branch protection**: PR 머지에 모든 workflow green 필수 — main에 적용.
-  - **secret 관리**: GitHub Actions secrets에 TRIPMATE_DATABASE_URL_TEST
-    (postgres CI 인스턴스용) / RESEND_API_KEY_TEST / 등. 본 저장소 secret 목록은
-    `docs/runbooks/local-dev.md`와 별 secret 카탈로그에 명시.
+    - `codex-pr-review.yml` — PR review reminder trigger(API key 없음)
+    - `codex-pr-monitor.yml` — 5분 주기 PR 감시 + review reminder(API key 없음)
+  - **branch protection**: main 직접 push 금지와 PR-only 머지 정책을 적용한다.
+    path-filtered workflow를 required status check로 바로 묶으면 docs-only PR이
+    대기 상태에 갇힐 수 있으므로, required check는 항상 실행되는 aggregate gate가
+    생긴 뒤 추가한다.
+  - **secret 관리**: 현재 필수 GitHub Actions secret 없음. `RESEND_API_KEY_TEST` 등
+    외부 통합 테스트 secret은 필요 시 별도 카탈로그에 추가한다.
   - **로컬 검증 병행**: WSL에서 `pytest` / `ruff` / `npm run lint`는 계속 1차
     검증. GitHub Actions는 2차 안전망.
-  - **AI agent 자동 리뷰**: codex-pr-review가 PR open / sync 이벤트에 자동
-    review 코멘트 생성. 이건 ADR-016 / `docs/runbooks/pr-review-sprint4.md`
-    와 함께.
+  - **AI agent 리뷰 운영**: Actions는 리뷰 필요 알림만 남긴다. 실제 리뷰 코멘트와
+    수정·검증·머지는 에이전트 또는 사람이 수행한다.
 - **근거**:
   - Sprint 4 이후 산출물이 커지면서 회귀 가능성 ↑
   - 한 명의 AI agent + 사용자만으로는 모든 PR 정합성 검증 어려움
@@ -776,7 +786,7 @@
 - **결과 (부정)**:
   - GitHub Actions 비용 (초기 무료 한도 후 유료 가능)
   - workflow 자체 유지보수 부담
-  - secret 관리 절차 추가
+  - secret이 필요한 외부 통합은 별도 등록 절차가 필요
 - **후속**:
   - Sprint 4 진입 PR에 `.github/workflows/` 복원
   - `docs/runbooks/pr-review-sprint4.md` 갱신 — workflow status 확인 절차

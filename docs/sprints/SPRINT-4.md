@@ -17,7 +17,8 @@
     /features/in-bounds`가 라이브러리 호출
   - `apps/api/app/etl_bridge/krtour_map.py` DI helper 활성화
   - **GitHub Actions CI/CD 재활성화** (ADR-021) — Sprint 1~3 동안 비활성이었음.
-    api/web/etl workflow + PR 자동 리뷰 + lint/typecheck/test 게이트 복원.
+    api/web/etl workflow + API key 없는 review reminder + lint/typecheck/test 게이트
+    복원.
   - **`maplibre-vworld-js` 공통 기능 PR 머지 완료** —
     `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"
     모두 라이브러리에 머지된 후에만 v0.1.0 tag. TripMate 전용 항목은 본 저장소에
@@ -161,11 +162,13 @@ Sprint 1~3 동안 사용자 지시로 비활성이었음 (PR #10 직전 변경).
 - `api.yml` — `apps/api` ruff + mypy --strict + pytest -q
 - `web.yml` — `apps/web` lint + typecheck + 단위 테스트
 - `etl.yml` — `apps/etl` ruff + mypy + dagster definitions validation (Sprint 5에 정식 활성)
-- `codex-pr-review.yml` — PR 자동 리뷰 트리거 (`docs/runbooks/pr-review-sprint4.md`)
-- `codex-pr-monitor.yml` — 5분 주기 PR 감시
+- `codex-pr-review.yml` — PR review reminder 트리거 (`docs/runbooks/pr-review-sprint4.md`)
+- `codex-pr-monitor.yml` — 5분 주기 PR 감시 + review reminder
 
 ### 7.2 운영 룰
 
-- PR이 열리면 위 workflow 모두 green이어야 머지 가능 (branch protection)
+- PR은 repository ruleset `main-pr-only`에 따라 squash PR로만 머지한다.
+- required status check는 path-filtered workflow가 docs-only PR을 막을 수 있어,
+  항상 실행되는 aggregate gate 설계 뒤 적용한다.
 - workflow 실패는 머지 차단 — fix 후 재시도. `--no-verify` / hook 우회 금지
   (`AGENTS.md` Git Safety Protocol)

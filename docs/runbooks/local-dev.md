@@ -177,6 +177,9 @@ TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:55432/tr
 
 ## 7. 프론트 (`apps/web`)
 
+프론트 개발 서버와 일반 검증은 **WSL ext4 미러**에서 실행한다. Windows에서 실행하는
+프론트 명령은 e2e 검증용 Playwright runner / 브라우저로 제한한다.
+
 ```bash
 cd ~/tripmate-workspaces/tripmate-codex
 npm install
@@ -190,8 +193,24 @@ npm --workspace apps/web run lint
 npm --workspace apps/web run typecheck
 npm --workspace apps/web run build
 npm --workspace apps/web test       # Vitest
-npm --workspace apps/web run test:e2e  # Playwright
 ```
+
+### 7.1 Playwright e2e (Windows 전용)
+
+Playwright 기반 브라우저 e2e는 Windows Node/브라우저에서만 실행한다. 대상 dev
+server는 위 WSL 미러에서 계속 띄워 둔다.
+
+```powershell
+# 1) WSL에서 프론트 dev server 실행
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run dev"
+
+# 2) 다른 PowerShell에서 Playwright만 Windows로 실행
+cd F:\dev\tripmate-codex
+npm --workspace apps/web run test:e2e
+```
+
+Windows에서 `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`를
+실행하지 않는다. Windows Node/npm은 Playwright runner와 브라우저 실행에만 쓴다.
 
 ## 8. 인프라 (Docker)
 
@@ -239,6 +258,7 @@ uv run dagster dev   # http://localhost:23000
 | 백엔드 테스트 | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && uv run pytest apps/api/tests -q"` |
 | 프론트 lint | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run lint"` |
 | 프론트 typecheck | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run typecheck"` |
+| Playwright e2e | `cd F:\dev\tripmate-codex; npm --workspace apps/web run test:e2e` (Windows PowerShell) |
 | Postgres up | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && docker compose -f infra/docker-compose.yml up -d postgres"` |
 | Alembic upgrade | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex/apps/api && uv run alembic upgrade head"` |
 | 검색 (rg) | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && PATH=/usr/local/bin:/usr/bin:/bin rg <pattern>"` |
@@ -254,6 +274,7 @@ uv run dagster dev   # http://localhost:23000
 | Docker 컨테이너 시작 안 됨 | Docker Desktop 종료 | Docker Desktop 시작 + WSL2 backend 확인 |
 | PostgreSQL 연결 실패 | host 포트 충돌 (5432) | `55432`로 host 포트 변경 |
 | `next dev` 느림 | WSL ↔ NTFS 파일 watch | WSL 미러에서만 실행 |
+| Playwright가 WSL에서 브라우저 의존성 오류 | WSL headless browser 라이브러리 누락 | WSL dev server + Windows Playwright로 실행 |
 | Alembic `relation does not exist` | 다른 DB에 마이그레이션 적용됨 | `TRIPMATE_DATABASE_URL` 확인 |
 | `exec format error` (Odroid) | ARM64 이미지 아님 | `docker buildx build --platform linux/arm64` |
 

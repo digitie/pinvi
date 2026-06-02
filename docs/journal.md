@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-02 (codex) — T-062 GitHub Actions secret / branch protection 점검
+
+**작업**: T-062 진행. GitHub Actions secret, branch protection/ruleset, 최근 Actions
+실패를 `gh`로 실제 확인하고, 사용자 지시 "API key 안 씀 / 앞으로도 안 씀"과
+"프론트엔드 실행은 WSL, e2e Playwright만 Windows"를 운영 문서와 workflow에 반영.
+
+**실측**:
+- Actions repository secret은 `0`개. 이는 정책과 일치. `OPENAI_API_KEY`는 등록하지
+  않고 앞으로도 사용하지 않는다.
+- classic `main` branch protection은 없음(REST 404).
+- repository ruleset은 없었으나, `main-pr-only`(id `17146781`)를 적용:
+  PR 필수, squash-only, required linear history, force push 차단, branch deletion
+  차단, bypass 없음(`current_user_can_bypass=never`).
+- 최근 `api` / `web` / `etl` workflow는 PR 또는 push에서 성공 이력 있음.
+- 기존 `Codex PR Review` 실패는 `openai/codex-action@v1`의
+  `/home/runner/.codex/<run>.json` server info 파일 누락. API key를 쓰지 않는 정책과
+  충돌하므로 action 호출을 제거.
+
+**변경**:
+- `.github/workflows/codex-pr-review.yml`, `codex-pr-monitor.yml` — 외부 API 호출 없는
+  review reminder / head SHA 마커 댓글 workflow로 변경.
+- `.github/workflows/README.md`, `docs/runbooks/secrets.md`,
+  `docs/runbooks/pr-review-sprint4.md` — API key 미사용, ruleset 실제 상태, required
+  status check 보류 사유 기록.
+- `AGENTS.md`, `CLAUDE.md`, `docs/dev-environment.md`, `docs/runbooks/local-dev.md` —
+  `apps/web` dev/lint/typecheck/build/Vitest는 WSL ext4 미러, Playwright 브라우저
+  e2e만 Windows에서 실행하도록 정리.
+- `docs/decisions.md` ADR-021 amendment — API key 미사용 + 프론트 실행 경계 반영.
+- `docs/tasks.md`, `docs/resume.md` — T-062 완료, 후속 T-065(aggregate CI gate 후
+  required status check 적용) 추가.
+
+**후속**: required status check는 현재 `api` / `web` / `etl` path filter 때문에
+docs-only PR이 `Expected` 대기에 갇힐 수 있어 바로 적용하지 않음. 항상 실행되는
+aggregate gate 설계 후 T-065에서 적용.
+
 ## 2026-06-02 (codex) — 최신 main 기준 문서 충돌 정정
 
 **작업**: 최신 `origin/main`(PR #27 이후)에서 문서를 다시 검토하고 ADR-024 개발
@@ -321,13 +356,15 @@ UI) 은 후속 PR.
 - `.github/workflows/README.md` 신규 — workflow 인덱스 + branch protection
   설정 안내
 - `docs/runbooks/secrets.md` 신규 — GitHub Actions secret 카탈로그
-  (`OPENAI_API_KEY` 등)
+  (`OPENAI_API_KEY` 등, 2026-06-02 사용자 지시로 API key 미사용 정책에 의해 superseded)
 
 **복원 source**: `git show dd11f04~1:.github/workflows/<file>` — Sprint 1 머지
 직전 (커밋 `dd11f04` "chore: remove GitHub Actions workflows") 의 직전 상태.
 
 **다음**: PR 머지 → 사용자가 GitHub UI에서 (1) `OPENAI_API_KEY` secret 등록 +
 (2) branch protection 활성 → Sprint 4 본격 코드 PR (PR-B 백엔드 / PR-C 프론트엔드).
+이 다음 행동은 2026-06-02 T-062에서 superseded: API key는 쓰지 않고, `main-pr-only`
+repository ruleset을 적용했다.
 
 
 
