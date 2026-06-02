@@ -18,6 +18,13 @@ git.exe) / WSL ext4=일회용 테스트 미러. 셋업·검증·함정 절차는
 **문서 충돌 정정** (2026-06-02 codex) — `agent-guide`, `local-dev`, `architecture`
 등에 남아 있던 ADR-024 이전 WSL git 모델, ADR-015 이전 Kakao/marker-wrapper 표현,
 ADR-025 이전 `kraddr.geo` in-process 검색 표현을 정정.
+**T-062 운영 게이트 확인/적용** (2026-06-02 codex) — GitHub Actions secret은
+`0`개가 의도된 상태다. `OPENAI_API_KEY`는 쓰지 않는다. `codex-pr-review` /
+`codex-pr-monitor`는 외부 API 호출 없이 review reminder만 남기도록 변경. `main`에는
+repository ruleset `main-pr-only`(id `17146781`)를 적용했다(PR 필수, squash-only,
+linear history, force push/deletion 차단, bypass 없음). Classic branch protection은
+없다. required status check는 path-filtered workflow가 docs-only PR을 막을 수 있어
+aggregate gate 설계 뒤 적용한다.
 
 ## 다음 한 작업
 
@@ -31,8 +38,9 @@ ADR-025 이전 `kraddr.geo` in-process 검색 표현을 정정.
    동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
    - `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-3. **운영 확인** — GitHub Actions secret(`docs/runbooks/secrets.md`) / branch
-   protection(`.github/workflows/README.md`) 실제 적용 상태 점검.
+3. **운영 후속** — 항상 실행되는 aggregate CI gate 설계 후 required status check
+   적용(T-065). 현재 `api` / `web` / `etl`은 path-filtered라 바로 required check로
+   걸지 않는다.
 
 이후 **PR-C (프론트엔드)**:
 
@@ -75,8 +83,9 @@ ADR-025 이전 `kraddr.geo` in-process 검색 표현을 정정.
 - [x] docs/conventions/ 6개 신규 (coding-style/database/testing/geospatial/normalization + README) — T-018
 - [x] docs/architecture/ 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract) — T-019
 - [x] AI agent 진입 절차 강화 (README/AGENTS/CLAUDE) — T-020
-- [x] Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 자동 리뷰 프롬프트 + 5분 주기 PR 감시 — T-023
+- [x] Sprint 4까지 PR 리뷰·수정·머지 운영 runbook + 5분 주기 PR 감시 — T-023
 - [x] Sprint 1 진입 PR (apps + packages scaffolding) — T-030
+- [x] GitHub Actions secret / branch protection 적용 상태 확인 — T-062
 - [x] 최신 main 기준 문서 충돌 정정 — T-064
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
@@ -102,10 +111,11 @@ ADR-025 이전 `kraddr.geo` in-process 검색 표현을 정정.
 
 - Sprint 4 완료 전까지 새 PR은 `docs/runbooks/pr-review-sprint4.md` 기준으로
   리뷰 → 상세 코멘트 → 코드 수정 → 기반 라이브러리 sync → 검증 → 머지를 반복한다.
-- `.github/workflows/codex-pr-monitor.yml`이 5분마다 열린 PR을 감시하고, 최신 head
-  SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
+- `.github/workflows/codex-pr-monitor.yml`이 외부 API key 없이 5분마다 열린 PR을
+  감시하고, 최신 head SHA review reminder 마커가 없는 PR에 알림을 남긴다. 실제
+  리뷰는 에이전트 또는 사람이 수행한다.
 
 ## 차단 사유 / 결정 대기
 
-- GitHub secret / branch protection의 실제 적용 상태 미확인
+- required status check 적용은 항상 실행되는 aggregate CI gate 설계 이후
 - Sprint 4 backlog 중 merge 완료 / 미완료 구분을 `tasks.md`에 재기록 필요

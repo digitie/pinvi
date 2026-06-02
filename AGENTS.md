@@ -112,6 +112,9 @@ trunk를 절대 편집하지 않는다.
   **Windows 버전 git (`git.exe`)** 으로 실행한다 (ADR-017). WSL git으로 `/mnt/f/...`
   NTFS 경로를 조작하지 않는다 — 권한·성능·CRLF 문제. pytest / docker / npm 등
   나머지 실행은 WSL ext4 테스트 미러 (ADR-024).
+- **Frontend 실행**: `apps/web` dev server, lint, typecheck, build, Vitest는
+  WSL ext4 테스트 미러에서 실행한다. e2e 검증을 위한 Playwright runner /
+  브라우저만 Windows에서 실행한다.
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
 #### CodeGraph Commands
@@ -161,8 +164,9 @@ trunk를 절대 편집하지 않는다.
   절대경로로 참조하고 변경하지 않는다.
 - **WSL PATH 오염 금지**: WSL에서 `npm`/`node`/`git`/`rg`가 `/mnt/c/...` Windows
   shim으로 잡히면 안 된다(`command -v`로 확인). 검색은 WSL native `rg`만.
-- **Playwright/브라우저 e2e**: Windows Node/브라우저에서만. WSL에서는 백엔드 검증 +
-  Linux Node lint/typecheck/build까지.
+- **Frontend 실행**: `apps/web` dev server / lint / typecheck / build / Vitest는
+  WSL ext4 미러에서만. **Playwright/브라우저 e2e만** Windows Node/브라우저에서
+  실행한다.
 
 절차·명령·함정 전체는 `docs/dev-environment.md`(ADR-024), worktree 생성·CodeGraph·
 git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 reference다.
@@ -238,7 +242,8 @@ git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 
 
 Sprint 4 완료 전까지 새 PR이 올라오거나 draft가 `ready_for_review`로 전환되면
 `docs/runbooks/pr-review-sprint4.md`를 따른다. `.github/workflows/codex-pr-monitor.yml`은
-5분마다 열린 PR을 감시하고, 최신 head SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
+외부 API key 없이 5분마다 열린 PR을 감시하고, 최신 head SHA review reminder 마커가
+없는 PR에 리뷰 필요 알림을 남긴다. 실제 리뷰는 에이전트 또는 사람이 수행한다.
 
 - 리뷰 후 상세 코멘트를 남기고, 필요한 코드 수정까지 직접 수행한다.
 - 변경량 최소화보다 Sprint 1~4를 버틸 장기 설계 정합성을 우선한다.

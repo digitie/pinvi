@@ -57,6 +57,8 @@ F:/dev/tripmate-antigravity          # Google Antigravity worktree
 |------|------|------|
 | git / 편집 / commit / PR | NTFS worktree `F:/dev/tripmate-<agent>` | Windows `git.exe`만 |
 | 의존성·테스트·Docker·장기 실행 | WSL ext4 `~/tripmate-workspaces/tripmate-<agent>` | commit 금지 |
+| 프론트 dev/lint/typecheck/build/Vitest | WSL ext4 `~/tripmate-workspaces/tripmate-<agent>` | Linux Node/npm |
+| Playwright 브라우저 e2e | Windows `F:/dev/tripmate-<agent>` | Windows Node/브라우저, 대상 dev server는 WSL |
 | 데이터 (`dataset/`, `refdocs/`) | NTFS 원본 `/mnt/f/dev/tripmate/dataset/` | ext4에선 심볼릭 링크/절대경로 참조 |
 | 빌드 산출물 (`.next`, `build`) | ext4 미러 | 폐기 가능 |
 
@@ -219,8 +221,9 @@ ruff format --check app tests
 mypy --strict app
 ```
 
-프론트(`apps/web`)는 Linux Node/npm으로 `npm run lint` / `npm run typecheck` /
-`npm run build`까지. **Playwright/브라우저 e2e는 WSL에서 실행하지 않는다** — WSL
+프론트(`apps/web`)는 Linux Node/npm으로 dev server, `npm run lint`,
+`npm run typecheck`, `npm run build`, Vitest까지 실행한다. **Playwright/브라우저
+e2e만 Windows에서 실행한다.** e2e 대상 dev server는 WSL ext4 미러에서 띄운다. WSL
 headless Chromium은 `libasound.so.2` 등 공유 라이브러리 누락으로 반복 실패한다.
 브라우저 검증은 Windows Node/브라우저에서 하고, 실행 명령·스크린샷 경로를 작업
 로그에 기록한다.
@@ -308,7 +311,8 @@ PowerShell로 한국어 문서를 읽을 때는 `Get-Content -Encoding UTF8` 명
 
 - [ ] NTFS → ext4 단방향 rsync (§3.1)
 - [ ] `pytest unit/integration` + `ruff` + `ruff format --check` + `mypy --strict`
-- [ ] (프론트) Linux npm으로 lint/typecheck/build. Playwright는 Windows에서.
+- [ ] (프론트) WSL Linux npm으로 dev/lint/typecheck/build/Vitest. Playwright는
+      Windows에서.
 
 마무리 (NTFS worktree):
 

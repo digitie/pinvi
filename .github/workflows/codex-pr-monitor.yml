@@ -1,4 +1,4 @@
-name: Codex PR Monitor
+name: PR Review Monitor
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: codex-pr-monitor
+  group: pr-review-monitor
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       has_prs: ${{ steps.discover.outputs.has_prs }}
       matrix: ${{ steps.discover.outputs.matrix }}
     steps:
-      - name: Find open PRs without current Codex review
+      - name: Find open PRs without current review reminder
         id: discover
         uses: actions/github-script@v7
         with:
@@ -49,9 +49,9 @@ jobs:
                 per_page: 100,
               });
 
-              const marker = `codex-pr-review:head=${pr.head.sha}`;
-              const alreadyReviewed = comments.some((comment) => comment.body?.includes(marker));
-              if (alreadyReviewed) {
+              const marker = `pr-review-reminder:head=${pr.head.sha}`;
+              const alreadyReminded = comments.some((comment) => comment.body?.includes(marker));
+              if (alreadyReminded) {
                 continue;
               }
 
@@ -68,13 +68,12 @@ jobs:
             core.setOutput("has_prs", include.length > 0 ? "true" : "false");
             core.setOutput("matrix", JSON.stringify({ include }));
 
-  review:
-    name: Review PR #${{ matrix.pr_number }}
+  remind:
+    name: Remind PR #${{ matrix.pr_number }}
     needs: discover
     if: needs.discover.outputs.has_prs == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       issues: write
       pull-requests: write
     strategy:
@@ -82,75 +81,32 @@ jobs:
       max-parallel: 2
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
-      - name: Checkout pull request merge commit
-        uses: actions/checkout@v5
-        with:
-          ref: refs/pull/${{ matrix.pr_number }}/merge
-          persist-credentials: false
-
-      - name: Fetch review refs
-        env:
-          PR_BASE_REF: ${{ matrix.base_ref }}
-          PR_NUMBER: ${{ matrix.pr_number }}
-        run: |
-          git fetch --no-tags origin \
-            "$PR_BASE_REF" \
-            "+refs/pull/$PR_NUMBER/head"
-
-      - name: Run Codex review
-        id: codex
-        uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          sandbox: read-only
-          prompt: |
-            You are reviewing PR #${{ matrix.pr_number }} for ${{ github.repository }}.
-
-            This scheduled monitor runs every 5 minutes. Review this PR because the latest head SHA
-            does not yet have a Codex review marker.
-
-            Review only the changes introduced by this pull request:
-              git diff --stat ${{ matrix.base_sha }}...${{ matrix.head_sha }}
-              git diff --find-renames ${{ matrix.base_sha }}...${{ matrix.head_sha }}
-
-            Follow the repository instructions in AGENTS.md, SKILL.md, docs/agent-guide.md,
-            and docs/runbooks/pr-review-sprint4.md.
-
-            Until Sprint 4 is completed, review PRs with a long-term architecture stance:
-            - Do not optimize for the smallest diff when a structural change is clearly better for Sprint 1-4 goals.
-            - Prefer changes that preserve clean module boundaries, dependency direction, and future Sprint 4 map/UI work.
-            - If the correct fix belongs in a base library such as python-krtour-map, maplibre-vworld-js,
-              python-kraddr-*, or a provider library, call that out as a required upstream library PR before merge.
-            - Flag cases where TripMate is adding wrappers, adapters, schema ownership, provider parsing,
-              map behavior, or category logic that should live in the owning library instead.
-
-            Use a code-review stance:
-            - Prioritize bugs, security risks, behavioral regressions, missing tests, and repository policy violations.
-            - Lead with findings ordered by severity.
-            - Include exact file paths and line references when possible.
-            - Keep the review detailed enough that the next agent can implement the fix without rediscovery.
-            - If there are no issues, say so clearly and mention any residual test risk.
-            - Include sections for findings, required code changes, base-library sync, verification, and merge readiness.
-            - Write the final review comment in Korean.
-
-            Pull request title and body:
-            ----
-            ${{ matrix.title }}
-            ${{ matrix.body }}
-
-      - name: Comment with Codex review
-        if: steps.codex.outputs['final-message'] != ''
+      - name: Comment with review checklist
         uses: actions/github-script@v7
         env:
-          CODEX_FINAL_MESSAGE: ${{ steps.codex.outputs['final-message'] }}
           PR_HEAD_SHA: ${{ matrix.head_sha }}
           PR_NUMBER: ${{ matrix.pr_number }}
         with:
           github-token: ${{ github.token }}
           script: |
+            const body = [
+              "## 리뷰 필요",
+              "",
+              "이 저장소는 GitHub Actions에서 외부 LLM API key를 사용하지 않습니다.",
+              "PR 리뷰는 `docs/runbooks/pr-review-sprint4.md` 기준으로 에이전트 또는 사람이 직접 수행해야 합니다.",
+              "",
+              "필수 확인:",
+              "- 변경분만 리뷰하고 차단 이슈를 먼저 기록",
+              "- ADR / Sprint 목표 / 책임 경계 위반 여부 확인",
+              "- 필요한 테스트와 문서 추적 파일 갱신 확인",
+              "- 검증 결과와 머지 판단을 PR에 남김",
+              "",
+              `<!-- pr-review-reminder:head=${process.env.PR_HEAD_SHA} -->`,
+            ].join("\n");
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: Number(process.env.PR_NUMBER),
-              body: `${process.env.CODEX_FINAL_MESSAGE}\n\n<!-- codex-pr-review:head=${process.env.PR_HEAD_SHA} -->`,
+              body,
             });

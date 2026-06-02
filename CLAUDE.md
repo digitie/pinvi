@@ -17,8 +17,10 @@
 > — 편집/commit/push/PR은 여기서 **Windows git(`git.exe`)으로만**. WSL git으로
 > `/mnt/f/...` 같은 worktree를 다루지 않는다(포인터 환경 혼용 → `prunable`/prune
 > 사고). **WSL ext4 미러**(`~/tripmate-workspaces/tripmate-claude`)는 의존성·
-> `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). **rsync는 NTFS→ext4
-> 단방향**. 절차·함정은 `docs/dev-environment.md`.
+> `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). `apps/web` dev server,
+> lint, typecheck, build, Vitest도 WSL 미러에서 실행한다. Playwright 기반 브라우저
+> e2e만 Windows Node/브라우저에서 실행한다. **rsync는 NTFS→ext4 단방향**. 절차·
+> 함정은 `docs/dev-environment.md`.
 >
 > **CodeGraph Commands**
 > - 인덱싱 초기화: `codegraph init -i` (worktree마다 1회)
@@ -73,7 +75,8 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 `docs/runbooks/pr-review-sprint4.md`를 따른다. 리뷰 후 상세 코멘트를 남기고,
 필요한 코드 수정·기반 라이브러리 PR·TripMate sync·검증·머지까지 이어간다.
 변경량 최소화보다 Sprint 1~4를 버틸 설계 정합성을 우선한다.
-`.github/workflows/codex-pr-monitor.yml`이 5분마다 열린 PR을 감시한다.
+`.github/workflows/codex-pr-monitor.yml`이 외부 API key 없이 5분마다 열린 PR을
+감시하고 review reminder를 남긴다. 실제 리뷰는 에이전트 또는 사람이 수행한다.
 
 ## 4. 의존 스택 (v2 확정 골격)
 
@@ -109,9 +112,9 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 
 ## 6. 작업 후 체크리스트 (1줄)
 
-`pytest -q` + `ruff check` + `mypy --strict` (`apps/api`) + `npm run
-lint` + `npm run typecheck` (`apps/web`) + `docs/journal.md` +
-`docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시).
+`pytest -q` + `ruff check` + `mypy --strict` (`apps/api`, WSL 미러) + `npm run
+lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
+`docs/journal.md` + `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시).
 
 ## 7. 빠른 문서 검색
 

@@ -1,13 +1,13 @@
-# GitHub Actions Secrets 카탈로그 (ADR-021)
+# GitHub Actions Secret 카탈로그 (ADR-021)
 
-> CI/CD 재활성 (ADR-021) 후 GitHub Actions가 사용하는 secret 목록. 모두
-> repository settings → Secrets and variables → Actions → New repository secret.
+> CI/CD 재활성 (ADR-021) 후 GitHub Actions가 사용하는 secret 목록.
+> 2026-06-02 현재 **필수 GitHub Actions secret은 없다**.
+> GitHub Actions에서 외부 LLM API key를 사용하지 않으며, `OPENAI_API_KEY`는 등록하지
+> 않는다.
 
-## 1. 필수 secret (CI 동작에 필요)
+## 1. 필수 secret
 
-| Secret | 사용처 | 값 형식 | 발급 |
-|--------|--------|--------|------|
-| `OPENAI_API_KEY` | `codex-pr-review.yml` / `codex-pr-monitor.yml` (Codex action) | `sk-...` | platform.openai.com → API keys |
+없음.
 
 ## 2. 선택 secret (필요 시)
 
@@ -17,7 +17,13 @@
 | `MAXMIND_LICENSE_KEY` | (Sprint 6) GeoIP DB 갱신 cron | UUID | ADR-018 한국 전용 |
 | `CODECOV_TOKEN` | (선택) 커버리지 업로드 | UUID | 본 저장소는 공개라면 불필요 |
 
-## 3. CI 전용 (workflow 내부에서만 사용)
+## 3. 사용하지 않는 값
+
+| Secret | 정책 |
+|--------|------|
+| `OPENAI_API_KEY` | GitHub Actions에서 외부 LLM API key를 사용하지 않는 사용자 지시에 따라 등록하지 않는다. `codex-pr-review.yml` / `codex-pr-monitor.yml`은 API key 없이 review reminder만 남긴다. |
+
+## 4. CI 전용 (workflow 내부에서만 사용)
 
 다음 값들은 secret이 아닌 workflow YAML에 평문 박힘 — CI postgres service
 container 비밀이므로 외부 노출 위험 X:
@@ -31,7 +37,7 @@ container 비밀이므로 외부 노출 위험 X:
 운영 환경 secret은 systemd `EnvironmentFile` 또는 Docker Compose env_file로
 관리 — GitHub Actions secret과 별개.
 
-## 4. 추가 절차
+## 5. 추가 절차
 
 새 secret이 필요하면:
 
@@ -41,14 +47,18 @@ container 비밀이므로 외부 노출 위험 X:
 4. PR 본문에 "본 PR 머지 후 사용자가 GitHub UI에서 `SECRET_NAME` 등록 필요" 명시
 5. journal에 secret 추가 이력 기록
 
-## 5. 회수 / rotation
+## 6. 회수 / rotation
 
-- `OPENAI_API_KEY` — 분기 1회 rotation 권장 (PLATFORM.openai.com → 새 키 → repo
-  secret 교체 → 옛 키 revoke)
+- 선택 secret은 분기 1회 rotation 권장.
 - 의심 leak 시 즉시 revoke + 신규 키 + workflow 재실행 확인
 - 회수 기록은 admin_audit_log 외부 (GitHub Audit log) 에 남음
 
-## 6. 참조
+## 7. T-062 점검 결과 (2026-06-02)
+
+`gh api repos/digitie/tripmate/actions/secrets` 기준 repository Actions secret은
+`0`개다. 이는 현재 정책과 일치한다.
+
+## 8. 참조
 
 - ADR-021 — GitHub Actions CI/CD 재활성
 - `.github/workflows/README.md` — workflow 카탈로그

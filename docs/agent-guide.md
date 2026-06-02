@@ -291,9 +291,10 @@ EOF
 
 Sprint 4 완료 전까지 새 PR 또는 `ready_for_review` 전환 PR은
 `docs/runbooks/pr-review-sprint4.md`를 따른다. `.github/workflows/codex-pr-monitor.yml`은
-5분마다 열린 PR을 감시하고, 최신 head SHA 리뷰 마커가 없는 PR을 다시 리뷰한다.
+외부 API key 없이 5분마다 열린 PR을 감시하고, 최신 head SHA review reminder 마커가
+없는 PR에 리뷰 필요 알림을 남긴다.
 
-- 자동 리뷰 코멘트는 1차 신호다. 에이전트는 별도로 변경분을 읽고 상세 리뷰를 남긴다.
+- review reminder는 1차 신호다. 에이전트는 별도로 변경분을 읽고 상세 리뷰를 남긴다.
 - 리뷰에서 끝내지 않고 필요한 코드 수정, 테스트 보강, 문서 갱신까지 수행한다.
 - 변경량 최소화보다 장기 설계 정합성을 우선한다. 특히 Sprint 4 지도/UI 작업을
   어렵게 만드는 단기 구조는 PR 안에서 바로잡는다.
@@ -303,11 +304,18 @@ Sprint 4 완료 전까지 새 PR 또는 `ready_for_review` 전환 PR은
 
 ### 8.6 main 직접 push 차단
 
-GitHub branch protection (운영자 수동 설정):
+GitHub repository ruleset `main-pr-only`:
 
 - Require pull request before merging
-- Require at least 1 approval (자체 PR은 self-approve 허용 운영 모델)
-- Require status checks to pass (lint, test, import-linter, openapi drift)
+- Squash merge만 허용
+- Require linear history
+- Block force pushes
+- Block deletions
+- Bypass 없음
+
+required status check는 현재 `api` / `web` / `etl` workflow가 path-filtered라서
+docs-only PR을 대기 상태에 가둘 수 있다. 항상 실행되는 aggregate gate를 만든 뒤
+required check로 묶는다.
 - Restrict force-push
 
 ### 8.7 핸드오프
