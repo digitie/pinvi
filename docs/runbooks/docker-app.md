@@ -15,9 +15,9 @@ RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-
 
 | 환경변수 | smoke test 기본 |
 |----------|----------------|
-| `TRIPMATE_WEB_PORT` | `13082` |
-| `TRIPMATE_API_PORT` | `18082` |
-| `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:18082` |
+| `TRIPMATE_WEB_PORT` | `9022` |
+| `TRIPMATE_API_PORT` | `9021` |
+| `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:9021` |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `maplibre-vworld-js` 지도 SDK용 (ADR-015). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록 |
 | 기타 `TRIPMATE_*` | 일반 `.env`와 동일 |
 
@@ -42,17 +42,17 @@ docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml run --rm ap
 docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web
 
 # 6) 헬스 체크
-curl -fsS http://127.0.0.1:18082/health
-curl -fsS http://127.0.0.1:18082/health/db
-curl -fsS http://127.0.0.1:13082/admin/login
+curl -fsS http://127.0.0.1:9021/health
+curl -fsS http://127.0.0.1:9021/health/db
+curl -fsS http://127.0.0.1:9022/admin/login
 
 # 7) Admin 로그인
-curl -fsS -X POST http://127.0.0.1:18082/admin/auth/login \
+curl -fsS -X POST http://127.0.0.1:9021/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@ad.min","password":"admin"}'
 
 # 8) Admin datasets
-curl -fsS -b cookies.txt http://127.0.0.1:18082/admin/datasets
+curl -fsS -b cookies.txt http://127.0.0.1:9021/admin/datasets
 
 # 9) 정리
 docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
@@ -91,22 +91,22 @@ sleep 10
 
 # 검증
 echo "==> /health"
-curl -fsS http://127.0.0.1:18082/health
+curl -fsS http://127.0.0.1:9021/health
 
 echo "==> /health/db"
-curl -fsS http://127.0.0.1:18082/health/db
+curl -fsS http://127.0.0.1:9021/health/db
 
 echo "==> /admin/login (web)"
-curl -fsS http://127.0.0.1:13082/admin/login > /dev/null
+curl -fsS http://127.0.0.1:9022/admin/login > /dev/null
 
 echo "==> /admin/auth/login"
-COOKIE=$(curl -fsS -c - -X POST http://127.0.0.1:18082/admin/auth/login \
+COOKIE=$(curl -fsS -c - -X POST http://127.0.0.1:9021/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@ad.min","password":"admin"}' | grep tripmate_access | awk '{print $7}')
 
 echo "==> /admin/datasets"
 curl -fsS -H "Cookie: tripmate_access=$COOKIE" \
-  http://127.0.0.1:18082/admin/datasets | jq '.data.datasets[].table_name' | head
+  http://127.0.0.1:9021/admin/datasets | jq '.data.datasets[].table_name' | head
 
 echo "✅ smoke test passed"
 ```
@@ -163,8 +163,8 @@ CORS:
 
 | origin | 환경 |
 |--------|------|
-| `http://localhost:3001` | 로컬 dev |
-| `http://127.0.0.1:13082` | smoke |
+| `http://localhost:9022` | 로컬 dev |
+| `http://127.0.0.1:9022` | smoke |
 | `https://app.example.com` | 운영 |
 
 ## 9. ARM64 빌드
@@ -194,7 +194,7 @@ CI에서:
 | `app-api` 시작 후 즉시 종료 | Alembic 미실행 | `app-api run --rm alembic upgrade head` 먼저 |
 | `app-web` 빌드 실패 | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드 |
 | `app-rustfs-init` 무한 루프 | bucket 이미 존재 | down -v로 볼륨 삭제 후 재시작 |
-| `13082` port already in use | 다른 컨테이너 점유 | `lsof -i:13082` 확인 + 정리 |
+| `9022` port already in use | 다른 컨테이너 점유 | `lsof -i:9022` 확인 + 정리 |
 | Admin login `tripmate_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인 |
 
 ## 11. 관련 문서

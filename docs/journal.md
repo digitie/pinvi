@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-02 (codex) — 로컬 dev 포트 9021/9022/9023 고정
+
+**작업**: 사용자 지시로 로컬 개발 포트 원칙을 고정. API는 `9021`, Web은 `9022`,
+Dagster는 `9023`을 항상 사용한다. 해당 포트가 점유되어 있으면 종료하고 같은 포트로
+다시 올린다.
+
+**변경**:
+- `scripts/dev-up.sh` / `scripts/dev-down.sh` 신규 — 9021/9022/9023 점유 프로세스
+  정리 후 API/Web/Dagster dev server 기동.
+- `apps/web/package.json` — `next dev` / `next start`를 9022로 고정.
+- `.env.example`, `apps/api/app/core/config.py`, `apps/web/**`, `apps/web/Dockerfile` —
+  API/Web dev URL 기본값을 9021/9022로 정렬.
+- `infra/docker-compose.yml` — Dagster UI host port 9023.
+- `infra/docker-compose.app.yml`, `scripts/docker-app-smoke-test.sh` — Docker smoke
+  host port도 API 9021 / Web 9022로 정렬.
+- `README.md`, `SKILL.md`, `docs/runbooks/{local-dev,README,docker-app,etl}.md`,
+  `docs/api/*`, `docs/integrations/*` 등 기존 개발 포트 참조를 새 규칙으로 정정.
+
+**검증 예정**: WSL ext4 미러에 sync 후 `scripts/dev-up.sh`로 포트 점유 종료 +
+재기동 확인. 실행 결과는 본 PR 코멘트/최종 보고에 기록.
+
 ## 2026-06-02 (codex) — T-062 GitHub Actions secret / branch protection 점검
 
 **작업**: T-062 진행. GitHub Actions secret, branch protection/ruleset, 최근 Actions

@@ -39,13 +39,11 @@ Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
 
 | 포트 | 용도 |
 |------|------|
-| 3001 | Next.js dev (`apps/web`) |
-| 8001 | FastAPI dev (`apps/api`) |
-| 13082 | Docker smoke web (`docker-compose.app.yml`) |
-| 18082 | Docker smoke api |
+| 9021 | FastAPI dev / Docker smoke API |
+| 9022 | Next.js dev / Docker smoke Web |
+| 9023 | Dagster UI |
 | 19000 | RustFS S3 endpoint |
 | 19001 | RustFS console |
-| 23000 | Dagster UI |
 | 55432 | PostgreSQL host port (compose) |
 | 5432 | PostgreSQL container port |
 | 9080 | Promtail (옵션) |

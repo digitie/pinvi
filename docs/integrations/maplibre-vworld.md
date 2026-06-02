@@ -63,8 +63,8 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 - VWorld 개발자 센터 (`www.vworld.kr`)에서 API Key 발급
 - **허용 도메인** 등록 필수 — 누락 시 403 / CORS 에러
 - TripMate 환경별:
-  - 로컬: `http://localhost:3001`, `http://127.0.0.1:3001`
-  - Docker smoke: `http://127.0.0.1:13082`
+  - 로컬: `http://localhost:9022`, `http://127.0.0.1:9022`
+  - Docker smoke: `http://127.0.0.1:9022`
   - 운영: TBD (Sprint 6)
 
 ### 3.2 환경변수
@@ -446,7 +446,7 @@ export function useFeatureMarkers(kinds: FeatureKind[]) {
 
 VWorld 403 / CORS 시 점검:
 
-1. **VWorld 개발자 센터 도메인 등록**: 정확한 origin (`http://localhost:3001` 등)
+1. **VWorld 개발자 센터 도메인 등록**: 정확한 origin (`http://localhost:9022` 등)
 2. **transformRequest 프록시**: 사내망 / 추가 정책 필요 시
 3. **CSP에 VWorld 도메인 허용**: `connect-src 'self' https://api.vworld.kr`
 

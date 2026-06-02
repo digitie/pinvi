@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     tripmate_resend_from_email: str = "TripMate <noreply@send.tripmate.local>"
     tripmate_resend_timeout_seconds: int = 5
     tripmate_resend_webhook_secret: str = ""
-    tripmate_web_base_url: str = "http://localhost:3001"
+    tripmate_web_base_url: str = "http://localhost:9022"
     tripmate_email_verification_path: str = "/verify-email"
 
     # OAuth (Sprint 2부터 실제 사용)
@@ -51,13 +51,13 @@ class Settings(BaseSettings):
     tripmate_naver_oauth_client_secret: str = ""
     tripmate_kakao_oauth_rest_api_key: str = ""
     tripmate_kakao_oauth_client_secret: str = ""
-    tripmate_oauth_callback_base_url: str = "http://localhost:8001"
+    tripmate_oauth_callback_base_url: str = "http://localhost:9021"
     tripmate_oauth_state_ttl_seconds: int = 600
     tripmate_oauth_http_timeout_seconds: int = 5
 
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:3001", "http://127.0.0.1:3001"]
+        default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]
     )
 
     # Sentry

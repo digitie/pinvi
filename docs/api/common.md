@@ -7,8 +7,8 @@
 
 | 환경 | URL |
 |------|-----|
-| 로컬 dev | `http://localhost:8001` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:18082` |
+| 로컬 dev | `http://localhost:9021` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:9021` |
 | 스테이징 | TBD (Sprint 6) |
 | 운영 | TBD (Sprint 6, Cloudflare Tunnel 후보) |
 
@@ -220,8 +220,8 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 
 | 환경 | 허용 Origin |
 |------|------------|
-| 로컬 dev | `http://localhost:3001`, `http://127.0.0.1:3001` |
-| Docker smoke | `http://127.0.0.1:13082` |
+| 로컬 dev | `http://localhost:9022`, `http://127.0.0.1:9022` |
+| Docker smoke | `http://127.0.0.1:9022` |
 | 스테이징 | TBD |
 | 운영 | TBD |
 
@@ -232,7 +232,7 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
   ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:8001 https://api.resend.com https://api.vworld.kr`
+  connect-src 'self' http://localhost:9021 https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(self)` (위치 권한 origin)

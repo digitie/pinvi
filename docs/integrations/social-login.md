@@ -242,11 +242,11 @@ UI는 한국어 메시지로 변환해 토스트 또는 인라인 에러 표시.
 
 | Provider | 콘솔에 등록 |
 |----------|-------------|
-| Google | `http://localhost:8001/auth/oauth/google/callback` |
-| Naver | `http://localhost:8001/auth/oauth/naver/callback` |
-| Kakao | `http://localhost:8001/auth/oauth/kakao/callback` |
+| Google | `http://localhost:9021/auth/oauth/google/callback` |
+| Naver | `http://localhost:9021/auth/oauth/naver/callback` |
+| Kakao | `http://localhost:9021/auth/oauth/kakao/callback` |
 
-Docker smoke: `http://127.0.0.1:18082/auth/oauth/{provider}/callback` (추가).
+Docker smoke: `http://127.0.0.1:9021/auth/oauth/{provider}/callback` (추가).
 
 ## 10. AI agent 구현 체크리스트
 

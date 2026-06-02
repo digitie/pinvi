@@ -115,6 +115,9 @@ trunk를 절대 편집하지 않는다.
 - **Frontend 실행**: `apps/web` dev server, lint, typecheck, build, Vitest는
   WSL ext4 테스트 미러에서 실행한다. e2e 검증을 위한 Playwright runner /
   브라우저만 Windows에서 실행한다.
+- **고정 dev 포트**: 로컬 장기 실행 서비스는 API `9021`, 웹 `9022`, Dagster
+  `9023`을 항상 사용한다. `scripts/dev-up.sh`는 시작 전 해당 포트를 점유한
+  프로세스를 종료하고 다시 올리며, `scripts/dev-down.sh`는 같은 포트를 정리한다.
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
 #### CodeGraph Commands
@@ -167,6 +170,9 @@ trunk를 절대 편집하지 않는다.
 - **Frontend 실행**: `apps/web` dev server / lint / typecheck / build / Vitest는
   WSL ext4 미러에서만. **Playwright/브라우저 e2e만** Windows Node/브라우저에서
   실행한다.
+- **고정 dev 포트**: API `9021`, 웹 `9022`, Dagster `9023`. 포트가 점유돼 있으면
+  기존 프로세스를 종료하고 같은 포트로 재기동한다(`npm run dev:up` /
+  `npm run dev:down`, WSL ext4 미러).
 
 절차·명령·함정 전체는 `docs/dev-environment.md`(ADR-024), worktree 생성·CodeGraph·
 git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 reference다.

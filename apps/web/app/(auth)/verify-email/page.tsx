@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:8001',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
 });
 
 export default function VerifyEmailPage() {

@@ -109,7 +109,7 @@ mc anonymous set-json local/tripmate-media cors.json
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["http://localhost:3001", "http://127.0.0.1:13082", "https://app.example.com"],
+      "AllowedOrigins": ["http://localhost:9022", "http://127.0.0.1:9022", "https://app.example.com"],
       "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
       "AllowedHeaders": ["Content-Type", "x-amz-*"],
       "MaxAgeSeconds": 3600
