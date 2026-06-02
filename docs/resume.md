@@ -25,6 +25,9 @@ repository ruleset `main-pr-only`(id `17146781`)를 적용했다(PR 필수, squa
 linear history, force push/deletion 차단, bypass 없음). Classic branch protection은
 없다. required status check는 path-filtered workflow가 docs-only PR을 막을 수 있어
 aggregate gate 설계 뒤 적용한다.
+**로컬 dev 포트 고정** (2026-06-02 codex) — API `9021`, Web `9022`, Dagster `9023`.
+`scripts/dev-up.sh`가 해당 포트를 점유한 프로세스를 종료하고 같은 포트로 다시 올린다.
+프론트 실행은 계속 WSL ext4 미러 기준이며, Playwright e2e만 Windows에서 실행한다.
 
 ## 다음 한 작업
 

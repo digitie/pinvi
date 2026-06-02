@@ -8,7 +8,7 @@ import type { AdminUserDetail } from '@tripmate/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:8001',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
 });
 
 type ActionKind = 'force-verify' | 'disable';

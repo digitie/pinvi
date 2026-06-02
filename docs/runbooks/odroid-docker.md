@@ -202,8 +202,8 @@ echo "==> Containers"
 docker compose -f /opt/tripmate/infra/docker-compose.app.yml ps
 
 echo "==> Health"
-curl -fsS http://127.0.0.1:18082/health || echo "API down"
-curl -fsS http://127.0.0.1:13082/admin/login >/dev/null || echo "Web down"
+curl -fsS http://127.0.0.1:9021/health || echo "API down"
+curl -fsS http://127.0.0.1:9022/admin/login >/dev/null || echo "Web down"
 ```
 
 ## 6. 리소스 튜닝 (10명 환경)

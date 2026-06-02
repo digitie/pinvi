@@ -52,12 +52,12 @@ def upgrade():
 
 ```bash
 # Admin 로그인 (curl)
-COOKIE=$(curl -fsS -c - -X POST http://localhost:8001/admin/auth/login \
+COOKIE=$(curl -fsS -c - -X POST http://localhost:9021/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"..."}' | grep tripmate_access | awk '{print $7}')
 
 # force-verify
-curl -fsS -X POST "http://localhost:8001/admin/users/<user_id>/force-verify" \
+curl -fsS -X POST "http://localhost:9021/admin/users/<user_id>/force-verify" \
   -H "Cookie: tripmate_access=$COOKIE" \
   -H "X-Access-Reason: 고객 문의 TICKET-1234" \
   -d '{}'
@@ -150,7 +150,7 @@ SELECT id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
 ### 6.1 시나리오 적용
 
 ```bash
-curl -fsS -X POST "http://localhost:8001/admin/seed/scenarios/new_user_first_trip" \
+curl -fsS -X POST "http://localhost:9021/admin/seed/scenarios/new_user_first_trip" \
   -H "Cookie: tripmate_access=$ADMIN_COOKIE" \
   -d '{}'
 ```
@@ -162,7 +162,7 @@ curl -fsS -X POST "http://localhost:8001/admin/seed/scenarios/new_user_first_tri
 ### 6.2 Reset
 
 ```bash
-curl -fsS -X POST "http://localhost:8001/admin/reset" \
+curl -fsS -X POST "http://localhost:9021/admin/reset" \
   -H "Cookie: tripmate_access=$ADMIN_COOKIE" \
   -d '{"confirm":"RESET","admin_password":"..."}'
 ```

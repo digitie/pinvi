@@ -209,8 +209,8 @@ RustFS 컨테이너 CORS 설정:
 
 | Allowed Origin | 용도 |
 |---------------|------|
-| `http://localhost:3001` | 로컬 dev |
-| `http://127.0.0.1:13082` | Docker smoke |
+| `http://localhost:9022` | 로컬 dev |
+| `http://127.0.0.1:9022` | Docker smoke |
 | 운영 도메인 | TBD |
 
 Methods: `PUT, GET, HEAD, OPTIONS`. Headers: `Content-Type, x-amz-*`.

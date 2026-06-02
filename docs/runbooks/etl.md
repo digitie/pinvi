@@ -164,7 +164,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 cd ~/tripmate-workspaces/tripmate-codex/apps/etl
 uv venv .venv --python 3.12
 uv pip install -e .
-uv run dagster dev   # UI + daemon http://localhost:23000
+uv run dagster dev --host 0.0.0.0 --port 9023   # UI + daemon http://localhost:9023
 ```
 
 ### 7.2 Docker
@@ -176,7 +176,7 @@ services:
     build: ./apps/etl
     depends_on: [postgres]
     ports:
-      - "23000:3000"
+      - "9023:3000"
     environment:
       TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:changeme@postgres:5432/tripmate
       TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9000

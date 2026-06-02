@@ -78,9 +78,28 @@ rsync -a --delete \
 PowerShell에서 실행 전용 명령을 호출할 때는 WSL로 감싼다:
 
 ```powershell
-wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm run dev"
+wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && scripts/dev-up.sh"
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && pytest apps/api/tests -q"
 wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && docker compose -f infra/docker-compose.yml up -d postgres"
+```
+
+## 4.1 고정 dev 포트
+
+TripMate 로컬 개발 서버 포트는 항상 고정한다.
+
+| 서비스 | 포트 | URL |
+|--------|------|-----|
+| FastAPI (`apps/api`) | 9021 | `http://localhost:9021` |
+| Next.js (`apps/web`) | 9022 | `http://localhost:9022` |
+| Dagster (`apps/etl`) | 9023 | `http://localhost:9023` |
+
+`scripts/dev-up.sh`는 시작 전에 9021/9022/9023을 점유한 프로세스를 종료하고 같은
+포트로 다시 올린다. 수동 정리는 `scripts/dev-down.sh`.
+
+```bash
+cd ~/tripmate-workspaces/tripmate-codex
+scripts/dev-up.sh
+scripts/dev-down.sh
 ```
 
 **검색은 PowerShell `rg.exe` 금지** — WindowsApps 경로 오염 회피:
@@ -120,7 +139,7 @@ docker buildx ls
 cd ~/tripmate-workspaces/tripmate-codex
 uv venv apps/api/.venv --python 3.12
 source apps/api/.venv/bin/activate
-uv pip install -e "apps/api[dev,providers]"
+uv pip install -e "apps/api[dev]"
 uv pip install "gdal==$(gdal-config --version)"
 
 # python-krtour-map editable (sibling checkout)
@@ -138,10 +157,10 @@ $EDITOR apps/api/.env
 
 ```bash
 cd apps/api
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 9021
 ```
 
-`http://localhost:8001/docs` (OpenAPI), `http://localhost:8001/health`.
+`http://localhost:9021/docs` (OpenAPI), `http://localhost:9021/health`.
 
 ### 6.2 테스트
 
@@ -183,7 +202,7 @@ TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:55432/tr
 ```bash
 cd ~/tripmate-workspaces/tripmate-codex
 npm install
-npm --workspace apps/web run dev   # http://localhost:3001
+npm --workspace apps/web run dev   # http://localhost:9022
 ```
 
 검사:
@@ -244,7 +263,7 @@ uv venv .venv --python 3.12
 uv pip install -e .
 
 # Dagster dev (UI + daemon)
-uv run dagster dev   # http://localhost:23000
+uv run dagster dev --host 0.0.0.0 --port 9023   # http://localhost:9023
 ```
 
 자세히는 [etl.md](./etl.md).
@@ -253,7 +272,9 @@ uv run dagster dev   # http://localhost:23000
 
 | 작업 | 명령 |
 |------|------|
-| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex/apps/api && uv run uvicorn app.main:app --reload --port 8001"` |
+| 전체 dev up | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && scripts/dev-up.sh"` |
+| 전체 dev down | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && scripts/dev-down.sh"` |
+| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex/apps/api && uv run uvicorn app.main:app --reload --port 9021"` |
 | 프론트 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run dev"` |
 | 백엔드 테스트 | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && uv run pytest apps/api/tests -q"` |
 | 프론트 lint | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run lint"` |

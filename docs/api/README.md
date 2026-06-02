@@ -25,9 +25,9 @@
 
 자세히는 [common.md](./common.md). 핵심:
 
-- **Base URL**: 개발 `http://localhost:8001`, Docker smoke `http://127.0.0.1:18082`,
+- **Base URL**: 개발 `http://localhost:9021`, Docker smoke `http://127.0.0.1:9021`,
   배포 미정 (Sprint 6).
-- **OpenAPI**: FastAPI 자동 생성 `http://localhost:8001/docs`.
+- **OpenAPI**: FastAPI 자동 생성 `http://localhost:9021/docs`.
 - **응답 형식**:
 
   ```jsonc

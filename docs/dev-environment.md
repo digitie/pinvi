@@ -282,7 +282,7 @@ TRIPMATE_JWT_SECRET_KEY=change-me-32-bytes-minimum-...
 TRIPMATE_RESEND_API_KEY=
 TRIPMATE_GOOGLE_OAUTH_CLIENT_ID=
 TRIPMATE_GOOGLE_OAUTH_CLIENT_SECRET=
-TRIPMATE_WEB_BASE_URL=http://localhost:3001
+TRIPMATE_WEB_BASE_URL=http://localhost:9022
 ```
 
 전체 키 목록은 `apps/api/app/core/config.py`의 `Settings`가 1차 진실이다. `.env`는

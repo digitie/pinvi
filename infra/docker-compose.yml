@@ -69,7 +69,7 @@ services:
       TRIPMATE_RUSTFS_BUCKET: tripmate-media
       DAGSTER_HOME: /opt/tripmate/.tmp/dagster
     ports:
-      - "23000:3000"
+      - "9023:3000"
     volumes:
       - ../apps/etl:/opt/tripmate/apps/etl
       - tripmate-dagster:/opt/tripmate/.tmp/dagster

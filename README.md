@@ -97,12 +97,12 @@ cd ~/tripmate-workspaces/tripmate-codex
 sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
 # 백엔드 (uv 권장)
-uv venv && uv pip install -e "apps/api[dev,providers]"
+uv venv && uv pip install -e "apps/api[dev]"
 uv pip install -e "git+https://github.com/digitie/python-krtour-map@<sha>#egg=python-krtour-map"
 
-# 프론트엔드
+# 프론트엔드 / API / Dagster dev server
 npm install
-npm --workspace apps/web run dev      # http://localhost:3001
+scripts/dev-up.sh                     # API 9021 / Web 9022 / Dagster 9023
 
 # 인프라
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
