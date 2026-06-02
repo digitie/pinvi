@@ -42,8 +42,10 @@ Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
 | 9021 | FastAPI dev / Docker smoke API |
 | 9022 | Next.js dev / Docker smoke Web |
 | 9023 | Dagster UI |
-| 19000 | RustFS S3 endpoint |
-| 19001 | RustFS console |
+| 9011 | krtour-map API |
+| 9012 | krtour-map admin |
+| 9003 | RustFS S3 endpoint |
+| 9004 | RustFS console |
 | 55432 | PostgreSQL host port (compose) |
 | 5432 | PostgreSQL container port |
 | 9080 | Promtail (옵션) |

@@ -79,7 +79,7 @@ def make_upload_url(
 
     bucket = getattr(settings, "tripmate_rustfs_bucket", "tripmate-media")
     public_endpoint = getattr(
-        settings, "tripmate_rustfs_public_endpoint_url", "http://127.0.0.1:19000"
+        settings, "tripmate_rustfs_public_endpoint_url", "http://127.0.0.1:9003"
     )
     storage_key = build_storage_key(purpose=purpose, user_id=user_id, filename=filename)
     expires = datetime.now(UTC) + timedelta(

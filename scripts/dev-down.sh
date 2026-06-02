@@ -35,7 +35,8 @@ kill_port() {
 
   if command -v lsof >/dev/null 2>&1; then
     pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
-  elif command -v fuser >/dev/null 2>&1; then
+  fi
+  if [[ -z "${pids}" ]] && command -v fuser >/dev/null 2>&1; then
     pids="$(fuser -n tcp "${port}" 2>/dev/null || true)"
   fi
 

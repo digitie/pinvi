@@ -10,6 +10,11 @@
   "scripts": {
     "dev:up": "bash scripts/dev-up.sh",
     "dev:down": "bash scripts/dev-down.sh",
+    "docker:app:build": "bash scripts/docker-app.sh build",
+    "docker:app:up": "bash scripts/docker-app.sh up",
+    "docker:app:down": "bash scripts/docker-app.sh down",
+    "docker:app:status": "bash scripts/docker-app.sh status",
+    "docker:app:smoke": "bash scripts/docker-app.sh smoke",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",

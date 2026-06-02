@@ -30,11 +30,12 @@ services:
       RUSTFS_ACCESS_KEY: tripmate-dev-access
       RUSTFS_SECRET_KEY: tripmate-dev-secret-change-me
       RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_ADDRESS: ":9003"
       RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9004"
     ports:
-      - "${TRIPMATE_RUSTFS_PORT:-19000}:9000"
-      - "${TRIPMATE_RUSTFS_CONSOLE_PORT:-19001}:9001"
+      - "${TRIPMATE_RUSTFS_PORT:-9003}:9003"
+      - "${TRIPMATE_RUSTFS_CONSOLE_PORT:-9004}:9004"
     volumes:
       - /mnt/nvme/rustfs:/data
     # 컨테이너 내부 사용자 UID = 10001 → 호스트 디렉토리 owner도 같게
@@ -45,7 +46,7 @@ services:
     depends_on: [rustfs]
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://rustfs:9000 tripmate-dev-access tripmate-dev-secret-change-me;
+      mc alias set local http://rustfs:9003 tripmate-dev-access tripmate-dev-secret-change-me;
       mc mb -p local/tripmate-media || true;
       mc anonymous set download local/tripmate-media || true;
       "
@@ -58,10 +59,10 @@ services:
 ls /mnt/f/dev/python-krtour-map/docker/rustfs/docker-compose.yml
 
 # TripMate compose는 RustFS service 미실행 — 같은 endpoint 사용
-TRIPMATE_RUSTFS_ENDPOINT_URL=http://127.0.0.1:19000
+TRIPMATE_RUSTFS_ENDPOINT_URL=http://127.0.0.1:9003
 ```
 
-**중요**: 같은 포트 (`19000` / `19001`)를 두 compose가 동시에 점유하면 안 됨. 한 쪽만
+**중요**: 같은 포트 (`9003` / `9004`)를 두 compose가 동시에 점유하면 안 됨. 한 쪽만
 실행. 결정은 운영자 (`docs/integrations/file-storage.md` 참고).
 
 ## 3. Bucket 정책
@@ -88,8 +89,8 @@ user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}
 
 | 환경변수 | 위치 | 비고 |
 |----------|------|------|
-| `TRIPMATE_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:9000`) |
-| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:19000`) |
+| `TRIPMATE_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:9003`) |
+| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:9003`) |
 | `TRIPMATE_RUSTFS_BUCKET` | API | `tripmate-media` |
 | `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | API | |
 | `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | API | |
@@ -122,7 +123,7 @@ mc anonymous set-json local/tripmate-media cors.json
 
 ```bash
 # 매주 RustFS rsync (mc mirror)
-mc alias set local http://127.0.0.1:19000 <access> <secret>
+mc alias set local http://127.0.0.1:9003 <access> <secret>
 mc alias set backup s3://backblaze-b2-account/tripmate-backup-bucket <key> <secret>
 mc mirror --overwrite local/tripmate-media backup/tripmate-media-$(date +%Y%m%d)/
 
@@ -188,7 +189,7 @@ mc du --recursive local/tripmate-media/user-uploads/
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| `19000` port already in use | python-krtour-map RustFS와 충돌 | 한 쪽만 실행. 환경변수로 통일 |
+| `9003` port already in use | python-krtour-map RustFS와 충돌 | 한 쪽만 실행. 환경변수로 통일 |
 | 브라우저 PUT 403 | CORS / 서명 host 불일치 | `PUBLIC_ENDPOINT_URL` = presigned host 확인 |
 | `chmod` / `chown` 오류 | RustFS UID 10001 ≠ 호스트 owner | `chown -R 10001:10001 /mnt/nvme/rustfs` |
 | disk full | retention 정책 미적용 | 정리 job 실행 / lifecycle 정책 |

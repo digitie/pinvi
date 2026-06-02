@@ -149,7 +149,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 | `TRIPMATE_DAGSTER_LOG_DIR` | `/opt/tripmate/.tmp/dagster-logs` |
 | `TRIPMATE_DAGSTER_HOME` | `/opt/tripmate/.tmp/dagster` |
 | `TRIPMATE_ETL_CONFIG_PATH` | `/opt/tripmate/config/etl-datasets.json` |
-| `TRIPMATE_RUSTFS_ENDPOINT_URL` | `http://rustfs:9000` |
+| `TRIPMATE_RUSTFS_ENDPOINT_URL` | `http://rustfs:9003` |
 | `TRIPMATE_RUSTFS_BUCKET_FEATURE` | `tripmate-feature-media` |
 | Provider API 키 | `KMA_SERVICE_KEY`, `VISITKOREA_SERVICE_KEY`, `OPINET_API_KEY`, `KHOA_API_KEY`, `EXPRESSWAY_API_KEY`, `KRHERITAGE_API_KEY`, ... |
 | `TRIPMATE_SENTRY_DSN` | (선택) |
@@ -179,7 +179,7 @@ services:
       - "9023:3000"
     environment:
       TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:changeme@postgres:5432/tripmate
-      TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9000
+      TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9003
       # ...
     volumes:
       - ./apps/etl:/opt/tripmate/apps/etl

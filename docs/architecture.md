@@ -159,7 +159,8 @@ async def get_krtour_map_client() -> AsyncKrtourMapClient:
   (krtour-map 내부 책임, 그쪽 ADR-006). **사용자 대면 geocoding(조회)** 은 이와
   별개로 `kraddr-geo` v2 REST를 직접 HTTP 호출한다 (ADR-025,
   `docs/integrations/kraddr-geo.md`). 두 경로를 혼동하지 않는다.
-- 디버그 UI (`krtour-map-debug-ui`)는 별도 패키지. TripMate는 의존하지 않는다.
+- krtour-map API/Admin(`krtour-map-admin`, API `9011` / admin `9012`)은 별도
+  독립 프로그램이다. TripMate는 의존하지 않는다.
   운영자가 별도로 띄울 수 있다.
 
 자세한 통합 가이드는 `krtour-map-integration.md`.

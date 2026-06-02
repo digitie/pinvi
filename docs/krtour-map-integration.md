@@ -71,9 +71,8 @@ dependencies = [
 ]
 ```
 
-본 라이브러리의 디버그 UI(`krtour-map-debug-ui`)는 별도 패키지이며 TripMate는
-의존하지 않는다 (`python-krtour-map` ADR-020). 디버그 UI는 운영자가 별도로 띄울
-수 있다.
+`python-krtour-map`의 API/Admin은 별도 독립 프로그램이며 TripMate는 소유하지
+않는다. 로컬 고정 포트는 API `9011`, admin `9012`다.
 
 개발 중에는 sibling checkout + editable install 권장:
 
@@ -271,21 +270,21 @@ v1의 `apps/api/app/services/krtour_map*.py`, `apps/api/app/core/krtour_map_cont
 
 자세한 이전 작업은 ADR-NNN으로 한 건씩 박는다.
 
-## 10. 디버그 UI 사용
+## 10. krtour-map API/Admin 사용
 
-`python-krtour-map`에는 별도 `krtour-map-debug-ui` 패키지가 있다 (그쪽 저장소
-`packages/krtour-map-debug-ui/`). TripMate는 의존하지 않는다.
+`python-krtour-map`에는 별도 `krtour-map-admin` 패키지가 있다 (그쪽 저장소
+`packages/krtour-map-admin/`). TripMate는 이 패키지를 vendoring하지 않는다.
 
-운영자가 디버그 UI를 띄우고 싶을 때:
+운영자가 krtour-map 독립 프로그램을 띄우고 싶을 때:
 
 ```bash
 cd ~/tripmate-workspaces/python-krtour-map
-uv pip install -e packages/krtour-map-debug-ui
-uvicorn krtour.map_debug_ui.app:app --host 127.0.0.1 --port 8600
+uv pip install -e packages/krtour-map-admin
+uvicorn krtour.map_admin.app:app --host 127.0.0.1 --port 9011
 ```
 
-디버그 UI는 인증이 없다 — localhost / 내부망 전용 (그쪽 저장소 ADR-005). 운영
-환경에 노출하지 않는다.
+krtour-map admin UI는 `http://127.0.0.1:9012`를 사용한다. API/Admin은 localhost /
+내부망 전용으로 두고 운영 환경에 직접 노출하지 않는다.
 
 ## 11. 작업 체크리스트 (TripMate가 라이브러리에 의존하는 변경 시)
 

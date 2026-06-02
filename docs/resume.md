@@ -28,6 +28,13 @@ aggregate gate 설계 뒤 적용한다.
 **로컬 dev 포트 고정** (2026-06-02 codex) — API `9021`, Web `9022`, Dagster `9023`.
 `scripts/dev-up.sh`가 해당 포트를 점유한 프로세스를 종료하고 같은 포트로 다시 올린다.
 프론트 실행은 계속 WSL ext4 미러 기준이며, Playwright e2e만 Windows에서 실행한다.
+**RustFS / Docker app 포트 고정** (2026-06-03 codex) — RustFS API `9003`, console
+`9004`. `scripts/docker-app.sh`가 Docker app build/up/down/status/logs/smoke를
+제공하고, 시작 전 API `9021`, Web `9022`, RustFS `9003`/`9004` 점유 항목을
+정리한다. `scripts/docker-app-smoke-test.sh`는 호환 wrapper다.
+**krtour-map 연동 포트 고정** (2026-06-03 codex) — `python-krtour-map` 독립
+프로그램의 API는 `9011`, admin은 `9012`를 기준으로 문서화한다. TripMate가 직접
+소유하지 않는 서비스이므로 실행/검증은 그쪽 저장소 런북이 권위다.
 
 ## 다음 한 작업
 
