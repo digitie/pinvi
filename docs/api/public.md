@@ -7,7 +7,7 @@
 
 - 인증 없음 (cookie / Authorization 헤더 없어도 OK)
 - Rate limit: IP 기준 분당 60회
-- 응답 데이터는 라이브러리(`python-krtour-map`)에서 가져옴 — `AsyncKrtourMapClient` 호출
+- 응답 데이터는 krtour-map OpenAPI HTTP 계약에서 가져옴
 - TripMate `app.users` / `trips`는 노출 안 됨 — 본 endpoint는 라이브러리 feature
   데이터만
 
@@ -60,7 +60,8 @@ GET /public/beaches?sido_code=11&sigungu_code=11680&query=광안리&limit=100&of
 }
 ```
 
-라이브러리 호출: `AsyncKrtourMapClient.public.beach_list(...)`.
+krtour-map 호출: 최신 `openapi.user.json` 또는 public subset에 정의된 beach/listing
+경로를 따른다. public beach 표면이 없으면 TripMate public API에서 노출하지 않는다.
 
 ### 2.2 `GET /public/beaches/map-markers`
 
@@ -179,15 +180,15 @@ GET /public/festivals/map-markers?limit=500
 
 ## 3. 캐싱
 
-- 라이브러리 호출 결과는 process LRU (5분)
+- krtour-map HTTP 응답은 process LRU (5분)
 - CDN 캐싱 가능 — `Cache-Control: public, max-age=300`
 - viewport 의존 X — 단순 ID 기반 조회
 
 ## 4. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/public.py` Pydantic + `packages/schemas/src/public.ts` Zod
-- [ ] `apps/api/app/services/public_view.py` — 라이브러리 호출 + 셰입 변환
+- [ ] `apps/api/app/services/public_view.py` — krtour-map HTTP 호출 + 셰입 변환
 - [ ] `apps/api/app/api/v1/public.py` 라우터
 - [ ] `Cache-Control` 헤더 응답
 - [ ] Rate limit 적용 (IP 기준)
-- [ ] 통합 테스트 (mock 라이브러리 client + 실제 라이브러리)
+- [ ] 통합 테스트 (`httpx.MockTransport` + 선택적 live krtour-map)

@@ -143,7 +143,7 @@ mutating tool 추가 (v1.1+) 전:
 | 401 (Token revoked) | revoked_at 설정됨 | 재발급, 회수 사유 확인 |
 | 429 Too Many Requests | rate limit (60/min) | backoff or 사용자 안내 |
 | 404 tool not found | tool 명 오타 / version mismatch | tools list (`/mcp/sse`로 GET) |
-| 500 internal | DB / 라이브러리 호출 실패 | request_id로 Loki 검색 |
+| 500 internal | DB / 외부 HTTP 호출 실패 | request_id로 Loki 검색 |
 | SSE 연결 끊김 | timeout / network | client 재연결 (exponential backoff) |
 
 ## 7. 보안 사고 대응

@@ -8,7 +8,7 @@ SPEC V8 N-5 정리.
 | 계층 | 범위 | 도구 | 위치 |
 |------|------|------|------|
 | 백엔드 단위 | 순수 함수 / 서비스 로직 / schema | `pytest` | `apps/api/tests/unit/` |
-| 백엔드 통합 | 라우터 + DB + 라이브러리 호출 | `pytest` + `httpx.AsyncClient(app=...)` + testcontainers PostGIS | `apps/api/tests/integration/` |
+| 백엔드 통합 | 라우터 + DB + 외부 HTTP 계약 | `pytest` + `httpx.AsyncClient(app=...)` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` |
 | 백엔드 e2e | API 시나리오 | `pytest` + 실제 stack | `apps/api/tests/e2e/` |
 | 프론트 단위 | 컴포넌트 / hook / utility | Vitest + Testing Library | `apps/web/tests/unit/` |
 | 프론트 E2E | 사용자 흐름 | Playwright | `apps/web/tests/e2e/` |
@@ -37,7 +37,7 @@ SPEC V8 N-5 정리.
 ### 4.1 외부 의존 격리
 
 - DB / HTTP / 파일시스템 / 시간 모두 격리
-- `AsyncKrtourMapClient` 모킹 (또는 fake repository)
+- krtour-map/kraddr-geo/KASI HTTP 호출은 `httpx.MockTransport` 또는 fake client로 격리
 - 시간 — `freezegun` 또는 명시적 `kst_now()` injection
 
 ```python
@@ -118,16 +118,14 @@ async def test_register_success(client):
     assert data["verification_email_dispatched"] is True
 ```
 
-### 5.3 라이브러리 통합
+### 5.3 krtour-map HTTP 계약
 
 ```python
 # apps/api/tests/integration/test_features_in_bounds.py
-from krtour.map import AsyncKrtourMapClient
+import httpx
 
-async def test_features_in_bounds_returns_clusters(client, mock_krtour_map_client):
-    mock_krtour_map_client.features_in_bounds.return_value = [
-        # fixture feature objects
-    ]
+async def test_features_in_bounds_returns_clusters(client, mock_krtour_map_transport):
+    # mock_krtour_map_transport returns the latest openapi.user.json response shape.
     response = await client.get("/features/in-bounds", params={
         "sw_lng": 129.0, "sw_lat": 35.0, "ne_lng": 129.2, "ne_lat": 35.2,
         "zoom": 12,
@@ -276,7 +274,7 @@ async def test_resend_delivered_webhook(client, db_session):
 - [ ] 단위 테스트 (validator + happy path + edge case)
 - [ ] 통합 테스트 (라우터 + DB)
 - [ ] (UI 변경) Vitest + Playwright smoke
-- [ ] (라이브러리 호출) mock + 실제 둘 다 통과
+- [ ] (외부 HTTP 계약) mock + 필요한 경우 live smoke 둘 다 통과
 - [ ] (ETL) `materialize_to_memory` + fixture
 - [ ] (DB schema) `apps/api/tests/integration/test_migration_contract.py`
 - [ ] (외부 API) VCR cassette + secret 마스킹

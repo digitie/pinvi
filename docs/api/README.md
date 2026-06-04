@@ -56,9 +56,9 @@
 
 - 모든 endpoint는 **TripMate가 소유**. URL/응답 셰입은 본 저장소 단일 진실.
 - 응답 데이터 일부가 `python-krtour-map`의 `feature.*` schema에서 오면, TripMate
-  서비스 레이어가 **라이브러리 함수 호출** (`AsyncKrtourMapClient`)을 통해 가져와
-  TripMate 응답 셰입으로 변환한다. `KrtourMapGateway` 같은 wrapper class 금지
-  (ADR-005).
+  서비스 레이어가 krtour-map OpenAPI HTTP 계약을 통해 가져와 TripMate 응답 셰입으로
+  변환한다. provider/feature 도메인 wrapper class는 금지하고, HTTP client는
+  transport 역할만 한다(ADR-026).
 
 ## 4. AI agent 작업 가이드
 
@@ -87,6 +87,6 @@
 
 - `docs/architecture.md` — 전체 의존 방향
 - `docs/spec/v8/02-backend.md` — 외부 SPEC 적용 노트
-- `docs/krtour-map-integration.md` — 라이브러리 호출 패턴
+- `docs/krtour-map-integration.md` — krtour-map OpenAPI HTTP 호출 패턴
 - `docs/data-model.md` — DB 모델
 - `docs/conventions/coding-style.md` — Python/TS 규칙

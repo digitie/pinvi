@@ -3,7 +3,7 @@
 좌표 / SRID / lon-lat / PostGIS / fuzzy 금지. v1 `skills/geospatial-postgis.ko.md` 정리.
 
 > **scope**: TripMate `app` schema의 공간 사용은 적음 — feature schema에 위임.
-> 본 규약은 클라이언트 ↔ API ↔ 라이브러리 호출 경계에서 좌표를 다룰 때.
+> 본 규약은 클라이언트 ↔ TripMate API ↔ krtour-map/kraddr-geo HTTP 경계에서 좌표를 다룰 때.
 
 ## 1. SRID 항상 명시
 
@@ -56,8 +56,8 @@ export function toLngLatTuple(c: { longitude: number; latitude: number }): [numb
 
 ## 5. shp / GIS 데이터
 
-- TripMate는 shp 직접 import X — `python-krtour-map`이 소유 (VWorld 경계)
-- 라이브러리 함수만 호출 (`AsyncKrtourMapClient.regions.*`)
+- TripMate는 shp 직접 import X — `python-krtour-map` 또는 `python-kraddr-geo`가 소유
+- feature 조회는 krtour-map OpenAPI, geocoding/region 조회는 kraddr-geo v2 REST
 - 본 저장소에 GIS raw data 저장 X
 
 ## 6. PostGIS 사용
@@ -71,8 +71,8 @@ export function toLngLatTuple(c: { longitude: number; latitude: number }): [numb
 
 TripMate 측에서:
 
-- 좌표 자체는 라이브러리에서 받아 그대로 응답에 직렬화
-- 거리 계산 (UI distance label)은 클라이언트 haversine 또는 라이브러리 호출
+- 좌표 자체는 krtour-map/kraddr-geo 응답에서 받아 그대로 응답에 직렬화
+- 거리 계산 (UI distance label)은 클라이언트 haversine 또는 krtour-map/kraddr-geo 응답값 사용
 
 ## 7. fixture 테스트
 

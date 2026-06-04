@@ -75,7 +75,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 }
 ```
 
-병렬 쿼리로 한 번에. 일부 라이브러리 schema 카운트는 `AsyncKrtourMapClient.stats()` 호출.
+병렬 쿼리로 한 번에. 일부 `feature` schema 카운트는 krtour-map ops/admin OpenAPI
+(`/ops/metrics` 등)로 조회한다.
 
 ## 4. 통합 엔티티 CRUD (`/admin/entities/{entity}`)
 
@@ -123,8 +124,8 @@ GET /admin/entities/users?q=email:gmail.com+-status:disabled&sort=-created_at&pa
 
 ## 5. Dataset 브라우저
 
-v1 `admin_data_browser.py` 이전. 라이브러리 schema가 분리됐으므로 일부 dataset
-은 라이브러리 호출 경유.
+v1 `admin_data_browser.py` 이전. krtour-map 소유 schema가 분리됐으므로 일부 dataset
+은 krtour-map admin/ops OpenAPI 경유.
 
 ### 5.1 `GET /admin/datasets`
 
@@ -157,8 +158,9 @@ GET /admin/datasets/notice_plans/rows?search=부산&sort_by=updated_at&sort_dir=
 - 자유 텍스트 검색: `search=...` (텍스트 컬럼 OR ILIKE)
 - 응답: `data.rows` 배열 + `meta.total` + `meta.has_more`
 
-geometry는 `ST_AsText`로 직렬화. JSONB는 그대로 반환. 라이브러리 schema는
-`AsyncKrtourMapClient.admin.list_rows(table, filters)`로 호출 (Sprint 5 추가).
+geometry는 `ST_AsText`로 직렬화. JSONB는 그대로 반환. krtour-map 소유 schema는
+TripMate가 직접 table browse하지 않고 krtour-map admin/offline/ops OpenAPI로
+조회한다.
 
 ## 6. 사용자 관리
 
@@ -249,7 +251,7 @@ SPEC V8 M-10 ~ M-11.
 { "verdict": "merge_a_into_b" | "merge_b_into_a" | "not_same" | "uncertain", "reason": "..." }
 ```
 
-라이브러리에 callback (`AsyncKrtourMapClient.dedup.resolve(...)`).
+krtour-map dedup verdict는 krtour-map admin OpenAPI로 callback한다.
 
 ### 9.3 `GET /admin/provider-sync`
 

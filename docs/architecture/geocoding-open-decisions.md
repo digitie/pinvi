@@ -12,15 +12,16 @@
 ## D1. `regions.md`의 기존 endpoint를 어떻게 처리할 것인가
 
 - **맥락**: 기존 `docs/api/regions.md`는 `GET /regions/covering-point`,
-  `GET /regions/within-radius`를 **krtour-map 함수 호출**로 정의했다. ADR-025는
-  geocoding/region을 kraddr-geo v2 직접으로 옮긴다.
+  `GET /regions/within-radius`를 krtour-map 함수 경유로 정의했다. ADR-025는
+  geocoding/region을 kraddr-geo v2 직접으로 옮겼고, 최신 kraddr-geo에는
+  `/v2/regions/within-radius`가 있다.
 - **선택지**:
   - (A) `/regions/*`를 **유지하되 내부 구현만** kraddr-geo v2(`/v2/reverse`
     `include_region`, `/v2/search?type=district`)로 교체. 기존 응답 셰입 보존.
   - (B) `/regions/*`를 폐기하고 `/geo/*`로 일원화(응답 셰입도 candidate 기반).
   - (C) 둘 다 유지(중복).
 - **잠정 기본값**: **(A)** — endpoint 경로/응답 셰입은 유지(프론트 영향 최소),
-  내부만 v2로. `within-radius`는 v2에 정확 대응이 없어(§D5) 잠정 보류.
+  내부만 v2로. `within-radius`는 kraddr-geo `/v2/regions/within-radius`로 래핑.
 - **추천**: (A). v0.1.0에서 경로 안정성 우선. v1.0에서 (B) 재검토.
 
 ## D2. `fallback="api"` (외부 VWorld/juso fallback) 사용 여부

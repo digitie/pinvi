@@ -9,17 +9,17 @@
 | 계층 | 범위 | 도구 | 위치 | DB |
 |------|------|------|------|----|
 | 단위 (`unit`) | 순수 함수, 서비스 로직, schema validation | `pytest` | `apps/api/tests/unit/` | 사용 X |
-| 통합 (`integration`) | 라우터 + DB + 라이브러리 호출 | `pytest` + testcontainers PostGIS | `apps/api/tests/integration/` | 실제 PostGIS |
+| 통합 (`integration`) | 라우터 + DB + 외부 HTTP 계약 | `pytest` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` | 실제 PostGIS |
 | e2e (`e2e`) | 백엔드 ↔ 프론트 (HTTP 시나리오) | `pytest` + `httpx` + `playwright` | `apps/api/tests/e2e/`, `apps/web/tests/` | 실제 PostGIS |
 | UI smoke | 프론트 화면 렌더링 | Playwright | `apps/web/tests/*.test.mjs` | 모의/실제 |
-| 라이브러리 정합성 | `python-krtour-map`과의 계약 | `pytest` integration | `apps/api/tests/integration/krtour_map/` | 실제 |
+| krtour-map 계약 | `python-krtour-map` OpenAPI와의 계약 | `pytest` + `httpx.MockTransport` + 선택적 live | `apps/api/tests/integration/krtour_map/` | 선택 |
 | Dagster asset | 단일 asset 실행 (dry-run) | Dagster runner | `apps/etl/tests/` | 실제/임시 |
 | 정합성 게이트 | OpenAPI drift, import-linter, coverage | CI workflow | `.github/workflows/` | — |
 
 ## 2. 단위 테스트 (`unit`)
 
-- 외부 의존(DB / HTTP / 파일시스템 / 시간)을 모두 격리. `python-krtour-map.client.
-  AsyncKrtourMapClient`도 모킹.
+- 외부 의존(DB / HTTP / 파일시스템 / 시간)을 모두 격리. krtour-map/kraddr-geo/KASI
+  HTTP 호출은 mock transport로 대체.
 - Pydantic v2 validator branch는 100% 커버 — `pytest.raises(ValidationError)`.
 - 시간이 들어가면 `freezegun` 또는 명시적 `kst_now()` injection.
 - DB 매핑(SQLAlchemy 모델)은 단위가 아니라 통합에서 검증.
@@ -28,8 +28,8 @@
 
 - testcontainers PostGIS 16-3.5 사용. session-scope fixture로 컨테이너 1회 기동.
 - 매 테스트는 transaction rollback 패턴 — DB 상태를 testcontainer 재기동 없이 격리.
-- `app` schema 외에 `feature` schema 일부 fixture가 필요한 테스트는 라이브러리의
-  `tests/fixtures/`를 import해서 사용 (sibling checkout 권장).
+- `feature` schema fixture를 TripMate DB에 직접 만들지 않는다. krtour-map 응답은
+  OpenAPI fixture 또는 `httpx.MockTransport`로 만든다.
 - 라우터 통합: `httpx.AsyncClient(app=fastapi_app)` ASGI 직접 호출 (네트워크 안 탐).
 - 인덱스 사용 검증이 필요한 raw SQL은 EXPLAIN 통합 테스트로 가드.
 
@@ -47,21 +47,21 @@
 - Visual regression은 도입 보류 (Sprint 3+에서 결정).
 - Admin 화면은 별도 fixture로 admin 권한 부여 후 진입.
 
-## 6. 라이브러리 정합성 테스트
+## 6. krtour-map 계약 테스트
 
-`python-krtour-map`과의 계약을 본 저장소에서도 검증:
+`python-krtour-map` 최신 `openapi.user.json`과의 계약을 본 저장소에서도 검증:
 
-- `apps/api/tests/integration/krtour_map/test_contract.py` — `AsyncKrtourMapClient`
-  생성 가능성 + 주입한 engine으로 ping + 핵심 메서드 시그니처 확인.
-- 라이브러리 버전 mismatch detection — `python-krtour-map` import 후
-  `__version__` 검사.
+- `apps/api/tests/integration/krtour_map/test_contract.py` — `GET /features/in-bounds`,
+  `GET /features/search`, `GET /features/{feature_id}`,
+  `POST /tripmate/features/batch` 응답 변환 확인.
+- 선택적 live mode는 `TRIPMATE_KRTOUR_MAP_API_BASE_URL`이 reachable할 때만 실행.
 
 ## 7. Dagster asset 테스트
 
 - `apps/etl/tests/test_asset_<name>.py` — 단일 asset에 모의 provider client 주입,
   `materialize_to_memory`로 결과 검증.
-- 통합 모드: testcontainer PostGIS + 실제 라이브러리 → 작은 fixture로 적재 후
-  `feature` schema row 검사.
+- 통합 모드: testcontainer PostGIS + 외부 HTTP mock. krtour-map feature 적재 자체는
+  그 저장소 테스트가 담당한다.
 
 ## 8. 정합성 게이트 (CI)
 

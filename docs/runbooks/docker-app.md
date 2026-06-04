@@ -94,8 +94,8 @@ docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml down -v --r
 ## 5. App + ETL 통합 smoke
 
 ETL 데이터를 사용한 admin 흐름은 `scripts/admin-etl-data-smoke-test.sh`. ETL이
-`apps/etl`로 분리됐으므로 (ADR-006) 본 smoke는 라이브러리 호출 mock 또는 실제
-라이브러리 fixture와 함께 실행.
+`apps/etl`로 분리됐으므로 (ADR-006) 본 smoke는 외부 HTTP mock 또는 live
+krtour-map/KASI 서비스와 함께 실행한다.
 
 ## 6. 기본 admin 계정
 

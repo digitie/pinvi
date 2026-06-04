@@ -19,6 +19,7 @@
 │  app.trips                                                       │
 │   ├── app.trip_days                                              │
 │   │    └── app.trip_day_pois  (POI 첨부 — feature_id reference)  │
+│   │         └── app.trip_poi_rise_sets  (KASI 위치별 해·달 출몰시각) │
 │   ├── app.trip_companions                                        │
 │   └── app.trip_share_links                                       │
 │                                                                  │
@@ -154,6 +155,41 @@ LexoRank fractional indexing + COLLATE "C"** (SPEC V8 E-6 Critical).
 
 `feature_snapshot`은 적재 시점의 정보를 보존하는 캐시 — 라이브러리 schema가
 바뀌어도 UI 표시는 유지. 실제 최신 좌표/이름은 `feature_id`로 조회.
+
+#### `app.trip_poi_rise_sets`
+
+POI 생성 시 `python-kasi-api`의 `rise_set.location`(`getLCRiseSetInfo`,
+위치별 해달 출몰시각 정보조회)을 1회 호출한 결과를 POI 부속 정보로 저장한다.
+재계산 schedule은 두지 않는다.
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `poi_id` | `uuid` (PK) → `app.trip_day_pois.attachment_id` | ON DELETE CASCADE |
+| `locdate` | `date` | 조회 기준일 (`trip_days.date`) |
+| `longitude`, `latitude` | `double precision` | 요청 좌표 snapshot |
+| `sunrise_at`, `sunset_at` | `timestamptz` | 파싱 가능할 때 |
+| `moonrise_at`, `moonset_at` | `timestamptz` | 파싱 가능할 때 |
+| `status` | `text` | `pending_date` / `pending_coord` / `success` / `failed` |
+| `raw_payload` | `jsonb` | KASI 원문 payload |
+| `error` | `jsonb` | 실패 시 redacted error |
+| `fetched_at` | `timestamptz` | 마지막 호출 시각 |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+#### `app.kasi_special_days`
+
+Dagster `kasi_special_days_daily`가 하루 1회, 실행일 기준 과거 6개월부터 미래
+18개월까지 KASI 특일 계열 dataset을 조회해 upsert한다. 별도 삭제는 없다.
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `special_day_id` | `uuid` (PK) | |
+| `dataset` | `text` | `holidays` / `national_holidays` / `anniversaries` / `solar_terms_24` / `sundry_days` |
+| `sol_date` | `date` | 양력 기준일 |
+| `name` | `text` | 특일명 |
+| `sequence` | `text` | provider sequence가 있으면 저장 |
+| `is_holiday` | `bool` | 공휴일 여부를 알 수 있을 때 |
+| `raw_payload` | `jsonb` | KASI 원문 payload |
+| `fetched_at`, `created_at`, `updated_at` | `timestamptz` | |
 
 #### `app.trip_companions`
 
@@ -301,7 +337,7 @@ Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops
 ```
 
 응답 빌더는 `apps/api/app/services/trip_view_builder.py`에 둔다 (코드 작성
-단계 진입 후). `AsyncKrtourMapClient.features_by_ids(...)`로 batch 조회 후 join.
+단계 진입 후). krtour-map `POST /tripmate/features/batch`로 batch 조회 후 join.
 
 ## 5. 인덱스 전략 (요약)
 

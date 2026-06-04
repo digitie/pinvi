@@ -5,15 +5,15 @@
 패턴이다. ADR-025 기준.
 
 > **경계 한 줄 요약**
-> - **Feature 데이터**(place/event/weather/...) → `python-krtour-map` **함수 직접
->   호출**(in-process, ADR-002). → `docs/krtour-map-integration.md`.
+> - **Feature 데이터**(place/event/weather/...) → `python-krtour-map` **OpenAPI
+>   HTTP 계약**(ADR-026). → `docs/krtour-map-integration.md`.
 > - **Geocoding/주소/행정구역** → `kraddr-geo` **v2 REST API HTTP 호출**(ADR-025).
 >   → 본 문서.
 > - krtour-map도 자기 ETL 적재 때 kraddr-geo v2 REST를 쓰지만(그쪽 ADR-006), 그건
 >   krtour-map 내부 책임이다. TripMate 사용자 경로는 본 문서 경계만 따른다.
 
-권위 출처는 kraddr-geo 저장소 `docs/api-reference/v2/{geocode,reverse,search}.md`
-+ `docs/api-reference/llm-summary.md`. 본 문서는 TripMate 입장의 사용 계약이다.
+권위 출처는 kraddr-geo 최신 `main`의 `openapi.json` +
+`docs/api-reference/llm-summary.md`다. 본 문서는 TripMate 입장의 사용 계약이다.
 
 ## 1. 개관
 
@@ -32,9 +32,10 @@
 └───────────────────────────────────────────────────────────┘
 ```
 
-- TripMate는 **v2 candidate 표면만** 의존한다. python 패키지(`kraddr.geo`)
+- TripMate는 **v2 candidate 표면**을 우선 의존한다. python 패키지(`kraddr.geo`)
   in-process import / DB 직접 접근을 사용자 경로에서 쓰지 않는다(ADR-025).
-- v1 vworld-호환 표면(`/v1/address/*`)은 신규 사용하지 않는다 — candidate 중심 v2만.
+- v1 vworld-호환 표면(`/v1/address/*`)은 legacy/호환 표면이다. 신규 사용자 경로는
+  candidate 중심 v2를 쓴다.
 - 외부 API(VWorld/juso/epost)는 TripMate가 직접 호출하지 않는다 — kraddr-geo REST
   내부 책임(`fallback="api"`).
 
@@ -44,9 +45,11 @@
   TripMate 내부도 동일 — `(lat, lng)` 뒤집기 어댑터를 두지 않는다(ADR-015 mirror).
 - `crs` 기본 `EPSG:4326`.
 - `sig_cd`: 2자리 시도 또는 5자리 시군구. `bjd_cd`: 8자리 prefix 또는 10자리 법정동.
-- `confidence`는 **endpoint-local 점수** — geocode/reverse/search 사이에서 직접
+- `confidence`는 **endpoint-local 점수** — geocode/reverse/search/regions 사이에서 직접
   비교하지 않는다(같은 endpoint 안 정렬/표시 보조값으로만).
 - 거리 기반 후보는 `distance_m`이 정식 필드(`metadata.distance_m`보다 우선).
+- `point_precision`은 `exact` / `interpolated` / `centroid` / `approximate` /
+  `null`이다. UI 문구나 저장 품질 판단은 이 필드를 우선한다.
 
 ## 3. v2 endpoint 계약 (TripMate가 호출하는 것)
 
@@ -105,6 +108,39 @@ curl -X POST "$KRADDR_GEO/v2/search" -H 'Content-Type: application/json' \
 > `fallback="api"`(외부 vworld/juso 결과를 candidate로 감쌈)는 **기본 사용 안 함**.
 > 비용·약관·캐시 정책이 얽혀 있어 `docs/architecture/geocoding-open-decisions.md`
 > 결정 전까지 `none` 유지.
+
+### 3.4 `POST /v2/regions/within-radius` — 좌표 반경 내 행정구역
+
+최신 kraddr-geo `openapi.json`에는 `POST /v2/regions/within-radius`가 있다. 좌표
+주변 행정구역 후보를 반경 기준으로 받을 때 사용한다.
+
+TripMate 사용 원칙:
+
+- 여행 목적지/POI 주변 지역 label처럼 **반경 내 행정구역 후보 목록**이 필요할 때만
+  호출한다.
+- 단일 좌표의 대표 주소/행정구역 label은 여전히 `/v2/reverse`를 우선한다.
+- 후보 정렬/표시는 `distance_m`, `confidence`, region code를 같은 응답 안에서만
+  비교한다.
+
+## 3.5 v1 및 admin 표면 확인
+
+최신 `openapi.json`의 public v1 legacy 표면:
+
+| 메서드 | 경로 |
+|--------|------|
+| `GET` | `/v1/healthz` |
+| `GET` | `/v1/address/geocode` |
+| `GET` | `/v1/address/reverse` |
+| `GET` | `/v1/address/search` |
+| `GET` | `/v1/address/zipcode` |
+| `GET` | `/v1/address/pobox` |
+
+Admin/ops 표면에는 uploads/jobs/tables/logs/normalize/explain/load-sources,
+backup/restore, consistency, audit/snapshot/release/maintenance, cache metrics,
+RustFS storage 경로가 포함된다. 특히 RustFS 운영 확인 경로는
+`/v1/admin/storage/rustfs/check`, 설정 조회는 `/v1/admin/storage/rustfs/config`다.
+TripMate는 이 admin 표면을 사용자 API에서 호출하지 않는다. kraddr-geo 운영 콘솔이나
+별도 runbook이 소유한다.
 
 ## 4. TripMate 노출 endpoint (신설 제안)
 
@@ -263,10 +299,11 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 | 지도 클릭/우클릭 "이 지점 주소" | `/geo/reverse` | 위치 감사 |
 | "내 위치" → 현재 행정구역 label | `/geo/reverse` (`include_region`) | user-location §4.2 |
 | 행정구역 단위 탐색(시군구 선택) | `/geo/search?type=district` | 대표점 = `ST_PointOnSurface` |
+| 좌표 주변 행정구역 후보 | `/geo/regions/within-radius` | kraddr-geo `/v2/regions/within-radius` |
 | 공유 링크/딥링크 주소 → 지도 이동 | `/geo/geocode` | |
 
 > feature(관광지/주유소/날씨 등) 검색은 geocoding이 아니다 — krtour-map
-> `features_*`(함수 호출). 주소·행정구역·장소명만 본 문서 경로.
+> OpenAPI HTTP 계약. 주소·행정구역·장소명만 본 문서 경로.
 
 ## 11. AI agent 구현 체크리스트
 
@@ -278,6 +315,8 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 - [ ] `apps/api/app/schemas/geo.py` + `packages/schemas/src/geo.ts` (Zod) —
       candidate / region / response (v2 셰입 → TripMate 셰입 변환 모델).
 - [ ] `apps/api/app/api/v1/geo.py` — `/geo/{search,reverse,geocode}` + 라우터 등록.
+- [ ] `/geo/regions/within-radius`가 필요하면 kraddr-geo
+      `/v2/regions/within-radius`를 래핑한다.
 - [ ] `location_audit.py` `PURPOSE_BY_PATH`에 `/geo/reverse` 등록.
 - [ ] 통합 테스트: `httpx.MockTransport`로 v2 응답 stub → 변환·에러·degrade 검증
       (`apps/api/tests/integration/test_geocoding.py`). 실 kraddr-geo 의존 금지.
@@ -300,6 +339,5 @@ kraddr-geo REST 서비스의 VWorld/juso API 키·포트·재시도는 **kraddr-
 - `docs/api/regions.md` — 행정구역 endpoint (ADR-025로 kraddr-geo v2 직접 정합).
 - `docs/architecture/user-location.md` — 역지오코딩 region label + 위치 감사.
 - `docs/architecture/geocoding-open-decisions.md` — 열린 결정(캐시/fallback/MCP 등).
-- `docs/krtour-map-integration.md` — feature 데이터 경계(함수 호출, 본 문서와 분리).
-- kraddr-geo 저장소 `docs/api-reference/v2/{geocode,reverse,search}.md` +
-  `docs/api-reference/llm-summary.md` (권위 출처).
+- `docs/krtour-map-integration.md` — feature 데이터 경계(OpenAPI HTTP, 본 문서와 분리).
+- kraddr-geo 저장소 `openapi.json` + `docs/api-reference/llm-summary.md` (권위 출처).

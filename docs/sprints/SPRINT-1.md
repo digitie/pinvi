@@ -100,8 +100,8 @@
 
 ## 3. 의존성 / 외부
 
-- `python-krtour-map`은 본 Sprint에서 import하지 않는다. `apps/etl/resources.py`의
-  `KrtourMapResource`는 빈 skeleton — Sprint 4에서 라이브러리 호출 활성화.
+- `python-krtour-map`은 본 Sprint에서 import하지 않는다. 이후 ADR-026에 따라
+  Sprint 4 feature read는 krtour-map OpenAPI HTTP client로 활성화한다.
 - `python-kraddr-*`도 Sprint 2 이후 도입.
 - 외부 API 키는 placeholder만 `.env.example`에 둠.
 

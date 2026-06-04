@@ -210,7 +210,7 @@ TripMate Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15)
 
 - `docs/data-model.md` (본 저장소 `app` 도메인 상세)
 - `docs/postgres-schema.md` (DDL 골격)
-- `docs/krtour-map-integration.md` (라이브러리 호출 패턴)
+- `docs/krtour-map-integration.md` (krtour-map OpenAPI HTTP 패턴)
 - `docs/decisions.md` ADR-003 (schema 책임 분담)
 - `docs/spec/v8/02-backend.md` (API 측 매핑)
 - `python-krtour-map`의 `docs/data-model.md`, `docs/postgres-schema.md`

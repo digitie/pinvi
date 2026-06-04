@@ -12,6 +12,9 @@
   - `custom_marker_color`, `custom_marker_icon` — 사용자 override
   - `version INTEGER` — optimistic lock (`If-Match`)
   - `planned_arrival_at`, `planned_departure_at` — KST aware
+- `app.trip_poi_rise_sets`:
+  - POI 생성 시 `python-kasi-api` 위치별 해달 출몰시각 정보조회 결과를 1회 저장
+  - `rise_set` 응답 선택 필드의 원천. 날짜/좌표가 없으면 pending 상태
 
 ## 2. CRUD
 
@@ -40,11 +43,27 @@ Content-Type: application/json
 }
 ```
 
-- `feature_id`가 라이브러리에 없으면 (`AsyncKrtourMapClient.features_by_ids` 결과 empty)
+- `feature_id`가 krtour-map batch 조회 결과에 없으면
   → `feature_link_broken_at` 채움 + 그래도 row 생성 (`feature_snapshot`으로 표시)
+- 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
+  `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. 생성 응답 시점에는
+  `rise_set`이 없거나 `pending`일 수 있다.
 - `sort_order` 충돌 시 (`(day_index, sort_order COLLATE "C")` UNIQUE) → `409`
 
-응답 201: 생성된 POI.
+응답 201: 생성된 POI. 선택 필드:
+
+```jsonc
+{
+  "rise_set": {
+    "status": "success",
+    "locdate": "2026-06-02",
+    "sunrise_at": "2026-06-02T05:10:00+09:00",
+    "sunset_at": "2026-06-02T19:39:00+09:00",
+    "moonrise_at": "...",
+    "moonset_at": "..."
+  }
+}
+```
 
 ### 2.2 `PATCH /trips/{trip_id}/pois/{poi_id}`
 
@@ -110,9 +129,9 @@ WebSocket broadcast: `poi.reordered` + `version`.
 
 | 정책 | 동작 |
 |------|------|
-| **lazy** (기본) | UI 표시 시 라이브러리 호출. snapshot은 fallback |
+| **lazy** (기본) | UI 표시 시 krtour-map batch 조회. snapshot은 fallback |
 | **eager** (선택) | Dagster job 일 1회 + `WHERE feature_id IN (...)` |
-| **on-write** | POI write 시점 라이브러리 호출 → snapshot upsert |
+| **on-write** | POI write 시점 krtour-map batch 조회 → snapshot upsert |
 
 v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 
@@ -140,6 +159,7 @@ v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 
 - [ ] `apps/api/app/schemas/poi.py` Pydantic + `packages/schemas/src/poi.ts` Zod
 - [ ] `apps/api/app/services/poi.py` 비즈니스 로직 (sort_order 검증 + 라이브러리 feature 검증)
+- [ ] POI 생성 시 좌표/방문일이 있으면 KASI 출몰시각 1회 갱신 enqueue
 - [ ] `apps/api/app/api/v1/pois.py` 라우터 (또는 `trips.py`에 합치기)
 - [ ] LexoRank helper `packages/hooks/src/lexorank.ts` (또는 `packages/lexorank/`)
 - [ ] `sort_order COLLATE "C"` Alembic + 로컬 PostGIS 통합 테스트

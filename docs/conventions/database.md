@@ -141,7 +141,7 @@ op.create_index("ix_places_geom", "places", ["geom"], postgresql_using="gist")
 
 > TripMate `app` schema에는 공간 컬럼이 적음 — feature schema에 위임. 본
 > 규약은 app schema의 공간 컬럼 (있다면 `feature_snapshot.coord` JSONB) 또는
-> 라이브러리 호출 결과 변환 시 적용.
+> krtour-map/kraddr-geo HTTP 응답 변환 시 적용.
 
 ## 6. JSONB
 

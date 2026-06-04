@@ -176,8 +176,8 @@ uv pip install -e ".[dev]"
 # GDAL 바인딩이 필요하면 시스템 버전에 핀
 uv pip install "gdal==$(gdal-config --version)"
 
-# python-krtour-map (함수 라이브러리, sibling checkout)
-uv pip install -e ~/dev/python-krtour-map        # 또는 git URL pin (@<sha>)
+# python-krtour-map은 별도 sibling 저장소에서 API 9011 / admin 9012로 실행
+# TripMate는 TRIPMATE_KRTOUR_MAP_API_BASE_URL만 설정
 
 # Node — Linux Node/npm (Windows shim 금지, §6)
 cd ~/tripmate-workspaces/tripmate-claude

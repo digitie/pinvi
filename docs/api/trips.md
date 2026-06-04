@@ -61,8 +61,9 @@ invite 이메일 발송.
 ### 3.3 `GET /trips/{trip_id}`
 
 응답에 trip + days + pois (snapshot 포함) + companions + share links. POI의
-`feature` 필드는 라이브러리에서 batch join한 최신 정보 (없으면 `feature_snapshot`
-사용).
+`feature` 필드는 krtour-map `POST /tripmate/features/batch`로 batch join한 최신 정보
+(없으면 `feature_snapshot` 사용). `rise_set`은 POI 생성 시 KASI 위치별 해달
+출몰시각 정보조회가 완료된 경우에만 포함한다.
 
 ### 3.4 `PATCH /trips/{trip_id}`
 
@@ -262,9 +263,9 @@ POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 ## 11. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/{trip,companion,share_link}.py` Pydantic + `packages/schemas/src/trip.ts` Zod
-- [ ] `apps/api/app/services/trip.py` 비즈니스 로직 (권한 검사 + 라이브러리 join)
+- [ ] `apps/api/app/services/trip.py` 비즈니스 로직 (권한 검사 + krtour-map batch join)
 - [ ] `apps/api/app/api/v1/trips.py` 라우터
-- [ ] `apps/api/app/etl_bridge/krtour_map.py`에서 `AsyncKrtourMapClient.features_by_ids(...)` 호출 패턴
+- [ ] krtour-map HTTP client에서 `POST /tripmate/features/batch` 호출 패턴
 - [ ] 통합 테스트 `apps/api/tests/integration/test_trips_api.py`
 - [ ] WebSocket broadcast 트리거 추가
 - [ ] 본 문서 + `common.md` 표준 에러 코드 갱신

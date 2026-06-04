@@ -3,6 +3,8 @@
 ## 진행 중
 
 - [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
+- [ ] T-066 — krtour-map OpenAPI HTTP 전환 구현 + drift gate
+- [ ] T-067 — KASI 특일/POI 출몰시각 Dagster 구현
 
 ## 다음 (우선순위 순)
 
@@ -47,6 +49,8 @@
 - [x] T-062 — GitHub Actions secret / branch protection 적용 상태 확인 (완료:
   2026-06-02, Actions secret 0개 정책 확인 + `main-pr-only` ruleset 적용)
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
+- [x] T-068 — 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 (완료: 2026-06-04,
+  ADR-026 + KASI 특일/출몰시각 저장 계약)
 
 ## 보류
 

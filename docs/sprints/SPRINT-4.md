@@ -2,7 +2,7 @@
 
 - **상태**: proposed
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
-- **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` 라이브러리 read 활성화
+- **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` OpenAPI read 활성화
   + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
 - **릴리즈**: `v0.1.0` (Sprint 4 종료 시 tag). 사용자 대면 지도/여행 흐름 첫
   사용 가능한 상태. 자세히는 `docs/release-plan.md` (Sprint README 참고).
@@ -13,9 +13,9 @@
   - 16색 팔레트 + maki 아이콘 (`apps/web/lib/markerPalette.ts`)
   - 우클릭 메뉴 4종 + 마커 우클릭 메뉴 3종
   - Trip 대시보드 (미래/과거 아코디언, 동반자 아바타)
-  - `python-krtour-map` `AsyncKrtourMapClient` lifespan 통합 — `GET
-    /features/in-bounds`가 라이브러리 호출
-  - `apps/api/app/etl_bridge/krtour_map.py` DI helper 활성화
+  - krtour-map OpenAPI HTTP client lifespan 통합 — `GET /features/in-bounds`가
+    krtour-map API 호출
+  - `apps/api/app/clients/krtour_map.py` HTTP client 활성화
   - **GitHub Actions CI/CD 재활성화** (ADR-021) — Sprint 1~3 동안 비활성이었음.
     api/web/etl workflow + API key 없는 review reminder + lint/typecheck/test 게이트
     복원.
@@ -29,7 +29,7 @@
 
 ### 백엔드
 
-- `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
+- `apps/api/app/clients/krtour_map.py` — krtour-map HTTP client lifespan
 - `apps/api/app/api/v1/features.py`
   - `GET /features/in-bounds?bounds=&zoom=&kinds[]=`
   - `GET /features/{id}`
@@ -74,7 +74,7 @@
 
 - 03-frontend.md 전체 (I-1 ~ I-7)
 - 02-backend.md §5.4 (H-4 Feature/지도 API)
-- 02-backend.md §6 (라이브러리 호출 패턴)
+- 02-backend.md §5.4 (krtour-map OpenAPI 호출 패턴)
 - 01-data.md §3 (라이브러리 위임 항목)
 - `docs/architecture/frontend.md` (Next.js + Expo 공용 패키지 구조)
 - `docs/architecture/user-location.md` §4.1 (지도 "내 위치로 이동" 버튼)

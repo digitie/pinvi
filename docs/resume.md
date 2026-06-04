@@ -13,7 +13,7 @@ git.exe) / WSL ext4=일회용 테스트 미러. 셋업·검증·함정 절차는
 `docs/dev-environment.md`(에이전트 공통).
 **Geocoding ADR-025로 확정** — 사용자 대면 geocoding(주소/좌표/행정구역)은
 `kraddr-geo` v2 REST API 직접 호출(`docs/integrations/kraddr-geo.md`), feature
-데이터는 krtour-map 함수 호출 유지. 열린 결정 8건은
+데이터는 krtour-map OpenAPI HTTP 계약(ADR-026). 열린 결정 8건은
 `docs/architecture/geocoding-open-decisions.md`(잠정값으로 진행).
 **문서 충돌 정정** (2026-06-02 codex) — `agent-guide`, `local-dev`, `architecture`
 등에 남아 있던 ADR-024 이전 WSL git 모델, ADR-015 이전 Kakao/marker-wrapper 표현,
@@ -35,6 +35,15 @@ aggregate gate 설계 뒤 적용한다.
 **krtour-map 연동 포트 고정** (2026-06-03 codex) — `python-krtour-map` 독립
 프로그램의 API는 `9011`, admin은 `9012`를 기준으로 문서화한다. TripMate가 직접
 소유하지 않는 서비스이므로 실행/검증은 그쪽 저장소 런북이 권위다.
+**krtour-map 최신 main 계약 반영** (2026-06-04 codex) — 최신 `python-krtour-map`
+`main`의 `openapi.user.json` / `openapi.json`을 확인해 ADR-026을 추가했다.
+TripMate ↔ krtour-map은 더 이상 함수 직접 호출이 아니라 OpenAPI HTTP 계약(API
+`9011`, admin `9012`)이다. `feature` / `provider_sync` schema 소유권은 그대로
+krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
+**KASI 특일/출몰시각 계약 추가** (2026-06-04 codex) — `python-kasi-api`를 통해
+특일 계열 5개 dataset을 하루 1회, 과거 6개월~미래 18개월 범위로 upsert한다.
+삭제는 없다. POI 생성 시에는 좌표와 방문일로 "위치별 해달 출몰시각 정보조회"를
+1회 호출해 `app.trip_poi_rise_sets`에 저장한다.
 
 ## 다음 한 작업
 
@@ -44,10 +53,13 @@ aggregate gate 설계 뒤 적용한다.
    - `email_queue` SKIP LOCKED worker + 비밀번호 재설정 메일 흐름
    - `api_call_log` 미들웨어 통합 테스트
    - CI(`api.yml`)에 `tests/integration` 스텝 추가 검토
-2. **Sprint 4 PR-B2** — `python-krtour-map` 실 client 주입 → `/features/in-bounds`
+2. **Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
    동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
-   - `apps/api/app/etl_bridge/krtour_map.py` — `AsyncKrtourMapClient` lifespan
+   - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
+3. **KASI 구현** — `kasi_special_days_daily` Dagster job +
+   `trip_poi_rise_sets` 저장/POI 생성 enqueue:
+   - `docs/integrations/kasi.md`, `docs/runbooks/etl.md` 기준
 3. **운영 후속** — 항상 실행되는 aggregate CI gate 설계 후 required status check
    적용(T-065). 현재 `api` / `web` / `etl`은 path-filtered라 바로 required check로
    걸지 않는다.
@@ -97,12 +109,13 @@ aggregate gate 설계 뒤 적용한다.
 - [x] Sprint 1 진입 PR (apps + packages scaffolding) — T-030
 - [x] GitHub Actions secret / branch protection 적용 상태 확인 — T-062
 - [x] 최신 main 기준 문서 충돌 정정 — T-064
+- [x] 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 — T-068
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
 - (ADR-024 박힘: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러)
 - (ADR-025 박힘: 사용자 대면 geocoding은 kraddr-geo v2 REST 직접)
-- ADR-026(후보): 기능 read API와 `python-krtour-map` 실제 client readiness 경계 명문화
+- (ADR-026 박힘: krtour-map OpenAPI HTTP 계약)
 - ADR-027(후보): Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
 - ADR-028(후보): Sprint 4 진행 추적 문서 정규화 (`resume.md` / `tasks.md` / `journal.md`)
 

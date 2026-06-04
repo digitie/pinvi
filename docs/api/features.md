@@ -1,14 +1,17 @@
 # Feature API (`/features/*`)
 
-라이브러리(`python-krtour-map`)의 지도 feature를 TripMate가 읽어서 클라이언트에
-제공. **TripMate는 응답 셰입을 갖고, 데이터는 라이브러리 호출로 가져옴**
-(ADR-002 / ADR-003). 공통 규약 [`common.md`](./common.md).
+`python-krtour-map` 독립 프로그램의 지도 feature를 TripMate가 OpenAPI HTTP로 읽어서
+클라이언트에 제공한다. **TripMate는 응답 셰입을 갖고, 데이터는 krtour-map
+`openapi.user.json` 계약으로 가져온다**(ADR-026 / ADR-003). 공통 규약
+[`common.md`](./common.md).
 
 ## 1. 책임
 
 - 본 API는 TripMate가 제공 — URL/응답 셰입은 본 저장소 소유
-- 데이터는 `AsyncKrtourMapClient` 함수 호출 (`docs/krtour-map-integration.md`)
-- TripMate는 추가 wrapper class 두지 않음 (ADR-005)
+- 데이터는 krtour-map API `9011`의 OpenAPI HTTP 호출
+  (`docs/krtour-map-integration.md`)
+- TripMate는 provider/feature 도메인 wrapper를 두지 않음. HTTP client는 transport
+  역할만 한다.
 - 좌표를 query/body에 받는 endpoint는 `app.location_access_log` 자동 적재
   (`docs/architecture/user-location.md`)
 
@@ -68,7 +71,7 @@ Cookie: tripmate_access=...
 }
 ```
 
-라이브러리 호출: `AsyncKrtourMapClient.features_in_bounds(bbox, zoom, kinds)`.
+krtour-map 호출: `GET /features/in-bounds`.
 
 Rate limit: 분당 60회 per user. 클라이언트 측 디바운스 250ms + AbortController 권장.
 
@@ -121,7 +124,7 @@ GET /features/f_2611000000_p_abc123...
 }
 ```
 
-라이브러리 호출: `AsyncKrtourMapClient.feature_detail(feature_id)`.
+krtour-map 호출: `GET /features/{feature_id}`.
 
 ### 2.3 `GET /features/{feature_id}/weather`
 
@@ -158,7 +161,8 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 KMA 시간축이 기본 (SPEC V8 R-4). 다른 provider 값은 sources 배열에 끼워 넣어
 사용자에게 한 카드로 표시.
 
-라이브러리 호출: `AsyncKrtourMapClient.weather_for_feature(feature_id, asof)`.
+날씨 feature/detail 제공 여부는 krtour-map 최신 OpenAPI 계약을 따른다. TripMate가
+별도 KMA provider 변환을 직접 구현하지 않는다.
 
 ### 2.4 `GET /features/nearby`
 
@@ -175,7 +179,7 @@ Cookie: tripmate_access=...
 
 응답: `features_in_bounds`와 같은 individual 셰입 배열 (cluster X).
 
-라이브러리 호출: `AsyncKrtourMapClient.features_nearby(lat, lng, radius_m, kinds)`.
+krtour-map 호출: 기준 feature가 있으면 `GET /features/nearby/by-target`를 우선한다.
 
 ### 2.5 `POST /features/requests`
 
@@ -224,7 +228,7 @@ Cookie: tripmate_access=...
 }
 ```
 
-호출 경계: feature 검색은 `AsyncKrtourMapClient.search(q, viewport)`로, 주소 후보는
+호출 경계: feature 검색은 krtour-map `GET /features/search`로, 주소 후보는
 `kraddr-geo` v2 REST search로 조회한다(ADR-025). 사용자 대면 검색 경로에서
 `kraddr.geo` in-process import나 krtour-map 경유 geocoding을 쓰지 않는다.
 
@@ -239,16 +243,17 @@ Cookie: tripmate_access=...
 ## 4. 캐싱
 
 - 클라이언트: TanStack Query, `staleTime: 60_000` (1분)
-- 백엔드: 라이브러리 호출 결과는 process 내 `functools.lru_cache(maxsize=...)`
-  (라이브러리 자체 캐시는 ADR-030 mirror — 없음)
+- 백엔드: krtour-map HTTP 응답은 짧은 TTL 캐시를 둘 수 있다. 캐시 키에는 path,
+  query/body, 사용자 권한 범위를 포함한다.
 - viewport 동일 bbox+zoom 1분 캐시 (위에)
 
 ## 5. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/feature.py` Pydantic + `packages/schemas/src/feature.ts` Zod
-- [ ] `apps/api/app/services/feature_view.py` — 라이브러리 호출 + 응답 변환
+- [ ] `apps/api/app/services/feature_view.py` — krtour-map HTTP 호출 + 응답 변환
 - [ ] `apps/api/app/api/v1/features.py` 라우터
-- [ ] `apps/api/app/etl_bridge/krtour_map.py` DI helper (`AsyncKrtourMapClient` lifespan)
+- [ ] `apps/api/app/clients/krtour_map.py` HTTP client + lifespan
 - [ ] `apps/api/app/middleware/location_audit.py` — 좌표 query/body 적재
-- [ ] 통합 테스트 `apps/api/tests/integration/test_features_api.py` (mock 라이브러리 client + 실제 라이브러리 client 두 모드)
+- [ ] 통합 테스트 `apps/api/tests/integration/test_features_api.py`
+      (`httpx.MockTransport` 계약 테스트 + 선택적 live krtour-map)
 - [ ] viewport 클러스터링 zoom 경계 unit 테스트
