@@ -42,7 +42,7 @@
 
 ## ADR-002: TripMate ↔ `python-krtour-map`은 함수 직접 호출 (REST 없음)
 
-- **상태**: accepted
+- **상태**: superseded by ADR-026
 - **날짜**: 2026-05-25
 - **결정자**: 사용자
 - **컨텍스트**: 지도 feature 도메인을 별 저장소로 분리하기로 했다(ADR-001).
@@ -964,8 +964,9 @@
 - **날짜**: 2026-06-02
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: TripMate는 두 종류의 외부 도메인 데이터를 쓴다.
-  1. **Feature 데이터**(place/event/notice/price/weather/route/area) — `python-
-     krtour-map`을 **함수 직접 호출**(in-process, ADR-002)로.
+  1. **Feature 데이터**(place/event/notice/price/weather/route/area) — 당시 기준은
+     `python-krtour-map` 함수 직접 호출(ADR-002)이었으나, 이후 ADR-026으로
+     OpenAPI HTTP 계약으로 전환.
   2. **Geocoding/주소**(주소→좌표 geocode, 좌표→주소 reverse, 주소/장소 search,
      행정구역 region 조회) — 사용자가 "geocoding 관련 기능은 kraddr-geo v2 API에
      직접 접근"하라고 지시.
@@ -981,7 +982,8 @@
     부른다. krtour-map을 경유하지 않는다.
     - 신설 endpoint(예): `GET /geo/search`, `GET /geo/reverse`, `GET /geo/geocode`
       — TripMate가 v2 candidate를 자기 응답 셰입(`{data, meta}`)으로 래핑.
-  - **Feature 데이터는 종전대로 krtour-map 함수 호출**(ADR-002) — 본 결정과 무관.
+  - **Feature 데이터는 krtour-map 계약** — 본 결정은 geocoding 경계만 다루며,
+    feature 데이터 경계는 이후 ADR-026의 OpenAPI HTTP 계약을 따른다.
   - **경계**: TripMate는 kraddr-geo의 **v2 REST 표면만** 의존한다. python 패키지
     (`kraddr.geo`) in-process import나 DB 직접 접근을 사용자 대면 경로에서 쓰지
     않는다(krtour-map이 ETL 내부에서 쓰는 것과 별개). v1 vworld-호환 표면(`/v1/
@@ -1010,10 +1012,62 @@
   - `docs/architecture/user-location.md` — 역지오코딩 region label 경로를 v2 reverse로.
   - `docs/krtour-map-integration.md` — geocoding은 본 경계 밖임을 명시.
   - 열린 결정은 `docs/architecture/geocoding-open-decisions.md`에 별도 정리(본 PR).
-- **참조**: ADR-002(krtour-map 함수 호출), ADR-003(schema 책임), `python-krtour-map`
-  `docs/address-geocoding.md`·ADR-006, `python-kraddr-geo` `docs/api-reference/v2/*`.
+- **참조**: ADR-002(superseded), ADR-026(krtour-map OpenAPI HTTP), ADR-003(schema
+  책임), `python-krtour-map` `docs/address-geocoding.md`·ADR-006,
+  `python-kraddr-geo` `docs/api-reference/v2/*`.
+
+## ADR-026: TripMate ↔ `python-krtour-map`은 최신 OpenAPI HTTP 계약으로 전환
+
+- **상태**: accepted
+- **날짜**: 2026-06-04
+- **결정자**: 사용자 + Codex
+- **컨텍스트**: ADR-002는 `python-krtour-map`을 같은 venv에서 함수 직접 호출하는
+  모델로 TripMate 통합을 정의했다. 그러나 2026-06-04에 최신 `python-krtour-map`
+  `main`을 새로 받아 확인한 결과, 그 저장소의 현재 권위 계약은
+  `packages/krtour-map-admin/openapi.user.json`(TripMate/user-facing subset)과
+  `packages/krtour-map-admin/openapi.json`(Admin/ops/debug 포함 전체 OpenAPI)이다.
+  `docs/tripmate-rest-api.md`와 `docs/openapi-admin-contract.md`도 TripMate가
+  krtour-map을 import/DB 직접 접근하지 않고 OpenAPI HTTP로 호출해야 한다고
+  명시한다.
+- **결정**:
+  - TripMate는 `python-krtour-map`을 **독립 프로그램의 OpenAPI HTTP API**로
+    호출한다. 로컬 고정 포트는 API `9011`, Admin `9012`.
+  - TripMate 사용자/서비스 경로에서 `from krtour.map import ...`,
+    `AsyncKrtourMapClient`, `feature`/`provider_sync` 직접 SQL/ORM 접근을 쓰지
+    않는다. HTTP client는 transport wrapper만 허용한다.
+  - TripMate/user-facing 권위 계약은 krtour-map 최신 `openapi.user.json`이다.
+    현재 주요 경로는 `GET /features/in-bounds`, `GET /features/search`,
+    `GET /features/nearby/by-target`, `GET /features/{feature_id}`,
+    `POST /tripmate/features/batch`, `POST /admin/feature-update-requests`,
+    `GET /admin/feature-update-requests/{request_id}`다.
+  - Admin/ops/debug 경로는 최신 `openapi.json`을 따른다. 일반 사용자 API에서는
+    admin/offline/dedup/ops/debug 경로를 노출하지 않는다.
+  - `feature` / `provider_sync` schema 소유권은 ADR-003 그대로 유지한다. TripMate는
+    `feature_id`와 snapshot만 `app` schema에 저장하고 최신 feature 정보는
+    krtour-map API로 조회한다.
+  - Geocoding/주소/행정구역은 ADR-025 그대로 `kraddr-geo` v2 REST 직접 호출이다.
+- **근거**:
+  - 최신 krtour-map `main`의 구현 산출물이 OpenAPI를 권위 계약으로 제공한다.
+  - 독립 HTTP 경계는 krtour-map 자체 Admin/Dagster/ops 운영과 TripMate 사용자 앱의
+    배포·장애·버전 관리를 분리한다.
+  - TripMate가 `feature` schema 내부 모델이나 provider 변환 로직을 다시 알 필요가
+    없다.
+- **결과 (긍정)**: TripMate와 krtour-map의 런타임 결합이 낮아지고, OpenAPI drift
+  검증으로 계약 변경을 잡을 수 있다. 최신 krtour-map Admin/ops 표면과 일관된다.
+- **결과 (부정)**: 함수 직접 호출 대비 HTTP hop과 장애 경계가 생긴다. TripMate
+  read 경로는 krtour-map API reachable 상태를 확인해야 하며, POI snapshot fallback
+  정책이 필요하다.
+- **후속**:
+  - `docs/krtour-map-integration.md`를 OpenAPI HTTP 기준으로 전면 갱신.
+  - `AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `README.md`, API/ETL 문서의 함수 호출
+    표현을 OpenAPI HTTP 표현으로 정정.
+  - feature read 구현 시 `httpx.MockTransport` 계약 테스트와 krtour-map
+    `openapi.user.json` drift 확인을 추가.
+- **참조**: ADR-002(superseded), ADR-003(schema 책임), ADR-025(kraddr-geo v2 REST),
+  `python-krtour-map` 최신 `packages/krtour-map-admin/openapi.user.json`,
+  `docs/tripmate-rest-api.md`, `docs/openapi-admin-contract.md`.
 
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-026**
+- 다음 신규 ADR = **ADR-027**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

@@ -12,6 +12,8 @@ TripMate가 직접 통합하는 외부 서비스 (이메일/소셜 로그인/AI/
 | [gemini.md](./gemini.md) | Gemini Deep Research (사용자 키) | 4+ |
 | [telegram.md](./telegram.md) | Telegram Bot (알림) | 4+ |
 | [maplibre-vworld.md](./maplibre-vworld.md) | **지도 클라이언트** — `maplibre-vworld-js` (VWorld + MapLibre GL) (ADR-015) | 4 |
+| [kraddr-geo.md](./kraddr-geo.md) | kraddr-geo v2 REST geocoding (ADR-025) | 4 |
+| [kasi.md](./kasi.md) | KASI 특일 + 위치별 해·달 출몰시각 | 5 |
 | ~~[kakao-map.md](./kakao-map.md)~~ | 폐기 — `maplibre-vworld-js`로 교체 (ADR-015) | — |
 | [youtube-intelligence.md](./youtube-intelligence.md) | YouTube + Gemini 비디오 분석 (v2) | (v2) |
 | [mcp-tools.md](./mcp-tools.md) | MCP 도구 표준 (read-only / draft-only) | (v2) |

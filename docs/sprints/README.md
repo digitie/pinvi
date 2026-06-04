@@ -33,12 +33,13 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - 이전 Sprint의 DoD 모두 충족
 - 신규 Sprint의 ADR들이 `proposed` → `accepted` 전환 (시기 의존 ADR만 해당)
 - 직전 Sprint에서 발견된 회귀/burndown 정리 완료
-- `python-krtour-map`의 대응 Sprint(별 저장소) 진척도 확인 (라이브러리 의존 핀)
+- `python-krtour-map`의 대응 Sprint(별 저장소) 진척도와 OpenAPI 계약 확인
 
 ## 관련 ADR
 
 - **ADR-001** — v1 보존 + v2 재시작
-- **ADR-002** — TripMate ↔ `python-krtour-map` 함수 호출
+- **ADR-002** — TripMate ↔ `python-krtour-map` 함수 호출 (ADR-026으로 superseded)
+- **ADR-026** — TripMate ↔ `python-krtour-map` OpenAPI HTTP 계약
 - **ADR-003** — schema 책임 분담
 - **ADR-005** — provider 어댑터 wrapper 금지
 - **ADR-006** — Dagster code location 분리

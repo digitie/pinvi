@@ -609,4 +609,4 @@ apps/web/app/                    apps/mobile/app/
 - `docs/architecture/notice-plans.md` (notice plan 도메인)
 - `docs/spec/v8/03-frontend.md` (SPEC V8 frontend 적용 노트)
 - `docs/spec/v8/04-admin.md` (Admin UI 위치)
-- `docs/krtour-map-integration.md` (라이브러리 호출 — `apps/api` 측, 본 문서는 UI 측)
+- `docs/krtour-map-integration.md` (krtour-map OpenAPI HTTP — `apps/api` 측, 본 문서는 UI 측)

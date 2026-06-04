@@ -106,17 +106,16 @@ PR은 불완전하다.
 Sprint 1~3 머지 완료. Sprint 4 준비/진행 단계.
 
 ## 다음 한 작업
-Sprint 4 PR-B2 — `python-krtour-map` 실 client 주입 + features read 동작 검증.
+Sprint 4 PR-B2 — `python-krtour-map` OpenAPI HTTP client + features read 동작 검증.
 
 ## 진척도
 - [x] README / AGENTS / CLAUDE / SKILL
 - [x] docs/architecture, agent-guide, dev-environment
-- [x] docs/decisions(ADR-001~025)
+- [x] docs/decisions(ADR-001~026)
 - [x] Sprint 1~3 merge
 - [ ] Sprint 4 map UI + `maplibre-vworld-js` integration
 
 ## 다음 ADR 후보
-- ADR-026: 기능 read API와 `python-krtour-map` 실제 client readiness 경계
 - ADR-027: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
 
 ## 차단 사유 / 결정 대기
@@ -180,12 +179,12 @@ Sprint 4 PR-B2 — `python-krtour-map` 실 client 주입 + features read 동작 
 
 ### 7.5 Dagster ETL 변경 (코드 작성 단계 진입 후)
 
-- [ ] `apps/etl/assets/<name>.py`의 asset은 `AsyncKrtourMapClient`를 통해서만
-  라이브러리 호출
+- [ ] `apps/etl/assets/<name>.py`의 asset이 TripMate `app` schema 소유 job인지 확인
 - [ ] asset 등록 (`definitions.py`)
 - [ ] schedule/sensor 정의
 - [ ] `docs/runbooks/etl.md` 갱신 (운영 문서)
-- [ ] (provider 추가 시) **`python-krtour-map`에 먼저 PR** — 본 저장소는 asset만 추가
+- [ ] feature provider 추가 시 **`python-krtour-map`에 먼저 PR** — 본 저장소에
+      provider 변환/적재 asset을 추가하지 않는다
 
 ## 8. PR 워크플로 (필수)
 

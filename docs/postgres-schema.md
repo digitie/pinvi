@@ -195,6 +195,38 @@ BEFORE UPDATE ON app.trip_day_pois
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
+### 3.3.1 `app.trip_poi_rise_sets`
+
+```sql
+CREATE TABLE app.trip_poi_rise_sets (
+  poi_id       uuid PRIMARY KEY REFERENCES app.trip_day_pois(attachment_id) ON DELETE CASCADE,
+  locdate      date,
+  longitude    double precision,
+  latitude     double precision,
+  sunrise_at   timestamptz,
+  sunset_at    timestamptz,
+  moonrise_at  timestamptz,
+  moonset_at   timestamptz,
+  status       text NOT NULL DEFAULT 'pending_date',
+  raw_payload  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error        jsonb,
+  fetched_at   timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trip_poi_rise_sets_status_chk
+    CHECK (status IN ('pending_date', 'pending_coord', 'success', 'failed'))
+);
+
+CREATE INDEX trip_poi_rise_sets_locdate_idx ON app.trip_poi_rise_sets (locdate);
+
+CREATE TRIGGER trip_poi_rise_sets_touch_updated_at
+BEFORE UPDATE ON app.trip_poi_rise_sets
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+POI 생성 시 `python-kasi-api`의 위치별 해달 출몰시각 정보조회 결과를 1회 저장한다.
+별도 주기 재조회는 없다.
+
 ### 3.4 `app.trip_companions`
 
 ```sql
@@ -339,6 +371,37 @@ CREATE TABLE app.import_jobs (
 CREATE INDEX import_jobs_kind_state_idx ON app.import_jobs (kind, state);
 CREATE INDEX import_jobs_started_idx ON app.import_jobs (started_at DESC) WHERE started_at IS NOT NULL;
 ```
+
+### 6.3 `app.kasi_special_days`
+
+```sql
+CREATE TABLE app.kasi_special_days (
+  special_day_id uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  dataset        text NOT NULL,
+  sol_date       date NOT NULL,
+  name           text NOT NULL,
+  sequence       text,
+  is_holiday     boolean,
+  raw_payload    jsonb NOT NULL DEFAULT '{}'::jsonb,
+  fetched_at     timestamptz NOT NULL DEFAULT now(),
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT kasi_special_days_dataset_chk CHECK (
+    dataset IN ('holidays', 'national_holidays', 'anniversaries', 'solar_terms_24', 'sundry_days')
+  )
+);
+
+CREATE UNIQUE INDEX kasi_special_days_source_uk
+  ON app.kasi_special_days (dataset, sol_date, (coalesce(sequence, '')), name);
+CREATE INDEX kasi_special_days_date_idx ON app.kasi_special_days (sol_date);
+
+CREATE TRIGGER kasi_special_days_touch_updated_at
+BEFORE UPDATE ON app.kasi_special_days
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+Dagster가 하루 1회 실행일 기준 과거 6개월부터 미래 18개월까지 upsert한다. 별도
+삭제는 없다.
 
 ## 7. 권한 / 보안
 

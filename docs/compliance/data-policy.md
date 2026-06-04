@@ -68,6 +68,14 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 - 처리방침에 위탁자 명시 (미국)
 - 자세히는 `docs/integrations/sentry.md`
 
+### 2.7 KASI / data.go.kr
+
+- `python-kasi-api`로 특일 정보와 POI별 위치별 해·달 출몰시각을 조회한다.
+- 서비스키는 `DATA_GO_KR_SERVICE_KEY`를 사용한다. 별도 `KASI_API_KEY`를 만들지 않는다.
+- 특일 정보 raw payload는 `app.kasi_special_days`, POI 출몰시각 raw payload는
+  `app.trip_poi_rise_sets`에 보존한다.
+- 자세히는 `docs/integrations/kasi.md`.
+
 ## 3. 라이브러리 위임 provider (`python-krtour-map` 소유)
 
 다음 provider는 본 저장소가 직접 호출하지 않음 — `python-krtour-map.providers`가
@@ -83,12 +91,12 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 - 국립공원공단 (`python-knps-api`): 트래킹 / 안전
 - 산림청 (`python-krforest-api`): 휴양림
 - 국가유산청 (`python-krheritage-api`): 문화재
-- 한국천문연구원 (`python-kasi-api`): 일출/일몰
 - VWorld (`python-vworld-api`): 경계 / 지오코딩
 - Juso.go.kr (`python-kraddr-geo` 경유): 도로명/지번
 
-본 저장소는 라이브러리 함수 호출 결과를 사용자에게 제공. provider TOS 준수는
-라이브러리 책임.
+본 저장소는 krtour-map OpenAPI 결과 또는 TripMate 직접 통합 결과를 사용자에게
+제공한다. krtour-map provider TOS 준수는 krtour-map 책임이고, KASI 직접 호출은
+TripMate 책임이다.
 
 처리방침에는 위탁자 명시:
 
@@ -100,6 +108,7 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 - "휴게소: 한국도로공사"
 - "해양: 국립해양조사원"
 - "대기질: 환경공단"
+- "천문/특일: 한국천문연구원"
 
 (모두 국내 정부/공공기관 — 국외 이전 의무 발생 안 함)
 

@@ -142,11 +142,8 @@ source apps/api/.venv/bin/activate
 uv pip install -e "apps/api[dev]"
 uv pip install "gdal==$(gdal-config --version)"
 
-# python-krtour-map editable (sibling checkout)
-cd ~/tripmate-workspaces
-git clone https://github.com/digitie/python-krtour-map.git
-cd tripmate-codex
-uv pip install -e ../python-krtour-map
+# python-krtour-map은 별도 sibling 저장소에서 실행 (API 9011 / admin 9012)
+# TripMate는 .env의 TRIPMATE_KRTOUR_MAP_API_BASE_URL로 연결
 
 # .env
 cp .env.example apps/api/.env

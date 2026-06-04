@@ -122,8 +122,8 @@ server = Server("tripmate-mcp")
 
 @server.tool("address_code_lookup")
 async def address_code_lookup(query_type: str, value: dict) -> dict:
-    # 라이브러리 호출
-    result = await app_state.krtour_map_client.address.lookup(query_type, value)
+    # kraddr-geo v2 REST 호출
+    result = await app_state.kraddr_geo_client.lookup(query_type, value)
     return {"matched_by": result.matched_by, "result": result.as_dict()}
 
 

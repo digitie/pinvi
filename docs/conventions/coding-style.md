@@ -139,25 +139,24 @@ layers = [
 
 - 라우터에서 HTTPException으로 변환
 
-### 2.8 라이브러리 호출
+### 2.8 krtour-map HTTP 호출
 
 ```python
-# 좋은 예 — 직접 호출
-from krtour.map import AsyncKrtourMapClient
+# 좋은 예 — OpenAPI HTTP client를 transport로만 사용
+from tripmate.api.clients.krtour_map import KrtourMapClient
 
 async def features_in_bounds(
     bbox: BBox,
     zoom: int,
     kinds: list[str],
-    client: AsyncKrtourMapClient = Depends(get_krtour_map_client),
+    client: KrtourMapClient = Depends(get_krtour_map_client),
 ):
     return await client.features_in_bounds(bbox, zoom, kinds)
 
 
-# 나쁜 예 — wrapper class (ADR-005 위반)
+# 나쁜 예 — feature 도메인 wrapper (ADR-026 위반)
 class KrtourMapGateway:
-    def __init__(self, client: AsyncKrtourMapClient): ...
-    async def features_in_bounds(self, ...): ...   # ❌ 금지
+    async def normalize_provider_raw(self, ...): ...   # 금지
 ```
 
 ### 2.9 SQLAlchemy

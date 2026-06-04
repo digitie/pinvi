@@ -37,9 +37,9 @@ docs/       — 본 저장소의 결정·기록·계약
 
 핵심 의존:
 
-- **`python-krtour-map`** (별 저장소 `F:\dev\python-krtour-map`, PyPI/Git URL pin):
-  지도 feature 정규화·저장 함수 라이브러리. TripMate는 함수 직접 호출로 사용
-  (REST 없음 — ADR-003 mirrored from `python-krtour-map` 측).
+- **`python-krtour-map`** (별 저장소 `F:\dev\python-krtour-map`):
+  지도 feature 정규화·저장 + OpenAPI API/Admin. TripMate는 최신 OpenAPI HTTP
+  계약으로 사용한다(ADR-026, API `9011` / admin `9012`).
 - **`python-*-api`** (별 저장소들): KMA, VisitKorea, OpiNet, MOIS, KREX, KHOA,
   국가유산, 산림청 등 한국 공공 API 클라이언트.
 - **`python-kraddr-geo`**: 주소·법정동·시군구 정규화/지오코딩.
@@ -49,21 +49,12 @@ docs/       — 본 저장소의 결정·기록·계약
 
 ## TripMate ↔ `python-krtour-map`
 
-```python
-# apps/api/app/etl/festival_asset.py (예시)
-from krtour.map import AsyncKrtourMapClient
+TripMate는 `python-krtour-map` 최신 `main`의 `openapi.user.json` 계약을 기준으로
+HTTP 호출한다. 대표 경로는 `GET /features/in-bounds`, `GET /features/search`,
+`GET /features/{feature_id}`, `POST /tripmate/features/batch`다.
 
-async with AsyncKrtourMapClient(
-    engine=tripmate_async_engine,
-    file_store=tripmate_rustfs_store,
-    kraddr_geo_client=tripmate_kraddr_client,
-) as client:
-    features = await client.features_in_bounds(bbox, kinds=["place", "event"])
-```
-
-`python-krtour-map`은 어떤 resource(engine, S3 client, provider client,
-geocoder)도 스스로 만들지 않고 TripMate에서 주입받는다. HTTP/REST는 사용하지
-않는다. 자세히는 `docs/krtour-map-integration.md`.
+TripMate는 `feature` / `provider_sync` schema를 직접 읽거나 `python-krtour-map`을
+import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 
 ## 책임 / 비책임 요약
 
@@ -73,7 +64,7 @@ geocoder)도 스스로 만들지 않고 TripMate에서 주입받는다. HTTP/RES
 - 여행 계획 도메인 (Trip, Day, POI 첨부, Notice plan, 공유)
 - Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
 - 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
-- Dagster orchestration (`python-krtour-map`의 collect/load 함수를 asset으로 호출)
+- Dagster orchestration (TripMate 자체 job + 외부 서비스 갱신 trigger)
 - 파일 스토리지(RustFS) 운영 API
 - 외부 통합 (Telegram, Gemini, Resend, 소셜 로그인 provider)
 
@@ -98,7 +89,7 @@ sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
 # 백엔드 (uv 권장)
 uv venv && uv pip install -e "apps/api[dev]"
-uv pip install -e "git+https://github.com/digitie/python-krtour-map@<sha>#egg=python-krtour-map"
+# krtour-map은 별도 프로그램으로 실행 (API 9011 / admin 9012)
 
 # 프론트엔드 / API / Dagster dev server
 npm install

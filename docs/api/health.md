@@ -54,7 +54,7 @@ GET /health/external
 }
 ```
 
-- `krtour_map`: `AsyncKrtourMapClient.ping()` 호출
+- `krtour_map`: krtour-map API `/debug/health` 또는 OpenAPI health 경로 호출
 - `rustfs`: HeadBucket 호출
 - `resend`: `/domains` GET (선택, rate limit 보호 위해 5분 캐시)
 - `kakao_map`: SDK 로드 가능 여부는 클라이언트 측 (서버는 X)

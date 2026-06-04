@@ -46,8 +46,8 @@ apps/api/
 │   ├── schemas/             # Pydantic
 │   ├── services/
 │   ├── repositories/        # app schema raw SQL
-│   ├── etl_bridge/
-│   │   └── krtour_map.py    # AsyncKrtourMapClient DI
+│   ├── clients/
+│   │   └── krtour_map.py    # krtour-map OpenAPI HTTP client
 │   └── webhooks/
 │       └── resend.py
 └── tests/{unit,integration,e2e}/
@@ -169,13 +169,13 @@ POI 편집은 `If-Match: version` (optimistic lock, J-2).
 ### 5.4 Feature / 지도 (H-4)
 
 - `GET /features/in-bounds?bounds=&zoom=&kinds[]=` — viewport 쿼리 + zoom별 클러스터 (I-4)
-- `GET /features/{id}` — 라이브러리 호출
+- `GET /features/{id}` — krtour-map OpenAPI 호출
 - `GET /features/{id}/weather` — `WeatherCard` (KMA 시간축 + sources 배열, R-4)
 - `GET /features/nearby?lat=&lng=&radius_m=` — 주변
 - `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_requests`)
 - `GET /search?q=` — 통합 검색 (2자 이상)
 
-라이브러리 호출 패턴은 `docs/krtour-map-integration.md` §6.
+krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
 
 ### 5.5 WebSocket (H-5)
 
@@ -243,7 +243,7 @@ POI 편집은 `If-Match: version` (optimistic lock, J-2).
 ## 8. 관련 문서
 
 - `docs/architecture.md` §2 백엔드 의존 방향
-- `docs/krtour-map-integration.md` (라이브러리 호출)
+- `docs/krtour-map-integration.md` (krtour-map OpenAPI HTTP)
 - `docs/spec/v8/00-infrastructure.md` (Sentry/Loki/Argon2)
 - `docs/spec/v8/01-data.md` (DB schema)
 - `docs/spec/v8/03-frontend.md` (WebSocket 클라이언트 쌍)

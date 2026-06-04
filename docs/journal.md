@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-04 (codex) — 최신 krtour-map/kraddr-geo/KASI 계약 반영
+
+**작업**: 사용자가 지시한 대로 `python-krtour-map` 최신 `main`을 별도 clean clone으로
+받아 `openapi.user.json` / `openapi.json` / `docs/tripmate-rest-api.md`를 확인했다.
+`python-kraddr-geo` 최신 `main`의 `openapi.json` / `llm-summary.md`와
+`python-kasi-api`의 특일·출몰시각 함수도 확인해 TripMate 문서에 반영했다.
+
+**핵심 결정**:
+- ADR-026 추가 — TripMate ↔ krtour-map은 더 이상 함수 직접 호출이 아니라 최신
+  OpenAPI HTTP 계약을 사용한다. API `9011`, admin `9012`.
+- ADR-002는 `superseded by ADR-026`으로 변경. `feature` / `provider_sync` schema
+  책임은 ADR-003 그대로 krtour-map 소유.
+- kraddr-geo v2 최신 표면에 `/v2/regions/within-radius`, `point_precision`,
+  `distance_m`, `include_geometry`, admin RustFS/ops 경로를 문서화했다.
+- KASI는 `python-kasi-api`와 `DATA_GO_KR_SERVICE_KEY`를 사용한다. 별도 `KASI_*`
+  API key는 만들지 않는다.
+
+**KASI 계약**:
+- 특일 정보는 하루 1회 Dagster job으로 과거 6개월~미래 18개월 월 범위를 조회해
+  `app.kasi_special_days`에 upsert한다. 별도 삭제는 없다.
+- POI 생성 시 좌표와 방문일로 "위치별 해달 출몰시각 정보조회"를 1회 호출하고
+  `app.trip_poi_rise_sets`에 저장한다. 정기 재조회는 없다.
+
+**후속**:
+- T-066 — krtour-map OpenAPI HTTP client 구현 + drift gate.
+- T-067 — KASI Dagster job / POI 생성 enqueue 구현.
+
 ## 2026-06-03 (codex) — RustFS 9003/9004 + Docker app 스크립트
 
 **작업**: 사용자 지시로 RustFS 저장소 포트를 API `9003`, console `9004`로 고정하고,

@@ -1,9 +1,9 @@
 # architecture.md
 
 `TripMate`의 아키텍처는 **monorepo + multi-process 애플리케이션** 모델이다. 본
-저장소는 사용자 대면 앱(FastAPI 백엔드 + Next.js 프론트)과 ETL orchestration
-(Dagster)을 담고, 지도 feature 도메인은 별 저장소 `python-krtour-map`을
-**함수 라이브러리**로 import해서 사용한다.
+저장소는 사용자 대면 앱(FastAPI 백엔드 + Next.js 프론트)과 TripMate 자체 ETL
+orchestration(Dagster)을 담고, 지도 feature 도메인은 별 저장소
+`python-krtour-map` 독립 프로그램의 **OpenAPI HTTP 계약**으로 사용한다.
 
 SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 자체 정리.
 
@@ -24,32 +24,28 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 │   models/   SQLAlchemy 2 async — app schema만                          │
 │   schemas/  Pydantic v2                                                │
 │                                                                        │
-│   from krtour.map import AsyncKrtourMapClient                          │
-│     → 함수 직접 호출 (HTTP 없음, ADR-003 from krtour-map 측)             │
-│                                                                        │
-│   from kraddr.geo import AsyncAddressClient                            │
-│   from python_visitkorea_api import ..., from python_kma_api import ...│
+│   httpx → krtour-map API :9011 (OpenAPI, ADR-026)                       │
+│   httpx → kraddr-geo v2 REST (ADR-025)                                  │
 └────────────────────────────────────────────────────────────────────────┘
                               │
        ┌──────────────────────┼──────────────────────────────┐
        ▼                      ▼                              ▼
 ┌──────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
 │ PostgreSQL16 │    │ RustFS (S3 호환)   │    │ python-krtour-map       │
-│ + PostGIS3.5 │    │ - app/             │    │ (함수 라이브러리)         │
+│ + PostGIS3.5 │    │ - app/             │    │ API/Admin :9011/:9012   │
 │ schema:      │    │   사용자 첨부      │    │                         │
 │ - app (TM)   │    │ - feature-media/   │    │ feature/provider_sync   │
 │ - feature    │    │   krtour-map 소유  │    │ schema 소유              │
 │ - provider_  │    │                    │    │                         │
-│   sync       │    └────────────────────┘    │ TripMate 주입 받음:      │
-│ - ops        │                              │   engine, file_store,   │
-│ - x_extension│                              │   kraddr_geo, provider  │
-└──────────────┘                              │   clients               │
+│   sync       │    └────────────────────┘    │ provider ETL 소유        │
+│ - ops        │                              │                         │
+│ - x_extension│                              │                         │
+└──────────────┘                              │                         │
        ▲                                       └─────────────────────────┘
        │
 ┌──────────────────────────────────────────────┐
 │ apps/etl (Dagster definitions/jobs/schedules)│
-│   asset: feature_event_festivals 등          │
-│   AsyncKrtourMapClient(.collect/.load)       │
+│   asset: KASI 특일/출몰시각, 알림, 보존정책 등 │
 └──────────────────────────────────────────────┘
 ```
 
@@ -59,7 +55,7 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 
 ```
 schemas → models → services → routes
-                  ↘ etl_bridge → krtour.map (외부 라이브러리)
+                  ↘ clients → krtour-map / kraddr-geo HTTP
 ```
 
 - `schemas`는 Pydantic v2 입출력. 다른 내부 모듈에 의존하지 않는다.
@@ -68,8 +64,8 @@ schemas → models → services → routes
   소유).
 - `services`는 비즈니스 로직. raw SQL이 필요하면 `app` schema에 한정.
 - `routes`는 FastAPI 라우터 + DI. 권한 미들웨어/dependency가 여기에 박힌다.
-- `etl_bridge`는 `AsyncKrtourMapClient` 주입 helper. 다른 라우터에서 의존성을
-  통해 쓴다.
+- `clients`는 외부 HTTP transport helper. krtour-map/kraddr-geo 계약을 호출하되
+  provider 변환이나 feature 정규화 로직을 만들지 않는다.
 
 CI에서 `import-linter`로 강제할 계약(코드 작성 단계 진입 후 박음):
 
@@ -114,54 +110,24 @@ forbidden_modules = [
 
 ### 2.3 ETL(`apps/etl`, Dagster)
 
-- 각 asset은 `AsyncKrtourMapClient`의 collect/load 함수를 호출한다.
-- TripMate-측 asset 구현 자체는 **얇은 어댑터** — provider client 인스턴스를
-  주입하고 결과를 logging만. 비즈니스 로직은 라이브러리 안에 있다.
+- 각 asset은 TripMate `app` schema 소유 job을 수행한다. 예: KASI 특일 일 1회
+  upsert, POI 출몰시각 생성 시 1회 갱신, 알림 outbox, PII retention.
+- krtour-map feature provider 적재 job은 krtour-map 저장소의 API/Admin/Dagster가
+  소유한다.
 - Asset 정의는 `apps/etl/assets/<name>.py`, 코드 위치는 `definitions.py`에 등록.
 
 ## 3. TripMate ↔ `python-krtour-map`
 
-```python
-# apps/api/app/etl_bridge/krtour_map.py (예시)
-from functools import lru_cache
-from sqlalchemy.ext.asyncio import create_async_engine
+TripMate는 최신 krtour-map `openapi.user.json`을 기준으로 HTTP 호출한다.
 
-from krtour.map import AsyncKrtourMapClient
-from kraddr.geo import AsyncAddressClient
+- API base URL: `TRIPMATE_KRTOUR_MAP_API_BASE_URL` (`http://localhost:9011`)
+- Admin base URL: `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` (`http://localhost:9012`)
+- 대표 경로: `GET /features/in-bounds`, `GET /features/search`,
+  `GET /features/{feature_id}`, `POST /tripmate/features/batch`
 
-from tripmate.api.core.config import Settings
-from tripmate.api.services.file_storage import get_file_store
-from tripmate.api.services.provider_clients import get_provider_clients
-
-@lru_cache
-def get_feature_engine():
-    return create_async_engine(
-        Settings().krtour_map_pg_dsn.get_secret_value(),
-        pool_size=Settings().pg_pool_size,
-        pool_pre_ping=True,
-        connect_args={"server_settings": {"search_path": "public,x_extension"}},
-    )
-
-async def get_krtour_map_client() -> AsyncKrtourMapClient:
-    return AsyncKrtourMapClient(
-        engine=get_feature_engine(),
-        file_store=await get_file_store(),
-        kraddr_geo_client=AsyncAddressClient(...),
-        providers=await get_provider_clients(),
-    )
-```
-
-- TripMate는 SQLAlchemy 2 async engine, 객체 저장소 client, kraddr-geo client,
-  provider client를 라이브러리에 주입한다.
-- 라이브러리는 어떤 resource도 스스로 생성하지 않는다.
-- TripMate ↔ 라이브러리 사이에 HTTP는 없다.
-- 위 `kraddr_geo_client` 주입은 **krtour-map의 적재(write) 시 주소 보강용**이다
-  (krtour-map 내부 책임, 그쪽 ADR-006). **사용자 대면 geocoding(조회)** 은 이와
-  별개로 `kraddr-geo` v2 REST를 직접 HTTP 호출한다 (ADR-025,
-  `docs/integrations/kraddr-geo.md`). 두 경로를 혼동하지 않는다.
-- krtour-map API/Admin(`krtour-map-admin`, API `9011` / admin `9012`)은 별도
-  독립 프로그램이다. TripMate는 의존하지 않는다.
-  운영자가 별도로 띄울 수 있다.
+TripMate는 `python-krtour-map` import, `feature` schema 직접 SQL, provider 변환을
+하지 않는다. 사용자 대면 geocoding(조회)은 별개로 `kraddr-geo` v2 REST를 직접
+HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 
 자세한 통합 가이드는 `krtour-map-integration.md`.
 
@@ -171,17 +137,16 @@ async def get_krtour_map_client() -> AsyncKrtourMapClient:
 
 1. 브라우저 `apps/web` → TripMate API
 2. `apps/api/app/api/routes/trips.py` 라우터가 사용자 인증 + Trip 도메인 처리
-3. POI 첨부 시 `feature_id`로 `python-krtour-map`의 `feature.search_in_bounds` 호출
-4. 라이브러리는 PostgreSQL `feature` schema에서 결과 반환
+3. POI 첨부 시 `feature_id`로 krtour-map `POST /tripmate/features/batch` 호출
+4. krtour-map API가 `feature` schema에서 결과 반환
 5. 라우터가 Pydantic 응답 셰입으로 변환해 클라이언트에 반환
 
-### 4.2 데이터 적재 (예: 축제 카탈로그)
+### 4.2 TripMate 자체 ETL (예: KASI 특일)
 
-1. Dagster scheduler가 `feature_event_festivals` asset 트리거
-2. Asset 함수가 `AsyncKrtourMapClient` 가져옴 (TripMate DI)
-3. `client.providers.visitkorea.festival_to_bundles(...)` 호출
-4. `client.load_festivals(bundles)` 호출 → `feature` schema upsert
-5. 로그 + 메타데이터는 Dagster `ops` schema에 기록
+1. Dagster scheduler가 `kasi_special_days_daily` asset/job 트리거
+2. `python-kasi-api`로 특일 계열 dataset을 조회
+3. `app.kasi_special_days`에 upsert
+4. 별도 삭제 없이 로그 + 메타데이터는 Dagster `ops` schema에 기록
 
 ## 5. 운영 환경 (Odroid M1S)
 
@@ -225,8 +190,8 @@ async def get_krtour_map_client() -> AsyncKrtourMapClient:
 1. NTFS worktree `F:/dev/tripmate-<agent>`에서 Windows `git.exe`로 branch/commit/push
 2. WSL ext4 테스트 미러 `~/tripmate-workspaces/tripmate-<agent>`에서 테스트/Docker 실행
 3. `dataset/`, `refdocs/`는 NTFS에 두고 ext4에 심볼릭 링크 또는 직접 참조
-4. `python-krtour-map`은 git URL pin + editable install (개발 중에는 sibling
-   checkout으로 `uv pip install -e ../python-krtour-map`)
+4. `python-krtour-map`은 별도 sibling 저장소에서 API `9011` / admin `9012`로 실행
+   하고, TripMate는 HTTP base URL만 설정한다.
 5. 동기는 NTFS → ext4 단방향. ext4 미러에서 commit/push 금지
 
 ## 9. v1과의 차이 (요약)
