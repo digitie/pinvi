@@ -19,7 +19,8 @@
   - **GitHub Actions CI/CD 재활성화** (ADR-021) — Sprint 1~3 동안 비활성이었음.
     api/web/etl workflow + API key 없는 review reminder + lint/typecheck/test 게이트
     복원.
-  - **`maplibre-vworld-js` 공통 기능 PR 머지 완료** —
+  - **`maplibre-vworld-js` 공통 기능 PR 머지 완료** — 2026-06-05 기준 완료
+    (`maplibre-vworld-js` PR #37 + PR #46, merge `f1dd74b9`).
     `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"
     모두 라이브러리에 머지된 후에만 v0.1.0 tag. TripMate 전용 항목은 본 저장소에
     구현.
@@ -94,7 +95,8 @@
 - [ ] DoD 모두 통과
 - [ ] 사용자가 PC와 모바일에서 가입 → 여행 생성 → POI 추가 → 지도 확인 가능
 - [ ] `python-krtour-map` 통합 e2e 통과
-- [ ] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5)
+- [x] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5) — PR #37 구현 +
+  PR #46 카탈로그 정합화 완료
 - [ ] **GitHub Actions CI/CD 모든 workflow green** (ADR-021)
 - [ ] `docs/journal.md` Sprint 4 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 5
@@ -119,6 +121,10 @@
 - 좌표 validation (§6.8)
 - SSR / hydration 안정화 (§6.9)
 
+**상태 (2026-06-05)**: 라이브러리 구현 PR #37과 카탈로그 정합화 PR #46이 모두
+머지되어 선행 라이브러리 조건은 완료다. 남은 작업은 TripMate frontend PR-C에서
+`maplibre-vworld` dependency pin, 실제 import, 지도 e2e를 처리하는 것이다.
+
 **판정 기준**: "어떤 지도 앱에서도 쓸 수 있는 일반 기능"이면 라이브러리. TripMate
 도메인 (16색 팔레트 매핑 / POI dnd 비즈니스 룰 / Notice plan copy) 이면 TripMate.
 
@@ -141,7 +147,7 @@ PR 생성.
 
 1. Sprint 4 DoD + 종료 체크리스트 모두 통과
 2. `maplibre-vworld-js` 신규 버전 npm 또는 git tag 발행 (라이브러리 측 PR 머지 후)
-3. TripMate `package.json` `maplibre-vworld-js` 버전 pin 갱신
+3. TripMate `package.json` `maplibre-vworld` 버전 pin 갱신
 4. `pnpm install` / `npm install` + lockfile 갱신 commit
 5. `CHANGELOG.md` 작성 — 사용자 대면 기능 위주
 6. `git tag -a v0.1.0 -m "v0.1.0 — 지도 + 여행 + Admin 기본기능"`

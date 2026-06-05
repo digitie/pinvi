@@ -59,18 +59,22 @@ worker batch, 비밀번호 재설정 요청/확정 API, `api_call_log` httpx eve
 통합 테스트를 추가했다. `.github/workflows/api.yml`은 PR에서 `pytest
 tests/integration -q`를 실행한다. Google OAuth client id는 네 TripMate worktree의
 로컬 `.env`에 반영했다.
+**T-063 maplibre consumer sync 완료** (2026-06-05 codex) — `maplibre-vworld-js`
+PR #46(`docs/consumer-feature-catalog.md` 정합화, `build-and-test` green, merge
+`f1dd74b9`)를 머지했고, TripMate §6/§11.1 snapshot과 Sprint 4 라이브러리 선행
+조건을 완료 처리했다. 실제 `maplibre-vworld` dependency pin/import/e2e는 PR-C
+frontend 구현에서 처리한다.
 
 ## 다음 한 작업
 
 우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **T-063** — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
-2. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
-3. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
+1. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
+2. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-4. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
+3. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
    check로 걸지 않는다.
 
 이후 **PR-C (프론트엔드)**:

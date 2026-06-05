@@ -311,13 +311,15 @@ export function renderPoiMarker(poi: Poi) {
 >
 > **v0.1.0 게이트** (Sprint 4 종료 시): 라이브러리 카탈로그 §1의 "PR 필요" 항목이
 > 모두 머지된 후에만 v0.1.0 tag (`docs/sprints/SPRINT-4.md` §5).
+> 2026-06-05 기준 `maplibre-vworld-js` PR #37(구현) + PR #46(카탈로그 정합화,
+> merge `f1dd74b9`)가 머지되어 라이브러리 선행 PR 조건은 완료다.
 >
 > **TripMate 전용 항목**: 라이브러리 카탈로그 §2 참고. 본 저장소가 직접 구현
 > (`apps/web/lib/markerPalette.ts` 등). 라이브러리에 박지 않는다.
 
-본 라이브러리에 다음 기능이 **부족할 가능성** — 사용 중 발견되면
-`maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출 (ADR-005 mirror: TripMate에
-wrapper 만들지 않고 라이브러리에 보강).
+다음 표는 TripMate가 사용하는 공통 기능 snapshot이다. 사용 중 추가 부족 기능이
+발견되면 `maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출한다(ADR-005 mirror:
+TripMate에 wrapper 만들지 않고 라이브러리에 보강).
 
 ### 6.1 viewport 이벤트
 
@@ -332,7 +334,7 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 
 | 기능 | 사용처 | 현재 상태 |
 |------|--------|----------|
-| `<UserLocationMarker lngLat accuracy_m />` | `useUserLocation` hook 결과 표시 | ❓ — `<PulsingMarker>`로 대체 가능? |
+| `<UserLocationMarker lngLat accuracy_m />` | `useUserLocation` hook 결과 표시 | ✅ 제공 (`PulsingMarker` 합성) |
 | `flyToUserLocation` prop pattern | "내 위치로 이동" 버튼 | ✅ 선언형 `center` prop 변경 또는 `flyToOptions` 사용 |
 
 ### 6.3 우클릭 메뉴
@@ -340,40 +342,40 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 | 기능 | 사용처 | 현재 상태 |
 |------|--------|----------|
 | `onContextMenu(e)` 지도 우클릭 | 우클릭 메뉴 (계획 추가/주변/날씨/요청) | ✅ 제공 (raw `MapMouseEvent`) |
-| `<MakiMarker onContextMenu>` 마커 우클릭 | 마커 색/아이콘 변경 메뉴 | ❓ |
+| `<MakiMarker onContextMenu>` 마커 우클릭 | 마커 색/아이콘 변경 메뉴 | ✅ `MarkerProps.onContextMenu` 상속 |
 
 ### 6.4 Place / Price / Weather 마커 props 확장
 
-| 컴포넌트 | 필요 prop | 비고 |
+| 컴포넌트 | 현재 처리 | 비고 |
 |----------|----------|------|
-| `PlaceMarker` | `title`, `description`, `imageUrl`, `category` | tooltip / popup |
-| `PriceMarker` | `currency`, `unit` (휘발유/경유/LPG), `change` (+/-) | 휘발유 표시 |
-| `WeatherMarker` | `temp`, `condition` (`clear`/`cloudy`/`rain`), `precipitation_prob` | KMA 응답 매핑 |
-| (신규) `EventMarker` | `event_period`, `is_active` | 축제 별표 + 진행/예정 구분 |
-| (신규) `NoticeMarker` | `notice_type` (`accident`/`closure`/`sea_parting`/`tide`), `severity` | 공지/자연현상 |
+| `PlaceMarker` | ✅ `title`, `description`, `category`, `photoUrl`, `link` | marker card / popup |
+| `PriceMarker` | ✅ `price`, `PriceItem[]`, `currency`, LOD | 유종/단위 label은 TripMate 데이터 매핑 |
+| `WeatherMarker` | ✅ `temperature`, `condition`, `hourlyForecast` | KMA condition/강수확률은 TripMate에서 매핑 |
+| `EventMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
+| `NoticeMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
 
 ### 6.5 Tooltip / Popup
 
 | 기능 | 비고 |
 |------|------|
-| 마커 hover tooltip | 이름 / 카테고리 표시 |
+| 마커 hover tooltip | ✅ `Marker`의 `title` / `description` / `imageUrl` prop |
 | 마커 click popup | `Popup` 컴포넌트 제공 (이전 `MapPopup` 에서 이름 변경) |
-| 양방향 연동 — 패널 ↔ 마커 selection | `selectedId` prop으로 강조 |
+| 양방향 연동 — 패널 ↔ 마커 selection | ✅ `selected` / `highlighted` prop으로 강조 |
 
 ### 6.6 카메라 / 애니메이션 제어
 
 | 기능 | 비고 |
 |------|------|
-| `cameraTarget` prop — `{center, zoom, bearing, pitch}` | 선언형 flyTo |
-| `cameraTransition` prop — `instant` / `smooth` / `flyOver` | 애니메이션 종류 |
-| `bbox` prop — `fitBounds` 등가 | viewport reset |
+| `cameraTarget` prop — `{center, zoom, bearing, pitch}` | ✅ 선언형 flyTo |
+| `cameraTransition` prop — `instant` / `smooth` / `flyOver` | ✅ 애니메이션 종류 |
+| `bbox` prop — `fitBounds` 등가 | ✅ viewport reset |
 
 ### 6.7 거리 / 측정
 
 | 기능 | 비고 |
 |------|------|
-| `<MeasureLine points={...}>` | 사용자 측정 도구 |
-| `haversine(a, b)` utility | 라이브러리 export — 클라이언트 직선 거리 |
+| `<MeasureLine points={...}>` | ✅ 사용자 측정 도구 |
+| `haversine(a, b)` utility | ✅ 라이브러리 export — 클라이언트 직선 거리 |
 
 ### 6.8 좌표 / 검증
 
@@ -507,6 +509,16 @@ TripMate 클라이언트 정책:
 - [ ] 라이브러리에 부족한 기능 발견 시 — TripMate에 wrapper 만들지 않고
       `maplibre-vworld-js` 저장소에 issue + PR (ADR-005 mirror)
 - [ ] 본 문서 §6 보강 필요 항목 표 갱신
+
+### 11.1 T-063 consumer sync 결과
+
+- [x] `maplibre-vworld-js` PR #37 — T-033~T-037 소비자 공통 기능 구현 완료.
+- [x] `maplibre-vworld-js` PR #46 — `docs/consumer-feature-catalog.md` source of
+  truth 정합화, `build-and-test` green, merge `f1dd74b9`.
+- [x] TripMate §6 snapshot을 라이브러리 카탈로그의 현재 상태와 동기화.
+- [ ] TripMate frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld` git
+  URL/tag를 pin하고 lockfile을 갱신.
+- [ ] TripMate frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
 
 ## 12. AI 에이전트 (Codex / Antigravity) 대응
 
