@@ -17,6 +17,7 @@ const NAV: { href: string; label: string; sprint: number }[] = [
   { href: '/admin/features', label: '라이브러리', sprint: 3 },
   { href: '/admin/pois', label: 'POI', sprint: 3 },
   { href: '/admin/etl', label: 'ETL', sprint: 5 },
+  { href: '/admin/grafana', label: 'Grafana', sprint: 5 },
   { href: '/admin/api-calls', label: 'API 호출', sprint: 3 },
   { href: '/admin/emails', label: '이메일 큐', sprint: 3 },
   { href: '/admin/audit', label: '감사 로그', sprint: 3 },

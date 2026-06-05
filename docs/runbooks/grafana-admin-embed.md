@@ -70,12 +70,22 @@ export default function GrafanaPage() {
 }
 ```
 
+현재 구현은 다음 env를 사용한다.
+
+```bash
+NEXT_PUBLIC_GRAFANA_URL=http://localhost:3002
+NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/tripmate/overview?orgId=1&kiosk=tv
+```
+
+운영에서는 `NEXT_PUBLIC_GRAFANA_URL`을 실제 Grafana origin으로 교체한다. 대시보드
+slug/uid가 바뀌면 `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`만 바꾼다.
+
 ## 3. CSP
 
 `apps/web` 다음 헤더 박음:
 
 ```
-Content-Security-Policy: frame-src https://grafana.tripmate.kr;
+Content-Security-Policy: frame-src 'self' <NEXT_PUBLIC_GRAFANA_URL origin>; frame-ancestors 'self';
 ```
 
 Grafana 측:

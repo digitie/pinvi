@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-110 Admin Grafana iframe embed
+
+**작업**: krtour-map과 무관한 운영 UI 후보로 `/admin/grafana` iframe shell을 먼저
+연결했다.
+
+**변경**:
+- `apps/web/app/(admin)/admin/grafana/page.tsx` — Grafana iframe, 새로고침, 새 창
+  action, embed origin 표시를 추가했다.
+- `apps/web/app/(admin)/admin/layout.tsx` — Admin navigation에 Grafana 항목 추가.
+- `apps/web/next.config.mjs` — `/admin/grafana`에 Grafana origin 대상 `frame-src`
+  CSP를 추가했다.
+- `.env.example`, `docs/runbooks/grafana-admin-embed.md` —
+  `NEXT_PUBLIC_GRAFANA_URL`, `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`를 명시했다.
+- `apps/web/e2e/admin-grafana.e2e.ts` — admin guard 뒤에서 iframe shell이 렌더링되고
+  krtour-map API `9011`을 호출하지 않음을 검증한다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run typecheck --workspace apps/web`
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run lint --workspace apps/web`
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... admin-grafana.e2e.ts`
+  — 1 passed
+
+**다음**: T-109 geofencing은 krtour-map 비의존이지만 보안/운영 정책 범위라
+ADR-018과 `docs/runbooks/korea-only.md`를 먼저 확인한다.
+
 ## 2026-06-05 (codex) — T-075 Trip / notice plan 사용자 shell
 
 **작업**: krtour-map feature 조회 없이 TripMate 자체 Trip / notice plan API만으로
