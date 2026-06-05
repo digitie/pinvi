@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     tripmate_bootstrap_admin_email: str = "admin@ad.min"
     tripmate_bootstrap_admin_password: str = ""
 
+    # Backup / Restore (ADR-022)
+    tripmate_backup_dir: str = ".tmp/backups"
+    tripmate_backup_script_path: str = "scripts/backup-db.sh"
+    tripmate_restore_script_path: str = "scripts/restore-db.sh"
+    tripmate_backup_timeout_seconds: int = 900
+    tripmate_backup_schema: str = "app"
+
     # Feature flag
     tripmate_enable_seed: bool = False
 

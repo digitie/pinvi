@@ -1,8 +1,11 @@
 # 인증 API (`/auth/*`)
 
-이메일 가입 + verify + JWT 로그인 + Google / Naver / Kakao OAuth + 비밀번호 재설정.
+이메일 가입 + verify + JWT 로그인 + Google OAuth + 비밀번호 재설정.
 공통 규약은 [`common.md`](./common.md). 소셜 로그인 흐름 디테일은
 [`docs/integrations/social-login.md`](../integrations/social-login.md).
+
+현재 OAuth provider는 **Google만 활성**이다. Naver/Kakao OAuth는 미래 작업으로
+분리했고, 현재 `/auth/oauth/providers`에는 노출하지 않는다.
 
 ## 1. 모델
 
@@ -11,7 +14,7 @@
 | `app.users` | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only) |
 | `app.user_sessions` | refresh 토큰 hash + IP/UA + 만료/폐기 |
 | `app.user_email_verifications` | verify/reset 토큰 (해시만 저장) |
-| `app.user_oauth_identities` | provider + provider_user_id (Google sub / Naver response.id / Kakao id) |
+| `app.user_oauth_identities` | provider + provider_user_id (현재 Google sub, Naver/Kakao는 미래 작업) |
 | `app.user_consents` | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...) |
 | `app.oauth_login_states` | OAuth state/nonce/PKCE hash, TTL 10분 |
 
@@ -252,7 +255,7 @@ Content-Type: application/json
 - 토큰 검증 + `password_hash` 갱신 + 모든 `user_sessions` `revoked_at = now()` (로그아웃 전체)
 - 응답 200, Set-Cookie 두 개 (자동 로그인)
 
-## 6. Google / Naver / Kakao OAuth
+## 6. Google OAuth
 
 자세한 흐름은 [`docs/integrations/social-login.md`](../integrations/social-login.md).
 
@@ -264,15 +267,14 @@ Content-Type: application/json
 {
   "data": {
     "providers": [
-      { "provider": "google", "enabled": true },
-      { "provider": "naver", "enabled": true },
-      { "provider": "kakao", "enabled": true }
+      { "provider": "google", "enabled": true }
     ]
   }
 }
 ```
 
-`enabled`는 환경변수 (`TRIPMATE_<PROVIDER>_OAUTH_CLIENT_ID` 존재 여부).
+`enabled`는 `TRIPMATE_GOOGLE_OAUTH_CLIENT_ID` 존재 여부다. Naver/Kakao는 future
+provider라 설정값이 있어도 현재 응답에 포함하지 않는다.
 
 ### 6.2 `POST /auth/oauth/google/start`
 
@@ -291,7 +293,7 @@ Content-Type: application/json
 - `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분). PKCE verifier는
   `state`와 서버 secret으로 재생성하므로 DB에는 hash만 남긴다.
 
-### 6.3 `GET /auth/oauth/{provider}/callback`
+### 6.3 `GET /auth/oauth/google/callback`
 
 ```http
 GET /auth/oauth/google/callback?code=...&state=...
@@ -300,13 +302,12 @@ GET /auth/oauth/google/callback?code=...&state=...
 처리:
 
 1. `state` hash 검증 + `expires_at > now()` + `consumed_at IS NULL`
-2. `code` → access token 교환 (provider 별 endpoint)
-3. provider userinfo 호출 → `provider_user_id`, `email`, `email_verified`
+2. `code` → Google access token 교환
+3. Google userinfo 호출 → `provider_user_id`, `email`, `email_verified`
 4. `app.user_oauth_identities` 조회/upsert
 5. 로그인 / 신규 가입 분기:
    - Google `email_verified=true` → 자동 user 생성 또는 기존 user 연결
-   - Naver → `email_verified` 없음. 신규는 별도 verify 메일 발송 후 연결
-   - Kakao `is_email_valid && is_email_verified` → Google과 동일 처리
+   - Naver/Kakao → 미래 작업. 현재 callback route 없음.
 
 응답:
 
@@ -316,7 +317,7 @@ GET /auth/oauth/google/callback?code=...&state=...
     `OAUTH_STATE_INVALID` / `OAUTH_PROVIDER_ERROR`
   - Naver/Kakao 후속 구현 시 provider별 세부 code를 추가한다.
 
-### 6.4 `POST /auth/oauth/{provider}/link`
+### 6.4 `POST /auth/oauth/google/link`
 
 기존 user 계정에 provider 연결 (이미 로그인 상태).
 
@@ -331,7 +332,7 @@ Cookie: tripmate_access=...
 응답 200: `{ "data": { "authorize_url": "..." } }`. 클라이언트가 top-level
 navigation.
 
-### 6.5 `DELETE /auth/oauth/{provider}`
+### 6.5 `DELETE /auth/oauth/google`
 
 ```http
 DELETE /auth/oauth/google

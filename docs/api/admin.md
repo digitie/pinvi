@@ -48,6 +48,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/integrity` / `POST /admin/integrity/{rule}/fix` | data_integrity_violations | 5 |
 | `WS /admin/debug/logs` | Loki LogQL stream | 5 |
 | `GET /admin/debug/request/{request_id}` | X-Request-Id 타임라인 | 5 |
+| `GET /admin/backup/snapshots` | `app` schema backup snapshot 목록 | 5 |
+| `POST /admin/backup/snapshot` | 수동 backup snapshot 생성 + audit | 5 |
 | `GET /admin/rustfs/objects` / `DELETE` | RustFS 객체 관리 | 2 |
 | `POST /admin/seed/*` | dev/staging seed 시나리오 (운영 차단) | 3 |
 | `POST /admin/reset` | DB reset (dev/staging only) | 3 |
@@ -303,16 +305,70 @@ Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 X-Request-Id 기반 단일 요청 타임라인. structlog 로그 + Sentry transaction +
 `app.api_call_log` row 합쳐 보여줌.
 
-## 11. Seed / Reset (dev/staging only)
+## 11. Backup / Restore 1차
 
-### 11.1 `POST /admin/seed/scenarios/{scenario_key}`
+ADR-022 Sprint 5 1차 범위. 본 API는 TripMate 소유 `app` schema backup snapshot만
+다룬다. `feature` / `provider_sync` schema는 `python-krtour-map` 책임이다.
+
+### 11.1 `GET /admin/backup/snapshots`
+
+```http
+GET /admin/backup/snapshots?limit=50
+```
+
+- 권한: `admin` / `operator` / `cpo`
+- 저장 위치: `TRIPMATE_BACKUP_DIR`의 `*.dump`
+- `.sha256` 파일이 있으면 `status="verified"`, 없으면 `status="available"`
+
+응답 200:
+
+```jsonc
+{
+  "data": [
+    {
+      "snapshot_id": "tripmate-app-20260606-003000",
+      "filename": "tripmate-app-20260606-003000.dump",
+      "path": "/var/lib/tripmate/backups/tripmate-app-20260606-003000.dump",
+      "size_bytes": 2097152,
+      "checksum_sha256": "b...",
+      "status": "verified",
+      "created_at": "2026-06-06T00:30:00Z"
+    }
+  ]
+}
+```
+
+### 11.2 `POST /admin/backup/snapshot`
+
+```http
+POST /admin/backup/snapshot
+Content-Type: application/json
+
+{ "access_reason": "배포 전 수동 snapshot" }
+```
+
+- 권한: `admin`
+- 동작: `TRIPMATE_BACKUP_SCRIPT_PATH`를 subprocess로 실행하고 `BACKUP_FILE=...`
+  출력 또는 새 dump 파일을 snapshot으로 인식한다.
+- audit: `app.admin_audit_log`에 `action="backup.snapshot"` 기록
+- 실패: `503 SERVICE_UNAVAILABLE`, `error.code="BACKUP_FAILED"`
+
+응답 201: `GET /admin/backup/snapshots` 항목과 동일한 snapshot 객체.
+
+단순 restore는 API가 아니라 `scripts/restore-db.sh`와
+[`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
+핫스왑 restore UI/API는 Sprint 6의 T-111 범위로 남긴다.
+
+## 12. Seed / Reset (dev/staging only)
+
+### 12.1 `POST /admin/seed/scenarios/{scenario_key}`
 
 `scenario_key`: SPEC V8 M-13 8 시나리오 키 (`new_user_first_trip` 등).
 
 운영 환경에서는 라우트 자체 비활성 (`ENABLE_SEED` 환경변수 false → router include
 안 함). 404.
 
-### 11.2 `POST /admin/reset`
+### 12.2 `POST /admin/reset`
 
 ```jsonc
 { "confirm": "RESET", "admin_password": "..." }
@@ -323,10 +379,10 @@ X-Request-Id 기반 단일 요청 타임라인. structlog 로그 + Sentry transa
 - 라이브러리 schema는 별도 reset endpoint (`POST /admin/krtour-map/reset`)
 - 자동으로 `new_user_first_trip` 시나리오 적용
 
-## 12. AI agent 구현 체크리스트
+## 13. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/api/v1/admin/__init__.py` 라우터 분기
-- [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,seed,reset,rustfs}.py`
+- [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,backup,seed,reset,rustfs}.py`
 - [ ] `apps/api/app/services/admin/{entity_browser,entity_crud,audit_chain,seed_scenarios,reset}.py`
 - [ ] `apps/api/app/middleware/admin_audit.py` (chain prev_hash + content_hash)
 - [ ] `apps/api/app/middleware/rbac.py` (`roles` 검사 + 404 변환)

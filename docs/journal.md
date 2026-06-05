@@ -2,6 +2,49 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-115 Backup snapshot foundation + T-116 Google-only OAuth
+
+**작업**: krtour-map과 무관한 운영/인증 후보로 ADR-022 Sprint 5 backup snapshot
+foundation을 구현하고, 현재 OAuth provider 범위를 Google-only로 정리했다.
+
+**변경**:
+- `scripts/backup-db.sh`, `scripts/restore-db.sh` — TripMate 소유 `app` schema custom
+  dump / restore 스크립트 추가. backup은 `.dump`와 `.sha256`을 생성한다.
+- `apps/api/app/services/backup_service.py`,
+  `apps/api/app/api/v1/admin/backup.py` — snapshot 목록 조회와 수동 snapshot 생성
+  endpoint(`GET /admin/backup/snapshots`, `POST /admin/backup/snapshot`) 추가.
+- `packages/schemas`, `packages/api-client`, `apps/web/app/(admin)/admin/backup/page.tsx`
+  — admin backup snapshot 목록 / 수동 trigger UI와 client schema 연결.
+- `apps/api/app/api/v1/oauth.py`, `apps/web/app/(auth)/login/page.tsx` — 현재 provider
+  응답과 UI를 Google만 활성으로 고정. Naver/Kakao는 T-122 미래 작업으로 분리.
+- `.env.example`, `docs/api/{admin,auth}.md`,
+  `docs/{architecture,runbooks}/backup-restore.md`,
+  `docs/integrations/social-login.md`, `docs/tasks.md`, `docs/resume.md` — backup
+  환경변수, API/runbook, Google-only OAuth 정책, 신규 비의존 backlog 반영.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run pytest -s tests/unit/test_backup_service.py tests/integration/test_oauth_google.py::test_providers_endpoint_exposes_google_only_for_now -q`
+  — 4 passed
+- WSL2 ext4 mirror:
+  `uv run ruff format --check app tests/unit/test_backup_service.py tests/integration/test_oauth_google.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/unit/test_backup_service.py tests/integration/test_oauth_google.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace packages/schemas`,
+  `npm run typecheck --workspace packages/api-client`,
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... admin-backup.e2e.ts`
+  — 1 passed
+- NTFS worktree: `git diff --check`
+
+**다음**: T-117 회원가입 약관 동의 화면 + `user_consents` 저장 보강부터 진행한다.
+Naver/Kakao OAuth는 현재 사용하지 않고 T-122 미래 작업으로 둔다.
+
 ## 2026-06-05 (codex) — T-109 한국 전용 geofencing FastAPI fallback
 
 **작업**: krtour-map과 무관한 보안/운영 후보로 ADR-018의 3차 FastAPI fallback을

@@ -128,11 +128,16 @@ async def test_no_link_when_email_unverified(session_factory) -> None:
         assert linked is None
 
 
-async def test_providers_endpoint(client) -> None:
+async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "tripmate_google_oauth_client_id", "google-client")
+    monkeypatch.setattr(settings, "tripmate_naver_oauth_client_id", "naver-client")
+    monkeypatch.setattr(settings, "tripmate_kakao_oauth_rest_api_key", "kakao-client")
+
     resp = await client.get("/auth/oauth/providers")
+
     assert resp.status_code == 200
-    providers = {p["provider"] for p in resp.json()["data"]["providers"]}
-    assert providers == {"google", "naver", "kakao"}
+    providers = resp.json()["data"]["providers"]
+    assert providers == [{"provider": "google", "enabled": True}]
 
 
 async def test_me_returns_linked_oauth_identities(

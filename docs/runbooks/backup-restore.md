@@ -10,7 +10,7 @@
 journalctl -u tripmate-backup --since "24 hours ago" | tail -20
 
 # 또는 Dagster UI
-open https://api.tripmate.kr/admin/etl
+open https://tripmateapi.digitie.mywire.org/admin/etl
 # asset `daily_postgres_backup` 최근 실행 확인
 ```
 
@@ -27,9 +27,13 @@ open https://api.tripmate.kr/admin/etl
 1. /admin/backup 진입 (admin role 필요)
 2. "지금 백업" 버튼 클릭
 3. 사유 입력 (audit log에 기록)
-4. progress 확인 (preparing → dumping → uploading → done)
-5. 결과 snapshot id 메모
+4. 생성 완료 메시지 확인
+5. snapshot 목록에서 파일명 / 생성 시각 / 크기 / sha256 상태 확인
 ```
+
+현재 UI는 Sprint 5 1차 범위다. `POST /admin/backup/snapshot`으로
+`scripts/backup-db.sh`를 실행하고 결과 snapshot을 표시한다. 진행률 stream,
+RustFS/외부 미러 표시, 핫스왑 restore 버튼은 Sprint 6 T-111에서 확정한다.
 
 ### 2.2 CLI (긴급)
 
@@ -40,8 +44,20 @@ sudo ./scripts/backup-db.sh
 
 # 결과
 ls -la /var/lib/tripmate/backups/
-# backup-20260601-143052.dump  (custom format)
+# tripmate-app-20260606-003000.dump
+# tripmate-app-20260606-003000.dump.sha256
 ```
+
+환경변수:
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `TRIPMATE_BACKUP_DIR` | `.tmp/backups` | dump 저장 디렉터리 |
+| `TRIPMATE_BACKUP_SCHEMA` | `app` | TripMate 소유 schema |
+| `TRIPMATE_BACKUP_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | backup 전용 DB URL override |
+
+스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
+단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다.
 
 ## 3. Restore — 단순 (긴급)
 
@@ -55,23 +71,31 @@ cd /opt/tripmate
 docker compose -f docker-compose.app.yml stop api web
 
 # 2. 검증
-pg_restore --list /var/lib/tripmate/backups/backup-20260601.dump | head -20
+pg_restore --list /var/lib/tripmate/backups/tripmate-app-20260606-003000.dump | head -20
 
 # 3. restore
-sudo ./scripts/restore-db.sh /var/lib/tripmate/backups/backup-20260601.dump
+sudo ./scripts/restore-db.sh /var/lib/tripmate/backups/tripmate-app-20260606-003000.dump
 
 # 4. 정합성 점검
 docker compose -f docker-compose.app.yml start api
 sleep 5
-curl -fsS https://api.tripmate.kr/api/v1/healthz/db
+curl -fsS https://tripmateapi.digitie.mywire.org/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
-  https://api.tripmate.kr/api/v1/admin/audit/verify-chain | jq .
+  https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
 
 # 5. 트래픽 재개
 docker compose -f docker-compose.app.yml start web
 ```
 
 다운타임 5~15분.
+
+`scripts/restore-db.sh` 환경변수:
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `TRIPMATE_RESTORE_SCHEMA` | `TRIPMATE_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema |
+| `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore 전용 DB URL override |
+| `TRIPMATE_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
 
 ## 4. Restore — 핫스왑 (정상 절차, Sprint 6 이후)
 

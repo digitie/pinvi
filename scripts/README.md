@@ -6,8 +6,8 @@
 |---------|------|--------|
 | `docker-app.sh` | App 컨테이너 build/up/down/status/logs/smoke (`docker-compose.app.yml`, API 9021/Web 9022/RustFS 9003·9004) | 1 |
 | `docker-app-smoke-test.sh` | `docker-app.sh smoke` 호환 wrapper | 1 |
-| `backup-db.sh` | pg_dump → 외부 위치 (Sprint 6) | 6 |
-| `restore-db.sh` | pg_restore (Sprint 6) | 6 |
+| `backup-db.sh` | `app` schema `pg_dump --format=custom` + sha256 (ADR-022 1차) | 5 |
+| `restore-db.sh` | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계) | 5 |
 | `odroid-docker-start.sh` | Odroid 배포 (Sprint 6) | 6 |
 
 루트 npm alias:

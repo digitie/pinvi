@@ -6,8 +6,16 @@
 
 ## 다음 (우선순위 순)
 
+- [ ] T-117 — 회원가입 약관 동의 화면 + `user_consents` 저장 보강
+  (krtour-map 비의존)
+- [ ] T-118 — Google OAuth 계정 매칭 / profile 연결 UX 보강
+  (아이디 매칭 안내, Naver/Kakao 제외)
+- [ ] T-119 — 회원 관리 Admin 보강 (검색/상태 필터/상세 audit UX)
+- [ ] T-120 — 여행계획 Admin 목록/상세/상태 관리
+- [ ] T-121 — POI Admin 목록/상세/연결 상태 관리
+  (feature re-link는 krtour-map client 준비 후)
 - [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — krtour-map
-  비의존 운영 후보
+  비의존 운영 후보. Sprint 5 snapshot foundation 위에 restore cut-over PoC 필요.
 
 ## 완료
 
@@ -83,6 +91,13 @@
 - [x] T-109 — 한국 전용 geofencing FastAPI fallback
   (완료: 2026-06-05, `TRIPMATE_GEOFENCE_*` env + `CF-IPCountry` 기반 451 middleware +
   health/docs 우회 + roles claim 운영자 우회 단위 테스트)
+- [x] T-115 — Backup snapshot foundation + `/admin/backup` 1차 UI
+  (완료: 2026-06-06, `scripts/backup-db.sh` / `scripts/restore-db.sh` +
+  `GET /admin/backup/snapshots` + `POST /admin/backup/snapshot` + admin snapshot page.
+  핫스왑 restore는 T-111로 유지)
+- [x] T-116 — OAuth provider 범위 Google-only 정리
+  (완료: 2026-06-06, `/auth/oauth/providers`가 Google만 반환. Naver/Kakao는 future
+  provider로 보류)
 
 ## 보류
 
@@ -100,6 +115,9 @@
   (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
 - [ ] T-108 — 운영 배포 자동화 (Sprint 6) — **Odroid M1S + N150 16GB 양쪽**
   (ADR-023). multi-platform Docker 빌드 + 두 노드 streaming replication.
+- [ ] T-122 — Naver/Kakao OAuth provider 구현 — **미래 작업**
+  (현재는 사용하지 않음. Google OAuth 안정화 후 별도 PR에서 provider별 start /
+  callback / link / unlink / 버튼 활성화)
 
 ### Sprint 5~6 (v0.2.0 / v1.0) 신규 backlog
 

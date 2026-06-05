@@ -51,3 +51,17 @@ class AdminPagedResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class AdminBackupSnapshotRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminBackupSnapshot(BaseModel):
+    snapshot_id: str
+    filename: str
+    path: str
+    size_bytes: int
+    checksum_sha256: str | None
+    status: Literal["available", "verified"]
+    created_at: datetime
