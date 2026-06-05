@@ -40,6 +40,7 @@ export const TripUpdateSchema = z.object({
   visibility: TripVisibilitySchema.optional(),
   status: TripStatusSchema.optional(),
 });
+export type TripUpdate = z.infer<typeof TripUpdateSchema>;
 
 export const TripResponseSchema = z.object({
   trip_id: z.string().uuid(),
