@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-067 KASI Dagster/DB/POI 연동 구현
+
+**작업**: krtour-map과 연계하지 않는 KASI 범위를 먼저 구현. `python-kasi-api`와
+`DATA_GO_KR_SERVICE_KEY`를 기준으로 특일 계열 upsert asset, POI별 해·달 출몰시각
+one-shot Dagster job, API POI 생성 시 fetch 대기 row 생성을 추가했다.
+
+**변경**:
+- `app.kasi_special_days`, `app.trip_poi_rise_sets` Alembic migration + ORM 모델.
+- POI 생성 시 trip 시작일 기반 `locdate`, feature snapshot 좌표를 읽어
+  `pending_date` / `pending_coord` / `pending_fetch` 상태 row 생성.
+- `apps/etl` Dagster definitions에 `tripmate_kasi_special_days` asset,
+  `kasi_poi_rise_set_job`, `TripmateDatabaseResource`, `KasiResource` 추가.
+- KASI/ETL/API 문서와 `docs/tasks.md` / `docs/resume.md` 상태 갱신.
+
+**검증**:
+- `apps/api`: `uv run pytest -s tests/unit/test_kasi_service.py -q`
+- `apps/api`: `uv run pytest -s tests/integration/test_kasi_poi_rise_set.py -q`
+- `apps/api`: `uv run ruff check app tests/unit/test_kasi_service.py tests/integration/test_kasi_poi_rise_set.py`
+- `apps/api`: `uv run mypy app`
+- `apps/etl`: `uv run pytest -s tests -q`
+- `apps/etl`: `uv run ruff check .`
+- `apps/etl`: `uv run mypy tripmate`
+
+**다음**: 본 PR 머지 후 사용자의 최신 지시에 따라 krtour-map 의존 T-066은 보류하고,
+T-070(Sprint 2 잔여 마감) 또는 T-065(aggregate CI gate) 같은 비의존 작업부터 진행.
+
 ## 2026-06-05 (codex) — production API/Web URL + OAuth 보안 문서화
 
 **작업**: 사용자 지시로 production API/Web 공개 URL을 문서와 환경변수 예시에

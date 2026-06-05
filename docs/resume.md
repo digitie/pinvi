@@ -44,6 +44,10 @@ krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
 특일 계열 5개 dataset을 하루 1회, 과거 6개월~미래 18개월 범위로 upsert한다.
 삭제는 없다. POI 생성 시에는 좌표와 방문일로 "위치별 해달 출몰시각 정보조회"를
 1회 호출해 `app.trip_poi_rise_sets`에 저장한다.
+**T-067 KASI 구현 완료** (2026-06-05 codex) — `apps/etl`에
+`tripmate_kasi_special_days` asset과 `kasi_poi_rise_set_job`을 추가했고, API는 POI
+생성 시 `app.trip_poi_rise_sets` 초기 row를 만든다. krtour-map 연계 없이
+`python-kasi-api` + `DATA_GO_KR_SERVICE_KEY`만 사용한다.
 **Production URL 확정** (2026-06-05 codex) — 운영 API는
 `https://tripmateapi.digitie.mywire.org`, 운영 Web은
 `https://tripmate.digitie.mywire.org`다. Google 승인된 JavaScript 원본은 Web origin,
@@ -53,22 +57,20 @@ origin만 허용하고, 운영 cookie는 `TRIPMATE_ENVIRONMENT=production`으로
 
 ## 다음 한 작업
 
-우선순위 후보:
+우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **Sprint 2 잔여 마감** (`docs/sprints/SPRINT-2.md` "잔여" 절):
+1. **T-070 / Sprint 2 잔여 마감** (`docs/sprints/SPRINT-2.md` "잔여" 절):
    - `email_queue` SKIP LOCKED worker + 비밀번호 재설정 메일 흐름
    - `api_call_log` 미들웨어 통합 테스트
    - CI(`api.yml`)에 `tests/integration` 스텝 추가 검토
-2. **Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
-   동작 + **위치 감사 자동 적재 e2e**(Sprint 2 잔여 1건, krtour client 의존):
+2. **T-063** — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
+3. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
+4. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
+   동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-3. **KASI 구현** — `kasi_special_days_daily` Dagster job +
-   `trip_poi_rise_sets` 저장/POI 생성 enqueue:
-   - `docs/integrations/kasi.md`, `docs/runbooks/etl.md` 기준
-4. **운영 후속** — 항상 실행되는 aggregate CI gate 설계 후 required status check
-   적용(T-065). 현재 `api` / `web` / `etl`은 path-filtered라 바로 required check로
-   걸지 않는다.
+5. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
+   check로 걸지 않는다.
 
 이후 **PR-C (프론트엔드)**:
 
@@ -117,6 +119,7 @@ origin만 허용하고, 운영 cookie는 `TRIPMATE_ENVIRONMENT=production`으로
 - [x] 최신 main 기준 문서 충돌 정정 — T-064
 - [x] 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 — T-068
 - [x] production API/Web URL + OAuth/CORS 보안 문서화 — T-069
+- [x] KASI 특일/POI 출몰시각 Dagster 구현 — T-067
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

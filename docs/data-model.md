@@ -169,7 +169,7 @@ POI 생성 시 `python-kasi-api`의 `rise_set.location`(`getLCRiseSetInfo`,
 | `longitude`, `latitude` | `double precision` | 요청 좌표 snapshot |
 | `sunrise_at`, `sunset_at` | `timestamptz` | 파싱 가능할 때 |
 | `moonrise_at`, `moonset_at` | `timestamptz` | 파싱 가능할 때 |
-| `status` | `text` | `pending_date` / `pending_coord` / `success` / `failed` |
+| `status` | `text` | `pending_date` / `pending_coord` / `pending_fetch` / `success` / `failed` |
 | `raw_payload` | `jsonb` | KASI 원문 payload |
 | `error` | `jsonb` | 실패 시 redacted error |
 | `fetched_at` | `timestamptz` | 마지막 호출 시각 |
