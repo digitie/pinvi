@@ -10,7 +10,7 @@
 
 ```
 ws://localhost:9021/ws/trips/<trip_id>?token=<jwt>
-wss://app.example.com/ws/trips/<trip_id>?token=<jwt>
+wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 ```
 
 권한 없으면 즉시 `close 4403` (`{ "code": 4403, "reason": "permission_denied" }`).

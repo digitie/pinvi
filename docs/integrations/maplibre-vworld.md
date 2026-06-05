@@ -65,7 +65,7 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 - TripMate 환경별:
   - 로컬: `http://localhost:9022`, `http://127.0.0.1:9022`
   - Docker smoke: `http://127.0.0.1:9022`
-  - 운영: TBD (Sprint 6)
+  - 운영: `https://tripmate.digitie.mywire.org`
 
 ### 3.2 환경변수
 
@@ -446,7 +446,8 @@ export function useFeatureMarkers(kinds: FeatureKind[]) {
 
 VWorld 403 / CORS 시 점검:
 
-1. **VWorld 개발자 센터 도메인 등록**: 정확한 origin (`http://localhost:9022` 등)
+1. **VWorld 개발자 센터 도메인 등록**: 정확한 origin
+   (`http://localhost:9022`, `https://tripmate.digitie.mywire.org` 등)
 2. **transformRequest 프록시**: 사내망 / 추가 정책 필요 시
 3. **CSP에 VWorld 도메인 허용**: `connect-src 'self' https://api.vworld.kr`
 
@@ -461,7 +462,8 @@ VWorld 403 / CORS 시 점검:
 ### 8.2 도메인 제한 회피 금지
 
 - 라이브러리가 임의 host 요청 가능하므로 키 도용 위험
-- VWorld 콘솔에서 운영 / staging / 로컬 외 origin 추가 금지
+- VWorld 콘솔에서 운영(`https://tripmate.digitie.mywire.org`) / staging / 로컬 외
+  origin 추가 금지
 - 운영 도메인 변경 시 반드시 콘솔 업데이트
 
 ## 9. 일 호출 한도 / Rate limit

@@ -33,7 +33,7 @@ Resend "verified" 상태 확인 후 발송 시작.
 | `TRIPMATE_RESEND_FROM_EMAIL` | `TripMate <noreply@send.trip.example.com>` |
 | `TRIPMATE_RESEND_TIMEOUT_SECONDS` | `5` |
 | `TRIPMATE_RESEND_WEBHOOK_SECRET` | (Svix secret) |
-| `TRIPMATE_WEB_BASE_URL` | `http://localhost:9022` (dev) |
+| `TRIPMATE_WEB_BASE_URL` | dev `http://localhost:9022`, production `https://tripmate.digitie.mywire.org` |
 | `TRIPMATE_EMAIL_VERIFICATION_PATH` | `/verify-email` |
 
 미설정 시 (`TRIPMATE_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에

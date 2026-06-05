@@ -248,6 +248,54 @@ UI는 한국어 메시지로 변환해 토스트 또는 인라인 에러 표시.
 
 Docker smoke: `http://127.0.0.1:9021/auth/oauth/{provider}/callback` (추가).
 
+## 9.1 Production OAuth / JavaScript origin
+
+운영 URL:
+
+| 항목 | 값 |
+|------|----|
+| API base | `https://tripmateapi.digitie.mywire.org` |
+| Web origin | `https://tripmate.digitie.mywire.org` |
+
+Google Cloud Console 등록값:
+
+| 설정 | 값 |
+|------|----|
+| 승인된 JavaScript 원본 | `https://tripmate.digitie.mywire.org` |
+| 승인된 리다이렉션 URI | `https://tripmateapi.digitie.mywire.org/auth/oauth/google/callback` |
+
+Naver/Kakao provider 콘솔도 같은 원칙을 따른다:
+
+| Provider | 운영 callback |
+|----------|---------------|
+| Google | `https://tripmateapi.digitie.mywire.org/auth/oauth/google/callback` |
+| Naver | `https://tripmateapi.digitie.mywire.org/auth/oauth/naver/callback` |
+| Kakao | `https://tripmateapi.digitie.mywire.org/auth/oauth/kakao/callback` |
+
+운영 환경변수:
+
+```dotenv
+TRIPMATE_WEB_BASE_URL=https://tripmate.digitie.mywire.org
+TRIPMATE_OAUTH_CALLBACK_BASE_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_CORS_ALLOWED_ORIGINS=["https://tripmate.digitie.mywire.org"]
+NEXT_PUBLIC_TRIPMATE_API_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_ENVIRONMENT=production
+```
+
+보안 처리:
+
+- `redirect_uri`는 provider 콘솔에 등록된 callback과 **문자열이 완전히 같아야** 한다.
+  경로, scheme, host가 다르면 token exchange가 실패한다.
+- OAuth 시작 요청의 `return_to`는 상대 경로 또는 `TRIPMATE_WEB_BASE_URL` 하위 경로만
+  허용한다. 외부 URL은 거부해 open redirect를 막는다.
+- 운영 cookie는 `Secure`, `HttpOnly`, `SameSite=Lax`로 내려간다.
+  `TRIPMATE_ENVIRONMENT=production` 누락 시 `Secure`가 빠질 수 있으므로 운영
+  배포에서 필수값으로 둔다.
+- CORS origin은 웹 origin인 `https://tripmate.digitie.mywire.org`만 허용한다.
+  API origin(`https://tripmateapi.digitie.mywire.org`)이나 wildcard는 허용하지 않는다.
+- OAuth code, state, token 응답은 로그에 남기지 않는다. `state`/PKCE verifier는
+  hash만 저장하고 TTL 10분 후 만료한다.
+
 ## 10. AI agent 구현 체크리스트
 
 - [ ] `app.user_oauth_identities` + `app.oauth_login_states` Alembic (Sprint 2)

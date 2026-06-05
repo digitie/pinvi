@@ -44,6 +44,12 @@ krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
 특일 계열 5개 dataset을 하루 1회, 과거 6개월~미래 18개월 범위로 upsert한다.
 삭제는 없다. POI 생성 시에는 좌표와 방문일로 "위치별 해달 출몰시각 정보조회"를
 1회 호출해 `app.trip_poi_rise_sets`에 저장한다.
+**Production URL 확정** (2026-06-05 codex) — 운영 API는
+`https://tripmateapi.digitie.mywire.org`, 운영 Web은
+`https://tripmate.digitie.mywire.org`다. Google 승인된 JavaScript 원본은 Web origin,
+OAuth redirect URI는 API origin의 `/auth/oauth/google/callback`이다. CORS는 Web
+origin만 허용하고, 운영 cookie는 `TRIPMATE_ENVIRONMENT=production`으로 Secure를
+강제한다.
 
 ## 다음 한 작업
 
@@ -60,7 +66,7 @@ krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
 3. **KASI 구현** — `kasi_special_days_daily` Dagster job +
    `trip_poi_rise_sets` 저장/POI 생성 enqueue:
    - `docs/integrations/kasi.md`, `docs/runbooks/etl.md` 기준
-3. **운영 후속** — 항상 실행되는 aggregate CI gate 설계 후 required status check
+4. **운영 후속** — 항상 실행되는 aggregate CI gate 설계 후 required status check
    적용(T-065). 현재 `api` / `web` / `etl`은 path-filtered라 바로 required check로
    걸지 않는다.
 
@@ -110,6 +116,7 @@ krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
 - [x] GitHub Actions secret / branch protection 적용 상태 확인 — T-062
 - [x] 최신 main 기준 문서 충돌 정정 — T-064
 - [x] 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 — T-068
+- [x] production API/Web URL + OAuth/CORS 보안 문서화 — T-069
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
