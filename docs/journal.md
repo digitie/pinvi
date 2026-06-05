@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-063 maplibre consumer sync
+
+**작업**: `maplibre-vworld-js` 선행 PR 상태와 TripMate consumer sync 체크리스트를
+정리했다. 라이브러리 저장소에서 PR #46을 생성해 `docs/consumer-feature-catalog.md`
+를 T-033~T-037 실제 구현 상태와 맞췄고, `build-and-test` 통과 후 squash merge했다.
+
+**변경**:
+- `docs/integrations/maplibre-vworld.md` — §6 snapshot을 PR #37/#46 기준으로 갱신,
+  §11.1에 TripMate consumer sync 결과와 남은 frontend pin/import/e2e 체크 추가.
+- `docs/sprints/SPRINT-4.md` — 라이브러리 선행 PR 조건을 완료 처리.
+- `docs/tasks.md`, `docs/resume.md` — T-063 완료와 다음 작업 T-065 반영.
+
+**검증**:
+- `maplibre-vworld-js` PR #46: `build-and-test` green, merge `f1dd74b9`.
+- TripMate: 문서 전용 변경. `git diff --check` 통과.
+
+**다음**: krtour-map 비의존 작업으로 T-065 aggregate CI gate 설계/적용.
+
 ## 2026-06-05 (codex) — T-070 Sprint 2 잔여 마감
 
 **작업**: krtour-map과 연계하지 않는 Sprint 2 잔여를 마감. `email_queue`

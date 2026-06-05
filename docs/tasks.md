@@ -7,7 +7,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
 - [ ] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
 
 ## 완료
@@ -57,6 +56,9 @@
 - [x] T-070 — Sprint 2 잔여 마감: `email_queue` SKIP LOCKED worker +
   비밀번호 재설정 메일 흐름, `api_call_log` 미들웨어 통합 테스트,
   `api.yml` integration step 추가 (완료: 2026-06-05)
+- [x] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
+  (완료: 2026-06-05, `maplibre-vworld-js` PR #46 merge `f1dd74b9` +
+  TripMate `docs/integrations/maplibre-vworld.md` §6/§11.1 sync)
 
 ## 보류
 
