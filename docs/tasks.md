@@ -6,8 +6,8 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-074 — PR-C frontend 지도 shell (`maplibre-vworld` dependency pin/import/e2e,
-  feature 조회는 krtour-map client 의존이라 제외)
+- [ ] T-075 — Trip 대시보드 / notice plan 사용자 shell (route/navigation/빈 상태/API
+  client 연결부터, 지도 feature 조회는 krtour-map client 의존이라 제외)
 
 ## 완료
 
@@ -71,6 +71,9 @@
 - [x] T-073 — Google OAuth profile 연결/해제 UI
   (완료: 2026-06-05, `/auth/me` OAuth identity 노출 + `/profile` Google 연결/해제 +
   소셜-only unlink 차단)
+- [x] T-074 — PR-C frontend 지도 shell
+  (완료: 2026-06-05, `maplibre-vworld` `f1dd74b9...` tarball pin + `/trips/map-shell`
+  `VWorldMap` import + Windows Playwright e2e, krtour-map feature 조회 제외)
 
 ## 보류
 

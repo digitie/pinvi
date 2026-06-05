@@ -18,6 +18,7 @@
     ".next/types/**/*.ts",
     "app/**/*",
     "components/**/*",
+    "e2e/**/*",
     "lib/**/*",
     "stores/**/*",
     "tests/**/*"
