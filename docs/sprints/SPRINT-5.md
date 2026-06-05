@@ -4,7 +4,8 @@
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨)
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Loki/Grafana + Admin
   운영 화면 (Record Linkage, provider sync, integrity, debug logs) +
-  **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint, UI는 Sprint 6)**
+  **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
+  snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
@@ -30,7 +31,8 @@
   - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
     pg_restore. 핫스왑 워크플로 design은 Sprint 6에서 finalize (ADR-022).
   - **`POST /admin/backup/snapshot`** — manual trigger (admin role) → backup
-    file 생성 + RustFS 또는 외부 위치로 upload + admin_audit_log 기록
+    file 생성 + sha256 + admin_audit_log 기록. RustFS 또는 외부 위치 미러는 후속
+    운영 보강.
 
 ## 산출물
 
@@ -42,8 +44,8 @@
 - `apps/api/app/api/v1/admin/{etl,dedup_review,provider_sync,integrity,debug,grafana,backup}.py`
 - `apps/api/app/services/admin/loki_stream.py` (LogQL WebSocket)
 - `apps/api/app/services/admin/request_trace.py` (X-Request-Id 조합)
-- `apps/api/app/services/backup_service.py` — pg_dump trigger + RustFS upload +
-  audit. `scripts/backup-db.sh` 호출 wrapper.
+- `apps/api/app/services/backup_service.py` — pg_dump trigger + audit.
+  `scripts/backup-db.sh` 호출 wrapper. RustFS/external mirror는 후속 운영 보강.
 
 ### ETL (`apps/etl`)
 

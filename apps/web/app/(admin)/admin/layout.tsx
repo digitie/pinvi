@@ -21,6 +21,7 @@ const NAV: { href: string; label: string; sprint: number }[] = [
   { href: '/admin/api-calls', label: 'API 호출', sprint: 3 },
   { href: '/admin/emails', label: '이메일 큐', sprint: 3 },
   { href: '/admin/audit', label: '감사 로그', sprint: 3 },
+  { href: '/admin/backup', label: 'Backup', sprint: 5 },
   { href: '/admin/feature-requests', label: '요청 큐', sprint: 6 },
   { href: '/admin/category-mapping', label: '카테고리 매핑', sprint: 6 },
   { href: '/admin/seed', label: '시드 (dev)', sprint: 3 },

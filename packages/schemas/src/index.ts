@@ -100,6 +100,8 @@ export {
   AdminPagedResponseSchema,
   AdminEmailEntrySchema,
   AdminChainVerifySchema,
+  AdminBackupSnapshotRequestSchema,
+  AdminBackupSnapshotSchema,
 } from './admin';
 export type {
   AdminUserSummary,
@@ -109,6 +111,8 @@ export type {
   AdminPagedResponse,
   AdminEmailEntry,
   AdminChainVerify,
+  AdminBackupSnapshotRequest,
+  AdminBackupSnapshot,
 } from './admin';
 
 export {

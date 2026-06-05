@@ -86,19 +86,14 @@ def _to_auth_user(user: Any) -> AuthUser:
 
 @router.get("/providers", response_model=Envelope[OAuthProvidersResponse])
 async def list_providers() -> Envelope[OAuthProvidersResponse]:
-    """활성화된 OAuth provider 목록 (client id 가 설정된 것만 enabled)."""
+    """현재 사용 중인 OAuth provider 목록.
+
+    Naver/Kakao는 미래 작업으로 보류했기 때문에 설정값이 있어도 노출하지 않는다.
+    """
     providers = [
         OAuthProviderInfo(
             provider="google",
             enabled=bool(settings.tripmate_google_oauth_client_id),
-        ),
-        OAuthProviderInfo(
-            provider="naver",
-            enabled=bool(settings.tripmate_naver_oauth_client_id),
-        ),
-        OAuthProviderInfo(
-            provider="kakao",
-            enabled=bool(settings.tripmate_kakao_oauth_rest_api_key),
         ),
     ]
     return Envelope.of(OAuthProvidersResponse(providers=providers))

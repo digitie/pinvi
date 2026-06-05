@@ -22,31 +22,35 @@ TripMate 데이터의 일관성 / 무중단 복구. SPEC V8 RTO 1h / RPO 24h.
 
 ```
 03:00 KST every day
-  → pg_dump --format=custom --jobs=2 \
+  → pg_dump --format=custom \
       --schema=app \
       --no-owner --no-privileges \
-      $DATABASE_URL > backup-$(date +%Y%m%d).dump
-  → upload RustFS s3://backup/$(date +%Y%m%d).dump
-  → mirror to external (BackBlaze B2 or NAS) if enabled
+      --file=tripmate-app-$(date -u +%Y%m%d-%H%M%S).dump \
+      $DATABASE_URL
+  → sha256sum tripmate-app-*.dump > tripmate-app-*.dump.sha256
+  → 후속 운영 보강: RustFS s3://backup/$(date +%Y%m%d).dump 업로드
+  → 후속 운영 보강: external mirror (BackBlaze B2 or NAS) if enabled
   → cleanup: keep 30 dailies + 12 monthly + 5 yearly
 ```
 
 구현 위치: `scripts/backup-db.sh` (Sprint 5) + Dagster schedule 또는 systemd
-timer.
+timer. custom format은 단일 파일 artifact라 `pg_dump --jobs`를 쓰지 않는다. 병렬
+처리는 restore 단계의 `pg_restore --jobs`에서만 사용한다.
 
 ### 3.2 수동 (admin trigger)
 
 ```
 POST /admin/backup/snapshot
   Authorization: Bearer <admin token>
-  Body: { "reason": "before migration" }
+  Body: { "access_reason": "before migration" }
 
-  → admin_audit_log 적재 (actor / reason / IP / UA)
   → scripts/backup-db.sh 호출 (subprocess)
-  → 결과 file_id 반환
+  → admin_audit_log 적재 (actor / reason / IP / UA)
+  → 결과 snapshot 반환
 ```
 
-UI: `/admin/backup` 페이지에서 "지금 백업" 버튼 (Sprint 5 1차, Sprint 6 finalize).
+UI: `/admin/backup` 페이지에서 "지금 백업" 버튼과 snapshot 목록을 제공한다
+(Sprint 5 1차). restore 진행률과 핫스왑 cut-over는 Sprint 6 T-111에서 finalize.
 
 ### 3.3 검증
 

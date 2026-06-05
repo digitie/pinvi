@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.admin import audit, emails, users
+from app.api.v1.admin import audit, backup, emails, users
 
 admin_router = APIRouter()
 admin_router.include_router(users.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(emails.router)
+admin_router.include_router(backup.router)

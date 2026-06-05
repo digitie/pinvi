@@ -72,3 +72,21 @@ export const AdminChainVerifySchema = z.object({
   rows_checked: z.number().int(),
 });
 export type AdminChainVerify = z.infer<typeof AdminChainVerifySchema>;
+
+export const AdminBackupSnapshotRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminBackupSnapshotRequest = z.infer<
+  typeof AdminBackupSnapshotRequestSchema
+>;
+
+export const AdminBackupSnapshotSchema = z.object({
+  snapshot_id: z.string(),
+  filename: z.string(),
+  path: z.string(),
+  size_bytes: z.number().int(),
+  checksum_sha256: z.string().nullable(),
+  status: z.enum(['available', 'verified']),
+  created_at: Iso8601Schema,
+});
+export type AdminBackupSnapshot = z.infer<typeof AdminBackupSnapshotSchema>;

@@ -10,12 +10,10 @@ const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
 });
 
-type OAuthProviderName = 'google' | 'naver' | 'kakao';
+type OAuthProviderName = 'google';
 
 const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
   google: false,
-  naver: false,
-  kakao: false,
 };
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -58,7 +56,9 @@ export default function LoginPage() {
         }
         const next = { ...DISABLED_OAUTH_PROVIDERS };
         for (const provider of result.providers) {
-          next[provider.provider] = provider.enabled;
+          if (provider.provider === 'google') {
+            next.google = provider.enabled;
+          }
         }
         setOauthProviders(next);
       } catch {

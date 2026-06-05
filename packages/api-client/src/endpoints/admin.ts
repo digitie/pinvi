@@ -1,6 +1,8 @@
 import {
   AdminActionRequestSchema,
   AdminAuditEntrySchema,
+  AdminBackupSnapshotRequestSchema,
+  AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
   AdminPagedResponseSchema,
@@ -70,5 +72,18 @@ export const adminApi = (client: ApiClient) => ({
     client.request(`/admin/emails/${emailId}/resend`, {
       method: 'POST',
       schema: AdminEmailEntrySchema,
+    }),
+
+  listBackupSnapshots: (limit = 50) =>
+    client.request(`/admin/backup/snapshots?limit=${limit}`, {
+      method: 'GET',
+      schema: z.array(AdminBackupSnapshotSchema),
+    }),
+
+  createBackupSnapshot: (body: z.infer<typeof AdminBackupSnapshotRequestSchema>) =>
+    client.request('/admin/backup/snapshot', {
+      method: 'POST',
+      body: JSON.stringify(AdminBackupSnapshotRequestSchema.parse(body)),
+      schema: AdminBackupSnapshotSchema,
     }),
 });

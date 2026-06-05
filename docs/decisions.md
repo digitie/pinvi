@@ -813,7 +813,7 @@
     - **Sprint 6 (finalize)**: Backup/Restore UI + 핫스왑 워크플로
       (`/admin/backup` 페이지).
   - **Backup**:
-    - `pg_dump --format=custom --jobs=2` → `app` + `app.audit` schema만
+    - `pg_dump --format=custom` → `app` + `app.audit` schema만
       (라이브러리 schema는 `python-krtour-map`이 별도 백업).
     - 결과 파일을 RustFS (`backup` 버킷) + 옵션으로 외부 (BackBlaze B2 또는
       NAS) 미러.
@@ -830,6 +830,9 @@
     훈련 (read-only mode + 가족 베타 사용자에게 안내).
   - **모니터링**: backup 성공/실패 → admin_audit_log + Grafana 대시보드.
     RPO 위반 시 알림.
+- **구현 보정 (2026-06-06)**:
+  - PostgreSQL custom format은 단일 파일 artifact라 `pg_dump --jobs`와 함께 쓰지
+    않는다. 병렬 처리는 restore 단계의 `pg_restore --jobs`에서만 적용한다.
 - **근거**:
   - SPEC V8 RTO 1h / RPO 24h 요구
   - 사용자 데이터 (PII / trip / 동의 이력) 보호가 최우선
