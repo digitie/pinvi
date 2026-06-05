@@ -71,3 +71,9 @@ jobs:
           TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
           TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
         run: alembic upgrade head
+
+      - name: pytest (integration)
+        env:
+          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
+          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+        run: pytest tests/integration -q

@@ -1,17 +1,155 @@
-"""Resend 이메일 발송 — Sprint 1은 콘솔 모드 + Resend stub.
+"""Resend 이메일 outbox + SKIP LOCKED worker.
 
-자세히는 `docs/integrations/resend.md`. 실제 발송 worker + Webhook은 Sprint 2.
+자세히는 `docs/integrations/resend.md`. API 요청은 `app.email_queue`에 적재하고,
+worker가 PostgreSQL `FOR UPDATE SKIP LOCKED`로 pending row를 가져가 발송한다.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.email_queue import EmailQueue
 
 log = get_logger("email")
+
+MAX_EMAIL_ATTEMPTS = 5
+RETRY_BACKOFF_SECONDS = (30, 300, 1800, 3600, 14400)
+
+
+@dataclass(frozen=True, slots=True)
+class EmailBatchResult:
+    claimed: int
+    sent: int
+    retried: int
+    failed: int
+
+
+async def enqueue_verification_email(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    to_email: str,
+    token: str,
+    expires_in_hours: int = 24,
+) -> bool:
+    """회원가입 인증 메일을 outbox에 적재합니다.
+
+    반환값은 실제 provider 발송 가능 여부다. API key가 없는 개발 환경에서도 queue row는
+    만들되 `verification_email_dispatched=false` 계약을 유지한다.
+    """
+
+    verify_url = _build_verify_url(token)
+    db.add(
+        EmailQueue(
+            user_id=user_id,
+            to_email=to_email,
+            template="verify_email",
+            subject="TripMate 이메일 인증",
+            payload={
+                "verify_url": verify_url,
+                "expires_in_hours": expires_in_hours,
+                "user_id": str(user_id),
+            },
+            status="pending",
+            scheduled_at=datetime.now(UTC),
+        )
+    )
+    return bool(settings.tripmate_resend_api_key)
+
+
+async def enqueue_password_reset_email(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    to_email: str,
+    token: str,
+    expires_in_minutes: int = 60,
+) -> bool:
+    """비밀번호 재설정 메일을 outbox에 적재합니다."""
+
+    reset_url = _build_password_reset_url(token)
+    db.add(
+        EmailQueue(
+            user_id=user_id,
+            to_email=to_email,
+            template="reset_password",
+            subject="TripMate 비밀번호 재설정",
+            payload={
+                "reset_url": reset_url,
+                "expires_in_minutes": expires_in_minutes,
+                "user_id": str(user_id),
+            },
+            status="pending",
+            scheduled_at=datetime.now(UTC),
+        )
+    )
+    return bool(settings.tripmate_resend_api_key)
+
+
+async def process_pending_email_batch(
+    db: AsyncSession,
+    *,
+    limit: int = 50,
+    now: datetime | None = None,
+) -> EmailBatchResult:
+    """pending email을 `FOR UPDATE SKIP LOCKED`로 가져와 한 batch 발송합니다."""
+
+    current = now or datetime.now(UTC)
+    result = await db.execute(
+        select(EmailQueue)
+        .where(
+            EmailQueue.status == "pending",
+            EmailQueue.scheduled_at <= current,
+        )
+        .order_by(EmailQueue.scheduled_at, EmailQueue.created_at)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    )
+    rows = list(result.scalars())
+    sent = 0
+    retried = 0
+    failed = 0
+
+    for row in rows:
+        row.attempts += 1
+        try:
+            row.resend_id = await _send_email_row(row)
+        except Exception as exc:
+            if row.attempts >= MAX_EMAIL_ATTEMPTS:
+                row.status = "failed"
+                failed += 1
+            else:
+                row.status = "pending"
+                row.scheduled_at = current + timedelta(seconds=_retry_delay(row.attempts))
+                retried += 1
+            row.last_error = str(exc)
+            log.warning(
+                "email.worker_failed",
+                email_id=str(row.email_id),
+                template=row.template,
+                attempts=row.attempts,
+                error=str(exc),
+            )
+            continue
+
+        row.status = "sent"
+        row.sent_at = current
+        row.last_error = None
+        sent += 1
+
+    if rows:
+        await db.commit()
+
+    return EmailBatchResult(claimed=len(rows), sent=sent, retried=retried, failed=failed)
 
 
 async def send_verification_email(
@@ -20,45 +158,88 @@ async def send_verification_email(
     verify_url: str,
     expires_in_hours: int = 24,
 ) -> bool:
-    """이메일 발송. 성공 시 True. Sprint 1 단계는 콘솔 모드.
+    """기존 즉시 발송 helper. 신규 flow는 `enqueue_verification_email`을 사용한다."""
 
-    `TRIPMATE_RESEND_API_KEY` 빈 값이면 발송 X — 로그만 남기고 True 반환
-    (가입 흐름은 계속 진행).
-    """
+    try:
+        resend_id = await _send_email_payload(
+            to_email=to_email,
+            subject="TripMate 이메일 인증",
+            html=_render_verify_html(verify_url, expires_in_hours),
+            template="verify_email",
+            entity_ref=None,
+        )
+    except Exception as exc:
+        log.error("email.send_failed", error=str(exc), to_email=to_email, template="verify_email")
+        return False
+    return resend_id is not None
+
+
+async def _send_email_row(row: EmailQueue) -> str | None:
+    payload = row.payload or {}
+    return await _send_email_payload(
+        to_email=row.to_email,
+        subject=row.subject,
+        html=_render_template(row.template, payload),
+        template=row.template,
+        entity_ref=row.email_id,
+    )
+
+
+async def _send_email_payload(
+    *,
+    to_email: str,
+    subject: str,
+    html: str,
+    template: str,
+    entity_ref: uuid.UUID | None,
+) -> str | None:
     payload: dict[str, Any] = {
         "to_email": to_email,
-        "subject": "TripMate 이메일 인증",
-        "verify_url": verify_url,
-        "expires_in_hours": expires_in_hours,
+        "subject": subject,
+        "template": template,
+        "entity_ref": None if entity_ref is None else str(entity_ref),
     }
 
     if not settings.tripmate_resend_api_key:
         log.info("email.console_mode", **payload)
-        return False  # 실제 발송 안 됨 — verification_email_dispatched=false
+        return None
 
-    # 실제 발송 — Sprint 2에서 Webhook + queue 추가
-    try:
-        import resend
+    import resend
 
-        resend.api_key = settings.tripmate_resend_api_key
-        response = resend.Emails.send(
-            {
-                "from": settings.tripmate_resend_from_email,
-                "to": [to_email],
-                "subject": payload["subject"],
-                "html": _render_verify_html(verify_url, expires_in_hours),
-                "tags": [{"name": "template", "value": "verify_email"}],
-            }
+    resend.api_key = settings.tripmate_resend_api_key
+    resend_payload: dict[str, Any] = {
+        "from": settings.tripmate_resend_from_email,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+        "tags": [
+            {"name": "template", "value": template},
+            {"name": "env", "value": settings.tripmate_environment},
+        ],
+    }
+    if entity_ref is not None:
+        resend_payload["headers"] = {"X-Entity-Ref-ID": str(entity_ref)}
+    response = cast(Any, resend.Emails.send)(resend_payload)
+    resend_id = response.get("id") if isinstance(response, dict) else None
+    log.info("email.sent", resend_id=resend_id, **payload)
+    return None if resend_id is None else str(resend_id)
+
+
+def _render_template(template: str, payload: dict[str, Any]) -> str:
+    if template == "verify_email":
+        return _render_verify_html(
+            verify_url=str(payload["verify_url"]),
+            expires_in_hours=int(payload.get("expires_in_hours", 24)),
         )
-        log.info("email.sent", resend_id=response.get("id"), **payload)
-        return True
-    except Exception as exc:
-        log.error("email.send_failed", error=str(exc), **payload)
-        return False
+    if template == "reset_password":
+        return _render_reset_password_html(
+            reset_url=str(payload["reset_url"]),
+            expires_in_minutes=int(payload.get("expires_in_minutes", 60)),
+        )
+    return _render_generic_html(template=template, payload=payload)
 
 
 def _render_verify_html(verify_url: str, expires_in_hours: int) -> str:
-    # Sprint 2에서 react-email 빌드 산출물로 교체.
     safe_url = json.dumps(verify_url)
     return f"""
     <html>
@@ -79,3 +260,54 @@ def _render_verify_html(verify_url: str, expires_in_hours: int) -> str:
       </body>
     </html>
     """
+
+
+def _render_reset_password_html(reset_url: str, expires_in_minutes: int) -> str:
+    safe_url = json.dumps(reset_url)
+    return f"""
+    <html>
+      <body style="font-family: sans-serif;">
+        <h2>TripMate 비밀번호 재설정</h2>
+        <p>아래 버튼을 클릭하여 새 비밀번호를 설정하세요.</p>
+        <p>
+          <a href={safe_url}
+             style="background:#FF385C;color:#fff;padding:12px 24px;
+                    border-radius:6px;text-decoration:none;">
+            비밀번호 재설정
+          </a>
+        </p>
+        <p style="color:#666;font-size:14px;margin-top:24px;">
+          이 링크는 {expires_in_minutes}분 후 만료됩니다.<br />
+          본인이 요청하지 않았다면 이 메일을 무시하세요.
+        </p>
+      </body>
+    </html>
+    """
+
+
+def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
+    safe_payload = json.dumps(payload, ensure_ascii=False, indent=2)
+    return f"""
+    <html>
+      <body style="font-family: sans-serif;">
+        <h2>TripMate 알림</h2>
+        <p>template: {template}</p>
+        <pre>{safe_payload}</pre>
+      </body>
+    </html>
+    """
+
+
+def _build_verify_url(token: str) -> str:
+    return (
+        f"{settings.tripmate_web_base_url}{settings.tripmate_email_verification_path}?token={token}"
+    )
+
+
+def _build_password_reset_url(token: str) -> str:
+    return f"{settings.tripmate_web_base_url}{settings.tripmate_auth_reset_path}?token={token}"
+
+
+def _retry_delay(attempts: int) -> int:
+    index = max(0, min(attempts - 1, len(RETRY_BACKOFF_SECONDS) - 1))
+    return RETRY_BACKOFF_SECONDS[index]

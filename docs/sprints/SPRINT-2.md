@@ -108,16 +108,18 @@ DoD 항목별:
 - [ ] **위치 감사 자동 적재 via `/features/in-bounds`** — 미들웨어/체인 로직은 완료·
   검증됐으나 endpoint 자동 트리거는 `python-krtour-map` client 주입(**Sprint 4
   PR-B**) 의존. Sprint 4에서 e2e 연결.
-- [ ] **`email_queue` SKIP LOCKED worker** + 비밀번호 재설정 메일 흐름.
-- [ ] `app.api_call_log` 미들웨어 통합 테스트 (미들웨어 자체는 존재).
+- [x] **`email_queue` SKIP LOCKED worker** + 비밀번호 재설정 메일 흐름
+  (`process_pending_email_batch`, `/auth/password/reset-request`,
+  `/auth/password/reset`).
+- [x] `app.api_call_log` 미들웨어 통합 테스트
+  (`tests/integration/test_api_call_logging.py`).
 - [ ] Resend 도메인 인증 (SPF/DKIM/DMARC) — 실제 도메인 확정 필요.
-- [ ] Google OAuth client id/secret + 콜백 HTTP 교환 e2e — 도메인 확정 후.
+- [ ] Google OAuth client secret + 콜백 HTTP 교환 e2e — 도메인 확정 후.
 
 ## 종료 체크리스트
 
 - [x] 핵심 DoD 통과 (위 항목별 표; 잔여 명시)
 - [x] `docs/journal.md` Sprint 2 엔트리
 - [x] `docs/resume.md` 갱신
-- [ ] CI 워크플로 main green (본 PR 머지 후 Actions 확인 — `tests/integration` CI
-  스텝 추가는 후속)
+- [x] CI 워크플로 PR에서 `tests/integration` 실행 (`api.yml` step 추가)
 - [x] SPEC V8 #2 §G/H 핵심 항목 박힘 (OAuth G-4 / Trip·POI H / 동의 G)

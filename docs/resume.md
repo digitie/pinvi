@@ -54,22 +54,23 @@ krtour-map에 있고, TripMate는 `feature_id` + snapshot만 저장한다.
 OAuth redirect URI는 API origin의 `/auth/oauth/google/callback`이다. CORS는 Web
 origin만 허용하고, 운영 cookie는 `TRIPMATE_ENVIRONMENT=production`으로 Secure를
 강제한다.
+**T-070 Sprint 2 잔여 마감** (2026-06-05 codex) — `email_queue` SKIP LOCKED
+worker batch, 비밀번호 재설정 요청/확정 API, `api_call_log` httpx event hook
+통합 테스트를 추가했다. `.github/workflows/api.yml`은 PR에서 `pytest
+tests/integration -q`를 실행한다. Google OAuth client id는 네 TripMate worktree의
+로컬 `.env`에 반영했다.
 
 ## 다음 한 작업
 
 우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **T-070 / Sprint 2 잔여 마감** (`docs/sprints/SPRINT-2.md` "잔여" 절):
-   - `email_queue` SKIP LOCKED worker + 비밀번호 재설정 메일 흐름
-   - `api_call_log` 미들웨어 통합 테스트
-   - CI(`api.yml`)에 `tests/integration` 스텝 추가 검토
-2. **T-063** — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
-3. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
-4. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
+1. **T-063** — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
+2. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
+3. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-5. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
+4. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
    check로 걸지 않는다.
 
 이후 **PR-C (프론트엔드)**:
@@ -120,6 +121,7 @@ origin만 허용하고, 운영 cookie는 `TRIPMATE_ENVIRONMENT=production`으로
 - [x] 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 — T-068
 - [x] production API/Web URL + OAuth/CORS 보안 문서화 — T-069
 - [x] KASI 특일/POI 출몰시각 Dagster 구현 — T-067
+- [x] Sprint 2 잔여 마감(email queue/reset/api_call_log/integration CI) — T-070
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

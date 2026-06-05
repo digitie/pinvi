@@ -225,7 +225,12 @@ Content-Type: application/json
 { "email": "user@example.com" }
 ```
 
-응답 200 (enumeration 차단으로 항상). 메일 발송은 user 있을 때만.
+응답 200 (enumeration 차단으로 항상). 메일 queue 적재는 user가 있고 이메일 인증이
+끝났을 때만.
+
+```json
+{ "data": { "accepted": true } }
+```
 
 ### 5.2 `POST /auth/password/reset`
 

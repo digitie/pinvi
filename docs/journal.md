@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-070 Sprint 2 잔여 마감
+
+**작업**: krtour-map과 연계하지 않는 Sprint 2 잔여를 마감. `email_queue`
+SKIP LOCKED worker batch, 비밀번호 재설정 요청/확정 API, `api_call_log` httpx event
+hook 통합 테스트, API CI integration step을 추가했다.
+
+**변경**:
+- `apps/api/app/services/email_service.py` — outbox enqueue + `process_pending_email_batch`
+  (`FOR UPDATE SKIP LOCKED`) + verify/reset HTML 렌더링.
+- `/auth/password/reset-request`, `/auth/password/reset` — enumeration-safe reset 요청,
+  token 검증, `password_hash` 갱신, `user_sessions.revoked_at` 처리, cookie 재발급.
+- `tests/integration/test_{password_reset_flow,email_queue_worker,api_call_logging}.py`
+  신규.
+- `.github/workflows/api.yml` — PR에서 `pytest tests/integration -q` 실행.
+- Google OAuth client id는 `/mnt/f/dev/tripmate`, `tripmate-codex`,
+  `tripmate-claude`, `tripmate-antigravity`의 로컬 `.env`에 반영.
+
+**검증**:
+- `apps/api`: `uv run pytest -s tests/unit -q` — 56 passed
+- `apps/api`: `uv run pytest -s tests/integration -q` — 35 passed
+- `apps/api`: `uv run ruff format --check . && uv run ruff check .`
+- `apps/api`: `uv run mypy --strict app`
+
+**다음**: 본 PR 머지 후 krtour-map 의존 T-066은 계속 보류하고, T-063 또는 T-065처럼
+비의존 작업부터 진행.
+
 ## 2026-06-05 (codex) — T-067 KASI Dagster/DB/POI 연동 구현
 
 **작업**: krtour-map과 연계하지 않는 KASI 범위를 먼저 구현. `python-kasi-api`와

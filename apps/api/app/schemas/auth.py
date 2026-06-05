@@ -36,6 +36,19 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetRequestResponse(BaseModel):
+    accepted: bool = True
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=43, max_length=43)
+    new_password: str = Field(min_length=8, max_length=200)
+
+
 class AuthUser(BaseModel):
     user_id: uuid.UUID
     email: EmailStr
