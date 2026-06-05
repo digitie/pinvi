@@ -32,16 +32,28 @@ export const LoginRequestSchema = z.object({
 });
 
 /** /auth/me 응답 user. */
+export const AuthUserOAuthIdentitySchema = z.object({
+  provider: z.enum(['google', 'naver', 'kakao']),
+  provider_email: z.string().max(320).nullable(),
+  provider_email_verified: z.boolean().nullable(),
+  display_name: z.string().nullable(),
+  linked_at: Iso8601Schema,
+  last_login_at: Iso8601Schema.nullable(),
+});
+
 export const AuthUserSchema = z.object({
   user_id: z.string().uuid(),
-  email: z.string().email(),
+  email: z.string().max(320),
   nickname: z.string().nullable(),
   avatar_url: z.string().url().nullable(),
   status: z.enum(['pending_verification', 'pending_profile', 'active', 'disabled']),
   roles: z.array(z.enum(['user', 'admin', 'operator', 'cpo'])),
   email_verified_at: Iso8601Schema.nullable(),
+  has_password: z.boolean(),
+  oauth_identities: z.array(AuthUserOAuthIdentitySchema).default([]),
 });
 export type AuthUser = z.infer<typeof AuthUserSchema>;
+export type AuthUserOAuthIdentity = z.infer<typeof AuthUserOAuthIdentitySchema>;
 
 /** OAuth provider 목록. */
 export const OAuthProviderNameSchema = z.enum(['google', 'naver', 'kakao']);
@@ -65,3 +77,8 @@ export const OAuthStartResponseSchema = z.object({
 });
 export type OAuthStartRequest = z.infer<typeof OAuthStartRequestSchema>;
 export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;
+
+export const OAuthLinkRequestSchema = z.object({
+  return_to: z.string().regex(/^\/[\w/_\-?=&]*$/).default('/profile'),
+});
+export type OAuthLinkRequest = z.infer<typeof OAuthLinkRequestSchema>;

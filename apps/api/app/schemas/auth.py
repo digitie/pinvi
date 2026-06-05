@@ -49,11 +49,22 @@ class PasswordResetConfirmRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=200)
 
 
+class AuthUserOAuthIdentity(BaseModel):
+    provider: Literal["google", "naver", "kakao"]
+    provider_email: str | None
+    provider_email_verified: bool | None
+    display_name: str | None
+    linked_at: datetime
+    last_login_at: datetime | None
+
+
 class AuthUser(BaseModel):
     user_id: uuid.UUID
-    email: EmailStr
+    email: str
     nickname: str | None
     avatar_url: str | None
     status: Literal["pending_verification", "pending_profile", "active", "disabled"]
     roles: list[Literal["user", "admin", "operator", "cpo"]]
     email_verified_at: datetime | None
+    has_password: bool
+    oauth_identities: list[AuthUserOAuthIdentity] = Field(default_factory=list)

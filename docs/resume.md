@@ -76,6 +76,10 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
 **T-072 Google OAuth 실패 UX** (2026-06-05 codex) — Google callback 실패는 API JSON
 오류 대신 Web `/login?error=...`로 303 redirect한다. 로그인 화면은 `error` code를
 고정 한국어 메시지로 매핑하고, 임의 `error_description`은 화면에 그대로 노출하지 않는다.
+**T-073 Google OAuth profile 연결/해제 UI** (2026-06-05 codex) — `/auth/me`가
+`has_password`와 `oauth_identities`를 반환하고, `/profile`에서 Google 연결 상태 확인,
+연결 시작, 해제를 수행한다. 소셜-only 계정은 비밀번호 설정 전 Google 해제를 409로
+차단한다.
 
 ## 다음 한 작업
 
@@ -85,8 +89,7 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **비의존 후속** — Google OAuth profile 연결/해제 UI.
-3. **운영 후속** — PR-C frontend 지도 구현. `maplibre-vworld` dependency pin,
+2. **비의존 후속** — PR-C frontend 지도 shell. `maplibre-vworld` dependency pin,
    지도 컴포넌트 import/e2e는 가능하지만, feature 조회는 krtour-map client 의존
    부분을 제외하고 진행한다.
 
@@ -139,6 +142,7 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
 - [x] production API/Web URL + OAuth/CORS 보안 문서화 — T-069
 - [x] KASI 특일/POI 출몰시각 Dagster 구현 — T-067
 - [x] Sprint 2 잔여 마감(email queue/reset/api_call_log/integration CI) — T-070
+- [x] Google OAuth profile 연결/해제 UI — T-073
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

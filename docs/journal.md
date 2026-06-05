@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-073 Google OAuth profile 연결/해제 UI
+
+**작업**: krtour-map과 무관한 Google OAuth profile 연결/해제 흐름을 Web UI까지
+연결했다.
+
+**변경**:
+- `/auth/me` — 현재 사용자 응답에 `has_password`와 `oauth_identities`를 포함한다.
+- `/auth/oauth/google/link` — 로그인된 사용자용 link state를 발급하고 `user_id`를
+  state row에 저장한다.
+- `DELETE /auth/oauth/google` — `password_hash`가 없는 소셜-only 계정은 409로 해제
+  차단.
+- `@tripmate/schemas` / `@tripmate/api-client` — OAuth identity schema,
+  `linkGoogleOAuth`, `unlinkGoogleOAuth`, 204 no-content client 처리 추가.
+- `apps/web/app/(auth)/profile/page.tsx` — Google 연결 상태, 연결 시작, 해제 UI 추가.
+- `docs/api/auth.md`, `docs/integrations/social-login.md`, `resume.md`, `tasks.md` —
+  현재 계약과 진행 상태 반영.
+
+**검증**:
+- `apps/api`: `python -m pytest -s tests/integration/test_oauth_google.py -q` — 14 passed
+- `apps/api`: `ruff format --check app tests/integration/test_oauth_google.py`
+- `apps/api`: `ruff check app tests/integration/test_oauth_google.py`
+- `apps/api`: `mypy --strict app`
+- `apps/web`: `npm run build --workspace apps/web`
+- root: `npm run typecheck --workspaces --if-present`
+- NTFS worktree: `git diff --check`
+
+**다음**: krtour-map client 의존 T-066은 계속 보류하고, PR-C frontend 지도 shell 중
+feature 조회를 제외한 범위를 진행한다.
+
 ## 2026-06-05 (codex) — T-072 Google OAuth callback 실패 UX
 
 **작업**: Google OAuth callback 실패가 API JSON 오류로 남지 않고 Web 로그인 화면으로

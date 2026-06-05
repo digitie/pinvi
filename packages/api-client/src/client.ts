@@ -26,13 +26,10 @@ export class ApiError extends Error {
 export class ApiClient {
   constructor(private readonly opts: ApiClientOptions) {}
 
-  async request<T>(
-    path: string,
-    init: RequestInit & { schema: z.ZodType<T> },
-  ): Promise<T> {
+  private async fetch(path: string, init: RequestInit): Promise<Response> {
     const token = (await this.opts.getAuthToken?.()) ?? null;
     const fetcher = this.opts.fetcher ?? fetch;
-    const res = await fetcher(this.opts.baseUrl + path, {
+    return fetcher(this.opts.baseUrl + path, {
       ...init,
       credentials: 'include',
       headers: {
@@ -41,6 +38,13 @@ export class ApiClient {
         ...init.headers,
       },
     });
+  }
+
+  async request<T>(
+    path: string,
+    init: RequestInit & { schema: z.ZodType<T> },
+  ): Promise<T> {
+    const res = await this.fetch(path, init);
 
     if (res.status === 401) {
       this.opts.onUnauthorized?.();
@@ -72,5 +76,30 @@ export class ApiClient {
       );
     }
     return envelope.data.data;
+  }
+
+  async requestNoContent(path: string, init: RequestInit): Promise<void> {
+    const res = await this.fetch(path, init);
+
+    if (res.status === 401) {
+      this.opts.onUnauthorized?.();
+    }
+
+    if (res.ok) {
+      return;
+    }
+
+    const text = await res.text();
+    const json: unknown = text ? JSON.parse(text) : {};
+    const parsed = ErrorEnvelopeSchema.safeParse(json);
+    if (parsed.success) {
+      throw new ApiError(
+        parsed.data.error.code,
+        parsed.data.error.message,
+        res.status,
+        parsed.data.error.details,
+      );
+    }
+    throw new ApiError('INTERNAL_ERROR', `HTTP ${res.status}`, res.status);
   }
 }
