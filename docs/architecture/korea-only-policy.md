@@ -72,7 +72,7 @@ class GeofenceMiddleware:
              request.headers.get("X-Real-IP") or \
              request.client.host
 
-        country = await geoip_lookup(ip)  # MaxMind 또는 캐시된 결과
+        country = request.headers.get("CF-IPCountry")  # Cloudflare/nginx header 기반
         if country != "KR":
             return JSONResponse(
                 status_code=451,
@@ -106,7 +106,9 @@ HTTP 451 Unavailable For Legal Reasons (RFC 7725).
 ### 4.1 인증된 admin / operator / cpo
 
 운영자가 출장 / VPN 사용 시 본인 직무 수행이 막히면 안 됨. FastAPI middleware
-3차에서 인증 토큰 확인 후 role이 admin/operator/cpo면 우회.
+3차는 access token의 `roles` claim이 admin/operator/cpo를 포함할 때 우회한다.
+현재 일반 로그인 토큰은 subject만 담고 DB 기반 RBAC을 수행하므로, 운영 해외 우회는
+Cloudflare Access allowlist 또는 KR VPN을 우선 사용한다.
 
 단, **사용자 데이터를 조회하는 API**는 location_access_log에 적재되어 사후
 감사 가능.

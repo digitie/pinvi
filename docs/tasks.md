@@ -6,9 +6,8 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-109 — 한국 전용 geofencing 3중 안전망 (ADR-018, Sprint 6) — krtour-map
-  비의존 보안/운영 후보. Cloudflare WAF + nginx geo + FastAPI middleware. KR 외 IP
-  → 451.
+- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — krtour-map
+  비의존 운영 후보
 
 ## 완료
 
@@ -81,6 +80,9 @@
 - [x] T-110 — Admin Grafana iframe embed
   (완료: 2026-06-05, `/admin/grafana` iframe shell + `NEXT_PUBLIC_GRAFANA_*` env +
   Web `frame-src` CSP + admin guard e2e)
+- [x] T-109 — 한국 전용 geofencing FastAPI fallback
+  (완료: 2026-06-05, `TRIPMATE_GEOFENCE_*` env + `CF-IPCountry` 기반 451 middleware +
+  health/docs 우회 + roles claim 운영자 우회 단위 테스트)
 
 ## 보류
 

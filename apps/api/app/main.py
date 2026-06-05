@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging, get_logger
 from app.etl_bridge.krtour_map import krtour_map_lifespan
+from app.middleware.geofence import GeofenceMiddleware
 from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
@@ -47,6 +48,7 @@ app = FastAPI(
 )
 
 app.add_middleware(LocationAuditMiddleware)
+app.add_middleware(GeofenceMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
