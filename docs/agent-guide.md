@@ -312,9 +312,9 @@ GitHub repository ruleset `main-pr-only`:
 - Block deletions
 - Bypass 없음
 
-required status check는 현재 `api` / `web` / `etl` workflow가 path-filtered라서
-docs-only PR을 대기 상태에 가둘 수 있다. 항상 실행되는 aggregate gate를 만든 뒤
-required check로 묶는다.
+required status check는 T-065 이후 `Aggregate CI gate` 하나만 묶는다. `api` /
+`web` / `etl` workflow는 path-filtered 상태를 유지하고, aggregate gate가 변경 파일에
+따라 필요한 check(`lint-typecheck-test`, `lint-typecheck-build`, `sanity`)만 기다린다.
 - Restrict force-push
 
 ### 8.7 핸드오프

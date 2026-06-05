@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-065 aggregate CI gate
+
+**작업**: path-filtered `api` / `web` / `etl` workflow를 유지하면서 docs-only PR도
+막히지 않도록 항상 실행되는 aggregate required check를 추가했다.
+
+**변경**:
+- `.github/workflows/aggregate-ci.yml` — 모든 PR에서 `Aggregate CI gate` job 실행.
+  변경 파일을 기준으로 필요한 check(`lint-typecheck-test`, `lint-typecheck-build`,
+  `sanity`)를 GitHub Checks API로 polling한다.
+- `.github/workflows/README.md`, `docs/agent-guide.md`, `docs/decisions.md`,
+  `docs/sprints/SPRINT-4.md` — required status check 정책을 `Aggregate CI gate`
+  하나로 정리.
+- `docs/tasks.md`, `docs/resume.md` — T-065 완료와 다음 작업 정리.
+
+**검증**: 로컬 `python3` PyYAML 파싱과 `git diff --check` 통과. `node`/`actionlint`는
+현재 WSL PATH에 없어 PR CI에서 workflow 실행으로 최종 확인한다. PR merge 후
+`main-pr-only` ruleset에 required status check `Aggregate CI gate`를 적용한다.
+
+**다음**: krtour-map 의존 작업은 계속 보류하고, 남은 비의존 frontend/운영 작업 범위를
+재확인.
+
 ## 2026-06-05 (codex) — T-063 maplibre consumer sync
 
 **작업**: `maplibre-vworld-js` 선행 PR 상태와 TripMate consumer sync 체크리스트를

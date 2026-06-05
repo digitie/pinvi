@@ -3,11 +3,10 @@
 ## 진행 중
 
 - [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
-- [ ] T-066 — krtour-map OpenAPI HTTP 전환 구현 + drift gate
 
 ## 다음 (우선순위 순)
 
-- [ ] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
+- (없음 — krtour-map 의존 T-066은 보류)
 
 ## 완료
 
@@ -59,9 +58,14 @@
 - [x] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
   (완료: 2026-06-05, `maplibre-vworld-js` PR #46 merge `f1dd74b9` +
   TripMate `docs/integrations/maplibre-vworld.md` §6/§11.1 sync)
+- [x] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
+  (완료: 2026-06-05, `.github/workflows/aggregate-ci.yml` + `main-pr-only` ruleset
+  required status check `Aggregate CI gate`)
 
 ## 보류
 
+- [ ] T-066 — krtour-map OpenAPI HTTP 전환 구현 + drift gate (보류:
+  krtour-map OpenAPI/client 연동 의존)
 - [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
 - [x] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 schema/model
   완료, 라우터 본격 구현은 Sprint 4)

@@ -1,0 +1,117 @@
+name: Aggregate CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  checks: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: aggregate-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  aggregate:
+    name: Aggregate CI gate
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Wait for required path checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+            const headSha = context.payload.pull_request.head.sha;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+
+            const changed = files.map((file) => file.filename);
+            const hasAny = (predicates) => changed.some((path) => predicates.some((predicate) => predicate(path)));
+            const startsWith = (prefix) => (path) => path.startsWith(prefix);
+            const equals = (target) => (path) => path === target;
+
+            const requiredChecks = [];
+            if (hasAny([
+              startsWith("apps/api/"),
+              equals(".github/workflows/api.yml"),
+              equals("pyproject.toml"),
+            ])) {
+              requiredChecks.push("lint-typecheck-test");
+            }
+            if (hasAny([
+              startsWith("apps/web/"),
+              startsWith("packages/"),
+              equals("package.json"),
+              equals("package-lock.json"),
+              equals("tsconfig.base.json"),
+              equals(".github/workflows/web.yml"),
+            ])) {
+              requiredChecks.push("lint-typecheck-build");
+            }
+            if (hasAny([
+              startsWith("apps/etl/"),
+              equals(".github/workflows/etl.yml"),
+            ])) {
+              requiredChecks.push("sanity");
+            }
+
+            core.info(`Changed files: ${changed.join(", ") || "(none)"}`);
+            core.info(`Required path checks: ${requiredChecks.join(", ") || "(none)"}`);
+            if (requiredChecks.length === 0) {
+              core.info("No path-filtered CI checks are required for this PR.");
+              return;
+            }
+
+            const deadline = Date.now() + 10 * 60 * 1000;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            while (true) {
+              const runs = await github.paginate(github.rest.checks.listForRef, {
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100,
+              });
+              const byName = new Map(runs.map((run) => [run.name, run]));
+              const pending = [];
+
+              for (const name of requiredChecks) {
+                const run = byName.get(name);
+                if (!run) {
+                  pending.push(`${name}: missing`);
+                  continue;
+                }
+                if (run.status !== "completed") {
+                  pending.push(`${name}: ${run.status}`);
+                  continue;
+                }
+                if (run.conclusion !== "success") {
+                  core.setFailed(`${name} concluded with ${run.conclusion}`);
+                  return;
+                }
+              }
+
+              if (pending.length === 0) {
+                core.info("All required path-filtered checks passed.");
+                return;
+              }
+              if (Date.now() > deadline) {
+                core.setFailed(`Timed out waiting for checks: ${pending.join(", ")}`);
+                return;
+              }
+
+              core.info(`Waiting for checks: ${pending.join(", ")}`);
+              await sleep(20 * 1000);
+            }

@@ -64,18 +64,22 @@ PR #46(`docs/consumer-feature-catalog.md` 정합화, `build-and-test` green, mer
 `f1dd74b9`)를 머지했고, TripMate §6/§11.1 snapshot과 Sprint 4 라이브러리 선행
 조건을 완료 처리했다. 실제 `maplibre-vworld` dependency pin/import/e2e는 PR-C
 frontend 구현에서 처리한다.
+**T-065 aggregate CI gate 적용** (2026-06-05 codex) — 모든 PR에서 실행되는
+`Aggregate CI gate` workflow를 추가했다. `api` / `web` / `etl`은 path filter를
+유지하고, aggregate gate가 변경 파일 기준으로 필요한 check만 기다린다. `main-pr-only`
+ruleset required status check는 `Aggregate CI gate`로 적용한다.
 
 ## 다음 한 작업
 
 우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **T-065** — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
-2. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
+1. **보류: Sprint 4 PR-B2** — krtour-map OpenAPI HTTP client → `/features/in-bounds`
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-3. **운영 후속** — 현재 `api` / `web` / `etl`은 path-filtered라 바로 required
-   check로 걸지 않는다.
+2. **운영 후속** — PR-C frontend 지도 구현. `maplibre-vworld` dependency pin,
+   지도 컴포넌트 import/e2e는 가능하지만, feature 조회는 krtour-map client 의존
+   부분을 제외하고 진행한다.
 
 이후 **PR-C (프론트엔드)**:
 
@@ -156,5 +160,5 @@ frontend 구현에서 처리한다.
 
 ## 차단 사유 / 결정 대기
 
-- required status check 적용은 항상 실행되는 aggregate CI gate 설계 이후
+- required status check는 `Aggregate CI gate`로 적용
 - Sprint 4 backlog 중 merge 완료 / 미완료 구분을 `tasks.md`에 재기록 필요
