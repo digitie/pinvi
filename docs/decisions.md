@@ -755,6 +755,11 @@
 - **amendment (2026-06-02)**: 프론트엔드 실행(`next dev`), lint/typecheck/build,
   Vitest는 WSL ext4 테스트 미러에서 수행한다. Playwright 기반 브라우저 e2e만
   Windows Node/브라우저에서 실행한다. e2e 대상 dev server는 WSL에서 띄운다.
+- **amendment (2026-06-05)**: required status check는 `Aggregate CI gate` 하나로
+  강제한다. `api` / `web` / `etl` workflow는 path-filtered 상태를 유지하고,
+  aggregate gate가 PR 변경 파일을 기준으로 필요한 check(`lint-typecheck-test`,
+  `lint-typecheck-build`, `sanity`)만 기다린다. docs-only PR은 aggregate gate 자체만
+  통과하면 된다.
 - **컨텍스트**: Sprint 1~3 진행 중 사용자 지시 "깃헙 ci / cd 쓰지마"로 PR #10
   직전 모든 `.github/workflows/`를 삭제했었다. Sprint 4 진입 시 사용자 결정
   뒤집힘 — 운영 가시화 / 정합성 게이트 / Sprint 4 이후 회귀 방지를 위해

@@ -174,7 +174,8 @@ Sprint 1~3 동안 사용자 지시로 비활성이었음 (PR #10 직전 변경).
 ### 7.2 운영 룰
 
 - PR은 repository ruleset `main-pr-only`에 따라 squash PR로만 머지한다.
-- required status check는 path-filtered workflow가 docs-only PR을 막을 수 있어,
-  항상 실행되는 aggregate gate 설계 뒤 적용한다.
+- required status check는 T-065 이후 `Aggregate CI gate` 하나만 적용한다.
+  `api` / `web` / `etl`은 path-filtered workflow로 유지하고, aggregate gate가 변경
+  파일에 따라 필요한 check만 기다린다.
 - workflow 실패는 머지 차단 — fix 후 재시도. `--no-verify` / hook 우회 금지
   (`AGENTS.md` Git Safety Protocol)

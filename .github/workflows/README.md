@@ -9,6 +9,7 @@
 | [api.yml](./api.yml) | `apps/api/**` PR / push | ruff + ruff format check + mypy --strict + pytest (unit) + alembic upgrade (PostGIS service) | 4+ |
 | [web.yml](./web.yml) | `apps/web/**` / `packages/**` PR / push | lint (next + ESLint) + tsc --noEmit + next build | 4+ |
 | [etl.yml](./etl.yml) | `apps/etl/**` PR / push | ruff check + Dagster definitions load test (placeholder, Sprint 5 본격) | 5+ |
+| [aggregate-ci.yml](./aggregate-ci.yml) | 모든 PR | 변경 파일 기준 필요한 path-filtered check를 기다리는 required gate | 4+ |
 | [codex-pr-review.yml](./codex-pr-review.yml) | PR opened / ready_for_review | 외부 API key 없이 review 필요 체크리스트 + head SHA 마커 댓글 | 4+ |
 | [codex-pr-monitor.yml](./codex-pr-monitor.yml) | 5분 cron | 머지되지 않은 PR 중 최신 head SHA에 review reminder 마커가 없으면 알림 댓글 | 4+ |
 
@@ -46,20 +47,22 @@ main에 다음 정책을 박는다 (GitHub Settings → Rulesets 또는 Branches
 - **Block deletions** — ON
 - **Do not allow bypassing the above settings** — ON (가능하면 admin 포함)
 
-required status check는 아직 활성화하지 않는다. 현재 `api` / `web` / `etl`은
-path-filtered workflow라서 docs-only PR에서는 check 자체가 생성되지 않는다. 이 상태로
-required check에 묶으면 PR이 `Expected` 상태에 갇힐 수 있다. 항상 실행되는 aggregate
-gate workflow를 만든 뒤 다음 항목을 required check로 추가한다.
+T-065 이후 required status check는 **`Aggregate CI gate` 하나만** 활성화한다. 현재
+`api` / `web` / `etl`은 path-filtered workflow라서 docs-only PR에서는 check 자체가
+생성되지 않는다. 각 path workflow를 직접 required로 묶으면 PR이 `Expected` 상태에
+갇힐 수 있으므로, 항상 실행되는 aggregate gate가 변경 파일에 따라 필요한 check만
+기다린다.
 
-- `api / lint-typecheck-test`
-- `web / lint-typecheck-build`
-- `etl / sanity`
+- API 변경: `lint-typecheck-test`
+- Web/packages 변경: `lint-typecheck-build`
+- ETL 변경: `sanity`
+- docs-only / 설정-only 변경: `Aggregate CI gate` 자체만 통과
 
 필요 시 추가 정책:
 
 - **Require branches to be up to date before merging** — aggregate gate 도입 뒤 ON 검토
 
-설정 변경 이력은 `docs/journal.md`와 본 파일의 T-062 섹션에 기록한다.
+설정 변경 이력은 `docs/journal.md`와 본 파일의 T-062/T-065 섹션에 기록한다.
 
 ## 운영
 
