@@ -256,9 +256,9 @@ Content-Type: application/json
 {
   "data": {
     "providers": [
-      { "name": "google", "enabled": true },
-      { "name": "naver", "enabled": true },
-      { "name": "kakao", "enabled": true }
+      { "provider": "google", "enabled": true },
+      { "provider": "naver", "enabled": true },
+      { "provider": "kakao", "enabled": true }
     ]
   }
 }
@@ -266,17 +266,21 @@ Content-Type: application/json
 
 `enabled`는 환경변수 (`TRIPMATE_<PROVIDER>_OAUTH_CLIENT_ID` 존재 여부).
 
-### 6.2 `GET /auth/oauth/{provider}/start`
+### 6.2 `POST /auth/oauth/google/start`
 
 ```http
-GET /auth/oauth/google/start?return_to=/trips&mode=login
+POST /auth/oauth/google/start
+Content-Type: application/json
+
+{ "return_to": "/trips", "mode": "login" }
 ```
 
-- `provider`: `google` | `naver` | `kakao`
 - `mode`: `login` (기본) | `link` (기존 user에 provider 연결)
 - `return_to`: TripMate 내부 경로만 허용 (allowlist), `/`로 시작
-- 302 redirect → provider 인증 페이지
-- `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분)
+- 응답 200: `{ "data": { "authorize_url": "https://accounts.google.com/..." } }`
+- 클라이언트는 `authorize_url`로 top-level navigation
+- `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분). PKCE verifier는
+  `state`와 서버 secret으로 재생성하므로 DB에는 hash만 남긴다.
 
 ### 6.3 `GET /auth/oauth/{provider}/callback`
 

@@ -2,9 +2,13 @@
 // `next lint`가 본 파일을 자동 선택.
 
 import { FlatCompat } from '@eslint/eslintrc';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const compat = new FlatCompat({
-  baseDirectory: import.meta.url,
+  baseDirectory: __dirname,
 });
 
 const config = [

@@ -9,13 +9,22 @@ from pydantic import BaseModel, Field
 OAuthProvider = Literal["google", "naver", "kakao"]
 
 
+class OAuthProviderInfo(BaseModel):
+    provider: OAuthProvider
+    enabled: bool
+
+
 class OAuthProvidersResponse(BaseModel):
-    providers: list[dict[str, str | bool]]
+    providers: list[OAuthProviderInfo]
 
 
 class OAuthStartRequest(BaseModel):
     return_to: str = Field(default="/", pattern=r"^/[\w/_\-?=&]*$")
     mode: Literal["login", "link"] = "login"
+
+
+class OAuthStartResponse(BaseModel):
+    authorize_url: str
 
 
 class OAuthLinkRequest(BaseModel):

@@ -1,6 +1,9 @@
 import {
   AuthUserSchema,
   LoginRequestSchema,
+  OAuthProvidersResponseSchema,
+  OAuthStartRequestSchema,
+  OAuthStartResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
   VerifyEmailRequestSchema,
@@ -49,5 +52,18 @@ export const authApi = (client: ApiClient) => ({
     client.request('/auth/me', {
       method: 'GET',
       schema: AuthUserSchema,
+    }),
+
+  oauthProviders: () =>
+    client.request('/auth/oauth/providers', {
+      method: 'GET',
+      schema: OAuthProvidersResponseSchema,
+    }),
+
+  startGoogleOAuth: (body: z.infer<typeof OAuthStartRequestSchema>) =>
+    client.request('/auth/oauth/google/start', {
+      method: 'POST',
+      body: JSON.stringify(OAuthStartRequestSchema.parse(body)),
+      schema: OAuthStartResponseSchema,
     }),
 });

@@ -119,11 +119,11 @@ CREATE INDEX oauth_login_states_active_idx
 
 ```
 사용자가 /login에서 [Google로 시작] 클릭
-  ↓ top-level navigation (fetch 아님)
-GET /auth/oauth/google/start?return_to=/trips
+  ↓ API가 authorize_url 발급
+POST /auth/oauth/google/start { return_to: "/trips", mode: "login" }
   ↓
-서버: state/nonce/PKCE 생성, hash 저장 (10분 TTL)
-  ↓ 302
+서버: state/nonce/PKCE 생성, hash 저장 (10분 TTL), authorize_url 반환
+  ↓ top-level navigation
 https://accounts.google.com/o/oauth2/v2/auth?client_id=...&response_type=code&scope=openid+email+profile&...&state=...
   ↓ 사용자 Google 동의
 GET /auth/oauth/google/callback?code=...&state=...
@@ -298,12 +298,12 @@ TRIPMATE_ENVIRONMENT=production
 
 ## 10. AI agent 구현 체크리스트
 
-- [ ] `app.user_oauth_identities` + `app.oauth_login_states` Alembic (Sprint 2)
-- [ ] `apps/api/app/services/oauth/{google,naver,kakao}.py` httpx 호출
-- [ ] `apps/api/app/services/oauth/resolve_user.py` (G-4 매칭 정책)
-- [ ] `apps/api/app/api/v1/oauth.py` 라우터 (start / callback / link / unlink)
-- [ ] `apps/web/app/(auth)/login/page.tsx` 버튼 (3개)
-- [ ] `apps/web/lib/oauth.ts` (provider 목록 fetch)
+- [x] `app.user_oauth_identities` + `app.oauth_login_states` Alembic (Sprint 2)
+- [x] `apps/api/app/services/oauth_google.py` httpx 호출 + G-4 매칭 정책
+- [x] `apps/api/app/api/v1/oauth.py` Google providers/start/callback/unlink 라우터
+- [x] `apps/web/app/(auth)/login/page.tsx` Google 버튼 + provider 목록 fetch
+- [ ] Naver/Kakao service + start/callback/link/unlink 라우터
+- [ ] Naver/Kakao 로그인 버튼 활성화
 - [ ] OAuth Naver 신규 가입 → 자체 verify 메일 트리거
 - [ ] 통합 테스트 — VCR.py로 provider 응답 녹화 + 재생
 - [ ] state / nonce / PKCE 검증 unit 테스트

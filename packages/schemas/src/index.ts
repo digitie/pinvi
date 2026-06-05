@@ -12,8 +12,20 @@ export {
   VerifyEmailRequestSchema,
   LoginRequestSchema,
   AuthUserSchema,
+  OAuthProviderNameSchema,
+  OAuthProviderSchema,
+  OAuthProvidersResponseSchema,
+  OAuthStartRequestSchema,
+  OAuthStartResponseSchema,
 } from './auth';
-export type { RegisterRequest, AuthUser } from './auth';
+export type {
+  RegisterRequest,
+  AuthUser,
+  OAuthProvider,
+  OAuthProvidersResponse,
+  OAuthStartRequest,
+  OAuthStartResponse,
+} from './auth';
 
 export {
   ConsentTypeSchema,

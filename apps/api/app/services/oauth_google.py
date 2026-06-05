@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -69,8 +70,25 @@ class OAuthLoginResult:
     linked_existing: bool
 
 
+@dataclass
+class ConsumedOAuthLoginState:
+    mode: str
+    return_to_path: str | None
+    user_id: uuid.UUID | None
+    code_verifier: str
+
+
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _derive_code_verifier(state: str) -> str:
+    digest = hmac.new(
+        settings.tripmate_jwt_secret_key.encode("utf-8"),
+        f"tripmate-oauth-pkce:{state}".encode(),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -83,10 +101,10 @@ async def issue_login_state(
     return_to: str = "/",
     user_id: uuid.UUID | None = None,
 ) -> tuple[str, str, str]:
-    """state / nonce / PKCE verifier 원본 반환 + hash 만 DB 저장."""
+    """state / nonce / PKCE verifier 반환 + hash 만 DB 저장."""
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(16)
-    code_verifier = secrets.token_urlsafe(48)
+    code_verifier = _derive_code_verifier(state)
     row = OAuthLoginState(
         state_hash=_hash(state),
         nonce_hash=_hash(nonce),
@@ -102,7 +120,7 @@ async def issue_login_state(
     return state, nonce, code_verifier
 
 
-async def consume_login_state(db: AsyncSession, *, state: str) -> OAuthLoginState:
+async def consume_login_state(db: AsyncSession, *, state: str) -> ConsumedOAuthLoginState:
     row = await db.scalar(select(OAuthLoginState).where(OAuthLoginState.state_hash == _hash(state)))
     if row is None:
         raise OAuthStateInvalidError("state 가 존재하지 않습니다.")
@@ -110,9 +128,20 @@ async def consume_login_state(db: AsyncSession, *, state: str) -> OAuthLoginStat
         raise OAuthStateInvalidError("이미 사용된 state 입니다.")
     if row.expires_at < datetime.now(UTC):
         raise OAuthStateInvalidError("state 가 만료되었습니다.")
+    code_verifier = _derive_code_verifier(state)
+    if row.pkce_code_verifier_hash and not hmac.compare_digest(
+        row.pkce_code_verifier_hash,
+        _hash(code_verifier),
+    ):
+        raise OAuthStateInvalidError("PKCE verifier 검증에 실패했습니다.")
     row.consumed_at = datetime.now(UTC)
     await db.commit()
-    return row
+    return ConsumedOAuthLoginState(
+        mode=row.mode,
+        return_to_path=row.return_to_path,
+        user_id=row.user_id,
+        code_verifier=code_verifier,
+    )
 
 
 def build_authorize_url(*, state: str, nonce: str, code_verifier: str) -> str:

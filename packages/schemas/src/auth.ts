@@ -42,3 +42,26 @@ export const AuthUserSchema = z.object({
   email_verified_at: Iso8601Schema.nullable(),
 });
 export type AuthUser = z.infer<typeof AuthUserSchema>;
+
+/** OAuth provider 목록. */
+export const OAuthProviderNameSchema = z.enum(['google', 'naver', 'kakao']);
+export const OAuthProviderSchema = z.object({
+  provider: OAuthProviderNameSchema,
+  enabled: z.boolean(),
+});
+export const OAuthProvidersResponseSchema = z.object({
+  providers: z.array(OAuthProviderSchema),
+});
+export type OAuthProvider = z.infer<typeof OAuthProviderSchema>;
+export type OAuthProvidersResponse = z.infer<typeof OAuthProvidersResponseSchema>;
+
+/** OAuth authorize URL 발급 요청/응답. */
+export const OAuthStartRequestSchema = z.object({
+  return_to: z.string().regex(/^\/[\w/_\-?=&]*$/).default('/'),
+  mode: z.enum(['login', 'link']).default('login'),
+});
+export const OAuthStartResponseSchema = z.object({
+  authorize_url: z.string().url(),
+});
+export type OAuthStartRequest = z.infer<typeof OAuthStartRequestSchema>;
+export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;

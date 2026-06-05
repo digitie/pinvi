@@ -6,13 +6,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.models.oauth_identity import UserOAuthIdentity
 from app.models.user import User
-from app.services.oauth_google import GoogleClaims, resolve_google_login
+from app.services.oauth_google import (
+    GoogleClaims,
+    consume_login_state,
+    issue_login_state,
+    resolve_google_login,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -124,3 +131,42 @@ async def test_providers_endpoint(client) -> None:
     assert resp.status_code == 200
     providers = {p["provider"] for p in resp.json()["data"]["providers"]}
     assert providers == {"google", "naver", "kakao"}
+
+
+async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "tripmate_google_oauth_client_id",
+        "test-client.apps.googleusercontent.com",
+    )
+
+    resp = await client.post(
+        "/auth/oauth/google/start",
+        json={"return_to": "/trips", "mode": "login"},
+    )
+
+    assert resp.status_code == 200
+    authorize_url = resp.json()["data"]["authorize_url"]
+    parsed = urlparse(authorize_url)
+    params = parse_qs(parsed.query)
+    assert parsed.netloc == "accounts.google.com"
+    assert params["client_id"] == ["test-client.apps.googleusercontent.com"]
+    assert params["redirect_uri"] == ["http://localhost:9021/auth/oauth/google/callback"]
+    assert params["response_type"] == ["code"]
+    assert params["state"][0]
+    assert params["code_challenge"][0]
+    assert params["code_challenge_method"] == ["S256"]
+
+
+async def test_login_state_replays_pkce_code_verifier(session_factory) -> None:
+    async with session_factory() as db:
+        state, _nonce, code_verifier = await issue_login_state(
+            db,
+            mode="login",
+            return_to="/trips",
+        )
+        consumed = await consume_login_state(db, state=state)
+
+    assert consumed.code_verifier == code_verifier
+    assert consumed.mode == "login"
+    assert consumed.return_to_path == "/trips"

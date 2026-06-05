@@ -16,7 +16,12 @@ from app.core.deps import CurrentUserId, DbSession
 from app.core.security import create_access_token, generate_opaque_token
 from app.schemas.auth import AuthUser
 from app.schemas.envelope import Envelope
-from app.schemas.oauth import OAuthProvidersResponse, OAuthStartRequest
+from app.schemas.oauth import (
+    OAuthProviderInfo,
+    OAuthProvidersResponse,
+    OAuthStartRequest,
+    OAuthStartResponse,
+)
 from app.services.oauth_google import (
     OAuthError,
     OAuthStateInvalidError,
@@ -69,15 +74,24 @@ def _to_auth_user(user: Any) -> AuthUser:
 async def list_providers() -> Envelope[OAuthProvidersResponse]:
     """활성화된 OAuth provider 목록 (client id 가 설정된 것만 enabled)."""
     providers = [
-        {"provider": "google", "enabled": bool(settings.tripmate_google_oauth_client_id)},
-        {"provider": "naver", "enabled": bool(settings.tripmate_naver_oauth_client_id)},
-        {"provider": "kakao", "enabled": bool(settings.tripmate_kakao_oauth_rest_api_key)},
+        OAuthProviderInfo(
+            provider="google",
+            enabled=bool(settings.tripmate_google_oauth_client_id),
+        ),
+        OAuthProviderInfo(
+            provider="naver",
+            enabled=bool(settings.tripmate_naver_oauth_client_id),
+        ),
+        OAuthProviderInfo(
+            provider="kakao",
+            enabled=bool(settings.tripmate_kakao_oauth_rest_api_key),
+        ),
     ]
     return Envelope.of(OAuthProvidersResponse(providers=providers))
 
 
-@router.post("/google/start")
-async def google_start(body: OAuthStartRequest, db: DbSession) -> dict[str, str]:
+@router.post("/google/start", response_model=Envelope[OAuthStartResponse])
+async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuthStartResponse]:
     """authorize URL 발급. 프론트는 반환된 URL 로 redirect."""
     if not settings.tripmate_google_oauth_client_id:
         raise HTTPException(
@@ -88,7 +102,7 @@ async def google_start(body: OAuthStartRequest, db: DbSession) -> dict[str, str]
         db, mode=body.mode, return_to=body.return_to
     )
     url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
-    return {"authorize_url": url}
+    return Envelope.of(OAuthStartResponse(authorize_url=url))
 
 
 @router.get("/google/callback")
@@ -107,11 +121,11 @@ async def google_callback(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    # code_verifier 원본은 저장하지 않으므로(해시만) 실제 운영에서는 별도 보관 필요.
-    # 본 구현은 통합 테스트에서 resolve_google_login 을 직접 검증하고,
-    # 콜백 HTTP 교환은 운영 비밀이 설정된 환경에서만 동작한다.
     try:
-        claims = await exchange_code_for_claims(code=code, code_verifier="")
+        claims = await exchange_code_for_claims(
+            code=code,
+            code_verifier=login_state.code_verifier,
+        )
     except OAuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
