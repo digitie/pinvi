@@ -49,7 +49,13 @@ export {
   TripVisibilitySchema,
   TripCompanionInviteSchema,
 } from './trip';
-export type { TripCreate, TripResponse, TripStatus, TripVisibility } from './trip';
+export type {
+  TripCreate,
+  TripUpdate,
+  TripResponse,
+  TripStatus,
+  TripVisibility,
+} from './trip';
 
 export {
   PoiCreateSchema,
@@ -65,7 +71,12 @@ export {
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
 } from './notice-plan';
-export type { NoticePoi, NoticePlan } from './notice-plan';
+export type {
+  NoticePoi,
+  NoticePlan,
+  NoticePlanCopyRequest,
+  NoticePlanCopyResponse,
+} from './notice-plan';
 
 export {
   AttachmentPurposeSchema,

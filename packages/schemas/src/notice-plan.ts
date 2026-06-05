@@ -44,6 +44,7 @@ export const NoticePlanCopyRequestSchema = z.object({
   trip_end_date: z.string().date().nullable().optional(),
   poi_ids: z.array(z.string().uuid()).default([]),
 });
+export type NoticePlanCopyRequest = z.infer<typeof NoticePlanCopyRequestSchema>;
 
 export const NoticePlanCopyResponseSchema = z.object({
   trip_id: z.string().uuid(),
@@ -51,3 +52,4 @@ export const NoticePlanCopyResponseSchema = z.object({
   copied_poi_ids: z.array(z.string().uuid()),
   copied_attachment_count: z.number().int(),
 });
+export type NoticePlanCopyResponse = z.infer<typeof NoticePlanCopyResponseSchema>;

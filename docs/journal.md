@@ -2,6 +2,43 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-075 Trip / notice plan 사용자 shell
+
+**작업**: krtour-map feature 조회 없이 TripMate 자체 Trip / notice plan API만으로
+사용자 shell을 연결했다.
+
+**변경**:
+- `packages/api-client/src/endpoints/trips.ts`,
+  `packages/api-client/src/endpoints/notice-plans.ts` — `GET /trips`,
+  `POST /trips`, `GET /notice-plans`, `POST /notice-plans/{id}/copy` 등 사용자
+  endpoint client를 추가했다.
+- `apps/web/app/(app)/layout.tsx`, `apps/web/components/app/AppShell.tsx` — 사용자
+  앱 공통 navigation shell을 추가했다.
+- `apps/web/app/(app)/trips/page.tsx`,
+  `apps/web/components/trips/TripDashboard.tsx` — Trip 목록, bucket 필터, 빈 상태,
+  간단 생성 form을 연결했다.
+- `apps/web/app/(app)/notice-plans/page.tsx`,
+  `apps/web/components/notice-plans/NoticePlanShelf.tsx` — 추천 여행 목록, category
+  필터, 내 여행으로 copy action을 연결했다.
+- `apps/web/e2e/user-shells.e2e.ts` — API 응답을 Playwright route mock으로 고정하고
+  `/features/*`와 krtour-map API `9011` 미호출을 검증했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run typecheck --workspace packages/api-client`
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run typecheck --workspace apps/web`
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run lint --workspace apps/web`
+- WSL2 ext4 mirror:
+  `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:... npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... map-shell.e2e.ts user-shells.e2e.ts`
+  — 3 passed
+
+**다음**: krtour-map client 의존 T-066은 계속 보류한다. 남은 비의존 후보는 Sprint
+5~6 backlog 중 운영/관리 UI 범위(T-110 등)를 별도 task로 선별한다.
+
 ## 2026-06-05 (codex) — T-074 PR-C frontend 지도 shell
 
 **작업**: krtour-map feature 조회를 연결하지 않고, Sprint 4 PR-C의 지도 shell을
@@ -16,7 +53,7 @@ TripMate Web에 먼저 붙였다.
   `/features/in-bounds` 또는 krtour-map API `9011` 호출은 하지 않는다.
 - `apps/web/app/(app)/trips/map-shell/page.tsx` — `/trips/map-shell` 지도 shell route
   추가.
-- `apps/web/playwright.config.ts`, `apps/web/tests/map-shell.spec.ts` — Windows
+- `apps/web/playwright.config.ts`, `apps/web/e2e/map-shell.e2e.ts` — Windows
   Playwright smoke로 shell 렌더링과 krtour-map 비호출을 검증.
 - `apps/web/next.config.mjs` — `maplibre-vworld` transpile 대상 추가. 라이브러리 dist의
   development JSX runtime이 `require("react")`를 호출하는 dev-only 문제는
@@ -29,7 +66,7 @@ TripMate Web에 먼저 붙였다.
 - WSL2 ext4 mirror: `npm run typecheck --workspace apps/web`
 - WSL2 ext4 mirror: `npm run build --workspace apps/web`
 - Windows Playwright runner → WSL dev server:
-  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 npx -y @playwright/test@1.60.0 test tests/map-shell.spec.ts`
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 npx -y @playwright/test@1.60.0 test map-shell.e2e.ts`
   — 1 passed
 
 **다음**: krtour-map client 의존 T-066은 계속 보류하고, Trip 대시보드 / notice plan

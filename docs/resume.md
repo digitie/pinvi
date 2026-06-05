@@ -86,6 +86,11 @@ archive tarball로 pin하고
 `/trips/map-shell`에서 `VWorldMap` / `ClusterLayer` / `MakiMarker` / `Popup`을
 실제 import한다. feature 조회는 연결하지 않았고, Windows Playwright smoke에서
 `/features/in-bounds`와 krtour-map API `9011` 미호출을 확인했다.
+**T-075 Trip / notice plan 사용자 shell** (2026-06-05 codex) — krtour-map feature
+조회 없이 공용 API client에 `/trips` / `/notice-plans` 사용자 endpoint를 추가하고,
+Web `/trips`와 `/notice-plans` route, 사용자 navigation shell, 빈 상태, Trip 생성,
+notice plan copy action을 연결했다. Windows Playwright smoke에서 `/features/*`와
+krtour-map API `9011` 미호출을 확인했다.
 
 ## 다음 한 작업
 
@@ -95,18 +100,14 @@ archive tarball로 pin하고
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **비의존 후속** — PR-C frontend 지도 shell. `maplibre-vworld` dependency pin,
-   지도 컴포넌트 import/e2e는 완료(T-074). feature 조회는 krtour-map client 의존
-   부분이라 제외한다.
-3. **비의존 후속** — T-075 Trip 대시보드 / notice plan 사용자 shell. 지도 feature
-   조회 없이 가능한 route, navigation, 빈 상태, 기존 Trip/Notice API client 연결부터
-   진행한다.
+2. **비의존 후속 후보 선별** — Sprint 5~6 backlog 중 krtour-map과 무관한 운영/관리 UI
+   범위(T-110 Admin Grafana iframe embed 등)를 별도 task로 진행한다.
 
 이후 **PR-C (프론트엔드)**:
 
 - `apps/web/components/map/*` (MapView, ViewportFeatureLayer, ClusterLayer, ...)
 - `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
-- Trip 대시보드 + notice plan UI (feature 조회 없는 shell부터)
+- Trip 대시보드 + notice plan UI — feature 조회 없는 shell 완료(T-075)
 
 이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)** — 자세히는
 `docs/sprints/SPRINT-4.md`.
@@ -153,6 +154,7 @@ archive tarball로 pin하고
 - [x] Sprint 2 잔여 마감(email queue/reset/api_call_log/integration CI) — T-070
 - [x] Google OAuth profile 연결/해제 UI — T-073
 - [x] PR-C frontend 지도 shell dependency pin/import/e2e — T-074
+- [x] Trip / notice plan 사용자 shell — T-075
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
