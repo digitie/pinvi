@@ -91,6 +91,10 @@ archive tarball로 pin하고
 Web `/trips`와 `/notice-plans` route, 사용자 navigation shell, 빈 상태, Trip 생성,
 notice plan copy action을 연결했다. Windows Playwright smoke에서 `/features/*`와
 krtour-map API `9011` 미호출을 확인했다.
+**T-110 Admin Grafana iframe embed** (2026-06-05 codex) — `/admin/grafana`에
+anonymous viewer용 Grafana iframe shell을 추가하고 `NEXT_PUBLIC_GRAFANA_URL`,
+`NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`, Web `frame-src` CSP를 문서/환경변수와 맞췄다.
+Grafana 컨테이너/provisioning 본체는 Sprint 5 인프라 작업으로 남겼다.
 
 ## 다음 한 작업
 
@@ -100,8 +104,9 @@ krtour-map API `9011` 미호출을 확인했다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **비의존 후속 후보 선별** — Sprint 5~6 backlog 중 krtour-map과 무관한 운영/관리 UI
-   범위(T-110 Admin Grafana iframe embed 등)를 별도 task로 진행한다.
+2. **비의존 후속 후보** — T-109 한국 전용 geofencing 3중 안전망. krtour-map과
+   무관하지만 보안/운영 정책 범위라 ADR-018과 `docs/runbooks/korea-only.md`를 먼저
+   확인한다.
 
 이후 **PR-C (프론트엔드)**:
 
@@ -155,6 +160,7 @@ krtour-map API `9011` 미호출을 확인했다.
 - [x] Google OAuth profile 연결/해제 UI — T-073
 - [x] PR-C frontend 지도 shell dependency pin/import/e2e — T-074
 - [x] Trip / notice plan 사용자 shell — T-075
+- [x] Admin Grafana iframe embed — T-110
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

@@ -6,8 +6,9 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-110 — Admin Grafana iframe embed (ADR-022 보조, Sprint 5) — krtour-map
-  비의존 운영 UI 후보
+- [ ] T-109 — 한국 전용 geofencing 3중 안전망 (ADR-018, Sprint 6) — krtour-map
+  비의존 보안/운영 후보. Cloudflare WAF + nginx geo + FastAPI middleware. KR 외 IP
+  → 451.
 
 ## 완료
 
@@ -77,6 +78,9 @@
 - [x] T-075 — Trip 대시보드 / notice plan 사용자 shell
   (완료: 2026-06-05, `/trips` / `/notice-plans` 사용자 route + navigation + 빈 상태 +
   API client 연결, `/features/*` / krtour-map API `9011` 미호출 e2e)
+- [x] T-110 — Admin Grafana iframe embed
+  (완료: 2026-06-05, `/admin/grafana` iframe shell + `NEXT_PUBLIC_GRAFANA_*` env +
+  Web `frame-src` CSP + admin guard e2e)
 
 ## 보류
 
@@ -97,8 +101,6 @@
 
 ### Sprint 5~6 (v0.2.0 / v1.0) 신규 backlog
 
-- [ ] T-109 — 한국 전용 geofencing 3중 안전망 (ADR-018, Sprint 6) —
-  Cloudflare WAF + nginx geo + FastAPI middleware. KR 외 IP → 451.
 - [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
   + RestoreHotswapDialog. Sprint 5의 backup script + endpoint 위에 UI + 핫스왑
   워크플로 finalize.
