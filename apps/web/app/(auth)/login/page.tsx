@@ -18,6 +18,17 @@ const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
   kakao: false,
 };
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  OAUTH_CALLBACK_INVALID: 'Google 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.',
+  OAUTH_PROVIDER_DENIED: 'Google 로그인이 취소되었습니다.',
+  OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+  OAUTH_STATE_INVALID: 'Google 로그인 요청이 만료되었습니다. 다시 시작해 주세요.',
+};
+
+function getOAuthErrorMessage(code: string) {
+  return OAUTH_ERROR_MESSAGES[code] ?? 'Google 로그인을 완료하지 못했습니다.';
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -28,6 +39,13 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
   const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('error');
+    if (code) {
+      setOauthError(getOAuthErrorMessage(code));
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +63,7 @@ export default function LoginPage() {
         setOauthProviders(next);
       } catch {
         if (active) {
-          setOauthError('소셜 로그인 상태를 불러오지 못했습니다.');
+          setOauthError((current) => current ?? '소셜 로그인 상태를 불러오지 못했습니다.');
         }
       } finally {
         if (active) {

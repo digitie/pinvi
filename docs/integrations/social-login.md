@@ -174,21 +174,17 @@ POST /auth/oauth/google/link { return_to: '/profile' }
 
 ## 6. 에러 redirect 코드
 
-callback 실패 시 `/login?error=<code>&error_description=<msg>` 으로 302:
+callback 실패 시 `/login?error=<code>&error_description=<msg>` 으로 303:
 
 | code | 의미 |
 |------|------|
-| `provider_disabled` | 환경변수 미설정 |
-| `provider_denied` | 사용자가 provider 측에서 거부 |
-| `state_invalid` | state hash 불일치 / consumed |
-| `state_expired` | TTL 초과 |
-| `provider_profile_failed` | userinfo 호출 실패 |
-| `email_required` | provider 응답에 email 없음 |
-| `email_unverified` | Google/Kakao verified=false |
-| `account_link_required` | 자동 연결 차단 |
-| `oauth_temporary_failure` | 5xx / 네트워크 / timeout |
+| `OAUTH_CALLBACK_INVALID` | callback 필수 query 누락 |
+| `OAUTH_PROVIDER_DENIED` | 사용자가 provider 측에서 거부 |
+| `OAUTH_STATE_INVALID` | state hash 불일치 / consumed / TTL 초과 |
+| `OAUTH_PROVIDER_ERROR` | token 교환 또는 userinfo 호출 실패 |
 
-UI는 한국어 메시지로 변환해 토스트 또는 인라인 에러 표시.
+UI는 `error_description`을 그대로 노출하지 않고 `error` code를 한국어 메시지로
+변환해 인라인 에러로 표시한다.
 
 ## 7. 보안
 
