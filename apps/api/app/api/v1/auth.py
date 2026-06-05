@@ -12,6 +12,9 @@ from app.core.security import create_access_token, generate_opaque_token
 from app.schemas.auth import (
     AuthUser,
     LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
     RegisterRequest,
     RegisterResponse,
     UserResponse,
@@ -25,6 +28,8 @@ from app.services.user_registration import (
     VerificationTokenInvalidError,
     authenticate,
     register_user,
+    request_password_reset,
+    reset_password,
     verify_email,
 )
 
@@ -103,6 +108,36 @@ async def verify_email_endpoint(
 ) -> Envelope[AuthUser]:
     try:
         user = await verify_email(db, token=body.token)
+    except VerificationTokenInvalidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": str(exc), "details": {"token": "invalid"}},
+        ) from exc
+
+    _set_session_cookies(response, user_id=str(user.user_id))
+    return Envelope.of(_to_auth_user(user))
+
+
+@router.post(
+    "/password/reset-request",
+    response_model=Envelope[PasswordResetRequestResponse],
+)
+async def password_reset_request(
+    body: PasswordResetRequest,
+    db: DbSession,
+) -> Envelope[PasswordResetRequestResponse]:
+    await request_password_reset(db, email=str(body.email))
+    return Envelope.of(PasswordResetRequestResponse(accepted=True))
+
+
+@router.post("/password/reset", response_model=Envelope[AuthUser])
+async def password_reset(
+    body: PasswordResetConfirmRequest,
+    response: Response,
+    db: DbSession,
+) -> Envelope[AuthUser]:
+    try:
+        user = await reset_password(db, token=body.token, new_password=body.new_password)
     except VerificationTokenInvalidError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

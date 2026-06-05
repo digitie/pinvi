@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     tripmate_resend_webhook_secret: str = ""
     tripmate_web_base_url: str = "http://localhost:9022"
     tripmate_email_verification_path: str = "/verify-email"
+    tripmate_auth_reset_path: str = Field(
+        default="/reset-password",
+        validation_alias="TRIPMATE_PASSWORD_RESET_PATH",
+    )
 
     # OAuth (Sprint 2부터 실제 사용)
     tripmate_google_oauth_client_id: str = ""
