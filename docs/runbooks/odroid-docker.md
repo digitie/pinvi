@@ -206,6 +206,32 @@ curl -fsS http://127.0.0.1:9021/health || echo "API down"
 curl -fsS http://127.0.0.1:9022/admin/login >/dev/null || echo "Web down"
 ```
 
+Production public URL:
+
+| 서비스 | 내부/host 포트 | 공개 URL |
+|--------|---------------|----------|
+| API | `9021` | `https://tripmateapi.digitie.mywire.org` |
+| Web | `9022` | `https://tripmate.digitie.mywire.org` |
+
+운영 `.env` 필수 URL/security 값:
+
+```dotenv
+TRIPMATE_WEB_BASE_URL=https://tripmate.digitie.mywire.org
+TRIPMATE_OAUTH_CALLBACK_BASE_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_CORS_ALLOWED_ORIGINS=["https://tripmate.digitie.mywire.org"]
+NEXT_PUBLIC_TRIPMATE_API_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_ENVIRONMENT=production
+```
+
+보안 체크:
+
+- Cloudflare Tunnel 또는 reverse proxy는 API와 Web을 서로 다른 host로 라우팅한다.
+- HTTP 직접 접근은 HTTPS로 redirect한다.
+- proxy가 `X-Forwarded-Proto=https`를 보존해야 Secure cookie / redirect URL 판단이
+  흔들리지 않는다.
+- OAuth provider 콘솔 callback은 API 공개 URL 기준
+  `https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`으로 등록한다.
+
 ## 6. 리소스 튜닝 (10명 환경)
 
 `infra/docker-compose.app.yml`:
@@ -295,7 +321,8 @@ sudo dpkg -i cloudflared.deb
 # 인증 + tunnel 생성
 cloudflared tunnel login
 cloudflared tunnel create tripmate
-cloudflared tunnel route dns tripmate app.example.com
+cloudflared tunnel route dns tripmate tripmate.digitie.mywire.org
+cloudflared tunnel route dns tripmate tripmateapi.digitie.mywire.org
 
 # systemd
 sudo cloudflared service install
@@ -308,7 +335,7 @@ sudo cloudflared service install
 ```bash
 # certbot + nginx
 sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d app.example.com -d api.app.example.com
+sudo certbot --nginx -d tripmate.digitie.mywire.org -d tripmateapi.digitie.mywire.org
 
 # 갱신 cron (이미 systemd timer 등록됨)
 sudo systemctl status certbot.timer

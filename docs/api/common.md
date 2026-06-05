@@ -10,7 +10,15 @@
 | 로컬 dev | `http://localhost:9021` |
 | 로컬 dev (Docker smoke) | `http://127.0.0.1:9021` |
 | 스테이징 | TBD (Sprint 6) |
-| 운영 | TBD (Sprint 6, Cloudflare Tunnel 후보) |
+| 운영 | `https://tripmateapi.digitie.mywire.org` |
+
+웹 origin:
+
+| 환경 | URL |
+|------|-----|
+| 로컬 dev | `http://localhost:9022` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:9022` |
+| 운영 | `https://tripmate.digitie.mywire.org` |
 
 OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
@@ -223,20 +231,36 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 | 로컬 dev | `http://localhost:9022`, `http://127.0.0.1:9022` |
 | Docker smoke | `http://127.0.0.1:9022` |
 | 스테이징 | TBD |
-| 운영 | TBD |
+| 운영 | `https://tripmate.digitie.mywire.org` |
 
 `Access-Control-Allow-Credentials: true` (cookie 전송).
+
+운영 보안 처리:
+
+- API `https://tripmateapi.digitie.mywire.org`는 CORS origin에 직접 추가하지 않는다.
+  CORS 허용 origin은 브라우저가 로드된 웹 origin
+  `https://tripmate.digitie.mywire.org`만 둔다.
+- 운영 `TRIPMATE_CORS_ALLOWED_ORIGINS`는 정확히
+  `["https://tripmate.digitie.mywire.org"]`로 설정한다. wildcard(`*`) 금지.
+- credential cookie를 쓰므로 `Access-Control-Allow-Credentials: true`와 wildcard
+  origin을 함께 쓰면 안 된다.
 
 ## 11. CSP / 보안 헤더
 
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
   ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:9021 https://api.resend.com https://api.vworld.kr`
+  connect-src 'self' http://localhost:9021 https://tripmateapi.digitie.mywire.org
+  https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(self)` (위치 권한 origin)
 - `X-Frame-Options: DENY` (Admin Dagit 임베드 예외는 별도)
+
+운영에서는 TLS 종단 이후에도 앱이 `TRIPMATE_ENVIRONMENT=production`을 받아야 한다.
+이 값이 production이면 인증 cookie는 `Secure`로 설정된다. reverse proxy /
+Cloudflare Tunnel 구성에서 `X-Forwarded-Proto=https`를 보존하고, HTTP 직접 접근은
+HTTPS로 redirect한다.
 
 ## 12. 로깅 / 추적
 

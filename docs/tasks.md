@@ -51,6 +51,8 @@
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
 - [x] T-068 — 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 (완료: 2026-06-04,
   ADR-026 + KASI 특일/출몰시각 저장 계약)
+- [x] T-069 — production API/Web URL + OAuth/CORS 보안 문서화 (완료: 2026-06-05,
+  API `https://tripmateapi.digitie.mywire.org`, Web `https://tripmate.digitie.mywire.org`)
 
 ## 보류
 

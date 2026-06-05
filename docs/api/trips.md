@@ -211,7 +211,7 @@ Content-Type: application/json
   "data": {
     "share_id": "uuid",
     "token": "<43-char URL-safe base64>",
-    "url": "https://app.example.com/trips/<trip_id>/shared/<token>",
+    "url": "https://tripmate.digitie.mywire.org/trips/<trip_id>/shared/<token>",
     "visibility": "...",
     "expires_at": "..."
   }

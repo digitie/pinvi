@@ -143,7 +143,24 @@ CORS:
 |--------|------|
 | `http://localhost:9022` | 로컬 dev |
 | `http://127.0.0.1:9022` | smoke |
-| `https://app.example.com` | 운영 |
+| `https://tripmate.digitie.mywire.org` | 운영 |
+
+운영 build/run 시 URL coupling:
+
+```dotenv
+TRIPMATE_WEB_BASE_URL=https://tripmate.digitie.mywire.org
+TRIPMATE_OAUTH_CALLBACK_BASE_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_CORS_ALLOWED_ORIGINS=["https://tripmate.digitie.mywire.org"]
+NEXT_PUBLIC_TRIPMATE_API_URL=https://tripmateapi.digitie.mywire.org
+TRIPMATE_ENVIRONMENT=production
+```
+
+보안 처리:
+
+- `NEXT_PUBLIC_TRIPMATE_API_URL`은 web build time에 embed된다. 운영 API 도메인을
+  바꾸면 web 이미지를 다시 빌드한다.
+- 운영 CORS는 웹 origin만 허용한다. wildcard 금지.
+- `TRIPMATE_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
 
 ## 10. ARM64 빌드
 

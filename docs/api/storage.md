@@ -211,7 +211,7 @@ RustFS 컨테이너 CORS 설정:
 |---------------|------|
 | `http://localhost:9022` | 로컬 dev |
 | `http://127.0.0.1:9022` | Docker smoke |
-| 운영 도메인 | TBD |
+| `https://tripmate.digitie.mywire.org` | 운영 |
 
 Methods: `PUT, GET, HEAD, OPTIONS`. Headers: `Content-Type, x-amz-*`.
 

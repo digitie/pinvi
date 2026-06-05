@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — production API/Web URL + OAuth 보안 문서화
+
+**작업**: 사용자 지시로 production API/Web 공개 URL을 문서와 환경변수 예시에
+명시하고, 관련 보안 처리(OAuth callback, Google JavaScript origin, CORS, CSP,
+Secure cookie, open redirect 방지)를 함께 정리.
+
+**결정**:
+- API production URL: `https://tripmateapi.digitie.mywire.org` (내부/host port
+  `9021`)
+- Web production URL: `https://tripmate.digitie.mywire.org` (내부/host port `9022`)
+- Google 승인된 JavaScript 원본: `https://tripmate.digitie.mywire.org`
+- Google redirect URI:
+  `https://tripmateapi.digitie.mywire.org/auth/oauth/google/callback`
+
+**보안 처리**:
+- CORS 허용 origin은 Web origin만. API origin과 wildcard는 허용하지 않는다.
+- OAuth `return_to`는 상대 경로 또는 `TRIPMATE_WEB_BASE_URL` 하위 경로만 허용해
+  open redirect를 차단한다.
+- 운영은 `TRIPMATE_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
+- reverse proxy / Cloudflare Tunnel은 `X-Forwarded-Proto=https`를 보존하고 HTTP를
+  HTTPS로 redirect한다.
+
 ## 2026-06-04 (codex) — 최신 krtour-map/kraddr-geo/KASI 계약 반영
 
 **작업**: 사용자가 지시한 대로 `python-krtour-map` 최신 `main`을 별도 clean clone으로

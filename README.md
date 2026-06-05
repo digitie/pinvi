@@ -78,6 +78,17 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 
 자세한 책임 경계는 `docs/architecture.md`, `docs/krtour-map-integration.md`.
 
+## 운영 URL
+
+| 서비스 | 로컬 고정 포트 | Production URL |
+|--------|---------------|----------------|
+| API | `9021` | `https://tripmateapi.digitie.mywire.org` |
+| Web | `9022` | `https://tripmate.digitie.mywire.org` |
+
+운영 OAuth callback은 API 도메인 기준
+`https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
+승인된 JavaScript 원본은 `https://tripmate.digitie.mywire.org`다.
+
 ## 빠른 시작
 
 ```bash
