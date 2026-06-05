@@ -498,8 +498,10 @@ TripMate 클라이언트 정책:
 
 지도 관련 PR 시:
 
-- [ ] `maplibre-vworld` git URL pin sha 확인 / 갱신
-- [ ] `apps/web/components/map/*` 컴포넌트 라이브러리 사용
+- [x] `maplibre-vworld` tarball pin sha 확인 / 갱신 (T-074:
+      `f1dd74b9ef5114582cec54d1fd47a494be0113a5`)
+- [x] `apps/web/components/map/*` 컴포넌트 라이브러리 사용 (T-074:
+      `MapView` shell)
 - [ ] Kakao SDK / `KAKAO_*` 환경변수 잔존 X (`rg "kakao" apps/web` 검사)
 - [ ] `(lng, lat)` 좌표 순서 일관 (어댑터 불필요)
 - [ ] `NEXT_PUBLIC_VWORLD_API_KEY` `.env.example`에 등록
@@ -516,9 +518,16 @@ TripMate 클라이언트 정책:
 - [x] `maplibre-vworld-js` PR #46 — `docs/consumer-feature-catalog.md` source of
   truth 정합화, `build-and-test` green, merge `f1dd74b9`.
 - [x] TripMate §6 snapshot을 라이브러리 카탈로그의 현재 상태와 동기화.
-- [ ] TripMate frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld` git
-  URL/tag를 pin하고 lockfile을 갱신.
-- [ ] TripMate frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
+- [x] TripMate frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld`
+  GitHub archive tarball URL을 pin하고 lockfile을 갱신.
+- [x] TripMate frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
+  T-074에서 `/trips/map-shell`을 추가하고 Windows Playwright smoke로
+  `/features/in-bounds` / krtour-map API `9011` 미호출을 확인했다.
+
+> T-074 메모: `maplibre-vworld` dist의 development JSX runtime은 Next dev 브라우저
+> chunk에서 `require("react")`를 호출한다. TripMate는 production build가 정상인 것을
+> 확인했고, dev/e2e에서는 `MapView`의 좁은 React require shim으로 보완했다. 라이브러리
+> 패키징 후속 PR이 머지되면 shim 제거 후보.
 
 ## 12. AI 에이전트 (Codex / Antigravity) 대응
 

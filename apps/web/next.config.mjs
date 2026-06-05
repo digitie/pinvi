@@ -10,6 +10,7 @@ const nextConfig = {
     '@tripmate/design-tokens',
     '@tripmate/hooks',
     '@tripmate/i18n',
+    'maplibre-vworld',
   ],
 };
 

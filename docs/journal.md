@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-074 PR-C frontend 지도 shell
+
+**작업**: krtour-map feature 조회를 연결하지 않고, Sprint 4 PR-C의 지도 shell을
+TripMate Web에 먼저 붙였다.
+
+**변경**:
+- `apps/web/package.json` / `package-lock.json` — `maplibre-vworld`를
+  `digitie/maplibre-vworld-js` commit `f1dd74b9...`의 GitHub archive tarball에
+  pin하고 `maplibre-gl`, Playwright dev dependency를 추가했다.
+- `apps/web/components/map/MapView.tsx` — `VWorldMap`, `ClusterLayer`,
+  `MakiMarker`, `Popup`을 dynamic import로 연결하고 정적 서울 샘플 포인트만 렌더링한다.
+  `/features/in-bounds` 또는 krtour-map API `9011` 호출은 하지 않는다.
+- `apps/web/app/(app)/trips/map-shell/page.tsx` — `/trips/map-shell` 지도 shell route
+  추가.
+- `apps/web/playwright.config.ts`, `apps/web/tests/map-shell.spec.ts` — Windows
+  Playwright smoke로 shell 렌더링과 krtour-map 비호출을 검증.
+- `apps/web/next.config.mjs` — `maplibre-vworld` transpile 대상 추가. 라이브러리 dist의
+  development JSX runtime이 `require("react")`를 호출하는 dev-only 문제는
+  `MapView`의 React require shim으로 보완했다. production build는 정상 통과.
+- `docs/integrations/maplibre-vworld.md`, `resume.md`, `tasks.md` — PR-C pin/import/e2e
+  상태와 다음 비의존 후속을 갱신.
+
+**검증**:
+- WSL2 ext4 mirror: `npm run lint --workspace apps/web`
+- WSL2 ext4 mirror: `npm run typecheck --workspace apps/web`
+- WSL2 ext4 mirror: `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 npx -y @playwright/test@1.60.0 test tests/map-shell.spec.ts`
+  — 1 passed
+
+**다음**: krtour-map client 의존 T-066은 계속 보류하고, Trip 대시보드 / notice plan
+사용자 shell처럼 feature 조회 없이 가능한 PR-C 후속을 진행한다.
+
 ## 2026-06-05 (codex) — T-073 Google OAuth profile 연결/해제 UI
 
 **작업**: krtour-map과 무관한 Google OAuth profile 연결/해제 흐름을 Web UI까지

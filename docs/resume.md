@@ -80,6 +80,12 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
 `has_password`와 `oauth_identities`를 반환하고, `/profile`에서 Google 연결 상태 확인,
 연결 시작, 해제를 수행한다. 소셜-only 계정은 비밀번호 설정 전 Google 해제를 409로
 차단한다.
+**T-074 PR-C frontend 지도 shell** (2026-06-05 codex) —
+`maplibre-vworld`를 `digitie/maplibre-vworld-js` commit `f1dd74b9...`의 GitHub
+archive tarball로 pin하고
+`/trips/map-shell`에서 `VWorldMap` / `ClusterLayer` / `MakiMarker` / `Popup`을
+실제 import한다. feature 조회는 연결하지 않았고, Windows Playwright smoke에서
+`/features/in-bounds`와 krtour-map API `9011` 미호출을 확인했다.
 
 ## 다음 한 작업
 
@@ -90,14 +96,17 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
 2. **비의존 후속** — PR-C frontend 지도 shell. `maplibre-vworld` dependency pin,
-   지도 컴포넌트 import/e2e는 가능하지만, feature 조회는 krtour-map client 의존
-   부분을 제외하고 진행한다.
+   지도 컴포넌트 import/e2e는 완료(T-074). feature 조회는 krtour-map client 의존
+   부분이라 제외한다.
+3. **비의존 후속** — T-075 Trip 대시보드 / notice plan 사용자 shell. 지도 feature
+   조회 없이 가능한 route, navigation, 빈 상태, 기존 Trip/Notice API client 연결부터
+   진행한다.
 
 이후 **PR-C (프론트엔드)**:
 
 - `apps/web/components/map/*` (MapView, ViewportFeatureLayer, ClusterLayer, ...)
 - `apps/web/lib/{vworldMap,markerPalette,featureQueryKeys,locationAdapter}.ts`
-- Trip 대시보드 + notice plan UI
+- Trip 대시보드 + notice plan UI (feature 조회 없는 shell부터)
 
 이후 **PR-D (통합 / 라이브러리 PR sync / v0.1.0 release)** — 자세히는
 `docs/sprints/SPRINT-4.md`.
@@ -143,6 +152,7 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
 - [x] KASI 특일/POI 출몰시각 Dagster 구현 — T-067
 - [x] Sprint 2 잔여 마감(email queue/reset/api_call_log/integration CI) — T-070
 - [x] Google OAuth profile 연결/해제 UI — T-073
+- [x] PR-C frontend 지도 shell dependency pin/import/e2e — T-074
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
