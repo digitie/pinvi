@@ -169,12 +169,20 @@ Cookie: tripmate_access=...
     "status": "active",
     "roles": ["user"],
     "email_verified_at": "...",
+    "has_password": true,
     "consents": [
       { "consent_type": "tos", "agreed_at": "...", "version": "v1.0" },
       { "consent_type": "location_collection", "agreed_at": "...", "withdrawn_at": null, "version": "v1.0" }
     ],
     "oauth_identities": [
-      { "provider": "google", "provider_email": "...", "linked_at": "...", "last_login_at": "..." }
+      {
+        "provider": "google",
+        "provider_email": "...",
+        "provider_email_verified": true,
+        "display_name": "...",
+        "linked_at": "...",
+        "last_login_at": "..."
+      }
     ]
   }
 }
@@ -275,7 +283,8 @@ Content-Type: application/json
 { "return_to": "/trips", "mode": "login" }
 ```
 
-- `mode`: `login` (기본) | `link` (기존 user에 provider 연결)
+- `mode`: `login` 기본. `/start`의 `mode=link`는 `400 OAUTH_LINK_REQUIRES_AUTH`로
+  거부하며, 기존 user 연결은 6.4의 `/link` endpoint를 사용한다.
 - `return_to`: TripMate 내부 경로만 허용 (allowlist), `/`로 시작
 - 응답 200: `{ "data": { "authorize_url": "https://accounts.google.com/..." } }`
 - 클라이언트는 `authorize_url`로 top-level navigation
@@ -301,7 +310,7 @@ GET /auth/oauth/google/callback?code=...&state=...
 
 응답:
 
-- 성공: 302 → `${return_to}` + Set-Cookie 두 개
+- 성공: 303 → `${return_to}` + Set-Cookie 두 개
 - 실패: 303 → `${TRIPMATE_WEB_BASE_URL}/login?error=<code>&error_description=...`
   - 현재 Google 구현: `OAUTH_CALLBACK_INVALID` / `OAUTH_PROVIDER_DENIED` /
     `OAUTH_STATE_INVALID` / `OAUTH_PROVIDER_ERROR`
@@ -319,7 +328,7 @@ Cookie: tripmate_access=...
 { "return_to": "/profile" }
 ```
 
-응답 200: `{ "data": { "redirect_url": "..." } }`. 클라이언트가 top-level
+응답 200: `{ "data": { "authorize_url": "..." } }`. 클라이언트가 top-level
 navigation.
 
 ### 6.5 `DELETE /auth/oauth/{provider}`

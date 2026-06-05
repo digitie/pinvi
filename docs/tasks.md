@@ -6,7 +6,8 @@
 
 ## 다음 (우선순위 순)
 
-- (없음 — krtour-map 의존 T-066은 보류)
+- [ ] T-074 — PR-C frontend 지도 shell (`maplibre-vworld` dependency pin/import/e2e,
+  feature 조회는 krtour-map client 의존이라 제외)
 
 ## 완료
 
@@ -67,6 +68,9 @@
 - [x] T-072 — Google OAuth callback 실패 redirect UX
   (완료: 2026-06-05, callback 실패 303 `/login?error=...` redirect +
   로그인 화면 code 기반 인라인 메시지)
+- [x] T-073 — Google OAuth profile 연결/해제 UI
+  (완료: 2026-06-05, `/auth/me` OAuth identity 노출 + `/profile` Google 연결/해제 +
+  소셜-only unlink 차단)
 
 ## 보류
 

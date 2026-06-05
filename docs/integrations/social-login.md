@@ -155,7 +155,7 @@ GET /auth/oauth/google/callback?code=...&state=...
 사용자 로그인 상태에서 /profile에서 [Google 연결] 클릭
   ↓
 POST /auth/oauth/google/link { return_to: '/profile' }
-  ↓ 응답에 redirect_url
+  ↓ 응답에 authorize_url
   ↓ 클라이언트가 top-level navigation
 ... (above flow with mode=link, user_id 포함된 state) ...
   ↓ callback
@@ -298,6 +298,7 @@ TRIPMATE_ENVIRONMENT=production
 - [x] `apps/api/app/services/oauth_google.py` httpx 호출 + G-4 매칭 정책
 - [x] `apps/api/app/api/v1/oauth.py` Google providers/start/callback/unlink 라우터
 - [x] `apps/web/app/(auth)/login/page.tsx` Google 버튼 + provider 목록 fetch
+- [x] `apps/web/app/(auth)/profile/page.tsx` Google 연결/해제 UI
 - [ ] Naver/Kakao service + start/callback/link/unlink 라우터
 - [ ] Naver/Kakao 로그인 버튼 활성화
 - [ ] OAuth Naver 신규 가입 → 자체 verify 메일 트리거

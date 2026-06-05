@@ -11,13 +11,17 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.core.security import create_access_token, generate_opaque_token
+from app.models.oauth_identity import UserOAuthIdentity
+from app.models.user import User
 from app.schemas.auth import AuthUser
 from app.schemas.envelope import Envelope
 from app.schemas.oauth import (
+    OAuthLinkRequest,
     OAuthProviderInfo,
     OAuthProvidersResponse,
     OAuthStartRequest,
@@ -76,6 +80,7 @@ def _to_auth_user(user: Any) -> AuthUser:
         status=user.status,
         roles=cast(list[Literal["user", "admin", "operator", "cpo"]], user.roles),
         email_verified_at=user.email_verified_at,
+        has_password=bool(user.password_hash),
     )
 
 
@@ -102,6 +107,14 @@ async def list_providers() -> Envelope[OAuthProvidersResponse]:
 @router.post("/google/start", response_model=Envelope[OAuthStartResponse])
 async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuthStartResponse]:
     """authorize URL 발급. 프론트는 반환된 URL 로 redirect."""
+    if body.mode != "login":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "OAUTH_LINK_REQUIRES_AUTH",
+                "message": "계정 연결은 /auth/oauth/google/link endpoint를 사용해야 합니다.",
+            },
+        )
     if not settings.tripmate_google_oauth_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -109,6 +122,37 @@ async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuth
         )
     state, nonce, code_verifier = await issue_login_state(
         db, mode=body.mode, return_to=body.return_to
+    )
+    url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
+    return Envelope.of(OAuthStartResponse(authorize_url=url))
+
+
+@router.post("/google/link", response_model=Envelope[OAuthStartResponse])
+async def google_link(
+    body: OAuthLinkRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[OAuthStartResponse]:
+    """로그인된 사용자의 Google 연결 authorize URL 발급."""
+    if not settings.tripmate_google_oauth_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
+        )
+
+    user_id = uuid.UUID(current_user_id)
+    user_exists = await db.scalar(select(User.user_id).where(User.user_id == user_id))
+    if user_exists is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "TOKEN_INVALID", "message": "사용자를 찾을 수 없습니다."},
+        )
+
+    state, nonce, code_verifier = await issue_login_state(
+        db,
+        mode="link",
+        return_to=body.return_to,
+        user_id=user_id,
     )
     url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
     return Envelope.of(OAuthStartResponse(authorize_url=url))
@@ -169,13 +213,25 @@ async def google_callback(
 @router.delete("/google", status_code=status.HTTP_204_NO_CONTENT)
 async def unlink_google(current_user_id: CurrentUserId, db: DbSession) -> None:
     """Google 연결 해제."""
-    from sqlalchemy import delete
-
-    from app.models.oauth_identity import UserOAuthIdentity
+    user_id = uuid.UUID(current_user_id)
+    user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "TOKEN_INVALID", "message": "사용자를 찾을 수 없습니다."},
+        )
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "OAUTH_UNLINK_PASSWORD_REQUIRED",
+                "message": "비밀번호가 없는 계정은 마지막 로그인 수단을 해제할 수 없습니다.",
+            },
+        )
 
     await db.execute(
         delete(UserOAuthIdentity).where(
-            UserOAuthIdentity.user_id == uuid.UUID(current_user_id),
+            UserOAuthIdentity.user_id == user_id,
             UserOAuthIdentity.provider == "google",
         )
     )

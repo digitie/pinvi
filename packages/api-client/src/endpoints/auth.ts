@@ -1,6 +1,7 @@
 import {
   AuthUserSchema,
   LoginRequestSchema,
+  OAuthLinkRequestSchema,
   OAuthProvidersResponseSchema,
   OAuthStartRequestSchema,
   OAuthStartResponseSchema,
@@ -65,5 +66,17 @@ export const authApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(OAuthStartRequestSchema.parse(body)),
       schema: OAuthStartResponseSchema,
+    }),
+
+  linkGoogleOAuth: (body: z.infer<typeof OAuthLinkRequestSchema>) =>
+    client.request('/auth/oauth/google/link', {
+      method: 'POST',
+      body: JSON.stringify(OAuthLinkRequestSchema.parse(body)),
+      schema: OAuthStartResponseSchema,
+    }),
+
+  unlinkGoogleOAuth: () =>
+    client.requestNoContent('/auth/oauth/google', {
+      method: 'DELETE',
     }),
 });

@@ -11,20 +11,24 @@ export {
   RegisterResponseSchema,
   VerifyEmailRequestSchema,
   LoginRequestSchema,
+  AuthUserOAuthIdentitySchema,
   AuthUserSchema,
   OAuthProviderNameSchema,
   OAuthProviderSchema,
   OAuthProvidersResponseSchema,
   OAuthStartRequestSchema,
   OAuthStartResponseSchema,
+  OAuthLinkRequestSchema,
 } from './auth';
 export type {
   RegisterRequest,
+  AuthUserOAuthIdentity,
   AuthUser,
   OAuthProvider,
   OAuthProvidersResponse,
   OAuthStartRequest,
   OAuthStartResponse,
+  OAuthLinkRequest,
 } from './auth';
 
 export {

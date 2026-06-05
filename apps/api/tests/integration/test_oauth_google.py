@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import uuid
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
@@ -12,7 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.models.oauth_identity import UserOAuthIdentity
+from app.models.oauth_identity import OAuthLoginState, UserOAuthIdentity
 from app.models.user import User
 from app.services.oauth_google import (
     GoogleClaims,
@@ -133,6 +135,47 @@ async def test_providers_endpoint(client) -> None:
     assert providers == {"google", "naver", "kakao"}
 
 
+async def test_me_returns_linked_oauth_identities(
+    client,
+    session_factory,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, email = verified_user
+    linked_at = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add(
+            UserOAuthIdentity(
+                user_id=uuid.UUID(user_id),
+                provider="google",
+                provider_user_id="me-linked-google",
+                provider_email=email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=linked_at,
+                last_login_at=linked_at,
+            )
+        )
+        await db.commit()
+
+    resp = await client.get("/auth/me", cookies=auth_cookies(user_id))
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["email"] == email
+    assert data["has_password"] is False
+    assert data["oauth_identities"] == [
+        {
+            "provider": "google",
+            "provider_email": email,
+            "provider_email_verified": True,
+            "display_name": "Google User",
+            "linked_at": linked_at.isoformat().replace("+00:00", "Z"),
+            "last_login_at": linked_at.isoformat().replace("+00:00", "Z"),
+        }
+    ]
+
+
 async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch) -> None:
     monkeypatch.setattr(
         settings,
@@ -158,6 +201,51 @@ async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch)
     assert params["code_challenge_method"] == ["S256"]
 
 
+async def test_google_start_rejects_link_mode_without_authenticated_link_endpoint(client) -> None:
+    resp = await client.post(
+        "/auth/oauth/google/start",
+        json={"return_to": "/profile", "mode": "link"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "OAUTH_LINK_REQUIRES_AUTH"
+
+
+async def test_google_link_stores_user_bound_link_state(
+    client,
+    session_factory,
+    verified_user,
+    auth_cookies,
+    monkeypatch,
+) -> None:
+    user_id, _email = verified_user
+    monkeypatch.setattr(
+        settings,
+        "tripmate_google_oauth_client_id",
+        "test-client.apps.googleusercontent.com",
+    )
+
+    resp = await client.post(
+        "/auth/oauth/google/link",
+        json={"return_to": "/profile"},
+        cookies=auth_cookies(user_id),
+    )
+
+    assert resp.status_code == 200
+    authorize_url = resp.json()["data"]["authorize_url"]
+    state = parse_qs(urlparse(authorize_url).query)["state"][0]
+    state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+    async with session_factory() as db:
+        row = await db.scalar(
+            select(OAuthLoginState).where(OAuthLoginState.state_hash == state_hash)
+        )
+        assert row is not None
+        assert row.mode == "link"
+        assert row.return_to_path == "/profile"
+        assert row.user_id == uuid.UUID(user_id)
+
+
 async def test_login_state_replays_pkce_code_verifier(session_factory) -> None:
     async with session_factory() as db:
         state, _nonce, code_verifier = await issue_login_state(
@@ -170,6 +258,83 @@ async def test_login_state_replays_pkce_code_verifier(session_factory) -> None:
     assert consumed.code_verifier == code_verifier
     assert consumed.mode == "login"
     assert consumed.return_to_path == "/trips"
+
+
+async def test_unlink_google_requires_password(
+    client,
+    session_factory,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, email = verified_user
+    async with session_factory() as db:
+        db.add(
+            UserOAuthIdentity(
+                user_id=uuid.UUID(user_id),
+                provider="google",
+                provider_user_id="unlink-blocked-google",
+                provider_email=email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=datetime.now(UTC),
+                last_login_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+
+    resp = await client.delete("/auth/oauth/google", cookies=auth_cookies(user_id))
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "OAUTH_UNLINK_PASSWORD_REQUIRED"
+    async with session_factory() as db:
+        identity = await db.scalar(
+            select(UserOAuthIdentity).where(
+                UserOAuthIdentity.provider_user_id == "unlink-blocked-google"
+            )
+        )
+        assert identity is not None
+
+
+async def test_unlink_google_deletes_identity_when_password_exists(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    user = User(
+        email="unlink-google@example.com",
+        password_hash="hash",
+        nickname="unlink",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    async with session_factory() as db:
+        db.add(user)
+        await db.flush()
+        db.add(
+            UserOAuthIdentity(
+                user_id=user.user_id,
+                provider="google",
+                provider_user_id="unlink-ok-google",
+                provider_email=user.email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=datetime.now(UTC),
+                last_login_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+        user_id = str(user.user_id)
+
+    resp = await client.delete("/auth/oauth/google", cookies=auth_cookies(user_id))
+
+    assert resp.status_code == 204
+    async with session_factory() as db:
+        identity = await db.scalar(
+            select(UserOAuthIdentity).where(
+                UserOAuthIdentity.provider_user_id == "unlink-ok-google"
+            )
+        )
+        assert identity is None
 
 
 async def test_callback_invalid_state_redirects_to_login(client) -> None:
