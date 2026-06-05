@@ -47,12 +47,13 @@ apps/etl/
 - `app.kasi_special_days`에 upsert.
 - 별도 삭제 없음.
 
-### 3.2 `kasi_poi_rise_set_once`
+### 3.2 `kasi_poi_rise_set_job`
 
 - POI 생성 시 enqueue/run.
-- `app.trip_day_pois`의 좌표 snapshot과 `app.trip_days.date`를 사용.
+- API 생성 경로가 `app.trip_day_pois`의 좌표 snapshot과 `app.trip_days.date`를
+  기준으로 `app.trip_poi_rise_sets` row를 먼저 만든다.
 - `python-kasi-api` `rise_set.location`으로 "위치별 해달 출몰시각 정보조회" 호출.
-- `app.trip_poi_rise_sets`에 1회 저장.
+- 날짜/좌표가 있으면 `pending_fetch` → `success` / `failed`로 전이한다.
 - 날짜/좌표가 없으면 `pending_date` / `pending_coord` 상태로 남긴다.
 
 ## 4. Schedule

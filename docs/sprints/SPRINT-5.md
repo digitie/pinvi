@@ -10,6 +10,8 @@
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
   - `apps/etl` Dagster code location 활성화 + 4 asset:
+    - `tripmate_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
+      `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
     - `python-visitkorea-api_festivals` (event, 주 1회)
     - `python-opinet-api_fuel` (price, 6시간)
     - `python-kma-api_short_term_weather` (weather, 30분)
@@ -43,16 +45,20 @@
 - `apps/api/app/services/backup_service.py` — pg_dump trigger + RustFS upload +
   audit. `scripts/backup-db.sh` 호출 wrapper.
 
-### ETL (`apps/etl`, 신규 디렉토리)
+### ETL (`apps/etl`)
 
-- `apps/etl/pyproject.toml` (dagster + dagit + `python-krtour-map` git URL pin)
+- `apps/etl/pyproject.toml` (dagster + dagster-webserver + provider client git URL pin)
 - `apps/etl/tripmate/etl/__init__.py`
 - `apps/etl/tripmate/etl/definitions.py` (Dagster code location)
-- `apps/etl/tripmate/etl/resources.py` (`KrtourMapResource`, `VisitKoreaResource`,
-  `OpiNetResource`, `KmaResource`, `KrheritageResource`)
+- `apps/etl/tripmate/etl/resources.py` (`TripmateDatabaseResource`, `KasiResource`,
+  후속 `KrtourMapResource`, `VisitKoreaResource`, `OpiNetResource`, `KmaResource`,
+  `KrheritageResource`)
+- `apps/etl/tripmate/etl/assets/tripmate_kasi_special_days.py`
+- `apps/etl/tripmate/etl/jobs.py` (`kasi_poi_rise_set_job`)
+- `apps/etl/tripmate/etl/schedules.py`
 - `apps/etl/tripmate/etl/assets/{feature_event_festivals,feature_price_fuel,feature_weather_kma_short_term,feature_place_heritage,feature_event_heritage,feature_vworld_import}.py`
-- `apps/etl/tripmate/etl/schedules.py` (cron 정의)
 - `apps/etl/tests/test_definitions.py`
+- `apps/etl/tests/test_kasi_special_days.py`
 - `apps/etl/tests/test_asset_festivals.py` (materialize_to_memory + fixture)
 
 ### 프론트엔드
@@ -116,8 +122,10 @@
 2. `python-opinet-api_fuel` materialize → `/admin/features?kind=price&category=fuel`
 3. `python-kma-api_short_term_weather` materialize → `/features/{id}/weather` API 응답
 4. `python-krheritage-api_heritage` materialize → place/area 분리 적재
-5. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
-6. `/admin/provider-sync` 일시정지 후 재개 → cursor 유지 확인
+5. `tripmate_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
+6. `kasi_poi_rise_set_job` 단일 POI 실행 → `app.trip_poi_rise_sets` success/failed 확인
+7. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
+8. `/admin/provider-sync` 일시정지 후 재개 → cursor 유지 확인
 
 ## 종료 체크리스트
 

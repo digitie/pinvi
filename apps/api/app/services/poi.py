@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
+from app.models.trip import Trip
 from app.models.trip_day import TripDay
+from app.services.kasi import build_initial_poi_rise_set
 
 
 class PoiError(Exception):
@@ -35,7 +38,11 @@ async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: in
         select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
     )
     if day is None:
-        day = TripDay(trip_id=trip_id, day_index=day_index)
+        trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+        date = None
+        if trip is not None and trip.start_date is not None:
+            date = trip.start_date + timedelta(days=day_index - 1)
+        day = TripDay(trip_id=trip_id, day_index=day_index, date=date)
         db.add(day)
         await db.flush()
     return day
@@ -54,7 +61,7 @@ async def create_poi(
     custom_marker_icon: str | None = None,
     user_note: str | None = None,
 ) -> TripDayPoi:
-    await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
+    day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     poi = TripDayPoi(
         trip_id=trip_id,
         day_index=day_index,
@@ -68,6 +75,14 @@ async def create_poi(
     )
     db.add(poi)
     try:
+        await db.flush()
+        db.add(
+            build_initial_poi_rise_set(
+                poi=poi,
+                locdate=day.date,
+                feature_snapshot=feature_snapshot,
+            )
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -122,6 +137,14 @@ async def update_poi(
 async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
     poi.deleted_at = datetime.now(UTC)
     await db.commit()
+
+
+async def get_poi_rise_set(
+    db: AsyncSession,
+    *,
+    poi_id: uuid.UUID,
+) -> TripPoiRiseSet | None:
+    return await db.get(TripPoiRiseSet, poi_id)
 
 
 async def reorder_pois(

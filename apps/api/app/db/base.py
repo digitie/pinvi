@@ -31,6 +31,7 @@ from app.models import (  # noqa: E402,F401
     audit,
     companion,
     email_queue,
+    kasi,
     notice_plan,
     oauth_identity,
     poi,

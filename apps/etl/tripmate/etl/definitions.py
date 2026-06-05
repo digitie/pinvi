@@ -1,16 +1,26 @@
-"""Dagster code location 진입점.
-
-Sprint 1: 빈 Definitions — UI에 노출되는 asset 없음. Sprint 5에서
-`python-krtour-map`의 변환·적재 함수를 호출하는 asset을 본 모듈에 등록.
-"""
+"""Dagster code location 진입점."""
 
 from __future__ import annotations
 
-from dagster import Definitions
+from dagster import Definitions, EnvVar
+
+from tripmate.etl.assets import tripmate_kasi_special_days
+from tripmate.etl.jobs import kasi_poi_rise_set_job
+from tripmate.etl.resources import KasiResource, TripmateDatabaseResource
+from tripmate.etl.schedules import schedules
 
 defs = Definitions(
-    assets=[],
-    schedules=[],
+    assets=[tripmate_kasi_special_days],
+    jobs=[kasi_poi_rise_set_job],
+    schedules=schedules,
     sensors=[],
-    resources={},
+    resources={
+        "db": TripmateDatabaseResource(
+            dsn=EnvVar("TRIPMATE_DATABASE_URL"),
+            pool_size=10,
+        ),
+        "kasi": KasiResource(
+            service_key=EnvVar("DATA_GO_KR_SERVICE_KEY"),
+        ),
+    },
 )

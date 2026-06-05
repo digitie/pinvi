@@ -214,7 +214,7 @@ CREATE TABLE app.trip_poi_rise_sets (
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT trip_poi_rise_sets_status_chk
-    CHECK (status IN ('pending_date', 'pending_coord', 'success', 'failed'))
+    CHECK (status IN ('pending_date', 'pending_coord', 'pending_fetch', 'success', 'failed'))
 );
 
 CREATE INDEX trip_poi_rise_sets_locdate_idx ON app.trip_poi_rise_sets (locdate);

@@ -4,10 +4,12 @@
 
 - [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
 - [ ] T-066 — krtour-map OpenAPI HTTP 전환 구현 + drift gate
-- [ ] T-067 — KASI 특일/POI 출몰시각 Dagster 구현
 
 ## 다음 (우선순위 순)
 
+- [ ] T-070 — Sprint 2 잔여 마감: `email_queue` SKIP LOCKED worker +
+  비밀번호 재설정 메일 흐름, `api_call_log` 미들웨어 통합 테스트,
+  `api.yml` integration step 검토
 - [ ] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
 - [ ] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
 
@@ -53,6 +55,8 @@
   ADR-026 + KASI 특일/출몰시각 저장 계약)
 - [x] T-069 — production API/Web URL + OAuth/CORS 보안 문서화 (완료: 2026-06-05,
   API `https://tripmateapi.digitie.mywire.org`, Web `https://tripmate.digitie.mywire.org`)
+- [x] T-067 — KASI 특일/POI 출몰시각 Dagster 구현 (완료: 2026-06-05,
+  `app.kasi_special_days` / `app.trip_poi_rise_sets` + Dagster asset/job)
 
 ## 보류
 

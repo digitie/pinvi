@@ -68,6 +68,9 @@ services:
       TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_dev_password@postgres:5432/tripmate
       TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:9003
       TRIPMATE_RUSTFS_BUCKET: tripmate-media
+      DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY:-}
+      TRIPMATE_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS: ${TRIPMATE_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS:-6}
+      TRIPMATE_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${TRIPMATE_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
       DAGSTER_HOME: /opt/tripmate/.tmp/dagster
     ports:
       - "9023:3000"

@@ -46,8 +46,10 @@ Content-Type: application/json
 - `feature_id`가 krtour-map batch 조회 결과에 없으면
   → `feature_link_broken_at` 채움 + 그래도 row 생성 (`feature_snapshot`으로 표시)
 - 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
-  `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. 생성 응답 시점에는
-  `rise_set`이 없거나 `pending`일 수 있다.
+  `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. API는 먼저
+  `app.trip_poi_rise_sets.status='pending_fetch'` row를 만들고, Dagster one-shot job이
+  실제 KASI 호출을 처리한다. 생성 응답 시점에는 `rise_set`이 없거나 `pending`일 수
+  있다.
 - `sort_order` 충돌 시 (`(day_index, sort_order COLLATE "C")` UNIQUE) → `409`
 
 응답 201: 생성된 POI. 선택 필드:
@@ -157,11 +159,11 @@ v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 
 ## 7. AI agent 구현 체크리스트
 
-- [ ] `apps/api/app/schemas/poi.py` Pydantic + `packages/schemas/src/poi.ts` Zod
-- [ ] `apps/api/app/services/poi.py` 비즈니스 로직 (sort_order 검증 + 라이브러리 feature 검증)
-- [ ] POI 생성 시 좌표/방문일이 있으면 KASI 출몰시각 1회 갱신 enqueue
-- [ ] `apps/api/app/api/v1/pois.py` 라우터 (또는 `trips.py`에 합치기)
+- [x] `apps/api/app/schemas/poi.py` Pydantic + `packages/schemas/src/poi.ts` Zod
+- [x] `apps/api/app/services/poi.py` 비즈니스 로직 (sort_order 검증)
+- [x] POI 생성 시 좌표/방문일이 있으면 KASI 출몰시각 `pending_fetch` row 생성
+- [x] `apps/api/app/api/v1/pois.py` 라우터
 - [ ] LexoRank helper `packages/hooks/src/lexorank.ts` (또는 `packages/lexorank/`)
-- [ ] `sort_order COLLATE "C"` Alembic + 로컬 PostGIS 통합 테스트
+- [x] `sort_order COLLATE "C"` Alembic + 로컬 PostGIS 통합 테스트
 - [ ] WebSocket broadcast 트리거 (`poi.*`)
 - [ ] feature_snapshot lazy join 패턴 통합 테스트
