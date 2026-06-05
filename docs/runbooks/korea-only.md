@@ -69,8 +69,17 @@ server {
 
 ```bash
 TRIPMATE_GEOFENCE_ENABLED=true
-TRIPMATE_GEOFENCE_GEOIP_PATH=/etc/tripmate/GeoLite2-Country.mmdb
+TRIPMATE_GEOFENCE_ALLOWED_COUNTRIES=["KR"]
+TRIPMATE_GEOFENCE_COUNTRY_HEADER=CF-IPCountry
+TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true
+TRIPMATE_GEOFENCE_BYPASS_PATHS=["/health","/health/db","/docs","/redoc","/openapi.json"]
 ```
+
+FastAPI 3차 fallback은 Cloudflare가 넣는 `CF-IPCountry` header를 우선 사용한다.
+직접 접속 우회를 막아야 하는 운영 환경에서는 `TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`로
+둔다. admin/operator/cpo 우회는 access token의 `roles` claim이 있는 경우에만
+FastAPI 단계에서 허용된다. 현재 일반 로그인 토큰은 DB 기반 RBAC이므로, 해외 출장
+운영 우회는 Cloudflare Access 또는 KR VPN을 우선 사용한다.
 
 ## 2. GeoIP DB 갱신 (월 1회)
 

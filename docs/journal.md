@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-109 한국 전용 geofencing FastAPI fallback
+
+**작업**: krtour-map과 무관한 보안/운영 후보로 ADR-018의 3차 FastAPI fallback을
+구현했다.
+
+**변경**:
+- `apps/api/app/middleware/geofence.py` — 기본 비활성 geofence middleware 추가.
+  활성 시 `CF-IPCountry` 기반으로 허용 국가(`KR`) 외 요청을 451로 차단한다.
+- `apps/api/app/core/config.py`, `.env.example` — `TRIPMATE_GEOFENCE_*` 환경변수 추가.
+- `apps/api/app/main.py` — Geofence middleware를 API middleware stack에 연결.
+- `apps/api/tests/unit/test_geofence_middleware.py` — 비활성 허용, KR 허용, 비KR 차단,
+  health 우회, unknown strict 차단, roles claim 기반 admin 우회를 검증.
+- `docs/runbooks/korea-only.md`, `docs/architecture/korea-only-policy.md`,
+  `resume.md`, `tasks.md` — 현재 FastAPI fallback 계약과 운영 우회 한계를 반영.
+
+**검증**:
+- WSL2 ext4 mirror: `uv run pytest -s tests/unit/test_geofence_middleware.py -q` — 6 passed
+- WSL2 ext4 mirror:
+  `uv run ruff format --check app tests/unit/test_geofence_middleware.py && uv run ruff check app tests/unit/test_geofence_middleware.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+
+**다음**: T-111 Backup/Restore UI 핫스왑은 krtour-map 비의존이지만 운영 데이터 보호
+범위라 ADR-022와 backup runbook을 먼저 확인한다.
+
 ## 2026-06-05 (codex) — T-110 Admin Grafana iframe embed
 
 **작업**: krtour-map과 무관한 운영 UI 후보로 `/admin/grafana` iframe shell을 먼저

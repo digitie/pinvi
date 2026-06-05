@@ -64,6 +64,15 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]
     )
 
+    # Geofencing (ADR-018) — 기본은 비활성, 운영에서 3차 fallback으로 활성.
+    tripmate_geofence_enabled: bool = False
+    tripmate_geofence_allowed_countries: list[str] = Field(default_factory=lambda: ["KR"])
+    tripmate_geofence_country_header: str = "CF-IPCountry"
+    tripmate_geofence_block_unknown: bool = False
+    tripmate_geofence_bypass_paths: list[str] = Field(
+        default_factory=lambda: ["/health", "/health/db", "/docs", "/redoc", "/openapi.json"]
+    )
+
     # Sentry
     tripmate_sentry_dsn: str = ""
     tripmate_sentry_environment: str = "development"
