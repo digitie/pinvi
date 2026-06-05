@@ -302,10 +302,10 @@ GET /auth/oauth/google/callback?code=...&state=...
 응답:
 
 - 성공: 302 → `${return_to}` + Set-Cookie 두 개
-- 실패: 302 → `/login?error=<code>&error_description=...`
-  - `provider_disabled` / `provider_denied` / `state_expired` / `state_invalid` /
-    `email_required` / `email_unverified` / `account_link_required` /
-    `provider_profile_failed` / `oauth_temporary_failure`
+- 실패: 303 → `${TRIPMATE_WEB_BASE_URL}/login?error=<code>&error_description=...`
+  - 현재 Google 구현: `OAUTH_CALLBACK_INVALID` / `OAUTH_PROVIDER_DENIED` /
+    `OAUTH_STATE_INVALID` / `OAUTH_PROVIDER_ERROR`
+  - Naver/Kakao 후속 구현 시 provider별 세부 code를 추가한다.
 
 ### 6.4 `POST /auth/oauth/{provider}/link`
 

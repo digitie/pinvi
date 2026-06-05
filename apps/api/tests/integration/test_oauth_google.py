@@ -170,3 +170,31 @@ async def test_login_state_replays_pkce_code_verifier(session_factory) -> None:
     assert consumed.code_verifier == code_verifier
     assert consumed.mode == "login"
     assert consumed.return_to_path == "/trips"
+
+
+async def test_callback_invalid_state_redirects_to_login(client) -> None:
+    resp = await client.get(
+        "/auth/oauth/google/callback?code=test-code&state=invalid-state",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    parsed = urlparse(location)
+    params = parse_qs(parsed.query)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/login"
+    assert params["error"] == ["OAUTH_STATE_INVALID"]
+
+
+async def test_callback_provider_denied_redirects_to_login(client) -> None:
+    resp = await client.get(
+        "/auth/oauth/google/callback?error=access_denied&error_description=cancelled",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    parsed = urlparse(location)
+    params = parse_qs(parsed.query)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/login"
+    assert params["error"] == ["OAUTH_PROVIDER_DENIED"]

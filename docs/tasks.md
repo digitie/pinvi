@@ -64,6 +64,9 @@
 - [x] T-071 — Google OAuth 로그인 UI + API client 연결
   (완료: 2026-06-05, `/auth/oauth/google/start` envelope 응답, provider 목록 기반
   로그인 버튼, PKCE verifier 재생성)
+- [x] T-072 — Google OAuth callback 실패 redirect UX
+  (완료: 2026-06-05, callback 실패 303 `/login?error=...` redirect +
+  로그인 화면 code 기반 인라인 메시지)
 
 ## 보류
 

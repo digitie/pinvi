@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-072 Google OAuth callback 실패 UX
+
+**작업**: Google OAuth callback 실패가 API JSON 오류로 남지 않고 Web 로그인 화면으로
+돌아오도록 정리했다.
+
+**변경**:
+- `/auth/oauth/google/callback` — provider 거부, 필수 query 누락, state 검증 실패,
+  token/userinfo 실패, 매칭 실패를 `/login?error=...&error_description=...` 303
+  redirect로 변환.
+- `apps/web/app/(auth)/login/page.tsx` — `error` query를 고정 한국어 메시지로 매핑해
+  인라인 표시. 임의 `error_description`은 화면에 직접 노출하지 않는다.
+- `test_oauth_google.py` — invalid state / provider denied redirect 회귀 테스트 추가.
+- `docs/api/auth.md`, `docs/integrations/social-login.md`, `resume.md`, `tasks.md` —
+  현재 Google callback 실패 UX 반영.
+
+**검증**: PR 전 API OAuth integration, API lint/typecheck, web lint/typecheck/build를
+재실행한다.
+
+**다음**: Google OAuth profile 연결/해제 UI는 별도 비의존 후속으로 진행한다.
+
 ## 2026-06-05 (codex) — T-071 Google OAuth 로그인 UI
 
 **작업**: 로컬 Google OAuth client id를 반영한 뒤, 로그인 화면에서 Google OAuth

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any, Literal, cast
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
@@ -55,6 +56,14 @@ def _set_session_cookies(response: Response, *, user_id: str) -> None:
         secure=secure,
         samesite="lax",
         max_age=settings.tripmate_refresh_token_days * 24 * 60 * 60,
+    )
+
+
+def _oauth_error_redirect(*, code: str, message: str) -> RedirectResponse:
+    query = urlencode({"error": code, "error_description": message})
+    return RedirectResponse(
+        url=f"{settings.tripmate_web_base_url}/login?{query}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
@@ -107,19 +116,28 @@ async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuth
 
 @router.get("/google/callback")
 async def google_callback(
-    code: str,
-    state: str,
-    response: Response,
     db: DbSession,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
 ) -> RedirectResponse:
     """Google redirect 처리 — state 검증 → 토큰 교환 → 안전 매칭 → 세션 쿠키."""
+    if error:
+        return _oauth_error_redirect(
+            code="OAUTH_PROVIDER_DENIED",
+            message=error_description or "Google 인증이 취소되었습니다.",
+        )
+    if not code or not state:
+        return _oauth_error_redirect(
+            code="OAUTH_CALLBACK_INVALID",
+            message="Google OAuth callback 파라미터가 올바르지 않습니다.",
+        )
+
     try:
         login_state = await consume_login_state(db, state=state)
     except OAuthStateInvalidError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+        return _oauth_error_redirect(code=exc.code, message=str(exc))
 
     try:
         claims = await exchange_code_for_claims(
@@ -127,10 +145,7 @@ async def google_callback(
             code_verifier=login_state.code_verifier,
         )
     except OAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+        return _oauth_error_redirect(code=exc.code, message=str(exc))
 
     try:
         if login_state.mode == "link" and login_state.user_id is not None:
@@ -140,10 +155,7 @@ async def google_callback(
             result = await resolve_google_login(db, claims=claims)
             user_id = result.user.user_id
     except OAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+        return _oauth_error_redirect(code=exc.code, message=str(exc))
 
     return_to = login_state.return_to_path or "/"
     redirect = RedirectResponse(

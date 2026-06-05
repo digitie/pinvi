@@ -73,6 +73,9 @@ ruleset required status check는 `Aggregate CI gate`로 적용한다.
 조회해 Google 버튼을 활성화한다. `/auth/oauth/google/start`는 envelope 응답으로
 authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` + 서버 secret으로
 재생성한다.
+**T-072 Google OAuth 실패 UX** (2026-06-05 codex) — Google callback 실패는 API JSON
+오류 대신 Web `/login?error=...`로 303 redirect한다. 로그인 화면은 `error` code를
+고정 한국어 메시지로 매핑하고, 임의 `error_description`은 화면에 그대로 노출하지 않는다.
 
 ## 다음 한 작업
 
@@ -82,7 +85,7 @@ authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` 
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **비의존 후속** — Google OAuth callback 실패 redirect UX와 profile 연결/해제 UI.
+2. **비의존 후속** — Google OAuth profile 연결/해제 UI.
 3. **운영 후속** — PR-C frontend 지도 구현. `maplibre-vworld` dependency pin,
    지도 컴포넌트 import/e2e는 가능하지만, feature 조회는 krtour-map client 의존
    부분을 제외하고 진행한다.
