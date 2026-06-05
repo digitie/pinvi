@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LoginRequestSchema } from '@tripmate/schemas';
@@ -10,12 +10,56 @@ const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
 });
 
+type OAuthProviderName = 'google' | 'naver' | 'kakao';
+
+const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
+  google: false,
+  naver: false,
+  kakao: false,
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState(DISABLED_OAUTH_PROVIDERS);
+  const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
+  const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadProviders = async () => {
+      try {
+        const result = await authApi(apiClient).oauthProviders();
+        if (!active) {
+          return;
+        }
+        const next = { ...DISABLED_OAUTH_PROVIDERS };
+        for (const provider of result.providers) {
+          next[provider.provider] = provider.enabled;
+        }
+        setOauthProviders(next);
+      } catch {
+        if (active) {
+          setOauthError('소셜 로그인 상태를 불러오지 못했습니다.');
+        }
+      } finally {
+        if (active) {
+          setOauthProvidersLoading(false);
+        }
+      }
+    };
+
+    void loadProviders();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -47,6 +91,31 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const onGoogleStart = async () => {
+    setOauthError(null);
+    setOauthLoading('google');
+    try {
+      const result = await authApi(apiClient).startGoogleOAuth({
+        return_to: '/trips',
+        mode: 'login',
+      });
+      window.location.assign(result.authorize_url);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'OAUTH_NOT_CONFIGURED') {
+        setOauthError('Google 로그인이 아직 설정되지 않았습니다.');
+      } else if (err instanceof ApiError) {
+        setOauthError(err.message);
+      } else {
+        setOauthError('Google 로그인을 시작하지 못했습니다.');
+      }
+    } finally {
+      setOauthLoading(null);
+    }
+  };
+
+  const googleOAuthDisabled =
+    oauthProvidersLoading || !oauthProviders.google || oauthLoading !== null;
 
   return (
     <div className="space-y-6">
@@ -101,9 +170,36 @@ export default function LoginPage() {
         </Link>
       </p>
 
-      <p className="text-center text-xs text-muted">
-        소셜 로그인 (Google / 네이버 / 카카오)은 Sprint 2에 활성화됩니다.
-      </p>
+      <div className="flex items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-hairline" />
+        <span className="text-xs text-muted">또는</span>
+        <span className="h-px flex-1 bg-hairline" />
+      </div>
+
+      <div className="space-y-2">
+        {oauthError && (
+          <p className="text-sm text-error-text" data-testid="oauth-error">
+            {oauthError}
+          </p>
+        )}
+
+        <button
+          type="button"
+          disabled={googleOAuthDisabled}
+          onClick={onGoogleStart}
+          className="flex w-full items-center justify-center gap-2 rounded-sm border border-hairline bg-white px-3 py-3 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-60"
+          data-testid="google-oauth-start"
+          aria-busy={oauthLoading === 'google'}
+        >
+          <span
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline text-xs font-bold"
+            aria-hidden="true"
+          >
+            G
+          </span>
+          {oauthLoading === 'google' ? 'Google 연결 중...' : 'Google로 시작'}
+        </button>
+      </div>
     </div>
   );
 }

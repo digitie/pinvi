@@ -61,6 +61,9 @@
 - [x] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
   (완료: 2026-06-05, `.github/workflows/aggregate-ci.yml` + `main-pr-only` ruleset
   required status check `Aggregate CI gate`)
+- [x] T-071 — Google OAuth 로그인 UI + API client 연결
+  (완료: 2026-06-05, `/auth/oauth/google/start` envelope 응답, provider 목록 기반
+  로그인 버튼, PKCE verifier 재생성)
 
 ## 보류
 

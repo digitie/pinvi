@@ -68,6 +68,11 @@ frontend 구현에서 처리한다.
 `Aggregate CI gate` workflow를 추가했다. `api` / `web` / `etl`은 path filter를
 유지하고, aggregate gate가 변경 파일 기준으로 필요한 check만 기다린다. `main-pr-only`
 ruleset required status check는 `Aggregate CI gate`로 적용한다.
+**T-071 Google OAuth 로그인 UI 연결** (2026-06-05 codex) — 로컬
+`TRIPMATE_GOOGLE_OAUTH_CLIENT_ID` 반영 후 로그인 화면에서 `/auth/oauth/providers`를
+조회해 Google 버튼을 활성화한다. `/auth/oauth/google/start`는 envelope 응답으로
+authorize URL을 반환하고, PKCE verifier는 DB 평문 저장 없이 `state` + 서버 secret으로
+재생성한다.
 
 ## 다음 한 작업
 
@@ -77,7 +82,8 @@ ruleset required status check는 `Aggregate CI gate`로 적용한다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **운영 후속** — PR-C frontend 지도 구현. `maplibre-vworld` dependency pin,
+2. **비의존 후속** — Google OAuth callback 실패 redirect UX와 profile 연결/해제 UI.
+3. **운영 후속** — PR-C frontend 지도 구현. `maplibre-vworld` dependency pin,
    지도 컴포넌트 import/e2e는 가능하지만, feature 조회는 krtour-map client 의존
    부분을 제외하고 진행한다.
 

@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-05 (codex) — T-071 Google OAuth 로그인 UI
+
+**작업**: 로컬 Google OAuth client id를 반영한 뒤, 로그인 화면에서 Google OAuth
+authorize URL 발급 흐름을 시작할 수 있게 연결했다.
+
+**변경**:
+- `/auth/oauth/google/start` — 공통 API client가 읽을 수 있도록 envelope 응답
+  (`data.authorize_url`)으로 정리.
+- `oauth_google.issue_login_state` / `consume_login_state` — PKCE verifier를 DB 평문
+  저장 없이 `state` + 서버 secret으로 재생성해 callback 토큰 교환에 전달.
+- `@tripmate/schemas` / `@tripmate/api-client` — OAuth provider 목록과 Google start
+  schema/client 메서드 추가.
+- `apps/web/app/(auth)/login/page.tsx` — `/auth/oauth/providers` 조회 후 Google 버튼
+  활성화, 클릭 시 `authorize_url`로 top-level navigation.
+- `apps/web/eslint.config.mjs` — `FlatCompat.baseDirectory`를 file URL이 아닌 절대
+  디렉터리 경로로 고쳐 Windows/CI lint 경로 해석을 안정화.
+
+**검증**: `test_oauth_google.py`에 start envelope와 PKCE verifier 재생성 회귀 테스트를
+추가했다. 전체 로컬 검증은 PR 전 WSL ext4 미러에서 실행한다.
+
+**다음**: Google OAuth callback 실패 redirect UX와 profile 연결/해제 UI는 별도
+비의존 후속으로 분리한다.
+
 ## 2026-06-05 (codex) — T-065 aggregate CI gate
 
 **작업**: path-filtered `api` / `web` / `etl` workflow를 유지하면서 docs-only PR도
