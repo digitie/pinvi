@@ -43,23 +43,36 @@ $$;
 
 ```sql
 CREATE TABLE app.users (
-  user_id          uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
-  email            text NOT NULL,
-  email_verified_at timestamptz,
-  display_name     text,
-  avatar_url       text,
-  status           text NOT NULL DEFAULT 'active',
-  roles            text[] NOT NULL DEFAULT '{}',
-  created_at       timestamptz NOT NULL DEFAULT now(),
-  updated_at       timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT users_email_lower_chk CHECK (email = lower(email))
+  user_id                 uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  email                   varchar(320) NOT NULL,
+  password_hash           varchar(255),
+  nickname                varchar(80),
+  avatar_url              varchar(1024),
+  avatar_kind             varchar(16) NOT NULL DEFAULT 'default',
+  gender                  varchar(16),
+  birth_year_month        varchar(6),
+  residence_sigungu_code  varchar(5),
+  status                  varchar(32) NOT NULL DEFAULT 'pending_verification',
+  roles                   varchar(16)[] NOT NULL DEFAULT ARRAY['user']::varchar[],
+  email_verified_at       timestamptz,
+  email_status            varchar(16) NOT NULL DEFAULT 'active',
+  is_active               boolean NOT NULL DEFAULT true,
+  deleted_at              timestamptz,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_users_status CHECK (
+    status IN ('pending_verification', 'pending_profile', 'active', 'disabled', 'deleted')
+  ),
+  CONSTRAINT ck_users_email_status CHECK (email_status IN ('active', 'bounced', 'complained')),
+  CONSTRAINT ck_users_gender CHECK (
+    gender IS NULL OR gender IN ('female', 'male', 'non_binary', 'no_answer')
+  )
 );
 
-CREATE UNIQUE INDEX users_email_uk ON app.users (email);
-CREATE INDEX users_status_idx ON app.users (status) WHERE status <> 'active';
-CREATE INDEX users_roles_gin_idx ON app.users USING gin (roles);
+CREATE UNIQUE INDEX uq_users_email ON app.users (email);
+CREATE INDEX ix_users_status ON app.users (status);
 
-CREATE TRIGGER users_touch_updated_at
+CREATE TRIGGER trg_users_touch_updated_at
 BEFORE UPDATE ON app.users
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
@@ -70,28 +83,34 @@ FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 CREATE TABLE app.user_oauth_identities (
   identity_id      uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
   user_id          uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
-  provider         text NOT NULL,
-  provider_user_id text NOT NULL,
-  provider_email   text,
+  provider         varchar(32) NOT NULL,
+  provider_user_id varchar(255) NOT NULL,
+  provider_email   varchar(320),
+  provider_email_verified boolean,
+  display_name_snapshot varchar(120),
   linked_at        timestamptz NOT NULL DEFAULT now(),
   last_login_at    timestamptz,
-  UNIQUE (provider, provider_user_id)
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT uq_user_oauth_identities_provider_subject UNIQUE (provider, provider_user_id),
+  CONSTRAINT uq_user_oauth_identities_user_provider UNIQUE (user_id, provider),
+  CONSTRAINT ck_user_oauth_identities_provider CHECK (provider IN ('google', 'naver', 'kakao'))
 );
-
-CREATE INDEX user_oauth_user_idx ON app.user_oauth_identities (user_id);
 ```
 
 ### 2.3 `app.user_sessions`
 
 ```sql
 CREATE TABLE app.user_sessions (
-  session_id   uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
-  user_id      uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
-  created_at   timestamptz NOT NULL DEFAULT now(),
-  expires_at   timestamptz NOT NULL,
-  revoked_at   timestamptz,
-  ip           inet,
-  user_agent   text
+  session_id          uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  user_id             uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  session_token_hash  varchar(128) NOT NULL UNIQUE,
+  expires_at          timestamptz NOT NULL,
+  revoked_at          timestamptz,
+  user_agent          varchar(512),
+  ip_address          inet,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX user_sessions_active_idx
@@ -105,17 +124,16 @@ CREATE INDEX user_sessions_active_idx
 CREATE TABLE app.user_email_verifications (
   verification_id uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
   user_id         uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
-  token_hash      text NOT NULL,
-  email           text NOT NULL,
-  purpose         text NOT NULL,
-  created_at      timestamptz NOT NULL DEFAULT now(),
+  token_hash      varchar(128) NOT NULL UNIQUE,
+  purpose         varchar(32) NOT NULL DEFAULT 'signup',
   expires_at      timestamptz NOT NULL,
-  used_at         timestamptz
+  used_at         timestamptz,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_user_email_verifications_purpose CHECK (
+    purpose IN ('signup', 'password_reset', 'email_change')
+  )
 );
-
-CREATE INDEX user_email_verifications_pending_idx
-  ON app.user_email_verifications (user_id, purpose)
-  WHERE used_at IS NULL;
 ```
 
 ## 3. 여행 계획
@@ -405,17 +423,62 @@ Dagster가 하루 1회 실행일 기준 과거 6개월부터 미래 18개월까�
 
 ## 7. 권한 / 보안
 
+### 7.1 `app.security_incidents`
+
+```sql
+CREATE TABLE app.security_incidents (
+  incident_id            uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  incident_type          varchar(64) NOT NULL,
+  severity               varchar(16) NOT NULL,
+  status                 varchar(24) NOT NULL DEFAULT 'open',
+  source                 varchar(64),
+  summary                varchar(240) NOT NULL,
+  details                jsonb NOT NULL DEFAULT '{}'::jsonb,
+  affected_user_count    int NOT NULL DEFAULT 0,
+  notification_required  boolean NOT NULL DEFAULT false,
+  assigned_cpo_user_id   uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  request_id             uuid,
+  detected_at            timestamptz NOT NULL DEFAULT now(),
+  acknowledged_at        timestamptz,
+  resolved_at            timestamptz,
+  notified_at            timestamptz,
+  kisa_reported_at       timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_security_incidents_severity_allowed CHECK (
+    severity IN ('low', 'medium', 'high', 'critical')
+  ),
+  CONSTRAINT ck_security_incidents_status_allowed CHECK (
+    status IN ('open', 'acknowledged', 'resolved', 'false_positive')
+  )
+);
+
+CREATE INDEX ix_security_incidents_status_detected_at
+  ON app.security_incidents (status, detected_at);
+CREATE INDEX ix_security_incidents_severity_detected_at
+  ON app.security_incidents (severity, detected_at);
+
+CREATE TRIGGER trg_security_incidents_touch_updated_at
+BEFORE UPDATE ON app.security_incidents
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+PIPA 침해 가능성 자동 감지와 CPO 검토 상태를 저장한다. 실제 자동 트리거, Telegram
+알림, `/admin/incidents` UI, 사용자 통지 발송은 후속 Sprint 6 작업에서 붙인다.
+
+### 7.2 운영 권한
+
 - DB 사용자 `tripmate`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
   CRUD. 단 `feature`, `provider_sync`의 DDL은 `python-krtour-map` Alembic으로만 실행.
 - 운영에서는 별도 read-only 사용자 `tripmate_ro`를 두어 BI/모니터링에 사용.
 - 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
-- `app.admin_audit_logs`는 append-only — DELETE 막는 trigger 또는 권한 분리.
+- `app.admin_audit_log`는 append-only — DELETE 막는 trigger 또는 권한 분리.
 
 ## 8. 데이터 보존 / GDPR / 탈퇴
 
 - `app.users.status = 'deleted'`일 때 PII 마스킹 잡 schedule (Dagster):
   - `email` → `deleted-<user_id>@example.invalid`
-  - `display_name` → `null`
+  - `nickname` → `null`
   - `avatar_url` → `null`
   - 관련 세션 / verification token 일괄 `revoked_at = now()`.
 - `app.attachments`는 RustFS 객체와 함께 hard-delete (사용자 명시 요청 시).

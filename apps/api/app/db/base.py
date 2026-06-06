@@ -35,6 +35,7 @@ from app.models import (  # noqa: E402,F401
     notice_plan,
     oauth_identity,
     poi,
+    security,
     session,
     share_link,
     trip,
