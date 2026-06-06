@@ -113,8 +113,8 @@
 
 ### ADR
 
-- ADR-NNN: OR-Tools 경로 최적화 정책 (POI ≤10/11-20/20+ 분기)
-- ADR-NNN: 카테고리 매핑 운영 정책 (라이브러리 default + DB override + 사용자 custom)
+- 후속 ADR 후보(번호 미배정): OR-Tools 경로 최적화 정책 (POI ≤10/11-20/20+ 분기)
+- 후속 ADR 후보(번호 미배정): 카테고리 매핑 운영 정책 (라이브러리 default + DB override + 사용자 custom)
 - **ADR-018** (참조): 한국 전용 서비스 정책 + geofencing 3중 안전망
 - **ADR-019** (참조): TripMate MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리

@@ -58,9 +58,10 @@
 
 ### ADR
 
-Admin RBAC / audit-chain / 검색 문법 / Seed-Reset 환경 가드의 미기록 ADR 백필은
-T-151에서 처리한다. 현재 구현 기준은 `docs/api/admin.md`,
-`docs/architecture/admin-rbac.md`(작성 예정), `docs/runbooks/admin.md`를 따른다.
+- ADR-033: Admin RBAC(`users.roles[]` + 서버 dependency)
+- ADR-034: Admin audit hash chain
+- 검색 문법과 Seed-Reset 환경 가드는 별도 ADR 없이 `docs/api/admin.md`와
+  `docs/runbooks/admin.md` 구현 기준을 따른다.
 
 ## SPEC V8 매핑
 

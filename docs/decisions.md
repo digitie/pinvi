@@ -1173,7 +1173,84 @@
 - **후속**: `docs/api/pois.md`/`admin.md` 정렬(T-126 인접), 스키마 변경(T-138 인접).
 - **참조**: 감사 A-15/D-18, `docs/decisions-needed-2026-06-06.md` DEC-08/09.
 
+## ADR-032: 인증 토큰 기준은 access JWT + httpOnly cookie
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 구현 기준 백필 (T-151)
+- **컨텍스트**: Sprint 1~2에서 회원가입/로그인/OAuth vertical slice가 먼저 구현됐지만,
+  Sprint 문서에는 인증 토큰 모델이 번호 미배정 placeholder로 남아 있었다. 현재 구현은
+  `apps/api/app/core/security.py`, `core/deps.py`, `api/v1/auth.py`에 박혀 있다.
+- **결정**:
+  - 비밀번호 저장은 Argon2id hash를 사용한다.
+  - 인증 성공 시 `tripmate_access` httpOnly cookie에 HS256 access JWT를 저장한다.
+    access JWT는 `sub`, `exp`, `iat`, `typ=access`를 담고, 권한 판단은 토큰 claim이
+    아니라 서버 DB 조회로 수행한다.
+  - `tripmate_refresh`는 opaque httpOnly cookie로 내려보내되, 서버 저장/회전/폐기와
+    `POST /auth/refresh` 완성은 T-134의 명시 후속으로 둔다.
+  - cookie는 `SameSite=Lax`, 운영 환경 `Secure=true`, access 15분, refresh 7일을
+    기본값으로 한다.
+  - 현재 활성 OAuth provider는 Google뿐이다. Naver/Kakao는 T-122 future provider로
+    보류하며 현재 런타임에서 사용하지 않는다.
+- **결과**: 사용자 API는 browser cookie 기반으로 단순하게 시작하고, refresh session
+  저장소가 완성될 때까지 재발급/강제 세션 폐기 기능은 제한된다. Admin/RBAC는 access
+  token의 `sub`로 사용자를 찾은 뒤 DB roles를 기준으로 판단한다.
+- **후속**: T-134에서 `user_sessions` persistence, refresh token rotation, logout all,
+  세션 목록/폐기 UI를 구현한다. OAuth provider 확장은 T-122에서 별도 PR로 다룬다.
+- **참조**: `docs/api/auth.md`, `docs/integrations/social-login.md`,
+  `apps/api/app/core/security.py`, `apps/api/app/api/v1/auth.py`.
+
+## ADR-033: Admin 권한은 `users.roles[]` + 서버 dependency가 정본
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 구현 기준 백필 (T-151)
+- **컨텍스트**: Sprint 3 Admin 콘솔은 RBAC를 구현했지만, Sprint 문서에는 RBAC
+  ADR 번호가 배정되지 않았다. 현재 구현은 `users.roles` 배열과 `require_role`
+  dependency를 기준으로 한다.
+- **결정**:
+  - 사용자 권한은 `app.users.roles TEXT[]`에 저장한다. 기본값은 `user`다.
+  - Admin API는 `require_role(...)` dependency로 현재 사용자 row를 다시 조회하고,
+    허용 role이 없으면 Admin 리소스 존재를 숨기기 위해 404 `RESOURCE_NOT_FOUND`를
+    반환한다.
+  - 현재 role vocabulary는 `user`, `admin`, `operator`, `cpo`다. endpoint별 허용
+    role은 서버 dependency가 정본이며, Next.js Admin guard는 UX 보조 수단이다.
+  - 개인정보/위치/감사 관련 action은 role 통과 후에도 별도 사유 입력과 audit log를
+    남긴다.
+- **결과**: 권한 정책은 token claim이나 frontend route guard에 의존하지 않는다. 권한
+  매트릭스 테이블은 아직 만들지 않고, endpoint dependency로 Sprint 3~4 범위를 버틴다.
+- **후속**: role이 늘어나거나 세부 scope가 필요해지면 `docs/architecture/admin-rbac.md`
+  와 권한 매트릭스 테이블을 별도 ADR로 추가한다.
+- **참조**: `docs/api/admin.md`, `docs/runbooks/admin.md`,
+  `apps/api/app/core/rbac.py`, `apps/api/app/models/user.py`.
+
+## ADR-034: Admin 감사 로그는 append-only hash chain으로 남긴다
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 구현 기준 백필 (T-151)
+- **컨텍스트**: Sprint 3에서 `admin_audit_log` content hash chain과 위험 action
+  사유 입력을 구현했으나, 해당 운영 기준의 ADR 번호가 없었다.
+- **결정**:
+  - Admin mutating action과 개인정보 열람 action은 `app.admin_audit_log`에 append-only로
+    기록한다.
+  - 각 row는 `prev_hash`와 `content_hash`를 저장한다. 신규 row의 `prev_hash`는 직전
+    row의 `content_hash`이며, genesis 값에서 시작한다.
+  - 감사 payload는 actor, action, resource type/id, before/after JSON, access reason,
+    target PII fields, IP hash, user agent, request id, occurred_at을 포함한다.
+  - 감사 로그는 삭제/수정 API를 만들지 않는다. 마스킹된 조회와 hash chain 검증만
+    Admin 콘솔에 노출한다.
+  - 현재 단일 노드 운영에서는 마지막 row 조회 후 append로 충분하다고 본다. 병렬 worker
+    확대나 높은 동시성이 필요해지면 advisory lock, outbox, partitioning 중 하나를
+    후속 ADR로 확정한다.
+- **결과**: Admin 운영 행위의 추적성과 변조 감지 기준이 생긴다. 다만 고동시성 append
+  경로는 아직 정교화하지 않았으므로 운영 부하가 커지는 시점에 보강이 필요하다.
+- **후속**: T-146의 location-audit async outbox와 함께 audit append 동시성/보존 정책을
+  재검토한다.
+- **참조**: `docs/api/admin.md`, `docs/compliance/pipa.md`,
+  `apps/api/app/models/audit.py`, `apps/api/app/services/admin_audit.py`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-032**
+- 다음 신규 ADR = **ADR-035**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
