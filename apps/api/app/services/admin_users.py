@@ -5,9 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
+from app.models.audit import AdminAuditLog
 from app.models.session import UserSession
 from app.models.user import User
 
@@ -51,19 +53,52 @@ async def disable_user(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.U
 
 
 async def list_users(
-    db: AsyncSession, *, page: int = 1, limit: int = 50, status_filter: str | None = None
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    limit: int = 50,
+    status_filter: str | None = None,
+    q: str | None = None,
 ) -> tuple[list[User], int]:
-    base = select(User).where(User.deleted_at.is_(None))
-    count_base = select(func.count(User.user_id)).where(User.deleted_at.is_(None))
+    filters: list[ColumnElement[bool]] = [User.deleted_at.is_(None)]
     if status_filter:
-        base = base.where(User.status == status_filter)
-        count_base = count_base.where(User.status == status_filter)
+        filters.append(User.status == status_filter)
+    q_value = q.strip() if q else ""
+    if q_value:
+        pattern = f"%{q_value}%"
+        search_filters: list[ColumnElement[bool]] = [
+            User.email.ilike(pattern),
+            User.nickname.ilike(pattern),
+        ]
+        try:
+            search_filters.append(User.user_id == uuid.UUID(q_value))
+        except ValueError:
+            pass
+        filters.append(or_(*search_filters))
+
+    base = select(User).where(*filters)
+    count_base = select(func.count(User.user_id)).where(*filters)
     total = await db.scalar(count_base) or 0
     offset = max(0, (page - 1) * limit)
     paged_q = base.order_by(User.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(paged_q)
     users = list(result.scalars())
     return users, total
+
+
+async def list_recent_user_audit(
+    db: AsyncSession, *, user_id: uuid.UUID, limit: int = 10
+) -> list[AdminAuditLog]:
+    result = await db.execute(
+        select(AdminAuditLog)
+        .where(
+            AdminAuditLog.resource_type == "user",
+            AdminAuditLog.resource_id == str(user_id),
+        )
+        .order_by(AdminAuditLog.log_id.desc())
+        .limit(limit)
+    )
+    return list(result.scalars())
 
 
 def mask_email(email: str) -> str:

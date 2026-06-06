@@ -2,6 +2,44 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-119 회원 관리 Admin 보강
+
+**작업**: krtour-map과 무관한 admin 후속으로, 회원 목록 검색과 상세 PII reveal audit
+UX를 보강했다.
+
+**변경**:
+- `GET /admin/users` — `q` 검색(이메일/닉네임 부분 일치, user_id 정확 일치)과
+  `status_filter`를 함께 적용한다.
+- `GET /admin/users/{user_id}` — 기본 응답은 이메일을 마스킹하고, `reveal=true` +
+  사유가 있을 때만 원본 이메일을 반환하며 `user.reveal_pii` audit을 남긴다.
+- `AdminUserDetail` / Web schema / API client — `email_revealed`, `recent_audit`,
+  reveal 조회 파라미터를 추가했다.
+- `/admin/users` UI — 검색 입력 + 상태 필터 결합 조회를 추가했다.
+- `/admin/users/{user_id}` UI — 원본 보기 사유 입력 dialog와 최근 audit 표를 추가했다.
+- `apps/api/tests/integration/test_admin_users_api.py`,
+  `apps/web/e2e/admin-users.e2e.ts` — 검색/마스킹/reveal audit과 krtour-map 미호출을
+  검증했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run ruff format app tests/integration/test_admin_users_api.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/integration/test_admin_users_api.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror: `uv run pytest -s tests/integration/test_admin_users_api.py -q`
+  — 2 passed
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace packages/schemas`,
+  `npm run typecheck --workspace packages/api-client`,
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... admin-users.e2e.ts`
+  — 2 passed
+
+**다음**: T-120 여행계획 Admin 목록/상세/상태 관리.
+
 ## 2026-06-06 (codex) — T-118 Google OAuth 계정 매칭 UX
 
 **작업**: krtour-map과 무관한 인증 UX 후속으로, Google OAuth의 같은 이메일 자동

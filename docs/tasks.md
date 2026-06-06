@@ -12,7 +12,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-119 — 회원 관리 Admin 보강 (검색/상태 필터/상세 audit UX)
 - [ ] T-120 — 여행계획 Admin 목록/상세/상태 관리
 - [ ] T-121 — POI Admin 목록/상세/연결 상태 관리
   (feature re-link는 krtour-map client 준비 후)
@@ -112,6 +111,9 @@
 - [x] T-118 — Google OAuth 계정 매칭 / profile 연결 UX 보강
   (완료: 2026-06-06, 같은 이메일 자동 연결 금지 + `OAUTH_ACCOUNT_LINK_REQUIRED` /
   `OAUTH_EMAIL_UNVERIFIED` 안내 + profile link-mode 충돌 redirect + Naver/Kakao 제외 e2e)
+- [x] T-119 — 회원 관리 Admin 보강
+  (완료: 2026-06-06, `/admin/users` `q` 검색 + 상태 필터 결합, 상세 기본 이메일
+  마스킹, 사유 기반 원본 조회 audit, 최근 audit UX + 통합/e2e 테스트)
 
 ## 보류
 

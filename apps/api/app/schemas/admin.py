@@ -21,18 +21,6 @@ class AdminUserSummary(BaseModel):
     created_at: datetime
 
 
-class AdminUserDetail(AdminUserSummary):
-    email: str
-    email_status: Literal["active", "bounced", "complained"]
-    is_active: bool
-
-
-class AdminActionRequest(BaseModel):
-    """force-verify / disable 등 위험 액션 — 사유 필수."""
-
-    access_reason: str = Field(min_length=1, max_length=500)
-
-
 class AdminAuditEntry(BaseModel):
     log_id: int
     actor_user_id: uuid.UUID
@@ -44,6 +32,20 @@ class AdminAuditEntry(BaseModel):
     prev_hash: str
     content_hash: str
     occurred_at: datetime
+
+
+class AdminUserDetail(AdminUserSummary):
+    email: str
+    email_revealed: bool
+    email_status: Literal["active", "bounced", "complained"]
+    is_active: bool
+    recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
+
+
+class AdminActionRequest(BaseModel):
+    """force-verify / disable 등 위험 액션 — 사유 필수."""
+
+    access_reason: str = Field(min_length=1, max_length=500)
 
 
 class AdminPagedResponse(BaseModel):
