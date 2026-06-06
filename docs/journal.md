@@ -30,6 +30,22 @@ DEC-06=krtour 연동까지 v0.1.0 대기, DEC-07=API 규약 제안 기본값+`/v
 `krtour-map-integration.md` 실재성 정정, `sprints/README.md` status·v0.1.0 게이트,
 `tasks.md` 감사 후속 백로그 + 머지표, `notice-plans.md`/`data-model.md` 정정 노트.
 
+## 2026-06-06 (codex) — T-100~T-104 backlog 상태 정정
+
+**작업**: 완료된 T-100~T-104가 `docs/tasks.md`의 `보류` 섹션에 남아 실제 상태와
+다르게 읽히던 문서 구조를 정리했다.
+
+**변경**:
+- `docs/tasks.md` — T-100~T-104를 `완료` 섹션으로 옮기고 `보류`에는 실제
+  보류/미래 항목만 남겼다.
+- `docs/agent-guide.md` — `tasks.md` 형식 예시의 T-100 번호를 예시용 T-900으로
+  바꿔 실제 backlog와 충돌하지 않게 했다.
+
+**검증**:
+- `git diff --check`
+
+**다음**: T-066은 krtour-map OpenAPI/client 의존으로 계속 보류한다.
+
 ## 2026-06-06 (codex) — T-115 Backup snapshot foundation + T-116 Google-only OAuth
 
 **작업**: krtour-map과 무관한 운영/인증 후보로 ADR-022 Sprint 5 backup snapshot

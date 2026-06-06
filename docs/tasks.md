@@ -90,6 +90,13 @@
 - [x] T-075 — Trip 대시보드 / notice plan 사용자 shell
   (완료: 2026-06-05, `/trips` / `/notice-plans` 사용자 route + navigation + 빈 상태 +
   API client 연결, `/features/*` / krtour-map API `9011` 미호출 e2e)
+- [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
+- [x] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 schema/model
+  완료, 라우터 본격 구현은 Sprint 4)
+- [x] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 schema/model 완료, 라우터
+  Sprint 6)
+- [x] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 완료, presigned PUT)
+- [x] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 완료, PR #11)
 - [x] T-110 — Admin Grafana iframe embed
   (완료: 2026-06-05, `/admin/grafana` iframe shell + `NEXT_PUBLIC_GRAFANA_*` env +
   Web `frame-src` CSP + admin guard e2e)
@@ -109,13 +116,6 @@
 - [ ] T-066 — krtour-map OpenAPI HTTP client 구현 + drift gate (보류:
   krtour-map이 운영급 HTTP 서비스를 **신설**해야 진입 — ADR-027/DEC-01=B 확정,
   `docs/krtour-map-requirements.md`. v0.1.0 게이트가 여기 의존 — DEC-06)
-- [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
-- [x] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 schema/model
-  완료, 라우터 본격 구현은 Sprint 4)
-- [x] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 schema/model 완료, 라우터
-  Sprint 6)
-- [x] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 완료, presigned PUT)
-- [x] T-104 — v1의 Admin 콘솔 (`apps/web/app/admin/`) v2로 이식 (Sprint 3 완료, PR #11)
 - [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
   `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
   (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
