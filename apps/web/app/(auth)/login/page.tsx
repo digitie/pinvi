@@ -17,7 +17,11 @@ const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
 };
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  OAUTH_ACCOUNT_LINK_REQUIRED:
+    '이미 같은 이메일의 TripMate 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 Google을 연결해 주세요.',
   OAUTH_CALLBACK_INVALID: 'Google 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.',
+  OAUTH_EMAIL_UNVERIFIED:
+    'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 시도해 주세요.',
   OAUTH_PROVIDER_DENIED: 'Google 로그인이 취소되었습니다.',
   OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
   OAUTH_STATE_INVALID: 'Google 로그인 요청이 만료되었습니다. 다시 시작해 주세요.',

@@ -18,8 +18,11 @@ from app.models.oauth_identity import OAuthLoginState, UserOAuthIdentity
 from app.models.user import User
 from app.services.oauth_google import (
     GoogleClaims,
+    OAuthAccountLinkRequiredError,
+    OAuthEmailUnverifiedError,
     consume_login_state,
     issue_login_state,
+    link_google_to_user,
     resolve_google_login,
 )
 
@@ -75,8 +78,8 @@ async def test_existing_identity_logs_in(session_factory) -> None:
         assert len(identities) == 1
 
 
-async def test_safe_link_when_email_verified(session_factory) -> None:
-    """Google email_verified=true + 같은 이메일 로컬 계정 → 안전 연결."""
+async def test_same_verified_email_requires_explicit_link(session_factory) -> None:
+    """Google email_verified=true + 같은 이메일 로컬 계정 → 자동 연결 금지."""
     async with session_factory() as db:
         local = User(
             email="local@gmail.com",
@@ -90,16 +93,20 @@ async def test_safe_link_when_email_verified(session_factory) -> None:
         local_id = local.user_id
 
     async with session_factory() as db:
-        result = await resolve_google_login(
-            db, claims=_claims(sub="g-3", email="local@gmail.com", verified=True)
+        with pytest.raises(OAuthAccountLinkRequiredError):
+            await resolve_google_login(
+                db, claims=_claims(sub="g-3", email="local@gmail.com", verified=True)
+            )
+
+    async with session_factory() as db:
+        linked = await db.scalar(
+            select(UserOAuthIdentity).where(UserOAuthIdentity.user_id == local_id)
         )
-        assert result.linked_existing is True
-        assert result.created_user is False
-        assert result.user.user_id == local_id
+        assert linked is None
 
 
 async def test_no_link_when_email_unverified(session_factory) -> None:
-    """Google email_verified=false → 자동 연결 금지 (계정 탈취 방지) → 신규 생성."""
+    """Google email_verified=false → 로그인 거부 + 자동 연결 금지."""
     async with session_factory() as db:
         local = User(
             email="victim@gmail.com",
@@ -113,12 +120,10 @@ async def test_no_link_when_email_unverified(session_factory) -> None:
         local_id = local.user_id
 
     async with session_factory() as db:
-        result = await resolve_google_login(
-            db, claims=_claims(sub="g-4", email="victim@gmail.com", verified=False)
-        )
-        # 기존 계정에 연결되지 않아야 한다
-        assert result.linked_existing is False
-        assert result.user.user_id != local_id
+        with pytest.raises(OAuthEmailUnverifiedError):
+            await resolve_google_login(
+                db, claims=_claims(sub="g-4", email="victim@gmail.com", verified=False)
+            )
 
     # victim 계정에는 google identity 가 붙지 않았어야 한다
     async with session_factory() as db:
@@ -126,6 +131,108 @@ async def test_no_link_when_email_unverified(session_factory) -> None:
             select(UserOAuthIdentity).where(UserOAuthIdentity.user_id == local_id)
         )
         assert linked is None
+
+
+async def test_link_google_rejects_identity_owned_by_another_user(session_factory) -> None:
+    first = User(
+        email="google-owner@example.com",
+        password_hash="x",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    second = User(
+        email="google-linker@example.com",
+        password_hash="x",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    async with session_factory() as db:
+        db.add_all([first, second])
+        await db.flush()
+        db.add(
+            UserOAuthIdentity(
+                user_id=first.user_id,
+                provider="google",
+                provider_user_id="linked-google-sub",
+                provider_email=first.email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=datetime.now(UTC),
+                last_login_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+        second_id = second.user_id
+
+    async with session_factory() as db:
+        with pytest.raises(OAuthAccountLinkRequiredError):
+            await link_google_to_user(
+                db,
+                user_id=second_id,
+                claims=_claims(sub="linked-google-sub", email="owner@gmail.com", verified=True),
+            )
+
+
+async def test_link_google_rejects_different_google_for_same_user(session_factory) -> None:
+    user = User(
+        email="already-linked@example.com",
+        password_hash="x",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    async with session_factory() as db:
+        db.add(user)
+        await db.flush()
+        db.add(
+            UserOAuthIdentity(
+                user_id=user.user_id,
+                provider="google",
+                provider_user_id="first-google-sub",
+                provider_email=user.email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=datetime.now(UTC),
+                last_login_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+        user_id = user.user_id
+
+    async with session_factory() as db:
+        with pytest.raises(OAuthAccountLinkRequiredError):
+            await link_google_to_user(
+                db,
+                user_id=user_id,
+                claims=_claims(sub="second-google-sub", email="second@gmail.com", verified=True),
+            )
+
+
+async def test_link_google_rejects_email_owned_by_another_user(session_factory) -> None:
+    current = User(
+        email="current@example.com",
+        password_hash="x",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    owner = User(
+        email="owner@example.com",
+        password_hash="x",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    async with session_factory() as db:
+        db.add_all([current, owner])
+        await db.flush()
+        current_id = current.user_id
+        await db.commit()
+
+    async with session_factory() as db:
+        with pytest.raises(OAuthAccountLinkRequiredError):
+            await link_google_to_user(
+                db,
+                user_id=current_id,
+                claims=_claims(sub="owner-email-google", email="owner@example.com", verified=True),
+            )
 
 
 async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatch) -> None:
@@ -340,6 +447,69 @@ async def test_unlink_google_deletes_identity_when_password_exists(
             )
         )
         assert identity is None
+
+
+async def test_link_callback_conflict_redirects_to_profile(
+    client,
+    session_factory,
+    verified_user,
+    monkeypatch,
+) -> None:
+    user_id, _email = verified_user
+
+    owner = User(
+        email="callback-owner@example.com",
+        password_hash="hash",
+        nickname="owner",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    async with session_factory() as db:
+        db.add(owner)
+        await db.flush()
+        db.add(
+            UserOAuthIdentity(
+                user_id=owner.user_id,
+                provider="google",
+                provider_user_id="callback-conflict-google",
+                provider_email=owner.email,
+                provider_email_verified=True,
+                display_name_snapshot="Google User",
+                linked_at=datetime.now(UTC),
+                last_login_at=datetime.now(UTC),
+            )
+        )
+        state, _nonce, _code_verifier = await issue_login_state(
+            db,
+            mode="link",
+            return_to="/profile",
+            user_id=uuid.UUID(user_id),
+        )
+        await db.commit()
+
+    async def fake_exchange_code_for_claims(**_kwargs) -> GoogleClaims:
+        return _claims(
+            sub="callback-conflict-google",
+            email="callback-owner@example.com",
+            verified=True,
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.oauth.exchange_code_for_claims",
+        fake_exchange_code_for_claims,
+    )
+
+    resp = await client.get(
+        f"/auth/oauth/google/callback?code=test-code&state={state}",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    parsed = urlparse(location)
+    params = parse_qs(parsed.query)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/profile"
+    assert params["error"] == ["OAUTH_ACCOUNT_LINK_REQUIRED"]
 
 
 async def test_callback_invalid_state_redirects_to_login(client) -> None:

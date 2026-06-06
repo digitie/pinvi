@@ -12,8 +12,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-118 — Google OAuth 계정 매칭 / profile 연결 UX 보강
-  (아이디 매칭 안내, Naver/Kakao 제외)
 - [ ] T-119 — 회원 관리 Admin 보강 (검색/상태 필터/상세 audit UX)
 - [ ] T-120 — 여행계획 Admin 목록/상세/상태 관리
 - [ ] T-121 — POI Admin 목록/상세/연결 상태 관리
@@ -111,6 +109,9 @@
 - [x] T-117 — 회원가입 약관 동의 화면 + `user_consents` 저장 보강
   (완료: 2026-06-06, `POST /auth/register` 필수 4종 동의 요구 +
   `app.user_consents` 동시 저장 + `/signup` 필수/선택 동의 UI + e2e)
+- [x] T-118 — Google OAuth 계정 매칭 / profile 연결 UX 보강
+  (완료: 2026-06-06, 같은 이메일 자동 연결 금지 + `OAUTH_ACCOUNT_LINK_REQUIRED` /
+  `OAUTH_EMAIL_UNVERIFIED` 안내 + profile link-mode 충돌 redirect + Naver/Kakao 제외 e2e)
 
 ## 보류
 

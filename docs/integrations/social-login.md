@@ -140,8 +140,8 @@ GET /auth/oauth/google/callback?code=...&state=...
   5. user_oauth_identities (google, sub) 검색
      - 있음: 그 user_id로 로그인
      - 없음 + email로 user 검색:
-       - 있음 + user.email_verified=true → "account_link_required" (자동 연결 X)
-       - 있음 + user.email_verified=false → "email_unverified" (먼저 자체 인증)
+       - 있음 + user.email_verified=true → `OAUTH_ACCOUNT_LINK_REQUIRED` (자동 연결 X)
+       - 있음 + user.email_verified=false → `OAUTH_EMAIL_UNVERIFIED` (먼저 자체 인증)
        - 없음 → 신규 user 생성 (password_hash=NULL, email_verified=true)
   6. user_oauth_identities row 생성 + last_login_at
   7. Set-Cookie 두 개 + 302 → return_to
@@ -165,8 +165,9 @@ POST /auth/oauth/google/link { return_to: '/profile' }
   ↓ 클라이언트가 top-level navigation
 ... (above flow with mode=link, user_id 포함된 state) ...
   ↓ callback
-  - 같은 provider+sub로 다른 user에 이미 연결 → "account_link_required" (충돌)
-  - 같은 user에 다른 sub로 이미 연결 → "account_link_required"
+  - 같은 provider+sub로 다른 user에 이미 연결 → `OAUTH_ACCOUNT_LINK_REQUIRED` (충돌)
+  - 같은 user에 다른 sub로 이미 연결 → `OAUTH_ACCOUNT_LINK_REQUIRED` (충돌)
+  - Google 이메일이 다른 TripMate 계정 이메일과 일치 → `OAUTH_ACCOUNT_LINK_REQUIRED` (충돌)
   - 신규 → user_oauth_identities row 생성
 ```
 
@@ -181,10 +182,14 @@ POST /auth/oauth/google/link { return_to: '/profile' }
 ## 6. 에러 redirect 코드
 
 callback 실패 시 `/login?error=<code>&error_description=<msg>` 으로 303:
+`mode=link` state를 정상 소비한 뒤 발생한 연결 충돌/검증 실패는
+`return_to`(기본 `/profile`)에 같은 query로 303 redirect한다.
 
 | code | 의미 |
 |------|------|
+| `OAUTH_ACCOUNT_LINK_REQUIRED` | 같은 이메일/Google identity가 기존 계정과 충돌. 이메일 로그인 후 프로필에서 명시 연결 필요 |
 | `OAUTH_CALLBACK_INVALID` | callback 필수 query 누락 |
+| `OAUTH_EMAIL_UNVERIFIED` | Google 또는 TripMate 이메일 인증 미완료 |
 | `OAUTH_PROVIDER_DENIED` | 사용자가 provider 측에서 거부 |
 | `OAUTH_STATE_INVALID` | state hash 불일치 / consumed / TTL 초과 |
 | `OAUTH_PROVIDER_ERROR` | token 교환 또는 userinfo 호출 실패 |

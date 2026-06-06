@@ -63,10 +63,12 @@ def _set_session_cookies(response: Response, *, user_id: str) -> None:
     )
 
 
-def _oauth_error_redirect(*, code: str, message: str) -> RedirectResponse:
+def _oauth_error_redirect(*, code: str, message: str, path: str = "/login") -> RedirectResponse:
     query = urlencode({"error": code, "error_description": message})
+    target_path = path if path.startswith("/") else "/login"
+    separator = "&" if "?" in target_path else "?"
     return RedirectResponse(
-        url=f"{settings.tripmate_web_base_url}/login?{query}",
+        url=f"{settings.tripmate_web_base_url}{target_path}{separator}{query}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -184,7 +186,8 @@ async def google_callback(
             code_verifier=login_state.code_verifier,
         )
     except OAuthError as exc:
-        return _oauth_error_redirect(code=exc.code, message=str(exc))
+        error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
+        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
 
     try:
         if login_state.mode == "link" and login_state.user_id is not None:
@@ -194,7 +197,8 @@ async def google_callback(
             result = await resolve_google_login(db, claims=claims)
             user_id = result.user.user_id
     except OAuthError as exc:
-        return _oauth_error_redirect(code=exc.code, message=str(exc))
+        error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
+        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
 
     return_to = login_state.return_to_path or "/"
     redirect = RedirectResponse(
