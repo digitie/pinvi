@@ -4,7 +4,7 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-150 계획/추적 문서 정합화를 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-151 미기록 ADR 백필을 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
 
@@ -151,6 +151,10 @@ agent-guide 잔여 bullet/trailer를 정리했다.
 `docs/integrations/README.md`에서 본 저장소의 현재 책임을 `AI companion 호출 계약`으로
 표현했다. Gemini/Claude/Codex provider 구현은 ADR-020에 따라 별도
 `tripmate-ai-companion` repo 책임이다.
+**T-150 계획/추적 문서 정합화** (2026-06-06 codex) — Sprint 1/3/4/5 status를 최신
+main 기준으로 맞추고, Sprint 5 ETL provider asset 계획을 krtour-map 책임으로 정정했다.
+`resume.md`의 박힌 ADR 목록은 ADR-031까지 갱신했고, stale ADR 후보는 T-151/T-148
+후속으로 재분류했다.
 
 ## 다음 한 작업
 
@@ -160,8 +164,8 @@ agent-guide 잔여 bullet/trailer를 정리했다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-150 계획/추적 문서 정합화. sprint status, 보류/완료
-   재분류, ADR refs, resume의 박힌 ADR 범위를 최신 main 기준으로 맞춘다.
+2. **다음 비의존 후보** — T-151 미기록 ADR 백필. auth-token / RBAC / audit-chain
+   ADR을 박고 SPRINT 문서의 남은 placeholder를 번호 있는 후속으로 정리한다.
 3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -230,14 +234,13 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] POI Admin 목록/상세/연결 상태 관리 — T-121
 - [x] 문서 정합 일괄 정정 — T-123
 - [x] Gemini 책임 목록 정정 — T-149
+- [x] 계획/추적 문서 정합화 — T-150
 
-## 다음 ADR 후보 (Sprint 진입 시 박음)
+## 다음 ADR 후보
 
-- (ADR-024 박힘: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러)
-- (ADR-025 박힘: 사용자 대면 geocoding은 kraddr-geo v2 REST 직접)
-- (ADR-026 박힘: krtour-map OpenAPI HTTP 계약)
-- ADR-027(후보): Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
-- ADR-028(후보): Sprint 4 진행 추적 문서 정규화 (`resume.md` / `tasks.md` / `journal.md`)
+- T-151 — auth-token / RBAC / audit-chain ADR 백필
+- T-148 이후 — Sprint 4 backend 재작성 과정에서 viewport cache / feature snapshot
+  동기화 정책이 실제 구현 결정으로 필요하면 신규 ADR 작성
 
 ## 박힌 ADR
 
@@ -249,6 +252,21 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - ADR-014: v1 자산 전수 조사 + 누락 항목 일괄 반영 + 문서 일관성 정리
 - ADR-015: 지도 클라이언트 변경 (Kakao Maps SDK → `maplibre-vworld-js`)
 - ADR-016: AI 에이전트 도구 다중 지원 — `AGENTS.md` ↔ `CLAUDE.md` 동기 정책
+- ADR-017: CodeGraph 인덱스 + agent별 고정 worktree 운영
+- ADR-018: 한국 전용 서비스 — geofencing 3중 안전망
+- ADR-019: TripMate MCP 외부 인터페이스 서빙(read-only)
+- ADR-020: T-107 Gemini AI Companion 별도 서비스 분리
+- ADR-021: GitHub Actions CI/CD 재활성화
+- ADR-022: Backup / Restore 핫스왑 정책
+- ADR-023: 운영 하드웨어 확장 — Odroid M1S + N150 16GB 병행
+- ADR-024: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러
+- ADR-025: 사용자 대면 geocoding은 `python-kraddr-geo` v2 REST API 직접 호출
+- ADR-026: TripMate ↔ `python-krtour-map`은 최신 OpenAPI HTTP 계약으로 전환
+- ADR-027: krtour-map 통합은 운영급 HTTP 서비스로 확정
+- ADR-028: 정규 `feature_id` 포맷은 krtour-map `make_feature_id` 출력
+- ADR-029: `notice_plans` 명칭 충돌 해소 — 큐레이션은 `curated_trip_plans`
+- ADR-030: 외부 API 규약 정본
+- ADR-031: POI delete 정책(soft) + `trip_day_pois.feature_id` nullable
 
 ## 운영 지시
 

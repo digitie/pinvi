@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-150 계획/추적 문서 정합화
+
+**작업**: 감사 P-04~21 중 T-150 범위의 sprint status, tracking 문서, ADR 참조
+드리프트를 최신 main 기준으로 정리했다.
+
+**변경**:
+- `docs/sprints/SPRINT-1.md`, `SPRINT-3.md`, `SPRINT-4.md` 헤더 상태를 merged /
+  in progress 기준으로 정정하고, 잘못 배정됐던 Sprint 1 ADR 참조를 실제 ADR 번호와
+  T-151 백필 대상으로 분리했다.
+- `docs/sprints/SPRINT-5.md`의 TripMate ETL provider asset 계획을 ADR-026/T-210c
+  경계에 맞춰 `app` schema 소유 job만 남기고, feature/provider 적재는 krtour-map
+  책임으로 정리했다.
+- `docs/sprints/README.md` 관련 ADR 목록을 ADR-031까지 확장했다.
+- `docs/resume.md`의 stale ADR 후보를 T-151/T-148 후속으로 재분류하고, 박힌 ADR
+  목록을 ADR-031까지 갱신했다.
+- `docs/tasks.md` 완료/다음 작업/merge history를 최신화했다.
+
+**검증**:
+- NTFS worktree: `rg`로 Sprint status / ADR 후보 / T-111 중복 / 보류 `[x]` 혼재
+  상태 확인
+- NTFS worktree: `git diff --check`
+
+**다음**: T-151 미기록 ADR 백필. krtour-map feature read는 계속 T-066 대기.
+
 ## 2026-06-06 (codex) — T-149 Gemini 책임 목록 정정
 
 **작업**: ADR-020(`tripmate-ai-companion` 별도 repo 분리)에 맞춰, 본 저장소의 현재

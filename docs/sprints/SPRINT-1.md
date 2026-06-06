@@ -1,6 +1,6 @@
 # SPRINT-1 — 모노레포 scaffolding + DB schema + 핵심 인증
 
-- **상태**: proposed (사용자 진입 승인 대기)
+- **상태**: merged (PR #9, 2026-05-26)
 - **목표**: v2 main에 `apps/{api,web,etl}` + `infra/` + `packages/` scaffolding을
   박고, `app` schema의 핵심 DDL + 회원가입/로그인의 첫 vertical slice를 통과시킨다.
 - **DoD (Definition of Done)**:
@@ -19,10 +19,9 @@
 
 ## 1. 진입 전 준비
 
-- [ ] 사용자가 Sprint 1 진입 승인 (이 문서 §4 미해결 결정 모두 정리 후)
-- [ ] `docs/decisions.md` ADR-010 (인증 토큰 모델) 결정
-- [ ] `docs/decisions.md` ADR-011 (Admin RBAC 모델) 결정 — Sprint 1은 단순 admin
-      이메일 화이트리스트로 시작 가능
+- [x] 사용자가 Sprint 1 진입 승인 (PR #9에서 완료)
+- [x] Sprint 1 scaffold / auth vertical slice merge 완료
+- [ ] 인증 토큰 / Admin RBAC / audit-chain ADR 백필은 T-151에서 별도 정리
 
 ## 2. 산출물
 
@@ -92,11 +91,12 @@
 
 ### 2.7 ADR
 
-본 Sprint 진입 PR에서 다음 ADR 박음 (proposed → accepted):
+본 Sprint 진입 PR 시점의 ADR 참조는 이후 번호 배정과 다르게 정리됐다. 현재 기준:
 
-- ADR-010 인증 토큰 모델
-- ADR-011 Admin RBAC 모델 (잠정)
-- ADR-016 지도 클라이언트 정책 (잠정)
+- ADR-010: SPEC V8 6편 채택 + 책임 분담 정정
+- ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
+- ADR-015: 지도 클라이언트 `maplibre-vworld-js`
+- 인증 토큰 / Admin RBAC / audit-chain ADR은 T-151에서 백필
 
 ## 3. 의존성 / 외부
 
