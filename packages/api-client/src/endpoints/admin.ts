@@ -6,6 +6,9 @@ import {
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
   AdminPagedResponseSchema,
+  AdminTripDetailSchema,
+  AdminTripPagedResponseSchema,
+  AdminTripStatusRequestSchema,
   AdminUserDetailSchema,
 } from '@tripmate/schemas';
 import { z } from 'zod';
@@ -52,6 +55,46 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminActionRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
+    }),
+
+  listTrips: (
+    params: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      visibility?: string;
+      ownerUserId?: string;
+      q?: string;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.status) qs.set('status_filter', params.status);
+    if (params.visibility) qs.set('visibility_filter', params.visibility);
+    if (params.ownerUserId) qs.set('owner_user_id', params.ownerUserId);
+    if (params.q) qs.set('q', params.q);
+    const path = `/admin/trips${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminTripPagedResponseSchema,
+    });
+  },
+
+  getTrip: (tripId: string) =>
+    client.request(`/admin/trips/${tripId}`, {
+      method: 'GET',
+      schema: AdminTripDetailSchema,
+    }),
+
+  updateTripStatus: (
+    tripId: string,
+    body: z.infer<typeof AdminTripStatusRequestSchema>,
+  ) =>
+    client.request(`/admin/trips/${tripId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(AdminTripStatusRequestSchema.parse(body)),
+      schema: AdminTripDetailSchema,
     }),
 
   listAudit: (limit = 50) =>

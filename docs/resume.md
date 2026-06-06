@@ -133,6 +133,10 @@ Naver/Kakao는 계속 T-122 미래 작업이다.
 검색과 상태 필터를 함께 적용하고, 상세는 기본 이메일 마스킹 상태로 응답한다.
 `reveal=true` + 사유가 있을 때만 원본 이메일을 반환하며 `user.reveal_pii` audit과
 최근 audit 목록을 상세 UI에 표시한다.
+**T-120 여행계획 Admin 목록/상세/상태 관리** (2026-06-06 codex) —
+`/admin/trips` 목록은 `q` 검색, 상태/공개범위/owner 필터와 day/POI/companion/share
+count를 제공한다. 상세는 companion/share metadata와 최근 audit을 표시하고, 상태
+변경은 `access_reason` 필수 + `trip.update_status` audit으로 기록한다.
 
 ## 다음 한 작업
 
@@ -142,11 +146,10 @@ Naver/Kakao는 계속 T-122 미래 작업이다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-120 여행계획 Admin 목록/상세/상태 관리.
-   `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
-   `docs/api/trips.md`를 먼저 확인한다.
-3. **이후 비의존 후보** — T-121 POI Admin.
-4. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
+2. **다음 비의존 후보** — T-121 POI Admin 목록/상세/연결 상태 관리.
+   feature re-link는 krtour-map client 준비 후로 두고, 현재는 `app.trip_day_pois`
+   조회/삭제/상태 표시처럼 TripMate 소유 영역만 다룬다.
+3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
 Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-122로 보류.
@@ -210,6 +213,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] 회원가입 약관 동의 화면 + `user_consents` 저장 보강 — T-117
 - [x] Google OAuth 계정 매칭 / profile 연결 UX 보강 — T-118
 - [x] 회원 관리 Admin 검색/상세 audit UX 보강 — T-119
+- [x] 여행계획 Admin 목록/상세/상태 관리 — T-120
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
