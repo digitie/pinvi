@@ -120,6 +120,58 @@ export const AdminTripStatusRequestSchema = z.object({
 });
 export type AdminTripStatusRequest = z.infer<typeof AdminTripStatusRequestSchema>;
 
+export const AdminPoiSummarySchema = z.object({
+  attachment_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
+  trip_title: z.string(),
+  owner_user_id: z.string().uuid(),
+  owner_email_masked: z.string(),
+  day_index: z.number().int(),
+  sort_order: z.string(),
+  feature_id: z.string(),
+  feature_label: z.string().nullable(),
+  feature_link_broken_at: Iso8601Schema.nullable(),
+  version: z.number().int(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminPoiSummary = z.infer<typeof AdminPoiSummarySchema>;
+
+const AdminPoiAmountSchema = z.union([z.string(), z.number()]).nullable();
+
+export const AdminPoiDetailSchema = AdminPoiSummarySchema.extend({
+  added_by_user_id: z.string().uuid(),
+  added_by_email_masked: z.string().nullable(),
+  feature_snapshot: z.record(z.string(), z.unknown()),
+  custom_marker_color: z.string().nullable(),
+  custom_marker_icon: z.string().nullable(),
+  planned_arrival_at: Iso8601Schema.nullable(),
+  planned_departure_at: Iso8601Schema.nullable(),
+  user_note: z.string().nullable(),
+  budget_amount: AdminPoiAmountSchema,
+  actual_amount: AdminPoiAmountSchema,
+  currency: z.string(),
+  user_url: z.string().nullable(),
+  recent_audit: z.array(AdminAuditEntrySchema).default([]),
+});
+export type AdminPoiDetail = z.infer<typeof AdminPoiDetailSchema>;
+
+export const AdminPoiPagedResponseSchema = z.object({
+  items: z.array(AdminPoiSummarySchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  limit: z.number().int(),
+});
+export type AdminPoiPagedResponse = z.infer<typeof AdminPoiPagedResponseSchema>;
+
+export const AdminPoiLinkStatusRequestSchema = z.object({
+  broken: z.boolean(),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminPoiLinkStatusRequest = z.infer<
+  typeof AdminPoiLinkStatusRequestSchema
+>;
+
 /** email_queue 행. */
 export const AdminEmailEntrySchema = z.object({
   email_id: z.string().uuid(),

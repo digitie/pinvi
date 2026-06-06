@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -115,6 +116,50 @@ class AdminTripPagedResponse(BaseModel):
 
 class AdminTripStatusRequest(BaseModel):
     status: TripStatus
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminPoiSummary(BaseModel):
+    attachment_id: uuid.UUID
+    trip_id: uuid.UUID
+    trip_title: str
+    owner_user_id: uuid.UUID
+    owner_email_masked: str
+    day_index: int
+    sort_order: str
+    feature_id: str
+    feature_label: str | None
+    feature_link_broken_at: datetime | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminPoiDetail(AdminPoiSummary):
+    added_by_user_id: uuid.UUID
+    added_by_email_masked: str | None
+    feature_snapshot: dict[str, Any]
+    custom_marker_color: str | None
+    custom_marker_icon: str | None
+    planned_arrival_at: datetime | None
+    planned_departure_at: datetime | None
+    user_note: str | None
+    budget_amount: Decimal | None
+    actual_amount: Decimal | None
+    currency: str
+    user_url: str | None
+    recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
+
+
+class AdminPoiPagedResponse(BaseModel):
+    items: list[AdminPoiSummary]
+    total: int
+    page: int
+    limit: int
+
+
+class AdminPoiLinkStatusRequest(BaseModel):
+    broken: bool
     access_reason: str = Field(min_length=1, max_length=500)
 
 
