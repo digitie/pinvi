@@ -1,17 +1,24 @@
-# krtour-map 통합 — 최신 `main` OpenAPI 계약
+# krtour-map 통합 — OpenAPI HTTP 계약 (목표)
 
 본 문서는 TripMate(`apps/api` + `apps/web`)가 별도 저장소
-`python-krtour-map`의 **최신 `main` OpenAPI 계약**을 사용하는 표준이다.
-ADR-026 기준이며, 과거 ADR-002의 "함수 직접 호출" 정책을 대체한다.
+`python-krtour-map`의 **OpenAPI HTTP 계약**을 사용하는 표준이다.
+ADR-026 + ADR-027 기준이며, 과거 ADR-002의 "함수 직접 호출" 정책을 대체한다.
 
-확인 기준(2026-06-04):
+> **⚠️ 현재 상태 정정 (2026-06-06, ADR-027)**: 아래 계약은 **krtour-map이 신규로
+> 구축해야 할 목표**다. 2026-06-06 `python-krtour-map` `main`(`HEAD=b775c74`) 실측
+> 결과, 이 문서가 가정했던 `packages/krtour-map-admin/openapi.user.json`·
+> `openapi.json`·`docs/tripmate-rest-api.md`·`docs/openapi-admin-contract.md`·포트
+> 9011·`/tripmate/features/batch`는 **실재하지 않는다.** krtour-map의 실제 HTTP 표면은
+> 인증 없는 debug-UI(`krtour-map-debug-ui`, 포트 8087, `GET /features` bbox·
+> `GET /features/{id}`)뿐이다. TripMate가 필요로 하는 능력의 권위 명세는
+> **`docs/krtour-map-requirements.md`** 이며, krtour-map은 이를 보고 운영급 HTTP
+> 서비스를 신설한다. 아래 §3~§7 계약은 그 신설 대상의 목표 셰입이다.
 
-- `python-krtour-map` 최신 `main`의 `packages/krtour-map-admin/openapi.user.json`
-  — TripMate/user-facing 권위 계약
-- `python-krtour-map` 최신 `main`의 `packages/krtour-map-admin/openapi.json`
-  — Admin/ops/debug 포함 전체 계약
-- `python-krtour-map` 최신 `main`의 `docs/tripmate-rest-api.md`,
-  `docs/openapi-admin-contract.md`
+향후 권위 산출물(krtour-map이 생성 예정):
+
+- `python-krtour-map`의 user-facing OpenAPI (TripMate/user-facing 권위 계약)
+- `python-krtour-map`의 전체 OpenAPI (Admin/ops/debug 포함)
+- krtour-map 측 TripMate 통합 문서
 
 ## 1. 경계
 

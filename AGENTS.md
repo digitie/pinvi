@@ -36,7 +36,12 @@ manifest / 문서가 들어 있다.
 본 앱은 지도 feature 도메인을 직접 소유하지 않는다. 지도 feature(place /
 event / notice / price / weather / route / area) 정규화·저장은 별 저장소
 `python-krtour-map`이 소유하고, TripMate는 최신 `python-krtour-map` **OpenAPI HTTP
-계약**으로 조회·갱신 요청을 보낸다(ADR-026).
+계약**으로 조회·갱신 요청을 보낸다(ADR-026/ADR-027).
+
+> **현황 (2026-06-06 감사, ADR-027)**: 이 HTTP 계약은 krtour-map이 **신규로 구축해야
+> 할 목표**다(현재 krtour-map은 in-process 함수 라이브러리 + 인증 없는 debug-UI만 보유,
+> 포트 9011/`openapi.user.json` 미존재). TripMate 요구사항은
+> `docs/krtour-map-requirements.md`, 종합 감사는 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. master(main)는 v2 사양으로 처음부터
 다시 구현한다(ADR-001).

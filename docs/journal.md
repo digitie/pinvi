@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (claude) — 문서·구현 정합성 전수 감사 + krtour-map 요구사항 명세
+
+**작업**: Sprint 1~4 중 계획 변경·Task 분절로 누적된 모순·불일치·누락을 문서 전체 +
+`apps/` 코드 + `python-krtour-map`(HEAD `b775c74`) 대조로 전수 점검했다. 5개 병렬
+감사(계획/프로세스, 외부 API, 코드 vs 문서, 기능/도메인, krtour-map 저장소)를 종합.
+
+**핵심 발견**: TripMate(ADR-026, HTTP 9011)와 krtour-map(in-process 함수 라이브러리,
+HTTP는 인증 없는 debug-UI 8087뿐)의 **통합 모델이 정반대**이며, ADR-026이 참조한
+krtour 산출물(`krtour-map-admin` 패키지·`openapi.user.json`·`/tripmate/features/batch`)
+이 **실재하지 않음**을 확인. 그 외 외부 API 규약 혼재(envelope/pagination/좌표/datetime),
+feature read 전 경로 미연결(C-01 client stub), `notice_plans` 명칭 충돌, PIPA `users`
+컬럼·`security_incidents` 테이블 누락, 실시간/검색/내보내기/동반자 초대 부재 등.
+
+**신규 문서**:
+- `docs/audit/2026-06-06-doc-impl-audit.md` — 감사 종합(증거 ID P/A/C/D, 병합 매핑표
+  T-123~151 / ADR-027~031).
+- `docs/krtour-map-requirements.md` — krtour-map 에이전트용 요구사항(능력별 왜/언제 +
+  현재 상태 + 격차표 K-1~14).
+- `docs/decisions-needed-2026-06-06.md` — 결정 DEC-01~10 + 사용자 결정 기록.
+
+**사용자 결정**: DEC-01=운영급 HTTP 서비스(B), DEC-03=`curated_trip_plans` 분리,
+DEC-06=krtour 연동까지 v0.1.0 대기, DEC-07=API 규약 제안 기본값+`/v1`. 나머지는 저위험
+권고 기본값 채택.
+
+**반영**: `decisions.md` ADR-027~031 추가, `common.md` 정본 규약(ADR-030),
+`krtour-map-integration.md` 실재성 정정, `sprints/README.md` status·v0.1.0 게이트,
+`tasks.md` 감사 후속 백로그 + 머지표, `notice-plans.md`/`data-model.md` 정정 노트.
+
 ## 2026-06-06 (codex) — T-115 Backup snapshot foundation + T-116 Google-only OAuth
 
 **작업**: krtour-map과 무관한 운영/인증 후보로 ADR-022 Sprint 5 backup snapshot

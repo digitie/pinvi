@@ -5,6 +5,14 @@
 
 `feature` schema의 데이터 모델은 `python-krtour-map`의 `docs/data-model.md` 참고.
 
+> **⚠️ 감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**: 본 문서와
+> `postgres-schema.md`에 다음이 누락/충돌이며 **T-137/T-138**에서 정정한다.
+> ① `notice_plans` 명칭 충돌 → 큐레이션은 `curated_trip_plans`로 개명(ADR-029/DEC-03).
+> ② 누락 테이블: `security_incidents`, `curated_plan_pois`, `curated_plan_attachments`,
+> `feature_requests`(또는 큐 소유권 DEC-05). ③ 누락 `users` 컬럼: `password_hash`,
+> `nickname`, `gender`, `birth_year_month`, `residence_sigungu_code`, `email_status`.
+> ④ `trip_day_pois`: `budget/currency` 추가(D-10), `feature_id` nullable 검토(DEC-09).
+
 ## 1. 큰 그림
 
 ```
