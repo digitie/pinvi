@@ -62,9 +62,10 @@
 
 ### ADR
 
-- ADR-NNN: 인증 토큰 모델 확정 (cookie session vs JWT 잠정 — Sprint 1 ADR-010)
-- ADR-NNN: 소셜 로그인 매칭 정책 (G-4 mirror)
-- ADR-NNN: `email_queue` worker 패턴 (PostgreSQL `SKIP LOCKED`)
+- ADR-032: 인증 토큰 기준(access JWT + httpOnly cookie)
+- 소셜 로그인 매칭 정책은 `docs/integrations/social-login.md`와 Google OAuth 구현 테스트가
+  정본이다. Naver/Kakao는 T-122 future provider로 보류한다.
+- `email_queue` worker 패턴은 `docs/integrations/resend.md`와 T-070 구현 기준을 따른다.
 
 ## SPEC V8 매핑
 

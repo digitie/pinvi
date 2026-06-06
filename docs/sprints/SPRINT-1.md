@@ -21,7 +21,7 @@
 
 - [x] 사용자가 Sprint 1 진입 승인 (PR #9에서 완료)
 - [x] Sprint 1 scaffold / auth vertical slice merge 완료
-- [ ] 인증 토큰 / Admin RBAC / audit-chain ADR 백필은 T-151에서 별도 정리
+- [x] 인증 토큰 / Admin RBAC / audit-chain ADR 백필 완료 (ADR-032~034)
 
 ## 2. 산출물
 
@@ -96,7 +96,9 @@
 - ADR-010: SPEC V8 6편 채택 + 책임 분담 정정
 - ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
 - ADR-015: 지도 클라이언트 `maplibre-vworld-js`
-- 인증 토큰 / Admin RBAC / audit-chain ADR은 T-151에서 백필
+- ADR-032: 인증 토큰 기준(access JWT + httpOnly cookie)
+- ADR-033: Admin RBAC(`users.roles[]` + 서버 dependency)
+- ADR-034: Admin audit hash chain
 
 ## 3. 의존성 / 외부
 
@@ -107,10 +109,11 @@
 
 ## 4. 미해결 결정 (Sprint 진입 전 결정 필요)
 
-- [ ] 인증 토큰 모델: cookie session (보안 강함, CSRF 처리) vs JWT (stateless).
-- [ ] Admin RBAC: roles 배열 + 백엔드 dependency 만으로 시작 vs RBAC 매트릭스 도입.
-- [ ] 이메일 검증 발신: Sprint 1은 console-log mock 발신, Sprint 2에서 Resend 통합.
-- [ ] 소셜 로그인: Sprint 1은 이메일/비밀번호만, Sprint 2에서 Kakao/Naver/Google.
+- [x] 인증 토큰 모델: ADR-032 기준(access JWT + httpOnly cookie, refresh persistence는 T-134).
+- [x] Admin RBAC: ADR-033 기준(`users.roles[]` + 백엔드 dependency, 매트릭스는 후속).
+- [x] 이메일 검증 발신: Sprint 1 console-log mock, Sprint 2/T-070에서 Resend 통합.
+- [x] 소셜 로그인: Sprint 1은 이메일/비밀번호만, 현재 활성 provider는 Google만 사용.
+  Naver/Kakao는 T-122 future provider로 보류(ADR-032).
 
 ## 5. 회귀 방지
 

@@ -101,13 +101,14 @@
 
 ### ADR
 
-- ADR-NNN: WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis Streams)
-- ADR-NNN: optimistic lock + `If-Match` 정책
-- ADR-NNN: TripMate Dagster `app` schema job 표준 (KASI/알림/보존정책)
-- ADR-NNN: Loki retention 정책 (7일, Odroid 용량)
+- 후속 ADR 후보(번호 미배정): WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis
+  Streams)
+- 후속 ADR 후보(번호 미배정): optimistic lock + `If-Match` 정책
+- 후속 ADR 후보(번호 미배정): TripMate Dagster `app` schema job 표준 (KASI/알림/보존정책)
+- 후속 ADR 후보(번호 미배정): Loki retention 정책 (7일, Odroid 용량)
 - ADR-022 (참조): Backup/Restore 핫스왑 정책 — 본 Sprint는 script + endpoint만,
   Sprint 6에서 UI + 핫스왑 finalize
-- ADR-NNN: Grafana anonymous viewer + frame-ancestors CSP (admin embed)
+- 후속 ADR 후보(번호 미배정): Grafana anonymous viewer + frame-ancestors CSP (admin embed)
 
 ## SPEC V8 매핑
 

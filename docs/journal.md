@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-151 미기록 ADR 백필
+
+**작업**: Sprint 문서에 placeholder로 남아 있던 인증 토큰 / Admin RBAC / Admin audit
+chain 결정을 현재 구현 기준으로 ADR에 박았다.
+
+**변경**:
+- `docs/decisions.md` — ADR-032(access JWT + httpOnly cookie), ADR-033(`users.roles[]`
+  Admin RBAC), ADR-034(Admin audit hash chain)를 추가하고 다음 신규 ADR을 ADR-035로
+  갱신했다.
+- `CLAUDE.md`, `docs/sprints/SPRINT-1.md`, `SPRINT-2.md`, `SPRINT-3.md`,
+  `SPRINT-5.md`, `SPRINT-6.md` — ADR 번호/후속 후보/구현 기준을 최신화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-151 완료와 다음 비의존 후보 T-143을 반영했다.
+
+**검증**:
+- NTFS worktree: `rg`로 Sprint/resume/decisions의 `ADR-NNN`, stale ADR-032/T-151 포인터 확인
+- NTFS worktree: `git diff --check`
+
+**다음**: T-143 지도/소셜 문서 정정. krtour-map feature read는 계속 T-066 대기.
+
 ## 2026-06-06 (codex) — T-150 계획/추적 문서 정합화
 
 **작업**: 감사 P-04~21 중 T-150 범위의 sprint status, tracking 문서, ADR 참조
