@@ -176,6 +176,23 @@
 - [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
 - [ ] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
 
+### krtour-map ADR-045 Phase 6 (TripMate 몫) 대응
+
+krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소가
+처리할 항목 매핑:
+
+- [x] **T-210c (TripMate 부분)** — `apps/etl` ETL 경계 정합 (완료: 2026-06-06).
+  코드 측은 이관할 feature/provider Dagster **스켈레톤이 없음**(apps/etl은 KASI 등
+  `app` schema 소유 job만 보유) → 이관/삭제 불필요. 문서 측 phantom 스켈레톤
+  (`dagster-etl-bridge.md`/`runbooks/etl.md`가 미존재 파일 나열)을 현재 구현 vs
+  계획으로 정합화 + `assets/__init__.py` 경계 가드 docstring 추가.
+- [x] **T-210b (TripMate 부분)** — 문서 OpenAPI HTTP supersede: ADR-026(T-068) +
+  ADR-027(감사 PR #47)로 사실상 완료(architecture/krtour-map-integration/etl 문서 전환).
+- [ ] **T-210d** = 본 저장소 **T-066**(httpx OpenAPI client) — krtour-map 운영 HTTP
+  서비스 신설(DEC-01=B) 대기.
+- [ ] **T-210e** — frontend `openapi-typescript` codegen + Zod mirror + CI diff 게이트
+  (krtour-map OpenAPI 산출물 확정 후).
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |
