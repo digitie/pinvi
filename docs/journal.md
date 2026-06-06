@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-144 여행/장소 검색 UX + 내보내기 설계
+
+**작업**: 감사 D-16/D-17 범위의 사용자 여행 검색, 장소 검색 drawer, PDF/GPX/print
+내보내기 설계를 문서화했다.
+
+**변경**:
+- `docs/api/trips.md` — `GET /trips` 검색 파라미터(`q`, bucket/status/date/sort)와
+  `exports/print-data`, `exports/gpx`, `exports/pdf` 계약을 추가했다.
+- `docs/api/features.md` — 장소 검색을 실제 경로 `GET /features/search`로 분리하고,
+  통합 `GET /search`는 T-129 future bucket 설계로 정리했다.
+- `docs/architecture/frontend.md`, `docs/spec/v8/03-frontend.md` — Trip search bar,
+  place search drawer, export menu, print route 책임과 krtour-map unavailable UX를
+  문서화했다. Naver/Kakao 검색 fallback은 쓰지 않는다.
+- `docs/api/common.md`, `docs/api/README.md`, `docs/spec/v8/02-backend.md` — rate limit,
+  인덱스, SPEC 적용 노트를 같은 계약으로 맞췄다.
+- `docs/resume.md`, `docs/tasks.md` — T-144 완료와 다음 비의존 후보 T-145를 반영했다.
+
+**검증**:
+- NTFS worktree: 문서 stale pattern 검색, `git diff --check`
+
+**다음**: T-145 backup 핫스왑 동일호스트 schema-swap 확정.
+
 ## 2026-06-06 (codex) — T-142 geofence/admin 정합
 
 **작업**: 감사 D-13/D-24 범위의 geofence admin 우회와 nginx GeoIP2 계층 과잉 표현을

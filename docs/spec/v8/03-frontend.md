@@ -47,6 +47,7 @@ apps/web/
 │   │   │   ├── new/page.tsx
 │   │   │   └── [tripId]/
 │   │   │       ├── page.tsx          # 지도보기 메인
+│   │   │       ├── print/page.tsx    # T-144 print/PDF 원천
 │   │   │       ├── share/[token]/page.tsx
 │   │   │       └── settings/page.tsx
 │   │   └── profile/page.tsx
@@ -180,9 +181,21 @@ default 상수 fallback.
 - [취소] / [적용] — 적용 시 fractional indexing 재산출 + WebSocket broadcast
 - 적용 후 5초 "되돌리기" 토스트 (undo)
 
-## 9. 실시간 동기화 (J장)
+## 9. 검색 / 내보내기 (T-144)
 
-### 9.1 채널 (J-1)
+- 여행 목록 검색은 `GET /trips`의 `q`, bucket, status, date range, sort를 사용한다.
+  장소/주소 검색과 섞지 않는다.
+- 장소 추가 drawer는 `GET /features/search`를 사용하고, krtour-map HTTP가 503이면
+  fallback provider 없이 비활성 상태를 보여준다. Naver/Kakao 검색 API는 현재 사용하지
+  않는다.
+- 통합 `/search`는 T-129에서 `trips`, `my_pois`, `features`, `addresses` bucket으로
+  구현한다.
+- 내보내기는 `/trips/[tripId]/print` route를 PDF/print 원천으로 두고,
+  GPX는 `GET /trips/{trip_id}/exports/gpx` file response를 사용한다.
+
+## 10. 실시간 동기화 (J장)
+
+### 10.1 채널 (J-1)
 
 `ws://api/v1/ws/trips/{trip_id}?token={jwt}`
 
@@ -204,7 +217,7 @@ default 상수 fallback.
 - `presence.heartbeat`
 - `presence.cursor` (옵션)
 
-### 9.2 충돌 해결 (J-2)
+### 10.2 충돌 해결 (J-2)
 
 | 전략 | 적용 |
 |------|------|
@@ -213,18 +226,18 @@ default 상수 fallback.
 | Fractional Indexing | `sort_order` — D&D 충돌 안 남 (E-6 COLLATE "C" 필수) |
 | Presence | 5초 heartbeat / 30초 무응답 offline |
 
-### 9.3 국가유산 area UI (K)
+### 10.3 국가유산 area UI (K)
 
 `feature.kind=area` polygon/multipolygon 우선 렌더, point centroid 보조.
 국가유산 상세는 명칭/유형/지정일/관리자/설명/source trace/RustFS 이미지 gallery.
 
-## 10. 카카오맵 SDK 약관 주의
+## 11. 카카오맵 SDK 약관 주의
 
-- 오프라인 캐싱 약관상 금지
-- Service Worker Network Only 강제 (v1 PWA 미포함)
-- 일 호출 한도는 카카오 개발자 콘솔 확인 후 ETL viewport 디바운스 / 캐시 조정
+ADR-015 이후 TripMate 지도 클라이언트는 `maplibre-vworld-js`다. 본 절은 SPEC V8 원문
+대비 superseded 주의사항으로만 남긴다. Kakao Maps SDK나 Kakao Local 검색 API를 현재
+구현에 쓰지 않는다.
 
-## 11. Sprint 매핑
+## 12. Sprint 매핑
 
 | SPEC V8 항목 | Sprint | 본 저장소 산출물 |
 |------|--------|------------------|
@@ -235,11 +248,12 @@ default 상수 fallback.
 | 16색 팔레트 + maki (I-6) | Sprint 4 | `apps/web/lib/markerPalette.ts` |
 | viewport 로딩 + 클러스터 (I-4) | Sprint 4 | `apps/web/components/map/ViewportFeatureLayer.tsx` |
 | 우클릭 메뉴 (I-7) | Sprint 4 | `apps/web/components/map/RightClickMenu.tsx` |
+| 여행 검색 / 장소 검색 drawer / print·GPX export | Sprint 4 | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView` |
 | Admin 콘솔 (M-3) | Sprint 3 | `apps/web/app/admin/...` |
 | WebSocket 클라이언트 (J-1) | Sprint 5 | `apps/web/lib/websocket.ts` |
 | 스마트 정렬 UI (I-8) | Sprint 6 | `apps/web/components/poi/OptimizeDialog.tsx` |
 
-## 12. 관련 문서
+## 13. 관련 문서
 
 - `docs/architecture.md` §2.2 프론트
 - `docs/design/marker-palette.md`

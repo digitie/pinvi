@@ -220,6 +220,8 @@ GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
 | OAuth start / callback | 분당 10회 | IP |
 | `/storage/upload-urls` | 분당 30회 | user_id |
 | `/features/in-bounds` | 분당 60회 | user_id |
+| `/features/search`, `/search` | 분당 60회 | user_id |
+| `/trips/{id}/exports/*` | 분당 20회 | user_id |
 | 그 외 | 분당 120회 | user_id |
 | 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token |
 

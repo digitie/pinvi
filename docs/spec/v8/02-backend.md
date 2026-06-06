@@ -161,6 +161,7 @@ OpenAPI 자동 생성. 핵심 엔드포인트:
 `POST/DELETE /trips/{id}/members[/{key}]` /
 `POST/DELETE /trips/{id}/share-tokens[/{token}]` /
 `GET /trips/{id}/shared/{token}` /
+`GET /trips/{id}/exports/{print-data,gpx,pdf}` /
 `POST/PATCH/DELETE /trips/{id}/pois[/{poi_id}]` /
 `POST /trips/{id}/pois/reorder`
 
@@ -172,8 +173,9 @@ POI 편집은 `If-Match: version` (optimistic lock, J-2).
 - `GET /features/{id}` — krtour-map OpenAPI 호출
 - `GET /features/{id}/weather` — `WeatherCard` (KMA 시간축 + sources 배열, R-4)
 - `GET /features/nearby?lat=&lng=&radius_m=` — 주변
+- `GET /features/search?q=` — 장소 feature 검색 (krtour-map HTTP)
 - `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_requests`)
-- `GET /search?q=` — 통합 검색 (2자 이상)
+- `GET /search?q=` — 통합 검색 (2자 이상, T-129)
 
 krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
 

@@ -55,7 +55,7 @@ Cookie: tripmate_access=...
       {
         "feature_id": "f_2611000000_p_abc123...",
         "kind": "place",
-        "name": "광안리 해수욕장",
+        "title": "광안리 해수욕장",
         "coord": { "longitude": 129.118, "latitude": 35.155 },
         "address_road": "...",
         "address_jibun": "...",
@@ -91,7 +91,7 @@ GET /features/f_2611000000_p_abc123...
   "data": {
     "feature_id": "...",
     "kind": "place",
-    "name": "...",
+    "title": "...",
     "coord": { "longitude": ..., "latitude": ... },
     "address_road": "...",
     "address_jibun": "...",
@@ -194,7 +194,7 @@ Cookie: tripmate_access=...
 {
   "longitude": 129.0,
   "latitude": 35.0,
-  "name": "새 카페",
+  "title": "새 카페",
   "categories": ["카페"],
   "note": "..."
 }
@@ -205,33 +205,67 @@ Cookie: tripmate_access=...
 
 응답 201: `{ "data": { "request_id": "uuid", "status": "queued" } }`.
 
-### 2.6 `GET /search`
+### 2.6 `GET /features/search`
 
-통합 검색 (feature + 주소 + 내 POI).
+장소/이벤트/공지 등 지도 feature 자유 텍스트 검색. TripMate는 URL/응답 셰입만 갖고,
+검색 인덱스와 ranking은 krtour-map HTTP 계약에 위임한다.
 
 ```http
-GET /search?q=광안리&viewport=129.0,35.0,129.2,35.2
+GET /features/search?q=광안리&bbox=129.0,35.0,129.2,35.2&kinds=place,event&limit=20
 Cookie: tripmate_access=...
 ```
 
 - `q`: 2자 이상
-- `viewport` (선택): bias용 bbox
+- `bbox` (선택): bias용 bbox (`lng_min,lat_min,lng_max,lat_max`)
+- `kinds` (선택): `place,event,notice,price,weather,route,area`
+- `limit`: 기본 50, 최대 200
 
-응답:
+응답은 `FeatureSummary[]` 배열이다.
+
+```jsonc
+{
+  "data": [
+    {
+      "feature_id": "f_2611000000_p_abc123...",
+      "kind": "place",
+      "title": "광안리 해수욕장",
+      "coord": { "longitude": 129.118, "latitude": 35.155 },
+      "category": "해수욕장",
+      "marker_color": "P-07",
+      "marker_icon": "swimming"
+    }
+  ]
+}
+```
+
+호출 경계: feature 검색은 krtour-map `GET /features/search`로 조회한다. Naver/Kakao
+검색 API는 현재 사용하지 않는다.
+
+### 2.7 `GET /search` (통합 검색, T-129)
+
+통합 검색은 future endpoint다. 구현 시 한 화면에서 다음 bucket을 함께 반환한다.
+
+```http
+GET /search?q=광안리&viewport=129.0,35.0,129.2,35.2&limit=10
+Cookie: tripmate_access=...
+```
 
 ```jsonc
 {
   "data": {
-    "features": [/* feature 목록 */],
-    "addresses": [/* 주소 후보 (kraddr-geo) */],
-    "my_pois": [/* 내 trip의 POI 중 매칭 */]
+    "trips": [/* app.trips 검색 결과 */],
+    "my_pois": [/* 접근 가능한 trip_day_pois 검색 결과 */],
+    "features": [/* /features/search 결과 */],
+    "addresses": [/* kraddr-geo v2 REST search 결과 */]
   }
 }
 ```
 
-호출 경계: feature 검색은 krtour-map `GET /features/search`로, 주소 후보는
-`kraddr-geo` v2 REST search로 조회한다(ADR-025). 사용자 대면 검색 경로에서
-`kraddr.geo` in-process import나 krtour-map 경유 geocoding을 쓰지 않는다.
+- `trips`, `my_pois`는 TripMate `app` schema 검색이다.
+- `features`는 본 문서 §2.6을 내부 호출 또는 서비스 함수로 재사용한다.
+- `addresses`는 `kraddr-geo` v2 REST search(ADR-025)로 조회한다. krtour-map 경유
+  geocoding이나 `kraddr.geo` in-process import를 쓰지 않는다.
+- T-129 전까지 Web은 `/features/search` + local trip list search를 별도 호출한다.
 
 ## 3. 응답 정책
 
