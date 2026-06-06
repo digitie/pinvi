@@ -10,6 +10,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from html import escape
 from typing import Any, cast
 
 from sqlalchemy import select
@@ -87,6 +88,40 @@ async def enqueue_password_reset_email(
                 "reset_url": reset_url,
                 "expires_in_minutes": expires_in_minutes,
                 "user_id": str(user_id),
+            },
+            status="pending",
+            scheduled_at=datetime.now(UTC),
+        )
+    )
+    return bool(settings.tripmate_resend_api_key)
+
+
+async def enqueue_trip_invite_email(
+    db: AsyncSession,
+    *,
+    to_email: str,
+    trip_id: uuid.UUID,
+    trip_title: str,
+    companion_id: uuid.UUID,
+    invited_by_user_id: uuid.UUID,
+    target_user_id: uuid.UUID | None,
+) -> bool:
+    """동반자 초대 메일을 outbox에 적재합니다."""
+
+    invite_url = _build_trip_invite_url(trip_id=trip_id, companion_id=companion_id)
+    db.add(
+        EmailQueue(
+            user_id=target_user_id,
+            to_email=to_email,
+            template="trip_invite",
+            subject=f"TripMate 여행 초대: {trip_title}",
+            payload={
+                "invite_url": invite_url,
+                "trip_id": str(trip_id),
+                "trip_title": trip_title,
+                "companion_id": str(companion_id),
+                "invited_by_user_id": str(invited_by_user_id),
+                "target_user_id": None if target_user_id is None else str(target_user_id),
             },
             status="pending",
             scheduled_at=datetime.now(UTC),
@@ -236,6 +271,11 @@ def _render_template(template: str, payload: dict[str, Any]) -> str:
             reset_url=str(payload["reset_url"]),
             expires_in_minutes=int(payload.get("expires_in_minutes", 60)),
         )
+    if template == "trip_invite":
+        return _render_trip_invite_html(
+            invite_url=str(payload["invite_url"]),
+            trip_title=str(payload["trip_title"]),
+        )
     return _render_generic_html(template=template, payload=payload)
 
 
@@ -285,6 +325,26 @@ def _render_reset_password_html(reset_url: str, expires_in_minutes: int) -> str:
     """
 
 
+def _render_trip_invite_html(invite_url: str, trip_title: str) -> str:
+    safe_url = json.dumps(invite_url)
+    safe_title = escape(trip_title)
+    return f"""
+    <html>
+      <body style="font-family: sans-serif;">
+        <h2>TripMate 여행 초대</h2>
+        <p>{safe_title} 여행에 동반자로 초대되었습니다.</p>
+        <p>
+          <a href={safe_url}
+             style="background:#FF385C;color:#fff;padding:12px 24px;
+                    border-radius:6px;text-decoration:none;">
+            여행 확인하기
+          </a>
+        </p>
+      </body>
+    </html>
+    """
+
+
 def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
     safe_payload = json.dumps(payload, ensure_ascii=False, indent=2)
     return f"""
@@ -306,6 +366,10 @@ def _build_verify_url(token: str) -> str:
 
 def _build_password_reset_url(token: str) -> str:
     return f"{settings.tripmate_web_base_url}{settings.tripmate_auth_reset_path}?token={token}"
+
+
+def _build_trip_invite_url(*, trip_id: uuid.UUID, companion_id: uuid.UUID) -> str:
+    return f"{settings.tripmate_web_base_url}/trips/{trip_id}?invite={companion_id}"
 
 
 def _retry_delay(attempts: int) -> int:

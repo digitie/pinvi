@@ -1,11 +1,23 @@
 import {
+  TripCommentCreateSchema,
+  TripCommentResponseSchema,
+  TripCompanionInviteSchema,
+  TripCompanionResponseSchema,
   TripCreateSchema,
   TripResponseSchema,
+  TripShareLinkCreateSchema,
+  TripShareLinkResponseSchema,
   TripUpdateSchema,
 } from '@tripmate/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type { TripCreate, TripUpdate } from '@tripmate/schemas';
+import type {
+  TripCommentCreate,
+  TripCompanionInvite,
+  TripCreate,
+  TripShareLinkCreate,
+  TripUpdate,
+} from '@tripmate/schemas';
 
 export type TripBucket = 'future' | 'past' | 'all';
 
@@ -52,5 +64,47 @@ export const tripApi = (client: ApiClient) => ({
       headers: { 'If-Match': String(version) },
       body: JSON.stringify(TripUpdateSchema.parse(body)),
       schema: TripResponseSchema,
+    }),
+
+  inviteMember: (tripId: string, body: TripCompanionInvite) =>
+    client.request(`/trips/${tripId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(TripCompanionInviteSchema.parse(body)),
+      schema: TripCompanionResponseSchema,
+    }),
+
+  removeMember: (tripId: string, companionId: string) =>
+    client.requestNoContent(`/trips/${tripId}/members/${companionId}`, {
+      method: 'DELETE',
+    }),
+
+  listComments: (tripId: string, limit = 50) =>
+    client.request(`/trips/${tripId}/comments?limit=${limit}`, {
+      method: 'GET',
+      schema: z.array(TripCommentResponseSchema),
+    }),
+
+  createComment: (tripId: string, body: TripCommentCreate) =>
+    client.request(`/trips/${tripId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(TripCommentCreateSchema.parse(body)),
+      schema: TripCommentResponseSchema,
+    }),
+
+  deleteComment: (tripId: string, commentId: string) =>
+    client.requestNoContent(`/trips/${tripId}/comments/${commentId}`, {
+      method: 'DELETE',
+    }),
+
+  createShareToken: (tripId: string, body: TripShareLinkCreate) =>
+    client.request(`/trips/${tripId}/share-tokens`, {
+      method: 'POST',
+      body: JSON.stringify(TripShareLinkCreateSchema.parse(body)),
+      schema: TripShareLinkResponseSchema,
+    }),
+
+  revokeShareToken: (tripId: string, shareId: string) =>
+    client.requestNoContent(`/trips/${tripId}/share-tokens/${shareId}`, {
+      method: 'DELETE',
     }),
 });

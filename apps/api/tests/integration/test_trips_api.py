@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
+
 import pytest
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _create_verified_user(session_factory, email: str) -> str:  # type: ignore[no-untyped-def]
+    from app.models.user import User
+
+    async with session_factory() as db:
+        user = User(
+            email=email,
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return str(user.user_id)
 
 
 async def test_create_and_get_trip(client, verified_user, auth_cookies) -> None:
@@ -101,6 +119,130 @@ async def test_share_link_uses_web_base_url(
     assert "app.tripmate.local" not in share["url"]
 
 
+async def test_owner_can_invite_existing_user_and_queue_trip_invite(
+    client,
+    verified_user,
+    auth_cookies,
+    session_factory,
+) -> None:
+    from sqlalchemy import select
+
+    from app.models.email_queue import EmailQueue
+
+    owner_id, _ = verified_user
+    companion_email = f"friend_{uuid.uuid4().hex[:8]}@example.com"
+    companion_id = await _create_verified_user(session_factory, companion_email)
+
+    created = await client.post(
+        "/trips",
+        json={"title": "동반자 여행"},
+        cookies=auth_cookies(owner_id),
+    )
+    trip_id = created.json()["data"]["trip_id"]
+
+    resp = await client.post(
+        f"/trips/{trip_id}/members",
+        json={"email": companion_email, "display_name": "친구", "role": "viewer"},
+        cookies=auth_cookies(owner_id),
+    )
+
+    assert resp.status_code == 201, resp.text
+    companion = resp.json()["data"]
+    assert companion["user_id"] == companion_id
+    assert companion["invited_email"] == companion_email
+    assert companion["joined_at"] is not None
+
+    async with session_factory() as db:
+        queued = await db.scalar(
+            select(EmailQueue).where(
+                EmailQueue.to_email == companion_email,
+                EmailQueue.template == "trip_invite",
+            )
+        )
+        assert queued is not None
+        assert queued.payload["trip_id"] == trip_id
+        assert queued.payload["companion_id"] == companion["companion_id"]
+
+
+async def test_companion_cannot_invite_or_issue_share_link(
+    client,
+    verified_user,
+    auth_cookies,
+    session_factory,
+) -> None:
+    owner_id, _ = verified_user
+    companion_email = f"viewer_{uuid.uuid4().hex[:8]}@example.com"
+    companion_id = await _create_verified_user(session_factory, companion_email)
+    owner_cookies = auth_cookies(owner_id)
+
+    created = await client.post("/trips", json={"title": "권한 여행"}, cookies=owner_cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    invite = await client.post(
+        f"/trips/{trip_id}/members",
+        json={"email": companion_email, "role": "viewer"},
+        cookies=owner_cookies,
+    )
+    assert invite.status_code == 201
+
+    companion_cookies = auth_cookies(companion_id)
+    invite_by_companion = await client.post(
+        f"/trips/{trip_id}/members",
+        json={"email": f"other_{uuid.uuid4().hex[:8]}@example.com", "role": "viewer"},
+        cookies=companion_cookies,
+    )
+    assert invite_by_companion.status_code == 403
+
+    share_by_companion = await client.post(
+        f"/trips/{trip_id}/share-tokens",
+        json={"visibility": "comment"},
+        cookies=companion_cookies,
+    )
+    assert share_by_companion.status_code == 403
+
+
+async def test_companion_can_comment_and_owner_can_delete(
+    client,
+    verified_user,
+    auth_cookies,
+    session_factory,
+) -> None:
+    owner_id, _ = verified_user
+    companion_email = f"commenter_{uuid.uuid4().hex[:8]}@example.com"
+    companion_id = await _create_verified_user(session_factory, companion_email)
+    owner_cookies = auth_cookies(owner_id)
+
+    created = await client.post("/trips", json={"title": "댓글 여행"}, cookies=owner_cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    invite = await client.post(
+        f"/trips/{trip_id}/members",
+        json={"email": companion_email, "role": "viewer"},
+        cookies=owner_cookies,
+    )
+    assert invite.status_code == 201
+
+    comment = await client.post(
+        f"/trips/{trip_id}/comments",
+        json={"body": "  일정 확인했습니다.  ", "target_type": "trip"},
+        cookies=auth_cookies(companion_id),
+    )
+    assert comment.status_code == 201, comment.text
+    comment_data = comment.json()["data"]
+    assert comment_data["body"] == "일정 확인했습니다."
+    assert comment_data["author_user_id"] == companion_id
+
+    comments = await client.get(f"/trips/{trip_id}/comments", cookies=owner_cookies)
+    assert comments.status_code == 200
+    assert [row["comment_id"] for row in comments.json()["data"]] == [comment_data["comment_id"]]
+
+    deleted = await client.delete(
+        f"/trips/{trip_id}/comments/{comment_data['comment_id']}",
+        cookies=owner_cookies,
+    )
+    assert deleted.status_code == 204
+    after_delete = await client.get(f"/trips/{trip_id}/comments", cookies=owner_cookies)
+    assert after_delete.json()["data"] == []
+
+
 async def test_other_user_cannot_access(
     client, verified_user, auth_cookies, session_factory
 ) -> None:
@@ -109,14 +251,11 @@ async def test_other_user_cannot_access(
     trip_id = created.json()["data"]["trip_id"]
 
     # 다른 사용자
-    import uuid
-    from datetime import UTC, datetime
-
     from app.models.user import User
 
     async with session_factory() as db:
         other = User(
-            email=f"other_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"other_{uuid.uuid4().hex[:8]}@example.com",
             status="active",
             email_verified_at=datetime.now(UTC),
         )

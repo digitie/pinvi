@@ -1,9 +1,4 @@
-export {
-  Iso8601Schema,
-  CoordSchema,
-  SuccessEnvelopeSchema,
-  ErrorEnvelopeSchema,
-} from './common';
+export { Iso8601Schema, CoordSchema, SuccessEnvelopeSchema, ErrorEnvelopeSchema } from './common';
 export type { Coord, ErrorEnvelope } from './common';
 
 export {
@@ -31,11 +26,7 @@ export type {
   OAuthLinkRequest,
 } from './auth';
 
-export {
-  ConsentTypeSchema,
-  UserConsentSchema,
-  ProfileCompleteRequestSchema,
-} from './user';
+export { ConsentTypeSchema, UserConsentSchema, ProfileCompleteRequestSchema } from './user';
 export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user';
 
 export { HealthResponseSchema, HealthDbResponseSchema } from './health';
@@ -47,7 +38,15 @@ export {
   TripResponseSchema,
   TripStatusSchema,
   TripVisibilitySchema,
+  TripCompanionRoleSchema,
   TripCompanionInviteSchema,
+  TripCompanionResponseSchema,
+  TripCommentTargetSchema,
+  TripCommentCreateSchema,
+  TripCommentResponseSchema,
+  TripShareLinkVisibilitySchema,
+  TripShareLinkCreateSchema,
+  TripShareLinkResponseSchema,
 } from './trip';
 export type {
   TripCreate,
@@ -55,6 +54,14 @@ export type {
   TripResponse,
   TripStatus,
   TripVisibility,
+  TripCompanionRole,
+  TripCompanionInvite,
+  TripCompanionResponse,
+  TripCommentCreate,
+  TripCommentResponse,
+  TripShareLinkVisibility,
+  TripShareLinkCreate,
+  TripShareLinkResponse,
 } from './trip';
 
 export {
