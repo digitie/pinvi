@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.middleware.geofence import GeofenceMiddleware
 
+ADMIN_USER_ID = "00000000-0000-0000-0000-000000000001"
+PLAIN_USER_ID = "00000000-0000-0000-0000-000000000002"
+
 
 @pytest.fixture(autouse=True)
 def _reset_geofence_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,14 +81,33 @@ def test_geofence_blocks_unknown_when_strict(
     assert response.json()["error"]["details"]["detected_country"] == "UNKNOWN"
 
 
-def test_geofence_allows_admin_role_claim(
+def test_geofence_allows_admin_role_from_db_resolver(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "tripmate_geofence_enabled", True)
-    token = create_access_token(subject="admin-user", extra={"roles": ["user", "admin"]})
+    client.app.state.geofence_role_resolver = lambda subject: (
+        ["user", "admin"] if subject == ADMIN_USER_ID else ["user"]
+    )
+    token = create_access_token(subject=ADMIN_USER_ID)
     client.cookies.set("tripmate_access", token)
     response = client.get(
         "/private",
         headers={"CF-IPCountry": "US"},
     )
     assert response.status_code == 200
+
+
+def test_geofence_ignores_token_role_claim_without_db_role(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_geofence_enabled", True)
+    client.app.state.geofence_role_resolver = lambda _subject: ["user"]
+    token = create_access_token(subject=PLAIN_USER_ID, extra={"roles": ["admin"]})
+    client.cookies.set("tripmate_access", token)
+
+    response = client.get(
+        "/private",
+        headers={"CF-IPCountry": "US"},
+    )
+
+    assert response.status_code == 451
