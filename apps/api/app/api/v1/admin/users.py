@@ -6,12 +6,15 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DbSession
 from app.core.rbac import require_role
+from app.models.audit import AdminAuditLog
 from app.models.user import User
 from app.schemas.admin import (
     AdminActionRequest,
+    AdminAuditEntry,
     AdminPagedResponse,
     AdminUserDetail,
     AdminUserSummary,
@@ -22,6 +25,7 @@ from app.services.admin_users import (
     AdminUserNotFoundError,
     disable_user,
     force_verify,
+    list_recent_user_audit,
     list_users,
     mask_email,
 )
@@ -41,14 +45,65 @@ def _to_summary(u: User) -> AdminUserSummary:
     )
 
 
-def _to_detail(u: User) -> AdminUserDetail:
+def _to_audit_entry(r: AdminAuditLog) -> AdminAuditEntry:
+    return AdminAuditEntry(
+        log_id=r.log_id,
+        actor_user_id=r.actor_user_id,
+        action=r.action,
+        resource_type=r.resource_type,
+        resource_id=r.resource_id,
+        access_reason=r.access_reason,
+        target_pii_fields=r.target_pii_fields,
+        prev_hash=r.prev_hash,
+        content_hash=r.content_hash,
+        occurred_at=r.occurred_at,
+    )
+
+
+def _to_detail(
+    u: User,
+    *,
+    recent_audit: list[AdminAuditEntry] | None = None,
+    email_revealed: bool = False,
+) -> AdminUserDetail:
     base = _to_summary(u)
     return AdminUserDetail(
         **base.model_dump(),
-        email=u.email,
+        email=u.email if email_revealed else mask_email(u.email),
+        email_revealed=email_revealed,
         email_status=u.email_status,
         is_active=u.is_active,
+        recent_audit=recent_audit or [],
     )
+
+
+async def _detail_with_recent_audit(
+    db: AsyncSession,
+    u: User,
+    *,
+    email_revealed: bool = False,
+) -> AdminUserDetail:
+    rows = await list_recent_user_audit(db, user_id=u.user_id)
+    return _to_detail(
+        u,
+        email_revealed=email_revealed,
+        recent_audit=[_to_audit_entry(row) for row in rows],
+    )
+
+
+def _parse_request_id(value: str | None) -> uuid.UUID:
+    if value is None:
+        return uuid.uuid4()
+    try:
+        return uuid.UUID(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "X-Request-Id 형식이 올바르지 않습니다.",
+            },
+        ) from exc
 
 
 @router.get("", response_model=Envelope[AdminPagedResponse])
@@ -58,8 +113,17 @@ async def list_users_endpoint(
     page: int = 1,
     limit: int = 50,
     status_filter: str | None = None,
+    q: str | None = None,
 ) -> Envelope[AdminPagedResponse]:
-    users, total = await list_users(db, page=page, limit=limit, status_filter=status_filter)
+    page = max(1, page)
+    limit = min(100, max(1, limit))
+    users, total = await list_users(
+        db,
+        page=page,
+        limit=limit,
+        status_filter=status_filter,
+        q=q,
+    )
     return Envelope.of(
         AdminPagedResponse(
             items=[_to_summary(u) for u in users],
@@ -75,6 +139,11 @@ async def get_user_endpoint(
     user_id: uuid.UUID,
     admin: Annotated[User, Depends(require_role("admin", "operator"))],
     db: DbSession,
+    request: Request,
+    reveal: bool = False,
+    access_reason: str | None = None,
+    x_access_reason: Annotated[str | None, Header(alias="X-Access-Reason")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminUserDetail]:
     from sqlalchemy import select
 
@@ -84,8 +153,30 @@ async def get_user_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
         )
-    _ = admin
-    return Envelope.of(_to_detail(u))
+
+    reason = (x_access_reason or access_reason or "").strip()
+    if reveal:
+        if not reason:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "VALIDATION_ERROR", "message": "PII 원본 조회 사유가 필요합니다."},
+            )
+        await append_admin_audit(
+            db,
+            actor_user_id=admin.user_id,
+            action="user.reveal_pii",
+            resource_type="user",
+            resource_id=str(u.user_id),
+            before_state=None,
+            after_state=None,
+            access_reason=reason,
+            target_pii_fields=["email"],
+            ip_hash_input=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent"),
+            request_id=_parse_request_id(x_request_id),
+        )
+
+    return Envelope.of(await _detail_with_recent_audit(db, u, email_revealed=reveal))
 
 
 @router.post("/{user_id}/force-verify", response_model=Envelope[AdminUserDetail])
@@ -106,8 +197,6 @@ async def force_verify_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    if x_request_id is None:
-        x_request_id = str(uuid.uuid4())
     await append_admin_audit(
         db,
         actor_user_id=admin.user_id,
@@ -120,9 +209,9 @@ async def force_verify_endpoint(
         target_pii_fields=["email"],
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=uuid.UUID(x_request_id),
+        request_id=_parse_request_id(x_request_id),
     )
-    return Envelope.of(_to_detail(target))
+    return Envelope.of(await _detail_with_recent_audit(db, target))
 
 
 @router.post("/{user_id}/disable", response_model=Envelope[AdminUserDetail])
@@ -142,8 +231,6 @@ async def disable_user_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    if x_request_id is None:
-        x_request_id = str(uuid.uuid4())
     await append_admin_audit(
         db,
         actor_user_id=admin.user_id,
@@ -156,6 +243,6 @@ async def disable_user_endpoint(
         target_pii_fields=["email"],
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=uuid.UUID(x_request_id),
+        request_id=_parse_request_id(x_request_id),
     )
-    return Envelope.of(_to_detail(target))
+    return Envelope.of(await _detail_with_recent_audit(db, target))

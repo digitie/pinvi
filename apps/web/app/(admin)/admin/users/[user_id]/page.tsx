@@ -11,7 +11,7 @@ const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
 });
 
-type ActionKind = 'force-verify' | 'disable';
+type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
 
 export default function AdminUserDetailPage() {
   const router = useRouter();
@@ -46,10 +46,13 @@ export default function AdminUserDetailPage() {
     setActing(true);
     try {
       const api = adminApi(apiClient);
+      const accessReason = reason.trim();
       const updated =
-        actionDialog === 'force-verify'
-          ? await api.forceVerify(userId, { access_reason: reason })
-          : await api.disableUser(userId, { access_reason: reason });
+        actionDialog === 'reveal-email'
+          ? await api.getUser(userId, { reveal: true, accessReason })
+          : actionDialog === 'force-verify'
+            ? await api.forceVerify(userId, { access_reason: accessReason })
+            : await api.disableUser(userId, { access_reason: accessReason });
       setUser(updated);
       setActionDialog(null);
       setReason('');
@@ -78,7 +81,7 @@ export default function AdminUserDetailPage() {
 
   return (
     <AdminPage
-      title={user.email}
+      title={user.email_revealed ? user.email : user.email_masked}
       description={`user_id ${user.user_id}`}
       actions={
         <Link href="/admin/users" className="rounded-sm border border-hairline px-3 py-2 text-sm">
@@ -90,7 +93,25 @@ export default function AdminUserDetailPage() {
         <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-user-info">
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">이메일</dt>
-            <dd className="font-mono text-ink">{user.email}</dd>
+            <dd className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-ink" data-testid="admin-user-email">
+                {user.email}
+              </span>
+              {user.email_revealed ? (
+                <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted">
+                  원본
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActionDialog('reveal-email')}
+                  className="rounded-sm border border-hairline px-2 py-1 text-xs"
+                  data-testid="admin-user-reveal-email"
+                >
+                  원본 보기
+                </button>
+              )}
+            </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">이메일 상태</dt>
@@ -116,9 +137,6 @@ export default function AdminUserDetailPage() {
       </Section>
 
       <Section title="액션 (admin role만)">
-        <p className="text-xs text-muted">
-          액션 실행 시 <code>access_reason</code> 입력 강제. admin_audit_log에 자동 기록.
-        </p>
         <div className="mt-3 flex gap-2">
           <button
             type="button"
@@ -141,14 +159,57 @@ export default function AdminUserDetailPage() {
         </div>
       </Section>
 
+      <Section title="최근 Audit">
+        <div className="overflow-x-auto" data-testid="admin-user-audit-list">
+          <table className="min-w-full divide-y divide-hairline text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                <th className="px-2 py-2">액션</th>
+                <th className="px-2 py-2">사유</th>
+                <th className="px-2 py-2">PII</th>
+                <th className="px-2 py-2">시각</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline">
+              {user.recent_audit.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-2 py-4 text-center text-muted">
+                    기록이 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                user.recent_audit.map((row) => (
+                  <tr key={row.log_id}>
+                    <td className="whitespace-nowrap px-2 py-2 font-mono text-xs">
+                      {row.action}
+                    </td>
+                    <td className="px-2 py-2">{row.access_reason ?? '—'}</td>
+                    <td className="whitespace-nowrap px-2 py-2">
+                      {row.target_pii_fields?.join(', ') ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-muted">
+                      {new Date(row.occurred_at).toLocaleString('ko-KR')}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
       {actionDialog && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md space-y-4 rounded-sm bg-white p-6">
             <h3 className="text-lg font-bold text-ink">
-              {actionDialog === 'force-verify' ? '강제 이메일 인증' : '사용자 비활성화'}
+              {actionDialog === 'reveal-email'
+                ? '이메일 원본 보기'
+                : actionDialog === 'force-verify'
+                  ? '강제 이메일 인증'
+                  : '사용자 비활성화'}
             </h3>
             <p className="text-xs text-muted">
-              사유는 admin_audit_log에 평문으로 기록됩니다. (최소 1자, 최대 500자)
+              사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)
             </p>
             <textarea
               value={reason}

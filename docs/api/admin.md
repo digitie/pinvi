@@ -166,6 +166,16 @@ TripMate가 직접 table browse하지 않고 krtour-map admin/offline/ops OpenAP
 
 ## 6. 사용자 관리
 
+### 6.0 `GET /admin/users`
+
+```http
+GET /admin/users?q=kim&status_filter=active&page=1&limit=50
+```
+
+- `q`: 이메일 / 닉네임 부분 일치, `user_id` UUID 정확 일치
+- `status_filter`: `pending_verification` / `pending_profile` / `active` / `disabled`
+- 목록 응답은 항상 `email_masked`만 제공하고 원본 이메일은 포함하지 않는다.
+
 ### 6.1 `POST /admin/users/{user_id}/force-verify`
 
 ```http
@@ -189,21 +199,23 @@ X-Access-Reason: "고객 문의 처리 (TICKET-1234)"
 
 - `users.status = 'disabled'`, `is_active = false`
 - 모든 `user_sessions.revoked_at = now()`
-- 응답 204
+- 응답 200: 갱신된 user + 최근 audit
 
 ### 6.4 PII 마스킹
 
-`GET /admin/entities/users` 목록 응답:
+`GET /admin/users` 목록 응답:
 
-- `email`: `a***@gmail.com` (사유 입력 후 `?reveal=true&reason=...`로 원본 표시)
+- `email_masked`: `a***@gmail.com`
 - `nickname`: 그대로
 - `birth_year_month`: 그대로 (선택 동의 받은 경우만)
 - `residence_sigungu_code`: 그대로 (선택 동의 받은 경우만)
 
-상세 `GET /admin/entities/users/{user_id}`:
+상세 `GET /admin/users/{user_id}`:
 
-- 기본 마스킹. `?reveal=true` + `X-Access-Reason` 헤더 → 원본 + `admin_audit_log`에
-  `target_pii_fields = ["email", "phone", ...]` 기록
+- 기본 마스킹. `?reveal=true` + `access_reason` query 또는 `X-Access-Reason` 헤더 →
+  원본 + `admin_audit_log`에 `action = "user.reveal_pii"`,
+  `target_pii_fields = ["email"]` 기록
+- 상세 응답은 `recent_audit` 최근 10건을 포함한다.
 
 ## 7. 위치 감사 로그 (CPO 권한)
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
 import type { AdminPagedResponse, AdminUserSummary } from '@tripmate/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
@@ -46,6 +46,8 @@ const columns: DataTableColumn<AdminUserSummary>[] = [
 export default function AdminUsersPage() {
   const [data, setData] = useState<AdminPagedResponse | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [queryInput, setQueryInput] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,12 @@ export default function AdminUsersPage() {
     let cancelled = false;
     setLoading(true);
     adminApi(apiClient)
-      .listUsers({ page, limit: 50, status: statusFilter || undefined })
+      .listUsers({
+        page,
+        limit: 50,
+        status: statusFilter || undefined,
+        q: submittedQuery || undefined,
+      })
       .then((res) => {
         if (cancelled) return;
         setData(res);
@@ -68,14 +75,41 @@ export default function AdminUsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, statusFilter]);
+  }, [page, statusFilter, submittedQuery]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 50));
 
+  const onSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmittedQuery(queryInput.trim());
+    setPage(1);
+  };
+
   return (
-    <AdminPage title="사용자" description="email_masked로 표시. 상세 진입 시 audit 기록.">
+    <AdminPage title="사용자" description="운영 계정 조회와 상태 관리">
       <FilterBar>
+        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <label htmlFor="admin-users-search" className="text-xs text-muted">
+            검색
+          </label>
+          <input
+            id="admin-users-search"
+            type="search"
+            value={queryInput}
+            onChange={(e) => setQueryInput(e.target.value)}
+            className="min-w-48 rounded-sm border border-hairline px-2 py-1 text-sm"
+            placeholder="이메일, 닉네임, user_id"
+            data-testid="admin-users-search"
+          />
+          <button
+            type="submit"
+            className="rounded-sm border border-hairline px-3 py-1 text-sm"
+            data-testid="admin-users-search-submit"
+          >
+            조회
+          </button>
+        </form>
         <label className="text-xs text-muted">상태</label>
         <select
           value={statusFilter}

@@ -13,11 +13,12 @@ import type { ApiClient } from '../client';
 
 /** `docs/api/admin.md` Sprint 3 범위. */
 export const adminApi = (client: ApiClient) => ({
-  listUsers: (params: { page?: number; limit?: number; status?: string } = {}) => {
+  listUsers: (params: { page?: number; limit?: number; status?: string; q?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.status) qs.set('status_filter', params.status);
+    if (params.q) qs.set('q', params.q);
     const path = `/admin/users${qs.toString() ? `?${qs.toString()}` : ''}`;
     return client.request(path, {
       method: 'GET',
@@ -25,11 +26,19 @@ export const adminApi = (client: ApiClient) => ({
     });
   },
 
-  getUser: (userId: string) =>
-    client.request(`/admin/users/${userId}`, {
+  getUser: (
+    userId: string,
+    params: { reveal?: boolean; accessReason?: string } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.reveal) qs.set('reveal', 'true');
+    if (params.accessReason) qs.set('access_reason', params.accessReason);
+    const path = `/admin/users/${userId}${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
       method: 'GET',
       schema: AdminUserDetailSchema,
-    }),
+    });
+  },
 
   forceVerify: (userId: string, body: z.infer<typeof AdminActionRequestSchema>) =>
     client.request(`/admin/users/${userId}/force-verify`, {

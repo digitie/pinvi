@@ -124,6 +124,10 @@ Google만 활성이다. `/auth/oauth/providers`는 Google만 반환하고, Naver
 같은 이메일의 로컬 계정을 자동 연결하지 않고 `OAUTH_ACCOUNT_LINK_REQUIRED`로
 안내한다. profile link-mode 충돌은 `/profile`로 돌아와 사용자 메시지를 표시한다.
 Naver/Kakao는 계속 T-122 미래 작업이다.
+**T-119 회원 관리 Admin 보강** (2026-06-06 codex) — `/admin/users` 목록은 `q`
+검색과 상태 필터를 함께 적용하고, 상세는 기본 이메일 마스킹 상태로 응답한다.
+`reveal=true` + 사유가 있을 때만 원본 이메일을 반환하며 `user.reveal_pii` audit과
+최근 audit 목록을 상세 UI에 표시한다.
 
 ## 다음 한 작업
 
@@ -133,10 +137,10 @@ Naver/Kakao는 계속 T-122 미래 작업이다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-119 회원 관리 Admin 보강 (검색/상태 필터/상세 audit
-   UX). `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`를
-   먼저 확인한다.
-3. **이후 비의존 후보** — T-120 여행계획 Admin, T-121 POI Admin.
+2. **다음 비의존 후보** — T-120 여행계획 Admin 목록/상세/상태 관리.
+   `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
+   `docs/api/trips.md`를 먼저 확인한다.
+3. **이후 비의존 후보** — T-121 POI Admin.
 4. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -200,6 +204,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] OAuth provider 범위 Google-only 정리 — T-116
 - [x] 회원가입 약관 동의 화면 + `user_consents` 저장 보강 — T-117
 - [x] Google OAuth 계정 매칭 / profile 연결 UX 보강 — T-118
+- [x] 회원 관리 Admin 검색/상세 audit UX 보강 — T-119
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
