@@ -24,7 +24,7 @@
     엔드포인트. 외부 AI agent가 TripMate의 trip/poi/feature 데이터를
     토큰 인증으로 read. 자세히는 `docs/architecture/mcp-server.md` (ADR-019).
   - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록
-    + 복구 시 신규 DB로 hot import → 트래픽 cut-over (ADR-022,
+    + 복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
     `docs/runbooks/backup-restore.md`)
   - **한국 전용 geofencing** — Cloudflare WAF + nginx geo + FastAPI middleware
     (3중 안전) — KR 외 IP는 451 (`docs/architecture/korea-only-policy.md`,
@@ -51,8 +51,9 @@
 - **`apps/api/app/services/backup_service.py`** 확장 — Sprint 5의 trigger를
   핫스왑 워크플로로:
   - `snapshot()` → 기존 (Sprint 5)
-  - `restore_hotswap(snapshot_id)` → 신규: 신규 schema 또는 신규 DB instance
-    로 복구 → app `DATABASE_URL` cut-over → 구 DB 7일 보존 후 삭제
+  - `restore_hotswap(snapshot_id)` → 신규: 같은 DB의 `app_restore_<ts>` schema로
+    복구 → write drain → `app` / `app_previous_<ts>` schema-swap → previous schema
+    보존 후 삭제
 - **`apps/api/app/middleware/geofence.py`** — `X-Real-IP` 기반 KR 외 차단
   (`docs/architecture/korea-only-policy.md`). Cloudflare WAF가 1차, nginx가 2차,
   본 미들웨어가 3차 안전망.
@@ -73,7 +74,7 @@
   - `apps/web/app/admin/backup/page.tsx` 확장 — snapshot 목록 + manual trigger
     + 복구 시작
   - `apps/web/components/admin/RestoreHotswapDialog.tsx` — snapshot 선택 →
-    progress (신규 DB 생성 / pg_restore / cut-over 단계 표시) → 결과
+    progress (schema 준비 / pg_restore / validate / drain / schema-swap 단계 표시) → 결과
   - `apps/web/components/admin/SnapshotTable.tsx`
 - **MCP 토큰 관리 UI** (ADR-019):
   - `apps/web/app/admin/mcp-tokens/page.tsx` — admin 전체 토큰 / 발급 / revoke
@@ -118,7 +119,7 @@
 - **ADR-018** (참조): 한국 전용 서비스 정책 + geofencing 3중 안전망
 - **ADR-019** (참조): TripMate MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리
-- **ADR-022** (참조): Backup/Restore 핫스왑 정책 (snapshot → 신규 DB → cut-over)
+- **ADR-022** (참조): Backup/Restore 핫스왑 정책 (snapshot → restore schema → schema-swap)
 - **ADR-023** (참조): 운영 하드웨어 확장 (Odroid M1S + N150 16GB 병행)
 
 ## SPEC V8 매핑
@@ -153,8 +154,8 @@
 6. ETL 자산 manual trigger + dedup-review
 7. **MCP 토큰 발급 → 외부 stdio client (`mcp-cli` 또는 Claude Code MCP server)
    → `list_trips` / `search_features` 호출 → 응답 검증** (ADR-019)
-8. **Backup 핫스왑: snapshot 생성 → 더미 변경 후 restore_hotswap → 데이터 복구
-   확인 + 7일 후 구 DB 자동 삭제 trigger 검증** (ADR-022)
+8. **Backup 핫스왑: snapshot 생성 → 더미 변경 후 restore_hotswap → schema-swap 데이터
+   복구 확인 + previous schema 자동 삭제 trigger 검증** (ADR-022)
 9. **한국 외 IP에서 접근 → 451 응답 + landing page redirect** (ADR-018)
 
 ## 종료 체크리스트

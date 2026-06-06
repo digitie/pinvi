@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-145 backup schema-swap 확정
+
+**작업**: 감사 D-19 범위의 Backup/Restore 핫스왑 정책을 Odroid M1S/N150 단일 노드
+예산에 맞춰 정리했다.
+
+**변경**:
+- `docs/decisions.md` ADR-022 — 신규 DB instance 방식을 폐기하고, 동일 Postgres
+  database 안의 `app_restore_<ts>` → `app` schema-swap으로 확정했다.
+- `docs/architecture/backup-restore.md`, `docs/runbooks/backup-restore.md` — precheck,
+  restore schema 준비, validation, write drain, schema rename, rollback, previous schema
+  retention(N150 7일 / Odroid 24시간)을 문서화했다.
+- `docs/sprints/SPRINT-6.md` — T-111 산출물/시나리오를 schema-swap 기준으로 정정했다.
+- `apps/web/app/(admin)/admin/backup/page.tsx` — Restore placeholder를 신규 DB/DB URL
+  cut-over가 아니라 schema-swap future workflow로 고쳤다.
+- `docs/resume.md`, `docs/tasks.md` — T-145 완료와 다음 비의존 후보 T-128을 반영했다.
+
+**검증**:
+- NTFS worktree: stale 신규 DB/DATABASE_URL cut-over 표현 검색, `git diff --check`
+- WSL2 ext4 mirror: Web typecheck
+
+**다음**: T-128 실시간 협업 백엔드 설계 + WS 계층.
+
 ## 2026-06-06 (codex) — T-144 여행/장소 검색 UX + 내보내기 설계
 
 **작업**: 감사 D-16/D-17 범위의 사용자 여행 검색, 장소 검색 drawer, PDF/GPX/print

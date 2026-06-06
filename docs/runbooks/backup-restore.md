@@ -97,31 +97,86 @@ docker compose -f docker-compose.app.yml start web
 | `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore 전용 DB URL override |
 | `TRIPMATE_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
 
-## 4. Restore — 핫스왑 (정상 절차, Sprint 6 이후)
+## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
 ### 4.1 admin UI
 
 ```
 1. /admin/backup 진입
 2. snapshot 목록에서 복구 대상 선택
-3. "Restore (핫스왑)" 버튼 → 다이얼로그
+3. "Restore (schema-swap)" 버튼 → 다이얼로그
 4. 사유 입력 (audit log)
 5. "시작" → progress 단계 추적:
-   - preparing: 신규 schema 또는 DB 준비 (10s)
+   - preparing: app_restore_<ts> schema 준비 + disk guard (10s)
    - restoring: pg_restore 실행 (수 분 ~ 수십 분, 사이즈 의존)
    - validating: row count + audit chain (10s)
-   - switching: DATABASE_URL cut-over + rolling restart (30s)
-6. 완료 후 구 schema 7일 보존 안내
+   - draining: write drain + API/Web 연결 종료 (10~30s)
+   - switching: schema rename + 권한 재부여 + API/Web 재시작 (30~90s)
+6. 완료 후 previous schema 보존 기한 안내 (N150 7일 / Odroid 24시간)
 ```
 
-다운타임 ~0 (정확히는 rolling restart 30s 동안 일부 요청 retry).
+신규 DB instance 방식은 사용하지 않는다. 같은 Postgres database 안에서
+`app_restore_<ts>`를 만들고, cut-over 순간에 `app` schema 이름을 바꾼다. 다운타임은
+0이 아니라 짧은 write drain + restart 구간이며, 목표는 30~90초다.
 
-### 4.2 실패 시
+### 4.2 CLI / 운영자 절차 (T-111 script 구현 기준)
+
+```bash
+# 운영 노드 SSH
+cd /opt/tripmate
+
+SNAPSHOT=/var/lib/tripmate/backups/tripmate-app-20260606-003000.dump
+RESTORE_ID="$(date -u +%Y%m%d%H%M%S)"
+RESTORE_SCHEMA="app_restore_${RESTORE_ID}"
+PREVIOUS_SCHEMA="app_previous_${RESTORE_ID}"
+
+# 1. precheck
+sha256sum -c "${SNAPSHOT}.sha256"
+pg_restore --list "${SNAPSHOT}" >/tmp/tripmate-restore-list.txt
+df -h /var/lib/postgresql /var/lib/tripmate/backups
+
+# 2. restore schema 준비/복구
+# T-111에서 scripts/restore-schema-swap.sh가 custom dump의 app schema를
+# ${RESTORE_SCHEMA}로 remap한다.
+sudo ./scripts/restore-schema-swap.sh prepare \
+  --snapshot "${SNAPSHOT}" \
+  --restore-schema "${RESTORE_SCHEMA}"
+
+# 3. restored schema 검증
+sudo ./scripts/restore-schema-swap.sh validate \
+  --restore-schema "${RESTORE_SCHEMA}"
+
+# 4. 짧은 drain + schema swap
+docker compose -f docker-compose.app.yml stop api web
+sudo ./scripts/restore-schema-swap.sh switch \
+  --restore-schema "${RESTORE_SCHEMA}" \
+  --previous-schema "${PREVIOUS_SCHEMA}"
+docker compose -f docker-compose.app.yml up -d api web
+
+# 5. healthcheck
+curl -fsS https://tripmateapi.digitie.mywire.org/health/db
+curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
+  https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
+```
+
+schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 advisory lock, active session
+확인, grants, rollback marker를 함께 처리해야 한다.
+
+```sql
+BEGIN;
+ALTER SCHEMA app RENAME TO app_previous_YYYYMMDDHHMMSS;
+ALTER SCHEMA app_restore_YYYYMMDDHHMMSS RENAME TO app;
+COMMIT;
+```
+
+### 4.3 실패 시
 
 다이얼로그가 자동 rollback을 트리거. 운영자는:
 - 진행 단계 확인
 - 실패 원인 (UI 로그 + Loki `request_id` 검색)
 - 필요 시 별 backup으로 재시도
+- cut-over 후 app 오류면 API/Web을 정지한 뒤 `app_previous_<ts>`를 다시 `app`으로
+  rename하고 재시작한다.
 
 ## 5. 분기 훈련
 
@@ -141,8 +196,8 @@ docker compose -f docker-compose.app.yml start web
 
 ```
 1. 가족 베타 사용자에게 안내 (Telegram + email, 1주일 전)
-2. read-only mode 30분 (실제는 무중단이지만 안전 마진)
-3. 최근 snapshot으로 핫스왑 PoC
+2. read-only/write drain window 30분 예약 (실제 schema swap 목표 30~90초)
+3. 최근 snapshot으로 schema-swap PoC
 4. cut-over 후 audit chain verify + 샘플 쿼리
 5. 30분 후 read-write 복귀
 6. journal + reflection
@@ -156,7 +211,7 @@ docker compose -f docker-compose.app.yml start web
 | backup duration 급증 | DB 행 수 폭증 / 네트워크 / RustFS 응답 지연 | Grafana로 원인 단계 식별, jobs 수 늘리기 |
 | pg_restore 실패 (FK 충돌) | --schema=app 외부 의존 (예: feature.feature_id) | restore 순서 변경 또는 `--data-only` |
 | audit chain verify-chain BROKEN | restore 중 row 일부 누락 | snapshot 검증 후 별 snapshot으로 재시도 |
-| 핫스왑 cut-over 후 app 502 | DATABASE_URL 환경변수 갱신 안됨 / 권한 | Docker Compose env 재배포 + rolling restart |
+| schema swap 후 app 502 | schema rename/grant 실패 / app DB 연결 잔존 | API/Web 정지 → previous schema rollback → grants 점검 |
 
 ## 7. RustFS 백업
 
