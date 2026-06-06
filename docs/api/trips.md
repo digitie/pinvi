@@ -29,12 +29,21 @@
 ### 3.1 `GET /trips`
 
 ```http
-GET /trips?bucket=future&limit=20&cursor=...
+GET /trips?bucket=future&q=부산&status=planned&visibility=private&date_from=2026-06-01&date_to=2026-06-30&sort=-updated_at&limit=20&cursor=...
 Cookie: tripmate_access=...
 ```
 
 - `bucket`: `future` (오늘 이후 종료) | `past` | `all`
-- 응답: 페이지네이션된 trip 목록
+- `q`: 선택. 2자 이상. `title`, `description`, `region_hint`를 대상으로 검색한다.
+- `status`: 선택. `draft` | `planned` | `in_progress` | `completed` | `archived`
+- `visibility`: 선택. `private` | `unlisted` | `public`
+- `date_from`, `date_to`: 선택. 여행 기간이 해당 범위와 겹치면 포함한다.
+- `sort`: `-updated_at`(기본) | `start_date` | `-start_date` | `title`
+- 응답: cursor 페이지네이션된 trip 목록 (`data` 배열 + `meta.cursor`).
+
+여행 목록 검색은 TripMate `app.trips`/`app.trip_companions`만 사용한다. POI/장소/주소
+검색은 본 endpoint에 섞지 않는다. 장소 검색은 `GET /features/search`, 통합 검색은
+T-129의 `GET /search`가 담당한다.
 
 ### 3.2 `POST /trips`
 
@@ -252,7 +261,90 @@ Rate limit: 분당 60회 per token.
 
 Sprint 6.
 
-## 10. WebSocket 이벤트
+## 10. 여행 내보내기
+
+내보내기는 **현재 저장된 TripMate snapshot**을 기준으로 만든다. PDF/print/GPX 생성 중
+krtour-map live lookup을 수행하지 않는다. feature 최신 정보가 없어도
+`feature_snapshot`, POI 메모, 일정 순서만으로 출력 가능해야 한다.
+
+| 형식 | 초기 구현 | 권한 | 비고 |
+|------|-----------|------|------|
+| print | Web route `/trips/{trip_id}/print` | owner/editor/viewer + share `view_only` | 브라우저 print/PDF 저장의 원천 |
+| PDF | print route 기반 브라우저 PDF 저장 우선, server PDF는 후속 | owner/editor/viewer | 서버 생성 시 저장 없이 stream |
+| GPX | API file response | owner/editor/viewer | share token은 v1.0 초기 제외 |
+
+### 10.1 `GET /trips/{trip_id}/exports/print-data`
+
+```http
+GET /trips/{trip_id}/exports/print-data?scope=all&include=notes,rise_set
+Cookie: tripmate_access=...
+```
+
+- `scope`: `all` | `day` | `range`
+- `day_index`: `scope=day`일 때 필수
+- `start_day_index`, `end_day_index`: `scope=range`일 때 필수
+- `include`: 콤마 구분. `notes`, `attachments`, `rise_set`, `map_overview`
+
+응답은 print/PDF 렌더러용 JSON이다. companion email, refresh/session, 감사 로그, 내부
+provider 원문은 포함하지 않는다. `attachments`는 사용자가 접근 가능한 파일의
+presigned read URL 또는 thumbnail URL만 포함한다.
+
+```jsonc
+{
+  "data": {
+    "trip": { "trip_id": "...", "title": "부산 2박 3일", "date_range": "..." },
+    "days": [
+      {
+        "day_index": 1,
+        "date": "2026-06-01",
+        "pois": [
+          {
+            "poi_id": "...",
+            "title": "부산타워",
+            "coord": { "longitude": 129.0319, "latitude": 35.1009 },
+            "planned_arrival_at": "2026-06-01T14:00:00+09:00",
+            "user_note": "...",
+            "rise_set": { "status": "success", "sunset_at": "..." }
+          }
+        ]
+      }
+    ],
+    "warnings": []
+  }
+}
+```
+
+### 10.2 `GET /trips/{trip_id}/exports/gpx`
+
+```http
+GET /trips/{trip_id}/exports/gpx?scope=all&include_notes=false
+Accept: application/gpx+xml
+Cookie: tripmate_access=...
+```
+
+- `Content-Type`: `application/gpx+xml; charset=utf-8`
+- `Content-Disposition`: `attachment; filename="tripmate-{trip_id}.gpx"`
+- 각 day는 `<rte>` 하나로 만들고, POI는 `sort_order` 순서의 `<rtept>`로 출력한다.
+- 좌표가 있는 POI는 `<wpt>`도 함께 출력한다. `planned_arrival_at`이 있으면 GPX `time`에
+  KST offset 포함 ISO 8601로 넣는다.
+- 좌표 없는 POI는 건너뛰고 `X-TripMate-Export-Warnings`에 개수를 기록한다. 출력 가능한
+  좌표가 하나도 없으면 `422 EXPORT_NO_COORDINATES`.
+- `include_notes=true`는 owner/editor만 허용한다. viewer는 POI 제목·좌표·일정 시각만.
+
+### 10.3 `GET /trips/{trip_id}/exports/pdf`
+
+```http
+GET /trips/{trip_id}/exports/pdf?scope=all&include=notes,rise_set,map_overview
+Cookie: tripmate_access=...
+```
+
+서버 PDF는 `/trips/{trip_id}/print`와 같은 HTML/CSS를 headless renderer로 출력한다.
+초기 Sprint 4 UI는 브라우저 print route에서 "PDF로 저장"을 제공하고, 서버 PDF endpoint는
+Sprint 6에서 운영 dependency(Chromium/Playwright 또는 대체 renderer)와 함께 켠다.
+생성 파일은 기본적으로 RustFS에 저장하지 않고 stream한다. 저장형 export가 필요하면
+별도 `app.trip_exports` 모델을 후속 ADR로 추가한다.
+
+## 11. WebSocket 이벤트
 
 POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 
@@ -263,11 +355,13 @@ POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 
 자세히는 [`websocket.md`](./websocket.md).
 
-## 11. AI agent 구현 체크리스트
+## 12. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/{trip,companion,share_link}.py` Pydantic + `packages/schemas/src/trip.ts` Zod
 - [ ] `apps/api/app/services/trip.py` 비즈니스 로직 (권한 검사 + krtour-map batch join)
 - [ ] `apps/api/app/api/v1/trips.py` 라우터
+- [ ] `GET /trips` 검색 파라미터(`q`, `status`, `visibility`, `date_from/to`, `sort`) 구현
+- [ ] `exports/print-data`, `exports/gpx`, `exports/pdf` 계약에 맞는 schema / permission 테스트
 - [ ] krtour-map HTTP client에서 `POST /tripmate/features/batch` 호출 패턴
 - [ ] 통합 테스트 `apps/api/tests/integration/test_trips_api.py`
 - [ ] WebSocket broadcast 트리거 추가

@@ -494,16 +494,108 @@ const form = useForm({ resolver: zodResolver(TripCreateSchema) });
 
 UI는 각 플랫폼의 native input 사용. validator는 동일.
 
-## 5. Expo 대응 — 점진적 전환
+## 5. 여행 검색 / 장소 검색 / 내보내기 UX
 
-### 5.1 v2 v1.0 단계 — Next.js만
+T-144 범위. 구현은 `apps/web` Next.js 기준으로 시작하고, API/상태 계약은
+`packages/{api-client,schemas}`에 둬 Expo 전환 시 그대로 가져간다.
+
+### 5.1 여행 목록 검색 (`/trips`)
+
+`TripDashboard` 상단은 다음 순서로 구성한다.
+
+1. 검색 input: `q`를 `GET /trips`에 전달. 2자 미만이면 query에서 제외.
+2. bucket segmented control: `all` / `future` / `past`
+3. status multi-select: `draft`, `planned`, `in_progress`, `completed`, `archived`
+4. date range: `date_from`, `date_to`
+5. sort menu: `-updated_at`, `start_date`, `-start_date`, `title`
+
+검색은 TripMate DB의 여행 메타(`title`, `description`, `region_hint`)만 대상으로 한다.
+POI/feature/주소 검색은 같은 input 아래 결과 그룹으로 섞지 않는다. 결과가 없으면 빈
+목록 상태를 보여주고, 503/외부 의존 상태는 여행 검색에는 나타나면 안 된다.
+
+Query key:
+
+```ts
+queryKeys.trips.list({
+  q,
+  bucket,
+  status,
+  visibility,
+  dateFrom,
+  dateTo,
+  sort,
+  cursor,
+});
+```
+
+### 5.2 장소 추가 검색 drawer
+
+Trip 상세/지도 화면의 "장소 추가" drawer는 segmented control로 검색 소스를 나눈다.
+
+| 탭 | 호출 | 의존 | 선택 시 |
+|----|------|------|---------|
+| 장소 | `GET /features/search` | krtour-map HTTP | `POST /trips/{trip_id}/pois`에 `feature_id` + snapshot |
+| 주소 | T-129 `GET /search` 또는 `/geo/search` | `kraddr-geo` v2 REST | 좌표 preview 후 feature 요청 후보 |
+| 내 POI | TripMate `app.trip_day_pois` 검색 | TripMate DB | 기존 POI 복사/참조 |
+
+장소 탭은 250ms debounce + AbortController를 사용하고, 현재 map viewport가 있으면 `bbox`
+bias를 전달한다. krtour-map이 503이면 "장소 검색 불가" 상태를 보여주되 Naver/Kakao
+검색 API로 fallback하지 않는다. Naver/Kakao OAuth와 검색 provider는 현재 사용하지
+않으며 T-122 future provider 범위다.
+
+선택 결과는 drawer 내부에서 day/도착시간/sort 위치를 고른 뒤 POI 생성 요청으로 이어진다.
+생성 payload의 snapshot은 검색 결과 title/category/coord/marker 값을 그대로 담아
+krtour-map 최신 조회가 실패해도 일정 화면이 깨지지 않게 한다.
+
+### 5.3 통합 검색 (`/search`, T-129)
+
+전역 통합 검색은 `/search`가 구현된 뒤에만 켠다. 결과 bucket 순서는 `trips`,
+`my_pois`, `features`, `addresses`다. 구현 전 Web은 여행 목록 검색과 장소 drawer
+검색을 분리 호출한다. 이 경계를 유지해야 krtour-map feature read가 준비되지 않아도
+여행 검색 UX가 동작한다.
+
+### 5.4 내보내기 UI
+
+Trip 상세 화면의 action menu에 내보내기 항목을 둔다.
+
+| 액션 | UI | 처리 |
+|------|----|------|
+| 인쇄 | `Printer` icon | `/trips/[tripId]/print` route open |
+| PDF | `FileDown` icon | 초기에는 print route에서 브라우저 PDF 저장. 서버 PDF는 Sprint 6 |
+| GPX | `Route` 또는 `Map` icon | `GET /trips/{trip_id}/exports/gpx` 다운로드 |
+
+Print route는 `GET /trips/{trip_id}/exports/print-data` 응답을 렌더링하고
+`@media print` CSS를 별도 유지한다. 화면용 지도 컴포넌트를 그대로 캡처하지 않고,
+출력용은 날짜별 POI 목록 + 좌표 + 간단한 경로 순서 중심으로 구성한다. cached
+`rise_set`은 있으면 표시하고, weather는 live fetch하지 않는다.
+
+권한/개인정보:
+
+- owner/editor는 notes/attachments 포함 옵션을 볼 수 있다.
+- viewer는 notes 제외 기본값이며, GPX는 제목·좌표·시간만 포함한다.
+- share `view_only`는 print route만 허용하고 GPX raw download는 v1.0 초기 제외.
+- companion email, audit log, provider raw payload, 내부 user id는 export payload에
+  포함하지 않는다.
+
+### 5.5 구현 컴포넌트 후보
+
+| 컴포넌트 | 위치 | 책임 |
+|----------|------|------|
+| `TripSearchBar` | `apps/web/components/trips/` | `/trips` 목록 검색/필터 상태 |
+| `PlaceSearchDrawer` | `apps/web/components/poi/` | `/features/search` + day 선택 + POI 생성 |
+| `TripExportMenu` | `apps/web/components/trips/` | print/PDF/GPX action menu |
+| `TripPrintView` | `apps/web/components/trips/` | print-data 렌더링 + print CSS |
+
+## 6. Expo 대응 — 점진적 전환
+
+### 6.1 v2 v1.0 단계 — Next.js만
 
 - `apps/web` 본격 구현
 - `packages/*`를 **처음부터 공용 코드 위치로 유지** — 웹 전용 코드 (next-intl,
   next-router, maplibre-vworld adapter)는 `apps/web/lib/`에만
 - `apps/mobile/`은 v1.0 출시 후 v2 단계에서 추가
 
-### 5.2 Expo 추가 시 (v2)
+### 6.2 Expo 추가 시 (v2)
 
 순서:
 
@@ -513,7 +605,7 @@ UI는 각 플랫폼의 native input 사용. validator는 동일.
 4. 플랫폼 어댑터 (`apps/mobile/lib/`): expo-location, AsyncStorage, react-native-maps
 5. 디자인 토큰은 `packages/design-tokens`에서 그대로 사용 (NativeWind preset)
 
-### 5.3 React Native Compatibility 룰
+### 6.3 React Native Compatibility 룰
 
 `packages/*` 작성 시:
 
@@ -526,7 +618,7 @@ UI는 각 플랫폼의 native input 사용. validator는 동일.
 
 ESLint 룰로 `packages/*`에서 위 import를 차단 (`no-restricted-imports`).
 
-## 6. 사용자 위치 정보 획득
+## 7. 사용자 위치 정보 획득
 
 별도 문서: `docs/architecture/user-location.md`. 요약:
 
@@ -538,7 +630,7 @@ ESLint 룰로 `packages/*`에서 위 import를 차단 (`no-restricted-imports`).
 - 좌표 정밀도 / 정확도 / timestamp 표준 응답
 - 사용자가 거부하면 fallback (시군구 단위 선택 UI 또는 viewport 중심점 사용)
 
-## 7. 라우팅 — Next.js / Expo 동일 트리
+## 8. 라우팅 — Next.js / Expo 동일 트리
 
 웹과 모바일이 같은 라우트 구조를 갖도록 파일명 규칙을 통일:
 
@@ -564,7 +656,7 @@ apps/web/app/                    apps/mobile/app/
 라우트 이름은 공용 상수 (`packages/i18n/routes.ts` 또는 `packages/schemas/routes.ts`)로
 관리해 deep link 생성 시 양쪽 일관성 보장.
 
-## 8. SPEC V8 정합
+## 9. SPEC V8 정합
 
 - 03-frontend.md 전체 (Next.js 15 + Zustand + TanStack Query + dnd-kit + shadcn/ui)
 - 03-frontend.md §6 (16색 팔레트 + maki)
@@ -579,7 +671,7 @@ apps/web/app/                    apps/mobile/app/
   앞당겨 실제 모바일 앱까지 가는 경로 박음
 - **`packages/*` 공용 코드** — Next.js / Expo 한 codebase 유지
 
-## 9. Sprint 매핑
+## 10. Sprint 매핑
 
 | 항목 | Sprint | 산출물 |
 |------|--------|--------|
@@ -594,13 +686,14 @@ apps/web/app/                    apps/mobile/app/
 | `useUserLocation` 공용 hook | Sprint 2 | `packages/hooks/src/useUserLocation.ts` + 웹 어댑터 |
 | Admin 콘솔 (`apps/web/app/admin/...`) | Sprint 3 | shadcn/ui DataTable / FilterBar |
 | 지도 + maplibre-vworld-js | Sprint 4 | `apps/web/components/map/*` + `apps/web/lib/{vworldMap,locationAdapter}.ts` |
+| 여행 검색 + 장소 검색 drawer + print/GPX export | Sprint 4 | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView` |
 | Notice plan UI (사용자 listing + copy 다이얼로그) | Sprint 4 | `apps/web/app/(app)/notice-plans/...` |
 | Notice plan UI (Admin 작성기) | Sprint 6 | `apps/web/app/admin/notice-plans/...` |
 | WebSocket 클라이언트 (공용 wrapper) | Sprint 5 | `packages/api-client/src/websocket.ts` |
 | 스마트 정렬 미리보기 다이얼로그 | Sprint 6 | `apps/web/components/poi/OptimizeDialog.tsx` |
 | **Expo `apps/mobile/` 추가** | (v1.0 후, v2 단계) | 별도 Sprint M-1 (Mobile) 신설 |
 
-## 10. 관련 문서
+## 11. 관련 문서
 
 - 본 저장소 루트 `DESIGN.md` (Airbnb 디자인 토큰 reference)
 - 본 저장소 루트 `airbnb-marker-palette.html` (16색 시각 reference)

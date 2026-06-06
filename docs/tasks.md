@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
+- [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -186,7 +186,7 @@
 - [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
 - [x] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
 - [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
-- [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
+- [x] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
 - [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
 - [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26)
 - [x] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
@@ -231,3 +231,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #58 | docs: align map social kraddr docs | 2026-06-06 | T-143 |
 | PR #59 | docs: fix rise set and gemini SQL docs | 2026-06-06 | T-147 |
 | PR #60 | fix: use db roles for geofence admin bypass | 2026-06-06 | T-142 |
+| PR #61 | docs: define trip search and export UX | 2026-06-06 | T-144 |
