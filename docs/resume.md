@@ -1,5 +1,14 @@
 # resume.md
 
+## 다음 한 작업 (2026-06-06 감사 후)
+
+문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
+사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**: ① krtour-map
+에이전트에 `docs/krtour-map-requirements.md`를 전달해 운영급 HTTP 서비스(DEC-01=B,
+ADR-027) 신설 우선순위·계약 회신 받기. ② 감사 후속 백로그 T-123~T-151 중 문서 정정
+계열(T-123/T-149/T-150/T-143/T-147)을 먼저 처리(저위험). ③ feature read는 krtour HTTP
+서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기 대기.
+
 ## 현재 상태
 
 **Sprint 2 핵심 DoD 마감 완료** (2026-06-01). OAuth G-4 + Notice copy + 통합

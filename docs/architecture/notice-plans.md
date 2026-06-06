@@ -1,6 +1,14 @@
 # Notice Plan 도메인 — 추천 여행 + POI + 첨부
 
-본 문서는 TripMate v2의 **추천 여행 plan** 도메인을 정의한다. v1
+> **⚠️ 명칭 충돌 결정 (ADR-029 / DEC-03, 2026-06-06)**: 본 문서의 "추천 여행 plan"
+> 테이블 `app.notice_plans`가 `docs/data-model.md`·`postgres-schema.md`의 "시스템
+> 공지" 정의와 동명 충돌한다(감사 D-01/D-04). 결정: **큐레이션 여행은
+> `app.curated_trip_plans`(하위 `curated_plan_pois`, `curated_plan_attachments`)로
+> 개명**, `app.notice_plans`는 운영 공지 전용. 본 문서 본문은 아직 옛 이름을 쓰며,
+> 스키마·문서 일괄 개명은 **T-137**에서 수행한다.
+
+본 문서는 TripMate v2의 **추천 여행 plan**(개명 후 `curated_trip_plans`) 도메인을
+정의한다. v1
 (`apps/api/app/services/notice_plan.py`, `app/models/trip.py`,
 `alembic/versions/20260521_0027_notice_plans.py`,
 `20260522_0028_plan_poi_attachments.py`)에서 9개월간 운영한 자산을 v2로 가져온다.

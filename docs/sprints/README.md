@@ -8,15 +8,19 @@ TripMate v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으
 | Sprint 1 | [SPRINT-1.md](./SPRINT-1.md) | **merged** (PR #9) | 모노레포 scaffolding + DB schema + 핵심 인증 | — |
 | Sprint 2 | [SPRINT-2.md](./SPRINT-2.md) | **merged** (PR #10) | 도메인 API + DB (Trip / POI / 4 분리 동의 / Resend / 위치 감사) | — |
 | Sprint 3 | [SPRINT-3.md](./SPRINT-3.md) | **merged** (PR #11) | Admin 콘솔 + RBAC + audit chain + seed | — |
-| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | proposed | 지도 UI + `maplibre-vworld-js` + 라이브러리 read + **CI/CD 재활성** | **`v0.1.0`** |
-| Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
+| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **in progress** (PR #15/#16 merged; feature read·v0.1.0 미완) | 지도 UI + `maplibre-vworld-js` + 라이브러리 read + **CI/CD 재활성** | **`v0.1.0`** |
+| Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed (일부 항목 선반영: T-109/110/115) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
 | Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + LBS 신고 + 법무 + **MCP 외부 인터페이스** + **Backup UI 핫스왑** + **Korean geofencing** + **T108 N150 병행 배포** | **`v1.0.0`** |
+
+> **상태 정합 주의 (감사 P-04, 2026-06-06)**: 일부 Sprint 5/6 항목(T-109 geofencing,
+> T-110 Grafana, T-115 backup foundation)이 Sprint 4 중 선반영됐다. 개별 SPRINT-N.md
+> 헤더 status와 본 표가 어긋나면 본 표를 정본으로 한다. 전면 정합은 T-150.
 
 ## 릴리즈 마일스톤
 
 | 버전 | 시점 | 핵심 기능 |
 |------|------|----------|
-| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. `maplibre-vworld-js` 라이브러리 PR 모두 머지 후 tag (`docs/sprints/SPRINT-4.md` §5). |
+| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(krtour HTTP 연동, T-066/ADR-027)까지 **대기 후 tag**. snapshot-only 조기출시 안 함. `maplibre-vworld-js` PR 머지 선행. |
 | `v0.2.0` | Sprint 5 종료 | 실시간 + ETL + 운영 가시화 (Grafana). Backup/Restore 1차 (script + endpoint, UI는 v1.0). |
 | `v1.0.0` | Sprint 6 종료 | 외부 정식 출시. MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 양 노드 + LBS 신고 + 법무 4 문서. |
 | `v1.1.0+` | post-Sprint 6 | PWA / 푸시 알림 / 사진 업로드 / `tripmate-ai-companion` 통합 |

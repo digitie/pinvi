@@ -3,6 +3,21 @@
 본 문서는 TripMate HTTP API의 공통 규약을 정의한다. 모든 endpoint 문서는 본 문서를
 참조하고, 본 규약에서 벗어나면 그 endpoint 문서에 명시한다.
 
+> **정본 규약 (ADR-030, 2026-06-06 확정)** — 외부 API는 다음을 단일 정본으로 한다.
+> 현재 per-domain 문서/코드에 혼재하는 변형은 T-123/T-124/T-126에서 본 규약으로
+> 정렬한다(감사 `docs/audit/2026-06-06-doc-impl-audit.md` §3).
+> - **URL 버전 prefix**: `/v1` 노출(라우터가 이미 `api/v1`). 예: `GET /v1/trips`.
+> - **list 응답**: `{"data": [...], "meta": {...}}` (data는 **배열 직접**). 단건은
+>   `{"data": {...}}`. `data.items`/`data.<plural>`/`data.rows` 변형은 폐기.
+> - **페이지네이션**: 사용자 대면 list는 **cursor**. Admin/S3 continuation은 예외로
+>   각 문서에 명문.
+> - **좌표**: `{"longitude": .., "latitude": ..}` (lng-first, 6자리). WebSocket 포함
+>   전 구간 동일. `[lng,lat]`/`{lat,lng}`/평면/GeoJSON 변형 폐기.
+> - **datetime**: ISO 8601 `+09:00`(KST). admin 포함 통일.
+> - **id 필드**: `<entity>_id`. 현재 사용자 객체는 `data.user`.
+> - **생성 status**: 영속 리소스 생성 시 `201`, 그 외 `200`.
+> - **에러**: 본 문서 표준 taxonomy만. 누락 코드는 등록 또는 표준 코드로 대체.
+
 ## 1. Base URL / 환경별
 
 | 환경 | URL |

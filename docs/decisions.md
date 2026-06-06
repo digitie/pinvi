@@ -1074,8 +1074,106 @@
 - **참조**: ADR-002(superseded), ADR-003(schema 책임), ADR-025(kraddr-geo v2 REST),
   `python-krtour-map` 최신 `packages/krtour-map-admin/openapi.user.json`,
   `docs/tripmate-rest-api.md`, `docs/openapi-admin-contract.md`.
+- **2026-06-06 정정(ADR-027)**: 위 "근거/참조"가 가정한 krtour-map 산출물
+  (`krtour-map-admin` 패키지, `openapi.user.json`, 포트 9011, `/tripmate/features/batch`)
+  은 2026-06-06 `python-krtour-map` `main`(`HEAD=b775c74`) 실측 결과 **존재하지
+  않는다.** krtour-map의 실제 HTTP 표면은 인증 없는 debug-UI(`krtour-map-debug-ui`,
+  포트 8087, `GET /features` bbox·`GET /features/{id}`)뿐이다. ADR-026의 HTTP 방향은
+  ADR-027에서 유지하되, 그 계약은 krtour-map이 **신규로 구축해야 할 목표**임을
+  명확히 한다.
+
+## ADR-027: krtour-map 통합은 운영급 HTTP 서비스로 확정 (ADR-026 reality-check)
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 사용자 (DEC-01)
+- **컨텍스트**: 2026-06-06 문서·구현 정합성 감사
+  (`docs/audit/2026-06-06-doc-impl-audit.md`)에서 두 저장소의 통합 모델이 정반대임을
+  확인했다. TripMate는 ADR-026으로 HTTP 계약(포트 9011)을 선언했으나, krtour-map은
+  9개월간 in-process 함수 라이브러리(krtour ADR-003)로 만들어졌고 HTTP는 인증 없는
+  debug-UI(8087)뿐이며, ADR-026이 참조한 krtour 산출물은 실재하지 않는다.
+- **결정**:
+  - 통합 모델은 **운영급 HTTP 서비스(DEC-01 안 B)** 로 확정한다. ADR-026 유지.
+  - 이 HTTP 계약(인증 있는 운영 API, 포트 9011/9012, 전 엔드포인트, OpenAPI 생성 +
+    drift gate)은 krtour-map이 **신규로 구축해야 할 목표**다. 현재 미존재임을 인지한다.
+  - TripMate가 krtour-map에 필요로 하는 능력의 권위 명세는
+    `docs/krtour-map-requirements.md`다. krtour-map 에이전트가 이를 읽고 우선순위·계약을
+    회신한다.
+  - **클러스터링(DEC-04)**: 지도 in-bounds 클러스터링은 **krtour-map 서버(DB 집계)**
+    가 수행한다(단일 노드 대역폭·성능). TripMate `cluster_query.py`는 fallback 한정.
+  - **feature 갱신요청 큐(DEC-05)**: 큐는 TripMate `app` schema가 소유하고, Admin 승인
+    시에만 krtour-map 적재 경로를 호출한다. krtour HTTP 표면 최소화.
+- **결과**: feature read 전 경로가 krtour HTTP 서비스 가용성에 의존한다. v0.1.0은
+  이 연동 완료까지 대기한다(DEC-06, `docs/sprints/README.md`).
+- **후속**: T-066(HTTP client 구현), T-124(계약 정렬), T-148(SPRINT-4 재작성). krtour-map
+  측 신규 HTTP 서비스 구축은 krtour 저장소 백로그.
+- **참조**: ADR-026, ADR-002(superseded), `docs/krtour-map-requirements.md`,
+  `docs/decisions-needed-2026-06-06.md` DEC-01/04/05.
+
+## ADR-028: 정규 `feature_id` 포맷은 krtour-map `make_feature_id` 출력
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 사용자 (DEC-02)
+- **컨텍스트**: `feature_id`가 3곳에서 다름 — TripMate 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`,
+  krtour 실제 `core.make_feature_id`(예 `{kind}:{hash}`), TripMate **코드는 UUID**(버그).
+- **결정**: feature 소유자는 krtour-map이므로 **`make_feature_id`의 출력이 정본**이다.
+  TripMate는 이를 **불투명 문자열**로 그대로 저장·전달한다. krtour-map이 확정 포맷을
+  명문화한다(`docs/krtour-map-requirements.md` K-13). TripMate 코드의 UUID 가정은
+  제거한다(T-125).
+- **참조**: ADR-027, `docs/api/features.md`, `apps/api/app/services/trip_view_builder.py`.
+
+## ADR-029: `notice_plans` 명칭 충돌 해소 — 큐레이션은 `curated_trip_plans`
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 사용자 (DEC-03)
+- **컨텍스트**: `app.notice_plans`가 "큐레이션 여행 템플릿"과 "시스템 공지" 두 뜻으로
+  동명 충돌(감사 D-01/D-04).
+- **결정**: 사용자 대면 "추천/큐레이션 여행"은 **`app.curated_trip_plans`**(하위
+  `curated_plan_pois`, `curated_plan_attachments`)로 개명한다. `app.notice_plans`는
+  운영 공지 전용으로 한정한다. 스키마 정본화는 T-137.
+- **후속**: `docs/architecture/notice-plans.md`, `docs/api/notice-plans.md`,
+  `docs/data-model.md`, `docs/postgres-schema.md` 정렬(T-137).
+- **참조**: 감사 D-01/D-04.
+
+## ADR-030: 외부 API 규약 정본
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 사용자 (DEC-07)
+- **컨텍스트**: envelope 4종·pagination 4종·좌표 4종·datetime 2종·버전 prefix 미확정이
+  도메인마다 혼재(감사 A-03/04/07/08/10).
+- **결정** (이후 모든 외부 API의 정본; `docs/api/common.md`가 단일 출처):
+  - list 응답 = `{"data": [...], "meta": {...}}`(data는 배열). 단건 = `{"data": {...}}`.
+  - 사용자 대면 list 페이지네이션 = **cursor**. Admin/S3 continuation은 예외로 명문.
+  - 좌표 = `{"longitude": .., "latitude": ..}`(lng-first, 6자리). WS 포함 전 구간 동일.
+  - datetime = ISO 8601 `+09:00`(KST). admin 포함 통일.
+  - id 필드 = `<entity>_id`. 현재 사용자 객체는 `data.user`로 통일.
+  - **URL 버전 prefix = `/v1` 노출**(라우터가 이미 `api/v1`).
+  - 생성 성공 status = 영속 리소스 생성 시 `201`, 그 외 `200`.
+  - 에러는 `common.md` 표준 taxonomy만 사용. 누락 코드(`DB_UNAVAILABLE`,
+    `TRIPS_OWNED` 등)는 표에 등록하거나 표준 코드로 대체.
+- **후속**: `common.md`/`api-contract.md` 정본화(본 PR 1차) + per-domain 일괄 정렬
+  (T-123/T-124/T-126 등).
+- **참조**: 감사 A-03/04/07/08/09/10/16/22, `docs/decisions-needed-2026-06-06.md` DEC-07.
+
+## ADR-031: POI delete 정책(soft) + `trip_day_pois.feature_id` nullable
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 사용자 권고 기본값 채택 (DEC-08/DEC-09)
+- **컨텍스트**: POI delete가 pois.md "미정" vs admin.md "hard"로 충돌(감사 A-15);
+  `trip_day_pois.feature_id` NOT NULL이라 krtour에 없는 자유 메모 장소를 일정에 못
+  넣음(감사 D-18).
+- **결정**:
+  - POI delete는 **soft delete**(`deleted_at`)로 통일한다. 복구·공유 링크 안정성 우선.
+  - `app.trip_day_pois.feature_id`를 **nullable**로 하고, feature 없이 사용자 좌표·
+    이름만으로 POI를 추가하는 경로를 허용한다.
+- **후속**: `docs/api/pois.md`/`admin.md` 정렬(T-126 인접), 스키마 변경(T-138 인접).
+- **참조**: 감사 A-15/D-18, `docs/decisions-needed-2026-06-06.md` DEC-08/09.
 
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-027**
+- 다음 신규 ADR = **ADR-032**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

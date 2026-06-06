@@ -1,5 +1,11 @@
 # tasks.md — 백로그
 
+> **2026-06-06 정합성 감사**: `docs/audit/2026-06-06-doc-impl-audit.md`에서
+> 모순·불일치·누락을 전수 점검하고 후속 Task(T-123~T-151)·ADR(ADR-027~031)·결정
+> (DEC-01~10)을 도출했다. 결정 결과는 `docs/decisions-needed-2026-06-06.md`,
+> krtour-map 요구사항은 `docs/krtour-map-requirements.md`. 후속 백로그는 본 파일
+> "감사 후속 백로그(2026-06-06)" 절.
+
 ## 진행 중
 
 - [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
@@ -14,8 +20,7 @@
 - [ ] T-120 — 여행계획 Admin 목록/상세/상태 관리
 - [ ] T-121 — POI Admin 목록/상세/연결 상태 관리
   (feature re-link는 krtour-map client 준비 후)
-- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — krtour-map
-  비의존 운영 후보. Sprint 5 snapshot foundation 위에 restore cut-over PoC 필요.
+  <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
 
@@ -108,8 +113,9 @@
 
 ## 보류
 
-- [ ] T-066 — krtour-map OpenAPI HTTP 전환 구현 + drift gate (보류:
-  krtour-map OpenAPI/client 연동 의존)
+- [ ] T-066 — krtour-map OpenAPI HTTP client 구현 + drift gate (보류:
+  krtour-map이 운영급 HTTP 서비스를 **신설**해야 진입 — ADR-027/DEC-01=B 확정,
+  `docs/krtour-map-requirements.md`. v0.1.0 게이트가 여기 의존 — DEC-06)
 - [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
   `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
   (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
@@ -131,6 +137,41 @@
 - [x] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — workflow 파일 복원 완료.
   운영 확인은 T-062에서 완료. required status check 후속은 T-065.
 
+### 감사 후속 백로그 (2026-06-06)
+
+> 출처: `docs/audit/2026-06-06-doc-impl-audit.md` §8.1. 괄호 안은 감사 증거 ID.
+> 다수가 ADR-027~031 / DEC-01~10 확정에 의존한다.
+
+- [ ] T-123 — 문서 정합 일괄 정정(README index/머지표/오타/dangling link/OAuth·share 문서화) (A-14,C-20,C-21,P-10,P-13,P-17,P-18)
+- [ ] T-124 — `/features/*` 코드↔문서 계약 정렬(in-bounds 파라미터·응답, trips 페이지네이션, 필드명) (C-07,C-10,C-11,C-15)
+- [ ] T-125 — feature_id 문자열化(코드의 UUID 가정 제거) (C-09; ADR-028)
+- [ ] T-126 — POI 생성 경로 단일화(`/trips/{id}/pois` 정본) (A-01,C-16)
+- [ ] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
+- [ ] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
+- [ ] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13)
+- [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
+- [ ] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
+- [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
+- [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
+- [ ] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
+- [ ] T-135 — POI 응답 `rise_set` 노출 (C-18)
+- [ ] T-136 — Resend webhook Svix 서명 검증 (C-22)
+- [ ] T-137 — notice/curated-plan 스키마 정본화(`curated_trip_plans` 분리) (D-01,D-04; ADR-029)
+- [ ] T-138 — `users` 누락 컬럼 + `security_incidents` 테이블 추가 (D-02,D-03,D-09)
+- [ ] T-139 — 동반자 초대 흐름 + 댓글 모델/`visibility` 정리 (D-06)
+- [ ] T-140 — 여행 예산(budget/currency) 도메인 + 복사 흐름 (D-10)
+- [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
+- [ ] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
+- [ ] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
+- [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
+- [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
+- [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26)
+- [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
+- [ ] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027)
+- [ ] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
+- [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
+- [ ] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |
@@ -139,3 +180,5 @@
 | PR #10 | Sprint 2 진입 PR | 2026-05-26 | 사용자/Trip/POI/동의/Storage |
 | PR #11 | Sprint 3 진입 PR | 2026-05-26 | Admin + RBAC + audit chain |
 | PR #14 | docs: Sprint 4~6 plan + ADR-018~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |
+| PR #15 | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A) | 2026-06-05 | T-114/T-065 |
+| PR #16 | feat: 백엔드 features API + krtour-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 (client는 stub — 감사 C-01) |
