@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-120 여행계획 Admin 목록/상세/상태 관리
+
+**작업**: krtour-map 연계가 필요 없는 admin 후속으로, TripMate 소유 여행계획의
+목록/상세/상태 관리 기능을 구현했다.
+
+**변경**:
+- `GET /admin/trips` — `q` 검색(제목/지역/owner email 부분 일치, trip_id /
+  owner_user_id 정확 일치), `status_filter`, `visibility_filter`, `owner_user_id`
+  필터와 day/POI/companion/share count를 제공한다.
+- `GET /admin/trips/{trip_id}` — owner 이메일은 마스킹하고, companion/share metadata와
+  최근 `admin_audit_log` 10건을 반환한다.
+- `PATCH /admin/trips/{trip_id}/status` — admin 전용 상태 변경, `access_reason`
+  필수, `trip.update_status` audit 기록.
+- `packages/schemas`, `packages/api-client`, Web `/admin/trips` 목록/상세 화면을
+  계약에 맞춰 추가했다.
+- `apps/api/tests/integration/test_admin_trips_api.py`,
+  `apps/web/e2e/admin-trips.e2e.ts` — 검색/마스킹/count/status audit과 krtour-map
+  미호출을 검증했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run ruff format app tests/integration/test_admin_trips_api.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/integration/test_admin_trips_api.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror: `uv run pytest -s tests/integration/test_admin_trips_api.py -q`
+  — 3 passed
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace packages/schemas`,
+  `npm run typecheck --workspace packages/api-client`,
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... admin-trips.e2e.ts`
+  — 2 passed
+
+**다음**: T-121 POI Admin 목록/상세/연결 상태 관리. feature re-link는 krtour-map
+client 준비 후로 두고, 현재는 TripMate 소유 `trip_day_pois` 영역만 다룬다.
+
 ## 2026-06-06 (claude) — T-210c(ADR-045 Phase 6) TripMate ETL 경계 정합
 
 **작업**: krtour-map ADR-045 Phase 6의 T-210c("TripMate `apps/etl` 레거시 Dagster

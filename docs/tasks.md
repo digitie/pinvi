@@ -12,7 +12,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-120 — 여행계획 Admin 목록/상세/상태 관리
 - [ ] T-121 — POI Admin 목록/상세/연결 상태 관리
   (feature re-link는 krtour-map client 준비 후)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
@@ -114,6 +113,9 @@
 - [x] T-119 — 회원 관리 Admin 보강
   (완료: 2026-06-06, `/admin/users` `q` 검색 + 상태 필터 결합, 상세 기본 이메일
   마스킹, 사유 기반 원본 조회 audit, 최근 audit UX + 통합/e2e 테스트)
+- [x] T-120 — 여행계획 Admin 목록/상세/상태 관리
+  (완료: 2026-06-06, `/admin/trips` 검색 + 상태/공개범위 필터, 상세 companion/share
+  metadata, 상태 변경 `trip.update_status` audit, Web 목록/상세 + 통합/e2e 테스트)
 
 ## 보류
 
