@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-123 문서 정합 일괄 정정
+
+**작업**: 감사 A-14/C-20/C-21/P-10/P-13/P-17/P-18 범위의 저위험 정합 문제를
+최신 구현 기준으로 정리했다.
+
+**변경**:
+- README/API index에 `GET /search`, `GET /health/external`을 노출하고, OAuth는
+  Google만 활성 + Naver/Kakao future provider로 표현을 맞췄다.
+- `POST /trips/{trip_id}/share-tokens` URL 생성을 `TRIPMATE_WEB_BASE_URL` 기반으로
+  변경하고 통합 테스트를 추가했다.
+- feature viewport zoom 하한을 코드/Zod와 같은 5로 문서 정정했다.
+- `docs/sprints/SPRINT-4.md`의 dangling `docs/release-plan.md` 링크를 현재 추적
+  문서(`sprints/README`, `tasks`, `resume`) 참조로 바꿨다.
+- `docs/decisions.md`의 `python-kraddr-map` 오타를 `python-kraddr-geo`로 정정했다.
+- `docs/agent-guide.md`의 구식 co-author 예시와 잔여 `Restrict force-push` bullet을
+  정리했다.
+- `docs/tasks.md` merge history에 PR #52/#53을 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run ruff format app/api/v1/trips.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app/api/v1/trips.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror: `uv run pytest -s tests/integration/test_trips_api.py -q`
+  — 6 passed
+
+**다음**: T-149 Gemini 책임 목록 정정. krtour-map feature read는 계속 T-066 대기.
+
 ## 2026-06-06 (codex) — T-121 POI Admin 목록/상세/연결 상태 관리
 
 **작업**: krtour-map 연계가 필요 없는 admin 후속으로, TripMate 소유

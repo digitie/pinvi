@@ -7,15 +7,15 @@
 
 | 파일 | 범위 | Sprint |
 |------|------|--------|
-| [auth.md](./auth.md) | 이메일 가입/로그인/verify/refresh + Google/Naver/Kakao OAuth | 1~2 |
+| [auth.md](./auth.md) | 이메일 가입/로그인/verify/refresh + Google OAuth(Naver/Kakao는 future provider) | 1~2 |
 | [users.md](./users.md) | 프로필/동의/탈퇴/avatar/OAuth 연결 | 1~2 |
 | [trips.md](./trips.md) | Trip CRUD + 동반자 + 공유 토큰 + items | 2 |
 | [pois.md](./pois.md) | POI CRUD + reorder (fractional indexing) | 2 |
-| [features.md](./features.md) | 라이브러리 feature read (in-bounds / nearby / weather) | 4 |
+| [features.md](./features.md) | 라이브러리 feature read (in-bounds / nearby / weather / `GET /search`) | 4 |
 | [notice-plans.md](./notice-plans.md) | 추천 plan listing + copy + Admin CRUD | 2/4/6 |
 | [storage.md](./storage.md) | presigned PUT + 첨부 등록 + RustFS 관리 | 2 |
 | [admin.md](./admin.md) | Admin 엔티티 CRUD + dataset 브라우저 | 3 |
-| [health.md](./health.md) | `/health`, `/health/db` | 1 |
+| [health.md](./health.md) | `/health`, `/health/db`, `/health/external` | 1 |
 | [public.md](./public.md) | 비로그인 listing (beach/festival map markers) | 4 |
 | [regions.md](./regions.md) | 행정구역 boundary 조회 (라이브러리 경유) | 4 |
 | [websocket.md](./websocket.md) | `WS /ws/trips/{trip_id}` 채널 | 5 |

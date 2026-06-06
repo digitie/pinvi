@@ -963,8 +963,8 @@
   - `docs/runbooks/codegraph-worktrees.md`에 Windows/WSL git 포인터 함정 절 +
     ADR-024 참조 추가.
 - **참조**: ADR-004(미러 모델 — 디스크/경로는 유지, source-of-truth 주장만
-  supersede), ADR-017(worktree + git.exe), `python-kraddr-map` 진영
-  `python-kraddr-geo` ADR-041, `docs/dev-environment.md`.
+  supersede), ADR-017(worktree + git.exe), `python-kraddr-geo` 진영
+  ADR-041, `docs/dev-environment.md`.
 
 ## ADR-025: 사용자 대면 geocoding은 `python-kraddr-geo` v2 REST API 직접 호출
 

@@ -5,7 +5,8 @@
 - **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` OpenAPI read 활성화
   + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
 - **릴리즈**: `v0.1.0` (Sprint 4 종료 시 tag). 사용자 대면 지도/여행 흐름 첫
-  사용 가능한 상태. 자세히는 `docs/release-plan.md` (Sprint README 참고).
+  사용 가능한 상태. 현재 릴리즈 게이트는 `docs/sprints/README.md`,
+  `docs/tasks.md`, `docs/resume.md`를 함께 본다.
 - **DoD**:
   - 지도 어댑터 (`maplibre-vworld-js`) 통합 — VWorld + MapLibre GL JS (ADR-015)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)

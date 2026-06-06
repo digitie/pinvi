@@ -71,6 +71,36 @@ async def test_trip_optimistic_lock(client, verified_user, auth_cookies) -> None
     assert conflict.status_code == 409
 
 
+async def test_share_link_uses_web_base_url(
+    client,
+    verified_user,
+    auth_cookies,
+    monkeypatch,
+) -> None:
+    from app.api.v1 import trips as trips_router
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    monkeypatch.setattr(
+        trips_router.settings,
+        "tripmate_web_base_url",
+        "https://tripmate.example",
+    )
+    created = await client.post("/trips", json={"title": "공유 여행"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    resp = await client.post(
+        f"/trips/{trip_id}/share-tokens",
+        json={"visibility": "view_only"},
+        cookies=cookies,
+    )
+
+    assert resp.status_code == 201, resp.text
+    share = resp.json()["data"]
+    assert share["url"].startswith(f"https://tripmate.example/trips/{trip_id}/shared/")
+    assert "app.tripmate.local" not in share["url"]
+
+
 async def test_other_user_cannot_access(
     client, verified_user, auth_cookies, session_factory
 ) -> None:
