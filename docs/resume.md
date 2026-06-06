@@ -4,7 +4,7 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-149 Gemini 책임 목록 정정을 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-150 계획/추적 문서 정합화를 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
 
@@ -147,6 +147,10 @@ client 준비 후로 유지한다.
 future provider 표현으로 맞췄다. share link URL은 `TRIPMATE_WEB_BASE_URL` 기반으로
 수정했고, zoom 하한 5, dangling `release-plan.md` 링크, `python-kraddr-geo` 오타,
 agent-guide 잔여 bullet/trailer를 정리했다.
+**T-149 Gemini 책임 목록 정정** (2026-06-06 codex) — README/AGENTS/CLAUDE/SKILL과
+`docs/integrations/README.md`에서 본 저장소의 현재 책임을 `AI companion 호출 계약`으로
+표현했다. Gemini/Claude/Codex provider 구현은 ADR-020에 따라 별도
+`tripmate-ai-companion` repo 책임이다.
 
 ## 다음 한 작업
 
@@ -156,8 +160,8 @@ agent-guide 잔여 bullet/trailer를 정리했다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-149 Gemini 책임 목록 정정. README/AGENTS/SKILL에 남은
-   현재 책임 표현을 ADR-020의 별도 repo 분리 결정과 맞춘다.
+2. **다음 비의존 후보** — T-150 계획/추적 문서 정합화. sprint status, 보류/완료
+   재분류, ADR refs, resume의 박힌 ADR 범위를 최신 main 기준으로 맞춘다.
 3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -225,6 +229,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] 여행계획 Admin 목록/상세/상태 관리 — T-120
 - [x] POI Admin 목록/상세/연결 상태 관리 — T-121
 - [x] 문서 정합 일괄 정정 — T-123
+- [x] Gemini 책임 목록 정정 — T-149
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

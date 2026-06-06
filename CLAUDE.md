@@ -130,7 +130,7 @@ lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
 | DB schema 변경 | `docs/postgres-schema.md` + `docs/conventions/database.md` |
 | krtour-map OpenAPI 호출 (feature 데이터) | `docs/krtour-map-integration.md` |
 | Geocoding (주소/좌표/행정구역) | `docs/integrations/kraddr-geo.md` (ADR-025, kraddr-geo v2 REST 직접) + `docs/architecture/geocoding-open-decisions.md` |
-| 외부 통합 (이메일/OAuth/AI) | `docs/integrations/<서비스>.md` |
+| 외부 통합 (이메일/OAuth/AI companion 호출 계약) | `docs/integrations/<서비스>.md` |
 | Frontend UI | `docs/architecture/frontend.md` + `DESIGN.md` |
 | 지도 (`maplibre-vworld-js`) | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md` |
 | Admin 콘솔 | `docs/api/admin.md` + `docs/runbooks/admin.md` |

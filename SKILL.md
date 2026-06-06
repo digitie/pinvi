@@ -189,8 +189,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
     필드 마스킹. 토큰/세션/이메일/전화는 보안 정책에 따른다.
 17. **Admin 권한 체크를 클라이언트만 신뢰 금지** — 모든 보호 라우터는 서버
     middleware/dependency에서 권한 검증. UI 라우팅은 보조.
-18. **Telegram/Gemini/Resend webhook payload 무검증 금지** — HMAC/signature
-    검증 후 처리.
+18. **Telegram/Resend/AI companion webhook payload 무검증 금지** —
+    HMAC/signature/idempotency 검증 후 처리.
 19. **Dagster asset이 `python-krtour-map`의 `infra/`/`providers/`를 직접 부르지
     말 것** — krtour-map provider 적재는 그 저장소의 API/Admin/Dagster가 소유한다.
 20. **`apps/web`에서 외부 API 키 직접 호출 금지** — 모든 외부 호출은 백엔드

@@ -66,7 +66,7 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 - 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
 - Dagster orchestration (TripMate 자체 job + 외부 서비스 갱신 trigger)
 - 파일 스토리지(RustFS) 운영 API
-- 외부 통합 (Telegram, Gemini, Resend, 소셜 로그인 provider)
+- 외부 통합 (Telegram, Resend, 소셜 로그인 provider, AI companion 호출 계약)
 
 ### 비책임 (`python-krtour-map`이 소유)
 
@@ -178,8 +178,8 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 **외부 통합**
 - 인덱스: [`docs/integrations/README.md`](docs/integrations/README.md)
 - Resend / 소셜 로그인 (현재 Google만 활성, Naver/Kakao는 future provider) /
-  Gemini / Telegram / [maplibre-vworld-js](docs/integrations/maplibre-vworld.md) /
-  Sentry / Loki
+  AI companion 호출 계약(ADR-020, provider 구현은 별도 repo) / Telegram /
+  [maplibre-vworld-js](docs/integrations/maplibre-vworld.md) / Sentry / Loki
 
 **규약 (코딩 / DB / 테스트)**
 - 인덱스: [`docs/conventions/README.md`](docs/conventions/README.md)

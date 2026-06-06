@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-149 Gemini 책임 목록 정정
+
+**작업**: ADR-020(`tripmate-ai-companion` 별도 repo 분리)에 맞춰, 본 저장소의 현재
+책임 목록에 남아 있던 Gemini 직접 통합 표현을 AI companion 호출 계약으로 정정했다.
+
+**변경**:
+- `README.md` — 책임/외부 통합 목록에서 Gemini 직접 통합을 제거하고 AI companion
+  호출 계약으로 표기했다.
+- `AGENTS.md` / `CLAUDE.md` — ADR-016 동기 원칙에 따라 외부 통합 진입 문구를
+  AI companion 호출 계약으로 맞췄다.
+- `SKILL.md` — DO NOT 항목의 webhook 검증 대상을 Telegram/Resend/AI companion으로
+  정리했다.
+- `docs/integrations/README.md` — Gemini 문서를 deferred reference로 낮추고,
+  AI provider 구현은 `tripmate-ai-companion`이 소유한다고 명시했다.
+
+**검증**:
+- NTFS worktree: `git diff --check`
+- NTFS worktree: stale 책임 표현 검색
+  (`외부 통합 .*Gemini`, `Telegram, Gemini`, `Google (OAuth + Gemini)`,
+  `Gemini Deep Research (사용자 키) | 4+` 등) — 잔여 없음
+
+**다음**: T-150 계획/추적 문서 정합화. krtour-map feature read는 계속 T-066 대기.
+
 ## 2026-06-06 (codex) — T-123 문서 정합 일괄 정정
 
 **작업**: 감사 A-14/C-20/C-21/P-10/P-13/P-17/P-18 범위의 저위험 정합 문제를
