@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-121 POI Admin 목록/상세/연결 상태 관리
+
+**작업**: krtour-map 연계가 필요 없는 admin 후속으로, TripMate 소유
+`app.trip_day_pois` POI 첨부 행의 목록/상세/연결 상태 관리 기능을 구현했다.
+
+**변경**:
+- `GET /admin/pois` — `q` 검색(`feature_id`, snapshot JSON, trip 제목, owner email,
+  UUID 정확 일치), `trip_id`, `has_broken_link` 필터와 owner 이메일 마스킹을 제공한다.
+- `GET /admin/pois/{poi_id}` — feature snapshot, 일정/비용/메모/URL, 추가자 마스킹,
+  최근 `admin_audit_log` 10건을 반환한다.
+- `PATCH /admin/pois/{poi_id}/link-status` — admin 전용 로컬 연결 상태 변경,
+  `access_reason` 필수, `poi.update_link_status` audit 기록.
+- `packages/schemas`, `packages/api-client`, Web `/admin/pois` 목록/상세 화면을
+  계약에 맞춰 추가했다.
+- `apps/api/tests/integration/test_admin_pois_api.py`,
+  `apps/web/e2e/admin-pois.e2e.ts` — 검색/마스킹/broken filter/link status audit과
+  krtour-map 미호출을 검증했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run ruff format app tests/integration/test_admin_pois_api.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/integration/test_admin_pois_api.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror: `uv run pytest -s tests/integration/test_admin_pois_api.py -q`
+  — 4 passed
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace packages/schemas`,
+  `npm run typecheck --workspace packages/api-client`,
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... admin-pois.e2e.ts`
+  — 2 passed
+- WSL2 ext4 mirror: `uv run ruff format --check .`
+- NTFS worktree: `git diff --check`
+
+**다음**: T-123 문서 정합 일괄 정정. 구현 feature read와 feature re-link는 계속
+krtour-map HTTP/OpenAPI 준비 후로 둔다.
+
 ## 2026-06-06 (codex) — T-120 여행계획 Admin 목록/상세/상태 관리
 
 **작업**: krtour-map 연계가 필요 없는 admin 후속으로, TripMate 소유 여행계획의

@@ -25,7 +25,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/users/{id}/disable` | 비활성화 (refresh 전부 revoke) | 3 |
 | `GET /admin/trips` / `{trip_id}` | trip 목록 / 상세 | 3 |
 | `GET /admin/features` | 라이브러리 feature 검색 (read-only) | 3 |
-| `GET /admin/pois` | POI 검색 (`feature_link_broken_at` 필터) | 3 |
+| `GET /admin/pois` / `{poi_id}` | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3 |
+| `PATCH /admin/pois/{poi_id}/link-status` | POI feature 연결 상태 로컬 표시 | 3 |
 | `GET /admin/datasets` | dataset 카탈로그 | 3 |
 | `GET /admin/datasets/{table_name}/rows` | row 조회 (검색/필터/정렬/page) | 3 |
 | `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]` | 통합 엔티티 CRUD | 3 |
@@ -259,9 +260,75 @@ Content-Type: application/json
 - `trips.status`를 변경하고 `version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "trip.update_status"`를 기록한다.
 
-## 8. 위치 감사 로그 (CPO 권한)
+## 8. POI 관리
 
-### 8.1 `GET /admin/audit/location`
+POI Admin은 TripMate 소유 `app.trip_day_pois` 첨부 행만 관리한다. `feature_id`
+재연결이나 feature 원천 데이터 수정은 krtour-map OpenAPI client 준비 후 별도 작업으로
+진행한다.
+
+### 8.1 `GET /admin/pois`
+
+```http
+GET /admin/pois?q=haeundae&has_broken_link=false&page=1&limit=50
+```
+
+- 권한: `admin` / `operator`
+- `q`: `feature_id`, `feature_snapshot` JSON, trip 제목, owner 이메일 부분 일치,
+  `attachment_id` / `trip_id` / `owner_user_id` UUID 정확 일치
+- `trip_id`: 특정 여행 UUID
+- `has_broken_link`: `true`면 `feature_link_broken_at IS NOT NULL`, `false`면 정상
+  연결 표시 행만 조회
+- 목록 응답은 owner 이메일 원본을 포함하지 않고 `owner_email_masked`만 제공한다.
+
+응답 row:
+
+```jsonc
+{
+  "attachment_id": "uuid",
+  "trip_id": "uuid",
+  "trip_title": "부산 가족 여행",
+  "owner_user_id": "uuid",
+  "owner_email_masked": "o***@example.com",
+  "day_index": 1,
+  "sort_order": "a0",
+  "feature_id": "place-haeundae",
+  "feature_label": "해운대 해수욕장",
+  "feature_link_broken_at": null,
+  "version": 1,
+  "created_at": "2026-06-06T10:00:00+09:00",
+  "updated_at": "2026-06-06T11:00:00+09:00"
+}
+```
+
+### 8.2 `GET /admin/pois/{poi_id}`
+
+- 권한: `admin` / `operator`
+- 목록 row + `added_by_email_masked`, `feature_snapshot`, marker override, 예정 시각,
+  메모, 예산/실사용 금액, 사용자 URL, 최근 `admin_audit_log` 10건을 반환한다.
+- owner / added_by 이메일은 항상 마스킹한다.
+
+### 8.3 `PATCH /admin/pois/{poi_id}/link-status`
+
+```http
+PATCH /admin/pois/<poi_id>/link-status
+Content-Type: application/json
+
+{
+  "broken": true,
+  "access_reason": "feature_id 점검 결과 끊김"
+}
+```
+
+- 권한: `admin`
+- `access_reason` 필수
+- `broken = true`면 `feature_link_broken_at`을 현재 시각으로 설정하고, `false`면
+  `NULL`로 되돌린다.
+- 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
+- `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
+
+## 9. 위치 감사 로그 (CPO 권한)
+
+### 9.1 `GET /admin/audit/location`
 
 ```http
 GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
@@ -272,15 +339,15 @@ GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
   + Sentry alert
 - 응답에는 좌표 정밀도 4자리로 mask (raw 6자리 표시는 별도 endpoint, 더 강한 사유 검증)
 
-## 9. Notice Plan 관리
+## 10. Notice Plan 관리
 
 자세히는 [`notice-plans.md`](./notice-plans.md) Admin 섹션.
 
-## 10. ETL / Record Linkage / 데이터 일관성
+## 11. ETL / Record Linkage / 데이터 일관성
 
 SPEC V8 M-10 ~ M-11.
 
-### 10.1 `GET /admin/dedup-review`
+### 11.1 `GET /admin/dedup-review`
 
 라이브러리 `dedup_review_queue` 호출.
 
@@ -301,7 +368,7 @@ SPEC V8 M-10 ~ M-11.
 }
 ```
 
-### 10.2 `POST /admin/dedup-review/{id}/verdict`
+### 11.2 `POST /admin/dedup-review/{id}/verdict`
 
 ```jsonc
 { "verdict": "merge_a_into_b" | "merge_b_into_a" | "not_same" | "uncertain", "reason": "..." }
@@ -309,7 +376,7 @@ SPEC V8 M-10 ~ M-11.
 
 krtour-map dedup verdict는 krtour-map admin OpenAPI로 callback한다.
 
-### 10.3 `GET /admin/provider-sync`
+### 11.3 `GET /admin/provider-sync`
 
 ```jsonc
 {
@@ -330,17 +397,17 @@ krtour-map dedup verdict는 krtour-map admin OpenAPI로 callback한다.
 }
 ```
 
-### 10.4 `POST /admin/provider-sync/{id}/{action}`
+### 11.4 `POST /admin/provider-sync/{id}/{action}`
 
 `action`: `pause` | `resume` | `retry` | `reset_cursor`.
 
-### 10.5 `GET /admin/integrity`
+### 11.5 `GET /admin/integrity`
 
 `app.data_integrity_violations` + 라이브러리 자체 violations 합쳐 표시.
 
-## 11. 디버그 콘솔
+## 12. 디버그 콘솔
 
-### 11.1 `WS /admin/debug/logs`
+### 12.1 `WS /admin/debug/logs`
 
 Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 
@@ -354,17 +421,17 @@ Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 { "type": "error", "message": "LogQL syntax error" }
 ```
 
-### 11.2 `GET /admin/debug/request/{request_id}`
+### 12.2 `GET /admin/debug/request/{request_id}`
 
 X-Request-Id 기반 단일 요청 타임라인. structlog 로그 + Sentry transaction +
 `app.api_call_log` row 합쳐 보여줌.
 
-## 12. Backup / Restore 1차
+## 13. Backup / Restore 1차
 
 ADR-022 Sprint 5 1차 범위. 본 API는 TripMate 소유 `app` schema backup snapshot만
 다룬다. `feature` / `provider_sync` schema는 `python-krtour-map` 책임이다.
 
-### 12.1 `GET /admin/backup/snapshots`
+### 13.1 `GET /admin/backup/snapshots`
 
 ```http
 GET /admin/backup/snapshots?limit=50
@@ -392,7 +459,7 @@ GET /admin/backup/snapshots?limit=50
 }
 ```
 
-### 12.2 `POST /admin/backup/snapshot`
+### 13.2 `POST /admin/backup/snapshot`
 
 ```http
 POST /admin/backup/snapshot
@@ -413,16 +480,16 @@ Content-Type: application/json
 [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
 핫스왑 restore UI/API는 Sprint 6의 T-111 범위로 남긴다.
 
-## 13. Seed / Reset (dev/staging only)
+## 14. Seed / Reset (dev/staging only)
 
-### 13.1 `POST /admin/seed/scenarios/{scenario_key}`
+### 14.1 `POST /admin/seed/scenarios/{scenario_key}`
 
 `scenario_key`: SPEC V8 M-13 8 시나리오 키 (`new_user_first_trip` 등).
 
 운영 환경에서는 라우트 자체 비활성 (`ENABLE_SEED` 환경변수 false → router include
 안 함). 404.
 
-### 13.2 `POST /admin/reset`
+### 14.2 `POST /admin/reset`
 
 ```jsonc
 { "confirm": "RESET", "admin_password": "..." }
@@ -433,7 +500,7 @@ Content-Type: application/json
 - 라이브러리 schema는 별도 reset endpoint (`POST /admin/krtour-map/reset`)
 - 자동으로 `new_user_first_trip` 시나리오 적용
 
-## 14. AI agent 구현 체크리스트
+## 15. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/api/v1/admin/__init__.py` 라우터 분기
 - [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,backup,seed,reset,rustfs}.py`

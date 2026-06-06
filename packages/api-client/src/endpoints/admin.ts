@@ -6,6 +6,9 @@ import {
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
   AdminPagedResponseSchema,
+  AdminPoiDetailSchema,
+  AdminPoiLinkStatusRequestSchema,
+  AdminPoiPagedResponseSchema,
   AdminTripDetailSchema,
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
@@ -95,6 +98,46 @@ export const adminApi = (client: ApiClient) => ({
       method: 'PATCH',
       body: JSON.stringify(AdminTripStatusRequestSchema.parse(body)),
       schema: AdminTripDetailSchema,
+    }),
+
+  listPois: (
+    params: {
+      page?: number;
+      limit?: number;
+      tripId?: string;
+      hasBrokenLink?: boolean;
+      q?: string;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.tripId) qs.set('trip_id', params.tripId);
+    if (params.hasBrokenLink !== undefined) {
+      qs.set('has_broken_link', String(params.hasBrokenLink));
+    }
+    if (params.q) qs.set('q', params.q);
+    const path = `/admin/pois${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminPoiPagedResponseSchema,
+    });
+  },
+
+  getPoi: (poiId: string) =>
+    client.request(`/admin/pois/${poiId}`, {
+      method: 'GET',
+      schema: AdminPoiDetailSchema,
+    }),
+
+  updatePoiLinkStatus: (
+    poiId: string,
+    body: z.infer<typeof AdminPoiLinkStatusRequestSchema>,
+  ) =>
+    client.request(`/admin/pois/${poiId}/link-status`, {
+      method: 'PATCH',
+      body: JSON.stringify(AdminPoiLinkStatusRequestSchema.parse(body)),
+      schema: AdminPoiDetailSchema,
     }),
 
   listAudit: (limit = 50) =>

@@ -3,11 +3,9 @@
 ## 다음 한 작업 (2026-06-06 감사 후)
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
-사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**: ① krtour-map
-에이전트에 `docs/krtour-map-requirements.md`를 전달해 운영급 HTTP 서비스(DEC-01=B,
-ADR-027) 신설 우선순위·계약 회신 받기. ② 감사 후속 백로그 T-123~T-151 중 문서 정정
-계열(T-123/T-149/T-150/T-143/T-147)을 먼저 처리(저위험). ③ feature read는 krtour HTTP
-서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기 대기.
+사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
+krtour-map 비의존 작업 루프 기준으로 T-123 문서 정합 일괄 정정을 처리한다. feature
+read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기 대기.
 
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
@@ -137,6 +135,12 @@ Naver/Kakao는 계속 T-122 미래 작업이다.
 `/admin/trips` 목록은 `q` 검색, 상태/공개범위/owner 필터와 day/POI/companion/share
 count를 제공한다. 상세는 companion/share metadata와 최근 audit을 표시하고, 상태
 변경은 `access_reason` 필수 + `trip.update_status` audit으로 기록한다.
+**T-121 POI Admin 목록/상세/연결 상태 관리** (2026-06-06 codex) —
+`/admin/pois` 목록은 `q` 검색, `trip_id`, `has_broken_link` 필터와 owner 이메일
+마스킹을 제공한다. 상세는 `feature_snapshot`, 일정/비용/메모/URL, 추가자 마스킹,
+최근 audit을 표시한다. 연결 상태 변경은 TripMate 로컬 `feature_link_broken_at`만
+수정하고 `poi.update_link_status` audit으로 기록한다. feature re-link는 krtour-map
+client 준비 후로 유지한다.
 
 ## 다음 한 작업
 
@@ -146,9 +150,8 @@ count를 제공한다. 상세는 companion/share metadata와 최근 audit을 표
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-121 POI Admin 목록/상세/연결 상태 관리.
-   feature re-link는 krtour-map client 준비 후로 두고, 현재는 `app.trip_day_pois`
-   조회/삭제/상태 표시처럼 TripMate 소유 영역만 다룬다.
+2. **다음 비의존 후보** — T-123 문서 정합 일괄 정정. README index/머지표/오타/
+   dangling link/OAuth·share 문서화를 최신 구현 기준으로 맞춘다.
 3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -214,6 +217,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] Google OAuth 계정 매칭 / profile 연결 UX 보강 — T-118
 - [x] 회원 관리 Admin 검색/상세 audit UX 보강 — T-119
 - [x] 여행계획 Admin 목록/상세/상태 관리 — T-120
+- [x] POI Admin 목록/상세/연결 상태 관리 — T-121
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 
