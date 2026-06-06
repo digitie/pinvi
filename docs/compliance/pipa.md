@@ -64,7 +64,7 @@ Dagster job 일 1회:
 ### 3.3 처리 흐름
 
 ```
-1) 자동 감지 → app.security_incidents row insert (`type`, `severity`, `details`)
+1) 자동 감지 → app.security_incidents row insert (`incident_type`, `severity`, `details`)
 2) Sentry alert + CPO Telegram 알림
 3) CPO가 30분 내 검토 (`/admin/incidents`)
 4) "정보주체 통지 필요" 판정 → 사용자 이메일 자동 발송 (`POST /admin/incidents/{id}/notify`)
@@ -169,7 +169,8 @@ ADR 필요 — Sprint 6 또는 v2.
 - [ ] PII 마스킹 (Sentry / Loki / API 응답)
 - [ ] PII 보존 만료 Dagster job
 - [ ] 침해 자동 트리거 (이상 IP / admin export / chain 깨짐)
-- [ ] `app.security_incidents` 테이블 + CPO 알림
+- [x] `app.security_incidents` 테이블 foundation
+- [ ] CPO 알림
 - [ ] `/admin/incidents` 페이지 + 사용자 통지 mailing
 - [ ] 처리방침 placeholder (`docs/legal/privacy-policy.md`)
 - [ ] PR 템플릿에 PIPA 점검 체크리스트

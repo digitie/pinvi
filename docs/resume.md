@@ -4,8 +4,8 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-138 `users` 누락 컬럼 + `security_incidents`
-테이블 추가를 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-139 동반자 초대 흐름 + 댓글 모델/`visibility`
+정리를 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
 
@@ -180,6 +180,10 @@ write drain + schema rename + API/Web restart다.
 프로세스 in-memory WebSocket broker 모델을 확정하고, `WS /ws/trips/{trip_id}` 인증/
 권한/presence 및 Trip/POI mutation broadcast를 구현했다. 수평 확장 broker는 후속 ADR
 대상이다.
+**T-138 사용자/보안 스키마 보강** (2026-06-06 codex) — 실제 코드에는 이미 반영된
+`users.password_hash/nickname/gender/birth_year_month/residence_sigungu_code/email_status`
+문서 drift를 고치고, PIPA 침해 대응 foundation인 `app.security_incidents` 모델,
+Alembic 0007, 통합 테스트를 추가했다.
 
 ## 다음 한 작업
 
@@ -189,8 +193,8 @@ write drain + schema rename + API/Web restart다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-138 `users` 누락 컬럼 + `security_incidents` 테이블 추가.
-   사용자/보안 스키마 보강이며 krtour-map feature read와 독립적이다.
+2. **다음 비의존 후보** — T-139 동반자 초대 흐름 + 댓글 모델/`visibility` 정리.
+   trip companion/share/comment 도메인 보강이며 krtour-map feature read와 독립적이다.
 3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -267,6 +271,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 — T-144
 - [x] backup 핫스왑 동일호스트 schema-swap 확정 — T-145
 - [x] 실시간 협업 백엔드 설계 + WS 계층 — T-128
+- [x] `users` 누락 컬럼 문서 정합 + `security_incidents` 테이블 추가 — T-138
 
 ## 다음 ADR 후보
 

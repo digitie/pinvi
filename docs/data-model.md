@@ -6,12 +6,11 @@
 `feature` schema의 데이터 모델은 `python-krtour-map`의 `docs/data-model.md` 참고.
 
 > **⚠️ 감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**: 본 문서와
-> `postgres-schema.md`에 다음이 누락/충돌이며 **T-137/T-138**에서 정정한다.
+> `postgres-schema.md`에 다음이 누락/충돌이며 **T-137/T-140 인접 작업**에서 정정한다.
 > ① `notice_plans` 명칭 충돌 → 큐레이션은 `curated_trip_plans`로 개명(ADR-029/DEC-03).
-> ② 누락 테이블: `security_incidents`, `curated_plan_pois`, `curated_plan_attachments`,
-> `feature_requests`(또는 큐 소유권 DEC-05). ③ 누락 `users` 컬럼: `password_hash`,
-> `nickname`, `gender`, `birth_year_month`, `residence_sigungu_code`, `email_status`.
-> ④ `trip_day_pois`: `budget/currency` 추가(D-10), `feature_id` nullable 검토(DEC-09).
+> ② 남은 누락 테이블: `curated_plan_pois`, `curated_plan_attachments`,
+> `feature_requests`(또는 큐 소유권 DEC-05). ③ `trip_day_pois`: `budget/currency`
+> 추가(D-10). `security_incidents`와 누락 `users` 컬럼 문서 정합은 T-138에서 반영했다.
 
 ## 1. 큰 그림
 
@@ -62,12 +61,20 @@
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
 | `user_id` | `uuid` (PK) | `gen_random_uuid()` |
-| `email` | `text` UNIQUE NOT NULL | 정규화된 lowercase |
+| `email` | `varchar(320)` UNIQUE NOT NULL | 가입/로그인 email |
+| `password_hash` | `varchar(255)` | Argon2id hash. OAuth-only 계정은 null 가능 |
+| `nickname` | `varchar(80)` | 표시 이름 |
+| `avatar_url` | `varchar(1024)` | RustFS 또는 OAuth 공급자 URL |
+| `avatar_kind` | `varchar(16)` | `default` 등 avatar source |
+| `gender` | `varchar(16)` | `demographic_use` 동의 시에만 저장 |
+| `birth_year_month` | `varchar(6)` | YYYYMM. `demographic_use` 동의 시에만 저장 |
+| `residence_sigungu_code` | `varchar(5)` | 거주 시군구. `demographic_use` 동의 시에만 저장 |
+| `status` | `varchar(32)` | `pending_verification` / `pending_profile` / `active` / `disabled` / `deleted` |
+| `roles` | `varchar(16)[]` | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']` |
 | `email_verified_at` | `timestamptz` | null이면 미인증 |
-| `display_name` | `text` | nullable |
-| `avatar_url` | `text` | RustFS 또는 OAuth 공급자 URL |
-| `status` | `text` | `active` / `suspended` / `deleted` |
-| `roles` | `text[]` | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']` |
+| `email_status` | `varchar(16)` | `active` / `bounced` / `complained` |
+| `is_active` | `boolean` | 서버 로그인 가능 여부 |
+| `deleted_at` | `timestamptz` | soft delete 시각 |
 | `created_at` | `timestamptz` NOT NULL DEFAULT now() | KST aware는 응용에서 변환 |
 | `updated_at` | `timestamptz` NOT NULL DEFAULT now() | trigger |
 
@@ -77,26 +84,31 @@
 |------|------|------|
 | `identity_id` | `uuid` (PK) | |
 | `user_id` | `uuid` NOT NULL → `app.users` | ON DELETE CASCADE |
-| `provider` | `text` NOT NULL | `kakao` / `naver` / `google` |
-| `provider_user_id` | `text` NOT NULL | 공급자 측 사용자 ID |
-| `provider_email` | `text` | nullable |
+| `provider` | `varchar(32)` NOT NULL | 현재 활성은 `google`; `naver`/`kakao`는 미래 provider |
+| `provider_user_id` | `varchar(255)` NOT NULL | 공급자 측 사용자 ID |
+| `provider_email` | `varchar(320)` | nullable |
+| `provider_email_verified` | `boolean` | provider가 확인한 email 여부 |
+| `display_name_snapshot` | `varchar(120)` | provider 표시명 snapshot |
 | `linked_at` | `timestamptz` NOT NULL | |
 | `last_login_at` | `timestamptz` | |
+| `created_at` | `timestamptz` NOT NULL | |
+| `updated_at` | `timestamptz` NOT NULL | |
 | UNIQUE | `(provider, provider_user_id)` | |
+| UNIQUE | `(user_id, provider)` | 사용자별 provider 1개 |
 
 #### `app.user_sessions`
 
-세션 모델은 ADR-010 결정 후 확정. 잠정안 (cookie session):
-
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
-| `session_id` | `uuid` (PK) | secure random |
+| `session_id` | `uuid` (PK) | `gen_random_uuid()` |
 | `user_id` | `uuid` NOT NULL → `app.users` | |
-| `created_at` | `timestamptz` NOT NULL | |
+| `session_token_hash` | `varchar(128)` UNIQUE NOT NULL | refresh token hash |
 | `expires_at` | `timestamptz` NOT NULL | |
 | `revoked_at` | `timestamptz` | nullable |
-| `ip` | `inet` | |
-| `user_agent` | `text` | |
+| `user_agent` | `varchar(512)` | |
+| `ip_address` | `inet` | |
+| `created_at` | `timestamptz` NOT NULL | |
+| `updated_at` | `timestamptz` NOT NULL | |
 
 #### `app.user_email_verifications`
 
@@ -104,12 +116,35 @@
 |------|------|------|
 | `verification_id` | `uuid` (PK) | |
 | `user_id` | `uuid` NOT NULL → `app.users` | |
-| `token_hash` | `text` NOT NULL | bcrypt/argon2 |
-| `email` | `text` NOT NULL | snapshot |
-| `purpose` | `text` | `signup` / `email_change` / `reset_password` |
-| `created_at` | `timestamptz` NOT NULL | |
+| `token_hash` | `varchar(128)` UNIQUE NOT NULL | verify/reset token hash |
+| `purpose` | `varchar(32)` | `signup` / `email_change` / `password_reset` |
 | `expires_at` | `timestamptz` NOT NULL | |
 | `used_at` | `timestamptz` | nullable |
+| `created_at` | `timestamptz` NOT NULL | |
+| `updated_at` | `timestamptz` NOT NULL | |
+
+#### `app.security_incidents`
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `incident_id` | `uuid` (PK) | |
+| `incident_type` | `varchar(64)` | `admin_export_anomaly`, `audit_chain_broken` 등 |
+| `severity` | `varchar(16)` | `low` / `medium` / `high` / `critical` |
+| `status` | `varchar(24)` | `open` / `acknowledged` / `resolved` / `false_positive` |
+| `source` | `varchar(64)` | 감지 소스 |
+| `summary` | `varchar(240)` | CPO 목록용 한 줄 설명 |
+| `details` | `jsonb` | 원인/근거 payload |
+| `affected_user_count` | `int` | 추정 영향 사용자 수 |
+| `notification_required` | `boolean` | 정보주체 통지 필요 판정 |
+| `assigned_cpo_user_id` | `uuid` → `app.users` | 담당 CPO, nullable |
+| `request_id` | `uuid` | 관련 API request id, nullable |
+| `detected_at` | `timestamptz` NOT NULL | 감지 시각 |
+| `acknowledged_at` | `timestamptz` | CPO 확인 시각 |
+| `resolved_at` | `timestamptz` | 종료 시각 |
+| `notified_at` | `timestamptz` | 사용자 통지 시각 |
+| `kisa_reported_at` | `timestamptz` | KISA 신고 시각 |
+| `created_at` | `timestamptz` NOT NULL | |
+| `updated_at` | `timestamptz` NOT NULL | |
 
 ### 2.2 여행 계획
 

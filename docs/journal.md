@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-138 사용자/보안 스키마 보강
+
+**작업**: 감사 D-02/D-03 범위의 `users` 문서 drift와 PIPA 침해 대응 테이블 누락을
+정리했다.
+
+**변경**:
+- `apps/api/app/models/security.py` — `SecurityIncident` 모델을 추가했다.
+- `apps/api/alembic/versions/20260606_0007_security_incidents.py` —
+  `app.security_incidents` 테이블, status/severity index, updated_at trigger를 추가했다.
+- `apps/api/tests/integration/test_security_incidents_schema.py` — Alembic 적용 후 모델
+  round-trip과 index 존재를 검증한다.
+- `docs/postgres-schema.md`, `docs/data-model.md` — 실제 `users` 모델/마이그레이션의
+  `password_hash`, `nickname`, demographic 선택 컬럼, `email_status` 등을 반영했다.
+- `docs/compliance/pipa.md` — `security_incidents` foundation 완료와 후속 CPO 알림을
+  분리했다.
+- `docs/resume.md`, `docs/tasks.md` — T-138 완료와 다음 비의존 후보 T-139를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy / `test_security_incidents_schema.py`
+- NTFS worktree: `git diff --check`, CodeGraph sync
+
+**다음**: T-139 동반자 초대 흐름 + 댓글 모델/`visibility` 정리.
+
 ## 2026-06-06 (codex) — T-128 실시간 협업 백엔드 설계 + WS 계층
 
 **작업**: Sprint 5 실시간 협업의 krtour-map 비의존 backend slice를 구현했다.
