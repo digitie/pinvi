@@ -1258,7 +1258,39 @@
 - **참조**: `docs/api/admin.md`, `docs/compliance/pipa.md`,
   `apps/api/app/models/audit.py`, `apps/api/app/services/admin_audit.py`.
 
+## ADR-035: Trip 실시간 협업은 단일 프로세스 in-memory WebSocket broker로 시작한다
+
+- **상태**: accepted
+- **날짜**: 2026-06-06
+- **결정자**: 구현 기준 백필 (T-128)
+- **컨텍스트**: Sprint 5 DoD는 `WS /ws/trips/{trip_id}` 기반 POI CRUD/reorder
+  broadcast와 presence를 요구한다. 현재 운영 모델은 Odroid M1S/N150 단일 노드 가족
+  베타이며, WebSocket 수평 확장보다 빠른 vertical slice와 명확한 HTTP optimistic lock
+  계약이 우선이다.
+- **결정**:
+  - `apps/api/app/services/realtime_broker.py`에 process-local in-memory broker를 둔다.
+    broker는 `trip_id -> connection set`을 관리한다.
+  - `WS /ws/trips/{trip_id}`는 access JWT cookie 또는 query token으로 인증하고,
+    `app.trips.owner_user_id` / `app.trip_companions.user_id` DB 조회로 권한을 확인한다.
+  - Trip/POI HTTP mutation은 DB commit 후 `trip.updated`, `poi.created`,
+    `poi.updated`, `poi.deleted`, `poi.reordered`를 같은 trip 채널에 publish한다.
+  - presence는 `presence.heartbeat` 기반으로 `viewing_day`와 online 상태를 broadcast한다.
+  - Sprint 5 운영에서는 WebSocket worker 1개 또는 sticky session을 전제로 한다.
+  - 다중 worker fan-out, durable replay, restart 이후 presence 보존이 필요해지면 Redis
+    Streams 또는 PostgreSQL LISTEN/NOTIFY 기반 broker ADR을 새로 쓴다.
+- **결과**:
+  - krtour-map HTTP feature read와 무관하게 TripMate 자체 실시간 협업 slice를 검증할 수
+    있다.
+  - worker 간 broadcast는 아직 보장하지 않는다.
+  - offline client replay와 event persistence는 제공하지 않는다.
+- **후속**:
+  - `apps/web/lib/websocket.ts`와 presence store / conflict dialog 연결.
+  - `apps/api/app/services/optimistic_lock.py` 분리 여부는 Trip/POI version 정책이
+    복잡해지는 시점에 재검토한다.
+- **참조**: `docs/architecture/websocket-broker.md`, `docs/api/websocket.md`,
+  `apps/api/app/api/v1/ws.py`, `apps/api/app/services/realtime_broker.py`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-035**
+- 다음 신규 ADR = **ADR-036**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

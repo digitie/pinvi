@@ -95,7 +95,7 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 - 수평 확장 (v2): Redis Streams 또는 PostgreSQL LISTEN/NOTIFY
 - broker는 trip별 connection set 관리 + 메시지 broadcast
 
-자세히는 `docs/architecture/websocket-broker.md` (Sprint 5 작성 예정).
+자세히는 `docs/architecture/websocket-broker.md` (ADR-035).
 
 ## 6. 인증 / 권한
 
@@ -114,12 +114,12 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 
 ### 백엔드
 
-- [ ] `apps/api/app/api/v1/ws.py` (FastAPI WebSocket)
-- [ ] `apps/api/app/services/realtime_broker.py` (단일 프로세스 in-memory)
+- [x] `apps/api/app/api/v1/ws.py` (FastAPI WebSocket)
+- [x] `apps/api/app/services/realtime_broker.py` (단일 프로세스 in-memory)
 - [ ] `apps/api/app/services/optimistic_lock.py` (`If-Match` 검증)
-- [ ] POI / Trip / Day CRUD 서비스에서 broker.publish() 호출
-- [ ] 연결 시 권한 검사 + heartbeat 30초 타임아웃
-- [ ] 통합 테스트 (httpx ASGI WebSocket client)
+- [x] POI / Trip CRUD route에서 broker.publish() 호출
+- [x] 연결 시 권한 검사 + heartbeat timeout
+- [x] 통합 테스트 (FastAPI TestClient WebSocket)
 
 ### 프론트 (`packages/api-client/src/websocket.ts`)
 
