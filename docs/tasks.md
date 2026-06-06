@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
+- [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -125,6 +125,10 @@
   `TRIPMATE_WEB_BASE_URL` 기반으로 수정, zoom 하한 5 정합, dangling
   `release-plan.md` 링크 제거, `python-kraddr-geo` 오타 정정, agent-guide 잔여
   bullet/trailer 정리)
+- [x] T-149 — Gemini 책임 목록 정정
+  (완료: 2026-06-06, README/AGENTS/CLAUDE/SKILL 및 integrations index의 현재 책임
+  표현을 ADR-020 기준 `AI companion 호출 계약`으로 정리. Gemini/Claude/Codex provider
+  구현은 별도 `tripmate-ai-companion` repo 책임)
 
 ## 보류
 
@@ -183,7 +187,7 @@
 - [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26)
 - [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
 - [ ] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027)
-- [ ] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
+- [x] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
 - [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
 - [ ] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
 
@@ -216,3 +220,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #16 | feat: 백엔드 features API + krtour-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 (client는 stub — 감사 C-01) |
 | PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
 | PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |
+| PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
