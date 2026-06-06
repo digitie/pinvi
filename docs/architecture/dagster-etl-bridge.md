@@ -18,28 +18,32 @@ location이다. krtour-map feature provider 적재는 최신 ADR-026 이후
 
 ## 2. 구조
 
+> ADR-045 Phase 6(T-210c): TripMate `apps/etl`에는 feature/provider 적재 Dagster가
+> 없으므로 krtour-map으로 이관할 레거시 스켈레톤도 없다. 아래는 현재 구현과
+> 계획(미구현)을 구분한 것이며, 상세 트리는 [`docs/runbooks/etl.md`](../runbooks/etl.md) §2.
+
+현재 구현(2026-06-06):
+
 ```
 apps/etl/
 ├── pyproject.toml
-├── tripmate/
-│   └── etl/
-│       ├── definitions.py
-│       ├── resources.py
-│       ├── schedules.py
-│       ├── sensors.py
-│       └── assets/
-│           ├── tripmate_kasi_special_days.py
-│           ├── tripmate_kasi_poi_rise_set.py
-│           ├── tripmate_telegram_weekly.py
-│           ├── tripmate_email_outbox.py
-│           ├── tripmate_pii_retention.py
-│           └── tripmate_location_log_archive.py
+├── tripmate/etl/
+│   ├── definitions.py     # code location (assets=[tripmate_kasi_special_days], jobs, schedules, sensors=[])
+│   ├── resources.py       # TripmateDatabaseResource, KasiResource
+│   ├── schedules.py       # kasi_special_days_job (KST 03:30)
+│   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
+│   └── assets/tripmate_kasi_special_days.py
 └── tests/
 ```
 
+계획(미구현, `app` schema 소유 job 후보): `sensors.py`(run_failure_sensor),
+`tripmate_telegram_weekly`(D-11) / `tripmate_email_outbox` / `tripmate_pii_retention` /
+`tripmate_location_log_archive`(DEC-10). POI 출몰시각은 별도 asset 파일이 아니라
+`jobs.py`의 one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
+
 ## 3. KASI assets
 
-### 3.1 `kasi_special_days_daily`
+### 3.1 `tripmate_kasi_special_days`
 
 - 하루 1회 KST 실행.
 - 실행일 기준 과거 6개월부터 미래 18개월까지 월 단위로 조회.

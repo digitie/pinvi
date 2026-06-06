@@ -9,6 +9,11 @@ ADR-027) 신설 우선순위·계약 회신 받기. ② 감사 후속 백로그 
 계열(T-123/T-149/T-150/T-143/T-147)을 먼저 처리(저위험). ③ feature read는 krtour HTTP
 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기 대기.
 
+**T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
+schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
+`dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`
+경계 가드. 남은 T-210d=T-066, T-210e는 krtour HTTP/OpenAPI 확정 후.
+
 ## 현재 상태
 
 **Sprint 2 핵심 DoD 마감 완료** (2026-06-01). OAuth G-4 + Notice copy + 통합

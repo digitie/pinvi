@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (claude) — T-210c(ADR-045 Phase 6) TripMate ETL 경계 정합
+
+**작업**: krtour-map ADR-045 Phase 6의 T-210c("TripMate `apps/etl` 레거시 Dagster
+이관/삭제") 중 TripMate가 지금 처리할 수 있는 부분을 수행했다.
+
+**확인**: `apps/etl`은 이미 `app` schema 소유 job만 보유(KASI 특일 asset +
+`kasi_poi_rise_set_job` + DB/KASI resource). feature/provider 적재 Dagster 코드는
+**없음** → krtour-map으로 이관/삭제할 레거시 스켈레톤 자체가 없다(코드 측 T-210c는 N/A).
+
+**변경(문서 phantom 스켈레톤 정합 + 코드 가드)**:
+- `docs/architecture/dagster-etl-bridge.md` §2 — 미존재 파일(`sensors.py`,
+  `tripmate_kasi_poi_rise_set/telegram_weekly/email_outbox/pii_retention/
+  location_log_archive`) 나열을 "현재 구현 vs 계획(미구현)"으로 정합. §3.1 asset명을
+  `kasi_special_days_daily` → 실제 `tripmate_kasi_special_days`로 정정.
+- `docs/runbooks/etl.md` §2 — 동일하게 구현/계획 분리 + T-210c 경계 노트.
+- `apps/etl/tripmate/etl/assets/__init__.py` — "feature/provider asset 추가 금지,
+  krtour-map 소유(ADR-003/026/045 T-210c)" 가드 docstring 추가.
+- `docs/tasks.md` — krtour-map ADR-045 Phase 6 TripMate 몫 매핑(T-210b/c 완료,
+  T-210d=T-066 대기, T-210e 대기).
+
 ## 2026-06-06 (codex) — T-119 회원 관리 Admin 보강
 
 **작업**: krtour-map과 무관한 admin 후속으로, 회원 목록 검색과 상세 PII reveal audit
