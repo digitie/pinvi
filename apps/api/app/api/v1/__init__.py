@@ -12,6 +12,7 @@ from app.api.v1 import (
     storage,
     trips,
     users,
+    ws,
 )
 from app.api.v1.admin import admin_router
 from app.webhooks import resend as resend_webhook
@@ -23,6 +24,7 @@ api_router.include_router(oauth.router)
 api_router.include_router(users.router)
 api_router.include_router(trips.router)
 api_router.include_router(pois.router)
+api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
 api_router.include_router(features.router)
 api_router.include_router(storage.router)

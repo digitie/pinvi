@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-128 실시간 협업 백엔드 설계 + WS 계층
+
+**작업**: Sprint 5 실시간 협업의 krtour-map 비의존 backend slice를 구현했다.
+
+**변경**:
+- `docs/decisions.md` ADR-035 — Trip WebSocket은 단일 프로세스 in-memory broker로
+  시작하고, 다중 worker fan-out/durable replay는 후속 ADR로 분리했다.
+- `apps/api/app/services/realtime_broker.py` — trip별 connection set, presence,
+  JSON envelope broadcast, 테스트 reset/count helper를 추가했다.
+- `apps/api/app/api/v1/ws.py` — `WS /ws/trips/{trip_id}` 인증(cookie/query token),
+  trip 권한 확인, heartbeat/cursor/error 수신 루프를 추가했다.
+- `apps/api/app/api/v1/{trips,pois}.py` — Trip/POI mutation 성공 후 `trip.updated`,
+  `poi.created/updated/deleted/reordered` 이벤트를 publish한다.
+- `docs/architecture/websocket-broker.md`, `docs/api/websocket.md` — broker 결정,
+  close code, presence/broadcast 범위와 구현 체크리스트를 최신화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-128 완료와 다음 비의존 후보 T-138을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy / realtime broker unit test / WS integration test /
+  Trip·POI 기존 통합 테스트
+- NTFS worktree: `git diff --check`
+
+**다음**: T-138 `users` 누락 컬럼 + `security_incidents` 테이블 추가.
+
 ## 2026-06-06 (codex) — T-145 backup schema-swap 확정
 
 **작업**: 감사 D-19 범위의 Backup/Restore 핫스왑 정책을 Odroid M1S/N150 단일 노드

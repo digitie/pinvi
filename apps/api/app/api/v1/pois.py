@@ -20,6 +20,7 @@ from app.services.poi import (
     soft_delete_poi,
     update_poi,
 )
+from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
     TripNotFoundError,
     TripPermissionError,
@@ -98,7 +99,15 @@ async def create_poi_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    return Envelope.of(_to_response(poi))
+    response = _to_response(poi)
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="poi.created",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={"poi": response.model_dump(mode="json")},
+        version=response.version,
+    )
+    return Envelope.of(response)
 
 
 @router.patch("/{poi_id}", response_model=Envelope[PoiResponse])
@@ -129,7 +138,19 @@ async def update_poi_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    return Envelope.of(_to_response(poi))
+    response = _to_response(poi)
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="poi.updated",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={
+            "poi_id": str(poi.attachment_id),
+            "changes": body.model_dump(exclude_unset=True, mode="json"),
+            "version": poi.version,
+        },
+        version=poi.version,
+    )
+    return Envelope.of(response)
 
 
 @router.delete("/{poi_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -148,6 +169,12 @@ async def delete_poi_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="poi.deleted",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={"poi_id": str(poi_id)},
+    )
 
 
 @router.post("/reorder", response_model=Envelope[list[PoiResponse]])
@@ -171,4 +198,17 @@ async def reorder_pois_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    return Envelope.of([_to_response(p) for p in updated])
+    response = [_to_response(p) for p in updated]
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="poi.reordered",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={
+            "moves": [
+                {"poi_id": str(poi.attachment_id), "new_sort_order": poi.sort_order}
+                for poi in updated
+            ]
+        },
+        version=max((poi.version for poi in updated), default=None),
+    )
+    return Envelope.of(response)

@@ -101,8 +101,8 @@
 
 ### ADR
 
-- 후속 ADR 후보(번호 미배정): WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis
-  Streams)
+- **ADR-035**: WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis Streams 또는
+  PostgreSQL LISTEN/NOTIFY)
 - 후속 ADR 후보(번호 미배정): optimistic lock + `If-Match` 정책
 - 후속 ADR 후보(번호 미배정): TripMate Dagster `app` schema job 표준 (KASI/알림/보존정책)
 - 후속 ADR 후보(번호 미배정): Loki retention 정책 (7일, Odroid 용량)

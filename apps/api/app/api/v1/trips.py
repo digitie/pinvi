@@ -12,6 +12,7 @@ from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate
+from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
     TripNotFoundError,
     TripPermissionError,
@@ -135,6 +136,16 @@ async def update_trip_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    await realtime_broker.publish_event(
+        trip_id=trip.trip_id,
+        event_type="trip.updated",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={
+            "changes": body.model_dump(exclude_unset=True, mode="json"),
+            "version": trip.version,
+        },
+        version=trip.version,
+    )
     return Envelope.of(_to_response(trip))
 
 

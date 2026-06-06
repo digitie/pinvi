@@ -56,14 +56,15 @@ admin `9012`).
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-034**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-035**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kraddr-geo v2 REST 직접), ADR-026 (krtour-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 krtour-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = krtour `make_feature_id`),
 ADR-029 (`notice_plans` 충돌 → 큐레이션은 `curated_trip_plans`), ADR-030 (외부 API
 규약 정본 + `/v1` 노출), ADR-031 (POI soft delete + `feature_id` nullable),
 ADR-032 (access JWT + httpOnly cookie), ADR-033 (`users.roles[]` Admin RBAC),
-ADR-034 (Admin audit hash chain). 다음 신규 = ADR-035. 2026-06-06 정합성 감사:
+ADR-034 (Admin audit hash chain), ADR-035 (Trip WebSocket in-memory broker). 다음
+신규 = ADR-036. 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
 v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `infra/`,

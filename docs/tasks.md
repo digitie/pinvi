@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
+- [ ] T-138 — `users` 누락 컬럼 + `security_incidents` 테이블 추가 (D-02,D-03,D-09)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -170,7 +170,7 @@
 - [ ] T-125 — feature_id 문자열化(코드의 UUID 가정 제거) (C-09; ADR-028)
 - [ ] T-126 — POI 생성 경로 단일화(`/trips/{id}/pois` 정본) (A-01,C-16)
 - [ ] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
-- [ ] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
+- [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
 - [ ] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13)
 - [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
 - [ ] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
@@ -233,3 +233,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #60 | fix: use db roles for geofence admin bypass | 2026-06-06 | T-142 |
 | PR #61 | docs: define trip search and export UX | 2026-06-06 | T-144 |
 | PR #62 | docs: finalize backup schema-swap restore | 2026-06-06 | T-145 |
+| PR #63 | feat: add trip realtime websocket broker | 2026-06-06 | T-128 |
