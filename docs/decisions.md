@@ -820,12 +820,13 @@
     - **자동**: 매일 03:00 KST (Dagster schedule 또는 systemd timer).
     - **수동**: `POST /admin/backup/snapshot` (admin role 전용, audit log).
   - **Restore (핫스왑)**:
-    - 1. `pg_restore`를 **신규 DB instance** 또는 **신규 schema**에 적용
-      (구체 정책은 Sprint 6 구현 시 PoC 후 결정).
-    - 2. 신규 DB / schema가 healthy하면 app `DATABASE_URL` cut-over
-      (rolling restart).
-    - 3. 구 DB / schema는 7일 보존 후 자동 삭제.
-    - 핫스왑 중 사용자 트래픽은 신규 DB로만 — 다운타임 최소.
+    - 1. `pg_restore`를 같은 Postgres database의 임시 schema
+      `app_restore_<ts>`에 적용한다. 신규 DB instance 방식은 쓰지 않는다.
+    - 2. restored schema가 healthy하면 짧은 write drain 후 schema rename으로
+      cut-over한다: `app` → `app_previous_<ts>`,
+      `app_restore_<ts>` → `app`.
+    - 3. previous schema는 N150/staging 7일, Odroid M1S 24시간 보존 후 자동 삭제한다.
+    - 핫스왑은 무중단이 아니라 near-zero downtime(목표 30~90초) schema-swap이다.
   - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
     훈련 (read-only mode + 가족 베타 사용자에게 안내).
   - **모니터링**: backup 성공/실패 → admin_audit_log + Grafana 대시보드.
@@ -833,6 +834,10 @@
 - **구현 보정 (2026-06-06)**:
   - PostgreSQL custom format은 단일 파일 artifact라 `pg_dump --jobs`와 함께 쓰지
     않는다. 병렬 처리는 restore 단계의 `pg_restore --jobs`에서만 적용한다.
+- **구현 보정 (2026-06-06, T-145)**:
+  - Odroid M1S / N150 단일 노드 예산을 고려해 신규 DB instance 방식은 폐기하고,
+    동일 database schema-swap으로 확정한다. SQLAlchemy metadata가 `app` schema를 직접
+    참조하므로 `DATABASE_URL` 교체가 아니라 schema rename이 cut-over다.
 - **근거**:
   - SPEC V8 RTO 1h / RPO 24h 요구
   - 사용자 데이터 (PII / trip / 동의 이력) 보호가 최우선
@@ -843,8 +848,11 @@
   - admin UI로 운영자가 직접 트리거 가능
 - **결과 (부정)**:
   - 구현 복잡도 ↑ (단순 pg_restore 대비)
-  - 임시로 구/신규 DB 모두 보유 → 디스크 2배
-  - cut-over 중 `app.audit_log` chain 손상 가능성 (Sprint 6 PoC에서 검증)
+  - restore schema와 previous schema 보존 중 일시적으로 `app` schema 데이터의 추가
+    디스크가 필요
+  - cut-over 중 짧은 write drain / API-Web restart가 필요
+  - restore는 point-in-time rollback이므로 snapshot 이후 audit row는 previous schema에
+    forensic 보존되고 canonical chain에서는 사라짐
 - **후속**:
   - `docs/runbooks/backup-restore.md` 신규 (본 PR) — 절차 + 트러블슈팅
   - `docs/architecture/backup-restore.md` 신규 — 핫스왑 아키텍처

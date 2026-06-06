@@ -73,65 +73,93 @@ scripts/restore-db.sh backup-20260601.dump
 
 다운타임 ~5-15분. 본격 사용은 staging 또는 emergency.
 
-## 5. Restore — 핫스왑 (Sprint 6 finalize, ADR-022)
+## 5. Restore — 핫스왑 (Sprint 6 T-111, T-145 확정)
+
+T-145 결정: **신규 DB instance 방식은 폐기**한다. Odroid M1S와 N150 단일 노드 운영에서
+별도 Postgres instance/container를 띄우면 RAM과 디스크 예산이 과하다. 핫스왑은 같은
+Postgres database 안에서 임시 restore schema를 만들고, cut-over 순간에 schema 이름을
+바꾸는 **동일호스트 schema-swap**으로 구현한다.
+
+이 저장소의 SQLAlchemy metadata와 Alembic은 `app` schema를 직접 참조한다
+(`apps/api/app/db/base.py`). 따라서 cut-over는 `DATABASE_URL` 교체가 아니라
+`app_restore_<ts>` → `app` schema rename이다.
 
 ### 5.1 워크플로
 
 ```
 1. snapshot 선택 (UI에서 admin)
    ↓
-2. 신규 DB schema (예: app_restore_20260601) 또는 신규 DB instance 준비
-   - PoC 후 결정 (Sprint 6 진입 시)
-   - 동일 호스트의 별 schema = 디스크 1.x배 / 단순
-   - 별 DB instance = 디스크 2배 / 격리 ↑
+2. precheck
+   - sha256 / pg_restore --list 검증
+   - restore schema 충돌 없음
+   - 여유 디스크 >= dump size × 2 + 20% safety margin
+   - backup/restore 동시 실행 없음
    ↓
-3. pg_restore → 신규 schema/instance
-   - 사용자 read-write 그대로 (구 schema가 primary)
+3. pg_restore → 임시 schema
+   - schema name: app_restore_YYYYMMDDHHMMSS
+   - custom dump의 app schema를 restore schema로 remap하는 전용 script 사용
+   - 사용자 read-write는 기존 app schema에서 계속 처리
    ↓
-4. 신규 schema healthcheck:
+4. restore schema healthcheck
    - app.users / app.trips 행 수 정상
-   - audit_chain 검증 (verify-chain endpoint)
-   - 샘플 쿼리 응답시간
+   - restored audit chain 검증
+   - 샘플 trip/poi query 응답시간
+   - migration version / 필수 extension 접근 확인
    ↓
 5. cut-over:
-   - app DATABASE_URL 환경변수 교체 (Docker secret / Compose env)
-   - app rolling restart (api 1개씩 1초 간격)
-   - 신규 트래픽은 신규 schema로
+   - 짧은 write drain/read-only 진입
+   - API/Web 연결 종료
+   - transaction 안에서 schema rename:
+     app → app_previous_YYYYMMDDHHMMSS
+     app_restore_YYYYMMDDHHMMSS → app
+   - 권한 재부여 + API/Web 재시작
    ↓
-6. 구 schema → 7일 보존 후 자동 DROP
-   - admin이 강제로 수동 DROP 가능
-   - 7일 동안 read-only 접근 가능 (debug)
+6. previous schema 보존 후 DROP
+   - N150/staging 기본 7일
+   - Odroid M1S 기본 24시간 (디스크 여유 부족 시 즉시 drop 가능)
+   - 보존 중에는 forensic/debug read-only만 허용
 ```
+
+cut-over 구간은 무중단이 아니라 **짧은 near-zero downtime**으로 본다. 목표는
+restore 준비 시간을 사용자 트래픽과 병렬로 처리하고, 쓰기 중단을 schema rename +
+프로세스 재시작 시간(대략 30~90초)으로 줄이는 것이다. RTO 1h / RPO 24h 요구에는
+충분하다.
 
 ### 5.2 UI 흐름
 
 `/admin/backup`:
 - snapshot 목록 (날짜 / 크기 / 검증 상태)
-- "Restore (핫스왑)" 버튼 → `RestoreHotswapDialog`
+- "Restore (schema-swap)" 버튼 → `RestoreHotswapDialog`
 - 다이얼로그:
   - snapshot 선택 + 사유 입력 (audit log 강제)
-  - "시작" 클릭 → progress bar (preparing / restoring / validating / switching)
+  - precheck 결과 표시 (checksum, disk guard, active restore lock)
+  - "시작" 클릭 → progress bar (preparing / restoring / validating / draining / switching)
   - 각 단계 estimate + 실시간 로그 표시 (WebSocket 또는 SSE)
   - 실패 시 자동 rollback (cut-over 전이면 안전)
-- 완료 후 "구 schema 보존 기한: 7일"
+- 완료 후 previous schema 보존 기한 표시 (N150 7일 / Odroid 24시간)
 
 ### 5.3 audit chain 안전성
 
-cut-over 중 `app.audit_log` chain은 다음을 보장:
+restore는 point-in-time rollback이다. snapshot 이후 구 schema에 쌓인 audit row는
+canonical chain에서 사라지고, previous schema에 forensic 목적으로 보존된다.
 
-- 구 schema의 chain 마지막 hash → 신규 schema chain의 prev_hash로 이어짐
-  (pg_restore가 모든 row를 그대로 복사 → chain 무결성 유지)
-- cut-over 시점 이후 추가되는 audit log는 신규 chain
-- Sprint 6 PoC에서 검증 — `verify-chain` endpoint가 cut-over 전후 모두 통과해야
+- restored `app.admin_audit_logs` / `app.location_access_log` chain은 snapshot 시점까지
+  자체 무결성을 유지해야 한다.
+- cut-over 후 첫 admin audit row는 restored chain의 마지막 hash를 `prev_hash`로 삼는다.
+- previous schema의 snapshot 이후 audit row는 canonical이 아니며, restore reflection에
+  별도 보존 위치와 폐기 시각을 기록한다.
+- Sprint 6 PoC에서 `verify-chain` endpoint가 cut-over 전후 모두 통과해야 한다.
 
 ### 5.4 실패 / rollback
 
 | 실패 지점 | 자동 처리 |
 |----------|----------|
-| 신규 schema 준비 실패 | abort, 구 schema 유지 |
-| pg_restore 실패 | 신규 schema DROP, 구 schema 유지 |
-| healthcheck 실패 | 신규 schema DROP, 구 schema 유지 |
-| cut-over 후 app 오류 | DATABASE_URL 구 schema로 되돌리기 + rolling restart |
+| precheck 실패 | abort, 기존 `app` 유지 |
+| restore schema 준비 실패 | abort, 기존 `app` 유지 |
+| pg_restore 실패 | restore schema DROP, 기존 `app` 유지 |
+| healthcheck 실패 | restore schema DROP, 기존 `app` 유지 |
+| cut-over 전 drain 실패 | abort, 기존 `app` 유지 |
+| cut-over 후 app 오류 | API/Web 정지 → `app`을 `app_failed_<ts>`로, `app_previous_<ts>`를 `app`으로 rename → 재시작 |
 | cut-over 후 1시간 내 audit chain 깨짐 발견 | manual intervention (운영자 판단) |
 
 ## 6. 분기 훈련

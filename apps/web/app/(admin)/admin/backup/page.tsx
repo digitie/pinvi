@@ -172,8 +172,8 @@ export default function AdminBackupPage() {
 
       <Section title="Restore">
         <p className="text-sm text-muted">
-          핫스왑 restore는 Sprint 6 PoC에서 신규 schema/DB cut-over 정책을 확정한 뒤
-          활성화한다. 현재 복구는 `scripts/restore-db.sh`와 runbook 절차로 수행한다.
+          핫스왑 restore는 Sprint 6 T-111에서 동일 DB schema-swap 워크플로로 활성화한다.
+          현재 복구는 `scripts/restore-db.sh`와 runbook 절차로 수행한다.
         </p>
       </Section>
     </AdminPage>
