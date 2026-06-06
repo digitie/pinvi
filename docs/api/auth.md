@@ -318,15 +318,21 @@ GET /auth/oauth/google/callback?code=...&state=...
 3. Google userinfo 호출 → `provider_user_id`, `email`, `email_verified`
 4. `app.user_oauth_identities` 조회/upsert
 5. 로그인 / 신규 가입 분기:
-   - Google `email_verified=true` → 자동 user 생성 또는 기존 user 연결
+   - 기존 identity(`provider + provider_user_id`) 있음 → 해당 user 로그인
+   - 기존 identity 없음 + 같은 이메일 로컬 계정 있음 → 자동 연결 금지,
+     `OAUTH_ACCOUNT_LINK_REQUIRED`
+   - 기존 identity 없음 + Google `email_verified=true` + 신규 이메일 → provider-only user 생성
+   - Google 또는 TripMate 이메일 인증 불확실 → `OAUTH_EMAIL_UNVERIFIED`
    - Naver/Kakao → 미래 작업. 현재 callback route 없음.
 
 응답:
 
 - 성공: 303 → `${return_to}` + Set-Cookie 두 개
 - 실패: 303 → `${TRIPMATE_WEB_BASE_URL}/login?error=<code>&error_description=...`
-  - 현재 Google 구현: `OAUTH_CALLBACK_INVALID` / `OAUTH_PROVIDER_DENIED` /
-    `OAUTH_STATE_INVALID` / `OAUTH_PROVIDER_ERROR`
+  - `mode=link` state 소비 뒤의 실패는 `return_to`(기본 `/profile`)로 redirect한다.
+  - 현재 Google 구현: `OAUTH_ACCOUNT_LINK_REQUIRED` / `OAUTH_CALLBACK_INVALID` /
+    `OAUTH_EMAIL_UNVERIFIED` / `OAUTH_PROVIDER_DENIED` / `OAUTH_STATE_INVALID` /
+    `OAUTH_PROVIDER_ERROR`
   - Naver/Kakao 후속 구현 시 provider별 세부 code를 추가한다.
 
 ### 6.4 `POST /auth/oauth/google/link`

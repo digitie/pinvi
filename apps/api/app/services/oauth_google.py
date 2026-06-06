@@ -4,10 +4,9 @@
 
 핵심 보안 정책 (G-4 안전 매칭):
 - 기존 oauth identity (provider + provider_user_id) 가 있으면 그 사용자로 로그인.
-- 없고, **Google이 email_verified=true 로 보증**하고 같은 이메일의 로컬 계정이
-  있으면 → 자동 연결 (link). email_verified=false 면 절대 자동 연결하지 않는다
+- 없고, 같은 이메일의 로컬 계정이 있으면 → 자동 연결하지 않고 명시 연결을 요구한다
   (계정 탈취 방지).
-- 그 외에는 신규 사용자 생성.
+- Google이 email_verified=true 로 보증한 신규 이메일만 provider-only 사용자로 만든다.
 
 HTTP 토큰 교환 / userinfo 조회는 `exchange_code_for_claims` 로 분리 — 통합
 테스트에서 claims 를 직접 주입(`resolve_google_login`)해 HTTP 없이 매칭 로직만
@@ -51,6 +50,14 @@ class OAuthStateInvalidError(OAuthError):
 
 class OAuthProviderError(OAuthError):
     code = "OAUTH_PROVIDER_ERROR"
+
+
+class OAuthAccountLinkRequiredError(OAuthError):
+    code = "OAUTH_ACCOUNT_LINK_REQUIRED"
+
+
+class OAuthEmailUnverifiedError(OAuthError):
+    code = "OAUTH_EMAIL_UNVERIFIED"
 
 
 @dataclass
@@ -243,44 +250,28 @@ async def resolve_google_login(
         await db.refresh(user)
         return OAuthLoginResult(user=user, created_user=False, linked_existing=False)
 
-    # 2) Google이 이메일 보증 + 같은 이메일 로컬 계정 → 안전 연결
-    if claims.email and claims.email_verified:
-        existing = await db.scalar(
-            select(User).where(User.email == claims.email, User.deleted_at.is_(None))
-        )
-        if existing is not None:
-            db.add(
-                UserOAuthIdentity(
-                    user_id=existing.user_id,
-                    provider="google",
-                    provider_user_id=claims.provider_user_id,
-                    provider_email=claims.email,
-                    provider_email_verified=claims.email_verified,
-                    display_name_snapshot=claims.display_name,
-                    linked_at=now,
-                    last_login_at=now,
-                )
-            )
-            await db.commit()
-            await db.refresh(existing)
-            log.info("oauth.linked_existing", user_id=str(existing.user_id), provider="google")
-            return OAuthLoginResult(user=existing, created_user=False, linked_existing=True)
+    if not claims.email or not claims.email_verified:
+        raise OAuthEmailUnverifiedError("Google 계정의 이메일 인증을 확인할 수 없습니다.")
 
-    # 3) 신규 사용자 생성.
-    #    email_verified=true 인 경우에만 claims.email 을 계정 이메일로 신뢰한다.
-    #    미인증이면 — 같은 이메일의 로컬 계정과 충돌(UNIQUE)할 수 있고, 무엇보다
-    #    Google이 보증하지 않은 주소이므로 — provider-namespaced placeholder 를 쓴다.
-    #    (G-4: 미인증 이메일을 신뢰 경로에 올리지 않는다.)
-    if claims.email and claims.email_verified:
-        account_email = claims.email
-    else:
-        account_email = f"google_{claims.provider_user_id}@no-email.tripmate.local"
+    # 2) 같은 이메일 로컬 계정 → 자동 연결 금지, 사용자가 로그인 후 profile에서 명시 연결.
+    existing = await db.scalar(
+        select(User).where(User.email == claims.email, User.deleted_at.is_(None))
+    )
+    if existing is not None:
+        if existing.email_verified_at is None:
+            raise OAuthEmailUnverifiedError("TripMate 이메일 인증을 먼저 완료해 주세요.")
+        raise OAuthAccountLinkRequiredError(
+            "이미 같은 이메일의 TripMate 계정이 있습니다. 이메일로 로그인한 뒤 "
+            "프로필에서 Google을 연결해 주세요."
+        )
+
+    # 3) 신규 사용자 생성. Google이 email_verified=true 로 보증한 이메일만 계정 식별자로 쓴다.
     user = User(
-        email=account_email,
+        email=claims.email,
         password_hash=None,
         nickname=claims.display_name,
-        status="active" if claims.email_verified else "pending_profile",
-        email_verified_at=now if claims.email_verified else None,
+        status="active",
+        email_verified_at=now,
     )
     db.add(user)
     await db.flush()
@@ -309,6 +300,9 @@ async def link_google_to_user(
     claims: GoogleClaims,
 ) -> UserOAuthIdentity:
     """로그인된 사용자가 명시적으로 Google 계정 연결 (mode=link)."""
+    if not claims.email or not claims.email_verified:
+        raise OAuthEmailUnverifiedError("Google 계정의 이메일 인증을 확인할 수 없습니다.")
+
     existing = await db.scalar(
         select(UserOAuthIdentity).where(
             UserOAuthIdentity.provider == "google",
@@ -316,13 +310,33 @@ async def link_google_to_user(
         )
     )
     if existing is not None and existing.user_id != user_id:
-        raise OAuthError("이 Google 계정은 다른 사용자에 연결되어 있습니다.")
+        raise OAuthAccountLinkRequiredError("이 Google 계정은 다른 사용자에 연결되어 있습니다.")
     now = datetime.now(UTC)
     if existing is not None:
         existing.last_login_at = now
         await db.commit()
         await db.refresh(existing)
         return existing
+
+    linked_google = await db.scalar(
+        select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == "google",
+            UserOAuthIdentity.user_id == user_id,
+        )
+    )
+    if linked_google is not None:
+        raise OAuthAccountLinkRequiredError("이미 다른 Google 계정이 연결되어 있습니다.")
+
+    email_owner = await db.scalar(
+        select(User).where(
+            User.email == claims.email,
+            User.user_id != user_id,
+            User.deleted_at.is_(None),
+        )
+    )
+    if email_owner is not None:
+        raise OAuthAccountLinkRequiredError("이 Google 이메일은 다른 TripMate 계정과 일치합니다.")
+
     identity = UserOAuthIdentity(
         user_id=user_id,
         provider="google",

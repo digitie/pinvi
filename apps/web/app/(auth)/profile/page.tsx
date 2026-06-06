@@ -20,6 +20,19 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+const PROFILE_OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  OAUTH_ACCOUNT_LINK_REQUIRED:
+    '이 Google 계정은 다른 TripMate 계정과 충돌합니다. 연결할 계정을 다시 확인해 주세요.',
+  OAUTH_EMAIL_UNVERIFIED:
+    'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 연결해 주세요.',
+  OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+  OAUTH_STATE_INVALID: 'Google 연결 요청이 만료되었습니다. 다시 시작해 주세요.',
+};
+
+function getProfileOAuthErrorMessage(code: string) {
+  return PROFILE_OAUTH_ERROR_MESSAGES[code] ?? 'Google 연결을 완료하지 못했습니다.';
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const [me, setMe] = useState<AuthUser | null>(null);
@@ -59,6 +72,14 @@ export default function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('error');
+    if (code) {
+      setError(getProfileOAuthErrorMessage(code));
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const onLinkGoogle = async () => {
     setAction('link-google');
     setError(null);
@@ -67,7 +88,11 @@ export default function ProfilePage() {
       const result = await authApi(apiClient).linkGoogleOAuth({ return_to: '/profile' });
       window.location.assign(result.authorize_url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Google 연결을 시작하지 못했습니다.');
+      if (err instanceof ApiError && err.code in PROFILE_OAUTH_ERROR_MESSAGES) {
+        setError(getProfileOAuthErrorMessage(err.code));
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Google 연결을 시작하지 못했습니다.');
+      }
       setAction(null);
     }
   };

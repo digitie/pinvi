@@ -2,6 +2,44 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-118 Google OAuth 계정 매칭 UX
+
+**작업**: krtour-map과 무관한 인증 UX 후속으로, Google OAuth의 같은 이메일 자동
+연결을 제거하고 명시 연결 안내/충돌 메시지를 보강했다. Naver/Kakao는 계속 T-122
+미래 작업으로 둔다.
+
+**변경**:
+- `apps/api/app/services/oauth_google.py` — 같은 이메일 로컬 계정이 있으면
+  `OAUTH_ACCOUNT_LINK_REQUIRED`를 발생시켜 자동 연결하지 않는다. Google 이메일
+  인증 불확실성은 `OAUTH_EMAIL_UNVERIFIED`로 거부한다.
+- `apps/api/app/api/v1/oauth.py` — link-mode callback 실패는 `/login`이 아니라
+  state의 `return_to`(`/profile`)로 redirect한다.
+- `apps/web/app/(auth)/login/page.tsx`, `apps/web/app/(auth)/profile/page.tsx` —
+  계정 매칭/연결 충돌 메시지를 code 기반으로 표시한다.
+- `apps/api/tests/integration/test_oauth_google.py`,
+  `apps/web/e2e/oauth-account-match.e2e.ts` — 자동 연결 금지, profile 충돌 redirect,
+  Naver/Kakao 미노출 e2e를 보강했다.
+- `docs/api/auth.md`, `docs/integrations/social-login.md`, `docs/tasks.md`,
+  `docs/resume.md` — OAuth 매칭 계약과 다음 비의존 후보(T-119)를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run ruff format app tests/integration/test_oauth_google.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/integration/test_oauth_google.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror: `uv run pytest -s tests/integration/test_oauth_google.py -q`
+  — 18 passed
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... oauth-account-match.e2e.ts`
+  — 2 passed
+
+**다음**: T-119 회원 관리 Admin 보강.
+
 ## 2026-06-06 (codex) — T-117 회원가입 약관 동의
 
 **작업**: krtour-map과 무관한 가입 UX/컴플라이언스 후보로, 회원가입 단계에서
