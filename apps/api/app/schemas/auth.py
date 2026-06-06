@@ -6,13 +6,29 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+from app.schemas.consent import REQUIRED_CONSENTS, ConsentItem
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
     nickname: str = Field(min_length=1, max_length=80)
+    consents: list[ConsentItem] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_required_consents(self) -> RegisterRequest:
+        provided: set[str] = set()
+        for item in self.consents:
+            if item.consent_type in provided:
+                raise ValueError(f"동의 항목 중복: {item.consent_type}")
+            provided.add(item.consent_type)
+
+        missing = REQUIRED_CONSENTS - provided
+        if missing:
+            raise ValueError(f"필수 동의 누락: {sorted(missing)}")
+        return self
 
 
 class UserResponse(BaseModel):

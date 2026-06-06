@@ -126,6 +126,7 @@ async def register(body: RegisterRequest, db: DbSession) -> Envelope[RegisterRes
             email=str(body.email),
             password=body.password,
             nickname=body.nickname,
+            consents=body.consents,
         )
     except EmailAlreadyUsedError as exc:
         raise HTTPException(

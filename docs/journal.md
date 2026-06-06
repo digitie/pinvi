@@ -2,6 +2,45 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-117 회원가입 약관 동의
+
+**작업**: krtour-map과 무관한 가입 UX/컴플라이언스 후보로, 회원가입 단계에서
+필수 약관 동의를 받고 `app.user_consents`에 저장하도록 보강했다.
+
+**변경**:
+- `apps/api/app/schemas/auth.py`, `packages/schemas/src/auth.ts` —
+  `RegisterRequest`에 `consents` 배열을 추가하고 필수 4종 동의 누락/중복을 검증한다.
+- `apps/api/app/services/user_registration.py`, `apps/api/app/api/v1/auth.py` —
+  가입 트랜잭션 안에서 `UserConsent` row를 생성한다.
+- `apps/api/app/core/errors.py` — Pydantic validator의 `ctx.error` 객체가 표준
+  validation 응답 직렬화를 깨지 않도록 JSON-safe 변환을 추가했다.
+- `apps/web/app/(auth)/signup/page.tsx` — 필수 전체 동의, 필수 4종 체크박스,
+  선택 `marketing` 동의를 추가하고 필수 동의 전 제출을 막는다.
+- `docs/api/auth.md`, `docs/compliance/lbs-act.md`, `docs/tasks.md`, `docs/resume.md`
+  — 회원가입 동의 계약과 다음 비의존 후보(T-118)를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror:
+  `uv run pytest -s tests/unit/test_schemas.py tests/integration/test_register_consents.py -q`
+  — 9 passed
+- WSL2 ext4 mirror:
+  `uv run ruff format --check app tests/unit/test_schemas.py tests/integration/test_register_consents.py`
+- WSL2 ext4 mirror:
+  `uv run ruff check app tests/unit/test_schemas.py tests/integration/test_register_consents.py`
+- WSL2 ext4 mirror: `uv run mypy --strict app`
+- WSL2 ext4 mirror:
+  `npm run typecheck --workspace packages/schemas`,
+  `npm run typecheck --workspace packages/api-client`,
+  `npm run typecheck --workspace apps/web`,
+  `npm run lint --workspace apps/web`,
+  `npm run build --workspace apps/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test ... signup-consents.e2e.ts`
+  — 1 passed
+
+**다음**: T-118 Google OAuth 계정 매칭 UX 보강. Naver/Kakao OAuth는 T-122 미래
+작업으로 유지한다.
+
 ## 2026-06-06 (claude) — 문서·구현 정합성 전수 감사 + krtour-map 요구사항 명세
 
 **작업**: Sprint 1~4 중 계획 변경·Task 분절로 누적된 모순·불일치·누락을 문서 전체 +

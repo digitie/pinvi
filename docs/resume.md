@@ -116,6 +116,10 @@ cut-over와 `RestoreHotswapDialog`는 T-111로 유지한다.
 **T-116 OAuth provider 범위 정리** (2026-06-06 codex) — 현재 OAuth provider는
 Google만 활성이다. `/auth/oauth/providers`는 Google만 반환하고, Naver/Kakao는 미래
 작업(T-122)으로 보류한다.
+**T-117 회원가입 약관 동의** (2026-06-06 codex) — `POST /auth/register`가 필수
+4종 동의(`tos`, `privacy`, `lbs_tos`, `location_collection`)를 요구하고,
+가입 트랜잭션 안에서 `app.user_consents`에 저장한다. `/signup` 화면은 필수 전체
+동의와 선택 `marketing` 동의를 제공하고, 필수 동의 전 제출을 막는다.
 
 ## 다음 한 작업
 
@@ -125,11 +129,11 @@ Google만 활성이다. `/auth/oauth/providers`는 Google만 반환하고, Naver
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-117 회원가입 약관 동의 화면 + `user_consents` 저장 보강.
-   `docs/api/auth.md`, `docs/data-model.md`, `docs/compliance/data-policy.md`,
-   `docs/compliance/pipa.md`를 먼저 확인한다.
-3. **이후 비의존 후보** — T-118 Google OAuth 계정 매칭 UX 보강,
-   T-119 회원 관리 Admin 보강, T-120 여행계획 Admin, T-121 POI Admin.
+2. **다음 비의존 후보** — T-118 Google OAuth 계정 매칭 UX 보강. 같은 이메일 기존
+   계정 자동 연결 금지/안내, profile 연결 충돌 메시지, Naver/Kakao 제외 정책을 먼저
+   확인한다.
+3. **이후 비의존 후보** — T-119 회원 관리 Admin 보강, T-120 여행계획 Admin,
+   T-121 POI Admin.
 4. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 
@@ -191,6 +195,7 @@ Naver/Kakao OAuth는 현재 사용하지 않는다. 후속 provider 구현은 T-
 - [x] 한국 전용 geofencing FastAPI fallback — T-109
 - [x] Backup snapshot foundation + `/admin/backup` 1차 UI — T-115
 - [x] OAuth provider 범위 Google-only 정리 — T-116
+- [x] 회원가입 약관 동의 화면 + `user_consents` 저장 보강 — T-117
 
 ## 다음 ADR 후보 (Sprint 진입 시 박음)
 

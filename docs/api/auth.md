@@ -31,7 +31,14 @@ Content-Type: application/json
 {
   "email": "user@example.com",
   "password": "MinLen8...",
-  "nickname": "user-nick"
+  "nickname": "user-nick",
+  "consents": [
+    { "consent_type": "tos", "version": "v1.0" },
+    { "consent_type": "privacy", "version": "v1.0" },
+    { "consent_type": "lbs_tos", "version": "v1.0" },
+    { "consent_type": "location_collection", "version": "v1.0" },
+    { "consent_type": "marketing", "version": "v1.0" }
+  ]
 }
 ```
 
@@ -52,6 +59,10 @@ Content-Type: application/json
 ```
 
 - Argon2id로 `password_hash` 저장 (passlib 또는 `argon2-cffi`)
+- 가입 화면에서 필수 4종 동의(`tos`, `privacy`, `lbs_tos`, `location_collection`)를
+  받아 `app.user_consents`에 같은 트랜잭션으로 저장한다.
+- `marketing`은 선택 동의다. `demographic_use`는 성별/생년월/거주지 입력이 있는
+  프로필 보강 단계에서만 받는다.
 - `app.user_email_verifications` row + Resend로 verify 메일 발송
   (`TRIPMATE_RESEND_API_KEY` 미설정 시 console-log 모드)
 - Resend HTTP 오류 → `503 SERVICE_UNAVAILABLE` + 트랜잭션 롤백
@@ -61,6 +72,7 @@ Content-Type: application/json
 
 - `409 EMAIL_ALREADY_USED` — 동일 email 활성 row 있음
 - `422 VALIDATION_ERROR` — 형식/길이/약한 비밀번호
+- `422 VALIDATION_ERROR` — 필수 약관 동의 누락 또는 동의 항목 중복
 - `429 RATE_LIMITED`
 
 ### 2.2 `POST /auth/verify-email`
