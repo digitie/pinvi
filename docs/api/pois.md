@@ -50,6 +50,8 @@ Content-Type: application/json
   `app.trip_poi_rise_sets.status='pending_fetch'` row를 만들고, Dagster one-shot job이
   실제 KASI 호출을 처리한다. 생성 응답 시점에는 `rise_set`이 없거나 `pending`일 수
   있다.
+- POI 날짜/좌표가 이후 변경되어도 `rise_set`은 자동 재조회하지 않는다. 저장된 값은
+  생성 당시 snapshot 기준이며, refresh action은 후속 PR에서 별도 추가한다.
 - `sort_order` 충돌 시 (`(day_index, sort_order COLLATE "C")` UNIQUE) → `409`
 
 응답 201: 생성된 POI. 선택 필드:

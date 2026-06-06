@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-147 잔여 문서 정정
+
+**작업**: 감사 D-23/D-25 범위의 KASI rise/set 재계산 정책과 Gemini 문서 SQL 문법을
+정리했다.
+
+**변경**:
+- `docs/integrations/kasi.md`, `docs/api/pois.md` — POI rise/set은 생성 당시
+  `locdate`/좌표 snapshot 기준 1회 저장하며, 날짜/좌표 변경 시 자동 재조회하지 않는다고
+  명시했다. 명시적 refresh action은 후속 PR 대상이다.
+- `docs/integrations/gemini.md` — partial unique index를 table constraint가 아니라
+  `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL` PostgreSQL 문법으로 정정했다.
+- `docs/resume.md`, `docs/tasks.md` — T-147 완료와 다음 비의존 후보 T-142를 반영했다.
+
+**검증**:
+- NTFS worktree: `rg`로 미결 rise/set 문구와 invalid inline partial unique 문법 검색
+- NTFS worktree: `git diff --check`
+
+**다음**: T-142 geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리.
+
 ## 2026-06-06 (codex) — T-143 지도/소셜 문서 정정
 
 **작업**: 감사 D-15/D-21/D-22 범위의 지도 클라이언트, 소셜 로그인 provider,

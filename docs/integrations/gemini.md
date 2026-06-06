@@ -34,9 +34,12 @@ CREATE TABLE app.user_provider_keys (
   last_verification_status varchar(32),                 -- 'ok' | 'invalid' | 'rate_limited'
   created_at               timestamptz NOT NULL DEFAULT now(),
   updated_at               timestamptz NOT NULL DEFAULT now(),
-  deleted_at               timestamptz,
-  UNIQUE (user_id, provider) WHERE deleted_at IS NULL   -- partial unique
+  deleted_at               timestamptz
 );
+
+CREATE UNIQUE INDEX user_provider_keys_active_provider_uidx
+  ON app.user_provider_keys (user_id, provider)
+  WHERE deleted_at IS NULL;
 ```
 
 ### 2.2 `app.gemini_research_runs`
