@@ -1,6 +1,6 @@
 """회원가입 흐름 — `docs/api/auth.md` §2.
 
-Sprint 1: 일반 가입 + verify. 소셜 / 동의 / 위치 audit는 Sprint 2에서.
+이메일 가입 + 필수 약관 동의 저장 + verify email queue.
 """
 
 from __future__ import annotations
@@ -22,7 +22,9 @@ from app.core.security import (
 )
 from app.models.session import UserSession
 from app.models.user import User
+from app.models.user_consent import UserConsent
 from app.models.user_email_verification import UserEmailVerification
+from app.schemas.consent import ConsentItem
 from app.services.email_service import enqueue_password_reset_email, enqueue_verification_email
 
 log = get_logger("auth")
@@ -69,6 +71,7 @@ async def register_user(
     email: str,
     password: str,
     nickname: str,
+    consents: list[ConsentItem],
 ) -> RegistrationResult:
     existing = await db.scalar(select(User).where(User.email == email, User.deleted_at.is_(None)))
     if existing is not None:
@@ -83,12 +86,23 @@ async def register_user(
     db.add(user)
     await db.flush()  # user_id 발급
 
+    now = datetime.now(UTC)
+    for item in consents:
+        db.add(
+            UserConsent(
+                user_id=user.user_id,
+                consent_type=item.consent_type,
+                version=item.version,
+                agreed_at=now,
+            )
+        )
+
     raw_token = generate_opaque_token(32)
     verification = UserEmailVerification(
         user_id=user.user_id,
         token_hash=_hash_token(raw_token),
         purpose="signup",
-        expires_at=datetime.now(UTC) + timedelta(hours=24),
+        expires_at=now + timedelta(hours=24),
     )
     db.add(verification)
     dispatched = await enqueue_verification_email(

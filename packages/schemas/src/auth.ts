@@ -1,11 +1,48 @@
 import { z } from 'zod';
 import { Iso8601Schema } from './common';
+import { ConsentTypeSchema } from './user';
+
+const RequiredRegisterConsentTypes = new Set([
+  'tos',
+  'privacy',
+  'lbs_tos',
+  'location_collection',
+]);
+
+const RegisterConsentItemSchema = z.object({
+  consent_type: ConsentTypeSchema,
+  version: z.string().min(1).max(32),
+});
 
 /** 회원가입 요청. `docs/api/auth.md` §2.1. */
 export const RegisterRequestSchema = z.object({
   email: z.string().email().max(320),
   password: z.string().min(8).max(200),
   nickname: z.string().min(1).max(80),
+  consents: z.array(RegisterConsentItemSchema).min(1),
+}).superRefine((value, ctx) => {
+  const provided = new Set<string>();
+  for (const item of value.consents) {
+    if (provided.has(item.consent_type)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['consents'],
+        message: `동의 항목 중복: ${item.consent_type}`,
+      });
+      return;
+    }
+    provided.add(item.consent_type);
+  }
+
+  for (const consentType of RequiredRegisterConsentTypes) {
+    if (!provided.has(consentType)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['consents'],
+        message: `필수 동의 누락: ${consentType}`,
+      });
+    }
+  }
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 

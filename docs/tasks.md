@@ -12,8 +12,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-117 — 회원가입 약관 동의 화면 + `user_consents` 저장 보강
-  (krtour-map 비의존)
 - [ ] T-118 — Google OAuth 계정 매칭 / profile 연결 UX 보강
   (아이디 매칭 안내, Naver/Kakao 제외)
 - [ ] T-119 — 회원 관리 Admin 보강 (검색/상태 필터/상세 audit UX)
@@ -110,6 +108,9 @@
 - [x] T-116 — OAuth provider 범위 Google-only 정리
   (완료: 2026-06-06, `/auth/oauth/providers`가 Google만 반환. Naver/Kakao는 future
   provider로 보류)
+- [x] T-117 — 회원가입 약관 동의 화면 + `user_consents` 저장 보강
+  (완료: 2026-06-06, `POST /auth/register` 필수 4종 동의 요구 +
+  `app.user_consents` 동시 저장 + `/signup` 필수/선택 동의 UI + e2e)
 
 ## 보류
 

@@ -12,6 +12,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return str(value)
+
+
 def build_error(
     code: str,
     message: str,
@@ -46,7 +56,7 @@ async def validation_exception_handler(_: Request, exc: Exception) -> JSONRespon
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=build_error("INTERNAL_ERROR", "서버 오류가 발생했습니다."),
         )
-    details: dict[str, Any] = {"errors": exc.errors()}
+    details: dict[str, Any] = {"errors": _json_safe(exc.errors())}
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=build_error("VALIDATION_ERROR", "요청이 올바르지 않습니다.", details),
