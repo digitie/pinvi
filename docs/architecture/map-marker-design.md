@@ -112,13 +112,12 @@ export default async function LoginPage() {
 
 ### 4.4 소셜 로그인 버튼
 
-자세히는 `docs/integrations/social-login.md` §8.1. 순서: Google → Naver → Kakao.
+자세히는 `docs/integrations/social-login.md` §8.1. 현재 Web UI에 노출하는 OAuth
+버튼은 Google 하나다. Naver/Kakao 버튼은 T-122 provider 구현 전까지 만들지 않는다.
 
 ```tsx
 <div className="space-y-3 mt-6">
   <SocialButton provider="google" />
-  <SocialButton provider="naver" />
-  <SocialButton provider="kakao" />
 </div>
 ```
 

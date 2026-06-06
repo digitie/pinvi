@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
+- [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -84,8 +84,8 @@
   (완료: 2026-06-05, `/trips` / `/notice-plans` 사용자 route + navigation + 빈 상태 +
   API client 연결, `/features/*` / krtour-map API `9011` 미호출 e2e)
 - [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
-- [x] T-101 — v1의 소셜 로그인 (Kakao/Naver/Google) v2로 이식 (Sprint 2 schema/model
-  완료, 라우터 본격 구현은 Sprint 4)
+- [x] T-101 — v1의 소셜 로그인 기반 schema/model v2 이전 (현재 활성은 Google-only,
+  Naver/Kakao provider 구현은 T-122 미래 작업)
 - [x] T-102 — v1의 Notice plan 도메인 v2로 이식 (Sprint 2 schema/model 완료, 라우터
   Sprint 6)
 - [x] T-103 — v1의 RustFS Storage API v2로 이식 (Sprint 2 완료, presigned PUT)
@@ -185,7 +185,7 @@
 - [ ] T-140 — 여행 예산(budget/currency) 도메인 + 복사 흐름 (D-10)
 - [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
 - [ ] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
-- [ ] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
+- [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
 - [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
 - [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
 - [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26)
@@ -227,3 +227,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
 | PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |
 | PR #56 | docs: align tracking docs with merged work | 2026-06-06 | T-150 |
+| PR #57 | docs: backfill auth rbac audit ADRs | 2026-06-06 | T-151 |

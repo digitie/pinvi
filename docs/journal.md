@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-143 지도/소셜 문서 정정
+
+**작업**: 감사 D-15/D-21/D-22 범위의 지도 클라이언트, 소셜 로그인 provider,
+kraddr-geo geocoding 경계 문서 드리프트를 정리했다.
+
+**변경**:
+- `docs/architecture/frontend.md` — `apps/web/lib`의 폐기된 지도 어댑터 표현을
+  `maplibre-vworld`로 바꾸고, 카카오맵 약관 메모가 ADR-015로 superseded됐음을 명시했다.
+- `docs/architecture/map-marker-design.md` — 로그인 화면 OAuth 버튼 예시를 Google 하나로
+  축소하고 Naver/Kakao는 T-122 전까지 만들지 않는다고 명시했다.
+- `docs/integrations/README.md`, `docs/data-sources/README.md` — 현재 직접 OAuth
+  provider는 Google이며, 주소/행정구역/geocoding은 `python-kraddr-geo` v2 REST 직접
+  호출임을 반영했다.
+- `docs/architecture/mcp-tools.md` — in-process geocoding 호출 표현을 v2 REST 호출
+  기준으로 정정했다.
+
+**검증**:
+- NTFS worktree: stale Kakao/Naver/social/kraddr 표현 검색
+- NTFS worktree: `git diff --check`
+
+**다음**: T-147 잔여 문서 정정. krtour-map feature read는 계속 T-066 대기.
+
 ## 2026-06-06 (codex) — T-151 미기록 ADR 백필
 
 **작업**: Sprint 문서에 placeholder로 남아 있던 인증 토큰 / Admin RBAC / Admin audit

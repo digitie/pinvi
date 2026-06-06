@@ -11,7 +11,7 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 | 파일 | 서비스 | Sprint |
 |------|--------|--------|
 | [resend.md](./resend.md) | Resend (이메일 transactional) | 2 |
-| [social-login.md](./social-login.md) | Google / Naver / Kakao OAuth | 2 |
+| [social-login.md](./social-login.md) | Google OAuth (Naver/Kakao는 T-122 future provider) | 2 |
 | ~~[gemini.md](./gemini.md)~~ | 보류 — `tripmate-ai-companion` 참고용 레거시 Gemini 메모 | deferred |
 | [telegram.md](./telegram.md) | Telegram Bot (알림) | 4+ |
 | [maplibre-vworld.md](./maplibre-vworld.md) | **지도 클라이언트** — `maplibre-vworld-js` (VWorld + MapLibre GL) (ADR-015) | 4 |
@@ -35,14 +35,16 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 
 ### 2.2 위탁 처리자 명시
 
-PIPA 처리방침에 다음 위탁자 명시 필수:
+PIPA 처리방침에 현재 필수로 명시할 위탁자:
 
 - Google OAuth — 미국. AI provider(Gemini 등)는 `tripmate-ai-companion`의
   처리방침/위탁자 목록에서 관리
 - Resend — 미국 AWS
 - Sentry SaaS — 미국
-- Naver / Kakao — 국내
 - Telegram — 글로벌
+
+Naver/Kakao는 T-122 구현 전까지 현행 위탁 처리자가 아니다. provider 활성화 PR에서
+국내 위탁자 항목으로 추가 검토한다.
 
 자세히는 `docs/compliance/pipa.md`.
 

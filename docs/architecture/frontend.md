@@ -46,7 +46,7 @@ apps/
 ├── web/                         # Next.js
 │   ├── app/                    # App Router
 │   ├── components/             # 웹 전용 컴포넌트 (shadcn/ui based)
-│   ├── lib/                    # 웹 전용 어댑터 (kakao map, next-intl 등)
+│   ├── lib/                    # 웹 전용 어댑터 (maplibre-vworld, next-intl 등)
 │   ├── public/maki/            # maki SVG (vendoring)
 │   └── package.json
 │
@@ -500,7 +500,7 @@ UI는 각 플랫폼의 native input 사용. validator는 동일.
 
 - `apps/web` 본격 구현
 - `packages/*`를 **처음부터 공용 코드 위치로 유지** — 웹 전용 코드 (next-intl,
-  next-router, kakao map adapter)는 `apps/web/lib/`에만
+  next-router, maplibre-vworld adapter)는 `apps/web/lib/`에만
 - `apps/mobile/`은 v1.0 출시 후 v2 단계에서 추가
 
 ### 5.2 Expo 추가 시 (v2)
@@ -568,7 +568,7 @@ apps/web/app/                    apps/mobile/app/
 
 - 03-frontend.md 전체 (Next.js 15 + Zustand + TanStack Query + dnd-kit + shadcn/ui)
 - 03-frontend.md §6 (16색 팔레트 + maki)
-- 03-frontend.md §10 (카카오맵 약관 — SW Network Only)
+- 03-frontend.md §10 (카카오맵 약관 메모 — ADR-015로 superseded)
 - 05-execution.md A-2 (스택 채택)
 
 추가 v2 결정 (본 문서에서 박음):

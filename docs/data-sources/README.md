@@ -4,6 +4,8 @@
 
 > **핵심 분담**: 지도 feature provider raw 적재 + serving 테이블은
 > **`python-krtour-map` 소유**. TripMate는 OpenAPI HTTP 결과만 사용한다(ADR-026).
+> 주소/행정구역/geocoding은 krtour-map 경유가 아니라 **`python-kraddr-geo` v2 REST**
+> 를 직접 호출한다(ADR-025).
 > 단, KASI 특일/POI 출몰시각은 TripMate `app` schema 소유 데이터라 본 저장소가
 > `python-kasi-api`로 직접 통합한다.
 
@@ -13,7 +15,6 @@
 
 | 도메인 | provider | 라이브러리 문서 |
 |--------|----------|----------------|
-| 행정구역 / 주소 | `python-vworld-api` (VWorld SHP), `python-kraddr-geo` (Juso) | `python-krtour-map/docs/{address-geocoding,vworld,juso}-*.md` |
 | 날씨 | `python-kma-api` (단기/중기/실황/특보), `python-krex-api` (휴게소 날씨), `python-krairport-api` (공항 날씨), `python-khoa-api` (해양 지수), `python-airkorea-api` (대기질) | `python-krtour-map/docs/kma-weather-etl.md` 외 |
 | 축제 / 행사 | `python-visitkorea-api`, `data.go.kr` 표준 (15013104), `python-krheritage-api` | `python-krtour-map/docs/event-feature-etl.md` |
 | 유가 | `python-opinet-api` | `python-krtour-map/docs/opinet-place-price-etl.md` |
@@ -33,7 +34,8 @@
 | 도메인 | provider | 문서 |
 |--------|----------|------|
 | 이메일 | Resend | `docs/integrations/resend.md` |
-| 소셜 로그인 | Google / Naver / Kakao OAuth | `docs/integrations/social-login.md` |
+| 소셜 로그인 | Google OAuth (Naver/Kakao는 T-122 future provider) | `docs/integrations/social-login.md` |
+| 주소 / 행정구역 / geocoding | `python-kraddr-geo` v2 REST | `docs/integrations/kraddr-geo.md` |
 | 지도 SDK | `maplibre-vworld-js` (VWorld + MapLibre GL JS, ADR-015) | `docs/integrations/maplibre-vworld.md` |
 | AI Research (사용자 키) | Google Gemini | `docs/integrations/gemini.md` |
 | 알림 | Telegram Bot | `docs/integrations/telegram.md` |
