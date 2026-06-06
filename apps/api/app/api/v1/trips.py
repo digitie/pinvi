@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, status
 
+from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
@@ -156,7 +157,8 @@ async def create_share_token(
         visibility=body.visibility,
         expires_at=body.expires_at,
     )
-    url = f"https://app.tripmate.local/trips/{trip.trip_id}/shared/{raw}"
+    web_base_url = settings.tripmate_web_base_url.rstrip("/")
+    url = f"{web_base_url}/trips/{trip.trip_id}/shared/{raw}"
     return Envelope.of(
         ShareLinkResponse(
             share_id=share.share_id,

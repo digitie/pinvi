@@ -211,7 +211,7 @@ codegraph sync
 
   본문 — "왜" 위주. 변경 내용은 diff가 알려준다.
 
-  Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+  Co-Authored-By: <agent name> <noreply@example.com>
   ```
 
   - `<scope>`: `api` / `web` / `etl` / `infra` / `docs` / `chore` / `adr` /
@@ -315,7 +315,6 @@ GitHub repository ruleset `main-pr-only`:
 required status check는 T-065 이후 `Aggregate CI gate` 하나만 묶는다. `api` /
 `web` / `etl` workflow는 path-filtered 상태를 유지하고, aggregate gate가 변경 파일에
 따라 필요한 check(`lint-typecheck-test`, `lint-typecheck-build`, `sanity`)만 기다린다.
-- Restrict force-push
 
 ### 8.7 핸드오프
 

@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-123 — 문서 정합 일괄 정정(README index/머지표/오타/dangling link/OAuth·share 문서화) (A-14,C-20,C-21,P-10,P-13,P-17,P-18)
+- [ ] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -119,6 +119,12 @@
   (완료: 2026-06-06, `/admin/pois` 검색 + `feature_link_broken_at` 필터, 상세
   snapshot/일정/비용/최근 audit, 연결 상태 변경 `poi.update_link_status` audit,
   Web 목록/상세 + 통합/e2e 테스트. feature re-link는 krtour-map client 준비 후)
+- [x] T-123 — 문서 정합 일괄 정정
+  (완료: 2026-06-06, README/API index의 `GET /search`·`/health/external` 보강,
+  OAuth Google-only/future provider 표현 정리, share link URL을
+  `TRIPMATE_WEB_BASE_URL` 기반으로 수정, zoom 하한 5 정합, dangling
+  `release-plan.md` 링크 제거, `python-kraddr-geo` 오타 정정, agent-guide 잔여
+  bullet/trailer 정리)
 
 ## 보류
 
@@ -151,7 +157,7 @@
 > 출처: `docs/audit/2026-06-06-doc-impl-audit.md` §8.1. 괄호 안은 감사 증거 ID.
 > 다수가 ADR-027~031 / DEC-01~10 확정에 의존한다.
 
-- [ ] T-123 — 문서 정합 일괄 정정(README index/머지표/오타/dangling link/OAuth·share 문서화) (A-14,C-20,C-21,P-10,P-13,P-17,P-18)
+- [x] T-123 — 문서 정합 일괄 정정(README index/머지표/오타/dangling link/OAuth·share 문서화) (A-14,C-20,C-21,P-10,P-13,P-17,P-18)
 - [ ] T-124 — `/features/*` 코드↔문서 계약 정렬(in-bounds 파라미터·응답, trips 페이지네이션, 필드명) (C-07,C-10,C-11,C-15)
 - [ ] T-125 — feature_id 문자열化(코드의 UUID 가정 제거) (C-09; ADR-028)
 - [ ] T-126 — POI 생성 경로 단일화(`/trips/{id}/pois` 정본) (A-01,C-16)
@@ -208,3 +214,5 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #14 | docs: Sprint 4~6 plan + ADR-018~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |
 | PR #15 | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A) | 2026-06-05 | T-114/T-065 |
 | PR #16 | feat: 백엔드 features API + krtour-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 (client는 stub — 감사 C-01) |
+| PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
+| PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |

@@ -218,6 +218,9 @@ Content-Type: application/json
 }
 ```
 
+`url`은 `TRIPMATE_WEB_BASE_URL`을 base로 생성한다. 개발 기본값은
+`http://localhost:9022`, 운영값은 `https://tripmate.digitie.mywire.org`다.
+
 ### 7.2 `DELETE /trips/{trip_id}/share-tokens/{share_id}`
 
 `revoked_at = now()`.
