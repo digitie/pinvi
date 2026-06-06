@@ -2,23 +2,36 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import inspect
+import uuid
+from collections.abc import Awaitable, Callable, Iterable
+from typing import cast
 
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
 from app.core.security import InvalidTokenError, decode_access_token
+from app.db.session import async_session_factory
+from app.models.user import User
 
 ADMIN_ROLES = {"admin", "operator", "cpo"}
+RoleResolver = Callable[[str], Awaitable[Iterable[str]] | Iterable[str]]
 
 
 def _normalized_set(values: Iterable[str]) -> set[str]:
     return {value.strip().upper() for value in values if value.strip()}
 
 
-def _token_roles(request: Request) -> set[str]:
+def _roles_set(values: Iterable[str] | None) -> set[str]:
+    if values is None:
+        return set()
+    return {role for role in values if isinstance(role, str)}
+
+
+async def _current_user_roles(request: Request) -> set[str]:
     token = request.cookies.get("tripmate_access")
     if not token:
         return set()
@@ -26,10 +39,28 @@ def _token_roles(request: Request) -> set[str]:
         payload = decode_access_token(token)
     except InvalidTokenError:
         return set()
-    roles = payload.get("roles")
-    if not isinstance(roles, list):
+    subject = payload.get("sub")
+    if not isinstance(subject, str):
         return set()
-    return {role for role in roles if isinstance(role, str)}
+
+    resolver = cast(
+        RoleResolver | None,
+        getattr(request.app.state, "geofence_role_resolver", None),
+    )
+    if resolver is not None:
+        resolved = resolver(subject)
+        if inspect.isawaitable(resolved):
+            resolved = await resolved
+        return _roles_set(resolved)
+
+    try:
+        user_id = uuid.UUID(subject)
+    except ValueError:
+        return set()
+
+    async with async_session_factory() as session:
+        roles = await session.scalar(select(User.roles).where(User.user_id == user_id))
+    return _roles_set(roles)
 
 
 def _is_bypass_path(path: str) -> bool:
@@ -68,8 +99,8 @@ def _blocked_response(country: str | None) -> JSONResponse:
 class GeofenceMiddleware(BaseHTTPMiddleware):
     """Cloudflare/nginx 다음 단계의 application-level KR-only fallback.
 
-    운영 기본 판정은 Cloudflare `CF-IPCountry` header다. GeoIP DB lookup은 nginx 2차
-    안전망이 맡고, FastAPI는 header 기반 fallback과 health/admin 우회를 담당한다.
+    운영 기본 판정은 Cloudflare `CF-IPCountry` header다. nginx GeoIP2는 선택 계층이고,
+    FastAPI는 header 기반 fallback과 health/admin 우회를 담당한다.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -79,16 +110,16 @@ class GeofenceMiddleware(BaseHTTPMiddleware):
         if _is_bypass_path(request.url.path):
             return await call_next(request)
 
-        if _token_roles(request).intersection(ADMIN_ROLES):
-            return await call_next(request)
-
         allowed_countries = _normalized_set(settings.tripmate_geofence_allowed_countries)
         country = _detected_country(request)
 
         if country is None and not settings.tripmate_geofence_block_unknown:
             return await call_next(request)
 
-        if country not in allowed_countries:
-            return _blocked_response(country)
+        if country in allowed_countries:
+            return await call_next(request)
 
-        return await call_next(request)
+        if (await _current_user_roles(request)).intersection(ADMIN_ROLES):
+            return await call_next(request)
+
+        return _blocked_response(country)

@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-142 geofence/admin 정합
+
+**작업**: 감사 D-13/D-24 범위의 geofence admin 우회와 nginx GeoIP2 계층 과잉 표현을
+정리했다.
+
+**변경**:
+- `apps/api/app/middleware/geofence.py` — KR/우회 path는 그대로 빠르게 통과시키고,
+  KR 외 또는 strict unknown 차단 후보일 때만 access token `sub`로 `app.users.roles`를
+  조회해 admin/operator/cpo 우회를 판단하도록 변경했다. token `roles` claim은 더 이상
+  신뢰하지 않는다.
+- `apps/api/tests/unit/test_geofence_middleware.py` — DB-role resolver 기반 admin 우회와
+  token `roles` claim 단독 우회 차단 회귀 테스트를 추가했다.
+- `docs/architecture/korea-only-policy.md`, `docs/runbooks/korea-only.md` — 단일
+  Cloudflare Tunnel 기본 운영은 Cloudflare WAF + FastAPI fallback이며, nginx GeoIP2는
+  별도 공개 edge가 있을 때의 선택 계층으로 정리했다.
+- `docs/resume.md`, `docs/tasks.md` — T-142 완료와 다음 비의존 후보 T-144를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy / geofence unit test
+- NTFS worktree: stale token role claim·nginx 3중 필수 표현 검색, `git diff --check`
+
+**다음**: T-144 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계.
+
 ## 2026-06-06 (codex) — T-147 잔여 문서 정정
 
 **작업**: 감사 D-23/D-25 범위의 KASI rise/set 재계산 정책과 Gemini 문서 SQL 문법을

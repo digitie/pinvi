@@ -3,7 +3,7 @@
 > 아키텍처는 `docs/architecture/korea-only-policy.md`. 본 runbook은 설정 / 갱신 /
 > 모니터링 / 트러블슈팅.
 
-## 1. 3중 안전망 활성 절차
+## 1. 한국 전용 geofencing 활성 절차
 
 ### 1.1 Cloudflare WAF (1차)
 
@@ -23,7 +23,13 @@ Custom Response:
 - "Threat Score > 0" 으로 known VPN/Tor 차단
 - ASN 화이트리스트 (한국 통신 3사 만 허용 — 옵션)
 
-### 1.2 nginx geo (2차)
+### 1.2 nginx geo (선택 계층)
+
+단일 Cloudflare Tunnel 뒤에서 운영하는 기본 배포는 Cloudflare WAF + FastAPI fallback
+두 계층이면 충분하다. nginx GeoIP2는 공인 reverse proxy를 별도로 노출하거나
+Cloudflare를 우회할 수 있는 네트워크 경로가 있을 때만 차단 계층으로 켠다. 기본값은
+observe/통계 용도이며, block 모드로 켜면 admin 우회도 nginx allowlist 또는
+Cloudflare Access에서 먼저 처리해야 한다.
 
 `infra/nginx/Dockerfile`:
 
@@ -63,7 +69,7 @@ server {
 }
 ```
 
-### 1.3 FastAPI middleware (3차)
+### 1.3 FastAPI middleware (application fallback)
 
 `apps/api/app/middleware/geofence.py` (Sprint 6 구현). 환경변수로 활성 / 비활성:
 
@@ -75,11 +81,15 @@ TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true
 TRIPMATE_GEOFENCE_BYPASS_PATHS=["/health","/health/db","/docs","/redoc","/openapi.json"]
 ```
 
-FastAPI 3차 fallback은 Cloudflare가 넣는 `CF-IPCountry` header를 우선 사용한다.
+FastAPI fallback은 Cloudflare가 넣는 `CF-IPCountry` header를 우선 사용한다.
 직접 접속 우회를 막아야 하는 운영 환경에서는 `TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`로
-둔다. admin/operator/cpo 우회는 access token의 `roles` claim이 있는 경우에만
-FastAPI 단계에서 허용된다. 현재 일반 로그인 토큰은 DB 기반 RBAC이므로, 해외 출장
-운영 우회는 Cloudflare Access 또는 KR VPN을 우선 사용한다.
+둔다. admin/operator/cpo 우회는 access token의 `sub`로 `app.users.roles`를 DB 조회한
+결과에 기반한다. access token의 `roles` claim은 신뢰하지 않는다.
+
+Cloudflare WAF가 KR 외 요청을 block하면 요청은 FastAPI까지 오지 않는다. 해외 출장
+운영 우회는 Cloudflare Access allowlist 또는 KR VPN을 우선 사용하고, FastAPI DB-role
+우회는 WAF allowlist/monitor mode/내부 직접 경로처럼 요청이 API까지 도달한 경우의
+fallback이다.
 
 ## 2. GeoIP DB 갱신 (월 1회)
 
@@ -139,15 +149,17 @@ docker logs tripmate-nginx | tail -20
 운영자 본인이 KR 외에서 운영 작업 필요:
 
 1. admin이 KR에서 사전 인증 (cookie 발급 + last_used_ip 기록)
-2. KR 외에서 호출 시 FastAPI middleware 3차가 role 확인 후 우회
-3. Cloudflare WAF 1차는 그대로 차단 — 우회 방법 둘:
+2. KR 외에서 운영 작업이 필요하면 Cloudflare Access allowlist 또는 KR VPN을 사용한다.
+3. 요청이 FastAPI까지 도달하면 middleware가 access token `sub`로 DB roles를 조회해
+   admin/operator/cpo를 확인한 뒤 우회한다.
+4. Cloudflare WAF 1차가 block 모드이면 FastAPI 우회가 실행되지 않는다. 우회 방법 둘:
    - (a) Cloudflare Access policy로 admin email allowlist
    - (b) VPN으로 KR IP를 사용 (가장 단순)
-4. 모든 admin 호출은 `location_access_log` + `admin_audit_log` 자동 기록
+5. 모든 admin 호출은 `location_access_log` + `admin_audit_log` 자동 기록
 
 ### 4.2 헬스체크
 
-`/api/v1/healthz` / `/api/v1/healthz/db` 는 nginx 2차에서 우회. Cloudflare 1차는
+`/api/v1/healthz` / `/api/v1/healthz/db` 는 nginx 선택 계층에서 우회. Cloudflare 1차는
 워커 / monitor 외부 호스팅 시 별 IP allowlist 필요.
 
 ### 4.3 사용자 신고
@@ -164,8 +176,8 @@ docker logs tripmate-nginx | tail -20
 |------|------|------|
 | 한국 사용자가 451 받음 | GeoIP DB 오래됨 / 잘못된 매핑 | DB 강제 갱신 + 사용자 IP MaxMind 직접 조회 |
 | 모든 트래픽 451 | Cloudflare WAF rule 오설정 (KR 매칭 실패) | 룰 expression 점검 + WAF 일시 disable |
-| nginx 502 | nginx geoip 모듈 누락 / DB 경로 잘못 | `nginx -t` + 모듈 설치 |
-| admin이 451 우회 안 됨 | role 확인 로직 / 인증 토큰 미전달 | request_id로 Loki 추적 |
+| nginx 502 | nginx geoip 모듈 누락 / DB 경로 잘못 | nginx GeoIP2 선택 계층이면 `nginx -t` + 모듈 설치 |
+| admin이 451 우회 안 됨 | Cloudflare/nginx에서 먼저 block / DB role 확인 실패 / 인증 토큰 미전달 | WAF/Access allowlist 확인 + request_id로 Loki 추적 |
 | 일일 차단 카운트 0 | rule 비활성? 모니터링 데이터 누락? | 직접 비KR IP로 curl 테스트 |
 
 ## 6. 해외 진출 시
@@ -174,7 +186,7 @@ ADR-018 supersede 시:
 
 1. 새 ADR로 다국가 정책 박음
 2. Cloudflare WAF rule 비활성 (점진적)
-3. nginx geo는 통계 용도로 유지 (block 제거)
+3. nginx geo를 켰다면 통계 용도로 유지 (block 제거)
 4. FastAPI middleware는 환경변수 `TRIPMATE_GEOFENCE_ENABLED=false`
 5. 사용자 안내 + 다국어 / 결제 / 약관 준비
 
