@@ -16,6 +16,7 @@ export const queryKeys = {
     all: () => ['trips'] as const,
     list: (params: { bucket?: string }) => ['trips', 'list', params] as const,
     detail: (tripId: string) => ['trips', 'detail', tripId] as const,
+    comments: (tripId: string) => ['trips', 'comments', tripId] as const,
   },
   noticePlans: {
     all: () => ['notice-plans'] as const,

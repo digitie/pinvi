@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Header, HTTPException, status
 
@@ -11,17 +11,32 @@ from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
-from app.schemas.trip import TripCreate, TripResponse, TripUpdate
+from app.schemas.trip import (
+    TripCommentCreate,
+    TripCommentResponse,
+    TripCompanionInvite,
+    TripCompanionResponse,
+    TripCreate,
+    TripResponse,
+    TripUpdate,
+)
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
+    TripCommentNotFoundError,
+    TripCompanionConflictError,
     TripNotFoundError,
     TripPermissionError,
     TripVersionConflictError,
+    create_comment,
     create_trip,
+    delete_comment,
     get_trip_for_user,
+    get_trip_owned_by_user,
     invite_companion,
     issue_share_link,
+    list_comments,
     list_trips_for_owner,
+    remove_companion,
     revoke_share_link,
     update_trip,
 )
@@ -44,6 +59,47 @@ def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
         created_at=trip.created_at,
         updated_at=trip.updated_at,
     )
+
+
+def _to_companion_response(companion) -> TripCompanionResponse:  # type: ignore[no-untyped-def]
+    return TripCompanionResponse(
+        companion_id=companion.companion_id,
+        trip_id=companion.trip_id,
+        user_id=companion.user_id,
+        invited_email=companion.invited_email,
+        invited_nickname=companion.invited_nickname,
+        role=companion.role,
+        invited_at=companion.invited_at,
+        joined_at=companion.joined_at,
+        created_at=companion.created_at,
+        updated_at=companion.updated_at,
+    )
+
+
+def _to_comment_response(comment) -> TripCommentResponse:  # type: ignore[no-untyped-def]
+    return TripCommentResponse(
+        comment_id=comment.comment_id,
+        trip_id=comment.trip_id,
+        author_user_id=comment.author_user_id,
+        body=comment.body,
+        target_type=comment.target_type,
+        target_id=comment.target_id,
+        day_index=comment.day_index,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+    )
+
+
+def _raise_trip_http(exc: TripNotFoundError | TripPermissionError) -> NoReturn:
+    if isinstance(exc, TripNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
 
 
 @router.get("", response_model=Envelope[list[TripResponse]])
@@ -77,9 +133,9 @@ async def create_trip_endpoint(
     for companion in body.companions:
         await invite_companion(
             db,
-            trip_id=trip.trip_id,
+            trip=trip,
+            invited_by_user_id=uuid.UUID(current_user_id),
             email=str(companion.email),
-            user_id=None,
             display_name=companion.display_name,
             role=companion.role,
         )
@@ -92,16 +148,8 @@ async def get_trip_endpoint(
 ) -> Envelope[TripResponse]:
     try:
         trip = await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
-    except TripNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-    except TripPermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
     return Envelope.of(_to_response(trip))
 
 
@@ -121,16 +169,8 @@ async def update_trip_endpoint(
             expected_version=if_match,
             patch=body.model_dump(exclude_unset=True),
         )
-    except TripNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-    except TripPermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
     except TripVersionConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -150,6 +190,151 @@ async def update_trip_endpoint(
 
 
 @router.post(
+    "/{trip_id}/members",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripCompanionResponse],
+)
+async def invite_trip_member(
+    trip_id: uuid.UUID,
+    body: TripCompanionInvite,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripCompanionResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        trip = await get_trip_owned_by_user(db, trip_id=trip_id, user_id=actor_id)
+        companion = await invite_companion(
+            db,
+            trip=trip,
+            invited_by_user_id=actor_id,
+            email=str(body.email),
+            display_name=body.display_name,
+            role=body.role,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripCompanionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response = _to_companion_response(companion)
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="trip.member_changed",
+        actor_user_id=actor_id,
+        payload={"action": "added", "companion": response.model_dump(mode="json")},
+    )
+    return Envelope.of(response)
+
+
+@router.delete(
+    "/{trip_id}/members/{companion_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_trip_member(
+    trip_id: uuid.UUID,
+    companion_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_owned_by_user(db, trip_id=trip_id, user_id=actor_id)
+        await remove_companion(db, trip_id=trip_id, companion_id=companion_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="trip.member_changed",
+        actor_user_id=actor_id,
+        payload={"action": "removed", "companion_id": str(companion_id)},
+    )
+
+
+@router.get(
+    "/{trip_id}/comments",
+    response_model=Envelope[list[TripCommentResponse]],
+)
+async def list_trip_comments(
+    trip_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    limit: int = 50,
+) -> Envelope[list[TripCommentResponse]]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    comments = await list_comments(db, trip_id=trip_id, limit=limit)
+    return Envelope.of([_to_comment_response(comment) for comment in comments])
+
+
+@router.post(
+    "/{trip_id}/comments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripCommentResponse],
+)
+async def create_trip_comment(
+    trip_id: uuid.UUID,
+    body: TripCommentCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripCommentResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    comment = await create_comment(
+        db,
+        trip_id=trip_id,
+        author_user_id=actor_id,
+        body=body.body,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        day_index=body.day_index,
+    )
+    response = _to_comment_response(comment)
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="comment.created",
+        actor_user_id=actor_id,
+        payload={"comment": response.model_dump(mode="json")},
+    )
+    return Envelope.of(response)
+
+
+@router.delete(
+    "/{trip_id}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_trip_comment(
+    trip_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        trip = await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await delete_comment(db, trip=trip, comment_id=comment_id, actor_user_id=actor_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripCommentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    await realtime_broker.publish_event(
+        trip_id=trip_id,
+        event_type="comment.deleted",
+        actor_user_id=actor_id,
+        payload={"comment_id": str(comment_id)},
+    )
+
+
+@router.post(
     "/{trip_id}/share-tokens",
     status_code=status.HTTP_201_CREATED,
     response_model=Envelope[ShareLinkResponse],
@@ -160,7 +345,14 @@ async def create_share_token(
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[ShareLinkResponse]:
-    trip = await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+    try:
+        trip = await get_trip_owned_by_user(
+            db,
+            trip_id=trip_id,
+            user_id=uuid.UUID(current_user_id),
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
     share, raw = await issue_share_link(
         db,
         trip_id=trip.trip_id,
@@ -195,11 +387,8 @@ async def revoke_share_token(
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> None:
-    await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
     try:
+        await get_trip_owned_by_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
         await revoke_share_link(db, share_id=share_id, trip_id=trip_id)
-    except TripNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)

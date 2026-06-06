@@ -10,14 +10,74 @@ export const TripStatusSchema = z.enum([
   'archived',
 ]);
 export const TripVisibilitySchema = z.enum(['private', 'unlisted', 'public']);
+export const TripCompanionRoleSchema = z.enum(['co_owner', 'editor', 'viewer']);
+export const TripShareLinkVisibilitySchema = z.enum(['view_only', 'comment', 'edit']);
 export type TripStatus = z.infer<typeof TripStatusSchema>;
 export type TripVisibility = z.infer<typeof TripVisibilitySchema>;
+export type TripCompanionRole = z.infer<typeof TripCompanionRoleSchema>;
+export type TripShareLinkVisibility = z.infer<typeof TripShareLinkVisibilitySchema>;
 
 export const TripCompanionInviteSchema = z.object({
   email: z.string().email().max(320),
   display_name: z.string().max(80).nullable().optional(),
-  role: z.enum(['co_owner', 'editor', 'viewer']).default('editor'),
+  role: TripCompanionRoleSchema.default('editor'),
 });
+export type TripCompanionInvite = z.infer<typeof TripCompanionInviteSchema>;
+
+export const TripCompanionResponseSchema = z.object({
+  companion_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
+  user_id: z.string().uuid().nullable(),
+  invited_email: z.string().email().nullable(),
+  invited_nickname: z.string().nullable(),
+  role: TripCompanionRoleSchema,
+  invited_at: Iso8601Schema,
+  joined_at: Iso8601Schema.nullable(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type TripCompanionResponse = z.infer<typeof TripCompanionResponseSchema>;
+
+export const TripCommentTargetSchema = z.enum(['trip', 'day', 'poi']);
+export const TripCommentCreateSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
+  target_type: TripCommentTargetSchema.default('trip'),
+  target_id: z.string().uuid().nullable().optional(),
+  day_index: z.number().int().min(1).nullable().optional(),
+});
+export type TripCommentCreate = z.infer<typeof TripCommentCreateSchema>;
+
+export const TripCommentResponseSchema = z.object({
+  comment_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
+  author_user_id: z.string().uuid().nullable(),
+  body: z.string(),
+  target_type: TripCommentTargetSchema,
+  target_id: z.string().uuid().nullable(),
+  day_index: z.number().int().nullable(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type TripCommentResponse = z.infer<typeof TripCommentResponseSchema>;
+
+export const TripShareLinkCreateSchema = z.object({
+  visibility: TripShareLinkVisibilitySchema.default('view_only'),
+  expires_at: Iso8601Schema.nullable().optional(),
+});
+export type TripShareLinkCreate = z.infer<typeof TripShareLinkCreateSchema>;
+
+export const TripShareLinkResponseSchema = z.object({
+  share_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
+  visibility: TripShareLinkVisibilitySchema,
+  token: z.string(),
+  url: z.string().url(),
+  expires_at: Iso8601Schema.nullable(),
+  revoked_at: Iso8601Schema.nullable(),
+  last_used_at: Iso8601Schema.nullable(),
+  created_at: Iso8601Schema,
+});
+export type TripShareLinkResponse = z.infer<typeof TripShareLinkResponseSchema>;
 
 export const TripCreateSchema = z.object({
   title: z.string().min(1).max(200),

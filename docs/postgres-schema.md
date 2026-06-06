@@ -249,34 +249,79 @@ POI 생성 시 `python-kasi-api`의 위치별 해달 출몰시각 정보조회 �
 
 ```sql
 CREATE TABLE app.trip_companions (
-  companion_id  uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
-  trip_id       uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
-  user_id       uuid REFERENCES app.users(user_id),
-  display_name  text,
-  role          text NOT NULL DEFAULT 'viewer',
-  joined_at     timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT trip_companions_role_chk CHECK (role IN ('co_owner', 'editor', 'viewer'))
+  companion_id     uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id          uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  user_id          uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  invited_email    varchar(320),
+  invited_nickname varchar(80),
+  role             varchar(16) NOT NULL DEFAULT 'editor',
+  invited_at       timestamptz NOT NULL DEFAULT now(),
+  joined_at        timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_trip_companions_target CHECK ((user_id IS NOT NULL) OR (invited_email IS NOT NULL)),
+  CONSTRAINT ck_trip_companions_role CHECK (role IN ('co_owner', 'editor', 'viewer'))
 );
 
-CREATE INDEX trip_companions_trip_idx ON app.trip_companions (trip_id);
-CREATE INDEX trip_companions_user_idx ON app.trip_companions (user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX ix_trip_companions_trip ON app.trip_companions (trip_id);
+CREATE INDEX ix_trip_companions_user ON app.trip_companions (user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_trip_companions_trip_user
+  ON app.trip_companions (trip_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_trip_companions_trip_invited
+  ON app.trip_companions (trip_id, lower(invited_email)) WHERE invited_email IS NOT NULL;
 ```
 
 ### 3.5 `app.trip_share_links`
 
 ```sql
 CREATE TABLE app.trip_share_links (
-  share_id   uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
-  trip_id    uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
-  token      text NOT NULL UNIQUE,
-  visibility text NOT NULL DEFAULT 'view_only',
-  expires_at timestamptz,
-  revoked_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT trip_share_links_visibility_chk CHECK (visibility IN ('view_only', 'comment', 'edit'))
+  share_id           uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id            uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  token_hash         varchar(128) NOT NULL UNIQUE,
+  created_by_user_id uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  visibility         varchar(16) NOT NULL DEFAULT 'view_only',
+  expires_at         timestamptz,
+  revoked_at         timestamptz,
+  last_used_at       timestamptz,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_trip_share_links_visibility CHECK (visibility IN ('view_only', 'comment', 'edit'))
 );
 
-CREATE INDEX trip_share_links_trip_idx ON app.trip_share_links (trip_id);
+CREATE INDEX ix_trip_share_links_trip_active
+  ON app.trip_share_links (trip_id) WHERE revoked_at IS NULL;
+```
+
+`visibility='comment'`는 공유 보기에서 댓글 작성까지 허용하는 링크다. 현재 구현된
+로그인 사용자 댓글 API는 `app.trip_comments`를 사용하며, 비로그인 shared-token 댓글
+작성 라우트는 `GET /trips/{trip_id}/shared/{token}` 구현과 함께 연결한다.
+
+### 3.6 `app.trip_comments`
+
+```sql
+CREATE TABLE app.trip_comments (
+  comment_id     uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id        uuid NOT NULL REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  author_user_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  body           text NOT NULL,
+  target_type    varchar(16) NOT NULL DEFAULT 'trip',
+  target_id      uuid,
+  day_index      int,
+  deleted_at     timestamptz,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_trip_comments_target_type CHECK (target_type IN ('trip', 'day', 'poi')),
+  CONSTRAINT ck_trip_comments_body_len CHECK (length(body) BETWEEN 1 AND 2000)
+);
+
+CREATE INDEX ix_trip_comments_trip_created_at
+  ON app.trip_comments (trip_id, created_at) WHERE deleted_at IS NULL;
+CREATE INDEX ix_trip_comments_author
+  ON app.trip_comments (author_user_id) WHERE author_user_id IS NOT NULL;
+
+CREATE TRIGGER trip_comments_touch_updated_at
+BEFORE UPDATE ON app.trip_comments
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
 ## 4. 첨부

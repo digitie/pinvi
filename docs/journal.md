@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-06 (codex) — T-139 동반자 초대/댓글/visibility 정합 보강
+
+**작업**: 감사 D-06 범위의 동반자 초대 엔드포인트 부재와
+`share_links.visibility='comment'` 대비 댓글 모델/API 부재를 정리했다.
+
+**변경**:
+- `apps/api/app/services/trip.py`, `apps/api/app/api/v1/trips.py` — owner-only
+  동반자 초대/삭제, 기존 user 이메일 매칭, 중복 초대 방지, 공유 토큰 owner-only 경계,
+  로그인 사용자 댓글 조회/작성/삭제를 구현했다.
+- `apps/api/app/services/email_service.py` — `trip_invite` email_queue 적재 helper와
+  HTML 렌더링을 추가했다.
+- `apps/api/app/models/comment.py`, `apps/api/alembic/versions/20260606_0008_trip_comments.py`
+  — `app.trip_comments` 테이블, index, updated_at trigger를 추가했다.
+- `apps/api/tests/integration/test_trips_api.py` — 기존 user 초대 매칭 + outbox, 동반자
+  권한 차단, 동반자 댓글 작성 + owner 삭제 흐름을 검증한다.
+- `packages/schemas`, `packages/api-client` — companion/comment/share link schema와
+  trip API client 메서드를 추가했다.
+- `docs/api/trips.md`, `docs/postgres-schema.md`, `docs/data-model.md` — companion,
+  share link, comment 계약과 `comment` visibility 의미를 최신화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-139 완료와 다음 비의존 후보 T-140을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy / `test_trips_api.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspaces --if-present`
+
+**다음**: T-140 여행 예산(budget/currency) 도메인 + 복사 흐름.
+
 ## 2026-06-06 (codex) — T-138 사용자/보안 스키마 보강
 
 **작업**: 감사 D-02/D-03 범위의 `users` 문서 drift와 PIPA 침해 대응 테이블 누락을

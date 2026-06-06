@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class TripBase(BaseModel):
@@ -24,6 +24,46 @@ class TripCompanionInvite(BaseModel):
     role: Literal["co_owner", "editor", "viewer"] = "editor"
 
 
+class TripCompanionResponse(BaseModel):
+    companion_id: uuid.UUID
+    trip_id: uuid.UUID
+    user_id: uuid.UUID | None
+    invited_email: EmailStr | None
+    invited_nickname: str | None
+    role: Literal["co_owner", "editor", "viewer"]
+    invited_at: datetime
+    joined_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TripCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+    target_type: Literal["trip", "day", "poi"] = "trip"
+    target_id: uuid.UUID | None = None
+    day_index: int | None = Field(default=None, ge=1)
+
+    @field_validator("body")
+    @classmethod
+    def _strip_body(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("댓글 본문을 입력하세요.")
+        return stripped
+
+
+class TripCommentResponse(BaseModel):
+    comment_id: uuid.UUID
+    trip_id: uuid.UUID
+    author_user_id: uuid.UUID | None
+    body: str
+    target_type: Literal["trip", "day", "poi"]
+    target_id: uuid.UUID | None
+    day_index: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class TripCreate(TripBase):
     companions: list[TripCompanionInvite] = Field(default_factory=list)
 
@@ -35,6 +75,13 @@ class TripCreate(TripBase):
             raise ValueError("start_date와 end_date는 동시에 채워지거나 동시에 비어야 합니다.")
         if self.end_date < self.start_date:
             raise ValueError("end_date는 start_date 이후여야 합니다.")
+        return self
+
+    @model_validator(mode="after")
+    def _check_unique_companion_emails(self) -> TripCreate:
+        emails = [str(companion.email).lower() for companion in self.companions]
+        if len(emails) != len(set(emails)):
+            raise ValueError("동반자 이메일이 중복되었습니다.")
         return self
 
 
