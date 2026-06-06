@@ -12,9 +12,9 @@ TripMate v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으
 | Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed (일부 항목 선반영: T-109/110/115) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
 | Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + LBS 신고 + 법무 + **MCP 외부 인터페이스** + **Backup UI 핫스왑** + **Korean geofencing** + **T108 N150 병행 배포** | **`v1.0.0`** |
 
-> **상태 정합 주의 (감사 P-04, 2026-06-06)**: 일부 Sprint 5/6 항목(T-109 geofencing,
-> T-110 Grafana, T-115 backup foundation)이 Sprint 4 중 선반영됐다. 개별 SPRINT-N.md
-> 헤더 status와 본 표가 어긋나면 본 표를 정본으로 한다. 전면 정합은 T-150.
+> **상태 정합 주의 (감사 P-04, 2026-06-06 / T-150 반영)**: Sprint 5/6 항목 일부
+> (T-067 KASI, T-109 geofencing, T-110 Grafana, T-115 backup foundation)는 Sprint 4
+> 중 선반영됐다. 개별 SPRINT-N.md 헤더와 본 표는 같은 상태를 가리키도록 정리했다.
 
 ## 릴리즈 마일스톤
 
@@ -42,12 +42,27 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 ## 관련 ADR
 
 - **ADR-001** — v1 보존 + v2 재시작
-- **ADR-002** — TripMate ↔ `python-krtour-map` 함수 호출 (ADR-026으로 superseded)
-- **ADR-026** — TripMate ↔ `python-krtour-map` OpenAPI HTTP 계약
+- **ADR-002** — 함수 직접 호출 모델(ADR-026으로 superseded)
 - **ADR-003** — schema 책임 분담
 - **ADR-005** — provider 어댑터 wrapper 금지
 - **ADR-006** — Dagster code location 분리
 - **ADR-007** — PR-only workflow
+- **ADR-015** — 지도 클라이언트 `maplibre-vworld-js`
+- **ADR-017** — CodeGraph + agent별 고정 worktree
+- **ADR-018** — 한국 전용 geofencing
+- **ADR-019** — MCP 외부 인터페이스
+- **ADR-020** — AI companion 별도 repo 분리
+- **ADR-021** — GitHub Actions CI/CD 재활성화
+- **ADR-022** — Backup / Restore 핫스왑 정책
+- **ADR-023** — Odroid M1S + N150 병행 운영
+- **ADR-024** — NTFS worktree + WSL ext4 테스트 미러
+- **ADR-025** — geocoding은 kraddr-geo v2 REST 직접
+- **ADR-026** — TripMate ↔ `python-krtour-map` OpenAPI HTTP 계약
+- **ADR-027** — krtour-map 운영급 HTTP 서비스 신설 대기
+- **ADR-028** — 정규 `feature_id` 포맷
+- **ADR-029** — `notice_plans` 명칭 충돌 해소
+- **ADR-030** — 외부 API 규약 정본
+- **ADR-031** — POI soft delete + nullable `feature_id`
 
 ## 참조
 

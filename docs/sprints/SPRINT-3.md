@@ -1,6 +1,7 @@
 # SPRINT-3 — Admin 데이터 디버그 콘솔
 
-- **상태**: proposed
+- **상태**: merged (PR #11, 2026-05-26). 이후 T-119/T-120/T-121에서 사용자/Trip/POI
+  admin 상세가 추가 보강됨.
 - **선행**: Sprint 2 DoD 완료
 - **목표**: 지도 UI를 만들기 전에 Admin 페이지로 모든 데이터 흐름을 검증한다.
   (SPEC V8 #5 결정 — Sprint 3 ≺ Sprint 4)
@@ -57,10 +58,9 @@
 
 ### ADR
 
-- ADR-NNN: Admin RBAC 모델 확정 (`roles TEXT[]` — `is_admin BOOLEAN` 정정 mirror)
-- ADR-NNN: Admin audit chain (prev_hash + content_hash)
-- ADR-NNN: 검색 문법 (필드 prefix + faceted 필터)
-- ADR-NNN: Seed/Reset 환경 가드 (`ENABLE_SEED` + ENV)
+Admin RBAC / audit-chain / 검색 문법 / Seed-Reset 환경 가드의 미기록 ADR 백필은
+T-151에서 처리한다. 현재 구현 기준은 `docs/api/admin.md`,
+`docs/architecture/admin-rbac.md`(작성 예정), `docs/runbooks/admin.md`를 따른다.
 
 ## SPEC V8 매핑
 

@@ -1,6 +1,7 @@
 # SPRINT-4 — 지도 + 사용자 UI + v0.1.0 릴리즈
 
-- **상태**: proposed
+- **상태**: in progress (PR #15/#16 merged; T-074/T-075 shell 완료. live feature read
+  및 v0.1.0 tag는 krtour-map 운영 HTTP 서비스/T-066 대기)
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` OpenAPI read 활성화
   + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
@@ -68,9 +69,10 @@
 
 ### ADR
 
-- ADR-015 (이미 박힘): 지도 클라이언트 `maplibre-vworld-js` + wrapping 금지 (TripMate는 직접 사용 + 부족 기능은 라이브러리에 PR)
-- ADR-NNN: viewport 클러스터링 전략 (서버측 + 디바운스 250ms)
-- ADR-NNN: feature_snapshot 동기화 정책 (라이브러리 변경 시 cache 갱신)
+- ADR-015: 지도 클라이언트 `maplibre-vworld-js` + wrapping 금지
+- ADR-026/027: krtour-map OpenAPI HTTP 계약과 운영급 HTTP 서비스 신설 대기
+- ADR-028: 정규 `feature_id` 포맷
+- viewport cache / feature snapshot 동기화 정책은 T-148/T-151에서 재정리
 
 ## SPEC V8 매핑
 

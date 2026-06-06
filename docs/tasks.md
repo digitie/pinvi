@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
+- [ ] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -129,6 +129,10 @@
   (완료: 2026-06-06, README/AGENTS/CLAUDE/SKILL 및 integrations index의 현재 책임
   표현을 ADR-020 기준 `AI companion 호출 계약`으로 정리. Gemini/Claude/Codex provider
   구현은 별도 `tripmate-ai-companion` repo 책임)
+- [x] T-150 — 계획/추적 문서 정합화
+  (완료: 2026-06-06, Sprint 1/3/4/5 status를 최신 main과 맞추고, Sprint 5 ETL
+  provider asset 목록을 krtour-map 책임으로 정정, `resume.md` ADR-031까지 박힌 ADR
+  목록 갱신, T-111 중복/보류·완료 혼재 상태 점검, merge history PR #55 추가)
 
 ## 보류
 
@@ -188,7 +192,7 @@
 - [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
 - [ ] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027)
 - [x] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
-- [ ] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
+- [x] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
 - [ ] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
 
 ### krtour-map ADR-045 Phase 6 (TripMate 몫) 대응
@@ -221,3 +225,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
 | PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |
 | PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
+| PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |

@@ -1,7 +1,9 @@
 # SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
-- **상태**: proposed
-- **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨)
+- **상태**: proposed (일부 선반영: T-067 KASI, T-109 geofencing, T-110 Grafana,
+  T-115 backup foundation)
+- **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
+  read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Loki/Grafana + Admin
   운영 화면 (Record Linkage, provider sync, integrity, debug logs) +
   **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
@@ -10,13 +12,13 @@
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
-  - `apps/etl` Dagster code location 활성화 + 4 asset:
+  - `apps/etl` Dagster code location 활성화 + TripMate `app` schema 소유 job:
     - `tripmate_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
-    - `python-visitkorea-api_festivals` (event, 주 1회)
-    - `python-opinet-api_fuel` (price, 6시간)
-    - `python-kma-api_short_term_weather` (weather, 30분)
-    - `python-krheritage-api_heritage` (place/area, 주 1회) + `_events` (event, 일 1회)
+    - (계획) `tripmate_email_outbox`, `tripmate_pii_retention`,
+      `tripmate_location_log_archive`, `tripmate_telegram_weekly`
+    - feature/provider 적재 asset(VisitKorea/OpiNet/KMA/KrHeritage 등)은
+      `python-krtour-map` 소유이며 본 저장소 ETL에 추가하지 않는다(ADR-026/T-210c).
   - vworld 법정동코드 임포트 trigger UI (`python-kraddr-geo`에 위임)
   - `/admin/etl` Dagit 임베드 + 자체 요약
   - `/admin/dedup-review` (라이브러리 `dedup_review_queue` callback)
@@ -52,16 +54,15 @@
 - `apps/etl/pyproject.toml` (dagster + dagster-webserver + provider client git URL pin)
 - `apps/etl/tripmate/etl/__init__.py`
 - `apps/etl/tripmate/etl/definitions.py` (Dagster code location)
-- `apps/etl/tripmate/etl/resources.py` (`TripmateDatabaseResource`, `KasiResource`,
-  후속 `KrtourMapResource`, `VisitKoreaResource`, `OpiNetResource`, `KmaResource`,
-  `KrheritageResource`)
+- `apps/etl/tripmate/etl/resources.py` (`TripmateDatabaseResource`, `KasiResource`)
 - `apps/etl/tripmate/etl/assets/tripmate_kasi_special_days.py`
 - `apps/etl/tripmate/etl/jobs.py` (`kasi_poi_rise_set_job`)
 - `apps/etl/tripmate/etl/schedules.py`
-- `apps/etl/tripmate/etl/assets/{feature_event_festivals,feature_price_fuel,feature_weather_kma_short_term,feature_place_heritage,feature_event_heritage,feature_vworld_import}.py`
+- `apps/etl/tripmate/etl/assets/{tripmate_email_outbox,tripmate_pii_retention,tripmate_location_log_archive,tripmate_telegram_weekly}.py`
+  (계획, `app` schema 소유 job일 때만)
 - `apps/etl/tests/test_definitions.py`
 - `apps/etl/tests/test_kasi_special_days.py`
-- `apps/etl/tests/test_asset_festivals.py` (materialize_to_memory + fixture)
+- `apps/etl/tests/test_email_outbox.py` / `test_pii_retention.py` (계획)
 
 ### 프론트엔드
 
@@ -94,9 +95,8 @@
 
 - `tests/integration/test_ws_trip_channel.py` (broadcast + close 4403)
 - `tests/integration/test_optimistic_lock.py` (409 + ConflictDialog)
-- `apps/etl/tests/test_asset_festivals.py`
-- `apps/etl/tests/test_asset_fuel.py`
-- `apps/etl/tests/test_asset_kma.py`
+- `apps/etl/tests/test_email_outbox.py`
+- `apps/etl/tests/test_pii_retention.py`
 - `tests/integration/test_admin_dedup_review.py` (라이브러리 callback)
 
 ### ADR
@@ -120,20 +120,19 @@
 
 본 Sprint 종료 직전:
 
-1. `python-visitkorea-api_festivals` materialize → `/admin/features?kind=event` 결과 확인
-2. `python-opinet-api_fuel` materialize → `/admin/features?kind=price&category=fuel`
-3. `python-kma-api_short_term_weather` materialize → `/features/{id}/weather` API 응답
-4. `python-krheritage-api_heritage` materialize → place/area 분리 적재
-5. `tripmate_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
-6. `kasi_poi_rise_set_job` 단일 POI 실행 → `app.trip_poi_rise_sets` success/failed 확인
-7. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
-8. `/admin/provider-sync` 일시정지 후 재개 → cursor 유지 확인
+1. `tripmate_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
+2. `kasi_poi_rise_set_job` 단일 POI 실행 → `app.trip_poi_rise_sets` success/failed 확인
+3. `tripmate_email_outbox` / retention 계열 job은 `app` schema만 변경하는지 확인
+4. feature/provider materialize 검증(VisitKorea/OpiNet/KMA/KrHeritage 등)은
+   `python-krtour-map` 저장소의 Sprint/런북에서 수행
+5. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
+6. `/admin/provider-sync` 일시정지 후 재개 → cursor 유지 확인
 
 ## 종료 체크리스트
 
 - [ ] DoD 모두 통과
 - [ ] WebSocket 동시 편집 5명 시뮬레이션 통과
-- [ ] Dagster 4 asset 첫 적재 통과
+- [ ] Dagster app-owned asset/job 첫 적재 통과
 - [ ] Loki LogQL stream Admin에서 확인
 - [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
 - [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
