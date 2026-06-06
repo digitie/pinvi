@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
+- [ ] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -189,7 +189,7 @@
 - [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
 - [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
 - [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26)
-- [ ] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
+- [x] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
 - [ ] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027)
 - [x] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
 - [x] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
@@ -228,3 +228,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |
 | PR #56 | docs: align tracking docs with merged work | 2026-06-06 | T-150 |
 | PR #57 | docs: backfill auth rbac audit ADRs | 2026-06-06 | T-151 |
+| PR #58 | docs: align map social kraddr docs | 2026-06-06 | T-143 |
