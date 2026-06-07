@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-136 Resend webhook Svix 서명 검증
+
+**작업**: `TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 운영 환경에서 Resend webhook이
+서명 없이 email 상태를 갱신할 수 있던 Sprint 2 임시 구현을 실제 Svix 검증으로
+교체했다.
+
+**변경**:
+- `apps/api/app/webhooks/resend.py` — JSON 파싱 전 raw body 기준으로
+  `svix-id`/`svix-timestamp`/`svix-signature`를 검증한다. `whsec_` secret을 HMAC key로
+  쓰고, `id.timestamp.payload` HMAC-SHA256 `v1` signature와 timestamp 300초 허용
+  오차를 확인한다. 실패 시 `401 WEBHOOK_SIGNATURE_INVALID`.
+- `apps/api/tests/integration/test_resend_webhook.py` — 서명 비활성 dev mode 기존
+  동작, 정상 서명 delivered 갱신, 헤더 누락/서명 불일치/오래된 timestamp 거부를
+  검증한다.
+- `docs/integrations/resend.md`, `docs/api/common.md`, `docs/resume.md`,
+  `docs/tasks.md` — Resend webhook 검증 계약과 T-136 완료, 다음 비의존 후보 T-134를
+  반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy
+- WSL2 ext4 mirror: `pytest --capture=no tests/integration/test_resend_webhook.py`
+
+**다음**: T-134 `POST /auth/refresh` + `user_sessions` 영속화.
+
 ## 2026-06-07 (codex) — T-141 trip↔지역 구조적 연결
 
 **작업**: D-11 감사 항목의 `region_hint` 자유텍스트 한계를 줄이기 위해 TripMate
