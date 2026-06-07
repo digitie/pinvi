@@ -138,6 +138,10 @@
   `mcp-telegram` 서버를 claude/codex/antigravity/gemini MCP 설정에 등록 +
   `.env.mcp-telegram` gitignore + AGENTS/CLAUDE/SKILL/runbook 정책. GitHub secret 미사용
   (T-062 유지). 실제 전송 검증 완료. PR 후 `send_message`로 요약+링크 발송 규칙.)
+- [x] T-153 — PR 리뷰 모니터 MCP 알림 보강
+  (완료: 2026-06-07, `scripts/pr_review_monitor.py`로 PR 이벤트/예약 감시 로직 단일화,
+  `synchronize`/`reopened` 즉시 알림 추가, 알림 본문에 `python-krtour-map`식 MCP 진입
+  CodeGraph/Playwright/Sequential Thinking/Telegram 기준 반영. GitHub secret 미사용.)
 
 ## 보류
 

@@ -290,8 +290,9 @@ EOF
 
 Sprint 4 완료 전까지 새 PR 또는 `ready_for_review` 전환 PR은
 `docs/runbooks/pr-review-sprint4.md`를 따른다. `.github/workflows/codex-pr-monitor.yml`은
-외부 API key 없이 5분마다 열린 PR을 감시하고, 최신 head SHA review reminder 마커가
-없는 PR에 리뷰 필요 알림을 남긴다.
+외부 API key 없이 예약/수동으로 열린 PR을 감시하고, `.github/workflows/codex-pr-review.yml`은
+PR 생성·전환·새 commit 이벤트에서 같은 로직을 실행한다. 최신 head SHA review reminder
+마커가 없는 PR에는 `python-krtour-map`과 같은 MCP 진입 방식의 리뷰 필요 알림을 남긴다.
 
 - review reminder는 1차 신호다. 에이전트는 별도로 변경분을 읽고 상세 리뷰를 남긴다.
 - 리뷰에서 끝내지 않고 필요한 코드 수정, 테스트 보강, 문서 갱신까지 수행한다.
