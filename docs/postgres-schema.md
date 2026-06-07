@@ -149,18 +149,33 @@ CREATE TABLE app.trips (
   start_date        date NOT NULL,
   end_date          date NOT NULL,
   region_hint       text,
+  primary_region_code varchar(10),
+  primary_region_source varchar(16),
   cover_attachment_id uuid,
   visibility        text NOT NULL DEFAULT 'private',
   status            text NOT NULL DEFAULT 'draft',
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT trips_dates_chk CHECK (end_date >= start_date),
+  CONSTRAINT ck_trips_primary_region_code CHECK (
+    primary_region_code IS NULL OR primary_region_code ~ '^[0-9]{2,10}$'
+  ),
+  CONSTRAINT ck_trips_primary_region_source CHECK (
+    primary_region_source IS NULL OR primary_region_source IN ('manual', 'poi_snapshot', 'geocoded')
+  ),
+  CONSTRAINT ck_trips_primary_region_pair CHECK (
+    (primary_region_code IS NULL AND primary_region_source IS NULL)
+    OR (primary_region_code IS NOT NULL AND primary_region_source IS NOT NULL)
+  ),
   CONSTRAINT trips_visibility_chk CHECK (visibility IN ('private', 'unlisted', 'public')),
   CONSTRAINT trips_status_chk CHECK (status IN ('draft', 'planned', 'in_progress', 'completed', 'archived'))
 );
 
 CREATE INDEX trips_owner_status_idx ON app.trips (owner_user_id, status, start_date DESC);
 CREATE INDEX trips_public_idx ON app.trips (start_date DESC) WHERE visibility = 'public';
+CREATE INDEX ix_trips_primary_region
+  ON app.trips (primary_region_code)
+  WHERE primary_region_code IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TRIGGER trips_touch_updated_at
 BEFORE UPDATE ON app.trips

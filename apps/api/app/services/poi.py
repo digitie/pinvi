@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -16,6 +18,18 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.kasi import build_initial_poi_rise_set
+
+_REGION_CODE_RE = re.compile(r"^[0-9]{2,10}$")
+_REGION_CODE_KEYS = (
+    "legal_dong_code",
+    "bjd_code",
+    "bjd_cd",
+    "region_code",
+    "sigungu_code",
+    "sig_cd",
+    "sido_code",
+)
+_REGION_CONTAINER_KEYS = ("region", "address", "location")
 
 
 class PoiError(Exception):
@@ -87,6 +101,11 @@ async def create_poi(
         added_by_user_id=added_by_user_id,
     )
     db.add(poi)
+    await _fill_trip_primary_region_from_snapshot(
+        db,
+        trip_id=trip_id,
+        feature_snapshot=feature_snapshot,
+    )
     try:
         await db.flush()
         db.add(
@@ -194,3 +213,41 @@ async def reorder_pois(
     for poi in updated:
         await db.refresh(poi)
     return updated
+
+
+async def _fill_trip_primary_region_from_snapshot(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    feature_snapshot: Mapping[str, Any],
+) -> None:
+    region_code = _extract_region_code(feature_snapshot)
+    if region_code is None:
+        return
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+    if trip is None or trip.primary_region_code is not None:
+        return
+    trip.primary_region_code = region_code
+    trip.primary_region_source = "poi_snapshot"
+    trip.version += 1
+
+
+def _extract_region_code(feature_snapshot: Mapping[str, Any]) -> str | None:
+    direct = _extract_region_code_from_mapping(feature_snapshot)
+    if direct is not None:
+        return direct
+    for key in _REGION_CONTAINER_KEYS:
+        value = feature_snapshot.get(key)
+        if isinstance(value, Mapping):
+            nested = _extract_region_code_from_mapping(value)
+            if nested is not None:
+                return nested
+    return None
+
+
+def _extract_region_code_from_mapping(value: Mapping[str, Any]) -> str | None:
+    for key in _REGION_CODE_KEYS:
+        candidate = value.get(key)
+        if isinstance(candidate, str) and _REGION_CODE_RE.fullmatch(candidate):
+            return candidate
+    return None

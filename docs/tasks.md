@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
+- [ ] T-136 — Resend webhook Svix 서명 검증 (C-22)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -192,7 +192,7 @@
 - [x] T-138 — `users` 누락 컬럼 + `security_incidents` 테이블 추가 (D-02,D-03,D-09)
 - [x] T-139 — 동반자 초대 흐름 + 댓글 모델/`visibility` 정리 (D-06)
 - [x] T-140 — 여행 예산(budget/currency) 도메인 + 복사 흐름 (D-10)
-- [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
+- [x] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
 - [x] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
 - [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
 - [x] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
@@ -246,3 +246,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #64 | feat: add security incidents schema | 2026-06-06 | T-138 |
 | PR #65 | feat: add trip companion comments flow | 2026-06-06 | T-139 |
 | PR #67 | feat: add trip budget constraints | 2026-06-06 | T-140 |
+| PR #69 | feat: add trip primary region | 2026-06-07 | T-141 |

@@ -57,6 +57,7 @@ Content-Type: application/json
   "start_date": "2026-06-01", // optional (둘 다 비우면 period-less)
   "end_date": "2026-06-03",
   "region_hint": "부산",      // optional
+  "primary_region_code": "26110", // optional, sido/sigungu/bjd code
   "visibility": "private",    // private | unlisted | public
   "companions": [             // optional
     { "email": "friend@example.com", "display_name": "친구" }
@@ -66,6 +67,13 @@ Content-Type: application/json
 
 응답 201: `{ "data": { "trip": {...}, "days": [...] } }`. 동반자가 있으면
 invite 이메일 발송.
+
+`primary_region_code`는 `region_hint` 자유텍스트와 별개로 지역 기반 weather/oil/
+Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigungu/bjd code)를
+허용하며, 사용자가 직접 입력하면 응답의 `primary_region_source`는 `manual`이다.
+값을 비워 만든 trip은 POI 생성 시 `feature_snapshot.region.*` 또는 snapshot 최상위의
+`sigungu_code`/`bjd_cd`/`region_code` 등에서 첫 지역 code를 찾아 `poi_snapshot`으로
+자동 채울 수 있다. kraddr-geo reverse geocoding 기반 자동 유도는 별도 후속 작업이다.
 
 ### 3.3 `GET /trips/{trip_id}`
 
@@ -87,6 +95,7 @@ Content-Type: application/json
   "start_date": "2026-06-01",
   "end_date": "2026-06-03",
   "region_hint": "...",
+  "primary_region_code": "26110",
   "cover_attachment_id": "uuid",
   "visibility": "...",
   "status": "draft" | "planned" | "in_progress" | "completed" | "archived"
@@ -95,6 +104,7 @@ Content-Type: application/json
 
 `If-Match` 불일치 → `409 VERSION_CONFLICT`. 성공 시 `version + 1` + WebSocket
 broadcast (`trip.updated`).
+`primary_region_code: null`을 보내면 `primary_region_source`도 함께 비운다.
 
 ### 3.5 `DELETE /trips/{trip_id}`
 

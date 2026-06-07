@@ -8,11 +8,19 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+RegionSource = Literal["manual", "poi_snapshot", "geocoded"]
+
 
 class TripBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     region_hint: str | None = Field(default=None, max_length=120)
+    primary_region_code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=10,
+        pattern=r"^[0-9]{2,10}$",
+    )
     start_date: date | None = None
     end_date: date | None = None
     visibility: Literal["private", "unlisted", "public"] = "private"
@@ -89,6 +97,12 @@ class TripUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     region_hint: str | None = Field(default=None, max_length=120)
+    primary_region_code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=10,
+        pattern=r"^[0-9]{2,10}$",
+    )
     cover_attachment_id: uuid.UUID | None = None
     start_date: date | None = None
     end_date: date | None = None
@@ -102,6 +116,8 @@ class TripResponse(BaseModel):
     title: str
     description: str | None
     region_hint: str | None
+    primary_region_code: str | None
+    primary_region_source: RegionSource | None
     start_date: date | None
     end_date: date | None
     visibility: Literal["private", "unlisted", "public"]

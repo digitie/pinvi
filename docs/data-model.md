@@ -160,10 +160,16 @@
 | `start_date` | `date` NOT NULL | |
 | `end_date` | `date` NOT NULL | `>= start_date` |
 | `region_hint` | `text` | 예: "부산", "강릉" |
+| `primary_region_code` | `varchar(10)` | 선택. 지역 기반 알림/질의용 sido/sigungu/bjd code |
+| `primary_region_source` | `varchar(16)` | `manual` / `poi_snapshot` / `geocoded` |
 | `cover_attachment_id` | `uuid` → `app.attachments` | nullable |
 | `visibility` | `text` | `private` / `unlisted` / `public` |
 | `status` | `text` | `draft` / `planned` / `in_progress` / `completed` / `archived` |
 | `created_at`, `updated_at` | `timestamptz` | |
+
+`region_hint`는 사용자 표시용 자유텍스트이고, `primary_region_code`는 텔레그램 brief,
+지역 날씨/유가 후보 질의처럼 구조화 지역 키가 필요한 흐름에서 사용한다. 사용자가
+직접 입력하면 `manual`, POI `feature_snapshot`에서 보강되면 `poi_snapshot`이다.
 
 #### `app.trip_days`
 

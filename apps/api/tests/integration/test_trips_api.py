@@ -31,19 +31,27 @@ async def test_create_and_get_trip(client, verified_user, auth_cookies) -> None:
 
     resp = await client.post(
         "/trips",
-        json={"title": "부산 2박 3일", "region_hint": "부산", "visibility": "private"},
+        json={
+            "title": "부산 2박 3일",
+            "region_hint": "부산",
+            "primary_region_code": "26110",
+            "visibility": "private",
+        },
         cookies=cookies,
     )
     assert resp.status_code == 201, resp.text
     trip = resp.json()["data"]
     assert trip["title"] == "부산 2박 3일"
     assert trip["owner_user_id"] == user_id
+    assert trip["primary_region_code"] == "26110"
+    assert trip["primary_region_source"] == "manual"
     assert trip["version"] == 1
 
     trip_id = trip["trip_id"]
     got = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert got.status_code == 200
     assert got.json()["data"]["trip_id"] == trip_id
+    assert got.json()["data"]["primary_region_code"] == "26110"
 
 
 async def test_list_trips_only_owner(client, verified_user, auth_cookies) -> None:
@@ -87,6 +95,39 @@ async def test_trip_optimistic_lock(client, verified_user, auth_cookies) -> None
         cookies=cookies,
     )
     assert conflict.status_code == 409
+
+
+async def test_trip_primary_region_update_and_validation(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post(
+        "/trips",
+        json={"title": "지역 여행", "primary_region_code": "11"},
+        cookies=cookies,
+    )
+    assert created.status_code == 201, created.text
+    trip = created.json()["data"]
+    assert trip["primary_region_code"] == "11"
+    assert trip["primary_region_source"] == "manual"
+
+    cleared = await client.patch(
+        f"/trips/{trip['trip_id']}",
+        json={"primary_region_code": None},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["data"]["primary_region_code"] is None
+    assert cleared.json()["data"]["primary_region_source"] is None
+
+    invalid = await client.post(
+        "/trips",
+        json={"title": "잘못된 지역", "primary_region_code": "SEOUL"},
+        cookies=cookies,
+    )
+    assert invalid.status_code == 422
 
 
 async def test_share_link_uses_web_base_url(

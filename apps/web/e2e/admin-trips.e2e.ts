@@ -22,6 +22,8 @@ const tripSummary: AdminTripSummary = {
   owner_email_masked: 'o***@example.com',
   title: '부산 가족 여행',
   region_hint: '부산',
+  primary_region_code: '26',
+  primary_region_source: 'manual',
   start_date: '2026-07-01',
   end_date: '2026-07-03',
   visibility: 'private',
@@ -181,9 +183,7 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await page.getByTestId('admin-trip-action-reason').fill('운영 정책 위반 처리');
   await page.getByTestId('admin-trip-action-confirm').click();
 
-  await expect(page.getByTestId('admin-trip-audit-list')).toContainText(
-    'trip.update_status',
-  );
+  await expect(page.getByTestId('admin-trip-audit-list')).toContainText('trip.update_status');
   expect(patchReason).toBe('운영 정책 위반 처리');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('9011'))).toBe(false);

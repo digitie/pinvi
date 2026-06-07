@@ -49,7 +49,11 @@ const columns: DataTableColumn<AdminTripSummary>[] = [
   { key: 'owner', header: '소유자', cell: (trip) => trip.owner_email_masked },
   { key: 'status', header: '상태', cell: (trip) => trip.status },
   { key: 'visibility', header: '공개', cell: (trip) => trip.visibility },
-  { key: 'region', header: '지역', cell: (trip) => trip.region_hint ?? '—' },
+  {
+    key: 'region',
+    header: '지역',
+    cell: (trip) => trip.region_hint ?? trip.primary_region_code ?? '—',
+  },
   { key: 'period', header: '기간', cell: formatDateRange },
   {
     key: 'counts',
@@ -169,7 +173,10 @@ export default function AdminTripsPage() {
       </FilterBar>
 
       {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-trips-error">
+        <p
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-trips-error"
+        >
           {error}
         </p>
       )}

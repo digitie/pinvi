@@ -10,10 +10,13 @@ export const TripStatusSchema = z.enum([
   'archived',
 ]);
 export const TripVisibilitySchema = z.enum(['private', 'unlisted', 'public']);
+const RegionCodeSchema = z.string().regex(/^[0-9]{2,10}$/);
+export const TripPrimaryRegionSourceSchema = z.enum(['manual', 'poi_snapshot', 'geocoded']);
 export const TripCompanionRoleSchema = z.enum(['co_owner', 'editor', 'viewer']);
 export const TripShareLinkVisibilitySchema = z.enum(['view_only', 'comment', 'edit']);
 export type TripStatus = z.infer<typeof TripStatusSchema>;
 export type TripVisibility = z.infer<typeof TripVisibilitySchema>;
+export type TripPrimaryRegionSource = z.infer<typeof TripPrimaryRegionSourceSchema>;
 export type TripCompanionRole = z.infer<typeof TripCompanionRoleSchema>;
 export type TripShareLinkVisibility = z.infer<typeof TripShareLinkVisibilitySchema>;
 
@@ -83,6 +86,7 @@ export const TripCreateSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().nullable().optional(),
   region_hint: z.string().max(120).nullable().optional(),
+  primary_region_code: RegionCodeSchema.nullable().optional(),
   start_date: z.string().date().nullable().optional(),
   end_date: z.string().date().nullable().optional(),
   visibility: TripVisibilitySchema.default('private'),
@@ -94,6 +98,7 @@ export const TripUpdateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().nullable().optional(),
   region_hint: z.string().max(120).nullable().optional(),
+  primary_region_code: RegionCodeSchema.nullable().optional(),
   cover_attachment_id: z.string().uuid().nullable().optional(),
   start_date: z.string().date().nullable().optional(),
   end_date: z.string().date().nullable().optional(),
@@ -108,6 +113,8 @@ export const TripResponseSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
   region_hint: z.string().nullable(),
+  primary_region_code: RegionCodeSchema.nullable(),
+  primary_region_source: TripPrimaryRegionSourceSchema.nullable(),
   start_date: z.string().date().nullable(),
   end_date: z.string().date().nullable(),
   visibility: TripVisibilitySchema,

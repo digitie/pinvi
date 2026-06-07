@@ -169,6 +169,7 @@ def _trip_filters(
         search_filters: list[ColumnElement[bool]] = [
             Trip.title.ilike(pattern),
             Trip.region_hint.ilike(pattern),
+            Trip.primary_region_code.ilike(pattern),
             User.email.ilike(pattern),
         ]
         try:

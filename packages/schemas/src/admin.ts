@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema } from './common';
-import { TripStatusSchema, TripVisibilitySchema } from './trip';
+import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
 /** `docs/api/admin.md` §6.4 — 목록 응답은 PII 마스킹. */
 export const AdminUserSummarySchema = z.object({
@@ -59,6 +59,11 @@ export const AdminTripSummarySchema = z.object({
   owner_email_masked: z.string(),
   title: z.string(),
   region_hint: z.string().nullable(),
+  primary_region_code: z
+    .string()
+    .regex(/^[0-9]{2,10}$/)
+    .nullable(),
+  primary_region_source: TripPrimaryRegionSourceSchema.nullable(),
   start_date: z.string().date().nullable(),
   end_date: z.string().date().nullable(),
   visibility: TripVisibilitySchema,
@@ -82,9 +87,7 @@ export const AdminTripCompanionSummarySchema = z.object({
   invited_at: Iso8601Schema,
   joined_at: Iso8601Schema.nullable(),
 });
-export type AdminTripCompanionSummary = z.infer<
-  typeof AdminTripCompanionSummarySchema
->;
+export type AdminTripCompanionSummary = z.infer<typeof AdminTripCompanionSummarySchema>;
 
 export const AdminTripShareLinkSummarySchema = z.object({
   share_id: z.string().uuid(),
@@ -94,9 +97,7 @@ export const AdminTripShareLinkSummarySchema = z.object({
   last_used_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
 });
-export type AdminTripShareLinkSummary = z.infer<
-  typeof AdminTripShareLinkSummarySchema
->;
+export type AdminTripShareLinkSummary = z.infer<typeof AdminTripShareLinkSummarySchema>;
 
 export const AdminTripDetailSchema = AdminTripSummarySchema.extend({
   description: z.string().nullable(),
@@ -168,9 +169,7 @@ export const AdminPoiLinkStatusRequestSchema = z.object({
   broken: z.boolean(),
   access_reason: z.string().min(1).max(500),
 });
-export type AdminPoiLinkStatusRequest = z.infer<
-  typeof AdminPoiLinkStatusRequestSchema
->;
+export type AdminPoiLinkStatusRequest = z.infer<typeof AdminPoiLinkStatusRequestSchema>;
 
 /** email_queue 행. */
 export const AdminEmailEntrySchema = z.object({
@@ -198,9 +197,7 @@ export type AdminChainVerify = z.infer<typeof AdminChainVerifySchema>;
 export const AdminBackupSnapshotRequestSchema = z.object({
   access_reason: z.string().min(1).max(500),
 });
-export type AdminBackupSnapshotRequest = z.infer<
-  typeof AdminBackupSnapshotRequestSchema
->;
+export type AdminBackupSnapshotRequest = z.infer<typeof AdminBackupSnapshotRequestSchema>;
 
 export const AdminBackupSnapshotSchema = z.object({
   snapshot_id: z.string(),

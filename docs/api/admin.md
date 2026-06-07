@@ -227,13 +227,15 @@ GET /admin/trips?q=busan&status_filter=planned&visibility_filter=private&page=1&
 ```
 
 - 권한: `admin` / `operator`
-- `q`: 제목 / 지역 힌트 / owner 이메일 부분 일치, `trip_id` 또는 `owner_user_id`
-  UUID 정확 일치
+- `q`: 제목 / 지역 힌트 / `primary_region_code` / owner 이메일 부분 일치,
+  `trip_id` 또는 `owner_user_id` UUID 정확 일치
 - `status_filter`: `draft` / `planned` / `in_progress` / `completed` / `archived`
 - `visibility_filter`: `private` / `unlisted` / `public`
 - `owner_user_id`: 특정 소유자 UUID
 - 목록 응답은 owner 이메일 원본을 포함하지 않고 `owner_email_masked`만 제공한다.
 - 각 row는 `day_count`, `poi_count`, `companion_count`, `share_link_count`를 포함한다.
+- 각 row는 `region_hint`와 함께 구조화 지역 키
+  `primary_region_code`/`primary_region_source`를 포함한다.
 
 ### 7.2 `GET /admin/trips/{trip_id}`
 
