@@ -172,7 +172,6 @@ async def update_poi_link_status_endpoint(
             poi_id=poi_id,
             broken=body.broken,
         )
-        row = await get_admin_poi(db, poi_id=poi.attachment_id)
     except AdminPoiNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -193,4 +192,7 @@ async def update_poi_link_status_endpoint(
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
+    await db.commit()
+    await db.refresh(poi)
+    row = await get_admin_poi(db, poi_id=poi.attachment_id)
     return Envelope.of(await _to_detail(db, row))

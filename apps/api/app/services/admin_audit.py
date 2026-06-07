@@ -28,7 +28,10 @@ async def append_admin_audit(
     user_agent: str | None,
     request_id: uuid.UUID,
 ) -> AdminAuditLog:
-    """audit row append (append-only trigger 보장)."""
+    """audit row append (append-only trigger 보장).
+
+    호출자는 업무 상태 변경과 audit append를 같은 트랜잭션에 묶은 뒤 commit한다.
+    """
     last = await db.scalar(select(AdminAuditLog).order_by(AdminAuditLog.log_id.desc()).limit(1))
     prev_hash = last.content_hash if last else GENESIS_HASH
     now = datetime.now(UTC)
@@ -65,5 +68,5 @@ async def append_admin_audit(
         occurred_at=now,
     )
     db.add(row)
-    await db.commit()
+    await db.flush()
     return row

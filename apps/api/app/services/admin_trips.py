@@ -68,8 +68,6 @@ async def update_admin_trip_status(
     before_status = trip.status
     trip.status = status
     trip.version += 1
-    await db.commit()
-    await db.refresh(trip)
     return trip, before_status
 
 

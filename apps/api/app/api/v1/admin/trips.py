@@ -242,4 +242,6 @@ async def update_trip_status_endpoint(
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
+    await db.commit()
+    await db.refresh(trip)
     return Envelope.of(await _to_detail(db, trip))

@@ -233,7 +233,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-157 — geofence fallback에 Cloudflare 발신 검증(header spoof + nginx 강등 우회 차단) (PR #60)
 - [x] T-158 — Trip WebSocket rate limit + cursor 증폭 차단 + broadcast backpressure + 연결 수 캡 (PR #63)
 - [x] T-159 — 응답 money 필드 Zod 타입 정합(`Decimal`→string vs `z.number()` 파싱 reject) (PR #67)
-- [ ] T-160 — admin 상태변경 status+audit 단일 트랜잭션(원자성, 해시체인) — #50/#52/#53 횡단 (PR #53)
+- [x] T-160 — admin 상태변경 status+audit 단일 트랜잭션(원자성, 해시체인) — #50/#52/#53 횡단 (PR #53)
 - [ ] T-161 — README `GET /search` 앵커 `#26`→`#27` 등 [중간] 정합 일괄 (PR #54 외)
 
 [중간]/[낮음] 세부는 종합 문서 §1 참조(필요 시 개별 task로 분해).
