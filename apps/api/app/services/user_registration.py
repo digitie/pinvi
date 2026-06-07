@@ -20,11 +20,11 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models.session import UserSession
 from app.models.user import User
 from app.models.user_consent import UserConsent
 from app.models.user_email_verification import UserEmailVerification
 from app.schemas.consent import ConsentItem
+from app.services.auth_session import revoke_active_user_sessions
 from app.services.email_service import enqueue_password_reset_email, enqueue_verification_email
 
 log = get_logger("auth")
@@ -183,11 +183,7 @@ async def reset_password(db: AsyncSession, *, token: str, new_password: str) -> 
     now = datetime.now(UTC)
     user.password_hash = hash_password(new_password)
     row.used_at = now
-    await db.execute(
-        update(UserSession)
-        .where(UserSession.user_id == user.user_id, UserSession.revoked_at.is_(None))
-        .values(revoked_at=now)
-    )
+    await revoke_active_user_sessions(db, user_id=user.user_id, revoked_at=now)
     await db.commit()
     await db.refresh(user)
     return user

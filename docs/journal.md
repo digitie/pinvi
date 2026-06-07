@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-156 비밀번호 재설정 session 폐기 보강
+
+**작업**: 비밀번호 재설정 후 기존 refresh session이 남으면 탈취 세션이 계속 유효할 수
+있다는 PR #71 사후 리뷰 후속을 닫았다.
+
+**변경**:
+- `apps/api/app/services/auth_session.py` — 현재 트랜잭션 안에서 사용자 active session을
+  일괄 폐기하는 `revoke_active_user_sessions` helper를 추가했다.
+- `apps/api/app/services/user_registration.py` — password reset 성공 시 helper로 기존
+  active refresh session을 모두 revoke한다.
+- `apps/api/tests/integration/test_password_reset_flow.py` — 기존 active session 2개가 모두
+  revoked 되고 reset 완료 후 새 session 1개만 active인 회귀 테스트로 강화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-156 완료를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/services/auth_session.py app/services/user_registration.py tests/integration/test_password_reset_flow.py`
+- WSL2 ext4 mirror: `mypy --strict app/services/auth_session.py app/services/user_registration.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_password_reset_flow.py`
+
+**다음**: T-126 POI 생성 경로 단일화 또는 T-157 geofence fallback 발신 검증.
+
 ## 2026-06-07 (codex) — T-155 Admin access_reason URL 로깅 제거
 
 **작업**: Admin 사용자 상세의 PII reveal 사유가 `access_reason` query string으로 전송돼

@@ -33,13 +33,14 @@ async def _seed_password_user(session_factory) -> tuple[str, str]:  # type: igno
             )
         )
         await db.flush()
-        db.add(
-            UserSession(
-                user_id=user_id,
-                session_token_hash=uuid.uuid4().hex,
-                expires_at=datetime.now(UTC) + timedelta(days=7),
+        for _ in range(2):
+            db.add(
+                UserSession(
+                    user_id=user_id,
+                    session_token_hash=uuid.uuid4().hex,
+                    expires_at=datetime.now(UTC) + timedelta(days=7),
+                )
             )
-        )
         await db.commit()
     return str(user_id), email
 
@@ -94,9 +95,12 @@ async def test_password_reset_updates_password_and_revokes_sessions(
         assert user.password_hash is not None
         assert verify_password("new-secret-pw-67890", user.password_hash)
 
-        session = await db.scalar(select(UserSession).where(UserSession.user_id == user.user_id))
-        assert session is not None
-        assert session.revoked_at is not None
+        sessions = (
+            await db.scalars(select(UserSession).where(UserSession.user_id == user.user_id))
+        ).all()
+        assert len(sessions) == 3
+        assert sum(session.revoked_at is not None for session in sessions) == 2
+        assert sum(session.revoked_at is None for session in sessions) == 1
 
         verification = await db.scalar(
             select(UserEmailVerification).where(

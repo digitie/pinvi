@@ -131,6 +131,20 @@ async def refresh_user_session(
     return RefreshedAuthSession(user=user, issue=issue)
 
 
+async def revoke_active_user_sessions(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    revoked_at: datetime | None = None,
+) -> None:
+    now = revoked_at or utc_now()
+    await db.execute(
+        update(UserSession)
+        .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+
+
 async def revoke_user_session(db: AsyncSession, *, refresh_token: str | None) -> None:
     if not refresh_token:
         return

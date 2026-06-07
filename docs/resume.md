@@ -19,6 +19,10 @@ webhook을 허용한다.
 걸리지 않도록 `POST /admin/users/{user_id}/reveal-pii` + JSON body로만 audit 사유를
 허용한다.
 
+**T-156 비밀번호 재설정 session 폐기 완료** (2026-06-07): reset password 성공 시
+기존 active refresh session을 모두 revoke하고, reset 완료 응답으로 발급되는 새 session만
+active로 남도록 `revoke_active_user_sessions` helper와 다중 session 회귀 테스트를 정렬했다.
+
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
 `dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`
