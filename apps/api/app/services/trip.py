@@ -50,6 +50,7 @@ async def create_trip(
     title: str,
     description: str | None,
     region_hint: str | None,
+    primary_region_code: str | None,
     start_date: date | None,
     end_date: date | None,
     visibility: str,
@@ -59,6 +60,8 @@ async def create_trip(
         title=title,
         description=description,
         region_hint=region_hint,
+        primary_region_code=primary_region_code,
+        primary_region_source="manual" if primary_region_code is not None else None,
         start_date=start_date,
         end_date=end_date,
         visibility=visibility,
@@ -110,8 +113,16 @@ async def update_trip(
 ) -> Trip:
     if trip.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    if "primary_region_code" in patch:
+        primary_region_code = patch.pop("primary_region_code")
+        trip.primary_region_code = primary_region_code
+        trip.primary_region_source = "manual" if primary_region_code is not None else None
     for key, value in patch.items():
-        if value is not None or key in {"description", "region_hint", "cover_attachment_id"}:
+        if value is not None or key in {
+            "description",
+            "region_hint",
+            "cover_attachment_id",
+        }:
             setattr(trip, key, value)
     trip.version += 1
     await db.commit()

@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-141 trip↔지역 구조적 연결
+
+**작업**: D-11 감사 항목의 `region_hint` 자유텍스트 한계를 줄이기 위해 TripMate
+자체 trip metadata에 구조화 지역 키를 추가했다.
+
+**변경**:
+- `apps/api/app/models/trip.py`,
+  `apps/api/alembic/versions/20260606_0010_trip_primary_region.py` — `app.trips`에
+  `primary_region_code`/`primary_region_source`와 code/source pair 제약, region index를
+  추가했다.
+- `apps/api/app/schemas/trip.py`, `apps/api/app/services/trip.py`,
+  `apps/api/app/api/v1/trips.py` — Trip create/update/response가 수동 region code를
+  저장하고 source를 `manual`로 관리하게 했다.
+- `apps/api/app/services/poi.py` — POI 생성 시 `feature_snapshot`의 region code가 있으면
+  비어 있는 trip primary region을 `poi_snapshot`으로 자동 보강한다.
+- Admin API/schema와 `packages/schemas`, web/admin mock·표시 fallback을 구조화 지역
+  필드에 맞췄다.
+- `apps/api/tests/integration/{test_trips_api.py,test_pois_reorder.py}` — 수동 region
+  round-trip/validation/null clear와 POI snapshot 기반 자동 보강을 검증한다.
+- `docs/api/{trips,admin}.md`, `docs/{data-model,postgres-schema,resume,tasks}.md` —
+  T-141 완료와 다음 비의존 후보 T-136을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy /
+  `test_trips_api.py test_pois_reorder.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspaces --if-present`
+- WSL2 ext4 mirror: prettier check (`packages/schemas`, admin/trip TSX/e2e)
+- NTFS worktree: `git diff --check`
+
+**다음**: T-136 Resend webhook Svix 서명 검증.
+
 ## 2026-06-07 (codex) — PR 리뷰 모니터 MCP 알림 보강
 
 **작업**: PR 모니터가 5분 cron처럼 보이지만 실제 GitHub schedule 실행 간격이

@@ -131,6 +131,29 @@ async def test_poi_budget_fields_round_trip(client, verified_user, auth_cookies)
     assert invalid.status_code == 422
 
 
+async def test_poi_snapshot_fills_empty_trip_primary_region(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies)
+
+    await _add_poi(
+        client,
+        cookies,
+        trip_id,
+        sort_order="r0",
+        feature_id="regioned",
+        feature_snapshot={"name": "광안리", "region": {"sigungu_code": "26110"}},
+    )
+
+    trip = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    assert trip.status_code == 200, trip.text
+    data = trip.json()["data"]
+    assert data["primary_region_code"] == "26110"
+    assert data["primary_region_source"] == "poi_snapshot"
+
+
 async def test_collate_c_ordering(client, verified_user, auth_cookies, session_factory) -> None:
     """대문자/숫자/소문자 혼합 정렬이 ASCII (COLLATE "C") 순서를 따르는지."""
     user_id, _ = verified_user

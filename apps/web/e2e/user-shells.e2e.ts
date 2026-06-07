@@ -23,6 +23,8 @@ test('Trip 사용자 shell이 Trip API만 조회한다', async ({ page }) => {
             title: '서울 주말 산책',
             description: null,
             region_hint: '서울',
+            primary_region_code: '11',
+            primary_region_source: 'manual',
             start_date: '2026-06-20',
             end_date: '2026-06-21',
             visibility: 'private',

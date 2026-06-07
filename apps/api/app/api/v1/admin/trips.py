@@ -96,6 +96,8 @@ def _to_summary(
         owner_email_masked=mask_email(owner_email),
         title=trip.title,
         region_hint=trip.region_hint,
+        primary_region_code=trip.primary_region_code,
+        primary_region_source=trip.primary_region_source,
         start_date=trip.start_date,
         end_date=trip.end_date,
         visibility=cast(TripVisibility, trip.visibility),

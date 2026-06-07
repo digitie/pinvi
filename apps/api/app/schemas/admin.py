@@ -68,6 +68,8 @@ class AdminTripSummary(BaseModel):
     owner_email_masked: str
     title: str
     region_hint: str | None
+    primary_region_code: str | None
+    primary_region_source: Literal["manual", "poi_snapshot", "geocoded"] | None
     start_date: date | None
     end_date: date | None
     visibility: TripVisibility

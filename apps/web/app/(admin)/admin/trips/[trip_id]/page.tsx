@@ -152,7 +152,7 @@ export default function AdminTripDetailPage() {
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">지역</dt>
-            <dd>{trip.region_hint ?? '—'}</dd>
+            <dd>{trip.region_hint ?? trip.primary_region_code ?? '—'}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">기간</dt>
@@ -161,8 +161,8 @@ export default function AdminTripDetailPage() {
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">구성</dt>
             <dd>
-              days {trip.day_count} / POI {trip.poi_count} / companions{' '}
-              {trip.companion_count} / shares {trip.share_link_count}
+              days {trip.day_count} / POI {trip.poi_count} / companions {trip.companion_count} /
+              shares {trip.share_link_count}
             </dd>
           </div>
           <div>

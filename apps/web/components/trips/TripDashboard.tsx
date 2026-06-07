@@ -1,13 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  CalendarDays,
-  Loader2,
-  MapPin,
-  Plus,
-  RefreshCw,
-} from 'lucide-react';
+import { CalendarDays, Loader2, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { ApiError, tripApi, type TripBucket } from '@tripmate/api-client';
 import type { TripCreate, TripResponse, TripStatus } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
@@ -158,12 +152,13 @@ export function TripDashboard() {
       </section>
 
       {message && (
-        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
-          {message}
-        </p>
+        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
       {error && (
-        <p className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text" data-testid="trips-error">
+        <p
+          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="trips-error"
+        >
           {error}
         </p>
       )}
@@ -256,15 +251,23 @@ export function TripDashboard() {
             <p className="mt-1 text-xs text-muted">첫 여행을 만들면 이곳에 나타납니다.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="trip-list">
+          <div
+            className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+            data-testid="trip-list"
+          >
             {filteredTrips.map((trip) => (
-              <article key={trip.trip_id} className="rounded-sm border border-hairline bg-white p-4">
+              <article
+                key={trip.trip_id}
+                className="rounded-sm border border-hairline bg-white p-4"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-lg font-bold text-ink">{trip.title}</h2>
                     <p className="mt-1 flex items-center gap-1 text-sm text-muted">
                       <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{trip.region_hint ?? '지역 미정'}</span>
+                      <span className="truncate">
+                        {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
+                      </span>
                     </p>
                   </div>
                   <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
