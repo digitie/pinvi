@@ -172,51 +172,35 @@ npm --workspace emails run build
 
 ## 6. Webhook (`POST /webhooks/resend`)
 
-Svix 서명 검증 후 처리.
+`TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 환경에서는 Resend/Svix 서명 검증을 통과한
+요청만 처리한다. 로컬 개발에서 secret이 비어 있으면 기존 webhook 통합 테스트처럼
+서명 없이도 처리한다.
 
-```python
-# apps/api/app/webhooks/resend.py
-from svix.webhooks import Webhook, WebhookVerificationError
+검증 헤더:
 
-@router.post("/webhooks/resend")
-async def resend_webhook(request: Request):
-    payload = await request.body()
-    headers = request.headers
-    try:
-        wh = Webhook(settings.tripmate_resend_webhook_secret)
-        event = wh.verify(payload, headers)
-    except WebhookVerificationError:
-        raise HTTPException(401, "Invalid signature")
+- `svix-id`
+- `svix-timestamp`
+- `svix-signature`
 
-    event_type = event["type"]
-    data = event["data"]
-    entity_id = data.get("headers", {}).get("X-Entity-Ref-ID")
+구현 기준:
 
-    if event_type == "email.delivered":
-        await db.execute(
-            "UPDATE app.email_queue SET status='delivered', delivered_at=now() WHERE id=:id",
-            {"id": entity_id},
-        )
-    elif event_type == "email.bounced":
-        bounce_type = data["bounce"]["type"]  # hard | soft
-        await db.execute(
-            "UPDATE app.email_queue SET status='bounced', bounced_at=now(), bounce_type=:t WHERE id=:id",
-            {"id": entity_id, "t": bounce_type},
-        )
-        if bounce_type == "hard":
-            email = data["to"][0]
-            await db.execute(
-                "UPDATE app.users SET email_status='bounced' WHERE email=:e",
-                {"e": email},
-            )
-    elif event_type == "email.complained":
-        email = data["to"][0]
-        await db.execute(
-            "UPDATE app.users SET email_status='complained' WHERE email=:e",
-            {"e": email},
-        )
-    return {"ok": True}
-```
+- 서명은 JSON 파싱 전 raw body 기준으로 검증한다.
+- `whsec_` secret의 base64 body를 key로 사용해 `svix-id.svix-timestamp.raw_payload`
+  형식의 바이트열을 HMAC-SHA256으로 서명한다.
+- `svix-signature`의 `v1,<base64>` 값 중 하나라도 일치하면 통과한다.
+- timestamp 허용 오차는 300초다.
+- 검증 실패 시 `401 WEBHOOK_SIGNATURE_INVALID`.
+
+처리 대상 이벤트:
+
+| 이벤트 | 처리 |
+|--------|------|
+| `email.delivered` | `app.email_queue.status='delivered'`, `delivered_at=now()` |
+| `email.bounced` | `status='bounced'`, `bounced_at=now()`, `bounce_type` 저장 |
+| `email.complained` | `status='complained'` |
+
+`X-Entity-Ref-ID` 헤더가 payload `data.headers`에 없으면 멱등 성공(`{"ok": true}`)으로
+끝내고 상태를 갱신하지 않는다.
 
 ## 7. 발송 차단 정책
 
