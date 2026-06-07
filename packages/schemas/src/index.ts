@@ -1,4 +1,10 @@
-export { Iso8601Schema, CoordSchema, SuccessEnvelopeSchema, ErrorEnvelopeSchema } from './common';
+export {
+  Iso8601Schema,
+  NonNegativeDecimalStringSchema,
+  CoordSchema,
+  SuccessEnvelopeSchema,
+  ErrorEnvelopeSchema,
+} from './common';
 export type { Coord, ErrorEnvelope } from './common';
 
 export {

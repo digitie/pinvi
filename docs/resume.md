@@ -33,6 +33,10 @@ per-connection message rate limit(초당 5/분당 60), `presence.cursor` 좌표 
 `longitude`/`latitude` broadcast, trip/process 연결 수 cap, broker send timeout 기반 stale
 connection 제거를 추가했다.
 
+**T-159 money 응답 Zod 타입 정합 완료** (2026-06-07): `packages/schemas`의 POI /
+추천 plan POI 응답 money 필드를 Pydantic `Decimal` JSON 직렬화와 맞춰 nonnegative decimal
+string으로 받도록 바꿨다. 요청 schema의 number 입력은 유지했다.
+
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
 `dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`

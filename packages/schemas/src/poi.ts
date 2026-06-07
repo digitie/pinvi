@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common';
+import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 
 /** `docs/api/pois.md`. */
 const MarkerColorPattern = /^P-\d{2}$/;
@@ -61,8 +61,8 @@ export const PoiResponseSchema = z.object({
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
   user_note: z.string().nullable(),
-  budget_amount: z.number().nonnegative().nullable(),
-  actual_amount: z.number().nonnegative().nullable(),
+  budget_amount: NonNegativeDecimalStringSchema.nullable(),
+  actual_amount: NonNegativeDecimalStringSchema.nullable(),
   currency: z.string().regex(CurrencyPattern),
   user_url: z.string().nullable(),
   version: z.number().int(),
