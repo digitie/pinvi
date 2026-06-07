@@ -228,7 +228,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 
 - [x] T-154 — **resend webhook C-22 완결**: secret 미설정 fail-closed + `_decode_svix_secret`
   표준 base64 교정(운영 서명 mismatch 버그) (PR #70; C-22 재오픈)
-- [ ] T-155 — admin `access_reason` PII를 query→header/body 전환(URL 로깅 제거) (PR #50)
+- [x] T-155 — admin `access_reason` PII를 query→header/body 전환(URL 로깅 제거) (PR #50)
 - [ ] T-156 — 비밀번호 재설정 시 기존 refresh session 전부 폐기 (PR #71)
 - [ ] T-157 — geofence fallback에 Cloudflare 발신 검증(header spoof + nginx 강등 우회 차단) (PR #60)
 - [ ] T-158 — Trip WebSocket rate limit + cursor 증폭 차단 + broadcast backpressure + 연결 수 캡 (PR #63)

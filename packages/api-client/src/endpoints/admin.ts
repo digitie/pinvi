@@ -32,19 +32,18 @@ export const adminApi = (client: ApiClient) => ({
     });
   },
 
-  getUser: (
-    userId: string,
-    params: { reveal?: boolean; accessReason?: string } = {},
-  ) => {
-    const qs = new URLSearchParams();
-    if (params.reveal) qs.set('reveal', 'true');
-    if (params.accessReason) qs.set('access_reason', params.accessReason);
-    const path = `/admin/users/${userId}${qs.toString() ? `?${qs.toString()}` : ''}`;
-    return client.request(path, {
+  getUser: (userId: string) =>
+    client.request(`/admin/users/${userId}`, {
       method: 'GET',
       schema: AdminUserDetailSchema,
-    });
-  },
+    }),
+
+  revealUserPii: (userId: string, body: z.infer<typeof AdminActionRequestSchema>) =>
+    client.request(`/admin/users/${userId}/reveal-pii`, {
+      method: 'POST',
+      body: JSON.stringify(AdminActionRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
 
   forceVerify: (userId: string, body: z.infer<typeof AdminActionRequestSchema>) =>
     client.request(`/admin/users/${userId}/force-verify`, {

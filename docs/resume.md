@@ -14,6 +14,11 @@ feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 
 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다. dev/test/local만 unsigned
 webhook을 허용한다.
 
+**T-155 Admin access reason URL 로깅 제거 완료** (2026-06-07): PII 원본 이메일 reveal은
+더 이상 `access_reason` query를 받지 않는다. 한국어 자유 텍스트 사유가 header 제약에
+걸리지 않도록 `POST /admin/users/{user_id}/reveal-pii` + JSON body로만 audit 사유를
+허용한다.
+
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
 `dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`

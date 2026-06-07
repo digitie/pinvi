@@ -106,7 +106,8 @@ GET /admin/entities/users?q=email:gmail.com+-status:disabled&sort=-created_at&pa
 ### 4.3 `PATCH /admin/entities/{entity}/{item_id}`
 
 - `If-Match: <version>` 필수
-- `access_reason` body 또는 `X-Access-Reason` 헤더 (위험 액션 시)
+- `access_reason` body 또는 `X-Access-Reason` 헤더 (위험 액션 시). PII 원본 조회처럼
+  자유 텍스트 사유가 필요한 액션은 URL과 header에 남기지 않고 JSON body만 허용한다.
 - `admin_audit_log` 자동 기록 (before/after diff)
 
 ### 4.4 `DELETE /admin/entities/{entity}/{item_id}`
@@ -213,10 +214,22 @@ X-Access-Reason: "고객 문의 처리 (TICKET-1234)"
 
 상세 `GET /admin/users/{user_id}`:
 
-- 기본 마스킹. `?reveal=true` + `access_reason` query 또는 `X-Access-Reason` 헤더 →
-  원본 + `admin_audit_log`에 `action = "user.reveal_pii"`,
-  `target_pii_fields = ["email"]` 기록
+- 기본 마스킹. `?reveal=true`는 legacy misuse로 보고 `422`로 거부한다.
 - 상세 응답은 `recent_audit` 최근 10건을 포함한다.
+
+원본 이메일 조회:
+
+```http
+POST /admin/users/<user_id>/reveal-pii
+Content-Type: application/json
+
+{ "access_reason": "고객 문의 확인" }
+```
+
+- 응답 200: 원본 이메일 포함 상세 + `email_revealed=true`.
+- `admin_audit_log`에 `action = "user.reveal_pii"`,
+  `target_pii_fields = ["email"]`, `access_reason` 기록.
+- 사유는 URL query/header가 아닌 JSON body로만 전달한다.
 
 ## 7. 여행계획 관리
 
