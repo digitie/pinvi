@@ -238,6 +238,25 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 
 [중간]/[낮음] 세부는 종합 문서 §1 참조(필요 시 개별 task로 분해).
 
+### Codex PR 사후 리뷰 2라운드 후속 (2026-06-08)
+
+정본 종합: `docs/reviews/2026-06-08-codex-pr-review.md` (PR #73~#83 codex 11건 리뷰).
+직전 [높음] T-154~T-161은 모두 구현 확인(✅). 이번 라운드 신규 [높음] 없음 — 아래는
+잔존 [중간](보안/무결성/가용성) 승격분:
+
+- [ ] T-162 — resend 운영 fail-open 잔존: 환경 문자열 게이트(기본 `development`)를 opt-in
+  플래그 또는 prod secret 강제로 반전 (PR #74)
+- [ ] T-163 — 비밀번호 재설정 시 access JWT(15분) 무효화(token version/jti denylist) +
+  refresh 회전 race(row lock/조건부 UPDATE) (PR #76)
+- [ ] T-164 — geofence outage 풋건 startup 가드 + shared-secret 외 IP allowlist/mTLS 방어심화 (PR #77)
+- [ ] T-165 — WS rate-limit grace 슬롯 점유 cap 우회 차단 + `publish_event` broadcast 비동기 분리 (PR #78)
+- [ ] T-166 — admin 감사 hash-chain head 직렬화(prev_hash unique/advisory lock) (PR #80)
+- [ ] T-167 — money 표현 통일(admin union→decimal-string) + `packages/schemas` round-trip 테스트 (PR #79)
+- [ ] T-168 — storage `AttachmentResponse` 필드 호환 정책을 notice-plans와 통일 (PR #73)
+- [ ] T-169 — MCP `list_trips` bucket/cursor parity + search_features HTTP 표현 정리 (PR #83)
+
+[낮음] 세부는 종합 문서 §1 참조.
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |
