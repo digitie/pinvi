@@ -9,13 +9,13 @@ import uuid
 from typing import Any, Literal, cast
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
-from app.core.security import create_access_token, generate_opaque_token
+from app.core.session_cookies import set_session_cookies
 from app.models.oauth_identity import UserOAuthIdentity
 from app.models.user import User
 from app.schemas.auth import AuthUser
@@ -27,6 +27,7 @@ from app.schemas.oauth import (
     OAuthStartRequest,
     OAuthStartResponse,
 )
+from app.services.auth_session import IssuedAuthSession, issue_user_session
 from app.services.oauth_google import (
     OAuthError,
     OAuthStateInvalidError,
@@ -41,25 +42,19 @@ from app.services.oauth_google import (
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
 
 
-def _set_session_cookies(response: Response, *, user_id: str) -> None:
-    access = create_access_token(subject=user_id)
-    refresh = generate_opaque_token(32)
-    secure = settings.tripmate_environment == "production"
-    response.set_cookie(
-        key="tripmate_access",
-        value=access,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        max_age=settings.tripmate_access_token_minutes * 60,
-    )
-    response.set_cookie(
-        key="tripmate_refresh",
-        value=refresh,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        max_age=settings.tripmate_refresh_token_days * 24 * 60 * 60,
+def _request_user_agent(request: Request) -> str | None:
+    return request.headers.get("user-agent")
+
+
+def _request_ip_address(request: Request) -> str | None:
+    return request.client.host if request.client is not None else None
+
+
+def _set_issue_cookies(response: RedirectResponse, issue: IssuedAuthSession) -> None:
+    set_session_cookies(
+        response,
+        access_token=issue.access_token,
+        refresh_token=issue.refresh_token,
     )
 
 
@@ -157,6 +152,7 @@ async def google_link(
 
 @router.get("/google/callback")
 async def google_callback(
+    request: Request,
     db: DbSession,
     code: str | None = None,
     state: str | None = None,
@@ -205,7 +201,13 @@ async def google_callback(
         url=f"{settings.tripmate_web_base_url}{return_to}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
-    _set_session_cookies(redirect, user_id=str(user_id))
+    issue = await issue_user_session(
+        db,
+        user_id=user_id,
+        user_agent=_request_user_agent(request),
+        ip_address=_request_ip_address(request),
+    )
+    _set_issue_cookies(redirect, issue)
     return redirect
 
 

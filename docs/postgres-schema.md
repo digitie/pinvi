@@ -118,6 +118,9 @@ CREATE INDEX user_sessions_active_idx
   WHERE revoked_at IS NULL;
 ```
 
+`session_token_hash`는 refresh token 원문이 아닌 SHA-256 hash다. refresh 성공 시 기존
+row의 `revoked_at`을 채우고 새 row를 발급한다.
+
 ### 2.4 `app.user_email_verifications`
 
 ```sql

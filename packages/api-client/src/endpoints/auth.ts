@@ -40,13 +40,12 @@ export const authApi = (client: ApiClient) => ({
   refresh: () =>
     client.request('/auth/refresh', {
       method: 'POST',
-      schema: z.object({}).passthrough(),
+      schema: AuthUserSchema,
     }),
 
   logout: () =>
-    client.request('/auth/logout', {
+    client.requestNoContent('/auth/logout', {
       method: 'POST',
-      schema: z.object({}).passthrough(),
     }),
 
   me: () =>

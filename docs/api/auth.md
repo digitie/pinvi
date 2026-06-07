@@ -151,9 +151,10 @@ POST /auth/refresh
 Cookie: tripmate_refresh=<opaque>
 ```
 
-응답 200: 새 `tripmate_access` cookie + 동일 `tripmate_refresh` (rotation은 v1.0 보류).
+응답 200: 새 `tripmate_access` cookie + 새 `tripmate_refresh` cookie.
 
-- 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` → 새 JWT
+- 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` →
+  기존 row `revoked_at=now()` + 새 session row 발급(refresh rotation)
 - 폐기됨 / 만료됨 → `401 TOKEN_EXPIRED` (cookie 삭제)
 
 ### 3.3 `POST /auth/logout`
@@ -163,7 +164,8 @@ POST /auth/logout
 Cookie: tripmate_refresh=...
 ```
 
-응답 204. `app.user_sessions.revoked_at = now()` + Set-Cookie로 두 cookie 삭제.
+응답 204. 현재 `tripmate_refresh`에 해당하는 `app.user_sessions.revoked_at = now()` +
+Set-Cookie로 두 cookie 삭제.
 
 ### 3.4 `GET /auth/me`
 
