@@ -6,8 +6,8 @@ export const AttachmentPurposeSchema = z.enum([
   'avatar',
   'trip_attachment',
   'poi_attachment',
-  'notice_plan_attachment',
-  'notice_poi_attachment',
+  'curated_plan_attachment',
+  'curated_poi_attachment',
 ]);
 export type AttachmentPurpose = z.infer<typeof AttachmentPurposeSchema>;
 

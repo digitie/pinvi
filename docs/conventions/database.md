@@ -51,13 +51,13 @@ TripMate `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
 | Table | alias (≤6자) |
 |-------|-------------|
 | `trip_day_pois` | `tdp` |
-| `notice_plans` | `npl` |
-| `notice_pois` | `npo` |
-| `plan_poi_attachments` | `ppa` |
+| `curated_trip_plans` | `ctp` |
+| `curated_plan_pois` | `cpp` |
+| `curated_plan_attachments` | `cpa` |
 | `user_oauth_identities` | `uoi` |
 | `user_email_verifications` | `uev` |
 
-예시: `fk_ppa_trip_id` (= `fk_plan_poi_attachments_trip_id`, 35자).
+예시: `fk_cpa_trip_id` (= `fk_curated_plan_attachments_trip_id`, 35자).
 
 ## 4. Alembic
 
@@ -225,7 +225,7 @@ sa.Column("sort_order", sa.Text(collation="C"), nullable=False)
   ```
 - ON DELETE는 명시 (`CASCADE` / `SET NULL` / `RESTRICT`)
 - cross-schema FK 금지 (`app` → `feature` — ADR-003)
-- 자기 참조 FK는 self-FK 명시 (예: `plan_poi_attachments.source_attachment_id`)
+- 자기 참조 FK는 self-FK 명시 (예: `curated_plan_attachments.source_attachment_id`)
 
 ## 11. CHECK / NOT NULL
 
@@ -240,8 +240,8 @@ sa.Column("sort_order", sa.Text(collation="C"), nullable=False)
 - 단일 대상 다중 컬럼 중 정확히 하나:
   ```python
   sa.CheckConstraint(
-      "num_nonnulls(trip_id, trip_poi_id, notice_plan_id, notice_poi_id) = 1",
-      name="ck_plan_poi_attachments_single_target"
+      "num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1",
+      name="ck_curated_plan_attachments_single_target"
   )
   ```
 

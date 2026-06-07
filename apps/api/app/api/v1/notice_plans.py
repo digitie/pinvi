@@ -1,6 +1,6 @@
-"""`/notice-plans/*` — 추천 여행 listing + 상세 + trip 으로 copy (ADR-013).
+"""`/notice-plans/*` — 추천 여행 listing + 상세 + trip 으로 copy.
 
-`docs/api/notice-plans.md`. notice plan ≠ notice feature.
+API path/field는 호환 유지, 내부 DB schema는 ADR-029의 curated-trip 정본을 따른다.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ router = APIRouter(prefix="/notice-plans", tags=["notice-plans"])
 
 def _poi_to_response(poi) -> NoticePoiResponse:  # type: ignore[no-untyped-def]
     return NoticePoiResponse(
-        notice_poi_id=poi.notice_poi_id,
-        notice_plan_id=poi.notice_plan_id,
+        notice_poi_id=poi.curated_poi_id,
+        notice_plan_id=poi.curated_plan_id,
         day_index=poi.day_index,
         sort_order=poi.sort_order,
         feature_id=poi.feature_id,
@@ -51,7 +51,7 @@ def _poi_to_response(poi) -> NoticePoiResponse:  # type: ignore[no-untyped-def]
 
 def _plan_to_response(plan, pois) -> NoticePlanResponse:  # type: ignore[no-untyped-def]
     return NoticePlanResponse(
-        notice_plan_id=plan.notice_plan_id,
+        notice_plan_id=plan.curated_plan_id,
         slug=plan.slug,
         title=plan.title,
         category=plan.category,

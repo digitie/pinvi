@@ -1,14 +1,11 @@
-# Notice Plan 도메인 — 추천 여행 + POI + 첨부
+# Curated Trip Plan 도메인 — 추천 여행 + POI + 첨부
 
-> **⚠️ 명칭 충돌 결정 (ADR-029 / DEC-03, 2026-06-06)**: 본 문서의 "추천 여행 plan"
-> 테이블 `app.notice_plans`가 `docs/data-model.md`·`postgres-schema.md`의 "시스템
-> 공지" 정의와 동명 충돌한다(감사 D-01/D-04). 결정: **큐레이션 여행은
-> `app.curated_trip_plans`(하위 `curated_plan_pois`, `curated_plan_attachments`)로
-> 개명**, `app.notice_plans`는 운영 공지 전용. 본 문서 본문은 아직 옛 이름을 쓰며,
-> 스키마·문서 일괄 개명은 **T-137**에서 수행한다.
+본 문서는 TripMate v2의 **추천/큐레이션 여행 plan** 도메인을 정의한다.
+ADR-029에 따라 DB/ORM 정본 이름은 `curated_trip_plans` 계열이고, 기존 사용자 API
+경로(`/notice-plans`)와 응답 필드(`notice_plan_id` 등)는 Sprint 4 호환을 위해
+유지한다. `app.notice_plans`는 운영 공지(system notice) 전용이다.
 
-본 문서는 TripMate v2의 **추천 여행 plan**(개명 후 `curated_trip_plans`) 도메인을
-정의한다. v1
+v1
 (`apps/api/app/services/notice_plan.py`, `app/models/trip.py`,
 `alembic/versions/20260521_0027_notice_plans.py`,
 `20260522_0028_plan_poi_attachments.py`)에서 9개월간 운영한 자산을 v2로 가져온다.
@@ -21,14 +18,10 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 | 개념 | 어디에 있나 | 소유 | 약어 |
 |------|-----------|------|------|
 | 공지 / 자연현상 feature (사고·시설 통제·바다갈라짐·만조/간조) | `feature.notices` (혹은 `feature.features WHERE kind='notice'`) | `python-krtour-map` | **notice feature** |
-| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.notice_plans` + `app.notice_pois` | TripMate | **notice plan** |
+| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.curated_trip_plans` + `app.curated_plan_pois` | TripMate | **curated trip plan** |
 
-본 문서는 후자(**notice plan**)를 다룬다. 전자는 SPEC V8 D-10 + `docs/spec/v8/01-data.md`
-§3 (라이브러리 위임 — 7 Feature 중 `notice` kind).
-
-> 향후 명명 충돌이 더 커지면 `notice plan` → `curated trip plan` 또는
-> `admin trip template`으로 rename ADR을 박을 수 있다. v2 v1.0은 v1 명명을
-> 유지해 PR 이력 추적 비용을 최소화한다.
+본 문서는 후자(**curated trip plan**)를 다룬다. 전자는 SPEC V8 D-10 +
+`docs/spec/v8/01-data.md` §3 (라이브러리 위임 — 7 Feature 중 `notice` kind).
 
 ## 2. 도메인 개요
 
@@ -49,11 +42,11 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 ## 3. DB 모델 (`app` schema)
 
-### 3.1 `app.notice_plans`
+### 3.1 `app.curated_trip_plans`
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
-| `id` | `uuid` (PK) | |
+| `curated_plan_id` | `uuid` (PK) | |
 | `slug` | `text` | URL-safe, partial unique on `deleted_at IS NULL` |
 | `title` | `text` NOT NULL | |
 | `category` | `text` | 예: `recommended`, `themed`, `seasonal` |
@@ -71,23 +64,23 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 인덱스:
 
-- `uq_notice_plans_slug_active` (partial `WHERE deleted_at IS NULL`)
-- `ix_notice_plans_published (is_published, updated_at)`
-- `ix_notice_plans_category (category, updated_at)`
-- `ix_notice_plans_created_by_admin`, `ix_notice_plans_updated_by_admin`
+- `uq_curated_trip_plans_slug_active` (partial `WHERE deleted_at IS NULL`)
+- `ix_curated_trip_plans_published (is_published, updated_at)`
+- `ix_curated_trip_plans_category (category, updated_at)`
+- `ix_curated_trip_plans_created_by_admin`, `ix_curated_trip_plans_updated_by_admin`
 
 CHECK:
 
 - 기간은 둘 다 null이거나 둘 다 채워짐, `ends_on >= starts_on`
 
-### 3.2 `app.notice_pois`
+### 3.2 `app.curated_plan_pois`
 
 추천 plan의 POI들. 구조가 `app.trip_pois`와 거의 동일.
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
-| `id` | `uuid` (PK) | |
-| `notice_plan_id` | `uuid` FK | CASCADE |
+| `curated_poi_id` | `uuid` (PK) | |
+| `curated_plan_id` | `uuid` FK | CASCADE |
 | `day_index` | `int` NOT NULL DEFAULT 1 | |
 | `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank — SPEC V8 E-6 |
 | `feature_id` | `text` | `feature.features.feature_id` reference (FK 없음, ADR-003) |
@@ -105,21 +98,21 @@ CHECK:
 
 인덱스:
 
-- UNIQUE `(notice_plan_id, day_index, sort_order COLLATE "C")`
-- `(notice_plan_id, day_index)`, `(feature_id)`
+- UNIQUE `(curated_plan_id, day_index, sort_order COLLATE "C")`
+- `(curated_plan_id, day_index)`, `(feature_id)`
 
-### 3.3 `app.plan_poi_attachments` — 단일 테이블 다중 대상
+### 3.3 `app.curated_plan_attachments` — 단일 테이블 다중 대상
 
-v1의 핵심 결정: **4개 대상(사용자 trip, 사용자 trip_poi, notice_plan, notice_poi)의
+v1의 핵심 결정: **4개 대상(사용자 trip, 사용자 trip_poi, curated_plan, curated_poi)의
 파일 첨부를 한 테이블에서 관리**.
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
-| `id` | `uuid` (PK) | |
+| `attachment_id` | `uuid` (PK) | |
 | `trip_id` | `uuid` FK `app.trips` | CASCADE — 단일 대상 |
 | `trip_poi_id` | `uuid` FK `app.trip_pois` (또는 `trip_day_pois`) | CASCADE |
-| `notice_plan_id` | `uuid` FK `app.notice_plans` | CASCADE |
-| `notice_poi_id` | `uuid` FK `app.notice_pois` | CASCADE |
+| `curated_plan_id` | `uuid` FK `app.curated_trip_plans` | CASCADE |
+| `curated_poi_id` | `uuid` FK `app.curated_plan_pois` | CASCADE |
 | `source_attachment_id` | `uuid` self FK | SET NULL — notice → trip copy 시 원본 추적 |
 | `bucket` | `text` NOT NULL | RustFS bucket (`tripmate-media` 기본) |
 | `storage_key` | `text` NOT NULL | RustFS object key |
@@ -137,13 +130,13 @@ v1의 핵심 결정: **4개 대상(사용자 trip, 사용자 trip_poi, notice_pl
 
 핵심 CHECK:
 
-- `num_nonnulls(trip_id, trip_poi_id, notice_plan_id, notice_poi_id) = 1`
+- `num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1`
 - `byte_size > 0`
 - `sort_order >= 0`
 - `role IN ('attachment', 'image', 'document', 'reference')`
 
 인덱스: `(trip_id, sort_order)`, `(trip_poi_id, sort_order)`,
-`(notice_plan_id, sort_order)`, `(notice_poi_id, sort_order)`,
+`(curated_plan_id, sort_order)`, `(curated_poi_id, sort_order)`,
 `(source_attachment_id)`, `(bucket, storage_key)`.
 
 ## 4. API endpoint
@@ -200,14 +193,14 @@ body: {
 }
   ↓
 서버:
-  1. notice_plan + 선택 POI 로드
+  1. curated trip plan + 선택 POI 로드
   2. target_trip_id null → 새 trip 생성 (제목=notice.title, 기간=notice 기간 또는 사용자 입력)
   3. target_trip_id 채워짐 → 권한 검사 (소유자 또는 동반자 editor+)
   4. 필요한 trip_days 생성
-  5. notice_pois를 trip_pois로 INSERT
+  5. curated_plan_pois를 trip_pois로 INSERT
      - sort_order: 새 trip이면 그대로, 기존 trip이면 마지막 + 다음 LexoRank
      - feature_id: 라이브러리에 존재하면 그대로, 없으면 null + snapshot만
-  6. plan_poi_attachments도 복사 (source_attachment_id에 원본 ref)
+  6. curated_plan_attachments도 복사 (source_attachment_id에 원본 ref)
      - RustFS object는 복사하지 않음 — 같은 object_key 공유 (CDN 캐시 효율)
   7. 응답: { trip_id, created_trip: bool, copied_poi_ids: [...] }
 ```
@@ -217,7 +210,7 @@ body: {
 - **RustFS object는 복사하지 않음** — source object 그대로 참조. `source_attachment_id`로
   원본 추적
 - 일반 첨부 `DELETE`는 row soft delete만, object 자체 삭제는 admin RustFS endpoint
-- 공지 첨부가 여러 사용자 trip에 copy되어 있을 수 있으므로 object 즉시 삭제 금지
+- 큐레이션 첨부가 여러 사용자 trip에 copy되어 있을 수 있으므로 object 즉시 삭제 금지
 
 ## 6. RustFS 설정 (v1 정합)
 
@@ -246,14 +239,14 @@ presigned PUT: `AWS4-HMAC-SHA256` + `UNSIGNED-PAYLOAD`.
 | D-10 notice feature (공지·자연현상) | 본 문서와 **별개 개념** (라이브러리 소유). 본 §1 표 참고 |
 | H-3 Trip API + POI 첨부 | 본 §4 |
 | M-2 `/admin/notice-plans` (잠재 페이지) | 본 §4.2 (Admin 페이지 — Sprint 6에서 박음) |
-| O-6 admin_audit_log | notice plan 변경 시 자동 기록 (POST/PATCH/DELETE) |
+| O-6 admin_audit_log | curated trip plan 변경 시 자동 기록 (POST/PATCH/DELETE) |
 
 ## 8. Sprint 매핑
 
 | 항목 | Sprint | 산출물 |
 |------|--------|--------|
-| `app.notice_plans` + `notice_pois` Alembic | Sprint 2 | `apps/api/alembic/versions/0010_notice_plans.py` |
-| `app.plan_poi_attachments` (단일 테이블 4 대상) | Sprint 2 | `apps/api/alembic/versions/0011_plan_poi_attachments.py` |
+| `app.curated_trip_plans` + `curated_plan_pois` Alembic | Sprint 2 | `apps/api/alembic/versions/20260602_0005_notice_plans_and_attachments.py` + T-137 rename |
+| `app.curated_plan_attachments` (단일 테이블 4 대상) | Sprint 2 | `apps/api/alembic/versions/20260607_0011_curated_trip_plans.py` |
 | 사용자 `GET /notice-plans`, `/copy` | Sprint 4 | `apps/api/app/api/v1/notice_plans.py` |
 | Admin `/admin/notice-plans/*` | Sprint 6 | `apps/api/app/api/v1/admin/notice_plans.py` + UI |
 | `POST /storage/upload-urls` presigned PUT | Sprint 2 | `apps/api/app/api/v1/storage.py` |
@@ -266,7 +259,8 @@ v1 자산:
 
 - `apps/api/alembic/versions/20260521_0027_notice_plans.py`
 - `apps/api/alembic/versions/20260522_0028_plan_poi_attachments.py`
-- `apps/api/app/models/trip.py` (`NoticePlan`, `NoticePoi`, `PlanPoiAttachment`)
+- `apps/api/app/models/curated_plan.py` (`CuratedTripPlan`, `CuratedPlanPoi`)
+- `apps/api/app/models/attachment.py` (`CuratedPlanAttachment`)
 - `apps/api/app/schemas/notice.py` (Pydantic)
 - `apps/api/app/services/notice_plan.py` (copy 흐름)
 - `apps/api/app/services/plan_poi_attachment.py` (첨부)

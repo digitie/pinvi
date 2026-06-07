@@ -361,14 +361,21 @@
     notice_poi 첨부)
   - `POST /notice-plans/{id}/copy` (사용자 trip으로 복사)
   - `docs/architecture/plan-poi-attachments.md`
+  - **2026-06-06 보정**: 아래 v1 명칭(`notice_plans`, `notice_pois`,
+    `plan_poi_attachments`)은 ADR-029가 DB/ORM 정본을 `curated_trip_plans`,
+    `curated_plan_pois`, `curated_plan_attachments`로 개명하면서 supersede했다.
+    `/notice-plans` API 경로와 `notice_plan_id` 응답 필드는 Sprint 4 호환 alias로
+    유지한다.
   사용자가 "v1에서 notice poi 관련 문서/코드 확인해서 보강할 것" 요청. 또한
   같은 단어 "notice"가 두 개의 별개 개념에 쓰여 혼동:
   1. **notice feature** — 지도 위 공지/자연현상 (SPEC V8 D-10, kind=notice,
      `python-krtour-map` 소유)
   2. **notice plan** — Admin이 작성한 추천 여행 plan (TripMate `app` schema)
 - **결정**:
-  - v1의 추천 여행 plan 도메인을 v2로 가져온다. 본 저장소 `app` schema에
-    `app.notice_plans` + `app.notice_pois` + `app.plan_poi_attachments` 도입.
+  - v1의 추천 여행 plan 도메인을 v2로 가져온다. 초기 도입 이름은
+    `app.notice_plans` + `app.notice_pois` + `app.plan_poi_attachments`였으나,
+    ADR-029 이후 DB/ORM 정본은 `app.curated_trip_plans` +
+    `app.curated_plan_pois` + `app.curated_plan_attachments`다.
   - **v1 코드를 cherry-pick하지 않고 본 저장소의 schema 정합성 + SPEC V8 E-6
     (COLLATE "C") + import-linter 계약에 맞춰 재작성**한다.
   - 명명 정정: "notice plan" (TripMate 도메인) vs "notice feature" (라이브러리
@@ -388,8 +395,9 @@
 - **결과 (부정)**: v1 → v2 재작성 비용 (Sprint 2에서 박음)
 - **후속**:
   - `docs/architecture/notice-plans.md` 신규 (본 PR)
-  - `docs/data-model.md` § (Trip / POI 다음에) notice plan 도메인 추가
-  - Sprint 2 Alembic `0007_notice_plans.py` + `0008_plan_poi_attachments.py`
+  - `docs/data-model.md` § (Trip / POI 다음에) curated trip plan 도메인 추가
+  - Sprint 2 Alembic `20260602_0005_notice_plans_and_attachments.py` +
+    T-137 rename migration `20260607_0011_curated_trip_plans.py`
   - Sprint 4에 사용자 listing + copy 다이얼로그 UI
   - Sprint 6에 Admin notice plan 작성기 UI
 
@@ -1147,8 +1155,8 @@
 - **결정**: 사용자 대면 "추천/큐레이션 여행"은 **`app.curated_trip_plans`**(하위
   `curated_plan_pois`, `curated_plan_attachments`)로 개명한다. `app.notice_plans`는
   운영 공지 전용으로 한정한다. 스키마 정본화는 T-137.
-- **후속**: `docs/architecture/notice-plans.md`, `docs/api/notice-plans.md`,
-  `docs/data-model.md`, `docs/postgres-schema.md` 정렬(T-137).
+- **후속**: T-137에서 ORM/Alembic과 `docs/architecture/notice-plans.md`,
+  `docs/api/notice-plans.md`, `docs/data-model.md`, `docs/postgres-schema.md`를 정렬했다.
 - **참조**: 감사 D-01/D-04.
 
 ## ADR-030: 외부 API 규약 정본

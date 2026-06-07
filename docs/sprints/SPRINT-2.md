@@ -29,11 +29,13 @@
   `location_access_log` + `admin_audit_log` chain
 - `apps/api/alembic/versions/0005_email_queue.py`
 - `apps/api/alembic/versions/0006_api_call_log.py`
-- `apps/api/alembic/versions/0007_notice_plans.py` — `notice_plans` +
-  `notice_pois` (v1에서 가져옴, `docs/architecture/notice-plans.md`)
-- `apps/api/alembic/versions/0008_plan_poi_attachments.py` — 단일 테이블 4 대상
-  (`trip_id` / `trip_poi_id` / `notice_plan_id` / `notice_poi_id`) + RustFS 메타
-- `apps/api/app/models/{trip,poi,companion,share_link,consent,location_audit,email,api_call,notice_plan,attachment}.py`
+- `apps/api/alembic/versions/20260602_0005_notice_plans_and_attachments.py` +
+  `20260607_0011_curated_trip_plans.py` — `curated_trip_plans` +
+  `curated_plan_pois` (v1 추천 여행을 ADR-029 이름으로 정본화)
+- `apps/api/alembic/versions/20260607_0011_curated_trip_plans.py` —
+  `curated_plan_attachments` 단일 테이블 4 대상
+  (`trip_id` / `trip_poi_id` / `curated_plan_id` / `curated_poi_id`) + RustFS 메타
+- `apps/api/app/models/{trip,poi,companion,share_link,consent,location_audit,email,api_call,curated_plan,attachment}.py`
 - `apps/api/app/schemas/{trip,poi,consent,share_link,notice,attachment}.py`
 - `apps/api/app/services/{trip,poi,consent,email_service,oauth_google,location_audit_hash,notice_plan,plan_poi_attachment,rustfs_presigner}.py`
 - `apps/api/app/api/v1/{trips,pois,oauth,notice_plans,storage}.py`

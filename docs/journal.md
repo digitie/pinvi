@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-137 curated trip plan 스키마 정본화
+
+**작업**: ADR-029의 `notice_plans` 명칭 충돌 결정을 실제 ORM/Alembic/문서에
+반영했다. 추천 여행 템플릿은 `curated_*` 계열로 분리하고, `app.notice_plans`는
+운영 공지(system notice) 전용으로 남긴다.
+
+**변경**:
+- `apps/api/app/models/curated_plan.py`,
+  `apps/api/app/models/{notice_plan,attachment}.py` — `CuratedTripPlan`,
+  `CuratedPlanPoi`, `CuratedPlanAttachment`를 정본 ORM으로 두고 legacy notice import/
+  property alias를 유지했다.
+- `apps/api/alembic/versions/20260607_0011_curated_trip_plans.py` —
+  `notice_plans` / `notice_pois` / `plan_poi_attachments`를 `curated_trip_plans` /
+  `curated_plan_pois` / `curated_plan_attachments`로 rename한다.
+- `apps/api/app/services/notice_plan.py`, `apps/api/app/api/v1/notice_plans.py` —
+  내부 조회/복사는 curated ORM 필드를 쓰고 `/notice-plans` 응답 필드는 기존
+  `notice_plan_id` / `notice_poi_id` alias를 유지한다.
+- `apps/api/app/schemas/storage.py`, `packages/schemas/src/storage.ts` — 첨부 purpose와
+  response 필드를 `curated_*`로 정본화했다.
+- 문서: ADR-013/029, notice-plans architecture/API, storage/admin API,
+  data-model/postgres-schema, conventions, file-storage runbook, Sprint 2, resume/tasks.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy / notice-plan copy integration tests
+- WSL2 ext4 mirror: alembic upgrade head smoke
+- WSL2 ext4 mirror: `npm run typecheck --workspaces --if-present`
+- NTFS worktree: `git diff --check`
+
+**다음**: T-126 POI 생성 경로 단일화(`/trips/{id}/pois` 정본).
+
 ## 2026-06-07 (claude) — Codex PR 사후 리뷰 20건 + 긴급성 종합
 
 **작업**: Codex가 올린 머지 완료 PR 20건(#50, #52~#65, #67~#71)을 각 PR diff + 실제
