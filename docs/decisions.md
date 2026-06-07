@@ -676,7 +676,7 @@
     는 Claude Code remote MCP / web client. (`apps/api/app/mcp/server.py`)
   - **인증**: 전용 MCP 토큰 (JWT scope=`mcp:read`). 일반 `tripmate_access`
     cookie 토큰과 분리 — MCP 토큰은 long-lived (30일 default, 무한대 옵션) +
-    사용자가 `/users/me/mcp/tokens`에서 발급 / 회수.
+    사용자가 `/users/me/mcp-tokens`에서 발급 / 회수.
   - **tools (1차)** — 모두 **read-only**:
     - `list_trips` — 본인 trip 목록
     - `get_trip(trip_id)` — trip + POI + day 트리

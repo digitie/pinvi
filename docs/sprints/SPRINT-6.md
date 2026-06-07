@@ -46,7 +46,7 @@
   - `__init__.py` / `server.py` — FastAPI sub-app or 별 binary 선택 (ADR에서 결정)
   - `tools/{list_trips,get_trip,list_pois,search_features,get_user_profile}.py`
   - `auth.py` — 전용 MCP token (JWT scope=`mcp:read`) — 사용자가
-    `/admin/mcp/tokens` 또는 `/users/me/mcp/tokens`에서 발급
+    `/admin/mcp-tokens` 또는 `/users/me/mcp-tokens`에서 발급
   - `/mcp/sse` (또는 `/mcp/stdio` 둘 중 SPEC 결정에 따라 — `docs/architecture/mcp-server.md`)
 - **`apps/api/app/services/backup_service.py`** 확장 — Sprint 5의 trigger를
   핫스왑 워크플로로:
