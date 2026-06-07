@@ -115,12 +115,21 @@ async def test_admin_user_detail_masks_then_reveals_with_audit(
     assert missing_reason.status_code == 422
     assert missing_reason.json()["error"]["code"] == "VALIDATION_ERROR"
 
-    request_id = uuid.uuid4()
-    revealed = await client.get(
+    query_reason = await client.get(
         f"/admin/users/{target_id}?reveal=true&access_reason=고객 문의 확인",
+        cookies=cookies,
+    )
+
+    assert query_reason.status_code == 422
+    assert query_reason.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    request_id = uuid.uuid4()
+    revealed = await client.post(
+        f"/admin/users/{target_id}/reveal-pii",
         headers={
             "X-Request-Id": str(request_id),
         },
+        json={"access_reason": "고객 문의 확인"},
         cookies=cookies,
     )
 

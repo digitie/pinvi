@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-155 Admin access_reason URL 로깅 제거
+
+**작업**: Admin 사용자 상세의 PII reveal 사유가 `access_reason` query string으로 전송돼
+nginx/proxy/browser history에 남을 수 있던 PR #50 사후 리뷰 후속을 닫았다.
+
+**변경**:
+- `apps/api/app/api/v1/admin/users.py` — PII reveal은
+  `POST /admin/users/{user_id}/reveal-pii` + JSON body 사유로 분리하고, GET
+  `?reveal=true` misuse는 `422`로 닫는다.
+- `packages/api-client/src/endpoints/admin.ts`,
+  `apps/web/e2e/admin-users.e2e.ts` — reveal reason을 URL query가 아니라 POST body로
+  전송/검증한다.
+- `apps/api/tests/integration/test_admin_users_api.py` — query reason이 422로 거부되고
+  body reason만 audit에 저장되는 케이스를 추가했다.
+- `docs/api/admin.md`, `docs/resume.md`, `docs/tasks.md` — T-155 완료와 body-only
+  계약을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/api/v1/admin/users.py tests/integration/test_admin_users_api.py`
+- WSL2 ext4 mirror: `mypy --strict app/api/v1/admin/users.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_admin_users_api.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspaces --if-present`
+
+**다음**: T-126 POI 생성 경로 단일화 또는 T-156 비밀번호 재설정 시 기존 refresh session 폐기.
+
 ## 2026-06-07 (codex) — T-154 Resend webhook fail-closed 보강
 
 **작업**: PR #70 사후 리뷰에서 재오픈된 C-22를 닫았다. Resend webhook secret이 없는

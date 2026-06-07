@@ -106,6 +106,18 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
         ) from exc
 
 
+async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
+    from sqlalchemy import select
+
+    u = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    if u is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
+        )
+    return u
+
+
 @router.get("", response_model=Envelope[AdminPagedResponse])
 async def list_users_endpoint(
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
@@ -137,46 +149,48 @@ async def list_users_endpoint(
 @router.get("/{user_id}", response_model=Envelope[AdminUserDetail])
 async def get_user_endpoint(
     user_id: uuid.UUID,
-    admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     db: DbSession,
-    request: Request,
     reveal: bool = False,
-    access_reason: str | None = None,
-    x_access_reason: Annotated[str | None, Header(alias="X-Access-Reason")] = None,
-    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminUserDetail]:
-    from sqlalchemy import select
-
-    u = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
-    if u is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
-        )
-
-    reason = (x_access_reason or access_reason or "").strip()
+    u = await _get_user_or_404(db, user_id)
     if reveal:
-        if not reason:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={"code": "VALIDATION_ERROR", "message": "PII 원본 조회 사유가 필요합니다."},
-            )
-        await append_admin_audit(
-            db,
-            actor_user_id=admin.user_id,
-            action="user.reveal_pii",
-            resource_type="user",
-            resource_id=str(u.user_id),
-            before_state=None,
-            after_state=None,
-            access_reason=reason,
-            target_pii_fields=["email"],
-            ip_hash_input=request.client.host if request.client else "",
-            user_agent=request.headers.get("user-agent"),
-            request_id=_parse_request_id(x_request_id),
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "PII 원본 조회는 POST /admin/users/{user_id}/reveal-pii를 사용합니다.",
+            },
         )
 
     return Envelope.of(await _detail_with_recent_audit(db, u, email_revealed=reveal))
+
+
+@router.post("/{user_id}/reveal-pii", response_model=Envelope[AdminUserDetail])
+async def reveal_user_pii_endpoint(
+    user_id: uuid.UUID,
+    body: AdminActionRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    u = await _get_user_or_404(db, user_id)
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="user.reveal_pii",
+        resource_type="user",
+        resource_id=str(u.user_id),
+        before_state=None,
+        after_state=None,
+        access_reason=body.access_reason,
+        target_pii_fields=["email"],
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    return Envelope.of(await _detail_with_recent_audit(db, u, email_revealed=True))
 
 
 @router.post("/{user_id}/force-verify", response_model=Envelope[AdminUserDetail])

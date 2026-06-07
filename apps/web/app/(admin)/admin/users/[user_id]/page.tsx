@@ -49,7 +49,7 @@ export default function AdminUserDetailPage() {
       const accessReason = reason.trim();
       const updated =
         actionDialog === 'reveal-email'
-          ? await api.getUser(userId, { reveal: true, accessReason })
+          ? await api.revealUserPii(userId, { access_reason: accessReason })
           : actionDialog === 'force-verify'
             ? await api.forceVerify(userId, { access_reason: accessReason })
             : await api.disableUser(userId, { access_reason: accessReason });
