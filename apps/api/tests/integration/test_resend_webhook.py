@@ -19,11 +19,16 @@ from app.models.email_queue import EmailQueue
 
 pytestmark = pytest.mark.asyncio
 
-_WEBHOOK_SECRET = "whsec_" + base64.b64encode(b"tripmate-test-webhook-secret").decode().rstrip("=")
+_WEBHOOK_SECRET_KEY = b"\xff\xee\xdd\xcc\xbb\xaa\x99\x88tripmate-test-webhook-secret"
+_WEBHOOK_SECRET = "whsec_" + base64.b64encode(_WEBHOOK_SECRET_KEY).decode().rstrip("=")
+_URLSAFE_WEBHOOK_SECRET = "whsec_" + base64.urlsafe_b64encode(_WEBHOOK_SECRET_KEY).decode().rstrip(
+    "="
+)
 
 
 @pytest.fixture(autouse=True)
 def _clear_resend_webhook_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "tripmate_environment", "development")
     monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", "")
 
 
@@ -52,7 +57,7 @@ def _payload(body: dict[str, Any]) -> bytes:
 def _secret_key(secret: str) -> bytes:
     secret_value = secret.removeprefix("whsec_")
     padding = "=" * (-len(secret_value) % 4)
-    return base64.b64decode(f"{secret_value}{padding}", altchars=b"-_")
+    return base64.b64decode(f"{secret_value}{padding}", validate=True)
 
 
 def _signed_headers(
@@ -94,6 +99,31 @@ async def test_delivered_updates_status(client, session_factory) -> None:
         assert row.delivered_at is not None
 
 
+async def test_unsigned_webhook_rejects_missing_secret_in_production(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_environment", "production")
+    email_id = await _seed_email(session_factory)
+
+    resp = await client.post(
+        "/webhooks/resend",
+        json={
+            "type": "email.delivered",
+            "data": {"headers": {"X-Entity-Ref-ID": email_id}},
+        },
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEBHOOK_SIGNATURE_NOT_CONFIGURED"
+
+    async with session_factory() as db:
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id)))
+        assert row is not None
+        assert row.status == "sent"
+        assert row.delivered_at is None
+
+
 async def test_signed_delivered_updates_status(
     client,
     session_factory,
@@ -120,6 +150,36 @@ async def test_signed_delivered_updates_status(
         assert row is not None
         assert row.status == "delivered"
         assert row.delivered_at is not None
+
+
+async def test_signed_webhook_rejects_urlsafe_secret_config(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_environment", "production")
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _URLSAFE_WEBHOOK_SECRET)
+    email_id = await _seed_email(session_factory)
+    payload = _payload(
+        {
+            "type": "email.delivered",
+            "data": {"headers": {"X-Entity-Ref-ID": email_id}},
+        }
+    )
+
+    resp = await client.post(
+        "/webhooks/resend",
+        content=payload,
+        headers=_signed_headers(payload),
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEBHOOK_SIGNATURE_NOT_CONFIGURED"
+
+    async with session_factory() as db:
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id)))
+        assert row is not None
+        assert row.status == "sent"
+        assert row.delivered_at is None
 
 
 async def test_signed_webhook_rejects_missing_signature_headers(

@@ -173,8 +173,9 @@ npm --workspace emails run build
 ## 6. Webhook (`POST /webhooks/resend`)
 
 `TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 환경에서는 Resend/Svix 서명 검증을 통과한
-요청만 처리한다. 로컬 개발에서 secret이 비어 있으면 기존 webhook 통합 테스트처럼
-서명 없이도 처리한다.
+요청만 처리한다. `development` / `dev` / `local` / `test` / `testing` 환경에서만
+secret이 비어 있을 때 서명 없는 webhook을 허용한다. 그 외 환경에서 secret이 비어
+있거나 잘못된 형식이면 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다.
 
 검증 헤더:
 
@@ -185,11 +186,13 @@ npm --workspace emails run build
 구현 기준:
 
 - 서명은 JSON 파싱 전 raw body 기준으로 검증한다.
-- `whsec_` secret의 base64 body를 key로 사용해 `svix-id.svix-timestamp.raw_payload`
-  형식의 바이트열을 HMAC-SHA256으로 서명한다.
+- `whsec_` secret의 표준 base64 body를 key로 사용해
+  `svix-id.svix-timestamp.raw_payload` 형식의 바이트열을 HMAC-SHA256으로 서명한다.
+  URL-safe base64 변형은 secret 설정 오류로 본다.
 - `svix-signature`의 `v1,<base64>` 값 중 하나라도 일치하면 통과한다.
 - timestamp 허용 오차는 300초다.
-- 검증 실패 시 `401 WEBHOOK_SIGNATURE_INVALID`.
+- 서명 검증 실패 시 `401 WEBHOOK_SIGNATURE_INVALID`.
+- secret 미설정 또는 secret 형식 오류 시 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`.
 
 처리 대상 이벤트:
 

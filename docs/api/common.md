@@ -234,13 +234,14 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 
 | Path | 발신자 | 검증 |
 |------|--------|------|
-| `POST /webhooks/resend` | Resend | Svix 서명 (`svix-id` / `svix-timestamp` / `svix-signature`) |
+| `POST /webhooks/resend` | Resend | Svix 서명 (`svix-id` / `svix-timestamp` / `svix-signature`), 운영 secret 미설정 시 `503` |
 | `POST /webhooks/oauth/{provider}/callback` | Google 활성, Naver/Kakao future provider | state + PKCE |
 | (v2) `POST /webhooks/telegram/{trip_id}` | Telegram bot | HMAC |
 | (v2) `POST /webhooks/gemini/job` | 사용자 키 호출 콜백 | idempotency_key |
 
-서명 검증 실패 시 `401`. 페이로드 raw는 `app.api_call_log`에 저장하지 않음
-(`hash`만).
+서명 검증 실패 시 `401`. 운영성 환경에서 Resend webhook secret이 없거나 잘못된 형식이면
+`503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다. 페이로드 raw는
+`app.api_call_log`에 저장하지 않음(`hash`만).
 
 ## 10. CORS
 

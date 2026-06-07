@@ -24,10 +24,19 @@ router = APIRouter(prefix="/webhooks/resend", tags=["webhooks"])
 log = get_logger("resend_webhook")
 
 _WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 300
+_UNSIGNED_WEBHOOK_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
 
 
 class ResendWebhookSignatureError(Exception):
     """Resend/Svix webhook 서명 검증 실패."""
+
+
+class ResendWebhookSecretError(Exception):
+    """Resend/Svix webhook secret 설정 오류."""
+
+
+def _allows_unsigned_resend_webhook() -> bool:
+    return settings.tripmate_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
 
 
 def _get_header(headers: Headers, *names: str) -> str | None:
@@ -39,12 +48,15 @@ def _get_header(headers: Headers, *names: str) -> str | None:
 
 
 def _decode_svix_secret(secret: str) -> bytes:
+    if not secret.startswith("whsec_"):
+        raise ResendWebhookSecretError("webhook secret must start with whsec_")
+
     secret_value = secret.removeprefix("whsec_")
     padding = "=" * (-len(secret_value) % 4)
     try:
-        return base64.b64decode(f"{secret_value}{padding}", altchars=b"-_", validate=False)
+        return base64.b64decode(f"{secret_value}{padding}", validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise ResendWebhookSignatureError("invalid webhook secret") from exc
+        raise ResendWebhookSecretError("invalid webhook secret") from exc
 
 
 def _iter_v1_signatures(signature_header: str) -> list[str]:
@@ -101,13 +113,36 @@ def _verify_resend_signature(
 @router.post("", status_code=status.HTTP_200_OK)
 async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
     payload = await request.body()
-    if settings.tripmate_resend_webhook_secret:
+    webhook_secret = settings.tripmate_resend_webhook_secret.strip()
+    if not webhook_secret and not _allows_unsigned_resend_webhook():
+        log.error(
+            "resend_webhook.missing_secret",
+            environment=settings.tripmate_environment,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "WEBHOOK_SIGNATURE_NOT_CONFIGURED",
+                "message": "Resend webhook signature secret is not configured.",
+            },
+        )
+
+    if webhook_secret:
         try:
             _verify_resend_signature(
                 payload,
                 request.headers,
-                settings.tripmate_resend_webhook_secret,
+                webhook_secret,
             )
+        except ResendWebhookSecretError as exc:
+            log.error("resend_webhook.invalid_secret_config", reason=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "WEBHOOK_SIGNATURE_NOT_CONFIGURED",
+                    "message": "Resend webhook signature secret is invalid.",
+                },
+            ) from exc
         except ResendWebhookSignatureError as exc:
             log.warning("resend_webhook.invalid_signature", reason=str(exc))
             raise HTTPException(
