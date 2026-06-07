@@ -8,6 +8,7 @@ import {
   TripShareLinkCreateSchema,
   TripShareLinkResponseSchema,
   TripUpdateSchema,
+  TripViewSchema,
 } from '@tripmate/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -55,7 +56,7 @@ export const tripApi = (client: ApiClient) => ({
   get: (tripId: string) =>
     client.request(`/trips/${tripId}`, {
       method: 'GET',
-      schema: TripResponseSchema,
+      schema: TripViewSchema,
     }),
 
   update: (tripId: string, version: number, body: TripUpdate) =>

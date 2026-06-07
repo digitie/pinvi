@@ -82,6 +82,61 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 (없으면 `feature_snapshot` 사용). `rise_set`은 POI 생성 시 KASI 위치별 해달
 출몰시각 정보조회가 완료된 경우에만 포함한다.
 
+응답 shape:
+
+```json
+{
+  "data": {
+    "trip": { "...": "TripResponse" },
+    "days": [
+      {
+        "day_index": 1,
+        "date": "2026-06-01",
+        "title": "1일차",
+        "pois": [
+          {
+            "poi_id": "uuid",
+            "feature_id": "feature-id",
+            "sort_order": "a0",
+            "title": "광안리",
+            "feature": { "...": "snapshot 또는 최신 feature" },
+            "marker_color": "P-01",
+            "marker_icon": "beach",
+            "is_broken": false,
+            "user_note": null,
+            "planned_arrival_at": null,
+            "planned_departure_at": null,
+            "budget_amount": "12000.00",
+            "actual_amount": null,
+            "currency": "KRW",
+            "user_url": null,
+            "feature_link_broken_at": null,
+            "version": 1,
+            "created_at": "2026-06-01T00:00:00Z",
+            "updated_at": "2026-06-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "companions": [],
+    "share_links": [
+      {
+        "share_id": "uuid",
+        "visibility": "view_only",
+        "expires_at": null,
+        "revoked_at": null,
+        "last_used_at": null,
+        "created_at": "2026-06-01T00:00:00Z"
+      }
+    ],
+    "broken_feature_count": 0
+  }
+}
+```
+
+`share_links` 목록은 공유 토큰 원문·hash를 노출하지 않는다. 토큰 원문은
+`POST /trips/{trip_id}/share-tokens` 생성 응답에서만 1회 제공한다.
+
 ### 3.4 `PATCH /trips/{trip_id}`
 
 ```http

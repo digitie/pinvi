@@ -150,8 +150,14 @@ async def test_poi_snapshot_fills_empty_trip_primary_region(
     trip = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert trip.status_code == 200, trip.text
     data = trip.json()["data"]
-    assert data["primary_region_code"] == "26110"
-    assert data["primary_region_source"] == "poi_snapshot"
+    assert data["trip"]["primary_region_code"] == "26110"
+    assert data["trip"]["primary_region_source"] == "poi_snapshot"
+    assert data["broken_feature_count"] == 0
+    assert data["days"][0]["day_index"] == 1
+    poi = data["days"][0]["pois"][0]
+    assert poi["feature_id"] == "regioned"
+    assert poi["title"] == "광안리"
+    assert poi["feature"]["name"] == "광안리"
 
 
 async def test_collate_c_ordering(client, verified_user, auth_cookies, session_factory) -> None:
