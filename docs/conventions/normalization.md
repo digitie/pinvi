@@ -83,16 +83,16 @@ v1 `skills/normalization-patterns.ko.md` 정리.
 
 ## 6. 폴리모픽 1:N
 
-`plan_poi_attachments`처럼 한 row가 4 대상 중 1 가리키는 경우:
+`curated_plan_attachments`처럼 한 row가 4 대상 중 1 가리키는 경우:
 
 ```sql
-CHECK (num_nonnulls(trip_id, trip_poi_id, notice_plan_id, notice_poi_id) = 1)
+CHECK (num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1)
 ```
 
 장점:
 
 - 단일 테이블 — 첨부 로직 일관
-- 검색 단순 (`WHERE notice_plan_id = ...`)
+- 검색 단순 (`WHERE curated_plan_id = ...`)
 
 단점:
 

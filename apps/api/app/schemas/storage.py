@@ -13,8 +13,8 @@ AttachmentPurpose = Literal[
     "avatar",
     "trip_attachment",
     "poi_attachment",
-    "notice_plan_attachment",
-    "notice_poi_attachment",
+    "curated_plan_attachment",
+    "curated_poi_attachment",
 ]
 
 
@@ -53,8 +53,8 @@ class AttachmentResponse(BaseModel):
     attachment_id: uuid.UUID
     trip_id: uuid.UUID | None
     trip_poi_id: uuid.UUID | None
-    notice_plan_id: uuid.UUID | None
-    notice_poi_id: uuid.UUID | None
+    curated_plan_id: uuid.UUID | None
+    curated_poi_id: uuid.UUID | None
     source_attachment_id: uuid.UUID | None
     bucket: str
     storage_key: str

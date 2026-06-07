@@ -1,6 +1,6 @@
-"""Notice plan → trip copy 통합 (ADR-013, SPRINT-2 산출물).
+"""Curated trip plan → trip copy 통합 (ADR-013, ADR-029).
 
-notice_pois → trip_day_pois 복사 + 새 trip 생성 / 기존 trip 추가 + 부분 선택.
+curated_plan_pois → trip_day_pois 복사 + 새 trip 생성 / 기존 trip 추가 + 부분 선택.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ async def _seed_plan(session_factory) -> uuid.UUID:
                 {"day_index": 2, "sort_order": "a0", "feature_id": "f_taejongdae"},
             ],
         )
-        return plan.notice_plan_id
+        return plan.curated_plan_id
 
 
 async def test_copy_creates_new_trip(client, verified_user, auth_cookies, session_factory) -> None:
@@ -147,7 +147,7 @@ async def test_unpublished_plan_not_found(
             is_published=False,
             pois=[{"day_index": 1, "sort_order": "a0", "feature_id": "f_x"}],
         )
-        plan_id = plan.notice_plan_id
+        plan_id = plan.curated_plan_id
 
     resp = await client.post(
         f"/notice-plans/{plan_id}/copy",

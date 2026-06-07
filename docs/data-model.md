@@ -5,13 +5,11 @@
 
 `feature` schema의 데이터 모델은 `python-krtour-map`의 `docs/data-model.md` 참고.
 
-> **⚠️ 감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**: 본 문서와
-> `postgres-schema.md`에 다음이 누락/충돌이며 **T-137/T-140 인접 작업**에서 정정한다.
-> ① `notice_plans` 명칭 충돌 → 큐레이션은 `curated_trip_plans`로 개명(ADR-029/DEC-03).
-> ② 남은 누락 테이블: `curated_plan_pois`, `curated_plan_attachments`,
-> `feature_requests`(또는 큐 소유권 DEC-05). `security_incidents`와 누락 `users` 컬럼
-> 문서 정합은 T-138에서 반영했고, `trip_day_pois` 예산/currency 정합은 T-140에서
-> 반영했다.
+> **감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**:
+> ADR-029에 따라 사용자 대면 추천 여행은 `curated_trip_plans` 계열로 분리했고,
+> `notice_plans`는 운영 공지 전용으로 남긴다. 남은 누락 후보는
+> `feature_requests`(또는 큐 소유권 DEC-05)다. `security_incidents`와 누락 `users`
+> 컬럼 문서 정합은 T-138, `trip_day_pois` 예산/currency 정합은 T-140에서 반영했다.
 
 ## 1. 큰 그림
 
@@ -32,6 +30,10 @@
 │   └── app.trip_share_links                                       │
 │                                                                  │
 │  app.attachments  (RustFS 메타 — Trip/POI/사용자 첨부)            │
+│                                                                  │
+│  app.curated_trip_plans  (Admin 추천 여행 템플릿)                 │
+│   ├── app.curated_plan_pois                                      │
+│   └── app.curated_plan_attachments                               │
 │                                                                  │
 │  app.notice_plans  (Admin이 운영하는 공지)                       │
 │   └── app.notice_plan_audiences                                  │
@@ -309,7 +311,7 @@ shared-token 댓글 라우트는 shared-token 조회 구현 시 같은 테이블
 | `byte_size` | `bigint` NOT NULL | |
 | `display_name` | `text` | 원본 파일명 |
 | `category` | `text` | `trip_cover` / `day_photo` / `poi_note` / `user_avatar` / `notice` |
-| `linked_entity_kind` | `text` | `trip` / `trip_day` / `poi_attachment` / `user` / `notice_plan` |
+| `linked_entity_kind` | `text` | `trip` / `trip_day` / `poi_attachment` / `user` / `curated_plan` / `notice` |
 | `linked_entity_id` | `uuid` | 카테고리에 따라 reference |
 | `created_at` | `timestamptz` | |
 | UNIQUE | `(bucket, object_key)` | |
@@ -317,7 +319,66 @@ shared-token 댓글 라우트는 shared-token 조회 구현 시 같은 테이블
 `linked_entity_kind` + `linked_entity_id`는 폴리모픽 참조. 외래키 제약은 두지
 않고 응용에서 검증. RustFS 버킷 분리 정책은 ADR-013.
 
-### 2.4 공지 (Notice plan)
+### 2.4 추천 여행 템플릿 (Curated trip plan)
+
+외부 API 경로는 Sprint 4 호환을 위해 `/notice-plans`를 유지하지만, DB/ORM 정본은
+ADR-029의 `curated_*` 이름이다. `app.notice_plans`는 아래 §2.5의 운영 공지 전용이다.
+
+#### `app.curated_trip_plans`
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `curated_plan_id` | `uuid` (PK) | |
+| `slug` | `varchar(160)` NOT NULL | partial unique (`deleted_at IS NULL`) |
+| `title` | `varchar(200)` NOT NULL | |
+| `category` | `varchar(80)` | `recommended` 기본 |
+| `summary` | `text` | |
+| `source_name` | `varchar(200)` | |
+| `destination` | `varchar(120)` | |
+| `starts_on`, `ends_on` | `date` | 둘 다 null이거나 둘 다 채움 |
+| `is_published` | `boolean` | published만 일반 사용자 노출 |
+| `created_by_admin_id`, `updated_by_admin_id` | `uuid` → `app.users` | |
+| `version` | `int` | optimistic lock |
+| `deleted_at`, `created_at`, `updated_at` | `timestamptz` | |
+
+#### `app.curated_plan_pois`
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `curated_poi_id` | `uuid` (PK) | |
+| `curated_plan_id` | `uuid` NOT NULL → `app.curated_trip_plans` | ON DELETE CASCADE |
+| `day_index` | `int` | 1 이상 |
+| `sort_order` | `text COLLATE "C"` | LexoRank |
+| `feature_id` | `text` | krtour-map feature id 값 참조(FK 없음) |
+| `feature_snapshot` | `jsonb` | 적재 시점 캐시 |
+| `memo` | `text` | |
+| `budget_amount` | `numeric(12,2)` | 0 이상 |
+| `currency` | `varchar(3)` | ISO 4217 |
+| `user_url` | `text` | |
+| `custom_marker_color`, `custom_marker_icon` | `text` | |
+| `version`, `deleted_at`, `created_at`, `updated_at` | | |
+
+#### `app.curated_plan_attachments`
+
+`trip` / `trip_poi` / `curated_plan` / `curated_poi` 중 정확히 하나를 가리키는
+RustFS 메타 테이블이다. curated → trip copy 시 새 row의 `source_attachment_id`에
+원본 row를 남기고 RustFS object 자체는 복사하지 않는다.
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `attachment_id` | `uuid` (PK) | |
+| `trip_id` | `uuid` → `app.trips` | 선택 |
+| `trip_poi_id` | `uuid` → `app.trip_day_pois.attachment_id` | 선택 |
+| `curated_plan_id` | `uuid` → `app.curated_trip_plans` | 선택 |
+| `curated_poi_id` | `uuid` → `app.curated_plan_pois` | 선택 |
+| `source_attachment_id` | `uuid` → `app.curated_plan_attachments` | copy 원본 |
+| `bucket`, `storage_key`, `original_filename`, `content_type` | `text` | RustFS 메타 |
+| `byte_size` | `bigint` | 0보다 큼 |
+| `role` | `varchar(40)` | `attachment` / `image` / `document` / `reference` |
+| `description`, `sort_order`, `uploaded_by_user_id` | | |
+| `deleted_at`, `created_at`, `updated_at` | `timestamptz` | |
+
+### 2.5 공지 (Notice plan)
 
 #### `app.notice_plans`
 
@@ -352,7 +413,7 @@ shared-token 댓글 라우트는 shared-token 조회 구현 시 같은 테이블
 | `log_id` | `bigserial` (PK) | |
 | `admin_user_id` | `uuid` → `app.users` | nullable (system) |
 | `action` | `text` NOT NULL | `create` / `update` / `delete` / `login` / ... |
-| `entity_kind` | `text` | `user` / `trip` / `notice_plan` / ... |
+| `entity_kind` | `text` | `user` / `trip` / `curated_trip_plan` / `notice` / ... |
 | `entity_id` | `text` | uuid 또는 자연키 |
 | `before` | `jsonb` | nullable |
 | `after` | `jsonb` | nullable |
@@ -431,6 +492,8 @@ Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops
 - `app.trip_day_pois(day_id, position)` UNIQUE 합성
 - `app.trip_day_pois(feature_id)` — feature schema join용 (B-tree)
 - `app.attachments(linked_entity_kind, linked_entity_id)` 합성
+- `app.curated_trip_plans(is_published, updated_at)` 합성
+- `app.curated_plan_pois(curated_plan_id, day_index)` 합성
 - `app.notice_plans(status, starts_at)` 합성
 - `app.admin_audit_logs(created_at)` BRIN (대량 append)
 

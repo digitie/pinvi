@@ -5,7 +5,7 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부 메타 등
 
 ## 1. 책임 / 모델
 
-- TripMate는 메타데이터만 저장 (`app.plan_poi_attachments` + `app.attachments`).
+- TripMate는 메타데이터만 저장 (`app.curated_plan_attachments` + `app.attachments`).
   파일 본문은 RustFS.
 - `python-krtour-map`과 **RustFS 컨테이너 공유** — 같은 endpoint, 같은 bucket
   (개발은 `tripmate-media`). 한 쪽 compose만 실행.
@@ -58,7 +58,7 @@ Cookie: tripmate_access=...
   "content_type": "image/jpeg",
   "content_length": 524288,
   "purpose": "media_asset" | "avatar" | "trip_attachment" | "poi_attachment" |
-             "notice_plan_attachment" | "notice_poi_attachment"
+             "curated_plan_attachment" | "curated_poi_attachment"
 }
 ```
 
@@ -106,11 +106,11 @@ Cookie: tripmate_access=...
 
 `GET /trips/{trip_id}/pois/{poi_id}/attachments`, `POST`, `DELETE`
 
-### 5.3 Notice plan 첨부 (Admin)
+### 5.3 Curated plan 첨부 (Admin)
 
 `GET /admin/notice-plans/{plan_id}/attachments`, `POST`, `DELETE`
 
-### 5.4 Notice POI 첨부 (Admin)
+### 5.4 Curated POI 첨부 (Admin)
 
 `GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments`, `POST`, `DELETE`
 
@@ -143,8 +143,8 @@ Cookie: tripmate_access=...
     "attachment_id": "uuid",
     "trip_id": "uuid",
     "trip_poi_id": null,
-    "notice_plan_id": null,
-    "notice_poi_id": null,
+    "curated_plan_id": null,
+    "curated_poi_id": null,
     "source_attachment_id": null,
     "bucket": "tripmate-media",
     "storage_key": "...",
@@ -153,12 +153,12 @@ Cookie: tripmate_access=...
 }
 ```
 
-서버 검증: `num_nonnulls(trip_id, trip_poi_id, notice_plan_id, notice_poi_id) = 1`
+서버 검증: `num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1`
 CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
 
 ### 5.6 DELETE 동작
 
-- `app.plan_poi_attachments.deleted_at = now()` (soft)
+- `app.curated_plan_attachments.deleted_at = now()` (soft)
 - **RustFS object는 함께 삭제하지 않음** — `/admin/rustfs/objects DELETE`로만
 - 이유: notice → trip copy 시 같은 `storage_key` 공유 → 원본 자동 삭제 금지
 

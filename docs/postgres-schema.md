@@ -359,6 +359,121 @@ BEFORE UPDATE ON app.trip_comments
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
+### 3.7 추천 여행 템플릿 (`curated_*`)
+
+외부 API는 Sprint 4 호환을 위해 `/notice-plans` 경로와 `notice_plan_id` 응답 alias를
+유지하지만, DB/ORM 정본은 ADR-029의 `curated_*` 이름이다.
+
+```sql
+CREATE TABLE app.curated_trip_plans (
+  curated_plan_id     uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  slug                varchar(160) NOT NULL,
+  title               varchar(200) NOT NULL,
+  category            varchar(80) NOT NULL DEFAULT 'recommended',
+  summary             text,
+  source_name         varchar(200),
+  destination         varchar(120),
+  starts_on           date,
+  ends_on             date,
+  is_published        boolean NOT NULL DEFAULT false,
+  created_by_admin_id uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  updated_by_admin_id uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  version             int NOT NULL DEFAULT 1,
+  deleted_at          timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_curated_trip_plans_date_range CHECK (
+    (starts_on IS NULL AND ends_on IS NULL)
+    OR (starts_on IS NOT NULL AND ends_on IS NOT NULL AND ends_on >= starts_on)
+  )
+);
+
+CREATE UNIQUE INDEX uq_curated_trip_plans_slug_active
+  ON app.curated_trip_plans (slug)
+  WHERE deleted_at IS NULL;
+CREATE INDEX ix_curated_trip_plans_published
+  ON app.curated_trip_plans (is_published, updated_at DESC);
+CREATE INDEX ix_curated_trip_plans_category
+  ON app.curated_trip_plans (category, updated_at DESC);
+
+CREATE TRIGGER trg_curated_trip_plans_touch_updated_at
+BEFORE UPDATE ON app.curated_trip_plans
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+
+CREATE TABLE app.curated_plan_pois (
+  curated_poi_id      uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  curated_plan_id     uuid NOT NULL REFERENCES app.curated_trip_plans(curated_plan_id) ON DELETE CASCADE,
+  day_index           int NOT NULL DEFAULT 1,
+  sort_order          text COLLATE "C" NOT NULL,
+  feature_id          text,
+  feature_snapshot    jsonb NOT NULL DEFAULT '{}'::jsonb,
+  memo                text,
+  budget_amount       numeric(12,2),
+  currency            varchar(3) NOT NULL DEFAULT 'KRW',
+  user_url            text,
+  custom_marker_color varchar(16),
+  custom_marker_icon  varchar(64),
+  version             int NOT NULL DEFAULT 1,
+  deleted_at          timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_curated_plan_pois_day_index CHECK (day_index >= 1),
+  CONSTRAINT ck_curated_plan_pois_budget_nonnegative CHECK (budget_amount IS NULL OR budget_amount >= 0),
+  CONSTRAINT ck_curated_plan_pois_currency CHECK (currency ~ '^[A-Z]{3}$')
+);
+
+CREATE INDEX ix_curated_plan_pois_plan_day
+  ON app.curated_plan_pois (curated_plan_id, day_index)
+  WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uq_curated_plan_pois_plan_day_sort
+  ON app.curated_plan_pois (curated_plan_id, day_index, sort_order COLLATE "C")
+  WHERE deleted_at IS NULL;
+
+CREATE TABLE app.curated_plan_attachments (
+  attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  trip_id              uuid REFERENCES app.trips(trip_id) ON DELETE CASCADE,
+  trip_poi_id          uuid REFERENCES app.trip_day_pois(attachment_id) ON DELETE CASCADE,
+  curated_plan_id      uuid REFERENCES app.curated_trip_plans(curated_plan_id) ON DELETE CASCADE,
+  curated_poi_id       uuid REFERENCES app.curated_plan_pois(curated_poi_id) ON DELETE CASCADE,
+  source_attachment_id uuid REFERENCES app.curated_plan_attachments(attachment_id) ON DELETE SET NULL,
+  bucket               varchar(80) NOT NULL,
+  storage_key          varchar(1024) NOT NULL,
+  original_filename    varchar(255) NOT NULL,
+  content_type         varchar(255) NOT NULL,
+  byte_size            bigint NOT NULL,
+  public_url           text,
+  checksum_sha256      varchar(64),
+  role                 varchar(40) NOT NULL DEFAULT 'attachment',
+  description          text,
+  sort_order           int NOT NULL DEFAULT 0,
+  uploaded_by_user_id  uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  deleted_at           timestamptz,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_curated_plan_attachments_single_target
+    CHECK (num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1),
+  CONSTRAINT ck_curated_plan_attachments_role
+    CHECK (role IN ('attachment', 'image', 'document', 'reference')),
+  CONSTRAINT ck_curated_plan_attachments_byte_size CHECK (byte_size > 0),
+  CONSTRAINT ck_curated_plan_attachments_sort_order CHECK (sort_order >= 0)
+);
+
+CREATE INDEX ix_curated_plan_attachments_trip
+  ON app.curated_plan_attachments (trip_id, sort_order)
+  WHERE trip_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ix_curated_plan_attachments_trip_poi
+  ON app.curated_plan_attachments (trip_poi_id, sort_order)
+  WHERE trip_poi_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ix_curated_plan_attachments_curated_plan
+  ON app.curated_plan_attachments (curated_plan_id, sort_order)
+  WHERE curated_plan_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ix_curated_plan_attachments_curated_poi
+  ON app.curated_plan_attachments (curated_poi_id, sort_order)
+  WHERE curated_poi_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX ix_curated_plan_attachments_storage_key
+  ON app.curated_plan_attachments (bucket, storage_key);
+```
+
 ## 4. 첨부
 
 ### 4.1 `app.attachments`
@@ -584,7 +699,7 @@ v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
 | 0024 library spec v3 schema | (`python-krtour-map`에 이관) | feature schema |
 | 0025 provider_source_weather_state | (`python-krtour-map`에 이관) | provider_sync |
 | 0026 outdoor_feature_profiles | (`python-krtour-map`에 이관) | feature schema |
-| 0027 notice_plans | T-102 (대기) | 본 §5 골격 사용 |
-| 0028 plan_poi_attachments | T-105 (대기) | 본 §3.3 골격 사용 |
+| 0027 notice_plans | T-102 (대기) | system notice는 본 §5 골격 사용 |
+| 0028 plan_poi_attachments | T-137 완료 | 추천 여행 첨부는 본 §3.7의 `curated_plan_attachments`로 개명 |
 
 자세한 매핑은 v2 코드 작성 단계에서 ADR로 박는다.

@@ -81,7 +81,7 @@ user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}
 ```
 
 `purpose`: `media_asset` / `avatar` / `trip_attachment` / `poi_attachment` /
-`notice_plan_attachment` / `notice_poi_attachment`.
+`curated_plan_attachment` / `curated_poi_attachment`.
 
 라이브러리 측은 `feature-media/{kind}/{feature_id_prefix}/{uuid}.{ext}`.
 
@@ -149,7 +149,7 @@ CLI:
 mc rm local/tripmate-media/user-uploads/trip_attachment/<uid>/2026/05/<u>.jpg
 ```
 
-주의: DB row 참조 검사 필요 — soft-deleted `plan_poi_attachments`가 있을 수
+주의: DB row 참조 검사 필요 — soft-deleted `curated_plan_attachments`가 있을 수
 있음 → admin endpoint 사용 권장.
 
 ### 8.2 사용량 확인
@@ -163,7 +163,7 @@ mc du --recursive local/tripmate-media/user-uploads/
 
 매월 자동:
 
-- soft-deleted `plan_poi_attachments` 30일 경과 + `source_attachment_id IS NULL`
+- soft-deleted `curated_plan_attachments` 30일 경과 + `source_attachment_id IS NULL`
   → RustFS object 삭제 + DB row hard delete
 
 ## 9. presigned URL 흐름
@@ -199,7 +199,7 @@ mc du --recursive local/tripmate-media/user-uploads/
 
 새 첨부 도메인 추가:
 
-- [ ] `app.plan_poi_attachments`에 신규 컬럼 또는 별도 테이블 결정
+- [ ] `app.curated_plan_attachments`에 신규 컬럼 또는 별도 테이블 결정
 - [ ] `apps/api/app/services/rustfs_storage.py` presigned 함수 + 검증 강화
 - [ ] CORS rule 추가 (필요 시)
 - [ ] retention 정책 정의 (Dagster cleanup job)

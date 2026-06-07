@@ -1,4 +1,4 @@
-"""`app.plan_poi_attachments` — 단일 테이블 4 대상."""
+"""`app.curated_plan_attachments` — trip / curated plan 첨부."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from app.db.base import Base
 from app.models.mixins import TimestampMixin
 
 
-class PlanPoiAttachment(Base, TimestampMixin):
-    """trip / trip_poi / notice_plan / notice_poi 중 정확히 하나."""
+class CuratedPlanAttachment(Base, TimestampMixin):
+    """trip / trip_poi / curated_plan / curated_poi 중 정확히 하나."""
 
-    __tablename__ = "plan_poi_attachments"
+    __tablename__ = "curated_plan_attachments"
 
     attachment_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -31,17 +31,17 @@ class PlanPoiAttachment(Base, TimestampMixin):
         PgUUID(as_uuid=True),
         ForeignKey("app.trip_day_pois.attachment_id", ondelete="CASCADE"),
     )
-    notice_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+    curated_plan_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.notice_plans.notice_plan_id", ondelete="CASCADE"),
+        ForeignKey("app.curated_trip_plans.curated_plan_id", ondelete="CASCADE"),
     )
-    notice_poi_id: Mapped[uuid.UUID | None] = mapped_column(
+    curated_poi_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.notice_pois.notice_poi_id", ondelete="CASCADE"),
+        ForeignKey("app.curated_plan_pois.curated_poi_id", ondelete="CASCADE"),
     )
     source_attachment_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.plan_poi_attachments.attachment_id", ondelete="SET NULL"),
+        ForeignKey("app.curated_plan_attachments.attachment_id", ondelete="SET NULL"),
     )
     bucket: Mapped[str] = mapped_column(String(80), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -59,3 +59,18 @@ class PlanPoiAttachment(Base, TimestampMixin):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def notice_plan_id(self) -> uuid.UUID | None:
+        """Deprecated API alias retained for `/notice-plans` compatibility."""
+
+        return self.curated_plan_id
+
+    @property
+    def notice_poi_id(self) -> uuid.UUID | None:
+        """Deprecated API alias retained for `/notice-plans` compatibility."""
+
+        return self.curated_poi_id
+
+
+PlanPoiAttachment = CuratedPlanAttachment

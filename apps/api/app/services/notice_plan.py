@@ -1,7 +1,7 @@
-"""Notice plan (추천 여행) 도메인 — listing + 상세 + trip 으로 copy (ADR-013).
+"""추천 여행(curated trip plan) 도메인 — listing + 상세 + trip 으로 copy.
 
-notice plan ≠ notice feature (라이브러리 공지). `docs/architecture/notice-plans.md`.
-copy 시 notice_pois → trip_day_pois 로 옮기고 plan_poi_attachments 를 복제한다.
+외부 `/notice-plans` API 이름은 호환 유지한다. 내부 schema는 ADR-029에 따라
+`curated_trip_plans` / `curated_plan_pois` / `curated_plan_attachments`를 쓴다.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.attachment import PlanPoiAttachment
-from app.models.notice_plan import NoticePlan, NoticePoi
+from app.models.attachment import CuratedPlanAttachment
+from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
@@ -38,23 +38,23 @@ async def list_published_plans(
     *,
     category: str | None = None,
     limit: int = 50,
-) -> list[NoticePlan]:
-    stmt = select(NoticePlan).where(
-        NoticePlan.is_published.is_(True), NoticePlan.deleted_at.is_(None)
+) -> list[CuratedTripPlan]:
+    stmt = select(CuratedTripPlan).where(
+        CuratedTripPlan.is_published.is_(True), CuratedTripPlan.deleted_at.is_(None)
     )
     if category is not None:
-        stmt = stmt.where(NoticePlan.category == category)
-    stmt = stmt.order_by(NoticePlan.created_at.desc()).limit(limit)
+        stmt = stmt.where(CuratedTripPlan.category == category)
+    stmt = stmt.order_by(CuratedTripPlan.created_at.desc()).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars())
 
 
-async def get_published_plan(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> NoticePlan:
+async def get_published_plan(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> CuratedTripPlan:
     plan = await db.scalar(
-        select(NoticePlan).where(
-            NoticePlan.notice_plan_id == notice_plan_id,
-            NoticePlan.is_published.is_(True),
-            NoticePlan.deleted_at.is_(None),
+        select(CuratedTripPlan).where(
+            CuratedTripPlan.curated_plan_id == notice_plan_id,
+            CuratedTripPlan.is_published.is_(True),
+            CuratedTripPlan.deleted_at.is_(None),
         )
     )
     if plan is None:
@@ -62,14 +62,14 @@ async def get_published_plan(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> 
     return plan
 
 
-async def list_plan_pois(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> list[NoticePoi]:
+async def list_plan_pois(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> list[CuratedPlanPoi]:
     result = await db.execute(
-        select(NoticePoi)
+        select(CuratedPlanPoi)
         .where(
-            NoticePoi.notice_plan_id == notice_plan_id,
-            NoticePoi.deleted_at.is_(None),
+            CuratedPlanPoi.curated_plan_id == notice_plan_id,
+            CuratedPlanPoi.deleted_at.is_(None),
         )
-        .order_by(NoticePoi.day_index, NoticePoi.sort_order)
+        .order_by(CuratedPlanPoi.day_index, CuratedPlanPoi.sort_order)
     )
     return list(result.scalars())
 
@@ -89,14 +89,14 @@ async def copy_plan_to_trip(
 
     - target_trip_id 가 있으면 그 trip(소유자 검증)에 추가, 없으면 새 trip 생성.
     - poi_ids 가 비어 있으면 plan 전체 POI 복사, 있으면 해당 POI 만.
-    - notice_poi 의 plan_poi_attachments 도 새 trip_poi 로 복제.
+    - curated_poi 의 curated_plan_attachments 도 새 trip_poi 로 복제.
     반환: (trip, created_trip, copied_poi_ids, copied_attachment_count)
     """
     plan = await get_published_plan(db, notice_plan_id=notice_plan_id)
     source_pois = await list_plan_pois(db, notice_plan_id=notice_plan_id)
     if poi_ids:
         wanted = set(poi_ids)
-        source_pois = [p for p in source_pois if p.notice_poi_id in wanted]
+        source_pois = [p for p in source_pois if p.curated_poi_id in wanted]
         if len(source_pois) != len(wanted):
             raise NoticePlanCopyError("일부 POI 가 추천 여행에 없습니다.")
     if not source_pois:
@@ -151,7 +151,7 @@ async def copy_plan_to_trip(
             trip_id=trip.trip_id,
             day_index=day_index,
             sort_order=new_sort,
-            feature_id=src.feature_id or f"notice:{src.notice_poi_id}",
+            feature_id=src.feature_id or f"curated:{src.curated_poi_id}",
             feature_snapshot=src.feature_snapshot,
             custom_marker_color=src.custom_marker_color,
             custom_marker_icon=src.custom_marker_icon,
@@ -165,16 +165,16 @@ async def copy_plan_to_trip(
         await db.flush()
         copied_poi_ids.append(new_poi.attachment_id)
 
-        # 첨부 복제 (notice_poi → 새 trip_poi)
+        # 첨부 복제 (curated_poi → 새 trip_poi)
         attachments = await db.execute(
-            select(PlanPoiAttachment).where(
-                PlanPoiAttachment.notice_poi_id == src.notice_poi_id,
-                PlanPoiAttachment.deleted_at.is_(None),
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.curated_poi_id == src.curated_poi_id,
+                CuratedPlanAttachment.deleted_at.is_(None),
             )
         )
         for att in attachments.scalars():
             db.add(
-                PlanPoiAttachment(
+                CuratedPlanAttachment(
                     trip_poi_id=new_poi.attachment_id,
                     source_attachment_id=att.attachment_id,
                     bucket=att.bucket,
@@ -223,8 +223,8 @@ async def create_plan_with_pois(
     destination: str | None = None,
     is_published: bool = True,
     pois: list[dict[str, Any]] | None = None,
-) -> NoticePlan:
-    plan = NoticePlan(
+) -> CuratedTripPlan:
+    plan = CuratedTripPlan(
         slug=slug,
         title=title,
         category=category,
@@ -238,8 +238,8 @@ async def create_plan_with_pois(
     await db.flush()
     for item in pois or []:
         db.add(
-            NoticePoi(
-                notice_plan_id=plan.notice_plan_id,
+            CuratedPlanPoi(
+                curated_plan_id=plan.curated_plan_id,
                 day_index=item.get("day_index", 1),
                 sort_order=item["sort_order"],
                 feature_id=item.get("feature_id"),
