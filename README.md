@@ -172,7 +172,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 **API**
 - 인덱스 + 공통 규약: [`docs/api/README.md`](docs/api/README.md) / [`docs/api/common.md`](docs/api/common.md)
 - 도메인별: [`auth`](docs/api/auth.md) / [`users`](docs/api/users.md) / [`trips`](docs/api/trips.md) / [`pois`](docs/api/pois.md) / [`features`](docs/api/features.md) / [`notice-plans`](docs/api/notice-plans.md) / [`storage`](docs/api/storage.md) / [`admin`](docs/api/admin.md) / [`public`](docs/api/public.md) / [`regions`](docs/api/regions.md) / [`health`](docs/api/health.md) / [`websocket`](docs/api/websocket.md)
-- 교차 검색 / 외부 상태: [`GET /search`](docs/api/features.md#26-get-search),
+- 교차 검색 / 외부 상태: [`GET /search`](docs/api/features.md#27-get-search),
   [`GET /health/external`](docs/api/health.md#13-get-healthexternal)
 
 **외부 통합**

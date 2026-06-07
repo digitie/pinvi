@@ -241,9 +241,9 @@ Cookie: tripmate_access=...
 호출 경계: feature 검색은 krtour-map `GET /features/search`로 조회한다. Naver/Kakao
 검색 API는 현재 사용하지 않는다.
 
-### 2.7 `GET /search` (통합 검색, T-129)
+### 2.7 `GET /search`
 
-통합 검색은 future endpoint다. 구현 시 한 화면에서 다음 bucket을 함께 반환한다.
+통합 검색은 T-129 future endpoint다. 구현 시 한 화면에서 다음 bucket을 함께 반환한다.
 
 ```http
 GET /search?q=광안리&viewport=129.0,35.0,129.2,35.2&limit=10

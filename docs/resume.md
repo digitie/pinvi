@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-161 README 앵커 정합 일괄을 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-127 MCP 외부 인터페이스 정본화를 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
+
+**T-161 README `/search` 앵커 정합 완료** (2026-06-07): `docs/api/features.md`의
+통합 검색 heading을 `2.7 GET /search`로 안정화하고, README 링크를
+`#27-get-search`로 교정했다. krtour-map 요구사항 문서의 잘못된 features.md 절 번호도
+§2.7로 맞췄다.
 
 **T-126 POI 생성 경로 단일화 완료** (2026-06-07): v2 정본 POI 생성/수정/삭제/정렬
 경로는 `/trips/{trip_id}/pois` 계열로 고정했다. `docs/api/trips.md`의 오래된
