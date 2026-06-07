@@ -54,6 +54,10 @@ export {
   TripShareLinkVisibilitySchema,
   TripShareLinkCreateSchema,
   TripShareLinkResponseSchema,
+  TripViewDaySchema,
+  TripViewPoiSchema,
+  TripViewSchema,
+  TripViewShareLinkSchema,
 } from './trip';
 export type {
   TripCreate,
@@ -70,6 +74,10 @@ export type {
   TripShareLinkVisibility,
   TripShareLinkCreate,
   TripShareLinkResponse,
+  TripView,
+  TripViewDay,
+  TripViewPoi,
+  TripViewShareLink,
 } from './trip';
 
 export {

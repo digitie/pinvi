@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common';
+import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 
 /** `docs/api/trips.md`. */
 export const TripStatusSchema = z.enum([
@@ -124,3 +124,53 @@ export const TripResponseSchema = z.object({
   updated_at: Iso8601Schema,
 });
 export type TripResponse = z.infer<typeof TripResponseSchema>;
+
+export const TripViewPoiSchema = z.object({
+  poi_id: z.string().uuid(),
+  feature_id: z.string(),
+  sort_order: z.string(),
+  title: z.string().nullable(),
+  feature: z.record(z.string(), z.unknown()),
+  marker_color: z.string().nullable(),
+  marker_icon: z.string().nullable(),
+  is_broken: z.boolean(),
+  user_note: z.string().nullable(),
+  planned_arrival_at: Iso8601Schema.nullable(),
+  planned_departure_at: Iso8601Schema.nullable(),
+  budget_amount: NonNegativeDecimalStringSchema.nullable(),
+  actual_amount: NonNegativeDecimalStringSchema.nullable(),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  user_url: z.string().nullable(),
+  feature_link_broken_at: Iso8601Schema.nullable(),
+  version: z.number().int(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type TripViewPoi = z.infer<typeof TripViewPoiSchema>;
+
+export const TripViewDaySchema = z.object({
+  day_index: z.number().int(),
+  date: z.string().date().nullable(),
+  title: z.string().nullable(),
+  pois: z.array(TripViewPoiSchema),
+});
+export type TripViewDay = z.infer<typeof TripViewDaySchema>;
+
+export const TripViewShareLinkSchema = z.object({
+  share_id: z.string().uuid(),
+  visibility: TripShareLinkVisibilitySchema,
+  expires_at: Iso8601Schema.nullable(),
+  revoked_at: Iso8601Schema.nullable(),
+  last_used_at: Iso8601Schema.nullable(),
+  created_at: Iso8601Schema,
+});
+export type TripViewShareLink = z.infer<typeof TripViewShareLinkSchema>;
+
+export const TripViewSchema = z.object({
+  trip: TripResponseSchema,
+  days: z.array(TripViewDaySchema),
+  companions: z.array(TripCompanionResponseSchema),
+  share_links: z.array(TripViewShareLinkSchema),
+  broken_feature_count: z.number().int().nonnegative(),
+});
+export type TripView = z.infer<typeof TripViewSchema>;

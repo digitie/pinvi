@@ -21,7 +21,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.etl_bridge.krtour_map import KrtourMapClient
+from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
+from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 
@@ -55,6 +57,8 @@ async def build_trip_view(
         dict: {
             "trip": Trip dict,
             "days": [{day_index, date, pois: [...]}, ...],
+            "companions": [...],
+            "share_links": [...],
             "broken_feature_count": int,
         }
     """
@@ -63,17 +67,35 @@ async def build_trip_view(
     days_result = await db.execute(day_query)
     days = list(days_result.scalars())
 
+    companion_query = (
+        select(TripCompanion)
+        .where(TripCompanion.trip_id == trip.trip_id)
+        .order_by(TripCompanion.invited_at.desc(), TripCompanion.companion_id.asc())
+    )
+    companion_result = await db.execute(companion_query)
+    companions = list(companion_result.scalars())
+
+    share_link_query = (
+        select(TripShareLink)
+        .where(TripShareLink.trip_id == trip.trip_id)
+        .order_by(TripShareLink.created_at.desc(), TripShareLink.share_id.asc())
+    )
+    share_link_result = await db.execute(share_link_query)
+    share_links = list(share_link_result.scalars())
+
     if not days:
         return {
-            "trip": {"trip_id": str(trip.trip_id), "title": trip.title},
+            "trip": _trip_to_dict(trip),
             "days": [],
+            "companions": [_companion_to_dict(c) for c in companions],
+            "share_links": [_share_link_to_dict(s) for s in share_links],
             "broken_feature_count": 0,
         }
 
     # POI 로드 — trip_id 단일 인덱스
     poi_query = (
         select(TripDayPoi)
-        .where(TripDayPoi.trip_id == trip.trip_id)
+        .where(TripDayPoi.trip_id == trip.trip_id, TripDayPoi.deleted_at.is_(None))
         .order_by(TripDayPoi.day_index, TripDayPoi.sort_order)
     )
     poi_result = await db.execute(poi_query)
@@ -116,13 +138,16 @@ async def build_trip_view(
             broken_count += 1
 
         feature_view = fresh or poi.feature_snapshot or {}
+        title = None
+        if isinstance(feature_view, dict):
+            title = feature_view.get("title") or feature_view.get("name")
 
         pois_by_day_index.setdefault(poi.day_index, []).append(
             {
                 "poi_id": str(poi.attachment_id),  # legacy 컬럼명
                 "feature_id": poi.feature_id,
                 "sort_order": poi.sort_order,
-                "title": feature_view.get("title") if isinstance(feature_view, dict) else None,
+                "title": title,
                 "feature": feature_view,
                 "marker_color": poi.custom_marker_color
                 or (feature_view.get("marker_color") if isinstance(feature_view, dict) else None),
@@ -132,19 +157,19 @@ async def build_trip_view(
                 "user_note": poi.user_note,
                 "planned_arrival_at": poi.planned_arrival_at,
                 "planned_departure_at": poi.planned_departure_at,
+                "budget_amount": poi.budget_amount,
+                "actual_amount": poi.actual_amount,
+                "currency": poi.currency,
+                "user_url": poi.user_url,
+                "feature_link_broken_at": poi.feature_link_broken_at,
+                "version": poi.version,
+                "created_at": poi.created_at,
+                "updated_at": poi.updated_at,
             }
         )
 
     return {
-        "trip": {
-            "trip_id": str(trip.trip_id),
-            "title": trip.title,
-            "description": trip.description,
-            "start_date": trip.start_date,
-            "end_date": trip.end_date,
-            "visibility": trip.visibility,
-            "version": trip.version,
-        },
+        "trip": _trip_to_dict(trip),
         "days": [
             {
                 "day_index": d.day_index,
@@ -154,5 +179,52 @@ async def build_trip_view(
             }
             for d in days
         ],
+        "companions": [_companion_to_dict(c) for c in companions],
+        "share_links": [_share_link_to_dict(s) for s in share_links],
         "broken_feature_count": broken_count,
+    }
+
+
+def _trip_to_dict(trip: Trip) -> dict[str, Any]:
+    return {
+        "trip_id": trip.trip_id,
+        "owner_user_id": trip.owner_user_id,
+        "title": trip.title,
+        "description": trip.description,
+        "region_hint": trip.region_hint,
+        "primary_region_code": trip.primary_region_code,
+        "primary_region_source": trip.primary_region_source,
+        "start_date": trip.start_date,
+        "end_date": trip.end_date,
+        "visibility": trip.visibility,
+        "status": trip.status,
+        "version": trip.version,
+        "created_at": trip.created_at,
+        "updated_at": trip.updated_at,
+    }
+
+
+def _companion_to_dict(companion: TripCompanion) -> dict[str, Any]:
+    return {
+        "companion_id": companion.companion_id,
+        "trip_id": companion.trip_id,
+        "user_id": companion.user_id,
+        "invited_email": companion.invited_email,
+        "invited_nickname": companion.invited_nickname,
+        "role": companion.role,
+        "invited_at": companion.invited_at,
+        "joined_at": companion.joined_at,
+        "created_at": companion.created_at,
+        "updated_at": companion.updated_at,
+    }
+
+
+def _share_link_to_dict(share_link: TripShareLink) -> dict[str, Any]:
+    return {
+        "share_id": share_link.share_id,
+        "visibility": share_link.visibility,
+        "expires_at": share_link.expires_at,
+        "revoked_at": share_link.revoked_at,
+        "last_used_at": share_link.last_used_at,
+        "created_at": share_link.created_at,
     }

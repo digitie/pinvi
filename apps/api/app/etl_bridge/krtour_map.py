@@ -172,4 +172,12 @@ async def get_krtour_map_client_dep() -> KrtourMapClient:
     return _client_singleton
 
 
+async def get_optional_krtour_map_client_dep() -> KrtourMapClient | None:
+    """FastAPI 의존성 — client 미주입 시 snapshot fallback 경로에서 사용."""
+    return _client_singleton
+
+
 KrtourMapClientDep = Annotated[KrtourMapClient, Depends(get_krtour_map_client_dep)]
+OptionalKrtourMapClientDep = Annotated[
+    KrtourMapClient | None, Depends(get_optional_krtour_map_client_dep)
+]

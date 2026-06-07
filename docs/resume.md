@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-131 `GET /trips/{id}` 상세 view 연결을 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-125 feature_id 문자열화(C-09)를 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
+
+**T-131 Trip 상세 view 연결 완료** (2026-06-07): `GET /trips/{trip_id}`가 더 이상
+trip 메타만 반환하지 않고 `trip_view_builder.build_trip_view`를 통해 trip/day/POI tree,
+companions, share link metadata, `broken_feature_count`를 반환한다. krtour-map client가
+미주입된 환경에서는 503 대신 저장된 `feature_snapshot`으로 fallback한다.
 
 **T-127 MCP 외부 인터페이스 정본화 완료** (2026-06-07): ADR-019 외부 MCP 계약은
 `docs/architecture/mcp-server.md`가 단일 진실이며, 1차 tool은 read-only 5개로 고정했다.

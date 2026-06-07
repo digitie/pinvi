@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
+from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
 from app.schemas.envelope import Envelope
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from app.schemas.trip import (
@@ -19,6 +20,7 @@ from app.schemas.trip import (
     TripCreate,
     TripResponse,
     TripUpdate,
+    TripView,
 )
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
@@ -40,6 +42,7 @@ from app.services.trip import (
     revoke_share_link,
     update_trip,
 )
+from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -145,15 +148,20 @@ async def create_trip_endpoint(
     return Envelope.of(_to_response(trip))
 
 
-@router.get("/{trip_id}", response_model=Envelope[TripResponse])
+@router.get("/{trip_id}", response_model=Envelope[TripView])
 async def get_trip_endpoint(
-    trip_id: uuid.UUID, current_user_id: CurrentUserId, db: DbSession
-) -> Envelope[TripResponse]:
+    trip_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    krtour_client: OptionalKrtourMapClientDep,
+) -> Envelope[TripView]:
     try:
         trip = await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
-    return Envelope.of(_to_response(trip))
+    return Envelope.of(
+        TripView.model_validate(await build_trip_view(db, trip=trip, krtour_client=krtour_client))
+    )
 
 
 @router.patch("/{trip_id}", response_model=Envelope[TripResponse])

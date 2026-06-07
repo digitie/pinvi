@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -125,3 +126,49 @@ class TripResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class TripViewPoi(BaseModel):
+    poi_id: uuid.UUID
+    feature_id: str
+    sort_order: str
+    title: str | None
+    feature: dict[str, Any]
+    marker_color: str | None
+    marker_icon: str | None
+    is_broken: bool
+    user_note: str | None
+    planned_arrival_at: datetime | None
+    planned_departure_at: datetime | None
+    budget_amount: Decimal | None
+    actual_amount: Decimal | None
+    currency: str
+    user_url: str | None
+    feature_link_broken_at: datetime | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TripViewDay(BaseModel):
+    day_index: int
+    date: date | None
+    title: str | None
+    pois: list[TripViewPoi]
+
+
+class TripViewShareLink(BaseModel):
+    share_id: uuid.UUID
+    visibility: Literal["view_only", "comment", "edit"]
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    last_used_at: datetime | None
+    created_at: datetime
+
+
+class TripView(BaseModel):
+    trip: TripResponse
+    days: list[TripViewDay]
+    companions: list[TripCompanionResponse]
+    share_links: list[TripViewShareLink]
+    broken_feature_count: int

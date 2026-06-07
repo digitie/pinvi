@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
+- [ ] T-125 — feature_id 문자열化(코드의 UUID 가정 제거) (C-09; ADR-028)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -182,7 +182,7 @@
 - [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
 - [ ] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13)
 - [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
-- [ ] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
+- [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
 - [x] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)

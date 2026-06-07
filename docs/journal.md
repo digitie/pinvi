@@ -15,6 +15,36 @@ hash-chain head fork(#80) 등. [중간] 8건을 T-162~T-169로 승격.
 **산출물**: `docs/reviews/2026-06-08-codex-pr-review.md`(수렴 표 + 잔존 TODO).
 검증 메모: #78 초기 "ADR-035 미존재"는 오탐(ADR-035 실재) — 종합에서 정정.
 
+## 2026-06-07 (codex) — T-131 Trip 상세 view 연결
+
+**작업**: 감사 C-05에서 지적된 `trip_view_builder.build_trip_view` dead code를 닫고,
+`GET /trips/{trip_id}`를 trip 메타 전용 응답에서 상세 view 응답으로 연결했다.
+
+**변경**:
+- `apps/api/app/api/v1/trips.py`, `apps/api/app/services/trip_view_builder.py` —
+  상세 GET에서 builder를 호출하고 trip/day/POI tree, companion 목록, share link metadata,
+  `broken_feature_count`를 반환한다. krtour-map client가 없으면 저장 snapshot으로 fallback한다.
+- `apps/api/app/schemas/trip.py`, `packages/schemas/src/trip.ts`,
+  `packages/api-client/src/endpoints/trips.ts` — `TripView` 응답 schema와 api-client `get`
+  계약을 추가했다.
+- `apps/api/tests/integration/test_trips_api.py`,
+  `apps/api/tests/integration/test_pois_reorder.py` — 상세 view 구조, share token 원문 비노출,
+  POI snapshot day tree 회귀 테스트를 추가했다.
+- `docs/api/trips.md`, `docs/resume.md`, `docs/tasks.md` — 상세 응답 shape와 T-131 완료,
+  다음 비-krtourmap 작업(T-125)을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app tests/integration/test_trips_api.py tests/integration/test_pois_reorder.py`
+- WSL2 ext4 mirror: `mypy --strict app`
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/api-client`
+- WSL2 ext4 mirror: `npx prettier --check packages/schemas/src/trip.ts packages/schemas/src/index.ts packages/api-client/src/endpoints/trips.ts`
+- WSL2 ext4 mirror: `PATH=/home/digitie/tripmate-workspaces/tripmate-codex/apps/api/.venv/bin:$PATH pytest --capture=no -q tests/integration/test_trips_api.py tests/integration/test_pois_reorder.py`
+- NTFS worktree: `git.exe diff --check`
+- NTFS worktree: `codegraph sync`
+
+**다음**: T-125 feature_id 문자열화(C-09).
+
 ## 2026-06-07 (codex) — T-127 MCP 외부 인터페이스 정본화
 
 **작업**: 감사 A-02/A-06/A-12에서 지적된 MCP 문서 충돌, trip status enum 불일치,

@@ -50,8 +50,13 @@ async def test_create_and_get_trip(client, verified_user, auth_cookies) -> None:
     trip_id = trip["trip_id"]
     got = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert got.status_code == 200
-    assert got.json()["data"]["trip_id"] == trip_id
-    assert got.json()["data"]["primary_region_code"] == "26110"
+    detail = got.json()["data"]
+    assert detail["trip"]["trip_id"] == trip_id
+    assert detail["trip"]["primary_region_code"] == "26110"
+    assert detail["days"] == []
+    assert detail["companions"] == []
+    assert detail["share_links"] == []
+    assert detail["broken_feature_count"] == 0
 
 
 async def test_list_trips_only_owner(client, verified_user, auth_cookies) -> None:
@@ -159,6 +164,13 @@ async def test_share_link_uses_web_base_url(
     assert share["url"].startswith(f"https://tripmate.example/trips/{trip_id}/shared/")
     assert "app.tripmate.local" not in share["url"]
 
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    assert detail.status_code == 200, detail.text
+    share_link = detail.json()["data"]["share_links"][0]
+    assert share_link["share_id"] == share["share_id"]
+    assert share_link["visibility"] == "view_only"
+    assert "token" not in share_link
+
 
 async def test_owner_can_invite_existing_user_and_queue_trip_invite(
     client,
@@ -192,6 +204,11 @@ async def test_owner_can_invite_existing_user_and_queue_trip_invite(
     assert companion["user_id"] == companion_id
     assert companion["invited_email"] == companion_email
     assert companion["joined_at"] is not None
+
+    detail = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner_id))
+    assert detail.status_code == 200, detail.text
+    companions = detail.json()["data"]["companions"]
+    assert [row["companion_id"] for row in companions] == [companion["companion_id"]]
 
     async with session_factory() as db:
         queued = await db.scalar(
