@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-158 Trip WebSocket guard
+
+**작업**: PR #63 사후 리뷰에서 남은 WebSocket 가용성 위험(rate limit 없음,
+`presence.cursor` fan-out 증폭, 느린 peer backpressure, connection cap 부재)을 닫았다.
+
+**변경**:
+- `apps/api/app/api/v1/ws.py` — client message rate limit(초당 5/분당 60), 초과 시
+  `error RATE_LIMITED` 후 close `4429`, `presence.cursor` 좌표 range 검증과 canonical
+  `longitude`/`latitude` broadcast를 추가했다.
+- `apps/api/app/services/realtime_broker.py` — trip/process connection cap과 broadcast
+  send timeout을 추가해 느린 peer를 stale connection으로 제거한다.
+- `apps/api/tests/{unit,integration}` — broker cap/timeout, WebSocket rate-limit close,
+  connection cap reject, cursor 검증 회귀 테스트를 추가했다.
+- `docs/api/websocket.md`, `docs/architecture/websocket-broker.md`,
+  `docs/resume.md`, `docs/tasks.md` — 운영 환경변수와 close code를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/core/config.py app/api/v1/ws.py app/services/realtime_broker.py tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/config.py app/api/v1/ws.py app/services/realtime_broker.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+
+**다음**: T-159 응답 money 필드 Zod 타입 정합 또는 T-126 POI 생성 경로 단일화.
+
 ## 2026-06-07 (codex) — T-157 geofence fallback 발신 검증
 
 **작업**: FastAPI geofence fallback이 `CF-IPCountry`만 신뢰하면 직접 접근에서

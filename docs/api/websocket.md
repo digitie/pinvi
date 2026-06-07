@@ -59,7 +59,7 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 | type | payload |
 |------|---------|
 | `presence.update` | `{ "user_id": "uuid", "viewing_day": 2, "is_online": true }` |
-| `presence.cursor` | `{ "user_id": "uuid", "lat": 37.5, "lng": 127.0 }` (옵션, 비활성 기본) |
+| `presence.cursor` | `{ "user_id": "uuid", "longitude": 127.0, "latitude": 37.5 }` (옵션, 비활성 기본) |
 
 ### 2.5 시스템
 
@@ -73,7 +73,7 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 | type | payload | 비고 |
 |------|---------|------|
 | `presence.heartbeat` | `{ "viewing_day": 2 }` | 5초 주기 |
-| `presence.cursor` | `{ "lat": ..., "lng": ... }` | 옵션 (v2) |
+| `presence.cursor` | `{ "longitude": ..., "latitude": ... }` | 옵션 (v2). 서버는 legacy `lng`/`lat` 입력도 받지만 canonical broadcast는 `longitude`/`latitude`다. |
 | `pong` | `{}` | 서버 `ping`에 응답 |
 
 30초 무응답 → 서버가 offline 처리 + 다른 클라이언트에 `presence.update is_online=false`.
@@ -107,8 +107,25 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 ## 7. Rate limit
 
 - 클라이언트 → 서버 메시지: 초당 5개 / 분당 60개
-- 초과 시 `error` 이벤트 + 30초 후 자동 close
+- 초과 시 `error` 이벤트 + 30초 grace 후 close `4429` (`rate_limited`)
 - Reconnect: 클라이언트 측 exponential backoff (1s, 2s, 4s, ... max 30s)
+- `presence.cursor`는 좌표 숫자/range를 검증하고 서버가 `user_id`를 채워 broadcast한다.
+- process-local cap: trip당 10 connections, process 전체 200 connections. 초과 시
+  `{ "code": 4408, "reason": "trip_connection_limit_exceeded" }` 또는
+  `process_connection_limit_exceeded` 후 close `4408`.
+- broadcast send timeout 기본 2초. 느린 peer는 stale connection으로 제거해 같은 trip fan-out을
+  막지 않게 한다.
+
+운영 조절 환경변수:
+
+| 환경변수 | 기본 |
+|----------|------|
+| `TRIPMATE_WS_CLIENT_RATE_PER_SECOND` | `5` |
+| `TRIPMATE_WS_CLIENT_RATE_PER_MINUTE` | `60` |
+| `TRIPMATE_WS_RATE_LIMIT_CLOSE_GRACE_SECONDS` | `30` |
+| `TRIPMATE_WS_MAX_CONNECTIONS_PER_TRIP` | `10` |
+| `TRIPMATE_WS_MAX_CONNECTIONS_TOTAL` | `200` |
+| `TRIPMATE_WS_SEND_TIMEOUT_SECONDS` | `2` |
 
 ## 8. AI agent 구현 체크리스트
 

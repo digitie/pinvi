@@ -75,6 +75,14 @@ class Settings(BaseSettings):
         default_factory=lambda: ["/health", "/health/db", "/docs", "/redoc", "/openapi.json"]
     )
 
+    # WebSocket safety guard (ADR-035)
+    tripmate_ws_client_rate_per_second: int = 5
+    tripmate_ws_client_rate_per_minute: int = 60
+    tripmate_ws_rate_limit_close_grace_seconds: float = 30.0
+    tripmate_ws_max_connections_per_trip: int = 10
+    tripmate_ws_max_connections_total: int = 200
+    tripmate_ws_send_timeout_seconds: float = 2.0
+
     # Sentry
     tripmate_sentry_dsn: str = ""
     tripmate_sentry_environment: str = "development"
