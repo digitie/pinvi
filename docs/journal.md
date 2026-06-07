@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (claude) — Telegram 완료 알림 MCP 도입 (모든 agent)
+
+**작업**: krtour-map PR #229 패턴을 미러해 TripMate 모든 agent worktree에서 PR 후
+Telegram 완료 알림을 보낼 수 있게 했다. GitHub Actions secret/워크플로 없이
+worktree 로컬 credential + MCP로 처리(T-062 0-secret 정책 유지).
+
+**변경**:
+- `scripts/mcp_telegram_start.py` — `.env.mcp-telegram`(gitignore) 로드 후
+  `mcp-telegram` 실행하는 wrapper.
+- `claude.json` / `.codex/config.toml` / `.gemini/mcp.json` / `antigravity.json` —
+  각 agent worktree `cwd`로 `mcp-telegram` MCP 서버 등록.
+- `.gitignore` — `.env.mcp-telegram` 무시. `.env.mcp-telegram.example` 템플릿 추가.
+- 문서: `AGENTS.md`/`CLAUDE.md`/`SKILL.md` "Telegram 완료 알림 MCP" 정책(ADR-016 동기),
+  `docs/runbooks/codegraph-worktrees.md` §3.7 셋업(모든 agent),
+  `docs/agent-workflow.md` §5 발송 시점.
+
+**검증**: wrapper `version`/JSON·TOML parse/py_compile OK. `mcp-telegram` v0.1.11 +
+사용자 전역 세션(`~/.local/state/mcp-telegram/session.session`, krtour-map 로그인
+재사용)으로 **실제 전송 성공**(Saved Messages, 사용자 수신 확인). `.env.mcp-telegram`은
+gitignore되어 tracked secret 없음.
+
 ## 2026-06-06 (codex) — T-139 동반자 초대/댓글/visibility 정합 보강
 
 **작업**: 감사 D-06 범위의 동반자 초대 엔드포인트 부재와

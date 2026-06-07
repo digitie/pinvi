@@ -12,3 +12,8 @@ env = { PLAYWRIGHT_HEADLESS = "true" }
 [mcp_servers.sequential-thinking]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+
+[mcp_servers.mcp-telegram]
+command = "C:\\Python314\\python.exe"
+args = ["scripts\\mcp_telegram_start.py"]
+cwd = "F:\\dev\\tripmate-codex"

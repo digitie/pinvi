@@ -51,6 +51,8 @@ Thumbs.db
 # env / secrets
 .env
 .env*.local
+# mcp-telegram local credential (per-worktree, never committed) — ADR-016/PR mcp-telegram
+.env.mcp-telegram
 
 # data / artifacts (kept on NTFS, not in git per dev-environment 정책)
 dataset/

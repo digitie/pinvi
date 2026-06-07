@@ -163,6 +163,14 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 6. **NTFS에서 직접 `pytest`/`docker`/`npm` 실행 금지** — WSL ext4 미러에서
    실행. 단 **git은 예외** — NTFS worktree에서 Windows `git.exe`로만 (ADR-024).
    ext4 미러에서 commit/push 금지. PowerShell `rg.exe` 금지 (WSL native `rg`만).
+
+### Telegram 완료 알림 MCP (모든 agent)
+
+각 worktree에는 `mcp-telegram` MCP 설정(`claude.json`/`.codex/config.toml`/
+`.gemini/mcp.json`/`antigravity.json`)과 로컬 `.env.mcp-telegram` credential
+(`API_ID`/`API_HASH`, gitignore)이 있다. **단위 작업을 PR로 마무리하면 최종 응답 전
+`send_message`로 완료 요약 + PR 링크를 Telegram에 보낸다.** GitHub secret/워크플로는
+쓰지 않는다. 셋업·로그인은 `docs/runbooks/codegraph-worktrees.md` §3.7.
 7. **좌표 순서 혼동 금지** — 모든 외부 인터페이스는 `(lon, lat)`. 라이브러리
    DTO와 동일.
 8. **카테고리/마커 매핑 하드코드 금지** — `python-krtour-map`의 카테고리 표 사용.

@@ -127,7 +127,13 @@ git switch -c agent/claude-<task> origin/main
 # ...편집...
 git add -A; git commit -m "..."; git push -u origin agent/claude-<task>
 gh pr create --base main --head agent/claude-<task> ...
+# PR 생성 후, 최종 응답 전: mcp-telegram MCP send_message로 완료 요약 + PR 링크 전송
+#   (AGENTS.md "Telegram 작업 완료 알림 MCP", 셋업: codegraph-worktrees.md §3.6)
 ```
+
+> **PR 후 Telegram 알림**: 단위 작업이 PR로 마무리되면 최종 응답 전에 `mcp-telegram`
+> MCP의 `send_message`(`entity`=알림 대상, 기본 `me`)로 짧은 완료 요약 + PR 링크를
+> 보낸다. credential은 worktree 로컬 `.env.mcp-telegram`에만 둔다.
 
 ## 참고
 
