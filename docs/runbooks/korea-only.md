@@ -77,14 +77,29 @@ server {
 TRIPMATE_GEOFENCE_ENABLED=true
 TRIPMATE_GEOFENCE_ALLOWED_COUNTRIES=["KR"]
 TRIPMATE_GEOFENCE_COUNTRY_HEADER=CF-IPCountry
+TRIPMATE_GEOFENCE_TRUSTED_PROXY_HEADER=X-TripMate-Geofence-Proxy
+TRIPMATE_GEOFENCE_TRUSTED_PROXY_SECRET=<cloudflare-or-nginx-shared-secret>
 TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true
 TRIPMATE_GEOFENCE_BYPASS_PATHS=["/health","/health/db","/docs","/redoc","/openapi.json"]
 ```
 
-FastAPI fallback은 Cloudflare가 넣는 `CF-IPCountry` header를 우선 사용한다.
-직접 접속 우회를 막아야 하는 운영 환경에서는 `TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`로
-둔다. admin/operator/cpo 우회는 access token의 `sub`로 `app.users.roles`를 DB 조회한
-결과에 기반한다. access token의 `roles` claim은 신뢰하지 않는다.
+FastAPI fallback은 Cloudflare 또는 내부 reverse proxy가 넣는 `CF-IPCountry` header를
+사용한다. 단 운영 strict 모드에서는 `TRIPMATE_GEOFENCE_TRUSTED_PROXY_SECRET`과 일치하는
+`TRIPMATE_GEOFENCE_TRUSTED_PROXY_HEADER`가 함께 있을 때만 country header를 신뢰한다.
+secret이 없거나 틀리면 country는 `UNKNOWN`으로 처리되며,
+`TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`에서 451로 차단된다. admin/operator/cpo 우회는
+access token의 `sub`로 `app.users.roles`를 DB 조회한 결과에 기반한다. access token의
+`roles` claim은 신뢰하지 않는다.
+
+Cloudflare Tunnel / nginx / 내부 proxy는 API upstream으로 전달하기 전 다음 header를
+추가한다. 이 값은 public client가 알 수 없는 임의 문자열이어야 하며 `.env`/systemd
+secret으로만 보관한다. nginx 설정은 배포 템플릿에서 `envsubst`로 치환하거나 secret
+파일을 include해 주입한다.
+
+```nginx
+proxy_set_header CF-IPCountry $http_cf_ipcountry;
+proxy_set_header X-TripMate-Geofence-Proxy "<cloudflare-or-nginx-shared-secret>";
+```
 
 Cloudflare WAF가 KR 외 요청을 block하면 요청은 FastAPI까지 오지 않는다. 해외 출장
 운영 우회는 Cloudflare Access allowlist 또는 KR VPN을 우선 사용하고, FastAPI DB-role
@@ -176,6 +191,7 @@ docker logs tripmate-nginx | tail -20
 |------|------|------|
 | 한국 사용자가 451 받음 | GeoIP DB 오래됨 / 잘못된 매핑 | DB 강제 갱신 + 사용자 IP MaxMind 직접 조회 |
 | 모든 트래픽 451 | Cloudflare WAF rule 오설정 (KR 매칭 실패) | 룰 expression 점검 + WAF 일시 disable |
+| `CF-IPCountry=KR`인데 451 UNKNOWN | trusted proxy secret/header 누락 | proxy header 주입과 `TRIPMATE_GEOFENCE_TRUSTED_PROXY_SECRET` 값 일치 확인 |
 | nginx 502 | nginx geoip 모듈 누락 / DB 경로 잘못 | nginx GeoIP2 선택 계층이면 `nginx -t` + 모듈 설치 |
 | admin이 451 우회 안 됨 | Cloudflare/nginx에서 먼저 block / DB role 확인 실패 / 인증 토큰 미전달 | WAF/Access allowlist 확인 + request_id로 Loki 추적 |
 | 일일 차단 카운트 0 | rule 비활성? 모니터링 데이터 누락? | 직접 비KR IP로 curl 테스트 |

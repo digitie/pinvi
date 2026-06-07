@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     tripmate_geofence_enabled: bool = False
     tripmate_geofence_allowed_countries: list[str] = Field(default_factory=lambda: ["KR"])
     tripmate_geofence_country_header: str = "CF-IPCountry"
+    tripmate_geofence_trusted_proxy_header: str = "X-TripMate-Geofence-Proxy"
+    tripmate_geofence_trusted_proxy_secret: str = ""
     tripmate_geofence_block_unknown: bool = False
     tripmate_geofence_bypass_paths: list[str] = Field(
         default_factory=lambda: ["/health", "/health/db", "/docs", "/redoc", "/openapi.json"]

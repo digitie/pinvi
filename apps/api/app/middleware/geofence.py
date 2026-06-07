@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import inspect
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
@@ -73,9 +74,19 @@ def _is_bypass_path(path: str) -> bool:
 def _detected_country(request: Request) -> str | None:
     header = settings.tripmate_geofence_country_header
     country = request.headers.get(header)
-    if country:
+    if country and _is_trusted_country_proxy(request):
         return country.strip().upper()
     return None
+
+
+def _is_trusted_country_proxy(request: Request) -> bool:
+    expected = settings.tripmate_geofence_trusted_proxy_secret.strip()
+    if not expected:
+        return not settings.tripmate_geofence_block_unknown
+
+    header = settings.tripmate_geofence_trusted_proxy_header
+    provided = request.headers.get(header, "")
+    return hmac.compare_digest(provided, expected)
 
 
 def _blocked_response(country: str | None) -> JSONResponse:
@@ -99,8 +110,8 @@ def _blocked_response(country: str | None) -> JSONResponse:
 class GeofenceMiddleware(BaseHTTPMiddleware):
     """Cloudflare/nginx 다음 단계의 application-level KR-only fallback.
 
-    운영 기본 판정은 Cloudflare `CF-IPCountry` header다. nginx GeoIP2는 선택 계층이고,
-    FastAPI는 header 기반 fallback과 health/admin 우회를 담당한다.
+    운영 기본 판정은 Cloudflare `CF-IPCountry` header다. strict fallback에서는
+    shared secret proxy header가 맞을 때만 country header를 신뢰한다.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
