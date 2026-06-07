@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-157 geofence fallback 발신 검증
+
+**작업**: FastAPI geofence fallback이 `CF-IPCountry`만 신뢰하면 직접 접근에서
+`CF-IPCountry: KR` spoof로 우회할 수 있던 PR #60 사후 리뷰 후속을 닫았다.
+
+**변경**:
+- `apps/api/app/core/config.py`, `apps/api/.env.example` — trusted proxy shared secret
+  header 설정(`TRIPMATE_GEOFENCE_TRUSTED_PROXY_*`)을 추가했다.
+- `apps/api/app/middleware/geofence.py` — strict 모드에서 shared secret proxy header가
+  맞을 때만 country header를 신뢰하고, 누락/오류는 `UNKNOWN`으로 처리한다.
+- `apps/api/tests/unit/test_geofence_middleware.py` — KR 허용/US 차단은 trusted proxy
+  header가 있을 때만 통과하고, 직접 spoof와 wrong secret은 451 UNKNOWN으로 차단됨을 검증한다.
+- `docs/runbooks/korea-only.md`, `docs/architecture/korea-only-policy.md`,
+  `docs/resume.md`, `docs/tasks.md` — 운영 secret 주입과 T-157 완료를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/core/config.py app/middleware/geofence.py tests/unit/test_geofence_middleware.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/config.py app/middleware/geofence.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_geofence_middleware.py`
+
+**다음**: T-126 POI 생성 경로 단일화 또는 T-158 WebSocket rate limit/cursor 증폭 차단.
+
 ## 2026-06-07 (codex) — T-156 비밀번호 재설정 session 폐기 보강
 
 **작업**: 비밀번호 재설정 후 기존 refresh session이 남으면 탈취 세션이 계속 유효할 수

@@ -23,6 +23,11 @@ webhook을 허용한다.
 기존 active refresh session을 모두 revoke하고, reset 완료 응답으로 발급되는 새 session만
 active로 남도록 `revoke_active_user_sessions` helper와 다중 session 회귀 테스트를 정렬했다.
 
+**T-157 geofence fallback 발신 검증 완료** (2026-06-07): FastAPI geofence strict 모드는
+`CF-IPCountry`만 믿지 않고 `X-TripMate-Geofence-Proxy` shared secret이 맞을 때만 country
+header를 신뢰한다. 직접 접근 spoof는 `UNKNOWN`으로 처리되어 `block_unknown=true`에서
+451로 차단된다.
+
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
 `dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`

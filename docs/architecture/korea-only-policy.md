@@ -67,7 +67,9 @@ GeoIP2 DB 갱신: 월 1회 cron (MaxMind GeoLite2 무료 라이선스).
 # apps/api/app/middleware/geofence.py
 class GeofenceMiddleware:
     async def __call__(self, request: Request, call_next):
-        country = request.headers.get("CF-IPCountry")  # Cloudflare/nginx header 기반
+        # Cloudflare/nginx header 기반. strict 운영은 shared secret proxy header가
+        # 맞을 때만 CF-IPCountry를 신뢰한다.
+        country = verified_proxy_country(request)
         if country == "KR":
             return await call_next(request)
 
