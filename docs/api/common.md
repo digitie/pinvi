@@ -101,8 +101,9 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 - DB에는 access 토큰을 저장하지 않음 (stateless JWT).
 - `tripmate_refresh`는 `app.user_sessions`에 hash로만 저장
   (`session_token_hash`). DB row에 `revoked_at` 채우면 즉시 폐기.
-- 로그아웃: 클라이언트 cookie 삭제 + 서버 `revoked_at=now()`.
-- refresh rotation은 v1.0 단계에서 보류 (Sprint 6 ADR로 확정).
+- 로그아웃: 현재 refresh session `revoked_at=now()` + 클라이언트 cookie 삭제.
+- refresh: 기존 refresh session `revoked_at=now()` + 새 refresh session row 발급
+  (rotation).
 - Admin은 동일 cookie 사용 (별도 admin 도메인 없음). 권한 검사는 서버 dependency.
 
 ### 3.2 OAuth state nonce

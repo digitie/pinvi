@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
+- [ ] T-137 — notice/curated-plan 스키마 정본화(`curated_trip_plans` 분리) (D-01,D-04; ADR-029)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -185,7 +185,7 @@
 - [ ] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
-- [ ] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
+- [x] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
 - [ ] T-135 — POI 응답 `rise_set` 노출 (C-18)
 - [x] T-136 — Resend webhook Svix 서명 검증 (C-22)
 - [ ] T-137 — notice/curated-plan 스키마 정본화(`curated_trip_plans` 분리) (D-01,D-04; ADR-029)
@@ -248,3 +248,4 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #67 | feat: add trip budget constraints | 2026-06-06 | T-140 |
 | PR #69 | feat: add trip primary region | 2026-06-07 | T-141 |
 | PR #70 | feat: verify resend webhook signatures | 2026-06-07 | T-136 |
+| PR #71 | feat: persist refresh sessions | 2026-06-07 | T-134 |

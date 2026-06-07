@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
-from app.core.security import create_access_token, generate_opaque_token
+from app.core.errors import build_error
+from app.core.session_cookies import clear_session_cookies, set_session_cookies
 from app.models.oauth_identity import UserOAuthIdentity
 from app.models.user import User
 from app.schemas.auth import (
@@ -26,6 +27,14 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 from app.schemas.envelope import Envelope
+from app.services.auth_session import (
+    IssuedAuthSession,
+    RefreshTokenExpiredError,
+    RefreshTokenInvalidError,
+    issue_user_session,
+    refresh_user_session,
+    revoke_user_session,
+)
 from app.services.user_registration import (
     EmailAlreadyUsedError,
     EmailNotVerifiedError,
@@ -88,30 +97,47 @@ async def _list_oauth_identities(
     ]
 
 
-def _set_session_cookies(response: Response, *, user_id: str) -> None:
-    access = create_access_token(subject=user_id)
-    refresh = generate_opaque_token(32)
-    response.set_cookie(
-        key="tripmate_access",
-        value=access,
-        httponly=True,
-        secure=settings.tripmate_environment == "production",
-        samesite="lax",
-        max_age=settings.tripmate_access_token_minutes * 60,
-    )
-    response.set_cookie(
-        key="tripmate_refresh",
-        value=refresh,
-        httponly=True,
-        secure=settings.tripmate_environment == "production",
-        samesite="lax",
-        max_age=settings.tripmate_refresh_token_days * 24 * 60 * 60,
+def _request_user_agent(request: Request) -> str | None:
+    return request.headers.get("user-agent")
+
+
+def _request_ip_address(request: Request) -> str | None:
+    return request.client.host if request.client is not None else None
+
+
+def _set_issue_cookies(response: Response, issue: IssuedAuthSession) -> None:
+    set_session_cookies(
+        response,
+        access_token=issue.access_token,
+        refresh_token=issue.refresh_token,
     )
 
 
-def _clear_session_cookies(response: Response) -> None:
-    response.delete_cookie("tripmate_access")
-    response.delete_cookie("tripmate_refresh")
+async def _issue_session_and_set_cookies(
+    response: Response,
+    *,
+    db: DbSession,
+    request: Request,
+    user_id: uuid.UUID,
+) -> None:
+    issue = await issue_user_session(
+        db,
+        user_id=user_id,
+        user_agent=_request_user_agent(request),
+        ip_address=_request_ip_address(request),
+    )
+    _set_issue_cookies(response, issue)
+
+
+def _auth_error_with_cleared_cookies(
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+) -> JSONResponse:
+    response = JSONResponse(status_code=status_code, content=build_error(code, message))
+    clear_session_cookies(response)
+    return response
 
 
 @router.post(
@@ -157,6 +183,7 @@ async def register(body: RegisterRequest, db: DbSession) -> Envelope[RegisterRes
 async def verify_email_endpoint(
     body: VerifyEmailRequest,
     response: Response,
+    request: Request,
     db: DbSession,
 ) -> Envelope[AuthUser]:
     try:
@@ -167,7 +194,7 @@ async def verify_email_endpoint(
             detail={"code": exc.code, "message": str(exc), "details": {"token": "invalid"}},
         ) from exc
 
-    _set_session_cookies(response, user_id=str(user.user_id))
+    await _issue_session_and_set_cookies(response, db=db, request=request, user_id=user.user_id)
     return Envelope.of(_to_auth_user(user))
 
 
@@ -187,6 +214,7 @@ async def password_reset_request(
 async def password_reset(
     body: PasswordResetConfirmRequest,
     response: Response,
+    request: Request,
     db: DbSession,
 ) -> Envelope[AuthUser]:
     try:
@@ -197,7 +225,7 @@ async def password_reset(
             detail={"code": exc.code, "message": str(exc), "details": {"token": "invalid"}},
         ) from exc
 
-    _set_session_cookies(response, user_id=str(user.user_id))
+    await _issue_session_and_set_cookies(response, db=db, request=request, user_id=user.user_id)
     return Envelope.of(_to_auth_user(user))
 
 
@@ -205,6 +233,7 @@ async def password_reset(
 async def login(
     body: LoginRequest,
     response: Response,
+    request: Request,
     db: DbSession,
 ) -> Envelope[AuthUser]:
     try:
@@ -224,14 +253,58 @@ async def login(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    _set_session_cookies(response, user_id=str(user.user_id))
+    await _issue_session_and_set_cookies(response, db=db, request=request, user_id=user.user_id)
     return Envelope.of(_to_auth_user(user))
 
 
+@router.post("/refresh", response_model=Envelope[AuthUser])
+async def refresh_session(
+    response: Response,
+    request: Request,
+    db: DbSession,
+    tripmate_refresh: Annotated[str | None, Cookie(alias="tripmate_refresh")] = None,
+) -> Envelope[AuthUser] | JSONResponse:
+    if not tripmate_refresh:
+        return _auth_error_with_cleared_cookies(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="TOKEN_INVALID",
+            message="refresh cookie가 없습니다.",
+        )
+
+    try:
+        refreshed = await refresh_user_session(
+            db,
+            refresh_token=tripmate_refresh,
+            user_agent=_request_user_agent(request),
+            ip_address=_request_ip_address(request),
+        )
+    except RefreshTokenExpiredError as exc:
+        return _auth_error_with_cleared_cookies(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=exc.code,
+            message=str(exc),
+        )
+    except RefreshTokenInvalidError as exc:
+        return _auth_error_with_cleared_cookies(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=exc.code,
+            message=str(exc),
+        )
+
+    _set_issue_cookies(response, refreshed.issue)
+    return Envelope.of(_to_auth_user(refreshed.user))
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response) -> Response:
-    _clear_session_cookies(response)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    response: Response,
+    db: DbSession,
+    tripmate_refresh: Annotated[str | None, Cookie(alias="tripmate_refresh")] = None,
+) -> Response:
+    await revoke_user_session(db, refresh_token=tripmate_refresh)
+    clear_session_cookies(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @router.get("/me", response_model=Envelope[AuthUser])

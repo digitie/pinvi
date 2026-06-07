@@ -15,7 +15,9 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.models.oauth_identity import OAuthLoginState, UserOAuthIdentity
+from app.models.session import UserSession
 from app.models.user import User
+from app.services.auth_session import hash_session_token
 from app.services.oauth_google import (
     GoogleClaims,
     OAuthAccountLinkRequiredError,
@@ -510,6 +512,52 @@ async def test_link_callback_conflict_redirects_to_profile(
     params = parse_qs(parsed.query)
     assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/profile"
     assert params["error"] == ["OAUTH_ACCOUNT_LINK_REQUIRED"]
+
+
+async def test_login_callback_persists_refresh_session(
+    client,
+    session_factory,
+    monkeypatch,
+) -> None:
+    async with session_factory() as db:
+        state, _nonce, _code_verifier = await issue_login_state(
+            db,
+            mode="login",
+            return_to="/trips",
+        )
+        await db.commit()
+
+    async def fake_exchange_code_for_claims(**_kwargs) -> GoogleClaims:
+        return _claims(sub="callback-login-google", email="callback-login@gmail.com", verified=True)
+
+    monkeypatch.setattr(
+        "app.api.v1.oauth.exchange_code_for_claims",
+        fake_exchange_code_for_claims,
+    )
+
+    resp = await client.get(
+        f"/auth/oauth/google/callback?code=test-code&state={state}",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "http://localhost:9022/trips"
+    refresh_token = resp.cookies.get("tripmate_refresh")
+    assert refresh_token is not None
+
+    async with session_factory() as db:
+        identity = await db.scalar(
+            select(UserOAuthIdentity).where(
+                UserOAuthIdentity.provider_user_id == "callback-login-google"
+            )
+        )
+        assert identity is not None
+        session = await db.scalar(
+            select(UserSession).where(UserSession.user_id == identity.user_id)
+        )
+        assert session is not None
+        assert session.session_token_hash == hash_session_token(refresh_token)
+        assert session.revoked_at is None
 
 
 async def test_callback_invalid_state_redirects_to_login(client) -> None:

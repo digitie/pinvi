@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-134 auth refresh/session 영속화
+
+**작업**: `tripmate_refresh` cookie가 opaque token으로 내려가지만 DB에 저장되지 않아
+`POST /auth/refresh`와 서버 측 세션 폐기가 불가능하던 C-14 감사 항목을 구현했다.
+
+**변경**:
+- `apps/api/app/services/auth_session.py`, `apps/api/app/core/session_cookies.py` —
+  refresh token SHA-256 hash 저장, refresh rotation, revoke, cookie 세팅/삭제 helper를
+  추가했다.
+- `apps/api/app/api/v1/auth.py` — login / verify-email / password reset 성공 시
+  `app.user_sessions` row를 발급하고, `POST /auth/refresh`와 `POST /auth/logout`을
+  구현했다.
+- `apps/api/app/api/v1/oauth.py` — Google OAuth callback 성공 시에도 refresh session
+  row를 저장하게 했다. Naver/Kakao는 계속 future provider다.
+- `packages/api-client/src/endpoints/auth.ts` — refresh 응답 schema를 `AuthUser`로
+  맞추고 logout은 204 no-content helper를 사용하게 했다.
+- `apps/api/tests/integration/test_auth_sessions.py`,
+  `apps/api/tests/integration/test_oauth_google.py` — 세션 저장, refresh rotation,
+  만료/폐기 거부, logout revoke, OAuth callback session 저장을 검증한다.
+- `docs/api/{auth,common}.md`, `docs/{data-model,postgres-schema,resume,tasks}.md` —
+  refresh rotation 계약과 T-134 완료, 다음 후보 T-137을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy
+- WSL2 ext4 mirror: auth session + OAuth integration tests
+
+**다음**: T-137 notice/curated-plan 스키마 정본화.
+
 ## 2026-06-07 (codex) — T-136 Resend webhook Svix 서명 검증
 
 **작업**: `TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 운영 환경에서 Resend webhook이

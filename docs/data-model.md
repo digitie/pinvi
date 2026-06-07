@@ -103,9 +103,9 @@
 |------|------|------|
 | `session_id` | `uuid` (PK) | `gen_random_uuid()` |
 | `user_id` | `uuid` NOT NULL → `app.users` | |
-| `session_token_hash` | `varchar(128)` UNIQUE NOT NULL | refresh token hash |
+| `session_token_hash` | `varchar(128)` UNIQUE NOT NULL | refresh token SHA-256 hash |
 | `expires_at` | `timestamptz` NOT NULL | |
-| `revoked_at` | `timestamptz` | nullable |
+| `revoked_at` | `timestamptz` | nullable. refresh rotation/logout 시 기존 row 폐기 |
 | `user_agent` | `varchar(512)` | |
 | `ip_address` | `inet` | |
 | `created_at` | `timestamptz` NOT NULL | |
