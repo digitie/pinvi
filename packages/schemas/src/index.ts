@@ -79,6 +79,7 @@ export {
   PoiResponseSchema,
 } from './poi';
 export type { PoiCreate, PoiResponse } from './poi';
+export type { PoiReorderRequest, PoiUpdate } from './poi';
 
 export {
   NoticePoiSchema,

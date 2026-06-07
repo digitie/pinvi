@@ -4,10 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-126 POI 생성 경로 단일화(`/trips/{id}/pois`
-정본)를 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-161 README 앵커 정합 일괄을 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
+
+**T-126 POI 생성 경로 단일화 완료** (2026-06-07): v2 정본 POI 생성/수정/삭제/정렬
+경로는 `/trips/{trip_id}/pois` 계열로 고정했다. `docs/api/trips.md`의 오래된
+`/days/{day_index}/items` 문서 블록을 정본 경로 설명으로 교체하고, 공용
+`packages/api-client`에 `poiApi` wrapper를 추가했다.
 
 **T-154 Resend webhook C-22 완결 완료** (2026-06-07): 운영성 환경에서
 `TRIPMATE_RESEND_WEBHOOK_SECRET`이 비어 있거나 `whsec_` 표준 base64 형식이 아니면

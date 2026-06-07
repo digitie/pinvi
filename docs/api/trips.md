@@ -154,29 +154,33 @@ Content-Type: application/json
 
 day의 모든 POI도 함께 CASCADE.
 
-## 5. Day item 추가 (place / festival / route / area / notice)
+## 5. POI 추가 정본 경로
 
-v1의 `trip_plan_items`를 통합한 endpoint. 다양한 `resource_type`을 같은 timeline에.
+Trip day에 장소/축제/공지 기반 POI를 추가하는 정본 endpoint는
+[`pois.md`](./pois.md)의 `POST /trips/{trip_id}/pois`다. `day_index`는 path가 아니라
+요청 body에 담는다. v1 문서에 남아 있던 `/trips/{trip_id}/days/{day_index}/items`는
+v2에서 사용하지 않는다.
 
-### 5.1 `POST /trips/{trip_id}/days/{day_index}/items`
+### 5.1 `POST /trips/{trip_id}/pois`
 
 ```http
-POST /trips/{trip_id}/days/2/items
+POST /trips/{trip_id}/pois
 Content-Type: application/json
 
 {
-  "resource_type": "place" | "event" | "route" | "area" | "notice" | "festival" | "custom",
-  "feature_id": "f_2611000000_p_abc123...",   // 라이브러리 feature_id (string)
+  "day_index": 2,
   "sort_order": "a3",                          // LexoRank
-  "title_snapshot": "부산타워",
-  "address_snapshot": "부산 중구 용두산길 37-55",
-  "longitude": 129.0319,
-  "latitude": 35.1009,
-  "operating_hours_snapshot": { /* ... */ },
-  "starts_at": "2026-06-02T14:00:00+09:00",
-  "ends_at": "2026-06-02T15:30:00+09:00",
-  "note": "...",
-  "resource_metadata": { /* free jsonb */ }
+  "feature_id": "f_2611000000_p_abc123...",   // 라이브러리 feature_id (string)
+  "feature_snapshot": {
+    "name": "부산타워",
+    "coord": { "longitude": 129.0319, "latitude": 35.1009 },
+    "category": "관광명소"
+  },
+  "planned_arrival_at": "2026-06-02T14:00:00+09:00",
+  "planned_departure_at": "2026-06-02T15:30:00+09:00",
+  "user_note": "야경 보기",
+  "budget_amount": "12000.00",
+  "currency": "KRW"
 }
 ```
 
