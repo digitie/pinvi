@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-161 README `/search` 앵커 정합
+
+**작업**: PR #54 사후 리뷰에서 남은 README `GET /search` dangling anchor를 닫았다.
+
+**변경**:
+- `docs/api/features.md` — 통합 검색 heading을 `2.7 GET /search`로 단순화해
+  `#27-get-search` anchor가 안정적으로 생성되게 했다.
+- `README.md` — `GET /search` 링크를 `docs/api/features.md#27-get-search`로 교정했다.
+- `docs/krtour-map-requirements.md` — 통합 검색 feature 부분의 잘못된 features.md 절
+  번호를 §2.7로 교정했다.
+- `docs/resume.md`, `docs/tasks.md` — T-161 완료와 다음 비-krtourmap 작업(T-127)을
+  반영했다.
+
+**검증**:
+- NTFS worktree: `rg -n "#27-get-search|features.md §2.7" README.md docs/api/features.md docs/krtour-map-requirements.md`
+- NTFS worktree: `git.exe diff --check`
+- NTFS worktree: `codegraph sync`
+
+**다음**: T-127 MCP 외부 인터페이스 정본화.
+
 ## 2026-06-07 (codex) — T-126 POI 생성 경로 단일화
 
 **작업**: 감사 A-01/C-16에서 지적된 POI 생성 경로 이중 표기를 닫았다. v2 정본은
