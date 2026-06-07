@@ -31,6 +31,12 @@
 > - 동기화 상태 확인: `codegraph status`
 > - 새 task 시작 시: `codegraph sync`
 >
+> **Telegram 완료 알림 MCP** — PR을 만들면 최종 응답 전 `mcp-telegram` MCP의
+> `send_message`(`entity` 기본 `me`)로 완료 요약 + PR 링크를 보낸다. credential은
+> worktree 로컬 `.env.mcp-telegram`(gitignore, GitHub secret 미사용)에만 둔다. 모든
+> agent(claude/codex/antigravity) 공통. 셋업 `docs/runbooks/codegraph-worktrees.md`
+> §3.7, 규칙 `AGENTS.md` "Telegram 작업 완료 알림 MCP".
+>
 > **Code Style & Rules** — 컴포넌트 / 함수 / 서비스를 수정하기 전 반드시 CodeGraph
 > 의 `codegraph_explore` 도구로 영향도를 먼저 평가한다. grep / Read fan-out 대신
 > 한 번의 MCP 호출로 관련 심볼 source + 호출 관계를 본다. 보조: `codegraph_impact`

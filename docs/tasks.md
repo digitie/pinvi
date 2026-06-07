@@ -133,6 +133,11 @@
   (완료: 2026-06-06, Sprint 1/3/4/5 status를 최신 main과 맞추고, Sprint 5 ETL
   provider asset 목록을 krtour-map 책임으로 정정, `resume.md` ADR-031까지 박힌 ADR
   목록 갱신, T-111 중복/보류·완료 혼재 상태 점검, merge history PR #55 추가)
+- [x] T-152 — Telegram 완료 알림 MCP (모든 agent)
+  (완료: 2026-06-07, krtour-map PR #229 패턴 미러. `scripts/mcp_telegram_start.py` +
+  `mcp-telegram` 서버를 claude/codex/antigravity/gemini MCP 설정에 등록 +
+  `.env.mcp-telegram` gitignore + AGENTS/CLAUDE/SKILL/runbook 정책. GitHub secret 미사용
+  (T-062 유지). 실제 전송 검증 완료. PR 후 `send_message`로 요약+링크 발송 규칙.)
 
 ## 보류
 
