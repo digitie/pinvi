@@ -12,6 +12,9 @@
   - `custom_marker_color`, `custom_marker_icon` — 사용자 override
   - `version INTEGER` — optimistic lock (`If-Match`)
   - `planned_arrival_at`, `planned_departure_at` — KST aware
+  - `budget_amount`, `actual_amount`, `currency` — 사용자 예상/실제 지출. 금액은 0 이상,
+    `currency`는 대문자 3글자(기본 `KRW`)
+  - `user_url` — 사용자가 저장한 참고 URL
 - `app.trip_poi_rise_sets`:
   - POI 생성 시 `python-kasi-api` 위치별 해달 출몰시각 정보조회 결과를 1회 저장
   - `rise_set` 응답 선택 필드의 원천. 날짜/좌표가 없으면 pending 상태
@@ -38,6 +41,10 @@ Content-Type: application/json
   "planned_arrival_at": "2026-06-02T14:00:00+09:00",
   "planned_departure_at": "2026-06-02T15:30:00+09:00",
   "user_note": "...",
+  "budget_amount": "12000.00",
+  "actual_amount": null,
+  "currency": "KRW",
+  "user_url": "https://example.com/menu",
   "custom_marker_color": "P-08",   // 선택
   "custom_marker_icon": null
 }
@@ -79,11 +86,15 @@ Content-Type: application/json
 {
   "user_note": "...",
   "custom_marker_color": "P-04",
-  "planned_arrival_at": "..."
+  "planned_arrival_at": "...",
+  "budget_amount": "15000.00",
+  "actual_amount": "11000.00",
+  "currency": "KRW"
 }
 ```
 
-LWW 필드 단위 — `version + 1` + WebSocket broadcast (`poi.updated`).
+LWW 필드 단위 — `version + 1` + WebSocket broadcast (`poi.updated`). 예산 금액은
+null 또는 0 이상, `currency`는 대문자 3글자만 허용한다.
 
 ### 2.3 `DELETE /trips/{trip_id}/pois/{poi_id}`
 

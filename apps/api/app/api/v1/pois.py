@@ -92,7 +92,13 @@ async def create_poi_endpoint(
             added_by_user_id=uuid.UUID(current_user_id),
             custom_marker_color=body.custom_marker_color,
             custom_marker_icon=body.custom_marker_icon,
+            planned_arrival_at=body.planned_arrival_at,
+            planned_departure_at=body.planned_departure_at,
             user_note=body.user_note,
+            budget_amount=body.budget_amount,
+            actual_amount=body.actual_amount,
+            currency=body.currency,
+            user_url=body.user_url,
         )
     except SortOrderConflictError as exc:
         raise HTTPException(

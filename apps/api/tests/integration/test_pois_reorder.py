@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 pytestmark = pytest.mark.asyncio
@@ -13,13 +15,23 @@ async def _make_trip(client, cookies) -> str:
     return resp.json()["data"]["trip_id"]
 
 
-async def _add_poi(client, cookies, trip_id, *, sort_order, feature_id, day_index=1) -> dict:
+async def _add_poi(
+    client,
+    cookies,
+    trip_id,
+    *,
+    sort_order,
+    feature_id,
+    day_index=1,
+    **overrides,
+) -> dict:
     resp = await client.post(
         f"/trips/{trip_id}/pois",
         json={
             "day_index": day_index,
             "sort_order": sort_order,
             "feature_id": feature_id,
+            **overrides,
         },
         cookies=cookies,
     )
@@ -66,6 +78,57 @@ async def test_sort_order_unique_conflict(client, verified_user, auth_cookies) -
         cookies=cookies,
     )
     assert resp.status_code == 409, resp.text
+
+
+async def test_poi_budget_fields_round_trip(client, verified_user, auth_cookies) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies)
+
+    created = await _add_poi(
+        client,
+        cookies,
+        trip_id,
+        sort_order="b0",
+        feature_id="budgeted",
+        budget_amount="12000.50",
+        actual_amount="9000.00",
+        currency="USD",
+        user_url="https://example.com/menu",
+    )
+    assert Decimal(str(created["budget_amount"])) == Decimal("12000.50")
+    assert Decimal(str(created["actual_amount"])) == Decimal("9000.00")
+    assert created["currency"] == "USD"
+    assert created["user_url"] == "https://example.com/menu"
+
+    updated = await client.patch(
+        f"/trips/{trip_id}/pois/{created['attachment_id']}",
+        headers={"If-Match": "1"},
+        json={
+            "budget_amount": "15000.00",
+            "actual_amount": "11000.00",
+            "currency": "KRW",
+        },
+        cookies=cookies,
+    )
+    assert updated.status_code == 200, updated.text
+    data = updated.json()["data"]
+    assert Decimal(str(data["budget_amount"])) == Decimal("15000.00")
+    assert Decimal(str(data["actual_amount"])) == Decimal("11000.00")
+    assert data["currency"] == "KRW"
+    assert data["version"] == 2
+
+    invalid = await client.post(
+        f"/trips/{trip_id}/pois",
+        json={
+            "day_index": 1,
+            "sort_order": "b1",
+            "feature_id": "invalid-budget",
+            "budget_amount": "-1.00",
+        },
+        cookies=cookies,
+    )
+    assert invalid.status_code == 422
 
 
 async def test_collate_c_ordering(client, verified_user, auth_cookies, session_factory) -> None:

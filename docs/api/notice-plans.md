@@ -127,8 +127,9 @@ Cookie: tripmate_access=...
 2. target_trip_id null → 새 trip 생성
 3. target_trip_id 채워짐 → owner / editor 권한 검증
 4. 필요한 `trip_days` 생성 (`day_index`)
-5. notice_pois → `trip_day_pois`로 INSERT (`sort_order`는 새 trip이면 그대로,
-   기존 trip이면 마지막 + LexoRank append)
+5. notice_pois → `trip_day_pois`로 INSERT (`memo`, `budget_amount`, `currency`,
+   `user_url`, custom marker 포함. `sort_order`는 새 trip이면 그대로, 기존 trip이면
+   마지막 + LexoRank append)
 6. `plan_poi_attachments` 복사 (`source_attachment_id` 설정, `storage_key` 동일)
 7. RustFS object는 **복사 안 함** (같은 object 참조)
 

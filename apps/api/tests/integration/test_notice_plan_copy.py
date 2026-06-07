@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
@@ -42,7 +43,13 @@ async def _seed_plan(session_factory) -> uuid.UUID:
             title="부산 추천 코스",
             destination="부산",
             pois=[
-                {"day_index": 1, "sort_order": "a0", "feature_id": "f_haeundae"},
+                {
+                    "day_index": 1,
+                    "sort_order": "a0",
+                    "feature_id": "f_haeundae",
+                    "budget_amount": Decimal("55000.00"),
+                    "currency": "KRW",
+                },
                 {"day_index": 1, "sort_order": "a1", "feature_id": "f_gwangalli"},
                 {"day_index": 2, "sort_order": "a0", "feature_id": "f_taejongdae"},
             ],
@@ -71,6 +78,20 @@ async def test_copy_creates_new_trip(client, verified_user, auth_cookies, sessio
             .where(TripDayPoi.trip_id == uuid.UUID(data["trip_id"]))
         )
         assert count == 3
+        copied_budget = await db.scalar(
+            select(TripDayPoi.budget_amount).where(
+                TripDayPoi.trip_id == uuid.UUID(data["trip_id"]),
+                TripDayPoi.feature_id == "f_haeundae",
+            )
+        )
+        copied_currency = await db.scalar(
+            select(TripDayPoi.currency).where(
+                TripDayPoi.trip_id == uuid.UUID(data["trip_id"]),
+                TripDayPoi.feature_id == "f_haeundae",
+            )
+        )
+        assert copied_budget == Decimal("55000.00")
+        assert copied_currency == "KRW"
 
 
 async def test_copy_partial_pois(client, verified_user, auth_cookies, session_factory) -> None:

@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -34,6 +35,15 @@ class TripDayPoi(Base, TimestampMixin):
             name="fk_trip_day_pois_day",
             ondelete="CASCADE",
         ),
+        CheckConstraint(
+            "budget_amount IS NULL OR budget_amount >= 0",
+            name="ck_trip_day_pois_budget_nonnegative",
+        ),
+        CheckConstraint(
+            "actual_amount IS NULL OR actual_amount >= 0",
+            name="ck_trip_day_pois_actual_nonnegative",
+        ),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_trip_day_pois_currency"),
     )
 
     attachment_id: Mapped[uuid.UUID] = mapped_column(

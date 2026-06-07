@@ -20,9 +20,9 @@ class PoiCreate(BaseModel):
     planned_arrival_at: datetime | None = None
     planned_departure_at: datetime | None = None
     user_note: str | None = None
-    budget_amount: Decimal | None = None
-    actual_amount: Decimal | None = None
-    currency: str = Field(default="KRW", min_length=3, max_length=3)
+    budget_amount: Decimal | None = Field(default=None, ge=0)
+    actual_amount: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="KRW", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     user_url: str | None = Field(default=None, max_length=2000)
 
 
@@ -34,8 +34,9 @@ class PoiUpdate(BaseModel):
     planned_arrival_at: datetime | None = None
     planned_departure_at: datetime | None = None
     user_note: str | None = None
-    budget_amount: Decimal | None = None
-    actual_amount: Decimal | None = None
+    budget_amount: Decimal | None = Field(default=None, ge=0)
+    actual_amount: Decimal | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     user_url: str | None = Field(default=None, max_length=2000)
 
 

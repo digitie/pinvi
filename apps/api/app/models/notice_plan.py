@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -64,6 +65,13 @@ class NoticePlan(Base, TimestampMixin):
 
 class NoticePoi(Base, TimestampMixin):
     __tablename__ = "notice_pois"
+    __table_args__ = (
+        CheckConstraint(
+            "budget_amount IS NULL OR budget_amount >= 0",
+            name="ck_notice_pois_budget_nonnegative",
+        ),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_notice_pois_currency"),
+    )
 
     notice_poi_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

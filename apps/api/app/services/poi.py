@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -59,7 +60,13 @@ async def create_poi(
     added_by_user_id: uuid.UUID,
     custom_marker_color: str | None = None,
     custom_marker_icon: str | None = None,
+    planned_arrival_at: datetime | None = None,
+    planned_departure_at: datetime | None = None,
     user_note: str | None = None,
+    budget_amount: Decimal | None = None,
+    actual_amount: Decimal | None = None,
+    currency: str = "KRW",
+    user_url: str | None = None,
 ) -> TripDayPoi:
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     poi = TripDayPoi(
@@ -70,7 +77,13 @@ async def create_poi(
         feature_snapshot=feature_snapshot,
         custom_marker_color=custom_marker_color,
         custom_marker_icon=custom_marker_icon,
+        planned_arrival_at=planned_arrival_at,
+        planned_departure_at=planned_departure_at,
         user_note=user_note,
+        budget_amount=budget_amount,
+        actual_amount=actual_amount,
+        currency=currency,
+        user_url=user_url,
         added_by_user_id=added_by_user_id,
     )
     db.add(poi)

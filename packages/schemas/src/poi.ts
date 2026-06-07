@@ -3,6 +3,7 @@ import { Iso8601Schema } from './common';
 
 /** `docs/api/pois.md`. */
 const MarkerColorPattern = /^P-\d{2}$/;
+const CurrencyPattern = /^[A-Z]{3}$/;
 
 export const PoiCreateSchema = z.object({
   day_index: z.number().int().min(1),
@@ -14,9 +15,9 @@ export const PoiCreateSchema = z.object({
   planned_arrival_at: Iso8601Schema.nullable().optional(),
   planned_departure_at: Iso8601Schema.nullable().optional(),
   user_note: z.string().nullable().optional(),
-  budget_amount: z.number().nullable().optional(),
-  actual_amount: z.number().nullable().optional(),
-  currency: z.string().length(3).default('KRW'),
+  budget_amount: z.number().nonnegative().nullable().optional(),
+  actual_amount: z.number().nonnegative().nullable().optional(),
+  currency: z.string().regex(CurrencyPattern).default('KRW'),
   user_url: z.string().max(2000).nullable().optional(),
 });
 export type PoiCreate = z.infer<typeof PoiCreateSchema>;
@@ -29,8 +30,9 @@ export const PoiUpdateSchema = z.object({
   planned_arrival_at: Iso8601Schema.nullable().optional(),
   planned_departure_at: Iso8601Schema.nullable().optional(),
   user_note: z.string().nullable().optional(),
-  budget_amount: z.number().nullable().optional(),
-  actual_amount: z.number().nullable().optional(),
+  budget_amount: z.number().nonnegative().nullable().optional(),
+  actual_amount: z.number().nonnegative().nullable().optional(),
+  currency: z.string().regex(CurrencyPattern).nullable().optional(),
   user_url: z.string().max(2000).nullable().optional(),
 });
 
@@ -59,9 +61,9 @@ export const PoiResponseSchema = z.object({
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
   user_note: z.string().nullable(),
-  budget_amount: z.number().nullable(),
-  actual_amount: z.number().nullable(),
-  currency: z.string(),
+  budget_amount: z.number().nonnegative().nullable(),
+  actual_amount: z.number().nonnegative().nullable(),
+  currency: z.string().regex(CurrencyPattern),
   user_url: z.string().nullable(),
   version: z.number().int(),
   created_at: Iso8601Schema,
