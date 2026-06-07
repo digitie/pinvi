@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import math
+import time
 import uuid
+from collections import deque
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import app.db.session as db_session
+from app.core.config import settings
 from app.core.security import InvalidTokenError, decode_access_token
-from app.services.realtime_broker import RealtimeConnection, realtime_broker
+from app.services.realtime_broker import (
+    RealtimeConnection,
+    RealtimeConnectionLimitError,
+    realtime_broker,
+)
 from app.services.trip import TripNotFoundError, TripPermissionError, get_trip_for_user
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -18,6 +26,8 @@ router = APIRouter(prefix="/ws", tags=["websocket"])
 _CLOSE_UNAUTHORIZED = 4401
 _CLOSE_PERMISSION_DENIED = 4403
 _CLOSE_BAD_MESSAGE = 4400
+_CLOSE_CONNECTION_LIMIT = 4408
+_CLOSE_RATE_LIMITED = 4429
 _HEARTBEAT_TIMEOUT_SECONDS = 35
 
 
@@ -35,13 +45,29 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
             return
 
     await websocket.accept()
-    connection = await realtime_broker.connect(websocket, trip_id=trip_id, user_id=user_id)
+    try:
+        connection = await realtime_broker.connect(websocket, trip_id=trip_id, user_id=user_id)
+    except RealtimeConnectionLimitError as exc:
+        await websocket.send_json({"code": _CLOSE_CONNECTION_LIMIT, "reason": exc.reason})
+        await websocket.close(code=_CLOSE_CONNECTION_LIMIT, reason=exc.reason)
+        return
+
+    rate_limiter = _ClientMessageRateLimiter()
     try:
         while True:
             message = await asyncio.wait_for(
                 websocket.receive_json(),
                 timeout=_HEARTBEAT_TIMEOUT_SECONDS,
             )
+            if not rate_limiter.allow():
+                await realtime_broker.send_error(
+                    connection,
+                    code="RATE_LIMITED",
+                    message="WebSocket 메시지 전송 한도를 초과했습니다.",
+                )
+                await asyncio.sleep(settings.tripmate_ws_rate_limit_close_grace_seconds)
+                await websocket.close(code=_CLOSE_RATE_LIMITED, reason="rate_limited")
+                return
             await _handle_client_message(connection, message)
     except TimeoutError:
         await websocket.close(code=_CLOSE_BAD_MESSAGE, reason="heartbeat_timeout")
@@ -82,25 +108,30 @@ async def _handle_client_message(connection: RealtimeConnection, message: Any) -
         payload = {}
 
     if event_type == "presence.heartbeat":
-        viewing_day = payload.get("viewing_day")
+        viewing_day = _viewing_day(payload.get("viewing_day"))
         await realtime_broker.mark_seen(
             connection,
-            viewing_day=viewing_day if isinstance(viewing_day, int) else None,
+            viewing_day=viewing_day,
         )
         await realtime_broker.publish_presence(connection, is_online=True)
         return
 
     if event_type == "presence.cursor":
+        cursor_payload = _presence_cursor_payload(connection, payload)
+        if cursor_payload is None:
+            await realtime_broker.send_error(
+                connection,
+                code="BAD_CURSOR",
+                message="presence.cursor 좌표는 latitude/longitude 숫자 범위 안이어야 합니다.",
+            )
+            return
+
         await realtime_broker.mark_seen(connection)
         await realtime_broker.publish_event(
             trip_id=connection.trip_id,
             event_type="presence.cursor",
             actor_user_id=connection.user_id,
-            payload={
-                "user_id": str(connection.user_id),
-                "lat": payload.get("lat"),
-                "lng": payload.get("lng"),
-            },
+            payload=cursor_payload,
         )
         return
 
@@ -113,6 +144,69 @@ async def _handle_client_message(connection: RealtimeConnection, message: Any) -
         code="UNKNOWN_EVENT",
         message=f"지원하지 않는 WebSocket 이벤트입니다: {event_type}",
     )
+
+
+class _ClientMessageRateLimiter:
+    def __init__(self) -> None:
+        self._seen_at: deque[float] = deque()
+
+    def allow(self) -> bool:
+        per_second = settings.tripmate_ws_client_rate_per_second
+        per_minute = settings.tripmate_ws_client_rate_per_minute
+        if per_second <= 0 and per_minute <= 0:
+            return True
+
+        now = time.monotonic()
+        minute_cutoff = now - 60.0
+        while self._seen_at and self._seen_at[0] <= minute_cutoff:
+            self._seen_at.popleft()
+
+        recent_second = sum(1 for seen_at in self._seen_at if seen_at > now - 1.0)
+        if per_second > 0 and recent_second >= per_second:
+            return False
+        if per_minute > 0 and len(self._seen_at) >= per_minute:
+            return False
+
+        self._seen_at.append(now)
+        return True
+
+
+def _viewing_day(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if value < 1 or value > 366:
+        return None
+    return value
+
+
+def _presence_cursor_payload(
+    connection: RealtimeConnection,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    latitude = _coordinate(payload.get("latitude", payload.get("lat")), minimum=-90.0, maximum=90.0)
+    longitude = _coordinate(
+        payload.get("longitude", payload.get("lng")),
+        minimum=-180.0,
+        maximum=180.0,
+    )
+    if latitude is None or longitude is None:
+        return None
+    return {
+        "user_id": str(connection.user_id),
+        "longitude": longitude,
+        "latitude": latitude,
+    }
+
+
+def _coordinate(value: Any, *, minimum: float, maximum: float) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    if not math.isfinite(number):
+        return None
+    if number < minimum or number > maximum:
+        return None
+    return round(number, 6)
 
 
 async def _reject(websocket: WebSocket, *, code: int, reason: str) -> None:

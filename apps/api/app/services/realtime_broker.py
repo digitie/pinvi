@@ -16,6 +16,7 @@ from typing import Any, Protocol, cast
 
 from fastapi.encoders import jsonable_encoder
 
+from app.core.config import settings
 from app.core.time import kst_now
 
 
@@ -33,12 +34,29 @@ class RealtimeConnection:
     last_seen_at: datetime = field(default_factory=kst_now)
 
 
+class RealtimeConnectionLimitError(RuntimeError):
+    """Raised when process-local WebSocket connection caps are exhausted."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
 class RealtimeBroker:
     """In-memory trip-channel broker for one FastAPI process."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_connections_per_trip: int | None = None,
+        max_connections_total: int | None = None,
+        send_timeout_seconds: float | None = None,
+    ) -> None:
         self._connections: dict[uuid.UUID, set[RealtimeConnection]] = defaultdict(set)
         self._lock = asyncio.Lock()
+        self._max_connections_per_trip_override = max_connections_per_trip
+        self._max_connections_total_override = max_connections_total
+        self._send_timeout_seconds_override = send_timeout_seconds
 
     async def connect(
         self,
@@ -49,6 +67,15 @@ class RealtimeBroker:
     ) -> RealtimeConnection:
         connection = RealtimeConnection(websocket=websocket, trip_id=trip_id, user_id=user_id)
         async with self._lock:
+            trip_connections = self._connections.get(trip_id, set())
+            per_trip_limit = self._max_connections_per_trip()
+            if per_trip_limit > 0 and len(trip_connections) >= per_trip_limit:
+                raise RealtimeConnectionLimitError("trip_connection_limit_exceeded")
+
+            total_limit = self._max_connections_total()
+            if total_limit > 0 and self._connection_count_unlocked() >= total_limit:
+                raise RealtimeConnectionLimitError("process_connection_limit_exceeded")
+
             self._connections[trip_id].add(connection)
         await self.publish_presence(connection, is_online=True)
         return connection
@@ -110,20 +137,30 @@ class RealtimeBroker:
         code: str,
         message: str,
     ) -> None:
-        await connection.websocket.send_json(
-            {
-                "type": "error",
-                "trip_id": str(connection.trip_id),
-                "actor_user_id": None,
-                "ts": kst_now().isoformat(),
-                "version": None,
-                "payload": {"code": code, "message": message},
-            }
-        )
+        try:
+            await asyncio.wait_for(
+                connection.websocket.send_json(
+                    {
+                        "type": "error",
+                        "trip_id": str(connection.trip_id),
+                        "actor_user_id": None,
+                        "ts": kst_now().isoformat(),
+                        "version": None,
+                        "payload": {"code": code, "message": message},
+                    }
+                ),
+                timeout=self._send_timeout_seconds(),
+            )
+        except Exception:
+            await self._remove(connection)
 
     async def connection_count(self, trip_id: uuid.UUID) -> int:
         async with self._lock:
             return len(self._connections.get(trip_id, set()))
+
+    async def total_connection_count(self) -> int:
+        async with self._lock:
+            return self._connection_count_unlocked()
 
     async def reset(self) -> None:
         async with self._lock:
@@ -134,14 +171,27 @@ class RealtimeBroker:
             connections = list(self._connections.get(trip_id, set()))
 
         stale: list[RealtimeConnection] = []
-        for connection in connections:
-            try:
-                await connection.websocket.send_json(message)
-            except Exception:
-                stale.append(connection)
+        results = await asyncio.gather(
+            *(self._send_or_stale(connection, message) for connection in connections)
+        )
+        stale.extend(connection for connection in results if connection is not None)
 
         for connection in stale:
             await self._remove(connection)
+
+    async def _send_or_stale(
+        self,
+        connection: RealtimeConnection,
+        message: dict[str, Any],
+    ) -> RealtimeConnection | None:
+        try:
+            await asyncio.wait_for(
+                connection.websocket.send_json(message),
+                timeout=self._send_timeout_seconds(),
+            )
+            return None
+        except Exception:
+            return connection
 
     async def _remove(self, connection: RealtimeConnection) -> bool:
         async with self._lock:
@@ -152,6 +202,24 @@ class RealtimeBroker:
             if not connections:
                 self._connections.pop(connection.trip_id, None)
             return True
+
+    def _connection_count_unlocked(self) -> int:
+        return sum(len(connections) for connections in self._connections.values())
+
+    def _max_connections_per_trip(self) -> int:
+        if self._max_connections_per_trip_override is not None:
+            return self._max_connections_per_trip_override
+        return settings.tripmate_ws_max_connections_per_trip
+
+    def _max_connections_total(self) -> int:
+        if self._max_connections_total_override is not None:
+            return self._max_connections_total_override
+        return settings.tripmate_ws_max_connections_total
+
+    def _send_timeout_seconds(self) -> float:
+        if self._send_timeout_seconds_override is not None:
+            return self._send_timeout_seconds_override
+        return settings.tripmate_ws_send_timeout_seconds
 
     def _event_message(
         self,
