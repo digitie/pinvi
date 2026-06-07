@@ -126,8 +126,6 @@ async def update_admin_poi_link_status(
         poi.feature_link_broken_at = None
     if poi.feature_link_broken_at != before:
         poi.version += 1
-    await db.commit()
-    await db.refresh(poi)
     return poi, before
 
 

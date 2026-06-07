@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-160 admin 상태+audit 원자성
+
+**작업**: PR #50/#52/#53 사후 리뷰에서 남은 admin 상태 변경과 audit append 사이의
+비원자성 위험을 닫았다.
+
+**변경**:
+- `apps/api/app/services/admin_audit.py` — `append_admin_audit()`가 자체 commit을 하지 않고
+  flush만 수행하도록 바꿔 호출 라우트가 업무 변경과 감사 로그를 단일 트랜잭션으로 묶게 했다.
+- `apps/api/app/services/admin_{users,trips,pois}.py` — 상태 변경 서비스의 내부 commit을
+  제거하고, 사용자 force verify/disable은 실제 before_state를 반환한다.
+- `apps/api/app/api/v1/admin/{users,trips,pois,backup}.py` — 상태 변경 + audit append 후
+  한 번만 commit하고, audit-only 경로도 명시 commit한다.
+- `apps/api/tests/integration/test_admin_{users,trips,pois}_api.py` — audit 실패 시 사용자
+  status/session revoke, trip status/version, POI link status/version이 rollback되는 회귀
+  테스트를 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/services/admin_audit.py app/services/admin_users.py app/services/admin_trips.py app/services/admin_pois.py app/api/v1/admin/users.py app/api/v1/admin/trips.py app/api/v1/admin/pois.py app/api/v1/admin/backup.py tests/integration/test_admin_users_api.py tests/integration/test_admin_trips_api.py tests/integration/test_admin_pois_api.py`
+- WSL2 ext4 mirror: `mypy --strict app/services/admin_audit.py app/services/admin_users.py app/services/admin_trips.py app/services/admin_pois.py app/api/v1/admin/users.py app/api/v1/admin/trips.py app/api/v1/admin/pois.py app/api/v1/admin/backup.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_admin_users_api.py tests/integration/test_admin_trips_api.py tests/integration/test_admin_pois_api.py`
+
+**다음**: T-126 POI 생성 경로 단일화 또는 T-161 README 앵커 정합 일괄.
+
 ## 2026-06-07 (codex) — T-159 money 응답 Zod 타입 정합
 
 **작업**: PR #67 사후 리뷰에서 남은 `Decimal` 응답과 프론트 Zod schema 불일치를 닫았다.

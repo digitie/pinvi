@@ -22,23 +22,33 @@ class AdminUserNotFoundError(AdminUserError):
     code = "RESOURCE_NOT_FOUND"
 
 
-async def force_verify(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID) -> User:
+async def force_verify(
+    db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID
+) -> tuple[User, dict[str, str | None]]:
     """email_verified_at 강제 설정 (디버그)."""
     user = await db.scalar(select(User).where(User.user_id == user_id))
     if user is None or actor_id == user_id:
         raise AdminUserNotFoundError("Not found.")
+    before_state = {
+        "status": user.status,
+        "email_verified_at": user.email_verified_at.isoformat() if user.email_verified_at else None,
+    }
     user.email_verified_at = datetime.now(UTC)
     if user.status == "pending_verification":
         user.status = "pending_profile"
-    await db.commit()
-    await db.refresh(user)
-    return user
+    return user, before_state
 
 
-async def disable_user(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID) -> User:
+async def disable_user(
+    db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID
+) -> tuple[User, dict[str, str | bool]]:
     user = await db.scalar(select(User).where(User.user_id == user_id))
     if user is None or actor_id == user_id:
         raise AdminUserNotFoundError("Not found.")
+    before_state: dict[str, str | bool] = {
+        "status": user.status,
+        "is_active": user.is_active,
+    }
     user.status = "disabled"
     user.is_active = False
     # 모든 active 세션 폐기
@@ -47,9 +57,7 @@ async def disable_user(db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.U
         .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
         .values(revoked_at=datetime.now(UTC))
     )
-    await db.commit()
-    await db.refresh(user)
-    return user
+    return user, before_state
 
 
 async def list_users(

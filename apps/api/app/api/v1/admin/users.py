@@ -190,6 +190,7 @@ async def reveal_user_pii_endpoint(
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
+    await db.commit()
     return Envelope.of(await _detail_with_recent_audit(db, u, email_revealed=True))
 
 
@@ -203,8 +204,7 @@ async def force_verify_endpoint(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminUserDetail]:
     try:
-        before_status = None
-        target = await force_verify(db, user_id=user_id, actor_id=admin.user_id)
+        target, before_state = await force_verify(db, user_id=user_id, actor_id=admin.user_id)
     except AdminUserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -217,14 +217,21 @@ async def force_verify_endpoint(
         action="user.force_verify",
         resource_type="user",
         resource_id=str(target.user_id),
-        before_state={"status": before_status},
-        after_state={"status": target.status, "email_verified_at": str(target.email_verified_at)},
+        before_state=before_state,
+        after_state={
+            "status": target.status,
+            "email_verified_at": target.email_verified_at.isoformat()
+            if target.email_verified_at
+            else None,
+        },
         access_reason=body.access_reason,
         target_pii_fields=["email"],
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
+    await db.commit()
+    await db.refresh(target)
     return Envelope.of(await _detail_with_recent_audit(db, target))
 
 
@@ -238,7 +245,7 @@ async def disable_user_endpoint(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminUserDetail]:
     try:
-        target = await disable_user(db, user_id=user_id, actor_id=admin.user_id)
+        target, before_state = await disable_user(db, user_id=user_id, actor_id=admin.user_id)
     except AdminUserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -251,7 +258,7 @@ async def disable_user_endpoint(
         action="user.disable",
         resource_type="user",
         resource_id=str(target.user_id),
-        before_state=None,
+        before_state=before_state,
         after_state={"status": "disabled", "is_active": False},
         access_reason=body.access_reason,
         target_pii_fields=["email"],
@@ -259,4 +266,6 @@ async def disable_user_endpoint(
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
+    await db.commit()
+    await db.refresh(target)
     return Envelope.of(await _detail_with_recent_audit(db, target))

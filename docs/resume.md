@@ -37,6 +37,11 @@ connection 제거를 추가했다.
 추천 plan POI 응답 money 필드를 Pydantic `Decimal` JSON 직렬화와 맞춰 nonnegative decimal
 string으로 받도록 바꿨다. 요청 schema의 number 입력은 유지했다.
 
+**T-160 admin 상태+audit 원자성 완료** (2026-06-07): 사용자 force verify/disable,
+여행 상태 변경, POI link-status 변경은 업무 상태 변경과 `admin_audit_log` append를 같은
+DB 트랜잭션에서 commit한다. audit append 실패 시 상태, 버전, session revoke가 함께
+rollback되는 회귀 테스트를 추가했다.
+
 **T-210c(ADR-045 Phase 6) TripMate 부분 완료** (2026-06-06): `apps/etl`은 `app`
 schema 소유 job만 보유해 이관할 feature provider Dagster 스켈레톤이 없음 확인 +
 `dagster-etl-bridge.md`/`runbooks/etl.md` phantom 스켈레톤 정합 + asset `__init__`

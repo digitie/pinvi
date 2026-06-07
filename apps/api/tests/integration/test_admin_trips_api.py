@@ -221,3 +221,43 @@ async def test_admin_trip_status_update_writes_audit(
     assert audit.resource_id == str(trip_id)
     assert audit.before_state == {"status": "planned"}
     assert audit.after_state == {"status": "archived"}
+
+
+async def test_admin_trip_status_update_rolls_back_when_audit_fails(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v1.admin.trips as admin_trips_router
+
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+
+    async def _fail_append(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("audit failed")
+
+    monkeypatch.setattr(admin_trips_router, "append_admin_audit", _fail_append)
+
+    with pytest.raises(RuntimeError, match="audit failed"):
+        await client.patch(
+            f"/admin/trips/{trip_id}/status",
+            json={"status": "archived", "access_reason": "테스트 감사 실패"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+
+    async with session_factory() as db:
+        trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.resource_id == str(trip_id))
+        )
+
+    assert trip is not None
+    assert trip.status == "planned"
+    assert trip.version == 1
+    assert audit is None

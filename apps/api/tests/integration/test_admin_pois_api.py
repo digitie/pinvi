@@ -259,3 +259,48 @@ async def test_admin_poi_link_status_update_writes_audit(
     assert audit.after_state["feature_link_broken_at"] is not None
     assert stored_poi is not None
     assert stored_poi.feature_link_broken_at is not None
+
+
+async def test_admin_poi_link_status_rolls_back_when_audit_fails(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v1.admin.pois as admin_pois_router
+
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    added_by_id = await _create_user(session_factory, email="planner@example.com")
+    _trip_id, active_poi_id, _broken_poi_id = await _create_poi_fixture(
+        session_factory,
+        owner_id=owner_id,
+        added_by_id=added_by_id,
+    )
+
+    async def _fail_append(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("audit failed")
+
+    monkeypatch.setattr(admin_pois_router, "append_admin_audit", _fail_append)
+
+    with pytest.raises(RuntimeError, match="audit failed"):
+        await client.patch(
+            f"/admin/pois/{active_poi_id}/link-status",
+            json={"broken": True, "access_reason": "테스트 감사 실패"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+
+    async with session_factory() as db:
+        poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.attachment_id == active_poi_id))
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.resource_id == str(active_poi_id))
+        )
+
+    assert poi is not None
+    assert poi.feature_link_broken_at is None
+    assert poi.version == 1
+    assert audit is None

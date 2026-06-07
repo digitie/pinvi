@@ -81,4 +81,5 @@ async def create_backup_snapshot_endpoint(
         user_agent=request.headers.get("user-agent"),
         request_id=uuid.UUID(x_request_id),
     )
+    await db.commit()
     return Envelope.of(response)
