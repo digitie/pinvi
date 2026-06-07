@@ -226,7 +226,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 정본 종합: `docs/reviews/2026-06-07-codex-pr-review.md` (PR #50~#71 codex 20건 리뷰).
 긴급성 [높음] 항목만 backlog로 승격:
 
-- [ ] T-154 — **resend webhook C-22 완결**: secret 미설정 fail-closed + `_decode_svix_secret`
+- [x] T-154 — **resend webhook C-22 완결**: secret 미설정 fail-closed + `_decode_svix_secret`
   표준 base64 교정(운영 서명 mismatch 버그) (PR #70; C-22 재오픈)
 - [ ] T-155 — admin `access_reason` PII를 query→header/body 전환(URL 로깅 제거) (PR #50)
 - [ ] T-156 — 비밀번호 재설정 시 기존 refresh session 전부 폐기 (PR #71)

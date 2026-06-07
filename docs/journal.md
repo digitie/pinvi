@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-154 Resend webhook fail-closed 보강
+
+**작업**: PR #70 사후 리뷰에서 재오픈된 C-22를 닫았다. Resend webhook secret이 없는
+운영성 환경은 서명 검증을 건너뛰지 않고 `503`으로 닫으며, `whsec_` secret은 표준
+base64만 허용한다.
+
+**변경**:
+- `apps/api/app/webhooks/resend.py` — dev/test/local만 unsigned webhook을 허용하고,
+  그 외 환경의 secret 미설정/형식 오류는 `WEBHOOK_SIGNATURE_NOT_CONFIGURED`로
+  fail-closed한다. signature mismatch는 기존대로 `401 WEBHOOK_SIGNATURE_INVALID`.
+- `apps/api/tests/integration/test_resend_webhook.py` — 운영 secret 미설정 차단,
+  표준 base64 secret 성공, URL-safe secret config 차단을 검증한다.
+- `docs/integrations/resend.md`, `docs/api/common.md`, `docs/resume.md`,
+  `docs/tasks.md` — C-22 재오픈 후속과 운영 fail-closed 계약을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check app/webhooks/resend.py tests/integration/test_resend_webhook.py`
+- WSL2 ext4 mirror: `mypy --strict app/webhooks/resend.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_resend_webhook.py`
+
+**다음**: T-126 POI 생성 경로 단일화 또는 T-155 admin `access_reason` PII URL 제거.
+
 ## 2026-06-07 (codex) — T-137 curated trip plan 스키마 정본화
 
 **작업**: ADR-029의 `notice_plans` 명칭 충돌 결정을 실제 ORM/Alembic/문서에
