@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common';
+import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 
 const CurrencyPattern = /^[A-Z]{3}$/;
 
@@ -11,7 +11,7 @@ export const NoticePoiSchema = z.object({
   feature_id: z.string().nullable(),
   feature_snapshot: z.record(z.string(), z.unknown()),
   memo: z.string().nullable(),
-  budget_amount: z.number().nonnegative().nullable(),
+  budget_amount: NonNegativeDecimalStringSchema.nullable(),
   currency: z.string().regex(CurrencyPattern),
   custom_marker_color: z.string().nullable(),
   custom_marker_icon: z.string().nullable(),

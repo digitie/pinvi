@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-159 money 응답 Zod 타입 정합
+
+**작업**: PR #67 사후 리뷰에서 남은 `Decimal` 응답과 프론트 Zod schema 불일치를 닫았다.
+
+**변경**:
+- `packages/schemas/src/common.ts` — Pydantic `Decimal` JSON 응답용
+  `NonNegativeDecimalStringSchema`를 추가했다.
+- `packages/schemas/src/poi.ts` — `PoiResponseSchema.budget_amount` /
+  `actual_amount`를 nonnegative decimal string으로 정합했다.
+- `packages/schemas/src/notice-plan.ts` — `NoticePoiSchema.budget_amount`를 같은 응답
+  schema로 정합했다.
+- `packages/schemas/src/index.ts`, `docs/resume.md`, `docs/tasks.md` — 공용 export와
+  T-159 완료를 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/schemas`
+- WSL2 ext4 mirror: `vite-node` 일회성 Zod parse 검증
+- WSL2 ext4 mirror: `prettier --check` (schema 파일)
+- NTFS worktree: `git.exe diff --check`
+- NTFS worktree: `codegraph sync`
+
+**다음**: T-160 admin 상태변경 status+audit 단일 트랜잭션 또는 T-126 POI 생성 경로 단일화.
+
 ## 2026-06-07 (codex) — T-158 Trip WebSocket guard
 
 **작업**: PR #63 사후 리뷰에서 남은 WebSocket 가용성 위험(rate limit 없음,

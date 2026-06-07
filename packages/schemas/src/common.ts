@@ -3,6 +3,9 @@ import { z } from 'zod';
 /** ISO 8601 + offset. Pydantic의 `datetime` 직렬화와 동일. */
 export const Iso8601Schema = z.string().datetime({ offset: true });
 
+/** Pydantic `Decimal` JSON 직렬화 응답 — 금액 정밀도 보존을 위해 string으로 받는다. */
+export const NonNegativeDecimalStringSchema = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+
 /** EPSG:4326 좌표 — `(longitude, latitude)` 순서, 대한민국 범위. */
 export const CoordSchema = z.object({
   longitude: z.number().min(124).max(132),
