@@ -35,6 +35,7 @@ export const PoiUpdateSchema = z.object({
   currency: z.string().regex(CurrencyPattern).nullable().optional(),
   user_url: z.string().max(2000).nullable().optional(),
 });
+export type PoiUpdate = z.infer<typeof PoiUpdateSchema>;
 
 export const PoiReorderRequestSchema = z.object({
   moves: z
@@ -47,6 +48,7 @@ export const PoiReorderRequestSchema = z.object({
     .min(1)
     .max(200),
 });
+export type PoiReorderRequest = z.infer<typeof PoiReorderRequestSchema>;
 
 export const PoiResponseSchema = z.object({
   attachment_id: z.string().uuid(),

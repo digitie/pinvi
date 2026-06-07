@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-126 POI 생성 경로 단일화
+
+**작업**: 감사 A-01/C-16에서 지적된 POI 생성 경로 이중 표기를 닫았다. v2 정본은
+`POST /trips/{trip_id}/pois`이고 `day_index`는 요청 body에 둔다.
+
+**변경**:
+- `docs/api/trips.md` — 오래된 `/trips/{trip_id}/days/{day_index}/items` 문서 블록을
+  `/trips/{trip_id}/pois` 정본 설명과 예시 payload로 교체했다.
+- `packages/api-client/src/endpoints/pois.ts`, `packages/api-client/src/index.ts` —
+  create/update/delete/reorder가 모두 `/trips/{tripId}/pois` 계열만 호출하는 `poiApi`를
+  추가했다.
+- `packages/schemas/src/poi.ts`, `packages/schemas/src/index.ts` — API client가 쓰는
+  `PoiUpdate`, `PoiReorderRequest` 타입 export를 추가했다.
+- `docs/resume.md`, `docs/tasks.md` — T-126 완료와 다음 비-krtourmap 작업(T-161)을
+  반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/api-client`
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/schemas`
+- WSL2 ext4 mirror: `prettier --check packages/api-client/src/endpoints/pois.ts packages/api-client/src/index.ts packages/schemas/src/poi.ts packages/schemas/src/index.ts`
+- NTFS worktree: `git.exe diff --check`
+- NTFS worktree: `codegraph sync`
+
+**다음**: T-161 README 앵커 정합 일괄.
+
 ## 2026-06-07 (codex) — T-160 admin 상태+audit 원자성
 
 **작업**: PR #50/#52/#53 사후 리뷰에서 남은 admin 상태 변경과 audit append 사이의
