@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (claude) — Codex PR 사후 리뷰 20건 + 긴급성 종합
+
+**작업**: Codex가 올린 머지 완료 PR 20건(#50, #52~#65, #67~#71)을 각 PR diff + 실제
+코드 + 2026-06-06 감사와 대조해 사후 리뷰하고, 각 PR에 "리뷰 결과" 코멘트를 게시했다.
+
+**핵심 발견**: 감사 백로그 대부분이 실구현으로 닫혔으나, 보안/가용성 PR에서 잔존 결함 확인.
+- **#70(T-136 resend)**: C-22 **미완결** — secret 미설정 fail-open + `_decode_svix_secret`
+  base64 altchars 버그(운영 서명 전부 mismatch).
+- **#71(T-134 auth refresh)**: 비밀번호 재설정이 기존 session 미폐기.
+- **#60(T-142 geofence)**: header spoof + nginx 강등 우회.
+- **#63(T-128 WS)**: rate limit·backpressure 부재(DoS).
+- **#67(T-140 budget)**: 응답 money Zod 타입 깨짐.
+- **#50/#52/#53 admin**: status+audit 비원자성.
+
+**산출물**: `docs/reviews/2026-06-07-codex-pr-review.md`(긴급성순 통합 TODO + PR별 표).
+[높음] 9건을 T-154~T-161로 backlog 승격(`docs/tasks.md`).
+
 ## 2026-06-07 (codex) — T-134 auth refresh/session 영속화
 
 **작업**: `tripmate_refresh` cookie가 opaque token으로 내려가지만 DB에 저장되지 않아
