@@ -53,8 +53,8 @@ class NoticePoiBase(BaseModel):
     feature_id: str | None = Field(default=None, max_length=200)
     feature_snapshot: dict[str, Any] = Field(default_factory=dict)
     memo: str | None = None
-    budget_amount: Decimal | None = None
-    currency: str = Field(default="KRW", min_length=3, max_length=3)
+    budget_amount: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="KRW", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     user_url: str | None = Field(default=None, max_length=2000)
     custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
     custom_marker_icon: str | None = Field(default=None, max_length=64)

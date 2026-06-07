@@ -189,24 +189,41 @@ CREATE INDEX trip_days_trip_idx ON app.trip_days (trip_id, day_index);
 ```sql
 CREATE TABLE app.trip_day_pois (
   attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
-  day_id               uuid NOT NULL REFERENCES app.trip_days(day_id) ON DELETE CASCADE,
+  trip_id              uuid NOT NULL,
+  day_index            int NOT NULL,
   sort_order           text COLLATE "C" NOT NULL,    -- SPEC V8 E-6 (Critical) — LexoRank
   feature_id           text NOT NULL,                 -- feature.features.feature_id 참조 (FK 없음)
+  feature_link_broken_at timestamptz,
   feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
   custom_marker_color  text,                          -- 사용자 override (P-01..P-16)
   custom_marker_icon   text,                          -- 사용자 override (maki id)
   planned_arrival_at   timestamptz,
   planned_departure_at timestamptz,
   user_note            text,
+  budget_amount        numeric(12,2),
+  actual_amount        numeric(12,2),
+  currency             varchar(3) NOT NULL DEFAULT 'KRW',
+  user_url             text,
+  added_by_user_id     uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
   version              int NOT NULL DEFAULT 1,        -- optimistic lock (SPEC V8 J-2)
+  deleted_at           timestamptz,
   created_at           timestamptz NOT NULL DEFAULT now(),
-  updated_at           timestamptz NOT NULL DEFAULT now()
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT fk_trip_day_pois_day
+    FOREIGN KEY (trip_id, day_index) REFERENCES app.trip_days(trip_id, day_index) ON DELETE CASCADE,
+  CONSTRAINT ck_trip_day_pois_budget_nonnegative
+    CHECK (budget_amount IS NULL OR budget_amount >= 0),
+  CONSTRAINT ck_trip_day_pois_actual_nonnegative
+    CHECK (actual_amount IS NULL OR actual_amount >= 0),
+  CONSTRAINT ck_trip_day_pois_currency CHECK (currency ~ '^[A-Z]{3}$')
 );
 
 -- 정렬·중복 방지: ASCII 바이트 순서 강제 (en_US.utf8 정렬과 다름)
-CREATE UNIQUE INDEX trip_day_pois_day_sort_uk
-  ON app.trip_day_pois (day_id, sort_order COLLATE "C");
-CREATE INDEX trip_day_pois_feature_idx ON app.trip_day_pois (feature_id);
+CREATE UNIQUE INDEX uq_trip_day_pois_day_sort
+  ON app.trip_day_pois (trip_id, day_index, sort_order COLLATE "C")
+  WHERE deleted_at IS NULL;
+CREATE INDEX ix_trip_day_pois_feature ON app.trip_day_pois (feature_id);
+CREATE INDEX ix_trip_day_pois_trip_day ON app.trip_day_pois (trip_id, day_index);
 
 CREATE TRIGGER trip_day_pois_touch_updated_at
 BEFORE UPDATE ON app.trip_day_pois

@@ -4,8 +4,8 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-140 여행 예산(budget/currency) 도메인 + 복사
-흐름을 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-141 trip↔지역 구조적 연결(POI 좌표 유도 또는
+region code)을 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
 
@@ -192,6 +192,10 @@ Alembic 0007, 통합 테스트를 추가했다.
 기존 user 이메일 매칭, `trip_invite` email_queue 적재, `app.trip_comments` 모델/
 Alembic 0008, 로그인 사용자 댓글 API, 공유 토큰 owner-only 경계와 `comment`
 visibility 의미를 구현했다.
+**T-140 여행 예산 정합 보강** (2026-06-06 codex) — `trip_day_pois`/`notice_pois`
+예산 금액 nonnegative와 currency 대문자 3글자 제약을 추가하고, POI create/update가
+`budget_amount`/`actual_amount`/`currency`/`user_url`을 실제 저장하도록 연결했다.
+추천 plan copy는 `budget_amount`/`currency`를 보존한다.
 
 ## 다음 한 작업
 
@@ -201,9 +205,9 @@ visibility 의미를 구현했다.
    동작 + **위치 감사 자동 적재 e2e**(krtour-map client 의존):
    - `apps/api/app/clients/krtour_map.py` — `httpx.AsyncClient` lifespan
    - `apps/api/app/services/cluster_query.py` / `trip_view_builder.py`
-2. **다음 비의존 후보** — T-140 여행 예산(budget/currency) 도메인 + 복사 흐름.
-   trip/POI의 사용자 입력 예산과 추천 plan 복사 흐름 보강이며 krtour-map feature read와
-   독립적이다.
+2. **다음 비의존 후보** — T-141 trip↔지역 구조적 연결(POI 좌표 유도 or region code).
+   TripMate 자체 trip metadata/POI snapshot 기반 보강으로 시작 가능하며 krtour-map live
+   feature read와 독립적인 slice를 우선한다.
 3. **운영 후보** — T-111 Backup/Restore UI 핫스왑. snapshot foundation은 T-115에서
    완료됐고, 신규 DB/schema cut-over PoC가 필요하다.
 

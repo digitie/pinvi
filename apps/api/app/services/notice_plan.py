@@ -245,7 +245,11 @@ async def create_plan_with_pois(
                 feature_id=item.get("feature_id"),
                 feature_snapshot=item.get("feature_snapshot", {}),
                 memo=item.get("memo"),
+                budget_amount=item.get("budget_amount"),
                 currency=item.get("currency", "KRW"),
+                user_url=item.get("user_url"),
+                custom_marker_color=item.get("custom_marker_color"),
+                custom_marker_icon=item.get("custom_marker_icon"),
             )
         )
     await db.commit()

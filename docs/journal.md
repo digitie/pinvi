@@ -23,6 +23,36 @@ worktree 로컬 credential + MCP로 처리(T-062 0-secret 정책 유지).
 재사용)으로 **실제 전송 성공**(Saved Messages, 사용자 수신 확인). `.env.mcp-telegram`은
 gitignore되어 tracked secret 없음.
 
+## 2026-06-06 (codex) — T-140 여행 예산/currency + copy 흐름 정합
+
+**작업**: 감사 D-10 범위의 POI 예산/currency domain과 추천 plan copy 보존 흐름을
+구현/검증했다.
+
+**변경**:
+- `apps/api/app/models/{poi,notice_plan}.py`,
+  `apps/api/alembic/versions/20260606_0009_budget_constraints.py` — 금액 nonnegative와
+  currency 대문자 3글자 check constraint를 추가했다.
+- `apps/api/app/schemas/{poi,notice}.py`, `packages/schemas/src/{poi,notice-plan}.ts`
+  — API/Zod schema에 같은 validation을 반영했다.
+- `apps/api/app/services/poi.py`, `apps/api/app/api/v1/pois.py` — POI 생성 시
+  `planned_arrival_at`, `planned_departure_at`, `budget_amount`, `actual_amount`,
+  `currency`, `user_url`을 실제 저장하도록 연결하고 PATCH currency 변경을 허용했다.
+- `apps/api/app/services/notice_plan.py` — 추천 plan seed/copy helper가
+  `budget_amount`, `currency`, `user_url`, custom marker를 보존하게 했다.
+- `apps/api/tests/integration/{test_pois_reorder.py,test_notice_plan_copy.py}` — 예산
+  round-trip, 음수 예산 거부, 추천 plan budget/currency 복사를 검증한다.
+- `docs/api/{pois,notice-plans}.md`, `docs/{data-model,postgres-schema}.md` — 예산/
+  currency 계약과 copy 보존 규칙을 최신화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-140 완료와 다음 비의존 후보 T-141을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: ruff / mypy /
+  `test_pois_reorder.py test_notice_plan_copy.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspaces --if-present`
+- WSL2 ext4 mirror: prettier check (`packages/schemas/src/{poi,notice-plan}.ts`)
+
+**다음**: T-141 trip↔지역 구조적 연결(POI 좌표 유도 or region code).
+
 ## 2026-06-06 (codex) — T-139 동반자 초대/댓글/visibility 정합 보강
 
 **작업**: 감사 D-06 범위의 동반자 초대 엔드포인트 부재와

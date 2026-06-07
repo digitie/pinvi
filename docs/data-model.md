@@ -9,8 +9,9 @@
 > `postgres-schema.md`에 다음이 누락/충돌이며 **T-137/T-140 인접 작업**에서 정정한다.
 > ① `notice_plans` 명칭 충돌 → 큐레이션은 `curated_trip_plans`로 개명(ADR-029/DEC-03).
 > ② 남은 누락 테이블: `curated_plan_pois`, `curated_plan_attachments`,
-> `feature_requests`(또는 큐 소유권 DEC-05). ③ `trip_day_pois`: `budget/currency`
-> 추가(D-10). `security_incidents`와 누락 `users` 컬럼 문서 정합은 T-138에서 반영했다.
+> `feature_requests`(또는 큐 소유권 DEC-05). `security_incidents`와 누락 `users` 컬럼
+> 문서 정합은 T-138에서 반영했고, `trip_day_pois` 예산/currency 정합은 T-140에서
+> 반영했다.
 
 ## 1. 큰 그림
 
@@ -184,7 +185,7 @@ LexoRank fractional indexing + COLLATE "C"** (SPEC V8 E-6 Critical).
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
 | `attachment_id` | `uuid` (PK) | |
-| `day_id` | `uuid` NOT NULL → `app.trip_days` | |
+| `trip_id`, `day_index` | `uuid`, `int` → `app.trip_days` | 복합 FK |
 | `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank. JS ASCII와 PG 정렬을 맞추기 위해 C 콜레이션 강제 |
 | `feature_id` | `text` NOT NULL | `feature.features.feature_id` 참조 (제약 없음) |
 | `feature_snapshot` | `jsonb` | denormalized 캐시 (이름/좌표/카테고리) |
@@ -193,6 +194,10 @@ LexoRank fractional indexing + COLLATE "C"** (SPEC V8 E-6 Critical).
 | `planned_arrival_at` | `timestamptz` | KST aware |
 | `planned_departure_at` | `timestamptz` | |
 | `user_note` | `text` | markdown |
+| `budget_amount` | `numeric(12,2)` | 예상 비용. null 또는 0 이상 |
+| `actual_amount` | `numeric(12,2)` | 실제 지출. null 또는 0 이상 |
+| `currency` | `varchar(3)` | 대문자 3글자. 기본 `KRW` |
+| `user_url` | `text` | 사용자 참고 URL |
 | `version` | `int` | optimistic lock — `PATCH` 시 `If-Match` 헤더 (SPEC V8 J-2) |
 | `created_at`, `updated_at` | `timestamptz` | |
 
