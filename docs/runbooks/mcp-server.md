@@ -26,6 +26,21 @@
 
 audit log에 `actor_user_id != owner_user_id` 기록.
 
+### 1.3 HTTP API 정본
+
+사용자 본인:
+
+- `GET /users/me/mcp-tokens` — 내 토큰 목록(마스킹, `last_used_at`, 만료/회수 상태)
+- `POST /users/me/mcp-tokens` — 토큰 발급(`name`, `expires_at`, `scopes=["mcp:read"]`)
+- `DELETE /users/me/mcp-tokens/{token_id}` — 내 토큰 회수
+
+Admin:
+
+- `GET /admin/mcp-tokens` — 전체 토큰 검색(`user_id`, `q`, `status`)
+- `POST /admin/mcp-tokens` — 사용자 대리 발급(`user_id`, `name`, `expires_at`,
+  `access_reason`)
+- `POST /admin/mcp-tokens/{token_id}/revoke` — 강제 회수(`access_reason`)
+
 ## 2. 클라이언트 등록
 
 ### 2.1 Claude Desktop (stdio)
@@ -39,7 +54,7 @@ audit log에 `actor_user_id != owner_user_id` 기록.
       "type": "stdio",
       "command": "/path/to/mcp-stdio-bridge.sh",
       "env": {
-        "TRIPMATE_MCP_URL": "https://api.tripmate.kr/mcp/sse",
+        "TRIPMATE_MCP_URL": "https://tripmateapi.digitie.mywire.org/mcp/sse",
         "TRIPMATE_MCP_TOKEN": "mcp_xxxx..."
       }
     }
@@ -57,7 +72,7 @@ Sprint 6).
   "mcpServers": {
     "tripmate": {
       "type": "sse",
-      "url": "https://api.tripmate.kr/mcp/sse",
+      "url": "https://tripmateapi.digitie.mywire.org/mcp/sse",
       "headers": {
         "Authorization": "Bearer mcp_xxxx..."
       }
@@ -71,7 +86,7 @@ Sprint 6).
 ```bash
 # SSE 스트림
 curl -N -H "Authorization: Bearer mcp_xxxx..." \
-  https://api.tripmate.kr/mcp/sse
+  https://tripmateapi.digitie.mywire.org/mcp/sse
 ```
 
 ## 3. 토큰 회수

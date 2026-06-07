@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — T-127 MCP 외부 인터페이스 정본화
+
+**작업**: 감사 A-02/A-06/A-12에서 지적된 MCP 문서 충돌, trip status enum 불일치,
+토큰 endpoint 미명세를 닫았다.
+
+**변경**:
+- `docs/architecture/mcp-server.md` — ADR-019 외부 MCP 정본으로 read-only 5개 tool을
+  유지하고, `list_trips.status` enum을 `draft/planned/in_progress/completed/archived`로
+  정합했다. krtour-map 검색은 OpenAPI HTTP `GET /features/search` 경유로 명시했다.
+- `docs/architecture/mcp-tools.md` — v1 후보 tool 가이드로 격하하고, 외부 MCP 정본은
+  `mcp-server.md`임을 명시했다. `tripmate_db_admin`은 외부 MCP 금지로 정리했다.
+- `docs/api/users.md`, `docs/api/admin.md`, `docs/runbooks/mcp-server.md`,
+  `docs/sprints/SPRINT-6.md`, `docs/decisions.md` — 사용자/admin MCP 토큰 발급·회수
+  endpoint를 `/users/me/mcp-tokens`와 `/admin/mcp-tokens` 계열로 정본화했다.
+- `docs/resume.md`, `docs/tasks.md` — T-127 완료와 다음 비-krtourmap 작업(T-131)을
+  반영했다.
+
+**검증**:
+- NTFS worktree: `rg -n "draft.*active.*archived|/mcp/tokens|api.tripmate.kr|\bMCP_JWT_SECRET\b" docs/architecture/mcp-server.md docs/architecture/mcp-tools.md docs/runbooks/mcp-server.md docs/decisions.md docs/sprints/SPRINT-6.md`
+- NTFS worktree: `rg -n "/users/me/mcp-tokens|/admin/mcp-tokens|draft.*planned.*in_progress.*completed.*archived" docs/architecture/mcp-server.md docs/api/users.md docs/api/admin.md docs/runbooks/mcp-server.md docs/decisions.md docs/sprints/SPRINT-6.md`
+- NTFS worktree: `git.exe diff --check`
+- NTFS worktree: `codegraph sync`
+
+**다음**: T-131 `GET /trips/{id}` 상세 view 연결.
+
 ## 2026-06-07 (codex) — T-161 README `/search` 앵커 정합
 
 **작업**: PR #54 사후 리뷰에서 남은 README `GET /search` dangling anchor를 닫았다.

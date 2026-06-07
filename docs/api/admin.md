@@ -51,6 +51,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/debug/request/{request_id}` | X-Request-Id 타임라인 | 5 |
 | `GET /admin/backup/snapshots` | `app` schema backup snapshot 목록 | 5 |
 | `POST /admin/backup/snapshot` | 수동 backup snapshot 생성 + audit | 5 |
+| `GET/POST /admin/mcp-tokens` / `{token_id}/revoke` | MCP 토큰 검색 / 대리 발급 / 강제 회수 | 6 |
 | `GET /admin/rustfs/objects` / `DELETE` | RustFS 객체 관리 | 2 |
 | `POST /admin/seed/*` | dev/staging seed 시나리오 (운영 차단) | 3 |
 | `POST /admin/reset` | DB reset (dev/staging only) | 3 |
@@ -495,16 +496,54 @@ Content-Type: application/json
 [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
 핫스왑 restore UI/API는 Sprint 6의 T-111 범위로 남긴다.
 
-## 14. Seed / Reset (dev/staging only)
+## 14. MCP 토큰 관리 (ADR-019, Sprint 6)
 
-### 14.1 `POST /admin/seed/scenarios/{scenario_key}`
+### 14.1 `GET /admin/mcp-tokens`
+
+```http
+GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
+```
+
+- 권한: `admin` / `operator` / `cpo`
+- `status`: `active` | `expired` | `revoked`
+- 응답은 토큰 원문 없이 마스킹 값과 metadata만 반환한다.
+
+### 14.2 `POST /admin/mcp-tokens`
+
+```jsonc
+{
+  "user_id": "uuid",
+  "name": "사용자 대리 발급",
+  "expires_at": "2026-07-07T00:00:00Z",
+  "access_reason": "고객 지원 요청"
+}
+```
+
+- 권한: `admin`
+- `scopes`는 1차 구현에서 `["mcp:read"]`만 허용한다.
+- `app.admin_audit_log`에 `action="mcp_token.issue"` 기록.
+- 응답은 발급 직후 1회만 `token` 원문을 포함한다.
+
+### 14.3 `POST /admin/mcp-tokens/{token_id}/revoke`
+
+```jsonc
+{ "access_reason": "토큰 유출 의심" }
+```
+
+- 권한: `admin`
+- `revoked_at = now()` 설정.
+- `app.admin_audit_log`에 `action="mcp_token.revoke"` 기록.
+
+## 15. Seed / Reset (dev/staging only)
+
+### 15.1 `POST /admin/seed/scenarios/{scenario_key}`
 
 `scenario_key`: SPEC V8 M-13 8 시나리오 키 (`new_user_first_trip` 등).
 
 운영 환경에서는 라우트 자체 비활성 (`ENABLE_SEED` 환경변수 false → router include
 안 함). 404.
 
-### 14.2 `POST /admin/reset`
+### 15.2 `POST /admin/reset`
 
 ```jsonc
 { "confirm": "RESET", "admin_password": "..." }
@@ -515,7 +554,7 @@ Content-Type: application/json
 - 라이브러리 schema는 별도 reset endpoint (`POST /admin/krtour-map/reset`)
 - 자동으로 `new_user_first_trip` 시나리오 적용
 
-## 15. AI agent 구현 체크리스트
+## 16. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/api/v1/admin/__init__.py` 라우터 분기
 - [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,backup,seed,reset,rustfs}.py`

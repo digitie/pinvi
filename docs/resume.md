@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-127 MCP 외부 인터페이스 정본화를 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-131 `GET /trips/{id}` 상세 view 연결을 처리한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
+
+**T-127 MCP 외부 인터페이스 정본화 완료** (2026-06-07): ADR-019 외부 MCP 계약은
+`docs/architecture/mcp-server.md`가 단일 진실이며, 1차 tool은 read-only 5개로 고정했다.
+`list_trips.status` enum을 실제 trip status와 맞추고, 사용자/admin MCP 토큰 발급·회수
+HTTP endpoint를 `docs/api/users.md` / `docs/api/admin.md` / runbook에 명시했다.
 
 **T-161 README `/search` 앵커 정합 완료** (2026-06-07): `docs/api/features.md`의
 통합 검색 heading을 `2.7 GET /search`로 안정화하고, README 링크를
