@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-07 (codex) — PR 리뷰 모니터 MCP 알림 보강
+
+**작업**: PR 모니터가 5분 cron처럼 보이지만 실제 GitHub schedule 실행 간격이
+25~30분대로 밀리고, 새 commit(`synchronize`)에는 즉시 반응하지 않는 점을 보강했다.
+`python-krtour-map`식 MCP 진입을 PR reminder 본문에 넣고, 모니터 로직을 로컬/Actions
+공용 Python 스크립트로 단일화했다.
+
+**변경**:
+- `scripts/pr_review_monitor.py` — 열린 PR 또는 지정 PR의 최신 head SHA marker를
+  확인하고 없으면 MCP 기반 리뷰 알림 댓글을 남긴다.
+- `.github/workflows/codex-pr-review.yml` — `reopened` / `synchronize` 이벤트 추가,
+  공용 스크립트 실행으로 변경.
+- `.github/workflows/codex-pr-monitor.yml` — GitHub Script matrix 로직 제거,
+  공용 스크립트로 열린 PR 전체를 보정 감시.
+- 문서: workflow index, Sprint 4 PR review runbook, agent-guide, ADR-021 amendment,
+  resume/tasks 갱신.
+
+**검증**: `gh` 기준 현재 열린 PR은 0개. 스크립트 dry-run / py_compile / YAML parse /
+`git diff --check` 통과.
+
 ## 2026-06-07 (claude) — Telegram 완료 알림 MCP 도입 (모든 agent)
 
 **작업**: krtour-map PR #229 패턴을 미러해 TripMate 모든 agent worktree에서 PR 후

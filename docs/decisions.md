@@ -760,6 +760,12 @@
   aggregate gate가 PR 변경 파일을 기준으로 필요한 check(`lint-typecheck-test`,
   `lint-typecheck-build`, `sanity`)만 기다린다. docs-only PR은 aggregate gate 자체만
   통과하면 된다.
+- **amendment (2026-06-07)**: PR review reminder는 `scripts/pr_review_monitor.py`로
+  단일화한다. `pull_request` 이벤트는 `opened` / `ready_for_review` / `reopened` /
+  `synchronize`에서 즉시 대상 PR을 확인하고, 5분 schedule은 GitHub 지연 가능성을
+  감안한 보정 감시로 둔다. 알림 본문은 `python-krtour-map`과 같은 MCP 진입 방식
+  (CodeGraph / Playwright / Sequential Thinking / Telegram)을 명시하되, 외부 LLM API
+  key와 GitHub secret은 계속 쓰지 않는다.
 - **컨텍스트**: Sprint 1~3 진행 중 사용자 지시 "깃헙 ci / cd 쓰지마"로 PR #10
   직전 모든 `.github/workflows/`를 삭제했었다. Sprint 4 진입 시 사용자 결정
   뒤집힘 — 운영 가시화 / 정합성 게이트 / Sprint 4 이후 회귀 방지를 위해
