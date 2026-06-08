@@ -5,6 +5,27 @@ import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 const MarkerColorPattern = /^P-\d{2}$/;
 const CurrencyPattern = /^[A-Z]{3}$/;
 
+export const PoiRiseSetStatusSchema = z.enum([
+  'pending_date',
+  'pending_coord',
+  'pending_fetch',
+  'success',
+  'failed',
+]);
+export type PoiRiseSetStatus = z.infer<typeof PoiRiseSetStatusSchema>;
+
+export const PoiRiseSetResponseSchema = z.object({
+  status: PoiRiseSetStatusSchema,
+  locdate: z.string().date().nullable(),
+  sunrise_at: Iso8601Schema.nullable(),
+  sunset_at: Iso8601Schema.nullable(),
+  moonrise_at: Iso8601Schema.nullable(),
+  moonset_at: Iso8601Schema.nullable(),
+  fetched_at: Iso8601Schema.nullable(),
+  updated_at: Iso8601Schema,
+});
+export type PoiRiseSetResponse = z.infer<typeof PoiRiseSetResponseSchema>;
+
 export const PoiCreateSchema = z.object({
   day_index: z.number().int().min(1),
   sort_order: z.string().min(1).max(80),
@@ -67,6 +88,7 @@ export const PoiResponseSchema = z.object({
   actual_amount: NonNegativeDecimalStringSchema.nullable(),
   currency: z.string().regex(CurrencyPattern),
   user_url: z.string().nullable(),
+  rise_set: PoiRiseSetResponseSchema.nullable(),
   version: z.number().int(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,

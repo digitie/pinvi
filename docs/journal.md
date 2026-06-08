@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-135 POI rise_set 응답 노출
+
+**작업**: 감사 C-18 후속인 POI 응답 `rise_set` 미노출을 정리했다.
+
+**변경**:
+- Pydantic/Zod POI 응답 schema에 `PoiRiseSetResponse`를 추가하고, `PoiResponse`와
+  `TripViewPoi`가 `rise_set`을 `null` 또는 KASI 상태 payload로 받도록 맞췄다.
+- `POST/PATCH /trips/{trip_id}/pois`와 POI reorder 응답에 `app.trip_poi_rise_sets`
+  상태를 붙였다. 생성 직후에는 `pending_date` / `pending_coord` / `pending_fetch`가
+  내려갈 수 있다.
+- `GET /trips/{trip_id}` 상세 builder는 POI ID 목록으로 `trip_poi_rise_sets`를 batch
+  조회해 N+1 없이 `rise_set`을 붙인다.
+- API/통합 문서와 `docs/tasks.md` / `docs/resume.md`를 T-135 완료 상태로 갱신했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/api/v1/pois.py app/schemas/poi.py app/schemas/trip.py app/services/poi.py app/services/trip_view_builder.py tests/integration/test_kasi_poi_rise_set.py tests/integration/test_trip_view_builder.py`
+- WSL2 ext4 mirror: `ruff check app/api/v1/pois.py app/schemas/poi.py app/schemas/trip.py app/services/poi.py app/services/trip_view_builder.py tests/integration/test_kasi_poi_rise_set.py tests/integration/test_trip_view_builder.py`
+- WSL2 ext4 mirror: `mypy --strict app/api/v1/pois.py app/schemas/poi.py app/schemas/trip.py app/services/poi.py app/services/trip_view_builder.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_kasi_poi_rise_set.py tests/integration/test_trip_view_builder.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run test --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/api-client`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+
+**다음**: PR 머지 후 남은 krtour-map 비의존 후보를 재감사한다. 현재 문서상 다음 후보는
+T-111 Backup/Restore UI 핫스왑이다.
+
 ## 2026-06-08 (codex) — T-169 MCP list_trips parity + Trip 목록 cursor
 
 **작업**: PR #83 사후 리뷰 잔존인 MCP `list_trips` bucket/cursor parity와

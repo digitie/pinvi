@@ -82,11 +82,13 @@ export type {
 
 export {
   PoiCreateSchema,
+  PoiRiseSetResponseSchema,
+  PoiRiseSetStatusSchema,
   PoiUpdateSchema,
   PoiReorderRequestSchema,
   PoiResponseSchema,
 } from './poi';
-export type { PoiCreate, PoiResponse } from './poi';
+export type { PoiCreate, PoiResponse, PoiRiseSetResponse, PoiRiseSetStatus } from './poi';
 export type { PoiReorderRequest, PoiUpdate } from './poi';
 
 export {

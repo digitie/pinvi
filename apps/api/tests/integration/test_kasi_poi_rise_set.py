@@ -40,7 +40,12 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
         cookies=cookies,
     )
     assert resp.status_code == 201, resp.text
-    poi_id = resp.json()["data"]["attachment_id"]
+    poi_data = resp.json()["data"]
+    poi_id = poi_data["attachment_id"]
+    assert poi_data["rise_set"]["status"] == "pending_fetch"
+    assert poi_data["rise_set"]["locdate"] == "2026-05-06"
+    assert poi_data["rise_set"]["sunrise_at"] is None
+    assert poi_data["rise_set"]["fetched_at"] is None
 
     async with session_factory() as db:
         row = (
@@ -57,6 +62,13 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
     assert row.longitude == 127.1
     assert row.latitude == 37.5
     assert row.status == "pending_fetch"
+
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    assert detail.status_code == 200, detail.text
+    detail_poi = detail.json()["data"]["days"][0]["pois"][0]
+    assert detail_poi["poi_id"] == poi_id
+    assert detail_poi["rise_set"]["status"] == "pending_fetch"
+    assert detail_poi["rise_set"]["locdate"] == "2026-05-06"
 
 
 async def test_create_poi_without_day_date_marks_rise_set_pending_date(
@@ -80,7 +92,10 @@ async def test_create_poi_without_day_date_marks_rise_set_pending_date(
         cookies=cookies,
     )
     assert resp.status_code == 201, resp.text
-    poi_id = resp.json()["data"]["attachment_id"]
+    poi_data = resp.json()["data"]
+    poi_id = poi_data["attachment_id"]
+    assert poi_data["rise_set"]["status"] == "pending_date"
+    assert poi_data["rise_set"]["locdate"] is None
 
     async with session_factory() as db:
         row = (

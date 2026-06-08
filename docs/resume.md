@@ -4,9 +4,15 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프는 T-169까지 닫혔다. 다음 구현 후보는 T-170 krtour-map
-HTTP client 붙이기이며, feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
-— v0.1.0 게이트도 여기 대기.
+krtour-map 비의존 루프에서 T-135도 닫았다. 다음 비의존 구현 후보는 T-111
+Backup/Restore UI 핫스왑이며, T-170 krtour-map HTTP client 붙이기는 feature read용
+HTTP 서비스 준비(T-066/DEC-06)에 의존한다.
+
+**T-135 POI `rise_set` 응답 노출 완료** (2026-06-08): POI 생성/수정/정렬 응답과
+`GET /trips/{trip_id}` 상세 POI에 `rise_set`을 노출한다. `app.trip_poi_rise_sets` row가
+있으면 `pending_date` / `pending_coord` / `pending_fetch` / `success` / `failed` 상태와
+출몰시각 필드를 내려주고, row가 없으면 `null`이다. Trip 상세 builder는 POI ID 목록으로
+`trip_poi_rise_sets`를 batch 조회해 N+1을 피한다.
 
 **T-169 MCP list_trips/search_features parity 완료** (2026-06-08): 사용자 `GET /trips`가
 bucket/q/status/visibility/date range/sort/opaque cursor를 받도록 보강하고 `meta.cursor` /

@@ -25,6 +25,7 @@ from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
+from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,10 @@ async def build_trip_view(
     )
     poi_result = await db.execute(poi_query)
     pois = list(poi_result.scalars())
+    rise_sets_by_poi_id = await get_poi_rise_sets(
+        db,
+        poi_ids=[poi.attachment_id for poi in pois],
+    )
 
     # feature_id batch 수집 (unique). krtour-map feature_id는 불투명 문자열이다.
     feature_ids: list[str] = []
@@ -152,6 +157,7 @@ async def build_trip_view(
                 "actual_amount": poi.actual_amount,
                 "currency": poi.currency,
                 "user_url": poi.user_url,
+                "rise_set": poi_rise_set_to_dict(rise_sets_by_poi_id.get(poi.attachment_id)),
                 "feature_link_broken_at": poi.feature_link_broken_at,
                 "version": poi.version,
                 "created_at": poi.created_at,
