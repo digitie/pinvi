@@ -60,6 +60,26 @@ class Settings(BaseSettings):
     tripmate_oauth_state_ttl_seconds: int = 600
     tripmate_oauth_http_timeout_seconds: int = 5
 
+    # RustFS (S3 호환 객체 저장소)
+    tripmate_rustfs_endpoint_url: str = "http://localhost:9003"
+    tripmate_rustfs_public_endpoint_url: str = "http://127.0.0.1:9003"
+    tripmate_rustfs_bucket: str = "tripmate-media"
+    tripmate_rustfs_access_key_id: str = "rustfsadmin"
+    tripmate_rustfs_secret_access_key: str = "rustfsadmin"  # noqa: S105 - 로컬 dev 기본값
+    tripmate_rustfs_presigned_url_expires_seconds: int = 900
+    tripmate_rustfs_max_upload_bytes: int = 10_485_760
+    tripmate_rustfs_allowed_content_types: list[str] = Field(
+        default_factory=lambda: [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "video/mp4",
+            "application/pdf",
+        ]
+    )
+    tripmate_rustfs_public_base_url: str = ""
+
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]

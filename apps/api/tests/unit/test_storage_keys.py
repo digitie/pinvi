@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 
+from app.core.config import Settings
 from app.services.rustfs_storage import (
     FileTooLargeError,
     MimeNotAllowedError,
@@ -57,3 +58,19 @@ def test_make_upload_url_rejects_too_large() -> None:
             content_type="image/jpeg",
             content_length=10**12,
         )
+
+
+def test_settings_reads_rustfs_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRIPMATE_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:9003")
+    monkeypatch.setenv("TRIPMATE_RUSTFS_BUCKET", "tripmate-test")
+    monkeypatch.setenv("TRIPMATE_RUSTFS_ACCESS_KEY_ID", "rustfsadmin")
+    monkeypatch.setenv("TRIPMATE_RUSTFS_SECRET_ACCESS_KEY", "rustfsadmin")
+    monkeypatch.setenv("TRIPMATE_RUSTFS_ALLOWED_CONTENT_TYPES", '["text/plain"]')
+
+    loaded = Settings(_env_file=None)
+
+    assert loaded.tripmate_rustfs_endpoint_url == "http://127.0.0.1:9003"
+    assert loaded.tripmate_rustfs_bucket == "tripmate-test"
+    assert loaded.tripmate_rustfs_access_key_id == "rustfsadmin"
+    assert loaded.tripmate_rustfs_secret_access_key == "rustfsadmin"
+    assert loaded.tripmate_rustfs_allowed_content_types == ["text/plain"]

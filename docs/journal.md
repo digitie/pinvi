@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (claude) — RustFS 설정 배선 (env → Settings)
+
+**작업**: `TRIPMATE_RUSTFS_*` 환경변수를 `Settings`(config.py)에 실제 필드로 배선했다.
+기존엔 필드가 없어 `rustfs_storage.py`가 `getattr`/`hasattr` 폴백으로 읽었고 env가 조용히
+무시됐다(krtour-map config 갭과 같은 부류). 필드 추가로 폴백 제거 + 직접 참조.
+
+**변경**: `config.py`(rustfs 9개 필드 + `public_base_url`), `rustfs_storage.py`(폴백 제거),
+`.env.example`/`apps/api/.env.example`(dev 기본값 `rustfsadmin`/`rustfsadmin` 정렬 + public base url),
+`docker-compose.yml`/`docker-compose.app.yml`(컨테이너 cred 정렬 + API env 주입), `storage.md`/
+`file-storage.md`(문서), `test_storage_keys.py`(Settings env 로드 테스트).
+
 ## 2026-06-08 (claude) — DEC-05 교정: 재적재≠제안, krtour feature 추가 API 신규 필요(K-15)
 
 **교정(사용자)**: 재적재(feature-update-request)와 사용자 제안은 **완전 별개**.

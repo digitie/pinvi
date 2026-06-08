@@ -11,11 +11,7 @@ from app.schemas.storage import AttachmentPurpose, UploadUrlResponse
 
 
 def _allowed_content_types() -> set[str]:
-    raw = (
-        settings.tripmate_rustfs_allowed_content_types
-        if hasattr(settings, "tripmate_rustfs_allowed_content_types")
-        else None
-    )
+    raw = settings.tripmate_rustfs_allowed_content_types
     if not raw:
         return {
             "image/jpeg",
@@ -70,20 +66,18 @@ def make_upload_url(
     Sprint 2 시점에는 실제 RustFS S3 서명 없이 placeholder URL을 생성.
     Sprint 4~5 활성화 시 `aioboto3` 또는 `botocore`로 실서명.
     """
-    max_bytes = getattr(settings, "tripmate_rustfs_max_upload_bytes", 10_485_760)
+    max_bytes = settings.tripmate_rustfs_max_upload_bytes
     if content_length > max_bytes:
         raise FileTooLargeError(f"최대 {max_bytes} bytes")
     allowed = _allowed_content_types()
     if content_type not in allowed:
         raise MimeNotAllowedError(f"허용 MIME: {sorted(allowed)}")
 
-    bucket = getattr(settings, "tripmate_rustfs_bucket", "tripmate-media")
-    public_endpoint = getattr(
-        settings, "tripmate_rustfs_public_endpoint_url", "http://127.0.0.1:9003"
-    )
+    bucket = settings.tripmate_rustfs_bucket
+    public_endpoint = settings.tripmate_rustfs_public_endpoint_url
     storage_key = build_storage_key(purpose=purpose, user_id=user_id, filename=filename)
     expires = datetime.now(UTC) + timedelta(
-        seconds=getattr(settings, "tripmate_rustfs_presigned_url_expires_seconds", 900)
+        seconds=settings.tripmate_rustfs_presigned_url_expires_seconds
     )
     upload_url = f"{public_endpoint}/{bucket}/{storage_key}?X-Amz-Signature=PLACEHOLDER"
     return UploadUrlResponse(
