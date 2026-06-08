@@ -14,7 +14,6 @@ SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from sqlalchemy import select
@@ -101,24 +100,21 @@ async def build_trip_view(
     poi_result = await db.execute(poi_query)
     pois = list(poi_result.scalars())
 
-    # feature_id batch 수집 (unique)
-    feature_ids: list[uuid.UUID] = []
+    # feature_id batch 수집 (unique). krtour-map feature_id는 불투명 문자열이다.
+    feature_ids: list[str] = []
     seen: set[str] = set()
     for poi in pois:
-        fid_str = poi.feature_id
+        fid_str = _canonical_feature_id(poi.feature_id)
         if fid_str not in seen:
             seen.add(fid_str)
-            try:
-                feature_ids.append(uuid.UUID(fid_str.split("@")[0]))
-            except (ValueError, AttributeError):
-                logger.warning("Invalid feature_id: %s", fid_str)
+            feature_ids.append(fid_str)
 
     # 라이브러리 batch fetch
-    fresh_features: dict[uuid.UUID, dict[str, Any]] = {}
+    fresh_features: dict[str, dict[str, Any]] = {}
     if krtour_client is not None and feature_ids:
         try:
             features = await krtour_client.features_by_ids(feature_ids)
-            fresh_features = {uuid.UUID(f["feature_id"]): f for f in features}
+            fresh_features = {_canonical_feature_id(str(f["feature_id"])): f for f in features}
         except Exception as exc:
             logger.error("features_by_ids batch 실패: %s — snapshot으로 fallback", exc)
 
@@ -126,14 +122,9 @@ async def build_trip_view(
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
     broken_count = 0
     for poi in pois:
-        feature_uuid: uuid.UUID | None = None
-        try:
-            feature_uuid = uuid.UUID(poi.feature_id.split("@")[0])
-        except (ValueError, AttributeError):
-            pass
-
-        fresh = fresh_features.get(feature_uuid) if feature_uuid else None
-        is_broken = krtour_client is not None and feature_uuid is not None and fresh is None
+        feature_id = _canonical_feature_id(poi.feature_id)
+        fresh = fresh_features.get(feature_id)
+        is_broken = krtour_client is not None and fresh is None
         if is_broken:
             broken_count += 1
 
@@ -202,6 +193,11 @@ def _trip_to_dict(trip: Trip) -> dict[str, Any]:
         "created_at": trip.created_at,
         "updated_at": trip.updated_at,
     }
+
+
+def _canonical_feature_id(feature_id: str) -> str:
+    """저장 snapshot suffix를 제외하고 krtour feature_id 문자열을 보존한다."""
+    return feature_id.split("@", 1)[0]
 
 
 def _companion_to_dict(companion: TripCompanion) -> dict[str, Any]:
