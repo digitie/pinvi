@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-166 admin 감사 hash-chain head 직렬화
+
+**작업**: PR #80 사후 리뷰 잔존인 admin audit hash-chain head fork 가능성을 보강했다.
+
+**변경**:
+- `app.admin_audit_log.prev_hash` unique constraint migration/model을 추가해 같은 head에서
+  두 row가 갈라지는 fork를 DB 차원에서 차단했다.
+- `append_admin_audit()`가 마지막 audit row 조회 전에 PostgreSQL transaction-level advisory
+  lock을 잡도록 바꿔 병렬 admin action도 하나의 chain head로 직렬화한다.
+- 동시 append가 첫 transaction commit 전까지 대기했다가 직전 `content_hash`를 연결하는
+  회귀 테스트와, 수동 fork insert가 unique constraint로 거부되는 테스트를 추가했다.
+- ADR-034, schema/data-model/runbook 문서에 `prev_hash` unique + advisory lock 기준을 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/services/admin_audit.py app/models/audit.py tests/integration/test_admin_audit_chain.py alembic/versions/20260608_0013_admin_audit_prev_hash_unique.py`
+- WSL2 ext4 mirror: `ruff check app/services/admin_audit.py app/models/audit.py tests/integration/test_admin_audit_chain.py alembic/versions/20260608_0013_admin_audit_prev_hash_unique.py`
+- WSL2 ext4 mirror: `mypy --strict app/services/admin_audit.py app/models/audit.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_admin_audit_chain.py tests/integration/test_admin_users_api.py tests/integration/test_admin_trips_api.py tests/integration/test_admin_pois_api.py`
+
+**다음**: T-167 money 표현 통일(admin union→decimal-string) + `packages/schemas` round-trip 테스트.
+
 ## 2026-06-08 (codex) — T-165 WebSocket cap/grace + broadcast 비동기 분리
 
 **작업**: PR #78 사후 리뷰 잔존인 rate-limit close grace 슬롯 점유와 HTTP mutation

@@ -6,11 +6,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AdminAuditLog
 from app.services.hash_chain import GENESIS_HASH, compute_content_hash, sha256_hex
+
+_ADMIN_AUDIT_CHAIN_LOCK_NAMESPACE = 0x54524D54  # "TRMT"
+_ADMIN_AUDIT_CHAIN_LOCK_RESOURCE = 0x41414454  # "AADT"
 
 
 async def append_admin_audit(
@@ -32,6 +35,13 @@ async def append_admin_audit(
 
     호출자는 업무 상태 변경과 audit append를 같은 트랜잭션에 묶은 뒤 commit한다.
     """
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(:namespace, :resource)"),
+        {
+            "namespace": _ADMIN_AUDIT_CHAIN_LOCK_NAMESPACE,
+            "resource": _ADMIN_AUDIT_CHAIN_LOCK_RESOURCE,
+        },
+    )
     last = await db.scalar(select(AdminAuditLog).order_by(AdminAuditLog.log_id.desc()).limit(1))
     prev_hash = last.content_hash if last else GENESIS_HASH
     now = datetime.now(UTC)

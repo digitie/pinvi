@@ -276,7 +276,7 @@ op.execute("CREATE EXTENSION IF NOT EXISTS postgis SCHEMA x_extension")
 | 패턴 | 예 |
 |------|-----|
 | optimistic lock | `version INTEGER NOT NULL DEFAULT 1` + `If-Match` 헤더 |
-| audit chain | `prev_hash CHAR(64) + content_hash CHAR(64)` + trigger 또는 응용 |
+| audit chain | `prev_hash CHAR(64) UNIQUE + content_hash CHAR(64)` + append-only trigger + advisory lock |
 | 시계열 (가격/날씨) | BRIN(observed_at) + (feature_id, item_key, observed_at) PK — 라이브러리 |
 | 큐 (email_queue) | `status` enum + `SKIP LOCKED` |
 | 폴리모픽 1:N | 4 FK 중 1 NOT NULL CHECK |

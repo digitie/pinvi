@@ -549,28 +549,36 @@ CREATE INDEX notice_plan_audiences_notice_idx ON app.notice_plan_audiences (noti
 
 ## 6. 운영 / 로그
 
-### 6.1 `app.admin_audit_logs`
+### 6.1 `app.admin_audit_log`
 
 ```sql
-CREATE TABLE app.admin_audit_logs (
-  log_id        bigserial PRIMARY KEY,
-  admin_user_id uuid REFERENCES app.users(user_id),
-  action        text NOT NULL,
-  entity_kind   text,
-  entity_id     text,
-  before        jsonb,
-  after         jsonb,
-  ip            inet,
-  user_agent    text,
-  created_at    timestamptz NOT NULL DEFAULT now()
+CREATE TABLE app.admin_audit_log (
+  log_id            bigserial PRIMARY KEY,
+  actor_user_id     uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  action            varchar(64) NOT NULL,
+  resource_type     varchar(64) NOT NULL,
+  resource_id       varchar(128),
+  before_state      jsonb,
+  after_state       jsonb,
+  access_reason     text,
+  target_pii_fields varchar(64)[],
+  ip_hash           varchar(64) NOT NULL,
+  user_agent        varchar(512),
+  request_id        uuid NOT NULL,
+  prev_hash         varchar(64) NOT NULL UNIQUE,
+  content_hash      varchar(64) NOT NULL,
+  occurred_at       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX admin_audit_logs_created_brin
-  ON app.admin_audit_logs USING brin (created_at);
-CREATE INDEX admin_audit_logs_entity_idx
-  ON app.admin_audit_logs (entity_kind, entity_id)
-  WHERE entity_kind IS NOT NULL;
+CREATE INDEX ix_admin_audit_log_occurred
+  ON app.admin_audit_log USING brin (occurred_at);
+CREATE INDEX ix_admin_audit_log_resource
+  ON app.admin_audit_log (resource_type, resource_id, occurred_at DESC);
 ```
+
+`append_admin_audit()`는 마지막 row 조회 전 PostgreSQL transaction-level advisory lock을
+잡아 head를 직렬화한다. `prev_hash` unique constraint는 같은 head에서 두 row가 갈라지는
+fork를 DB 차원에서 차단한다.
 
 ### 6.2 `app.import_jobs`
 

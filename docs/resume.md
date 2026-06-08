@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-166 admin 감사 hash-chain head 직렬화
-(`prev_hash` unique/advisory lock)를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-167 money 표현 통일(admin union→decimal-string)과
+`packages/schemas` round-trip 테스트를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-166 admin 감사 hash-chain head 직렬화 완료** (2026-06-08):
+`app.admin_audit_log.prev_hash`에 unique constraint를 추가하고, `append_admin_audit()`가
+마지막 row 조회 전 PostgreSQL transaction-level advisory lock을 획득해 병렬 admin action도
+하나의 chain head로 직렬화한다. 동시 append 회귀와 fork insert 거부 테스트를 추가했다.
 
 **T-165 WebSocket cap/grace + broadcast 비동기 분리 완료** (2026-06-08):
 client message rate 초과 connection은 `RATE_LIMITED` error 전송 직후 broker에서 제거해
