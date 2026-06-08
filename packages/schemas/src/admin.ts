@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Iso8601Schema } from './common';
+import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
 /** `docs/api/admin.md` §6.4 — 목록 응답은 PII 마스킹. */
@@ -138,8 +138,6 @@ export const AdminPoiSummarySchema = z.object({
 });
 export type AdminPoiSummary = z.infer<typeof AdminPoiSummarySchema>;
 
-const AdminPoiAmountSchema = z.union([z.string(), z.number()]).nullable();
-
 export const AdminPoiDetailSchema = AdminPoiSummarySchema.extend({
   added_by_user_id: z.string().uuid(),
   added_by_email_masked: z.string().nullable(),
@@ -149,8 +147,8 @@ export const AdminPoiDetailSchema = AdminPoiSummarySchema.extend({
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
   user_note: z.string().nullable(),
-  budget_amount: AdminPoiAmountSchema,
-  actual_amount: AdminPoiAmountSchema,
+  budget_amount: NonNegativeDecimalStringSchema.nullable(),
+  actual_amount: NonNegativeDecimalStringSchema.nullable(),
   currency: z.string(),
   user_url: z.string().nullable(),
   recent_audit: z.array(AdminAuditEntrySchema).default([]),

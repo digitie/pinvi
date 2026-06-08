@@ -14,7 +14,7 @@ const apiClient = new ApiClient({
 const formatDateTime = (value: string | null) =>
   value ? new Date(value).toLocaleString('ko-KR') : '—';
 
-const formatAmount = (value: string | number | null, currency: string) =>
+const formatAmount = (value: string | null, currency: string) =>
   value === null ? '—' : `${value} ${currency}`;
 
 const isBroken = (poi: AdminPoiDetail) => Boolean(poi.feature_link_broken_at);

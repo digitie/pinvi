@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-167 money 표현 통일
+
+**작업**: PR #79 사후 리뷰 잔존인 admin money `string | number` union과
+`packages/schemas` runtime round-trip 테스트 부재를 보강했다.
+
+**변경**:
+- `packages/schemas/src/admin.ts`의 admin POI detail `budget_amount` / `actual_amount`를
+  `NonNegativeDecimalStringSchema.nullable()`로 통일했다.
+- Admin POI detail UI의 `formatAmount` 입력 타입을 `string | null`로 좁혔다.
+- `packages/schemas`에 Vitest test script/devDependency와 money response round-trip 테스트를
+  추가했다. admin/POI/trip-view/notice-plan 응답 money가 decimal string으로 유지되고
+  number/exponential/negative 표현은 거부된다.
+
+**검증**:
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run test --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+
+**다음**: T-168 storage `AttachmentResponse` 필드 호환 정책을 notice-plans와 통일.
+
 ## 2026-06-08 (codex) — T-166 admin 감사 hash-chain head 직렬화
 
 **작업**: PR #80 사후 리뷰 잔존인 admin audit hash-chain head fork 가능성을 보강했다.
