@@ -62,33 +62,34 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 
 ---
 
-## DEC-05 — feature 갱신요청 처리 ☑ (확정 2026-06-08)
-**배경**: krtour `POST /tripmate/feature-update-requests`(openapi.user.json에 있으나)는
-자유 제출 큐가 아니라 **scope 재적재(Dagster job) 트리거** = 운영자 액션이다. krtour는
-users/auth/검수를 소유하지 않는다.
-**의미 분리**: ① 사용자 제안/신고(자유 입력, 검수 필요 — 사람) vs ② scope 재적재(구조화
-trigger — 운영). 둘은 다른 레이어다.
-**확정 (두 레이어 — 사용자 제안 + Admin 재적재, 둘 다 v1 구현)**:
+## DEC-05 — 사용자 feature 제안 (재적재와 완전 분리) ☑ (확정 2026-06-08)
+**핵심 교정**: **재적재(feature-update-request)와 사용자 제안은 완전히 다른 작업이다.**
+이 둘을 묶지 않는다.
+
+**(A) 재적재 = krtour-map Admin 기능 — TripMate 사용자 제품과 무관**
+- `POST /admin/feature-update-requests`(= scope 재적재/Dagster job)는 **krtour-map 운영자**가
+  krtour-map admin(포트 9012 / admin 콘솔)에서 쓰는 기능이다.
+- **TripMate 일반 사용자에게 노출되지 않으며, 사용자 제안 흐름에도 들어가지 않는다.**
+  TripMate 제품은 재적재를 surface하지 않는다(필요 시 krtour admin이 직접 운영).
+
+**(B) 사용자 제안 = TripMate가 소유, 승인 시 krtour "feature 추가 API"로 추가**
 - **(레이어 1) 사용자 제안 큐 — TripMate `app`(user 도메인)**: `app.feature_suggestions`
   (requester_user_id, type[new_place|correction|closure], target_feature_id?, name, coord,
-  categories[], note, status[pending|triaged|forwarded|loaded|rejected|duplicate],
-  krtour_request_id?, krtour_status_url?, reviewed_by_admin_id?, created_at, resolved_at).
-  사용자 endpoint `POST /features/requests`(즉시 201, krtour 동기 호출 X) +
-  `GET /features/requests/{id}`(내 제안 상태). per-user rate-limit + dedup(같은 feature/근접
-  좌표 중복은 1건으로 collapse). 감사 C-12의 미존재 테이블을 이 테이블로 실체화.
-- **(레이어 2) Admin 검수 → krtour 재적재 — admin 도메인**: `/admin/feature-requests`
-  목록/검수, `POST /admin/feature-requests/{id}/approve|reject`. 승인 시(정정/폐업)
-  운영자가 krtour `POST /tripmate/feature-update-requests`(scope) 호출 — `apps/api/app/api/v1/admin/`,
-  RBAC `admin`/`operator`, `append_admin_audit`. request_id/status_url 저장,
-  status=forwarded. (선택)reconcile job이 krtour 상태 폴링해 forwarded→loaded.
-- **경계 핵심**: 사용자 제안 큐는 **krtour를 직접 호출하지 않는다.** krtour 재적재 호출은
-  **Admin 레이어에서만**(= `/tripmate/feature-update-requests`는 admin 영역).
-- **scope 매핑**: 정정/갱신 = `FeatureIdsScope`(+`run_mode=queued`), 영역 stale =
-  `CenterRadiusScope`/`BboxScope`, 폐업/숨김 = `update_policy.prevent_provider_reactivation=true`
-  또는 `/admin/features/{id}/deactivate`, **신규 장소 = krtour offline-upload(운영자)** —
-  재적재로 합성 불가(검수 시 별도 처리/백로그).
-- **검수 게이트**: v1은 admin/operator 승인 필수(남용·LOCK_BUSY 폭주 방지). 자동 전달은 후순위.
-**근거**: 경계(검수/남용/PII는 TripMate user 도메인), 운영 액션 감사, scope당 1회 재적재.
+  categories[], note, status[pending|approved|rejected|added|duplicate], reviewed_by_admin_id?,
+  krtour_ref?, created_at, resolved_at). 사용자 endpoint `POST /features/requests`(즉시 201) +
+  `GET /features/requests/{id}`. per-user rate-limit + dedup. 감사 C-12의 미존재 테이블 실체화.
+- **(레이어 2) TripMate Admin 검사/승인/거절 — admin 도메인**: `/admin/feature-requests`
+  목록/검수 + `POST /admin/feature-requests/{id}/approve|reject` (RBAC admin/operator + audit).
+  **승인 시 krtour-map의 feature 추가 API로 feature를 추가한다.** 재적재 호출과 무관.
+
+**⚠️ krtour 신규 구축 필요 — feature 추가 API 미존재(확정)**: 현재 krtour의 feature **추가**
+표면은 `POST /admin/offline-uploads`(multipart **파일** CSV/TSV → validate → Dagster load)**뿐**
+이고, **단건 "이 장소 하나 추가" REST 엔드포인트가 없다**(`/admin/features`는 list + deactivate만).
+→ 승인된 제안을 추가하려면 krtour가 **단건 feature add API를 새로 만들어야 한다**(예
+`POST /admin/features` 또는 `/tripmate/features`, 입력 = name/coord/category/kind/note/source).
+**`docs/krtour-map-requirements.md` K-15로 krtour 요청 등록.** TripMate 승인 흐름(T-179)은 이
+API 완성에 의존한다.
+**근거**: 경계(검수/남용/PII는 TripMate user 도메인), 재적재(운영)와 제안(사용자)은 별개 도메인.
 
 ---
 
@@ -145,7 +146,7 @@ trigger — 운영). 둘은 다른 레이어다.
 | DEC-02 | ☑ krtour `make_feature_id` 정본(문자열) | 2026-06-06 | 권고 기본값 적용. ADR-028 |
 | DEC-03 | ☑ 큐레이션→`curated_trip_plans` 분리 | 2026-06-06 | 사용자. ADR-029 |
 | DEC-04 | ☑ 서버(krtour DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
-| DEC-05 | ☑ **두 레이어**: 사용자 제안 큐(`app.feature_suggestions`, user) + Admin 검수→krtour 재적재(admin). 사용자 큐는 krtour 직접 호출 X | 2026-06-08 | 사용자 확정 (admin 영역 호출 + 사용자 제안도 구현). §DEC-05 본문 참조 |
+| DEC-05 | ☑ **재적재(krtour admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=TripMate(`app.feature_suggestions`)→Admin 검사/승인→**krtour 신규 feature 추가 API**로 추가 | 2026-06-08 | 사용자 확정. feature 추가 API는 **미존재 → krtour 신규 구축** 필요(`krtour-map-requirements.md` K-15). §DEC-05 본문 |
 | DEC-06 | ☑ **krtour 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
 | DEC-07 | ☑ 제안 기본값 + `/v1` 노출 | 2026-06-06 | 사용자. ADR-030 |
 | DEC-08 | ☑ POI **soft delete** | 2026-06-06 | 권고 기본값 적용. ADR-031(예정) |

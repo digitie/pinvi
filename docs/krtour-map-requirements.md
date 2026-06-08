@@ -275,11 +275,28 @@ created_at, updated_at`.
 | K-11 | sync state 적재 | `upsert_sync_state` | ❌ 미구현 | 중 | 증분 적재 필수 |
 | K-12 | healthz public | `healthz()` | △ 확인요망 | 낮음 | |
 | K-13 | feature_id 포맷 명문화 | (계약) | △ 불일치 | **높음** | DEC-02, 정본 선언 |
-| K-14 | 운영급 HTTP 서비스 | (신규) | ❌ debug-only | DEC-01 의존 | 1-B 선택 시에만 |
+| K-14 | 운영급 HTTP 서비스 | (신규) | ✅ 구축됨(`krtour-map-admin` 9011) | — | 2026-06-08 완료 |
+| **K-15** | **단건 feature 추가 API (신규)** | (신규) | **❌ 없음 — 신규 구축 필요** | **높음** | DEC-05, TripMate 제안 승인 흐름 의존 |
 
-> **권장 진행**: DEC-01과 무관하게 **K-3/K-4/K-5/K-13/K-11**(높음)을 먼저 client
-> 메서드로 구현. 통합 모델이 HTTP(1-B)로 확정되면 K-14에서 이 메서드들을 라우터로
-> 얇게 노출 + 인증/포트 정렬 + OpenAPI 생성.
+> **2026-06-08 갱신**: K-1~K-14 대부분 구현 완료(`krtour-map-admin` 운영 HTTP API).
+> 신규 격차는 **K-15**.
+
+### K-15 상세 — 단건 feature 추가 API (krtour 신규 구축)
+
+- **왜/언제**: TripMate 사용자가 "이 장소 추가해주세요" 제안 → **TripMate Admin이
+  검사/승인** → 승인된 **단건**을 krtour feature로 추가해야 한다(DEC-05).
+- **현재 krtour 상태**: feature **추가**는 `POST /admin/offline-uploads`(multipart **파일**
+  CSV/TSV → validate → Dagster load)**뿐**. `/admin/features`는 list + deactivate만 —
+  **단건 "feature 하나 추가" REST 엔드포인트가 없다.**
+- **요청**: 단건 add API 신설. 예:
+  `POST /admin/features`(또는 `/tripmate/features`) body `{ kind, name, coord{lon,lat},
+  category, address?, note?, source:{system:"tripmate", suggestion_id}, marker_*? }` →
+  생성된 `feature_id` 반환. 멱등(같은 source/좌표 중복 방지), dedup 큐 연동, status=draft|active 정책.
+- **대안(임시)**: TripMate Admin이 승인분을 모아 offline-upload 파일로 적재(번거로움).
+- **우선순위 높음**: 사용자 제안 기능(T-177/T-179)의 필수 의존.
+
+> **권장 진행**: K-15(단건 add)와 K-13(feature_id 포맷 명문화)을 우선. 운영 HTTP 서비스
+> (K-14)는 이미 구축됨.
 
 ---
 
@@ -288,5 +305,6 @@ created_at, updated_at`.
    갈 의사가 있는지, 있다면 운영 HTTP 서비스 신설 일정.
 2. `make_feature_id` 확정 포맷(K-13).
 3. K-3/K-4/K-5 구현 가능 시점.
-4. feature 갱신 요청 큐 소유권(DEC-05) 선호.
-5. 클러스터링을 서버(krtour-map DB 집계)가 할지(DEC-04) 선호.
+4. **단건 feature 추가 API(K-15) 신설 시점** — TripMate 사용자 제안 승인 흐름이 의존. 현재
+   add 경로는 offline-upload(파일)뿐이라 단건 추가 불가.
+5. 클러스터링을 서버(krtour-map DB 집계)가 할지(DEC-04) 선호. (in-bounds `cluster_unit`로 구현됨)
