@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (claude) — DEC-05 교정: 재적재≠제안, krtour feature 추가 API 신규 필요(K-15)
+
+**교정(사용자)**: 재적재(feature-update-request)와 사용자 제안은 **완전 별개**.
+- **재적재** = krtour-map **admin 기능**, TripMate 일반 사용자 **비노출**, 제안 흐름과 무관.
+- **사용자 제안** = TripMate user 제출 → **TripMate Admin 검사/승인/거절** → 승인 시
+  **krtour feature 추가 API로 추가**(재적재 호출 아님).
+- **krtour 격차 확정**: feature **추가** API가 **없음**(add 경로는 offline-upload 파일뿐,
+  `/admin/features`는 list+deactivate만) → krtour가 **단건 add API를 신규 구축**해야 함.
+
+**반영**: `decisions-needed` DEC-05 재작성, `krtour-map-requirements.md` **K-15**(단건 feature
+add API, 높음) 신규 등록, `krtour-map-rest-api.md` §2.8/§5/§6/§7, `tasks.md` T-179(→feature 추가,
+K-15 의존). T-177(사용자 제안 큐)은 그대로.
+
 ## 2026-06-08 (claude) — DEC-05 확정: feature 제안/재적재 두 레이어
 
 **결정(사용자)**: krtour `/tripmate/feature-update-requests`는 **admin 영역**(운영자 재적재

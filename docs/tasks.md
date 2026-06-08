@@ -271,7 +271,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /tripmate/features/batch`(string, cap 200) 배선
 - [ ] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결
 - [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X
-- [ ] T-179 — [H2] Admin 검수 → krtour 재적재(DEC-05 확정): `/admin/feature-requests` 검수 + approve 시 운영자가 krtour `POST /tripmate/feature-update-requests`(scope) 호출 + 상태조회, RBAC(admin/operator)+audit, 신규장소는 offline-upload 분기
+- [ ] T-179 — [H2] Admin 검사/승인 → krtour **feature 추가**(DEC-05 확정): `/admin/feature-requests` 검사 + approve/reject 시 krtour 단건 feature 추가 API 호출, RBAC(admin/operator)+audit. **krtour 단건 add API 미존재 → K-15 krtour 신규 구축 의존.** 재적재(feature-update-request)와 무관(그건 krtour-map admin 기능, TripMate 비노출)
 - [ ] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중)
 
 ## 머지 히스토리 (참고)
