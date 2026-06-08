@@ -443,10 +443,11 @@ Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 X-Request-Id 기반 단일 요청 타임라인. structlog 로그 + Sentry transaction +
 `app.api_call_log` row 합쳐 보여줌.
 
-## 13. Backup / Restore 1차
+## 13. Backup / Restore
 
-ADR-022 Sprint 5 1차 범위. 본 API는 TripMate 소유 `app` schema backup snapshot만
-다룬다. `feature` / `provider_sync` schema는 `python-krtour-map` 책임이다.
+ADR-022 범위. 본 API는 TripMate 소유 `app` schema backup snapshot과 동일 DB
+schema-swap restore만 다룬다. `feature` / `provider_sync` schema는
+`python-krtour-map` 책임이다.
 
 ### 13.1 `GET /admin/backup/snapshots`
 
@@ -493,9 +494,57 @@ Content-Type: application/json
 
 응답 201: `GET /admin/backup/snapshots` 항목과 동일한 snapshot 객체.
 
+### 13.3 `POST /admin/backup/restore-hotswap`
+
+```http
+POST /admin/backup/restore-hotswap
+Content-Type: application/json
+
+{
+  "snapshot_id": "tripmate-app-20260606-003000",
+  "access_reason": "운영 복구 훈련",
+  "confirm_schema_swap": true
+}
+```
+
+- 권한: `admin`
+- 동작: `TRIPMATE_RESTORE_HOTSWAP_SCRIPT_PATH`를 subprocess로 실행한다.
+  기본 스크립트는 `TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 custom dump를
+  `app_restore_<ts>`로 remap restore하고, 검증 후 `app` → `app_previous_<ts>`,
+  `app_restore_<ts>` → `app` schema rename을 수행한다.
+- `TRIPMATE_RESTORE_DRAIN_COMMAND`가 있으면 switch 전 write drain 단계에서 실행한다.
+  없으면 `TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1`일 때만 drain을 skip할 수 있다.
+- audit: 성공 시 `action="backup.restore_hotswap"`, 실패 시
+  `action="backup.restore_hotswap_failed"` 기록
+- 실패: snapshot 없음 `404 BACKUP_SNAPSHOT_NOT_FOUND`, 스크립트 실패
+  `503 BACKUP_FAILED`, `confirm_schema_swap=false`는 `422 VALIDATION_ERROR`
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "restore_id": "20260608093000",
+    "snapshot_id": "tripmate-app-20260606-003000",
+    "snapshot_path": "/var/lib/tripmate/backups/tripmate-app-20260606-003000.dump",
+    "restore_schema": "app_restore_20260608093000",
+    "previous_schema": "app_previous_20260608093000",
+    "status": "succeeded",
+    "phases": [
+      { "name": "preparing", "status": "success", "message": "snapshot verified" },
+      { "name": "restoring", "status": "success", "message": "restored" },
+      { "name": "validating", "status": "success", "message": "validated" },
+      { "name": "draining", "status": "success", "message": "drained" },
+      { "name": "switching", "status": "success", "message": "schema-swap completed" }
+    ],
+    "started_at": "2026-06-08T09:30:00Z",
+    "completed_at": "2026-06-08T09:31:00Z"
+  }
+}
+```
+
 단순 restore는 API가 아니라 `scripts/restore-db.sh`와
 [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
-핫스왑 restore UI/API는 Sprint 6의 T-111 범위로 남긴다.
 
 ## 14. MCP 토큰 관리 (ADR-019, Sprint 6)
 

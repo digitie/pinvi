@@ -122,7 +122,9 @@ class Settings(BaseSettings):
     tripmate_backup_dir: str = ".tmp/backups"
     tripmate_backup_script_path: str = "scripts/backup-db.sh"
     tripmate_restore_script_path: str = "scripts/restore-db.sh"
+    tripmate_restore_hotswap_script_path: str = "scripts/restore-hotswap.sh"
     tripmate_backup_timeout_seconds: int = 900
+    tripmate_restore_timeout_seconds: int = 3600
     tripmate_backup_schema: str = "app"
 
     # Feature flag

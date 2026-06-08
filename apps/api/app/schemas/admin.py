@@ -177,3 +177,27 @@ class AdminBackupSnapshot(BaseModel):
     checksum_sha256: str | None
     status: Literal["available", "verified"]
     created_at: datetime
+
+
+class AdminBackupRestoreRequest(BaseModel):
+    snapshot_id: str = Field(min_length=1, max_length=200)
+    access_reason: str = Field(min_length=1, max_length=500)
+    confirm_schema_swap: bool
+
+
+class AdminBackupRestorePhase(BaseModel):
+    name: Literal["preparing", "restoring", "validating", "draining", "switching"]
+    status: Literal["pending", "running", "success", "failed", "skipped"]
+    message: str | None
+
+
+class AdminBackupRestoreRun(BaseModel):
+    restore_id: str
+    snapshot_id: str
+    snapshot_path: str
+    restore_schema: str
+    previous_schema: str
+    status: Literal["succeeded", "failed"]
+    phases: list[AdminBackupRestorePhase]
+    started_at: datetime
+    completed_at: datetime

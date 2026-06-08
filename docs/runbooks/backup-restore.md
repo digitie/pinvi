@@ -32,8 +32,9 @@ open https://tripmateapi.digitie.mywire.org/admin/etl
 ```
 
 현재 UI는 Sprint 5 1차 범위다. `POST /admin/backup/snapshot`으로
-`scripts/backup-db.sh`를 실행하고 결과 snapshot을 표시한다. 진행률 stream,
-RustFS/외부 미러 표시, 핫스왑 restore 버튼은 Sprint 6 T-111에서 확정한다.
+`scripts/backup-db.sh`를 실행하고 결과 snapshot을 표시한다. 핫스왑 restore는
+snapshot 행의 Restore 버튼에서 `POST /admin/backup/restore-hotswap`을 호출한다.
+RustFS/외부 미러 표시는 후속 운영 보강이다.
 
 ### 2.2 CLI (긴급)
 
@@ -135,32 +136,26 @@ sha256sum -c "${SNAPSHOT}.sha256"
 pg_restore --list "${SNAPSHOT}" >/tmp/tripmate-restore-list.txt
 df -h /var/lib/postgresql /var/lib/tripmate/backups
 
-# 2. restore schema 준비/복구
-# T-111에서 scripts/restore-schema-swap.sh가 custom dump의 app schema를
-# ${RESTORE_SCHEMA}로 remap한다.
-sudo ./scripts/restore-schema-swap.sh prepare \
-  --snapshot "${SNAPSHOT}" \
-  --restore-schema "${RESTORE_SCHEMA}"
-
-# 3. restored schema 검증
-sudo ./scripts/restore-schema-swap.sh validate \
-  --restore-schema "${RESTORE_SCHEMA}"
-
-# 4. 짧은 drain + schema swap
-docker compose -f docker-compose.app.yml stop api web
-sudo ./scripts/restore-schema-swap.sh switch \
-  --restore-schema "${RESTORE_SCHEMA}" \
-  --previous-schema "${PREVIOUS_SCHEMA}"
+# 2. restore schema 준비/복구 + 검증 + drain + schema swap
+# 실제 실행 전 staging drill 후 TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
+TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1 \
+TRIPMATE_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
+sudo -E ./scripts/restore-hotswap.sh run \
+  "${SNAPSHOT}" \
+  "${RESTORE_SCHEMA}" \
+  "${PREVIOUS_SCHEMA}"
 docker compose -f docker-compose.app.yml up -d api web
 
-# 5. healthcheck
+# 3. healthcheck
 curl -fsS https://tripmateapi.digitie.mywire.org/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
   https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
 ```
 
 schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 advisory lock, active session
-확인, grants, rollback marker를 함께 처리해야 한다.
+확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본
+`scripts/restore-hotswap.sh`는 custom dump를 `app_restore_<ts>` schema로 remap해
+복구하고 `TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 아래 rename을 수행한다.
 
 ```sql
 BEGIN;

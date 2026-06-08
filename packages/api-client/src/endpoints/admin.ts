@@ -1,6 +1,8 @@
 import {
   AdminActionRequestSchema,
   AdminAuditEntrySchema,
+  AdminBackupRestoreRequestSchema,
+  AdminBackupRestoreRunSchema,
   AdminBackupSnapshotRequestSchema,
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
@@ -179,5 +181,12 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupSnapshotRequestSchema.parse(body)),
       schema: AdminBackupSnapshotSchema,
+    }),
+
+  restoreBackupHotswap: (body: z.infer<typeof AdminBackupRestoreRequestSchema>) =>
+    client.request('/admin/backup/restore-hotswap', {
+      method: 'POST',
+      body: JSON.stringify(AdminBackupRestoreRequestSchema.parse(body)),
+      schema: AdminBackupRestoreRunSchema,
     }),
 });

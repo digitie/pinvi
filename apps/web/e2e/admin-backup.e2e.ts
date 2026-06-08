@@ -62,6 +62,34 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
     });
   });
 
+  await page.route(/.*\/admin\/backup\/restore-hotswap$/, async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.snapshot_id).toBe('tripmate-app-20260606-001500');
+    expect(body.confirm_schema_swap).toBe(true);
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          restore_id: '20260608093000',
+          snapshot_id: 'tripmate-app-20260606-001500',
+          snapshot_path: '/var/lib/tripmate/backups/tripmate-app-20260606-001500.dump',
+          restore_schema: 'app_restore_20260608093000',
+          previous_schema: 'app_previous_20260608093000',
+          status: 'succeeded',
+          phases: [
+            { name: 'preparing', status: 'success', message: 'checked' },
+            { name: 'restoring', status: 'success', message: 'restored' },
+            { name: 'validating', status: 'success', message: 'validated' },
+            { name: 'draining', status: 'success', message: 'drained' },
+            { name: 'switching', status: 'success', message: 'switched' },
+          ],
+          started_at: '2026-06-08T09:30:00+09:00',
+          completed_at: '2026-06-08T09:31:00+09:00',
+        },
+      }),
+    });
+  });
+
   await page.goto('/admin/backup');
 
   await expect(page.getByRole('heading', { name: 'Backup' })).toBeVisible();
@@ -74,6 +102,17 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
   await expect(page.getByTestId('admin-backup-filename').first()).toContainText(
     'tripmate-app-20260606-003000.dump',
   );
+
+  await page.getByTestId('admin-backup-restore').last().click();
+  await expect(page.getByTestId('restore-snapshot-name')).toContainText(
+    'tripmate-app-20260606-001500.dump',
+  );
+  await page.getByTestId('restore-reason').fill('복구 훈련');
+  await page.getByTestId('restore-confirm').check();
+  await page.getByTestId('restore-submit').click();
+  await expect(page.getByTestId('restore-run-id')).toContainText('20260608093000');
+  await expect(page.getByTestId('restore-phase-switching')).toContainText('success');
+  await expect(page.getByText(/핫스왑 restore 요청이 완료됐습니다/)).toBeVisible();
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('9011'))).toBe(false);

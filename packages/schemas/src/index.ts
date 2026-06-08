@@ -140,6 +140,9 @@ export {
   AdminChainVerifySchema,
   AdminBackupSnapshotRequestSchema,
   AdminBackupSnapshotSchema,
+  AdminBackupRestoreRequestSchema,
+  AdminBackupRestorePhaseSchema,
+  AdminBackupRestoreRunSchema,
 } from './admin';
 export type {
   AdminUserSummary,
@@ -161,6 +164,9 @@ export type {
   AdminChainVerify,
   AdminBackupSnapshotRequest,
   AdminBackupSnapshot,
+  AdminBackupRestoreRequest,
+  AdminBackupRestorePhase,
+  AdminBackupRestoreRun,
 } from './admin';
 
 export {
