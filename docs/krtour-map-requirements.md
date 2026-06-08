@@ -276,24 +276,21 @@ created_at, updated_at`.
 | K-12 | healthz public | `healthz()` | △ 확인요망 | 낮음 | |
 | K-13 | feature_id 포맷 명문화 | (계약) | △ 불일치 | **높음** | DEC-02, 정본 선언 |
 | K-14 | 운영급 HTTP 서비스 | (신규) | ✅ 구축됨(`krtour-map-admin` 9011) | — | 2026-06-08 완료 |
-| **K-15** | **단건 feature 추가 API (신규)** | (신규) | **❌ 없음 — 신규 구축 필요** | **높음** | DEC-05, TripMate 제안 승인 흐름 의존 |
+| **K-15** | **단건 feature 추가/수정/삭제 API** | (신규) | **✅ 구축됨 — krtour PR #317** | — | 2026-06-09 완료 |
 
-> **2026-06-08 갱신**: K-1~K-14 대부분 구현 완료(`krtour-map-admin` 운영 HTTP API).
-> 신규 격차는 **K-15**.
+> **2026-06-09 갱신**: K-1~K-15 모두 구현 완료. K-15는 krtour **PR #317**(`POST/PATCH/DELETE
+> /admin/features` + 검수 워크플로 + version 0/1 분리)로 해소.
 
-### K-15 상세 — 단건 feature 추가 API (krtour 신규 구축)
+### K-15 — 단건 feature 추가/수정/삭제 API ✅ (krtour PR #317 구현)
 
-- **왜/언제**: TripMate 사용자가 "이 장소 추가해주세요" 제안 → **TripMate Admin이
-  검사/승인** → 승인된 **단건**을 krtour feature로 추가해야 한다(DEC-05).
-- **현재 krtour 상태**: feature **추가**는 `POST /admin/offline-uploads`(multipart **파일**
-  CSV/TSV → validate → Dagster load)**뿐**. `/admin/features`는 list + deactivate만 —
-  **단건 "feature 하나 추가" REST 엔드포인트가 없다.**
-- **요청**: 단건 add API 신설. 예:
-  `POST /admin/features`(또는 `/tripmate/features`) body `{ kind, name, coord{lon,lat},
-  category, address?, note?, source:{system:"tripmate", suggestion_id}, marker_*? }` →
-  생성된 `feature_id` 반환. 멱등(같은 source/좌표 중복 방지), dedup 큐 연동, status=draft|active 정책.
-- **대안(임시)**: TripMate Admin이 승인분을 모아 offline-upload 파일로 적재(번거로움).
-- **우선순위 높음**: 사용자 제안 기능(T-177/T-179)의 필수 의존.
+- **왜/언제**: TripMate 사용자 제안 → **TripMate Admin 검사/승인** → 승인된 단건을 krtour
+  feature로 반영(DEC-05).
+- **krtour 구현(PR #317)**: `POST /admin/features`(create) / `PATCH /admin/features/{id}`(수정) /
+  `DELETE /admin/features/{id}`(soft delete), `place`/`event` 대상. `review_mode`
+  (require_review|immediate), version 0(provider)/1(user) 분리 + 재적재 보존. 응답에
+  `feature_id`/`request_id`/state. (계약 상세 `docs/integrations/krtour-map-rest-api.md` §2.9.)
+- **TripMate 후속**: T-179(Admin 승인→호출) + T-180(admin 9012 client). 연동 합의 5건
+  (review_mode 등)은 krtour PR #317 코멘트로 질의(§7).
 
 > **권장 진행**: K-15(단건 add)와 K-13(feature_id 포맷 명문화)을 우선. 운영 HTTP 서비스
 > (K-14)는 이미 구축됨.

@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — krtour PR #317 리뷰 + TripMate 반영(K-15 해소)
+
+**작업**: krtour-map PR #317("admin feature change API")을 TripMate consumer 관점에서 리뷰하고
+PR에 코멘트를 남긴 뒤, TripMate 문서/태스크에 반영했다.
+
+**PR #317 핵심(TripMate 영향)**:
+- **K-15 해소**: `POST/PATCH/DELETE /admin/features`(place/event 추가/수정/soft delete) +
+  검수 워크플로(`/admin/features/change-requests` approve/reject) + version 0(provider)/1(user)
+  분리 + 재적재 보존. → DEC-05 사용자 제안 승인 흐름(T-179) actionable.
+- `/tripmate/feature-update-requests*` 제거 → `/admin/feature-update-requests*` 고정(DEC-05 정합).
+- **user API(9011) 무영향**: `/tripmate/features/batch`·`/features/*` 유지 → T-170 client 변경 없음.
+
+**TripMate 반영**:
+- `integrations/krtour-map-rest-api.md`: §2.8 경로 갱신 + **§2.9 feature change API** 신설 +
+  §4(T-170/171 완료) + §5/§6(T-179 actionable, **T-180** admin client) + §7(연동 합의 5건).
+- `krtour-map-requirements.md` K-15 ✅ resolved. `decisions-needed` DEC-05 갱신.
+- `tasks.md` T-179 actionable + T-180 신규.
+
+**연동 합의 질의(krtour PR #317 코멘트)**: review_mode(이중 검수 방지), idempotency 멱등,
+출처 태깅, admin 인증(9012), closure(DELETE vs deactivate).
+
 ## 2026-06-09 (claude) — T-170/T-171 krtour-map HTTP client + config 배선
 
 **작업**: TripMate↔krtour-map 연결 토대. `docs/integrations/krtour-map-rest-api.md` 계약 기준.
