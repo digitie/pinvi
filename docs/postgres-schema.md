@@ -56,6 +56,7 @@ CREATE TABLE app.users (
   roles                   varchar(16)[] NOT NULL DEFAULT ARRAY['user']::varchar[],
   email_verified_at       timestamptz,
   email_status            varchar(16) NOT NULL DEFAULT 'active',
+  access_token_version    integer NOT NULL DEFAULT 0,
   is_active               boolean NOT NULL DEFAULT true,
   deleted_at              timestamptz,
   created_at              timestamptz NOT NULL DEFAULT now(),
@@ -66,7 +67,8 @@ CREATE TABLE app.users (
   CONSTRAINT ck_users_email_status CHECK (email_status IN ('active', 'bounced', 'complained')),
   CONSTRAINT ck_users_gender CHECK (
     gender IS NULL OR gender IN ('female', 'male', 'non_binary', 'no_answer')
-  )
+  ),
+  CONSTRAINT ck_users_access_token_version_nonnegative CHECK (access_token_version >= 0)
 );
 
 CREATE UNIQUE INDEX uq_users_email ON app.users (email);
@@ -118,8 +120,12 @@ CREATE INDEX user_sessions_active_idx
   WHERE revoked_at IS NULL;
 ```
 
+`access_token_version`은 access JWT의 `token_version` claim과 비교한다. 비밀번호 재설정
+등 전체 세션 무효화 이벤트에서 증가하며, 이전 access JWT는 만료 시간 전이라도 거부된다.
+
 `session_token_hash`는 refresh token 원문이 아닌 SHA-256 hash다. refresh 성공 시 기존
-row의 `revoked_at`을 채우고 새 row를 발급한다.
+row의 `revoked_at`을 채우고 새 row를 발급한다. 회전 처리는 기존 row를 잠가 같은 refresh
+token 동시 재사용이 새 session을 둘 이상 만들지 못하게 한다.
 
 ### 2.4 `app.user_email_verifications`
 

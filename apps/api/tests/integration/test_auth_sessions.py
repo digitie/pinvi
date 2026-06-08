@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -11,7 +12,12 @@ from sqlalchemy import select
 from app.core.security import hash_password
 from app.models.session import UserSession
 from app.models.user import User
-from app.services.auth_session import hash_session_token
+from app.services.auth_session import (
+    RefreshTokenExpiredError,
+    RefreshTokenInvalidError,
+    hash_session_token,
+    refresh_user_session,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -90,6 +96,44 @@ async def test_refresh_rotates_refresh_session(client, session_factory) -> None:
     replay_resp = await client.post("/auth/refresh", cookies={"tripmate_refresh": old_refresh})
     assert replay_resp.status_code == 401
     assert replay_resp.json()["error"]["code"] == "TOKEN_EXPIRED"
+
+
+async def test_refresh_rotation_is_single_use_under_race(client, session_factory) -> None:
+    user_id, email, password = await _seed_active_user(session_factory)
+    login_resp = await client.post("/auth/login", json={"email": email, "password": password})
+    old_refresh = login_resp.cookies["tripmate_refresh"]
+    client.cookies.clear()
+
+    async def rotate_once() -> str:
+        async with session_factory() as db:
+            try:
+                refreshed = await refresh_user_session(db, refresh_token=old_refresh)
+            except (RefreshTokenExpiredError, RefreshTokenInvalidError) as exc:
+                return exc.code
+            return refreshed.issue.refresh_token
+
+    results = await asyncio.gather(rotate_once(), rotate_once())
+
+    successes = [result for result in results if result not in {"TOKEN_EXPIRED", "TOKEN_INVALID"}]
+    failures = [result for result in results if result in {"TOKEN_EXPIRED", "TOKEN_INVALID"}]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert successes[0] != old_refresh
+
+    async with session_factory() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(UserSession)
+                    .where(UserSession.user_id == uuid.UUID(user_id))
+                    .order_by(UserSession.created_at.asc())
+                )
+            ).scalars()
+        )
+        assert len(rows) == 2
+        assert sum(row.revoked_at is None for row in rows) == 1
+        assert rows[0].session_token_hash == hash_session_token(old_refresh)
+        assert rows[0].revoked_at is not None
 
 
 async def test_refresh_rejects_expired_session_and_revokes_it(client, session_factory) -> None:

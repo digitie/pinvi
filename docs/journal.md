@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-163 access JWT 무효화 + refresh race 보강
+
+**작업**: PR #76 사후 리뷰 잔존인 비밀번호 재설정 후 access JWT 유효 시간 잔존과
+refresh token 동시 회전 race를 보강했다.
+
+**변경**:
+- `app.users.access_token_version` migration/model 추가. access JWT에는 `token_version`
+  claim을 싣고, 인증 의존성은 사용자 상태와 현재 version을 DB에서 검증한다.
+- 비밀번호 재설정 성공 시 `access_token_version` 증가 + 기존 refresh session 일괄
+  revoke + reset 완료 새 session 발급으로 access/refresh 전체 무효화를 맞췄다.
+- `refresh_user_session`은 기존 refresh row를 `FOR UPDATE`로 잠근 뒤 revoke/insert를
+  수행해 같은 refresh token 동시 재사용이 session을 둘 이상 만들지 못하게 했다.
+- reset 전 access cookie 401 회귀 테스트와 refresh 동시 회전 단일 성공 테스트를 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/core/deps.py app/models/user.py app/services/auth_session.py app/services/user_registration.py tests/integration/test_auth_sessions.py tests/integration/test_password_reset_flow.py alembic/versions/20260608_0012_user_access_token_version.py`
+- WSL2 ext4 mirror: `ruff check app/core/deps.py app/models/user.py app/services/auth_session.py app/services/user_registration.py tests/integration/test_auth_sessions.py tests/integration/test_password_reset_flow.py alembic/versions/20260608_0012_user_access_token_version.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/deps.py app/models/user.py app/services/auth_session.py app/services/user_registration.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_auth_sessions.py tests/integration/test_password_reset_flow.py`
+
+**다음**: T-164 geofence outage 풋건 startup 가드 + shared-secret 외 방어심화.
+
 ## 2026-06-08 (claude) — krtour-map REST API 계약 문서화 (붙이기 청사진)
 
 **작업**: TripMate↔krtour-map 연결 작업 진입 전, 양쪽 docs+code를 대조해 REST API 계약을

@@ -52,10 +52,13 @@ def _truncate_user_agent(user_agent: str | None) -> str | None:
     return user_agent[:512]
 
 
-def _issue_tokens(*, user_id: uuid.UUID) -> IssuedAuthSession:
+def _issue_tokens(*, user: User) -> IssuedAuthSession:
     refresh_token = generate_opaque_token(32)
     return IssuedAuthSession(
-        access_token=create_access_token(subject=str(user_id)),
+        access_token=create_access_token(
+            subject=str(user.user_id),
+            extra={"token_version": user.access_token_version or 0},
+        ),
         refresh_token=refresh_token,
         expires_at=utc_now() + timedelta(days=settings.tripmate_refresh_token_days),
     )
@@ -68,7 +71,17 @@ async def issue_user_session(
     user_agent: str | None = None,
     ip_address: str | None = None,
 ) -> IssuedAuthSession:
-    issue = _issue_tokens(user_id=user_id)
+    user = await db.scalar(
+        select(User).where(
+            User.user_id == user_id,
+            User.deleted_at.is_(None),
+            User.is_active.is_(True),
+        )
+    )
+    if user is None or user.status in {"disabled", "deleted"}:
+        raise RefreshTokenInvalidError("세션 사용자를 찾을 수 없습니다.")
+
+    issue = _issue_tokens(user=user)
     db.add(
         UserSession(
             user_id=user_id,
@@ -91,9 +104,9 @@ async def refresh_user_session(
 ) -> RefreshedAuthSession:
     now = utc_now()
     session = await db.scalar(
-        select(UserSession).where(
-            UserSession.session_token_hash == hash_session_token(refresh_token)
-        )
+        select(UserSession)
+        .where(UserSession.session_token_hash == hash_session_token(refresh_token))
+        .with_for_update()
     )
     if session is None:
         raise RefreshTokenInvalidError("refresh token을 찾을 수 없습니다.")
@@ -117,7 +130,7 @@ async def refresh_user_session(
         raise RefreshTokenInvalidError("세션 사용자를 찾을 수 없습니다.")
 
     session.revoked_at = now
-    issue = _issue_tokens(user_id=user.user_id)
+    issue = _issue_tokens(user=user)
     db.add(
         UserSession(
             user_id=user.user_id,

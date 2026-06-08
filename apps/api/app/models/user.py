@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Boolean, DateTime, String, text
+from sqlalchemy import ARRAY, Boolean, DateTime, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,6 +47,11 @@ class User(Base, TimestampMixin):
         String(16),
         nullable=False,
         server_default="active",
+    )
+    access_token_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("0"),
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
