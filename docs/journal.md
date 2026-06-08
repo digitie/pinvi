@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (claude) — DEC-05 확정: feature 제안/재적재 두 레이어
+
+**결정(사용자)**: krtour `/tripmate/feature-update-requests`는 **admin 영역**(운영자 재적재
+트리거)이고, **사용자 제안 기능도 v1에 구현**한다. → 두 레이어:
+- (user) `app.feature_suggestions` 큐 + `POST/GET /features/requests` — 사용자 제출(즉시 201),
+  rate-limit/dedup. krtour 직접 호출 X. (감사 C-12 미존재 테이블 실체화)
+- (admin) `/admin/feature-requests` 검수 → approve 시 운영자가 krtour 재적재 호출(scope) +
+  상태조회, RBAC(admin/operator)+audit. 신규장소는 offline-upload 분기.
+
+**반영**: `decisions-needed-2026-06-06.md` DEC-05 확정 기록,
+`integrations/krtour-map-rest-api.md` §2.8/§5/§6/§7, `tasks.md` T-177(user 큐)/T-179(admin 재적재).
+
 ## 2026-06-08 (codex) — T-168 storage AttachmentResponse 호환 alias
 
 **작업**: PR #73 사후 리뷰 잔존인 storage `AttachmentResponse`와 notice-plan attachment
