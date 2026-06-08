@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date as Date
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.schemas.poi import PoiRiseSetResponse
+from app.schemas.storage import AttachmentResponse
 
 RegionSource = Literal["manual", "poi_snapshot", "geocoded"]
 
@@ -24,8 +26,8 @@ class TripBase(BaseModel):
         max_length=10,
         pattern=r"^[0-9]{2,10}$",
     )
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: Date | None = None
+    end_date: Date | None = None
     visibility: Literal["private", "unlisted", "public"] = "private"
 
 
@@ -107,10 +109,65 @@ class TripUpdate(BaseModel):
         pattern=r"^[0-9]{2,10}$",
     )
     cover_attachment_id: uuid.UUID | None = None
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: Date | None = None
+    end_date: Date | None = None
     visibility: Literal["private", "unlisted", "public"] | None = None
     status: Literal["draft", "planned", "in_progress", "completed", "archived"] | None = None
+
+
+class TripDeleteRequest(BaseModel):
+    mode: Literal["soft_delete", "transfer_leader"] = "soft_delete"
+    new_owner_user_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _check_transfer_target(self) -> TripDeleteRequest:
+        if self.mode == "transfer_leader" and self.new_owner_user_id is None:
+            raise ValueError("transfer_leader에는 new_owner_user_id가 필요합니다.")
+        return self
+
+
+class TripDayCreate(BaseModel):
+    day_index: int = Field(ge=1)
+    date: Date | None = None
+    title: str | None = Field(default=None, max_length=200)
+    note: str | None = None
+
+
+class TripDayUpdate(BaseModel):
+    date: Date | None = None
+    title: str | None = Field(default=None, max_length=200)
+    note: str | None = None
+
+
+class TripDayResponse(BaseModel):
+    trip_id: uuid.UUID
+    day_index: int
+    date: Date | None
+    title: str | None
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TripCopyRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    scope: Literal["all", "day", "range"] = "all"
+    day_index: int | None = Field(default=None, ge=1)
+    start_day_index: int | None = Field(default=None, ge=1)
+    end_day_index: int | None = Field(default=None, ge=1)
+    date_shift_days: int = 0
+    target_trip_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _check_scope(self) -> TripCopyRequest:
+        if self.scope == "day" and self.day_index is None:
+            raise ValueError("scope=day에는 day_index가 필요합니다.")
+        if self.scope == "range":
+            if self.start_day_index is None or self.end_day_index is None:
+                raise ValueError("scope=range에는 start_day_index/end_day_index가 필요합니다.")
+            if self.end_day_index < self.start_day_index:
+                raise ValueError("end_day_index는 start_day_index 이후여야 합니다.")
+        return self
 
 
 class TripResponse(BaseModel):
@@ -121,13 +178,21 @@ class TripResponse(BaseModel):
     region_hint: str | None
     primary_region_code: str | None
     primary_region_source: RegionSource | None
-    start_date: date | None
-    end_date: date | None
+    start_date: Date | None
+    end_date: Date | None
     visibility: Literal["private", "unlisted", "public"]
     status: Literal["draft", "planned", "in_progress", "completed", "archived"]
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class TripCopyResponse(BaseModel):
+    trip: TripResponse
+    created_trip: bool
+    copied_day_count: int
+    copied_poi_count: int
+    copied_attachment_count: int
 
 
 class TripViewPoi(BaseModel):
@@ -155,7 +220,7 @@ class TripViewPoi(BaseModel):
 
 class TripViewDay(BaseModel):
     day_index: int
-    date: date | None
+    date: Date | None
     title: str | None
     pois: list[TripViewPoi]
 
@@ -175,3 +240,43 @@ class TripView(BaseModel):
     companions: list[TripCompanionResponse]
     share_links: list[TripViewShareLink]
     broken_feature_count: int
+
+
+class TripSharedView(BaseModel):
+    visibility: Literal["view_only", "comment", "edit"]
+    trip: TripResponse
+    days: list[TripViewDay]
+    broken_feature_count: int
+
+
+class TripDayOptimizeRequest(BaseModel):
+    strategy: Literal["nearest_neighbor"] = "nearest_neighbor"
+    start_poi_id: uuid.UUID | None = None
+    persist: bool = False
+
+
+class TripDayOptimizeMove(BaseModel):
+    poi_id: uuid.UUID
+    old_sort_order: str
+    new_sort_order: str
+
+
+class TripDayOptimizeResponse(BaseModel):
+    trip_id: uuid.UUID
+    day_index: int
+    ordered_poi_ids: list[uuid.UUID]
+    moves: list[TripDayOptimizeMove]
+    distance_meters: int | None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TripDistanceMatrixResponse(BaseModel):
+    trip_id: uuid.UUID
+    day_index: int
+    poi_ids: list[uuid.UUID]
+    distances_meters: list[list[int | None]]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TripAttachmentResponse(AttachmentResponse):
+    pass

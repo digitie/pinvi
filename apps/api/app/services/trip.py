@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_opaque_token
+from app.models.attachment import CuratedPlanAttachment
 from app.models.comment import TripComment
 from app.models.companion import TripCompanion
+from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
+from app.models.trip_day import TripDay
 from app.models.user import User
+from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 
@@ -43,10 +49,31 @@ class TripCommentNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
 
 
+class TripDayConflictError(TripError):
+    code = "TRIP_DAY_CONFLICT"
+
+
+class TripDayNotFoundError(TripError):
+    code = "RESOURCE_NOT_FOUND"
+
+
+class TripCopyError(TripError):
+    code = "TRIP_COPY_ERROR"
+
+
+class TripAttachmentNotFoundError(TripError):
+    code = "RESOURCE_NOT_FOUND"
+
+
+class TripOptimizeError(TripError):
+    code = "TRIP_OPTIMIZE_ERROR"
+
+
 TripBucket = Literal["future", "past", "all"]
 TripListSort = Literal["-updated_at", "start_date", "-start_date", "title"]
 TripStatus = Literal["draft", "planned", "in_progress", "completed", "archived"]
 TripVisibility = Literal["private", "unlisted", "public"]
+TripCopyScope = Literal["all", "day", "range"]
 
 
 async def create_trip(
@@ -182,6 +209,385 @@ async def update_trip(
     await db.commit()
     await db.refresh(trip)
     return trip
+
+
+async def delete_or_transfer_trip(
+    db: AsyncSession,
+    *,
+    trip: Trip,
+    actor_user_id: uuid.UUID,
+    mode: str,
+    new_owner_user_id: uuid.UUID | None,
+) -> Trip:
+    if mode == "soft_delete":
+        trip.status = "archived"
+        trip.deleted_at = datetime.now(UTC)
+        trip.version += 1
+        await db.commit()
+        await db.refresh(trip)
+        return trip
+
+    if new_owner_user_id is None:
+        raise TripCopyError("새 owner가 필요합니다.")
+    new_owner = await db.scalar(
+        select(User).where(User.user_id == new_owner_user_id, User.deleted_at.is_(None))
+    )
+    if new_owner is None:
+        raise TripNotFoundError("새 owner 사용자를 찾을 수 없습니다.")
+    if new_owner.user_id == trip.owner_user_id:
+        raise TripCopyError("현재 owner와 동일한 사용자에게 이전할 수 없습니다.")
+
+    new_owner_companion = await db.scalar(
+        select(TripCompanion).where(
+            TripCompanion.trip_id == trip.trip_id,
+            TripCompanion.user_id == new_owner.user_id,
+        )
+    )
+    if new_owner_companion is not None:
+        await db.delete(new_owner_companion)
+
+    former_owner_companion = await db.scalar(
+        select(TripCompanion).where(
+            TripCompanion.trip_id == trip.trip_id,
+            TripCompanion.user_id == actor_user_id,
+        )
+    )
+    if former_owner_companion is None:
+        now = datetime.now(UTC)
+        db.add(
+            TripCompanion(
+                trip_id=trip.trip_id,
+                user_id=actor_user_id,
+                role="co_owner",
+                invited_at=now,
+                joined_at=now,
+            )
+        )
+    else:
+        former_owner_companion.role = "co_owner"
+        former_owner_companion.joined_at = former_owner_companion.joined_at or datetime.now(UTC)
+
+    trip.owner_user_id = new_owner.user_id
+    trip.version += 1
+    await db.commit()
+    await db.refresh(trip)
+    return trip
+
+
+async def create_trip_day(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+    date_value: date | None,
+    title: str | None,
+    note: str | None,
+) -> TripDay:
+    day = TripDay(trip_id=trip_id, day_index=day_index, date=date_value, title=title, note=note)
+    db.add(day)
+    await _bump_trip_version(db, trip_id=trip_id)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise TripDayConflictError("이미 존재하는 day_index입니다.") from exc
+    await db.refresh(day)
+    return day
+
+
+async def get_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> TripDay:
+    day = await db.scalar(
+        select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
+    )
+    if day is None:
+        raise TripDayNotFoundError("여행 day를 찾을 수 없습니다.")
+    return day
+
+
+async def update_trip_day(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+    patch: dict[str, Any],
+) -> TripDay:
+    day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    for key, value in patch.items():
+        setattr(day, key, value)
+    await _bump_trip_version(db, trip_id=trip_id)
+    await db.commit()
+    await db.refresh(day)
+    return day
+
+
+async def delete_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> None:
+    day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    await db.delete(day)
+    await _bump_trip_version(db, trip_id=trip_id)
+    await db.commit()
+
+
+async def copy_trip(
+    db: AsyncSession,
+    *,
+    source_trip: Trip,
+    actor_user_id: uuid.UUID,
+    title: str | None,
+    scope: TripCopyScope,
+    day_index: int | None,
+    start_day_index: int | None,
+    end_day_index: int | None,
+    date_shift_days: int,
+    target_trip_id: uuid.UUID | None,
+) -> tuple[Trip, bool, int, int, int]:
+    days = await _select_copy_days(
+        db,
+        trip_id=source_trip.trip_id,
+        scope=scope,
+        day_index=day_index,
+        start_day_index=start_day_index,
+        end_day_index=end_day_index,
+    )
+    source_day_indexes = None if scope == "all" else [day.day_index for day in days]
+
+    created_trip = False
+    if target_trip_id is None:
+        target_trip = Trip(
+            owner_user_id=actor_user_id,
+            title=title or f"{source_trip.title} copy",
+            description=source_trip.description,
+            region_hint=source_trip.region_hint,
+            primary_region_code=source_trip.primary_region_code,
+            primary_region_source=source_trip.primary_region_source,
+            start_date=_shift_date(source_trip.start_date, date_shift_days),
+            end_date=_shift_date(source_trip.end_date, date_shift_days),
+            visibility="private",
+            status="draft",
+        )
+        db.add(target_trip)
+        await db.flush()
+        created_trip = True
+    else:
+        existing_target_trip = await db.scalar(
+            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+        )
+        if existing_target_trip is None:
+            raise TripNotFoundError("대상 여행을 찾을 수 없습니다.")
+        if existing_target_trip.owner_user_id != actor_user_id:
+            raise TripPermissionError("대상 여행 소유자만 합칠 수 있습니다.")
+        target_trip = existing_target_trip
+
+    copied_day_count = 0
+    for source_day in days:
+        target_day = await db.scalar(
+            select(TripDay).where(
+                TripDay.trip_id == target_trip.trip_id,
+                TripDay.day_index == source_day.day_index,
+            )
+        )
+        if target_day is None:
+            db.add(
+                TripDay(
+                    trip_id=target_trip.trip_id,
+                    day_index=source_day.day_index,
+                    date=_shift_date(source_day.date, date_shift_days),
+                    title=source_day.title,
+                    note=source_day.note,
+                )
+            )
+            copied_day_count += 1
+
+    source_pois = await _list_copy_pois(
+        db,
+        trip_id=source_trip.trip_id,
+        day_indexes=source_day_indexes,
+    )
+    last_sort: dict[int, str | None] = {}
+    poi_id_map: dict[uuid.UUID, uuid.UUID] = {}
+    copied_poi_count = 0
+    for source_poi in source_pois:
+        if not created_trip and source_poi.day_index not in last_sort:
+            last_sort[source_poi.day_index] = await _max_sort_order(
+                db,
+                target_trip.trip_id,
+                source_poi.day_index,
+            )
+        sort_order = source_poi.sort_order
+        if not created_trip:
+            sort_order = lexorank.between(last_sort[source_poi.day_index], None)
+            last_sort[source_poi.day_index] = sort_order
+        copied = TripDayPoi(
+            trip_id=target_trip.trip_id,
+            day_index=source_poi.day_index,
+            sort_order=sort_order,
+            feature_id=source_poi.feature_id,
+            feature_link_broken_at=source_poi.feature_link_broken_at,
+            feature_snapshot=source_poi.feature_snapshot,
+            custom_marker_color=source_poi.custom_marker_color,
+            custom_marker_icon=source_poi.custom_marker_icon,
+            planned_arrival_at=_shift_datetime(source_poi.planned_arrival_at, date_shift_days),
+            planned_departure_at=_shift_datetime(source_poi.planned_departure_at, date_shift_days),
+            user_note=source_poi.user_note,
+            budget_amount=source_poi.budget_amount,
+            actual_amount=source_poi.actual_amount,
+            currency=source_poi.currency,
+            user_url=source_poi.user_url,
+            added_by_user_id=actor_user_id,
+        )
+        db.add(copied)
+        await db.flush()
+        poi_id_map[source_poi.attachment_id] = copied.attachment_id
+        copied_poi_count += 1
+
+    copied_attachment_count = await _copy_trip_attachments(
+        db,
+        source_trip_id=source_trip.trip_id,
+        target_trip_id=target_trip.trip_id,
+        poi_id_map=poi_id_map,
+        actor_user_id=actor_user_id,
+        include_trip_level=scope == "all",
+    )
+    target_trip.version += 1
+    await db.commit()
+    await db.refresh(target_trip)
+    return target_trip, created_trip, copied_day_count, copied_poi_count, copied_attachment_count
+
+
+async def get_trip_for_share_token(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    token: str,
+) -> tuple[Trip, TripShareLink]:
+    share = await db.scalar(
+        select(TripShareLink).where(
+            TripShareLink.trip_id == trip_id,
+            TripShareLink.token_hash == sha256_hex(token),
+            TripShareLink.revoked_at.is_(None),
+        )
+    )
+    now = datetime.now(UTC)
+    if share is None or (share.expires_at is not None and share.expires_at <= now):
+        raise TripNotFoundError("공유 토큰을 찾을 수 없습니다.")
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
+    if trip is None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
+    share.last_used_at = now
+    await db.commit()
+    await db.refresh(share)
+    return trip, share
+
+
+async def list_attachments(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+) -> list[CuratedPlanAttachment]:
+    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    if trip_id is not None:
+        filters.append(CuratedPlanAttachment.trip_id == trip_id)
+    if trip_poi_id is not None:
+        filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
+    result = await db.execute(
+        select(CuratedPlanAttachment)
+        .where(*filters)
+        .order_by(CuratedPlanAttachment.sort_order.asc(), CuratedPlanAttachment.created_at.asc())
+    )
+    return list(result.scalars())
+
+
+async def create_attachment(
+    db: AsyncSession,
+    *,
+    uploaded_by_user_id: uuid.UUID,
+    trip_id: uuid.UUID | None,
+    trip_poi_id: uuid.UUID | None,
+    payload: dict[str, Any],
+) -> CuratedPlanAttachment:
+    attachment = CuratedPlanAttachment(
+        trip_id=trip_id,
+        trip_poi_id=trip_poi_id,
+        uploaded_by_user_id=uploaded_by_user_id,
+        **payload,
+    )
+    db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
+    return attachment
+
+
+async def delete_attachment(
+    db: AsyncSession,
+    *,
+    attachment_id: uuid.UUID,
+    trip_id: uuid.UUID | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+) -> None:
+    filters = [
+        CuratedPlanAttachment.attachment_id == attachment_id,
+        CuratedPlanAttachment.deleted_at.is_(None),
+    ]
+    if trip_id is not None:
+        filters.append(CuratedPlanAttachment.trip_id == trip_id)
+    if trip_poi_id is not None:
+        filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
+    attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
+    if attachment is None:
+        raise TripAttachmentNotFoundError("첨부를 찾을 수 없습니다.")
+    attachment.deleted_at = datetime.now(UTC)
+    await db.commit()
+
+
+async def build_distance_matrix(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+) -> tuple[list[TripDayPoi], list[list[int | None]], list[str]]:
+    pois = await _list_day_pois(db, trip_id=trip_id, day_index=day_index)
+    coords = [_extract_coord(poi.feature_snapshot) for poi in pois]
+    warnings: list[str] = []
+    missing = sum(1 for coord in coords if coord is None)
+    if missing:
+        warnings.append(f"{missing}개 POI는 좌표가 없어 거리 계산에서 제외됩니다.")
+    matrix: list[list[int | None]] = []
+    for left in coords:
+        row: list[int | None] = []
+        for right in coords:
+            row.append(None if left is None or right is None else _distance_meters(left, right))
+        matrix.append(row)
+    return pois, matrix, warnings
+
+
+async def optimize_trip_day(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+    start_poi_id: uuid.UUID | None,
+    persist: bool,
+) -> tuple[list[TripDayPoi], list[tuple[TripDayPoi, str, str]], int | None, list[str]]:
+    pois = await _list_day_pois(db, trip_id=trip_id, day_index=day_index)
+    if not pois:
+        raise TripDayNotFoundError("최적화할 POI가 없습니다.")
+    ordered, total_distance, warnings = _nearest_neighbor_order(pois, start_poi_id=start_poi_id)
+    moves: list[tuple[TripDayPoi, str, str]] = []
+    next_sort: str | None = None
+    for poi in ordered:
+        old_sort = poi.sort_order
+        new_sort = lexorank.between(next_sort, None)
+        next_sort = new_sort
+        if old_sort != new_sort:
+            moves.append((poi, old_sort, new_sort))
+        if persist:
+            poi.sort_order = new_sort
+            poi.version += 1
+    if persist and moves:
+        await db.commit()
+        for poi, _, _ in moves:
+            await db.refresh(poi)
+    return ordered, moves, total_distance, warnings
 
 
 async def invite_companion(
@@ -354,6 +760,225 @@ async def delete_comment(
     await db.commit()
     await db.refresh(comment)
     return comment
+
+
+async def _bump_trip_version(db: AsyncSession, *, trip_id: uuid.UUID) -> None:
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+    if trip is not None:
+        trip.version += 1
+
+
+async def _select_copy_days(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    scope: TripCopyScope,
+    day_index: int | None,
+    start_day_index: int | None,
+    end_day_index: int | None,
+) -> list[TripDay]:
+    stmt = select(TripDay).where(TripDay.trip_id == trip_id)
+    if scope == "day":
+        if day_index is None:
+            raise TripCopyError("day_index가 필요합니다.")
+        stmt = stmt.where(TripDay.day_index == day_index)
+    elif scope == "range":
+        if start_day_index is None or end_day_index is None:
+            raise TripCopyError("start_day_index/end_day_index가 필요합니다.")
+        stmt = stmt.where(
+            TripDay.day_index >= start_day_index,
+            TripDay.day_index <= end_day_index,
+        )
+    result = await db.execute(stmt.order_by(TripDay.day_index.asc()))
+    days = list(result.scalars())
+    if scope != "all" and not days:
+        raise TripDayNotFoundError("복사할 day를 찾을 수 없습니다.")
+    return days
+
+
+async def _list_copy_pois(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_indexes: list[int] | None,
+) -> list[TripDayPoi]:
+    if day_indexes == []:
+        return []
+    filters: list[Any] = [
+        TripDayPoi.trip_id == trip_id,
+        TripDayPoi.deleted_at.is_(None),
+    ]
+    if day_indexes is not None:
+        filters.append(TripDayPoi.day_index.in_(day_indexes))
+    result = await db.execute(
+        select(TripDayPoi)
+        .where(*filters)
+        .order_by(TripDayPoi.day_index.asc(), TripDayPoi.sort_order.asc())
+    )
+    return list(result.scalars())
+
+
+async def _copy_trip_attachments(
+    db: AsyncSession,
+    *,
+    source_trip_id: uuid.UUID,
+    target_trip_id: uuid.UUID,
+    poi_id_map: dict[uuid.UUID, uuid.UUID],
+    actor_user_id: uuid.UUID,
+    include_trip_level: bool,
+) -> int:
+    copied = 0
+    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    if include_trip_level:
+        filters.append(
+            or_(
+                CuratedPlanAttachment.trip_id == source_trip_id,
+                CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())),
+            )
+        )
+    elif poi_id_map:
+        filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
+    else:
+        return 0
+    result = await db.execute(select(CuratedPlanAttachment).where(*filters))
+    for attachment in result.scalars():
+        trip_id = target_trip_id if attachment.trip_id == source_trip_id else None
+        source_poi_id = attachment.trip_poi_id
+        trip_poi_id = (
+            poi_id_map[source_poi_id]
+            if source_poi_id is not None and source_poi_id in poi_id_map
+            else None
+        )
+        if trip_id is None and trip_poi_id is None:
+            continue
+        db.add(
+            CuratedPlanAttachment(
+                trip_id=trip_id,
+                trip_poi_id=trip_poi_id,
+                source_attachment_id=attachment.attachment_id,
+                bucket=attachment.bucket,
+                storage_key=attachment.storage_key,
+                original_filename=attachment.original_filename,
+                content_type=attachment.content_type,
+                byte_size=attachment.byte_size,
+                public_url=attachment.public_url,
+                checksum_sha256=attachment.checksum_sha256,
+                role=attachment.role,
+                description=attachment.description,
+                sort_order=attachment.sort_order,
+                uploaded_by_user_id=actor_user_id,
+            )
+        )
+        copied += 1
+    return copied
+
+
+async def _max_sort_order(db: AsyncSession, trip_id: uuid.UUID, day_index: int) -> str | None:
+    result = await db.execute(
+        select(TripDayPoi.sort_order)
+        .where(
+            TripDayPoi.trip_id == trip_id,
+            TripDayPoi.day_index == day_index,
+            TripDayPoi.deleted_at.is_(None),
+        )
+        .order_by(TripDayPoi.sort_order.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _shift_date(value: date | None, days: int) -> date | None:
+    return None if value is None else value + timedelta(days=days)
+
+
+def _shift_datetime(value: datetime | None, days: int) -> datetime | None:
+    return None if value is None else value + timedelta(days=days)
+
+
+async def _list_day_pois(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+) -> list[TripDayPoi]:
+    result = await db.execute(
+        select(TripDayPoi)
+        .where(
+            TripDayPoi.trip_id == trip_id,
+            TripDayPoi.day_index == day_index,
+            TripDayPoi.deleted_at.is_(None),
+        )
+        .order_by(TripDayPoi.sort_order.asc(), TripDayPoi.attachment_id.asc())
+    )
+    return list(result.scalars())
+
+
+Coord = tuple[float, float]
+
+
+def _extract_coord(snapshot: dict[str, Any]) -> Coord | None:
+    containers: list[Any] = [snapshot, snapshot.get("coord"), snapshot.get("location")]
+    for item in containers:
+        if not isinstance(item, dict):
+            continue
+        lon = item.get("longitude", item.get("lon"))
+        lat = item.get("latitude", item.get("lat"))
+        if isinstance(lon, int | float) and isinstance(lat, int | float):
+            return float(lon), float(lat)
+    return None
+
+
+def _distance_meters(left: Coord, right: Coord) -> int:
+    lon1, lat1 = left
+    lon2, lat2 = right
+    radius_m = 6_371_000
+    dlon = radians(lon2 - lon1)
+    dlat = radians(lat2 - lat1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return round(2 * radius_m * asin(sqrt(a)))
+
+
+def _nearest_neighbor_order(
+    pois: list[TripDayPoi],
+    *,
+    start_poi_id: uuid.UUID | None,
+) -> tuple[list[TripDayPoi], int | None, list[str]]:
+    coord_by_id = {poi.attachment_id: _extract_coord(poi.feature_snapshot) for poi in pois}
+    with_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is not None]
+    without_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is None]
+    warnings: list[str] = []
+    if without_coords:
+        warnings.append(f"{len(without_coords)}개 POI는 좌표가 없어 기존 순서로 뒤에 둡니다.")
+    if not with_coords:
+        return pois, None, warnings
+
+    remaining = with_coords[:]
+    if start_poi_id is not None:
+        start = next((poi for poi in remaining if poi.attachment_id == start_poi_id), None)
+        if start is None:
+            raise TripOptimizeError("start_poi_id가 해당 day에 없거나 좌표가 없습니다.")
+    else:
+        start = remaining[0]
+
+    ordered = [start]
+    remaining.remove(start)
+    total = 0
+    while remaining:
+        current_coord = coord_by_id[ordered[-1].attachment_id]
+        assert current_coord is not None
+
+        def distance_from_current(poi: TripDayPoi, base_coord: Coord = current_coord) -> int:
+            candidate_coord = coord_by_id[poi.attachment_id]
+            assert candidate_coord is not None
+            return _distance_meters(base_coord, candidate_coord)
+
+        nearest = min(remaining, key=distance_from_current)
+        nearest_coord = coord_by_id[nearest.attachment_id]
+        assert nearest_coord is not None
+        total += _distance_meters(current_coord, nearest_coord)
+        ordered.append(nearest)
+        remaining.remove(nearest)
+    return ordered + without_coords, total, warnings
 
 
 async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:

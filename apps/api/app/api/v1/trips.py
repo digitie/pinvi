@@ -16,39 +16,68 @@ from app.core.deps import CurrentUserId, DbSession
 from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
+from app.schemas.storage import AttachmentCreate
 from app.schemas.trip import (
+    TripAttachmentResponse,
     TripCommentCreate,
     TripCommentResponse,
     TripCompanionInvite,
     TripCompanionResponse,
+    TripCopyRequest,
+    TripCopyResponse,
     TripCreate,
+    TripDayCreate,
+    TripDayOptimizeRequest,
+    TripDayOptimizeResponse,
+    TripDayResponse,
+    TripDayUpdate,
+    TripDeleteRequest,
+    TripDistanceMatrixResponse,
     TripResponse,
+    TripSharedView,
     TripUpdate,
     TripView,
 )
+from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
+    TripAttachmentNotFoundError,
     TripBucket,
     TripCommentNotFoundError,
     TripCompanionConflictError,
+    TripCopyError,
+    TripDayConflictError,
+    TripDayNotFoundError,
     TripListSort,
     TripNotFoundError,
+    TripOptimizeError,
     TripPermissionError,
     TripStatus,
     TripVersionConflictError,
     TripVisibility,
+    build_distance_matrix,
+    copy_trip,
+    create_attachment,
     create_comment,
     create_trip,
+    create_trip_day,
+    delete_attachment,
     delete_comment,
+    delete_or_transfer_trip,
+    delete_trip_day,
+    get_trip_for_share_token,
     get_trip_for_user,
     get_trip_owned_by_user,
     invite_companion,
     issue_share_link,
+    list_attachments,
     list_comments,
     list_trips_for_owner,
+    optimize_trip_day,
     remove_companion,
     revoke_share_link,
     update_trip,
+    update_trip_day,
 )
 from app.services.trip_view_builder import build_trip_view
 
@@ -101,6 +130,42 @@ def _to_comment_response(comment) -> TripCommentResponse:  # type: ignore[no-unt
         day_index=comment.day_index,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
+    )
+
+
+def _to_day_response(day) -> TripDayResponse:  # type: ignore[no-untyped-def]
+    return TripDayResponse(
+        trip_id=day.trip_id,
+        day_index=day.day_index,
+        date=day.date,
+        title=day.title,
+        note=day.note,
+        created_at=day.created_at,
+        updated_at=day.updated_at,
+    )
+
+
+def _to_attachment_response(attachment) -> TripAttachmentResponse:  # type: ignore[no-untyped-def]
+    return TripAttachmentResponse(
+        attachment_id=attachment.attachment_id,
+        trip_id=attachment.trip_id,
+        trip_poi_id=attachment.trip_poi_id,
+        curated_plan_id=attachment.curated_plan_id,
+        curated_poi_id=attachment.curated_poi_id,
+        notice_plan_id=attachment.notice_plan_id,
+        notice_poi_id=attachment.notice_poi_id,
+        source_attachment_id=attachment.source_attachment_id,
+        bucket=attachment.bucket,
+        storage_key=attachment.storage_key,
+        original_filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        byte_size=attachment.byte_size,
+        public_url=attachment.public_url,
+        role=attachment.role,
+        description=attachment.description,
+        sort_order=attachment.sort_order,
+        created_at=attachment.created_at,
+        updated_at=attachment.updated_at,
     )
 
 
@@ -276,6 +341,444 @@ async def update_trip_endpoint(
         version=trip.version,
     )
     return Envelope.of(_to_response(trip))
+
+
+@router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trip_endpoint(
+    trip_id: uuid.UUID,
+    body: TripDeleteRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        trip = await get_trip_owned_by_user(db, trip_id=trip_id, user_id=actor_id)
+        updated = await delete_or_transfer_trip(
+            db,
+            trip=trip,
+            actor_user_id=actor_id,
+            mode=body.mode,
+            new_owner_user_id=body.new_owner_user_id,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripCopyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="trip.updated",
+        actor_user_id=actor_id,
+        payload={"mode": body.mode, "version": updated.version},
+        version=updated.version,
+    )
+
+
+@router.post(
+    "/{trip_id}/copy",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripCopyResponse],
+)
+async def copy_trip_endpoint(
+    trip_id: uuid.UUID,
+    body: TripCopyRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripCopyResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        source = await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        trip, created, day_count, poi_count, attachment_count = await copy_trip(
+            db,
+            source_trip=source,
+            actor_user_id=actor_id,
+            title=body.title,
+            scope=body.scope,
+            day_index=body.day_index,
+            start_day_index=body.start_day_index,
+            end_day_index=body.end_day_index,
+            date_shift_days=body.date_shift_days,
+            target_trip_id=body.target_trip_id,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (TripCopyError, TripDayNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response = TripCopyResponse(
+        trip=_to_response(trip),
+        created_trip=created,
+        copied_day_count=day_count,
+        copied_poi_count=poi_count,
+        copied_attachment_count=attachment_count,
+    )
+    realtime_broker.publish_event_nowait(
+        trip_id=trip.trip_id,
+        event_type="trip.copied",
+        actor_user_id=actor_id,
+        payload=response.model_dump(mode="json"),
+        version=trip.version,
+    )
+    return Envelope.of(response)
+
+
+@router.post(
+    "/{trip_id}/days",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripDayResponse],
+)
+async def create_trip_day_endpoint(
+    trip_id: uuid.UUID,
+    body: TripDayCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripDayResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        day = await create_trip_day(
+            db,
+            trip_id=trip_id,
+            day_index=body.day_index,
+            date_value=body.date,
+            title=body.title,
+            note=body.note,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response = _to_day_response(day)
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="day.created",
+        actor_user_id=actor_id,
+        payload={"day": response.model_dump(mode="json")},
+    )
+    return Envelope.of(response)
+
+
+@router.patch("/{trip_id}/days/{day_index}", response_model=Envelope[TripDayResponse])
+async def update_trip_day_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: TripDayUpdate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripDayResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        day = await update_trip_day(
+            db,
+            trip_id=trip_id,
+            day_index=day_index,
+            patch=body.model_dump(exclude_unset=True),
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response = _to_day_response(day)
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="day.updated",
+        actor_user_id=actor_id,
+        payload={"day": response.model_dump(mode="json")},
+    )
+    return Envelope.of(response)
+
+
+@router.delete("/{trip_id}/days/{day_index}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trip_day_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await delete_trip_day(db, trip_id=trip_id, day_index=day_index)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="day.deleted",
+        actor_user_id=actor_id,
+        payload={"day_index": day_index},
+    )
+
+
+@router.get(
+    "/{trip_id}/shared/{token}",
+    response_model=Envelope[TripSharedView],
+)
+async def get_shared_trip_endpoint(
+    trip_id: uuid.UUID,
+    token: str,
+    db: DbSession,
+    krtour_client: OptionalKrtourMapClientDep,
+) -> Envelope[TripSharedView]:
+    try:
+        trip, share = await get_trip_for_share_token(db, trip_id=trip_id, token=token)
+    except TripNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    view = TripView.model_validate(
+        await build_trip_view(db, trip=trip, krtour_client=krtour_client)
+    )
+    return Envelope.of(
+        TripSharedView(
+            visibility=share.visibility,
+            trip=view.trip,
+            days=view.days,
+            broken_feature_count=view.broken_feature_count,
+        )
+    )
+
+
+@router.get(
+    "/{trip_id}/attachments",
+    response_model=Envelope[list[TripAttachmentResponse]],
+)
+async def list_trip_attachments_endpoint(
+    trip_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[list[TripAttachmentResponse]]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    attachments = await list_attachments(db, trip_id=trip_id)
+    return Envelope.of([_to_attachment_response(attachment) for attachment in attachments])
+
+
+@router.post(
+    "/{trip_id}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripAttachmentResponse],
+)
+async def create_trip_attachment_endpoint(
+    trip_id: uuid.UUID,
+    body: AttachmentCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripAttachmentResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    attachment = await create_attachment(
+        db,
+        uploaded_by_user_id=actor_id,
+        trip_id=trip_id,
+        trip_poi_id=None,
+        payload=body.model_dump(),
+    )
+    return Envelope.of(_to_attachment_response(attachment))
+
+
+@router.delete(
+    "/{trip_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_trip_attachment_endpoint(
+    trip_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await delete_attachment(db, attachment_id=attachment_id, trip_id=trip_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripAttachmentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+
+@router.get(
+    "/{trip_id}/pois/{poi_id}/attachments",
+    response_model=Envelope[list[TripAttachmentResponse]],
+)
+async def list_trip_poi_attachments_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[list[TripAttachmentResponse]]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except PoiNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    attachments = await list_attachments(db, trip_poi_id=poi_id)
+    return Envelope.of([_to_attachment_response(attachment) for attachment in attachments])
+
+
+@router.post(
+    "/{trip_id}/pois/{poi_id}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripAttachmentResponse],
+)
+async def create_trip_poi_attachment_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    body: AttachmentCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripAttachmentResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except PoiNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    attachment = await create_attachment(
+        db,
+        uploaded_by_user_id=actor_id,
+        trip_id=None,
+        trip_poi_id=poi_id,
+        payload=body.model_dump(),
+    )
+    return Envelope.of(_to_attachment_response(attachment))
+
+
+@router.delete(
+    "/{trip_id}/pois/{poi_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_trip_poi_attachment_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+        await delete_attachment(db, attachment_id=attachment_id, trip_poi_id=poi_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (PoiNotFoundError, TripAttachmentNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+
+@router.get(
+    "/{trip_id}/days/{day_index}/distance-matrix",
+    response_model=Envelope[TripDistanceMatrixResponse],
+)
+async def get_trip_day_distance_matrix_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripDistanceMatrixResponse]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    pois, matrix, warnings = await build_distance_matrix(db, trip_id=trip_id, day_index=day_index)
+    return Envelope.of(
+        TripDistanceMatrixResponse(
+            trip_id=trip_id,
+            day_index=day_index,
+            poi_ids=[poi.attachment_id for poi in pois],
+            distances_meters=matrix,
+            warnings=warnings,
+        )
+    )
+
+
+@router.post(
+    "/{trip_id}/days/{day_index}/optimize",
+    response_model=Envelope[TripDayOptimizeResponse],
+)
+async def optimize_trip_day_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: TripDayOptimizeRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripDayOptimizeResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        ordered, moves, total_distance, warnings = await optimize_trip_day(
+            db,
+            trip_id=trip_id,
+            day_index=day_index,
+            start_poi_id=body.start_poi_id,
+            persist=body.persist,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripOptimizeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    response = TripDayOptimizeResponse(
+        trip_id=trip_id,
+        day_index=day_index,
+        ordered_poi_ids=[poi.attachment_id for poi in ordered],
+        moves=[
+            {"poi_id": poi.attachment_id, "old_sort_order": old, "new_sort_order": new}
+            for poi, old, new in moves
+        ],
+        distance_meters=total_distance,
+        warnings=warnings,
+    )
+    if body.persist and moves:
+        realtime_broker.publish_event_nowait(
+            trip_id=trip_id,
+            event_type="poi.reordered",
+            actor_user_id=actor_id,
+            payload={"moves": response.model_dump(mode="json")["moves"]},
+        )
+    return Envelope.of(response)
 
 
 @router.post(

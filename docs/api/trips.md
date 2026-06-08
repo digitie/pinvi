@@ -80,8 +80,7 @@ Content-Type: application/json
 }
 ```
 
-응답 201: `{ "data": { "trip": {...}, "days": [...] } }`. 동반자가 있으면
-invite 이메일 발송.
+응답 201: `{ "data": { "...": "TripResponse" } }`. 동반자가 있으면 invite 이메일 발송.
 
 `primary_region_code`는 `region_hint` 자유텍스트와 별개로 지역 기반 weather/oil/
 Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigungu/bjd code)를
@@ -198,6 +197,8 @@ Content-Type: application/json
 
 - `soft_delete`: `status = 'archived'` + `deleted_at = now()`
 - `transfer_leader`: `owner_user_id` 변경, 자기는 `co_owner`로 전환
+- owner만 호출 가능. `transfer_leader` 대상 user가 기존 companion이면 companion row를
+  제거하고 새 owner로 승격한다.
 
 ### 3.6 `POST /trips/{trip_id}/copy`
 
@@ -215,6 +216,23 @@ Content-Type: application/json
   "target_trip_id": "uuid"          // 기존 trip에 합치는 경우
 }
 ```
+
+응답 201:
+
+```jsonc
+{
+  "data": {
+    "trip": { "...": "TripResponse" },
+    "created_trip": true,
+    "copied_day_count": 2,
+    "copied_poi_count": 5,
+    "copied_attachment_count": 3
+  }
+}
+```
+
+새 trip을 만들면 원본 trip-level attachment와 선택된 POI attachment metadata를 복제한다.
+`target_trip_id`를 지정하면 actor가 owner인 기존 trip 뒤에 선택 POI를 append한다.
 
 ## 4. Trip days
 
@@ -327,9 +345,9 @@ Content-Type: application/json
 
 `url`은 `TRIPMATE_WEB_BASE_URL`을 base로 생성한다. 개발 기본값은
 `http://localhost:9022`, 운영값은 `https://tripmate.digitie.mywire.org`다.
-owner만 발급 가능하다. `visibility='comment'`는 shared-token 사용자가 조회와 댓글
-작성을 할 수 있다는 의미이며, `visibility='edit'`는 후속 shared edit 흐름에서 POI/
-일정 편집까지 열기 위한 값이다.
+owner만 발급 가능하다. 현재 구현은 shared-token 조회를 제공한다. `comment` / `edit`
+visibility는 후속 shared 댓글/편집 흐름을 위한 권한 metadata이며, 로그인 없는 댓글 작성
+라우트는 아직 열지 않는다.
 
 ### 7.2 `DELETE /trips/{trip_id}/share-tokens/{share_id}`
 
@@ -338,7 +356,18 @@ owner만. `revoked_at = now()`.
 ### 7.3 `GET /trips/{trip_id}/shared/{token}` (비로그인 가능)
 
 token 검증 (`revoked_at IS NULL`, `expires_at > now()`). `last_used_at = now()` 기록.
-응답은 visibility별 셰입 차이 (view_only는 메타 + POI 일부만).
+응답은 `TripSharedView`다. companions, share_links, 토큰 원문/hash는 포함하지 않는다.
+
+```jsonc
+{
+  "data": {
+    "visibility": "view_only",
+    "trip": { "...": "TripResponse" },
+    "days": [{ "day_index": 1, "pois": [{ "...": "TripViewPoi" }] }],
+    "broken_feature_count": 0
+  }
+}
+```
 
 Rate limit: 분당 60회 per token.
 
@@ -397,8 +426,8 @@ Content-Type: application/json
 
 댓글 작성자 또는 owner만. `deleted_at = now()` soft delete.
 
-shared-token 사용자의 댓글 작성은 `GET /trips/{trip_id}/shared/{token}` 라우트 구현과
-함께 같은 `app.trip_comments` 테이블에 연결한다.
+shared-token 사용자의 댓글 작성은 후속 shared comment 라우트에서 같은
+`app.trip_comments` 테이블에 연결한다.
 
 ## 9. 첨부 (`/trips/{trip_id}/attachments`)
 
@@ -418,7 +447,11 @@ shared-token 사용자의 댓글 작성은 `GET /trips/{trip_id}/shared/{token}`
 - `POST /trips/{trip_id}/days/{day_index}/optimize`
 - `GET /trips/{trip_id}/days/{day_index}/distance-matrix`
 
-Sprint 6.
+T-132 MVP는 krtour-map live lookup 없이 저장된 `feature_snapshot.coord` 또는
+`feature_snapshot.location`의 `(longitude, latitude)`를 사용한다. 거리 행렬은 haversine
+meter 정수 또는 좌표 누락 시 `null`을 반환한다. optimize는 `nearest_neighbor`만 지원하며,
+좌표 없는 POI는 경고와 함께 기존 순서로 뒤에 둔다. `persist=true`면 POI `sort_order`를
+새 LexoRank로 저장하고 `poi.reordered` realtime event를 발행한다.
 
 ## 11. 여행 내보내기
 

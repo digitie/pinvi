@@ -360,6 +360,254 @@ async def test_companion_can_comment_and_owner_can_delete(
     assert after_delete.json()["data"] == []
 
 
+def _attachment_payload(filename: str = "trip-cover.jpg") -> dict[str, object]:
+    return {
+        "bucket": "tripmate-media",
+        "storage_key": f"user-uploads/trip_attachment/test/{uuid.uuid4().hex}.jpg",
+        "original_filename": filename,
+        "content_type": "image/jpeg",
+        "byte_size": 1234,
+        "role": "image",
+        "description": "테스트 첨부",
+        "sort_order": 0,
+    }
+
+
+def _poi_payload(day_index: int, sort_order: str, lon: float, lat: float) -> dict[str, object]:
+    return {
+        "day_index": day_index,
+        "sort_order": sort_order,
+        "feature_id": f"feature-{uuid.uuid4().hex}",
+        "feature_snapshot": {
+            "name": f"POI {sort_order}",
+            "coord": {"longitude": lon, "latitude": lat},
+        },
+    }
+
+
+async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, auth_cookies) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "day CRUD"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    day = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "date": "2026-06-10", "title": "첫날"},
+        cookies=cookies,
+    )
+    assert day.status_code == 201, day.text
+    assert day.json()["data"]["title"] == "첫날"
+
+    patched = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"title": "도착일", "note": "비행기"},
+        cookies=cookies,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["note"] == "비행기"
+
+    poi = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "a", 126.978, 37.5665),
+        cookies=cookies,
+    )
+    assert poi.status_code == 201, poi.text
+
+    deleted = await client.request("DELETE", f"/trips/{trip_id}/days/1", cookies=cookies)
+    assert deleted.status_code == 204
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"]["days"] == []
+
+
+async def test_trip_copy_shared_view_and_attachments(
+    client,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post(
+        "/trips",
+        json={
+            "title": "원본 여행",
+            "start_date": "2026-06-10",
+            "end_date": "2026-06-10",
+        },
+        cookies=cookies,
+    )
+    trip_id = created.json()["data"]["trip_id"]
+    day = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "date": "2026-06-10", "title": "원본 day"},
+        cookies=cookies,
+    )
+    assert day.status_code == 201, day.text
+    poi = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "a", 126.978, 37.5665),
+        cookies=cookies,
+    )
+    poi_id = poi.json()["data"]["attachment_id"]
+
+    trip_attachment = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(),
+        cookies=cookies,
+    )
+    assert trip_attachment.status_code == 201, trip_attachment.text
+    poi_attachment = await client.post(
+        f"/trips/{trip_id}/pois/{poi_id}/attachments",
+        json=_attachment_payload("poi.jpg"),
+        cookies=cookies,
+    )
+    assert poi_attachment.status_code == 201, poi_attachment.text
+
+    copied = await client.post(
+        f"/trips/{trip_id}/copy",
+        json={"title": "복사본", "scope": "all", "date_shift_days": 7},
+        cookies=cookies,
+    )
+    assert copied.status_code == 201, copied.text
+    copy_data = copied.json()["data"]
+    copied_trip_id = copy_data["trip"]["trip_id"]
+    assert copy_data["created_trip"] is True
+    assert copy_data["copied_day_count"] == 1
+    assert copy_data["copied_poi_count"] == 1
+    assert copy_data["copied_attachment_count"] == 2
+    assert copy_data["trip"]["start_date"] == "2026-06-17"
+
+    copied_detail = await client.get(f"/trips/{copied_trip_id}", cookies=cookies)
+    copied_day = copied_detail.json()["data"]["days"][0]
+    assert copied_day["date"] == "2026-06-17"
+    copied_poi_id = copied_day["pois"][0]["poi_id"]
+
+    copied_trip_attachments = await client.get(
+        f"/trips/{copied_trip_id}/attachments",
+        cookies=cookies,
+    )
+    assert copied_trip_attachments.status_code == 200, copied_trip_attachments.text
+    assert (
+        copied_trip_attachments.json()["data"][0]["source_attachment_id"]
+        == (trip_attachment.json()["data"]["attachment_id"])
+    )
+    copied_poi_attachments = await client.get(
+        f"/trips/{copied_trip_id}/pois/{copied_poi_id}/attachments",
+        cookies=cookies,
+    )
+    assert copied_poi_attachments.status_code == 200, copied_poi_attachments.text
+    assert (
+        copied_poi_attachments.json()["data"][0]["source_attachment_id"]
+        == (poi_attachment.json()["data"]["attachment_id"])
+    )
+
+    share = await client.post(
+        f"/trips/{copied_trip_id}/share-tokens",
+        json={"visibility": "view_only"},
+        cookies=cookies,
+    )
+    token = share.json()["data"]["token"]
+    shared = await client.get(f"/trips/{copied_trip_id}/shared/{token}")
+    assert shared.status_code == 200, shared.text
+    shared_data = shared.json()["data"]
+    assert shared_data["visibility"] == "view_only"
+    assert shared_data["trip"]["trip_id"] == copied_trip_id
+    assert "share_links" not in shared_data
+    assert "companions" not in shared_data
+
+    removed = await client.delete(
+        f"/trips/{copied_trip_id}/attachments/{copied_trip_attachments.json()['data'][0]['attachment_id']}",
+        cookies=cookies,
+    )
+    assert removed.status_code == 204
+    after_delete = await client.get(f"/trips/{copied_trip_id}/attachments", cookies=cookies)
+    assert after_delete.json()["data"] == []
+
+
+async def test_trip_copy_all_includes_auto_created_day_rows(
+    client,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "day row 없는 여행"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    poi = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(2, "a", 126.978, 37.5665),
+        cookies=cookies,
+    )
+    assert poi.status_code == 201, poi.text
+
+    copied = await client.post(
+        f"/trips/{trip_id}/copy",
+        json={"title": "복사본", "scope": "all"},
+        cookies=cookies,
+    )
+    assert copied.status_code == 201, copied.text
+    copy_data = copied.json()["data"]
+    assert copy_data["copied_day_count"] == 1
+    assert copy_data["copied_poi_count"] == 1
+
+    copied_detail = await client.get(
+        f"/trips/{copy_data['trip']['trip_id']}",
+        cookies=cookies,
+    )
+    assert copied_detail.status_code == 200, copied_detail.text
+    assert copied_detail.json()["data"]["days"][0]["day_index"] == 2
+
+
+async def test_trip_day_distance_matrix_and_optimize(
+    client,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "최적화 여행"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    first = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "a", 126.0, 37.0),
+        cookies=cookies,
+    )
+    second = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "b", 128.0, 37.0),
+        cookies=cookies,
+    )
+    third = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "c", 126.1, 37.0),
+        cookies=cookies,
+    )
+    first_id = first.json()["data"]["attachment_id"]
+    second_id = second.json()["data"]["attachment_id"]
+    third_id = third.json()["data"]["attachment_id"]
+
+    matrix = await client.get(f"/trips/{trip_id}/days/1/distance-matrix", cookies=cookies)
+    assert matrix.status_code == 200, matrix.text
+    distances = matrix.json()["data"]["distances_meters"]
+    assert len(distances) == 3
+    assert distances[0][0] == 0
+    assert distances[0][2] < distances[0][1]
+
+    optimized = await client.post(
+        f"/trips/{trip_id}/days/1/optimize",
+        json={"start_poi_id": first_id, "persist": True},
+        cookies=cookies,
+    )
+    assert optimized.status_code == 200, optimized.text
+    assert optimized.json()["data"]["ordered_poi_ids"] == [first_id, third_id, second_id]
+    assert optimized.json()["data"]["moves"]
+
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    pois = detail.json()["data"]["days"][0]["pois"]
+    assert [poi["poi_id"] for poi in pois] == [first_id, third_id, second_id]
+
+
 async def test_other_user_cannot_access(
     client, verified_user, auth_cookies, session_factory
 ) -> None:

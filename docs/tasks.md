@@ -12,8 +12,10 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
-- [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
+- [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
+- [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions`
+  + `POST /features/requests` + `GET /features/requests/{id}` 실구현(C-12 실체화,
+  krtour 직접 호출 X)
 
 ## 완료
 
@@ -162,6 +164,10 @@
 - [x] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
   + RestoreHotswapDialog. Sprint 5의 backup script + endpoint 위에 UI + 핫스왑
   워크플로 finalize.
+- [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize)
+  구현 분할 (완료: 2026-06-09, trip delete/transfer, copy, day CRUD, shared view,
+  trip/POI attachment metadata, distance matrix, nearest-neighbor optimize API +
+  schemas/api-client/tests)
 - [ ] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
   `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
 - [ ] T-113 — `tripmate-ai-companion` 별 repo 신설 (ADR-020) — T-107 후속.
@@ -183,7 +189,7 @@
 - [ ] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13)
 - [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
-- [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
+- [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
 - [x] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
 - [x] T-135 — POI 응답 `rise_set` 노출 (C-18)

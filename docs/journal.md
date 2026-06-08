@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (codex) — T-132 Trip 하위 리소스 API 분할
+
+**작업**: 감사 C-06/D-06 후속으로 Trip 소유 하위 리소스 중 krtour-map 연계가 필요 없는
+days/shared/attachments/copy/optimize API를 실제 구현했다.
+
+**변경**:
+- `DELETE /trips/{trip_id}` soft delete와 owner transfer를 추가했다. owner transfer는
+  새 owner를 검증하고 기존 owner를 `co_owner` companion으로 남긴다.
+- `/trips/{trip_id}/copy`를 추가했다. `all` / `day` / `range` scope, 날짜 shift, 기존
+  target trip append를 지원하고 day/POI/첨부 metadata 복제 건수를 반환한다.
+- `/trips/{trip_id}/days` CRUD와 `GET /trips/{trip_id}/shared/{token}` anonymous shared
+  view를 추가했다. shared view는 companions/share link 원문 없이 trip/day/POI와
+  `broken_feature_count`만 반환한다.
+- trip/POI attachment metadata 조회·생성·soft delete API를 `/trips/{trip_id}/attachments`
+  및 `/trips/{trip_id}/pois/{poi_id}/attachments`에 연결했다.
+- day별 distance matrix와 nearest-neighbor optimize API를 추가했다. optimize는 좌표 없는
+  POI를 경고와 함께 뒤에 유지하고, `persist=true`일 때 LexoRank를 재부여한다.
+- Pydantic/Zod schema와 `@tripmate/api-client` endpoint를 확장하고, Trip API 통합 테스트에
+  day 삭제 cascade, copy + attachment 복제, shared view, distance matrix/optimize 회귀를
+  추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/api/v1/trips.py app/schemas/trip.py app/services/trip.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `ruff check app/api/v1/trips.py app/schemas/trip.py app/services/trip.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `mypy --strict app/api/v1/trips.py app/schemas/trip.py app/services/trip.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run test --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/api-client`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+
+**다음**: PR 머지 후 남은 krtour-map 비의존 후보를 재감사한다. 현재 문서상 다음 후보는
+T-133 Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등)이다.
+
 ## 2026-06-08 (codex) — T-111 Backup/Restore UI 핫스왑
 
 **작업**: ADR-022/T-145의 동일 DB schema-swap restore를 admin API와 `/admin/backup`

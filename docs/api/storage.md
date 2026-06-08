@@ -98,6 +98,9 @@ Cookie: tripmate_access=...
 
 ## 5. 첨부 메타 등록 / 조회 / 삭제
 
+Trip/Trip POI 첨부 metadata 라우트는 T-132에서 구현됐다. 파일 본문은 presigned PUT로
+RustFS에 올린 뒤, 아래 endpoint에 metadata를 등록한다.
+
 ### 5.1 Trip 첨부
 
 `GET /trips/{trip_id}/attachments`, `POST`, `DELETE /trips/{trip_id}/attachments/{attachment_id}`

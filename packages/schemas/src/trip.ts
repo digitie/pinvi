@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 import { PoiRiseSetResponseSchema } from './poi';
+import { AttachmentCreateSchema, AttachmentResponseSchema } from './storage';
 
 /** `docs/api/trips.md`. */
 export const TripStatusSchema = z.enum([
@@ -108,6 +109,22 @@ export const TripUpdateSchema = z.object({
 });
 export type TripUpdate = z.infer<typeof TripUpdateSchema>;
 
+export const TripDeleteRequestSchema = z
+  .object({
+    mode: z.enum(['soft_delete', 'transfer_leader']).default('soft_delete'),
+    new_owner_user_id: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === 'transfer_leader' && !value.new_owner_user_id) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['new_owner_user_id'],
+        message: 'new_owner_user_id is required for transfer_leader',
+      });
+    }
+  });
+export type TripDeleteRequest = z.infer<typeof TripDeleteRequestSchema>;
+
 export const TripResponseSchema = z.object({
   trip_id: z.string().uuid(),
   owner_user_id: z.string().uuid(),
@@ -125,6 +142,73 @@ export const TripResponseSchema = z.object({
   updated_at: Iso8601Schema,
 });
 export type TripResponse = z.infer<typeof TripResponseSchema>;
+
+export const TripDayCreateSchema = z.object({
+  day_index: z.number().int().min(1),
+  date: z.string().date().nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+export type TripDayCreate = z.infer<typeof TripDayCreateSchema>;
+
+export const TripDayUpdateSchema = z.object({
+  date: z.string().date().nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+export type TripDayUpdate = z.infer<typeof TripDayUpdateSchema>;
+
+export const TripDayResponseSchema = z.object({
+  trip_id: z.string().uuid(),
+  day_index: z.number().int(),
+  date: z.string().date().nullable(),
+  title: z.string().nullable(),
+  note: z.string().nullable(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type TripDayResponse = z.infer<typeof TripDayResponseSchema>;
+
+export const TripCopyRequestSchema = z
+  .object({
+    title: z.string().min(1).max(200).nullable().optional(),
+    scope: z.enum(['all', 'day', 'range']).default('all'),
+    day_index: z.number().int().min(1).nullable().optional(),
+    start_day_index: z.number().int().min(1).nullable().optional(),
+    end_day_index: z.number().int().min(1).nullable().optional(),
+    date_shift_days: z.number().int().default(0),
+    target_trip_id: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.scope === 'day' && !value.day_index) {
+      ctx.addIssue({ code: 'custom', path: ['day_index'], message: 'day_index is required' });
+    }
+    if (value.scope === 'range') {
+      if (!value.start_day_index || !value.end_day_index) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['start_day_index'],
+          message: 'start_day_index/end_day_index are required',
+        });
+      } else if (value.end_day_index < value.start_day_index) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['end_day_index'],
+          message: 'end_day_index must be greater than or equal to start_day_index',
+        });
+      }
+    }
+  });
+export type TripCopyRequest = z.infer<typeof TripCopyRequestSchema>;
+
+export const TripCopyResponseSchema = z.object({
+  trip: TripResponseSchema,
+  created_trip: z.boolean(),
+  copied_day_count: z.number().int().nonnegative(),
+  copied_poi_count: z.number().int().nonnegative(),
+  copied_attachment_count: z.number().int().nonnegative(),
+});
+export type TripCopyResponse = z.infer<typeof TripCopyResponseSchema>;
 
 export const TripViewPoiSchema = z.object({
   poi_id: z.string().uuid(),
@@ -176,3 +260,49 @@ export const TripViewSchema = z.object({
   broken_feature_count: z.number().int().nonnegative(),
 });
 export type TripView = z.infer<typeof TripViewSchema>;
+
+export const TripSharedViewSchema = z.object({
+  visibility: TripShareLinkVisibilitySchema,
+  trip: TripResponseSchema,
+  days: z.array(TripViewDaySchema),
+  broken_feature_count: z.number().int().nonnegative(),
+});
+export type TripSharedView = z.infer<typeof TripSharedViewSchema>;
+
+export const TripDayOptimizeRequestSchema = z.object({
+  strategy: z.literal('nearest_neighbor').default('nearest_neighbor'),
+  start_poi_id: z.string().uuid().nullable().optional(),
+  persist: z.boolean().default(false),
+});
+export type TripDayOptimizeRequest = z.infer<typeof TripDayOptimizeRequestSchema>;
+
+export const TripDayOptimizeMoveSchema = z.object({
+  poi_id: z.string().uuid(),
+  old_sort_order: z.string(),
+  new_sort_order: z.string(),
+});
+export type TripDayOptimizeMove = z.infer<typeof TripDayOptimizeMoveSchema>;
+
+export const TripDayOptimizeResponseSchema = z.object({
+  trip_id: z.string().uuid(),
+  day_index: z.number().int(),
+  ordered_poi_ids: z.array(z.string().uuid()),
+  moves: z.array(TripDayOptimizeMoveSchema),
+  distance_meters: z.number().int().nullable(),
+  warnings: z.array(z.string()),
+});
+export type TripDayOptimizeResponse = z.infer<typeof TripDayOptimizeResponseSchema>;
+
+export const TripDistanceMatrixResponseSchema = z.object({
+  trip_id: z.string().uuid(),
+  day_index: z.number().int(),
+  poi_ids: z.array(z.string().uuid()),
+  distances_meters: z.array(z.array(z.number().int().nullable())),
+  warnings: z.array(z.string()),
+});
+export type TripDistanceMatrixResponse = z.infer<typeof TripDistanceMatrixResponseSchema>;
+
+export const TripAttachmentCreateSchema = AttachmentCreateSchema;
+export const TripAttachmentResponseSchema = AttachmentResponseSchema;
+export type TripAttachmentCreate = z.infer<typeof TripAttachmentCreateSchema>;
+export type TripAttachmentResponse = z.infer<typeof TripAttachmentResponseSchema>;
