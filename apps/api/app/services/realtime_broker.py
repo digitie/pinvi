@@ -7,6 +7,7 @@ is a future Redis Streams or LISTEN/NOTIFY decision.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping
@@ -18,6 +19,8 @@ from fastapi.encoders import jsonable_encoder
 
 from app.core.config import settings
 from app.core.time import kst_now
+
+logger = logging.getLogger(__name__)
 
 
 class JsonWebSocket(Protocol):
@@ -57,6 +60,7 @@ class RealtimeBroker:
         self._max_connections_per_trip_override = max_connections_per_trip
         self._max_connections_total_override = max_connections_total
         self._send_timeout_seconds_override = send_timeout_seconds
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def connect(
         self,
@@ -130,6 +134,30 @@ class RealtimeBroker:
         )
         await self._broadcast(trip_id, message)
 
+    def publish_event_nowait(
+        self,
+        *,
+        trip_id: uuid.UUID,
+        event_type: str,
+        actor_user_id: uuid.UUID | None,
+        payload: Mapping[str, Any],
+        version: int | None = None,
+    ) -> asyncio.Task[None]:
+        message = self._event_message(
+            trip_id=trip_id,
+            event_type=event_type,
+            actor_user_id=actor_user_id,
+            payload=payload,
+            version=version,
+        )
+        task = asyncio.create_task(
+            self._broadcast(trip_id, message),
+            name=f"tripmate-realtime-broadcast:{event_type}",
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._finalize_background_task)
+        return task
+
     async def send_error(
         self,
         connection: RealtimeConnection,
@@ -163,6 +191,12 @@ class RealtimeBroker:
             return self._connection_count_unlocked()
 
     async def reset(self) -> None:
+        background_tasks = list(self._background_tasks)
+        for task in background_tasks:
+            task.cancel()
+        if background_tasks:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+        self._background_tasks.clear()
         async with self._lock:
             self._connections.clear()
 
@@ -205,6 +239,15 @@ class RealtimeBroker:
 
     def _connection_count_unlocked(self) -> int:
         return sum(len(connections) for connections in self._connections.values())
+
+    def _finalize_background_task(self, task: asyncio.Task[None]) -> None:
+        self._background_tasks.discard(task)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("Realtime background broadcast failed.")
 
     def _max_connections_per_trip(self) -> int:
         if self._max_connections_per_trip_override is not None:

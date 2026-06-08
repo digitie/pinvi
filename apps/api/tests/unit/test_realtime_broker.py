@@ -121,3 +121,28 @@ async def test_broker_drops_slow_connection_without_blocking_broadcast() -> None
 
     assert fast_socket.messages[-1]["type"] == "trip.updated"
     assert await broker.connection_count(trip_id) == 1
+
+
+async def test_broker_publish_event_nowait_returns_before_slow_broadcast() -> None:
+    broker = RealtimeBroker(send_timeout_seconds=1.0)
+    trip_id = uuid.uuid4()
+    actor_id = uuid.uuid4()
+    fast_socket = FakeSocket()
+    slow_socket = FakeSocket()
+
+    await broker.connect(fast_socket, trip_id=trip_id, user_id=actor_id)
+    await broker.connect(slow_socket, trip_id=trip_id, user_id=uuid.uuid4())
+    slow_socket.delay_seconds = 0.05
+
+    task = broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="trip.updated",
+        actor_user_id=actor_id,
+        payload={"changes": {"title": "느린 전송 분리"}},
+        version=4,
+    )
+
+    assert not task.done()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert fast_socket.messages[-1]["type"] == "trip.updated"
+    assert slow_socket.messages[-1]["type"] == "trip.updated"

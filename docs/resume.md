@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-165 WS rate-limit grace 슬롯 점유 cap 우회 차단과
-`publish_event` broadcast 비동기 분리를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-166 admin 감사 hash-chain head 직렬화
+(`prev_hash` unique/advisory lock)를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-165 WebSocket cap/grace + broadcast 비동기 분리 완료** (2026-06-08):
+client message rate 초과 connection은 `RATE_LIMITED` error 전송 직후 broker에서 제거해
+close grace 동안 trip/process cap slot을 점유하지 않는다. Trip/POI HTTP mutation route는
+`publish_event_nowait`로 broadcast task만 예약하고 fan-out 완료를 응답 경로에서 기다리지 않는다.
 
 **T-164 geofence outage guard + defense-in-depth 완료** (2026-06-08): strict geofence
 (`enabled && block_unknown`)에서 trusted country-header signal이 하나도 없으면 API startup이

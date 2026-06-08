@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-165 WebSocket cap/grace + broadcast 비동기 분리
+
+**작업**: PR #78 사후 리뷰 잔존인 rate-limit close grace 슬롯 점유와 HTTP mutation
+broadcast 대기 결합을 보강했다.
+
+**변경**:
+- `RealtimeBroker.publish_event_nowait`를 추가해 HTTP mutation route가 background
+  broadcast task만 예약하고 응답 경로에서 fan-out 완료를 기다리지 않게 했다.
+- background broadcast task는 broker가 참조를 보관하고 완료 callback에서 예외를 회수해
+  누수/미회수 예외 로그를 방지한다. `reset()`은 남은 background task를 cancel한다.
+- WebSocket client message rate 초과 시 `RATE_LIMITED` error 전송 직후 broker에서
+  connection을 제거해 close grace 동안 trip/process cap slot을 점유하지 않게 했다.
+- broker unit test와 WebSocket integration test에 느린 broadcast 비동기 분리, grace 중 cap
+  슬롯 반환 회귀를 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/services/realtime_broker.py app/api/v1/ws.py app/api/v1/trips.py app/api/v1/pois.py tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+- WSL2 ext4 mirror: `ruff check app/services/realtime_broker.py app/api/v1/ws.py app/api/v1/trips.py app/api/v1/pois.py tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+- WSL2 ext4 mirror: `mypy --strict app/services/realtime_broker.py app/api/v1/ws.py app/api/v1/trips.py app/api/v1/pois.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+
+**다음**: T-166 admin 감사 hash-chain head 직렬화(prev_hash unique/advisory lock).
+
 ## 2026-06-08 (codex) — T-164 geofence outage guard + 방어심화
 
 **작업**: PR #77 사후 리뷰 잔존인 strict geofence silent outage 풋건과 shared-secret
