@@ -13,6 +13,10 @@ export const FeatureKindSchema = z.enum([
 ]);
 export type FeatureKind = z.infer<typeof FeatureKindSchema>;
 
+/** krtour-map `make_feature_id` 출력. TripMate는 포맷을 해석하지 않는다. */
+export const FeatureIdSchema = z.string().min(1).max(200);
+export type FeatureId = z.infer<typeof FeatureIdSchema>;
+
 /** viewport bounding box (한국 범위, ADR-018). */
 export const BBoxSchema = z.object({
   lng_min: z.number().min(124).max(132),
@@ -23,13 +27,11 @@ export const BBoxSchema = z.object({
 export type BBox = z.infer<typeof BBoxSchema>;
 
 /** 16색 팔레트 P-01~P-16. */
-export const MarkerColorSchema = z
-  .string()
-  .regex(/^P-\d{2}$/, 'marker color는 P-01~P-16 형식.');
+export const MarkerColorSchema = z.string().regex(/^P-\d{2}$/, 'marker color는 P-01~P-16 형식.');
 
 /** 마커 표시용 요약. */
 export const FeatureSummarySchema = z.object({
-  feature_id: z.string().uuid(),
+  feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
   title: z.string(),
   coord: CoordSchema,
@@ -61,7 +63,7 @@ export type FeaturesInBoundsResponse = z.infer<typeof FeaturesInBoundsResponseSc
 
 /** 상세 응답. */
 export const FeatureDetailSchema = z.object({
-  feature_id: z.string().uuid(),
+  feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
   title: z.string(),
   coord: CoordSchema,
@@ -93,7 +95,7 @@ export type WeatherTimepoint = z.infer<typeof WeatherTimepointSchema>;
 
 /** KMA weather card. */
 export const FeatureWeatherCardSchema = z.object({
-  feature_id: z.string().uuid(),
+  feature_id: FeatureIdSchema,
   asof: Iso8601Schema,
   short_term: z.array(WeatherTimepointSchema),
   daily: z.array(WeatherTimepointSchema),

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -42,9 +41,20 @@ class TestBBoxValidation:
 
 
 class TestFeatureSummary:
+    def test_feature_id_is_opaque_string(self) -> None:
+        summary = FeatureSummary(
+            feature_id="place:abc123",
+            kind="place",
+            title="경복궁",
+            coord=Coord(longitude=126.9770, latitude=37.5796),
+            marker_color="P-01",
+            marker_icon="monument",
+        )
+        assert summary.feature_id == "place:abc123"
+
     def test_marker_color_pattern(self) -> None:
         FeatureSummary(
-            feature_id=uuid.uuid4(),
+            feature_id="place:gyeongbokgung",
             kind="place",
             title="경복궁",
             coord=Coord(longitude=126.9770, latitude=37.5796),
@@ -55,7 +65,7 @@ class TestFeatureSummary:
     def test_marker_color_invalid_pattern(self) -> None:
         with pytest.raises(ValidationError):
             FeatureSummary(
-                feature_id=uuid.uuid4(),
+                feature_id="place:gyeongbokgung",
                 kind="place",
                 title="경복궁",
                 coord=Coord(longitude=126.9770, latitude=37.5796),
@@ -88,7 +98,7 @@ class TestFeatureCluster:
 class TestFeatureDetail:
     def test_minimal(self) -> None:
         d = FeatureDetail(
-            feature_id=uuid.uuid4(),
+            feature_id="place:gyeongbokgung",
             kind="place",
             title="경복궁",
             coord=Coord(longitude=126.9770, latitude=37.5796),
@@ -102,7 +112,7 @@ class TestFeatureDetail:
 
 class TestFeatureWeatherCard:
     def test_empty_card(self) -> None:
-        c = FeatureWeatherCard(feature_id=uuid.uuid4(), asof=datetime.now(UTC))
+        c = FeatureWeatherCard(feature_id="weather:gyeongbokgung", asof=datetime.now(UTC))
         assert c.short_term == []
         assert c.daily == []
         assert c.sources == []
@@ -110,7 +120,7 @@ class TestFeatureWeatherCard:
     def test_with_timepoints(self) -> None:
         tp = WeatherTimepoint(asof=datetime.now(UTC), temp_c=22.5, condition="clear")
         c = FeatureWeatherCard(
-            feature_id=uuid.uuid4(),
+            feature_id="weather:gyeongbokgung",
             asof=datetime.now(UTC),
             short_term=[tp],
             sources=["kma:short_term:11B10101"],

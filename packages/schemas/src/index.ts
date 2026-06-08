@@ -161,6 +161,7 @@ export type {
 
 export {
   FeatureKindSchema,
+  FeatureIdSchema,
   BBoxSchema,
   MarkerColorSchema,
   FeatureSummarySchema,
@@ -174,6 +175,7 @@ export {
 } from './feature';
 export type {
   FeatureKind,
+  FeatureId,
   BBox,
   FeatureSummary,
   FeatureCluster,

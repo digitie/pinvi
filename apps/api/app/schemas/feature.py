@@ -48,7 +48,7 @@ class BBox(BaseModel):
 class FeatureSummary(BaseModel):
     """viewport feature 마커 표시용 (in-bounds / nearby / search 응답)."""
 
-    feature_id: uuid.UUID
+    feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
     title: str
     coord: Coord
@@ -80,7 +80,7 @@ class FeaturesInBoundsResponse(BaseModel):
 class FeatureDetail(BaseModel):
     """상세 응답 — `GET /features/{id}`."""
 
-    feature_id: uuid.UUID
+    feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
     title: str
     coord: Coord
@@ -112,7 +112,7 @@ class WeatherTimepoint(BaseModel):
 class FeatureWeatherCard(BaseModel):
     """KMA 시간축 응답 — `GET /features/{id}/weather`."""
 
-    feature_id: uuid.UUID
+    feature_id: str = Field(min_length=1, max_length=200)
     asof: datetime
     short_term: list[WeatherTimepoint] = Field(default_factory=list)  # 3h x 24
     daily: list[WeatherTimepoint] = Field(default_factory=list)  # day x 7

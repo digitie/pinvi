@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-125 feature_id 문자열화
+
+**작업**: ADR-028에 따라 TripMate의 feature_id UUID 가정을 제거했다.
+
+**변경**:
+- `apps/api/app/schemas/feature.py`, `apps/api/app/api/v1/features.py`,
+  `apps/api/app/etl_bridge/krtour_map.py` — feature read id를 불투명 문자열로 처리.
+- `apps/api/app/services/trip_view_builder.py` — trip POI batch 조회가 문자열
+  feature_id를 그대로 사용하고 저장 suffix만 제거.
+- `packages/schemas/src/feature.ts` — Zod feature_id `.uuid()` 제거.
+- `docs/api/features.md`, `docs/resume.md`, `docs/tasks.md` — T-125 완료 반영.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff check ...`
+- WSL2 ext4 mirror: `ruff format --check ...`
+- WSL2 ext4 mirror: `mypy --strict app`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_feature_schemas.py tests/integration/test_trip_view_builder.py`
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck -w @tripmate/api-client`
+- WSL2 ext4 mirror: `npx prettier --check packages/schemas/src/feature.ts packages/schemas/src/index.ts`
+
+**다음**: 사용자 지시로 PR 머지 후 중지. 이후 재개 시 T-163.
+
 ## 2026-06-08 (codex) — T-162 Resend webhook unsigned opt-in
 
 **작업**: PR #74 사후 리뷰 잔존인 Resend webhook fail-open 위험을 닫았다. 기존에는

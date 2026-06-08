@@ -62,15 +62,15 @@ class KrtourMapClient(Protocol):
     ) -> list[FeatureDTO]:
         """반경 검색 — `coord_5179` 기반 (라이브러리 책임)."""
 
-    async def get_feature(self, feature_id: uuid.UUID) -> FeatureDTO | None:
+    async def get_feature(self, feature_id: str) -> FeatureDTO | None:
         """feature 1건 상세."""
 
-    async def features_by_ids(self, feature_ids: list[uuid.UUID]) -> list[FeatureDTO]:
+    async def features_by_ids(self, feature_ids: list[str]) -> list[FeatureDTO]:
         """ID batch 조회 — trip POI snapshot 갱신용."""
 
     async def build_weather_card(
         self,
-        feature_id: uuid.UUID,
+        feature_id: str,
         *,
         asof: datetime,
     ) -> WeatherCardDTO:

@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.core.deps import CurrentUserId
 from app.etl_bridge.krtour_map import KrtourMapClientDep
@@ -65,7 +65,7 @@ def _parse_bbox(bbox_str: str) -> BBox:
 def _summary_from_dto(dto: dict[str, Any]) -> FeatureSummary:
     """라이브러리 DTO → TripMate FeatureSummary."""
     return FeatureSummary(
-        feature_id=uuid.UUID(str(dto["feature_id"])),
+        feature_id=str(dto["feature_id"]),
         kind=dto["kind"],
         title=dto["title"],
         coord=Coord(longitude=dto["coord"]["longitude"], latitude=dto["coord"]["latitude"]),
@@ -159,7 +159,7 @@ async def search_features(
 
 @router.get("/{feature_id}", response_model=Envelope[FeatureDetail])
 async def get_feature(
-    feature_id: uuid.UUID,
+    feature_id: Annotated[str, Path(min_length=1, max_length=200)],
     _current_user: CurrentUserId,
     client: KrtourMapClientDep,
 ) -> Envelope[FeatureDetail]:
@@ -172,7 +172,7 @@ async def get_feature(
         )
     return Envelope.of(
         FeatureDetail(
-            feature_id=uuid.UUID(str(dto["feature_id"])),
+            feature_id=str(dto["feature_id"]),
             kind=dto["kind"],
             title=dto["title"],
             coord=Coord(longitude=dto["coord"]["longitude"], latitude=dto["coord"]["latitude"]),
@@ -193,7 +193,7 @@ async def get_feature(
 
 @router.get("/{feature_id}/weather", response_model=Envelope[FeatureWeatherCard])
 async def get_feature_weather(
-    feature_id: uuid.UUID,
+    feature_id: Annotated[str, Path(min_length=1, max_length=200)],
     _current_user: CurrentUserId,
     client: KrtourMapClientDep,
 ) -> Envelope[FeatureWeatherCard]:
@@ -202,7 +202,7 @@ async def get_feature_weather(
     dto = await client.build_weather_card(feature_id, asof=asof)
     return Envelope.of(
         FeatureWeatherCard(
-            feature_id=feature_id,
+            feature_id=str(dto.get("feature_id") or feature_id),
             asof=dto.get("asof") or asof,
             short_term=dto.get("short_term", []),
             daily=dto.get("daily", []),

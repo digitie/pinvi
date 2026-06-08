@@ -271,7 +271,8 @@ Cookie: tripmate_access=...
 
 - 좌표 정밀도: 6자리 (~10cm) — 라이브러리 원본 그대로
 - 단, 사용자 위치 자체를 응답에 포함할 때는 4자리 (`docs/api/common.md` §4.2)
-- `feature_id`는 안정적 string (`f_{bjd_code}_{kind[0]}_{sha1[:16]}` 형식)
+- `feature_id`는 krtour-map `make_feature_id`가 발급한 안정적 불투명 문자열이다.
+  TripMate는 UUID나 특정 prefix 구조로 파싱하지 않고 그대로 저장·전달한다(ADR-028).
 - `marker_color` / `marker_icon`은 라이브러리가 카테고리 마스터로 부여한 값.
   사용자가 POI에서 override한 값은 별도 (`docs/api/pois.md`)
 
