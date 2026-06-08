@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — krtour PR #316(ADR-048) 리뷰 + TripMate 반영(외부 표준 추종)
+
+**작업**: krtour-map PR #316("REST API versioning admin/ops 확장 + 정합성 표준", ADR-048)을
+TripMate consumer 관점에서 리뷰하고 PR에 코멘트를 남긴 뒤, TripMate 문서/태스크에 반영했다.
+ADR-048은 **docs-only OPEN 플랜**(live `openapi.user.json`은 아직 unprefixed) — 차단은 아니나
+#317보다 소비자 영향이 크다(외부 표면 표준화).
+
+**PR #316 핵심(TripMate 영향)**:
+- **외부 `/v1` prefix**: 사용자 표면 전체를 `/v1`로(admin/ops/debug까지 통일). T-170 client는
+  base path만 config로 바꾸면 되나 **무중단 이중지원 창** 필요.
+- **RFC7807 `application/problem+json` 에러**: client `_error_code`(현재 `error.code`)가 확장 멤버
+  `code` 파싱으로 갱신 대상. 코드 enum 유지 확인 필요.
+- **파라미터 개명**: `search` bbox CSV→4 float, in-bounds `limit`→`max_items`, `total_count`
+  opt-in `?include_total=true`. 쿼리 빌더 영향.
+- **`*_key`→`*_id` 내부 개명**(경계: `cluster_key`/`feature_id`/`target_key` 보존) + 성공
+  `meta.request_id` 추가(하위호환). admin client(T-180)는 신 spec 기준 작성이라 무영향.
+
+**TripMate 반영**:
+- `integrations/krtour-map-rest-api.md`: §1(`/v1`/RFC7807 예고 경고) + §6 **T-181** 추가 +
+  §7 ADR-048 연동 합의 5건.
+- `tasks.md` **T-181** 신규(표준 추종, 현재 대기·차단 아님).
+
+**연동 합의 질의(krtour PR #316 코멘트)**: ① 외부 `/v1` 이중지원 창+공지, ② 에러 `code`
+위치/enum 고정, ③ 소비 read 필드 개명 제외 확인, ④ 외부 파라미터명 확정, ⑤ #317과 외부 spec
+반영 순서.
+
 ## 2026-06-09 (claude) — krtour PR #317 리뷰 + TripMate 반영(K-15 해소)
 
 **작업**: krtour-map PR #317("admin feature change API")을 TripMate consumer 관점에서 리뷰하고

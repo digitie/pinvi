@@ -284,6 +284,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-179 — [H2] Admin 검사/승인 → krtour **feature change**(DEC-05) — **actionable**(K-15 = krtour PR #317로 구현됨): `/admin/feature-requests` 검사 + approve/reject 시 krtour `POST/PATCH/DELETE /admin/features` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. review_mode 합의(§7) 선행. 재적재와 무관
 - [ ] T-180 — krtour **admin HTTP client(9012)**: §2.9 feature change(`POST/PATCH/DELETE /admin/features`) + 운영자 재적재(`/admin/feature-update-requests`) proxy 호출 client. T-170 user client(9011)와 분리. `tripmate_krtour_map_admin_base_url` + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
 - [ ] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중)
+- [ ] T-181 — [표준 추종] ADR-048(krtour PR #316) 외부 표면 표준 추종: krtour 외부 `/v1` + RFC7807 `application/problem+json` + 파라미터 개명이 안정되면 T-170 client(`apps/api/app/clients/krtour_map.py`) 일괄 갱신 — (1) base path `/v1`(config-driven, 무중단 이중지원 창), (2) `_error_code`를 problem+json 확장 `code` 파싱으로, (3) 쿼리 빌더 개명(`search` bbox CSV→4 float, in-bounds `limit`→`max_items`, `total_count` opt-in `?include_total=true`). frontend는 T-210e codegen이 신 spec pin. **선행**: rest-api §7 ADR-048 합의 5건. krtour spec이 아직 unprefixed라 현재 대기(차단 아님). (krtour PR #316 코멘트 질의 완료 2026-06-09)
 
 ## 머지 히스토리 (참고)
 
