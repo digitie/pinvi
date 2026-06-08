@@ -30,6 +30,7 @@ _URLSAFE_WEBHOOK_SECRET = "whsec_" + base64.urlsafe_b64encode(_WEBHOOK_SECRET_KE
 def _clear_resend_webhook_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "tripmate_environment", "development")
     monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", "")
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", False)
 
 
 async def _seed_email(session_factory) -> str:
@@ -80,7 +81,34 @@ def _signed_headers(
     }
 
 
-async def test_delivered_updates_status(client, session_factory) -> None:
+async def test_unsigned_webhook_rejects_missing_secret_without_local_opt_in(
+    client,
+    session_factory,
+) -> None:
+    email_id = await _seed_email(session_factory)
+    resp = await client.post(
+        "/webhooks/resend",
+        json={
+            "type": "email.delivered",
+            "data": {"headers": {"X-Entity-Ref-ID": email_id}},
+        },
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEBHOOK_SIGNATURE_NOT_CONFIGURED"
+
+    async with session_factory() as db:
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id)))
+        assert row is not None
+        assert row.status == "sent"
+        assert row.delivered_at is None
+
+
+async def test_unsigned_delivered_updates_status_with_local_opt_in(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
@@ -105,6 +133,7 @@ async def test_unsigned_webhook_rejects_missing_secret_in_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "tripmate_environment", "production")
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
 
     resp = await client.post(
@@ -265,7 +294,12 @@ async def test_signed_webhook_rejects_old_timestamp(
         assert row.status == "sent"
 
 
-async def test_bounced_updates_status(client, session_factory) -> None:
+async def test_unsigned_bounced_updates_status_with_local_opt_in(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
@@ -287,7 +321,11 @@ async def test_bounced_updates_status(client, session_factory) -> None:
         assert row.bounced_at is not None
 
 
-async def test_missing_entity_ref_is_ok(client) -> None:
+async def test_unsigned_missing_entity_ref_is_ok_with_local_opt_in(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
     resp = await client.post(
         "/webhooks/resend",
         json={"type": "email.delivered", "data": {"headers": {}}},
