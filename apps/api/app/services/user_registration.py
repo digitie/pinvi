@@ -182,6 +182,7 @@ async def reset_password(db: AsyncSession, *, token: str, new_password: str) -> 
 
     now = datetime.now(UTC)
     user.password_hash = hash_password(new_password)
+    user.access_token_version = (user.access_token_version or 0) + 1
     row.used_at = now
     await revoke_active_user_sessions(db, user_id=user.user_id, revoked_at=now)
     await db.commit()

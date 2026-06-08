@@ -4,9 +4,15 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-163 비밀번호 재설정 access JWT 무효화와 refresh
-회전 race 보강을 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-164 geofence outage 풋건 startup 가드와
+shared-secret 외 방어심화를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-163 비밀번호 재설정 access JWT 무효화 + refresh race 보강 완료** (2026-06-08):
+`users.access_token_version`을 access JWT `token_version` claim과 대조해 reset 전 access
+JWT를 즉시 거부한다. password reset 성공 시 token version 증가 + refresh session 일괄
+revoke + 새 session 발급으로 정렬했고, refresh rotation은 기존 row lock으로 같은 refresh
+token 동시 재사용이 새 session을 둘 이상 만들지 못하게 했다.
 
 **T-125 feature_id 문자열화 완료** (2026-06-08): feature read 응답 schema,
 `/features/{feature_id}` 라우터, krtour-map client Protocol, trip 상세 view builder가

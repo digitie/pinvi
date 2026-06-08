@@ -76,6 +76,7 @@
 | `roles` | `varchar(16)[]` | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']` |
 | `email_verified_at` | `timestamptz` | null이면 미인증 |
 | `email_status` | `varchar(16)` | `active` / `bounced` / `complained` |
+| `access_token_version` | `integer` NOT NULL DEFAULT 0 | access JWT `token_version` claim 검증. 비밀번호 재설정 등 전체 세션 무효화 시 증가 |
 | `is_active` | `boolean` | 서버 로그인 가능 여부 |
 | `deleted_at` | `timestamptz` | soft delete 시각 |
 | `created_at` | `timestamptz` NOT NULL DEFAULT now() | KST aware는 응용에서 변환 |
@@ -107,7 +108,7 @@
 | `user_id` | `uuid` NOT NULL → `app.users` | |
 | `session_token_hash` | `varchar(128)` UNIQUE NOT NULL | refresh token SHA-256 hash |
 | `expires_at` | `timestamptz` NOT NULL | |
-| `revoked_at` | `timestamptz` | nullable. refresh rotation/logout 시 기존 row 폐기 |
+| `revoked_at` | `timestamptz` | nullable. refresh rotation/logout 시 기존 row 폐기. rotation은 기존 row lock 후 처리 |
 | `user_agent` | `varchar(512)` | |
 | `ip_address` | `inet` | |
 | `created_at` | `timestamptz` NOT NULL | |

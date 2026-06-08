@@ -112,6 +112,45 @@ async def test_password_reset_updates_password_and_revokes_sessions(
         assert verification.used_at is not None
 
 
+async def test_password_reset_invalidates_existing_access_cookie(client, session_factory) -> None:
+    user_id, email = await _seed_password_user(session_factory)
+    login_resp = await client.post(
+        "/auth/login",
+        json={"email": email, "password": "old-secret-pw-12345"},
+    )
+    old_access = login_resp.cookies["tripmate_access"]
+    client.cookies.clear()
+
+    request_resp = await client.post("/auth/password/reset-request", json={"email": email})
+    assert request_resp.status_code == 200
+
+    async with session_factory() as db:
+        queue_row = await db.scalar(
+            select(EmailQueue).where(
+                EmailQueue.user_id == uuid.UUID(user_id),
+                EmailQueue.template == "reset_password",
+            )
+        )
+        assert queue_row is not None
+        token = parse_qs(urlparse(str(queue_row.payload["reset_url"])).query)["token"][0]
+
+    reset_resp = await client.post(
+        "/auth/password/reset",
+        json={"token": token, "new_password": "new-secret-pw-67890"},
+    )
+    assert reset_resp.status_code == 200
+    new_access = reset_resp.cookies["tripmate_access"]
+    client.cookies.clear()
+
+    stale_resp = await client.get("/auth/me", cookies={"tripmate_access": old_access})
+    assert stale_resp.status_code == 401
+    assert stale_resp.json()["error"]["code"] == "TOKEN_INVALID"
+
+    fresh_resp = await client.get("/auth/me", cookies={"tripmate_access": new_access})
+    assert fresh_resp.status_code == 200
+    assert fresh_resp.json()["data"]["email"] == email
+
+
 async def test_password_reset_rejects_invalid_token(client) -> None:
     resp = await client.post(
         "/auth/password/reset",

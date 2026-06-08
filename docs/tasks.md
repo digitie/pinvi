@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-163 — 비밀번호 재설정 access JWT 무효화 + refresh 회전 race 보강 (PR #76)
+- [ ] T-164 — geofence outage 풋건 startup 가드 + shared-secret 외 IP allowlist/mTLS 방어심화 (PR #77)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -246,7 +246,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 
 - [x] T-162 — resend 운영 fail-open 잔존: 환경 문자열 게이트(기본 `development`)를 opt-in
   플래그 또는 prod secret 강제로 반전 (PR #74)
-- [ ] T-163 — 비밀번호 재설정 시 access JWT(15분) 무효화(token version/jti denylist) +
+- [x] T-163 — 비밀번호 재설정 시 access JWT(15분) 무효화(token version/jti denylist) +
   refresh 회전 race(row lock/조건부 UPDATE) (PR #76)
 - [ ] T-164 — geofence outage 풋건 startup 가드 + shared-secret 외 IP allowlist/mTLS 방어심화 (PR #77)
 - [ ] T-165 — WS rate-limit grace 슬롯 점유 cap 우회 차단 + `publish_event` broadcast 비동기 분리 (PR #78)

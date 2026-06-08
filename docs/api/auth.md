@@ -154,7 +154,8 @@ Cookie: tripmate_refresh=<opaque>
 응답 200: 새 `tripmate_access` cookie + 새 `tripmate_refresh` cookie.
 
 - 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` →
-  기존 row `revoked_at=now()` + 새 session row 발급(refresh rotation)
+  기존 row lock 후 `revoked_at=now()` + 새 session row 발급(refresh rotation). 같은 refresh
+  token 동시 재사용은 첫 요청만 성공한다.
 - 폐기됨 / 만료됨 → `401 TOKEN_EXPIRED` (cookie 삭제)
 
 ### 3.3 `POST /auth/logout`
@@ -266,7 +267,8 @@ Content-Type: application/json
 { "token": "<43-char>", "new_password": "..." }
 ```
 
-- 토큰 검증 + `password_hash` 갱신 + 모든 `user_sessions` `revoked_at = now()` (로그아웃 전체)
+- 토큰 검증 + `password_hash` 갱신 + `users.access_token_version += 1` +
+  모든 `user_sessions` `revoked_at = now()` (access/refresh 전체 무효화)
 - 응답 200, Set-Cookie 두 개 (자동 로그인)
 
 ## 6. Google OAuth
