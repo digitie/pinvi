@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (claude) — krtour-map REST API 계약 문서화 (붙이기 청사진)
+
+**작업**: TripMate↔krtour-map 연결 작업 진입 전, 양쪽 docs+code를 대조해 REST API 계약을
+정리했다. **중대 변화**: krtour-map이 운영 HTTP API(`packages/krtour-map-admin`, 포트 9011,
+`openapi.user.json`)를 **이미 구축**(HEAD `f442bd0`, T-213a~h 완료) — ADR-026/027/DEC-01=B 충족.
+2026-06-06 requirements가 "없다"던 능력(batch/nearby/search/weather/categories/update-request)
+대부분 구현됨.
+
+**신규 문서**: `docs/integrations/krtour-map-rest-api.md` — 13개 엔드포인트 계약(params/응답
+셰입/소비처/주의) + 데이터 계약(feature_id `f_{bjd}_{k}_{sha1[:16]}` 문자열, name/평면 lon,lat/
+구조화 address/weather metric 목록/server cluster) + TripMate 측 작업 A~H(T-170~T-178).
+
+**TripMate 출발점**: httpx client·config·배선 전부 미구현(`etl_bridge/krtour_map.py`는
+in-process Protocol stub → 모든 `/features/*` 503). #87로 feature_id 문자열화는 1차 반영됨.
+
+**작업 순서 등록**: T-170(client)→T-171(config)→T-172(feature_id 마감) 토대 후 D~H 병행.
+(주의: 본 작업 중 worktree에 있던 무관한 미커밋 변경(rustfs/storage/docker)은 stash로 보존.)
+
 ## 2026-06-08 (codex) — T-125 feature_id 문자열화
 
 **작업**: ADR-028에 따라 TripMate의 feature_id UUID 가정을 제거했다.
