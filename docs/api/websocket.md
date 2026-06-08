@@ -107,12 +107,15 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 ## 7. Rate limit
 
 - 클라이언트 → 서버 메시지: 초당 5개 / 분당 60개
-- 초과 시 `error` 이벤트 + 30초 grace 후 close `4429` (`rate_limited`)
+- 초과 시 `error` 이벤트 + broker slot 즉시 반환 + 30초 grace 후 close `4429`
+  (`rate_limited`)
 - Reconnect: 클라이언트 측 exponential backoff (1s, 2s, 4s, ... max 30s)
 - `presence.cursor`는 좌표 숫자/range를 검증하고 서버가 `user_id`를 채워 broadcast한다.
 - process-local cap: trip당 10 connections, process 전체 200 connections. 초과 시
   `{ "code": 4408, "reason": "trip_connection_limit_exceeded" }` 또는
   `process_connection_limit_exceeded` 후 close `4408`.
+- HTTP mutation broadcast는 background task로 예약한다. 응답 경로는 fan-out 완료를 기다리지
+  않는다.
 - broadcast send timeout 기본 2초. 느린 peer는 stale connection으로 제거해 같은 trip fan-out을
   막지 않게 한다.
 

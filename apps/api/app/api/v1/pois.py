@@ -106,7 +106,7 @@ async def create_poi_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_response(poi)
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.created",
         actor_user_id=uuid.UUID(current_user_id),
@@ -145,7 +145,7 @@ async def update_poi_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_response(poi)
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.updated",
         actor_user_id=uuid.UUID(current_user_id),
@@ -175,7 +175,7 @@ async def delete_poi_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.deleted",
         actor_user_id=uuid.UUID(current_user_id),
@@ -205,7 +205,7 @@ async def reorder_pois_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = [_to_response(p) for p in updated]
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.reordered",
         actor_user_id=uuid.UUID(current_user_id),

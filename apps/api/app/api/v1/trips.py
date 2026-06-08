@@ -187,7 +187,7 @@ async def update_trip_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip.trip_id,
         event_type="trip.updated",
         actor_user_id=uuid.UUID(current_user_id),
@@ -230,7 +230,7 @@ async def invite_trip_member(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_companion_response(companion)
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="trip.member_changed",
         actor_user_id=actor_id,
@@ -255,7 +255,7 @@ async def remove_trip_member(
         await remove_companion(db, trip_id=trip_id, companion_id=companion_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="trip.member_changed",
         actor_user_id=actor_id,
@@ -307,7 +307,7 @@ async def create_trip_comment(
         day_index=body.day_index,
     )
     response = _to_comment_response(comment)
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="comment.created",
         actor_user_id=actor_id,
@@ -337,7 +337,7 @@ async def delete_trip_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    await realtime_broker.publish_event(
+    realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="comment.deleted",
         actor_user_id=actor_id,

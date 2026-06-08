@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -151,6 +152,54 @@ async def test_ws_trip_channel_rate_limits_client_messages(
 
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 websocket.receive_json()
+            assert exc_info.value.code == 4429
+
+
+async def test_ws_trip_channel_releases_cap_before_rate_limit_grace_close(
+    session_factory,
+    verified_user,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.main import app
+
+    await realtime_broker.reset()
+    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_second", 2)
+    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_minute", 60)
+    monkeypatch.setattr(settings, "tripmate_ws_rate_limit_close_grace_seconds", 0.5)
+    monkeypatch.setattr(settings, "tripmate_ws_max_connections_per_trip", 1)
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    token = cookies["tripmate_access"]
+
+    with TestClient(app) as sync_client:
+        created = sync_client.post("/trips", json={"title": "rate grace cap"}, cookies=cookies)
+        assert created.status_code == 201, created.text
+        trip_id = created.json()["data"]["trip_id"]
+        trip_uuid = uuid.UUID(trip_id)
+
+        with sync_client.websocket_connect(f"/ws/trips/{trip_id}?token={token}") as first:
+            assert first.receive_json()["type"] == "presence.update"
+
+            first.send_json({"type": "pong", "payload": {}})
+            first.send_json({"type": "pong", "payload": {}})
+            first.send_json({"type": "pong", "payload": {}})
+
+            limited = first.receive_json()
+            assert limited["type"] == "error"
+            assert limited["payload"]["code"] == "RATE_LIMITED"
+
+            for _ in range(50):
+                if await realtime_broker.connection_count(trip_uuid) == 0:
+                    break
+                await asyncio.sleep(0.01)
+            assert await realtime_broker.connection_count(trip_uuid) == 0
+
+            with sync_client.websocket_connect(f"/ws/trips/{trip_id}?token={token}") as second:
+                assert second.receive_json()["type"] == "presence.update"
+
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                first.receive_json()
             assert exc_info.value.code == 4429
 
 

@@ -31,8 +31,9 @@ trip_id -> set(RealtimeConnection)
 RealtimeConnection = websocket + user_id + viewing_day + last_seen_at
 ```
 
-HTTP mutating route가 DB commit 이후 `realtime_broker.publish_event(...)`를 호출한다.
-broker는 현재 process에 연결된 같은 trip WebSocket에만 JSON message를 보낸다.
+HTTP mutating route는 DB commit 이후 `realtime_broker.publish_event_nowait(...)`로
+broadcast task를 예약하고 응답 경로에서는 fan-out 완료를 기다리지 않는다. broker는 현재
+process에 연결된 같은 trip WebSocket에만 JSON message를 보낸다.
 
 이 구조는 다음을 의도적으로 감수한다:
 
@@ -57,6 +58,8 @@ worker를 1개로 고정하거나 sticky session을 적용한다.
 
 초과 처리는 `docs/api/websocket.md` §7의 close code를 따른다. `presence.cursor`는
 서버가 좌표 범위를 검증하고 canonical `longitude`/`latitude` payload로 broadcast한다.
+client message rate 초과 connection은 close grace 전에 broker에서 제거해 cap slot을 즉시
+반환한다.
 
 ## 3. 메시지 envelope
 

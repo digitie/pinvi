@@ -52,6 +52,7 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
         await websocket.close(code=_CLOSE_CONNECTION_LIMIT, reason=exc.reason)
         return
 
+    active_connection: RealtimeConnection | None = connection
     rate_limiter = _ClientMessageRateLimiter()
     try:
         while True:
@@ -65,6 +66,8 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
                     code="RATE_LIMITED",
                     message="WebSocket 메시지 전송 한도를 초과했습니다.",
                 )
+                await realtime_broker.disconnect(connection)
+                active_connection = None
                 await asyncio.sleep(settings.tripmate_ws_rate_limit_close_grace_seconds)
                 await websocket.close(code=_CLOSE_RATE_LIMITED, reason="rate_limited")
                 return
@@ -74,7 +77,8 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        await realtime_broker.disconnect(connection)
+        if active_connection is not None:
+            await realtime_broker.disconnect(active_connection)
 
 
 async def _authenticate(websocket: WebSocket) -> uuid.UUID | None:
