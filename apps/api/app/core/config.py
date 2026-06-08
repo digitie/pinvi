@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     )
     tripmate_rustfs_public_base_url: str = ""
 
+    # krtour-map 독립 프로그램 (지도 feature OpenAPI HTTP, ADR-026/027)
+    # `docs/integrations/krtour-map-rest-api.md` §1 — API 9011 / Admin 9012.
+    tripmate_krtour_map_api_base_url: str = "http://localhost:9011"
+    tripmate_krtour_map_admin_base_url: str = "http://localhost:9012"
+    # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Krtour-Service-Token 전달.
+    tripmate_krtour_map_service_token: str = ""
+    tripmate_krtour_map_timeout_seconds: float = 5.0
+    tripmate_krtour_map_max_attempts: int = 3
+    tripmate_krtour_map_batch_chunk_size: int = 200  # /tripmate/features/batch cap
+
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]

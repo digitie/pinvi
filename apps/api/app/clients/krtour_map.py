@@ -1,0 +1,337 @@
+"""krtour-map OpenAPI HTTP client (transport-only).
+
+`python-krtour-map`의 운영 HTTP API(`krtour-map-admin`, 포트 9011,
+`openapi.user.json`)를 호출하는 httpx 기반 client다. ADR-026/027(DEC-01=B) 기준이며
+in-process import(`from krtour.map import ...`)를 쓰지 않는다.
+
+- transport 역할만 한다(ADR-005). provider 변환/feature 정규화 같은 도메인 wrapper를
+  만들지 않는다. 응답은 krtour envelope(`{data, meta}`)에서 `data`만 풀어 dict로 돌려준다.
+- 응답 셰입을 TripMate schema로 매핑하는 책임은 라우터/뷰 계층(T-173/T-124)이다.
+- 에러는 도메인 예외로 올리고, HTTP status 변환(503 FEATURE_SERVICE_UNAVAILABLE 등)은
+  라우터(T-178)가 한다.
+
+계약: `docs/integrations/krtour-map-rest-api.md`.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Annotated, Any
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+
+from app.core.config import Settings, settings
+
+logger = logging.getLogger(__name__)
+
+_SERVICE_TOKEN_HEADER = "X-Krtour-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+
+
+class KrtourMapError(Exception):
+    """krtour-map 호출 일반 오류."""
+
+
+class KrtourMapUnavailable(KrtourMapError):
+    """timeout / 연결 실패 / 5xx — 재시도 후에도 실패(503 매핑 대상)."""
+
+
+class KrtourMapFeatureNotFound(KrtourMapError):
+    """404 FEATURE_NOT_FOUND."""
+
+
+class KrtourMapBadRequest(KrtourMapError):
+    """4xx 잘못된 요청 (422 INVALID_BBOX / TOO_MANY_IDS 등)."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class KrtourMapRateLimited(KrtourMapError):
+    """429 RATE_LIMITED / 409 LOCK_BUSY — Retry-After 존중."""
+
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class KrtourMapClient:
+    """krtour-map user-facing OpenAPI(`openapi.user.json`) HTTP client."""
+
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        *,
+        service_token: str = "",
+        max_attempts: int = 3,
+        batch_chunk_size: int = 200,
+        backoff_base_seconds: float = 0.2,
+    ) -> None:
+        self._http = http
+        self._service_token = service_token
+        self._max_attempts = max(1, max_attempts)
+        self._batch_chunk_size = max(1, batch_chunk_size)
+        self._backoff_base_seconds = backoff_base_seconds
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    # ── 내부 ────────────────────────────────────────────────────────────────
+
+    def _headers(self) -> dict[str, str]:
+        if self._service_token:
+            return {_SERVICE_TOKEN_HEADER: self._service_token}
+        return {}
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any | None = None,
+    ) -> httpx.Response:
+        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
+        last: KrtourMapUnavailable | None = None
+        for attempt in range(self._max_attempts):
+            try:
+                resp = await self._http.request(
+                    method, path, params=params, json=json, headers=self._headers()
+                )
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last = KrtourMapUnavailable(f"krtour-map 요청 실패({path}): {exc!r}")
+            else:
+                if resp.status_code >= 500:
+                    last = KrtourMapUnavailable(f"krtour-map {resp.status_code} ({path})")
+                else:
+                    return resp
+            if attempt + 1 < self._max_attempts:
+                await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
+        logger.warning("krtour_map.unavailable", extra={"path": path})
+        raise last or KrtourMapUnavailable(f"krtour-map 요청 실패({path})")
+
+    @staticmethod
+    def _retry_after(resp: httpx.Response) -> int | None:
+        raw = resp.headers.get("Retry-After")
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
+    def _data(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답에서 `data`(dict) 추출. 오류 status는 도메인 예외로 변환."""
+        sc = resp.status_code
+        if sc == status.HTTP_404_NOT_FOUND:
+            raise KrtourMapFeatureNotFound("feature 를 찾을 수 없습니다.")
+        if sc in (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_409_CONFLICT):
+            raise KrtourMapRateLimited(
+                f"krtour-map {sc}", retry_after_seconds=self._retry_after(resp)
+            )
+        if sc >= status.HTTP_400_BAD_REQUEST:
+            raise KrtourMapBadRequest(f"krtour-map {sc}", code=_error_code(resp))
+        payload = resp.json()
+        data = payload.get("data") if isinstance(payload, Mapping) else None
+        if not isinstance(data, dict):
+            raise KrtourMapError(f"예상치 못한 응답 셰입({resp.request.url.path})")
+        return data
+
+    # ── 사용자 표면 (openapi.user.json) ─────────────────────────────────────
+
+    async def features_in_bounds(
+        self,
+        *,
+        min_lon: float,
+        min_lat: float,
+        max_lon: float,
+        max_lat: float,
+        kinds: Sequence[str] | None = None,
+        category: str | None = None,
+        zoom: int | None = None,
+        cluster_unit: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """viewport feature + 서버 클러스터. data = {count, cluster_unit, clusters, items}."""
+        params: dict[str, Any] = {
+            "min_lon": min_lon,
+            "min_lat": min_lat,
+            "max_lon": max_lon,
+            "max_lat": max_lat,
+        }
+        if kinds:
+            params["kind"] = list(kinds)
+        if category is not None:
+            params["category"] = category
+        if zoom is not None:
+            params["zoom"] = zoom
+        if cluster_unit is not None:
+            params["cluster_unit"] = cluster_unit
+        if limit is not None:
+            params["limit"] = limit
+        return self._data(await self._send("GET", "/features/in-bounds", params=params))
+
+    async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
+        """단건 상세. 404 → None."""
+        resp = await self._send("GET", f"/features/{feature_id}")
+        if resp.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        return self._data(resp)
+
+    async def get_features(self, feature_ids: Sequence[str]) -> dict[str, Any]:
+        """배치 조회 — cap 초과 시 청크 분할. data = {items: {id: detail}, missing: [id]}."""
+        unique = list(dict.fromkeys(feature_ids))
+        items: dict[str, Any] = {}
+        missing: list[str] = []
+        for start in range(0, len(unique), self._batch_chunk_size):
+            chunk = unique[start : start + self._batch_chunk_size]
+            data = self._data(
+                await self._send("POST", "/tripmate/features/batch", json={"feature_ids": chunk})
+            )
+            chunk_items = data.get("items")
+            if isinstance(chunk_items, dict):
+                items.update(chunk_items)
+            chunk_missing = data.get("missing")
+            if isinstance(chunk_missing, list):
+                missing.extend(str(x) for x in chunk_missing)
+        return {"items": items, "missing": missing}
+
+    async def features_nearby(
+        self,
+        *,
+        lon: float,
+        lat: float,
+        radius_m: float,
+        kinds: Sequence[str] | None = None,
+        category: str | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        sort: str | None = None,
+    ) -> dict[str, Any]:
+        """반경 조회. data = {origin, items:[+distance_m], next_cursor}."""
+        params: dict[str, Any] = {"lon": lon, "lat": lat, "radius_m": radius_m}
+        if kinds:
+            params["kind"] = list(kinds)
+        if category is not None:
+            params["category"] = category
+        if page_size is not None:
+            params["page_size"] = page_size
+        if cursor is not None:
+            params["cursor"] = cursor
+        if sort is not None:
+            params["sort"] = sort
+        return self._data(await self._send("GET", "/features/nearby", params=params))
+
+    async def search_features(
+        self,
+        *,
+        q: str | None = None,
+        bbox: str | None = None,
+        kinds: Sequence[str] | None = None,
+        category: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """텍스트 검색(feature만). data = {items, next_cursor, total_count}."""
+        params: dict[str, Any] = {}
+        if q is not None:
+            params["q"] = q
+        if bbox is not None:
+            params["bbox"] = bbox
+        if kinds:
+            params["kind"] = list(kinds)
+        if category is not None:
+            params["category"] = category
+        if limit is not None:
+            params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
+        return self._data(await self._send("GET", "/features/search", params=params))
+
+    async def feature_weather(
+        self, feature_id: str, *, asof: datetime | None = None
+    ) -> dict[str, Any]:
+        """날씨 카드. data = {feature_id, asof, is_stale, source_styles, metrics}."""
+        params: dict[str, Any] = {}
+        if asof is not None:
+            params["asof"] = asof.isoformat()
+        return self._data(await self._send("GET", f"/features/{feature_id}/weather", params=params))
+
+    async def categories(
+        self, *, include_counts: bool = False, active_only: bool = False
+    ) -> dict[str, Any]:
+        """카테고리 카탈로그. data = {count, include_counts, items}."""
+        params = {"include_counts": include_counts, "active_only": active_only}
+        return self._data(await self._send("GET", "/categories", params=params))
+
+    async def healthz(self) -> dict[str, Any]:
+        """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""
+        resp = await self._send("GET", "/health")
+        body = resp.json()
+        return body if isinstance(body, dict) else {"status": "unknown"}
+
+
+def _error_code(resp: httpx.Response) -> str | None:
+    try:
+        payload = resp.json()
+    except ValueError:
+        return None
+    if isinstance(payload, Mapping):
+        error = payload.get("error")
+        if isinstance(error, Mapping):
+            code = error.get("code")
+            if isinstance(code, str):
+                return code
+    return None
+
+
+def create_krtour_map_client(app_settings: Settings) -> KrtourMapClient:
+    """설정 기반 client 생성 (httpx.AsyncClient 1개)."""
+    http = httpx.AsyncClient(
+        base_url=app_settings.tripmate_krtour_map_api_base_url,
+        timeout=app_settings.tripmate_krtour_map_timeout_seconds,
+    )
+    return KrtourMapClient(
+        http,
+        service_token=app_settings.tripmate_krtour_map_service_token,
+        max_attempts=app_settings.tripmate_krtour_map_max_attempts,
+        batch_chunk_size=app_settings.tripmate_krtour_map_batch_chunk_size,
+    )
+
+
+@asynccontextmanager
+async def krtour_map_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan — httpx client 1개 생성 후 `app.state`에 보관."""
+    client = create_krtour_map_client(settings)
+    app.state.krtour_map_client = client
+    logger.info(
+        "krtour_map.client_ready",
+        extra={"base_url": settings.tripmate_krtour_map_api_base_url},
+    )
+    try:
+        yield
+    finally:
+        await client.aclose()
+        app.state.krtour_map_client = None
+
+
+def get_krtour_map_client(request: Request) -> KrtourMapClient:
+    """FastAPI 의존성 — `app.state`의 client. 미주입 시 503."""
+    client = getattr(request.app.state, "krtour_map_client", None)
+    if not isinstance(client, KrtourMapClient):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "FEATURE_SERVICE_UNAVAILABLE",
+                "message": "지도 feature 서비스가 일시적으로 사용 불가합니다.",
+            },
+        )
+    return client
+
+
+KrtourMapHttpClientDep = Annotated[KrtourMapClient, Depends(get_krtour_map_client)]

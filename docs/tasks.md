@@ -269,8 +269,12 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 9011, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 TripMate가
 실제 연결한다. 권장 순서 A→B→C 먼저, 이후 D~H 병행.
 
-- [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
-- [ ] T-171 — [B] config 배선(`TRIPMATE_KRTOUR_MAP_API_BASE_URL` Settings 필드 — 현재 silently ignored)
+- [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/krtour_map.py`
+  — features in-bounds/get/batch/nearby/search/weather/categories/healthz + 도메인 예외
+  + 재시도(transient 백오프) + 서비스 토큰 헤더 + lifespan/dependency + MockTransport 계약
+  테스트 10개. 라우터 cutover/stub 제거는 T-173)
+- [x] T-171 — [B] config 배선 (완료: 2026-06-09, `Settings`에 `tripmate_krtour_map_*` 필드
+  추가 + `.env.example`/`apps/api/.env.example` 블록. 기존엔 필드 없어 env silently ignored)
 - [ ] T-172 — [C] feature_id 문자열 정합 마감(#87/T-125 후속, 잔여 uuid 캐스트·`@version` 가정 제거)
 - [ ] T-173 — [D] 응답 셰입 정렬(name/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입)
 - [ ] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거

@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-170/T-171 krtour-map HTTP client + config 배선
+
+**작업**: TripMate↔krtour-map 연결 토대. `docs/integrations/krtour-map-rest-api.md` 계약 기준.
+
+- **T-171**: `Settings`에 `tripmate_krtour_map_api_base_url`/`admin_base_url`/`service_token`/
+  `timeout_seconds`/`max_attempts`/`batch_chunk_size` 필드 추가(기존엔 필드 없어 `.env` 값
+  silently ignored) + `.env.example`/`apps/api/.env.example` 블록.
+- **T-170**: `apps/api/app/clients/krtour_map.py` 신설 — httpx 기반, openapi.user.json 계약
+  메서드(features_in_bounds[서버 클러스터]/get_feature[404→None]/get_features[batch,
+  cap 청크]/features_nearby/search_features/feature_weather/categories/healthz),
+  `{data,meta}` 언랩, 도메인 예외(Unavailable/FeatureNotFound/BadRequest/RateLimited),
+  transient(타임아웃/연결/5xx) 지수 백오프 재시도, X-Krtour-Service-Token 전달,
+  lifespan(`app.state`) + `get_krtour_map_client` 의존성. MockTransport 계약 테스트 10개.
+- `main.py` lifespan에 신규 client 등록. 레거시 in-process Protocol stub
+  (`etl_bridge/krtour_map.py`)은 라우터 cutover(T-173) 후 제거 — 본 PR은 additive.
+
+**검증(WSL 미러)**: ruff check + ruff format --check + mypy --strict app + pytest unit
+100 passed. main import OK.
+
 ## 2026-06-09 (codex) — T-132 Trip 하위 리소스 API 분할
 
 **작업**: 감사 C-06/D-06 후속으로 Trip 소유 하위 리소스 중 krtour-map 연계가 필요 없는

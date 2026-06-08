@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.v1 import api_router
+from app.clients.krtour_map import krtour_map_client_lifespan
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging, get_logger
@@ -34,8 +35,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     for warning in validate_geofence_configuration():
         log.warning("tripmate.geofence.config_warning", warning=warning)
-    # python-krtour-map client lifespan (ADR-002) — 라이브러리 ready 전이면 client=None
-    async with krtour_map_lifespan(app):
+    # krtour-map OpenAPI HTTP client (ADR-026/027) — feature 데이터 read 경로.
+    # 레거시 in-process Protocol stub(krtour_map_lifespan)은 라우터 cutover(T-173) 후 제거.
+    async with krtour_map_client_lifespan(app), krtour_map_lifespan(app):
         yield
     log.info("tripmate.api.stop")
 
