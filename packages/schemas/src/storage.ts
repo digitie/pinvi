@@ -32,6 +32,7 @@ export const UploadUrlResponseSchema = z.object({
 export type UploadUrlResponse = z.infer<typeof UploadUrlResponseSchema>;
 
 export const AttachmentRoleSchema = z.enum(['attachment', 'image', 'document', 'reference']);
+const NullableUuidSchema = z.string().uuid().nullable();
 
 export const AttachmentCreateSchema = z.object({
   bucket: z.string().min(1).max(80),
@@ -50,3 +51,63 @@ export const AttachmentCreateSchema = z.object({
   sort_order: z.number().int().min(0).default(0),
 });
 export type AttachmentCreate = z.infer<typeof AttachmentCreateSchema>;
+
+const AttachmentResponseBaseSchema = z
+  .object({
+    attachment_id: z.string().uuid(),
+    trip_id: NullableUuidSchema,
+    trip_poi_id: NullableUuidSchema,
+    curated_plan_id: NullableUuidSchema.optional(),
+    curated_poi_id: NullableUuidSchema.optional(),
+    notice_plan_id: NullableUuidSchema.optional(),
+    notice_poi_id: NullableUuidSchema.optional(),
+    source_attachment_id: NullableUuidSchema,
+    bucket: z.string(),
+    storage_key: z.string(),
+    original_filename: z.string(),
+    content_type: z.string(),
+    byte_size: z.number().int(),
+    public_url: z.string().nullable(),
+    role: AttachmentRoleSchema,
+    description: z.string().nullable(),
+    sort_order: z.number().int(),
+    created_at: Iso8601Schema,
+    updated_at: Iso8601Schema,
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.curated_plan_id &&
+      value.notice_plan_id &&
+      value.curated_plan_id !== value.notice_plan_id
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['notice_plan_id'],
+        message: 'notice_plan_id must match curated_plan_id',
+      });
+    }
+    if (
+      value.curated_poi_id &&
+      value.notice_poi_id &&
+      value.curated_poi_id !== value.notice_poi_id
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['notice_poi_id'],
+        message: 'notice_poi_id must match curated_poi_id',
+      });
+    }
+  });
+
+export const AttachmentResponseSchema = AttachmentResponseBaseSchema.transform((value) => {
+  const curatedPlanId = value.curated_plan_id ?? value.notice_plan_id ?? null;
+  const curatedPoiId = value.curated_poi_id ?? value.notice_poi_id ?? null;
+  return {
+    ...value,
+    curated_plan_id: curatedPlanId,
+    curated_poi_id: curatedPoiId,
+    notice_plan_id: curatedPlanId,
+    notice_poi_id: curatedPoiId,
+  };
+});
+export type AttachmentResponse = z.infer<typeof AttachmentResponseSchema>;

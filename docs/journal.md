@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-168 storage AttachmentResponse 호환 alias
+
+**작업**: PR #73 사후 리뷰 잔존인 storage `AttachmentResponse`와 notice-plan attachment
+alias 정책 비대칭을 정리했다.
+
+**변경**:
+- Pydantic `AttachmentResponse`에 `notice_plan_id` / `notice_poi_id` alias를 추가하고
+  `curated_*`와 notice alias를 같은 값으로 정규화한다. 두 값이 불일치하면 validation error.
+- Zod `AttachmentResponseSchema`를 추가하고 같은 alias 정규화/불일치 reject 정책을 반영했다.
+- storage/notice-plans API 문서에 `curated_*` 정본 + `notice_*` 호환 alias 병행 정책을 명시했다.
+- Pydantic unit test와 `packages/schemas` Vitest storage schema 테스트를 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/schemas/storage.py tests/unit/test_schemas.py`
+- WSL2 ext4 mirror: `ruff check app/schemas/storage.py tests/unit/test_schemas.py`
+- WSL2 ext4 mirror: `mypy --strict app/schemas/storage.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_schemas.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run test --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+
+**다음**: T-169 MCP `list_trips` bucket/cursor parity + `search_features` HTTP 표현 정리.
+
 ## 2026-06-08 (codex) — T-167 money 표현 통일
 
 **작업**: PR #79 사후 리뷰 잔존인 admin money `string | number` union과

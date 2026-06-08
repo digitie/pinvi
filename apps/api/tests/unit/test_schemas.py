@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
 from app.schemas.auth import LoginRequest, RegisterRequest, VerifyEmailRequest
+from app.schemas.storage import AttachmentResponse
 
 
 def _register_consents() -> list[dict[str, str]]:
@@ -77,3 +81,84 @@ def test_verify_email_request_token_length() -> None:
 def test_login_request_valid() -> None:
     req = LoginRequest(email="user@example.com", password="x")
     assert req.password == "x"
+
+
+def test_attachment_response_syncs_notice_aliases() -> None:
+    plan_id = uuid.uuid4()
+    poi_id = uuid.uuid4()
+    response = AttachmentResponse(
+        attachment_id=uuid.uuid4(),
+        trip_id=None,
+        trip_poi_id=None,
+        curated_plan_id=plan_id,
+        curated_poi_id=poi_id,
+        source_attachment_id=None,
+        bucket="tripmate-media",
+        storage_key="curated/plan/image.jpg",
+        original_filename="image.jpg",
+        content_type="image/jpeg",
+        byte_size=1024,
+        public_url=None,
+        role="image",
+        description=None,
+        sort_order=0,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert response.notice_plan_id == plan_id
+    assert response.notice_poi_id == poi_id
+    dumped = response.model_dump(mode="json")
+    assert dumped["notice_plan_id"] == str(plan_id)
+    assert dumped["notice_poi_id"] == str(poi_id)
+
+
+def test_attachment_response_accepts_legacy_notice_aliases() -> None:
+    plan_id = uuid.uuid4()
+    response = AttachmentResponse(
+        attachment_id=uuid.uuid4(),
+        trip_id=None,
+        trip_poi_id=None,
+        notice_plan_id=plan_id,
+        notice_poi_id=None,
+        source_attachment_id=None,
+        bucket="tripmate-media",
+        storage_key="curated/plan/image.jpg",
+        original_filename="image.jpg",
+        content_type="image/jpeg",
+        byte_size=1024,
+        public_url=None,
+        role="image",
+        description=None,
+        sort_order=0,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert response.curated_plan_id == plan_id
+    assert response.notice_plan_id == plan_id
+
+
+def test_attachment_response_rejects_mismatched_notice_aliases() -> None:
+    with pytest.raises(ValidationError):
+        AttachmentResponse(
+            attachment_id=uuid.uuid4(),
+            trip_id=None,
+            trip_poi_id=None,
+            curated_plan_id=uuid.uuid4(),
+            curated_poi_id=None,
+            notice_plan_id=uuid.uuid4(),
+            notice_poi_id=None,
+            source_attachment_id=None,
+            bucket="tripmate-media",
+            storage_key="curated/plan/image.jpg",
+            original_filename="image.jpg",
+            content_type="image/jpeg",
+            byte_size=1024,
+            public_url=None,
+            role="image",
+            description=None,
+            sort_order=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
