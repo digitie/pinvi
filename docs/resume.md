@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-167 money 표현 통일(admin union→decimal-string)과
-`packages/schemas` round-trip 테스트를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-168 storage `AttachmentResponse` 필드 호환 정책을
+notice-plans와 통일한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-167 money 표현 통일 완료** (2026-06-08): admin POI detail Zod money 필드를
+`string | number` union에서 `NonNegativeDecimalStringSchema`로 통일했다. `packages/schemas`
+Vitest round-trip 테스트를 추가해 admin/POI/trip-view/notice-plan 응답 money가 decimal string으로
+유지되고 number/exponential/negative 표현은 거부되는지 검증한다.
 
 **T-166 admin 감사 hash-chain head 직렬화 완료** (2026-06-08):
 `app.admin_audit_log.prev_hash`에 unique constraint를 추가하고, `append_admin_audit()`가
