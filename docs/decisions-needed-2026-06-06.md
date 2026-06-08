@@ -82,13 +82,15 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
   목록/검수 + `POST /admin/feature-requests/{id}/approve|reject` (RBAC admin/operator + audit).
   **승인 시 krtour-map의 feature 추가 API로 feature를 추가한다.** 재적재 호출과 무관.
 
-**⚠️ krtour 신규 구축 필요 — feature 추가 API 미존재(확정)**: 현재 krtour의 feature **추가**
-표면은 `POST /admin/offline-uploads`(multipart **파일** CSV/TSV → validate → Dagster load)**뿐**
-이고, **단건 "이 장소 하나 추가" REST 엔드포인트가 없다**(`/admin/features`는 list + deactivate만).
-→ 승인된 제안을 추가하려면 krtour가 **단건 feature add API를 새로 만들어야 한다**(예
-`POST /admin/features` 또는 `/tripmate/features`, 입력 = name/coord/category/kind/note/source).
-**`docs/krtour-map-requirements.md` K-15로 krtour 요청 등록.** TripMate 승인 흐름(T-179)은 이
-API 완성에 의존한다.
+**✅ krtour feature 추가 API 구현됨(krtour PR #317, 2026-06-09)**: `POST /admin/features`(create) /
+`PATCH /admin/features/{id}` / `DELETE /admin/features/{id}` 신설(place/event). version 0(provider)/
+1(user) 분리 + 재적재 보존. 응답에 `feature_id`/`request_id`/state. (계약 §
+`docs/integrations/krtour-map-rest-api.md` §2.9, 요구사항 K-15.) → T-179 actionable.
+**남은 하위 결정(연동 합의, krtour PR #317 코멘트로 질의 중)**:
+- **review_mode**: krtour 기본 `require_review`인데 TripMate가 이미 Admin 검수 → 이중 검수 방지.
+  krtour `immediate` / TripMate `create→approve` 2-step / 요청 단위 override 중 합의.
+- idempotency_key 멱등, 출처 태깅, admin 인증(9012), closure(DELETE vs deactivate).
+
 **근거**: 경계(검수/남용/PII는 TripMate user 도메인), 재적재(운영)와 제안(사용자)은 별개 도메인.
 
 ---
@@ -146,7 +148,7 @@ API 완성에 의존한다.
 | DEC-02 | ☑ krtour `make_feature_id` 정본(문자열) | 2026-06-06 | 권고 기본값 적용. ADR-028 |
 | DEC-03 | ☑ 큐레이션→`curated_trip_plans` 분리 | 2026-06-06 | 사용자. ADR-029 |
 | DEC-04 | ☑ 서버(krtour DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
-| DEC-05 | ☑ **재적재(krtour admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=TripMate(`app.feature_suggestions`)→Admin 검사/승인→**krtour 신규 feature 추가 API**로 추가 | 2026-06-08 | 사용자 확정. feature 추가 API는 **미존재 → krtour 신규 구축** 필요(`krtour-map-requirements.md` K-15). §DEC-05 본문 |
+| DEC-05 | ☑ **재적재(krtour admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=TripMate→Admin 검사/승인→krtour feature 추가 API로 반영 | 2026-06-08 | 사용자 확정. feature 추가 API = **krtour PR #317로 구현됨(2026-06-09)** → T-179 actionable. review_mode 등 연동 합의 진행. §DEC-05 본문 |
 | DEC-06 | ☑ **krtour 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
 | DEC-07 | ☑ 제안 기본값 + `/v1` 노출 | 2026-06-06 | 사용자. ADR-030 |
 | DEC-08 | ☑ POI **soft delete** | 2026-06-06 | 권고 기본값 적용. ADR-031(예정) |
