@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-111 Backup/Restore UI 핫스왑
+
+**작업**: ADR-022/T-145의 동일 DB schema-swap restore를 admin API와 `/admin/backup`
+UI에 연결했다.
+
+**변경**:
+- `POST /admin/backup/restore-hotswap` API를 추가했다. 요청은 `snapshot_id`,
+  `access_reason`, `confirm_schema_swap`을 받으며, 성공/실패 모두 admin audit에 기록한다.
+- `backup_service`에 snapshot lookup, restore run/phase 모델, hotswap script 실행 및
+  `RESTORE_PHASE=...` 로그 파서를 추가했다.
+- `scripts/restore-hotswap.sh`를 추가했다. 기본은 `TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1`
+  가드 뒤에서 custom dump를 `app_restore_<ts>` schema로 remap restore하고, 검증/drain 후
+  `app` → `app_previous_<ts>`, `app_restore_<ts>` → `app` rename을 수행한다.
+- `packages/schemas` / `packages/api-client`에 restore request/run schema와 client 메서드를
+  추가했고, `/admin/backup`에 `RestoreHotswapDialog`를 연결했다.
+- backup/restore API·아키텍처·runbook·환경변수 예시와 `docs/tasks.md` / `docs/resume.md`를
+  T-111 완료 상태로 갱신했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/core/config.py app/services/backup_service.py app/api/v1/admin/backup.py app/schemas/admin.py tests/unit/test_backup_service.py`
+- WSL2 ext4 mirror: `ruff check app/core/config.py app/services/backup_service.py app/api/v1/admin/backup.py app/schemas/admin.py tests/unit/test_backup_service.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/config.py app/services/backup_service.py app/api/v1/admin/backup.py app/schemas/admin.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_backup_service.py`
+- WSL2 ext4 mirror: `bash -n scripts/restore-hotswap.sh`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/schemas`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/api-client`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+- Windows Playwright runner → WSL dev server:
+  `PLAYWRIGHT_BASE_URL=http://172.26.51.35:9022 ... @playwright/test@1.60.0 test admin-backup.e2e.ts`
+- NTFS worktree: `git diff --check`
+
+**다음**: PR 머지 후 남은 krtour-map 비의존 후보를 재감사한다. 현재 문서상 다음 후보는
+T-132 trip 하위 리소스 분할이다.
+
 ## 2026-06-08 (codex) — T-135 POI rise_set 응답 노출
 
 **작업**: 감사 C-18 후속인 POI 응답 `rise_set` 미노출을 정리했다.

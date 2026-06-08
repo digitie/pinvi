@@ -12,9 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
-  + RestoreHotswapDialog. krtour-map HTTP 서비스 준비와 무관한 다음 구현 후보.
-  <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
+- [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
 
 ## 완료
@@ -101,7 +99,7 @@
 - [x] T-115 — Backup snapshot foundation + `/admin/backup` 1차 UI
   (완료: 2026-06-06, `scripts/backup-db.sh` / `scripts/restore-db.sh` +
   `GET /admin/backup/snapshots` + `POST /admin/backup/snapshot` + admin snapshot page.
-  핫스왑 restore는 T-111로 유지)
+  핫스왑 restore는 T-111에서 완료)
 - [x] T-116 — OAuth provider 범위 Google-only 정리
   (완료: 2026-06-06, `/auth/oauth/providers`가 Google만 반환. Naver/Kakao는 future
   provider로 보류)
@@ -161,7 +159,7 @@
 
 ### Sprint 5~6 (v0.2.0 / v1.0) 신규 backlog
 
-- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
+- [x] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
   + RestoreHotswapDialog. Sprint 5의 backup script + endpoint 위에 UI + 핫스왑
   워크플로 finalize.
 - [ ] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —

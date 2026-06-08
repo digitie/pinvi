@@ -8,19 +8,40 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from app.core.config import settings
 
 SnapshotStatus = Literal["available", "verified"]
+RestoreRunStatus = Literal["succeeded", "failed"]
+RestorePhaseName = Literal["preparing", "restoring", "validating", "draining", "switching"]
+RestorePhaseStatus = Literal["pending", "running", "success", "failed", "skipped"]
 
 _BACKUP_FILE_RE = re.compile(r"^BACKUP_FILE=(?P<path>.+)$", re.MULTILINE)
+_RESTORE_PHASE_RE = re.compile(
+    r"^RESTORE_PHASE=(?P<name>[a-z_]+):(?P<status>[a-z_]+)(?::(?P<message>.*))?$",
+    re.MULTILINE,
+)
+_SNAPSHOT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_RESTORE_PHASES: tuple[RestorePhaseName, ...] = (
+    "preparing",
+    "restoring",
+    "validating",
+    "draining",
+    "switching",
+)
 
 
 class BackupServiceError(Exception):
     """backup script 실행 / 결과 확인 실패."""
 
     code = "BACKUP_FAILED"
+
+
+class BackupSnapshotNotFoundError(BackupServiceError):
+    """선택한 backup snapshot을 찾을 수 없음."""
+
+    code = "BACKUP_SNAPSHOT_NOT_FOUND"
 
 
 @dataclass(frozen=True)
@@ -32,6 +53,26 @@ class BackupSnapshot:
     checksum_sha256: str | None
     status: SnapshotStatus
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class BackupRestorePhase:
+    name: RestorePhaseName
+    status: RestorePhaseStatus
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class BackupRestoreRun:
+    restore_id: str
+    snapshot_id: str
+    snapshot_path: str
+    restore_schema: str
+    previous_schema: str
+    status: RestoreRunStatus
+    phases: list[BackupRestorePhase]
+    started_at: datetime
+    completed_at: datetime
 
 
 def repo_root() -> Path:
@@ -51,6 +92,10 @@ def backup_dir() -> Path:
 
 def backup_script_path() -> Path:
     return resolve_repo_path(settings.tripmate_backup_script_path)
+
+
+def restore_hotswap_script_path() -> Path:
+    return resolve_repo_path(settings.tripmate_restore_hotswap_script_path)
 
 
 def _checksum_for(path: Path) -> str | None:
@@ -82,6 +127,15 @@ def list_backup_snapshots(*, limit: int = 50) -> list[BackupSnapshot]:
     snapshots = [_snapshot_from_file(path) for path in directory.glob("*.dump") if path.is_file()]
     snapshots.sort(key=lambda snapshot: snapshot.created_at, reverse=True)
     return snapshots[:limit]
+
+
+def get_backup_snapshot(*, snapshot_id: str) -> BackupSnapshot:
+    if not _SNAPSHOT_ID_RE.fullmatch(snapshot_id):
+        raise BackupSnapshotNotFoundError("backup snapshot id 형식이 올바르지 않습니다.")
+    path = backup_dir() / f"{snapshot_id}.dump"
+    if not path.is_file():
+        raise BackupSnapshotNotFoundError(f"backup snapshot을 찾을 수 없습니다: {snapshot_id}")
+    return _snapshot_from_file(path)
 
 
 def _snapshot_from_script_result(
@@ -147,3 +201,102 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
         return snapshot
 
     raise BackupServiceError("backup script completed without creating a dump")
+
+
+async def restore_backup_hotswap(
+    *,
+    snapshot_id: str,
+    access_reason: str,
+) -> BackupRestoreRun:
+    snapshot = get_backup_snapshot(snapshot_id=snapshot_id)
+    script = restore_hotswap_script_path()
+    if not script.exists():
+        raise BackupServiceError(f"restore hotswap script not found: {script}")
+
+    started_at = datetime.now(UTC)
+    restore_id = started_at.strftime("%Y%m%d%H%M%S")
+    schema = settings.tripmate_backup_schema
+    restore_schema = f"{schema}_restore_{restore_id}"
+    previous_schema = f"{schema}_previous_{restore_id}"
+    env = {
+        **os.environ,
+        "TRIPMATE_BACKUP_SCHEMA": schema,
+        "TRIPMATE_RESTORE_REASON": access_reason,
+        "TRIPMATE_RESTORE_ID": restore_id,
+        "TRIPMATE_RESTORE_SCHEMA": restore_schema,
+        "TRIPMATE_PREVIOUS_SCHEMA": previous_schema,
+        "TRIPMATE_DATABASE_URL": settings.tripmate_database_url,
+    }
+
+    proc = await asyncio.create_subprocess_exec(
+        str(script),
+        "run",
+        snapshot.path,
+        restore_schema,
+        previous_schema,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+        cwd=str(repo_root()),
+    )
+    try:
+        stdout_raw, stderr_raw = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=settings.tripmate_restore_timeout_seconds,
+        )
+    except TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise BackupServiceError("restore hotswap script timed out") from exc
+
+    stdout = stdout_raw.decode("utf-8", errors="replace")
+    stderr = stderr_raw.decode("utf-8", errors="replace")
+    phases = _parse_restore_phases(stdout)
+    completed_at = datetime.now(UTC)
+    if proc.returncode != 0:
+        message = stderr or stdout or f"restore hotswap script exited {proc.returncode}"
+        raise BackupServiceError(message)
+
+    return BackupRestoreRun(
+        restore_id=restore_id,
+        snapshot_id=snapshot.snapshot_id,
+        snapshot_path=snapshot.path,
+        restore_schema=restore_schema,
+        previous_schema=previous_schema,
+        status="succeeded",
+        phases=phases,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+
+
+def _parse_restore_phases(stdout: str) -> list[BackupRestorePhase]:
+    by_name: dict[RestorePhaseName, BackupRestorePhase] = {
+        name: BackupRestorePhase(name=name, status="pending") for name in _RESTORE_PHASES
+    }
+    seen = False
+    for match in _RESTORE_PHASE_RE.finditer(stdout):
+        raw_name = match.group("name")
+        raw_status = match.group("status")
+        if raw_name not in _RESTORE_PHASES or raw_status not in {
+            "pending",
+            "running",
+            "success",
+            "failed",
+            "skipped",
+        }:
+            continue
+        name = cast(RestorePhaseName, raw_name)
+        status = cast(RestorePhaseStatus, raw_status)
+        by_name[name] = BackupRestorePhase(
+            name=name,
+            status=status,
+            message=match.group("message") or None,
+        )
+        seen = True
+    if not seen:
+        return [
+            BackupRestorePhase(name=name, status="success", message="script completed")
+            for name in _RESTORE_PHASES
+        ]
+    return [by_name[name] for name in _RESTORE_PHASES]

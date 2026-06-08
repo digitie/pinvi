@@ -207,3 +207,30 @@ export const AdminBackupSnapshotSchema = z.object({
   created_at: Iso8601Schema,
 });
 export type AdminBackupSnapshot = z.infer<typeof AdminBackupSnapshotSchema>;
+
+export const AdminBackupRestoreRequestSchema = z.object({
+  snapshot_id: z.string().min(1).max(200),
+  access_reason: z.string().min(1).max(500),
+  confirm_schema_swap: z.boolean(),
+});
+export type AdminBackupRestoreRequest = z.infer<typeof AdminBackupRestoreRequestSchema>;
+
+export const AdminBackupRestorePhaseSchema = z.object({
+  name: z.enum(['preparing', 'restoring', 'validating', 'draining', 'switching']),
+  status: z.enum(['pending', 'running', 'success', 'failed', 'skipped']),
+  message: z.string().nullable(),
+});
+export type AdminBackupRestorePhase = z.infer<typeof AdminBackupRestorePhaseSchema>;
+
+export const AdminBackupRestoreRunSchema = z.object({
+  restore_id: z.string(),
+  snapshot_id: z.string(),
+  snapshot_path: z.string(),
+  restore_schema: z.string(),
+  previous_schema: z.string(),
+  status: z.enum(['succeeded', 'failed']),
+  phases: z.array(AdminBackupRestorePhaseSchema),
+  started_at: Iso8601Schema,
+  completed_at: Iso8601Schema,
+});
+export type AdminBackupRestoreRun = z.infer<typeof AdminBackupRestoreRunSchema>;

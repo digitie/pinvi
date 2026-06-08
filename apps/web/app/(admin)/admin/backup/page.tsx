@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DatabaseBackup, Loader2, RefreshCw } from 'lucide-react';
+import { DatabaseBackup, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import { ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminBackupSnapshot } from '@tripmate/schemas';
+import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@tripmate/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { DataTable } from '@/components/admin/DataTable';
+import { RestoreHotswapDialog } from '@/components/admin/RestoreHotswapDialog';
 import { apiClient } from '@/lib/api';
 
 function formatDateTime(value: string) {
@@ -29,6 +30,7 @@ export default function AdminBackupPage() {
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restoreSnapshot, setRestoreSnapshot] = useState<AdminBackupSnapshot | null>(null);
 
   const loadSnapshots = async () => {
     setLoading(true);
@@ -41,6 +43,10 @@ export default function AdminBackupPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const completeRestore = (run: AdminBackupRestoreRun) => {
+    setMessage(`핫스왑 restore 요청이 완료됐습니다. restore id: ${run.restore_id}`);
   };
 
   useEffect(() => {
@@ -166,16 +172,37 @@ export default function AdminBackupPage() {
               header: 'sha256',
               cell: (row) => row.checksum_sha256?.slice(0, 12) ?? '없음',
             },
+            {
+              key: 'restore',
+              header: 'restore',
+              cell: (row) => (
+                <button
+                  type="button"
+                  onClick={() => setRestoreSnapshot(row)}
+                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  data-testid="admin-backup-restore"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Restore
+                </button>
+              ),
+            },
           ]}
         />
       </Section>
 
       <Section title="Restore">
         <p className="text-sm text-muted">
-          핫스왑 restore는 Sprint 6 T-111에서 동일 DB schema-swap 워크플로로 활성화한다.
-          현재 복구는 `scripts/restore-db.sh`와 runbook 절차로 수행한다.
+          핫스왑 restore는 동일 DB schema-swap 스크립트로 실행되며 결과 단계와 schema
+          이름이 audit log에 남는다.
         </p>
       </Section>
+
+      <RestoreHotswapDialog
+        snapshot={restoreSnapshot}
+        onClose={() => setRestoreSnapshot(null)}
+        onComplete={completeRestore}
+      />
     </AdminPage>
   );
 }
