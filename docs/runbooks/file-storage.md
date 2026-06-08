@@ -27,8 +27,8 @@ services:
       resources:
         limits: { memory: 512M }
     environment:
-      RUSTFS_ACCESS_KEY: tripmate-dev-access
-      RUSTFS_SECRET_KEY: tripmate-dev-secret-change-me
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
       RUSTFS_VOLUMES: /data
       RUSTFS_ADDRESS: ":9003"
       RUSTFS_CONSOLE_ENABLE: "true"
@@ -46,7 +46,7 @@ services:
     depends_on: [rustfs]
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://rustfs:9003 tripmate-dev-access tripmate-dev-secret-change-me;
+      mc alias set local http://rustfs:9003 rustfsadmin rustfsadmin;
       mc mb -p local/tripmate-media || true;
       mc anonymous set download local/tripmate-media || true;
       "

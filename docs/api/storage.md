@@ -19,8 +19,8 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부 메타 등
 | `TRIPMATE_RUSTFS_ENDPOINT_URL` | `http://rustfs:9003` | API 컨테이너 → RustFS 내부 |
 | `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | `http://127.0.0.1:9003` | 브라우저 → RustFS (presigned host) |
 | `TRIPMATE_RUSTFS_BUCKET` | `tripmate-media` | |
-| `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | `tripmate-dev-access` | |
-| `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | (secret) | |
+| `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | `rustfsadmin` | 로컬 dev 기본값 |
+| `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | `rustfsadmin` | 로컬 dev 기본값 |
 | `TRIPMATE_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | `900` | 15분 기본 |
 | `TRIPMATE_RUSTFS_MAX_UPLOAD_BYTES` | `10485760` | 10MB 기본 |
 | `TRIPMATE_RUSTFS_ALLOWED_CONTENT_TYPES` | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` | JSON 배열 |
