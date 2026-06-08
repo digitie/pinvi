@@ -270,7 +270,8 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거
 - [ ] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /tripmate/features/batch`(string, cap 200) 배선
 - [ ] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결
-- [ ] T-177 — [H] feature 갱신요청 분리(DEC-05): 사용자 제안 큐=TripMate, 재적재 트리거=krtour
+- [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X
+- [ ] T-179 — [H2] Admin 검수 → krtour 재적재(DEC-05 확정): `/admin/feature-requests` 검수 + approve 시 운영자가 krtour `POST /tripmate/feature-update-requests`(scope) 호출 + 상태조회, RBAC(admin/operator)+audit, 신규장소는 offline-upload 분기
 - [ ] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중)
 
 ## 머지 히스토리 (참고)
