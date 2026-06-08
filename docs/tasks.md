@@ -257,6 +257,22 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 
 [낮음] 세부는 종합 문서 §1 참조.
 
+### krtour-map 연동(붙이기) 작업 (2026-06-08)
+
+정본 계약: `docs/integrations/krtour-map-rest-api.md`. krtour-map이 운영 HTTP API(포트
+9011, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 TripMate가
+실제 연결한다. 권장 순서 A→B→C 먼저, 이후 D~H 병행.
+
+- [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
+- [ ] T-171 — [B] config 배선(`TRIPMATE_KRTOUR_MAP_API_BASE_URL` Settings 필드 — 현재 silently ignored)
+- [ ] T-172 — [C] feature_id 문자열 정합 마감(#87/T-125 후속, 잔여 uuid 캐스트·`@version` 가정 제거)
+- [ ] T-173 — [D] 응답 셰입 정렬(name/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입)
+- [ ] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거
+- [ ] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /tripmate/features/batch`(string, cap 200) 배선
+- [ ] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결
+- [ ] T-177 — [H] feature 갱신요청 분리(DEC-05): 사용자 제안 큐=TripMate, 재적재 트리거=krtour
+- [ ] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중)
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |

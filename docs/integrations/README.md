@@ -15,6 +15,7 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 | ~~[gemini.md](./gemini.md)~~ | 보류 — `tripmate-ai-companion` 참고용 레거시 Gemini 메모 | deferred |
 | [telegram.md](./telegram.md) | Telegram Bot (알림) | 4+ |
 | [maplibre-vworld.md](./maplibre-vworld.md) | **지도 클라이언트** — `maplibre-vworld-js` (VWorld + MapLibre GL) (ADR-015) | 4 |
+| [krtour-map-rest-api.md](./krtour-map-rest-api.md) | **krtour-map REST API 계약** — feature 데이터 OpenAPI HTTP(포트 9011, ADR-026/027) + TripMate 연결 작업 | 4 |
 | [kraddr-geo.md](./kraddr-geo.md) | kraddr-geo v2 REST geocoding (ADR-025) | 4 |
 | [kasi.md](./kasi.md) | KASI 특일 + 위치별 해·달 출몰시각 | 5 |
 | ~~[kakao-map.md](./kakao-map.md)~~ | 폐기 — `maplibre-vworld-js`로 교체 (ADR-015) | — |
