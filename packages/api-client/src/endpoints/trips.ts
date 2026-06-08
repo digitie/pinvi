@@ -1,10 +1,22 @@
 import {
+  TripAttachmentCreateSchema,
+  TripAttachmentResponseSchema,
   TripCommentCreateSchema,
   TripCommentResponseSchema,
   TripCompanionInviteSchema,
   TripCompanionResponseSchema,
+  TripCopyRequestSchema,
+  TripCopyResponseSchema,
   TripCreateSchema,
+  TripDayCreateSchema,
+  TripDayOptimizeRequestSchema,
+  TripDayOptimizeResponseSchema,
+  TripDayResponseSchema,
+  TripDayUpdateSchema,
+  TripDeleteRequestSchema,
+  TripDistanceMatrixResponseSchema,
   TripResponseSchema,
+  TripSharedViewSchema,
   TripShareLinkCreateSchema,
   TripShareLinkResponseSchema,
   TripUpdateSchema,
@@ -13,9 +25,15 @@ import {
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 import type {
+  TripAttachmentCreate,
   TripCommentCreate,
   TripCompanionInvite,
+  TripCopyRequest,
   TripCreate,
+  TripDayCreate,
+  TripDayOptimizeRequest,
+  TripDayUpdate,
+  TripDeleteRequest,
   TripShareLinkCreate,
   TripUpdate,
 } from '@tripmate/schemas';
@@ -112,6 +130,97 @@ export const tripApi = (client: ApiClient) => ({
       headers: { 'If-Match': String(version) },
       body: JSON.stringify(TripUpdateSchema.parse(body)),
       schema: TripResponseSchema,
+    }),
+
+  delete: (tripId: string, body: TripDeleteRequest = { mode: 'soft_delete' }) =>
+    client.requestNoContent(`/trips/${tripId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(TripDeleteRequestSchema.parse(body)),
+    }),
+
+  copy: (tripId: string, body: TripCopyRequest = { scope: 'all', date_shift_days: 0 }) =>
+    client.request(`/trips/${tripId}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(TripCopyRequestSchema.parse(body)),
+      schema: TripCopyResponseSchema,
+    }),
+
+  createDay: (tripId: string, body: TripDayCreate) =>
+    client.request(`/trips/${tripId}/days`, {
+      method: 'POST',
+      body: JSON.stringify(TripDayCreateSchema.parse(body)),
+      schema: TripDayResponseSchema,
+    }),
+
+  updateDay: (tripId: string, dayIndex: number, body: TripDayUpdate) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}`, {
+      method: 'PATCH',
+      body: JSON.stringify(TripDayUpdateSchema.parse(body)),
+      schema: TripDayResponseSchema,
+    }),
+
+  deleteDay: (tripId: string, dayIndex: number) =>
+    client.requestNoContent(`/trips/${tripId}/days/${dayIndex}`, {
+      method: 'DELETE',
+    }),
+
+  getShared: (tripId: string, token: string) =>
+    client.request(`/trips/${tripId}/shared/${token}`, {
+      method: 'GET',
+      schema: TripSharedViewSchema,
+    }),
+
+  listAttachments: (tripId: string) =>
+    client.request(`/trips/${tripId}/attachments`, {
+      method: 'GET',
+      schema: z.array(TripAttachmentResponseSchema),
+    }),
+
+  createAttachment: (tripId: string, body: TripAttachmentCreate) =>
+    client.request(`/trips/${tripId}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(TripAttachmentCreateSchema.parse(body)),
+      schema: TripAttachmentResponseSchema,
+    }),
+
+  deleteAttachment: (tripId: string, attachmentId: string) =>
+    client.requestNoContent(`/trips/${tripId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    }),
+
+  listPoiAttachments: (tripId: string, poiId: string) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/attachments`, {
+      method: 'GET',
+      schema: z.array(TripAttachmentResponseSchema),
+    }),
+
+  createPoiAttachment: (tripId: string, poiId: string, body: TripAttachmentCreate) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(TripAttachmentCreateSchema.parse(body)),
+      schema: TripAttachmentResponseSchema,
+    }),
+
+  deletePoiAttachment: (tripId: string, poiId: string, attachmentId: string) =>
+    client.requestNoContent(`/trips/${tripId}/pois/${poiId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    }),
+
+  getDistanceMatrix: (tripId: string, dayIndex: number) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}/distance-matrix`, {
+      method: 'GET',
+      schema: TripDistanceMatrixResponseSchema,
+    }),
+
+  optimizeDay: (
+    tripId: string,
+    dayIndex: number,
+    body: TripDayOptimizeRequest = { strategy: 'nearest_neighbor', persist: false },
+  ) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}/optimize`, {
+      method: 'POST',
+      body: JSON.stringify(TripDayOptimizeRequestSchema.parse(body)),
+      schema: TripDayOptimizeResponseSchema,
     }),
 
   inviteMember: (tripId: string, body: TripCompanionInvite) =>

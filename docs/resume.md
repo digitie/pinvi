@@ -4,9 +4,15 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 루프에서 T-111까지 닫았다. 다음 비의존 구현 후보는 T-132
-trip 하위 리소스 분할이며, T-170 krtour-map HTTP client 붙이기는 feature read용 HTTP
-서비스 준비(T-066/DEC-06)에 의존한다.
+krtour-map 비의존 루프에서 T-132까지 닫았다. 다음 비의존 구현 후보는 T-133
+Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등)이다. T-170 krtour-map HTTP
+client 붙이기는 feature read용 HTTP 서비스 연결 작업이므로 비의존 루프에서는 제외한다.
+
+**T-132 trip 하위 리소스 분할 완료** (2026-06-09): `/trips/{trip_id}` delete/owner
+transfer, `/copy`, day CRUD, anonymous shared view, trip/POI attachment metadata CRUD,
+day distance matrix, nearest-neighbor optimize API를 추가했다. Pydantic/Zod schema와
+`@tripmate/api-client` endpoint를 확장했고, 통합 테스트는 day 삭제 cascade, copy +
+attachment 복제, shared view, distance matrix/optimize persist 흐름을 검증한다.
 
 **T-111 Backup/Restore UI 핫스왑 완료** (2026-06-08): `/admin/backup` snapshot 목록에
 Restore schema-swap 다이얼로그를 연결하고 `POST /admin/backup/restore-hotswap` API를
