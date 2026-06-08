@@ -131,12 +131,15 @@ X-Access-Reason: "월간 추천 콘텐츠 공개"
 ```sql
 -- chain 깨짐 검사
 WITH rows AS (
-  SELECT id, prev_hash, content_hash,
-         LAG(content_hash) OVER (ORDER BY id) AS expected_prev
+  SELECT log_id, prev_hash, content_hash,
+         COALESCE(
+           LAG(content_hash) OVER (ORDER BY log_id),
+           repeat('0', 64)
+         ) AS expected_prev
   FROM app.admin_audit_log
-  ORDER BY id
+  ORDER BY log_id
 )
-SELECT id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
+SELECT log_id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
 ```
 
 깨진 row 발견 → 즉시 CPO 알림 + Sentry alert (보안 사건 가능성).

@@ -7,7 +7,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import (
+    ARRAY,
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -43,6 +53,7 @@ class AdminAuditLog(Base):
     """SPEC V8 O-6 / M-14 — Admin 변경 audit + chain hash."""
 
     __tablename__ = "admin_audit_log"
+    __table_args__ = (UniqueConstraint("prev_hash", name="uq_admin_audit_log_prev_hash"),)
 
     log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     actor_user_id: Mapped[uuid.UUID] = mapped_column(

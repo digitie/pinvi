@@ -407,20 +407,24 @@ RustFS 메타 테이블이다. curated → trip copy 시 새 row의 `source_atta
 
 ### 2.5 운영 / 로그
 
-#### `app.admin_audit_logs`
+#### `app.admin_audit_log`
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
 | `log_id` | `bigserial` (PK) | |
-| `admin_user_id` | `uuid` → `app.users` | nullable (system) |
-| `action` | `text` NOT NULL | `create` / `update` / `delete` / `login` / ... |
-| `entity_kind` | `text` | `user` / `trip` / `curated_trip_plan` / `notice` / ... |
-| `entity_id` | `text` | uuid 또는 자연키 |
-| `before` | `jsonb` | nullable |
-| `after` | `jsonb` | nullable |
-| `ip` | `inet` | |
+| `actor_user_id` | `uuid` → `app.users` | |
+| `action` | `varchar(64)` NOT NULL | `user.force_verify` / `trip.update_status` / ... |
+| `resource_type` | `varchar(64)` NOT NULL | `user` / `trip` / `poi` / `backup` / ... |
+| `resource_id` | `varchar(128)` | uuid 또는 자연키 |
+| `before_state`, `after_state` | `jsonb` | nullable |
+| `access_reason` | `text` | 위험 액션 사유 |
+| `target_pii_fields` | `varchar(64)[]` | 접근한 PII 필드 |
+| `ip_hash` | `varchar(64)` NOT NULL | SHA-256(IP) |
 | `user_agent` | `text` | |
-| `created_at` | `timestamptz` NOT NULL | |
+| `request_id` | `uuid` NOT NULL | |
+| `prev_hash` | `varchar(64)` NOT NULL UNIQUE | chain fork 차단 |
+| `content_hash` | `varchar(64)` NOT NULL | |
+| `occurred_at` | `timestamptz` NOT NULL | |
 
 #### `app.import_jobs`
 
@@ -623,7 +627,7 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 |------|------|
 | `access_reason` | 위험 액션 시 강제 입력 |
 | `target_pii_fields` | text[] — 접근한 PII 필드 목록 |
-| `prev_hash`, `content_hash` | chain (audit log chain 깨짐 → 즉시 CPO 알림) |
+| `prev_hash`, `content_hash` | chain (audit log chain 깨짐 → 즉시 CPO 알림). `prev_hash`는 unique이며 append 경로는 advisory lock으로 head를 직렬화 |
 
 ## 9. 향후 확장 후보 (ADR 후보)
 

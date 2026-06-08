@@ -103,7 +103,7 @@
 - `before` / `after` JSONB diff
 - `access_reason` (위험 액션 시 강제)
 - `target_pii_fields TEXT[]` (접근한 PII 필드)
-- `prev_hash` / `content_hash` chain
+- `prev_hash` / `content_hash` chain (`prev_hash` unique + advisory lock으로 head 직렬화)
 - append-only (DELETE 차단 trigger 또는 권한 분리)
 
 ### 2.6 Admin 보조 테이블 (M-6)

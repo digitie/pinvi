@@ -1262,12 +1262,13 @@
     target PII fields, IP hash, user agent, request id, occurred_at을 포함한다.
   - 감사 로그는 삭제/수정 API를 만들지 않는다. 마스킹된 조회와 hash chain 검증만
     Admin 콘솔에 노출한다.
-  - 현재 단일 노드 운영에서는 마지막 row 조회 후 append로 충분하다고 본다. 병렬 worker
-    확대나 높은 동시성이 필요해지면 advisory lock, outbox, partitioning 중 하나를
-    후속 ADR로 확정한다.
-- **결과**: Admin 운영 행위의 추적성과 변조 감지 기준이 생긴다. 다만 고동시성 append
-  경로는 아직 정교화하지 않았으므로 운영 부하가 커지는 시점에 보강이 필요하다.
-- **후속**: T-146의 location-audit async outbox와 함께 audit append 동시성/보존 정책을
+  - `prev_hash`는 unique constraint로 보호한다. 같은 head에서 두 row가 갈라지는 fork를
+    DB가 거부한다.
+  - `append_admin_audit()`는 마지막 row 조회 전에 PostgreSQL transaction-level advisory lock을
+    획득해 병렬 admin action도 한 체인 head로 직렬화한다.
+- **결과**: Admin 운영 행위의 추적성과 변조 감지 기준이 생긴다. 병렬 worker에서도
+  app-level append 경로는 한 번에 하나의 head만 확정한다.
+- **후속**: T-146의 location-audit async outbox와 함께 장기 보존/partitioning 정책을
   재검토한다.
 - **참조**: `docs/api/admin.md`, `docs/compliance/pipa.md`,
   `apps/api/app/models/audit.py`, `apps/api/app/services/admin_audit.py`.

@@ -9,7 +9,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 - 사용자와 동일한 cookie 인증 (`tripmate_access`, `tripmate_refresh`)
 - 권한 검사는 `app.users.roles` 배열에 `admin` / `operator` / `cpo` 포함 여부
 - 미권한 사용자 → **`404 Not Found`** (존재 자체 숨김 — `403` 대신)
-- 모든 mutating 액션은 `app.admin_audit_log`에 자동 기록 (chain prev_hash/content_hash)
+- 모든 mutating 액션은 `app.admin_audit_log`에 자동 기록 (`prev_hash` unique +
+  advisory lock 기반 chain)
 - 위험 액션은 `access_reason` 입력 강제 (request body 또는 별도 헤더)
 
 자세히는 SPEC V8 M-4 / O-6.
