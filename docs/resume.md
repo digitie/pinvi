@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-168 storage `AttachmentResponse` 필드 호환 정책을
-notice-plans와 통일한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-169 MCP `list_trips` bucket/cursor parity와
+`search_features` HTTP 표현 정리를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-168 storage AttachmentResponse 호환 정책 완료** (2026-06-08): storage
+`AttachmentResponse`가 신규 `curated_plan_id` / `curated_poi_id`와 `/notice-plans` 호환
+alias `notice_plan_id` / `notice_poi_id`를 함께 제공하도록 Pydantic/Zod schema를 맞췄다.
+한쪽만 들어오면 같은 값으로 정규화하고, 두 값이 불일치하면 reject한다.
 
 **T-167 money 표현 통일 완료** (2026-06-08): admin POI detail Zod money 필드를
 `string | number` union에서 `NonNegativeDecimalStringSchema`로 통일했다. `packages/schemas`

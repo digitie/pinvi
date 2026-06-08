@@ -219,6 +219,10 @@ DELETE /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments/{attachment_id}
 
 자세히는 [`storage.md`](./storage.md).
 
+첨부 응답은 storage 정본 `curated_plan_id` / `curated_poi_id`와 `/notice-plans` 호환
+alias `notice_plan_id` / `notice_poi_id`를 함께 제공한다. 두 필드는 같은 값을 가리키며
+불일치 payload는 schema에서 거부한다.
+
 ## 3. 권한 매트릭스
 
 | 액션 | 인증 사용자 | admin | operator | cpo |

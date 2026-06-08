@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-168 — storage `AttachmentResponse` 필드 호환 정책을 notice-plans와 통일 (PR #73)
+- [ ] T-169 — MCP `list_trips` bucket/cursor parity + search_features HTTP 표현 정리 (PR #83)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -252,7 +252,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-165 — WS rate-limit grace 슬롯 점유 cap 우회 차단 + `publish_event` broadcast 비동기 분리 (PR #78)
 - [x] T-166 — admin 감사 hash-chain head 직렬화(prev_hash unique/advisory lock) (PR #80)
 - [x] T-167 — money 표현 통일(admin union→decimal-string) + `packages/schemas` round-trip 테스트 (PR #79)
-- [ ] T-168 — storage `AttachmentResponse` 필드 호환 정책을 notice-plans와 통일 (PR #73)
+- [x] T-168 — storage `AttachmentResponse` 필드 호환 정책을 notice-plans와 통일 (PR #73)
 - [ ] T-169 — MCP `list_trips` bucket/cursor parity + search_features HTTP 표현 정리 (PR #83)
 
 [낮음] 세부는 종합 문서 §1 참조.

@@ -145,6 +145,8 @@ Cookie: tripmate_access=...
     "trip_poi_id": null,
     "curated_plan_id": null,
     "curated_poi_id": null,
+    "notice_plan_id": null,
+    "notice_poi_id": null,
     "source_attachment_id": null,
     "bucket": "tripmate-media",
     "storage_key": "...",
@@ -152,6 +154,10 @@ Cookie: tripmate_access=...
   }
 }
 ```
+
+`notice_plan_id` / `notice_poi_id`는 `/notice-plans` 호환 alias다. 응답은 신규
+`curated_plan_id` / `curated_poi_id`와 alias를 모두 포함하며 값은 항상 같다. 입력/내부
+정규화 단계에서 한쪽만 들어와도 같은 값으로 맞추고, 둘이 다르면 거부한다.
 
 서버 검증: `num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1`
 CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
