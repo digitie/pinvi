@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import uuid
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from binascii import Error as BinasciiError
+from datetime import date
+from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
-from app.schemas.envelope import Envelope
+from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from app.schemas.trip import (
     TripCommentCreate,
@@ -24,11 +28,15 @@ from app.schemas.trip import (
 )
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
+    TripBucket,
     TripCommentNotFoundError,
     TripCompanionConflictError,
+    TripListSort,
     TripNotFoundError,
     TripPermissionError,
+    TripStatus,
     TripVersionConflictError,
+    TripVisibility,
     create_comment,
     create_trip,
     delete_comment,
@@ -45,6 +53,7 @@ from app.services.trip import (
 from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+_TRIP_CURSOR_VERSION = 1
 
 
 def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
@@ -107,14 +116,83 @@ def _raise_trip_http(exc: TripNotFoundError | TripPermissionError) -> NoReturn:
     ) from exc
 
 
-@router.get("", response_model=Envelope[list[TripResponse]])
+@router.get("", response_model=EnvelopeWithMeta[list[TripResponse]])
 async def list_trips(
     current_user_id: CurrentUserId,
     db: DbSession,
-    limit: int = 20,
-) -> Envelope[list[TripResponse]]:
-    trips = await list_trips_for_owner(db, user_id=uuid.UUID(current_user_id), limit=limit)
-    return Envelope.of([_to_response(t) for t in trips])
+    bucket: Annotated[TripBucket, Query()] = "future",
+    q: Annotated[str | None, Query(min_length=2, max_length=120)] = None,
+    status_filter: Annotated[TripStatus | None, Query(alias="status")] = None,
+    visibility_filter: Annotated[TripVisibility | None, Query(alias="visibility")] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    sort: Annotated[TripListSort, Query()] = "-updated_at",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> EnvelopeWithMeta[list[TripResponse]]:
+    if date_from is not None and date_to is not None and date_to < date_from:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "date_to는 date_from 이후여야 합니다.",
+            },
+        )
+    offset = _decode_trip_cursor(cursor)
+    trips, has_more = await list_trips_for_owner(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        bucket=bucket,
+        q=q,
+        status_filter=status_filter,
+        visibility_filter=visibility_filter,
+        date_from=date_from,
+        date_to=date_to,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    next_cursor = _encode_trip_cursor(offset + limit) if has_more else None
+    return EnvelopeWithMeta.of(
+        [_to_response(t) for t in trips],
+        meta=EnvelopeMeta(cursor=next_cursor, has_more=has_more, limit=limit),
+    )
+
+
+def _encode_trip_cursor(offset: int) -> str:
+    raw = dumps(
+        {"v": _TRIP_CURSOR_VERSION, "offset": offset},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_trip_cursor(cursor: str | None) -> int:
+    if cursor is None:
+        return 0
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = loads(urlsafe_b64decode(f"{cursor}{padding}"))
+    except (BinasciiError, JSONDecodeError, ValueError, TypeError) as exc:
+        raise _invalid_trip_cursor() from exc
+    if not isinstance(payload, dict):
+        raise _invalid_trip_cursor()
+    if payload.get("v") != _TRIP_CURSOR_VERSION:
+        raise _invalid_trip_cursor()
+    offset = payload.get("offset")
+    if not isinstance(offset, int) or offset < 0:
+        raise _invalid_trip_cursor()
+    return offset
+
+
+def _invalid_trip_cursor() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={
+            "code": "VALIDATION_ERROR",
+            "message": "cursor 형식이 올바르지 않습니다.",
+        },
+    )
 
 
 @router.post(

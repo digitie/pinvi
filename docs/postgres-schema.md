@@ -145,6 +145,36 @@ CREATE TABLE app.user_email_verifications (
 );
 ```
 
+### 2.5 `app.mcp_tokens` (Sprint 6)
+
+```sql
+CREATE TABLE app.mcp_tokens (
+  token_id           uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  user_id            uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
+  token_hash         varchar(255) NOT NULL UNIQUE,
+  name               varchar(120) NOT NULL,
+  scopes             varchar(32)[] NOT NULL DEFAULT ARRAY['mcp:read']::varchar[],
+  expires_at         timestamptz,
+  last_used_at       timestamptz,
+  last_used_ip_hash  varchar(128),
+  revoked_at         timestamptz,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_mcp_tokens_scope_read_only CHECK (scopes <@ ARRAY['mcp:read']::varchar[])
+);
+
+CREATE INDEX ix_mcp_tokens_user_active
+  ON app.mcp_tokens (user_id, expires_at)
+  WHERE revoked_at IS NULL;
+
+CREATE TRIGGER trg_mcp_tokens_touch_updated_at
+BEFORE UPDATE ON app.mcp_tokens
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+원본 MCP 토큰은 발급 직후 1회만 표시하고 DB에는 Argon2id hash(`token_hash`)만 저장한다.
+1차 외부 MCP는 read-only라 `mcp:read` scope만 허용한다(ADR-019).
+
 ## 3. 여행 계획
 
 ### 3.1 `app.trips`
