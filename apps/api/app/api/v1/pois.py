@@ -8,6 +8,8 @@ from typing import Annotated
 from fastapi import APIRouter, Header, HTTPException, status
 
 from app.core.deps import CurrentUserId, DbSession
+from app.models.kasi import TripPoiRiseSet
+from app.models.poi import TripDayPoi
 from app.schemas.envelope import Envelope
 from app.schemas.poi import PoiCreate, PoiReorderRequest, PoiResponse, PoiUpdate
 from app.services.poi import (
@@ -16,6 +18,9 @@ from app.services.poi import (
     SortOrderConflictError,
     create_poi,
     get_poi,
+    get_poi_rise_set,
+    get_poi_rise_sets,
+    poi_rise_set_to_dict,
     reorder_pois,
     soft_delete_poi,
     update_poi,
@@ -30,7 +35,11 @@ from app.services.trip import (
 router = APIRouter(prefix="/trips/{trip_id}/pois", tags=["pois"])
 
 
-def _to_response(poi) -> PoiResponse:  # type: ignore[no-untyped-def]
+def _to_response(
+    poi: TripDayPoi,
+    *,
+    rise_set: TripPoiRiseSet | None = None,
+) -> PoiResponse:
     return PoiResponse(
         attachment_id=poi.attachment_id,
         trip_id=poi.trip_id,
@@ -48,6 +57,7 @@ def _to_response(poi) -> PoiResponse:  # type: ignore[no-untyped-def]
         actual_amount=poi.actual_amount,
         currency=poi.currency,
         user_url=poi.user_url,
+        rise_set=poi_rise_set_to_dict(rise_set),
         version=poi.version,
         created_at=poi.created_at,
         updated_at=poi.updated_at,
@@ -105,7 +115,8 @@ async def create_poi_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    response = _to_response(poi)
+    rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
+    response = _to_response(poi, rise_set=rise_set)
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.created",
@@ -144,7 +155,8 @@ async def update_poi_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    response = _to_response(poi)
+    rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
+    response = _to_response(poi, rise_set=rise_set)
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.updated",
@@ -204,7 +216,8 @@ async def reorder_pois_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    response = [_to_response(p) for p in updated]
+    rise_sets = await get_poi_rise_sets(db, poi_ids=[p.attachment_id for p in updated])
+    response = [_to_response(p, rise_set=rise_sets.get(p.attachment_id)) for p in updated]
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.reordered",

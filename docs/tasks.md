@@ -12,8 +12,10 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
+- [ ] T-111 — Backup/Restore UI 핫스왑 (ADR-022, Sprint 6) — `/admin/backup`
+  + RestoreHotswapDialog. krtour-map HTTP 서비스 준비와 무관한 다음 구현 후보.
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
+- [ ] T-170 — [A] httpx client 신설(`apps/api/app/clients/krtour_map.py`) — in-process Protocol stub 대체, MockTransport 계약 테스트
 
 ## 완료
 
@@ -186,7 +188,7 @@
 - [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
 - [x] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
-- [ ] T-135 — POI 응답 `rise_set` 노출 (C-18)
+- [x] T-135 — POI 응답 `rise_set` 노출 (C-18)
 - [x] T-136 — Resend webhook Svix 서명 검증 (C-22)
 - [x] T-137 — notice/curated-plan 스키마 정본화(`curated_trip_plans` 분리) (D-01,D-04; ADR-029)
 - [x] T-138 — `users` 누락 컬럼 + `security_incidents` 테이블 추가 (D-02,D-03,D-09)

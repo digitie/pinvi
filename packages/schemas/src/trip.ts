@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
+import { PoiRiseSetResponseSchema } from './poi';
 
 /** `docs/api/trips.md`. */
 export const TripStatusSchema = z.enum([
@@ -141,6 +142,7 @@ export const TripViewPoiSchema = z.object({
   actual_amount: NonNegativeDecimalStringSchema.nullable(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   user_url: z.string().nullable(),
+  rise_set: PoiRiseSetResponseSchema.nullable(),
   feature_link_broken_at: Iso8601Schema.nullable(),
   version: z.number().int(),
   created_at: Iso8601Schema,

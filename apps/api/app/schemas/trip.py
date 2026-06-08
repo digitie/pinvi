@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from app.schemas.poi import PoiRiseSetResponse
+
 RegionSource = Literal["manual", "poi_snapshot", "geocoded"]
 
 
@@ -144,6 +146,7 @@ class TripViewPoi(BaseModel):
     actual_amount: Decimal | None
     currency: str
     user_url: str | None
+    rise_set: PoiRiseSetResponse | None
     feature_link_broken_at: datetime | None
     version: int
     created_at: datetime

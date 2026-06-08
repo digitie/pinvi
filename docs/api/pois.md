@@ -55,8 +55,8 @@ Content-Type: application/json
 - 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
   `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. API는 먼저
   `app.trip_poi_rise_sets.status='pending_fetch'` row를 만들고, Dagster one-shot job이
-  실제 KASI 호출을 처리한다. 생성 응답 시점에는 `rise_set`이 없거나 `pending`일 수
-  있다.
+  실제 KASI 호출을 처리한다. 생성 응답 시점에는 `rise_set.status`가 `pending_date` /
+  `pending_coord` / `pending_fetch`일 수 있다. row가 없으면 `rise_set`은 `null`이다.
 - POI 날짜/좌표가 이후 변경되어도 `rise_set`은 자동 재조회하지 않는다. 저장된 값은
   생성 당시 snapshot 기준이며, refresh action은 후속 PR에서 별도 추가한다.
 - `sort_order` 충돌 시 (`(day_index, sort_order COLLATE "C")` UNIQUE) → `409`
@@ -71,7 +71,9 @@ Content-Type: application/json
     "sunrise_at": "2026-06-02T05:10:00+09:00",
     "sunset_at": "2026-06-02T19:39:00+09:00",
     "moonrise_at": "...",
-    "moonset_at": "..."
+    "moonset_at": "...",
+    "fetched_at": "2026-06-01T21:00:00Z",
+    "updated_at": "2026-06-01T21:00:00Z"
   }
 }
 ```
@@ -175,6 +177,7 @@ v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 - [x] `apps/api/app/schemas/poi.py` Pydantic + `packages/schemas/src/poi.ts` Zod
 - [x] `apps/api/app/services/poi.py` 비즈니스 로직 (sort_order 검증)
 - [x] POI 생성 시 좌표/방문일이 있으면 KASI 출몰시각 `pending_fetch` row 생성
+- [x] POI 생성/수정/정렬 응답과 Trip 상세 POI에 `rise_set` 노출
 - [x] `apps/api/app/api/v1/pois.py` 라우터
 - [ ] LexoRank helper `packages/hooks/src/lexorank.ts` (또는 `packages/lexorank/`)
 - [x] `sort_order COLLATE "C"` Alembic + 로컬 PostGIS 통합 테스트

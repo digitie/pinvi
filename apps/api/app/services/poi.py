@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -177,6 +177,35 @@ async def get_poi_rise_set(
     poi_id: uuid.UUID,
 ) -> TripPoiRiseSet | None:
     return await db.get(TripPoiRiseSet, poi_id)
+
+
+async def get_poi_rise_sets(
+    db: AsyncSession,
+    *,
+    poi_ids: Iterable[uuid.UUID],
+) -> dict[uuid.UUID, TripPoiRiseSet]:
+    unique_poi_ids = list(dict.fromkeys(poi_ids))
+    if not unique_poi_ids:
+        return {}
+    result = await db.execute(
+        select(TripPoiRiseSet).where(TripPoiRiseSet.poi_id.in_(unique_poi_ids))
+    )
+    return {row.poi_id: row for row in result.scalars()}
+
+
+def poi_rise_set_to_dict(rise_set: TripPoiRiseSet | None) -> dict[str, Any] | None:
+    if rise_set is None:
+        return None
+    return {
+        "status": rise_set.status,
+        "locdate": rise_set.locdate,
+        "sunrise_at": rise_set.sunrise_at,
+        "sunset_at": rise_set.sunset_at,
+        "moonrise_at": rise_set.moonrise_at,
+        "moonset_at": rise_set.moonset_at,
+        "fetched_at": rise_set.fetched_at,
+        "updated_at": rise_set.updated_at,
+    }
 
 
 async def reorder_pois(

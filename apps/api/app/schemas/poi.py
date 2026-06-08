@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+PoiRiseSetStatus = Literal["pending_date", "pending_coord", "pending_fetch", "success", "failed"]
 
 
 class PoiCreate(BaseModel):
@@ -49,6 +51,19 @@ class PoiReorderRequest(BaseModel):
     moves: list[PoiReorderMove] = Field(min_length=1, max_length=200)
 
 
+class PoiRiseSetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: PoiRiseSetStatus
+    locdate: date | None
+    sunrise_at: datetime | None
+    sunset_at: datetime | None
+    moonrise_at: datetime | None
+    moonset_at: datetime | None
+    fetched_at: datetime | None
+    updated_at: datetime
+
+
 class PoiResponse(BaseModel):
     attachment_id: uuid.UUID
     trip_id: uuid.UUID
@@ -66,6 +81,7 @@ class PoiResponse(BaseModel):
     actual_amount: Decimal | None
     currency: str
     user_url: str | None
+    rise_set: PoiRiseSetResponse | None
     version: int
     created_at: datetime
     updated_at: datetime

@@ -95,7 +95,8 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 응답에 trip + days + pois (snapshot 포함) + companions + share links. POI의
 `feature` 필드는 krtour-map `POST /tripmate/features/batch`로 batch join한 최신 정보
 (없으면 `feature_snapshot` 사용). `rise_set`은 POI 생성 시 KASI 위치별 해달
-출몰시각 정보조회가 완료된 경우에만 포함한다.
+출몰시각 row가 있으면 포함하며, 아직 처리 전이면 `pending_*` 상태로 내려간다. row가
+없으면 `rise_set`은 `null`이다.
 
 응답 shape:
 
@@ -125,6 +126,16 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
             "actual_amount": null,
             "currency": "KRW",
             "user_url": null,
+            "rise_set": {
+              "status": "pending_fetch",
+              "locdate": "2026-06-01",
+              "sunrise_at": null,
+              "sunset_at": null,
+              "moonrise_at": null,
+              "moonset_at": null,
+              "fetched_at": null,
+              "updated_at": "2026-06-01T00:00:00Z"
+            },
             "feature_link_broken_at": null,
             "version": 1,
             "created_at": "2026-06-01T00:00:00Z",
