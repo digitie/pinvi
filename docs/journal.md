@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-164 geofence outage guard + 방어심화
+
+**작업**: PR #77 사후 리뷰 잔존인 strict geofence silent outage 풋건과 shared-secret
+단일 방어를 보강했다.
+
+**변경**:
+- `GeofenceConfigError` / `validate_geofence_configuration` startup guard 추가. strict
+  geofence에서 trusted signal이 없으면 API startup이 실패하고, signal이 하나뿐이면 warning을 남긴다.
+- country header 신뢰 조건을 shared secret, proxy CIDR allowlist, mTLS verified header 중
+  설정된 factor가 모두 통과해야 하는 방식으로 바꿨다.
+- `.env.example`, `apps/api/.env.example`, korea-only runbook/architecture에 CIDR/mTLS
+  설정과 secret 비로그/회전 운영 기준을 반영했다.
+- unit test에 startup guard, proxy CIDR, mTLS verified header, 다중 factor 요구 회귀를 추가했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/core/config.py app/main.py app/middleware/geofence.py tests/unit/test_geofence_middleware.py`
+- WSL2 ext4 mirror: `ruff check app/core/config.py app/main.py app/middleware/geofence.py tests/unit/test_geofence_middleware.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/config.py app/main.py app/middleware/geofence.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/unit/test_geofence_middleware.py`
+
+**다음**: T-165 WS rate-limit grace 슬롯 점유 cap 우회 차단 + `publish_event` broadcast 비동기 분리.
+
 ## 2026-06-08 (codex) — T-163 access JWT 무효화 + refresh race 보강
 
 **작업**: PR #76 사후 리뷰 잔존인 비밀번호 재설정 후 access JWT 유효 시간 잔존과

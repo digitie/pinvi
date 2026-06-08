@@ -67,8 +67,9 @@ GeoIP2 DB 갱신: 월 1회 cron (MaxMind GeoLite2 무료 라이선스).
 # apps/api/app/middleware/geofence.py
 class GeofenceMiddleware:
     async def __call__(self, request: Request, call_next):
-        # Cloudflare/nginx header 기반. strict 운영은 shared secret proxy header가
-        # 맞을 때만 CF-IPCountry를 신뢰한다.
+        # Cloudflare/nginx header 기반. strict 운영은 shared secret, proxy CIDR,
+        # mTLS verified header 중 설정된 trusted signal이 모두 맞을 때만
+        # CF-IPCountry를 신뢰한다.
         country = verified_proxy_country(request)
         if country == "KR":
             return await call_next(request)
@@ -83,6 +84,10 @@ class GeofenceMiddleware:
             content={"code": "GEO_BLOCKED", "message": "..."},
         )
 ```
+
+`TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`에서 trusted signal이 하나도 설정되지 않으면
+API startup guard가 실패한다. shared secret 단독 strict 모드는 동작하되 startup warning을
+남기며, 운영 기본은 shared secret + proxy CIDR 또는 mTLS 검증 header 조합이다.
 
 ## 3. 451 응답
 

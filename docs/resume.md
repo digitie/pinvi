@@ -4,9 +4,14 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-164 geofence outage 풋건 startup 가드와
-shared-secret 외 방어심화를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프 기준으로 T-165 WS rate-limit grace 슬롯 점유 cap 우회 차단과
+`publish_event` broadcast 비동기 분리를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-164 geofence outage guard + defense-in-depth 완료** (2026-06-08): strict geofence
+(`enabled && block_unknown`)에서 trusted country-header signal이 하나도 없으면 API startup이
+실패한다. shared secret 단독 strict 모드는 warning을 남기고, country header 신뢰에는 선택적
+proxy CIDR allowlist 또는 mTLS verified header를 함께 요구할 수 있게 했다.
 
 **T-163 비밀번호 재설정 access JWT 무효화 + refresh race 보강 완료** (2026-06-08):
 `users.access_token_version`을 access JWT `token_version` claim과 대조해 reset 전 access

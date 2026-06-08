@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import inspect
+import ipaddress
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from typing import cast
@@ -20,6 +21,12 @@ from app.models.user import User
 
 ADMIN_ROLES = {"admin", "operator", "cpo"}
 RoleResolver = Callable[[str], Awaitable[Iterable[str]] | Iterable[str]]
+IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+IpNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+class GeofenceConfigError(RuntimeError):
+    """Geofence strict mode가 운영자를 조용한 전체 차단 상태로 몰지 않게 막는다."""
 
 
 def _normalized_set(values: Iterable[str]) -> set[str]:
@@ -79,14 +86,112 @@ def _detected_country(request: Request) -> str | None:
     return None
 
 
-def _is_trusted_country_proxy(request: Request) -> bool:
-    expected = settings.tripmate_geofence_trusted_proxy_secret.strip()
-    if not expected:
-        return not settings.tripmate_geofence_block_unknown
+def _trusted_proxy_networks() -> list[IpNetwork]:
+    networks: list[IpNetwork] = []
+    for raw in settings.tripmate_geofence_trusted_proxy_cidrs:
+        value = raw.strip()
+        if value:
+            try:
+                networks.append(ipaddress.ip_network(value, strict=False))
+            except ValueError as exc:
+                raise GeofenceConfigError(
+                    "TRIPMATE_GEOFENCE_TRUSTED_PROXY_CIDRS contains an invalid CIDR."
+                ) from exc
+    return networks
 
+
+def _client_ip(request: Request) -> IpAddress | None:
+    if request.client is None:
+        return None
+    try:
+        return ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return None
+
+
+def _source_ip_is_trusted(request: Request, networks: list[IpNetwork]) -> bool:
+    if not networks:
+        return True
+    client_ip = _client_ip(request)
+    if client_ip is None:
+        return False
+    return any(client_ip in network for network in networks)
+
+
+def _shared_secret_is_trusted(request: Request, expected: str) -> bool:
+    if not expected:
+        return True
     header = settings.tripmate_geofence_trusted_proxy_header
     provided = request.headers.get(header, "")
     return hmac.compare_digest(provided, expected)
+
+
+def _mtls_header_is_trusted(request: Request, header: str, expected: str) -> bool:
+    if not header:
+        return True
+    if not expected:
+        return False
+    provided = request.headers.get(header, "")
+    return hmac.compare_digest(provided, expected)
+
+
+def _configured_trust_factor_names() -> set[str]:
+    names: set[str] = set()
+    if settings.tripmate_geofence_trusted_proxy_secret.strip():
+        names.add("shared_secret")
+    if _trusted_proxy_networks():
+        names.add("proxy_cidr")
+    if settings.tripmate_geofence_mtls_verified_header.strip():
+        names.add("mtls")
+    return names
+
+
+def validate_geofence_configuration() -> list[str]:
+    """Geofence startup guard.
+
+    반환값은 startup log에 남길 경고다. secret/header 원문은 절대 포함하지 않는다.
+    """
+    if not settings.tripmate_geofence_enabled:
+        return []
+
+    warnings: list[str] = []
+    factors = _configured_trust_factor_names()
+    if settings.tripmate_geofence_block_unknown and not factors:
+        raise GeofenceConfigError(
+            "TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true requires at least one trusted "
+            "country-header source: TRIPMATE_GEOFENCE_TRUSTED_PROXY_SECRET, "
+            "TRIPMATE_GEOFENCE_TRUSTED_PROXY_CIDRS, or "
+            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_HEADER."
+        )
+
+    mtls_header = settings.tripmate_geofence_mtls_verified_header.strip()
+    if mtls_header and not settings.tripmate_geofence_mtls_verified_value.strip():
+        raise GeofenceConfigError(
+            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_VALUE must be non-empty when "
+            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_HEADER is set."
+        )
+
+    if settings.tripmate_geofence_block_unknown and len(factors) == 1:
+        warnings.append(
+            "geofence strict mode has only one trusted country-header factor; "
+            "configure proxy CIDR allowlist or mTLS verification for defense in depth."
+        )
+    return warnings
+
+
+def _is_trusted_country_proxy(request: Request) -> bool:
+    expected = settings.tripmate_geofence_trusted_proxy_secret.strip()
+    networks = _trusted_proxy_networks()
+    mtls_header = settings.tripmate_geofence_mtls_verified_header.strip()
+    mtls_value = settings.tripmate_geofence_mtls_verified_value.strip()
+    if not (expected or networks or mtls_header):
+        return False
+
+    return (
+        _shared_secret_is_trusted(request, expected)
+        and _source_ip_is_trusted(request, networks)
+        and _mtls_header_is_trusted(request, mtls_header, mtls_value)
+    )
 
 
 def _blocked_response(country: str | None) -> JSONResponse:

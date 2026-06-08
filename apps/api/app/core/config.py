@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     tripmate_geofence_country_header: str = "CF-IPCountry"
     tripmate_geofence_trusted_proxy_header: str = "X-TripMate-Geofence-Proxy"
     tripmate_geofence_trusted_proxy_secret: str = ""
+    tripmate_geofence_trusted_proxy_cidrs: list[str] = Field(default_factory=list)
+    tripmate_geofence_mtls_verified_header: str = ""
+    tripmate_geofence_mtls_verified_value: str = "SUCCESS"
     tripmate_geofence_block_unknown: bool = False
     tripmate_geofence_bypass_paths: list[str] = Field(
         default_factory=lambda: ["/health", "/health/db", "/docs", "/redoc", "/openapi.json"]
