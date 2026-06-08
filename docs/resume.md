@@ -4,9 +4,15 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-125 feature_id 문자열화(C-09)를 처리한다.
+krtour-map 비의존 작업 루프 기준으로 T-163 비밀번호 재설정 access JWT 무효화와 refresh
+회전 race 보강을 처리한다. T-125는 별도 agent 진행 중으로 Codex lane에서 제외한다.
 feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06) — v0.1.0 게이트도 여기
 대기.
+
+**T-162 Resend webhook fail-open 잔존 완료** (2026-06-08): secret이 비어 있을 때
+`TRIPMATE_ENVIRONMENT` 기본값 `development`만으로 unsigned webhook이 열리지 않도록
+`TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED` 명시 opt-in을 추가했다. production에서는 opt-in이
+켜져도 secret 미설정 시 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다.
 
 **T-131 Trip 상세 view 연결 완료** (2026-06-07): `GET /trips/{trip_id}`가 더 이상
 trip 메타만 반환하지 않고 `trip_view_builder.build_trip_view`를 통해 trip/day/POI tree,

@@ -33,6 +33,7 @@ Resend "verified" 상태 확인 후 발송 시작.
 | `TRIPMATE_RESEND_FROM_EMAIL` | `TripMate <noreply@send.trip.example.com>` |
 | `TRIPMATE_RESEND_TIMEOUT_SECONDS` | `5` |
 | `TRIPMATE_RESEND_WEBHOOK_SECRET` | (Svix secret) |
+| `TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED` | `false` 기본. 로컬 개발에서만 `true` |
 | `TRIPMATE_WEB_BASE_URL` | dev `http://localhost:9022`, production `https://tripmate.digitie.mywire.org` |
 | `TRIPMATE_EMAIL_VERIFICATION_PATH` | `/verify-email` |
 
@@ -173,9 +174,12 @@ npm --workspace emails run build
 ## 6. Webhook (`POST /webhooks/resend`)
 
 `TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 환경에서는 Resend/Svix 서명 검증을 통과한
-요청만 처리한다. `development` / `dev` / `local` / `test` / `testing` 환경에서만
-secret이 비어 있을 때 서명 없는 webhook을 허용한다. 그 외 환경에서 secret이 비어
-있거나 잘못된 형식이면 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다.
+요청만 처리한다. secret이 비어 있을 때 서명 없는 webhook은
+`TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED=true`이고 환경이 `development` / `dev` /
+`local` / `test` / `testing`인 경우에만 허용한다. 기본값은 `false`이므로
+`TRIPMATE_ENVIRONMENT` 누락으로 기본 `development`가 적용되어도 webhook은 열리지 않는다.
+그 외 환경에서 secret이 비어 있거나 잘못된 형식이면
+`503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다.
 
 검증 헤더:
 

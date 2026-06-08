@@ -36,7 +36,10 @@ class ResendWebhookSecretError(Exception):
 
 
 def _allows_unsigned_resend_webhook() -> bool:
-    return settings.tripmate_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
+    return (
+        settings.tripmate_resend_webhook_allow_unsigned
+        and settings.tripmate_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
+    )
 
 
 def _get_header(headers: Headers, *names: str) -> str | None:

@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-162 Resend webhook unsigned opt-in
+
+**작업**: PR #74 사후 리뷰 잔존인 Resend webhook fail-open 위험을 닫았다. 기존에는
+`TRIPMATE_ENVIRONMENT` 기본값 `development` 때문에 운영 env 누락 시 unsigned webhook이
+열릴 수 있었다.
+
+**변경**:
+- `apps/api/app/core/config.py`, `apps/api/app/webhooks/resend.py` —
+  `TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED`를 추가하고, secret 없는 webhook은 로컬성 환경에서
+  opt-in이 명시된 경우에만 허용한다.
+- `apps/api/tests/integration/test_resend_webhook.py` — 기본 development에서도 opt-in 없이는
+  `503`, 로컬 opt-in은 허용, production은 opt-in이 켜져도 secret 없으면 `503`인 회귀 테스트.
+- `.env.example`, `apps/api/.env.example`, `docs/integrations/resend.md`,
+  `docs/api/common.md` — 로컬 unsigned는 명시 opt-in, 운영/스테이징은 secret 필수 정책 반영.
+
+**검증**:
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_resend_webhook.py`
+- WSL2 ext4 mirror: `ruff check app/core/config.py app/webhooks/resend.py tests/integration/test_resend_webhook.py`
+- WSL2 ext4 mirror: `mypy --strict app/core/config.py app/webhooks/resend.py`
+
 ## 2026-06-08 (claude) — Codex PR 사후 리뷰 2라운드 (#73~#83) + 수렴 확인
 
 **작업**: Codex PR 11건(#73~#83)을 사후 리뷰하고 각 PR에 코멘트 게시. 대부분 직전 라운드

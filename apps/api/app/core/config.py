@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     tripmate_resend_from_email: str = "TripMate <noreply@send.tripmate.local>"
     tripmate_resend_timeout_seconds: int = 5
     tripmate_resend_webhook_secret: str = ""
+    tripmate_resend_webhook_allow_unsigned: bool = False
     tripmate_web_base_url: str = "http://localhost:9022"
     tripmate_email_verification_path: str = "/verify-email"
     tripmate_auth_reset_path: str = Field(

@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-125 — feature_id 문자열化(코드의 UUID 가정 제거) (C-09; ADR-028)
+- [ ] T-163 — 비밀번호 재설정 access JWT 무효화 + refresh 회전 race 보강 (PR #76)
   <!-- T-111은 아래 "Sprint 5~6 backlog"에 정본 정의(감사 P-06 중복 제거) -->
 
 ## 완료
@@ -244,7 +244,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 직전 [높음] T-154~T-161은 모두 구현 확인(✅). 이번 라운드 신규 [높음] 없음 — 아래는
 잔존 [중간](보안/무결성/가용성) 승격분:
 
-- [ ] T-162 — resend 운영 fail-open 잔존: 환경 문자열 게이트(기본 `development`)를 opt-in
+- [x] T-162 — resend 운영 fail-open 잔존: 환경 문자열 게이트(기본 `development`)를 opt-in
   플래그 또는 prod secret 강제로 반전 (PR #74)
 - [ ] T-163 — 비밀번호 재설정 시 access JWT(15분) 무효화(token version/jti denylist) +
   refresh 회전 race(row lock/조건부 UPDATE) (PR #76)
