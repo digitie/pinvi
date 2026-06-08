@@ -79,13 +79,47 @@ Authorization: Bearer mcp_<JWT>
         "type": "string",
         "enum": ["draft", "planned", "in_progress", "completed", "archived"]
       },
-      "limit": { "type": "integer", "default": 20, "maximum": 100 }
+      "bucket": {
+        "type": "string",
+        "enum": ["future", "past", "all"],
+        "default": "future"
+      },
+      "q": { "type": "string", "minLength": 2, "maxLength": 120 },
+      "visibility": {
+        "type": "string",
+        "enum": ["private", "unlisted", "public"]
+      },
+      "date_from": { "type": "string", "format": "date" },
+      "date_to": { "type": "string", "format": "date" },
+      "sort": {
+        "type": "string",
+        "enum": ["-updated_at", "start_date", "-start_date", "title"],
+        "default": "-updated_at"
+      },
+      "limit": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 },
+      "cursor": { "type": "string" }
     }
   }
 }
 ```
 
-응답: `[{trip_id, title, status, start_date, end_date, day_count, poi_count}]`
+`list_trips`는 사용자 `GET /trips`와 같은 bucket/search/filter/sort/cursor 계약을
+쓴다. `cursor`는 이전 응답의 `next_cursor`를 그대로 전달하는 불투명 문자열이며,
+TripMate `app.trips` / `app.trip_companions`만 조회한다.
+
+응답:
+
+```jsonc
+{
+  "items": [
+    { "trip_id": "uuid", "title": "부산 2박 3일", "status": "planned",
+      "start_date": "2026-06-01", "end_date": "2026-06-03",
+      "day_count": 3, "poi_count": 12 }
+  ],
+  "next_cursor": "opaque-or-null",
+  "has_more": true
+}
+```
 
 ### 4.2 `get_trip(trip_id)`
 
@@ -109,8 +143,9 @@ trip 또는 trip의 특정 day의 POI만 필터.
 
 ### 4.4 `search_features(q, kind?, bounds?)`
 
-krtour-map OpenAPI HTTP `GET /features/search`로 조회한다. 결과는 사용자 권한 /
-동의 범위 내에서만 반환한다.
+krtour-map OpenAPI HTTP `GET /features/search`로 조회한다. `python-krtour-map` Python
+함수나 DB schema를 TripMate MCP 서버가 직접 호출하지 않는다(ADR-026). 결과는 사용자
+권한 / 동의 범위 내에서만 반환한다.
 
 ### 4.5 `get_user_profile`
 

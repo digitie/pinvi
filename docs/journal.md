@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-08 (codex) — T-169 MCP list_trips parity + Trip 목록 cursor
+
+**작업**: PR #83 사후 리뷰 잔존인 MCP `list_trips` bucket/cursor parity와
+`search_features` HTTP 경계 표현을 정리했다.
+
+**변경**:
+- 사용자 `GET /trips`가 `bucket` / `q` / `status` / `visibility` / `date_from` /
+  `date_to` / `sort` / `limit` / `cursor` query를 받도록 구현했다.
+- `/trips` 목록 응답에 `meta.cursor` / `meta.has_more` / `meta.limit`를 추가하고,
+  기존 `data` 배열 shape는 유지했다.
+- `packages/api-client`에 envelope meta를 읽는 `requestEnvelope()`와 Trip 목록
+  `listPage()`를 추가했다. 기존 `list()`는 배열 반환을 유지한다.
+- MCP `list_trips` 문서를 사용자 `GET /trips` query 계약과 맞추고,
+  `search_features`는 krtour-map Python 함수/DB 직접 호출이 아니라 OpenAPI HTTP
+  `GET /features/search` 경유임을 명시했다.
+- Sprint 6 `app.mcp_tokens` DDL 골격을 `docs/postgres-schema.md`에 반영했다.
+
+**검증**:
+- WSL2 ext4 mirror: `ruff format --check app/api/v1/trips.py app/services/trip.py app/schemas/envelope.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `ruff check app/api/v1/trips.py app/services/trip.py app/schemas/envelope.py tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `mypy --strict app/api/v1/trips.py app/services/trip.py app/schemas/envelope.py`
+- WSL2 ext4 mirror: `pytest --capture=no -q tests/integration/test_trips_api.py`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/api-client`
+- WSL2 ext4 mirror: `npm run typecheck --workspace @tripmate/web`
+- WSL2 ext4 mirror: `npm run lint --workspace @tripmate/web`
+- WSL2 ext4 mirror: `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:8001 npm run build --workspace @tripmate/web`
+
+**다음**: krtour-map 비의존 루프는 닫힘. 다음 후보는 T-170 krtour-map HTTP client 붙이기.
+
 ## 2026-06-08 (claude) — RustFS 설정 배선 (env → Settings)
 
 **작업**: `TRIPMATE_RUSTFS_*` 환경변수를 `Settings`(config.py)에 실제 필드로 배선했다.

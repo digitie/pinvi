@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -69,6 +69,65 @@ async def test_list_trips_only_owner(client, verified_user, auth_cookies) -> Non
     resp = await client.get("/trips", cookies=cookies)
     assert resp.status_code == 200
     assert len(resp.json()["data"]) == 3
+    assert resp.json()["meta"]["has_more"] is False
+
+
+async def test_list_trips_bucket_search_and_cursor(client, verified_user, auth_cookies) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    today = date.today()
+    fixtures = [
+        {
+            "title": "지난 부산 여행",
+            "region_hint": "부산",
+            "start_date": str(today - timedelta(days=10)),
+            "end_date": str(today - timedelta(days=8)),
+        },
+        {
+            "title": "부산 여름 여행",
+            "region_hint": "부산",
+            "start_date": str(today + timedelta(days=2)),
+            "end_date": str(today + timedelta(days=4)),
+        },
+        {
+            "title": "서울 주말 여행",
+            "region_hint": "서울",
+            "start_date": str(today + timedelta(days=8)),
+            "end_date": str(today + timedelta(days=10)),
+        },
+    ]
+    for body in fixtures:
+        created = await client.post("/trips", json=body, cookies=cookies)
+        assert created.status_code == 201, created.text
+
+    past = await client.get("/trips?bucket=past", cookies=cookies)
+    assert past.status_code == 200, past.text
+    assert [row["title"] for row in past.json()["data"]] == ["지난 부산 여행"]
+
+    future_busan = await client.get("/trips?bucket=future&q=부산", cookies=cookies)
+    assert future_busan.status_code == 200, future_busan.text
+    assert [row["title"] for row in future_busan.json()["data"]] == ["부산 여름 여행"]
+
+    first = await client.get("/trips?bucket=all&limit=2", cookies=cookies)
+    assert first.status_code == 200, first.text
+    first_payload = first.json()
+    assert len(first_payload["data"]) == 2
+    assert first_payload["meta"]["has_more"] is True
+    assert first_payload["meta"]["cursor"]
+
+    second = await client.get(
+        f"/trips?bucket=all&limit=2&cursor={first_payload['meta']['cursor']}",
+        cookies=cookies,
+    )
+    assert second.status_code == 200, second.text
+    second_payload = second.json()
+    assert len(second_payload["data"]) == 1
+    assert second_payload["meta"]["has_more"] is False
+    listed_ids = {row["trip_id"] for row in first_payload["data"] + second_payload["data"]}
+    assert len(listed_ids) == 3
+
+    invalid_cursor = await client.get("/trips?cursor=not-a-cursor", cookies=cookies)
+    assert invalid_cursor.status_code == 422
 
 
 async def test_trip_requires_auth(client) -> None:

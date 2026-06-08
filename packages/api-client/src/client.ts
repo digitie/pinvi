@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ErrorEnvelopeSchema } from '@tripmate/schemas';
+import { ErrorEnvelopeSchema, SuccessEnvelopeSchema } from '@tripmate/schemas';
 
 /** API 클라이언트 옵션 — Next.js / Expo가 어댑터 주입. */
 export interface ApiClientOptions {
@@ -23,6 +23,20 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiResponseMeta {
+  cursor?: string | null;
+  has_more?: boolean;
+  total?: number;
+  page?: number;
+  limit?: number;
+  version?: number;
+}
+
+export interface ApiEnvelope<T> {
+  data: T;
+  meta?: ApiResponseMeta;
+}
+
 export class ApiClient {
   constructor(private readonly opts: ApiClientOptions) {}
 
@@ -44,6 +58,14 @@ export class ApiClient {
     path: string,
     init: RequestInit & { schema: z.ZodType<T> },
   ): Promise<T> {
+    const envelope = await this.requestEnvelope(path, init);
+    return envelope.data;
+  }
+
+  async requestEnvelope<T>(
+    path: string,
+    init: RequestInit & { schema: z.ZodType<T> },
+  ): Promise<ApiEnvelope<T>> {
     const res = await this.fetch(path, init);
 
     if (res.status === 401) {
@@ -66,8 +88,8 @@ export class ApiClient {
       throw new ApiError('INTERNAL_ERROR', `HTTP ${res.status}`, res.status);
     }
 
-    // `data` 필드 파싱
-    const envelope = z.object({ data: init.schema }).safeParse(json);
+    // `data` 필드와 선택적 `meta` 필드 파싱
+    const envelope = SuccessEnvelopeSchema(init.schema).safeParse(json);
     if (!envelope.success) {
       throw new ApiError(
         'RESPONSE_SHAPE_INVALID',
@@ -75,7 +97,7 @@ export class ApiClient {
         res.status,
       );
     }
-    return envelope.data.data;
+    return envelope.data;
   }
 
   async requestNoContent(path: string, init: RequestInit): Promise<void> {

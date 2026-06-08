@@ -21,19 +21,54 @@ import type {
 } from '@tripmate/schemas';
 
 export type TripBucket = 'future' | 'past' | 'all';
+export type TripListSort = '-updated_at' | 'start_date' | '-start_date' | 'title';
 
 export interface TripListParams {
   bucket?: TripBucket;
+  q?: string;
+  status?: 'draft' | 'planned' | 'in_progress' | 'completed' | 'archived';
+  visibility?: 'private' | 'unlisted' | 'public';
+  date_from?: string;
+  date_to?: string;
+  sort?: TripListSort;
   limit?: number;
+  cursor?: string;
+}
+
+export interface TripListPage {
+  items: z.infer<typeof TripResponseSchema>[];
+  cursor: string | null;
+  has_more: boolean;
 }
 
 function buildTripListPath(params: TripListParams): string {
   const qs = new URLSearchParams();
-  if (params.bucket && params.bucket !== 'all') {
+  if (params.bucket) {
     qs.set('bucket', params.bucket);
+  }
+  if (params.q) {
+    qs.set('q', params.q);
+  }
+  if (params.status) {
+    qs.set('status', params.status);
+  }
+  if (params.visibility) {
+    qs.set('visibility', params.visibility);
+  }
+  if (params.date_from) {
+    qs.set('date_from', params.date_from);
+  }
+  if (params.date_to) {
+    qs.set('date_to', params.date_to);
+  }
+  if (params.sort) {
+    qs.set('sort', params.sort);
   }
   if (params.limit) {
     qs.set('limit', String(params.limit));
+  }
+  if (params.cursor) {
+    qs.set('cursor', params.cursor);
   }
   return `/trips${qs.toString() ? `?${qs.toString()}` : ''}`;
 }
@@ -45,6 +80,18 @@ export const tripApi = (client: ApiClient) => ({
       method: 'GET',
       schema: z.array(TripResponseSchema),
     }),
+
+  listPage: async (params: TripListParams = {}): Promise<TripListPage> => {
+    const envelope = await client.requestEnvelope(buildTripListPath(params), {
+      method: 'GET',
+      schema: z.array(TripResponseSchema),
+    });
+    return {
+      items: envelope.data,
+      cursor: envelope.meta?.cursor ?? null,
+      has_more: envelope.meta?.has_more ?? false,
+    };
+  },
 
   create: (body: TripCreate) =>
     client.request('/trips', {

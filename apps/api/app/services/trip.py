@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,12 @@ class TripCompanionConflictError(TripError):
 
 class TripCommentNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
+
+
+TripBucket = Literal["future", "past", "all"]
+TripListSort = Literal["-updated_at", "start_date", "-start_date", "title"]
+TripStatus = Literal["draft", "planned", "in_progress", "completed", "archived"]
+TripVisibility = Literal["private", "unlisted", "public"]
 
 
 async def create_trip(
@@ -93,15 +99,63 @@ async def get_trip_for_user(db: AsyncSession, *, trip_id: uuid.UUID, user_id: uu
 
 
 async def list_trips_for_owner(
-    db: AsyncSession, *, user_id: uuid.UUID, limit: int = 20
-) -> list[Trip]:
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    bucket: TripBucket = "future",
+    q: str | None = None,
+    status_filter: TripStatus | None = None,
+    visibility_filter: TripVisibility | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    sort: TripListSort = "-updated_at",
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[Trip], bool]:
+    today = datetime.now(UTC).date()
+    filters = [Trip.owner_user_id == user_id, Trip.deleted_at.is_(None)]
+    if bucket == "future":
+        filters.append(or_(Trip.end_date.is_(None), Trip.end_date >= today))
+    elif bucket == "past":
+        filters.append(Trip.end_date < today)
+    normalized_q = q.strip() if q is not None else None
+    if normalized_q:
+        needle = f"%{normalized_q}%"
+        filters.append(
+            or_(
+                Trip.title.ilike(needle),
+                Trip.description.ilike(needle),
+                Trip.region_hint.ilike(needle),
+            )
+        )
+    if status_filter is not None:
+        filters.append(Trip.status == status_filter)
+    if visibility_filter is not None:
+        filters.append(Trip.visibility == visibility_filter)
+    if date_from is not None:
+        filters.append(Trip.end_date >= date_from)
+    if date_to is not None:
+        filters.append(Trip.start_date <= date_to)
+
     result = await db.execute(
         select(Trip)
-        .where(Trip.owner_user_id == user_id, Trip.deleted_at.is_(None))
-        .order_by(Trip.updated_at.desc())
-        .limit(limit)
+        .where(*filters)
+        .order_by(*_trip_list_ordering(sort))
+        .offset(offset)
+        .limit(limit + 1)
     )
-    return list(result.scalars())
+    rows = list(result.scalars())
+    return rows[:limit], len(rows) > limit
+
+
+def _trip_list_ordering(sort: TripListSort) -> tuple[Any, ...]:
+    if sort == "start_date":
+        return Trip.start_date.is_(None).asc(), Trip.start_date.asc(), Trip.trip_id.asc()
+    if sort == "-start_date":
+        return Trip.start_date.is_(None).asc(), Trip.start_date.desc(), Trip.trip_id.asc()
+    if sort == "title":
+        return func.lower(Trip.title).asc(), Trip.trip_id.asc()
+    return Trip.updated_at.desc(), Trip.trip_id.asc()
 
 
 async def update_trip(

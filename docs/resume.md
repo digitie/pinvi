@@ -4,9 +4,16 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 작업 루프 기준으로 T-169 MCP `list_trips` bucket/cursor parity와
-`search_features` HTTP 표현 정리를 처리한다. feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
+krtour-map 비의존 작업 루프는 T-169까지 닫혔다. 다음 구현 후보는 T-170 krtour-map
+HTTP client 붙이기이며, feature read는 krtour HTTP 서비스 준비에 의존(T-066/DEC-06)
 — v0.1.0 게이트도 여기 대기.
+
+**T-169 MCP list_trips/search_features parity 완료** (2026-06-08): 사용자 `GET /trips`가
+bucket/q/status/visibility/date range/sort/opaque cursor를 받도록 보강하고 `meta.cursor` /
+`meta.has_more`를 반환한다. API client는 기존 `list()` 배열 반환을 유지하면서 `listPage()`로
+cursor meta를 노출한다. MCP `list_trips` 문서는 같은 query 계약을 따르도록 정리했고,
+`search_features`는 krtour-map Python 함수/DB 직접 호출이 아니라 OpenAPI HTTP
+`GET /features/search` 경유임을 명시했다.
 
 **T-168 storage AttachmentResponse 호환 정책 완료** (2026-06-08): storage
 `AttachmentResponse`가 신규 `curated_plan_id` / `curated_poi_id`와 `/notice-plans` 호환

@@ -33,13 +33,28 @@ GET /trips?bucket=future&q=부산&status=planned&visibility=private&date_from=20
 Cookie: tripmate_access=...
 ```
 
-- `bucket`: `future` (오늘 이후 종료) | `past` | `all`
+- `bucket`: `future`(기본, 오늘 이후 종료 또는 기간 미정) | `past` | `all`
 - `q`: 선택. 2자 이상. `title`, `description`, `region_hint`를 대상으로 검색한다.
 - `status`: 선택. `draft` | `planned` | `in_progress` | `completed` | `archived`
 - `visibility`: 선택. `private` | `unlisted` | `public`
 - `date_from`, `date_to`: 선택. 여행 기간이 해당 범위와 겹치면 포함한다.
 - `sort`: `-updated_at`(기본) | `start_date` | `-start_date` | `title`
-- 응답: cursor 페이지네이션된 trip 목록 (`data` 배열 + `meta.cursor`).
+- `cursor`: 선택. 이전 응답의 `meta.cursor` 값을 그대로 넘기는 불투명 cursor.
+- 응답: cursor 페이지네이션된 trip 목록 (`data` 배열 + `meta.cursor` /
+  `meta.has_more` / `meta.limit`).
+
+```jsonc
+{
+  "data": [
+    { "trip_id": "uuid", "title": "부산 2박 3일", "...": "TripResponse" }
+  ],
+  "meta": {
+    "cursor": "eyJ2IjoxLCJvZmZzZXQiOjIwfQ", // 다음 페이지가 없으면 null
+    "has_more": true,
+    "limit": 20
+  }
+}
+```
 
 여행 목록 검색은 TripMate `app.trips`/`app.trip_companions`만 사용한다. POI/장소/주소
 검색은 본 endpoint에 섞지 않는다. 장소 검색은 `GET /features/search`, 통합 검색은
