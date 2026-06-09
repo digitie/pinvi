@@ -17,7 +17,7 @@ from app.clients.kraddr_geo import (
 )
 from app.core.deps import CurrentUserId
 from app.schemas.envelope import Envelope
-from app.schemas.geo import BoundaryLevel, GeoCandidateList, SearchKind
+from app.schemas.geo import BoundaryLevel, GeoCandidateList, RegionCovering, SearchKind
 
 geo_router = APIRouter(prefix="/geo", tags=["geo"])
 regions_router = APIRouter(prefix="/regions", tags=["regions"])
@@ -98,6 +98,37 @@ async def search(
     except (KraddrGeoUnavailable, KraddrGeoBadRequest) as exc:
         _raise_geo_http(exc)
     return Envelope.of(_candidate_list(payload))
+
+
+@regions_router.get("/covering-point", response_model=Envelope[RegionCovering])
+async def regions_covering_point(
+    _current_user: CurrentUserId,
+    client: KraddrGeoClientDep,
+    longitude: Annotated[float, LON],
+    latitude: Annotated[float, LAT],
+    boundary_level: Annotated[BoundaryLevel, Query()] = "legal_dong",
+) -> Envelope[RegionCovering]:
+    """좌표를 포함하는 행정구역(단건) — kraddr-geo `/v2/reverse`의 최선 후보 region. 미매치 404."""
+    try:
+        payload = await client.reverse(lon=longitude, lat=latitude, include_region=True)
+    except (KraddrGeoUnavailable, KraddrGeoBadRequest) as exc:
+        _raise_geo_http(exc)
+    region = _first_region(payload)
+    if region is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "행정구역을 찾을 수 없습니다."},
+        )
+    return Envelope.of(RegionCovering(boundary_level=boundary_level, region=region))
+
+
+def _first_region(payload: dict[str, Any]) -> dict[str, Any] | None:
+    for candidate in payload.get("candidates", []):
+        if isinstance(candidate, dict):
+            region = candidate.get("region")
+            if isinstance(region, dict) and region:
+                return region
+    return None
 
 
 @regions_router.get("/within-radius", response_model=Envelope[GeoCandidateList])
