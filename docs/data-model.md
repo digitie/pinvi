@@ -7,9 +7,9 @@
 
 > **감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**:
 > ADR-029에 따라 사용자 대면 추천 여행은 `curated_trip_plans` 계열로 분리했고,
-> `notice_plans`는 운영 공지 전용으로 남긴다. 남은 누락 후보는
-> `feature_requests`(또는 큐 소유권 DEC-05)다. `security_incidents`와 누락 `users`
-> 컬럼 문서 정합은 T-138, `trip_day_pois` 예산/currency 정합은 T-140에서 반영했다.
+> `notice_plans`는 운영 공지 전용으로 남긴다. DEC-05 사용자 제안 큐는 T-177에서
+> `feature_suggestions`로 실체화했다. `security_incidents`와 누락 `users` 컬럼 문서
+> 정합은 T-138, `trip_day_pois` 예산/currency 정합은 T-140에서 반영했다.
 
 ## 1. 큰 그림
 
@@ -37,6 +37,8 @@
 │                                                                  │
 │  app.notice_plans  (Admin이 운영하는 공지)                       │
 │   └── app.notice_plan_audiences                                  │
+│                                                                  │
+│  app.feature_suggestions  (사용자 feature 제안 큐)                │
 │                                                                  │
 │  app.admin_audit_logs                                            │
 │                                                                  │
@@ -500,6 +502,10 @@ Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops
 - `app.curated_trip_plans(is_published, updated_at)` 합성
 - `app.curated_plan_pois(curated_plan_id, day_index)` 합성
 - `app.notice_plans(status, starts_at)` 합성
+- `app.feature_suggestions(requester_user_id, created_at)` 합성
+- `app.feature_suggestions(status, created_at)` 합성
+- `app.feature_suggestions(requester_user_id, kind, lower(name), lng, lat)` partial UNIQUE
+  WHERE `status='pending'` — 사용자 pending 중복 방지
 - `app.admin_audit_logs(created_at)` BRIN (대량 append)
 
 ## 6. 마이그레이션 정책
@@ -580,19 +586,27 @@ Resend 통합:
 | `endpoint`, `status`, `latency_ms`, `error` | |
 | `occurred_at` | BRIN index + `(provider, occurred_at DESC)` |
 
-### 8.5 `app.feature_requests` (SPEC V8 H-6)
+### 8.5 `app.feature_suggestions` (SPEC V8 H-6 / DEC-05)
 
-사용자 feature 추가 요청:
+사용자 feature 추가/정정/폐쇄 제안 큐. TripMate `app` schema가 소유하고,
+`POST /features/requests`는 krtour-map을 직접 호출하지 않는다. Admin 검사/승인 후
+krtour-map feature change API로 반영하는 흐름은 T-179에서 연결한다.
 
 | 컬럼 | 비고 |
 |------|------|
 | `request_id` (uuid PK) | |
-| `requester_user_id` | |
-| `coord`, `name`, `categories` | 요청 내용 |
-| `status` | `queued` / `approved` / `rejected` |
-| `processed_at`, `processed_by` | |
+| `requester_user_id` | `app.users` FK. 제안 소유자 |
+| `type` | `new_place` / `correction` / `closure` |
+| `target_feature_id` | 기존 feature 정정/폐쇄 대상. FK 없음 |
+| `kind` | `place` / `event` / `notice` / `price` / `weather` / `route` / `area` |
+| `name`, `lng`, `lat`, `categories`, `note` | 사용자 입력 제안 내용 |
+| `status` | `pending` / `approved` / `rejected` / `added` / `duplicate` |
+| `reviewed_by_admin_id` | Admin 처리자. nullable |
+| `krtour_ref` | 승인 후 krtour `feature_id`/`request_id`/state 참조 payload |
+| `resolved_at` | 종료 시각 |
 
-승인 시 라이브러리 적재 trigger (Sprint 6).
+pending 상태에서는 같은 사용자·kind·정규화 이름·소수 6자리 좌표 조합을 중복 등록하지
+않는다. API 레이어는 사용자당 24시간 20건 rate-limit을 적용한다.
 
 ### 8.6 `app.category_mappings` (SPEC V8 I-6 / M-2)
 

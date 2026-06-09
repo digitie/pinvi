@@ -174,7 +174,8 @@ POI 편집은 `If-Match: version` (optimistic lock, J-2).
 - `GET /features/{id}/weather` — `WeatherCard` (KMA 시간축 + sources 배열, R-4)
 - `GET /features/nearby?lat=&lng=&radius_m=` — 주변
 - `GET /features/search?q=` — 장소 feature 검색 (krtour-map HTTP)
-- `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_requests`)
+- `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_suggestions`, krtour 직접 호출 X)
+- `GET /features/requests/{id}` — 본인 요청 상태 조회
 - `GET /search?q=` — 통합 검색 (2자 이상, T-129)
 
 krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
@@ -237,7 +238,7 @@ krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
 | Trip CRUD + 공유 토큰 (H-3, F-2) | Sprint 2 | `apps/api/app/api/v1/trips.py` |
 | POI CRUD + optimistic lock (H-3, J-2) | Sprint 2 | `apps/api/app/api/v1/pois.py` |
 | Feature read (H-4) | Sprint 4 | `apps/api/app/api/v1/features.py` |
-| Admin H-6 (`api_call_log`, `feature_requests` 등) | Sprint 3 | `apps/api/app/api/v1/admin/` |
+| Admin H-6 (`api_call_log`, `feature_suggestions` 등) | Sprint 3 | `apps/api/app/api/v1/admin/` |
 | Webhook Resend (G-6) | Sprint 2 | `apps/api/app/webhooks/resend.py` |
 | WebSocket (H-5, J-1) | Sprint 5 | `apps/api/app/api/v1/ws.py` |
 | OR-Tools 일정 최적화 (H-8) | Sprint 6 | `apps/api/app/services/route_optimizer.py` |

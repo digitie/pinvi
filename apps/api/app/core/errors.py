@@ -47,7 +47,7 @@ async def http_exception_handler(_: Request, exc: Exception) -> JSONResponse:
             code=_default_code_for_status(exc.status_code),
             message=str(detail),
         )
-    return JSONResponse(status_code=exc.status_code, content=body)
+    return JSONResponse(status_code=exc.status_code, content=body, headers=exc.headers)
 
 
 async def validation_exception_handler(_: Request, exc: Exception) -> JSONResponse:

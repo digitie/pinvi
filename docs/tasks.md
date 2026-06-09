@@ -12,9 +12,8 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions`
-  + `POST /features/requests` + `GET /features/requests/{id}` 실구현(C-12 실체화,
-  krtour 직접 호출 X)
+- [ ] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
+  `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
 
 ## 완료
 
@@ -279,7 +278,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거
 - [ ] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /tripmate/features/batch`(string, cap 200) 배선
 - [ ] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결
-- [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X
+- [x] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X (완료: 2026-06-09)
 - [ ] T-179 — [H2] Admin 검사/승인 → krtour **feature change**(DEC-05) — **actionable**(K-15 = krtour PR #317로 구현됨): `/admin/feature-requests` 검사 + approve/reject 시 krtour `POST/PATCH/DELETE /admin/features` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. review_mode 합의(§7) 선행. 재적재와 무관
 - [ ] T-180 — krtour **admin HTTP client(9012)**: §2.9 feature change(`POST/PATCH/DELETE /admin/features`) + 운영자 재적재(`/admin/feature-update-requests`) proxy 호출 client. T-170 user client(9011)와 분리. `tripmate_krtour_map_admin_base_url` + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
 - [ ] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중)
