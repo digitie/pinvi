@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from binascii import Error as BinasciiError
-from datetime import date
+from datetime import date, datetime
 from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
@@ -48,6 +48,7 @@ from app.services.trip import (
     TripCopyError,
     TripDayConflictError,
     TripDayNotFoundError,
+    TripListCursor,
     TripListSort,
     TripNotFoundError,
     TripOptimizeError,
@@ -85,7 +86,7 @@ from app.services.trip import (
 from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
-_TRIP_CURSOR_VERSION = 1
+_TRIP_CURSOR_VERSION = 2
 
 
 def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
@@ -206,7 +207,7 @@ async def list_trips(
                 "message": "date_to는 date_from 이후여야 합니다.",
             },
         )
-    offset = _decode_trip_cursor(cursor)
+    trip_cursor = _decode_trip_cursor(cursor)
     trips, has_more = await list_trips_for_owner(
         db,
         user_id=uuid.UUID(current_user_id),
@@ -218,39 +219,55 @@ async def list_trips(
         date_to=date_to,
         sort=sort,
         limit=limit,
-        offset=offset,
+        cursor=trip_cursor,
     )
-    next_cursor = _encode_trip_cursor(offset + limit) if has_more else None
+    next_cursor: str | None = None
+    if has_more and trips:
+        last = trips[-1]
+        if sort == "-updated_at":
+            next_cursor = _encode_keyset_cursor(last.updated_at, last.trip_id)
+        else:
+            next_cursor = _encode_offset_cursor(trip_cursor.offset + limit)
     return EnvelopeWithMeta.of(
         [_to_response(t) for t in trips],
         meta=EnvelopeMeta(cursor=next_cursor, has_more=has_more, limit=limit),
     )
 
 
-def _encode_trip_cursor(offset: int) -> str:
+def _encode_offset_cursor(offset: int) -> str:
+    raw = dumps({"v": _TRIP_CURSOR_VERSION, "off": offset}, separators=(",", ":")).encode("utf-8")
+    return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _encode_keyset_cursor(updated_at: datetime, trip_id: uuid.UUID) -> str:
     raw = dumps(
-        {"v": _TRIP_CURSOR_VERSION, "offset": offset},
+        {"v": _TRIP_CURSOR_VERSION, "ua": updated_at.isoformat(), "id": str(trip_id)},
         separators=(",", ":"),
     ).encode("utf-8")
     return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def _decode_trip_cursor(cursor: str | None) -> int:
+def _decode_trip_cursor(cursor: str | None) -> TripListCursor:
     if cursor is None:
-        return 0
+        return TripListCursor()
     try:
         padding = "=" * (-len(cursor) % 4)
         payload = loads(urlsafe_b64decode(f"{cursor}{padding}"))
     except (BinasciiError, JSONDecodeError, ValueError, TypeError) as exc:
         raise _invalid_trip_cursor() from exc
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get("v") != _TRIP_CURSOR_VERSION:
         raise _invalid_trip_cursor()
-    if payload.get("v") != _TRIP_CURSOR_VERSION:
-        raise _invalid_trip_cursor()
-    offset = payload.get("offset")
+    if "ua" in payload or "id" in payload:
+        try:
+            updated_at = datetime.fromisoformat(str(payload["ua"]))
+            trip_id = uuid.UUID(str(payload["id"]))
+        except (KeyError, ValueError, TypeError) as exc:
+            raise _invalid_trip_cursor() from exc
+        return TripListCursor(updated_at=updated_at, trip_id=trip_id)
+    offset = payload.get("off")
     if not isinstance(offset, int) or offset < 0:
         raise _invalid_trip_cursor()
-    return offset
+    return TripListCursor(offset=offset)
 
 
 def _invalid_trip_cursor() -> HTTPException:

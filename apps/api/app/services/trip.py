@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -159,6 +160,20 @@ def can_manage_trip(role: TripRole) -> bool:
     return role in _MANAGEMENT_ROLES
 
 
+@dataclass(frozen=True)
+class TripListCursor:
+    """페이지네이션 커서. 기본 정렬(-updated_at)은 keyset, 그 외는 offset."""
+
+    offset: int = 0
+    updated_at: datetime | None = None
+    trip_id: uuid.UUID | None = None
+
+
+def _escape_like(value: str) -> str:
+    # ilike 와일드카드(% _)와 escape(\)를 리터럴로 취급 — 검색어 의미 변질 방지.
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def list_trips_for_owner(
     db: AsyncSession,
     *,
@@ -171,8 +186,9 @@ async def list_trips_for_owner(
     date_to: date | None = None,
     sort: TripListSort = "-updated_at",
     limit: int = 20,
-    offset: int = 0,
+    cursor: TripListCursor | None = None,
 ) -> tuple[list[Trip], bool]:
+    cursor = cursor or TripListCursor()
     today = datetime.now(UTC).date()
     filters = [Trip.owner_user_id == user_id, Trip.deleted_at.is_(None)]
     if bucket == "future":
@@ -181,12 +197,12 @@ async def list_trips_for_owner(
         filters.append(Trip.end_date < today)
     normalized_q = q.strip() if q is not None else None
     if normalized_q:
-        needle = f"%{normalized_q}%"
+        needle = f"%{_escape_like(normalized_q)}%"
         filters.append(
             or_(
-                Trip.title.ilike(needle),
-                Trip.description.ilike(needle),
-                Trip.region_hint.ilike(needle),
+                Trip.title.ilike(needle, escape="\\"),
+                Trip.description.ilike(needle, escape="\\"),
+                Trip.region_hint.ilike(needle, escape="\\"),
             )
         )
     if status_filter is not None:
@@ -198,13 +214,19 @@ async def list_trips_for_owner(
     if date_to is not None:
         filters.append(Trip.start_date <= date_to)
 
-    result = await db.execute(
-        select(Trip)
-        .where(*filters)
-        .order_by(*_trip_list_ordering(sort))
-        .offset(offset)
-        .limit(limit + 1)
-    )
+    # 기본 -updated_at 정렬은 keyset(updated_at, trip_id)으로 — 동시 쓰기 시 page skip/중복 회피.
+    use_keyset = sort == "-updated_at"
+    if use_keyset and cursor.updated_at is not None and cursor.trip_id is not None:
+        filters.append(
+            or_(
+                Trip.updated_at < cursor.updated_at,
+                and_(Trip.updated_at == cursor.updated_at, Trip.trip_id > cursor.trip_id),
+            )
+        )
+    stmt = select(Trip).where(*filters).order_by(*_trip_list_ordering(sort)).limit(limit + 1)
+    if not use_keyset:
+        stmt = stmt.offset(cursor.offset)
+    result = await db.execute(stmt)
     rows = list(result.scalars())
     return rows[:limit], len(rows) > limit
 
