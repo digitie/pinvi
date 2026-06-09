@@ -213,6 +213,7 @@ export {
   WeatherTimepointSchema,
   FeatureWeatherCardSchema,
   FeatureRequestCategorySchema,
+  FeatureRequestTypeSchema,
   FeatureRequestCreateSchema,
   FeatureRequestStatusSchema,
   FeatureRequestResponseSchema,
@@ -228,6 +229,7 @@ export type {
   WeatherTimepoint,
   FeatureWeatherCard,
   FeatureRequestStatus,
+  FeatureRequestType,
   FeatureRequestCreate,
   FeatureRequestResponse,
 } from './feature';

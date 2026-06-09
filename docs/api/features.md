@@ -194,6 +194,7 @@ Content-Type: application/json
 Cookie: tripmate_access=...
 
 {
+  "type": "new_place",
   "kind": "place",
   "title": "새 카페",
   "coord": { "longitude": 129.0, "latitude": 35.0 },
@@ -202,9 +203,14 @@ Cookie: tripmate_access=...
 }
 ```
 
-동일 사용자가 같은 `kind` + 정규화된 `title` + 소수 6자리 좌표로 이미 `pending` 제안을
-등록했다면 기존 row를 반환한다. 신규 등록은 사용자당 24시간 20건으로 제한하고, 초과 시
-`429 RATE_LIMITED` + `Retry-After: 86400`을 반환한다.
+`type`(기본 `new_place`)은 `new_place` | `correction` | `closure` 중 하나다. `correction`/`closure`
+(기존 feature 정보 수정·폐업 제보)는 `target_feature_id`가 **필수**이고, `new_place`는
+`target_feature_id`를 가질 수 없다(위반 시 `422 VALIDATION_ERROR`).
+
+동일 사용자가 같은 `type` + `target_feature_id` + `kind` + 정규화된 `title` + 소수 6자리 좌표로
+이미 `pending` 제안을 등록했다면 기존 row를 반환한다(`new_place`와 `correction`은 같은 이름/좌표여도
+별개). 신규 등록은 사용자당 24시간 20건으로 제한하고, 초과 시 `429 RATE_LIMITED` +
+`Retry-After: 86400`을 반환한다.
 
 응답 201:
 
@@ -213,11 +219,13 @@ Cookie: tripmate_access=...
   "data": {
     "request_id": "uuid",
     "status": "pending",
+    "type": "new_place",
     "kind": "place",
     "title": "새 카페",
     "coord": { "longitude": 129.0, "latitude": 35.0 },
     "categories": ["카페"],
     "note": "...",
+    "target_feature_id": null,
     "created_at": "2026-06-09T11:10:00+09:00",
     "resolved_at": null
   }

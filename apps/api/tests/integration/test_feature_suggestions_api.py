@@ -167,3 +167,54 @@ async def test_feature_suggestion_rate_limit(
 
     assert limited.status_code == 429
     assert limited.headers["Retry-After"] == "86400"
+
+
+async def test_correction_suggestion_requires_target_and_dedup_separates_type(
+    client: Any,
+    session_factory: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    user_id, _email = verified_user
+    base = {
+        "kind": "place",
+        "title": "정보 수정 요청",
+        "coord": {"longitude": 127.5, "latitude": 37.5},
+    }
+
+    # correction인데 target_feature_id 누락 → 422
+    missing = await client.post(
+        "/features/requests",
+        json={**base, "type": "correction"},
+        cookies=auth_cookies(user_id),
+    )
+    assert missing.status_code == 422, missing.text
+
+    # new_place인데 target_feature_id 지정 → 422
+    forbidden = await client.post(
+        "/features/requests",
+        json={**base, "type": "new_place", "target_feature_id": "place:abc"},
+        cookies=auth_cookies(user_id),
+    )
+    assert forbidden.status_code == 422, forbidden.text
+
+    # correction + target → 201, 응답에 type/target_feature_id 노출
+    created = await client.post(
+        "/features/requests",
+        json={**base, "type": "correction", "target_feature_id": "place:abc123"},
+        cookies=auth_cookies(user_id),
+    )
+    assert created.status_code == 201, created.text
+    correction = created.json()["data"]
+    assert correction["type"] == "correction"
+    assert correction["target_feature_id"] == "place:abc123"
+
+    # 같은 이름/좌표라도 new_place는 correction과 별개로 등록(dedup이 type/target을 구분).
+    new_place = await client.post(
+        "/features/requests",
+        json={**base, "type": "new_place"},
+        cookies=auth_cookies(user_id),
+    )
+    assert new_place.status_code == 201, new_place.text
+    assert new_place.json()["data"]["type"] == "new_place"
+    assert new_place.json()["data"]["request_id"] != correction["request_id"]

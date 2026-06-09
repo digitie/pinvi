@@ -106,13 +106,28 @@ export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
 /** Feature 요청 큐 등록 (Sprint 6 Admin 검토 → 라이브러리 적재). */
 export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 
-export const FeatureRequestCreateSchema = z.object({
-  kind: FeatureKindSchema,
-  title: z.string().min(1).max(200),
-  coord: CoordSchema,
-  categories: z.array(FeatureRequestCategorySchema).max(10).optional().default([]),
-  note: z.string().max(2000).nullable().optional(),
-});
+export const FeatureRequestTypeSchema = z.enum(['new_place', 'correction', 'closure']);
+export type FeatureRequestType = z.infer<typeof FeatureRequestTypeSchema>;
+
+export const FeatureRequestCreateSchema = z
+  .object({
+    type: FeatureRequestTypeSchema.optional().default('new_place'),
+    kind: FeatureKindSchema,
+    title: z.string().min(1).max(200),
+    coord: CoordSchema,
+    categories: z.array(FeatureRequestCategorySchema).max(10).optional().default([]),
+    note: z.string().max(2000).nullable().optional(),
+    // correction/closure(기존 feature 참조) 시 필수, new_place 시 금지.
+    target_feature_id: z.string().min(1).max(200).nullable().optional(),
+  })
+  .refine((v) => v.type === 'new_place' || v.target_feature_id != null, {
+    message: 'correction/closure 제안은 target_feature_id가 필요합니다.',
+    path: ['target_feature_id'],
+  })
+  .refine((v) => v.type !== 'new_place' || v.target_feature_id == null, {
+    message: 'new_place 제안은 target_feature_id를 가질 수 없습니다.',
+    path: ['target_feature_id'],
+  });
 export type FeatureRequestCreate = z.infer<typeof FeatureRequestCreateSchema>;
 
 export const FeatureRequestStatusSchema = z.enum([
@@ -127,11 +142,13 @@ export type FeatureRequestStatus = z.infer<typeof FeatureRequestStatusSchema>;
 export const FeatureRequestResponseSchema = z.object({
   request_id: z.string().uuid(),
   status: FeatureRequestStatusSchema,
+  type: FeatureRequestTypeSchema,
   kind: FeatureKindSchema,
   title: z.string().min(1).max(200),
   coord: CoordSchema,
   categories: z.array(FeatureRequestCategorySchema).max(10),
   note: z.string().nullable().optional(),
+  target_feature_id: z.string().nullable().optional(),
   created_at: Iso8601Schema,
   resolved_at: Iso8601Schema.nullable().optional(),
 });
