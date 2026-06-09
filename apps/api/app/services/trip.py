@@ -12,6 +12,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import generate_opaque_token
 from app.models.attachment import CuratedPlanAttachment
 from app.models.comment import TripComment
@@ -64,6 +65,10 @@ class TripCopyError(TripError):
 
 class TripAttachmentNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
+
+
+class TripAttachmentLimitError(TripError):
+    code = "ATTACHMENT_LIMIT_EXCEEDED"
 
 
 class TripOptimizeError(TripError):
@@ -556,6 +561,20 @@ async def list_attachments(
     return list(result.scalars())
 
 
+async def _count_attachments(
+    db: AsyncSession, *, trip_id: uuid.UUID | None, trip_poi_id: uuid.UUID | None
+) -> int:
+    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    if trip_id is not None:
+        filters.append(CuratedPlanAttachment.trip_id == trip_id)
+    if trip_poi_id is not None:
+        filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
+    return int(
+        await db.scalar(select(func.count(CuratedPlanAttachment.attachment_id)).where(*filters))
+        or 0
+    )
+
+
 async def create_attachment(
     db: AsyncSession,
     *,
@@ -564,6 +583,10 @@ async def create_attachment(
     trip_poi_id: uuid.UUID | None,
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
+    # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
+    limit = settings.tripmate_max_attachments_per_target
+    if await _count_attachments(db, trip_id=trip_id, trip_poi_id=trip_poi_id) >= limit:
+        raise TripAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
     attachment = CuratedPlanAttachment(
         trip_id=trip_id,
         trip_poi_id=trip_poi_id,
@@ -571,6 +594,33 @@ async def create_attachment(
         **payload,
     )
     db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
+    return attachment
+
+
+async def update_attachment(
+    db: AsyncSession,
+    *,
+    attachment_id: uuid.UUID,
+    trip_id: uuid.UUID | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+    patch: dict[str, Any],
+) -> CuratedPlanAttachment:
+    """첨부 메타 수정 — sort_order(재정렬) / description."""
+    filters: list[Any] = [
+        CuratedPlanAttachment.attachment_id == attachment_id,
+        CuratedPlanAttachment.deleted_at.is_(None),
+    ]
+    if trip_id is not None:
+        filters.append(CuratedPlanAttachment.trip_id == trip_id)
+    if trip_poi_id is not None:
+        filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
+    attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
+    if attachment is None:
+        raise TripAttachmentNotFoundError("첨부를 찾을 수 없습니다.")
+    for key, value in patch.items():
+        setattr(attachment, key, value)
     await db.commit()
     await db.refresh(attachment)
     return attachment

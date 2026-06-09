@@ -681,3 +681,49 @@ async def test_other_user_cannot_access(
 
     resp = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(other_id))
     assert resp.status_code == 403
+
+
+async def test_trip_attachment_limit_and_reorder(
+    client,
+    verified_user,
+    auth_cookies,
+    monkeypatch,
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "tripmate_max_attachments_per_target", 2)
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "첨부 한도"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    a1 = await client.post(
+        f"/trips/{trip_id}/attachments", json=_attachment_payload("a1.jpg"), cookies=cookies
+    )
+    assert a1.status_code == 201, a1.text
+    a2 = await client.post(
+        f"/trips/{trip_id}/attachments", json=_attachment_payload("a2.jpg"), cookies=cookies
+    )
+    assert a2.status_code == 201
+
+    # 한도(2) 초과 → 409.
+    a3 = await client.post(
+        f"/trips/{trip_id}/attachments", json=_attachment_payload("a3.jpg"), cookies=cookies
+    )
+    assert a3.status_code == 409, a3.text
+    assert a3.json()["error"]["code"] == "ATTACHMENT_LIMIT_EXCEEDED"
+
+    # 재정렬: a1을 sort_order=10으로 → 목록에서 a2(0)가 먼저.
+    a1_id = a1.json()["data"]["attachment_id"]
+    a2_id = a2.json()["data"]["attachment_id"]
+    patched = await client.patch(
+        f"/trips/{trip_id}/attachments/{a1_id}",
+        json={"sort_order": 10},
+        cookies=cookies,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["sort_order"] == 10
+
+    listed = await client.get(f"/trips/{trip_id}/attachments", cookies=cookies)
+    ids = [row["attachment_id"] for row in listed.json()["data"]]
+    assert ids == [a2_id, a1_id]

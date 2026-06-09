@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-105 첨부 하드닝(개수 제한 + 재정렬)
+
+**작업**: trip/POI 첨부(이미 T-132로 CRUD 완료)에 남용 방지 + 재정렬을 추가.
+
+- **개수 상한**: 대상(trip 또는 POI)당 첨부 `tripmate_max_attachments_per_target`(기본 30) 초과 시
+  `create_attachment`가 `TripAttachmentLimitError` → `409 ATTACHMENT_LIMIT_EXCEEDED`(`_count_attachments`).
+- **재정렬/설명 수정**: `update_attachment` 서비스 + `AttachmentUpdate` 스키마(sort_order/description,
+  최소 1필드) + `PATCH /trips/{id}/attachments/{aid}` · `PATCH /trips/{id}/pois/{pid}/attachments/{aid}`
+  (편집 권한 gate). 목록은 sort_order asc → created_at asc.
+- config `tripmate_max_attachments_per_target`, docs/api/storage.md §5 하드닝 노트, 테스트(한도 409 +
+  재정렬 후 목록 순서).
+
+**경계**: Admin curated-plan/POI 첨부(§5.3/5.4)는 admin curated-plan 도메인 미구축이라 별도 작업으로 유지.
+
 ## 2026-06-09 (claude) — T-182: 좌표 필드명 `lon`/`lat` 정렬 (DEC-07/ADR-048 B)
 
 **작업**: TripMate 정본 좌표 필드를 krtour 정렬로 `longitude`/`latitude` → `lon`/`lat` 일괄 리네임

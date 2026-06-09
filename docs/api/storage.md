@@ -101,6 +101,12 @@ Cookie: tripmate_access=...
 Trip/Trip POI 첨부 metadata 라우트는 T-132에서 구현됐다. 파일 본문은 presigned PUT로
 RustFS에 올린 뒤, 아래 endpoint에 metadata를 등록한다.
 
+> **하드닝 (T-105)**: 대상(trip 또는 POI)당 첨부 개수 상한
+> `TRIPMATE_MAX_ATTACHMENTS_PER_TARGET`(기본 30) 초과 시 `409 ATTACHMENT_LIMIT_EXCEEDED`.
+> 재정렬/설명 수정은 `PATCH /trips/{trip_id}/attachments/{attachment_id}` +
+> `PATCH /trips/{trip_id}/pois/{poi_id}/attachments/{attachment_id}`(body `{sort_order?, description?}`,
+> 편집 권한 필요). 목록은 `sort_order` asc → `created_at` asc 정렬.
+
 ### 5.1 Trip 첨부
 
 `GET /trips/{trip_id}/attachments`, `POST`, `DELETE /trips/{trip_id}/attachments/{attachment_id}`
