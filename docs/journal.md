@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-105 #1·#2: Admin 큐레이션(plan/POI) 첨부 (§5.3/5.4)
+
+**작업**: `/admin/notice-plans/*` 큐레이션 첨부 CRUD — T-105 첨부 도메인 잔여 마지막 2건.
+
+- `services/admin_curated_attachment.py` 신규 — `ensure_plan`/`ensure_poi`(존재·소속 검증,
+  soft-delete 제외) + `list/create/get/delete_curated_attachment`. mutate 는 commit 안 하고
+  flush 만(라우터가 audit 와 같은 트랜잭션에 묶어 commit). 개수 상한은 trip 첨부와 동일 설정
+  (`tripmate_max_attachments_per_target`) 공유.
+- `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
+  (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
+  개수 초과 409. POST/DELETE 는 admin_audit chain 기록(`curated_plan.attachment_*` /
+  `curated_poi.attachment_*`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
+  copy 시 `storage_key` 공유).
+- 응답은 `AttachmentResponse`(curated_* + notice_* alias 항상 동기). 입력 `AttachmentCreate`
+  (storage_key 위생 검증 재사용).
+- 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).
+
+**검증**(WSL ext4): integration 133 passed, unit 116 passed, mypy --strict 통과, ruff+format clean.
+
+**완료**: T-105 첨부 도메인 4건(#1·#2 admin curated, #3 rustfs+boto3, #4 download URL) 전부 머지.
+
 ## 2026-06-10 (claude) — T-105 #3: /admin/rustfs/* 객체 관리 (boto3)
 
 **작업**: RustFS(S3) Admin 객체 관리 — 실 ListObjectsV2/DeleteObject. boto3 의존성 추가.

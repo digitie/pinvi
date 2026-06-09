@@ -8,6 +8,7 @@ from app.api.v1.admin import (
     backup,
     emails,
     mcp_tokens,
+    notice_plans,
     pois,
     rustfs,
     stats,
@@ -26,3 +27,4 @@ admin_router.include_router(emails.router)
 admin_router.include_router(backup.router)
 admin_router.include_router(mcp_tokens.router)
 admin_router.include_router(rustfs.router)
+admin_router.include_router(notice_plans.router)
