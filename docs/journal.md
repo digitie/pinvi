@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — PR #108 리뷰 + T-188(type/target_feature_id 노출)
+
+**작업**: codex PR #108(feature suggestion queue, T-177)을 사후 리뷰([코멘트](https://github.com/digitie/tripmate/pull/108#issuecomment-4656262939))하고
+DEC-05 갭을 코드로 반영.
+
+**리뷰 총평**: DEC-05 레이어 1을 정확히 구현(krtour 직접 호출 없음, dedup partial-unique +
+IntegrityError race fallback, 24h rate limit, Korea coord CHECK, owner-only 조회, 라우트 순서).
+잔존 [중간] 1건: 테이블·모델은 `type`(new_place/correction/closure)+`target_feature_id`를 갖췄으나
+API 미노출 → **new_place만 생성 가능**.
+
+**T-188 반영**: `FeatureRequestCreate/Response`에 `type`+`target_feature_id` 노출 + validator
+(correction/closure는 target 필수·new_place는 금지, 422). dedup이 type/target을 구분하도록
+`_find_duplicate`(`is_not_distinct_from`) + 마이그레이션 0015(유니크 키에 type+COALESCE(target) 포함).
+frontend Zod(`FeatureRequestTypeSchema` + refine) + index export + `docs/api/features.md` + 회귀 테스트.
+잔존 낮음(kind 과허용·requester FK RESTRICT·rate-limit status 무관)은 리뷰 코멘트에 기록.
+
 ## 2026-06-09 (codex) — T-177 사용자 feature 제안 큐
 
 **작업**: DEC-05의 사용자 제안 큐를 TripMate `app` 도메인에 실체화하고, krtour-map

@@ -292,6 +292,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-185 — [중간] #91 websocket: `api/v1/ws.py` grace 윈도우 raw 소켓 누수(FD/mem DoS) 차단, `services/realtime_broker.py` per-connection `send_json` 직렬화 + shutdown drain.
 - [ ] T-186 — [중간] #96 trip list cursor: offset→keyset(`updated_at`,`trip_id`) 전환, 무필터 기본 bucket 의미 회귀 점검, `q` strip 재검증, `ilike` `%`/`_` 이스케이프.
 - [ ] T-187 — [중간] #90/#107: `middleware/geofence.py` mTLS 단일헤더 약점 → network CIDR 병행 강제/문서화, `api/v1/admin/audit.py` 위치감사 chain 풀스캔 → 반환 윈도우만 검증.
+- [x] T-188 — [중간] #108 후속: `POST /features/requests`에 `type`(new_place|correction|closure) + `target_feature_id` 노출(테이블·모델은 갖췄으나 API 미노출 → new_place만 가능했음). correction/closure는 target 필수·new_place는 금지(422), dedup 유니크 키에 type+target 포함(마이그레이션 0015), 응답 노출, frontend Zod + 회귀 테스트. (완료 2026-06-09, PR #108 리뷰 반영)
 
 ## 머지 히스토리 (참고)
 

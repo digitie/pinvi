@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 FeatureKind = Literal[
     "place",
@@ -25,6 +25,7 @@ FeatureKind = Literal[
     "area",
 ]
 FeatureRequestStatus = Literal["pending", "approved", "rejected", "added", "duplicate"]
+FeatureRequestType = Literal["new_place", "correction", "closure"]
 FeatureRequestCategory = Annotated[str, Field(min_length=1, max_length=80)]
 
 
@@ -122,22 +123,35 @@ class FeatureWeatherCard(BaseModel):
 
 
 class FeatureRequestCreate(BaseModel):
-    """사용자 feature 요청 큐 적재 — Admin이 검토 후 라이브러리에 적재 (Sprint 6)."""
+    """사용자 feature 제안 큐 적재 — Admin이 검토 후 krtour feature 추가 API로 반영 (DEC-05)."""
 
+    type: FeatureRequestType = "new_place"
     kind: FeatureKind
     title: str = Field(min_length=1, max_length=200)
     coord: Coord
     categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)
     note: str | None = Field(default=None, max_length=2000)
+    # correction/closure(기존 feature 참조) 시 필수, new_place 시 금지.
+    target_feature_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_target_feature_id(self) -> Self:
+        if self.type in ("correction", "closure") and self.target_feature_id is None:
+            raise ValueError("correction/closure 제안은 target_feature_id가 필요합니다.")
+        if self.type == "new_place" and self.target_feature_id is not None:
+            raise ValueError("new_place 제안은 target_feature_id를 가질 수 없습니다.")
+        return self
 
 
 class FeatureRequestResponse(BaseModel):
     request_id: uuid.UUID
     status: FeatureRequestStatus = "pending"
+    type: FeatureRequestType = "new_place"
     kind: FeatureKind
     title: str = Field(min_length=1, max_length=200)
     coord: Coord
     categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)
     note: str | None = None
+    target_feature_id: str | None = None
     created_at: datetime
     resolved_at: datetime | None = None

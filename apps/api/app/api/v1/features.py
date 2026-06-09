@@ -34,6 +34,7 @@ from app.schemas.feature import (
     FeatureRequestCreate,
     FeatureRequestResponse,
     FeatureRequestStatus,
+    FeatureRequestType,
     FeaturesInBoundsResponse,
     FeatureSummary,
     FeatureWeatherCard,
@@ -134,11 +135,13 @@ def _feature_request_response(row: FeatureSuggestion) -> FeatureRequestResponse:
     return FeatureRequestResponse(
         request_id=row.request_id,
         status=cast(FeatureRequestStatus, row.status),
+        type=cast(FeatureRequestType, row.suggestion_type),
         kind=cast(FeatureKind, row.kind),
         title=row.name,
         coord=Coord(longitude=float(row.lng), latitude=float(row.lat)),
         categories=row.categories,
         note=row.note,
+        target_feature_id=row.target_feature_id,
         created_at=row.created_at,
         resolved_at=row.resolved_at,
     )
@@ -148,6 +151,8 @@ async def _find_duplicate_feature_suggestion(
     db: AsyncSession,
     *,
     user_id: uuid.UUID,
+    suggestion_type: str,
+    target_feature_id: str | None,
     kind: str,
     name: str,
     lng: Decimal,
@@ -158,6 +163,8 @@ async def _find_duplicate_feature_suggestion(
         .where(
             FeatureSuggestion.requester_user_id == user_id,
             FeatureSuggestion.status == "pending",
+            FeatureSuggestion.suggestion_type == suggestion_type,
+            FeatureSuggestion.target_feature_id.is_not_distinct_from(target_feature_id),
             FeatureSuggestion.kind == kind,
             func.lower(FeatureSuggestion.name) == name.lower(),
             FeatureSuggestion.lng == lng,
@@ -358,6 +365,8 @@ async def request_feature(
     duplicate = await _find_duplicate_feature_suggestion(
         db,
         user_id=user_id,
+        suggestion_type=body.type,
+        target_feature_id=body.target_feature_id,
         kind=body.kind,
         name=name,
         lng=lng,
@@ -369,6 +378,8 @@ async def request_feature(
     await _enforce_feature_suggestion_rate_limit(db, user_id=user_id)
     row = FeatureSuggestion(
         requester_user_id=user_id,
+        suggestion_type=body.type,
+        target_feature_id=body.target_feature_id,
         kind=body.kind,
         name=name,
         lng=lng,
@@ -384,6 +395,8 @@ async def request_feature(
         duplicate = await _find_duplicate_feature_suggestion(
             db,
             user_id=user_id,
+            suggestion_type=body.type,
+            target_feature_id=body.target_feature_id,
             kind=body.kind,
             name=name,
             lng=lng,
