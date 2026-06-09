@@ -1,25 +1,25 @@
 """위치 감사 미들웨어 — `docs/compliance/lbs-act.md` §3.
 
-좌표(`lat`/`lng`)가 query/body에 있는 endpoint에 자동 적재. content_hash chain.
+좌표(`lat`/`lng`)가 query/body에 있는 endpoint 접근을 자동 적재. T-146(D-20): 요청 경로에서는
+체인 해시를 동기 계산하지 않고 **async outbox에 빠르게 append**하고, worker가 체인으로 drain한다
+(단일 노드 hotspot 제거). 체인 로직은 `app.services.location_audit`.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.db.session import async_session_factory
-from app.models.audit import LocationAccessLog
-from app.services.hash_chain import GENESIS_HASH, compute_content_hash, sha256_hex
+from app.services.hash_chain import sha256_hex
+from app.services.location_audit import append_location_log, enqueue_location_audit_outbox
 
 log = structlog.get_logger("location_audit")
 
@@ -67,7 +67,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
 
         try:
             async with async_session_factory() as session:
-                await _append_log(
+                await enqueue_location_audit_outbox(
                     session,
                     user_id=user_id,
                     endpoint=request.url.path,
@@ -78,16 +78,9 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
                     ip_hash=ip_hash,
                 )
         except Exception as exc:
-            log.warning("location_audit.append_failed", error=str(exc))
+            log.warning("location_audit.enqueue_failed", error=str(exc))
 
         return response
-
-
-def _coord_str(value: Decimal | None) -> str | None:
-    """Numeric(9,6) 저장 표현과 일치하도록 6자리로 quantize (chain 재검증용)."""
-    if value is None:
-        return None
-    return str(value.quantize(Decimal("0.000001")))
 
 
 def _classify_purpose(path: str) -> str | None:
@@ -122,36 +115,14 @@ async def _append_log(
     request_id: uuid.UUID,
     ip_hash: str,
 ) -> None:
-    last = await session.scalar(
-        select(LocationAccessLog).order_by(LocationAccessLog.log_id.desc()).limit(1)
-    )
-    prev_hash = last.content_hash if last else GENESIS_HASH
-    now = datetime.now(UTC)
-    payload = {
-        "user_id": str(user_id),
-        "occurred_at": now.isoformat(),
-        "endpoint": endpoint,
-        "purpose": purpose,
-        # lat/lng 는 Numeric(9,6) 컬럼 — DB 가 6자리로 정규화(`37.566500`)하므로
-        # 저장 후 재계산해도 일치하도록 hash 입력도 6자리로 quantize 한다.
-        # (감사 체인은 저장된 row 만으로 재검증 가능해야 한다.)
-        "lat": _coord_str(lat),
-        "lng": _coord_str(lng),
-        "request_id": str(request_id),
-        "ip_hash": ip_hash,
-    }
-    content_hash = compute_content_hash(prev_hash, payload)
-    row = LocationAccessLog(
+    """동기 체인 append(legacy/직접 적재). 체인 로직은 services.location_audit로 이전."""
+    await append_location_log(
+        session,
         user_id=user_id,
-        occurred_at=now,
         endpoint=endpoint,
         purpose=purpose,
         lat=lat,
         lng=lng,
         request_id=request_id,
         ip_hash=ip_hash,
-        prev_hash=prev_hash,
-        content_hash=content_hash,
     )
-    session.add(row)
-    await session.commit()
