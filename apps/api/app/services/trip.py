@@ -1051,9 +1051,10 @@ async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID
 
 
 async def _companion_role(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> str | None:
-    return await db.scalar(
+    role: str | None = await db.scalar(
         select(TripCompanion.role).where(
             TripCompanion.trip_id == trip_id,
             TripCompanion.user_id == user_id,
         )
     )
+    return role
