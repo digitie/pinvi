@@ -13,6 +13,11 @@
   `DELETE /admin/rustfs/objects`(key+reason+force). DB 참조(`CuratedPlanAttachment.storage_key`)
   있으면 `force` 없이 `409 OBJECT_REFERENCED`. 삭제는 admin_audit chain 기록. require_role(admin)→404.
 - 스키마 `RustfsObject`/`RustfsObjectList`. 테스트(S3 monkeypatch: list/참조-409/force-204/비admin-404).
+- **harness fix** `core/deps.py`: `get_db` 가 `db_session.async_session_factory` 를 **모듈 속성으로
+  동적 참조**하도록 변경(기존 `from ... import async_session_factory` 이름 바인딩 제거). 통합 테스트가
+  엔진을 함수 스코프로 monkeypatch 하는데, 테스트 모듈이 app 을 **top-level import** 하면(본 rustfs
+  테스트) collection 시점에 deps 가 패치 이전 기본(localhost) 팩토리를 잡아 전 스위트가
+  `relation "app.users" does not exist` 로 무너지던 잠재 버그를 제거.
 
 **참고**: presigned upload/download은 여전히 placeholder(실서명은 RustFS 활성화 시 별도). 본 PR은
 admin 객체 조회/삭제만 실 S3.
