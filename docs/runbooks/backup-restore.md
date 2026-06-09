@@ -98,6 +98,16 @@ docker compose -f docker-compose.app.yml start web
 | `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore 전용 DB URL override |
 | `TRIPMATE_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
 
+`scripts/restore-hotswap.sh` / API hot-swap 환경변수:
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore/swap 전용 DB URL override |
+| `TRIPMATE_RESTORE_HOTSWAP_EXECUTE` | `0` | staging drill 후 운영 노드에서만 `1` |
+| `TRIPMATE_RESTORE_DRAIN_COMMAND` | 빈 값 | CLI 경로에서만 실행할 write drain 명령 |
+| `TRIPMATE_RESTORE_ALLOW_NO_DRAIN` | `0` | API 경로에서 외부 drain 완료 후 `1` |
+| `TRIPMATE_RESTORE_APP_ROLE` | 빈 값 | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
+
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
 ### 4.1 admin UI
@@ -136,10 +146,11 @@ sha256sum -c "${SNAPSHOT}.sha256"
 pg_restore --list "${SNAPSHOT}" >/tmp/tripmate-restore-list.txt
 df -h /var/lib/postgresql /var/lib/tripmate/backups
 
-# 2. restore schema 준비/복구 + 검증 + drain + schema swap
+# 2. restore schema 준비/복구 + 검증 + drain + schema swap (CLI 운영자 경로)
 # 실제 실행 전 staging drill 후 TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
 TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1 \
 TRIPMATE_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
+TRIPMATE_RESTORE_APP_ROLE=tripmate \
 sudo -E ./scripts/restore-hotswap.sh run \
   "${SNAPSHOT}" \
   "${RESTORE_SCHEMA}" \
@@ -152,8 +163,22 @@ curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
   https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
 ```
 
-schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 advisory lock, active session
-확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본
+API `/admin/backup/restore-hotswap` 버튼/endpoint 경로는 자기 API 컨테이너를 멈추는
+drain command를 실행하지 않는다. 운영자는 먼저 reverse proxy나 orchestrator에서 write
+drain/read-only 전환을 수행한 뒤 API 환경을 다음처럼 둔다.
+
+```bash
+TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1
+TRIPMATE_RESTORE_DRAIN_COMMAND=
+TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1
+TRIPMATE_RESTORE_APP_ROLE=tripmate
+```
+
+API-triggered restore 중 `TRIPMATE_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
+`draining:failed`로 중단한다. CLI 경로만 drain command를 실행할 수 있다.
+
+schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 DB advisory lock,
+active session 확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본
 `scripts/restore-hotswap.sh`는 custom dump를 `app_restore_<ts>` schema로 remap해
 복구하고 `TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 아래 rename을 수행한다.
 
