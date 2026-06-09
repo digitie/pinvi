@@ -285,6 +285,14 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [ ] T-181 — [표준 추종] ADR-048(krtour PR #316) 외부 표면 표준 추종 — **hard cutover lockstep**: krtour 외부 `/v1` + RFC7807 + 파라미터/좌표명 정렬 cut commit에 맞춰 T-170 client(`apps/api/app/clients/krtour_map.py`) lockstep 일괄 교체 — (1) base `/v1`(config-driven, **이중지원 의존 안 함**), (2) `_error_code`를 problem+json top-level 확장 `code` 파싱, (3) 쿼리 빌더 개명(`search` bbox CSV→4 float, in-bounds `limit`→`max_items`, `total_count` opt-in), (4) 좌표 필드명 정렬(DEC-07 하위결정 반영), (5) **envelope payload/meta 분리 대응** — list 메서드가 `data.next_cursor` 대신 `meta.page.next_cursor` threading(현재 `data`만 반환·`meta` 폐기 → page 객체 반환), `meta`/`request_id` 항상·`next_cursor` null 계약 테스트. frontend는 T-210e codegen이 신 spec pin. **선행**: rest-api §7 ADR-048 A~F 수렴 완료(krtour df69057) + 잔여 1(batch `items` 키 충돌) 정리. krtour spec이 아직 unprefixed라 현재 대기(차단 아님). ※ 2026-06-09 재리뷰로 "무중단 이중지원" 전제 철회(미출시·유일소비자라 hard cutover 정합). (krtour PR #316 3차 검토 2026-06-09)
 - [ ] T-182 — [결정] DEC-07 좌표 필드명 정렬(ADR-048 B 선결): TripMate 정본 좌표를 `lon`/`lat`(krtour 정렬·terse, 권고) vs `longitude`/`latitude`(현 DEC-07 유지·krtour가 맞춤) 중 택1. 결정 시 DEC-07 + `apps/api/app/schemas/feature.py` + `packages/schemas`(web Zod) 정렬. T-181 base.
 
+### Codex PR 3라운드 사후 리뷰 후속 (2026-06-09, `docs/reviews/2026-06-09-codex-pr-review.md`)
+
+- [ ] T-183 — [높음] #100 backup hotswap 무결성/가용성: `scripts/restore-hotswap.sh` GRANT 복원 + FK 적재순서(`session_replication_role=replica`), `services/backup_service.py` advisory lock + restore_id ms/uuid, `api/v1/admin/backup.py` self-kill drain 회피, cut-over audit 고립 보강. **운영 활성화 전 선결.**
+- [ ] T-184 — [중간] #101/#85 trip 권한·PII·첨부검증·shared rate limit: companion 쓰기권한 read-only 강제(day/attachment/optimize), `invited_email` PII 비-owner 마스킹, 첨부 metadata 입력검증(`public_url` 서버파생/bucket allowlist), shared GET rate limit.
+- [ ] T-185 — [중간] #91 websocket: `api/v1/ws.py` grace 윈도우 raw 소켓 누수(FD/mem DoS) 차단, `services/realtime_broker.py` per-connection `send_json` 직렬화 + shutdown drain.
+- [ ] T-186 — [중간] #96 trip list cursor: offset→keyset(`updated_at`,`trip_id`) 전환, 무필터 기본 bucket 의미 회귀 점검, `q` strip 재검증, `ilike` `%`/`_` 이스케이프.
+- [ ] T-187 — [중간] #90/#107: `middleware/geofence.py` mTLS 단일헤더 약점 → network CIDR 병행 강제/문서화, `api/v1/admin/audit.py` 위치감사 chain 풀스캔 → 반환 윈도우만 검증.
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |

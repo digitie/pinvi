@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -203,7 +204,24 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
     raise BackupServiceError("backup script completed without creating a dump")
 
 
+# 동시 복원은 동일 DB에 두 개의 비가역 schema-swap을 겹쳐 무결성을 깨뜨린다.
+# 프로세스 내 직렬화(같은 API 워커에서 동시 실행 차단). 교차 프로세스 격리는 운영상
+# 단일 admin 노드 가정 + restore_id uuid suffix로 보강(잔여: pg advisory lock).
+_restore_lock = asyncio.Lock()
+
+
 async def restore_backup_hotswap(
+    *,
+    snapshot_id: str,
+    access_reason: str,
+) -> BackupRestoreRun:
+    async with _restore_lock:
+        return await _restore_backup_hotswap_locked(
+            snapshot_id=snapshot_id, access_reason=access_reason
+        )
+
+
+async def _restore_backup_hotswap_locked(
     *,
     snapshot_id: str,
     access_reason: str,
@@ -214,7 +232,8 @@ async def restore_backup_hotswap(
         raise BackupServiceError(f"restore hotswap script not found: {script}")
 
     started_at = datetime.now(UTC)
-    restore_id = started_at.strftime("%Y%m%d%H%M%S")
+    # 초 해상도만 쓰면 같은 초에 두 번 복원 시 restore_id(→ 스키마명)가 충돌한다. uuid suffix로 고유화.
+    restore_id = f"{started_at.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
     schema = settings.tripmate_backup_schema
     restore_schema = f"{schema}_restore_{restore_id}"
     previous_schema = f"{schema}_previous_{restore_id}"

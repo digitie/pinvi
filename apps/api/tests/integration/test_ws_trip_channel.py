@@ -155,12 +155,14 @@ async def test_ws_trip_channel_rate_limits_client_messages(
             assert exc_info.value.code == 4429
 
 
-async def test_ws_trip_channel_releases_cap_before_rate_limit_grace_close(
+async def test_ws_trip_channel_holds_cap_during_rate_limit_grace_close(
     session_factory,
     verified_user,
     auth_cookies,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # T-185(#91): grace 동안 broker 슬롯을 유지해야 한다 — 슬롯을 먼저 비우면 닫히는 중인
+    # 소켓이 cap에 계상되지 않아 connect→spam→reconnect로 cap을 우회(FD/메모리 누수)한다.
     from app.main import app
 
     await realtime_broker.reset()
@@ -189,18 +191,19 @@ async def test_ws_trip_channel_releases_cap_before_rate_limit_grace_close(
             assert limited["type"] == "error"
             assert limited["payload"]["code"] == "RATE_LIMITED"
 
-            for _ in range(50):
-                if await realtime_broker.connection_count(trip_uuid) == 0:
-                    break
-                await asyncio.sleep(0.01)
-            assert await realtime_broker.connection_count(trip_uuid) == 0
-
-            with sync_client.websocket_connect(f"/ws/trips/{trip_id}?token={token}") as second:
-                assert second.receive_json()["type"] == "presence.update"
+            # grace 동안 슬롯이 유지된다(아직 해제 전).
+            assert await realtime_broker.connection_count(trip_uuid) == 1
 
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 first.receive_json()
             assert exc_info.value.code == 4429
+
+        # 연결이 완전히 닫힌 뒤에야 슬롯이 해제된다.
+        for _ in range(50):
+            if await realtime_broker.connection_count(trip_uuid) == 0:
+                break
+            await asyncio.sleep(0.01)
+        assert await realtime_broker.connection_count(trip_uuid) == 0
 
 
 async def test_ws_trip_channel_rejects_connection_cap(

@@ -66,8 +66,9 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
                     code="RATE_LIMITED",
                     message="WebSocket 메시지 전송 한도를 초과했습니다.",
                 )
-                await realtime_broker.disconnect(connection)
-                active_connection = None
+                # grace 동안 broker 슬롯을 유지한다 — 슬롯을 먼저 비우면 닫히는 중인 소켓이
+                # cap에 계상되지 않아 connect→spam→reconnect 누적으로 FD/메모리가 새어
+                # cap을 우회한다. finally에서 close 이후 정리한다.
                 await asyncio.sleep(settings.tripmate_ws_rate_limit_close_grace_seconds)
                 await websocket.close(code=_CLOSE_RATE_LIMITED, reason="rate_limited")
                 return

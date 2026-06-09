@@ -35,6 +35,7 @@ async def build_trip_view(
     *,
     trip: Trip,
     krtour_client: KrtourMapClient | None,
+    include_management: bool = True,
 ) -> dict[str, Any]:
     """Trip + 모든 Day + 모든 POI + (feature snapshot 또는 라이브러리 fresh fetch).
 
@@ -75,20 +76,26 @@ async def build_trip_view(
     companion_result = await db.execute(companion_query)
     companions = list(companion_result.scalars())
 
-    share_link_query = (
-        select(TripShareLink)
-        .where(TripShareLink.trip_id == trip.trip_id)
-        .order_by(TripShareLink.created_at.desc(), TripShareLink.share_id.asc())
-    )
-    share_link_result = await db.execute(share_link_query)
-    share_links = list(share_link_result.scalars())
+    # 동반자 PII(invited_email)와 공유 링크 메타는 owner/co_owner(관리 권한)에게만 노출.
+    companions_view = [
+        _companion_to_dict(c, include_management=include_management) for c in companions
+    ]
+    share_links_view: list[dict[str, Any]] = []
+    if include_management:
+        share_link_query = (
+            select(TripShareLink)
+            .where(TripShareLink.trip_id == trip.trip_id)
+            .order_by(TripShareLink.created_at.desc(), TripShareLink.share_id.asc())
+        )
+        share_link_result = await db.execute(share_link_query)
+        share_links_view = [_share_link_to_dict(s) for s in share_link_result.scalars()]
 
     if not days:
         return {
             "trip": _trip_to_dict(trip),
             "days": [],
-            "companions": [_companion_to_dict(c) for c in companions],
-            "share_links": [_share_link_to_dict(s) for s in share_links],
+            "companions": companions_view,
+            "share_links": share_links_view,
             "broken_feature_count": 0,
         }
 
@@ -176,8 +183,8 @@ async def build_trip_view(
             }
             for d in days
         ],
-        "companions": [_companion_to_dict(c) for c in companions],
-        "share_links": [_share_link_to_dict(s) for s in share_links],
+        "companions": companions_view,
+        "share_links": share_links_view,
         "broken_feature_count": broken_count,
     }
 
@@ -206,12 +213,13 @@ def _canonical_feature_id(feature_id: str) -> str:
     return feature_id.split("@", 1)[0]
 
 
-def _companion_to_dict(companion: TripCompanion) -> dict[str, Any]:
+def _companion_to_dict(companion: TripCompanion, *, include_management: bool) -> dict[str, Any]:
+    # 비관리 viewer에게는 invited_email(PII)을 마스킹. 닉네임/역할은 협업 표시용으로 유지.
     return {
         "companion_id": companion.companion_id,
         "trip_id": companion.trip_id,
         "user_id": companion.user_id,
-        "invited_email": companion.invited_email,
+        "invited_email": companion.invited_email if include_management else None,
         "invited_nickname": companion.invited_nickname,
         "role": companion.role,
         "invited_at": companion.invited_at,

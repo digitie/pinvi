@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from binascii import Error as BinasciiError
-from datetime import date
+from datetime import date, datetime
 from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
@@ -48,6 +48,7 @@ from app.services.trip import (
     TripCopyError,
     TripDayConflictError,
     TripDayNotFoundError,
+    TripListCursor,
     TripListSort,
     TripNotFoundError,
     TripOptimizeError,
@@ -56,6 +57,7 @@ from app.services.trip import (
     TripVersionConflictError,
     TripVisibility,
     build_distance_matrix,
+    can_manage_trip,
     copy_trip,
     create_attachment,
     create_comment,
@@ -65,8 +67,10 @@ from app.services.trip import (
     delete_comment,
     delete_or_transfer_trip,
     delete_trip_day,
+    get_trip_access,
     get_trip_for_share_token,
     get_trip_for_user,
+    get_trip_for_user_write,
     get_trip_owned_by_user,
     invite_companion,
     issue_share_link,
@@ -82,7 +86,7 @@ from app.services.trip import (
 from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
-_TRIP_CURSOR_VERSION = 1
+_TRIP_CURSOR_VERSION = 2
 
 
 def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
@@ -203,7 +207,7 @@ async def list_trips(
                 "message": "date_to는 date_from 이후여야 합니다.",
             },
         )
-    offset = _decode_trip_cursor(cursor)
+    trip_cursor = _decode_trip_cursor(cursor)
     trips, has_more = await list_trips_for_owner(
         db,
         user_id=uuid.UUID(current_user_id),
@@ -215,39 +219,55 @@ async def list_trips(
         date_to=date_to,
         sort=sort,
         limit=limit,
-        offset=offset,
+        cursor=trip_cursor,
     )
-    next_cursor = _encode_trip_cursor(offset + limit) if has_more else None
+    next_cursor: str | None = None
+    if has_more and trips:
+        last = trips[-1]
+        if sort == "-updated_at":
+            next_cursor = _encode_keyset_cursor(last.updated_at, last.trip_id)
+        else:
+            next_cursor = _encode_offset_cursor(trip_cursor.offset + limit)
     return EnvelopeWithMeta.of(
         [_to_response(t) for t in trips],
         meta=EnvelopeMeta(cursor=next_cursor, has_more=has_more, limit=limit),
     )
 
 
-def _encode_trip_cursor(offset: int) -> str:
+def _encode_offset_cursor(offset: int) -> str:
+    raw = dumps({"v": _TRIP_CURSOR_VERSION, "off": offset}, separators=(",", ":")).encode("utf-8")
+    return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _encode_keyset_cursor(updated_at: datetime, trip_id: uuid.UUID) -> str:
     raw = dumps(
-        {"v": _TRIP_CURSOR_VERSION, "offset": offset},
+        {"v": _TRIP_CURSOR_VERSION, "ua": updated_at.isoformat(), "id": str(trip_id)},
         separators=(",", ":"),
     ).encode("utf-8")
     return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def _decode_trip_cursor(cursor: str | None) -> int:
+def _decode_trip_cursor(cursor: str | None) -> TripListCursor:
     if cursor is None:
-        return 0
+        return TripListCursor()
     try:
         padding = "=" * (-len(cursor) % 4)
         payload = loads(urlsafe_b64decode(f"{cursor}{padding}"))
     except (BinasciiError, JSONDecodeError, ValueError, TypeError) as exc:
         raise _invalid_trip_cursor() from exc
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get("v") != _TRIP_CURSOR_VERSION:
         raise _invalid_trip_cursor()
-    if payload.get("v") != _TRIP_CURSOR_VERSION:
-        raise _invalid_trip_cursor()
-    offset = payload.get("offset")
+    if "ua" in payload or "id" in payload:
+        try:
+            updated_at = datetime.fromisoformat(str(payload["ua"]))
+            trip_id = uuid.UUID(str(payload["id"]))
+        except (KeyError, ValueError, TypeError) as exc:
+            raise _invalid_trip_cursor() from exc
+        return TripListCursor(updated_at=updated_at, trip_id=trip_id)
+    offset = payload.get("off")
     if not isinstance(offset, int) or offset < 0:
         raise _invalid_trip_cursor()
-    return offset
+    return TripListCursor(offset=offset)
 
 
 def _invalid_trip_cursor() -> HTTPException:
@@ -299,11 +319,18 @@ async def get_trip_endpoint(
     krtour_client: OptionalKrtourMapClientDep,
 ) -> Envelope[TripView]:
     try:
-        trip = await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     return Envelope.of(
-        TripView.model_validate(await build_trip_view(db, trip=trip, krtour_client=krtour_client))
+        TripView.model_validate(
+            await build_trip_view(
+                db,
+                trip=trip,
+                krtour_client=krtour_client,
+                include_management=can_manage_trip(role),
+            )
+        )
     )
 
 
@@ -316,7 +343,9 @@ async def update_trip_endpoint(
     if_match: Annotated[int, Header(alias="If-Match")],
 ) -> Envelope[TripResponse]:
     try:
-        trip = await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        trip = await get_trip_for_user_write(
+            db, trip_id=trip_id, user_id=uuid.UUID(current_user_id)
+        )
         trip = await update_trip(
             db,
             trip=trip,
@@ -439,7 +468,7 @@ async def create_trip_day_endpoint(
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         day = await create_trip_day(
             db,
             trip_id=trip_id,
@@ -475,7 +504,7 @@ async def update_trip_day_endpoint(
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         day = await update_trip_day(
             db,
             trip_id=trip_id,
@@ -508,7 +537,7 @@ async def delete_trip_day_endpoint(
 ) -> None:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         await delete_trip_day(db, trip_id=trip_id, day_index=day_index)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -543,7 +572,7 @@ async def get_shared_trip_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     view = TripView.model_validate(
-        await build_trip_view(db, trip=trip, krtour_client=krtour_client)
+        await build_trip_view(db, trip=trip, krtour_client=krtour_client, include_management=False)
     )
     return Envelope.of(
         TripSharedView(
@@ -585,7 +614,7 @@ async def create_trip_attachment_endpoint(
 ) -> Envelope[TripAttachmentResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     attachment = await create_attachment(
@@ -609,7 +638,7 @@ async def delete_trip_attachment_endpoint(
     db: DbSession,
 ) -> None:
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
         await delete_attachment(db, attachment_id=attachment_id, trip_id=trip_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -658,7 +687,7 @@ async def create_trip_poi_attachment_endpoint(
 ) -> Envelope[TripAttachmentResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -689,7 +718,7 @@ async def delete_trip_poi_attachment_endpoint(
     db: DbSession,
 ) -> None:
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
         await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
         await delete_attachment(db, attachment_id=attachment_id, trip_poi_id=poi_id)
     except (TripNotFoundError, TripPermissionError) as exc:
@@ -740,7 +769,10 @@ async def optimize_trip_day_endpoint(
 ) -> Envelope[TripDayOptimizeResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
+        if body.persist:
+            await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        else:
+            await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
         ordered, moves, total_distance, warnings = await optimize_trip_day(
             db,
             trip_id=trip_id,

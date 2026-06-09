@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +70,8 @@ class TripOptimizeError(TripError):
     code = "TRIP_OPTIMIZE_ERROR"
 
 
+_SHARE_LAST_USED_THROTTLE = timedelta(minutes=1)
+
 TripBucket = Literal["future", "past", "all"]
 TripListSort = Literal["-updated_at", "start_date", "-start_date", "title"]
 TripStatus = Literal["draft", "planned", "in_progress", "completed", "archived"]
@@ -117,12 +120,58 @@ async def get_trip_owned_by_user(
 
 
 async def get_trip_for_user(db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID) -> Trip:
+    trip, _ = await get_trip_access(db, trip_id=trip_id, user_id=user_id)
+    return trip
+
+
+# 역할 권한: owner = 소유자, co_owner/editor = 편집 가능, viewer = 읽기 전용.
+TripRole = Literal["owner", "co_owner", "editor", "viewer"]
+_WRITE_ROLES: frozenset[str] = frozenset({"owner", "co_owner", "editor"})
+_MANAGEMENT_ROLES: frozenset[str] = frozenset({"owner", "co_owner"})
+
+
+async def get_trip_access(
+    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
+) -> tuple[Trip, TripRole]:
+    """여행 + 호출자의 유효 역할을 반환. 멤버가 아니면 PermissionError."""
     trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
-    if trip.owner_user_id != user_id and not await _is_companion(db, trip_id, user_id):
+    if trip.owner_user_id == user_id:
+        return trip, "owner"
+    role = await _companion_role(db, trip_id, user_id)
+    if role not in {"co_owner", "editor", "viewer"}:
         raise TripPermissionError("이 여행에 대한 권한이 없습니다.")
+    return trip, role  # type: ignore[return-value]
+
+
+async def get_trip_for_user_write(
+    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
+) -> Trip:
+    """편집(쓰기) 권한 검증 — owner/co_owner/editor만 허용, viewer는 거부."""
+    trip, role = await get_trip_access(db, trip_id=trip_id, user_id=user_id)
+    if role not in _WRITE_ROLES:
+        raise TripPermissionError("이 여행을 편집할 권한이 없습니다.")
     return trip
+
+
+def can_manage_trip(role: TripRole) -> bool:
+    """owner/co_owner만 동반자 PII·공유 링크 등 관리 정보를 볼 수 있다."""
+    return role in _MANAGEMENT_ROLES
+
+
+@dataclass(frozen=True)
+class TripListCursor:
+    """페이지네이션 커서. 기본 정렬(-updated_at)은 keyset, 그 외는 offset."""
+
+    offset: int = 0
+    updated_at: datetime | None = None
+    trip_id: uuid.UUID | None = None
+
+
+def _escape_like(value: str) -> str:
+    # ilike 와일드카드(% _)와 escape(\)를 리터럴로 취급 — 검색어 의미 변질 방지.
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def list_trips_for_owner(
@@ -137,8 +186,9 @@ async def list_trips_for_owner(
     date_to: date | None = None,
     sort: TripListSort = "-updated_at",
     limit: int = 20,
-    offset: int = 0,
+    cursor: TripListCursor | None = None,
 ) -> tuple[list[Trip], bool]:
+    cursor = cursor or TripListCursor()
     today = datetime.now(UTC).date()
     filters = [Trip.owner_user_id == user_id, Trip.deleted_at.is_(None)]
     if bucket == "future":
@@ -147,12 +197,12 @@ async def list_trips_for_owner(
         filters.append(Trip.end_date < today)
     normalized_q = q.strip() if q is not None else None
     if normalized_q:
-        needle = f"%{normalized_q}%"
+        needle = f"%{_escape_like(normalized_q)}%"
         filters.append(
             or_(
-                Trip.title.ilike(needle),
-                Trip.description.ilike(needle),
-                Trip.region_hint.ilike(needle),
+                Trip.title.ilike(needle, escape="\\"),
+                Trip.description.ilike(needle, escape="\\"),
+                Trip.region_hint.ilike(needle, escape="\\"),
             )
         )
     if status_filter is not None:
@@ -164,13 +214,19 @@ async def list_trips_for_owner(
     if date_to is not None:
         filters.append(Trip.start_date <= date_to)
 
-    result = await db.execute(
-        select(Trip)
-        .where(*filters)
-        .order_by(*_trip_list_ordering(sort))
-        .offset(offset)
-        .limit(limit + 1)
-    )
+    # 기본 -updated_at 정렬은 keyset(updated_at, trip_id)으로 — 동시 쓰기 시 page skip/중복 회피.
+    use_keyset = sort == "-updated_at"
+    if use_keyset and cursor.updated_at is not None and cursor.trip_id is not None:
+        filters.append(
+            or_(
+                Trip.updated_at < cursor.updated_at,
+                and_(Trip.updated_at == cursor.updated_at, Trip.trip_id > cursor.trip_id),
+            )
+        )
+    stmt = select(Trip).where(*filters).order_by(*_trip_list_ordering(sort)).limit(limit + 1)
+    if not use_keyset:
+        stmt = stmt.offset(cursor.offset)
+    result = await db.execute(stmt)
     rows = list(result.scalars())
     return rows[:limit], len(rows) > limit
 
@@ -472,9 +528,12 @@ async def get_trip_for_share_token(
     trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
-    share.last_used_at = now
-    await db.commit()
-    await db.refresh(share)
+    # last_used_at 갱신은 best-effort throttle — 매 요청 write/commit(증폭 DoS) 회피.
+    last_used = share.last_used_at
+    if last_used is None or (now - last_used) >= _SHARE_LAST_USED_THROTTLE:
+        share.last_used_at = now
+        await db.commit()
+        await db.refresh(share)
     return trip, share
 
 
@@ -989,3 +1048,13 @@ async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID
         )
     )
     return row is not None
+
+
+async def _companion_role(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> str | None:
+    role: str | None = await db.scalar(
+        select(TripCompanion.role).where(
+            TripCompanion.trip_id == trip_id,
+            TripCompanion.user_id == user_id,
+        )
+    )
+    return role
