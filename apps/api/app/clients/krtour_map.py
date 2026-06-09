@@ -174,11 +174,11 @@ class KrtourMapClient:
             params["cluster_unit"] = cluster_unit
         if limit is not None:
             params["limit"] = limit
-        return self._data(await self._send("GET", "/features/in-bounds", params=params))
+        return self._data(await self._send("GET", "/v1/features/in-bounds", params=params))
 
     async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
         """단건 상세. 404 → None."""
-        resp = await self._send("GET", f"/features/{feature_id}")
+        resp = await self._send("GET", f"/v1/features/{feature_id}")
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
@@ -191,7 +191,7 @@ class KrtourMapClient:
         for start in range(0, len(unique), self._batch_chunk_size):
             chunk = unique[start : start + self._batch_chunk_size]
             data = self._data(
-                await self._send("POST", "/tripmate/features/batch", json={"feature_ids": chunk})
+                await self._send("POST", "/v1/features/batch", json={"feature_ids": chunk})
             )
             chunk_items = data.get("items")
             if isinstance(chunk_items, dict):
@@ -225,33 +225,45 @@ class KrtourMapClient:
             params["cursor"] = cursor
         if sort is not None:
             params["sort"] = sort
-        return self._data(await self._send("GET", "/features/nearby", params=params))
+        return self._data(await self._send("GET", "/v1/features/nearby", params=params))
 
     async def search_features(
         self,
         *,
         q: str | None = None,
-        bbox: str | None = None,
+        min_lon: float | None = None,
+        min_lat: float | None = None,
+        max_lon: float | None = None,
+        max_lat: float | None = None,
         kinds: Sequence[str] | None = None,
         category: str | None = None,
-        limit: int | None = None,
+        page_size: int | None = None,
         cursor: str | None = None,
     ) -> dict[str, Any]:
-        """텍스트 검색(feature만). data = {items, next_cursor, total_count}."""
+        """텍스트 검색(feature만). data = {items, next_cursor, total_count}.
+
+        bbox는 ADR-048 clean cut으로 분리 float 4개(min_lon/min_lat/max_lon/max_lat).
+        """
         params: dict[str, Any] = {}
         if q is not None:
             params["q"] = q
-        if bbox is not None:
-            params["bbox"] = bbox
+        if min_lon is not None:
+            params["min_lon"] = min_lon
+        if min_lat is not None:
+            params["min_lat"] = min_lat
+        if max_lon is not None:
+            params["max_lon"] = max_lon
+        if max_lat is not None:
+            params["max_lat"] = max_lat
         if kinds:
             params["kind"] = list(kinds)
         if category is not None:
             params["category"] = category
-        if limit is not None:
-            params["limit"] = limit
+        if page_size is not None:
+            params["page_size"] = page_size
         if cursor is not None:
             params["cursor"] = cursor
-        return self._data(await self._send("GET", "/features/search", params=params))
+        return self._data(await self._send("GET", "/v1/features/search", params=params))
 
     async def feature_weather(
         self, feature_id: str, *, asof: datetime | None = None
@@ -260,14 +272,16 @@ class KrtourMapClient:
         params: dict[str, Any] = {}
         if asof is not None:
             params["asof"] = asof.isoformat()
-        return self._data(await self._send("GET", f"/features/{feature_id}/weather", params=params))
+        return self._data(
+            await self._send("GET", f"/v1/features/{feature_id}/weather", params=params)
+        )
 
     async def categories(
         self, *, include_counts: bool = False, active_only: bool = False
     ) -> dict[str, Any]:
         """카테고리 카탈로그. data = {count, include_counts, items}."""
         params = {"include_counts": include_counts, "active_only": active_only}
-        return self._data(await self._send("GET", "/categories", params=params))
+        return self._data(await self._send("GET", "/v1/categories", params=params))
 
     async def healthz(self) -> dict[str, Any]:
         """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""

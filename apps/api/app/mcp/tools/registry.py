@@ -273,6 +273,29 @@ async def _list_pois(
     }
 
 
+def _parse_bounds_csv(bounds: str | None) -> dict[str, float]:
+    """`min_lon,min_lat,max_lon,max_lat` CSV → 분리 float(ADR-048 clean cut). 빈 값은 {}."""
+    if not bounds:
+        return {}
+    parts = bounds.split(",")
+    if len(parts) != 4:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "bounds는 'min_lon,min_lat,max_lon,max_lat' 형식이어야 합니다.",
+            },
+        )
+    try:
+        nums = [float(part) for part in parts]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "VALIDATION_ERROR", "message": "bounds 숫자 변환 실패."},
+        ) from exc
+    return {"min_lon": nums[0], "min_lat": nums[1], "max_lon": nums[2], "max_lat": nums[3]}
+
+
 async def _search_features(*, request: Request, args: SearchFeaturesArgs) -> dict[str, Any]:
     client = getattr(request.app.state, "krtour_map_client", None)
     if not isinstance(client, KrtourMapClient):
@@ -284,11 +307,15 @@ async def _search_features(*, request: Request, args: SearchFeaturesArgs) -> dic
             },
         )
     kinds = [args.kind] if args.kind else None
+    bbox = _parse_bounds_csv(args.bounds)
     return await client.search_features(
         q=args.q,
-        bbox=args.bounds,
         kinds=kinds,
-        limit=args.limit,
+        page_size=args.limit,
+        min_lon=bbox.get("min_lon"),
+        min_lat=bbox.get("min_lat"),
+        max_lon=bbox.get("max_lon"),
+        max_lat=bbox.get("max_lat"),
     )
 
 
