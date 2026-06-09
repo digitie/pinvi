@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-129 slice: `/geo/*` + `/regions/*` (kraddr-geo v2 REST)
+
+**작업**: T-129의 geo·regions slice를 from-scratch 구현(ADR-025, `docs/integrations/kraddr-geo.md`).
+krtour-map 비의존 사용자 경로. 좌표는 `(lon, lat)`, 대한민국 범위(ADR-018).
+
+**신규**:
+- `apps/api/app/clients/kraddr_geo.py` — kraddr-geo v2 REST httpx client(전송 전용). `geocode`/
+  `reverse`/`search`/`regions_within_radius`(POST `/v2/*`) + 도메인 예외(Unavailable/BadRequest) +
+  지수 백오프 재시도 + lifespan/dep. 응답 최상위는 `{status, candidates[]}`(envelope `data` 없음).
+- `apps/api/app/schemas/geo.py` — `GeoCandidateList`(candidate pass-through).
+- `apps/api/app/api/v1/geo.py` — `GET /geo/{geocode,reverse,search}` + `GET /regions/within-radius`
+  (인증 필요, Korea 좌표 bounds, client 미주입 시 503 GEOCODING_SERVICE_UNAVAILABLE).
+- config `tripmate_kraddr_geo_*`(base 8888/timeout/max_attempts), main.py lifespan 합성, 라우터 등록.
+- 테스트: client MockTransport 계약(경로/payload/재시도/4xx) + 라우터 통합(stub 주입/503/401/422).
+
+**경계**: kraddr-geo는 별 프로세스(REST), TripMate는 v2 candidate를 pass-through. 외부 API
+(vworld/juso)는 kraddr-geo 내부 책임.
+
+**잔여(T-129)**: `/regions/covering-point`(→ `/v2/reverse` 매핑), 통합 `GET /search`(features+
+addresses+my_pois, C-13), frontend Zod/api-client.
+
 ## 2026-06-09 (claude) — T-181 krtour 외부 `/v1` hard cutover (T-170 client 적응)
 
 **작업**: krtour `origin/main`이 외부 `/v1` clean cut(PR #319) + batch `/tripmate/features/batch`→
