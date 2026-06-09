@@ -218,3 +218,41 @@ async def test_correction_suggestion_requires_target_and_dedup_separates_type(
     assert new_place.status_code == 201, new_place.text
     assert new_place.json()["data"]["type"] == "new_place"
     assert new_place.json()["data"]["request_id"] != correction["request_id"]
+
+
+async def test_rate_limit_excludes_rejected_and_duplicate(
+    client: Any,
+    session_factory: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    from decimal import Decimal
+
+    user_id, _email = verified_user
+    # 한도만큼 rejected/duplicate 제안을 직접 적재 — 카운트에서 제외되어야 한다(#108 리뷰).
+    async with session_factory() as db:
+        for i in range(FEATURE_SUGGESTION_DAILY_LIMIT):
+            db.add(
+                FeatureSuggestion(
+                    requester_user_id=uuid.UUID(user_id),
+                    kind="place",
+                    name=f"거절된 {i}",
+                    lng=Decimal("127.000000"),
+                    lat=Decimal(f"37.{500000 + i:06d}"),
+                    categories=[],
+                    status="rejected" if i % 2 == 0 else "duplicate",
+                )
+            )
+        await db.commit()
+
+    # rejected/duplicate는 한도에 안 잡히므로 신규 제안은 201.
+    resp = await client.post(
+        "/features/requests",
+        json={
+            "kind": "place",
+            "title": "정당한 신규 제안",
+            "coord": {"longitude": 128.0, "latitude": 37.5},
+        },
+        cookies=auth_cookies(user_id),
+    )
+    assert resp.status_code == 201, resp.text

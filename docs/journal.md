@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-189 리뷰 잔여 낮음 묶음
+
+**작업**: #108/#316 리뷰에서 남긴 저위험 항목을 한 PR로 정리.
+
+- 사용자 제안 `kind`를 `place`/`event`로 좁힘(#108) — notice/price/weather/route/area는 운영
+  데이터라 제안 대상 아님. `FeatureSuggestionKind` 신설(create만, response는 broad 유지) + Zod 미러.
+- 제안 rate-limit이 `rejected`/`duplicate`를 카운트에서 제외 → `pending`/`approved`/`added`만
+  남용 신호로(거절 다수 사용자가 정당 신규 제안 못 하는 것 방지).
+- 테스트: 제안 kind 거부(notice 422) + rate-limit rejected/duplicate 제외(201).
+
+**잔여(미반영, tasks T-189)**: requester FK RESTRICT PIPA 파기 정책, #99 rise_set model_validate,
+#93 money quantize(저위험 가설).
+
 ## 2026-06-09 (claude) — T-146 완성: feature TTL 캐시 (D-26)
 
 **작업**: trip view마다 krtour를 재조회하는 단일 노드 hotspot(D-26)을 process-local TTL 캐시로 완화.
