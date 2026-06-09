@@ -16,7 +16,15 @@ class _FakeKraddrGeoClient:
 
     async def reverse(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("reverse", kwargs))
-        return {"status": "ok", "candidates": [{"address": "부산 수영구 광안동"}]}
+        return {
+            "status": "ok",
+            "candidates": [
+                {
+                    "address": "부산 수영구 광안동",
+                    "region": {"region_name": "광안동", "sig_cd": "26500"},
+                }
+            ],
+        }
 
     async def search(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("search", kwargs))
@@ -99,3 +107,102 @@ async def test_geo_503_when_client_missing(
     )
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "GEOCODING_SERVICE_UNAVAILABLE"
+
+
+async def test_regions_covering_point_returns_region(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, fake_geo_client: Any
+) -> None:
+    user_id, _ = verified_user
+    resp = await client.get(
+        "/regions/covering-point?longitude=129.118&latitude=35.155",
+        cookies=auth_cookies(user_id),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["boundary_level"] == "legal_dong"
+    assert data["region"]["region_name"] == "광안동"
+
+
+async def test_regions_covering_point_404_when_no_region(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    from app.clients.kraddr_geo import get_kraddr_geo_client
+    from app.main import app
+
+    class _NoRegion:
+        async def reverse(self, **kwargs: Any) -> dict[str, Any]:
+            return {"status": "ok", "candidates": [{"address": "주소만"}]}
+
+    app.dependency_overrides[get_kraddr_geo_client] = lambda: _NoRegion()
+    try:
+        user_id, _ = verified_user
+        resp = await client.get(
+            "/regions/covering-point?longitude=129.0&latitude=35.0",
+            cookies=auth_cookies(user_id),
+        )
+        assert resp.status_code == 404, resp.text
+    finally:
+        app.dependency_overrides.pop(get_kraddr_geo_client, None)
+
+
+class _FakeKrtourClient:
+    def __init__(self, *, raise_error: bool = False) -> None:
+        self.raise_error = raise_error
+
+    async def search_features(self, **kwargs: Any) -> dict[str, Any]:
+        if self.raise_error:
+            from app.clients.krtour_map import KrtourMapUnavailable
+
+            raise KrtourMapUnavailable("down")
+        return {"items": [{"feature_id": "f_1", "name": "광안리 해수욕장"}], "next_cursor": None}
+
+
+def _override_search_clients(krtour: Any, kraddr: Any) -> None:
+    from app.clients.kraddr_geo import get_kraddr_geo_client
+    from app.clients.krtour_map import get_krtour_map_client
+    from app.main import app
+
+    app.dependency_overrides[get_krtour_map_client] = lambda: krtour
+    app.dependency_overrides[get_kraddr_geo_client] = lambda: kraddr
+
+
+def _clear_search_clients() -> None:
+    from app.clients.kraddr_geo import get_kraddr_geo_client
+    from app.clients.krtour_map import get_krtour_map_client
+    from app.main import app
+
+    app.dependency_overrides.pop(get_krtour_map_client, None)
+    app.dependency_overrides.pop(get_kraddr_geo_client, None)
+
+
+async def test_unified_search_merges_sources(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _ = verified_user
+    _override_search_clients(_FakeKrtourClient(), _FakeKraddrGeoClient())
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["features"][0]["feature_id"] == "f_1"
+        assert data["addresses"][0]["address"] == "테헤란로"
+        assert data["my_pois"] == []
+        assert data["degraded_sources"] == []
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_degrades_on_feature_outage(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _ = verified_user
+    _override_search_clients(_FakeKrtourClient(raise_error=True), _FakeKraddrGeoClient())
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["features"] == []
+        assert "features" in data["degraded_sources"]
+        assert data["addresses"][0]["address"] == "테헤란로"
+    finally:
+        _clear_search_clients()

@@ -10,6 +10,7 @@ from app.api.v1 import (
     notice_plans,
     oauth,
     pois,
+    search,
     storage,
     trips,
     users,
@@ -31,6 +32,7 @@ api_router.include_router(notice_plans.router)
 api_router.include_router(features.router)
 api_router.include_router(geo.geo_router)
 api_router.include_router(geo.regions_router)
+api_router.include_router(search.router)
 api_router.include_router(storage.router)
 api_router.include_router(mcp_router)
 api_router.include_router(resend_webhook.router)

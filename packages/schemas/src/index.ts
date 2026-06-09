@@ -252,3 +252,17 @@ export type {
   FeatureRequestCreate,
   FeatureRequestResponse,
 } from './feature';
+export {
+  BoundaryLevelSchema,
+  GeoSearchKindSchema,
+  GeoCandidateListSchema,
+  RegionCoveringSchema,
+  UnifiedSearchResultSchema,
+} from './geo';
+export type {
+  BoundaryLevel,
+  GeoSearchKind,
+  GeoCandidateList,
+  RegionCovering,
+  UnifiedSearchResult,
+} from './geo';

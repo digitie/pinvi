@@ -187,7 +187,7 @@
 - [x] T-126 — POI 생성 경로 단일화(`/trips/{id}/pois` 정본) (A-01,C-16)
 - [x] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
 - [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
-- [~] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13). **slice 완료(2026-06-09)**: kraddr-geo v2 REST client(`apps/api/app/clients/kraddr_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/within-radius`(`api/v1/geo.py`) + lifespan/dep + 계약/통합 테스트. **잔여**: `/regions/covering-point`(→ `/v2/reverse` 매핑), 통합 `GET /search`(features+addresses+my_pois, C-13), frontend Zod/api-client.
+- [x] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13) (완료: 2026-06-09): kraddr-geo v2 REST client(`apps/api/app/clients/kraddr_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/{within-radius,covering-point}`(`api/v1/geo.py`) + **통합 `GET /search`**(feature[krtour]+address[kraddr]+내 POI[DB], 소스별 graceful degrade, `api/v1/search.py`, C-13) + frontend Zod(`packages/schemas/src/geo.ts`) + 계약/통합 테스트. 좌표 매핑(`lon`/`lat`)·router cutover(T-173)는 별개.
 - [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)

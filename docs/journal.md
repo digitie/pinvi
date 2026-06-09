@@ -21,6 +21,23 @@
 
 **잔여(T-146/D-26)**: trip view feature 캐시(krtour batch+join N+1 제거).
 
+## 2026-06-09 (claude) — T-129 완성: `/regions/covering-point` + 통합 `GET /search`
+
+**작업**: T-129 잔여를 닫아 완료 처리.
+
+**신규/갱신**:
+- `GET /regions/covering-point` — kraddr-geo `/v2/reverse` 최선 후보의 `region` pass-through, 미매치 404.
+- **통합 `GET /search`**(`apps/api/app/api/v1/search.py`, C-13) — feature(krtour httpx client) +
+  address(kraddr-geo) + 내 POI(TripMate `trip_day_pois`, 소유 trip 한정 ILIKE) 3소스 병합.
+  외부 소스 한쪽 불가 시 전체 실패 대신 해당 소스만 비우고 `degraded_sources`에 기록(graceful degrade).
+  ilike 와일드카드 이스케이프.
+- frontend Zod(`packages/schemas/src/geo.ts`): `GeoCandidateList`/`RegionCovering`/
+  `UnifiedSearchResult` + index export.
+- 테스트: covering-point(region/404) + 통합 search(병합/feature outage degrade).
+
+**경계**: krtour httpx client를 라우트에서 쓰는 첫 사례(/search). 기존 `/features/*`는 여전히
+etl_bridge stub(T-173 cutover 별개). 좌표명 정렬(T-182)도 별개.
+
 ## 2026-06-09 (claude) — T-129 slice: `/geo/*` + `/regions/*` (kraddr-geo v2 REST)
 
 **작업**: T-129의 geo·regions slice를 from-scratch 구현(ADR-025, `docs/integrations/kraddr-geo.md`).
