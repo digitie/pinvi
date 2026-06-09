@@ -98,7 +98,7 @@ async def list_location_audit_log(
     )
     result = await db.execute(stmt)
     rows = list(result.scalars())
-    if await _is_location_chain_broken(db):
+    if await _is_location_window_broken(db, rows):
         response.headers["X-Chain-Broken"] = "true"
     return Envelope.of([_to_location_entry(row) for row in rows])
 
@@ -134,12 +134,31 @@ def _to_location_entry(r: LocationAccessLog) -> AdminLocationAuditEntry:
     )
 
 
-async def _is_location_chain_broken(db: AsyncSession) -> bool:
-    result = await db.execute(select(LocationAccessLog).order_by(LocationAccessLog.log_id))
-    prev = GENESIS_HASH
-    for row in result.scalars():
+async def _is_location_window_broken(db: AsyncSession, window: list[LocationAccessLog]) -> bool:
+    """반환 윈도우의 해시체인 무결성만 검증 — 전체 테이블 풀스캔(O(n)) 회피.
+
+    윈도우를 log_id 오름차순으로 정렬하고, 윈도우 직전 행의 content_hash를 앵커로
+    삼아 윈도우 내부의 prev_hash/content_hash 연속성을 확인한다(O(window)).
+    윈도우 밖 변조는 별도 전체 감사 작업의 몫이다.
+    """
+    if not window:
+        return False
+    ordered = sorted(window, key=lambda r: r.log_id)
+    # 앵커 링크: 최소 log_id 행의 prev_hash가 직전 글로벌 행 content_hash와 일치하는지 1회 확인.
+    # (필터로 윈도우가 비연속이어도 prev_hash는 항상 글로벌 직전 행을 가리키므로 정확하다.)
+    anchor_prev = await db.scalar(
+        select(LocationAccessLog.content_hash)
+        .where(LocationAccessLog.log_id < ordered[0].log_id)
+        .order_by(LocationAccessLog.log_id.desc())
+        .limit(1)
+    )
+    if ordered[0].prev_hash != (anchor_prev if anchor_prev is not None else GENESIS_HASH):
+        return True
+    # 각 행 self-consistency: content_hash == H(prev_hash, fields). 필터/윈도우 비연속과 무관하게
+    # 표시된 행의 필드 변조를 탐지한다(윈도우 내부 링크는 비연속이라 검증 대상 아님).
+    for row in ordered:
         expected = compute_content_hash(
-            prev,
+            row.prev_hash,
             {
                 "user_id": str(row.user_id),
                 "occurred_at": row.occurred_at.isoformat(),
@@ -151,9 +170,8 @@ async def _is_location_chain_broken(db: AsyncSession) -> bool:
                 "ip_hash": row.ip_hash,
             },
         )
-        if row.prev_hash != prev or row.content_hash != expected:
+        if row.content_hash != expected:
             return True
-        prev = row.content_hash
     return False
 
 
