@@ -138,9 +138,33 @@ pg_restore \
   --no-privileges \
   --file="${TMP_DIR}/data.sql" \
   "${SNAPSHOT}"
-remap_sql "${TMP_DIR}/data.sql" >"${TMP_DIR}/data-remapped.sql"
+# 스키마(FK 포함)를 먼저 만든 뒤 data-only를 적재하므로, FK 적재 순서/순환이 있으면 실패한다.
+# 데이터 적재 동안만 트리거/FK 검증을 끈다(단일 세션 내 SET → 세션 종료 시 자동 해제).
+{
+  printf 'SET session_replication_role = replica;\n'
+  remap_sql "${TMP_DIR}/data.sql"
+} >"${TMP_DIR}/data-remapped.sql"
 psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
 phase restoring success "restored into ${RESTORE_SCHEMA}"
+
+# pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
+# 아니면 swap 직후 permission denied가 난다. swap 전에 RESTORE_SCHEMA에 GRANT를 재적용한다
+# (GRANT는 객체에 귀속되어 schema rename 후에도 유지된다).
+APP_ROLE="${TRIPMATE_RESTORE_APP_ROLE:-}"
+if [[ -n "${APP_ROLE}" ]]; then
+  if [[ ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    phase restoring failed "unsafe app role name: ${APP_ROLE}"
+    exit 2
+  fi
+  psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+GRANT USAGE ON SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
+SQL
+  phase restoring success "re-granted privileges to ${APP_ROLE}"
+else
+  phase restoring success "TRIPMATE_RESTORE_APP_ROLE unset; assuming single-owner role (no GRANT re-apply)"
+fi
 
 phase validating running "validating restored schema"
 users_exists="$(psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "SELECT to_regclass('${RESTORE_SCHEMA}.users') IS NOT NULL")"
