@@ -117,11 +117,23 @@ RustFS에 올린 뒤, 아래 endpoint에 metadata를 등록한다.
 
 ### 5.3 Curated plan 첨부 (Admin)
 
-`GET /admin/notice-plans/{plan_id}/attachments`, `POST`, `DELETE`
+`GET /admin/notice-plans/{plan_id}/attachments`, `POST`, `DELETE /{attachment_id}`
+
+- `require_role("admin")` — 비권한은 404(존재 숨김).
+- plan 미존재(soft-delete 포함) → 404 `NOT_FOUND`. 개수 상한 초과 → 409
+  `ATTACHMENT_LIMIT_EXCEEDED`(상한은 trip 첨부와 동일: `tripmate_max_attachments_per_target`).
+- POST body는 §5.5와 동일(`AttachmentCreate`). 응답은 `curated_plan_id`만 채워지고
+  `notice_plan_id` alias 동기. `uploaded_by_user_id = 현재 admin`.
+- POST/DELETE는 admin_audit chain에 기록(`curated_plan.attachment_added` /
+  `curated_plan.attachment_deleted`).
 
 ### 5.4 Curated POI 첨부 (Admin)
 
-`GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments`, `POST`, `DELETE`
+`GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments`, `POST`,
+`DELETE /{attachment_id}`
+
+- POI가 해당 plan 소속이 아니면 404 `NOT_FOUND`. 그 외 규약은 §5.3과 동일
+  (audit action은 `curated_poi.attachment_*`, 응답은 `curated_poi_id`/`notice_poi_id`).
 
 ### 5.5 POST body
 
