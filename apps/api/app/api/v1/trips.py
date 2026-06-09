@@ -16,7 +16,7 @@ from app.core.deps import CurrentUserId, DbSession
 from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
-from app.schemas.storage import AttachmentCreate, AttachmentUpdate
+from app.schemas.storage import AttachmentCreate, AttachmentUpdate, DownloadUrlResponse
 from app.schemas.trip import (
     TripAttachmentResponse,
     TripCommentCreate,
@@ -40,6 +40,7 @@ from app.schemas.trip import (
 )
 from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
+from app.services.rustfs_storage import make_download_url
 from app.services.trip import (
     TripAttachmentLimitError,
     TripAttachmentNotFoundError,
@@ -68,6 +69,7 @@ from app.services.trip import (
     delete_comment,
     delete_or_transfer_trip,
     delete_trip_day,
+    get_attachment,
     get_trip_access,
     get_trip_for_share_token,
     get_trip_for_user,
@@ -691,6 +693,36 @@ async def delete_trip_attachment_endpoint(
 
 
 @router.get(
+    "/{trip_id}/attachments/{attachment_id}/download-url",
+    response_model=Envelope[DownloadUrlResponse],
+)
+async def trip_attachment_download_url_endpoint(
+    trip_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    """첨부 본문 접근용 presigned GET URL(읽기 권한 — 동반자 포함)."""
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        attachment = await get_attachment(db, attachment_id=attachment_id, trip_id=trip_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripAttachmentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    return Envelope.of(
+        make_download_url(
+            bucket=attachment.bucket,
+            storage_key=attachment.storage_key,
+            public_url=attachment.public_url,
+        )
+    )
+
+
+@router.get(
     "/{trip_id}/pois/{poi_id}/attachments",
     response_model=Envelope[list[TripAttachmentResponse]],
 )
@@ -804,6 +836,38 @@ async def delete_trip_poi_attachment_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+
+
+@router.get(
+    "/{trip_id}/pois/{poi_id}/attachments/{attachment_id}/download-url",
+    response_model=Envelope[DownloadUrlResponse],
+)
+async def trip_poi_attachment_download_url_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    """POI 첨부 presigned GET URL(읽기 권한 — 동반자 포함)."""
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+        attachment = await get_attachment(db, attachment_id=attachment_id, trip_poi_id=poi_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (PoiNotFoundError, TripAttachmentNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    return Envelope.of(
+        make_download_url(
+            bucket=attachment.bucket,
+            storage_key=attachment.storage_key,
+            public_url=attachment.public_url,
+        )
+    )
 
 
 @router.get(

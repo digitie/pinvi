@@ -31,6 +31,17 @@ export const UploadUrlResponseSchema = z.object({
 });
 export type UploadUrlResponse = z.infer<typeof UploadUrlResponseSchema>;
 
+/** presigned GET — private 첨부 접근(T-105). */
+export const DownloadUrlResponseSchema = z.object({
+  method: z.literal('GET'),
+  bucket: z.string(),
+  storage_key: z.string(),
+  download_url: z.string().url(),
+  expires_at: Iso8601Schema,
+  public_url: z.string().nullable().optional(),
+});
+export type DownloadUrlResponse = z.infer<typeof DownloadUrlResponseSchema>;
+
 export const AttachmentRoleSchema = z.enum(['attachment', 'image', 'document', 'reference']);
 const NullableUuidSchema = z.string().uuid().nullable();
 
