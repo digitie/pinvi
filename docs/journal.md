@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-105 #4: 첨부 presigned download URL
+
+**작업**: private 첨부 본문 접근용 presigned GET URL. 권한은 attachment-scoped(trip 읽기 권한 →
+동반자 포함)로, 단순 storage-key 노출보다 안전.
+
+- `rustfs_storage.make_download_url`(placeholder presigned GET, upload과 동일 패턴, public_url 동반)
+  + `DownloadUrlResponse` 스키마 + Zod.
+- `trip.get_attachment`(스코프 단건 조회) 서비스.
+- `GET /trips/{id}/attachments/{aid}/download-url` + `GET /trips/{id}/pois/{pid}/attachments/{aid}/download-url`
+  (읽기 권한, 없는 첨부 404). 라우트 suffix가 distinct라 list/PATCH/DELETE와 충돌 없음.
+- 테스트: download-url 200(method GET·storage_key 포함) + 404.
+
 ## 2026-06-10 (claude) — T-105 첨부 하드닝(개수 제한 + 재정렬)
 
 **작업**: trip/POI 첨부(이미 T-132로 CRUD 완료)에 남용 방지 + 재정렬을 추가.

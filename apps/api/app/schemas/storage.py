@@ -36,6 +36,17 @@ class UploadUrlResponse(BaseModel):
     public_url: str | None = None
 
 
+class DownloadUrlResponse(BaseModel):
+    """presigned GET — private 첨부 접근(T-105). public_url이 있으면 그것도 함께 제공."""
+
+    method: Literal["GET"] = "GET"
+    bucket: str
+    storage_key: str
+    download_url: str
+    expires_at: datetime
+    public_url: str | None = None
+
+
 class AttachmentCreate(BaseModel):
     bucket: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     storage_key: str = Field(min_length=1, max_length=1024)

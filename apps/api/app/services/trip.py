@@ -626,6 +626,28 @@ async def update_attachment(
     return attachment
 
 
+async def get_attachment(
+    db: AsyncSession,
+    *,
+    attachment_id: uuid.UUID,
+    trip_id: uuid.UUID | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+) -> CuratedPlanAttachment:
+    """단건 첨부 조회(스코프 한정). 없으면 NotFound."""
+    filters: list[Any] = [
+        CuratedPlanAttachment.attachment_id == attachment_id,
+        CuratedPlanAttachment.deleted_at.is_(None),
+    ]
+    if trip_id is not None:
+        filters.append(CuratedPlanAttachment.trip_id == trip_id)
+    if trip_poi_id is not None:
+        filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
+    attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
+    if attachment is None:
+        raise TripAttachmentNotFoundError("첨부를 찾을 수 없습니다.")
+    return attachment
+
+
 async def delete_attachment(
     db: AsyncSession,
     *,

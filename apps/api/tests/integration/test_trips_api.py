@@ -727,3 +727,28 @@ async def test_trip_attachment_limit_and_reorder(
     listed = await client.get(f"/trips/{trip_id}/attachments", cookies=cookies)
     ids = [row["attachment_id"] for row in listed.json()["data"]]
     assert ids == [a2_id, a1_id]
+
+
+async def test_trip_attachment_download_url(client, verified_user, auth_cookies) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "다운로드"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    payload = _attachment_payload("dl.jpg")
+    att = await client.post(f"/trips/{trip_id}/attachments", json=payload, cookies=cookies)
+    assert att.status_code == 201, att.text
+    att_id = att.json()["data"]["attachment_id"]
+
+    resp = await client.get(f"/trips/{trip_id}/attachments/{att_id}/download-url", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["method"] == "GET"
+    assert data["bucket"] == payload["bucket"]
+    assert data["storage_key"] == payload["storage_key"]
+    assert payload["storage_key"] in data["download_url"]
+
+    # 없는 첨부 → 404
+    missing = await client.get(
+        f"/trips/{trip_id}/attachments/{uuid.uuid4()}/download-url", cookies=cookies
+    )
+    assert missing.status_code == 404

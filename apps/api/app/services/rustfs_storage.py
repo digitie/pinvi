@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
-from app.schemas.storage import AttachmentPurpose, UploadUrlResponse
+from app.schemas.storage import AttachmentPurpose, DownloadUrlResponse, UploadUrlResponse
 
 
 def _allowed_content_types() -> set[str]:
@@ -88,4 +88,26 @@ def make_upload_url(
         expires_at=expires,
         max_upload_bytes=max_bytes,
         public_url=None,
+    )
+
+
+def make_download_url(
+    *, bucket: str, storage_key: str, public_url: str | None = None
+) -> DownloadUrlResponse:
+    """presigned GET URL 응답(private 첨부 접근, T-105).
+
+    Sprint 2 시점에는 실서명 없이 placeholder URL을 생성(make_upload_url과 동일 패턴).
+    public_url이 있으면 함께 반환해 공개 버킷은 그대로 직접 접근하게 한다.
+    """
+    public_endpoint = settings.tripmate_rustfs_public_endpoint_url
+    expires = datetime.now(UTC) + timedelta(
+        seconds=settings.tripmate_rustfs_presigned_url_expires_seconds
+    )
+    download_url = f"{public_endpoint}/{bucket}/{storage_key}?X-Amz-Signature=PLACEHOLDER"
+    return DownloadUrlResponse(
+        bucket=bucket,
+        storage_key=storage_key,
+        download_url=download_url,
+        expires_at=expires,
+        public_url=public_url,
     )

@@ -153,6 +153,7 @@ export {
   AttachmentPurposeSchema,
   UploadUrlRequestSchema,
   UploadUrlResponseSchema,
+  DownloadUrlResponseSchema,
   AttachmentCreateSchema,
   AttachmentResponseSchema,
   AttachmentRoleSchema,
@@ -161,6 +162,7 @@ export type {
   AttachmentPurpose,
   UploadUrlRequest,
   UploadUrlResponse,
+  DownloadUrlResponse,
   AttachmentCreate,
   AttachmentResponse,
 } from './storage';
