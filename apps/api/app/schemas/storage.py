@@ -63,6 +63,19 @@ class AttachmentCreate(BaseModel):
         return self
 
 
+class AttachmentUpdate(BaseModel):
+    """첨부 메타 수정 — 재정렬(sort_order) / 설명."""
+
+    sort_order: int | None = Field(default=None, ge=0)
+    description: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_one_field(self) -> Self:
+        if self.sort_order is None and self.description is None:
+            raise ValueError("수정할 필드(sort_order 또는 description)가 필요합니다.")
+        return self
+
+
 class AttachmentResponse(BaseModel):
     attachment_id: uuid.UUID
     trip_id: uuid.UUID | None

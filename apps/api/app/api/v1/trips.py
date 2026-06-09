@@ -16,7 +16,7 @@ from app.core.deps import CurrentUserId, DbSession
 from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
-from app.schemas.storage import AttachmentCreate
+from app.schemas.storage import AttachmentCreate, AttachmentUpdate
 from app.schemas.trip import (
     TripAttachmentResponse,
     TripCommentCreate,
@@ -41,6 +41,7 @@ from app.schemas.trip import (
 from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
+    TripAttachmentLimitError,
     TripAttachmentNotFoundError,
     TripBucket,
     TripCommentNotFoundError,
@@ -80,6 +81,7 @@ from app.services.trip import (
     optimize_trip_day,
     remove_companion,
     revoke_share_link,
+    update_attachment,
     update_trip,
     update_trip_day,
 )
@@ -171,6 +173,13 @@ def _to_attachment_response(attachment) -> TripAttachmentResponse:  # type: igno
         created_at=attachment.created_at,
         updated_at=attachment.updated_at,
     )
+
+
+def _raise_attachment_limit(exc: TripAttachmentLimitError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
 
 
 def _raise_trip_http(exc: TripNotFoundError | TripPermissionError) -> NoReturn:
@@ -617,13 +626,45 @@ async def create_trip_attachment_endpoint(
         await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
-    attachment = await create_attachment(
-        db,
-        uploaded_by_user_id=actor_id,
-        trip_id=trip_id,
-        trip_poi_id=None,
-        payload=body.model_dump(),
-    )
+    try:
+        attachment = await create_attachment(
+            db,
+            uploaded_by_user_id=actor_id,
+            trip_id=trip_id,
+            trip_poi_id=None,
+            payload=body.model_dump(),
+        )
+    except TripAttachmentLimitError as exc:
+        _raise_attachment_limit(exc)
+    return Envelope.of(_to_attachment_response(attachment))
+
+
+@router.patch(
+    "/{trip_id}/attachments/{attachment_id}", response_model=Envelope[TripAttachmentResponse]
+)
+async def update_trip_attachment_endpoint(
+    trip_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    body: AttachmentUpdate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripAttachmentResponse]:
+    """첨부 재정렬(sort_order)/설명 수정 — 편집 권한 필요."""
+    try:
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        attachment = await update_attachment(
+            db,
+            attachment_id=attachment_id,
+            trip_id=trip_id,
+            patch=body.model_dump(exclude_unset=True),
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripAttachmentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     return Envelope.of(_to_attachment_response(attachment))
 
 
@@ -696,13 +737,48 @@ async def create_trip_poi_attachment_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    attachment = await create_attachment(
-        db,
-        uploaded_by_user_id=actor_id,
-        trip_id=None,
-        trip_poi_id=poi_id,
-        payload=body.model_dump(),
-    )
+    try:
+        attachment = await create_attachment(
+            db,
+            uploaded_by_user_id=actor_id,
+            trip_id=None,
+            trip_poi_id=poi_id,
+            payload=body.model_dump(),
+        )
+    except TripAttachmentLimitError as exc:
+        _raise_attachment_limit(exc)
+    return Envelope.of(_to_attachment_response(attachment))
+
+
+@router.patch(
+    "/{trip_id}/pois/{poi_id}/attachments/{attachment_id}",
+    response_model=Envelope[TripAttachmentResponse],
+)
+async def update_trip_poi_attachment_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    body: AttachmentUpdate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripAttachmentResponse]:
+    """POI 첨부 재정렬(sort_order)/설명 수정 — 편집 권한 필요."""
+    try:
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+        attachment = await update_attachment(
+            db,
+            attachment_id=attachment_id,
+            trip_poi_id=poi_id,
+            patch=body.model_dump(exclude_unset=True),
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (PoiNotFoundError, TripAttachmentNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     return Envelope.of(_to_attachment_response(attachment))
 
 

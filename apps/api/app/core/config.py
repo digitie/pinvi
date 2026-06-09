@@ -84,6 +84,8 @@ class Settings(BaseSettings):
         ]
     )
     tripmate_rustfs_public_base_url: str = ""
+    # Trip/POI 첨부 개수 상한(남용 방지, T-105)
+    tripmate_max_attachments_per_target: int = 30
 
     # krtour-map 독립 프로그램 (지도 feature OpenAPI HTTP, ADR-026/027)
     # `docs/integrations/krtour-map-rest-api.md` §1 — API 9011 / Admin 9012.
