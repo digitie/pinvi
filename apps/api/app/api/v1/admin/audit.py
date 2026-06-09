@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DbSession
 from app.core.rbac import require_role
-from app.models.audit import AdminAuditLog
+from app.models.audit import AdminAuditLog, LocationAccessLog
 from app.models.user import User
-from app.schemas.admin import AdminAuditEntry
+from app.schemas.admin import AdminAuditEntry, AdminLocationAuditEntry
 from app.schemas.envelope import Envelope
 from app.services.hash_chain import GENESIS_HASH, compute_content_hash
 
@@ -68,6 +72,37 @@ async def verify_chain(
     )
 
 
+@router.get("/location", response_model=Envelope[list[AdminLocationAuditEntry]])
+async def list_location_audit_log(
+    _cpo: Annotated[User, Depends(require_role("cpo"))],
+    db: DbSession,
+    response: Response,
+    user_id: uuid.UUID | None = None,
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> Envelope[list[AdminLocationAuditEntry]]:
+    filters: list[Any] = []
+    if user_id is not None:
+        filters.append(LocationAccessLog.user_id == user_id)
+    if from_ is not None:
+        filters.append(LocationAccessLog.occurred_at >= from_)
+    if to is not None:
+        filters.append(LocationAccessLog.occurred_at <= to)
+
+    stmt = (
+        select(LocationAccessLog)
+        .where(*filters)
+        .order_by(LocationAccessLog.log_id.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = list(result.scalars())
+    if await _is_location_chain_broken(db):
+        response.headers["X-Chain-Broken"] = "true"
+    return Envelope.of([_to_location_entry(row) for row in rows])
+
+
 def _to_entry(r: AdminAuditLog) -> AdminAuditEntry:
     return AdminAuditEntry(
         log_id=r.log_id,
@@ -81,3 +116,54 @@ def _to_entry(r: AdminAuditLog) -> AdminAuditEntry:
         content_hash=r.content_hash,
         occurred_at=r.occurred_at,
     )
+
+
+def _to_location_entry(r: LocationAccessLog) -> AdminLocationAuditEntry:
+    return AdminLocationAuditEntry(
+        log_id=r.log_id,
+        user_id=r.user_id,
+        occurred_at=r.occurred_at,
+        endpoint=r.endpoint,
+        purpose=r.purpose,
+        lat_masked=_mask_coord(r.lat),
+        lng_masked=_mask_coord(r.lng),
+        request_id=r.request_id,
+        ip_hash=r.ip_hash,
+        prev_hash=r.prev_hash,
+        content_hash=r.content_hash,
+    )
+
+
+async def _is_location_chain_broken(db: AsyncSession) -> bool:
+    result = await db.execute(select(LocationAccessLog).order_by(LocationAccessLog.log_id))
+    prev = GENESIS_HASH
+    for row in result.scalars():
+        expected = compute_content_hash(
+            prev,
+            {
+                "user_id": str(row.user_id),
+                "occurred_at": row.occurred_at.isoformat(),
+                "endpoint": row.endpoint,
+                "purpose": row.purpose,
+                "lat": _coord_str(row.lat),
+                "lng": _coord_str(row.lng),
+                "request_id": str(row.request_id),
+                "ip_hash": row.ip_hash,
+            },
+        )
+        if row.prev_hash != prev or row.content_hash != expected:
+            return True
+        prev = row.content_hash
+    return False
+
+
+def _coord_str(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.000001")))
+
+
+def _mask_coord(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.0001")))

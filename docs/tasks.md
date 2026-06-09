@@ -12,7 +12,6 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
 - [ ] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions`
   + `POST /features/requests` + `GET /features/requests/{id}` 실구현(C-12 실체화,
   krtour 직접 호출 X)
@@ -190,7 +189,7 @@
 - [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
-- [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
+- [x] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
 - [x] T-134 — `POST /auth/refresh` + `user_sessions` 영속화 (C-14)
 - [x] T-135 — POI 응답 `rise_set` 노출 (C-18)
 - [x] T-136 — Resend webhook Svix 서명 검증 (C-22)

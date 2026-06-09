@@ -35,6 +35,46 @@ class AdminAuditEntry(BaseModel):
     occurred_at: datetime
 
 
+class AdminLocationAuditEntry(BaseModel):
+    log_id: int
+    user_id: uuid.UUID
+    occurred_at: datetime
+    endpoint: str
+    purpose: str
+    lat_masked: str | None
+    lng_masked: str | None
+    request_id: uuid.UUID
+    ip_hash: str
+    prev_hash: str
+    content_hash: str
+
+
+class AdminApiCallEntry(BaseModel):
+    log_id: int
+    provider: str
+    endpoint: str
+    status_code: int | None
+    latency_ms: int | None
+    error_class: str | None
+    error_message: str | None
+    request_id: uuid.UUID | None
+    occurred_at: datetime
+
+
+class AdminStatsOverview(BaseModel):
+    users_total: int
+    users_24h: int
+    users_pending_verification: int
+    trips_total: int
+    trips_active: int
+    pois_total: int
+    email_queue_pending: int
+    api_calls_24h: int
+    api_calls_failed_24h: int
+    features_by_kind: dict[str, int] = Field(default_factory=dict)
+    etl_last_24h: dict[str, int] = Field(default_factory=lambda: {"success": 0, "failed": 0})
+
+
 class AdminUserDetail(AdminUserSummary):
     email: str
     email_revealed: bool

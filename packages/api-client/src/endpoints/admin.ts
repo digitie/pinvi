@@ -1,5 +1,6 @@
 import {
   AdminActionRequestSchema,
+  AdminApiCallEntrySchema,
   AdminAuditEntrySchema,
   AdminBackupRestoreRequestSchema,
   AdminBackupRestoreRunSchema,
@@ -7,10 +8,12 @@ import {
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
+  AdminLocationAuditEntrySchema,
   AdminPagedResponseSchema,
   AdminPoiDetailSchema,
   AdminPoiLinkStatusRequestSchema,
   AdminPoiPagedResponseSchema,
+  AdminStatsOverviewSchema,
   AdminTripDetailSchema,
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
@@ -21,6 +24,12 @@ import type { ApiClient } from '../client';
 
 /** `docs/api/admin.md` Sprint 3 범위. */
 export const adminApi = (client: ApiClient) => ({
+  getStatsOverview: () =>
+    client.request('/admin/stats/overview', {
+      method: 'GET',
+      schema: AdminStatsOverviewSchema,
+    }),
+
   listUsers: (params: { page?: number; limit?: number; status?: string; q?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.page) qs.set('page', String(params.page));
@@ -152,6 +161,46 @@ export const adminApi = (client: ApiClient) => ({
       method: 'GET',
       schema: AdminChainVerifySchema,
     }),
+
+  listLocationAudit: (
+    params: {
+      userId?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.userId) qs.set('user_id', params.userId);
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/audit/location${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: z.array(AdminLocationAuditEntrySchema),
+    });
+  },
+
+  listApiCalls: (
+    params: {
+      provider?: string;
+      statusCode?: number;
+      errorClass?: string;
+      limit?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.provider) qs.set('provider', params.provider);
+    if (params.statusCode !== undefined) qs.set('status_code', String(params.statusCode));
+    if (params.errorClass) qs.set('error_class', params.errorClass);
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/api-calls${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: z.array(AdminApiCallEntrySchema),
+    });
+  },
 
   listEmails: (params: { status?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams();

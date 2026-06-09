@@ -29,6 +29,57 @@ export const AdminAuditEntrySchema = z.object({
 });
 export type AdminAuditEntry = z.infer<typeof AdminAuditEntrySchema>;
 
+/** location_access_log CPO 조회 — 좌표는 4자리 mask. */
+export const AdminLocationAuditEntrySchema = z.object({
+  log_id: z.number().int(),
+  user_id: z.string().uuid(),
+  occurred_at: Iso8601Schema,
+  endpoint: z.string(),
+  purpose: z.string(),
+  lat_masked: z.string().nullable(),
+  lng_masked: z.string().nullable(),
+  request_id: z.string().uuid(),
+  ip_hash: z.string(),
+  prev_hash: z.string(),
+  content_hash: z.string(),
+});
+export type AdminLocationAuditEntry = z.infer<typeof AdminLocationAuditEntrySchema>;
+
+/** app.api_call_log read-only 행. */
+export const AdminApiCallEntrySchema = z.object({
+  log_id: z.number().int(),
+  provider: z.string(),
+  endpoint: z.string(),
+  status_code: z.number().int().nullable(),
+  latency_ms: z.number().int().nullable(),
+  error_class: z.string().nullable(),
+  error_message: z.string().nullable(),
+  request_id: z.string().uuid().nullable(),
+  occurred_at: Iso8601Schema,
+});
+export type AdminApiCallEntry = z.infer<typeof AdminApiCallEntrySchema>;
+
+/** `/admin/stats/overview` — TripMate app-owned 지표. */
+export const AdminStatsOverviewSchema = z.object({
+  users_total: z.number().int(),
+  users_24h: z.number().int(),
+  users_pending_verification: z.number().int(),
+  trips_total: z.number().int(),
+  trips_active: z.number().int(),
+  pois_total: z.number().int(),
+  email_queue_pending: z.number().int(),
+  api_calls_24h: z.number().int(),
+  api_calls_failed_24h: z.number().int(),
+  features_by_kind: z.record(z.string(), z.number().int()).default({}),
+  etl_last_24h: z
+    .object({
+      success: z.number().int(),
+      failed: z.number().int(),
+    })
+    .default({ success: 0, failed: 0 }),
+});
+export type AdminStatsOverview = z.infer<typeof AdminStatsOverviewSchema>;
+
 /** 상세는 기본 마스킹, 사유 기반 원본 조회 시 audit 기록. */
 export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email: z.string(),
