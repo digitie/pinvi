@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     tripmate_kraddr_geo_timeout_seconds: float = 5.0
     tripmate_kraddr_geo_max_attempts: int = 3
 
+    # 위치 감사 async outbox drain worker (T-146 / D-20)
+    tripmate_location_audit_outbox_worker_enabled: bool = True
+    tripmate_location_audit_outbox_drain_interval_seconds: float = 1.0
+    tripmate_location_audit_outbox_batch_size: int = 200
+
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]

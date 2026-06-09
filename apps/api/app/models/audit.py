@@ -76,3 +76,27 @@ class AdminAuditLog(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class LocationAuditOutbox(Base):
+    """위치 감사 async outbox (T-146 / D-20) — 요청 경로에서 빠르게 append, worker가 체인으로 drain."""
+
+    __tablename__ = "location_audit_outbox"
+
+    outbox_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.users.user_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text(), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(64), nullable=False)
+    lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    request_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-146 slice: location-audit async outbox (D-20)
+
+**작업**: 위치 감사 적재의 요청경로 hotspot(동기 체인 해시 + chain-head 직렬화)을 async outbox로 제거.
+
+**설계**: 요청경로 → `location_audit_outbox`에 fast append(체인 미계산). 단일 writer worker가
+`drain_location_audit_outbox`로 outbox를 occurred 순서로 `location_access_log` 체인에 반영
+(advisory xact lock으로 동시 drain 체인 fork 방지, 한 트랜잭션에서 flush로 chain-head 진행).
+
+**신규/갱신**:
+- migration 0017 `app.location_audit_outbox`(pending 부분 인덱스) + 모델 `LocationAuditOutbox`.
+- `services/location_audit.py`: `append_location_log`(체인 primitive, occurred_at/commit 옵션) +
+  `enqueue_location_audit_outbox` + `drain_location_audit_outbox` + 백그라운드 `location_audit_outbox_worker_lifespan`.
+- 미들웨어: 요청경로를 enqueue로 전환(체인 로직 service로 이전, `_append_log`는 wrapper 유지 →
+  기존 직접-적재 테스트 호환).
+- config `tripmate_location_audit_outbox_*`(enabled/interval/batch), main.py lifespan 합성.
+- 테스트: enqueue→pending 확인→drain→체인 3건/processed + idempotent.
+
+**잔여(T-146/D-26)**: trip view feature 캐시(krtour batch+join N+1 제거).
+
 ## 2026-06-09 (claude) — T-129 완성: `/regions/covering-point` + 통합 `GET /search`
 
 **작업**: T-129 잔여를 닫아 완료 처리.
