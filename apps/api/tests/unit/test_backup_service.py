@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
 import pytest
 
 from app.core.config import settings
+from app.services import backup_service
 from app.services.backup_service import (
     BackupServiceError,
     BackupSnapshotNotFoundError,
@@ -29,6 +32,17 @@ def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         "tripmate_database_url",
         "postgresql+asyncpg://tripmate:tripmate@localhost:55432/tripmate",
     )
+    monkeypatch.setattr(settings, "tripmate_restore_database_url", "")
+    monkeypatch.setattr(settings, "tripmate_restore_hotswap_execute", False)
+    monkeypatch.setattr(settings, "tripmate_restore_drain_command", "")
+    monkeypatch.setattr(settings, "tripmate_restore_allow_no_drain", False)
+    monkeypatch.setattr(settings, "tripmate_restore_app_role", "")
+
+    @asynccontextmanager
+    async def _noop_restore_advisory_lock() -> AsyncIterator[None]:
+        yield
+
+    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _noop_restore_advisory_lock)
 
 
 def _write_script(path: Path, body: str) -> None:
@@ -97,6 +111,21 @@ def test_list_backup_snapshots_sorts_recent_first(tmp_path: Path) -> None:
     assert [snapshot.filename for snapshot in snapshots] == [new.name, old.name]
 
 
+def test_restore_lock_database_url_accepts_psql_driverless_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "tripmate_restore_database_url",
+        "postgresql://tripmate:tripmate@localhost:55432/tripmate",
+    )
+
+    assert (
+        backup_service._restore_lock_database_url()
+        == "postgresql+asyncpg://tripmate:tripmate@localhost:55432/tripmate"
+    )
+
+
 @pytest.mark.asyncio
 async def test_restore_backup_hotswap_runs_script_and_parses_phases(
     tmp_path: Path,
@@ -113,6 +142,7 @@ async def test_restore_backup_hotswap_runs_script_and_parses_phases(
 set -euo pipefail
 test "$1" = run
 test -f "$2"
+test "${TRIPMATE_RESTORE_API_TRIGGER}" = "1"
 printf 'RESTORE_PHASE=preparing:success:checked\\n'
 printf 'RESTORE_PHASE=restoring:success:restored %s\\n' "$3"
 printf 'RESTORE_PHASE=validating:success:validated\\n'
@@ -132,6 +162,46 @@ printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
     assert run.restore_schema.startswith("app_restore_")
     assert run.previous_schema.startswith("app_previous_")
     assert [phase.status for phase in run.phases] == ["success"] * 5
+
+
+@pytest.mark.asyncio
+async def test_restore_backup_hotswap_uses_advisory_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backup_dir = anyio.Path(settings.tripmate_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "tripmate-app-lock.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+    script = tmp_path / "restore-hotswap.sh"
+    _write_script(
+        script,
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'RESTORE_PHASE=preparing:success:checked\\n'
+printf 'RESTORE_PHASE=restoring:success:restored\\n'
+printf 'RESTORE_PHASE=validating:success:validated\\n'
+printf 'RESTORE_PHASE=draining:skipped:test\\n'
+printf 'RESTORE_PHASE=switching:success:switched\\n'
+""",
+    )
+    monkeypatch.setattr(settings, "tripmate_restore_hotswap_script_path", str(script))
+    entered = False
+
+    @asynccontextmanager
+    async def _recording_restore_advisory_lock() -> AsyncIterator[None]:
+        nonlocal entered
+        entered = True
+        yield
+
+    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _recording_restore_advisory_lock)
+
+    await restore_backup_hotswap(
+        snapshot_id="tripmate-app-lock",
+        access_reason="락 테스트",
+    )
+
+    assert entered is True
 
 
 @pytest.mark.asyncio
