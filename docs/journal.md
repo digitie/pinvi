@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — krtour PR #316(ADR-048) **재리뷰** — 호환성보다 정합성 우선으로 입장 전환
+
+**작업**: 소유자 지시("호환성 신경쓰지 말 것. 지금 다 뒤집더라도 일관성·확장성·안정성 우선")로
+PR #316을 한 번 더 리뷰. krtour 에이전트가 내 1차 리뷰 5건을 **전부 "동결/무중단" 방향으로 반영**
+(커밋 7de0668)한 것을 확인하고, 그 전제를 뒤집는 재리뷰를 PR #316에 코멘트로 게시 + TripMate 반영.
+
+**핵심 모순 발견**: ADR-048 §1.2가 "경로 shim 금지(ADR-046)"와 "구 unprefixed alias 동시지원"을
+**한 문단에서 동시에** 말함 — unprefixed alias = 경로 shim이라 자기모순.
+
+**재리뷰 6지점(PR #316 코멘트)**:
+- **A. dual-support 창 철회 → hard cutover**: TripMate 미출시 + `/features/*` 503 + 유일소비자라
+  보호할 설치 기반 0. 1차의 "무중단 이중지원" 요청 **철회**, `/v1` 단일 commit cut + lockstep.
+- **B. `lon`/`lat` 동결 해제 → 양 repo 정렬**: DEC-07(`longitude`/`latitude`) vs krtour `lon`/`lat`
+  영구 불일치를 동결로 박지 말고 하나로 정렬(경계 매핑 0). → DEC-07 좌표명 하위결정(T-182).
+- **C. `cluster_key` merit 분류**: 행정 자연키면 `_key` 유지, surrogate면 `cluster_id`. compat 동결 X.
+- **D. `feature_id` 값 안정성 명문화**: v0/v1 행+soft-delete에서 외부 id 불변을 계약에 박기(이름 동결과 별개).
+- **E. envelope 불변식**: `meta`/`request_id` 항상 present, `next_cursor` null(omit 금지).
+- **F. `/vN` 거버넌스**: pre-1.0 in-place break → v1.0.0 GA에 `/v1` 동결 → 이후 `/v2`+N-1.
+
+**TripMate 반영**: rest-api.md §1(hard cutover 명시) + §6 **T-181 재정의**(이중지원 의존 제거) +
+§7(A~F로 합의항목 교체 + DEC-07 좌표명 하위결정). tasks.md **T-181 재정의 + T-182 신규**.
+
 ## 2026-06-09 (claude) — krtour PR #316(ADR-048) 리뷰 + TripMate 반영(외부 표준 추종)
 
 **작업**: krtour-map PR #316("REST API versioning admin/ops 확장 + 정합성 표준", ADR-048)을
