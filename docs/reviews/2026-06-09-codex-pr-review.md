@@ -111,3 +111,19 @@
 - **T-187 [중간] #90/#107** — geofence CIDR 병행, 위치감사 chain 윈도우 검증.
 
 > 코드 반영 결과는 후속 PR에 기록하고 본 문서의 항목별 ✅로 추적한다.
+
+### 코드 반영 결과 (2026-06-09, 동일 PR)
+- ✅ **T-184** (#101/#85): `get_trip_for_user_write`(owner/co_owner/editor) — day/attachment/
+  trip-update/optimize(persist) 쓰기 게이트, viewer read-only. `build_trip_view(include_management)`
+  로 비-owner에 `invited_email` 마스킹 + share_links 비노출. `AttachmentCreate` bucket pattern +
+  storage_key traversal 거부 + public_url http(s) 검증. shared `last_used_at` 1분 throttle. +회귀 테스트.
+- ✅ **T-186** (#96): 기본 `-updated_at` keyset cursor(updated_at,trip_id) 전환 + `ilike` %/_/\ 이스케이프.
+- ✅ **T-185** (#91): rate-limit grace 동안 broker 슬롯 유지(cap 우회/FD 누수 차단) + `RealtimeConnection.send_lock`
+  연결별 송신 직렬화. 기존 테스트를 새 불변식으로 갱신.
+- ✅ **T-187** (#90/#107): geofence strict 모드 mTLS-header 신뢰에 CIDR 앵커 강제. 위치감사 chain
+  `_is_location_window_broken`(per-row self-consistency + 앵커 링크) — 풀스캔 제거.
+- ✅ **T-183** (#100 높음): restore-hotswap.sh FK 적재 `session_replication_role=replica` + swap 전
+  GRANT 재적용(`TRIPMATE_RESTORE_APP_ROLE`). backup_service restore_id uuid suffix + `_restore_lock` 직렬화.
+- ✅ 낮음: `.env.example` 2개 `ALLOW_UNSIGNED=false`(#86).
+- **잔여(후속 task로 유지)**: #100 self-kill drain(runbook: read-only 전환 권장)·cut-over audit 격리·
+  교차프로세스 advisory lock(중간), #99 rise_set model_validate·#93 money quantize 등 낮음(저위험·문서/가설).
