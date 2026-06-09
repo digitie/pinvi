@@ -308,6 +308,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
   network CIDR 병행 강제/문서화, `api/v1/admin/audit.py` 위치감사 chain 풀스캔 →
   반환 윈도우만 검증. **완료: 2026-06-09, PR #109.**
 - [x] T-188 — [중간] #108 후속: `POST /features/requests`에 `type`(new_place|correction|closure) + `target_feature_id` 노출(테이블·모델은 갖췄으나 API 미노출 → new_place만 가능했음). correction/closure는 target 필수·new_place는 금지(422), dedup 유니크 키에 type+target 포함(마이그레이션 0015), 응답 노출, frontend Zod + 회귀 테스트. (완료 2026-06-09, PR #108 리뷰 반영)
+- [x] T-189 — [낮음 묶음] 리뷰 잔여 정리(2026-06-09): (a) 사용자 제안 kind를 `place`/`event`로 좁힘(#108 — notice/price/weather/route/area는 운영 데이터, `FeatureSuggestionKind` + Zod) (b) 제안 rate-limit이 `rejected`/`duplicate` 제외하고 `pending`/`approved`/`added`만 카운트(거절 다수 사용자 정당 제안 차단 방지). **잔여(후속)**: `app.feature_suggestions.requester_user_id` FK RESTRICT의 PIPA 파기 정책(사용자 hard-delete 시 익명화/cascade — T-142 인접), #99 `poi_rise_set_to_dict` model_validate·#93 money quantize(저위험 가설, 미반영).
 
 ## 머지 히스토리 (참고)
 

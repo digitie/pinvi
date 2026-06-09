@@ -157,6 +157,15 @@ class TestFeatureRequestCreate:
                 coord=Coord(lon=127.0, lat=37.5),
             )
 
+    def test_rejects_non_suggestion_kind(self) -> None:
+        # 사용자 제안 kind는 place/event만(#108 리뷰) — notice/price/... 거부.
+        with pytest.raises(ValidationError):
+            FeatureRequestCreate(
+                kind="notice",  # type: ignore[arg-type]
+                title="운영 공지 제안",
+                coord=Coord(lon=127.0, lat=37.5),
+            )
+
 
 class TestFeatureRequestResponse:
     def test_pending_response(self) -> None:

@@ -26,6 +26,8 @@ FeatureKind = Literal[
 ]
 FeatureRequestStatus = Literal["pending", "approved", "rejected", "added", "duplicate"]
 FeatureRequestType = Literal["new_place", "correction", "closure"]
+# 사용자가 제안 가능한 kind는 사실상 장소/이벤트뿐(notice/price/weather/route/area는 운영 데이터).
+FeatureSuggestionKind = Literal["place", "event"]
 FeatureRequestCategory = Annotated[str, Field(min_length=1, max_length=80)]
 
 
@@ -126,7 +128,7 @@ class FeatureRequestCreate(BaseModel):
     """사용자 feature 제안 큐 적재 — Admin이 검토 후 krtour feature 추가 API로 반영 (DEC-05)."""
 
     type: FeatureRequestType = "new_place"
-    kind: FeatureKind
+    kind: FeatureSuggestionKind = "place"
     title: str = Field(min_length=1, max_length=200)
     coord: Coord
     categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)

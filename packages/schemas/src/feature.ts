@@ -109,10 +109,14 @@ export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 export const FeatureRequestTypeSchema = z.enum(['new_place', 'correction', 'closure']);
 export type FeatureRequestType = z.infer<typeof FeatureRequestTypeSchema>;
 
+/** 사용자가 제안 가능한 kind는 장소/이벤트뿐(나머지는 운영 데이터). */
+export const FeatureSuggestionKindSchema = z.enum(['place', 'event']);
+export type FeatureSuggestionKind = z.infer<typeof FeatureSuggestionKindSchema>;
+
 export const FeatureRequestCreateSchema = z
   .object({
     type: FeatureRequestTypeSchema.optional().default('new_place'),
-    kind: FeatureKindSchema,
+    kind: FeatureSuggestionKindSchema,
     title: z.string().min(1).max(200),
     coord: CoordSchema,
     categories: z.array(FeatureRequestCategorySchema).max(10).optional().default([]),
