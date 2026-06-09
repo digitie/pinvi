@@ -19,12 +19,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.etl_bridge.krtour_map import KrtourMapClient
 from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
+from app.services.feature_cache import feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
@@ -121,14 +123,24 @@ async def build_trip_view(
             seen.add(fid_str)
             feature_ids.append(fid_str)
 
-    # 라이브러리 batch fetch
+    # 라이브러리 batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
     fresh_features: dict[str, dict[str, Any]] = {}
     if krtour_client is not None and feature_ids:
-        try:
-            features = await krtour_client.features_by_ids(feature_ids)
-            fresh_features = {_canonical_feature_id(str(f["feature_id"])): f for f in features}
-        except Exception as exc:
-            logger.error("features_by_ids batch 실패: %s — snapshot으로 fallback", exc)
+        use_cache = settings.tripmate_feature_cache_enabled
+        if use_cache:
+            cached, missing = feature_cache.get_many(feature_ids)
+            fresh_features.update(cached)
+        else:
+            missing = feature_ids
+        if missing:
+            try:
+                features = await krtour_client.features_by_ids(missing)
+                fetched = {_canonical_feature_id(str(f["feature_id"])): f for f in features}
+                fresh_features.update(fetched)
+                if use_cache and fetched:
+                    feature_cache.put_many(fetched)
+            except Exception as exc:
+                logger.error("features_by_ids batch 실패: %s — snapshot으로 fallback", exc)
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}

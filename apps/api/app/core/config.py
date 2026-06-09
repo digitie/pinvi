@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     tripmate_location_audit_outbox_drain_interval_seconds: float = 1.0
     tripmate_location_audit_outbox_batch_size: int = 200
 
+    # Feature 조회 process-local TTL 캐시 (T-146 / D-26)
+    tripmate_feature_cache_enabled: bool = True
+    tripmate_feature_cache_ttl_seconds: float = 60.0
+    tripmate_feature_cache_max_size: int = 10000
+
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]
