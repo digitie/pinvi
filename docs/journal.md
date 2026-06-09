@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (codex) — T-133 Admin priority-3 결선
+
+**작업**: krtour-map 연계가 필요 없는 Admin priority-3 항목을 실제 API/UI로 결선하고,
+krtour-map 또는 운영 안전장치가 필요한 항목은 문서에서 상태를 명확히 낮췄다.
+
+**변경**:
+- `GET /admin/stats/overview`: TripMate app DB 기준 사용자/여행/POI/email queue/API 호출
+  지표를 반환한다. feature/ETL 지표는 외부 결선 전 빈 값/0값으로 고정한다.
+- `GET /admin/api-calls`: `app.api_call_log` read-only 조회와 provider/status/error 필터를
+  추가했다.
+- `GET /admin/audit/location`: CPO 전용 `location_access_log` 조회를 추가했다. 좌표는
+  4자리로 마스킹하고, hash chain 깨짐은 `X-Chain-Broken: true` 헤더로 표시한다.
+- `/admin`, `/admin/api-calls`, `/admin/audit/location` 화면을 실제 데이터 조회 화면으로
+  연결했다.
+- `/admin/features`, `/admin/etl`, `/admin/seed`, `/admin/reset`은 각각 krtour-map admin API
+  또는 운영 안전장치가 필요한 후속 결선으로 문서화했다.
+
+**검증**: backend ruff/mypy/pytest, schema/api-client/web typecheck, schema test,
+web lint/build, Windows Playwright e2e(`admin-priority3.e2e.ts`), `git diff --check`,
+CodeGraph sync.
+
 ## 2026-06-09 (claude) — krtour PR #316(ADR-048) **3차 검토** — A–F 수렴 확인 + 잔여 정합성 2건
 
 **작업**: 소유자 재지시(호환성 무시, 일관성/확장성/안정성 우선 + gh rate limit 준수)로 PR #316

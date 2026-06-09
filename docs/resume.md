@@ -4,9 +4,18 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 루프에서 T-132까지 닫았다. 다음 비의존 구현 후보는 T-133
-Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등)이다. T-170 krtour-map HTTP
-client 붙이기는 feature read용 HTTP 서비스 연결 작업이므로 비의존 루프에서는 제외한다.
+krtour-map 비의존 루프에서 T-133까지 닫았다. 다음 비의존 구현 후보는 T-177
+사용자 feature 제안 큐(`app.feature_suggestions`, krtour 직접 호출 없음)이다. T-170 이후
+krtour-map HTTP client 붙이기와 admin feature change proxy는 feature read/admin 호출
+작업이므로 비의존 루프에서는 제외한다.
+
+**T-133 Admin priority-3 엔드포인트·페이지 완료** (2026-06-09): TripMate app DB만 읽는
+`GET /admin/stats/overview`, `GET /admin/api-calls`, CPO 전용
+`GET /admin/audit/location`을 추가하고 `/admin`, `/admin/api-calls`,
+`/admin/audit/location` 화면을 실제 데이터 테이블로 결선했다. 위치 감사 로그는 좌표를
+4자리로 마스킹하고 chain 깨짐 시 `X-Chain-Broken: true` 헤더를 반환한다. `/admin/features`
+상세 편집, `/admin/etl`, seed/reset은 krtour-map 또는 운영 안전장치 결선 전 상태로
+명시적으로 남긴다.
 
 **T-132 trip 하위 리소스 분할 완료** (2026-06-09): `/trips/{trip_id}` delete/owner
 transfer, `/copy`, day CRUD, anonymous shared view, trip/POI attachment metadata CRUD,

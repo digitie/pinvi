@@ -118,7 +118,7 @@ X-Access-Reason: "월간 추천 콘텐츠 공개"
 
 ### 4.2 admin이 `/admin/audit/location` 진입
 
-→ `cpo` 역할 없음 → `403 PERMISSION_DENIED` (CPO 권한 필요 — admin 화면에서 명시 안내).
+→ `cpo` 역할 없음 → `404 Not Found` (존재 자체 숨김 정책).
 
 ### 4.3 cpo가 사용자 disable 시도
 

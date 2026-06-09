@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
 import type { AdminAuditEntry, AdminChainVerify } from '@tripmate/schemas';
@@ -71,15 +72,23 @@ export default function AdminAuditPage() {
       title="감사 로그"
       description="admin_audit_log read-only — SHA-256 chain. CPO 권한이 있어야 검증 가능."
       actions={
-        <button
-          type="button"
-          onClick={onVerify}
-          disabled={verifying}
-          className="rounded-sm border border-primary px-3 py-2 text-sm text-primary disabled:opacity-50"
-          data-testid="admin-audit-verify"
-        >
-          {verifying ? '검증 중...' : 'chain 검증'}
-        </button>
+        <>
+          <Link
+            href="/admin/audit/location"
+            className="rounded-sm border border-hairline bg-white px-3 py-2 text-sm font-semibold text-ink"
+          >
+            위치 감사
+          </Link>
+          <button
+            type="button"
+            onClick={onVerify}
+            disabled={verifying}
+            className="rounded-sm border border-primary px-3 py-2 text-sm text-primary disabled:opacity-50"
+            data-testid="admin-audit-verify"
+          >
+            {verifying ? '검증 중...' : 'chain 검증'}
+          </button>
+        </>
       }
     >
       {verify && (

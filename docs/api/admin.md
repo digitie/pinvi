@@ -61,6 +61,9 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 
 ### 3.1 `GET /admin/stats/overview`
 
+TripMate app schema에서 계산 가능한 지표만 즉시 반환한다. `features_by_kind`와
+`etl_last_24h`는 krtour-map admin/ops 및 Dagster 요약 API가 결선될 때까지 빈 값/0값이다.
+
 응답 200:
 
 ```jsonc
@@ -71,17 +74,17 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
     "users_pending_verification": 18,
     "trips_total": 567,
     "trips_active": 234,
-    "features_by_kind": { "place": 12345, "event": 234, "...": 0 },
     "pois_total": 789,
-    "etl_last_24h": { "success": 12, "failed": 1 },
-    "api_rate_limit_remaining": { "kma": 0.85, "visitkorea": 0.92 },
-    "email_queue_pending": 3
+    "email_queue_pending": 3,
+    "api_calls_24h": 91,
+    "api_calls_failed_24h": 2,
+    "features_by_kind": {},
+    "etl_last_24h": { "success": 0, "failed": 0 }
   }
 }
 ```
 
-병렬 쿼리로 한 번에. 일부 `feature` schema 카운트는 krtour-map ops/admin OpenAPI
-(`/ops/metrics` 등)로 조회한다.
+권한: `admin` / `operator`.
 
 ## 4. 통합 엔티티 CRUD (`/admin/entities/{entity}`)
 
@@ -343,9 +346,23 @@ Content-Type: application/json
 - 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
 
-## 9. 위치 감사 로그 (CPO 권한)
+## 9. API 호출 로그
 
-### 9.1 `GET /admin/audit/location`
+### 9.1 `GET /admin/api-calls`
+
+```http
+GET /admin/api-calls?provider=kma&status_code=200&error_class=Timeout&limit=100
+```
+
+- 권한: `admin` / `operator`
+- `app.api_call_log`를 `occurred_at DESC, log_id DESC`로 반환한다.
+- 필터: `provider`, `status_code`, `error_class`, `limit(1~500)`
+- 응답 row: `log_id`, `provider`, `endpoint`, `status_code`, `latency_ms`,
+  `error_class`, `error_message`, `request_id`, `occurred_at`
+
+## 10. 위치 감사 로그 (CPO 권한)
+
+### 10.1 `GET /admin/audit/location`
 
 ```http
 GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
@@ -356,15 +373,23 @@ GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
   + Sentry alert
 - 응답에는 좌표 정밀도 4자리로 mask (raw 6자리 표시는 별도 endpoint, 더 강한 사유 검증)
 
-## 10. Notice Plan 관리
+## 11. 상태 강등 / 후속 결선
+
+- `/admin/features`: feature read/edit는 `python-krtour-map` admin API 기준으로 결선한다.
+  TripMate가 feature 정규화·저장 책임을 가져오지 않는다.
+- `/admin/etl`: Dagster/Dagit reverse proxy와 자체 요약은 Sprint 5 결선.
+- `/admin/seed`, `/admin/reset`: dev/staging 전용 안전장치(운영 라우트 미등록, 확인 키워드,
+  audit)가 들어갈 때까지 운영 기능으로 취급하지 않는다.
+
+## 12. Notice Plan 관리
 
 자세히는 [`notice-plans.md`](./notice-plans.md) Admin 섹션.
 
-## 11. ETL / Record Linkage / 데이터 일관성
+## 13. ETL / Record Linkage / 데이터 일관성
 
 SPEC V8 M-10 ~ M-11.
 
-### 11.1 `GET /admin/dedup-review`
+### 13.1 `GET /admin/dedup-review`
 
 라이브러리 `dedup_review_queue` 호출.
 
@@ -385,7 +410,7 @@ SPEC V8 M-10 ~ M-11.
 }
 ```
 
-### 11.2 `POST /admin/dedup-review/{id}/verdict`
+### 13.2 `POST /admin/dedup-review/{id}/verdict`
 
 ```jsonc
 { "verdict": "merge_a_into_b" | "merge_b_into_a" | "not_same" | "uncertain", "reason": "..." }
@@ -393,7 +418,7 @@ SPEC V8 M-10 ~ M-11.
 
 krtour-map dedup verdict는 krtour-map admin OpenAPI로 callback한다.
 
-### 11.3 `GET /admin/provider-sync`
+### 13.3 `GET /admin/provider-sync`
 
 ```jsonc
 {
@@ -414,17 +439,17 @@ krtour-map dedup verdict는 krtour-map admin OpenAPI로 callback한다.
 }
 ```
 
-### 11.4 `POST /admin/provider-sync/{id}/{action}`
+### 13.4 `POST /admin/provider-sync/{id}/{action}`
 
 `action`: `pause` | `resume` | `retry` | `reset_cursor`.
 
-### 11.5 `GET /admin/integrity`
+### 13.5 `GET /admin/integrity`
 
 `app.data_integrity_violations` + 라이브러리 자체 violations 합쳐 표시.
 
-## 12. 디버그 콘솔
+## 14. 디버그 콘솔
 
-### 12.1 `WS /admin/debug/logs`
+### 14.1 `WS /admin/debug/logs`
 
 Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 
@@ -438,18 +463,18 @@ Loki LogQL을 백엔드에서 호출 → WebSocket으로 push.
 { "type": "error", "message": "LogQL syntax error" }
 ```
 
-### 12.2 `GET /admin/debug/request/{request_id}`
+### 14.2 `GET /admin/debug/request/{request_id}`
 
 X-Request-Id 기반 단일 요청 타임라인. structlog 로그 + Sentry transaction +
 `app.api_call_log` row 합쳐 보여줌.
 
-## 13. Backup / Restore
+## 15. Backup / Restore
 
 ADR-022 범위. 본 API는 TripMate 소유 `app` schema backup snapshot과 동일 DB
 schema-swap restore만 다룬다. `feature` / `provider_sync` schema는
 `python-krtour-map` 책임이다.
 
-### 13.1 `GET /admin/backup/snapshots`
+### 15.1 `GET /admin/backup/snapshots`
 
 ```http
 GET /admin/backup/snapshots?limit=50
@@ -477,7 +502,7 @@ GET /admin/backup/snapshots?limit=50
 }
 ```
 
-### 13.2 `POST /admin/backup/snapshot`
+### 15.2 `POST /admin/backup/snapshot`
 
 ```http
 POST /admin/backup/snapshot
@@ -494,7 +519,7 @@ Content-Type: application/json
 
 응답 201: `GET /admin/backup/snapshots` 항목과 동일한 snapshot 객체.
 
-### 13.3 `POST /admin/backup/restore-hotswap`
+### 15.3 `POST /admin/backup/restore-hotswap`
 
 ```http
 POST /admin/backup/restore-hotswap
@@ -546,9 +571,9 @@ Content-Type: application/json
 단순 restore는 API가 아니라 `scripts/restore-db.sh`와
 [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
 
-## 14. MCP 토큰 관리 (ADR-019, Sprint 6)
+## 16. MCP 토큰 관리 (ADR-019, Sprint 6)
 
-### 14.1 `GET /admin/mcp-tokens`
+### 16.1 `GET /admin/mcp-tokens`
 
 ```http
 GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
@@ -558,7 +583,7 @@ GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
 - `status`: `active` | `expired` | `revoked`
 - 응답은 토큰 원문 없이 마스킹 값과 metadata만 반환한다.
 
-### 14.2 `POST /admin/mcp-tokens`
+### 16.2 `POST /admin/mcp-tokens`
 
 ```jsonc
 {
@@ -574,7 +599,7 @@ GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
 - `app.admin_audit_log`에 `action="mcp_token.issue"` 기록.
 - 응답은 발급 직후 1회만 `token` 원문을 포함한다.
 
-### 14.3 `POST /admin/mcp-tokens/{token_id}/revoke`
+### 16.3 `POST /admin/mcp-tokens/{token_id}/revoke`
 
 ```jsonc
 { "access_reason": "토큰 유출 의심" }
@@ -584,16 +609,16 @@ GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
 - `revoked_at = now()` 설정.
 - `app.admin_audit_log`에 `action="mcp_token.revoke"` 기록.
 
-## 15. Seed / Reset (dev/staging only)
+## 17. Seed / Reset (dev/staging only)
 
-### 15.1 `POST /admin/seed/scenarios/{scenario_key}`
+### 17.1 `POST /admin/seed/scenarios/{scenario_key}`
 
 `scenario_key`: SPEC V8 M-13 8 시나리오 키 (`new_user_first_trip` 등).
 
 운영 환경에서는 라우트 자체 비활성 (`ENABLE_SEED` 환경변수 false → router include
 안 함). 404.
 
-### 15.2 `POST /admin/reset`
+### 17.2 `POST /admin/reset`
 
 ```jsonc
 { "confirm": "RESET", "admin_password": "..." }
@@ -604,7 +629,7 @@ GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
 - 라이브러리 schema는 별도 reset endpoint (`POST /admin/krtour-map/reset`)
 - 자동으로 `new_user_first_trip` 시나리오 적용
 
-## 16. AI agent 구현 체크리스트
+## 18. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/api/v1/admin/__init__.py` 라우터 분기
 - [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,backup,seed,reset,rustfs}.py`

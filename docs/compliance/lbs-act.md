@@ -187,6 +187,6 @@ target):
 - [ ] `apps/api/app/middleware/location_audit.py` 자동 적재
 - [ ] CPO RBAC dependency
 - [ ] retention Dagster job + chain 보존 정책
-- [ ] `/admin/audit/location` UI (CPO 권한)
+- [x] `/admin/audit/location` UI (CPO 권한)
 - [ ] chain 깨짐 monitoring (Sentry alert)
 - [ ] 처리방침 텍스트 (`docs/legal/lbs-terms.md`)
