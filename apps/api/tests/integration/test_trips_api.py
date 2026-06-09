@@ -360,6 +360,56 @@ async def test_companion_can_comment_and_owner_can_delete(
     assert after_delete.json()["data"] == []
 
 
+async def test_viewer_companion_cannot_write_and_email_masked(
+    client,
+    verified_user,
+    auth_cookies,
+    session_factory,
+) -> None:
+    owner_id, _ = verified_user
+    viewer_email = f"viewer_{uuid.uuid4().hex[:8]}@example.com"
+    viewer_id = await _create_verified_user(session_factory, viewer_email)
+    editor_email = f"editor_{uuid.uuid4().hex[:8]}@example.com"
+    editor_id = await _create_verified_user(session_factory, editor_email)
+    owner_cookies = auth_cookies(owner_id)
+
+    created = await client.post("/trips", json={"title": "권한 분리"}, cookies=owner_cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    for email, role in ((viewer_email, "viewer"), (editor_email, "editor")):
+        invite = await client.post(
+            f"/trips/{trip_id}/members",
+            json={"email": email, "role": role},
+            cookies=owner_cookies,
+        )
+        assert invite.status_code == 201, invite.text
+
+    # viewer는 day 생성(쓰기) 불가, editor는 가능.
+    day_by_viewer = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "title": "몰래"},
+        cookies=auth_cookies(viewer_id),
+    )
+    assert day_by_viewer.status_code == 403, day_by_viewer.text
+    day_by_editor = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "title": "editor day"},
+        cookies=auth_cookies(editor_id),
+    )
+    assert day_by_editor.status_code == 201, day_by_editor.text
+
+    # viewer 상세 — 다른 동반자 invited_email 마스킹 + share_links 비노출.
+    viewer_detail = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(viewer_id))
+    assert viewer_detail.status_code == 200, viewer_detail.text
+    viewer_data = viewer_detail.json()["data"]
+    assert all(row["invited_email"] is None for row in viewer_data["companions"])
+    assert viewer_data["share_links"] == []
+
+    # owner 상세 — invited_email 노출.
+    owner_detail = await client.get(f"/trips/{trip_id}", cookies=owner_cookies)
+    owner_emails = {row["invited_email"] for row in owner_detail.json()["data"]["companions"]}
+    assert viewer_email in owner_emails
+
+
 def _attachment_payload(filename: str = "trip-cover.jpg") -> dict[str, object]:
     return {
         "bucket": "tripmate-media",

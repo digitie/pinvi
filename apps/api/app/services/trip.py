@@ -69,6 +69,8 @@ class TripOptimizeError(TripError):
     code = "TRIP_OPTIMIZE_ERROR"
 
 
+_SHARE_LAST_USED_THROTTLE = timedelta(minutes=1)
+
 TripBucket = Literal["future", "past", "all"]
 TripListSort = Literal["-updated_at", "start_date", "-start_date", "title"]
 TripStatus = Literal["draft", "planned", "in_progress", "completed", "archived"]
@@ -117,12 +119,44 @@ async def get_trip_owned_by_user(
 
 
 async def get_trip_for_user(db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID) -> Trip:
+    trip, _ = await get_trip_access(db, trip_id=trip_id, user_id=user_id)
+    return trip
+
+
+# 역할 권한: owner = 소유자, co_owner/editor = 편집 가능, viewer = 읽기 전용.
+TripRole = Literal["owner", "co_owner", "editor", "viewer"]
+_WRITE_ROLES: frozenset[str] = frozenset({"owner", "co_owner", "editor"})
+_MANAGEMENT_ROLES: frozenset[str] = frozenset({"owner", "co_owner"})
+
+
+async def get_trip_access(
+    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
+) -> tuple[Trip, TripRole]:
+    """여행 + 호출자의 유효 역할을 반환. 멤버가 아니면 PermissionError."""
     trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
-    if trip.owner_user_id != user_id and not await _is_companion(db, trip_id, user_id):
+    if trip.owner_user_id == user_id:
+        return trip, "owner"
+    role = await _companion_role(db, trip_id, user_id)
+    if role not in {"co_owner", "editor", "viewer"}:
         raise TripPermissionError("이 여행에 대한 권한이 없습니다.")
+    return trip, role  # type: ignore[return-value]
+
+
+async def get_trip_for_user_write(
+    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
+) -> Trip:
+    """편집(쓰기) 권한 검증 — owner/co_owner/editor만 허용, viewer는 거부."""
+    trip, role = await get_trip_access(db, trip_id=trip_id, user_id=user_id)
+    if role not in _WRITE_ROLES:
+        raise TripPermissionError("이 여행을 편집할 권한이 없습니다.")
     return trip
+
+
+def can_manage_trip(role: TripRole) -> bool:
+    """owner/co_owner만 동반자 PII·공유 링크 등 관리 정보를 볼 수 있다."""
+    return role in _MANAGEMENT_ROLES
 
 
 async def list_trips_for_owner(
@@ -472,9 +506,12 @@ async def get_trip_for_share_token(
     trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
     if trip is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
-    share.last_used_at = now
-    await db.commit()
-    await db.refresh(share)
+    # last_used_at 갱신은 best-effort throttle — 매 요청 write/commit(증폭 DoS) 회피.
+    last_used = share.last_used_at
+    if last_used is None or (now - last_used) >= _SHARE_LAST_USED_THROTTLE:
+        share.last_used_at = now
+        await db.commit()
+        await db.refresh(share)
     return trip, share
 
 
@@ -989,3 +1026,12 @@ async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID
         )
     )
     return row is not None
+
+
+async def _companion_role(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> str | None:
+    return await db.scalar(
+        select(TripCompanion.role).where(
+            TripCompanion.trip_id == trip_id,
+            TripCompanion.user_id == user_id,
+        )
+    )

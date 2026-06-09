@@ -37,16 +37,30 @@ class UploadUrlResponse(BaseModel):
 
 
 class AttachmentCreate(BaseModel):
-    bucket: str = Field(min_length=1, max_length=80)
+    bucket: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     storage_key: str = Field(min_length=1, max_length=1024)
     original_filename: str = Field(min_length=1, max_length=255)
     content_type: str = Field(min_length=1, max_length=255)
     byte_size: int = Field(gt=0)
-    public_url: str | None = None
+    public_url: str | None = Field(default=None, max_length=2048)
     checksum_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     role: Literal["attachment", "image", "document", "reference"] = "attachment"
     description: str | None = None
     sort_order: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_storage_refs(self) -> Self:
+        # 클라이언트가 임의 storage_key/public_url을 주입하지 못하도록 입력 위생 검증.
+        # 경로 traversal·절대경로·역슬래시 금지(presigned 업로드가 발급한 key만 정상).
+        if (
+            self.storage_key.startswith("/")
+            or "\\" in self.storage_key
+            or ".." in self.storage_key.split("/")
+        ):
+            raise ValueError("storage_key 형식이 올바르지 않습니다.")
+        if self.public_url is not None and not self.public_url.startswith(("http://", "https://")):
+            raise ValueError("public_url은 http(s) URL이어야 합니다.")
+        return self
 
 
 class AttachmentResponse(BaseModel):
