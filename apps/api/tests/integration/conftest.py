@@ -39,6 +39,16 @@ def _require_docker() -> None:
         pytest.skip("docker SDK 미설치 — 통합 테스트 skip")
 
 
+@pytest.fixture(autouse=True)
+def _clear_feature_cache() -> Iterator[None]:
+    """프로세스 로컬 feature 캐시(T-146/D-26)를 테스트 간 격리."""
+    from app.services.feature_cache import feature_cache
+
+    feature_cache.clear()
+    yield
+    feature_cache.clear()
+
+
 @pytest.fixture(scope="session")
 def _database_url() -> Iterator[str]:
     """PostGIS 컨테이너 기동 + alembic upgrade head (1회) → asyncpg URL 반환."""

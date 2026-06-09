@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-146 완성: feature TTL 캐시 (D-26)
+
+**작업**: trip view마다 krtour를 재조회하는 단일 노드 hotspot(D-26)을 process-local TTL 캐시로 완화.
+
+**신규/갱신**:
+- `services/feature_cache.py` — `FeatureCache`(TTL + LRU maxsize, monotonic clock) + 싱글톤.
+  `get_many`(hit/miss 분리) / `put_many`(만료시각·LRU evict) / `clear`.
+- `trip_view_builder.build_trip_view` — feature_id를 캐시 조회 → **miss만** `features_by_ids`로
+  재조회 후 캐시 적재(반복 view에서 krtour 호출 0). `tripmate_feature_cache_enabled` 가드.
+- config `tripmate_feature_cache_*`(enabled/ttl 60s/max 10000).
+- 테스트: 캐시 단위(hit/miss/LRU/TTL/clear) + trip_view 2-build cache-hit(2번째 build fetch 0) +
+  conftest autouse `feature_cache.clear()`로 테스트 격리.
+
+T-146 완료(D-20 outbox + D-26 캐시).
+
 ## 2026-06-09 (claude) — T-146 slice: location-audit async outbox (D-20)
 
 **작업**: 위치 감사 적재의 요청경로 hotspot(동기 체인 해시 + chain-head 직렬화)을 async outbox로 제거.

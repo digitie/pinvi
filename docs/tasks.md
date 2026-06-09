@@ -204,7 +204,7 @@
 - [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
 - [x] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
 - [x] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
-- [~] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26). **outbox slice 완료(2026-06-09, D-20)**: `app.location_audit_outbox` 테이블(migration 0017) + 미들웨어 요청경로 fast append(체인 동기계산 제거) + 단일 writer `drain_location_audit_outbox`(advisory xact lock으로 체인 fork 방지) + 백그라운드 drain worker lifespan + config. 체인 로직은 `services/location_audit.py`로 이전(미들웨어 `_append_log`는 wrapper 유지). **잔여(D-26)**: trip view feature 캐시(krtour batch+join N+1 제거).
+- [x] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26) (완료: 2026-06-09). **D-20**: `app.location_audit_outbox`(migration 0017) + 미들웨어 요청경로 fast append + 단일 writer `drain_location_audit_outbox`(advisory xact lock) + 백그라운드 worker. **D-26**: `services/feature_cache.py` process-local TTL/LRU 캐시 — `trip_view_builder`가 miss만 krtour 재조회(반복 trip view hotspot 완화), config `tripmate_feature_cache_*`. 단위/통합 테스트(캐시 hit/miss/LRU/TTL + 2-build cache-hit).
 - [x] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
 - [ ] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027)
 - [x] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
