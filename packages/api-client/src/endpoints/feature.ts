@@ -95,4 +95,11 @@ export const featureApi = (client: ApiClient) => ({
       body: JSON.stringify(FeatureRequestCreateSchema.parse(body)),
       schema: FeatureRequestResponseSchema,
     }),
+
+  /** feature 요청 큐 상세. */
+  getRequest: (requestId: string) =>
+    client.request(`/features/requests/${requestId}`, {
+      method: 'GET',
+      schema: FeatureRequestResponseSchema,
+    }),
 });

@@ -104,16 +104,35 @@ export const FeatureWeatherCardSchema = z.object({
 export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
 
 /** Feature 요청 큐 등록 (Sprint 6 Admin 검토 → 라이브러리 적재). */
+export const FeatureRequestCategorySchema = z.string().min(1).max(80);
+
 export const FeatureRequestCreateSchema = z.object({
   kind: FeatureKindSchema,
   title: z.string().min(1).max(200),
   coord: CoordSchema,
+  categories: z.array(FeatureRequestCategorySchema).max(10).optional().default([]),
   note: z.string().max(2000).nullable().optional(),
 });
 export type FeatureRequestCreate = z.infer<typeof FeatureRequestCreateSchema>;
 
+export const FeatureRequestStatusSchema = z.enum([
+  'pending',
+  'approved',
+  'rejected',
+  'added',
+  'duplicate',
+]);
+export type FeatureRequestStatus = z.infer<typeof FeatureRequestStatusSchema>;
+
 export const FeatureRequestResponseSchema = z.object({
   request_id: z.string().uuid(),
-  status: z.literal('pending'),
+  status: FeatureRequestStatusSchema,
+  kind: FeatureKindSchema,
+  title: z.string().min(1).max(200),
+  coord: CoordSchema,
+  categories: z.array(FeatureRequestCategorySchema).max(10),
+  note: z.string().nullable().optional(),
+  created_at: Iso8601Schema,
+  resolved_at: Iso8601Schema.nullable().optional(),
 });
 export type FeatureRequestResponse = z.infer<typeof FeatureRequestResponseSchema>;

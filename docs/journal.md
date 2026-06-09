@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (codex) — T-177 사용자 feature 제안 큐
+
+**작업**: DEC-05의 사용자 제안 큐를 TripMate `app` 도메인에 실체화하고, krtour-map
+직접 호출 없이 `/features/requests` API가 동작하도록 전환했다.
+
+**변경**:
+- `app.feature_suggestions` 모델과 Alembic 마이그레이션을 추가했다. `requester_user_id`,
+  제안 type/kind/name/좌표/categories/note/status, admin 처리자, `krtour_ref`, resolved 시각을
+  저장한다.
+- `POST /features/requests`는 같은 사용자·kind·정규화 title·소수 6자리 좌표의 pending
+  제안을 dedup하고, 신규 등록은 사용자당 24시간 20건으로 제한한다.
+- `GET /features/requests/{request_id}`는 본인 제안만 조회하고, 타 사용자 제안은 404로
+  숨긴다.
+- Pydantic/Zod schema와 `@tripmate/api-client`에 feature request 상세 응답 및
+  `getRequest()`를 추가했다.
+
+**검증**: backend ruff/mypy/pytest, schema/api-client/web typecheck, schema test, web lint,
+`git diff --check`, CodeGraph sync.
+
 ## 2026-06-09 (codex) — T-133 Admin priority-3 결선
 
 **작업**: krtour-map 연계가 필요 없는 Admin priority-3 항목을 실제 API/UI로 결선하고,

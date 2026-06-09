@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -13,6 +14,7 @@ from app.schemas.feature import (
     FeatureCluster,
     FeatureDetail,
     FeatureRequestCreate,
+    FeatureRequestResponse,
     FeatureSummary,
     FeatureWeatherCard,
     WeatherTimepoint,
@@ -136,6 +138,16 @@ class TestFeatureRequestCreate:
             coord=Coord(longitude=127.0, latitude=37.5),
         )
         assert r.note is None
+        assert r.categories == []
+
+    def test_categories(self) -> None:
+        r = FeatureRequestCreate(
+            kind="place",
+            title="새로운 카페",
+            coord=Coord(longitude=127.0, latitude=37.5),
+            categories=["카페", "디저트"],
+        )
+        assert r.categories == ["카페", "디저트"]
 
     def test_title_too_long(self) -> None:
         with pytest.raises(ValidationError):
@@ -144,3 +156,20 @@ class TestFeatureRequestCreate:
                 title="x" * 201,
                 coord=Coord(longitude=127.0, latitude=37.5),
             )
+
+
+class TestFeatureRequestResponse:
+    def test_pending_response(self) -> None:
+        request_id = uuid.uuid4()
+        created_at = datetime.now(UTC)
+        r = FeatureRequestResponse(
+            request_id=request_id,
+            status="pending",
+            kind="place",
+            title="새로운 카페",
+            coord=Coord(longitude=127.0, latitude=37.5),
+            created_at=created_at,
+        )
+        assert r.request_id == request_id
+        assert r.status == "pending"
+        assert r.categories == []

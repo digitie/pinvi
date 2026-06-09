@@ -577,6 +577,54 @@ CREATE TABLE app.notice_plan_audiences (
 CREATE INDEX notice_plan_audiences_notice_idx ON app.notice_plan_audiences (notice_id);
 ```
 
+### 5.3 `app.feature_suggestions`
+
+```sql
+CREATE TABLE app.feature_suggestions (
+  request_id           uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
+  requester_user_id    uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  type                 varchar(16) NOT NULL DEFAULT 'new_place',
+  target_feature_id    text,
+  kind                 varchar(16) NOT NULL,
+  name                 varchar(200) NOT NULL,
+  lng                  numeric(9,6) NOT NULL,
+  lat                  numeric(8,6) NOT NULL,
+  categories           varchar(80)[] NOT NULL DEFAULT ARRAY[]::varchar[],
+  note                 text,
+  status               varchar(16) NOT NULL DEFAULT 'pending',
+  reviewed_by_admin_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  krtour_ref           jsonb,
+  resolved_at          timestamptz,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_feature_suggestions_type
+    CHECK (type IN ('new_place', 'correction', 'closure')),
+  CONSTRAINT ck_feature_suggestions_status
+    CHECK (status IN ('pending', 'approved', 'rejected', 'added', 'duplicate')),
+  CONSTRAINT ck_feature_suggestions_kind
+    CHECK (kind IN ('place', 'event', 'notice', 'price', 'weather', 'route', 'area')),
+  CONSTRAINT ck_feature_suggestions_korea_coord
+    CHECK (lng >= 124.0 AND lng <= 132.0 AND lat >= 33.0 AND lat <= 43.0),
+  CONSTRAINT ck_feature_suggestions_name CHECK (char_length(name) BETWEEN 1 AND 200),
+  CONSTRAINT ck_feature_suggestions_note CHECK (note IS NULL OR char_length(note) <= 2000)
+);
+
+CREATE INDEX ix_feature_suggestions_requester_created_at
+  ON app.feature_suggestions (requester_user_id, created_at);
+CREATE INDEX ix_feature_suggestions_status_created_at
+  ON app.feature_suggestions (status, created_at);
+CREATE UNIQUE INDEX ux_feature_suggestions_user_pending_dedup
+  ON app.feature_suggestions (requester_user_id, kind, lower(name), lng, lat)
+  WHERE status = 'pending';
+
+CREATE TRIGGER trg_feature_suggestions_touch_updated_at
+BEFORE UPDATE ON app.feature_suggestions
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+사용자 `POST /features/requests`는 이 테이블에만 적재하고 krtour-map을 직접 호출하지
+않는다. Admin 검사/승인 후 krtour feature change API로 반영하는 단계는 T-179에서 연결한다.
+
 ## 6. 운영 / 로그
 
 ### 6.1 `app.admin_audit_log`

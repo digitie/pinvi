@@ -4,10 +4,16 @@
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
 사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 루프에서 T-133까지 닫았다. 다음 비의존 구현 후보는 T-177
-사용자 feature 제안 큐(`app.feature_suggestions`, krtour 직접 호출 없음)이다. T-170 이후
-krtour-map HTTP client 붙이기와 admin feature change proxy는 feature read/admin 호출
-작업이므로 비의존 루프에서는 제외한다.
+krtour-map 비의존 루프에서 T-177 사용자 feature 제안 큐까지 닫았다. 다음 비의존
+구현 후보는 T-112 TripMate MCP 외부 인터페이스 서빙이다. T-179/T-180 admin feature
+change와 T-172~T-176 feature read cutover는 krtour-map HTTP/admin 호출 작업이므로
+비의존 루프에서는 제외한다.
+
+**T-177 사용자 feature 제안 큐 완료** (2026-06-09): `app.feature_suggestions` 테이블을
+추가하고 `POST /features/requests`, `GET /features/requests/{request_id}`를 TripMate
+DB 큐 기반으로 실구현했다. POST는 krtour-map을 직접 호출하지 않고 즉시 201을 반환하며,
+사용자별 24시간 20건 rate-limit와 pending 중복 dedup을 적용한다. 응답은
+`pending/approved/rejected/added/duplicate` 상태 enum과 제안 입력값을 함께 내려준다.
 
 **T-133 Admin priority-3 엔드포인트·페이지 완료** (2026-06-09): TripMate app DB만 읽는
 `GET /admin/stats/overview`, `GET /admin/api-calls`, CPO 전용

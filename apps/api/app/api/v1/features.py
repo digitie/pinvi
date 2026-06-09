@@ -12,13 +12,18 @@ TripMate 책임: 권한 / 좌표 validation / 사용자 컨텍스트 / 응답 sc
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
-from typing import Annotated, Any
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import CurrentUserId
+from app.core.deps import CurrentUserId, DbSession
 from app.etl_bridge.krtour_map import KrtourMapClientDep
+from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
     BBox,
@@ -28,6 +33,7 @@ from app.schemas.feature import (
     FeatureKind,
     FeatureRequestCreate,
     FeatureRequestResponse,
+    FeatureRequestStatus,
     FeaturesInBoundsResponse,
     FeatureSummary,
     FeatureWeatherCard,
@@ -39,6 +45,8 @@ router = APIRouter(prefix="/features", tags=["features"])
 LNG_MIN, LNG_MAX = 124.0, 132.0
 LAT_MIN, LAT_MAX = 33.0, 43.0
 MIN_ZOOM, MAX_ZOOM = 5, 19
+FEATURE_SUGGESTION_DAILY_LIMIT = 20
+DECIMAL_6 = Decimal("0.000001")
 
 
 def _parse_bbox(bbox_str: str) -> BBox:
@@ -84,6 +92,103 @@ def _cluster_from_dto(dto: dict[str, Any]) -> FeatureCluster:
         sample_kinds=list(dto.get("sample_kinds", [])),
         bbox=BBox(**dto["bbox"]),
     )
+
+
+def _current_user_uuid(current_user_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(current_user_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "TOKEN_INVALID", "message": "토큰 sub 클레임이 잘못되었습니다."},
+        ) from exc
+
+
+def _decimal6(value: float) -> Decimal:
+    return Decimal(str(value)).quantize(DECIMAL_6)
+
+
+def _normalise_title(title: str) -> str:
+    normalised = " ".join(title.split())
+    if not normalised:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "VALIDATION_ERROR", "message": "title 은 공백만 입력할 수 없습니다."},
+        )
+    return normalised
+
+
+def _normalise_categories(categories: list[str]) -> list[str]:
+    seen: set[str] = set()
+    normalised: list[str] = []
+    for raw in categories:
+        category = " ".join(raw.split())
+        key = category.lower()
+        if category and key not in seen:
+            normalised.append(category)
+            seen.add(key)
+    return normalised
+
+
+def _feature_request_response(row: FeatureSuggestion) -> FeatureRequestResponse:
+    return FeatureRequestResponse(
+        request_id=row.request_id,
+        status=cast(FeatureRequestStatus, row.status),
+        kind=cast(FeatureKind, row.kind),
+        title=row.name,
+        coord=Coord(longitude=float(row.lng), latitude=float(row.lat)),
+        categories=row.categories,
+        note=row.note,
+        created_at=row.created_at,
+        resolved_at=row.resolved_at,
+    )
+
+
+async def _find_duplicate_feature_suggestion(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    kind: str,
+    name: str,
+    lng: Decimal,
+    lat: Decimal,
+) -> FeatureSuggestion | None:
+    row = await db.scalar(
+        select(FeatureSuggestion)
+        .where(
+            FeatureSuggestion.requester_user_id == user_id,
+            FeatureSuggestion.status == "pending",
+            FeatureSuggestion.kind == kind,
+            func.lower(FeatureSuggestion.name) == name.lower(),
+            FeatureSuggestion.lng == lng,
+            FeatureSuggestion.lat == lat,
+        )
+        .order_by(FeatureSuggestion.created_at.desc())
+    )
+    return row
+
+
+async def _enforce_feature_suggestion_rate_limit(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+) -> None:
+    since = datetime.now(UTC) - timedelta(days=1)
+    submitted = await db.scalar(
+        select(func.count(FeatureSuggestion.request_id)).where(
+            FeatureSuggestion.requester_user_id == user_id,
+            FeatureSuggestion.created_at >= since,
+        )
+    )
+    if int(submitted or 0) >= FEATURE_SUGGESTION_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMITED",
+                "message": "feature 제안은 사용자당 24시간에 20건까지 등록할 수 있습니다.",
+            },
+            headers={"Retry-After": "86400"},
+        )
 
 
 @router.get("/in-bounds", response_model=Envelope[FeaturesInBoundsResponse])
@@ -157,6 +262,28 @@ async def search_features(
     return Envelope.of([_summary_from_dto(item) for item in items])
 
 
+@router.get("/requests/{request_id}", response_model=Envelope[FeatureRequestResponse])
+async def get_feature_request(
+    request_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[FeatureRequestResponse]:
+    """사용자 본인이 등록한 feature 제안 큐 1건을 조회한다."""
+    user_id = _current_user_uuid(current_user_id)
+    row = await db.scalar(
+        select(FeatureSuggestion).where(
+            FeatureSuggestion.request_id == request_id,
+            FeatureSuggestion.requester_user_id == user_id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature request not found."},
+        )
+    return Envelope.of(_feature_request_response(row))
+
+
 @router.get("/{feature_id}", response_model=Envelope[FeatureDetail])
 async def get_feature(
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
@@ -219,14 +346,51 @@ async def get_feature_weather(
 async def request_feature(
     body: FeatureRequestCreate,
     current_user_id: CurrentUserId,
-    client: KrtourMapClientDep,
+    db: DbSession,
 ) -> Envelope[FeatureRequestResponse]:
-    """사용자가 feature 요청 큐에 등록 → Admin이 검토 후 라이브러리 적재 (Sprint 6)."""
-    request_id = await client.request_feature(
-        user_id=uuid.UUID(current_user_id),
+    """사용자가 feature 제안을 TripMate 소유 큐에 등록한다. krtour-map 직접 호출은 하지 않는다."""
+    user_id = _current_user_uuid(current_user_id)
+    name = _normalise_title(body.title)
+    lng = _decimal6(body.coord.longitude)
+    lat = _decimal6(body.coord.latitude)
+    categories = _normalise_categories(body.categories)
+
+    duplicate = await _find_duplicate_feature_suggestion(
+        db,
+        user_id=user_id,
         kind=body.kind,
-        title=body.title,
-        coord=(body.coord.longitude, body.coord.latitude),
+        name=name,
+        lng=lng,
+        lat=lat,
+    )
+    if duplicate is not None:
+        return Envelope.of(_feature_request_response(duplicate))
+
+    await _enforce_feature_suggestion_rate_limit(db, user_id=user_id)
+    row = FeatureSuggestion(
+        requester_user_id=user_id,
+        kind=body.kind,
+        name=name,
+        lng=lng,
+        lat=lat,
+        categories=categories,
         note=body.note,
     )
-    return Envelope.of(FeatureRequestResponse(request_id=request_id))
+    db.add(row)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        duplicate = await _find_duplicate_feature_suggestion(
+            db,
+            user_id=user_id,
+            kind=body.kind,
+            name=name,
+            lng=lng,
+            lat=lat,
+        )
+        if duplicate is not None:
+            return Envelope.of(_feature_request_response(duplicate))
+        raise
+    await db.refresh(row)
+    return Envelope.of(_feature_request_response(row))

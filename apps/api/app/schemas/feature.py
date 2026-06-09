@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,8 @@ FeatureKind = Literal[
     "route",
     "area",
 ]
+FeatureRequestStatus = Literal["pending", "approved", "rejected", "added", "duplicate"]
+FeatureRequestCategory = Annotated[str, Field(min_length=1, max_length=80)]
 
 
 class Coord(BaseModel):
@@ -125,9 +127,17 @@ class FeatureRequestCreate(BaseModel):
     kind: FeatureKind
     title: str = Field(min_length=1, max_length=200)
     coord: Coord
+    categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)
     note: str | None = Field(default=None, max_length=2000)
 
 
 class FeatureRequestResponse(BaseModel):
     request_id: uuid.UUID
-    status: Literal["pending"] = "pending"
+    status: FeatureRequestStatus = "pending"
+    kind: FeatureKind
+    title: str = Field(min_length=1, max_length=200)
+    coord: Coord
+    categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)
+    note: str | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None

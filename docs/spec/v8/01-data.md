@@ -133,9 +133,11 @@
 - `/admin/integrity` 페이지 1차 소스
 - `app` schema 룰 위반 추적 (feature schema는 라이브러리가 별도 관리)
 
-`app.feature_requests`:
+`app.feature_suggestions`:
 
-- 사용자가 "feature 추가 요청" → Admin 큐 → 승인 시 라이브러리에 적재 요청
+- 사용자가 "feature 추가/정정/폐쇄 제안" → TripMate Admin 큐
+- 사용자 API는 `POST /features/requests`, `GET /features/requests/{id}`
+- 승인 시 krtour-map admin feature change API로 반영(T-179)
 
 `app.category_mappings`:
 
@@ -200,7 +202,7 @@ TripMate Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15)
 | `app.email_queue` (M-6) | Sprint 1 | DDL + worker (Sprint 2) |
 | `app.api_call_log` (M-6) | Sprint 2 | httpx middleware |
 | `app.import_jobs` (M-6) | Sprint 5 | Dagster sensor |
-| `app.feature_requests` (H-6) | Sprint 3 | Admin 페이지 |
+| `app.feature_suggestions` (H-6 / DEC-05) | Sprint 3 | 사용자 제안 API + Admin 페이지 |
 | `app.category_mappings` (M-2) | Sprint 3 | Admin 페이지 |
 | 라이브러리 `feature.*` 사용 (모든 read API) | Sprint 4 | `apps/api/app/etl_bridge/krtour_map.py` |
 | vworld 임포트 trigger UI (L-3) | Sprint 5 | Admin `/admin/etl/vworld-import` |
