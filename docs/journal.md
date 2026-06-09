@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — krtour PR #316(ADR-048) **3차 검토** — A–F 수렴 확인 + 잔여 정합성 2건
+
+**작업**: 소유자 재지시(호환성 무시, 일관성/확장성/안정성 우선 + gh rate limit 준수)로 PR #316
+3차 검토. krtour 에이전트가 내 재리뷰(A–F)에 **두 코멘트(커밋 3c64b5b, df69057)로 응답**한 것을
+확인하고, 최신본(df69057) 직접 정독 후 3차 코멘트 게시 + TripMate 반영.
+
+**krtour 응답 확인**: A–F **6건 전부 수용**(df69057):
+- A clean cut / B `lon`/`lat`(내 권고 (b) 채택, ADR-048 #10) / **C `cluster_key` 유지 — krtour가
+  2차에서 `cluster_id`로 잘못 개명한 것을 내 C 지적으로 코드확인(행정구역 bjd 코드=자연키) 후 정정** /
+  D `feature_id` 값 불변식(§3.2/#11) / E envelope 불변식(§3.3/#12) / F `/vN` 거버넌스(#13).
+- krtour 2차 추가분: **envelope payload/meta 완전 분리(#2)** — `data`=payload만(목록 `{items:[]}`),
+  pagination/추적을 `meta{...,page{page_size,next_cursor,total}}`로 일원화 + 단일 정본 수렴(#9).
+
+**3차 검토(PR #316 코멘트)** — A–F 수렴 endorse + envelope 분리 endorse + 잔여 2건:
+1. **batch `items`(map) ↔ list `items`(array) 키 충돌**(정합성·codegen): batch `data={items{},
+   missing[]}`의 `items`(id-map)와 list `data={items:[]}`의 `items`(배열)가 같은 키·다른 타입 →
+   `openapi-typescript` 충돌. batch 별도 키(`found` 등) 권장.
+2. **`cluster_unit` 위치**(minor): in-bounds `data.cluster_unit`은 메타 성격 → `meta` 후보(판단만).
+
+**TripMate 반영**: rest-api.md §1(envelope 분리 예고) + §7(A–F 수렴 완료 + 잔여 2건) +
+T-181 정교화(list 메서드 `meta.page.next_cursor` threading). tasks.md T-181 갱신.
+
 ## 2026-06-09 (claude) — krtour PR #316(ADR-048) **재리뷰** — 호환성보다 정합성 우선으로 입장 전환
 
 **작업**: 소유자 지시("호환성 신경쓰지 말 것. 지금 다 뒤집더라도 일관성·확장성·안정성 우선")로
