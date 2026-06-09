@@ -18,6 +18,27 @@ API 미노출 → **new_place만 생성 가능**.
 frontend Zod(`FeatureRequestTypeSchema` + refine) + index export + `docs/api/features.md` + 회귀 테스트.
 잔존 낮음(kind 과허용·requester FK RESTRICT·rate-limit status 무관)은 리뷰 코멘트에 기록.
 
+## 2026-06-09 (codex) — T-112 TripMate MCP 외부 인터페이스
+
+**작업**: ADR-019의 read-only MCP 외부 인터페이스 1차 표면을 TripMate app 도메인에
+구현했다.
+
+**변경**:
+- `app.mcp_tokens` 모델과 Alembic migration을 추가했다. MCP 토큰은 `mcp_<JWT>` 원문을
+  발급 직후 1회만 반환하고, DB에는 Argon2id hash와 마스킹용 prefix/suffix만 저장한다.
+- 사용자 `GET/POST/DELETE /users/me/mcp-tokens`, admin `GET/POST /admin/mcp-tokens`,
+  `POST /admin/mcp-tokens/{token_id}/revoke`를 추가했다. admin 발급/회수는
+  `admin_audit_log`에 `mcp_token.issue` / `mcp_token.revoke`로 남긴다.
+- `/mcp/sse`는 Bearer MCP 토큰 검증 후 5개 read-only tool descriptor를 SSE로 제공하고,
+  `/mcp/tools/{tool_name}`은 `list_trips`, `get_trip`, `list_pois`, `search_features`,
+  `get_user_profile`을 호출한다. `search_features`는 krtour-map OpenAPI HTTP client만
+  사용한다.
+- `@tripmate/schemas`, `@tripmate/api-client`, `/settings/mcp-tokens`,
+  `/admin/mcp-tokens` 화면을 추가했다.
+
+**검증**: backend ruff/mypy, MCP 통합 테스트, schema/api-client/web typecheck, schema test,
+web lint/build, `git diff --check`, CodeGraph sync.
+
 ## 2026-06-09 (codex) — T-177 사용자 feature 제안 큐
 
 **작업**: DEC-05의 사용자 제안 큐를 TripMate `app` 도메인에 실체화하고, krtour-map

@@ -1,0 +1,1 @@
+"""TripMate MCP external interface."""

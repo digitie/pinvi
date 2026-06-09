@@ -12,12 +12,14 @@
 
 ## 다음 (우선순위 순)
 
-- [ ] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
-  `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
+- 사용자 요청으로 현재 작업(T-112) 완료 후 새 task 진행 중지.
 
 ## 완료
 
 - [x] T-000 — git v1 보존 + main v2 재시작 (완료: 2026-05-25)
+- [x] T-112 — TripMate MCP 외부 인터페이스 서빙 (완료: 2026-06-09) —
+  `app.mcp_tokens`, `/users/me/mcp-tokens`, `/admin/mcp-tokens`, `/mcp/sse`,
+  `/mcp/tools/{tool_name}`, 사용자/admin 토큰 UI, 5개 read-only tool.
 - [x] T-001 — README / CLAUDE / AGENTS / SKILL (완료: 2026-05-25)
 - [x] T-002 — docs/architecture / agent-guide / dev-environment (완료: 2026-05-25)
 - [x] T-003 — docs/decisions (ADR-001 ~ ADR-010) (완료: 2026-05-25)

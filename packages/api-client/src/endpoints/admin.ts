@@ -8,6 +8,7 @@ import {
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
+  AdminMcpTokenIssueRequestSchema,
   AdminLocationAuditEntrySchema,
   AdminPagedResponseSchema,
   AdminPoiDetailSchema,
@@ -18,6 +19,9 @@ import {
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
   AdminUserDetailSchema,
+  McpTokenRevokeRequestSchema,
+  McpTokenIssueResponseSchema,
+  McpTokenSchema,
 } from '@tripmate/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -237,5 +241,39 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupRestoreRequestSchema.parse(body)),
       schema: AdminBackupRestoreRunSchema,
+    }),
+
+  listMcpTokens: (
+    params: {
+      userId?: string;
+      status?: 'active' | 'expired' | 'revoked';
+      q?: string;
+      limit?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.userId) qs.set('user_id', params.userId);
+    if (params.status) qs.set('status', params.status);
+    if (params.q) qs.set('q', params.q);
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/mcp-tokens${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: z.array(McpTokenSchema),
+    });
+  },
+
+  issueMcpToken: (body: z.input<typeof AdminMcpTokenIssueRequestSchema>) =>
+    client.request('/admin/mcp-tokens', {
+      method: 'POST',
+      body: JSON.stringify(AdminMcpTokenIssueRequestSchema.parse(body)),
+      schema: McpTokenIssueResponseSchema,
+    }),
+
+  revokeMcpToken: (tokenId: string, body: z.infer<typeof McpTokenRevokeRequestSchema>) =>
+    client.request(`/admin/mcp-tokens/${tokenId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify(McpTokenRevokeRequestSchema.parse(body)),
+      schema: McpTokenSchema,
     }),
 });
