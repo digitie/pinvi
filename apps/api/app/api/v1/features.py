@@ -181,10 +181,13 @@ async def _enforce_feature_suggestion_rate_limit(
     user_id: uuid.UUID,
 ) -> None:
     since = datetime.now(UTC) - timedelta(days=1)
+    # 거절/중복(rejected/duplicate)은 한도 카운트에서 제외 — 거절 많이 받은 사용자가 정당한
+    # 신규 제안을 못 하는 것을 방지(#108 리뷰). pending/approved/added만 남용 신호로 본다.
     submitted = await db.scalar(
         select(func.count(FeatureSuggestion.request_id)).where(
             FeatureSuggestion.requester_user_id == user_id,
             FeatureSuggestion.created_at >= since,
+            FeatureSuggestion.status.in_(("pending", "approved", "added")),
         )
     )
     if int(submitted or 0) >= FEATURE_SUGGESTION_DAILY_LIMIT:
