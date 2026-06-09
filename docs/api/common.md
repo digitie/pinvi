@@ -11,7 +11,7 @@
 >   `{"data": {...}}`. `data.items`/`data.<plural>`/`data.rows` 변형은 폐기.
 > - **페이지네이션**: 사용자 대면 list는 **cursor**. Admin/S3 continuation은 예외로
 >   각 문서에 명문.
-> - **좌표**: `{"longitude": .., "latitude": ..}` (lng-first, 6자리). WebSocket 포함
+> - **좌표**: `{"lon": .., "lat": ..}` (lng-first, 6자리). WebSocket 포함
 >   전 구간 동일. `[lng,lat]`/`{lat,lng}`/평면/GeoJSON 변형 폐기.
 > - **datetime**: ISO 8601 `+09:00`(KST). admin 포함 통일.
 > - **id 필드**: `<entity>_id`. 현재 사용자 객체는 `data.user`.
@@ -132,7 +132,7 @@ CLI / 외부 도구가 access를 직접 사용하려면 `Authorization: Bearer <
 ### 4.2 좌표
 
 - 입력/응답: **`(longitude, latitude)`** 순서. EPSG:4326.
-- 응답 단일 좌표: `{"longitude": 127.0, "latitude": 37.5}` 또는
+- 응답 단일 좌표: `{"lon": 127.0, "lat": 37.5}` 또는
   GeoJSON `{"type": "Point", "coordinates": [127.0, 37.5]}`.
 - 응답 좌표 정밀도: 소수점 4자리 (~10m) — 사용자 위치(SPEC V8 O-3)는 4자리 제한,
   POI feature 좌표는 6자리 가능.

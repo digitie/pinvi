@@ -59,7 +59,7 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 | type | payload |
 |------|---------|
 | `presence.update` | `{ "user_id": "uuid", "viewing_day": 2, "is_online": true }` |
-| `presence.cursor` | `{ "user_id": "uuid", "longitude": 127.0, "latitude": 37.5 }` (옵션, 비활성 기본) |
+| `presence.cursor` | `{ "user_id": "uuid", "lon": 127.0, "lat": 37.5 }` (옵션, 비활성 기본) |
 
 ### 2.5 시스템
 
@@ -73,7 +73,7 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 | type | payload | 비고 |
 |------|---------|------|
 | `presence.heartbeat` | `{ "viewing_day": 2 }` | 5초 주기 |
-| `presence.cursor` | `{ "longitude": ..., "latitude": ... }` | 옵션 (v2). 서버는 legacy `lng`/`lat` 입력도 받지만 canonical broadcast는 `longitude`/`latitude`다. |
+| `presence.cursor` | `{ "lon": ..., "lat": ... }` | 옵션 (v2). 서버는 legacy `lng`/`lat` 입력도 받지만 canonical broadcast는 `longitude`/`latitude`다. |
 | `pong` | `{}` | 서버 `ping`에 응답 |
 
 30초 무응답 → 서버가 offline 처리 + 다른 클라이언트에 `presence.update is_online=false`.

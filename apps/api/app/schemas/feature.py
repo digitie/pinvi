@@ -30,10 +30,10 @@ FeatureRequestCategory = Annotated[str, Field(min_length=1, max_length=80)]
 
 
 class Coord(BaseModel):
-    """EPSG:4326 — `(longitude, latitude)` 순서, 대한민국 범위 (ADR-018)."""
+    """EPSG:4326 — `(lon, lat)` 순서, 대한민국 범위 (ADR-018)."""
 
-    longitude: float = Field(ge=124.0, le=132.0)
-    latitude: float = Field(ge=33.0, le=43.0)
+    lon: float = Field(ge=124.0, le=132.0)
+    lat: float = Field(ge=33.0, le=43.0)
 
 
 class BBox(BaseModel):

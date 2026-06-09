@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-182: 좌표 필드명 `lon`/`lat` 정렬 (DEC-07/ADR-048 B)
+
+**작업**: TripMate 정본 좌표 필드를 krtour 정렬로 `longitude`/`latitude` → `lon`/`lat` 일괄 리네임
+(서브에이전트 기계 sweep + 검증). DEC-07 좌표 sub-decision 확정.
+
+**리네임(우리 Coord/API/테스트)**: `Coord`(Pydantic) + `CoordSchema`(Zod) 필드, 전 `Coord(...)`
+생성자·`.lon`/`.lat` 읽기, geo query 파라미터, ws `presence.cursor` 출력, frontend
+`useUserLocation`/`locationAdapter` 출력, 전 테스트, `docs/api` JSON 예시.
+
+**keep(경계)**: 외부 krtour DTO/feature_snapshot tolerant reader(trip `_extract_coord`,
+kasi snapshot, location_audit query alias에 `lon` 추가), 브라우저 Geolocation `position.coords.*`,
+KASI DB 컬럼(`models/kasi.py` — 리네임은 migration 필요, out of scope).
+
+**검증**: ruff check/format 통과, 잔여 `longitude`/`latitude`는 전부 의도된 keep(외부값·DB·tolerant).
+mypy/pytest/web tsc는 CI.
+
 ## 2026-06-09 (claude) — T-146 완성: feature TTL 캐시 (D-26)
 
 **작업**: trip view마다 krtour를 재조회하는 단일 노드 hotspot(D-26)을 process-local TTL 캐시로 완화.

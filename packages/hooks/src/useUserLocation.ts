@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 
 /** 사용자 위치 — `docs/architecture/user-location.md` 참고. */
 export interface UserLocation {
-  coord: { longitude: number; latitude: number };
+  coord: { lon: number; lat: number };
   accuracy_m: number;
   /** epoch ms */
   timestamp: number;

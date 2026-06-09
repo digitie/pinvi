@@ -59,8 +59,8 @@ async def test_ws_trip_channel_presence_and_poi_broadcast(
             assert cursor["type"] == "presence.cursor"
             assert cursor["payload"] == {
                 "user_id": user_id,
-                "longitude": 126.978414,
-                "latitude": 37.566681,
+                "lon": 126.978414,
+                "lat": 37.566681,
             }
 
             poi = sync_client.post(

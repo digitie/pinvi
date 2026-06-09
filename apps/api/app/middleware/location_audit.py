@@ -95,7 +95,11 @@ def _classify_purpose(path: str) -> str | None:
 
 def _extract_coord(request: Request) -> tuple[Decimal | None, Decimal | None]:
     lat = request.query_params.get("lat") or request.query_params.get("latitude")
-    lng = request.query_params.get("lng") or request.query_params.get("longitude")
+    lng = (
+        request.query_params.get("lng")
+        or request.query_params.get("lon")
+        or request.query_params.get("longitude")
+    )
     if lat is None and lng is None:
         return None, None
     return (

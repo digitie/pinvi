@@ -198,8 +198,8 @@ def _presence_cursor_payload(
         return None
     return {
         "user_id": str(connection.user_id),
-        "longitude": longitude,
-        "latitude": latitude,
+        "lon": longitude,
+        "lat": latitude,
     }
 
 
