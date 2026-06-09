@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Map,
   Newspaper,
+  Settings,
   UserCircle,
 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: '/notice-plans', label: '추천', icon: Newspaper },
   { href: '/trips/map-shell', label: '지도', icon: Map },
   { href: '/profile', label: '프로필', icon: UserCircle },
+  { href: '/settings/mcp-tokens', label: '설정', icon: Settings },
 ] as const;
 
 function isActivePath(pathname: string, href: string): boolean {

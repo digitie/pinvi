@@ -62,8 +62,9 @@ Admin:
 }
 ```
 
-`mcp-stdio-bridge.sh`는 본 저장소가 제공 (`apps/api/scripts/mcp-stdio-bridge.sh`,
-Sprint 6).
+T-112 1차 구현은 SSE discovery와 HTTP tool-call 표면을 먼저 제공한다. stdio wrapper
+(`apps/api/scripts/mcp-stdio-bridge.sh`)는 같은 토큰과 tool registry를 재사용하는 후속
+작업에서 추가한다.
 
 ### 2.2 Claude Code (SSE 직접)
 
@@ -87,6 +88,12 @@ Sprint 6).
 # SSE 스트림
 curl -N -H "Authorization: Bearer mcp_xxxx..." \
   https://tripmateapi.digitie.mywire.org/mcp/sse
+
+# tool 호출
+curl -X POST -H "Authorization: Bearer mcp_xxxx..." \
+  -H "Content-Type: application/json" \
+  -d '{"arguments":{"bucket":"all","limit":20}}' \
+  https://tripmateapi.digitie.mywire.org/mcp/tools/list_trips
 ```
 
 ## 3. 토큰 회수

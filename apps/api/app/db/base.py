@@ -35,6 +35,7 @@ from app.models import (  # noqa: E402,F401
     email_queue,
     feature_suggestion,
     kasi,
+    mcp_token,
     oauth_identity,
     poi,
     security,

@@ -152,6 +152,8 @@ CREATE TABLE app.mcp_tokens (
   token_id           uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
   user_id            uuid NOT NULL REFERENCES app.users(user_id) ON DELETE CASCADE,
   token_hash         varchar(255) NOT NULL UNIQUE,
+  token_prefix       varchar(16) NOT NULL,
+  token_suffix       varchar(12) NOT NULL,
   name               varchar(120) NOT NULL,
   scopes             varchar(32)[] NOT NULL DEFAULT ARRAY['mcp:read']::varchar[],
   expires_at         timestamptz,
@@ -173,6 +175,7 @@ FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
 원본 MCP 토큰은 발급 직후 1회만 표시하고 DB에는 Argon2id hash(`token_hash`)만 저장한다.
+목록 마스킹용으로 원본 앞/뒤 일부만 `token_prefix` / `token_suffix`에 보존한다.
 1차 외부 MCP는 read-only라 `mcp:read` scope만 허용한다(ADR-019).
 
 ## 3. 여행 계획

@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     tripmate_access_token_minutes: int = 15
     tripmate_refresh_token_days: int = 7
     tripmate_admin_session_ttl: int = 3600
+    tripmate_mcp_jwt_secret: str = Field(
+        default="tripmate-local-mcp-secret-change-me", min_length=32
+    )
+    tripmate_mcp_token_default_days: int = 30
+    tripmate_mcp_rate_limit_per_minute: int = 60
 
     # Resend
     tripmate_resend_api_key: str = ""

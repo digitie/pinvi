@@ -4,6 +4,7 @@ export { queryKeys } from './query-keys';
 export { authApi } from './endpoints/auth';
 export { adminApi } from './endpoints/admin';
 export { featureApi } from './endpoints/feature';
+export { userApi } from './endpoints/users';
 export { tripApi } from './endpoints/trips';
 export { poiApi } from './endpoints/pois';
 export { noticePlanApi } from './endpoints/notice-plans';

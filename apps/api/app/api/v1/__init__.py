@@ -15,6 +15,7 @@ from app.api.v1 import (
     ws,
 )
 from app.api.v1.admin import admin_router
+from app.mcp.server import router as mcp_router
 from app.webhooks import resend as resend_webhook
 
 api_router = APIRouter()
@@ -28,5 +29,6 @@ api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
 api_router.include_router(features.router)
 api_router.include_router(storage.router)
+api_router.include_router(mcp_router)
 api_router.include_router(resend_webhook.router)
 api_router.include_router(admin_router)

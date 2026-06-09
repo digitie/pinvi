@@ -35,6 +35,25 @@ export type {
 export { ConsentTypeSchema, UserConsentSchema, ProfileCompleteRequestSchema } from './user';
 export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user';
 
+export {
+  AdminMcpTokenIssueRequestSchema,
+  McpScopeSchema,
+  McpTokenIssueRequestSchema,
+  McpTokenIssueResponseSchema,
+  McpTokenRevokeRequestSchema,
+  McpTokenSchema,
+  McpTokenStatusSchema,
+} from './mcp';
+export type {
+  AdminMcpTokenIssueRequest,
+  McpScope,
+  McpToken,
+  McpTokenIssueRequest,
+  McpTokenIssueResponse,
+  McpTokenRevokeRequest,
+  McpTokenStatus,
+} from './mcp';
+
 export { HealthResponseSchema, HealthDbResponseSchema } from './health';
 export type { HealthResponse } from './health';
 
