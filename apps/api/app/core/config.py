@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     tripmate_krtour_map_max_attempts: int = 3
     tripmate_krtour_map_batch_chunk_size: int = 200  # /tripmate/features/batch cap
 
+    # kraddr-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kraddr-geo.md`.
+    tripmate_kraddr_geo_base_url: str = "http://localhost:8888"
+    tripmate_kraddr_geo_timeout_seconds: float = 5.0
+    tripmate_kraddr_geo_max_attempts: int = 3
+
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]

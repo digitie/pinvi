@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     features,
+    geo,
     healthz,
     notice_plans,
     oauth,
@@ -28,6 +29,8 @@ api_router.include_router(pois.router)
 api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
 api_router.include_router(features.router)
+api_router.include_router(geo.geo_router)
+api_router.include_router(geo.regions_router)
 api_router.include_router(storage.router)
 api_router.include_router(mcp_router)
 api_router.include_router(resend_webhook.router)
