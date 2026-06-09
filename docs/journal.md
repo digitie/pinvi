@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-105 #3: /admin/rustfs/* 객체 관리 (boto3)
+
+**작업**: RustFS(S3) Admin 객체 관리 — 실 ListObjectsV2/DeleteObject. boto3 의존성 추가.
+
+- `boto3>=1.35` 의존성 + mypy `boto3.*` ignore_missing_imports override.
+- `services/rustfs_admin.py`: boto3 동기 client를 `asyncio.to_thread`로 감싼 `list_objects`/
+  `delete_object`(endpoint/keys는 settings).
+- `api/v1/admin/rustfs.py`: `GET /admin/rustfs/objects`(prefix/limit/cursor) +
+  `DELETE /admin/rustfs/objects`(key+reason+force). DB 참조(`CuratedPlanAttachment.storage_key`)
+  있으면 `force` 없이 `409 OBJECT_REFERENCED`. 삭제는 admin_audit chain 기록. require_role(admin)→404.
+- 스키마 `RustfsObject`/`RustfsObjectList`. 테스트(S3 monkeypatch: list/참조-409/force-204/비admin-404).
+- **harness fix** `core/deps.py`: `get_db` 가 `db_session.async_session_factory` 를 **모듈 속성으로
+  동적 참조**하도록 변경(기존 `from ... import async_session_factory` 이름 바인딩 제거). 통합 테스트가
+  엔진을 함수 스코프로 monkeypatch 하는데, 테스트 모듈이 app 을 **top-level import** 하면(본 rustfs
+  테스트) collection 시점에 deps 가 패치 이전 기본(localhost) 팩토리를 잡아 전 스위트가
+  `relation "app.users" does not exist` 로 무너지던 잠재 버그를 제거.
+
+**참고**: presigned upload/download은 여전히 placeholder(실서명은 RustFS 활성화 시 별도). 본 PR은
+admin 객체 조회/삭제만 실 S3.
+
 ## 2026-06-10 (claude) — T-105 #4: 첨부 presigned download URL
 
 **작업**: private 첨부 본문 접근용 presigned GET URL. 권한은 attachment-scoped(trip 읽기 권한 →

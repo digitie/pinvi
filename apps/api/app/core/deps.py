@@ -14,12 +14,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import InvalidTokenError, decode_access_token
-from app.db.session import async_session_factory
+from app.db import session as db_session
 from app.models.user import User
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async with async_session_factory() as session:
+    # 모듈 속성으로 동적 참조 — 통합 테스트가 `db_session.async_session_factory` 를
+    # 함수 스코프 엔진으로 monkeypatch 한다. `from ... import async_session_factory`
+    # 로 이름을 박으면 import 순서(테스트 모듈이 app 을 top-level import 하는 경우)에
+    # 따라 패치 이전의 기본(localhost) 팩토리를 잡아 "relation app.users does not
+    # exist" 가 난다.
+    async with db_session.async_session_factory() as session:
         yield session
 
 

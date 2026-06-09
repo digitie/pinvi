@@ -47,6 +47,22 @@ class DownloadUrlResponse(BaseModel):
     public_url: str | None = None
 
 
+class RustfsObject(BaseModel):
+    """RustFS(S3) 객체 1건 — Admin 객체 관리(T-105 #3)."""
+
+    key: str
+    size: int = 0
+    last_modified: str | None = None
+    etag: str | None = None
+    storage_class: str | None = None
+
+
+class RustfsObjectList(BaseModel):
+    objects: list[RustfsObject] = Field(default_factory=list)
+    is_truncated: bool = False
+    next_continuation_token: str | None = None
+
+
 class AttachmentCreate(BaseModel):
     bucket: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     storage_key: str = Field(min_length=1, max_length=1024)
