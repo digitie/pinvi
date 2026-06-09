@@ -20,3 +20,19 @@ class GeoCandidateList(BaseModel):
     status: str
     candidates: list[dict[str, Any]] = Field(default_factory=list)
     total: int | None = None
+
+
+class RegionCovering(BaseModel):
+    """좌표를 포함하는 행정구역(단건). kraddr-geo `region` 객체 pass-through."""
+
+    boundary_level: BoundaryLevel
+    region: dict[str, Any]
+
+
+class UnifiedSearchResult(BaseModel):
+    """통합 검색 — feature(krtour) + address(kraddr) + 내 POI(TripMate). 소스별 degrade 가능."""
+
+    features: list[dict[str, Any]] = Field(default_factory=list)
+    addresses: list[dict[str, Any]] = Field(default_factory=list)
+    my_pois: list[dict[str, Any]] = Field(default_factory=list)
+    degraded_sources: list[str] = Field(default_factory=list)
