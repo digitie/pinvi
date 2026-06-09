@@ -6,10 +6,16 @@ import asyncio
 import os
 import re
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -43,6 +49,12 @@ class BackupSnapshotNotFoundError(BackupServiceError):
     """선택한 backup snapshot을 찾을 수 없음."""
 
     code = "BACKUP_SNAPSHOT_NOT_FOUND"
+
+
+class BackupRestoreAlreadyRunningError(BackupServiceError):
+    """동일 DB에서 다른 schema-swap restore가 진행 중."""
+
+    code = "BACKUP_RESTORE_ALREADY_RUNNING"
 
 
 @dataclass(frozen=True)
@@ -205,9 +217,21 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
 
 
 # 동시 복원은 동일 DB에 두 개의 비가역 schema-swap을 겹쳐 무결성을 깨뜨린다.
-# 프로세스 내 직렬화(같은 API 워커에서 동시 실행 차단). 교차 프로세스 격리는 운영상
-# 단일 admin 노드 가정 + restore_id uuid suffix로 보강(잔여: pg advisory lock).
+# 프로세스 내 lock + DB advisory lock을 함께 써서 같은 워커와 다중 워커를 모두 막는다.
 _restore_lock = asyncio.Lock()
+_RESTORE_LOCK_NAMESPACE = 0x54524D54  # "TRMT"
+_RESTORE_LOCK_RESOURCE = 0x48535750  # "HSWP"
+
+
+def _asyncpg_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql://"):
+        return f"postgresql+asyncpg://{database_url.removeprefix('postgresql://')}"
+    return database_url
+
+
+def _restore_lock_database_url() -> str:
+    database_url = settings.tripmate_restore_database_url or settings.tripmate_database_url
+    return _asyncpg_database_url(database_url)
 
 
 async def restore_backup_hotswap(
@@ -216,9 +240,32 @@ async def restore_backup_hotswap(
     access_reason: str,
 ) -> BackupRestoreRun:
     async with _restore_lock:
-        return await _restore_backup_hotswap_locked(
-            snapshot_id=snapshot_id, access_reason=access_reason
-        )
+        async with _restore_advisory_lock():
+            return await _restore_backup_hotswap_locked(
+                snapshot_id=snapshot_id, access_reason=access_reason
+            )
+
+
+@asynccontextmanager
+async def _restore_advisory_lock() -> AsyncIterator[None]:
+    engine = create_async_engine(_restore_lock_database_url(), poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            acquired = await conn.scalar(
+                text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
+                {"namespace": _RESTORE_LOCK_NAMESPACE, "resource": _RESTORE_LOCK_RESOURCE},
+            )
+            if acquired is not True:
+                raise BackupRestoreAlreadyRunningError("다른 schema-swap restore가 진행 중입니다.")
+            try:
+                yield
+            finally:
+                await conn.execute(
+                    text("SELECT pg_advisory_unlock(:namespace, :resource)"),
+                    {"namespace": _RESTORE_LOCK_NAMESPACE, "resource": _RESTORE_LOCK_RESOURCE},
+                )
+    finally:
+        await engine.dispose()
 
 
 async def _restore_backup_hotswap_locked(
@@ -245,6 +292,16 @@ async def _restore_backup_hotswap_locked(
         "TRIPMATE_RESTORE_SCHEMA": restore_schema,
         "TRIPMATE_PREVIOUS_SCHEMA": previous_schema,
         "TRIPMATE_DATABASE_URL": settings.tripmate_database_url,
+        "TRIPMATE_RESTORE_DATABASE_URL": settings.tripmate_restore_database_url,
+        "TRIPMATE_RESTORE_HOTSWAP_EXECUTE": (
+            "1" if settings.tripmate_restore_hotswap_execute else "0"
+        ),
+        "TRIPMATE_RESTORE_DRAIN_COMMAND": settings.tripmate_restore_drain_command,
+        "TRIPMATE_RESTORE_ALLOW_NO_DRAIN": (
+            "1" if settings.tripmate_restore_allow_no_drain else "0"
+        ),
+        "TRIPMATE_RESTORE_APP_ROLE": settings.tripmate_restore_app_role,
+        "TRIPMATE_RESTORE_API_TRIGGER": "1",
     }
 
     proc = await asyncio.create_subprocess_exec(

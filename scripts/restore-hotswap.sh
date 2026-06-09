@@ -175,6 +175,10 @@ fi
 phase validating success "restored schema passed basic checks"
 
 phase draining running "write drain"
+if [[ "${TRIPMATE_RESTORE_API_TRIGGER:-0}" == "1" && -n "${TRIPMATE_RESTORE_DRAIN_COMMAND:-}" ]]; then
+  phase draining failed "API-triggered restore cannot run TRIPMATE_RESTORE_DRAIN_COMMAND; pre-drain externally and set TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1"
+  exit 3
+fi
 if [[ -n "${TRIPMATE_RESTORE_DRAIN_COMMAND:-}" ]]; then
   bash -lc "${TRIPMATE_RESTORE_DRAIN_COMMAND}"
   phase draining success "drain command completed"

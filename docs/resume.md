@@ -3,11 +3,21 @@
 ## 다음 한 작업 (2026-06-06 감사 후)
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
-사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). **다음**:
-krtour-map 비의존 루프에서 T-177 사용자 feature 제안 큐까지 닫았다. 다음 비의존
-구현 후보는 T-112 TripMate MCP 외부 인터페이스 서빙이다. T-179/T-180 admin feature
-change와 T-172~T-176 feature read cutover는 krtour-map HTTP/admin 호출 작업이므로
-비의존 루프에서는 제외한다.
+사용자 결정 DEC-01~10 확정(`docs/decisions-needed-2026-06-06.md`). krtour-map
+비의존 루프는 T-112 MCP 외부 인터페이스까지 PR/머지 완료했다. **다음 비의존 후보는
+T-108 운영 배포 자동화, T-129의 `/geo/*`·`/regions/*` slice, T-146 location-audit
+outbox slice를 현재 main 기준으로 재평가한다.** T-172~T-181/T-179/T-180은
+krtour-map HTTP/admin 계약 연동 작업이므로 이 비의존 루프에서는 제외한다.
+
+**T-183 Backup hotswap 잔여 보강 완료** (2026-06-09): API-triggered
+`restore-hotswap`이 자기 API/Web 프로세스를 멈추는 drain command를 실행하지 못하도록
+`TRIPMATE_RESTORE_API_TRIGGER` guard를 추가했다. `restore_backup_hotswap()`은 프로세스 내부
+`asyncio.Lock`에 더해 Postgres `pg_try_advisory_lock`을 잡아 다중 워커/프로세스 동시
+schema-swap을 차단한다. API restore는 swap 전 `backup.restore_hotswap_started`를 현재
+canonical audit chain에 먼저 commit하고, swap 성공 reflection은
+`app_previous_<restore_id>.admin_audit_log`에 append해 오래된 snapshot에 현재 admin이 없어도
+success audit가 FK로 깨지지 않게 했다. `.env.example`/Settings/runbook도
+`TRIPMATE_RESTORE_*` 실행 설정과 `TRIPMATE_RESTORE_APP_ROLE`을 정렬했다.
 
 **T-112 TripMate MCP 외부 인터페이스 서빙 완료** (2026-06-09): `app.mcp_tokens` 테이블과
 Argon2id-hashed `mcp_<JWT>` 토큰 발급/회수 API를 추가했다. 사용자 `/settings/mcp-tokens`와
@@ -15,8 +25,7 @@ admin `/admin/mcp-tokens`에서 원문 1회 표시, 목록 마스킹, 회수가 
 Bearer MCP 토큰으로 5개 read-only tool descriptor를 제공하고, `/mcp/tools/{tool_name}`은
 `list_trips`, `get_trip`, `list_pois`, `search_features`, `get_user_profile`을 호출한다.
 `search_features`는 krtour-map OpenAPI HTTP client 경계만 사용하며, stdio bridge/full MCP
-session proxy는 후속 작업으로 분리한다. 사용자 요청에 따라 본 작업 완료 후 새 task는 진행하지
-않는다.
+session proxy는 후속 작업으로 분리한다.
 
 **T-177 사용자 feature 제안 큐 완료** (2026-06-09): `app.feature_suggestions` 테이블을
 추가하고 `POST /features/requests`, `GET /features/requests/{request_id}`를 TripMate

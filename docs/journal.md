@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (codex) — T-183 Backup hotswap 잔여 보강
+
+**작업**: PR #109에서 남긴 #100 backup hotswap 잔여(self-kill drain, 교차프로세스 lock,
+cut-over audit 격리)를 운영 활성화 전 선결 수준으로 닫았다.
+
+**변경**:
+- `restore_backup_hotswap()`에 Postgres `pg_try_advisory_lock`을 추가해 다중 API 워커/프로세스가
+  동시에 schema-swap을 실행하지 못하게 했다.
+- API-triggered restore는 `TRIPMATE_RESTORE_API_TRIGGER=1`을 script에 넘기고,
+  `TRIPMATE_RESTORE_DRAIN_COMMAND`가 설정되어 있으면 `draining:failed`로 중단한다. API 호출은
+  외부 read-only/drain 완료 후 `TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1`로만 swap을 진행한다.
+- swap 전 `backup.restore_hotswap_started` audit를 canonical chain에 먼저 남기고, swap 성공
+  reflection은 `app_previous_<restore_id>.admin_audit_log`에 append한다.
+- `TRIPMATE_RESTORE_DATABASE_URL`, `TRIPMATE_RESTORE_HOTSWAP_EXECUTE`,
+  `TRIPMATE_RESTORE_DRAIN_COMMAND`, `TRIPMATE_RESTORE_ALLOW_NO_DRAIN`,
+  `TRIPMATE_RESTORE_APP_ROLE`을 Settings/env/runbook에 정렬했다.
+
+**검증**: backup service unit test, backend ruff/mypy, `git diff --check`, CodeGraph sync.
+
 ## 2026-06-09 (claude) — PR #108 리뷰 + T-188(type/target_feature_id 노출)
 
 **작업**: codex PR #108(feature suggestion queue, T-177)을 사후 리뷰([코멘트](https://github.com/digitie/tripmate/pull/108#issuecomment-4656262939))하고

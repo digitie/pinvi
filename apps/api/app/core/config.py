@@ -141,6 +141,11 @@ class Settings(BaseSettings):
     tripmate_backup_timeout_seconds: int = 900
     tripmate_restore_timeout_seconds: int = 3600
     tripmate_backup_schema: str = "app"
+    tripmate_restore_database_url: str = ""
+    tripmate_restore_hotswap_execute: bool = False
+    tripmate_restore_drain_command: str = ""
+    tripmate_restore_allow_no_drain: bool = False
+    tripmate_restore_app_role: str = ""
 
     # Feature flag
     tripmate_enable_seed: bool = False

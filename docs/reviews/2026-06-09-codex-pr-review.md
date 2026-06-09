@@ -124,6 +124,7 @@
   `_is_location_window_broken`(per-row self-consistency + 앵커 링크) — 풀스캔 제거.
 - ✅ **T-183** (#100 높음): restore-hotswap.sh FK 적재 `session_replication_role=replica` + swap 전
   GRANT 재적용(`TRIPMATE_RESTORE_APP_ROLE`). backup_service restore_id uuid suffix + `_restore_lock` 직렬화.
+  후속 보강으로 DB `pg_try_advisory_lock`, API-trigger self-kill drain guard, previous-schema
+  success audit reflection을 추가해 T-183 잔여를 닫았다.
 - ✅ 낮음: `.env.example` 2개 `ALLOW_UNSIGNED=false`(#86).
-- **잔여(후속 task로 유지)**: #100 self-kill drain(runbook: read-only 전환 권장)·cut-over audit 격리·
-  교차프로세스 advisory lock(중간), #99 rise_set model_validate·#93 money quantize 등 낮음(저위험·문서/가설).
+- **잔여(후속 task로 유지)**: #99 rise_set model_validate·#93 money quantize 등 낮음(저위험·문서/가설).

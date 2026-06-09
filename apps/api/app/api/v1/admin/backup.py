@@ -17,7 +17,7 @@ from app.schemas.admin import (
     AdminBackupSnapshotRequest,
 )
 from app.schemas.envelope import Envelope
-from app.services.admin_audit import append_admin_audit
+from app.services.admin_audit import append_admin_audit, append_admin_audit_to_schema
 from app.services.backup_service import (
     BackupRestoreRun,
     BackupServiceError,
@@ -135,12 +135,43 @@ async def restore_backup_hotswap_endpoint(
             },
         )
 
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="backup.restore_hotswap_started",
+        resource_type="backup_snapshot",
+        resource_id=body.snapshot_id,
+        before_state=None,
+        after_state={"snapshot_id": body.snapshot_id, "confirm_schema_swap": True},
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=request_id,
+    )
+    await db.commit()
+
     try:
         run = await restore_backup_hotswap(
             snapshot_id=body.snapshot_id,
             access_reason=body.access_reason,
         )
     except BackupSnapshotNotFoundError as exc:
+        await append_admin_audit(
+            db,
+            actor_user_id=admin.user_id,
+            action="backup.restore_hotswap_failed",
+            resource_type="backup_snapshot",
+            resource_id=body.snapshot_id,
+            before_state=None,
+            after_state={"error": {"code": exc.code, "message": str(exc)}},
+            access_reason=body.access_reason,
+            target_pii_fields=None,
+            ip_hash_input=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent"),
+            request_id=request_id,
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
@@ -167,14 +198,19 @@ async def restore_backup_hotswap_endpoint(
         ) from exc
 
     response = _to_restore_run(run)
-    await append_admin_audit(
+    await append_admin_audit_to_schema(
         db,
+        schema=run.previous_schema,
         actor_user_id=admin.user_id,
         action="backup.restore_hotswap",
         resource_type="backup_snapshot",
         resource_id=run.snapshot_id,
         before_state=None,
-        after_state=response.model_dump(mode="json"),
+        after_state={
+            **response.model_dump(mode="json"),
+            "audit_reflection_schema": run.previous_schema,
+            "canonical_schema_after_restore": "app",
+        },
         access_reason=body.access_reason,
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
