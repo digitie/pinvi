@@ -35,6 +35,9 @@ class RealtimeConnection:
     user_id: uuid.UUID
     viewing_day: int | None = None
     last_seen_at: datetime = field(default_factory=kst_now)
+    # 동시 broadcast task가 같은 소켓에 send_json을 겹쳐 호출하면 프레임이 인터리브된다.
+    # 연결별 lock으로 송신을 직렬화한다(프레임 무결성 보장).
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 class RealtimeConnectionLimitError(RuntimeError):
@@ -166,19 +169,20 @@ class RealtimeBroker:
         message: str,
     ) -> None:
         try:
-            await asyncio.wait_for(
-                connection.websocket.send_json(
-                    {
-                        "type": "error",
-                        "trip_id": str(connection.trip_id),
-                        "actor_user_id": None,
-                        "ts": kst_now().isoformat(),
-                        "version": None,
-                        "payload": {"code": code, "message": message},
-                    }
-                ),
-                timeout=self._send_timeout_seconds(),
-            )
+            async with connection.send_lock:
+                await asyncio.wait_for(
+                    connection.websocket.send_json(
+                        {
+                            "type": "error",
+                            "trip_id": str(connection.trip_id),
+                            "actor_user_id": None,
+                            "ts": kst_now().isoformat(),
+                            "version": None,
+                            "payload": {"code": code, "message": message},
+                        }
+                    ),
+                    timeout=self._send_timeout_seconds(),
+                )
         except Exception:
             await self._remove(connection)
 
@@ -219,10 +223,11 @@ class RealtimeBroker:
         message: dict[str, Any],
     ) -> RealtimeConnection | None:
         try:
-            await asyncio.wait_for(
-                connection.websocket.send_json(message),
-                timeout=self._send_timeout_seconds(),
-            )
+            async with connection.send_lock:
+                await asyncio.wait_for(
+                    connection.websocket.send_json(message),
+                    timeout=self._send_timeout_seconds(),
+                )
             return None
         except Exception:
             return connection
