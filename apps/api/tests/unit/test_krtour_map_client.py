@@ -41,8 +41,33 @@ async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
         min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2, kinds=["place", "event"]
     )
     assert data == {"count": 1, "items": []}
-    assert seen["path"] == "/features/in-bounds"
+    assert seen["path"] == "/v1/features/in-bounds"
     assert "kind=place" in seen["query"] and "kind=event" in seen["query"]
+    await client.aclose()
+
+
+async def test_search_features_uses_v1_path_and_split_bbox() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = str(request.url.query, "utf-8")
+        return httpx.Response(200, json={"data": {"items": [], "next_cursor": None}})
+
+    client = _client(handler)
+    await client.search_features(
+        q="광안리",
+        min_lon=129.0,
+        min_lat=35.0,
+        max_lon=129.2,
+        max_lat=35.2,
+        page_size=20,
+    )
+    assert seen["path"] == "/v1/features/search"
+    # ADR-048 clean cut: bbox는 분리 float 4개, pagination은 page_size.
+    for token in ("min_lon=129", "min_lat=35", "max_lon=129.2", "max_lat=35.2", "page_size=20"):
+        assert token in seen["query"], seen["query"]
+    assert "bbox=" not in seen["query"]
     await client.aclose()
 
 
@@ -69,9 +94,12 @@ async def test_get_feature_returns_data() -> None:
 async def test_get_features_chunks_and_merges() -> None:
     calls: list[list[str]] = []
 
+    seen_path: dict[str, str] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
         import json as _json
 
+        seen_path["path"] = request.url.path
         body = _json.loads(request.content)
         ids = body["feature_ids"]
         calls.append(ids)
@@ -81,6 +109,7 @@ async def test_get_features_chunks_and_merges() -> None:
 
     client = _client(handler, batch_chunk_size=2)
     data = await client.get_features(["f_1", "f_2", "f_missing"])
+    assert seen_path["path"] == "/v1/features/batch"  # #318: /tripmate 제거
     assert len(calls) == 2  # 2 + 1 청크
     assert set(data["items"]) == {"f_1", "f_2"}
     assert data["missing"] == ["f_missing"]

@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-09 (claude) — T-181 krtour 외부 `/v1` hard cutover (T-170 client 적응)
+
+**작업**: krtour `origin/main`이 외부 `/v1` clean cut(PR #319) + batch `/tripmate/features/batch`→
+`/v1/features/batch`(PR #318) + 파라미터 개명(PR #321)을 머지함을 `openapi.user.json`로 확인하고
+T-170 httpx client를 새 라이브 계약에 맞춰 일괄 교체.
+
+**확인한 라이브 계약**(`openapi.user.json` title `krtour-map-user 0.2.0-dev`): 외부 전 표면 `/v1`,
+`/health`·`/version`만 비버전. in-bounds=`min_lon/min_lat/max_lon/max_lat`+`limit`+`zoom`+
+`cluster_unit`, search=`q`+bbox 4 float+`page_size`+`cursor`, nearby=`lon/lat/radius_m`+`page_size`,
+batch=`POST /v1/features/batch {feature_ids[]}`→`{data:{items{},missing[]}}`. **envelope payload/meta
+분리(#2)와 problem+json(#5)은 아직 미머지** — `data.next_cursor`·`{error:{code}}` 유지.
+
+**반영**(`apps/api/app/clients/krtour_map.py`): 전 feature/category 경로 `/v1` prefix(/health 제외),
+batch 경로 교체, `search_features` 시그니처 `bbox`(CSV)→`min_lon/min_lat/max_lon/max_lat` + `limit`→
+`page_size`. MCP `_search_features`가 `bounds` CSV를 4 float로 파싱하도록 갱신. MockTransport 계약
+테스트(in-bounds/search/batch 경로 + bbox 분리 검증) 추가/갱신.
+
+**잔여**: problem+json 에러·meta.page 분리는 krtour T-216 머지 시 추종(T-181 잔여로 유지). 라우터
+cutover(T-173)·좌표 응답 매핑(T-182)은 별개. 현재 client는 etl_bridge stub 미사용 경로라 라우트 무영향.
+
 ## 2026-06-09 (codex) — T-183 Backup hotswap 잔여 보강
 
 **작업**: PR #109에서 남긴 #100 backup hotswap 잔여(self-kill drain, 교차프로세스 lock,
