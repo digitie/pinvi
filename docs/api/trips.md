@@ -272,7 +272,7 @@ Content-Type: application/json
   "feature_id": "f_2611000000_p_abc123...",   // 라이브러리 feature_id (string)
   "feature_snapshot": {
     "name": "부산타워",
-    "coord": { "longitude": 129.0319, "latitude": 35.1009 },
+    "coord": { "lon": 129.0319, "lat": 35.1009 },
     "category": "관광명소"
   },
   "planned_arrival_at": "2026-06-02T14:00:00+09:00",
@@ -493,7 +493,7 @@ presigned read URL 또는 thumbnail URL만 포함한다.
           {
             "poi_id": "...",
             "title": "부산타워",
-            "coord": { "longitude": 129.0319, "latitude": 35.1009 },
+            "coord": { "lon": 129.0319, "lat": 35.1009 },
             "planned_arrival_at": "2026-06-01T14:00:00+09:00",
             "user_note": "...",
             "rise_set": { "status": "success", "sunset_at": "..." }

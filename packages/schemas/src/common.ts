@@ -6,10 +6,10 @@ export const Iso8601Schema = z.string().datetime({ offset: true });
 /** Pydantic `Decimal` JSON 직렬화 응답 — 금액 정밀도 보존을 위해 string으로 받는다. */
 export const NonNegativeDecimalStringSchema = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
 
-/** EPSG:4326 좌표 — `(longitude, latitude)` 순서, 대한민국 범위. */
+/** EPSG:4326 좌표 — `(lon, lat)` 순서, 대한민국 범위. */
 export const CoordSchema = z.object({
-  longitude: z.number().min(124).max(132),
-  latitude: z.number().min(33).max(43),
+  lon: z.number().min(124).max(132),
+  lat: z.number().min(33).max(43),
 });
 export type Coord = z.infer<typeof CoordSchema>;
 

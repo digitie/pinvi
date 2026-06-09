@@ -150,7 +150,7 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 | DEC-04 | ☑ 서버(krtour DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
 | DEC-05 | ☑ **재적재(krtour admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=TripMate→Admin 검사/승인→krtour feature 추가 API로 반영 | 2026-06-08 | 사용자 확정. feature 추가 API = **krtour PR #317로 구현됨(2026-06-09)** → T-179 actionable. review_mode 등 연동 합의 진행. §DEC-05 본문 |
 | DEC-06 | ☑ **krtour 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
-| DEC-07 | ☑ 제안 기본값 + `/v1` 노출 | 2026-06-06 | 사용자. ADR-030 |
+| DEC-07 | ☑ 제안 기본값 + `/v1` 노출. **좌표 필드명 = `lon`/`lat`(ADR-048 B, 2026-06-09 정렬)** | 2026-06-06 | 사용자. ADR-030. 좌표는 krtour 정렬로 `lon`/`lat` 채택(T-182) |
 | DEC-08 | ☑ POI **soft delete** | 2026-06-06 | 권고 기본값 적용. ADR-031(예정) |
 | DEC-09 | ☑ `trip_day_pois.feature_id` **nullable** | 2026-06-06 | 권고 기본값 적용. ADR-031 부속(예정) |
 | DEC-10 | ☑ 위치로그 **archive 테이블** 이동 + 체인 연속 | 2026-06-06 | 권고 기본값 적용. T-142 인접 |
