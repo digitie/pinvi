@@ -19,8 +19,8 @@ export const webLocationAdapter: LocationAdapter = {
         (position) => {
           resolve({
             coord: {
-              longitude: position.coords.longitude,
-              latitude: position.coords.latitude,
+              lon: position.coords.longitude,
+              lat: position.coords.latitude,
             },
             accuracy_m: position.coords.accuracy,
             timestamp: position.timestamp,

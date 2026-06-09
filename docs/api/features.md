@@ -48,7 +48,7 @@ Cookie: tripmate_access=...
         "cluster_code": "11680",
         "display_name": "강남구",
         "count": 47,
-        "center": { "longitude": 127.04, "latitude": 37.52 },
+        "center": { "lon": 127.04, "lat": 37.52 },
         "kind_breakdown": { "place": 30, "event": 5, "notice": 12 }
       },
       // individual:
@@ -56,7 +56,7 @@ Cookie: tripmate_access=...
         "feature_id": "f_2611000000_p_abc123...",
         "kind": "place",
         "title": "광안리 해수욕장",
-        "coord": { "longitude": 129.118, "latitude": 35.155 },
+        "coord": { "lon": 129.118, "lat": 35.155 },
         "address_road": "...",
         "address_jibun": "...",
         "category": "해수욕장",
@@ -92,7 +92,7 @@ GET /features/f_2611000000_p_abc123...
     "feature_id": "...",
     "kind": "place",
     "title": "...",
-    "coord": { "longitude": ..., "latitude": ... },
+    "coord": { "lon": ..., "lat": ... },
     "address_road": "...",
     "address_jibun": "...",
     "category": "...",
@@ -197,7 +197,7 @@ Cookie: tripmate_access=...
   "type": "new_place",
   "kind": "place",
   "title": "새 카페",
-  "coord": { "longitude": 129.0, "latitude": 35.0 },
+  "coord": { "lon": 129.0, "lat": 35.0 },
   "categories": ["카페"],
   "note": "..."
 }
@@ -222,7 +222,7 @@ Cookie: tripmate_access=...
     "type": "new_place",
     "kind": "place",
     "title": "새 카페",
-    "coord": { "longitude": 129.0, "latitude": 35.0 },
+    "coord": { "lon": 129.0, "lat": 35.0 },
     "categories": ["카페"],
     "note": "...",
     "target_feature_id": null,
@@ -268,7 +268,7 @@ Cookie: tripmate_access=...
       "feature_id": "f_2611000000_p_abc123...",
       "kind": "place",
       "title": "광안리 해수욕장",
-      "coord": { "longitude": 129.118, "latitude": 35.155 },
+      "coord": { "lon": 129.118, "lat": 35.155 },
       "category": "해수욕장",
       "marker_color": "P-07",
       "marker_icon": "swimming"

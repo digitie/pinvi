@@ -77,7 +77,7 @@ def _summary_from_dto(dto: dict[str, Any]) -> FeatureSummary:
         feature_id=str(dto["feature_id"]),
         kind=dto["kind"],
         title=dto["title"],
-        coord=Coord(longitude=dto["coord"]["longitude"], latitude=dto["coord"]["latitude"]),
+        coord=Coord(lon=dto["coord"]["longitude"], lat=dto["coord"]["latitude"]),
         marker_color=dto.get("marker_color", "P-13"),
         marker_icon=dto.get("marker_icon", "marker"),
         category=dto.get("category"),
@@ -88,7 +88,7 @@ def _summary_from_dto(dto: dict[str, Any]) -> FeatureSummary:
 def _cluster_from_dto(dto: dict[str, Any]) -> FeatureCluster:
     return FeatureCluster(
         cluster_id=str(dto["cluster_id"]),
-        center=Coord(longitude=dto["center"]["longitude"], latitude=dto["center"]["latitude"]),
+        center=Coord(lon=dto["center"]["longitude"], lat=dto["center"]["latitude"]),
         feature_count=int(dto["feature_count"]),
         sample_kinds=list(dto.get("sample_kinds", [])),
         bbox=BBox(**dto["bbox"]),
@@ -138,7 +138,7 @@ def _feature_request_response(row: FeatureSuggestion) -> FeatureRequestResponse:
         type=cast(FeatureRequestType, row.suggestion_type),
         kind=cast(FeatureKind, row.kind),
         title=row.name,
-        coord=Coord(longitude=float(row.lng), latitude=float(row.lat)),
+        coord=Coord(lon=float(row.lng), lat=float(row.lat)),
         categories=row.categories,
         note=row.note,
         target_feature_id=row.target_feature_id,
@@ -312,7 +312,7 @@ async def get_feature(
             feature_id=str(dto["feature_id"]),
             kind=dto["kind"],
             title=dto["title"],
-            coord=Coord(longitude=dto["coord"]["longitude"], latitude=dto["coord"]["latitude"]),
+            coord=Coord(lon=dto["coord"]["longitude"], lat=dto["coord"]["latitude"]),
             marker_color=dto.get("marker_color", "P-13"),
             marker_icon=dto.get("marker_icon", "marker"),
             category=dto.get("category"),
@@ -361,8 +361,8 @@ async def request_feature(
     """사용자가 feature 제안을 TripMate 소유 큐에 등록한다. krtour-map 직접 호출은 하지 않는다."""
     user_id = _current_user_uuid(current_user_id)
     name = _normalise_title(body.title)
-    lng = _decimal6(body.coord.longitude)
-    lat = _decimal6(body.coord.latitude)
+    lng = _decimal6(body.coord.lon)
+    lat = _decimal6(body.coord.lat)
     categories = _normalise_categories(body.categories)
 
     duplicate = await _find_duplicate_feature_suggestion(

@@ -70,13 +70,13 @@ async def geocode(
 async def reverse(
     _current_user: CurrentUserId,
     client: KraddrGeoClientDep,
-    longitude: Annotated[float, LON],
-    latitude: Annotated[float, LAT],
+    lon: Annotated[float, LON],
+    lat: Annotated[float, LAT],
     radius_m: Annotated[int, Query(ge=10, le=5000)] = 200,
 ) -> Envelope[GeoCandidateList]:
     """좌표 → 주소/행정구역 후보. 좌표 query는 location_audit 미들웨어가 chain 적재."""
     try:
-        payload = await client.reverse(lon=longitude, lat=latitude, radius_m=radius_m)
+        payload = await client.reverse(lon=lon, lat=lat, radius_m=radius_m)
     except (KraddrGeoUnavailable, KraddrGeoBadRequest) as exc:
         _raise_geo_http(exc)
     return Envelope.of(_candidate_list(payload))
@@ -104,13 +104,13 @@ async def search(
 async def regions_covering_point(
     _current_user: CurrentUserId,
     client: KraddrGeoClientDep,
-    longitude: Annotated[float, LON],
-    latitude: Annotated[float, LAT],
+    lon: Annotated[float, LON],
+    lat: Annotated[float, LAT],
     boundary_level: Annotated[BoundaryLevel, Query()] = "legal_dong",
 ) -> Envelope[RegionCovering]:
     """좌표를 포함하는 행정구역(단건) — kraddr-geo `/v2/reverse`의 최선 후보 region. 미매치 404."""
     try:
-        payload = await client.reverse(lon=longitude, lat=latitude, include_region=True)
+        payload = await client.reverse(lon=lon, lat=lat, include_region=True)
     except (KraddrGeoUnavailable, KraddrGeoBadRequest) as exc:
         _raise_geo_http(exc)
     region = _first_region(payload)
@@ -135,15 +135,15 @@ def _first_region(payload: dict[str, Any]) -> dict[str, Any] | None:
 async def regions_within_radius(
     _current_user: CurrentUserId,
     client: KraddrGeoClientDep,
-    longitude: Annotated[float, LON],
-    latitude: Annotated[float, LAT],
+    lon: Annotated[float, LON],
+    lat: Annotated[float, LAT],
     radius_m: Annotated[int, Query(ge=100, le=50000)] = 2000,
     boundary_level: Annotated[BoundaryLevel, Query()] = "legal_dong",
 ) -> Envelope[GeoCandidateList]:
     """좌표 반경 내 행정구역 후보 목록."""
     try:
         payload = await client.regions_within_radius(
-            lon=longitude, lat=latitude, radius_m=radius_m, boundary_level=boundary_level
+            lon=lon, lat=lat, radius_m=radius_m, boundary_level=boundary_level
         )
     except (KraddrGeoUnavailable, KraddrGeoBadRequest) as exc:
         _raise_geo_http(exc)

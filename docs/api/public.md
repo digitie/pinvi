@@ -32,8 +32,8 @@ GET /public/beaches?sido_code=11&sigungu_code=11680&query=광안리&limit=100&of
       {
         "feature_id": "f_2611000000_p_...",
         "display_name": "광안리 해수욕장",
-        "longitude": 129.118,
-        "latitude": 35.155,
+        "lon": 129.118,
+        "lat": 35.155,
         "legal_dong_code": "2611010100",
         "sigungu_code": "26110",
         "sido_code": "26",
@@ -84,8 +84,8 @@ GET /public/beaches/map-markers?limit=500
       {
         "feature_id": "...",
         "name": "광안리 해수욕장",
-        "longitude": 129.118,
-        "latitude": 35.155
+        "lon": 129.118,
+        "lat": 35.155
       }
     ]
   }
@@ -128,8 +128,8 @@ GET /public/festivals/monthly?year=2026&month=6&limit=12
         "jibun_address": "...",
         "sigungu_code": "26110",
         "sido_code": "26",
-        "longitude": 129.118,
-        "latitude": 35.155,
+        "lon": 129.118,
+        "lat": 35.155,
         "homepage_url": "..."
       }
     ]

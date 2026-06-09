@@ -33,7 +33,7 @@ Content-Type: application/json
   "feature_id": "f_2611000000_p_abc123...",    // 라이브러리 feature_id
   "feature_snapshot": {
     "name": "부산타워",
-    "coord": { "longitude": 129.0319, "latitude": 35.1009 },
+    "coord": { "lon": 129.0319, "lat": 35.1009 },
     "category": "관광명소",
     "marker_color": "P-11",
     "marker_icon": "attraction"

@@ -42,7 +42,7 @@ async def test_user_creates_and_reads_feature_suggestion(
     body = {
         "kind": "place",
         "title": "  새 카페  ",
-        "coord": {"longitude": 127.1234564, "latitude": 37.1234564},
+        "coord": {"lon": 127.1234564, "lat": 37.1234564},
         "categories": ["카페", "카페", "  디저트  "],
         "note": "입구가 골목 안쪽에 있어요.",
     }
@@ -58,7 +58,7 @@ async def test_user_creates_and_reads_feature_suggestion(
     assert data["status"] == "pending"
     assert data["title"] == "새 카페"
     assert data["categories"] == ["카페", "디저트"]
-    assert data["coord"] == {"longitude": 127.123456, "latitude": 37.123456}
+    assert data["coord"] == {"lon": 127.123456, "lat": 37.123456}
 
     request_id = uuid.UUID(data["request_id"])
     async with session_factory() as db:
@@ -93,7 +93,7 @@ async def test_feature_suggestion_detail_is_owner_only(
         json={
             "kind": "event",
             "title": "동네 축제",
-            "coord": {"longitude": 126.9, "latitude": 37.4},
+            "coord": {"lon": 126.9, "lat": 37.4},
         },
         cookies=auth_cookies(owner_id),
     )
@@ -118,7 +118,7 @@ async def test_duplicate_feature_suggestion_returns_existing_row(
     body = {
         "kind": "place",
         "title": "해변 전망대",
-        "coord": {"longitude": 129.118, "latitude": 35.155},
+        "coord": {"lon": 129.118, "lat": 35.155},
     }
 
     first = await client.post("/features/requests", json=body, cookies=auth_cookies(user_id))
@@ -149,7 +149,7 @@ async def test_feature_suggestion_rate_limit(
             json={
                 "kind": "place",
                 "title": f"제안 장소 {i}",
-                "coord": {"longitude": 127.0 + i * 0.0001, "latitude": 37.5},
+                "coord": {"lon": 127.0 + i * 0.0001, "lat": 37.5},
             },
             cookies=auth_cookies(user_id),
         )
@@ -160,7 +160,7 @@ async def test_feature_suggestion_rate_limit(
         json={
             "kind": "place",
             "title": "제한 초과 장소",
-            "coord": {"longitude": 128.0, "latitude": 37.5},
+            "coord": {"lon": 128.0, "lat": 37.5},
         },
         cookies=auth_cookies(user_id),
     )
@@ -179,7 +179,7 @@ async def test_correction_suggestion_requires_target_and_dedup_separates_type(
     base = {
         "kind": "place",
         "title": "정보 수정 요청",
-        "coord": {"longitude": 127.5, "latitude": 37.5},
+        "coord": {"lon": 127.5, "lat": 37.5},
     }
 
     # correction인데 target_feature_id 누락 → 422
@@ -251,7 +251,7 @@ async def test_rate_limit_excludes_rejected_and_duplicate(
         json={
             "kind": "place",
             "title": "정당한 신규 제안",
-            "coord": {"longitude": 128.0, "latitude": 37.5},
+            "coord": {"lon": 128.0, "lat": 37.5},
         },
         cookies=auth_cookies(user_id),
     )

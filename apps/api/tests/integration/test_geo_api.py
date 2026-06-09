@@ -57,7 +57,7 @@ async def test_geo_reverse_returns_candidates(
 ) -> None:
     user_id, _ = verified_user
     resp = await client.get(
-        "/geo/reverse?longitude=129.118&latitude=35.155&radius_m=200",
+        "/geo/reverse?lon=129.118&lat=35.155&radius_m=200",
         cookies=auth_cookies(user_id),
     )
     assert resp.status_code == 200, resp.text
@@ -73,7 +73,7 @@ async def test_regions_within_radius_returns_candidates(
 ) -> None:
     user_id, _ = verified_user
     resp = await client.get(
-        "/regions/within-radius?longitude=129.0&latitude=35.0&radius_m=2000",
+        "/regions/within-radius?lon=129.0&lat=35.0&radius_m=2000",
         cookies=auth_cookies(user_id),
     )
     assert resp.status_code == 200, resp.text
@@ -85,14 +85,14 @@ async def test_geo_reverse_rejects_out_of_korea(
 ) -> None:
     user_id, _ = verified_user
     resp = await client.get(
-        "/geo/reverse?longitude=10.0&latitude=50.0",
+        "/geo/reverse?lon=10.0&lat=50.0",
         cookies=auth_cookies(user_id),
     )
     assert resp.status_code == 422, resp.text
 
 
 async def test_geo_requires_auth(client: Any) -> None:
-    resp = await client.get("/geo/reverse?longitude=129.0&latitude=35.0")
+    resp = await client.get("/geo/reverse?lon=129.0&lat=35.0")
     assert resp.status_code == 401
 
 
@@ -114,7 +114,7 @@ async def test_regions_covering_point_returns_region(
 ) -> None:
     user_id, _ = verified_user
     resp = await client.get(
-        "/regions/covering-point?longitude=129.118&latitude=35.155",
+        "/regions/covering-point?lon=129.118&lat=35.155",
         cookies=auth_cookies(user_id),
     )
     assert resp.status_code == 200, resp.text
@@ -137,7 +137,7 @@ async def test_regions_covering_point_404_when_no_region(
     try:
         user_id, _ = verified_user
         resp = await client.get(
-            "/regions/covering-point?longitude=129.0&latitude=35.0",
+            "/regions/covering-point?lon=129.0&lat=35.0",
             cookies=auth_cookies(user_id),
         )
         assert resp.status_code == 404, resp.text
