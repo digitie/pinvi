@@ -156,7 +156,7 @@ async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSugge
                 "message": f"이미 처리된 제안입니다(status={suggestion.status}).",
             },
         )
-    return cast(FeatureSuggestion, suggestion)
+    return suggestion
 
 
 @router.get("", response_model=Envelope[AdminFeatureRequestPagedResponse])
