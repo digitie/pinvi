@@ -257,6 +257,20 @@ export type {
   FeatureRequestResponse,
 } from './feature';
 export {
+  AdminFeatureRequestSummarySchema,
+  AdminFeatureRequestPagedResponseSchema,
+  AdminFeatureRequestApproveSchema,
+  AdminFeatureRequestRejectSchema,
+  AdminFeatureRequestResultSchema,
+} from './admin_feature_request';
+export type {
+  AdminFeatureRequestSummary,
+  AdminFeatureRequestPagedResponse,
+  AdminFeatureRequestApprove,
+  AdminFeatureRequestReject,
+  AdminFeatureRequestResult,
+} from './admin_feature_request';
+export {
   BoundaryLevelSchema,
   GeoSearchKindSchema,
   GeoCandidateListSchema,
