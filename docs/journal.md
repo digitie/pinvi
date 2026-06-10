@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 장소 제안 딥링크(`/map?suggest=`) + E2E
+
+**작업**: 지도 우클릭 없이도 장소 제안 다이얼로그를 열 수 있는 딥링크 + 제안 흐름 E2E.
+
+- `lib/suggestParam.ts`: `parseSuggestParam("lon,lat")` → CoordSchema 검증(한국 범위) coord|null. 순수·테스트.
+- `FeatureMapView`: `initialSuggestCoord` prop — requestCoord 초기값으로 다이얼로그 사전 오픈.
+- `app/(app)/map/page.tsx`: async + `searchParams.suggest` 파싱 → FeatureMapView 전달(라우트는 dynamic).
+- `e2e/feature-request.e2e.ts`: `/map?suggest=126.978,37.566` → 다이얼로그 좌표 표시 → 이름 입력 →
+  제출(`features/requests` mock) → "제안이 접수됐습니다". (VWorld 키 없이 검증 가능.)
+- `tests/suggestParam.test.ts` 3건.
+
+**검증**: 로컬 chromium 전 스위트 `28 passed` + tsc + lint + vitest.
+
 ## 2026-06-10 (claude) — E2E 추가: 최적화/공유/위치동의
 
 **작업**: trip 협업·지도 흐름 E2E 3종(mock).

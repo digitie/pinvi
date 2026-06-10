@@ -97,6 +97,8 @@ export interface FeatureMapViewProps {
   className?: string;
   initialCenter?: [number, number];
   initialZoom?: number;
+  /** 딥링크(`?suggest=lon,lat`)로 장소 제안 다이얼로그를 특정 좌표에 미리 연다. */
+  initialSuggestCoord?: { lon: number; lat: number } | null;
 }
 
 export function FeatureMapView({
@@ -104,6 +106,7 @@ export function FeatureMapView({
   className,
   initialCenter = DEFAULT_CENTER,
   initialZoom = DEFAULT_ZOOM,
+  initialSuggestCoord = null,
 }: FeatureMapViewProps) {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const latestRequest = useRef(0);
@@ -121,7 +124,9 @@ export function FeatureMapView({
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
-  const [requestCoord, setRequestCoord] = useState<{ lon: number; lat: number } | null>(null);
+  const [requestCoord, setRequestCoord] = useState<{ lon: number; lat: number } | null>(
+    initialSuggestCoord
+  );
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchInBounds = useCallback(async (map: maplibregl.Map) => {

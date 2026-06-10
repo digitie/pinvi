@@ -1,6 +1,12 @@
 import { FeatureMapView } from '@/components/map/FeatureMapView';
+import { parseSuggestParam } from '@/lib/suggestParam';
 
-export default function ExploreMapPage() {
+export default async function ExploreMapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ suggest?: string | string[] }>;
+}) {
+  const suggestCoord = parseSuggestParam((await searchParams).suggest);
   return (
     <div className="flex min-h-[calc(100vh-120px)] flex-col gap-4">
       <header className="flex flex-col gap-3 border-b border-hairline pb-4 md:flex-row md:items-end md:justify-between">
@@ -18,7 +24,11 @@ export default function ExploreMapPage() {
         </div>
       </header>
       <section className="min-h-[520px] flex-1">
-        <FeatureMapView apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''} className="h-full" />
+        <FeatureMapView
+          apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''}
+          className="h-full"
+          initialSuggestCoord={suggestCoord}
+        />
       </section>
     </div>
   );
