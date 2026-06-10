@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { ApiError, tripApi, type TripBucket } from '@tripmate/api-client';
 import type { TripCreate, TripResponse, TripStatus } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
+import { FormField } from '@/components/forms/FormField';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -57,8 +58,10 @@ export function TripDashboard() {
   const [regionHint, setRegionHint] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [titleError, setTitleError] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   const filteredTrips = useMemo(() => visibleTrips(trips, bucket), [bucket, trips]);
   const upcomingCount = useMemo(() => trips.filter((trip) => !isPastTrip(trip)).length, [trips]);
@@ -85,9 +88,11 @@ export function TripDashboard() {
     event.preventDefault();
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      setError('여행 제목을 입력하세요.');
+      setTitleError('여행 제목을 입력하세요.');
+      titleRef.current?.focus();
       return;
     }
+    setTitleError(undefined);
     setCreating(true);
     setError(null);
     setMessage(null);
@@ -166,48 +171,50 @@ export function TripDashboard() {
       )}
 
       <section className="rounded-sm border border-hairline bg-white p-4">
-        <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto]">
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            제목
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
-              maxLength={200}
-              placeholder="부산 2박 3일"
-            />
-          </label>
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            지역
-            <input
-              value={regionHint}
-              onChange={(event) => setRegionHint(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
-              maxLength={120}
-              placeholder="부산"
-            />
-          </label>
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            시작일
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
-            />
-          </label>
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            종료일
-            <input
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
-            />
-          </label>
+        <form onSubmit={onCreate} className="grid items-start gap-3 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto]">
+          <FormField
+            ref={titleRef}
+            id="trip-create-title"
+            label="제목"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="h-10 focus:border-primary"
+            maxLength={200}
+            placeholder="부산 2박 3일"
+            error={titleError}
+            data-testid="trip-create-title"
+          />
+          <FormField
+            id="trip-create-region"
+            label="지역"
+            value={regionHint}
+            onChange={(event) => setRegionHint(event.target.value)}
+            className="h-10 focus:border-primary"
+            maxLength={120}
+            placeholder="부산"
+            data-testid="trip-create-region"
+          />
+          <FormField
+            id="trip-create-start"
+            label="시작일"
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+            className="h-10 focus:border-primary"
+            data-testid="trip-create-start"
+          />
+          <FormField
+            id="trip-create-end"
+            label="종료일"
+            type="date"
+            value={endDate}
+            onChange={(event) => setEndDate(event.target.value)}
+            className="h-10 focus:border-primary"
+            data-testid="trip-create-end"
+          />
           <button
             type="submit"
-            className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 md:mt-auto"
+            className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 md:mt-7"
             disabled={creating}
             data-testid="trip-create-submit"
           >
