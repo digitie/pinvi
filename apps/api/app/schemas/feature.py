@@ -1,10 +1,13 @@
 """Feature Pydantic schema — `docs/api/features.md`.
 
-라이브러리 DTO를 그대로 export하지 않고 TripMate 측 API 응답 schema로 재정의.
+krtour-map OpenAPI(`openapi.user.json`) 응답을 TripMate 측 API 응답 schema로 투영한다.
+TripMate는 응답 셰입을 소유하되 **krtour 실계약 field 명/의미에 정합**한다(ADR-026/030):
+평면 `lon`/`lat`(DEC-07→`lon`/`lat` 정렬), 표시명 `name`, 구조화 `address` 객체,
+클러스터 자연키 `cluster_key`, 날씨 평탄 `metrics`(+`forecast_style`).
+
 - 사용자에게 노출할 필드만 (PII / 내부 metadata 제외)
 - Zod 측 `packages/schemas/src/feature.ts` 와 cross-validation
-
-SPEC V8 §H-4 (Feature/지도 API) + ADR-015 (좌표 GeoJSON `(lng, lat)`).
+- `feature_id` 는 krtour `make_feature_id` 출력 불투명 문자열(ADR-028, UUID 아님)
 """
 
 from __future__ import annotations
@@ -51,77 +54,95 @@ class BBox(BaseModel):
 
 
 class FeatureSummary(BaseModel):
-    """viewport feature 마커 표시용 (in-bounds / nearby / search 응답)."""
+    """마커/목록 표시용 (in-bounds items / nearby / search 응답).
+
+    krtour `FeatureSummary`/`NearbyFeatureSummary` 투영. krtour는 평면 `lon`/`lat`,
+    `name`, `status`를 주고 `lon`/`lat`/`marker_*`는 nullable. nearby 응답에만
+    `distance_m`이 채워진다.
+    """
 
     feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
-    title: str
-    coord: Coord
-    marker_color: str = Field(pattern=r"^P-\d{2}$")  # 16색 팔레트 P-01~P-16
-    marker_icon: str = Field(max_length=64)  # maki icon name
+    name: str
+    coord: Coord | None = None  # krtour lon/lat nullable (point geometry 없는 kind)
     category: str | None = None
-    summary: str | None = None  # 1줄 요약
+    marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")  # 16색 P-01~P-16
+    marker_icon: str = Field(default="marker", max_length=64)  # maki icon name
+    status: str | None = None  # active / inactive / hidden 등 (krtour lifecycle)
+    distance_m: float | None = None  # nearby 응답에만
 
 
 class FeatureCluster(BaseModel):
-    """클러스터 마커 응답 — zoom < 14에서 라이브러리 측 클러스터링."""
+    """서버(krtour) 클러스터 — `cluster_key`는 행정구역 코드(자연키, ADR-048 §3.1)."""
 
-    cluster_id: str  # 라이브러리 측 정의
-    center: Coord
-    feature_count: int = Field(ge=2)
-    sample_kinds: list[FeatureKind] = Field(max_length=8)
-    bbox: BBox  # 클러스터 영역
+    cluster_key: str
+    coord: Coord
+    feature_count: int = Field(ge=1)
 
 
 class FeaturesInBoundsResponse(BaseModel):
-    """viewport 응답 — feature 또는 cluster mixed."""
+    """viewport 응답 — 개별 feature(`items`) + 서버 cluster(`clusters`) 혼합.
 
-    features: list[FeatureSummary] = Field(default_factory=list)
+    클러스터링은 krtour 서버 책임(`cluster_unit`/`zoom`). granularity는
+    `meta.cluster.cluster_unit`로 오므로 `cluster_unit`에 투영한다.
+    """
+
+    items: list[FeatureSummary] = Field(default_factory=list)
     clusters: list[FeatureCluster] = Field(default_factory=list)
+    cluster_unit: str | None = None  # sido | sigungu | eupmyeondong | individual
     zoom: int
     bbox: BBox
 
 
 class FeatureDetail(BaseModel):
-    """상세 응답 — `GET /features/{id}`."""
+    """상세 응답 — `GET /features/{id}` (krtour `FeatureDetailResponse` 투영)."""
 
     feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
-    title: str
-    coord: Coord
-    marker_color: str = Field(pattern=r"^P-\d{2}$")
-    marker_icon: str = Field(max_length=64)
+    name: str
+    coord: Coord | None = None
     category: str | None = None
-    address: str | None = None
-    address_road: str | None = None
-    bjd_code: str | None = None  # 법정동 코드
+    address: dict[str, Any] | None = None  # 구조화 주소 객체 (krtour 원본)
+    legal_dong_code: str | None = None  # 법정동 코드
+    sido_code: str | None = None
     sigungu_code: str | None = None
-    description: str | None = None
-    detail: dict[str, Any] = Field(default_factory=dict)  # 라이브러리 PlaceDetail 등
-    source_ids: list[str] = Field(default_factory=list)  # `feature.source_links` 참조
+    marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
+    marker_icon: str = Field(default="marker", max_length=64)
+    urls: dict[str, Any] = Field(default_factory=dict)  # homepage/sns/review 등
+    detail: dict[str, Any] = Field(default_factory=dict)  # kind별 PlaceDetail 등
+    status: str | None = None
     updated_at: datetime
 
 
-class WeatherTimepoint(BaseModel):
-    """KMA 시간축 1 point."""
+class WeatherMetric(BaseModel):
+    """krtour 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
 
-    asof: datetime
-    temp_c: float | None = None
-    precipitation_mm: float | None = None
-    precipitation_prob: float | None = None
-    condition: str | None = None  # `clear` / `cloudy` / `rain` / `snow` 등
-    wind_speed_ms: float | None = None
-    humidity_pct: float | None = None
+    metric_key: str
+    metric_name: str | None = None
+    forecast_style: str  # nowcast / ultra_short / short / mid / observed / index / advisory
+    timeline_bucket: str | None = None
+    valid_at: datetime | None = None
+    issued_at: datetime | None = None
+    observed_at: datetime | None = None
+    value_number: float | None = None
+    value_text: str | None = None
+    unit: str | None = None
+    severity: str | None = None
 
 
 class FeatureWeatherCard(BaseModel):
-    """KMA 시간축 응답 — `GET /features/{id}/weather`."""
+    """weather 응답 — `GET /features/{id}/weather` (krtour `WeatherCardData` 투영).
+
+    krtour는 평탄 `metrics` 목록 + `source_styles`를 준다. 프런트는 `forecast_style`
+    별로 그룹핑해 카드를 구성한다(KMA provider 변환을 TripMate가 직접 작성하지 않음).
+    """
 
     feature_id: str = Field(min_length=1, max_length=200)
-    asof: datetime
-    short_term: list[WeatherTimepoint] = Field(default_factory=list)  # 3h x 24
-    daily: list[WeatherTimepoint] = Field(default_factory=list)  # day x 7
-    sources: list[str] = Field(default_factory=list)  # 라이브러리 `source_links` 키
+    asof: datetime | None = None
+    latest_at: datetime | None = None
+    is_stale: bool = False
+    source_styles: list[str] = Field(default_factory=list)
+    metrics: list[WeatherMetric] = Field(default_factory=list)
 
 
 class FeatureRequestCreate(BaseModel):

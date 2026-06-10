@@ -23,12 +23,16 @@ export const featureApi = (client: ApiClient) => ({
     bbox: string;
     zoom: number;
     kinds?: FeatureKind[];
+    category?: string;
+    clusterUnit?: string;
     limit?: number;
   }) => {
     const qs = new URLSearchParams();
     qs.set('bbox', params.bbox);
     qs.set('zoom', String(params.zoom));
     if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
+    if (params.category) qs.set('category', params.category);
+    if (params.clusterUnit) qs.set('cluster_unit', params.clusterUnit);
     if (params.limit) qs.set('limit', String(params.limit));
     return client.request(`/features/in-bounds?${qs.toString()}`, {
       method: 'GET',
@@ -36,19 +40,21 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** 반경 검색. location_audit 미들웨어가 좌표 query 자동 감지 + chain 적재. */
+  /** 반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재. */
   nearby: (params: {
     lat: number;
-    lng: number;
+    lon: number;
     radius_m: number;
     kinds?: FeatureKind[];
+    category?: string;
     limit?: number;
   }) => {
     const qs = new URLSearchParams();
     qs.set('lat', String(params.lat));
-    qs.set('lng', String(params.lng));
+    qs.set('lon', String(params.lon));
     qs.set('radius_m', String(params.radius_m));
     if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
+    if (params.category) qs.set('category', params.category);
     if (params.limit) qs.set('limit', String(params.limit));
     return client.request(`/features/nearby?${qs.toString()}`, {
       method: 'GET',
@@ -56,16 +62,18 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** 자유 텍스트 검색 (FTS5/pg_trgm). */
+  /** 자유 텍스트 검색 (feature 파트만 — 인덱스/ranking은 krtour 책임). */
   search: (params: {
     q: string;
     kinds?: FeatureKind[];
+    category?: string;
     bbox?: string;
     limit?: number;
   }) => {
     const qs = new URLSearchParams();
     qs.set('q', params.q);
     if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
+    if (params.category) qs.set('category', params.category);
     if (params.bbox) qs.set('bbox', params.bbox);
     if (params.limit) qs.set('limit', String(params.limit));
     return client.request(`/features/search?${qs.toString()}`, {

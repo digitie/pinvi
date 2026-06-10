@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-173/174/176/178: feature read 라우터를 krtour HTTP client로 cutover
+
+**작업**: `/features/*` read 경로를 레거시 `etl_bridge` in-process Protocol stub에서 실 HTTP
+client(`app.clients.krtour_map`)로 전환하고 응답 셰입을 krtour `openapi.user.json` 계약에 정합.
+
+- **schemas** (`apps/api/app/schemas/feature.py` + `packages/schemas/src/feature.ts`): `FeatureSummary`
+  `title`→`name` + nullable `coord`/`marker_*` + `status` + nearby `distance_m`. `FeatureCluster`
+  `cluster_id`/`center`/`sample_kinds`/`bbox` → `cluster_key`(행정 자연키)/`coord`/`feature_count`.
+  `FeaturesInBoundsResponse` `features`→`items` + `cluster_unit`. `FeatureDetail` 구조화 `address`
+  객체 + `legal_dong_code`/`sido_code`/`sigungu_code` + `urls`. 날씨 `{short_term,daily}` → 평탄
+  `metrics`(+`forecast_style`)/`source_styles`/`is_stale`.
+- **router** (`apps/api/app/api/v1/features.py`): `KrtourMapHttpClientDep`로 교체. in-bounds
+  (`min_lon..max_items`, items/clusters/cluster_unit), nearby(`page_size`, distance_m), search(분리
+  4-float bbox), get, weather 매핑 재작성. `_map_krtour_errors` 가드(T-178): 5xx/timeout→503
+  `FEATURE_SERVICE_UNAVAILABLE`, 429/409→Retry-After, 404→RESOURCE_NOT_FOUND.
+- **T-174**: `services/cluster_query.py`(직접 `feature` SQL = 경계 위반) + 단위 테스트 제거 — 클러스터링은
+  krtour 서버 위임.
+- **web**: `FeatureMapView`/`MapSearchBox`/`TripDetail` + map e2e mock을 신 셰입(items/name/cluster_key/
+  nullable coord/weather metrics)으로 정합.
+- 테스트: `tests/integration/test_features_api.py` 재작성(dependency_overrides 주입, 신 셰입·503),
+  `tests/unit/test_feature_mapping.py` 신규(매핑 helper DB-free). `docs/api/features.md` 갱신.
+
+**범위**: read 경로만. trip view batch(`trip_view_builder`/`trips.py`) + `etl_bridge` 제거는 T-175(후속 PR).
+
+**검증**: ruff check + format(clean, 로컬). mypy/pytest는 CI(api `lint-typecheck-test` + web
+`lint-typecheck-build`).
+
 ## 2026-06-10 (claude) — T-181: krtour HTTP client를 0e45bd7 계약으로 정렬
 
 **작업**: krtour `0e45bd7`(ADR-048/T-216a~g) 라이브 계약에 `apps/api/app/clients/krtour_map.py` 정렬.

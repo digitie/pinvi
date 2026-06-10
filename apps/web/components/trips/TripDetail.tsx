@@ -125,6 +125,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleAddFeature = (feature: FeatureSummary) => {
     if (selectedDay == null) return;
+    const coord = feature.coord;
+    if (!coord) return;
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
     void runMutation(() =>
       poiApi(apiClient).create(tripId, {
@@ -132,8 +134,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
         sort_order: appendRank(last),
         feature_id: feature.feature_id,
         feature_snapshot: {
-          coord: { lon: feature.coord.lon, lat: feature.coord.lat },
-          title: feature.title,
+          coord: { lon: coord.lon, lat: coord.lat },
+          name: feature.name,
+          // 구 snapshot 읽기(`feature_snapshot.title`) 호환을 위해 title 도 함께 보존.
+          title: feature.name,
           kind: feature.kind,
           marker_color: feature.marker_color,
           marker_icon: feature.marker_icon,

@@ -53,43 +53,77 @@ interface ContextMenuState {
 }
 
 function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
-  const features: MapPoint[] = data.features.map((f) => ({
-    id: f.feature_id,
-    lngLat: [f.coord.lon, f.coord.lat],
-    kind: 'feature',
-    color: paletteHex(f.marker_color),
-    icon: f.marker_icon,
-    title: f.title,
-    lon: f.coord.lon,
-    lat: f.coord.lat,
-    featureId: f.feature_id,
-  }));
+  // krtour 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
+  const features: MapPoint[] = data.items.flatMap((f) =>
+    f.coord
+      ? [
+          {
+            id: f.feature_id,
+            lngLat: [f.coord.lon, f.coord.lat] as [number, number],
+            kind: 'feature' as const,
+            color: paletteHex(f.marker_color),
+            icon: f.marker_icon,
+            title: f.name,
+            lon: f.coord.lon,
+            lat: f.coord.lat,
+            featureId: f.feature_id,
+          },
+        ]
+      : []
+  );
   const clusters: MapPoint[] = data.clusters.map((c) => ({
-    id: c.cluster_id,
-    lngLat: [c.center.lon, c.center.lat],
+    id: c.cluster_key,
+    lngLat: [c.coord.lon, c.coord.lat],
     kind: 'cluster',
     color: CLUSTER_COLOR,
     icon: 'circle',
     title: `${c.feature_count}곳`,
-    lon: c.center.lon,
-    lat: c.center.lat,
+    lon: c.coord.lon,
+    lat: c.coord.lat,
     count: c.feature_count,
   }));
   return [...features, ...clusters];
 }
 
-function featureToPoint(f: FeatureSummary): MapPoint {
+function featureToPoint(f: FeatureSummary): MapPoint | null {
+  if (!f.coord) return null;
   return {
     id: f.feature_id,
     lngLat: [f.coord.lon, f.coord.lat],
     kind: 'feature',
     color: paletteHex(f.marker_color),
     icon: f.marker_icon,
-    title: f.title,
+    title: f.name,
     lon: f.coord.lon,
     lat: f.coord.lat,
     featureId: f.feature_id,
   };
+}
+
+/** krtour 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
+function addressLine(detail: FeatureDetail | null): string | null {
+  const addr = detail?.address;
+  if (!addr) return null;
+  const pick = (key: string): string | null =>
+    typeof addr[key] === 'string' && (addr[key] as string).length > 0 ? (addr[key] as string) : null;
+  return (
+    pick('road') ??
+    pick('full') ??
+    pick('jibun') ??
+    pick('name') ??
+    Object.values(addr).find((v): v is string => typeof v === 'string' && v.length > 0) ??
+    null
+  );
+}
+
+/** 평탄 weather metric 중 기온(℃) metric 의 현재값을 찾는다(metric_key 미확정 → 방어적). */
+function currentTempC(card: FeatureWeatherCard | null): number | null {
+  const metric = card?.metrics.find(
+    (m) =>
+      m.value_number != null &&
+      (/℃|°C/.test(m.unit ?? '') || /temp|기온|T1H|TMP|TMN|TMX/i.test(m.metric_key))
+  );
+  return metric?.value_number ?? null;
 }
 
 export interface FeatureMapViewProps {
@@ -234,6 +268,7 @@ export function FeatureMapView({
   const handleSearchSelect = useCallback(
     (feature: FeatureSummary) => {
       const point = featureToPoint(feature);
+      if (!point) return;
       setSelected(point);
       flyTo(point.lon, point.lat, 15);
     },
@@ -302,7 +337,8 @@ export function FeatureMapView({
     }
   }, []);
 
-  const currentTemp = weather?.short_term.find((t) => t.temp_c != null)?.temp_c ?? null;
+  const currentTemp = currentTempC(weather);
+  const detailAddress = addressLine(detail);
 
   return (
     <div className={className} data-testid="feature-map">
@@ -371,7 +407,7 @@ export function FeatureMapView({
               <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-ink">{detail?.title ?? selected.title}</p>
+                    <p className="text-sm font-semibold text-ink">{detail?.name ?? selected.title}</p>
                     <button
                       type="button"
                       onClick={() => setSelected(null)}
@@ -382,7 +418,7 @@ export function FeatureMapView({
                     </button>
                   </div>
                   {detail?.category && <p className="text-xs text-muted">{detail.category}</p>}
-                  {detail?.address && <p className="text-xs text-body">{detail.address}</p>}
+                  {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
                   {currentTemp != null && (
                     <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
                   )}

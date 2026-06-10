@@ -1,17 +1,19 @@
 """`/features/*` — `docs/api/features.md`.
 
-라이브러리 `python-krtour-map` 의 `AsyncKrtourMapClient` 를 호출 wrapping (ADR-002).
-TripMate 책임: 권한 / 좌표 validation / 사용자 컨텍스트 / 응답 schema.
-라이브러리 책임: 정규화 / 클러스터링 / dedup / sources / overrides / weather.
+지도 feature read는 `python-krtour-map`의 운영 HTTP API(`openapi.user.json`, 포트 9011)를
+`app.clients.krtour_map.KrtourMapClient`로 호출한다(ADR-026/027). TripMate 책임: 권한 /
+좌표 validation / 사용자 컨텍스트 / 응답 schema 투영 / 에러·저하 정책(T-178). krtour 책임:
+정규화 / 클러스터링 / dedup / sources / weather.
 
-본 라우터는 라이브러리 client 미주입 (Sprint 2 라이브러리 진행 중) 시 503 응답
-(`docs/architecture/mcp-server.md` 와 비슷한 placeholder 패턴이 아닌, 실제
-라이브러리 lifespan이 ready 후 동작).
+`POST /features/requests` 큐(T-177)는 krtour를 직접 호출하지 않고 `app.feature_suggestions`
+에만 적재한다 — Admin 검토 후 krtour feature change API 반영은 T-179.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, cast
@@ -21,8 +23,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.krtour_map import (
+    KrtourMapBadRequest,
+    KrtourMapFeatureNotFound,
+    KrtourMapHttpClientDep,
+    KrtourMapRateLimited,
+    KrtourMapUnavailable,
+)
 from app.core.deps import CurrentUserId, DbSession
-from app.etl_bridge.krtour_map import KrtourMapClientDep
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
@@ -38,6 +46,7 @@ from app.schemas.feature import (
     FeaturesInBoundsResponse,
     FeatureSummary,
     FeatureWeatherCard,
+    WeatherMetric,
 )
 
 router = APIRouter(prefix="/features", tags=["features"])
@@ -48,6 +57,51 @@ LAT_MIN, LAT_MAX = 33.0, 43.0
 MIN_ZOOM, MAX_ZOOM = 5, 19
 FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
+_DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice"]
+_DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
+
+
+@contextmanager
+def _map_krtour_errors() -> Iterator[None]:
+    """krtour-map 도메인 예외 → HTTP status 변환 (T-178 저하 정책).
+
+    transient(타임아웃/연결/5xx) = 503 FEATURE_SERVICE_UNAVAILABLE,
+    429/409 = RATE_LIMITED(+Retry-After), 4xx = 422, 404 = RESOURCE_NOT_FOUND.
+    """
+    try:
+        yield
+    except KrtourMapFeatureNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
+        ) from exc
+    except KrtourMapRateLimited as exc:
+        headers = (
+            {"Retry-After": str(exc.retry_after_seconds)}
+            if exc.retry_after_seconds is not None
+            else None
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "RATE_LIMITED", "message": "요청이 많아 잠시 후 다시 시도하세요."},
+            headers=headers,
+        ) from exc
+    except KrtourMapBadRequest as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": exc.code or "VALIDATION_ERROR",
+                "message": "잘못된 feature 요청입니다.",
+            },
+        ) from exc
+    except KrtourMapUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "FEATURE_SERVICE_UNAVAILABLE",
+                "message": "지도 feature 서비스가 일시적으로 사용 불가합니다.",
+            },
+        ) from exc
 
 
 def _parse_bbox(bbox_str: str) -> BBox:
@@ -71,27 +125,90 @@ def _parse_bbox(bbox_str: str) -> BBox:
     return BBox(lng_min=nums[0], lat_min=nums[1], lng_max=nums[2], lat_max=nums[3])
 
 
-def _summary_from_dto(dto: dict[str, Any]) -> FeatureSummary:
-    """라이브러리 DTO → TripMate FeatureSummary."""
+def _coord_from_krtour(dto: dict[str, Any]) -> Coord | None:
+    """krtour 평면 `lon`/`lat`(nullable) → Coord | None."""
+    lon = dto.get("lon")
+    lat = dto.get("lat")
+    if lon is None or lat is None:
+        return None
+    return Coord(lon=float(lon), lat=float(lat))
+
+
+def _summary_from_krtour(dto: dict[str, Any]) -> FeatureSummary:
+    """krtour `FeatureSummary`/`NearbyFeatureSummary` → TripMate FeatureSummary."""
+    distance = dto.get("distance_m")
     return FeatureSummary(
         feature_id=str(dto["feature_id"]),
         kind=dto["kind"],
-        title=dto["title"],
-        coord=Coord(lon=dto["coord"]["longitude"], lat=dto["coord"]["latitude"]),
-        marker_color=dto.get("marker_color", "P-13"),
-        marker_icon=dto.get("marker_icon", "marker"),
+        name=dto.get("name") or dto.get("title") or "",
+        coord=_coord_from_krtour(dto),
         category=dto.get("category"),
-        summary=dto.get("summary"),
+        marker_color=dto.get("marker_color") or "P-13",
+        marker_icon=dto.get("marker_icon") or "marker",
+        status=dto.get("status"),
+        distance_m=float(distance) if distance is not None else None,
     )
 
 
-def _cluster_from_dto(dto: dict[str, Any]) -> FeatureCluster:
+def _cluster_from_krtour(dto: dict[str, Any]) -> FeatureCluster:
+    """krtour `ClusterSummary` → TripMate FeatureCluster (cluster_key = 행정코드 자연키)."""
     return FeatureCluster(
-        cluster_id=str(dto["cluster_id"]),
-        center=Coord(lon=dto["center"]["longitude"], lat=dto["center"]["latitude"]),
+        cluster_key=str(dto["cluster_key"]),
+        coord=Coord(lon=float(dto["lon"]), lat=float(dto["lat"])),
         feature_count=int(dto["feature_count"]),
-        sample_kinds=list(dto.get("sample_kinds", [])),
-        bbox=BBox(**dto["bbox"]),
+    )
+
+
+def _detail_from_krtour(dto: dict[str, Any]) -> FeatureDetail:
+    """krtour `FeatureDetailResponse` → TripMate FeatureDetail."""
+    address = dto.get("address")
+    return FeatureDetail(
+        feature_id=str(dto["feature_id"]),
+        kind=dto["kind"],
+        name=dto.get("name") or dto.get("title") or "",
+        coord=_coord_from_krtour(dto),
+        category=dto.get("category"),
+        address=address if isinstance(address, dict) else None,
+        legal_dong_code=dto.get("legal_dong_code"),
+        sido_code=dto.get("sido_code"),
+        sigungu_code=dto.get("sigungu_code"),
+        marker_color=dto.get("marker_color") or "P-13",
+        marker_icon=dto.get("marker_icon") or "marker",
+        urls=dto.get("urls") if isinstance(dto.get("urls"), dict) else {},
+        detail=dto.get("detail") if isinstance(dto.get("detail"), dict) else {},
+        status=dto.get("status"),
+        updated_at=dto.get("updated_at") or datetime.now(UTC),
+    )
+
+
+def _weather_metric_from_krtour(metric: dict[str, Any]) -> WeatherMetric:
+    return WeatherMetric(
+        metric_key=str(metric["metric_key"]),
+        metric_name=metric.get("metric_name"),
+        forecast_style=str(metric.get("forecast_style") or "observed"),
+        timeline_bucket=metric.get("timeline_bucket"),
+        valid_at=metric.get("valid_at"),
+        issued_at=metric.get("issued_at"),
+        observed_at=metric.get("observed_at"),
+        value_number=metric.get("value_number"),
+        value_text=metric.get("value_text"),
+        unit=metric.get("unit"),
+        severity=metric.get("severity"),
+    )
+
+
+def _weather_from_krtour(dto: dict[str, Any], *, feature_id: str) -> FeatureWeatherCard:
+    """krtour `WeatherCardData` → TripMate FeatureWeatherCard (평탄 metric 목록)."""
+    metrics = [
+        _weather_metric_from_krtour(m) for m in dto.get("metrics", []) if isinstance(m, dict)
+    ]
+    return FeatureWeatherCard(
+        feature_id=str(dto.get("feature_id") or feature_id),
+        asof=dto.get("asof"),
+        latest_at=dto.get("latest_at"),
+        is_stale=bool(dto.get("is_stale", False)),
+        source_styles=list(dto.get("source_styles", [])),
+        metrics=metrics,
     )
 
 
@@ -204,72 +321,93 @@ async def _enforce_feature_suggestion_rate_limit(
 @router.get("/in-bounds", response_model=Envelope[FeaturesInBoundsResponse])
 async def features_in_bounds(
     _current_user: CurrentUserId,
-    client: KrtourMapClientDep,
+    client: KrtourMapHttpClientDep,
     bbox: Annotated[str, Query(description="lng_min,lat_min,lng_max,lat_max")],
     zoom: Annotated[int, Query(ge=MIN_ZOOM, le=MAX_ZOOM)],
     kinds: Annotated[list[FeatureKind] | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
+    cluster_unit: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> Envelope[FeaturesInBoundsResponse]:
-    """viewport 내 feature 목록 (개별 + 클러스터). zoom별 클러스터링은 라이브러리 책임."""
+    """viewport 내 feature(`items`) + 서버 클러스터(`clusters`). 클러스터링은 krtour 책임."""
     bbox_obj = _parse_bbox(bbox)
-    items = await client.features_in_bounds(
-        bbox_obj.as_tuple(),
-        kinds=list(kinds) if kinds else ["place", "event", "notice"],
-        zoom=zoom,
-        limit=limit,
-    )
-    features: list[FeatureSummary] = []
-    clusters: list[FeatureCluster] = []
-    for item in items:
-        if item.get("type") == "cluster":
-            clusters.append(_cluster_from_dto(item))
-        else:
-            features.append(_summary_from_dto(item))
+    with _map_krtour_errors():
+        data = await client.features_in_bounds(
+            min_lon=bbox_obj.lng_min,
+            min_lat=bbox_obj.lat_min,
+            max_lon=bbox_obj.lng_max,
+            max_lat=bbox_obj.lat_max,
+            kinds=[str(k) for k in (kinds or _DEFAULT_INBOUNDS_KINDS)],
+            category=category,
+            zoom=zoom,
+            cluster_unit=cluster_unit,
+            max_items=limit,
+        )
+    items = [_summary_from_krtour(x) for x in data.get("items", []) if isinstance(x, dict)]
+    clusters = [_cluster_from_krtour(x) for x in data.get("clusters", []) if isinstance(x, dict)]
     return Envelope.of(
-        FeaturesInBoundsResponse(features=features, clusters=clusters, zoom=zoom, bbox=bbox_obj)
+        FeaturesInBoundsResponse(
+            items=items,
+            clusters=clusters,
+            cluster_unit=data.get("cluster_unit"),
+            zoom=zoom,
+            bbox=bbox_obj,
+        )
     )
 
 
 @router.get("/nearby", response_model=Envelope[list[FeatureSummary]])
 async def features_nearby(
     _current_user: CurrentUserId,
-    client: KrtourMapClientDep,
+    client: KrtourMapHttpClientDep,
     lon: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     lat: Annotated[float, Query(ge=LAT_MIN, le=LAT_MAX)],
     radius_m: Annotated[int, Query(ge=10, le=50000)],
     kinds: Annotated[list[FeatureKind] | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> Envelope[list[FeatureSummary]]:
-    """반경 검색 — `coord_5179` 기반 (라이브러리 책임). location_audit 미들웨어가
-    좌표 query 자동 감지 후 `app.location_access_log` chain 적재."""
-    items = await client.features_nearby(
-        lon=lon,
-        lat=lat,
-        radius_m=radius_m,
-        kinds=list(kinds) if kinds else ["place"],
-        limit=limit,
+    """반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재."""
+    with _map_krtour_errors():
+        data = await client.features_nearby(
+            lon=lon,
+            lat=lat,
+            radius_m=radius_m,
+            kinds=[str(k) for k in (kinds or _DEFAULT_NEARBY_KINDS)],
+            category=category,
+            page_size=limit,
+        )
+    return Envelope.of(
+        [_summary_from_krtour(x) for x in data.get("items", []) if isinstance(x, dict)]
     )
-    return Envelope.of([_summary_from_dto(item) for item in items])
 
 
 @router.get("/search", response_model=Envelope[list[FeatureSummary]])
 async def search_features(
     _current_user: CurrentUserId,
-    client: KrtourMapClientDep,
+    client: KrtourMapHttpClientDep,
     q: Annotated[str, Query(min_length=1, max_length=200)],
     kinds: Annotated[list[FeatureKind] | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
     bbox: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> Envelope[list[FeatureSummary]]:
-    """자유 텍스트 검색 (FTS5 또는 pg_trgm — 라이브러리 책임)."""
-    bbox_tuple = _parse_bbox(bbox).as_tuple() if bbox else None
-    items = await client.search(
-        q=q,
-        kinds=list(kinds) if kinds else None,
-        bbox=bbox_tuple,
-        limit=limit,
+    """자유 텍스트 검색 (feature 파트만 — 검색 인덱스/ranking은 krtour 책임)."""
+    bbox_obj = _parse_bbox(bbox) if bbox else None
+    with _map_krtour_errors():
+        data = await client.search_features(
+            q=q,
+            min_lon=bbox_obj.lng_min if bbox_obj else None,
+            min_lat=bbox_obj.lat_min if bbox_obj else None,
+            max_lon=bbox_obj.lng_max if bbox_obj else None,
+            max_lat=bbox_obj.lat_max if bbox_obj else None,
+            kinds=[str(k) for k in kinds] if kinds else None,
+            category=category,
+            page_size=limit,
+        )
+    return Envelope.of(
+        [_summary_from_krtour(x) for x in data.get("items", []) if isinstance(x, dict)]
     )
-    return Envelope.of([_summary_from_dto(item) for item in items])
 
 
 @router.get("/requests/{request_id}", response_model=Envelope[FeatureRequestResponse])
@@ -298,54 +436,30 @@ async def get_feature_request(
 async def get_feature(
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
     _current_user: CurrentUserId,
-    client: KrtourMapClientDep,
+    client: KrtourMapHttpClientDep,
 ) -> Envelope[FeatureDetail]:
     """feature 1건 상세."""
-    dto = await client.get_feature(feature_id)
+    with _map_krtour_errors():
+        dto = await client.get_feature(feature_id)
     if dto is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
         )
-    return Envelope.of(
-        FeatureDetail(
-            feature_id=str(dto["feature_id"]),
-            kind=dto["kind"],
-            title=dto["title"],
-            coord=Coord(lon=dto["coord"]["longitude"], lat=dto["coord"]["latitude"]),
-            marker_color=dto.get("marker_color", "P-13"),
-            marker_icon=dto.get("marker_icon", "marker"),
-            category=dto.get("category"),
-            address=dto.get("address"),
-            address_road=dto.get("address_road"),
-            bjd_code=dto.get("bjd_code"),
-            sigungu_code=dto.get("sigungu_code"),
-            description=dto.get("description"),
-            detail=dto.get("detail", {}),
-            source_ids=list(dto.get("source_ids", [])),
-            updated_at=dto.get("updated_at") or datetime.now(UTC),
-        )
-    )
+    return Envelope.of(_detail_from_krtour(dto))
 
 
 @router.get("/{feature_id}/weather", response_model=Envelope[FeatureWeatherCard])
 async def get_feature_weather(
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
     _current_user: CurrentUserId,
-    client: KrtourMapClientDep,
+    client: KrtourMapHttpClientDep,
+    asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[FeatureWeatherCard]:
-    """KMA 시간축 weather card — 라이브러리가 sources 배열 포함 반환."""
-    asof = datetime.now(UTC)
-    dto = await client.build_weather_card(feature_id, asof=asof)
-    return Envelope.of(
-        FeatureWeatherCard(
-            feature_id=str(dto.get("feature_id") or feature_id),
-            asof=dto.get("asof") or asof,
-            short_term=dto.get("short_term", []),
-            daily=dto.get("daily", []),
-            sources=list(dto.get("sources", [])),
-        )
-    )
+    """weather card — krtour 평탄 metric 목록 + source_styles."""
+    with _map_krtour_errors():
+        dto = await client.feature_weather(feature_id, asof=asof)
+    return Envelope.of(_weather_from_krtour(dto, feature_id=feature_id))
 
 
 @router.post(
