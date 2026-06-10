@@ -97,8 +97,9 @@ export default function AdminEmailsPage() {
   return (
     <AdminPage title="이메일 큐" description="email_queue 행 + 재발송 trigger (status=pending로 reset).">
       <FilterBar>
-        <label className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-emails-status-filter" className="text-xs text-muted">상태</label>
         <select
+          id="admin-emails-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-sm border border-hairline px-2 py-1 text-sm"
@@ -113,7 +114,7 @@ export default function AdminEmailsPage() {
       </FilterBar>
 
       {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
       <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r) => r.email_id} />

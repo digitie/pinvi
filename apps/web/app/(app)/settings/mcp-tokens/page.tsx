@@ -7,6 +7,8 @@ import type { McpToken } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { FormField } from '@/components/forms/FormField';
+import { FormSelect } from '@/components/forms/FormSelect';
 
 const EXPIRY_OPTIONS = [
   { value: '30', label: '30일' },
@@ -135,35 +137,38 @@ export default function McpTokensSettingsPage() {
         <h1 className="text-2xl font-bold text-ink">MCP 토큰</h1>
       </header>
 
-      {error && <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>}
+      {error && (
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+      )}
 
       <Section title="새 토큰">
-        <form onSubmit={onIssue} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto]">
-          <input
+        <form onSubmit={onIssue} className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto]">
+          <FormField
+            id="settings-mcp-name"
+            label="토큰 이름"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             minLength={1}
             maxLength={120}
-            className="rounded-sm border border-hairline px-3 py-2 text-sm"
-            aria-label="토큰 이름"
+            data-testid="settings-mcp-name"
           />
-          <select
+          <FormSelect
+            id="settings-mcp-expiry"
+            label="만료"
             value={expiry}
             onChange={(e) => setExpiry(e.target.value as (typeof EXPIRY_OPTIONS)[number]['value'])}
-            className="rounded-sm border border-hairline px-3 py-2 text-sm"
-            aria-label="만료"
           >
             {EXPIRY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </FormSelect>
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
             {saving ? '발급 중...' : '발급'}
@@ -173,19 +178,21 @@ export default function McpTokensSettingsPage() {
 
       {issued && (
         <Section title="발급 원문">
-          <div className="flex min-w-0 gap-2">
-            <input
+          <div className="flex min-w-0 items-end gap-2">
+            <FormField
+              id="settings-mcp-issued"
+              label="발급된 MCP 토큰"
               readOnly
               value={issued}
-              className="min-w-0 flex-1 rounded-sm border border-hairline px-3 py-2 font-mono text-xs"
-              aria-label="발급된 MCP 토큰"
+              className="min-w-0 flex-1 font-mono text-xs"
+              data-testid="settings-mcp-issued"
             />
             <button
               type="button"
               onClick={onCopy}
               title="복사"
               aria-label="토큰 복사"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-hairline"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-hairline"
             >
               <Copy className="h-4 w-4" aria-hidden="true" />
             </button>

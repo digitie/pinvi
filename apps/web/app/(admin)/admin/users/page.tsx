@@ -110,8 +110,9 @@ export default function AdminUsersPage() {
             조회
           </button>
         </form>
-        <label className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-users-status-filter" className="text-xs text-muted">상태</label>
         <select
+          id="admin-users-status-filter"
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value);
@@ -130,7 +131,7 @@ export default function AdminUsersPage() {
       </FilterBar>
 
       {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-users-error">
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-users-error">
           {error}
         </p>
       )}

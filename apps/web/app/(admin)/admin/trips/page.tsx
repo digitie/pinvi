@@ -137,8 +137,9 @@ export default function AdminTripsPage() {
             조회
           </button>
         </form>
-        <label className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-trips-status-filter" className="text-xs text-muted">상태</label>
         <select
+          id="admin-trips-status-filter"
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value);
@@ -153,8 +154,9 @@ export default function AdminTripsPage() {
             </option>
           ))}
         </select>
-        <label className="text-xs text-muted">공개</label>
+        <label htmlFor="admin-trips-visibility-filter" className="text-xs text-muted">공개</label>
         <select
+          id="admin-trips-visibility-filter"
           value={visibilityFilter}
           onChange={(e) => {
             setVisibilityFilter(e.target.value);
@@ -174,6 +176,7 @@ export default function AdminTripsPage() {
 
       {error && (
         <p
+          role="alert"
           className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
           data-testid="admin-trips-error"
         >
