@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C(5): 위치 동의 흐름 + day 관리
+
+**작업**: LBS/PIPA 위치 동의 게이트 + trip day CRUD UI.
+
+- **api-client**: `userApi` 에 `getConsents`/`putConsents`/`withdrawConsent`(`/users/consents`) 추가.
+- **위치 동의** (`docs/compliance/lbs-act.md` §2):
+  - `lib/locationConsent.ts`: `hasLocationConsent`(lbs_tos+location_collection 유효 확인) +
+    `locationConsentItems`(v1.0). 순수·테스트.
+  - `components/map/LocationConsentDialog.tsx`: 동의 모달.
+  - `FeatureMapView` "내 위치" 버튼 → 동의 확인(`getConsents`) → 미동의 시 다이얼로그 → 동의
+    (`putConsents`) 후 geolocation. 철회 케이스도 재동의로 처리.
+- **day 관리**: `components/trips/TripDayControls.tsx`(일자 추가/이름수정/삭제) → `TripDetail` 에
+  `tripApi.createDay`/`updateDay`/`deleteDay` 배선(mutation 후 재조회).
+- `tests/locationConsent.test.ts` 4건.
+
+**검증**: web build(`/map` 7.11kB, `/trips/[tripId]` 9.45kB) / workspace `tsc`/`next lint` /
+vitest 24 passed. 실 위치/지오로케이션 E2E(브라우저)는 별도.
+
+**남은 PR-C**: 마커 우클릭 직접 편집, 설정에서 동의 철회 UI(현재는 가입/위치 게이트만).
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C(4): POI 추가/재정렬/편집
 
 **작업**: trip `[tripId]` 지도/패널에서 POI 추가·재정렬·마커 편집·삭제. 백엔드 `poiApi` 기존 활용

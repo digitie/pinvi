@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
 import type maplibregl from 'maplibre-gl';
 import type { ClusterPoint } from 'maplibre-vworld';
-import { ApiError, featureApi } from '@tripmate/api-client';
+import { ApiError, featureApi, userApi } from '@tripmate/api-client';
 import type {
   FeatureDetail,
   FeaturesInBoundsResponse,
@@ -13,6 +13,7 @@ import type {
 } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { hasLocationConsent, locationConsentItems } from '@/lib/locationConsent';
 import { paletteHex } from '@/lib/markerPalette';
 import {
   ClusterLayer,
@@ -24,6 +25,7 @@ import {
   UserLocationMarker,
   VWorldMap,
 } from '@/components/map/vworldPrimitives';
+import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
@@ -114,6 +116,10 @@ export function FeatureMapView({
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [locationConsent, setLocationConsent] = useState<boolean | null>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchInBounds = useCallback(async (map: maplibregl.Map) => {
@@ -227,7 +233,7 @@ export function FeatureMapView({
     [flyTo]
   );
 
-  const handleMyLocation = useCallback(() => {
+  const runGeolocate = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setNotice('이 브라우저는 위치를 지원하지 않습니다.');
       return;
@@ -243,6 +249,41 @@ export function FeatureMapView({
       () => setNotice('위치 권한이 거부되었거나 가져올 수 없습니다.')
     );
   }, [flyTo]);
+
+  // 위치 기능은 LBS 동의(lbs_tos + location_collection) 확인 후에만(위치정보법 제15·16조).
+  const handleMyLocation = useCallback(async () => {
+    if (locationConsent === true) {
+      runGeolocate();
+      return;
+    }
+    try {
+      const consents = await userApi(apiClient).getConsents();
+      if (hasLocationConsent(consents)) {
+        setLocationConsent(true);
+        runGeolocate();
+        return;
+      }
+    } catch {
+      // 동의 조회 실패 시 동의 다이얼로그로 안내.
+    }
+    setConsentError(null);
+    setConsentOpen(true);
+  }, [locationConsent, runGeolocate]);
+
+  const handleConsentAgree = useCallback(async () => {
+    setConsentSaving(true);
+    setConsentError(null);
+    try {
+      await userApi(apiClient).putConsents(locationConsentItems());
+      setLocationConsent(true);
+      setConsentOpen(false);
+      runGeolocate();
+    } catch (err) {
+      setConsentError(err instanceof ApiError ? err.message : '동의 저장에 실패했습니다.');
+    } finally {
+      setConsentSaving(false);
+    }
+  }, [runGeolocate]);
 
   const copyCoord = useCallback(async (lat: number, lon: number) => {
     const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -271,7 +312,7 @@ export function FeatureMapView({
             </div>
             <button
               type="button"
-              onClick={handleMyLocation}
+              onClick={() => void handleMyLocation()}
               aria-label="내 위치로 이동"
               data-testid="map-my-location"
               className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-ink shadow-sm hover:bg-surface-soft"
@@ -389,6 +430,13 @@ export function FeatureMapView({
           </div>
         </dl>
       </div>
+      <LocationConsentDialog
+        open={consentOpen}
+        saving={consentSaving}
+        error={consentError}
+        onAgree={() => void handleConsentAgree()}
+        onCancel={() => setConsentOpen(false)}
+      />
     </div>
   );
 }

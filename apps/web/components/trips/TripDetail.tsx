@@ -10,6 +10,7 @@ import type { MarkerColorKey } from '@/lib/markerPalette';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 
@@ -148,6 +149,27 @@ export function TripDetail({ tripId }: TripDetailProps) {
     void runMutation(() => poiApi(apiClient).delete(tripId, poiId));
   };
 
+  const handleAddDay = () => {
+    const nextIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
+    void runMutation(async () => {
+      await tripApi(apiClient).createDay(tripId, { day_index: nextIndex });
+      setSelectedDayIndex(nextIndex);
+    });
+  };
+
+  const handleRenameDay = (dayIndex: number, title: string) => {
+    void runMutation(() =>
+      tripApi(apiClient).updateDay(tripId, dayIndex, { title: title || null })
+    );
+  };
+
+  const handleDeleteDay = (dayIndex: number) => {
+    void runMutation(async () => {
+      await tripApi(apiClient).deleteDay(tripId, dayIndex);
+      setSelectedDayIndex(null);
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
@@ -237,6 +259,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
           })}
         </div>
       )}
+
+      <TripDayControls
+        selectedDay={selectedDay}
+        onAdd={handleAddDay}
+        onRename={handleRenameDay}
+        onDelete={handleDeleteDay}
+        busy={busy}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="min-h-[460px]" aria-label="여행 지도">
