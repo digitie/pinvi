@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C(2): trip 대시보드 링크 + [tripId] 메인 지도
+
+**작업**: 사용자 여행을 지도에 — `/trips/[tripId]` 메인 지도 + POI 사이드패널(양방향 선택).
+
+- `lib/tripMapPoints.ts`: `TripView` POI(opaque `feature.coord`)를 `CoordSchema` 런타임 검증으로
+  지도 포인트로 변환(`extractCoord`/`tripPoiToMapPoint`/`tripDaysToMapPoints`/`pointsBounds`).
+  좌표 없거나 한국 범위 밖이면 제외. marker_color → 팔레트 hex.
+- `components/map/vworldPrimitives.tsx`: maplibre-vworld 동적 import + dev shim 공통 모듈
+  (VWorldMap/ClusterLayer/MakiMarker/Popup/skeleton/fallback) — TripMapView 가 사용.
+- `components/trips/TripMapView.tsx`: trip POI 지도 — 로드 시 POI 경계 fitBounds, 마커 클릭 →
+  선택, 외부 선택 시 flyTo, broken POI 표시.
+- `components/trips/TripPoiList.tsx`: 선택 일자의 POI 목록(순번 색 dot + 도착시각 + 예산 + 메모 +
+  broken 배지). 클릭 → 선택(지도와 양방향 동기).
+- `components/trips/TripDetail.tsx`: `tripApi.get`(TripView) → 헤더(제목/일정/지역/동반/끊긴
+  링크 수) + 일자 탭 + 지도/목록 양방향. raw apiClient 패턴.
+- `app/(app)/trips/[tripId]/page.tsx` 라우트 + `TripDashboard` 카드 → `/trips/{id}` 링크.
+- `tests/tripMapPoints.test.ts` 6건.
+
+**검증**: web build(`/trips/[tripId]` 6.36kB) / `tsc --noEmit` / `next lint` / vitest 15 passed.
+실 지도 렌더 E2E(VWorld 키+브라우저)는 별도.
+
+**남은 PR-C**: POI 추가/재정렬(D&D)·편집, 우클릭 메뉴(4+3), 내 위치+동의 흐름, search overlay.
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C(1): 지도 실 feature 로딩 슬라이스
 
 **작업**: shell-only 였던 지도에 실제 `/features/in-bounds` 데이터 로딩 + 16색 팔레트를 입힘.
