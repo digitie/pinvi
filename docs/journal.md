@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 인증 폼 접근성 강화 (FormField + 필드별 검증)
+
+**작업**: 로그인/회원가입 폼의 a11y·검증 갭 보강.
+
+- `lib/formValidation.ts`: `validateForm(schema, values)` → 필드별 한국어 메시지(이메일/비밀번호 min/너무 긺) +
+  `firstField`(포커스 이동용). 순수·테스트(6건).
+- `components/forms/FormField.tsx`: a11y 기본 입력 필드 — `htmlFor`/`id` 연결, 오류 시 `aria-invalid` +
+  `aria-describedby` + `role=alert`, `forwardRef`(포커스).
+- `app/(auth)/login/page.tsx`, `signup/page.tsx`: FormField + validateForm 적용. `autoComplete`
+  (email/current-password/new-password/nickname) + `noValidate` + 첫 오류 필드 포커스. OAuth·동의 fieldset 보존.
+- `e2e/auth-form-a11y.e2e.ts`: 잘못된 이메일 → 필드 오류 + aria-invalid / label 클릭 포커스 / 비밀번호 8자 검증(3건).
+
+**주의(복구)**: 작업 시작 시 stale `agent/claude-idle`(origin/main −134)에서 편집을 시작 → 발견 후 새 파일
+백업·되돌리고 `origin/main` 기준 fresh 브랜치로 재적용. 브랜치 base도 stale(#150)였어서 `git fetch` 후 #151 위로 rebase.
+
+**검증**: tsc + lint(clean) + build + vitest 6 + a11y E2E 3 + 인증 회귀(signup-consents/oauth-account-match 3) 통과.
+
 ## 2026-06-10 (claude) — App Router 에러 바운더리 + not-found + 로딩 상태
 
 **작업**: Next.js App Router 전역 품질 방어선 — 에러 바운더리·404·로딩이 전무하던 갭 보강.

@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LoginRequestSchema } from '@tripmate/schemas';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
+import { FormField } from '@/components/forms/FormField';
+import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
@@ -35,8 +37,11 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [oauthProviders, setOauthProviders] = useState(DISABLED_OAUTH_PROVIDERS);
   const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
   const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
@@ -83,19 +88,25 @@ export default function LoginPage() {
     };
   }, []);
 
+  const focusField = (field: string | null) => {
+    if (field === 'email') emailRef.current?.focus();
+    else if (field === 'password') passwordRef.current?.focus();
+  };
+
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
 
-    const parsed = LoginRequestSchema.safeParse({ email, password });
-    if (!parsed.success) {
-      setError('이메일 또는 비밀번호 형식을 확인해 주세요.');
+    const result = validateForm(LoginRequestSchema, { email, password });
+    setFieldErrors(result.fieldErrors);
+    if (!result.success || !result.data) {
+      focusField(result.firstField);
       return;
     }
 
     setLoading(true);
     try {
-      await authApi(apiClient).login(parsed.data);
+      await authApi(apiClient).login(result.data);
       router.push('/trips');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -143,34 +154,35 @@ export default function LoginPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-ink">로그인</h1>
 
-      <form onSubmit={onSubmit} className="space-y-4" data-testid="login-form">
-        <label className="block">
-          <span className="text-sm text-ink">이메일</span>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="login-email"
-          />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-4" data-testid="login-form" noValidate>
+        <FormField
+          ref={emailRef}
+          id="login-email"
+          label="이메일"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          data-testid="login-email"
+        />
 
-        <label className="block">
-          <span className="text-sm text-ink">비밀번호</span>
-          <input
-            type="password"
-            required
-            minLength={1}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="login-password"
-          />
-        </label>
+        <FormField
+          ref={passwordRef}
+          id="login-password"
+          label="비밀번호"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          data-testid="login-password"
+        />
 
         {error && (
-          <p className="text-sm text-error-text" data-testid="login-error">
+          <p className="text-sm text-error-text" role="alert" data-testid="login-error">
             {error}
           </p>
         )}
