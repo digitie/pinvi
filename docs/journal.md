@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 공유 trip 읽기전용 뷰 라우트 + E2E
+
+**작업**: 토큰 공유 링크용 **공개 읽기전용** 여행 뷰.
+
+- `app/shared/[tripId]/[token]/page.tsx`: route group 밖(인증 불필요) 공개 라우트.
+- `components/trips/SharedTripView.tsx`: `tripApi.getShared(id, token)`(TripSharedView) → 헤더
+  (제목/일정/지역 + "공유된 여행") + 일자 탭 + 지도(TripMapView) + POI 목록(TripPoiList 읽기전용,
+  편집/D&D 없음). 지도↔목록 선택 동기.
+- `e2e/shared-trip.e2e.ts`: 로그인 없이 `/shared/{id}/{token}` → 제목·POI 표시 + 편집 버튼 부재 검증.
+
+**검증**: 로컬 chromium 전 스위트 `32 passed`(CI env port 9021) + tsc + lint + build(`/shared` 라우트).
+
 ## 2026-06-10 (claude) — trip 메타 편집 다이얼로그 + E2E
 
 **작업**: trip 제목/지역/일정/상태/공개범위 편집.
