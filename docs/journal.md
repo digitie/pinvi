@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-175: trip view batch를 krtour HTTP client로 연결 + etl_bridge 제거
+
+**작업**: PR1(#171)에 이어 trip 상세 view의 feature batch 경로를 레거시 stub에서 실 HTTP
+client로 전환하고, 더 이상 참조되지 않는 `etl_bridge` 패키지를 완전히 제거.
+
+- `clients/krtour_map.py`: `get_optional_krtour_map_client`(미주입 시 503 대신 None) +
+  `OptionalKrtourMapHttpClientDep` 추가 — feature가 보조인 경로(trip view)용.
+- `services/trip_view_builder.py`: `KrtourMapClient` import를 `clients`로 교체.
+  `features_by_ids(list)->list` → `get_features(ids)->{found, missing}`. `found`(id→detail)를
+  canonical feature_id로 재키잉해 fresh_features에 merge + feature_cache 보존. miss/없음은
+  snapshot fallback + is_broken 유지.
+- `api/v1/trips.py`: `get_trip` / `get_shared_trip`의 `OptionalKrtourMapClientDep` →
+  `OptionalKrtourMapHttpClientDep`.
+- `main.py`: 레거시 `krtour_map_lifespan`(in-process Protocol stub) 합성 제거.
+- **삭제**: `apps/api/app/etl_bridge/`(krtour_map.py + __init__.py) — 마지막 소비처 정리 완료.
+- 테스트: `test_trip_view_builder.py` fake를 `get_features`/`{found,missing}` 셰입으로 갱신.
+
+**검증**: ruff check + format(clean, 로컬). mypy/pytest는 CI.
+
 ## 2026-06-11 (claude) — T-173/174/176/178: feature read 라우터를 krtour HTTP client로 cutover
 
 **작업**: `/features/*` read 경로를 레거시 `etl_bridge` in-process Protocol stub에서 실 HTTP

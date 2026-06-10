@@ -11,9 +11,9 @@ from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
+from app.clients.krtour_map import OptionalKrtourMapHttpClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
-from app.etl_bridge.krtour_map import OptionalKrtourMapClientDep
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from app.schemas.storage import AttachmentCreate, AttachmentUpdate, DownloadUrlResponse
@@ -356,7 +356,7 @@ async def get_trip_endpoint(
     trip_id: uuid.UUID,
     current_user_id: CurrentUserId,
     db: DbSession,
-    krtour_client: OptionalKrtourMapClientDep,
+    krtour_client: OptionalKrtourMapHttpClientDep,
 ) -> Envelope[TripView]:
     try:
         trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
@@ -602,7 +602,7 @@ async def get_shared_trip_endpoint(
     trip_id: uuid.UUID,
     token: str,
     db: DbSession,
-    krtour_client: OptionalKrtourMapClientDep,
+    krtour_client: OptionalKrtourMapHttpClientDep,
 ) -> Envelope[TripSharedView]:
     try:
         trip, share = await get_trip_for_share_token(db, trip_id=trip_id, token=token)
