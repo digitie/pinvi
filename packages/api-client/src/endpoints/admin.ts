@@ -8,6 +8,10 @@ import {
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
+  AdminFeatureRequestApproveSchema,
+  AdminFeatureRequestPagedResponseSchema,
+  AdminFeatureRequestRejectSchema,
+  AdminFeatureRequestResultSchema,
   AdminMcpTokenIssueRequestSchema,
   AdminLocationAuditEntrySchema,
   AdminPagedResponseSchema,
@@ -32,6 +36,41 @@ export const adminApi = (client: ApiClient) => ({
     client.request('/admin/stats/overview', {
       method: 'GET',
       schema: AdminStatsOverviewSchema,
+    }),
+
+  /** 사용자 feature 제안 검토 큐 (T-179). */
+  listFeatureRequests: (
+    params: { status?: string; page?: number; limit?: number } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/feature-requests${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminFeatureRequestPagedResponseSchema,
+    });
+  },
+
+  approveFeatureRequest: (
+    requestId: string,
+    body: z.infer<typeof AdminFeatureRequestApproveSchema>
+  ) =>
+    client.request(`/admin/feature-requests/${requestId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(AdminFeatureRequestApproveSchema.parse(body)),
+      schema: AdminFeatureRequestResultSchema,
+    }),
+
+  rejectFeatureRequest: (
+    requestId: string,
+    body: z.infer<typeof AdminFeatureRequestRejectSchema>
+  ) =>
+    client.request(`/admin/feature-requests/${requestId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(AdminFeatureRequestRejectSchema.parse(body)),
+      schema: AdminFeatureRequestResultSchema,
     }),
 
   listUsers: (params: { page?: number; limit?: number; status?: string; q?: string } = {}) => {

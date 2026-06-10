@@ -424,12 +424,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
    Sprint 5 ETL — 날씨/유가 krtour 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
 2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023) — Odroid M1S + N150 multi-platform
    Docker 빌드 + 두 노드 streaming replication.
-3. **krtour 연동 cutover** — ✅ T-181(client, #170) + ✅ **T-173/174/176/178**(feature read 라우터
-   cutover, #171) + ✅ **T-175**(trip view batch + `etl_bridge` 제거, #172) + ✅ **T-180**(admin
-   HTTP client + admin base 9011 정정, #173) + ✅ **T-179 백엔드**(`/admin/feature-requests`
-   검토→승인/거절 + krtour change API 릴레이 + audit, 2026-06-11). 남은 것: **T-179 web 검토 UI**
-   (`/admin/feature-requests` 화면 — PR3c). §7 합의 5건은 krtour T-217c 회신 대기 — 문서화된
-   기본값으로 진행(확정 시 조정).
+3. **krtour 연동 cutover — ✅ 완료** — T-181(client, #170) + **T-173/174/176/178**(feature read
+   라우터 cutover, #171) + **T-175**(trip view batch + `etl_bridge` 제거, #172) + **T-180**(admin
+   HTTP client + admin base 9011 정정, #173) + **T-179 백엔드**(`/admin/feature-requests`
+   검토→승인/거절 + krtour change API 릴레이 + audit, #174) + **T-179 web UI**(검토 큐 화면 + 승인/거절,
+   2026-06-11). **남은 cross-repo 의존**: §7 합의 5건(review_mode/idempotency/출처태깅/admin인증/
+   closure)은 krtour T-217c 회신 대기 — TripMate는 문서화된 기본값으로 동작, 확정 시 호출부 조정.
 4. **보류: future provider** — T-122 Naver/Kakao OAuth (현재 런타임 provider는 Google만).
 
 ## 릴리즈 로드맵

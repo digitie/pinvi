@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-179: admin feature-request 검토 web UI (PR3c)
+
+**작업**: `/admin/feature-requests` placeholder를 실제 검토 큐 화면으로 교체 — T-179 백엔드
+(검토→승인/거절 + krtour 릴레이) 완결.
+
+- `apps/web/app/(admin)/admin/feature-requests/page.tsx` — 상태 필터(대기/승인/반영/거절) +
+  DataTable(유형/이름/kind/좌표/요청자 마스킹/상태/등록) + 행별 "검토" → ReviewPanel.
+  ReviewPanel: 제안 상세 + 승인(new_place는 category 코드/marker_color/marker_icon/사유 입력,
+  누락 시 클라+서버 422) / 거절(사유). 처리 후 목록 재조회 + notice.
+- `packages/schemas/src/admin_feature_request.ts` 신규 — Summary/Paged/Approve/Reject/Result Zod
+  (Pydantic 미러) + index 배럴 export.
+- `packages/api-client` adminApi에 `listFeatureRequests`/`approveFeatureRequest`/`rejectFeatureRequest` 추가.
+- e2e `admin-feature-requests.e2e.ts` 2: 승인 시 krtour 전달 API 호출 body 검증 + new_place 마커 누락 가드.
+
+**검증**: web typecheck/lint/build + e2e는 CI(web `lint-typecheck-build`).
+
 ## 2026-06-11 (claude) — T-179: admin feature-request 검토→승인 릴레이 (백엔드)
 
 **작업**: 사용자 feature 제안(T-177 큐)을 Admin이 검토해 승인 시 krtour `/v1/admin/features*`
