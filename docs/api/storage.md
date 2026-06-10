@@ -72,8 +72,7 @@ Cookie: tripmate_access=...
     "storage_key": "user-uploads/trip_attachment/<user_id>/2026/05/<uuid>.jpg",
     "upload_url": "http://127.0.0.1:9003/tripmate-media/user-uploads/...?X-Amz-Signature=...",
     "headers": {
-      "Content-Type": "image/jpeg",
-      "x-amz-content-sha256": "UNSIGNED-PAYLOAD"
+      "Content-Type": "image/jpeg"
     },
     "expires_at": "2026-05-25T15:00:00+09:00",
     "max_upload_bytes": 10485760,
@@ -81,6 +80,11 @@ Cookie: tripmate_access=...
   }
 }
 ```
+
+> 서명: boto3 `generate_presigned_url`(SigV4 query auth). 서명 host 는 **public
+> endpoint**(`TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL`), path-style addressing. `ContentType`
+> 가 서명에 포함되므로 PUT 시 `Content-Type` 헤더를 응답 `headers` 그대로 보내야 한다.
+> body 는 UNSIGNED-PAYLOAD 이라 별도 `x-amz-content-sha256` 헤더 불필요.
 
 검증:
 
