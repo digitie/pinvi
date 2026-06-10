@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 종결: 문서 체크리스트 + PIPA
+
+**작업**: T-106 Sprint-4 스코프(신규 trip / 동반자 초대 알림 채널) 종결 문서화.
+
+- `docs/integrations/telegram.md` §10 체크리스트를 현 구현으로 갱신(완료 8 + Sprint5 ETL/후속 표시),
+  각 항목에 PR 번호(#160~#168) 명시.
+- `docs/compliance/pipa.md` §4.3 Telegram 위탁 내용 구체화(신규/동반자 알림, 수령 = `telegram_chat_id`만,
+  메시지 본문 PII 미포함, bot token 미저장).
+
+**T-106 Sprint-4 완료** (#160 client → #161 target CRUD → #163 알림 hook → #164 관리 UI → #165 outbox 재시도 →
+#166 trip 링킹 → #168 trip-link UI). **남은 후속(별 스코프)**: weekly/daily summary Dagster(§7, Sprint 5 ETL —
+날씨/유가 krtour 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
+
 ## 2026-06-10 (claude) — T-106 PR-7: trip 상세 Telegram 연결 UI
 
 **작업**: 여행 상세에서 Telegram 알림 대상을 연결/해제하는 프론트 UI (백엔드 #166 위).
