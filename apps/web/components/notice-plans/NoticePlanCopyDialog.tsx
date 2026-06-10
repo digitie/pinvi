@@ -1,13 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { ApiError, noticePlanApi, tripApi } from '@tripmate/api-client';
 import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { buildCopyRequest, canCopy, type CopyForm } from '@/lib/noticePlanCopy';
 import { useEscapeKey } from '@/lib/useEscapeKey';
+import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
+import { FormField } from '@/components/forms/FormField';
+
+const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
+const DIALOG_INPUT = 'h-9 px-2 focus:border-primary';
 
 export interface NoticePlanCopyDialogProps {
   plan: NoticePlan;
@@ -28,8 +33,10 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   const [copying, setCopying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NoticePlanCopyResponse | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   useEscapeKey(onClose);
+  useDialogAutoFocus(titleRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,34 +130,35 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
 
             {form.mode === 'new' ? (
               <div className="space-y-3">
-                <label className="block text-sm font-semibold text-ink">
-                  여행 제목
-                  <input
-                    value={form.title}
-                    onChange={(event) => update({ title: event.target.value })}
-                    maxLength={200}
-                    className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-                  />
-                </label>
+                <FormField
+                  ref={titleRef}
+                  id="notice-copy-title"
+                  label="여행 제목"
+                  labelClassName={DIALOG_LABEL}
+                  className={DIALOG_INPUT}
+                  value={form.title}
+                  onChange={(event) => update({ title: event.target.value })}
+                  maxLength={200}
+                />
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="block text-sm font-semibold text-ink">
-                    시작일
-                    <input
-                      type="date"
-                      value={form.startDate}
-                      onChange={(event) => update({ startDate: event.target.value })}
-                      className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-ink">
-                    종료일
-                    <input
-                      type="date"
-                      value={form.endDate}
-                      onChange={(event) => update({ endDate: event.target.value })}
-                      className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-                    />
-                  </label>
+                  <FormField
+                    id="notice-copy-start"
+                    label="시작일"
+                    type="date"
+                    labelClassName={DIALOG_LABEL}
+                    className={DIALOG_INPUT}
+                    value={form.startDate}
+                    onChange={(event) => update({ startDate: event.target.value })}
+                  />
+                  <FormField
+                    id="notice-copy-end"
+                    label="종료일"
+                    type="date"
+                    labelClassName={DIALOG_LABEL}
+                    className={DIALOG_INPUT}
+                    value={form.endDate}
+                    onChange={(event) => update({ endDate: event.target.value })}
+                  />
                 </div>
               </div>
             ) : loadingTrips ? (

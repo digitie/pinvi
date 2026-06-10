@@ -1,12 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CheckCircle2, Loader2, MapPin } from 'lucide-react';
 import { ApiError, featureApi } from '@tripmate/api-client';
 import type { FeatureSuggestionKind } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { buildNewPlaceRequest, type NewPlaceForm } from '@/lib/featureRequest';
 import { useEscapeKey } from '@/lib/useEscapeKey';
+import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
+import { FormField } from '@/components/forms/FormField';
+
+const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
+const DIALOG_INPUT = 'h-9 px-2 focus:border-primary';
 
 export interface FeatureRequestDialogProps {
   coord: { lon: number; lat: number };
@@ -27,18 +32,23 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
     note: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [titleError, setTitleError] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   useEscapeKey(onClose);
+  useDialogAutoFocus(titleRef);
 
   const update = (patch: Partial<NewPlaceForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
   const submit = async () => {
     if (!form.title.trim()) {
-      setError('이름을 입력하세요.');
+      setTitleError('이름을 입력하세요.');
+      titleRef.current?.focus();
       return;
     }
+    setTitleError(undefined);
     setSubmitting(true);
     setError(null);
     try {
@@ -104,25 +114,27 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
               ))}
             </div>
 
-            <label className="block text-sm font-semibold text-ink">
-              이름
-              <input
-                value={form.title}
-                onChange={(event) => update({ title: event.target.value })}
-                maxLength={200}
-                placeholder="예: 해운대 블루라인파크"
-                className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-              />
-            </label>
-            <label className="block text-sm font-semibold text-ink">
-              카테고리(쉼표 구분, 선택)
-              <input
-                value={form.categories}
-                onChange={(event) => update({ categories: event.target.value })}
-                placeholder="카페, 디저트"
-                className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-              />
-            </label>
+            <FormField
+              ref={titleRef}
+              id="feature-request-title"
+              label="이름"
+              labelClassName={DIALOG_LABEL}
+              className={DIALOG_INPUT}
+              value={form.title}
+              onChange={(event) => update({ title: event.target.value })}
+              maxLength={200}
+              placeholder="예: 해운대 블루라인파크"
+              error={titleError}
+            />
+            <FormField
+              id="feature-request-categories"
+              label="카테고리(쉼표 구분, 선택)"
+              labelClassName={DIALOG_LABEL}
+              className={DIALOG_INPUT}
+              value={form.categories}
+              onChange={(event) => update({ categories: event.target.value })}
+              placeholder="카페, 디저트"
+            />
             <label className="block text-sm font-semibold text-ink">
               메모(선택)
               <textarea
@@ -149,7 +161,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={submitting || !form.title.trim()}
+                disabled={submitting}
                 data-testid="feature-request-submit"
                 className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
               >

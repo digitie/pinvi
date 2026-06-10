@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { TripResponse, TripStatus, TripUpdate, TripVisibility } from '@tripmate/schemas';
 import {
@@ -10,6 +10,11 @@ import {
   type TripEditForm,
 } from '@/lib/tripEdit';
 import { useEscapeKey } from '@/lib/useEscapeKey';
+import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
+import { FormField } from '@/components/forms/FormField';
+
+const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
+const DIALOG_INPUT = 'h-9 px-2 focus:border-primary';
 
 const STATUSES: TripStatus[] = ['draft', 'planned', 'in_progress', 'completed', 'archived'];
 const VISIBILITIES: TripVisibility[] = ['private', 'unlisted', 'public'];
@@ -24,6 +29,8 @@ export interface TripEditDialogProps {
 
 export function TripEditDialog({ trip, saving = false, error = null, onSave, onClose }: TripEditDialogProps) {
   useEscapeKey(onClose);
+  const titleRef = useRef<HTMLInputElement>(null);
+  useDialogAutoFocus(titleRef);
   const [form, setForm] = useState<TripEditForm>({
     title: trip.title,
     regionHint: trip.region_hint ?? '',
@@ -46,43 +53,44 @@ export function TripEditDialog({ trip, saving = false, error = null, onSave, onC
       <div className="w-full max-w-md space-y-3 rounded-md border border-hairline bg-white p-5 shadow-lg">
         <h2 className="text-base font-bold text-ink">여행 편집</h2>
 
-        <label className="block text-sm font-semibold text-ink">
-          제목
-          <input
-            value={form.title}
-            onChange={(event) => update({ title: event.target.value })}
-            maxLength={200}
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
-        <label className="block text-sm font-semibold text-ink">
-          지역
-          <input
-            value={form.regionHint}
-            onChange={(event) => update({ regionHint: event.target.value })}
-            maxLength={120}
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
+        <FormField
+          ref={titleRef}
+          id="trip-edit-title"
+          label="제목"
+          labelClassName={DIALOG_LABEL}
+          className={DIALOG_INPUT}
+          value={form.title}
+          onChange={(event) => update({ title: event.target.value })}
+          maxLength={200}
+        />
+        <FormField
+          id="trip-edit-region"
+          label="지역"
+          labelClassName={DIALOG_LABEL}
+          className={DIALOG_INPUT}
+          value={form.regionHint}
+          onChange={(event) => update({ regionHint: event.target.value })}
+          maxLength={120}
+        />
         <div className="grid grid-cols-2 gap-2">
-          <label className="block text-sm font-semibold text-ink">
-            시작일
-            <input
-              type="date"
-              value={form.startDate}
-              onChange={(event) => update({ startDate: event.target.value })}
-              className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-            />
-          </label>
-          <label className="block text-sm font-semibold text-ink">
-            종료일
-            <input
-              type="date"
-              value={form.endDate}
-              onChange={(event) => update({ endDate: event.target.value })}
-              className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-            />
-          </label>
+          <FormField
+            id="trip-edit-start"
+            label="시작일"
+            type="date"
+            labelClassName={DIALOG_LABEL}
+            className={DIALOG_INPUT}
+            value={form.startDate}
+            onChange={(event) => update({ startDate: event.target.value })}
+          />
+          <FormField
+            id="trip-edit-end"
+            label="종료일"
+            type="date"
+            labelClassName={DIALOG_LABEL}
+            className={DIALOG_INPUT}
+            value={form.endDate}
+            onChange={(event) => update({ endDate: event.target.value })}
+          />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-sm font-semibold text-ink">

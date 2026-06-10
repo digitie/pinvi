@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 모달 다이얼로그 포커스 관리 + 폼 접근성
+
+**작업**: trip 편집 / 추천 복사 / 장소 제안 다이얼로그의 a11y 보강 — 모달 포커스 관리 + FormField 통일.
+
+- `lib/useDialogAutoFocus.ts`: 모달 열림 시 첫 입력으로 포커스(WCAG 2.4.3), 닫힘 시 직전 포커스 요소로 복원. rAF 지연 + `document.contains` 가드.
+- `components/forms/FormField.tsx`: `labelClassName` prop 추가(다이얼로그의 굵은 라벨 보존).
+- `TripEditDialog` / `NoticePlanCopyDialog` / `FeatureRequestDialog`: 텍스트·날짜 입력 → `FormField`(id 연결),
+  제목/이름 입력에 `useDialogAutoFocus` 적용.
+- `FeatureRequestDialog`: 제출 버튼을 빈 제목에도 활성화하고(disabled 버튼 안티패턴 제거) 제출 시
+  `이름` 필드 오류(aria-invalid) + 포커스로 안내.
+- `e2e/dialog-focus.e2e.ts`(2): 다이얼로그 열림→첫 입력 포커스 / 이름 없이 제출→필드 오류+aria-invalid+포커스.
+  `e2e/trip-edit.e2e.ts`: 열림 시 제목 자동 포커스 단언 추가.
+
+**검증**: tsc + lint(clean) + build + dialog-focus E2E 2 + 회귀(trip-edit/notice-copy/feature-request/form-a11y/auth-form-a11y) 통과.
+(`PoiEditor`는 모달이 아니라 inline 확장 + textarea 포함이라 이번 범위 외.)
+
 ## 2026-06-10 (claude) — trip 생성 / 프로필 완성 폼 접근성 (FormField 확장)
 
 **작업**: 인증 폼에 이어 trip 생성·프로필 완성 폼에도 `FormField`/필드 검증 적용 (a11y 일관성).
