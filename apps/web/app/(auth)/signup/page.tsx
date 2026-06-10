@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RegisterRequestSchema } from '@tripmate/schemas';
 import type { ConsentType } from '@tripmate/schemas';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
+import { FormField } from '@/components/forms/FormField';
+import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
@@ -59,10 +61,20 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [consents, setConsents] = useState<Record<ConsentType, boolean>>(INITIAL_CONSENTS);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const nicknameRef = useRef<HTMLInputElement>(null);
 
   const allRequiredConsents = REQUIRED_CONSENTS.every((item) => consents[item.type]);
+
+  const focusField = (field: string | null) => {
+    if (field === 'email') emailRef.current?.focus();
+    else if (field === 'password') passwordRef.current?.focus();
+    else if (field === 'nickname') nicknameRef.current?.focus();
+  };
 
   const toggleConsent = (type: ConsentType, checked: boolean) => {
     setConsents((current) => ({ ...current, [type]: checked }));
@@ -91,22 +103,23 @@ export default function SignupPage() {
       .filter((item) => consents[item.type])
       .map((item) => ({ consent_type: item.type, version: CONSENT_VERSION }));
 
-    const parsed = RegisterRequestSchema.safeParse({
+    const result = validateForm(RegisterRequestSchema, {
       email,
       password,
       nickname,
       consents: consentItems,
     });
-    if (!parsed.success) {
-      setError('입력 값과 약관 동의 상태를 다시 확인해 주세요. (비밀번호 최소 8자)');
+    setFieldErrors(result.fieldErrors);
+    if (!result.success || !result.data) {
+      focusField(result.firstField);
       return;
     }
 
     setLoading(true);
     try {
-      const result = await authApi(apiClient).register(parsed.data);
+      const registered = await authApi(apiClient).register(result.data);
       router.push(
-        `/signup/verify-pending?email=${encodeURIComponent(parsed.data.email)}&dispatched=${result.verification_email_dispatched}`,
+        `/signup/verify-pending?email=${encodeURIComponent(result.data.email)}&dispatched=${registered.verification_email_dispatched}`,
       );
     } catch (err) {
       if (err instanceof ApiError) {
@@ -127,18 +140,19 @@ export default function SignupPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-ink">회원가입</h1>
 
-      <form onSubmit={onSubmit} className="space-y-4" data-testid="signup-form">
-        <label className="block">
-          <span className="text-sm text-ink">이메일</span>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="signup-email"
-          />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-4" data-testid="signup-form" noValidate>
+        <FormField
+          ref={emailRef}
+          id="signup-email"
+          label="이메일"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          data-testid="signup-email"
+        />
 
         <fieldset className="space-y-3 rounded-sm border border-hairline p-3">
           <legend className="px-1 text-sm font-semibold text-ink">필수 약관 동의</legend>
@@ -189,34 +203,37 @@ export default function SignupPage() {
           ))}
         </fieldset>
 
-        <label className="block">
-          <span className="text-sm text-ink">비밀번호 (8자 이상)</span>
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="signup-password"
-          />
-        </label>
+        <FormField
+          ref={passwordRef}
+          id="signup-password"
+          label="비밀번호"
+          hint="8자 이상"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          data-testid="signup-password"
+        />
 
-        <label className="block">
-          <span className="text-sm text-ink">닉네임</span>
-          <input
-            type="text"
-            required
-            maxLength={80}
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="signup-nickname"
-          />
-        </label>
+        <FormField
+          ref={nicknameRef}
+          id="signup-nickname"
+          label="닉네임"
+          type="text"
+          autoComplete="nickname"
+          required
+          maxLength={80}
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          error={fieldErrors.nickname}
+          data-testid="signup-nickname"
+        />
 
         {error && (
-          <p className="text-sm text-error-text" data-testid="signup-error">
+          <p className="text-sm text-error-text" role="alert" data-testid="signup-error">
             {error}
           </p>
         )}
