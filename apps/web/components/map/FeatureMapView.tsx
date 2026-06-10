@@ -1,69 +1,30 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import * as ReactDOMRuntime from 'react-dom';
-import * as ReactRuntime from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LocateFixed } from 'lucide-react';
 import type maplibregl from 'maplibre-gl';
-import type {
-  ClusterLayerProps,
-  ClusterPoint,
-  MakiMarkerProps,
-  PopupProps,
-  VWorldMapFallbackInfo,
-  VWorldMapProps,
-} from 'maplibre-vworld';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import 'maplibre-vworld/style.css';
+import type { ClusterPoint } from 'maplibre-vworld';
 import { ApiError, featureApi } from '@tripmate/api-client';
-import type { FeatureDetail, FeaturesInBoundsResponse, FeatureWeatherCard } from '@tripmate/schemas';
+import type {
+  FeatureDetail,
+  FeaturesInBoundsResponse,
+  FeatureSummary,
+  FeatureWeatherCard,
+} from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { paletteHex } from '@/lib/markerPalette';
-
-declare global {
-  interface Window {
-    require?: (moduleName: string) => unknown;
-  }
-}
-
-// maplibre-vworld dev 빌드가 UMD `require('react')` 를 호출하는 것을 위한 shim(개발 전용).
-// 멱등 — 여러 지도 컴포넌트가 호출해도 한 번만 설치된다.
-function installMaplibreVworldDevRequireShim() {
-  if (
-    typeof window === 'undefined' ||
-    process.env.NODE_ENV === 'production' ||
-    Reflect.has(window, 'require')
-  ) {
-    return;
-  }
-  Object.defineProperty(window, 'require', {
-    configurable: true,
-    value: (moduleName: string) => {
-      if (moduleName === 'react') return ReactRuntime;
-      if (moduleName === 'react-dom') return ReactDOMRuntime;
-      throw new Error(`Unsupported maplibre-vworld dev require: ${moduleName}`);
-    },
-  });
-}
-
-installMaplibreVworldDevRequireShim();
-
-const VWorldMap = dynamic<VWorldMapProps>(
-  () => import('maplibre-vworld').then((module) => module.VWorldMap),
-  { ssr: false, loading: () => <MapLoadingSkeleton /> }
-);
-const ClusterLayer = dynamic<ClusterLayerProps>(
-  () => import('maplibre-vworld').then((module) => module.ClusterLayer),
-  { ssr: false }
-);
-const MakiMarker = dynamic<MakiMarkerProps>(
-  () => import('maplibre-vworld').then((module) => module.MakiMarker),
-  { ssr: false }
-);
-const Popup = dynamic<PopupProps>(() => import('maplibre-vworld').then((module) => module.Popup), {
-  ssr: false,
-});
+import {
+  ClusterLayer,
+  MakiMarker,
+  MapContextMenu,
+  MapFallback,
+  MapLoadingSkeleton,
+  Popup,
+  UserLocationMarker,
+  VWorldMap,
+} from '@/components/map/vworldPrimitives';
+import { MapSearchBox } from '@/components/map/MapSearchBox';
 
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
 const DEFAULT_ZOOM = 12;
@@ -80,6 +41,13 @@ type MapPoint = ClusterPoint & {
   featureId?: string;
   count?: number;
 };
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  lon: number;
+  lat: number;
+}
 
 function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
   const features: MapPoint[] = data.features.map((f) => ({
@@ -107,40 +75,25 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
   return [...features, ...clusters];
 }
 
+function featureToPoint(f: FeatureSummary): MapPoint {
+  return {
+    id: f.feature_id,
+    lngLat: [f.coord.lon, f.coord.lat],
+    kind: 'feature',
+    color: paletteHex(f.marker_color),
+    icon: f.marker_icon,
+    title: f.title,
+    lon: f.coord.lon,
+    lat: f.coord.lat,
+    featureId: f.feature_id,
+  };
+}
+
 export interface FeatureMapViewProps {
   apiKey?: string;
   className?: string;
   initialCenter?: [number, number];
   initialZoom?: number;
-}
-
-function MapLoadingSkeleton() {
-  return (
-    <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft text-sm text-muted"
-      data-testid="vworld-map-loading"
-    >
-      지도 로딩 중
-    </div>
-  );
-}
-
-function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
-  const message =
-    info.reason === 'missing-api-key'
-      ? 'VWorld API 키가 설정되지 않았습니다.'
-      : '지도 엔진을 초기화할 수 없습니다.';
-  return (
-    <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft px-6 text-center"
-      data-testid="vworld-map-fallback"
-    >
-      <div className="max-w-sm space-y-2">
-        <p className="text-base font-semibold text-ink">{message}</p>
-        <p className="text-sm text-muted">NEXT_PUBLIC_VWORLD_API_KEY</p>
-      </div>
-    </div>
-  );
 }
 
 export function FeatureMapView({
@@ -159,6 +112,9 @@ export function FeatureMapView({
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const [detail, setDetail] = useState<FeatureDetail | null>(null);
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fetchInBounds = useCallback(async (map: maplibregl.Map) => {
     const bbox = boundsToBbox(map.getBounds());
@@ -208,6 +164,15 @@ export function FeatureMapView({
     [scheduleFetch]
   );
 
+  const handleContextMenu = useCallback((event: maplibregl.MapMouseEvent) => {
+    setContextMenu({
+      x: event.originalEvent.clientX,
+      y: event.originalEvent.clientY,
+      lon: event.lngLat.lng,
+      lat: event.lngLat.lat,
+    });
+  }, []);
+
   // 선택된 feature 의 상세 + 날씨 로드.
   useEffect(() => {
     if (!selected?.featureId) {
@@ -237,15 +202,56 @@ export function FeatureMapView({
     };
   }, [selected?.featureId]);
 
-  const handlePointClick = useCallback((point: MapPoint) => {
-    if (point.kind === 'cluster') {
-      const map = mapRef.current;
-      if (map) {
-        map.flyTo({ center: [point.lon, point.lat], zoom: Math.min(map.getZoom() + 2, 17) });
+  const flyTo = useCallback((lon: number, lat: number, zoom?: number) => {
+    mapRef.current?.flyTo(zoom != null ? { center: [lon, lat], zoom } : { center: [lon, lat] });
+  }, []);
+
+  const handlePointClick = useCallback(
+    (point: MapPoint) => {
+      if (point.kind === 'cluster') {
+        const map = mapRef.current;
+        if (map) flyTo(point.lon, point.lat, Math.min(map.getZoom() + 2, 17));
+        return;
       }
+      setSelected(point);
+    },
+    [flyTo]
+  );
+
+  const handleSearchSelect = useCallback(
+    (feature: FeatureSummary) => {
+      const point = featureToPoint(feature);
+      setSelected(point);
+      flyTo(point.lon, point.lat, 15);
+    },
+    [flyTo]
+  );
+
+  const handleMyLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setNotice('이 브라우저는 위치를 지원하지 않습니다.');
       return;
     }
-    setSelected(point);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lon = position.coords.longitude;
+        const lat = position.coords.latitude;
+        setUserLocation([lon, lat]);
+        setNotice(null);
+        flyTo(lon, lat, 14);
+      },
+      () => setNotice('위치 권한이 거부되었거나 가져올 수 없습니다.')
+    );
+  }, [flyTo]);
+
+  const copyCoord = useCallback(async (lat: number, lon: number) => {
+    const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    try {
+      await navigator.clipboard?.writeText(text);
+      setNotice(`좌표 복사됨: ${text}`);
+    } catch {
+      setNotice(`좌표: ${text}`);
+    }
   }, []);
 
   const currentTemp = weather?.short_term.find((t) => t.temp_c != null)?.temp_c ?? null;
@@ -254,6 +260,26 @@ export function FeatureMapView({
     <div className={className} data-testid="feature-map">
       <div className="grid h-full min-h-[560px] grid-rows-[1fr_auto] overflow-hidden rounded-sm border border-hairline bg-canvas md:min-h-[680px]">
         <div className="relative min-h-0">
+          <div className="pointer-events-none absolute inset-0 z-10">
+            <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
+              <MapSearchBox onSelect={handleSearchSelect} />
+              {notice && (
+                <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-sm">
+                  {notice}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleMyLocation}
+              aria-label="내 위치로 이동"
+              data-testid="map-my-location"
+              className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-ink shadow-sm hover:bg-surface-soft"
+            >
+              <LocateFixed className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+
           <VWorldMap
             apiKey={apiKey}
             center={initialCenter}
@@ -266,6 +292,7 @@ export function FeatureMapView({
             onLoad={handleMapLoad}
             onMoveEnd={handleViewportChange}
             onZoomEnd={handleViewportChange}
+            onContextMenu={handleContextMenu}
             fallback={(info) => <MapFallback info={info} />}
             loadingSkeleton={<MapLoadingSkeleton />}
             className="h-full min-h-[360px]"
@@ -291,6 +318,7 @@ export function FeatureMapView({
                 );
               }}
             />
+            {userLocation && <UserLocationMarker lngLat={userLocation} />}
             {selected && (
               <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
                 <div className="space-y-2">
@@ -315,6 +343,33 @@ export function FeatureMapView({
               </Popup>
             )}
           </VWorldMap>
+
+          {contextMenu && (
+            <MapContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+              <div className="min-w-44 overflow-hidden rounded-sm border border-hairline bg-white py-1 text-sm shadow-md">
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"
+                  onClick={() => {
+                    flyTo(contextMenu.lon, contextMenu.lat, 15);
+                    setContextMenu(null);
+                  }}
+                >
+                  여기서 주변 보기
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"
+                  onClick={() => {
+                    void copyCoord(contextMenu.lat, contextMenu.lon);
+                    setContextMenu(null);
+                  }}
+                >
+                  좌표 복사
+                </button>
+              </div>
+            </MapContextMenu>
+          )}
         </div>
         <dl
           className="grid gap-0 border-t border-hairline bg-canvas text-xs text-muted sm:grid-cols-3"
