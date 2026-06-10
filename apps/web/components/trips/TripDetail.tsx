@@ -10,6 +10,7 @@ import type { MarkerColorKey } from '@/lib/markerPalette';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
@@ -317,7 +318,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
         </aside>
       </div>
 
-      <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TripAttachments tripId={tripId} />
+        <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
+      </div>
     </div>
   );
 }
