@@ -43,6 +43,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
+  const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async (): Promise<TripView | null> => {
@@ -83,6 +84,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
     setSelectedPoiId(poiId);
     const dayIndex = poiDay.get(poiId);
     if (dayIndex != null) setSelectedDayIndex(dayIndex);
+  };
+
+  // 지도 마커 우클릭 → 해당 POI 선택 + 편집기 열기.
+  const handleMarkerContextMenu = (poiId: string) => {
+    handleSelectPoi(poiId);
+    setEditingPoiId(poiId);
   };
 
   const runMutation = useCallback(
@@ -275,6 +282,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             points={mapPoints}
             selectedPoiId={selectedPoiId}
             onSelectPoi={handleSelectPoi}
+            onMarkerContextMenu={handleMarkerContextMenu}
             className="h-full"
           />
         </section>
@@ -302,6 +310,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
             onEditMarker={handleEditMarker}
             onDelete={handleDelete}
             savingPoiId={savingPoiId}
+            editingPoiId={editingPoiId}
+            onEditToggle={setEditingPoiId}
           />
         </aside>
       </div>
