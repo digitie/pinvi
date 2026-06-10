@@ -9,20 +9,23 @@ T-108 운영 배포 자동화, T-129의 `/geo/*`·`/regions/*` slice, T-146 loca
 outbox slice를 현재 main 기준으로 재평가한다.** T-172~T-181/T-179/T-180은
 krtour-map HTTP/admin 계약 연동 작업이므로 이 비의존 루프에서는 제외한다.
 
-**Claude 세션: 프론트 폼 a11y 스윕 + T-106 Telegram 1·2차 완료** (2026-06-10, `agent/claude-*`):
-- **폼 접근성 스윕 #152~#159** — 재사용 컴포넌트 `FormField`/`FormTextArea`/`FormSelect` +
+**Claude 세션: 프론트 폼 a11y 스윕 + T-106 Telegram 백엔드 완성** (2026-06-10, `agent/claude-*`, PR #151~#166):
+- **폼 접근성 스윕 #151~#159** — 재사용 컴포넌트 `FormField`/`FormTextArea`/`FormSelect` +
   `validateForm`(Zod→필드별 한국어 메시지 + firstField) + `useDialogAutoFocus`(모달 포커스 이동/복원)를
   앱 전반에 적용: 공개 인증(login/signup), trip 생성·profile-complete, 모달 3종(TripEdit/NoticePlanCopy/
   FeatureRequest), PoiEditor inline, admin 로그인·액션모달·mcp-tokens, list filter select(`for` 연결)+
-  error `role=alert`, settings/mcp-tokens. label↔input 연결·`aria-invalid`·`autoComplete`·포커스 정합.
-- **App Router 방어선 #151** — `error.tsx`/`global-error.tsx`/`not-found.tsx`/`loading.tsx` + `errorMessage`.
-- **T-106 Telegram PR-1 #160** — `app/clients/telegram.py` `TelegramClient`(verify/send) + §5 실패 분류 +
-  §9 token 마스킹. 단위 15.
-- **T-106 Telegram PR-2 #161** — `/users/me/telegram-targets` CRUD: `app.telegram_targets` 모델/마이그레이션
-  (20260610_0018, soft delete)·스키마·서비스(create/verify/delete)·라우터. **단일 시스템 봇** 모델(원시 토큰
-  DB 저장 X, §1). 통합 5.
-- **T-106 남은 슬라이스**: trip↔target 링킹(§6.5/6.6 max 3), send/outbox + 신규 trip·동반자 초대 알림 hook,
-  per-user 봇 토큰(vault), 프론트 target 관리 UI.
+  error `role=alert`, settings/mcp-tokens. App Router 방어선(#151 error/global-error/not-found/loading).
+- **T-106 Telegram 통합 (백엔드 완성, #160·161·163·164·165·166)**:
+  - #160 client `TelegramClient`(verify/send) + §5 실패 분류 + §9 token 마스킹.
+  - #161 `/users/me/telegram-targets` CRUD + `app.telegram_targets`(0018, soft delete). **단일 시스템 봇** 모델
+    (원시 토큰 DB 저장 X, §1).
+  - #163 신규 trip / 동반자 초대 알림 hook(메시지 빌더 + send, 응답 비차단).
+  - #164 `/settings/telegram` target 관리 UI(`telegramApi` + 등록/검증/삭제) + settings 서브내비.
+  - #165 outbox 재시도(§8) — `app.telegram_system_notification_outbox`(0019) + SKIP LOCKED drain worker
+    (backoff 30s/5m/30m/1h/4h, lifespan). hook을 enqueue로 전환.
+  - #166 trip↔target 링킹(§6.5/6.6) — `app.trip_telegram_targets`(0020, ≤3) + `/trips/{id}/telegram-targets`.
+- **T-106 남은 후속**: weekly/daily summary Dagster 스케줄(§7.1/7.2, Sprint 5 ETL), 프론트 trip-link UI,
+  per-user 봇 토큰(vault), PIPA 위탁자 명시(§10 체크리스트).
 
 **krtour 연동 작업 unblock** (2026-06-10, `docs/reviews/2026-06-10-krtour-cross-repo-decisions.md`):
 krtour `origin/main 0e45bd7`에서 ADR-048/T-216a~g 머지 확인 — **T-181 잔여(problem+json·
@@ -416,12 +419,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **T-106 Telegram 후속 슬라이스** (PR-1/PR-2 머지 완료):
-   - 신규 trip / 동반자 초대 알림 hook — `create_trip`/`invite_companion`에서 default
-     telegram target으로 send(메시지 빌더 + outbox). client(#160) + target CRUD(#161) 기반.
-   - trip↔target 링킹(§6.5/6.6, `trip_telegram_targets`, max 3) + 라우터.
-   - 프론트 target 관리 UI(`@tripmate/api-client` telegramApi + profile/settings 화면).
-   - per-user 봇 토큰 저장(vault/pgcrypto) — 현재는 단일 시스템 봇만.
+1. **T-106 Telegram 후속 슬라이스** (백엔드 완성 #160~#166 — client·target CRUD·hook·UI·outbox·trip링킹):
+   - **남음**: 프론트 trip-link UI(trip 상세에서 `/trips/{id}/telegram-targets` 연결/해제),
+     weekly/daily summary Dagster 스케줄(§7.1/7.2, Sprint 5 ETL — 날씨/유가는 krtour-map 의존),
+     per-user 봇 토큰(vault/pgcrypto, 현재는 단일 시스템 봇), PIPA 위탁자 명시(§10).
 2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023) — Odroid M1S + N150 multi-platform
    Docker 빌드 + 두 노드 streaming replication.
 3. **krtour 연동 unblock 작업** — T-181 잔여(problem+json·`meta.page`·batch `found`·
