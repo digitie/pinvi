@@ -25,6 +25,7 @@ import {
   UserLocationMarker,
   VWorldMap,
 } from '@/components/map/vworldPrimitives';
+import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 
@@ -120,6 +121,7 @@ export function FeatureMapView({
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  const [requestCoord, setRequestCoord] = useState<{ lon: number; lat: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchInBounds = useCallback(async (map: maplibregl.Map) => {
@@ -402,6 +404,16 @@ export function FeatureMapView({
                   type="button"
                   className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"
                   onClick={() => {
+                    setRequestCoord({ lon: contextMenu.lon, lat: contextMenu.lat });
+                    setContextMenu(null);
+                  }}
+                >
+                  이 위치 장소 제안
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"
+                  onClick={() => {
                     void copyCoord(contextMenu.lat, contextMenu.lon);
                     setContextMenu(null);
                   }}
@@ -437,6 +449,13 @@ export function FeatureMapView({
         onAgree={() => void handleConsentAgree()}
         onCancel={() => setConsentOpen(false)}
       />
+      {requestCoord && (
+        <FeatureRequestDialog
+          coord={requestCoord}
+          onClose={() => setRequestCoord(null)}
+          onSubmitted={() => setNotice('장소 제안이 접수됐습니다.')}
+        />
+      )}
     </div>
   );
 }
