@@ -22,57 +22,50 @@
 viewport 안 feature 조회 + zoom별 클러스터링.
 
 ```http
-GET /features/in-bounds?sw_lng=129.0&sw_lat=35.0&ne_lng=129.2&ne_lat=35.2&zoom=12&kinds=place,event
+GET /features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=12&kinds=place&kinds=event
 Cookie: tripmate_access=...
 ```
 
-- `sw_lng, sw_lat, ne_lng, ne_lat`: bbox (EPSG:4326)
+- `bbox`: `lng_min,lat_min,lng_max,lat_max` (EPSG:4326)
 - `zoom`: 5~19 (`apps/api/app/api/v1/features.py`와
   `packages/schemas/src/feature.ts` 기준. Satellite/Hybrid는 z18까지)
-- `kinds`: `place,event,notice,price,weather,route,area` 중 콤마 구분
-- zoom별 클러스터 자동 (SPEC V8 I-4):
-  - `zoom < 7`: 시도 단위
-  - `zoom < 11`: 시군구
-  - `zoom < 14`: 읍면동
-  - `zoom >= 14`: 개별 마커
+- `kinds`: `place,event,notice,price,weather,route,area` 중 반복 파라미터 (`kinds=a&kinds=b`)
+- `cluster_unit`(선택), `category`(선택), `limit`(기본 500, 최대 2000 → krtour `max_items`)
+- zoom별 클러스터링은 **krtour 서버 책임**(`cluster_unit`/`zoom`). granularity는
+  `cluster_unit`(`sido | sigungu | eupmyeondong | individual`)으로 응답에 실린다.
 
-응답 200:
+응답 200 — 개별 feature(`items`) + 서버 cluster(`clusters`) 분리:
 
 ```jsonc
 {
   "data": {
-    "cluster_unit": "sigungu",     // sido | sigungu | eupmyeondong | individual
     "items": [
-      // cluster_unit != individual:
-      {
-        "cluster_code": "11680",
-        "display_name": "강남구",
-        "count": 47,
-        "center": { "lon": 127.04, "lat": 37.52 },
-        "kind_breakdown": { "place": 30, "event": 5, "notice": 12 }
-      },
-      // individual:
       {
         "feature_id": "f_2611000000_p_abc123...",
         "kind": "place",
-        "title": "광안리 해수욕장",
-        "coord": { "lon": 129.118, "lat": 35.155 },
-        "address_road": "...",
-        "address_jibun": "...",
+        "name": "광안리 해수욕장",
+        "coord": { "lon": 129.118, "lat": 35.155 },   // null 가능
         "category": "해수욕장",
         "marker_color": "P-07",
         "marker_icon": "swimming",
-        "parent_feature_id": null,
-        "sibling_group_id": "uuid",
-        "status": "active",
-        "updated_at": "..."
+        "status": "active"
       }
-    ]
+    ],
+    "clusters": [
+      {
+        "cluster_key": "11680",                        // 행정구역 코드(자연키)
+        "coord": { "lon": 127.04, "lat": 37.52 },
+        "feature_count": 47
+      }
+    ],
+    "cluster_unit": "sigungu",
+    "zoom": 12,
+    "bbox": { "lng_min": 129.0, "lat_min": 35.0, "lng_max": 129.2, "lat_max": 35.2 }
   }
 }
 ```
 
-krtour-map 호출: `GET /features/in-bounds`.
+krtour-map 호출: `GET /v1/features/in-bounds` (평면 `lon`/`lat`, `cluster_key`, `max_items`).
 
 Rate limit: 분당 60회 per user. 클라이언트 측 디바운스 250ms + AbortController 권장.
 
@@ -89,43 +82,29 @@ GET /features/f_2611000000_p_abc123...
 ```jsonc
 {
   "data": {
-    "feature_id": "...",
+    "feature_id": "f_2611000000_p_abc123...",
     "kind": "place",
-    "title": "...",
-    "coord": { "lon": ..., "lat": ... },
-    "address_road": "...",
-    "address_jibun": "...",
-    "category": "...",
+    "name": "...",                               // 표시명 (krtour `name`)
+    "coord": { "lon": 129.0, "lat": 35.0 },      // null 가능
+    "category": "01070100",
+    "address": { /* 구조화 주소 객체 (krtour 원본) */ },
+    "legal_dong_code": "1168010100",
+    "sido_code": "11",
+    "sigungu_code": "11680",
     "marker_color": "P-07",
     "marker_icon": "swimming",
-    "urls": {
-      "homepage": "...",
-      "sns1": null,
-      "review_naver": "...",
-      "review_kakao": "...",
-      "review_google": null
-    },
+    "urls": { "homepage": "...", "review_naver": null },
     "detail": {
-      // kind+category별 Pydantic 모델 (PlaceDetail / EventDetail / ...)
-      "phones": ["051-..."],
-      "business_hours": { /* ... */ },
-      "entry_fee": null,
-      "parking_fee": null
+      // kind+category별 payload (krtour PlaceDetail / EventDetail / ...)
+      "phones": ["051-..."]
     },
-    "raw_refs": [
-      { "source_type": "python-krmois-api", "source_id": "...", "fetched_at": "..." }
-    ],
-    "parent_feature_id": null,
-    "sibling_group_id": "uuid",
     "status": "active",
-    "deleted_at": null,
-    "created_at": "...",
     "updated_at": "..."
   }
 }
 ```
 
-krtour-map 호출: `GET /features/{feature_id}`.
+krtour-map 호출: `GET /v1/features/{feature_id}` (`name`, 구조화 `address`, `*_code`).
 
 ### 2.3 `GET /features/{feature_id}/weather`
 
@@ -137,33 +116,34 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 
 `asof`: 시각 (생략 시 now). KST aware.
 
-응답 200:
+응답 200 — krtour는 **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA
+시간축 그룹핑은 프런트 표현 계층):
 
 ```jsonc
 {
   "data": {
     "feature_id": "...",
-    "asof": "...",
-    "nowcast": { /* KMA 초단기실황 */ },
-    "ultra_short": [/* KMA 초단기예보 +6h */],
-    "short": [/* KMA 단기예보 +3day */],
-    "mid": { /* KMA 중기예보 +10day */ },
-    "advisories": [/* KMA 특보 */],
-    "sources": [
-      // 같은 valid_at에 들어온 다른 provider 값
-      { "provider": "python-krex-api", "slot": "rest_area_weather", "...": "..." },
-      { "provider": "python-airkorea-api", "slot": "air_quality", "pm10": 32, "pm25": 18 },
-      { "provider": "python-khoa-api", "slot": "beach_marine", "wave_m": 0.5 }
+    "asof": "2026-06-10T12:00:00+09:00",          // null 가능
+    "latest_at": "2026-06-10T11:00:00+09:00",     // null 가능
+    "is_stale": false,
+    "source_styles": ["nowcast", "short"],
+    "metrics": [
+      {
+        "metric_key": "T1H",
+        "metric_name": "기온",
+        "forecast_style": "nowcast",              // nowcast|ultra_short|short|mid|observed|index|advisory
+        "timeline_bucket": null,
+        "valid_at": "...", "issued_at": null, "observed_at": null,
+        "value_number": 23.0, "value_text": null, "unit": "℃", "severity": null
+      }
     ]
   }
 }
 ```
 
-KMA 시간축이 기본 (SPEC V8 R-4). 다른 provider 값은 sources 배열에 끼워 넣어
-사용자에게 한 카드로 표시.
-
-날씨 feature/detail 제공 여부는 krtour-map 최신 OpenAPI 계약을 따른다. TripMate가
-별도 KMA provider 변환을 직접 구현하지 않는다.
+프런트는 `forecast_style` 별로 metric을 그룹핑해 한 카드로 표시한다. TripMate가
+별도 KMA provider 변환을 직접 구현하지 않는다(금지룰). 날씨 제공 여부/필드는
+krtour-map 최신 `openapi.user.json` 계약을 따른다.
 
 ### 2.4 `GET /features/nearby`
 
@@ -174,13 +154,15 @@ GET /features/nearby?lon=129.118&lat=35.155&radius_m=5000&kinds=place,event
 Cookie: tripmate_access=...
 ```
 
-- 좌표: EPSG:4326
-- `radius_m`: meter (라이브러리가 `coord_5179` 컬럼 사용 — SPEC V8 §SKILL DO-NOT 11)
-- 최대 `radius_m = 50000` (50km)
+- 좌표: EPSG:4326 (`lon`/`lat` 쿼리 — 구 `lng`는 거부)
+- `radius_m`: meter, 최대 `50000` (50km)
+- `kinds`(반복), `category`(선택), `limit`(기본 100, 최대 500 → krtour `page_size`)
 
-응답: `features_in_bounds`와 같은 individual 셰입 배열 (cluster X).
+응답: `FeatureSummary[]` 배열 — `features_in_bounds`의 `items` 셰입에 **`distance_m`**
+(기준 좌표로부터 거리, meter)가 추가된다. cluster는 없다.
 
-krtour-map 호출: 기준 feature가 있으면 `GET /features/nearby/by-target`를 우선한다.
+krtour-map 호출: `GET /v1/features/nearby`. 기준 feature(등록된 POI cache target)가
+있으면 `GET /v1/features/nearby/by-target`를 우선한다(admin flow 등록 필요 — 후순위).
 
 ### 2.5 `POST /features/requests`
 
@@ -267,18 +249,19 @@ Cookie: tripmate_access=...
     {
       "feature_id": "f_2611000000_p_abc123...",
       "kind": "place",
-      "title": "광안리 해수욕장",
-      "coord": { "lon": 129.118, "lat": 35.155 },
+      "name": "광안리 해수욕장",
+      "coord": { "lon": 129.118, "lat": 35.155 },   // null 가능
       "category": "해수욕장",
       "marker_color": "P-07",
-      "marker_icon": "swimming"
+      "marker_icon": "swimming",
+      "status": "active"
     }
   ]
 }
 ```
 
-호출 경계: feature 검색은 krtour-map `GET /features/search`로 조회한다. Naver/Kakao
-검색 API는 현재 사용하지 않는다.
+호출 경계: feature 검색은 krtour-map `GET /v1/features/search`로 조회한다(분리 4-float
+bbox + `page_size`). Naver/Kakao 검색 API는 현재 사용하지 않는다.
 
 ### 2.7 `GET /search`
 
@@ -322,13 +305,15 @@ Cookie: tripmate_access=...
   query/body, 사용자 권한 범위를 포함한다.
 - viewport 동일 bbox+zoom 1분 캐시 (위에)
 
-## 5. AI agent 구현 체크리스트
+## 5. 구현 상태 (T-173/174/176/178 완료)
 
-- [ ] `apps/api/app/schemas/feature.py` Pydantic + `packages/schemas/src/feature.ts` Zod
-- [ ] `apps/api/app/services/feature_view.py` — krtour-map HTTP 호출 + 응답 변환
-- [ ] `apps/api/app/api/v1/features.py` 라우터
-- [ ] `apps/api/app/clients/krtour_map.py` HTTP client + lifespan
-- [ ] `apps/api/app/middleware/location_audit.py` — 좌표 query/body 적재
-- [ ] 통합 테스트 `apps/api/tests/integration/test_features_api.py`
-      (`httpx.MockTransport` 계약 테스트 + 선택적 live krtour-map)
-- [ ] viewport 클러스터링 zoom 경계 unit 테스트
+- [x] `apps/api/app/schemas/feature.py` Pydantic + `packages/schemas/src/feature.ts` Zod — krtour
+      `openapi.user.json` 셰입 정합(`name`/평면 `lon`,`lat`/구조화 `address`/`cluster_key`/평탄 `metrics`)
+- [x] `apps/api/app/api/v1/features.py` 라우터 — `clients/krtour_map.py` HTTP client 호출 + 응답
+      투영 + 에러/저하 정책(T-178: 5xx/timeout→503, 429→Retry-After, 404)
+- [x] `apps/api/app/clients/krtour_map.py` HTTP client + lifespan (T-170/171/181)
+- [x] 클러스터링은 krtour 서버 위임 — TripMate `services/cluster_query.py`(직접 `feature` SQL =
+      경계 위반) 제거 (T-174)
+- [x] `apps/api/app/middleware/location_audit.py` — `nearby` 좌표 query 적재
+- [x] 통합 테스트 `tests/integration/test_features_api.py` + 매핑 단위 테스트
+      `tests/unit/test_feature_mapping.py`

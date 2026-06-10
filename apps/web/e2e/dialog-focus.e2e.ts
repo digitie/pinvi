@@ -9,8 +9,9 @@ async function mockInBounds(page: import('@playwright/test').Page) {
       contentType: 'application/json',
       body: JSON.stringify({
         data: {
-          features: [],
+          items: [],
           clusters: [],
+          cluster_unit: 'individual',
           zoom: 12,
           bbox: { lng_min: 126.9, lat_min: 37.4, lng_max: 127.1, lat_max: 37.6 },
         },

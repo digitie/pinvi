@@ -11,8 +11,9 @@ test('탐색 지도가 검색·내 위치 컨트롤과 함께 렌더링된다', 
       contentType: 'application/json',
       body: JSON.stringify({
         data: {
-          features: [],
+          items: [],
           clusters: [],
+          cluster_unit: 'individual',
           zoom: 12,
           bbox: { lng_min: 126.9, lat_min: 37.4, lng_max: 127.1, lat_max: 37.6 },
         },

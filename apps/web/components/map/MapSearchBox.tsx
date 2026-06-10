@@ -65,7 +65,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
                 }}
                 className="block w-full px-3 py-2 text-left hover:bg-surface-soft"
               >
-                <span className="block truncate text-sm font-medium text-ink">{feature.title}</span>
+                <span className="block truncate text-sm font-medium text-ink">{feature.name}</span>
                 {feature.category && (
                   <span className="block truncate text-xs text-muted">{feature.category}</span>
                 )}

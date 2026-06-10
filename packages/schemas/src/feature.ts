@@ -29,81 +29,90 @@ export type BBox = z.infer<typeof BBoxSchema>;
 /** 16색 팔레트 P-01~P-16. */
 export const MarkerColorSchema = z.string().regex(/^P-\d{2}$/, 'marker color는 P-01~P-16 형식.');
 
-/** 마커 표시용 요약. */
+/**
+ * 마커/목록 표시용 요약 (in-bounds items / nearby / search).
+ * krtour 평면 `lon`/`lat`(nullable), 표시명 `name`, lifecycle `status`에 정합.
+ * `distance_m`은 nearby 응답에만 채워진다.
+ */
 export const FeatureSummarySchema = z.object({
   feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
-  title: z.string(),
-  coord: CoordSchema,
+  name: z.string(),
+  coord: CoordSchema.nullable(),
+  category: z.string().nullable().optional(),
   marker_color: MarkerColorSchema,
   marker_icon: z.string().max(64),
-  category: z.string().nullable().optional(),
-  summary: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  distance_m: z.number().nullable().optional(),
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
 
-/** 클러스터 마커 (zoom < 14). */
+/** 서버(krtour) 클러스터 — `cluster_key`는 행정구역 코드(자연키). */
 export const FeatureClusterSchema = z.object({
-  cluster_id: z.string(),
-  center: CoordSchema,
-  feature_count: z.number().int().min(2),
-  sample_kinds: z.array(FeatureKindSchema).max(8),
-  bbox: BBoxSchema,
+  cluster_key: z.string(),
+  coord: CoordSchema,
+  feature_count: z.number().int().min(1),
 });
 export type FeatureCluster = z.infer<typeof FeatureClusterSchema>;
 
-/** viewport 응답 — features + clusters. */
+/** viewport 응답 — 개별 feature(items) + 서버 cluster(clusters). */
 export const FeaturesInBoundsResponseSchema = z.object({
-  features: z.array(FeatureSummarySchema),
+  items: z.array(FeatureSummarySchema),
   clusters: z.array(FeatureClusterSchema),
+  cluster_unit: z.string().nullable().optional(),
   zoom: z.number().int().min(5).max(19),
   bbox: BBoxSchema,
 });
 export type FeaturesInBoundsResponse = z.infer<typeof FeaturesInBoundsResponseSchema>;
 
-/** 상세 응답. */
+/** 상세 응답 (krtour `FeatureDetailResponse` 투영). */
 export const FeatureDetailSchema = z.object({
   feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
-  title: z.string(),
-  coord: CoordSchema,
+  name: z.string(),
+  coord: CoordSchema.nullable(),
+  category: z.string().nullable().optional(),
+  address: z.record(z.string(), z.unknown()).nullable().optional(),
+  legal_dong_code: z.string().nullable().optional(),
+  sido_code: z.string().nullable().optional(),
+  sigungu_code: z.string().nullable().optional(),
   marker_color: MarkerColorSchema,
   marker_icon: z.string().max(64),
-  category: z.string().nullable().optional(),
-  address: z.string().nullable().optional(),
-  address_road: z.string().nullable().optional(),
-  bjd_code: z.string().nullable().optional(),
-  sigungu_code: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
+  urls: z.record(z.string(), z.unknown()),
   detail: z.record(z.string(), z.unknown()),
-  source_ids: z.array(z.string()),
+  status: z.string().nullable().optional(),
   updated_at: Iso8601Schema,
 });
 export type FeatureDetail = z.infer<typeof FeatureDetailSchema>;
 
-/** KMA timepoint. */
-export const WeatherTimepointSchema = z.object({
-  asof: Iso8601Schema,
-  temp_c: z.number().nullable().optional(),
-  precipitation_mm: z.number().nullable().optional(),
-  precipitation_prob: z.number().nullable().optional(),
-  condition: z.string().nullable().optional(),
-  wind_speed_ms: z.number().nullable().optional(),
-  humidity_pct: z.number().nullable().optional(),
+/** krtour 평탄 weather metric (forecast_style 태그). */
+export const WeatherMetricSchema = z.object({
+  metric_key: z.string(),
+  metric_name: z.string().nullable().optional(),
+  forecast_style: z.string(),
+  timeline_bucket: z.string().nullable().optional(),
+  valid_at: Iso8601Schema.nullable().optional(),
+  issued_at: Iso8601Schema.nullable().optional(),
+  observed_at: Iso8601Schema.nullable().optional(),
+  value_number: z.number().nullable().optional(),
+  value_text: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  severity: z.string().nullable().optional(),
 });
-export type WeatherTimepoint = z.infer<typeof WeatherTimepointSchema>;
+export type WeatherMetric = z.infer<typeof WeatherMetricSchema>;
 
-/** KMA weather card. */
+/** weather card — 평탄 metric 목록 + source_styles (krtour `WeatherCardData`). */
 export const FeatureWeatherCardSchema = z.object({
   feature_id: FeatureIdSchema,
-  asof: Iso8601Schema,
-  short_term: z.array(WeatherTimepointSchema),
-  daily: z.array(WeatherTimepointSchema),
-  sources: z.array(z.string()),
+  asof: Iso8601Schema.nullable().optional(),
+  latest_at: Iso8601Schema.nullable().optional(),
+  is_stale: z.boolean(),
+  source_styles: z.array(z.string()),
+  metrics: z.array(WeatherMetricSchema),
 });
 export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
 
-/** Feature 요청 큐 등록 (Sprint 6 Admin 검토 → 라이브러리 적재). */
+/** Feature 요청 큐 등록 (Admin 검토 → krtour feature change). */
 export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 
 export const FeatureRequestTypeSchema = z.enum(['new_place', 'correction', 'closure']);
