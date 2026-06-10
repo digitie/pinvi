@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — admin 로그인 + 액션 모달 폼 접근성
+
+**작업**: admin 콘솔의 실 폼(로그인) + 액션 확인 모달(사유 textarea) a11y 보강.
+
+- `app/(admin)/admin/login/page.tsx`: 공개 로그인과 동일하게 `FormField` + `validateForm` 전환 —
+  필드 오류(aria-invalid), `autoComplete`, 첫 오류 필드 포커스, 에러 region `role=alert`.
+- `app/(admin)/admin/{users/[user_id],trips/[trip_id],pois/[poi_id]}/page.tsx`: 라벨 없던 사유 textarea를
+  `FormTextArea`로 전환(label="사유" + hint). testid 보존.
+- `components/forms/FormTextArea.tsx`: `hint` prop 추가(FormField와 동등, aria-describedby 연결).
+- `e2e/admin-login.e2e.ts`(2): 잘못된 이메일→필드 오류+aria-invalid+포커스 / `?reason=forbidden`→role=alert.
+
+**검증**: tsc + lint(clean) + build + admin-login E2E 2 + 회귀(admin-users/trips/pois 6, action-reason FormTextArea flow 포함) 통과.
+**후속 후보**: admin/mcp-tokens(placeholder-only 라벨 5+개) 대규모 FormField 리팩터, list 페이지 select `for`/error role=alert 폴리시.
+
 ## 2026-06-10 (claude) — PoiEditor inline 폼 접근성 (FormTextArea 추가)
 
 **작업**: POI 상세 편집기(inline)의 입력을 FormField/FormTextArea로 통일 — label↔input id 연결.
