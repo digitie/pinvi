@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2, MapPin } from 'lucide-react';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 export interface LocationConsentDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ export function LocationConsentDialog({
   onAgree,
   onCancel,
 }: LocationConsentDialogProps) {
+  useEscapeKey(onCancel, open);
   if (!open) return null;
   return (
     <div
@@ -43,7 +45,7 @@ export function LocationConsentDialog({
           </p>
         </div>
         {error && (
-          <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
+          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
         )}
         <div className="flex justify-end gap-2">
           <button

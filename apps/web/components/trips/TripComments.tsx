@@ -114,7 +114,7 @@ export function TripComments({ tripId }: TripCommentsProps) {
         </button>
       </div>
 
-      {error && <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
 
       {loading ? (
         <div className="flex h-16 items-center justify-center text-sm text-muted">

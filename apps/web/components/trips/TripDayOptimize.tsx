@@ -71,7 +71,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
         동선 최적화
       </button>
 
-      {error && <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
 
       {preview && (
         <div className="space-y-2 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">

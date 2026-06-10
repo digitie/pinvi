@@ -191,6 +191,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           여행 목록
         </Link>
         <p
+          role="alert"
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
           data-testid="trip-detail-error"
         >
@@ -300,6 +301,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           )}
           {mutationError && (
             <p
+              role="alert"
               className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
               data-testid="poi-mutation-error"
             >

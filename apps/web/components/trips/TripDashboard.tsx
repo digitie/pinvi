@@ -157,6 +157,7 @@ export function TripDashboard() {
       )}
       {error && (
         <p
+          role="alert"
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
           data-testid="trips-error"
         >

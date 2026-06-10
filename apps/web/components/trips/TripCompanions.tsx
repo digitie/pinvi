@@ -101,7 +101,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
         </button>
       </div>
 
-      {error && <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
 
       {companions.length > 0 && (
         <ul className="space-y-1" data-testid="companion-list">
