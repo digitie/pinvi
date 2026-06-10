@@ -68,10 +68,11 @@ jobs:
 
       # 모든 e2e 는 page.route 로 API 를 mock — 백엔드 불필요.
       # playwright webServer 가 `npm run build && npm run start`(:9022)로 앱을 띄운다.
+      # API URL 은 9021(lib/api 기본값) — admin e2e mock 이 port 9021 을 exact-match 하므로 일치 필수.
       - name: Run Playwright e2e
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_TRIPMATE_API_URL: http://localhost:8001
+          NEXT_PUBLIC_TRIPMATE_API_URL: http://localhost:9021
         run: npx playwright test
 
       - name: Upload e2e traces
