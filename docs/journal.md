@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-5: Telegram outbox 재시도 (§8)
+
+**작업**: 알림 전송을 fire-and-forget(BackgroundTasks)에서 **outbox + drain worker**로 전환 — 영속·재시도 보장.
+
+- `models/telegram_outbox.py` + `alembic/.../20260610_0019`: `app.telegram_system_notification_outbox`
+  (§2.3 — category/payload/status/attempts/last_error/scheduled_at/sent_at, pending partial index).
+  사용자 알림 category(trip_created/companion_invited)도 같은 outbox로 흐름.
+- `services/telegram_outbox.py`: `enqueue_user_notification`(요청 트랜잭션에서 적재) +
+  `process_pending_telegram_batch`(FOR UPDATE SKIP LOCKED, email_queue와 동일 backoff 30s/5m/30m/1h/4h,
+  5회 소진→failed, 대상/토큰 없음→skipped 종결) + `telegram_outbox_worker_lifespan`(location_audit 패턴,
+  interval 5s 설정, batch 가득 시 즉시 재drain).
+- `services/telegram_notify.py` 리팩터: `send_user_notification`(비전파 wrapper) → `deliver_user_notification`
+  (worker용 코어 — 'sent'/'skipped' 반환, 실패는 TelegramError 전파해 worker가 재시도 분류).
+- `api/v1/trips.py` hooks: BackgroundTasks 직접 전송 → `enqueue_user_notification` 인라인 적재.
+- `main.py`: lifespan에 telegram_outbox_worker 합성. config에 worker 설정 3개.
+- 테스트(`test_telegram_notify_hooks.py` 재작성, 5): enqueue→drain 전송 / 초대 알림(스킵 혼합) /
+  rate_limited→backoff 재예약 / 소진→failed / 대상 없음→skipped 종결.
+
+**검증**: ruff(clean) + mypy --strict(clean) + telegram 스위트 30 + 전체 unit 138 통과(WSL+Docker).
+
 ## 2026-06-10 (claude) — T-106 PR-4: Telegram target 관리 UI (/settings/telegram)
 
 **작업**: 사용자가 알림 대상을 직접 등록/검증/삭제 — T-106이 end-to-end로 완성.

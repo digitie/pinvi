@@ -24,6 +24,7 @@ from app.middleware.geofence import GeofenceMiddleware, validate_geofence_config
 from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.services.location_audit import location_audit_outbox_worker_lifespan
+from app.services.telegram_outbox import telegram_outbox_worker_lifespan
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         kraddr_geo_client_lifespan(app),
         krtour_map_lifespan(app),
         location_audit_outbox_worker_lifespan(app),
+        telegram_outbox_worker_lifespan(app),
     ):
         yield
     log.info("tripmate.api.stop")
