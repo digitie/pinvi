@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — E2E 추가: 지도/추천복사/첨부업로드
+
+**작업**: PR-C 핵심 흐름 Playwright E2E(mock) 3종.
+
+- `e2e/map-explore.e2e.ts`: `/map` 탐색 셸 — 검색/내 위치 컨트롤 + 지도 fallback|canvas 렌더
+  (in-bounds mock, VWorld 키 유무 무관).
+- `e2e/notice-copy.e2e.ts`: 추천 여행 카드 → copy 다이얼로그 → `notice-plans/{id}/copy` mock →
+  "새 여행을 만들었습니다." + "여행 열기" 링크(`/trips/{id}`) 검증.
+- `e2e/trip-attachment.e2e.ts`: TripView+`/storage/upload-urls`+presigned PUT(127.0.0.1:9555)+
+  attachments(POST/GET 메서드 분기) mock → `setInputFiles` 업로드 → 목록에 `photo.jpg` 표시.
+- `TripAttachments` 파일 input 에 `data-testid="attachment-input"`(E2E 타깃).
+
+**검증**: `tsc`(e2e 포함) + `playwright test --list`(21 tests) + `next lint` + vitest + build. 실행은
+브라우저/서버 인프라 별도(CI 미포함).
+
 ## 2026-06-10 (claude) — PR-D 착수: trip 상세 E2E + maplibre-vworld v0.1.3 동기화 + tasks.md 정리
 
 **작업**: Sprint 4 v0.1.0 마무리 1차.
