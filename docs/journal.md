@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — App Router 에러 바운더리 + not-found + 로딩 상태
+
+**작업**: Next.js App Router 전역 품질 방어선 — 에러 바운더리·404·로딩이 전무하던 갭 보강.
+
+- `lib/errorMessage.ts`: `friendlyErrorText(unknown)`(ApiError status별 안내 401/403/404/5xx) +
+  `errorDigest`(production digest 추출). 순수·테스트(6건).
+- `components/feedback/FullPageMessage.tsx`: 빈/오류/404 공통 표현(아이콘·제목·설명·액션·ref). 훅 없음 → 서버·클라 공용.
+- `components/feedback/RouteError.tsx`: segment error boundary 공통 클라 뷰(다시 시도/홈으로).
+- `components/feedback/PageLoading.tsx`: 전체 화면 로딩(`role=status`).
+- `app/error.tsx` + `app/(app)/error.tsx`: RouteError 얇은 래퍼.
+- `app/global-error.tsx`: root layout 붕괴 대비 최후 방어선 — 자체 `<html>/<body>` + 인라인 스타일(CSS 미로드 가정).
+- `app/not-found.tsx`: 404 페이지(홈/내 여행 링크).
+- `app/loading.tsx` + `app/(app)/loading.tsx`: 라우트 전환 로딩.
+- `e2e/not-found.e2e.ts`: 미지 경로 → 404 status + not-found 페이지 + 홈 링크 이동(2건).
+
+**검증**: tsc + lint(clean) + build(`/_not-found` 등) + vitest 6 + not-found E2E 2 + 기존 회귀(trip-detail/map-explore/user-shells 4) 통과.
+
 ## 2026-06-10 (claude) — 공유 링크 ↔ 공유뷰 연결
 
 **작업**: 생성된 공유 링크가 실제 `/shared/{id}/{token}` 라우트를 가리키게 연결.
