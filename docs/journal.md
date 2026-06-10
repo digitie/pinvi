@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-6: trip↔target 링킹 (§6.5/6.6)
+
+**작업**: 여행별 Telegram 대상 연결(≤3) — T-106 백엔드 마지막 조각.
+
+- `models/trip_telegram_target.py` + `alembic/.../20260610_0020`: `app.trip_telegram_targets`
+  (복합 PK trip_id+telegram_target_id, 양 FK CASCADE, target index). trip은 user 소유 target을 참조만(§2.2).
+- `services/telegram_targets.py`: `link_trip_target`(소유 검증 + ≤3 + 중복 금지) / `unlink_trip_target` /
+  `list_trip_targets`. `TripTargetLimitError`(MAX_TARGETS_REACHED) / `TripTargetConflictError`(ALREADY_LINKED).
+- `api/v1/trip_telegram_targets.py` 신규: `GET/POST/DELETE /trips/{trip_id}/telegram-targets` — owner-only,
+  4번째 연결 시 422+`reason: max_targets_reached`. `__init__` 등록.
+- `schemas/telegram.py`: `TripTelegramTargetLink`.
+- 테스트(`test_trip_telegram_targets_api.py`, 5): 연결→목록→해제 / 중복 409 / 4번째 422 한도 / 미존재 타겟 404 /
+  남의 여행 차단.
+
+**검증**: ruff(clean) + mypy --strict(clean) + trip-link/targets/hooks 통합 15 통과(WSL+Docker).
+**T-106 백엔드 완료**: client·target CRUD·hook·outbox·trip링킹. 남은 후속: weekly/daily Dagster 알림(§7), 프론트 trip-link UI.
+
 ## 2026-06-10 (claude) — T-106 PR-5: Telegram outbox 재시도 (§8)
 
 **작업**: 알림 전송을 fire-and-forget(BackgroundTasks)에서 **outbox + drain worker**로 전환 — 영속·재시도 보장.

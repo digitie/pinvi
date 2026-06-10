@@ -8,6 +8,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
+class TripTelegramTargetLink(BaseModel):
+    """`POST /trips/{trip_id}/telegram-targets` 본문 (§6.5)."""
+
+    telegram_target_id: uuid.UUID
+
+
 class TelegramTargetCreate(BaseModel):
     """`POST /users/me/telegram-targets` 본문.
 

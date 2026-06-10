@@ -13,6 +13,7 @@ from app.api.v1 import (
     search,
     storage,
     telegram_targets,
+    trip_telegram_targets,
     trips,
     users,
     ws,
@@ -27,6 +28,7 @@ api_router.include_router(auth.router)
 api_router.include_router(oauth.router)
 api_router.include_router(users.router)
 api_router.include_router(telegram_targets.router)
+api_router.include_router(trip_telegram_targets.router)
 api_router.include_router(trips.router)
 api_router.include_router(pois.router)
 api_router.include_router(ws.router)
