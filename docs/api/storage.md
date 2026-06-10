@@ -85,6 +85,7 @@ Cookie: tripmate_access=...
 검증:
 
 - `purpose` 별 권한 (예: `notice_*`는 admin만)
+- `curated_plan_attachment` / `curated_poi_attachment`는 admin만 발급 가능
 - `content_type` ∈ `TRIPMATE_RUSTFS_ALLOWED_CONTENT_TYPES`
 - `content_length <= TRIPMATE_RUSTFS_MAX_UPLOAD_BYTES`
 - 파일명 확장자와 content_type 일치
@@ -182,6 +183,17 @@ Cookie: tripmate_access=...
 
 서버 검증: `num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1`
 CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
+또한 metadata 등록 시 `bucket`은 `TRIPMATE_RUSTFS_BUCKET`과 같아야 하며, `storage_key`는
+현재 사용자가 `POST /storage/upload-urls`에서 발급받은 prefix만 허용한다.
+
+| 대상 | 허용 prefix |
+|------|-------------|
+| Trip 첨부 | `user-uploads/trip_attachment/{current_user_id}/` |
+| Trip POI 첨부 | `user-uploads/poi_attachment/{current_user_id}/` |
+| Admin curated plan 첨부 | `user-uploads/curated_plan_attachment/{admin_user_id}/` |
+| Admin curated POI 첨부 | `user-uploads/curated_poi_attachment/{admin_user_id}/` |
+
+위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`.
 
 ### 5.6 DELETE 동작
 

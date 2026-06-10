@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
 
-from app.core.deps import CurrentUserId
+from app.core.deps import CurrentUserId, DbSession
+from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.storage import UploadUrlRequest, UploadUrlResponse
 from app.services.rustfs_storage import (
@@ -16,12 +18,20 @@ from app.services.rustfs_storage import (
 )
 
 router = APIRouter(prefix="/storage", tags=["storage"])
+_ADMIN_ONLY_PURPOSES = {"curated_plan_attachment", "curated_poi_attachment"}
 
 
 @router.post("/upload-urls", response_model=Envelope[UploadUrlResponse])
 async def upload_urls(
-    body: UploadUrlRequest, current_user_id: CurrentUserId
+    body: UploadUrlRequest, current_user_id: CurrentUserId, db: DbSession
 ) -> Envelope[UploadUrlResponse]:
+    if body.purpose in _ADMIN_ONLY_PURPOSES:
+        user = await db.scalar(select(User).where(User.user_id == uuid.UUID(current_user_id)))
+        if user is None or "admin" not in set(user.roles or []):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
+            )
     try:
         response = make_upload_url(
             purpose=body.purpose,

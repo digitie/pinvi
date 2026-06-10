@@ -44,6 +44,7 @@ from app.services.rustfs_storage import make_download_url
 from app.services.trip import (
     TripAttachmentLimitError,
     TripAttachmentNotFoundError,
+    TripAttachmentStorageRefError,
     TripBucket,
     TripCommentNotFoundError,
     TripCompanionConflictError,
@@ -180,6 +181,13 @@ def _to_attachment_response(attachment) -> TripAttachmentResponse:  # type: igno
 def _raise_attachment_limit(exc: TripAttachmentLimitError) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
+
+
+def _raise_attachment_storage_ref(exc: TripAttachmentStorageRefError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={"code": exc.code, "message": str(exc)},
     ) from exc
 
@@ -638,6 +646,8 @@ async def create_trip_attachment_endpoint(
         )
     except TripAttachmentLimitError as exc:
         _raise_attachment_limit(exc)
+    except TripAttachmentStorageRefError as exc:
+        _raise_attachment_storage_ref(exc)
     return Envelope.of(_to_attachment_response(attachment))
 
 
@@ -779,6 +789,8 @@ async def create_trip_poi_attachment_endpoint(
         )
     except TripAttachmentLimitError as exc:
         _raise_attachment_limit(exc)
+    except TripAttachmentStorageRefError as exc:
+        _raise_attachment_storage_ref(exc)
     return Envelope.of(_to_attachment_response(attachment))
 
 

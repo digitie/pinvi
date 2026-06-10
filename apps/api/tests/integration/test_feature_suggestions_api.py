@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
 from sqlalchemy import func, select
 
+from app.models.audit import LocationAuditOutbox
 from app.models.feature_suggestion import FeatureSuggestion
 from app.models.user import User
 
@@ -77,6 +79,39 @@ async def test_user_creates_and_reads_feature_suggestion(
 
     assert detail.status_code == 200, detail.text
     assert detail.json()["data"]["request_id"] == str(request_id)
+
+
+async def test_feature_suggestion_location_audit_uses_authenticated_user(
+    client: Any,
+    session_factory: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    user_id, _email = verified_user
+    spoofed_user_id = await _create_user(session_factory, email_prefix="spoofed_audit_user")
+
+    resp = await client.post(
+        "/features/requests",
+        json={
+            "kind": "place",
+            "title": "감사 대상 장소",
+            "coord": {"lon": 127.01, "lat": 37.51},
+        },
+        cookies=auth_cookies(user_id),
+        headers={"X-User-Id": spoofed_user_id},
+    )
+
+    assert resp.status_code == 201, resp.text
+    response_request_id = uuid.UUID(resp.headers["X-Request-Id"])
+    async with session_factory() as db:
+        outbox = await db.scalar(select(LocationAuditOutbox))
+    assert outbox is not None
+    assert outbox.user_id == uuid.UUID(user_id)
+    assert outbox.user_id != uuid.UUID(spoofed_user_id)
+    assert outbox.request_id == response_request_id
+    assert outbox.endpoint == "/features/requests"
+    assert outbox.lat == Decimal("37.510000")
+    assert outbox.lng == Decimal("127.010000")
 
 
 async def test_feature_suggestion_detail_is_owner_only(
@@ -226,8 +261,6 @@ async def test_rate_limit_excludes_rejected_and_duplicate(
     verified_user: tuple[str, str],
     auth_cookies: Any,
 ) -> None:
-    from decimal import Decimal
-
     user_id, _email = verified_user
     # 한도만큼 rejected/duplicate 제안을 직접 적재 — 카운트에서 제외되어야 한다(#108 리뷰).
     async with session_factory() as db:

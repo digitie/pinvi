@@ -410,10 +410,15 @@ async def test_viewer_companion_cannot_write_and_email_masked(
     assert viewer_email in owner_emails
 
 
-def _attachment_payload(filename: str = "trip-cover.jpg") -> dict[str, object]:
+def _attachment_payload(
+    user_id: str,
+    filename: str = "trip-cover.jpg",
+    *,
+    purpose: str = "trip_attachment",
+) -> dict[str, object]:
     return {
         "bucket": "tripmate-media",
-        "storage_key": f"user-uploads/trip_attachment/test/{uuid.uuid4().hex}.jpg",
+        "storage_key": f"user-uploads/{purpose}/{user_id}/2026/06/{uuid.uuid4().hex}.jpg",
         "original_filename": filename,
         "content_type": "image/jpeg",
         "byte_size": 1234,
@@ -503,13 +508,13 @@ async def test_trip_copy_shared_view_and_attachments(
 
     trip_attachment = await client.post(
         f"/trips/{trip_id}/attachments",
-        json=_attachment_payload(),
+        json=_attachment_payload(user_id),
         cookies=cookies,
     )
     assert trip_attachment.status_code == 201, trip_attachment.text
     poi_attachment = await client.post(
         f"/trips/{trip_id}/pois/{poi_id}/attachments",
-        json=_attachment_payload("poi.jpg"),
+        json=_attachment_payload(user_id, "poi.jpg", purpose="poi_attachment"),
         cookies=cookies,
     )
     assert poi_attachment.status_code == 201, poi_attachment.text
@@ -698,17 +703,23 @@ async def test_trip_attachment_limit_and_reorder(
     trip_id = created.json()["data"]["trip_id"]
 
     a1 = await client.post(
-        f"/trips/{trip_id}/attachments", json=_attachment_payload("a1.jpg"), cookies=cookies
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "a1.jpg"),
+        cookies=cookies,
     )
     assert a1.status_code == 201, a1.text
     a2 = await client.post(
-        f"/trips/{trip_id}/attachments", json=_attachment_payload("a2.jpg"), cookies=cookies
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "a2.jpg"),
+        cookies=cookies,
     )
     assert a2.status_code == 201
 
     # 한도(2) 초과 → 409.
     a3 = await client.post(
-        f"/trips/{trip_id}/attachments", json=_attachment_payload("a3.jpg"), cookies=cookies
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "a3.jpg"),
+        cookies=cookies,
     )
     assert a3.status_code == 409, a3.text
     assert a3.json()["error"]["code"] == "ATTACHMENT_LIMIT_EXCEEDED"
@@ -729,12 +740,44 @@ async def test_trip_attachment_limit_and_reorder(
     assert ids == [a2_id, a1_id]
 
 
+async def test_trip_attachment_rejects_unowned_storage_ref(
+    client,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "첨부 검증"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    wrong_user_payload = _attachment_payload(str(uuid.uuid4()), "other.jpg")
+    wrong_user = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=wrong_user_payload,
+        cookies=cookies,
+    )
+    assert wrong_user.status_code == 422, wrong_user.text
+    assert wrong_user.json()["error"]["code"] == "INVALID_ATTACHMENT_STORAGE_REF"
+
+    wrong_bucket_payload = {
+        **_attachment_payload(user_id, "bucket.jpg"),
+        "bucket": "other-bucket",
+    }
+    wrong_bucket = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=wrong_bucket_payload,
+        cookies=cookies,
+    )
+    assert wrong_bucket.status_code == 422, wrong_bucket.text
+    assert wrong_bucket.json()["error"]["code"] == "INVALID_ATTACHMENT_STORAGE_REF"
+
+
 async def test_trip_attachment_download_url(client, verified_user, auth_cookies) -> None:
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     created = await client.post("/trips", json={"title": "다운로드"}, cookies=cookies)
     trip_id = created.json()["data"]["trip_id"]
-    payload = _attachment_payload("dl.jpg")
+    payload = _attachment_payload(user_id, "dl.jpg")
     att = await client.post(f"/trips/{trip_id}/attachments", json=payload, cookies=cookies)
     assert att.status_code == 201, att.text
     att_id = att.json()["data"]["attachment_id"]

@@ -9,7 +9,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 async def get_current_user_id(
+    request: Request,
     db: DbSession,
     tripmate_access: Annotated[str | None, Cookie(alias="tripmate_access")] = None,
 ) -> str:
@@ -93,6 +94,7 @@ async def get_current_user_id(
             detail={"code": "TOKEN_INVALID", "message": "토큰 버전이 만료되었습니다."},
         )
 
+    request.state.user_id = str(user.user_id)
     return str(user.user_id)
 
 
