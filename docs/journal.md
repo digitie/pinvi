@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — notice-plan copy 다이얼로그
+
+**작업**: 추천 여행(notice-plan)을 trip 으로 가져오는 다이얼로그(기존 1-click 복사 대체).
+
+- `lib/noticePlanCopy.ts`: `buildCopyRequest`(새 여행=trip_title+날짜 / 기존=target_trip_id,
+  poi_ids=[] 전체) + `canCopy`. 순수·테스트.
+- `components/notice-plans/NoticePlanCopyDialog.tsx`: 새 여행/기존 여행 선택, 새 여행은 제목·
+  날짜 편집, 기존은 `tripApi.list` 선택 → `noticePlanApi.copy` → 결과(장소 N곳) + "여행 열기"
+  링크(`/trips/{id}`).
+- `NoticePlanShelf`: 카드 버튼 → 다이얼로그 오픈(이전 즉시 복사 제거).
+- `tests/noticePlanCopy.test.ts` 4건.
+
+**검증**: web build(`/notice-plans` 4.41kB) / `tsc` / `next lint` / vitest 28 passed.
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C 잔여: 마커 우클릭 편집 + 동의 철회 UI
 
 **작업**: PR-C 잔여 UI 2종.

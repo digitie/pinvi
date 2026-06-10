@@ -11,6 +11,7 @@ import {
 import { ApiError, noticePlanApi } from '@tripmate/api-client';
 import type { NoticePlan } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
+import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
 
 const CATEGORY_FILTERS = [
   { value: 'all', label: '전체' },
@@ -36,7 +37,7 @@ export function NoticePlanShelf() {
   const [plans, setPlans] = useState<NoticePlan[]>([]);
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [loading, setLoading] = useState(true);
-  const [copyingPlanId, setCopyingPlanId] = useState<string | null>(null);
+  const [copyPlan, setCopyPlan] = useState<NoticePlan | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,29 +64,6 @@ export function NoticePlanShelf() {
     void loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
-
-  const onCopy = async (plan: NoticePlan) => {
-    setCopyingPlanId(plan.notice_plan_id);
-    setMessage(null);
-    setError(null);
-    try {
-      const result = await noticePlanApi(apiClient).copy(plan.notice_plan_id, {
-        trip_title: plan.title,
-        trip_start_date: plan.starts_on,
-        trip_end_date: plan.ends_on,
-        poi_ids: [],
-      });
-      setMessage(
-        result.created_trip
-          ? '추천 여행을 내 여행으로 복사했습니다.'
-          : '선택한 여행에 추천 여행을 복사했습니다.',
-      );
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '추천 여행을 복사하지 못했습니다.');
-    } finally {
-      setCopyingPlanId(null);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -180,21 +158,30 @@ export function NoticePlanShelf() {
               </div>
               <button
                 type="button"
-                onClick={() => void onCopy(plan)}
-                disabled={copyingPlanId !== null}
-                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                onClick={() => setCopyPlan(plan)}
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white"
                 data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
               >
-                {copyingPlanId === plan.notice_plan_id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <CopyPlus className="h-4 w-4" aria-hidden="true" />
-                )}
-                내 여행으로 복사
+                <CopyPlus className="h-4 w-4" aria-hidden="true" />
+                내 여행으로 가져오기
               </button>
             </article>
           ))}
         </div>
+      )}
+
+      {copyPlan && (
+        <NoticePlanCopyDialog
+          plan={copyPlan}
+          onClose={() => setCopyPlan(null)}
+          onCopied={(result) =>
+            setMessage(
+              result.created_trip
+                ? '추천 여행으로 새 여행을 만들었습니다.'
+                : '선택한 여행에 추천 여행을 추가했습니다.'
+            )
+          }
+        />
       )}
     </div>
   );
