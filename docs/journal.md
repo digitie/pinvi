@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — trip 메타 편집 다이얼로그 + E2E
+
+**작업**: trip 제목/지역/일정/상태/공개범위 편집.
+
+- `lib/tripEdit.ts`: `buildTripUpdate`(폼→`TripUpdate`, trim/null) + 상태·공개 라벨. 순수·테스트.
+- `components/trips/TripEditDialog.tsx`: 제목/지역/시작·종료일/상태(5)/공개(3) 폼 + Escape 닫기.
+- `TripDetail`: 헤더 "편집" 버튼 → 다이얼로그 → `tripApi.update(version)`(If-Match) → reload.
+- `e2e/trip-edit.e2e.ts`: 제목 변경 → 헤더 반영(stateful PATCH).
+- `tests/tripEdit.test.ts` 2건.
+
+**검증**: 로컬 chromium 전 스위트 `31 passed`(CI env port 9021) + tsc + lint + vitest.
+
 ## 2026-06-10 (claude) — trip 복사/삭제 액션 + E2E
 
 **작업**: trip `[tripId]` 헤더에 복사·삭제 액션.
