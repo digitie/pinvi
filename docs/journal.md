@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C(1): 지도 실 feature 로딩 슬라이스
+
+**작업**: shell-only 였던 지도에 실제 `/features/in-bounds` 데이터 로딩 + 16색 팔레트를 입힘.
+PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔레트" 핵심 슬라이스.
+
+- `apps/web/lib/markerPalette.ts`: 16색 팔레트(P-01~P-16 → hex/labelColor) + `paletteHex`/
+  `paletteLabelColor` + 카테고리/kind → maki·색 fallback 매핑(`docs/design/marker-palette.md`).
+- `apps/web/lib/featureBounds.ts`: viewport → `lng_min,lat_min,lng_max,lat_max` bbox(한국 범위
+  clamp, 소수 5자리) + `clampZoom`(5~19). 순수 함수.
+- `apps/web/components/map/FeatureMapView.tsx`: 기존 shell 의 maplibre-vworld 배선을 그대로
+  쓰되 load/moveend/zoomend(250ms debounce)에 `featureApi.inBounds` 호출 → 서버 features =
+  MakiMarker(팔레트 색·maki 아이콘) / 서버 clusters = 숫자 마커(클릭 시 flyTo zoom-in). 마커
+  클릭 → `get`+`weather` 동시 로드 → Popup(제목/카테고리/주소/현재 기온). stale 응답 가드 +
+  raw apiClient 패턴(기존 TripDashboard 와 동일).
+- `apps/web/app/(app)/map/page.tsx`: "탐색 지도" 라우트. 기존 `/trips/map-shell`(shell)은 유지.
+- `apps/web/tests/{markerPalette,featureBounds}.test.ts` + `vitest.config.ts`(e2e 제외, `@` alias).
+
+**검증**: web build / `tsc --noEmit` / `next lint` / vitest 9 passed (workspace 전체 lint+typecheck
+포함). 실 지도 렌더(VWorld 키 + 브라우저) E2E 는 별도.
+
+**남은 PR-C(후속 슬라이스)**: POI D&D + 양방향 패널, trip 대시보드/[tripId] 메인 맵, 우클릭 메뉴
+4+3종, 내 위치 버튼+동의 흐름, search overlay, CI web 워크플로 e2e 게이트.
+
 ## 2026-06-10 (claude) — RustFS presigned 실서명 활성화 (PUT/GET)
 
 **작업**: 그간 placeholder(`X-Amz-Signature=PLACEHOLDER`)였던 presigned URL 을 boto3 실서명으로 전환.
