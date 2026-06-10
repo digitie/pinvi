@@ -13,6 +13,7 @@ import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
+import { TripShareLinks } from '@/components/trips/TripShareLinks';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -315,6 +316,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           />
         </aside>
       </div>
+
+      <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
     </div>
   );
 }
