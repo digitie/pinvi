@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — feature 제안 폼 (새 장소/이벤트)
+
+**작업**: 지도 우클릭 → 새 장소/이벤트 제안 다이얼로그(`featureApi.request`, `type=new_place`).
+
+- `lib/featureRequest.ts`: `parseCategories`(쉼표·trim·중복·max10) + `buildNewPlaceRequest`
+  (kind/title/coord/categories/note → FeatureRequestCreate). 순수·테스트.
+- `components/map/FeatureRequestDialog.tsx`: 종류(장소/이벤트)+이름+카테고리+메모, 좌표 표시
+  → `featureApi.request` → 접수 안내(관리자 검토).
+- `FeatureMapView`: 우클릭 메뉴에 "이 위치 장소 제안" 추가 → 클릭 좌표 prefill 다이얼로그.
+- `tests/featureRequest.test.ts` 3건.
+
+**검증**: web build(`/map` 8.1kB) / `tsc` / `next lint` / vitest 37 passed.
+
 ## 2026-06-10 (claude) — 첨부 업로드 UI (presigned PUT)
 
 **작업**: trip 첨부 2-phase 업로드 + 목록/삭제/다운로드.
