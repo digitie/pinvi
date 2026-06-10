@@ -9,8 +9,13 @@ import {
   isoToDatetimeLocal,
   type PoiDetailForm,
 } from '@/lib/poiDetail';
+import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const COLOR_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
+
+const POI_LABEL = 'block text-xs font-semibold text-ink';
+const POI_INPUT = 'h-9 px-2 focus:border-primary';
 
 export interface PoiEditorProps {
   poi: TripViewPoi;
@@ -60,84 +65,84 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
         </div>
       </div>
 
-      <label className="block text-xs font-semibold text-ink">
-        maki 아이콘
-        <input
-          value={form.icon}
-          onChange={(event) => update({ icon: event.target.value })}
-          maxLength={64}
-          placeholder="marker"
-          className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-        />
-      </label>
+      <FormField
+        id="poi-edit-icon"
+        label="maki 아이콘"
+        labelClassName={POI_LABEL}
+        className={POI_INPUT}
+        value={form.icon}
+        onChange={(event) => update({ icon: event.target.value })}
+        maxLength={64}
+        placeholder="marker"
+      />
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-xs font-semibold text-ink">
-          도착
-          <input
-            type="datetime-local"
-            value={form.arrival}
-            onChange={(event) => update({ arrival: event.target.value })}
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
-        <label className="block text-xs font-semibold text-ink">
-          출발
-          <input
-            type="datetime-local"
-            value={form.departure}
-            onChange={(event) => update({ departure: event.target.value })}
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
+        <FormField
+          id="poi-edit-arrival"
+          label="도착"
+          type="datetime-local"
+          labelClassName={POI_LABEL}
+          className={POI_INPUT}
+          value={form.arrival}
+          onChange={(event) => update({ arrival: event.target.value })}
+        />
+        <FormField
+          id="poi-edit-departure"
+          label="출발"
+          type="datetime-local"
+          labelClassName={POI_LABEL}
+          className={POI_INPUT}
+          value={form.departure}
+          onChange={(event) => update({ departure: event.target.value })}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-xs font-semibold text-ink">
-          예산
-          <input
-            type="number"
-            min={0}
-            value={form.budget}
-            onChange={(event) => update({ budget: event.target.value })}
-            placeholder="0"
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
-        <label className="block text-xs font-semibold text-ink">
-          실제 비용
-          <input
-            type="number"
-            min={0}
-            value={form.actual}
-            onChange={(event) => update({ actual: event.target.value })}
-            placeholder="0"
-            className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-          />
-        </label>
+        <FormField
+          id="poi-edit-budget"
+          label="예산"
+          type="number"
+          min={0}
+          labelClassName={POI_LABEL}
+          className={POI_INPUT}
+          value={form.budget}
+          onChange={(event) => update({ budget: event.target.value })}
+          placeholder="0"
+        />
+        <FormField
+          id="poi-edit-actual"
+          label="실제 비용"
+          type="number"
+          min={0}
+          labelClassName={POI_LABEL}
+          className={POI_INPUT}
+          value={form.actual}
+          onChange={(event) => update({ actual: event.target.value })}
+          placeholder="0"
+        />
       </div>
 
-      <label className="block text-xs font-semibold text-ink">
-        메모
-        <textarea
-          value={form.note}
-          onChange={(event) => update({ note: event.target.value })}
-          rows={2}
-          className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm font-normal text-ink outline-none focus:border-primary"
-        />
-      </label>
+      <FormTextArea
+        id="poi-edit-note"
+        label="메모"
+        labelClassName={POI_LABEL}
+        className="px-2 py-1 focus:border-primary"
+        value={form.note}
+        onChange={(event) => update({ note: event.target.value })}
+        rows={2}
+      />
 
-      <label className="block text-xs font-semibold text-ink">
-        링크
-        <input
-          type="url"
-          value={form.url}
-          onChange={(event) => update({ url: event.target.value })}
-          maxLength={2000}
-          placeholder="https://"
-          className="mt-1 h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
-        />
-      </label>
+      <FormField
+        id="poi-edit-url"
+        label="링크"
+        type="url"
+        labelClassName={POI_LABEL}
+        className={POI_INPUT}
+        value={form.url}
+        onChange={(event) => update({ url: event.target.value })}
+        maxLength={2000}
+        placeholder="https://"
+      />
 
       <div className="flex justify-end gap-2">
         <button
