@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { TripActions } from '@/components/trips/TripActions';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
 import { TripCompanions } from '@/components/trips/TripCompanions';
@@ -229,9 +230,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
               </span>
             </p>
           </div>
-          <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
-            {STATUS_LABEL[trip.status]}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+              {STATUS_LABEL[trip.status]}
+            </span>
+            <TripActions tripId={tripId} />
+          </div>
         </div>
         {view.broken_feature_count > 0 && (
           <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">

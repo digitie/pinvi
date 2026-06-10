@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — trip 복사/삭제 액션 + E2E
+
+**작업**: trip `[tripId]` 헤더에 복사·삭제 액션.
+
+- `components/trips/TripActions.tsx`: 복사(`tripApi.copy` → 새 여행으로 `router.push`) + 삭제
+  (2-step 확인 → `tripApi.delete` → `/trips` 이동). 에러 `role=alert`.
+- `TripDetail` 헤더 상태 배지 아래 배치.
+- `e2e/trip-actions.e2e.ts`: 복사 → `/trips/{newId}` 이동 / 삭제 확인 → `/trips` 이동 검증.
+
+**검증**: 로컬 chromium 전 스위트 `30 passed`(CI env port 9021) + tsc + lint.
+
 ## 2026-06-10 (claude) — 장소 제안 딥링크(`/map?suggest=`) + E2E
 
 **작업**: 지도 우클릭 없이도 장소 제안 다이얼로그를 열 수 있는 딥링크 + 제안 흐름 E2E.
