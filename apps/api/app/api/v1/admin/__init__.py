@@ -7,6 +7,7 @@ from app.api.v1.admin import (
     audit,
     backup,
     emails,
+    feature_requests,
     mcp_tokens,
     notice_plans,
     pois,
@@ -20,6 +21,7 @@ admin_router = APIRouter()
 admin_router.include_router(users.router)
 admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
+admin_router.include_router(feature_requests.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
 admin_router.include_router(stats.router)
