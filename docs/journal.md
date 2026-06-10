@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-3: 신규 trip / 동반자 초대 Telegram 알림 hook
+
+**작업**: T-106 원래 목표 기능 — 즉시 알림 2종이 실제로 동작 시작.
+
+- `services/telegram_messages.py` 신규: `build_trip_created_message`(제목/일정/지역) /
+  `build_companion_invited_message`(이메일 등 PII 미포함 — 그룹 채널 가정, §9). plain text.
+- `services/telegram_notify.py` 신규: `send_user_notification(user_id, text)` — default(없으면 최신
+  enabled) target으로 시스템 봇 전송. **자체 세션**(`db.session` 모듈 속성 동적 참조 — BackgroundTasks는
+  request 세션 종료 후 실행) + 실패 절대 비전파(로그 + `last_send_status`, bot_forbidden→비활성).
+- `clients/telegram.py`: `parse_mode=None` 허용(plain text — MarkdownV2 escape 회피).
+- `api/v1/trips.py`: `create_trip_endpoint` → owner 알림, `invite_trip_member` → 초대된 기존
+  사용자(companion.user_id) 알림. 둘 다 FastAPI `BackgroundTasks`(응답 후, 비차단).
+- 테스트: messages 단위 4 + client parse_mode 1 + hook 통합 4(생성 알림/타겟 없음 noop/
+  전송 실패에도 201+상태 기록/초대 알림 PII 미포함).
+
+**검증**: ruff(clean) + mypy --strict(clean) + telegram 스위트 29 + 전체 unit 138 통과(WSL+Docker).
+**남은 T-106**: trip↔target 링킹(§6.5/6.6), weekly/daily Dagster(§7.1/7.2), outbox(§8), per-user 토큰, 프론트 UI.
+
 ## 2026-06-10 (claude) — 세션 일단락: resume.md 정리
 
 **작업**: 장시간 세션 마감 — `docs/resume.md`를 현 상태로 정합화.
