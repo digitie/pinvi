@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 프론트 접근성 개선(모달 Escape + 에러 role=alert)
+
+**작업**: 이번 세션 추가 컴포넌트 a11y 점검·개선.
+
+- `lib/useEscapeKey.ts`: Escape 키로 닫기 hook. `LocationConsentDialog`/`FeatureRequestDialog`/
+  `NoticePlanCopyDialog` 3개 모달에 적용(키보드 사용자 모달 탈출).
+- 에러 메시지 `<p>` 13곳에 `role="alert"` 추가 — 스크린리더가 비동기 에러를 즉시 안내
+  (map/trips 컴포넌트 + settings/consents + notice-plans).
+- `e2e/notice-copy.e2e.ts`: 다이얼로그 Escape 닫힘 → 재오픈 → 복사 시퀀스 검증 추가.
+
+**검증**: web build / `tsc` / `next lint` / vitest / playwright --list(21) 전부 통과.
+
 ## 2026-06-10 (claude) — E2E 추가: 지도/추천복사/첨부업로드
 
 **작업**: PR-C 핵심 흐름 Playwright E2E(mock) 3종.

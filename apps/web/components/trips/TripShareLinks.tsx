@@ -102,7 +102,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
         </button>
       </div>
 
-      {error && <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
 
       {newUrl && (
         <div className="space-y-1 rounded-sm bg-success-bg px-3 py-2" data-testid="new-share-url">

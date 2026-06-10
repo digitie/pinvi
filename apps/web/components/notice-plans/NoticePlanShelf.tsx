@@ -97,6 +97,7 @@ export function NoticePlanShelf() {
       {error && (
         <p
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          role="alert"
           data-testid="notice-plans-error"
         >
           {error}

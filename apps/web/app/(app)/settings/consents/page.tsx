@@ -86,7 +86,7 @@ export default function ConsentsSettingsPage() {
       </header>
 
       {error && (
-        <p className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text" data-testid="consents-error">
+        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text" data-testid="consents-error">
           {error}
         </p>
       )}

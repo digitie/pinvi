@@ -7,6 +7,7 @@ import { ApiError, noticePlanApi, tripApi } from '@tripmate/api-client';
 import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { buildCopyRequest, canCopy, type CopyForm } from '@/lib/noticePlanCopy';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 export interface NoticePlanCopyDialogProps {
   plan: NoticePlan;
@@ -27,6 +28,8 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   const [copying, setCopying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NoticePlanCopyResponse | null>(null);
+
+  useEscapeKey(onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,7 +184,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
             )}
 
             {error && (
-              <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
+              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
             )}
 
             <div className="flex justify-end gap-2">

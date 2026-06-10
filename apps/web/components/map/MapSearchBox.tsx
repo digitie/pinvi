@@ -51,7 +51,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
         {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden="true" />}
       </form>
       {error && (
-        <p className="mt-1 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">{error}</p>
+        <p role="alert" className="mt-1 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">{error}</p>
       )}
       {results.length > 0 && (
         <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-white shadow-sm">

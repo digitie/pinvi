@@ -6,6 +6,7 @@ import { ApiError, featureApi } from '@tripmate/api-client';
 import type { FeatureSuggestionKind } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { buildNewPlaceRequest, type NewPlaceForm } from '@/lib/featureRequest';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 export interface FeatureRequestDialogProps {
   coord: { lon: number; lat: number };
@@ -28,6 +29,8 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  useEscapeKey(onClose);
 
   const update = (patch: Partial<NewPlaceForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -132,7 +135,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
             </label>
 
             {error && (
-              <p className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
+              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
             )}
 
             <div className="flex justify-end gap-2">
