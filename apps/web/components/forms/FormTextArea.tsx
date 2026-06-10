@@ -7,6 +7,8 @@ export interface FormTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaEl
   label: string;
   /** 검증 오류 메시지 — 있으면 aria-invalid + role=alert로 노출 */
   error?: string;
+  /** 보조 설명(예: "최소 1자") */
+  hint?: string;
   /** label 클래스 override */
   labelClassName?: string;
 }
@@ -16,21 +18,29 @@ export interface FormTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaEl
  * 오류 시 `aria-invalid` + `aria-describedby` + `role=alert`로 노출한다.
  */
 export const FormTextArea = forwardRef<HTMLTextAreaElement, FormTextAreaProps>(function FormTextArea(
-  { id, label, error, className, labelClassName, ...textareaProps },
+  { id, label, error, hint, className, labelClassName, ...textareaProps },
   ref,
 ) {
   const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const describedBy =
+    [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
 
   return (
     <div className="space-y-1">
       <label htmlFor={id} className={labelClassName ?? 'block text-sm text-ink'}>
         {label}
       </label>
+      {hint ? (
+        <p id={hintId} className="text-xs text-muted">
+          {hint}
+        </p>
+      ) : null}
       <textarea
         ref={ref}
         id={id}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={describedBy}
         className={`w-full rounded-sm border px-3 py-2 text-sm ${
           error ? 'border-error-text' : 'border-hairline'
         }${className ? ` ${className}` : ''}`}

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
 import type { AdminPoiDetail } from '@tripmate/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
@@ -243,11 +244,13 @@ export default function AdminPoiDetailPage() {
             <p className="text-xs text-muted">
               {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
             </p>
-            <textarea
+            <FormTextArea
+              id="admin-poi-action-reason"
+              label="사유"
+              hint="감사 로그에 기록됩니다."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
-              className="w-full rounded-sm border border-hairline px-3 py-2 text-sm"
               data-testid="admin-poi-action-reason"
             />
             <div className="flex justify-end gap-2">

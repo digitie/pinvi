@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
 import type { AdminUserDetail } from '@tripmate/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
@@ -208,14 +209,14 @@ export default function AdminUserDetailPage() {
                   ? '강제 이메일 인증'
                   : '사용자 비활성화'}
             </h3>
-            <p className="text-xs text-muted">
-              사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)
-            </p>
-            <textarea
+            <FormTextArea
+              id="admin-user-action-reason"
+              label="사유"
+              hint="사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
-              className="w-full rounded-sm border border-hairline px-3 py-2 text-sm"
+              maxLength={500}
               data-testid="admin-user-action-reason"
             />
             <div className="flex justify-end gap-2">
