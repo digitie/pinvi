@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-1: Telegram Bot API client (verify/send)
+
+**작업**: Telegram 알림(T-106) 첫 슬라이스 — 전송 전용 client. DB/마이그레이션 없이 httpx mock으로 완결 단위테스트.
+
+- `apps/api/app/clients/telegram.py` 신규: `TelegramClient`(httpx.AsyncClient 주입) `verify_target`(getChat) /
+  `send_to_target`(sendMessage), `TelegramError.code`로 §5 실패 분류(bot_forbidden/invalid_chat/invalid_topic/
+  rate_limited/network_error/unknown_error/missing_chat_id), `mask_token`(§9 — token secret 마스킹, 에러 메시지에 token 비노출).
+- `apps/api/app/core/config.py`: `tripmate_telegram_{api_base,timeout_seconds,bot_token_default,admin_chat_id}` 설정.
+- `apps/api/tests/unit/test_telegram_client.py`(15): verify/send 페이로드·실패 분류·retry_after·timeout·token 마스킹.
+
+**책임 분리**: 사용자용 Telegram Bot(bot token)은 agent용 `mcp-telegram`(MTProto, `.env.mcp-telegram`)과 무관(별 시스템).
+bot token 원본은 DB 저장 X(§1), client는 전송만 — DB 모델/outbox/라우터/UI는 후속 PR.
+
+**검증**: ruff(clean) + ruff format + mypy --strict(clean) + 단위테스트 15(WSL `.venv-wsl`) + 전체 unit 133 통과.
+
 ## 2026-06-10 (claude) — 폼 a11y 마무리 (admin list 폴리시 + settings/mcp-tokens)
 
 **작업**: 폼 접근성 스윕의 마지막 폴리시 — list filter select 연결 + error region role + 사용자용 mcp-tokens.
