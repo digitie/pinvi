@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 일자 동선 최적화 UI
+
+**작업**: 선택 일자 동선 최적화(nearest_neighbor) 미리보기 → 적용.
+
+- `lib/distance.ts`: `formatDistanceMeters`(m/km/null). 순수·테스트.
+- `components/trips/TripDayOptimize.tsx`: "동선 최적화" → `optimizeDay(persist=false)` 미리보기
+  (추정 거리/변경 수/warnings) → "적용"(`persist=true`) → reload. POI<2 면 숨김.
+- `TripDetail` 사이드 패널(선택 일자)에 통합.
+- `tests/distance.test.ts` 1건.
+
+**검증**: web build(`/trips/[tripId]` 13.6kB) / `tsc` / `next lint` / vitest 41 passed.
+
 ## 2026-06-10 (claude) — 동반자 초대/관리 UI
 
 **작업**: trip `[tripId]` 동반자 초대(이메일+역할)/목록/제거.
