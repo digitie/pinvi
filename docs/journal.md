@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — E2E mutation 흐름 3종 추가
+
+**작업**: trip mutation 흐름 Playwright E2E(mock) 추가 — 이제 CI에서 실제 실행됨.
+
+- `e2e/trip-mutations.e2e.ts`:
+  - 동반자 초대 → `members` POST mock + stateful TripView → `companion-list` 에 이메일 표시.
+  - POI 삭제 → `pois/{id}` DELETE(204) + stateful TripView → "등록된 장소가 없습니다" 안내.
+  - POI 마커 편집기 열기 → 저장(`pois/{id}` PATCH) → 편집기 닫힘.
+
+**검증**: 로컬 chromium 전 스위트 `24 passed`(CI env port 9021) + tsc + lint.
+
 ## 2026-06-10 (claude) — E2E web CI 워크플로 (Playwright 실행 게이트)
 
 **작업**: 작성만 해두고 CI에서 안 돌던 Playwright e2e를 실제 실행 게이트로.
