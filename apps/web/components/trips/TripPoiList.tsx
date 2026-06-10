@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { AlertTriangle, GripVertical, Pencil, Trash2 } from 'lucide-react';
-import type { TripViewPoi } from '@tripmate/schemas';
-import { paletteHex, type MarkerColorKey } from '@/lib/markerPalette';
+import type { PoiUpdate, TripViewPoi } from '@tripmate/schemas';
+import { paletteHex } from '@/lib/markerPalette';
 import { arrayMove } from '@/lib/poiRank';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 
@@ -21,7 +21,7 @@ export interface TripPoiListProps {
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
   onReorder?: (orderedPoiIds: string[]) => void;
-  onEditMarker?: (poi: TripViewPoi, color: MarkerColorKey, icon: string) => void;
+  onEditPoi?: (poi: TripViewPoi, patch: PoiUpdate) => void;
   onDelete?: (poiId: string) => void;
   savingPoiId?: string | null;
   /** 편집 중 POI(외부 제어 — 지도 마커 우클릭 등). 미지정 시 내부 상태. */
@@ -35,7 +35,7 @@ export function TripPoiList({
   onSelectPoi,
   editable = false,
   onReorder,
-  onEditMarker,
+  onEditPoi,
   onDelete,
   savingPoiId = null,
   editingPoiId: editingPoiIdProp,
@@ -171,13 +171,12 @@ export function TripPoiList({
                   </div>
                 )}
               </div>
-              {editing && onEditMarker && (
+              {editing && onEditPoi && (
                 <PoiEditor
-                  initialColor={poi.marker_color}
-                  initialIcon={poi.marker_icon}
+                  poi={poi}
                   saving={savingPoiId === poi.poi_id}
-                  onSave={(color, icon) => {
-                    onEditMarker(poi, color, icon);
+                  onSave={(patch) => {
+                    onEditPoi(poi, patch);
                     setEditingPoiId(null);
                   }}
                   onCancel={() => setEditingPoiId(null)}
