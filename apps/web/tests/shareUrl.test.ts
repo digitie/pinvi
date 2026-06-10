@@ -1,0 +1,10 @@
+import { describe, expect, it } from 'vitest';
+import { buildShareUrl } from '@/lib/shareUrl';
+
+describe('shareUrl', () => {
+  it('buildShareUrl: origin + /shared/{tripId}/{token}', () => {
+    expect(buildShareUrl('https://tripmate.app', 'trip-1', 'tok-9')).toBe(
+      'https://tripmate.app/shared/trip-1/tok-9'
+    );
+  });
+});

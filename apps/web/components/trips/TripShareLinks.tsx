@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { Copy, Link2, Loader2, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
 import { ApiError, tripApi } from '@tripmate/api-client';
 import type { TripShareLinkVisibility, TripViewShareLink } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { SHARE_STATUS_LABEL, VISIBILITY_LABEL, shareLinkStatus } from '@/lib/shareLink';
+import { buildShareUrl } from '@/lib/shareUrl';
 
 const VISIBILITIES: TripShareLinkVisibility[] = ['view_only', 'comment', 'edit'];
 
@@ -27,17 +29,21 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newUrl, setNewUrl] = useState<string | null>(null);
+  const [newToken, setNewToken] = useState<string | null>(null);
 
   const create = async () => {
     setCreating(true);
     setError(null);
     setNewUrl(null);
+    setNewToken(null);
     try {
       const res = await tripApi(apiClient).createShareToken(tripId, {
         visibility,
         expires_at: expiresAt ? new Date(`${expiresAt}T23:59:59`).toISOString() : null,
       });
-      setNewUrl(res.url);
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      setNewUrl(buildShareUrl(origin, tripId, res.token));
+      setNewToken(res.token);
       setExpiresAt('');
       await onChanged();
     } catch (err) {
@@ -120,6 +126,17 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               복사
             </button>
+            {newToken && (
+              <Link
+                href={`/shared/${tripId}/${newToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-white px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                열기
+              </Link>
+            )}
           </div>
         </div>
       )}
