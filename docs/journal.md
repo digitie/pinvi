@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-180: krtour admin HTTP client (feature change relay 토대)
+
+**작업**: TripMate Admin이 승인한 사용자 feature 제안을 krtour `/v1/admin/features*`로 전송할
+admin-path HTTP client 신설. (T-179 검토→승인 플로우의 전송 토대.)
+
+- `clients/krtour_map_admin.py` 신규 — `KrtourMapAdminClient`: create/patch/delete_feature
+  (`data.request` 반환) + change-requests list/approve/reject. 재시도·도메인 예외는 user client
+  재사용. base = :9011 `/v1/admin/*` (9012는 admin UI라 base 아님), `X-Krtour-Service-Token`.
+- config: `tripmate_krtour_map_admin_base_url` 기본값 9012→**9011** 정정(§7 admin base 오류 수정) +
+  `tripmate_krtour_map_admin_service_token`(미설정 시 공용 토큰 fallback) 추가. `.env.example` 2개.
+- `main.py` lifespan에 admin client 합성.
+- 계약 테스트 `tests/unit/test_krtour_map_admin_client.py`(MockTransport, 7): create/patch/delete +
+  approve action sub-resource + 404/422/5xx 에러 매핑.
+
+**§7 기본값 가정**(krtour T-217c 미확정): admin 인증=service token, review_mode=require_review,
+closure=DELETE(soft). 확정 시 호출부(T-179) 조정.
+
+**범위**: client 토대만. 사용자 제안 승인→호출 플로우 + web UI는 T-179(후속 PR).
+
+**검증**: ruff check + format(clean, 로컬). mypy/pytest는 CI.
+
 ## 2026-06-11 (claude) — T-175: trip view batch를 krtour HTTP client로 연결 + etl_bridge 제거
 
 **작업**: PR1(#171)에 이어 trip 상세 view의 feature batch 경로를 레거시 stub에서 실 HTTP

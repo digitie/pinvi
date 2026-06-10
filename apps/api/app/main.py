@@ -16,6 +16,7 @@ from app import __version__
 from app.api.v1 import api_router
 from app.clients.kraddr_geo import kraddr_geo_client_lifespan
 from app.clients.krtour_map import krtour_map_client_lifespan
+from app.clients.krtour_map_admin import krtour_map_admin_client_lifespan
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging, get_logger
@@ -39,8 +40,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.warning("tripmate.geofence.config_warning", warning=warning)
     # krtour-map OpenAPI HTTP client (ADR-026/027) — feature read/batch 경로.
     # 레거시 in-process Protocol stub(etl_bridge)은 T-175에서 제거됨.
+    # admin client(T-180)는 사용자 제안 승인 시 `/v1/admin/features*` change API 호출.
     async with (
         krtour_map_client_lifespan(app),
+        krtour_map_admin_client_lifespan(app),
         kraddr_geo_client_lifespan(app),
         location_audit_outbox_worker_lifespan(app),
         telegram_outbox_worker_lifespan(app),
