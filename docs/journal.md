@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — E2E web CI 워크플로 (Playwright 실행 게이트)
+
+**작업**: 작성만 해두고 CI에서 안 돌던 Playwright e2e를 실제 실행 게이트로.
+
+- `playwright.config.ts`: `webServer`(`npm run build && npm run start`, :9022, CI에선 새 서버)
+  추가 — 모든 e2e가 `page.route` API mock 이라 백엔드 불필요.
+- `.github/workflows/web.yml`: `e2e` job 추가 — `playwright install --with-deps chromium` +
+  `playwright test`(webServer가 앱 기동). 실패 시 traces artifact 업로드.
+- **로컬 chromium 설치 후 전 스위트 실행 검증** — `trip-attachment` 의 `heading '첨부'` 가
+  trip 제목("첨부 테스트 여행")과 strict-mode 충돌 → `exact: true` 로 수정. **21/21 통과**.
+
+**검증**: 로컬 `npx playwright test` 21 passed + tsc. CI에선 본 PR의 web `e2e` job이 실증.
+
 ## 2026-06-10 (claude) — 프론트 접근성 개선(모달 Escape + 에러 role=alert)
 
 **작업**: 이번 세션 추가 컴포넌트 a11y 점검·개선.
