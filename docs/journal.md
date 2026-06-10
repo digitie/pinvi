@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-2: Telegram 알림 대상 CRUD + verify
+
+**작업**: `/users/me/telegram-targets` CRUD(§6.1~6.4) — 모델/마이그레이션/스키마/서비스/라우터.
+
+- `models/telegram_target.py` + `alembic/.../20260610_0018_telegram_targets.py`: `app.telegram_targets`
+  (user FK CASCADE, chat_id/type/thread/label/title_snapshot, is_default/is_enabled, last_verified_at,
+  last_send_status, soft delete, `telegram_bot_token_ref` 기본 `system`). updated_at 트리거 + partial index.
+- `schemas/telegram.py`: TelegramTargetCreate(bot token 안 받음) / TelegramTargetResponse.
+- `services/telegram_targets.py`: create(등록 시 verify, 실패 시 미저장) / list / verify_existing(실패 기록+
+  bot_forbidden→is_enabled=false) / delete(soft). §5 실패코드→HTTP status 매핑.
+- `api/v1/telegram_targets.py`: GET/POST/POST verify/DELETE + `get_telegram_client` 의존성. `__init__` 등록.
+- 테스트: `tests/integration/test_telegram_targets_api.py`(5, fake client override) — 생성+verify+삭제 / bot_forbidden 403 미저장 /
+  시스템봇 미설정 시 미검증 생성 / verify 엔드포인트 / 404.
+
+**설계 결정**: per-user vault 미구현 → **단일 TripMate 시스템 봇** 모델 채택. 사용자는 봇을 자기 chat에 추가하고
+chat_id만 등록(원시 토큰 DB 저장 X, §1 준수). per-user 봇 토큰(vault)은 후속. trip↔target 링킹(§6.5/6.6, max 3)도 후속 PR.
+
+**검증**: ruff(clean) + mypy --strict(clean) + 단위 15 + 통합 5(WSL+Docker) 통과. (전체 unit 132/133; `test_access_token_expiry`는
+시간 의존 flaky로 격리 시 통과 — 무관.)
+
 ## 2026-06-10 (claude) — T-106 PR-1: Telegram Bot API client (verify/send)
 
 **작업**: Telegram 알림(T-106) 첫 슬라이스 — 전송 전용 client. DB/마이그레이션 없이 httpx mock으로 완결 단위테스트.
