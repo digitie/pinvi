@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C(3): 지도 검색 + 내 위치 + 우클릭 메뉴
+
+**작업**: 탐색 지도(`/map`)에 인터랙션 3종 추가. 라이브러리 실제 API surface(검증) 기준.
+
+- `components/map/MapSearchBox.tsx`: `/features/search` 검색 박스 — 결과 클릭 시 해당 feature 로
+  flyTo + 선택(상세/날씨 팝업).
+- `FeatureMapView`: ① 검색 overlay(좌상단) ② 내 위치 버튼(우하단, `navigator.geolocation` →
+  `UserLocationMarker` + flyTo, 서버 좌표 전송 없음 — LBS 단순화) ③ 우클릭 `MapContextMenu`
+  (`onContextMenu` → "여기서 주변 보기" flyTo / "좌표 복사"). 기존 in-bounds 로딩·클러스터·팝업 유지.
+- `vworldPrimitives.tsx`: `UserLocationMarker` / `MapContextMenu` 추가. FeatureMapView 를 공통
+  primitives 로 이관(로컬 dynamic 블록·shim 중복 제거).
+
+**검증**: web build(`/map` 3.73kB) / `tsc --noEmit` / `next lint` / vitest 15 passed. 실 지도 인터랙션
+E2E(VWorld 키+브라우저)는 별도.
+
+**남은 PR-C**: POI 추가/재정렬(D&D)·편집, 마커 우클릭 색/아이콘, 위치 동의 흐름(LBS/PIPA).
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C(2): trip 대시보드 링크 + [tripId] 메인 지도
 
 **작업**: 사용자 여행을 지도에 — `/trips/[tripId]` 메인 지도 + POI 사이드패널(양방향 선택).

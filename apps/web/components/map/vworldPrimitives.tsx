@@ -11,7 +11,9 @@ import * as ReactRuntime from 'react';
 import type {
   ClusterLayerProps,
   MakiMarkerProps,
+  MapContextMenuProps,
   PopupProps,
+  UserLocationMarkerProps,
   VWorldMapFallbackInfo,
   VWorldMapProps,
 } from 'maplibre-vworld';
@@ -91,5 +93,15 @@ export const MakiMarker = dynamic<MakiMarkerProps>(
 
 export const Popup = dynamic<PopupProps>(
   () => import('maplibre-vworld').then((module) => module.Popup),
+  { ssr: false }
+);
+
+export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
+  () => import('maplibre-vworld').then((module) => module.UserLocationMarker),
+  { ssr: false }
+);
+
+export const MapContextMenu = dynamic<MapContextMenuProps>(
+  () => import('maplibre-vworld').then((module) => module.MapContextMenu),
   { ssr: false }
 );
