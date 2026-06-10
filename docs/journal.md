@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C 잔여: 마커 우클릭 편집 + 동의 철회 UI
+
+**작업**: PR-C 잔여 UI 2종.
+
+- **마커 우클릭 편집**: `MakiMarker.onContextMenu`(라이브러리 `Marker` 상속) → trip 지도 마커
+  우클릭 시 해당 POI 선택 + 편집기 오픈. `TripPoiList` 편집 상태를 외부 제어 가능하게 변경
+  (`editingPoiId`/`onEditToggle`, 미지정 시 내부 상태 유지) → `TripDetail` 이 마커 우클릭과
+  목록 연필을 동일 편집 상태로 묶음.
+- **동의 철회 UI**: `app/(app)/settings/consents` 신규 — `getConsents` 현황 + 선택 항목
+  (`location_collection`/`demographic_use`/`marketing`) `withdrawConsent` 철회(필수 약관은 제외).
+
+**검증**: web build(`/settings/consents` 신규, `/trips/[tripId]` 9.55kB) / `tsc` / `next lint` /
+vitest 24 passed.
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C(5): 위치 동의 흐름 + day 관리
 
 **작업**: LBS/PIPA 위치 동의 게이트 + trip day CRUD UI.

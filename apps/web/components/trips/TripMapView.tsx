@@ -24,6 +24,7 @@ export interface TripMapViewProps {
   points: TripMapPoint[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poiId: string) => void;
+  onMarkerContextMenu?: (poiId: string) => void;
   className?: string;
 }
 
@@ -32,6 +33,7 @@ export function TripMapView({
   points,
   selectedPoiId = null,
   onSelectPoi,
+  onMarkerContextMenu,
   className,
 }: TripMapViewProps) {
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -117,6 +119,10 @@ export function TripMapView({
                   selected={marker.point.poiId === selectedPoiId}
                   ariaLabel={marker.point.title}
                   onClick={() => onSelectPoi?.(marker.point.poiId)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    onMarkerContextMenu?.(marker.point.poiId);
+                  }}
                 />
               );
             }}

@@ -24,6 +24,9 @@ export interface TripPoiListProps {
   onEditMarker?: (poi: TripViewPoi, color: MarkerColorKey, icon: string) => void;
   onDelete?: (poiId: string) => void;
   savingPoiId?: string | null;
+  /** 편집 중 POI(외부 제어 — 지도 마커 우클릭 등). 미지정 시 내부 상태. */
+  editingPoiId?: string | null;
+  onEditToggle?: (poiId: string | null) => void;
 }
 
 export function TripPoiList({
@@ -35,9 +38,17 @@ export function TripPoiList({
   onEditMarker,
   onDelete,
   savingPoiId = null,
+  editingPoiId: editingPoiIdProp,
+  onEditToggle,
 }: TripPoiListProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
+  const [editingInternal, setEditingInternal] = useState<string | null>(null);
+  const controlled = editingPoiIdProp !== undefined;
+  const editingPoiId = controlled ? editingPoiIdProp : editingInternal;
+  const setEditingPoiId = (next: string | null) => {
+    if (controlled) onEditToggle?.(next);
+    else setEditingInternal(next);
+  };
 
   if (pois.length === 0) {
     return (
