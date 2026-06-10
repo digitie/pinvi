@@ -4,21 +4,16 @@
 `python-krtour-map`의 **OpenAPI HTTP 계약**을 사용하는 표준이다.
 ADR-026 + ADR-027 기준이며, 과거 ADR-002의 "함수 직접 호출" 정책을 대체한다.
 
-> **⚠️ 현재 상태 정정 (2026-06-06, ADR-027)**: 아래 계약은 **krtour-map이 신규로
-> 구축해야 할 목표**다. 2026-06-06 `python-krtour-map` `main`(`HEAD=b775c74`) 실측
-> 결과, 이 문서가 가정했던 `packages/krtour-map-admin/openapi.user.json`·
-> `openapi.json`·`docs/tripmate-rest-api.md`·`docs/openapi-admin-contract.md`·포트
-> 9011·`/tripmate/features/batch`는 **실재하지 않는다.** krtour-map의 실제 HTTP 표면은
-> 인증 없는 debug-UI(`krtour-map-debug-ui`, 포트 8087, `GET /features` bbox·
-> `GET /features/{id}`)뿐이다. TripMate가 필요로 하는 능력의 권위 명세는
-> **`docs/krtour-map-requirements.md`** 이며, krtour-map은 이를 보고 운영급 HTTP
-> 서비스를 신설한다. 아래 §3~§7 계약은 그 신설 대상의 목표 셰입이다.
-
-향후 권위 산출물(krtour-map이 생성 예정):
-
-- `python-krtour-map`의 user-facing OpenAPI (TripMate/user-facing 권위 계약)
-- `python-krtour-map`의 전체 OpenAPI (Admin/ops/debug 포함)
-- krtour-map 측 TripMate 통합 문서
+> **✅ 현재 상태 (2026-06-10 갱신)**: 위 계약은 더 이상 "목표"가 아니라 **실재한다**.
+> `python-krtour-map` `origin/main` `0e45bd7` 기준 — FastAPI :9011에 `/v1` 전 표면
+> (사용자 read 8종 + admin/ops/debug, ADR-048 T-216a~g 머지 완료: RFC7807
+> problem+json, envelope payload/meta 분리, batch `found`, in-bounds `max_items`),
+> 기계 정본 `packages/krtour-map-admin/openapi.user.json`·`openapi.json`, prose 정본
+> `docs/rest-api.md`(전 표면) + `docs/tripmate-rest-api.md`(TripMate 소비 view).
+> 2026-06-06의 "미존재(debug-ui 8087뿐)" 실측은 **stale 본 체크아웃(b775c74) 오판**
+> 이었다 — 형제 repo 실측은 반드시 `git fetch` 후 origin/main 기준으로 할 것.
+> **구체 엔드포인트 계약은 `docs/integrations/krtour-map-rest-api.md`가 정본 view**이고,
+> 본 문서는 경계/패턴 개요만 유지한다. 충돌 시 krtour `openapi.user.json` 우선.
 
 ## 1. 경계
 
@@ -50,6 +45,9 @@ python-krtour-map 독립 프로그램
 
 ```dotenv
 TRIPMATE_KRTOUR_MAP_API_BASE_URL=http://localhost:9011
+# admin "API"도 :9011 (/v1/admin/*) — :9012는 krtour admin UI(Next.js)일 뿐 API 아님.
+# ADMIN_BASE_URL은 운영자용 UI 링크 생성에만 사용하고, admin client(T-180)의
+# HTTP base는 9011이어야 한다 (2026-06-10 정정 — config.py 기본값 재정의 필요).
 TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL=http://localhost:9012
 ```
 
@@ -62,13 +60,15 @@ TripMate 설정 prefix는 항상 `TRIPMATE_*`다.
 
 | 메서드 | 경로 | TripMate 용도 |
 |--------|------|---------------|
-| `GET` | `/features/in-bounds` | 지도 viewport feature 조회 |
-| `GET` | `/features/search` | feature 텍스트 검색 |
-| `GET` | `/features/nearby/by-target` | 기준 feature 주변 feature 조회 |
-| `GET` | `/features/{feature_id}` | feature 상세 조회 |
-| `POST` | `/tripmate/features/batch` | POI/일정 응답 조립용 batch 조회 |
-| `POST` | `/admin/feature-update-requests` | feature 갱신 요청 enqueue |
-| `GET` | `/admin/feature-update-requests/{request_id}` | 갱신 요청 상태 조회 |
+| `GET` | `/v1/features/in-bounds` | 지도 viewport feature 조회 (서버 클러스터, `max_items`) |
+| `GET` | `/v1/features/search` | feature 텍스트 검색 |
+| `GET` | `/v1/features/nearby` (+`/by-target`) | 반경/기준 feature 주변 조회 |
+| `GET` | `/v1/features/{feature_id}` | feature 상세 조회 |
+| `GET` | `/v1/features/{feature_id}/weather` | 날씨 카드 |
+| `POST` | `/v1/features/batch` | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
+| `GET` | `/v1/categories` | 카테고리 카탈로그 |
+| `POST` | `/v1/admin/features*` (change API) | TripMate Admin 승인 제안 반영 (admin 도메인 전용, §2.9 of integrations doc) |
+| `POST/GET` | `/v1/admin/feature-update-requests*` | 재적재 — krtour 운영자 전용, TripMate 제품 비노출 (DEC-05) |
 
 응답 envelope는 krtour-map 계약의 `{data, meta}`를 따른다. TripMate는 이 응답을
 자기 API 응답 셰입으로 다시 감싸거나 필요한 필드만 투영할 수 있지만, 원천 필드명
@@ -84,30 +84,32 @@ Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 
 
 | 영역 | 대표 경로 |
 |------|----------|
-| feature update request | `/admin/feature-update-requests`, `/run-now`, `/cancel` |
-| dedup review | `/admin/dedup-review` |
-| feature 관리 | `/admin/features`, `/admin/features/{feature_id}/deactivate` |
-| offline upload | `/admin/offline-uploads/*` |
-| POI cache target | `/admin/poi-cache-targets/*` |
-| ops/consistency | `/ops/consistency/*`, `/ops/import-jobs`, `/ops/metrics` |
-| dagster summary | `/ops/dagster/summary` |
-| debug | `/debug/health`, `/debug/version`, `/debug/etl/*`, `/debug/mois-license` |
+| feature update request | `/v1/admin/feature-update-requests`, `/run-now`, `/cancel` |
+| dedup/enrichment review | `/v1/admin/dedup-reviews`, `/v1/admin/enrichment-reviews` |
+| feature 관리 | `/v1/admin/features*`(change API 포함), `/v1/admin/features/{id}/deactivate` |
+| 이슈 큐 | `/v1/admin/issues*` |
+| offline upload | `/v1/admin/offline-uploads/*` |
+| POI cache target | `/v1/admin/poi-cache-targets/*` |
+| backup/restore | `/v1/admin/backups*`, `/v1/admin/restore/*` |
+| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/import-jobs`, `/v1/ops/metrics`, `/v1/ops/health-deep` |
+| dagster summary | `/v1/ops/dagster/summary` |
+| debug | `/v1/debug/etl/*`, `/v1/debug/mois-license` |
 
-`docs/tripmate-rest-api.md`의 prose에는 `/version` 언급이 남아 있을 수 있으나,
-2026-06-04 최신 OpenAPI에서 확인한 구현 경로는 `/debug/version`이다. 구현과
-테스트는 OpenAPI 파일을 우선한다.
+`/health`·`/version`만 비버전 경로다 (구 `/debug/health`·`/debug/version`은 krtour
+T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :9011**이다 — :9012는
+krtour admin **UI**(Next.js)이지 API가 아니다. 구현과 테스트는 OpenAPI 파일을 우선한다.
 
 ## 5. TripMate API 매핑
 
 | TripMate API | krtour-map 호출 | 비고 |
 |--------------|----------------|------|
-| `GET /features/in-bounds` | `GET /features/in-bounds` | query passthrough 후 TripMate 응답으로 투영 |
-| `GET /features/{feature_id}` | `GET /features/{feature_id}` | 상세 화면 |
-| `GET /features/nearby` | `GET /features/nearby/by-target` 또는 search/bounds 조합 | 기준 feature가 있을 때 by-target 우선 |
-| `GET /search` feature 영역 | `GET /features/search` | 주소 후보는 `kraddr-geo` v2 search |
-| `GET /trips/{trip_id}` POI join | `POST /tripmate/features/batch` | `feature_id[]` batch 조회 |
-| POI 생성 feature 검증 | `POST /tripmate/features/batch` | 없으면 snapshot fallback 정책 적용 |
-| 사용자 feature 갱신 요청 | `POST /admin/feature-update-requests` | Admin/ops 권한 또는 내부 서비스 권한 필요 |
+| `GET /features/in-bounds` | `GET /v1/features/in-bounds` | query passthrough 후 TripMate 응답으로 투영 (`max_items`, 서버 클러스터) |
+| `GET /features/{feature_id}` | `GET /v1/features/{feature_id}` | 상세 화면 |
+| `GET /features/nearby` | `GET /v1/features/nearby` (기준 feature 시 `/by-target`) | cursor 페이지네이션 |
+| `GET /search` feature 영역 | `GET /v1/features/search` | 주소 후보는 `kraddr-geo` v2 search |
+| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch` | `feature_id[]` batch, 응답 `data.found`/`missing` |
+| POI 생성 feature 검증 | `POST /v1/features/batch` | `missing`이면 snapshot fallback 정책 적용 |
+| 사용자 feature 제안 승인 반영 | `POST/PATCH/DELETE /v1/admin/features*` (change API) | TripMate Admin 도메인 전용 (DEC-05, T-179/T-180) |
 
 ## 6. HTTP client 패턴
 
@@ -118,11 +120,11 @@ class KrtourMapClient:
 
     async def features_batch(self, feature_ids: list[str]) -> dict:
         resp = await self._http.post(
-            "/tripmate/features/batch",
+            "/v1/features/batch",
             json={"feature_ids": feature_ids},
         )
         resp.raise_for_status()
-        return resp.json()
+        return resp.json()  # {"data": {"found": {...}, "missing": [...]}, "meta": {...}}
 ```
 
 - `httpx.AsyncClient`는 FastAPI lifespan에서 1개 생성해 재사용한다.
@@ -136,7 +138,9 @@ class KrtourMapClient:
 - `app.trip_day_pois.feature_id`는 krtour-map `feature_id` 문자열을 저장한다.
   cross-schema FK는 두지 않는다.
 - `feature_snapshot`은 POI 생성 시점의 표시 캐시다. 최신 정보는
-  `/tripmate/features/batch`로 가져오고, 실패하면 snapshot을 표시한다.
+  `POST /v1/features/batch`로 가져오고, 실패하면 snapshot을 표시한다. inactive로
+  전환된 feature는 `found`에 status와 함께 내려온다(krtour D-12, 2026-06-10) —
+  "철회/폐업됨" 표시로 구분하고 `missing`(삭제/없음)과 다르게 다룬다.
 - krtour-map 최신 정보와 snapshot이 달라도 TripMate가 `feature` schema를 직접
   수정하지 않는다. 필요 시 feature update request를 생성한다.
 

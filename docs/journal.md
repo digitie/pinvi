@@ -56,6 +56,27 @@
 - `e2e/trip-mutations.e2e.ts`: 편집기 열림 시 메모/링크/예산 라벨↔입력 연결 단언 추가.
 
 **검증**: tsc + lint(clean) + build + trip-mutations E2E 3(PoiEditor 포함) + 회귀(form-a11y/dialog-focus/auth-form-a11y 8) 통과.
+## 2026-06-10 (claude) — krtour-map 발 cross-repo 검토 결정 반영 (문서만)
+
+**작업**: krtour-map repo에서 수행한 3-시스템 교차 검토(결정 D-01~13 종결, krtour
+ADR-050~052 + T-217a~g)의 TripMate 측 반영. 코드 무변경, 문서 3건.
+
+- `docs/reviews/2026-06-10-krtour-cross-repo-decisions.md` 신설 — 확정 사항/신규 오류/
+  액션 후보 요약.
+- `docs/krtour-map-integration.md` — 2026-06-06 "krtour HTTP 미존재" 경고 블록을 현재
+  상태(0e45bd7, `/v1` 완비)로 교체 + 전 경로 `/v1`·batch `found` 정정.
+- `docs/integrations/krtour-map-rest-api.md` — 0e45bd7 재대조: krtour T-216a~g 머지
+  확인 → **T-181 잔여 lockstep 대기 해제**, §7 잔여 2건(batch `found`·`meta.cluster`)
+  수용 완료 반영, admin API base 정정(**9011 `/v1/admin/*`** — 9012는 admin UI).
+- **핵심 액션**: T-181 잔여 즉시 실행 가능(batch `found`/`max_items`/problem+json/
+  `meta.page`), T-180 admin client base 9011 정정, 사용자 제안 흐름(DEC-05)은 krtour
+  ADR-051로 공식 승인 — T-179/T-180 그대로 진행, 합의 5건은 krtour T-217c 회신 대기.
+- **PR #155 리뷰 반영(같은 날)**: ① 이미 머지된 #154 커밋 제거(최신 main 위로 재구성,
+  journal 충돌 해소) ② `integrations/krtour-map-rest-api.md` 본문 stale 계약 전면 제거
+  (§1 envelope/error 확정형, §2 전 경로 `/v1`·`max_items`·`page_size`·`meta.page`,
+  §3 T-182 반영, §4/§5/§6 — T-175 `found`, T-179 `/v1/admin/features*`, T-180 base
+  9011, `/tripmate/*` 잔재 제거) ③ `docs/tasks.md`(T-175/179/180/181)·`docs/resume.md`
+  (krtour 연동 unblock 블록) 동기 갱신.
 
 ## 2026-06-10 (claude) — 모달 다이얼로그 포커스 관리 + 폼 접근성
 
