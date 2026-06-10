@@ -1,8 +1,8 @@
-"""Telegram 즉시 알림 전송 — T-106 (신규 trip / 동반자 초대).
+"""Telegram 사용자 알림 delivery 코어 — T-106.
 
-FastAPI `BackgroundTasks`에서 응답 후 실행된다. request 세션은 이미 닫혔으므로
-`app.db.session.async_session_factory`(모듈 속성 — 테스트가 패치)를 통해 자체 세션을
-연다. 알림 실패는 본 흐름을 깨지 않는다 — 로그 + `last_send_status` 기록만 한다.
+outbox worker(`telegram_outbox.process_pending_telegram_batch`)가 호출한다.
+default(없으면 최신 enabled) target을 해석해 시스템 봇으로 plain text를 보낸다.
+전송 실패는 `TelegramError`로 전파해 worker가 재시도를 분류한다(§8).
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ import logging
 import uuid
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.telegram import TelegramClient, TelegramError
 from app.core.config import settings
@@ -25,53 +27,46 @@ def _make_client() -> TelegramClient:
     return TelegramClient(http, timeout_seconds=settings.tripmate_telegram_timeout_seconds)
 
 
-async def send_user_notification(user_id: uuid.UUID, text: str) -> None:
-    """user의 default(없으면 최신 enabled) target으로 plain text 알림을 보낸다.
+async def deliver_user_notification(db: AsyncSession, *, user_id: uuid.UUID, text: str) -> str:
+    """user의 default target으로 알림을 보낸다.
 
-    시스템 봇 미설정 / target 없음 → 조용히 no-op. 전송 실패 → 로그 + 상태 기록.
-    절대 raise하지 않는다(BackgroundTasks용).
+    반환: `"sent"` | `"skipped"`(시스템 봇 미설정 또는 enabled target 없음 — 재시도 무의미).
+    전송 실패는 `TelegramError` raise — 호출자(worker)가 재시도/소진을 판단한다.
+    target의 `last_send_status`는 여기서 기록한다(commit은 호출자).
     """
     token = settings.tripmate_telegram_bot_token_default
     if not token:
-        return
+        return "skipped"
 
-    # request 세션과 분리된 자체 세션 — 모듈 속성으로 동적 참조(테스트 패치 호환).
-    from sqlalchemy import select
+    target = await db.scalar(
+        select(TelegramTarget)
+        .where(
+            TelegramTarget.user_id == user_id,
+            TelegramTarget.deleted_at.is_(None),
+            TelegramTarget.is_enabled.is_(True),
+        )
+        .order_by(TelegramTarget.is_default.desc(), TelegramTarget.created_at.desc())
+        .limit(1)
+    )
+    if target is None:
+        return "skipped"
 
-    from app.db import session as db_session
-
+    client = _make_client()
     try:
-        async with db_session.async_session_factory() as db:
-            target = await db.scalar(
-                select(TelegramTarget)
-                .where(
-                    TelegramTarget.user_id == user_id,
-                    TelegramTarget.deleted_at.is_(None),
-                    TelegramTarget.is_enabled.is_(True),
-                )
-                .order_by(TelegramTarget.is_default.desc(), TelegramTarget.created_at.desc())
-                .limit(1)
-            )
-            if target is None:
-                return
-
-            client = _make_client()
-            try:
-                await client.send_to_target(
-                    token,
-                    target.telegram_chat_id,
-                    text,
-                    thread_id=target.telegram_message_thread_id,
-                    parse_mode=None,
-                )
-                target.last_send_status = "ok"
-            except TelegramError as exc:
-                target.last_send_status = f"failed:{exc.code}"
-                if exc.code == "bot_forbidden":
-                    target.is_enabled = False
-                logger.warning("telegram notify 실패 user_id=%s code=%s", user_id, exc.code)
-            finally:
-                await client.aclose()
-            await db.commit()
-    except Exception:
-        logger.exception("telegram notify 처리 중 오류 user_id=%s", user_id)
+        await client.send_to_target(
+            token,
+            target.telegram_chat_id,
+            text,
+            thread_id=target.telegram_message_thread_id,
+            parse_mode=None,
+        )
+        target.last_send_status = "ok"
+    except TelegramError as exc:
+        target.last_send_status = f"failed:{exc.code}"
+        if exc.code == "bot_forbidden":
+            target.is_enabled = False
+        logger.warning("telegram notify 실패 user_id=%s code=%s", user_id, exc.code)
+        raise
+    finally:
+        await client.aclose()
+    return "sent"

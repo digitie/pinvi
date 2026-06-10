@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     tripmate_telegram_timeout_seconds: float = 5.0
     tripmate_telegram_bot_token_default: str = ""  # 시스템/Admin 봇
     tripmate_telegram_admin_chat_id: str = ""
+    # outbox drain worker (§8)
+    tripmate_telegram_outbox_worker_enabled: bool = True
+    tripmate_telegram_outbox_drain_interval_seconds: float = 5.0
+    tripmate_telegram_outbox_batch_size: int = 50
 
     # 위치 감사 async outbox drain worker (T-146 / D-20)
     tripmate_location_audit_outbox_worker_enabled: bool = True
