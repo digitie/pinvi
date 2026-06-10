@@ -25,6 +25,7 @@ import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
+import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -358,6 +359,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
         <TripAttachments tripId={tripId} />
         <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
       </div>
+
+      <TripTelegramTargets tripId={tripId} />
 
       <TripComments tripId={tripId} />
 

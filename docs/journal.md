@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-7: trip 상세 Telegram 연결 UI
+
+**작업**: 여행 상세에서 Telegram 알림 대상을 연결/해제하는 프론트 UI (백엔드 #166 위).
+
+- `packages/api-client/src/endpoints/telegram.ts`: `listTripTargets`/`linkTripTarget`/`unlinkTripTarget` 추가.
+- `components/trips/TripTelegramTargets.tsx` 신규: 사용자 target 중 미연결분 select로 연결(최대 3,
+  MAX_TARGETS_REACHED 안내) + 연결 목록 + 해제. 설정 페이지 링크 안내. `TripDetail`에 섹션 배치.
+- `e2e/trip-telegram.e2e.ts`(1, stateful mock): 초기 연결 표시 → B 연결 → A 해제.
+
+**검증**: tsc + lint(clean) + build + trip-telegram E2E 1 + 회귀(trip-detail/trip-collab/settings-telegram 5) 통과.
+**T-106 잔여**: weekly/daily summary Dagster(§7, Sprint 5 ETL — 날씨/유가 krtour 의존), PIPA 위탁자 명시(§10),
+per-user 봇 토큰(vault).
+
 ## 2026-06-10 (claude) — T-106 PR-6: trip↔target 링킹 (§6.5/6.6)
 
 **작업**: 여행별 Telegram 대상 연결(≤3) — T-106 백엔드 마지막 조각.
