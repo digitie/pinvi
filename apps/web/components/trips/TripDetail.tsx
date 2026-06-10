@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
 import { ApiError, poiApi, tripApi } from '@tripmate/api-client';
-import type { FeatureSummary, TripStatus, TripView } from '@tripmate/schemas';
+import type { FeatureSummary, PoiUpdate, TripStatus, TripView } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
-import type { MarkerColorKey } from '@/lib/markerPalette';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
@@ -143,17 +142,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
     void runMutation(() => poiApi(apiClient).reorder(tripId, { moves }));
   };
 
-  const handleEditMarker = (
-    poi: { poi_id: string; version: number },
-    color: MarkerColorKey,
-    icon: string
-  ) => {
+  const handleEditPoi = (poi: { poi_id: string; version: number }, patch: PoiUpdate) => {
     setSavingPoiId(poi.poi_id);
     void runMutation(() =>
-      poiApi(apiClient).update(tripId, poi.poi_id, poi.version, {
-        custom_marker_color: color,
-        custom_marker_icon: icon,
-      })
+      poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch)
     ).finally(() => setSavingPoiId(null));
   };
 
@@ -320,7 +312,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             onSelectPoi={handleSelectPoi}
             editable={!busy}
             onReorder={handleReorder}
-            onEditMarker={handleEditMarker}
+            onEditPoi={handleEditPoi}
             onDelete={handleDelete}
             savingPoiId={savingPoiId}
             editingPoiId={editingPoiId}

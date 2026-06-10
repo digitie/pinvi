@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — POI 상세 편집(시간/예산/메모/URL)
+
+**작업**: PoiEditor를 색/아이콘 → 도착·출발/예산·실제/메모/링크까지 풀 편집으로 확장.
+
+- `lib/poiDetail.ts`: `parseAmount`(음수/비숫자/빈값→null) + `datetimeLocalToIso`/
+  `isoToDatetimeLocal` + `buildPoiDetailPatch`(폼→`PoiUpdate`). 순수·테스트(parse/build).
+- `PoiEditor`: props `poi`+`onSave(patch)` 로 변경, 16색+아이콘+도착/출발(datetime-local)+
+  예산/실제(number)+메모+URL.
+- `TripPoiList`: `onEditMarker`→`onEditPoi(poi, patch)`. `TripDetail`: `handleEditPoi`로
+  `poiApi.update(version)` patch 전송(마커 우클릭/연필 동일).
+- `tests/poiDetail.test.ts` 3건.
+
+**검증**: web build(`/trips/[tripId]` 14.1kB) / `tsc` / `next lint` / vitest 44 passed.
+
 ## 2026-06-10 (claude) — 일자 동선 최적화 UI
 
 **작업**: 선택 일자 동선 최적화(nearest_neighbor) 미리보기 → 적용.
