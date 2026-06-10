@@ -1,12 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
-import type { TripStatus, TripView } from '@tripmate/schemas';
+import { ApiError, poiApi, tripApi } from '@tripmate/api-client';
+import type { FeatureSummary, TripStatus, TripView } from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
+import type { MarkerColorKey } from '@/lib/markerPalette';
+import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
+import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 
@@ -37,29 +40,34 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async (): Promise<TripView | null> => {
+    try {
+      const res = await tripApi(apiClient).get(tripId);
+      setView(res);
+      setError(null);
+      return res;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
+      return null;
+    }
+  }, [tripId]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    tripApi(apiClient)
-      .get(tripId)
-      .then((res) => {
-        if (cancelled) return;
-        setView(res);
-        setSelectedDayIndex(res.days[0]?.day_index ?? null);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void reload().then((res) => {
+      if (cancelled) return;
+      if (res) setSelectedDayIndex((current) => current ?? res.days[0]?.day_index ?? null);
+      setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [tripId]);
+  }, [reload]);
 
   const mapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
   const poiDay = useMemo(() => {
@@ -74,6 +82,70 @@ export function TripDetail({ tripId }: TripDetailProps) {
     setSelectedPoiId(poiId);
     const dayIndex = poiDay.get(poiId);
     if (dayIndex != null) setSelectedDayIndex(dayIndex);
+  };
+
+  const runMutation = useCallback(
+    async (fn: () => Promise<unknown>) => {
+      setMutationError(null);
+      setBusy(true);
+      try {
+        await fn();
+        await reload();
+      } catch (err) {
+        setMutationError(err instanceof ApiError ? err.message : '변경에 실패했습니다.');
+        await reload();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reload]
+  );
+
+  const handleAddFeature = (feature: FeatureSummary) => {
+    if (selectedDay == null) return;
+    const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
+    void runMutation(() =>
+      poiApi(apiClient).create(tripId, {
+        day_index: selectedDay.day_index,
+        sort_order: appendRank(last),
+        feature_id: feature.feature_id,
+        feature_snapshot: {
+          coord: { lon: feature.coord.lon, lat: feature.coord.lat },
+          title: feature.title,
+          kind: feature.kind,
+          marker_color: feature.marker_color,
+          marker_icon: feature.marker_icon,
+          category: feature.category ?? null,
+        },
+        currency: 'KRW',
+      })
+    );
+  };
+
+  const handleReorder = (orderedPoiIds: string[]) => {
+    if (selectedDay == null) return;
+    const currentSortById = new Map(selectedDay.pois.map((p) => [p.poi_id, p.sort_order]));
+    const moves = reorderMoves(orderedPoiIds, currentSortById);
+    if (moves.length === 0) return;
+    void runMutation(() => poiApi(apiClient).reorder(tripId, { moves }));
+  };
+
+  const handleEditMarker = (
+    poi: { poi_id: string; version: number },
+    color: MarkerColorKey,
+    icon: string
+  ) => {
+    setSavingPoiId(poi.poi_id);
+    void runMutation(() =>
+      poiApi(apiClient).update(tripId, poi.poi_id, poi.version, {
+        custom_marker_color: color,
+        custom_marker_icon: icon,
+      })
+    ).finally(() => setSavingPoiId(null));
+  };
+
+  const handleDelete = (poiId: string) => {
+    void runMutation(() => poiApi(apiClient).delete(tripId, poiId));
   };
 
   if (loading) {
@@ -176,11 +248,30 @@ export function TripDetail({ tripId }: TripDetailProps) {
             className="h-full"
           />
         </section>
-        <aside aria-label="장소 목록">
+        <aside className="space-y-3" aria-label="장소 목록">
+          {selectedDay && (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-ink">장소 추가</p>
+              <MapSearchBox onSelect={handleAddFeature} />
+            </div>
+          )}
+          {mutationError && (
+            <p
+              className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+              data-testid="poi-mutation-error"
+            >
+              {mutationError}
+            </p>
+          )}
           <TripPoiList
             pois={selectedDay?.pois ?? []}
             selectedPoiId={selectedPoiId}
             onSelectPoi={handleSelectPoi}
+            editable={!busy}
+            onReorder={handleReorder}
+            onEditMarker={handleEditMarker}
+            onDelete={handleDelete}
+            savingPoiId={savingPoiId}
           />
         </aside>
       </div>

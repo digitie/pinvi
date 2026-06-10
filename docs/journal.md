@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — Sprint 4 PR-C(4): POI 추가/재정렬/편집
+
+**작업**: trip `[tripId]` 지도/패널에서 POI 추가·재정렬·마커 편집·삭제. 백엔드 `poiApi` 기존 활용
+(변경 없음).
+
+- `lib/poiRank.ts`: `sort_order`(COLLATE "C") 키 생성 — `evenRanks`(균등 base36 고정폭)/`appendRank`
+  (suffix)/`arrayMove`/`reorderMoves`(변경분만 move). 순수·테스트.
+- `components/trips/PoiEditor.tsx`: 16색 스와치 + maki 아이콘 입력 → `custom_marker_color`/
+  `custom_marker_icon`.
+- `TripPoiList`: HTML5 D&D 재정렬(`onReorder`) + 편집 토글(PoiEditor) + 삭제. `editable` gate.
+- `TripDetail`: 추가(MapSearchBox 결과 → `poiApi.create`, snapshot 에 coord 포함) / 재정렬
+  (`poiApi.reorder`) / 편집(`poiApi.update` + If-Match version, optimistic lock) / 삭제. 모든
+  mutation 후 `tripApi.get` 재조회, 실패 시 에러 표시 + 재조회.
+- `tests/poiRank.test.ts` 5건.
+
+**검증**: web build(`/trips/[tripId]` 9.04kB) / `tsc --noEmit` / `next lint` / vitest 20 passed.
+실 D&D·편집 E2E(브라우저)는 별도. 권한 gate(viewer 숨김)는 TripView 에 role 노출 시 후속.
+
+**남은 PR-C**: 위치 동의 흐름(LBS/PIPA), 마커 우클릭 직접 편집, day 추가/관리 UI.
+
 ## 2026-06-10 (claude) — Sprint 4 PR-C(3): 지도 검색 + 내 위치 + 우클릭 메뉴
 
 **작업**: 탐색 지도(`/map`)에 인터랙션 3종 추가. 라이브러리 실제 API surface(검증) 기준.
