@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — trip 공유 링크 관리 UI
+
+**작업**: trip `[tripId]` 상세에 공유 링크 생성/복사/철회.
+
+- `lib/shareLink.ts`: `shareLinkStatus`(revoked/expired/active) + 권한/상태 라벨. 순수·테스트.
+- `components/trips/TripShareLinks.tsx`: 권한(보기/댓글/편집)+만료일 선택 → `createShareToken`
+  → 생성 URL 1회 표시(복사). 기존 링크 목록(상태/만료) + active 링크 철회(`revokeShareToken`).
+- `TripDetail`: 하단에 공유 섹션(view.share_links + reload). 토큰/URL 은 응답에만 있고
+  TripView 엔 없으므로 생성 시 1회 노출.
+- `tests/shareLink.test.ts` 3건.
+
+**검증**: web build(`/trips/[tripId]` 10.7kB) / `tsc` / `next lint` / vitest 31 passed.
+
 ## 2026-06-10 (claude) — notice-plan copy 다이얼로그
 
 **작업**: 추천 여행(notice-plan)을 trip 으로 가져오는 다이얼로그(기존 1-click 복사 대체).
