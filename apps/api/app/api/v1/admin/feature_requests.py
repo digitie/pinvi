@@ -1,0 +1,332 @@
+"""`/admin/feature-requests/*` — 사용자 feature 제안 검토 큐 (T-179).
+
+사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
+krtour `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
+feature_id/request_id/state를 `krtour_ref`에 저장한다.
+
+§7 합의(krtour T-217c 미확정) 동안 문서화된 기본값 가정:
+- idempotency_key = suggestion request_id (재시도 시 동일 feature 보장)
+- 출처 태깅 = operator `tripmate-admin:{admin_id}` + reason (익명, D-11)
+- closure = DELETE(soft)
+- review_mode = krtour 측 설정(require_review면 status=approved, immediate면 added)
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from typing import Annotated, Any, cast
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.clients.krtour_map import (
+    KrtourMapBadRequest,
+    KrtourMapFeatureNotFound,
+    KrtourMapRateLimited,
+    KrtourMapUnavailable,
+)
+from app.clients.krtour_map_admin import KrtourMapAdminClientDep
+from app.core.deps import DbSession
+from app.core.rbac import require_role
+from app.models.feature_suggestion import FeatureSuggestion
+from app.models.user import User
+from app.schemas.admin_feature_request import (
+    AdminFeatureRequestApprove,
+    AdminFeatureRequestPagedResponse,
+    AdminFeatureRequestReject,
+    AdminFeatureRequestResult,
+    AdminFeatureRequestSummary,
+)
+from app.schemas.envelope import Envelope
+from app.schemas.feature import Coord, FeatureKind, FeatureRequestStatus, FeatureRequestType
+from app.services.admin_audit import append_admin_audit
+from app.services.admin_users import mask_email
+
+router = APIRouter(prefix="/admin/feature-requests", tags=["admin"])
+
+
+def _parse_request_id(value: str | None) -> uuid.UUID:
+    if value is None:
+        return uuid.uuid4()
+    try:
+        return uuid.UUID(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "X-Request-Id 형식이 올바르지 않습니다.",
+            },
+        ) from exc
+
+
+@contextmanager
+def _map_admin_errors() -> Iterator[None]:
+    """krtour admin 호출 도메인 예외 → HTTP status."""
+    try:
+        yield
+    except KrtourMapFeatureNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "RESOURCE_NOT_FOUND",
+                "message": "대상 feature를 krtour에서 찾을 수 없습니다.",
+            },
+        ) from exc
+    except KrtourMapRateLimited as exc:
+        headers = (
+            {"Retry-After": str(exc.retry_after_seconds)}
+            if exc.retry_after_seconds is not None
+            else None
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMITED",
+                "message": "krtour 요청이 많아 잠시 후 다시 시도하세요.",
+            },
+            headers=headers,
+        ) from exc
+    except KrtourMapBadRequest as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": exc.code or "VALIDATION_ERROR",
+                "message": "krtour가 feature change 요청을 거절했습니다.",
+            },
+        ) from exc
+    except KrtourMapUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "FEATURE_SERVICE_UNAVAILABLE",
+                "message": "krtour admin 서비스가 일시적으로 사용 불가합니다.",
+            },
+        ) from exc
+
+
+def _summary(row: FeatureSuggestion, email: str | None) -> AdminFeatureRequestSummary:
+    return AdminFeatureRequestSummary(
+        request_id=row.request_id,
+        requester_user_id=row.requester_user_id,
+        requester_email_masked=mask_email(email) if email else None,
+        type=cast(FeatureRequestType, row.suggestion_type),
+        kind=cast(FeatureKind, row.kind),
+        name=row.name,
+        coord=Coord(lon=float(row.lng), lat=float(row.lat)),
+        categories=row.categories,
+        note=row.note,
+        target_feature_id=row.target_feature_id,
+        status=cast(FeatureRequestStatus, row.status),
+        krtour_ref=row.krtour_ref,
+        reviewed_by_admin_id=row.reviewed_by_admin_id,
+        created_at=row.created_at,
+        resolved_at=row.resolved_at,
+    )
+
+
+def _result(row: FeatureSuggestion) -> AdminFeatureRequestResult:
+    return AdminFeatureRequestResult(
+        request_id=row.request_id,
+        status=cast(FeatureRequestStatus, row.status),
+        krtour_ref=row.krtour_ref,
+        reviewed_by_admin_id=row.reviewed_by_admin_id,
+        resolved_at=row.resolved_at,
+    )
+
+
+async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
+    suggestion = await db.scalar(
+        select(FeatureSuggestion).where(FeatureSuggestion.request_id == request_id)
+    )
+    if suggestion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature request not found."},
+        )
+    if suggestion.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "INVALID_STATE",
+                "message": f"이미 처리된 제안입니다(status={suggestion.status}).",
+            },
+        )
+    return suggestion
+
+
+@router.get("", response_model=Envelope[AdminFeatureRequestPagedResponse])
+async def list_feature_requests_endpoint(
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+    status_filter: Annotated[FeatureRequestStatus | None, Query(alias="status")] = "pending",
+    page: int = 1,
+    limit: int = 50,
+) -> Envelope[AdminFeatureRequestPagedResponse]:
+    """검토 큐 목록 — 기본 pending. 오래된 순(검토 FIFO). 요청자 이메일은 마스킹."""
+    page = max(1, page)
+    limit = min(100, max(1, limit))
+    rows_q = select(FeatureSuggestion, User.email).join(
+        User, User.user_id == FeatureSuggestion.requester_user_id
+    )
+    count_q = select(func.count(FeatureSuggestion.request_id))
+    if status_filter is not None:
+        rows_q = rows_q.where(FeatureSuggestion.status == status_filter)
+        count_q = count_q.where(FeatureSuggestion.status == status_filter)
+    rows_q = (
+        rows_q.order_by(FeatureSuggestion.created_at.asc()).offset((page - 1) * limit).limit(limit)
+    )
+    total = int(await db.scalar(count_q) or 0)
+    rows = (await db.execute(rows_q)).all()
+    items = [_summary(row[0], row[1]) for row in rows]
+    return Envelope.of(
+        AdminFeatureRequestPagedResponse(items=items, total=total, page=page, limit=limit)
+    )
+
+
+@router.post("/{request_id}/approve", response_model=Envelope[AdminFeatureRequestResult])
+async def approve_feature_request_endpoint(
+    request_id: uuid.UUID,
+    body: AdminFeatureRequestApprove,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    admin_client: KrtourMapAdminClientDep,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminFeatureRequestResult]:
+    """승인 — krtour change API 호출 후 상태/`krtour_ref` 갱신 + audit.
+
+    krtour 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
+    """
+    suggestion = await _load_pending(db, request_id)
+    operator = f"tripmate-admin:{admin.user_id}"
+    reason = body.krtour_reason or body.access_reason
+    stype = suggestion.suggestion_type
+
+    if stype == "new_place":
+        if not (body.category and body.marker_color and body.marker_icon):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "신규 장소 승인은 category/marker_color/marker_icon이 필요합니다.",
+                },
+            )
+        payload: dict[str, Any] = {
+            "kind": suggestion.kind,
+            "name": body.name or suggestion.name,
+            "category": body.category,
+            "marker_color": body.marker_color,
+            "marker_icon": body.marker_icon,
+            "reason": reason,
+            "coord": {"lon": float(suggestion.lng), "lat": float(suggestion.lat)},
+            "idempotency_key": str(suggestion.request_id),
+            "operator": operator,
+        }
+        with _map_admin_errors():
+            record = await admin_client.create_feature(payload)
+    elif stype == "correction":
+        if suggestion.target_feature_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "correction 제안에 target_feature_id가 없습니다.",
+                },
+            )
+        patch: dict[str, Any] = {"reason": reason, "operator": operator}
+        if body.name:
+            patch["name"] = body.name
+        if body.category:
+            patch["category"] = body.category
+        if body.marker_color:
+            patch["marker_color"] = body.marker_color
+        if body.marker_icon:
+            patch["marker_icon"] = body.marker_icon
+        with _map_admin_errors():
+            record = await admin_client.patch_feature(suggestion.target_feature_id, patch)
+    else:  # closure
+        if suggestion.target_feature_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "closure 제안에 target_feature_id가 없습니다.",
+                },
+            )
+        with _map_admin_errors():
+            record = await admin_client.delete_feature(
+                suggestion.target_feature_id, reason=reason, operator=operator
+            )
+
+    krtour_state = str(record.get("status") or "")
+    # require_review면 krtour 큐 적재(approved), immediate/applied면 반영 완료(added).
+    new_status = "added" if krtour_state == "applied" else "approved"
+    before = {"status": suggestion.status}
+    krtour_ref = {
+        "feature_id": record.get("feature_id"),
+        "request_id": record.get("request_id"),
+        "state": krtour_state,
+        "review_mode": record.get("review_mode"),
+        "action": record.get("action"),
+    }
+    suggestion.status = new_status
+    suggestion.krtour_ref = krtour_ref
+    suggestion.reviewed_by_admin_id = admin.user_id
+    suggestion.resolved_at = datetime.now(UTC)
+
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="feature_request.approve",
+        resource_type="feature_request",
+        resource_id=str(request_id),
+        before_state=before,
+        after_state={"status": new_status, "krtour_ref": krtour_ref},
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(suggestion)
+    return Envelope.of(_result(suggestion))
+
+
+@router.post("/{request_id}/reject", response_model=Envelope[AdminFeatureRequestResult])
+async def reject_feature_request_endpoint(
+    request_id: uuid.UUID,
+    body: AdminFeatureRequestReject,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminFeatureRequestResult]:
+    """거절 — krtour 호출 없이 상태만 rejected로. audit."""
+    suggestion = await _load_pending(db, request_id)
+    before = {"status": suggestion.status}
+    suggestion.status = "rejected"
+    suggestion.reviewed_by_admin_id = admin.user_id
+    suggestion.resolved_at = datetime.now(UTC)
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="feature_request.reject",
+        resource_type="feature_request",
+        resource_id=str(request_id),
+        before_state=before,
+        after_state={"status": "rejected"},
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(suggestion)
+    return Envelope.of(_result(suggestion))

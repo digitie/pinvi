@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-179: admin feature-request 검토→승인 릴레이 (백엔드)
+
+**작업**: 사용자 feature 제안(T-177 큐)을 Admin이 검토해 승인 시 krtour `/v1/admin/features*`
+change API(T-180 client)로 전달하는 백엔드 완성. (krtour ADR-051: 신규 수신 API 없이 기존
+change API를 전송 구간으로.)
+
+- `api/v1/admin/feature_requests.py` 신규 — `GET /admin/feature-requests`(pending 큐, 이메일
+  마스킹, FIFO), `POST .../{id}/approve`(suggestion_type별 create/patch/delete 호출 → `krtour_ref`
+  저장 + status `approved`/`added`), `POST .../{id}/reject`(rejected). RBAC admin/operator +
+  admin_audit chain. krtour 호출 먼저 → 성공 시에만 commit(실패 시 pending 유지·재시도).
+- `schemas/admin_feature_request.py` 신규 — Summary/Paged/Approve/Reject/Result.
+- `admin/__init__.py`에 라우터 등록. `feature_suggestions`의 `reviewed_by_admin_id`/`krtour_ref`/
+  `resolved_at`(T-177 기존 컬럼) 사용 — **migration 불요**.
+- 통합 테스트 6: list 마스킹 / approve new_place(payload·krtour_ref·audit) / marker 누락 422 /
+  reject / 이미 처리 409 / 비-admin 404.
+
+**§7 기본값 가정**(krtour T-217c 미확정): create는 Admin이 category(코드)/marker_color/marker_icon
+채움. idempotency_key=request_id, 출처 태깅 operator=`tripmate-admin:{id}`(익명, D-11),
+closure=DELETE(soft), review_mode=krtour 설정(applied→added, 그 외→approved). 확정 시 조정.
+
+**범위**: 백엔드만. web 검토 UI는 PR3c.
+
+**검증**: ruff check + format(clean, 로컬). mypy/pytest는 CI.
+
 ## 2026-06-11 (claude) — T-180: krtour admin HTTP client (feature change relay 토대)
 
 **작업**: TripMate Admin이 승인한 사용자 feature 제안을 krtour `/v1/admin/features*`로 전송할

@@ -38,8 +38,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/audit/location` | `location_access_log` (CPO 권한만) | 3 |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE` | Notice plan CRUD | 6 |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]` | Notice POI | 6 |
-| `GET/POST/DELETE /admin/feature-requests[/{id}]` | 사용자 feature 요청 큐 | 6 |
-| `POST /admin/feature-requests/{id}/approve` | 승인 → 라이브러리 적재 trigger | 6 |
+| `GET /admin/feature-requests` | 사용자 feature 제안 검토 큐 (§8.4) | 8 |
+| `POST /admin/feature-requests/{id}/approve\|reject` | 검토 → krtour `/v1/admin/features*` 릴레이 | 8 |
 | `GET/PUT /admin/category-mappings` | maki + 16색 매핑 | 6 |
 | `GET /admin/etl/*` | Dagit reverse-proxy + 자체 요약 | 5 |
 | `GET /admin/dedup-review` / `POST /admin/dedup-review/{id}/verdict` | Record Linkage 검토 큐 | 5 |
@@ -345,6 +345,32 @@ Content-Type: application/json
   `NULL`로 되돌린다.
 - 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
+
+### 8.4 사용자 feature 제안 검토 큐 (T-179)
+
+사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
+krtour `/v1/admin/features*` change API(전송 client = T-180, `:9011 /v1/admin/*`)로 전달한다.
+**TripMate는 신규 수신 API를 만들지 않고 krtour 기존 change API를 전송 구간으로 쓴다**
+(krtour ADR-051). `apps/api/app/api/v1/admin/feature_requests.py`.
+
+```
+GET    /admin/feature-requests?status=pending&page=&limit=     # admin/operator, 이메일 마스킹, FIFO
+POST   /admin/feature-requests/{request_id}/approve            # admin
+POST   /admin/feature-requests/{request_id}/reject             # admin
+```
+
+- **approve** (`access_reason` 필수 + audit): `suggestion_type`별 분기 —
+  - `new_place` → krtour `POST /v1/admin/features` (`category`(8자리 코드)/`marker_color`/
+    `marker_icon`은 사용자 제안에 없어 **Admin이 검토하며 body로 채운다** — 누락 시 422).
+  - `correction` → `PATCH /v1/admin/features/{target_feature_id}` (override 일부).
+  - `closure` → `DELETE /v1/admin/features/{target_feature_id}` (soft).
+  - krtour 호출을 **먼저** 하고 성공 시에만 commit한다(실패 시 제안 `pending` 유지 → 재시도).
+    반환 `feature_id`/`request_id`/state를 `krtour_ref`에 저장하고 상태를 `applied`면 `added`,
+    그 외(require_review 큐 적재)면 `approved`로 둔다. `idempotency_key = request_id`,
+    출처 태깅 `operator = tripmate-admin:{admin_id}`(익명, D-11).
+- **reject**: krtour 호출 없이 `status = rejected` + audit.
+- **§7 미확정**(krtour T-217c): review_mode/idempotency/출처태깅/admin인증/closure 합의는 문서화된
+  기본값으로 진행하며 확정 시 조정한다.
 
 ## 9. API 호출 로그
 
