@@ -9,6 +9,13 @@ T-108 운영 배포 자동화, T-129의 `/geo/*`·`/regions/*` slice, T-146 loca
 outbox slice를 현재 main 기준으로 재평가한다.** T-172~T-181/T-179/T-180은
 krtour-map HTTP/admin 계약 연동 작업이므로 이 비의존 루프에서는 제외한다.
 
+**krtour 연동 작업 unblock** (2026-06-10, `docs/reviews/2026-06-10-krtour-cross-repo-decisions.md`):
+krtour `origin/main 0e45bd7`에서 ADR-048/T-216a~g 머지 확인 — **T-181 잔여(problem+json·
+`meta.page`·batch `found`·`max_items`)가 대기 해제, 즉시 실행 가능**. T-179/T-180도
+actionable (krtour ADR-051이 `/v1/admin/features*` change API를 전송 구간 정본으로 승인,
+합의 5건은 krtour T-217c 회신 대기). 주의: **krtour admin API base는 9011 `/v1/admin/*`**
+(9012는 admin UI) — T-180에서 `tripmate_krtour_map_admin_base_url` 의미 재정의 필요.
+
 **Claude PR 사후 리뷰 후속 완료** (2026-06-10): 2026-06-08 00:00 KST 이후 Claude가 올린
 PR #84/#88/#95/#97/#98/#102~#106/#109/#110/#113~#123 총 23건을 closed 포함 재검토했다
 (`docs/reviews/2026-06-10-claude-pr-review.md`). 기존 PR에는 GitHub Actions MCP 리뷰 알림만

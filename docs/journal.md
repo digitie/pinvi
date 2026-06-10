@@ -57,6 +57,12 @@ ADR-050~052 + T-217a~g)의 TripMate 측 반영. 코드 무변경, 문서 3건.
 - **핵심 액션**: T-181 잔여 즉시 실행 가능(batch `found`/`max_items`/problem+json/
   `meta.page`), T-180 admin client base 9011 정정, 사용자 제안 흐름(DEC-05)은 krtour
   ADR-051로 공식 승인 — T-179/T-180 그대로 진행, 합의 5건은 krtour T-217c 회신 대기.
+- **PR #155 리뷰 반영(같은 날)**: ① 이미 머지된 #154 커밋 제거(최신 main 위로 재구성,
+  journal 충돌 해소) ② `integrations/krtour-map-rest-api.md` 본문 stale 계약 전면 제거
+  (§1 envelope/error 확정형, §2 전 경로 `/v1`·`max_items`·`page_size`·`meta.page`,
+  §3 T-182 반영, §4/§5/§6 — T-175 `found`, T-179 `/v1/admin/features*`, T-180 base
+  9011, `/tripmate/*` 잔재 제거) ③ `docs/tasks.md`(T-175/179/180/181)·`docs/resume.md`
+  (krtour 연동 unblock 블록) 동기 갱신.
 
 ## 2026-06-10 (claude) — 모달 다이얼로그 포커스 관리 + 폼 접근성
 
