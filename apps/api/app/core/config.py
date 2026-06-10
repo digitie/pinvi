@@ -88,14 +88,17 @@ class Settings(BaseSettings):
     tripmate_max_attachments_per_target: int = 30
 
     # krtour-map 독립 프로그램 (지도 feature OpenAPI HTTP, ADR-026/027)
-    # `docs/integrations/krtour-map-rest-api.md` §1 — API 9011 / Admin 9012.
+    # `docs/integrations/krtour-map-rest-api.md` §1 — 전 표면 API :9011 (9012는 admin UI).
     tripmate_krtour_map_api_base_url: str = "http://localhost:9011"
-    tripmate_krtour_map_admin_base_url: str = "http://localhost:9012"
+    # admin feature change(`/v1/admin/features*`, T-180)도 같은 호스트 :9011 (9012 아님 — admin UI).
+    tripmate_krtour_map_admin_base_url: str = "http://localhost:9011"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Krtour-Service-Token 전달.
     tripmate_krtour_map_service_token: str = ""
+    # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback). §7 admin 인증 합의 대기.
+    tripmate_krtour_map_admin_service_token: str = ""
     tripmate_krtour_map_timeout_seconds: float = 5.0
     tripmate_krtour_map_max_attempts: int = 3
-    tripmate_krtour_map_batch_chunk_size: int = 200  # /tripmate/features/batch cap
+    tripmate_krtour_map_batch_chunk_size: int = 200  # /v1/features/batch cap
 
     # kraddr-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kraddr-geo.md`.
     tripmate_kraddr_geo_base_url: str = "http://localhost:8888"
