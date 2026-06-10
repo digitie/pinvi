@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — trip 댓글(comment) UI
+
+**작업**: trip `[tripId]` 댓글 목록/작성/삭제.
+
+- `lib/comments.ts`: `canDeleteComment`(본인 댓글만 삭제 버튼). 순수·테스트.
+- `components/trips/TripComments.tsx`: `listComments` 로드 + `authApi.me` 로 본인 식별,
+  textarea 작성(`createComment` target_type=trip) + 본인 댓글 삭제(`deleteComment`).
+- `TripDetail` 하단에 댓글 섹션.
+- `tests/comments.test.ts` 1건.
+
+**검증**: web build(`/trips/[tripId]` 12.5kB) / `tsc` / `next lint` / vitest 38 passed.
+
 ## 2026-06-10 (claude) — feature 제안 폼 (새 장소/이벤트)
 
 **작업**: 지도 우클릭 → 새 장소/이벤트 제안 다이얼로그(`featureApi.request`, `type=new_place`).

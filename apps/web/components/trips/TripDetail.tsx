@@ -11,6 +11,7 @@ import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripAttachments } from '@/components/trips/TripAttachments';
+import { TripComments } from '@/components/trips/TripComments';
 import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
@@ -322,6 +323,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
         <TripAttachments tripId={tripId} />
         <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
       </div>
+
+      <TripComments tripId={tripId} />
     </div>
   );
 }
