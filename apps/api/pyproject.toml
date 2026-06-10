@@ -83,7 +83,7 @@ module = "jose.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "boto3.*"
+module = ["boto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

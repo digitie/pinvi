@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — RustFS presigned 실서명 활성화 (PUT/GET)
+
+**작업**: 그간 placeholder(`X-Amz-Signature=PLACEHOLDER`)였던 presigned URL 을 boto3 실서명으로 전환.
+
+- `rustfs_storage.py`: `make_upload_url`(put_object) / `make_download_url`(get_object) 가
+  boto3 `generate_presigned_url`(SigV4 query auth) 사용. 서명 client 는 **public endpoint**
+  + path-style addressing(RustFS/MinIO 필수), 설정 조합별 `lru_cache`. 서명은 순수 로컬 연산이라
+  async 핸들러 동기 호출에도 블로킹 없음.
+- 업로드 헤더에서 불필요한 `x-amz-content-sha256` 제거(query 서명 body=UNSIGNED-PAYLOAD).
+  `ContentType` 을 서명에 포함 → 클라이언트는 `Content-Type` 헤더 필수.
+- `pyproject.toml`: mypy override `boto3.*` → `["boto3.*", "botocore.*"]`.
+- 단위 테스트 2건(upload/download 실서명 검증 — AWS4-HMAC-SHA256 / X-Amz-Signature /
+  path-style / placeholder 부재). RustFS 없이 로컬 서명만으로 검증.
+- `docs/api/storage.md` §4.1 헤더/서명 노트 갱신.
+
+**검증**(WSL ext4): unit 118 passed, integration 139 passed, mypy --strict 통과, ruff+format clean.
+
+**참고**: admin 객체 list/delete(#122)는 이미 실 boto3. 이로써 RustFS S3 경로(presign+admin)
+전부 실서명/실호출. 실제 업로드/다운로드 E2E 는 RustFS 컨테이너 기동 후 별도 확인.
+
 ## 2026-06-10 (codex) — Claude PR 사후 리뷰 + T-190~T-194 후속
 
 **작업**: 2026-06-08 00:00 KST 이후 Claude `agent/claude-*` PR 23건(#84/#88/#95/#97/#98/

@@ -6,11 +6,12 @@ import uuid
 
 import pytest
 
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.services.rustfs_storage import (
     FileTooLargeError,
     MimeNotAllowedError,
     build_storage_key,
+    make_download_url,
     make_upload_url,
 )
 
@@ -34,6 +35,42 @@ def test_make_upload_url_basic() -> None:
     assert response.method == "PUT"
     assert "image/jpeg" in response.headers["Content-Type"]
     assert response.max_upload_bytes > 0
+
+
+def test_make_upload_url_is_really_signed() -> None:
+    user_id = uuid.uuid4()
+    response = make_upload_url(
+        purpose="trip_attachment",
+        user_id=user_id,
+        filename="photo.jpg",
+        content_type="image/jpeg",
+        content_length=1024,
+    )
+    url = response.upload_url
+    # 실서명 — placeholder 가 아니라 SigV4 query auth 파라미터를 포함.
+    assert "PLACEHOLDER" not in url
+    assert "X-Amz-Algorithm=AWS4-HMAC-SHA256" in url
+    assert "X-Amz-Signature=" in url
+    assert "X-Amz-Credential=" in url
+    assert "X-Amz-Expires=" in url
+    # path-style addressing — public endpoint host + bucket + key 가 경로에.
+    assert settings.tripmate_rustfs_public_endpoint_url in url
+    assert f"/{settings.tripmate_rustfs_bucket}/" in url
+    assert response.storage_key in url
+
+
+def test_make_download_url_is_really_signed() -> None:
+    response = make_download_url(
+        bucket=settings.tripmate_rustfs_bucket,
+        storage_key="user-uploads/trip_attachment/x/2026/06/abc.jpg",
+        public_url=None,
+    )
+    url = response.download_url
+    assert response.method == "GET"
+    assert "PLACEHOLDER" not in url
+    assert "X-Amz-Signature=" in url
+    assert "X-Amz-Algorithm=AWS4-HMAC-SHA256" in url
+    assert "user-uploads/trip_attachment/x/2026/06/abc.jpg" in url
 
 
 def test_make_upload_url_rejects_unknown_mime() -> None:
