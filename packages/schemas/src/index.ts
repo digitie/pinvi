@@ -270,3 +270,5 @@ export type {
   RegionCovering,
   UnifiedSearchResult,
 } from './geo';
+export { TelegramTargetCreateSchema, TelegramTargetSchema } from './telegram';
+export type { TelegramTarget, TelegramTargetCreate } from './telegram';

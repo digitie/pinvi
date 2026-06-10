@@ -9,5 +9,6 @@ export { tripApi } from './endpoints/trips';
 export { poiApi } from './endpoints/pois';
 export { noticePlanApi } from './endpoints/notice-plans';
 export { storageApi } from './endpoints/storage';
+export { telegramApi } from './endpoints/telegram';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
