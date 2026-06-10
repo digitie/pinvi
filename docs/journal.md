@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — PoiEditor inline 폼 접근성 (FormTextArea 추가)
+
+**작업**: POI 상세 편집기(inline)의 입력을 FormField/FormTextArea로 통일 — label↔input id 연결.
+
+- `components/forms/FormTextArea.tsx` 신규: FormField의 textarea 버전(htmlFor/id 연결, aria-invalid/role=alert).
+- `components/trips/PoiEditor.tsx`: maki 아이콘/도착/출발/예산/실제비용/링크 → `FormField`, 메모 → `FormTextArea`.
+  작은 라벨 스타일은 `labelClassName="block text-xs font-semibold text-ink"`로 보존. 마커색 picker(버튼 그룹)는 유지.
+- `e2e/trip-mutations.e2e.ts`: 편집기 열림 시 메모/링크/예산 라벨↔입력 연결 단언 추가.
+
+**검증**: tsc + lint(clean) + build + trip-mutations E2E 3(PoiEditor 포함) + 회귀(form-a11y/dialog-focus/auth-form-a11y 8) 통과.
+
 ## 2026-06-10 (claude) — 모달 다이얼로그 포커스 관리 + 폼 접근성
 
 **작업**: trip 편집 / 추천 복사 / 장소 제안 다이얼로그의 a11y 보강 — 모달 포커스 관리 + FormField 통일.

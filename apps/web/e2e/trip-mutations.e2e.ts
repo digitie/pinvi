@@ -195,6 +195,11 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
   const editor = page.getByTestId('poi-editor');
   await expect(editor).toBeVisible();
 
+  // FormField/FormTextArea로 label↔input이 연결됐는지(접근성) 확인.
+  await expect(editor.getByLabel('메모')).toBeVisible();
+  await expect(editor.getByLabel('링크')).toBeVisible();
+  await expect(editor.getByLabel('예산')).toBeVisible();
+
   await editor.getByRole('button', { name: '저장' }).click();
   await expect(editor).toBeHidden();
 });
