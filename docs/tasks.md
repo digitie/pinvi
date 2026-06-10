@@ -8,12 +8,16 @@
 
 ## 진행 중
 
-- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합)
+- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합).
+  **2026-06-10 진행**: PR-C 프론트 지도/협업 슬라이스 대부분 머지(#126~#139, 아래
+  "Claude Sprint 4 PR-C 프론트 (2026-06-10)" 절). 잔여: krtour-map client 실주입(라이브러리
+  ready 시) + Playwright E2E 실행(브라우저/서버 환경) + v0.1.0 tag.
 
 ## 다음 (우선순위 순)
 
-- T-183 PR 머지 후 krtour-map 비의존 후보를 재평가한다. 현재 후보: T-108 운영 배포
-  자동화, T-129의 `/geo/*`·`/regions/*` slice, T-146 location-audit outbox slice.
+- v0.1.0 마무리: krtour-map client 실주입(PR-D2) + E2E 실행 게이트 + tag.
+- krtour-map 비의존 후보 재평가. 현재 후보: T-108 운영 배포 자동화, T-129의
+  `/geo/*`·`/regions/*` slice(머지됨), T-146 location-audit outbox slice(머지됨).
 
 ## 완료
 
@@ -328,6 +332,30 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-194 — [중간] #119 `/features/nearby` query `lon`/`lat` 정렬:
   legacy `lng`를 거부하고 krtour/DEC-07 정본 `lon`으로 통일. **완료: 2026-06-10.**
 
+### Claude T-105 첨부 도메인 + RustFS (2026-06-10)
+
+- [x] T-105 — Trip/POI/admin 첨부 도메인 완성. 하드닝(개수 제한+재정렬, #120), presigned
+  download URL(#121), `/admin/rustfs/*` 객체 관리 boto3(#122), admin 큐레이션 첨부 §5.3/5.4(#123).
+  부수: test-harness 잠재 버그 수정(`core/deps.py` get_db 동적 세션팩토리 참조). **완료: 2026-06-10.**
+- [x] RustFS presigned 실서명 활성화(#125) — `make_upload_url`/`make_download_url` boto3 SigV4
+  query auth(public endpoint, path-style). presigned + admin 경로 전부 실서명/실호출. **완료: 2026-06-10.**
+
+### Claude Sprint 4 PR-C 프론트 (2026-06-10)
+
+> 검증: web build / `tsc --noEmit` / `next lint` / vitest. 실 지도·업로드 E2E(VWorld 키 +
+> RustFS + 브라우저)는 별도 인프라 게이트.
+
+- [x] 지도 실 feature 로딩 + 16색 팔레트(#126) — viewport→`/features/in-bounds`, `markerPalette`/`featureBounds`.
+- [x] trip `[tripId]` 메인 지도 + POI 사이드패널 양방향(#127) — `tripMapPoints`, `TripMapView`.
+- [x] 지도 검색/내 위치/우클릭 메뉴(#128) — `MapSearchBox`/`UserLocationMarker`/`MapContextMenu`.
+- [x] POI 추가/재정렬(D&D)/마커 편집/삭제(#129) — `poiRank`, optimistic lock.
+- [x] 위치 동의 흐름(LBS/PIPA) + day CRUD(#130) — `userApi.getConsents/putConsents/withdrawConsent`.
+- [x] 마커 우클릭 편집 + 설정 동의 철회 페이지(#131).
+- [x] notice-plan copy 다이얼로그(#132).
+- [x] trip 공유 링크 관리(#133) / 첨부 업로드 presigned PUT(#134) / feature 제안 폼(#135).
+- [x] trip 댓글(#136) / 동반자 초대·관리(#137) / 일자 동선 최적화(#138) / POI 상세 편집(#139).
+- [x] `maplibre-vworld` 핀 v0.1.3 동기화(최신, src/dist 무변경 docs 릴리스). **완료: 2026-06-10.**
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |
@@ -356,3 +384,8 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #69 | feat: add trip primary region | 2026-06-07 | T-141 |
 | PR #70 | feat: verify resend webhook signatures | 2026-06-07 | T-136 |
 | PR #71 | feat: persist refresh sessions | 2026-06-07 | T-134 |
+| PR #120~#123 | feat: T-105 첨부 도메인(하드닝/download URL/rustfs boto3/admin 큐레이션) | 2026-06-10 | T-105 |
+| PR #125 | feat: RustFS presigned 실서명 활성화 | 2026-06-10 | storage |
+| PR #126~#131 | feat: Sprint 4 PR-C 지도 프론트(실데이터/trip맵/검색·위치·우클릭/POI편집/동의·day/잔여) | 2026-06-10 | T-060 |
+| PR #132~#135 | feat: notice copy / 공유 링크 / 첨부 업로드 / feature 제안 | 2026-06-10 | T-060 |
+| PR #136~#139 | feat: 댓글 / 동반자 / 동선 최적화 / POI 상세 편집 | 2026-06-10 | T-060 |

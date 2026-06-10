@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — PR-D 착수: trip 상세 E2E + maplibre-vworld v0.1.3 동기화 + tasks.md 정리
+
+**작업**: Sprint 4 v0.1.0 마무리 1차.
+
+- **E2E**: `e2e/trip-detail.e2e.ts` — `GET /trips/{id}`(TripView)·`/auth/me`·comments·attachments 를
+  `page.route` mock → 헤더/일자탭/POI 목록/동반자/공유/첨부/댓글 섹션 렌더 검증. `tsc`(e2e 포함) +
+  `playwright test --list`(18 tests)로 확인. 실행은 브라우저/서버 환경 별도(CI 미포함).
+- **maplibre-vworld 핀 최신화**: `f1dd74b9`(v0.1.2 코드) → **v0.1.3 tag `2a13ce02`**. v0.1.3 은
+  src/dist 무변경 docs 릴리스(CHANGELOG 확인)라 코드 영향 없음. package.json + lock + build 확인.
+- **docs/tasks.md**: 이번 세션(T-105 #120~#123, RustFS presign #125, PR-C 프론트 #126~#139,
+  maplibre v0.1.3) 반영 — T-060 진행 노트 + 신규 절 2개 + 머지 히스토리 행.
+
+**검증**: web build / `tsc` / `next lint` / vitest / playwright --list 전부 통과.
+
+**남은 v0.1.0**: krtour-map client 실주입(라이브러리 ready 시) + E2E 실행 게이트 + tag.
+
 ## 2026-06-10 (claude) — POI 상세 편집(시간/예산/메모/URL)
 
 **작업**: PoiEditor를 색/아이콘 → 도착·출발/예산·실제/메모/링크까지 풀 편집으로 확장.
