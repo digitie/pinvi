@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-106 PR-4: Telegram target 관리 UI (/settings/telegram)
+
+**작업**: 사용자가 알림 대상을 직접 등록/검증/삭제 — T-106이 end-to-end로 완성.
+
+- `packages/schemas/src/telegram.ts`: TelegramTargetCreate/TelegramTarget Zod(백엔드 §6 대응) + index export.
+- `packages/api-client/src/endpoints/telegram.ts`: `telegramApi`(listTargets/createTarget/verifyTarget/deleteTarget).
+- `apps/web/app/(app)/settings/telegram/page.tsx`: Chat ID(+별칭/기본) 등록 폼(FormField, 필드 오류+포커스),
+  대상 목록(별칭·chat·종류·상태) + 재검증/삭제. 그룹 채널 PII 경고 문구(§9).
+- `apps/web/app/(app)/settings/layout.tsx` 신규: settings 서브내비 탭(동의/MCP 토큰/Telegram) — 발견 가능성.
+- `e2e/settings-telegram.e2e.ts`(2): 등록→스냅샷 표시→삭제 / Chat ID 누락→필드 오류+aria-invalid+포커스.
+
+**검증**: tsc + lint(clean) + build + e2e 3(신규 2 + settings-mcp 회귀 1) + vitest 62 통과.
+**T-106 4부작 완료**: client(#160) → target CRUD(#161) → 알림 hook(#163) → 관리 UI. 남은 후속: trip↔target
+링킹(§6.5/6.6), weekly/daily Dagster(§7), outbox(§8), per-user 토큰.
+
 ## 2026-06-10 (claude) — T-106 PR-3: 신규 trip / 동반자 초대 Telegram 알림 hook
 
 **작업**: T-106 원래 목표 기능 — 즉시 알림 2종이 실제로 동작 시작.
