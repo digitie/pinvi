@@ -22,6 +22,7 @@ from app.services.admin_audit import append_admin_audit
 from app.services.admin_curated_attachment import (
     CuratedAttachmentLimitError,
     CuratedAttachmentNotFoundError,
+    CuratedAttachmentStorageRefError,
     CuratedPlanNotFoundError,
     create_curated_attachment,
     delete_curated_attachment,
@@ -86,6 +87,13 @@ def _raise_not_found(
 def _raise_limit(exc: CuratedAttachmentLimitError) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
+
+
+def _raise_storage_ref(exc: CuratedAttachmentStorageRefError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={"code": exc.code, "message": str(exc)},
     ) from exc
 
@@ -157,6 +165,8 @@ async def create_plan_attachment(
         _raise_not_found(exc)
     except CuratedAttachmentLimitError as exc:
         _raise_limit(exc)
+    except CuratedAttachmentStorageRefError as exc:
+        _raise_storage_ref(exc)
     await _audit(
         db,
         admin,
@@ -243,6 +253,8 @@ async def create_poi_attachment(
         _raise_not_found(exc)
     except CuratedAttachmentLimitError as exc:
         _raise_limit(exc)
+    except CuratedAttachmentStorageRefError as exc:
+        _raise_storage_ref(exc)
     await _audit(
         db,
         admin,

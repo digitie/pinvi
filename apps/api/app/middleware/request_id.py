@@ -18,6 +18,8 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        request.scope.setdefault("extensions", {})["tripmate_request_id"] = request_id
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
             path=request.url.path,

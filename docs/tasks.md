@@ -310,6 +310,24 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-188 — [중간] #108 후속: `POST /features/requests`에 `type`(new_place|correction|closure) + `target_feature_id` 노출(테이블·모델은 갖췄으나 API 미노출 → new_place만 가능했음). correction/closure는 target 필수·new_place는 금지(422), dedup 유니크 키에 type+target 포함(마이그레이션 0015), 응답 노출, frontend Zod + 회귀 테스트. (완료 2026-06-09, PR #108 리뷰 반영)
 - [x] T-189 — [낮음 묶음] 리뷰 잔여 정리(2026-06-09): (a) 사용자 제안 kind를 `place`/`event`로 좁힘(#108 — notice/price/weather/route/area는 운영 데이터, `FeatureSuggestionKind` + Zod) (b) 제안 rate-limit이 `rejected`/`duplicate` 제외하고 `pending`/`approved`/`added`만 카운트(거절 다수 사용자 정당 제안 차단 방지). **잔여(후속)**: `app.feature_suggestions.requester_user_id` FK RESTRICT의 PIPA 파기 정책(사용자 hard-delete 시 익명화/cascade — T-142 인접), #99 `poi_rise_set_to_dict` model_validate·#93 money quantize(저위험 가설, 미반영).
 
+### Claude PR 사후 리뷰 후속 (2026-06-10, `docs/reviews/2026-06-10-claude-pr-review.md`)
+
+- [x] T-190 — [높음] #116 location-audit outbox 인증 주체/요청 ID 정합: 인증 의존성이
+  `request.state.user_id`를 저장하고, 미들웨어는 spoof 가능한 `X-User-Id` 대신 state 값을 사용.
+  `RequestIdMiddleware`의 생성 request id도 state/extensions에 보존하며, `/features/requests`
+  body 좌표를 outbox에 남김. **완료: 2026-06-10.**
+- [x] T-191 — [높음] #120/#121 trip/POI 첨부 metadata storage ref 검증:
+  `bucket == TRIPMATE_RUSTFS_BUCKET` + `user-uploads/{trip_attachment|poi_attachment}/{current_user_id}/`
+  prefix만 허용, 위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`. **완료: 2026-06-10.**
+- [x] T-192 — [높음] #123 admin 큐레이션 첨부 metadata storage ref 검증:
+  `user-uploads/{curated_plan_attachment|curated_poi_attachment}/{admin_user_id}/` prefix만 허용.
+  **완료: 2026-06-10.**
+- [x] T-193 — [중간] #123 `/storage/upload-urls` curated 목적 admin gate:
+  `curated_plan_attachment` / `curated_poi_attachment` presigned 발급은 admin만 허용하고
+  비권한은 404로 숨김. **완료: 2026-06-10.**
+- [x] T-194 — [중간] #119 `/features/nearby` query `lon`/`lat` 정렬:
+  legacy `lng`를 거부하고 krtour/DEC-07 정본 `lon`으로 통일. **완료: 2026-06-10.**
+
 ## 머지 히스토리 (참고)
 
 | PR | 제목 | merge 일 | 비고 |

@@ -170,7 +170,7 @@ KMA 시간축이 기본 (SPEC V8 R-4). 다른 provider 값은 sources 배열에 
 좌표 주변 feature 조회.
 
 ```http
-GET /features/nearby?lng=129.118&lat=35.155&radius_m=5000&kinds=place,event
+GET /features/nearby?lon=129.118&lat=35.155&radius_m=5000&kinds=place,event
 Cookie: tripmate_access=...
 ```
 

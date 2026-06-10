@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.attachment import CuratedPlanAttachment
 from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
+from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
 
 
 class CuratedAttachmentError(Exception):
@@ -37,6 +38,10 @@ class CuratedAttachmentNotFoundError(CuratedAttachmentError):
 
 class CuratedAttachmentLimitError(CuratedAttachmentError):
     code = "ATTACHMENT_LIMIT_EXCEEDED"
+
+
+class CuratedAttachmentStorageRefError(CuratedAttachmentError):
+    code = "INVALID_ATTACHMENT_STORAGE_REF"
 
 
 async def ensure_plan(db: AsyncSession, *, curated_plan_id: uuid.UUID) -> None:
@@ -116,6 +121,12 @@ async def create_curated_attachment(
     limit = settings.tripmate_max_attachments_per_target
     if await _count(db, curated_plan_id=curated_plan_id, curated_poi_id=curated_poi_id) >= limit:
         raise CuratedAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
+    _validate_curated_attachment_storage_ref(
+        uploaded_by_user_id=uploaded_by_user_id,
+        curated_plan_id=curated_plan_id,
+        curated_poi_id=curated_poi_id,
+        payload=payload,
+    )
     attachment = CuratedPlanAttachment(
         curated_plan_id=curated_plan_id,
         curated_poi_id=curated_poi_id,
@@ -126,6 +137,27 @@ async def create_curated_attachment(
     await db.flush()
     await db.refresh(attachment)
     return attachment
+
+
+def _validate_curated_attachment_storage_ref(
+    *,
+    uploaded_by_user_id: uuid.UUID,
+    curated_plan_id: uuid.UUID | None,
+    curated_poi_id: uuid.UUID | None,
+    payload: dict[str, Any],
+) -> None:
+    if curated_plan_id is None and curated_poi_id is None:
+        raise CuratedAttachmentStorageRefError("첨부 대상이 필요합니다.")
+    purpose = "curated_plan_attachment" if curated_plan_id is not None else "curated_poi_attachment"
+    try:
+        validate_attachment_storage_ref(
+            bucket=payload.get("bucket"),
+            storage_key=payload.get("storage_key"),
+            purpose=purpose,
+            user_id=uploaded_by_user_id,
+        )
+    except InvalidStorageRefError as exc:
+        raise CuratedAttachmentStorageRefError(str(exc)) from exc
 
 
 async def get_curated_attachment(

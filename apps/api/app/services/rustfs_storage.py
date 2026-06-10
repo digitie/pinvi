@@ -41,6 +41,10 @@ class FileTooLargeError(StorageError):
     code = "FILE_TOO_LARGE"
 
 
+class InvalidStorageRefError(StorageError):
+    code = "INVALID_ATTACHMENT_STORAGE_REF"
+
+
 def build_storage_key(
     *,
     purpose: AttachmentPurpose,
@@ -111,3 +115,20 @@ def make_download_url(
         expires_at=expires,
         public_url=public_url,
     )
+
+
+def validate_attachment_storage_ref(
+    *,
+    bucket: str | None,
+    storage_key: str | None,
+    purpose: str,
+    user_id: uuid.UUID,
+) -> None:
+    """첨부 metadata가 서버가 발급한 presigned upload ref를 가리키는지 검증한다."""
+    if bucket != settings.tripmate_rustfs_bucket:
+        raise InvalidStorageRefError("첨부 bucket은 서버가 발급한 RustFS bucket이어야 합니다.")
+    expected_prefix = f"user-uploads/{purpose}/{user_id}/"
+    if not isinstance(storage_key, str) or not storage_key.startswith(expected_prefix):
+        raise InvalidStorageRefError(
+            "첨부 storage_key는 현재 사용자의 presigned 업로드 경로여야 합니다."
+        )

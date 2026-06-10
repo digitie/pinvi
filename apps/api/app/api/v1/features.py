@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -234,8 +234,8 @@ async def features_in_bounds(
 async def features_nearby(
     _current_user: CurrentUserId,
     client: KrtourMapClientDep,
+    lon: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     lat: Annotated[float, Query(ge=LAT_MIN, le=LAT_MAX)],
-    lng: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     radius_m: Annotated[int, Query(ge=10, le=50000)],
     kinds: Annotated[list[FeatureKind] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -243,7 +243,7 @@ async def features_nearby(
     """반경 검색 — `coord_5179` 기반 (라이브러리 책임). location_audit 미들웨어가
     좌표 query 자동 감지 후 `app.location_access_log` chain 적재."""
     items = await client.features_nearby(
-        lng=lng,
+        lon=lon,
         lat=lat,
         radius_m=radius_m,
         kinds=list(kinds) if kinds else ["place"],
@@ -357,12 +357,14 @@ async def request_feature(
     body: FeatureRequestCreate,
     current_user_id: CurrentUserId,
     db: DbSession,
+    request: Request,
 ) -> Envelope[FeatureRequestResponse]:
     """사용자가 feature 제안을 TripMate 소유 큐에 등록한다. krtour-map 직접 호출은 하지 않는다."""
     user_id = _current_user_uuid(current_user_id)
     name = _normalise_title(body.title)
     lng = _decimal6(body.coord.lon)
     lat = _decimal6(body.coord.lat)
+    request.state.location_audit_coord = (lat, lng)
     categories = _normalise_categories(body.categories)
 
     duplicate = await _find_duplicate_feature_suggestion(

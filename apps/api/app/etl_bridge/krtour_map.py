@@ -54,7 +54,7 @@ class KrtourMapClient(Protocol):
     async def features_nearby(
         self,
         *,
-        lng: float,
+        lon: float,
         lat: float,
         radius_m: int,
         kinds: list[str],

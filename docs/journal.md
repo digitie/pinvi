@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (codex) — Claude PR 사후 리뷰 + T-190~T-194 후속
+
+**작업**: 2026-06-08 00:00 KST 이후 Claude `agent/claude-*` PR 23건(#84/#88/#95/#97/#98/
+#102~#106/#109/#110/#113~#123)을 closed 포함 재검토하고, PR별 Codex 사후 리뷰 코멘트를 게시.
+취합 문서: `docs/reviews/2026-06-10-claude-pr-review.md`.
+
+- #116 후속(T-190): `get_current_user_id()`가 인증된 user id를 `request.state.user_id`에 저장.
+  `RequestIdMiddleware`는 생성/수신 request id를 `request.state.request_id`와 ASGI extensions에
+  보존. `LocationAuditMiddleware`는 spoof 가능한 `X-User-Id`를 더 이상 신뢰하지 않고 state 값만
+  사용. `/features/requests`는 검증된 body 좌표를 `request.state.location_audit_coord`로 넘겨
+  outbox 좌표를 보존.
+- #120/#121/#123 후속(T-191~T-192): 첨부 metadata 등록 시 `bucket == TRIPMATE_RUSTFS_BUCKET` +
+  `user-uploads/{purpose}/{user_id}/` prefix 검증을 공통 `rustfs_storage.validate_attachment_storage_ref`
+  로 강제. trip/POI/admin curated 모두 위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`.
+- #123 후속(T-193): `/storage/upload-urls`에서 `curated_plan_attachment` /
+  `curated_poi_attachment` purpose는 admin role만 발급. 비권한은 기존 admin 규약처럼 404.
+- #119 후속(T-194): `/features/nearby` query를 `lon`/`lat`로 정렬하고 legacy `lng` 요청은 422.
+- 문서: `docs/api/storage.md` 서버 검증 규칙, `docs/api/features.md` nearby 예시, `docs/tasks.md`,
+  `docs/resume.md` 갱신.
+
+**검증**: 후속 PR 검증 명령 결과를 PR 본문에 기록.
+
 ## 2026-06-10 (claude) — T-105 #1·#2: Admin 큐레이션(plan/POI) 첨부 (§5.3/5.4)
 
 **작업**: `/admin/notice-plans/*` 큐레이션 첨부 CRUD — T-105 첨부 도메인 잔여 마지막 2건.

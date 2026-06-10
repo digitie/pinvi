@@ -25,6 +25,7 @@ from app.models.user import User
 from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
+from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
 
 
 class TripError(Exception):
@@ -69,6 +70,10 @@ class TripAttachmentNotFoundError(TripError):
 
 class TripAttachmentLimitError(TripError):
     code = "ATTACHMENT_LIMIT_EXCEEDED"
+
+
+class TripAttachmentStorageRefError(TripError):
+    code = "INVALID_ATTACHMENT_STORAGE_REF"
 
 
 class TripOptimizeError(TripError):
@@ -587,6 +592,12 @@ async def create_attachment(
     limit = settings.tripmate_max_attachments_per_target
     if await _count_attachments(db, trip_id=trip_id, trip_poi_id=trip_poi_id) >= limit:
         raise TripAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
+    _validate_attachment_storage_ref(
+        uploaded_by_user_id=uploaded_by_user_id,
+        trip_id=trip_id,
+        trip_poi_id=trip_poi_id,
+        payload=payload,
+    )
     attachment = CuratedPlanAttachment(
         trip_id=trip_id,
         trip_poi_id=trip_poi_id,
@@ -597,6 +608,27 @@ async def create_attachment(
     await db.commit()
     await db.refresh(attachment)
     return attachment
+
+
+def _validate_attachment_storage_ref(
+    *,
+    uploaded_by_user_id: uuid.UUID,
+    trip_id: uuid.UUID | None,
+    trip_poi_id: uuid.UUID | None,
+    payload: dict[str, Any],
+) -> None:
+    if trip_id is None and trip_poi_id is None:
+        raise TripAttachmentStorageRefError("첨부 대상이 필요합니다.")
+    purpose = "trip_attachment" if trip_id is not None else "poi_attachment"
+    try:
+        validate_attachment_storage_ref(
+            bucket=payload.get("bucket"),
+            storage_key=payload.get("storage_key"),
+            purpose=purpose,
+            user_id=uploaded_by_user_id,
+        )
+    except InvalidStorageRefError as exc:
+        raise TripAttachmentStorageRefError(str(exc)) from exc
 
 
 async def update_attachment(

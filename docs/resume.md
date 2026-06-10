@@ -9,6 +9,17 @@ T-108 운영 배포 자동화, T-129의 `/geo/*`·`/regions/*` slice, T-146 loca
 outbox slice를 현재 main 기준으로 재평가한다.** T-172~T-181/T-179/T-180은
 krtour-map HTTP/admin 계약 연동 작업이므로 이 비의존 루프에서는 제외한다.
 
+**Claude PR 사후 리뷰 후속 완료** (2026-06-10): 2026-06-08 00:00 KST 이후 Claude가 올린
+PR #84/#88/#95/#97/#98/#102~#106/#109/#110/#113~#123 총 23건을 closed 포함 재검토했다
+(`docs/reviews/2026-06-10-claude-pr-review.md`). 기존 PR에는 GitHub Actions MCP 리뷰 알림만
+있고 상세 리뷰 코멘트는 없어 각 PR에 Codex 사후 리뷰 코멘트를 게시했다. 코드 후속은
+T-190~T-194로 반영: location-audit이 인증된 `request.state.user_id`/request id를 쓰게 하고
+`X-User-Id` spoof를 버렸으며 `/features/requests` body 좌표도 outbox에 보존한다.
+trip/POI/admin curated 첨부 metadata는 서버가 발급한
+RustFS bucket + `user-uploads/{purpose}/{user_id}/` prefix만 허용한다. `/storage/upload-urls`
+의 `curated_*` purpose는 admin 전용으로 막고, `/features/nearby` query를 `lon`/`lat`로
+정렬했다.
+
 **T-183 Backup hotswap 잔여 보강 완료** (2026-06-09): API-triggered
 `restore-hotswap`이 자기 API/Web 프로세스를 멈추는 drain command를 실행하지 못하도록
 `TRIPMATE_RESTORE_API_TRIGGER` guard를 추가했다. `restore_backup_hotswap()`은 프로세스 내부

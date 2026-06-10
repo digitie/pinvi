@@ -1,6 +1,6 @@
 """위치 감사 미들웨어 — `docs/compliance/lbs-act.md` §3.
 
-좌표(`lat`/`lng`)가 query/body에 있는 endpoint 접근을 자동 적재. T-146(D-20): 요청 경로에서는
+좌표(`lat`/`lon`)가 query/body에 있는 endpoint 접근을 자동 적재. T-146(D-20): 요청 경로에서는
 체인 해시를 동기 계산하지 않고 **async outbox에 빠르게 append**하고, worker가 체인으로 drain한다
 (단일 노드 hotspot 제거). 체인 로직은 `app.services.location_audit`.
 """
@@ -50,7 +50,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return response
 
-        user_id_str = request.headers.get("X-User-Id") or getattr(request.state, "user_id", None)
+        user_id_str = getattr(request.state, "user_id", None)
         if user_id_str is None:
             return response
 
@@ -59,8 +59,16 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return response
 
-        request_id = request.headers.get("X-Request-Id")
-        if request_id is None:
+        request_id_raw = (
+            getattr(request.state, "request_id", None)
+            or request.headers.get("X-Request-Id")
+            or response.headers.get("X-Request-Id")
+        )
+        if request_id_raw is None:
+            return response
+        try:
+            request_id = uuid.UUID(str(request_id_raw))
+        except ValueError:
             return response
 
         ip_hash = sha256_hex(request.client.host) if request.client else sha256_hex("")
@@ -74,7 +82,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
                     purpose=purpose,
                     lat=lat,
                     lng=lng,
-                    request_id=uuid.UUID(request_id),
+                    request_id=request_id,
                     ip_hash=ip_hash,
                 )
         except Exception as exc:
@@ -94,6 +102,14 @@ def _classify_purpose(path: str) -> str | None:
 
 
 def _extract_coord(request: Request) -> tuple[Decimal | None, Decimal | None]:
+    state_coord = getattr(request.state, "location_audit_coord", None)
+    if state_coord is not None:
+        lat, lng = state_coord
+        return (
+            Decimal(str(lat)) if lat is not None else None,
+            Decimal(str(lng)) if lng is not None else None,
+        )
+
     lat = request.query_params.get("lat") or request.query_params.get("latitude")
     lng = (
         request.query_params.get("lng")
