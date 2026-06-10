@@ -9,6 +9,8 @@ export interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   /** 보조 설명(예: "8자 이상") */
   hint?: string;
+  /** label 클래스 override (다이얼로그의 굵은 라벨 등) */
+  labelClassName?: string;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> {
  * - 포커스 이동을 위해 `forwardRef`
  */
 export const FormField = forwardRef<HTMLInputElement, FormFieldProps>(function FormField(
-  { id, label, error, hint, className, ...inputProps },
+  { id, label, error, hint, className, labelClassName, ...inputProps },
   ref,
 ) {
   const errorId = `${id}-error`;
@@ -28,7 +30,7 @@ export const FormField = forwardRef<HTMLInputElement, FormFieldProps>(function F
 
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm text-ink">
+      <label htmlFor={id} className={labelClassName ?? 'block text-sm text-ink'}>
         {label}
       </label>
       <input

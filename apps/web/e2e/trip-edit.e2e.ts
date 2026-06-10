@@ -73,6 +73,8 @@ test('여행 메타 편집: 제목을 바꾸면 헤더에 반영된다', async (
   await page.getByRole('button', { name: '편집' }).click();
   const dialog = page.getByTestId('trip-edit-dialog');
   await expect(dialog).toBeVisible();
+  // 다이얼로그가 열리면 제목 입력에 자동 포커스.
+  await expect(dialog.getByLabel('제목')).toBeFocused();
 
   await dialog.getByLabel('제목').fill('수정된 제목');
   await page.getByTestId('trip-edit-save').click();
