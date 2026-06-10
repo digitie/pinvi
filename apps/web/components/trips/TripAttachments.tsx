@@ -113,6 +113,7 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
             ref={inputRef}
             type="file"
             className="sr-only"
+            data-testid="attachment-input"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
