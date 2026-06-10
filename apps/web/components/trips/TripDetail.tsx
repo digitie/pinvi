@@ -4,12 +4,19 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
 import { ApiError, poiApi, tripApi } from '@tripmate/api-client';
-import type { FeatureSummary, PoiUpdate, TripStatus, TripView } from '@tripmate/schemas';
+import type {
+  FeatureSummary,
+  PoiUpdate,
+  TripStatus,
+  TripUpdate,
+  TripView,
+} from '@tripmate/schemas';
 import { apiClient } from '@/lib/api';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripActions } from '@/components/trips/TripActions';
+import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
 import { TripCompanions } from '@/components/trips/TripCompanions';
@@ -49,6 +56,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
+  const [tripEditOpen, setTripEditOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async (): Promise<TripView | null> => {
@@ -175,6 +183,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
   };
 
+  const handleEditTrip = (patch: TripUpdate) => {
+    const version = view?.trip.version ?? 1;
+    void runMutation(async () => {
+      await tripApi(apiClient).update(tripId, version, patch);
+      setTripEditOpen(false);
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
@@ -231,9 +247,18 @@ export function TripDetail({ tripId }: TripDetailProps) {
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
-            <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
-              {STATUS_LABEL[trip.status]}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+                {STATUS_LABEL[trip.status]}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTripEditOpen(true)}
+                className="h-8 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+              >
+                편집
+              </button>
+            </div>
             <TripActions tripId={tripId} />
           </div>
         </div>
@@ -335,6 +360,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
       </div>
 
       <TripComments tripId={tripId} />
+
+      {tripEditOpen && (
+        <TripEditDialog
+          trip={trip}
+          saving={busy}
+          error={mutationError}
+          onSave={handleEditTrip}
+          onClose={() => setTripEditOpen(false)}
+        />
+      )}
     </div>
   );
 }
