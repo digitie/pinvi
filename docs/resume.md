@@ -419,10 +419,9 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 우선순위 후보(krtour-map 비의존 작업 우선):
 
-1. **T-106 Telegram 후속 슬라이스** (백엔드 완성 #160~#166 — client·target CRUD·hook·UI·outbox·trip링킹):
-   - **남음**: 프론트 trip-link UI(trip 상세에서 `/trips/{id}/telegram-targets` 연결/해제),
-     weekly/daily summary Dagster 스케줄(§7.1/7.2, Sprint 5 ETL — 날씨/유가는 krtour-map 의존),
-     per-user 봇 토큰(vault/pgcrypto, 현재는 단일 시스템 봇), PIPA 위탁자 명시(§10).
+1. ~~**T-106 Telegram 알림 채널**~~ — **Sprint-4 스코프 완료** (#160~#168: client·target CRUD·알림 hook·
+   관리 UI·outbox·trip 링킹·trip-link UI). **남은 후속(별 스코프)**: weekly/daily summary Dagster(§7,
+   Sprint 5 ETL — 날씨/유가 krtour 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
 2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023) — Odroid M1S + N150 multi-platform
    Docker 빌드 + 두 노드 streaming replication.
 3. **krtour 연동 unblock 작업** — T-181 잔여(problem+json·`meta.page`·batch `found`·
