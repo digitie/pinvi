@@ -11,13 +11,15 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.telegram import TelegramClient, TelegramError
 from app.models.telegram_target import TelegramTarget
+from app.models.trip_telegram_target import TripTelegramTarget
 
 SYSTEM_TOKEN_REF = "system"  # noqa: S105 - token이 아니라 ref 이름(설정 키)
+MAX_TARGETS_PER_TRIP = 3
 
 
 class TelegramTargetError(Exception):
@@ -26,6 +28,18 @@ class TelegramTargetError(Exception):
 
 class TelegramTargetNotFoundError(TelegramTargetError):
     code = "RESOURCE_NOT_FOUND"
+
+
+class TripTargetLimitError(TelegramTargetError):
+    """trip별 연결 한도(≤3) 초과."""
+
+    code = "MAX_TARGETS_REACHED"
+
+
+class TripTargetConflictError(TelegramTargetError):
+    """이미 연결된 target."""
+
+    code = "ALREADY_LINKED"
 
 
 class TelegramTargetVerifyError(TelegramTargetError):
@@ -176,4 +190,66 @@ async def delete_target(db: AsyncSession, *, target_id: uuid.UUID, user_id: uuid
     target = await get_target(db, target_id=target_id, user_id=user_id)
     target.deleted_at = datetime.now(UTC)
     target.is_enabled = False
+    await db.flush()
+
+
+# --- trip ↔ target 연결 (§6.5/6.6) -----------------------------------------
+
+
+async def list_trip_targets(
+    db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID
+) -> Sequence[TelegramTarget]:
+    """trip에 연결된(소유자의 살아있는) target 목록."""
+    rows = await db.execute(
+        select(TelegramTarget)
+        .join(TripTelegramTarget, TripTelegramTarget.telegram_target_id == TelegramTarget.id)
+        .where(
+            TripTelegramTarget.trip_id == trip_id,
+            TelegramTarget.user_id == user_id,
+            TelegramTarget.deleted_at.is_(None),
+        )
+        .order_by(TripTelegramTarget.created_at)
+    )
+    return rows.scalars().all()
+
+
+async def link_trip_target(
+    db: AsyncSession, *, trip_id: uuid.UUID, target_id: uuid.UUID, user_id: uuid.UUID
+) -> TelegramTarget:
+    """trip에 user 소유 target을 연결한다(≤3, 중복 금지). target 미존재 시 404."""
+    target = await get_target(db, target_id=target_id, user_id=user_id)
+
+    existing = await db.scalar(
+        select(TripTelegramTarget).where(
+            TripTelegramTarget.trip_id == trip_id,
+            TripTelegramTarget.telegram_target_id == target_id,
+        )
+    )
+    if existing is not None:
+        raise TripTargetConflictError("이미 연결된 대상입니다.")
+
+    count = await db.scalar(
+        select(func.count())
+        .select_from(TripTelegramTarget)
+        .where(TripTelegramTarget.trip_id == trip_id)
+    )
+    if (count or 0) >= MAX_TARGETS_PER_TRIP:
+        raise TripTargetLimitError("여행당 최대 3개 대상까지 연결할 수 있습니다.")
+
+    db.add(TripTelegramTarget(trip_id=trip_id, telegram_target_id=target_id))
+    await db.flush()
+    return target
+
+
+async def unlink_trip_target(db: AsyncSession, *, trip_id: uuid.UUID, target_id: uuid.UUID) -> None:
+    """trip↔target 연결을 해제한다(연결 row 없으면 404). target 자체는 삭제하지 않음."""
+    link = await db.scalar(
+        select(TripTelegramTarget).where(
+            TripTelegramTarget.trip_id == trip_id,
+            TripTelegramTarget.telegram_target_id == target_id,
+        )
+    )
+    if link is None:
+        raise TelegramTargetNotFoundError("연결을 찾을 수 없습니다.")
+    await db.delete(link)
     await db.flush()
