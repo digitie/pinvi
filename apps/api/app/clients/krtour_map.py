@@ -395,3 +395,19 @@ def get_krtour_map_client(request: Request) -> KrtourMapClient:
 
 
 KrtourMapHttpClientDep = Annotated[KrtourMapClient, Depends(get_krtour_map_client)]
+
+
+def get_optional_krtour_map_client(request: Request) -> KrtourMapClient | None:
+    """FastAPI 의존성 — client 또는 None. 미주입 시 503이 아니라 None 반환.
+
+    feature가 보조 정보인 경로(trip 상세 view 등)에서 쓴다 — client 부재 시 POI
+    `feature_snapshot`으로 degrade한다. 사용자 대면 feature read 라우터는
+    `get_krtour_map_client`(503)를 쓴다.
+    """
+    client = getattr(request.app.state, "krtour_map_client", None)
+    return client if isinstance(client, KrtourMapClient) else None
+
+
+OptionalKrtourMapHttpClientDep = Annotated[
+    KrtourMapClient | None, Depends(get_optional_krtour_map_client)
+]

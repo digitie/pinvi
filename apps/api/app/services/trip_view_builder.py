@@ -1,7 +1,7 @@
 """`app.trip` ↔ `feature.feature` join — Trip 응답 빌더.
 
 Trip 상세 응답에 POI별 feature 정보 (좌표 / 마커 / 카테고리) 를 채워주는 빌더.
-라이브러리 측 `features_by_ids` batch 호출로 N+1 회피.
+krtour `POST /v1/features/batch`(`KrtourMapClient.get_features`) batch 호출로 N+1 회피.
 
 SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 
@@ -19,8 +19,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.krtour_map import KrtourMapClient
 from app.core.config import settings
-from app.etl_bridge.krtour_map import KrtourMapClient
 from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
@@ -44,11 +44,11 @@ async def build_trip_view(
     동작:
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. POI의 `feature_id` 수집 후 unique 리스트로
-    3. `krtour_client.features_by_ids(ids)` 1회 batch 호출 (N+1 회피)
-    4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (라이브러리에서 사라진
+    3. `krtour_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
+    4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (krtour에서 사라진
        feature 는 `is_broken=True` 표시)
 
-    라이브러리가 미주입 (`krtour_client=None`) 인 경우 — POI의 stored `feature_snapshot`
+    krtour client가 미주입 (`krtour_client=None`) 인 경우 — POI의 stored `feature_snapshot`
     만 사용 (fresh fetch 없음). 사용자에게 stale 경고 표시.
 
     Args:
@@ -123,7 +123,8 @@ async def build_trip_view(
             seen.add(fid_str)
             feature_ids.append(fid_str)
 
-    # 라이브러리 batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
+    # krtour batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
+    # krtour `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
     fresh_features: dict[str, dict[str, Any]] = {}
     if krtour_client is not None and feature_ids:
         use_cache = settings.tripmate_feature_cache_enabled
@@ -134,13 +135,18 @@ async def build_trip_view(
             missing = feature_ids
         if missing:
             try:
-                features = await krtour_client.features_by_ids(missing)
-                fetched = {_canonical_feature_id(str(f["feature_id"])): f for f in features}
+                batch = await krtour_client.get_features(missing)
+                found_map: dict[str, Any] = batch.get("found") or {}
+                fetched: dict[str, dict[str, Any]] = {
+                    _canonical_feature_id(str(fid)): feature
+                    for fid, feature in found_map.items()
+                    if isinstance(feature, dict)
+                }
                 fresh_features.update(fetched)
                 if use_cache and fetched:
                     feature_cache.put_many(fetched)
             except Exception as exc:
-                logger.error("features_by_ids batch 실패: %s — snapshot으로 fallback", exc)
+                logger.error("get_features batch 실패: %s — snapshot으로 fallback", exc)
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}

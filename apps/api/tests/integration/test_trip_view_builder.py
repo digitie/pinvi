@@ -15,16 +15,19 @@ class _StringFeatureClient:
     def __init__(self) -> None:
         self.requested_ids: list[str] = []
 
-    async def features_by_ids(self, feature_ids: list[str]) -> list[dict[str, Any]]:
+    async def get_features(self, feature_ids: list[str]) -> dict[str, Any]:
         self.requested_ids = list(feature_ids)
-        return [
-            {
-                "feature_id": "place:abc123",
-                "title": "최신 경복궁",
-                "marker_color": "P-01",
-                "marker_icon": "monument",
-            }
-        ]
+        return {
+            "found": {
+                "place:abc123": {
+                    "feature_id": "place:abc123",
+                    "name": "최신 경복궁",
+                    "marker_color": "P-01",
+                    "marker_icon": "monument",
+                }
+            },
+            "missing": [],
+        }
 
 
 async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -99,10 +102,19 @@ class _CountingFeatureClient:
         self.call_count = 0
         self.last_requested: list[str] = []
 
-    async def features_by_ids(self, feature_ids: list[str]) -> list[dict[str, Any]]:
+    async def get_features(self, feature_ids: list[str]) -> dict[str, Any]:
         self.call_count += 1
         self.last_requested = list(feature_ids)
-        return [{"feature_id": "place:cache1", "title": "캐시된 장소", "marker_color": "P-02"}]
+        return {
+            "found": {
+                "place:cache1": {
+                    "feature_id": "place:cache1",
+                    "name": "캐시된 장소",
+                    "marker_color": "P-02",
+                }
+            },
+            "missing": [],
+        }
 
 
 async def test_build_trip_view_uses_feature_cache(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -153,7 +165,7 @@ async def test_build_trip_view_uses_feature_cache(session_factory) -> None:  # t
         first = await build_trip_view(db, trip=trip, krtour_client=client)
         second = await build_trip_view(db, trip=trip, krtour_client=client)
 
-    # 1번째는 fetch, 2번째는 캐시 hit → features_by_ids 추가 호출 없음.
+    # 1번째는 fetch, 2번째는 캐시 hit → get_features 추가 호출 없음.
     assert client.call_count == 1
     assert first["days"][0]["pois"][0]["title"] == "캐시된 장소"
     assert second["days"][0]["pois"][0]["title"] == "캐시된 장소"
