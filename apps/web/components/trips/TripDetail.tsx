@@ -14,6 +14,7 @@ import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
 import { TripCompanions } from '@/components/trips/TripCompanions';
 import { TripDayControls } from '@/components/trips/TripDayControls';
+import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
@@ -296,6 +297,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <p className="text-xs font-semibold text-ink">장소 추가</p>
               <MapSearchBox onSelect={handleAddFeature} />
             </div>
+          )}
+          {selectedDay && (
+            <TripDayOptimize
+              tripId={tripId}
+              dayIndex={selectedDay.day_index}
+              poiCount={selectedDay.pois.length}
+              onApplied={reload}
+            />
           )}
           {mutationError && (
             <p
