@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — admin/mcp-tokens 폼 접근성 (FormSelect 추가)
+
+**작업**: admin MCP 토큰 페이지의 placeholder/aria-label-only 입력들을 시각적 라벨 폼으로 전환(가장 심한 a11y 갭).
+
+- `components/forms/FormSelect.tsx` 신규: FormField의 select 버전(htmlFor/id 연결, option은 children).
+- `app/(admin)/admin/mcp-tokens/page.tsx`: 검색/상태 + 발급 폼(user_id/이름/만료/사유) + 발급원문/회수사유 입력을
+  `FormField`/`FormSelect`로 전환 — 시각적 라벨·id 연결·`data-testid`(admin-mcp-*). 발급 시 user_id/사유 필수
+  필드 검증(aria-invalid + 포커스), 에러 region `role=alert`.
+- `e2e/admin-mcp-tokens.e2e.ts`(2): 발급 폼 라벨 노출(getByLabel) / user_id 없이 발급→필드 오류+aria-invalid+포커스.
+
+**버그 수정(테스트)**: 리스트 목 정규식이 페이지 내비게이션(:9022)까지 가로채 JSON을 반환 → API 포트(9021)
++ pathname으로 한정해 해결.
+
+**검증**: tsc + lint(clean) + build + mcp-tokens E2E 2 + 회귀(admin-login/admin-users/form-a11y/dialog-focus 10) 통과.
+**남은 후속**: settings/mcp-tokens(사용자용), list 페이지 select `for`/error role=alert 폴리시.
+
 ## 2026-06-10 (claude) — admin 로그인 + 액션 모달 폼 접근성
 
 **작업**: admin 콘솔의 실 폼(로그인) + 액션 확인 모달(사유 textarea) a11y 보강.
