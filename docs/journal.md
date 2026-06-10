@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — trip 생성 / 프로필 완성 폼 접근성 (FormField 확장)
+
+**작업**: 인증 폼에 이어 trip 생성·프로필 완성 폼에도 `FormField`/필드 검증 적용 (a11y 일관성).
+
+- `app/(auth)/profile-complete/page.tsx`: 닉네임 → `FormField` + `validateForm`(ProfileCompleteRequestSchema).
+  검증 실패 시 nickname 필드 오류 + 포커스. 동의 fieldset 보존.
+- `components/trips/TripDashboard.tsx`: 생성 폼 4필드(제목/지역/시작·종료일) → `FormField`. 제목 누락 시
+  `titleError`(aria-invalid + role=alert) + 제목 포커스. 각 입력에 `id`+`data-testid`(trip-create-*) 부여.
+- `e2e/form-a11y.e2e.ts`: 제목 없이 제출→필드 오류+aria-invalid+포커스 / label 클릭 포커스 / 프로필 닉네임 검증(3건).
+
+**검증**: tsc + lint(clean) + build + a11y E2E 3 + 회귀(auth-form-a11y 3, user-shells 2) 통과.
+(프로필 페이지 `/profile`은 OAuth 링크만이라 텍스트 폼 없음 — 대상 외.)
+
 ## 2026-06-10 (claude) — 인증 폼 접근성 강화 (FormField + 필드별 검증)
 
 **작업**: 로그인/회원가입 폼의 a11y·검증 갭 보강.

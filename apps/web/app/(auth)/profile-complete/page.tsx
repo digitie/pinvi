@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProfileCompleteRequestSchema } from '@tripmate/schemas';
 import { ApiClient, ApiError } from '@tripmate/api-client';
 import { z } from 'zod';
+import { FormField } from '@/components/forms/FormField';
+import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
@@ -37,8 +39,10 @@ export default function ProfileCompletePage() {
   const [optional, setOptional] = useState<CheckedMap>(
     Object.fromEntries(OPTIONAL.map((c) => [c.type, false])),
   );
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const nicknameRef = useRef<HTMLInputElement>(null);
 
   const allRequired = REQUIRED.every((c) => required[c.type]);
 
@@ -60,20 +64,22 @@ export default function ProfileCompletePage() {
       })),
     ];
 
-    const parsed = ProfileCompleteRequestSchema.safeParse({
+    const result = validateForm(ProfileCompleteRequestSchema, {
       nickname,
       avatar_kind: 'default',
       consents,
     });
-    if (!parsed.success) {
-      setError(parsed.error.message);
+    setFieldErrors(result.fieldErrors);
+    if (!result.success || !result.data) {
+      if (result.firstField === 'nickname') nicknameRef.current?.focus();
+      else setError('입력 값을 다시 확인해 주세요.');
       return;
     }
     setLoading(true);
     try {
       await apiClient.request('/users/me/profile/complete', {
         method: 'POST',
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify(result.data),
         schema: z.array(z.unknown()),
       });
       router.push('/trips');
@@ -87,18 +93,19 @@ export default function ProfileCompletePage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-ink">프로필 완성하기</h1>
-      <form onSubmit={onSubmit} className="space-y-5" data-testid="profile-complete-form">
-        <label className="block">
-          <span className="text-sm text-ink">닉네임 (필수)</span>
-          <input
-            type="text"
-            required
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            className="mt-1 w-full rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="profile-nickname"
-          />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-5" data-testid="profile-complete-form" noValidate>
+        <FormField
+          ref={nicknameRef}
+          id="profile-nickname"
+          label="닉네임 (필수)"
+          type="text"
+          autoComplete="nickname"
+          required
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          error={fieldErrors.nickname}
+          data-testid="profile-nickname"
+        />
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold text-ink">필수 동의</legend>
