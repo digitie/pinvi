@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 동반자 초대/관리 UI
+
+**작업**: trip `[tripId]` 동반자 초대(이메일+역할)/목록/제거.
+
+- `lib/companion.ts`: `companionDisplayName`(nickname>email>fallback) + `companionJoined` +
+  `ROLE_LABEL`. 순수·테스트.
+- `components/trips/TripCompanions.tsx`: 이메일+역할(편집/보기/공동소유) → `inviteMember`,
+  목록(이름/역할/참여여부) + `removeMember`. `view.companions` + reload.
+- `TripDetail` 일자 탭 아래 동반자 섹션.
+- `tests/companion.test.ts` 2건.
+
+**검증**: web build(`/trips/[tripId]` 13kB) / `tsc` / `next lint` / vitest 40 passed.
+
 ## 2026-06-10 (claude) — trip 댓글(comment) UI
 
 **작업**: trip `[tripId]` 댓글 목록/작성/삭제.

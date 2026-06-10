@@ -12,6 +12,7 @@ import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
+import { TripCompanions } from '@/components/trips/TripCompanions';
 import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
@@ -318,6 +319,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           />
         </aside>
       </div>
+
+      <TripCompanions tripId={tripId} companions={companions} onChanged={reload} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <TripAttachments tripId={tripId} />
