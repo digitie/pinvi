@@ -99,6 +99,17 @@ async def test_send_to_target_posts_payload() -> None:
     assert result == {"message_id": 7}
 
 
+async def test_send_plain_text_omits_parse_mode() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = _json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 2}})
+
+    await _client(handler).send_to_target("9:tok", "555", "plain", parse_mode=None)
+    assert "parse_mode" not in seen["body"]
+
+
 async def test_send_omits_thread_id_when_none() -> None:
     seen: dict[str, object] = {}
 

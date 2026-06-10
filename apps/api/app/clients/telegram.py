@@ -136,12 +136,17 @@ class TelegramClient:
         message: str,
         *,
         thread_id: str | None = None,
-        parse_mode: str = "MarkdownV2",
+        parse_mode: str | None = "MarkdownV2",
     ) -> dict[str, Any]:
-        """`sendMessage`로 메시지를 보낸다. 성공 시 Telegram message 객체를 반환한다."""
+        """`sendMessage`로 메시지를 보낸다. 성공 시 Telegram message 객체를 반환한다.
+
+        `parse_mode=None`이면 plain text — MarkdownV2 escape가 필요 없는 시스템 알림에 사용.
+        """
         if not chat_id:
             raise TelegramError("chat_id required", code="missing_chat_id")
-        payload: dict[str, Any] = {"chat_id": chat_id, "text": message, "parse_mode": parse_mode}
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": message}
+        if parse_mode is not None:
+            payload["parse_mode"] = parse_mode
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
         return await self._call("POST", "sendMessage", token, json=payload)

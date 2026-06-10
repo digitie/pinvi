@@ -9,7 +9,7 @@ from datetime import date, datetime
 from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
@@ -41,6 +41,11 @@ from app.schemas.trip import (
 from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
 from app.services.rustfs_storage import make_download_url
+from app.services.telegram_messages import (
+    build_companion_invited_message,
+    build_trip_created_message,
+)
+from app.services.telegram_notify import send_user_notification
 from app.services.trip import (
     TripAttachmentLimitError,
     TripAttachmentNotFoundError,
@@ -305,11 +310,15 @@ def _invalid_trip_cursor() -> HTTPException:
     response_model=Envelope[TripResponse],
 )
 async def create_trip_endpoint(
-    body: TripCreate, current_user_id: CurrentUserId, db: DbSession
+    body: TripCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> Envelope[TripResponse]:
+    owner_id = uuid.UUID(current_user_id)
     trip = await create_trip(
         db,
-        owner_user_id=uuid.UUID(current_user_id),
+        owner_user_id=owner_id,
         title=body.title,
         description=body.description,
         region_hint=body.region_hint,
@@ -322,11 +331,22 @@ async def create_trip_endpoint(
         await invite_companion(
             db,
             trip=trip,
-            invited_by_user_id=uuid.UUID(current_user_id),
+            invited_by_user_id=owner_id,
             email=str(companion.email),
             display_name=companion.display_name,
             role=companion.role,
         )
+    # T-106 — owner default target으로 신규 trip 알림 (응답 후, 실패 비차단).
+    background_tasks.add_task(
+        send_user_notification,
+        owner_id,
+        build_trip_created_message(
+            title=trip.title,
+            start_date=trip.start_date,
+            end_date=trip.end_date,
+            region_hint=trip.region_hint,
+        ),
+    )
     return Envelope.of(_to_response(trip))
 
 
@@ -975,6 +995,7 @@ async def invite_trip_member(
     body: TripCompanionInvite,
     current_user_id: CurrentUserId,
     db: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> Envelope[TripCompanionResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
@@ -994,6 +1015,16 @@ async def invite_trip_member(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    # T-106 — 초대된 기존 사용자의 default target으로 알림 (응답 후, 실패 비차단).
+    if companion.user_id is not None:
+        background_tasks.add_task(
+            send_user_notification,
+            companion.user_id,
+            build_companion_invited_message(
+                trip_title=trip.title,
+                display_name=companion.invited_nickname,
+            ),
+        )
     response = _to_companion_response(companion)
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
