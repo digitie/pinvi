@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 공유 링크 ↔ 공유뷰 연결
+
+**작업**: 생성된 공유 링크가 실제 `/shared/{id}/{token}` 라우트를 가리키게 연결.
+
+- `lib/shareUrl.ts`: `buildShareUrl(origin, tripId, token)` → 프론트 공유 뷰 URL. 순수·테스트.
+- `TripShareLinks`: 서버 `url` 대신 구성 URL 표시 + "열기" 링크(`/shared/{id}/{token}`, new tab).
+- `SharedTripView`: 에러 메시지 친절화("만료/유효하지 않음") + "TripMate 홈으로" 링크.
+- `e2e/trip-collab.e2e.ts`: 공유 배너가 `/shared/{tripId}/{token}` 포함 + "열기" href 검증.
+- `tests/shareUrl.test.ts` 1건.
+
+**검증**: 로컬 chromium 전 스위트 `32 passed`(CI env port 9021) + tsc + lint + build + vitest.
+
 ## 2026-06-10 (claude) — 공유 trip 읽기전용 뷰 라우트 + E2E
 
 **작업**: 토큰 공유 링크용 **공개 읽기전용** 여행 뷰.

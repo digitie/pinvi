@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Share2 } from 'lucide-react';
 import { ApiError, tripApi } from '@tripmate/api-client';
@@ -78,13 +79,18 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
 
   if (error || !view) {
     return (
-      <p
-        role="alert"
-        className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
-        data-testid="shared-error"
-      >
-        {error ?? '공유 여행을 찾을 수 없습니다.'}
-      </p>
+      <div className="space-y-3">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="shared-error"
+        >
+          {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'}
+        </p>
+        <Link href="/" className="inline-block text-sm font-semibold text-primary hover:underline">
+          TripMate 홈으로
+        </Link>
+      </div>
     );
   }
 

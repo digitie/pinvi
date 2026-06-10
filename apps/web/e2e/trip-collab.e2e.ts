@@ -126,7 +126,12 @@ test('공유 링크를 만들면 생성된 URL이 1회 표시된다', async ({ p
 
   const banner = page.getByTestId('new-share-url');
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText('http://127.0.0.1:9022/s/tok-abc');
+  // 서버 url 대신 실제 공유 뷰 라우트(/shared/{tripId}/{token})로 구성된다.
+  await expect(banner).toContainText(`/shared/${tripId}/tok-abc`);
+  await expect(banner.getByRole('link', { name: '열기' })).toHaveAttribute(
+    'href',
+    `/shared/${tripId}/tok-abc`
+  );
 });
 
 test('동선 최적화 미리보기 후 적용하면 패널이 닫힌다', async ({ page }) => {
