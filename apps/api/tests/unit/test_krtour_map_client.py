@@ -103,16 +103,113 @@ async def test_get_features_chunks_and_merges() -> None:
         body = _json.loads(request.content)
         ids = body["feature_ids"]
         calls.append(ids)
-        items = {fid: {"feature_id": fid} for fid in ids if fid != "f_missing"}
+        found = {fid: {"feature_id": fid} for fid in ids if fid != "f_missing"}
         missing = [fid for fid in ids if fid == "f_missing"]
-        return httpx.Response(200, json={"data": {"items": items, "missing": missing}})
+        # ADR-048: id-keyed map 키는 `found`(구 `items`).
+        return httpx.Response(200, json={"data": {"found": found, "missing": missing}, "meta": {}})
 
     client = _client(handler, batch_chunk_size=2)
     data = await client.get_features(["f_1", "f_2", "f_missing"])
     assert seen_path["path"] == "/v1/features/batch"  # #318: /tripmate 제거
     assert len(calls) == 2  # 2 + 1 청크
-    assert set(data["items"]) == {"f_1", "f_2"}
+    assert set(data["found"]) == {"f_1", "f_2"}
     assert data["missing"] == ["f_missing"]
+    await client.aclose()
+
+
+# --- ADR-048 / krtour 0e45bd7 계약 (T-181) -------------------------------
+
+
+async def test_in_bounds_sends_max_items_and_threads_cluster_unit() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query"] = str(request.url.query, "utf-8")
+        # granularity는 meta.cluster.cluster_unit로 옴 (data.cluster_unit 폐기).
+        return httpx.Response(
+            200,
+            json={
+                "data": {"clusters": [], "items": []},
+                "meta": {"request_id": "r1", "cluster": {"cluster_unit": "sigungu"}},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.features_in_bounds(
+        min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2, max_items=1000
+    )
+    assert "max_items=1000" in seen["query"]
+    assert "limit=" not in seen["query"]  # 구 limit 폐기
+    assert data["cluster_unit"] == "sigungu"  # meta.cluster → data re-projection
+    await client.aclose()
+
+
+async def test_nearby_threads_meta_page_cursor() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {"origin": {}, "items": [{"feature_id": "f1", "distance_m": 12}]},
+                "meta": {
+                    "request_id": "r2",
+                    "page": {"page_size": 20, "next_cursor": "c2", "total": None},
+                },
+            },
+        )
+
+    client = _client(handler)
+    data = await client.features_nearby(lon=129.0, lat=35.0, radius_m=500)
+    # 구 data.next_cursor 폐기 → meta.page.next_cursor를 data로 threading.
+    assert data["next_cursor"] == "c2"
+    assert data["total"] is None
+    assert data["items"][0]["distance_m"] == 12
+    await client.aclose()
+
+
+async def test_search_threads_meta_page_and_include_total() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query"] = str(request.url.query, "utf-8")
+        return httpx.Response(
+            200,
+            json={
+                "data": {"items": []},
+                "meta": {
+                    "request_id": "r3",
+                    "page": {"page_size": 50, "next_cursor": None, "total": 7},
+                },
+            },
+        )
+
+    client = _client(handler)
+    data = await client.search_features(q="광안리", include_total=True)
+    assert "include_total=true" in seen["query"].lower()
+    assert data["next_cursor"] is None
+    assert data["total"] == 7
+    await client.aclose()
+
+
+async def test_problem_json_top_level_code_parsed() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        # RFC7807 problem+json — 머신 코드는 top-level 확장 `code`.
+        return httpx.Response(
+            422,
+            headers={"Content-Type": "application/problem+json"},
+            json={
+                "type": "about:blank",
+                "title": "Unprocessable Entity",
+                "status": 422,
+                "detail": "bbox invalid",
+                "code": "INVALID_BBOX",
+                "request_id": "r4",
+            },
+        )
+
+    client = _client(handler)
+    with pytest.raises(KrtourMapBadRequest) as exc:
+        await client.features_in_bounds(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
+    assert exc.value.code == "INVALID_BBOX"
     await client.aclose()
 
 
