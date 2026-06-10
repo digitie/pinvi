@@ -121,8 +121,9 @@ export default function AdminPoisPage() {
             조회
           </button>
         </form>
-        <label className="text-xs text-muted">연결</label>
+        <label htmlFor="admin-pois-broken-filter" className="text-xs text-muted">연결</label>
         <select
+          id="admin-pois-broken-filter"
           value={linkFilter}
           onChange={(e) => {
             setLinkFilter(e.target.value);
@@ -141,7 +142,7 @@ export default function AdminPoisPage() {
       </FilterBar>
 
       {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-pois-error">
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-pois-error">
           {error}
         </p>
       )}

@@ -120,7 +120,7 @@ export default function AdminApiCallsPage() {
       </FilterBar>
 
       {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
       <DataTable columns={columns} rows={rows} loading={loading} rowKey={(row) => String(row.log_id)} />

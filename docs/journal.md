@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 폼 a11y 마무리 (admin list 폴리시 + settings/mcp-tokens)
+
+**작업**: 폼 접근성 스윕의 마지막 폴리시 — list filter select 연결 + error region role + 사용자용 mcp-tokens.
+
+- admin list(users/trips/pois/emails): filter `<select>`에 `id` + label `htmlFor` 연결(미연결이던 상태/공개/연결 필터).
+- error region `role=alert` 일괄 부여: admin users/trips/pois/emails/audit-location/api-calls list.
+- `app/(app)/settings/mcp-tokens/page.tsx`: aria-label-only 입력(이름/만료/발급원문)을 `FormField`/`FormSelect`로 전환(시각적 라벨), error `role=alert`.
+- `e2e/settings-mcp-tokens.e2e.ts`(1): 발급 폼 라벨 노출.
+
+**검증**: tsc + lint(clean) + build + settings-mcp E2E 1 + 회귀(admin-users/trips/pois/mcp-tokens 8, testid 보존) 통과.
+
+**폼 a11y 스윕 종료**: FormField/FormTextArea/FormSelect/validateForm/useDialogAutoFocus가 공개 인증·trip/profile·
+다이얼로그·PoiEditor·admin 로그인/액션모달/mcp-tokens·list·settings 전반에 적용됨 (#152~#159).
+
 ## 2026-06-10 (claude) — admin/mcp-tokens 폼 접근성 (FormSelect 추가)
 
 **작업**: admin MCP 토큰 페이지의 placeholder/aria-label-only 입력들을 시각적 라벨 폼으로 전환(가장 심한 a11y 갭).
