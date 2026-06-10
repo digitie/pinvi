@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     tripmate_kraddr_geo_timeout_seconds: float = 5.0
     tripmate_kraddr_geo_max_attempts: int = 3
 
+    # Telegram Bot 알림 (T-106) — `docs/integrations/telegram.md`.
+    # bot token 원본은 DB 저장 X(§1), 로그는 mask_token으로만(§9).
+    tripmate_telegram_api_base: str = "https://api.telegram.org"
+    tripmate_telegram_timeout_seconds: float = 5.0
+    tripmate_telegram_bot_token_default: str = ""  # 시스템/Admin 봇
+    tripmate_telegram_admin_chat_id: str = ""
+
     # 위치 감사 async outbox drain worker (T-146 / D-20)
     tripmate_location_audit_outbox_worker_enabled: bool = True
     tripmate_location_audit_outbox_drain_interval_seconds: float = 1.0
