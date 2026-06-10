@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — 첨부 업로드 UI (presigned PUT)
+
+**작업**: trip 첨부 2-phase 업로드 + 목록/삭제/다운로드.
+
+- **api-client**: `storageApi.createUploadUrl`(`POST /storage/upload-urls`) 신규 endpoint +
+  `tripApi.attachmentDownloadUrl`(`GET .../download-url`) 추가.
+- `lib/upload.ts`: `roleFromContentType`/`buildAttachmentCreate`(순수·테스트) + `putToPresigned`
+  (브라우저→RustFS PUT).
+- `components/trips/TripAttachments.tsx`: 파일 선택 → upload-url 발급 → RustFS PUT →
+  `createAttachment` 등록 → 목록(이름/타입/크기) + 다운로드(presigned GET 새 탭) + 삭제.
+- `TripDetail` 하단에 첨부/공유 2열 섹션.
+- `tests/upload.test.ts` 3건.
+
+**검증**: web build(`/trips/[tripId]` 11.9kB) / workspace `tsc` / `next lint` / vitest 34 passed.
+실 PUT/다운로드는 RustFS 컨테이너 + CORS 필요(런타임).
+
 ## 2026-06-10 (claude) — trip 공유 링크 관리 UI
 
 **작업**: trip `[tripId]` 상세에 공유 링크 생성/복사/철회.

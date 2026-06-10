@@ -1,4 +1,5 @@
 import {
+  DownloadUrlResponseSchema,
   TripAttachmentCreateSchema,
   TripAttachmentResponseSchema,
   TripCommentCreateSchema,
@@ -186,6 +187,12 @@ export const tripApi = (client: ApiClient) => ({
   deleteAttachment: (tripId: string, attachmentId: string) =>
     client.requestNoContent(`/trips/${tripId}/attachments/${attachmentId}`, {
       method: 'DELETE',
+    }),
+
+  attachmentDownloadUrl: (tripId: string, attachmentId: string) =>
+    client.request(`/trips/${tripId}/attachments/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
     }),
 
   listPoiAttachments: (tripId: string, poiId: string) =>
