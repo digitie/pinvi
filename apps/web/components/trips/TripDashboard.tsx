@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { ApiError, tripApi, type TripBucket } from '@tripmate/api-client';
@@ -256,9 +257,10 @@ export function TripDashboard() {
             data-testid="trip-list"
           >
             {filteredTrips.map((trip) => (
-              <article
+              <Link
                 key={trip.trip_id}
-                className="rounded-sm border border-hairline bg-white p-4"
+                href={`/trips/${trip.trip_id}`}
+                className="block rounded-sm border border-hairline bg-white p-4 transition hover:border-primary hover:bg-surface-soft"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -280,7 +282,7 @@ export function TripDashboard() {
                 {trip.description && (
                   <p className="mt-2 line-clamp-2 text-sm text-muted">{trip.description}</p>
                 )}
-              </article>
+              </Link>
             ))}
           </div>
         )}
