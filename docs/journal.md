@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — E2E 추가: 최적화/공유/위치동의
+
+**작업**: trip 협업·지도 흐름 E2E 3종(mock).
+
+- `e2e/trip-collab.e2e.ts`: 공유 링크 생성(`share-tokens` POST → `new-share-url` 배너 URL) +
+  동선 최적화 미리보기→적용(`days/{n}/optimize` persist false/true → "최단 경로 추정 거리"/1.8km
+  표시 후 패널 닫힘).
+- `e2e/map-consent.e2e.ts`: 내 위치 버튼 → 미동의 시 동의 다이얼로그 → 동의(`users/consents`
+  PUT) → 닫힘. `test.use` geolocation 권한/좌표 주입.
+
+**검증**: 로컬 chromium 전 스위트 `27 passed`(CI env port 9021) + tsc + lint.
+
 ## 2026-06-10 (claude) — E2E mutation 흐름 3종 추가
 
 **작업**: trip mutation 흐름 Playwright E2E(mock) 추가 — 이제 CI에서 실제 실행됨.
