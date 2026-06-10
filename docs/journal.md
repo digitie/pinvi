@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-10 (claude) — T-181: krtour HTTP client를 0e45bd7 계약으로 정렬
+
+**작업**: krtour `0e45bd7`(ADR-048/T-216a~g) 라이브 계약에 `apps/api/app/clients/krtour_map.py` 정렬.
+
+- `_payload(resp) → (data, meta)`로 리팩터(구 `_data`는 위임). 응답 envelope `{data, meta}` 분리 대응.
+- **batch**: `data.get("items")` → `data.get("found")`. 반환 키도 `{found, missing}`(inactive feature는 `found`+status, D-12).
+- **in-bounds**: 파라미터 `limit` → `max_items`(≤2000). `data.cluster_unit` 폐기 → `meta.cluster.cluster_unit` re-projection.
+- **nearby/search**: `data.next_cursor` 폐기 → `meta.page.next_cursor`/`total` threading. search `include_total` opt-in.
+- **에러**: `_error_code`를 RFC7807 problem+json top-level `code` 파싱(구 `error.code` fallback).
+- 계약 테스트 `tests/unit/test_krtour_map_client.py`: batch `found` 갱신 + 신규 5(max_items/cluster_unit·
+  nearby page·search page+include_total·problem+json code). 15 pass.
+
+**범위**: client 계층만 — feature 라우터는 아직 레거시 Protocol stub 사용(라우터 cutover = T-173 별도).
+`docs/integrations/krtour-map-rest-api.md` T-181 항목에 client 완료 표시.
+
+**검증**: ruff(clean) + mypy --strict(clean) + 단위 15(WSL).
+
 ## 2026-06-10 (claude) — T-106 종결: 문서 체크리스트 + PIPA
 
 **작업**: T-106 Sprint-4 스코프(신규 trip / 동반자 초대 알림 채널) 종결 문서화.

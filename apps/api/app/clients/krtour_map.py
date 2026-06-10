@@ -125,8 +125,12 @@ class KrtourMapClient:
         except ValueError:
             return None
 
-    def _data(self, resp: httpx.Response) -> dict[str, Any]:
-        """성공 응답에서 `data`(dict) 추출. 오류 status는 도메인 예외로 변환."""
+    def _payload(self, resp: httpx.Response) -> tuple[dict[str, Any], dict[str, Any]]:
+        """성공 응답에서 `(data, meta)` 추출. 오류 status는 도메인 예외로 변환.
+
+        krtour 0e45bd7 envelope = `{data: <payload>, meta: <Meta>}` (ADR-048).
+        에러는 RFC7807 problem+json — 머신 코드는 top-level 확장 `code`.
+        """
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
             raise KrtourMapFeatureNotFound("feature 를 찾을 수 없습니다.")
@@ -140,6 +144,21 @@ class KrtourMapClient:
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
             raise KrtourMapError(f"예상치 못한 응답 셰입({resp.request.url.path})")
+        meta = payload.get("meta") if isinstance(payload, Mapping) else None
+        return data, meta if isinstance(meta, dict) else {}
+
+    def _data(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답에서 `data`(dict)만 추출 — 단건/배치 등 page 없는 표면용."""
+        return self._payload(resp)[0]
+
+    @staticmethod
+    def _thread_page(data: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+        """`meta.page`(next_cursor/total)를 data로 re-projection (구 `data.next_cursor` 폐기)."""
+        page = meta.get("page")
+        if isinstance(page, Mapping):
+            data["next_cursor"] = page.get("next_cursor")
+            if "total" in page:
+                data["total"] = page.get("total")
         return data
 
     # ── 사용자 표면 (openapi.user.json) ─────────────────────────────────────
@@ -155,9 +174,13 @@ class KrtourMapClient:
         category: str | None = None,
         zoom: int | None = None,
         cluster_unit: str | None = None,
-        limit: int | None = None,
+        max_items: int | None = None,
     ) -> dict[str, Any]:
-        """viewport feature + 서버 클러스터. data = {count, cluster_unit, clusters, items}."""
+        """viewport feature + 서버 클러스터. data = {clusters, items}.
+
+        `max_items`(≤2000, 기본 1000 — 구 `limit` 폐기, ADR-048). granularity는
+        `meta.cluster.cluster_unit`로 오므로 data에 re-projection(구 `data.cluster_unit` 폐기).
+        """
         params: dict[str, Any] = {
             "min_lon": min_lon,
             "min_lat": min_lat,
@@ -172,9 +195,13 @@ class KrtourMapClient:
             params["zoom"] = zoom
         if cluster_unit is not None:
             params["cluster_unit"] = cluster_unit
-        if limit is not None:
-            params["limit"] = limit
-        return self._data(await self._send("GET", "/v1/features/in-bounds", params=params))
+        if max_items is not None:
+            params["max_items"] = max_items
+        data, meta = self._payload(await self._send("GET", "/v1/features/in-bounds", params=params))
+        cluster = meta.get("cluster")
+        if isinstance(cluster, Mapping) and "cluster_unit" in cluster:
+            data["cluster_unit"] = cluster.get("cluster_unit")
+        return data
 
     async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
         """단건 상세. 404 → None."""
@@ -184,22 +211,27 @@ class KrtourMapClient:
         return self._data(resp)
 
     async def get_features(self, feature_ids: Sequence[str]) -> dict[str, Any]:
-        """배치 조회 — cap 초과 시 청크 분할. data = {items: {id: detail}, missing: [id]}."""
+        """배치 조회 — cap 초과 시 청크 분할. data = {found: {id: detail}, missing: [id]}.
+
+        id-keyed map 키는 ADR-048에서 `items`→`found`로 확정(list `items[]`와 타입 분리).
+        inactive feature(reject/tombstone/deactivate)는 `missing`이 아니라 `found`에
+        status와 함께 옴(krtour D-12) — 호출자(snapshot fallback)가 "철회/폐업" 분기.
+        """
         unique = list(dict.fromkeys(feature_ids))
-        items: dict[str, Any] = {}
+        found: dict[str, Any] = {}
         missing: list[str] = []
         for start in range(0, len(unique), self._batch_chunk_size):
             chunk = unique[start : start + self._batch_chunk_size]
             data = self._data(
                 await self._send("POST", "/v1/features/batch", json={"feature_ids": chunk})
             )
-            chunk_items = data.get("items")
-            if isinstance(chunk_items, dict):
-                items.update(chunk_items)
+            chunk_found = data.get("found")
+            if isinstance(chunk_found, dict):
+                found.update(chunk_found)
             chunk_missing = data.get("missing")
             if isinstance(chunk_missing, list):
                 missing.extend(str(x) for x in chunk_missing)
-        return {"items": items, "missing": missing}
+        return {"found": found, "missing": missing}
 
     async def features_nearby(
         self,
@@ -213,7 +245,10 @@ class KrtourMapClient:
         cursor: str | None = None,
         sort: str | None = None,
     ) -> dict[str, Any]:
-        """반경 조회. data = {origin, items:[+distance_m], next_cursor}."""
+        """반경 조회. data = {origin, items:[+distance_m]} + threaded next_cursor/total.
+
+        pagination은 `meta.page`(구 `data.next_cursor` 폐기) — client가 data로 re-projection.
+        """
         params: dict[str, Any] = {"lon": lon, "lat": lat, "radius_m": radius_m}
         if kinds:
             params["kind"] = list(kinds)
@@ -225,7 +260,8 @@ class KrtourMapClient:
             params["cursor"] = cursor
         if sort is not None:
             params["sort"] = sort
-        return self._data(await self._send("GET", "/v1/features/nearby", params=params))
+        data, meta = self._payload(await self._send("GET", "/v1/features/nearby", params=params))
+        return self._thread_page(data, meta)
 
     async def search_features(
         self,
@@ -239,10 +275,13 @@ class KrtourMapClient:
         category: str | None = None,
         page_size: int | None = None,
         cursor: str | None = None,
+        include_total: bool = False,
     ) -> dict[str, Any]:
-        """텍스트 검색(feature만). data = {items, next_cursor, total_count}.
+        """텍스트 검색(feature만). data = {items} + threaded next_cursor/total.
 
         bbox는 ADR-048 clean cut으로 분리 float 4개(min_lon/min_lat/max_lon/max_lat).
+        pagination은 `meta.page`(구 `data.next_cursor`/`total_count` 폐기). `total`은
+        `include_total=true` opt-in일 때만 채워짐(기본 null).
         """
         params: dict[str, Any] = {}
         if q is not None:
@@ -263,7 +302,10 @@ class KrtourMapClient:
             params["page_size"] = page_size
         if cursor is not None:
             params["cursor"] = cursor
-        return self._data(await self._send("GET", "/v1/features/search", params=params))
+        if include_total:
+            params["include_total"] = True
+        data, meta = self._payload(await self._send("GET", "/v1/features/search", params=params))
+        return self._thread_page(data, meta)
 
     async def feature_weather(
         self, feature_id: str, *, asof: datetime | None = None
@@ -291,16 +333,20 @@ class KrtourMapClient:
 
 
 def _error_code(resp: httpx.Response) -> str | None:
+    """RFC7807 problem+json의 top-level 확장 `code`를 읽는다(구 `error.code`는 fallback)."""
     try:
         payload = resp.json()
     except ValueError:
         return None
     if isinstance(payload, Mapping):
-        error = payload.get("error")
+        code = payload.get("code")  # problem+json top-level 확장(krtour 0e45bd7)
+        if isinstance(code, str):
+            return code
+        error = payload.get("error")  # 구 envelope fallback
         if isinstance(error, Mapping):
-            code = error.get("code")
-            if isinstance(code, str):
-                return code
+            legacy = error.get("code")
+            if isinstance(legacy, str):
+                return legacy
     return None
 
 
