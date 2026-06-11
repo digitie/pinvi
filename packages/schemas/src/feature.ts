@@ -112,6 +112,19 @@ export const FeatureWeatherCardSchema = z.object({
 });
 export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
 
+/** 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (krtour `CategorySummary` 투영). */
+export const FeatureCategorySchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  parent_code: z.string().nullable().optional(),
+  depth: z.number().int(),
+  path: z.array(z.string()),
+  maki_icon: z.string(),
+  is_active: z.boolean(),
+  sort_order: z.number().int(),
+});
+export type FeatureCategory = z.infer<typeof FeatureCategorySchema>;
+
 /** Feature 요청 큐 등록 (Admin 검토 → krtour feature change). */
 export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 

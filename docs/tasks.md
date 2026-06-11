@@ -193,7 +193,10 @@
 - [x] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
 - [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
 - [x] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13) (완료: 2026-06-09): kraddr-geo v2 REST client(`apps/api/app/clients/kraddr_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/{within-radius,covering-point}`(`api/v1/geo.py`) + **통합 `GET /search`**(feature[krtour]+address[kraddr]+내 POI[DB], 소스별 graceful degrade, `api/v1/search.py`, C-13) + frontend Zod(`packages/schemas/src/geo.ts`) + 계약/통합 테스트. 좌표 매핑(`lon`/`lat`)·router cutover(T-173)는 별개.
-- [ ] T-130 — `/public/*` 구현(krtour 연동 후) (C-04)
+- [ ] T-130 — `/public/*` 구현 — **krtour 표면 대기**: krtour `openapi.user.json`에 전용
+  public/beach/festival 표면(수질·KHOA 예보·축제 상세)이 아직 없어 풍부한 셰입 노출 불가
+  (`docs/api/public.md` 상태 노트). krtour가 public 표면 추가 시 진입. 카테고리는 `GET
+  /features/categories`로, 일반 viewport 마커는 `GET /features/in-bounds`로 이미 제공. (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [x] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
@@ -279,8 +282,8 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 > **✅ 연동 루프 완료 (2026-06-11)**: T-170/171/181(client) + T-172~T-176/T-178(feature read
 > cutover, #171) + T-175(trip view batch + `etl_bridge` 제거, #172) + T-180(admin client, #173) +
 > T-179(admin 검토→승인 릴레이 BE #174 + web UI #175). **→ v0.1.0 게이트(DEC-06) 충족.**
-> **잔여**: T-130 `/public/*` 미구현 · T-176 `/features/categories` catalog 엔드포인트 미구현 ·
-> T-210e drift gate · §7 합의 5건(krtour T-217c 회신 대기 — 문서화된 기본값으로 동작 중).
+> **잔여**: T-130 `/public/*`(krtour public/beach/festival 표면 대기) · T-210e drift gate ·
+> §7 합의 5건(krtour T-217c 회신 대기 — 문서화된 기본값으로 동작 중).
 
 - [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/krtour_map.py`
   — features in-bounds/get/batch/nearby/search/weather/categories/healthz + 도메인 예외
@@ -292,7 +295,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-173 — [D] 응답 셰입 정렬(name/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입) (완료: 2026-06-11, #171 — Pydantic+Zod+api-client+web+docs 일괄)
 - [x] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거 (완료: 2026-06-11, #171)
 - [x] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /v1/features/batch`(string, cap 200, 응답 `{found,missing}`) 배선. inactive feature는 `found`+status로 옴 — "철회/폐업" 표시 분기(krtour D-12) (완료: 2026-06-11, #172 — `get_features` 연결 + `etl_bridge` 제거)
-- [x] T-176 — [G] 검색/날씨/근접 라우터 실연결 (완료: 2026-06-11, #171 — in-bounds/nearby/search/get/weather). **잔여**: 카테고리 catalog 엔드포인트(`/features/categories`, 마커 범례/필터칩용)는 미구현 → 후속(`/public/*` T-130과 함께)
+- [x] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결 (완료: 2026-06-11 — in-bounds/nearby/search/get/weather #171 + `GET /features/categories` 카탈로그 추가)
 - [x] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X (완료: 2026-06-09)
 - [x] T-179 — [H2] Admin 검사/승인 → krtour **feature change**(DEC-05) — **완료: 2026-06-11 (#174 백엔드 + #175 web UI)** — **actionable**(K-15 = krtour PR #317로 구현, krtour ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로 승인): `/admin/feature-requests` 검사 + approve/reject 시 krtour `POST/PATCH/DELETE /v1/admin/features*` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. 합의 5건(review_mode 등)은 krtour T-217c 회신으로 확정. 재적재와 무관
 - [x] T-180 — krtour **admin HTTP client(API 9011 `/v1/admin/*`)** — **완료: 2026-06-11 (#173)** — §2.9 feature change(`POST/PATCH/DELETE /v1/admin/features*`) + 운영자 재적재(`/v1/admin/feature-update-requests`) proxy 호출 client. T-170 user client와 base 동일(9011), 경로/토큰 정책만 분리 — **9012는 krtour admin UI(Next.js)라 API base 아님**: `tripmate_krtour_map_admin_base_url` 기본값(9012)/의미 재정의 + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)

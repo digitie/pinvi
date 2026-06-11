@@ -114,6 +114,29 @@ class _FakeKrtourClient:
             ],
         }
 
+    async def categories(
+        self, *, include_counts: bool = False, active_only: bool = False
+    ) -> dict[str, Any]:
+        self.calls["categories"] = {
+            "include_counts": include_counts,
+            "active_only": active_only,
+        }
+        return {
+            "include_counts": include_counts,
+            "items": [
+                {
+                    "code": "01070100",
+                    "label": "해수욕장",
+                    "parent_code": "010701",
+                    "depth": 3,
+                    "path": ["자연", "해안", "해수욕장"],
+                    "maki_icon": "swimming",
+                    "is_active": True,
+                    "sort_order": 5,
+                }
+            ],
+        }
+
 
 class _UnavailableClient(_FakeKrtourClient):
     async def features_in_bounds(self, **kwargs: Any) -> dict[str, Any]:
@@ -256,3 +279,23 @@ async def test_in_bounds_returns_503_when_krtour_unavailable(
 
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
+
+
+async def test_categories_maps_catalog(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _email = verified_user
+    fake = _FakeKrtourClient()
+    _override(fake)
+    try:
+        resp = await client.get("/features/categories", cookies=auth_cookies(user_id))
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert items[0]["code"] == "01070100"
+    assert items[0]["label"] == "해수욕장"
+    assert items[0]["maki_icon"] == "swimming"
+    assert items[0]["path"] == ["자연", "해안", "해수욕장"]
+    assert fake.calls["categories"]["active_only"] is True

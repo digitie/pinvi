@@ -145,6 +145,23 @@ class FeatureWeatherCard(BaseModel):
     metrics: list[WeatherMetric] = Field(default_factory=list)
 
 
+class FeatureCategory(BaseModel):
+    """krtour 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (`GET /features/categories`).
+
+    krtour `CategorySummary` 투영. code(8자리) + label + 트리(parent/depth/path) + maki 아이콘.
+    저빈도 데이터라 클라이언트 긴 TTL 캐시 권장.
+    """
+
+    code: str
+    label: str
+    parent_code: str | None = None
+    depth: int = 0
+    path: list[str] = Field(default_factory=list)
+    maki_icon: str = "marker"
+    is_active: bool = True
+    sort_order: int = 0
+
+
 class FeatureRequestCreate(BaseModel):
     """사용자 feature 제안 큐 적재 — Admin이 검토 후 krtour feature 추가 API로 반영 (DEC-05)."""
 
