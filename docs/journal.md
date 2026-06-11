@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — §7 합의 5건 확정 반영 (krtour T-217c, item 3)
+
+**작업**: krtour T-217c(#347)로 사용자 제안 연동 합의 5건이 확정 — TripMate 측 반영.
+
+- **출처 태깅(#3) 실수정**: `feature_requests.py` 승인 시 operator를 `tripmate-admin:{admin_id}`
+  (admin id 노출) → **고정 `"tripmate-admin"`**(익명 D-11)로, reason에 `[suggestion:<request_id>]`
+  prefix 추가(change-requests 큐 출처 식별). 기존 4건(review_mode/idempotency/closure/9011 admin)은
+  이미 확정값과 일치 — 코드 무변경.
+- **§7-pending → 확정 마킹**: `feature_requests.py`/`krtour_map_admin.py` docstring, `config.py`
+  admin token 주석(인증=인프라 계층), `docs/integrations/krtour-map-rest-api.md` §6/§7(5건 상세),
+  `tasks.md` 배너.
+- 통합 테스트: 승인 테스트의 operator/reason 단언 갱신.
+
+**참고**: krtour는 T-210e로 `krtour-map-user-client` TS 타입 패키지(#348)도 배포 — TripMate는
+당분간 수기 Zod + 본 저장소 드리프트 게이트(#178) 유지(추후 그 패키지 소비 검토 가능).
+
+**→ krtour 연동 루프 완전 종결**(§7까지). 유일 잔여 = T-130 `/public/*`(krtour 표면 대기).
+
+**검증**: ruff check + format(clean). mypy/pytest는 CI.
+
 ## 2026-06-11 (claude) — T-210e: krtour openapi 드리프트 게이트 (item 4)
 
 **작업**: 수기 httpx client가 krtour `openapi.user.json`과 silent drift하는 것을 막는 게이트.

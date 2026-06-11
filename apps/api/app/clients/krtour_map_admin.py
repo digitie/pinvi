@@ -5,11 +5,12 @@ TripMate Admin이 1차 검토·승인한 사용자 feature 제안을 krtour `/v1
 API base는 **:9011 `/v1/admin/*`** (9012는 admin UI). 사용자 토큰을 전달하지 않고
 설정된 admin service token(`X-Krtour-Service-Token`)만 보낸다.
 
-§7 합의(krtour T-217c 미확정) 동안의 **문서화된 기본값 가정**:
-- admin 인증 = service token (`X-Krtour-Service-Token`)
-- review_mode = krtour 측 `KRTOUR_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`(기본 require_review)
-- closure = `DELETE`(soft)
-확정 시 본 모듈/호출부(T-179) 조정.
+§7 합의 5건 **확정** (krtour T-217c, 2026-06-11):
+- admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 krtour 측
+  `admin_destructive_enabled` kill-switch뿐 — `X-Krtour-Service-Token`은 선택 pass-through.
+- review_mode = krtour `KRTOUR_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`(기본 require_review 2단 검토).
+- closure = soft `DELETE`(`user_deleted_*`, provider 재적재 부활 차단) / deactivate는 일시 비활성.
+- idempotency/출처 태깅은 호출부(T-179 `feature_requests.py`)에서 적용.
 
 계약: `docs/integrations/krtour-map-rest-api.md` §2.9 + krtour `openapi.json`.
 """

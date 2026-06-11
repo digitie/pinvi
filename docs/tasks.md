@@ -282,8 +282,9 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 > **✅ 연동 루프 완료 (2026-06-11)**: T-170/171/181(client) + T-172~T-176/T-178(feature read
 > cutover, #171) + T-175(trip view batch + `etl_bridge` 제거, #172) + T-180(admin client, #173) +
 > T-179(admin 검토→승인 릴레이 BE #174 + web UI #175). **→ v0.1.0 게이트(DEC-06) 충족.**
-> **잔여**: T-130 `/public/*`(krtour public/beach/festival 표면 대기) · T-210e drift gate ·
-> §7 합의 5건(krtour T-217c 회신 대기 — 문서화된 기본값으로 동작 중).
+> ✅ T-210e drift gate(#178) + ✅ §7 합의 5건 확정(krtour T-217c, 2026-06-11 — TripMate 반영:
+> 출처 태깅 operator 고정 `"tripmate-admin"` + reason `[suggestion:<id>]` prefix).
+> **유일 잔여**: T-130 `/public/*`(krtour public/beach/festival 표면 대기).
 
 - [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/krtour_map.py`
   — features in-bounds/get/batch/nearby/search/weather/categories/healthz + 도메인 예외
