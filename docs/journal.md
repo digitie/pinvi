@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-176 잔여: `/features/categories` + `/public/*` 표면 대기 명시 (item 5)
+
+**작업**: feature read 잔여(카테고리 카탈로그) 추가 + `/public/*`는 krtour 표면 부재로 대기 명시.
+
+- `GET /features/categories` 신규 — krtour `GET /v1/categories` 투영(`code`/`label`/`parent_code`/
+  `depth`/`path`/`maki_icon`/`is_active`/`sort_order`). 마커 범례·필터 칩용. 라우트는 `/{feature_id}`
+  앞에 등록(정적 경로 우선). `active_only` 쿼리.
+- `schemas/feature.py` `FeatureCategory` + Zod `FeatureCategorySchema`(+index) + api-client
+  `featureApi.categories()`. 매핑 단위 테스트 2 + 통합 테스트 1.
+- **T-130 `/public/*` 대기 명시**: krtour `openapi.user.json`에 전용 public/beach/festival 표면
+  (수질·KHOA 예보·축제 상세)이 아직 없음 → 정책("표면 없으면 노출 안 함")대로 미구현. krtour
+  public 표면 추가 시 진입. `docs/api/public.md` 상태 노트 + tasks.md 갱신.
+
+**검증**: ruff check + format(clean, 로컬). mypy/pytest는 CI(api) + web typecheck(packages 변경).
+
 ## 2026-06-11 (claude) — T-179: admin feature-request 검토 web UI (PR3c)
 
 **작업**: `/admin/feature-requests` placeholder를 실제 검토 큐 화면으로 교체 — T-179 백엔드

@@ -1,4 +1,5 @@
 import {
+  FeatureCategorySchema,
   FeatureDetailSchema,
   FeatureRequestCreateSchema,
   FeatureRequestResponseSchema,
@@ -95,6 +96,14 @@ export const featureApi = (client: ApiClient) => ({
       method: 'GET',
       schema: FeatureWeatherCardSchema,
     }),
+
+  /** 카테고리 카탈로그 (마커 범례 / 필터 칩). 저빈도 → 긴 staleTime 권장. */
+  categories: (params: { activeOnly?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.activeOnly === false) qs.set('active_only', 'false');
+    const path = `/features/categories${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, { method: 'GET', schema: z.array(FeatureCategorySchema) });
+  },
 
   /** feature 요청 큐 등록 (Sprint 6 Admin 검토). */
   request: (body: FeatureRequestCreate) =>

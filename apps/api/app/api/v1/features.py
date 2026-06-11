@@ -36,6 +36,7 @@ from app.schemas.envelope import Envelope
 from app.schemas.feature import (
     BBox,
     Coord,
+    FeatureCategory,
     FeatureCluster,
     FeatureDetail,
     FeatureKind,
@@ -209,6 +210,20 @@ def _weather_from_krtour(dto: dict[str, Any], *, feature_id: str) -> FeatureWeat
         is_stale=bool(dto.get("is_stale", False)),
         source_styles=list(dto.get("source_styles", [])),
         metrics=metrics,
+    )
+
+
+def _category_from_krtour(dto: dict[str, Any]) -> FeatureCategory:
+    """krtour `CategorySummary` → TripMate FeatureCategory."""
+    return FeatureCategory(
+        code=str(dto["code"]),
+        label=str(dto.get("label") or dto["code"]),
+        parent_code=dto.get("parent_code"),
+        depth=int(dto.get("depth", 0)),
+        path=[str(p) for p in dto.get("path", [])],
+        maki_icon=str(dto.get("maki_icon") or "marker"),
+        is_active=bool(dto.get("is_active", True)),
+        sort_order=int(dto.get("sort_order", 0)),
     )
 
 
@@ -430,6 +445,20 @@ async def get_feature_request(
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature request not found."},
         )
     return Envelope.of(_feature_request_response(row))
+
+
+@router.get("/categories", response_model=Envelope[list[FeatureCategory]])
+async def list_feature_categories(
+    _current_user: CurrentUserId,
+    client: KrtourMapHttpClientDep,
+    active_only: Annotated[bool, Query()] = True,
+) -> Envelope[list[FeatureCategory]]:
+    """krtour 카테고리 카탈로그 (마커 범례 / 필터 칩). 저빈도 → 클라이언트 긴 TTL 캐시 권장."""
+    with _map_krtour_errors():
+        data = await client.categories(active_only=active_only)
+    return Envelope.of(
+        [_category_from_krtour(c) for c in data.get("items", []) if isinstance(c, dict)]
+    )
 
 
 @router.get("/{feature_id}", response_model=Envelope[FeatureDetail])
