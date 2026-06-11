@@ -304,3 +304,71 @@ created_at, updated_at`.
 4. **단건 feature 추가 API(K-15) 신설 시점** — TripMate 사용자 제안 승인 흐름이 의존. 현재
    add 경로는 offline-upload(파일)뿐이라 단건 추가 불가.
 5. 클러스터링을 서버(krtour-map DB 집계)가 할지(DEC-04) 선호. (in-bounds `cluster_unit`로 구현됨)
+
+---
+
+## 6. Public 표면 요구사항 (T-130 — TripMate `/public/*` 차단 해소)
+
+> **상태 (2026-06-11)**: §0~§5의 통합 모델·HTTP 표면·feature change(K-15)·§7 합의는 krtour가
+> REST API(:9011 `/v1`)를 구축하고 T-216/T-217로 확정해 **대부분 해소**됐다. **남은 유일한
+> krtour-측 미해결 = 본 §6의 public 도메인 필드(해수욕장/축제 상세) 계약**. TripMate는 그때까지
+> `/public/*`를 구현하지 않는다(`docs/api/public.md` 정책: "표면이 없으면 노출하지 않는다").
+
+### 6.0 배경 / 현재 격차
+
+TripMate는 비로그인 공개 read API `/public/*`(IP rate limit, krtour 데이터만)를 설계해 뒀다
+(`docs/api/public.md`): 로그인 화면 축제 광고 + 비로그인 지도 마커 layer + 해수욕장/축제 상세.
+**현재 krtour user API(`openapi.user.json`)는 일반 `/v1/features/*` + `/v1/categories`만 노출**하고,
+해수욕장/축제의 **풍부한 도메인 필드**(수질·KHOA 예보·축제 상세 등)를 계약에 담지 않는다.
+일반 `FeatureDetailResponse.detail`은 open object라 kind별 payload 계약이 명세돼 있지 않다.
+
+### 6.1 필요한 것 — beach(해수욕장)
+
+TripMate `/public/beaches`(+`/{id}`, `/beaches/map-markers`)가 노출하려는 필드(public.md §2.1~2.3):
+
+| TripMate 노출 필드 | krtour에서 필요한 것 |
+|---|---|
+| display_name / lon,lat / 행정코드 / 도로명주소 | 일반 `FeatureSummary`/`FeatureDetailResponse`로 충족 |
+| beach_width_m / beach_length_m / beach_material | place(해수욕장 category) feature **`detail` payload**에 포함 필요 |
+| latest_water_quality (수질 등급 + 측정일) | KHOA/수질 provider 값 — feature 단위 조회 표면 필요 |
+| upcoming_index_forecasts (KHOA 예보) | KHOA index forecast — feature weather/index 표면으로 |
+| latest_observation / latest_weather | 기존 `GET /v1/features/{id}/weather`(metric) 재사용 가능 여부 확인 |
+| emergency_contact / homepage_url / image_url | feature `detail` / `urls` |
+| source_providers | feature `detail` 또는 sources |
+
+→ **요청**: 해수욕장 category place feature의 `detail` 계약(필드명·타입)을 `openapi.user.json`에
+명세 + 수질/KHOA index를 feature 단위로 조회(weather 카드 metric 확장 또는 별도 index 표면).
+
+### 6.2 필요한 것 — festival(축제/이벤트)
+
+TripMate `/public/festivals/monthly`(+`/{id}`, `/festivals/map-markers`)가 노출하려는 필드
+(public.md §2.4~2.6):
+
+| TripMate 노출 필드 | krtour에서 필요한 것 |
+|---|---|
+| festival_name / venue_name / lon,lat / 주소 | event `FeatureSummary`/`FeatureDetailResponse` |
+| event_start_date / end_date / event_status | event feature **`detail`**에 기간·상태 필요 |
+| 월별 count (`months[]`) | "이번 달 진행 축제" 집계 — 서버 집계 또는 TripMate가 기간 범위 search로 집계 |
+| festival_content / mnnst·auspc·suprt_instt_name / phone / homepage / reference_date | event feature `detail` / `urls` |
+
+→ **요청**: event(축제) feature의 `detail` 계약(기간·상태·주최/주관/후원·연락처·내용) 명세 +
+기간 overlap "월별 active 축제" 필터(또는 `event_*_date` 범위 쿼리 파라미터).
+
+### 6.3 공개(no-auth) 표면 / 인증
+
+- `/v1/features/*` GET은 이미 공용 read(인프라 SSO 비강제, rest-api.md §1.3)이므로 TripMate가
+  **서버측에서** 프록시하면 인증 문제는 없다(TripMate `/public/*`만 비로그인 노출, krtour 호출은 서버).
+- 별도 no-auth public 표면은 필수 아님 — **핵심 격차는 위 6.1/6.2의 도메인 필드(`detail`) 계약**이다.
+
+### 6.4 우선순위 / 비차단
+
+- **v0.1.0 비차단**(공개 광고/마커는 nice-to-have).
+- **최소안**: 일반 viewport 마커는 TripMate가 `GET /v1/features/in-bounds`(category 필터)로 이미
+  가능 → lightweight `map-markers`만이라도 우선 가능. 풍부한 상세(수질·예보·축제 내용)는 후속.
+- 도메인 필드가 계약에 들어오는 즉시 TripMate `/public/*` 구현(라우터·셰입은 public.md에 이미 설계).
+
+### 6.5 krtour 회신 요청
+
+1. 해수욕장/축제 feature의 `detail` payload 계약을 `openapi.user.json`에 명세할 의향/일정.
+2. 수질·KHOA index를 feature 단위로 조회하는 표면(weather metric 확장 vs 별도 index 엔드포인트).
+3. "월별 active 축제" 집계를 서버가 제공할지, TripMate가 `search` 기간 범위 쿼리로 집계할지.

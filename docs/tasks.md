@@ -197,6 +197,8 @@
   public/beach/festival 표면(수질·KHOA 예보·축제 상세)이 아직 없어 풍부한 셰입 노출 불가
   (`docs/api/public.md` 상태 노트). krtour가 public 표면 추가 시 진입. 카테고리는 `GET
   /features/categories`로, 일반 viewport 마커는 `GET /features/in-bounds`로 이미 제공. (C-04)
+  **krtour-측 필요 작업 명세**: `docs/krtour-map-requirements.md` §6 (해수욕장/축제 `detail` 계약 +
+  수질/KHOA index feature 표면 + 월별 축제 집계 — krtour 회신 요청 3건).
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [x] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
