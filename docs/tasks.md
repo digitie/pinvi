@@ -232,8 +232,10 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] **T-210b (TripMate 부분)** — 문서 OpenAPI HTTP supersede: ADR-026(T-068) +
   ADR-027(감사 PR #47)로 사실상 완료(architecture/krtour-map-integration/etl 문서 전환).
 - [x] **T-210d** = 본 저장소 **T-066**(httpx OpenAPI client) — **완료(2026-06-11, #170/#173)**.
-- [ ] **T-210e** — drift gate: krtour `openapi.user.json` 스냅샷 vendor + 계약 정합 테스트
-  (+선택 `openapi-typescript` codegen + Zod mirror + CI diff). 수기 client는 krtour 권고대로 유지.
+- [x] **T-210e** — drift gate (완료: 2026-06-11): krtour `openapi.user.json` 스냅샷 vendor
+  (`apps/api/tests/contract/krtour-openapi-user.json`) + 계약 정합 테스트
+  (`tests/unit/test_krtour_contract.py` — client 경로·매핑 응답 필드 ⊆ 스냅샷 + 로컬 핀 신선도
+  검사). 수기 client는 krtour 권고대로 유지. `openapi-typescript` codegen은 선택(미도입, 후속).
 
 ### Codex PR 사후 리뷰 후속 (2026-06-07)
 

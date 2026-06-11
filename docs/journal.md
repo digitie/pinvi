@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-210e: krtour openapi 드리프트 게이트 (item 4)
+
+**작업**: 수기 httpx client가 krtour `openapi.user.json`과 silent drift하는 것을 막는 게이트.
+
+- `apps/api/tests/contract/krtour-openapi-user.json` — krtour user 스펙 vendor 스냅샷(pin).
+- `apps/api/tests/unit/test_krtour_contract.py` (CI pytest unit): client 경로(`/v1/features/*`·
+  `/v1/categories`) + 매핑 응답 필드(FeatureSummary/Cluster/Detail/Weather/Category/Batch) ⊆
+  스냅샷. + 로컬 핀 신선도 검사(sibling krtour repo와 경로 집합 일치, CI skip,
+  `TRIPMATE_KRTOUR_OPENAPI_USER_PATH` override).
+- `docs/integrations/krtour-map-rest-api.md` §8 갱신 절차 + tasks.md T-210e 완료.
+- codegen(openapi-typescript)은 미도입(선택) — krtour 권고대로 수기 client 유지.
+
+**검증**: ruff(clean) + 스냅샷 대조 로컬 통과. mypy/pytest는 CI.
+
 ## 2026-06-11 (claude) — T-176 잔여: `/features/categories` + `/public/*` 표면 대기 명시 (item 5)
 
 **작업**: feature read 잔여(카테고리 카탈로그) 추가 + `/public/*`는 krtour 표면 부재로 대기 명시.
