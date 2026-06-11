@@ -94,7 +94,8 @@ class Settings(BaseSettings):
     tripmate_krtour_map_admin_base_url: str = "http://localhost:9011"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Krtour-Service-Token 전달.
     tripmate_krtour_map_service_token: str = ""
-    # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback). §7 admin 인증 합의 대기.
+    # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
+    # §7 확정(krtour T-217c): 운영 인증은 인프라 계층(SSO/IP allowlist) — token은 선택 pass-through.
     tripmate_krtour_map_admin_service_token: str = ""
     tripmate_krtour_map_timeout_seconds: float = 5.0
     tripmate_krtour_map_max_attempts: int = 3

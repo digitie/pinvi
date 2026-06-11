@@ -4,11 +4,13 @@
 krtour `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
 feature_id/request_id/state를 `krtour_ref`에 저장한다.
 
-§7 합의(krtour T-217c 미확정) 동안 문서화된 기본값 가정:
-- idempotency_key = suggestion request_id (재시도 시 동일 feature 보장)
-- 출처 태깅 = operator `tripmate-admin:{admin_id}` + reason (익명, D-11)
-- closure = DELETE(soft)
-- review_mode = krtour 측 설정(require_review면 status=approved, immediate면 added)
+§7 합의 5건 (krtour T-217c **확정**, 2026-06-11, krtour `docs/decisions.md` ADR-051):
+- **review_mode**: krtour 설정(기본 `require_review` 2단 검토 → status=approved, `immediate`면 added)
+- **idempotency_key** = suggestion `request_id` (krtour가 결정적 feature_id 생성, 재시도 동일 feature)
+- **출처 태깅** = operator 고정 `"tripmate-admin"`(admin id 미노출, 익명 D-11) + reason
+  `[suggestion:<request_id>]` prefix (change-requests 큐가 출처 식별)
+- **closure** = soft `DELETE`(provider 재적재 부활 차단). 일시 비활성 deactivate는 미사용
+- **admin 인증** = 인프라 계층(9011 `/v1/admin/*`, SSO/IP allowlist; service token은 선택 pass-through)
 """
 
 from __future__ import annotations
@@ -203,8 +205,11 @@ async def approve_feature_request_endpoint(
     krtour 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
     """
     suggestion = await _load_pending(db, request_id)
-    operator = f"tripmate-admin:{admin.user_id}"
-    reason = body.krtour_reason or body.access_reason
+    # 출처 태깅 (§7 #3 확정, krtour T-217c / D-11 익명): operator는 **고정 문자열**(admin id
+    # 미노출), suggestion_id는 reason 머리에 `[suggestion:<id>]` prefix로 실어 change-requests
+    # 큐에서 출처 식별. krtour는 개인정보를 저장하지 않고, 역추적은 TripMate admin이 한다.
+    operator = "tripmate-admin"
+    reason = f"[suggestion:{request_id}] {body.krtour_reason or body.access_reason}"
     stype = suggestion.suggestion_type
 
     if stype == "new_place":

@@ -171,7 +171,9 @@ async def test_approve_new_place_calls_krtour_and_marks_added(
     assert fake.created["category"] == "01070100"
     assert fake.created["coord"] == {"lon": 129.0, "lat": 35.0}
     assert fake.created["idempotency_key"] == str(req_id)
-    assert fake.created["operator"].startswith("tripmate-admin:")
+    # §7 #3 확정: operator 고정(admin id 미노출) + reason에 [suggestion:<id>] 출처 prefix
+    assert fake.created["operator"] == "tripmate-admin"
+    assert fake.created["reason"].startswith(f"[suggestion:{req_id}]")
 
     async with session_factory() as db:
         audit = await db.scalar(
