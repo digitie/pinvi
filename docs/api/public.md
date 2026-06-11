@@ -9,6 +9,8 @@
 > 노출된다. §정책의 "표면이 없으면 노출하지 않는다"에 따라 **krtour가 public 표면을 추가할
 > 때까지 본 API는 구현하지 않는다.** 카테고리 카탈로그는 인증 경로 `GET /features/categories`로
 > 제공(마커 범례/필터칩). 일반 viewport 마커는 인증 경로 `GET /features/in-bounds` 사용.
+> **krtour에 필요한 것(상세 요청)**: `docs/krtour-map-requirements.md` §6 (해수욕장/축제 `detail`
+> 계약 + 수질/KHOA index 표면 + 월별 축제 집계).
 
 ## 1. 정책
 

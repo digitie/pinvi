@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-11 (claude) — T-130 `/public/*` krtour-측 필요 작업 문서화
+
+**작업**: `/public/*`(T-130)가 차단된 원인 = krtour가 해수욕장/축제의 풍부한 도메인 필드를 계약에
+안 담음. krtour가 해야 할 일을 TripMate 측 요구사항 문서로 저장(추후 krtour에 전달용).
+
+- `docs/krtour-map-requirements.md` **§6 신설** — Public 표면 요구사항(T-130): beach(수질·KHOA
+  예보·width/material 등)·festival(기간·상태·주최/내용·월별 집계) `detail` 계약 요청 + 표 매핑
+  (TripMate 노출 필드 ↔ krtour 필요분) + 비차단/최소안(in-bounds 마커 우선) + krtour 회신 요청 3건.
+  머리에 §0~§5는 REST API 구축으로 대부분 해소·§6만 잔여 상태 배너.
+- `docs/api/public.md` 상태 노트 + `tasks.md` T-130에 §6 포인터.
+
+**비고**: TripMate 코드 변경 없음(docs-only). 도메인 필드가 krtour 계약에 들어오면 즉시 구현
+(라우터·셰입은 public.md에 이미 설계).
+
 ## 2026-06-11 (claude) — §7 합의 5건 확정 반영 (krtour T-217c, item 3)
 
 **작업**: krtour T-217c(#347)로 사용자 제안 연동 합의 5건이 확정 — TripMate 측 반영.
