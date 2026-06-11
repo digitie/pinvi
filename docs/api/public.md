@@ -3,6 +3,13 @@
 비로그인 사용자도 접근 가능한 read-only endpoint. 로그인 화면의 축제 광고, 일반
 사용자의 지도 마커 layer 등.
 
+> **상태 (2026-06-11): krtour 표면 대기 — 미구현(T-130).** 본 문서의 풍부한 beach/festival
+> 상세 셰입(수질·KHOA 예보·축제 상세 등)은 krtour 운영 API(`openapi.user.json`)에 **전용
+> public/beach/festival 표면이 아직 없다** — 현재는 일반 `/v1/features/*` + `/v1/categories`만
+> 노출된다. §정책의 "표면이 없으면 노출하지 않는다"에 따라 **krtour가 public 표면을 추가할
+> 때까지 본 API는 구현하지 않는다.** 카테고리 카탈로그는 인증 경로 `GET /features/categories`로
+> 제공(마커 범례/필터칩). 일반 viewport 마커는 인증 경로 `GET /features/in-bounds` 사용.
+
 ## 1. 정책
 
 - 인증 없음 (cookie / Authorization 헤더 없어도 OK)

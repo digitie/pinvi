@@ -263,6 +263,37 @@ Cookie: tripmate_access=...
 호출 경계: feature 검색은 krtour-map `GET /v1/features/search`로 조회한다(분리 4-float
 bbox + `page_size`). Naver/Kakao 검색 API는 현재 사용하지 않는다.
 
+### 2.6.1 `GET /features/categories`
+
+마커 범례 / 필터 칩용 카테고리 카탈로그. 저빈도 데이터 → 클라이언트 긴 `staleTime` 권장.
+
+```http
+GET /features/categories?active_only=true
+Cookie: tripmate_access=...
+```
+
+응답은 `FeatureCategory[]` 배열:
+
+```jsonc
+{
+  "data": [
+    {
+      "code": "01070100",         // 8자리 카테고리 코드
+      "label": "해수욕장",
+      "parent_code": "010701",
+      "depth": 3,
+      "path": ["자연", "해안", "해수욕장"],
+      "maki_icon": "swimming",
+      "is_active": true,
+      "sort_order": 5
+    }
+  ]
+}
+```
+
+krtour-map 호출: `GET /v1/categories` (`active_only` 전달). 정본은 krtour이며 TripMate는
+필요한 필드만 투영한다.
+
 ### 2.7 `GET /search`
 
 통합 검색은 T-129 future endpoint다. 구현 시 한 화면에서 다음 bucket을 함께 반환한다.

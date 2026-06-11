@@ -6,12 +6,41 @@ krtour 평면 lon/lat·name·status·구조화 address·cluster_key·평탄 metr
 from __future__ import annotations
 
 from app.api.v1.features import (
+    _category_from_krtour,
     _cluster_from_krtour,
     _coord_from_krtour,
     _detail_from_krtour,
     _summary_from_krtour,
     _weather_from_krtour,
 )
+
+
+def test_category_maps_catalog_fields() -> None:
+    category = _category_from_krtour(
+        {
+            "code": "01070100",
+            "label": "해수욕장",
+            "parent_code": "010701",
+            "depth": 3,
+            "path": ["자연", "해안", "해수욕장"],
+            "maki_icon": "swimming",
+            "is_active": True,
+            "sort_order": 5,
+        }
+    )
+    assert category.code == "01070100"
+    assert category.label == "해수욕장"
+    assert category.parent_code == "010701"
+    assert category.path == ["자연", "해안", "해수욕장"]
+    assert category.maki_icon == "swimming"
+
+
+def test_category_defaults_when_sparse() -> None:
+    category = _category_from_krtour({"code": "99", "label": "X"})
+    assert category.depth == 0
+    assert category.path == []
+    assert category.maki_icon == "marker"
+    assert category.is_active is True
 
 
 def test_coord_is_none_when_lon_or_lat_missing() -> None:
