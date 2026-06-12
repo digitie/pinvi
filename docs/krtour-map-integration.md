@@ -64,6 +64,8 @@ TripMate 설정 prefix는 항상 `TRIPMATE_*`다.
 | `GET` | `/v1/features/{feature_id}/weather` | 날씨 카드 |
 | `POST` | `/v1/features/batch` | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
 | `GET` | `/v1/categories` | 카테고리 카탈로그 |
+| `GET` | `/v1/public/beaches*` | TripMate `/public/beaches*` 공개 해수욕장 목록·상세·marker |
+| `GET` | `/v1/public/festivals*` | TripMate `/public/festivals*` 공개 축제 월별 목록·상세·marker |
 | `POST` | `/v1/admin/features*` (change API) | TripMate Admin 승인 제안 반영 (admin 도메인 전용, §2.9 of integrations doc) |
 | `POST/GET` | `/v1/admin/feature-update-requests*` | 재적재 — krtour 운영자 전용, TripMate 제품 비노출 (DEC-05) |
 

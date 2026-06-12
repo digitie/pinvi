@@ -3,19 +3,18 @@
 비로그인 사용자도 접근 가능한 read-only endpoint. 로그인 화면의 축제 광고, 일반
 사용자의 지도 마커 layer 등.
 
-> **상태 (2026-06-11): krtour 표면 대기 — 미구현(T-130).** 본 문서의 풍부한 beach/festival
-> 상세 셰입(수질·KHOA 예보·축제 상세 등)은 krtour 운영 API(`openapi.user.json`)에 **전용
-> public/beach/festival 표면이 아직 없다** — 현재는 일반 `/v1/features/*` + `/v1/categories`만
-> 노출된다. §정책의 "표면이 없으면 노출하지 않는다"에 따라 **krtour가 public 표면을 추가할
-> 때까지 본 API는 구현하지 않는다.** 카테고리 카탈로그는 인증 경로 `GET /features/categories`로
-> 제공(마커 범례/필터칩). 일반 viewport 마커는 인증 경로 `GET /features/in-bounds` 사용.
-> **krtour에 필요한 것(상세 요청)**: `docs/krtour-map-requirements.md` §6 (해수욕장/축제 `detail`
-> 계약 + 수질/KHOA index 표면 + 월별 축제 집계).
+> **상태 (2026-06-12): 구현됨(T-130 / krtour T-222c).** krtour-map
+> `openapi.user.json`에 `/v1/public/beaches*`와 `/v1/public/festivals*` 표면이 추가됐고,
+> TripMate는 `app.clients.krtour_map.KrtourMapClient`로 해당 user OpenAPI를 호출해
+> `/public/*`에 투영한다. 수질/KHOA index/weather는 krtour 응답의 nullable 필드를 그대로
+> 노출한다.
 
 ## 1. 정책
 
 - 인증 없음 (cookie / Authorization 헤더 없어도 OK)
-- Rate limit: IP 기준 분당 60회
+- Rate limit: IP 기준 분당 60회 목표. 현재 앱 공통 `SlowAPI` 미들웨어는 아직 붙어 있지
+  않으므로 krtour upstream 한도와 edge/CDN 제한을 우선 적용하고, 앱 내 공통 rate-limit는
+  별도 후속에서 닫는다.
 - 응답 데이터는 krtour-map OpenAPI HTTP 계약에서 가져옴
 - TripMate `app.users` / `trips`는 노출 안 됨 — 본 endpoint는 라이브러리 feature
   데이터만
@@ -27,10 +26,12 @@
 해수욕장 통합 listing.
 
 ```http
-GET /public/beaches?sido_code=11&sigungu_code=11680&query=광안리&limit=100&offset=0
+GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cursor=...
 ```
 
-- `sido_code` / `sigungu_code` / `query` / `limit` (1~300, 기본 100) / `offset`
+- `sido_code`(2자리) / `sigungu_code`(5자리) / `q`(최대 100자)
+- `page_size` 1~200, 기본 50 / `cursor`
+- `include_quality`, `include_forecast` boolean. 기본 `false`.
 
 응답 200:
 
@@ -63,21 +64,25 @@ GET /public/beaches?sido_code=11&sigungu_code=11680&query=광안리&limit=100&of
         "upcoming_index_forecasts": [/* KHOA 예보 */],
         "latest_weather": { /* KMA */ }
       }
-    ],
-    "total": 50
+    ]
+  },
+  "meta": {
+    "cursor": "next-cursor-or-null",
+    "has_more": true,
+    "total": 50,
+    "limit": 50
   }
 }
 ```
 
-krtour-map 호출: 최신 `openapi.user.json` 또는 public subset에 정의된 beach/listing
-경로를 따른다. public beach 표면이 없으면 TripMate public API에서 노출하지 않는다.
+krtour-map 호출: `GET /v1/public/beaches`.
 
 ### 2.2 `GET /public/beaches/map-markers`
 
 지도 layer용 경량 응답.
 
 ```http
-GET /public/beaches/map-markers?limit=500
+GET /public/beaches/map-markers?max_items=500
 ```
 
 응답 200:
@@ -89,12 +94,13 @@ GET /public/beaches/map-markers?limit=500
     "display_name": "해수욕장",
     "marker_color": "P-07",
     "marker_icon": "swimming",
-    "markers": [
+    "items": [
       {
         "feature_id": "...",
         "name": "광안리 해수욕장",
         "lon": 129.118,
-        "lat": 35.155
+        "lat": 35.155,
+        "sigungu_code": "26110"
       }
     ]
   }
@@ -108,24 +114,23 @@ GET /public/beaches/map-markers?limit=500
 ### 2.4 `GET /public/festivals/monthly`
 
 ```http
-GET /public/festivals/monthly?year=2026&month=6&limit=12
+GET /public/festivals/monthly?year=2026&month=6&page_size=12
 ```
 
 - `year`/`month` 생략 시 now KST 기준
-- `limit`: 1~50 (기본 12)
+- `page_size`: 1~50 (기본 12) / `cursor`
+- `include_months`: 기본 `true`
 - 응답 200:
 
 ```jsonc
 {
   "data": {
-    "year": 2026,
-    "month": 6,
     "months": [
-      { "month": 5, "count": 23 },
-      { "month": 6, "count": 47 },
-      { "month": 7, "count": 31 }
+      { "year": 2026, "month": 5, "count": 23 },
+      { "year": 2026, "month": 6, "count": 47 },
+      { "year": 2026, "month": 7, "count": 31 }
     ],
-    "festivals": [
+    "items": [
       {
         "feature_id": "f_..._e_...",
         "festival_name": "부산 바다축제",
@@ -142,6 +147,12 @@ GET /public/festivals/monthly?year=2026&month=6&limit=12
         "homepage_url": "..."
       }
     ]
+  },
+  "meta": {
+    "cursor": null,
+    "has_more": false,
+    "total": 47,
+    "limit": 12
   }
 }
 ```
@@ -151,7 +162,7 @@ GET /public/festivals/monthly?year=2026&month=6&limit=12
 ### 2.5 `GET /public/festivals/map-markers`
 
 ```http
-GET /public/festivals/map-markers?limit=500
+GET /public/festivals/map-markers?max_items=500
 ```
 
 ```jsonc
@@ -160,7 +171,7 @@ GET /public/festivals/map-markers?limit=500
     "layer_key": "festival",
     "marker_color": "P-11",
     "marker_icon": "star",
-    "markers": [/* feature_id + name + lng + lat */]
+    "items": [/* feature_id + name + lon + lat */]
   }
 }
 ```
@@ -195,9 +206,9 @@ GET /public/festivals/map-markers?limit=500
 
 ## 4. AI agent 구현 체크리스트
 
-- [ ] `apps/api/app/schemas/public.py` Pydantic + `packages/schemas/src/public.ts` Zod
-- [ ] `apps/api/app/services/public_view.py` — krtour-map HTTP 호출 + 셰입 변환
-- [ ] `apps/api/app/api/v1/public.py` 라우터
-- [ ] `Cache-Control` 헤더 응답
-- [ ] Rate limit 적용 (IP 기준)
-- [ ] 통합 테스트 (`httpx.MockTransport` + 선택적 live krtour-map)
+- [x] `apps/api/app/schemas/public.py` Pydantic + `packages/schemas/src/public.ts` Zod
+- [x] `apps/api/app/clients/krtour_map.py` — krtour-map `/v1/public/*` HTTP 호출
+- [x] `apps/api/app/api/v1/public.py` 라우터
+- [x] `Cache-Control: public, max-age=300` 헤더 응답
+- [ ] 앱 내 공통 Rate limit 적용(IP 기준) — 공통 `SlowAPI` 미들웨어 도입 후 닫음
+- [x] 통합 테스트(`httpx` ASGI + fake krtour client)

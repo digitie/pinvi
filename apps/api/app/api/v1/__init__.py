@@ -10,6 +10,7 @@ from app.api.v1 import (
     notice_plans,
     oauth,
     pois,
+    public,
     search,
     storage,
     telegram_targets,
@@ -33,6 +34,7 @@ api_router.include_router(trips.router)
 api_router.include_router(pois.router)
 api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
+api_router.include_router(public.router)
 api_router.include_router(features.router)
 api_router.include_router(geo.geo_router)
 api_router.include_router(geo.regions_router)

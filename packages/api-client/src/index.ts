@@ -7,8 +7,16 @@ export { featureApi } from './endpoints/feature';
 export { userApi } from './endpoints/users';
 export { tripApi } from './endpoints/trips';
 export { poiApi } from './endpoints/pois';
+export { publicApi } from './endpoints/public';
 export { noticePlanApi } from './endpoints/notice-plans';
 export { storageApi } from './endpoints/storage';
 export { telegramApi } from './endpoints/telegram';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
+export type {
+  PublicBeachListParams,
+  PublicFestivalMarkerParams,
+  PublicFestivalMonthlyParams,
+  PublicMarkerParams,
+  PublicPage,
+} from './endpoints/public';

@@ -16,6 +16,9 @@
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 구현 후보: T-108 운영 배포 자동화. T-129 `/geo/*`·`/regions/*`와
   T-146 location-audit outbox/feature cache는 이미 머지 완료.
+- 보안/운영 후속: T-195 public/API 공통 rate-limit 미들웨어. T-130 public API는
+  krtour upstream 한도와 edge/CDN 제한을 전제로 먼저 열었고, 앱 내부 IP/token 기준
+  제한은 공통 미들웨어로 따로 닫는다.
 - 후속 대기: T-211 krtour `curated_features` → TripMate `curated_trip_plans` 1:1
   import. TripMate-native 큐레이션을 대체하지 않는 추가 소스이며, krtour REST 상세 계약
   확정 후 구현한다.
@@ -197,12 +200,12 @@
 - [x] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
 - [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
 - [x] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13) (완료: 2026-06-09): kraddr-geo v2 REST client(`apps/api/app/clients/kraddr_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/{within-radius,covering-point}`(`api/v1/geo.py`) + **통합 `GET /search`**(feature[krtour]+address[kraddr]+내 POI[DB], 소스별 graceful degrade, `api/v1/search.py`, C-13) + frontend Zod(`packages/schemas/src/geo.ts`) + 계약/통합 테스트. 좌표 매핑(`lon`/`lat`)·router cutover(T-173)는 별개.
-- [ ] T-130 — `/public/*` 구현 — **krtour 표면 대기**: krtour `openapi.user.json`에 전용
-  public/beach/festival 표면(수질·KHOA 예보·축제 상세)이 아직 없어 풍부한 셰입 노출 불가
-  (`docs/api/public.md` 상태 노트). krtour가 public 표면 추가 시 진입. 카테고리는 `GET
-  /features/categories`로, 일반 viewport 마커는 `GET /features/in-bounds`로 이미 제공. (C-04)
-  **krtour-측 필요 작업 명세**: `docs/krtour-map-requirements.md` §6 (해수욕장/축제 `detail` 계약 +
-  수질/KHOA index feature 표면 + 월별 축제 집계 — krtour 회신 요청 3건).
+- [x] T-130 — `/public/*` 구현 — **완료(2026-06-12, Codex / krtour T-222c)**:
+  krtour `openapi.user.json`의 `/v1/public/beaches*`, `/v1/public/festivals*` 6개 표면을
+  vendor 스냅샷에 동기화하고, TripMate `KrtourMapClient` + `/public/*` 라우터 +
+  Pydantic/Zod/API client schema를 연결했다. 목록은 `meta.cursor/has_more/total/limit`로
+  cursor pagination을 노출하고, 상세/marker layer는 krtour public view를 그대로 투영한다.
+  앱 내부 공통 rate-limit 미들웨어는 T-195로 분리한다. (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
 - [x] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등) (C-08,C-17)
@@ -290,7 +293,8 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 > T-179(admin 검토→승인 릴레이 BE #174 + web UI #175). **→ v0.1.0 게이트(DEC-06) 충족.**
 > ✅ T-210e drift gate(#178) + ✅ §7 합의 5건 확정(krtour T-217c, 2026-06-11 — TripMate 반영:
 > 출처 태깅 operator 고정 `"tripmate-admin"` + reason `[suggestion:<id>]` prefix).
-> **유일 잔여**: T-130 `/public/*`(krtour public/beach/festival 표면 대기).
+> ✅ T-130 `/public/*`(2026-06-12 — krtour public beach/festival 표면 소비 연결).
+> 앱 내부 공통 rate-limit만 T-195 후속.
 
 - [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/krtour_map.py`
   — features in-bounds/get/batch/nearby/search/weather/categories/healthz + 도메인 예외
@@ -357,6 +361,11 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
   비권한은 404로 숨김. **완료: 2026-06-10.**
 - [x] T-194 — [중간] #119 `/features/nearby` query `lon`/`lat` 정렬:
   legacy `lng`를 거부하고 krtour/DEC-07 정본 `lon`으로 통일. **완료: 2026-06-10.**
+- [ ] T-195 — [중간] public/API 공통 rate-limit 미들웨어:
+  `docs/api/common.md`와 `docs/api/public.md`가 말하는 IP/token 기준 분당 제한을 실제
+  FastAPI middleware 또는 검증된 라이브러리로 적용한다. `/public/*`는 IP 기준 60/min,
+  인증 사용자 경로는 token/user 기준 60/min, 로그인/가입/재설정은 별도 낮은 한도로
+  분리한다. 다중 worker/노드 운영 전 Redis/Postgres-backed bucket 여부를 결정한다.
 
 ### Claude T-105 첨부 도메인 + RustFS (2026-06-10)
 

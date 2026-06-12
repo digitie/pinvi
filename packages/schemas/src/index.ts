@@ -259,6 +259,28 @@ export type {
   FeatureRequestResponse,
 } from './feature';
 export {
+  PublicBeachListSchema,
+  PublicBeachViewSchema,
+  PublicFestivalMonthSchema,
+  PublicFestivalMonthlySchema,
+  PublicFestivalStatusSchema,
+  PublicFestivalViewSchema,
+  PublicMapLayerKeySchema,
+  PublicMapMarkerLayerSchema,
+  PublicMapMarkerSchema,
+} from './public';
+export type {
+  PublicBeachList,
+  PublicBeachView,
+  PublicFestivalMonth,
+  PublicFestivalMonthly,
+  PublicFestivalStatus,
+  PublicFestivalView,
+  PublicMapLayerKey,
+  PublicMapMarker,
+  PublicMapMarkerLayer,
+} from './public';
+export {
   AdminFeatureRequestSummarySchema,
   AdminFeatureRequestPagedResponseSchema,
   AdminFeatureRequestApproveSchema,

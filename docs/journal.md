@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-12 (codex) — T-130 `/public/*` krtour public view 소비 연결
+
+**작업**: krtour-map T-222b로 user OpenAPI에 공개 해수욕장/축제 표면이 생겨 TripMate
+T-130을 연결했다.
+
+- `apps/api/tests/contract/krtour-openapi-user.json`을 최신 krtour `openapi.user.json`으로
+  교체하고 drift gate에 `/v1/public/beaches*`, `/v1/public/festivals*` 6개 경로와
+  public view schema 필드 검사를 추가했다.
+- `KrtourMapClient`에 public beaches/festivals 목록·상세·marker 호출을 추가했다.
+- 신규 `/public/beaches`, `/public/beaches/map-markers`, `/public/beaches/{feature_id}`,
+  `/public/festivals/monthly`, `/public/festivals/map-markers`,
+  `/public/festivals/{feature_id}` 라우터를 추가했다.
+- `packages/schemas/src/public.ts`와 `@tripmate/api-client` `publicApi`를 추가했다.
+- 앱 내부 공통 rate-limit 미들웨어는 T-195 후속으로 분리했다.
+
+**검증**:
+
+- WSL ext4 mirror: `uv run --extra dev pytest tests/unit/test_krtour_map_client.py tests/unit/test_krtour_contract.py -q`
+  → 22 passed, 1 skipped.
+- WSL ext4 mirror: `uv run --extra dev pytest tests/integration/test_public_api.py -q`
+  → 4 passed.
+- WSL ext4 mirror: `uv run --extra dev pytest tests/unit -q` → 158 passed, 1 skipped.
+- WSL ext4 mirror: `uv run --extra dev ruff check app tests`, `uv run --extra dev mypy --strict app` 통과.
+- WSL ext4 mirror: `npm run typecheck --workspaces --if-present`,
+  `npm run lint --workspaces --if-present`, `npm run build --workspaces --if-present` 통과.
+
 ## 2026-06-12 (codex) — Docker app RustFS 재시작 정책 보강
 
 **작업**: PR #181 merge 후 `scripts/docker-app.sh smoke --keep-running` 상태 확인에서
@@ -95,7 +121,8 @@
 **참고**: krtour는 T-210e로 `krtour-map-user-client` TS 타입 패키지(#348)도 배포 — TripMate는
 당분간 수기 Zod + 본 저장소 드리프트 게이트(#178) 유지(추후 그 패키지 소비 검토 가능).
 
-**→ krtour 연동 루프 완전 종결**(§7까지). 유일 잔여 = T-130 `/public/*`(krtour 표면 대기).
+**→ krtour 연동 루프 완전 종결**(§7까지). 당시 유일 잔여 = T-130 `/public/*`
+(2026-06-12 Codex 작업으로 완료).
 
 **검증**: ruff check + format(clean). mypy/pytest는 CI.
 
@@ -122,7 +149,7 @@
   앞에 등록(정적 경로 우선). `active_only` 쿼리.
 - `schemas/feature.py` `FeatureCategory` + Zod `FeatureCategorySchema`(+index) + api-client
   `featureApi.categories()`. 매핑 단위 테스트 2 + 통합 테스트 1.
-- **T-130 `/public/*` 대기 명시**: krtour `openapi.user.json`에 전용 public/beach/festival 표면
+- **T-130 `/public/*` 대기 명시(당시 기준, 2026-06-12 완료)**: krtour `openapi.user.json`에 전용 public/beach/festival 표면
   (수질·KHOA 예보·축제 상세)이 아직 없음 → 정책("표면 없으면 노출 안 함")대로 미구현. krtour
   public 표면 추가 시 진입. `docs/api/public.md` 상태 노트 + tasks.md 갱신.
 
