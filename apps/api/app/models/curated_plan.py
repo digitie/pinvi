@@ -48,6 +48,11 @@ class CuratedTripPlan(Base, TimestampMixin):
     destination: Mapped[str | None] = mapped_column(String(120))
     starts_on: Mapped[date | None] = mapped_column(Date())
     ends_on: Mapped[date | None] = mapped_column(Date())
+    source_system: Mapped[str | None] = mapped_column(String(80))
+    source_curated_feature_id: Mapped[str | None] = mapped_column(Text())
+    source_curated_feature_version: Mapped[int | None] = mapped_column(Integer)
+    source_etag: Mapped[str | None] = mapped_column(String(128))
+    source_imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_published: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -109,6 +114,8 @@ class CuratedPlanPoi(Base, TimestampMixin):
     user_url: Mapped[str | None] = mapped_column(Text())
     custom_marker_color: Mapped[str | None] = mapped_column(String(16))
     custom_marker_icon: Mapped[str | None] = mapped_column(String(64))
+    source_curated_feature_id: Mapped[str | None] = mapped_column(Text())
+    source_curated_feature_item_id: Mapped[str | None] = mapped_column(Text())
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

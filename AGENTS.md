@@ -121,8 +121,8 @@ trunk를 절대 편집하지 않는다.
   WSL ext4 테스트 미러에서 실행한다. e2e 검증을 위한 Playwright runner /
   브라우저만 Windows에서 실행한다.
 - **고정 dev 포트**: 로컬 장기 실행 서비스는 PostgreSQL `5432`, API `12501`,
-  웹 `12505`, Dagster `9023`, krtour-map API/Admin API `12301`, tripmate-agent API
-  `12401`, RustFS API `12101`, RustFS console `12105`를 항상 사용한다.
+  웹 `12505`, Dagster `9023`, krtour-map API/Admin API `12301`, RustFS API `12101`,
+  RustFS console `12105`를 항상 사용한다.
   `scripts/dev-up.sh`는 시작 전 해당 포트를 점유한 프로세스를 종료하고 다시 올리며,
   `scripts/dev-down.sh`는 같은 포트를 정리한다. Docker app 실행은
   `scripts/docker-app.sh`를 사용한다.
@@ -179,8 +179,7 @@ trunk를 절대 편집하지 않는다.
   WSL ext4 미러에서만. **Playwright/브라우저 e2e만** Windows Node/브라우저에서
   실행한다.
 - **고정 dev 포트**: PostgreSQL `5432`, API `12501`, 웹 `12505`, Dagster `9023`,
-  krtour-map API/Admin API `12301`, tripmate-agent API `12401`, RustFS API `12101`,
-  RustFS console `12105`.
+  krtour-map API/Admin API `12301`, RustFS API `12101`, RustFS console `12105`.
   포트가 점유돼 있으면 기존 프로세스를 종료하고 같은 포트로 재기동한다
   (`npm run dev:up` / `npm run dev:down`, WSL ext4 미러). Docker app은
   `scripts/docker-app.sh`를 사용한다.

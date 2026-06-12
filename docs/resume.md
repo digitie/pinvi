@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-12 Codex 작업 메모 — T-211/T-223d krtour curated import 연결
+
+krtour-map T-223c copy snapshot 계약을 TripMate가 소비하도록 연결했다.
+
+- `KrtourMapClient.get_curated_tripmate_copy()`가
+  `GET /v1/curated-features/{curated_feature_id}/tripmate-copy`를 호출한다.
+- `POST /admin/notice-plans/imports/krtour-curated-features`를 추가했다. `mode`는
+  `create` / `upsert` / `refresh`를 지원하고, 응답에는 `source_version` / `source_etag` /
+  복사·재사용 POI 수를 포함한다.
+- `curated_trip_plans`에 `source_system`, `source_curated_feature_id`,
+  `source_curated_feature_version`, `source_etag`, `source_imported_at`을 추가하고,
+  `curated_plan_pois`에 source item 추적 컬럼을 추가했다.
+- krtour-map import는 feature-backed POI를 재사용하고, 없는 item만 새 LexoRank 뒤에 append한다.
+- `tripmate-agent` 잔여 설정(`TRIPMATE_AGENT_API_BASE_URL`, 12401 예약)을 제거했다.
+  `krtour-ai-agent`는 TripMate curated trip plan 생성 흐름에 관여하지 않는다.
+
+**다음 한 작업**: krtour-map 작업 순서로 돌아가 T-223의 남은 항목을 계속 진행한다.
+
 ## 2026-06-12 Codex 작업 메모 — T-130 `/public/*` krtour public view 소비
 
 krtour-map T-222b가 `/v1/public/beaches*`, `/v1/public/festivals*` user OpenAPI 표면을
@@ -16,8 +34,8 @@ krtour-map T-222b가 `/v1/public/beaches*`, `/v1/public/festivals*` user OpenAPI
 - 앱 내부 공통 rate-limit 미들웨어는 아직 없으므로 T-195로 분리했다. 현재 public API는 krtour
   upstream 한도와 edge/CDN 제한을 전제로 먼저 연다.
 
-**다음 한 작업**: krtour-map 쪽 순서로 돌아가 **T-223b** provider 보강을 진행한다. TripMate
-T-211(`curated_features` import)은 krtour T-223c REST 계약이 나온 뒤 실행한다.
+**다음 한 작업(당시)**: krtour-map 쪽 순서로 돌아가 **T-223b** provider 보강을 진행한다.
+TripMate T-211(`curated_features` import)은 2026-06-12 T-223d로 완료했다.
 
 ## 다음 한 작업 (2026-06-06 감사 후)
 
@@ -30,11 +48,11 @@ smoke 확인, `v0.1.0` tag, GitHub Release notes다. 다음 구현 후보는 **T
 
 **2026-06-12 상태 정합 + ADR-036 반영 (codex)**: `trip_day_pois.feature_id`는
 ADR-031대로 nullable로 정렬하고, `curated_plan_pois.feature_id`도 nullable 유지한다.
-curated trip plan은 POI 묶음이며, `tripmate-agent` 등 외부 연계가 feature를 제공할 때만
-같은 plan의 feature-backed POI를 찾아 재사용하고 없으면 새 POI를 생성한다(ADR-036).
+curated trip plan은 POI 묶음이며, krtour-map import가 feature를 제공할 때만 같은 plan의
+feature-backed POI를 찾아 재사용하고 없으면 새 POI를 생성한다(ADR-036).
 가짜 `curated:<id>` feature id fallback은 제거한다. 생성 소스는 TripMate-native
 큐레이션과 krtour-map `curated_features` 1:1 import가 모두 정식이며, krtour import는
-T-211로 REST 상세 계약 확정 후 구현한다.
+2026-06-12 T-223d로 구현했다.
 
 **Claude 세션: 프론트 폼 a11y 스윕 + T-106 Telegram 백엔드 완성** (2026-06-10, `agent/claude-*`, PR #151~#166):
 - **폼 접근성 스윕 #151~#159** — 재사용 컴포넌트 `FormField`/`FormTextArea`/`FormSelect` +

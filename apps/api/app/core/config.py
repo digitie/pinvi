@@ -101,9 +101,6 @@ class Settings(BaseSettings):
     tripmate_krtour_map_max_attempts: int = 3
     tripmate_krtour_map_batch_chunk_size: int = 200  # /v1/features/batch cap
 
-    # tripmate-agent 독립 프로그램 (후속 외부 연계, ADR-020 계열)
-    tripmate_agent_api_base_url: str = "http://localhost:12401"
-
     # kraddr-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kraddr-geo.md`.
     tripmate_kraddr_geo_base_url: str = "http://localhost:8888"
     tripmate_kraddr_geo_timeout_seconds: float = 5.0

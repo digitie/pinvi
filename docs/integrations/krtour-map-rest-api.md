@@ -228,26 +228,21 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 
 ### 2.11 `curated_features` — TripMate curated trip plan import (후속, 계약 대기)
 
-**상태**: krtour-map에 `curated_features` 기능이 추가됐으나, TripMate가 소비할
-OpenAPI path/schema는 아직 이 문서의 pinned `openapi.user.json` 범위에 없다. 따라서
-TripMate 구현은 대기하고, 설계만 선반영한다.
+**상태**: TripMate가 krtour-map `GET /v1/curated-features/{id}/tripmate-copy`를
+소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다.
 
 제품 의미:
 
-- TripMate-native 큐레이션: Admin/운영자/TripMate agent가 TripMate 안에서 직접 만든다.
+- TripMate-native 큐레이션: Admin/운영자가 TripMate 안에서 직접 만든다.
 - krtour `curated_features` import: krtour curated feature 1건을 TripMate
   `curated_trip_plans` 1건으로 1:1 복사한다.
 - 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
 
-필요한 krtour REST 능력:
+사용하는 krtour REST 표면:
 
 ```http
-GET /v1/curated-features
-GET /v1/curated-features/{curated_feature_id}
+GET /v1/curated-features/{curated_feature_id}/tripmate-copy
 ```
-
-위 경로는 제안 수준이다. 실제 path, query, response, version/etag 정책은 krtour
-OpenAPI 확정 후 갱신한다.
 
 TripMate import 매핑:
 
@@ -258,11 +253,12 @@ TripMate import 매핑:
 | item `feature_id` | `curated_plan_pois.feature_id` nullable 저장 |
 | item 표시 snapshot | `feature_snapshot` |
 | item day/order | `day_index` / `sort_order` |
+| snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
+| item id | `source_curated_feature_item_id` |
 
-REST 계약 확정 후 필요하면 TripMate plan/POI에 `source_system`,
-`source_curated_feature_id`, `source_curated_feature_version`,
-`source_curated_feature_item_id`, `source_imported_at` 같은 provenance 컬럼을 별도
-migration으로 추가한다. 현 단계에서는 컬럼을 선행 확정하지 않는다.
+TripMate는 krtour-map을 OpenAPI HTTP로만 호출한다. krtour-map Python 패키지 import나 DB
+직접 접근은 금지한다. `krtour-ai-agent`는 TripMate curated trip plan 생성 흐름에 관여하지
+않는다.
 
 ---
 

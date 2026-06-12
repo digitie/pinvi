@@ -13,10 +13,19 @@ from typing import Annotated, Any, NoReturn
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.krtour_map import (
+    KrtourMapError,
+    KrtourMapFeatureNotFound,
+    KrtourMapHttpClientDep,
+)
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.envelope import Envelope
+from app.schemas.notice import (
+    KrtourCuratedFeatureImportRequest,
+    KrtourCuratedFeatureImportResponse,
+)
 from app.schemas.storage import AttachmentCreate, AttachmentResponse
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_curated_attachment import (
@@ -29,6 +38,12 @@ from app.services.admin_curated_attachment import (
     ensure_plan,
     ensure_poi,
     list_curated_attachments,
+)
+from app.services.notice_plan import (
+    NoticePlanCopyError,
+    NoticePlanNotFoundError,
+    NoticePlanPolicyError,
+    import_krtour_curated_feature,
 )
 
 router = APIRouter(prefix="/admin/notice-plans", tags=["admin"])
@@ -108,12 +123,13 @@ async def _audit(
     resource_id: str,
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
+    resource_type: str = "curated_plan_attachment",
 ) -> None:
     await append_admin_audit(
         db,
         actor_user_id=admin.user_id,
         action=action,
-        resource_type="curated_plan_attachment",
+        resource_type=resource_type,
         resource_id=resource_id,
         before_state=before,
         after_state=after,
@@ -122,6 +138,90 @@ async def _audit(
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
+    )
+
+
+# ── krtour-map curated feature import (T-223d) ─────────────────────────────
+
+
+@router.post(
+    "/imports/krtour-curated-features",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KrtourCuratedFeatureImportResponse],
+)
+async def import_krtour_curated_feature_route(
+    body: KrtourCuratedFeatureImportRequest,
+    admin: AdminDep,
+    db: DbSession,
+    krtour_client: KrtourMapHttpClientDep,
+    request: Request,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KrtourCuratedFeatureImportResponse]:
+    try:
+        result = await import_krtour_curated_feature(
+            db,
+            admin_id=admin.user_id,
+            krtour_client=krtour_client,
+            curated_feature_id=body.curated_feature_id,
+            mode=body.mode,
+            is_published=body.is_published,
+        )
+    except KrtourMapFeatureNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "KRTOUR_CURATED_FEATURE_NOT_FOUND", "message": str(exc)},
+        ) from exc
+    except KrtourMapError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "KRTOUR_MAP_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except NoticePlanNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except NoticePlanPolicyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except NoticePlanCopyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    await _audit(
+        db,
+        admin,
+        request,
+        x_request_id,
+        action="curated_plan.krtour_imported",
+        resource_type="curated_plan",
+        resource_id=str(result.plan.curated_plan_id),
+        before=None,
+        after={
+            "source_system": result.source_system,
+            "source_curated_feature_id": result.source_curated_feature_id,
+            "source_version": result.source_version,
+            "source_etag": result.source_etag,
+            "copied_poi_count": result.copied_poi_count,
+            "created_plan": result.created_plan,
+        },
+    )
+    await db.commit()
+    return Envelope.of(
+        KrtourCuratedFeatureImportResponse(
+            notice_plan_id=result.plan.curated_plan_id,
+            created_plan=result.created_plan,
+            source_system=result.source_system,
+            source_curated_feature_id=result.source_curated_feature_id,
+            source_version=result.source_version,
+            source_etag=result.source_etag,
+            copied_poi_count=result.copied_poi_count,
+            reused_feature_backed_poi_count=result.reused_feature_backed_poi_count,
+        )
     )
 
 

@@ -1313,16 +1313,16 @@
 - **컨텍스트**: ADR-029는 추천 여행 템플릿의 이름을 `curated_trip_plans` 계열로
   정리했지만, curated POI와 krtour feature의 연결 정책은 모호하게 남았다. 특히
   TripMate 내부에서 자유 메모/임시 장소 POI는 `feature_id` 없이 존재할 수 있어야
-  하지만, `tripmate-agent` 등 외부 연계가 TripMate로 추천 코스를 만들 때는 이미 알고
-  있는 krtour `feature_id`를 함께 전달해 POI를 feature-backed로 연결할 수 있다.
+  하지만, krtour-map import처럼 이미 알고 있는 krtour `feature_id`가 함께 들어오는
+  경우에는 POI를 feature-backed로 연결할 수 있다.
   또한 2026-06-12 기준 `python-krtour-map`에 `curated_features` 기능이 추가되어,
   TripMate가 해당 REST API를 호출해 `curated_features`를 TripMate
   `curated_trip_plans`로 1:1 복사하는 후속 흐름을 설계에 포함해야 한다. 단,
   `curated_features`의 상세 REST 계약과 구현은 아직 TripMate에 붙지 않았다.
 - **결정**:
   - Curated trip plan의 생성 소스는 둘 다 정식이다.
-    1. **TripMate-native 큐레이션**: Admin, 운영자, 또는 TripMate agent가 TripMate 안에서
-       직접 기획/생성하는 추천 plan.
+    1. **TripMate-native 큐레이션**: Admin/운영자가 TripMate 안에서 직접 기획/생성하는
+       추천 plan.
     2. **krtour `curated_features` import**: TripMate가 krtour-map REST API로
        curated feature 정보를 조회해 TripMate `curated_trip_plans` /
        `curated_plan_pois`로 1:1 복사하는 추천 plan.
@@ -1330,7 +1330,7 @@
     POI는 feature 없이도 존재할 수 있다(ADR-031 유지).
   - Curated trip plan은 POI 묶음이며, 각 POI는 선택적으로 krtour feature에 연결된다.
     외래키는 두지 않고 `feature_id` 문자열만 저장한다(TripMate ↔ krtour 책임 분리).
-  - 외부 연계가 `feature_id`를 제공하는 경우 TripMate는 같은 curated plan 안에서 해당
+  - krtour-map import가 `feature_id`를 제공하는 경우 TripMate는 같은 curated plan 안에서 해당
     feature-backed POI를 먼저 찾고, 없으면 새 `curated_plan_pois` row를 생성해 plan에
     연결한다. 이미 있으면 기존 POI를 재사용한다.
   - krtour `curated_features` import에서는 krtour curated feature 1건을 TripMate
@@ -1341,20 +1341,16 @@
     임시 `curated:<id>` 같은 가짜 feature id를 만들지 않는다.
 - **결과**: TripMate가 자체적으로 만든 추천 plan과 krtour `curated_features`에서 가져온
   추천 plan이 같은 TripMate 도메인 모델을 공유한다. 사람/Admin이 만든 자유 POI와
-  agent/API가 만든 feature-backed POI가 같은 curated plan 안에 공존할 수 있고,
-  krtour feature 표준화가 가능한 외부 연계는 feature-backed 경로를 사용해 중복 POI
-  생성을 줄인다.
+  krtour-map import가 만든 feature-backed POI가 같은 curated plan 안에 공존할 수 있고,
+  krtour feature 표준화가 가능한 import 경로는 feature-backed 경로를 사용해 중복 POI 생성을
+  줄인다.
 - **후속**:
-  - Admin notice-plan 작성기나 `tripmate-agent` API 표면을 추가할 때는
-    `ensure_plan_poi_for_feature()` 계열 helper를 통해 feature-backed POI를 연결한다.
-  - krtour `curated_features` REST 계약이 확정되면 import endpoint와 client를 추가한다.
-    필요 시 plan/POI 출처 추적 컬럼(`source_system`, `source_curated_feature_id`,
-    `source_curated_feature_version`, `source_curated_feature_item_id` 등)을 별도 migration으로
-    추가한다. 지금 단계에서는 상세 계약이 없으므로 실제 컬럼을 선행 확정하지 않는다.
+  - krtour `curated_features` import endpoint와 client를 유지하고, source version/etag
+    provenance 컬럼을 갱신한다.
 - **참조**: ADR-029, ADR-031, `docs/architecture/notice-plans.md`,
   `apps/api/app/services/notice_plan.py`.
 
-## ADR-037: 로컬 고정 포트는 5432/12101/12105/12301/12401/12501/12505로 재배정한다
+## ADR-037: 로컬 고정 포트는 5432/12101/12105/12301/12501/12505로 재배정한다
 
 - **상태**: accepted
 - **날짜**: 2026-06-12
@@ -1369,8 +1365,9 @@
   - `python-krtour-map` API/Admin API는 `12301`을 사용한다. TripMate의
     `TRIPMATE_KRTOUR_MAP_API_BASE_URL`과 `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` 기본값은
     모두 `http://localhost:12301`이다.
-  - `tripmate-agent` API는 `12401`을 사용한다. 아직 상세 구현이 없더라도
-    `TRIPMATE_AGENT_API_BASE_URL` 기본값으로 이 포트를 노출한다.
+  - `tripmate-agent`는 `krtour-ai-agent`로 이름이 바뀌었고 TripMate와의 직접 관계를
+    끊는다. TripMate는 agent API 포트를 예약하지 않고 `TRIPMATE_AGENT_API_BASE_URL`도
+    노출하지 않는다.
   - 본 저장소 TripMate API는 `12501`, Web UI는 `12505`를 사용한다.
   - Dagster UI는 기존 고정 포트 `9023`을 유지한다.
 - **결과**: 로컬 개발, Docker smoke, 문서 예시, 환경변수 기본값이 같은 포트 집합을
