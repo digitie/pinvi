@@ -93,14 +93,13 @@ TripMate 로컬 개발 서버 포트는 항상 고정한다.
 | RustFS API | 12101 | `http://localhost:12101` |
 | RustFS console | 12105 | `http://localhost:12105` |
 | krtour-map API/Admin API | 12301 | `http://localhost:12301` |
-| tripmate-agent API | 12401 | `http://localhost:12401` |
 | FastAPI (`apps/api`) | 12501 | `http://localhost:12501` |
 | Next.js (`apps/web`) | 12505 | `http://localhost:12505` |
 | Dagster (`apps/etl`) | 9023 | `http://localhost:9023` |
 
 `scripts/dev-up.sh`는 시작 전에 12501/12505/9023을 점유한 프로세스를 종료하고 같은
-포트로 다시 올린다. PostgreSQL/RustFS는 Docker compose, krtour-map/tripmate-agent는
-각 sibling 저장소 런북으로 실행한다. 수동 정리는 `scripts/dev-down.sh`.
+포트로 다시 올린다. PostgreSQL/RustFS는 Docker compose, krtour-map은 해당 sibling
+저장소 런북으로 실행한다. 수동 정리는 `scripts/dev-down.sh`.
 
 ```bash
 cd ~/tripmate-workspaces/tripmate-codex

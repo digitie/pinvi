@@ -6,9 +6,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 import uuid
-from datetime import date
-from typing import Any
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from typing import Any, Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +41,28 @@ class NoticePlanPolicyError(NoticePlanError):
     code = "CURATED_PLAN_POI_POLICY_ERROR"
 
 
+class KrtourCuratedCopyClient(Protocol):
+    async def get_curated_tripmate_copy(self, curated_feature_id: str) -> dict[str, Any]:
+        """krtour-map TripMate copy snapshot 조회."""
+        ...
+
+
+@dataclass(frozen=True)
+class KrtourCuratedImportResult:
+    plan: CuratedTripPlan
+    created_plan: bool
+    copied_poi_count: int
+    reused_feature_backed_poi_count: int
+    source_system: str
+    source_curated_feature_id: str
+    source_version: int | None
+    source_etag: str | None
+
+
+_KRTOUR_SOURCE_SYSTEM = "krtour-map"
+_SLUG_TOKEN_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _optional_feature_id(value: object) -> str | None:
     if value is None:
         return None
@@ -44,6 +70,50 @@ def _optional_feature_id(value: object) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _optional_text(value: object, *, max_length: int | None = None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if max_length is not None:
+        return normalized[:max_length]
+    return normalized
+
+
+def _mapping(value: object) -> Mapping[str, Any]:
+    return cast(Mapping[str, Any], value) if isinstance(value, Mapping) else {}
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _slug_for_krtour_curated_feature(curated_feature_id: str) -> str:
+    token = _SLUG_TOKEN_RE.sub("-", curated_feature_id.lower()).strip("-")
+    digest = hashlib.sha256(curated_feature_id.encode("utf-8")).hexdigest()[:10]
+    if not token:
+        return f"krtour-{digest}"
+    token = token[:140].strip("-")
+    return f"krtour-{token}-{digest}"
+
+
+def _snapshot_items(snapshot: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    raw_items = snapshot.get("items")
+    if not isinstance(raw_items, list):
+        return []
+    return [cast(Mapping[str, Any], item) for item in raw_items if isinstance(item, Mapping)]
 
 
 async def list_published_plans(
@@ -241,9 +311,9 @@ async def ensure_plan_poi_for_feature(
 ) -> CuratedPlanPoi:
     """외부 연계에서 feature-backed curated POI를 보장.
 
-    POI 자체는 `feature_id` 없이도 존재할 수 있다. 다만 tripmate-agent 같은 외부
-    연계가 feature를 알고 들어오는 경우, 같은 plan에 해당 feature POI가 이미 있으면
-    재사용하고 없으면 새 `curated_plan_pois` row를 만든다.
+    POI 자체는 `feature_id` 없이도 존재할 수 있다. 다만 krtour-map import처럼
+    feature를 알고 들어오는 경우, 같은 plan에 해당 feature POI가 이미 있으면 재사용하고
+    없으면 새 `curated_plan_pois` row를 만든다.
     """
     normalized_feature_id = _optional_feature_id(feature_id)
     if normalized_feature_id is None:
@@ -274,6 +344,267 @@ async def ensure_plan_poi_for_feature(
     db.add(poi)
     await db.flush()
     return poi
+
+
+async def import_krtour_curated_feature(
+    db: AsyncSession,
+    *,
+    admin_id: uuid.UUID,
+    krtour_client: KrtourCuratedCopyClient,
+    curated_feature_id: str,
+    mode: str = "create",
+    is_published: bool | None = None,
+) -> KrtourCuratedImportResult:
+    """krtour-map curated feature snapshot을 TripMate curated plan으로 복사."""
+    if mode not in {"create", "upsert", "refresh"}:
+        raise NoticePlanPolicyError("지원하지 않는 import mode 입니다.")
+
+    snapshot = _mapping(await krtour_client.get_curated_tripmate_copy(curated_feature_id))
+    source_curated_feature_id = _optional_text(snapshot.get("curated_feature_id"))
+    if source_curated_feature_id is None:
+        raise NoticePlanCopyError("krtour-map copy snapshot에 curated_feature_id가 없습니다.")
+    plan_payload = _mapping(snapshot.get("plan"))
+    source_payload = _mapping(snapshot.get("source"))
+    theme_payload = _mapping(snapshot.get("theme"))
+    items = _snapshot_items(snapshot)
+    if not items:
+        raise NoticePlanCopyError("krtour-map copy snapshot에 복사할 item이 없습니다.")
+
+    existing = await _get_krtour_imported_plan(
+        db, source_curated_feature_id=source_curated_feature_id
+    )
+    if existing is not None and mode == "create":
+        raise NoticePlanCopyError("이미 가져온 krtour curated feature 입니다.")
+    if existing is None and mode == "refresh":
+        raise NoticePlanNotFoundError("refresh할 krtour curated feature import가 없습니다.")
+
+    created_plan = existing is None
+    plan = existing or CuratedTripPlan(
+        slug=_slug_for_krtour_curated_feature(source_curated_feature_id),
+        title=_optional_text(plan_payload.get("title"), max_length=200)
+        or source_curated_feature_id,
+        category=_category_from_snapshot(plan_payload, theme_payload),
+        created_by_admin_id=admin_id,
+        updated_by_admin_id=admin_id,
+    )
+    if created_plan:
+        db.add(plan)
+
+    _apply_krtour_plan_snapshot(
+        plan,
+        admin_id=admin_id,
+        plan_payload=plan_payload,
+        source_payload=source_payload,
+        theme_payload=theme_payload,
+        snapshot=snapshot,
+        source_curated_feature_id=source_curated_feature_id,
+        is_published=is_published
+        if is_published is not None
+        else (False if created_plan else plan.is_published),
+    )
+    await db.flush()
+
+    copied_count = 0
+    reused_count = 0
+    last_sort_by_day: dict[int, str | None] = {}
+    ordered_items = sorted(
+        items,
+        key=lambda item: (
+            _int_or_none(item.get("day_index")) or 1,
+            _int_or_none(item.get("sort_order")) or 0,
+            _optional_text(item.get("curated_feature_item_id")) or "",
+        ),
+    )
+    for item in ordered_items:
+        poi, reused = await _ensure_krtour_import_poi(
+            db,
+            plan=plan,
+            source_curated_feature_id=source_curated_feature_id,
+            item=item,
+            last_sort_by_day=last_sort_by_day,
+        )
+        _apply_krtour_poi_snapshot(
+            poi,
+            source_curated_feature_id=source_curated_feature_id,
+            item=item,
+        )
+        copied_count += 1
+        if reused and poi.feature_id is not None:
+            reused_count += 1
+
+    await db.commit()
+    await db.refresh(plan)
+    return KrtourCuratedImportResult(
+        plan=plan,
+        created_plan=created_plan,
+        copied_poi_count=copied_count,
+        reused_feature_backed_poi_count=reused_count,
+        source_system=_KRTOUR_SOURCE_SYSTEM,
+        source_curated_feature_id=source_curated_feature_id,
+        source_version=_int_or_none(snapshot.get("version")),
+        source_etag=_optional_text(snapshot.get("etag"), max_length=128),
+    )
+
+
+async def _get_krtour_imported_plan(
+    db: AsyncSession, *, source_curated_feature_id: str
+) -> CuratedTripPlan | None:
+    return cast(
+        CuratedTripPlan | None,
+        await db.scalar(
+            select(CuratedTripPlan).where(
+                CuratedTripPlan.source_system == _KRTOUR_SOURCE_SYSTEM,
+                CuratedTripPlan.source_curated_feature_id == source_curated_feature_id,
+                CuratedTripPlan.deleted_at.is_(None),
+            )
+        ),
+    )
+
+
+def _category_from_snapshot(
+    plan_payload: Mapping[str, Any], theme_payload: Mapping[str, Any]
+) -> str:
+    return (
+        _optional_text(plan_payload.get("category"), max_length=80)
+        or _optional_text(theme_payload.get("theme_slug"), max_length=80)
+        or "recommended"
+    )
+
+
+def _apply_krtour_plan_snapshot(
+    plan: CuratedTripPlan,
+    *,
+    admin_id: uuid.UUID,
+    plan_payload: Mapping[str, Any],
+    source_payload: Mapping[str, Any],
+    theme_payload: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+    source_curated_feature_id: str,
+    is_published: bool,
+) -> None:
+    plan.title = _optional_text(plan_payload.get("title"), max_length=200) or plan.title
+    plan.category = _category_from_snapshot(plan_payload, theme_payload)
+    plan.summary = _optional_text(plan_payload.get("summary"))
+    plan.source_name = (
+        _optional_text(source_payload.get("source_name"), max_length=200)
+        or _optional_text(source_payload.get("provider"), max_length=200)
+        or _KRTOUR_SOURCE_SYSTEM
+    )
+    plan.destination = _optional_text(
+        plan_payload.get("destination_name"), max_length=120
+    ) or _optional_text(plan_payload.get("region_code"), max_length=120)
+    plan.is_published = is_published
+    plan.updated_by_admin_id = admin_id
+    plan.source_system = _KRTOUR_SOURCE_SYSTEM
+    plan.source_curated_feature_id = source_curated_feature_id
+    plan.source_curated_feature_version = _int_or_none(snapshot.get("version"))
+    plan.source_etag = _optional_text(snapshot.get("etag"), max_length=128)
+    plan.source_imported_at = datetime.now(UTC)
+
+
+async def _ensure_krtour_import_poi(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    source_curated_feature_id: str,
+    item: Mapping[str, Any],
+    last_sort_by_day: dict[int, str | None],
+) -> tuple[CuratedPlanPoi, bool]:
+    source_item_id = _optional_text(item.get("curated_feature_item_id"))
+    if source_item_id is not None:
+        existing_by_item = await db.scalar(
+            select(CuratedPlanPoi).where(
+                CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
+                CuratedPlanPoi.source_curated_feature_id == source_curated_feature_id,
+                CuratedPlanPoi.source_curated_feature_item_id == source_item_id,
+                CuratedPlanPoi.deleted_at.is_(None),
+            )
+        )
+        if existing_by_item is not None:
+            return existing_by_item, True
+
+    day_index = _int_or_none(item.get("day_index")) or 1
+    feature_id = _optional_feature_id(item.get("feature_id"))
+    if feature_id is not None:
+        existing_by_feature = await db.scalar(
+            select(CuratedPlanPoi).where(
+                CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
+                CuratedPlanPoi.feature_id == feature_id,
+                CuratedPlanPoi.deleted_at.is_(None),
+            )
+        )
+        sort_order = existing_by_feature.sort_order if existing_by_feature else None
+        if sort_order is None:
+            sort_order = await _next_curated_sort_order(
+                db, plan.curated_plan_id, day_index, last_sort_by_day
+            )
+        poi = await ensure_plan_poi_for_feature(
+            db,
+            curated_plan_id=plan.curated_plan_id,
+            feature_id=feature_id,
+            day_index=day_index,
+            sort_order=sort_order,
+        )
+        return poi, existing_by_feature is not None
+
+    sort_order = await _next_curated_sort_order(
+        db, plan.curated_plan_id, day_index, last_sort_by_day
+    )
+    poi = CuratedPlanPoi(
+        curated_plan_id=plan.curated_plan_id,
+        day_index=day_index,
+        sort_order=sort_order,
+        feature_id=None,
+    )
+    db.add(poi)
+    await db.flush()
+    return poi, False
+
+
+async def _next_curated_sort_order(
+    db: AsyncSession,
+    curated_plan_id: uuid.UUID,
+    day_index: int,
+    last_sort_by_day: dict[int, str | None],
+) -> str:
+    if day_index not in last_sort_by_day:
+        last_sort_by_day[day_index] = await _max_curated_sort_order(db, curated_plan_id, day_index)
+    sort_order = lexorank.between(last_sort_by_day[day_index], None)
+    last_sort_by_day[day_index] = sort_order
+    return sort_order
+
+
+async def _max_curated_sort_order(
+    db: AsyncSession, curated_plan_id: uuid.UUID, day_index: int
+) -> str | None:
+    result = await db.execute(
+        select(CuratedPlanPoi.sort_order)
+        .where(
+            CuratedPlanPoi.curated_plan_id == curated_plan_id,
+            CuratedPlanPoi.day_index == day_index,
+            CuratedPlanPoi.deleted_at.is_(None),
+        )
+        .order_by(CuratedPlanPoi.sort_order.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _apply_krtour_poi_snapshot(
+    poi: CuratedPlanPoi,
+    *,
+    source_curated_feature_id: str,
+    item: Mapping[str, Any],
+) -> None:
+    day_index = _int_or_none(item.get("day_index"))
+    if day_index is not None:
+        poi.day_index = day_index
+    poi.feature_id = _optional_feature_id(item.get("feature_id"))
+    snapshot = item.get("feature_snapshot")
+    poi.feature_snapshot = dict(_mapping(snapshot))
+    poi.memo = _optional_text(item.get("memo"))
+    poi.source_curated_feature_id = source_curated_feature_id
+    poi.source_curated_feature_item_id = _optional_text(item.get("curated_feature_item_id"))
 
 
 # Admin 용 생성 helper (Sprint 3 admin UI 보강 전 최소 — seed/테스트용)

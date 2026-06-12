@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-12 (codex) — T-211/T-223d krtour curated import 연결
+
+**작업**: krtour-map T-223c의 TripMate copy snapshot을 TripMate admin import로 연결했다.
+
+- `KrtourMapClient.get_curated_tripmate_copy()` 추가:
+  `GET /v1/curated-features/{curated_feature_id}/tripmate-copy`.
+- `POST /admin/notice-plans/imports/krtour-curated-features` 추가. `create` / `upsert` /
+  `refresh` mode를 지원하고, source version/etag와 POI 복사·재사용 수를 반환한다.
+- `curated_trip_plans` / `curated_plan_pois` provenance 컬럼을 추가해 krtour source id,
+  source item id, version, etag, imported_at을 저장한다.
+- import refresh/upsert는 기존 source item 또는 같은 feature-backed POI를 재사용하고, 새 item만
+  LexoRank 마지막 뒤에 append한다.
+- TripMate와 관계가 끊긴 `tripmate-agent` 잔여 설정(`TRIPMATE_AGENT_API_BASE_URL`, 12401
+  예약)을 제거했다. TripMate curated trip plan 생성에는 `krtour-ai-agent`가 관여하지 않는다.
+
+**검증**: 최종 PR 검증 결과에 기재.
+
 ## 2026-06-12 (codex) — T-130 `/public/*` krtour public view 소비 연결
 
 **작업**: krtour-map T-222b로 user OpenAPI에 공개 해수욕장/축제 표면이 생겨 TripMate
@@ -49,11 +66,10 @@ T-130을 연결했다.
 
 - PostgreSQL host/container 포트는 표준 `5432`로 정렬.
 - RustFS API `12101`, console `12105`; krtour-map API/Admin API `12301`;
-  tripmate-agent API `12401`; TripMate API `12501`; Web UI `12505`로 고정.
+  TripMate API `12501`; Web UI `12505`로 고정. agent 포트 예약은 이후 T-196에서 제거.
 - 신규 **ADR-037** 추가. `AGENTS.md`/`CLAUDE.md`/`README.md`/`.env.example`/
   `apps/api/.env.example`/`Settings`/Docker compose/runbook 문서를 같은 포트 집합으로 정렬.
-- `TRIPMATE_AGENT_API_BASE_URL=http://localhost:12401` 기본값을 추가해 후속
-  tripmate-agent 연계가 같은 포트 정책을 쓰게 했다.
+- agent API 기본값은 이후 T-196에서 제거했다.
 
 **검증**:
 
@@ -76,7 +92,7 @@ T-130을 연결했다.
 - 상태 정합: `tasks.md`/`resume.md`/`sprints/README.md`/`SPRINT-4.md`/`README.md`/진입 요약을
   "Sprint 4 기능 게이트 충족, v0.1.0 tag/Release notes 대기"로 정렬.
 - 신규 **ADR-036**: POI `feature_id`는 nullable 유지. curated trip plan은 POI 묶음이며,
-  외부 연계(`tripmate-agent` 등)가 feature를 제공할 때만 같은 plan의 feature-backed POI를
+  krtour-map import가 feature를 제공할 때만 같은 plan의 feature-backed POI를
   찾아 재사용하고, 없으면 새 `curated_plan_pois` row를 생성. 생성 소스는
   TripMate-native 큐레이션과 krtour-map `curated_features` 1:1 import를 모두 정식으로
   둔다.

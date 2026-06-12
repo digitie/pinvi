@@ -19,9 +19,6 @@
 - 보안/운영 후속: T-195 public/API 공통 rate-limit 미들웨어. T-130 public API는
   krtour upstream 한도와 edge/CDN 제한을 전제로 먼저 열었고, 앱 내부 IP/token 기준
   제한은 공통 미들웨어로 따로 닫는다.
-- 후속 대기: T-211 krtour `curated_features` → TripMate `curated_trip_plans` 1:1
-  import. TripMate-native 큐레이션을 대체하지 않는 추가 소스이며, krtour REST 상세 계약
-  확정 후 구현한다.
 
 ## 완료
 
@@ -313,14 +310,16 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중) (완료: 2026-06-11, #171 — `_map_krtour_errors` 가드: 5xx/timeout→503, 429/409→Retry-After, 404)
 - [x] T-181 — [표준 추종] ADR-048 외부 `/v1` hard cutover — **완료(2026-06-11, #170 client 잔여까지 머지)**: — **라이브 계약분 완료(2026-06-09)**: krtour `origin/main`(`openapi.user.json` title `krtour-map-user 0.2.0-dev`, krtour PR #318/#319/#321)이 외부 `/v1` clean cut + batch `/tripmate/features/batch`→`/v1/features/batch`(#318) + 파라미터 개명(`search` bbox CSV→`min_lon/min_lat/max_lon/max_lat`, `page_size`/`cursor`)을 머지함. **T-170 client(`apps/api/app/clients/krtour_map.py`) 일괄 교체 완료** — 전 feature/category 경로 `/v1` prefix(`/health`만 비버전), batch 경로/검색 파라미터 갱신 + MCP `_search_features` 호출부 + MockTransport 계약 테스트. **잔여 — 대기 해제(2026-06-10, krtour `0e45bd7` T-216a~g 머지 확인)**: ① problem+json(`_error_code`를 top-level `code` 파싱으로) ② envelope payload/meta 분리(`meta.page.next_cursor` threading) ③ batch 응답 `items`→**`found`** 교체(현재 전 결과 silent-missing) ④ in-bounds `limit`→`max_items` — **즉시 실행 가능**. frontend codegen은 T-210e.
 - [x] T-182 — [결정] DEC-07 좌표 필드명 정렬(ADR-048 B) (완료: 2026-06-09): **`lon`/`lat` 채택**(krtour 정렬·terse). `Coord`(Pydantic) + `CoordSchema`(Zod) `longitude`/`latitude`→`lon`/`lat`, 전 API 요청/응답·query 파라미터(geo)·ws presence.cursor 출력·frontend(useUserLocation/locationAdapter 출력)·전 테스트·docs/api 예시 일괄 정렬. 외부 krtour DTO/snapshot tolerant reader·브라우저 Geolocation `position.coords.*`·KASI DB 컬럼은 keep.
-- [ ] T-211 — krtour `curated_features` → TripMate `curated_trip_plans` 1:1 import
-  (후속, REST 계약 대기): krtour curated feature 1건을 TripMate curated plan 1건으로 복사하고,
-  하위 item/POI를 `curated_plan_pois`로 복사한다. item이 `feature_id`를 제공하면
-  feature-backed POI로 upsert하고, 없으면 nullable POI로 저장한다. TripMate-native
-  큐레이션은 계속 정식 생성 소스다. 필요 시 `source_system`,
-  `source_curated_feature_id`, `source_curated_feature_version`,
-  `source_curated_feature_item_id`, `source_imported_at` 등 provenance 컬럼을 별도
-  migration으로 추가한다.
+- [x] T-211 — krtour `curated_features` → TripMate `curated_trip_plans` 1:1 import
+  (완료: 2026-06-12, Codex / krtour T-223d): `KrtourMapClient`가
+  `/v1/curated-features/{curated_feature_id}/tripmate-copy`를 소비하고,
+  `/admin/notice-plans/imports/krtour-curated-features`가 `create` / `upsert` / `refresh`
+  mode로 TripMate curated plan/POI를 생성·갱신한다. `source_system`,
+  `source_curated_feature_id`, `source_curated_feature_version`, `source_etag`,
+  `source_imported_at`, source item id provenance 컬럼을 저장한다.
+- [x] T-196 — `tripmate-agent` 잔여 TripMate 설정 제거 (완료: 2026-06-12, Codex):
+  프로젝트가 `krtour-ai-agent`로 rename되고 TripMate와 직접 관계를 끊는 결정에 따라
+  `TRIPMATE_AGENT_API_BASE_URL`, 12401 포트 예약, Docker/env/runbook 노출을 제거했다.
 
 ### Codex PR 3라운드 사후 리뷰 후속 (2026-06-09, `docs/reviews/2026-06-09-codex-pr-review.md`)
 

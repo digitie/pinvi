@@ -19,14 +19,11 @@ RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-
 | `TRIPMATE_API_PORT` | `12501` |
 | `TRIPMATE_RUSTFS_PORT` | `12101` |
 | `TRIPMATE_RUSTFS_CONSOLE_PORT` | `12105` |
-| `TRIPMATE_AGENT_API_BASE_URL` | `http://host.docker.internal:12401` |
 | `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:12501` |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `maplibre-vworld-js` 지도 SDK용 (ADR-015). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록 |
 | 기타 `TRIPMATE_*` | 일반 `.env`와 동일 |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).
-`TRIPMATE_AGENT_API_BASE_URL`은 host 실행 agent를 가리키므로 compose에서
-`host.docker.internal:host-gateway`를 app-api에 매핑한다.
 
 ## 3. Docker app 스크립트
 

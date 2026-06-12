@@ -22,7 +22,7 @@
 > e2e만 Windows Node/브라우저에서 실행한다. **rsync는 NTFS→ext4 단방향**. 절차·
 > 함정은 `docs/dev-environment.md`. 로컬 장기 실행 dev 포트는 PostgreSQL `5432`,
 > API `12501`, 웹 `12505`, Dagster `9023`, krtour-map API/Admin API `12301`,
-> tripmate-agent API `12401`, RustFS API `12101`, RustFS console `12105`로 고정하며,
+> RustFS API `12101`, RustFS console `12105`로 고정하며,
 > `npm run dev:up`은 점유
 > 중인 해당 포트를 먼저 종료한 뒤 같은 포트로 재기동한다. Docker app
 > build/run/smoke는 `scripts/docker-app.sh`를 사용한다.

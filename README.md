@@ -89,7 +89,6 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 | PostgreSQL | `5432` | 내부망 |
 | RustFS API / console | `12101` / `12105` | 내부망 |
 | krtour-map API/Admin API | `12301` | 별도 저장소 |
-| tripmate-agent API | `12401` | 별도 저장소 |
 
 운영 OAuth callback은 API 도메인 기준
 `https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google

@@ -6,9 +6,9 @@ ADR-029에 따라 DB/ORM 정본 이름은 `curated_trip_plans` 계열이고, 기
 유지한다. `app.notice_plans`는 운영 공지(system notice) 전용이다.
 ADR-036에 따라 curated trip plan은 **POI 묶음**이며, 각 POI의 `feature_id`는
 nullable이다. 생성 소스는 TripMate 자체 큐레이션과 krtour-map `curated_features`
-1:1 import가 모두 정식이다. 외부 연계(`tripmate-agent` 등)가 krtour feature를 알고
-들어올 때만 feature-backed POI로 연결하고, 같은 plan에 해당 feature POI가 없으면
-새로 만든다.
+1:1 import가 모두 정식이다. TripMate curated trip plan 생성에는 krtour-ai-agent가
+관여하지 않는다. krtour-map import가 krtour feature를 제공할 때만 feature-backed POI로
+연결하고, 같은 plan에 해당 feature POI가 없으면 새로 만든다.
 
 v1
 (`apps/api/app/services/notice_plan.py`, `app/models/trip.py`,
@@ -32,12 +32,11 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 추천 여행 plan은 **Admin이 운영하는 "이렇게 여행해 보세요" 콘텐츠**다.
 
-- Admin/운영자/TripMate agent가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로
-  TripMate-native plan 작성
-- krtour-map `curated_features` REST 계약이 확정되면 TripMate가 해당 정보를 조회해
+- Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 TripMate-native plan 작성
+- TripMate가 krtour-map `GET /v1/curated-features/{id}/tripmate-copy`를 조회해
   `curated_trip_plans` / `curated_plan_pois`로 1:1 복사
 - POI를 day별로 sort_order에 따라 배치 — 사용자 trip과 동일한 구조
-- POI는 `feature_id` 없이도 존재 가능. 단 외부/agent 연계가 feature를 제공하면
+- POI는 `feature_id` 없이도 존재 가능. 단 krtour-map import가 feature를 제공하면
   `feature_id`로 기존 curated POI를 찾아 연결하고, 없으면 새 POI를 생성
 - POI마다 memo / budget / custom marker 등 추천 정보
 - 파일 첨부 (이미지 / 문서) — RustFS에 저장
@@ -69,6 +68,11 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 | `created_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
 | `updated_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
 | `version` | `int` NOT NULL DEFAULT 1 | optimistic lock |
+| `source_system` | `text` | nullable. 예: `krtour-map` |
+| `source_curated_feature_id` | `text` | nullable. krtour curated feature 원천 id |
+| `source_curated_feature_version` | `int` | nullable. krtour copy snapshot version |
+| `source_etag` | `text` | nullable. krtour copy snapshot etag |
+| `source_imported_at` | `timestamptz` | nullable. 마지막 import 시각 |
 | `deleted_at` | `timestamptz` | soft delete |
 | `created_at`, `updated_at` | `timestamptz` | |
 
@@ -78,6 +82,8 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 - `ix_curated_trip_plans_published (is_published, updated_at)`
 - `ix_curated_trip_plans_category (category, updated_at)`
 - `ix_curated_trip_plans_created_by_admin`, `ix_curated_trip_plans_updated_by_admin`
+- `uq_curated_trip_plans_source_active (source_system, source_curated_feature_id)`
+  partial unique (`deleted_at IS NULL`, source 컬럼 not null)
 
 CHECK:
 
@@ -95,13 +101,15 @@ CHECK:
 | `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank — SPEC V8 E-6 |
 | `feature_id` | `text` | nullable. krtour `feature.features.feature_id` reference (FK 없음, ADR-003/036) |
 | `map_feature_id` | `uuid` | v1 호환용 (라이브러리 UUID 시절 cursor — v2에서는 미사용 후보) |
-| `snapshot` | `jsonb` | feature 캐시 (이름/좌표/카테고리) |
+| `feature_snapshot` | `jsonb` | feature 캐시 (이름/좌표/카테고리) |
 | `memo` | `text` | |
 | `budget` | `numeric(12,2)` | |
 | `currency` | `char(3)` NOT NULL DEFAULT 'KRW' | |
 | `user_url` | `text` | 추천자가 참조할 외부 링크 |
 | `custom_marker_color` | `text` | P-01~P-16 |
 | `custom_marker_icon` | `text` | maki id |
+| `source_curated_feature_id` | `text` | nullable. krtour curated feature 원천 id |
+| `source_curated_feature_item_id` | `text` | nullable. krtour copy item 원천 id |
 | `version` | `int` NOT NULL DEFAULT 1 | |
 | `deleted_at` | `timestamptz` | |
 | `created_at`, `updated_at` | `timestamptz` | |
@@ -114,8 +122,8 @@ CHECK:
 정책:
 
 - 사람이 만든 자유 POI는 `feature_id = null`일 수 있다.
-- `tripmate-agent` 같은 외부 연계가 feature를 알고 있으면
-  `ensure_plan_poi_for_feature()` 경로로 같은 plan의 기존 feature-backed POI를 재사용한다.
+- krtour-map import가 feature를 알고 있으면 `ensure_plan_poi_for_feature()` 경로로 같은
+  plan의 기존 feature-backed POI를 재사용한다.
 - 기존 POI가 없으면 새 `curated_plan_pois` row를 만들고 plan에 연결한다.
 - krtour feature schema와 cross-schema FK는 만들지 않는다.
 
@@ -125,10 +133,10 @@ Curated trip plan의 생성 소스는 하나로 제한하지 않는다.
 
 | 소스 | 설명 | 현재 상태 |
 |------|------|----------|
-| TripMate-native 큐레이션 | Admin/운영자/TripMate agent가 TripMate 안에서 직접 기획·작성한 추천 여행 plan | 현재 정본 흐름 |
-| krtour `curated_features` import | TripMate가 krtour-map REST API로 curated feature 정보를 가져와 TripMate plan으로 1:1 복사 | REST 상세 계약 대기 |
+| TripMate-native 큐레이션 | Admin/운영자가 TripMate 안에서 직접 기획·작성한 추천 여행 plan | 현재 정본 흐름 |
+| krtour `curated_features` import | TripMate가 krtour-map REST API로 curated feature copy snapshot을 가져와 TripMate plan으로 1:1 복사 | 구현 완료 |
 
-krtour import가 붙으면 매핑은 다음 원칙을 따른다.
+krtour import 매핑은 다음 원칙을 따른다.
 
 | krtour-map | TripMate |
 |------------|----------|
@@ -137,18 +145,14 @@ krtour import가 붙으면 매핑은 다음 원칙을 따른다.
 | 하위 항목의 `feature_id` | `curated_plan_pois.feature_id`에 nullable 저장 |
 | 하위 항목의 표시명/좌표/카테고리 snapshot | `curated_plan_pois.feature_snapshot` |
 | 순서/일차 정보 | `day_index`, `sort_order` |
+| snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
+| copy item id | `source_curated_feature_item_id` |
 
 이 import는 TripMate-native 큐레이션을 대체하지 않는다. krtour `curated_features`는
 추가 소스이며, TripMate가 자체적으로 직접 만든 추천 plan도 같은 테이블에 계속 저장한다.
 
-REST 계약 확정 후 provenance가 필요하면 별도 migration으로 다음 후보 컬럼을 검토한다.
-
-- plan: `source_system`, `source_curated_feature_id`, `source_curated_feature_version`,
-  `source_imported_at`
-- POI: `source_curated_feature_item_id`, `source_curated_feature_id`
-
-계약이 확정되기 전에는 위 컬럼을 선행 확정하지 않는다. 그 전까지는 기존 `source_name`과
-`feature_snapshot`만으로 표시 정보를 보존한다.
+TripMate는 krtour-map을 HTTP로만 호출하며, krtour-map DB나 Python 패키지를 직접 의존하지
+않는다. `krtour-ai-agent`는 TripMate curated trip plan 생성 흐름에 관여하지 않는다.
 
 ### 3.3 `app.curated_plan_attachments` — 단일 테이블 다중 대상
 

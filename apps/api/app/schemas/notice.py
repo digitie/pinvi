@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -93,3 +93,20 @@ class NoticePlanCopyResponse(BaseModel):
     created_trip: bool
     copied_poi_ids: list[uuid.UUID]
     copied_attachment_count: int
+
+
+class KrtourCuratedFeatureImportRequest(BaseModel):
+    curated_feature_id: str = Field(min_length=1, max_length=240)
+    mode: Literal["create", "upsert", "refresh"] = "create"
+    is_published: bool | None = None
+
+
+class KrtourCuratedFeatureImportResponse(BaseModel):
+    notice_plan_id: uuid.UUID
+    created_plan: bool
+    source_system: str
+    source_curated_feature_id: str
+    source_version: int | None = None
+    source_etag: str | None = None
+    copied_poi_count: int
+    reused_feature_backed_poi_count: int
