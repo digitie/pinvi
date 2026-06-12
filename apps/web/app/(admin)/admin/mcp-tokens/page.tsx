@@ -12,7 +12,7 @@ import { FormSelect } from '@/components/forms/FormSelect';
 type IssueFieldErrors = { userId?: string; reason?: string };
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
 });
 
 const EXPIRY_OPTIONS = [

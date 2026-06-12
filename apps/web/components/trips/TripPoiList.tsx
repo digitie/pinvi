@@ -123,7 +123,7 @@ export function TripPoiList({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-semibold text-ink">
-                        {poi.title ?? poi.feature_id}
+                        {poi.title ?? poi.feature_id ?? '장소'}
                       </span>
                       {poi.is_broken && (
                         <AlertTriangle

@@ -6,7 +6,7 @@ const up: UploadUrlResponse = {
   method: 'PUT',
   bucket: 'tripmate-media',
   storage_key: 'user-uploads/trip_attachment/u/2026/06/x.jpg',
-  upload_url: 'http://127.0.0.1:9003/tripmate-media/user-uploads/x.jpg?X-Amz-Signature=z',
+  upload_url: 'http://127.0.0.1:12101/tripmate-media/user-uploads/x.jpg?X-Amz-Signature=z',
   headers: { 'Content-Type': 'image/jpeg' },
   expires_at: '2026-06-10T00:15:00Z',
   max_upload_bytes: 10485760,

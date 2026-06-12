@@ -50,7 +50,7 @@ class NoticePlanUpdate(BaseModel):
 class NoticePoiBase(BaseModel):
     day_index: int = Field(default=1, ge=1)
     sort_order: str = Field(min_length=1, max_length=80)
-    feature_id: str | None = Field(default=None, max_length=200)
+    feature_id: str | None = Field(default=None, min_length=1, max_length=200)
     feature_snapshot: dict[str, Any] = Field(default_factory=dict)
     memo: str | None = None
     budget_amount: Decimal | None = Field(default=None, ge=0)

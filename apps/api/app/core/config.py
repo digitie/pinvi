@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # Database
     tripmate_database_url: str = Field(
-        default="postgresql+asyncpg://tripmate:tripmate_dev_password@localhost:55432/tripmate"
+        default="postgresql+asyncpg://tripmate:tripmate_dev_password@localhost:5432/tripmate"
     )
     tripmate_database_pool_size: int = 10
 
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     tripmate_resend_timeout_seconds: int = 5
     tripmate_resend_webhook_secret: str = ""
     tripmate_resend_webhook_allow_unsigned: bool = False
-    tripmate_web_base_url: str = "http://localhost:9022"
+    tripmate_web_base_url: str = "http://localhost:12505"
     tripmate_email_verification_path: str = "/verify-email"
     tripmate_auth_reset_path: str = Field(
         default="/reset-password",
@@ -61,13 +61,13 @@ class Settings(BaseSettings):
     tripmate_naver_oauth_client_secret: str = ""
     tripmate_kakao_oauth_rest_api_key: str = ""
     tripmate_kakao_oauth_client_secret: str = ""
-    tripmate_oauth_callback_base_url: str = "http://localhost:9021"
+    tripmate_oauth_callback_base_url: str = "http://localhost:12501"
     tripmate_oauth_state_ttl_seconds: int = 600
     tripmate_oauth_http_timeout_seconds: int = 5
 
     # RustFS (S3 호환 객체 저장소)
-    tripmate_rustfs_endpoint_url: str = "http://localhost:9003"
-    tripmate_rustfs_public_endpoint_url: str = "http://127.0.0.1:9003"
+    tripmate_rustfs_endpoint_url: str = "http://localhost:12101"
+    tripmate_rustfs_public_endpoint_url: str = "http://127.0.0.1:12101"
     tripmate_rustfs_bucket: str = "tripmate-media"
     tripmate_rustfs_access_key_id: str = "rustfsadmin"
     tripmate_rustfs_secret_access_key: str = "rustfsadmin"  # noqa: S105 - 로컬 dev 기본값
@@ -88,10 +88,10 @@ class Settings(BaseSettings):
     tripmate_max_attachments_per_target: int = 30
 
     # krtour-map 독립 프로그램 (지도 feature OpenAPI HTTP, ADR-026/027)
-    # `docs/integrations/krtour-map-rest-api.md` §1 — 전 표면 API :9011 (9012는 admin UI).
-    tripmate_krtour_map_api_base_url: str = "http://localhost:9011"
-    # admin feature change(`/v1/admin/features*`, T-180)도 같은 호스트 :9011 (9012 아님 — admin UI).
-    tripmate_krtour_map_admin_base_url: str = "http://localhost:9011"
+    # `docs/integrations/krtour-map-rest-api.md` §1 — 전 표면 API/Admin API :12301.
+    tripmate_krtour_map_api_base_url: str = "http://localhost:12301"
+    # admin feature change(`/v1/admin/features*`, T-180)도 같은 호스트 :12301.
+    tripmate_krtour_map_admin_base_url: str = "http://localhost:12301"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Krtour-Service-Token 전달.
     tripmate_krtour_map_service_token: str = ""
     # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     tripmate_krtour_map_timeout_seconds: float = 5.0
     tripmate_krtour_map_max_attempts: int = 3
     tripmate_krtour_map_batch_chunk_size: int = 200  # /v1/features/batch cap
+
+    # tripmate-agent 독립 프로그램 (후속 외부 연계, ADR-020 계열)
+    tripmate_agent_api_base_url: str = "http://localhost:12401"
 
     # kraddr-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kraddr-geo.md`.
     tripmate_kraddr_geo_base_url: str = "http://localhost:8888"
@@ -129,7 +132,7 @@ class Settings(BaseSettings):
 
     # CORS
     tripmate_cors_allowed_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:9022", "http://127.0.0.1:9022"]
+        default_factory=lambda: ["http://localhost:12505", "http://127.0.0.1:12505"]
     )
 
     # Geofencing (ADR-018) — 기본은 비활성, 운영에서 3차 fallback으로 활성.

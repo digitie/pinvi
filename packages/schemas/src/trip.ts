@@ -212,7 +212,7 @@ export type TripCopyResponse = z.infer<typeof TripCopyResponseSchema>;
 
 export const TripViewPoiSchema = z.object({
   poi_id: z.string().uuid(),
-  feature_id: z.string(),
+  feature_id: z.string().nullable(),
   sort_order: z.string(),
   title: z.string().nullable(),
   feature: z.record(z.string(), z.unknown()),

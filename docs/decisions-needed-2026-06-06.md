@@ -9,10 +9,10 @@
 
 ## DEC-01 — krtour-map 통합 모델 (가장 중요) ☐
 **배경**: TripMate는 ADR-026(2026-06-04)로 "krtour-map = OpenAPI HTTP 계약(포트
-9011)"으로 전환 선언했으나, krtour-map 저장소는 9개월간 **in-process 함수
+12301)"으로 전환 선언했으나, krtour-map 저장소는 9개월간 **in-process 함수
 라이브러리**(ADR-003, "HTTP 없음")로 만들어졌고 HTTP는 인증 없는 debug-UI(8087,
 `/features` bbox·`/features/{id}`만)뿐이다. TripMate 통합 문서가 참조하는
-krtour 산출물(`krtour-map-admin` 패키지, `openapi.user.json`, 포트 9011,
+krtour 산출물(`krtour-map-admin` 패키지, `openapi.user.json`, 포트 12301,
 `/tripmate/features/batch`)은 **실재하지 않는다**. (상세 `docs/krtour-map-requirements.md` §0)
 
 **선택지**
@@ -21,7 +21,7 @@ krtour 산출물(`krtour-map-admin` 패키지, `openapi.user.json`, 포트 9011,
   누락 client 메서드만 채움. 네트워크 hop 0(단일 노드 유리). 단 TripMate가 feature
   DB에 직접 연결(스키마 결합 ↑).
 - **(B) krtour-map 운영급 HTTP 서비스 신설** — ADR-026 유지. krtour가 인증 있는 운영
-  API(포트 9011/9012, 전 엔드포인트, OpenAPI+drift gate) 신설. TripMate는 httpx
+  API(포트 12301, 전 엔드포인트, OpenAPI+drift gate) 신설. TripMate는 httpx
   client 구현. 프로세스/배포 격리. 단 krtour에 큰 신규 표면 + 네트워크 hop.
 - **(C) 하이브리드** — 우선 (A)로 v0.1.0 빠르게 출시, 후속 Sprint에 (B)로 승격.
 
@@ -68,7 +68,7 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 
 **(A) 재적재 = krtour-map Admin 기능 — TripMate 사용자 제품과 무관**
 - `POST /admin/feature-update-requests`(= scope 재적재/Dagster job)는 **krtour-map 운영자**가
-  krtour-map admin(포트 9012 / admin 콘솔)에서 쓰는 기능이다.
+  krtour-map admin API/콘솔에서 쓰는 기능이다.
 - **TripMate 일반 사용자에게 노출되지 않으며, 사용자 제안 흐름에도 들어가지 않는다.**
   TripMate 제품은 재적재를 surface하지 않는다(필요 시 krtour admin이 직접 운영).
 
@@ -89,7 +89,7 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 **남은 하위 결정(연동 합의, krtour PR #317 코멘트로 질의 중)**:
 - **review_mode**: krtour 기본 `require_review`인데 TripMate가 이미 Admin 검수 → 이중 검수 방지.
   krtour `immediate` / TripMate `create→approve` 2-step / 요청 단위 override 중 합의.
-- idempotency_key 멱등, 출처 태깅, admin 인증(9012), closure(DELETE vs deactivate).
+- idempotency_key 멱등, 출처 태깅, admin 인증, closure(DELETE vs deactivate).
 
 **근거**: 경계(검수/남용/PII는 TripMate user 도메인), 재적재(운영)와 제안(사용자)은 별개 도메인.
 

@@ -33,5 +33,5 @@ test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한�
   const frameSrc = await page.getByTestId('admin-grafana-frame').getAttribute('src');
   expect(frameSrc).toContain('/d/tripmate/overview');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });

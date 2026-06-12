@@ -19,12 +19,12 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
                               ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │ apps/api (FastAPI + Uvicorn)                                           │
-│   routes/   인증·여행 계획·관리자·Storage·Notice·소셜 로그인               │
+│   routes/   인증·여행 계획·관리자·Storage·curated/Notice 호환·소셜 로그인 │
 │   services/ 비즈니스 로직 (사용자/여행/Admin CRUD/공지/첨부/이메일/소셜)     │
 │   models/   SQLAlchemy 2 async — app schema만                          │
 │   schemas/  Pydantic v2                                                │
 │                                                                        │
-│   httpx → krtour-map API :9011 (OpenAPI, ADR-026)                       │
+│   httpx → krtour-map API :12301 (OpenAPI, ADR-026)                       │
 │   httpx → kraddr-geo v2 REST (ADR-025)                                  │
 └────────────────────────────────────────────────────────────────────────┘
                               │
@@ -32,7 +32,7 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
        ▼                      ▼                              ▼
 ┌──────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
 │ PostgreSQL16 │    │ RustFS (S3 호환)   │    │ python-krtour-map       │
-│ + PostGIS3.5 │    │ - app/             │    │ API/Admin :9011/:9012   │
+│ + PostGIS3.5 │    │ - app/             │    │ API/Admin API :12301     │
 │ schema:      │    │   사용자 첨부      │    │                         │
 │ - app (TM)   │    │ - feature-media/   │    │ feature/provider_sync   │
 │ - feature    │    │   krtour-map 소유  │    │ schema 소유              │
@@ -120,10 +120,10 @@ forbidden_modules = [
 
 TripMate는 최신 krtour-map `openapi.user.json`을 기준으로 HTTP 호출한다.
 
-- API base URL: `TRIPMATE_KRTOUR_MAP_API_BASE_URL` (`http://localhost:9011`)
-- Admin base URL: `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` (`http://localhost:9012`)
+- API base URL: `TRIPMATE_KRTOUR_MAP_API_BASE_URL` (`http://localhost:12301`)
+- Admin API base URL: `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` (`http://localhost:12301`)
 - 대표 경로: `GET /features/in-bounds`, `GET /features/search`,
-  `GET /features/{feature_id}`, `POST /tripmate/features/batch`
+  `GET /features/{feature_id}`, `POST /v1/features/batch`
 
 TripMate는 `python-krtour-map` import, `feature` schema 직접 SQL, provider 변환을
 하지 않는다. 사용자 대면 geocoding(조회)은 별개로 `kraddr-geo` v2 REST를 직접
@@ -137,7 +137,7 @@ HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 
 1. 브라우저 `apps/web` → TripMate API
 2. `apps/api/app/api/routes/trips.py` 라우터가 사용자 인증 + Trip 도메인 처리
-3. POI 첨부 시 `feature_id`로 krtour-map `POST /tripmate/features/batch` 호출
+3. POI 첨부 시 `feature_id`가 있으면 krtour-map `POST /v1/features/batch` 호출
 4. krtour-map API가 `feature` schema에서 결과 반환
 5. 라우터가 Pydantic 응답 셰입으로 변환해 클라이언트에 반환
 
@@ -190,7 +190,7 @@ HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 1. NTFS worktree `F:/dev/tripmate-<agent>`에서 Windows `git.exe`로 branch/commit/push
 2. WSL ext4 테스트 미러 `~/tripmate-workspaces/tripmate-<agent>`에서 테스트/Docker 실행
 3. `dataset/`, `refdocs/`는 NTFS에 두고 ext4에 심볼릭 링크 또는 직접 참조
-4. `python-krtour-map`은 별도 sibling 저장소에서 API `9011` / admin `9012`로 실행
+4. `python-krtour-map`은 별도 sibling 저장소에서 API/Admin API `12301`로 실행
    하고, TripMate는 HTTP base URL만 설정한다.
 5. 동기는 NTFS → ext4 단방향. ext4 미러에서 commit/push 금지
 

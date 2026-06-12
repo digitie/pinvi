@@ -7,7 +7,7 @@
 
 - `app.trip_day_pois`:
   - `sort_order TEXT COLLATE "C"` — **SPEC V8 E-6 Critical** (LexoRank 정합성)
-  - `feature_id TEXT` — 라이브러리 `feature.features.feature_id` reference (FK 없음)
+  - `feature_id TEXT` — nullable. 라이브러리 `feature.features.feature_id` reference (FK 없음)
   - `feature_snapshot JSONB` — 적재 시점 캐시 (이름/좌표/카테고리)
   - `custom_marker_color`, `custom_marker_icon` — 사용자 override
   - `version INTEGER` — optimistic lock (`If-Match`)
@@ -30,7 +30,7 @@ Content-Type: application/json
 {
   "day_index": 2,
   "sort_order": "a3",                          // LexoRank
-  "feature_id": "f_2611000000_p_abc123...",    // 라이브러리 feature_id
+  "feature_id": "f_2611000000_p_abc123...",    // nullable. 라이브러리 feature_id
   "feature_snapshot": {
     "name": "부산타워",
     "coord": { "lon": 129.0319, "lat": 35.1009 },
@@ -50,7 +50,8 @@ Content-Type: application/json
 }
 ```
 
-- `feature_id`가 krtour-map batch 조회 결과에 없으면
+- `feature_id`가 없으면 자유 POI로 저장하고 `feature_snapshot`만 표시용으로 사용한다.
+- `feature_id`가 있는데 krtour-map batch 조회 결과에 없으면
   → `feature_link_broken_at` 채움 + 그래도 row 생성 (`feature_snapshot`으로 표시)
 - 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
   `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. API는 먼저
@@ -100,7 +101,7 @@ null 또는 0 이상, `currency`는 대문자 3글자만 허용한다.
 
 ### 2.3 `DELETE /trips/{trip_id}/pois/{poi_id}`
 
-소프트 삭제 (`deleted_at = now()`) 또는 hard delete (정책 결정 — Sprint 2 ADR).
+소프트 삭제 (`deleted_at = now()`)만 수행한다(ADR-031).
 
 ## 3. Reorder (D&D)
 
@@ -165,7 +166,7 @@ v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
   "day_index": 1,
   "pois": [
     { "feature_id": "...", "snapshot": {...}, "user_note": "...", "sort_order": "a1" },
-    { "feature_id": "...", "snapshot": {...}, "user_note": "...", "sort_order": "a2" }
+    { "feature_id": null, "snapshot": {...}, "user_note": "...", "sort_order": "a2" }
   ]
 }
 ```

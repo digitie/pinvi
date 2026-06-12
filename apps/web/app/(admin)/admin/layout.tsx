@@ -7,7 +7,7 @@ import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
 import type { AuthUser } from '@tripmate/schemas';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
 });
 
 const NAV: { href: string; label: string; sprint: number }[] = [

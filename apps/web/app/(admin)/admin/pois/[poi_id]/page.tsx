@@ -9,7 +9,7 @@ import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
 });
 
 const formatDateTime = (value: string | null) =>
@@ -91,7 +91,8 @@ export default function AdminPoiDetailPage() {
   }
 
   const currentBroken = isBroken(poi);
-  const featureTitle = poi.feature_label ?? poi.feature_id;
+  const hasFeatureLink = poi.feature_id !== null;
+  const featureTitle = poi.feature_label ?? poi.feature_id ?? 'Feature 없는 POI';
 
   return (
     <AdminPage
@@ -129,29 +130,35 @@ export default function AdminPoiDetailPage() {
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">feature_id</dt>
-            <dd className="font-mono text-xs">{poi.feature_id}</dd>
+            <dd className="font-mono text-xs">{poi.feature_id ?? '—'}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">연결 상태</dt>
             <dd className="mt-1 flex flex-wrap items-center gap-2">
-              <select
-                value={brokenDraft ? 'broken' : 'normal'}
-                onChange={(e) => setBrokenDraft(e.target.value === 'broken')}
-                className="rounded-sm border border-hairline px-2 py-1 text-sm"
-                data-testid="admin-poi-link-status"
-              >
-                <option value="normal">정상</option>
-                <option value="broken">끊김</option>
-              </select>
-              <button
-                type="button"
-                disabled={brokenDraft === currentBroken}
-                onClick={() => setShowStatusDialog(true)}
-                className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
-                data-testid="admin-poi-link-status-save"
-              >
-                저장
-              </button>
+              {hasFeatureLink ? (
+                <>
+                  <select
+                    value={brokenDraft ? 'broken' : 'normal'}
+                    onChange={(e) => setBrokenDraft(e.target.value === 'broken')}
+                    className="rounded-sm border border-hairline px-2 py-1 text-sm"
+                    data-testid="admin-poi-link-status"
+                  >
+                    <option value="normal">정상</option>
+                    <option value="broken">끊김</option>
+                  </select>
+                  <button
+                    type="button"
+                    disabled={brokenDraft === currentBroken}
+                    onClick={() => setShowStatusDialog(true)}
+                    className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
+                    data-testid="admin-poi-link-status-save"
+                  >
+                    저장
+                  </button>
+                </>
+              ) : (
+                <span className="text-muted">—</span>
+              )}
             </dd>
           </div>
           <div>

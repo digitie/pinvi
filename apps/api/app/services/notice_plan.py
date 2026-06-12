@@ -33,6 +33,19 @@ class NoticePlanCopyError(NoticePlanError):
     code = "NOTICE_PLAN_COPY_ERROR"
 
 
+class NoticePlanPolicyError(NoticePlanError):
+    code = "CURATED_PLAN_POI_POLICY_ERROR"
+
+
+def _optional_feature_id(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 async def list_published_plans(
     db: AsyncSession,
     *,
@@ -151,7 +164,7 @@ async def copy_plan_to_trip(
             trip_id=trip.trip_id,
             day_index=day_index,
             sort_order=new_sort,
-            feature_id=src.feature_id or f"curated:{src.curated_poi_id}",
+            feature_id=src.feature_id,
             feature_snapshot=src.feature_snapshot,
             custom_marker_color=src.custom_marker_color,
             custom_marker_icon=src.custom_marker_icon,
@@ -211,6 +224,58 @@ async def _max_sort_order(db: AsyncSession, trip_id: uuid.UUID, day_index: int) 
     return result.scalar_one_or_none()
 
 
+async def ensure_plan_poi_for_feature(
+    db: AsyncSession,
+    *,
+    curated_plan_id: uuid.UUID,
+    feature_id: str,
+    day_index: int,
+    sort_order: str,
+    feature_snapshot: dict[str, Any] | None = None,
+    memo: str | None = None,
+    budget_amount: Any | None = None,
+    currency: str = "KRW",
+    user_url: str | None = None,
+    custom_marker_color: str | None = None,
+    custom_marker_icon: str | None = None,
+) -> CuratedPlanPoi:
+    """외부 연계에서 feature-backed curated POI를 보장.
+
+    POI 자체는 `feature_id` 없이도 존재할 수 있다. 다만 tripmate-agent 같은 외부
+    연계가 feature를 알고 들어오는 경우, 같은 plan에 해당 feature POI가 이미 있으면
+    재사용하고 없으면 새 `curated_plan_pois` row를 만든다.
+    """
+    normalized_feature_id = _optional_feature_id(feature_id)
+    if normalized_feature_id is None:
+        raise NoticePlanPolicyError("feature 연계 POI 생성에는 feature_id가 필요합니다.")
+    existing = await db.scalar(
+        select(CuratedPlanPoi).where(
+            CuratedPlanPoi.curated_plan_id == curated_plan_id,
+            CuratedPlanPoi.feature_id == normalized_feature_id,
+            CuratedPlanPoi.deleted_at.is_(None),
+        )
+    )
+    if existing is not None:
+        return existing
+
+    poi = CuratedPlanPoi(
+        curated_plan_id=curated_plan_id,
+        day_index=day_index,
+        sort_order=sort_order,
+        feature_id=normalized_feature_id,
+        feature_snapshot=feature_snapshot or {},
+        memo=memo,
+        budget_amount=budget_amount,
+        currency=currency,
+        user_url=user_url,
+        custom_marker_color=custom_marker_color,
+        custom_marker_icon=custom_marker_icon,
+    )
+    db.add(poi)
+    await db.flush()
+    return poi
+
+
 # Admin 용 생성 helper (Sprint 3 admin UI 보강 전 최소 — seed/테스트용)
 async def create_plan_with_pois(
     db: AsyncSession,
@@ -237,12 +302,29 @@ async def create_plan_with_pois(
     db.add(plan)
     await db.flush()
     for item in pois or []:
+        feature_id = _optional_feature_id(item.get("feature_id"))
+        if feature_id is not None:
+            await ensure_plan_poi_for_feature(
+                db,
+                curated_plan_id=plan.curated_plan_id,
+                day_index=item.get("day_index", 1),
+                sort_order=item["sort_order"],
+                feature_id=feature_id,
+                feature_snapshot=item.get("feature_snapshot", {}),
+                memo=item.get("memo"),
+                budget_amount=item.get("budget_amount"),
+                currency=item.get("currency", "KRW"),
+                user_url=item.get("user_url"),
+                custom_marker_color=item.get("custom_marker_color"),
+                custom_marker_icon=item.get("custom_marker_icon"),
+            )
+            continue
         db.add(
             CuratedPlanPoi(
                 curated_plan_id=plan.curated_plan_id,
                 day_index=item.get("day_index", 1),
                 sort_order=item["sort_order"],
-                feature_id=item.get("feature_id"),
+                feature_id=None,
                 feature_snapshot=item.get("feature_snapshot", {}),
                 memo=item.get("memo"),
                 budget_amount=item.get("budget_amount"),

@@ -176,7 +176,7 @@ uv pip install -e ".[dev]"
 # GDAL 바인딩이 필요하면 시스템 버전에 핀
 uv pip install "gdal==$(gdal-config --version)"
 
-# python-krtour-map은 별도 sibling 저장소에서 API 9011 / admin 9012로 실행
+# python-krtour-map은 별도 sibling 저장소에서 API/Admin API 12301로 실행
 # TripMate는 TRIPMATE_KRTOUR_MAP_API_BASE_URL만 설정
 
 # Node — Linux Node/npm (Windows shim 금지, §6)
@@ -282,7 +282,7 @@ TRIPMATE_JWT_SECRET_KEY=change-me-32-bytes-minimum-...
 TRIPMATE_RESEND_API_KEY=
 TRIPMATE_GOOGLE_OAUTH_CLIENT_ID=
 TRIPMATE_GOOGLE_OAUTH_CLIENT_SECRET=
-TRIPMATE_WEB_BASE_URL=http://localhost:9022
+TRIPMATE_WEB_BASE_URL=http://localhost:12505
 ```
 
 전체 키 목록은 `apps/api/app/core/config.py`의 `Settings`가 1차 진실이다. `.env`는

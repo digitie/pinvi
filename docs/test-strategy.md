@@ -53,7 +53,7 @@
 
 - `apps/api/tests/integration/krtour_map/test_contract.py` — `GET /features/in-bounds`,
   `GET /features/search`, `GET /features/{feature_id}`,
-  `POST /tripmate/features/batch` 응답 변환 확인.
+  `POST /v1/features/batch` 응답 변환 확인.
 - 선택적 live mode는 `TRIPMATE_KRTOUR_MAP_API_BASE_URL`이 reachable할 때만 실행.
 
 ## 7. Dagster asset 테스트

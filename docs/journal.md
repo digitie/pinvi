@@ -2,6 +2,54 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-12 (codex) — 로컬/Docker 고정 포트 재배정
+
+**작업**: 사용자 지시에 따라 로컬·Docker·문서 포트를 새 고정값으로 정렬했다.
+
+- PostgreSQL host/container 포트는 표준 `5432`로 정렬.
+- RustFS API `12101`, console `12105`; krtour-map API/Admin API `12301`;
+  tripmate-agent API `12401`; TripMate API `12501`; Web UI `12505`로 고정.
+- 신규 **ADR-037** 추가. `AGENTS.md`/`CLAUDE.md`/`README.md`/`.env.example`/
+  `apps/api/.env.example`/`Settings`/Docker compose/runbook 문서를 같은 포트 집합으로 정렬.
+- `TRIPMATE_AGENT_API_BASE_URL=http://localhost:12401` 기본값을 추가해 후속
+  tripmate-agent 연계가 같은 포트 정책을 쓰게 했다.
+
+**검증**:
+
+- WSL ext4 mirror: `uv run --extra dev ruff check app tests` 통과.
+- WSL ext4 mirror: `uv run --extra dev mypy --strict app` 통과.
+- WSL ext4 mirror: `uv run --extra dev pytest tests/integration/test_notice_plan_copy.py tests/integration/test_trip_view_builder.py tests/integration/test_oauth_google.py tests/unit/test_storage_keys.py -q`
+  → 35 passed.
+- WSL ext4 mirror: `uv run --extra dev pytest tests/unit -q` → 154 passed, 1 skipped.
+- WSL ext4 mirror: `npm run lint`, `npm run typecheck`,
+  `NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:12501 npm run build` 통과.
+- WSL ext4 mirror: `scripts/docker-app.sh smoke --keep-running` 통과. 실행 후
+  `scripts/docker-app.sh status`에서 API `12501`, Web `12505`, RustFS `12101`/`12105`,
+  Postgres internal `5432` healthy 확인.
+
+## 2026-06-12 (codex) — 상태 정합 정리 + ADR-036 curated POI feature 연계 정책
+
+**작업**: Sprint 4/v0.1.0 상태 문서 drift 정리 + curated trip plan POI의 feature link 정책을
+사용자 정정에 맞춰 반영.
+
+- 상태 정합: `tasks.md`/`resume.md`/`sprints/README.md`/`SPRINT-4.md`/`README.md`/진입 요약을
+  "Sprint 4 기능 게이트 충족, v0.1.0 tag/Release notes 대기"로 정렬.
+- 신규 **ADR-036**: POI `feature_id`는 nullable 유지. curated trip plan은 POI 묶음이며,
+  외부 연계(`tripmate-agent` 등)가 feature를 제공할 때만 같은 plan의 feature-backed POI를
+  찾아 재사용하고, 없으면 새 `curated_plan_pois` row를 생성. 생성 소스는
+  TripMate-native 큐레이션과 krtour-map `curated_features` 1:1 import를 모두 정식으로
+  둔다.
+- 코드 정합: `trip_day_pois.feature_id` ORM/Pydantic/Zod를 ADR-031대로 nullable로 정렬하고
+  Alembic 0021 추가. `copy_plan_to_trip()`의 가짜 `curated:<id>` feature fallback 제거.
+  `ensure_plan_poi_for_feature()` helper로 외부 feature-backed upsert 경로 추가.
+- 문서 정합: `notice-plans.md`, `pois.md`, `data-model.md`, `postgres-schema.md`, `SKILL.md`,
+  `krtour-map-requirements.md`, `integrations/krtour-map-rest-api.md`의 `feature_id` nullable /
+  curated feature-backed upsert / krtour `curated_features` 후속 import 설명 갱신.
+- 후속: T-211 — krtour `curated_features` REST 상세 계약 확정 후 TripMate
+  `curated_trip_plans` 1:1 import endpoint/client/provenance 컬럼 검토.
+
+**검증**: ruff/mypy/pytest/web typecheck는 본 작업 말미 실행 결과를 최종 응답에 기재.
+
 ## 2026-06-11 (claude) — T-130 `/public/*` krtour-측 필요 작업 문서화
 
 **작업**: `/public/*`(T-130)가 차단된 원인 = krtour가 해수욕장/축제의 풍부한 도메인 필드를 계약에

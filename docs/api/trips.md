@@ -91,9 +91,10 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 
 ### 3.3 `GET /trips/{trip_id}`
 
-응답에 trip + days + pois (snapshot 포함) + companions + share links. POI의
-`feature` 필드는 krtour-map `POST /tripmate/features/batch`로 batch join한 최신 정보
-(없으면 `feature_snapshot` 사용). `rise_set`은 POI 생성 시 KASI 위치별 해달
+응답에 trip + days + pois (snapshot 포함) + companions + share links. `feature_id`가
+있는 POI의 `feature` 필드는 krtour-map `POST /v1/features/batch`로 batch join한 최신 정보
+(없거나 조회 실패 시 `feature_snapshot` 사용). feature 없는 POI는 snapshot만 사용한다.
+`rise_set`은 POI 생성 시 KASI 위치별 해달
 출몰시각 row가 있으면 포함하며, 아직 처리 전이면 `pending_*` 상태로 내려간다. row가
 없으면 `rise_set`은 `null`이다.
 
@@ -344,7 +345,7 @@ Content-Type: application/json
 ```
 
 `url`은 `TRIPMATE_WEB_BASE_URL`을 base로 생성한다. 개발 기본값은
-`http://localhost:9022`, 운영값은 `https://tripmate.digitie.mywire.org`다.
+`http://localhost:12505`, 운영값은 `https://tripmate.digitie.mywire.org`다.
 owner만 발급 가능하다. 현재 구현은 shared-token 조회를 제공한다. `comment` / `edit`
 visibility는 후속 shared 댓글/편집 흐름을 위한 권한 metadata이며, 로그인 없는 댓글 작성
 라우트는 아직 열지 않는다.
@@ -554,7 +555,7 @@ POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 - [ ] `apps/api/app/api/v1/trips.py` 라우터
 - [ ] `GET /trips` 검색 파라미터(`q`, `status`, `visibility`, `date_from/to`, `sort`) 구현
 - [ ] `exports/print-data`, `exports/gpx`, `exports/pdf` 계약에 맞는 schema / permission 테스트
-- [ ] krtour-map HTTP client에서 `POST /tripmate/features/batch` 호출 패턴
+- [x] krtour-map HTTP client에서 `POST /v1/features/batch` 호출 패턴
 - [ ] 통합 테스트 `apps/api/tests/integration/test_trips_api.py`
 - [ ] WebSocket broadcast 트리거 추가
 - [ ] 본 문서 + `common.md` 표준 에러 코드 갱신

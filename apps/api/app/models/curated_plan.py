@@ -97,7 +97,7 @@ class CuratedPlanPoi(Base, TimestampMixin):
     day_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     # LexoRank — COLLATE "C"
     sort_order: Mapped[str] = mapped_column(Text(collation="C"), nullable=False)
-    feature_id: Mapped[str | None] = mapped_column(Text())
+    feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB(astext_type=Text()),
         nullable=False,

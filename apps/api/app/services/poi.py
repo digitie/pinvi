@@ -69,7 +69,7 @@ async def create_poi(
     trip_id: uuid.UUID,
     day_index: int,
     sort_order: str,
-    feature_id: str,
+    feature_id: str | None,
     feature_snapshot: dict[str, Any],
     added_by_user_id: uuid.UUID,
     custom_marker_color: str | None = None,

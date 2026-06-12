@@ -8,7 +8,7 @@
 ## 1. 책임
 
 - 본 API는 TripMate가 제공 — URL/응답 셰입은 본 저장소 소유
-- 데이터는 krtour-map API `9011`의 OpenAPI HTTP 호출
+- 데이터는 krtour-map API `12301`의 OpenAPI HTTP 호출
   (`docs/krtour-map-integration.md`)
 - TripMate는 provider/feature 도메인 wrapper를 두지 않음. HTTP client는 transport
   역할만 한다.

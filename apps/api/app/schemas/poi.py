@@ -15,7 +15,7 @@ PoiRiseSetStatus = Literal["pending_date", "pending_coord", "pending_fetch", "su
 class PoiCreate(BaseModel):
     day_index: int = Field(ge=1)
     sort_order: str = Field(min_length=1, max_length=80)
-    feature_id: str = Field(min_length=1, max_length=200)
+    feature_id: str | None = Field(default=None, min_length=1, max_length=200)
     feature_snapshot: dict[str, Any] = Field(default_factory=dict)
     custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
     custom_marker_icon: str | None = Field(default=None, max_length=64)
@@ -69,7 +69,7 @@ class PoiResponse(BaseModel):
     trip_id: uuid.UUID
     day_index: int
     sort_order: str
-    feature_id: str
+    feature_id: str | None
     feature_link_broken_at: datetime | None
     feature_snapshot: dict[str, Any]
     custom_marker_color: str | None

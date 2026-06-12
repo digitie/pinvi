@@ -222,7 +222,7 @@ Cookie: tripmate_access=...
   "avatar_kind": "default" | "upload",
   "avatar_attachment_id": "uuid",   // upload면 storage 먼저 거침
   "gender": "female" | "male" | "non_binary" | "no_answer",
-  "birth_year_month": "199003",     // YYYYMM (선택)
+  "birth_year_month": "199003",      // YYYYMM (선택)
   "residence_sigungu_code": "11680", // 시군구 코드 (선택)
   "consents": [
     { "consent_type": "tos", "version": "v1.0" },

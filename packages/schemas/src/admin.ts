@@ -180,7 +180,7 @@ export const AdminPoiSummarySchema = z.object({
   owner_email_masked: z.string(),
   day_index: z.number().int(),
   sort_order: z.string(),
-  feature_id: z.string(),
+  feature_id: z.string().nullable(),
   feature_label: z.string().nullable(),
   feature_link_broken_at: Iso8601Schema.nullable(),
   version: z.number().int(),

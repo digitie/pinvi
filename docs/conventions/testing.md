@@ -189,7 +189,7 @@ test('signup → verify → login flow', async ({ page, request }) => {
   // 2) admin force-verify (test 환경)
   const adminToken = process.env.E2E_ADMIN_TOKEN!;
   const userId = await getUserIdByEmail('e2e@example.com');
-  await request.post(`http://localhost:9021/admin/users/${userId}/force-verify`, {
+  await request.post(`http://localhost:12501/admin/users/${userId}/force-verify`, {
     headers: { Cookie: `tripmate_access=${adminToken}` },
   });
 

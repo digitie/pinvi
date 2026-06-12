@@ -7,7 +7,7 @@ import type { AuthUser, OAuthProvider } from '@tripmate/schemas';
 import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
 });
 
 function formatDateTime(value: string | null) {

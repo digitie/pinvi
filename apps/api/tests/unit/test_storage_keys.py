@@ -98,7 +98,7 @@ def test_make_upload_url_rejects_too_large() -> None:
 
 
 def test_settings_reads_rustfs_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TRIPMATE_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:9003")
+    monkeypatch.setenv("TRIPMATE_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:12101")
     monkeypatch.setenv("TRIPMATE_RUSTFS_BUCKET", "tripmate-test")
     monkeypatch.setenv("TRIPMATE_RUSTFS_ACCESS_KEY_ID", "rustfsadmin")
     monkeypatch.setenv("TRIPMATE_RUSTFS_SECRET_ACCESS_KEY", "rustfsadmin")
@@ -106,7 +106,7 @@ def test_settings_reads_rustfs_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     loaded = Settings(_env_file=None)
 
-    assert loaded.tripmate_rustfs_endpoint_url == "http://127.0.0.1:9003"
+    assert loaded.tripmate_rustfs_endpoint_url == "http://127.0.0.1:12101"
     assert loaded.tripmate_rustfs_bucket == "tripmate-test"
     assert loaded.tripmate_rustfs_access_key_id == "rustfsadmin"
     assert loaded.tripmate_rustfs_secret_access_key == "rustfsadmin"

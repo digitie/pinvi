@@ -4,8 +4,9 @@
 지도/날씨/이벤트/가격/공지/경로/구역 데이터를 사용해 사용자가 여행 계획을 세우고,
 이동 중 컨텍스트(날씨/혼잡/이벤트)를 확인하고, 결과를 기록·공유하도록 돕는다.
 
-> **현재 상태 (Sprint 4 준비/진행 단계)**: Sprint 1~3는 머지 완료, 현재 기준선은
-> 지도 UI + `maplibre-vworld-js` 통합 + CI/CD 재활성화가 포함된 Sprint 4다.
+> **현재 상태 (Sprint 4 릴리즈 게이트 충족)**: Sprint 1~3는 머지 완료, Sprint 4의
+> 지도 UI + `maplibre-vworld-js` 통합 + krtour HTTP feature read + CI/CD 게이트도
+> 머지됐다. 현재 기준선은 `v0.1.0` tag/릴리즈 노트 정리 단계다.
 > 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 상태 추적은 `docs/resume.md`,
 > `docs/tasks.md`, `docs/sprints/README.md`를 우선한다.
 
@@ -38,8 +39,8 @@ docs/       — 본 저장소의 결정·기록·계약
 핵심 의존:
 
 - **`python-krtour-map`** (별 저장소 `F:\dev\python-krtour-map`):
-  지도 feature 정규화·저장 + OpenAPI API/Admin. TripMate는 최신 OpenAPI HTTP
-  계약으로 사용한다(ADR-026, API `9011` / admin `9012`).
+  지도 feature 정규화·저장 + OpenAPI API/Admin API. TripMate는 최신 OpenAPI HTTP
+  계약으로 사용한다(ADR-026, API/Admin API `12301`).
 - **`python-*-api`** (별 저장소들): KMA, VisitKorea, OpiNet, MOIS, KREX, KHOA,
   국가유산, 산림청 등 한국 공공 API 클라이언트.
 - **`python-kraddr-geo`**: 주소·법정동·시군구 정규화/지오코딩.
@@ -51,7 +52,7 @@ docs/       — 본 저장소의 결정·기록·계약
 
 TripMate는 `python-krtour-map` 최신 `main`의 `openapi.user.json` 계약을 기준으로
 HTTP 호출한다. 대표 경로는 `GET /features/in-bounds`, `GET /features/search`,
-`GET /features/{feature_id}`, `POST /tripmate/features/batch`다.
+`GET /features/{feature_id}`, `POST /v1/features/batch`다.
 
 TripMate는 `feature` / `provider_sync` schema를 직접 읽거나 `python-krtour-map`을
 import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
@@ -61,7 +62,8 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 ### 책임
 
 - 사용자/세션/인증 (이메일·소셜·OAuth)
-- 여행 계획 도메인 (Trip, Day, POI 첨부, Notice plan, 공유)
+- 여행 계획 도메인 (Trip, Day, POI 첨부, curated trip plan, TripMate-native 큐레이션,
+  krtour `curated_features` 1:1 import 소비, 공유)
 - Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
 - 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
 - Dagster orchestration (TripMate 자체 job + 외부 서비스 갱신 trigger)
@@ -82,8 +84,12 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 
 | 서비스 | 로컬 고정 포트 | Production URL |
 |--------|---------------|----------------|
-| API | `9021` | `https://tripmateapi.digitie.mywire.org` |
-| Web | `9022` | `https://tripmate.digitie.mywire.org` |
+| API | `12501` | `https://tripmateapi.digitie.mywire.org` |
+| Web | `12505` | `https://tripmate.digitie.mywire.org` |
+| PostgreSQL | `5432` | 내부망 |
+| RustFS API / console | `12101` / `12105` | 내부망 |
+| krtour-map API/Admin API | `12301` | 별도 저장소 |
+| tripmate-agent API | `12401` | 별도 저장소 |
 
 운영 OAuth callback은 API 도메인 기준
 `https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
@@ -100,19 +106,19 @@ sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
 # 백엔드 (uv 권장)
 uv venv && uv pip install -e "apps/api[dev]"
-# krtour-map은 별도 프로그램으로 실행 (API 9011 / admin 9012)
+# krtour-map은 별도 프로그램으로 실행 (API/Admin API 12301)
 
 # 프론트엔드 / API / Dagster dev server
 npm install
-scripts/dev-up.sh                     # API 9021 / Web 9022 / Dagster 9023
+scripts/dev-up.sh                     # API 12501 / Web 12505 / Dagster 9023
 
-# 인프라 (RustFS API 9003 / console 9004)
+# 인프라 (RustFS API 12101 / console 12105)
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
 
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# krtour-map 독립 프로그램은 별 저장소에서 실행 (API 9011 / admin 9012)
+# krtour-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
 
 # Alembic (앱 도메인)
 uv run --package apps/api alembic upgrade head
@@ -124,7 +130,7 @@ pytest apps/api/tests -q
 npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 ```
 
-현재는 Sprint 4 기준선 문서와 일부 구현이 함께 존재한다. 정확한 실행 전제와
+현재는 Sprint 4 산출물과 릴리즈 정리 문서가 함께 존재한다. 정확한 실행 전제와
 진척도는 `docs/agent-workflow.md`, `docs/dev-environment.md`,
 `docs/runbooks/local-dev.md`, `docs/resume.md`, 각 Sprint 문서를 함께 본다.
 

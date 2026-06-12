@@ -36,7 +36,7 @@ const poiSummary: AdminPoiSummary = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/auth/me',
+    (url) => url.port === '12501' && url.pathname === '/auth/me',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -51,7 +51,7 @@ test('Admin POI 목록이 검색어와 연결 필터를 API에 전달한다', as
   page.on('request', (request) => requests.push(request.url()));
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/admin/pois',
+    (url) => url.port === '12501' && url.pathname === '/admin/pois',
     async (route) => {
       requests.push(route.request().url());
       await route.fulfill({
@@ -95,7 +95,7 @@ test('Admin POI 목록이 검색어와 연결 필터를 API에 전달한다', as
     .toBe(true);
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });
 
 test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ page }) => {
@@ -124,7 +124,7 @@ test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ 
   page.on('request', (request) => requests.push(request.url()));
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === `/admin/pois/${poiId}`,
+    (url) => url.port === '12501' && url.pathname === `/admin/pois/${poiId}`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -134,7 +134,7 @@ test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ 
   );
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === `/admin/pois/${poiId}/link-status`,
+    (url) => url.port === '12501' && url.pathname === `/admin/pois/${poiId}/link-status`,
     async (route) => {
       const body = route.request().postDataJSON() as {
         broken: boolean;
@@ -183,5 +183,5 @@ test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ 
   );
   expect(patchReason).toBe('feature_id 점검 결과 끊김');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });

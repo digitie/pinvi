@@ -20,9 +20,10 @@
 > `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). `apps/web` dev server,
 > lint, typecheck, build, Vitest도 WSL 미러에서 실행한다. Playwright 기반 브라우저
 > e2e만 Windows Node/브라우저에서 실행한다. **rsync는 NTFS→ext4 단방향**. 절차·
-> 함정은 `docs/dev-environment.md`. 로컬 장기 실행 dev 포트는 API `9021`, 웹
-> `9022`, Dagster `9023`, krtour-map API `9011`, krtour-map admin `9012`,
-> RustFS API `9003`, RustFS console `9004`로 고정하며, `npm run dev:up`은 점유
+> 함정은 `docs/dev-environment.md`. 로컬 장기 실행 dev 포트는 PostgreSQL `5432`,
+> API `12501`, 웹 `12505`, Dagster `9023`, krtour-map API/Admin API `12301`,
+> tripmate-agent API `12401`, RustFS API `12101`, RustFS console `12105`로 고정하며,
+> `npm run dev:up`은 점유
 > 중인 해당 포트를 먼저 종료한 뒤 같은 포트로 재기동한다. Docker app
 > build/run/smoke는 `scripts/docker-app.sh`를 사용한다.
 >
@@ -51,26 +52,28 @@
 **구성**: `apps/api` (FastAPI), `apps/web` (Next.js), `apps/etl` (Dagster) +
 `infra/`, `docs/`. 지도 feature 도메인은 본 저장소가 아니라 **별 저장소**
 `python-krtour-map`이 소유한다. TripMate ↔ `python-krtour-map`은 최신
-`python-krtour-map` **OpenAPI HTTP 계약**으로 통신한다(ADR-026, API `9011`,
-admin `9012`).
+`python-krtour-map` **OpenAPI HTTP 계약**으로 통신한다(ADR-026, API/Admin API
+`12301`).
 
 ## 2. 현 단계
 
-**Sprint 1~3 머지 완료**. 현재 기준선은 Sprint 4 준비/진행 단계다
-(지도 + 사용자 UI + `maplibre-vworld-js` + CI/CD 재활성 → **v0.1.0** 출시).
+**Sprint 1~3 머지 완료**. Sprint 4의 라이브 feature read / 지도 UI / CI 게이트는
+머지되어 **v0.1.0** 릴리즈 게이트를 충족했고, 현재 기준선은 tag/릴리즈 노트 정리 단계다.
 이후 Sprint 5 (실시간 + ETL + Grafana embed + Backup 1차 → **v0.2.0**) → Sprint
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-035**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-037**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kraddr-geo v2 REST 직접), ADR-026 (krtour-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 krtour-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = krtour `make_feature_id`),
 ADR-029 (`notice_plans` 충돌 → 큐레이션은 `curated_trip_plans`), ADR-030 (외부 API
 규약 정본 + `/v1` 노출), ADR-031 (POI soft delete + `feature_id` nullable),
 ADR-032 (access JWT + httpOnly cookie), ADR-033 (`users.roles[]` Admin RBAC),
-ADR-034 (Admin audit hash chain), ADR-035 (Trip WebSocket in-memory broker). 다음
-신규 = ADR-036. 2026-06-06 정합성 감사:
+ADR-034 (Admin audit hash chain), ADR-035 (Trip WebSocket in-memory broker),
+ADR-036 (curated plan 자체 큐레이션 + krtour `curated_features` import + nullable
+feature link), ADR-037 (로컬 고정 포트 재배정). 다음
+신규 = ADR-038. 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
 v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `infra/`,

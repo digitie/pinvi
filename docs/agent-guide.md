@@ -103,7 +103,7 @@ PR은 불완전하다.
 # resume.md
 
 ## 현재 상태
-Sprint 1~3 머지 완료. Sprint 4 준비/진행 단계.
+Sprint 1~3 머지 완료. Sprint 4 릴리즈 게이트 충족, v0.1.0 tag/Release notes 정리 단계.
 
 ## 다음 한 작업
 Sprint 4 PR-B2 — `python-krtour-map` OpenAPI HTTP client + features read 동작 검증.
@@ -326,7 +326,8 @@ required status check는 T-065 이후 `Aggregate CI gate` 하나만 묶는다. `
 ## 9. 현재 단계 정책
 
 초기 v2 bootstrap의 "코드 작성 금지" 규칙은 Sprint 1 진입 전 임시 제약이었다.
-현재 기준선은 **Sprint 1~3 머지 완료, Sprint 4 준비/진행 단계**다.
+현재 기준선은 **Sprint 1~3 머지 완료, Sprint 4 릴리즈 게이트 충족 및 v0.1.0
+tag/Release notes 정리 단계**다.
 
 - `apps/`, `packages/`, `infra/`, `docs/` 변경이 가능하다.
 - 변경 범위는 accepted ADR, 현재 Sprint 목표, TripMate vs `python-krtour-map`
