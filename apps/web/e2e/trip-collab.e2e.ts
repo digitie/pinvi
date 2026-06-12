@@ -109,7 +109,7 @@ test('공유 링크를 만들면 생성된 URL이 1회 표시된다', async ({ p
           trip_id: tripId,
           visibility: 'view_only',
           token: 'tok-abc',
-          url: 'http://127.0.0.1:9022/s/tok-abc',
+          url: 'http://127.0.0.1:12505/s/tok-abc',
           expires_at: null,
           revoked_at: null,
           last_used_at: null,

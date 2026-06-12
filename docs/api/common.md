@@ -22,8 +22,8 @@
 
 | 환경 | URL |
 |------|-----|
-| 로컬 dev | `http://localhost:9021` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:9021` |
+| 로컬 dev | `http://localhost:12501` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12501` |
 | 스테이징 | TBD (Sprint 6) |
 | 운영 | `https://tripmateapi.digitie.mywire.org` |
 
@@ -31,8 +31,8 @@
 
 | 환경 | URL |
 |------|-----|
-| 로컬 dev | `http://localhost:9022` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:9022` |
+| 로컬 dev | `http://localhost:12505` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12505` |
 | 운영 | `https://tripmate.digitie.mywire.org` |
 
 OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
@@ -248,8 +248,8 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 
 | 환경 | 허용 Origin |
 |------|------------|
-| 로컬 dev | `http://localhost:9022`, `http://127.0.0.1:9022` |
-| Docker smoke | `http://127.0.0.1:9022` |
+| 로컬 dev | `http://localhost:12505`, `http://127.0.0.1:12505` |
+| Docker smoke | `http://127.0.0.1:12505` |
 | 스테이징 | TBD |
 | 운영 | `https://tripmate.digitie.mywire.org` |
 
@@ -270,7 +270,7 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
   ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:9021 https://tripmateapi.digitie.mywire.org
+  connect-src 'self' http://localhost:12501 https://tripmateapi.digitie.mywire.org
   https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`

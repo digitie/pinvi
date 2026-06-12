@@ -39,7 +39,7 @@ const tripSummary: AdminTripSummary = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/auth/me',
+    (url) => url.port === '12501' && url.pathname === '/auth/me',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -54,7 +54,7 @@ test('Admin 여행 목록이 검색어와 필터를 API에 전달한다', async 
   page.on('request', (request) => requests.push(request.url()));
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/admin/trips',
+    (url) => url.port === '12501' && url.pathname === '/admin/trips',
     async (route) => {
       requests.push(route.request().url());
       await route.fulfill({
@@ -93,7 +93,7 @@ test('Admin 여행 목록이 검색어와 필터를 API에 전달한다', async 
     .toBe(true);
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });
 
 test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page }) => {
@@ -129,7 +129,7 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   page.on('request', (request) => requests.push(request.url()));
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === `/admin/trips/${tripId}`,
+    (url) => url.port === '12501' && url.pathname === `/admin/trips/${tripId}`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -139,7 +139,7 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   );
 
   await page.route(
-    (url) => url.port === '9021' && url.pathname === `/admin/trips/${tripId}/status`,
+    (url) => url.port === '12501' && url.pathname === `/admin/trips/${tripId}/status`,
     async (route) => {
       const body = route.request().postDataJSON() as {
         status: 'archived';
@@ -186,5 +186,5 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await expect(page.getByTestId('admin-trip-audit-list')).toContainText('trip.update_status');
   expect(patchReason).toBe('운영 정책 위반 처리');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });

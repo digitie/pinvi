@@ -19,7 +19,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /repo
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
-ARG NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:9021
+ARG NEXT_PUBLIC_TRIPMATE_API_URL=http://localhost:12501
 ENV NEXT_PUBLIC_TRIPMATE_API_URL=${NEXT_PUBLIC_TRIPMATE_API_URL}
 RUN npm --workspace apps/web run build
 

@@ -15,15 +15,18 @@ RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-
 
 | 환경변수 | smoke test 기본 |
 |----------|----------------|
-| `TRIPMATE_WEB_PORT` | `9022` |
-| `TRIPMATE_API_PORT` | `9021` |
-| `TRIPMATE_RUSTFS_PORT` | `9003` |
-| `TRIPMATE_RUSTFS_CONSOLE_PORT` | `9004` |
-| `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:9021` |
+| `TRIPMATE_WEB_PORT` | `12505` |
+| `TRIPMATE_API_PORT` | `12501` |
+| `TRIPMATE_RUSTFS_PORT` | `12101` |
+| `TRIPMATE_RUSTFS_CONSOLE_PORT` | `12105` |
+| `TRIPMATE_AGENT_API_BASE_URL` | `http://host.docker.internal:12401` |
+| `NEXT_PUBLIC_TRIPMATE_API_URL` | `http://127.0.0.1:12501` |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `maplibre-vworld-js` 지도 SDK용 (ADR-015). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록 |
 | 기타 `TRIPMATE_*` | 일반 `.env`와 동일 |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).
+`TRIPMATE_AGENT_API_BASE_URL`은 host 실행 agent를 가리키므로 compose에서
+`host.docker.internal:host-gateway`를 app-api에 매핑한다.
 
 ## 3. Docker app 스크립트
 
@@ -45,10 +48,10 @@ scripts/docker-app.sh reset   # down -v --remove-orphans
 
 | 서비스 | URL |
 |--------|-----|
-| API | `http://127.0.0.1:9021` |
-| Web | `http://127.0.0.1:9022` |
-| RustFS API | `http://127.0.0.1:9003` |
-| RustFS console | `http://127.0.0.1:9004` |
+| API | `http://127.0.0.1:12501` |
+| Web | `http://127.0.0.1:12505` |
+| RustFS API | `http://127.0.0.1:12101` |
+| RustFS console | `http://127.0.0.1:12105` |
 
 기존 `scripts/docker-app-smoke-test.sh`는 호환 wrapper이며 내부적으로
 `scripts/docker-app.sh smoke`를 호출한다.
@@ -72,18 +75,18 @@ docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml run --rm ap
 docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web
 
 # 6) 헬스 체크
-curl -fsS http://127.0.0.1:9021/health
-curl -fsS http://127.0.0.1:9021/health/db
-curl -fsS http://127.0.0.1:9022/admin/login
-curl -fsS http://127.0.0.1:9003/health/live
+curl -fsS http://127.0.0.1:12501/health
+curl -fsS http://127.0.0.1:12501/health/db
+curl -fsS http://127.0.0.1:12505/admin/login
+curl -fsS http://127.0.0.1:12101/health/live
 
 # 7) Admin 로그인
-curl -fsS -X POST http://127.0.0.1:9021/admin/auth/login \
+curl -fsS -X POST http://127.0.0.1:12501/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@ad.min","password":"admin"}'
 
 # 8) Admin datasets
-curl -fsS -b cookies.txt http://127.0.0.1:9021/admin/datasets
+curl -fsS -b cookies.txt http://127.0.0.1:12501/admin/datasets
 
 # 9) 정리
 docker compose -p tripmate-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
@@ -141,8 +144,8 @@ CORS:
 
 | origin | 환경 |
 |--------|------|
-| `http://localhost:9022` | 로컬 dev |
-| `http://127.0.0.1:9022` | smoke |
+| `http://localhost:12505` | 로컬 dev |
+| `http://127.0.0.1:12505` | smoke |
 | `https://tripmate.digitie.mywire.org` | 운영 |
 
 운영 build/run 시 URL coupling:
@@ -189,7 +192,7 @@ CI에서:
 | `app-api` 시작 후 즉시 종료 | Alembic 미실행 | `app-api run --rm alembic upgrade head` 먼저 |
 | `app-web` 빌드 실패 | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드 |
 | `app-rustfs-init` 무한 루프 | bucket 이미 존재 | down -v로 볼륨 삭제 후 재시작 |
-| `9022` / `9003` port already in use | 다른 컨테이너 점유 | `scripts/docker-app.sh up`이 정리. 수동 확인은 `lsof -i:<port>` |
+| `12505` / `12101` port already in use | 다른 컨테이너 점유 | `scripts/docker-app.sh up`이 정리. 수동 확인은 `lsof -i:<port>` |
 | Admin login `tripmate_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인 |
 
 ## 12. 관련 문서

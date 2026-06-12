@@ -59,15 +59,15 @@ uv venv && uv pip install -e "apps/api[dev]"
 
 # 프론트
 npm install
-scripts/dev-up.sh                                           # API 9021 / Web 9022 / Dagster 9023
+scripts/dev-up.sh                                           # API 12501 / Web 12505 / Dagster 9023
 
-# 인프라 (RustFS API 9003 / console 9004)
+# 인프라 (RustFS API 12101 / console 12105)
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
 
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# krtour-map 독립 프로그램은 별 저장소에서 실행 (API 9011 / admin 9012)
+# krtour-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
 
 # Alembic (app schema만)
 uv run --package apps/api alembic upgrade head
@@ -81,7 +81,7 @@ pytest apps/api/tests -q
 pytest apps/api/tests/integration -q
 ```
 
-현재 저장소는 Sprint 1~3 산출물과 Sprint 4 준비/진행용 구현이 함께 존재한다.
+현재 저장소는 Sprint 1~4 산출물과 v0.1.0 릴리즈 정리 문서가 함께 존재한다.
 실행 전에는 `docs/resume.md`, `docs/runbooks/local-dev.md`, 관련 Sprint 문서를
 먼저 확인한다.
 
@@ -224,7 +224,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | 새 RustFS 버킷 추가 | `apps/api/app/services/file_storage.py` + 환경변수 + Admin UI |
 | 새 frontend 화면 추가 | `packages/schemas/`에 Zod → `packages/api-client/`에 endpoint → `apps/web/app/<route>/page.tsx` (shadcn/ui + Airbnb 톤 — `docs/architecture/frontend.md`) |
 | 위치 정보 사용처 추가 | `packages/hooks/src/useUserLocation.ts` 활용 + 동의 확인 + `app.location_access_log` 자동 적재 (`docs/architecture/user-location.md`) |
-| 새 notice plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. **notice plan ≠ notice feature** |
+| 새 curated trip plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. TripMate-native 큐레이션과 krtour `curated_features` import 모두 정식 소스. POI는 `feature_id` nullable, 외부 연계가 feature를 줄 때만 feature-backed upsert |
 | 기존 함수 / 컴포넌트 수정 (영향도 평가) | **`codegraph_explore`** 1차 → 필요 시 `codegraph_impact` (반경) / `codegraph_callers` (호출자). 답이 인덱스에서 나오면 Read 생략 (ADR-017) |
 | CodeGraph 인덱스가 stale로 의심 | `codegraph status` → `codegraph sync` → 안 풀리면 `codegraph index --force` |
 
@@ -234,18 +234,19 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 |------|------|
 | Trip | 사용자 여행 계획 (시작·종료 일자, 동행자, POI 목록) |
 | TripDay | Trip의 일자별 분할 (이동 경로 / POI 순서) |
-| POI Attachment | TripDay의 POI 첨부 — `feature_id` reference + 사용자 메모/사진 |
-| Notice Plan | Admin이 운영하는 공지 (일반 / 점검 / 이벤트) — 기간/대상/우선순위 |
+| POI Attachment | TripDay의 POI 첨부 — `feature_id` nullable + 사용자 메모/사진 |
+| Curated Trip Plan | Admin/agent가 TripMate 안에서 직접 만든 추천 여행 plan 또는 krtour `curated_features`를 1:1 import한 plan. `curated_plan_pois` 묶음이며 사용자 trip으로 copy 가능 |
+| krtour `curated_features` | `python-krtour-map`의 curated feature 묶음. TripMate가 REST로 조회해 `curated_trip_plans`로 복사하는 후속 import 소스(T-211) |
 | Library API | 본 저장소가 `python-krtour-map`을 호출할 때 거치는 thin facade (DI helper) |
 | Feature | `python-krtour-map`의 단일 객체 — TripMate는 `feature_id`로 참조만 |
-| feature_id | `python-krtour-map`이 발급한 결정적 PK. 포맷 `f_{bjd_code}_{kind[0]}_{sha1(...)[:16]}` |
+| feature_id | `python-krtour-map`이 발급한 결정적 PK. TripMate는 포맷을 해석하지 않는 불투명 문자열로 저장 |
 | Provider | 한국 공공 API의 데이터 공급자 (KMA, VisitKorea, OpiNet, MOIS, ...) |
 | Dataset key | provider 내 sub-dataset 식별자 (`search_list`, `gis_spca`, ...) |
-| `app` schema | TripMate 도메인 (사용자/여행계획/공지/첨부) |
+| `app` schema | TripMate 도메인 (사용자/여행계획/curated plan/공지/첨부) |
 | `feature` schema | `python-krtour-map` 소유 (Feature/SourceRecord/SourceLink/...) |
-| Notice plan | Admin이 만든 추천 여행 plan (`app.notice_plans`). 사용자 trip으로 copy 가능 |
+| Notice plan | `/notice-plans` 호환 API 이름. DB/ORM 정본은 `app.curated_trip_plans` |
 | Notice feature | 지도 위 공지·자연현상 feature (라이브러리 소유, kind=notice). **Notice plan과 별개 개념** |
-| Plan POI attachment | 단일 테이블 `plan_poi_attachments` (trip / trip_poi / notice_plan / notice_poi 중 정확히 하나 채움) |
+| Plan POI attachment | 단일 테이블 `curated_plan_attachments` (trip / trip_poi / curated_plan / curated_poi 중 정확히 하나 채움) |
 | RustFS | S3 호환 객체 저장소. TripMate `app` 첨부 + `python-krtour-map` 미디어 분리 |
 | Soak test | ETL 장시간(20시간±) 검증. `scripts/etl-soak-*.sh` (v1 자산, v2에서 재정비) |
 | WSL 테스트 미러 | `~/tripmate-workspaces/tripmate-<agent>` — ext4 일회용 실행 사본(테스트/docker). git은 NTFS worktree (ADR-024) |
@@ -282,7 +283,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 ## 9. 현재 단계 메모
 
 초기 문서화 단계의 "코드 작성 금지" 규칙은 더 이상 현재 상태를 설명하지 않는다.
-현 기준선은 Sprint 1~3 머지 완료, Sprint 4 준비/진행 단계다.
+현 기준선은 Sprint 1~3 머지 완료, Sprint 4 릴리즈 게이트 충족 및 v0.1.0
+tag/릴리즈 노트 정리 단계다.
 
 - 코드 변경 가능 범위와 책임 경계는 `AGENTS.md`의 "현재 단계 정책"을 따른다.
 - 구현 우선순위는 `docs/resume.md`, `docs/tasks.md`, `docs/sprints/SPRINT-4.md`를

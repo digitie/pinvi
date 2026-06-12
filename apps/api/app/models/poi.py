@@ -55,7 +55,7 @@ class TripDayPoi(Base, TimestampMixin):
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
     # LexoRank — JS ASCII와 PG 정렬 일관을 위해 COLLATE "C"
     sort_order: Mapped[str] = mapped_column(Text(collation="C"), nullable=False)
-    feature_id: Mapped[str] = mapped_column(Text(), nullable=False)
+    feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     feature_link_broken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB(astext_type=Text()),

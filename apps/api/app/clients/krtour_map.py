@@ -1,6 +1,6 @@
 """krtour-map OpenAPI HTTP client (transport-only).
 
-`python-krtour-map`의 운영 HTTP API(`krtour-map-admin`, 포트 9011,
+`python-krtour-map`의 운영 HTTP API(`krtour-map-admin`, 포트 12301,
 `openapi.user.json`)를 호출하는 httpx 기반 client다. ADR-026/027(DEC-01=B) 기준이며
 in-process import(`from krtour.map import ...`)를 쓰지 않는다.
 

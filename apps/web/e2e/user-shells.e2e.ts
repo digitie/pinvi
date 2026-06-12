@@ -45,7 +45,7 @@ test('Trip 사용자 shell이 Trip API만 조회한다', async ({ page }) => {
   await expect(page.getByTestId('app-nav--trips')).toBeVisible();
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });
 
 test('notice plan 사용자 shell이 추천 plan API만 조회한다', async ({ page }) => {
@@ -89,5 +89,5 @@ test('notice plan 사용자 shell이 추천 plan API만 조회한다', async ({ 
   await expect(page.getByTestId('app-nav--notice-plans')).toBeVisible();
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('9011'))).toBe(false);
+  expect(requests.some((url) => url.includes('12301'))).toBe(false);
 });

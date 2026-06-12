@@ -30,7 +30,7 @@ def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         settings,
         "tripmate_database_url",
-        "postgresql+asyncpg://tripmate:tripmate@localhost:55432/tripmate",
+        "postgresql+asyncpg://tripmate:tripmate@localhost:5432/tripmate",
     )
     monkeypatch.setattr(settings, "tripmate_restore_database_url", "")
     monkeypatch.setattr(settings, "tripmate_restore_hotswap_execute", False)
@@ -117,12 +117,12 @@ def test_restore_lock_database_url_accepts_psql_driverless_url(
     monkeypatch.setattr(
         settings,
         "tripmate_restore_database_url",
-        "postgresql://tripmate:tripmate@localhost:55432/tripmate",
+        "postgresql://tripmate:tripmate@localhost:5432/tripmate",
     )
 
     assert (
         backup_service._restore_lock_database_url()
-        == "postgresql+asyncpg://tripmate:tripmate@localhost:55432/tripmate"
+        == "postgresql+asyncpg://tripmate:tripmate@localhost:5432/tripmate"
     )
 
 

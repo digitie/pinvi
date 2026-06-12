@@ -197,7 +197,7 @@ class TripCopyResponse(BaseModel):
 
 class TripViewPoi(BaseModel):
     poi_id: uuid.UUID
-    feature_id: str
+    feature_id: str | None
     sort_order: str
     title: str | None
     feature: dict[str, Any]

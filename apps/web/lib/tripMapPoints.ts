@@ -40,7 +40,7 @@ export function tripPoiToMapPoint(poi: TripViewPoi, dayIndex: number): TripMapPo
   return {
     poiId: poi.poi_id,
     dayIndex,
-    title: poi.title ?? poi.feature_id,
+    title: poi.title ?? poi.feature_id ?? '장소',
     lon: coord.lon,
     lat: coord.lat,
     color: paletteHex(poi.marker_color),

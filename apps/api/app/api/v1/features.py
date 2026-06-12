@@ -1,6 +1,6 @@
 """`/features/*` — `docs/api/features.md`.
 
-지도 feature read는 `python-krtour-map`의 운영 HTTP API(`openapi.user.json`, 포트 9011)를
+지도 feature read는 `python-krtour-map`의 운영 HTTP API(`openapi.user.json`, 포트 12301)를
 `app.clients.krtour_map.KrtourMapClient`로 호출한다(ADR-026/027). TripMate 책임: 권한 /
 좌표 validation / 사용자 컨텍스트 / 응답 schema 투영 / 에러·저하 정책(T-178). krtour 책임:
 정규화 / 클러스터링 / dedup / sources / weather.

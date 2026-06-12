@@ -169,7 +169,7 @@ class AdminPoiSummary(BaseModel):
     owner_email_masked: str
     day_index: int
     sort_order: str
-    feature_id: str
+    feature_id: str | None
     feature_label: str | None
     feature_link_broken_at: datetime | None
     version: int

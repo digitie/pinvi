@@ -1,13 +1,12 @@
 # SPRINT-4 — 지도 + 사용자 UI + v0.1.0 릴리즈
 
-- **상태**: in progress (PR #15/#16 merged; T-074/T-075 shell 완료. live feature read
-  및 v0.1.0 tag는 krtour-map 운영 HTTP 서비스/T-066 대기)
+- **상태**: release gate met (PR #15/#16 + #126~#139 + #170~#180 머지. live feature
+  read/krtour HTTP cutover/CI gate 충족, v0.1.0 tag + Release notes 대기)
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `python-krtour-map` OpenAPI read 활성화
   + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
-- **릴리즈**: `v0.1.0` (Sprint 4 종료 시 tag). 사용자 대면 지도/여행 흐름 첫
-  사용 가능한 상태. 현재 릴리즈 게이트는 `docs/sprints/README.md`,
-  `docs/tasks.md`, `docs/resume.md`를 함께 본다.
+- **릴리즈**: `v0.1.0` (Sprint 4 종료 tag). 사용자 대면 지도/여행 흐름 첫
+  사용 가능한 상태. 기능 게이트는 충족했고, 최종 tag/릴리즈 노트만 남았다.
 - **DoD**:
   - 지도 어댑터 (`maplibre-vworld-js`) 통합 — VWorld + MapLibre GL JS (ADR-015)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)
@@ -40,9 +39,8 @@
   - `GET /features/nearby?lat=&lng=&radius_m=&kinds[]=`
   - `POST /features/requests`
   - `GET /search`
-- `apps/api/app/services/cluster_query.py` — zoom별 `bjd_lookup` 또는
-  `ST_ClusterDBSCAN` 그루핑
-- `apps/api/app/services/trip_view_builder.py` — `app` ↔ `feature` join
+- krtour 클러스터링은 `python-krtour-map` 서버 위임 (`services/cluster_query.py` 제거)
+- `apps/api/app/services/trip_view_builder.py` — krtour HTTP batch + snapshot fallback
 
 ### 프론트엔드
 
@@ -95,12 +93,12 @@
 
 ## 종료 체크리스트
 
-- [ ] DoD 모두 통과
+- [x] DoD 기능 게이트 통과 (tag/Release notes는 별도 릴리즈 작업)
 - [ ] 사용자가 PC와 모바일에서 가입 → 여행 생성 → POI 추가 → 지도 확인 가능
-- [ ] `python-krtour-map` 통합 e2e 통과
+- [x] `python-krtour-map` HTTP read/admin 연동 cutover + drift gate 통과
 - [x] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5) — PR #37 구현 +
   PR #46 카탈로그 정합화 완료
-- [ ] **GitHub Actions CI/CD 모든 workflow green** (ADR-021)
+- [x] **GitHub Actions CI/CD 게이트 복원** (ADR-021; 최종 릴리즈 전 최신 run 확인)
 - [ ] `docs/journal.md` Sprint 4 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 5
 - [ ] **`v0.1.0` git tag 생성 + GitHub Release notes 작성** (§6)

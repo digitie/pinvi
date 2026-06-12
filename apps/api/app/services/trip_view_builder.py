@@ -43,7 +43,7 @@ async def build_trip_view(
 
     동작:
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
-    2. POI의 `feature_id` 수집 후 unique 리스트로
+    2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
     3. `krtour_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
     4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (krtour에서 사라진
        feature 는 `is_broken=True` 표시)
@@ -114,11 +114,13 @@ async def build_trip_view(
         poi_ids=[poi.attachment_id for poi in pois],
     )
 
-    # feature_id batch 수집 (unique). krtour-map feature_id는 불투명 문자열이다.
+    # feature_id batch 수집 (unique). feature 없는 자유 POI는 snapshot만 사용한다.
     feature_ids: list[str] = []
     seen: set[str] = set()
     for poi in pois:
         fid_str = _canonical_feature_id(poi.feature_id)
+        if fid_str is None:
+            continue
         if fid_str not in seen:
             seen.add(fid_str)
             feature_ids.append(fid_str)
@@ -137,11 +139,13 @@ async def build_trip_view(
             try:
                 batch = await krtour_client.get_features(missing)
                 found_map: dict[str, Any] = batch.get("found") or {}
-                fetched: dict[str, dict[str, Any]] = {
-                    _canonical_feature_id(str(fid)): feature
-                    for fid, feature in found_map.items()
-                    if isinstance(feature, dict)
-                }
+                fetched: dict[str, dict[str, Any]] = {}
+                for fid, feature in found_map.items():
+                    if not isinstance(feature, dict):
+                        continue
+                    canonical_id = _canonical_feature_id(str(fid))
+                    if canonical_id is not None:
+                        fetched[canonical_id] = feature
                 fresh_features.update(fetched)
                 if use_cache and fetched:
                     feature_cache.put_many(fetched)
@@ -153,8 +157,8 @@ async def build_trip_view(
     broken_count = 0
     for poi in pois:
         feature_id = _canonical_feature_id(poi.feature_id)
-        fresh = fresh_features.get(feature_id)
-        is_broken = krtour_client is not None and fresh is None
+        fresh = fresh_features.get(feature_id) if feature_id is not None else None
+        is_broken = feature_id is not None and krtour_client is not None and fresh is None
         if is_broken:
             broken_count += 1
 
@@ -226,8 +230,10 @@ def _trip_to_dict(trip: Trip) -> dict[str, Any]:
     }
 
 
-def _canonical_feature_id(feature_id: str) -> str:
+def _canonical_feature_id(feature_id: str | None) -> str | None:
     """저장 snapshot suffix를 제외하고 krtour feature_id 문자열을 보존한다."""
+    if feature_id is None:
+        return None
     return feature_id.split("@", 1)[0]
 
 

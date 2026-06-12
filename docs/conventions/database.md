@@ -96,7 +96,7 @@ def downgrade():
 # 모델 메타데이터 확인만으로 끝내지 않음 — 실제 PostgreSQL/PostGIS에 적용
 docker exec tripmate-postgres dropdb -U tripmate tripmate_migration_check
 docker exec tripmate-postgres createdb -U tripmate tripmate_migration_check
-TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:55432/tripmate_migration_check' \
+TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:5432/tripmate_migration_check' \
   uv run alembic upgrade head
 ```
 

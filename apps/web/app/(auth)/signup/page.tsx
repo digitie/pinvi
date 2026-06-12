@@ -10,7 +10,7 @@ import { FormField } from '@/components/forms/FormField';
 import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:9021',
+  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
 });
 
 const CONSENT_VERSION = 'v1.0';

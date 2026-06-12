@@ -8,16 +8,17 @@
 
 ## 진행 중
 
-- [ ] T-060 — Sprint 4 진입 PR (지도 + 사용자 UI + `maplibre-vworld-js` 통합).
-  **2026-06-10 진행**: PR-C 프론트 지도/협업 슬라이스 대부분 머지(#126~#139, 아래
-  "Claude Sprint 4 PR-C 프론트 (2026-06-10)" 절). 잔여: krtour-map client 실주입(라이브러리
-  ready 시) + Playwright E2E 실행(브라우저/서버 환경) + v0.1.0 tag.
+- [ ] v0.1.0 릴리즈 정리 — Sprint 4 기능 게이트는 충족(지도 UI + live feature read +
+  CI/CD + krtour drift gate). 남은 일은 최종 CI/수동 smoke 확인, tag, GitHub Release notes.
 
 ## 다음 (우선순위 순)
 
-- v0.1.0 마무리: krtour-map client 실주입(PR-D2) + E2E 실행 게이트 + tag.
-- krtour-map 비의존 후보 재평가. 현재 후보: T-108 운영 배포 자동화, T-129의
-  `/geo/*`·`/regions/*` slice(머지됨), T-146 location-audit outbox slice(머지됨).
+- v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
+- 다음 구현 후보: T-108 운영 배포 자동화. T-129 `/geo/*`·`/regions/*`와
+  T-146 location-audit outbox/feature cache는 이미 머지 완료.
+- 후속 대기: T-211 krtour `curated_features` → TripMate `curated_trip_plans` 1:1
+  import. TripMate-native 큐레이션을 대체하지 않는 추가 소스이며, krtour REST 상세 계약
+  확정 후 구현한다.
 
 ## 완료
 
@@ -57,6 +58,9 @@
 - [x] T-035 — Sprint 1 PR 생성 (완료: 2026-05-26)
 - [x] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed) (완료: 2026-05-26)
 - [x] T-061 — Sprint 4 진행 추적 문서 정합화 (`resume.md` / `tasks.md` / `journal.md`) (완료: 2026-06-01)
+- [x] T-060 — Sprint 4 진입 PR/기능 게이트 (완료: 2026-06-11): 지도 UI,
+  `maplibre-vworld-js`, krtour live feature read, trip 상세 HTTP batch, Admin feature-request
+  릴레이, drift gate, CI/CD 재활성까지 머지. v0.1.0 tag/릴리즈 노트만 별도 정리.
 - [x] T-062 — GitHub Actions secret / branch protection 적용 상태 확인 (완료:
   2026-06-02, Actions secret 0개 정책 확인 + `main-pr-only` ruleset 적용)
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
@@ -89,7 +93,7 @@
   `VWorldMap` import + Windows Playwright e2e, krtour-map feature 조회 제외)
 - [x] T-075 — Trip 대시보드 / notice plan 사용자 shell
   (완료: 2026-06-05, `/trips` / `/notice-plans` 사용자 route + navigation + 빈 상태 +
-  API client 연결, `/features/*` / krtour-map API `9011` 미호출 e2e)
+  API client 연결, `/features/*` / krtour-map API `12301` 미호출 e2e)
 - [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
 - [x] T-101 — v1의 소셜 로그인 기반 schema/model v2 이전 (현재 활성은 Google-only,
   Naver/Kakao provider 구현은 T-122 미래 작업)
@@ -154,7 +158,7 @@
 
 - [x] T-066 — krtour-map OpenAPI HTTP client **구현 완료** (2026-06-11, #170 user client
   `clients/krtour_map.py` + #173 admin client `clients/krtour_map_admin.py`). krtour가 운영급
-  `:9011 /v1` HTTP 서비스를 신설해 ADR-027/DEC-01=B 전제 충족. **drift gate는 T-210e로 분리**(잔여).
+  `:12301 /v1` HTTP 서비스를 신설해 ADR-027/DEC-01=B 전제 충족. **drift gate는 T-210e로 분리**(잔여).
   → **v0.1.0 게이트(DEC-06: 라이브 feature read) 충족** — 릴리즈 가능.
 - [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
   `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
@@ -278,7 +282,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 ### krtour-map 연동(붙이기) 작업 (2026-06-08)
 
 정본 계약: `docs/integrations/krtour-map-rest-api.md`. krtour-map이 운영 HTTP API(포트
-9011, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 TripMate가
+12301, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 TripMate가
 실제 연결한다. 권장 순서 A→B→C 먼저, 이후 D~H 병행.
 
 > **✅ 연동 루프 완료 (2026-06-11)**: T-170/171/181(client) + T-172~T-176/T-178(feature read
@@ -301,10 +305,18 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 - [x] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결 (완료: 2026-06-11 — in-bounds/nearby/search/get/weather #171 + `GET /features/categories` 카탈로그 추가)
 - [x] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X (완료: 2026-06-09)
 - [x] T-179 — [H2] Admin 검사/승인 → krtour **feature change**(DEC-05) — **완료: 2026-06-11 (#174 백엔드 + #175 web UI)** — **actionable**(K-15 = krtour PR #317로 구현, krtour ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로 승인): `/admin/feature-requests` 검사 + approve/reject 시 krtour `POST/PATCH/DELETE /v1/admin/features*` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. 합의 5건(review_mode 등)은 krtour T-217c 회신으로 확정. 재적재와 무관
-- [x] T-180 — krtour **admin HTTP client(API 9011 `/v1/admin/*`)** — **완료: 2026-06-11 (#173)** — §2.9 feature change(`POST/PATCH/DELETE /v1/admin/features*`) + 운영자 재적재(`/v1/admin/feature-update-requests`) proxy 호출 client. T-170 user client와 base 동일(9011), 경로/토큰 정책만 분리 — **9012는 krtour admin UI(Next.js)라 API base 아님**: `tripmate_krtour_map_admin_base_url` 기본값(9012)/의미 재정의 + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
+- [x] T-180 — krtour **admin HTTP client(API 12301 `/v1/admin/*`)** — **완료: 2026-06-11 (#173)** — §2.9 feature change(`POST/PATCH/DELETE /v1/admin/features*`) + 운영자 재적재(`/v1/admin/feature-update-requests`) proxy 호출 client. T-170 user client와 base 동일(12301), 경로/토큰 정책만 분리 — `tripmate_krtour_map_admin_base_url` 기본값도 12301로 고정 + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
 - [x] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중) (완료: 2026-06-11, #171 — `_map_krtour_errors` 가드: 5xx/timeout→503, 429/409→Retry-After, 404)
 - [x] T-181 — [표준 추종] ADR-048 외부 `/v1` hard cutover — **완료(2026-06-11, #170 client 잔여까지 머지)**: — **라이브 계약분 완료(2026-06-09)**: krtour `origin/main`(`openapi.user.json` title `krtour-map-user 0.2.0-dev`, krtour PR #318/#319/#321)이 외부 `/v1` clean cut + batch `/tripmate/features/batch`→`/v1/features/batch`(#318) + 파라미터 개명(`search` bbox CSV→`min_lon/min_lat/max_lon/max_lat`, `page_size`/`cursor`)을 머지함. **T-170 client(`apps/api/app/clients/krtour_map.py`) 일괄 교체 완료** — 전 feature/category 경로 `/v1` prefix(`/health`만 비버전), batch 경로/검색 파라미터 갱신 + MCP `_search_features` 호출부 + MockTransport 계약 테스트. **잔여 — 대기 해제(2026-06-10, krtour `0e45bd7` T-216a~g 머지 확인)**: ① problem+json(`_error_code`를 top-level `code` 파싱으로) ② envelope payload/meta 분리(`meta.page.next_cursor` threading) ③ batch 응답 `items`→**`found`** 교체(현재 전 결과 silent-missing) ④ in-bounds `limit`→`max_items` — **즉시 실행 가능**. frontend codegen은 T-210e.
 - [x] T-182 — [결정] DEC-07 좌표 필드명 정렬(ADR-048 B) (완료: 2026-06-09): **`lon`/`lat` 채택**(krtour 정렬·terse). `Coord`(Pydantic) + `CoordSchema`(Zod) `longitude`/`latitude`→`lon`/`lat`, 전 API 요청/응답·query 파라미터(geo)·ws presence.cursor 출력·frontend(useUserLocation/locationAdapter 출력)·전 테스트·docs/api 예시 일괄 정렬. 외부 krtour DTO/snapshot tolerant reader·브라우저 Geolocation `position.coords.*`·KASI DB 컬럼은 keep.
+- [ ] T-211 — krtour `curated_features` → TripMate `curated_trip_plans` 1:1 import
+  (후속, REST 계약 대기): krtour curated feature 1건을 TripMate curated plan 1건으로 복사하고,
+  하위 item/POI를 `curated_plan_pois`로 복사한다. item이 `feature_id`를 제공하면
+  feature-backed POI로 upsert하고, 없으면 nullable POI로 저장한다. TripMate-native
+  큐레이션은 계속 정식 생성 소스다. 필요 시 `source_system`,
+  `source_curated_feature_id`, `source_curated_feature_version`,
+  `source_curated_feature_item_id`, `source_imported_at` 등 provenance 컬럼을 별도
+  migration으로 추가한다.
 
 ### Codex PR 3라운드 사후 리뷰 후속 (2026-06-09, `docs/reviews/2026-06-09-codex-pr-review.md`)
 

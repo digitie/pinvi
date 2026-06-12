@@ -7,8 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_DIR="${ROOT}/.tmp/dev/pids"
 LOG_DIR="${ROOT}/.tmp/dev/logs"
 
-API_PORT="${TRIPMATE_API_DEV_PORT:-9021}"
-WEB_PORT="${TRIPMATE_WEB_DEV_PORT:-9022}"
+API_PORT="${TRIPMATE_API_DEV_PORT:-12501}"
+WEB_PORT="${TRIPMATE_WEB_DEV_PORT:-12505}"
 DAGSTER_PORT="${TRIPMATE_DAGSTER_DEV_PORT:-9023}"
 
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"

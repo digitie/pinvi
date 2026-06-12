@@ -2,7 +2,7 @@
 
 TripMate Admin이 1차 검토·승인한 사용자 feature 제안을 krtour `/v1/admin/features*`
 (POST/PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다.
-API base는 **:9011 `/v1/admin/*`** (9012는 admin UI). 사용자 토큰을 전달하지 않고
+API base는 **:12301 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
 설정된 admin service token(`X-Krtour-Service-Token`)만 보낸다.
 
 §7 합의 5건 **확정** (krtour T-217c, 2026-06-11):

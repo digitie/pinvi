@@ -34,7 +34,7 @@ const summary = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/auth/me',
+    (url) => url.port === '12501' && url.pathname === '/auth/me',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -43,7 +43,7 @@ test.beforeEach(async ({ page }) => {
     },
   );
   await page.route(
-    (url) => url.port === '9021' && url.pathname === '/admin/feature-requests',
+    (url) => url.port === '12501' && url.pathname === '/admin/feature-requests',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -56,7 +56,7 @@ test.beforeEach(async ({ page }) => {
 test('Admin이 feature 제안을 승인하면 krtour 전달 API를 호출한다', async ({ page }) => {
   let approveBody: Record<string, unknown> | null = null;
   await page.route(
-    (url) => url.port === '9021' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
+    (url) => url.port === '12501' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
     async (route) => {
       approveBody = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({

@@ -249,7 +249,7 @@ CREATE TABLE app.trip_day_pois (
   trip_id              uuid NOT NULL,
   day_index            int NOT NULL,
   sort_order           text COLLATE "C" NOT NULL,    -- SPEC V8 E-6 (Critical) — LexoRank
-  feature_id           text NOT NULL,                 -- feature.features.feature_id 참조 (FK 없음)
+  feature_id           text,                          -- nullable. feature.features.feature_id 참조 (FK 없음)
   feature_link_broken_at timestamptz,
   feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
   custom_marker_color  text,                          -- 사용자 override (P-01..P-16)
@@ -439,12 +439,18 @@ CREATE TRIGGER trg_curated_trip_plans_touch_updated_at
 BEFORE UPDATE ON app.curated_trip_plans
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 
+-- krtour curated_features 1:1 import를 붙일 때 출처 추적이 필요하면
+-- source_system, source_curated_feature_id, source_curated_feature_version,
+-- source_imported_at 같은 컬럼을 후속 migration으로 추가한다.
+-- 현재 DDL은 TripMate-native 큐레이션과 krtour import가 같은 테이블을 공유한다는
+-- 정책만 반영하고, 상세 REST 계약 확정 전 source 컬럼을 선행 확정하지 않는다.
+
 CREATE TABLE app.curated_plan_pois (
   curated_poi_id      uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
   curated_plan_id     uuid NOT NULL REFERENCES app.curated_trip_plans(curated_plan_id) ON DELETE CASCADE,
   day_index           int NOT NULL DEFAULT 1,
   sort_order          text COLLATE "C" NOT NULL,
-  feature_id          text,
+  feature_id          text,                           -- nullable. 외부 연계 시 feature-backed POI lookup
   feature_snapshot    jsonb NOT NULL DEFAULT '{}'::jsonb,
   memo                text,
   budget_amount       numeric(12,2),
@@ -464,9 +470,17 @@ CREATE TABLE app.curated_plan_pois (
 CREATE INDEX ix_curated_plan_pois_plan_day
   ON app.curated_plan_pois (curated_plan_id, day_index)
   WHERE deleted_at IS NULL;
+CREATE INDEX ix_curated_plan_pois_feature
+  ON app.curated_plan_pois (feature_id)
+  WHERE deleted_at IS NULL AND feature_id IS NOT NULL;
 CREATE UNIQUE INDEX uq_curated_plan_pois_plan_day_sort
   ON app.curated_plan_pois (curated_plan_id, day_index, sort_order COLLATE "C")
   WHERE deleted_at IS NULL;
+
+-- krtour curated_features 하위 item과의 대응이 필요하면
+-- source_curated_feature_id/source_curated_feature_item_id를 후속 migration으로 추가한다.
+-- feature_id는 계속 nullable이다. krtour item이 feature를 제공하지 않거나
+-- TripMate-native 자유 POI이면 NULL로 둔다.
 
 CREATE TABLE app.curated_plan_attachments (
   attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),

@@ -7,8 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_DIR="${ROOT}/.tmp/dev/pids"
 
 PORTS=(
-  "${TRIPMATE_API_DEV_PORT:-9021}"
-  "${TRIPMATE_WEB_DEV_PORT:-9022}"
+  "${TRIPMATE_API_DEV_PORT:-12501}"
+  "${TRIPMATE_WEB_DEV_PORT:-12505}"
   "${TRIPMATE_DAGSTER_DEV_PORT:-9023}"
 )
 

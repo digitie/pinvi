@@ -89,12 +89,18 @@ TripMate 로컬 개발 서버 포트는 항상 고정한다.
 
 | 서비스 | 포트 | URL |
 |--------|------|-----|
-| FastAPI (`apps/api`) | 9021 | `http://localhost:9021` |
-| Next.js (`apps/web`) | 9022 | `http://localhost:9022` |
+| PostgreSQL | 5432 | `localhost:5432` |
+| RustFS API | 12101 | `http://localhost:12101` |
+| RustFS console | 12105 | `http://localhost:12105` |
+| krtour-map API/Admin API | 12301 | `http://localhost:12301` |
+| tripmate-agent API | 12401 | `http://localhost:12401` |
+| FastAPI (`apps/api`) | 12501 | `http://localhost:12501` |
+| Next.js (`apps/web`) | 12505 | `http://localhost:12505` |
 | Dagster (`apps/etl`) | 9023 | `http://localhost:9023` |
 
-`scripts/dev-up.sh`는 시작 전에 9021/9022/9023을 점유한 프로세스를 종료하고 같은
-포트로 다시 올린다. 수동 정리는 `scripts/dev-down.sh`.
+`scripts/dev-up.sh`는 시작 전에 12501/12505/9023을 점유한 프로세스를 종료하고 같은
+포트로 다시 올린다. PostgreSQL/RustFS는 Docker compose, krtour-map/tripmate-agent는
+각 sibling 저장소 런북으로 실행한다. 수동 정리는 `scripts/dev-down.sh`.
 
 ```bash
 cd ~/tripmate-workspaces/tripmate-codex
@@ -142,7 +148,7 @@ source apps/api/.venv/bin/activate
 uv pip install -e "apps/api[dev]"
 uv pip install "gdal==$(gdal-config --version)"
 
-# python-krtour-map은 별도 sibling 저장소에서 실행 (API 9011 / admin 9012)
+# python-krtour-map은 별도 sibling 저장소에서 실행 (API/Admin API 12301)
 # TripMate는 .env의 TRIPMATE_KRTOUR_MAP_API_BASE_URL로 연결
 
 # .env
@@ -154,10 +160,10 @@ $EDITOR apps/api/.env
 
 ```bash
 cd apps/api
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 9021
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 12501
 ```
 
-`http://localhost:9021/docs` (OpenAPI), `http://localhost:9021/health`.
+`http://localhost:12501/docs` (OpenAPI), `http://localhost:12501/health`.
 
 ### 6.2 테스트
 
@@ -187,7 +193,7 @@ alembic upgrade head
 ```bash
 docker exec tripmate-postgres dropdb -U tripmate tripmate_migration_check
 docker exec tripmate-postgres createdb -U tripmate tripmate_migration_check
-TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:55432/tripmate_migration_check' \
+TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:5432/tripmate_migration_check' \
   uv run alembic upgrade head
 ```
 
@@ -199,7 +205,7 @@ TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:55432/tr
 ```bash
 cd ~/tripmate-workspaces/tripmate-codex
 npm install
-npm --workspace apps/web run dev   # http://localhost:9022
+npm --workspace apps/web run dev   # http://localhost:12505
 ```
 
 검사:
@@ -249,7 +255,7 @@ docker compose -f infra/docker-compose.yml up -d
 docker exec -it tripmate-postgres psql -U tripmate -d tripmate
 
 # 또는 host 포트로
-psql -h localhost -p 55432 -U tripmate -d tripmate
+psql -h localhost -p 5432 -U tripmate -d tripmate
 ```
 
 ## 9. ETL (`apps/etl`, Sprint 5)
@@ -271,7 +277,7 @@ uv run dagster dev --host 0.0.0.0 --port 9023   # http://localhost:9023
 |------|------|
 | 전체 dev up | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && scripts/dev-up.sh"` |
 | 전체 dev down | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && scripts/dev-down.sh"` |
-| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex/apps/api && uv run uvicorn app.main:app --reload --port 9021"` |
+| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex/apps/api && uv run uvicorn app.main:app --reload --port 12501"` |
 | 프론트 dev | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run dev"` |
 | 백엔드 테스트 | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && uv run pytest apps/api/tests -q"` |
 | 프론트 lint | `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && npm --workspace apps/web run lint"` |
@@ -290,7 +296,7 @@ uv run dagster dev --host 0.0.0.0 --port 9023   # http://localhost:9023
 | inotify 한도 초과 | 너무 많은 watch | `sudo sysctl fs.inotify.max_user_watches=524288` |
 | `rg.exe` 사용 권한 오류 | WindowsApps `rg.exe` 우선 | WSL `rg` 사용 (`PATH` 명시) |
 | Docker 컨테이너 시작 안 됨 | Docker Desktop 종료 | Docker Desktop 시작 + WSL2 backend 확인 |
-| PostgreSQL 연결 실패 | host 포트 충돌 (5432) | `55432`로 host 포트 변경 |
+| PostgreSQL 연결 실패 | host 포트 충돌 (5432) | `5432`로 host 포트 변경 |
 | `next dev` 느림 | WSL ↔ NTFS 파일 watch | WSL 미러에서만 실행 |
 | Playwright가 WSL에서 브라우저 의존성 오류 | WSL headless browser 라이브러리 누락 | WSL dev server + Windows Playwright로 실행 |
 | Alembic `relation does not exist` | 다른 DB에 마이그레이션 적용됨 | `TRIPMATE_DATABASE_URL` 확인 |

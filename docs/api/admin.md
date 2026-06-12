@@ -349,7 +349,7 @@ Content-Type: application/json
 ### 8.4 사용자 feature 제안 검토 큐 (T-179)
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-krtour `/v1/admin/features*` change API(전송 client = T-180, `:9011 /v1/admin/*`)로 전달한다.
+krtour `/v1/admin/features*` change API(전송 client = T-180, `:12301 /v1/admin/*`)로 전달한다.
 **TripMate는 신규 수신 API를 만들지 않고 krtour 기존 change API를 전송 구간으로 쓴다**
 (krtour ADR-051). `apps/api/app/api/v1/admin/feature_requests.py`.
 

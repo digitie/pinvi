@@ -202,16 +202,16 @@ echo "==> Containers"
 docker compose -f /opt/tripmate/infra/docker-compose.app.yml ps
 
 echo "==> Health"
-curl -fsS http://127.0.0.1:9021/health || echo "API down"
-curl -fsS http://127.0.0.1:9022/admin/login >/dev/null || echo "Web down"
+curl -fsS http://127.0.0.1:12501/health || echo "API down"
+curl -fsS http://127.0.0.1:12505/admin/login >/dev/null || echo "Web down"
 ```
 
 Production public URL:
 
 | 서비스 | 내부/host 포트 | 공개 URL |
 |--------|---------------|----------|
-| API | `9021` | `https://tripmateapi.digitie.mywire.org` |
-| Web | `9022` | `https://tripmate.digitie.mywire.org` |
+| API | `12501` | `https://tripmateapi.digitie.mywire.org` |
+| Web | `12505` | `https://tripmate.digitie.mywire.org` |
 
 운영 `.env` 필수 URL/security 값:
 

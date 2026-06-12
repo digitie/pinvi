@@ -29,7 +29,7 @@ export type PoiRiseSetResponse = z.infer<typeof PoiRiseSetResponseSchema>;
 export const PoiCreateSchema = z.object({
   day_index: z.number().int().min(1),
   sort_order: z.string().min(1).max(80),
-  feature_id: z.string().min(1).max(200),
+  feature_id: z.string().min(1).max(200).nullable().optional(),
   feature_snapshot: z.record(z.string(), z.unknown()).default({}),
   custom_marker_color: z.string().regex(MarkerColorPattern).nullable().optional(),
   custom_marker_icon: z.string().max(64).nullable().optional(),
@@ -76,7 +76,7 @@ export const PoiResponseSchema = z.object({
   trip_id: z.string().uuid(),
   day_index: z.number().int(),
   sort_order: z.string(),
-  feature_id: z.string(),
+  feature_id: z.string().nullable(),
   feature_link_broken_at: Iso8601Schema.nullable(),
   feature_snapshot: z.record(z.string(), z.unknown()),
   custom_marker_color: z.string().nullable(),

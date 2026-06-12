@@ -12,9 +12,10 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select
 
+from app.models.curated_plan import CuratedPlanPoi
 from app.models.poi import TripDayPoi
 from app.models.user import User
-from app.services.notice_plan import create_plan_with_pois
+from app.services.notice_plan import create_plan_with_pois, ensure_plan_poi_for_feature
 
 pytestmark = pytest.mark.asyncio
 
@@ -92,6 +93,85 @@ async def test_copy_creates_new_trip(client, verified_user, auth_cookies, sessio
         )
         assert copied_budget == Decimal("55000.00")
         assert copied_currency == "KRW"
+
+
+async def test_copy_allows_curated_poi_without_feature_id(
+    client, verified_user, auth_cookies, session_factory
+) -> None:
+    user_id, _ = verified_user
+    admin_id = await _admin_id(session_factory)
+    async with session_factory() as db:
+        plan = await create_plan_with_pois(
+            db,
+            admin_id=admin_id,
+            slug=f"free-poi-{uuid.uuid4().hex[:6]}",
+            title="자유 장소 코스",
+            pois=[
+                {
+                    "day_index": 1,
+                    "sort_order": "a0",
+                    "feature_snapshot": {"name": "메모 장소"},
+                    "memo": "feature 연결 없이도 curated POI 가능",
+                }
+            ],
+        )
+        plan_id = plan.curated_plan_id
+
+    resp = await client.post(
+        f"/notice-plans/{plan_id}/copy",
+        json={"trip_title": "자유 장소 포함 여행"},
+        cookies=auth_cookies(user_id),
+    )
+    assert resp.status_code == 201, resp.text
+    trip_id = uuid.UUID(resp.json()["data"]["trip_id"])
+
+    async with session_factory() as db:
+        copied_feature_id = await db.scalar(
+            select(TripDayPoi.feature_id).where(TripDayPoi.trip_id == trip_id)
+        )
+        assert copied_feature_id is None
+
+
+async def test_feature_backed_curated_poi_is_created_once_for_external_link(
+    session_factory,
+) -> None:
+    admin_id = await _admin_id(session_factory)
+    async with session_factory() as db:
+        plan = await create_plan_with_pois(
+            db,
+            admin_id=admin_id,
+            slug=f"agent-link-{uuid.uuid4().hex[:6]}",
+            title="외부 연계 코스",
+            pois=[],
+        )
+        first = await ensure_plan_poi_for_feature(
+            db,
+            curated_plan_id=plan.curated_plan_id,
+            feature_id="f_agent_linked",
+            day_index=1,
+            sort_order="a0",
+            feature_snapshot={"name": "연계 장소"},
+        )
+        second = await ensure_plan_poi_for_feature(
+            db,
+            curated_plan_id=plan.curated_plan_id,
+            feature_id="f_agent_linked",
+            day_index=1,
+            sort_order="a1",
+            feature_snapshot={"name": "중복 요청"},
+        )
+        assert second.curated_poi_id == first.curated_poi_id
+
+        count = await db.scalar(
+            select(func.count())
+            .select_from(CuratedPlanPoi)
+            .where(
+                CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
+                CuratedPlanPoi.feature_id == "f_agent_linked",
+                CuratedPlanPoi.deleted_at.is_(None),
+            )
+        )
+        assert count == 1
 
 
 async def test_copy_partial_pois(client, verified_user, auth_cookies, session_factory) -> None:

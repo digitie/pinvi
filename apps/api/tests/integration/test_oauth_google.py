@@ -308,7 +308,7 @@ async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch)
     params = parse_qs(parsed.query)
     assert parsed.netloc == "accounts.google.com"
     assert params["client_id"] == ["test-client.apps.googleusercontent.com"]
-    assert params["redirect_uri"] == ["http://localhost:9021/auth/oauth/google/callback"]
+    assert params["redirect_uri"] == ["http://localhost:12501/auth/oauth/google/callback"]
     assert params["response_type"] == ["code"]
     assert params["state"][0]
     assert params["code_challenge"][0]
@@ -510,7 +510,7 @@ async def test_link_callback_conflict_redirects_to_profile(
     location = resp.headers["location"]
     parsed = urlparse(location)
     params = parse_qs(parsed.query)
-    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/profile"
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:12505/profile"
     assert params["error"] == ["OAUTH_ACCOUNT_LINK_REQUIRED"]
 
 
@@ -541,7 +541,7 @@ async def test_login_callback_persists_refresh_session(
     )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "http://localhost:9022/trips"
+    assert resp.headers["location"] == "http://localhost:12505/trips"
     refresh_token = resp.cookies.get("tripmate_refresh")
     assert refresh_token is not None
 
@@ -570,7 +570,7 @@ async def test_callback_invalid_state_redirects_to_login(client) -> None:
     location = resp.headers["location"]
     parsed = urlparse(location)
     params = parse_qs(parsed.query)
-    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/login"
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:12505/login"
     assert params["error"] == ["OAUTH_STATE_INVALID"]
 
 
@@ -584,5 +584,5 @@ async def test_callback_provider_denied_redirects_to_login(client) -> None:
     location = resp.headers["location"]
     parsed = urlparse(location)
     params = parse_qs(parsed.query)
-    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:9022/login"
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:12505/login"
     assert params["error"] == ["OAUTH_PROVIDER_DENIED"]
