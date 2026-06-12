@@ -16,6 +16,7 @@ services:
 
   app-rustfs:
     image: rustfs/rustfs:latest
+    restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin

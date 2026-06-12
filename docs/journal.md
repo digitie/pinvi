@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-12 (codex) — Docker app RustFS 재시작 정책 보강
+
+**작업**: PR #181 merge 후 `scripts/docker-app.sh smoke --keep-running` 상태 확인에서
+`app-rustfs`가 smoke 통과 후 종료된 것을 확인했다. app smoke 스택도 새 RustFS 포트
+`12101`/`12105`로 계속 떠 있어야 하므로 `app-rustfs`에 `restart: unless-stopped`를
+추가했다.
+
+**검증**:
+
+- WSL ext4 mirror: `scripts/docker-app.sh up`으로 app smoke 스택 재적용.
+- WSL ext4 mirror: API `/health`, API `/health/db`, Web `/admin/login`, RustFS
+  `/health/live` 확인.
+- WSL ext4 mirror: `docker inspect tripmate-app-app-rustfs-1`에서 restart policy
+  `unless-stopped`, state `running`, health `healthy` 확인.
+
 ## 2026-06-12 (codex) — 로컬/Docker 고정 포트 재배정
 
 **작업**: 사용자 지시에 따라 로컬·Docker·문서 포트를 새 고정값으로 정렬했다.
