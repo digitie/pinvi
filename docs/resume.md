@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-12 Codex 작업 메모 — T-130 `/public/*` krtour public view 소비
+
+krtour-map T-222b가 `/v1/public/beaches*`, `/v1/public/festivals*` user OpenAPI 표면을
+제공하게 되어, TripMate T-130을 소비 측에서 연결했다.
+
+- `apps/api/tests/contract/krtour-openapi-user.json`을 최신 krtour `openapi.user.json`으로
+  교체하고, drift gate가 public 6개 경로와 beach/festival/marker schema 필드를 확인하게 했다.
+- `KrtourMapClient`에 public beaches/festivals 목록·상세·marker 호출을 추가했다. 목록형 응답은
+  krtour `meta.page.next_cursor/total`을 TripMate `meta.cursor/total`로 투영한다.
+- `apps/api/app/api/v1/public.py`와 `apps/api/app/schemas/public.py`를 추가해 인증 없는
+  `/public/beaches*`, `/public/festivals*`를 열었다. 응답에는
+  `Cache-Control: public, max-age=300`을 붙인다.
+- `packages/schemas/src/public.ts`와 `@tripmate/api-client` `publicApi`를 추가했다.
+- 앱 내부 공통 rate-limit 미들웨어는 아직 없으므로 T-195로 분리했다. 현재 public API는 krtour
+  upstream 한도와 edge/CDN 제한을 전제로 먼저 연다.
+
+**다음 한 작업**: krtour-map 쪽 순서로 돌아가 **T-223b** provider 보강을 진행한다. TripMate
+T-211(`curated_features` import)은 krtour T-223c REST 계약이 나온 뒤 실행한다.
+
 ## 다음 한 작업 (2026-06-06 감사 후)
 
 문서·구현 정합성 전수 감사 완료 — `docs/audit/2026-06-06-doc-impl-audit.md`.
@@ -555,4 +574,4 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 ## 차단 사유 / 결정 대기
 
 - required status check는 `Aggregate CI gate`로 적용
-- T-130 `/public/*`은 krtour public/beach/festival 표면 대기
+- T-130 `/public/*`은 완료. 앱 내부 공통 rate-limit 미들웨어만 T-195 후속.

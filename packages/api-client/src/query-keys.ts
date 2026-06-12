@@ -30,4 +30,16 @@ export const queryKeys = {
     detail: (featureId: string) => ['features', 'detail', featureId] as const,
     weather: (featureId: string) => ['features', 'weather', featureId] as const,
   },
+  public: {
+    beaches: (params: { sido_code?: string; sigungu_code?: string; q?: string; cursor?: string }) =>
+      ['public', 'beaches', params] as const,
+    beach: (featureId: string) => ['public', 'beach', featureId] as const,
+    beachMarkers: (params: { bbox?: string; sido_code?: string; sigungu_code?: string }) =>
+      ['public', 'beach-markers', params] as const,
+    festivalsMonthly: (params: { year?: number; month?: number; cursor?: string }) =>
+      ['public', 'festivals-monthly', params] as const,
+    festival: (featureId: string) => ['public', 'festival', featureId] as const,
+    festivalMarkers: (params: { year?: number; month?: number; bbox?: string }) =>
+      ['public', 'festival-markers', params] as const,
+  },
 } as const;

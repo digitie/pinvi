@@ -325,6 +325,141 @@ class KrtourMapClient:
         params = {"include_counts": include_counts, "active_only": active_only}
         return self._data(await self._send("GET", "/v1/categories", params=params))
 
+    async def public_beaches(
+        self,
+        *,
+        sido_code: str | None = None,
+        sigungu_code: str | None = None,
+        q: str | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        include_quality: bool = False,
+        include_forecast: bool = False,
+    ) -> dict[str, Any]:
+        """공개 해수욕장 목록. data = {items} + threaded next_cursor/total."""
+        params: dict[str, Any] = {
+            "include_quality": include_quality,
+            "include_forecast": include_forecast,
+        }
+        if sido_code is not None:
+            params["sido_code"] = sido_code
+        if sigungu_code is not None:
+            params["sigungu_code"] = sigungu_code
+        if q is not None:
+            params["q"] = q
+        if page_size is not None:
+            params["page_size"] = page_size
+        if cursor is not None:
+            params["cursor"] = cursor
+        data, meta = self._payload(await self._send("GET", "/v1/public/beaches", params=params))
+        return self._thread_page(data, meta)
+
+    async def public_beach_markers(
+        self,
+        *,
+        min_lon: float | None = None,
+        min_lat: float | None = None,
+        max_lon: float | None = None,
+        max_lat: float | None = None,
+        sido_code: str | None = None,
+        sigungu_code: str | None = None,
+        max_items: int | None = None,
+    ) -> dict[str, Any]:
+        """공개 해수욕장 지도 marker layer. data = {layer_key, display_name, items}."""
+        params: dict[str, Any] = {}
+        for key, value in (
+            ("min_lon", min_lon),
+            ("min_lat", min_lat),
+            ("max_lon", max_lon),
+            ("max_lat", max_lat),
+            ("sido_code", sido_code),
+            ("sigungu_code", sigungu_code),
+            ("max_items", max_items),
+        ):
+            if value is not None:
+                params[key] = value
+        return self._data(await self._send("GET", "/v1/public/beaches/map-markers", params=params))
+
+    async def get_public_beach(
+        self,
+        feature_id: str,
+        *,
+        include_quality: bool = False,
+        include_forecast: bool = False,
+    ) -> dict[str, Any] | None:
+        """공개 해수욕장 상세. 404 → None."""
+        resp = await self._send(
+            "GET",
+            f"/v1/public/beaches/{feature_id}",
+            params={"include_quality": include_quality, "include_forecast": include_forecast},
+        )
+        if resp.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        return self._data(resp)
+
+    async def public_festivals_monthly(
+        self,
+        *,
+        year: int | None = None,
+        month: int | None = None,
+        sido_code: str | None = None,
+        sigungu_code: str | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        include_months: bool = True,
+    ) -> dict[str, Any]:
+        """공개 월별 축제 목록. data = {months, items} + threaded next_cursor/total."""
+        params: dict[str, Any] = {"include_months": include_months}
+        for key, value in (
+            ("year", year),
+            ("month", month),
+            ("sido_code", sido_code),
+            ("sigungu_code", sigungu_code),
+            ("page_size", page_size),
+            ("cursor", cursor),
+        ):
+            if value is not None:
+                params[key] = value
+        data, meta = self._payload(
+            await self._send("GET", "/v1/public/festivals/monthly", params=params)
+        )
+        return self._thread_page(data, meta)
+
+    async def public_festival_markers(
+        self,
+        *,
+        year: int | None = None,
+        month: int | None = None,
+        min_lon: float | None = None,
+        min_lat: float | None = None,
+        max_lon: float | None = None,
+        max_lat: float | None = None,
+        max_items: int | None = None,
+    ) -> dict[str, Any]:
+        """공개 축제 지도 marker layer. data = {layer_key, display_name, items}."""
+        params: dict[str, Any] = {}
+        for key, value in (
+            ("year", year),
+            ("month", month),
+            ("min_lon", min_lon),
+            ("min_lat", min_lat),
+            ("max_lon", max_lon),
+            ("max_lat", max_lat),
+            ("max_items", max_items),
+        ):
+            if value is not None:
+                params[key] = value
+        return self._data(
+            await self._send("GET", "/v1/public/festivals/map-markers", params=params)
+        )
+
+    async def get_public_festival(self, feature_id: str) -> dict[str, Any] | None:
+        """공개 축제 상세. 404 → None."""
+        resp = await self._send("GET", f"/v1/public/festivals/{feature_id}")
+        if resp.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        return self._data(resp)
+
     async def healthz(self) -> dict[str, Any]:
         """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""
         resp = await self._send("GET", "/health")

@@ -190,6 +190,132 @@ async def test_search_threads_meta_page_and_include_total() -> None:
     await client.aclose()
 
 
+async def test_public_beaches_uses_public_path_and_threads_page_meta() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = str(request.url.query, "utf-8")
+        return httpx.Response(
+            200,
+            json={
+                "data": {"items": [{"feature_id": "f_beach"}]},
+                "meta": {"page": {"page_size": 20, "next_cursor": "n2", "total": 3}},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.public_beaches(
+        sido_code="26",
+        sigungu_code="26110",
+        q="광안리",
+        page_size=20,
+        cursor="c1",
+        include_quality=True,
+        include_forecast=True,
+    )
+    assert seen["path"] == "/v1/public/beaches"
+    for token in (
+        "sido_code=26",
+        "sigungu_code=26110",
+        "q=",
+        "page_size=20",
+        "cursor=c1",
+        "include_quality=true",
+        "include_forecast=true",
+    ):
+        assert token in seen["query"], seen["query"]
+    assert data["next_cursor"] == "n2"
+    assert data["total"] == 3
+    await client.aclose()
+
+
+async def test_public_marker_and_detail_paths() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/map-markers"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "layer_key": "beach",
+                        "display_name": "해수욕장",
+                        "marker_icon": "swimming",
+                        "marker_color": "P-07",
+                        "items": [],
+                    },
+                    "meta": {},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature_id": "f_beach",
+                    "display_name": "광안리 해수욕장",
+                    "address": {},
+                    "source_providers": ["khoa"],
+                    "updated_at": "2026-06-12T00:00:00+09:00",
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    await client.public_beach_markers(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
+    beach = await client.get_public_beach("f_beach")
+    assert beach is not None
+    assert seen == ["/v1/public/beaches/map-markers", "/v1/public/beaches/f_beach"]
+    await client.aclose()
+
+
+async def test_public_festivals_uses_public_paths() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/monthly"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": {"months": [{"year": 2026, "month": 6, "count": 1}], "items": []},
+                    "meta": {"page": {"page_size": 12, "next_cursor": None, "total": 1}},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "layer_key": "festival",
+                    "display_name": "축제",
+                    "marker_icon": "star",
+                    "marker_color": "P-11",
+                    "items": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    monthly = await client.public_festivals_monthly(year=2026, month=6, page_size=12)
+    await client.public_festival_markers(year=2026, month=6, max_items=100)
+    assert monthly["total"] == 1
+    assert seen == ["/v1/public/festivals/monthly", "/v1/public/festivals/map-markers"]
+    await client.aclose()
+
+
+async def test_public_detail_404_returns_none() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"code": "FEATURE_NOT_FOUND"})
+
+    client = _client(handler)
+    assert await client.get_public_beach("missing") is None
+    assert await client.get_public_festival("missing") is None
+    await client.aclose()
+
+
 async def test_problem_json_top_level_code_parsed() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         # RFC7807 problem+json — 머신 코드는 top-level 확장 `code`.
