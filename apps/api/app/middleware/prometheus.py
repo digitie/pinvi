@@ -7,8 +7,9 @@ raw URLs to keep Prometheus series cardinality bounded.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from time import perf_counter
-from typing import Final
+from typing import Final, cast
 
 from fastapi import HTTPException, Request
 from prometheus_client import (
@@ -95,6 +96,9 @@ def _route_template(request: Request) -> str:
 def _generate_latest() -> bytes:
     if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
         registry = CollectorRegistry()
-        multiprocess.MultiProcessCollector(registry)
+        multi_process_collector = cast(
+            Callable[[CollectorRegistry], object], multiprocess.MultiProcessCollector
+        )
+        multi_process_collector(registry)
         return bytes(generate_latest(registry))
     return bytes(generate_latest())
