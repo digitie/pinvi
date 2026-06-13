@@ -93,9 +93,11 @@
 ### 인프라 / 운영
 
 - `infra/odroid/README.md` (배포 절차) — 유지
-- `infra/n150/README.md` (신규, ADR-023) — N150 16GB / NVMe 1TB / Ubuntu 26.04
+- `infra/n150/README.md` (ADR-023) — N150 16GB / NVMe 1TB / Ubuntu 26.04
   배포 + Odroid 대비 변경점 (x86_64 vs ARM64 이미지)
-- `scripts/{odroid-docker-doctor,n150-docker-doctor,backup-db,restore-db,restore-hotswap}.sh`
+- `.github/workflows/docker-images.yml` — API/Web `linux/amd64,linux/arm64` GHCR image build
+- `scripts/deploy-node.sh` + `scripts/{n150,odroid}-docker-doctor.sh`
+- `scripts/{backup-db,restore-db,restore-hotswap}.sh`
 - `infra/docker-compose.app.yml` 최종 — x86_64 / ARM64 멀티 platform
 - `infra/nginx/{nginx.conf,geo-kr.conf}` — 한국 IP 화이트리스트 (ADR-018)
 - `infra/cloudflare/wrangler.toml` 또는 dashboard 설정 메모 — WAF rule "Country

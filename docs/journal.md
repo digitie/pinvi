@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-13 (codex) — v0.1.0 릴리즈 준비 + T-195/T-108
+
+**작업**: 사용자 지시대로 1) v0.1.0 릴리즈 정리, 2) public/API 공통 rate-limit,
+3) 운영 배포 자동화 foundation 순서로 진행했다.
+
+- `CHANGELOG.md`를 추가해 `v0.1.0` 릴리즈 노트 초안을 만들었다. 실제 tag/GitHub
+  Release는 PR-only 흐름상 main merge 후 생성한다.
+- ADR-038을 추가하고 `RateLimitMiddleware`를 전역 적용했다. production/staging은
+  Postgres `app.rate_limit_buckets`, dev/test/smoke는 memory backend를 쓴다.
+- rate-limit 정책: `/public/*` IP 60/min, 인증 사용자 user/token 60/min, 로그인/가입/
+  재설정/verify 5/min, OAuth 10/min, storage upload 30/min, 공유 토큰 60/min.
+- T-108 foundation: `.github/workflows/docker-images.yml`, compose image override,
+  `scripts/deploy-node.sh`, `scripts/*-docker-doctor.sh`, N150/Odroid 노드별 runbook을
+  추가했다.
+- 사용자 지시에 따라 ADR-039를 추가하고 노드 간 DB live sync 관련 문서와
+  doctor 상태 점검 코드를 제거했다. Odroid는 실시간 대기 DB 노드가 아니라 ARM64 smoke와
+  backup/restore 기반 수동 대체 배포 노드다.
+
+**검증**:
+
+- WSL ext4 mirror: `python -m pytest tests -q`(apps/api) → 342 passed, 1 skipped.
+- WSL ext4 mirror: `ruff check --exclude .venv --exclude .venv-wsl .`,
+  `ruff format --check --exclude .venv --exclude .venv-wsl .`, `mypy --strict app` 통과.
+- WSL ext4 mirror: `npm run lint`, `npm run typecheck`, `npm run build`,
+  `npm run test` 통과
+  (web 62 passed, schemas 6 passed).
+- WSL ext4 mirror: `python -m pytest tests -q`(apps/etl) → 3 passed.
+- WSL ext4 mirror: `ruff check pinvi tests`, `ruff format --check pinvi tests`,
+  `mypy --strict pinvi` 통과.
+- WSL ext4 mirror: `bash -n scripts/deploy-node.sh scripts/ops-node-doctor.sh scripts/n150-docker-doctor.sh scripts/odroid-docker-doctor.sh` 통과.
+- WSL ext4 mirror: `docker compose -f infra/docker-compose.yml config` /
+  `docker compose -f infra/docker-compose.app.yml config` 통과.
+- Windows: `git diff --check` 통과.
+
+**다음**: PR로 올린 뒤 리뷰/merge. merge 후 main에서 `v0.1.0` tag + GitHub Release 생성.
+
 ## 2026-06-13 (codex) — T-199 런타임 계약/외부 서비스명 Pinvi hard cutover
 
 **작업**: 호환 별칭 없이 런타임 계약과 외부 서비스명을 새 이름으로 정리했다.

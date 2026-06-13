@@ -1,7 +1,9 @@
 # Odroid M1S 배포 Runbook
 
 ODROID M1S (ARM64, RK3566, 8GB RAM) + Ubuntu 24.04 + Docker Compose 운영.
-SPEC V8 N-7 + v1 `docs/runbooks/odroid-docker.md` 정리.
+ADR-023/ADR-039 이후 Odroid는 ARM64 검증과 수동 대체 배포가 가능한 노드다. 전체 배포
+절차는 [deploy.md](./deploy.md), 노드별 요약은
+[`infra/odroid/README.md`](../../infra/odroid/README.md)를 우선한다.
 
 ## 1. 사전 조건
 
@@ -35,6 +37,10 @@ sudo chown -R pinvi:pinvi /mnt/nvme
 ```
 
 ## 2. ARM64 multi-arch 이미지
+
+현재 정본 workflow는 `.github/workflows/docker-images.yml`이다. tag `v*` push 또는
+수동 실행으로 API/Web image를 `linux/amd64,linux/arm64` manifest로 GHCR에 push한다.
+아래 YAML은 구상 참고이며, 실제 값은 workflow 파일을 본다.
 
 ### 2.1 CI 빌드 (`x86_64` 호스트에서 `linux/arm64` 포함)
 
@@ -94,46 +100,17 @@ scp /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz odroid:/tmp
 ssh odroid 'cd /opt/pinvi && docker load < /tmp/pinvi-api-arm64-*.tar.gz'
 ```
 
-## 3. 초기 배포 (`scripts/odroid-docker-start.sh`)
+## 3. 초기 배포 (`scripts/deploy-node.sh`)
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# 사전 검사
-if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "Linux only" >&2; exit 1
-fi
-if ! docker compose version >/dev/null 2>&1; then
-  echo "Docker Compose v2 plugin not installed" >&2; exit 1
-fi
-
 cd /opt/pinvi
-
-# 디렉토리 준비
-mkdir -p .tmp/{dagster-downloads,dagster-logs,etl-soak,backups} dataset
-
-# 이미지 pull
-docker compose -f infra/docker-compose.app.yml pull
-
-# Postgres + RustFS 먼저
-docker compose -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-
-# 헬스 대기
-sleep 5
-
-# Alembic
-docker compose -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head
-
-# kor-travel-map alembic (별 컨테이너)
-docker compose -f infra/docker-compose.app.yml run --rm app-etl python -m kor_travel_map.map.cli alembic upgrade head
-
-# API + Web + Dagster
-docker compose -f infra/docker-compose.app.yml up -d app-api app-web app-etl
-
-# 상태
-docker compose -f infra/docker-compose.app.yml ps
+scripts/odroid-docker-doctor.sh
+scripts/deploy-node.sh deploy
+scripts/odroid-docker-doctor.sh
 ```
+
+평상시 Odroid는 public traffic을 받지 않는다. ARM64 API/Web smoke만 필요하면
+`scripts/deploy-node.sh up && scripts/deploy-node.sh smoke`를 사용한다.
 
 ## 4. 배포 (운영)
 

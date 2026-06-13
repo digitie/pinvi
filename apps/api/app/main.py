@@ -23,6 +23,7 @@ from app.core.logging import configure_logging, get_logger
 from app.middleware.geofence import GeofenceMiddleware, validate_geofence_configuration
 from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.services.location_audit import location_audit_outbox_worker_lifespan
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
@@ -63,6 +64,7 @@ app = FastAPI(
 )
 
 app.add_middleware(LocationAuditMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(GeofenceMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(PrometheusMetricsMiddleware)
