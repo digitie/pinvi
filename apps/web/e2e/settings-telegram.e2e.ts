@@ -23,7 +23,7 @@ test('Telegram 대상 등록 → 목록 반영 → 삭제', async ({ page }) => 
   const targets: Array<Record<string, unknown>> = [];
 
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/users/me/telegram-targets',
+    (url) => url.port === '12801' && url.pathname === '/users/me/telegram-targets',
     async (route, request) => {
       if (request.method() === 'POST') {
         targets.unshift(targetBody());
@@ -41,7 +41,7 @@ test('Telegram 대상 등록 → 목록 반영 → 삭제', async ({ page }) => 
     },
   );
   await page.route(
-    (url) => url.port === '12501' && url.pathname === `/users/me/telegram-targets/${targetId}`,
+    (url) => url.port === '12801' && url.pathname === `/users/me/telegram-targets/${targetId}`,
     async (route, request) => {
       if (request.method() !== 'DELETE') return route.continue();
       targets.length = 0;
@@ -71,7 +71,7 @@ test('Telegram 대상 등록 → 목록 반영 → 삭제', async ({ page }) => 
 
 test('Chat ID 없이 연결하면 필드 오류 + aria-invalid + 포커스', async ({ page }) => {
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/users/me/telegram-targets',
+    (url) => url.port === '12801' && url.pathname === '/users/me/telegram-targets',
     async (route, request) => {
       if (request.method() !== 'GET') return route.continue();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });

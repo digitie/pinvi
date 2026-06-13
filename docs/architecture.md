@@ -24,7 +24,7 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 │   models/   SQLAlchemy 2 async — app schema만                          │
 │   schemas/  Pydantic v2                                                │
 │                                                                        │
-│   httpx → kor-travel-map API :12301 (OpenAPI, ADR-026)                       │
+│   httpx → kor-travel-map API :12701 (OpenAPI, ADR-026)                       │
 │   httpx → kor-travel-geo v2 REST (ADR-025)                                  │
 └────────────────────────────────────────────────────────────────────────┘
                               │
@@ -32,7 +32,7 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
        ▼                      ▼                              ▼
 ┌──────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
 │ PostgreSQL16 │    │ RustFS (S3 호환)   │    │ kor-travel-map       │
-│ + PostGIS3.5 │    │ - app/             │    │ API/Admin API :12301     │
+│ + PostGIS3.5 │    │ - app/             │    │ API/Admin API :12701     │
 │ schema:      │    │   사용자 첨부      │    │                         │
 │ - app (TM)   │    │ - feature-media/   │    │ feature/provider_sync   │
 │ - feature    │    │   kor-travel-map 소유  │    │ schema 소유              │
@@ -120,8 +120,8 @@ forbidden_modules = [
 
 Pinvi는 최신 kor-travel-map `openapi.user.json`을 기준으로 HTTP 호출한다.
 
-- API base URL: `PINVI_KOR_TRAVEL_MAP_API_BASE_URL` (`http://localhost:12301`)
-- Admin API base URL: `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` (`http://localhost:12301`)
+- API base URL: `PINVI_KOR_TRAVEL_MAP_API_BASE_URL` (`http://localhost:12701`)
+- Admin API base URL: `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` (`http://localhost:12701`)
 - 대표 경로: `GET /features/in-bounds`, `GET /features/search`,
   `GET /features/{feature_id}`, `POST /v1/features/batch`
 
@@ -190,7 +190,7 @@ HTTP 호출한다(ADR-025, `docs/integrations/kor-travel-geo.md`).
 1. NTFS worktree `F:/dev/pinvi-<agent>`에서 Windows `git.exe`로 branch/commit/push
 2. WSL ext4 테스트 미러 `~/pinvi-workspaces/pinvi-<agent>`에서 테스트/Docker 실행
 3. `dataset/`, `refdocs/`는 NTFS에 두고 ext4에 심볼릭 링크 또는 직접 참조
-4. `kor-travel-map`은 별도 sibling 저장소에서 API/Admin API `12301`로 실행
+4. `kor-travel-map`은 별도 sibling 저장소에서 API/Admin API `12701`로 실행
    하고, Pinvi는 HTTP base URL만 설정한다.
 5. 동기는 NTFS → ext4 단방향. ext4 미러에서 commit/push 금지
 

@@ -28,16 +28,16 @@ services:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
       RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: ":12101"
+      RUSTFS_ADDRESS: ":9000"
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_CONSOLE_ADDRESS: ":12105"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
     ports:
-      - "12101:12101"
-      - "12105:12105"
+      - "12101:9000"
+      - "12105:9001"
     volumes:
       - pinvi-rustfs:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:12101/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,7 +49,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://rustfs:12101 rustfsadmin rustfsadmin;
+      mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin;
       mc mb -p local/pinvi-media || true;
       "
 
@@ -66,7 +66,7 @@ services:
         condition: service_healthy
     environment:
       PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_dev_password@postgres:5432/pinvi
-      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:12101
+      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:9000
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: rustfsadmin
       PINVI_RUSTFS_SECRET_ACCESS_KEY: rustfsadmin
@@ -75,7 +75,7 @@ services:
       PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
       DAGSTER_HOME: /opt/pinvi/.tmp/dagster
     ports:
-      - "9023:3000"
+      - "12802:3000"
     volumes:
       - ../apps/etl:/opt/pinvi/apps/etl
       - pinvi-dagster:/opt/pinvi/.tmp/dagster
@@ -89,7 +89,7 @@ services:
     devices:
       - /dev/kmsg:/dev/kmsg
     ports:
-      - "${PINVI_CADVISOR_PORT:-12602}:8080"
+      - "${PINVI_CADVISOR_PORT:-12301}:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -112,7 +112,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${PINVI_PROMETHEUS_PORT:-12601}:9090"
+      - "${PINVI_PROMETHEUS_PORT:-12401}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - pinvi-prometheus:/prometheus
@@ -134,7 +134,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
-      - "${PINVI_GRAFANA_PORT:-12605}:3000"
+      - "${PINVI_GRAFANA_PORT:-12205}:3000"
     volumes:
       - pinvi-grafana:/var/lib/grafana
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro

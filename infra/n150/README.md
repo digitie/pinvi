@@ -45,5 +45,5 @@ Postgres는 이 노드의 운영 DB로 실행한다. Odroid와 DB live sync는 �
 
 ```bash
 scripts/n150-docker-doctor.sh
-curl -fsS http://127.0.0.1:12501/health/db
+curl -fsS http://127.0.0.1:12801/health/db
 ```

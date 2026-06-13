@@ -6,8 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
 
-API_PORT="${PINVI_API_PORT:-12501}"
-WEB_PORT="${PINVI_WEB_PORT:-12505}"
+API_PORT="${PINVI_API_PORT:-12801}"
+WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 SMOKE_KEEP_RUNNING=""
@@ -25,16 +25,16 @@ Usage:
   scripts/docker-app.sh smoke [--keep-running]
 
 Defaults:
-  API URL:            http://127.0.0.1:12501
-  Web URL:            http://127.0.0.1:12505
+  API URL:            http://127.0.0.1:12801
+  Web URL:            http://127.0.0.1:12805
   RustFS API URL:     http://127.0.0.1:12101
   RustFS console URL: http://127.0.0.1:12105
 
 Environment overrides:
   PINVI_DOCKER_PROJECT=pinvi-app
   PINVI_DOCKER_COMPOSE_FILE=infra/docker-compose.app.yml
-  PINVI_API_PORT=12501
-  PINVI_WEB_PORT=12505
+  PINVI_API_PORT=12801
+  PINVI_WEB_PORT=12805
   PINVI_RUSTFS_PORT=12101
   PINVI_RUSTFS_CONSOLE_PORT=12105
 EOF

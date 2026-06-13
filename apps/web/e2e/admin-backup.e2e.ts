@@ -115,5 +115,5 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
   await expect(page.getByText(/핫스왑 restore 요청이 완료됐습니다/)).toBeVisible();
 
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('12301'))).toBe(false);
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });

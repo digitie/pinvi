@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 
-const DEFAULT_GRAFANA_URL = 'http://localhost:12605';
+const DEFAULT_GRAFANA_URL = 'http://localhost:12205';
 const DEFAULT_DASHBOARD_PATH = '/d/pinvi/overview?orgId=1&kiosk=tv';
 
 function buildGrafanaUrl(): string {

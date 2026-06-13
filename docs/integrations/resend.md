@@ -34,7 +34,7 @@ Resend "verified" 상태 확인 후 발송 시작.
 | `PINVI_RESEND_TIMEOUT_SECONDS` | `5` |
 | `PINVI_RESEND_WEBHOOK_SECRET` | (Svix secret) |
 | `PINVI_RESEND_WEBHOOK_ALLOW_UNSIGNED` | `false` 기본. 로컬 개발에서만 `true` |
-| `PINVI_WEB_BASE_URL` | dev `http://localhost:12505`, production `https://pinvi.digitie.mywire.org` |
+| `PINVI_WEB_BASE_URL` | dev `http://localhost:12805`, production `https://pinvi.digitie.mywire.org` |
 | `PINVI_EMAIL_VERIFICATION_PATH` | `/verify-email` |
 
 미설정 시 (`PINVI_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에

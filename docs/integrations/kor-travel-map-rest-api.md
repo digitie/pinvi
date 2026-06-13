@@ -13,8 +13,8 @@
 > batch `data.found`(§7 잔여 1 우리 제안 **수용됨**), in-bounds `max_items`,
 > `meta.cluster.cluster_unit`(§7 잔여 2 수용됨). → **T-181 잔여 lockstep 대기 해제,
 > 실행 가능**. 본문 중 "미머지/대기" 표기는 이 노트가 우선한다.
-> 추가 정정: **kor_travel_map admin API는 :12301 `/v1/admin/*`**이다. 본문/`config.py`는
-> admin API base도 `12301`을 기본값으로 둔다.
+> 추가 정정: **kor_travel_map admin API는 :12701 `/v1/admin/*`**이다. 본문/`config.py`는
+> admin API base도 `12701`을 기본값으로 둔다.
 > 결정 반영: 재적재 vs 사용자 제안 분리 흐름(§2.8/2.9)은 kor_travel_map **ADR-051(2026-06-10)**로
 > 공식 승인됐고, 잔여 합의 5건(§7)은 kor_travel_map T-217c가 확정해 회신 예정.
 > **2026-06-12 추가**: kor-travel-map `curated_features`는 Pinvi
@@ -30,7 +30,7 @@
 ## 0. 한눈에 — 무엇이 바뀌었나
 
 `docs/kor-travel-map-requirements.md`(2026-06-06)가 "kor-travel-map에 없다"고 한 능력 대부분이
-**구현 완료**됐다. kor-travel-map은 `packages/kor-travel-map-admin`(FastAPI, 포트 **12301**)에
+**구현 완료**됐다. kor-travel-map은 `packages/kor-travel-map-admin`(FastAPI, 포트 **12701**)에
 Pinvi-facing `openapi.user.json`을 export하고, 다음 사용자 표면 엔드포인트를 제공한다:
 
 | 능력 | 엔드포인트 | 직전 상태 → 현재 |
@@ -56,10 +56,10 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 
 ## 1. 연결 규약 (전 엔드포인트 공통)
 
-- **Base URL**: 로컬 `http://127.0.0.1:12301` — **admin/ops API 포함 전 표면이 :12301**
+- **Base URL**: 로컬 `http://127.0.0.1:12701` — **admin/ops API 포함 전 표면이 :12701**
   (`/v1/admin/*`·`/v1/ops/*` path로 구분, Pinvi Admin 프록시 전용·사용자 경로 미노출).
   Pinvi 설정은 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`과
-  `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 모두 기본값을 `12301`로 둔다.
+  `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 모두 기본값을 `12701`로 둔다.
 - **버전 prefix**: **외부 전 표면 `/v1` (라이브, 2026-06-09)** — kor_travel_map PR #318/#319/#321이 `/v1`
   clean cut + batch `/pinvi/features/batch`→`/v1/features/batch` + 파라미터 개명을 머지
   (`openapi.user.json` `kor-travel-map-user 0.2.0-dev`). `/health`·`/version`만 비버전. **Pinvi T-170
@@ -182,7 +182,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 
 **(A) 재적재(feature-update-request) = kor-travel-map Admin — Pinvi 제품 무관**
 - **경로 변경(kor_travel_map PR #317)**: `/pinvi/feature-update-requests*` alias **제거** →
-  **`/v1/admin/feature-update-requests*`** 로 고정(admin spec — **API는 :12301**).
+  **`/v1/admin/feature-update-requests*`** 로 고정(admin spec — **API는 :12701**).
   `POST`(create/dry-run) / `GET /{id}` / `POST /{id}/cancel` / `POST /{id}/run-now`.
 - "특정 scope를 다시 적재(Dagster job)"하는 **kor-travel-map 운영자 기능**. kor-travel-map admin
   콘솔에서 운영. **Pinvi 일반 사용자 비노출, 사용자 제안 흐름과 무관.**
@@ -198,7 +198,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 ### 2.9 feature change API — `POST/PATCH/DELETE /admin/features` (kor_travel_map PR #317, K-15 해소)
 
 **Pinvi Admin 도메인 전용**(`require_admin_destructive_enabled` + 서비스 토큰 —
-**API base는 :12301 `/v1/admin/*`**). 사용자 제안 승인 시 호출.
+**API base는 :12701 `/v1/admin/*`**). 사용자 제안 승인 시 호출.
 `place`/`event`만 대상. **kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로
 공식 승인** — 별도 suggestions API는 만들지 않는다.
 
@@ -282,12 +282,12 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 
 - ✅ **T-170/T-171 완료(PR #102)**: `apps/api/app/clients/kor_travel_map.py` httpx client(계약
   메서드 + 도메인 예외 + 재시도 + 서비스 토큰 + lifespan/dependency) + `Settings`
-  `pinvi_kor_travel_map_*` 배선. user API(12301) 소비 준비됨.
+  `pinvi_kor_travel_map_*` 배선. user API(12701) 소비 준비됨.
 - 레거시 `apps/api/app/etl_bridge/kor_travel_map.py`(in-process Protocol stub) + `features.py`
   라우터는 아직 stub을 사용 → `/features/*` 503. **라우터 cutover/셰입 정렬은 T-173/T-124**.
 - `trip_view_builder`/`cluster_query`는 완성됐으나 미연결(T-175/T-174).
 - admin 도메인 feature change client는 미구현(T-180, PR #317로 대상 API 생김).
-  **base는 API 12301 `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도
+  **base는 API 12701 `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도
   같은 기본값을 사용해야 한다.
 
 ---
@@ -309,7 +309,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
       idempotency_key)`로 결정적 feature_id, 재시도 동일.
    3. **출처 태깅**: operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) + reason
       `[suggestion:<request_id>]` prefix(change-requests 큐가 출처 표시).
-   4. **admin 인증**: 12301 `/v1/admin/*`, 코드 인증은 kor_travel_map `admin_destructive_enabled`
+   4. **admin 인증**: 12701 `/v1/admin/*`, 코드 인증은 kor_travel_map `admin_destructive_enabled`
       kill-switch뿐 — 호출자 인증은 인프라 계층(SSO/IP allowlist). service token은 선택 pass-through.
    5. **closure**: 영구 폐업 = soft `DELETE`(`user_deleted_*`, provider 재적재 부활 차단) /
       일시 비활성 = `deactivate`(미사용).
@@ -349,10 +349,10 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   ⚠️ 재적재(feature-update-request)와 **무관**. **web 검토 UI 완료**
   (`apps/web/app/(admin)/admin/feature-requests/page.tsx` — 검토 큐 + 승인/거절 패널).
   **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11) + Pinvi 반영 완료** — §7 참조.
-- **[admin client] ✅ T-180 — kor_travel_map admin HTTP client(API 12301 `/v1/admin/*`)** (완료 2026-06-11):
+- **[admin client] ✅ T-180 — kor_travel_map admin HTTP client(API 12701 `/v1/admin/*`)** (완료 2026-06-11):
   `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (create/patch/delete_feature
   → `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
-  base = :12301 `/v1/admin/*` (`pinvi_kor_travel_map_admin_base_url` 기본값도 12301),
+  base = :12701 `/v1/admin/*` (`pinvi_kor_travel_map_admin_base_url` 기본값도 12701),
   `X-Kor-Travel-Map-Service-Token`(`pinvi_kor_travel_map_admin_service_token`, 미설정 시 공용 토큰 fallback).
   lifespan/`get_kor_travel_map_admin_client` 의존성 + MockTransport 계약 테스트. **승인 시 호출 배선은 T-179.**
 - **[공통] T-178 — 에러/저하 정책**: kor_travel_map 5xx/timeout → Pinvi `503 FEATURE_SERVICE_UNAVAILABLE`
@@ -388,7 +388,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
      kor_travel_map `immediate` 운영 / Pinvi `create→approve` 2-step / 요청 단위 override 중 합의.
   2. **idempotency_key 멱등**: 같은 제안 재시도 시 동일 feature_id 반환 여부.
   3. **출처 태깅**: Pinvi + suggestion_id 추적(operator/reason vs 전용 source 필드).
-  4. **admin 인증**: `/v1/admin/features*`(`require_admin_destructive_enabled`, **API 12301**) 호출 토큰 방식.
+  4. **admin 인증**: `/v1/admin/features*`(`require_admin_destructive_enabled`, **API 12701**) 호출 토큰 방식.
   5. **closure**: 영구 폐업 = `DELETE`(soft) vs `/{id}/deactivate` 권장.
 - **ADR-048 재리뷰 A–F — 수렴 완료(kor_travel_map df69057에서 6건 전부 수용, 2026-06-09)**:
   소유자 지시(호환성 무시, 일관성/확장성/안정성 우선)로 1차 "무중단/동결"을 철회한 재리뷰를

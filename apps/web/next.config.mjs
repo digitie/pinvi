@@ -1,4 +1,4 @@
-const DEFAULT_GRAFANA_URL = 'http://localhost:12605';
+const DEFAULT_GRAFANA_URL = 'http://localhost:12205';
 
 function grafanaOrigin() {
   try {

@@ -349,7 +349,7 @@ Content-Type: application/json
 ### 8.4 사용자 feature 제안 검토 큐 (T-179)
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12301 /v1/admin/*`)로 전달한다.
+kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12701 /v1/admin/*`)로 전달한다.
 **Pinvi는 신규 수신 API를 만들지 않고 kor_travel_map 기존 change API를 전송 구간으로 쓴다**
 (kor_travel_map ADR-051). `apps/api/app/api/v1/admin/feature_requests.py`.
 

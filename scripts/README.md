@@ -4,7 +4,7 @@
 
 | 스크립트 | 용도 | Sprint |
 |---------|------|--------|
-| `docker-app.sh` | App 컨테이너 build/up/down/status/logs/smoke (`docker-compose.app.yml`, API 12501/Web 12505/RustFS 12101·12105) | 1 |
+| `docker-app.sh` | App 컨테이너 build/up/down/status/logs/smoke (`docker-compose.app.yml`, API 12801/Web 12805/RustFS 12101·12105) | 1 |
 | `docker-app-smoke-test.sh` | `docker-app.sh smoke` 호환 wrapper | 1 |
 | `pr_review_monitor.py` | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김 | 4 |
 | `backup-db.sh` | `app` schema `pg_dump --format=custom` + sha256 (ADR-022 1차) | 5 |

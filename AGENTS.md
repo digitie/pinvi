@@ -40,7 +40,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 
 > **현황 (2026-06-06 감사, ADR-027)**: 이 HTTP 계약은 kor-travel-map이 **신규로 구축해야
 > 할 목표**다(현재 kor-travel-map은 in-process 함수 라이브러리 + 인증 없는 debug-UI만 보유,
-> 포트 12301/`openapi.user.json` 미존재). Pinvi 요구사항은
+> 포트 12701/`openapi.user.json` 미존재). Pinvi 요구사항은
 > `docs/kor-travel-map-requirements.md`, 종합 감사는 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. master(main)는 v2 사양으로 처음부터
@@ -120,13 +120,14 @@ trunk를 절대 편집하지 않는다.
 - **Frontend 실행**: `apps/web` dev server, lint, typecheck, build, Vitest는
   WSL ext4 테스트 미러에서 실행한다. e2e 검증을 위한 Playwright runner /
   브라우저만 Windows에서 실행한다.
-- **고정 dev 포트**: 로컬 장기 실행 서비스는 PostgreSQL `5432`, API `12501`,
-  웹 `12505`, Dagster `9023`, kor-travel-map API/Admin API `12301`, RustFS API `12101`,
+- **고정 dev 포트**: 로컬 장기 실행 서비스는 PostgreSQL `5432`, API `12801`,
+  웹 `12805`, Dagster `12802`, kor-travel-map API/Admin API `12701`, RustFS API `12101`,
   RustFS console `12105`를 항상 사용한다.
   `scripts/dev-up.sh`는 시작 전 해당 포트를 점유한 프로세스를 종료하고 다시 올리며,
   `scripts/dev-down.sh`는 같은 포트를 정리한다. Docker 빌드/실행은
   `kor-travel-docker-manager`(`ktdctl`)를 1차 경로로 쓰고, 불가 시
-  `scripts/docker-app.sh`로 폴백한다 (ADR-040, `docs/runbooks/docker-app.md` §0).
+  `scripts/docker-app.sh`로 폴백한다 (Docker 진입 경로 ADR-040, 포트 정책 ADR-042,
+  `docs/runbooks/docker-app.md` §0).
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 
 #### CodeGraph Commands
@@ -179,12 +180,12 @@ trunk를 절대 편집하지 않는다.
 - **Frontend 실행**: `apps/web` dev server / lint / typecheck / build / Vitest는
   WSL ext4 미러에서만. **Playwright/브라우저 e2e만** Windows Node/브라우저에서
   실행한다.
-- **고정 dev 포트**: PostgreSQL `5432`, API `12501`, 웹 `12505`, Dagster `9023`,
-  kor-travel-map API/Admin API `12301`, RustFS API `12101`, RustFS console `12105`.
+- **고정 dev 포트**: PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster `12802`,
+  kor-travel-map API/Admin API `12701`, RustFS API `12101`, RustFS console `12105`.
   포트가 점유돼 있으면 기존 프로세스를 종료하고 같은 포트로 재기동한다
   (`npm run dev:up` / `npm run dev:down`, WSL ext4 미러). Docker 빌드/실행은
   `kor-travel-docker-manager`(`ktdctl`) 1차 + `scripts/docker-app.sh` 폴백
-  (ADR-040, `docs/runbooks/docker-app.md` §0).
+  (Docker 진입 경로 ADR-040, 포트 정책 ADR-042, `docs/runbooks/docker-app.md` §0).
 
 절차·명령·함정 전체는 `docs/dev-environment.md`(ADR-024), worktree 생성·CodeGraph·
 git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017)가 1차 reference다.

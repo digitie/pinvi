@@ -27,11 +27,11 @@ test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한�
 
   await expect(page.getByRole('heading', { name: 'Grafana' })).toBeVisible();
   await expect(page.getByTestId('admin-grafana-frame')).toBeVisible();
-  await expect(page.getByTestId('admin-grafana-origin')).toContainText('http://localhost:12605');
+  await expect(page.getByTestId('admin-grafana-origin')).toContainText('http://localhost:12205');
   await expect(page.getByTestId('admin-nav--admin-grafana')).toBeVisible();
 
   const frameSrc = await page.getByTestId('admin-grafana-frame').getAttribute('src');
   expect(frameSrc).toContain('/d/pinvi/overview');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
-  expect(requests.some((url) => url.includes('12301'))).toBe(false);
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });

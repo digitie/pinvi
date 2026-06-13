@@ -59,7 +59,7 @@ uv venv && uv pip install -e "apps/api[dev]"
 
 # 프론트
 npm install
-scripts/dev-up.sh                                           # API 12501 / Web 12505 / Dagster 9023
+scripts/dev-up.sh                                           # API 12801 / Web 12805 / Dagster 12802
 
 # 인프라 (RustFS API 12101 / console 12105)
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
@@ -67,7 +67,7 @@ docker compose -f infra/docker-compose.yml up -d postgres rustfs
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
+# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12701)
 
 # Alembic (app schema만)
 uv run --package apps/api alembic upgrade head

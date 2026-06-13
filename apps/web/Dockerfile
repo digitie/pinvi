@@ -19,7 +19,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /repo
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
-ARG NEXT_PUBLIC_PINVI_API_URL=http://localhost:12501
+ARG NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801
 ENV NEXT_PUBLIC_PINVI_API_URL=${NEXT_PUBLIC_PINVI_API_URL}
 RUN npm --workspace apps/web run build
 

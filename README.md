@@ -40,7 +40,7 @@ docs/       — 본 저장소의 결정·기록·계약
 
 - **`kor-travel-map`** (별 저장소 `F:\dev\kor-travel-map`):
   지도 feature 정규화·저장 + OpenAPI API/Admin API. Pinvi는 최신 OpenAPI HTTP
-  계약으로 사용한다(ADR-026, API/Admin API `12301`).
+  계약으로 사용한다(ADR-026, API/Admin API `12701`).
 - **`python-*-api`** (별 저장소들): KMA, VisitKorea, OpiNet, MOIS, KREX, KHOA,
   국가유산, 산림청 등 한국 공공 API 클라이언트.
 - **`kor-travel-geo`**: 주소·법정동·시군구 정규화/지오코딩.
@@ -84,11 +84,11 @@ import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 
 | 서비스 | 로컬 고정 포트 | Production URL |
 |--------|---------------|----------------|
-| API | `12501` | `https://pinviapi.digitie.mywire.org` |
-| Web | `12505` | `https://pinvi.digitie.mywire.org` |
+| API | `12801` | `https://pinviapi.digitie.mywire.org` |
+| Web | `12805` | `https://pinvi.digitie.mywire.org` |
 | PostgreSQL | `5432` | 내부망 |
 | RustFS API / console | `12101` / `12105` | 내부망 |
-| kor-travel-map API/Admin API | `12301` | 별도 저장소 |
+| kor-travel-map API/Admin API | `12701` | 별도 저장소 |
 
 운영 OAuth callback은 API 도메인 기준
 `https://pinviapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
@@ -105,11 +105,11 @@ sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
 # 백엔드 (uv 권장)
 uv venv && uv pip install -e "apps/api[dev]"
-# kor-travel-map은 별도 프로그램으로 실행 (API/Admin API 12301)
+# kor-travel-map은 별도 프로그램으로 실행 (API/Admin API 12701)
 
 # 프론트엔드 / API / Dagster dev server
 npm install
-scripts/dev-up.sh                     # API 12501 / Web 12505 / Dagster 9023
+scripts/dev-up.sh                     # API 12801 / Web 12805 / Dagster 12802
 
 # 인프라 (RustFS API 12101 / console 12105)
 docker compose -f infra/docker-compose.yml up -d postgres rustfs
@@ -117,7 +117,7 @@ docker compose -f infra/docker-compose.yml up -d postgres rustfs
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
+# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12701)
 
 # Alembic (앱 도메인)
 uv run --package apps/api alembic upgrade head

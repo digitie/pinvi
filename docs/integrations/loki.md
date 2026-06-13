@@ -34,7 +34,7 @@ services:
       resources:
         limits: { memory: 384M }
     ports:
-      - "12605:3000"    # observability 대역(Grafana)
+      - "12205:3000"    # observability 대역(Grafana)
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PW}
     volumes:

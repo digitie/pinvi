@@ -39,16 +39,16 @@ Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
 
 | 포트 | 용도 |
 |------|------|
-| 12501 | FastAPI dev / Docker smoke API |
-| 12505 | Next.js dev / Docker smoke Web |
-| 9023 | Dagster UI |
-| 12301 | kor-travel-map API/Admin API |
+| 12801 | FastAPI dev / Docker smoke API |
+| 12805 | Next.js dev / Docker smoke Web |
+| 12802 | Dagster UI |
+| 12701 | kor-travel-map API/Admin API |
 | 12101 | RustFS S3 endpoint |
 | 12105 | RustFS console |
 | 5432 | PostgreSQL host/container port |
-| 12601 | Prometheus (옵션, observability profile) |
-| 12602 | cAdvisor Exporter (옵션, observability profile) |
-| 12605 | Grafana (옵션, observability profile) |
+| 12401 | Prometheus (옵션, observability profile) |
+| 12301 | cAdvisor Exporter (옵션, observability profile) |
+| 12205 | Grafana (옵션, observability profile) |
 
 ### 2.3 환경변수 정책
 

@@ -25,9 +25,9 @@
 
 자세히는 [common.md](./common.md). 핵심:
 
-- **Base URL**: 개발 `http://localhost:12501`, Docker smoke `http://127.0.0.1:12501`,
+- **Base URL**: 개발 `http://localhost:12801`, Docker smoke `http://127.0.0.1:12801`,
   운영 `https://pinviapi.digitie.mywire.org`.
-- **OpenAPI**: FastAPI 자동 생성 `http://localhost:12501/docs`.
+- **OpenAPI**: FastAPI 자동 생성 `http://localhost:12801/docs`.
 - **응답 형식**:
 
   ```jsonc

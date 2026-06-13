@@ -138,7 +138,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 | `PINVI_DAGSTER_LOG_DIR` | `/opt/pinvi/.tmp/dagster-logs` |
 | `PINVI_DAGSTER_HOME` | `/opt/pinvi/.tmp/dagster` |
 | `PINVI_ETL_CONFIG_PATH` | `/opt/pinvi/config/etl-datasets.json` |
-| `PINVI_RUSTFS_ENDPOINT_URL` | `http://rustfs:12101` |
+| `PINVI_RUSTFS_ENDPOINT_URL` | `http://rustfs:9000` |
 | `PINVI_RUSTFS_BUCKET_FEATURE` | `pinvi-feature-media` |
 | `DATA_GO_KR_SERVICE_KEY` | KASI 등 data.go.kr 공통 서비스키 |
 | `PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS` | `6` |
@@ -156,7 +156,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 cd ~/pinvi-workspaces/pinvi-codex/apps/etl
 uv venv .venv --python 3.12
 uv pip install -e .
-uv run dagster dev --host 0.0.0.0 --port 9023   # UI + daemon http://localhost:9023
+uv run dagster dev --host 0.0.0.0 --port 12802   # UI + daemon http://localhost:12802
 ```
 
 ### 7.2 Docker
@@ -168,10 +168,10 @@ services:
     build: ./apps/etl
     depends_on: [postgres]
     ports:
-      - "9023:3000"
+      - "12802:3000"
     environment:
       PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi
-      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:12101
+      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:9000
       # ...
     volumes:
       - ./apps/etl:/opt/pinvi/apps/etl

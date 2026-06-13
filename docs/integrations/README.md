@@ -15,7 +15,7 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 | ~~[gemini.md](./gemini.md)~~ | 보류 — `kor-travel-concierge` 참고용 레거시 Gemini 메모 | deferred |
 | [telegram.md](./telegram.md) | Telegram Bot (알림) | 4+ |
 | [maplibre-vworld.md](./maplibre-vworld.md) | **지도 클라이언트** — `maplibre-vworld-js` (VWorld + MapLibre GL) (ADR-015) | 4 |
-| [kor-travel-map-rest-api.md](./kor-travel-map-rest-api.md) | **kor-travel-map REST API 계약** — feature 데이터 OpenAPI HTTP(포트 12301, ADR-026/027) + Pinvi 연결 작업 | 4 |
+| [kor-travel-map-rest-api.md](./kor-travel-map-rest-api.md) | **kor-travel-map REST API 계약** — feature 데이터 OpenAPI HTTP(포트 12701, ADR-026/027) + Pinvi 연결 작업 | 4 |
 | [kor-travel-geo.md](./kor-travel-geo.md) | kor-travel-geo v2 REST geocoding (ADR-025) | 4 |
 | [kasi.md](./kasi.md) | KASI 특일 + 위치별 해·달 출몰시각 | 5 |
 | ~~[kakao-map.md](./kakao-map.md)~~ | 폐기 — `maplibre-vworld-js`로 교체 (ADR-015) | — |

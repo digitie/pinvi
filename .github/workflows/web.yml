@@ -44,7 +44,7 @@ jobs:
 
       - name: Build (workspaces)
         env:
-          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12501
+          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12801
         run: npm run build
 
   e2e:
@@ -67,12 +67,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # 모든 e2e 는 page.route 로 API 를 mock — 백엔드 불필요.
-      # playwright webServer 가 `npm run build && npm run start`(:12505)로 앱을 띄운다.
-      # API URL 은 12501(lib/api 기본값) — admin e2e mock 이 port 12501 을 exact-match 하므로 일치 필수.
+      # playwright webServer 가 `npm run build && npm run start`(:12805)로 앱을 띄운다.
+      # API URL 은 12801(lib/api 기본값) — admin e2e mock 이 port 12801 을 exact-match 하므로 일치 필수.
       - name: Run Playwright e2e
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12501
+          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12801
         run: npx playwright test
 
       - name: Upload e2e traces

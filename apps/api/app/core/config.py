@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     pinvi_resend_timeout_seconds: int = 5
     pinvi_resend_webhook_secret: str = ""
     pinvi_resend_webhook_allow_unsigned: bool = False
-    pinvi_web_base_url: str = "http://localhost:12505"
+    pinvi_web_base_url: str = "http://localhost:12805"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(
         default="/reset-password",
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     pinvi_naver_oauth_client_secret: str = ""
     pinvi_kakao_oauth_rest_api_key: str = ""
     pinvi_kakao_oauth_client_secret: str = ""
-    pinvi_oauth_callback_base_url: str = "http://localhost:12501"
+    pinvi_oauth_callback_base_url: str = "http://localhost:12801"
     pinvi_oauth_state_ttl_seconds: int = 600
     pinvi_oauth_http_timeout_seconds: int = 5
 
@@ -84,10 +84,10 @@ class Settings(BaseSettings):
     pinvi_max_attachments_per_target: int = 30
 
     # kor-travel-map 독립 프로그램 (지도 feature OpenAPI HTTP, ADR-026/027)
-    # `docs/integrations/kor-travel-map-rest-api.md` §1 — 전 표면 API/Admin API :12301.
-    pinvi_kor_travel_map_api_base_url: str = "http://localhost:12301"
-    # admin feature change(`/v1/admin/features*`, T-180)도 같은 호스트 :12301.
-    pinvi_kor_travel_map_admin_base_url: str = "http://localhost:12301"
+    # `docs/integrations/kor-travel-map-rest-api.md` §1 — 전 표면 API/Admin API :12701.
+    pinvi_kor_travel_map_api_base_url: str = "http://localhost:12701"
+    # admin feature change(`/v1/admin/features*`, T-180)도 같은 호스트 :12701.
+    pinvi_kor_travel_map_admin_base_url: str = "http://localhost:12701"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Kor-Travel-Map-Service-Token 전달.
     pinvi_kor_travel_map_service_token: str = ""
     # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_batch_chunk_size: int = 200  # /v1/features/batch cap
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
-    pinvi_kor_travel_geo_base_url: str = "http://localhost:8888"
+    pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
 
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
 
     # CORS
     pinvi_cors_allowed_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:12505", "http://127.0.0.1:12505"]
+        default_factory=lambda: ["http://localhost:12805", "http://127.0.0.1:12805"]
     )
 
     # Geofencing (ADR-018) — 기본은 비활성, 운영에서 3차 fallback으로 활성.

@@ -17,4 +17,4 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:12501
+          - host.docker.internal:12801

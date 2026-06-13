@@ -25,5 +25,5 @@ test('지도 shell이 kor-travel-map feature 조회 없이 렌더링된다', asy
   }
 
   expect(requests.some((url) => url.includes('/features/in-bounds'))).toBe(false);
-  expect(requests.some((url) => url.includes('12301'))).toBe(false);
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });

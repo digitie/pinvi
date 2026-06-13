@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-13 (codex) — ADR-042 docker-manager 포트 대역 정렬
+
+**작업**: `kor-travel-docker-manager`의 `config/docker-targets.yml` / `docs/ports.md`를
+정본으로 삼아 Pinvi와 참조 서비스 포트를 재배정했다.
+
+- ADR-037은 ADR-042로 supersede하고, `CLAUDE.md` / `AGENTS.md` 1쪽 진입 요약을 동기화했다.
+- Pinvi API/Web/Dagster 기본 포트를 `12801` / `12805` / `12802`로 변경했다.
+- `kor-travel-map` API/Admin API 기본값은 `12701`, `kor-travel-geo` 기본값은 `12501`로
+  정렬했다.
+- 공용 observability는 Grafana `12205`, cAdvisor `12301`, Prometheus `12401`로 정리하고
+  RustFS host `12101`/`12105` ↔ container `9000`/`9001` 계약을 compose에 반영했다.
+- `.env.example`, API settings, Web 기본 API URL, Playwright mock, Docker compose,
+  dev/smoke/deploy scripts, runbook/API/integration 문서를 같은 포트 정책으로 맞췄다.
+- docker-manager가 이미 Pinvi app target을 포함하므로 `ktdctl srv --build`를 1차 Docker
+  실행 경로로 문서화하고, `scripts/docker-app.sh`는 폴백/smoke 경로로 낮췄다.
+
+**검증**:
+
+- WSL ext4 mirror: `docker compose -f infra/docker-compose.yml config`,
+  `docker compose -f infra/docker-compose.app.yml config` 통과.
+- WSL ext4 mirror: `bash -n scripts/dev-up.sh scripts/dev-down.sh scripts/docker-app.sh scripts/deploy-node.sh scripts/ops-node-doctor.sh` 통과.
+- WSL ext4 mirror: API OAuth/storage focused pytest 26 passed, Web lint/typecheck/build/Vitest
+  62 passed.
+- Windows Playwright runner: 포트 표면 e2e 20 passed. 전체 e2e는 기존 auth mock 한계로 43 passed /
+  9 failed(`/login` redirect)였고 포트 변경 회귀와는 별개다.
+- WSL dev server: API `http://localhost:12801`, Web `http://localhost:12805`, Dagster
+  `http://localhost:12802` 기동 및 `/health`/Web 200 확인.
+- Windows: `git diff --check` 통과.
+
 ## 2026-06-13 (claude) — Expo apps/mobile 구조 스캐폴드 + Docker 진입 경로 docker-manager화
 
 **작업**: 사용자 요청 두 건을 한 PR로 반영했다.

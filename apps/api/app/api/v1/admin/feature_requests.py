@@ -10,7 +10,7 @@ feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다.
 - **출처 태깅** = operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) + reason
   `[suggestion:<request_id>]` prefix (change-requests 큐가 출처 식별)
 - **closure** = soft `DELETE`(provider 재적재 부활 차단). 일시 비활성 deactivate는 미사용
-- **admin 인증** = 인프라 계층(12301 `/v1/admin/*`, SSO/IP allowlist; service token은 선택 pass-through)
+- **admin 인증** = 인프라 계층(12701 `/v1/admin/*`, SSO/IP allowlist; service token은 선택 pass-through)
 """
 
 from __future__ import annotations

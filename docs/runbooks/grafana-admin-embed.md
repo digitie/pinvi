@@ -73,7 +73,7 @@ export default function GrafanaPage() {
 현재 구현은 다음 env를 사용한다.
 
 ```bash
-NEXT_PUBLIC_GRAFANA_URL=http://localhost:12605
+NEXT_PUBLIC_GRAFANA_URL=http://localhost:12205
 NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 ```
 
