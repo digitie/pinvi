@@ -9,7 +9,10 @@
 | `pr_review_monitor.py` | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김 | 4 |
 | `backup-db.sh` | `app` schema `pg_dump --format=custom` + sha256 (ADR-022 1차) | 5 |
 | `restore-db.sh` | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계) | 5 |
-| `odroid-docker-start.sh` | Odroid 배포 (Sprint 6) | 6 |
+| `deploy-node.sh` | 운영 노드에서 compose pull/migrate/up/smoke 실행 (N150/Odroid 공통) | 6 |
+| `ops-node-doctor.sh` | 운영 노드 공통 사전 점검(비밀값 출력 없음) | 6 |
+| `n150-docker-doctor.sh` | N150 운영 노드 사전 점검 wrapper | 6 |
+| `odroid-docker-doctor.sh` | Odroid ARM64 노드 사전 점검 wrapper | 6 |
 
 루트 npm alias:
 

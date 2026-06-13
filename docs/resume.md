@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-06-13 Codex 작업 메모 — v0.1.0 릴리즈 준비 + T-195/T-108
+
+사용자 요청 순서대로 v0.1.0 릴리즈 준비, public/API 공통 rate-limit, 운영 배포 자동화
+foundation을 진행했다.
+
+- `CHANGELOG.md`를 추가해 `v0.1.0` GitHub Release notes 초안을 준비했다. tag/GitHub
+  Release 생성은 PR merge 후 main commit에서 수행해야 하므로 아직 만들지 않았다.
+- ADR-038을 추가했다. production/staging rate-limit는 Postgres
+  `app.rate_limit_buckets` fixed-window bucket, dev/test/smoke는 memory backend를 쓴다.
+- `RateLimitMiddleware`를 전역 적용했다. `/public/*` IP 60/min, 인증 사용자
+  user/token 60/min, auth low 5/min, OAuth 10/min, storage upload 30/min,
+  shared-token 60/min 정책을 적용한다.
+- T-108 foundation으로 GHCR multi-arch API/Web build workflow, compose image override,
+  `scripts/deploy-node.sh`, N150/Odroid doctor scripts, 노드별 배포 runbook을 추가했다.
+- ADR-039를 추가해 운영 노드 간 DB live sync를 사용하지 않기로 확정하고, 관련
+  runbook/doctor 점검 코드를 제거했다.
+
+**검증**: WSL ext4 mirror에서 API 전체 pytest 342 passed/1 skipped, API
+ruff/format/mypy, web lint/typecheck/build/Vitest 62 passed + schemas 6 passed, ETL 3 passed
++ ruff/format/mypy, shell `bash -n`, dev/app compose config 통과. Windows git에서
+`git diff --check` 통과.
+
+**다음 한 작업**: PR 생성 후 리뷰/merge. PR merge 뒤 main에서 `v0.1.0` tag와
+GitHub Release를 생성한다.
+
 ## 2026-06-13 Codex 작업 메모 — T-199 런타임 계약/외부 서비스명 hard cutover
 
 호환 별칭 없이 런타임 계약을 `Pinvi` / `pinvi`와 새 외부 서비스명으로 정리했다.
@@ -519,8 +544,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 1. ~~**T-106 Telegram 알림 채널**~~ — **Sprint-4 스코프 완료** (#160~#168: client·target CRUD·알림 hook·
    관리 UI·outbox·trip 링킹·trip-link UI). **남은 후속(별 스코프)**: weekly/daily summary Dagster(§7,
    Sprint 5 ETL — 날씨/유가 kor_travel_map 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
-2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023) — Odroid M1S + N150 multi-platform
-   Docker 빌드 + 두 노드 streaming replication.
+2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023/ADR-039) — Odroid M1S + N150
+   multi-platform Docker 빌드 + backup/restore 기반 수동 대체 운영.
 3. **kor_travel_map 연동 cutover — ✅ 완료** — T-181(client, #170) + **T-173/174/176/178**(feature read
    라우터 cutover, #171) + **T-175**(trip view batch + `etl_bridge` 제거, #172) + **T-180**(admin
    HTTP client + admin base 12301 정정, #173) + **T-179 백엔드**(`/admin/feature-requests`

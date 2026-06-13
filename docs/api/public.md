@@ -12,9 +12,8 @@
 ## 1. 정책
 
 - 인증 없음 (cookie / Authorization 헤더 없어도 OK)
-- Rate limit: IP 기준 분당 60회 목표. 현재 앱 공통 `SlowAPI` 미들웨어는 아직 붙어 있지
-  않으므로 kor_travel_map upstream 한도와 edge/CDN 제한을 우선 적용하고, 앱 내 공통 rate-limit는
-  별도 후속에서 닫는다.
+- Rate limit: 앱 공통 `RateLimitMiddleware`가 IP 기준 분당 60회를 적용한다(T-195).
+  운영/staging은 Postgres bucket을 써서 worker/노드 간 한도를 공유한다(ADR-038).
 - 응답 데이터는 kor-travel-map OpenAPI HTTP 계약에서 가져옴
 - Pinvi `app.users` / `trips`는 노출 안 됨 — 본 endpoint는 라이브러리 feature
   데이터만
@@ -210,5 +209,5 @@ GET /public/festivals/map-markers?max_items=500
 - [x] `apps/api/app/clients/kor_travel_map.py` — kor-travel-map `/v1/public/*` HTTP 호출
 - [x] `apps/api/app/api/v1/public.py` 라우터
 - [x] `Cache-Control: public, max-age=300` 헤더 응답
-- [ ] 앱 내 공통 Rate limit 적용(IP 기준) — 공통 `SlowAPI` 미들웨어 도입 후 닫음
+- [x] 앱 내 공통 Rate limit 적용(IP 기준, 60/min)
 - [x] 통합 테스트(`httpx` ASGI + fake kor_travel_map client)

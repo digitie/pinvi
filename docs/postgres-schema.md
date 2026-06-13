@@ -778,6 +778,32 @@ PIPA 침해 가능성 자동 감지와 CPO 검토 상태를 저장한다. 실제
 - 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
 - `app.admin_audit_log`는 append-only — DELETE 막는 trigger 또는 권한 분리.
 
+### 7.3 `app.rate_limit_buckets`
+
+HTTP 공통 rate-limit의 운영/staging shared counter다(ADR-038). 원문 IP/email/token은
+저장하지 않고 정책명+식별자를 HMAC-SHA256한 bucket hash만 저장한다.
+
+```sql
+CREATE TABLE app.rate_limit_buckets (
+  bucket_hash  varchar(64) NOT NULL,
+  window_start timestamptz NOT NULL,
+  limit_name   varchar(80) NOT NULL,
+  count        integer NOT NULL DEFAULT 0,
+  expires_at   timestamptz NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pk_rate_limit_buckets PRIMARY KEY (bucket_hash, window_start),
+  CONSTRAINT ck_rate_limit_buckets_count_nonnegative CHECK (count >= 0)
+);
+
+CREATE INDEX ix_rate_limit_buckets_expires_at
+  ON app.rate_limit_buckets (expires_at);
+```
+
+`RateLimitMiddleware`가 요청마다 atomic upsert로 `count`를 증가시키고, 만료 bucket은
+opportunistic cleanup으로 제거한다. 로컬 개발/테스트/smoke는 기본 memory backend를
+사용해 이 테이블에 쓰지 않는다.
+
 ## 8. 데이터 보존 / GDPR / 탈퇴
 
 - `app.users.status = 'deleted'`일 때 PII 마스킹 잡 schedule (Dagster):

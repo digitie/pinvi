@@ -48,7 +48,7 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    image: pinvi-api:local
+    image: ${PINVI_API_IMAGE:-pinvi-api:local}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -76,7 +76,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_PINVI_API_URL: http://127.0.0.1:${PINVI_API_PORT:-12501}
-    image: pinvi-web:local
+    image: ${PINVI_WEB_IMAGE:-pinvi-web:local}
     depends_on:
       - app-api
     ports:

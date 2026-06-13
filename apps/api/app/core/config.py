@@ -149,6 +149,33 @@ class Settings(BaseSettings):
         ]
     )
 
+    # HTTP rate limit (ADR-038 / T-195). backend=auto uses Postgres in production/staging
+    # and process-local memory in development/test/smoke.
+    pinvi_rate_limit_enabled: bool = True
+    pinvi_rate_limit_backend: str = "auto"  # auto | memory | postgres
+    pinvi_rate_limit_fail_open: bool = False
+    pinvi_rate_limit_window_seconds: int = 60
+    pinvi_rate_limit_public_per_minute: int = 60
+    pinvi_rate_limit_authenticated_per_minute: int = 60
+    pinvi_rate_limit_auth_per_minute: int = 5
+    pinvi_rate_limit_oauth_per_minute: int = 10
+    pinvi_rate_limit_storage_upload_per_minute: int = 30
+    pinvi_rate_limit_feature_search_per_minute: int = 60
+    pinvi_rate_limit_trip_export_per_minute: int = 20
+    pinvi_rate_limit_shared_token_per_minute: int = 60
+    pinvi_rate_limit_body_peek_max_bytes: int = 65_536
+    pinvi_rate_limit_client_ip_header: str = ""
+    pinvi_rate_limit_bypass_paths: list[str] = Field(
+        default_factory=lambda: [
+            "/health",
+            "/health/db",
+            "/metrics",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ]
+    )
+
     # WebSocket safety guard (ADR-035)
     pinvi_ws_client_rate_per_second: int = 5
     pinvi_ws_client_rate_per_minute: int = 60

@@ -217,18 +217,28 @@ GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
 
 | 카테고리 | 한도 | 키 |
 |---------|------|-----|
-| 로그인 / 가입 / 재설정 / verify | 분당 5회 | IP + 이메일 |
+| 로그인 / 가입 / 재설정 / verify | 분당 5회 | IP + 이메일(JSON body에 이메일이 있으면 포함) |
 | OAuth start / callback | 분당 10회 | IP |
 | `/storage/upload-urls` | 분당 30회 | user_id |
-| `/features/in-bounds` | 분당 60회 | user_id |
-| `/features/search`, `/search` | 분당 60회 | user_id |
+| `/public/*` | 분당 60회 | IP |
+| `/features/in-bounds` | 분당 60회 | user_id 또는 IP |
+| `/features/search`, `/search` | 분당 60회 | user_id 또는 IP |
 | `/trips/{id}/exports/*` | 분당 20회 | user_id |
-| 그 외 | 분당 120회 | user_id |
+| 그 외 인증 사용자 경로 | 분당 60회 | user_id 또는 token |
 | 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token |
 
 초과 시 `429 RATE_LIMITED` + `Retry-After` 헤더.
 
-SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
+구현은 `RateLimitMiddleware`가 전역으로 적용한다(ADR-038/T-195). 기본
+`PINVI_RATE_LIMIT_BACKEND=auto`는 `PINVI_ENVIRONMENT=production`/`staging`에서
+Postgres fixed-window bucket(`app.rate_limit_buckets`), 그 외 로컬/테스트/smoke에서
+process-local memory를 사용한다. 운영에서 worker/노드 간 한도 공유가 필요하므로 memory
+backend를 강제하지 않는다.
+
+IP key는 기본적으로 socket client IP를 사용한다. Cloudflare Tunnel/reverse proxy가 origin
+직접 접근을 막고 실제 client IP를 보존하는 환경에서만
+`PINVI_RATE_LIMIT_CLIENT_IP_HEADER=CF-Connecting-IP`처럼 명시한다. 저장 bucket key는
+HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않는다.
 
 ## 9. Webhook
 

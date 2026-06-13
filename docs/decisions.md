@@ -875,7 +875,7 @@
 
 ## ADR-023: 운영 하드웨어 확장 — Odroid M1S + N150 16GB 병행
 
-- **상태**: accepted
+- **상태**: accepted (Postgres streaming replication / hot-standby 가정은 ADR-039가 supersede)
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: 원래 운영 환경은 Odroid M1S (ARM64, Ubuntu 24.04, ADR
@@ -888,15 +888,13 @@
   - **이미지**: `apps/api/Dockerfile`을 multi-platform build로 — `linux/amd64`
     + `linux/arm64`. GitHub Actions에서 `docker buildx`로 두 플랫폼 빌드 후
     GHCR push.
-  - **데이터 동기**:
-    - Postgres streaming replication: N150이 primary, Odroid가 replica
-      (또는 standby).
-    - RustFS는 N150이 primary, Odroid가 mirror (rsync 또는 RustFS native).
-  - **장애 fail-over**:
-    - 단순 DNS / nginx upstream switch (수동 1차, 자동화는 v1.1).
+  - **데이터 운영**:
+    - Postgres streaming replication은 사용하지 않는다(ADR-039).
+    - 장애 대응은 backup/restore 후 수동 DNS / nginx upstream switch로 제한한다.
+    - RustFS 동기화는 별도 backup/mirror 절차로 다루고, 본 ADR은 live mirror를 강제하지 않는다.
   - **선택 기준 (사용자 작업 환경에서)**:
     - 평상시 트래픽 / 일 호출 한도 / Dagster ETL 부하 → N150이 처리
-    - Odroid는 hot standby + 분기 fail-over 훈련
+    - Odroid는 ARM64 검증, 백업 복구 훈련, 필요 시 수동 대체 운영
   - **운영 비용 / 전력**: Odroid는 저전력 (5W) → 야간 / 비상시 단독 운영도
     가능. N150은 일반 전력.
   - **N150 환경 사전 검토 항목** (사용자가 도입 전 확인할 것):
@@ -911,10 +909,11 @@
   - Odroid 자산 활용 + N150 신규 자원의 보강 효과
   - 멀티 플랫폼 빌드 = 향후 다른 ARM SBC / x86 NUC 등에도 호환
 - **결과 (긍정)**:
-  - 단일 노드 장애가 서비스 중단으로 이어지지 않음
+  - 단일 플랫폼에 묶이지 않고 x86_64/ARM64 양쪽 배포 경로를 확보
   - 신규 기능 (Dagster ETL / Grafana / MCP 서버) 부하 흡수
 - **결과 (부정)**:
   - 운영 / 모니터링 복잡도 ↑
+  - DB live sync가 없으므로 장애 시 RPO는 최신 backup/snapshot에 의존
   - 두 노드의 OS / 패키지 / 시간 동기화 부담
   - 멀티 플랫폼 이미지 빌드 CI 시간 ↑
 - **후속**:
@@ -1376,7 +1375,71 @@
   `infra/docker-compose.app.yml`, `scripts/dev-up.sh`, `scripts/docker-app.sh`,
   `docs/runbooks/README.md`.
 
+## ADR-038: HTTP rate limit은 운영에서 Postgres 고정-window 버킷을 사용한다
+
+- **상태**: accepted
+- **날짜**: 2026-06-13
+- **결정자**: Codex
+- **컨텍스트**: T-195는 `/public/*`, 인증 사용자 경로, 로그인/가입/재설정 같은 abuse
+  표면에 공통 rate-limit를 요구한다. 단순 process-local memory limiter는 Uvicorn worker
+  2개와 Odroid+N150 양 노드 운영에서 한도를 worker/node 수만큼 늘려 버린다. Redis는
+  현재 Pinvi 운영 스택에 없고, Postgres는 이미 필수 의존이다.
+- **결정**:
+  - FastAPI 전역 `RateLimitMiddleware`를 둔다.
+  - `PINVI_RATE_LIMIT_BACKEND=auto` 기본값은 `production`/`staging`에서 Postgres,
+    `development`/`test`/`smoke`에서 memory를 사용한다.
+  - 운영/staging Postgres backend는 `app.rate_limit_buckets`에 1분 fixed-window counter를
+    atomic upsert로 저장한다.
+  - bucket key는 정책명과 IP/user/token/email 식별자를 HMAC-SHA256으로 해시해 저장하고,
+    원문 IP/email/token은 DB에 저장하지 않는다.
+  - rate-limit 저장소 장애는 기본 fail-closed(`503 SERVICE_UNAVAILABLE`)다.
+  - `/health`, `/health/db`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`과 `OPTIONS`는
+    rate-limit에서 제외한다.
+- **결과**:
+  - 운영에서 다중 worker/두 노드가 같은 한도를 공유한다.
+  - Redis 없이도 Sprint 6 운영 배포 전 abuse guard를 닫을 수 있다.
+  - 모든 요청에 Postgres hit가 생기므로 고트래픽 전환 시 Redis/token-bucket ADR을
+    새로 검토한다.
+- **후속**:
+  - T-195 구현: `app.rate_limit_buckets` migration, `RateLimitMiddleware`, 단위 테스트,
+    API 문서 갱신.
+  - T-108 운영 배포 문서에서 production/staging은 `PINVI_RATE_LIMIT_BACKEND=postgres` 또는
+    `auto` + `PINVI_ENVIRONMENT=production`을 강제한다.
+- **참조**: `docs/api/common.md` §8, `docs/api/public.md`, `apps/api/app/middleware/rate_limit.py`.
+
+## ADR-039: 운영 노드 간 Postgres streaming replication은 사용하지 않는다
+
+- **상태**: accepted
+- **날짜**: 2026-06-13
+- **결정자**: 사용자
+- **컨텍스트**: T-108 운영 배포 자동화 foundation에서 N150을 primary, Odroid를 replica/hot-standby로
+  두고 Postgres streaming replication runbook과 doctor 점검을 추가하려 했다. 사용자는 현재 운영
+  모델에서 streaming replication을 사용하지 않는다고 결정했다.
+- **결정**:
+  - N150/Odroid 병행 운영은 유지하되, Postgres streaming replication은 구성하지 않는다.
+  - `pg_basebackup`, physical replication slot, `pg_is_in_recovery()` 기반 doctor,
+    `pg_promote()` 기반 failover 절차를 Pinvi 운영 문서와 스크립트에 두지 않는다.
+  - Odroid는 replica/hot-standby가 아니라 ARM64 smoke, backup/restore 훈련, 필요 시 수동
+    대체 배포 노드로 둔다.
+  - 장애 대응은 `docs/runbooks/backup-restore.md`의 snapshot/restore 절차와 수동
+    Cloudflare/nginx 전환을 따른다.
+- **근거**:
+  - 현재 운영 규모에서는 live replication의 설정·감시·split-brain 위험이 이득보다 크다.
+  - 이미 ADR-022에 backup/restore 핫스왑 정책이 있으므로, 우선 그 절차를 정본으로 삼는다.
+- **결과 (긍정)**:
+  - 운영 runbook과 doctor가 실제 운영 방식과 일치한다.
+  - replica/promote 오조작으로 인한 split-brain 위험을 줄인다.
+- **결과 (부정)**:
+  - N150 장애 시 RPO/RTO는 최신 backup과 수동 복구 숙련도에 의존한다.
+  - Odroid는 즉시 write 가능한 hot standby가 아니다.
+- **후속**:
+  - T-108 문서/스크립트에서 streaming replication 관련 내용과 코드를 제거한다.
+  - 향후 live replication이 다시 필요해지면 새 ADR로 Patroni/repmgr/managed Postgres 등
+    대안을 비교한다.
+- **참조**: ADR-022, ADR-023, `docs/runbooks/deploy.md`,
+  `docs/runbooks/backup-restore.md`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-038**
+- 다음 신규 ADR = **ADR-040**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

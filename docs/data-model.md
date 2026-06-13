@@ -44,6 +44,7 @@
 │  app.feature_suggestions  (사용자 feature 제안 큐)                │
 │                                                                  │
 │  app.admin_audit_logs                                            │
+│  app.rate_limit_buckets  (운영 HTTP rate-limit counter)           │
 │                                                                  │
 │  app.import_jobs  (Dagster job/run 영속화 — ops와 분리)          │
 │                                                                  │
@@ -155,6 +156,22 @@
 | `kisa_reported_at` | `timestamptz` | KISA 신고 시각 |
 | `created_at` | `timestamptz` NOT NULL | |
 | `updated_at` | `timestamptz` NOT NULL | |
+
+#### `app.rate_limit_buckets`
+
+운영/staging에서 HTTP 공통 rate-limit counter를 worker/노드 간 공유하기 위한 고정
+window bucket이다(ADR-038). 개발/테스트/smoke는 process-local memory backend를 쓴다.
+
+| 컬럼 | 타입 | 비고 |
+|------|------|------|
+| `bucket_hash` | `varchar(64)` | 정책명 + IP/user/token/email 식별자를 HMAC-SHA256한 값 |
+| `window_start` | `timestamptz` | fixed-window 시작 시각 |
+| `limit_name` | `varchar(80)` | `public`, `auth_low`, `authenticated_default` 등 |
+| `count` | `integer` | 현재 window 누적 요청 수 |
+| `expires_at` | `timestamptz` | cleanup 기준 |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+원문 IP/email/token은 저장하지 않는다.
 
 ### 2.2 여행 계획
 
