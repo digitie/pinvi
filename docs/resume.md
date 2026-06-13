@@ -536,6 +536,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
+> **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker
+> 진입 경로 docker-manager화(ADR-040)를 한 PR로 머지했다. Expo 다음 단계는 **Sprint M-1
+> 활성화** — `apps/mobile`을 root workspaces에 등록 + `npm install`/`expo install` + 화면
+> 구현 + EAS (`apps/mobile/README.md`). Docker는 `kor-travel-docker-manager` 기동이 1차,
+> `scripts/docker-app.sh`가 폴백(`docs/runbooks/docker-app.md` §0).
+
 > **갱신 (2026-06-10)**: 기존에 여기 있던 "Sprint 4 PR-B2 / PR-C / PR-D" 후보는
 > 모두 완료됐다(지도 UI·trip 상세·POI·협업·E2E·CI 전부 머지). 현재 비의존 후보:
 
@@ -656,6 +662,11 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 - ADR-034: Admin 감사 로그 append-only hash chain
 - ADR-035: Trip WebSocket in-memory broker
 - ADR-036: Curated trip plan 자체 큐레이션 + kor_travel_map `curated_features` import + nullable feature link
+- ADR-037: 로컬 고정 포트 재배정 (5432/12101/12105/12301/12501/12505)
+- ADR-038: HTTP rate limit은 운영에서 Postgres 고정-window 버킷 사용
+- ADR-039: 운영 노드 간 Postgres streaming replication 미사용
+- ADR-040: Docker 빌드/실행은 kor-travel-docker-manager 1차 + `scripts/docker-app.sh` 폴백
+- ADR-041: Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1
 
 ## 운영 지시
 

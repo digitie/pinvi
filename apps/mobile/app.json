@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Pinvi",
+    "slug": "pinvi",
+    "scheme": "pinvi",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.mywire.digitie.pinvi"
+    },
+    "android": {
+      "package": "org.mywire.digitie.pinvi"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "여행 주변 장소를 보여주기 위해 현재 위치를 사용합니다."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-13 (claude) — Expo apps/mobile 구조 스캐폴드 + Docker 진입 경로 docker-manager화
+
+**작업**: 사용자 요청 두 건을 한 PR로 반영했다.
+
+1. **Expo `apps/mobile` 구조 스캐폴드 (ADR-041, ADR-011 실행)** — Next.js 웹과 `@pinvi/*`
+   공용 패키지를 공유하는 Expo SDK 53 앱 골격을 박았다. `app/`(Expo Router 진입 + `(auth)`
+   group), `lib/`(api=SecureStore / location=expo-location→`@pinvi/hooks` LocationAdapter /
+   storage=AsyncStorage→zustand StateStorage / stores=`createAuthStore` 주입), app.json·
+   babel·metro(monorepo)·tailwind(NativeWind=`@pinvi/design-tokens` preset)·tsconfig·README.
+   `app/index.tsx`가 `@pinvi/schemas`·`@pinvi/api-client` import로 공용 패키지 wiring을
+   증명한다(frontend.md §6.2). **CI-safe**: root `workspaces`·`package-lock.json` 미변경 →
+   install 그래프 밖 스캐폴드. 활성화(workspaces 등록 + install + 화면 + EAS)는 Sprint M-1.
+2. **Docker 진입 경로 docker-manager화 (ADR-040)** — Docker 빌드/실행 1차 경로를
+   `kor-travel-docker-manager`(`ktdctl`)로 문서화하고, 불가 시 `scripts/docker-app.sh` 폴백을
+   명시했다. `docs/runbooks/docker-app.md` §0(두 책임 경계/1차 경로/폴백 조건), `CLAUDE.md`,
+   `AGENTS.md`(ADR-016 동기) 갱신.
+
+**검증**: 변경 파일이 `apps/mobile/**` + `docs/**` + `CLAUDE.md`/`AGENTS.md`뿐이라
+web/api/etl path-filtered CI(`npm ci`)를 트리거하지 않는다. aggregate-ci 게이트는 필수 체크
+0개로 즉시 green. `git diff --check` 통과.
+
 ## 2026-06-13 (codex) — v0.1.0 릴리즈 준비 + T-195/T-108
 
 **작업**: 사용자 지시대로 1) v0.1.0 릴리즈 정리, 2) public/API 공통 rate-limit,
