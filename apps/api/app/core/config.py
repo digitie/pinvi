@@ -29,15 +29,11 @@ class Settings(BaseSettings):
     pinvi_database_pool_size: int = 10
 
     # JWT / 세션
-    pinvi_jwt_secret_key: str = Field(
-        default="pinvi-local-jwt-secret-change-me", min_length=32
-    )
+    pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)
     pinvi_access_token_minutes: int = 15
     pinvi_refresh_token_days: int = 7
     pinvi_admin_session_ttl: int = 3600
-    pinvi_mcp_jwt_secret: str = Field(
-        default="pinvi-local-mcp-secret-change-me", min_length=32
-    )
+    pinvi_mcp_jwt_secret: str = Field(default="pinvi-local-mcp-secret-change-me", min_length=32)
     pinvi_mcp_token_default_days: int = 30
     pinvi_mcp_rate_limit_per_minute: int = 60
 

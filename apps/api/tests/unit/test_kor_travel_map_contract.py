@@ -128,7 +128,9 @@ def test_snapshot_is_kor_travel_map_user_surface() -> None:
 def test_client_paths_exist_in_snapshot() -> None:
     paths = set(_spec()["paths"])
     missing = [p for p in _CLIENT_PATHS if p not in paths]
-    assert not missing, f"client가 의존하는 kor_travel_map 경로가 스냅샷에 없음(드리프트): {missing}"
+    assert not missing, (
+        f"client가 의존하는 kor_travel_map 경로가 스냅샷에 없음(드리프트): {missing}"
+    )
 
 
 def test_mapped_response_fields_exist_in_snapshot() -> None:
@@ -139,7 +141,9 @@ def test_mapped_response_fields_exist_in_snapshot() -> None:
         gone = fields - props
         if gone:
             problems.append(f"{schema_name}: {sorted(gone)}")
-    assert not problems, f"매핑이 의존하는 kor_travel_map 응답 필드가 스냅샷에 없음(드리프트): {problems}"
+    assert not problems, (
+        f"매핑이 의존하는 kor_travel_map 응답 필드가 스냅샷에 없음(드리프트): {problems}"
+    )
 
 
 def _live_spec_path() -> Path | None:

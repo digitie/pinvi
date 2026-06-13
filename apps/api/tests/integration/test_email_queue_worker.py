@@ -39,9 +39,7 @@ async def test_process_pending_email_batch_marks_console_mode_sent(
     assert result.sent == 1
 
     async with session_factory() as db:
-        row = await db.scalar(
-            select(EmailQueue).where(EmailQueue.to_email == "worker@pinvi.test")
-        )
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.to_email == "worker@pinvi.test"))
         assert row is not None
         assert row.status == "sent"
         assert row.attempts == 1
@@ -69,9 +67,7 @@ async def test_process_pending_email_batch_retries_render_failure(session_factor
     assert result.retried == 1
 
     async with session_factory() as db:
-        row = await db.scalar(
-            select(EmailQueue).where(EmailQueue.to_email == "retry@pinvi.test")
-        )
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.to_email == "retry@pinvi.test"))
         assert row is not None
         assert row.status == "pending"
         assert row.attempts == 1

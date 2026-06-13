@@ -173,11 +173,7 @@ def validate_geofence_configuration() -> list[str]:
 
     # mTLS-verified-header 값(예: "SUCCESS")은 비밀이 아니라 추측 가능하므로, 출처를 검증
     # 못 하면 origin 직접 타격으로 스푸핑된다. strict 모드에선 네트워크 CIDR 앵커를 강제한다.
-    if (
-        settings.pinvi_geofence_block_unknown
-        and "mtls" in factors
-        and "proxy_cidr" not in factors
-    ):
+    if settings.pinvi_geofence_block_unknown and "mtls" in factors and "proxy_cidr" not in factors:
         raise GeofenceConfigError(
             "PINVI_GEOFENCE_MTLS_VERIFIED_HEADER trust requires a network CIDR anchor "
             "(PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS); a verified-header value alone is "

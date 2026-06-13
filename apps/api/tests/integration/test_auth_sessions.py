@@ -173,9 +173,7 @@ async def test_logout_revokes_refresh_session_and_clears_cookies(client, session
 
     assert resp.status_code == 204
     set_cookie_headers = resp.headers.get_list("set-cookie")
-    assert any(
-        "pinvi_access=" in header and "Max-Age=0" in header for header in set_cookie_headers
-    )
+    assert any("pinvi_access=" in header and "Max-Age=0" in header for header in set_cookie_headers)
     assert any(
         "pinvi_refresh=" in header and "Max-Age=0" in header for header in set_cookie_headers
     )

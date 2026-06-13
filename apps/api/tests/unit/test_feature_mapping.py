@@ -52,7 +52,9 @@ def test_coord_is_none_when_lon_or_lat_missing() -> None:
 
 
 def test_summary_defaults_marker_and_name() -> None:
-    summary = _summary_from_kor_travel_map({"feature_id": "f1", "kind": "place", "lon": 129.1, "lat": 35.1})
+    summary = _summary_from_kor_travel_map(
+        {"feature_id": "f1", "kind": "place", "lon": 129.1, "lat": 35.1}
+    )
     assert summary.name == ""
     assert summary.marker_color == "P-13"
     assert summary.marker_icon == "marker"

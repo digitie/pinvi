@@ -24,9 +24,7 @@ def _reset_geofence_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "pinvi_geofence_enabled", False)
     monkeypatch.setattr(settings, "pinvi_geofence_allowed_countries", ["KR"])
     monkeypatch.setattr(settings, "pinvi_geofence_country_header", "CF-IPCountry")
-    monkeypatch.setattr(
-        settings, "pinvi_geofence_trusted_proxy_header", "X-Pinvi-Geofence-Proxy"
-    )
+    monkeypatch.setattr(settings, "pinvi_geofence_trusted_proxy_header", "X-Pinvi-Geofence-Proxy")
     monkeypatch.setattr(settings, "pinvi_geofence_trusted_proxy_secret", "")
     monkeypatch.setattr(settings, "pinvi_geofence_trusted_proxy_cidrs", [])
     monkeypatch.setattr(settings, "pinvi_geofence_mtls_verified_header", "")

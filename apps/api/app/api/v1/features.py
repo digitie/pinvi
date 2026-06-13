@@ -201,7 +201,9 @@ def _weather_metric_from_kor_travel_map(metric: dict[str, Any]) -> WeatherMetric
 def _weather_from_kor_travel_map(dto: dict[str, Any], *, feature_id: str) -> FeatureWeatherCard:
     """kor_travel_map `WeatherCardData` → Pinvi FeatureWeatherCard (평탄 metric 목록)."""
     metrics = [
-        _weather_metric_from_kor_travel_map(m) for m in dto.get("metrics", []) if isinstance(m, dict)
+        _weather_metric_from_kor_travel_map(m)
+        for m in dto.get("metrics", [])
+        if isinstance(m, dict)
     ]
     return FeatureWeatherCard(
         feature_id=str(dto.get("feature_id") or feature_id),
@@ -359,7 +361,9 @@ async def features_in_bounds(
             max_items=limit,
         )
     items = [_summary_from_kor_travel_map(x) for x in data.get("items", []) if isinstance(x, dict)]
-    clusters = [_cluster_from_kor_travel_map(x) for x in data.get("clusters", []) if isinstance(x, dict)]
+    clusters = [
+        _cluster_from_kor_travel_map(x) for x in data.get("clusters", []) if isinstance(x, dict)
+    ]
     return Envelope.of(
         FeaturesInBoundsResponse(
             items=items,

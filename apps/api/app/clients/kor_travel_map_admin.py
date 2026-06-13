@@ -94,7 +94,9 @@ class KorTravelMapAdminClient:
                 last = KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path}): {exc!r}")
             else:
                 if resp.status_code >= 500:
-                    last = KorTravelMapUnavailable(f"kor-travel-map admin {resp.status_code} ({path})")
+                    last = KorTravelMapUnavailable(
+                        f"kor-travel-map admin {resp.status_code} ({path})"
+                    )
                 else:
                     return resp
             if attempt + 1 < self._max_attempts:
@@ -247,4 +249,6 @@ def get_kor_travel_map_admin_client(request: Request) -> KorTravelMapAdminClient
     return client
 
 
-KorTravelMapAdminClientDep = Annotated[KorTravelMapAdminClient, Depends(get_kor_travel_map_admin_client)]
+KorTravelMapAdminClientDep = Annotated[
+    KorTravelMapAdminClient, Depends(get_kor_travel_map_admin_client)
+]

@@ -293,13 +293,9 @@ async def _restore_backup_hotswap_locked(
         "PINVI_PREVIOUS_SCHEMA": previous_schema,
         "PINVI_DATABASE_URL": settings.pinvi_database_url,
         "PINVI_RESTORE_DATABASE_URL": settings.pinvi_restore_database_url,
-        "PINVI_RESTORE_HOTSWAP_EXECUTE": (
-            "1" if settings.pinvi_restore_hotswap_execute else "0"
-        ),
+        "PINVI_RESTORE_HOTSWAP_EXECUTE": ("1" if settings.pinvi_restore_hotswap_execute else "0"),
         "PINVI_RESTORE_DRAIN_COMMAND": settings.pinvi_restore_drain_command,
-        "PINVI_RESTORE_ALLOW_NO_DRAIN": (
-            "1" if settings.pinvi_restore_allow_no_drain else "0"
-        ),
+        "PINVI_RESTORE_ALLOW_NO_DRAIN": ("1" if settings.pinvi_restore_allow_no_drain else "0"),
         "PINVI_RESTORE_APP_ROLE": settings.pinvi_restore_app_role,
         "PINVI_RESTORE_API_TRIGGER": "1",
     }

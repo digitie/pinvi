@@ -612,7 +612,9 @@ async def get_shared_trip_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     view = TripView.model_validate(
-        await build_trip_view(db, trip=trip, kor_travel_map_client=kor_travel_map_client, include_management=False)
+        await build_trip_view(
+            db, trip=trip, kor_travel_map_client=kor_travel_map_client, include_management=False
+        )
     )
     return Envelope.of(
         TripSharedView(

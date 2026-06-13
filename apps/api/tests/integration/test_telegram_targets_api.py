@@ -45,9 +45,7 @@ def _override(fake: _FakeTelegram) -> Iterator[None]:
 def _with_system_bot(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import settings
 
-    monkeypatch.setattr(
-        settings, "pinvi_telegram_bot_token_default", "111:AAAA_system_token_value"
-    )
+    monkeypatch.setattr(settings, "pinvi_telegram_bot_token_default", "111:AAAA_system_token_value")
 
 
 async def test_create_verifies_then_lists_and_deletes(

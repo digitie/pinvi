@@ -359,9 +359,7 @@ def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
 
 
 def _build_verify_url(token: str) -> str:
-    return (
-        f"{settings.pinvi_web_base_url}{settings.pinvi_email_verification_path}?token={token}"
-    )
+    return f"{settings.pinvi_web_base_url}{settings.pinvi_email_verification_path}?token={token}"
 
 
 def _build_password_reset_url(token: str) -> str:
