@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Copy, KeyRound, Trash2 } from 'lucide-react';
-import { ApiError, userApi } from '@tripmate/api-client';
-import type { McpToken } from '@tripmate/schemas';
+import { ApiError, userApi } from '@pinvi/api-client';
+import type { McpToken } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';

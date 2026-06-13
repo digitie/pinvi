@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Loader2, Paperclip, Trash2, Upload } from 'lucide-react';
-import { ApiError, storageApi, tripApi } from '@tripmate/api-client';
-import type { TripAttachmentResponse } from '@tripmate/schemas';
+import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
+import type { TripAttachmentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { buildAttachmentCreate, putToPresigned } from '@/lib/upload';
 

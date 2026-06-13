@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-ink">
             <Compass className="h-5 w-5 text-primary" aria-hidden="true" />
-            TripMate
+            Pinvi
           </Link>
           <nav className="flex gap-1 overflow-x-auto text-sm" aria-label="사용자 메뉴">
             {NAV_ITEMS.map((item) => {

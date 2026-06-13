@@ -5,7 +5,7 @@
  * `poi_ids: []` 는 plan 의 전체 POI 복사를 의미한다.
  */
 
-import type { NoticePlanCopyRequest } from '@tripmate/schemas';
+import type { NoticePlanCopyRequest } from '@pinvi/schemas';
 
 export type CopyMode = 'new' | 'existing';
 

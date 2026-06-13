@@ -4,7 +4,7 @@
 
 ## 1. 목적
 
-TripMate v1은 **한국 거주자 / 한국 IP 전용**. KR 외 IP는 451 응답으로 차단.
+Pinvi v1은 **한국 거주자 / 한국 IP 전용**. KR 외 IP는 451 응답으로 차단.
 근거 / 결과는 ADR-018 참고.
 
 ## 2. 권장 안전망
@@ -85,7 +85,7 @@ class GeofenceMiddleware:
         )
 ```
 
-`TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true`에서 trusted signal이 하나도 설정되지 않으면
+`PINVI_GEOFENCE_BLOCK_UNKNOWN=true`에서 trusted signal이 하나도 설정되지 않으면
 API startup guard가 실패한다. shared secret 단독 strict 모드는 동작하되 startup warning을
 남기며, 운영 기본은 shared secret + proxy CIDR 또는 mTLS 검증 header 조합이다.
 
@@ -97,10 +97,10 @@ HTTP 451 Unavailable For Legal Reasons (RFC 7725).
 {
   "error": {
     "code": "GEO_BLOCKED",
-    "message": "TripMate는 대한민국 거주자 전용 서비스입니다. (Service available only in Republic of Korea.)",
+    "message": "Pinvi는 대한민국 거주자 전용 서비스입니다. (Service available only in Republic of Korea.)",
     "details": {
       "detected_country": "US",
-      "contact": "support@tripmate.kr"
+      "contact": "support@pinvi.kr"
     }
   }
 }

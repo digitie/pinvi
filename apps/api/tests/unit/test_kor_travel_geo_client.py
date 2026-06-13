@@ -1,4 +1,4 @@
-"""kraddr-geo v2 REST client 계약 테스트 (httpx.MockTransport)."""
+"""kor-travel-geo v2 REST client 계약 테스트 (httpx.MockTransport)."""
 
 from __future__ import annotations
 
@@ -8,23 +8,23 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from app.clients.kraddr_geo import (
-    KraddrGeoBadRequest,
-    KraddrGeoClient,
-    KraddrGeoUnavailable,
+from app.clients.kor_travel_geo import (
+    KorTravelGeoBadRequest,
+    KorTravelGeoClient,
+    KorTravelGeoUnavailable,
 )
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler, **kwargs: object) -> KraddrGeoClient:
+def _client(handler: Handler, **kwargs: object) -> KorTravelGeoClient:
     http = httpx.AsyncClient(
-        base_url="http://kraddr.test",
+        base_url="http://kor-travel-geo.test",
         transport=httpx.MockTransport(handler),
     )
     params: dict[str, object] = {"max_attempts": 2, "backoff_base_seconds": 0.0}
     params.update(kwargs)
-    return KraddrGeoClient(http, **params)  # type: ignore[arg-type]
+    return KorTravelGeoClient(http, **params)  # type: ignore[arg-type]
 
 
 async def test_reverse_posts_v2_and_passes_lon_lat() -> None:
@@ -87,7 +87,7 @@ async def test_5xx_retries_then_unavailable() -> None:
         return httpx.Response(503, json={"code": "UPSTREAM"})
 
     client = _client(handler, max_attempts=3)
-    with pytest.raises(KraddrGeoUnavailable):
+    with pytest.raises(KorTravelGeoUnavailable):
         await client.geocode(query="서울시청")
     assert attempts["n"] == 3
     await client.aclose()
@@ -98,7 +98,7 @@ async def test_4xx_raises_bad_request_with_code() -> None:
         return httpx.Response(422, json={"code": "INVALID_QUERY"})
 
     client = _client(handler)
-    with pytest.raises(KraddrGeoBadRequest) as exc:
+    with pytest.raises(KorTravelGeoBadRequest) as exc:
         await client.geocode(query="")
     assert exc.value.code == "INVALID_QUERY"
     await client.aclose()
@@ -109,6 +109,6 @@ async def test_transport_error_raises_unavailable() -> None:
         raise httpx.ConnectError("boom", request=request)
 
     client = _client(handler)
-    with pytest.raises(KraddrGeoUnavailable):
+    with pytest.raises(KorTravelGeoUnavailable):
         await client.reverse(lon=129.0, lat=35.0)
     await client.aclose()

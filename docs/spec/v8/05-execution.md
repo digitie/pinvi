@@ -1,12 +1,12 @@
-# SPEC V8 #5 — 실행 · 결정 · Sprint (TripMate 적용 노트)
+# SPEC V8 #5 — 실행 · 결정 · Sprint (Pinvi 적용 노트)
 
 원본: `spec_v8_5_execution.docx` (A 결정 / P Sprint / C 추가 결정 대기).
 
 ## 1. 필수 결정 6건 (A-1, 모두 확정)
 
-| # | 항목 | 결정 | TripMate v2 매핑 |
+| # | 항목 | 결정 | Pinvi v2 매핑 |
 |---|------|------|------------------|
-| 1 | vworld 법정동코드 파일 | vworld.kr txt 사용 | `python-kraddr-geo`가 임포트 (L장 / `python-krtour-map` ADR-006) |
+| 1 | vworld 법정동코드 파일 | vworld.kr txt 사용 | `kor-travel-geo`가 임포트 (L장 / `kor-travel-map` ADR-006) |
 | 2 | 참여자 동의 UI | 프로필 입력 시 통합. 필수/선택 분리 | G-5 4 분리 동의 (`docs/spec/v8/02-backend.md` §4.2) |
 | 3 | 소셜 로그인 매칭 | 이메일 인증 방식. verify 후만 활성/연결 | G-4 안전 매칭 (F-3) |
 | 4 | ~~카카오맵 SDK~~ → **maplibre-vworld-js** (ADR-015로 정정) | `maplibre-vworld-js` (VWorld + MapLibre GL JS) 직접 사용 | 좌표 lon-lat 일관 + 선언형 + 16색 마커 + Place/Price/Weather 마커 라이브러리에 내장 |
@@ -33,7 +33,7 @@
 
 ## 3. Sprint 계획 (P장)
 
-SPEC V8 원본의 Sprint 순서를 TripMate v2 책임 분담에 맞춰 정리.
+SPEC V8 원본의 Sprint 순서를 Pinvi v2 책임 분담에 맞춰 정리.
 
 ### Sprint 1 (1~2주) — 기반
 
@@ -55,7 +55,7 @@ DoD: `/healthz` + 가입 → verify → 로그인 e2e 통과 + `pytest -q` + `np
 - 4 분리 동의 + 위치 감사 미들웨어 (G-5, O-3)
 - Resend 통합 + `email_queue` worker (G-6)
 - Google OAuth + 안전 매칭 (G-4)
-- `python-krtour-map` DI helper skeleton (호출은 Sprint 4부터)
+- `kor-travel-map` DI helper skeleton (호출은 Sprint 4부터)
 
 DoD: UI 없이 API + DB 완성.
 
@@ -78,7 +78,7 @@ DoD: ETL/회원가입/여행 동작 검증을 Admin으로 완료.
 - 16색 팔레트 + maki 아이콘 (I-6)
 - 우클릭 메뉴 (I-7)
 - Trip 대시보드 (초기화면 미래/과거 아코디언)
-- `python-krtour-map` 라이브러리 read 활성화
+- `kor-travel-map` 라이브러리 read 활성화
 
 DoD: 일반 사용자가 PC/모바일에서 여행 생성 + POI 추가 + 지도 확인.
 
@@ -124,7 +124,7 @@ DoD: 외부 정식 출시 가능 상태.
 | 도메인 + 브랜드명 | ❓ 대기 | manifest / Resend / OAuth redirect / 이메일 발신자에 모두 필요 |
 | 외부 API 인증키 일괄 신청 | ❓ 대기 | VWORLD / TourAPI / 기상청 / 행안부 / 카카오 / OpiNet / KHOA / 천문연 / KASI |
 | Resend 가입 + 도메인 | ❓ 대기 | 도메인 결정 후 |
-| Git 리포지토리 | ✓ `tripmate` | 본 저장소 + `python-krtour-map` 별 저장소 |
+| Git 리포지토리 | ✓ `pinvi` | 본 저장소 + `kor-travel-map` 별 저장소 |
 | CI/CD 플랫폼 | ✓ GitHub Actions | Sprint 1에서 활성화 |
 | Container Registry | ❓ 대기 | GHCR 권장 |
 | Odroid NVMe 용량 | ❓ 대기 | 256GB 시작 권장 |
@@ -166,11 +166,11 @@ DoD: 외부 정식 출시 가능 상태.
 
 ## 5. SPEC V8 후속 메모 (2026-05-16 ~ 2026-05-20)
 
-원본에 후속 추가된 결정 메모. TripMate v2에 반영:
+원본에 후속 추가된 결정 메모. Pinvi v2에 반영:
 
 - **M, N (2026-05-16)** — `users.role` RBAC, audit log chain, provider canonical
   명칭, weather slot 정의
-- **O (2026-05-17)** — `python-krtour-map` 책임 분리 (feature schema 이관) →
+- **O (2026-05-17)** — `kor-travel-map` 책임 분리 (feature schema 이관) →
   v2의 ADR-001/002/003 mirror
 - **P (2026-05-19)** — 국가유산 (`python-krheritage-api`) 추가
 - **Q, R (2026-05-20)** — asyncio provider 통합, 표준데이터 5건, debug UI 정책,

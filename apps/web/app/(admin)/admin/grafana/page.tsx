@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 
-const DEFAULT_GRAFANA_URL = 'http://localhost:3002';
-const DEFAULT_DASHBOARD_PATH = '/d/tripmate/overview?orgId=1&kiosk=tv';
+const DEFAULT_GRAFANA_URL = 'http://localhost:12605';
+const DEFAULT_DASHBOARD_PATH = '/d/pinvi/overview?orgId=1&kiosk=tv';
 
 function buildGrafanaUrl(): string {
   const baseUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? DEFAULT_GRAFANA_URL;
@@ -48,7 +48,7 @@ export default function AdminGrafanaPage() {
         <iframe
           key={frameKey}
           src={grafanaUrl}
-          title="TripMate Grafana"
+          title="Pinvi Grafana"
           className="h-full w-full border-0"
           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
           referrerPolicy="no-referrer"

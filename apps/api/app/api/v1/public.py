@@ -1,7 +1,7 @@
 """`/public/*` — 인증 없는 공개 read-only 표면.
 
-해수욕장/축제 공개 데이터는 krtour-map `/v1/public/*` user OpenAPI 계약을 HTTP로
-소비한다. TripMate는 응답 envelope, cache header, frontend-facing schema만 투영한다.
+해수욕장/축제 공개 데이터는 kor-travel-map `/v1/public/*` user OpenAPI 계약을 HTTP로
+소비한다. Pinvi는 응답 envelope, cache header, frontend-facing schema만 투영한다.
 """
 
 from __future__ import annotations
@@ -12,12 +12,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
-from app.clients.krtour_map import (
-    KrtourMapBadRequest,
-    KrtourMapFeatureNotFound,
-    KrtourMapHttpClientDep,
-    KrtourMapRateLimited,
-    KrtourMapUnavailable,
+from app.clients.kor_travel_map import (
+    KorTravelMapBadRequest,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapHttpClientDep,
+    KorTravelMapRateLimited,
+    KorTravelMapUnavailable,
 )
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.public import (
@@ -35,16 +35,16 @@ _CACHE_CONTROL = "public, max-age=300"
 
 
 @contextmanager
-def _map_krtour_errors() -> Iterator[None]:
-    """krtour-map 도메인 예외 → TripMate HTTP 오류 envelope."""
+def _map_kor_travel_map_errors() -> Iterator[None]:
+    """kor-travel-map 도메인 예외 → Pinvi HTTP 오류 envelope."""
     try:
         yield
-    except KrtourMapFeatureNotFound as exc:
+    except KorTravelMapFeatureNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Public feature not found."},
         ) from exc
-    except KrtourMapRateLimited as exc:
+    except KorTravelMapRateLimited as exc:
         headers = (
             {"Retry-After": str(exc.retry_after_seconds)}
             if exc.retry_after_seconds is not None
@@ -55,7 +55,7 @@ def _map_krtour_errors() -> Iterator[None]:
             detail={"code": "RATE_LIMITED", "message": "요청이 많아 잠시 후 다시 시도하세요."},
             headers=headers,
         ) from exc
-    except KrtourMapBadRequest as exc:
+    except KorTravelMapBadRequest as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
@@ -63,7 +63,7 @@ def _map_krtour_errors() -> Iterator[None]:
                 "message": "잘못된 public feature 요청입니다.",
             },
         ) from exc
-    except KrtourMapUnavailable as exc:
+    except KorTravelMapUnavailable as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -119,7 +119,7 @@ def _validate_bbox(
 @router.get("/beaches", response_model=EnvelopeWithMeta[PublicBeachList])
 async def list_public_beaches(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     sido_code: Annotated[str | None, Query(min_length=2, max_length=2)] = None,
     sigungu_code: Annotated[str | None, Query(min_length=5, max_length=5)] = None,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -129,7 +129,7 @@ async def list_public_beaches(
     include_forecast: Annotated[bool, Query()] = False,
 ) -> EnvelopeWithMeta[PublicBeachList]:
     """공개 해수욕장 목록."""
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.public_beaches(
             sido_code=sido_code,
             sigungu_code=sigungu_code,
@@ -155,7 +155,7 @@ async def list_public_beaches(
 @router.get("/beaches/map-markers", response_model=Envelope[PublicMapMarkerLayer])
 async def list_public_beach_markers(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     min_lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     min_lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     max_lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
@@ -166,7 +166,7 @@ async def list_public_beach_markers(
 ) -> Envelope[PublicMapMarkerLayer]:
     """공개 해수욕장 지도 marker layer."""
     _validate_bbox(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.public_beach_markers(
             min_lon=min_lon,
             min_lat=min_lat,
@@ -183,13 +183,13 @@ async def list_public_beach_markers(
 @router.get("/beaches/{feature_id}", response_model=Envelope[PublicBeachView])
 async def get_public_beach(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
     include_quality: Annotated[bool, Query()] = False,
     include_forecast: Annotated[bool, Query()] = False,
 ) -> Envelope[PublicBeachView]:
     """공개 해수욕장 상세."""
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.get_public_beach(
             feature_id, include_quality=include_quality, include_forecast=include_forecast
         )
@@ -205,7 +205,7 @@ async def get_public_beach(
 @router.get("/festivals/monthly", response_model=EnvelopeWithMeta[PublicFestivalMonthly])
 async def list_public_festivals_monthly(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
     month: Annotated[int | None, Query(ge=1, le=12)] = None,
     sido_code: Annotated[str | None, Query(min_length=2, max_length=2)] = None,
@@ -215,7 +215,7 @@ async def list_public_festivals_monthly(
     include_months: Annotated[bool, Query()] = True,
 ) -> EnvelopeWithMeta[PublicFestivalMonthly]:
     """공개 월별 축제 목록."""
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.public_festivals_monthly(
             year=year,
             month=month,
@@ -246,7 +246,7 @@ async def list_public_festivals_monthly(
 @router.get("/festivals/map-markers", response_model=Envelope[PublicMapMarkerLayer])
 async def list_public_festival_markers(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
     month: Annotated[int | None, Query(ge=1, le=12)] = None,
     min_lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
@@ -257,7 +257,7 @@ async def list_public_festival_markers(
 ) -> Envelope[PublicMapMarkerLayer]:
     """공개 축제 지도 marker layer."""
     _validate_bbox(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.public_festival_markers(
             year=year,
             month=month,
@@ -274,11 +274,11 @@ async def list_public_festival_markers(
 @router.get("/festivals/{feature_id}", response_model=Envelope[PublicFestivalView])
 async def get_public_festival(
     response: Response,
-    client: KrtourMapHttpClientDep,
+    client: KorTravelMapHttpClientDep,
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
 ) -> Envelope[PublicFestivalView]:
     """공개 축제 상세."""
-    with _map_krtour_errors():
+    with _map_kor_travel_map_errors():
         data = await client.get_public_festival(feature_id)
     if data is None:
         raise HTTPException(

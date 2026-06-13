@@ -31,9 +31,9 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
       body: JSON.stringify({
         data: [
           {
-            snapshot_id: 'tripmate-app-20260606-001500',
-            filename: 'tripmate-app-20260606-001500.dump',
-            path: '/var/lib/tripmate/backups/tripmate-app-20260606-001500.dump',
+            snapshot_id: 'pinvi-app-20260606-001500',
+            filename: 'pinvi-app-20260606-001500.dump',
+            path: '/var/lib/pinvi/backups/pinvi-app-20260606-001500.dump',
             size_bytes: 1048576,
             checksum_sha256: 'a'.repeat(64),
             status: 'verified',
@@ -50,9 +50,9 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
       contentType: 'application/json',
       body: JSON.stringify({
         data: {
-          snapshot_id: 'tripmate-app-20260606-003000',
-          filename: 'tripmate-app-20260606-003000.dump',
-          path: '/var/lib/tripmate/backups/tripmate-app-20260606-003000.dump',
+          snapshot_id: 'pinvi-app-20260606-003000',
+          filename: 'pinvi-app-20260606-003000.dump',
+          path: '/var/lib/pinvi/backups/pinvi-app-20260606-003000.dump',
           size_bytes: 2097152,
           checksum_sha256: 'b'.repeat(64),
           status: 'verified',
@@ -64,15 +64,15 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
 
   await page.route(/.*\/admin\/backup\/restore-hotswap$/, async (route) => {
     const body = route.request().postDataJSON();
-    expect(body.snapshot_id).toBe('tripmate-app-20260606-001500');
+    expect(body.snapshot_id).toBe('pinvi-app-20260606-001500');
     expect(body.confirm_schema_swap).toBe(true);
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
         data: {
           restore_id: '20260608093000',
-          snapshot_id: 'tripmate-app-20260606-001500',
-          snapshot_path: '/var/lib/tripmate/backups/tripmate-app-20260606-001500.dump',
+          snapshot_id: 'pinvi-app-20260606-001500',
+          snapshot_path: '/var/lib/pinvi/backups/pinvi-app-20260606-001500.dump',
           restore_schema: 'app_restore_20260608093000',
           previous_schema: 'app_previous_20260608093000',
           status: 'succeeded',
@@ -94,18 +94,18 @@ test('Admin backup page가 snapshot 목록과 수동 trigger를 렌더링한다'
 
   await expect(page.getByRole('heading', { name: 'Backup' })).toBeVisible();
   await expect(page.getByTestId('admin-backup-filename')).toContainText(
-    'tripmate-app-20260606-001500.dump',
+    'pinvi-app-20260606-001500.dump',
   );
 
   await page.getByTestId('admin-backup-create').click();
   await expect(page.getByText('수동 백업 snapshot을 생성했습니다.')).toBeVisible();
   await expect(page.getByTestId('admin-backup-filename').first()).toContainText(
-    'tripmate-app-20260606-003000.dump',
+    'pinvi-app-20260606-003000.dump',
   );
 
   await page.getByTestId('admin-backup-restore').last().click();
   await expect(page.getByTestId('restore-snapshot-name')).toContainText(
-    'tripmate-app-20260606-001500.dump',
+    'pinvi-app-20260606-001500.dump',
   );
   await page.getByTestId('restore-reason').fill('복구 훈련');
   await page.getByTestId('restore-confirm').check();

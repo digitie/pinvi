@@ -1,9 +1,9 @@
 # architecture.md
 
-`TripMate`의 아키텍처는 **monorepo + multi-process 애플리케이션** 모델이다. 본
-저장소는 사용자 대면 앱(FastAPI 백엔드 + Next.js 프론트)과 TripMate 자체 ETL
+`Pinvi`의 아키텍처는 **monorepo + multi-process 애플리케이션** 모델이다. 본
+저장소는 사용자 대면 앱(FastAPI 백엔드 + Next.js 프론트)과 Pinvi 자체 ETL
 orchestration(Dagster)을 담고, 지도 feature 도메인은 별 저장소
-`python-krtour-map` 독립 프로그램의 **OpenAPI HTTP 계약**으로 사용한다.
+`kor-travel-map` 독립 프로그램의 **OpenAPI HTTP 계약**으로 사용한다.
 
 SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 자체 정리.
 
@@ -24,18 +24,18 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 │   models/   SQLAlchemy 2 async — app schema만                          │
 │   schemas/  Pydantic v2                                                │
 │                                                                        │
-│   httpx → krtour-map API :12301 (OpenAPI, ADR-026)                       │
-│   httpx → kraddr-geo v2 REST (ADR-025)                                  │
+│   httpx → kor-travel-map API :12301 (OpenAPI, ADR-026)                       │
+│   httpx → kor-travel-geo v2 REST (ADR-025)                                  │
 └────────────────────────────────────────────────────────────────────────┘
                               │
        ┌──────────────────────┼──────────────────────────────┐
        ▼                      ▼                              ▼
 ┌──────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
-│ PostgreSQL16 │    │ RustFS (S3 호환)   │    │ python-krtour-map       │
+│ PostgreSQL16 │    │ RustFS (S3 호환)   │    │ kor-travel-map       │
 │ + PostGIS3.5 │    │ - app/             │    │ API/Admin API :12301     │
 │ schema:      │    │   사용자 첨부      │    │                         │
 │ - app (TM)   │    │ - feature-media/   │    │ feature/provider_sync   │
-│ - feature    │    │   krtour-map 소유  │    │ schema 소유              │
+│ - feature    │    │   kor-travel-map 소유  │    │ schema 소유              │
 │ - provider_  │    │                    │    │                         │
 │   sync       │    └────────────────────┘    │ provider ETL 소유        │
 │ - ops        │                              │                         │
@@ -55,39 +55,39 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 
 ```
 schemas → models → services → routes
-                  ↘ clients → krtour-map / kraddr-geo HTTP
+                  ↘ clients → kor-travel-map / kor-travel-geo HTTP
 ```
 
 - `schemas`는 Pydantic v2 입출력. 다른 내부 모듈에 의존하지 않는다.
 - `models`는 SQLAlchemy 2 async 매핑. `app` schema만 갖는다. `feature`/
-  `provider_sync`의 ORM 매핑은 본 저장소에 두지 않는다 (`python-krtour-map`이
+  `provider_sync`의 ORM 매핑은 본 저장소에 두지 않는다 (`kor-travel-map`이
   소유).
 - `services`는 비즈니스 로직. raw SQL이 필요하면 `app` schema에 한정.
 - `routes`는 FastAPI 라우터 + DI. 권한 미들웨어/dependency가 여기에 박힌다.
-- `clients`는 외부 HTTP transport helper. krtour-map/kraddr-geo 계약을 호출하되
+- `clients`는 외부 HTTP transport helper. kor-travel-map/kor-travel-geo 계약을 호출하되
   provider 변환이나 feature 정규화 로직을 만들지 않는다.
 
 CI에서 `import-linter`로 강제할 계약(코드 작성 단계 진입 후 박음):
 
 ```toml
 [tool.importlinter]
-root_packages = ["tripmate"]
+root_packages = ["pinvi"]
 
 [[tool.importlinter.contracts]]
 type = "layers"
 layers = [
-  "tripmate.api.routes",
-  "tripmate.api.services",
-  "tripmate.api.models",
-  "tripmate.api.schemas",
+  "pinvi.api.routes",
+  "pinvi.api.services",
+  "pinvi.api.models",
+  "pinvi.api.schemas",
 ]
 
 [[tool.importlinter.contracts]]
 type = "forbidden"
-source_modules = ["tripmate.api"]
+source_modules = ["pinvi.api"]
 forbidden_modules = [
-  "tripmate.api.models.feature",       # feature schema 매핑 금지
-  "tripmate.api.models.provider_sync", # provider_sync schema 매핑 금지
+  "pinvi.api.models.feature",       # feature schema 매핑 금지
+  "pinvi.api.models.provider_sync", # provider_sync schema 매핑 금지
 ]
 ```
 
@@ -110,38 +110,38 @@ forbidden_modules = [
 
 ### 2.3 ETL(`apps/etl`, Dagster)
 
-- 각 asset은 TripMate `app` schema 소유 job을 수행한다. 예: KASI 특일 일 1회
+- 각 asset은 Pinvi `app` schema 소유 job을 수행한다. 예: KASI 특일 일 1회
   upsert, POI 출몰시각 생성 시 1회 갱신, 알림 outbox, PII retention.
-- krtour-map feature provider 적재 job은 krtour-map 저장소의 API/Admin/Dagster가
+- kor-travel-map feature provider 적재 job은 kor-travel-map 저장소의 API/Admin/Dagster가
   소유한다.
 - Asset 정의는 `apps/etl/assets/<name>.py`, 코드 위치는 `definitions.py`에 등록.
 
-## 3. TripMate ↔ `python-krtour-map`
+## 3. Pinvi ↔ `kor-travel-map`
 
-TripMate는 최신 krtour-map `openapi.user.json`을 기준으로 HTTP 호출한다.
+Pinvi는 최신 kor-travel-map `openapi.user.json`을 기준으로 HTTP 호출한다.
 
-- API base URL: `TRIPMATE_KRTOUR_MAP_API_BASE_URL` (`http://localhost:12301`)
-- Admin API base URL: `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` (`http://localhost:12301`)
+- API base URL: `PINVI_KOR_TRAVEL_MAP_API_BASE_URL` (`http://localhost:12301`)
+- Admin API base URL: `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` (`http://localhost:12301`)
 - 대표 경로: `GET /features/in-bounds`, `GET /features/search`,
   `GET /features/{feature_id}`, `POST /v1/features/batch`
 
-TripMate는 `python-krtour-map` import, `feature` schema 직접 SQL, provider 변환을
-하지 않는다. 사용자 대면 geocoding(조회)은 별개로 `kraddr-geo` v2 REST를 직접
-HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
+Pinvi는 `kor-travel-map` import, `feature` schema 직접 SQL, provider 변환을
+하지 않는다. 사용자 대면 geocoding(조회)은 별개로 `kor-travel-geo` v2 REST를 직접
+HTTP 호출한다(ADR-025, `docs/integrations/kor-travel-geo.md`).
 
-자세한 통합 가이드는 `krtour-map-integration.md`.
+자세한 통합 가이드는 `kor-travel-map-integration.md`.
 
 ## 4. 데이터 흐름
 
 ### 4.1 사용자 요청 (예: "내일 부산 여행 계획")
 
-1. 브라우저 `apps/web` → TripMate API
+1. 브라우저 `apps/web` → Pinvi API
 2. `apps/api/app/api/routes/trips.py` 라우터가 사용자 인증 + Trip 도메인 처리
-3. POI 첨부 시 `feature_id`가 있으면 krtour-map `POST /v1/features/batch` 호출
-4. krtour-map API가 `feature` schema에서 결과 반환
+3. POI 첨부 시 `feature_id`가 있으면 kor-travel-map `POST /v1/features/batch` 호출
+4. kor-travel-map API가 `feature` schema에서 결과 반환
 5. 라우터가 Pydantic 응답 셰입으로 변환해 클라이언트에 반환
 
-### 4.2 TripMate 자체 ETL (예: KASI 특일)
+### 4.2 Pinvi 자체 ETL (예: KASI 특일)
 
 1. Dagster scheduler가 `kasi_special_days_daily` asset/job 트리거
 2. `python-kasi-api`로 특일 계열 dataset을 조회
@@ -152,7 +152,7 @@ HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 
 - Ubuntu 24.04 + Docker Compose plugin
 - 서비스 컨테이너:
-  - PostgreSQL 16 + PostGIS 3.5 (단일 DB `tripmate`)
+  - PostgreSQL 16 + PostGIS 3.5 (단일 DB `pinvi`)
   - RustFS (S3 호환)
   - `apps/api` (Uvicorn workers)
   - `apps/web` (Next.js standalone)
@@ -180,18 +180,18 @@ HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 - `.github/workflows/openapi.yml` — OpenAPI export drift gate
 - `.github/workflows/security.yml` — bandit + npm audit
 
-각 게이트는 ADR과 함께 박는다. `python-krtour-map`의 CI는 그쪽 저장소에서
+각 게이트는 ADR과 함께 박는다. `kor-travel-map`의 CI는 그쪽 저장소에서
 독립 운영.
 
 ## 8. 로컬 개발 흐름 (요약)
 
 자세히는 `dev-environment.md`. 핵심:
 
-1. NTFS worktree `F:/dev/tripmate-<agent>`에서 Windows `git.exe`로 branch/commit/push
-2. WSL ext4 테스트 미러 `~/tripmate-workspaces/tripmate-<agent>`에서 테스트/Docker 실행
+1. NTFS worktree `F:/dev/pinvi-<agent>`에서 Windows `git.exe`로 branch/commit/push
+2. WSL ext4 테스트 미러 `~/pinvi-workspaces/pinvi-<agent>`에서 테스트/Docker 실행
 3. `dataset/`, `refdocs/`는 NTFS에 두고 ext4에 심볼릭 링크 또는 직접 참조
-4. `python-krtour-map`은 별도 sibling 저장소에서 API/Admin API `12301`로 실행
-   하고, TripMate는 HTTP base URL만 설정한다.
+4. `kor-travel-map`은 별도 sibling 저장소에서 API/Admin API `12301`로 실행
+   하고, Pinvi는 HTTP base URL만 설정한다.
 5. 동기는 NTFS → ext4 단방향. ext4 미러에서 commit/push 금지
 
 ## 9. v1과의 차이 (요약)
@@ -199,9 +199,9 @@ HTTP 호출한다(ADR-025, `docs/integrations/kraddr-geo.md`).
 v1(`v1` 브랜치)에서 v2로 가져오는 결정은 ADR로 한 건씩 박는다. 큰 차이는:
 
 - **지도 feature 도메인을 별 저장소로 분리** — v1은 `apps/api` 안에 모든
-  모델/서비스가 있었다. v2는 `python-krtour-map`이 소유.
+  모델/서비스가 있었다. v2는 `kor-travel-map`이 소유.
 - **provider 어댑터 wrapper 제거** — v1에는 `apps/api/app/etl/<provider>/` 아래
-  raw → DTO 변환이 있었다. v2는 모두 `python-krtour-map.providers`로 이전.
+  raw → DTO 변환이 있었다. v2는 모두 `kor-travel-map.providers`로 이전.
 - **Dagster asset 위치 변경** — v1은 `apps/api/app/dagster_etl/`. v2는
   `apps/etl/`로 분리해 백엔드와 코드 위치를 다르게 한다.
 - **개발 환경 모델 변경** — v1의 ext4 직접 작업본/NTFS export 표현과 ADR-004의

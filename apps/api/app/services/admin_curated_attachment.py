@@ -118,7 +118,7 @@ async def create_curated_attachment(
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
     """첨부 1건 생성(flush 까지). 대상당 개수 상한은 trip 첨부와 동일 설정 공유."""
-    limit = settings.tripmate_max_attachments_per_target
+    limit = settings.pinvi_max_attachments_per_target
     if await _count(db, curated_plan_id=curated_plan_id, curated_poi_id=curated_poi_id) >= limit:
         raise CuratedAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
     _validate_curated_attachment_storage_ref(

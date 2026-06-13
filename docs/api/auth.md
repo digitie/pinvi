@@ -64,7 +64,7 @@ Content-Type: application/json
 - `marketing`은 선택 동의다. `demographic_use`는 성별/생년월/거주지 입력이 있는
   프로필 보강 단계에서만 받는다.
 - `app.user_email_verifications` row + Resend로 verify 메일 발송
-  (`TRIPMATE_RESEND_API_KEY` 미설정 시 console-log 모드)
+  (`PINVI_RESEND_API_KEY` 미설정 시 console-log 모드)
 - Resend HTTP 오류 → `503 SERVICE_UNAVAILABLE` + 트랜잭션 롤백
   (`verification_email_dispatched: false`)
 
@@ -95,7 +95,7 @@ Content-Type: application/json
 }
 ```
 
-Set-Cookie: `tripmate_access`, `tripmate_refresh`.
+Set-Cookie: `pinvi_access`, `pinvi_refresh`.
 
 - `app.user_email_verifications` 검증 (해시 비교 + `expires_at > now()` + `used_at IS NULL`)
 - 성공 시 `users.email_verified_at = now()`, `users.status = 'pending_profile'`
@@ -148,10 +148,10 @@ Set-Cookie 두 개.
 
 ```http
 POST /auth/refresh
-Cookie: tripmate_refresh=<opaque>
+Cookie: pinvi_refresh=<opaque>
 ```
 
-응답 200: 새 `tripmate_access` cookie + 새 `tripmate_refresh` cookie.
+응답 200: 새 `pinvi_access` cookie + 새 `pinvi_refresh` cookie.
 
 - 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` →
   기존 row lock 후 `revoked_at=now()` + 새 session row 발급(refresh rotation). 같은 refresh
@@ -162,17 +162,17 @@ Cookie: tripmate_refresh=<opaque>
 
 ```http
 POST /auth/logout
-Cookie: tripmate_refresh=...
+Cookie: pinvi_refresh=...
 ```
 
-응답 204. 현재 `tripmate_refresh`에 해당하는 `app.user_sessions.revoked_at = now()` +
+응답 204. 현재 `pinvi_refresh`에 해당하는 `app.user_sessions.revoked_at = now()` +
 Set-Cookie로 두 cookie 삭제.
 
 ### 3.4 `GET /auth/me`
 
 ```http
 GET /auth/me
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 ```
 
 응답 200:
@@ -215,7 +215,7 @@ Cookie: tripmate_access=...
 ```http
 POST /auth/profile/complete
 Content-Type: application/json
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 
 {
   "nickname": "user-nick",
@@ -289,7 +289,7 @@ Content-Type: application/json
 }
 ```
 
-`enabled`는 `TRIPMATE_GOOGLE_OAUTH_CLIENT_ID` 존재 여부다. Naver/Kakao는 future
+`enabled`는 `PINVI_GOOGLE_OAUTH_CLIENT_ID` 존재 여부다. Naver/Kakao는 future
 provider라 설정값이 있어도 현재 응답에 포함하지 않는다.
 
 ### 6.2 `POST /auth/oauth/google/start`
@@ -303,7 +303,7 @@ Content-Type: application/json
 
 - `mode`: `login` 기본. `/start`의 `mode=link`는 `400 OAUTH_LINK_REQUIRES_AUTH`로
   거부하며, 기존 user 연결은 6.4의 `/link` endpoint를 사용한다.
-- `return_to`: TripMate 내부 경로만 허용 (allowlist), `/`로 시작
+- `return_to`: Pinvi 내부 경로만 허용 (allowlist), `/`로 시작
 - 응답 200: `{ "data": { "authorize_url": "https://accounts.google.com/..." } }`
 - 클라이언트는 `authorize_url`로 top-level navigation
 - `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분). PKCE verifier는
@@ -326,13 +326,13 @@ GET /auth/oauth/google/callback?code=...&state=...
    - 기존 identity 없음 + 같은 이메일 로컬 계정 있음 → 자동 연결 금지,
      `OAUTH_ACCOUNT_LINK_REQUIRED`
    - 기존 identity 없음 + Google `email_verified=true` + 신규 이메일 → provider-only user 생성
-   - Google 또는 TripMate 이메일 인증 불확실 → `OAUTH_EMAIL_UNVERIFIED`
+   - Google 또는 Pinvi 이메일 인증 불확실 → `OAUTH_EMAIL_UNVERIFIED`
    - Naver/Kakao → 미래 작업. 현재 callback route 없음.
 
 응답:
 
 - 성공: 303 → `${return_to}` + Set-Cookie 두 개
-- 실패: 303 → `${TRIPMATE_WEB_BASE_URL}/login?error=<code>&error_description=...`
+- 실패: 303 → `${PINVI_WEB_BASE_URL}/login?error=<code>&error_description=...`
   - `mode=link` state 소비 뒤의 실패는 `return_to`(기본 `/profile`)로 redirect한다.
   - 현재 Google 구현: `OAUTH_ACCOUNT_LINK_REQUIRED` / `OAUTH_CALLBACK_INVALID` /
     `OAUTH_EMAIL_UNVERIFIED` / `OAUTH_PROVIDER_DENIED` / `OAUTH_STATE_INVALID` /
@@ -346,7 +346,7 @@ GET /auth/oauth/google/callback?code=...&state=...
 ```http
 POST /auth/oauth/google/link
 Content-Type: application/json
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 
 { "return_to": "/profile" }
 ```
@@ -358,7 +358,7 @@ navigation.
 
 ```http
 DELETE /auth/oauth/google
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 ```
 
 - 비밀번호 설정돼 있어야 (`password_hash IS NOT NULL`) — 소셜-only는 거부
@@ -371,7 +371,7 @@ Cookie: tripmate_access=...
 
 ```http
 DELETE /auth/me
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 Content-Type: application/json
 
 { "confirm": "DELETE" }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { PoiUpdate, TripViewPoi } from '@tripmate/schemas';
+import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
 import { MARKER_PALETTE, type MarkerColorKey } from '@/lib/markerPalette';
 import {
   buildPoiDetailPatch,

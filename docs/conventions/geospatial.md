@@ -2,8 +2,8 @@
 
 좌표 / SRID / lon-lat / PostGIS / fuzzy 금지. v1 `skills/geospatial-postgis.ko.md` 정리.
 
-> **scope**: TripMate `app` schema의 공간 사용은 적음 — feature schema에 위임.
-> 본 규약은 클라이언트 ↔ TripMate API ↔ krtour-map/kraddr-geo HTTP 경계에서 좌표를 다룰 때.
+> **scope**: Pinvi `app` schema의 공간 사용은 적음 — feature schema에 위임.
+> 본 규약은 클라이언트 ↔ Pinvi API ↔ kor-travel-map/kor-travel-geo HTTP 경계에서 좌표를 다룰 때.
 
 ## 1. SRID 항상 명시
 
@@ -23,7 +23,7 @@
   ```
 - PostGIS: `ST_MakePoint(lon, lat)` 항상
 - GeoJSON: `coordinates: [lon, lat]`
-- **TripMate stack 전체가 `(lng, lat)` 일관** — `maplibre-vworld-js`는 GeoJSON 순서를 따르므로 어댑터 불필요 (ADR-015)
+- **Pinvi stack 전체가 `(lng, lat)` 일관** — `maplibre-vworld-js`는 GeoJSON 순서를 따르므로 어댑터 불필요 (ADR-015)
 
 ```ts
 // apps/web/lib/coordAdapter.ts
@@ -56,8 +56,8 @@ export function toLngLatTuple(c: { longitude: number; latitude: number }): [numb
 
 ## 5. shp / GIS 데이터
 
-- TripMate는 shp 직접 import X — `python-krtour-map` 또는 `python-kraddr-geo`가 소유
-- feature 조회는 krtour-map OpenAPI, geocoding/region 조회는 kraddr-geo v2 REST
+- Pinvi는 shp 직접 import X — `kor-travel-map` 또는 `kor-travel-geo`가 소유
+- feature 조회는 kor-travel-map OpenAPI, geocoding/region 조회는 kor-travel-geo v2 REST
 - 본 저장소에 GIS raw data 저장 X
 
 ## 6. PostGIS 사용
@@ -69,10 +69,10 @@ export function toLngLatTuple(c: { longitude: number; latitude: number }): [numb
 - `ST_Covers` / `ST_Intersects` — boundary
 - Index: GiST on geom + `coord_5179`
 
-TripMate 측에서:
+Pinvi 측에서:
 
-- 좌표 자체는 krtour-map/kraddr-geo 응답에서 받아 그대로 응답에 직렬화
-- 거리 계산 (UI distance label)은 클라이언트 haversine 또는 krtour-map/kraddr-geo 응답값 사용
+- 좌표 자체는 kor-travel-map/kor-travel-geo 응답에서 받아 그대로 응답에 직렬화
+- 거리 계산 (UI distance label)은 클라이언트 haversine 또는 kor-travel-map/kor-travel-geo 응답값 사용
 
 ## 7. fixture 테스트
 
@@ -83,7 +83,7 @@ TripMate 측에서:
 - 잘못된 geometry (invalid)
 - 인접 시군구
 
-라이브러리 측 책임. TripMate는 좌표 입력 검증 + 응답 변환 unit 테스트만.
+라이브러리 측 책임. Pinvi는 좌표 입력 검증 + 응답 변환 unit 테스트만.
 
 ## 8. AI agent 체크리스트
 

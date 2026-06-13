@@ -589,7 +589,7 @@ async def create_attachment(
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
-    limit = settings.tripmate_max_attachments_per_target
+    limit = settings.pinvi_max_attachments_per_target
     if await _count_attachments(db, trip_id=trip_id, trip_poi_id=trip_poi_id) >= limit:
         raise TripAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
     _validate_attachment_storage_ref(

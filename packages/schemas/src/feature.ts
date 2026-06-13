@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CoordSchema, Iso8601Schema } from './common';
 
-/** `python-krtour-map` 의 7가지 kind. */
+/** `kor-travel-map` 의 7가지 kind. */
 export const FeatureKindSchema = z.enum([
   'place',
   'event',
@@ -13,7 +13,7 @@ export const FeatureKindSchema = z.enum([
 ]);
 export type FeatureKind = z.infer<typeof FeatureKindSchema>;
 
-/** krtour-map `make_feature_id` 출력. TripMate는 포맷을 해석하지 않는다. */
+/** kor-travel-map `make_feature_id` 출력. Pinvi는 포맷을 해석하지 않는다. */
 export const FeatureIdSchema = z.string().min(1).max(200);
 export type FeatureId = z.infer<typeof FeatureIdSchema>;
 
@@ -31,7 +31,7 @@ export const MarkerColorSchema = z.string().regex(/^P-\d{2}$/, 'marker color는 
 
 /**
  * 마커/목록 표시용 요약 (in-bounds items / nearby / search).
- * krtour 평면 `lon`/`lat`(nullable), 표시명 `name`, lifecycle `status`에 정합.
+ * kor_travel_map 평면 `lon`/`lat`(nullable), 표시명 `name`, lifecycle `status`에 정합.
  * `distance_m`은 nearby 응답에만 채워진다.
  */
 export const FeatureSummarySchema = z.object({
@@ -47,7 +47,7 @@ export const FeatureSummarySchema = z.object({
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
 
-/** 서버(krtour) 클러스터 — `cluster_key`는 행정구역 코드(자연키). */
+/** 서버(kor_travel_map) 클러스터 — `cluster_key`는 행정구역 코드(자연키). */
 export const FeatureClusterSchema = z.object({
   cluster_key: z.string(),
   coord: CoordSchema,
@@ -65,7 +65,7 @@ export const FeaturesInBoundsResponseSchema = z.object({
 });
 export type FeaturesInBoundsResponse = z.infer<typeof FeaturesInBoundsResponseSchema>;
 
-/** 상세 응답 (krtour `FeatureDetailResponse` 투영). */
+/** 상세 응답 (kor_travel_map `FeatureDetailResponse` 투영). */
 export const FeatureDetailSchema = z.object({
   feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
@@ -85,7 +85,7 @@ export const FeatureDetailSchema = z.object({
 });
 export type FeatureDetail = z.infer<typeof FeatureDetailSchema>;
 
-/** krtour 평탄 weather metric (forecast_style 태그). */
+/** kor_travel_map 평탄 weather metric (forecast_style 태그). */
 export const WeatherMetricSchema = z.object({
   metric_key: z.string(),
   metric_name: z.string().nullable().optional(),
@@ -101,7 +101,7 @@ export const WeatherMetricSchema = z.object({
 });
 export type WeatherMetric = z.infer<typeof WeatherMetricSchema>;
 
-/** weather card — 평탄 metric 목록 + source_styles (krtour `WeatherCardData`). */
+/** weather card — 평탄 metric 목록 + source_styles (kor_travel_map `WeatherCardData`). */
 export const FeatureWeatherCardSchema = z.object({
   feature_id: FeatureIdSchema,
   asof: Iso8601Schema.nullable().optional(),
@@ -112,7 +112,7 @@ export const FeatureWeatherCardSchema = z.object({
 });
 export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
 
-/** 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (krtour `CategorySummary` 투영). */
+/** 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (kor_travel_map `CategorySummary` 투영). */
 export const FeatureCategorySchema = z.object({
   code: z.string(),
   label: z.string(),
@@ -125,7 +125,7 @@ export const FeatureCategorySchema = z.object({
 });
 export type FeatureCategory = z.infer<typeof FeatureCategorySchema>;
 
-/** Feature 요청 큐 등록 (Admin 검토 → krtour feature change). */
+/** Feature 요청 큐 등록 (Admin 검토 → kor_travel_map feature change). */
 export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 
 export const FeatureRequestTypeSchema = z.enum(['new_place', 'correction', 'closure']);

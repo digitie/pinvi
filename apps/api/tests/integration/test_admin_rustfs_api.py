@@ -18,7 +18,7 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
 
     async with session_factory() as db:
         user = User(
-            email=f"rustfs_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"rustfs_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash="x",
             nickname="관리자",
             status="active",
@@ -43,7 +43,7 @@ async def _seed_attachment(session_factory, *, owner_id: str, storage_key: str) 
             CuratedPlanAttachment(
                 trip_id=trip.trip_id,
                 uploaded_by_user_id=uuid.UUID(owner_id),
-                bucket="tripmate-media",
+                bucket="pinvi-media",
                 storage_key=storage_key,
                 original_filename="ref.jpg",
                 content_type="image/jpeg",

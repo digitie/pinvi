@@ -1,4 +1,4 @@
-"""krtour-map admin HTTP client 계약 테스트 (httpx.MockTransport)."""
+"""kor-travel-map admin HTTP client 계약 테스트 (httpx.MockTransport)."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ from typing import Any
 import httpx
 import pytest
 
-from app.clients.krtour_map import (
-    KrtourMapBadRequest,
-    KrtourMapFeatureNotFound,
-    KrtourMapUnavailable,
+from app.clients.kor_travel_map import (
+    KorTravelMapBadRequest,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapUnavailable,
 )
-from app.clients.krtour_map_admin import KrtourMapAdminClient
+from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler, **kwargs: object) -> KrtourMapAdminClient:
+def _client(handler: Handler, **kwargs: object) -> KorTravelMapAdminClient:
     http = httpx.AsyncClient(
-        base_url="http://krtour-admin.test",
+        base_url="http://kor_travel_map-admin.test",
         transport=httpx.MockTransport(handler),
     )
     params: dict[str, object] = {
@@ -30,7 +30,7 @@ def _client(handler: Handler, **kwargs: object) -> KrtourMapAdminClient:
         "service_token": "svc-tok",
     }
     params.update(kwargs)
-    return KrtourMapAdminClient(http, **params)  # type: ignore[arg-type]
+    return KorTravelMapAdminClient(http, **params)  # type: ignore[arg-type]
 
 
 def _change_response(*, action: str = "create", state: str = "pending") -> dict[str, Any]:
@@ -56,7 +56,7 @@ async def test_create_feature_posts_with_token_and_returns_record() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         seen["method"] = request.method
         seen["path"] = request.url.path
-        seen["token"] = request.headers.get("X-Krtour-Service-Token", "")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
         return httpx.Response(201, json=_change_response(action="create"))
 
     client = _client(handler)
@@ -130,7 +130,7 @@ async def test_404_maps_to_feature_not_found() -> None:
     client = _client(
         lambda r: httpx.Response(404, json={"code": "FEATURE_NOT_FOUND", "status": 404})
     )
-    with pytest.raises(KrtourMapFeatureNotFound):
+    with pytest.raises(KorTravelMapFeatureNotFound):
         await client.patch_feature("f_x", {"reason": "x"})
     await client.aclose()
 
@@ -139,7 +139,7 @@ async def test_422_maps_to_bad_request_with_code() -> None:
     client = _client(
         lambda r: httpx.Response(422, json={"code": "VALIDATION_ERROR", "status": 422})
     )
-    with pytest.raises(KrtourMapBadRequest) as exc_info:
+    with pytest.raises(KorTravelMapBadRequest) as exc_info:
         await client.create_feature({"reason": "x"})
     assert exc_info.value.code == "VALIDATION_ERROR"
     await client.aclose()
@@ -153,7 +153,7 @@ async def test_5xx_retries_then_raises_unavailable() -> None:
         return httpx.Response(503, json={})
 
     client = _client(handler)  # max_attempts=2
-    with pytest.raises(KrtourMapUnavailable):
+    with pytest.raises(KorTravelMapUnavailable):
         await client.create_feature({"reason": "x"})
     assert calls["n"] == 2
     await client.aclose()

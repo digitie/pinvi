@@ -1,6 +1,6 @@
-# test-strategy.md — TripMate 테스트 전략
+# test-strategy.md — Pinvi 테스트 전략
 
-본 문서는 v2 TripMate의 테스트 정책이다. `python-krtour-map`의 `docs/test-strategy.md`
+본 문서는 v2 Pinvi의 테스트 정책이다. `kor-travel-map`의 `docs/test-strategy.md`
 와 일관성 있게 정리하되, 본 저장소는 사용자 대면 앱 + ETL orchestration이 추가
 되므로 e2e와 UI 테스트 비중이 더 크다.
 
@@ -12,13 +12,13 @@
 | 통합 (`integration`) | 라우터 + DB + 외부 HTTP 계약 | `pytest` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` | 실제 PostGIS |
 | e2e (`e2e`) | 백엔드 ↔ 프론트 (HTTP 시나리오) | `pytest` + `httpx` + `playwright` | `apps/api/tests/e2e/`, `apps/web/tests/` | 실제 PostGIS |
 | UI smoke | 프론트 화면 렌더링 | Playwright | `apps/web/tests/*.test.mjs` | 모의/실제 |
-| krtour-map 계약 | `python-krtour-map` OpenAPI와의 계약 | `pytest` + `httpx.MockTransport` + 선택적 live | `apps/api/tests/integration/krtour_map/` | 선택 |
+| kor-travel-map 계약 | `kor-travel-map` OpenAPI와의 계약 | `pytest` + `httpx.MockTransport` + 선택적 live | `apps/api/tests/integration/kor_travel_map/` | 선택 |
 | Dagster asset | 단일 asset 실행 (dry-run) | Dagster runner | `apps/etl/tests/` | 실제/임시 |
 | 정합성 게이트 | OpenAPI drift, import-linter, coverage | CI workflow | `.github/workflows/` | — |
 
 ## 2. 단위 테스트 (`unit`)
 
-- 외부 의존(DB / HTTP / 파일시스템 / 시간)을 모두 격리. krtour-map/kraddr-geo/KASI
+- 외부 의존(DB / HTTP / 파일시스템 / 시간)을 모두 격리. kor-travel-map/kor-travel-geo/KASI
   HTTP 호출은 mock transport로 대체.
 - Pydantic v2 validator branch는 100% 커버 — `pytest.raises(ValidationError)`.
 - 시간이 들어가면 `freezegun` 또는 명시적 `kst_now()` injection.
@@ -28,7 +28,7 @@
 
 - testcontainers PostGIS 16-3.5 사용. session-scope fixture로 컨테이너 1회 기동.
 - 매 테스트는 transaction rollback 패턴 — DB 상태를 testcontainer 재기동 없이 격리.
-- `feature` schema fixture를 TripMate DB에 직접 만들지 않는다. krtour-map 응답은
+- `feature` schema fixture를 Pinvi DB에 직접 만들지 않는다. kor-travel-map 응답은
   OpenAPI fixture 또는 `httpx.MockTransport`로 만든다.
 - 라우터 통합: `httpx.AsyncClient(app=fastapi_app)` ASGI 직접 호출 (네트워크 안 탐).
 - 인덱스 사용 검증이 필요한 raw SQL은 EXPLAIN 통합 테스트로 가드.
@@ -47,20 +47,20 @@
 - Visual regression은 도입 보류 (Sprint 3+에서 결정).
 - Admin 화면은 별도 fixture로 admin 권한 부여 후 진입.
 
-## 6. krtour-map 계약 테스트
+## 6. kor-travel-map 계약 테스트
 
-`python-krtour-map` 최신 `openapi.user.json`과의 계약을 본 저장소에서도 검증:
+`kor-travel-map` 최신 `openapi.user.json`과의 계약을 본 저장소에서도 검증:
 
-- `apps/api/tests/integration/krtour_map/test_contract.py` — `GET /features/in-bounds`,
+- `apps/api/tests/integration/kor_travel_map/test_contract.py` — `GET /features/in-bounds`,
   `GET /features/search`, `GET /features/{feature_id}`,
   `POST /v1/features/batch` 응답 변환 확인.
-- 선택적 live mode는 `TRIPMATE_KRTOUR_MAP_API_BASE_URL`이 reachable할 때만 실행.
+- 선택적 live mode는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`이 reachable할 때만 실행.
 
 ## 7. Dagster asset 테스트
 
 - `apps/etl/tests/test_asset_<name>.py` — 단일 asset에 모의 provider client 주입,
   `materialize_to_memory`로 결과 검증.
-- 통합 모드: testcontainer PostGIS + 외부 HTTP mock. krtour-map feature 적재 자체는
+- 통합 모드: testcontainer PostGIS + 외부 HTTP mock. kor-travel-map feature 적재 자체는
   그 저장소 테스트가 담당한다.
 
 ## 8. 정합성 게이트 (CI)
@@ -127,7 +127,7 @@
 v1의 `apps/api/tests/test_*.py`는 코드 작성 단계에서 한 건씩 evaluation:
 
 - 단위 테스트의 케이스 시나리오는 가치 보존 — v2 schema에 맞춰 재작성.
-- 통합 테스트는 라이브러리 분리로 일부 무효 — `python-krtour-map`의 통합
+- 통합 테스트는 라이브러리 분리로 일부 무효 — `kor-travel-map`의 통합
   fixture로 이동했을 가능성.
 - Dagster asset 테스트는 v2의 `apps/etl/tests/`로 이전.
 

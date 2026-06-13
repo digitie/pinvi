@@ -1,7 +1,7 @@
 """Public API schema — `docs/api/public.md`.
 
-TripMate `/public/*`는 인증 없이 노출되는 read-only 표면이다. 데이터 원천은
-krtour-map `openapi.user.json`의 `/v1/public/*` 응답이며, TripMate는 사용자에게
+Pinvi `/public/*`는 인증 없이 노출되는 read-only 표면이다. 데이터 원천은
+kor-travel-map `openapi.user.json`의 `/v1/public/*` 응답이며, Pinvi는 사용자에게
 노출할 필드와 envelope/meta 투영만 소유한다.
 """
 

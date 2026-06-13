@@ -54,11 +54,11 @@ def upgrade():
 # Admin 로그인 (curl)
 COOKIE=$(curl -fsS -c - -X POST http://localhost:12501/admin/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"..."}' | grep tripmate_access | awk '{print $7}')
+  -d '{"email":"admin@example.com","password":"..."}' | grep pinvi_access | awk '{print $7}')
 
 # force-verify
 curl -fsS -X POST "http://localhost:12501/admin/users/<user_id>/force-verify" \
-  -H "Cookie: tripmate_access=$COOKIE" \
+  -H "Cookie: pinvi_access=$COOKIE" \
   -H "X-Access-Reason: 고객 문의 TICKET-1234" \
   -d '{}'
 ```
@@ -154,7 +154,7 @@ SELECT log_id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
 
 ```bash
 curl -fsS -X POST "http://localhost:12501/admin/seed/scenarios/new_user_first_trip" \
-  -H "Cookie: tripmate_access=$ADMIN_COOKIE" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
   -d '{}'
 ```
 
@@ -166,12 +166,12 @@ curl -fsS -X POST "http://localhost:12501/admin/seed/scenarios/new_user_first_tr
 
 ```bash
 curl -fsS -X POST "http://localhost:12501/admin/reset" \
-  -H "Cookie: tripmate_access=$ADMIN_COOKIE" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
   -d '{"confirm":"RESET","admin_password":"..."}'
 ```
 
 - DB 전체 reset (`alembic downgrade base` → `upgrade head`)
-- 라이브러리 schema는 별도 (`POST /admin/krtour-map/reset`)
+- 라이브러리 schema는 별도 (`POST /admin/kor-travel-map/reset`)
 - 자동으로 `new_user_first_trip` 적용
 
 ## 7. Daily check (운영자 일과)

@@ -1,7 +1,7 @@
 """RustFS(S3 호환) Admin 객체 관리 — ListObjectsV2 / DeleteObject (T-105 #3).
 
 boto3 동기 client를 `asyncio.to_thread`로 감싸 비동기 경로에서 호출한다. 객체 본문은
-RustFS가 소유하므로 TripMate는 메타만 다룬다. RBAC는 라우터에서 강제.
+RustFS가 소유하므로 Pinvi는 메타만 다룬다. RBAC는 라우터에서 강제.
 """
 
 from __future__ import annotations
@@ -17,16 +17,16 @@ from app.core.config import settings
 def _client() -> Any:
     return boto3.client(
         "s3",
-        endpoint_url=settings.tripmate_rustfs_endpoint_url,
-        aws_access_key_id=settings.tripmate_rustfs_access_key_id,
-        aws_secret_access_key=settings.tripmate_rustfs_secret_access_key,
+        endpoint_url=settings.pinvi_rustfs_endpoint_url,
+        aws_access_key_id=settings.pinvi_rustfs_access_key_id,
+        aws_secret_access_key=settings.pinvi_rustfs_secret_access_key,
         region_name="us-east-1",
     )
 
 
 def _list_objects_sync(prefix: str, limit: int, token: str | None) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
-        "Bucket": settings.tripmate_rustfs_bucket,
+        "Bucket": settings.pinvi_rustfs_bucket,
         "Prefix": prefix,
         "MaxKeys": limit,
     }
@@ -57,7 +57,7 @@ async def list_objects(
 
 
 def _delete_object_sync(key: str) -> None:
-    _client().delete_object(Bucket=settings.tripmate_rustfs_bucket, Key=key)
+    _client().delete_object(Bucket=settings.pinvi_rustfs_bucket, Key=key)
 
 
 async def delete_object(*, key: str) -> None:

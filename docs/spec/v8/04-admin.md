@@ -1,4 +1,4 @@
-# SPEC V8 #4 — Admin · 디버그 (TripMate 적용 노트)
+# SPEC V8 #4 — Admin · 디버그 (Pinvi 적용 노트)
 
 원본: `spec_v8_4_admin.docx` (M장 Admin 13개 sub-section).
 
@@ -15,7 +15,7 @@
 | `/admin` | 대시보드 (지표 카드 8개) | 3 |
 | `/admin/users` / `/admin/users/{id}` | 사용자 목록/상세 + 디버그 액션 | 3 |
 | `/admin/trips` / `/admin/trips/{id}` | 여행 목록/상세 + 멤버/POI/공유 토큰 | 3 |
-| `/admin/features` | 라이브러리 feature 검색 (read-only, krtour-map admin API 결선 후) | 3 |
+| `/admin/features` | 라이브러리 feature 검색 (read-only, kor-travel-map admin API 결선 후) | 3 |
 | `/admin/pois` | POI 검색 (`feature_link_broken_at` 필터) | 3 |
 | `/admin/etl` | Dagit reverse-proxy + 자체 요약 | 5 |
 | `/admin/api-calls` | 외부 API 호출 로그 (`app.api_call_log`) | 3 |
@@ -26,7 +26,7 @@
 | `/admin/seed` (dev only) | 8 시나리오 샘플 (운영 환경 차단 안전장치 후 결선) | 3 |
 | `/admin/reset` (dev only) | DB 전체 reset (확인 다이얼로그/운영 라우트 미등록 후 결선) | 3 |
 
-추가 (M-15) — `python-krtour-map` schema 가시화:
+추가 (M-15) — `kor-travel-map` schema 가시화:
 
 | 경로 | 내용 | Sprint |
 |------|------|--------|
@@ -79,7 +79,7 @@
 |--------|---|---|---|---|------|
 | users | ✗ | ✓ | ✓ | ○ | 생성=가입. 삭제=soft + 30일 후 hard |
 | trips | ✗ | ✓ | ✓ | ○ | 임의 생성 X |
-| features | ✓ | ✓ | ✓ | ○ | 라이브러리에 위임 — TripMate는 trigger만 |
+| features | ✓ | ✓ | ✓ | ○ | 라이브러리에 위임 — Pinvi는 trigger만 |
 | category_mappings | ✓ | ✓ | ✓ | ✓ | 자유 편집 |
 | api_call_log | ✗ | ✓ | ✗ | ✗ | read-only |
 | location_access_log | ✗ | ◐ | ✗ | ✗ | CPO만. chain 검증 |
@@ -114,13 +114,13 @@ faceted 필터 + 저장된 뷰 (개인 + 팀 공유). URL 쿼리 동기화.
 - 자산 상세: 30일 실행 이력 / 의존 그래프 / 에러 로그 / 입력 샘플 / 출력 메트릭 / 수동 trigger
 
 본 저장소의 Dagster code location은 `apps/etl` (ADR-006).
-`python-krtour-map`의 collect/load 함수는 asset에서 호출.
+`kor-travel-map`의 collect/load 함수는 asset에서 호출.
 
 ## 8. Record Linkage 검토 큐 (M-10 + K-4)
 
 `/admin/dedup-review`:
 
-- `dedup_review_queue` (`python-krtour-map` 소유) read
+- `dedup_review_queue` (`kor-travel-map` 소유) read
 - 좌우 분할: A 후보 vs B 후보 (name/coord/address/category/raw_refs/리뷰 링크)
 - 판정 액션: [같음→A로 병합] / [같음→B로 병합] / [다름→무시] / [의심→보류]
 - 판정 결과 → 라이브러리에 callback (ML 학습 데이터 누적)
@@ -219,4 +219,4 @@ PR 머지 전 verify checklist로 활용:
 - `docs/spec/v8/02-backend.md` H-6 (Admin API)
 - `docs/spec/v8/01-data.md` (`admin_audit_log` chain)
 - `docs/spec/v8/00-infrastructure.md` (Loki, Sentry deep link)
-- `docs/krtour-map-integration.md` (M-15 라이브러리 schema 호출)
+- `docs/kor-travel-map-integration.md` (M-15 라이브러리 schema 호출)

@@ -109,7 +109,7 @@ DoD 항목별:
 ## 잔여 (후속 PR)
 
 - [ ] **위치 감사 자동 적재 via `/features/in-bounds`** — 미들웨어/체인 로직은 완료·
-  검증됐으나 endpoint 자동 트리거는 `python-krtour-map` client 주입(**Sprint 4
+  검증됐으나 endpoint 자동 트리거는 `kor-travel-map` client 주입(**Sprint 4
   PR-B**) 의존. Sprint 4에서 e2e 연결.
 - [x] **`email_queue` SKIP LOCKED worker** + 비밀번호 재설정 메일 흐름
   (`process_pending_email_batch`, `/auth/password/reset-request`,

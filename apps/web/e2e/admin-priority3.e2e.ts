@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { AdminApiCallEntry, AdminLocationAuditEntry } from '@tripmate/schemas';
+import type { AdminApiCallEntry, AdminLocationAuditEntry } from '@pinvi/schemas';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',

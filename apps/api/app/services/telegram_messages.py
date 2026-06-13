@@ -51,6 +51,6 @@ def build_companion_invited_message(
         [
             f"✉️ {who}, 여행에 초대되었습니다 — {trip_title}",
             "",
-            "TripMate에서 일정을 확인해 보세요.",
+            "Pinvi에서 일정을 확인해 보세요.",
         ]
     )

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.krtour_map import KrtourMapClient
+from app.clients.kor_travel_map import KorTravelMapClient
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
@@ -89,7 +89,7 @@ TOOL_DESCRIPTORS: list[McpToolDescriptor] = [
     ),
     McpToolDescriptor(
         name="search_features",
-        description="krtour-map OpenAPI HTTP feature 검색",
+        description="kor-travel-map OpenAPI HTTP feature 검색",
         inputSchema={
             "type": "object",
             "properties": {
@@ -232,7 +232,7 @@ async def _get_trip(*, db: AsyncSession, user_id: uuid.UUID, args: TripIdArgs) -
         trip = await get_trip_for_user(db, trip_id=args.trip_id, user_id=user_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         raise _trip_http(exc) from exc
-    return await build_trip_view(db, trip=trip, krtour_client=None)
+    return await build_trip_view(db, trip=trip, kor_travel_map_client=None)
 
 
 async def _list_pois(
@@ -297,8 +297,8 @@ def _parse_bounds_csv(bounds: str | None) -> dict[str, float]:
 
 
 async def _search_features(*, request: Request, args: SearchFeaturesArgs) -> dict[str, Any]:
-    client = getattr(request.app.state, "krtour_map_client", None)
-    if not isinstance(client, KrtourMapClient):
+    client = getattr(request.app.state, "kor_travel_map_client", None)
+    if not isinstance(client, KorTravelMapClient):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={

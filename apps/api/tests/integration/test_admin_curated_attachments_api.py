@@ -16,7 +16,7 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
 
     async with session_factory() as db:
         user = User(
-            email=f"curated_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"curated_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash="x",
             nickname="관리자",
             status="active",
@@ -54,7 +54,7 @@ async def _seed_plan_poi(session_factory, *, admin_id: str) -> tuple[str, str]: 
 
 def _body(user_id: str, purpose: str = "curated_plan_attachment", **over: Any) -> dict[str, Any]:
     base = {
-        "bucket": "tripmate-media",
+        "bucket": "pinvi-media",
         "storage_key": f"user-uploads/{purpose}/{user_id}/2026/06/{uuid.uuid4().hex}.jpg",
         "original_filename": "cover.jpg",
         "content_type": "image/jpeg",
@@ -178,7 +178,7 @@ async def test_curated_upload_url_requires_admin(
     allowed = await client.post("/storage/upload-urls", json=body, cookies=auth_cookies(admin_id))
     assert allowed.status_code == 200, allowed.text
     data = allowed.json()["data"]
-    assert data["bucket"] == "tripmate-media"
+    assert data["bucket"] == "pinvi-media"
     assert data["storage_key"].startswith(f"user-uploads/curated_plan_attachment/{admin_id}/")
 
 

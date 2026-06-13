@@ -18,15 +18,15 @@ async def test_process_pending_email_batch_marks_console_mode_sent(
     monkeypatch: pytest.MonkeyPatch,
     session_factory,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_api_key", "")
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", "")
     now = datetime.now(UTC)
     async with session_factory() as db:
         db.add(
             EmailQueue(
-                to_email="worker@tripmate.test",
-                subject="TripMate 이메일 인증",
+                to_email="worker@pinvi.test",
+                subject="Pinvi 이메일 인증",
                 template="verify_email",
-                payload={"verify_url": "https://tripmate.test/verify?token=x"},
+                payload={"verify_url": "https://pinvi.test/verify?token=x"},
                 scheduled_at=now,
             )
         )
@@ -40,7 +40,7 @@ async def test_process_pending_email_batch_marks_console_mode_sent(
 
     async with session_factory() as db:
         row = await db.scalar(
-            select(EmailQueue).where(EmailQueue.to_email == "worker@tripmate.test")
+            select(EmailQueue).where(EmailQueue.to_email == "worker@pinvi.test")
         )
         assert row is not None
         assert row.status == "sent"
@@ -53,8 +53,8 @@ async def test_process_pending_email_batch_retries_render_failure(session_factor
     async with session_factory() as db:
         db.add(
             EmailQueue(
-                to_email="retry@tripmate.test",
-                subject="TripMate 이메일 인증",
+                to_email="retry@pinvi.test",
+                subject="Pinvi 이메일 인증",
                 template="verify_email",
                 payload={},
                 scheduled_at=now,
@@ -70,7 +70,7 @@ async def test_process_pending_email_batch_retries_render_failure(session_factor
 
     async with session_factory() as db:
         row = await db.scalar(
-            select(EmailQueue).where(EmailQueue.to_email == "retry@tripmate.test")
+            select(EmailQueue).where(EmailQueue.to_email == "retry@pinvi.test")
         )
         assert row is not None
         assert row.status == "pending"

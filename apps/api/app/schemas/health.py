@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    service: Literal["tripmate-api"] = "tripmate-api"
+    service: Literal["pinvi-api"] = "pinvi-api"
     version: str | None = None
     git_sha: str | None = None
 

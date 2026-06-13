@@ -46,7 +46,7 @@ def _with_system_bot(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import settings
 
     monkeypatch.setattr(
-        settings, "tripmate_telegram_bot_token_default", "111:AAAA_system_token_value"
+        settings, "pinvi_telegram_bot_token_default", "111:AAAA_system_token_value"
     )
 
 

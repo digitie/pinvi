@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Share2 } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
-import type { TripSharedView } from '@tripmate/schemas';
+import { ApiError, tripApi } from '@pinvi/api-client';
+import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
 import { TripMapView } from '@/components/trips/TripMapView';
@@ -88,7 +88,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
           {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'}
         </p>
         <Link href="/" className="inline-block text-sm font-semibold text-primary hover:underline">
-          TripMate 홈으로
+          Pinvi 홈으로
         </Link>
       </div>
     );

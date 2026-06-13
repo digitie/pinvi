@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { CheckCircle2, Loader2, MapPin } from 'lucide-react';
-import { ApiError, featureApi } from '@tripmate/api-client';
-import type { FeatureSuggestionKind } from '@tripmate/schemas';
+import { ApiError, featureApi } from '@pinvi/api-client';
+import type { FeatureSuggestionKind } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { buildNewPlaceRequest, type NewPlaceForm } from '@/lib/featureRequest';
 import { useEscapeKey } from '@/lib/useEscapeKey';

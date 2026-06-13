@@ -1,18 +1,18 @@
 # postgres-schema.md — `app` schema 골격
 
-본 문서는 `tripmate` PostgreSQL 데이터베이스의 `app` schema DDL 골격이다. 실제
+본 문서는 `pinvi` PostgreSQL 데이터베이스의 `app` schema DDL 골격이다. 실제
 DDL은 Alembic migration이 박는다 (코드 작성 단계 진입 후 `apps/api/alembic/
 versions/...`).
 
 다른 schema:
 
-- `feature`, `provider_sync` — `python-krtour-map` 소유. 그쪽 저장소의
+- `feature`, `provider_sync` — `kor-travel-map` 소유. 그쪽 저장소의
   `docs/postgres-schema.md` 참고.
-- `ops` — Dagster run/event storage. Dagster가 자체 관리. TripMate는 `app.import_jobs`
+- `ops` — Dagster run/event storage. Dagster가 자체 관리. Pinvi는 `app.import_jobs`
   로 도메인 관점의 메타만 둔다.
 - `x_extension` — PostGIS / pg_trgm / pgcrypto.
 
-SPEC V8 cross-reference: spec/v8/01-data.md §2 (TripMate가 박는 항목 매핑).
+SPEC V8 cross-reference: spec/v8/01-data.md §2 (Pinvi가 박는 항목 매핑).
 
 ## 1. 부트스트랩
 
@@ -25,7 +25,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA x_extension;
 CREATE EXTENSION IF NOT EXISTS pg_trgm  SCHEMA x_extension;
 
 -- 접속 시 search_path
-ALTER ROLE tripmate SET search_path TO public, x_extension;
+ALTER ROLE pinvi SET search_path TO public, x_extension;
 
 -- updated_at trigger (공통)
 CREATE OR REPLACE FUNCTION app.touch_updated_at()
@@ -439,10 +439,10 @@ CREATE TRIGGER trg_curated_trip_plans_touch_updated_at
 BEFORE UPDATE ON app.curated_trip_plans
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 
--- krtour curated_features 1:1 import를 붙일 때 출처 추적이 필요하면
+-- kor_travel_map curated_features 1:1 import를 붙일 때 출처 추적이 필요하면
 -- source_system, source_curated_feature_id, source_curated_feature_version,
 -- source_imported_at 같은 컬럼을 후속 migration으로 추가한다.
--- 현재 DDL은 TripMate-native 큐레이션과 krtour import가 같은 테이블을 공유한다는
+-- 현재 DDL은 Pinvi-native 큐레이션과 kor_travel_map import가 같은 테이블을 공유한다는
 -- 정책만 반영하고, 상세 REST 계약 확정 전 source 컬럼을 선행 확정하지 않는다.
 
 CREATE TABLE app.curated_plan_pois (
@@ -477,10 +477,10 @@ CREATE UNIQUE INDEX uq_curated_plan_pois_plan_day_sort
   ON app.curated_plan_pois (curated_plan_id, day_index, sort_order COLLATE "C")
   WHERE deleted_at IS NULL;
 
--- krtour curated_features 하위 item과의 대응이 필요하면
+-- kor_travel_map curated_features 하위 item과의 대응이 필요하면
 -- source_curated_feature_id/source_curated_feature_item_id를 후속 migration으로 추가한다.
--- feature_id는 계속 nullable이다. krtour item이 feature를 제공하지 않거나
--- TripMate-native 자유 POI이면 NULL로 둔다.
+-- feature_id는 계속 nullable이다. kor_travel_map item이 feature를 제공하지 않거나
+-- Pinvi-native 자유 POI이면 NULL로 둔다.
 
 CREATE TABLE app.curated_plan_attachments (
   attachment_id        uuid PRIMARY KEY DEFAULT x_extension.gen_random_uuid(),
@@ -610,7 +610,7 @@ CREATE TABLE app.feature_suggestions (
   note                 text,
   status               varchar(16) NOT NULL DEFAULT 'pending',
   reviewed_by_admin_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
-  krtour_ref           jsonb,
+  kor_travel_map_ref           jsonb,
   resolved_at          timestamptz,
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now(),
@@ -639,8 +639,8 @@ BEFORE UPDATE ON app.feature_suggestions
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
-사용자 `POST /features/requests`는 이 테이블에만 적재하고 krtour-map을 직접 호출하지
-않는다. Admin 검사/승인 후 krtour feature change API로 반영하는 단계는 T-179에서 연결한다.
+사용자 `POST /features/requests`는 이 테이블에만 적재하고 kor-travel-map을 직접 호출하지
+않는다. Admin 검사/승인 후 kor_travel_map feature change API로 반영하는 단계는 T-179에서 연결한다.
 
 ## 6. 운영 / 로그
 
@@ -772,9 +772,9 @@ PIPA 침해 가능성 자동 감지와 CPO 검토 상태를 저장한다. 실제
 
 ### 7.2 운영 권한
 
-- DB 사용자 `tripmate`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
-  CRUD. 단 `feature`, `provider_sync`의 DDL은 `python-krtour-map` Alembic으로만 실행.
-- 운영에서는 별도 read-only 사용자 `tripmate_ro`를 두어 BI/모니터링에 사용.
+- DB 사용자 `pinvi`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
+  CRUD. 단 `feature`, `provider_sync`의 DDL은 `kor-travel-map` Alembic으로만 실행.
+- 운영에서는 별도 read-only 사용자 `pinvi_ro`를 두어 BI/모니터링에 사용.
 - 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
 - `app.admin_audit_log`는 append-only — DELETE 막는 trigger 또는 권한 분리.
 
@@ -791,8 +791,8 @@ PIPA 침해 가능성 자동 감지와 CPO 검토 상태를 저장한다. 실제
 ## 9. 마이그레이션 운영
 
 - 두 Alembic이 같은 DB를 친다 — 실행 순서:
-  1. `python-krtour-map alembic upgrade head` (feature/provider_sync)
-  2. `tripmate alembic upgrade head` (app/ops)
+  1. `kor-travel-map alembic upgrade head` (feature/provider_sync)
+  2. `pinvi alembic upgrade head` (app/ops)
 - 충돌 가능 항목: schema 이름 / 확장 설치 / 함수 정의.
 - 가능한 한 본 schema에서 `feature` schema 객체를 참조하지 않는다 (FK 없음).
 - backfill은 별도 Dagster job으로 분리 — DDL migration에 데이터 변환 섞지 않음.
@@ -804,10 +804,10 @@ v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
 | v1 migration | v2 ADR | 비고 |
 |--------------|--------|------|
 | 0001 initial_core (user/session/trip 기본) | T-105 (대기) | 컬럼 정렬은 본 §2~§3 골격 사용 |
-| 0023 widen mid-term weather summary | (`python-krtour-map`에 이관) | feature schema 소유 |
-| 0024 library spec v3 schema | (`python-krtour-map`에 이관) | feature schema |
-| 0025 provider_source_weather_state | (`python-krtour-map`에 이관) | provider_sync |
-| 0026 outdoor_feature_profiles | (`python-krtour-map`에 이관) | feature schema |
+| 0023 widen mid-term weather summary | (`kor-travel-map`에 이관) | feature schema 소유 |
+| 0024 library spec v3 schema | (`kor-travel-map`에 이관) | feature schema |
+| 0025 provider_source_weather_state | (`kor-travel-map`에 이관) | provider_sync |
+| 0026 outdoor_feature_profiles | (`kor-travel-map`에 이관) | feature schema |
 | 0027 notice_plans | T-102 (대기) | system notice는 본 §5 골격 사용 |
 | 0028 plan_poi_attachments | T-137 완료 | 추천 여행 첨부는 본 §3.7의 `curated_plan_attachments`로 개명 |
 

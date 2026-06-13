@@ -1,4 +1,4 @@
-"""Feature Pydantic schema 단위 테스트 (krtour REST 셰입 정합)."""
+"""Feature Pydantic schema 단위 테스트 (kor_travel_map REST 셰입 정합)."""
 
 from __future__ import annotations
 
@@ -52,14 +52,14 @@ class TestFeatureSummary:
         )
         assert summary.feature_id == "f_1168010100_p_abc123"
         assert summary.name == "경복궁"
-        # marker_* 는 krtour nullable → TripMate 기본값으로 채움
+        # marker_* 는 kor_travel_map nullable → Pinvi 기본값으로 채움
         assert summary.marker_color == "P-13"
         assert summary.marker_icon == "marker"
         assert summary.status is None
         assert summary.distance_m is None
 
     def test_coord_is_optional(self) -> None:
-        # krtour lon/lat nullable — point geometry 없는 feature
+        # kor_travel_map lon/lat nullable — point geometry 없는 feature
         summary = FeatureSummary(feature_id="f1", kind="notice", name="공지")
         assert summary.coord is None
 

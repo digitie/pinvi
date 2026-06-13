@@ -1,6 +1,6 @@
-# TripMate HTTP API 문서
+# Pinvi HTTP API 문서
 
-본 디렉토리는 TripMate `apps/api`가 제공하는 HTTP endpoint의 계약을 박는다.
+본 디렉토리는 Pinvi `apps/api`가 제공하는 HTTP endpoint의 계약을 박는다.
 **v1.0 출시 전까지 본 문서가 단일 진실 — 실제 코드 구현 시 이 문서가 우선**한다.
 
 ## 1. 인덱스
@@ -26,7 +26,7 @@
 자세히는 [common.md](./common.md). 핵심:
 
 - **Base URL**: 개발 `http://localhost:12501`, Docker smoke `http://127.0.0.1:12501`,
-  운영 `https://tripmateapi.digitie.mywire.org`.
+  운영 `https://pinviapi.digitie.mywire.org`.
 - **OpenAPI**: FastAPI 자동 생성 `http://localhost:12501/docs`.
 - **응답 형식**:
 
@@ -41,7 +41,7 @@
   `EMAIL_ALREADY_USED`, `TOKEN_EXPIRED`, `TOKEN_INVALID`, `PERMISSION_DENIED`,
   `RESOURCE_NOT_FOUND`, `VERSION_CONFLICT`, `RATE_LIMITED`, `VALIDATION_ERROR`,
   `INTERNAL_ERROR`, 그 외 도메인별.
-- **인증**: httpOnly cookie (`tripmate_access`, `tripmate_refresh`) — JWT 15분 /
+- **인증**: httpOnly cookie (`pinvi_access`, `pinvi_refresh`) — JWT 15분 /
   refresh 7일. 자세히는 `docs/integrations/social-login.md` + `docs/spec/v8/02-backend.md`.
 - **CSRF**: `SameSite=Lax` cookie + state nonce (OAuth). 별도 CSRF 토큰 없음.
 - **Rate limit**: SlowAPI. 로그인/가입/재설정은 IP+이메일 기준 분당 5회.
@@ -54,9 +54,9 @@
 
 ## 3. 책임 경계
 
-- 모든 endpoint는 **TripMate가 소유**. URL/응답 셰입은 본 저장소 단일 진실.
-- 응답 데이터 일부가 `python-krtour-map`의 `feature.*` schema에서 오면, TripMate
-  서비스 레이어가 krtour-map OpenAPI HTTP 계약을 통해 가져와 TripMate 응답 셰입으로
+- 모든 endpoint는 **Pinvi가 소유**. URL/응답 셰입은 본 저장소 단일 진실.
+- 응답 데이터 일부가 `kor-travel-map`의 `feature.*` schema에서 오면, Pinvi
+  서비스 레이어가 kor-travel-map OpenAPI HTTP 계약을 통해 가져와 Pinvi 응답 셰입으로
   변환한다. provider/feature 도메인 wrapper class는 금지하고, HTTP client는
   transport 역할만 한다(ADR-026).
 
@@ -87,6 +87,6 @@
 
 - `docs/architecture.md` — 전체 의존 방향
 - `docs/spec/v8/02-backend.md` — 외부 SPEC 적용 노트
-- `docs/krtour-map-integration.md` — krtour-map OpenAPI HTTP 호출 패턴
+- `docs/kor-travel-map-integration.md` — kor-travel-map OpenAPI HTTP 호출 패턴
 - `docs/data-model.md` — DB 모델
 - `docs/conventions/coding-style.md` — Python/TS 규칙

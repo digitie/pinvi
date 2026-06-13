@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminStatsOverview } from '@tripmate/schemas';
+import { ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminStatsOverview } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { apiClient } from '@/lib/api';
 
@@ -52,7 +52,7 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <AdminPage title="대시보드" description="TripMate app DB 기준 운영 지표">
+    <AdminPage title="대시보드" description="Pinvi app DB 기준 운영 지표">
       {error && (
         <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
@@ -80,7 +80,7 @@ export default function AdminDashboardPage() {
           <li>이메일 큐 조회/재발송 ✅</li>
           <li>감사 로그 read-only + chain 검증 ✅</li>
           <li>여행/POI/API 호출 로그/위치 감사 로그 ✅</li>
-          <li>Feature / ETL / seed-reset — krtour-map 또는 운영 안전장치 후 결선</li>
+          <li>Feature / ETL / seed-reset — kor-travel-map 또는 운영 안전장치 후 결선</li>
         </ul>
       </Section>
     </AdminPage>

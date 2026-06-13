@@ -2,7 +2,7 @@
  * POI 상세 편집 폼 ↔ `PoiUpdate` 변환 — `docs/api/pois.md`.
  */
 
-import type { PoiUpdate } from '@tripmate/schemas';
+import type { PoiUpdate } from '@pinvi/schemas';
 import type { MarkerColorKey } from '@/lib/markerPalette';
 
 export interface PoiDetailForm {

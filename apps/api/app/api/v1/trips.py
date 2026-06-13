@@ -11,7 +11,7 @@ from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
-from app.clients.krtour_map import OptionalKrtourMapHttpClientDep
+from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
@@ -356,7 +356,7 @@ async def get_trip_endpoint(
     trip_id: uuid.UUID,
     current_user_id: CurrentUserId,
     db: DbSession,
-    krtour_client: OptionalKrtourMapHttpClientDep,
+    kor_travel_map_client: OptionalKorTravelMapHttpClientDep,
 ) -> Envelope[TripView]:
     try:
         trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
@@ -367,7 +367,7 @@ async def get_trip_endpoint(
             await build_trip_view(
                 db,
                 trip=trip,
-                krtour_client=krtour_client,
+                kor_travel_map_client=kor_travel_map_client,
                 include_management=can_manage_trip(role),
             )
         )
@@ -602,7 +602,7 @@ async def get_shared_trip_endpoint(
     trip_id: uuid.UUID,
     token: str,
     db: DbSession,
-    krtour_client: OptionalKrtourMapHttpClientDep,
+    kor_travel_map_client: OptionalKorTravelMapHttpClientDep,
 ) -> Envelope[TripSharedView]:
     try:
         trip, share = await get_trip_for_share_token(db, trip_id=trip_id, token=token)
@@ -612,7 +612,7 @@ async def get_shared_trip_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     view = TripView.model_validate(
-        await build_trip_view(db, trip=trip, krtour_client=krtour_client, include_management=False)
+        await build_trip_view(db, trip=trip, kor_travel_map_client=kor_travel_map_client, include_management=False)
     )
     return Envelope.of(
         TripSharedView(
@@ -1169,7 +1169,7 @@ async def create_share_token(
         visibility=body.visibility,
         expires_at=body.expires_at,
     )
-    web_base_url = settings.tripmate_web_base_url.rstrip("/")
+    web_base_url = settings.pinvi_web_base_url.rstrip("/")
     url = f"{web_base_url}/trips/{trip.trip_id}/shared/{raw}"
     return Envelope.of(
         ShareLinkResponse(

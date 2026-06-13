@@ -1,4 +1,4 @@
-# SKILL — TripMate 에이전트 매뉴얼
+# SKILL — Pinvi 에이전트 매뉴얼
 
 > 이 파일은 당신(AI 에이전트 — Claude / Codex / Antigravity / Cursor / Copilot
 > 누구든)이 작업을 시작하기 전 반드시 읽어야 한다. 1회만 읽으면 30분 이상의
@@ -11,13 +11,13 @@
 
 ## 1. 정체성
 
-본 저장소(GitHub 이름 `tripmate`)는 **한국 여행 계획·기록·공유 애플리케이션**의
+본 저장소(GitHub 이름 `pinvi`)는 **한국 여행 계획·기록·공유 애플리케이션**의
 모노레포다. 백엔드(FastAPI) + 프론트(Next.js) + ETL(Dagster) + 인프라 manifest +
 문서가 들어 있다.
 
 지도 feature(place / event / notice / price / weather / route / area) 정규화·
-저장은 본 저장소가 아니라 별 저장소 `python-krtour-map`이 소유한다. TripMate ↔
-`python-krtour-map`은 최신 **OpenAPI HTTP 계약**으로 통신한다(ADR-026).
+저장은 본 저장소가 아니라 별 저장소 `kor-travel-map`이 소유한다. Pinvi ↔
+`kor-travel-map`은 최신 **OpenAPI HTTP 계약**으로 통신한다(ADR-026).
 
 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. master(main)는 v2 사양으로 처음부터
 다시 구현한다(ADR-001).
@@ -26,23 +26,23 @@
 
 | 항목 | 값 |
 |------|----|
-| GitHub 저장소 | `tripmate` |
-| 백엔드 import (계획) | `from tripmate.api import ...`, `from tripmate.etl import ...` |
+| GitHub 저장소 | `pinvi` |
+| 백엔드 import (계획) | `from pinvi.api import ...`, `from pinvi.etl import ...` |
 | 프론트 패키지 (계획) | `apps/web` (Next.js App Router) |
-| 환경변수 prefix | `TRIPMATE_*` |
-| PostgreSQL DB 이름 (개발) | `tripmate` |
+| 환경변수 prefix | `PINVI_*` |
+| PostgreSQL DB 이름 (개발) | `pinvi` |
 | Postgres schema (자체) | `app`, `ops` |
-| Postgres schema (`python-krtour-map` 소유) | `feature`, `provider_sync` |
+| Postgres schema (`kor-travel-map` 소유) | `feature`, `provider_sync` |
 | Dagster code location | `apps/etl` |
 | Admin 콘솔 | `apps/web/app/admin/` |
 | 운영 노드 | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose) |
 
 ### 개발 환경 (PC, WSL) — ADR-024
 
-- **git / 편집 / commit / PR**: NTFS worktree (`F:/dev/tripmate-<agent>`)에서
+- **git / 편집 / commit / PR**: NTFS worktree (`F:/dev/pinvi-<agent>`)에서
   **Windows git(`git.exe`)으로만**. 여기가 git source of truth.
 - **의존성 설치 / `pytest` / `docker` / 장기 실행**: WSL ext4 **일회용 테스트
-  미러** (`~/tripmate-workspaces/tripmate-<agent>`). 미러에서 commit/push 금지.
+  미러** (`~/pinvi-workspaces/pinvi-<agent>`). 미러에서 commit/push 금지.
 - **rsync는 NTFS → ext4 단방향**. 수정은 NTFS worktree에 반영 후 다시 단방향 sync.
 - **데이터(`dataset/`, `refdocs/`)**: NTFS 원본. ext4 미러는 심볼릭 링크/절대경로 참조.
 - 절차·함정 전체는 `docs/dev-environment.md` + `docs/agent-workflow.md`,
@@ -51,7 +51,7 @@
 ## 2. 빠른 시작 (코드 작성 단계 이후)
 
 ```bash
-cd ~/tripmate-workspaces/tripmate-claude                    # WSL ext4 테스트 미러 (의존성/테스트 전용; git은 NTFS worktree)
+cd ~/pinvi-workspaces/pinvi-claude                    # WSL ext4 테스트 미러 (의존성/테스트 전용; git은 NTFS worktree)
 sudo apt install -y libgdal-dev gdal-bin libpq-dev          # 시스템 의존성
 
 # 백엔드 (uv 권장)
@@ -67,12 +67,12 @@ docker compose -f infra/docker-compose.yml up -d postgres rustfs
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# krtour-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
+# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
 
 # Alembic (app schema만)
 uv run --package apps/api alembic upgrade head
 
-# python-krtour-map alembic은 별 저장소에서 실행 (feature schema 소유)
+# kor-travel-map alembic은 별 저장소에서 실행 (feature schema 소유)
 
 # 단위 테스트
 pytest apps/api/tests -q
@@ -96,7 +96,7 @@ apps/
       models/                ← SQLAlchemy 매핑 (app schema만)
       schemas/               ← Pydantic v2
       services/              ← 비즈니스 로직
-      etl_bridge/            ← python-krtour-map 클라이언트 주입
+      etl_bridge/            ← kor-travel-map 클라이언트 주입
     alembic/                 ← app schema migration (feature schema는 별 저장소)
     tests/
   web/                       ← Next.js App Router + admin
@@ -105,7 +105,7 @@ apps/
     tests/
   etl/                       ← Dagster definitions/jobs/schedules
     definitions.py
-    assets/                  ← TripMate 자체 Dagster job / 외부 갱신 trigger
+    assets/                  ← Pinvi 자체 Dagster job / 외부 갱신 trigger
 
 packages/                    ← 공유 TS 패키지 (필요 시)
   ui/
@@ -130,7 +130,7 @@ docs/
   resume.md
   tasks.md
   test-strategy.md
-  krtour-map-integration.md
+  kor-travel-map-integration.md
   sprints/
     README.md
     SPRINT-1.md
@@ -141,24 +141,24 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 ```
 
 본 저장소의 의존 방향(계획): **schemas → models → services → routes**.
-`tripmate.etl`은 `tripmate.api.services`와 분리된 코드 위치이며 같은 DB schema
+`pinvi.etl`은 `pinvi.api.services`와 분리된 코드 위치이며 같은 DB schema
 (`app`)에 책을 댄다.
 
-`apps/api`는 `TRIPMATE_KRTOUR_MAP_API_BASE_URL`의 OpenAPI HTTP 계약으로 feature를
-조회한다. `apps/etl`은 TripMate 자체 job과 외부 서비스 갱신 trigger를 담당한다.
+`apps/api`는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`의 OpenAPI HTTP 계약으로 feature를
+조회한다. `apps/etl`은 Pinvi 자체 job과 외부 서비스 갱신 trigger를 담당한다.
 
 ## 4. 절대 하지 말 것 (DO NOT)
 
 1. **main에 직접 push 금지** — feature branch + PR (ADR-001 후속).
-2. **`feature`/`provider_sync` schema에 TripMate가 직접 DDL/migration 작성 금지** —
-   해당 schema는 `python-krtour-map`이 소유. TripMate는 `app` schema와 자체
+2. **`feature`/`provider_sync` schema에 Pinvi가 직접 DDL/migration 작성 금지** —
+   해당 schema는 `kor-travel-map`이 소유. Pinvi는 `app` schema와 자체
    도메인만 관리.
-3. **provider raw → DTO 변환 직접 작성 금지** — `python-krtour-map.providers`에
+3. **provider raw → DTO 변환 직접 작성 금지** — `kor-travel-map.providers`에
    위임. 새 provider는 그쪽 저장소에 PR.
-4. **TripMate 사용자 경로에서 `python-krtour-map` import 금지** — 최신
+4. **Pinvi 사용자 경로에서 `kor-travel-map` import 금지** — 최신
    `openapi.user.json` 기반 HTTP client만 사용한다.
 5. **`feature` 도메인 wrapper 신규 생성 금지** — HTTP client는 transport 역할만.
-   provider 변환, feature 정규화, dedup 같은 도메인 로직은 krtour-map 저장소에서
+   provider 변환, feature 정규화, dedup 같은 도메인 로직은 kor-travel-map 저장소에서
    처리한다.
 6. **NTFS에서 직접 `pytest`/`docker`/`npm` 실행 금지** — WSL ext4 미러에서
    실행. 단 **git은 예외** — NTFS worktree에서 Windows `git.exe`로만 (ADR-024).
@@ -173,12 +173,12 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 쓰지 않는다. 셋업·로그인은 `docs/runbooks/codegraph-worktrees.md` §3.7.
 7. **좌표 순서 혼동 금지** — 모든 외부 인터페이스는 `(lon, lat)`. 라이브러리
    DTO와 동일.
-8. **카테고리/마커 매핑 하드코드 금지** — `python-krtour-map`의 카테고리 표 사용.
-   TripMate UI는 그 표에서 읽어 maki/icon 매핑.
+8. **카테고리/마커 매핑 하드코드 금지** — `kor-travel-map`의 카테고리 표 사용.
+   Pinvi UI는 그 표에서 읽어 maki/icon 매핑.
 9. **외부 API 키 평문 커밋 금지** — `SecretStr`. `.env` 권한 600 또는 systemd
    `EnvironmentFile`/vault.
 10. **시간 직접 사용 금지** — 모든 datetime은 KST aware (`Asia/Seoul`). naive
-    datetime을 DTO/DB에 넣지 않는다. `python-krtour-map`의 `kst_now()` 또는
+    datetime을 DTO/DB에 넣지 않는다. `kor-travel-map`의 `kst_now()` 또는
     동등 helper 사용.
 11. **데이터/원천 파일을 git에 커밋 금지** — `dataset/`, `refdocs/`, `data/`,
     `artifacts/`는 `.gitignore`. NTFS 보관.
@@ -191,7 +191,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 14. **작업 큐 상태를 in-memory만 신뢰 금지** — `app.import_jobs` 또는 동등
     영속 테이블 사용. 다중 워커는 `pg_try_advisory_lock` + `FOR UPDATE SKIP
     LOCKED`.
-15. **`Feature.detail`을 자유 dict로 사용 금지** — `python-krtour-map`의
+15. **`Feature.detail`을 자유 dict로 사용 금지** — `kor-travel-map`의
     `PlaceDetail`/`EventDetail` 등 Pydantic 모델 인스턴스 → `.model_dump()`.
 16. **사용자 데이터를 클라이언트 응답에 평문으로 다 노출 금지** — 권한 별로
     필드 마스킹. 토큰/세션/이메일/전화는 보안 정책에 따른다.
@@ -199,10 +199,10 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
     middleware/dependency에서 권한 검증. UI 라우팅은 보조.
 18. **Telegram/Resend/AI companion webhook payload 무검증 금지** —
     HMAC/signature/idempotency 검증 후 처리.
-19. **Dagster asset이 `python-krtour-map`의 `infra/`/`providers/`를 직접 부르지
-    말 것** — krtour-map provider 적재는 그 저장소의 API/Admin/Dagster가 소유한다.
+19. **Dagster asset이 `kor-travel-map`의 `infra/`/`providers/`를 직접 부르지
+    말 것** — kor-travel-map provider 적재는 그 저장소의 API/Admin/Dagster가 소유한다.
 20. **`apps/web`에서 외부 API 키 직접 호출 금지** — 모든 외부 호출은 백엔드
-    경유. 클라이언트는 TripMate API만 호출.
+    경유. 클라이언트는 Pinvi API만 호출.
 21. **컴포넌트 / 함수 / 서비스를 영향도 평가 없이 수정 금지** (ADR-017) — 수정
     전 `codegraph_explore`로 관련 심볼 source + 호출 관계를 한 번에 본다. 보조:
     `codegraph_impact` (반경) / `codegraph_callers` (호출자) / `codegraph_trace`
@@ -216,15 +216,15 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 |------|-----------|
 | 새 사용자 도메인 필드 추가 | `packages/schemas/src/<entity>.ts` (Zod) + `apps/api/app/schemas/<entity>.py` → `models/<entity>.py` → `services/<entity>.py` → `api/routes/<entity>.py` + Alembic |
 | 새 Admin CRUD 추가 | `services/admin_entity_crud.py`에 entity 등록 → 라우터 + UI `apps/web/app/admin/<entity>/page.tsx` (shadcn/ui DataTable) |
-| 새 외부 API 통합 (provider) | **`python-krtour-map`에 PR** (raw → DTO + 적재). 본 저장소는 필요 시 갱신 요청 API만 호출 |
-| 새 Dagster asset 추가 | TripMate `app` schema 소유 job만 추가. krtour-map feature 적재 job은 그 저장소에서 처리 |
+| 새 외부 API 통합 (provider) | **`kor-travel-map`에 PR** (raw → DTO + 적재). 본 저장소는 필요 시 갱신 요청 API만 호출 |
+| 새 Dagster asset 추가 | Pinvi `app` schema 소유 job만 추가. kor-travel-map feature 적재 job은 그 저장소에서 처리 |
 | 새 알림 채널 추가 (Telegram/이메일/푸시) | `apps/api/app/services/<channel>.py` + webhook 라우터 + 환경변수 |
 | Postgres `app` schema 변경 | `apps/api/alembic/versions/...` migration + `docs/postgres-schema.md` 갱신 |
-| `feature`/`provider_sync` schema 변경 | **`python-krtour-map`에서 작업**. 본 저장소는 사용 측 코드만 갱신 |
+| `feature`/`provider_sync` schema 변경 | **`kor-travel-map`에서 작업**. 본 저장소는 사용 측 코드만 갱신 |
 | 새 RustFS 버킷 추가 | `apps/api/app/services/file_storage.py` + 환경변수 + Admin UI |
 | 새 frontend 화면 추가 | `packages/schemas/`에 Zod → `packages/api-client/`에 endpoint → `apps/web/app/<route>/page.tsx` (shadcn/ui + Airbnb 톤 — `docs/architecture/frontend.md`) |
 | 위치 정보 사용처 추가 | `packages/hooks/src/useUserLocation.ts` 활용 + 동의 확인 + `app.location_access_log` 자동 적재 (`docs/architecture/user-location.md`) |
-| 새 curated trip plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. TripMate-native 큐레이션과 krtour `curated_features` import 모두 정식 소스. POI는 `feature_id` nullable, 외부 연계가 feature를 줄 때만 feature-backed upsert |
+| 새 curated trip plan 카테고리 / POI 컴포넌트 | `docs/architecture/notice-plans.md` 참고. Pinvi-native 큐레이션과 kor_travel_map `curated_features` import 모두 정식 소스. POI는 `feature_id` nullable, 외부 연계가 feature를 줄 때만 feature-backed upsert |
 | 기존 함수 / 컴포넌트 수정 (영향도 평가) | **`codegraph_explore`** 1차 → 필요 시 `codegraph_impact` (반경) / `codegraph_callers` (호출자). 답이 인덱스에서 나오면 Read 생략 (ADR-017) |
 | CodeGraph 인덱스가 stale로 의심 | `codegraph status` → `codegraph sync` → 안 풀리면 `codegraph index --force` |
 
@@ -235,21 +235,21 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | Trip | 사용자 여행 계획 (시작·종료 일자, 동행자, POI 목록) |
 | TripDay | Trip의 일자별 분할 (이동 경로 / POI 순서) |
 | POI Attachment | TripDay의 POI 첨부 — `feature_id` nullable + 사용자 메모/사진 |
-| Curated Trip Plan | Admin/agent가 TripMate 안에서 직접 만든 추천 여행 plan 또는 krtour `curated_features`를 1:1 import한 plan. `curated_plan_pois` 묶음이며 사용자 trip으로 copy 가능 |
-| krtour `curated_features` | `python-krtour-map`의 curated feature 묶음. TripMate가 REST로 조회해 `curated_trip_plans`로 복사하는 후속 import 소스(T-211) |
-| Library API | 본 저장소가 `python-krtour-map`을 호출할 때 거치는 thin facade (DI helper) |
-| Feature | `python-krtour-map`의 단일 객체 — TripMate는 `feature_id`로 참조만 |
-| feature_id | `python-krtour-map`이 발급한 결정적 PK. TripMate는 포맷을 해석하지 않는 불투명 문자열로 저장 |
+| Curated Trip Plan | Admin/agent가 Pinvi 안에서 직접 만든 추천 여행 plan 또는 kor_travel_map `curated_features`를 1:1 import한 plan. `curated_plan_pois` 묶음이며 사용자 trip으로 copy 가능 |
+| kor_travel_map `curated_features` | `kor-travel-map`의 curated feature 묶음. Pinvi가 REST로 조회해 `curated_trip_plans`로 복사하는 후속 import 소스(T-211) |
+| Library API | 본 저장소가 `kor-travel-map`을 호출할 때 거치는 thin facade (DI helper) |
+| Feature | `kor-travel-map`의 단일 객체 — Pinvi는 `feature_id`로 참조만 |
+| feature_id | `kor-travel-map`이 발급한 결정적 PK. Pinvi는 포맷을 해석하지 않는 불투명 문자열로 저장 |
 | Provider | 한국 공공 API의 데이터 공급자 (KMA, VisitKorea, OpiNet, MOIS, ...) |
 | Dataset key | provider 내 sub-dataset 식별자 (`search_list`, `gis_spca`, ...) |
-| `app` schema | TripMate 도메인 (사용자/여행계획/curated plan/공지/첨부) |
-| `feature` schema | `python-krtour-map` 소유 (Feature/SourceRecord/SourceLink/...) |
+| `app` schema | Pinvi 도메인 (사용자/여행계획/curated plan/공지/첨부) |
+| `feature` schema | `kor-travel-map` 소유 (Feature/SourceRecord/SourceLink/...) |
 | Notice plan | `/notice-plans` 호환 API 이름. DB/ORM 정본은 `app.curated_trip_plans` |
 | Notice feature | 지도 위 공지·자연현상 feature (라이브러리 소유, kind=notice). **Notice plan과 별개 개념** |
 | Plan POI attachment | 단일 테이블 `curated_plan_attachments` (trip / trip_poi / curated_plan / curated_poi 중 정확히 하나 채움) |
-| RustFS | S3 호환 객체 저장소. TripMate `app` 첨부 + `python-krtour-map` 미디어 분리 |
+| RustFS | S3 호환 객체 저장소. Pinvi `app` 첨부 + `kor-travel-map` 미디어 분리 |
 | Soak test | ETL 장시간(20시간±) 검증. `scripts/etl-soak-*.sh` (v1 자산, v2에서 재정비) |
-| WSL 테스트 미러 | `~/tripmate-workspaces/tripmate-<agent>` — ext4 일회용 실행 사본(테스트/docker). git은 NTFS worktree (ADR-024) |
+| WSL 테스트 미러 | `~/pinvi-workspaces/pinvi-<agent>` — ext4 일회용 실행 사본(테스트/docker). git은 NTFS worktree (ADR-024) |
 
 추가 도메인 어휘는 `docs/data-model.md` §용어 사전에 정렬.
 
@@ -289,4 +289,4 @@ tag/릴리즈 노트 정리 단계다.
 - 코드 변경 가능 범위와 책임 경계는 `AGENTS.md`의 "현재 단계 정책"을 따른다.
 - 구현 우선순위는 `docs/resume.md`, `docs/tasks.md`, `docs/sprints/SPRINT-4.md`를
   함께 본다.
-- `python-krtour-map` 책임 범위를 넘는 기능은 이 저장소에서 직접 구현하지 않는다.
+- `kor-travel-map` 책임 범위를 넘는 기능은 이 저장소에서 직접 구현하지 않는다.

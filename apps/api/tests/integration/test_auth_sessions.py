@@ -45,11 +45,11 @@ async def test_login_persists_refresh_session_hash(client, session_factory) -> N
     resp = await client.post(
         "/auth/login",
         json={"email": email, "password": password},
-        headers={"user-agent": "tripmate-test-agent"},
+        headers={"user-agent": "pinvi-test-agent"},
     )
 
     assert resp.status_code == 200
-    refresh_token = resp.cookies.get("tripmate_refresh")
+    refresh_token = resp.cookies.get("pinvi_refresh")
     assert refresh_token is not None
     async with session_factory() as db:
         session = await db.scalar(
@@ -59,19 +59,19 @@ async def test_login_persists_refresh_session_hash(client, session_factory) -> N
         assert session.session_token_hash == hash_session_token(refresh_token)
         assert session.session_token_hash != refresh_token
         assert session.revoked_at is None
-        assert session.user_agent == "tripmate-test-agent"
+        assert session.user_agent == "pinvi-test-agent"
 
 
 async def test_refresh_rotates_refresh_session(client, session_factory) -> None:
     user_id, email, password = await _seed_active_user(session_factory)
     login_resp = await client.post("/auth/login", json={"email": email, "password": password})
-    old_refresh = login_resp.cookies["tripmate_refresh"]
+    old_refresh = login_resp.cookies["pinvi_refresh"]
     client.cookies.clear()
 
-    refresh_resp = await client.post("/auth/refresh", cookies={"tripmate_refresh": old_refresh})
+    refresh_resp = await client.post("/auth/refresh", cookies={"pinvi_refresh": old_refresh})
 
     assert refresh_resp.status_code == 200
-    new_refresh = refresh_resp.cookies.get("tripmate_refresh")
+    new_refresh = refresh_resp.cookies.get("pinvi_refresh")
     assert new_refresh is not None
     assert new_refresh != old_refresh
     assert refresh_resp.json()["data"]["email"] == email
@@ -93,7 +93,7 @@ async def test_refresh_rotates_refresh_session(client, session_factory) -> None:
         assert rows[1].revoked_at is None
 
     client.cookies.clear()
-    replay_resp = await client.post("/auth/refresh", cookies={"tripmate_refresh": old_refresh})
+    replay_resp = await client.post("/auth/refresh", cookies={"pinvi_refresh": old_refresh})
     assert replay_resp.status_code == 401
     assert replay_resp.json()["error"]["code"] == "TOKEN_EXPIRED"
 
@@ -101,7 +101,7 @@ async def test_refresh_rotates_refresh_session(client, session_factory) -> None:
 async def test_refresh_rotation_is_single_use_under_race(client, session_factory) -> None:
     user_id, email, password = await _seed_active_user(session_factory)
     login_resp = await client.post("/auth/login", json={"email": email, "password": password})
-    old_refresh = login_resp.cookies["tripmate_refresh"]
+    old_refresh = login_resp.cookies["pinvi_refresh"]
     client.cookies.clear()
 
     async def rotate_once() -> str:
@@ -149,7 +149,7 @@ async def test_refresh_rejects_expired_session_and_revokes_it(client, session_fa
         )
         await db.commit()
 
-    resp = await client.post("/auth/refresh", cookies={"tripmate_refresh": expired_refresh})
+    resp = await client.post("/auth/refresh", cookies={"pinvi_refresh": expired_refresh})
 
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "TOKEN_EXPIRED"
@@ -166,18 +166,18 @@ async def test_refresh_rejects_expired_session_and_revokes_it(client, session_fa
 async def test_logout_revokes_refresh_session_and_clears_cookies(client, session_factory) -> None:
     user_id, email, password = await _seed_active_user(session_factory)
     login_resp = await client.post("/auth/login", json={"email": email, "password": password})
-    refresh_token = login_resp.cookies["tripmate_refresh"]
+    refresh_token = login_resp.cookies["pinvi_refresh"]
     client.cookies.clear()
 
-    resp = await client.post("/auth/logout", cookies={"tripmate_refresh": refresh_token})
+    resp = await client.post("/auth/logout", cookies={"pinvi_refresh": refresh_token})
 
     assert resp.status_code == 204
     set_cookie_headers = resp.headers.get_list("set-cookie")
     assert any(
-        "tripmate_access=" in header and "Max-Age=0" in header for header in set_cookie_headers
+        "pinvi_access=" in header and "Max-Age=0" in header for header in set_cookie_headers
     )
     assert any(
-        "tripmate_refresh=" in header and "Max-Age=0" in header for header in set_cookie_headers
+        "pinvi_refresh=" in header and "Max-Age=0" in header for header in set_cookie_headers
     )
 
     async with session_factory() as db:

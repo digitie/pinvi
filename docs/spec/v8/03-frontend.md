@@ -1,4 +1,4 @@
-# SPEC V8 #3 — 프론트엔드 · 실시간 (TripMate 적용 노트)
+# SPEC V8 #3 — 프론트엔드 · 실시간 (Pinvi 적용 노트)
 
 원본: `spec_v8_3_frontend.docx` (I 프론트엔드 + J 실시간).
 
@@ -185,7 +185,7 @@ default 상수 fallback.
 
 - 여행 목록 검색은 `GET /trips`의 `q`, bucket, status, date range, sort를 사용한다.
   장소/주소 검색과 섞지 않는다.
-- 장소 추가 drawer는 `GET /features/search`를 사용하고, krtour-map HTTP가 503이면
+- 장소 추가 drawer는 `GET /features/search`를 사용하고, kor-travel-map HTTP가 503이면
   fallback provider 없이 비활성 상태를 보여준다. Naver/Kakao 검색 API는 현재 사용하지
   않는다.
 - 통합 `/search`는 T-129에서 `trips`, `my_pois`, `features`, `addresses` bucket으로
@@ -233,7 +233,7 @@ default 상수 fallback.
 
 ## 11. 카카오맵 SDK 약관 주의
 
-ADR-015 이후 TripMate 지도 클라이언트는 `maplibre-vworld-js`다. 본 절은 SPEC V8 원문
+ADR-015 이후 Pinvi 지도 클라이언트는 `maplibre-vworld-js`다. 본 절은 SPEC V8 원문
 대비 superseded 주의사항으로만 남긴다. Kakao Maps SDK나 Kakao Local 검색 API를 현재
 구현에 쓰지 않는다.
 

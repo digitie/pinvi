@@ -34,7 +34,7 @@ const ATTACHMENT = {
   trip_id: tripId,
   trip_poi_id: null,
   source_attachment_id: null,
-  bucket: 'tripmate-media',
+  bucket: 'pinvi-media',
   storage_key: 'user-uploads/trip_attachment/u/2026/06/photo.jpg',
   original_filename: 'photo.jpg',
   content_type: 'image/jpeg',
@@ -95,9 +95,9 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
       body: JSON.stringify({
         data: {
           method: 'PUT',
-          bucket: 'tripmate-media',
+          bucket: 'pinvi-media',
           storage_key: ATTACHMENT.storage_key,
-          upload_url: 'http://127.0.0.1:9555/tripmate-media/photo.jpg?X-Amz-Signature=z',
+          upload_url: 'http://127.0.0.1:9555/pinvi-media/photo.jpg?X-Amz-Signature=z',
           headers: { 'Content-Type': 'image/jpeg' },
           expires_at: '2026-06-01T09:15:00+09:00',
           max_upload_bytes: 10485760,

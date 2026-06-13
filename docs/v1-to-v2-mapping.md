@@ -6,7 +6,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 상태 표기:
 
 - ✅ **반영됨** — 본 저장소 v2 문서/구조에 들어옴
-- 🚚 **위임됨** — `python-krtour-map`이 소유 (ADR-001/003/005)
+- 🚚 **위임됨** — `kor-travel-map`이 소유 (ADR-001/003/005)
 - 📋 **계획됨** — Sprint N에서 박을 예정 (시점 명시)
 - ⛔ **폐기** — ADR로 명시적 제외
 - 🆕 **신규** — v1에 없던 v2 신규 자산
@@ -24,7 +24,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | `docs/api/health.md` | `docs/api/health.md` | 📋 본 PR로 신규 작성 |
 | `docs/api/public.md` | `docs/api/public.md` | 📋 본 PR로 신규 작성 |
 | `docs/api/regions.md` | `docs/api/regions.md` | 📋 본 PR로 신규 작성 |
-| `docs/api/kto-tourapi.md` | (라이브러리로 이관) | 🚚 `python-krtour-map` |
+| `docs/api/kto-tourapi.md` | (라이브러리로 이관) | 🚚 `kor-travel-map` |
 
 ### 1.2 docs/architecture/* (v1 23개)
 
@@ -32,14 +32,14 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 |---------|---------|------|
 | `architecture/address-schema.md` | (라이브러리 schema) | 🚚 |
 | `architecture/beach-schema.md` | (라이브러리 schema) | 🚚 |
-| `architecture/dagster-krtour-map-boundary.md` | `docs/architecture/dagster-etl-bridge.md` | 📋 본 PR |
+| `architecture/dagster-kor-travel-map-boundary.md` | `docs/architecture/dagster-etl-bridge.md` | 📋 본 PR |
 | `architecture/fuel-schema.md` | (라이브러리 schema) | 🚚 |
 | `architecture/kasi-calendar-schema.md` | (라이브러리 schema) | 🚚 |
 | `architecture/khoa-ocean-index-schema.md` | (라이브러리 schema) | 🚚 |
 | `architecture/kma-tour-course-schema.md` | (라이브러리 schema) | 🚚 |
-| `architecture/kraddr-base-boundary.md` | `docs/krtour-map-integration.md` cross-ref | ✅ |
-| `architecture/krtour-map-db-initialization.md` | `docs/dev-environment.md` §5 | ✅ |
-| `architecture/krtour-map-library.md` | `docs/krtour-map-integration.md` | ✅ |
+| `architecture/kraddr-base-boundary.md` | `docs/kor-travel-map-integration.md` cross-ref | ✅ |
+| `architecture/kor-travel-map-db-initialization.md` | `docs/dev-environment.md` §5 | ✅ |
+| `architecture/kor-travel-map-library.md` | `docs/kor-travel-map-integration.md` | ✅ |
 | `architecture/map-feature-schema.md` | (라이브러리 schema) | 🚚 |
 | `architecture/map-marker-design.md` | `docs/architecture/map-marker-design.md` | 📋 본 PR |
 | `architecture/mcp-tools.md` | `docs/architecture/mcp-tools.md` | 📋 본 PR |
@@ -59,7 +59,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 
 | v1 파일 | v2 위치 | 상태 |
 |---------|---------|------|
-| `data-sources.md` (1쪽) | (라이브러리 → TripMate compliance) | 🚚 + ✅ |
+| `data-sources.md` (1쪽) | (라이브러리 → Pinvi compliance) | 🚚 + ✅ |
 | `data-sources/address-region.md` | (라이브러리) | 🚚 |
 | `data-sources/beach-sources.md` | (라이브러리) | 🚚 |
 | `data-sources/fuel-opinet.md` | (라이브러리) | 🚚 |
@@ -96,7 +96,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | `festival-login-provider-library.md` | ADR-005 + SPRINT-5 | ✅ |
 | `juso-legal-dong-etl.md` | (라이브러리) | 🚚 |
 | `kma-beach-weather-etl.md` | (라이브러리) | 🚚 |
-| `korea-tripmate-implementation-plan.md` | SPRINT-1~6 전체 | ✅ |
+| `korea-pinvi-implementation-plan.md` | SPRINT-1~6 전체 | ✅ |
 | `legal-dong-code-standard-etl.md` | (라이브러리) | 🚚 |
 | `post-login-trek-kakao-ui.md` | `docs/architecture/frontend.md` + SPRINT-4 | ✅ |
 | `pykex-kex-openapi-integration.md` | (라이브러리) | 🚚 |
@@ -148,7 +148,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 |---------|---------|------|
 | `docs/PROJECT_BRIEF.md` | `README.md` + `docs/spec/v8/` | ✅ |
 | `docs/architecture.md` | `docs/architecture.md` | ✅ |
-| `docs/reports/tripmate-outdoor-feature-db-report-20260518.docx` | 운영자 보관 | ⛔ (git 미포함) |
+| `docs/reports/pinvi-outdoor-feature-db-report-20260518.docx` | 운영자 보관 | ⛔ (git 미포함) |
 
 ## 2. apps/api (v1 → v2 Sprint 매핑)
 
@@ -176,13 +176,13 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | `services/etl_runtime.py` | (라이브러리) | 🚚 |
 | `services/file_storage.py` | `apps/api/app/services/rustfs_storage.py` (Sprint 2) | 📋 |
 | `services/fuel_report.py` | (라이브러리) | 🚚 |
-| `services/krtour_map.py` (wrapper) | ⛔ 제거 (ADR-005) | ⛔ |
-| `services/krtour_map_contract.py` | ⛔ 제거 (ADR-005) | ⛔ |
-| `services/krtour_map_feature_store.py` | ⛔ 제거 (ADR-005) | ⛔ |
+| `services/kor_travel_map.py` (wrapper) | ⛔ 제거 (ADR-005) | ⛔ |
+| `services/kor_travel_map_contract.py` | ⛔ 제거 (ADR-005) | ⛔ |
+| `services/kor_travel_map_feature_store.py` | ⛔ 제거 (ADR-005) | ⛔ |
 | `services/notice_plan.py` | `apps/api/app/services/notice_plan.py` (Sprint 2) | 📋 |
 | `services/oauth_email_policy.py` | `apps/api/app/services/oauth_google.py` (Sprint 2) | 📋 |
 | `services/plan_poi_attachment.py` | `apps/api/app/services/plan_poi_attachment.py` (Sprint 2) | 📋 |
-| `services/region_boundary.py` | (라이브러리) — DI helper만 TripMate | 🚚 + 📋 |
+| `services/region_boundary.py` | (라이브러리) — DI helper만 Pinvi | 🚚 + 📋 |
 | `services/trip_plan.py` | `apps/api/app/services/trip.py` (Sprint 2) | 📋 |
 | `services/user_registration.py` | `apps/api/app/services/user_registration.py` (Sprint 1) | 📋 |
 
@@ -192,7 +192,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 |---------|---------|------|
 | `models/address.py` | (라이브러리) | 🚚 |
 | `models/beach.py` | (라이브러리) | 🚚 |
-| `models/etl.py` | (라이브러리) + TripMate `app.import_jobs` (Sprint 5) | 🚚 + 📋 |
+| `models/etl.py` | (라이브러리) + Pinvi `app.import_jobs` (Sprint 5) | 🚚 + 📋 |
 | `models/fuel.py` | (라이브러리) | 🚚 |
 | `models/mixins.py` | `apps/api/app/models/mixins.py` (Sprint 1) | 📋 |
 | `models/ocean.py` | (라이브러리) | 🚚 |
@@ -222,10 +222,10 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 
 | v1 영역 | v2 처리 | 상태 |
 |---------|---------|------|
-| `app/etl/*` (provider 어댑터 전체) | ⛔ 제거 → `python-krtour-map` 소유 (ADR-005) | ⛔ + 🚚 |
+| `app/etl/*` (provider 어댑터 전체) | ⛔ 제거 → `kor-travel-map` 소유 (ADR-005) | ⛔ + 🚚 |
 | `app/dagster_etl/*` (definitions/registry/runtime/loaders) | ⛔ 제거 → `apps/etl/` (ADR-006) | ⛔ + 📋 |
 | `app/cli/{legal_dong_code,opinet_fuel,vworld_boundary}.py` | ⛔ 제거 → 라이브러리 CLI | ⛔ + 🚚 |
-| `app/core/{kex,kto,krtour_map_contract}.py` | ⛔ 제거 (ADR-005 wrapper 금지) | ⛔ |
+| `app/core/{kex,kto,kor_travel_map_contract}.py` | ⛔ 제거 (ADR-005 wrapper 금지) | ⛔ |
 | `app/core/{config,etl_config,json_types,redaction}.py` | `apps/api/app/core/*` (Sprint 1) | 📋 |
 | `app/db/*` | `apps/api/app/core/database.py` (Sprint 1) | 📋 |
 | `app/geospatial/__init__.py` | (라이브러리) | 🚚 |
@@ -253,7 +253,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | `scripts/backup-db.sh`, `restore-db.sh` | `scripts/*` (Sprint 6) | 📋 |
 | `scripts/docker-app-smoke-test.sh` | `scripts/*` (Sprint 1) | 📋 |
 | `scripts/docker-keepalive.sh` | (운영 환경 결정 후) | 📋 |
-| `scripts/etl-soak-*.sh` (5개) | (라이브러리) + TripMate Dagster (Sprint 5) | 🚚 + 📋 |
+| `scripts/etl-soak-*.sh` (5개) | (라이브러리) + Pinvi Dagster (Sprint 5) | 🚚 + 📋 |
 | `scripts/odroid-docker-*.sh` (3개) | `scripts/*` (Sprint 6) | 📋 |
 | `scripts/admin-etl-data-smoke-test.sh` | `scripts/*` (Sprint 3) | 📋 |
 | `config/etl-datasets.json`, `*.soak.json` | (라이브러리) | 🚚 |
@@ -270,7 +270,7 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | `docs/architecture/frontend.md` | Next.js + Expo 공용 monorepo | ✅ |
 | `docs/architecture/user-location.md` | Geolocation + expo-location | ✅ |
 | `docs/architecture/notice-plans.md` | Notice plan 도메인 (v1 자산 정리) | ✅ |
-| `docs/krtour-map-integration.md` | 라이브러리 사용 패턴 | ✅ |
+| `docs/kor-travel-map-integration.md` | 라이브러리 사용 패턴 | ✅ |
 | `docs/design/marker-palette.md` | 16색 + maki 매핑 | ✅ |
 | `docs/v1-to-v2-mapping.md` | 본 문서 | 📋 본 PR |
 
@@ -279,10 +279,10 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 | ADR | 주제 | v1 관련 |
 |-----|------|---------|
 | ADR-001 | v1 보존 + v2 재시작 | v1 전체 |
-| ADR-002 | 함수 직접 호출 (REST 없음) | v1 `services/krtour_map_*` 폐기 |
+| ADR-002 | 함수 직접 호출 (REST 없음) | v1 `services/kor_travel_map_*` 폐기 |
 | ADR-003 | schema 책임 분담 (feature/app) | v1 monorepo 단일 |
 | ADR-004 | WSL 미러 단일 모델 | v1 `runbooks/wsl-ext4-workflow.md` 폐기 |
-| ADR-005 | provider 어댑터 wrapper 금지 | v1 `services/krtour_map_*` + `core/{kex,kto}.py` 폐기 |
+| ADR-005 | provider 어댑터 wrapper 금지 | v1 `services/kor_travel_map_*` + `core/{kex,kto}.py` 폐기 |
 | ADR-006 | Dagster code location 분리 (`apps/etl`) | v1 `apps/api/app/dagster_etl/*` 이전 |
 | ADR-007 | PR-only workflow | v1 일부 직접 push 정정 |
 | ADR-008 | Postgres `x_extension` schema | v1과 동일 채택 |
@@ -307,8 +307,8 @@ v1 브랜치(`v1`)의 모든 자산을 v2 컨텍스트로 어떻게 가져왔는
 ## 8. ADR로 명시적 폐기 (⛔)
 
 - WSL ext4 직접 작업본 모델 (ADR-004 — 본 v2는 NTFS 작업 + WSL 미러)
-- `apps/api/app/services/krtour_map_*` 위장 service layer (ADR-005)
-- `apps/api/app/core/{kex,kto,krtour_map_contract}.py` provider wrapper (ADR-005)
+- `apps/api/app/services/kor_travel_map_*` 위장 service layer (ADR-005)
+- `apps/api/app/core/{kex,kto,kor_travel_map_contract}.py` provider wrapper (ADR-005)
 - `apps/api/app/etl/` provider 어댑터 전체 (ADR-005 + ADR-006)
 - `apps/api/app/dagster_etl/` (ADR-006 → `apps/etl/`)
 - `apps/api/app/cli/{vworld_boundary,legal_dong_code,opinet_fuel}.py` (라이브러리 CLI로 이전)

@@ -51,7 +51,7 @@ Content-Type: application/json
 ```
 
 - `feature_id`가 없으면 자유 POI로 저장하고 `feature_snapshot`만 표시용으로 사용한다.
-- `feature_id`가 있는데 krtour-map batch 조회 결과에 없으면
+- `feature_id`가 있는데 kor-travel-map batch 조회 결과에 없으면
   → `feature_link_broken_at` 채움 + 그래도 row 생성 (`feature_snapshot`으로 표시)
 - 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
   `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. API는 먼저
@@ -147,9 +147,9 @@ WebSocket broadcast: `poi.reordered` + `version`.
 
 | 정책 | 동작 |
 |------|------|
-| **lazy** (기본) | UI 표시 시 krtour-map batch 조회. snapshot은 fallback |
+| **lazy** (기본) | UI 표시 시 kor-travel-map batch 조회. snapshot은 fallback |
 | **eager** (선택) | Dagster job 일 1회 + `WHERE feature_id IN (...)` |
-| **on-write** | POI write 시점 krtour-map batch 조회 → snapshot upsert |
+| **on-write** | POI write 시점 kor-travel-map batch 조회 → snapshot upsert |
 
 v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 

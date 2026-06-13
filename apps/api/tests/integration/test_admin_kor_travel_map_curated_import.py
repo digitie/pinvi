@@ -1,4 +1,4 @@
-"""krtour-map curated feature → TripMate notice plan import 통합 테스트."""
+"""kor-travel-map curated feature → Pinvi notice plan import 통합 테스트."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from sqlalchemy import select
 pytestmark = pytest.mark.asyncio
 
 
-class _FakeKrtourClient:
+class _FakeKorTravelMapClient:
     def __init__(self, snapshot: dict[str, Any]) -> None:
         self.snapshot = snapshot
         self.seen: list[str] = []
 
-    async def get_curated_tripmate_copy(self, curated_feature_id: str) -> dict[str, Any]:
+    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
         self.seen.append(curated_feature_id)
         return self.snapshot
 
@@ -27,7 +27,7 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
 
     async with session_factory() as db:
         user = User(
-            email=f"krtour_import_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"kor_travel_map_import_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash="x",
             nickname="관리자",
             status="active",
@@ -55,8 +55,8 @@ def _snapshot() -> dict[str, Any]:
             "category": "festival",
         },
         "source": {
-            "provider": "krtour-map",
-            "source_name": "krtour curated",
+            "provider": "kor-travel-map",
+            "source_name": "kor_travel_map curated",
             "dataset_key": "curated_features",
         },
         "items": [
@@ -84,19 +84,19 @@ def _snapshot() -> dict[str, Any]:
     }
 
 
-async def test_admin_imports_krtour_curated_feature_and_upserts(
+async def test_admin_imports_kor_travel_map_curated_feature_and_upserts(
     client, session_factory, auth_cookies
 ) -> None:  # type: ignore[no-untyped-def]
-    from app.clients.krtour_map import get_krtour_map_client
+    from app.clients.kor_travel_map import get_kor_travel_map_client
     from app.main import app
     from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
 
     admin_id = await _admin(session_factory)
-    fake = _FakeKrtourClient(_snapshot())
-    app.dependency_overrides[get_krtour_map_client] = lambda: fake
+    fake = _FakeKorTravelMapClient(_snapshot())
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
     try:
         created = await client.post(
-            "/admin/notice-plans/imports/krtour-curated-features",
+            "/admin/notice-plans/imports/kor-travel-map-curated-features",
             json={
                 "curated_feature_id": "festival::busan::2026",
                 "mode": "create",
@@ -107,7 +107,7 @@ async def test_admin_imports_krtour_curated_feature_and_upserts(
         assert created.status_code == 201, created.text
         data = created.json()["data"]
         assert data["created_plan"] is True
-        assert data["source_system"] == "krtour-map"
+        assert data["source_system"] == "kor-travel-map"
         assert data["source_curated_feature_id"] == "festival::busan::2026"
         assert data["source_version"] == 7
         assert data["source_etag"] == "sha256:abc123"
@@ -120,7 +120,7 @@ async def test_admin_imports_krtour_curated_feature_and_upserts(
             assert plan is not None
             assert plan.title == "부산 축제 코스"
             assert plan.category == "festival"
-            assert plan.source_system == "krtour-map"
+            assert plan.source_system == "kor-travel-map"
             assert plan.source_curated_feature_id == "festival::busan::2026"
             assert plan.source_curated_feature_version == 7
             assert plan.source_etag == "sha256:abc123"
@@ -142,7 +142,7 @@ async def test_admin_imports_krtour_curated_feature_and_upserts(
             }
 
         updated = await client.post(
-            "/admin/notice-plans/imports/krtour-curated-features",
+            "/admin/notice-plans/imports/kor-travel-map-curated-features",
             json={"curated_feature_id": "festival::busan::2026", "mode": "upsert"},
             cookies=auth_cookies(admin_id),
         )
@@ -167,4 +167,4 @@ async def test_admin_imports_krtour_curated_feature_and_upserts(
             assert plan is not None
             assert plan.is_published is True
     finally:
-        app.dependency_overrides.pop(get_krtour_map_client, None)
+        app.dependency_overrides.pop(get_kor_travel_map_client, None)

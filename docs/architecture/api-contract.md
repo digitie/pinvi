@@ -1,6 +1,6 @@
 # API 계약 — 응답 / 에러 / Pagination / 버전
 
-본 문서는 TripMate HTTP API의 계약 표준. `docs/api/common.md`의 디테일을 본 문서가
+본 문서는 Pinvi HTTP API의 계약 표준. `docs/api/common.md`의 디테일을 본 문서가
 요약. AI agent가 구현 시작 전 빠르게 확인.
 
 ## 1. 응답 형식
@@ -100,8 +100,8 @@ If-Match: 42
 
 기본 cookie:
 
-- `tripmate_access` (JWT, 15분)
-- `tripmate_refresh` (opaque, 7일)
+- `pinvi_access` (JWT, 15분)
+- `pinvi_refresh` (opaque, 7일)
 
 대안 Bearer:
 

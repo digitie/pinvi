@@ -34,7 +34,7 @@ services:
       resources:
         limits: { memory: 384M }
     ports:
-      - "3002:3000"     # Next.js는 12505 고정 → grafana는 3002 권장
+      - "12605:3000"    # observability 대역(Grafana)
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PW}
     volumes:

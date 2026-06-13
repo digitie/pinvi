@@ -3,10 +3,10 @@ import {
   PoiReorderRequestSchema,
   PoiResponseSchema,
   PoiUpdateSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type { PoiCreate, PoiReorderRequest, PoiUpdate } from '@tripmate/schemas';
+import type { PoiCreate, PoiReorderRequest, PoiUpdate } from '@pinvi/schemas';
 
 /** `docs/api/pois.md` 정본 POI API. */
 export const poiApi = (client: ApiClient) => ({

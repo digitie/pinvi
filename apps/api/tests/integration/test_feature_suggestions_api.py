@@ -22,7 +22,7 @@ FEATURE_SUGGESTION_DAILY_LIMIT = 20
 async def _create_user(session_factory, *, email_prefix: str) -> str:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
         user = User(
-            email=f"{email_prefix}_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"{email_prefix}_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash=None,
             nickname="제안 사용자",
             status="active",

@@ -1,6 +1,6 @@
 # 코딩 / DB / 테스트 규약
 
-본 디렉토리는 v1 `skills/*.ko.md`를 TripMate v2 컨텍스트로 정리한 규약 모음.
+본 디렉토리는 v1 `skills/*.ko.md`를 Pinvi v2 컨텍스트로 정리한 규약 모음.
 **모든 AI agent와 사람이 본 규약을 PR 제출 전 확인**.
 
 ## 1. 인덱스
@@ -8,7 +8,7 @@
 | 파일 | 범위 |
 |------|------|
 | [coding-style.md](./coding-style.md) | Python (FastAPI/Pydantic/SQLAlchemy) + TypeScript (Next.js) 규칙 |
-| [database.md](./database.md) | PostgreSQL/PostGIS/Alembic 규칙 (TripMate app schema) |
+| [database.md](./database.md) | PostgreSQL/PostGIS/Alembic 규칙 (Pinvi app schema) |
 | [testing.md](./testing.md) | pytest / Vitest / Playwright 매트릭스 |
 | [geospatial.md](./geospatial.md) | 좌표 / SRID / lon-lat / fuzzy 금지 |
 | [normalization.md](./normalization.md) | 정규화 패턴 (1NF~BCNF + denorm) |

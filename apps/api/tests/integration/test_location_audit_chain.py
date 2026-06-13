@@ -1,6 +1,6 @@
 """위치 감사 content_hash chain 통합 (SPRINT-2 DoD, ADR-012 / lbs-act §3.3).
 
-HTTP 자동 적재(`/features/in-bounds`)는 krtour 라이브러리 client 주입(Sprint 4)에
+HTTP 자동 적재(`/features/in-bounds`)는 kor_travel_map 라이브러리 client 주입(Sprint 4)에
 의존하므로, 본 테스트는 미들웨어가 호출하는 `_append_log` chain 로직을 실제 DB 에
 대해 검증한다 — prev_hash 링크 + content_hash 결정성 + 변조 탐지.
 """
@@ -26,7 +26,7 @@ async def _make_user(session_factory) -> uuid.UUID:
 
     async with session_factory() as db:
         u = User(
-            email=f"loc_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"loc_{uuid.uuid4().hex[:8]}@pinvi.test",
             status="active",
             email_verified_at=datetime.now(UTC),
         )

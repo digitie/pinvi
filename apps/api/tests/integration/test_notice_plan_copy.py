@@ -23,7 +23,7 @@ pytestmark = pytest.mark.asyncio
 async def _admin_id(session_factory) -> uuid.UUID:
     async with session_factory() as db:
         admin = User(
-            email=f"admin_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"admin_{uuid.uuid4().hex[:8]}@pinvi.test",
             status="active",
             roles=["user", "admin"],
             email_verified_at=datetime.now(UTC),

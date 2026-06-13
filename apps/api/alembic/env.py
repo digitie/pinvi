@@ -1,6 +1,6 @@
-"""Alembic env — TripMate `app` schema 전용.
+"""Alembic env — Pinvi `app` schema 전용.
 
-`feature` / `provider_sync` schema는 `python-krtour-map`이 별도 alembic으로 관리
+`feature` / `provider_sync` schema는 `kor-travel-map`이 별도 alembic으로 관리
 (ADR-003). 본 env는 `app` + `x_extension` schema만 다룬다.
 """
 
@@ -26,7 +26,7 @@ target_metadata = metadata
 
 
 def get_url() -> str:
-    return settings.tripmate_database_url
+    return settings.pinvi_database_url
 
 
 def run_migrations_offline() -> None:

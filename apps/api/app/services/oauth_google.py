@@ -91,8 +91,8 @@ def _hash(value: str) -> str:
 
 def _derive_code_verifier(state: str) -> str:
     digest = hmac.new(
-        settings.tripmate_jwt_secret_key.encode("utf-8"),
-        f"tripmate-oauth-pkce:{state}".encode(),
+        settings.pinvi_jwt_secret_key.encode("utf-8"),
+        f"pinvi-oauth-pkce:{state}".encode(),
         hashlib.sha256,
     ).digest()
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -120,7 +120,7 @@ async def issue_login_state(
         mode=mode,
         return_to_path=return_to,
         user_id=user_id,
-        expires_at=datetime.now(UTC) + timedelta(seconds=settings.tripmate_oauth_state_ttl_seconds),
+        expires_at=datetime.now(UTC) + timedelta(seconds=settings.pinvi_oauth_state_ttl_seconds),
     )
     db.add(row)
     await db.commit()
@@ -157,9 +157,9 @@ def build_authorize_url(*, state: str, nonce: str, code_verifier: str) -> str:
         .decode()
         .rstrip("=")
     )
-    redirect_uri = f"{settings.tripmate_oauth_callback_base_url}/auth/oauth/google/callback"
+    redirect_uri = f"{settings.pinvi_oauth_callback_base_url}/auth/oauth/google/callback"
     params = {
-        "client_id": settings.tripmate_google_oauth_client_id,
+        "client_id": settings.pinvi_google_oauth_client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
@@ -181,16 +181,16 @@ async def exchange_code_for_claims(
     code_verifier: str,
     client: httpx.AsyncClient | None = None,
 ) -> GoogleClaims:
-    redirect_uri = f"{settings.tripmate_oauth_callback_base_url}/auth/oauth/google/callback"
+    redirect_uri = f"{settings.pinvi_oauth_callback_base_url}/auth/oauth/google/callback"
     owns_client = client is None
-    http = client or httpx.AsyncClient(timeout=settings.tripmate_oauth_http_timeout_seconds)
+    http = client or httpx.AsyncClient(timeout=settings.pinvi_oauth_http_timeout_seconds)
     try:
         token_resp = await http.post(
             _GOOGLE_TOKEN_URL,
             data={
                 "code": code,
-                "client_id": settings.tripmate_google_oauth_client_id,
-                "client_secret": settings.tripmate_google_oauth_client_secret,
+                "client_id": settings.pinvi_google_oauth_client_id,
+                "client_secret": settings.pinvi_google_oauth_client_secret,
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
                 "code_verifier": code_verifier,
@@ -259,9 +259,9 @@ async def resolve_google_login(
     )
     if existing is not None:
         if existing.email_verified_at is None:
-            raise OAuthEmailUnverifiedError("TripMate 이메일 인증을 먼저 완료해 주세요.")
+            raise OAuthEmailUnverifiedError("Pinvi 이메일 인증을 먼저 완료해 주세요.")
         raise OAuthAccountLinkRequiredError(
-            "이미 같은 이메일의 TripMate 계정이 있습니다. 이메일로 로그인한 뒤 "
+            "이미 같은 이메일의 Pinvi 계정이 있습니다. 이메일로 로그인한 뒤 "
             "프로필에서 Google을 연결해 주세요."
         )
 
@@ -335,7 +335,7 @@ async def link_google_to_user(
         )
     )
     if email_owner is not None:
-        raise OAuthAccountLinkRequiredError("이 Google 이메일은 다른 TripMate 계정과 일치합니다.")
+        raise OAuthAccountLinkRequiredError("이 Google 이메일은 다른 Pinvi 계정과 일치합니다.")
 
     identity = UserOAuthIdentity(
         user_id=user_id,

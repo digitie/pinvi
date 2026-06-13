@@ -1,10 +1,10 @@
 # DB 규약 (PostgreSQL / PostGIS / Alembic)
 
-TripMate `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
+Pinvi `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
 `docs/decisions/20260425-postgres-migration-constraints.md` 정리.
 
-> **scope 주의**: `feature` / `provider_sync` schema는 `python-krtour-map` 소유
-> (ADR-003). 본 규약은 TripMate `app` schema에만 적용.
+> **scope 주의**: `feature` / `provider_sync` schema는 `kor-travel-map` 소유
+> (ADR-003). 본 규약은 Pinvi `app` schema에만 적용.
 
 ## 1. 기본 원칙
 
@@ -13,7 +13,7 @@ TripMate `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
 - 공간 컬럼은 SRID 명시 (`docs/conventions/geospatial.md`)
 - 모든 코드 컬럼 (addr_code / provider_code / category_code)은 **문자열** —
   선행 0 보존
-- raw vs serving 계층 분리 (TripMate는 주로 serving)
+- raw vs serving 계층 분리 (Pinvi는 주로 serving)
 - raw provider 응답 long-term 저장 X
 - secret을 DB / fixture / log에 평문 X
 
@@ -21,7 +21,7 @@ TripMate `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
 
 - PostgreSQL 16 + PostGIS 3.5
 - `x_extension` schema에 extension 설치 (ADR-008)
-- 로캘 `en_US.utf8` 운영 — `tripmate_db.col COLLATE "C"`은 명시 컬럼만
+- 로캘 `en_US.utf8` 운영 — `pinvi_db.col COLLATE "C"`은 명시 컬럼만
 
 ## 3. 명명 / 식별자
 
@@ -94,9 +94,9 @@ def downgrade():
 
 ```bash
 # 모델 메타데이터 확인만으로 끝내지 않음 — 실제 PostgreSQL/PostGIS에 적용
-docker exec tripmate-postgres dropdb -U tripmate tripmate_migration_check
-docker exec tripmate-postgres createdb -U tripmate tripmate_migration_check
-TRIPMATE_DATABASE_URL='postgresql+psycopg://tripmate:changeme@localhost:5432/tripmate_migration_check' \
+docker exec pinvi-postgres dropdb -U pinvi pinvi_migration_check
+docker exec pinvi-postgres createdb -U pinvi pinvi_migration_check
+PINVI_DATABASE_URL='postgresql+psycopg://pinvi:changeme@localhost:5432/pinvi_migration_check' \
   uv run alembic upgrade head
 ```
 
@@ -139,9 +139,9 @@ op.create_index("ix_places_geom", "places", ["geom"], postgresql_using="gist")
 - 좌표: `ST_MakePoint(lon, lat)` 순서 — 항상
 - 자세히는 [geospatial.md](./geospatial.md)
 
-> TripMate `app` schema에는 공간 컬럼이 적음 — feature schema에 위임. 본
+> Pinvi `app` schema에는 공간 컬럼이 적음 — feature schema에 위임. 본
 > 규약은 app schema의 공간 컬럼 (있다면 `feature_snapshot.coord` JSONB) 또는
-> krtour-map/kraddr-geo HTTP 응답 변환 시 적용.
+> kor-travel-map/kor-travel-geo HTTP 응답 변환 시 적용.
 
 ## 6. JSONB
 
@@ -265,9 +265,9 @@ op.execute("CREATE EXTENSION IF NOT EXISTS postgis SCHEMA x_extension")
 
 ## 14. 권한 / 보안
 
-- DB 사용자 `tripmate`: `app`, `ops`, `feature`, `provider_sync` 모두 CRUD
-- 단 `feature`/`provider_sync` schema DDL은 `python-krtour-map` Alembic만
-- 운영 read-only 사용자 `tripmate_ro` 별도 (BI / 모니터링)
+- DB 사용자 `pinvi`: `app`, `ops`, `feature`, `provider_sync` 모두 CRUD
+- 단 `feature`/`provider_sync` schema DDL은 `kor-travel-map` Alembic만
+- 운영 read-only 사용자 `pinvi_ro` 별도 (BI / 모니터링)
 - 비밀번호 / 토큰 hash 컬럼은 평문 저장 절대 X (Argon2 / bcrypt)
 - `admin_audit_log`는 append-only (DELETE 거부 trigger 또는 권한 분리)
 

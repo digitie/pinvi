@@ -238,9 +238,9 @@ async def test_link_google_rejects_email_owned_by_another_user(session_factory) 
 
 
 async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatch) -> None:
-    monkeypatch.setattr(settings, "tripmate_google_oauth_client_id", "google-client")
-    monkeypatch.setattr(settings, "tripmate_naver_oauth_client_id", "naver-client")
-    monkeypatch.setattr(settings, "tripmate_kakao_oauth_rest_api_key", "kakao-client")
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "google-client")
+    monkeypatch.setattr(settings, "pinvi_naver_oauth_client_id", "naver-client")
+    monkeypatch.setattr(settings, "pinvi_kakao_oauth_rest_api_key", "kakao-client")
 
     resp = await client.get("/auth/oauth/providers")
 
@@ -293,7 +293,7 @@ async def test_me_returns_linked_oauth_identities(
 async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch) -> None:
     monkeypatch.setattr(
         settings,
-        "tripmate_google_oauth_client_id",
+        "pinvi_google_oauth_client_id",
         "test-client.apps.googleusercontent.com",
     )
 
@@ -335,7 +335,7 @@ async def test_google_link_stores_user_bound_link_state(
     user_id, _email = verified_user
     monkeypatch.setattr(
         settings,
-        "tripmate_google_oauth_client_id",
+        "pinvi_google_oauth_client_id",
         "test-client.apps.googleusercontent.com",
     )
 
@@ -542,7 +542,7 @@ async def test_login_callback_persists_refresh_session(
 
     assert resp.status_code == 303
     assert resp.headers["location"] == "http://localhost:12505/trips"
-    refresh_token = resp.cookies.get("tripmate_refresh")
+    refresh_token = resp.cookies.get("pinvi_refresh")
     assert refresh_token is not None
 
     async with session_factory() as db:

@@ -19,7 +19,7 @@ from app.models.email_queue import EmailQueue
 
 pytestmark = pytest.mark.asyncio
 
-_WEBHOOK_SECRET_KEY = b"\xff\xee\xdd\xcc\xbb\xaa\x99\x88tripmate-test-webhook-secret"
+_WEBHOOK_SECRET_KEY = b"\xff\xee\xdd\xcc\xbb\xaa\x99\x88pinvi-test-webhook-secret"
 _WEBHOOK_SECRET = "whsec_" + base64.b64encode(_WEBHOOK_SECRET_KEY).decode().rstrip("=")
 _URLSAFE_WEBHOOK_SECRET = "whsec_" + base64.urlsafe_b64encode(_WEBHOOK_SECRET_KEY).decode().rstrip(
     "="
@@ -28,9 +28,9 @@ _URLSAFE_WEBHOOK_SECRET = "whsec_" + base64.urlsafe_b64encode(_WEBHOOK_SECRET_KE
 
 @pytest.fixture(autouse=True)
 def _clear_resend_webhook_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "tripmate_environment", "development")
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", "")
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", False)
+    monkeypatch.setattr(settings, "pinvi_environment", "development")
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", "")
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", False)
 
 
 async def _seed_email(session_factory) -> str:
@@ -40,7 +40,7 @@ async def _seed_email(session_factory) -> str:
         db.add(
             EmailQueue(
                 email_id=email_id,
-                to_email="x@tripmate.test",
+                to_email="x@pinvi.test",
                 subject="인증",
                 template="verify_email",
                 status="sent",
@@ -108,7 +108,7 @@ async def test_unsigned_delivered_updates_status_with_local_opt_in(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
@@ -132,8 +132,8 @@ async def test_unsigned_webhook_rejects_missing_secret_in_production(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_environment", "production")
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
+    monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
 
     resp = await client.post(
@@ -158,7 +158,7 @@ async def test_signed_delivered_updates_status(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
     email_id = await _seed_email(session_factory)
     payload = _payload(
         {
@@ -186,8 +186,8 @@ async def test_signed_webhook_rejects_urlsafe_secret_config(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_environment", "production")
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _URLSAFE_WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _URLSAFE_WEBHOOK_SECRET)
     email_id = await _seed_email(session_factory)
     payload = _payload(
         {
@@ -216,7 +216,7 @@ async def test_signed_webhook_rejects_missing_signature_headers(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
     email_id = await _seed_email(session_factory)
     payload = _payload(
         {
@@ -245,7 +245,7 @@ async def test_signed_webhook_rejects_invalid_signature(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
     email_id = await _seed_email(session_factory)
     payload = _payload(
         {
@@ -271,7 +271,7 @@ async def test_signed_webhook_rejects_old_timestamp(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_secret", _WEBHOOK_SECRET)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
     email_id = await _seed_email(session_factory)
     payload = _payload(
         {
@@ -299,7 +299,7 @@ async def test_unsigned_bounced_updates_status_with_local_opt_in(
     session_factory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
     email_id = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
@@ -325,7 +325,7 @@ async def test_unsigned_missing_entity_ref_is_ok_with_local_opt_in(
     client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "tripmate_resend_webhook_allow_unsigned", True)
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
     resp = await client.post(
         "/webhooks/resend",
         json={"type": "email.delivered", "data": {"headers": {}}},

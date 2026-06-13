@@ -54,7 +54,7 @@ async def enqueue_verification_email(
             user_id=user_id,
             to_email=to_email,
             template="verify_email",
-            subject="TripMate 이메일 인증",
+            subject="Pinvi 이메일 인증",
             payload={
                 "verify_url": verify_url,
                 "expires_in_hours": expires_in_hours,
@@ -64,7 +64,7 @@ async def enqueue_verification_email(
             scheduled_at=datetime.now(UTC),
         )
     )
-    return bool(settings.tripmate_resend_api_key)
+    return bool(settings.pinvi_resend_api_key)
 
 
 async def enqueue_password_reset_email(
@@ -83,7 +83,7 @@ async def enqueue_password_reset_email(
             user_id=user_id,
             to_email=to_email,
             template="reset_password",
-            subject="TripMate 비밀번호 재설정",
+            subject="Pinvi 비밀번호 재설정",
             payload={
                 "reset_url": reset_url,
                 "expires_in_minutes": expires_in_minutes,
@@ -93,7 +93,7 @@ async def enqueue_password_reset_email(
             scheduled_at=datetime.now(UTC),
         )
     )
-    return bool(settings.tripmate_resend_api_key)
+    return bool(settings.pinvi_resend_api_key)
 
 
 async def enqueue_trip_invite_email(
@@ -114,7 +114,7 @@ async def enqueue_trip_invite_email(
             user_id=target_user_id,
             to_email=to_email,
             template="trip_invite",
-            subject=f"TripMate 여행 초대: {trip_title}",
+            subject=f"Pinvi 여행 초대: {trip_title}",
             payload={
                 "invite_url": invite_url,
                 "trip_id": str(trip_id),
@@ -127,7 +127,7 @@ async def enqueue_trip_invite_email(
             scheduled_at=datetime.now(UTC),
         )
     )
-    return bool(settings.tripmate_resend_api_key)
+    return bool(settings.pinvi_resend_api_key)
 
 
 async def process_pending_email_batch(
@@ -198,7 +198,7 @@ async def send_verification_email(
     try:
         resend_id = await _send_email_payload(
             to_email=to_email,
-            subject="TripMate 이메일 인증",
+            subject="Pinvi 이메일 인증",
             html=_render_verify_html(verify_url, expires_in_hours),
             template="verify_email",
             entity_ref=None,
@@ -235,21 +235,21 @@ async def _send_email_payload(
         "entity_ref": None if entity_ref is None else str(entity_ref),
     }
 
-    if not settings.tripmate_resend_api_key:
+    if not settings.pinvi_resend_api_key:
         log.info("email.console_mode", **payload)
         return None
 
     import resend
 
-    resend.api_key = settings.tripmate_resend_api_key
+    resend.api_key = settings.pinvi_resend_api_key
     resend_payload: dict[str, Any] = {
-        "from": settings.tripmate_resend_from_email,
+        "from": settings.pinvi_resend_from_email,
         "to": [to_email],
         "subject": subject,
         "html": html,
         "tags": [
             {"name": "template", "value": template},
-            {"name": "env", "value": settings.tripmate_environment},
+            {"name": "env", "value": settings.pinvi_environment},
         ],
     }
     if entity_ref is not None:
@@ -284,7 +284,7 @@ def _render_verify_html(verify_url: str, expires_in_hours: int) -> str:
     return f"""
     <html>
       <body style="font-family: sans-serif;">
-        <h2>TripMate 이메일 인증</h2>
+        <h2>Pinvi 이메일 인증</h2>
         <p>아래 버튼을 클릭하여 이메일 주소를 인증하세요.</p>
         <p>
           <a href={safe_url}
@@ -307,7 +307,7 @@ def _render_reset_password_html(reset_url: str, expires_in_minutes: int) -> str:
     return f"""
     <html>
       <body style="font-family: sans-serif;">
-        <h2>TripMate 비밀번호 재설정</h2>
+        <h2>Pinvi 비밀번호 재설정</h2>
         <p>아래 버튼을 클릭하여 새 비밀번호를 설정하세요.</p>
         <p>
           <a href={safe_url}
@@ -331,7 +331,7 @@ def _render_trip_invite_html(invite_url: str, trip_title: str) -> str:
     return f"""
     <html>
       <body style="font-family: sans-serif;">
-        <h2>TripMate 여행 초대</h2>
+        <h2>Pinvi 여행 초대</h2>
         <p>{safe_title} 여행에 동반자로 초대되었습니다.</p>
         <p>
           <a href={safe_url}
@@ -350,7 +350,7 @@ def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
     return f"""
     <html>
       <body style="font-family: sans-serif;">
-        <h2>TripMate 알림</h2>
+        <h2>Pinvi 알림</h2>
         <p>template: {template}</p>
         <pre>{safe_payload}</pre>
       </body>
@@ -360,16 +360,16 @@ def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
 
 def _build_verify_url(token: str) -> str:
     return (
-        f"{settings.tripmate_web_base_url}{settings.tripmate_email_verification_path}?token={token}"
+        f"{settings.pinvi_web_base_url}{settings.pinvi_email_verification_path}?token={token}"
     )
 
 
 def _build_password_reset_url(token: str) -> str:
-    return f"{settings.tripmate_web_base_url}{settings.tripmate_auth_reset_path}?token={token}"
+    return f"{settings.pinvi_web_base_url}{settings.pinvi_auth_reset_path}?token={token}"
 
 
 def _build_trip_invite_url(*, trip_id: uuid.UUID, companion_id: uuid.UUID) -> str:
-    return f"{settings.tripmate_web_base_url}/trips/{trip_id}?invite={companion_id}"
+    return f"{settings.pinvi_web_base_url}/trips/{trip_id}?invite={companion_id}"
 
 
 def _retry_delay(attempts: int) -> int:

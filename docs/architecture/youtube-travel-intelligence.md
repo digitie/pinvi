@@ -6,8 +6,8 @@ YouTube 채널 / playlist / 영상 모니터링 + Gemini 비디오 분석으로 
 ## 1. 정책
 
 - 전체 동영상 파일 저장 X — Gemini API에 YouTube URL 직접 전달 (`file_data.file_uri`)
-- 장소 후보는 `python-krtour-map`의 `Feature` + `SourceRecord` + `SourceLink`
-  계약 + TripMate `media_asset` 구조와 연결
+- 장소 후보는 `kor-travel-map`의 `Feature` + `SourceRecord` + `SourceLink`
+  계약 + Pinvi `media_asset` 구조와 연결
 - Agent는 DB에 직접 접속 X — MCP 경유
 - Agent는 YouTube 영상 파일 직접 다운로드 X
 - Gemini-추론 주소는 confirmed 저장 X (`pending` 상태만)
@@ -19,7 +19,7 @@ YouTube 채널 / playlist / 영상 모니터링 + Gemini 비디오 분석으로 
 
 ```
 ┌─────────────────────────────────────────┐
-│ Main AI Agent (TripMate v2 chat / admin)│
+│ Main AI Agent (Pinvi v2 chat / admin)│
 │   - 사용자 / 운영자 트리거                  │
 │   - DB 직접 접근 X                       │
 └─────────────────────────────────────────┘
@@ -35,14 +35,14 @@ YouTube 채널 / playlist / 영상 모니터링 + Gemini 비디오 분석으로 
       │ MCP call
       ▼
 ┌─────────────────────────────────────────┐
-│ TripMate DB MCP                         │
+│ Pinvi DB MCP                         │
 │   - read/write app.youtube_* tables     │
 │   - 모든 write는 pending / draft        │
 │   - 운영자 검수 후 promote              │
 └─────────────────────────────────────────┘
 ```
 
-## 3. DB 테이블 (TripMate `app` schema)
+## 3. DB 테이블 (Pinvi `app` schema)
 
 ### 3.1 `app.youtube_monitor_sources`
 

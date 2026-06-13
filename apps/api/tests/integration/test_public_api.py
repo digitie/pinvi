@@ -1,4 +1,4 @@
-"""Public API 통합 테스트 — krtour `/v1/public/*` 소비 표면."""
+"""Public API 통합 테스트 — kor_travel_map `/v1/public/*` 소비 표면."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ from typing import Any
 
 import pytest
 
-from app.clients.krtour_map import KrtourMapUnavailable, get_krtour_map_client
+from app.clients.kor_travel_map import KorTravelMapUnavailable, get_kor_travel_map_client
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
 
 
-class _FakeKrtourPublicClient:
-    """public.py가 호출하는 krtour data-level 메서드만 구현."""
+class _FakeKorTravelMapPublicClient:
+    """public.py가 호출하는 kor_travel_map data-level 메서드만 구현."""
 
     def __init__(self) -> None:
         self.calls: dict[str, dict[str, Any]] = {}
@@ -136,21 +136,21 @@ class _FakeKrtourPublicClient:
         }
 
 
-class _UnavailablePublicClient(_FakeKrtourPublicClient):
+class _UnavailablePublicClient(_FakeKorTravelMapPublicClient):
     async def public_beaches(self, **kwargs: Any) -> dict[str, Any]:
-        raise KrtourMapUnavailable("krtour-map down")
+        raise KorTravelMapUnavailable("kor-travel-map down")
 
 
 def _override(fake: Any) -> None:
-    app.dependency_overrides[get_krtour_map_client] = lambda: fake
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
 
 
 def _clear() -> None:
-    app.dependency_overrides.pop(get_krtour_map_client, None)
+    app.dependency_overrides.pop(get_kor_travel_map_client, None)
 
 
 async def test_public_beaches_is_unauthenticated_and_maps_meta(client: Any) -> None:
-    fake = _FakeKrtourPublicClient()
+    fake = _FakeKorTravelMapPublicClient()
     _override(fake)
     try:
         resp = await client.get(
@@ -178,7 +178,7 @@ async def test_public_beaches_is_unauthenticated_and_maps_meta(client: Any) -> N
 
 
 async def test_public_markers_validate_bbox_and_map_items(client: Any) -> None:
-    fake = _FakeKrtourPublicClient()
+    fake = _FakeKorTravelMapPublicClient()
     _override(fake)
     try:
         invalid = await client.get("/public/beaches/map-markers?min_lon=129&min_lat=35")
@@ -199,7 +199,7 @@ async def test_public_markers_validate_bbox_and_map_items(client: Any) -> None:
 
 
 async def test_public_festivals_monthly_and_detail(client: Any) -> None:
-    fake = _FakeKrtourPublicClient()
+    fake = _FakeKorTravelMapPublicClient()
     _override(fake)
     try:
         monthly = await client.get("/public/festivals/monthly?year=2026&month=6&page_size=12")
@@ -216,7 +216,7 @@ async def test_public_festivals_monthly_and_detail(client: Any) -> None:
     assert missing.status_code == 404
 
 
-async def test_public_maps_krtour_unavailable_to_503(client: Any) -> None:
+async def test_public_maps_kor_travel_map_unavailable_to_503(client: Any) -> None:
     _override(_UnavailablePublicClient())
     try:
         resp = await client.get("/public/beaches")

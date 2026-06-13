@@ -1,6 +1,6 @@
 # 정규화 패턴
 
-1NF~BCNF 일반 정규화 + denormalization 패턴 + TripMate 도메인 적용 가이드.
+1NF~BCNF 일반 정규화 + denormalization 패턴 + Pinvi 도메인 적용 가이드.
 v1 `skills/normalization-patterns.ko.md` 정리.
 
 ## 1. 정규형 요약
@@ -12,7 +12,7 @@ v1 `skills/normalization-patterns.ko.md` 정리.
 | **3NF** | 비 PK → 비 PK 전이 의존 X |
 | **BCNF** | 모든 determinant가 candidate key |
 
-## 2. TripMate 적용
+## 2. Pinvi 적용
 
 ### 2.1 1NF
 
@@ -121,7 +121,7 @@ CREATE INDEX ix_price_values_observed_brin ON feature.price_values USING brin (o
 
 BRIN 인덱스 — 대량 append-only 시계열에 적합.
 
-TripMate `app` schema에는 시계열 거의 없음 (notification outbox 정도).
+Pinvi `app` schema에는 시계열 거의 없음 (notification outbox 정도).
 
 ## 8. AI agent 체크리스트
 

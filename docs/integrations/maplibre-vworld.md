@@ -1,11 +1,11 @@
 # maplibre-vworld-js 지도 클라이언트
 
-TripMate 지도는 **내부 라이브러리 `maplibre-vworld-js`**를 사용한다 (ADR-015 —
+Pinvi 지도는 **내부 라이브러리 `maplibre-vworld-js`**를 사용한다 (ADR-015 —
 Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 선언형 React 통합.
 
 > **상태**: `maplibre-vworld-js` 본체는 `F:\dev\maplibre-vworld-js` (별 저장소).
-> TripMate는 git URL pin 또는 npm 배포로 의존. 본 문서는 (a) TripMate에서 어떻게
+> Pinvi는 git URL pin 또는 npm 배포로 의존. 본 문서는 (a) Pinvi에서 어떻게
 > 사용할지, (b) 어떤 기능이 부족해서 라이브러리에 보강해야 할지 정리.
 
 ## 1. 라이브러리 식별자
@@ -18,7 +18,7 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 | 라이선스 | MIT |
 | 빌드 산출 | git 저장소에 `dist/` 커밋되어 있음 — 소비자 build 불필요 |
 
-설치 (TripMate `apps/web/package.json`):
+설치 (Pinvi `apps/web/package.json`):
 
 ```json
 {
@@ -40,19 +40,19 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 | SDK 키 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
 | 도메인 제한 | Kakao 콘솔 origin 화이트리스트 | VWorld 개발자 센터 도메인 등록 |
 | 선언형 API | 명령형 `map.panTo()` 등 혼용 | **순수 선언형 (props만)** |
-| 좌표 순서 | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — TripMate 표준과 일치 |
+| 좌표 순서 | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — Pinvi 표준과 일치 |
 | 마커 | `MapMarker` (이미지 src) | React Portal 컴포넌트 직접 주입 |
 | 클러스터링 | supercluster 별도 구현 | `ClusterLayer` 내장 (KDBush) |
 | Polygon/Route | 별도 구현 | `PolygonArea`, `RouteLine` 내장 |
-| 16색 팔레트 매핑 | TripMate가 직접 구현 | TripMate가 직접 구현 (이전 `TRIPMATE_MARKER_PALETTE` / `TripmateFeatureLayer` 라이브러리에서 제거됨 — generic primitive만 제공) |
-| Local 검색 | Kakao Local API (server) | **없음** — TripMate `/search` 라이브러리 경유 |
+| 16색 팔레트 매핑 | Pinvi가 직접 구현 | Pinvi가 직접 구현 (이전 `PINVI_MARKER_PALETTE` / `PinviFeatureLayer` 라이브러리에서 제거됨 — generic primitive만 제공) |
+| Local 검색 | Kakao Local API (server) | **없음** — Pinvi `/search` 라이브러리 경유 |
 | 경로 안내 | Kakao 모빌리티 길찾기 | **없음** — Sprint 6 OR-Tools 직선 거리 또는 라이브러리 경유 |
 
 핵심 이득:
 
 - 좌표 순서 일관 (`(lng, lat)` 전체 stack)
 - 선언형 — `useEffect`로 명령형 호출 불필요
-- Maki 아이콘 + 클러스터링 + Polygon/RouteLine generic primitive 제공 — TripMate 도메인(16색 팔레트, Place/Price/Weather 매핑)은 `apps/web/lib`에서 어댑터로 구성
+- Maki 아이콘 + 클러스터링 + Polygon/RouteLine generic primitive 제공 — Pinvi 도메인(16색 팔레트, Place/Price/Weather 매핑)은 `apps/web/lib`에서 어댑터로 구성
 - VWorld는 국토부 공식 — provider 위탁자 명시 간소화 (국내)
 - 오프라인 캐싱 제한 없음 (PWA v2 후보 활성화)
 
@@ -62,18 +62,18 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 
 - VWorld 개발자 센터 (`www.vworld.kr`)에서 API Key 발급
 - **허용 도메인** 등록 필수 — 누락 시 403 / CORS 에러
-- TripMate 환경별:
+- Pinvi 환경별:
   - 로컬: `http://localhost:12505`, `http://127.0.0.1:12505`
   - Docker smoke: `http://127.0.0.1:12505`
-  - 운영: `https://tripmate.digitie.mywire.org`
+  - 운영: `https://pinvi.digitie.mywire.org`
 
 ### 3.2 환경변수
 
 | 환경변수 | 위치 | 비고 |
 |----------|------|------|
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `apps/web` (빌드 타임 embed) | 브라우저 노출 가능 (도메인 화이트리스트로 보호) |
-| `TRIPMATE_VWORLD_API_KEY` | `apps/api` (선택) | 백엔드 reverse geocoding / boundary 조회는 라이브러리(`python-vworld-api`) 경유 → 본 키 미사용 |
-| `TRIPMATE_VWORLD_PROXY_PATH` | `apps/web` | 사내망 / 보안 정책으로 직접 호출 막힐 때 reverse proxy 경로 (옵션) |
+| `PINVI_VWORLD_API_KEY` | `apps/api` (선택) | 백엔드 reverse geocoding / boundary 조회는 라이브러리(`python-vworld-api`) 경유 → 본 키 미사용 |
+| `PINVI_VWORLD_PROXY_PATH` | `apps/web` | 사내망 / 보안 정책으로 직접 호출 막힐 때 reverse proxy 경로 (옵션) |
 
 키 정규화: `<VWorldMap apiKey={...}>`은 입력의 공백/개행 자동 제거 + URL-encode.
 복사·붙여넣기 사고 회피.
@@ -98,7 +98,7 @@ Sentry.captureException(error, { tags: { url: redacted } });
 
 > 이전 `redactVWorldTileUrl` 별칭은 제거됨 — `redactVWorldUrl`로 통합.
 
-## 4. TripMate 사용 패턴
+## 4. Pinvi 사용 패턴
 
 ### 4.1 Next.js App Router 통합
 
@@ -149,7 +149,7 @@ export function MapView({ initialCenter, pois }: Props) {
 > - `onMapClick` → `onClick`, `onMapLoad` → `onLoad`, `onMapError` → `onError`, `onMapContextMenu` → `onContextMenu`
 > - `onViewportChange` 제거 → 필요한 시점별로 `onMoveEnd` / `onZoomEnd` / `onIdle` (각각 raw `MapLibreEvent`) 분리
 > - `showNavigationControl` / `showGeolocateControl` / `showScaleControl` → `navigation` / `geolocate` / `scale`
-> - `tileErrorThreshold` prop 제거 — 타일 에러 카운트는 TripMate가 직접 (`onError` 누적) 관리
+> - `tileErrorThreshold` prop 제거 — 타일 에러 카운트는 Pinvi가 직접 (`onError` 누적) 관리
 > - `center` 가 필수 prop (기본값 서울 좌표 제거됨)
 > - 콜백에 전달되는 인자가 wrapper 타입(`VWorldMapErrorInfo` / `VWorldMapContextMenuInfo` / `VWorldViewportInfo`)이 아니라 **raw MapLibre 이벤트** 그대로
 
@@ -172,7 +172,7 @@ viewport 정보는 `e.target.getBounds()` / `getZoom()` 등으로 직접 추출.
 ```
 
 `setBounds`가 TanStack Query 키 invalidate → `/features/in-bounds` 호출.
-debounce 250ms + AbortController 는 TripMate 측에서 (라이브러리는 raw 이벤트만).
+debounce 250ms + AbortController 는 Pinvi 측에서 (라이브러리는 raw 이벤트만).
 
 ### 4.3 클러스터링
 
@@ -262,13 +262,13 @@ proxy endpoint (`/api/vworld-proxy`) 추가 필요 (Sprint 4 결정).
 ## 5. 16색 팔레트 + Maki 매핑
 
 `docs/design/marker-palette.md`의 P-01~P-16과 라이브러리 마커 컴포넌트 연결.
-라이브러리는 generic primitive만 export — TripMate 팔레트(`TRIPMATE_MARKER_PALETTE`
-/ `TRIPMATE_CATEGORY_MARKERS` / `resolveTripmateMarkerStyle`)와 도메인 wrapper
-(`TripmateFeatureLayer`)는 **`apps/web/lib`에서 직접 구현**한다.
+라이브러리는 generic primitive만 export — Pinvi 팔레트(`PINVI_MARKER_PALETTE`
+/ `PINVI_CATEGORY_MARKERS` / `resolvePinviMarkerStyle`)와 도메인 wrapper
+(`PinviFeatureLayer`)는 **`apps/web/lib`에서 직접 구현**한다.
 
 ```ts
 // apps/web/lib/markerAdapter.ts
-import { MARKER_PALETTE } from '@tripmate/design-tokens';
+import { MARKER_PALETTE } from '@pinvi/design-tokens';
 import { MakiMarker, PlaceMarker, PriceMarker, WeatherMarker } from 'maplibre-vworld';
 
 export function renderPoiMarker(poi: Poi) {
@@ -301,12 +301,12 @@ export function renderPoiMarker(poi: Poi) {
 > `MakiMarker` props 변경 — 이전 `iconName` / `fallbackIcon` 두 prop이
 > `icon: string` 하나로 통합. fallback이 필요하면 caller에서 `??` 로 결정.
 
-## 6. 라이브러리 측 보강 필요 항목 (TripMate가 요청할 PR)
+## 6. 라이브러리 측 보강 필요 항목 (Pinvi가 요청할 PR)
 
 > **카탈로그는 라이브러리 저장소가 source of truth**: `maplibre-vworld-js` 저장소의
 > [`docs/consumer-feature-catalog.md`](https://github.com/digitie/maplibre-vworld-js/blob/main/docs/consumer-feature-catalog.md)
 > 가 §1 (라이브러리 PR 대상 10항목) + §2 (소비자 전용 - 라이브러리 거부 항목)을
-> 박는다. 본 §6 / §6.1~§6.11은 TripMate가 실제 사용하며 마주친 부족 기능의
+> 박는다. 본 §6 / §6.1~§6.11은 Pinvi가 실제 사용하며 마주친 부족 기능의
 > snapshot 메모로만 유지. 분류 / 상태의 단일 진실은 라이브러리 doc.
 >
 > **v0.1.0 게이트** (Sprint 4 종료 시): 라이브러리 카탈로그 §1의 "PR 필요" 항목이
@@ -314,12 +314,12 @@ export function renderPoiMarker(poi: Poi) {
 > 2026-06-05 기준 `maplibre-vworld-js` PR #37(구현) + PR #46(카탈로그 정합화,
 > merge `f1dd74b9`)가 머지되어 라이브러리 선행 PR 조건은 완료다.
 >
-> **TripMate 전용 항목**: 라이브러리 카탈로그 §2 참고. 본 저장소가 직접 구현
+> **Pinvi 전용 항목**: 라이브러리 카탈로그 §2 참고. 본 저장소가 직접 구현
 > (`apps/web/lib/markerPalette.ts` 등). 라이브러리에 박지 않는다.
 
-다음 표는 TripMate가 사용하는 공통 기능 snapshot이다. 사용 중 추가 부족 기능이
+다음 표는 Pinvi가 사용하는 공통 기능 snapshot이다. 사용 중 추가 부족 기능이
 발견되면 `maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출한다(ADR-005 mirror:
-TripMate에 wrapper 만들지 않고 라이브러리에 보강).
+Pinvi에 wrapper 만들지 않고 라이브러리에 보강).
 
 ### 6.1 viewport 이벤트
 
@@ -328,7 +328,7 @@ TripMate에 wrapper 만들지 않고 라이브러리에 보강).
 | `onMoveEnd` / `onZoomEnd` / `onIdle` callback | viewport feature fetch trigger / cluster_unit 결정 | ✅ 제공 (raw `MapLibreEvent`) |
 | viewport state subscription | TanStack Query invalidation | ✅ `useMapSelector(selector)` 로 zoom/bounds 등 구독 가능 |
 
-debounce는 TripMate 측에서 (250ms + AbortController).
+debounce는 Pinvi 측에서 (250ms + AbortController).
 
 ### 6.2 사용자 위치
 
@@ -349,8 +349,8 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 | 컴포넌트 | 현재 처리 | 비고 |
 |----------|----------|------|
 | `PlaceMarker` | ✅ `title`, `description`, `category`, `photoUrl`, `link` | marker card / popup |
-| `PriceMarker` | ✅ `price`, `PriceItem[]`, `currency`, LOD | 유종/단위 label은 TripMate 데이터 매핑 |
-| `WeatherMarker` | ✅ `temperature`, `condition`, `hourlyForecast` | KMA condition/강수확률은 TripMate에서 매핑 |
+| `PriceMarker` | ✅ `price`, `PriceItem[]`, `currency`, LOD | 유종/단위 label은 Pinvi 데이터 매핑 |
+| `WeatherMarker` | ✅ `temperature`, `condition`, `hourlyForecast` | KMA condition/강수확률은 Pinvi에서 매핑 |
 | `EventMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
 | `NoticeMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
 
@@ -381,10 +381,10 @@ debounce는 TripMate 측에서 (250ms + AbortController).
 
 | 기능 | 비고 |
 |------|------|
-| `LngLatSchema` zod | 이미 export — TripMate `packages/schemas`에서 import |
-| 한국 좌표 범위 검증 | `makeBoundedLngLatSchema([124, 132], [33, 43])` factory 로 직접 생성 (이전 `KoreaLngLatSchema` / `KoreaBoundsSchema` / `KOREA_LNG_RANGE` / `KOREA_LAT_RANGE` 상수는 라이브러리에서 제거됨 — TripMate 측에서 1회 생성해 재사용) |
+| `LngLatSchema` zod | 이미 export — Pinvi `packages/schemas`에서 import |
+| 한국 좌표 범위 검증 | `makeBoundedLngLatSchema([124, 132], [33, 43])` factory 로 직접 생성 (이전 `KoreaLngLatSchema` / `KoreaBoundsSchema` / `KOREA_LNG_RANGE` / `KOREA_LAT_RANGE` 상수는 라이브러리에서 제거됨 — Pinvi 측에서 1회 생성해 재사용) |
 | `BBoxSchema` | viewport bounds 검증 |
-| Point 스키마 확장 | `PointSchema` (이전 `BasePointDataSchema`) / `extendPointSchema` (이전 `createPointDataSchema`) — TripMate POI 스키마 정의에 활용 |
+| Point 스키마 확장 | `PointSchema` (이전 `BasePointDataSchema`) / `extendPointSchema` (이전 `createPointDataSchema`) — Pinvi POI 스키마 정의에 활용 |
 
 ### 6.9 SSR / hydration
 
@@ -402,12 +402,12 @@ v2 후보. VWorld TOS 확인 후 라이브러리에 PWA 가이드 추가:
 - IndexedDB 타일 캐시 (TOS 허용 시)
 - 오프라인 fallback layer
 
-### 6.11 TripMate 도메인에 특화된 hook / 컴포넌트
+### 6.11 Pinvi 도메인에 특화된 hook / 컴포넌트
 
 라이브러리는 generic primitive(`VWorldMap` / `MakiMarker` / `ClusterLayer` /
-`Popup` / `PolygonArea` / `RouteLine`)만 export. **TripMate 도메인 wrapper
-(`TripmateFeatureLayer`)와 팔레트 상수(`TRIPMATE_MARKER_PALETTE` /
-`TRIPMATE_CATEGORY_MARKERS` / `resolveTripmateMarkerStyle`)는 라이브러리에서
+`Popup` / `PolygonArea` / `RouteLine`)만 export. **Pinvi 도메인 wrapper
+(`PinviFeatureLayer`)와 팔레트 상수(`PINVI_MARKER_PALETTE` /
+`PINVI_CATEGORY_MARKERS` / `resolvePinviMarkerStyle`)는 라이브러리에서
 제거되었으므로 `apps/web/lib`에서 직접 구현**한다.
 
 라이브러리가 제공하는 hook:
@@ -426,8 +426,8 @@ v2 후보. VWorld TOS 확인 후 라이브러리에 PWA 가이드 추가:
 export 도 사용 가능 (DevTools, custom selector 등).
 
 ```ts
-// apps/web/lib/featureLayer.ts — TripMate가 직접 구현 (라이브러리는 generic primitive만 제공)
-import { useFeaturesInBounds } from '@tripmate/api-client';
+// apps/web/lib/featureLayer.ts — Pinvi가 직접 구현 (라이브러리는 generic primitive만 제공)
+import { useFeaturesInBounds } from '@pinvi/api-client';
 import { useMapSelector } from 'maplibre-vworld';
 
 export function useFeatureMarkers(kinds: FeatureKind[]) {
@@ -449,7 +449,7 @@ export function useFeatureMarkers(kinds: FeatureKind[]) {
 VWorld 403 / CORS 시 점검:
 
 1. **VWorld 개발자 센터 도메인 등록**: 정확한 origin
-   (`http://localhost:12505`, `https://tripmate.digitie.mywire.org` 등)
+   (`http://localhost:12505`, `https://pinvi.digitie.mywire.org` 등)
 2. **transformRequest 프록시**: 사내망 / 추가 정책 필요 시
 3. **CSP에 VWorld 도메인 허용**: `connect-src 'self' https://api.vworld.kr`
 
@@ -464,7 +464,7 @@ VWorld 403 / CORS 시 점검:
 ### 8.2 도메인 제한 회피 금지
 
 - 라이브러리가 임의 host 요청 가능하므로 키 도용 위험
-- VWorld 콘솔에서 운영(`https://tripmate.digitie.mywire.org`) / staging / 로컬 외
+- VWorld 콘솔에서 운영(`https://pinvi.digitie.mywire.org`) / staging / 로컬 외
   origin 추가 금지
 - 운영 도메인 변경 시 반드시 콘솔 업데이트
 
@@ -475,7 +475,7 @@ VWorld 무료 티어:
 - 일 N건 (콘솔에서 확인 — 정확한 수치는 시점별 변경)
 - 초과 시 403 + admin alert
 
-TripMate 클라이언트 정책:
+Pinvi 클라이언트 정책:
 
 - viewport debounce 250ms + AbortController 취소
 - 동일 bounding box + zoom 1분 캐시 (TanStack Query)
@@ -490,8 +490,8 @@ TripMate 클라이언트 정책:
 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
 | `apps/web/lib/coordAdapter.ts` (Kakao lat-lng 변환) | 제거 (VWorld는 `(lng, lat)`) |
 | `apps/web/lib/kakao.ts` SDK 로드 | 제거 |
-| `apps/web/scripts/sync-maki-icons.mjs` | 유지 — 라이브러리는 Maki 외부 의존 — TripMate self-host |
-| 백엔드 `apps/api/app/services/kakao_local.py` | **`/search` 구현 변경** — 라이브러리 (`python-krtour-map`의 `search`) 경유 |
+| `apps/web/scripts/sync-maki-icons.mjs` | 유지 — 라이브러리는 Maki 외부 의존 — Pinvi self-host |
+| 백엔드 `apps/api/app/services/kakao_local.py` | **`/search` 구현 변경** — 라이브러리 (`kor-travel-map`의 `search`) 경유 |
 | `docs/integrations/kakao-map.md` | 폐기 → 본 문서 |
 
 ## 11. 작업 체크리스트 (AI agent)
@@ -508,7 +508,7 @@ TripMate 클라이언트 정책:
 - [ ] CSP에 `https://api.vworld.kr` 허용
 - [ ] VWorld 콘솔 도메인 등록 확인 (개발 / staging / 운영)
 - [ ] Sentry / Loki에 `redactVWorldUrl` 자동 적용
-- [ ] 라이브러리에 부족한 기능 발견 시 — TripMate에 wrapper 만들지 않고
+- [ ] 라이브러리에 부족한 기능 발견 시 — Pinvi에 wrapper 만들지 않고
       `maplibre-vworld-js` 저장소에 issue + PR (ADR-005 mirror)
 - [ ] 본 문서 §6 보강 필요 항목 표 갱신
 
@@ -517,24 +517,24 @@ TripMate 클라이언트 정책:
 - [x] `maplibre-vworld-js` PR #37 — T-033~T-037 소비자 공통 기능 구현 완료.
 - [x] `maplibre-vworld-js` PR #46 — `docs/consumer-feature-catalog.md` source of
   truth 정합화, `build-and-test` green, merge `f1dd74b9`.
-- [x] TripMate §6 snapshot을 라이브러리 카탈로그의 현재 상태와 동기화.
-- [x] TripMate frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld`
+- [x] Pinvi §6 snapshot을 라이브러리 카탈로그의 현재 상태와 동기화.
+- [x] Pinvi frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld`
   GitHub archive tarball URL을 pin하고 lockfile을 갱신.
-- [x] TripMate frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
+- [x] Pinvi frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
   T-074에서 `/trips/map-shell`을 추가하고 Windows Playwright smoke로
-  `/features/in-bounds` / krtour-map API `12301` 미호출을 확인했다.
+  `/features/in-bounds` / kor-travel-map API `12301` 미호출을 확인했다.
 
 > T-074 메모: `maplibre-vworld` dist의 development JSX runtime은 Next dev 브라우저
-> chunk에서 `require("react")`를 호출한다. TripMate는 production build가 정상인 것을
+> chunk에서 `require("react")`를 호출한다. Pinvi는 production build가 정상인 것을
 > 확인했고, dev/e2e에서는 `MapView`의 좁은 React require shim으로 보완했다. 라이브러리
 > 패키징 후속 PR이 머지되면 shim 제거 후보.
 
 ## 12. AI 에이전트 (Codex / Antigravity) 대응
 
-라이브러리 본체는 Antigravity 2.0 + Gemini 3.1 Pro로 만들어진 코드. TripMate에서
+라이브러리 본체는 Antigravity 2.0 + Gemini 3.1 Pro로 만들어진 코드. Pinvi에서
 라이브러리 사용 / 보강 작업 시 다음 진입 문서 참조:
 
-- 본 문서 (TripMate 사용 패턴 + 보강 요청 카탈로그)
+- 본 문서 (Pinvi 사용 패턴 + 보강 요청 카탈로그)
 - `maplibre-vworld-js` 저장소의 [`AGENTS.md`](https://github.com/digitie/maplibre-vworld-js/blob/main/AGENTS.md)
   (Cursor / Copilot / Codex / Antigravity 진입 가이드)
 - `maplibre-vworld-js/AI_AGENT_GUIDE.md` (SSR + dynamic import + transformRequest 규칙)

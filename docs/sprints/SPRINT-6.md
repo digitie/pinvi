@@ -3,7 +3,7 @@
 - **상태**: proposed
 - **선행**: Sprint 5 DoD 완료 (v0.2.0)
 - **목표**: 일정 자동 최적화, Admin 보강, 컴플라이언스 (LBS 신고 + 법무 4 문서),
-  **MCP 외부 인터페이스 (TripMate가 서빙)**, **Backup/Restore UI 핫스왑**,
+  **MCP 외부 인터페이스 (Pinvi가 서빙)**, **Backup/Restore UI 핫스왑**,
   **한국 전용 geofencing**, **운영 하드웨어 확장 (Odroid + N150)**,
   E2E + 성능 + 보안 점검 — 외부 정식 출시 가능 상태
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
@@ -21,7 +21,7 @@
     / Ubuntu 26.04 양쪽** (ADR-023)
   - 백업 + 복구 훈련 1회 — **핫스왑 패턴 검증** (ADR-022)
   - **MCP 외부 인터페이스 서빙** — `apps/api/app/mcp/` 모듈 + `/mcp/sse`
-    엔드포인트. 외부 AI agent가 TripMate의 trip/poi/feature 데이터를
+    엔드포인트. 외부 AI agent가 Pinvi의 trip/poi/feature 데이터를
     토큰 인증으로 read. 자세히는 `docs/architecture/mcp-server.md` (ADR-019).
   - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록
     + 복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
@@ -30,7 +30,7 @@
     (3중 안전) — KR 외 IP는 451 (`docs/architecture/korea-only-policy.md`,
     ADR-018)
   - **T-107 (Gemini) 별도 서비스로 분리** — 본 저장소에서 제거, 별 repo
-    (`tripmate-ai-companion` 또는 사용자 지정)로 이동. local docker-to-docker
+    (`kor-travel-concierge` 또는 사용자 지정)로 이동. local docker-to-docker
     호출 패턴. 자세히는 ADR-020.
 
 ## 산출물
@@ -42,7 +42,7 @@
   `GET /trips/{id}/days/{day_index}/distance-matrix`)
 - `apps/api/app/api/v1/admin/{feature_requests,category_mappings}.py`
 - `apps/api/app/services/distance_matrix.py` (PostGIS + 카카오 모빌리티 + cache)
-- **`apps/api/app/mcp/`** — TripMate MCP 서버 (ADR-019):
+- **`apps/api/app/mcp/`** — Pinvi MCP 서버 (ADR-019):
   - `__init__.py` / `server.py` — FastAPI sub-app or 별 binary 선택 (ADR에서 결정)
   - `tools/{list_trips,get_trip,list_pois,search_features,get_user_profile}.py`
   - `auth.py` — 전용 MCP token (JWT scope=`mcp:read`) — 사용자가
@@ -117,7 +117,7 @@
 - 후속 ADR 후보(번호 미배정): OR-Tools 경로 최적화 정책 (POI ≤10/11-20/20+ 분기)
 - 후속 ADR 후보(번호 미배정): 카테고리 매핑 운영 정책 (라이브러리 default + DB override + 사용자 custom)
 - **ADR-018** (참조): 한국 전용 서비스 정책 + geofencing 3중 안전망
-- **ADR-019** (참조): TripMate MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
+- **ADR-019** (참조): Pinvi MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리
 - **ADR-022** (참조): Backup/Restore 핫스왑 정책 (snapshot → restore schema → schema-swap)
 - **ADR-023** (참조): 운영 하드웨어 확장 (Odroid M1S + N150 16GB 병행)
@@ -164,7 +164,7 @@
 - [ ] E2E **9** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence)
 - [ ] 운영 환경 smoke test 통과 — **Odroid + N150 양쪽** (ADR-023)
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
-  TripMate trip 조회 성공)
+  Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
 - [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
@@ -177,7 +177,7 @@
 
 - v2 후보: PWA, Redis Streams, 푸시 알림, 사진 업로드, 다국어, 결제,
   GPX 업로드, 공개 여행 / 커뮤니티, 댓글
-- AI 추천 / 챗봇은 별 repo (`tripmate-ai-companion`, ADR-020) — Gemini /
+- AI 추천 / 챗봇은 별 repo (`kor-travel-concierge`, ADR-020) — Gemini /
   Claude / Codex 등 provider 선택 가능. local docker-to-docker 호출로 본
   서비스 통합.
 - `docs/tasks.md`에 T-100 ~ T-200 백로그로 관리

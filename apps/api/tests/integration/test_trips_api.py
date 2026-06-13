@@ -206,8 +206,8 @@ async def test_share_link_uses_web_base_url(
     cookies = auth_cookies(user_id)
     monkeypatch.setattr(
         trips_router.settings,
-        "tripmate_web_base_url",
-        "https://tripmate.example",
+        "pinvi_web_base_url",
+        "https://pinvi.example",
     )
     created = await client.post("/trips", json={"title": "공유 여행"}, cookies=cookies)
     trip_id = created.json()["data"]["trip_id"]
@@ -220,8 +220,8 @@ async def test_share_link_uses_web_base_url(
 
     assert resp.status_code == 201, resp.text
     share = resp.json()["data"]
-    assert share["url"].startswith(f"https://tripmate.example/trips/{trip_id}/shared/")
-    assert "app.tripmate.local" not in share["url"]
+    assert share["url"].startswith(f"https://pinvi.example/trips/{trip_id}/shared/")
+    assert "app.pinvi.local" not in share["url"]
 
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text
@@ -417,7 +417,7 @@ def _attachment_payload(
     purpose: str = "trip_attachment",
 ) -> dict[str, object]:
     return {
-        "bucket": "tripmate-media",
+        "bucket": "pinvi-media",
         "storage_key": f"user-uploads/{purpose}/{user_id}/2026/06/{uuid.uuid4().hex}.jpg",
         "original_filename": filename,
         "content_type": "image/jpeg",
@@ -696,7 +696,7 @@ async def test_trip_attachment_limit_and_reorder(
 ) -> None:
     from app.core.config import settings
 
-    monkeypatch.setattr(settings, "tripmate_max_attachments_per_target", 2)
+    monkeypatch.setattr(settings, "pinvi_max_attachments_per_target", 2)
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     created = await client.post("/trips", json={"title": "첨부 한도"}, cookies=cookies)

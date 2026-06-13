@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LoginRequestSchema } from '@tripmate/schemas';
-import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
+import { LoginRequestSchema } from '@pinvi/schemas';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
 import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 type OAuthProviderName = 'google';
@@ -20,7 +20,7 @@ const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   OAUTH_ACCOUNT_LINK_REQUIRED:
-    '이미 같은 이메일의 TripMate 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 Google을 연결해 주세요.',
+    '이미 같은 이메일의 Pinvi 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 Google을 연결해 주세요.',
   OAUTH_CALLBACK_INVALID: 'Google 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.',
   OAUTH_EMAIL_UNVERIFIED:
     'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 시도해 주세요.',

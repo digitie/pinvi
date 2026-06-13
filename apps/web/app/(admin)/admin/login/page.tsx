@@ -2,13 +2,13 @@
 
 import { Suspense, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LoginRequestSchema } from '@tripmate/schemas';
-import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
+import { LoginRequestSchema } from '@pinvi/schemas';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
 import { validateForm, type FieldErrors } from '@/lib/formValidation';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
@@ -82,7 +82,7 @@ function AdminLoginForm() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6 rounded-sm border border-hairline bg-white p-8">
         <header>
-          <h1 className="text-xl font-bold text-ink">TripMate Admin</h1>
+          <h1 className="text-xl font-bold text-ink">Pinvi Admin</h1>
           <p className="mt-1 text-xs text-muted">
             관리자/운영자/CPO 계정으로 로그인하세요.
           </p>

@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
-import type { TripShareLinkVisibility, TripViewShareLink } from '@tripmate/schemas';
+import { ApiError, tripApi } from '@pinvi/api-client';
+import type { TripShareLinkVisibility, TripViewShareLink } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { SHARE_STATUS_LABEL, VISIBILITY_LABEL, shareLinkStatus } from '@/lib/shareLink';
 import { buildShareUrl } from '@/lib/shareUrl';

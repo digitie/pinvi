@@ -1,6 +1,6 @@
-"""Geocoding/행정구역 API schema — `docs/api/regions.md` + `docs/integrations/kraddr-geo.md`.
+"""Geocoding/행정구역 API schema — `docs/api/regions.md` + `docs/integrations/kor-travel-geo.md`.
 
-kraddr-geo v2 REST 후보(candidate)는 풍부하고 자주 진화하므로 TripMate 응답은 candidate를
+kor-travel-geo v2 REST 후보(candidate)는 풍부하고 자주 진화하므로 Pinvi 응답은 candidate를
 `dict` 그대로 pass-through하되, 최상위 envelope만 타입 고정한다. 좌표는 `(lon, lat)`.
 """
 
@@ -23,14 +23,14 @@ class GeoCandidateList(BaseModel):
 
 
 class RegionCovering(BaseModel):
-    """좌표를 포함하는 행정구역(단건). kraddr-geo `region` 객체 pass-through."""
+    """좌표를 포함하는 행정구역(단건). kor-travel-geo `region` 객체 pass-through."""
 
     boundary_level: BoundaryLevel
     region: dict[str, Any]
 
 
 class UnifiedSearchResult(BaseModel):
-    """통합 검색 — feature(krtour) + address(kraddr) + 내 POI(TripMate). 소스별 degrade 가능."""
+    """통합 검색 — feature(kor_travel_map) + address(kor_travel_geo) + 내 POI(Pinvi). 소스별 degrade 가능."""
 
     features: list[dict[str, Any]] = Field(default_factory=list)
     addresses: list[dict[str, Any]] = Field(default_factory=list)

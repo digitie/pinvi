@@ -10,7 +10,7 @@
 
 ```
 ws://localhost:12501/ws/trips/<trip_id>?token=<jwt>
-wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
+wss://pinviapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 ```
 
 권한 없으면 즉시 `close 4403` (`{ "code": 4403, "reason": "permission_denied" }`).
@@ -123,12 +123,12 @@ wss://tripmateapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 
 | 환경변수 | 기본 |
 |----------|------|
-| `TRIPMATE_WS_CLIENT_RATE_PER_SECOND` | `5` |
-| `TRIPMATE_WS_CLIENT_RATE_PER_MINUTE` | `60` |
-| `TRIPMATE_WS_RATE_LIMIT_CLOSE_GRACE_SECONDS` | `30` |
-| `TRIPMATE_WS_MAX_CONNECTIONS_PER_TRIP` | `10` |
-| `TRIPMATE_WS_MAX_CONNECTIONS_TOTAL` | `200` |
-| `TRIPMATE_WS_SEND_TIMEOUT_SECONDS` | `2` |
+| `PINVI_WS_CLIENT_RATE_PER_SECOND` | `5` |
+| `PINVI_WS_CLIENT_RATE_PER_MINUTE` | `60` |
+| `PINVI_WS_RATE_LIMIT_CLOSE_GRACE_SECONDS` | `30` |
+| `PINVI_WS_MAX_CONNECTIONS_PER_TRIP` | `10` |
+| `PINVI_WS_MAX_CONNECTIONS_TOTAL` | `200` |
+| `PINVI_WS_SEND_TIMEOUT_SECONDS` | `2` |
 
 ## 8. AI agent 구현 체크리스트
 

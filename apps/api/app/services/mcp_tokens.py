@@ -42,7 +42,7 @@ class McpPrincipal:
 
 
 def default_mcp_expires_at() -> datetime:
-    return datetime.now(UTC) + timedelta(days=settings.tripmate_mcp_token_default_days)
+    return datetime.now(UTC) + timedelta(days=settings.pinvi_mcp_token_default_days)
 
 
 def create_mcp_jwt(
@@ -62,7 +62,7 @@ def create_mcp_jwt(
     }
     if expires_at is not None:
         payload["exp"] = expires_at
-    encoded = jwt.encode(payload, settings.tripmate_mcp_jwt_secret, algorithm=_ALGORITHM)
+    encoded = jwt.encode(payload, settings.pinvi_mcp_jwt_secret, algorithm=_ALGORITHM)
     return _TOKEN_PREFIX + str(encoded)
 
 
@@ -184,7 +184,7 @@ async def authenticate_mcp_token(db: AsyncSession, *, raw_token: str) -> McpPrin
     try:
         payload = jwt.decode(
             raw_token.removeprefix(_TOKEN_PREFIX),
-            settings.tripmate_mcp_jwt_secret,
+            settings.pinvi_mcp_jwt_secret,
             algorithms=[_ALGORITHM],
         )
     except JWTError as exc:

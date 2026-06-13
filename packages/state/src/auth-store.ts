@@ -27,7 +27,7 @@ export const createAuthStore = (storage: StateStorage) =>
         setStatus: (status) => set({ status }),
       }),
       {
-        name: 'tripmate-auth',
+        name: 'pinvi-auth',
         storage: createJSONStorage(() => storage),
         partialize: (state) => ({ authenticatedUserId: state.authenticatedUserId }),
       },

@@ -7,39 +7,39 @@
 
 ---
 
-## DEC-01 — krtour-map 통합 모델 (가장 중요) ☐
-**배경**: TripMate는 ADR-026(2026-06-04)로 "krtour-map = OpenAPI HTTP 계약(포트
-12301)"으로 전환 선언했으나, krtour-map 저장소는 9개월간 **in-process 함수
+## DEC-01 — kor-travel-map 통합 모델 (가장 중요) ☐
+**배경**: Pinvi는 ADR-026(2026-06-04)로 "kor-travel-map = OpenAPI HTTP 계약(포트
+12301)"으로 전환 선언했으나, kor-travel-map 저장소는 9개월간 **in-process 함수
 라이브러리**(ADR-003, "HTTP 없음")로 만들어졌고 HTTP는 인증 없는 debug-UI(8087,
-`/features` bbox·`/features/{id}`만)뿐이다. TripMate 통합 문서가 참조하는
-krtour 산출물(`krtour-map-admin` 패키지, `openapi.user.json`, 포트 12301,
-`/tripmate/features/batch`)은 **실재하지 않는다**. (상세 `docs/krtour-map-requirements.md` §0)
+`/features` bbox·`/features/{id}`만)뿐이다. Pinvi 통합 문서가 참조하는
+kor_travel_map 산출물(`kor-travel-map-admin` 패키지, `openapi.user.json`, 포트 12301,
+`/pinvi/features/batch`)은 **실재하지 않는다**. (상세 `docs/kor-travel-map-requirements.md` §0)
 
 **선택지**
-- **(A) in-process 라이브러리로 복귀** — ADR-026 철회, TripMate가 `python-krtour-map`
-  의존 + `AsyncKrtourMapClient` DI + feature DB engine 주입. krtour는 HTTP 불요,
-  누락 client 메서드만 채움. 네트워크 hop 0(단일 노드 유리). 단 TripMate가 feature
+- **(A) in-process 라이브러리로 복귀** — ADR-026 철회, Pinvi가 `kor-travel-map`
+  의존 + `AsyncKorTravelMapClient` DI + feature DB engine 주입. kor_travel_map는 HTTP 불요,
+  누락 client 메서드만 채움. 네트워크 hop 0(단일 노드 유리). 단 Pinvi가 feature
   DB에 직접 연결(스키마 결합 ↑).
-- **(B) krtour-map 운영급 HTTP 서비스 신설** — ADR-026 유지. krtour가 인증 있는 운영
-  API(포트 12301, 전 엔드포인트, OpenAPI+drift gate) 신설. TripMate는 httpx
-  client 구현. 프로세스/배포 격리. 단 krtour에 큰 신규 표면 + 네트워크 hop.
+- **(B) kor-travel-map 운영급 HTTP 서비스 신설** — ADR-026 유지. kor_travel_map가 인증 있는 운영
+  API(포트 12301, 전 엔드포인트, OpenAPI+drift gate) 신설. Pinvi는 httpx
+  client 구현. 프로세스/배포 격리. 단 kor_travel_map에 큰 신규 표면 + 네트워크 hop.
 - **(C) 하이브리드** — 우선 (A)로 v0.1.0 빠르게 출시, 후속 Sprint에 (B)로 승격.
 
-**권고**: 사실관계상 krtour-map 전체 설계가 (A) 전제다. 단일 노드 성능·작업량 모두
+**권고**: 사실관계상 kor-travel-map 전체 설계가 (A) 전제다. 단일 노드 성능·작업량 모두
 (A)가 유리. 격리가 꼭 필요하면 (C). **(A) 또는 (C) 권고.** ※ 어느 쪽이든 §DEC와
-무관하게 krtour는 누락 능력(near/batch/search 등)을 먼저 구현하면 됨.
+무관하게 kor_travel_map는 누락 능력(near/batch/search 등)을 먼저 구현하면 됨.
 
-**결정 시 후속**: ADR-027 작성, `docs/krtour-map-integration.md`·`features.md`·
+**결정 시 후속**: ADR-027 작성, `docs/kor-travel-map-integration.md`·`features.md`·
 SPRINT-4 재작성(T-148), C-01 client 구현 방향 확정.
 
 ---
 
 ## DEC-02 — 정규 `feature_id` 포맷 ☐
-**배경**: 3곳이 다름 — TripMate 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`, krtour 실제
-`{kind}:{hash}`(추정, 확인요망), TripMate **코드는 UUID**(버그).
-**선택지**: (A) krtour `make_feature_id` 출력이 정본(권고 — feature 소유자가 krtour) /
-(B) TripMate 문서 포맷으로 krtour가 맞춤.
-**권고**: (A). krtour가 포맷을 명문화(ADR-028), TripMate 코드의 UUID 가정 제거(T-125).
+**배경**: 3곳이 다름 — Pinvi 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`, kor_travel_map 실제
+`{kind}:{hash}`(추정, 확인요망), Pinvi **코드는 UUID**(버그).
+**선택지**: (A) kor_travel_map `make_feature_id` 출력이 정본(권고 — feature 소유자가 kor_travel_map) /
+(B) Pinvi 문서 포맷으로 kor_travel_map가 맞춤.
+**권고**: (A). kor_travel_map가 포맷을 명문화(ADR-028), Pinvi 코드의 UUID 가정 제거(T-125).
 
 ---
 
@@ -54,10 +54,10 @@ SPRINT-4 재작성(T-148), C-01 client 구현 방향 확정.
 ---
 
 ## DEC-04 — 지도 클러스터링 책임 ☐
-**배경**: `/features/in-bounds`가 zoom별 시도/시군구/읍면동 클러스터를 기대하나 krtour
-client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는 있으나 미연결.
-**선택지**: (A) krtour DB 집계로 서버에서 클러스터(권고 — 단일 노드 대역폭·성능) /
-(B) krtour는 raw, TripMate가 로컬 집계.
+**배경**: `/features/in-bounds`가 zoom별 시도/시군구/읍면동 클러스터를 기대하나 kor_travel_map
+client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 있으나 미연결.
+**선택지**: (A) kor_travel_map DB 집계로 서버에서 클러스터(권고 — 단일 노드 대역폭·성능) /
+(B) kor_travel_map는 raw, Pinvi가 로컬 집계.
 **권고**: (A). DEC-01과 함께 ADR-027 부속으로.
 
 ---
@@ -66,38 +66,38 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 **핵심 교정**: **재적재(feature-update-request)와 사용자 제안은 완전히 다른 작업이다.**
 이 둘을 묶지 않는다.
 
-**(A) 재적재 = krtour-map Admin 기능 — TripMate 사용자 제품과 무관**
-- `POST /admin/feature-update-requests`(= scope 재적재/Dagster job)는 **krtour-map 운영자**가
-  krtour-map admin API/콘솔에서 쓰는 기능이다.
-- **TripMate 일반 사용자에게 노출되지 않으며, 사용자 제안 흐름에도 들어가지 않는다.**
-  TripMate 제품은 재적재를 surface하지 않는다(필요 시 krtour admin이 직접 운영).
+**(A) 재적재 = kor-travel-map Admin 기능 — Pinvi 사용자 제품과 무관**
+- `POST /admin/feature-update-requests`(= scope 재적재/Dagster job)는 **kor-travel-map 운영자**가
+  kor-travel-map admin API/콘솔에서 쓰는 기능이다.
+- **Pinvi 일반 사용자에게 노출되지 않으며, 사용자 제안 흐름에도 들어가지 않는다.**
+  Pinvi 제품은 재적재를 surface하지 않는다(필요 시 kor_travel_map admin이 직접 운영).
 
-**(B) 사용자 제안 = TripMate가 소유, 승인 시 krtour "feature 추가 API"로 추가**
-- **(레이어 1) 사용자 제안 큐 — TripMate `app`(user 도메인)**: `app.feature_suggestions`
+**(B) 사용자 제안 = Pinvi가 소유, 승인 시 kor_travel_map "feature 추가 API"로 추가**
+- **(레이어 1) 사용자 제안 큐 — Pinvi `app`(user 도메인)**: `app.feature_suggestions`
   (requester_user_id, type[new_place|correction|closure], target_feature_id?, name, coord,
   categories[], note, status[pending|approved|rejected|added|duplicate], reviewed_by_admin_id?,
-  krtour_ref?, created_at, resolved_at). 사용자 endpoint `POST /features/requests`(즉시 201) +
+  kor_travel_map_ref?, created_at, resolved_at). 사용자 endpoint `POST /features/requests`(즉시 201) +
   `GET /features/requests/{id}`. per-user rate-limit + dedup. 감사 C-12의 미존재 테이블 실체화.
-- **(레이어 2) TripMate Admin 검사/승인/거절 — admin 도메인**: `/admin/feature-requests`
+- **(레이어 2) Pinvi Admin 검사/승인/거절 — admin 도메인**: `/admin/feature-requests`
   목록/검수 + `POST /admin/feature-requests/{id}/approve|reject` (RBAC admin/operator + audit).
-  **승인 시 krtour-map의 feature 추가 API로 feature를 추가한다.** 재적재 호출과 무관.
+  **승인 시 kor-travel-map의 feature 추가 API로 feature를 추가한다.** 재적재 호출과 무관.
 
-**✅ krtour feature 추가 API 구현됨(krtour PR #317, 2026-06-09)**: `POST /admin/features`(create) /
+**✅ kor_travel_map feature 추가 API 구현됨(kor_travel_map PR #317, 2026-06-09)**: `POST /admin/features`(create) /
 `PATCH /admin/features/{id}` / `DELETE /admin/features/{id}` 신설(place/event). version 0(provider)/
 1(user) 분리 + 재적재 보존. 응답에 `feature_id`/`request_id`/state. (계약 §
-`docs/integrations/krtour-map-rest-api.md` §2.9, 요구사항 K-15.) → T-179 actionable.
-**남은 하위 결정(연동 합의, krtour PR #317 코멘트로 질의 중)**:
-- **review_mode**: krtour 기본 `require_review`인데 TripMate가 이미 Admin 검수 → 이중 검수 방지.
-  krtour `immediate` / TripMate `create→approve` 2-step / 요청 단위 override 중 합의.
+`docs/integrations/kor-travel-map-rest-api.md` §2.9, 요구사항 K-15.) → T-179 actionable.
+**남은 하위 결정(연동 합의, kor_travel_map PR #317 코멘트로 질의 중)**:
+- **review_mode**: kor_travel_map 기본 `require_review`인데 Pinvi가 이미 Admin 검수 → 이중 검수 방지.
+  kor_travel_map `immediate` / Pinvi `create→approve` 2-step / 요청 단위 override 중 합의.
 - idempotency_key 멱등, 출처 태깅, admin 인증, closure(DELETE vs deactivate).
 
-**근거**: 경계(검수/남용/PII는 TripMate user 도메인), 재적재(운영)와 제안(사용자)은 별개 도메인.
+**근거**: 경계(검수/남용/PII는 Pinvi user 도메인), 재적재(운영)와 제안(사용자)은 별개 도메인.
 
 ---
 
 ## DEC-06 — v0.1.0 출시 게이트 ☐
-**배경**: v0.1.0 DoD가 krtour HTTP client + 라이브 feature read(T-066, 보류)에 묶임.
-**선택지**: (A) snapshot-only로 v0.1.0 출시(라이브 feature는 v0.2.0) / (B) krtour
+**배경**: v0.1.0 DoD가 kor_travel_map HTTP client + 라이브 feature read(T-066, 보류)에 묶임.
+**선택지**: (A) snapshot-only로 v0.1.0 출시(라이브 feature는 v0.2.0) / (B) kor_travel_map
 연동까지 v0.1.0 보류.
 **권고**: DEC-01 결과에 종속. (A)면 지도에 캐시/snapshot만 — UX 제한. 사용자 우선순위
 질문.
@@ -127,7 +127,7 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 ---
 
 ## DEC-09 — `trip_day_pois.feature_id` nullable ☐
-**배경**: 현재 NOT NULL → krtour에 없는 "자유 메모 장소"를 일정에 못 넣음(D-18).
+**배경**: 현재 NOT NULL → kor_travel_map에 없는 "자유 메모 장소"를 일정에 못 넣음(D-18).
 **선택지**: (A) nullable + 사용자 좌표 경로 허용(권고 — 기본 계획 UX) / (B) 유지.
 **권고**: (A). ADR-031 부속.
 
@@ -144,13 +144,13 @@ client는 클러스터링 안 함(개별 행만). TripMate `cluster_query.py`는
 ## 결정 기록란
 | DEC | 결정 | 날짜 | 비고 |
 |-----|------|------|------|
-| DEC-01 | ☑ **(B) 운영급 HTTP 서비스** | 2026-06-06 | 사용자. ADR-027. krtour가 HTTP 신설 필요 |
-| DEC-02 | ☑ krtour `make_feature_id` 정본(문자열) | 2026-06-06 | 권고 기본값 적용. ADR-028 |
+| DEC-01 | ☑ **(B) 운영급 HTTP 서비스** | 2026-06-06 | 사용자. ADR-027. kor_travel_map가 HTTP 신설 필요 |
+| DEC-02 | ☑ kor_travel_map `make_feature_id` 정본(문자열) | 2026-06-06 | 권고 기본값 적용. ADR-028 |
 | DEC-03 | ☑ 큐레이션→`curated_trip_plans` 분리 | 2026-06-06 | 사용자. ADR-029 |
-| DEC-04 | ☑ 서버(krtour DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
-| DEC-05 | ☑ **재적재(krtour admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=TripMate→Admin 검사/승인→krtour feature 추가 API로 반영 | 2026-06-08 | 사용자 확정. feature 추가 API = **krtour PR #317로 구현됨(2026-06-09)** → T-179 actionable. review_mode 등 연동 합의 진행. §DEC-05 본문 |
-| DEC-06 | ☑ **krtour 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
-| DEC-07 | ☑ 제안 기본값 + `/v1` 노출. **좌표 필드명 = `lon`/`lat`(ADR-048 B, 2026-06-09 정렬)** | 2026-06-06 | 사용자. ADR-030. 좌표는 krtour 정렬로 `lon`/`lat` 채택(T-182) |
+| DEC-04 | ☑ 서버(kor_travel_map DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
+| DEC-05 | ☑ **재적재(kor_travel_map admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=Pinvi→Admin 검사/승인→kor_travel_map feature 추가 API로 반영 | 2026-06-08 | 사용자 확정. feature 추가 API = **kor_travel_map PR #317로 구현됨(2026-06-09)** → T-179 actionable. review_mode 등 연동 합의 진행. §DEC-05 본문 |
+| DEC-06 | ☑ **kor_travel_map 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
+| DEC-07 | ☑ 제안 기본값 + `/v1` 노출. **좌표 필드명 = `lon`/`lat`(ADR-048 B, 2026-06-09 정렬)** | 2026-06-06 | 사용자. ADR-030. 좌표는 kor_travel_map 정렬로 `lon`/`lat` 채택(T-182) |
 | DEC-08 | ☑ POI **soft delete** | 2026-06-06 | 권고 기본값 적용. ADR-031(예정) |
 | DEC-09 | ☑ `trip_day_pois.feature_id` **nullable** | 2026-06-06 | 권고 기본값 적용. ADR-031 부속(예정) |
 | DEC-10 | ☑ 위치로그 **archive 테이블** 이동 + 체인 연속 | 2026-06-06 | 권고 기본값 적용. T-142 인접 |

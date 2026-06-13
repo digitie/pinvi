@@ -18,7 +18,7 @@ log = structlog.get_logger("api_call")
 class ApiCallTracker:
     """httpx AsyncClient에 event_hook으로 부착.
 
-    `request.extensions["tripmate_provider"]`에 provider 이름을 넣어 호출.
+    `request.extensions["pinvi_provider"]`에 provider 이름을 넣어 호출.
     """
 
     def __init__(self, session_factory: Any) -> None:
@@ -32,8 +32,8 @@ class ApiCallTracker:
         request = response.request
         start = self._start_times.pop(id(request), None)
         latency_ms = int((time.perf_counter() - start) * 1000) if start else None
-        provider = request.extensions.get("tripmate_provider", "unknown")
-        request_id_raw = request.extensions.get("tripmate_request_id")
+        provider = request.extensions.get("pinvi_provider", "unknown")
+        request_id_raw = request.extensions.get("pinvi_request_id")
         request_id = None
         if isinstance(request_id_raw, str):
             try:

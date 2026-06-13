@@ -17,7 +17,7 @@ class TripTelegramTargetLink(BaseModel):
 class TelegramTargetCreate(BaseModel):
     """`POST /users/me/telegram-targets` 본문.
 
-    bot token은 받지 않는다(§1) — TripMate 시스템 봇을 사용자가 자기 chat에 추가한 뒤
+    bot token은 받지 않는다(§1) — Pinvi 시스템 봇을 사용자가 자기 chat에 추가한 뒤
     chat_id만 등록한다. `telegram_bot_token_ref`는 현 단계 `system`만 허용.
     """
 

@@ -155,7 +155,7 @@ class RealtimeBroker:
         )
         task = asyncio.create_task(
             self._broadcast(trip_id, message),
-            name=f"tripmate-realtime-broadcast:{event_type}",
+            name=f"pinvi-realtime-broadcast:{event_type}",
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._finalize_background_task)
@@ -257,17 +257,17 @@ class RealtimeBroker:
     def _max_connections_per_trip(self) -> int:
         if self._max_connections_per_trip_override is not None:
             return self._max_connections_per_trip_override
-        return settings.tripmate_ws_max_connections_per_trip
+        return settings.pinvi_ws_max_connections_per_trip
 
     def _max_connections_total(self) -> int:
         if self._max_connections_total_override is not None:
             return self._max_connections_total_override
-        return settings.tripmate_ws_max_connections_total
+        return settings.pinvi_ws_max_connections_total
 
     def _send_timeout_seconds(self) -> float:
         if self._send_timeout_seconds_override is not None:
             return self._send_timeout_seconds_override
-        return settings.tripmate_ws_send_timeout_seconds
+        return settings.pinvi_ws_send_timeout_seconds
 
     def _event_message(
         self,

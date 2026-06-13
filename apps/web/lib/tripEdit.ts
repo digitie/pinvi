@@ -2,7 +2,7 @@
  * trip 메타 편집 폼 ↔ `TripUpdate` — `docs/api/trips.md`.
  */
 
-import type { TripStatus, TripUpdate, TripVisibility } from '@tripmate/schemas';
+import type { TripStatus, TripUpdate, TripVisibility } from '@pinvi/schemas';
 
 export interface TripEditForm {
   title: string;

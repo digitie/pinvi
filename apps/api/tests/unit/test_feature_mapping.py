@@ -1,22 +1,22 @@
-"""features.py krtour → TripMate 매핑 helper 단위 테스트 (DB 불필요).
+"""features.py kor_travel_map → Pinvi 매핑 helper 단위 테스트 (DB 불필요).
 
-krtour 평면 lon/lat·name·status·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
+kor_travel_map 평면 lon/lat·name·status·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
 """
 
 from __future__ import annotations
 
 from app.api.v1.features import (
-    _category_from_krtour,
-    _cluster_from_krtour,
-    _coord_from_krtour,
-    _detail_from_krtour,
-    _summary_from_krtour,
-    _weather_from_krtour,
+    _category_from_kor_travel_map,
+    _cluster_from_kor_travel_map,
+    _coord_from_kor_travel_map,
+    _detail_from_kor_travel_map,
+    _summary_from_kor_travel_map,
+    _weather_from_kor_travel_map,
 )
 
 
 def test_category_maps_catalog_fields() -> None:
-    category = _category_from_krtour(
+    category = _category_from_kor_travel_map(
         {
             "code": "01070100",
             "label": "해수욕장",
@@ -36,7 +36,7 @@ def test_category_maps_catalog_fields() -> None:
 
 
 def test_category_defaults_when_sparse() -> None:
-    category = _category_from_krtour({"code": "99", "label": "X"})
+    category = _category_from_kor_travel_map({"code": "99", "label": "X"})
     assert category.depth == 0
     assert category.path == []
     assert category.maki_icon == "marker"
@@ -44,15 +44,15 @@ def test_category_defaults_when_sparse() -> None:
 
 
 def test_coord_is_none_when_lon_or_lat_missing() -> None:
-    assert _coord_from_krtour({"lon": None, "lat": 35.0}) is None
-    assert _coord_from_krtour({"lat": 35.0}) is None
-    coord = _coord_from_krtour({"lon": 129.1, "lat": 35.1})
+    assert _coord_from_kor_travel_map({"lon": None, "lat": 35.0}) is None
+    assert _coord_from_kor_travel_map({"lat": 35.0}) is None
+    coord = _coord_from_kor_travel_map({"lon": 129.1, "lat": 35.1})
     assert coord is not None
     assert (coord.lon, coord.lat) == (129.1, 35.1)
 
 
 def test_summary_defaults_marker_and_name() -> None:
-    summary = _summary_from_krtour({"feature_id": "f1", "kind": "place", "lon": 129.1, "lat": 35.1})
+    summary = _summary_from_kor_travel_map({"feature_id": "f1", "kind": "place", "lon": 129.1, "lat": 35.1})
     assert summary.name == ""
     assert summary.marker_color == "P-13"
     assert summary.marker_icon == "marker"
@@ -60,7 +60,7 @@ def test_summary_defaults_marker_and_name() -> None:
 
 
 def test_summary_carries_status_and_distance() -> None:
-    summary = _summary_from_krtour(
+    summary = _summary_from_kor_travel_map(
         {
             "feature_id": "f1",
             "kind": "place",
@@ -78,7 +78,7 @@ def test_summary_carries_status_and_distance() -> None:
 
 
 def test_cluster_uses_natural_key_and_flat_coord() -> None:
-    cluster = _cluster_from_krtour(
+    cluster = _cluster_from_kor_travel_map(
         {"cluster_key": "11680", "feature_count": 5, "lon": 127.0, "lat": 37.5}
     )
     assert cluster.cluster_key == "11680"
@@ -87,7 +87,7 @@ def test_cluster_uses_natural_key_and_flat_coord() -> None:
 
 
 def test_detail_maps_structured_address_and_codes() -> None:
-    detail = _detail_from_krtour(
+    detail = _detail_from_kor_travel_map(
         {
             "feature_id": "f1",
             "kind": "place",
@@ -109,7 +109,7 @@ def test_detail_maps_structured_address_and_codes() -> None:
 
 
 def test_weather_maps_flat_metrics() -> None:
-    card = _weather_from_krtour(
+    card = _weather_from_kor_travel_map(
         {
             "feature_id": "f1",
             "is_stale": True,

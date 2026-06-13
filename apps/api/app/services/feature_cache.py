@@ -1,6 +1,6 @@
 """Feature 조회 process-local TTL 캐시 (T-146 / D-26).
 
-trip view마다 krtour-map을 재호출하는 단일 노드 hotspot을 완화한다. feature_id(불투명 문자열,
+trip view마다 kor-travel-map을 재호출하는 단일 노드 hotspot을 완화한다. feature_id(불투명 문자열,
 canonical) → feature dict를 짧은 TTL로 캐시하고, miss만 라이브러리에서 가져온다.
 멀티 워커 간 공유는 하지 않는다(프로세스 로컬). 동시성 race는 캐시 특성상 무해(중복 fetch 정도).
 """
@@ -53,6 +53,6 @@ class FeatureCache:
 
 
 feature_cache = FeatureCache(
-    ttl_seconds=settings.tripmate_feature_cache_ttl_seconds,
-    max_size=settings.tripmate_feature_cache_max_size,
+    ttl_seconds=settings.pinvi_feature_cache_ttl_seconds,
+    max_size=settings.pinvi_feature_cache_max_size,
 )

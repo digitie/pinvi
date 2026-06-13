@@ -22,7 +22,7 @@ import {
   TripShareLinkResponseSchema,
   TripUpdateSchema,
   TripViewSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 import type {
@@ -37,7 +37,7 @@ import type {
   TripDeleteRequest,
   TripShareLinkCreate,
   TripUpdate,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 
 export type TripBucket = 'future' | 'past' | 'all';
 export type TripListSort = '-updated_at' | 'start_date' | '-start_date' | 'title';

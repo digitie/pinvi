@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
 import type maplibregl from 'maplibre-gl';
 import type { ClusterPoint } from 'maplibre-vworld';
-import { ApiError, featureApi, userApi } from '@tripmate/api-client';
+import { ApiError, featureApi, userApi } from '@pinvi/api-client';
 import type {
   FeatureDetail,
   FeaturesInBoundsResponse,
   FeatureSummary,
   FeatureWeatherCard,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { hasLocationConsent, locationConsentItems } from '@/lib/locationConsent';
@@ -53,7 +53,7 @@ interface ContextMenuState {
 }
 
 function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
-  // krtour 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
+  // kor_travel_map 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
   const features: MapPoint[] = data.items.flatMap((f) =>
     f.coord
       ? [
@@ -100,7 +100,7 @@ function featureToPoint(f: FeatureSummary): MapPoint | null {
   };
 }
 
-/** krtour 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
+/** kor_travel_map 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
 function addressLine(detail: FeatureDetail | null): string | null {
   const addr = detail?.address;
   if (!addr) return null;

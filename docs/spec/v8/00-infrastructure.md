@@ -1,19 +1,19 @@
-# SPEC V8 #0 — 인프라 · 컴플라이언스 (TripMate 적용 노트)
+# SPEC V8 #0 — 인프라 · 컴플라이언스 (Pinvi 적용 노트)
 
 원본: `spec_v8_0_infrastructure.docx` (N장 비기능 + O장 법률).
 
 ## 1. 적용 범위
 
-| 항목 | 본 저장소 | `python-krtour-map` | 비고 |
+| 항목 | 본 저장소 | `kor-travel-map` | 비고 |
 |------|-----------|---------------------|------|
-| docker-compose / Odroid 운영 manifest | ✓ | — | `infra/docker-compose.yml`은 TripMate 소유. 라이브러리는 import만 |
+| docker-compose / Odroid 운영 manifest | ✓ | — | `infra/docker-compose.yml`은 Pinvi 소유. 라이브러리는 import만 |
 | Sentry SaaS Free 통합 | ✓ | ✓ | 양쪽 모두 동일 DSN + environment 태그 |
 | Loki+Promtail+Grafana | ✓ | — | `apps/api` / `apps/web` / `apps/etl` 로그 수집 |
-| RustFS 객체 저장소 | ✓ | — | TripMate가 운영. 라이브러리는 `file_store` 주입 받음 |
-| 백업 (pg_dump + WAL) | ✓ | — | DB는 단일. TripMate alembic + 라이브러리 alembic 모두 백업 대상 |
+| RustFS 객체 저장소 | ✓ | — | Pinvi가 운영. 라이브러리는 `file_store` 주입 받음 |
+| 백업 (pg_dump + WAL) | ✓ | — | DB는 단일. Pinvi alembic + 라이브러리 alembic 모두 백업 대상 |
 | 위치정보법 / PIPA 컴플라이언스 | ✓ | — | 호출 측 책임 — 라이브러리는 schema 미설치 |
 
-## 2. 핵심 채택 (TripMate v2)
+## 2. 핵심 채택 (Pinvi v2)
 
 ### 2.1 운영 환경 — Odroid M1S
 
@@ -51,7 +51,7 @@ export"와 차이가 있다 — v2는 **NTFS worktree에서 git/편집/commit**,
 
 | SPEC V8 원본 | v2 채택 (ADR-024) |
 |------|------|
-| 코드는 ext4 `~/projects/trip-service` | 코드는 agent별 NTFS worktree `F:\dev\tripmate-<agent>`, 실행은 WSL 미러 `~/tripmate-workspaces/tripmate-<agent>` |
+| 코드는 ext4 `~/projects/trip-service` | 코드는 agent별 NTFS worktree `F:\dev\pinvi-<agent>`, 실행은 WSL 미러 `~/pinvi-workspaces/pinvi-<agent>` |
 | 산출물(tar)은 NTFS `/mnt/c/Users/Me/artifacts/` | 산출물은 ext4 build/, 배포 시 scp 또는 GHCR pull |
 | Windows 손상 시 산출물 NTFS 보존 | git origin이 단일 진실 공급원, 산출물은 임시 |
 
@@ -75,7 +75,7 @@ ADR-024에 기록되어 있다.
 - CORS 화이트리스트
 - CSP: `script-src 'self'` + `connect-src 'self' https://api.vworld.kr` (`maplibre-vworld-js` 사용, ADR-015). inline script 금지 (nonce)
 - Rate limit (SlowAPI): 로그인/가입/재설정 IP+이메일 기준 분당 5회
-- Admin 작업 audit log: `app.admin_audit_log` (TripMate 소유)
+- Admin 작업 audit log: `app.admin_audit_log` (Pinvi 소유)
 
 ### 2.6 백업 (N-3)
 
@@ -95,7 +95,7 @@ ADR-024에 기록되어 있다.
   - Sentry는 에러/예외/성능, Loki는 INFO/요청 추적
   - `apps/api` structlog JSON → Promtail 파싱
   - `request_id` / `user_id` / `level` 라벨
-- 메트릭: Prometheus + Grafana (v2 후보)
+- 메트릭: Prometheus + cAdvisor + Grafana (Sprint 5 observability profile)
 - Uptime: UptimeRobot / Better Stack (v2 후보)
 
 Admin `/admin/debug/logs`는 Loki LogQL을 WebSocket으로 stream

@@ -5,7 +5,7 @@
  * (3) `POST .../attachments` 로 메타 등록. 본 모듈은 (1)·(3) 사이 변환 + PUT 수행.
  */
 
-import type { AttachmentCreate, UploadUrlResponse } from '@tripmate/schemas';
+import type { AttachmentCreate, UploadUrlResponse } from '@pinvi/schemas';
 
 export type AttachmentRole = 'attachment' | 'image' | 'document' | 'reference';
 

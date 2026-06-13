@@ -135,7 +135,7 @@ def _comment_body(pr: PullRequest) -> str:
         f"""
         ## MCP 기반 리뷰 필요
 
-        이 저장소는 GitHub Actions에서 외부 LLM API key를 사용하지 않습니다. PR 리뷰는 로컬 agent가 `python-krtour-map`과 같은 MCP 진입 방식으로 수행합니다.
+        이 저장소는 GitHub Actions에서 외부 LLM API key를 사용하지 않습니다. PR 리뷰는 로컬 agent가 `kor-travel-map`과 같은 MCP 진입 방식으로 수행합니다.
 
         필수 진입:
         - `.codex/config.toml`, `claude.json`, `antigravity.json`, `.gemini/mcp.json`의 MCP 설정 확인
@@ -147,7 +147,7 @@ def _comment_body(pr: PullRequest) -> str:
         리뷰 기준:
         - `docs/runbooks/pr-review-sprint4.md` 기준으로 변경분만 리뷰
         - 차단 이슈, 필요한 코드 수정, 검증 결과, 머지 판단을 PR에 별도 코멘트로 기록
-        - ADR / Sprint 목표 / TripMate와 `python-krtour-map` 책임 경계 위반 여부 확인
+        - ADR / Sprint 목표 / Pinvi와 `kor-travel-map` 책임 경계 위반 여부 확인
 
         대상:
         - PR: #{pr.number} `{pr.title}`
@@ -176,7 +176,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Post missing PR review reminder comments for current PR heads."
     )
-    parser.add_argument("--repo", help="GitHub repository, for example digitie/tripmate")
+    parser.add_argument("--repo", help="GitHub repository, for example digitie/pinvi")
     parser.add_argument("--pr-number", type=int, help="Limit monitoring to one PR number")
     parser.add_argument("--dry-run", action="store_true", help="Print actions only")
     parser.add_argument(

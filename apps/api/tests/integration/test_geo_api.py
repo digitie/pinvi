@@ -1,4 +1,4 @@
-"""`/geo/*` + `/regions/*` 라우터 통합 테스트 (kraddr-geo client는 stub 주입)."""
+"""`/geo/*` + `/regions/*` 라우터 통합 테스트 (kor-travel-geo client는 stub 주입)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 
-class _FakeKraddrGeoClient:
+class _FakeKorTravelGeoClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -40,16 +40,16 @@ class _FakeKraddrGeoClient:
 
 
 @pytest.fixture
-def fake_geo_client() -> Iterator[_FakeKraddrGeoClient]:
-    from app.clients.kraddr_geo import get_kraddr_geo_client
+def fake_geo_client() -> Iterator[_FakeKorTravelGeoClient]:
+    from app.clients.kor_travel_geo import get_kor_travel_geo_client
     from app.main import app
 
-    fake = _FakeKraddrGeoClient()
-    app.dependency_overrides[get_kraddr_geo_client] = lambda: fake
+    fake = _FakeKorTravelGeoClient()
+    app.dependency_overrides[get_kor_travel_geo_client] = lambda: fake
     try:
         yield fake
     finally:
-        app.dependency_overrides.pop(get_kraddr_geo_client, None)
+        app.dependency_overrides.pop(get_kor_travel_geo_client, None)
 
 
 async def test_geo_reverse_returns_candidates(
@@ -99,7 +99,7 @@ async def test_geo_requires_auth(client: Any) -> None:
 async def test_geo_503_when_client_missing(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
-    # lifespan이 ASGITransport에서 실행되지 않아 app.state.kraddr_geo_client = 미설정 → 503.
+    # lifespan이 ASGITransport에서 실행되지 않아 app.state.kor_travel_geo_client = 미설정 → 503.
     user_id, _ = verified_user
     resp = await client.get(
         "/geo/search?query=테헤란로",
@@ -126,14 +126,14 @@ async def test_regions_covering_point_returns_region(
 async def test_regions_covering_point_404_when_no_region(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
-    from app.clients.kraddr_geo import get_kraddr_geo_client
+    from app.clients.kor_travel_geo import get_kor_travel_geo_client
     from app.main import app
 
     class _NoRegion:
         async def reverse(self, **kwargs: Any) -> dict[str, Any]:
             return {"status": "ok", "candidates": [{"address": "주소만"}]}
 
-    app.dependency_overrides[get_kraddr_geo_client] = lambda: _NoRegion()
+    app.dependency_overrides[get_kor_travel_geo_client] = lambda: _NoRegion()
     try:
         user_id, _ = verified_user
         resp = await client.get(
@@ -142,44 +142,44 @@ async def test_regions_covering_point_404_when_no_region(
         )
         assert resp.status_code == 404, resp.text
     finally:
-        app.dependency_overrides.pop(get_kraddr_geo_client, None)
+        app.dependency_overrides.pop(get_kor_travel_geo_client, None)
 
 
-class _FakeKrtourClient:
+class _FakeKorTravelMapClient:
     def __init__(self, *, raise_error: bool = False) -> None:
         self.raise_error = raise_error
 
     async def search_features(self, **kwargs: Any) -> dict[str, Any]:
         if self.raise_error:
-            from app.clients.krtour_map import KrtourMapUnavailable
+            from app.clients.kor_travel_map import KorTravelMapUnavailable
 
-            raise KrtourMapUnavailable("down")
+            raise KorTravelMapUnavailable("down")
         return {"items": [{"feature_id": "f_1", "name": "광안리 해수욕장"}], "next_cursor": None}
 
 
-def _override_search_clients(krtour: Any, kraddr: Any) -> None:
-    from app.clients.kraddr_geo import get_kraddr_geo_client
-    from app.clients.krtour_map import get_krtour_map_client
+def _override_search_clients(kor_travel_map: Any, kor_travel_geo: Any) -> None:
+    from app.clients.kor_travel_geo import get_kor_travel_geo_client
+    from app.clients.kor_travel_map import get_kor_travel_map_client
     from app.main import app
 
-    app.dependency_overrides[get_krtour_map_client] = lambda: krtour
-    app.dependency_overrides[get_kraddr_geo_client] = lambda: kraddr
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: kor_travel_map
+    app.dependency_overrides[get_kor_travel_geo_client] = lambda: kor_travel_geo
 
 
 def _clear_search_clients() -> None:
-    from app.clients.kraddr_geo import get_kraddr_geo_client
-    from app.clients.krtour_map import get_krtour_map_client
+    from app.clients.kor_travel_geo import get_kor_travel_geo_client
+    from app.clients.kor_travel_map import get_kor_travel_map_client
     from app.main import app
 
-    app.dependency_overrides.pop(get_krtour_map_client, None)
-    app.dependency_overrides.pop(get_kraddr_geo_client, None)
+    app.dependency_overrides.pop(get_kor_travel_map_client, None)
+    app.dependency_overrides.pop(get_kor_travel_geo_client, None)
 
 
 async def test_unified_search_merges_sources(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _ = verified_user
-    _override_search_clients(_FakeKrtourClient(), _FakeKraddrGeoClient())
+    _override_search_clients(_FakeKorTravelMapClient(), _FakeKorTravelGeoClient())
     try:
         resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
         assert resp.status_code == 200, resp.text
@@ -196,7 +196,7 @@ async def test_unified_search_degrades_on_feature_outage(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _ = verified_user
-    _override_search_clients(_FakeKrtourClient(raise_error=True), _FakeKraddrGeoClient())
+    _override_search_clients(_FakeKorTravelMapClient(raise_error=True), _FakeKorTravelGeoClient())
     try:
         resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
         assert resp.status_code == 200, resp.text

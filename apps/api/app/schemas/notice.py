@@ -95,13 +95,13 @@ class NoticePlanCopyResponse(BaseModel):
     copied_attachment_count: int
 
 
-class KrtourCuratedFeatureImportRequest(BaseModel):
+class KorTravelMapCuratedFeatureImportRequest(BaseModel):
     curated_feature_id: str = Field(min_length=1, max_length=240)
     mode: Literal["create", "upsert", "refresh"] = "create"
     is_published: bool | None = None
 
 
-class KrtourCuratedFeatureImportResponse(BaseModel):
+class KorTravelMapCuratedFeatureImportResponse(BaseModel):
     notice_plan_id: uuid.UUID
     created_plan: bool
     source_system: str

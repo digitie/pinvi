@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'TripMate',
+  title: 'Pinvi',
   description: '한국 여행 계획·기록·공유 — v2',
 };
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** kraddr-geo v2 candidate는 풍부/가변이라 pass-through(record). 좌표는 (lon, lat). */
+/** kor-travel-geo v2 candidate는 풍부/가변이라 pass-through(record). 좌표는 (lon, lat). */
 const CandidateSchema = z.record(z.string(), z.unknown());
 
 export const BoundaryLevelSchema = z.enum(['sido', 'sigungu', 'legal_dong']);

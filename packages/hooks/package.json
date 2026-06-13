@@ -1,8 +1,8 @@
 {
-  "name": "@tripmate/hooks",
+  "name": "@pinvi/hooks",
   "version": "0.1.0",
   "private": true,
-  "description": "TripMate 공용 React hook (Next.js / Expo 호환).",
+  "description": "Pinvi 공용 React hook (Next.js / Expo 호환).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

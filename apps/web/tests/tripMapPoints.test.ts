@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TripViewDay, TripViewPoi } from '@tripmate/schemas';
+import type { TripViewDay, TripViewPoi } from '@pinvi/schemas';
 import {
   extractCoord,
   pointsBounds,

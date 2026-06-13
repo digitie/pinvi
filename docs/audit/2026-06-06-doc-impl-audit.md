@@ -4,7 +4,7 @@
 > 작업하면서 누적된 **모순·불일치·누락·미흡**을 전수 점검해 한 곳에 모은다.
 > 중점: ① 실제로 동작 가능한가 ② 목적에 맞게 최적화됐나 ③ **외부 노출 API가
 > 일관·완결한가** ④ 빠진 기능은 없나.
-> **방법**: 문서 전체 + `apps/api`·`apps/web`·`apps/etl` 코드 + `python-krtour-map`
+> **방법**: 문서 전체 + `apps/api`·`apps/web`·`apps/etl` 코드 + `kor-travel-map`
 > 저장소(HEAD `b775c74`)를 2026-06-06에 대조.
 > **병합 안내**: 각 발견에 **제안 Task(T-)** 또는 **제안 ADR(ADR-)** 를 붙였다.
 > 이 문서의 §8 매핑표를 보고 `docs/tasks.md` / `docs/decisions.md`로 lift한다.
@@ -18,16 +18,16 @@
 
 ## 0. 요약 — 가장 중요한 5가지
 
-1. **[치명] krtour-map 통합 모델이 두 저장소에서 정반대다.** TripMate는 HTTP
-   계약(ADR-026, 포트 9011, `/features/in-bounds`·`/tripmate/features/batch`)을
-   믿지만, krtour-map은 **in-process 함수 라이브러리**(ADR-003, "HTTP 없음")로
+1. **[치명] kor-travel-map 통합 모델이 두 저장소에서 정반대다.** Pinvi는 HTTP
+   계약(ADR-026, 포트 9011, `/features/in-bounds`·`/pinvi/features/batch`)을
+   믿지만, kor-travel-map은 **in-process 함수 라이브러리**(ADR-003, "HTTP 없음")로
    만들어졌고 HTTP는 인증 없는 debug-UI(포트 8087, `/features` bbox·`/features/{id}`
-   뿐)만 존재한다. TripMate 통합 문서가 참조하는 krtour-map 산출물(`krtour-map-admin`
+   뿐)만 존재한다. Pinvi 통합 문서가 참조하는 kor-travel-map 산출물(`kor-travel-map-admin`
    패키지, `openapi.user.json`, 포트 9011)은 **실재하지 않는다**. → **DEC-01**.
-   상세·요구사항은 `docs/krtour-map-requirements.md`.
-2. **[높음] feature read 경로 전체가 미연결.** `apps/api/.../etl_bridge/krtour_map.py`
+   상세·요구사항은 `docs/kor-travel-map-requirements.md`.
+2. **[높음] feature read 경로 전체가 미연결.** `apps/api/.../etl_bridge/kor_travel_map.py`
    client 싱글톤이 항상 `None`(`TODO(sprint-4-PR-B2)`) → `/features/*` 전부 `503`.
-   `apps/api/app/clients/krtour_map.py`(문서가 가정한 HTTP client)는 존재하지 않는다
+   `apps/api/app/clients/kor_travel_map.py`(문서가 가정한 HTTP client)는 존재하지 않는다
    (C-01). v0.1.0 출시 게이트가 여기에 묶여 있다(P-12 → **DEC-06**).
 3. **[높음] 외부 API 표면이 일관되지 않다.** list envelope 4종(`data`배열 /
    `data.items` / `data.<plural>` / `data.rows`), 페이지네이션 4종(cursor / page+limit
@@ -49,27 +49,27 @@
 
 | DEC | 주제 | 막는 것 | 제안 ADR |
 |-----|------|---------|----------|
-| DEC-01 | krtour-map 통합 모델: in-process vs 운영 HTTP | feature 전 기능 | ADR-027 |
+| DEC-01 | kor-travel-map 통합 모델: in-process vs 운영 HTTP | feature 전 기능 | ADR-027 |
 | DEC-02 | 정규 `feature_id` 포맷(3곳 불일치) | feature read 전부 | ADR-028 |
 | DEC-03 | `notice_plans` 명칭 충돌 해소(큐레이션 vs 공지) | notice/공지 도메인 | ADR-029 |
-| DEC-04 | 지도 클러스터링 책임(krtour DB 집계 vs TripMate 로컬) | in-bounds 성능 | ADR-027 부속 |
-| DEC-05 | feature 갱신요청 큐 소유권(krtour vs TripMate app) | feature request | ADR-027 부속 |
-| DEC-06 | v0.1.0 출시 게이트: snapshot-only 출시 vs krtour 연동 대기 | 릴리즈 | — |
+| DEC-04 | 지도 클러스터링 책임(kor_travel_map DB 집계 vs Pinvi 로컬) | in-bounds 성능 | ADR-027 부속 |
+| DEC-05 | feature 갱신요청 큐 소유권(kor_travel_map vs Pinvi app) | feature request | ADR-027 부속 |
+| DEC-06 | v0.1.0 출시 게이트: snapshot-only 출시 vs kor_travel_map 연동 대기 | 릴리즈 | — |
 | DEC-07 | 외부 API 규약 정본(envelope/pagination/coord/datetime/버전 prefix) | API 전반 | ADR-030 |
 | DEC-08 | POI delete 정책(soft vs hard) | POI/Admin | ADR-031 |
 | DEC-09 | `trip_day_pois.feature_id` nullable(자유 메모 POI 허용) | 계획 UX | ADR-031 부속 |
 
 ---
 
-## 2. krtour-map 경계 (가장 큰 결함)
+## 2. kor-travel-map 경계 (가장 큰 결함)
 
-→ 전용 문서 `docs/krtour-map-requirements.md`로 분리(krtour-map 에이전트용).
-여기서는 TripMate 측 정정 항목만:
+→ 전용 문서 `docs/kor-travel-map-requirements.md`로 분리(kor-travel-map 에이전트용).
+여기서는 Pinvi 측 정정 항목만:
 
 | ID | 심각도 | 문제 | 제안 |
 |----|--------|------|------|
-| C-01 | high | feature HTTP client(`clients/krtour_map.py`) 미존재, etl_bridge stub만 → `/features/*` 503 | T-066 구현(DEC-01 후) |
-| A-05/D-07 | high | `docs/krtour-map-integration.md`·`features.md`가 실재하지 않는 krtour 산출물(포트 9011, `openapi.user.json`, `/tripmate/features/batch`) 참조 | DEC-01 확정 후 통합 문서 재작성 |
+| C-01 | high | feature HTTP client(`clients/kor_travel_map.py`) 미존재, etl_bridge stub만 → `/features/*` 503 | T-066 구현(DEC-01 후) |
+| A-05/D-07 | high | `docs/kor-travel-map-integration.md`·`features.md`가 실재하지 않는 kor_travel_map 산출물(포트 9011, `openapi.user.json`, `/pinvi/features/batch`) 참조 | DEC-01 확정 후 통합 문서 재작성 |
 | C-07 | high | `/features/in-bounds` 파라미터(`bbox=` 단일 vs `sw_/ne_` 4개)·응답(`{features,clusters}` vs `{cluster_unit,items}`) 코드↔문서 불일치 | T-124 |
 | C-09 | med | 코드가 `feature_id`를 UUID로 취급(`features.py`, `trip_view_builder.py:90` `uuid.UUID(...)`) — 문자열이어야 함 | T-125(DEC-02) |
 | C-10/11/12 | med | FeatureSummary/weather/feature-request 필드명 코드↔문서 불일치 | T-124 |
@@ -110,7 +110,7 @@
 
 | ID | 심각도 | 문제 | 제안 |
 |----|--------|------|------|
-| C-04 | high | `/public/*`(해변/축제) 라우터·서비스 미존재 | T-130(krtour 연동 후) |
+| C-04 | high | `/public/*`(해변/축제) 라우터·서비스 미존재 | T-130(kor_travel_map 연동 후) |
 | C-05 | high | `GET /trips/{id}`가 trip 메타만 반환. `trip_view_builder.build_trip_view`는 완성됐으나 **어떤 라우터도 호출 안 함**(dead code) | T-131(builder 연결) |
 | C-06 | high | trip 하위 리소스(DELETE/copy/days/day-items/members/shared view/attachments/optimize) 대부분 미구현 | T-132(분할) |
 | C-08 | high | Admin(T-050/T-104 "완료")이 상당수 placeholder(`/admin/{trips,pois,features,etl,seed,reset,...}` 페이지가 `Placeholder.tsx`; priority-3 엔드포인트 미구현) | P-05 정정 + T-133 |
@@ -121,14 +121,14 @@
 | C-13 | med | 통합 `GET /search`(features+addresses+my_pois) 미구현(코드는 features만) | T-129 |
 | C-19 | med | `services/cluster_query.py` 어디서도 호출 안 함(테스트만) | DEC-04 후 연결/삭제 |
 | C-20 | low | OAuth `GET /auth/oauth/providers`·`DELETE /auth/oauth/google` 구현됐으나 미문서화 | T-123(문서) |
-| C-21 | low | share-link 호스트 하드코딩(`app.tripmate.local`), zoom 하한 코드(5) vs 문서(7) | T-123 |
+| C-21 | low | share-link 호스트 하드코딩(`app.pinvi.local`), zoom 하한 코드(5) vs 문서(7) | T-123 |
 | C-22 | med | Resend webhook 서명 검증 no-op(미인증 입력으로 `email_queue` 변경) | T-136(보안) |
 
 > **동작하는 것(오탐 방지)**: auth(register/verify/login/logout/me/password-reset),
 > Google OAuth(start/callback/link/unlink/providers), consents, trips
 > create/list/get/patch + share token, POI CRUD/reorder, notice-plans(list/get/copy),
 > storage presigned, admin(users/audit/emails/backup), KASI ETL(T-067)는 **실구현**.
-> 가장 큰 단일 결함은 C-01(krtour 연동)이고 C-04/05/09~13이 거기에 연쇄된다.
+> 가장 큰 단일 결함은 C-01(kor_travel_map 연동)이고 C-04/05/09~13이 거기에 연쇄된다.
 
 ---
 
@@ -142,17 +142,17 @@
 | D-04 | high | 큐레이션 plan 테이블(`notice_pois`,`plan_poi_attachments`) 정본 스키마에 없음; 첨부 모델 2종(단일 4-target vs polymorphic) 공존 | DEC-03 → T-137 |
 | D-05 | high | 실시간 협업 백엔드(presence/충돌해소) 설계 문서 없음. `trip_day_pois`는 단일 작성자 optimistic lock뿐 | T-128(Sprint 5 설계) |
 | D-06 | high | `trip_companions`·`trip_invite` 템플릿 있으나 **초대 흐름 엔드포인트 없음**; `share_links.visibility='comment'`인데 댓글 모델/ API 없음 | T-132/T-139 |
-| D-08 | med | krtour 계약에 없는 소비처 호출(`/features/nearby`,`/{id}/weather`,`/regions/*`,`/features/requests`) | krtour-requirements K-3/K-6/K-8 |
+| D-08 | med | kor_travel_map 계약에 없는 소비처 호출(`/features/nearby`,`/{id}/weather`,`/regions/*`,`/features/requests`) | kor_travel_map-requirements K-3/K-6/K-8 |
 | D-10 | med | `notice_pois.budget`가 복사 대상 `trip_day_pois`에 컬럼 없음 → 예산 silently drop, 여행 예산 기능 자체 부재 | T-140 |
 | D-11 | med | trip↔지역 구조적 연결 없음(`region_hint` 자유텍스트뿐) → 텔레그램 brief의 지역 날씨/주유 질의 불가 | T-141 |
 | D-12 | med | LBS 6개월 보존 DELETE가 `location_access_log` 해시체인 깨뜨림 — 보존/체인연속 정책 미결 | DEC-10 |
 | D-13 | med | korea-only 3단 geofence admin 우회가 토큰 `roles` claim 의존인데 토큰엔 subject만(DB RBAC) → 출장 admin이 451 | T-142 |
 | D-15/21 | med | social-login(Google-only) vs map-marker-design(3버튼); frontend.md가 ADR-015로 삭제된 Kakao 어댑터 잔존 | T-143(문서정정) |
 | D-16/17 | med | 여행/장소 검색 UX 문서 없음; 여행 내보내기(PDF/GPX/print) 설계 없음(기록·공유 제품인데) | T-144 |
-| D-18 | med | `trip_day_pois.feature_id` NOT NULL → krtour에 없는 자유 메모 POI 불가 | DEC-09 |
+| D-18 | med | `trip_day_pois.feature_id` NOT NULL → kor_travel_map에 없는 자유 메모 POI 불가 | DEC-09 |
 | D-19 | med | backup 핫스왑이 2× DB(2× 디스크/RAM) 전제 — Odroid M1S에서 비현실적 | T-145(동일호스트 schema-swap 확정) |
-| D-20/26 | med | location-audit 동기 체인해시 + trip view마다 krtour batch+join(캐시 없음) — 단일 노드 hotspot | T-146(async outbox + feature 캐시) |
-| D-22 | med | kraddr-geo v2(ADR-025) integration 문서·CLAUDE 의존성 누락 | T-143 (※ `kraddr-geo.md`는 이미 존재 — CLAUDE §4 stack에만 추가) |
+| D-20/26 | med | location-audit 동기 체인해시 + trip view마다 kor_travel_map batch+join(캐시 없음) — 단일 노드 hotspot | T-146(async outbox + feature 캐시) |
+| D-22 | med | kor-travel-geo v2(ADR-025) integration 문서·CLAUDE 의존성 누락 | T-143 (※ `kor-travel-geo.md`는 이미 존재 — CLAUDE §4 stack에만 추가) |
 | D-24 | low | korea-only 3중 geofence(WAF+nginx GeoIP2+app)가 단일 Cloudflare tunnel 뒤에선 과잉 | T-142 |
 | D-23/D-25 | low | rise/set 재계산 정책 미결; gemini.md의 `UNIQUE ... WHERE` 인라인은 invalid PG 문법 | T-147(문서정정) |
 
@@ -172,7 +172,7 @@
 | P-09/15/20 | med | resume.md "박힌 ADR"가 016에서 끊김(017~026 누락); 헤드라인 상태 구식; 죽은 ADR-028 후보 | T-150 |
 | P-10/13/17/18/21 | low | `release-plan.md` dangling link; 머지표 PR#15/16 누락; `python-kraddr-map` 오타; agent-guide 잔여 bullet/구식 trailer; MCP 토큰 경로 3곳 불일치 | T-150 |
 | P-11 | low | SPRINT-5 Dagster asset 수(4 vs 5~6) 불일치 | T-150 |
-| P-12 | med | v0.1.0 게이트가 보류 항목(T-066, krtour client)에 의존 | DEC-06 |
+| P-12 | med | v0.1.0 게이트가 보류 항목(T-066, kor_travel_map client)에 의존 | DEC-06 |
 
 ---
 
@@ -182,7 +182,7 @@
   prefix가 도메인마다 제각각(§3.1). 정본 규약 1개(DEC-07 → ADR-030)를 박고
   `common.md`·`api-contract.md`를 단일 출처로 만든 뒤 per-domain 문서를 일괄 정렬해야
   한다.
-- **완결성**: feature/지도(krtour 의존), 실시간, regions/geo/public, trip 하위 리소스,
+- **완결성**: feature/지도(kor_travel_map 의존), 실시간, regions/geo/public, trip 하위 리소스,
   MCP 토큰, 검색/내보내기/동반자 초대가 **미완**. CRUD 짝 누락(생성만 있고 수정/삭제
   없음)이 trips·admin에 다수.
 - **빠진 기능(제품 목적 대비)**: 여행 **검색**, 여행 **내보내기/공유 렌더**, **동반자
@@ -204,7 +204,7 @@
 - [ ] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, mcp-tools 재범위, status enum, 토큰 엔드포인트)  (A-02,A-06,A-12)
 - [ ] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소) (Sprint 5)  (C-03,D-05)
 - [ ] T-129 — /search 통합 + /geo/*·/regions/* 명세·구현  (A-13,C-02,C-13)
-- [ ] T-130 — /public/* 구현 (krtour 연동 후)  (C-04)
+- [ ] T-130 — /public/* 구현 (kor_travel_map 연동 후)  (C-04)
 - [ ] T-131 — GET /trips/{id}에 build_trip_view 연결  (C-05)
 - [ ] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할  (C-06,D-06)
 - [ ] T-133 — Admin priority-3 엔드포인트·페이지 실구현(or 상태 강등)  (C-08,C-17)
@@ -217,7 +217,7 @@
 - [ ] T-140 — 여행 예산(budget/currency) 도메인 + 복사 흐름  (D-10)
 - [ ] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code)  (D-11)
 - [ ] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리  (D-13,D-24)
-- [ ] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가)  (D-15,D-21,D-22)
+- [ ] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kor-travel-geo stack 추가)  (D-15,D-21,D-22)
 - [ ] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계  (D-16,D-17)
 - [ ] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기)  (D-19)
 - [ ] T-146 — location-audit async outbox + feature 캐시(N+1 제거)  (D-20,D-26)
@@ -230,7 +230,7 @@
 
 ### 8.2 제안 ADR (→ `docs/decisions.md`, 다음 번호 ADR-027~)
 ```
-- ADR-027 — krtour-map 통합 모델 확정(in-process vs 운영 HTTP) + 클러스터링/요청큐 소유권  (DEC-01/04/05)
+- ADR-027 — kor-travel-map 통합 모델 확정(in-process vs 운영 HTTP) + 클러스터링/요청큐 소유권  (DEC-01/04/05)
 - ADR-028 — 정규 feature_id 포맷  (DEC-02)
 - ADR-029 — notice_plans 명칭 충돌 해소(curated_trip_plans 분리)  (DEC-03)
 - ADR-030 — 외부 API 규약 정본(envelope/pagination/coord/datetime/버전 prefix/에러 taxonomy)  (DEC-07)
@@ -246,4 +246,4 @@ ADR/Task에 반영.
 ## 9. 부록 — 증거 ID ↔ 원천
 P-* = 계획/프로세스 감사, A-* = 외부 API 감사, C-* = 코드 vs 문서 감사,
 D-* = 기능/도메인 감사. 각 발견의 file:line은 감사 당시 본문 기준이며 병합 시
-재확인한다. krtour-map 대조는 `python-krtour-map` HEAD `b775c74` 기준.
+재확인한다. kor-travel-map 대조는 `kor-travel-map` HEAD `b775c74` 기준.

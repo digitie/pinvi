@@ -1,9 +1,9 @@
-# data-model.md — TripMate `app` 도메인 데이터 모델
+# data-model.md — Pinvi `app` 도메인 데이터 모델
 
-본 문서는 TripMate가 소유하는 `app` schema의 도메인 모델이다. 지도 feature
-도메인(`feature` schema)은 `python-krtour-map`이 소유하며 본 문서 범위 밖이다.
+본 문서는 Pinvi가 소유하는 `app` schema의 도메인 모델이다. 지도 feature
+도메인(`feature` schema)은 `kor-travel-map`이 소유하며 본 문서 범위 밖이다.
 
-`feature` schema의 데이터 모델은 `python-krtour-map`의 `docs/data-model.md` 참고.
+`feature` schema의 데이터 모델은 `kor-travel-map`의 `docs/data-model.md` 참고.
 
 > **감사 후속 (2026-06-06, `docs/audit/2026-06-06-doc-impl-audit.md`)**:
 > ADR-029에 따라 사용자 대면 추천 여행은 `curated_trip_plans` 계열로 분리했고,
@@ -11,14 +11,14 @@
 > `feature_suggestions`로 실체화했다. `security_incidents`와 누락 `users` 컬럼 문서
 > 정합은 T-138, `trip_day_pois` 예산/currency 정합은 T-140에서 반영했다. ADR-036에
 > 따라 curated plan POI는 feature 없이도 존재할 수 있고, 외부 연계가 feature를 줄 때만
-> feature-backed POI로 upsert한다. Curated trip plan의 소스는 TripMate-native 큐레이션과
-> krtour-map `curated_features` 1:1 import가 모두 가능하다.
+> feature-backed POI로 upsert한다. Curated trip plan의 소스는 Pinvi-native 큐레이션과
+> kor-travel-map `curated_features` 1:1 import가 모두 가능하다.
 
 ## 1. 큰 그림
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ app schema (TripMate 소유)                                        │
+│ app schema (Pinvi 소유)                                        │
 │                                                                  │
 │  app.users                                                       │
 │   ├── app.user_oauth_identities  (kakao/naver/google/email)      │
@@ -51,7 +51,7 @@
                               │
                               ▼ feature_id (외부 schema reference)
 ┌──────────────────────────────────────────────────────────────────┐
-│ feature schema (python-krtour-map 소유)                          │
+│ feature schema (kor-travel-map 소유)                          │
 │   feature.features, feature.source_records, ...                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +59,7 @@
 `app.trip_day_pois.feature_id`와 `app.curated_plan_pois.feature_id`는 nullable이며,
 값이 있을 때는 `feature.features.feature_id`를 가리킨다. 두 컬럼에는
 **외래키 제약은 두지 않는다** (schema 책임 분리 — 라이브러리 schema가 우선
-변경되면 TripMate의 제약이 깨질 수 있음). 정합성은 응용 레이어에서 처리.
+변경되면 Pinvi의 제약이 깨질 수 있음). 정합성은 응용 레이어에서 처리.
 
 ## 2. 엔티티 카탈로그
 
@@ -312,7 +312,7 @@ shared-token 댓글 라우트는 shared-token 조회 구현 시 같은 테이블
 |------|------|------|
 | `attachment_id` | `uuid` (PK) | |
 | `owner_user_id` | `uuid` NOT NULL → `app.users` | |
-| `bucket` | `text` NOT NULL | `tripmate-app` 기본 |
+| `bucket` | `text` NOT NULL | `pinvi-app` 기본 |
 | `object_key` | `text` NOT NULL | RustFS key |
 | `mime_type` | `text` NOT NULL | |
 | `byte_size` | `bigint` NOT NULL | |
@@ -330,7 +330,7 @@ shared-token 댓글 라우트는 shared-token 조회 구현 시 같은 테이블
 
 외부 API 경로는 Sprint 4 호환을 위해 `/notice-plans`를 유지하지만, DB/ORM 정본은
 ADR-029의 `curated_*` 이름이다. `app.notice_plans`는 아래 §2.5의 운영 공지 전용이다.
-생성 소스는 TripMate 안에서 직접 만든 큐레이션과 krtour-map `curated_features`를
+생성 소스는 Pinvi 안에서 직접 만든 큐레이션과 kor-travel-map `curated_features`를
 REST로 조회해 1:1 복사한 큐레이션을 모두 포함한다.
 
 #### `app.curated_trip_plans`
@@ -350,17 +350,17 @@ REST로 조회해 1:1 복사한 큐레이션을 모두 포함한다.
 | `version` | `int` | optimistic lock |
 | `deleted_at`, `created_at`, `updated_at` | `timestamptz` | |
 
-현재 스키마의 출처 표시는 `source_name`과 `feature_snapshot` 중심이다. krtour
+현재 스키마의 출처 표시는 `source_name`과 `feature_snapshot` 중심이다. kor_travel_map
 `curated_features` REST 계약이 확정되고 import idempotency/refresh 추적이 필요해지면
 별도 migration으로 다음 후보 컬럼을 검토한다.
 
 | 후보 컬럼 | 대상 | 용도 |
 |-----------|------|------|
-| `source_system` | `curated_trip_plans` | `tripmate` / `krtour-map` 등 생성 소스 |
-| `source_curated_feature_id` | `curated_trip_plans` | krtour curated feature 원본 id |
+| `source_system` | `curated_trip_plans` | `pinvi` / `kor-travel-map` 등 생성 소스 |
+| `source_curated_feature_id` | `curated_trip_plans` | kor_travel_map curated feature 원본 id |
 | `source_curated_feature_version` | `curated_trip_plans` | refresh/idempotency 판단용 원본 버전 |
 | `source_imported_at` | `curated_trip_plans` | 마지막 import 시각 |
-| `source_curated_feature_item_id` | `curated_plan_pois` | krtour curated feature 하위 항목 원본 id |
+| `source_curated_feature_item_id` | `curated_plan_pois` | kor_travel_map curated feature 하위 항목 원본 id |
 
 위 후보는 설계 메모이며 현 migration에는 포함하지 않는다.
 
@@ -372,7 +372,7 @@ REST로 조회해 1:1 복사한 큐레이션을 모두 포함한다.
 | `curated_plan_id` | `uuid` NOT NULL → `app.curated_trip_plans` | ON DELETE CASCADE |
 | `day_index` | `int` | 1 이상 |
 | `sort_order` | `text COLLATE "C"` | LexoRank |
-| `feature_id` | `text` | nullable. krtour-map feature id 값 참조(FK 없음) |
+| `feature_id` | `text` | nullable. kor-travel-map feature id 값 참조(FK 없음) |
 | `feature_snapshot` | `jsonb` | 적재 시점 캐시 |
 | `memo` | `text` | |
 | `budget_amount` | `numeric(12,2)` | 0 이상 |
@@ -381,9 +381,9 @@ REST로 조회해 1:1 복사한 큐레이션을 모두 포함한다.
 | `custom_marker_color`, `custom_marker_icon` | `text` | |
 | `version`, `deleted_at`, `created_at`, `updated_at` | | |
 
-krtour `curated_features` import가 제공한 하위 항목은 이 테이블에 복사한다.
-항목이 krtour `feature_id`를 가지면 `feature_id`에 저장하고, 없으면 nullable POI로 둔다.
-TripMate-native 큐레이션에서 직접 만든 자유 POI도 같은 규칙을 따른다.
+kor_travel_map `curated_features` import가 제공한 하위 항목은 이 테이블에 복사한다.
+항목이 kor_travel_map `feature_id`를 가지면 `feature_id`에 저장하고, 없으면 nullable POI로 둔다.
+Pinvi-native 큐레이션에서 직접 만든 자유 POI도 같은 규칙을 따른다.
 
 #### `app.curated_plan_attachments`
 
@@ -455,7 +455,7 @@ RustFS 메타 테이블이다. curated → trip copy 시 새 row의 `source_atta
 #### `app.import_jobs`
 
 Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops` schema)와
-분리해서 TripMate 도메인 관점의 메타를 둔다.
+분리해서 Pinvi 도메인 관점의 메타를 둔다.
 
 | 컬럼 | 타입 | 비고 |
 |------|------|------|
@@ -493,7 +493,7 @@ Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops
             "attachment_id": "...",
             "feature_id": "f_2611000000_p_...",
             "feature": {
-              // python-krtour-map에서 join해 가져온 최신 정보
+              // kor-travel-map에서 join해 가져온 최신 정보
               "name": "...",
               "category": "...",
               "coord": [lon, lat]
@@ -509,7 +509,7 @@ Dagster run을 영속화하는 ops 보조 테이블. Dagster 자체 storage(`ops
 ```
 
 응답 빌더는 `apps/api/app/services/trip_view_builder.py`에 둔다. `feature_id`가 있는
-POI만 krtour-map `POST /v1/features/batch`로 batch 조회 후 join하고, feature 없는
+POI만 kor-travel-map `POST /v1/features/batch`로 batch 조회 후 join하고, feature 없는
 POI는 `feature_snapshot`으로 표시한다.
 
 ## 5. 인덱스 전략 (요약)
@@ -541,9 +541,9 @@ POI는 `feature_snapshot`으로 표시한다.
 ## 7. 의존 다이어그램 (외부 schema)
 
 ```
-app schema (TripMate)
-  └─ feature schema (python-krtour-map)
-       └─ source_records → provider_sync (python-krtour-map)
+app schema (Pinvi)
+  └─ feature schema (kor-travel-map)
+       └─ source_records → provider_sync (kor-travel-map)
 ```
 
 `app`은 `feature`를 컬럼 값(`feature_id`)으로만 참조한다. 외래키 없음. join은
@@ -611,9 +611,9 @@ Resend 통합:
 
 ### 8.5 `app.feature_suggestions` (SPEC V8 H-6 / DEC-05)
 
-사용자 feature 추가/정정/폐쇄 제안 큐. TripMate `app` schema가 소유하고,
-`POST /features/requests`는 krtour-map을 직접 호출하지 않는다. Admin 검사/승인 후
-krtour-map feature change API로 반영하는 흐름은 T-179에서 연결한다.
+사용자 feature 추가/정정/폐쇄 제안 큐. Pinvi `app` schema가 소유하고,
+`POST /features/requests`는 kor-travel-map을 직접 호출하지 않는다. Admin 검사/승인 후
+kor-travel-map feature change API로 반영하는 흐름은 T-179에서 연결한다.
 
 | 컬럼 | 비고 |
 |------|------|
@@ -625,7 +625,7 @@ krtour-map feature change API로 반영하는 흐름은 T-179에서 연결한다
 | `name`, `lng`, `lat`, `categories`, `note` | 사용자 입력 제안 내용 |
 | `status` | `pending` / `approved` / `rejected` / `added` / `duplicate` |
 | `reviewed_by_admin_id` | Admin 처리자. nullable |
-| `krtour_ref` | 승인 후 krtour `feature_id`/`request_id`/state 참조 payload |
+| `kor_travel_map_ref` | 승인 후 kor_travel_map `feature_id`/`request_id`/state 참조 payload |
 | `resolved_at` | 종료 시각 |
 
 pending 상태에서는 같은 사용자·kind·정규화 이름·소수 6자리 좌표 조합을 중복 등록하지

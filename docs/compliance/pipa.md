@@ -142,7 +142,7 @@ ADR 필요 — Sprint 6 또는 v2.
 - 마스킹 default (`a***@gmail.com`)
 - 사유 입력 후에만 원본 reveal
 - Admin 로그인 2FA (v2 후보)
-- 세션 1시간 (admin 별도) — `TRIPMATE_ADMIN_SESSION_TTL=3600`
+- 세션 1시간 (admin 별도) — `PINVI_ADMIN_SESSION_TTL=3600`
 - IP 화이트리스트 옵션
 
 ## 7. Privacy by Design 체크리스트 (PR 템플릿)

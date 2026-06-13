@@ -1,6 +1,6 @@
 # 사용자 위치 정보 — 웹 + 모바일 (Geolocation / expo-location)
 
-본 문서는 TripMate v2 프론트엔드(Next.js 웹 + Expo 모바일)에서 **사용자의 현재
+본 문서는 Pinvi v2 프론트엔드(Next.js 웹 + Expo 모바일)에서 **사용자의 현재
 위치 정보를 획득·사용**하는 기능 사양을 박는다. SPEC V8 #0 O장 (위치정보법 +
 PIPA)과 정합되며, 동의 → 권한 → 획득 → 사용 → 감사 로그 → 폴백의 전체 흐름을
 명시한다.
@@ -186,7 +186,7 @@ export const useUserLocation = (
 
 ```tsx
 // apps/web/app/(app)/page.tsx
-import { useUserLocation } from '@tripmate/hooks';
+import { useUserLocation } from '@pinvi/hooks';
 import { webLocationAdapter } from '@/lib/locationAdapter';
 import { useConsentStore } from '@/lib/stores';
 
@@ -225,8 +225,8 @@ export default function MapPage() {
 - `GET /features/{id}/weather?lat=&lng=` (좌표 기반 보정 시)
 
 - `GET /geo/reverse?lon=&lat=` — "내 위치"/지도 클릭 → 행정구역·주소 label
-  (kraddr-geo v2 `POST /v2/reverse`, ADR-025 / `docs/integrations/kraddr-geo.md`).
-  `purpose=reverse_geocode`로 적재. 역지오코딩은 krtour-map이 아니라 kraddr-geo
+  (kor-travel-geo v2 `POST /v2/reverse`, ADR-025 / `docs/integrations/kor-travel-geo.md`).
+  `purpose=reverse_geocode`로 적재. 역지오코딩은 kor-travel-map이 아니라 kor-travel-geo
   v2 REST 직접이다.
 
 서버 미들웨어 `apps/api/app/middleware/location_audit.py`:
@@ -260,7 +260,7 @@ async def location_audit(request: Request, call_next):
 - `/features/nearby` → `'nearby_attractions'`
 - `/features/in-bounds` → `'viewport_query'`
 - `/features/{id}/weather` → `'weather_at_coord'`
-- `/geo/reverse` → `'reverse_geocode'` (kraddr-geo v2, ADR-025)
+- `/geo/reverse` → `'reverse_geocode'` (kor-travel-geo v2, ADR-025)
 - 그 외 좌표 포함 endpoint → `'feature_request'`
 
 content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `docs/spec/v8/00-infrastructure.md` §3.3).

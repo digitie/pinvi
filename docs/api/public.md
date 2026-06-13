@@ -3,20 +3,20 @@
 비로그인 사용자도 접근 가능한 read-only endpoint. 로그인 화면의 축제 광고, 일반
 사용자의 지도 마커 layer 등.
 
-> **상태 (2026-06-12): 구현됨(T-130 / krtour T-222c).** krtour-map
+> **상태 (2026-06-12): 구현됨(T-130 / kor_travel_map T-222c).** kor-travel-map
 > `openapi.user.json`에 `/v1/public/beaches*`와 `/v1/public/festivals*` 표면이 추가됐고,
-> TripMate는 `app.clients.krtour_map.KrtourMapClient`로 해당 user OpenAPI를 호출해
-> `/public/*`에 투영한다. 수질/KHOA index/weather는 krtour 응답의 nullable 필드를 그대로
+> Pinvi는 `app.clients.kor_travel_map.KorTravelMapClient`로 해당 user OpenAPI를 호출해
+> `/public/*`에 투영한다. 수질/KHOA index/weather는 kor_travel_map 응답의 nullable 필드를 그대로
 > 노출한다.
 
 ## 1. 정책
 
 - 인증 없음 (cookie / Authorization 헤더 없어도 OK)
 - Rate limit: IP 기준 분당 60회 목표. 현재 앱 공통 `SlowAPI` 미들웨어는 아직 붙어 있지
-  않으므로 krtour upstream 한도와 edge/CDN 제한을 우선 적용하고, 앱 내 공통 rate-limit는
+  않으므로 kor_travel_map upstream 한도와 edge/CDN 제한을 우선 적용하고, 앱 내 공통 rate-limit는
   별도 후속에서 닫는다.
-- 응답 데이터는 krtour-map OpenAPI HTTP 계약에서 가져옴
-- TripMate `app.users` / `trips`는 노출 안 됨 — 본 endpoint는 라이브러리 feature
+- 응답 데이터는 kor-travel-map OpenAPI HTTP 계약에서 가져옴
+- Pinvi `app.users` / `trips`는 노출 안 됨 — 본 endpoint는 라이브러리 feature
   데이터만
 
 ## 2. Endpoint
@@ -75,7 +75,7 @@ GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cur
 }
 ```
 
-krtour-map 호출: `GET /v1/public/beaches`.
+kor-travel-map 호출: `GET /v1/public/beaches`.
 
 ### 2.2 `GET /public/beaches/map-markers`
 
@@ -200,15 +200,15 @@ GET /public/festivals/map-markers?max_items=500
 
 ## 3. 캐싱
 
-- krtour-map HTTP 응답은 process LRU (5분)
+- kor-travel-map HTTP 응답은 process LRU (5분)
 - CDN 캐싱 가능 — `Cache-Control: public, max-age=300`
 - viewport 의존 X — 단순 ID 기반 조회
 
 ## 4. AI agent 구현 체크리스트
 
 - [x] `apps/api/app/schemas/public.py` Pydantic + `packages/schemas/src/public.ts` Zod
-- [x] `apps/api/app/clients/krtour_map.py` — krtour-map `/v1/public/*` HTTP 호출
+- [x] `apps/api/app/clients/kor_travel_map.py` — kor-travel-map `/v1/public/*` HTTP 호출
 - [x] `apps/api/app/api/v1/public.py` 라우터
 - [x] `Cache-Control: public, max-age=300` 헤더 응답
 - [ ] 앱 내 공통 Rate limit 적용(IP 기준) — 공통 `SlowAPI` 미들웨어 도입 후 닫음
-- [x] 통합 테스트(`httpx` ASGI + fake krtour client)
+- [x] 통합 테스트(`httpx` ASGI + fake kor_travel_map client)

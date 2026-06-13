@@ -1,14 +1,14 @@
-# 16색 마커 팔레트 — TripMate v2
+# 16색 마커 팔레트 — Pinvi v2
 
 SPEC V8 #3 (I-6) + v1의 색상 reference HTML(`airbnb-marker-palette.html`)을
-TripMate v2의 마커 표시 표준으로 박는다.
+Pinvi v2의 마커 표시 표준으로 박는다.
 
 ## 1. 위치 / 책임
 
 - 색상 reference (사용자 시각 확인용): 저장소 루트 `airbnb-marker-palette.html`
   (브라우저로 직접 열어서 미리보기. v1 시점의 자산 그대로 보존)
 - 디자인 시스템 가이드(브랜드/타이포/컴포넌트): 저장소 루트 `DESIGN.md`
-  (v1 자산 — Airbnb 디자인 토큰 reference로 사용. TripMate 브랜드 결정 전 임시
+  (v1 자산 — Airbnb 디자인 토큰 reference로 사용. Pinvi 브랜드 결정 전 임시
   기준)
 - 본 문서: 마커 팔레트의 **운영 규칙** + 카테고리 매핑
 
@@ -73,8 +73,8 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
 
 - 카테고리 → 색상/아이콘 매핑은 **DB(`app.category_mappings`) + 라이브러리
   default 상수** 양쪽에서 관리.
-  - 라이브러리(`python-krtour-map`)에서 카테고리 마스터를 제공
-  - TripMate Admin이 `/admin/category-mapping`에서 사용자 override
+  - 라이브러리(`kor-travel-map`)에서 카테고리 마스터를 제공
+  - Pinvi Admin이 `/admin/category-mapping`에서 사용자 override
   - 클라이언트 fallback: 라이브러리 default → DB override → 사용자 custom
 - 사용자가 POI별로 색/아이콘을 직접 변경하면 `app.trip_day_pois.custom_marker_color` /
   `custom_marker_icon`에 저장 — 카테고리 매핑과 무관
@@ -90,7 +90,7 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
 - 색상 hex + 이름 + label color 미리보기
 
 > 위 HTML은 Airbnb 디자인 가이드(저장소 루트 `DESIGN.md`)를 기준으로 만든 reference 데모다.
-> TripMate 자체 브랜드가 확정되면 별도 ADR로 본 팔레트를 교체하거나 확장한다.
+> Pinvi 자체 브랜드가 확정되면 별도 ADR로 본 팔레트를 교체하거나 확장한다.
 
 ## 6. SPEC V8 cross-reference
 

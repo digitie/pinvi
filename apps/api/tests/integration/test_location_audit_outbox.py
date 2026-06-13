@@ -24,7 +24,7 @@ async def _make_user(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-d
 
     async with session_factory() as db:
         user = User(
-            email=f"outbox_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"outbox_{uuid.uuid4().hex[:8]}@pinvi.test",
             status="active",
             email_verified_at=datetime.now(UTC),
         )

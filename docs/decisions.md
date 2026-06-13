@@ -1,10 +1,10 @@
 # decisions.md — ADR (Architecture Decision Records)
 
-이 문서는 `TripMate`의 누적 ADR이다. 결정이 뒤집힐 때도 이전 기록은 지우지 않고
+이 문서는 `Pinvi`의 누적 ADR이다. 결정이 뒤집힐 때도 이전 기록은 지우지 않고
 `superseded by ADR-XXX`로 표시한다. 각 ADR은 PR과 함께 커밋되어 코드/문서/결정이
 동기된다.
 
-`python-krtour-map`의 ADR과 충돌·연계가 있으면 양쪽 ADR이 서로 참조한다.
+`kor-travel-map`의 ADR과 충돌·연계가 있으면 양쪽 ADR이 서로 참조한다.
 
 ## ADR-001: v1은 `v1` 브랜치 보존, main은 v2로 재시작
 
@@ -20,13 +20,13 @@
   - skill/runbook/decisions 사이의 일관성이 흐려짐.
 - **결정**: 현재 main의 모든 commit을 `v1` 브랜치에 보존하고, main은 같은 시점에서
   분기 후 대량 삭제 + v2 골격 신규 작성으로 다시 시작한다.
-  - 지도 feature 도메인은 별 저장소 `python-krtour-map`으로 완전 분리한다
-    (`python-krtour-map`의 ADR-001 mirror).
-  - TripMate ↔ `python-krtour-map`은 함수 직접 호출 (`python-krtour-map` ADR-003).
+  - 지도 feature 도메인은 별 저장소 `kor-travel-map`으로 완전 분리한다
+    (`kor-travel-map`의 ADR-001 mirror).
+  - Pinvi ↔ `kor-travel-map`은 함수 직접 호출 (`kor-travel-map` ADR-003).
   - v1의 개별 자산(예: 인증 라우트, Admin 콘솔, Resend 통합)은 v2에서 한 건씩
     ADR로 결정하고 가져온다.
 - **근거**:
-  - 책임 경계(TripMate vs `python-krtour-map`)를 처음부터 명확히 박는다.
+  - 책임 경계(Pinvi vs `kor-travel-map`)를 처음부터 명확히 박는다.
   - v1 코드를 완전히 폐기하지 않음 — `v1` 브랜치 + git history로 복구 가능.
   - 새 에이전트가 main만 봐도 v2 의도가 명확.
 - **결과 (긍정)**:
@@ -40,50 +40,50 @@
   - v2 골격(README/AGENTS/CLAUDE/SKILL + docs/) 작성 (본 PR).
   - Sprint 1 진입 PR에서 `apps/` scaffolding 박음.
 
-## ADR-002: TripMate ↔ `python-krtour-map`은 함수 직접 호출 (REST 없음)
+## ADR-002: Pinvi ↔ `kor-travel-map`은 함수 직접 호출 (REST 없음)
 
 - **상태**: superseded by ADR-026
 - **날짜**: 2026-05-25
 - **결정자**: 사용자
 - **컨텍스트**: 지도 feature 도메인을 별 저장소로 분리하기로 했다(ADR-001).
-  TripMate가 그 라이브러리를 어떻게 호출할지 결정 필요. 선택지:
+  Pinvi가 그 라이브러리를 어떻게 호출할지 결정 필요. 선택지:
   - (A) HTTP 마이크로서비스로 띄우고 REST 호출
   - (B) 같은 venv에 `pip install`해서 함수 직접 호출
-- **결정**: (B) `pip install` + 함수 직접 호출. `python-krtour-map` ADR-003 mirror.
+- **결정**: (B) `pip install` + 함수 직접 호출. `kor-travel-map` ADR-003 mirror.
 - **근거**:
   - 두 코드베이스가 같은 운영 환경(Odroid 단일 노드)에서 동작 → HTTP overhead 무의미.
   - 직렬화/역직렬화 비용 없음 — Pydantic DTO 직접 전달.
   - DB connection pool/transaction 공유 가능.
 - **결과 (긍정)**: 운영 단순화 + 성능 향상 + 디버깅 용이 + 타입 안전성.
-- **결과 (부정)**: 라이브러리 변경 시 TripMate 재배포 필요 (단일 venv).
+- **결과 (부정)**: 라이브러리 변경 시 Pinvi 재배포 필요 (단일 venv).
 - **후속**:
-  - `python-krtour-map` 의존은 `apps/api/pyproject.toml`에 git URL pin (`@<sha>`).
-  - 라이브러리는 자체 client/engine을 생성하지 않고 모두 TripMate에서 주입.
-  - 사용 패턴은 `docs/krtour-map-integration.md`.
+  - `kor-travel-map` 의존은 `apps/api/pyproject.toml`에 git URL pin (`@<sha>`).
+  - 라이브러리는 자체 client/engine을 생성하지 않고 모두 Pinvi에서 주입.
+  - 사용 패턴은 `docs/kor-travel-map-integration.md`.
 
-## ADR-003: `feature` / `provider_sync` schema는 `python-krtour-map`이 소유
+## ADR-003: `feature` / `provider_sync` schema는 `kor-travel-map`이 소유
 
 - **상태**: accepted
 - **날짜**: 2026-05-25
 - **결정자**: 사용자 + Claude
-- **컨텍스트**: 같은 PostgreSQL 데이터베이스(`tripmate`)에 두 저장소가 schema를
+- **컨텍스트**: 같은 PostgreSQL 데이터베이스(`pinvi`)에 두 저장소가 schema를
   나누어 가질 때 DDL/migration 책임을 어디에 두는지 결정 필요.
 - **결정**:
-  - `feature`, `provider_sync` schema의 DDL + Alembic migration은 `python-krtour-map`
+  - `feature`, `provider_sync` schema의 DDL + Alembic migration은 `kor-travel-map`
     이 소유.
-  - `app`, `ops` schema는 TripMate가 소유.
+  - `app`, `ops` schema는 Pinvi가 소유.
   - `x_extension` schema는 운영자가 수동 부트스트랩 (PostGIS / pg_trgm / pgcrypto).
 - **근거**:
   - 책임이 한 저장소에 몰리지 않게 분산.
   - Feature 스키마 변경은 라이브러리 PR에서 마이그레이션과 함께 박힌다 — 라이브러리
     버전 핀이 곧 schema 호환성 핀.
-- **결과 (긍정)**: schema 책임이 명확. TripMate가 라이브러리 schema에 함부로 손대지
+- **결과 (긍정)**: schema 책임이 명확. Pinvi가 라이브러리 schema에 함부로 손대지
   못한다.
 - **결과 (부정)**:
   - 두 Alembic을 따로 돌려야 한다. 운영 절차에 추가 단계.
   - schema 간 외래키 참조 시 alembic dependency 순서를 잘 정해야 한다.
 - **후속**:
-  - 운영 절차에 `python-krtour-map alembic upgrade head` → `tripmate alembic
+  - 운영 절차에 `kor-travel-map alembic upgrade head` → `pinvi alembic
     upgrade head` 순서 박음.
   - `docs/postgres-schema.md`에 `app` schema만 기록. `feature` / `provider_sync`는
     그쪽 저장소의 `docs/postgres-schema.md`를 참조.
@@ -94,13 +94,13 @@
 - **날짜**: 2026-05-25
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: v1 운영 중에 작업 모델이 두 번 흔들렸다:
-  - 모델 A — WSL ext4 직접 작업본 (`~/dev/tripmate`)과 NTFS export
-    (`/mnt/f/dev/tripmate`)
+  - 모델 A — WSL ext4 직접 작업본 (`~/dev/pinvi`)과 NTFS export
+    (`/mnt/f/dev/pinvi`)
   - 모델 B — NTFS 직접 작업 + WSL 미러 테스트
   v1의 마지막 상태(codex/wsl-test-mirror-docs)는 모델 B로 정렬되어 있다.
 - **결정**: **모델 B (WSL 미러)**를 v2의 표준으로 박는다.
-  - 작업 디렉토리는 NTFS (`F:\dev\tripmate`) — 사용자의 일상 작업 위치.
-  - WSL2 미러 (`~/tripmate-workspaces/tripmate`) — `git`/`pytest`/`docker`/`npm`
+  - 작업 디렉토리는 NTFS (`F:\dev\pinvi`) — 사용자의 일상 작업 위치.
+  - WSL2 미러 (`~/pinvi-workspaces/pinvi`) — `git`/`pytest`/`docker`/`npm`
     등 실행 위치.
   - 명령 전후로 rsync로 양방향 동기.
 - **근거**:
@@ -115,26 +115,26 @@
   - `AGENTS.md` "개발 환경 정책" 갱신.
   - PowerShell `rg.exe` 금지, WSL `rg` 강제.
 
-## ADR-005: provider raw → DTO 변환은 `python-krtour-map`에 위임 (TripMate 어댑터 제거)
+## ADR-005: provider raw → DTO 변환은 `kor-travel-map`에 위임 (Pinvi 어댑터 제거)
 
 - **상태**: accepted
 - **날짜**: 2026-05-25
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: v1에는 `apps/api/app/etl/<provider>/sources.py`, `loaders.py`,
   `opinet_source.py` 등 provider raw → 내부 모델 변환이 직접 박혀 있었다.
-- **결정**: v2에서는 그 책임을 모두 `python-krtour-map.providers`로 이전한다.
-  TripMate에는 `KrtourMapGateway` / `KrtourMapAdapter` 같은 wrapper class를 두지
-  않는다 (`python-krtour-map` ADR-006 mirror).
+- **결정**: v2에서는 그 책임을 모두 `kor-travel-map.providers`로 이전한다.
+  Pinvi에는 `KorTravelMapGateway` / `KorTravelMapAdapter` 같은 wrapper class를 두지
+  않는다 (`kor-travel-map` ADR-006 mirror).
 - **근거**:
   - 같은 provider에 대해 두 곳에서 변환 로직을 유지하지 않는다.
   - dedup / source_link / feature_id 정책이 라이브러리에 일관되게 박혀 있다.
   - 라이브러리 단위 테스트가 fixture 기반으로 가능.
-- **결과 (긍정)**: TripMate `apps/api`의 코드량 감소. provider 추가 시 작업 위치가
+- **결과 (긍정)**: Pinvi `apps/api`의 코드량 감소. provider 추가 시 작업 위치가
   하나.
 - **결과 (부정)**: 새 provider는 라이브러리에 PR을 먼저 보내야 함. 두 단계 PR.
 - **후속**:
   - Dagster asset 코드 (`apps/etl/assets/<name>.py`)는 얇은 어댑터로만 — provider
-    client 주입 + `AsyncKrtourMapClient` 호출 + 로깅.
+    client 주입 + `AsyncKorTravelMapClient` 호출 + 로깅.
   - v1의 provider 어댑터 코드는 cherry-pick하지 않는다 — 라이브러리 ADR-006 후속
     으로 재작성.
 
@@ -152,7 +152,7 @@
   - `apps/etl`의 의존성(`dagster`, `dagit`)이 `apps/api`의 venv에 들어가지 않는다.
   - Dagster code location 표준 패턴.
 - **결과 (긍정)**: 분리된 venv + 별도 컨테이너 + 재시작 독립.
-- **결과 (부정)**: 두 venv 유지 — `apps/api`와 `apps/etl` 모두 `python-krtour-map`
+- **결과 (부정)**: 두 venv 유지 — `apps/api`와 `apps/etl` 모두 `kor-travel-map`
   의존성을 갖는다.
 - **후속**:
   - `infra/docker-compose.yml`에 `dagster` 서비스 정의.
@@ -171,7 +171,7 @@
 - **근거**:
   - 단일 작성자라도 PR 페이지에서 한 번 더 변경 확인.
   - 자동 status check(lint, test, import-linter, openapi drift)를 강제할 수 있다.
-  - `python-krtour-map`과 동일 패턴(ADR-021).
+  - `kor-travel-map`과 동일 패턴(ADR-021).
 - **결과 (긍정)**: 회귀 방지 + 자동 게이트 + 일관된 워크플로.
 - **결과 (부정)**: 작은 docs 변경도 PR을 거쳐야 한다 — 약간의 오버헤드.
 - **후속**:
@@ -185,9 +185,9 @@
 - **날짜**: 2026-05-25
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: PostGIS / pg_trgm / pgcrypto를 `public`에 설치하면 dump/restore,
-  schema 비교, 권한 부여에서 혼선이 생긴다. `python-krtour-map`은 ADR-008로
+  schema 비교, 권한 부여에서 혼선이 생긴다. `kor-travel-map`은 ADR-008로
   `x_extension`을 채택했다.
-- **결정**: TripMate도 동일하게 `x_extension` schema를 사용한다.
+- **결정**: Pinvi도 동일하게 `x_extension` schema를 사용한다.
 - **근거**:
   - `feature`/`provider_sync`/`app`/`ops` schema가 깨끗하게 비즈니스 데이터만 가진다.
   - search_path를 `public, x_extension`으로 두면 호출 측 코드 변경 없음.
@@ -225,15 +225,15 @@
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: 외부에서 제공된 "여행 계획 서비스 SW 개발 명세서 V8" 6부작
   (`spec_v8_0_infrastructure` ~ `spec_v8_5_execution`)이 v1 시점에 작성되어
-  `python-krtour-map` 분리 이전의 단일 모노레포 가정을 일부 포함한다. 다만
+  `kor-travel-map` 분리 이전의 단일 모노레포 가정을 일부 포함한다. 다만
   원본의 후속 메모(M~R, 2026-05-16 ~ 2026-05-20)에는 이미 같은 책임 분리
   결정이 들어 있다. v2 골격 작성 후 본 SPEC을 어떻게 반영할지 결정 필요.
 - **결정**:
-  - SPEC V8 6편을 TripMate v2의 작업 기준으로 채택한다.
+  - SPEC V8 6편을 Pinvi v2의 작업 기준으로 채택한다.
   - 본 저장소에 `docs/spec/v8/` 디렉토리 신설 후 6편 적용 노트 작성 — 원본의
     의도를 v2 책임 분담(ADR-001/002/003)으로 재정리한다.
-  - 단일 모노레포 가정 부분(예: `feature.features` schema가 TripMate 안에 있다는
-    문장)은 후속 메모와 ADR-003에 따라 `python-krtour-map`이 소유하는 것으로
+  - 단일 모노레포 가정 부분(예: `feature.features` schema가 Pinvi 안에 있다는
+    문장)은 후속 메모와 ADR-003에 따라 `kor-travel-map`이 소유하는 것으로
     재해석. 원본을 수정하지 않고 본 저장소의 적용 노트에서 정리.
   - SPEC V8의 Sprint 1~6 계획(P장)을 본 저장소의 `docs/sprints/SPRINT-*.md`로
     가져온다. Sprint 3(Admin)이 Sprint 4(지도)보다 앞이라는 원본 결정 유지.
@@ -245,7 +245,7 @@
   - SPEC V8은 v1 시점의 작성이지만 도메인 정의/API/Admin/Sprint 계획이 매우
     구체적 — v2가 이를 모두 새로 작성할 필요 없다.
   - 원본의 후속 메모가 이미 책임 분리를 반영 — 추가 큰 결정 없이 적용 가능.
-  - python-krtour-map과 정합 유지를 위해 본 저장소도 같은 분리 원칙을 박는다.
+  - kor-travel-map과 정합 유지를 위해 본 저장소도 같은 분리 원칙을 박는다.
 - **결과 (긍정)**:
   - Sprint 1~6 계획이 즉시 가용 — 별도 plan 작성 비용 없음.
   - API 명세 + DB schema 골격이 명확.
@@ -262,7 +262,7 @@
   - `docs/design/marker-palette.md` 신규 + 저장소 루트 `DESIGN.md` /
     `airbnb-marker-palette.html` 복원 (본 PR).
   - `docs/data-model.md`, `docs/postgres-schema.md`, `docs/architecture.md`,
-    `docs/krtour-map-integration.md` 갱신 — SPEC V8 후속 메모와 정합.
+    `docs/kor-travel-map-integration.md` 갱신 — SPEC V8 후속 메모와 정합.
   - 원본 docx는 운영자가 `refdocs/` 또는 외부에 보관. 본 저장소 git에는
     포함하지 않음.
 
@@ -284,7 +284,7 @@
   - 모바일 (v2): Expo SDK 53+ + Expo Router + NativeWind (Tailwind for RN) +
     동일 Zustand / TanStack Query / RHF + Zod (공용)
   - 디자인 톤: 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html`을
-    v1.0의 단일 기준으로 사용 (TripMate 자체 브랜드 확정 시 ADR로 교체)
+    v1.0의 단일 기준으로 사용 (Pinvi 자체 브랜드 확정 시 ADR로 교체)
   - 공용 코드 위치: `packages/{schemas,api-client,state,design-tokens,hooks,i18n}`
     — Zod schema / 데이터 정의 / API 클라이언트 / 상태 store / 디자인 토큰 /
     공용 hook / 메시지 카탈로그를 모든 앱이 import
@@ -369,8 +369,8 @@
   사용자가 "v1에서 notice poi 관련 문서/코드 확인해서 보강할 것" 요청. 또한
   같은 단어 "notice"가 두 개의 별개 개념에 쓰여 혼동:
   1. **notice feature** — 지도 위 공지/자연현상 (SPEC V8 D-10, kind=notice,
-     `python-krtour-map` 소유)
-  2. **notice plan** — Admin이 작성한 추천 여행 plan (TripMate `app` schema)
+     `kor-travel-map` 소유)
+  2. **notice plan** — Admin이 작성한 추천 여행 plan (Pinvi `app` schema)
 - **결정**:
   - v1의 추천 여행 plan 도메인을 v2로 가져온다. 초기 도입 이름은
     `app.notice_plans` + `app.notice_pois` + `app.plan_poi_attachments`였으나,
@@ -378,7 +378,7 @@
     `app.curated_plan_pois` + `app.curated_plan_attachments`다.
   - **v1 코드를 cherry-pick하지 않고 본 저장소의 schema 정합성 + SPEC V8 E-6
     (COLLATE "C") + import-linter 계약에 맞춰 재작성**한다.
-  - 명명 정정: "notice plan" (TripMate 도메인) vs "notice feature" (라이브러리
+  - 명명 정정: "notice plan" (Pinvi 도메인) vs "notice feature" (라이브러리
     도메인) — 모든 신규 문서에서 두 개념을 명시적으로 구분.
   - v1 컬럼 `position INT` (trip_pois)는 v2의 `sort_order TEXT COLLATE "C"`로
     교체 (SPEC V8 E-6 Critical).
@@ -421,14 +421,14 @@
      - `docs/conventions/` 6개 (README/coding-style/database/testing/geospatial/normalization)
      - `docs/architecture/` 5개 추가 (map-marker-design/youtube-travel-intelligence/mcp-tools/dagster-etl-bridge/api-contract)
      - `docs/data-sources/README.md` 인덱스 + cross-ref
-  3. ADR-005 / ADR-001 / ADR-004 일관성 점검 — 모든 신규 문서가 책임 분담 (TripMate
-     vs `python-krtour-map`) 명시
+  3. ADR-005 / ADR-001 / ADR-004 일관성 점검 — 모든 신규 문서가 책임 분담 (Pinvi
+     vs `kor-travel-map`) 명시
   4. AI agent 진입 절차 강화 — `AGENTS.md` + `CLAUDE.md`에 작업 종류별 진입 문서표
   5. 명명 일관성: `pyXyz` 짧은 alias 사용 금지 → `python-xyz-api` canonical
 - **근거**:
   - v1의 9개월 운영 노하우를 v2로 가져오지 않으면 같은 결정을 반복
   - AI agent가 본 저장소 단일 진입점에서 모든 도메인 작업을 시작할 수 있어야 함
-  - 문서 일관성 결여는 책임 분담 (TripMate vs 라이브러리) 오인의 가장 큰 원인
+  - 문서 일관성 결여는 책임 분담 (Pinvi vs 라이브러리) 오인의 가장 큰 원인
 - **결과 (긍정)**:
   - AI agent가 한 PR에서 작업 진입에 필요한 모든 문서를 찾을 수 있음
   - v1 자산 (특히 notice_plans / plan_poi_attachments / oauth flow / Resend
@@ -461,22 +461,22 @@
   - 환경변수 `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` / `KAKAO_REST_API_KEY` 제거 →
     `NEXT_PUBLIC_VWORLD_API_KEY`만 사용
   - `apps/web/lib/coordAdapter.ts` (`(lat, lng)` 변환 어댑터) 제거 — VWorld는
-    `(lng, lat)` GeoJSON 순서를 따르므로 TripMate stack과 일관
+    `(lng, lat)` GeoJSON 순서를 따르므로 Pinvi stack과 일관
   - 라이브러리는 git URL pin 또는 npm 배포로 `apps/web`이 직접 import
-  - TripMate에 wrapper class 만들지 않음 (ADR-005 mirror) — 부족 기능은
+  - Pinvi에 wrapper class 만들지 않음 (ADR-005 mirror) — 부족 기능은
     `maplibre-vworld-js` 저장소에 PR
   - 라이브러리에 있는 `PlaceMarker` / `PriceMarker` / `WeatherMarker` /
     `ClusterLayer` (이전 `MarkerClusterer`) / `PolygonArea` / `RouteLine` /
     `Popup` (이전 `MapPopup`) generic primitive 직접 사용
   - 16색 팔레트 (P-01 ~ P-16) hex 값을 라이브러리 마커 컴포넌트에 props로 전달
-  - **TripMate 도메인 wrapper (`TripmateFeatureLayer`)와 팔레트 상수
-    (`TRIPMATE_MARKER_PALETTE` / `TRIPMATE_CATEGORY_MARKERS` /
-    `resolveTripmateMarkerStyle`)는 라이브러리에 두지 않고 `apps/web/lib`에서
+  - **Pinvi 도메인 wrapper (`PinviFeatureLayer`)와 팔레트 상수
+    (`PINVI_MARKER_PALETTE` / `PINVI_CATEGORY_MARKERS` /
+    `resolvePinviMarkerStyle`)는 라이브러리에 두지 않고 `apps/web/lib`에서
     직접 구현** — 라이브러리는 generic primitive에 한정
 - **근거**:
   - 좌표 순서 일관 — `(lng, lat)` 전체 stack
   - 선언형 React — `useEffect`로 명령형 호출 불필요
-  - 마커 / 클러스터 / Popup / Polygon / RouteLine generic primitive 라이브러리에 내장 (TripMate 도메인 매핑은 `apps/web/lib`에서 어댑터)
+  - 마커 / 클러스터 / Popup / Polygon / RouteLine generic primitive 라이브러리에 내장 (Pinvi 도메인 매핑은 `apps/web/lib`에서 어댑터)
   - VWorld는 국토교통부 공식 — 위탁자 명시 간소 (국내)
   - 카카오맵 SDK 오프라인 캐싱 약관 제약 회피 (PWA v2 후보 활성화)
   - 같은 진영 (Antigravity / 내부 자산) — wrapper 추가 없이 직접 의존 가능
@@ -484,9 +484,9 @@
   - 좌표 어댑터 제거 → 코드 단순화
   - WebGL GPU 렌더링 (60fps fractional zoom)
   - 16색 + Maki 통합 더 자연스러움
-  - 사용 / 보강 권한이 TripMate 측에 있음 (내부 라이브러리)
+  - 사용 / 보강 권한이 Pinvi 측에 있음 (내부 라이브러리)
 - **결과 (부정)**:
-  - Kakao Local 검색이 빠짐 — `/search` 구현은 `python-krtour-map`의 검색
+  - Kakao Local 검색이 빠짐 — `/search` 구현은 `kor-travel-map`의 검색
     함수로 대체 (또는 라이브러리 추가)
   - Kakao 모빌리티 길찾기가 빠짐 — Sprint 6 일정 최적화는 OR-Tools 직선 거리 +
     라이브러리 PR로 대응
@@ -529,7 +529,7 @@
     저장소의 `AGENTS.md`에 위임하는 1쪽 stub만 둔다 (v1에서 했던 것처럼 별도
     rule 전체를 옮기지 않는다).
 - **근거**:
-  - 도구 다양화는 막을 수 없음 — TripMate 자체도 Antigravity로 만든
+  - 도구 다양화는 막을 수 없음 — Pinvi 자체도 Antigravity로 만든
     `maplibre-vworld-js` (ADR-015)를 사용
   - fact drift는 운영 사고의 흔한 원인 (특히 식별자 / 환경변수 / 정책 충돌)
   - 두 파일 동기는 PR 리뷰 시점에 자연스럽게 강제 가능
@@ -551,10 +551,10 @@
 
 - **상태**: accepted
 - **날짜**: 2026-05-26
-- **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `tripmate-` 변경
-  (`geo-claude` → `tripmate-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/tripmate-<agent>`.
+- **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `pinvi-` 변경
+  (`geo-claude` → `pinvi-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/pinvi-<agent>`.
   실제 worktree 디렉터리는 `git worktree move`로 rename.
-- **amendment (2026-05-31)**: Windows worktree(NTFS, 예: `F:/dev/tripmate-claude`)에서
+- **amendment (2026-05-31)**: Windows worktree(NTFS, 예: `F:/dev/pinvi-claude`)에서
   git 명령은 **Windows 버전 git (`git.exe`)** 으로 실행한다 (사용자 지시). WSL git으로
   `/mnt/f/...` NTFS 경로를 조작하지 않는다 — 권한·I/O 성능·CRLF 변환 문제. pytest /
   docker / npm 등 나머지 실행은 ADR-004대로 WSL ext4 미러를 유지한다 (git만 예외).
@@ -570,11 +570,11 @@
   로컬 인덱스를 두며 1회 init 후 incremental sync로 유지된다.
 - **결정**:
   - **agent별 고정 worktree**:
-    - Claude Code → worktree 이름 `tripmate-claude` (예: `F:/dev/tripmate-claude`)
-    - OpenAI Codex (CLI / VS Code) → `tripmate-codex`
-    - Google Antigravity 2.0 → `tripmate-antigravity`
-    - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/tripmate-<agent>`,
-      WSL `~/tripmate-workspaces/tripmate-<agent>`).
+    - Claude Code → worktree 이름 `pinvi-claude` (예: `F:/dev/pinvi-claude`)
+    - OpenAI Codex (CLI / VS Code) → `pinvi-codex`
+    - Google Antigravity 2.0 → `pinvi-antigravity`
+    - worktree 이름은 고정. 경로는 자유 (예: NTFS `F:/dev/pinvi-<agent>`,
+      WSL `~/pinvi-workspaces/pinvi-<agent>`).
   - **작업 단위는 worktree가 아니라 branch**:
     - 새 작업 시작 시 같은 worktree 안에서 `git fetch && git switch -c agent/<agent>-<task> origin/main`.
       (로컬 `main` ref는 trunk가 점유 — worktree에서는 `origin/main`을 직접 기준 ref로 쓴다.
@@ -586,7 +586,7 @@
     - 이후 task 시작 시 `codegraph sync` (incremental).
     - `.codegraph/` 디렉터리는 `.gitignore`에 박힘 (로컬 SQLite, 머신 / worktree
       마다 별개).
-  - **사람이 직접 만지는 trunk** `F:/dev/tripmate` (메인 checkout)은 자유.
+  - **사람이 직접 만지는 trunk** `F:/dev/pinvi` (메인 checkout)은 자유.
     AI 도구는 절대 trunk를 직접 만지지 않고 각자의 worktree만 사용.
   - **runbook** `docs/runbooks/codegraph-worktrees.md`가 1차 reference.
 - **근거**:
@@ -619,7 +619,7 @@
 - **상태**: accepted
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
-- **컨텍스트**: TripMate v1은 한국 사용자만 대상. 한국 공공 API (VWorld / KMA /
+- **컨텍스트**: Pinvi v1은 한국 사용자만 대상. 한국 공공 API (VWorld / KMA /
   VisitKorea 등) TOS가 한국 도메인 / IP 제한을 두는 항목이 있고, LBS 사업자
   신고도 국내 대상 한정. 해외 IP는 차단해 트래픽 / API 한도 / 법적 리스크를
   통째로 줄인다.
@@ -632,7 +632,7 @@
        `X-Real-IP` 또는 `CF-Connecting-IP` 헤더 기준 MaxMind 또는
        `python-vworld-api`의 행정구역 조회로 검증. 응용 단계 fallback.
   - **차단 응답**: HTTP 451 (Unavailable For Legal Reasons) + landing page
-    안내 (한/영) — "TripMate는 한국 거주자 전용 서비스입니다."
+    안내 (한/영) — "Pinvi는 한국 거주자 전용 서비스입니다."
   - **예외**: admin / cpo role 사용자는 비KR에서도 접근 허용 (운영자 출장 등).
     `geofence.py`에서 인증된 사용자 role 확인 후 우회.
   - **VPN / Tor**: Cloudflare WAF에서 known VPN/Tor exit node도 차단 옵션
@@ -660,21 +660,21 @@
   - 해외 진출 결정 시 본 ADR superseded — 동시 결정 PR 필수
 - **참조**: SPRINT-6 DoD, `docs/compliance/lbs-act.md`
 
-## ADR-019: TripMate MCP 외부 인터페이스 서빙 (read-only)
+## ADR-019: Pinvi MCP 외부 인터페이스 서빙 (read-only)
 
 - **상태**: accepted
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: AI agent (Claude Code / Codex / Antigravity / 사용자 본인의
-  Claude Desktop 등)가 TripMate 데이터를 직접 query할 수 있으면 trip planning
+  Claude Desktop 등)가 Pinvi 데이터를 직접 query할 수 있으면 trip planning
   loop가 짧아진다 — "내 부산 여행에 추가할 카페 추천" / "다음 주 일정 보여줘"
   등을 사용자가 AI 도구에 직접 물어볼 수 있다. MCP (Model Context Protocol,
   Anthropic 표준)는 이런 외부 노출의 사실상 표준 포맷.
 - **결정**:
-  - TripMate가 **MCP 서버를 노출**한다 (Sprint 6, v1.0에 포함).
+  - Pinvi가 **MCP 서버를 노출**한다 (Sprint 6, v1.0에 포함).
   - **트랜스포트**: stdio + SSE 둘 다 지원. stdio는 Claude Desktop 로컬, SSE
     는 Claude Code remote MCP / web client. (`apps/api/app/mcp/server.py`)
-  - **인증**: 전용 MCP 토큰 (JWT scope=`mcp:read`). 일반 `tripmate_access`
+  - **인증**: 전용 MCP 토큰 (JWT scope=`mcp:read`). 일반 `pinvi_access`
     cookie 토큰과 분리 — MCP 토큰은 long-lived (30일 default, 무한대 옵션) +
     사용자가 `/users/me/mcp-tokens`에서 발급 / 회수.
   - **tools (1차)** — 모두 **read-only**:
@@ -718,10 +718,10 @@
   rate limit / 비용 / 책임 분리 측면에서 본 서비스와 lifecycle이 다르다. 또
   본 저장소가 한국 전용 (ADR-018)인 반면 AI API는 글로벌 (US/EU 호스팅).
 - **결정**:
-  - T-107을 본 저장소에서 **제거**. 별 repo `tripmate-ai-companion` (또는
+  - T-107을 본 저장소에서 **제거**. 별 repo `kor-travel-concierge` (또는
     사용자 지정 명)로 분리.
-  - **통신 패턴**: 로컬 docker-to-docker 호출 — `tripmate-ai-companion`이
-    별도 컨테이너로 동일 호스트(Odroid / N150)에서 실행, TripMate API는
+  - **통신 패턴**: 로컬 docker-to-docker 호출 — `kor-travel-concierge`이
+    별도 컨테이너로 동일 호스트(Odroid / N150)에서 실행, Pinvi API는
     `http://ai-companion:8000/...`으로 호출.
   - **인터페이스**: HTTP API + MCP 토큰 (ADR-019 재사용 가능) 두 가지 지원.
   - **AI provider**: Gemini / Claude / Codex 중 사용자 선택. 별 repo의
@@ -746,7 +746,7 @@
 - **후속**:
   - 별 repo 생성 — 사용자 결정 시점 / 명명
   - `docs/integrations/ai-companion.md` 신규 (Sprint 6 진입 시)
-  - `docs/tasks.md`에서 T-107 → "deferred to `tripmate-ai-companion` repo"
+  - `docs/tasks.md`에서 T-107 → "deferred to `kor-travel-concierge` repo"
 - **참조**: ADR-019 (MCP), ADR-018 (한국 전용)
 
 ## ADR-021: GitHub Actions CI/CD 재활성화
@@ -771,7 +771,7 @@
 - **amendment (2026-06-07)**: PR review reminder는 `scripts/pr_review_monitor.py`로
   단일화한다. `pull_request` 이벤트는 `opened` / `ready_for_review` / `reopened` /
   `synchronize`에서 즉시 대상 PR을 확인하고, 5분 schedule은 GitHub 지연 가능성을
-  감안한 보정 감시로 둔다. 알림 본문은 `python-krtour-map`과 같은 MCP 진입 방식
+  감안한 보정 감시로 둔다. 알림 본문은 `kor-travel-map`과 같은 MCP 진입 방식
   (CodeGraph / Playwright / Sequential Thinking / Telegram)을 명시하되, 외부 LLM API
   key와 GitHub secret은 계속 쓰지 않는다.
 - **컨텍스트**: Sprint 1~3 진행 중 사용자 지시 "깃헙 ci / cd 쓰지마"로 PR #10
@@ -828,7 +828,7 @@
       (`/admin/backup` 페이지).
   - **Backup**:
     - `pg_dump --format=custom` → `app` + `app.audit` schema만
-      (라이브러리 schema는 `python-krtour-map`이 별도 백업).
+      (라이브러리 schema는 `kor-travel-map`이 별도 백업).
     - 결과 파일을 RustFS (`backup` 버킷) + 옵션으로 외부 (BackBlaze B2 또는
       NAS) 미러.
     - **자동**: 매일 03:00 KST (Dagster schedule 또는 systemd timer).
@@ -931,14 +931,14 @@
 - **날짜**: 2026-06-01
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: ADR-017로 AI 도구(Claude / Codex / Antigravity)마다 NTFS에 고정
-  worktree(`F:/dev/tripmate-<agent>`)를 두고, NTFS worktree에서 git을 Windows 버전
+  worktree(`F:/dev/pinvi-<agent>`)를 두고, NTFS worktree에서 git을 Windows 버전
   git(`git.exe`)으로 실행하기로 했다. 그런데 `docs/dev-environment.md`는 여전히
   ADR-004 시절의 구 모델("WSL ext4 미러가 표준 작업 위치", "Git source of truth는
   ext4", commit은 ext4 한 쪽에서만, 양방향 rsync)을 서술하고 있었다. 두 모델이
   공존하면서 다음 실제 사고가 반복됐다:
   - **worktree 포인터 환경 혼용**: codex worktree의 `.git`는
-    `gitdir: /mnt/f/dev/tripmate/.git/worktrees/tripmate-codex`(WSL에서 생성),
-    claude worktree는 `gitdir: F:/dev/tripmate/.git/worktrees/...`(Windows에서
+    `gitdir: /mnt/f/dev/pinvi/.git/worktrees/pinvi-codex`(WSL에서 생성),
+    claude worktree는 `gitdir: F:/dev/pinvi/.git/worktrees/...`(Windows에서
     생성)로 절대경로 표기가 환경별로 달랐다. 같은 worktree를 다른 환경 git으로
     다루면 `fatal: not a git repository` / `git worktree list`에서 `prunable`로
     표시되고, 그 상태로 `git worktree prune`을 돌리면 살아있는 worktree 등록까지
@@ -948,15 +948,15 @@
     헤맸다. 특히 rsync 왕복 중 파일 일부에 중복/오염이 섞이는 사고가 있었다.
   - **WSL에서 Windows 도구 PATH 오염**: `npm`/`git`이 `/mnt/c/...`의 Windows
     shim으로 잡혀 `node: not found`, UNC 경로 경고, 잘못된 경로 전달이 발생.
-  같은 NTFS+WSL 혼용 문제를 별 저장소 `python-kraddr-geo`가 ADR-041로 이미
+  같은 NTFS+WSL 혼용 문제를 별 저장소 `kor-travel-geo`가 ADR-041로 이미
   해결했고(동일 패턴), 본 저장소도 그 패턴으로 통일한다.
 - **결정**:
   - **git source of truth = NTFS worktree**. 코드 편집 / branch / commit / push /
-    PR은 NTFS worktree(`F:/dev/tripmate-<agent>`)에서 Windows git(`git.exe`)으로만
+    PR은 NTFS worktree(`F:/dev/pinvi-<agent>`)에서 Windows git(`git.exe`)으로만
     수행한다. ADR-004의 "Git source of truth는 ext4" 문장은 **supersede**.
   - **WSL ext4 = 일회용 테스트 미러**. 의존성 설치(`uv`/`pip`/`npm`), 테스트
     (`pytest`/통합), Docker, 장기 실행(`uvicorn`)은 ext4 미러
-    (`~/tripmate-workspaces/tripmate-<agent>`)에서 수행한다. **미러에서는 commit /
+    (`~/pinvi-workspaces/pinvi-<agent>`)에서 수행한다. **미러에서는 commit /
     push 하지 않는다.**
   - **rsync는 단방향(NTFS → ext4)**. 작업/검증 직전 NTFS worktree → ext4 미러로
     `rsync -a --delete` 복사. 검증 중 발견한 수정은 **NTFS worktree에 직접 반영**
@@ -974,7 +974,7 @@
     Windows 탐색기 / IDE에서 같은 파일을 그대로 본다.
   - ext4를 실행 전용 일회용으로 두면 양방향 동기의 오염 위험이 사라지고, 미러는
     언제든 폐기·재생성 가능하다(I/O·inotify·권한은 ext4가 우월).
-  - `python-kraddr-geo` ADR-041과 동일 패턴 → 도구·저장소 간 일관.
+  - `kor-travel-geo` ADR-041과 동일 패턴 → 도구·저장소 간 일관.
 - **결과 (긍정)**: 환경 모델 단일화. codex/antigravity도 같은 절차를 따른다.
   worktree prune 사고·rsync 오염·git.exe vs WSL git 혼용이 문서로 차단된다.
 - **결과 (부정)**: 작업 직전 단방향 rsync 1회가 필요. ext4에서 포맷한 파일은
@@ -985,163 +985,163 @@
   - `docs/runbooks/codegraph-worktrees.md`에 Windows/WSL git 포인터 함정 절 +
     ADR-024 참조 추가.
 - **참조**: ADR-004(미러 모델 — 디스크/경로는 유지, source-of-truth 주장만
-  supersede), ADR-017(worktree + git.exe), `python-kraddr-geo` 진영
+  supersede), ADR-017(worktree + git.exe), `kor-travel-geo` 진영
   ADR-041, `docs/dev-environment.md`.
 
-## ADR-025: 사용자 대면 geocoding은 `python-kraddr-geo` v2 REST API 직접 호출
+## ADR-025: 사용자 대면 geocoding은 `kor-travel-geo` v2 REST API 직접 호출
 
 - **상태**: accepted
 - **날짜**: 2026-06-02
 - **결정자**: 사용자 + Claude
-- **컨텍스트**: TripMate는 두 종류의 외부 도메인 데이터를 쓴다.
+- **컨텍스트**: Pinvi는 두 종류의 외부 도메인 데이터를 쓴다.
   1. **Feature 데이터**(place/event/notice/price/weather/route/area) — 당시 기준은
-     `python-krtour-map` 함수 직접 호출(ADR-002)이었으나, 이후 ADR-026으로
+     `kor-travel-map` 함수 직접 호출(ADR-002)이었으나, 이후 ADR-026으로
      OpenAPI HTTP 계약으로 전환.
   2. **Geocoding/주소**(주소→좌표 geocode, 좌표→주소 reverse, 주소/장소 search,
-     행정구역 region 조회) — 사용자가 "geocoding 관련 기능은 kraddr-geo v2 API에
+     행정구역 region 조회) — 사용자가 "geocoding 관련 기능은 kor-travel-geo v2 API에
      직접 접근"하라고 지시.
-  그런데 기존 문서(`docs/api/regions.md`, `docs/krtour-map-integration.md`)는
-  region/주소 조회를 **krtour-map 함수 호출 경유**로 서술해, 지시와 어긋났다.
-  한편 `python-kraddr-geo`는 이미 v2 REST API(`POST /v2/geocode|reverse|search`,
-  candidate 목록 표면)를 제공하고, krtour-map도 자기 ETL 적재 시 이 v2 REST를
-  HTTP로 호출한다(krtour-map `address-geocoding.md`, ADR-006). 즉 v2 REST가
+  그런데 기존 문서(`docs/api/regions.md`, `docs/kor-travel-map-integration.md`)는
+  region/주소 조회를 **kor-travel-map 함수 호출 경유**로 서술해, 지시와 어긋났다.
+  한편 `kor-travel-geo`는 이미 v2 REST API(`POST /v2/geocode|reverse|search`,
+  candidate 목록 표면)를 제공하고, kor-travel-map도 자기 ETL 적재 시 이 v2 REST를
+  HTTP로 호출한다(kor-travel-map `address-geocoding.md`, ADR-006). 즉 v2 REST가
   geocoding의 공식 표면이다.
 - **결정**:
-  - **TripMate 사용자 대면 geocoding은 `kraddr-geo` v2 REST API를 직접 HTTP 호출**
+  - **Pinvi 사용자 대면 geocoding은 `kor-travel-geo` v2 REST API를 직접 HTTP 호출**
     한다. `apps/api`가 `httpx.AsyncClient`로 `POST /v2/geocode|reverse|search`를
-    부른다. krtour-map을 경유하지 않는다.
+    부른다. kor-travel-map을 경유하지 않는다.
     - 신설 endpoint(예): `GET /geo/search`, `GET /geo/reverse`, `GET /geo/geocode`
-      — TripMate가 v2 candidate를 자기 응답 셰입(`{data, meta}`)으로 래핑.
-  - **Feature 데이터는 krtour-map 계약** — 본 결정은 geocoding 경계만 다루며,
+      — Pinvi가 v2 candidate를 자기 응답 셰입(`{data, meta}`)으로 래핑.
+  - **Feature 데이터는 kor-travel-map 계약** — 본 결정은 geocoding 경계만 다루며,
     feature 데이터 경계는 이후 ADR-026의 OpenAPI HTTP 계약을 따른다.
-  - **경계**: TripMate는 kraddr-geo의 **v2 REST 표면만** 의존한다. python 패키지
-    (`kraddr.geo`) in-process import나 DB 직접 접근을 사용자 대면 경로에서 쓰지
-    않는다(krtour-map이 ETL 내부에서 쓰는 것과 별개). v1 vworld-호환 표면(`/v1/
+  - **경계**: Pinvi는 kor-travel-geo의 **v2 REST 표면만** 의존한다. python 패키지
+    (`kor_travel_geo`) in-process import나 DB 직접 접근을 사용자 대면 경로에서 쓰지
+    않는다(kor-travel-map이 ETL 내부에서 쓰는 것과 별개). v1 vworld-호환 표면(`/v1/
     address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
   - **region 조회**(시도/시군구/법정동)도 v2로 수렴: 좌표→행정구역은 `POST
     /v2/reverse`(`include_region=true`)의 `candidates[].region`, 행정구역 검색은
-    `POST /v2/search`(`type="district"`)로 처리한다. 기존 `regions.md`의 krtour-map
+    `POST /v2/search`(`type="district"`)로 처리한다. 기존 `regions.md`의 kor-travel-map
     경유 서술은 본 ADR로 정정한다.
-  - **VWorld/juso/epost 등 외부 API 직접 호출 금지** — 모두 kraddr-geo REST 내부
-    책임(`fallback="api"`). TripMate는 v2 응답만 신뢰.
+  - **VWorld/juso/epost 등 외부 API 직접 호출 금지** — 모두 kor-travel-geo REST 내부
+    책임(`fallback="api"`). Pinvi는 v2 응답만 신뢰.
 - **근거**:
-  - 사용자 지시 + kraddr-geo가 이미 v2 REST를 공식 표면으로 제공.
+  - 사용자 지시 + kor-travel-geo가 이미 v2 REST를 공식 표면으로 제공.
   - geocoding은 feature 적재와 lifecycle/배포가 다르다(별 서비스로 기동 가능,
-    HTTP 경계가 자연스럽다). 함수 호출로 묶으면 krtour-map에 불필요한 결합.
-  - krtour-map과 동일한 v2 표면을 공유 → 좌표·코드 해석 일관(같은 `(lon,lat)`,
+    HTTP 경계가 자연스럽다). 함수 호출로 묶으면 kor-travel-map에 불필요한 결합.
+  - kor-travel-map과 동일한 v2 표면을 공유 → 좌표·코드 해석 일관(같은 `(lon,lat)`,
     같은 region 코드 체계).
-- **결과 (긍정)**: geocoding 의존이 명확한 HTTP 경계 1개로 단순화. krtour-map
-  버전과 독립적으로 geocoding 진화. 캐싱/rate-limit을 TripMate가 자기 경계에서 관리.
+- **결과 (긍정)**: geocoding 의존이 명확한 HTTP 경계 1개로 단순화. kor-travel-map
+  버전과 독립적으로 geocoding 진화. 캐싱/rate-limit을 Pinvi가 자기 경계에서 관리.
 - **결과 (부정)**: in-process 함수 호출 대비 HTTP hop(직렬화·네트워크). 단 같은
-  호스트(docker network)면 무시 가능. kraddr-geo REST 서비스가 reachable해야 함
+  호스트(docker network)면 무시 가능. kor-travel-geo REST 서비스가 reachable해야 함
   (healthz 의존).
 - **후속**:
-  - `docs/integrations/kraddr-geo.md` 신규 — v2 endpoint 계약 + httpx client 주입 +
+  - `docs/integrations/kor-travel-geo.md` 신규 — v2 endpoint 계약 + httpx client 주입 +
     환경변수 + 캐싱 + 에러 매핑 + 위치 감사 + 사용처 + AI agent 체크리스트 (본 PR).
-  - `docs/api/regions.md` 정정 — krtour-map 경유 → kraddr-geo v2 직접.
+  - `docs/api/regions.md` 정정 — kor-travel-map 경유 → kor-travel-geo v2 직접.
   - `docs/architecture/user-location.md` — 역지오코딩 region label 경로를 v2 reverse로.
-  - `docs/krtour-map-integration.md` — geocoding은 본 경계 밖임을 명시.
+  - `docs/kor-travel-map-integration.md` — geocoding은 본 경계 밖임을 명시.
   - 열린 결정은 `docs/architecture/geocoding-open-decisions.md`에 별도 정리(본 PR).
-- **참조**: ADR-002(superseded), ADR-026(krtour-map OpenAPI HTTP), ADR-003(schema
-  책임), `python-krtour-map` `docs/address-geocoding.md`·ADR-006,
-  `python-kraddr-geo` `docs/api-reference/v2/*`.
+- **참조**: ADR-002(superseded), ADR-026(kor-travel-map OpenAPI HTTP), ADR-003(schema
+  책임), `kor-travel-map` `docs/address-geocoding.md`·ADR-006,
+  `kor-travel-geo` `docs/api-reference/v2/*`.
 
-## ADR-026: TripMate ↔ `python-krtour-map`은 최신 OpenAPI HTTP 계약으로 전환
+## ADR-026: Pinvi ↔ `kor-travel-map`은 최신 OpenAPI HTTP 계약으로 전환
 
 - **상태**: accepted
 - **날짜**: 2026-06-04
 - **결정자**: 사용자 + Codex
-- **컨텍스트**: ADR-002는 `python-krtour-map`을 같은 venv에서 함수 직접 호출하는
-  모델로 TripMate 통합을 정의했다. 그러나 2026-06-04에 최신 `python-krtour-map`
+- **컨텍스트**: ADR-002는 `kor-travel-map`을 같은 venv에서 함수 직접 호출하는
+  모델로 Pinvi 통합을 정의했다. 그러나 2026-06-04에 최신 `kor-travel-map`
   `main`을 새로 받아 확인한 결과, 그 저장소의 현재 권위 계약은
-  `packages/krtour-map-admin/openapi.user.json`(TripMate/user-facing subset)과
-  `packages/krtour-map-admin/openapi.json`(Admin/ops/debug 포함 전체 OpenAPI)이다.
-  `docs/tripmate-rest-api.md`와 `docs/openapi-admin-contract.md`도 TripMate가
-  krtour-map을 import/DB 직접 접근하지 않고 OpenAPI HTTP로 호출해야 한다고
+  `packages/kor-travel-map-admin/openapi.user.json`(Pinvi/user-facing subset)과
+  `packages/kor-travel-map-admin/openapi.json`(Admin/ops/debug 포함 전체 OpenAPI)이다.
+  `docs/pinvi-rest-api.md`와 `docs/openapi-admin-contract.md`도 Pinvi가
+  kor-travel-map을 import/DB 직접 접근하지 않고 OpenAPI HTTP로 호출해야 한다고
   명시한다.
 - **결정**:
-  - TripMate는 `python-krtour-map`을 **독립 프로그램의 OpenAPI HTTP API**로
+  - Pinvi는 `kor-travel-map`을 **독립 프로그램의 OpenAPI HTTP API**로
     호출한다. 로컬 고정 포트는 API/Admin API `12301`.
-  - TripMate 사용자/서비스 경로에서 `from krtour.map import ...`,
-    `AsyncKrtourMapClient`, `feature`/`provider_sync` 직접 SQL/ORM 접근을 쓰지
+  - Pinvi 사용자/서비스 경로에서 `from kor_travel_map.map import ...`,
+    `AsyncKorTravelMapClient`, `feature`/`provider_sync` 직접 SQL/ORM 접근을 쓰지
     않는다. HTTP client는 transport wrapper만 허용한다.
-  - TripMate/user-facing 권위 계약은 krtour-map 최신 `openapi.user.json`이다.
+  - Pinvi/user-facing 권위 계약은 kor-travel-map 최신 `openapi.user.json`이다.
     현재 주요 경로는 `GET /features/in-bounds`, `GET /features/search`,
     `GET /features/nearby/by-target`, `GET /features/{feature_id}`,
-    `POST /tripmate/features/batch`, `POST /admin/feature-update-requests`,
+    `POST /pinvi/features/batch`, `POST /admin/feature-update-requests`,
     `GET /admin/feature-update-requests/{request_id}`다.
   - Admin/ops/debug 경로는 최신 `openapi.json`을 따른다. 일반 사용자 API에서는
     admin/offline/dedup/ops/debug 경로를 노출하지 않는다.
-  - `feature` / `provider_sync` schema 소유권은 ADR-003 그대로 유지한다. TripMate는
+  - `feature` / `provider_sync` schema 소유권은 ADR-003 그대로 유지한다. Pinvi는
     `feature_id`와 snapshot만 `app` schema에 저장하고 최신 feature 정보는
-    krtour-map API로 조회한다.
-  - Geocoding/주소/행정구역은 ADR-025 그대로 `kraddr-geo` v2 REST 직접 호출이다.
+    kor-travel-map API로 조회한다.
+  - Geocoding/주소/행정구역은 ADR-025 그대로 `kor-travel-geo` v2 REST 직접 호출이다.
 - **근거**:
-  - 최신 krtour-map `main`의 구현 산출물이 OpenAPI를 권위 계약으로 제공한다.
-  - 독립 HTTP 경계는 krtour-map 자체 Admin/Dagster/ops 운영과 TripMate 사용자 앱의
+  - 최신 kor-travel-map `main`의 구현 산출물이 OpenAPI를 권위 계약으로 제공한다.
+  - 독립 HTTP 경계는 kor-travel-map 자체 Admin/Dagster/ops 운영과 Pinvi 사용자 앱의
     배포·장애·버전 관리를 분리한다.
-  - TripMate가 `feature` schema 내부 모델이나 provider 변환 로직을 다시 알 필요가
+  - Pinvi가 `feature` schema 내부 모델이나 provider 변환 로직을 다시 알 필요가
     없다.
-- **결과 (긍정)**: TripMate와 krtour-map의 런타임 결합이 낮아지고, OpenAPI drift
-  검증으로 계약 변경을 잡을 수 있다. 최신 krtour-map Admin/ops 표면과 일관된다.
-- **결과 (부정)**: 함수 직접 호출 대비 HTTP hop과 장애 경계가 생긴다. TripMate
-  read 경로는 krtour-map API reachable 상태를 확인해야 하며, POI snapshot fallback
+- **결과 (긍정)**: Pinvi와 kor-travel-map의 런타임 결합이 낮아지고, OpenAPI drift
+  검증으로 계약 변경을 잡을 수 있다. 최신 kor-travel-map Admin/ops 표면과 일관된다.
+- **결과 (부정)**: 함수 직접 호출 대비 HTTP hop과 장애 경계가 생긴다. Pinvi
+  read 경로는 kor-travel-map API reachable 상태를 확인해야 하며, POI snapshot fallback
   정책이 필요하다.
 - **후속**:
-  - `docs/krtour-map-integration.md`를 OpenAPI HTTP 기준으로 전면 갱신.
+  - `docs/kor-travel-map-integration.md`를 OpenAPI HTTP 기준으로 전면 갱신.
   - `AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `README.md`, API/ETL 문서의 함수 호출
     표현을 OpenAPI HTTP 표현으로 정정.
-  - feature read 구현 시 `httpx.MockTransport` 계약 테스트와 krtour-map
+  - feature read 구현 시 `httpx.MockTransport` 계약 테스트와 kor-travel-map
     `openapi.user.json` drift 확인을 추가.
-- **참조**: ADR-002(superseded), ADR-003(schema 책임), ADR-025(kraddr-geo v2 REST),
-  `python-krtour-map` 최신 `packages/krtour-map-admin/openapi.user.json`,
-  `docs/tripmate-rest-api.md`, `docs/openapi-admin-contract.md`.
-- **2026-06-06 정정(ADR-027)**: 위 "근거/참조"가 가정한 krtour-map 산출물
-  (`krtour-map-admin` 패키지, `openapi.user.json`, 포트 12301, `/tripmate/features/batch`)
-  은 2026-06-06 `python-krtour-map` `main`(`HEAD=b775c74`) 실측 결과 **존재하지
-  않는다.** krtour-map의 실제 HTTP 표면은 인증 없는 debug-UI(`krtour-map-debug-ui`,
+- **참조**: ADR-002(superseded), ADR-003(schema 책임), ADR-025(kor-travel-geo v2 REST),
+  `kor-travel-map` 최신 `packages/kor-travel-map-admin/openapi.user.json`,
+  `docs/pinvi-rest-api.md`, `docs/openapi-admin-contract.md`.
+- **2026-06-06 정정(ADR-027)**: 위 "근거/참조"가 가정한 kor-travel-map 산출물
+  (`kor-travel-map-admin` 패키지, `openapi.user.json`, 포트 12301, `/pinvi/features/batch`)
+  은 2026-06-06 `kor-travel-map` `main`(`HEAD=b775c74`) 실측 결과 **존재하지
+  않는다.** kor-travel-map의 실제 HTTP 표면은 인증 없는 debug-UI(`kor-travel-map-debug-ui`,
   포트 8087, `GET /features` bbox·`GET /features/{id}`)뿐이다. ADR-026의 HTTP 방향은
-  ADR-027에서 유지하되, 그 계약은 krtour-map이 **신규로 구축해야 할 목표**임을
+  ADR-027에서 유지하되, 그 계약은 kor-travel-map이 **신규로 구축해야 할 목표**임을
   명확히 한다.
 
-## ADR-027: krtour-map 통합은 운영급 HTTP 서비스로 확정 (ADR-026 reality-check)
+## ADR-027: kor-travel-map 통합은 운영급 HTTP 서비스로 확정 (ADR-026 reality-check)
 
 - **상태**: accepted
 - **날짜**: 2026-06-06
 - **결정자**: 사용자 (DEC-01)
 - **컨텍스트**: 2026-06-06 문서·구현 정합성 감사
   (`docs/audit/2026-06-06-doc-impl-audit.md`)에서 두 저장소의 통합 모델이 정반대임을
-  확인했다. TripMate는 ADR-026으로 HTTP 계약(포트 12301)을 선언했으나, krtour-map은
-  9개월간 in-process 함수 라이브러리(krtour ADR-003)로 만들어졌고 HTTP는 인증 없는
-  debug-UI(8087)뿐이며, ADR-026이 참조한 krtour 산출물은 실재하지 않는다.
+  확인했다. Pinvi는 ADR-026으로 HTTP 계약(포트 12301)을 선언했으나, kor-travel-map은
+  9개월간 in-process 함수 라이브러리(kor_travel_map ADR-003)로 만들어졌고 HTTP는 인증 없는
+  debug-UI(8087)뿐이며, ADR-026이 참조한 kor_travel_map 산출물은 실재하지 않는다.
 - **결정**:
   - 통합 모델은 **운영급 HTTP 서비스(DEC-01 안 B)** 로 확정한다. ADR-026 유지.
   - 이 HTTP 계약(인증 있는 운영 API, 포트 12301, 전 엔드포인트, OpenAPI 생성 +
-    drift gate)은 krtour-map이 **신규로 구축해야 할 목표**다. 현재 미존재임을 인지한다.
-  - TripMate가 krtour-map에 필요로 하는 능력의 권위 명세는
-    `docs/krtour-map-requirements.md`다. krtour-map 에이전트가 이를 읽고 우선순위·계약을
+    drift gate)은 kor-travel-map이 **신규로 구축해야 할 목표**다. 현재 미존재임을 인지한다.
+  - Pinvi가 kor-travel-map에 필요로 하는 능력의 권위 명세는
+    `docs/kor-travel-map-requirements.md`다. kor-travel-map 에이전트가 이를 읽고 우선순위·계약을
     회신한다.
-  - **클러스터링(DEC-04)**: 지도 in-bounds 클러스터링은 **krtour-map 서버(DB 집계)**
-    가 수행한다(단일 노드 대역폭·성능). TripMate `cluster_query.py`는 fallback 한정.
-  - **feature 갱신요청 큐(DEC-05)**: 큐는 TripMate `app` schema가 소유하고, Admin 승인
-    시에만 krtour-map 적재 경로를 호출한다. krtour HTTP 표면 최소화.
-- **결과**: feature read 전 경로가 krtour HTTP 서비스 가용성에 의존한다. v0.1.0은
+  - **클러스터링(DEC-04)**: 지도 in-bounds 클러스터링은 **kor-travel-map 서버(DB 집계)**
+    가 수행한다(단일 노드 대역폭·성능). Pinvi `cluster_query.py`는 fallback 한정.
+  - **feature 갱신요청 큐(DEC-05)**: 큐는 Pinvi `app` schema가 소유하고, Admin 승인
+    시에만 kor-travel-map 적재 경로를 호출한다. kor_travel_map HTTP 표면 최소화.
+- **결과**: feature read 전 경로가 kor_travel_map HTTP 서비스 가용성에 의존한다. v0.1.0은
   이 연동 완료까지 대기한다(DEC-06, `docs/sprints/README.md`).
-- **후속**: T-066(HTTP client 구현), T-124(계약 정렬), T-148(SPRINT-4 재작성). krtour-map
-  측 신규 HTTP 서비스 구축은 krtour 저장소 백로그.
-- **참조**: ADR-026, ADR-002(superseded), `docs/krtour-map-requirements.md`,
+- **후속**: T-066(HTTP client 구현), T-124(계약 정렬), T-148(SPRINT-4 재작성). kor-travel-map
+  측 신규 HTTP 서비스 구축은 kor_travel_map 저장소 백로그.
+- **참조**: ADR-026, ADR-002(superseded), `docs/kor-travel-map-requirements.md`,
   `docs/decisions-needed-2026-06-06.md` DEC-01/04/05.
 
-## ADR-028: 정규 `feature_id` 포맷은 krtour-map `make_feature_id` 출력
+## ADR-028: 정규 `feature_id` 포맷은 kor-travel-map `make_feature_id` 출력
 
 - **상태**: accepted
 - **날짜**: 2026-06-06
 - **결정자**: 사용자 (DEC-02)
-- **컨텍스트**: `feature_id`가 3곳에서 다름 — TripMate 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`,
-  krtour 실제 `core.make_feature_id`(예 `{kind}:{hash}`), TripMate **코드는 UUID**(버그).
-- **결정**: feature 소유자는 krtour-map이므로 **`make_feature_id`의 출력이 정본**이다.
-  TripMate는 이를 **불투명 문자열**로 그대로 저장·전달한다. krtour-map이 확정 포맷을
-  명문화한다(`docs/krtour-map-requirements.md` K-13). TripMate 코드의 UUID 가정은
+- **컨텍스트**: `feature_id`가 3곳에서 다름 — Pinvi 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`,
+  kor_travel_map 실제 `core.make_feature_id`(예 `{kind}:{hash}`), Pinvi **코드는 UUID**(버그).
+- **결정**: feature 소유자는 kor-travel-map이므로 **`make_feature_id`의 출력이 정본**이다.
+  Pinvi는 이를 **불투명 문자열**로 그대로 저장·전달한다. kor-travel-map이 확정 포맷을
+  명문화한다(`docs/kor-travel-map-requirements.md` K-13). Pinvi 코드의 UUID 가정은
   제거한다(T-125).
 - **참조**: ADR-027, `docs/api/features.md`, `apps/api/app/services/trip_view_builder.py`.
 
@@ -1186,7 +1186,7 @@
 - **날짜**: 2026-06-06
 - **결정자**: 사용자 권고 기본값 채택 (DEC-08/DEC-09)
 - **컨텍스트**: POI delete가 pois.md "미정" vs admin.md "hard"로 충돌(감사 A-15);
-  `trip_day_pois.feature_id` NOT NULL이라 krtour에 없는 자유 메모 장소를 일정에 못
+  `trip_day_pois.feature_id` NOT NULL이라 kor_travel_map에 없는 자유 메모 장소를 일정에 못
   넣음(감사 D-18).
 - **결정**:
   - POI delete는 **soft delete**(`deleted_at`)로 통일한다. 복구·공유 링크 안정성 우선.
@@ -1205,10 +1205,10 @@
   `apps/api/app/core/security.py`, `core/deps.py`, `api/v1/auth.py`에 박혀 있다.
 - **결정**:
   - 비밀번호 저장은 Argon2id hash를 사용한다.
-  - 인증 성공 시 `tripmate_access` httpOnly cookie에 HS256 access JWT를 저장한다.
+  - 인증 성공 시 `pinvi_access` httpOnly cookie에 HS256 access JWT를 저장한다.
     access JWT는 `sub`, `exp`, `iat`, `typ=access`를 담고, 권한 판단은 토큰 claim이
     아니라 서버 DB 조회로 수행한다.
-  - `tripmate_refresh`는 opaque httpOnly cookie로 내려보내되, 서버 저장/회전/폐기와
+  - `pinvi_refresh`는 opaque httpOnly cookie로 내려보내되, 서버 저장/회전/폐기와
     `POST /auth/refresh` 완성은 T-134의 명시 후속으로 둔다.
   - cookie는 `SameSite=Lax`, 운영 환경 `Secure=true`, access 15분, refresh 7일을
     기본값으로 한다.
@@ -1294,7 +1294,7 @@
   - 다중 worker fan-out, durable replay, restart 이후 presence 보존이 필요해지면 Redis
     Streams 또는 PostgreSQL LISTEN/NOTIFY 기반 broker ADR을 새로 쓴다.
 - **결과**:
-  - krtour-map HTTP feature read와 무관하게 TripMate 자체 실시간 협업 slice를 검증할 수
+  - kor-travel-map HTTP feature read와 무관하게 Pinvi 자체 실시간 협업 slice를 검증할 수
     있다.
   - worker 간 broadcast는 아직 보장하지 않는다.
   - offline client replay와 event persistence는 제공하지 않는다.
@@ -1305,47 +1305,47 @@
 - **참조**: `docs/architecture/websocket-broker.md`, `docs/api/websocket.md`,
   `apps/api/app/api/v1/ws.py`, `apps/api/app/services/realtime_broker.py`.
 
-## ADR-036: Curated trip plan은 자체 큐레이션과 krtour curated_features import를 모두 지원한다
+## ADR-036: Curated trip plan은 자체 큐레이션과 kor_travel_map curated_features import를 모두 지원한다
 
 - **상태**: accepted
 - **날짜**: 2026-06-12
 - **결정자**: 사용자
 - **컨텍스트**: ADR-029는 추천 여행 템플릿의 이름을 `curated_trip_plans` 계열로
-  정리했지만, curated POI와 krtour feature의 연결 정책은 모호하게 남았다. 특히
-  TripMate 내부에서 자유 메모/임시 장소 POI는 `feature_id` 없이 존재할 수 있어야
-  하지만, krtour-map import처럼 이미 알고 있는 krtour `feature_id`가 함께 들어오는
+  정리했지만, curated POI와 kor_travel_map feature의 연결 정책은 모호하게 남았다. 특히
+  Pinvi 내부에서 자유 메모/임시 장소 POI는 `feature_id` 없이 존재할 수 있어야
+  하지만, kor-travel-map import처럼 이미 알고 있는 kor_travel_map `feature_id`가 함께 들어오는
   경우에는 POI를 feature-backed로 연결할 수 있다.
-  또한 2026-06-12 기준 `python-krtour-map`에 `curated_features` 기능이 추가되어,
-  TripMate가 해당 REST API를 호출해 `curated_features`를 TripMate
+  또한 2026-06-12 기준 `kor-travel-map`에 `curated_features` 기능이 추가되어,
+  Pinvi가 해당 REST API를 호출해 `curated_features`를 Pinvi
   `curated_trip_plans`로 1:1 복사하는 후속 흐름을 설계에 포함해야 한다. 단,
-  `curated_features`의 상세 REST 계약과 구현은 아직 TripMate에 붙지 않았다.
+  `curated_features`의 상세 REST 계약과 구현은 아직 Pinvi에 붙지 않았다.
 - **결정**:
   - Curated trip plan의 생성 소스는 둘 다 정식이다.
-    1. **TripMate-native 큐레이션**: Admin/운영자가 TripMate 안에서 직접 기획/생성하는
+    1. **Pinvi-native 큐레이션**: Admin/운영자가 Pinvi 안에서 직접 기획/생성하는
        추천 plan.
-    2. **krtour `curated_features` import**: TripMate가 krtour-map REST API로
-       curated feature 정보를 조회해 TripMate `curated_trip_plans` /
+    2. **kor_travel_map `curated_features` import**: Pinvi가 kor-travel-map REST API로
+       curated feature 정보를 조회해 Pinvi `curated_trip_plans` /
        `curated_plan_pois`로 1:1 복사하는 추천 plan.
   - `app.trip_day_pois.feature_id`와 `app.curated_plan_pois.feature_id`는 nullable이다.
     POI는 feature 없이도 존재할 수 있다(ADR-031 유지).
-  - Curated trip plan은 POI 묶음이며, 각 POI는 선택적으로 krtour feature에 연결된다.
-    외래키는 두지 않고 `feature_id` 문자열만 저장한다(TripMate ↔ krtour 책임 분리).
-  - krtour-map import가 `feature_id`를 제공하는 경우 TripMate는 같은 curated plan 안에서 해당
+  - Curated trip plan은 POI 묶음이며, 각 POI는 선택적으로 kor_travel_map feature에 연결된다.
+    외래키는 두지 않고 `feature_id` 문자열만 저장한다(Pinvi ↔ kor_travel_map 책임 분리).
+  - kor-travel-map import가 `feature_id`를 제공하는 경우 Pinvi는 같은 curated plan 안에서 해당
     feature-backed POI를 먼저 찾고, 없으면 새 `curated_plan_pois` row를 생성해 plan에
     연결한다. 이미 있으면 기존 POI를 재사용한다.
-  - krtour `curated_features` import에서는 krtour curated feature 1건을 TripMate
+  - kor_travel_map `curated_features` import에서는 kor_travel_map curated feature 1건을 Pinvi
     curated trip plan 1건으로, 그 하위 항목/POI를 `curated_plan_pois`로 복사한다.
-    krtour 항목이 `feature_id`를 제공하면 feature-backed POI로 저장하고, 제공하지 않거나
-    TripMate-native로 만든 자유 장소는 `feature_id = null`로 저장한다.
+    kor_travel_map 항목이 `feature_id`를 제공하면 feature-backed POI로 저장하고, 제공하지 않거나
+    Pinvi-native로 만든 자유 장소는 `feature_id = null`로 저장한다.
   - feature 없는 curated POI는 copy 시 feature 없는 사용자 `trip_day_pois`로 복사된다.
     임시 `curated:<id>` 같은 가짜 feature id를 만들지 않는다.
-- **결과**: TripMate가 자체적으로 만든 추천 plan과 krtour `curated_features`에서 가져온
-  추천 plan이 같은 TripMate 도메인 모델을 공유한다. 사람/Admin이 만든 자유 POI와
-  krtour-map import가 만든 feature-backed POI가 같은 curated plan 안에 공존할 수 있고,
-  krtour feature 표준화가 가능한 import 경로는 feature-backed 경로를 사용해 중복 POI 생성을
+- **결과**: Pinvi가 자체적으로 만든 추천 plan과 kor_travel_map `curated_features`에서 가져온
+  추천 plan이 같은 Pinvi 도메인 모델을 공유한다. 사람/Admin이 만든 자유 POI와
+  kor-travel-map import가 만든 feature-backed POI가 같은 curated plan 안에 공존할 수 있고,
+  kor_travel_map feature 표준화가 가능한 import 경로는 feature-backed 경로를 사용해 중복 POI 생성을
   줄인다.
 - **후속**:
-  - krtour `curated_features` import endpoint와 client를 유지하고, source version/etag
+  - kor_travel_map `curated_features` import endpoint와 client를 유지하고, source version/etag
     provenance 컬럼을 갱신한다.
 - **참조**: ADR-029, ADR-031, `docs/architecture/notice-plans.md`,
   `apps/api/app/services/notice_plan.py`.
@@ -1355,23 +1355,23 @@
 - **상태**: accepted
 - **날짜**: 2026-06-12
 - **결정자**: 사용자
-- **컨텍스트**: Sprint 1~4 동안 TripMate dev/API/Web/RustFS/krtour-map 포트가 여러 차례
-  바뀌었고, 일부 문서에는 krtour admin UI 포트와 admin API base가 섞여 남았다.
+- **컨텍스트**: Sprint 1~4 동안 Pinvi dev/API/Web/RustFS/kor-travel-map 포트가 여러 차례
+  바뀌었고, 일부 문서에는 kor_travel_map admin UI 포트와 admin API base가 섞여 남았다.
   2026-06-12 기준 Docker 설정도 새 포트로 다시 로드되었으므로, 저장소의 설정·런북·문서
   전체가 같은 고정값을 따라야 한다.
 - **결정**:
   - PostgreSQL host/container 포트는 표준 `5432`를 사용한다.
   - RustFS API는 `12101`, RustFS console은 `12105`를 사용한다.
-  - `python-krtour-map` API/Admin API는 `12301`을 사용한다. TripMate의
-    `TRIPMATE_KRTOUR_MAP_API_BASE_URL`과 `TRIPMATE_KRTOUR_MAP_ADMIN_BASE_URL` 기본값은
+  - `kor-travel-map` API/Admin API는 `12301`을 사용한다. Pinvi의
+    `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`과 `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 기본값은
     모두 `http://localhost:12301`이다.
-  - `tripmate-agent`는 `krtour-ai-agent`로 이름이 바뀌었고 TripMate와의 직접 관계를
-    끊는다. TripMate는 agent API 포트를 예약하지 않고 `TRIPMATE_AGENT_API_BASE_URL`도
+  - `kor-travel-concierge`는 `kor-travel-concierge`로 이름이 바뀌었고 Pinvi와의 직접 관계를
+    끊는다. Pinvi는 agent API 포트를 예약하지 않고 `PINVI_AGENT_API_BASE_URL`도
     노출하지 않는다.
-  - 본 저장소 TripMate API는 `12501`, Web UI는 `12505`를 사용한다.
+  - 본 저장소 Pinvi API는 `12501`, Web UI는 `12505`를 사용한다.
   - Dagster UI는 기존 고정 포트 `9023`을 유지한다.
 - **결과**: 로컬 개발, Docker smoke, 문서 예시, 환경변수 기본값이 같은 포트 집합을
-  공유한다. krtour admin API는 `12301`로 명확해져, 과거 admin UI 포트와 혼동하지 않는다.
+  공유한다. kor_travel_map admin API는 `12301`로 명확해져, 과거 admin UI 포트와 혼동하지 않는다.
 - **참조**: `AGENTS.md`, `CLAUDE.md`, `.env.example`, `infra/docker-compose.yml`,
   `infra/docker-compose.app.yml`, `scripts/dev-up.sh`, `scripts/docker-app.sh`,
   `docs/runbooks/README.md`.

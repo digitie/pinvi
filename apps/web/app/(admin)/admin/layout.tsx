@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
-import type { AuthUser } from '@tripmate/schemas';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
+import type { AuthUser } from '@pinvi/schemas';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 const NAV: { href: string; label: string; sprint: number }[] = [
@@ -92,7 +92,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <aside className="w-60 shrink-0 border-r border-hairline bg-white">
         <div className="border-b border-hairline px-4 py-4">
           <Link href="/admin" className="text-sm font-bold text-ink">
-            TripMate Admin
+            Pinvi Admin
           </Link>
           {me && (
             <p className="mt-1 text-xs text-muted" data-testid="admin-me">

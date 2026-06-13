@@ -1,4 +1,4 @@
-"""TripMate Dagster one-shot job 정의."""
+"""Pinvi Dagster one-shot job 정의."""
 
 from datetime import UTC, date, datetime, time
 from typing import Any

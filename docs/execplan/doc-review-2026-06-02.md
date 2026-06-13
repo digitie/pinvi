@@ -19,8 +19,8 @@
 
 - git/편집/commit/push는 NTFS worktree + Windows `git.exe`.
 - WSL ext4는 테스트/Docker/의존성 전용 일회용 미러, commit/push 금지.
-- 지도 UI는 `maplibre-vworld-js` 직접 import. TripMate 전용 wrapper 패키지 금지.
-- 사용자 대면 주소/좌표/행정구역 검색은 `kraddr-geo` v2 REST 직접 호출.
+- 지도 UI는 `maplibre-vworld-js` 직접 import. Pinvi 전용 wrapper 패키지 금지.
+- 사용자 대면 주소/좌표/행정구역 검색은 `kor-travel-geo` v2 REST 직접 호출.
 
 ## 검증
 

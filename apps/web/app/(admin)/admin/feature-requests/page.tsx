@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
+import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminFeatureRequestPagedResponse,
   AdminFeatureRequestSummary,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 const STATUS_FILTERS = [
@@ -69,7 +69,7 @@ function ReviewPanel({
         marker_color: markerColor.trim() || undefined,
         marker_icon: markerIcon.trim() || undefined,
       });
-      onDone('제안을 승인해 krtour에 전달했습니다.');
+      onDone('제안을 승인해 kor_travel_map에 전달했습니다.');
     } catch (error) {
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
     } finally {
@@ -129,9 +129,9 @@ function ReviewPanel({
         <dd>{request.status}</dd>
       </dl>
 
-      {request.krtour_ref && (
-        <p className="break-all text-xs text-muted" data-testid="admin-fr-krtour-ref">
-          krtour: {JSON.stringify(request.krtour_ref)}
+      {request.kor_travel_map_ref && (
+        <p className="break-all text-xs text-muted" data-testid="admin-fr-kor_travel_map-ref">
+          kor_travel_map: {JSON.stringify(request.kor_travel_map_ref)}
         </p>
       )}
 
@@ -280,7 +280,7 @@ export default function AdminFeatureRequestsPage() {
   return (
     <AdminPage
       title="Feature 제안 검토"
-      description="사용자 feature 제안을 검토해 krtour에 반영하거나 거절"
+      description="사용자 feature 제안을 검토해 kor_travel_map에 반영하거나 거절"
     >
       <FilterBar>
         <label htmlFor="admin-fr-status" className="text-xs text-muted">

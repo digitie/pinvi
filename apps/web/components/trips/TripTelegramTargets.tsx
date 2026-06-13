@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Send, Star, Trash2 } from 'lucide-react';
-import { ApiError, telegramApi } from '@tripmate/api-client';
-import type { TelegramTarget } from '@tripmate/schemas';
+import { ApiError, telegramApi } from '@pinvi/api-client';
+import type { TelegramTarget } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 
 function targetName(target: TelegramTarget): string {

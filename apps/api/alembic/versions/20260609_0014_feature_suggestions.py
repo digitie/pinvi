@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column("note", sa.Text()),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="pending"),
         sa.Column("reviewed_by_admin_id", postgresql.UUID(as_uuid=True)),
-        sa.Column("krtour_ref", postgresql.JSONB(astext_type=sa.Text())),
+        sa.Column("kor_travel_map_ref", postgresql.JSONB(astext_type=sa.Text())),
         sa.Column("resolved_at", sa.DateTime(timezone=True)),
         sa.Column(
             "created_at",

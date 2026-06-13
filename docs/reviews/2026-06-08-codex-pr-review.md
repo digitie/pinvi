@@ -39,7 +39,7 @@
 
 ### 🟡 중간 (보안·무결성·가용성 잔존)
 1. **[#74] resend 운영 fail-open 잔존** — `_allows_unsigned_resend_webhook`가 환경 문자열
-   게이트인데 `tripmate_environment` 기본이 `"development"` → 운영이 명시적으로 덮어쓰지
+   게이트인데 `pinvi_environment` 기본이 `"development"` → 운영이 명시적으로 덮어쓰지
    않으면 무서명 통과. allow-list(opt-out)→opt-in 플래그 또는 prod secret 강제로 반전.
 2. **[#76] reset 후 access JWT(15분) 미무효화** — refresh는 끊겼지만 탈취 access는 TTL 동안
    생존. token version/jti denylist 또는 TTL 단축.

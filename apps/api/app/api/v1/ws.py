@@ -69,7 +69,7 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
                 # grace 동안 broker 슬롯을 유지한다 — 슬롯을 먼저 비우면 닫히는 중인 소켓이
                 # cap에 계상되지 않아 connect→spam→reconnect 누적으로 FD/메모리가 새어
                 # cap을 우회한다. finally에서 close 이후 정리한다.
-                await asyncio.sleep(settings.tripmate_ws_rate_limit_close_grace_seconds)
+                await asyncio.sleep(settings.pinvi_ws_rate_limit_close_grace_seconds)
                 await websocket.close(code=_CLOSE_RATE_LIMITED, reason="rate_limited")
                 return
             await _handle_client_message(connection, message)
@@ -83,7 +83,7 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
 
 
 async def _authenticate(websocket: WebSocket) -> uuid.UUID | None:
-    token = websocket.cookies.get("tripmate_access") or websocket.query_params.get("token")
+    token = websocket.cookies.get("pinvi_access") or websocket.query_params.get("token")
     if not token:
         await _reject(websocket, code=_CLOSE_UNAUTHORIZED, reason="token_missing")
         return None
@@ -156,8 +156,8 @@ class _ClientMessageRateLimiter:
         self._seen_at: deque[float] = deque()
 
     def allow(self) -> bool:
-        per_second = settings.tripmate_ws_client_rate_per_second
-        per_minute = settings.tripmate_ws_client_rate_per_minute
+        per_second = settings.pinvi_ws_client_rate_per_second
+        per_minute = settings.pinvi_ws_client_rate_per_minute
         if per_second <= 0 and per_minute <= 0:
             return True
 

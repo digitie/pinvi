@@ -1,13 +1,13 @@
 # Curated Trip Plan 도메인 — 추천 여행 + POI + 첨부
 
-본 문서는 TripMate v2의 **추천/큐레이션 여행 plan** 도메인을 정의한다.
+본 문서는 Pinvi v2의 **추천/큐레이션 여행 plan** 도메인을 정의한다.
 ADR-029에 따라 DB/ORM 정본 이름은 `curated_trip_plans` 계열이고, 기존 사용자 API
 경로(`/notice-plans`)와 응답 필드(`notice_plan_id` 등)는 Sprint 4 호환을 위해
 유지한다. `app.notice_plans`는 운영 공지(system notice) 전용이다.
 ADR-036에 따라 curated trip plan은 **POI 묶음**이며, 각 POI의 `feature_id`는
-nullable이다. 생성 소스는 TripMate 자체 큐레이션과 krtour-map `curated_features`
-1:1 import가 모두 정식이다. TripMate curated trip plan 생성에는 krtour-ai-agent가
-관여하지 않는다. krtour-map import가 krtour feature를 제공할 때만 feature-backed POI로
+nullable이다. 생성 소스는 Pinvi 자체 큐레이션과 kor-travel-map `curated_features`
+1:1 import가 모두 정식이다. Pinvi curated trip plan 생성에는 kor-travel-concierge가
+관여하지 않는다. kor-travel-map import가 kor_travel_map feature를 제공할 때만 feature-backed POI로
 연결하고, 같은 plan에 해당 feature POI가 없으면 새로 만든다.
 
 v1
@@ -22,8 +22,8 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 | 개념 | 어디에 있나 | 소유 | 약어 |
 |------|-----------|------|------|
-| 공지 / 자연현상 feature (사고·시설 통제·바다갈라짐·만조/간조) | `feature.notices` (혹은 `feature.features WHERE kind='notice'`) | `python-krtour-map` | **notice feature** |
-| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.curated_trip_plans` + `app.curated_plan_pois` | TripMate | **curated trip plan** |
+| 공지 / 자연현상 feature (사고·시설 통제·바다갈라짐·만조/간조) | `feature.notices` (혹은 `feature.features WHERE kind='notice'`) | `kor-travel-map` | **notice feature** |
+| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.curated_trip_plans` + `app.curated_plan_pois` | Pinvi | **curated trip plan** |
 
 본 문서는 후자(**curated trip plan**)를 다룬다. 전자는 SPEC V8 D-10 +
 `docs/spec/v8/01-data.md` §3 (라이브러리 위임 — 7 Feature 중 `notice` kind).
@@ -32,11 +32,11 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 추천 여행 plan은 **Admin이 운영하는 "이렇게 여행해 보세요" 콘텐츠**다.
 
-- Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 TripMate-native plan 작성
-- TripMate가 krtour-map `GET /v1/curated-features/{id}/tripmate-copy`를 조회해
+- Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 Pinvi-native plan 작성
+- Pinvi가 kor-travel-map `GET /v1/curated-features/{id}/pinvi-copy`를 조회해
   `curated_trip_plans` / `curated_plan_pois`로 1:1 복사
 - POI를 day별로 sort_order에 따라 배치 — 사용자 trip과 동일한 구조
-- POI는 `feature_id` 없이도 존재 가능. 단 krtour-map import가 feature를 제공하면
+- POI는 `feature_id` 없이도 존재 가능. 단 kor-travel-map import가 feature를 제공하면
   `feature_id`로 기존 curated POI를 찾아 연결하고, 없으면 새 POI를 생성
 - POI마다 memo / budget / custom marker 등 추천 정보
 - 파일 첨부 (이미지 / 문서) — RustFS에 저장
@@ -68,10 +68,10 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 | `created_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
 | `updated_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
 | `version` | `int` NOT NULL DEFAULT 1 | optimistic lock |
-| `source_system` | `text` | nullable. 예: `krtour-map` |
-| `source_curated_feature_id` | `text` | nullable. krtour curated feature 원천 id |
-| `source_curated_feature_version` | `int` | nullable. krtour copy snapshot version |
-| `source_etag` | `text` | nullable. krtour copy snapshot etag |
+| `source_system` | `text` | nullable. 예: `kor-travel-map` |
+| `source_curated_feature_id` | `text` | nullable. kor_travel_map curated feature 원천 id |
+| `source_curated_feature_version` | `int` | nullable. kor_travel_map copy snapshot version |
+| `source_etag` | `text` | nullable. kor_travel_map copy snapshot etag |
 | `source_imported_at` | `timestamptz` | nullable. 마지막 import 시각 |
 | `deleted_at` | `timestamptz` | soft delete |
 | `created_at`, `updated_at` | `timestamptz` | |
@@ -99,7 +99,7 @@ CHECK:
 | `curated_plan_id` | `uuid` FK | CASCADE |
 | `day_index` | `int` NOT NULL DEFAULT 1 | |
 | `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank — SPEC V8 E-6 |
-| `feature_id` | `text` | nullable. krtour `feature.features.feature_id` reference (FK 없음, ADR-003/036) |
+| `feature_id` | `text` | nullable. kor_travel_map `feature.features.feature_id` reference (FK 없음, ADR-003/036) |
 | `map_feature_id` | `uuid` | v1 호환용 (라이브러리 UUID 시절 cursor — v2에서는 미사용 후보) |
 | `feature_snapshot` | `jsonb` | feature 캐시 (이름/좌표/카테고리) |
 | `memo` | `text` | |
@@ -108,8 +108,8 @@ CHECK:
 | `user_url` | `text` | 추천자가 참조할 외부 링크 |
 | `custom_marker_color` | `text` | P-01~P-16 |
 | `custom_marker_icon` | `text` | maki id |
-| `source_curated_feature_id` | `text` | nullable. krtour curated feature 원천 id |
-| `source_curated_feature_item_id` | `text` | nullable. krtour copy item 원천 id |
+| `source_curated_feature_id` | `text` | nullable. kor_travel_map curated feature 원천 id |
+| `source_curated_feature_item_id` | `text` | nullable. kor_travel_map copy item 원천 id |
 | `version` | `int` NOT NULL DEFAULT 1 | |
 | `deleted_at` | `timestamptz` | |
 | `created_at`, `updated_at` | `timestamptz` | |
@@ -122,23 +122,23 @@ CHECK:
 정책:
 
 - 사람이 만든 자유 POI는 `feature_id = null`일 수 있다.
-- krtour-map import가 feature를 알고 있으면 `ensure_plan_poi_for_feature()` 경로로 같은
+- kor-travel-map import가 feature를 알고 있으면 `ensure_plan_poi_for_feature()` 경로로 같은
   plan의 기존 feature-backed POI를 재사용한다.
 - 기존 POI가 없으면 새 `curated_plan_pois` row를 만들고 plan에 연결한다.
-- krtour feature schema와 cross-schema FK는 만들지 않는다.
+- kor_travel_map feature schema와 cross-schema FK는 만들지 않는다.
 
-### 3.2.1 생성 소스와 krtour `curated_features` import
+### 3.2.1 생성 소스와 kor_travel_map `curated_features` import
 
 Curated trip plan의 생성 소스는 하나로 제한하지 않는다.
 
 | 소스 | 설명 | 현재 상태 |
 |------|------|----------|
-| TripMate-native 큐레이션 | Admin/운영자가 TripMate 안에서 직접 기획·작성한 추천 여행 plan | 현재 정본 흐름 |
-| krtour `curated_features` import | TripMate가 krtour-map REST API로 curated feature copy snapshot을 가져와 TripMate plan으로 1:1 복사 | 구현 완료 |
+| Pinvi-native 큐레이션 | Admin/운영자가 Pinvi 안에서 직접 기획·작성한 추천 여행 plan | 현재 정본 흐름 |
+| kor_travel_map `curated_features` import | Pinvi가 kor-travel-map REST API로 curated feature copy snapshot을 가져와 Pinvi plan으로 1:1 복사 | 구현 완료 |
 
-krtour import 매핑은 다음 원칙을 따른다.
+kor_travel_map import 매핑은 다음 원칙을 따른다.
 
-| krtour-map | TripMate |
+| kor-travel-map | Pinvi |
 |------------|----------|
 | curated feature 1건 | `app.curated_trip_plans` 1건 |
 | curated feature의 하위 항목/POI | `app.curated_plan_pois` 여러 건 |
@@ -148,11 +148,11 @@ krtour import 매핑은 다음 원칙을 따른다.
 | snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
 | copy item id | `source_curated_feature_item_id` |
 
-이 import는 TripMate-native 큐레이션을 대체하지 않는다. krtour `curated_features`는
-추가 소스이며, TripMate가 자체적으로 직접 만든 추천 plan도 같은 테이블에 계속 저장한다.
+이 import는 Pinvi-native 큐레이션을 대체하지 않는다. kor_travel_map `curated_features`는
+추가 소스이며, Pinvi가 자체적으로 직접 만든 추천 plan도 같은 테이블에 계속 저장한다.
 
-TripMate는 krtour-map을 HTTP로만 호출하며, krtour-map DB나 Python 패키지를 직접 의존하지
-않는다. `krtour-ai-agent`는 TripMate curated trip plan 생성 흐름에 관여하지 않는다.
+Pinvi는 kor-travel-map을 HTTP로만 호출하며, kor-travel-map DB나 Python 패키지를 직접 의존하지
+않는다. `kor-travel-concierge`는 Pinvi curated trip plan 생성 흐름에 관여하지 않는다.
 
 ### 3.3 `app.curated_plan_attachments` — 단일 테이블 다중 대상
 
@@ -167,7 +167,7 @@ v1의 핵심 결정: **4개 대상(사용자 trip, 사용자 trip_poi, curated_p
 | `curated_plan_id` | `uuid` FK `app.curated_trip_plans` | CASCADE |
 | `curated_poi_id` | `uuid` FK `app.curated_plan_pois` | CASCADE |
 | `source_attachment_id` | `uuid` self FK | SET NULL — notice → trip copy 시 원본 추적 |
-| `bucket` | `text` NOT NULL | RustFS bucket (`tripmate-media` 기본) |
+| `bucket` | `text` NOT NULL | RustFS bucket (`pinvi-media` 기본) |
 | `storage_key` | `text` NOT NULL | RustFS object key |
 | `original_filename` | `text` NOT NULL | |
 | `content_type` | `text` NOT NULL | |
@@ -269,11 +269,11 @@ body: {
 
 | 환경변수 | 비고 |
 |---------|------|
-| `TRIPMATE_RUSTFS_ENDPOINT_URL` | 내부 API endpoint (FastAPI ↔ RustFS) |
-| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | 브라우저 presigned PUT (보통 reverse proxy 경로) |
-| `TRIPMATE_RUSTFS_BUCKET` | `tripmate-media` 기본 |
-| `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | |
-| `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | |
+| `PINVI_RUSTFS_ENDPOINT_URL` | 내부 API endpoint (FastAPI ↔ RustFS) |
+| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | 브라우저 presigned PUT (보통 reverse proxy 경로) |
+| `PINVI_RUSTFS_BUCKET` | `pinvi-media` 기본 |
+| `PINVI_RUSTFS_ACCESS_KEY_ID` | |
+| `PINVI_RUSTFS_SECRET_ACCESS_KEY` | |
 
 object key 패턴: `user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}`.
 
@@ -281,7 +281,7 @@ presigned PUT: `AWS4-HMAC-SHA256` + `UNSIGNED-PAYLOAD`.
 
 관리자 ListObjectsV2 / DeleteObject 호환.
 
-`python-krtour-map`이 RustFS feature media에 같은 컨테이너를 쓰면 endpoint/keys를
+`kor-travel-map`이 RustFS feature media에 같은 컨테이너를 쓰면 endpoint/keys를
 공유. 두 compose가 동시에 12101/12105을 점유하지 않도록 한 쪽만 실행 (v1
 운영 노트).
 

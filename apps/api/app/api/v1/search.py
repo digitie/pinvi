@@ -1,6 +1,6 @@
 """`GET /search` — 통합 검색(feature + address + 내 POI). 감사 C-13 / `docs/api/features.md` §2.6.
 
-feature는 krtour-map(httpx client), address는 kraddr-geo(v2 REST), my_pois는 TripMate DB.
+feature는 kor-travel-map(httpx client), address는 kor-travel-geo(v2 REST), my_pois는 Pinvi DB.
 외부 소스 한쪽이 불가해도 전체를 실패시키지 않고 해당 소스만 비우고 `degraded_sources`에 기록한다.
 """
 
@@ -12,8 +12,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query
 from sqlalchemy import or_, select
 
-from app.clients.kraddr_geo import KraddrGeoClientDep, KraddrGeoError
-from app.clients.krtour_map import KrtourMapError, KrtourMapHttpClientDep
+from app.clients.kor_travel_geo import KorTravelGeoClientDep, KorTravelGeoError
+from app.clients.kor_travel_map import KorTravelMapError, KorTravelMapHttpClientDep
 from app.core.deps import CurrentUserId, DbSession
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
@@ -68,8 +68,8 @@ async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[
 async def unified_search(
     current_user_id: CurrentUserId,
     db: DbSession,
-    krtour: KrtourMapHttpClientDep,
-    kraddr: KraddrGeoClientDep,
+    kor_travel_map: KorTravelMapHttpClientDep,
+    kor_travel_geo: KorTravelGeoClientDep,
     q: Annotated[str, Query(min_length=2, max_length=120)],
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> Envelope[UnifiedSearchResult]:
@@ -78,20 +78,20 @@ async def unified_search(
 
     features: list[dict[str, Any]] = []
     try:
-        feature_data = await krtour.search_features(q=q, page_size=limit)
+        feature_data = await kor_travel_map.search_features(q=q, page_size=limit)
         items = feature_data.get("items")
         if isinstance(items, list):
             features = [item for item in items if isinstance(item, dict)]
-    except KrtourMapError:
+    except KorTravelMapError:
         degraded.append("features")
 
     addresses: list[dict[str, Any]] = []
     try:
-        address_data = await kraddr.search(query=q, kind="address", size=limit)
+        address_data = await kor_travel_geo.search(query=q, kind="address", size=limit)
         candidates = address_data.get("candidates")
         if isinstance(candidates, list):
             addresses = [c for c in candidates if isinstance(c, dict)]
-    except KraddrGeoError:
+    except KorTravelGeoError:
         degraded.append("addresses")
 
     my_pois = await _search_my_pois(db, user_id=user_id, q=q)

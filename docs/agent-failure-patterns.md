@@ -7,7 +7,7 @@
 상호작용에서 생긴다. 같은 증상이면 프로젝트 버그로 오판하기 전에 먼저 본 문서를
 확인한다.
 
-> `python-kraddr-geo`의 `docs/agent-failure-patterns.md`와 같은 목적·패턴이다
+> `kor-travel-geo`의 `docs/agent-failure-patterns.md`와 같은 목적·패턴이다
 > (도구 간 일관). 절차 전체는 `docs/dev-environment.md`(ADR-024), worktree·git
 > 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017).
 
@@ -24,7 +24,7 @@
 ## 2. 패턴 A — NTFS worktree에서 WSL `git` 실패 / 포인터 혼용
 
 ### 증상
-- `git -C /mnt/f/dev/tripmate-codex status`가 실패한다.
+- `git -C /mnt/f/dev/pinvi-codex status`가 실패한다.
 - 오류에 `F:/dev/.../.git/worktrees/...` 또는 `/mnt/f/...` 경로가 섞여 나온다.
 - 같은 worktree가 한 환경에선 정상인데 다른 환경에선 `prunable`로 보인다.
 
@@ -32,8 +32,8 @@
 worktree의 `.git` 파일과 main repo의 `worktrees/*/gitdir` 포인터에는 worktree를
 **만든 환경 기준 절대경로**가 박힌다. WSL에서 만들면 `/mnt/f/...`, Windows git에서
 만들면 `F:/dev/...`. 다른 환경 git으로 같은 worktree를 다루면 포인터를 해석하지
-못해 repository 오류가 난다. (실측: tripmate에서 codex worktree는
-`gitdir: /mnt/f/dev/tripmate/.git/worktrees/tripmate-codex`, claude worktree는
+못해 repository 오류가 난다. (실측: pinvi에서 codex worktree는
+`gitdir: /mnt/f/dev/pinvi/.git/worktrees/pinvi-codex`, claude worktree는
 `gitdir: F:/dev/...`로 환경이 갈려 있었다.)
 
 ### 재발 방지
@@ -47,12 +47,12 @@ worktree의 `.git` 파일과 main repo의 `worktrees/*/gitdir` 포인터에는 w
 ### 표준 명령
 ```powershell
 # Windows PowerShell — NTFS worktree는 Windows git.exe 로
-cd F:\dev\tripmate-claude
+cd F:\dev\pinvi-claude
 git status -sb
 git fetch origin
 git switch -c agent/claude-<task> origin/main
 # 포인터가 틀어졌으면 trunk에서 복구
-git -C F:\dev\tripmate worktree repair F:\dev\tripmate-claude
+git -C F:\dev\pinvi worktree repair F:\dev\pinvi-claude
 ```
 
 ## 3. 패턴 B — 명령 런처 실패 / 대량 병렬 호출 backlog
@@ -134,4 +134,4 @@ WSL native `rg`만(`PATH=/usr/local/bin:/usr/bin:/bin rg ...`).
 - `docs/dev-environment.md` — 환경 모델·셋업·rsync·검증·함정 전체 (ADR-024).
 - `docs/agent-workflow.md` — "어떤 순서로 무엇을 치는가" 런북.
 - `docs/runbooks/codegraph-worktrees.md` §3.6 — Windows/WSL git 포인터 복구.
-- `python-kraddr-geo` `docs/agent-failure-patterns.md` — 동일 패턴 reference.
+- `kor-travel-geo` `docs/agent-failure-patterns.md` — 동일 패턴 reference.

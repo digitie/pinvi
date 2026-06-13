@@ -15,15 +15,15 @@ cookie_secure = true
 
 [auth.anonymous]
 enabled = true
-org_name = TripMate
+org_name = Pinvi
 org_role = Viewer
 
 [auth]
 disable_login_form = false
 
 [server]
-domain = grafana.tripmate.kr
-root_url = https://grafana.tripmate.kr/
+domain = grafana.pinvi.kr
+root_url = https://grafana.pinvi.kr/
 ```
 
 `infra/grafana/provisioning/dashboards/default.yaml`:
@@ -31,8 +31,8 @@ root_url = https://grafana.tripmate.kr/
 ```yaml
 apiVersion: 1
 providers:
-  - name: tripmate
-    folder: TripMate
+  - name: pinvi
+    folder: Pinvi
     type: file
     options:
       path: /etc/grafana/dashboards
@@ -57,11 +57,11 @@ Sprint 6에 추가:
 'use client';
 
 export default function GrafanaPage() {
-  const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? 'https://grafana.tripmate.kr';
+  const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? 'https://grafana.pinvi.kr';
   return (
     <div className="h-screen w-full">
       <iframe
-        src={`${grafanaUrl}/d/tripmate/overview?orgId=1&kiosk=tv`}
+        src={`${grafanaUrl}/d/pinvi/overview?orgId=1&kiosk=tv`}
         className="h-full w-full border-0"
         sandbox="allow-same-origin allow-scripts allow-popups"
       />
@@ -73,8 +73,8 @@ export default function GrafanaPage() {
 현재 구현은 다음 env를 사용한다.
 
 ```bash
-NEXT_PUBLIC_GRAFANA_URL=http://localhost:3002
-NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/tripmate/overview?orgId=1&kiosk=tv
+NEXT_PUBLIC_GRAFANA_URL=http://localhost:12605
+NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 ```
 
 운영에서는 `NEXT_PUBLIC_GRAFANA_URL`을 실제 Grafana origin으로 교체한다. 대시보드
@@ -92,7 +92,7 @@ Grafana 측:
 
 ```
 X-Frame-Options: 제거 (allow_embedding=true가 처리)
-Content-Security-Policy: frame-ancestors https://app.tripmate.kr https://*.tripmate.kr;
+Content-Security-Policy: frame-ancestors https://app.pinvi.kr https://*.pinvi.kr;
 ```
 
 ## 4. RBAC

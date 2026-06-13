@@ -54,14 +54,14 @@ def test_make_upload_url_is_really_signed() -> None:
     assert "X-Amz-Credential=" in url
     assert "X-Amz-Expires=" in url
     # path-style addressing — public endpoint host + bucket + key 가 경로에.
-    assert settings.tripmate_rustfs_public_endpoint_url in url
-    assert f"/{settings.tripmate_rustfs_bucket}/" in url
+    assert settings.pinvi_rustfs_public_endpoint_url in url
+    assert f"/{settings.pinvi_rustfs_bucket}/" in url
     assert response.storage_key in url
 
 
 def test_make_download_url_is_really_signed() -> None:
     response = make_download_url(
-        bucket=settings.tripmate_rustfs_bucket,
+        bucket=settings.pinvi_rustfs_bucket,
         storage_key="user-uploads/trip_attachment/x/2026/06/abc.jpg",
         public_url=None,
     )
@@ -98,16 +98,16 @@ def test_make_upload_url_rejects_too_large() -> None:
 
 
 def test_settings_reads_rustfs_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TRIPMATE_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:12101")
-    monkeypatch.setenv("TRIPMATE_RUSTFS_BUCKET", "tripmate-test")
-    monkeypatch.setenv("TRIPMATE_RUSTFS_ACCESS_KEY_ID", "rustfsadmin")
-    monkeypatch.setenv("TRIPMATE_RUSTFS_SECRET_ACCESS_KEY", "rustfsadmin")
-    monkeypatch.setenv("TRIPMATE_RUSTFS_ALLOWED_CONTENT_TYPES", '["text/plain"]')
+    monkeypatch.setenv("PINVI_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:12101")
+    monkeypatch.setenv("PINVI_RUSTFS_BUCKET", "pinvi-test")
+    monkeypatch.setenv("PINVI_RUSTFS_ACCESS_KEY_ID", "rustfsadmin")
+    monkeypatch.setenv("PINVI_RUSTFS_SECRET_ACCESS_KEY", "rustfsadmin")
+    monkeypatch.setenv("PINVI_RUSTFS_ALLOWED_CONTENT_TYPES", '["text/plain"]')
 
     loaded = Settings(_env_file=None)
 
-    assert loaded.tripmate_rustfs_endpoint_url == "http://127.0.0.1:12101"
-    assert loaded.tripmate_rustfs_bucket == "tripmate-test"
-    assert loaded.tripmate_rustfs_access_key_id == "rustfsadmin"
-    assert loaded.tripmate_rustfs_secret_access_key == "rustfsadmin"
-    assert loaded.tripmate_rustfs_allowed_content_types == ["text/plain"]
+    assert loaded.pinvi_rustfs_endpoint_url == "http://127.0.0.1:12101"
+    assert loaded.pinvi_rustfs_bucket == "pinvi-test"
+    assert loaded.pinvi_rustfs_access_key_id == "rustfsadmin"
+    assert loaded.pinvi_rustfs_secret_access_key == "rustfsadmin"
+    assert loaded.pinvi_rustfs_allowed_content_types == ["text/plain"]

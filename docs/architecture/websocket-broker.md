@@ -1,13 +1,13 @@
 # WebSocket broker 아키텍처 (ADR-035)
 
-TripMate 실시간 협업은 Sprint 5/T-128에서 **단일 FastAPI process 안의 in-memory
+Pinvi 실시간 협업은 Sprint 5/T-128에서 **단일 FastAPI process 안의 in-memory
 broker**로 시작한다. 지도 feature read와 무관하게 여행 계획(`app.trips`)과 POI
 첨부(`app.trip_day_pois`) 변경을 같은 trip 채널에 broadcast한다.
 
 ## 1. 범위
 
 - 채널: `WS /ws/trips/{trip_id}`
-- 인증: `tripmate_access` httpOnly cookie 또는 query `?token=`의 access JWT
+- 인증: `pinvi_access` httpOnly cookie 또는 query `?token=`의 access JWT
 - 권한: 연결 시 `app.trips.owner_user_id` 또는 `app.trip_companions.user_id`
 - 서버 이벤트:
   - `presence.update`

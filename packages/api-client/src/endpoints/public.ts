@@ -4,11 +4,11 @@ import {
   PublicFestivalMonthlySchema,
   PublicFestivalViewSchema,
   PublicMapMarkerLayerSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import type {
   PublicBeachList,
   PublicFestivalMonthly,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import type { ApiClient } from '../client';
 
 export interface PublicBeachListParams {

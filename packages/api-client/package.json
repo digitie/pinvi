@@ -1,8 +1,8 @@
 {
-  "name": "@tripmate/api-client",
+  "name": "@pinvi/api-client",
   "version": "0.1.0",
   "private": true,
-  "description": "TripMate API 공용 클라이언트 — fetch wrapper + TanStack Query keys. Next.js / Expo 공유.",
+  "description": "Pinvi API 공용 클라이언트 — fetch wrapper + TanStack Query keys. Next.js / Expo 공유.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tripmate/schemas": "*",
+    "@pinvi/schemas": "*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

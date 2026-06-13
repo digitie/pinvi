@@ -100,15 +100,15 @@ def resolve_repo_path(value: str) -> Path:
 
 
 def backup_dir() -> Path:
-    return resolve_repo_path(settings.tripmate_backup_dir)
+    return resolve_repo_path(settings.pinvi_backup_dir)
 
 
 def backup_script_path() -> Path:
-    return resolve_repo_path(settings.tripmate_backup_script_path)
+    return resolve_repo_path(settings.pinvi_backup_script_path)
 
 
 def restore_hotswap_script_path() -> Path:
-    return resolve_repo_path(settings.tripmate_restore_hotswap_script_path)
+    return resolve_repo_path(settings.pinvi_restore_hotswap_script_path)
 
 
 def _checksum_for(path: Path) -> str | None:
@@ -181,10 +181,10 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
     before = {path.resolve() for path in directory.glob("*.dump")}
     env = {
         **os.environ,
-        "TRIPMATE_BACKUP_DIR": str(directory),
-        "TRIPMATE_BACKUP_SCHEMA": settings.tripmate_backup_schema,
-        "TRIPMATE_BACKUP_REASON": access_reason,
-        "TRIPMATE_DATABASE_URL": settings.tripmate_database_url,
+        "PINVI_BACKUP_DIR": str(directory),
+        "PINVI_BACKUP_SCHEMA": settings.pinvi_backup_schema,
+        "PINVI_BACKUP_REASON": access_reason,
+        "PINVI_DATABASE_URL": settings.pinvi_database_url,
     }
 
     proc = await asyncio.create_subprocess_exec(
@@ -197,7 +197,7 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
     try:
         stdout_raw, stderr_raw = await asyncio.wait_for(
             proc.communicate(),
-            timeout=settings.tripmate_backup_timeout_seconds,
+            timeout=settings.pinvi_backup_timeout_seconds,
         )
     except TimeoutError as exc:
         proc.kill()
@@ -230,7 +230,7 @@ def _asyncpg_database_url(database_url: str) -> str:
 
 
 def _restore_lock_database_url() -> str:
-    database_url = settings.tripmate_restore_database_url or settings.tripmate_database_url
+    database_url = settings.pinvi_restore_database_url or settings.pinvi_database_url
     return _asyncpg_database_url(database_url)
 
 
@@ -281,27 +281,27 @@ async def _restore_backup_hotswap_locked(
     started_at = datetime.now(UTC)
     # 초 해상도만 쓰면 같은 초에 두 번 복원 시 restore_id(→ 스키마명)가 충돌한다. uuid suffix로 고유화.
     restore_id = f"{started_at.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    schema = settings.tripmate_backup_schema
+    schema = settings.pinvi_backup_schema
     restore_schema = f"{schema}_restore_{restore_id}"
     previous_schema = f"{schema}_previous_{restore_id}"
     env = {
         **os.environ,
-        "TRIPMATE_BACKUP_SCHEMA": schema,
-        "TRIPMATE_RESTORE_REASON": access_reason,
-        "TRIPMATE_RESTORE_ID": restore_id,
-        "TRIPMATE_RESTORE_SCHEMA": restore_schema,
-        "TRIPMATE_PREVIOUS_SCHEMA": previous_schema,
-        "TRIPMATE_DATABASE_URL": settings.tripmate_database_url,
-        "TRIPMATE_RESTORE_DATABASE_URL": settings.tripmate_restore_database_url,
-        "TRIPMATE_RESTORE_HOTSWAP_EXECUTE": (
-            "1" if settings.tripmate_restore_hotswap_execute else "0"
+        "PINVI_BACKUP_SCHEMA": schema,
+        "PINVI_RESTORE_REASON": access_reason,
+        "PINVI_RESTORE_ID": restore_id,
+        "PINVI_RESTORE_SCHEMA": restore_schema,
+        "PINVI_PREVIOUS_SCHEMA": previous_schema,
+        "PINVI_DATABASE_URL": settings.pinvi_database_url,
+        "PINVI_RESTORE_DATABASE_URL": settings.pinvi_restore_database_url,
+        "PINVI_RESTORE_HOTSWAP_EXECUTE": (
+            "1" if settings.pinvi_restore_hotswap_execute else "0"
         ),
-        "TRIPMATE_RESTORE_DRAIN_COMMAND": settings.tripmate_restore_drain_command,
-        "TRIPMATE_RESTORE_ALLOW_NO_DRAIN": (
-            "1" if settings.tripmate_restore_allow_no_drain else "0"
+        "PINVI_RESTORE_DRAIN_COMMAND": settings.pinvi_restore_drain_command,
+        "PINVI_RESTORE_ALLOW_NO_DRAIN": (
+            "1" if settings.pinvi_restore_allow_no_drain else "0"
         ),
-        "TRIPMATE_RESTORE_APP_ROLE": settings.tripmate_restore_app_role,
-        "TRIPMATE_RESTORE_API_TRIGGER": "1",
+        "PINVI_RESTORE_APP_ROLE": settings.pinvi_restore_app_role,
+        "PINVI_RESTORE_API_TRIGGER": "1",
     }
 
     proc = await asyncio.create_subprocess_exec(
@@ -318,7 +318,7 @@ async def _restore_backup_hotswap_locked(
     try:
         stdout_raw, stderr_raw = await asyncio.wait_for(
             proc.communicate(),
-            timeout=settings.tripmate_restore_timeout_seconds,
+            timeout=settings.pinvi_restore_timeout_seconds,
         )
     except TimeoutError as exc:
         proc.kill()

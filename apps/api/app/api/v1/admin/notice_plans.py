@@ -13,18 +13,18 @@ from typing import Annotated, Any, NoReturn
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.krtour_map import (
-    KrtourMapError,
-    KrtourMapFeatureNotFound,
-    KrtourMapHttpClientDep,
+from app.clients.kor_travel_map import (
+    KorTravelMapError,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapHttpClientDep,
 )
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.notice import (
-    KrtourCuratedFeatureImportRequest,
-    KrtourCuratedFeatureImportResponse,
+    KorTravelMapCuratedFeatureImportRequest,
+    KorTravelMapCuratedFeatureImportResponse,
 )
 from app.schemas.storage import AttachmentCreate, AttachmentResponse
 from app.services.admin_audit import append_admin_audit
@@ -43,7 +43,7 @@ from app.services.notice_plan import (
     NoticePlanCopyError,
     NoticePlanNotFoundError,
     NoticePlanPolicyError,
-    import_krtour_curated_feature,
+    import_kor_travel_map_curated_feature,
 )
 
 router = APIRouter(prefix="/admin/notice-plans", tags=["admin"])
@@ -141,40 +141,40 @@ async def _audit(
     )
 
 
-# ── krtour-map curated feature import (T-223d) ─────────────────────────────
+# ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
 
 
 @router.post(
-    "/imports/krtour-curated-features",
+    "/imports/kor-travel-map-curated-features",
     status_code=status.HTTP_201_CREATED,
-    response_model=Envelope[KrtourCuratedFeatureImportResponse],
+    response_model=Envelope[KorTravelMapCuratedFeatureImportResponse],
 )
-async def import_krtour_curated_feature_route(
-    body: KrtourCuratedFeatureImportRequest,
+async def import_kor_travel_map_curated_feature_route(
+    body: KorTravelMapCuratedFeatureImportRequest,
     admin: AdminDep,
     db: DbSession,
-    krtour_client: KrtourMapHttpClientDep,
+    kor_travel_map_client: KorTravelMapHttpClientDep,
     request: Request,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
-) -> Envelope[KrtourCuratedFeatureImportResponse]:
+) -> Envelope[KorTravelMapCuratedFeatureImportResponse]:
     try:
-        result = await import_krtour_curated_feature(
+        result = await import_kor_travel_map_curated_feature(
             db,
             admin_id=admin.user_id,
-            krtour_client=krtour_client,
+            kor_travel_map_client=kor_travel_map_client,
             curated_feature_id=body.curated_feature_id,
             mode=body.mode,
             is_published=body.is_published,
         )
-    except KrtourMapFeatureNotFound as exc:
+    except KorTravelMapFeatureNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "KRTOUR_CURATED_FEATURE_NOT_FOUND", "message": str(exc)},
+            detail={"code": "KOR_TRAVEL_MAP_CURATED_FEATURE_NOT_FOUND", "message": str(exc)},
         ) from exc
-    except KrtourMapError as exc:
+    except KorTravelMapError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "KRTOUR_MAP_UNAVAILABLE", "message": str(exc)},
+            detail={"code": "KOR_TRAVEL_MAP_UNAVAILABLE", "message": str(exc)},
         ) from exc
     except NoticePlanNotFoundError as exc:
         raise HTTPException(
@@ -197,7 +197,7 @@ async def import_krtour_curated_feature_route(
         admin,
         request,
         x_request_id,
-        action="curated_plan.krtour_imported",
+        action="curated_plan.kor_travel_map_imported",
         resource_type="curated_plan",
         resource_id=str(result.plan.curated_plan_id),
         before=None,
@@ -212,7 +212,7 @@ async def import_krtour_curated_feature_route(
     )
     await db.commit()
     return Envelope.of(
-        KrtourCuratedFeatureImportResponse(
+        KorTravelMapCuratedFeatureImportResponse(
             notice_plan_id=result.plan.curated_plan_id,
             created_plan=result.created_plan,
             source_system=result.source_system,

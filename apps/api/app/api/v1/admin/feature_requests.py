@@ -1,13 +1,13 @@
 """`/admin/feature-requests/*` — 사용자 feature 제안 검토 큐 (T-179).
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-krtour `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
-feature_id/request_id/state를 `krtour_ref`에 저장한다.
+kor_travel_map `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
+feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다.
 
-§7 합의 5건 (krtour T-217c **확정**, 2026-06-11, krtour `docs/decisions.md` ADR-051):
-- **review_mode**: krtour 설정(기본 `require_review` 2단 검토 → status=approved, `immediate`면 added)
-- **idempotency_key** = suggestion `request_id` (krtour가 결정적 feature_id 생성, 재시도 동일 feature)
-- **출처 태깅** = operator 고정 `"tripmate-admin"`(admin id 미노출, 익명 D-11) + reason
+§7 합의 5건 (kor_travel_map T-217c **확정**, 2026-06-11, kor_travel_map `docs/decisions.md` ADR-051):
+- **review_mode**: kor_travel_map 설정(기본 `require_review` 2단 검토 → status=approved, `immediate`면 added)
+- **idempotency_key** = suggestion `request_id` (kor_travel_map가 결정적 feature_id 생성, 재시도 동일 feature)
+- **출처 태깅** = operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) + reason
   `[suggestion:<request_id>]` prefix (change-requests 큐가 출처 식별)
 - **closure** = soft `DELETE`(provider 재적재 부활 차단). 일시 비활성 deactivate는 미사용
 - **admin 인증** = 인프라 계층(12301 `/v1/admin/*`, SSO/IP allowlist; service token은 선택 pass-through)
@@ -25,13 +25,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, s
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.krtour_map import (
-    KrtourMapBadRequest,
-    KrtourMapFeatureNotFound,
-    KrtourMapRateLimited,
-    KrtourMapUnavailable,
+from app.clients.kor_travel_map import (
+    KorTravelMapBadRequest,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapRateLimited,
+    KorTravelMapUnavailable,
 )
-from app.clients.krtour_map_admin import KrtourMapAdminClientDep
+from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.feature_suggestion import FeatureSuggestion
@@ -68,18 +68,18 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
 
 @contextmanager
 def _map_admin_errors() -> Iterator[None]:
-    """krtour admin 호출 도메인 예외 → HTTP status."""
+    """kor_travel_map admin 호출 도메인 예외 → HTTP status."""
     try:
         yield
-    except KrtourMapFeatureNotFound as exc:
+    except KorTravelMapFeatureNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "code": "RESOURCE_NOT_FOUND",
-                "message": "대상 feature를 krtour에서 찾을 수 없습니다.",
+                "message": "대상 feature를 kor_travel_map에서 찾을 수 없습니다.",
             },
         ) from exc
-    except KrtourMapRateLimited as exc:
+    except KorTravelMapRateLimited as exc:
         headers = (
             {"Retry-After": str(exc.retry_after_seconds)}
             if exc.retry_after_seconds is not None
@@ -89,24 +89,24 @@ def _map_admin_errors() -> Iterator[None]:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "code": "RATE_LIMITED",
-                "message": "krtour 요청이 많아 잠시 후 다시 시도하세요.",
+                "message": "kor_travel_map 요청이 많아 잠시 후 다시 시도하세요.",
             },
             headers=headers,
         ) from exc
-    except KrtourMapBadRequest as exc:
+    except KorTravelMapBadRequest as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "code": exc.code or "VALIDATION_ERROR",
-                "message": "krtour가 feature change 요청을 거절했습니다.",
+                "message": "kor_travel_map가 feature change 요청을 거절했습니다.",
             },
         ) from exc
-    except KrtourMapUnavailable as exc:
+    except KorTravelMapUnavailable as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "FEATURE_SERVICE_UNAVAILABLE",
-                "message": "krtour admin 서비스가 일시적으로 사용 불가합니다.",
+                "message": "kor_travel_map admin 서비스가 일시적으로 사용 불가합니다.",
             },
         ) from exc
 
@@ -124,7 +124,7 @@ def _summary(row: FeatureSuggestion, email: str | None) -> AdminFeatureRequestSu
         note=row.note,
         target_feature_id=row.target_feature_id,
         status=cast(FeatureRequestStatus, row.status),
-        krtour_ref=row.krtour_ref,
+        kor_travel_map_ref=row.kor_travel_map_ref,
         reviewed_by_admin_id=row.reviewed_by_admin_id,
         created_at=row.created_at,
         resolved_at=row.resolved_at,
@@ -135,7 +135,7 @@ def _result(row: FeatureSuggestion) -> AdminFeatureRequestResult:
     return AdminFeatureRequestResult(
         request_id=row.request_id,
         status=cast(FeatureRequestStatus, row.status),
-        krtour_ref=row.krtour_ref,
+        kor_travel_map_ref=row.kor_travel_map_ref,
         reviewed_by_admin_id=row.reviewed_by_admin_id,
         resolved_at=row.resolved_at,
     )
@@ -197,19 +197,19 @@ async def approve_feature_request_endpoint(
     request: Request,
     admin: Annotated[User, Depends(require_role("admin"))],
     db: DbSession,
-    admin_client: KrtourMapAdminClientDep,
+    admin_client: KorTravelMapAdminClientDep,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
-    """승인 — krtour change API 호출 후 상태/`krtour_ref` 갱신 + audit.
+    """승인 — kor_travel_map change API 호출 후 상태/`kor_travel_map_ref` 갱신 + audit.
 
-    krtour 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
+    kor_travel_map 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
     """
     suggestion = await _load_pending(db, request_id)
-    # 출처 태깅 (§7 #3 확정, krtour T-217c / D-11 익명): operator는 **고정 문자열**(admin id
+    # 출처 태깅 (§7 #3 확정, kor_travel_map T-217c / D-11 익명): operator는 **고정 문자열**(admin id
     # 미노출), suggestion_id는 reason 머리에 `[suggestion:<id>]` prefix로 실어 change-requests
-    # 큐에서 출처 식별. krtour는 개인정보를 저장하지 않고, 역추적은 TripMate admin이 한다.
-    operator = "tripmate-admin"
-    reason = f"[suggestion:{request_id}] {body.krtour_reason or body.access_reason}"
+    # 큐에서 출처 식별. kor_travel_map는 개인정보를 저장하지 않고, 역추적은 Pinvi admin이 한다.
+    operator = "pinvi-admin"
+    reason = f"[suggestion:{request_id}] {body.kor_travel_map_reason or body.access_reason}"
     stype = suggestion.suggestion_type
 
     if stype == "new_place":
@@ -268,19 +268,19 @@ async def approve_feature_request_endpoint(
                 suggestion.target_feature_id, reason=reason, operator=operator
             )
 
-    krtour_state = str(record.get("status") or "")
-    # require_review면 krtour 큐 적재(approved), immediate/applied면 반영 완료(added).
-    new_status = "added" if krtour_state == "applied" else "approved"
+    kor_travel_map_state = str(record.get("status") or "")
+    # require_review면 kor_travel_map 큐 적재(approved), immediate/applied면 반영 완료(added).
+    new_status = "added" if kor_travel_map_state == "applied" else "approved"
     before = {"status": suggestion.status}
-    krtour_ref = {
+    kor_travel_map_ref = {
         "feature_id": record.get("feature_id"),
         "request_id": record.get("request_id"),
-        "state": krtour_state,
+        "state": kor_travel_map_state,
         "review_mode": record.get("review_mode"),
         "action": record.get("action"),
     }
     suggestion.status = new_status
-    suggestion.krtour_ref = krtour_ref
+    suggestion.kor_travel_map_ref = kor_travel_map_ref
     suggestion.reviewed_by_admin_id = admin.user_id
     suggestion.resolved_at = datetime.now(UTC)
 
@@ -291,7 +291,7 @@ async def approve_feature_request_endpoint(
         resource_type="feature_request",
         resource_id=str(request_id),
         before_state=before,
-        after_state={"status": new_status, "krtour_ref": krtour_ref},
+        after_state={"status": new_status, "kor_travel_map_ref": kor_travel_map_ref},
         access_reason=body.access_reason,
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
@@ -312,7 +312,7 @@ async def reject_feature_request_endpoint(
     db: DbSession,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
-    """거절 — krtour 호출 없이 상태만 rejected로. audit."""
+    """거절 — kor_travel_map 호출 없이 상태만 rejected로. audit."""
     suggestion = await _load_pending(db, request_id)
     before = {"status": suggestion.status}
     suggestion.status = "rejected"

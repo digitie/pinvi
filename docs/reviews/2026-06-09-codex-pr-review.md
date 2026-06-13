@@ -123,7 +123,7 @@
 - ✅ **T-187** (#90/#107): geofence strict 모드 mTLS-header 신뢰에 CIDR 앵커 강제. 위치감사 chain
   `_is_location_window_broken`(per-row self-consistency + 앵커 링크) — 풀스캔 제거.
 - ✅ **T-183** (#100 높음): restore-hotswap.sh FK 적재 `session_replication_role=replica` + swap 전
-  GRANT 재적용(`TRIPMATE_RESTORE_APP_ROLE`). backup_service restore_id uuid suffix + `_restore_lock` 직렬화.
+  GRANT 재적용(`PINVI_RESTORE_APP_ROLE`). backup_service restore_id uuid suffix + `_restore_lock` 직렬화.
   후속 보강으로 DB `pg_try_advisory_lock`, API-trigger self-kill drain guard, previous-schema
   success audit reflection을 추가해 T-183 잔여를 닫았다.
 - ✅ 낮음: `.env.example` 2개 `ALLOW_UNSIGNED=false`(#86).

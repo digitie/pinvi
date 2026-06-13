@@ -1,12 +1,12 @@
 /**
  * TripView(POI) → 지도 포인트 변환 — PR-C(2).
  *
- * `TripViewPoi.feature` 는 opaque dict(krtour fresh 또는 snapshot)라 좌표를 런타임 검증으로
+ * `TripViewPoi.feature` 는 opaque dict(kor_travel_map fresh 또는 snapshot)라 좌표를 런타임 검증으로
  * 꺼낸다(`CoordSchema`). 좌표가 없거나 한국 범위 밖이면 지도에 올리지 않는다(null).
  */
 
-import { CoordSchema } from '@tripmate/schemas';
-import type { TripViewDay, TripViewPoi } from '@tripmate/schemas';
+import { CoordSchema } from '@pinvi/schemas';
+import type { TripViewDay, TripViewPoi } from '@pinvi/schemas';
 import { paletteHex } from './markerPalette';
 
 export interface TripMapPoint {

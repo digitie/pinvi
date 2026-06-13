@@ -15,7 +15,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[tripmate] global error:', error);
+    console.error('[pinvi] global error:', error);
   }, [error]);
 
   return (

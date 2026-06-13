@@ -4,7 +4,8 @@
   T-115 backup foundation)
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
-- **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Loki/Grafana + Admin
+- **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
+  Loki + Admin
   운영 화면 (Record Linkage, provider sync, integrity, debug logs) +
   **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
@@ -12,14 +13,14 @@
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
-  - `apps/etl` Dagster code location 활성화 + TripMate `app` schema 소유 job:
-    - `tripmate_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
+  - `apps/etl` Dagster code location 활성화 + Pinvi `app` schema 소유 job:
+    - `pinvi_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
-    - (계획) `tripmate_email_outbox`, `tripmate_pii_retention`,
-      `tripmate_location_log_archive`, `tripmate_telegram_weekly`
+    - (계획) `pinvi_email_outbox`, `pinvi_pii_retention`,
+      `pinvi_location_log_archive`, `pinvi_telegram_weekly`
     - feature/provider 적재 asset(VisitKorea/OpiNet/KMA/KrHeritage 등)은
-      `python-krtour-map` 소유이며 본 저장소 ETL에 추가하지 않는다(ADR-026/T-210c).
-  - vworld 법정동코드 임포트 trigger UI (`python-kraddr-geo`에 위임)
+      `kor-travel-map` 소유이며 본 저장소 ETL에 추가하지 않는다(ADR-026/T-210c).
+  - vworld 법정동코드 임포트 trigger UI (`kor-travel-geo`에 위임)
   - `/admin/etl` Dagit 임베드 + 자체 요약
   - `/admin/dedup-review` (라이브러리 `dedup_review_queue` callback)
   - `/admin/features/{id}/sources` / `/overrides` / `/weather-values` (M-15)
@@ -27,7 +28,8 @@
   - `/admin/integrity` `app.data_integrity_violations` 1차 소스
   - `/admin/debug/logs` Loki LogQL WebSocket stream
   - `/admin/debug/request/{id}` X-Request-Id 타임라인
-  - Loki + Promtail + Grafana 컨테이너 활성
+  - Prometheus + cAdvisor + Grafana 컨테이너 활성
+  - Loki + Promtail 로그 수집은 후속 또는 운영 선택 계층
   - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,
     `docs/runbooks/grafana-admin-embed.md`)
   - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
@@ -52,13 +54,13 @@
 ### ETL (`apps/etl`)
 
 - `apps/etl/pyproject.toml` (dagster + dagster-webserver + provider client git URL pin)
-- `apps/etl/tripmate/etl/__init__.py`
-- `apps/etl/tripmate/etl/definitions.py` (Dagster code location)
-- `apps/etl/tripmate/etl/resources.py` (`TripmateDatabaseResource`, `KasiResource`)
-- `apps/etl/tripmate/etl/assets/tripmate_kasi_special_days.py`
-- `apps/etl/tripmate/etl/jobs.py` (`kasi_poi_rise_set_job`)
-- `apps/etl/tripmate/etl/schedules.py`
-- `apps/etl/tripmate/etl/assets/{tripmate_email_outbox,tripmate_pii_retention,tripmate_location_log_archive,tripmate_telegram_weekly}.py`
+- `apps/etl/pinvi/etl/__init__.py`
+- `apps/etl/pinvi/etl/definitions.py` (Dagster code location)
+- `apps/etl/pinvi/etl/resources.py` (`PinviDatabaseResource`, `KasiResource`)
+- `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
+- `apps/etl/pinvi/etl/jobs.py` (`kasi_poi_rise_set_job`)
+- `apps/etl/pinvi/etl/schedules.py`
+- `apps/etl/pinvi/etl/assets/{pinvi_email_outbox,pinvi_pii_retention,pinvi_location_log_archive,pinvi_telegram_weekly}.py`
   (계획, `app` schema 소유 job일 때만)
 - `apps/etl/tests/test_definitions.py`
 - `apps/etl/tests/test_kasi_special_days.py`
@@ -81,7 +83,8 @@
 
 ### 인프라
 
-- `infra/docker-compose.yml` Loki/Promtail/Grafana 추가
+- `infra/docker-compose.yml` Prometheus/cAdvisor/Grafana 추가
+- `infra/prometheus/prometheus.yml`
 - `infra/promtail/config.yml`
 - `infra/loki/local-config.yaml`
 - `infra/grafana/{provisioning,dashboards}/` — anonymous viewer + 기본 dashboard
@@ -104,7 +107,7 @@
 - **ADR-035**: WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis Streams 또는
   PostgreSQL LISTEN/NOTIFY)
 - 후속 ADR 후보(번호 미배정): optimistic lock + `If-Match` 정책
-- 후속 ADR 후보(번호 미배정): TripMate Dagster `app` schema job 표준 (KASI/알림/보존정책)
+- 후속 ADR 후보(번호 미배정): Pinvi Dagster `app` schema job 표준 (KASI/알림/보존정책)
 - 후속 ADR 후보(번호 미배정): Loki retention 정책 (7일, Odroid 용량)
 - ADR-022 (참조): Backup/Restore 핫스왑 정책 — 본 Sprint는 script + endpoint만,
   Sprint 6에서 UI + 핫스왑 finalize
@@ -121,11 +124,11 @@
 
 본 Sprint 종료 직전:
 
-1. `tripmate_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
+1. `pinvi_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
 2. `kasi_poi_rise_set_job` 단일 POI 실행 → `app.trip_poi_rise_sets` success/failed 확인
-3. `tripmate_email_outbox` / retention 계열 job은 `app` schema만 변경하는지 확인
+3. `pinvi_email_outbox` / retention 계열 job은 `app` schema만 변경하는지 확인
 4. feature/provider materialize 검증(VisitKorea/OpiNet/KMA/KrHeritage 등)은
-   `python-krtour-map` 저장소의 Sprint/런북에서 수행
+   `kor-travel-map` 저장소의 Sprint/런북에서 수행
 5. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
 6. `/admin/provider-sync` 일시정지 후 재개 → cursor 유지 확인
 
@@ -134,7 +137,8 @@
 - [ ] DoD 모두 통과
 - [ ] WebSocket 동시 편집 5명 시뮬레이션 통과
 - [ ] Dagster app-owned asset/job 첫 적재 통과
-- [ ] Loki LogQL stream Admin에서 확인
+- [ ] Prometheus scrape target UP + API p95/request dashboard 확인
+- [ ] Loki LogQL stream Admin에서 확인(후속/선택)
 - [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
 - [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
 - [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**

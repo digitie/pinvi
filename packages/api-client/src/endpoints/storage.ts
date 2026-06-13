@@ -1,6 +1,6 @@
-import { UploadUrlRequestSchema, UploadUrlResponseSchema } from '@tripmate/schemas';
+import { UploadUrlRequestSchema, UploadUrlResponseSchema } from '@pinvi/schemas';
 import type { ApiClient } from '../client';
-import type { UploadUrlRequest } from '@tripmate/schemas';
+import type { UploadUrlRequest } from '@pinvi/schemas';
 
 /** `docs/api/storage.md` §4 — presigned PUT 발급. */
 export const storageApi = (client: ApiClient) => ({

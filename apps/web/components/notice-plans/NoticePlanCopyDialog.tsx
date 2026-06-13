@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
-import { ApiError, noticePlanApi, tripApi } from '@tripmate/api-client';
-import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@tripmate/schemas';
+import { ApiError, noticePlanApi, tripApi } from '@pinvi/api-client';
+import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { buildCopyRequest, canCopy, type CopyForm } from '@/lib/noticePlanCopy';
 import { useEscapeKey } from '@/lib/useEscapeKey';

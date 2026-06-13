@@ -24,14 +24,14 @@ SPEC V8 N-7 + v1 `docs/runbooks/odroid-docker.md` 정리.
 ### 1.3 사용자 / 디렉토리
 
 ```bash
-sudo useradd -m -s /bin/bash tripmate
-sudo usermod -aG docker tripmate
-sudo mkdir -p /opt/tripmate
-sudo chown tripmate:tripmate /opt/tripmate
+sudo useradd -m -s /bin/bash pinvi
+sudo usermod -aG docker pinvi
+sudo mkdir -p /opt/pinvi
+sudo chown pinvi:pinvi /opt/pinvi
 
 # NVMe 마운트
 sudo mkdir -p /mnt/nvme/{pgdata,rustfs,dagster,backups,loki,grafana}
-sudo chown -R tripmate:tripmate /mnt/nvme
+sudo chown -R pinvi:pinvi /mnt/nvme
 ```
 
 ## 2. ARM64 multi-arch 이미지
@@ -57,24 +57,24 @@ sudo chown -R tripmate:tripmate /mnt/nvme
     platforms: linux/amd64,linux/arm64
     push: true
     tags: |
-      ghcr.io/digitie/tripmate-api:${{ github.sha }}
-      ghcr.io/digitie/tripmate-api:latest
-    cache-from: type=registry,ref=ghcr.io/digitie/tripmate-api:cache
-    cache-to: type=registry,ref=ghcr.io/digitie/tripmate-api:cache,mode=max
+      ghcr.io/digitie/pinvi-api:${{ github.sha }}
+      ghcr.io/digitie/pinvi-api:latest
+    cache-from: type=registry,ref=ghcr.io/digitie/pinvi-api:cache
+    cache-to: type=registry,ref=ghcr.io/digitie/pinvi-api:cache,mode=max
 - name: Build & push web
   uses: docker/build-push-action@v5
   with:
     context: ./apps/web
     platforms: linux/amd64,linux/arm64
     push: true
-    tags: ghcr.io/digitie/tripmate-web:${{ github.sha }}
+    tags: ghcr.io/digitie/pinvi-web:${{ github.sha }}
 - name: Build & push etl
   uses: docker/build-push-action@v5
   with:
     context: ./apps/etl
     platforms: linux/amd64,linux/arm64
     push: true
-    tags: ghcr.io/digitie/tripmate-etl:${{ github.sha }}
+    tags: ghcr.io/digitie/pinvi-etl:${{ github.sha }}
 ```
 
 ### 2.2 로컬 빌드 + scp 전송 (대안, GHCR 안 쓸 때)
@@ -82,16 +82,16 @@ sudo chown -R tripmate:tripmate /mnt/nvme
 ```bash
 # WSL2에서 cross-build
 docker buildx build --platform linux/arm64 \
-  -t tripmate-api:dev --load ./apps/api
+  -t pinvi-api:dev --load ./apps/api
 
 # NTFS artifacts로 save
-docker save tripmate-api:dev | gzip > /mnt/c/Users/Me/artifacts/tripmate-api-arm64-$(date +%Y%m%d).tar.gz
+docker save pinvi-api:dev | gzip > /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz
 
 # Odroid로 전송
-scp /mnt/c/Users/Me/artifacts/tripmate-api-arm64-$(date +%Y%m%d).tar.gz odroid:/tmp/
+scp /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz odroid:/tmp/
 
 # Odroid에서 load
-ssh odroid 'cd /opt/tripmate && docker load < /tmp/tripmate-api-arm64-*.tar.gz'
+ssh odroid 'cd /opt/pinvi && docker load < /tmp/pinvi-api-arm64-*.tar.gz'
 ```
 
 ## 3. 초기 배포 (`scripts/odroid-docker-start.sh`)
@@ -108,7 +108,7 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "Docker Compose v2 plugin not installed" >&2; exit 1
 fi
 
-cd /opt/tripmate
+cd /opt/pinvi
 
 # 디렉토리 준비
 mkdir -p .tmp/{dagster-downloads,dagster-logs,etl-soak,backups} dataset
@@ -125,8 +125,8 @@ sleep 5
 # Alembic
 docker compose -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head
 
-# python-krtour-map alembic (별 컨테이너)
-docker compose -f infra/docker-compose.app.yml run --rm app-etl python -m krtour.map.cli alembic upgrade head
+# kor-travel-map alembic (별 컨테이너)
+docker compose -f infra/docker-compose.app.yml run --rm app-etl python -m kor_travel_map.map.cli alembic upgrade head
 
 # API + Web + Dagster
 docker compose -f infra/docker-compose.app.yml up -d app-api app-web app-etl
@@ -141,7 +141,7 @@ docker compose -f infra/docker-compose.app.yml ps
 
 ```bash
 ssh odroid
-cd /opt/tripmate
+cd /opt/pinvi
 
 # 새 git pull (compose 파일 변경 시)
 git pull origin main
@@ -160,13 +160,13 @@ docker compose -f infra/docker-compose.app.yml ps
 
 ```bash
 # 로컬에서
-scp /mnt/c/.../tripmate-{api,web,etl}-arm64-<date>.tar.gz odroid:/tmp/
+scp /mnt/c/.../pinvi-{api,web,etl}-arm64-<date>.tar.gz odroid:/tmp/
 
 # Odroid에서
 ssh odroid bash -s << 'EOF'
-  cd /opt/tripmate
+  cd /opt/pinvi
   for img in api web etl; do
-    docker load < /tmp/tripmate-${img}-arm64-*.tar.gz
+    docker load < /tmp/pinvi-${img}-arm64-*.tar.gz
   done
   docker compose -f infra/docker-compose.app.yml up -d
 EOF
@@ -192,14 +192,14 @@ mount | grep '/mnt/nvme'
 df -h /mnt/nvme
 
 echo "==> .env exists"
-[ -f /opt/tripmate/.env ] && echo "OK" || echo "MISSING"
-ls -la /opt/tripmate/.env
+[ -f /opt/pinvi/.env ] && echo "OK" || echo "MISSING"
+ls -la /opt/pinvi/.env
 
 echo "==> Required env vars (name only, value masked)"
-grep -E '^TRIPMATE_(DATABASE_URL|KMA|VISITKOREA|OPINET|EXPRESSWAY|KHOA|RESEND|SENTRY|RUSTFS)' /opt/tripmate/.env | sed 's/=.*/=***/'
+grep -E '^PINVI_(DATABASE_URL|KMA|VISITKOREA|OPINET|EXPRESSWAY|KHOA|RESEND|SENTRY|RUSTFS)' /opt/pinvi/.env | sed 's/=.*/=***/'
 
 echo "==> Containers"
-docker compose -f /opt/tripmate/infra/docker-compose.app.yml ps
+docker compose -f /opt/pinvi/infra/docker-compose.app.yml ps
 
 echo "==> Health"
 curl -fsS http://127.0.0.1:12501/health || echo "API down"
@@ -210,17 +210,17 @@ Production public URL:
 
 | 서비스 | 내부/host 포트 | 공개 URL |
 |--------|---------------|----------|
-| API | `12501` | `https://tripmateapi.digitie.mywire.org` |
-| Web | `12505` | `https://tripmate.digitie.mywire.org` |
+| API | `12501` | `https://pinviapi.digitie.mywire.org` |
+| Web | `12505` | `https://pinvi.digitie.mywire.org` |
 
 운영 `.env` 필수 URL/security 값:
 
 ```dotenv
-TRIPMATE_WEB_BASE_URL=https://tripmate.digitie.mywire.org
-TRIPMATE_OAUTH_CALLBACK_BASE_URL=https://tripmateapi.digitie.mywire.org
-TRIPMATE_CORS_ALLOWED_ORIGINS=["https://tripmate.digitie.mywire.org"]
-NEXT_PUBLIC_TRIPMATE_API_URL=https://tripmateapi.digitie.mywire.org
-TRIPMATE_ENVIRONMENT=production
+PINVI_WEB_BASE_URL=https://pinvi.digitie.mywire.org
+PINVI_OAUTH_CALLBACK_BASE_URL=https://pinviapi.digitie.mywire.org
+PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.digitie.mywire.org"]
+NEXT_PUBLIC_PINVI_API_URL=https://pinviapi.digitie.mywire.org
+PINVI_ENVIRONMENT=production
 ```
 
 보안 체크:
@@ -230,7 +230,7 @@ TRIPMATE_ENVIRONMENT=production
 - proxy가 `X-Forwarded-Proto=https`를 보존해야 Secure cookie / redirect URL 판단이
   흔들리지 않는다.
 - OAuth provider 콘솔 callback은 API 공개 URL 기준
-  `https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`으로 등록한다.
+  `https://pinviapi.digitie.mywire.org/auth/oauth/{provider}/callback`으로 등록한다.
 
 ## 6. 리소스 튜닝 (10명 환경)
 
@@ -283,21 +283,21 @@ services:
 
 ```bash
 # systemd shutdown hook
-sudo tee /etc/systemd/system/tripmate-graceful-shutdown.service << 'EOF'
+sudo tee /etc/systemd/system/pinvi-graceful-shutdown.service << 'EOF'
 [Unit]
-Description=Graceful stop of tripmate containers
+Description=Graceful stop of pinvi containers
 DefaultDependencies=no
 Before=shutdown.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker compose -f /opt/tripmate/infra/docker-compose.app.yml stop -t 30
+ExecStart=/usr/bin/docker compose -f /opt/pinvi/infra/docker-compose.app.yml stop -t 30
 
 [Install]
 WantedBy=halt.target reboot.target shutdown.target
 EOF
 
-sudo systemctl enable tripmate-graceful-shutdown.service
+sudo systemctl enable pinvi-graceful-shutdown.service
 ```
 
 UPS daemon (apcupsd 등)이 배터리 잔량 < 20%면 `shutdown -h` 트리거.
@@ -308,7 +308,7 @@ UPS daemon (apcupsd 등)이 배터리 잔량 < 20%면 `shutdown -h` 트리거.
 
 ```bash
 # DuckDNS 갱신 cron (5분마다)
-echo "*/5 * * * * curl -s 'https://www.duckdns.org/update?domains=tripmate-test&token=<token>&ip=' > /dev/null" | crontab -
+echo "*/5 * * * * curl -s 'https://www.duckdns.org/update?domains=pinvi-test&token=<token>&ip=' > /dev/null" | crontab -
 ```
 
 ### 9.2 Cloudflare Tunnel (권장)
@@ -320,9 +320,9 @@ sudo dpkg -i cloudflared.deb
 
 # 인증 + tunnel 생성
 cloudflared tunnel login
-cloudflared tunnel create tripmate
-cloudflared tunnel route dns tripmate tripmate.digitie.mywire.org
-cloudflared tunnel route dns tripmate tripmateapi.digitie.mywire.org
+cloudflared tunnel create pinvi
+cloudflared tunnel route dns pinvi pinvi.digitie.mywire.org
+cloudflared tunnel route dns pinvi pinviapi.digitie.mywire.org
 
 # systemd
 sudo cloudflared service install
@@ -335,7 +335,7 @@ sudo cloudflared service install
 ```bash
 # certbot + nginx
 sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d tripmate.digitie.mywire.org -d tripmateapi.digitie.mywire.org
+sudo certbot --nginx -d pinvi.digitie.mywire.org -d pinviapi.digitie.mywire.org
 
 # 갱신 cron (이미 systemd timer 등록됨)
 sudo systemctl status certbot.timer
@@ -373,7 +373,7 @@ sudo systemctl status certbot.timer
 | 증상 | 원인 | 해결 |
 |------|------|------|
 | `exec format error` | x86_64 이미지 pull | ARM64 manifest 확인 (`docker buildx imagetools inspect`) |
-| `chown` 거부 | NVMe owner 불일치 | `sudo chown -R tripmate:tripmate /mnt/nvme` |
+| `chown` 거부 | NVMe owner 불일치 | `sudo chown -R pinvi:pinvi /mnt/nvme` |
 | Dagster OOM | 동시 ETL | `DAGSTER_MAX_CONCURRENT_RUNS=1` |
 | Postgres slow | swap 부족 | swapfile 16GB 추가 |
 | HTTPS 인증서 갱신 실패 | DNS / 포트 막힘 | `certbot renew --dry-run` |

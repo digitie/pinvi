@@ -20,7 +20,7 @@ export interface RouteErrorProps {
  */
 export function RouteError({ error, reset, scope = 'route', testId = 'route-error' }: RouteErrorProps) {
   useEffect(() => {
-    console.error(`[tripmate] ${scope} error:`, error);
+    console.error(`[pinvi] ${scope} error:`, error);
   }, [error, scope]);
 
   return (

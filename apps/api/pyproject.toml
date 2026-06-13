@@ -1,7 +1,7 @@
 [project]
-name = "tripmate-api"
+name = "pinvi-api"
 version = "0.1.0"
-description = "TripMate FastAPI backend"
+description = "Pinvi FastAPI backend"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 
@@ -24,6 +24,7 @@ dependencies = [
   "slowapi>=0.1.9",
   "resend>=2.4",
   "boto3>=1.35",
+  "prometheus-client>=0.22",
 ]
 
 [project.optional-dependencies]
@@ -84,6 +85,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["boto3.*", "botocore.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["prometheus_client.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

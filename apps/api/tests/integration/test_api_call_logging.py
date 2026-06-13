@@ -26,10 +26,10 @@ async def test_api_call_tracker_persists_httpx_response(session_factory) -> None
         event_hooks={"request": [tracker.on_request], "response": [tracker.on_response]},
     ) as client:
         response = await client.get(
-            "https://provider.tripmate.test/v1/items",
+            "https://provider.pinvi.test/v1/items",
             extensions={
-                "tripmate_provider": "resend",
-                "tripmate_request_id": str(request_id),
+                "pinvi_provider": "resend",
+                "pinvi_request_id": str(request_id),
             },
         )
 
@@ -38,7 +38,7 @@ async def test_api_call_tracker_persists_httpx_response(session_factory) -> None
     async with session_factory() as db:
         row = await db.scalar(select(ApiCallLog).where(ApiCallLog.provider == "resend"))
         assert row is not None
-        assert row.endpoint == "https://provider.tripmate.test/v1/items"
+        assert row.endpoint == "https://provider.pinvi.test/v1/items"
         assert row.status_code == 202
         assert row.request_id == request_id
         assert row.latency_ms is not None

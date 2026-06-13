@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('지도 shell이 krtour-map feature 조회 없이 렌더링된다', async ({ page }) => {
+test('지도 shell이 kor-travel-map feature 조회 없이 렌더링된다', async ({ page }) => {
   const requests: string[] = [];
 
   page.on('request', (request) => {

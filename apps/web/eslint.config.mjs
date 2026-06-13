@@ -16,7 +16,7 @@ const config = [
     extends: ['next/core-web-vitals', 'next/typescript'],
     rules: {
       'react/no-unescaped-entities': 'off',
-      // TripMate `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
+      // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
       'no-restricted-imports': [
         'error',
         {

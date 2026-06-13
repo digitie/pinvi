@@ -1,4 +1,4 @@
-import { ApiError } from '@tripmate/api-client';
+import { ApiError } from '@pinvi/api-client';
 
 /**
  * 사용자에게 보여줄 친화적인 오류 문구를 만든다.

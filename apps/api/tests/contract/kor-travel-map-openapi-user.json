@@ -1963,8 +1963,8 @@
             ],
             "title": "Commit"
           },
-          "krtour_map_version": {
-            "title": "Krtour Map Version",
+          "kor_travel_map_version": {
+            "title": "KorTravelMap Map Version",
             "type": "string"
           },
           "openapi_version": {
@@ -1978,7 +1978,7 @@
         },
         "required": [
           "version",
-          "krtour_map_version",
+          "kor_travel_map_version",
           "openapi_version"
         ],
         "title": "VersionData",
@@ -2169,16 +2169,16 @@
     },
     "securitySchemes": {
       "ServiceToken": {
-        "description": "TripMate 등 외부 서비스 호출 토큰 (ADR-045 D-1).",
+        "description": "Pinvi 등 외부 서비스 호출 토큰 (ADR-045 D-1).",
         "in": "header",
-        "name": "X-Krtour-Service-Token",
+        "name": "X-Kor-Travel-Map-Service-Token",
         "type": "apiKey"
       }
     }
   },
   "info": {
-    "description": "TripMate/user-facing subset of krtour-map OpenAPI. Internal admin/debug/ops routes are intentionally excluded.",
-    "title": "krtour-map-user",
+    "description": "Pinvi/user-facing subset of kor-travel-map OpenAPI. Internal admin/debug/ops routes are intentionally excluded.",
+    "title": "kor-travel-map-user",
     "version": "0.2.0-dev"
   },
   "openapi": "3.1.0",
@@ -2467,7 +2467,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "bbox 안 feature 목록 (TripMate/public envelope)",
+        "summary": "bbox 안 feature 목록 (Pinvi/public envelope)",
         "tags": [
           "features"
         ]
@@ -2670,12 +2670,12 @@
         "operationId": "list_features_nearby_by_target_v1_features_nearby_by_target_get",
         "parameters": [
           {
-            "description": "외부 시스템 이름. 예: tripmate",
+            "description": "외부 시스템 이름. 예: pinvi",
             "in": "query",
             "name": "external_system",
             "required": true,
             "schema": {
-              "description": "외부 시스템 이름. 예: tripmate",
+              "description": "외부 시스템 이름. 예: pinvi",
               "title": "External System",
               "type": "string"
             }
@@ -3965,7 +3965,7 @@
     },
     "/version": {
       "get": {
-        "description": "배포 프로그램(admin)/메인 lib 버전 + commit(env ``KRTOUR_MAP_GIT_COMMIT``).",
+        "description": "배포 프로그램(admin)/메인 lib 버전 + commit(env ``KOR_TRAVEL_MAP_GIT_COMMIT``).",
         "operationId": "get_public_version_version_get",
         "responses": {
           "200": {

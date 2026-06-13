@@ -1,6 +1,6 @@
 # RustFS 파일 저장소 Runbook
 
-RustFS (S3 호환) 운영 — 컨테이너 / bucket / presigned URL / `python-krtour-map`
+RustFS (S3 호환) 운영 — 컨테이너 / bucket / presigned URL / `kor-travel-map`
 공유. v1 `docs/runbooks/file-storage.md` 정리 + ADR-005 정합.
 
 ## 1. RustFS 채택 이유 (SPEC V8 N-7.5)
@@ -34,8 +34,8 @@ services:
       RUSTFS_CONSOLE_ENABLE: "true"
       RUSTFS_CONSOLE_ADDRESS: ":12105"
     ports:
-      - "${TRIPMATE_RUSTFS_PORT:-12101}:12101"
-      - "${TRIPMATE_RUSTFS_CONSOLE_PORT:-12105}:12105"
+      - "${PINVI_RUSTFS_PORT:-12101}:12101"
+      - "${PINVI_RUSTFS_CONSOLE_PORT:-12105}:12105"
     volumes:
       - /mnt/nvme/rustfs:/data
     # 컨테이너 내부 사용자 UID = 10001 → 호스트 디렉토리 owner도 같게
@@ -47,19 +47,19 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://rustfs:12101 rustfsadmin rustfsadmin;
-      mc mb -p local/tripmate-media || true;
-      mc anonymous set download local/tripmate-media || true;
+      mc mb -p local/pinvi-media || true;
+      mc anonymous set download local/pinvi-media || true;
       "
 ```
 
-### 2.2 python-krtour-map과 공유
+### 2.2 kor-travel-map과 공유
 
 ```bash
-# python-krtour-map 측에 이미 RustFS docker 실행 중이면
-ls /mnt/f/dev/python-krtour-map/docker/rustfs/docker-compose.yml
+# kor-travel-map 측에 이미 RustFS docker 실행 중이면
+ls /mnt/f/dev/kor-travel-map/docker/rustfs/docker-compose.yml
 
-# TripMate compose는 RustFS service 미실행 — 같은 endpoint 사용
-TRIPMATE_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
+# Pinvi compose는 RustFS service 미실행 — 같은 endpoint 사용
+PINVI_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
 ```
 
 **중요**: 같은 포트 (`12101` / `12105`)를 두 compose가 동시에 점유하면 안 됨. 한 쪽만
@@ -69,8 +69,8 @@ TRIPMATE_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
 
 | Bucket | 용도 | 소유 |
 |--------|------|------|
-| `tripmate-media` | 사용자 첨부 + Admin notice 첨부 | TripMate |
-| `tripmate-feature-media` (라이브러리) | feature 미디어 (krheritage 이미지 등) | python-krtour-map |
+| `pinvi-media` | 사용자 첨부 + Admin notice 첨부 | Pinvi |
+| `pinvi-feature-media` (라이브러리) | feature 미디어 (krheritage 이미지 등) | kor-travel-map |
 
 bucket 분리 — schema 책임 분담과 동일 (ADR-003).
 
@@ -89,28 +89,28 @@ user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}
 
 | 환경변수 | 위치 | 비고 |
 |----------|------|------|
-| `TRIPMATE_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:12101`) |
-| `TRIPMATE_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:12101`) |
-| `TRIPMATE_RUSTFS_BUCKET` | API | `tripmate-media` |
-| `TRIPMATE_RUSTFS_ACCESS_KEY_ID` | API | |
-| `TRIPMATE_RUSTFS_SECRET_ACCESS_KEY` | API | |
-| `TRIPMATE_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | API | `900` |
-| `TRIPMATE_RUSTFS_MAX_UPLOAD_BYTES` | API | `10485760` (10MB) |
-| `TRIPMATE_RUSTFS_ALLOWED_CONTENT_TYPES` | API | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` |
-| `TRIPMATE_RUSTFS_PUBLIC_BASE_URL` | API | 선택 (CDN) |
+| `PINVI_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:12101`) |
+| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:12101`) |
+| `PINVI_RUSTFS_BUCKET` | API | `pinvi-media` |
+| `PINVI_RUSTFS_ACCESS_KEY_ID` | API | |
+| `PINVI_RUSTFS_SECRET_ACCESS_KEY` | API | |
+| `PINVI_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | API | `900` |
+| `PINVI_RUSTFS_MAX_UPLOAD_BYTES` | API | `10485760` (10MB) |
+| `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES` | API | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` |
+| `PINVI_RUSTFS_PUBLIC_BASE_URL` | API | 선택 (CDN) |
 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | RustFS container | 컨테이너 내부 |
 
 ## 6. CORS
 
 ```bash
 # RustFS mc로 CORS 설정 (또는 컨테이너 환경변수)
-mc anonymous set-json local/tripmate-media cors.json
+mc anonymous set-json local/pinvi-media cors.json
 
 # cors.json
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["http://localhost:12505", "http://127.0.0.1:12505", "https://tripmate.digitie.mywire.org"],
+      "AllowedOrigins": ["http://localhost:12505", "http://127.0.0.1:12505", "https://pinvi.digitie.mywire.org"],
       "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
       "AllowedHeaders": ["Content-Type", "x-amz-*"],
       "MaxAgeSeconds": 3600
@@ -124,8 +124,8 @@ mc anonymous set-json local/tripmate-media cors.json
 ```bash
 # 매주 RustFS rsync (mc mirror)
 mc alias set local http://127.0.0.1:12101 <access> <secret>
-mc alias set backup s3://backblaze-b2-account/tripmate-backup-bucket <key> <secret>
-mc mirror --overwrite local/tripmate-media backup/tripmate-media-$(date +%Y%m%d)/
+mc alias set backup s3://backblaze-b2-account/pinvi-backup-bucket <key> <secret>
+mc mirror --overwrite local/pinvi-media backup/pinvi-media-$(date +%Y%m%d)/
 
 # 또는 컨테이너 volume rsync
 rsync -av --delete /mnt/nvme/rustfs/ /mnt/nvme/backups/rustfs-$(date +%Y%m%d)/
@@ -146,7 +146,7 @@ UI: `/admin/rustfs/objects` (`docs/api/storage.md` §6).
 CLI:
 
 ```bash
-mc rm local/tripmate-media/user-uploads/trip_attachment/<uid>/2026/05/<u>.jpg
+mc rm local/pinvi-media/user-uploads/trip_attachment/<uid>/2026/05/<u>.jpg
 ```
 
 주의: DB row 참조 검사 필요 — soft-deleted `curated_plan_attachments`가 있을 수
@@ -155,8 +155,8 @@ mc rm local/tripmate-media/user-uploads/trip_attachment/<uid>/2026/05/<u>.jpg
 ### 8.2 사용량 확인
 
 ```bash
-mc du local/tripmate-media
-mc du --recursive local/tripmate-media/user-uploads/
+mc du local/pinvi-media
+mc du --recursive local/pinvi-media/user-uploads/
 ```
 
 ### 8.3 정리 잡
@@ -189,11 +189,11 @@ mc du --recursive local/tripmate-media/user-uploads/
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| `12101` port already in use | python-krtour-map RustFS와 충돌 | 한 쪽만 실행. 환경변수로 통일 |
+| `12101` port already in use | kor-travel-map RustFS와 충돌 | 한 쪽만 실행. 환경변수로 통일 |
 | 브라우저 PUT 403 | CORS / 서명 host 불일치 | `PUBLIC_ENDPOINT_URL` = presigned host 확인 |
 | `chmod` / `chown` 오류 | RustFS UID 10001 ≠ 호스트 owner | `chown -R 10001:10001 /mnt/nvme/rustfs` |
 | disk full | retention 정책 미적용 | 정리 job 실행 / lifecycle 정책 |
-| ListObjectsV2 응답 비었음 | bucket 권한 / prefix 오타 | `mc ls local/tripmate-media/user-uploads/` |
+| ListObjectsV2 응답 비었음 | bucket 권한 / prefix 오타 | `mc ls local/pinvi-media/user-uploads/` |
 
 ## 12. AI agent 작업 체크리스트
 
@@ -203,5 +203,5 @@ mc du --recursive local/tripmate-media/user-uploads/
 - [ ] `apps/api/app/services/rustfs_storage.py` presigned 함수 + 검증 강화
 - [ ] CORS rule 추가 (필요 시)
 - [ ] retention 정책 정의 (Dagster cleanup job)
-- [ ] python-krtour-map과 bucket 공유 / 분리 ADR (`docs/decisions.md`)
+- [ ] kor-travel-map과 bucket 공유 / 분리 ADR (`docs/decisions.md`)
 - [ ] 본 runbook + `docs/api/storage.md` 갱신

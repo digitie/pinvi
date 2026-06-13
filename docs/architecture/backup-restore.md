@@ -4,17 +4,17 @@
 
 ## 1. 목적
 
-TripMate 데이터의 일관성 / 무중단 복구. SPEC V8 RTO 1h / RPO 24h.
+Pinvi 데이터의 일관성 / 무중단 복구. SPEC V8 RTO 1h / RPO 24h.
 
 ## 2. 책임 분리
 
 | 데이터 | 책임 | 백업 방식 |
 |--------|------|----------|
-| `app` schema (사용자 / trip / poi / 동의 / audit_log) | TripMate | pg_dump --custom |
-| `feature` / `provider_sync` schema | `python-krtour-map` (별 저장소) | 별 저장소가 관리 — 본 PR 범위 외 |
-| RustFS (사용자 첨부 + feature 미디어) | TripMate + 라이브러리 | RustFS native snapshot 또는 rsync |
+| `app` schema (사용자 / trip / poi / 동의 / audit_log) | Pinvi | pg_dump --custom |
+| `feature` / `provider_sync` schema | `kor-travel-map` (별 저장소) | 별 저장소가 관리 — 본 PR 범위 외 |
+| RustFS (사용자 첨부 + feature 미디어) | Pinvi + 라이브러리 | RustFS native snapshot 또는 rsync |
 
-본 문서는 **TripMate 측 `app` schema + 사용자 첨부 RustFS 버킷**에 한정.
+본 문서는 **Pinvi 측 `app` schema + 사용자 첨부 RustFS 버킷**에 한정.
 
 ## 3. Backup
 
@@ -25,9 +25,9 @@ TripMate 데이터의 일관성 / 무중단 복구. SPEC V8 RTO 1h / RPO 24h.
   → pg_dump --format=custom \
       --schema=app \
       --no-owner --no-privileges \
-      --file=tripmate-app-$(date -u +%Y%m%d-%H%M%S).dump \
+      --file=pinvi-app-$(date -u +%Y%m%d-%H%M%S).dump \
       $DATABASE_URL
-  → sha256sum tripmate-app-*.dump > tripmate-app-*.dump.sha256
+  → sha256sum pinvi-app-*.dump > pinvi-app-*.dump.sha256
   → 후속 운영 보강: RustFS s3://backup/$(date +%Y%m%d).dump 업로드
   → 후속 운영 보강: external mirror (BackBlaze B2 or NAS) if enabled
   → cleanup: keep 30 dailies + 12 monthly + 5 yearly

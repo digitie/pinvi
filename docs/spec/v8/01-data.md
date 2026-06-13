@@ -1,14 +1,14 @@
-# SPEC V8 #1 — 데이터 모델 · DB · ETL (TripMate 적용 노트)
+# SPEC V8 #1 — 데이터 모델 · DB · ETL (Pinvi 적용 노트)
 
 원본: `spec_v8_1_data.docx` (D장 데이터 모델 + E장 DDL + K장 ETL + L장 vworld 임포트).
 
 > SPEC V8의 후속 메모 **O (2026-05-17)** 와 **Q/R (2026-05-20)** 는 본 도메인의
-> 책임을 `python-krtour-map`으로 분리한다고 명시한다. 본 노트는 그 분리된
-> 책임에 따라 TripMate가 무엇을 하고 무엇을 라이브러리에 위임하는지 정리한다.
+> 책임을 `kor-travel-map`으로 분리한다고 명시한다. 본 노트는 그 분리된
+> 책임에 따라 Pinvi가 무엇을 하고 무엇을 라이브러리에 위임하는지 정리한다.
 
 ## 1. 책임 분담
 
-| 영역 | 본 저장소 | `python-krtour-map` | SPEC V8 출처 |
+| 영역 | 본 저장소 | `kor-travel-map` | SPEC V8 출처 |
 |------|-----------|---------------------|--------------|
 | 7 Feature 모델(place/event/notice/price/weather/route/area) | — | ✓ | D-1 ~ D-13 |
 | `feature_id` 생성 (`f_{bjd}_{kind[0]}_{sha1[:16]}`) | — | ✓ | D-2 |
@@ -17,11 +17,11 @@
 | `price_points` / `price_values` 시계열 | — | ✓ | D-5, E-3 |
 | `WeatherValue` / `feature_weather_values` | — | ✓ | D-6, N(2026-05-16) |
 | **POI** snapshot + sort_order | ✓ | — | D-7, E-3 |
-| `bjd_lookup` (법정동코드 마스터) | — | ✓ | E-3, L장 (python-kraddr-geo) |
+| `bjd_lookup` (법정동코드 마스터) | — | ✓ | E-3, L장 (kor-travel-geo) |
 | `features.geom` GIST 인덱스 | — | ✓ | E-3 |
 | Record Linkage (100m blocking / 0.45/0.35/0.20 / 0.85) | — | ✓ | D-14, K-4 |
 | `dedup_review_queue` schema | — | ✓ | K-4 |
-| vworld 법정동코드 임포트 본체 | — | ✓ (`python-kraddr-geo`) | L장 |
+| vworld 법정동코드 임포트 본체 | — | ✓ (`kor-travel-geo`) | L장 |
 | vworld 임포트 트리거 UI | ✓ | — | L-3 |
 | `app.trips` / `app.trip_days` / `app.trip_pois` | ✓ | — | E-3 |
 | **POI sort_order COLLATE "C"** | ✓ | — | E-6 (Critical) |
@@ -29,7 +29,7 @@
 | `app.location_access_log` audit chain | ✓ | — | O-3 |
 | `app.admin_audit_log` audit chain | ✓ | — | O-6, M-14 |
 
-## 2. TripMate가 직접 박는 항목
+## 2. Pinvi가 직접 박는 항목
 
 ### 2.1 POI sort_order — Fractional Indexing + COLLATE "C" (E-6 Critical)
 
@@ -120,7 +120,7 @@
 - `provider` (`python-kma-api` 등 canonical name)
 - `endpoint`, `status`, `latency_ms`, `error`
 - BRIN(occurred_at) + (provider, occurred_at DESC)
-- TripMate가 호출하는 외부 API의 호출 로그 — 라이브러리는 라이브러리 측에서
+- Pinvi가 호출하는 외부 API의 호출 로그 — 라이브러리는 라이브러리 측에서
   별도 로그 (양쪽 결합 안 함)
 
 `app.import_jobs`:
@@ -135,16 +135,16 @@
 
 `app.feature_suggestions`:
 
-- 사용자가 "feature 추가/정정/폐쇄 제안" → TripMate Admin 큐
+- 사용자가 "feature 추가/정정/폐쇄 제안" → Pinvi Admin 큐
 - 사용자 API는 `POST /features/requests`, `GET /features/requests/{id}`
-- 승인 시 krtour-map admin feature change API로 반영(T-179)
+- 승인 시 kor-travel-map admin feature change API로 반영(T-179)
 
 `app.category_mappings`:
 
 - 외부 카테고리 ↔ 내부 카테고리 매핑 (UI 표시용)
 - 라이브러리의 카테고리 마스터 위에 사용자별 override
 
-## 3. `python-krtour-map`에 위임하는 항목
+## 3. `kor-travel-map`에 위임하는 항목
 
 ### 3.1 7 Feature
 
@@ -170,7 +170,7 @@
 - `event` — `event_period.end + 20년`
 - `notice` — `valid_period.end + 1년` (없으면 `start + 1년`)
 - `price (value)` — `price_points.retention_days` (카테고리별, 기본 10년)
-- `weather` — 여행 참조 0건이 되면 즉시 (TripMate가 trigger)
+- `weather` — 여행 참조 0건이 되면 즉시 (Pinvi가 trigger)
 - `route`/`area` — 무기한 (`status='inactive'`로 hide)
 
 ### 3.3 Record Linkage (D-14, K-4)
@@ -178,7 +178,7 @@
 - Blocking: 같은 `bjd_code` + `kind` + `ST_DWithin(coord, 100m)`
 - Scoring: 명칭(Jaro-Winkler, 0.45) + 공간(Haversine 비선형, 0.35) + 카테고리(Jaccard, 0.20)
 - 자동 병합 ≥ 0.85, 수동 큐 0.65 ~ 0.85
-- `dedup_review_queue` — TripMate Admin `/admin/dedup-review` UI에서 호출
+- `dedup_review_queue` — Pinvi Admin `/admin/dedup-review` UI에서 호출
 
 ### 3.4 provider sync (Q-3 ~ R-2)
 
@@ -187,7 +187,7 @@
 - `cursor`, `last_success_at`, `last_error`, `last_full_scan_at`
 - VisitKorea modifiedtime 증분, KMA 시간축, KHOA 30분 갱신
 
-TripMate Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15).
+Pinvi Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15).
 
 ## 4. Sprint 매핑
 
@@ -204,7 +204,7 @@ TripMate Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15)
 | `app.import_jobs` (M-6) | Sprint 5 | Dagster sensor |
 | `app.feature_suggestions` (H-6 / DEC-05) | Sprint 3 | 사용자 제안 API + Admin 페이지 |
 | `app.category_mappings` (M-2) | Sprint 3 | Admin 페이지 |
-| 라이브러리 `feature.*` 사용 (모든 read API) | Sprint 4 | `apps/api/app/etl_bridge/krtour_map.py` |
+| 라이브러리 `feature.*` 사용 (모든 read API) | Sprint 4 | `apps/api/app/etl_bridge/kor_travel_map.py` |
 | vworld 임포트 trigger UI (L-3) | Sprint 5 | Admin `/admin/etl/vworld-import` |
 | Record Linkage 검토 큐 UI (K-4) | Sprint 5 | Admin `/admin/dedup-review` |
 
@@ -212,7 +212,7 @@ TripMate Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15)
 
 - `docs/data-model.md` (본 저장소 `app` 도메인 상세)
 - `docs/postgres-schema.md` (DDL 골격)
-- `docs/krtour-map-integration.md` (krtour-map OpenAPI HTTP 패턴)
+- `docs/kor-travel-map-integration.md` (kor-travel-map OpenAPI HTTP 패턴)
 - `docs/decisions.md` ADR-003 (schema 책임 분담)
 - `docs/spec/v8/02-backend.md` (API 측 매핑)
-- `python-krtour-map`의 `docs/data-model.md`, `docs/postgres-schema.md`
+- `kor-travel-map`의 `docs/data-model.md`, `docs/postgres-schema.md`

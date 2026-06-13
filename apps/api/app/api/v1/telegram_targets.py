@@ -1,6 +1,6 @@
 """`/users/me/telegram-targets/*` — `docs/integrations/telegram.md` §6. T-106.
 
-bot token은 받지 않는다(§1). 사용자는 TripMate 시스템 봇을 자기 chat에 추가한 뒤
+bot token은 받지 않는다(§1). 사용자는 Pinvi 시스템 봇을 자기 chat에 추가한 뒤
 chat_id를 등록한다. 등록/verify 시 시스템 봇 토큰으로 `getChat`을 호출한다.
 """
 
@@ -32,8 +32,8 @@ router = APIRouter(prefix="/users/me/telegram-targets", tags=["telegram"])
 
 
 async def get_telegram_client() -> AsyncIterator[TelegramClient]:
-    http = httpx.AsyncClient(base_url=settings.tripmate_telegram_api_base)
-    client = TelegramClient(http, timeout_seconds=settings.tripmate_telegram_timeout_seconds)
+    http = httpx.AsyncClient(base_url=settings.pinvi_telegram_api_base)
+    client = TelegramClient(http, timeout_seconds=settings.pinvi_telegram_timeout_seconds)
     try:
         yield client
     finally:
@@ -44,7 +44,7 @@ TelegramClientDep = Annotated[TelegramClient, Depends(get_telegram_client)]
 
 
 def _system_bot_token() -> str | None:
-    return settings.tripmate_telegram_bot_token_default or None
+    return settings.pinvi_telegram_bot_token_default or None
 
 
 def _response(row: TelegramTarget) -> TelegramTargetResponse:

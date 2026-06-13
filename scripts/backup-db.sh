@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Create a TripMate app-schema PostgreSQL custom-format backup.
+# Create a Pinvi app-schema PostgreSQL custom-format backup.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKUP_DIR="${TRIPMATE_BACKUP_DIR:-${ROOT_DIR}/.tmp/backups}"
-SCHEMA="${TRIPMATE_BACKUP_SCHEMA:-app}"
-DATABASE_URL="${TRIPMATE_BACKUP_DATABASE_URL:-${TRIPMATE_DATABASE_URL:-}}"
+BACKUP_DIR="${PINVI_BACKUP_DIR:-${ROOT_DIR}/.tmp/backups}"
+SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
+DATABASE_URL="${PINVI_BACKUP_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 
 if [[ -z "${DATABASE_URL}" ]]; then
-  echo "TRIPMATE_DATABASE_URL or TRIPMATE_BACKUP_DATABASE_URL is required" >&2
+  echo "PINVI_DATABASE_URL or PINVI_BACKUP_DATABASE_URL is required" >&2
   exit 2
 fi
 
@@ -30,7 +30,7 @@ fi
 mkdir -p "${BACKUP_DIR}"
 
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
-backup_file="${BACKUP_DIR}/tripmate-${SCHEMA}-${timestamp}.dump"
+backup_file="${BACKUP_DIR}/pinvi-${SCHEMA}-${timestamp}.dump"
 
 # pg_dump custom format is a single-file artifact. Parallel jobs are used at restore time.
 pg_dump \

@@ -13,5 +13,5 @@ test('not-found 페이지의 홈 링크로 이동한다', async ({ page }) => {
   await page.goto('/nope-nope-nope');
   await page.getByTestId('not-found-page').getByRole('link', { name: '홈으로' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'TripMate', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pinvi', exact: true })).toBeVisible();
 });

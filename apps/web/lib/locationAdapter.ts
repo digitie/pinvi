@@ -7,7 +7,7 @@ import {
   type LocationAdapter,
   type LocationOptions,
   type UserLocation,
-} from '@tripmate/hooks';
+} from '@pinvi/hooks';
 
 export const webLocationAdapter: LocationAdapter = {
   async getCurrentPosition(opts: LocationOptions = {}): Promise<UserLocation> {

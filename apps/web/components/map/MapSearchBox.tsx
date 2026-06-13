@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
-import { ApiError, featureApi } from '@tripmate/api-client';
-import type { FeatureSummary } from '@tripmate/schemas';
+import { ApiError, featureApi } from '@pinvi/api-client';
+import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 
 export interface MapSearchBoxProps {

@@ -1,28 +1,28 @@
-# TripMate dev compose — PostgreSQL/PostGIS + RustFS + (옵션) Dagster.
+# Pinvi dev compose — PostgreSQL/PostGIS + RustFS + (옵션) Dagster.
 # `docs/runbooks/local-dev.md` §8.
 
 services:
   postgres:
     image: postgis/postgis:16-3.5-alpine
-    container_name: tripmate-postgres
+    container_name: pinvi-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: tripmate
-      POSTGRES_PASSWORD: tripmate_dev_password
-      POSTGRES_DB: tripmate
+      POSTGRES_USER: pinvi
+      POSTGRES_PASSWORD: pinvi_dev_password
+      POSTGRES_DB: pinvi
     ports:
       - "5432:5432"
     volumes:
-      - tripmate-pgdata:/var/lib/postgresql/data
+      - pinvi-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tripmate -d tripmate"]
+      test: ["CMD-SHELL", "pg_isready -U pinvi -d pinvi"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   rustfs:
     image: rustfs/rustfs:latest
-    container_name: tripmate-rustfs
+    container_name: pinvi-rustfs
     restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: rustfsadmin
@@ -35,7 +35,7 @@ services:
       - "12101:12101"
       - "12105:12105"
     volumes:
-      - tripmate-rustfs:/data
+      - pinvi-rustfs:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:12101/health/live || exit 1"]
       interval: 10s
@@ -50,7 +50,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://rustfs:12101 rustfsadmin rustfsadmin;
-      mc mb -p local/tripmate-media || true;
+      mc mb -p local/pinvi-media || true;
       "
 
   # Sprint 5에서 활성화. Sprint 1은 컨테이너 정의만.
@@ -59,28 +59,94 @@ services:
     build:
       context: ..
       dockerfile: apps/etl/Dockerfile
-    container_name: tripmate-dagster
+    container_name: pinvi-dagster
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_dev_password@postgres:5432/tripmate
-      TRIPMATE_RUSTFS_ENDPOINT_URL: http://rustfs:12101
-      TRIPMATE_RUSTFS_BUCKET: tripmate-media
-      TRIPMATE_RUSTFS_ACCESS_KEY_ID: rustfsadmin
-      TRIPMATE_RUSTFS_SECRET_ACCESS_KEY: rustfsadmin
+      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_dev_password@postgres:5432/pinvi
+      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:12101
+      PINVI_RUSTFS_BUCKET: pinvi-media
+      PINVI_RUSTFS_ACCESS_KEY_ID: rustfsadmin
+      PINVI_RUSTFS_SECRET_ACCESS_KEY: rustfsadmin
       DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY:-}
-      TRIPMATE_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS: ${TRIPMATE_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS:-6}
-      TRIPMATE_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${TRIPMATE_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
-      DAGSTER_HOME: /opt/tripmate/.tmp/dagster
+      PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS:-6}
+      PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
+      DAGSTER_HOME: /opt/pinvi/.tmp/dagster
     ports:
       - "9023:3000"
     volumes:
-      - ../apps/etl:/opt/tripmate/apps/etl
-      - tripmate-dagster:/opt/tripmate/.tmp/dagster
+      - ../apps/etl:/opt/pinvi/apps/etl
+      - pinvi-dagster:/opt/pinvi/.tmp/dagster
+
+  cadvisor:
+    profiles: ["observability"]
+    image: ${PINVI_CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.52.1}
+    container_name: pinvi-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    ports:
+      - "${PINVI_CADVISOR_PORT:-12602}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  prometheus:
+    profiles: ["observability"]
+    image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
+    container_name: pinvi-prometheus
+    restart: unless-stopped
+    user: "${PINVI_PROMETHEUS_RUN_AS_USER:-0}"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PINVI_PROMETHEUS_PORT:-12601}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - pinvi-prometheus:/prometheus
+    depends_on:
+      cadvisor:
+        condition: service_started
+
+  grafana:
+    profiles: ["observability"]
+    image: ${PINVI_GRAFANA_IMAGE:-grafana/grafana:11.1.4}
+    container_name: pinvi-grafana
+    restart: unless-stopped
+    user: "${PINVI_GRAFANA_RUN_AS_USER:-0}"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${PINVI_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${PINVI_GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${PINVI_GRAFANA_PORT:-12605}:3000"
+    volumes:
+      - pinvi-grafana:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
 
 volumes:
-  tripmate-pgdata:
-  tripmate-rustfs:
-  tripmate-dagster:
+  pinvi-pgdata:
+  pinvi-rustfs:
+  pinvi-dagster:
+  pinvi-prometheus:
+  pinvi-grafana:

@@ -19,7 +19,7 @@ export const AdminFeatureRequestSummarySchema = z.object({
   note: z.string().nullable().optional(),
   target_feature_id: z.string().nullable().optional(),
   status: FeatureRequestStatusSchema,
-  krtour_ref: z.record(z.string(), z.unknown()).nullable().optional(),
+  kor_travel_map_ref: z.record(z.string(), z.unknown()).nullable().optional(),
   reviewed_by_admin_id: z.string().uuid().nullable().optional(),
   created_at: Iso8601Schema,
   resolved_at: Iso8601Schema.nullable().optional(),
@@ -46,7 +46,7 @@ export const AdminFeatureRequestApproveSchema = z.object({
     .optional(),
   marker_icon: z.string().max(64).optional(),
   name: z.string().min(1).max(200).optional(),
-  krtour_reason: z.string().max(500).optional(),
+  kor_travel_map_reason: z.string().max(500).optional(),
 });
 export type AdminFeatureRequestApprove = z.infer<typeof AdminFeatureRequestApproveSchema>;
 
@@ -58,7 +58,7 @@ export type AdminFeatureRequestReject = z.infer<typeof AdminFeatureRequestReject
 export const AdminFeatureRequestResultSchema = z.object({
   request_id: z.string().uuid(),
   status: FeatureRequestStatusSchema,
-  krtour_ref: z.record(z.string(), z.unknown()).nullable().optional(),
+  kor_travel_map_ref: z.record(z.string(), z.unknown()).nullable().optional(),
   reviewed_by_admin_id: z.string().uuid().nullable().optional(),
   resolved_at: Iso8601Schema.nullable().optional(),
 });

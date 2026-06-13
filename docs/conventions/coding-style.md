@@ -56,7 +56,7 @@ trip.model_dump(mode="json")
 
 - 모든 I/O는 async (`asyncpg`, `httpx.AsyncClient`)
 - 동기 함수는 순수 함수 / CPU-bound만
-- 라이브러리(`python-krtour-map`)는 async — 호출자도 async
+- 라이브러리(`kor-travel-map`)는 async — 호출자도 async
 
 ```python
 # 좋은 예
@@ -102,7 +102,7 @@ async def update_trip(
 
 ```
 schemas → models → services → routes
-                  ↘ etl_bridge → krtour.map (외부)
+                  ↘ etl_bridge → kor_travel_map.map (외부)
 ```
 
 `import-linter` 계약 박음 (Sprint 1 진입 후):
@@ -111,10 +111,10 @@ schemas → models → services → routes
 [[tool.importlinter.contracts]]
 type = "layers"
 layers = [
-  "tripmate.api.routes",
-  "tripmate.api.services",
-  "tripmate.api.models",
-  "tripmate.api.schemas",
+  "pinvi.api.routes",
+  "pinvi.api.services",
+  "pinvi.api.models",
+  "pinvi.api.schemas",
 ]
 ```
 
@@ -124,7 +124,7 @@ layers = [
 - 클래스: `PascalCase`
 - 함수/변수: `snake_case`
 - 상수: `UPPER_SNAKE`
-- 환경변수: `TRIPMATE_*` prefix
+- 환경변수: `PINVI_*` prefix
 - 외부 식별자 / API 응답 키 / 코드: 원문 유지 (legal_dong_code, mapX, areaCode 등)
 
 ### 2.7 예외
@@ -139,23 +139,23 @@ layers = [
 
 - 라우터에서 HTTPException으로 변환
 
-### 2.8 krtour-map HTTP 호출
+### 2.8 kor-travel-map HTTP 호출
 
 ```python
 # 좋은 예 — OpenAPI HTTP client를 transport로만 사용
-from tripmate.api.clients.krtour_map import KrtourMapClient
+from pinvi.api.clients.kor_travel_map import KorTravelMapClient
 
 async def features_in_bounds(
     bbox: BBox,
     zoom: int,
     kinds: list[str],
-    client: KrtourMapClient = Depends(get_krtour_map_client),
+    client: KorTravelMapClient = Depends(get_kor_travel_map_client),
 ):
     return await client.features_in_bounds(bbox, zoom, kinds)
 
 
 # 나쁜 예 — feature 도메인 wrapper (ADR-026 위반)
-class KrtourMapGateway:
+class KorTravelMapGateway:
     async def normalize_provider_raw(self, ...): ...   # 금지
 ```
 
@@ -207,8 +207,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // 2. 공용 패키지 (alphabetical)
-import { useApi } from '@tripmate/api-client';
-import { useAuthStore } from '@tripmate/state';
+import { useApi } from '@pinvi/api-client';
+import { useAuthStore } from '@pinvi/state';
 
 // 3. 본 앱 (alphabetical)
 import { Button } from '@/components/ui/button';
@@ -244,7 +244,7 @@ const response = await api.request('/trips', { schema: TripListSchema });
 
 ```tsx
 // apps/web/components/trip/TripCard.tsx
-import type { Trip } from '@tripmate/schemas';
+import type { Trip } from '@pinvi/schemas';
 
 interface TripCardProps {
   trip: Trip;
@@ -285,7 +285,7 @@ async function TripsPage() {
 
 // Client Component — TanStack Query
 'use client';
-import { useTripsList } from '@tripmate/api-client';
+import { useTripsList } from '@pinvi/api-client';
 
 export function TripsDashboard() {
   const { data, isLoading, error } = useTripsList({ bucket: 'future' });
@@ -346,7 +346,7 @@ const t = useTranslations('Auth');
 - [ ] `npm --workspace apps/web run lint` 통과
 - [ ] `npm --workspace apps/web run typecheck` 통과
 - [ ] `import-linter` 의존 방향 통과
-- [ ] 새 환경변수는 `TRIPMATE_*` prefix
+- [ ] 새 환경변수는 `PINVI_*` prefix
 - [ ] datetime은 timezone-aware
 - [ ] 좌표는 lon-lat 순서
 - [ ] wrapper class 안 만들었나 (ADR-005)
