@@ -27,7 +27,7 @@
                   ▼
 ┌───────────────────────────────────────────────────────────┐
 │ kor-travel-geo REST 서비스 (별 프로세스/컨테이너)        │
-│   FastAPI :8888  (운영 docker network: http://kor-travel-geo:8888)│
+│   FastAPI :12501  (운영 docker network: http://kor-travel-geo:12501)│
 │   1차 로컬 PostGIS(도로명주소 전자지도) → 2차 vworld/juso fallback │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -163,7 +163,7 @@ geocoding은 HTTP 의존이므로 kor-travel-map과 별개의 httpx client를 li
 
 ```python
 # apps/api/app/core/config.py (Settings 발췌)
-pinvi_kor_travel_geo_base_url: str = "http://localhost:8888"   # 운영: http://kor-travel-geo:8888
+pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"   # 운영: http://kor-travel-geo:12501
 pinvi_kor_travel_geo_timeout_seconds: float = 3.0
 pinvi_kor_travel_geo_enabled: bool = True       # False면 geocoding 기능 비활성(503)
 ```
@@ -326,7 +326,7 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 ## 12. 환경변수
 
 ```dotenv
-PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:8888   # 운영: http://kor-travel-geo:8888
+PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
 PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
 PINVI_KOR_TRAVEL_GEO_ENABLED=true
 ```

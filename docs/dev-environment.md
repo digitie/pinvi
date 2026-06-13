@@ -176,7 +176,7 @@ uv pip install -e ".[dev]"
 # GDAL 바인딩이 필요하면 시스템 버전에 핀
 uv pip install "gdal==$(gdal-config --version)"
 
-# kor-travel-map은 별도 sibling 저장소에서 API/Admin API 12301로 실행
+# kor-travel-map은 별도 sibling 저장소에서 API/Admin API 12701로 실행
 # Pinvi는 PINVI_KOR_TRAVEL_MAP_API_BASE_URL만 설정
 
 # Node — Linux Node/npm (Windows shim 금지, §6)
@@ -282,7 +282,7 @@ PINVI_JWT_SECRET_KEY=change-me-32-bytes-minimum-...
 PINVI_RESEND_API_KEY=
 PINVI_GOOGLE_OAUTH_CLIENT_ID=
 PINVI_GOOGLE_OAUTH_CLIENT_SECRET=
-PINVI_WEB_BASE_URL=http://localhost:12505
+PINVI_WEB_BASE_URL=http://localhost:12805
 ```
 
 전체 키 목록은 `apps/api/app/core/config.py`의 `Settings`가 1차 진실이다. `.env`는

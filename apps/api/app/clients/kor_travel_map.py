@@ -1,6 +1,6 @@
 """kor-travel-map OpenAPI HTTP client (transport-only).
 
-`kor-travel-map`의 운영 HTTP API(`kor-travel-map-admin`, 포트 12301,
+`kor-travel-map`의 운영 HTTP API(`kor-travel-map-admin`, 포트 12701,
 `openapi.user.json`)를 호출하는 httpx 기반 client다. ADR-026/027(DEC-01=B) 기준이며
 in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 

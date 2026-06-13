@@ -92,15 +92,15 @@ Pinvi 로컬 개발 서버 포트는 항상 고정한다.
 | PostgreSQL | 5432 | `localhost:5432` |
 | RustFS API | 12101 | `http://localhost:12101` |
 | RustFS console | 12105 | `http://localhost:12105` |
-| kor-travel-map API/Admin API | 12301 | `http://localhost:12301` |
-| FastAPI (`apps/api`) | 12501 | `http://localhost:12501` |
-| Next.js (`apps/web`) | 12505 | `http://localhost:12505` |
-| Dagster (`apps/etl`) | 9023 | `http://localhost:9023` |
-| Prometheus | 12601 | `http://localhost:12601` |
-| cAdvisor Exporter | 12602 | `http://localhost:12602` |
-| Grafana | 12605 | `http://localhost:12605` |
+| kor-travel-map API/Admin API | 12701 | `http://localhost:12701` |
+| FastAPI (`apps/api`) | 12801 | `http://localhost:12801` |
+| Next.js (`apps/web`) | 12805 | `http://localhost:12805` |
+| Dagster (`apps/etl`) | 12802 | `http://localhost:12802` |
+| Prometheus | 12401 | `http://localhost:12401` |
+| cAdvisor Exporter | 12301 | `http://localhost:12301` |
+| Grafana | 12205 | `http://localhost:12205` |
 
-`scripts/dev-up.sh`는 시작 전에 12501/12505/9023을 점유한 프로세스를 종료하고 같은
+`scripts/dev-up.sh`는 시작 전에 12801/12805/12802을 점유한 프로세스를 종료하고 같은
 포트로 다시 올린다. PostgreSQL/RustFS는 Docker compose, kor-travel-map은 해당 sibling
 저장소 런북으로 실행한다. 수동 정리는 `scripts/dev-down.sh`.
 
@@ -156,7 +156,7 @@ source apps/api/.venv/bin/activate
 uv pip install -e "apps/api[dev]"
 uv pip install "gdal==$(gdal-config --version)"
 
-# kor-travel-map은 별도 sibling 저장소에서 실행 (API/Admin API 12301)
+# kor-travel-map은 별도 sibling 저장소에서 실행 (API/Admin API 12701)
 # Pinvi는 .env의 PINVI_KOR_TRAVEL_MAP_API_BASE_URL로 연결
 
 # .env
@@ -168,10 +168,10 @@ $EDITOR apps/api/.env
 
 ```bash
 cd apps/api
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 12501
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 12801
 ```
 
-`http://localhost:12501/docs` (OpenAPI), `http://localhost:12501/health`.
+`http://localhost:12801/docs` (OpenAPI), `http://localhost:12801/health`.
 
 ### 6.2 테스트
 
@@ -213,7 +213,7 @@ PINVI_DATABASE_URL='postgresql+psycopg://pinvi:changeme@localhost:5432/pinvi_mig
 ```bash
 cd ~/pinvi-workspaces/pinvi-codex
 npm install
-npm --workspace apps/web run dev   # http://localhost:12505
+npm --workspace apps/web run dev   # http://localhost:12805
 ```
 
 검사:
@@ -277,7 +277,7 @@ uv venv .venv --python 3.12
 uv pip install -e .
 
 # Dagster dev (UI + daemon)
-uv run dagster dev --host 0.0.0.0 --port 9023   # http://localhost:9023
+uv run dagster dev --host 0.0.0.0 --port 12802   # http://localhost:12802
 ```
 
 자세히는 [etl.md](./etl.md).
@@ -288,7 +288,7 @@ uv run dagster dev --host 0.0.0.0 --port 9023   # http://localhost:9023
 |------|------|
 | 전체 dev up | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && scripts/dev-up.sh"` |
 | 전체 dev down | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && scripts/dev-down.sh"` |
-| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex/apps/api && uv run uvicorn app.main:app --reload --port 12501"` |
+| 백엔드 dev | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex/apps/api && uv run uvicorn app.main:app --reload --port 12801"` |
 | 프론트 dev | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && npm --workspace apps/web run dev"` |
 | 백엔드 테스트 | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && uv run pytest apps/api/tests -q"` |
 | 프론트 lint | `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && npm --workspace apps/web run lint"` |

@@ -9,7 +9,7 @@ import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
 const STATUSES: { value: TripStatus; label: string }[] = [

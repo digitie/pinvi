@@ -14,14 +14,14 @@ const adminUser = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/auth/me',
+    (url) => url.port === '12801' && url.pathname === '/auth/me',
     async (route) => {
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: adminUser }) });
     },
   );
-  // 포트 12501(API)로 한정 — 12505 페이지 내비게이션을 가로채지 않도록.
+  // 포트 12801(API)로 한정 — 12805 페이지 내비게이션을 가로채지 않도록.
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/admin/mcp-tokens',
+    (url) => url.port === '12801' && url.pathname === '/admin/mcp-tokens',
     async (route, request) => {
       if (request.method() !== 'GET') return route.continue();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });

@@ -7,9 +7,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_DIR="${ROOT}/.tmp/dev/pids"
 
 PORTS=(
-  "${PINVI_API_DEV_PORT:-12501}"
-  "${PINVI_WEB_DEV_PORT:-12505}"
-  "${PINVI_DAGSTER_DEV_PORT:-9023}"
+  "${PINVI_API_DEV_PORT:-12801}"
+  "${PINVI_WEB_DEV_PORT:-12805}"
+  "${PINVI_DAGSTER_DEV_PORT:-12802}"
 )
 
 kill_pid_file() {

@@ -41,7 +41,7 @@ const locationAudit: AdminLocationAuditEntry = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/auth/me',
+    (url) => url.port === '12801' && url.pathname === '/auth/me',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -53,7 +53,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page }) => {
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/admin/stats/overview',
+    (url) => url.port === '12801' && url.pathname === '/admin/stats/overview',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -88,7 +88,7 @@ test('Admin API 호출 로그가 필터를 API에 전달한다', async ({ page }
   const requests: string[] = [];
 
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/admin/api-calls',
+    (url) => url.port === '12801' && url.pathname === '/admin/api-calls',
     async (route) => {
       requests.push(route.request().url());
       await route.fulfill({
@@ -112,14 +112,14 @@ test('Admin API 호출 로그가 필터를 API에 전달한다', async ({ page }
       requests.some((url) => url.includes('provider=kma') && url.includes('status_code=200')),
     )
     .toBe(true);
-  expect(requests.some((url) => url.includes('12301'))).toBe(false);
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });
 
 test('CPO 위치 감사 로그가 마스킹 좌표와 날짜 필터를 표시한다', async ({ page }) => {
   const requests: string[] = [];
 
   await page.route(
-    (url) => url.port === '12501' && url.pathname === '/admin/audit/location',
+    (url) => url.port === '12801' && url.pathname === '/admin/audit/location',
     async (route) => {
       requests.push(route.request().url());
       await route.fulfill({
@@ -150,5 +150,5 @@ test('CPO 위치 감사 로그가 마스킹 좌표와 날짜 필터를 표시한
       ),
     )
     .toBe(true);
-  expect(requests.some((url) => url.includes('12301'))).toBe(false);
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });

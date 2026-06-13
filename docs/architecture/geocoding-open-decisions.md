@@ -72,7 +72,7 @@
 ## D7. 네트워크 · 인증 모델 (Pinvi ↔ kor-travel-geo REST)
 
 - **맥락**: v2 REST 호출의 신뢰 경계.
-- **잠정 기본값**: 같은 **docker network 내부 호출**(`http://kor-travel-geo:8888`),
+- **잠정 기본값**: 같은 **docker network 내부 호출**(`http://kor-travel-geo:12501`),
   외부 비노출, 별도 인증 없음(내부망). Pinvi가 자기 rate-limit으로 보호.
 - **추천**: 내부망 유지. 만약 kor-travel-geo를 다른 호스트/외부에 두면 mTLS 또는
   토큰 + 별도 ADR.

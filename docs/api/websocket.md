@@ -9,7 +9,7 @@
 여행 단위 채널. JWT 인증 (cookie 또는 query `?token=`).
 
 ```
-ws://localhost:12501/ws/trips/<trip_id>?token=<jwt>
+ws://localhost:12801/ws/trips/<trip_id>?token=<jwt>
 wss://pinviapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
 ```
 

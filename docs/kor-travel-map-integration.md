@@ -5,7 +5,7 @@
 ADR-026 + ADR-027 기준이며, 과거 ADR-002의 "함수 직접 호출" 정책을 대체한다.
 
 > **✅ 현재 상태 (2026-06-10 갱신)**: 위 계약은 더 이상 "목표"가 아니라 **실재한다**.
-> `kor-travel-map` `origin/main` `0e45bd7` 기준 — FastAPI :12301에 `/v1` 전 표면
+> `kor-travel-map` `origin/main` `0e45bd7` 기준 — FastAPI :12701에 `/v1` 전 표면
 > (사용자 read 8종 + admin/ops/debug, ADR-048 T-216a~g 머지 완료: RFC7807
 > problem+json, envelope payload/meta 분리, batch `found`, in-bounds `max_items`),
 > 기계 정본 `packages/kor-travel-map-admin/openapi.user.json`·`openapi.json`, prose 정본
@@ -26,7 +26,7 @@ Pinvi apps/api
           │ HTTP, JSON, OpenAPI
           ▼
 kor-travel-map 독립 프로그램
-  ├─ API/Admin API: http://127.0.0.1:12301
+  ├─ API/Admin API: http://127.0.0.1:12701
   ├─ feature / provider_sync schema 소유
   └─ 자체 Dagster/Provider 적재 소유
 ```
@@ -43,9 +43,9 @@ kor-travel-map 독립 프로그램
 ## 2. 설정
 
 ```dotenv
-PINVI_KOR_TRAVEL_MAP_API_BASE_URL=http://localhost:12301
-# admin "API"도 :12301 (/v1/admin/*)이다.
-PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL=http://localhost:12301
+PINVI_KOR_TRAVEL_MAP_API_BASE_URL=http://localhost:12701
+# admin "API"도 :12701 (/v1/admin/*)이다.
+PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL=http://localhost:12701
 ```
 
 kor-travel-map 쪽 런북에서는 동일 API URL을 `KOR_TRAVEL_MAP_API_URL`로 부를 수 있다.
@@ -95,7 +95,7 @@ Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 
 | debug | `/v1/debug/etl/*`, `/v1/debug/mois-license` |
 
 `/health`·`/version`만 비버전 경로다 (구 `/debug/health`·`/debug/version`은 kor_travel_map
-T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12301**이다. 구현과
+T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이다. 구현과
 테스트는 OpenAPI 파일을 우선한다.
 
 ## 5. Pinvi API 매핑

@@ -24,8 +24,9 @@
 - CI/CD gate를 복원하고 API/Web/ETL lint, typecheck, test workflow를 정렬했다.
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
-- 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12301`,
-  API `12501`, Web `12505`, Dagster `9023`, Grafana `12605`로 정렬했다.
+- 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,
+  API `12801`, Web `12805`, Dagster `12802`, Grafana `12205`, cAdvisor `12301`,
+  Prometheus `12401`로 정렬했다.
 
 ### 검증 기준
 

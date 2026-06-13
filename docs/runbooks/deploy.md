@@ -57,9 +57,9 @@ scripts/n150-docker-doctor.sh
 검증:
 
 ```bash
-curl -fsS http://127.0.0.1:12501/health
-curl -fsS http://127.0.0.1:12501/health/db
-curl -fsS http://127.0.0.1:12505/
+curl -fsS http://127.0.0.1:12801/health
+curl -fsS http://127.0.0.1:12801/health/db
+curl -fsS http://127.0.0.1:12805/
 curl -fsS https://pinviapi.digitie.mywire.org/health
 ```
 

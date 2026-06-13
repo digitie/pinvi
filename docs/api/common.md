@@ -22,8 +22,8 @@
 
 | 환경 | URL |
 |------|-----|
-| 로컬 dev | `http://localhost:12501` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:12501` |
+| 로컬 dev | `http://localhost:12801` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12801` |
 | 스테이징 | TBD (Sprint 6) |
 | 운영 | `https://pinviapi.digitie.mywire.org` |
 
@@ -31,8 +31,8 @@
 
 | 환경 | URL |
 |------|-----|
-| 로컬 dev | `http://localhost:12505` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:12505` |
+| 로컬 dev | `http://localhost:12805` |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12805` |
 | 운영 | `https://pinvi.digitie.mywire.org` |
 
 OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
@@ -258,8 +258,8 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 
 | 환경 | 허용 Origin |
 |------|------------|
-| 로컬 dev | `http://localhost:12505`, `http://127.0.0.1:12505` |
-| Docker smoke | `http://127.0.0.1:12505` |
+| 로컬 dev | `http://localhost:12805`, `http://127.0.0.1:12805` |
+| Docker smoke | `http://127.0.0.1:12805` |
 | 스테이징 | TBD |
 | 운영 | `https://pinvi.digitie.mywire.org` |
 
@@ -280,7 +280,7 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
   ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:12501 https://pinviapi.digitie.mywire.org
+  connect-src 'self' http://localhost:12801 https://pinviapi.digitie.mywire.org
   https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`

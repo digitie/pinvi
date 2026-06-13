@@ -1061,6 +1061,7 @@
 - **결정**:
   - Pinvi는 `kor-travel-map`을 **독립 프로그램의 OpenAPI HTTP API**로
     호출한다. 로컬 고정 포트는 API/Admin API `12301`.
+    이 포트 값은 ADR-042에서 docker-manager 대역 정책에 따라 `12701`로 supersede됐다.
   - Pinvi 사용자/서비스 경로에서 `from kor_travel_map.map import ...`,
     `AsyncKorTravelMapClient`, `feature`/`provider_sync` 직접 SQL/ORM 접근을 쓰지
     않는다. HTTP client는 transport wrapper만 허용한다.
@@ -1117,6 +1118,7 @@
   - 통합 모델은 **운영급 HTTP 서비스(DEC-01 안 B)** 로 확정한다. ADR-026 유지.
   - 이 HTTP 계약(인증 있는 운영 API, 포트 12301, 전 엔드포인트, OpenAPI 생성 +
     drift gate)은 kor-travel-map이 **신규로 구축해야 할 목표**다. 현재 미존재임을 인지한다.
+    이 포트 값은 ADR-042에서 docker-manager 대역 정책에 따라 `12701`로 supersede됐다.
   - Pinvi가 kor-travel-map에 필요로 하는 능력의 권위 명세는
     `docs/kor-travel-map-requirements.md`다. kor-travel-map 에이전트가 이를 읽고 우선순위·계약을
     회신한다.
@@ -1351,7 +1353,7 @@
 
 ## ADR-037: 로컬 고정 포트는 5432/12101/12105/12301/12501/12505로 재배정한다
 
-- **상태**: accepted
+- **상태**: superseded by ADR-042
 - **날짜**: 2026-06-12
 - **결정자**: 사용자
 - **컨텍스트**: Sprint 1~4 동안 Pinvi dev/API/Web/RustFS/kor-travel-map 포트가 여러 차례
@@ -1452,20 +1454,17 @@
   + idempotent 초기화). 그동안 Pinvi 문서는 `scripts/docker-app.sh`만 Docker 진입으로
   안내해 공용 인프라와 앱 컨테이너 경로가 분리되지 않았다.
 - **결정**:
-  - **Docker 빌드/실행의 1차 경로는 `kor-travel-docker-manager`**다. 공용 의존 인프라는
-    `ktdctl <target>`로 올린다. Pinvi 개발 의존성 전체는 `ktdctl main --build`
-    (db→storage→gra→cadv→prom→geo→map→ai→main 누적)로 기동한다.
-  - **Pinvi 자체 app 컨테이너(api/web 이미지 빌드·smoke)**는 현재
-    `kor-travel-docker-manager` compose에 포함되지 않으므로(docker-manager
-    `docs/docker-management.md` §3), `infra/docker-compose.app.yml` +
-    `scripts/docker-app.sh build/up/smoke`가 정본이다. docker-manager가 app target을
-    compose에 추가하면 그 경로로 이관한다.
+  - **Docker 빌드/실행의 1차 경로는 `kor-travel-docker-manager`**다. 공용 의존 인프라와
+    Pinvi API/Web 앱 컨테이너는 `ktdctl srv --build`로 올린다(`srv`는 `pinvi` target의
+    짧은 별칭, db→storage→gra→cadv→prom→geo→conc→map→pinvi 누적).
+  - **Pinvi 폴백 app smoke**는 `infra/docker-compose.app.yml` +
+    `scripts/docker-app.sh build/up/smoke`가 맡는다. docker-manager가 없거나 Pinvi app만
+    격리 검증해야 할 때 사용한다.
   - **폴백**: `kor-travel-docker-manager` 미설치/미기동, `ktdctl` 부재, WSL/네트워크
     문제 등으로 1차 경로를 쓸 수 없으면 `scripts/docker-app.sh`(공용 인프라 일부는
-    `infra/docker-compose.yml`)로 진행한다. 폴백 시 포트 정책(ADR-037)을 유지한다.
-- **결과**: 공용 인프라는 한 곳(`ktdctl`)에서 일관되게 올라가고, 앱 이미지 빌드/smoke는
-  Pinvi 저장소 스크립트가 책임진다. docker-manager가 없는 환경에서도 폴백으로 막히지
-  않는다.
+    `infra/docker-compose.yml`)로 진행한다. 폴백 시 포트 정책(ADR-042)을 유지한다.
+- **결과**: 공용 인프라와 Pinvi 앱 컨테이너는 한 곳(`ktdctl`)에서 일관되게 올라가고,
+  docker-manager가 없는 환경에서도 Pinvi 저장소 스크립트 폴백으로 막히지 않는다.
 - **참조**: `docs/runbooks/docker-app.md` §0, `CLAUDE.md`, `AGENTS.md`,
   `kor-travel-docker-manager/docs/docker-management.md`, `scripts/docker-app.sh`,
   `infra/docker-compose.app.yml`.
@@ -1498,7 +1497,68 @@
 - **참조**: `apps/mobile/README.md`, `docs/architecture/frontend.md` (§2, §6, §8, §10),
   ADR-011, `.github/workflows/web.yml`, `.github/workflows/aggregate-ci.yml`.
 
+## ADR-042: 로컬 포트 정책은 `kor-travel-docker-manager` target 대역을 따른다
+
+- **상태**: accepted
+- **날짜**: 2026-06-13
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+ADR-037은 Pinvi API/Web과 `kor-travel-map`을 각각 `12501`/`12505`/`12301`에 고정했다.
+하지만 `kor-travel-docker-manager`가 TripMate 계열 공용 target registry와
+`docs/ports.md`를 정리하면서 `db → storage → gra → cadv → prom → geo → conc → map → pinvi`
+순서의 100 단위 포트 대역을 정본으로 제공한다. Pinvi가 예전 포트를 계속 쓰면
+`kor-travel-geo`, `kor-travel-map`, 공용 observability와 충돌한다.
+
+### 결정
+
+- 로컬 포트 정책의 source of truth는 `kor-travel-docker-manager`
+  `config/docker-targets.yml`과 `docs/ports.md`다.
+- PostgreSQL host 포트는 표준 `5432`를 유지한다.
+- RustFS host 포트는 API `12101`, console `12105`를 유지하되, 컨테이너 내부 포트는
+  docker-manager와 같이 API `9000`, console `9001`을 사용한다.
+- 공용 observability는 Grafana `12205`, cAdvisor `12301`, Prometheus `12401`을 사용한다.
+- `kor-travel-geo`는 API `12501`, Web UI `12505`를 사용한다. Pinvi의
+  `PINVI_KOR_TRAVEL_GEO_BASE_URL` 기본값은 `http://localhost:12501`이다.
+- `kor-travel-concierge`는 API `12601`, MCP `12602`, Web UI `12605` 대역을 사용한다.
+  Pinvi는 이 서비스를 직접 호출하지 않는다.
+- `kor-travel-map`은 API/Admin API `12701`, Dagster `12702`, Web UI `12705`를 사용한다.
+  Pinvi의 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`과
+  `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 기본값은 `http://localhost:12701`이다.
+- Pinvi 자체 로컬 포트는 API `12801`, Dagster dev `12802`, Web UI `12805`다.
+  docker-manager가 현재 Pinvi Dagster를 관리하지 않으므로 Dagster는 Pinvi 대역의
+  추가 service 포트(`+2`)로 배정한다.
+- `kor-travel-docker-manager` 자체 Backend API와 Dashboard는 `12901`, `12905`를 사용한다.
+- Docker 실행 1차 경로는 `ktdctl srv --build`이며, Pinvi 폴백 스크립트와 compose도 같은
+  포트 계약을 따른다.
+
+### 근거
+
+- 모든 TripMate 계열 앱이 같은 포트 대역 규칙을 공유해야 동시 기동과 포트 점유 정리가
+  예측 가능하다.
+- Pinvi API가 `12501`을 계속 쓰면 새 `kor-travel-geo` API 대역과 충돌한다.
+- `kor-travel-map` API/Admin API가 `12701`로 이동했으므로 Pinvi HTTP client 기본값도
+  같은 host 포트를 바라봐야 한다.
+
+### 결과
+
+- ADR-037의 포트 고정값은 본 ADR이 supersede한다.
+- `.env.example`, API settings, Web 기본 API URL, Playwright mock, Docker compose,
+  dev/smoke/deploy scripts, runbook 문서가 `kor-travel-docker-manager` 대역과 정렬된다.
+- 기존 로컬 `.env`에 예전 포트가 남아 있으면 새 기본값을 덮어쓰므로 수동 정리가 필요하다.
+
+### 참조
+
+- `kor-travel-docker-manager/config/docker-targets.yml`
+- `kor-travel-docker-manager/docs/ports.md`
+- `docs/runbooks/docker-app.md`
+- `docs/runbooks/local-dev.md`
+- `.env.example`
+- `infra/docker-compose.yml`
+- `infra/docker-compose.app.yml`
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-042**
+- 다음 신규 ADR = **ADR-043**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

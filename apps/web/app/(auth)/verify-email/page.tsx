@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
 export default function VerifyEmailPage() {

@@ -8,7 +8,7 @@ import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
 const columns: DataTableColumn<AdminAuditEntry>[] = [

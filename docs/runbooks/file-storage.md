@@ -30,9 +30,9 @@ services:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
       RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: ":12101"
+      RUSTFS_ADDRESS: ":9000"
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_CONSOLE_ADDRESS: ":12105"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
     ports:
       - "${PINVI_RUSTFS_PORT:-12101}:12101"
       - "${PINVI_RUSTFS_CONSOLE_PORT:-12105}:12105"
@@ -46,7 +46,7 @@ services:
     depends_on: [rustfs]
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://rustfs:12101 rustfsadmin rustfsadmin;
+      mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin;
       mc mb -p local/pinvi-media || true;
       mc anonymous set download local/pinvi-media || true;
       "
@@ -89,7 +89,7 @@ user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}
 
 | 환경변수 | 위치 | 비고 |
 |----------|------|------|
-| `PINVI_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:12101`) |
+| `PINVI_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:9000`) |
 | `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:12101`) |
 | `PINVI_RUSTFS_BUCKET` | API | `pinvi-media` |
 | `PINVI_RUSTFS_ACCESS_KEY_ID` | API | |
@@ -110,7 +110,7 @@ mc anonymous set-json local/pinvi-media cors.json
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["http://localhost:12505", "http://127.0.0.1:12505", "https://pinvi.digitie.mywire.org"],
+      "AllowedOrigins": ["http://localhost:12805", "http://127.0.0.1:12805", "https://pinvi.digitie.mywire.org"],
       "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
       "AllowedHeaders": ["Content-Type", "x-amz-*"],
       "MaxAgeSeconds": 3600

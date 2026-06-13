@@ -1,6 +1,6 @@
 """`/features/*` — `docs/api/features.md`.
 
-지도 feature read는 `kor-travel-map`의 운영 HTTP API(`openapi.user.json`, 포트 12301)를
+지도 feature read는 `kor-travel-map`의 운영 HTTP API(`openapi.user.json`, 포트 12701)를
 `app.clients.kor_travel_map.KorTravelMapClient`로 호출한다(ADR-026/027). Pinvi 책임: 권한 /
 좌표 validation / 사용자 컨텍스트 / 응답 schema 투영 / 에러·저하 정책(T-178). kor_travel_map 책임:
 정규화 / 클러스터링 / dedup / sources / weather.
