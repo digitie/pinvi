@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start TripMate local dev services on fixed ports.
+# Start Pinvi local dev services on fixed ports.
 
 set -euo pipefail
 
@@ -7,9 +7,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_DIR="${ROOT}/.tmp/dev/pids"
 LOG_DIR="${ROOT}/.tmp/dev/logs"
 
-API_PORT="${TRIPMATE_API_DEV_PORT:-12501}"
-WEB_PORT="${TRIPMATE_WEB_DEV_PORT:-12505}"
-DAGSTER_PORT="${TRIPMATE_DAGSTER_DEV_PORT:-9023}"
+API_PORT="${PINVI_API_DEV_PORT:-12501}"
+WEB_PORT="${PINVI_WEB_DEV_PORT:-12505}"
+DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-9023}"
 
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
 export TMPDIR=/tmp
@@ -63,7 +63,7 @@ start_service api \
   bash -lc "cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port ${API_PORT}"
 
 start_service web \
-  env NEXT_PUBLIC_TRIPMATE_API_URL="http://localhost:${API_PORT}" \
+  env NEXT_PUBLIC_PINVI_API_URL="http://localhost:${API_PORT}" \
     npm --workspace apps/web run dev
 
 start_service dagster \

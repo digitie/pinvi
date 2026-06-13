@@ -28,11 +28,11 @@
 다음 값들은 secret이 아닌 workflow YAML에 평문 박힘 — CI postgres service
 container 비밀이므로 외부 노출 위험 X:
 
-- `POSTGRES_USER=tripmate`
-- `POSTGRES_PASSWORD=tripmate_ci_password`
-- `POSTGRES_DB=tripmate_ci`
-- `TRIPMATE_JWT_SECRET_KEY=tripmate-ci-jwt-secret-32-bytes-minimum-aaaa` (CI dummy)
-- `TRIPMATE_DATABASE_URL=postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci`
+- `POSTGRES_USER=pinvi`
+- `POSTGRES_PASSWORD=pinvi_ci_password`
+- `POSTGRES_DB=pinvi_ci`
+- `PINVI_JWT_SECRET_KEY=pinvi-ci-jwt-secret-32-bytes-minimum-aaaa` (CI dummy)
+- `PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci`
 
 운영 환경 secret은 systemd `EnvironmentFile` 또는 Docker Compose env_file로
 관리 — GitHub Actions secret과 별개.
@@ -55,7 +55,7 @@ container 비밀이므로 외부 노출 위험 X:
 
 ## 7. T-062 점검 결과 (2026-06-02)
 
-`gh api repos/digitie/tripmate/actions/secrets` 기준 repository Actions secret은
+`gh api repos/digitie/pinvi/actions/secrets` 기준 repository Actions secret은
 `0`개다. 이는 현재 정책과 일치한다.
 
 ## 8. 참조

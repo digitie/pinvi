@@ -1,12 +1,12 @@
 # MCP 후보 도구 가이드 (비정본)
 
-> **정본**: TripMate가 외부로 노출하는 MCP 서버 계약은
+> **정본**: Pinvi가 외부로 노출하는 MCP 서버 계약은
 > [`docs/architecture/mcp-server.md`](./mcp-server.md)가 단일 진실이다(ADR-019).
 > Sprint 6 1차 외부 MCP는 `list_trips`, `get_trip`, `list_pois`,
 > `search_features`, `get_user_profile` 5개 read-only tool만 제공한다.
 
 본 문서는 v1에서 넘어온 후보 tool 아이디어와 구현 체크리스트를 보존한다. 아래 도구는
-ADR-019 1차 외부 MCP에 자동 포함되지 않는다. TripMate 외부 MCP에 추가하려면
+ADR-019 1차 외부 MCP에 자동 포함되지 않는다. Pinvi 외부 MCP에 추가하려면
 ADR-019 amendment 또는 후속 ADR, scope 설계, 사용자 UI/보안 검토가 필요하다.
 
 ## 1. 일반 원칙
@@ -24,10 +24,10 @@ ADR-019 amendment 또는 후속 ADR, scope 설계, 사용자 UI/보안 검토가
 
 | 후보 tool | 상태 | 권한 기준 |
 |----------|------|----------|
-| `address_code_lookup` | 후보. 구현 시 `python-kraddr-geo` v2 REST 경유 | 사용자 본인 read-only |
+| `address_code_lookup` | 후보. 구현 시 `kor-travel-geo` v2 REST 경유 | 사용자 본인 read-only |
 | `youtube_place_import` | 후보. dry-run 또는 pending 후보 적재만 | 운영자 + 사용자 trigger |
 | `gemini_research` | 후보. 사용자 본인 키 사용 | 사용자 본인 |
-| `tripmate_db_admin` | 외부 MCP 금지. Admin HTTP/UI로만 처리 | CPO + admin |
+| `pinvi_db_admin` | 외부 MCP 금지. Admin HTTP/UI로만 처리 | CPO + admin |
 | `search_features` | ADR-019 1차 정본 tool | 사용자 본인 read-only |
 
 ## 3. `address_code_lookup` (v2)
@@ -70,8 +70,8 @@ ADR-019 amendment 또는 후속 ADR, scope 설계, 사용자 UI/보안 검토가
 
 ### 3.3 책임
 
-- TripMate 측 MCP 또는 kraddr-geo 측 MCP (주소 데이터 소유 서비스에 더 가까움)
-- TripMate에서 제공할 때도 `python-kraddr-geo` **v2 REST**를 호출한다. `kraddr.geo`
+- Pinvi 측 MCP 또는 kor-travel-geo 측 MCP (주소 데이터 소유 서비스에 더 가까움)
+- Pinvi에서 제공할 때도 `kor-travel-geo` **v2 REST**를 호출한다. `kor_travel_geo`
   in-process 함수 호출은 사용자 대면/MCP 경로에서 쓰지 않는다(ADR-025).
 - 주소 문자열 fuzzy matching X
 
@@ -127,13 +127,13 @@ YouTube URL → 장소 후보 추출.
 # candidate only — apps/api/app/mcp/server.py 정본이 아님
 from mcp.server import Server
 
-server = Server("tripmate-candidate-tools")
+server = Server("pinvi-candidate-tools")
 
 
 @server.tool("address_code_lookup")
 async def address_code_lookup(query_type: str, value: dict) -> dict:
-    # kraddr-geo v2 REST 호출
-    result = await app_state.kraddr_geo_client.lookup(query_type, value)
+    # kor-travel-geo v2 REST 호출
+    result = await app_state.kor_travel_geo_client.lookup(query_type, value)
     return {"matched_by": result.matched_by, "result": result.as_dict()}
 
 

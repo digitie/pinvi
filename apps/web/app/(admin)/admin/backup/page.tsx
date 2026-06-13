@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { DatabaseBackup, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
-import { ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@tripmate/schemas';
+import { ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { DataTable } from '@/components/admin/DataTable';
 import { RestoreHotswapDialog } from '@/components/admin/RestoreHotswapDialog';

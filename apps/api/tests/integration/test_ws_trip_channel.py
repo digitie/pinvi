@@ -27,7 +27,7 @@ async def test_ws_trip_channel_presence_and_poi_broadcast(
     await realtime_broker.reset()
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    token = cookies["tripmate_access"]
+    token = cookies["pinvi_access"]
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "실시간 여행"}, cookies=cookies)
@@ -101,14 +101,14 @@ async def test_ws_trip_channel_rejects_non_member(
 
         async with session_factory() as db:
             other = User(
-                email=f"ws_other_{uuid.uuid4().hex[:8]}@tripmate.test",
+                email=f"ws_other_{uuid.uuid4().hex[:8]}@pinvi.test",
                 status="active",
                 email_verified_at=datetime.now(UTC),
             )
             db.add(other)
             await db.commit()
             await db.refresh(other)
-            other_token = auth_cookies(str(other.user_id))["tripmate_access"]
+            other_token = auth_cookies(str(other.user_id))["pinvi_access"]
 
         with sync_client.websocket_connect(f"/ws/trips/{trip_id}?token={other_token}") as websocket:
             rejected = websocket.receive_json()
@@ -127,12 +127,12 @@ async def test_ws_trip_channel_rate_limits_client_messages(
     from app.main import app
 
     await realtime_broker.reset()
-    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_second", 2)
-    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_minute", 60)
-    monkeypatch.setattr(settings, "tripmate_ws_rate_limit_close_grace_seconds", 0.0)
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_second", 2)
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_minute", 60)
+    monkeypatch.setattr(settings, "pinvi_ws_rate_limit_close_grace_seconds", 0.0)
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    token = cookies["tripmate_access"]
+    token = cookies["pinvi_access"]
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "rate limited"}, cookies=cookies)
@@ -166,13 +166,13 @@ async def test_ws_trip_channel_holds_cap_during_rate_limit_grace_close(
     from app.main import app
 
     await realtime_broker.reset()
-    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_second", 2)
-    monkeypatch.setattr(settings, "tripmate_ws_client_rate_per_minute", 60)
-    monkeypatch.setattr(settings, "tripmate_ws_rate_limit_close_grace_seconds", 0.5)
-    monkeypatch.setattr(settings, "tripmate_ws_max_connections_per_trip", 1)
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_second", 2)
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_minute", 60)
+    monkeypatch.setattr(settings, "pinvi_ws_rate_limit_close_grace_seconds", 0.5)
+    monkeypatch.setattr(settings, "pinvi_ws_max_connections_per_trip", 1)
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    token = cookies["tripmate_access"]
+    token = cookies["pinvi_access"]
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "rate grace cap"}, cookies=cookies)
@@ -215,10 +215,10 @@ async def test_ws_trip_channel_rejects_connection_cap(
     from app.main import app
 
     await realtime_broker.reset()
-    monkeypatch.setattr(settings, "tripmate_ws_max_connections_per_trip", 1)
+    monkeypatch.setattr(settings, "pinvi_ws_max_connections_per_trip", 1)
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    token = cookies["tripmate_access"]
+    token = cookies["pinvi_access"]
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "connection cap"}, cookies=cookies)
@@ -248,7 +248,7 @@ async def test_ws_trip_channel_rejects_invalid_cursor(
     await realtime_broker.reset()
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    token = cookies["tripmate_access"]
+    token = cookies["pinvi_access"]
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "invalid cursor"}, cookies=cookies)

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Loader2, Route } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
-import type { TripDayOptimizeResponse } from '@tripmate/schemas';
+import { ApiError, tripApi } from '@pinvi/api-client';
+import type { TripDayOptimizeResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { formatDistanceMeters } from '@/lib/distance';
 

@@ -4,10 +4,10 @@ import {
   McpTokenIssueResponseSchema,
   McpTokenSchema,
   UserConsentSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type { ConsentType } from '@tripmate/schemas';
+import type { ConsentType } from '@pinvi/schemas';
 
 const ConsentItemsSchema = z.array(
   z.object({ consent_type: ConsentTypeSchema, version: z.string().min(1).max(32) })

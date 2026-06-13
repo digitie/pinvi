@@ -55,7 +55,7 @@ test('프로필 화면이 Google 연결 충돌 redirect를 안내한다', async 
   await page.goto('/profile?error=OAUTH_ACCOUNT_LINK_REQUIRED');
 
   await expect(page.getByTestId('profile-error')).toContainText(
-    'Google 계정은 다른 TripMate 계정과 충돌',
+    'Google 계정은 다른 Pinvi 계정과 충돌',
   );
   await expect(page).toHaveURL(/\/profile$/);
 });

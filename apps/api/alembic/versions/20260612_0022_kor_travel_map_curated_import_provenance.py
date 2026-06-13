@@ -1,10 +1,10 @@
-"""krtour curated import provenance
+"""kor_travel_map curated import provenance
 
 Revision ID: 20260612_0022
 Revises: 20260612_0021
 Create Date: 2026-06-12 00:00:00
 
-T-223d: krtour-map curated feature copy snapshot을 TripMate curated plan으로
+T-223d: kor-travel-map curated feature copy snapshot을 Pinvi curated plan으로
 가져올 때 source version/etag와 item provenance를 저장한다.
 """
 

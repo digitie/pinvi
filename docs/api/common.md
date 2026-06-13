@@ -1,6 +1,6 @@
 # API 공통 규약
 
-본 문서는 TripMate HTTP API의 공통 규약을 정의한다. 모든 endpoint 문서는 본 문서를
+본 문서는 Pinvi HTTP API의 공통 규약을 정의한다. 모든 endpoint 문서는 본 문서를
 참조하고, 본 규약에서 벗어나면 그 endpoint 문서에 명시한다.
 
 > **정본 규약 (ADR-030, 2026-06-06 확정)** — 외부 API는 다음을 단일 정본으로 한다.
@@ -25,7 +25,7 @@
 | 로컬 dev | `http://localhost:12501` |
 | 로컬 dev (Docker smoke) | `http://127.0.0.1:12501` |
 | 스테이징 | TBD (Sprint 6) |
-| 운영 | `https://tripmateapi.digitie.mywire.org` |
+| 운영 | `https://pinviapi.digitie.mywire.org` |
 
 웹 origin:
 
@@ -33,7 +33,7 @@
 |------|-----|
 | 로컬 dev | `http://localhost:12505` |
 | 로컬 dev (Docker smoke) | `http://127.0.0.1:12505` |
-| 운영 | `https://tripmate.digitie.mywire.org` |
+| 운영 | `https://pinvi.digitie.mywire.org` |
 
 OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
@@ -95,11 +95,11 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
 | Cookie | 용도 | 속성 |
 |--------|------|------|
-| `tripmate_access` | JWT access | HttpOnly, Secure, SameSite=Lax, 15분 |
-| `tripmate_refresh` | refresh handle (opaque) | HttpOnly, Secure, SameSite=Lax, 7일 |
+| `pinvi_access` | JWT access | HttpOnly, Secure, SameSite=Lax, 15분 |
+| `pinvi_refresh` | refresh handle (opaque) | HttpOnly, Secure, SameSite=Lax, 7일 |
 
 - DB에는 access 토큰을 저장하지 않음 (stateless JWT).
-- `tripmate_refresh`는 `app.user_sessions`에 hash로만 저장
+- `pinvi_refresh`는 `app.user_sessions`에 hash로만 저장
   (`session_token_hash`). DB row에 `revoked_at` 채우면 즉시 폐기.
 - 로그아웃: 현재 refresh session `revoked_at=now()` + 클라이언트 cookie 삭제.
 - refresh: 기존 refresh session `revoked_at=now()` + 새 refresh session row 발급
@@ -241,7 +241,7 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 
 서명 검증 실패 시 `401`. Resend webhook secret이 없거나 잘못된 형식이면 기본
 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다. 서명 없는 Resend webhook은
-로컬성 환경에서 `TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED=true`를 명시한 경우에만 허용한다.
+로컬성 환경에서 `PINVI_RESEND_WEBHOOK_ALLOW_UNSIGNED=true`를 명시한 경우에만 허용한다.
 페이로드 raw는 `app.api_call_log`에 저장하지 않음(`hash`만).
 
 ## 10. CORS
@@ -251,17 +251,17 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 | 로컬 dev | `http://localhost:12505`, `http://127.0.0.1:12505` |
 | Docker smoke | `http://127.0.0.1:12505` |
 | 스테이징 | TBD |
-| 운영 | `https://tripmate.digitie.mywire.org` |
+| 운영 | `https://pinvi.digitie.mywire.org` |
 
 `Access-Control-Allow-Credentials: true` (cookie 전송).
 
 운영 보안 처리:
 
-- API `https://tripmateapi.digitie.mywire.org`는 CORS origin에 직접 추가하지 않는다.
+- API `https://pinviapi.digitie.mywire.org`는 CORS origin에 직접 추가하지 않는다.
   CORS 허용 origin은 브라우저가 로드된 웹 origin
-  `https://tripmate.digitie.mywire.org`만 둔다.
-- 운영 `TRIPMATE_CORS_ALLOWED_ORIGINS`는 정확히
-  `["https://tripmate.digitie.mywire.org"]`로 설정한다. wildcard(`*`) 금지.
+  `https://pinvi.digitie.mywire.org`만 둔다.
+- 운영 `PINVI_CORS_ALLOWED_ORIGINS`는 정확히
+  `["https://pinvi.digitie.mywire.org"]`로 설정한다. wildcard(`*`) 금지.
 - credential cookie를 쓰므로 `Access-Control-Allow-Credentials: true`와 wildcard
   origin을 함께 쓰면 안 된다.
 
@@ -270,14 +270,14 @@ SlowAPI 또는 `starlette-limiter`. Sprint 1에서 도입.
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
   ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:12501 https://tripmateapi.digitie.mywire.org
+  connect-src 'self' http://localhost:12501 https://pinviapi.digitie.mywire.org
   https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(self)` (위치 권한 origin)
 - `X-Frame-Options: DENY` (Admin Dagit 임베드 예외는 별도)
 
-운영에서는 TLS 종단 이후에도 앱이 `TRIPMATE_ENVIRONMENT=production`을 받아야 한다.
+운영에서는 TLS 종단 이후에도 앱이 `PINVI_ENVIRONMENT=production`을 받아야 한다.
 이 값이 production이면 인증 cookie는 `Secure`로 설정된다. reverse proxy /
 Cloudflare Tunnel 구성에서 `X-Forwarded-Proto=https`를 보존하고, HTTP 직접 접근은
 HTTPS로 redirect한다.

@@ -8,7 +8,7 @@
   - `apps/web`이 Next.js dev로 부팅하고 `/`, `/login`, `/signup` 라우트 렌더.
   - `apps/etl`이 Dagster code location으로 등록되고 빈 asset 목록 노출.
   - `infra/docker-compose.yml`로 PostgreSQL + RustFS 기동.
-  - `tripmate alembic upgrade head`로 `app.users`, `app.user_sessions`,
+  - `pinvi alembic upgrade head`로 `app.users`, `app.user_sessions`,
     `app.user_email_verifications` 적재.
   - `pytest apps/api/tests/unit -q` 통과 (단위 5건 이상).
   - `pytest apps/api/tests/integration -q` 통과 (testcontainer PostGIS 기동).
@@ -30,7 +30,7 @@
 - `apps/api/pyproject.toml` (uv + dependencies + dev/providers extras +
   import-linter 계약)
 - `apps/api/app/main.py` (FastAPI app + lifespan + `/healthz`)
-- `apps/api/app/core/config.py` (`Settings` + `TRIPMATE_*` 환경변수)
+- `apps/api/app/core/config.py` (`Settings` + `PINVI_*` 환경변수)
 - `apps/api/app/core/database.py` (async engine + session factory)
 - `apps/api/app/models/user.py`, `session.py` (SQLAlchemy 매핑)
 - `apps/api/app/schemas/user.py`, `auth.py` (Pydantic v2)
@@ -54,9 +54,9 @@
 ### 2.3 ETL `apps/etl`
 
 - `apps/etl/pyproject.toml`
-- `apps/etl/tripmate/etl/__init__.py`
-- `apps/etl/tripmate/etl/definitions.py` (빈 code location)
-- `apps/etl/tripmate/etl/resources.py` (`KrtourMapResource` skeleton)
+- `apps/etl/pinvi/etl/__init__.py`
+- `apps/etl/pinvi/etl/definitions.py` (빈 code location)
+- `apps/etl/pinvi/etl/resources.py` (`KorTravelMapResource` skeleton)
 - `apps/etl/tests/test_definitions.py`
 
 ### 2.4 인프라 `infra`
@@ -75,7 +75,7 @@
 - `packages/hooks/` — `useUserLocation` 등 공용 React hook (RN 호환)
 - `packages/i18n/` — next-intl + i18n-js 공유 메시지 카탈로그 (ko 기본)
 - 지도 전용 React wrapper 패키지는 만들지 않는다. Sprint 4 지도 UI는
-  `apps/web`이 `maplibre-vworld-js`를 직접 import하고, TripMate 전용 팔레트/쿼리
+  `apps/web`이 `maplibre-vworld-js`를 직접 import하고, Pinvi 전용 팔레트/쿼리
   helper만 `apps/web/lib`에 둔다(ADR-015).
 
 본 Sprint는 패키지 skeleton만 박는다 (실제 export는 Sprint 1~2에서 점진 추가).
@@ -102,9 +102,9 @@
 
 ## 3. 의존성 / 외부
 
-- `python-krtour-map`은 본 Sprint에서 import하지 않는다. 이후 ADR-026에 따라
-  Sprint 4 feature read는 krtour-map OpenAPI HTTP client로 활성화한다.
-- `python-kraddr-*`도 Sprint 2 이후 도입.
+- `kor-travel-map`은 본 Sprint에서 import하지 않는다. 이후 ADR-026에 따라
+  Sprint 4 feature read는 kor-travel-map OpenAPI HTTP client로 활성화한다.
+- `python-kraddr-base / kor-travel-geo / python-kraddr-gop`도 Sprint 2 이후 도입.
 - 외부 API 키는 placeholder만 `.env.example`에 둠.
 
 ## 4. 미해결 결정 (Sprint 진입 전 결정 필요)
@@ -118,13 +118,13 @@
 ## 5. 회귀 방지
 
 - `import-linter` 계약 4종 활성화 (`apps/api/pyproject.toml`):
-  - `tripmate.api.routes → services → models → schemas` layers
-  - `tripmate.api` forbidden `tripmate.api.models.feature/provider_sync`
-  - `tripmate.api` forbidden `cachetools` / `async_lru` (라이브러리 ADR-030 mirror)
-  - `tripmate.api` forbidden `kafka` / `aiokafka` (streaming 의존 차단)
+  - `pinvi.api.routes → services → models → schemas` layers
+  - `pinvi.api` forbidden `pinvi.api.models.feature/provider_sync`
+  - `pinvi.api` forbidden `cachetools` / `async_lru` (라이브러리 ADR-030 mirror)
+  - `pinvi.api` forbidden `kafka` / `aiokafka` (streaming 의존 차단)
 - `mypy --strict` (`apps/api/app/` 전체)
 - `ruff check apps/api apps/etl tests`
-- Coverage `fail_under=50` 시작 (Sprint별 상향, `python-krtour-map` ADR-032 mirror)
+- Coverage `fail_under=50` 시작 (Sprint별 상향, `kor-travel-map` ADR-032 mirror)
 
 ## 6. 작업 분할 (PR 단위)
 
@@ -139,7 +139,7 @@
 - PR #7 — `.github/workflows/*` 활성화 + import-linter 박기
 
 PR 사이에 의존이 있으면 base branch를 명시 (`gh pr create --base feat/sprint1-pr2`
-패턴 — `python-krtour-map` Sprint 1 분할 방식과 동일).
+패턴 — `kor-travel-map` Sprint 1 분할 방식과 동일).
 
 ## 7. 종료 체크리스트 (Sprint 1 PR-Last)
 
@@ -167,4 +167,4 @@ PR 사이에 의존이 있으면 base branch를 명시 (`gh pr create --base fea
 - `docs/postgres-schema.md` — DDL 골격
 - `docs/test-strategy.md` — 테스트 계층
 - `docs/dev-environment.md` — WSL 미러 작업 흐름
-- `docs/krtour-map-integration.md` — Sprint 4부터 활성화
+- `docs/kor-travel-map-integration.md` — Sprint 4부터 활성화

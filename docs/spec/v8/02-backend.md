@@ -1,4 +1,4 @@
-# SPEC V8 #2 — 백엔드 · 인증 · API (TripMate 적용 노트)
+# SPEC V8 #2 — 백엔드 · 인증 · API (Pinvi 적용 노트)
 
 원본: `spec_v8_2_backend.docx` (B 라이브러리 / C 스택 / F 권한 / G 회원가입 / H API).
 
@@ -7,7 +7,7 @@
 | 계층 | 채택 | 비고 |
 |------|------|------|
 | API 서버 | FastAPI + Uvicorn | async I/O, OpenAPI 자동 |
-| ORM | SQLAlchemy 2 async + GeoAlchemy2 | TripMate `app` schema만 매핑 |
+| ORM | SQLAlchemy 2 async + GeoAlchemy2 | Pinvi `app` schema만 매핑 |
 | 마이그레이션 | Alembic | `apps/api/alembic/versions/...` (app schema 한정) |
 | 실시간 동기화 | FastAPI WebSocket | 단일 프로세스. 수평 확장은 v2 (Redis Streams) |
 | 작업 큐 | Dagster + PostgreSQL 단발 SKIP LOCKED | Redis 없음 |
@@ -47,7 +47,7 @@ apps/api/
 │   ├── services/
 │   ├── repositories/        # app schema raw SQL
 │   ├── clients/
-│   │   └── krtour_map.py    # krtour-map OpenAPI HTTP client
+│   │   └── kor_travel_map.py    # kor-travel-map OpenAPI HTTP client
 │   └── webhooks/
 │       └── resend.py
 └── tests/{unit,integration,e2e}/
@@ -55,15 +55,15 @@ apps/api/
 
 ## 2. 라이브러리 의존 (B-1)
 
-| 라이브러리 | TripMate 사용처 |
+| 라이브러리 | Pinvi 사용처 |
 |-----------|----------------|
-| `python-krtour-map` | 라이브러리 본체 (모든 feature read/write) |
+| `kor-travel-map` | 라이브러리 본체 (모든 feature read/write) |
 | `python-kraddr-base` | 좌표/주소/카테고리 base 타입 — DTO/응답에 사용 |
-| `python-kraddr-geo` | 주소 검색/지오코딩 — `app.users.sigungu_code` 검증 등 |
+| `kor-travel-geo` | 주소 검색/지오코딩 — `app.users.sigungu_code` 검증 등 |
 | `python-vworld-api` | (라이브러리 경유) — 직접 호출 안 함 |
 | `python-visitkorea-api` 등 모든 provider client | Dagster asset이 라이브러리 client에 주입 |
 
-**wrapper 금지**: SPEC V8 R-1 + ADR-005. TripMate에 `KrtourMapGateway` /
+**wrapper 금지**: SPEC V8 R-1 + ADR-005. Pinvi에 `KorTravelMapGateway` /
 `KmaWrapper` 같은 어댑터 클래스 만들지 않는다.
 
 ## 3. 권한 / 공유 (F장)
@@ -88,7 +88,7 @@ apps/api/
 - `CHAR(43)` URL-safe base64, 256bit 엔트로피
 - 기본 만료 30일 (사용자가 변경 가능)
 - revoke 즉시 차단
-- URL: `https://tripmate.digitie.mywire.org/trips/{trip_id}/share/{token}`
+- URL: `https://pinvi.digitie.mywire.org/trips/{trip_id}/share/{token}`
 - rate limit: 토큰당 분당 60회 (스크래핑 방지)
 
 ### 3.3 소셜 로그인 매칭 (F-3, G-4)
@@ -122,7 +122,7 @@ email_verified == false → 거부
 ### 4.3 Resend 이메일 (G-6)
 
 - 도메인 인증 필수: SPF / DKIM / DMARC
-- From: `TripMate <noreply@send.tripmate.example>` (서브도메인 분리)
+- From: `Pinvi <noreply@send.pinvi.example>` (서브도메인 분리)
 - 백엔드: `services/email_service.py` + `email_queue` 테이블 + worker
 - 템플릿: react-email (`emails/*.tsx`) — 빌드 시 정적 HTML export → 백엔드 변수 치환
 - Webhook (`/webhooks/resend`): Svix 서명 검증 → `email.delivered` /
@@ -170,15 +170,15 @@ POI 편집은 `If-Match: version` (optimistic lock, J-2).
 ### 5.4 Feature / 지도 (H-4)
 
 - `GET /features/in-bounds?bounds=&zoom=&kinds[]=` — viewport 쿼리 + zoom별 클러스터 (I-4)
-- `GET /features/{id}` — krtour-map OpenAPI 호출
+- `GET /features/{id}` — kor-travel-map OpenAPI 호출
 - `GET /features/{id}/weather` — `WeatherCard` (KMA 시간축 + sources 배열, R-4)
 - `GET /features/nearby?lat=&lng=&radius_m=` — 주변
-- `GET /features/search?q=` — 장소 feature 검색 (krtour-map HTTP)
-- `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_suggestions`, krtour 직접 호출 X)
+- `GET /features/search?q=` — 장소 feature 검색 (kor-travel-map HTTP)
+- `POST /features/requests` — 사용자 요청 → Admin 큐 (`app.feature_suggestions`, kor_travel_map 직접 호출 X)
 - `GET /features/requests/{id}` — 본인 요청 상태 조회
 - `GET /search?q=` — 통합 검색 (2자 이상, T-129)
 
-krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
+kor-travel-map OpenAPI 호출 패턴은 `docs/kor-travel-map-integration.md`.
 
 ### 5.5 WebSocket (H-5)
 
@@ -246,7 +246,7 @@ krtour-map OpenAPI 호출 패턴은 `docs/krtour-map-integration.md`.
 ## 8. 관련 문서
 
 - `docs/architecture.md` §2 백엔드 의존 방향
-- `docs/krtour-map-integration.md` (krtour-map OpenAPI HTTP)
+- `docs/kor-travel-map-integration.md` (kor-travel-map OpenAPI HTTP)
 - `docs/spec/v8/00-infrastructure.md` (Sentry/Loki/Argon2)
 - `docs/spec/v8/01-data.md` (DB schema)
 - `docs/spec/v8/03-frontend.md` (WebSocket 클라이언트 쌍)

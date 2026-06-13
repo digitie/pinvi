@@ -1,6 +1,6 @@
 """Telegram 알림 대상 CRUD + verify — `docs/integrations/telegram.md` §6. T-106.
 
-bot token 원본은 저장하지 않는다(§1). 현 단계는 TripMate 시스템 봇만 지원하며,
+bot token 원본은 저장하지 않는다(§1). 현 단계는 Pinvi 시스템 봇만 지원하며,
 사용자는 봇을 자기 chat에 추가한 뒤 `telegram_chat_id`만 등록한다. `verify`는
 시스템 봇 토큰으로 `getChat`을 호출해 chat 타입/제목 스냅샷을 채운다.
 """

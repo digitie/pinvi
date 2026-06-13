@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
-import { ApiError, poiApi, tripApi } from '@tripmate/api-client';
+import { ApiError, poiApi, tripApi } from '@pinvi/api-client';
 import type {
   FeatureSummary,
   PoiUpdate,
   TripStatus,
   TripUpdate,
   TripView,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { appendRank, reorderMoves } from '@/lib/poiRank';
 import { tripDaysToMapPoints } from '@/lib/tripMapPoints';

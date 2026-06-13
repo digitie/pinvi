@@ -1,7 +1,7 @@
 [project]
-name = "tripmate-etl"
+name = "pinvi-etl"
 version = "0.1.0"
-description = "TripMate Dagster code location — Sprint 5에서 본격 활성화 (ADR-006)."
+description = "Pinvi Dagster code location — Sprint 5에서 본격 활성화 (ADR-006)."
 requires-python = ">=3.12"
 
 dependencies = [
@@ -30,11 +30,11 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["tripmate"]
+packages = ["pinvi"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
 [tool.dagster]
-module_name = "tripmate.etl.definitions"
+module_name = "pinvi.etl.definitions"

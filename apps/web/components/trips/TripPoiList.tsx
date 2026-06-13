@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, GripVertical, Pencil, Trash2 } from 'lucide-react';
-import type { PoiUpdate, TripViewPoi } from '@tripmate/schemas';
+import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
 import { paletteHex } from '@/lib/markerPalette';
 import { arrayMove } from '@/lib/poiRank';
 import { PoiEditor } from '@/components/trips/PoiEditor';

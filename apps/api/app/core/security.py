@@ -40,7 +40,7 @@ def create_access_token(
     expires_minutes: int | None = None,
 ) -> str:
     token_minutes = (
-        settings.tripmate_access_token_minutes if expires_minutes is None else expires_minutes
+        settings.pinvi_access_token_minutes if expires_minutes is None else expires_minutes
     )
     expire = datetime.now(UTC) + timedelta(minutes=token_minutes)
     payload: dict[str, Any] = {
@@ -51,12 +51,12 @@ def create_access_token(
     }
     if extra:
         payload.update(extra)
-    return cast(str, jwt.encode(payload, settings.tripmate_jwt_secret_key, algorithm=_ALGORITHM))
+    return cast(str, jwt.encode(payload, settings.pinvi_jwt_secret_key, algorithm=_ALGORITHM))
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     try:
-        payload = jwt.decode(token, settings.tripmate_jwt_secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.pinvi_jwt_secret_key, algorithms=[_ALGORITHM])
     except JWTError as exc:
         raise InvalidTokenError(str(exc)) from exc
     return cast(dict[str, Any], payload)

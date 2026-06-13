@@ -4,7 +4,7 @@
  * 사용자는 `new_place` 제안만(장소/이벤트). 좌표는 지도에서 가져온다.
  */
 
-import type { FeatureRequestCreate, FeatureSuggestionKind } from '@tripmate/schemas';
+import type { FeatureRequestCreate, FeatureSuggestionKind } from '@pinvi/schemas';
 
 export interface NewPlaceForm {
   kind: FeatureSuggestionKind;

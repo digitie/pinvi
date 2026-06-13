@@ -1,29 +1,29 @@
-# TripMate
+# Pinvi
 
-`TripMate`는 한국 여행 계획·기록·공유 애플리케이션이다. 한국 공공 API에서 모은
+`Pinvi`는 한국 여행 계획·기록·공유 애플리케이션이다. 한국 공공 API에서 모은
 지도/날씨/이벤트/가격/공지/경로/구역 데이터를 사용해 사용자가 여행 계획을 세우고,
 이동 중 컨텍스트(날씨/혼잡/이벤트)를 확인하고, 결과를 기록·공유하도록 돕는다.
 
 > **현재 상태 (Sprint 4 릴리즈 게이트 충족)**: Sprint 1~3는 머지 완료, Sprint 4의
-> 지도 UI + `maplibre-vworld-js` 통합 + krtour HTTP feature read + CI/CD 게이트도
+> 지도 UI + `maplibre-vworld-js` 통합 + kor_travel_map HTTP feature read + CI/CD 게이트도
 > 머지됐다. 현재 기준선은 `v0.1.0` tag/릴리즈 노트 정리 단계다.
 > 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 상태 추적은 `docs/resume.md`,
 > `docs/tasks.md`, `docs/sprints/README.md`를 우선한다.
 
 ## 정체성
 
-- **GitHub 저장소**: `tripmate`
-- **백엔드 import (계획)**: `from tripmate.api import ...`, `from tripmate.etl import ...`
+- **GitHub 저장소**: `pinvi`
+- **백엔드 import (계획)**: `from pinvi.api import ...`, `from pinvi.etl import ...`
 - **프론트엔드 패키지 (계획)**: `apps/web` (Next.js App Router)
-- **환경변수 prefix**: `TRIPMATE_*`
-- **PostgreSQL DB 이름 (개발)**: `tripmate`
+- **환경변수 prefix**: `PINVI_*`
+- **PostgreSQL DB 이름 (개발)**: `pinvi`
 - **Postgres schema (계획)**: `app`, `feature`, `provider_sync`, `ops`, `x_extension`
-  (`feature`/`provider_sync` 영역은 `python-krtour-map`이 소유. `app`은 TripMate
+  (`feature`/`provider_sync` 영역은 `kor-travel-map`이 소유. `app`은 Pinvi
   도메인 — 사용자/여행 계획/POI 첨부/공유 등)
 
 ## 구성
 
-TripMate는 **monorepo**다. 현재 저장소는 아래 구조를 이미 사용 중이며 Sprint별로
+Pinvi는 **monorepo**다. 현재 저장소는 아래 구조를 이미 사용 중이며 Sprint별로
 구현을 확장한다.
 
 ```
@@ -38,39 +38,39 @@ docs/       — 본 저장소의 결정·기록·계약
 
 핵심 의존:
 
-- **`python-krtour-map`** (별 저장소 `F:\dev\python-krtour-map`):
-  지도 feature 정규화·저장 + OpenAPI API/Admin API. TripMate는 최신 OpenAPI HTTP
+- **`kor-travel-map`** (별 저장소 `F:\dev\kor-travel-map`):
+  지도 feature 정규화·저장 + OpenAPI API/Admin API. Pinvi는 최신 OpenAPI HTTP
   계약으로 사용한다(ADR-026, API/Admin API `12301`).
 - **`python-*-api`** (별 저장소들): KMA, VisitKorea, OpiNet, MOIS, KREX, KHOA,
   국가유산, 산림청 등 한국 공공 API 클라이언트.
-- **`python-kraddr-geo`**: 주소·법정동·시군구 정규화/지오코딩.
+- **`kor-travel-geo`**: 주소·법정동·시군구 정규화/지오코딩.
 - 인프라: PostgreSQL 16 + PostGIS 3.5 / SQLAlchemy 2 async / asyncpg / Pydantic
   v2 / FastAPI + Uvicorn / httpx + tenacity / Alembic / Dagster / Next.js +
   TanStack Query + zustand / RustFS (S3 호환 객체 저장소).
 
-## TripMate ↔ `python-krtour-map`
+## Pinvi ↔ `kor-travel-map`
 
-TripMate는 `python-krtour-map` 최신 `main`의 `openapi.user.json` 계약을 기준으로
+Pinvi는 `kor-travel-map` 최신 `main`의 `openapi.user.json` 계약을 기준으로
 HTTP 호출한다. 대표 경로는 `GET /features/in-bounds`, `GET /features/search`,
 `GET /features/{feature_id}`, `POST /v1/features/batch`다.
 
-TripMate는 `feature` / `provider_sync` schema를 직접 읽거나 `python-krtour-map`을
-import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
+Pinvi는 `feature` / `provider_sync` schema를 직접 읽거나 `kor-travel-map`을
+import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 
 ## 책임 / 비책임 요약
 
 ### 책임
 
 - 사용자/세션/인증 (이메일·소셜·OAuth)
-- 여행 계획 도메인 (Trip, Day, POI 첨부, curated trip plan, TripMate-native 큐레이션,
-  krtour `curated_features` 1:1 import 소비, 공유)
+- 여행 계획 도메인 (Trip, Day, POI 첨부, curated trip plan, Pinvi-native 큐레이션,
+  kor_travel_map `curated_features` 1:1 import 소비, 공유)
 - Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
 - 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
-- Dagster orchestration (TripMate 자체 job + 외부 서비스 갱신 trigger)
+- Dagster orchestration (Pinvi 자체 job + 외부 서비스 갱신 trigger)
 - 파일 스토리지(RustFS) 운영 API
 - 외부 통합 (Telegram, Resend, 소셜 로그인 provider, AI companion 호출 계약)
 
-### 비책임 (`python-krtour-map`이 소유)
+### 비책임 (`kor-travel-map`이 소유)
 
 - Feature 정규화 / `feature_id` 생성 / SourceRecord 관리
 - Postgres schema `feature` / `provider_sync` 의 DDL과 raw SQL
@@ -78,34 +78,34 @@ import하지 않는다. 자세히는 `docs/krtour-map-integration.md`.
 - Record Linkage / dedup queue
 - 지도 좌표·CRS 정책 (`coord_5179` 반경 검색 등)
 
-자세한 책임 경계는 `docs/architecture.md`, `docs/krtour-map-integration.md`.
+자세한 책임 경계는 `docs/architecture.md`, `docs/kor-travel-map-integration.md`.
 
 ## 운영 URL
 
 | 서비스 | 로컬 고정 포트 | Production URL |
 |--------|---------------|----------------|
-| API | `12501` | `https://tripmateapi.digitie.mywire.org` |
-| Web | `12505` | `https://tripmate.digitie.mywire.org` |
+| API | `12501` | `https://pinviapi.digitie.mywire.org` |
+| Web | `12505` | `https://pinvi.digitie.mywire.org` |
 | PostgreSQL | `5432` | 내부망 |
 | RustFS API / console | `12101` / `12105` | 내부망 |
-| krtour-map API/Admin API | `12301` | 별도 저장소 |
+| kor-travel-map API/Admin API | `12301` | 별도 저장소 |
 
 운영 OAuth callback은 API 도메인 기준
-`https://tripmateapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
-승인된 JavaScript 원본은 `https://tripmate.digitie.mywire.org`다.
+`https://pinviapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
+승인된 JavaScript 원본은 `https://pinvi.digitie.mywire.org`다.
 
 ## 빠른 시작
 
 ```bash
 # WSL ext4 테스트 미러 (의존성/테스트 전용; git/commit/push는 NTFS worktree)
-cd ~/tripmate-workspaces/tripmate-codex
+cd ~/pinvi-workspaces/pinvi-codex
 
 # 시스템 의존성
 sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
 # 백엔드 (uv 권장)
 uv venv && uv pip install -e "apps/api[dev]"
-# krtour-map은 별도 프로그램으로 실행 (API/Admin API 12301)
+# kor-travel-map은 별도 프로그램으로 실행 (API/Admin API 12301)
 
 # 프론트엔드 / API / Dagster dev server
 npm install
@@ -117,12 +117,12 @@ docker compose -f infra/docker-compose.yml up -d postgres rustfs
 # Docker app build/run/smoke
 npm run docker:app:smoke
 
-# krtour-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
+# kor-travel-map 독립 프로그램은 별 저장소에서 실행 (API/Admin API 12301)
 
 # Alembic (앱 도메인)
 uv run --package apps/api alembic upgrade head
 
-# python-krtour-map alembic은 그 저장소에서 실행 (feature schema 소유)
+# kor-travel-map alembic은 그 저장소에서 실행 (feature schema 소유)
 
 # 테스트
 pytest apps/api/tests -q
@@ -170,7 +170,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - YouTube intelligence (v2): [`docs/architecture/youtube-travel-intelligence.md`](docs/architecture/youtube-travel-intelligence.md)
 
 **데이터**
-- TripMate `app` 도메인: [`docs/data-model.md`](docs/data-model.md)
+- Pinvi `app` 도메인: [`docs/data-model.md`](docs/data-model.md)
 - Postgres schema 골격: [`docs/postgres-schema.md`](docs/postgres-schema.md)
 - 데이터 소스 인덱스: [`docs/data-sources/README.md`](docs/data-sources/README.md)
 
@@ -208,7 +208,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - 백로그: [`docs/tasks.md`](docs/tasks.md)
 
 **라이브러리 연계**
-- [`docs/krtour-map-integration.md`](docs/krtour-map-integration.md)
+- [`docs/kor-travel-map-integration.md`](docs/kor-travel-map-integration.md)
 
 **SPEC V8 적용 노트** (외부 문서 기반)
 - [`docs/spec/v8/`](docs/spec/v8/README.md)

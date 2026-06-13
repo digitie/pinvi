@@ -11,7 +11,7 @@
 ```http
 PATCH /users/me
 Content-Type: application/json
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 
 {
   "nickname": "...",
@@ -105,8 +105,8 @@ Content-Type: multipart/form-data
 
 ## 6. MCP 토큰 (ADR-019, Sprint 6)
 
-외부 AI agent가 TripMate MCP 서버를 read-only로 호출할 때 쓰는 전용 토큰이다.
-일반 `tripmate_access` / `tripmate_refresh` cookie와 분리한다.
+외부 AI agent가 Pinvi MCP 서버를 read-only로 호출할 때 쓰는 전용 토큰이다.
+일반 `pinvi_access` / `pinvi_refresh` cookie와 분리한다.
 
 ### 6.1 `GET /users/me/mcp-tokens`
 

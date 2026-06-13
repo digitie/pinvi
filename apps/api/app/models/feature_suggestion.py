@@ -90,5 +90,5 @@ class FeatureSuggestion(Base, TimestampMixin):
         PgUUID(as_uuid=True),
         ForeignKey("app.users.user_id", ondelete="SET NULL"),
     )
-    krtour_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB(astext_type=Text()))
+    kor_travel_map_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB(astext_type=Text()))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

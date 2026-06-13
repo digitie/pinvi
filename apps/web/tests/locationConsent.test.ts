@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { UserConsent } from '@tripmate/schemas';
+import type { UserConsent } from '@pinvi/schemas';
 import { hasLocationConsent, locationConsentItems } from '@/lib/locationConsent';
 
 function consent(over: Partial<UserConsent> & { consent_type: UserConsent['consent_type'] }): UserConsent {

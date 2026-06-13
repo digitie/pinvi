@@ -5,7 +5,7 @@ Revises: 20260602_0004
 Create Date: 2026-06-02 13:00:00
 
 `docs/architecture/notice-plans.md` §3 / `docs/api/notice-plans.md` / ADR-013.
-주의: notice_plans (TripMate 추천 여행) ≠ notice feature (라이브러리 공지/자연현상).
+주의: notice_plans (Pinvi 추천 여행) ≠ notice feature (라이브러리 공지/자연현상).
 """
 
 from __future__ import annotations

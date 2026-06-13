@@ -6,7 +6,7 @@
  * 사용 시점에 다시 확인한다.
  */
 
-import type { ConsentType, UserConsent } from '@tripmate/schemas';
+import type { ConsentType, UserConsent } from '@pinvi/schemas';
 
 export const LOCATION_CONSENT_TYPES: ConsentType[] = ['lbs_tos', 'location_collection'];
 export const CONSENT_VERSION = 'v1.0';

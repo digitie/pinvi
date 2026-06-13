@@ -1,6 +1,6 @@
-"""Feature API contract regressions — krtour REST cutover (T-173/174/176/178).
+"""Feature API contract regressions — kor_travel_map REST cutover (T-173/174/176/178).
 
-krtour-map HTTP client(`app.clients.krtour_map`)를 `app.dependency_overrides`로
+kor-travel-map HTTP client(`app.clients.kor_travel_map`)를 `app.dependency_overrides`로
 fake 주입한다. fake는 client가 envelope를 푼 뒤의 **data-level 셰입**(평면 lon/lat,
 items/clusters, found/missing, metrics)을 반환한다.
 """
@@ -11,14 +11,14 @@ from typing import Any
 
 import pytest
 
-from app.clients.krtour_map import KrtourMapUnavailable, get_krtour_map_client
+from app.clients.kor_travel_map import KorTravelMapUnavailable, get_kor_travel_map_client
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
 
 
-class _FakeKrtourClient:
-    """features.py 가 호출하는 메서드만 구현 — krtour data-level 셰입 반환."""
+class _FakeKorTravelMapClient:
+    """features.py 가 호출하는 메서드만 구현 — kor_travel_map data-level 셰입 반환."""
 
     def __init__(self) -> None:
         self.calls: dict[str, dict[str, Any]] = {}
@@ -138,24 +138,24 @@ class _FakeKrtourClient:
         }
 
 
-class _UnavailableClient(_FakeKrtourClient):
+class _UnavailableClient(_FakeKorTravelMapClient):
     async def features_in_bounds(self, **kwargs: Any) -> dict[str, Any]:
-        raise KrtourMapUnavailable("krtour-map down")
+        raise KorTravelMapUnavailable("kor-travel-map down")
 
 
 def _override(fake: Any) -> None:
-    app.dependency_overrides[get_krtour_map_client] = lambda: fake
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
 
 
 def _clear() -> None:
-    app.dependency_overrides.pop(get_krtour_map_client, None)
+    app.dependency_overrides.pop(get_kor_travel_map_client, None)
 
 
-async def test_in_bounds_maps_krtour_shape(
+async def test_in_bounds_maps_kor_travel_map_shape(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    fake = _FakeKrtourClient()
+    fake = _FakeKorTravelMapClient()
     _override(fake)
     try:
         resp = await client.get(
@@ -181,7 +181,7 @@ async def test_nearby_uses_lon_lat_and_distance(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    fake = _FakeKrtourClient()
+    fake = _FakeKorTravelMapClient()
     _override(fake)
     try:
         resp = await client.get(
@@ -203,7 +203,7 @@ async def test_nearby_rejects_legacy_lng_query(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    _override(_FakeKrtourClient())
+    _override(_FakeKorTravelMapClient())
     try:
         resp = await client.get(
             "/features/nearby?lng=129.118&lat=35.155&radius_m=5000",
@@ -219,7 +219,7 @@ async def test_feature_detail_maps_structured_address(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    _override(_FakeKrtourClient())
+    _override(_FakeKorTravelMapClient())
     try:
         resp = await client.get("/features/f_1168010100_p_abc", cookies=auth_cookies(user_id))
     finally:
@@ -237,7 +237,7 @@ async def test_feature_detail_returns_404_when_missing(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    _override(_FakeKrtourClient())
+    _override(_FakeKorTravelMapClient())
     try:
         resp = await client.get("/features/missing", cookies=auth_cookies(user_id))
     finally:
@@ -250,7 +250,7 @@ async def test_weather_maps_flat_metrics(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    _override(_FakeKrtourClient())
+    _override(_FakeKorTravelMapClient())
     try:
         resp = await client.get("/features/f_x_p_1/weather", cookies=auth_cookies(user_id))
     finally:
@@ -264,7 +264,7 @@ async def test_weather_maps_flat_metrics(
     assert data["metrics"][0]["value_number"] == 23.0
 
 
-async def test_in_bounds_returns_503_when_krtour_unavailable(
+async def test_in_bounds_returns_503_when_kor_travel_map_unavailable(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
@@ -285,7 +285,7 @@ async def test_categories_maps_catalog(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    fake = _FakeKrtourClient()
+    fake = _FakeKorTravelMapClient()
     _override(fake)
     try:
         resp = await client.get("/features/categories", cookies=auth_cookies(user_id))

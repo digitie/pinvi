@@ -2,7 +2,7 @@
  * trip 공유 링크 상태/표시 — `docs/api/trips.md`.
  */
 
-import type { TripShareLinkVisibility } from '@tripmate/schemas';
+import type { TripShareLinkVisibility } from '@pinvi/schemas';
 
 export type ShareStatus = 'active' | 'expired' | 'revoked';
 

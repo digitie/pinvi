@@ -34,16 +34,16 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 async def get_current_user_id(
     request: Request,
     db: DbSession,
-    tripmate_access: Annotated[str | None, Cookie(alias="tripmate_access")] = None,
+    pinvi_access: Annotated[str | None, Cookie(alias="pinvi_access")] = None,
 ) -> str:
     """cookie에서 access JWT 추출 + 사용자 상태와 token version 검증."""
-    if not tripmate_access:
+    if not pinvi_access:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "TOKEN_INVALID", "message": "인증 cookie가 없습니다."},
         )
     try:
-        payload = decode_access_token(tripmate_access)
+        payload = decode_access_token(pinvi_access)
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

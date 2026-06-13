@@ -30,14 +30,14 @@ SPEC V8 N-5 정리.
 - 백엔드 / DB / geospatial / ETL / Alembic 검증은 WSL2 ext4 테스트 미러에서 실행
   (ADR-024). NTFS worktree에서 직접 `pytest`/Docker를 돌리지 않는다.
 - git/commit/push는 NTFS worktree에서 Windows `git.exe`로만 수행한다.
-- 예: `wsl.exe -e bash -lc "cd ~/tripmate-workspaces/tripmate-codex && pytest apps/api/tests -q"`
+- 예: `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && pytest apps/api/tests -q"`
 
 ## 4. 백엔드 단위 테스트
 
 ### 4.1 외부 의존 격리
 
 - DB / HTTP / 파일시스템 / 시간 모두 격리
-- krtour-map/kraddr-geo/KASI HTTP 호출은 `httpx.MockTransport` 또는 fake client로 격리
+- kor-travel-map/kor-travel-geo/KASI HTTP 호출은 `httpx.MockTransport` 또는 fake client로 격리
 - 시간 — `freezegun` 또는 명시적 `kst_now()` injection
 
 ```python
@@ -118,14 +118,14 @@ async def test_register_success(client):
     assert data["verification_email_dispatched"] is True
 ```
 
-### 5.3 krtour-map HTTP 계약
+### 5.3 kor-travel-map HTTP 계약
 
 ```python
 # apps/api/tests/integration/test_features_in_bounds.py
 import httpx
 
-async def test_features_in_bounds_returns_clusters(client, mock_krtour_map_transport):
-    # mock_krtour_map_transport returns the latest openapi.user.json response shape.
+async def test_features_in_bounds_returns_clusters(client, mock_kor_travel_map_transport):
+    # mock_kor_travel_map_transport returns the latest openapi.user.json response shape.
     response = await client.get("/features/in-bounds", params={
         "sw_lng": 129.0, "sw_lat": 35.0, "ne_lng": 129.2, "ne_lat": 35.2,
         "zoom": 12,
@@ -158,7 +158,7 @@ async def test_trip_day_pois_sort_order_uses_index(db_session):
 ```ts
 // apps/web/tests/unit/markerPalette.test.ts
 import { describe, it, expect } from 'vitest';
-import { MARKER_PALETTE } from '@tripmate/design-tokens';
+import { MARKER_PALETTE } from '@pinvi/design-tokens';
 
 describe('MARKER_PALETTE', () => {
   it('has 16 keys P-01 to P-16', () => {
@@ -190,7 +190,7 @@ test('signup → verify → login flow', async ({ page, request }) => {
   const adminToken = process.env.E2E_ADMIN_TOKEN!;
   const userId = await getUserIdByEmail('e2e@example.com');
   await request.post(`http://localhost:12501/admin/users/${userId}/force-verify`, {
-    headers: { Cookie: `tripmate_access=${adminToken}` },
+    headers: { Cookie: `pinvi_access=${adminToken}` },
   });
 
   // 3) login
@@ -207,15 +207,15 @@ test('signup → verify → login flow', async ({ page, request }) => {
 ```python
 # apps/etl/tests/test_asset_festivals.py
 from dagster import materialize_to_memory
-from tripmate.etl.assets.feature_event_festivals import feature_event_festivals
-from tripmate.etl.resources import KrtourMapResource, VisitKoreaResource
+from pinvi.etl.assets.feature_event_festivals import feature_event_festivals
+from pinvi.etl.resources import KorTravelMapResource, VisitKoreaResource
 
 
-def test_feature_event_festivals_loads(mock_krtour_map, mock_visitkorea):
+def test_feature_event_festivals_loads(mock_kor_travel_map, mock_visitkorea):
     result = materialize_to_memory(
         [feature_event_festivals],
         resources={
-            "krtour_map": mock_krtour_map,
+            "kor_travel_map": mock_kor_travel_map,
             "visitkorea": mock_visitkorea,
         },
     )
@@ -255,7 +255,7 @@ async def test_resend_delivered_webhook(client, db_session):
 
 - `apps/api/tests/fixtures/` — 작은 fixture (코드와 함께)
 - NTFS `dataset/` — 대용량 (MOIS localdata zip, krheritage SHP 등)
-- 라이브러리 fixture는 sibling checkout 또는 `tests/fixtures/krtour_map/` symlink
+- 라이브러리 fixture는 sibling checkout 또는 `tests/fixtures/kor_travel_map/` symlink
 
 ### 10.2 seed scenarios (`/admin/seed`)
 

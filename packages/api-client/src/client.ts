@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ErrorEnvelopeSchema, SuccessEnvelopeSchema } from '@tripmate/schemas';
+import { ErrorEnvelopeSchema, SuccessEnvelopeSchema } from '@pinvi/schemas';
 
 /** API 클라이언트 옵션 — Next.js / Expo가 어댑터 주입. */
 export interface ApiClientOptions {

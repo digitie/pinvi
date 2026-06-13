@@ -3,13 +3,13 @@
 > **2026-06-06 정합성 감사**: `docs/audit/2026-06-06-doc-impl-audit.md`에서
 > 모순·불일치·누락을 전수 점검하고 후속 Task(T-123~T-151)·ADR(ADR-027~031)·결정
 > (DEC-01~10)을 도출했다. 결정 결과는 `docs/decisions-needed-2026-06-06.md`,
-> krtour-map 요구사항은 `docs/krtour-map-requirements.md`. 후속 백로그는 본 파일
+> kor-travel-map 요구사항은 `docs/kor-travel-map-requirements.md`. 후속 백로그는 본 파일
 > "감사 후속 백로그(2026-06-06)" 절.
 
 ## 진행 중
 
 - [ ] v0.1.0 릴리즈 정리 — Sprint 4 기능 게이트는 충족(지도 UI + live feature read +
-  CI/CD + krtour drift gate). 남은 일은 최종 CI/수동 smoke 확인, tag, GitHub Release notes.
+  CI/CD + kor_travel_map drift gate). 남은 일은 최종 CI/수동 smoke 확인, tag, GitHub Release notes.
 
 ## 다음 (우선순위 순)
 
@@ -17,13 +17,13 @@
 - 다음 구현 후보: T-108 운영 배포 자동화. T-129 `/geo/*`·`/regions/*`와
   T-146 location-audit outbox/feature cache는 이미 머지 완료.
 - 보안/운영 후속: T-195 public/API 공통 rate-limit 미들웨어. T-130 public API는
-  krtour upstream 한도와 edge/CDN 제한을 전제로 먼저 열었고, 앱 내부 IP/token 기준
+  kor_travel_map upstream 한도와 edge/CDN 제한을 전제로 먼저 열었고, 앱 내부 IP/token 기준
   제한은 공통 미들웨어로 따로 닫는다.
 
 ## 완료
 
 - [x] T-000 — git v1 보존 + main v2 재시작 (완료: 2026-05-25)
-- [x] T-112 — TripMate MCP 외부 인터페이스 서빙 (완료: 2026-06-09) —
+- [x] T-112 — Pinvi MCP 외부 인터페이스 서빙 (완료: 2026-06-09) —
   `app.mcp_tokens`, `/users/me/mcp-tokens`, `/admin/mcp-tokens`, `/mcp/sse`,
   `/mcp/tools/{tool_name}`, 사용자/admin 토큰 UI, 5개 read-only tool.
 - [x] T-001 — README / CLAUDE / AGENTS / SKILL (완료: 2026-05-25)
@@ -31,7 +31,7 @@
 - [x] T-003 — docs/decisions (ADR-001 ~ ADR-010) (완료: 2026-05-25)
 - [x] T-004 — docs/journal / resume / tasks (완료: 2026-05-25)
 - [x] T-005 — docs/data-model / postgres-schema / test-strategy (완료: 2026-05-25)
-- [x] T-006 — docs/krtour-map-integration (완료: 2026-05-25)
+- [x] T-006 — docs/kor-travel-map-integration (완료: 2026-05-25)
 - [x] T-007 — docs/sprints/README + SPRINT-1~6 (완료: 2026-05-25)
 - [x] T-008 — docs/spec/v8/ 6편 적용 노트 (완료: 2026-05-25)
 - [x] T-009 — docs/design/marker-palette + 루트 DESIGN.md/airbnb-marker-palette.html 복원 (완료: 2026-05-25)
@@ -59,15 +59,15 @@
 - [x] T-050 — Sprint 3 진입 PR (Admin 콘솔 + RBAC + audit chain integration + seed) (완료: 2026-05-26)
 - [x] T-061 — Sprint 4 진행 추적 문서 정합화 (`resume.md` / `tasks.md` / `journal.md`) (완료: 2026-06-01)
 - [x] T-060 — Sprint 4 진입 PR/기능 게이트 (완료: 2026-06-11): 지도 UI,
-  `maplibre-vworld-js`, krtour live feature read, trip 상세 HTTP batch, Admin feature-request
+  `maplibre-vworld-js`, kor_travel_map live feature read, trip 상세 HTTP batch, Admin feature-request
   릴레이, drift gate, CI/CD 재활성까지 머지. v0.1.0 tag/릴리즈 노트만 별도 정리.
 - [x] T-062 — GitHub Actions secret / branch protection 적용 상태 확인 (완료:
   2026-06-02, Actions secret 0개 정책 확인 + `main-pr-only` ruleset 적용)
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
-- [x] T-068 — 최신 krtour-map/kraddr-geo/KASI 계약 문서 반영 (완료: 2026-06-04,
+- [x] T-068 — 최신 kor-travel-map/kor-travel-geo/KASI 계약 문서 반영 (완료: 2026-06-04,
   ADR-026 + KASI 특일/출몰시각 저장 계약)
 - [x] T-069 — production API/Web URL + OAuth/CORS 보안 문서화 (완료: 2026-06-05,
-  API `https://tripmateapi.digitie.mywire.org`, Web `https://tripmate.digitie.mywire.org`)
+  API `https://pinviapi.digitie.mywire.org`, Web `https://pinvi.digitie.mywire.org`)
 - [x] T-067 — KASI 특일/POI 출몰시각 Dagster 구현 (완료: 2026-06-05,
   `app.kasi_special_days` / `app.trip_poi_rise_sets` + Dagster asset/job)
 - [x] T-070 — Sprint 2 잔여 마감: `email_queue` SKIP LOCKED worker +
@@ -75,7 +75,7 @@
   `api.yml` integration step 추가 (완료: 2026-06-05)
 - [x] T-063 — `maplibre-vworld-js` 선행 PR 및 consumer sync 체크리스트 정리
   (완료: 2026-06-05, `maplibre-vworld-js` PR #46 merge `f1dd74b9` +
-  TripMate `docs/integrations/maplibre-vworld.md` §6/§11.1 sync)
+  Pinvi `docs/integrations/maplibre-vworld.md` §6/§11.1 sync)
 - [x] T-065 — 항상 실행되는 aggregate CI gate 설계 후 required status check 적용
   (완료: 2026-06-05, `.github/workflows/aggregate-ci.yml` + `main-pr-only` ruleset
   required status check `Aggregate CI gate`)
@@ -90,10 +90,10 @@
   소셜-only unlink 차단)
 - [x] T-074 — PR-C frontend 지도 shell
   (완료: 2026-06-05, `maplibre-vworld` `f1dd74b9...` tarball pin + `/trips/map-shell`
-  `VWorldMap` import + Windows Playwright e2e, krtour-map feature 조회 제외)
+  `VWorldMap` import + Windows Playwright e2e, kor-travel-map feature 조회 제외)
 - [x] T-075 — Trip 대시보드 / notice plan 사용자 shell
   (완료: 2026-06-05, `/trips` / `/notice-plans` 사용자 route + navigation + 빈 상태 +
-  API client 연결, `/features/*` / krtour-map API `12301` 미호출 e2e)
+  API client 연결, `/features/*` / kor-travel-map API `12301` 미호출 e2e)
 - [x] T-100 — v1의 Resend 이메일 통합 v2로 이식 (Sprint 2 완료, PR #10)
 - [x] T-101 — v1의 소셜 로그인 기반 schema/model v2 이전 (현재 활성은 Google-only,
   Naver/Kakao provider 구현은 T-122 미래 작업)
@@ -105,7 +105,7 @@
   (완료: 2026-06-05, `/admin/grafana` iframe shell + `NEXT_PUBLIC_GRAFANA_*` env +
   Web `frame-src` CSP + admin guard e2e)
 - [x] T-109 — 한국 전용 geofencing FastAPI fallback
-  (완료: 2026-06-05, `TRIPMATE_GEOFENCE_*` env + `CF-IPCountry` 기반 451 middleware +
+  (완료: 2026-06-05, `PINVI_GEOFENCE_*` env + `CF-IPCountry` 기반 451 middleware +
   health/docs 우회 + DB roles 운영자 우회 단위 테스트. T-142에서 token roles claim 신뢰 제거)
 - [x] T-115 — Backup snapshot foundation + `/admin/backup` 1차 UI
   (완료: 2026-06-06, `scripts/backup-db.sh` / `scripts/restore-db.sh` +
@@ -129,39 +129,39 @@
 - [x] T-121 — POI Admin 목록/상세/연결 상태 관리
   (완료: 2026-06-06, `/admin/pois` 검색 + `feature_link_broken_at` 필터, 상세
   snapshot/일정/비용/최근 audit, 연결 상태 변경 `poi.update_link_status` audit,
-  Web 목록/상세 + 통합/e2e 테스트. feature re-link는 krtour-map client 준비 후)
+  Web 목록/상세 + 통합/e2e 테스트. feature re-link는 kor-travel-map client 준비 후)
 - [x] T-123 — 문서 정합 일괄 정정
   (완료: 2026-06-06, README/API index의 `GET /search`·`/health/external` 보강,
   OAuth Google-only/future provider 표현 정리, share link URL을
-  `TRIPMATE_WEB_BASE_URL` 기반으로 수정, zoom 하한 5 정합, dangling
-  `release-plan.md` 링크 제거, `python-kraddr-geo` 오타 정정, agent-guide 잔여
+  `PINVI_WEB_BASE_URL` 기반으로 수정, zoom 하한 5 정합, dangling
+  `release-plan.md` 링크 제거, `kor-travel-geo` 오타 정정, agent-guide 잔여
   bullet/trailer 정리)
 - [x] T-149 — Gemini 책임 목록 정정
   (완료: 2026-06-06, README/AGENTS/CLAUDE/SKILL 및 integrations index의 현재 책임
   표현을 ADR-020 기준 `AI companion 호출 계약`으로 정리. Gemini/Claude/Codex provider
-  구현은 별도 `tripmate-ai-companion` repo 책임)
+  구현은 별도 `kor-travel-concierge` repo 책임)
 - [x] T-150 — 계획/추적 문서 정합화
   (완료: 2026-06-06, Sprint 1/3/4/5 status를 최신 main과 맞추고, Sprint 5 ETL
-  provider asset 목록을 krtour-map 책임으로 정정, `resume.md` ADR-031까지 박힌 ADR
+  provider asset 목록을 kor-travel-map 책임으로 정정, `resume.md` ADR-031까지 박힌 ADR
   목록 갱신, T-111 중복/보류·완료 혼재 상태 점검, merge history PR #55 추가)
 - [x] T-152 — Telegram 완료 알림 MCP (모든 agent)
-  (완료: 2026-06-07, krtour-map PR #229 패턴 미러. `scripts/mcp_telegram_start.py` +
+  (완료: 2026-06-07, kor-travel-map PR #229 패턴 미러. `scripts/mcp_telegram_start.py` +
   `mcp-telegram` 서버를 claude/codex/antigravity/gemini MCP 설정에 등록 +
   `.env.mcp-telegram` gitignore + AGENTS/CLAUDE/SKILL/runbook 정책. GitHub secret 미사용
   (T-062 유지). 실제 전송 검증 완료. PR 후 `send_message`로 요약+링크 발송 규칙.)
 - [x] T-153 — PR 리뷰 모니터 MCP 알림 보강
   (완료: 2026-06-07, `scripts/pr_review_monitor.py`로 PR 이벤트/예약 감시 로직 단일화,
-  `synchronize`/`reopened` 즉시 알림 추가, 알림 본문에 `python-krtour-map`식 MCP 진입
+  `synchronize`/`reopened` 즉시 알림 추가, 알림 본문에 `kor-travel-map`식 MCP 진입
   CodeGraph/Playwright/Sequential Thinking/Telegram 기준 반영. GitHub secret 미사용.)
 
 ## 보류
 
-- [x] T-066 — krtour-map OpenAPI HTTP client **구현 완료** (2026-06-11, #170 user client
-  `clients/krtour_map.py` + #173 admin client `clients/krtour_map_admin.py`). krtour가 운영급
+- [x] T-066 — kor-travel-map OpenAPI HTTP client **구현 완료** (2026-06-11, #170 user client
+  `clients/kor_travel_map.py` + #173 admin client `clients/kor_travel_map_admin.py`). kor_travel_map가 운영급
   `:12301 /v1` HTTP 서비스를 신설해 ADR-027/DEC-01=B 전제 충족. **drift gate는 T-210e로 분리**(잔여).
   → **v0.1.0 게이트(DEC-06: 라이브 feature read) 충족** — 릴리즈 가능.
 - [ ] ~~T-107~~ — **Gemini 통합 — 보류 (deferred)**. 별 repo
-  `tripmate-ai-companion`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
+  `kor-travel-concierge`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
   (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
 - [ ] T-108 — 운영 배포 자동화 (Sprint 6) — **Odroid M1S + N150 16GB 양쪽**
   (ADR-023). multi-platform Docker 빌드 + 두 노드 streaming replication.
@@ -178,9 +178,9 @@
   구현 분할 (완료: 2026-06-09, trip delete/transfer, copy, day CRUD, shared view,
   trip/POI attachment metadata, distance matrix, nearest-neighbor optimize API +
   schemas/api-client/tests)
-- [x] T-112 — TripMate MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
+- [x] T-112 — Pinvi MCP 외부 인터페이스 서빙 (ADR-019, Sprint 6) —
   `apps/api/app/mcp/` + `/mcp/sse` + 토큰 발급 / 회수 UI + 5개 read-only tool.
-- [ ] T-113 — `tripmate-ai-companion` 별 repo 신설 (ADR-020) — T-107 후속.
+- [ ] T-113 — `kor-travel-concierge` 별 repo 신설 (ADR-020) — T-107 후속.
   사용자가 repo 명 / provider 확정 후 진입.
 - [x] T-114 — GitHub Actions CI/CD 복원 (ADR-021, Sprint 4) — workflow 파일 복원 완료.
   운영 확인은 T-062에서 완료. required status check 후속은 T-065.
@@ -196,12 +196,12 @@
 - [x] T-126 — POI 생성 경로 단일화(`/trips/{id}/pois` 정본) (A-01,C-16)
 - [x] T-127 — MCP 외부 인터페이스 정본화(mcp-server.md 권위, status enum, 토큰 엔드포인트) (A-02,A-06,A-12)
 - [x] T-128 — 실시간 협업 백엔드 설계 + WS 계층(presence/충돌해소, Sprint 5) (C-03,D-05)
-- [x] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13) (완료: 2026-06-09): kraddr-geo v2 REST client(`apps/api/app/clients/kraddr_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/{within-radius,covering-point}`(`api/v1/geo.py`) + **통합 `GET /search`**(feature[krtour]+address[kraddr]+내 POI[DB], 소스별 graceful degrade, `api/v1/search.py`, C-13) + frontend Zod(`packages/schemas/src/geo.ts`) + 계약/통합 테스트. 좌표 매핑(`lon`/`lat`)·router cutover(T-173)는 별개.
-- [x] T-130 — `/public/*` 구현 — **완료(2026-06-12, Codex / krtour T-222c)**:
-  krtour `openapi.user.json`의 `/v1/public/beaches*`, `/v1/public/festivals*` 6개 표면을
-  vendor 스냅샷에 동기화하고, TripMate `KrtourMapClient` + `/public/*` 라우터 +
+- [x] T-129 — `/search` 통합 + `/geo/*`·`/regions/*` 명세·구현 (A-13,C-02,C-13) (완료: 2026-06-09): kor-travel-geo v2 REST client(`apps/api/app/clients/kor_travel_geo.py`, ADR-025) + config + `GET /geo/{geocode,reverse,search}` + `GET /regions/{within-radius,covering-point}`(`api/v1/geo.py`) + **통합 `GET /search`**(feature[kor_travel_map]+address[kor_travel_geo]+내 POI[DB], 소스별 graceful degrade, `api/v1/search.py`, C-13) + frontend Zod(`packages/schemas/src/geo.ts`) + 계약/통합 테스트. 좌표 매핑(`lon`/`lat`)·router cutover(T-173)는 별개.
+- [x] T-130 — `/public/*` 구현 — **완료(2026-06-12, Codex / kor_travel_map T-222c)**:
+  kor_travel_map `openapi.user.json`의 `/v1/public/beaches*`, `/v1/public/festivals*` 6개 표면을
+  vendor 스냅샷에 동기화하고, Pinvi `KorTravelMapClient` + `/public/*` 라우터 +
   Pydantic/Zod/API client schema를 연결했다. 목록은 `meta.cursor/has_more/total/limit`로
-  cursor pagination을 노출하고, 상세/marker layer는 krtour public view를 그대로 투영한다.
+  cursor pagination을 노출하고, 상세/marker layer는 kor_travel_map public view를 그대로 투영한다.
   앱 내부 공통 rate-limit 미들웨어는 T-195로 분리한다. (C-04)
 - [x] T-131 — `GET /trips/{id}`에 `build_trip_view` 연결 (C-05)
 - [x] T-132 — trip 하위 리소스(days/day-items/members/shared/attachments/copy/optimize) 구현 분할 (C-06,D-06)
@@ -215,33 +215,33 @@
 - [x] T-140 — 여행 예산(budget/currency) 도메인 + 복사 흐름 (D-10)
 - [x] T-141 — trip↔지역 구조적 연결(POI 좌표 유도 or region code) (D-11)
 - [x] T-142 — geofence admin 우회 RBAC 소스 정정 + nginx 티어 정리 (D-13,D-24)
-- [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kraddr-geo stack 추가) (D-15,D-21,D-22)
+- [x] T-143 — 지도/소셜 문서 정정(Kakao 어댑터 제거, Google-only, kor-travel-geo stack 추가) (D-15,D-21,D-22)
 - [x] T-144 — 여행/장소 검색 UX + 내보내기(PDF/GPX/print) 설계 (D-16,D-17)
 - [x] T-145 — backup 핫스왑 동일호스트 schema-swap 확정(2×DB 폐기) (D-19)
-- [x] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26) (완료: 2026-06-09). **D-20**: `app.location_audit_outbox`(migration 0017) + 미들웨어 요청경로 fast append + 단일 writer `drain_location_audit_outbox`(advisory xact lock) + 백그라운드 worker. **D-26**: `services/feature_cache.py` process-local TTL/LRU 캐시 — `trip_view_builder`가 miss만 krtour 재조회(반복 trip view hotspot 완화), config `tripmate_feature_cache_*`. 단위/통합 테스트(캐시 hit/miss/LRU/TTL + 2-build cache-hit).
+- [x] T-146 — location-audit async outbox + feature 캐시(N+1 제거) (D-20,D-26) (완료: 2026-06-09). **D-20**: `app.location_audit_outbox`(migration 0017) + 미들웨어 요청경로 fast append + 단일 writer `drain_location_audit_outbox`(advisory xact lock) + 백그라운드 worker. **D-26**: `services/feature_cache.py` process-local TTL/LRU 캐시 — `trip_view_builder`가 miss만 kor_travel_map 재조회(반복 trip view hotspot 완화), config `pinvi_feature_cache_*`. 단위/통합 테스트(캐시 hit/miss/LRU/TTL + 2-build cache-hit).
 - [x] T-147 — 잔여 문서 정정(rise/set 정책, gemini.md partial unique index 문법) (D-23,D-25)
-- [x] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027) (완료: 2026-06-11, #171/#172 — feature read·trip view 전부 krtour HTTP client 경유, `etl_bridge` 제거)
+- [x] T-148 — SPRINT-4 backend 재작성(HTTP 경계 반영) (P-01; ADR-027) (완료: 2026-06-11, #171/#172 — feature read·trip view 전부 kor_travel_map HTTP client 경유, `etl_bridge` 제거)
 - [x] T-149 — Gemini 책임 목록 정정(README/AGENTS/SKILL) (P-03)
 - [x] T-150 — 계획/추적 문서 정합화(sprint status/보류·완료 재분류/ADR refs/resume "박힌 ADR" 갱신) (P-04~21)
 - [x] T-151 — 미기록 ADR 백필(auth-token/RBAC/audit-chain) + SPRINT placeholder 번호 할당 (P-07,P-08)
 
-### krtour-map ADR-045 Phase 6 (TripMate 몫) 대응
+### kor-travel-map ADR-045 Phase 6 (Pinvi 몫) 대응
 
-krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소가
+kor-travel-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 Pinvi 저장소가
 처리할 항목 매핑:
 
-- [x] **T-210c (TripMate 부분)** — `apps/etl` ETL 경계 정합 (완료: 2026-06-06).
+- [x] **T-210c (Pinvi 부분)** — `apps/etl` ETL 경계 정합 (완료: 2026-06-06).
   코드 측은 이관할 feature/provider Dagster **스켈레톤이 없음**(apps/etl은 KASI 등
   `app` schema 소유 job만 보유) → 이관/삭제 불필요. 문서 측 phantom 스켈레톤
   (`dagster-etl-bridge.md`/`runbooks/etl.md`가 미존재 파일 나열)을 현재 구현 vs
   계획으로 정합화 + `assets/__init__.py` 경계 가드 docstring 추가.
-- [x] **T-210b (TripMate 부분)** — 문서 OpenAPI HTTP supersede: ADR-026(T-068) +
-  ADR-027(감사 PR #47)로 사실상 완료(architecture/krtour-map-integration/etl 문서 전환).
+- [x] **T-210b (Pinvi 부분)** — 문서 OpenAPI HTTP supersede: ADR-026(T-068) +
+  ADR-027(감사 PR #47)로 사실상 완료(architecture/kor-travel-map-integration/etl 문서 전환).
 - [x] **T-210d** = 본 저장소 **T-066**(httpx OpenAPI client) — **완료(2026-06-11, #170/#173)**.
-- [x] **T-210e** — drift gate (완료: 2026-06-11): krtour `openapi.user.json` 스냅샷 vendor
-  (`apps/api/tests/contract/krtour-openapi-user.json`) + 계약 정합 테스트
-  (`tests/unit/test_krtour_contract.py` — client 경로·매핑 응답 필드 ⊆ 스냅샷 + 로컬 핀 신선도
-  검사). 수기 client는 krtour 권고대로 유지. `openapi-typescript` codegen은 선택(미도입, 후속).
+- [x] **T-210e** — drift gate (완료: 2026-06-11): kor_travel_map `openapi.user.json` 스냅샷 vendor
+  (`apps/api/tests/contract/kor-travel-map-openapi-user.json`) + 계약 정합 테스트
+  (`tests/unit/test_kor_travel_map_contract.py` — client 경로·매핑 응답 필드 ⊆ 스냅샷 + 로컬 핀 신선도
+  검사). 수기 client는 kor_travel_map 권고대로 유지. `openapi-typescript` codegen은 선택(미도입, 후속).
 
 ### Codex PR 사후 리뷰 후속 (2026-06-07)
 
@@ -279,47 +279,62 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 
 [낮음] 세부는 종합 문서 §1 참조.
 
-### krtour-map 연동(붙이기) 작업 (2026-06-08)
+### kor-travel-map 연동(붙이기) 작업 (2026-06-08)
 
-정본 계약: `docs/integrations/krtour-map-rest-api.md`. krtour-map이 운영 HTTP API(포트
-12301, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 TripMate가
+정본 계약: `docs/integrations/kor-travel-map-rest-api.md`. kor-travel-map이 운영 HTTP API(포트
+12301, `openapi.user.json`)를 **이미 구축**했으므로(ADR-026/027/DEC-01=B 충족), 이제 Pinvi가
 실제 연결한다. 권장 순서 A→B→C 먼저, 이후 D~H 병행.
 
 > **✅ 연동 루프 완료 (2026-06-11)**: T-170/171/181(client) + T-172~T-176/T-178(feature read
 > cutover, #171) + T-175(trip view batch + `etl_bridge` 제거, #172) + T-180(admin client, #173) +
 > T-179(admin 검토→승인 릴레이 BE #174 + web UI #175). **→ v0.1.0 게이트(DEC-06) 충족.**
-> ✅ T-210e drift gate(#178) + ✅ §7 합의 5건 확정(krtour T-217c, 2026-06-11 — TripMate 반영:
-> 출처 태깅 operator 고정 `"tripmate-admin"` + reason `[suggestion:<id>]` prefix).
-> ✅ T-130 `/public/*`(2026-06-12 — krtour public beach/festival 표면 소비 연결).
+> ✅ T-210e drift gate(#178) + ✅ §7 합의 5건 확정(kor_travel_map T-217c, 2026-06-11 — Pinvi 반영:
+> 출처 태깅 operator 고정 `"pinvi-admin"` + reason `[suggestion:<id>]` prefix).
+> ✅ T-130 `/public/*`(2026-06-12 — kor_travel_map public beach/festival 표면 소비 연결).
 > 앱 내부 공통 rate-limit만 T-195 후속.
 
-- [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/krtour_map.py`
+- [x] T-170 — [A] httpx client 신설 (완료: 2026-06-09, `apps/api/app/clients/kor_travel_map.py`
   — features in-bounds/get/batch/nearby/search/weather/categories/healthz + 도메인 예외
   + 재시도(transient 백오프) + 서비스 토큰 헤더 + lifespan/dependency + MockTransport 계약
   테스트 10개. 라우터 cutover/stub 제거는 T-173)
-- [x] T-171 — [B] config 배선 (완료: 2026-06-09, `Settings`에 `tripmate_krtour_map_*` 필드
+- [x] T-171 — [B] config 배선 (완료: 2026-06-09, `Settings`에 `pinvi_kor_travel_map_*` 필드
   추가 + `.env.example`/`apps/api/.env.example` 블록. 기존엔 필드 없어 env silently ignored)
 - [x] T-172 — [C] feature_id 문자열 정합 마감(#87/T-125 후속, 잔여 uuid 캐스트·`@version` 가정 제거) (완료: 2026-06-11, #171 — 라우터·schema·trip_view 전부 불투명 문자열)
 - [x] T-173 — [D] 응답 셰입 정렬(name/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입) (완료: 2026-06-11, #171 — Pydantic+Zod+api-client+web+docs 일괄)
 - [x] T-174 — [E] 클러스터링 서버 위임(`cluster_unit`) + `services/cluster_query.py`(feature schema 직접 SQL — 경계 위반) 제거 (완료: 2026-06-11, #171)
-- [x] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /v1/features/batch`(string, cap 200, 응답 `{found,missing}`) 배선. inactive feature는 `found`+status로 옴 — "철회/폐업" 표시 분기(krtour D-12) (완료: 2026-06-11, #172 — `get_features` 연결 + `etl_bridge` 제거)
+- [x] T-175 — [F] `GET /trips/{id}`에 trip_view_builder 연결 + `POST /v1/features/batch`(string, cap 200, 응답 `{found,missing}`) 배선. inactive feature는 `found`+status로 옴 — "철회/폐업" 표시 분기(kor_travel_map D-12) (완료: 2026-06-11, #172 — `get_features` 연결 + `etl_bridge` 제거)
 - [x] T-176 — [G] 검색/날씨/카테고리/근접 라우터 실연결 (완료: 2026-06-11 — in-bounds/nearby/search/get/weather #171 + `GET /features/categories` 카탈로그 추가)
-- [x] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. krtour 직접 호출 X (완료: 2026-06-09)
-- [x] T-179 — [H2] Admin 검사/승인 → krtour **feature change**(DEC-05) — **완료: 2026-06-11 (#174 백엔드 + #175 web UI)** — **actionable**(K-15 = krtour PR #317로 구현, krtour ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로 승인): `/admin/feature-requests` 검사 + approve/reject 시 krtour `POST/PATCH/DELETE /v1/admin/features*` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. 합의 5건(review_mode 등)은 krtour T-217c 회신으로 확정. 재적재와 무관
-- [x] T-180 — krtour **admin HTTP client(API 12301 `/v1/admin/*`)** — **완료: 2026-06-11 (#173)** — §2.9 feature change(`POST/PATCH/DELETE /v1/admin/features*`) + 운영자 재적재(`/v1/admin/feature-update-requests`) proxy 호출 client. T-170 user client와 base 동일(12301), 경로/토큰 정책만 분리 — `tripmate_krtour_map_admin_base_url` 기본값도 12301로 고정 + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
-- [x] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중) (완료: 2026-06-11, #171 — `_map_krtour_errors` 가드: 5xx/timeout→503, 429/409→Retry-After, 404)
-- [x] T-181 — [표준 추종] ADR-048 외부 `/v1` hard cutover — **완료(2026-06-11, #170 client 잔여까지 머지)**: — **라이브 계약분 완료(2026-06-09)**: krtour `origin/main`(`openapi.user.json` title `krtour-map-user 0.2.0-dev`, krtour PR #318/#319/#321)이 외부 `/v1` clean cut + batch `/tripmate/features/batch`→`/v1/features/batch`(#318) + 파라미터 개명(`search` bbox CSV→`min_lon/min_lat/max_lon/max_lat`, `page_size`/`cursor`)을 머지함. **T-170 client(`apps/api/app/clients/krtour_map.py`) 일괄 교체 완료** — 전 feature/category 경로 `/v1` prefix(`/health`만 비버전), batch 경로/검색 파라미터 갱신 + MCP `_search_features` 호출부 + MockTransport 계약 테스트. **잔여 — 대기 해제(2026-06-10, krtour `0e45bd7` T-216a~g 머지 확인)**: ① problem+json(`_error_code`를 top-level `code` 파싱으로) ② envelope payload/meta 분리(`meta.page.next_cursor` threading) ③ batch 응답 `items`→**`found`** 교체(현재 전 결과 silent-missing) ④ in-bounds `limit`→`max_items` — **즉시 실행 가능**. frontend codegen은 T-210e.
-- [x] T-182 — [결정] DEC-07 좌표 필드명 정렬(ADR-048 B) (완료: 2026-06-09): **`lon`/`lat` 채택**(krtour 정렬·terse). `Coord`(Pydantic) + `CoordSchema`(Zod) `longitude`/`latitude`→`lon`/`lat`, 전 API 요청/응답·query 파라미터(geo)·ws presence.cursor 출력·frontend(useUserLocation/locationAdapter 출력)·전 테스트·docs/api 예시 일괄 정렬. 외부 krtour DTO/snapshot tolerant reader·브라우저 Geolocation `position.coords.*`·KASI DB 컬럼은 keep.
-- [x] T-211 — krtour `curated_features` → TripMate `curated_trip_plans` 1:1 import
-  (완료: 2026-06-12, Codex / krtour T-223d): `KrtourMapClient`가
-  `/v1/curated-features/{curated_feature_id}/tripmate-copy`를 소비하고,
-  `/admin/notice-plans/imports/krtour-curated-features`가 `create` / `upsert` / `refresh`
-  mode로 TripMate curated plan/POI를 생성·갱신한다. `source_system`,
+- [x] T-177 — [H1] 사용자 feature 제안 큐(DEC-05 확정): `app.feature_suggestions` + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현(C-12 실체화) + rate-limit/dedup. kor_travel_map 직접 호출 X (완료: 2026-06-09)
+- [x] T-179 — [H2] Admin 검사/승인 → kor_travel_map **feature change**(DEC-05) — **완료: 2026-06-11 (#174 백엔드 + #175 web UI)** — **actionable**(K-15 = kor_travel_map PR #317로 구현, kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로 승인): `/admin/feature-requests` 검사 + approve/reject 시 kor_travel_map `POST/PATCH/DELETE /v1/admin/features*` 호출, 결과 `feature_id`/`request_id`/state를 `feature_suggestions`에 저장, RBAC(admin/operator)+audit. 합의 5건(review_mode 등)은 kor_travel_map T-217c 회신으로 확정. 재적재와 무관
+- [x] T-180 — kor_travel_map **admin HTTP client(API 12301 `/v1/admin/*`)** — **완료: 2026-06-11 (#173)** — §2.9 feature change(`POST/PATCH/DELETE /v1/admin/features*`) + 운영자 재적재(`/v1/admin/feature-update-requests`) proxy 호출 client. T-170 user client와 base 동일(12301), 경로/토큰 정책만 분리 — `pinvi_kor_travel_map_admin_base_url` 기본값도 12301로 고정 + 서비스 토큰 + MockTransport 계약 테스트. (T-179 의존)
+- [x] T-178 — [공통] 에러/저하 정책(503 FEATURE_SERVICE_UNAVAILABLE + snapshot fallback, Retry-After 존중) (완료: 2026-06-11, #171 — `_map_kor_travel_map_errors` 가드: 5xx/timeout→503, 429/409→Retry-After, 404)
+- [x] T-181 — [표준 추종] ADR-048 외부 `/v1` hard cutover — **완료(2026-06-11, #170 client 잔여까지 머지)**: — **라이브 계약분 완료(2026-06-09)**: kor_travel_map `origin/main`(`openapi.user.json` title `kor-travel-map-user 0.2.0-dev`, kor_travel_map PR #318/#319/#321)이 외부 `/v1` clean cut + batch `/pinvi/features/batch`→`/v1/features/batch`(#318) + 파라미터 개명(`search` bbox CSV→`min_lon/min_lat/max_lon/max_lat`, `page_size`/`cursor`)을 머지함. **T-170 client(`apps/api/app/clients/kor_travel_map.py`) 일괄 교체 완료** — 전 feature/category 경로 `/v1` prefix(`/health`만 비버전), batch 경로/검색 파라미터 갱신 + MCP `_search_features` 호출부 + MockTransport 계약 테스트. **잔여 — 대기 해제(2026-06-10, kor_travel_map `0e45bd7` T-216a~g 머지 확인)**: ① problem+json(`_error_code`를 top-level `code` 파싱으로) ② envelope payload/meta 분리(`meta.page.next_cursor` threading) ③ batch 응답 `items`→**`found`** 교체(현재 전 결과 silent-missing) ④ in-bounds `limit`→`max_items` — **즉시 실행 가능**. frontend codegen은 T-210e.
+- [x] T-182 — [결정] DEC-07 좌표 필드명 정렬(ADR-048 B) (완료: 2026-06-09): **`lon`/`lat` 채택**(kor_travel_map 정렬·terse). `Coord`(Pydantic) + `CoordSchema`(Zod) `longitude`/`latitude`→`lon`/`lat`, 전 API 요청/응답·query 파라미터(geo)·ws presence.cursor 출력·frontend(useUserLocation/locationAdapter 출력)·전 테스트·docs/api 예시 일괄 정렬. 외부 kor_travel_map DTO/snapshot tolerant reader·브라우저 Geolocation `position.coords.*`·KASI DB 컬럼은 keep.
+- [x] T-211 — kor_travel_map `curated_features` → Pinvi `curated_trip_plans` 1:1 import
+  (완료: 2026-06-12, Codex / kor_travel_map T-223d): `KorTravelMapClient`가
+  `/v1/curated-features/{curated_feature_id}/pinvi-copy`를 소비하고,
+  `/admin/notice-plans/imports/kor-travel-map-curated-features`가 `create` / `upsert` / `refresh`
+  mode로 Pinvi curated plan/POI를 생성·갱신한다. `source_system`,
   `source_curated_feature_id`, `source_curated_feature_version`, `source_etag`,
   `source_imported_at`, source item id provenance 컬럼을 저장한다.
-- [x] T-196 — `tripmate-agent` 잔여 TripMate 설정 제거 (완료: 2026-06-12, Codex):
-  프로젝트가 `krtour-ai-agent`로 rename되고 TripMate와 직접 관계를 끊는 결정에 따라
-  `TRIPMATE_AGENT_API_BASE_URL`, 12401 포트 예약, Docker/env/runbook 노출을 제거했다.
+- [x] T-196 — `kor-travel-concierge` 잔여 Pinvi 설정 제거 (완료: 2026-06-12, Codex):
+  프로젝트가 `kor-travel-concierge`로 rename되고 Pinvi와 직접 관계를 끊는 결정에 따라
+  `PINVI_AGENT_API_BASE_URL`, 12401 포트 예약, Docker/env/runbook 노출을 제거했다.
+- [x] T-197 — Prometheus 성능 모니터링 추가 (완료: 2026-06-13, Codex):
+  FastAPI `/metrics` + route-template 기반 request counter/latency histogram/in-flight gauge를
+  추가하고, Docker multi-worker용 Prometheus multiprocess 설정을 넣었다. `observability`
+  profile은 Prometheus `12601`, cAdvisor `12602`, Grafana `12605`를 사용하며, Grafana
+  datasource/dashboard provisioning과 `/admin/grafana` 기본 URL을 같은 포트 정책으로 정렬했다.
+- [x] T-198 — 프로젝트명/GitHub repo `pinvi` 변경 (완료: 2026-06-13, Codex):
+  제품/문서 표기와 GitHub 저장소 식별자를 `Pinvi`/`pinvi`로 정렬하고, npm workspace
+  scope를 `@pinvi/*`, Python package metadata를 `pinvi-api`/`pinvi-etl`로 변경했다.
+  ETL package path는 `apps/etl/pinvi`/`pinvi.etl`로 이전했다.
+- [x] T-199 — 런타임 계약/외부 서비스명 hard cutover (완료: 2026-06-13, Codex):
+  호환 별칭 없이 env/settings/cookie/DB/RustFS/API field를 `PINVI_*`/`pinvi_*` 기준으로
+  정리했다. 개발 DB/사용자/compose 이름은 `pinvi`/`pinvi-*`, RustFS bucket은
+  `pinvi-media`로 맞췄다. 이전 지도 서비스명은 `kor-travel-map`/`kor_travel_map`,
+  이전 주소/지오코딩 서비스명은 `kor-travel-geo`/`kor_travel_geo`, 이전 agent 계열은
+  `kor-travel-concierge`로 정리했다.
 
 ### Codex PR 3라운드 사후 리뷰 후속 (2026-06-09, `docs/reviews/2026-06-09-codex-pr-review.md`)
 
@@ -350,7 +365,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
   `RequestIdMiddleware`의 생성 request id도 state/extensions에 보존하며, `/features/requests`
   body 좌표를 outbox에 남김. **완료: 2026-06-10.**
 - [x] T-191 — [높음] #120/#121 trip/POI 첨부 metadata storage ref 검증:
-  `bucket == TRIPMATE_RUSTFS_BUCKET` + `user-uploads/{trip_attachment|poi_attachment}/{current_user_id}/`
+  `bucket == PINVI_RUSTFS_BUCKET` + `user-uploads/{trip_attachment|poi_attachment}/{current_user_id}/`
   prefix만 허용, 위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`. **완료: 2026-06-10.**
 - [x] T-192 — [높음] #123 admin 큐레이션 첨부 metadata storage ref 검증:
   `user-uploads/{curated_plan_attachment|curated_poi_attachment}/{admin_user_id}/` prefix만 허용.
@@ -359,7 +374,7 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
   `curated_plan_attachment` / `curated_poi_attachment` presigned 발급은 admin만 허용하고
   비권한은 404로 숨김. **완료: 2026-06-10.**
 - [x] T-194 — [중간] #119 `/features/nearby` query `lon`/`lat` 정렬:
-  legacy `lng`를 거부하고 krtour/DEC-07 정본 `lon`으로 통일. **완료: 2026-06-10.**
+  legacy `lng`를 거부하고 kor_travel_map/DEC-07 정본 `lon`으로 통일. **완료: 2026-06-10.**
 - [ ] T-195 — [중간] public/API 공통 rate-limit 미들웨어:
   `docs/api/common.md`와 `docs/api/public.md`가 말하는 IP/token 기준 분당 제한을 실제
   FastAPI middleware 또는 검증된 라이브러리로 적용한다. `/public/*`는 IP 기준 60/min,
@@ -399,14 +414,14 @@ krtour-map의 ADR-045 standalone 계획 Phase 6(T-210a~e) 중 TripMate 저장소
 | PR #11 | Sprint 3 진입 PR | 2026-05-26 | Admin + RBAC + audit chain |
 | PR #14 | docs: Sprint 4~6 plan + ADR-018~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |
 | PR #15 | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A) | 2026-06-05 | T-114/T-065 |
-| PR #16 | feat: 백엔드 features API + krtour-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 (client는 stub — 감사 C-01) |
+| PR #16 | feat: 백엔드 features API + kor-travel-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 (client는 stub — 감사 C-01) |
 | PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
 | PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |
 | PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
 | PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |
 | PR #56 | docs: align tracking docs with merged work | 2026-06-06 | T-150 |
 | PR #57 | docs: backfill auth rbac audit ADRs | 2026-06-06 | T-151 |
-| PR #58 | docs: align map social kraddr docs | 2026-06-06 | T-143 |
+| PR #58 | docs: align map social kor-travel-geo docs | 2026-06-06 | T-143 |
 | PR #59 | docs: fix rise set and gemini SQL docs | 2026-06-06 | T-147 |
 | PR #60 | fix: use db roles for geofence admin bypass | 2026-06-06 | T-142 |
 | PR #61 | docs: define trip search and export UX | 2026-06-06 | T-144 |

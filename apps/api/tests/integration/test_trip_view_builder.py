@@ -45,7 +45,7 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
     async with session_factory() as db:
         user = User(
             user_id=user_id,
-            email=f"builder_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"builder_{uuid.uuid4().hex[:8]}@pinvi.test",
             status="active",
             email_verified_at=now,
         )
@@ -84,10 +84,10 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
         await db.commit()
         await db.refresh(trip)
 
-        krtour_client = _StringFeatureClient()
-        view = await build_trip_view(db, trip=trip, krtour_client=krtour_client)
+        kor_travel_map_client = _StringFeatureClient()
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=kor_travel_map_client)
 
-    assert krtour_client.requested_ids == ["place:abc123"]
+    assert kor_travel_map_client.requested_ids == ["place:abc123"]
     assert view["broken_feature_count"] == 0
     built_poi = view["days"][0]["pois"][0]
     assert built_poi["feature_id"] == "place:abc123@raw"
@@ -112,7 +112,7 @@ async def test_build_trip_view_skips_null_feature_ids(session_factory) -> None: 
         db.add(
             User(
                 user_id=user_id,
-                email=f"null_feature_{uuid.uuid4().hex[:8]}@tripmate.test",
+                email=f"null_feature_{uuid.uuid4().hex[:8]}@pinvi.test",
                 status="active",
                 email_verified_at=now,
             )
@@ -135,10 +135,10 @@ async def test_build_trip_view_skips_null_feature_ids(session_factory) -> None: 
         await db.commit()
         await db.refresh(trip)
 
-        krtour_client = _StringFeatureClient()
-        view = await build_trip_view(db, trip=trip, krtour_client=krtour_client)
+        kor_travel_map_client = _StringFeatureClient()
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=kor_travel_map_client)
 
-    assert krtour_client.requested_ids == []
+    assert kor_travel_map_client.requested_ids == []
     assert view["broken_feature_count"] == 0
     built_poi = view["days"][0]["pois"][0]
     assert built_poi["feature_id"] is None
@@ -182,7 +182,7 @@ async def test_build_trip_view_uses_feature_cache(session_factory) -> None:  # t
         db.add(
             User(
                 user_id=user_id,
-                email=f"cache_{uuid.uuid4().hex[:8]}@tripmate.test",
+                email=f"cache_{uuid.uuid4().hex[:8]}@pinvi.test",
                 status="active",
                 email_verified_at=now,
             )
@@ -210,8 +210,8 @@ async def test_build_trip_view_uses_feature_cache(session_factory) -> None:  # t
         await db.refresh(trip := await db.get(Trip, trip_id))
 
         client = _CountingFeatureClient()
-        first = await build_trip_view(db, trip=trip, krtour_client=client)
-        second = await build_trip_view(db, trip=trip, krtour_client=client)
+        first = await build_trip_view(db, trip=trip, kor_travel_map_client=client)
+        second = await build_trip_view(db, trip=trip, kor_travel_map_client=client)
 
     # 1번째는 fetch, 2번째는 캐시 hit → get_features 추가 호출 없음.
     assert client.call_count == 1

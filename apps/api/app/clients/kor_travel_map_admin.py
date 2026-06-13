@@ -1,18 +1,18 @@
-"""krtour-map admin OpenAPI HTTP client — feature change relay (T-180).
+"""kor-travel-map admin OpenAPI HTTP client — feature change relay (T-180).
 
-TripMate Admin이 1차 검토·승인한 사용자 feature 제안을 krtour `/v1/admin/features*`
+Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map `/v1/admin/features*`
 (POST/PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다.
 API base는 **:12301 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
-설정된 admin service token(`X-Krtour-Service-Token`)만 보낸다.
+설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)만 보낸다.
 
-§7 합의 5건 **확정** (krtour T-217c, 2026-06-11):
-- admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 krtour 측
-  `admin_destructive_enabled` kill-switch뿐 — `X-Krtour-Service-Token`은 선택 pass-through.
-- review_mode = krtour `KRTOUR_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`(기본 require_review 2단 검토).
+§7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
+- admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
+  `admin_destructive_enabled` kill-switch뿐 — `X-Kor-Travel-Map-Service-Token`은 선택 pass-through.
+- review_mode = kor_travel_map `KOR_TRAVEL_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`(기본 require_review 2단 검토).
 - closure = soft `DELETE`(`user_deleted_*`, provider 재적재 부활 차단) / deactivate는 일시 비활성.
 - idempotency/출처 태깅은 호출부(T-179 `feature_requests.py`)에서 적용.
 
-계약: `docs/integrations/krtour-map-rest-api.md` §2.9 + krtour `openapi.json`.
+계약: `docs/integrations/kor-travel-map-rest-api.md` §2.9 + kor_travel_map `openapi.json`.
 """
 
 from __future__ import annotations
@@ -26,19 +26,19 @@ from typing import Annotated, Any
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
-from app.clients.krtour_map import (
-    KrtourMapBadRequest,
-    KrtourMapError,
-    KrtourMapFeatureNotFound,
-    KrtourMapRateLimited,
-    KrtourMapUnavailable,
+from app.clients.kor_travel_map import (
+    KorTravelMapBadRequest,
+    KorTravelMapError,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapRateLimited,
+    KorTravelMapUnavailable,
     _error_code,
 )
 from app.core.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
-_SERVICE_TOKEN_HEADER = "X-Krtour-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+_SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 
 
 def _retry_after(resp: httpx.Response) -> int | None:
@@ -51,8 +51,8 @@ def _retry_after(resp: httpx.Response) -> int | None:
         return None
 
 
-class KrtourMapAdminClient:
-    """krtour-map admin(`/v1/admin/features*`) HTTP client (transport-only)."""
+class KorTravelMapAdminClient:
+    """kor-travel-map admin(`/v1/admin/features*`) HTTP client (transport-only)."""
 
     def __init__(
         self,
@@ -84,39 +84,41 @@ class KrtourMapAdminClient:
         params: Mapping[str, Any] | None = None,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
-        last: KrtourMapUnavailable | None = None
+        last: KorTravelMapUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
                 resp = await self._http.request(
                     method, path, json=json, params=params, headers=self._headers()
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last = KrtourMapUnavailable(f"krtour-map admin 요청 실패({path}): {exc!r}")
+                last = KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path}): {exc!r}")
             else:
                 if resp.status_code >= 500:
-                    last = KrtourMapUnavailable(f"krtour-map admin {resp.status_code} ({path})")
+                    last = KorTravelMapUnavailable(
+                        f"kor-travel-map admin {resp.status_code} ({path})"
+                    )
                 else:
                     return resp
             if attempt + 1 < self._max_attempts:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
-        logger.warning("krtour_map_admin.unavailable", extra={"path": path})
-        raise last or KrtourMapUnavailable(f"krtour-map admin 요청 실패({path})")
+        logger.warning("kor_travel_map_admin.unavailable", extra={"path": path})
+        raise last or KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path})")
 
     def _data(self, resp: httpx.Response) -> dict[str, Any]:
         """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
-            raise KrtourMapFeatureNotFound("feature 를 찾을 수 없습니다.")
+            raise KorTravelMapFeatureNotFound("feature 를 찾을 수 없습니다.")
         if sc in (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_409_CONFLICT):
-            raise KrtourMapRateLimited(
-                f"krtour-map admin {sc}", retry_after_seconds=_retry_after(resp)
+            raise KorTravelMapRateLimited(
+                f"kor-travel-map admin {sc}", retry_after_seconds=_retry_after(resp)
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
-            raise KrtourMapBadRequest(f"krtour-map admin {sc}", code=_error_code(resp))
+            raise KorTravelMapBadRequest(f"kor-travel-map admin {sc}", code=_error_code(resp))
         payload = resp.json()
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
-            raise KrtourMapError(f"예상치 못한 admin 응답 셰입({resp.request.url.path})")
+            raise KorTravelMapError(f"예상치 못한 admin 응답 셰입({resp.request.url.path})")
         return data
 
     def _change_record(self, resp: httpx.Response) -> dict[str, Any]:
@@ -128,7 +130,7 @@ class KrtourMapAdminClient:
         data = self._data(resp)
         record = data.get("request")
         if not isinstance(record, dict):
-            raise KrtourMapError("admin change 응답에 data.request 가 없습니다.")
+            raise KorTravelMapError("admin change 응답에 data.request 가 없습니다.")
         return record
 
     # ── feature change (T-179 승인 시 호출) ─────────────────────────────────
@@ -156,7 +158,7 @@ class KrtourMapAdminClient:
             await self._send("DELETE", f"/v1/admin/features/{feature_id}", json=body)
         )
 
-    # ── change-requests 큐 (krtour 운영자 검수 추적) ───────────────────────
+    # ── change-requests 큐 (kor_travel_map 운영자 검수 추적) ───────────────────────
 
     async def list_change_requests(
         self, *, page_size: int | None = None, cursor: str | None = None
@@ -200,43 +202,43 @@ class KrtourMapAdminClient:
         )
 
 
-def create_krtour_map_admin_client(app_settings: Settings) -> KrtourMapAdminClient:
+def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAdminClient:
     """설정 기반 admin client 생성. admin token 미설정 시 공용 service token으로 fallback."""
     token = (
-        app_settings.tripmate_krtour_map_admin_service_token
-        or app_settings.tripmate_krtour_map_service_token
+        app_settings.pinvi_kor_travel_map_admin_service_token
+        or app_settings.pinvi_kor_travel_map_service_token
     )
     http = httpx.AsyncClient(
-        base_url=app_settings.tripmate_krtour_map_admin_base_url,
-        timeout=app_settings.tripmate_krtour_map_timeout_seconds,
+        base_url=app_settings.pinvi_kor_travel_map_admin_base_url,
+        timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
     )
-    return KrtourMapAdminClient(
+    return KorTravelMapAdminClient(
         http,
         service_token=token,
-        max_attempts=app_settings.tripmate_krtour_map_max_attempts,
+        max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
     )
 
 
 @asynccontextmanager
-async def krtour_map_admin_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def kor_travel_map_admin_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan — admin httpx client 1개 생성 후 `app.state`에 보관."""
-    client = create_krtour_map_admin_client(settings)
-    app.state.krtour_map_admin_client = client
+    client = create_kor_travel_map_admin_client(settings)
+    app.state.kor_travel_map_admin_client = client
     logger.info(
-        "krtour_map_admin.client_ready",
-        extra={"base_url": settings.tripmate_krtour_map_admin_base_url},
+        "kor_travel_map_admin.client_ready",
+        extra={"base_url": settings.pinvi_kor_travel_map_admin_base_url},
     )
     try:
         yield
     finally:
         await client.aclose()
-        app.state.krtour_map_admin_client = None
+        app.state.kor_travel_map_admin_client = None
 
 
-def get_krtour_map_admin_client(request: Request) -> KrtourMapAdminClient:
+def get_kor_travel_map_admin_client(request: Request) -> KorTravelMapAdminClient:
     """FastAPI 의존성 — `app.state`의 admin client. 미주입 시 503."""
-    client = getattr(request.app.state, "krtour_map_admin_client", None)
-    if not isinstance(client, KrtourMapAdminClient):
+    client = getattr(request.app.state, "kor_travel_map_admin_client", None)
+    if not isinstance(client, KorTravelMapAdminClient):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -247,4 +249,6 @@ def get_krtour_map_admin_client(request: Request) -> KrtourMapAdminClient:
     return client
 
 
-KrtourMapAdminClientDep = Annotated[KrtourMapAdminClient, Depends(get_krtour_map_admin_client)]
+KorTravelMapAdminClientDep = Annotated[
+    KorTravelMapAdminClient, Depends(get_kor_travel_map_admin_client)
+]

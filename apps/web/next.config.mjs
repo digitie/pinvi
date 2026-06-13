@@ -1,4 +1,4 @@
-const DEFAULT_GRAFANA_URL = 'http://localhost:3002';
+const DEFAULT_GRAFANA_URL = 'http://localhost:12605';
 
 function grafanaOrigin() {
   try {
@@ -27,12 +27,12 @@ const nextConfig = {
   },
   // monorepo workspace 패키지 transpile
   transpilePackages: [
-    '@tripmate/schemas',
-    '@tripmate/api-client',
-    '@tripmate/state',
-    '@tripmate/design-tokens',
-    '@tripmate/hooks',
-    '@tripmate/i18n',
+    '@pinvi/schemas',
+    '@pinvi/api-client',
+    '@pinvi/state',
+    '@pinvi/design-tokens',
+    '@pinvi/hooks',
+    '@pinvi/i18n',
     'maplibre-vworld',
   ],
 };

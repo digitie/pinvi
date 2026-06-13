@@ -21,7 +21,7 @@ pytestmark = pytest.mark.asyncio
 async def _make_admin_user(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
         user = User(
-            email=f"admin_audit_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"admin_audit_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash="x",
             nickname="감사 관리자",
             status="active",

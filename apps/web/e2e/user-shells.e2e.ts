@@ -67,7 +67,7 @@ test('notice plan 사용자 shell이 추천 plan API만 조회한다', async ({ 
             title: '서울 추천 주말 코스',
             category: 'recommended',
             summary: '가볍게 걷고 쉬는 서울 주말 코스',
-            source_name: 'TripMate',
+            source_name: 'Pinvi',
             destination: '서울',
             starts_on: '2026-06-20',
             ends_on: '2026-06-21',

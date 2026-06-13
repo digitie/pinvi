@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
-import { ApiError, authApi, tripApi } from '@tripmate/api-client';
-import type { TripCommentResponse } from '@tripmate/schemas';
+import { ApiError, authApi, tripApi } from '@pinvi/api-client';
+import type { TripCommentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { canDeleteComment } from '@/lib/comments';
 

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Loader2, UserPlus, Users, X } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
-import type { TripCompanionResponse, TripCompanionRole } from '@tripmate/schemas';
+import { ApiError, tripApi } from '@pinvi/api-client';
+import type { TripCompanionResponse, TripCompanionRole } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { ROLE_LABEL, companionDisplayName, companionJoined } from '@/lib/companion';
 

@@ -36,14 +36,14 @@ def _presign_client(endpoint_url: str, access_key: str, secret_key: str) -> Any:
 
 def _presigner() -> Any:
     return _presign_client(
-        settings.tripmate_rustfs_public_endpoint_url,
-        settings.tripmate_rustfs_access_key_id,
-        settings.tripmate_rustfs_secret_access_key,
+        settings.pinvi_rustfs_public_endpoint_url,
+        settings.pinvi_rustfs_access_key_id,
+        settings.pinvi_rustfs_secret_access_key,
     )
 
 
 def _allowed_content_types() -> set[str]:
-    raw = settings.tripmate_rustfs_allowed_content_types
+    raw = settings.pinvi_rustfs_allowed_content_types
     if not raw:
         return {
             "image/jpeg",
@@ -102,16 +102,16 @@ def make_upload_url(
     `ContentType` 을 서명에 포함하므로 클라이언트는 PUT 시 동일한 `Content-Type` 헤더를
     반드시 보내야 한다(응답 `headers` 그대로). body 는 UNSIGNED-PAYLOAD(query 서명 기본).
     """
-    max_bytes = settings.tripmate_rustfs_max_upload_bytes
+    max_bytes = settings.pinvi_rustfs_max_upload_bytes
     if content_length > max_bytes:
         raise FileTooLargeError(f"최대 {max_bytes} bytes")
     allowed = _allowed_content_types()
     if content_type not in allowed:
         raise MimeNotAllowedError(f"허용 MIME: {sorted(allowed)}")
 
-    bucket = settings.tripmate_rustfs_bucket
+    bucket = settings.pinvi_rustfs_bucket
     storage_key = build_storage_key(purpose=purpose, user_id=user_id, filename=filename)
-    expires_seconds = settings.tripmate_rustfs_presigned_url_expires_seconds
+    expires_seconds = settings.pinvi_rustfs_presigned_url_expires_seconds
     expires = datetime.now(UTC) + timedelta(seconds=expires_seconds)
     upload_url: str = _presigner().generate_presigned_url(
         "put_object",
@@ -136,7 +136,7 @@ def make_download_url(
 
     public_url이 있으면 함께 반환해 공개 버킷은 그대로 직접 접근하게 한다.
     """
-    expires_seconds = settings.tripmate_rustfs_presigned_url_expires_seconds
+    expires_seconds = settings.pinvi_rustfs_presigned_url_expires_seconds
     expires = datetime.now(UTC) + timedelta(seconds=expires_seconds)
     download_url: str = _presigner().generate_presigned_url(
         "get_object",
@@ -160,7 +160,7 @@ def validate_attachment_storage_ref(
     user_id: uuid.UUID,
 ) -> None:
     """첨부 metadata가 서버가 발급한 presigned upload ref를 가리키는지 검증한다."""
-    if bucket != settings.tripmate_rustfs_bucket:
+    if bucket != settings.pinvi_rustfs_bucket:
         raise InvalidStorageRefError("첨부 bucket은 서버가 발급한 RustFS bucket이어야 합니다.")
     expected_prefix = f"user-uploads/{purpose}/{user_id}/"
     if not isinstance(storage_key, str) or not storage_key.startswith(expected_prefix):

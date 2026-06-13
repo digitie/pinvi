@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Plus, RefreshCw } from 'lucide-react';
-import { ApiError, tripApi, type TripBucket } from '@tripmate/api-client';
-import type { TripCreate, TripResponse, TripStatus } from '@tripmate/schemas';
+import { ApiError, tripApi, type TripBucket } from '@pinvi/api-client';
+import type { TripCreate, TripResponse, TripStatus } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { FormField } from '@/components/forms/FormField';
 

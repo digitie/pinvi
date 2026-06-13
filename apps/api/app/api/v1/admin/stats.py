@@ -1,4 +1,4 @@
-"""`/admin/stats/*` — TripMate app-owned 운영 지표."""
+"""`/admin/stats/*` — Pinvi app-owned 운영 지표."""
 
 from __future__ import annotations
 

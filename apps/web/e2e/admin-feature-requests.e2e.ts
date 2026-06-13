@@ -26,7 +26,7 @@ const summary = {
   note: '좋은 곳',
   target_feature_id: null,
   status: 'pending',
-  krtour_ref: null,
+  kor_travel_map_ref: null,
   reviewed_by_admin_id: null,
   created_at: '2026-06-11T10:00:00+09:00',
   resolved_at: null,
@@ -53,7 +53,7 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('Admin이 feature 제안을 승인하면 krtour 전달 API를 호출한다', async ({ page }) => {
+test('Admin이 feature 제안을 승인하면 kor_travel_map 전달 API를 호출한다', async ({ page }) => {
   let approveBody: Record<string, unknown> | null = null;
   await page.route(
     (url) => url.port === '12501' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
@@ -65,7 +65,7 @@ test('Admin이 feature 제안을 승인하면 krtour 전달 API를 호출한다'
           data: {
             request_id: requestId,
             status: 'added',
-            krtour_ref: { feature_id: 'f_new_1' },
+            kor_travel_map_ref: { feature_id: 'f_new_1' },
             reviewed_by_admin_id: adminUser.user_id,
             resolved_at: '2026-06-11T10:05:00+09:00',
           },

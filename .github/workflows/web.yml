@@ -44,7 +44,7 @@ jobs:
 
       - name: Build (workspaces)
         env:
-          NEXT_PUBLIC_TRIPMATE_API_URL: http://localhost:12501
+          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12501
         run: npm run build
 
   e2e:
@@ -72,7 +72,7 @@ jobs:
       - name: Run Playwright e2e
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_TRIPMATE_API_URL: http://localhost:12501
+          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12501
         run: npx playwright test
 
       - name: Upload e2e traces

@@ -87,7 +87,7 @@ async def test_password_reset_updates_password_and_revokes_sessions(
 
     assert reset_resp.status_code == 200
     assert reset_resp.json()["data"]["email"] == email
-    assert "tripmate_access=" in reset_resp.headers["set-cookie"]
+    assert "pinvi_access=" in reset_resp.headers["set-cookie"]
 
     async with session_factory() as db:
         user = await db.scalar(select(User).where(User.user_id == uuid.UUID(user_id)))
@@ -118,7 +118,7 @@ async def test_password_reset_invalidates_existing_access_cookie(client, session
         "/auth/login",
         json={"email": email, "password": "old-secret-pw-12345"},
     )
-    old_access = login_resp.cookies["tripmate_access"]
+    old_access = login_resp.cookies["pinvi_access"]
     client.cookies.clear()
 
     request_resp = await client.post("/auth/password/reset-request", json={"email": email})
@@ -139,14 +139,14 @@ async def test_password_reset_invalidates_existing_access_cookie(client, session
         json={"token": token, "new_password": "new-secret-pw-67890"},
     )
     assert reset_resp.status_code == 200
-    new_access = reset_resp.cookies["tripmate_access"]
+    new_access = reset_resp.cookies["pinvi_access"]
     client.cookies.clear()
 
-    stale_resp = await client.get("/auth/me", cookies={"tripmate_access": old_access})
+    stale_resp = await client.get("/auth/me", cookies={"pinvi_access": old_access})
     assert stale_resp.status_code == 401
     assert stale_resp.json()["error"]["code"] == "TOKEN_INVALID"
 
-    fresh_resp = await client.get("/auth/me", cookies={"tripmate_access": new_access})
+    fresh_resp = await client.get("/auth/me", cookies={"pinvi_access": new_access})
     assert fresh_resp.status_code == 200
     assert fresh_resp.json()["data"]["email"] == email
 

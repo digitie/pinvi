@@ -1,16 +1,16 @@
-"""krtour-map OpenAPI HTTP client (transport-only).
+"""kor-travel-map OpenAPI HTTP client (transport-only).
 
-`python-krtour-map`의 운영 HTTP API(`krtour-map-admin`, 포트 12301,
+`kor-travel-map`의 운영 HTTP API(`kor-travel-map-admin`, 포트 12301,
 `openapi.user.json`)를 호출하는 httpx 기반 client다. ADR-026/027(DEC-01=B) 기준이며
-in-process import(`from krtour.map import ...`)를 쓰지 않는다.
+in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 
 - transport 역할만 한다(ADR-005). provider 변환/feature 정규화 같은 도메인 wrapper를
-  만들지 않는다. 응답은 krtour envelope(`{data, meta}`)에서 `data`만 풀어 dict로 돌려준다.
-- 응답 셰입을 TripMate schema로 매핑하는 책임은 라우터/뷰 계층(T-173/T-124)이다.
+  만들지 않는다. 응답은 kor_travel_map envelope(`{data, meta}`)에서 `data`만 풀어 dict로 돌려준다.
+- 응답 셰입을 Pinvi schema로 매핑하는 책임은 라우터/뷰 계층(T-173/T-124)이다.
 - 에러는 도메인 예외로 올리고, HTTP status 변환(503 FEATURE_SERVICE_UNAVAILABLE 등)은
   라우터(T-178)가 한다.
 
-계약: `docs/integrations/krtour-map-rest-api.md`.
+계약: `docs/integrations/kor-travel-map-rest-api.md`.
 """
 
 from __future__ import annotations
@@ -29,22 +29,22 @@ from app.core.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
-_SERVICE_TOKEN_HEADER = "X-Krtour-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+_SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 
 
-class KrtourMapError(Exception):
-    """krtour-map 호출 일반 오류."""
+class KorTravelMapError(Exception):
+    """kor-travel-map 호출 일반 오류."""
 
 
-class KrtourMapUnavailable(KrtourMapError):
+class KorTravelMapUnavailable(KorTravelMapError):
     """timeout / 연결 실패 / 5xx — 재시도 후에도 실패(503 매핑 대상)."""
 
 
-class KrtourMapFeatureNotFound(KrtourMapError):
+class KorTravelMapFeatureNotFound(KorTravelMapError):
     """404 FEATURE_NOT_FOUND."""
 
 
-class KrtourMapBadRequest(KrtourMapError):
+class KorTravelMapBadRequest(KorTravelMapError):
     """4xx 잘못된 요청 (422 INVALID_BBOX / TOO_MANY_IDS 등)."""
 
     def __init__(self, message: str, *, code: str | None = None) -> None:
@@ -52,7 +52,7 @@ class KrtourMapBadRequest(KrtourMapError):
         self.code = code
 
 
-class KrtourMapRateLimited(KrtourMapError):
+class KorTravelMapRateLimited(KorTravelMapError):
     """429 RATE_LIMITED / 409 LOCK_BUSY — Retry-After 존중."""
 
     def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
@@ -60,8 +60,8 @@ class KrtourMapRateLimited(KrtourMapError):
         self.retry_after_seconds = retry_after_seconds
 
 
-class KrtourMapClient:
-    """krtour-map user-facing OpenAPI(`openapi.user.json`) HTTP client."""
+class KorTravelMapClient:
+    """kor-travel-map user-facing OpenAPI(`openapi.user.json`) HTTP client."""
 
     def __init__(
         self,
@@ -97,23 +97,23 @@ class KrtourMapClient:
         json: Any | None = None,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
-        last: KrtourMapUnavailable | None = None
+        last: KorTravelMapUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
                 resp = await self._http.request(
                     method, path, params=params, json=json, headers=self._headers()
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last = KrtourMapUnavailable(f"krtour-map 요청 실패({path}): {exc!r}")
+                last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
             else:
                 if resp.status_code >= 500:
-                    last = KrtourMapUnavailable(f"krtour-map {resp.status_code} ({path})")
+                    last = KorTravelMapUnavailable(f"kor-travel-map {resp.status_code} ({path})")
                 else:
                     return resp
             if attempt + 1 < self._max_attempts:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
-        logger.warning("krtour_map.unavailable", extra={"path": path})
-        raise last or KrtourMapUnavailable(f"krtour-map 요청 실패({path})")
+        logger.warning("kor_travel_map.unavailable", extra={"path": path})
+        raise last or KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path})")
 
     @staticmethod
     def _retry_after(resp: httpx.Response) -> int | None:
@@ -128,22 +128,22 @@ class KrtourMapClient:
     def _payload(self, resp: httpx.Response) -> tuple[dict[str, Any], dict[str, Any]]:
         """성공 응답에서 `(data, meta)` 추출. 오류 status는 도메인 예외로 변환.
 
-        krtour 0e45bd7 envelope = `{data: <payload>, meta: <Meta>}` (ADR-048).
+        kor_travel_map 0e45bd7 envelope = `{data: <payload>, meta: <Meta>}` (ADR-048).
         에러는 RFC7807 problem+json — 머신 코드는 top-level 확장 `code`.
         """
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
-            raise KrtourMapFeatureNotFound("feature 를 찾을 수 없습니다.")
+            raise KorTravelMapFeatureNotFound("feature 를 찾을 수 없습니다.")
         if sc in (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_409_CONFLICT):
-            raise KrtourMapRateLimited(
-                f"krtour-map {sc}", retry_after_seconds=self._retry_after(resp)
+            raise KorTravelMapRateLimited(
+                f"kor-travel-map {sc}", retry_after_seconds=self._retry_after(resp)
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
-            raise KrtourMapBadRequest(f"krtour-map {sc}", code=_error_code(resp))
+            raise KorTravelMapBadRequest(f"kor-travel-map {sc}", code=_error_code(resp))
         payload = resp.json()
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
-            raise KrtourMapError(f"예상치 못한 응답 셰입({resp.request.url.path})")
+            raise KorTravelMapError(f"예상치 못한 응답 셰입({resp.request.url.path})")
         meta = payload.get("meta") if isinstance(payload, Mapping) else None
         return data, meta if isinstance(meta, dict) else {}
 
@@ -215,7 +215,7 @@ class KrtourMapClient:
 
         id-keyed map 키는 ADR-048에서 `items`→`found`로 확정(list `items[]`와 타입 분리).
         inactive feature(reject/tombstone/deactivate)는 `missing`이 아니라 `found`에
-        status와 함께 옴(krtour D-12) — 호출자(snapshot fallback)가 "철회/폐업" 분기.
+        status와 함께 옴(kor_travel_map D-12) — 호출자(snapshot fallback)가 "철회/폐업" 분기.
         """
         unique = list(dict.fromkeys(feature_ids))
         found: dict[str, Any] = {}
@@ -460,10 +460,10 @@ class KrtourMapClient:
             return None
         return self._data(resp)
 
-    async def get_curated_tripmate_copy(self, curated_feature_id: str) -> dict[str, Any]:
-        """krtour-map curated feature → TripMate copy snapshot."""
+    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
+        """kor-travel-map curated feature → Pinvi copy snapshot."""
         return self._data(
-            await self._send("GET", f"/v1/curated-features/{curated_feature_id}/tripmate-copy")
+            await self._send("GET", f"/v1/curated-features/{curated_feature_id}/pinvi-copy")
         )
 
     async def healthz(self) -> dict[str, Any]:
@@ -480,7 +480,7 @@ def _error_code(resp: httpx.Response) -> str | None:
     except ValueError:
         return None
     if isinstance(payload, Mapping):
-        code = payload.get("code")  # problem+json top-level 확장(krtour 0e45bd7)
+        code = payload.get("code")  # problem+json top-level 확장(kor_travel_map 0e45bd7)
         if isinstance(code, str):
             return code
         error = payload.get("error")  # 구 envelope fallback
@@ -491,40 +491,40 @@ def _error_code(resp: httpx.Response) -> str | None:
     return None
 
 
-def create_krtour_map_client(app_settings: Settings) -> KrtourMapClient:
+def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
     """설정 기반 client 생성 (httpx.AsyncClient 1개)."""
     http = httpx.AsyncClient(
-        base_url=app_settings.tripmate_krtour_map_api_base_url,
-        timeout=app_settings.tripmate_krtour_map_timeout_seconds,
+        base_url=app_settings.pinvi_kor_travel_map_api_base_url,
+        timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
     )
-    return KrtourMapClient(
+    return KorTravelMapClient(
         http,
-        service_token=app_settings.tripmate_krtour_map_service_token,
-        max_attempts=app_settings.tripmate_krtour_map_max_attempts,
-        batch_chunk_size=app_settings.tripmate_krtour_map_batch_chunk_size,
+        service_token=app_settings.pinvi_kor_travel_map_service_token,
+        max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
+        batch_chunk_size=app_settings.pinvi_kor_travel_map_batch_chunk_size,
     )
 
 
 @asynccontextmanager
-async def krtour_map_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def kor_travel_map_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan — httpx client 1개 생성 후 `app.state`에 보관."""
-    client = create_krtour_map_client(settings)
-    app.state.krtour_map_client = client
+    client = create_kor_travel_map_client(settings)
+    app.state.kor_travel_map_client = client
     logger.info(
-        "krtour_map.client_ready",
-        extra={"base_url": settings.tripmate_krtour_map_api_base_url},
+        "kor_travel_map.client_ready",
+        extra={"base_url": settings.pinvi_kor_travel_map_api_base_url},
     )
     try:
         yield
     finally:
         await client.aclose()
-        app.state.krtour_map_client = None
+        app.state.kor_travel_map_client = None
 
 
-def get_krtour_map_client(request: Request) -> KrtourMapClient:
+def get_kor_travel_map_client(request: Request) -> KorTravelMapClient:
     """FastAPI 의존성 — `app.state`의 client. 미주입 시 503."""
-    client = getattr(request.app.state, "krtour_map_client", None)
-    if not isinstance(client, KrtourMapClient):
+    client = getattr(request.app.state, "kor_travel_map_client", None)
+    if not isinstance(client, KorTravelMapClient):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -535,20 +535,20 @@ def get_krtour_map_client(request: Request) -> KrtourMapClient:
     return client
 
 
-KrtourMapHttpClientDep = Annotated[KrtourMapClient, Depends(get_krtour_map_client)]
+KorTravelMapHttpClientDep = Annotated[KorTravelMapClient, Depends(get_kor_travel_map_client)]
 
 
-def get_optional_krtour_map_client(request: Request) -> KrtourMapClient | None:
+def get_optional_kor_travel_map_client(request: Request) -> KorTravelMapClient | None:
     """FastAPI 의존성 — client 또는 None. 미주입 시 503이 아니라 None 반환.
 
     feature가 보조 정보인 경로(trip 상세 view 등)에서 쓴다 — client 부재 시 POI
     `feature_snapshot`으로 degrade한다. 사용자 대면 feature read 라우터는
-    `get_krtour_map_client`(503)를 쓴다.
+    `get_kor_travel_map_client`(503)를 쓴다.
     """
-    client = getattr(request.app.state, "krtour_map_client", None)
-    return client if isinstance(client, KrtourMapClient) else None
+    client = getattr(request.app.state, "kor_travel_map_client", None)
+    return client if isinstance(client, KorTravelMapClient) else None
 
 
-OptionalKrtourMapHttpClientDep = Annotated[
-    KrtourMapClient | None, Depends(get_optional_krtour_map_client)
+OptionalKorTravelMapHttpClientDep = Annotated[
+    KorTravelMapClient | None, Depends(get_optional_kor_travel_map_client)
 ]

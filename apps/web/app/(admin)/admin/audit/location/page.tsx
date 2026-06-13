@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminLocationAuditEntry } from '@tripmate/schemas';
+import { ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminLocationAuditEntry } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { apiClient } from '@/lib/api';

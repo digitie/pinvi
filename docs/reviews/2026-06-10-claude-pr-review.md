@@ -13,9 +13,9 @@
 
 ## 0. 총평
 
-- 문서 PR(#84/#88/#95/#97/#103~#106)은 krtour-map 외부 계약과 DEC-05/ADR-048 추종을
+- 문서 PR(#84/#88/#95/#97/#103~#106)은 kor-travel-map 외부 계약과 DEC-05/ADR-048 추종을
   정리했고, 현 main과 충돌하는 차단 결함은 없었다.
-- 구현 PR은 krtour-map client(#102/#113), feature 제안(#110), geo/regions(#114/#115),
+- 구현 PR은 kor-travel-map client(#102/#113), feature 제안(#110), geo/regions(#114/#115),
   location audit outbox/cache(#116/#117), 좌표 `lon`/`lat` 정렬(#119), 첨부/RustFS(#120~#123)
   순서로 빠르게 누적됐다.
 - 신규 차단급 결함은 **위치 감사 인증 주체 추적**, **첨부 storage ref 신뢰**, **admin
@@ -41,7 +41,7 @@
    - `AttachmentCreate`는 경로 traversal만 막고, 서버가 발급한 presigned key인지 검증하지 않았다.
      이후 download-url PR(#121)이 DB row 기준으로 presigned GET을 만들기 때문에, 악성 row가
      다른 bucket/key를 가리킬 여지가 있었다.
-   - 수정: metadata 등록 시 bucket이 `TRIPMATE_RUSTFS_BUCKET`과 같고,
+   - 수정: metadata 등록 시 bucket이 `PINVI_RUSTFS_BUCKET`과 같고,
      `storage_key`가 `user-uploads/{trip_attachment|poi_attachment}/{current_user_id}/` prefix인지
      검증한다. 위반 시 422 `INVALID_ATTACHMENT_STORAGE_REF`.
 
@@ -68,8 +68,8 @@
 
 ### 🟢 낮음 / 추적 유지
 
-- **[#102/#113] krtour-map HTTP client는 도입됐지만 `/features/*` router cutover는 T-173/T-174
-  잔여 작업**이다. 이번 리뷰 결함은 아니며, `docs/tasks.md`의 기존 krtour-map 연동 queue를
+- **[#102/#113] kor-travel-map HTTP client는 도입됐지만 `/features/*` router cutover는 T-173/T-174
+  잔여 작업**이다. 이번 리뷰 결함은 아니며, `docs/tasks.md`의 기존 kor-travel-map 연동 queue를
   유지한다.
 - **[#122] `/admin/rustfs/*` 객체 관리는 admin 전용 + DB 참조 보호가 들어가 있어 새 차단
   결함은 없었다.** 다만 #123 metadata 검증 부재 때문에 참조 row 자체를 신뢰할 수 있게 보강한다.
@@ -81,16 +81,16 @@
 | PR | 주제 | verdict | 후속 |
 |----|------|---------|------|
 | #84 | Codex PR 2라운드 리뷰 종합 | 적정 | 없음 |
-| #88 | krtour-map REST 계약 청사진 | 적정 | T-170~T-178 queue 유지 |
+| #88 | kor-travel-map REST 계약 청사진 | 적정 | T-170~T-178 queue 유지 |
 | #95 | DEC-05 feature 제안/재적재 분리 | 적정 | 없음 |
-| #97 | DEC-05 correction + K-15 필요 | 적정 | krtour feature change queue 유지 |
+| #97 | DEC-05 correction + K-15 필요 | 적정 | kor_travel_map feature change queue 유지 |
 | #98 | RustFS settings 배선 | 적정 | 첨부 metadata 검증은 #120~#123 후속에서 처리 |
-| #102 | T-170/T-171 krtour client/config | 적정 | router cutover는 기존 T-173/T-174 |
-| #103~#106 | krtour PR #316/#317 반영 문서 | 적정 | 없음 |
+| #102 | T-170/T-171 kor_travel_map client/config | 적정 | router cutover는 기존 T-173/T-174 |
+| #103~#106 | kor_travel_map PR #316/#317 반영 문서 | 적정 | 없음 |
 | #109 | Codex 3라운드 후속 정리 | 적정 | 없음 |
 | #110 | feature 제안 type/target 노출 | 적정 | 없음 |
-| #113 | 외부 `/v1` hard cutover | 적정 | krtour 미머지 envelope/problem+json 추종 대기 |
-| #114/#115 | kraddr-geo `/geo/*`·`/regions/*` | 적정 | 없음 |
+| #113 | 외부 `/v1` hard cutover | 적정 | kor_travel_map 미머지 envelope/problem+json 추종 대기 |
+| #114/#115 | kor-travel-geo `/geo/*`·`/regions/*` | 적정 | 없음 |
 | #116 | location-audit outbox | **수정 필요** | 인증 user/request id state 저장 |
 | #117 | feature TTL cache | 적정 | 없음 |
 | #118 | 리뷰 잔여 낮음 묶음 | 적정 | 없음 |

@@ -2,10 +2,10 @@ import {
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
   NoticePlanResponseSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type { NoticePlanCopyRequest } from '@tripmate/schemas';
+import type { NoticePlanCopyRequest } from '@pinvi/schemas';
 
 export interface NoticePlanListParams {
   category?: string;

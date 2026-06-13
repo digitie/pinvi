@@ -1,6 +1,6 @@
 # Sprint 계획 디렉토리
 
-TripMate v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로 박혀
+Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로 박혀
 있고, Sprint 진입 시 체크리스트와 함께 검토한다.
 
 | Sprint | 파일 | 상태 | 목표 | 릴리즈 |
@@ -20,10 +20,10 @@ TripMate v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으
 
 | 버전 | 시점 | 핵심 기능 |
 |------|------|----------|
-| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(krtour HTTP 연동, T-066/ADR-027) 충족. snapshot-only 조기출시 금지 조건 해소. 남은 일은 tag + Release notes. |
+| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(kor_travel_map HTTP 연동, T-066/ADR-027) 충족. snapshot-only 조기출시 금지 조건 해소. 남은 일은 tag + Release notes. |
 | `v0.2.0` | Sprint 5 종료 | 실시간 + ETL + 운영 가시화 (Grafana). Backup/Restore 1차 (script + endpoint, UI는 v1.0). |
 | `v1.0.0` | Sprint 6 종료 | 외부 정식 출시. MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 양 노드 + LBS 신고 + 법무 4 문서. |
-| `v1.1.0+` | post-Sprint 6 | PWA / 푸시 알림 / 사진 업로드 / `tripmate-ai-companion` 통합 |
+| `v1.1.0+` | post-Sprint 6 | PWA / 푸시 알림 / 사진 업로드 / `kor-travel-concierge` 통합 |
 
 SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞** — 데이터
 흐름 검증 후 지도 작업 (원본 결정).
@@ -37,7 +37,7 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - 이전 Sprint의 DoD 모두 충족
 - 신규 Sprint의 ADR들이 `proposed` → `accepted` 전환 (시기 의존 ADR만 해당)
 - 직전 Sprint에서 발견된 회귀/burndown 정리 완료
-- `python-krtour-map`의 대응 Sprint(별 저장소) 진척도와 OpenAPI 계약 확인
+- `kor-travel-map`의 대응 Sprint(별 저장소) 진척도와 OpenAPI 계약 확인
 
 ## 관련 ADR
 
@@ -56,9 +56,9 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-022** — Backup / Restore 핫스왑 정책
 - **ADR-023** — Odroid M1S + N150 병행 운영
 - **ADR-024** — NTFS worktree + WSL ext4 테스트 미러
-- **ADR-025** — geocoding은 kraddr-geo v2 REST 직접
-- **ADR-026** — TripMate ↔ `python-krtour-map` OpenAPI HTTP 계약
-- **ADR-027** — krtour-map 운영급 HTTP 서비스 신설 대기
+- **ADR-025** — geocoding은 kor-travel-geo v2 REST 직접
+- **ADR-026** — Pinvi ↔ `kor-travel-map` OpenAPI HTTP 계약
+- **ADR-027** — kor-travel-map 운영급 HTTP 서비스 신설 대기
 - **ADR-028** — 정규 `feature_id` 포맷
 - **ADR-029** — `notice_plans` 명칭 충돌 해소
 - **ADR-030** — 외부 API 규약 정본
@@ -71,4 +71,4 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - 진척도: `../resume.md`
 - 작업 일지: `../journal.md`
 - 책임 경계: `../architecture.md`
-- 라이브러리 통합: `../krtour-map-integration.md`
+- 라이브러리 통합: `../kor-travel-map-integration.md`

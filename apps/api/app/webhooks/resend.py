@@ -37,8 +37,8 @@ class ResendWebhookSecretError(Exception):
 
 def _allows_unsigned_resend_webhook() -> bool:
     return (
-        settings.tripmate_resend_webhook_allow_unsigned
-        and settings.tripmate_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
+        settings.pinvi_resend_webhook_allow_unsigned
+        and settings.pinvi_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
     )
 
 
@@ -116,11 +116,11 @@ def _verify_resend_signature(
 @router.post("", status_code=status.HTTP_200_OK)
 async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
     payload = await request.body()
-    webhook_secret = settings.tripmate_resend_webhook_secret.strip()
+    webhook_secret = settings.pinvi_resend_webhook_secret.strip()
     if not webhook_secret and not _allows_unsigned_resend_webhook():
         log.error(
             "resend_webhook.missing_secret",
-            environment=settings.tripmate_environment,
+            environment=settings.pinvi_environment,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

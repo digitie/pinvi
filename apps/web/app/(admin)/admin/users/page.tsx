@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminPagedResponse, AdminUserSummary } from '@tripmate/schemas';
+import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminPagedResponse, AdminUserSummary } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 const STATUSES = [

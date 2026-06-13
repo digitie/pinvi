@@ -26,7 +26,7 @@ import {
   McpTokenRevokeRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 

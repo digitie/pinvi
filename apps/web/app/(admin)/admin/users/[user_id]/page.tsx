@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ApiClient, ApiError, adminApi } from '@tripmate/api-client';
-import type { AdminUserDetail } from '@tripmate/schemas';
+import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminUserDetail } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';

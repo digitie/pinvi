@@ -6,7 +6,7 @@ from dagster import ScheduleDefinition, define_asset_job
 
 kasi_special_days_job = define_asset_job(
     "kasi_special_days_job",
-    selection=["tripmate_kasi_special_days"],
+    selection=["pinvi_kasi_special_days"],
 )
 
 schedules = [

@@ -60,7 +60,7 @@ def _issue_tokens(*, user: User) -> IssuedAuthSession:
             extra={"token_version": user.access_token_version or 0},
         ),
         refresh_token=refresh_token,
-        expires_at=utc_now() + timedelta(days=settings.tripmate_refresh_token_days),
+        expires_at=utc_now() + timedelta(days=settings.pinvi_refresh_token_days),
     )
 
 

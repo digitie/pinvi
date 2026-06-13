@@ -2,7 +2,7 @@
  * trip 동반자 표시 헬퍼 — `docs/api/trips.md`.
  */
 
-import type { TripCompanionResponse, TripCompanionRole } from '@tripmate/schemas';
+import type { TripCompanionResponse, TripCompanionRole } from '@pinvi/schemas';
 
 export const ROLE_LABEL: Record<TripCompanionRole, string> = {
   co_owner: '공동 소유자',

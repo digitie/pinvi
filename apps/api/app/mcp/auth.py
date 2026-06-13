@@ -83,7 +83,7 @@ def _enforce_rate_limit(principal: McpPrincipal) -> None:
     window = _CALLS[key]
     while window and now - window[0] >= 60:
         window.popleft()
-    limit = max(1, settings.tripmate_mcp_rate_limit_per_minute)
+    limit = max(1, settings.pinvi_mcp_rate_limit_per_minute)
     if len(window) >= limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

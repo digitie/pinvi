@@ -25,13 +25,13 @@ jobs:
       postgres:
         image: postgis/postgis:16-3.5-alpine
         env:
-          POSTGRES_USER: tripmate
-          POSTGRES_PASSWORD: tripmate_ci_password
-          POSTGRES_DB: tripmate_ci
+          POSTGRES_USER: pinvi
+          POSTGRES_PASSWORD: pinvi_ci_password
+          POSTGRES_DB: pinvi_ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U tripmate -d tripmate_ci"
+          --health-cmd "pg_isready -U pinvi -d pinvi_ci"
           --health-interval 10s --health-timeout 5s --health-retries 5
 
     defaults:
@@ -62,18 +62,18 @@ jobs:
 
       - name: pytest (unit)
         env:
-          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
-          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+          PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
+          PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
         run: pytest tests/unit -q
 
       - name: Alembic migration sanity (PostGIS 컨테이너에 실제 적용)
         env:
-          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
-          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+          PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
+          PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
         run: alembic upgrade head
 
       - name: pytest (integration)
         env:
-          TRIPMATE_JWT_SECRET_KEY: tripmate-ci-jwt-secret-32-bytes-minimum-aaaa
-          TRIPMATE_DATABASE_URL: postgresql+asyncpg://tripmate:tripmate_ci_password@localhost:5432/tripmate_ci
+          PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
+          PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
         run: pytest tests/integration -q

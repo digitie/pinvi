@@ -262,9 +262,9 @@ async def refresh_session(
     response: Response,
     request: Request,
     db: DbSession,
-    tripmate_refresh: Annotated[str | None, Cookie(alias="tripmate_refresh")] = None,
+    pinvi_refresh: Annotated[str | None, Cookie(alias="pinvi_refresh")] = None,
 ) -> Envelope[AuthUser] | JSONResponse:
-    if not tripmate_refresh:
+    if not pinvi_refresh:
         return _auth_error_with_cleared_cookies(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="TOKEN_INVALID",
@@ -274,7 +274,7 @@ async def refresh_session(
     try:
         refreshed = await refresh_user_session(
             db,
-            refresh_token=tripmate_refresh,
+            refresh_token=pinvi_refresh,
             user_agent=_request_user_agent(request),
             ip_address=_request_ip_address(request),
         )
@@ -299,9 +299,9 @@ async def refresh_session(
 async def logout(
     response: Response,
     db: DbSession,
-    tripmate_refresh: Annotated[str | None, Cookie(alias="tripmate_refresh")] = None,
+    pinvi_refresh: Annotated[str | None, Cookie(alias="pinvi_refresh")] = None,
 ) -> Response:
-    await revoke_user_session(db, refresh_token=tripmate_refresh)
+    await revoke_user_session(db, refresh_token=pinvi_refresh)
     clear_session_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

@@ -57,19 +57,19 @@ def _database_url() -> Iterator[str]:
 
     container = PostgresContainer(
         "postgis/postgis:16-3.5-alpine",
-        username="tripmate",
-        password="tripmate_test",
-        dbname="tripmate_test",
+        username="pinvi",
+        password="pinvi_test",
+        dbname="pinvi_test",
     )
     container.start()
     try:
         host = container.get_container_host_ip()
         port = container.get_exposed_port(5432)
-        url = f"postgresql+asyncpg://tripmate:tripmate_test@{host}:{port}/tripmate_test"
+        url = f"postgresql+asyncpg://pinvi:pinvi_test@{host}:{port}/pinvi_test"
 
         # 마이그레이션은 subprocess 로 (자체 이벤트 루프, CI 쉘 스텝과 동일 경로).
         env = dict(os.environ)
-        env["TRIPMATE_DATABASE_URL"] = url
+        env["PINVI_DATABASE_URL"] = url
         result = subprocess.run(
             ["alembic", "upgrade", "head"],  # noqa: S607 — venv PATH 의 alembic (테스트 전용)
             cwd=str(API_DIR),
@@ -90,7 +90,7 @@ async def session_factory(_database_url: str):  # type: ignore[no-untyped-def]
     """테스트별 엔진/세션팩토리 — 현재 이벤트 루프에 바인딩 + app 글로벌 패치."""
     from app.core.config import settings
 
-    settings.tripmate_database_url = _database_url
+    settings.pinvi_database_url = _database_url
 
     # NullPool: 연결을 풀에 재사용하지 않는다. 테스트에서 미들웨어 세션 + 라우트
     # 세션이 같은 풀 커넥션을 공유하다 "another operation is in progress" 가 나는
@@ -140,7 +140,7 @@ async def verified_user(session_factory):  # type: ignore[no-untyped-def]
     """이메일 인증 완료된 사용자 생성 → (user_id, email) 반환."""
     from app.models.user import User
 
-    email = f"user_{uuid.uuid4().hex[:8]}@tripmate.test"
+    email = f"user_{uuid.uuid4().hex[:8]}@pinvi.test"
     async with session_factory() as db:
         user = User(
             email=email,
@@ -161,6 +161,6 @@ def auth_cookies():  # type: ignore[no-untyped-def]
     from app.core.security import create_access_token
 
     def _make(user_id: str) -> dict[str, str]:
-        return {"tripmate_access": create_access_token(subject=user_id)}
+        return {"pinvi_access": create_access_token(subject=user_id)}
 
     return _make

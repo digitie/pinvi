@@ -1,8 +1,8 @@
 {
-  "name": "@tripmate/design-tokens",
+  "name": "@pinvi/design-tokens",
   "version": "0.1.0",
   "private": true,
-  "description": "TripMate 디자인 토큰 — Airbnb 톤 + 16색 마커 팔레트 + Tailwind preset",
+  "description": "Pinvi 디자인 토큰 — Airbnb 톤 + 16색 마커 팔레트 + Tailwind preset",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

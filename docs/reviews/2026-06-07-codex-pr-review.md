@@ -26,7 +26,7 @@
 ## 1. 긴급성순 통합 TODO
 
 ### 🔴 높음 (보안·무결성·가용성·계약)
-1. **[#70] resend webhook fail-open 제거** — `TRIPMATE_RESEND_WEBHOOK_SECRET` 미설정 시
+1. **[#70] resend webhook fail-open 제거** — `PINVI_RESEND_WEBHOOK_SECRET` 미설정 시
    서명검증을 통째로 건너뜀(`config.py:43` 기본 `""`). 운영 누락 시 C-22 취약점 재현 →
    미설정이면 fail-closed(401/503), dev만 `settings.debug` 게이트.
 2. **[#70] Svix secret base64 디코드 버그** — `_decode_svix_secret`가 `altchars=b"-_"`로
@@ -79,8 +79,8 @@
 - [#52] `_to_detail` owner email KeyError 방어 + status/visibility enum 검증.
 - [#53] snapshot ilike 검색 인덱스 전략.
 - [#56] README Sprint 5 셀에 T-067 추가; ADR-002 제목에 superseded 표기.
-- [#57] SPRINT-1 krtour-map ADR-032 vs TripMate ADR-032 혼동 주석; admin-rbac.md 작성.
-- [#58] CLAUDE §4 스택에 `python-kraddr-geo` 추가; 감사문서 T-143 체크박스 동기.
+- [#57] SPRINT-1 kor-travel-map ADR-032 vs Pinvi ADR-032 혼동 주석; admin-rbac.md 작성.
+- [#58] CLAUDE §4 스택에 `kor-travel-geo` 추가; 감사문서 T-143 체크박스 동기.
 - [#59] rise/set snapshot UI 동작 단일안.
 - [#61] `GET /trips` cursor sort 종속성 명문화; §2.7 addresses `/geo/search` 정렬.
 - [#63] WS query token 로그 노출 완화 + 누락 테스트.
@@ -103,7 +103,7 @@
 | #55 | T-149 gemini | P-03 | 적정 | data-sources/pipa 잔존 표현 |
 | #56 | T-150 추적정합 | P-04~21 | 적정 | Sprint5 셀 T-067 등 미세 |
 | #57 | T-151 ADR 백필 | P-07/08 | 적정 | 번호 혼동 주석 |
-| #58 | T-143 지도/소셜 | D-15/21/22 | 적정 | CLAUDE §4 kraddr-geo |
+| #58 | T-143 지도/소셜 | D-15/21/22 | 적정 | CLAUDE §4 kor-travel-geo |
 | #59 | T-147 doc tail | D-23/25 | 적정 | Alembic 인덱스 반영 |
 | #60 | T-142 geofence | D-13/24 | 적정(보안 후속) | header spoof 우회(높음) |
 | #61 | T-144 검색/내보내기 | D-16/17 | 적정 | snapshot 키 통일 |

@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link2, Loader2, Unlink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { AuthUser, OAuthProvider } from '@tripmate/schemas';
-import { ApiClient, ApiError, authApi } from '@tripmate/api-client';
+import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 
 const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_TRIPMATE_API_URL ?? 'http://localhost:12501',
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12501',
 });
 
 function formatDateTime(value: string | null) {
@@ -22,7 +22,7 @@ function formatDateTime(value: string | null) {
 
 const PROFILE_OAUTH_ERROR_MESSAGES: Record<string, string> = {
   OAUTH_ACCOUNT_LINK_REQUIRED:
-    '이 Google 계정은 다른 TripMate 계정과 충돌합니다. 연결할 계정을 다시 확인해 주세요.',
+    '이 Google 계정은 다른 Pinvi 계정과 충돌합니다. 연결할 계정을 다시 확인해 주세요.',
   OAUTH_EMAIL_UNVERIFIED:
     'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 연결해 주세요.',
   OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',

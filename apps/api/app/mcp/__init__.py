@@ -1,1 +1,1 @@
-"""TripMate MCP external interface."""
+"""Pinvi MCP external interface."""

@@ -4,7 +4,7 @@ Revision ID: 20260612_0021
 Revises: 20260610_0020
 Create Date: 2026-06-12 00:00:00
 
-ADR-031 permits trip POIs without a krtour feature link. ADR-036 clarifies that
+ADR-031 permits trip POIs without a kor_travel_map feature link. ADR-036 clarifies that
 external integrations may still upsert feature-backed curated POIs by feature_id.
 """
 

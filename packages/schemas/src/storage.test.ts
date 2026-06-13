@@ -15,7 +15,7 @@ const attachment = {
   notice_plan_id: planId,
   notice_poi_id: poiId,
   source_attachment_id: null,
-  bucket: 'tripmate-media',
+  bucket: 'pinvi-media',
   storage_key: 'curated/plan/image.jpg',
   original_filename: 'image.jpg',
   content_type: 'image/jpeg',

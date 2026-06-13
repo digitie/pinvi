@@ -1,7 +1,7 @@
 """`app.telegram_targets` — 사용자 Telegram 알림 대상 — `docs/integrations/telegram.md` §2.1.
 
 bot token 원본은 저장하지 않는다(§1). `telegram_bot_token_ref`는 토큰을 보관한
-설정/vault 키 이름이며, 현 단계는 TripMate 시스템 봇(`system`)만 지원한다.
+설정/vault 키 이름이며, 현 단계는 Pinvi 시스템 봇(`system`)만 지원한다.
 """
 
 from __future__ import annotations

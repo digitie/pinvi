@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guarded entrypoint for TripMate same-database schema-swap restore.
+# Guarded entrypoint for Pinvi same-database schema-swap restore.
 
 set -euo pipefail
 
@@ -18,14 +18,14 @@ fi
 SNAPSHOT="$2"
 RESTORE_SCHEMA="$3"
 PREVIOUS_SCHEMA="$4"
-DATABASE_URL="${TRIPMATE_RESTORE_DATABASE_URL:-${TRIPMATE_DATABASE_URL:-}}"
-SOURCE_SCHEMA="${TRIPMATE_BACKUP_SCHEMA:-app}"
+DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
+SOURCE_SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 TMP_DIR=""
 
 phase preparing running "precheck started"
 
 if [[ -z "${DATABASE_URL}" ]]; then
-  phase preparing failed "TRIPMATE_DATABASE_URL or TRIPMATE_RESTORE_DATABASE_URL is required"
+  phase preparing failed "PINVI_DATABASE_URL or PINVI_RESTORE_DATABASE_URL is required"
   exit 2
 fi
 
@@ -54,8 +54,8 @@ fi
 pg_restore --list "${SNAPSHOT}" >/dev/null
 phase preparing success "snapshot verified for ${RESTORE_SCHEMA}"
 
-if [[ "${TRIPMATE_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
-  phase restoring failed "guard refused schema-swap; set TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1 only after staging drill"
+if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
+  phase restoring failed "guard refused schema-swap; set PINVI_RESTORE_HOTSWAP_EXECUTE=1 only after staging drill"
   phase validating skipped "restore did not run"
   phase draining skipped "restore did not run"
   phase switching skipped "restore did not run"
@@ -150,7 +150,7 @@ phase restoring success "restored into ${RESTORE_SCHEMA}"
 # pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
 # 아니면 swap 직후 permission denied가 난다. swap 전에 RESTORE_SCHEMA에 GRANT를 재적용한다
 # (GRANT는 객체에 귀속되어 schema rename 후에도 유지된다).
-APP_ROLE="${TRIPMATE_RESTORE_APP_ROLE:-}"
+APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 if [[ -n "${APP_ROLE}" ]]; then
   if [[ ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     phase restoring failed "unsafe app role name: ${APP_ROLE}"
@@ -163,7 +163,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 SQL
   phase restoring success "re-granted privileges to ${APP_ROLE}"
 else
-  phase restoring success "TRIPMATE_RESTORE_APP_ROLE unset; assuming single-owner role (no GRANT re-apply)"
+  phase restoring success "PINVI_RESTORE_APP_ROLE unset; assuming single-owner role (no GRANT re-apply)"
 fi
 
 phase validating running "validating restored schema"
@@ -175,17 +175,17 @@ fi
 phase validating success "restored schema passed basic checks"
 
 phase draining running "write drain"
-if [[ "${TRIPMATE_RESTORE_API_TRIGGER:-0}" == "1" && -n "${TRIPMATE_RESTORE_DRAIN_COMMAND:-}" ]]; then
-  phase draining failed "API-triggered restore cannot run TRIPMATE_RESTORE_DRAIN_COMMAND; pre-drain externally and set TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1"
+if [[ "${PINVI_RESTORE_API_TRIGGER:-0}" == "1" && -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
+  phase draining failed "API-triggered restore cannot run PINVI_RESTORE_DRAIN_COMMAND; pre-drain externally and set PINVI_RESTORE_ALLOW_NO_DRAIN=1"
   exit 3
 fi
-if [[ -n "${TRIPMATE_RESTORE_DRAIN_COMMAND:-}" ]]; then
-  bash -lc "${TRIPMATE_RESTORE_DRAIN_COMMAND}"
+if [[ -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
+  bash -lc "${PINVI_RESTORE_DRAIN_COMMAND}"
   phase draining success "drain command completed"
-elif [[ "${TRIPMATE_RESTORE_ALLOW_NO_DRAIN:-0}" == "1" ]]; then
-  phase draining skipped "TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1"
+elif [[ "${PINVI_RESTORE_ALLOW_NO_DRAIN:-0}" == "1" ]]; then
+  phase draining skipped "PINVI_RESTORE_ALLOW_NO_DRAIN=1"
 else
-  phase draining failed "TRIPMATE_RESTORE_DRAIN_COMMAND is required unless TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1"
+  phase draining failed "PINVI_RESTORE_DRAIN_COMMAND is required unless PINVI_RESTORE_ALLOW_NO_DRAIN=1"
   exit 3
 fi
 

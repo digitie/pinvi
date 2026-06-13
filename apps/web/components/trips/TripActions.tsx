@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Copy, Loader2, Trash2 } from 'lucide-react';
-import { ApiError, tripApi } from '@tripmate/api-client';
+import { ApiError, tripApi } from '@pinvi/api-client';
 import { apiClient } from '@/lib/api';
 
 export interface TripActionsProps {

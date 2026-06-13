@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, ShieldCheck } from 'lucide-react';
-import { ApiError, userApi } from '@tripmate/api-client';
-import type { ConsentType, UserConsent } from '@tripmate/schemas';
+import { ApiError, userApi } from '@pinvi/api-client';
+import type { ConsentType, UserConsent } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 
 interface ConsentMeta {

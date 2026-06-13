@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 
 engine = create_async_engine(
-    settings.tripmate_database_url,
-    pool_size=settings.tripmate_database_pool_size,
+    settings.pinvi_database_url,
+    pool_size=settings.pinvi_database_pool_size,
     pool_pre_ping=True,
     future=True,
 )

@@ -6,13 +6,13 @@ import {
   FeatureSummarySchema,
   FeatureWeatherCardSchema,
   FeaturesInBoundsResponseSchema,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 import type {
   FeatureKind,
   FeatureRequestCreate,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 
 /** `docs/api/features.md` — Sprint 4 (v0.1.0 게이트). */
 export const featureApi = (client: ApiClient) => ({
@@ -63,7 +63,7 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** 자유 텍스트 검색 (feature 파트만 — 인덱스/ranking은 krtour 책임). */
+  /** 자유 텍스트 검색 (feature 파트만 — 인덱스/ranking은 kor_travel_map 책임). */
   search: (params: {
     q: string;
     kinds?: FeatureKind[];

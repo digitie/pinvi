@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 def _make_client() -> TelegramClient:
     """실 전송용 client. 테스트는 이 함수를 monkeypatch한다."""
-    http = httpx.AsyncClient(base_url=settings.tripmate_telegram_api_base)
-    return TelegramClient(http, timeout_seconds=settings.tripmate_telegram_timeout_seconds)
+    http = httpx.AsyncClient(base_url=settings.pinvi_telegram_api_base)
+    return TelegramClient(http, timeout_seconds=settings.pinvi_telegram_timeout_seconds)
 
 
 async def deliver_user_notification(db: AsyncSession, *, user_id: uuid.UUID, text: str) -> str:
@@ -34,7 +34,7 @@ async def deliver_user_notification(db: AsyncSession, *, user_id: uuid.UUID, tex
     전송 실패는 `TelegramError` raise — 호출자(worker)가 재시도/소진을 판단한다.
     target의 `last_send_status`는 여기서 기록한다(commit은 호출자).
     """
-    token = settings.tripmate_telegram_bot_token_default
+    token = settings.pinvi_telegram_bot_token_default
     if not token:
         return "skipped"
 

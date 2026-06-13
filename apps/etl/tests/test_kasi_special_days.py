@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from tripmate.etl.assets.tripmate_kasi_special_days import (
+from pinvi.etl.assets.pinvi_kasi_special_days import (
     fetch_special_day_records,
     month_buckets,
 )

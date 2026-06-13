@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('admin 로그인: 잘못된 이메일 제출 시 필드 오류 + aria-invalid + 포커스', async ({ page }) => {
   await page.goto('/admin/login');
-  await expect(page.getByRole('heading', { name: 'TripMate Admin' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pinvi Admin' })).toBeVisible();
 
   await page.getByTestId('admin-login-email').fill('not-an-email');
   await page.getByTestId('admin-login-password').fill('whatever');

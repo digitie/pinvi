@@ -1,6 +1,6 @@
 # 운영 Runbook
 
-TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저장소 운영
+Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저장소 운영
 가이드. AI agent + 운영자 모두 이용.
 
 ## 1. 인덱스
@@ -11,15 +11,15 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 | [docker-app.md](./docker-app.md) | App 컨테이너 smoke test (`docker-compose.app.yml`) | 1 |
 | [etl.md](./etl.md) | Dagster `apps/etl` 운영 + soak | 5 |
 | [admin.md](./admin.md) | Admin 콘솔 운영 (RBAC / seed / 시나리오) | 3 |
-| [file-storage.md](./file-storage.md) | RustFS 운영 + python-krtour-map 공유 | 2 |
+| [file-storage.md](./file-storage.md) | RustFS 운영 + kor-travel-map 공유 | 2 |
 | [odroid-docker.md](./odroid-docker.md) | Odroid M1S 배포 + ARM64 빌드 | 6 |
 | [backup-restore.md](./backup-restore.md) | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6 |
 | [deploy.md](./deploy.md) | 배포 절차 + rollback (Odroid + N150, ADR-023) | 6 |
-| [observability.md](./observability.md) | Sentry + Loki + Grafana 운영 | 5 |
+| [observability.md](./observability.md) | Prometheus + cAdvisor + Grafana 운영 | 5 |
 | [security-incident.md](./security-incident.md) | 인시던트 대응 + PIPA 통지 | 6 |
 | [codegraph-worktrees.md](./codegraph-worktrees.md) | CodeGraph + agent별 고정 worktree (ADR-017) | 0 (상시) |
 | [pr-review-sprint4.md](./pr-review-sprint4.md) | Sprint 4까지 PR 리뷰·머지 운영 | 1~4 |
-| [mcp-server.md](./mcp-server.md) | TripMate MCP 외부 인터페이스 운영 (ADR-019) | 6 |
+| [mcp-server.md](./mcp-server.md) | Pinvi MCP 외부 인터페이스 운영 (ADR-019) | 6 |
 | [korea-only.md](./korea-only.md) | 한국 전용 geofencing 3중 안전망 (ADR-018) | 6 |
 | [grafana-admin-embed.md](./grafana-admin-embed.md) | Admin Grafana iframe embed | 5 |
 | [secrets.md](./secrets.md) | GitHub Actions secrets 카탈로그 (ADR-021) | 4 (상시) |
@@ -29,9 +29,9 @@ TripMate 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 
 ### 2.1 작업 흐름
 
 git / 편집 / commit / push / PR은 **NTFS worktree**
-(`F:/dev/tripmate-<agent>`)에서 Windows `git.exe`로 실행한다(ADR-024). 테스트,
+(`F:/dev/pinvi-<agent>`)에서 Windows `git.exe`로 실행한다(ADR-024). 테스트,
 Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
-(`~/tripmate-workspaces/tripmate-<agent>`)에서 실행하고, 미러에서는 commit/push하지
+(`~/pinvi-workspaces/pinvi-<agent>`)에서 실행하고, 미러에서는 commit/push하지
 않는다. 자세한 순서는 [agent-workflow](../agent-workflow.md)와
 [local-dev.md](./local-dev.md)를 따른다.
 
@@ -42,17 +42,17 @@ Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
 | 12501 | FastAPI dev / Docker smoke API |
 | 12505 | Next.js dev / Docker smoke Web |
 | 9023 | Dagster UI |
-| 12301 | krtour-map API/Admin API |
+| 12301 | kor-travel-map API/Admin API |
 | 12101 | RustFS S3 endpoint |
 | 12105 | RustFS console |
 | 5432 | PostgreSQL host/container port |
-| 9080 | Promtail (옵션) |
-| 3100 | Loki (옵션) |
-| 3002 | Grafana (옵션) |
+| 12601 | Prometheus (옵션, observability profile) |
+| 12602 | cAdvisor Exporter (옵션, observability profile) |
+| 12605 | Grafana (옵션, observability profile) |
 
 ### 2.3 환경변수 정책
 
-- `TRIPMATE_*` prefix
+- `PINVI_*` prefix
 - `.env`는 로컬 권한 600, 운영은 systemd `EnvironmentFile`
 - `docker compose config`는 secret 노출 가능 → 공유 금지
 - secret 변경 시 audit log
@@ -61,7 +61,7 @@ Docker, 의존성 설치, 장기 실행은 **WSL ext4 테스트 미러**
 
 - 모든 Docker 명령은 WSL2에서. Windows PowerShell에서 직접 X
 - ARM64 multi-arch 빌드 — CI에서 `docker buildx` + QEMU
-- 컨테이너 이미지 태그: `tripmate-api:local`, `tripmate-web:local`, 운영은 git short sha
+- 컨테이너 이미지 태그: `pinvi-api:local`, `pinvi-web:local`, 운영은 git short sha
 
 ## 3. AI agent 작업 가이드
 

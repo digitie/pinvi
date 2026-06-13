@@ -63,7 +63,7 @@ def _oauth_error_redirect(*, code: str, message: str, path: str = "/login") -> R
     target_path = path if path.startswith("/") else "/login"
     separator = "&" if "?" in target_path else "?"
     return RedirectResponse(
-        url=f"{settings.tripmate_web_base_url}{target_path}{separator}{query}",
+        url=f"{settings.pinvi_web_base_url}{target_path}{separator}{query}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -90,7 +90,7 @@ async def list_providers() -> Envelope[OAuthProvidersResponse]:
     providers = [
         OAuthProviderInfo(
             provider="google",
-            enabled=bool(settings.tripmate_google_oauth_client_id),
+            enabled=bool(settings.pinvi_google_oauth_client_id),
         ),
     ]
     return Envelope.of(OAuthProvidersResponse(providers=providers))
@@ -107,7 +107,7 @@ async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuth
                 "message": "계정 연결은 /auth/oauth/google/link endpoint를 사용해야 합니다.",
             },
         )
-    if not settings.tripmate_google_oauth_client_id:
+    if not settings.pinvi_google_oauth_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
@@ -126,7 +126,7 @@ async def google_link(
     db: DbSession,
 ) -> Envelope[OAuthStartResponse]:
     """로그인된 사용자의 Google 연결 authorize URL 발급."""
-    if not settings.tripmate_google_oauth_client_id:
+    if not settings.pinvi_google_oauth_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
@@ -198,7 +198,7 @@ async def google_callback(
 
     return_to = login_state.return_to_path or "/"
     redirect = RedirectResponse(
-        url=f"{settings.tripmate_web_base_url}{return_to}",
+        url=f"{settings.pinvi_web_base_url}{return_to}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
     issue = await issue_user_session(

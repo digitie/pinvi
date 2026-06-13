@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LoginRequestSchema, RegisterRequestSchema } from '@tripmate/schemas';
+import { LoginRequestSchema, RegisterRequestSchema } from '@pinvi/schemas';
 import { validateForm } from '@/lib/formValidation';
 
 // RegisterRequestSchema는 필수 동의 4종을 superRefine으로 요구하므로,

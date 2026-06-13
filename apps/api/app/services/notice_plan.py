@@ -41,14 +41,14 @@ class NoticePlanPolicyError(NoticePlanError):
     code = "CURATED_PLAN_POI_POLICY_ERROR"
 
 
-class KrtourCuratedCopyClient(Protocol):
-    async def get_curated_tripmate_copy(self, curated_feature_id: str) -> dict[str, Any]:
-        """krtour-map TripMate copy snapshot 조회."""
+class KorTravelMapCuratedCopyClient(Protocol):
+    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
+        """kor-travel-map Pinvi copy snapshot 조회."""
         ...
 
 
 @dataclass(frozen=True)
-class KrtourCuratedImportResult:
+class KorTravelMapCuratedImportResult:
     plan: CuratedTripPlan
     created_plan: bool
     copied_poi_count: int
@@ -59,7 +59,7 @@ class KrtourCuratedImportResult:
     source_etag: str | None
 
 
-_KRTOUR_SOURCE_SYSTEM = "krtour-map"
+_KOR_TRAVEL_MAP_SOURCE_SYSTEM = "kor-travel-map"
 _SLUG_TOKEN_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -100,13 +100,13 @@ def _int_or_none(value: object) -> int | None:
     return None
 
 
-def _slug_for_krtour_curated_feature(curated_feature_id: str) -> str:
+def _slug_for_kor_travel_map_curated_feature(curated_feature_id: str) -> str:
     token = _SLUG_TOKEN_RE.sub("-", curated_feature_id.lower()).strip("-")
     digest = hashlib.sha256(curated_feature_id.encode("utf-8")).hexdigest()[:10]
     if not token:
-        return f"krtour-{digest}"
+        return f"kor_travel_map-{digest}"
     token = token[:140].strip("-")
-    return f"krtour-{token}-{digest}"
+    return f"kor_travel_map-{token}-{digest}"
 
 
 def _snapshot_items(snapshot: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -311,7 +311,7 @@ async def ensure_plan_poi_for_feature(
 ) -> CuratedPlanPoi:
     """외부 연계에서 feature-backed curated POI를 보장.
 
-    POI 자체는 `feature_id` 없이도 존재할 수 있다. 다만 krtour-map import처럼
+    POI 자체는 `feature_id` 없이도 존재할 수 있다. 다만 kor-travel-map import처럼
     feature를 알고 들어오는 경우, 같은 plan에 해당 feature POI가 이미 있으면 재사용하고
     없으면 새 `curated_plan_pois` row를 만든다.
     """
@@ -346,41 +346,41 @@ async def ensure_plan_poi_for_feature(
     return poi
 
 
-async def import_krtour_curated_feature(
+async def import_kor_travel_map_curated_feature(
     db: AsyncSession,
     *,
     admin_id: uuid.UUID,
-    krtour_client: KrtourCuratedCopyClient,
+    kor_travel_map_client: KorTravelMapCuratedCopyClient,
     curated_feature_id: str,
     mode: str = "create",
     is_published: bool | None = None,
-) -> KrtourCuratedImportResult:
-    """krtour-map curated feature snapshot을 TripMate curated plan으로 복사."""
+) -> KorTravelMapCuratedImportResult:
+    """kor-travel-map curated feature snapshot을 Pinvi curated plan으로 복사."""
     if mode not in {"create", "upsert", "refresh"}:
         raise NoticePlanPolicyError("지원하지 않는 import mode 입니다.")
 
-    snapshot = _mapping(await krtour_client.get_curated_tripmate_copy(curated_feature_id))
+    snapshot = _mapping(await kor_travel_map_client.get_curated_pinvi_copy(curated_feature_id))
     source_curated_feature_id = _optional_text(snapshot.get("curated_feature_id"))
     if source_curated_feature_id is None:
-        raise NoticePlanCopyError("krtour-map copy snapshot에 curated_feature_id가 없습니다.")
+        raise NoticePlanCopyError("kor-travel-map copy snapshot에 curated_feature_id가 없습니다.")
     plan_payload = _mapping(snapshot.get("plan"))
     source_payload = _mapping(snapshot.get("source"))
     theme_payload = _mapping(snapshot.get("theme"))
     items = _snapshot_items(snapshot)
     if not items:
-        raise NoticePlanCopyError("krtour-map copy snapshot에 복사할 item이 없습니다.")
+        raise NoticePlanCopyError("kor-travel-map copy snapshot에 복사할 item이 없습니다.")
 
-    existing = await _get_krtour_imported_plan(
+    existing = await _get_kor_travel_map_imported_plan(
         db, source_curated_feature_id=source_curated_feature_id
     )
     if existing is not None and mode == "create":
-        raise NoticePlanCopyError("이미 가져온 krtour curated feature 입니다.")
+        raise NoticePlanCopyError("이미 가져온 kor_travel_map curated feature 입니다.")
     if existing is None and mode == "refresh":
-        raise NoticePlanNotFoundError("refresh할 krtour curated feature import가 없습니다.")
+        raise NoticePlanNotFoundError("refresh할 kor_travel_map curated feature import가 없습니다.")
 
     created_plan = existing is None
     plan = existing or CuratedTripPlan(
-        slug=_slug_for_krtour_curated_feature(source_curated_feature_id),
+        slug=_slug_for_kor_travel_map_curated_feature(source_curated_feature_id),
         title=_optional_text(plan_payload.get("title"), max_length=200)
         or source_curated_feature_id,
         category=_category_from_snapshot(plan_payload, theme_payload),
@@ -390,7 +390,7 @@ async def import_krtour_curated_feature(
     if created_plan:
         db.add(plan)
 
-    _apply_krtour_plan_snapshot(
+    _apply_kor_travel_map_plan_snapshot(
         plan,
         admin_id=admin_id,
         plan_payload=plan_payload,
@@ -416,14 +416,14 @@ async def import_krtour_curated_feature(
         ),
     )
     for item in ordered_items:
-        poi, reused = await _ensure_krtour_import_poi(
+        poi, reused = await _ensure_kor_travel_map_import_poi(
             db,
             plan=plan,
             source_curated_feature_id=source_curated_feature_id,
             item=item,
             last_sort_by_day=last_sort_by_day,
         )
-        _apply_krtour_poi_snapshot(
+        _apply_kor_travel_map_poi_snapshot(
             poi,
             source_curated_feature_id=source_curated_feature_id,
             item=item,
@@ -434,26 +434,26 @@ async def import_krtour_curated_feature(
 
     await db.commit()
     await db.refresh(plan)
-    return KrtourCuratedImportResult(
+    return KorTravelMapCuratedImportResult(
         plan=plan,
         created_plan=created_plan,
         copied_poi_count=copied_count,
         reused_feature_backed_poi_count=reused_count,
-        source_system=_KRTOUR_SOURCE_SYSTEM,
+        source_system=_KOR_TRAVEL_MAP_SOURCE_SYSTEM,
         source_curated_feature_id=source_curated_feature_id,
         source_version=_int_or_none(snapshot.get("version")),
         source_etag=_optional_text(snapshot.get("etag"), max_length=128),
     )
 
 
-async def _get_krtour_imported_plan(
+async def _get_kor_travel_map_imported_plan(
     db: AsyncSession, *, source_curated_feature_id: str
 ) -> CuratedTripPlan | None:
     return cast(
         CuratedTripPlan | None,
         await db.scalar(
             select(CuratedTripPlan).where(
-                CuratedTripPlan.source_system == _KRTOUR_SOURCE_SYSTEM,
+                CuratedTripPlan.source_system == _KOR_TRAVEL_MAP_SOURCE_SYSTEM,
                 CuratedTripPlan.source_curated_feature_id == source_curated_feature_id,
                 CuratedTripPlan.deleted_at.is_(None),
             )
@@ -471,7 +471,7 @@ def _category_from_snapshot(
     )
 
 
-def _apply_krtour_plan_snapshot(
+def _apply_kor_travel_map_plan_snapshot(
     plan: CuratedTripPlan,
     *,
     admin_id: uuid.UUID,
@@ -488,21 +488,21 @@ def _apply_krtour_plan_snapshot(
     plan.source_name = (
         _optional_text(source_payload.get("source_name"), max_length=200)
         or _optional_text(source_payload.get("provider"), max_length=200)
-        or _KRTOUR_SOURCE_SYSTEM
+        or _KOR_TRAVEL_MAP_SOURCE_SYSTEM
     )
     plan.destination = _optional_text(
         plan_payload.get("destination_name"), max_length=120
     ) or _optional_text(plan_payload.get("region_code"), max_length=120)
     plan.is_published = is_published
     plan.updated_by_admin_id = admin_id
-    plan.source_system = _KRTOUR_SOURCE_SYSTEM
+    plan.source_system = _KOR_TRAVEL_MAP_SOURCE_SYSTEM
     plan.source_curated_feature_id = source_curated_feature_id
     plan.source_curated_feature_version = _int_or_none(snapshot.get("version"))
     plan.source_etag = _optional_text(snapshot.get("etag"), max_length=128)
     plan.source_imported_at = datetime.now(UTC)
 
 
-async def _ensure_krtour_import_poi(
+async def _ensure_kor_travel_map_import_poi(
     db: AsyncSession,
     *,
     plan: CuratedTripPlan,
@@ -590,7 +590,7 @@ async def _max_curated_sort_order(
     return result.scalar_one_or_none()
 
 
-def _apply_krtour_poi_snapshot(
+def _apply_kor_travel_map_poi_snapshot(
     poi: CuratedPlanPoi,
     *,
     source_curated_feature_id: str,

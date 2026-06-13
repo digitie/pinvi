@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, XCircle } from 'lucide-react';
-import { ApiError, adminApi } from '@tripmate/api-client';
+import { ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminBackupRestorePhase,
   AdminBackupRestoreRun,
   AdminBackupSnapshot,
-} from '@tripmate/schemas';
+} from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 
 interface RestoreHotswapDialogProps {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop local dev services that use TripMate's fixed dev ports.
+# Stop local dev services that use Pinvi's fixed dev ports.
 
 set -euo pipefail
 
@@ -7,9 +7,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_DIR="${ROOT}/.tmp/dev/pids"
 
 PORTS=(
-  "${TRIPMATE_API_DEV_PORT:-12501}"
-  "${TRIPMATE_WEB_DEV_PORT:-12505}"
-  "${TRIPMATE_DAGSTER_DEV_PORT:-9023}"
+  "${PINVI_API_DEV_PORT:-12501}"
+  "${PINVI_WEB_DEV_PORT:-12505}"
+  "${PINVI_DAGSTER_DEV_PORT:-9023}"
 )
 
 kill_pid_file() {

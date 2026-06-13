@@ -1,13 +1,13 @@
 """Feature Pydantic schema — `docs/api/features.md`.
 
-krtour-map OpenAPI(`openapi.user.json`) 응답을 TripMate 측 API 응답 schema로 투영한다.
-TripMate는 응답 셰입을 소유하되 **krtour 실계약 field 명/의미에 정합**한다(ADR-026/030):
+kor-travel-map OpenAPI(`openapi.user.json`) 응답을 Pinvi 측 API 응답 schema로 투영한다.
+Pinvi는 응답 셰입을 소유하되 **kor_travel_map 실계약 field 명/의미에 정합**한다(ADR-026/030):
 평면 `lon`/`lat`(DEC-07→`lon`/`lat` 정렬), 표시명 `name`, 구조화 `address` 객체,
 클러스터 자연키 `cluster_key`, 날씨 평탄 `metrics`(+`forecast_style`).
 
 - 사용자에게 노출할 필드만 (PII / 내부 metadata 제외)
 - Zod 측 `packages/schemas/src/feature.ts` 와 cross-validation
-- `feature_id` 는 krtour `make_feature_id` 출력 불투명 문자열(ADR-028, UUID 아님)
+- `feature_id` 는 kor_travel_map `make_feature_id` 출력 불투명 문자열(ADR-028, UUID 아님)
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class BBox(BaseModel):
 class FeatureSummary(BaseModel):
     """마커/목록 표시용 (in-bounds items / nearby / search 응답).
 
-    krtour `FeatureSummary`/`NearbyFeatureSummary` 투영. krtour는 평면 `lon`/`lat`,
+    kor_travel_map `FeatureSummary`/`NearbyFeatureSummary` 투영. kor_travel_map는 평면 `lon`/`lat`,
     `name`, `status`를 주고 `lon`/`lat`/`marker_*`는 nullable. nearby 응답에만
     `distance_m`이 채워진다.
     """
@@ -64,16 +64,16 @@ class FeatureSummary(BaseModel):
     feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
     name: str
-    coord: Coord | None = None  # krtour lon/lat nullable (point geometry 없는 kind)
+    coord: Coord | None = None  # kor_travel_map lon/lat nullable (point geometry 없는 kind)
     category: str | None = None
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")  # 16색 P-01~P-16
     marker_icon: str = Field(default="marker", max_length=64)  # maki icon name
-    status: str | None = None  # active / inactive / hidden 등 (krtour lifecycle)
+    status: str | None = None  # active / inactive / hidden 등 (kor_travel_map lifecycle)
     distance_m: float | None = None  # nearby 응답에만
 
 
 class FeatureCluster(BaseModel):
-    """서버(krtour) 클러스터 — `cluster_key`는 행정구역 코드(자연키, ADR-048 §3.1)."""
+    """서버(kor_travel_map) 클러스터 — `cluster_key`는 행정구역 코드(자연키, ADR-048 §3.1)."""
 
     cluster_key: str
     coord: Coord
@@ -83,7 +83,7 @@ class FeatureCluster(BaseModel):
 class FeaturesInBoundsResponse(BaseModel):
     """viewport 응답 — 개별 feature(`items`) + 서버 cluster(`clusters`) 혼합.
 
-    클러스터링은 krtour 서버 책임(`cluster_unit`/`zoom`). granularity는
+    클러스터링은 kor_travel_map 서버 책임(`cluster_unit`/`zoom`). granularity는
     `meta.cluster.cluster_unit`로 오므로 `cluster_unit`에 투영한다.
     """
 
@@ -95,14 +95,14 @@ class FeaturesInBoundsResponse(BaseModel):
 
 
 class FeatureDetail(BaseModel):
-    """상세 응답 — `GET /features/{id}` (krtour `FeatureDetailResponse` 투영)."""
+    """상세 응답 — `GET /features/{id}` (kor_travel_map `FeatureDetailResponse` 투영)."""
 
     feature_id: str = Field(min_length=1, max_length=200)
     kind: FeatureKind
     name: str
     coord: Coord | None = None
     category: str | None = None
-    address: dict[str, Any] | None = None  # 구조화 주소 객체 (krtour 원본)
+    address: dict[str, Any] | None = None  # 구조화 주소 객체 (kor_travel_map 원본)
     legal_dong_code: str | None = None  # 법정동 코드
     sido_code: str | None = None
     sigungu_code: str | None = None
@@ -115,7 +115,7 @@ class FeatureDetail(BaseModel):
 
 
 class WeatherMetric(BaseModel):
-    """krtour 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
+    """kor_travel_map 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
 
     metric_key: str
     metric_name: str | None = None
@@ -131,10 +131,10 @@ class WeatherMetric(BaseModel):
 
 
 class FeatureWeatherCard(BaseModel):
-    """weather 응답 — `GET /features/{id}/weather` (krtour `WeatherCardData` 투영).
+    """weather 응답 — `GET /features/{id}/weather` (kor_travel_map `WeatherCardData` 투영).
 
-    krtour는 평탄 `metrics` 목록 + `source_styles`를 준다. 프런트는 `forecast_style`
-    별로 그룹핑해 카드를 구성한다(KMA provider 변환을 TripMate가 직접 작성하지 않음).
+    kor_travel_map는 평탄 `metrics` 목록 + `source_styles`를 준다. 프런트는 `forecast_style`
+    별로 그룹핑해 카드를 구성한다(KMA provider 변환을 Pinvi가 직접 작성하지 않음).
     """
 
     feature_id: str = Field(min_length=1, max_length=200)
@@ -146,9 +146,9 @@ class FeatureWeatherCard(BaseModel):
 
 
 class FeatureCategory(BaseModel):
-    """krtour 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (`GET /features/categories`).
+    """kor_travel_map 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (`GET /features/categories`).
 
-    krtour `CategorySummary` 투영. code(8자리) + label + 트리(parent/depth/path) + maki 아이콘.
+    kor_travel_map `CategorySummary` 투영. code(8자리) + label + 트리(parent/depth/path) + maki 아이콘.
     저빈도 데이터라 클라이언트 긴 TTL 캐시 권장.
     """
 
@@ -163,7 +163,7 @@ class FeatureCategory(BaseModel):
 
 
 class FeatureRequestCreate(BaseModel):
-    """사용자 feature 제안 큐 적재 — Admin이 검토 후 krtour feature 추가 API로 반영 (DEC-05)."""
+    """사용자 feature 제안 큐 적재 — Admin이 검토 후 kor_travel_map feature 추가 API로 반영 (DEC-05)."""
 
     type: FeatureRequestType = "new_place"
     kind: FeatureSuggestionKind = "place"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Restore a TripMate app-schema PostgreSQL custom-format backup.
+# Restore a Pinvi app-schema PostgreSQL custom-format backup.
 
 set -euo pipefail
 
-SCHEMA="${TRIPMATE_RESTORE_SCHEMA:-${TRIPMATE_BACKUP_SCHEMA:-app}}"
-DATABASE_URL="${TRIPMATE_RESTORE_DATABASE_URL:-${TRIPMATE_DATABASE_URL:-}}"
-JOBS="${TRIPMATE_RESTORE_JOBS:-2}"
+SCHEMA="${PINVI_RESTORE_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
+DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
+JOBS="${PINVI_RESTORE_JOBS:-2}"
 BACKUP_FILE="${1:-}"
 
 if [[ -z "${BACKUP_FILE}" ]]; then
@@ -14,7 +14,7 @@ if [[ -z "${BACKUP_FILE}" ]]; then
 fi
 
 if [[ -z "${DATABASE_URL}" ]]; then
-  echo "TRIPMATE_DATABASE_URL or TRIPMATE_RESTORE_DATABASE_URL is required" >&2
+  echo "PINVI_DATABASE_URL or PINVI_RESTORE_DATABASE_URL is required" >&2
   exit 2
 fi
 

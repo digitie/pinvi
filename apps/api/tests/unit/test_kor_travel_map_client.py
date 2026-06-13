@@ -1,4 +1,4 @@
-"""krtour-map HTTP client 계약 테스트 (httpx.MockTransport)."""
+"""kor-travel-map HTTP client 계약 테스트 (httpx.MockTransport)."""
 
 from __future__ import annotations
 
@@ -7,25 +7,25 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from app.clients.krtour_map import (
-    KrtourMapBadRequest,
-    KrtourMapClient,
-    KrtourMapFeatureNotFound,
-    KrtourMapRateLimited,
-    KrtourMapUnavailable,
+from app.clients.kor_travel_map import (
+    KorTravelMapBadRequest,
+    KorTravelMapClient,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapRateLimited,
+    KorTravelMapUnavailable,
 )
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler, **kwargs: object) -> KrtourMapClient:
+def _client(handler: Handler, **kwargs: object) -> KorTravelMapClient:
     http = httpx.AsyncClient(
-        base_url="http://krtour.test",
+        base_url="http://kor_travel_map.test",
         transport=httpx.MockTransport(handler),
     )
     params: dict[str, object] = {"max_attempts": 2, "backoff_base_seconds": 0.0}
     params.update(kwargs)
-    return KrtourMapClient(http, **params)  # type: ignore[arg-type]
+    return KorTravelMapClient(http, **params)  # type: ignore[arg-type]
 
 
 async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
@@ -110,14 +110,14 @@ async def test_get_features_chunks_and_merges() -> None:
 
     client = _client(handler, batch_chunk_size=2)
     data = await client.get_features(["f_1", "f_2", "f_missing"])
-    assert seen_path["path"] == "/v1/features/batch"  # #318: /tripmate 제거
+    assert seen_path["path"] == "/v1/features/batch"  # #318: /pinvi 제거
     assert len(calls) == 2  # 2 + 1 청크
     assert set(data["found"]) == {"f_1", "f_2"}
     assert data["missing"] == ["f_missing"]
     await client.aclose()
 
 
-# --- ADR-048 / krtour 0e45bd7 계약 (T-181) -------------------------------
+# --- ADR-048 / kor_travel_map 0e45bd7 계약 (T-181) -------------------------------
 
 
 async def test_in_bounds_sends_max_items_and_threads_cluster_unit() -> None:
@@ -316,7 +316,7 @@ async def test_public_detail_404_returns_none() -> None:
     await client.aclose()
 
 
-async def test_curated_tripmate_copy_uses_public_snapshot_path() -> None:
+async def test_curated_pinvi_copy_uses_public_snapshot_path() -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -339,8 +339,8 @@ async def test_curated_tripmate_copy_uses_public_snapshot_path() -> None:
         )
 
     client = _client(handler)
-    snapshot = await client.get_curated_tripmate_copy("cf_1")
-    assert seen["path"] == "/v1/curated-features/cf_1/tripmate-copy"
+    snapshot = await client.get_curated_pinvi_copy("cf_1")
+    assert seen["path"] == "/v1/curated-features/cf_1/pinvi-copy"
     assert snapshot["curated_feature_id"] == "cf_1"
     assert snapshot["etag"] == "sha256:abc"
     await client.aclose()
@@ -363,7 +363,7 @@ async def test_problem_json_top_level_code_parsed() -> None:
         )
 
     client = _client(handler)
-    with pytest.raises(KrtourMapBadRequest) as exc:
+    with pytest.raises(KorTravelMapBadRequest) as exc:
         await client.features_in_bounds(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
     assert exc.value.code == "INVALID_BBOX"
     await client.aclose()
@@ -377,7 +377,7 @@ async def test_5xx_retries_then_unavailable() -> None:
         return httpx.Response(503, json={"error": {"code": "UPSTREAM_UNAVAILABLE"}})
 
     client = _client(handler, max_attempts=3)
-    with pytest.raises(KrtourMapUnavailable):
+    with pytest.raises(KorTravelMapUnavailable):
         await client.get_feature("f_x")
     assert attempts["n"] == 3
     await client.aclose()
@@ -388,7 +388,7 @@ async def test_transport_error_raises_unavailable() -> None:
         raise httpx.ConnectError("boom", request=request)
 
     client = _client(handler)
-    with pytest.raises(KrtourMapUnavailable):
+    with pytest.raises(KorTravelMapUnavailable):
         await client.healthz()
     await client.aclose()
 
@@ -400,7 +400,7 @@ async def test_rate_limited_429_with_retry_after() -> None:
         )
 
     client = _client(handler)
-    with pytest.raises(KrtourMapRateLimited) as exc:
+    with pytest.raises(KorTravelMapRateLimited) as exc:
         await client.features_in_bounds(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
     assert exc.value.retry_after_seconds == 15
     await client.aclose()
@@ -411,7 +411,7 @@ async def test_422_raises_bad_request_with_code() -> None:
         return httpx.Response(422, json={"error": {"code": "INVALID_BBOX"}})
 
     client = _client(handler)
-    with pytest.raises(KrtourMapBadRequest) as exc:
+    with pytest.raises(KorTravelMapBadRequest) as exc:
         await client.features_in_bounds(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
     assert exc.value.code == "INVALID_BBOX"
     await client.aclose()
@@ -423,7 +423,7 @@ async def test_batch_404_path_raises_not_found() -> None:
         return httpx.Response(404, json={"error": {"code": "FEATURE_NOT_FOUND"}})
 
     client = _client(handler)
-    with pytest.raises(KrtourMapFeatureNotFound):
+    with pytest.raises(KorTravelMapFeatureNotFound):
         await client.get_features(["f_1"])
     await client.aclose()
 
@@ -432,7 +432,7 @@ async def test_service_token_header() -> None:
     seen: dict[str, str | None] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["token"] = request.headers.get("X-Krtour-Service-Token")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
         return httpx.Response(200, json={"data": {"count": 0, "items": []}})
 
     with_token = _client(handler, service_token="secret-abc")

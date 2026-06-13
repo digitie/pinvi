@@ -59,7 +59,7 @@ export const AdminApiCallEntrySchema = z.object({
 });
 export type AdminApiCallEntry = z.infer<typeof AdminApiCallEntrySchema>;
 
-/** `/admin/stats/overview` — TripMate app-owned 지표. */
+/** `/admin/stats/overview` — Pinvi app-owned 지표. */
 export const AdminStatsOverviewSchema = z.object({
   users_total: z.number().int(),
   users_24h: z.number().int(),

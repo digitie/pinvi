@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '@tripmate/api-client';
+import { ApiError } from '@pinvi/api-client';
 import { errorDigest, friendlyErrorText } from '@/lib/errorMessage';
 
 describe('friendlyErrorText', () => {

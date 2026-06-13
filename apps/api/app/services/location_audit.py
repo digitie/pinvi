@@ -172,13 +172,13 @@ async def _drain_loop(interval: float, batch_size: int) -> None:
 @asynccontextmanager
 async def location_audit_outbox_worker_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan — 백그라운드 outbox drain worker(단일 task) 시작/정리."""
-    if not settings.tripmate_location_audit_outbox_worker_enabled:
+    if not settings.pinvi_location_audit_outbox_worker_enabled:
         yield
         return
     task = asyncio.create_task(
         _drain_loop(
-            settings.tripmate_location_audit_outbox_drain_interval_seconds,
-            settings.tripmate_location_audit_outbox_batch_size,
+            settings.pinvi_location_audit_outbox_drain_interval_seconds,
+            settings.pinvi_location_audit_outbox_batch_size,
         ),
         name="location-audit-outbox-drain",
     )

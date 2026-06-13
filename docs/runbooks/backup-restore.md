@@ -7,10 +7,10 @@
 
 ```bash
 # 운영 노드 SSH
-journalctl -u tripmate-backup --since "24 hours ago" | tail -20
+journalctl -u pinvi-backup --since "24 hours ago" | tail -20
 
 # 또는 Dagster UI
-open https://tripmateapi.digitie.mywire.org/admin/etl
+open https://pinviapi.digitie.mywire.org/admin/etl
 # asset `daily_postgres_backup` 최근 실행 확인
 ```
 
@@ -40,22 +40,22 @@ RustFS/외부 미러 표시는 후속 운영 보강이다.
 
 ```bash
 # 운영 노드 SSH
-cd /opt/tripmate
+cd /opt/pinvi
 sudo ./scripts/backup-db.sh
 
 # 결과
-ls -la /var/lib/tripmate/backups/
-# tripmate-app-20260606-003000.dump
-# tripmate-app-20260606-003000.dump.sha256
+ls -la /var/lib/pinvi/backups/
+# pinvi-app-20260606-003000.dump
+# pinvi-app-20260606-003000.dump.sha256
 ```
 
 환경변수:
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `TRIPMATE_BACKUP_DIR` | `.tmp/backups` | dump 저장 디렉터리 |
-| `TRIPMATE_BACKUP_SCHEMA` | `app` | TripMate 소유 schema |
-| `TRIPMATE_BACKUP_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | backup 전용 DB URL override |
+| `PINVI_BACKUP_DIR` | `.tmp/backups` | dump 저장 디렉터리 |
+| `PINVI_BACKUP_SCHEMA` | `app` | Pinvi 소유 schema |
+| `PINVI_BACKUP_DATABASE_URL` | `PINVI_DATABASE_URL` | backup 전용 DB URL override |
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
 단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다.
@@ -66,23 +66,23 @@ ls -la /var/lib/tripmate/backups/
 
 ```bash
 # 운영 노드 SSH
-cd /opt/tripmate
+cd /opt/pinvi
 
 # 1. 트래픽 차단 (maintenance mode)
 docker compose -f docker-compose.app.yml stop api web
 
 # 2. 검증
-pg_restore --list /var/lib/tripmate/backups/tripmate-app-20260606-003000.dump | head -20
+pg_restore --list /var/lib/pinvi/backups/pinvi-app-20260606-003000.dump | head -20
 
 # 3. restore
-sudo ./scripts/restore-db.sh /var/lib/tripmate/backups/tripmate-app-20260606-003000.dump
+sudo ./scripts/restore-db.sh /var/lib/pinvi/backups/pinvi-app-20260606-003000.dump
 
 # 4. 정합성 점검
 docker compose -f docker-compose.app.yml start api
 sleep 5
-curl -fsS https://tripmateapi.digitie.mywire.org/health/db
+curl -fsS https://pinviapi.digitie.mywire.org/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
-  https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
+  https://pinviapi.digitie.mywire.org/admin/audit/verify-chain | jq .
 
 # 5. 트래픽 재개
 docker compose -f docker-compose.app.yml start web
@@ -94,19 +94,19 @@ docker compose -f docker-compose.app.yml start web
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `TRIPMATE_RESTORE_SCHEMA` | `TRIPMATE_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema |
-| `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore 전용 DB URL override |
-| `TRIPMATE_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
+| `PINVI_RESTORE_SCHEMA` | `PINVI_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema |
+| `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL` | restore 전용 DB URL override |
+| `PINVI_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
 
 `scripts/restore-hotswap.sh` / API hot-swap 환경변수:
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `TRIPMATE_RESTORE_DATABASE_URL` | `TRIPMATE_DATABASE_URL` | restore/swap 전용 DB URL override |
-| `TRIPMATE_RESTORE_HOTSWAP_EXECUTE` | `0` | staging drill 후 운영 노드에서만 `1` |
-| `TRIPMATE_RESTORE_DRAIN_COMMAND` | 빈 값 | CLI 경로에서만 실행할 write drain 명령 |
-| `TRIPMATE_RESTORE_ALLOW_NO_DRAIN` | `0` | API 경로에서 외부 drain 완료 후 `1` |
-| `TRIPMATE_RESTORE_APP_ROLE` | 빈 값 | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
+| `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override |
+| `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0` | staging drill 후 운영 노드에서만 `1` |
+| `PINVI_RESTORE_DRAIN_COMMAND` | 빈 값 | CLI 경로에서만 실행할 write drain 명령 |
+| `PINVI_RESTORE_ALLOW_NO_DRAIN` | `0` | API 경로에서 외부 drain 완료 후 `1` |
+| `PINVI_RESTORE_APP_ROLE` | 빈 값 | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -134,23 +134,23 @@ docker compose -f docker-compose.app.yml start web
 
 ```bash
 # 운영 노드 SSH
-cd /opt/tripmate
+cd /opt/pinvi
 
-SNAPSHOT=/var/lib/tripmate/backups/tripmate-app-20260606-003000.dump
+SNAPSHOT=/var/lib/pinvi/backups/pinvi-app-20260606-003000.dump
 RESTORE_ID="$(date -u +%Y%m%d%H%M%S)"
 RESTORE_SCHEMA="app_restore_${RESTORE_ID}"
 PREVIOUS_SCHEMA="app_previous_${RESTORE_ID}"
 
 # 1. precheck
 sha256sum -c "${SNAPSHOT}.sha256"
-pg_restore --list "${SNAPSHOT}" >/tmp/tripmate-restore-list.txt
-df -h /var/lib/postgresql /var/lib/tripmate/backups
+pg_restore --list "${SNAPSHOT}" >/tmp/pinvi-restore-list.txt
+df -h /var/lib/postgresql /var/lib/pinvi/backups
 
 # 2. restore schema 준비/복구 + 검증 + drain + schema swap (CLI 운영자 경로)
-# 실제 실행 전 staging drill 후 TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
-TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1 \
-TRIPMATE_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
-TRIPMATE_RESTORE_APP_ROLE=tripmate \
+# 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
+PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
+PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
+PINVI_RESTORE_APP_ROLE=pinvi \
 sudo -E ./scripts/restore-hotswap.sh run \
   "${SNAPSHOT}" \
   "${RESTORE_SCHEMA}" \
@@ -158,9 +158,9 @@ sudo -E ./scripts/restore-hotswap.sh run \
 docker compose -f docker-compose.app.yml up -d api web
 
 # 3. healthcheck
-curl -fsS https://tripmateapi.digitie.mywire.org/health/db
+curl -fsS https://pinviapi.digitie.mywire.org/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
-  https://tripmateapi.digitie.mywire.org/admin/audit/verify-chain | jq .
+  https://pinviapi.digitie.mywire.org/admin/audit/verify-chain | jq .
 ```
 
 API `/admin/backup/restore-hotswap` 버튼/endpoint 경로는 자기 API 컨테이너를 멈추는
@@ -168,19 +168,19 @@ drain command를 실행하지 않는다. 운영자는 먼저 reverse proxy나 or
 drain/read-only 전환을 수행한 뒤 API 환경을 다음처럼 둔다.
 
 ```bash
-TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1
-TRIPMATE_RESTORE_DRAIN_COMMAND=
-TRIPMATE_RESTORE_ALLOW_NO_DRAIN=1
-TRIPMATE_RESTORE_APP_ROLE=tripmate
+PINVI_RESTORE_HOTSWAP_EXECUTE=1
+PINVI_RESTORE_DRAIN_COMMAND=
+PINVI_RESTORE_ALLOW_NO_DRAIN=1
+PINVI_RESTORE_APP_ROLE=pinvi
 ```
 
-API-triggered restore 중 `TRIPMATE_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
+API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
 `draining:failed`로 중단한다. CLI 경로만 drain command를 실행할 수 있다.
 
 schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 DB advisory lock,
 active session 확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본
 `scripts/restore-hotswap.sh`는 custom dump를 `app_restore_<ts>` schema로 remap해
-복구하고 `TRIPMATE_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 아래 rename을 수행한다.
+복구하고 `PINVI_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 아래 rename을 수행한다.
 
 ```sql
 BEGIN;
@@ -204,7 +204,7 @@ COMMIT;
 
 ```bash
 # 1. staging DB로 prod backup restore
-./scripts/restore-db.sh /var/lib/tripmate/backups/backup-latest.dump
+./scripts/restore-db.sh /var/lib/pinvi/backups/backup-latest.dump
 # (staging의 DATABASE_URL로 실행)
 
 # 2. UI에서 trip / poi 데이터 검증
@@ -227,7 +227,7 @@ COMMIT;
 
 | 증상 | 원인 후보 | 해결 |
 |------|----------|------|
-| backup 실패 (디스크 full) | `/var/lib/tripmate/backups/` 가득 | 30+30 정책 미작동 → 수동 정리 + cron 점검 |
+| backup 실패 (디스크 full) | `/var/lib/pinvi/backups/` 가득 | 30+30 정책 미작동 → 수동 정리 + cron 점검 |
 | backup duration 급증 | DB 행 수 폭증 / 네트워크 / RustFS 응답 지연 | Grafana로 원인 단계 식별, jobs 수 늘리기 |
 | pg_restore 실패 (FK 충돌) | --schema=app 외부 의존 (예: feature.feature_id) | restore 순서 변경 또는 `--data-only` |
 | audit chain verify-chain BROKEN | restore 중 row 일부 누락 | snapshot 검증 후 별 snapshot으로 재시도 |

@@ -1,6 +1,6 @@
 """Admin feature-request 검토 큐 통합 테스트 (T-179).
 
-krtour admin client는 `app.dependency_overrides`로 fake 주입 — fake는 change API의
+kor_travel_map admin client는 `app.dependency_overrides`로 fake 주입 — fake는 change API의
 `data.request`(record)에 해당하는 dict를 반환한다.
 """
 
@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 
-from app.clients.krtour_map_admin import get_krtour_map_admin_client
+from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
 from app.models.audit import AdminAuditLog
 from app.models.feature_suggestion import FeatureSuggestion
@@ -108,11 +108,11 @@ class _FakeAdminClient:
 
 
 def _override(fake: Any) -> None:
-    app.dependency_overrides[get_krtour_map_admin_client] = lambda: fake
+    app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: fake
 
 
 def _clear() -> None:
-    app.dependency_overrides.pop(get_krtour_map_admin_client, None)
+    app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)
 
 
 async def test_list_pending_masks_requester_email(
@@ -136,7 +136,7 @@ async def test_list_pending_masks_requester_email(
     assert "reporter@example.com" not in resp.text
 
 
-async def test_approve_new_place_calls_krtour_and_marks_added(
+async def test_approve_new_place_calls_kor_travel_map_and_marks_added(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     admin_id = await _create_user(
@@ -164,15 +164,15 @@ async def test_approve_new_place_calls_krtour_and_marks_added(
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert data["status"] == "added"  # applied → added
-    assert data["krtour_ref"]["feature_id"] == "f_new_1"
-    assert data["krtour_ref"]["request_id"] == "krq-1"
+    assert data["kor_travel_map_ref"]["feature_id"] == "f_new_1"
+    assert data["kor_travel_map_ref"]["request_id"] == "krq-1"
     assert fake.created is not None
     assert fake.created["kind"] == "place"
     assert fake.created["category"] == "01070100"
     assert fake.created["coord"] == {"lon": 129.0, "lat": 35.0}
     assert fake.created["idempotency_key"] == str(req_id)
     # §7 #3 확정: operator 고정(admin id 미노출) + reason에 [suggestion:<id>] 출처 prefix
-    assert fake.created["operator"] == "tripmate-admin"
+    assert fake.created["operator"] == "pinvi-admin"
     assert fake.created["reason"].startswith(f"[suggestion:{req_id}]")
 
     async with session_factory() as db:

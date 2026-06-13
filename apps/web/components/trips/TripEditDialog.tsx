@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { TripResponse, TripStatus, TripUpdate, TripVisibility } from '@tripmate/schemas';
+import type { TripResponse, TripStatus, TripUpdate, TripVisibility } from '@pinvi/schemas';
 import {
   STATUS_LABEL,
   VISIBILITY_LABEL,

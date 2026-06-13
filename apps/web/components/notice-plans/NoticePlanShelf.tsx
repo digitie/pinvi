@@ -8,8 +8,8 @@ import {
   Newspaper,
   RefreshCw,
 } from 'lucide-react';
-import { ApiError, noticePlanApi } from '@tripmate/api-client';
-import type { NoticePlan } from '@tripmate/schemas';
+import { ApiError, noticePlanApi } from '@pinvi/api-client';
+import type { NoticePlan } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
 

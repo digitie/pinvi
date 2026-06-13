@@ -96,7 +96,7 @@ UI는 섹션별 collapsible.
 ```http
 POST /users/me/provider-keys
 Content-Type: application/json
-Cookie: tripmate_access=...
+Cookie: pinvi_access=...
 
 {
   "provider": "gemini",
@@ -168,7 +168,7 @@ response = model.generate_content([
 YouTube/Gemini 결과의 장소 이름/주소/좌표는 **즉시 confirmed feature로 적재하지
 않음**:
 
-- TripMate `app.youtube_place_candidates` (또는 `app.gemini_place_candidates`)에
+- Pinvi `app.youtube_place_candidates` (또는 `app.gemini_place_candidates`)에
   `status='pending'`으로 저장
 - Admin이 검수 후 라이브러리에 `feature_request`로 promote
 
@@ -177,7 +177,7 @@ YouTube/Gemini 결과의 장소 이름/주소/좌표는 **즉시 confirmed featu
 ## 7. Rate limit / Quota
 
 - 사용자 키: Gemini 자체 quota (Free tier 분당 15 요청 등 — 변경 가능)
-- TripMate 자체 한도: 사용자 당 일 50회 (Sprint 결정)
+- Pinvi 자체 한도: 사용자 당 일 50회 (Sprint 결정)
 - 시스템 키: 신중하게 — auto-monitor batch는 batch당 N건 cap
 
 ## 8. UI

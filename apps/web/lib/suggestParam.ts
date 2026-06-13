@@ -3,7 +3,7 @@
  * 특정 좌표로 미리 연다. 한국 범위 밖/형식 오류는 무시(null).
  */
 
-import { CoordSchema } from '@tripmate/schemas';
+import { CoordSchema } from '@pinvi/schemas';
 
 export function parseSuggestParam(
   raw: string | string[] | undefined | null

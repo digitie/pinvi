@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { BadgeCheck, Loader2, Send, Star, Trash2 } from 'lucide-react';
-import { ApiError, telegramApi } from '@tripmate/api-client';
-import type { TelegramTarget } from '@tripmate/schemas';
+import { ApiError, telegramApi } from '@pinvi/api-client';
+import type { TelegramTarget } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
@@ -167,7 +167,7 @@ export default function TelegramTargetsSettingsPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-bold text-ink">Telegram 알림</h1>
         <p className="text-sm text-muted">
-          여행 생성·동반자 초대 알림을 받을 Telegram chat을 연결합니다. TripMate 봇을 chat에
+          여행 생성·동반자 초대 알림을 받을 Telegram chat을 연결합니다. Pinvi 봇을 chat에
           추가한 뒤 chat ID를 등록하세요.
         </p>
         <p className="text-xs text-muted">

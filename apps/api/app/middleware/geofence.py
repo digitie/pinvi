@@ -40,7 +40,7 @@ def _roles_set(values: Iterable[str] | None) -> set[str]:
 
 
 async def _current_user_roles(request: Request) -> set[str]:
-    token = request.cookies.get("tripmate_access")
+    token = request.cookies.get("pinvi_access")
     if not token:
         return set()
     try:
@@ -74,12 +74,12 @@ async def _current_user_roles(request: Request) -> set[str]:
 def _is_bypass_path(path: str) -> bool:
     return any(
         path == bypass or path.startswith(f"{bypass}/")
-        for bypass in settings.tripmate_geofence_bypass_paths
+        for bypass in settings.pinvi_geofence_bypass_paths
     )
 
 
 def _detected_country(request: Request) -> str | None:
-    header = settings.tripmate_geofence_country_header
+    header = settings.pinvi_geofence_country_header
     country = request.headers.get(header)
     if country and _is_trusted_country_proxy(request):
         return country.strip().upper()
@@ -88,14 +88,14 @@ def _detected_country(request: Request) -> str | None:
 
 def _trusted_proxy_networks() -> list[IpNetwork]:
     networks: list[IpNetwork] = []
-    for raw in settings.tripmate_geofence_trusted_proxy_cidrs:
+    for raw in settings.pinvi_geofence_trusted_proxy_cidrs:
         value = raw.strip()
         if value:
             try:
                 networks.append(ipaddress.ip_network(value, strict=False))
             except ValueError as exc:
                 raise GeofenceConfigError(
-                    "TRIPMATE_GEOFENCE_TRUSTED_PROXY_CIDRS contains an invalid CIDR."
+                    "PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS contains an invalid CIDR."
                 ) from exc
     return networks
 
@@ -121,7 +121,7 @@ def _source_ip_is_trusted(request: Request, networks: list[IpNetwork]) -> bool:
 def _shared_secret_is_trusted(request: Request, expected: str) -> bool:
     if not expected:
         return True
-    header = settings.tripmate_geofence_trusted_proxy_header
+    header = settings.pinvi_geofence_trusted_proxy_header
     provided = request.headers.get(header, "")
     return hmac.compare_digest(provided, expected)
 
@@ -137,11 +137,11 @@ def _mtls_header_is_trusted(request: Request, header: str, expected: str) -> boo
 
 def _configured_trust_factor_names() -> set[str]:
     names: set[str] = set()
-    if settings.tripmate_geofence_trusted_proxy_secret.strip():
+    if settings.pinvi_geofence_trusted_proxy_secret.strip():
         names.add("shared_secret")
     if _trusted_proxy_networks():
         names.add("proxy_cidr")
-    if settings.tripmate_geofence_mtls_verified_header.strip():
+    if settings.pinvi_geofence_mtls_verified_header.strip():
         names.add("mtls")
     return names
 
@@ -151,40 +151,36 @@ def validate_geofence_configuration() -> list[str]:
 
     반환값은 startup log에 남길 경고다. secret/header 원문은 절대 포함하지 않는다.
     """
-    if not settings.tripmate_geofence_enabled:
+    if not settings.pinvi_geofence_enabled:
         return []
 
     warnings: list[str] = []
     factors = _configured_trust_factor_names()
-    if settings.tripmate_geofence_block_unknown and not factors:
+    if settings.pinvi_geofence_block_unknown and not factors:
         raise GeofenceConfigError(
-            "TRIPMATE_GEOFENCE_BLOCK_UNKNOWN=true requires at least one trusted "
-            "country-header source: TRIPMATE_GEOFENCE_TRUSTED_PROXY_SECRET, "
-            "TRIPMATE_GEOFENCE_TRUSTED_PROXY_CIDRS, or "
-            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_HEADER."
+            "PINVI_GEOFENCE_BLOCK_UNKNOWN=true requires at least one trusted "
+            "country-header source: PINVI_GEOFENCE_TRUSTED_PROXY_SECRET, "
+            "PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS, or "
+            "PINVI_GEOFENCE_MTLS_VERIFIED_HEADER."
         )
 
-    mtls_header = settings.tripmate_geofence_mtls_verified_header.strip()
-    if mtls_header and not settings.tripmate_geofence_mtls_verified_value.strip():
+    mtls_header = settings.pinvi_geofence_mtls_verified_header.strip()
+    if mtls_header and not settings.pinvi_geofence_mtls_verified_value.strip():
         raise GeofenceConfigError(
-            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_VALUE must be non-empty when "
-            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_HEADER is set."
+            "PINVI_GEOFENCE_MTLS_VERIFIED_VALUE must be non-empty when "
+            "PINVI_GEOFENCE_MTLS_VERIFIED_HEADER is set."
         )
 
     # mTLS-verified-header 값(예: "SUCCESS")은 비밀이 아니라 추측 가능하므로, 출처를 검증
     # 못 하면 origin 직접 타격으로 스푸핑된다. strict 모드에선 네트워크 CIDR 앵커를 강제한다.
-    if (
-        settings.tripmate_geofence_block_unknown
-        and "mtls" in factors
-        and "proxy_cidr" not in factors
-    ):
+    if settings.pinvi_geofence_block_unknown and "mtls" in factors and "proxy_cidr" not in factors:
         raise GeofenceConfigError(
-            "TRIPMATE_GEOFENCE_MTLS_VERIFIED_HEADER trust requires a network CIDR anchor "
-            "(TRIPMATE_GEOFENCE_TRUSTED_PROXY_CIDRS); a verified-header value alone is "
+            "PINVI_GEOFENCE_MTLS_VERIFIED_HEADER trust requires a network CIDR anchor "
+            "(PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS); a verified-header value alone is "
             "spoofable when the origin is reachable directly."
         )
 
-    if settings.tripmate_geofence_block_unknown and len(factors) == 1:
+    if settings.pinvi_geofence_block_unknown and len(factors) == 1:
         warnings.append(
             "geofence strict mode has only one trusted country-header factor; "
             "configure proxy CIDR allowlist or mTLS verification for defense in depth."
@@ -193,10 +189,10 @@ def validate_geofence_configuration() -> list[str]:
 
 
 def _is_trusted_country_proxy(request: Request) -> bool:
-    expected = settings.tripmate_geofence_trusted_proxy_secret.strip()
+    expected = settings.pinvi_geofence_trusted_proxy_secret.strip()
     networks = _trusted_proxy_networks()
-    mtls_header = settings.tripmate_geofence_mtls_verified_header.strip()
-    mtls_value = settings.tripmate_geofence_mtls_verified_value.strip()
+    mtls_header = settings.pinvi_geofence_mtls_verified_header.strip()
+    mtls_value = settings.pinvi_geofence_mtls_verified_value.strip()
     if not (expected or networks or mtls_header):
         return False
 
@@ -214,14 +210,14 @@ def _blocked_response(country: str | None) -> JSONResponse:
         content={
             "error": {
                 "code": "GEO_BLOCKED",
-                "message": "TripMate는 대한민국 거주자 전용 서비스입니다.",
+                "message": "Pinvi는 대한민국 거주자 전용 서비스입니다.",
                 "details": {
                     "detected_country": detected,
-                    "contact": "support@tripmate.kr",
+                    "contact": "support@pinvi.kr",
                 },
             }
         },
-        headers={"X-TripMate-Geofence": "blocked"},
+        headers={"X-Pinvi-Geofence": "blocked"},
     )
 
 
@@ -233,16 +229,16 @@ class GeofenceMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if not settings.tripmate_geofence_enabled:
+        if not settings.pinvi_geofence_enabled:
             return await call_next(request)
 
         if _is_bypass_path(request.url.path):
             return await call_next(request)
 
-        allowed_countries = _normalized_set(settings.tripmate_geofence_allowed_countries)
+        allowed_countries = _normalized_set(settings.pinvi_geofence_allowed_countries)
         country = _detected_country(request)
 
-        if country is None and not settings.tripmate_geofence_block_unknown:
+        if country is None and not settings.pinvi_geofence_block_unknown:
             return await call_next(request)
 
         if country in allowed_countries:

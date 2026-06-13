@@ -1,7 +1,7 @@
 """`app.trip` ↔ `feature.feature` join — Trip 응답 빌더.
 
 Trip 상세 응답에 POI별 feature 정보 (좌표 / 마커 / 카테고리) 를 채워주는 빌더.
-krtour `POST /v1/features/batch`(`KrtourMapClient.get_features`) batch 호출로 N+1 회피.
+kor_travel_map `POST /v1/features/batch`(`KorTravelMapClient.get_features`) batch 호출로 N+1 회피.
 
 SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 
@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.krtour_map import KrtourMapClient
+from app.clients.kor_travel_map import KorTravelMapClient
 from app.core.config import settings
 from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
@@ -36,7 +36,7 @@ async def build_trip_view(
     db: AsyncSession,
     *,
     trip: Trip,
-    krtour_client: KrtourMapClient | None,
+    kor_travel_map_client: KorTravelMapClient | None,
     include_management: bool = True,
 ) -> dict[str, Any]:
     """Trip + 모든 Day + 모든 POI + (feature snapshot 또는 라이브러리 fresh fetch).
@@ -44,17 +44,17 @@ async def build_trip_view(
     동작:
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
-    3. `krtour_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
-    4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (krtour에서 사라진
+    3. `kor_travel_map_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
+    4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (kor_travel_map에서 사라진
        feature 는 `is_broken=True` 표시)
 
-    krtour client가 미주입 (`krtour_client=None`) 인 경우 — POI의 stored `feature_snapshot`
+    kor_travel_map client가 미주입 (`kor_travel_map_client=None`) 인 경우 — POI의 stored `feature_snapshot`
     만 사용 (fresh fetch 없음). 사용자에게 stale 경고 표시.
 
     Args:
         db: AsyncSession.
         trip: Trip 인스턴스 (eager loaded 권장).
-        krtour_client: 라이브러리 client. None 가능 (placeholder).
+        kor_travel_map_client: 라이브러리 client. None 가능 (placeholder).
 
     Returns:
         dict: {
@@ -125,11 +125,11 @@ async def build_trip_view(
             seen.add(fid_str)
             feature_ids.append(fid_str)
 
-    # krtour batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
-    # krtour `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
+    # kor_travel_map batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
+    # kor_travel_map `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
     fresh_features: dict[str, dict[str, Any]] = {}
-    if krtour_client is not None and feature_ids:
-        use_cache = settings.tripmate_feature_cache_enabled
+    if kor_travel_map_client is not None and feature_ids:
+        use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
             cached, missing = feature_cache.get_many(feature_ids)
             fresh_features.update(cached)
@@ -137,7 +137,7 @@ async def build_trip_view(
             missing = feature_ids
         if missing:
             try:
-                batch = await krtour_client.get_features(missing)
+                batch = await kor_travel_map_client.get_features(missing)
                 found_map: dict[str, Any] = batch.get("found") or {}
                 fetched: dict[str, dict[str, Any]] = {}
                 for fid, feature in found_map.items():
@@ -158,7 +158,7 @@ async def build_trip_view(
     for poi in pois:
         feature_id = _canonical_feature_id(poi.feature_id)
         fresh = fresh_features.get(feature_id) if feature_id is not None else None
-        is_broken = feature_id is not None and krtour_client is not None and fresh is None
+        is_broken = feature_id is not None and kor_travel_map_client is not None and fresh is None
         if is_broken:
             broken_count += 1
 
@@ -231,7 +231,7 @@ def _trip_to_dict(trip: Trip) -> dict[str, Any]:
 
 
 def _canonical_feature_id(feature_id: str | None) -> str | None:
-    """저장 snapshot suffix를 제외하고 krtour feature_id 문자열을 보존한다."""
+    """저장 snapshot suffix를 제외하고 kor_travel_map feature_id 문자열을 보존한다."""
     if feature_id is None:
         return None
     return feature_id.split("@", 1)[0]

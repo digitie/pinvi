@@ -1,6 +1,6 @@
 # Resend 이메일 통합
 
-TripMate transactional 이메일은 Resend 사용. 회원가입 verify / 비밀번호 재설정 /
+Pinvi transactional 이메일은 Resend 사용. 회원가입 verify / 비밀번호 재설정 /
 trip 초대 / 공유 링크 알림 / 기타 시스템 알림. SPEC V8 G-6 / `docs/spec/v8/02-backend.md` §4.3.
 
 ## 1. Resend 계정 / 도메인 인증
@@ -22,22 +22,22 @@ Resend 대시보드에서 발송 도메인 등록 → DNS 3 레코드 추가:
 
 Resend "verified" 상태 확인 후 발송 시작.
 
-`From` 주소: `TripMate <noreply@send.trip.example.com>` — **발송 전용 서브도메인**
+`From` 주소: `Pinvi <noreply@send.trip.example.com>` — **발송 전용 서브도메인**
 권장 (메인 도메인 평판 보호).
 
 ## 2. 환경변수
 
 | 환경변수 | 예시 |
 |----------|------|
-| `TRIPMATE_RESEND_API_KEY` | `re_...` |
-| `TRIPMATE_RESEND_FROM_EMAIL` | `TripMate <noreply@send.trip.example.com>` |
-| `TRIPMATE_RESEND_TIMEOUT_SECONDS` | `5` |
-| `TRIPMATE_RESEND_WEBHOOK_SECRET` | (Svix secret) |
-| `TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED` | `false` 기본. 로컬 개발에서만 `true` |
-| `TRIPMATE_WEB_BASE_URL` | dev `http://localhost:12505`, production `https://tripmate.digitie.mywire.org` |
-| `TRIPMATE_EMAIL_VERIFICATION_PATH` | `/verify-email` |
+| `PINVI_RESEND_API_KEY` | `re_...` |
+| `PINVI_RESEND_FROM_EMAIL` | `Pinvi <noreply@send.trip.example.com>` |
+| `PINVI_RESEND_TIMEOUT_SECONDS` | `5` |
+| `PINVI_RESEND_WEBHOOK_SECRET` | (Svix secret) |
+| `PINVI_RESEND_WEBHOOK_ALLOW_UNSIGNED` | `false` 기본. 로컬 개발에서만 `true` |
+| `PINVI_WEB_BASE_URL` | dev `http://localhost:12505`, production `https://pinvi.digitie.mywire.org` |
+| `PINVI_EMAIL_VERIFICATION_PATH` | `/verify-email` |
 
-미설정 시 (`TRIPMATE_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에
+미설정 시 (`PINVI_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에
 적재되지만 발송 X, stdout에 렌더링 결과 출력. 가입은 성공하지만
 `verification_email_dispatched=false`.
 
@@ -72,7 +72,7 @@ Worker:
 import resend
 from app.core.config import settings
 
-resend.api_key = settings.tripmate_resend_api_key
+resend.api_key = settings.pinvi_resend_api_key
 
 async def enqueue_verification_email(user_id: UUID, email: str, token: str):
     await db.execute(
@@ -83,7 +83,7 @@ async def enqueue_verification_email(user_id: UUID, email: str, token: str):
             "id": uuid4(),
             "email": email,
             "payload": json.dumps({
-                "verify_url": f"{settings.tripmate_web_base_url}/verify-email?token={token}",
+                "verify_url": f"{settings.pinvi_web_base_url}/verify-email?token={token}",
                 "expires_in_hours": 24,
                 "user_id": str(user_id),
             }),
@@ -103,7 +103,7 @@ async def process_queue():
             try:
                 html = render_react_email(row.template, row.payload)
                 response = resend.Emails.send({
-                    "from": settings.tripmate_resend_from_email,
+                    "from": settings.pinvi_resend_from_email,
                     "to": [row.to_email],
                     "subject": _subject(row.template),
                     "html": html,
@@ -138,7 +138,7 @@ export default function VerifyEmail({ verify_url, expires_in_hours }: Props) {
       <Head />
       <Body style={{ fontFamily: 'sans-serif' }}>
         <Container>
-          <Heading>TripMate 이메일 인증</Heading>
+          <Heading>Pinvi 이메일 인증</Heading>
           <Text>아래 버튼을 클릭하여 이메일 주소를 인증하세요.</Text>
           <Button href={verify_url} style={{ background: '#FF385C', color: '#fff',
                                               padding: '12px 24px', borderRadius: '6px' }}>
@@ -173,11 +173,11 @@ npm --workspace emails run build
 
 ## 6. Webhook (`POST /webhooks/resend`)
 
-`TRIPMATE_RESEND_WEBHOOK_SECRET`이 설정된 환경에서는 Resend/Svix 서명 검증을 통과한
+`PINVI_RESEND_WEBHOOK_SECRET`이 설정된 환경에서는 Resend/Svix 서명 검증을 통과한
 요청만 처리한다. secret이 비어 있을 때 서명 없는 webhook은
-`TRIPMATE_RESEND_WEBHOOK_ALLOW_UNSIGNED=true`이고 환경이 `development` / `dev` /
+`PINVI_RESEND_WEBHOOK_ALLOW_UNSIGNED=true`이고 환경이 `development` / `dev` /
 `local` / `test` / `testing`인 경우에만 허용한다. 기본값은 `false`이므로
-`TRIPMATE_ENVIRONMENT` 누락으로 기본 `development`가 적용되어도 webhook은 열리지 않는다.
+`PINVI_ENVIRONMENT` 누락으로 기본 `development`가 적용되어도 webhook은 열리지 않는다.
 그 외 환경에서 secret이 비어 있거나 잘못된 형식이면
 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다.
 
@@ -220,7 +220,7 @@ npm --workspace emails run build
 
 | 환경 | 동작 |
 |------|------|
-| dev (`TRIPMATE_RESEND_API_KEY` 빈값) | 콘솔 출력 모드. queue 적재만 |
+| dev (`PINVI_RESEND_API_KEY` 빈값) | 콘솔 출력 모드. queue 적재만 |
 | dev (실제 키) | 실제 발송 — 본인 이메일로만 테스트 |
 | staging | Resend "테스트 모드" API 키 — 실제 발송 X, API 흐름만 |
 | 운영 | 실제 발송 |

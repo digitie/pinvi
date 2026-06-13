@@ -12,7 +12,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from tripmate.etl.resources import KasiResource, TripmateDatabaseResource
+from pinvi.etl.resources import KasiResource, PinviDatabaseResource
 
 SPECIAL_DAY_DATASETS: dict[str, str] = {
     "holidays": "holidays",
@@ -113,13 +113,13 @@ async def upsert_special_day_records(
 
 
 @asset(
-    group_name="tripmate_kasi",
+    group_name="pinvi_kasi",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
     description="KASI 특일 정보를 과거 6개월~미래 18개월 범위로 upsert",
 )
-async def tripmate_kasi_special_days(
+async def pinvi_kasi_special_days(  # type: ignore[no-untyped-def]
     context,
-    db: TripmateDatabaseResource,
+    db: PinviDatabaseResource,
     kasi: KasiResource,
 ) -> dict[str, int]:
     today = datetime.now(UTC).date()

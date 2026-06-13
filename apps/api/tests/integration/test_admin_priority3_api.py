@@ -26,7 +26,7 @@ async def _create_admin_user(
 ) -> uuid.UUID:
     async with session_factory() as db:
         user = User(
-            email=f"{email_prefix}_{uuid.uuid4().hex[:8]}@tripmate.test",
+            email=f"{email_prefix}_{uuid.uuid4().hex[:8]}@pinvi.test",
             password_hash="x",
             nickname="관리자",
             status="active",
@@ -159,7 +159,7 @@ async def test_admin_stats_overview_counts_app_owned_tables(
     async with session_factory() as db:
         db.add(
             User(
-                email=f"pending_{uuid.uuid4().hex[:8]}@tripmate.test",
+                email=f"pending_{uuid.uuid4().hex[:8]}@pinvi.test",
                 password_hash="x",
                 nickname="가입대기",
                 status="pending_verification",

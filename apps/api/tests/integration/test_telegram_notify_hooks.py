@@ -45,7 +45,7 @@ def fake_telegram(monkeypatch: pytest.MonkeyPatch) -> _RecordingTelegram:
     from app.services import telegram_notify
 
     fake = _RecordingTelegram()
-    monkeypatch.setattr(settings, "tripmate_telegram_bot_token_default", "111:system_token")
+    monkeypatch.setattr(settings, "pinvi_telegram_bot_token_default", "111:system_token")
     monkeypatch.setattr(telegram_notify, "_make_client", lambda: fake)
     return fake
 
@@ -183,7 +183,7 @@ async def test_send_failure_schedules_retry_with_backoff(
     await _seed_target(session_factory, user_id=user_id, chat_id="-100888")
 
     failing = _RecordingTelegram(error=TelegramError("429", code="rate_limited", status_code=429))
-    monkeypatch.setattr(settings, "tripmate_telegram_bot_token_default", "111:system_token")
+    monkeypatch.setattr(settings, "pinvi_telegram_bot_token_default", "111:system_token")
     monkeypatch.setattr(telegram_notify, "_make_client", lambda: failing)
 
     created = await client.post(
@@ -219,7 +219,7 @@ async def test_retry_exhaustion_marks_failed(
     await _seed_target(session_factory, user_id=user_id, chat_id="-100999")
 
     failing = _RecordingTelegram(error=TelegramError("500", code="network_error", status_code=500))
-    monkeypatch.setattr(settings, "tripmate_telegram_bot_token_default", "111:system_token")
+    monkeypatch.setattr(settings, "pinvi_telegram_bot_token_default", "111:system_token")
     monkeypatch.setattr(telegram_notify, "_make_client", lambda: failing)
 
     # 소진 직전 상태의 row를 직접 적재.
