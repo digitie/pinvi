@@ -1,0 +1,17 @@
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native 프로젝트 산출물 (expo prebuild)
+ios/
+android/
+
+# Metro / 빌드
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

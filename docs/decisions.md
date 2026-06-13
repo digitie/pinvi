@@ -1439,7 +1439,66 @@
 - **참조**: ADR-022, ADR-023, `docs/runbooks/deploy.md`,
   `docs/runbooks/backup-restore.md`.
 
+## ADR-040: Docker 빌드/실행은 kor-travel-docker-manager를 1차 경로로 쓰고 docker-app.sh로 폴백한다
+
+- **상태**: accepted
+- **날짜**: 2026-06-13
+- **결정자**: 사용자
+- **컨텍스트**: Pinvi가 의존하는 Docker 인프라(통합 PostgreSQL/PostGIS, RustFS,
+  Grafana, cAdvisor, Prometheus, `kor-travel-geo` API/Web)는 `kor-travel-map`,
+  `kor-travel-concierge`, `kor-travel-geo`와 공용이다. 이 공용 인프라는 별도 저장소
+  `kor-travel-docker-manager`가 `ktdctl` CLI / API / 대시보드와
+  `config/docker-targets.yml` target registry로 일괄 관리한다(`docker compose up -d`
+  + idempotent 초기화). 그동안 Pinvi 문서는 `scripts/docker-app.sh`만 Docker 진입으로
+  안내해 공용 인프라와 앱 컨테이너 경로가 분리되지 않았다.
+- **결정**:
+  - **Docker 빌드/실행의 1차 경로는 `kor-travel-docker-manager`**다. 공용 의존 인프라는
+    `ktdctl <target>`로 올린다. Pinvi 개발 의존성 전체는 `ktdctl main --build`
+    (db→storage→gra→cadv→prom→geo→map→ai→main 누적)로 기동한다.
+  - **Pinvi 자체 app 컨테이너(api/web 이미지 빌드·smoke)**는 현재
+    `kor-travel-docker-manager` compose에 포함되지 않으므로(docker-manager
+    `docs/docker-management.md` §3), `infra/docker-compose.app.yml` +
+    `scripts/docker-app.sh build/up/smoke`가 정본이다. docker-manager가 app target을
+    compose에 추가하면 그 경로로 이관한다.
+  - **폴백**: `kor-travel-docker-manager` 미설치/미기동, `ktdctl` 부재, WSL/네트워크
+    문제 등으로 1차 경로를 쓸 수 없으면 `scripts/docker-app.sh`(공용 인프라 일부는
+    `infra/docker-compose.yml`)로 진행한다. 폴백 시 포트 정책(ADR-037)을 유지한다.
+- **결과**: 공용 인프라는 한 곳(`ktdctl`)에서 일관되게 올라가고, 앱 이미지 빌드/smoke는
+  Pinvi 저장소 스크립트가 책임진다. docker-manager가 없는 환경에서도 폴백으로 막히지
+  않는다.
+- **참조**: `docs/runbooks/docker-app.md` §0, `CLAUDE.md`, `AGENTS.md`,
+  `kor-travel-docker-manager/docs/docker-management.md`, `scripts/docker-app.sh`,
+  `infra/docker-compose.app.yml`.
+
+## ADR-041: Expo `apps/mobile` 구조 스캐폴드를 추가하고 활성화는 Sprint M-1로 분리한다
+
+- **상태**: accepted
+- **날짜**: 2026-06-13
+- **결정자**: 사용자 + Claude
+- **컨텍스트**: ADR-011이 Next.js 웹 + Expo 모바일 공용 패키지 구조를 박았고,
+  `packages/*`(schemas/api-client/state/design-tokens/hooks/i18n)는 처음부터 플랫폼
+  무관 + 어댑터 주입형으로 작성됐다(frontend.md §2, §6). 남은 것은 `apps/mobile` Expo
+  앱을 실제로 박는 일이다. 다만 CI(`.github/workflows/web.yml`)가 `npm ci`로 설치하므로,
+  `apps/mobile`을 root `workspaces`에 넣으면 Expo/RN 의존성을 `package-lock.json`에
+  커밋해야 하고(안 하면 `npm ci` 실패), 커밋하면 매 web CI가 무거운 Expo 트리를 설치하게
+  된다.
+- **결정**:
+  - `apps/mobile`에 **Expo SDK 53 구조 스캐폴드**를 추가한다: `app/`(Expo Router 진입 +
+    `(auth)` group), `lib/`(api/location/storage/stores 플랫폼 어댑터),
+    app.json/babel/metro/tailwind(NativeWind)/tsconfig, 공용 패키지 import 검증. 공용
+    로직·데이터는 `@pinvi/*`에서 그대로 가져오고 `apps/mobile`은 어댑터 + RN 화면만
+    갖는다(frontend.md §2.1).
+  - **CI-safe를 위해 스캐폴드는 install 그래프 밖에 둔다**: root `workspaces`에 등록하지
+    않고 의존성도 설치하지 않는다(`package-lock.json` 미변경). 따라서 스캐폴드 추가 PR은
+    web/api/etl CI를 트리거하지 않고 머지된다.
+  - **활성화(workspaces 등록 + `npm install` + `expo install` 버전 정합 + 화면 구현 +
+    EAS)는 별도 Sprint M-1**에서 수행한다. 절차는 `apps/mobile/README.md`.
+- **결과**: ADR-011의 모바일 구조가 코드로 박혔고, 활성화 비용(설치/화면)만 남았다. 공용
+  패키지가 RN에서 import되는 wiring을 코드로 증명한다. 본 스캐폴드의 CI footprint는 0이다.
+- **참조**: `apps/mobile/README.md`, `docs/architecture/frontend.md` (§2, §6, §8, §10),
+  ADR-011, `.github/workflows/web.yml`, `.github/workflows/aggregate-ci.yml`.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-040**
+- 다음 신규 ADR = **ADR-042**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

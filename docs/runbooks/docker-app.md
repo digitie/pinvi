@@ -4,6 +4,57 @@ App 컨테이너 (`docker-compose.app.yml`) smoke test — API + Web + PostgreSQ
 RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-test.sh`
 이전.
 
+## 0. Docker 빌드/실행 진입 경로 (ADR-040)
+
+Pinvi의 Docker 빌드/실행은 **1차로 `kor-travel-docker-manager`**(별도 저장소
+`F:/dev/kor-travel-docker-manager`)**를 통한다.** docker-manager가 Pinvi ·
+`kor-travel-map` · `kor-travel-concierge` · `kor-travel-geo` 공용 Docker 인프라를
+target 단위로 일괄 기동·복구한다. 1차 경로를 쓸 수 없을 때만 본 문서의
+`scripts/docker-app.sh`로 **폴백**한다.
+
+### 0.1 두 책임 경계
+
+| 대상 | 경로 | 명령 |
+|------|------|------|
+| **공용 의존 인프라** (통합 PostgreSQL/PostGIS, RustFS, Grafana, cAdvisor, Prometheus, `kor-travel-geo` API/Web) | **1차: `kor-travel-docker-manager`** | `ktdctl <target>` — 예: `ktdctl main --build` (Pinvi dev 의존성 누적 기동) |
+| **Pinvi 자체 app 컨테이너** (api/web 이미지 빌드·smoke) | `infra/docker-compose.app.yml` + `scripts/docker-app.sh` | `scripts/docker-app.sh build` / `up` / `smoke` |
+
+docker-manager target 누적 의존 순서는 `db → storage → gra → cadv → prom → geo →
+map → ai → main`이며, `ktdctl main --build`가 Pinvi 개발에 필요한 공용 인프라 전체를
+올린다(docker-manager `docs/docker-management.md` §3). 현재 docker-manager compose는
+Pinvi의 api/web **앱 이미지**를 포함하지 않으므로, 앱 이미지 빌드/smoke 자체는 아래 §3
+`scripts/docker-app.sh`가 정본이다. docker-manager가 app target을 compose에 추가하면
+그쪽으로 이관한다.
+
+### 0.2 1차 경로 (kor-travel-docker-manager)
+
+```bash
+# 공용 의존 인프라 기동 (docker 명령은 WSL ext4 미러에서 실행 — ADR-024)
+cd /mnt/f/dev/kor-travel-docker-manager
+ktdctl targets            # target 목록·의존 순서
+ktdctl main --build       # Pinvi dev 의존성 전체 (db..main 누적)
+ktdctl status main        # 상태
+ktdctl logs storage --follow
+```
+
+셋업·CLI·target registry 상세는 `kor-travel-docker-manager`의 `CLAUDE.md` /
+`docs/docker-management.md`가 권위다(Pinvi가 소유하지 않는 저장소 — 실행/검증 권위는
+그쪽 런북).
+
+### 0.3 폴백 조건 → `scripts/docker-app.sh`
+
+다음이면 1차 경로 대신 본 문서 §3의 `scripts/docker-app.sh`로 진행한다.
+
+- `kor-travel-docker-manager`가 미설치/미기동이거나 `ktdctl`을 찾을 수 없을 때
+- docker-manager 백엔드/CLI 오류, WSL/네트워크 문제로 target 기동이 막힐 때
+- 공용 인프라 없이 Pinvi app 컨테이너만 빠르게 smoke 해야 할 때
+  (`scripts/docker-app.sh`가 자체 Postgres+RustFS를 `docker-compose.app.yml`로 함께 올린다)
+
+폴백 시에도 포트 정책(ADR-037: `5432`/`12101`/`12105`/`12301`/`12501`/`12505`)은
+동일하게 유지한다.
+
+---
+
 ## 1. 두 스택 구성
 
 | 파일 | 용도 |

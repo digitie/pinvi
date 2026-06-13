@@ -1,0 +1,46 @@
+{
+  "name": "@pinvi/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinvi 모바일 앱 (Expo / React Native). Next.js 웹과 @pinvi/* 공용 패키지를 공유한다 (ADR-011 / ADR-041). 현재는 구조 스캐폴드(비활성) — root npm workspaces 미등록 + 미설치로 CI-safe. 활성화 절차는 README.md.",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinvi/api-client": "*",
+    "@pinvi/design-tokens": "*",
+    "@pinvi/hooks": "*",
+    "@pinvi/i18n": "*",
+    "@pinvi/schemas": "*",
+    "@pinvi/state": "*",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@tanstack/react-query": "^5.59.0",
+    "expo": "~53.0.0",
+    "expo-constants": "~17.1.0",
+    "expo-linking": "~7.1.0",
+    "expo-location": "~18.1.0",
+    "expo-router": "~5.0.0",
+    "expo-secure-store": "~14.2.0",
+    "expo-status-bar": "~2.2.0",
+    "nativewind": "^4.1.23",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-native": "0.79.2",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.10.0",
+    "react-native-web": "~0.20.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@types/react": "^19.0.0",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.0"
+  }
+}
