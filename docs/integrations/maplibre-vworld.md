@@ -37,8 +37,8 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 | 엔진 | Kakao Maps JavaScript SDK | MapLibre GL JS (WebGL GPU) |
 | 데이터 | Kakao 지도 타일 | VWorld WMTS (국토부) |
 | 캐싱 | 약관상 오프라인 캐싱 금지 | 표준 HTTP 캐싱 가능 (VWorld TOS 별도 확인) |
-| SDK 키 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
-| 도메인 제한 | Kakao 콘솔 origin 화이트리스트 | VWorld 개발자 센터 도메인 등록 |
+| SDK 키 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | Web: `NEXT_PUBLIC_VWORLD_API_KEY`, Mobile: server-issued token |
+| 도메인 제한 | Kakao 콘솔 origin 화이트리스트 | Web은 VWorld 개발자 센터 도메인 등록, Mobile은 Pinvi API 발급/프록시 정책 |
 | 선언형 API | 명령형 `map.panTo()` 등 혼용 | **순수 선언형 (props만)** |
 | 좌표 순서 | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — Pinvi 표준과 일치 |
 | 마커 | `MapMarker` (이미지 src) | React Portal 컴포넌트 직접 주입 |
@@ -67,16 +67,23 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
   - Docker smoke: `http://127.0.0.1:12805`
   - 운영: `https://pinvi.digitie.mywire.org`
 
-### 3.2 환경변수
+### 3.2 환경변수 / 앱 설정
 
-| 환경변수 | 위치 | 비고 |
-|----------|------|------|
+| 설정 | 위치 | 비고 |
+|------|------|------|
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `apps/web` (빌드 타임 embed) | 브라우저 노출 가능 (도메인 화이트리스트로 보호) |
-| `PINVI_VWORLD_API_KEY` | `apps/api` (선택) | 백엔드 reverse geocoding / boundary 조회는 라이브러리(`python-vworld-api`) 경유 → 본 키 미사용 |
+| `PINVI_VWORLD_API_KEY` | `apps/api` (선택) | 모바일 token/proxy 발급 또는 백엔드 VWorld 조회가 필요할 때만 서버에서 사용 |
 | `PINVI_VWORLD_PROXY_PATH` | `apps/web` | 사내망 / 보안 정책으로 직접 호출 막힐 때 reverse proxy 경로 (옵션) |
+| `EXPO_PUBLIC_PINVI_API_URL` | `apps/mobile` | 모바일 앱이 Pinvi API를 찾기 위한 public base URL |
+| `app.json` `extra.pinvi.vworld.tokenPath` | `apps/mobile` | VWorld key가 아니라 Pinvi API의 server-issued token endpoint |
 
 키 정규화: `<VWorldMap apiKey={...}>`은 입력의 공백/개행 자동 제거 + URL-encode.
 복사·붙여넣기 사고 회피.
+
+모바일(ADR-043)은 `EXPO_PUBLIC_VWORLD_API_KEY`를 사용하지 않는다. native 앱은 웹 origin
+화이트리스트 보호를 그대로 적용하기 어렵기 때문에, 앱 설정에는 서버 발급 endpoint만 두고
+Pinvi API가 단기 token 또는 proxy session을 발급한다. 모바일 지도 엔진을
+`maplibre-react-native`로 갈지 WebView 임베드로 갈지는 별도 ADR에서 확정한다.
 
 ### 3.3 키 redact
 

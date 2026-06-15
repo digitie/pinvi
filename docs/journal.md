@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-15 (codex) — 모바일 Expo Dev Client 기준선 반영
+
+**작업**: 사용자 지시에 따라 `apps/mobile` 기준을 Expo Dev Client + EAS Build로
+고정하고 Expo Go 미사용, React Native New Architecture, Android `minSdkVersion >= 23`,
+VWorld server-issued key 구조를 반영했다.
+
+- ADR-043을 추가해 모바일 런타임/빌드/키 발급 기준선을 accepted decision으로 박았다.
+- `apps/mobile/package.json` script를 `expo start --dev-client` 기준으로 바꾸고,
+  `expo-dev-client`, `expo-build-properties` 의존성과 EAS build script를 추가했다.
+- `apps/mobile/eas.json`을 추가하고 development profile에 `developmentClient: true`를 설정했다.
+- `app.json`에 `expo-dev-client`, `expo-build-properties`, Android `minSdkVersion: 23`,
+  VWorld server-issued endpoint 설정을 추가했다.
+- `apps/mobile/lib/config.ts`를 추가해 Expo `extra` / `EXPO_PUBLIC_PINVI_API_URL` 기반 앱 설정과
+  VWorld token endpoint 계산을 분리했다.
+- `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, README, frontend 아키텍처, VWorld 통합 문서,
+  data-policy, `apps/mobile/README.md`, `CHANGELOG.md`, `docs/resume.md`를 동기화했다.
+
+**검증**:
+
+- Windows: `apps/mobile/package.json`, `apps/mobile/app.json`, `apps/mobile/eas.json`
+  JSON parse 통과.
+- Windows: `apps/mobile/lib/config.ts`, `apps/mobile/lib/api.ts`, `apps/mobile/app/index.tsx`
+  TypeScript syntax transpile 통과.
+- Windows: `git diff --check` 통과.
+- Windows: 수정 파일 대상 검색에서 Expo Go용 기본 start script와 모바일 public VWorld
+  key 값 잔여 없음 확인.
+- `apps/mobile`은 root workspace 밖의 비활성 스캐폴드라 전체 `tsc -p apps/mobile`은
+  Expo/RN/@pinvi 의존성 미설치로 모듈 해석 단계에서 실패한다. `npm install`, Expo 실행,
+  EAS build는 Sprint M-1 활성화 전이라 수행하지 않았다.
+
+**다음**: Sprint M-1에서 `apps/mobile`을 root workspaces에 등록하고 WSL ext4 미러에서
+`npm install` + `expo install --check` + EAS development build를 실행한다.
+
 ## 2026-06-15 (codex) — Pinvi 웹 favicon/app icon 설정
 
 **작업**: 사용자가 제공한 `pinvi_favicon.svg` / `pinvi_app_icon.svg`를 기준으로

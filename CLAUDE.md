@@ -51,8 +51,9 @@
 지도·날씨·이벤트·가격·공지·경로·구역 데이터를 사용해 사용자 여행 계획 흐름을
 제공한다.
 
-**구성**: `apps/api` (FastAPI), `apps/web` (Next.js), `apps/etl` (Dagster) +
-`infra/`, `docs/`. 지도 feature 도메인은 본 저장소가 아니라 **별 저장소**
+**구성**: `apps/api` (FastAPI), `apps/web` (Next.js), `apps/mobile` (Expo Dev Client
+스캐폴드, 비활성), `apps/etl` (Dagster) + `infra/`, `docs/`. 지도 feature 도메인은 본
+저장소가 아니라 **별 저장소**
 `kor-travel-map`이 소유한다. Pinvi ↔ `kor-travel-map`은 최신
 `kor-travel-map` **OpenAPI HTTP 계약**으로 통신한다(ADR-026, API/Admin API
 `12701`).
@@ -65,7 +66,7 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-042**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-043**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -79,8 +80,10 @@ ADR-038 (운영 HTTP rate-limit는
 Postgres fixed-window bucket), ADR-039 (운영 노드 간 DB live sync 미사용), ADR-040
 (Docker 빌드/실행은 kor-travel-docker-manager 1차 + `scripts/docker-app.sh` 폴백),
 ADR-041 (Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1),
-ADR-042 (`kor-travel-docker-manager` target 대역 기반 로컬 포트 정책). 다음
-신규 = ADR-043. 2026-06-06 정합성 감사:
+ADR-042 (`kor-travel-docker-manager` target 대역 기반 로컬 포트 정책),
+ADR-043 (모바일은 Expo Dev Client + EAS Build, Expo Go 미사용, RN New Architecture,
+Android minSdk 23, VWorld server-issued key 구조). 다음 신규 = ADR-044.
+2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
 v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `infra/`,
@@ -112,6 +115,9 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 - 프론트엔드: Next.js 15 (App Router) + React 19 + TanStack Query v5 + Zustand +
   React Hook Form + Zod + shadcn/ui + Tailwind + **`maplibre-vworld-js`**
   (VWorld + MapLibre GL JS, ADR-015)
+- 모바일: Expo SDK 53 + Expo Router + **Expo Dev Client** + EAS Build + React Native
+  New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
+  23 이상이다(ADR-043).
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
   / Docker Compose / N150 16GB + Odroid M1S 병행 운영 (ADR-023)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)

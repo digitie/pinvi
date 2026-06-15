@@ -14,7 +14,9 @@
 
 - **GitHub 저장소**: `pinvi`
 - **백엔드 import (계획)**: `from pinvi.api import ...`, `from pinvi.etl import ...`
-- **프론트엔드 패키지 (계획)**: `apps/web` (Next.js App Router)
+- **프론트엔드 패키지**: `apps/web` (Next.js App Router)
+- **모바일 패키지 (비활성 스캐폴드)**: `apps/mobile` (Expo SDK 53 + Expo Dev Client +
+  EAS Build, Expo Go 미사용 — ADR-043)
 - **환경변수 prefix**: `PINVI_*`
 - **PostgreSQL DB 이름 (개발)**: `pinvi`
 - **Postgres schema (계획)**: `app`, `feature`, `provider_sync`, `ops`, `x_extension`
@@ -30,6 +32,7 @@ Pinvi는 **monorepo**다. 현재 저장소는 아래 구조를 이미 사용 중
 apps/
   api/      — FastAPI 백엔드 (인증, 여행 계획, 관리자, Storage, Dagster bridge)
   web/      — Next.js 사용자 UI + Admin
+  mobile/   — Expo Dev Client 모바일 스캐폴드 (비활성, Sprint M-1 활성화)
   etl/      — Dagster definitions/jobs/schedules (provider 적재 orchestration)
 packages/   — 공유 TS 패키지 (UI/마커/타입)
 infra/      — docker-compose, deployment manifests
@@ -46,7 +49,7 @@ docs/       — 본 저장소의 결정·기록·계약
 - **`kor-travel-geo`**: 주소·법정동·시군구 정규화/지오코딩.
 - 인프라: PostgreSQL 16 + PostGIS 3.5 / SQLAlchemy 2 async / asyncpg / Pydantic
   v2 / FastAPI + Uvicorn / httpx + tenacity / Alembic / Dagster / Next.js +
-  TanStack Query + zustand / RustFS (S3 호환 객체 저장소).
+  TanStack Query + zustand / Expo Dev Client + EAS Build / RustFS (S3 호환 객체 저장소).
 
 ## Pinvi ↔ `kor-travel-map`
 
@@ -160,7 +163,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 
 **아키텍처**
 - 큰 그림: [`docs/architecture.md`](docs/architecture.md)
-- Frontend (Next.js + Expo 공용 monorepo): [`docs/architecture/frontend.md`](docs/architecture/frontend.md)
+- Frontend (Next.js + Expo Dev Client 공용 monorepo): [`docs/architecture/frontend.md`](docs/architecture/frontend.md)
 - 사용자 위치 정보: [`docs/architecture/user-location.md`](docs/architecture/user-location.md)
 - Notice plan 도메인: [`docs/architecture/notice-plans.md`](docs/architecture/notice-plans.md)
 - 지도 마커 / 로그인 디자인: [`docs/architecture/map-marker-design.md`](docs/architecture/map-marker-design.md)
