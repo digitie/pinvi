@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — Expo 앱 추가구현 계획 문서화
+
+**작업**: `apps/mobile`(Expo Dev Client) 앱을 실제로 제작하기 위한 추가구현 항목을
+`docs/architecture/expo-implementation-plan.md`로 정리했다.
+
+- 공용 패키지 소비(이번 refactor로 `@pinvi/domain` 추가), 화면별 RN 구현 목록(웹 라우트 대응),
+  플랫폼 어댑터 현황, **지도 `maplibre-vworld-react` 선결 의존(이슈 #2~#10)**, 백엔드 추가 필요
+  (`/v1/mobile/vworld/token` 등), EAS/Dev Client 빌드, 권장 구현 순서를 담았다.
+- ADR-043 VWorld 키 server-issued 정책의 서버 측 짝(`lib/config.ts`가 전제하는
+  `/v1/mobile/vworld/token`)이 미구현임을 명시했다.
+- `frontend.md` §6/§11 + `apps/mobile/README.md`에서 새 문서를 참조하도록 연결.
+
+**검증**: 문서 전용 변경(코드 무변경). CI path-filter 미트리거.
+
 ## 2026-06-16 (claude) — Expo/web 공용 코드 정리: packages/domain 신설
 
 **작업**: Expo·web 동시 대응을 위해 `apps/web/lib`의 플랫폼-무관 순수 로직을 공용 패키지로
