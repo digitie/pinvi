@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-15 Codex 작업 메모 — Pinvi 웹 favicon/app icon 설정
+
+사용자가 제공한 Pinvi favicon/app icon SVG를 기준으로 웹 정적 아이콘 자산과 Next.js
+metadata를 설정했다.
+
+- `apps/web/public/favicon.svg`, generated `favicon.ico`, `apple-touch-icon.png`,
+  `icons/pinvi-app-icon.svg`, 192px/512px PNG, `site.webmanifest`를 추가했다.
+- `apps/web/app/layout.tsx`에서 favicon SVG/ICO, Apple touch icon, manifest,
+  Apple web app metadata, `theme-color`를 내보내도록 연결했다.
+- `CHANGELOG.md`와 `docs/journal.md`에 v0.1.0 polish 변경으로 기록했다.
+
+**검증**: Windows에서 PNG/ICO 크기와 512px/180px 아이콘 시각 확인. WSL ext4 mirror에서
+`npm --workspace apps/web run lint`, `npm --workspace apps/web run typecheck`,
+`npm --workspace apps/web run build`, `npm --workspace apps/web run test`(62 passed) 통과.
+Next build 산출물 head에 favicon/manifest/Apple touch icon/theme-color 링크가 포함되는 것도
+확인했다.
+
+**다음 한 작업**: v0.1.0 릴리즈 직전 main 기준 최종 CI/수동 smoke와 tag/GitHub
+Release notes 생성을 이어간다.
+
 ## 2026-06-13 Codex 작업 메모 — docker-manager 포트 대역 정렬
 
 `kor-travel-docker-manager`의 target registry를 정본으로 Pinvi 로컬 포트와 참조 서비스 포트를

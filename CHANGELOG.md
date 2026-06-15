@@ -18,6 +18,7 @@
 - RustFS presigned upload/download와 Trip/POI/curated plan 첨부 도메인을 추가했다.
 - Telegram target/outbox 기반 알림 channel과 trip-target linking을 추가했다.
 - Prometheus `/metrics`, Prometheus/cAdvisor/Grafana compose profile, 기본 Grafana dashboard를 추가했다.
+- Pinvi favicon, Apple touch icon, PWA app icon, web manifest를 추가했다.
 
 ### 운영/보안
 

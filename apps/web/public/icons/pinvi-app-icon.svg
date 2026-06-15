@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">PINVI app icon</title>
+  <desc id="desc">Rounded-square app icon with a deep navy background, a mint map-pin outline, a symmetric V-shaped route with three nodes, and an amber sparkle.</desc>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#03163B"/>
+      <stop offset="100%" stop-color="#08275D"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0.15" y1="0.1" x2="0.85" y2="0.9">
+      <stop offset="0%" stop-color="#68F0E4"/>
+      <stop offset="100%" stop-color="#1EC7B8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="18" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+    <style>
+      .pin-stroke { fill: none; stroke: url(#mintGrad); stroke-width: 38; stroke-linecap: round; stroke-linejoin: round; }
+      .route-stroke { fill: none; stroke: url(#mintGrad); stroke-width: 28; stroke-linecap: round; stroke-linejoin: round; }
+      .node { fill: url(#mintGrad); }
+      .spark { fill: #FFB43D; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="170" fill="url(#bgGrad)"/>
+
+  <!-- Outer pin -->
+  <path class="pin-stroke" filter="url(#softShadow)"
+        d="M512 176
+           C671 176 792 297 792 454
+           C792 581 723 686 610 808
+           L512 913
+           L414 808
+           C301 686 232 581 232 454
+           C232 297 353 176 512 176 Z"/>
+
+  <!-- Inner route -->
+  <path class="route-stroke" d="M366 438 L512 688 L658 438"/>
+  <circle class="node" cx="366" cy="438" r="37"/>
+  <circle class="node" cx="512" cy="688" r="37"/>
+  <circle class="node" cx="658" cy="438" r="37"/>
+
+  <!-- Sparkle -->
+  <path class="spark" d="M512 286
+                           C520 326 552 355 592 364
+                           C552 373 520 402 512 442
+                           C504 402 472 373 432 364
+                           C472 355 504 326 512 286 Z"/>
+</svg>
