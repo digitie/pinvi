@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2, Route } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripDayOptimizeResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { formatDistanceMeters } from '@/lib/distance';
+import { formatDistanceMeters } from '@pinvi/domain';
 
 export interface TripDayOptimizeProps {
   tripId: string;

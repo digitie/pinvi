@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildNewPlaceRequest, parseCategories } from '@/lib/featureRequest';
+import { buildNewPlaceRequest, parseCategories } from './featureRequest';
 
 describe('featureRequest', () => {
   it('parseCategories: trim·중복 제거·최대 10', () => {

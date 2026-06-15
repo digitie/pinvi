@@ -11,7 +11,7 @@ import {
   Popup,
   VWorldMap,
 } from '@/components/map/vworldPrimitives';
-import { pointsBounds, type TripMapPoint } from '@/lib/tripMapPoints';
+import { pointsBounds, type TripMapPoint } from '@pinvi/domain';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];

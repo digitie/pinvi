@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shareLinkStatus } from '@/lib/shareLink';
+import { shareLinkStatus } from './shareLink';
 
 const NOW = Date.parse('2026-06-10T00:00:00Z');
 

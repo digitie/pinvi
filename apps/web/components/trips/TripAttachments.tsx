@@ -5,7 +5,7 @@ import { Download, Loader2, Paperclip, Trash2, Upload } from 'lucide-react';
 import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
 import type { TripAttachmentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { buildAttachmentCreate, putToPresigned } from '@/lib/upload';
+import { buildAttachmentCreate, putToPresigned } from '@pinvi/domain';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

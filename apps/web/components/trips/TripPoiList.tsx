@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { AlertTriangle, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
-import { paletteHex } from '@/lib/markerPalette';
-import { arrayMove } from '@/lib/poiRank';
+import { arrayMove, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 
 function formatTime(value: string | null): string | null {

@@ -6,8 +6,7 @@ import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripShareLinkVisibility, TripViewShareLink } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { SHARE_STATUS_LABEL, VISIBILITY_LABEL, shareLinkStatus } from '@/lib/shareLink';
-import { buildShareUrl } from '@/lib/shareUrl';
+import { SHARE_STATUS_LABEL, SHARE_VISIBILITY_LABEL, shareLinkStatus, buildShareUrl } from '@pinvi/domain';
 
 const VISIBILITIES: TripShareLinkVisibility[] = ['view_only', 'comment', 'edit'];
 
@@ -83,7 +82,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           >
             {VISIBILITIES.map((v) => (
               <option key={v} value={v}>
-                {VISIBILITY_LABEL[v]}
+                {SHARE_VISIBILITY_LABEL[v]}
               </option>
             ))}
           </select>
@@ -151,7 +150,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
                 className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm"
               >
                 <span className="flex items-center gap-2 text-ink">
-                  <span className="font-medium">{VISIBILITY_LABEL[link.visibility]}</span>
+                  <span className="font-medium">{SHARE_VISIBILITY_LABEL[link.visibility]}</span>
                   <span className="rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs text-muted">
                     {SHARE_STATUS_LABEL[status]}
                   </span>

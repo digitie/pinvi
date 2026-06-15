@@ -1,5 +1,5 @@
 import { FeatureMapView } from '@/components/map/FeatureMapView';
-import { parseSuggestParam } from '@/lib/suggestParam';
+import { parseSuggestParam } from '@pinvi/domain';
 
 export default async function ExploreMapPage({
   searchParams,

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { FullPageMessage } from '@/components/feedback/FullPageMessage';
-import { errorDigest, friendlyErrorText } from '@/lib/errorMessage';
+import { errorDigest, friendlyErrorText } from '@pinvi/domain';
 
 export interface RouteErrorProps {
   error: Error & { digest?: string };

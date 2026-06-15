@@ -1,31 +1,16 @@
 /**
- * 16색 마커 팔레트 + 카테고리 매핑 — `docs/design/marker-palette.md`.
+ * 16색 마커 팔레트 스타일 로직 — `docs/design/marker-palette.md`.
  *
- * 백엔드 feature 응답은 `marker_color`(P-01~P-16) + `marker_icon`(maki) 를 이미 해석해
- * 내려준다. 본 모듈은 (1) P-xx → hex 변환(마커 렌더 색), (2) 카테고리/kind fallback
- * 매핑(서버가 색/아이콘을 못 준 경우)을 제공한다.
+ * 팔레트 데이터(P-01~P-16)는 `@pinvi/design-tokens`가 단일 진실로 소유한다.
+ * 본 모듈은 (1) P-xx → hex 변환(마커 렌더 색), (2) 카테고리/kind fallback 매핑을
+ * 제공한다. 백엔드 feature 응답이 marker_color/marker_icon 을 주면 그 값을 우선
+ * 쓰고, 본 모듈 함수는 누락 시 fallback 으로만 쓴다. (Next.js 웹 / Expo 공용.)
  */
 
-export const MARKER_PALETTE = {
-  'P-01': { hex: '#E53935', name: '빨강', labelColor: '#FFFFFF' },
-  'P-02': { hex: '#FB8C00', name: '주황', labelColor: '#FFFFFF' },
-  'P-03': { hex: '#FDD835', name: '노랑', labelColor: '#222222' },
-  'P-04': { hex: '#7CB342', name: '연두', labelColor: '#FFFFFF' },
-  'P-05': { hex: '#43A047', name: '초록', labelColor: '#FFFFFF' },
-  'P-06': { hex: '#00897B', name: '청록', labelColor: '#FFFFFF' },
-  'P-07': { hex: '#00ACC1', name: '하늘색', labelColor: '#FFFFFF' },
-  'P-08': { hex: '#1E88E5', name: '파랑', labelColor: '#FFFFFF' },
-  'P-09': { hex: '#3949AB', name: '남색', labelColor: '#FFFFFF' },
-  'P-10': { hex: '#8E24AA', name: '보라', labelColor: '#FFFFFF' },
-  'P-11': { hex: '#D81B60', name: '자홍', labelColor: '#FFFFFF' },
-  'P-12': { hex: '#6D4C41', name: '갈색', labelColor: '#FFFFFF' },
-  'P-13': { hex: '#757575', name: '회색', labelColor: '#FFFFFF' },
-  'P-14': { hex: '#212121', name: '검정', labelColor: '#FFFFFF' },
-  'P-15': { hex: '#F4511E', name: '주홍', labelColor: '#FFFFFF' },
-  'P-16': { hex: '#039BE5', name: '청색', labelColor: '#FFFFFF' },
-} as const;
+import { MARKER_PALETTE, type MarkerColorKey } from '@pinvi/design-tokens';
 
-export type MarkerColorKey = keyof typeof MARKER_PALETTE;
+export { MARKER_PALETTE };
+export type { MarkerColorKey };
 
 /** 미상 색상 fallback — P-13 회색. */
 export const FALLBACK_COLOR: MarkerColorKey = 'P-13';
@@ -45,9 +30,9 @@ export function paletteHex(color: string | null | undefined): string {
 /** 마커 라벨(텍스트) 대비 색 — 노랑(P-03)만 어두운 글자. */
 export function paletteLabelColor(color: string | null | undefined): string {
   if (color && isMarkerColorKey(color)) {
-    return MARKER_PALETTE[color].labelColor;
+    return MARKER_PALETTE[color].label_color;
   }
-  return MARKER_PALETTE[FALLBACK_COLOR].labelColor;
+  return MARKER_PALETTE[FALLBACK_COLOR].label_color;
 }
 
 interface MarkerStyle {
@@ -86,8 +71,8 @@ export const KIND_MARKER: Record<string, MarkerStyle> = {
 };
 
 /**
- * 카테고리 + kind 로 마커 스타일 결정. 카테고리 매핑 우선, 없으면 kind, 그래도 없으면
- * 회색 marker. (서버가 marker_color/marker_icon 을 주면 그 값을 우선 쓰고 본 함수는 fallback.)
+ * 카테고리 + kind 로 마커 스타일 결정. 카테고리 매핑 우선, 없으면 kind, 그래도
+ * 없으면 회색 marker.
  */
 export function markerStyleFor(
   category: string | null | undefined,

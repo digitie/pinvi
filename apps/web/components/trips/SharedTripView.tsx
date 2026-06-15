@@ -6,7 +6,7 @@ import { CalendarDays, Loader2, MapPin, Share2 } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
+import { tripDaysToMapPoints } from '@pinvi/domain';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 

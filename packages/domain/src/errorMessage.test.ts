@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@pinvi/api-client';
-import { errorDigest, friendlyErrorText } from '@/lib/errorMessage';
+import { errorDigest, friendlyErrorText } from './errorMessage';
 
 describe('friendlyErrorText', () => {
   it('maps ApiError status codes to guidance', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UserConsent } from '@pinvi/schemas';
-import { hasLocationConsent, locationConsentItems } from '@/lib/locationConsent';
+import { hasLocationConsent, locationConsentItems } from './locationConsent';
 
 function consent(over: Partial<UserConsent> & { consent_type: UserConsent['consent_type'] }): UserConsent {
   return {

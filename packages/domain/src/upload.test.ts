@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UploadUrlResponse } from '@pinvi/schemas';
-import { buildAttachmentCreate, roleFromContentType } from '@/lib/upload';
+import { buildAttachmentCreate, roleFromContentType } from './upload';
 
 const up: UploadUrlResponse = {
   method: 'PUT',

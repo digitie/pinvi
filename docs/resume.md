@@ -606,6 +606,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
+> **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
+> 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증
+> typecheck/Vitest 68/build/lint/e2e 52 전부 green. maplibre-vworld-react 이슈 9건 등록
+> (digitie/maplibre-vworld-react #2~#10). **다음 단계**: Expo 앱(`apps/mobile`) 추가구현 항목
+> 문서화 — 화면별 RN 구현 목록, maplibre-vworld-react 연동(이슈 해소 의존), 네비/인증 wiring.
+
 > **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker
 > 진입 경로 docker-manager화(ADR-040)를 한 PR로 머지했다. Expo 다음 단계는 **Sprint M-1
 > 활성화** — `apps/mobile`을 root workspaces에 등록 + `npm install`/`expo install` + 화면

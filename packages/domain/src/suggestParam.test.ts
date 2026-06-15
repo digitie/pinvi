@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSuggestParam } from '@/lib/suggestParam';
+import { parseSuggestParam } from './suggestParam';
 
 describe('suggestParam', () => {
   it('유효한 lon,lat → coord', () => {

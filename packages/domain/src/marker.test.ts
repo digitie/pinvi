@@ -5,7 +5,7 @@ import {
   markerStyleFor,
   paletteHex,
   paletteLabelColor,
-} from '@/lib/markerPalette';
+} from './marker';
 
 describe('markerPalette', () => {
   it('16색이 모두 P-01~P-16 형식 + hex', () => {

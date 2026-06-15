@@ -8,7 +8,7 @@ import {
   VISIBILITY_LABEL,
   buildTripUpdate,
   type TripEditForm,
-} from '@/lib/tripEdit';
+} from '@pinvi/domain';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { FormField } from '@/components/forms/FormField';

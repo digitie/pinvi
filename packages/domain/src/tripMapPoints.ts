@@ -7,7 +7,7 @@
 
 import { CoordSchema } from '@pinvi/schemas';
 import type { TripViewDay, TripViewPoi } from '@pinvi/schemas';
-import { paletteHex } from './markerPalette';
+import { paletteHex } from './marker';
 
 export interface TripMapPoint {
   poiId: string;

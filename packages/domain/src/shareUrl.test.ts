@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildShareUrl } from '@/lib/shareUrl';
+import { buildShareUrl } from './shareUrl';
 
 describe('shareUrl', () => {
   it('buildShareUrl: origin + /shared/{tripId}/{token}', () => {

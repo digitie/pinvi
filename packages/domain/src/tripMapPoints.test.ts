@@ -5,7 +5,7 @@ import {
   pointsBounds,
   tripDaysToMapPoints,
   tripPoiToMapPoint,
-} from '@/lib/tripMapPoints';
+} from './tripMapPoints';
 
 function poi(over: Partial<TripViewPoi> & { feature: Record<string, unknown> }): TripViewPoi {
   return {

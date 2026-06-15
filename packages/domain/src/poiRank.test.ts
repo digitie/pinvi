@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendRank, arrayMove, evenRanks, reorderMoves } from '@/lib/poiRank';
+import { appendRank, arrayMove, evenRanks, reorderMoves } from './poiRank';
 
 describe('poiRank', () => {
   it('evenRanks: 사전식(COLLATE C) 오름차순 == 입력 순서', () => {

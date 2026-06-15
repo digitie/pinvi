@@ -13,8 +13,7 @@ import type {
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { hasLocationConsent, locationConsentItems } from '@/lib/locationConsent';
-import { paletteHex } from '@/lib/markerPalette';
+import { hasLocationConsent, locationConsentItems, paletteHex } from '@pinvi/domain';
 import {
   ClusterLayer,
   MakiMarker,

@@ -12,8 +12,7 @@ import type {
   TripView,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { appendRank, reorderMoves } from '@/lib/poiRank';
-import { tripDaysToMapPoints } from '@/lib/tripMapPoints';
+import { appendRank, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TripActions } from '@/components/trips/TripActions';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';

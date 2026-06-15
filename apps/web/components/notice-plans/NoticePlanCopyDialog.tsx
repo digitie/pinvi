@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { ApiError, noticePlanApi, tripApi } from '@pinvi/api-client';
 import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { buildCopyRequest, canCopy, type CopyForm } from '@/lib/noticePlanCopy';
+import { buildCopyRequest, canCopy, type CopyForm } from '@pinvi/domain';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { FormField } from '@/components/forms/FormField';

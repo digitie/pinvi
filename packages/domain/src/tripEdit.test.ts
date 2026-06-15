@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTripUpdate, type TripEditForm } from '@/lib/tripEdit';
+import { buildTripUpdate, type TripEditForm } from './tripEdit';
 
 const base: TripEditForm = {
   title: '  부산 여행  ',

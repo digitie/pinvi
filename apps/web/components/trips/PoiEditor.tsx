@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
-import { MARKER_PALETTE, type MarkerColorKey } from '@/lib/markerPalette';
+import { MARKER_PALETTE, type MarkerColorKey } from '@pinvi/design-tokens';
 import {
   buildPoiDetailPatch,
   isoToDatetimeLocal,
   type PoiDetailForm,
-} from '@/lib/poiDetail';
+} from '@pinvi/domain';
 import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDistanceMeters } from '@/lib/distance';
+import { formatDistanceMeters } from './distance';
 
 describe('distance', () => {
   it('formatDistanceMeters: m / km / null', () => {
