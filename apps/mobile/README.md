@@ -3,6 +3,8 @@
 Next.js 웹(`apps/web`)과 `@pinvi/*` 공용 패키지를 공유하는 Expo Dev Client 기반
 React Native 앱이다.
 구조·스택·코드 공유 전략은 [`docs/architecture/frontend.md`](../../docs/architecture/frontend.md),
+**앱 제작 추가구현 계획**은
+[`docs/architecture/expo-implementation-plan.md`](../../docs/architecture/expo-implementation-plan.md),
 결정은 [ADR-011](../../docs/decisions.md) / [ADR-041](../../docs/decisions.md) /
 [ADR-043](../../docs/decisions.md)를 본다.
 
