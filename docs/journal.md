@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — maplibre-vworld-react npm 미발행 = 의도 반영
+
+**작업**: `maplibre-vworld-react`의 npm 미발행은 의도된 방침(Pinvi는 `maplibre-vworld-js`처럼
+GitHub tarball/git-URL로 소비)임을 반영했다.
+
+- `docs/architecture/expo-implementation-plan.md`: §4 표의 "npm 미발행" 행을 "git-URL/tarball
+  설치 경로 미확정"으로 정정 + §4.2 "소비 모델 — git-URL/tarball(npm 미발행은 의도)" 추가.
+  §7 라벨도 "#2(git-install 경로)"로 수정.
+- `digitie/maplibre-vworld-react` 이슈 #2를 "npm 발행"이 아니라 **git-URL/tarball 한 줄 설치가
+  동작하도록**(`vworld-map-core` `*` 의존 해소 + `dist` 번들)으로 정정.
+
 ## 2026-06-16 (claude) — Expo 앱 추가구현 계획 문서화
 
 **작업**: `apps/mobile`(Expo Dev Client) 앱을 실제로 제작하기 위한 추가구현 항목을

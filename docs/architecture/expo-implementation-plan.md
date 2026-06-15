@@ -72,7 +72,7 @@ RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver
 |-----------|------|------|
 | **VWorld 키 번들링** — RN 어댑터가 평문 키를 타일 URL에 embed | **#3 (blocker)** | **ADR-043 위반**. 키 proxy/token 주입 훅 필요 |
 | 키 로그 redaction 부재 | #4 | 에러 로그에 키 노출 |
-| npm 미발행 + workspace `*` 의존 | #2 | Pinvi가 `npm install` 불가 |
+| git-URL/tarball 설치 경로 미확정 (`vworld-map-core` `*` 의존 + `dist` 번들) | #2 | npm 발행은 **의도적 미실시**(§4.2). 단 git-URL 한 줄 설치가 깨짐 |
 | Popup/Place/Price/Weather 프리미티브 누락 | #5 | 도메인 마커 재현 불가 |
 | `ClusterLayer` 아이콘 미등록(`pin-red`) | #6 | unclustered 포인트 미렌더 |
 | Expo SDK 53 vs example SDK 56 불일치 | #7 | `apps/mobile`(SDK 53)과 타깃 어긋남 |
@@ -86,6 +86,19 @@ RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver
 - `apps/mobile/lib/config.ts`가 `getVWorldTokenUrl()`로 Pinvi API의
   `GET /v1/mobile/vworld/token`(기본 path)을 가리킨다 — **이 백엔드 endpoint는 신규 구현 필요**(§5).
 - `maplibre-vworld-react`에 키/토큰 주입 훅(이슈 #3)이 생기면, 이 토큰을 타일 요청에 붙인다.
+
+### 4.2 소비 모델 — git-URL/tarball (npm 미발행은 의도)
+
+`maplibre-vworld-react`를 **npm에 발행하지 않는 것은 의도된 방침**이다. Pinvi는
+`maplibre-vworld-js`와 동일하게 **GitHub archive tarball / git-URL pin**으로 소비한다
+(예: `apps/web/package.json`의 `"maplibre-vworld": "https://github.com/digitie/maplibre-vworld-js/archive/<sha>.tar.gz"`).
+모바일도 `apps/mobile/package.json`에서 같은 방식으로 `maplibre-vworld-react`(RN 패키지)를
+git-URL/tarball로 핀한다.
+
+따라서 이슈 #2의 목표는 "npm publish"가 아니라 **git-URL/tarball 한 줄 설치가 실제로
+동작하게** 하는 것이다 — `vworld-map-rn`의 `vworld-map-core: "*"` workspace 의존 해소
+(번들 또는 concrete 핀) + 빌드 산출물(`dist`) 포함. 활성화 시 모바일 `package.json` 핀은
+이 경로가 확정된 뒤 추가한다.
 
 ## 5. 백엔드(`apps/api`) 추가 필요
 
@@ -111,7 +124,7 @@ RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver
    (`README.md`). 이때 `@pinvi/domain` 등 공용 패키지가 RN에서 해석됨을 확인.
 2. **인증 흐름**: `(auth)/login`·`signup`·`verify-email`·`profile` + SecureStore 토큰 + refresh.
 3. **백엔드 선결**: `/v1/mobile/vworld/token` + 모바일 토큰 흐름(§5).
-4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(발행)/#7(SDK)/#5·#6(프리미티브).
+4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
    해소 전에는 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로 검토.
 5. **핵심 화면**: 지도 탐색 → trips 목록/상세(POI 재정렬·지도) → notice-plans → settings → shared view.
 6. **푸시/오프라인** 등 부가 기능은 후속.
