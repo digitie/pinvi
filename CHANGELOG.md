@@ -19,6 +19,9 @@
 - Telegram target/outbox 기반 알림 channel과 trip-target linking을 추가했다.
 - Prometheus `/metrics`, Prometheus/cAdvisor/Grafana compose profile, 기본 Grafana dashboard를 추가했다.
 - Pinvi favicon, Apple touch icon, PWA app icon, web manifest를 추가했다.
+- Expo 모바일 스캐폴드의 런타임 기준을 Expo Dev Client + EAS Build로 고정하고,
+  Expo Go 미사용 / React Native New Architecture / Android minSdk 23 / VWorld 서버 발급
+  키 구조를 문서화했다.
 
 ### 운영/보안
 

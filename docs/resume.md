@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
+
+사용자 지시에 따라 `apps/mobile`의 모바일 기준을 Expo Dev Client + EAS Build로
+명확히 고정했다.
+
+- ADR-043을 추가했다. 모바일은 Expo Go를 사용하지 않고, Expo Dev Client development build와
+  EAS Build profile을 기준으로 둔다.
+- `apps/mobile/package.json`, `app.json`, `eas.json`, `lib/config.ts`를 정렬했다.
+- React Native New Architecture는 `newArchEnabled: true`로 유지하고, Android 최소 SDK는
+  `expo-build-properties`의 `minSdkVersion: 23`으로 박았다.
+- 모바일 VWorld key는 앱에 번들하지 않고, 앱 설정에는 Pinvi API의 server-issued token endpoint만
+  두도록 문서화했다.
+- `CLAUDE.md` / `AGENTS.md` / `SKILL.md`, 루트 README, frontend 아키텍처, VWorld 통합 문서,
+  data-policy, `apps/mobile/README.md`, `CHANGELOG.md`, `docs/journal.md`를 동기화했다.
+
+**검증**: Windows에서 `apps/mobile/package.json`, `apps/mobile/app.json`,
+`apps/mobile/eas.json` JSON parse, 모바일 변경 TS 파일 syntax transpile, `git diff --check`
+통과. 수정 파일 대상 검색에서 Expo Go용 기본 실행 스크립트와 모바일 public VWorld key 값
+잔여가 없음을 확인했다. `apps/mobile`은 아직 root workspace 밖의 비활성 스캐폴드라 전체
+`tsc -p apps/mobile`은 Expo/RN/@pinvi 의존성 미설치로 모듈 해석 단계에서 실패하며,
+`npm install`/Expo 실행은 Sprint M-1 활성화 때 수행한다.
+
+**다음 한 작업**: v0.1.0 릴리즈 직전 main 기준 최종 CI/수동 smoke와 tag/GitHub
+Release notes 생성을 이어간다.
+
 ## 2026-06-15 Codex 작업 메모 — Pinvi 웹 favicon/app icon 설정
 
 사용자가 제공한 Pinvi favicon/app icon SVG를 기준으로 웹 정적 아이콘 자산과 Next.js

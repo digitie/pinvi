@@ -16,7 +16,7 @@ export default function HomeScreen() {
         namespace {queryNamespaces}개.
       </Text>
       <Text className="text-center text-xs text-ink">
-        구조 스캐폴드(ADR-041). 화면 구현은 Sprint M-1.
+        구조 스캐폴드(ADR-041). Dev Client 기준선(ADR-043). 화면 구현은 Sprint M-1.
       </Text>
     </View>
   );

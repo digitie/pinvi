@@ -30,8 +30,8 @@
 ## 정체성
 
 본 저장소(GitHub 이름 `pinvi`)는 **한국 여행 계획·기록·공유 애플리케이션**의
-모노레포다. 백엔드(FastAPI) / 프론트엔드(Next.js) / ETL(Dagster) / 인프라
-manifest / 문서가 들어 있다.
+모노레포다. 백엔드(FastAPI) / 프론트엔드(Next.js) / 모바일 Expo Dev Client
+스캐폴드(`apps/mobile`, 비활성) / ETL(Dagster) / 인프라 manifest / 문서가 들어 있다.
 
 본 앱은 지도 feature 도메인을 직접 소유하지 않는다. 지도 feature(place /
 event / notice / price / weather / route / area) 정규화·저장은 별 저장소
@@ -88,6 +88,11 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-krairport-api` | 한국공항공사 공항 / 항공편 |
 | `python-kraddr-gop` | 우편번호 / 도로명 base |
 | `maplibre-vworld-js` | **Pinvi 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + `PolygonArea` + `RouteLine` + `ClusterLayer` + `Popup` generic primitive 제공 (Pinvi 도메인 wrapper / 16색 팔레트 상수는 라이브러리에 없음 — `apps/web/lib`에서 직접 구현). `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
+
+모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 53 + Expo Router + **Expo Dev
+Client** + EAS Build + React Native New Architecture를 사용한다. Expo Go는 사용하지
+않고, Android `minSdkVersion`은 23 이상이며, VWorld API key는 앱에 번들하지 않고
+Pinvi API의 server-issued token/proxy 구조로 분리한다.
 
 상세 사용 정책은 `kor-travel-map`의 `docs/external-apis.md`와 본 저장소의
 `docs/kor-travel-map-integration.md`.

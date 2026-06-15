@@ -22,7 +22,9 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 ### 2.1 VWorld 지도 (`maplibre-vworld-js` 경유, ADR-015)
 
 - 지도 클라이언트는 내부 라이브러리 `maplibre-vworld-js` 사용 (Kakao Maps SDK 폐기)
-- VWorld API 키는 `NEXT_PUBLIC_VWORLD_API_KEY` (브라우저 노출, origin 화이트리스트로 보호)
+- Web VWorld API 키는 `NEXT_PUBLIC_VWORLD_API_KEY` (브라우저 노출, origin 화이트리스트로 보호)
+- Mobile Expo 앱에는 `EXPO_PUBLIC_VWORLD_API_KEY`를 두지 않는다. 앱 설정에는 Pinvi API의
+  server-issued token endpoint만 두고 실제 key/token은 서버에서 발급한다(ADR-043).
 - VWorld 개발자 센터 (`www.vworld.kr`)에서 허용 도메인 등록 필수
 - 일 호출 한도는 VWorld 콘솔에서 확인 — 클라이언트 viewport 250ms 디바운스 + 1분 캐시
 - 로그에 키 미포함 — 라이브러리의 `redactVWorldUrl()` 헬퍼 사용

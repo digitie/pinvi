@@ -18,13 +18,39 @@
       "bundler": "metro",
       "output": "static"
     },
+    "extra": {
+      "pinvi": {
+        "apiBaseUrl": "http://localhost:12801",
+        "vworld": {
+          "keySource": "server-issued",
+          "tokenPath": "/v1/mobile/vworld/token",
+          "bundledApiKey": false
+        }
+      }
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "launcher",
+          "toolsButton": true,
+          "showMenuAtLaunch": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "여행 주변 장소를 보여주기 위해 현재 위치를 사용합니다."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 23
+          }
         }
       ]
     ],
