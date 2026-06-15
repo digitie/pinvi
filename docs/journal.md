@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-15 (codex) — Pinvi 웹 favicon/app icon 설정
+
+**작업**: 사용자가 제공한 `pinvi_favicon.svg` / `pinvi_app_icon.svg`를 기준으로
+웹 favicon과 홈 화면 앱 아이콘 자산을 설정했다.
+
+- `apps/web/public/favicon.svg`와 `apps/web/public/icons/pinvi-app-icon.svg`를
+  원본 SVG로 추가했다.
+- favicon SVG를 Playwright 렌더링으로 PNG화한 뒤 `favicon.ico`(16/32/48/64/128/256)를
+  생성했다.
+- app icon SVG에서 `apple-touch-icon.png`, 192px/512px PNG를 생성하고
+  `site.webmanifest`에 연결했다.
+- Next.js root metadata에 favicon, shortcut icon, Apple touch icon, manifest,
+  `theme-color`를 명시했다.
+- `CHANGELOG.md`의 `v0.1.0` 사용자 가시 변경 목록에 아이콘/manifest 추가를 기록했다.
+
+**검증**:
+
+- Windows: 생성된 PNG/ICO 크기와 ICO 포함 크기 확인, 512px/180px 아이콘 시각 확인.
+- WSL ext4 mirror: `npm --workspace apps/web run lint`,
+  `npm --workspace apps/web run typecheck`, `npm --workspace apps/web run build`,
+  `npm --workspace apps/web run test`(62 passed) 통과.
+- WSL ext4 mirror: Next build 산출물에서 `favicon.svg`, `favicon.ico`,
+  `apple-touch-icon.png`, `site.webmanifest`, `theme-color` head 출력 확인.
+
+**다음**: v0.1.0 릴리즈 직전 main에서 웹 smoke를 돌릴 때 브라우저 탭 favicon과
+설치 프롬프트 아이콘도 함께 확인한다.
+
 ## 2026-06-13 (codex) — ADR-042 docker-manager 포트 대역 정렬
 
 **작업**: `kor-travel-docker-manager`의 `config/docker-targets.yml` / `docs/ports.md`를
