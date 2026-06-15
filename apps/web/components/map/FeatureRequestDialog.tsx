@@ -5,7 +5,7 @@ import { CheckCircle2, Loader2, MapPin } from 'lucide-react';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSuggestionKind } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { buildNewPlaceRequest, type NewPlaceForm } from '@/lib/featureRequest';
+import { buildNewPlaceRequest, type NewPlaceForm } from '@pinvi/domain';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { FormField } from '@/components/forms/FormField';

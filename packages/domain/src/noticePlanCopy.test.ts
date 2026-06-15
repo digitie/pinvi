@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCopyRequest, canCopy, type CopyForm } from '@/lib/noticePlanCopy';
+import { buildCopyRequest, canCopy, type CopyForm } from './noticePlanCopy';
 
 const base: CopyForm = {
   mode: 'new',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPoiDetailPatch, parseAmount, type PoiDetailForm } from '@/lib/poiDetail';
+import { buildPoiDetailPatch, parseAmount, type PoiDetailForm } from './poiDetail';
 
 describe('poiDetail', () => {
   it('parseAmount: 빈값/음수/비숫자 → null, 양수 → number', () => {

@@ -127,7 +127,7 @@ packages/                        # Next.js / Expo 공용
 | **API 클라이언트 함수** | `packages/api-client` ✓ 공용 | endpoint URL + 응답 파싱 동일 |
 | **TanStack Query key factory** | `packages/api-client` ✓ 공용 | invalidation 일관성 |
 | **Zustand store** | `packages/state` ✓ 공용 | storage adapter만 주입 (web: localStorage, mobile: AsyncStorage) |
-| **순수 비즈니스 로직** | `packages/*` (필요 시 `packages/domain` 신설) ✓ 공용 | 가격 계산 / LexoRank / 거리 계산 등 |
+| **순수 비즈니스 로직** | **`packages/domain`** ✓ 공용 (2026-06-16 신설) | 거리/정렬(LexoRank)/폼 검증/공유링크/업로드/마커 스타일 등 — 웹·Expo 공유. DOM/next/react-native import 금지 |
 | **디자인 토큰** | `packages/design-tokens` ✓ 공용 | Tailwind preset 양쪽 사용 |
 | **i18n 메시지** | `packages/i18n` ✓ 공용 | |
 | **공용 hook (생명주기 무관)** | `packages/hooks` ✓ 공용 | useDebounce 등 |

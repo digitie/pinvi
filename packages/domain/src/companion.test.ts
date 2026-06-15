@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { companionDisplayName, companionJoined } from '@/lib/companion';
+import { companionDisplayName, companionJoined } from './companion';
 
 describe('companion', () => {
   it('companionDisplayName: nickname > email > fallback', () => {

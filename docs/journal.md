@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — Expo/web 공용 코드 정리: packages/domain 신설
+
+**작업**: Expo·web 동시 대응을 위해 `apps/web/lib`의 플랫폼-무관 순수 로직을 공용 패키지로
+모았다 (ADR-011 §2.1 `packages/domain` 계획 실현).
+
+- **`packages/domain` 신설** (`@pinvi/domain`): 순수 도메인 로직 16개 모듈 + 각 Vitest 테스트를
+  `apps/web/lib` → `packages/domain/src`로 `git mv`(이력 보존): distance, poiRank, comments,
+  companion, errorMessage, featureRequest, formValidation, locationConsent, noticePlanCopy,
+  poiDetail, shareLink, shareUrl, suggestParam, tripEdit, tripMapPoints, upload + marker.
+- **markerPalette 중복 통합**: `apps/web/lib/markerPalette.ts`(labelColor)와 `@pinvi/design-tokens`
+  MARKER_PALETTE(label_color) 분기를 해소. 팔레트 데이터는 design-tokens 단일 진실, 스타일 로직
+  (paletteHex/markerStyleFor/CATEGORY_MARKER 등)은 `@pinvi/domain/marker`가 design-tokens 팔레트를
+  import해 제공.
+- **배럴 충돌 해소**: shareLink `VISIBILITY_LABEL` → `SHARE_VISIBILITY_LABEL`(여행 가시성 tripEdit과
+  이름 충돌 회피).
+- **apps/web import 재배선**: ~21개 component/page의 `@/lib/<moved>` → `@pinvi/domain`(+ MARKER_PALETTE/
+  MarkerColorKey는 `@pinvi/design-tokens`). web-only 5개(api/featureBounds/locationAdapter/
+  useDialogAutoFocus/useEscapeKey)는 `apps/web/lib` 유지.
+
+**검증**: typecheck(전 workspace), Vitest(@pinvi/domain 17파일·58 + web 4 + schemas 6 = 68 passed),
+web `next build` 성공, `next lint` 무경고, **Playwright e2e 52 passed**(기존 web 회귀 없음). `npm install`로
+`@pinvi/domain` workspace 심링크 + lockfile 정합(외부 의존 추가 없음).
+
+**다음**: Expo 앱 추가구현 항목 문서화(`apps/mobile`), maplibre-vworld-react 이슈는 등록 완료
+(digitie/maplibre-vworld-react #2~#10).
+
 ## 2026-06-15 (codex) — 모바일 Expo Dev Client 기준선 반영
 
 **작업**: 사용자 지시에 따라 `apps/mobile` 기준을 Expo Dev Client + EAS Build로

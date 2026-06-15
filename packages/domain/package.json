@@ -1,0 +1,26 @@
+{
+  "name": "@pinvi/domain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinvi 공용 도메인 로직 — 플랫폼 무관 순수 함수(거리/정렬/검증/공유/업로드/마커 스타일 등). Next.js 웹 / Expo 모바일 공유 (ADR-011 §2.1). DOM/next/react-native import 금지.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinvi/api-client": "*",
+    "@pinvi/design-tokens": "*",
+    "@pinvi/schemas": "*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

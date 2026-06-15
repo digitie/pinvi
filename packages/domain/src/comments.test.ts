@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canDeleteComment } from '@/lib/comments';
+import { canDeleteComment } from './comments';
 
 describe('comments', () => {
   it('canDeleteComment: 본인 댓글만', () => {

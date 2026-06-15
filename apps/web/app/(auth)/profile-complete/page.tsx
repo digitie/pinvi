@@ -6,7 +6,7 @@ import { ProfileCompleteRequestSchema } from '@pinvi/schemas';
 import { ApiClient, ApiError } from '@pinvi/api-client';
 import { z } from 'zod';
 import { FormField } from '@/components/forms/FormField';
-import { validateForm, type FieldErrors } from '@/lib/formValidation';
+import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',

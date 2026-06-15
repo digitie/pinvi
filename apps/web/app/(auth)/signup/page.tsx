@@ -7,7 +7,7 @@ import { RegisterRequestSchema } from '@pinvi/schemas';
 import type { ConsentType } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
-import { validateForm, type FieldErrors } from '@/lib/formValidation';
+import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',

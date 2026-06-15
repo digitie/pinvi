@@ -21,7 +21,7 @@ export const SHARE_STATUS_LABEL: Record<ShareStatus, string> = {
   revoked: '철회',
 };
 
-export const VISIBILITY_LABEL: Record<TripShareLinkVisibility, string> = {
+export const SHARE_VISIBILITY_LABEL: Record<TripShareLinkVisibility, string> = {
   view_only: '보기 전용',
   comment: '댓글 가능',
   edit: '편집 가능',

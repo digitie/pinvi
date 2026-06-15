@@ -3,7 +3,7 @@
  */
 
 import type { PoiUpdate } from '@pinvi/schemas';
-import type { MarkerColorKey } from '@/lib/markerPalette';
+import type { MarkerColorKey } from '@pinvi/design-tokens';
 
 export interface PoiDetailForm {
   color: MarkerColorKey;

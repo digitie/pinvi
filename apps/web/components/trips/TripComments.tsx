@@ -5,7 +5,7 @@ import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
 import { ApiError, authApi, tripApi } from '@pinvi/api-client';
 import type { TripCommentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { canDeleteComment } from '@/lib/comments';
+import { canDeleteComment } from '@pinvi/domain';
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(

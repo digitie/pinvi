@@ -5,7 +5,7 @@ import { Loader2, UserPlus, Users, X } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripCompanionResponse, TripCompanionRole } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { ROLE_LABEL, companionDisplayName, companionJoined } from '@/lib/companion';
+import { ROLE_LABEL, companionDisplayName, companionJoined } from '@pinvi/domain';
 
 const ROLES: TripCompanionRole[] = ['editor', 'viewer', 'co_owner'];
 

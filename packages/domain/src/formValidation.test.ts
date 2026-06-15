@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LoginRequestSchema, RegisterRequestSchema } from '@pinvi/schemas';
-import { validateForm } from '@/lib/formValidation';
+import { validateForm } from './formValidation';
 
 // RegisterRequestSchema는 필수 동의 4종을 superRefine으로 요구하므로,
 // 필드 오류를 격리하려고 동의 항목을 모두 유효하게 채운다.
