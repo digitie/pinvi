@@ -225,6 +225,43 @@ export function Checkbox({
   );
 }
 
+/** 단일 선택 칩 그룹(visibility/status 등 enum 선택). */
+export function ChipGroup<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label?: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (next: T) => void;
+}) {
+  return (
+    <View className="gap-1.5">
+      {label ? <Text className="text-sm font-medium text-ink">{label}</Text> : null}
+      <View className="flex-row flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = value === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => onChange(opt.value)}
+              className={`rounded-sm border px-3 py-2 ${active ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
+            >
+              <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-body'}`}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 /** 색 점 + 라벨(상태/카테고리 뱃지). */
 export function Badge({ label, className }: { label: string; className?: string }) {
   return (

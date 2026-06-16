@@ -49,7 +49,7 @@
 | `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
 | `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ home / 🟡 map placeholder | home=네비 타일, map=server-issued 키 + `useUserLocation` 확인(지도 §4 대기) |
 | `app/(app)/trips/index.tsx` | `(app)/trips` | ✅ 구현 | `tripApi.listPage` + 검색(`useDebounce`) |
-| `app/(app)/trips/[tripId].tsx` | `(app)/trips/[tripId]` | ✅ 구현(읽기) | trip 상세 + 일자별 POI(`paletteHex`). 재정렬/지도는 후속 |
+| `app/(app)/trips/[tripId]/index.tsx` + `edit.tsx` | `(app)/trips/[tripId]` | ✅ 구현 | 상세(읽기) + 편집(메타 `buildTripUpdate`/If-Match, POI 재정렬 `reorderMoves`, 삭제). POI 필드(메모/비용) 편집·지도는 후속 |
 | `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
 | `app/(app)/settings/index.tsx` + `telegram`·`consents`·`mcp-tokens` | `(app)/settings/{telegram,consents,mcp-tokens}` | ✅ 구현 | `telegramApi`/`userApi`(consents·mcp-tokens) — 목록·발급/연결·철회/회수 |
 | `app/shared/[tripId]/[token].tsx` | `shared/[tripId]/[token]` | ✅ 구현 | 익명 공유 뷰(가드 밖, `buildShareUrl` deep link) |
@@ -147,9 +147,12 @@ git-URL/tarball로 핀한다.
 4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
    해소 전에는 `(app)/map.tsx` placeholder(server-issued 키 + `useUserLocation` 확인)를 유지하고,
    해소 시 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로를 검토한다.
-5. **핵심 화면** — ✅ **완료(2026-06-16, 지도 제외)**: home → trips 목록/상세(읽기) →
+5. **핵심 화면** — ✅ **완료(2026-06-16, 지도 제외)**: home → trips 목록/상세/**편집(메타+POI 재정렬·삭제)** →
    notice-plans(복사) → settings(허브 + telegram/consents/mcp-tokens 세부 화면) → shared view.
-   POI 재정렬·trip 편집은 후속(§7 후속).
+   POI 필드(메모/비용) 편집·일자 CRUD는 후속.
+
+> **CI**: 모바일 전용 변경도 게이트되도록 `.github/workflows/mobile.yml`(루트 `npm --workspace @pinvi/mobile run typecheck`)을
+> 추가하고 `aggregate-ci.yml`이 `apps/mobile/**`·`packages/**` 변경 시 `mobile-typecheck`를 요구하게 했다(2026-06-16).
 6. **푸시/오프라인** 등 부가 기능은 후속.
 
 ## 8. 관련 문서

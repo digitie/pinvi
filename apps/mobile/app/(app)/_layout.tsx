@@ -35,7 +35,8 @@ export default function AppLayout() {
       <Stack.Screen name="index" options={{ title: 'Pinvi' }} />
       <Stack.Screen name="map" options={{ title: '지도' }} />
       <Stack.Screen name="trips/index" options={{ title: '내 여행' }} />
-      <Stack.Screen name="trips/[tripId]" options={{ title: '여행 상세' }} />
+      <Stack.Screen name="trips/[tripId]/index" options={{ title: '여행 상세' }} />
+      <Stack.Screen name="trips/[tripId]/edit" options={{ title: '여행 편집' }} />
       <Stack.Screen name="notice-plans/index" options={{ title: '추천 여행' }} />
       <Stack.Screen name="settings/index" options={{ title: '설정' }} />
       <Stack.Screen name="settings/telegram" options={{ title: 'Telegram 알림' }} />

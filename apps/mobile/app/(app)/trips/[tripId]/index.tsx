@@ -1,12 +1,13 @@
 import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
 import { friendlyErrorText, paletteHex } from '@pinvi/domain';
-import { api } from '../../../lib/api';
+import { api } from '../../../../lib/api';
 import {
   Badge,
   Body,
+  Button,
   Card,
   ErrorView,
   Heading,
@@ -14,7 +15,7 @@ import {
   Muted,
   Screen,
   Subheading,
-} from '../../../components/ui';
+} from '../../../../components/ui';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '초안',
@@ -33,6 +34,7 @@ function dateRange(start: string | null, end: string | null): string {
 /** 여행 상세 — 웹 `(app)/trips/[tripId]` 대응(읽기). 일자별 POI + 공유 링크. */
 export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const router = useRouter();
 
   const tripQuery = useQuery({
     queryKey: queryKeys.trips.detail(tripId),
@@ -68,6 +70,11 @@ export default function TripDetailScreen() {
             <Badge label={STATUS_LABELS[trip.status] ?? trip.status} />
             {broken_feature_count > 0 ? <Badge label={`연결 끊김 ${broken_feature_count}`} /> : null}
           </View>
+          <Button
+            label="편집"
+            variant="secondary"
+            onPress={() => router.push(`/trips/${tripId}/edit`)}
+          />
         </View>
 
         {days.length === 0 ? (
