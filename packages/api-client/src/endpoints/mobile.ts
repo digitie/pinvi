@@ -1,4 +1,9 @@
-import { AuthUserSchema, LoginRequestSchema, VerifyEmailRequestSchema } from '@pinvi/schemas';
+import {
+  AuthUserSchema,
+  LoginRequestSchema,
+  OAuthStartResponseSchema,
+  VerifyEmailRequestSchema,
+} from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 
@@ -41,5 +46,20 @@ export const mobileAuthApi = (client: ApiClient) => ({
     client.requestNoContent('/mobile/auth/logout', {
       method: 'POST',
       body: JSON.stringify({ refresh_token: refreshToken }),
+    }),
+
+  /** Google OAuth 시작 — authorize URL 발급(앱 딥링크로 callback). */
+  oauthGoogleStart: () =>
+    client.request('/mobile/auth/oauth/google/start', {
+      method: 'POST',
+      schema: OAuthStartResponseSchema,
+    }),
+
+  /** 딥링크로 받은 1회용 code를 토큰과 교환. */
+  oauthExchange: (code: string) =>
+    client.request('/mobile/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+      schema: MobileAuthResponseSchema,
     }),
 });

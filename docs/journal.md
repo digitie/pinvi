@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 Google OAuth 앱 클라이언트
+
+**작업**: OAuth 대응 2차(모바일 앱). 백엔드(딥링크 1회용 code, 별도 PR) 위에 앱 흐름을 얹었다.
+
+- `expo-web-browser@~56.0.5` 추가(네이티브 — EAS 재빌드 필요).
+- `@pinvi/api-client` `mobileAuthApi`에 `oauthGoogleStart`/`oauthExchange` 추가.
+- `lib/oauth.ts` — `loginWithGoogle()`: start → `WebBrowser.openAuthSessionAsync(url, 'pinvi://oauth')`
+  → 결과 URL의 `code`/`error` 파싱 → `oauthExchange` → `MobileAuthResult`. 취소/에러 분류.
+- `(auth)/login.tsx`에 "Google로 로그인" 버튼 + `adoptSession` 결선 + OAuth 에러 한국어 매핑.
+
+**검증**: mobile typecheck ✅. (백엔드 OAuth PR 머지 후 동작. 실기기는 expo-web-browser+maplibre
+포함 EAS Dev Client 재빌드 필요.)
+
 ## 2026-06-16 (claude) — 모바일 Google OAuth 백엔드 (딥링크 1회용 code)
 
 **작업**: 모바일 OAuth 대응 1차(백엔드). 웹은 callback에서 쿠키를 세팅하지만 모바일은 cookie를
@@ -17,8 +30,7 @@
 - config: `pinvi_mobile_oauth_redirect`/`_exchange_ttl_seconds`. 통합 테스트 7건(callback→code→
   exchange e2e, 잘못된/재사용 code 401, 에러 딥링크, start 200/503).
 
-**검증**: ruff format/check 통과, py_compile OK. mypy/pytest는 api CI. 다음: 모바일 앱
-`expo-web-browser`로 start→브라우저→exchange 흐름 + 로그인 버튼.
+**검증**: ruff format/check 통과, py_compile OK. mypy/pytest는 api CI.
 
 ## 2026-06-16 (claude) — 모바일 지도 통합 (vworld-map-rn) + 라이브러리 #21 수정 (ADR-044)
 
