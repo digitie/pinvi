@@ -38,6 +38,9 @@ export default function AppLayout() {
       <Stack.Screen name="trips/[tripId]" options={{ title: '여행 상세' }} />
       <Stack.Screen name="notice-plans/index" options={{ title: '추천 여행' }} />
       <Stack.Screen name="settings/index" options={{ title: '설정' }} />
+      <Stack.Screen name="settings/telegram" options={{ title: 'Telegram 알림' }} />
+      <Stack.Screen name="settings/consents" options={{ title: '동의 관리' }} />
+      <Stack.Screen name="settings/mcp-tokens" options={{ title: 'MCP 토큰' }} />
       <Stack.Screen name="profile" options={{ title: '프로필' }} />
     </Stack>
   );

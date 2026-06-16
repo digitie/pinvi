@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 settings 세부 화면 (telegram/consents/mcp-tokens)
+
+**작업**: "남은 작업 끝까지" 1차 — `apps/mobile`에 설정 세부 화면 3종을 추가했다.
+
+- `(app)/settings/telegram.tsx` — `telegramApi`로 대상 목록/연결(chat ID·별칭·기본)/재검증/삭제.
+- `(app)/settings/consents.tsx` — `userApi.getConsents`/`withdrawConsent`로 동의 현황 + 선택 항목 철회
+  (필수 약관은 철회 제외, 웹과 동일).
+- `(app)/settings/mcp-tokens.tsx` — `userApi`로 토큰 발급(만료 칩 30/7/90/무기한, 원문 1회 selectable 표시)/회수.
+- `lib/api.ts`에 `user`/`telegram` 바인딩 추가, settings 허브를 세부 화면 링크로 교체, `(app)/_layout`에 3개 라우트 등록.
+- 새 네이티브 의존성 없이(클립보드는 `selectable` Text) 기존 dev-client APK 그대로 동작.
+
+**검증**: mobile typecheck ✅. (다음: trip 편집/POI 재정렬.)
+
 ## 2026-06-16 (claude) — 모바일 RN 앱 인증 흐름 + 핵심 화면 구현 (Step 2 + 5)
 
 **작업**: "앱 화면 끝까지" — `apps/mobile` RN 기반과 화면을 구현했다
