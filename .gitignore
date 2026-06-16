@@ -76,3 +76,7 @@ artifacts/
 # Build outputs
 build/
 dist/
+
+# Claude Code 로컬 전용(공유 X) + 런타임 산출물
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
