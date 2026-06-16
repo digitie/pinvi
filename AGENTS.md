@@ -91,7 +91,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 
 모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 56 + Expo Router + **Expo Dev
 Client** + EAS Build + React Native New Architecture를 사용한다. Expo Go는 사용하지
-않고, Android `minSdkVersion`은 23 이상이며, VWorld API key는 앱에 번들하지 않고
+않고, Android `minSdkVersion`은 24 이상이며(SDK 56 요구), VWorld API key는 앱에 번들하지 않고
 Pinvi API의 server-issued token/proxy 구조로 분리한다.
 
 상세 사용 정책은 `kor-travel-map`의 `docs/external-apis.md`와 본 저장소의
