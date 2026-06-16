@@ -14,7 +14,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _seed_user(session_factory) -> tuple[str, str]:  # type: ignore[no-untyped-def]
-    email = f"mob_{uuid.uuid4().hex[:8]}@pinvi.test"
+    email = f"mob_{uuid.uuid4().hex[:8]}@example.com"
     password = "mobile-pw-12345"
     async with session_factory() as db:
         db.add(
