@@ -18,9 +18,11 @@
   스타일을 재사용한다.
 - **2026-06-16 추가**: Step 2(인증 흐름) + Step 5(핵심 화면)을 구현했다. RN 기반
   (`lib/{tokens,auth}.tsx`·`components/ui.tsx`·프로바이더·네비 가드)과 화면
-  (login/signup/verify-email/profile, home/map placeholder/trips 목록·상세/notice-plans
-  복사/settings/shared 뷰)이 모두 동작하며 mobile typecheck·web lint/build 통과. 지도(§4)만
-  `maplibre-vworld-react` 선결 대기로 placeholder다.
+  (login/signup/verify-email/profile, home/trips 목록·상세·생성·편집·삭제/notice-plans
+  복사/settings 세부/shared 뷰)이 모두 동작하며 mobile typecheck·web lint/build 통과.
+- **2026-06-16 추가**: 지도(§4)도 통합 완료 — `vworld-map-rn`을 vendored tarball로 핀하고
+  `(app)/map.tsx`에 실제 VWorld 지도를 탑재(ADR-044). 소비 중 발견한 라이브러리 gap은 #21로 수정.
+  실기기 동작은 `@maplibre/maplibre-react-native` 네이티브 모듈 포함 EAS Dev Client 재빌드 필요.
 
 ## 1. 공용 패키지 소비 (모바일이 그대로 가져가는 것)
 
@@ -47,7 +49,7 @@
 | `app/(auth)/signup.tsx` | `(auth)/signup` | ✅ 구현 | 약관 4종 동의 + `RegisterRequestSchema` |
 | `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`) |
 | `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
-| `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ home / 🟡 map placeholder | home=네비 타일, map=server-issued 키 + `useUserLocation` 확인(지도 §4 대기) |
+| `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ 구현 | home=네비 타일, map=`VWorldMapView`(`vworld-map-rn`) + server-issued 키(ADR-044) + 내 위치 마커/`flyTo` |
 | `app/(app)/trips/index.tsx` + `new.tsx` | `(app)/trips` | ✅ 구현 | 목록 `tripApi.listPage` + 검색(`useDebounce`) + 생성(`tripApi.create`) |
 | `app/(app)/trips/[tripId]/{index,edit,poi/[poiId]}.tsx` | `(app)/trips/[tripId]` | ✅ 구현 | 상세(읽기, **공유 링크 생성/해제**) + 편집(메타 `buildTripUpdate`/If-Match, POI 재정렬 `reorderMoves`·삭제, 일자 추가/삭제, **여행 삭제**) + POI 필드 편집(메모/예산). 지도·POI 추가(feature 검색)는 후속 |
 | `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
@@ -76,11 +78,18 @@ push/offline.
 | `config.ts` (Expo extra + VWorld token URL) | ✓ | §4 백엔드 endpoint 의존 |
 | 푸시 알림 | 없음 | `expo-notifications` + 토큰 등록 endpoint(후속) |
 
-## 4. 지도 연동 — `maplibre-vworld-react` (최대 의존)
+## 4. 지도 연동 — `maplibre-vworld-react` (✅ 통합 완료, ADR-044)
 
-모바일 지도는 `digitie/maplibre-vworld-react`(RN 패키지 `vworld-map-rn`)를 쓸 계획이다.
-**현재 그 라이브러리는 모바일 운영에 그대로 쓸 수 없다.** 2026-06-16 검토 결과 다음이
-선결되어야 하며, 해당 저장소에 이슈로 등록했다(`digitie/maplibre-vworld-react` #2~#10).
+모바일 지도는 `digitie/maplibre-vworld-react`(RN 패키지 `vworld-map-rn` + `vworld-map-core`)를
+쓴다. **2026-06-16 통합 완료**: 아래 선결 이슈(#2~#10)가 모두 해소됐고, Pinvi는
+`apps/mobile/vendor/vworld-map-{core,rn}-1.0.0.tgz`를 `file:`로 핀해 소비한다(ADR-044, npm 미발행
+방침이라 vendored tarball). 지도 화면 `(app)/map.tsx`는 server-issued 키(ADR-043)를
+`VWorldMapView.apiKey`로 주입하고 내 위치 마커 + `flyTo`를 쓴다. `@maplibre/maplibre-react-native`
+config plugin이 필요해 **EAS Dev Client 빌드에서만** 동작한다.
+
+소비 중 발견한 잔여 gap(`markers` 편의 prop이 color/zIndex/ariaLabel를 드롭)을 라이브러리에
+이슈→PR→머지(#21)로 고쳐 16색 마커 parity를 확보했다. 아래는 해소된 선결 이슈 이력이다
+(`digitie/maplibre-vworld-react` #2~#10, 모두 closed).
 
 | 차단/필요 | 이슈 | 영향 |
 |-----------|------|------|
@@ -144,9 +153,10 @@ git-URL/tarball로 핀한다.
    `(app)/profile` + SecureStore 토큰(`lib/tokens.ts`) + 401 자동 refresh(`lib/api.ts`) +
    `AuthProvider`(`lib/auth.tsx`) + 네비 가드.
 3. **백엔드 선결**: `/mobile/vworld/token` + 모바일 토큰 흐름(§5) — ✅ 완료.
-4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
-   해소 전에는 `(app)/map.tsx` placeholder(server-issued 키 + `useUserLocation` 확인)를 유지하고,
-   해소 시 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로를 검토한다.
+4. **지도 연동** — ✅ **완료(2026-06-16, ADR-044)**: `vworld-map-rn` + `vworld-map-core`를
+   vendored tarball(`apps/mobile/vendor/`)로 핀, `@maplibre/maplibre-react-native` config plugin
+   추가, `(app)/map.tsx`에 `VWorldMapView`(server-issued 키 + 내 위치 마커 + `flyTo`) 구현.
+   소비 중 발견한 markers color parity gap은 라이브러리 #21로 수정. 실기기 동작은 EAS Dev Client 재빌드 필요.
 5. **핵심 화면** — ✅ **완료(2026-06-16, 지도 제외)**: home → trips 목록/상세/**편집(메타+POI 재정렬·삭제)** →
    notice-plans(복사) → settings(허브 + telegram/consents/mcp-tokens 세부 화면) → shared view.
    POI 필드(메모/비용) 편집·일자 CRUD는 후속.
