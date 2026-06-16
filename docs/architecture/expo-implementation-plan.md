@@ -51,7 +51,7 @@
 | `app/(app)/trips/index.tsx` | `(app)/trips` | ✅ 구현 | `tripApi.listPage` + 검색(`useDebounce`) |
 | `app/(app)/trips/[tripId].tsx` | `(app)/trips/[tripId]` | ✅ 구현(읽기) | trip 상세 + 일자별 POI(`paletteHex`). 재정렬/지도는 후속 |
 | `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
-| `app/(app)/settings/index.tsx` | `(app)/settings/{telegram,consents,mcp-tokens}` | 🟡 허브 | 진입 + 로그아웃. 세부 폼은 후속 |
+| `app/(app)/settings/index.tsx` + `telegram`·`consents`·`mcp-tokens` | `(app)/settings/{telegram,consents,mcp-tokens}` | ✅ 구현 | `telegramApi`/`userApi`(consents·mcp-tokens) — 목록·발급/연결·철회/회수 |
 | `app/shared/[tripId]/[token].tsx` | `shared/[tripId]/[token]` | ✅ 구현 | 익명 공유 뷰(가드 밖, `buildShareUrl` deep link) |
 
 > **라우트 그룹 주의**: 모바일은 클라이언트 가드를 위해 `(app)`=인증 필요,
@@ -148,7 +148,8 @@ git-URL/tarball로 핀한다.
    해소 전에는 `(app)/map.tsx` placeholder(server-issued 키 + `useUserLocation` 확인)를 유지하고,
    해소 시 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로를 검토한다.
 5. **핵심 화면** — ✅ **완료(2026-06-16, 지도 제외)**: home → trips 목록/상세(읽기) →
-   notice-plans(복사) → settings(허브) → shared view. POI 재정렬·trip 편집·settings 세부 폼은 후속.
+   notice-plans(복사) → settings(허브 + telegram/consents/mcp-tokens 세부 화면) → shared view.
+   POI 재정렬·trip 편집은 후속(§7 후속).
 6. **푸시/오프라인** 등 부가 기능은 후속.
 
 ## 8. 관련 문서

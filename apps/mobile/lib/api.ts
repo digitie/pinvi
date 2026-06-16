@@ -3,7 +3,9 @@ import {
   authApi,
   mobileAuthApi,
   noticePlanApi,
+  telegramApi,
   tripApi,
+  userApi,
   MobileAuthResponseSchema,
   type MobileAuthResult,
 } from '@pinvi/api-client';
@@ -103,6 +105,8 @@ export const api = {
   mobileAuth: mobileAuthApi(apiClient),
   trips: tripApi(apiClient),
   noticePlans: noticePlanApi(apiClient),
+  user: userApi(apiClient),
+  telegram: telegramApi(apiClient),
 };
 
 /** 로그인/verify 성공 응답의 토큰을 SecureStore에 저장한다. */
