@@ -120,6 +120,15 @@ export default function TripEditScreen() {
     onError: (err) => Alert.alert('일자 삭제 실패', friendlyErrorText(err)),
   });
 
+  const deleteTripMutation = useMutation({
+    mutationFn: () => api.trips.delete(tripId, { mode: 'soft_delete' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips.all() });
+      router.replace('/trips');
+    },
+    onError: (err) => Alert.alert('여행 삭제 실패', friendlyErrorText(err)),
+  });
+
   if (tripQuery.isLoading || !form) {
     return (
       <Screen scroll={false}>
@@ -146,6 +155,13 @@ export default function TripEditScreen() {
     Alert.alert('일자 삭제', `Day ${dayIndex}와(과) 그 안의 장소를 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: () => deleteDayMutation.mutate(dayIndex) },
+    ]);
+  };
+
+  const onDeleteTrip = () => {
+    Alert.alert('여행 삭제', '이 여행을 삭제할까요? 되돌릴 수 없습니다.', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => deleteTripMutation.mutate() },
     ]);
   };
 
@@ -324,6 +340,16 @@ export default function TripEditScreen() {
           loading={addDayMutation.isPending}
           onPress={() => addDayMutation.mutate(nextDayIndex)}
         />
+
+        <View className="mt-4 gap-2 border-t border-hairline-soft pt-4">
+          <Subheading>위험 구역</Subheading>
+          <Button
+            label="여행 삭제"
+            variant="danger"
+            loading={deleteTripMutation.isPending}
+            onPress={onDeleteTrip}
+          />
+        </View>
       </View>
     </Screen>
   );

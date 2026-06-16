@@ -1,6 +1,6 @@
-import { View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
 import { friendlyErrorText, paletteHex } from '@pinvi/domain';
 import { api } from '../../../../lib/api';
@@ -16,6 +16,11 @@ import {
   Screen,
   Subheading,
 } from '../../../../components/ui';
+
+const SHARE_VISIBILITY_LABELS: Record<string, string> = {
+  view_only: '읽기 전용',
+  comment: '댓글 가능',
+};
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '초안',
@@ -35,11 +40,27 @@ function dateRange(start: string | null, end: string | null): string {
 export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const tripQuery = useQuery({
     queryKey: queryKeys.trips.detail(tripId),
     queryFn: () => api.trips.get(tripId),
     enabled: Boolean(tripId),
+  });
+
+  const createShareMutation = useMutation({
+    mutationFn: () => api.trips.createShareToken(tripId, { visibility: 'view_only' }),
+    onSuccess: (link) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      Alert.alert('공유 링크 생성', `링크가 만들어졌습니다.\n\n${link.url}`);
+    },
+    onError: (err) => Alert.alert('생성 실패', friendlyErrorText(err)),
+  });
+
+  const revokeShareMutation = useMutation({
+    mutationFn: (shareId: string) => api.trips.revokeShareToken(tripId, shareId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
+    onError: (err) => Alert.alert('해제 실패', friendlyErrorText(err)),
   });
 
   if (tripQuery.isLoading) {
@@ -112,17 +133,45 @@ export default function TripDetailScreen() {
           ))
         )}
 
-        {share_links.length > 0 ? (
-          <Card className="gap-2">
-            <Subheading>공유 링크</Subheading>
-            {share_links.map((link) => (
-              <Muted key={link.share_id}>
-                {link.visibility}
-                {link.revoked_at ? ' · 해제됨' : link.expires_at ? ` · 만료 ${link.expires_at}` : ''}
-              </Muted>
-            ))}
-          </Card>
-        ) : null}
+        <Card className="gap-3">
+          <Subheading>공유 링크</Subheading>
+          {share_links.length === 0 ? (
+            <Muted>아직 공유 링크가 없습니다.</Muted>
+          ) : (
+            share_links.map((link) => {
+              const revoked = Boolean(link.revoked_at);
+              return (
+                <View key={link.share_id} className="flex-row items-center gap-2">
+                  <View className="flex-1">
+                    <Text className="text-sm text-ink">
+                      {SHARE_VISIBILITY_LABELS[link.visibility] ?? link.visibility}
+                    </Text>
+                    <Muted>
+                      {revoked
+                        ? '해제됨'
+                        : link.expires_at
+                          ? `만료 ${link.expires_at.slice(0, 10)}`
+                          : '무기한'}
+                    </Muted>
+                  </View>
+                  {!revoked ? (
+                    <Button
+                      label="해제"
+                      variant="secondary"
+                      loading={revokeShareMutation.isPending && revokeShareMutation.variables === link.share_id}
+                      onPress={() => revokeShareMutation.mutate(link.share_id)}
+                    />
+                  ) : null}
+                </View>
+              );
+            })
+          )}
+          <Button
+            label="공유 링크 만들기"
+            onPress={() => createShareMutation.mutate()}
+            loading={createShareMutation.isPending}
+          />
+        </Card>
       </View>
     </Screen>
   );
