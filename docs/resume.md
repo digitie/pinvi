@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-16 (claude) — 모바일 RN 앱 인증 흐름 + 핵심 화면 구현
+
+`apps/mobile` RN 기반(`lib/tokens.ts`·`lib/api.ts` 401 자동 refresh·`lib/auth.tsx`
+`AuthProvider`·`components/ui.tsx` NativeWind 키트·네비 가드)과 화면을 구현했다:
+`(auth)/login`·`signup`·`verify-email`, `(app)/profile`·`index`(home)·`map`(placeholder)·
+`trips` 목록/상세·`notice-plans`·`settings`, `shared/[tripId]/[token]`. 공용
+`@pinvi/api-client`에 `mobileAuthApi` 추가. (expo-implementation-plan §7 Step 2·5 완료.)
+
+**검증**: mobile typecheck ✅, root typecheck ✅, web lint ✅, web build ✅(라우트 회귀 없음).
+
+**다음 한 작업**: 지도(§4) — `maplibre-vworld-react` 선결 이슈(#3 키 주입 / #2 git-install /
+#8 카메라) 해소 후 `(app)/map.tsx`에 실제 VWorld 지도를 탑재한다. 해소 전이면 trip 편집/POI
+재정렬(`reorderMoves`) 또는 settings 세부 폼(telegram/consents/mcp-tokens)을 먼저 구현한다.
+
 ## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
 
 사용자 지시에 따라 `apps/mobile`의 모바일 기준을 Expo Dev Client + EAS Build로
