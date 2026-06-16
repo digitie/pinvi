@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 trip 편집/POI 재정렬 + 모바일 CI 게이트
+
+**작업**: "남은 작업 끝까지" 2차.
+
+- `(app)/trips/[tripId]`를 `[tripId]/index.tsx`(상세) + `[tripId]/edit.tsx`(편집)로 분리.
+- 편집 화면: trip 메타 수정(`buildTripUpdate` + `tripApi.update` If-Match version), 일자별 POI
+  재정렬(↑/↓ → `reorderMoves` → `poiApi.reorder`), POI 삭제. visibility/status는 칩 선택
+  (`ChipGroup` UI 추가). `lib/api.ts`에 `pois` 바인딩 추가.
+- **CI 게이트 보강**: 모바일 전용 PR(=`apps/mobile/**`만 변경)은 web.yml/api.yml 경로 필터에 안 걸려
+  지금까지 CI typecheck가 없었다. `.github/workflows/mobile.yml`(`mobile-typecheck` job)을 추가하고
+  `aggregate-ci.yml`이 `apps/mobile/**`·`packages/**` 변경 시 `mobile-typecheck`를 required check로
+  기다리게 했다.
+
+**검증**: mobile typecheck ✅. (다음: 지도는 외부 라이브러리 선결 대기 — 빌드 가능한 잔여 거의 소진.)
+
 ## 2026-06-16 (claude) — 모바일 settings 세부 화면 (telegram/consents/mcp-tokens)
 
 **작업**: "남은 작업 끝까지" 1차 — `apps/mobile`에 설정 세부 화면 3종을 추가했다.

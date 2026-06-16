@@ -61,6 +61,16 @@ jobs:
               requiredChecks.push("lint-typecheck-build");
             }
             if (hasAny([
+              startsWith("apps/mobile/"),
+              startsWith("packages/"),
+              equals("package.json"),
+              equals("package-lock.json"),
+              equals("tsconfig.base.json"),
+              equals(".github/workflows/mobile.yml"),
+            ])) {
+              requiredChecks.push("mobile-typecheck");
+            }
+            if (hasAny([
               startsWith("apps/etl/"),
               equals(".github/workflows/etl.yml"),
             ])) {

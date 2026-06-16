@@ -10,9 +10,11 @@
 
 **검증**: mobile typecheck ✅, root typecheck ✅, web lint ✅, web build ✅(라우트 회귀 없음).
 
-**후속(2026-06-16 진행 중)**: settings 세부 화면(telegram/consents/mcp-tokens) 구현 완료.
-trip 편집/POI 재정렬(`tripEdit`/`reorderMoves`)이 다음이고, 지도(§4)는 `maplibre-vworld-react`
-선결 이슈(#2/#3/#8) 해소 후 `(app)/map.tsx`에 실제 VWorld 지도 탑재.
+**후속(2026-06-16 진행 중)**: settings 세부 화면 + trip 편집/POI 재정렬·삭제 구현 완료, 모바일
+CI 게이트(`mobile.yml` + aggregate `mobile-typecheck`) 추가. **빌드 가능한 잔여는 사실상 소진**이며,
+남은 큰 항목인 지도(§4)는 외부 `maplibre-vworld-react` 선결 이슈(#2 git-install / #3 키 주입 /
+#8 카메라)가 풀려야 `(app)/map.tsx`에 실제 VWorld 지도를 탑재할 수 있다(현 placeholder 유지).
+소소한 후속: POI 필드(메모/비용) 편집, 일자 CRUD, OAuth 연결 시작(딥링크), push/offline.
 
 ## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
 
