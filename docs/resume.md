@@ -10,10 +10,11 @@
 
 **검증**: mobile typecheck ✅, root typecheck ✅, web lint ✅, web build ✅(라우트 회귀 없음).
 
-**모바일 앱 빌드 라운드 완료(2026-06-16)**: 인증 흐름 + 핵심 화면(home/trips 목록·상세·생성·편집/
-notice-plans/settings 세부/shared) + trip 편집(메타·POI 재정렬·삭제·일자 추가/삭제) + POI 필드
-편집(메모/예산) + 모바일 CI 게이트(`mobile.yml` + aggregate `mobile-typecheck`)까지 구현·머지.
-PR #202/#203/#204/#205 및 본 라운드.
+**모바일 앱 빌드 라운드 완료(2026-06-16)**: 인증 흐름 + 핵심 화면(home/trips 목록·상세·생성·편집·
+**삭제**/notice-plans/settings 세부/shared) + trip 편집(메타·POI 재정렬·삭제·일자 추가/삭제) +
+POI 필드 편집(메모/예산) + **공유 링크 생성/해제** + 모바일 CI 게이트(`mobile.yml` + aggregate
+`mobile-typecheck`)까지 구현·머지. PR #202/#203/#204/#205/#206 및 trip-lifecycle PR.
+trip CRUD(생성·읽기·수정·삭제)가 모바일에서 완결됐다.
 
 **남은 것은 모두 외부 선결/재빌드 의존이라 본 라운드에서 중단**:
 - **지도(§4)** — `maplibre-vworld-react` 이슈(#2 git-install / #3 키 주입 / #8 카메라) 해소 후
