@@ -31,7 +31,8 @@ React Native 앱이다.
   native plugin, VWorld 키 발급, New Architecture 기준 검증을 모두 development build에서 한다.
 - **EAS Build 사용**: `eas.json`의 `development` / `preview` / `production` profile을 정본으로
   둔다. 로컬 native build는 디버깅 예외 경로일 뿐이다.
-- **React Native New Architecture 기준**: `app.json`의 `newArchEnabled: true`가 기준이다.
+- **React Native New Architecture 기준**: SDK 56(RN 0.85)에서 기본 활성이며, app.json
+  `newArchEnabled` flag는 SDK 56에서 제거됐다(별도 설정 불필요).
 - **Android `minSdkVersion` 23 이상**: `expo-build-properties` config plugin에서
   `android.minSdkVersion = 23`을 박는다.
 - **VWorld API key 비번들링**: 모바일 앱에는 `EXPO_PUBLIC_VWORLD_API_KEY`를 두지 않는다.
@@ -70,18 +71,18 @@ apps/mobile/
 
 ## 활성화 (Sprint M-1)
 
-1. root `package.json`의 `workspaces`에 `"apps/mobile"` 추가.
-2. WSL ext4 미러에서 의존성 설치 + 버전 정합:
+1. ~~root `workspaces`에 `apps/mobile` 추가~~ — ✅ 완료(2026-06-16).
+2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료. Expo SDK 56 설치, `expo install --check` / `expo-doctor`
+   **21/21 통과**(빌드 준비 완료). `package-lock.json` 갱신(web CI `npm ci`에 포함).
+3. **Development build 생성 (EAS) — Expo 계정 로그인 필요(인터랙티브, 사용자 수행).**
    ```bash
-   npm install
-   npm --workspace @pinvi/mobile exec -- expo install --check   # SDK 호환 버전 정합
+   cd apps/mobile
+   eas login                  # Expo 계정 로그인 (또는 EXPO_TOKEN 환경변수)
+   eas init                   # EAS 프로젝트 생성/연결 → app.json에 projectId 기록
+   npm run build:development:android   # = eas build --platform android --profile development
+   # iOS: npm run build:development:ios
    ```
-   → `package-lock.json`이 갱신되며, 이 변경은 web CI(`npm ci`)에 포함된다.
-3. development build 생성 (Expo Go 대신 Dev Client 설치):
-   ```bash
-   npm --workspace @pinvi/mobile run build:development:android
-   # iOS 환경에서는 build:development:ios
-   ```
+   빌드는 Expo 클라우드에서 수행되며 설치 가능한 dev client(APK/IPA)를 산출한다.
 4. 실행/검증 (Expo Dev Client + Metro):
    ```bash
    npm --workspace @pinvi/mobile run start       # expo start --dev-client

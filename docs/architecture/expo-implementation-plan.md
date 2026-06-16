@@ -119,7 +119,7 @@ git-URL/tarball로 핀한다.
 
 - **Expo Go 미사용**(native plugin + config plugin) — `eas build --profile development`로 dev-client
   설치 후 `expo start --dev-client`. `eas.json`에 development/preview/production 프로파일 ✓.
-- Android `minSdkVersion 23`(`expo-build-properties`), New Architecture(`newArchEnabled:true`) ✓.
+- Android `minSdkVersion 23`(`expo-build-properties`), New Architecture(SDK 56 기본, RN 0.85) ✓.
 - 실행/검증은 WSL ext4 미러 + 시뮬레이터/기기(ADR-024). git/commit은 NTFS worktree.
 
 ## 7. 권장 구현 순서 (Sprint M-1)

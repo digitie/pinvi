@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — EAS development build 준비 (expo-doctor 21/21)
+
+**작업**: development build(EAS)를 위해 `apps/mobile`을 빌드 가능 상태로 정비했다.
+`expo-doctor`가 4건을 지적해 모두 해소했다.
+
+- **`newArchEnabled` 제거**: SDK 56 app config 스키마가 거부(New Arch는 RN 0.85 기본). app.json에서
+  제거 + ADR-043/README/frontend/expo-plan 문서 정합.
+- **metro `disableHierarchicalLookup` 제거**: Expo 권장값(false)으로 복원.
+- **react 중복 해소**: `apps/mobile` react/react-dom 19.2.3 → 19.2.6으로 정합(root와 단일화, `npm ls`
+  valid). Expo 권장 19.2.3 대비 patch 차이는 `expo.install.exclude`로 처리(typescript도).
+- 결과: **`expo-doctor` 21/21 통과**. 전 workspace typecheck / web build 35/35 green 유지.
+
+**EAS 빌드 자체는 Expo 계정 로그인(인터랙티브)이 필요**해 자율 실행 불가(`eas whoami`=Not logged in,
+EXPO_TOKEN 미설정, app.json projectId 미연결). 사용자가 `eas login` → `eas init` → `eas build
+--profile development`을 수행한다(README §활성화 3). 빌드 준비/문서는 본 PR로 완료.
+
 ## 2026-06-16 (claude) — Expo `apps/mobile` Sprint M-1 활성화
 
 **작업**: 사용자 지시("m1활성화")대로 `apps/mobile`을 비활성 스캐폴드 → **활성화된 Expo SDK 56

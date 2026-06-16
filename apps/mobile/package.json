@@ -2,8 +2,13 @@
   "name": "@pinvi/mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "Pinvi 모바일 앱 (Expo Dev Client / React Native New Architecture). Next.js 웹과 @pinvi/* 공용 패키지를 공유한다 (ADR-011 / ADR-041 / ADR-043). 현재는 구조 스캐폴드(비활성) — root npm workspaces 미등록 + 미설치로 CI-safe. 활성화 절차는 README.md.",
+  "description": "Pinvi 모바일 앱 (Expo SDK 56 / Dev Client / RN New Architecture). Next.js 웹과 @pinvi/* 공용 패키지를 공유한다 (ADR-011 / ADR-041 / ADR-043). Sprint M-1 활성화됨(root workspaces 등록 + 설치). 절차는 README.md.",
   "main": "expo-router/entry",
+  "expo": {
+    "install": {
+      "exclude": ["typescript", "react", "react-dom"]
+    }
+  },
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo start --dev-client --android",
@@ -34,8 +39,8 @@
     "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "nativewind": "^4.1.23",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
     "react-native": "0.85.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
