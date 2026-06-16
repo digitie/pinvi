@@ -10,11 +10,19 @@
 
 **검증**: mobile typecheck ✅, root typecheck ✅, web lint ✅, web build ✅(라우트 회귀 없음).
 
-**후속(2026-06-16 진행 중)**: settings 세부 화면 + trip 편집/POI 재정렬·삭제 구현 완료, 모바일
-CI 게이트(`mobile.yml` + aggregate `mobile-typecheck`) 추가. **빌드 가능한 잔여는 사실상 소진**이며,
-남은 큰 항목인 지도(§4)는 외부 `maplibre-vworld-react` 선결 이슈(#2 git-install / #3 키 주입 /
-#8 카메라)가 풀려야 `(app)/map.tsx`에 실제 VWorld 지도를 탑재할 수 있다(현 placeholder 유지).
-소소한 후속: POI 필드(메모/비용) 편집, 일자 CRUD, OAuth 연결 시작(딥링크), push/offline.
+**모바일 앱 빌드 라운드 완료(2026-06-16)**: 인증 흐름 + 핵심 화면(home/trips 목록·상세·생성·편집/
+notice-plans/settings 세부/shared) + trip 편집(메타·POI 재정렬·삭제·일자 추가/삭제) + POI 필드
+편집(메모/예산) + 모바일 CI 게이트(`mobile.yml` + aggregate `mobile-typecheck`)까지 구현·머지.
+PR #202/#203/#204/#205 및 본 라운드.
+
+**남은 것은 모두 외부 선결/재빌드 의존이라 본 라운드에서 중단**:
+- **지도(§4)** — `maplibre-vworld-react` 이슈(#2 git-install / #3 키 주입 / #8 카메라) 해소 후
+  `(app)/map.tsx`에 실제 VWorld 지도 탑재(현 placeholder 유지).
+- **POI 추가** — feature 검색 UI 필요(지도/feature 흐름에 종속).
+- **OAuth 연결 시작** — `expo-web-browser`/`expo-auth-session` 네이티브 dep + dev-client 재빌드 필요.
+- **push/offline** — `expo-notifications` + 백엔드 푸시 토큰 등록 endpoint(미구현) 필요.
+
+**다음 한 작업**: 위 선결 중 하나가 풀리면 해당 화면을 잇는다. 우선순위는 지도(#3 키 주입 먼저).
 
 ## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
 
