@@ -5,7 +5,15 @@ import { LoginRequestSchema } from '@pinvi/schemas';
 import { ApiError } from '@pinvi/api-client';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 import { useAuth } from '../../lib/auth';
-import { Body, Button, ErrorBanner, Field, Heading, Screen } from '../../components/ui';
+import { OAuthCancelledError, OAuthProviderError, loginWithGoogle } from '../../lib/oauth';
+import { Body, Button, ErrorBanner, Field, Heading, Muted, Screen } from '../../components/ui';
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  OAUTH_ACCOUNT_LINK_REQUIRED:
+    '이미 같은 이메일의 Pinvi 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 Google을 연결해 주세요.',
+  OAUTH_EMAIL_UNVERIFIED: 'Google 계정의 이메일 인증을 확인할 수 없습니다.',
+  OAUTH_ACCOUNT_LINK: '계정 연결이 필요합니다.',
+};
 
 /**
  * 로그인 화면 — 웹 `apps/web/app/(auth)/login/page.tsx` 대응.
@@ -13,13 +21,34 @@ import { Body, Button, ErrorBanner, Field, Heading, Screen } from '../../compone
  * 바뀌면 `(auth)/_layout` 가드가 홈으로 리다이렉트한다. (OAuth/소셜은 후속.)
  */
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, adoptSession } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const passwordRef = useRef<TextInput>(null);
+
+  const onGoogle = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      const result = await loginWithGoogle();
+      await adoptSession(result);
+      // 성공 시 상태 전환 → 그룹 가드가 홈으로 이동.
+    } catch (err) {
+      if (err instanceof OAuthCancelledError) {
+        // 사용자가 취소 — 조용히 무시.
+      } else if (err instanceof OAuthProviderError) {
+        setError(OAUTH_ERROR_MESSAGES[err.code] ?? 'Google 로그인을 완료하지 못했습니다.');
+      } else {
+        setError('Google 로그인 중 문제가 발생했습니다.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const onSubmit = async () => {
     setError(null);
@@ -86,6 +115,18 @@ export default function LoginScreen() {
             placeholder="비밀번호"
           />
           <Button label="로그인" onPress={onSubmit} loading={loading} />
+
+          <View className="flex-row items-center gap-3 py-1">
+            <View className="h-px flex-1 bg-hairline" />
+            <Muted>또는</Muted>
+            <View className="h-px flex-1 bg-hairline" />
+          </View>
+          <Button
+            label="Google로 로그인"
+            variant="secondary"
+            onPress={onGoogle}
+            loading={googleLoading}
+          />
         </View>
 
         <View className="flex-row items-center justify-center gap-1">

@@ -45,7 +45,7 @@
 
 | 모바일 라우트 | 웹 대응 | 상태 | 핵심 재사용 |
 |--------------|---------|------|------------|
-| `app/(auth)/login.tsx` | `(auth)/login` | ✅ 구현 | `LoginRequestSchema` + `validateForm`(@pinvi/domain) |
+| `app/(auth)/login.tsx` | `(auth)/login` | ✅ 구현 | `LoginRequestSchema` + `validateForm` + **Google 로그인**(`expo-web-browser` 딥링크 → `/mobile/auth/oauth/exchange`) |
 | `app/(auth)/signup.tsx` | `(auth)/signup` | ✅ 구현 | 약관 4종 동의 + `RegisterRequestSchema` |
 | `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`) |
 | `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
@@ -134,7 +134,9 @@ git-URL/tarball로 핀한다.
    `POST /mobile/auth/{login,verify-email,refresh,logout}`가 access/refresh 토큰을 **본문으로** 반환·
    회전·폐기한다(웹 `/auth/*` cookie 경로는 그대로, 같은 인증 서비스 재사용). 앱은 SecureStore에 보관.
 3. **푸시 토큰 등록**(후속) — `expo-notifications` 토큰 저장 endpoint.
-4. CORS/origin은 모바일(앱 스킴 `pinvi://`)에 무관하나, OAuth redirect는 앱 deep link 대응 필요.
+4. **모바일 OAuth(Google)** — ✅ **구현됨**. `POST /mobile/auth/oauth/google/start`(딥링크 return_to) +
+   공통 callback이 `pinvi://oauth?code=`로 1회용 code 리다이렉트 + `POST /mobile/auth/oauth/exchange`로
+   토큰 교환. 앱은 `expo-web-browser`의 `openAuthSessionAsync`로 받는다. naver/kakao는 후속.
 
 ## 6. 빌드 · 실행 (EAS / Dev Client)
 
