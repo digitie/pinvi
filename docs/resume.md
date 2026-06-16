@@ -610,9 +610,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증
 > typecheck/Vitest 68/build/lint/e2e 52 전부 green. maplibre-vworld-react 이슈 9건 등록
 > (digitie/maplibre-vworld-react #2~#10). Expo 앱 추가구현 계획은
-> `docs/architecture/expo-implementation-plan.md`로 정리했다. **다음 단계**: Sprint M-1 활성화
-> (workspaces 등록 + install) → 인증 화면 → 백엔드 `/v1/mobile/vworld/token` → 지도(maplibre
-> 이슈 해소 의존) → 핵심 화면. maplibre-vworld-react 이슈 #3(키 번들링)이 지도 hard blocker.
+> `docs/architecture/expo-implementation-plan.md`로 정리했다. maplibre 이슈 #3(키 주입 훅)
+> 해소에 맞춰 **백엔드 `GET /mobile/vworld/token`(server-issued VWorld 키) + 인증 dep Bearer
+> 수용을 구현**했다. **다음 단계**: Sprint M-1 활성화(workspaces 등록 + install) → 인증 화면 →
+> 지도(maplibre `tileUrlTransform` + 토큰 endpoint 결선) → 핵심 화면.
 
 > **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker
 > 진입 경로 docker-manager화(ADR-040)를 한 PR로 머지했다. Expo 다음 단계는 **Sprint M-1

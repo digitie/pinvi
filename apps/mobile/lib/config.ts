@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:12801';
-const DEFAULT_VWORLD_TOKEN_PATH = '/v1/mobile/vworld/token';
+const DEFAULT_VWORLD_TOKEN_PATH = '/mobile/vworld/token';
 
 type PinviExtra = {
   apiBaseUrl?: string;

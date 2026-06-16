@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 VWorld 토큰 endpoint + Bearer 인증 (ADR-043 서버 측)
+
+**작업**: maplibre-vworld-react 이슈 #3(키 proxy/token 주입, `tileUrlTransform`) 해소에 맞춰,
+ADR-043 "VWorld 키 비번들 + server-issued"의 **서버 측 짝**을 구현했다.
+
+- **`GET /mobile/vworld/token`** (`app/api/v1/mobile.py`) — 인증된 클라이언트에 server-issued
+  VWorld 키(`api_key`/`key_source`/`ttl_seconds`) 발급. 키 미설정 시 503 `VWORLD_NOT_CONFIGURED`.
+  설정 `PINVI_VWORLD_API_KEY`(+ ttl) `config.py`에 추가.
+- **인증 dep 확장**: `get_current_user_id`가 `pinvi_access` cookie뿐 아니라 `Authorization:
+  Bearer`도 수용(모바일=Bearer, expo-plan §5 #2). 검증 로직 공유.
+- 경로 정합: Pinvi 자체 API는 `/v1` prefix가 없으므로(`app.include_router(api_router)` bare)
+  endpoint는 `/mobile/vworld/token`. `apps/mobile`의 `config.ts`/`app.json` tokenPath와 expo-plan을
+  맞췄다.
+- 통합 테스트: cookie 인증·Bearer 인증 둘 다 키 반환, 미인증 401, 키 미설정 503.
+
+**검증**: ruff/mypy/pytest는 api CI(`api.yml`)에서 실행(로컬 uv 미설치). 변경은 apps/api +
+apps/mobile 설정 + 문서.
+
 ## 2026-06-16 (claude) — maplibre-vworld-react npm 미발행 = 의도 반영
 
 **작업**: `maplibre-vworld-react`의 npm 미발행은 의도된 방침(Pinvi는 `maplibre-vworld-js`처럼
