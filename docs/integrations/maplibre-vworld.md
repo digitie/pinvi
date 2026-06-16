@@ -81,9 +81,16 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 복사·붙여넣기 사고 회피.
 
 모바일(ADR-043)은 `EXPO_PUBLIC_VWORLD_API_KEY`를 사용하지 않는다. native 앱은 웹 origin
-화이트리스트 보호를 그대로 적용하기 어렵기 때문에, 앱 설정에는 서버 발급 endpoint만 두고
-Pinvi API가 단기 token 또는 proxy session을 발급한다. 모바일 지도 엔진을
-`maplibre-react-native`로 갈지 WebView 임베드로 갈지는 별도 ADR에서 확정한다.
+화이트리스트 보호를 그대로 적용하기 어렵기 때문에, 앱 설정에는 서버 발급 endpoint
+(`GET /mobile/vworld/token`)만 두고 Pinvi API가 키를 발급한다. 모바일 지도 엔진은
+ADR-044로 `vworld-map-rn`(vendored tarball)으로 확정됐다.
+
+> **모바일 키 런타임 정책 (ADR-045)**: 현 단계(Dev Client + 내부 테스트)는 인증된
+> 클라이언트에 raw `PINVI_VWORLD_API_KEY`를 발급하는 **인터림 운영 제한**이다. 응답의
+> `ttl_seconds`는 클라이언트 refetch 힌트일 뿐 서버 강제 만료가 아니다. 발급은 인증 게이트 +
+> 구조화 감사 로그(`mobile.vworld_token_issued`, 키 원본은 미로깅)로 추적한다. **공개
+> 배포(앱스토어/플레이스토어) 전 하드 게이트**로 (A) Pinvi 서명 opaque 단기 token 또는
+> (B) tile proxy로 대체한다 — `docs/decisions.md` ADR-045.
 
 ### 3.3 키 redact
 

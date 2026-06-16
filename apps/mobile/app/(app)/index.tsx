@@ -17,7 +17,7 @@ const TILES: { href: Href; title: string; description: string }[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, offline } = useAuth();
 
   return (
     <Screen>
@@ -25,6 +25,7 @@ export default function HomeScreen() {
         <View className="gap-1">
           <Heading>안녕하세요{user?.nickname ? `, ${user.nickname}님` : ''}</Heading>
           <Body>오늘은 어떤 여행을 준비할까요?</Body>
+          {offline ? <Muted>오프라인 — 저장된 정보로 표시 중</Muted> : null}
         </View>
 
         <View className="gap-3">

@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
@@ -82,6 +83,26 @@ def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
         url=f"{base}{separator}{urlencode(params)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+async def _provider_error_redirect(
+    db: AsyncSession, *, state: str | None, error_description: str | None
+) -> RedirectResponse:
+    """Google이 callback에 error를 실어 보낸 경우 — state를 조회해 모바일/웹/연결 흐름에 맞게 라우팅."""
+    code = "OAUTH_PROVIDER_DENIED"
+    message = error_description or "Google 인증이 취소되었습니다."
+    login_state = None
+    if state:
+        try:
+            login_state = await consume_login_state(db, state=state)
+        except OAuthStateInvalidError:
+            login_state = None
+    if login_state is not None and _is_mobile_return(login_state.return_to_path):
+        return _mobile_redirect(params={"error": code, "error_description": message})
+    error_path = "/login"
+    if login_state is not None and login_state.mode == "link":
+        error_path = login_state.return_to_path or "/login"
+    return _oauth_error_redirect(code=code, message=message, path=error_path)
 
 
 def _to_auth_user(user: Any) -> AuthUser:
@@ -177,9 +198,8 @@ async def google_callback(
 ) -> RedirectResponse:
     """Google redirect 처리 — state 검증 → 토큰 교환 → 안전 매칭 → 세션 쿠키."""
     if error:
-        return _oauth_error_redirect(
-            code="OAUTH_PROVIDER_DENIED",
-            message=error_description or "Google 인증이 취소되었습니다.",
+        return await _provider_error_redirect(
+            db, state=state, error_description=error_description
         )
     if not code or not state:
         return _oauth_error_redirect(

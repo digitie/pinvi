@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-17 (claude) — 이슈 #215 Expo/mobile 사후 리뷰 후속 정리
+
+이슈 #215 완료 조건의 P0 + 정책 + 문서 항목을 한 묶음으로 처리했다(branch
+`agent/claude-issue-215`). 백엔드/모바일을 전문 에이전트로 병렬, 문서/ADR은 직접.
+
+- **#209(P0)**: provider `error`도 state를 보고 모바일 딥링크(`pinvi://oauth?error=`)로 라우팅 +
+  exchange code/login state를 원자적 조건부 UPDATE로 1회 소비. 통합 테스트 4건 추가.
+- **#207(P0/P1)**: 1회용 share URL을 화면에 보존(selectable Text + 경고) + 해제 확인 다이얼로그.
+- **#202(P1)**: 부팅 시 네트워크 실패 vs 확정 401 분리 — 네트워크면 토큰 보존 + 캐시 프로필 부팅
+  (`lib/user-cache.ts`) + offline 배너.
+- **VWorld 키 정책(P1)**: ADR-045(인터림 운영 제한 + 공개 배포 전 opaque token/proxy 게이트) +
+  토큰 발급 감사 로그(키 미로깅).
+- **문서 drift**: SDK 56 / 활성 / minSdk 24 / 설치 완료로 동기화(README/SKILL/AGENTS/CLAUDE/mobile).
+
+**검증(WSL 미러)**: API ruff/mypy --strict(변경 파일) + pytest 30 passed(oauth 통합). 모바일/웹
+typecheck(전 workspace) + web lint 모두 ✅.
+
+**다음 한 작업**: #211 실기기 smoke(Android Dev Client APK 설치 → 로그인/지도/Google OAuth/공유
+URL 복사/오프라인 부팅 확인). 이후 P2(#204/205/206 mutation rollback·클라 검증, #203 동의 gate/
+파괴적 확인, mobile CI lint/expo-doctor/build gate)를 후속 묶음으로.
+
 ## 2026-06-16 (claude) — 모바일 RN 앱 인증 흐름 + 핵심 화면 구현
 
 `apps/mobile` RN 기반(`lib/tokens.ts`·`lib/api.ts` 401 자동 refresh·`lib/auth.tsx`

@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-17 (claude) — 이슈 #215 Expo/mobile 사후 리뷰 후속 정리 (P0 + VWorld 정책 + 문서 drift)
+
+**작업**: 이슈 #215(Expo/mobile PR 사후 리뷰)의 완료 조건을 한 묶음으로 처리. 백엔드는
+backend-developer, 모바일은 mobile-developer 전문 에이전트로 병렬 처리하고(파일 분리),
+문서/ADR은 직접. Expo 플러그인 스킬(`building-native-ui`/`expo-dev-client`) 규칙 + ADR-043~045 기준.
+
+- **#209 OAuth 백엔드(P0 차단)** — (1) Google provider `error` callback이 state를 보기 전에
+  웹 `/login`으로 빠져 모바일 흐름이 `pinvi://oauth?error=`를 못 받던 문제: `_provider_error_redirect`로
+  state를 조회/소비해 모바일/웹/연결 흐름에 맞게 라우팅. (2) `consume_mobile_exchange`(및
+  `consume_login_state`)의 read-then-write 경합: `UPDATE ... WHERE consumed_at IS NULL AND
+  expires_at > now() RETURNING ...` 원자적 조건부 소비로 1회용 보장. 통합 테스트 4건 추가
+  (provider error → 모바일 딥링크 / 웹 /login / 만료 code 401 / 동시 exchange 정확히 1건 성공).
+- **#207 공유 URL 1회 손실(P0/P1)** — 생성 응답에만 있는 share `url`을 `Alert.alert`로만 띄워
+  닫으면 복구 불가하던 것을, `issuedShareUrl` 상태로 화면에 보존(`<Text selectable>` + 경고 +
+  숨기기). 공유 해제는 파괴적 확인 다이얼로그 추가.
+- **#202 모바일 부팅 복구(P1)** — 네트워크/일시 오류와 확정 인증 실패(401)를 분리. 401(ApiError,
+  refreshingFetcher가 이미 refresh 1회 실패)만 세션/토큰/캐시 정리. 네트워크 실패면 토큰 보존 +
+  `lib/user-cache.ts`(AsyncStorage)에 캐시한 프로필로 부팅 + `offline` 플래그 + 홈 배너. 부팅 catch의
+  중복 수동 refresh 제거.
+- **VWorld 키 런타임 정책(P1, #194/#208)** — **ADR-045**: 현 단계는 인증 게이트 + 감사 로깅의
+  "문서화된 운영 제한"으로 raw key 발급을 수용하되, opaque 단기 token/tile proxy를 공개 배포 전
+  하드 게이트로 박음. `mobile.py` `get_vworld_token`에 구조화 감사 로그(`mobile.vworld_token_issued`,
+  user_id/ttl만 — 키 원본 미로깅) 추가. maplibre-vworld.md에 모바일 키 정책 노트.
+- **문서 drift 정리** — README/SKILL/AGENTS/CLAUDE/apps-mobile-README의 `SDK 53`→56, `비활성`→활성,
+  `minSdkVersion 23`→24, `(미설치)`→설치 동기화. CLAUDE/AGENTS ADR 현황 ADR-045 반영(다음=ADR-046).
+
+**검증**(WSL ext4 미러): API ruff ✅ + mypy --strict ✅(변경 파일) + pytest 30 passed(oauth 통합,
+신규 4건 포함, 104s). 모바일/웹 typecheck ✅(전 9 workspace 포함) + web lint ✅.
+
+**남은 것(실기기 — 코드 외)**: #211 Dev Client Android/iOS 실기기 smoke(로그인/지도/OAuth/공유/오프라인
+부팅/foreground)는 물리 기기 필요 — 미수행. P2(#204/205/206 mutation rollback·검증, #203 동의 gate/
+파괴적 확인, mobile CI lint/doctor/build gate)는 본 묶음 범위 밖 후속.
+
 ## 2026-06-16 (claude) — 모바일 Google OAuth 앱 클라이언트
 
 **작업**: OAuth 대응 2차(모바일 앱). 백엔드(딥링크 1회용 code, 별도 PR) 위에 앱 흐름을 얹었다.

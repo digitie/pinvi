@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
+from app.core.logging import get_logger
 from app.models.user import User
 from app.schemas.auth import AuthUser, LoginRequest, VerifyEmailRequest
 from app.schemas.envelope import Envelope
@@ -48,15 +49,22 @@ from app.services.user_registration import (
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
+log = get_logger("mobile")
+
 
 @router.get("/vworld/token", response_model=Envelope[MobileVWorldTokenResponse])
 async def get_vworld_token(
     current_user_id: CurrentUserId,
 ) -> Envelope[MobileVWorldTokenResponse]:
-    """인증된 모바일 클라이언트에 server-issued VWorld 키를 발급한다 (ADR-043).
+    """인증된 모바일 클라이언트에 server-issued VWorld 키를 발급한다 (ADR-043/045).
 
     웹은 빌드타임 `NEXT_PUBLIC_VWORLD_API_KEY`를 쓰지만, 모바일 앱은 키를 번들하지 않고
     이 endpoint로 받는다(`apps/mobile/lib/config.ts`). 키 미설정 시 503.
+
+    인터림 정책(ADR-045): 현 단계는 raw `PINVI_VWORLD_API_KEY`를 인증된 클라이언트에 발급하는
+    "문서화된 운영 제한"이다. `ttl_seconds`는 클라이언트 refetch 힌트이며 서버 강제 만료가
+    아니다. 발급은 인증 게이트 + 구조화 감사 로그(user_id/ttl만; 키 원본은 절대 로깅하지 않음)로
+    추적한다. 공개 배포 전에는 opaque 단기 token 또는 tile proxy로 대체한다(ADR-045 게이트).
     """
     if not settings.pinvi_vworld_api_key:
         raise HTTPException(
@@ -66,6 +74,12 @@ async def get_vworld_token(
                 "message": "VWorld 지도 키가 설정되지 않았습니다.",
             },
         )
+    # 감사 로그 — 누가/언제 발급받았는지. 키 원본은 절대 싣지 않는다(ADR-045 §결정 3).
+    log.info(
+        "mobile.vworld_token_issued",
+        user_id=current_user_id,
+        ttl_seconds=settings.pinvi_vworld_token_ttl_seconds,
+    )
     return Envelope.of(
         MobileVWorldTokenResponse(
             api_key=settings.pinvi_vworld_api_key,
