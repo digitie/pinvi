@@ -31,9 +31,7 @@ async def test_vworld_token_with_bearer(client, verified_user, monkeypatch) -> N
     user_id, _ = verified_user
     token = create_access_token(subject=user_id)
 
-    resp = await client.get(
-        "/mobile/vworld/token", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/mobile/vworld/token", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["api_key"] == VWORLD_KEY
@@ -48,7 +46,9 @@ async def test_vworld_token_requires_auth(client, monkeypatch) -> None:
     assert resp.json()["error"]["code"] == "TOKEN_INVALID"
 
 
-async def test_vworld_token_not_configured(client, verified_user, auth_cookies, monkeypatch) -> None:
+async def test_vworld_token_not_configured(
+    client, verified_user, auth_cookies, monkeypatch
+) -> None:
     monkeypatch.setattr(KEY_ATTR, "")
     user_id, _ = verified_user
 
