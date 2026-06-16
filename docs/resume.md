@@ -616,8 +616,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 > 활성화 완료(2026-06-16)**: `apps/mobile`을 root workspaces 등록 + Expo SDK 56 의존성 설치
 > (`package-lock.json` 갱신, 535 packages), `apps/mobile` typecheck 통과, 전 workspace
 > typecheck/lint/web build/Vitest 68 green. (web CI `npm ci`가 이제 Expo 트리 설치 — ADR-041
-> 활성화.) **다음 단계**: development build(EAS) → 인증 화면 → 지도(maplibre `tileUrlTransform` +
-> `/mobile/vworld/token` 결선) → 핵심 화면.
+> 활성화.) **EAS 빌드 준비 완료**: `expo-doctor` 21/21(newArchEnabled 제거/metro/react 단일화).
+> EAS 클라우드 빌드는 **Expo 계정 로그인 필요** → 사용자가 `eas login`/`eas init`/`eas build
+> --profile development` 수행(README §활성화 3). **다음 단계**: (사용자) dev build 생성 → 인증 화면 →
+> 지도(maplibre `tileUrlTransform` + `/mobile/vworld/token` 결선) → 핵심 화면.
 
 > **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker
 > 진입 경로 docker-manager화(ADR-040)를 한 PR로 머지했다. Expo 다음 단계는 **Sprint M-1
