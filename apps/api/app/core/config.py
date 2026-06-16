@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
 
+    # VWorld 지도 키 (ADR-043) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
+    # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후
+    # server-issued 키를 발급받는다(키 미설정 시 endpoint는 503).
+    pinvi_vworld_api_key: str = ""
+    pinvi_vworld_token_ttl_seconds: int = 600
+
     # Telegram Bot 알림 (T-106) — `docs/integrations/telegram.md`.
     # bot token 원본은 DB 저장 X(§1), 로그는 mask_token으로만(§9).
     pinvi_telegram_api_base: str = "https://api.telegram.org"

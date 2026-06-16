@@ -9,7 +9,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,19 +31,32 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
+def _bearer_token(authorization: str | None) -> str | None:
+    """`Authorization: Bearer <jwt>` → 토큰. 모바일 앱은 cookie 대신 Bearer를 쓴다."""
+    if not authorization:
+        return None
+    scheme, _, credential = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not credential.strip():
+        return None
+    return credential.strip()
+
+
 async def get_current_user_id(
     request: Request,
     db: DbSession,
     pinvi_access: Annotated[str | None, Cookie(alias="pinvi_access")] = None,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    """cookie에서 access JWT 추출 + 사용자 상태와 token version 검증."""
-    if not pinvi_access:
+    """access JWT 추출(웹=`pinvi_access` cookie / 모바일=`Authorization: Bearer`) +
+    사용자 상태와 token version 검증."""
+    access_token = pinvi_access or _bearer_token(authorization)
+    if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "TOKEN_INVALID", "message": "인증 cookie가 없습니다."},
+            detail={"code": "TOKEN_INVALID", "message": "인증 정보가 없습니다."},
         )
     try:
-        payload = decode_access_token(pinvi_access)
+        payload = decode_access_token(access_token)
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

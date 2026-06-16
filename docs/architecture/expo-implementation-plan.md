@@ -84,7 +84,7 @@ RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver
 
 - 모바일 앱에 `EXPO_PUBLIC_VWORLD_API_KEY`를 두지 않는다(`bundledApiKey:false`).
 - `apps/mobile/lib/config.ts`가 `getVWorldTokenUrl()`로 Pinvi API의
-  `GET /v1/mobile/vworld/token`(기본 path)을 가리킨다 — **이 백엔드 endpoint는 신규 구현 필요**(§5).
+  `GET /mobile/vworld/token`(기본 path)을 가리킨다 — 이 백엔드 endpoint는 **구현됨**(§5).
 - `maplibre-vworld-react`에 키/토큰 주입 훅(이슈 #3)이 생기면, 이 토큰을 타일 요청에 붙인다.
 
 ### 4.2 소비 모델 — git-URL/tarball (npm 미발행은 의도)
@@ -104,10 +104,12 @@ git-URL/tarball로 핀한다.
 
 모바일 활성화 전 Pinvi API에 다음이 필요하다.
 
-1. **`GET /v1/mobile/vworld/token`** — VWorld 타일 접근용 서버 발급 단기 토큰(또는 타일 프록시
-   endpoint). ADR-043 키 비번들 정책의 서버 측 짝. (`config.ts`가 이미 이 경로를 전제.)
+1. **`GET /mobile/vworld/token`** — ✅ **구현됨**. 인증된 모바일 클라이언트에 server-issued
+   VWorld 키 발급(`api_key`/`key_source`/`ttl_seconds`, 키 미설정 시 503). ADR-043 키 비번들
+   정책의 서버 측 짝. 설정: `PINVI_VWORLD_API_KEY`. 향후 더 엄격히는 타일 프록시로 격상 가능.
 2. **모바일 인증 토큰 흐름** — 웹은 httpOnly cookie(ADR-032)지만 모바일은 Authorization
-   Bearer. refresh 회전/로그아웃의 모바일(헤더 기반) 경로 확인/보강.
+   Bearer. ✅ `get_current_user_id`가 cookie + Bearer 둘 다 수용. refresh 회전/로그아웃의
+   헤더 기반 경로는 후속.
 3. **푸시 토큰 등록**(후속) — `expo-notifications` 토큰 저장 endpoint.
 4. CORS/origin은 모바일(앱 스킴 `pinvi://`)에 무관하나, OAuth redirect는 앱 deep link 대응 필요.
 
@@ -123,7 +125,7 @@ git-URL/tarball로 핀한다.
 1. **활성화**: root `workspaces`에 `apps/mobile` 추가 + `npm install` + `expo install --check`
    (`README.md`). 이때 `@pinvi/domain` 등 공용 패키지가 RN에서 해석됨을 확인.
 2. **인증 흐름**: `(auth)/login`·`signup`·`verify-email`·`profile` + SecureStore 토큰 + refresh.
-3. **백엔드 선결**: `/v1/mobile/vworld/token` + 모바일 토큰 흐름(§5).
+3. **백엔드 선결**: `/mobile/vworld/token` + 모바일 토큰 흐름(§5) — ✅ 완료.
 4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
    해소 전에는 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로 검토.
 5. **핵심 화면**: 지도 탐색 → trips 목록/상세(POI 재정렬·지도) → notice-plans → settings → shared view.

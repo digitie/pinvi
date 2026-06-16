@@ -23,7 +23,7 @@
         "apiBaseUrl": "http://localhost:12801",
         "vworld": {
           "keySource": "server-issued",
-          "tokenPath": "/v1/mobile/vworld/token",
+          "tokenPath": "/mobile/vworld/token",
           "bundledApiKey": false
         }
       }

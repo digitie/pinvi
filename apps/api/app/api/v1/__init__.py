@@ -7,6 +7,7 @@ from app.api.v1 import (
     features,
     geo,
     healthz,
+    mobile,
     notice_plans,
     oauth,
     pois,
@@ -28,6 +29,7 @@ api_router.include_router(healthz.router)
 api_router.include_router(auth.router)
 api_router.include_router(oauth.router)
 api_router.include_router(users.router)
+api_router.include_router(mobile.router)
 api_router.include_router(telegram_targets.router)
 api_router.include_router(trip_telegram_targets.router)
 api_router.include_router(trips.router)
