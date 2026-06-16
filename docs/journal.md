@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 기준 Expo SDK 53 → 56 상향
+
+**작업**: 사용자 결정대로 `apps/mobile` 기준 Expo SDK를 53 → 56으로 상향했다
+(maplibre-vworld-react example과 동일 기준).
+
+- `apps/mobile/package.json`: `expo ~56.0.12`, `react`/`react-dom 19.2.3`, `react-native 0.85.3`,
+  `expo-status-bar ~56.0.4`, `expo-build-properties ~0.13.2`, `typescript ~6.0.3`,
+  `@types/react ~19.2.2` 등 SDK 56 정합(미설치 스캐폴드 — 정확한 patch는 활성화 시
+  `expo install --check`가 reconcile).
+- ADR-043에 2026-06-16 갱신 note 추가. ADR-011 / `frontend.md` / `expo-implementation-plan.md` /
+  `apps/mobile/README.md` / `AGENTS.md` / `CLAUDE.md` / `spec/v8/03-frontend.md`의 SDK 53 표기를
+  56으로 정합. ADR-041의 "SDK 53 스캐폴드 추가"는 역사 기록으로 유지.
+- maplibre-vworld-react 이슈 #7(SDK 53 vs 56)은 이미 closed — Pinvi가 56으로 맞춰 불일치 해소.
+
+**검증**: package.json JSON valid. `apps/mobile`은 root workspaces 밖(미설치)이라 web/api/etl CI
+미트리거(문서 + 모바일 스캐폴드 변경).
+
 ## 2026-06-16 (claude) — 모바일 VWorld 토큰 endpoint + Bearer 인증 (ADR-043 서버 측)
 
 **작업**: maplibre-vworld-react 이슈 #3(키 proxy/token 주입, `tileUrlTransform`) 해소에 맞춰,

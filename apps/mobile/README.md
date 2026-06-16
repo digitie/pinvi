@@ -63,7 +63,7 @@ apps/mobile/
 ├── tailwind.config.js       # @pinvi/design-tokens preset + NativeWind preset
 ├── global.css               # Tailwind directives
 ├── tsconfig.json            # ../../tsconfig.base.json 확장
-└── package.json             # Expo SDK 53 + @pinvi/* (미설치)
+└── package.json             # Expo SDK 56 + @pinvi/* (미설치)
 ```
 
 공용 로직·데이터(스키마/ API 클라이언트/ 상태/ 디자인 토큰/ hook/ i18n)는 새로 쓰지 않고

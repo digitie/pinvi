@@ -89,7 +89,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-kraddr-gop` | 우편번호 / 도로명 base |
 | `maplibre-vworld-js` | **Pinvi 지도 클라이언트** — VWorld + MapLibre GL JS 선언형 React (ADR-015). Place/Price/Weather 마커 + `PolygonArea` + `RouteLine` + `ClusterLayer` + `Popup` generic primitive 제공 (Pinvi 도메인 wrapper / 16색 팔레트 상수는 라이브러리에 없음 — `apps/web/lib`에서 직접 구현). `apps/web`이 npm 또는 git URL pin으로 직접 import. wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
 
-모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 53 + Expo Router + **Expo Dev
+모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 56 + Expo Router + **Expo Dev
 Client** + EAS Build + React Native New Architecture를 사용한다. Expo Go는 사용하지
 않고, Android `minSdkVersion`은 23 이상이며, VWorld API key는 앱에 번들하지 않고
 Pinvi API의 server-issued token/proxy 구조로 분리한다.
