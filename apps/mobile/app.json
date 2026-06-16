@@ -2,6 +2,7 @@
   "expo": {
     "name": "Pinvi",
     "slug": "pinvi",
+    "owner": "digitie",
     "scheme": "pinvi",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -11,7 +12,11 @@
       "bundleIdentifier": "org.mywire.digitie.pinvi"
     },
     "android": {
-      "package": "org.mywire.digitie.pinvi"
+      "package": "org.mywire.digitie.pinvi",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -25,6 +30,10 @@
           "tokenPath": "/mobile/vworld/token",
           "bundledApiKey": false
         }
+      },
+      "router": {},
+      "eas": {
+        "projectId": "2e24842e-6159-4145-8cb1-63964e2fe6fc"
       }
     },
     "plugins": [
