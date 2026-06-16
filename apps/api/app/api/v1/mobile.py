@@ -11,22 +11,32 @@ from __future__ import annotations
 from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, status
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
+from app.models.user import User
 from app.schemas.auth import AuthUser, LoginRequest, VerifyEmailRequest
 from app.schemas.envelope import Envelope
 from app.schemas.mobile import (
     MobileAuthResponse,
+    MobileOAuthExchangeRequest,
     MobileRefreshRequest,
     MobileVWorldTokenResponse,
 )
+from app.schemas.oauth import OAuthStartResponse
 from app.services.auth_session import (
     RefreshTokenExpiredError,
     RefreshTokenInvalidError,
     issue_user_session,
     refresh_user_session,
     revoke_user_session,
+)
+from app.services.oauth_google import (
+    OAuthStateInvalidError,
+    build_authorize_url,
+    consume_mobile_exchange,
+    issue_login_state,
 )
 from app.services.user_registration import (
     EmailNotVerifiedError,
@@ -170,3 +180,51 @@ async def mobile_refresh(
 async def mobile_logout(body: MobileRefreshRequest, db: DbSession) -> None:
     """모바일 logout — 본문 refresh token으로 세션 폐기."""
     await revoke_user_session(db, refresh_token=body.refresh_token)
+
+
+@router.post("/auth/oauth/google/start", response_model=Envelope[OAuthStartResponse])
+async def mobile_oauth_google_start(db: DbSession) -> Envelope[OAuthStartResponse]:
+    """모바일 Google OAuth 시작 — authorize URL 발급.
+
+    웹 `/auth/oauth/google/start`와 같은 state/PKCE 발급을 쓰되 `return_to`를 앱 딥링크
+    (`pinvi_mobile_oauth_redirect`)로 둔다. 공통 callback이 이 흐름을 모바일로 인지해 쿠키 대신
+    1회용 code를 `pinvi://oauth?code=`로 돌려준다. 앱은 그 URL을
+    `WebBrowser.openAuthSessionAsync`로 받아 `/mobile/auth/oauth/exchange`로 교환한다.
+    """
+    if not settings.pinvi_google_oauth_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
+        )
+    state, nonce, code_verifier = await issue_login_state(
+        db, mode="login", return_to=settings.pinvi_mobile_oauth_redirect
+    )
+    url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
+    return Envelope.of(OAuthStartResponse(authorize_url=url))
+
+
+@router.post("/auth/oauth/exchange", response_model=Envelope[MobileAuthResponse])
+async def mobile_oauth_exchange(
+    body: MobileOAuthExchangeRequest, request: Request, db: DbSession
+) -> Envelope[MobileAuthResponse]:
+    """1회용 OAuth code → access/refresh 토큰. callback이 발급한 code를 토큰과 교환."""
+    try:
+        user_id = await consume_mobile_exchange(db, code=body.code)
+    except OAuthStateInvalidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "TOKEN_INVALID", "message": "사용자를 찾을 수 없습니다."},
+        )
+
+    user_agent, ip_address = _client_meta(request)
+    issue = await issue_user_session(
+        db, user_id=user.user_id, user_agent=user_agent, ip_address=ip_address
+    )
+    return _mobile_auth_response(user, issue)

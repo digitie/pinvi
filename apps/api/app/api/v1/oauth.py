@@ -36,6 +36,7 @@ from app.services.oauth_google import (
     exchange_code_for_claims,
     issue_login_state,
     link_google_to_user,
+    mint_mobile_exchange,
     resolve_google_login,
 )
 
@@ -64,6 +65,21 @@ def _oauth_error_redirect(*, code: str, message: str, path: str = "/login") -> R
     separator = "&" if "?" in target_path else "?"
     return RedirectResponse(
         url=f"{settings.pinvi_web_base_url}{target_path}{separator}{query}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _is_mobile_return(return_to_path: str | None) -> bool:
+    """모바일 OAuth 흐름인지 — start가 return_to를 앱 딥링크 스킴으로 발급한 경우."""
+    return bool(return_to_path) and return_to_path == settings.pinvi_mobile_oauth_redirect
+
+
+def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
+    """앱 딥링크(`pinvi://oauth`)로 리다이렉트. 토큰은 싣지 않고 1회용 code/에러만."""
+    base = settings.pinvi_mobile_oauth_redirect
+    separator = "&" if "?" in base else "?"
+    return RedirectResponse(
+        url=f"{base}{separator}{urlencode(params)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -176,14 +192,21 @@ async def google_callback(
     except OAuthStateInvalidError as exc:
         return _oauth_error_redirect(code=exc.code, message=str(exc))
 
+    is_mobile = _is_mobile_return(login_state.return_to_path)
+
+    def _flow_error(exc: OAuthError) -> RedirectResponse:
+        if is_mobile:
+            return _mobile_redirect(params={"error": exc.code, "error_description": str(exc)})
+        error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
+        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
+
     try:
         claims = await exchange_code_for_claims(
             code=code,
             code_verifier=login_state.code_verifier,
         )
     except OAuthError as exc:
-        error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
-        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
+        return _flow_error(exc)
 
     try:
         if login_state.mode == "link" and login_state.user_id is not None:
@@ -193,8 +216,12 @@ async def google_callback(
             result = await resolve_google_login(db, claims=claims)
             user_id = result.user.user_id
     except OAuthError as exc:
-        error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
-        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
+        return _flow_error(exc)
+
+    # 모바일: 쿠키/세션 대신 1회용 code를 앱 딥링크로 전달(세션은 exchange 시점 발급).
+    if is_mobile:
+        exchange_code = await mint_mobile_exchange(db, user_id=user_id)
+        return _mobile_redirect(params={"code": exchange_code})
 
     return_to = login_state.return_to_path or "/"
     redirect = RedirectResponse(

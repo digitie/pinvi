@@ -61,3 +61,29 @@ class OAuthLoginState(Base):
         nullable=False,
         server_default=text("now()"),
     )
+
+
+class OAuthMobileExchange(Base):
+    """모바일 OAuth 1회용 교환 코드.
+
+    웹은 callback에서 쿠키를 세팅하지만(ADR-032), 모바일은 cookie를 못 쓴다. Google callback이
+    `pinvi://oauth?code=<code>` 딥링크로 리다이렉트하고, 앱이 그 code를
+    `POST /mobile/auth/oauth/exchange`로 토큰과 교환한다. 토큰을 URL에 싣지 않도록 code→user_id만
+    저장하고(세션은 exchange 시점에 발급), 짧은 TTL + 1회 소비로 막는다.
+    """
+
+    __tablename__ = "oauth_mobile_exchanges"
+
+    code_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
