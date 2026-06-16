@@ -8,22 +8,20 @@ React Native 앱이다.
 결정은 [ADR-011](../../docs/decisions.md) / [ADR-041](../../docs/decisions.md) /
 [ADR-043](../../docs/decisions.md)를 본다.
 
-## 현재 상태 — 비활성 스캐폴드 (CI-safe)
+## 현재 상태 — 활성화됨 (Sprint M-1, 2026-06-16)
 
-이 디렉터리는 **구조만 박아 둔 스캐폴드**다. 다음 두 가지가 의도적으로 미반영 상태다:
+이 디렉터리는 **활성화된 Expo SDK 56 앱**이다(구조 스캐폴드 → 활성화). 다음이 반영됐다:
 
-1. **root `package.json`의 `workspaces`에 등록하지 않았다.**
-2. **의존성을 설치하지 않았다** (`node_modules` 없음, `package-lock.json` 미변경).
+1. **root `package.json`의 `workspaces`에 `apps/mobile` 등록.**
+2. **Expo SDK 56 의존성 설치 + `package-lock.json` 갱신** (`expo install --check` 정합 — 네이티브
+   모듈 전부 SDK 56 정렬).
+3. **`tsc --noEmit` 통과** — 루트 `npm run typecheck`(전 workspace)에 `apps/mobile`이 포함된다.
 
-이유: CI(`.github/workflows/web.yml`)가 `npm ci`로 설치한다. `npm ci`는
-`package.json` ↔ `package-lock.json` 정합을 강제하므로, `apps/mobile`을 workspaces에
-넣으면서 Expo/RN 의존성을 lockfile에 커밋하지 않으면 **web CI가 깨진다**. 반대로 전체
-Expo 트리를 lockfile에 커밋하면 매 web CI가 무거운 Expo 의존성을 설치하게 된다. 그래서
-**스캐폴드는 install 그래프 밖에 두고**, 실제 설치·workspaces 등록은 활성화 단계(Sprint
-M-1)로 분리했다. 결과적으로 본 스캐폴드를 추가하는 PR은 web/api/etl CI를 트리거하지
-않고 머지된다.
+> CI(`web.yml`)의 `npm ci`가 이제 Expo 트리를 설치하고 typecheck에 `apps/mobile`을 포함한다
+> (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은 자체
+> `lint`/`build` 스크립트가 없어 루트 `npm run lint`/`build --if-present`에서는 건너뛴다.
 
-> 그동안 `@pinvi/*` import는 IDE/타입 해석이 안 될 수 있다(미설치). 활성화 후 정상 동작한다.
+남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
 
 ## 모바일 런타임 기준선
 

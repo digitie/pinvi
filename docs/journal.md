@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — Expo `apps/mobile` Sprint M-1 활성화
+
+**작업**: 사용자 지시("m1활성화")대로 `apps/mobile`을 비활성 스캐폴드 → **활성화된 Expo SDK 56
+앱**으로 전환했다 (ADR-041 활성화).
+
+- root `package.json` `workspaces`에 `apps/mobile` 등록.
+- Expo SDK 56 의존성 설치: package.json을 Expo `bundledNativeModules`(sdk-56) 기준 정확 버전으로
+  정합(통합 56.x 체계 — expo-router ~56.2.11, expo-location ~56.0.18 등). `npm install`로 535
+  packages 설치 + `package-lock.json` 갱신. `expo install --check`는 네이티브 모듈 전부 SDK 56
+  정렬(typescript만 권장 6.0.3 vs repo 5.x — cosmetic, expo-managed 아님).
+- **검증**: `apps/mobile` `tsc --noEmit` 통과(실제 Expo/RN 타입 기준). 루트 `npm run typecheck`
+  (전 workspace), `npm run lint`, `npm run test`(Vitest 68), `npm run build`(web 35/35) 모두 green.
+- 문서: README(활성화됨), ADR-041(활성화 note), expo-implementation-plan §0/§7 갱신.
+
+**영향**: 의도적 CI-safe 유예 종료 — web CI `npm ci`가 Expo 트리를 설치하고 typecheck에
+`apps/mobile`을 포함한다(web CI가 다소 무거워짐). 남은 것은 development build + 화면 구현.
+WSL 미러 부재로 install/검증은 Windows에서 수행(lockfile은 플랫폼 독립, 권위 검증은 CI).
+
 ## 2026-06-16 (claude) — 모바일 기준 Expo SDK 53 → 56 상향
 
 **작업**: 사용자 결정대로 `apps/mobile` 기준 Expo SDK를 53 → 56으로 상향했다

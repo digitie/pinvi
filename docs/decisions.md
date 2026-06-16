@@ -1471,9 +1471,14 @@
 
 ## ADR-041: Expo `apps/mobile` 구조 스캐폴드를 추가하고 활성화는 Sprint M-1로 분리한다
 
-- **상태**: accepted
+- **상태**: accepted (2026-06-16 **활성화 완료**)
 - **날짜**: 2026-06-13
 - **결정자**: 사용자 + Claude
+- **2026-06-16 활성화**: Sprint M-1 활성화 완료 — `apps/mobile`을 root `workspaces`에 등록하고
+  Expo SDK 56 의존성을 설치(`package-lock.json` 갱신, `expo install --check`로 네이티브 모듈
+  정합). 루트 `npm run typecheck`에 `apps/mobile`이 포함되며 전 workspace typecheck/lint/web
+  build/Vitest(68) 통과. **의도적 CI-safe 유예는 종료** — web CI `npm ci`가 Expo 트리를 설치하고
+  typecheck에 `apps/mobile`을 포함한다(web CI가 다소 무거워짐).
 - **컨텍스트**: ADR-011이 Next.js 웹 + Expo 모바일 공용 패키지 구조를 박았고,
   `packages/*`(schemas/api-client/state/design-tokens/hooks/i18n)는 처음부터 플랫폼
   무관 + 어댑터 주입형으로 작성됐다(frontend.md §2, §6). 남은 것은 `apps/mobile` Expo

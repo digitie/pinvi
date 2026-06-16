@@ -7,10 +7,12 @@
 
 ## 0. 현재 상태 (2026-06-16)
 
-- `apps/mobile`은 **비활성 구조 스캐폴드**다: Expo Router 진입(`app/_layout.tsx`,
-  `index.tsx`, `(auth)/login.tsx`), 플랫폼 어댑터(`lib/{api,location,storage,stores,config}.ts`),
-  설정(`app.json`/`eas.json`/`babel`/`metro`/`tailwind`/`tsconfig`)만 있다.
-- root `workspaces` 미등록 + 미설치(CI-safe). 활성화 절차는 `apps/mobile/README.md`.
+- `apps/mobile`은 **활성화된 Expo SDK 56 앱**이다(2026-06-16 Sprint M-1 활성화): Expo Router
+  진입(`app/_layout.tsx`, `index.tsx`, `(auth)/login.tsx`), 플랫폼 어댑터
+  (`lib/{api,location,storage,stores,config}.ts`), 설정(`app.json`/`eas.json`/`babel`/`metro`/
+  `tailwind`/`tsconfig`)을 갖는다.
+- root `workspaces` 등록 + Expo SDK 56 의존성 설치 완료(`package-lock.json` 갱신). 루트
+  `npm run typecheck`에 포함되며 통과. 남은 것은 development build + 화면 구현(§7).
 - **2026-06-16 갱신**: 공용 순수 로직이 `@pinvi/domain`으로 모였다(이 저장소 refactor).
   모바일은 이제 웹과 동일하게 `@pinvi/domain`을 import해 거리/정렬/검증/공유/업로드/마커
   스타일을 재사용한다.
@@ -122,8 +124,10 @@ git-URL/tarball로 핀한다.
 
 ## 7. 권장 구현 순서 (Sprint M-1)
 
-1. **활성화**: root `workspaces`에 `apps/mobile` 추가 + `npm install` + `expo install --check`
-   (`README.md`). 이때 `@pinvi/domain` 등 공용 패키지가 RN에서 해석됨을 확인.
+1. **활성화** — ✅ **완료(2026-06-16)**: root `workspaces`에 `apps/mobile` 등록 + Expo SDK 56
+   `npm install`(`package-lock.json` 갱신) + `expo install --check` 정합. 루트 `npm run typecheck`에
+   포함되며 전 workspace typecheck/lint/web build/Vitest 통과. `@pinvi/domain` 등 공용 패키지가
+   RN에서 정상 해석됨.
 2. **인증 흐름**: `(auth)/login`·`signup`·`verify-email`·`profile` + SecureStore 토큰 + refresh.
 3. **백엔드 선결**: `/mobile/vworld/token` + 모바일 토큰 흐름(§5) — ✅ 완료.
 4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
