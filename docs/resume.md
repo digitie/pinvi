@@ -22,15 +22,22 @@ Pinvi는 `vworld-map-{core,rn}` vendored tarball을 `apps/mobile/vendor/`에 `fi
 `@maplibre/maplibre-react-native` config plugin을 추가했다. `(app)/map.tsx`가 server-issued 키로
 실제 `VWorldMapView`(내 위치 마커 + `flyTo`)를 렌더한다. mobile typecheck 그린.
 
-**남은 것**:
-- **EAS Dev Client 재빌드** — 지도 네이티브 모듈(`@maplibre/maplibre-react-native`) 포함 새 APK
-  빌드를 해야 실기기에서 지도가 뜬다(JS 변경만으론 부족). EXPO_TOKEN 보유.
-- **OAuth 연결 시작** — `expo-web-browser`/`expo-auth-session` 네이티브 dep + dev-client 재빌드
-  (다음 작업 — 사용자 지시).
-- **POI 추가** — feature 검색 UI 필요(지도/feature 흐름에 종속).
-- **push/offline** — `expo-notifications` + 백엔드 푸시 토큰 등록 endpoint(미구현) 필요.
+**2026-06-16 추가 — Google OAuth 완료(모바일)**: 백엔드(딥링크 1회용 code: `/mobile/auth/oauth/
+google/start` + 공통 callback `pinvi://oauth?code=` + `/mobile/auth/oauth/exchange`,
+`app.oauth_mobile_exchanges` 0024) + 앱(`expo-web-browser` `loginWithGoogle` + login 화면 버튼)을
+머지했다. PR #209(backend)/#210(client). maplibre `markers` color parity는 라이브러리 #21(PR #22).
 
-**다음 한 작업**: 지도 PR 머지 후 OAuth(Google) 모바일 딥링크 대응을 진행한다(사용자 지시).
+**EAS Dev Client 빌드**: 지도(maplibre) 단독 빌드 `2DV8...apk`(FINISHED) 확인. 지도+OAuth
+(expo-web-browser) **결합 빌드** `54e933ef`를 main에서 트리거(진행 중) — 실기기 검증용 dev-client APK.
+
+**남은 것(외부/운영 선결)**:
+- **결합 EAS 빌드 완료 확인** + Android 기기 설치 후 `expo start --dev-client`로 지도/OAuth 실동작 smoke.
+- **Google Console**: 모바일 OAuth가 실제로 동작하려면 운영 callback(`pinviapi.digitie.mywire.org/auth/oauth/google/callback`)이
+  승인된 redirect_uri에 있어야 하고, dev에선 공개 터널이 필요하다(코드는 완성).
+- **POI 추가** — feature 검색 UI(지도/feature 흐름 종속). **push/offline** — `expo-notifications` +
+  백엔드 푸시 토큰 endpoint(미구현). naver/kakao OAuth.
+
+**다음 한 작업**: `54e933ef` 결합 빌드가 끝나면 APK로 지도/Google 로그인을 실기기 smoke한다.
 
 ## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
 
