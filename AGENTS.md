@@ -92,7 +92,10 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 56 + Expo Router + **Expo Dev
 Client** + EAS Build + React Native New Architecture를 사용한다. Expo Go는 사용하지
 않고, Android `minSdkVersion`은 24 이상이며(SDK 56 요구), VWorld API key는 앱에 번들하지 않고
-Pinvi API의 server-issued token/proxy 구조로 분리한다.
+Pinvi API의 server-issued token/proxy 구조로 분리한다. 모바일 지도 엔진은 ADR-044: 별 저장소
+`maplibre-vworld-react`의 `vworld-map-rn`을 **vendored tarball**(`apps/mobile/vendor/*.tgz`
+`file:` 핀)로 소비하고, `@maplibre/maplibre-react-native` config plugin이 필요해 EAS Dev Client
+빌드에서만 동작한다.
 
 상세 사용 정책은 `kor-travel-map`의 `docs/external-apis.md`와 본 저장소의
 `docs/kor-travel-map-integration.md`.

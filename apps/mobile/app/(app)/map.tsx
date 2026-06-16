@@ -1,17 +1,24 @@
+import { useRef } from 'react';
 import { View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
+import { VWorldMapView, type VWorldMapHandle } from 'vworld-map-rn';
 import { useUserLocation } from '@pinvi/hooks';
 import { apiClient } from '../../lib/api';
 import { expoLocationAdapter } from '../../lib/location';
 import { Body, Button, Card, Heading, Muted, Screen, Subheading } from '../../components/ui';
 
 /**
- * 지도 화면 — 현재는 placeholder. 실제 VWorld 지도는 `maplibre-vworld-react`(RN)
- * 선결 항목(키 주입 #3 / git-install #2 / 프리미티브 #5·#6 / 카메라 #8)이 해소되어야
- * 탑재한다(expo-implementation-plan §4). 여기서는 (a) server-issued VWorld 키 경로와
- * (b) `useUserLocation` 어댑터가 동작함을 확인한다.
+ * 지도 화면 — VWorld + MapLibre (`vworld-map-rn`). VWorld 키는 앱에 번들하지 않고
+ * `GET /mobile/vworld/token`으로 server-issued 발급받아 `apiKey`로 주입한다(ADR-043).
+ * 내 위치 마커 + "현재 위치로" 카메라 이동(`VWorldMapHandle.flyTo`).
+ *
+ * 네이티브 모듈(`@maplibre/maplibre-react-native`)이 필요하므로 Expo Dev Client(EAS) 빌드에서만
+ * 동작한다(Expo Go 미사용, ADR-043).
  */
+const SEOUL: [number, number] = [126.978, 37.5665];
+
 const VWorldTokenSchema = z.object({
   api_key: z.string(),
   key_source: z.literal('server-issued'),
@@ -19,8 +26,12 @@ const VWorldTokenSchema = z.object({
 });
 
 export default function MapScreen() {
+  const mapRef = useRef<VWorldMapHandle>(null);
   const { location, error, loading, refresh } = useUserLocation(expoLocationAdapter, {
     high_accuracy: false,
+    on_success: (loc) => {
+      mapRef.current?.flyTo({ center: [loc.coord.lon, loc.coord.lat], zoom: 15 });
+    },
   });
 
   const tokenQuery = useQuery({
@@ -31,54 +42,75 @@ export default function MapScreen() {
     staleTime: 60_000,
   });
 
-  return (
-    <Screen>
-      <View className="gap-5 py-2">
-        <View className="gap-1">
+  // 키 미발급(미설정/오프라인) → 지도를 띄울 수 없으므로 안내 화면.
+  if (tokenQuery.isError || (tokenQuery.isSuccess && !tokenQuery.data.api_key)) {
+    return (
+      <Screen>
+        <View className="gap-5 py-2">
           <Heading>지도</Heading>
-          <Body>주변 장소 탐색은 준비 중입니다.</Body>
-        </View>
-
-        <Card className="gap-2">
-          <Subheading>지도 라이브러리 준비 상태</Subheading>
-          <Muted>
-            VWorld + MapLibre 지도는 `maplibre-vworld-react` 선결 항목(키 주입·git 설치·카메라
-            제어) 해소 후 탑재됩니다(ADR-043, 이슈 #2/#3/#8).
-          </Muted>
-        </Card>
-
-        <Card className="gap-2">
-          <Subheading>지도 키(server-issued)</Subheading>
-          {tokenQuery.isLoading ? (
-            <Muted>키 발급 확인 중…</Muted>
-          ) : tokenQuery.isError ? (
-            <Muted>키 발급 확인 실패 — API 서버 연결 후 다시 시도하세요.</Muted>
-          ) : (
-            <Body>
-              발급 OK · 만료 {tokenQuery.data?.ttl_seconds}s · 키는 앱에 번들하지 않음
-            </Body>
-          )}
-        </Card>
-
-        <Card className="gap-3">
-          <Subheading>내 위치</Subheading>
-          {location ? (
-            <Body>
-              위도 {location.coord.lat.toFixed(5)}, 경도 {location.coord.lon.toFixed(5)} (±
-              {Math.round(location.accuracy_m)}m)
-            </Body>
-          ) : error ? (
-            <Muted className="text-error-text">
-              {error.code === 'PERMISSION_DENIED'
-                ? '위치 권한이 거부되었습니다. 설정에서 권한을 허용해 주세요.'
-                : '위치를 가져오지 못했습니다.'}
+          <Card className="gap-2">
+            <Subheading>지도를 불러올 수 없습니다</Subheading>
+            <Muted>
+              VWorld 지도 키를 발급받지 못했습니다. API 서버 연결과 키 설정(`PINVI_VWORLD_API_KEY`)을
+              확인한 뒤 다시 시도하세요.
             </Muted>
-          ) : (
-            <Muted>아직 위치를 가져오지 않았습니다.</Muted>
-          )}
-          <Button label="현재 위치 가져오기" variant="secondary" onPress={refresh} loading={loading} />
-        </Card>
+            <Button label="다시 시도" variant="secondary" onPress={() => tokenQuery.refetch()} />
+          </Card>
+        </View>
+      </Screen>
+    );
+  }
+
+  const markers =
+    location != null
+      ? [
+          {
+            id: 'me',
+            coordinate: [location.coord.lon, location.coord.lat] as [number, number],
+            color: '#1E88E5',
+            selected: true,
+            ariaLabel: '내 위치',
+          },
+        ]
+      : [];
+
+  const center: [number, number] = location
+    ? [location.coord.lon, location.coord.lat]
+    : SEOUL;
+
+  return (
+    <SafeAreaView className="flex-1 bg-canvas" edges={['bottom']}>
+      <View className="flex-1">
+        {tokenQuery.isSuccess ? (
+          <VWorldMapView
+            ref={mapRef}
+            apiKey={tokenQuery.data.api_key}
+            mapType="base"
+            initialCenter={center}
+            initialZoom={location ? 15 : 12}
+            markers={markers}
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Muted>지도 키 발급 중…</Muted>
+          </View>
+        )}
+
+        {/* 오버레이 컨트롤 */}
+        <View className="absolute bottom-5 left-5 right-5 gap-2">
+          {error ? (
+            <Card className="gap-1">
+              <Body className="text-error-text">
+                {error.code === 'PERMISSION_DENIED'
+                  ? '위치 권한이 거부되었습니다. 설정에서 허용해 주세요.'
+                  : '위치를 가져오지 못했습니다.'}
+              </Body>
+            </Card>
+          ) : null}
+          <Button label="현재 위치로" onPress={refresh} loading={loading} />
+        </View>
       </View>
-    </Screen>
+    </SafeAreaView>
   );
 }

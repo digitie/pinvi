@@ -66,7 +66,7 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-043**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-044**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -82,7 +82,9 @@ Postgres fixed-window bucket), ADR-039 (운영 노드 간 DB live sync 미사용
 ADR-041 (Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1),
 ADR-042 (`kor-travel-docker-manager` target 대역 기반 로컬 포트 정책),
 ADR-043 (모바일은 Expo Dev Client + EAS Build, Expo Go 미사용, RN New Architecture,
-Android minSdk 24, VWorld server-issued key 구조). 다음 신규 = ADR-044.
+Android minSdk 24, VWorld server-issued key 구조),
+ADR-044 (모바일 지도 엔진 = `maplibre-vworld-react`/`vworld-map-rn`, vendored tarball `file:` 핀
+소비, server-issued 키). 다음 신규 = ADR-045.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

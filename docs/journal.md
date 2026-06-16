@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 지도 통합 (vworld-map-rn) + 라이브러리 #21 수정 (ADR-044)
+
+**작업**: 사용자 지시 — maplibre-vworld-react 직접 수정(이슈→PR→머지) 후 모바일에서 소비.
+
+- **라이브러리 점검**: `digitie/maplibre-vworld-react` 선결 이슈 #2~#10이 이미 모두 closed·머지됨
+  (이전 세션, tileUrlTransform/camera/redaction/primitives/dist 등 완비, 8/8 그린).
+- **소비 중 실제 gap 발견 → 수정(#21)**: `VWorldMapView`의 `markers` 편의 prop이 `color`/
+  `highlighted`/`zIndex`/`ariaLabel`를 `<Marker>`에 전달하지 않아 모든 핀이 빨강으로 렌더됐다.
+  core `MarkerItem`에 타입 필드 추가 + RN에서 전달 + 회귀 테스트 → PR #22 머지. 16색 마커 parity 확보.
+- **Pinvi 소비(ADR-044)**: `vworld-map-core`/`vworld-map-rn`을 `npm pack`해 `apps/mobile/vendor/`에
+  vendored tarball로 두고 `file:` 핀(둘 다 핀해야 `rn`의 core 의존 충족 — npm 미발행 방침). 
+  `@maplibre/maplibre-react-native@^11.3.4` + config plugin(`app.json`) 추가. lockfile 갱신.
+- **지도 화면**: `(app)/map.tsx`를 placeholder → 실제 `VWorldMapView`로 교체. server-issued 키
+  (`GET /mobile/vworld/token`)를 `apiKey`로 주입(ADR-043, 비번들), 내 위치 마커(파랑, color 전달
+  검증) + `flyTo`로 "현재 위치로". 키 미발급 시 안내 화면.
+
+**검증**: 라이브러리 8/8(typecheck/lint/test/build) + Pinvi mobile typecheck ✅. 실기기 동작은
+네이티브 모듈 포함 EAS Dev Client 재빌드 필요(별도).
+
 ## 2026-06-16 (claude) — 모바일 trip 삭제 + 공유 링크 생성/해제 (lifecycle 완결)
 
 **작업**: "남은 작업 끝까지" 5차(빌드 가능한 CRUD gap 마감).

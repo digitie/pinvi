@@ -16,14 +16,21 @@ POI 필드 편집(메모/예산) + **공유 링크 생성/해제** + 모바일 C
 `mobile-typecheck`)까지 구현·머지. PR #202/#203/#204/#205/#206 및 trip-lifecycle PR.
 trip CRUD(생성·읽기·수정·삭제)가 모바일에서 완결됐다.
 
-**남은 것은 모두 외부 선결/재빌드 의존이라 본 라운드에서 중단**:
-- **지도(§4)** — `maplibre-vworld-react` 이슈(#2 git-install / #3 키 주입 / #8 카메라) 해소 후
-  `(app)/map.tsx`에 실제 VWorld 지도 탑재(현 placeholder 유지).
+**2026-06-16 추가 — 지도 통합 완료(ADR-044)**: `maplibre-vworld-react` 선결 이슈는 이미 해소돼
+있었고(이전 세션), 소비 중 발견한 markers color parity gap을 라이브러리 #21(PR #22)로 수정·머지.
+Pinvi는 `vworld-map-{core,rn}` vendored tarball을 `apps/mobile/vendor/`에 `file:` 핀하고
+`@maplibre/maplibre-react-native` config plugin을 추가했다. `(app)/map.tsx`가 server-issued 키로
+실제 `VWorldMapView`(내 위치 마커 + `flyTo`)를 렌더한다. mobile typecheck 그린.
+
+**남은 것**:
+- **EAS Dev Client 재빌드** — 지도 네이티브 모듈(`@maplibre/maplibre-react-native`) 포함 새 APK
+  빌드를 해야 실기기에서 지도가 뜬다(JS 변경만으론 부족). EXPO_TOKEN 보유.
+- **OAuth 연결 시작** — `expo-web-browser`/`expo-auth-session` 네이티브 dep + dev-client 재빌드
+  (다음 작업 — 사용자 지시).
 - **POI 추가** — feature 검색 UI 필요(지도/feature 흐름에 종속).
-- **OAuth 연결 시작** — `expo-web-browser`/`expo-auth-session` 네이티브 dep + dev-client 재빌드 필요.
 - **push/offline** — `expo-notifications` + 백엔드 푸시 토큰 등록 endpoint(미구현) 필요.
 
-**다음 한 작업**: 위 선결 중 하나가 풀리면 해당 화면을 잇는다. 우선순위는 지도(#3 키 주입 먼저).
+**다음 한 작업**: 지도 PR 머지 후 OAuth(Google) 모바일 딥링크 대응을 진행한다(사용자 지시).
 
 ## 2026-06-15 Codex 작업 메모 — 모바일 Expo Dev Client 기준선
 
