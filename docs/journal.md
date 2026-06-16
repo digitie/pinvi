@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — EAS Android development build 실행 (@digitie/pinvi)
+
+**작업**: 사용자가 EXPO_TOKEN을 제공해 EAS 클라우드 development build를 실제로 실행했다.
+
+- `eas init --force`로 EAS 프로젝트 **`@digitie/pinvi`**(ID `2e24842e-…`) 생성·연결. `app.json`에
+  `owner: digitie` + `extra.eas.projectId` 기록(+ expo-location 위치 권한 자동 추가).
+- `eas build --platform android --profile development --non-interactive --no-wait`로 빌드 큐 등록.
+  빌드: `https://expo.dev/accounts/digitie/projects/pinvi/builds/945c3785-6705-4e5c-a1c9-144459ba2901`
+  (Android / internal distribution / SDK 56, in progress).
+- npx 임시 eas-cli는 `build` 명령에서 `domino` 모듈 누락으로 실패 → **eas-cli 전역 설치**로 해결.
+- EXPO_TOKEN은 secret이라 env로만 사용(커밋/출력 안 함).
+
+**결과**: 클라우드 빌드 완료 시 Build Artifacts(APK) URL 산출 → dev client 설치 후
+`expo start --dev-client`로 Metro 연결. 화면 구현이 다음.
+
 ## 2026-06-16 (claude) — EAS development build 준비 (expo-doctor 21/21)
 
 **작업**: development build(EAS)를 위해 `apps/mobile`을 빌드 가능 상태로 정비했다.
