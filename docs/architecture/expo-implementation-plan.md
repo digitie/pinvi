@@ -48,7 +48,7 @@
 | `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`) |
 | `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
 | `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ home / 🟡 map placeholder | home=네비 타일, map=server-issued 키 + `useUserLocation` 확인(지도 §4 대기) |
-| `app/(app)/trips/index.tsx` | `(app)/trips` | ✅ 구현 | `tripApi.listPage` + 검색(`useDebounce`) |
+| `app/(app)/trips/index.tsx` + `new.tsx` | `(app)/trips` | ✅ 구현 | 목록 `tripApi.listPage` + 검색(`useDebounce`) + 생성(`tripApi.create`) |
 | `app/(app)/trips/[tripId]/index.tsx` + `edit.tsx` | `(app)/trips/[tripId]` | ✅ 구현 | 상세(읽기) + 편집(메타 `buildTripUpdate`/If-Match, POI 재정렬 `reorderMoves`, 삭제). POI 필드(메모/비용) 편집·지도는 후속 |
 | `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
 | `app/(app)/settings/index.tsx` + `telegram`·`consents`·`mcp-tokens` | `(app)/settings/{telegram,consents,mcp-tokens}` | ✅ 구현 | `telegramApi`/`userApi`(consents·mcp-tokens) — 목록·발급/연결·철회/회수 |

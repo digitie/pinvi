@@ -9,6 +9,7 @@ import { api } from '../../../lib/api';
 import {
   Badge,
   Body,
+  Button,
   EmptyState,
   ErrorView,
   Loading,
@@ -45,6 +46,7 @@ export default function TripsScreen() {
   return (
     <Screen>
       <View className="gap-4 py-2">
+        <Button label="+ 새 여행" onPress={() => router.push('/trips/new')} />
         <TextInput
           value={query}
           onChangeText={setQuery}
