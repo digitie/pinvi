@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 인증 백엔드 `/mobile/auth/*` (토큰 본문 발급)
+
+**작업**: 모바일 앱은 httpOnly cookie를 못 쓰므로(Bearer 기반), 로그인/토큰 흐름의 서버 측을
+구현했다(expo-implementation-plan §5 #2, "앱 화면 끝까지" 1단계).
+
+- **`POST /mobile/auth/login`** — 인증 성공 시 `{user, access_token, refresh_token, expires_at}`를
+  **본문**으로 반환(cookie 미세팅). 앱이 SecureStore에 보관.
+- **`/mobile/auth/verify-email`** — verify 성공 시 로그인 상태로 토큰 본문 반환.
+- **`/mobile/auth/refresh`** — 본문 `refresh_token`으로 회전 발급(옛 토큰 무효).
+- **`/mobile/auth/logout`** — 본문 `refresh_token`으로 세션 폐기.
+- 웹 `/auth/*`(cookie) 경로는 그대로 두고 같은 인증 서비스(`authenticate`/`issue_user_session`/
+  `refresh_user_session`)를 재사용. 통합 테스트 4건(토큰 발급+Bearer 동작, 잘못된 자격 401, refresh
+  회전·옛 토큰 무효, logout 폐기).
+
+**검증**: ruff format/check 통과. mypy/pytest는 api CI. 다음 단계: RN 기반(프로바이더·인증 컨텍스트·
+UI 키트·네비) + 화면 구현.
+
 ## 2026-06-16 (claude) — EAS Android development build 성공 (APK 산출)
 
 **결과**: minSdk 24 수정 후 재빌드(build `c195bd46`)가 **성공**(18분, 10:48→11:06). 설치 가능한

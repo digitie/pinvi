@@ -109,9 +109,9 @@ git-URL/tarball로 핀한다.
 1. **`GET /mobile/vworld/token`** — ✅ **구현됨**. 인증된 모바일 클라이언트에 server-issued
    VWorld 키 발급(`api_key`/`key_source`/`ttl_seconds`, 키 미설정 시 503). ADR-043 키 비번들
    정책의 서버 측 짝. 설정: `PINVI_VWORLD_API_KEY`. 향후 더 엄격히는 타일 프록시로 격상 가능.
-2. **모바일 인증 토큰 흐름** — 웹은 httpOnly cookie(ADR-032)지만 모바일은 Authorization
-   Bearer. ✅ `get_current_user_id`가 cookie + Bearer 둘 다 수용. refresh 회전/로그아웃의
-   헤더 기반 경로는 후속.
+2. **모바일 인증 토큰 흐름** — ✅ **구현됨**. `get_current_user_id`가 cookie + Bearer 둘 다 수용하고,
+   `POST /mobile/auth/{login,verify-email,refresh,logout}`가 access/refresh 토큰을 **본문으로** 반환·
+   회전·폐기한다(웹 `/auth/*` cookie 경로는 그대로, 같은 인증 서비스 재사용). 앱은 SecureStore에 보관.
 3. **푸시 토큰 등록**(후속) — `expo-notifications` 토큰 저장 endpoint.
 4. CORS/origin은 모바일(앱 스킴 `pinvi://`)에 무관하나, OAuth redirect는 앱 deep link 대응 필요.
 
