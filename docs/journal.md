@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — EAS 빌드 1차 실패 → Android minSdk 24로 수정
+
+**작업**: Android development build 1차(build `945c3785`)가 Gradle `processDebugMainManifest`에서
+실패. EAS 로그(gzip) 해제로 원인 확인: **`Manifest merger failed : uses-sdk:minSdkVersion 23
+cannot be smaller than version 24 declared in library [expo.modules.ui:56.0.18]`**.
+
+- 원인: Expo SDK 56의 `expo.modules.ui`가 **minSdk 24**를 요구(Expo SDK 54+가 Android 최소를
+  24로 상향). ADR-043이 23으로 박았던 게 SDK 56과 불일치.
+- 수정: `apps/mobile/app.json` `expo-build-properties.android.minSdkVersion` **23 → 24**.
+  ADR-043 / frontend.md / expo-implementation-plan / AGENTS.md / CLAUDE.md의 minSdk 23 → 24 정합
+  (journal 역사 기록은 유지).
+- 재빌드 진행.
+
 ## 2026-06-16 (claude) — EAS Android development build 실행 (@digitie/pinvi)
 
 **작업**: 사용자가 EXPO_TOKEN을 제공해 EAS 클라우드 development build를 실제로 실행했다.

@@ -82,7 +82,7 @@ Postgres fixed-window bucket), ADR-039 (운영 노드 간 DB live sync 미사용
 ADR-041 (Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1),
 ADR-042 (`kor-travel-docker-manager` target 대역 기반 로컬 포트 정책),
 ADR-043 (모바일은 Expo Dev Client + EAS Build, Expo Go 미사용, RN New Architecture,
-Android minSdk 23, VWorld server-issued key 구조). 다음 신규 = ADR-044.
+Android minSdk 24, VWorld server-issued key 구조). 다음 신규 = ADR-044.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
@@ -117,7 +117,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
   (VWorld + MapLibre GL JS, ADR-015)
 - 모바일: Expo SDK 56 + Expo Router + **Expo Dev Client** + EAS Build + React Native
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
-  23 이상이다(ADR-043).
+  24 이상이다(ADR-043, SDK 56 요구).
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
   / Docker Compose / N150 16GB + Odroid M1S 병행 운영 (ADR-023)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
