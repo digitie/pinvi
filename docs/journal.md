@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 일자 추가/삭제 + POI 필드 편집
+
+**작업**: "남은 작업 끝까지" 4차(빌드 가능한 잔여 마무리).
+
+- 여행 편집 화면: **일자 추가**(`tripApi.createDay`, day_index=max+1) / **일자 삭제**
+  (`deleteDay`, 확인). POI 행을 눌러 편집 화면으로 이동.
+- **POI 필드 편집** `(app)/trips/[tripId]/poi/[poiId].tsx` — 메모/예산을 `poiApi.update`(If-Match version)로 저장.
+- `(app)/_layout`에 `trips/[tripId]/poi/[poiId]` 라우트 등록.
+
+**검증**: mobile typecheck ✅.
+
+**남은 것(빌드 불가/외부 선결)**: 지도 본체(`maplibre-vworld-react` #2/#3/#8), POI 추가
+(feature 검색 — 지도 흐름에 종속), OAuth 연결 시작(expo-web-browser 등 네이티브 dep + dev-client
+재빌드), push(expo-notifications + 백엔드 토큰 등록 endpoint 미구현). 이들은 외부 의존/재빌드가
+선결이라 본 라운드에서 중단.
+
 ## 2026-06-16 (claude) — 모바일 새 여행 생성
 
 **작업**: "남은 작업 끝까지" 3차 — 모바일에서 여행을 만들 수 없던 gap을 메웠다.

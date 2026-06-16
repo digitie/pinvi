@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
@@ -108,6 +108,18 @@ export default function TripEditScreen() {
     onError: (err) => Alert.alert('삭제 실패', friendlyErrorText(err)),
   });
 
+  const addDayMutation = useMutation({
+    mutationFn: (dayIndex: number) => api.trips.createDay(tripId, { day_index: dayIndex }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
+    onError: (err) => Alert.alert('일자 추가 실패', friendlyErrorText(err)),
+  });
+
+  const deleteDayMutation = useMutation({
+    mutationFn: (dayIndex: number) => api.trips.deleteDay(tripId, dayIndex),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
+    onError: (err) => Alert.alert('일자 삭제 실패', friendlyErrorText(err)),
+  });
+
   if (tripQuery.isLoading || !form) {
     return (
       <Screen scroll={false}>
@@ -128,6 +140,14 @@ export default function TripEditScreen() {
   for (const day of days) {
     for (const poi of day.pois) poiById.set(poi.poi_id, poi);
   }
+  const nextDayIndex = days.reduce((max, d) => Math.max(max, d.day_index), 0) + 1;
+
+  const onDeleteDay = (dayIndex: number) => {
+    Alert.alert('일자 삭제', `Day ${dayIndex}와(과) 그 안의 장소를 삭제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => deleteDayMutation.mutate(dayIndex) },
+    ]);
+  };
 
   const move = (dayIndex: number, from: number, to: number) => {
     const current = order[dayIndex] ?? [];
@@ -223,8 +243,8 @@ export default function TripEditScreen() {
         </Card>
 
         <View className="gap-1">
-          <Subheading>일정 · 장소 순서</Subheading>
-          <Muted>↑/↓로 순서를 바꾸고, 삭제로 장소를 제거합니다. 변경은 즉시 저장됩니다.</Muted>
+          <Subheading>일정 · 장소</Subheading>
+          <Muted>↑/↓로 순서 변경, 장소를 눌러 메모/예산 편집, 삭제로 제거. 변경은 즉시 저장됩니다.</Muted>
         </View>
 
         {days.length === 0 ? (
@@ -234,10 +254,19 @@ export default function TripEditScreen() {
             const ids = order[day.day_index] ?? day.pois.map((p) => p.poi_id);
             return (
               <Card key={day.day_index} className="gap-3">
-                <Subheading>
-                  Day {day.day_index}
-                  {day.title ? ` · ${day.title}` : ''}
-                </Subheading>
+                <View className="flex-row items-center gap-2">
+                  <Subheading className="flex-1">
+                    Day {day.day_index}
+                    {day.title ? ` · ${day.title}` : ''}
+                    {day.date ? ` (${day.date})` : ''}
+                  </Subheading>
+                  <Button
+                    label="일자 삭제"
+                    variant="secondary"
+                    loading={deleteDayMutation.isPending && deleteDayMutation.variables === day.day_index}
+                    onPress={() => onDeleteDay(day.day_index)}
+                  />
+                </View>
                 {ids.length === 0 ? (
                   <Muted>이 날의 장소가 없습니다.</Muted>
                 ) : (
@@ -245,29 +274,41 @@ export default function TripEditScreen() {
                     const poi = poiById.get(poiId);
                     if (!poi) return null;
                     return (
-                      <View key={poiId} className="flex-row items-center gap-2">
-                        <View
-                          className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: paletteHex(poi.marker_color) }}
-                        />
-                        <Body className="flex-1 text-ink">{poi.title ?? '제목 없는 장소'}</Body>
-                        <Button
-                          label="↑"
-                          variant="secondary"
-                          disabled={index === 0 || reorderMutation.isPending}
-                          onPress={() => move(day.day_index, index, index - 1)}
-                        />
-                        <Button
-                          label="↓"
-                          variant="secondary"
-                          disabled={index === ids.length - 1 || reorderMutation.isPending}
-                          onPress={() => move(day.day_index, index, index + 1)}
-                        />
-                        <Button
-                          label="삭제"
-                          variant="danger"
-                          onPress={() => onDelete(poiId, poi.title ?? '이 장소')}
-                        />
+                      <View key={poiId} className="gap-1.5 border-t border-hairline-soft pt-2">
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => router.push(`/trips/${tripId}/poi/${poiId}`)}
+                          className="flex-row items-center gap-2 active:opacity-70"
+                        >
+                          <View
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: paletteHex(poi.marker_color) }}
+                          />
+                          <Body className="flex-1 text-ink">{poi.title ?? '제목 없는 장소'}</Body>
+                          <Muted>편집 ›</Muted>
+                        </Pressable>
+                        <View className="flex-row gap-2">
+                          <Button
+                            label="↑"
+                            variant="secondary"
+                            className="flex-1"
+                            disabled={index === 0 || reorderMutation.isPending}
+                            onPress={() => move(day.day_index, index, index - 1)}
+                          />
+                          <Button
+                            label="↓"
+                            variant="secondary"
+                            className="flex-1"
+                            disabled={index === ids.length - 1 || reorderMutation.isPending}
+                            onPress={() => move(day.day_index, index, index + 1)}
+                          />
+                          <Button
+                            label="삭제"
+                            variant="danger"
+                            className="flex-1"
+                            onPress={() => onDelete(poiId, poi.title ?? '이 장소')}
+                          />
+                        </View>
                       </View>
                     );
                   })
@@ -276,6 +317,13 @@ export default function TripEditScreen() {
             );
           })
         )}
+
+        <Button
+          label="+ 일자 추가"
+          variant="secondary"
+          loading={addDayMutation.isPending}
+          onPress={() => addDayMutation.mutate(nextDayIndex)}
+        />
       </View>
     </Screen>
   );
