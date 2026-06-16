@@ -5,6 +5,7 @@
   "description": "Pinvi v2 — 한국 여행 계획·기록·공유 애플리케이션",
   "workspaces": [
     "apps/web",
+    "apps/mobile",
     "packages/*"
   ],
   "scripts": {
