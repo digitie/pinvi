@@ -16,6 +16,11 @@
 - **2026-06-16 갱신**: 공용 순수 로직이 `@pinvi/domain`으로 모였다(이 저장소 refactor).
   모바일은 이제 웹과 동일하게 `@pinvi/domain`을 import해 거리/정렬/검증/공유/업로드/마커
   스타일을 재사용한다.
+- **2026-06-16 추가**: Step 2(인증 흐름) + Step 5(핵심 화면)을 구현했다. RN 기반
+  (`lib/{tokens,auth}.tsx`·`components/ui.tsx`·프로바이더·네비 가드)과 화면
+  (login/signup/verify-email/profile, home/map placeholder/trips 목록·상세/notice-plans
+  복사/settings/shared 뷰)이 모두 동작하며 mobile typecheck·web lint/build 통과. 지도(§4)만
+  `maplibre-vworld-react` 선결 대기로 placeholder다.
 
 ## 1. 공용 패키지 소비 (모바일이 그대로 가져가는 것)
 
@@ -38,26 +43,33 @@
 
 | 모바일 라우트 | 웹 대응 | 상태 | 핵심 재사용 |
 |--------------|---------|------|------------|
-| `app/(auth)/login.tsx` | `(auth)/login` | placeholder | `LoginRequestSchema` + `validateForm`(@pinvi/domain) |
-| `app/(auth)/signup.tsx` | `(auth)/signup` | 미구현 | 약관 4종 동의 + `RegisterRequestSchema` |
-| `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | 미구현 | deep link 처리 |
-| `app/(auth)/profile.tsx` | `(auth)/profile` `profile-complete` | 미구현 | OAuth 연결/해제, 프로필 보강 |
-| `app/(app)/index.tsx` (또는 `map.tsx`) | `(app)/map` | 미구현 | **지도(§4)** + `useUserLocation` + `markerStyleFor` |
-| `app/(app)/trips/index.tsx` | `(app)/trips` | 미구현 | `tripApi` + 목록/검색 |
-| `app/(app)/trips/[tripId].tsx` | `(app)/trips/[tripId]` | 미구현 | trip 상세 + POI 재정렬(`reorderMoves`) + 지도 |
-| `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | 미구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
-| `app/(app)/settings/*.tsx` | `(app)/settings/{telegram,consents,mcp-tokens}` | 미구현 | 설정 폼 |
-| `app/shared/[tripId]/[token].tsx` | `shared/[tripId]/[token]` | 미구현 | 익명 공유 뷰(`buildShareUrl` deep link) |
+| `app/(auth)/login.tsx` | `(auth)/login` | ✅ 구현 | `LoginRequestSchema` + `validateForm`(@pinvi/domain) |
+| `app/(auth)/signup.tsx` | `(auth)/signup` | ✅ 구현 | 약관 4종 동의 + `RegisterRequestSchema` |
+| `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`) |
+| `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
+| `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ home / 🟡 map placeholder | home=네비 타일, map=server-issued 키 + `useUserLocation` 확인(지도 §4 대기) |
+| `app/(app)/trips/index.tsx` | `(app)/trips` | ✅ 구현 | `tripApi.listPage` + 검색(`useDebounce`) |
+| `app/(app)/trips/[tripId].tsx` | `(app)/trips/[tripId]` | ✅ 구현(읽기) | trip 상세 + 일자별 POI(`paletteHex`). 재정렬/지도는 후속 |
+| `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
+| `app/(app)/settings/index.tsx` | `(app)/settings/{telegram,consents,mcp-tokens}` | 🟡 허브 | 진입 + 로그아웃. 세부 폼은 후속 |
+| `app/shared/[tripId]/[token].tsx` | `shared/[tripId]/[token]` | ✅ 구현 | 익명 공유 뷰(가드 밖, `buildShareUrl` deep link) |
 
-각 화면 공통 추가구현: RN 폼 컴포넌트(웹 `FormField`/`FormTextArea`/`FormSelect` 대응),
-RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver`(공용 schema) 결선,
-한국어 오류 메시지(`validateForm`).
+> **라우트 그룹 주의**: 모바일은 클라이언트 가드를 위해 `(app)`=인증 필요,
+> `(auth)`=비인증, `shared/`=공개로 나눈다. 프로필/계정은 인증이 필요하므로 웹의
+> `(auth)/profile`과 달리 모바일에서는 `(app)/profile`에 둔다(가드 경계). 가드는
+> `app/(app)/_layout.tsx`(비인증 → `/login`) / `app/(auth)/_layout.tsx`(인증 → `/`).
+
+각 화면 공통 구현: RN 폼 필드/체크박스/버튼/카드/빈상태(`components/ui.tsx`, 웹
+`FormField` 등 대응), 리스트/로딩/오류 뷰, 공용 schema + `validateForm` 한국어 오류 결선.
+미구현(후속): trip 편집/POI 재정렬, settings 세부 폼, OAuth 연결 시작(딥링크 redirect),
+push/offline.
 
 ## 3. 플랫폼 어댑터 (`apps/mobile/lib`)
 
 | 어댑터 | 상태 | 추가구현 |
 |--------|------|---------|
-| `api.ts` (ApiClient + SecureStore 토큰) | ✓ 스캐폴드 | refresh 토큰 회전/401 재인증 흐름(웹 cookie ↔ 모바일 SecureStore) |
+| `api.ts` (ApiClient + SecureStore 토큰) | ✅ | refresh 토큰 회전/401 자동 재시도 구현(`lib/tokens.ts` + `refreshingFetcher`). 동시 401은 single-flight refresh |
+| `auth.tsx` (AuthProvider/useAuth) | ✅ | 부팅 복구(me→refresh) + login/adoptSession/logout, `createAuthStore` 연동 |
 | `location.ts` (expo-location → LocationAdapter) | ✓ | 권한 거부 fallback UI, 백그라운드 위치(보류) |
 | `storage.ts` (AsyncStorage → StateStorage) | ✓ | — |
 | `stores.ts` (`createAuthStore` 주입) | ✓ | UI store 등 추가 store 주입 |
@@ -128,11 +140,15 @@ git-URL/tarball로 핀한다.
    `npm install`(`package-lock.json` 갱신) + `expo install --check` 정합. 루트 `npm run typecheck`에
    포함되며 전 workspace typecheck/lint/web build/Vitest 통과. `@pinvi/domain` 등 공용 패키지가
    RN에서 정상 해석됨.
-2. **인증 흐름**: `(auth)/login`·`signup`·`verify-email`·`profile` + SecureStore 토큰 + refresh.
+2. **인증 흐름** — ✅ **완료(2026-06-16)**: `(auth)/login`·`signup`·`verify-email` +
+   `(app)/profile` + SecureStore 토큰(`lib/tokens.ts`) + 401 자동 refresh(`lib/api.ts`) +
+   `AuthProvider`(`lib/auth.tsx`) + 네비 가드.
 3. **백엔드 선결**: `/mobile/vworld/token` + 모바일 토큰 흐름(§5) — ✅ 완료.
 4. **지도 차단 해소 대기/기여**: `maplibre-vworld-react` 이슈 #3(키)/#2(git-install 경로)/#7(SDK)/#5·#6(프리미티브).
-   해소 전에는 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로 검토.
-5. **핵심 화면**: 지도 탐색 → trips 목록/상세(POI 재정렬·지도) → notice-plans → settings → shared view.
+   해소 전에는 `(app)/map.tsx` placeholder(server-issued 키 + `useUserLocation` 확인)를 유지하고,
+   해소 시 WebView 임베드 또는 raw `@maplibre/maplibre-react-native` 임시 경로를 검토한다.
+5. **핵심 화면** — ✅ **완료(2026-06-16, 지도 제외)**: home → trips 목록/상세(읽기) →
+   notice-plans(복사) → settings(허브) → shared view. POI 재정렬·trip 편집·settings 세부 폼은 후속.
 6. **푸시/오프라인** 등 부가 기능은 후속.
 
 ## 8. 관련 문서

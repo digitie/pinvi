@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 RN 앱 인증 흐름 + 핵심 화면 구현 (Step 2 + 5)
+
+**작업**: "앱 화면 끝까지" — `apps/mobile` RN 기반과 화면을 구현했다
+(expo-implementation-plan §7 Step 2·5).
+
+- **공용**: `@pinvi/api-client`에 `mobileAuthApi`(`/mobile/auth/*`) + `MobileAuthResponseSchema` 추가/export.
+- **RN 기반**: `lib/tokens.ts`(SecureStore access+refresh), `lib/api.ts`(바인딩 API +
+  401 시 single-flight refresh 후 자동 1회 재시도하는 `refreshingFetcher`), `lib/auth.tsx`
+  (`AuthProvider`/`useAuth`: 부팅 복구 me→refresh, login/adoptSession/logout, `createAuthStore` 연동),
+  `components/ui.tsx`(Screen/Field/Button/Card/Checkbox/EmptyState/ErrorView 등 NativeWind 키트),
+  네비 가드(`(app)/_layout` 비인증→`/login`, `(auth)/_layout` 인증→`/`).
+- **화면**: `(auth)/login`·`signup`(약관 4종)·`verify-email`(딥링크 토큰), `(app)/profile`,
+  `(app)/index`(home), `(app)/map`(placeholder — server-issued 키 + `useUserLocation` 확인),
+  `(app)/trips`(목록·검색)·`trips/[tripId]`(상세 읽기), `(app)/notice-plans`(복사),
+  `(app)/settings`(허브), `shared/[tripId]/[token]`(익명 공유, 가드 밖).
+- 공용 `LoginRequestSchema`/`RegisterRequestSchema`/`validateForm`/`buildCopyRequest`/`paletteHex`/
+  `friendlyErrorText` 등 `@pinvi/domain`·`@pinvi/schemas` 재사용.
+
+**검증**: mobile typecheck ✅, root typecheck ✅, web lint ✅, web build ✅(라우트 회귀 없음).
+지도(§4)만 `maplibre-vworld-react` 선결(#2/#3/#8) 대기로 placeholder. 후속: trip 편집/POI 재정렬,
+settings 세부 폼, OAuth 연결 시작(딥링크), push/offline.
+
 ## 2026-06-16 (claude) — 모바일 인증 백엔드 `/mobile/auth/*` (토큰 본문 발급)
 
 **작업**: 모바일 앱은 httpOnly cookie를 못 쓰므로(Bearer 기반), 로그인/토큰 흐름의 서버 측을
