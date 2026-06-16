@@ -612,7 +612,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 > (digitie/maplibre-vworld-react #2~#10). Expo 앱 추가구현 계획은
 > `docs/architecture/expo-implementation-plan.md`로 정리했다. maplibre 이슈 #3(키 주입 훅)
 > 해소에 맞춰 **백엔드 `GET /mobile/vworld/token`(server-issued VWorld 키) + 인증 dep Bearer
-> 수용을 구현**했다. **다음 단계**: Sprint M-1 활성화(workspaces 등록 + install) → 인증 화면 →
+> 수용을 구현**했다. **모바일 기준 Expo SDK를 53 → 56으로 상향**(ADR-043 갱신, package.json/문서
+> 정합). **다음 단계**: Sprint M-1 활성화(workspaces 등록 + install) → 인증 화면 →
 > 지도(maplibre `tileUrlTransform` + 토큰 endpoint 결선) → 핵심 화면.
 
 > **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker

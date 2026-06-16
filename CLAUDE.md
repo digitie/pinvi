@@ -115,7 +115,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 - 프론트엔드: Next.js 15 (App Router) + React 19 + TanStack Query v5 + Zustand +
   React Hook Form + Zod + shadcn/ui + Tailwind + **`maplibre-vworld-js`**
   (VWorld + MapLibre GL JS, ADR-015)
-- 모바일: Expo SDK 53 + Expo Router + **Expo Dev Client** + EAS Build + React Native
+- 모바일: Expo SDK 56 + Expo Router + **Expo Dev Client** + EAS Build + React Native
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
   23 이상이다(ADR-043).
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)

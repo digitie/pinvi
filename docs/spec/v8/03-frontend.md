@@ -14,7 +14,7 @@
 | 계층 | 채택 |
 |------|------|
 | 프레임워크 (웹) | **Next.js 15** (App Router) + **React 19** |
-| 프레임워크 (모바일, v2) | **Expo SDK 53+** (React Native + Expo Router) |
+| 프레임워크 (모바일, v2) | **Expo SDK 56+** (React Native + Expo Router) |
 | UI 컴포넌트 (웹) | **shadcn/ui** + Radix Primitives (Tailwind 기반 vendoring) |
 | 스타일 | **Tailwind CSS 3.4+** (NativeWind로 모바일 공유) |
 | 상태(클라이언트) | **Zustand** (공용 `packages/state`) |

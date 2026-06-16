@@ -75,7 +75,7 @@ RN 다이얼로그/모달, 리스트/빈상태, `react-hook-form` + `zodResolver
 | git-URL/tarball 설치 경로 미확정 (`vworld-map-core` `*` 의존 + `dist` 번들) | #2 | npm 발행은 **의도적 미실시**(§4.2). 단 git-URL 한 줄 설치가 깨짐 |
 | Popup/Place/Price/Weather 프리미티브 누락 | #5 | 도메인 마커 재현 불가 |
 | `ClusterLayer` 아이콘 미등록(`pin-red`) | #6 | unclustered 포인트 미렌더 |
-| Expo SDK 53 vs example SDK 56 불일치 | #7 | `apps/mobile`(SDK 53)과 타깃 어긋남 |
+| Expo SDK 타깃 정합 | #7 ✅ closed | Pinvi가 **SDK 56로 정합**(example과 일치). maintainer가 지원 SDK range도 명시(#17) |
 | controlled camera/flyTo/fitBounds 부재 | #8 | "선택 장소로 이동"/한국 경계 clamp 불가 |
 | root README 부재 | #9 | 소비 방법 미문서 |
 | `Marker` prop parity(color/selected/zIndex) | #10 | 16색 팔레트/상태 재현 제약 |
