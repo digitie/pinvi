@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     pinvi_oauth_callback_base_url: str = "http://localhost:12801"
     pinvi_oauth_state_ttl_seconds: int = 600
     pinvi_oauth_http_timeout_seconds: int = 5
+    # 모바일 OAuth: callback이 이 앱 딥링크로 1회용 code를 실어 리다이렉트한다(ADR-044/032).
+    pinvi_mobile_oauth_redirect: str = "pinvi://oauth"
+    pinvi_mobile_oauth_exchange_ttl_seconds: int = 120
 
     # RustFS (S3 호환 객체 저장소)
     pinvi_rustfs_endpoint_url: str = "http://localhost:12101"

@@ -41,3 +41,9 @@ class MobileRefreshRequest(BaseModel):
     """모바일 refresh/logout — cookie 대신 본문 refresh token."""
 
     refresh_token: str
+
+
+class MobileOAuthExchangeRequest(BaseModel):
+    """모바일 OAuth 1회용 교환 코드 → 토큰. Google callback이 `pinvi://oauth?code=`로 준 code."""
+
+    code: str

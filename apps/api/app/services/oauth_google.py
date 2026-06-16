@@ -30,7 +30,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.oauth_identity import OAuthLoginState, UserOAuthIdentity
+from app.models.oauth_identity import (
+    OAuthLoginState,
+    OAuthMobileExchange,
+    UserOAuthIdentity,
+)
 from app.models.user import User
 
 log = get_logger("oauth_google")
@@ -149,6 +153,39 @@ async def consume_login_state(db: AsyncSession, *, state: str) -> ConsumedOAuthL
         user_id=row.user_id,
         code_verifier=code_verifier,
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# 모바일 1회용 교환 코드 (callback → 앱 딥링크 → exchange)
+# ─────────────────────────────────────────────────────────────
+async def mint_mobile_exchange(db: AsyncSession, *, user_id: uuid.UUID) -> str:
+    """모바일 OAuth 성공 시 1회용 code 발급. plaintext code 반환, hash만 저장."""
+    code = secrets.token_urlsafe(32)
+    row = OAuthMobileExchange(
+        code_hash=_hash(code),
+        user_id=user_id,
+        expires_at=datetime.now(UTC)
+        + timedelta(seconds=settings.pinvi_mobile_oauth_exchange_ttl_seconds),
+    )
+    db.add(row)
+    await db.commit()
+    return code
+
+
+async def consume_mobile_exchange(db: AsyncSession, *, code: str) -> uuid.UUID:
+    """모바일 exchange code 소비 → user_id. 1회용 + TTL 검증."""
+    row = await db.scalar(
+        select(OAuthMobileExchange).where(OAuthMobileExchange.code_hash == _hash(code))
+    )
+    if row is None:
+        raise OAuthStateInvalidError("교환 코드가 존재하지 않습니다.")
+    if row.consumed_at is not None:
+        raise OAuthStateInvalidError("이미 사용된 교환 코드입니다.")
+    if row.expires_at < datetime.now(UTC):
+        raise OAuthStateInvalidError("교환 코드가 만료되었습니다.")
+    row.consumed_at = datetime.now(UTC)
+    await db.commit()
+    return row.user_id
 
 
 def build_authorize_url(*, state: str, nonce: str, code_verifier: str) -> str:

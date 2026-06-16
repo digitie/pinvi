@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — 모바일 Google OAuth 백엔드 (딥링크 1회용 code)
+
+**작업**: 모바일 OAuth 대응 1차(백엔드). 웹은 callback에서 쿠키를 세팅하지만 모바일은 cookie를
+못 쓰므로, 같은 state/PKCE/안전 매칭(G-4)을 재사용하되 **딥링크 1회용 code** 패턴을 추가했다.
+
+- `app.oauth_mobile_exchanges`(0024) — code_hash→user_id, 짧은 TTL + 1회 소비. 토큰을 URL에
+  싣지 않도록 세션은 exchange 시점에 발급.
+- `oauth_google.py`: `mint_mobile_exchange`/`consume_mobile_exchange`.
+- 공통 callback(`/auth/oauth/google/callback`): `return_to`가 앱 딥링크(`pinvi://oauth`)면 쿠키 대신
+  `pinvi://oauth?code=`(에러는 `?error=`)로 리다이렉트. 웹 흐름은 그대로.
+- `POST /mobile/auth/oauth/google/start`(authorize URL, return_to=딥링크) +
+  `POST /mobile/auth/oauth/exchange`(code→access/refresh 토큰 본문).
+- config: `pinvi_mobile_oauth_redirect`/`_exchange_ttl_seconds`. 통합 테스트 7건(callback→code→
+  exchange e2e, 잘못된/재사용 code 401, 에러 딥링크, start 200/503).
+
+**검증**: ruff format/check 통과, py_compile OK. mypy/pytest는 api CI. 다음: 모바일 앱
+`expo-web-browser`로 start→브라우저→exchange 흐름 + 로그인 버튼.
+
 ## 2026-06-16 (claude) — 모바일 지도 통합 (vworld-map-rn) + 라이브러리 #21 수정 (ADR-044)
 
 **작업**: 사용자 지시 — maplibre-vworld-react 직접 수정(이슈→PR→머지) 후 모바일에서 소비.
