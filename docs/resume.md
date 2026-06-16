@@ -617,10 +617,11 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 > (`package-lock.json` 갱신, 535 packages), `apps/mobile` typecheck 통과, 전 workspace
 > typecheck/lint/web build/Vitest 68 green. (web CI `npm ci`가 이제 Expo 트리 설치 — ADR-041
 > 활성화.) **EAS 빌드 준비 완료**: `expo-doctor` 21/21(newArchEnabled 제거/metro/react 단일화).
-> **EAS Android development build 실행됨(2026-06-16)**: EXPO_TOKEN으로 `eas init`(프로젝트
-> `@digitie/pinvi` 생성, projectId app.json 기록) + `eas build --profile development` 큐 등록
-> (in progress, build `945c3785`). 완료 시 APK 산출. eas-cli는 전역 설치(`npx`는 `domino` 누락).
-> **다음 단계**: dev client 설치 → 인증 화면 → 지도(maplibre `tileUrlTransform` +
+> **EAS Android development build 성공(2026-06-16)**: EXPO_TOKEN으로 EAS 프로젝트
+> `@digitie/pinvi` 생성(projectId app.json 기록), 1차 빌드는 minSdk 23<24(SDK 56 요구)로 실패 →
+> **minSdk 24 수정 후 재빌드 성공**(build `c195bd46`, APK 산출
+> `expo.dev/artifacts/eas/gGm7b6xYaS3aKLxTn0YIhA-KqHW46HNQZUBensU4gl8.apk`).
+> **다음 단계**: dev client(APK) 설치 → 인증 화면 → 지도(maplibre `tileUrlTransform` +
 > `/mobile/vworld/token` 결선) → 핵심 화면.
 
 > **갱신 (2026-06-13, claude)**: Expo `apps/mobile` 구조 스캐폴드(ADR-041) + Docker

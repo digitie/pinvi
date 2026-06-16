@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-16 (claude) — EAS Android development build 성공 (APK 산출)
+
+**결과**: minSdk 24 수정 후 재빌드(build `c195bd46`)가 **성공**(18분, 10:48→11:06). 설치 가능한
+**dev client APK** 산출.
+
+- APK: `https://expo.dev/artifacts/eas/gGm7b6xYaS3aKLxTn0YIhA-KqHW46HNQZUBensU4gl8.apk`
+- 빌드 상세: `https://expo.dev/accounts/digitie/projects/pinvi/builds/c195bd46-65c5-4a97-b50d-7a8bdef328e5`
+- 사용: Android 기기/에뮬레이터에 APK 설치 → `npm --workspace @pinvi/mobile run start`
+  (`expo start --dev-client`)로 Metro 연결.
+
+이로써 Sprint M-1 활성화 + EAS development build까지 완료. 남은 것은 인증/지도/핵심 화면 구현
+(`expo-implementation-plan.md` §7, §2).
+
 ## 2026-06-16 (claude) — EAS 빌드 1차 실패 → Android minSdk 24로 수정
 
 **작업**: Android development build 1차(build `945c3785`)가 Gradle `processDebugMainManifest`에서
