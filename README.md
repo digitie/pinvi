@@ -15,8 +15,8 @@
 - **GitHub 저장소**: `pinvi`
 - **백엔드 import (계획)**: `from pinvi.api import ...`, `from pinvi.etl import ...`
 - **프론트엔드 패키지**: `apps/web` (Next.js App Router)
-- **모바일 패키지 (비활성 스캐폴드)**: `apps/mobile` (Expo SDK 53 + Expo Dev Client +
-  EAS Build, Expo Go 미사용 — ADR-043)
+- **모바일 패키지 (활성, Sprint M-1)**: `apps/mobile` (Expo SDK 56 + Expo Dev Client +
+  EAS Build, Expo Go 미사용, Android minSdk 24 — ADR-043/044/045)
 - **환경변수 prefix**: `PINVI_*`
 - **PostgreSQL DB 이름 (개발)**: `pinvi`
 - **Postgres schema (계획)**: `app`, `feature`, `provider_sync`, `ops`, `x_extension`
@@ -32,7 +32,7 @@ Pinvi는 **monorepo**다. 현재 저장소는 아래 구조를 이미 사용 중
 apps/
   api/      — FastAPI 백엔드 (인증, 여행 계획, 관리자, Storage, Dagster bridge)
   web/      — Next.js 사용자 UI + Admin
-  mobile/   — Expo Dev Client 모바일 스캐폴드 (비활성, Sprint M-1 활성화)
+  mobile/   — Expo Dev Client 모바일 앱 (활성, Sprint M-1 — SDK 56, minSdk 24)
   etl/      — Dagster definitions/jobs/schedules (provider 적재 orchestration)
 packages/   — 공유 TS 패키지 (UI/마커/타입)
 infra/      — docker-compose, deployment manifests

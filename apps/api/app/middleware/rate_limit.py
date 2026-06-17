@@ -69,6 +69,10 @@ class MemoryRateLimitBackend:
         self._lock = asyncio.Lock()
         self._counts: dict[tuple[str, datetime], tuple[int, datetime]] = {}
 
+    def reset(self) -> None:
+        """누적 카운트를 비운다 — 테스트 격리(모듈 싱글톤이 테스트 간 누적되지 않게)."""
+        self._counts.clear()
+
     async def hit(
         self,
         *,

@@ -1687,7 +1687,67 @@ ADR-043의 후속(“모바일 지도 엔진은 별도 ADR로 확정”). 모바
 - ADR-043, ADR-026(외부 계약), `digitie/maplibre-vworld-react`(#2 git/tarball 설치, #21 markers parity)
 - `docs/architecture/expo-implementation-plan.md` §4, `apps/mobile/app/(app)/map.tsx`
 
+## ADR-045: 모바일 VWorld 키 런타임 정책 — 현 단계는 인증 게이트 + 감사 로깅의 "문서화된 운영 제한", opaque token/tile proxy는 공개 배포 전 게이트
+
+- **상태**: accepted
+- **날짜**: 2026-06-17
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+ADR-043/044는 "모바일은 VWorld 키를 앱에 번들하지 않고 `GET /mobile/vworld/token`으로
+server-issued로 받는다"까지만 정했다. 현재 구현(`apps/api/app/api/v1/mobile.py`)은
+인증된 클라이언트에 **실제 장기 `PINVI_VWORLD_API_KEY` 원본을 그대로** 내려준다.
+응답의 `ttl_seconds`는 클라이언트 refetch 힌트일 뿐 **서버가 강제하는 만료가 아니며**,
+opaque token도 tile proxy도 아니다(이슈 #215 P1 — #194/#208). 즉 "키를 번들하지 않는다"는
+앱 바이너리 정적 추출은 막지만, 인증 토큰을 확보한 주체는 런타임에 원본 키를 얻는다.
+
+웹은 origin 화이트리스트로 키 도용을 제한하지만(ADR-015, maplibre-vworld §8), native
+앱은 origin 보호가 없어 이 제약이 더 크다. 운영(공개 배포) 전에 키 노출면을 좁혀야 한다.
+
+### 결정
+
+- **현 단계(Dev Client + 내부 테스트, Sprint M-1)** 는 raw key 발급을 **명시적·한시적
+  운영 제한으로 수용**한다. 단, 다음을 강제한다:
+  1. endpoint는 **인증 필수**(`CurrentUserId`) — 익명 발급 금지. (구현됨)
+  2. 키 미설정 시 **503** — 빈 키를 흘리지 않는다. (구현됨)
+  3. 발급 시 **구조화 감사 로그**(`mobile.vworld_token_issued`, `user_id`/`ttl_seconds`만)
+     를 남긴다. **키 원본은 로그/Sentry/`api_call_log` 어디에도 남기지 않는다.** (본 ADR에서 추가)
+  4. endpoint는 운영 rate-limit 미들웨어(ADR-038, Postgres fixed-window) 적용 범위에 둔다.
+  5. 클라이언트는 `ttl_seconds` 경과 시 token을 **refetch**하고, 네트워크 복구/foreground
+     재개 시 재시도한다(후속 — `map.tsx` AppState/NetInfo 연동).
+- **공개 배포(앱스토어/플레이스토어 정식 배포, Sprint M-2 이후) 전 하드 게이트**: raw key
+  발급을 폐기하고 다음 중 하나로 대체한다.
+  - (A) **Pinvi 서명 opaque 단기 token** — 서버가 짧은 TTL을 **강제 만료**하고, 타일 요청은
+    Pinvi가 검증/교환한다. 또는
+  - (B) **tile proxy** — 앱은 Pinvi 경유로 타일을 받고, 원본 키는 서버에만 둔다
+    (maplibre-vworld §4.6 `transformRequest` 프록시의 모바일 대응).
+- 위 중 무엇으로 갈지는 운영 트래픽/VWorld TOS·한도(maplibre-vworld §9) 측정 후 별도 ADR로
+  확정한다. 본 ADR은 **그때까지의 인터림 정책과 게이트 조건**을 박는다.
+
+### 근거
+
+- "번들 안 함"만으로는 native 키 노출을 막지 못한다 — 정적 추출 ≠ 런타임 추출. 인터림
+  단계에서도 인증 게이트 + 감사 로깅 + 키 redaction으로 노출면을 좁히고 추적 가능하게 둔다.
+- 단기 opaque token/proxy는 서버 강제 만료·교환 검증이 필요해 구현 비용이 있다. Dev Client
+  내부 테스트 단계에서 이를 선결로 묶으면 모바일 진행이 막힌다 — 공개 배포 게이트로 미룬다.
+- raw key를 로그에 남기지 않는 것은 즉시·저비용이고 사고 위험이 가장 크므로 본 ADR에서 강제한다.
+
+### 후속
+
+- `map.tsx`에 `ttl_seconds` 기반 refetch + AppState(foreground 재개)/NetInfo(네트워크 복구)
+  재시도를 연결(이슈 #215 P1 — #208 reconnect smoke).
+- vendored tarball(`apps/mobile/vendor/vworld-map-{core,rn}-*.tgz`) source commit/checksum/
+  provenance를 `apps/mobile/README.md` 또는 본 ADR 참조 문서에 기록(이슈 #215 P1 — #208).
+- 공개 배포 게이트 도달 시 (A)/(B) 결정 ADR을 신규로 박는다.
+
+### 참조
+
+- ADR-043(키 정책), ADR-044(지도 엔진), ADR-038(rate-limit), ADR-015/maplibre-vworld §8(웹 키 정책)
+- `apps/api/app/api/v1/mobile.py` `get_vworld_token`, `apps/mobile/app/(app)/map.tsx`
+- 이슈 #215 P1(#194/#208)
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-045**
+- 다음 신규 ADR = **ADR-046**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

@@ -52,7 +52,7 @@
 제공한다.
 
 **구성**: `apps/api` (FastAPI), `apps/web` (Next.js), `apps/mobile` (Expo Dev Client
-스캐폴드, 비활성), `apps/etl` (Dagster) + `infra/`, `docs/`. 지도 feature 도메인은 본
+앱, 활성 — Sprint M-1, SDK 56 / minSdk 24), `apps/etl` (Dagster) + `infra/`, `docs/`. 지도 feature 도메인은 본
 저장소가 아니라 **별 저장소**
 `kor-travel-map`이 소유한다. Pinvi ↔ `kor-travel-map`은 최신
 `kor-travel-map` **OpenAPI HTTP 계약**으로 통신한다(ADR-026, API/Admin API
@@ -66,7 +66,7 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-044**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-045**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -84,7 +84,9 @@ ADR-042 (`kor-travel-docker-manager` target 대역 기반 로컬 포트 정책),
 ADR-043 (모바일은 Expo Dev Client + EAS Build, Expo Go 미사용, RN New Architecture,
 Android minSdk 24, VWorld server-issued key 구조),
 ADR-044 (모바일 지도 엔진 = `maplibre-vworld-react`/`vworld-map-rn`, vendored tarball `file:` 핀
-소비, server-issued 키). 다음 신규 = ADR-045.
+소비, server-issued 키),
+ADR-045 (모바일 VWorld 키 런타임 정책 — 현 단계는 인증 게이트 + 감사 로깅의 문서화된 운영
+제한, opaque token/tile proxy는 공개 배포 전 게이트). 다음 신규 = ADR-046.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
@@ -17,6 +18,8 @@ from app.core.security import hash_password
 from app.models.user import User
 from app.services.oauth_google import (
     GoogleClaims,
+    OAuthStateInvalidError,
+    consume_mobile_exchange,
     issue_login_state,
     mint_mobile_exchange,
 )
@@ -157,3 +160,73 @@ async def test_mobile_oauth_start_503_when_unconfigured(client, monkeypatch) -> 
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "")
     resp = await client.post("/mobile/auth/oauth/google/start")
     assert resp.status_code == 503
+
+
+async def test_mobile_callback_provider_error_redirects_to_app_deeplink(
+    client, session_factory
+) -> None:  # type: ignore[no-untyped-def]
+    # provider가 error를 실어 보낸 모바일 흐름 → 앱 딥링크로 라우팅(웹 /login 아님).
+    async with session_factory() as db:
+        state, _nonce, _verifier = await issue_login_state(
+            db, mode="login", return_to=settings.pinvi_mobile_oauth_redirect
+        )
+        await db.commit()
+
+    resp = await client.get(
+        f"/auth/oauth/google/callback?error=access_denied&error_description=denied&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    parsed = urlparse(resp.headers["location"])
+    assert parsed.scheme == "pinvi"
+    assert parse_qs(parsed.query).get("error") == ["OAUTH_PROVIDER_DENIED"]
+
+
+async def test_web_callback_provider_error_redirects_to_login(client, session_factory) -> None:  # type: ignore[no-untyped-def]
+    # 웹 흐름(non-mobile return_to) → 웹 /login 으로 라우팅(딥링크 아님).
+    async with session_factory() as db:
+        state, _nonce, _verifier = await issue_login_state(db, mode="login", return_to="/")
+        await db.commit()
+
+    resp = await client.get(
+        f"/auth/oauth/google/callback?error=access_denied&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    assert urlparse(location).scheme != "pinvi"
+    assert location.startswith(settings.pinvi_web_base_url)
+    assert "error=OAUTH_PROVIDER_DENIED" in location
+
+
+async def test_mobile_exchange_rejects_expired_code(client, session_factory, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # 음수 TTL로 발급 → 만료된 code → exchange 401.
+    user_id = await _seed_user(session_factory)
+    monkeypatch.setattr(settings, "pinvi_mobile_oauth_exchange_ttl_seconds", -10)
+    async with session_factory() as db:
+        code = await mint_mobile_exchange(db, user_id=user_id)
+
+    resp = await client.post("/mobile/auth/oauth/exchange", json={"code": code})
+    assert resp.status_code == 401
+
+
+async def test_mobile_exchange_concurrent_only_one_wins(client, session_factory) -> None:  # type: ignore[no-untyped-def]
+    # 같은 code를 동시에 두 번 소비 → 정확히 하나만 성공(1회용 원자성).
+    user_id = await _seed_user(session_factory)
+    async with session_factory() as db:
+        code = await mint_mobile_exchange(db, user_id=user_id)
+
+    async def _consume(factory, code):  # type: ignore[no-untyped-def]
+        async with factory() as db:
+            return await consume_mobile_exchange(db, code=code)
+
+    results = await asyncio.gather(
+        _consume(session_factory, code),
+        _consume(session_factory, code),
+        return_exceptions=True,
+    )
+    successes = [r for r in results if isinstance(r, uuid.UUID)]
+    failures = [r for r in results if isinstance(r, OAuthStateInvalidError)]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert successes[0] == user_id

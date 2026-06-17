@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -41,6 +42,8 @@ export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  // url/token은 생성 시 1회만 내려온다(share_links 목록엔 없음) → 화면에 보존.
+  const [issuedShareUrl, setIssuedShareUrl] = useState<string | null>(null);
 
   const tripQuery = useQuery({
     queryKey: queryKeys.trips.detail(tripId),
@@ -52,7 +55,7 @@ export default function TripDetailScreen() {
     mutationFn: () => api.trips.createShareToken(tripId, { visibility: 'view_only' }),
     onSuccess: (link) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
-      Alert.alert('공유 링크 생성', `링크가 만들어졌습니다.\n\n${link.url}`);
+      setIssuedShareUrl(link.url);
     },
     onError: (err) => Alert.alert('생성 실패', friendlyErrorText(err)),
   });
@@ -62,6 +65,18 @@ export default function TripDetailScreen() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
     onError: (err) => Alert.alert('해제 실패', friendlyErrorText(err)),
   });
+
+  // 파괴적 동작 — 해제 전 확인.
+  function confirmRevoke(shareId: string) {
+    Alert.alert(
+      '공유 링크 해제',
+      '이 공유 링크를 해제하면 더 이상 접근할 수 없습니다. 계속할까요?',
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '해제', style: 'destructive', onPress: () => revokeShareMutation.mutate(shareId) },
+      ],
+    );
+  }
 
   if (tripQuery.isLoading) {
     return (
@@ -159,13 +174,25 @@ export default function TripDetailScreen() {
                       label="해제"
                       variant="secondary"
                       loading={revokeShareMutation.isPending && revokeShareMutation.variables === link.share_id}
-                      onPress={() => revokeShareMutation.mutate(link.share_id)}
+                      onPress={() => confirmRevoke(link.share_id)}
                     />
                   ) : null}
                 </View>
               );
             })
           )}
+          {issuedShareUrl ? (
+            <View className="gap-2 rounded-md bg-surface-strong p-3">
+              <Subheading>새 공유 링크</Subheading>
+              <Text selectable className="text-sm text-ink">
+                {issuedShareUrl}
+              </Text>
+              <Muted>
+                이 링크는 지금만 표시됩니다. 길게 눌러 복사해 안전한 곳에 보관하세요.
+              </Muted>
+              <Button label="숨기기" variant="ghost" onPress={() => setIssuedShareUrl(null)} />
+            </View>
+          ) : null}
           <Button
             label="공유 링크 만들기"
             onPress={() => createShareMutation.mutate()}

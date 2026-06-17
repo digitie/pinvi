@@ -1,4 +1,4 @@
-# apps/mobile — Pinvi Expo Dev Client 모바일 앱 (구조 스캐폴드)
+# apps/mobile — Pinvi Expo Dev Client 모바일 앱 (활성, Sprint M-1)
 
 Next.js 웹(`apps/web`)과 `@pinvi/*` 공용 패키지를 공유하는 Expo Dev Client 기반
 React Native 앱이다.
@@ -6,7 +6,8 @@ React Native 앱이다.
 **앱 제작 추가구현 계획**은
 [`docs/architecture/expo-implementation-plan.md`](../../docs/architecture/expo-implementation-plan.md),
 결정은 [ADR-011](../../docs/decisions.md) / [ADR-041](../../docs/decisions.md) /
-[ADR-043](../../docs/decisions.md)를 본다.
+[ADR-043](../../docs/decisions.md) / [ADR-044](../../docs/decisions.md) /
+[ADR-045](../../docs/decisions.md)를 본다.
 
 ## 현재 상태 — 활성화됨 (Sprint M-1, 2026-06-16)
 
@@ -33,8 +34,8 @@ React Native 앱이다.
   둔다. 로컬 native build는 디버깅 예외 경로일 뿐이다.
 - **React Native New Architecture 기준**: SDK 56(RN 0.85)에서 기본 활성이며, app.json
   `newArchEnabled` flag는 SDK 56에서 제거됐다(별도 설정 불필요).
-- **Android `minSdkVersion` 23 이상**: `expo-build-properties` config plugin에서
-  `android.minSdkVersion = 23`을 박는다.
+- **Android `minSdkVersion` 24 이상**: `expo-build-properties` config plugin에서
+  `android.minSdkVersion = 24`를 박는다(ADR-043 — SDK 56 요구).
 - **VWorld API key 비번들링**: 모바일 앱에는 `EXPO_PUBLIC_VWORLD_API_KEY`를 두지 않는다.
   앱 설정(`extra.pinvi.vworld`)에는 서버 발급 endpoint만 두고, 실제 VWorld key/token은
   Pinvi API가 발급한다.
@@ -44,25 +45,29 @@ React Native 앱이다.
 ```
 apps/mobile/
 ├── app/                     # Expo Router (웹 App Router와 동일 라우트 트리 — frontend.md §8)
-│   ├── _layout.tsx          # 루트 레이아웃 + TanStack Query Provider
-│   ├── index.tsx            # 홈 — @pinvi/schemas·@pinvi/api-client import 검증
-│   └── (auth)/              # 웹 (auth) group 대응
-│       ├── _layout.tsx
-│       └── login.tsx
+│   ├── _layout.tsx          # 루트 레이아웃 + TanStack Query + AuthProvider
+│   ├── (auth)/              # 비인증 group — login / signup / verify-email
+│   ├── (app)/              # 인증 필요 group — 홈·지도·trips·settings·profile·notice-plans
+│   └── shared/[tripId]/[token].tsx   # 익명 공유 뷰
 ├── lib/                     # 플랫폼 어댑터 (frontend.md §2.1 — 앱 전용)
-│   ├── api.ts               # ApiClient + SecureStore 토큰 (웹은 cookie)
+│   ├── api.ts               # ApiClient + SecureStore 토큰 + refresh 회전 (웹은 cookie)
+│   ├── auth.tsx             # AuthProvider — 부팅 복구(네트워크/인증 실패 분리, ADR #202)
+│   ├── oauth.ts             # Google OAuth 딥링크(expo-web-browser) 1회용 code 교환
+│   ├── tokens.ts            # SecureStore access/refresh 토큰
+│   ├── user-cache.ts        # AsyncStorage 캐시 AuthUser(오프라인 부팅 복구)
 │   ├── config.ts            # Expo extra + EXPO_PUBLIC_* 앱 설정
 │   ├── location.ts          # expo-location → @pinvi/hooks LocationAdapter
 │   ├── storage.ts           # AsyncStorage → zustand StateStorage
 │   └── stores.ts            # createAuthStore(AsyncStorage 주입)
-├── app.json                 # Expo Dev Client / New Architecture / minSdk / VWorld 설정
+├── vendor/                  # vworld-map-{core,rn} tarball (ADR-044, file: 핀)
+├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정
 ├── eas.json                 # EAS Build profile (developmentClient=true)
 ├── babel.config.js          # babel-preset-expo + nativewind
 ├── metro.config.js          # monorepo watchFolders + NativeWind
 ├── tailwind.config.js       # @pinvi/design-tokens preset + NativeWind preset
 ├── global.css               # Tailwind directives
 ├── tsconfig.json            # ../../tsconfig.base.json 확장
-└── package.json             # Expo SDK 56 + @pinvi/* (미설치)
+└── package.json             # Expo SDK 56 + @pinvi/* (설치 완료)
 ```
 
 공용 로직·데이터(스키마/ API 클라이언트/ 상태/ 디자인 토큰/ hook/ i18n)는 새로 쓰지 않고

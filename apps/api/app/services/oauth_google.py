@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -132,7 +132,8 @@ async def issue_login_state(
 
 
 async def consume_login_state(db: AsyncSession, *, state: str) -> ConsumedOAuthLoginState:
-    row = await db.scalar(select(OAuthLoginState).where(OAuthLoginState.state_hash == _hash(state)))
+    state_hash = _hash(state)
+    row = await db.scalar(select(OAuthLoginState).where(OAuthLoginState.state_hash == state_hash))
     if row is None:
         raise OAuthStateInvalidError("state 가 존재하지 않습니다.")
     if row.consumed_at is not None:
@@ -145,7 +146,21 @@ async def consume_login_state(db: AsyncSession, *, state: str) -> ConsumedOAuthL
         _hash(code_verifier),
     ):
         raise OAuthStateInvalidError("PKCE verifier 검증에 실패했습니다.")
-    row.consumed_at = datetime.now(UTC)
+    # consume 경합 차단 — consumed_at IS NULL 조건부 UPDATE로 1회용 보장.
+    now = datetime.now(UTC)
+    consumed = await db.execute(
+        update(OAuthLoginState)
+        .where(
+            OAuthLoginState.state_hash == state_hash,
+            OAuthLoginState.consumed_at.is_(None),
+        )
+        .values(consumed_at=now)
+        .returning(OAuthLoginState.state_hash)
+        .execution_options(synchronize_session=False)
+    )
+    if consumed.scalar_one_or_none() is None:
+        await db.rollback()
+        raise OAuthStateInvalidError("이미 사용된 state 입니다.")
     await db.commit()
     return ConsumedOAuthLoginState(
         mode=row.mode,
@@ -173,19 +188,34 @@ async def mint_mobile_exchange(db: AsyncSession, *, user_id: uuid.UUID) -> str:
 
 
 async def consume_mobile_exchange(db: AsyncSession, *, code: str) -> uuid.UUID:
-    """모바일 exchange code 소비 → user_id. 1회용 + TTL 검증."""
+    """모바일 exchange code 소비 → user_id. 1회용 + TTL을 원자적 조건부 UPDATE로 보장."""
+    now = datetime.now(UTC)
+    code_hash = _hash(code)
+    result = await db.execute(
+        update(OAuthMobileExchange)
+        .where(
+            OAuthMobileExchange.code_hash == code_hash,
+            OAuthMobileExchange.consumed_at.is_(None),
+            OAuthMobileExchange.expires_at > now,
+        )
+        .values(consumed_at=now)
+        .returning(OAuthMobileExchange.user_id)
+        .execution_options(synchronize_session=False)
+    )
+    user_id = result.scalar_one_or_none()
+    if user_id is not None:
+        await db.commit()
+        return user_id
+    # 매칭 0건 — 이미 소비/만료/부재. 정확한 에러로 분류한다(소비된 row를 변경하지 않음).
+    await db.rollback()
     row = await db.scalar(
-        select(OAuthMobileExchange).where(OAuthMobileExchange.code_hash == _hash(code))
+        select(OAuthMobileExchange).where(OAuthMobileExchange.code_hash == code_hash)
     )
     if row is None:
         raise OAuthStateInvalidError("교환 코드가 존재하지 않습니다.")
     if row.consumed_at is not None:
         raise OAuthStateInvalidError("이미 사용된 교환 코드입니다.")
-    if row.expires_at < datetime.now(UTC):
-        raise OAuthStateInvalidError("교환 코드가 만료되었습니다.")
-    row.consumed_at = datetime.now(UTC)
-    await db.commit()
-    return row.user_id
+    raise OAuthStateInvalidError("교환 코드가 만료되었습니다.")
 
 
 def build_authorize_url(*, state: str, nonce: str, code_verifier: str) -> str:

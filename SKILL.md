@@ -12,8 +12,8 @@
 ## 1. 정체성
 
 본 저장소(GitHub 이름 `pinvi`)는 **한국 여행 계획·기록·공유 애플리케이션**의
-모노레포다. 백엔드(FastAPI) + 프론트(Next.js) + 모바일 Expo Dev Client 스캐폴드
-(`apps/mobile`, 비활성) + ETL(Dagster) + 인프라 manifest + 문서가 들어 있다.
+모노레포다. 백엔드(FastAPI) + 프론트(Next.js) + 모바일 Expo Dev Client 앱
+(`apps/mobile`, 활성 — Sprint M-1) + ETL(Dagster) + 인프라 manifest + 문서가 들어 있다.
 
 지도 feature(place / event / notice / price / weather / route / area) 정규화·
 저장은 본 저장소가 아니라 별 저장소 `kor-travel-map`이 소유한다. Pinvi ↔
@@ -29,7 +29,7 @@
 | GitHub 저장소 | `pinvi` |
 | 백엔드 import (계획) | `from pinvi.api import ...`, `from pinvi.etl import ...` |
 | 프론트 패키지 (계획) | `apps/web` (Next.js App Router) |
-| 모바일 패키지 (비활성) | `apps/mobile` (Expo SDK 53 + Expo Dev Client + EAS Build, Expo Go 미사용 — ADR-043) |
+| 모바일 패키지 (활성, Sprint M-1) | `apps/mobile` (Expo SDK 56 + Expo Dev Client + EAS Build, Expo Go 미사용, Android minSdk 24 — ADR-043/044/045) |
 | 환경변수 prefix | `PINVI_*` |
 | PostgreSQL DB 이름 (개발) | `pinvi` |
 | Postgres schema (자체) | `app`, `ops` |
