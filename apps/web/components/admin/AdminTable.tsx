@@ -219,7 +219,10 @@ export function AdminTable<R>({
             <col key={col.key} style={col.width ? { width: col.width } : undefined} />
           ))}
         </colgroup>
-        <thead className="sticky top-0 z-20 bg-surface-soft">
+        {/* sticky 헤더는 실제 세로 스크롤이 있는 가상화 테이블에만. 비가상(content-fit)은 스크롤이
+            없어 sticky가 무의미하고, z-20 stacking이 z-index 없는 모달 위로 올라와 클릭을 가로채는
+            문제(상세 페이지 상태변경 모달)를 일으킨다. */}
+        <thead className={virtualized ? 'sticky top-0 z-20 bg-surface-soft' : 'bg-surface-soft'}>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => {

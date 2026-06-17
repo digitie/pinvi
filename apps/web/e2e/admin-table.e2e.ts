@@ -70,6 +70,30 @@ function rowOrder(page: Page) {
     .evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-testid')));
 }
 
+// request_id는 UUID여야 파싱을 통과한다(스키마 z.string().uuid()).
+const apiUuid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+const apiCallsRowId = (i: number) => `admin-api-calls-row-${apiUuid(i)}`;
+
+async function mockApiCalls(page: Page, count: number) {
+  const rows = Array.from({ length: count }, (_, i) => ({
+    log_id: i,
+    provider: 'kma',
+    endpoint: `/weather/${i}`,
+    status_code: 200,
+    latency_ms: 10 + i,
+    error_class: null,
+    error_message: null,
+    request_id: apiUuid(i),
+    occurred_at: `2026-06-01T00:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}+09:00`,
+  }));
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/api-calls',
+    async (route) => {
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: rows }) });
+    },
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -136,9 +160,10 @@ test('로딩 중에는 안내 문구를 보였다가 데이터로 대체된다',
   await expect(page.getByTestId(usersRowId(UID.alice))).toBeVisible();
 });
 
-test('헤더는 sticky로 고정된다', async ({ page }) => {
-  await mockUsers(page, THREE_USERS);
-  await page.goto('/admin/users');
+test('가상화 테이블(로그) 헤더는 sticky로 고정된다', async ({ page }) => {
+  // sticky는 실제 세로 스크롤이 있는 가상화 테이블(api-calls)에만 적용된다.
+  await mockApiCalls(page, 3);
+  await page.goto('/admin/api-calls');
   await expect(page.getByRole('table')).toBeVisible();
   const position = await page
     .locator('thead')
@@ -148,31 +173,7 @@ test('헤더는 sticky로 고정된다', async ({ page }) => {
 });
 
 test('가상화: 큰 로그 목록은 보이는 행만 DOM에 두고 스크롤 시 후행을 렌더한다', async ({ page }) => {
-  // request_id는 UUID여야 파싱을 통과한다(스키마 z.string().uuid()).
-  const apiUuid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
-  const apiCallsRowId = (i: number) => `admin-api-calls-row-${apiUuid(i)}`;
-  const many = Array.from({ length: 200 }, (_, i) => ({
-    log_id: i,
-    provider: 'kma',
-    endpoint: `/weather/${i}`,
-    status_code: 200,
-    latency_ms: 10 + i,
-    error_class: null,
-    error_message: null,
-    request_id: apiUuid(i),
-    occurred_at: `2026-06-01T00:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}+09:00`,
-  }));
-
-  await page.route(
-    (url) => url.port === '12801' && url.pathname === '/admin/api-calls',
-    async (route) => {
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({ data: many }),
-      });
-    },
-  );
-
+  await mockApiCalls(page, 200);
   await page.goto('/admin/api-calls');
   await expect(page.getByTestId(apiCallsRowId(0))).toBeVisible();
   // 후행은 초기 윈도우에 없다(가상화).
