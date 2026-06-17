@@ -182,9 +182,7 @@ async def test_mobile_callback_provider_error_redirects_to_app_deeplink(
     assert parse_qs(parsed.query).get("error") == ["OAUTH_PROVIDER_DENIED"]
 
 
-async def test_web_callback_provider_error_redirects_to_login(
-    client, session_factory
-) -> None:  # type: ignore[no-untyped-def]
+async def test_web_callback_provider_error_redirects_to_login(client, session_factory) -> None:  # type: ignore[no-untyped-def]
     # 웹 흐름(non-mobile return_to) → 웹 /login 으로 라우팅(딥링크 아님).
     async with session_factory() as db:
         state, _nonce, _verifier = await issue_login_state(db, mode="login", return_to="/")
@@ -201,9 +199,7 @@ async def test_web_callback_provider_error_redirects_to_login(
     assert "error=OAUTH_PROVIDER_DENIED" in location
 
 
-async def test_mobile_exchange_rejects_expired_code(
-    client, session_factory, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+async def test_mobile_exchange_rejects_expired_code(client, session_factory, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     # 음수 TTL로 발급 → 만료된 code → exchange 401.
     user_id = await _seed_user(session_factory)
     monkeypatch.setattr(settings, "pinvi_mobile_oauth_exchange_ttl_seconds", -10)
@@ -214,9 +210,7 @@ async def test_mobile_exchange_rejects_expired_code(
     assert resp.status_code == 401
 
 
-async def test_mobile_exchange_concurrent_only_one_wins(
-    client, session_factory
-) -> None:  # type: ignore[no-untyped-def]
+async def test_mobile_exchange_concurrent_only_one_wins(client, session_factory) -> None:  # type: ignore[no-untyped-def]
     # 같은 code를 동시에 두 번 소비 → 정확히 하나만 성공(1회용 원자성).
     user_id = await _seed_user(session_factory)
     async with session_factory() as db:

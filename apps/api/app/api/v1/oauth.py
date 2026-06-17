@@ -198,9 +198,7 @@ async def google_callback(
 ) -> RedirectResponse:
     """Google redirect 처리 — state 검증 → 토큰 교환 → 안전 매칭 → 세션 쿠키."""
     if error:
-        return await _provider_error_redirect(
-            db, state=state, error_description=error_description
-        )
+        return await _provider_error_redirect(db, state=state, error_description=error_description)
     if not code or not state:
         return _oauth_error_redirect(
             code="OAUTH_CALLBACK_INVALID",
