@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminUserDetail } from '@pinvi/schemas';
+import type { AdminAuditEntry, AdminUserDetail } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
@@ -13,6 +14,33 @@ const apiClient = new ApiClient({
 });
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
+
+const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
+  {
+    key: 'action',
+    header: '액션',
+    cell: (row) => <span className="font-mono text-xs">{row.action}</span>,
+  },
+  {
+    key: 'access_reason',
+    header: '사유',
+    cell: (row) => row.access_reason ?? '—',
+  },
+  {
+    key: 'target_pii_fields',
+    header: 'PII',
+    cell: (row) => row.target_pii_fields?.join(', ') ?? '—',
+  },
+  {
+    key: 'occurred_at',
+    header: '시각',
+    sortable: true,
+    sortValue: (row) => new Date(row.occurred_at).getTime(),
+    cell: (row) => (
+      <span className="text-muted">{new Date(row.occurred_at).toLocaleString('ko-KR')}</span>
+    ),
+  },
+];
 
 export default function AdminUserDetailPage() {
   const router = useRouter();
@@ -161,41 +189,13 @@ export default function AdminUserDetailPage() {
       </Section>
 
       <Section title="최근 Audit">
-        <div className="overflow-x-auto" data-testid="admin-user-audit-list">
-          <table className="min-w-full divide-y divide-hairline text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-2 py-2">액션</th>
-                <th className="px-2 py-2">사유</th>
-                <th className="px-2 py-2">PII</th>
-                <th className="px-2 py-2">시각</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {user.recent_audit.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-2 py-4 text-center text-muted">
-                    기록이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                user.recent_audit.map((row) => (
-                  <tr key={row.log_id}>
-                    <td className="whitespace-nowrap px-2 py-2 font-mono text-xs">
-                      {row.action}
-                    </td>
-                    <td className="px-2 py-2">{row.access_reason ?? '—'}</td>
-                    <td className="whitespace-nowrap px-2 py-2">
-                      {row.target_pii_fields?.join(', ') ?? '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-muted">
-                      {new Date(row.occurred_at).toLocaleString('ko-KR')}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div data-testid="admin-user-audit-list">
+          <AdminTable
+            columns={auditColumns}
+            rows={user.recent_audit}
+            rowKey={(row) => String(row.log_id)}
+            empty="기록이 없습니다."
+          />
         </div>
       </Section>
 

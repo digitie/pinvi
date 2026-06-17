@@ -1,23 +1,44 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
-import { ApiError, adminApi } from '@pinvi/api-client';
+import { useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminApiCallEntry } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { apiClient } from '@/lib/api';
 
 const formatDateTime = (value: string) => new Date(value).toLocaleString('ko-KR');
 
-const columns: DataTableColumn<AdminApiCallEntry>[] = [
-  { key: 'provider', header: 'Provider', cell: (row) => row.provider },
+const columns: AdminTableColumn<AdminApiCallEntry>[] = [
+  {
+    key: 'provider',
+    header: 'Provider',
+    sortable: true,
+    sortValue: (row) => row.provider,
+    cell: (row) => row.provider,
+  },
   {
     key: 'endpoint',
     header: 'Endpoint',
+    sortable: true,
+    sortValue: (row) => row.endpoint,
     cell: (row) => <span className="font-mono text-xs">{row.endpoint}</span>,
   },
-  { key: 'status', header: 'Status', cell: (row) => row.status_code ?? '—' },
-  { key: 'latency', header: 'Latency', cell: (row) => `${row.latency_ms ?? '—'} ms` },
+  {
+    key: 'status',
+    header: 'Status',
+    sortable: true,
+    sortValue: (row) => row.status_code ?? 0,
+    cell: (row) => row.status_code ?? '—',
+  },
+  {
+    key: 'latency',
+    header: 'Latency',
+    sortable: true,
+    sortValue: (row) => row.latency_ms ?? 0,
+    cell: (row) => `${row.latency_ms ?? '—'} ms`,
+  },
   { key: 'error', header: 'Error', cell: (row) => row.error_class ?? '—' },
   {
     key: 'request',
@@ -28,42 +49,45 @@ const columns: DataTableColumn<AdminApiCallEntry>[] = [
       </span>
     ),
   },
-  { key: 'occurred', header: '발생', cell: (row) => formatDateTime(row.occurred_at) },
+  {
+    key: 'occurred',
+    header: '발생',
+    sortable: true,
+    sortValue: (row) => new Date(row.occurred_at).getTime(),
+    cell: (row) => formatDateTime(row.occurred_at),
+  },
 ];
 
 export default function AdminApiCallsPage() {
-  const [rows, setRows] = useState<AdminApiCallEntry[]>([]);
   const [providerInput, setProviderInput] = useState('');
   const [statusInput, setStatusInput] = useState('');
   const [errorClassInput, setErrorClassInput] = useState('');
   const [filters, setFilters] = useState({ provider: '', statusCode: '', errorClass: '' });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    adminApi(apiClient)
-      .listApiCalls({
+  const statusCode = filters.statusCode ? Number(filters.statusCode) : undefined;
+
+  const apiCallsQuery = useQuery({
+    queryKey: queryKeys.admin.apiCalls({
+      provider: filters.provider || undefined,
+      statusCode,
+      errorClass: filters.errorClass || undefined,
+      limit: 100,
+    }),
+    queryFn: () =>
+      adminApi(apiClient).listApiCalls({
         provider: filters.provider || undefined,
-        statusCode: filters.statusCode ? Number(filters.statusCode) : undefined,
+        statusCode,
         errorClass: filters.errorClass || undefined,
         limit: 100,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setRows(result);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : 'API 호출 로그를 불러오지 못했습니다.');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [filters]);
+      }),
+  });
+
+  const rows = apiCallsQuery.data ?? [];
+  const error = apiCallsQuery.isError
+    ? apiCallsQuery.error instanceof ApiError
+      ? apiCallsQuery.error.message
+      : 'API 호출 로그를 불러오지 못했습니다.'
+    : null;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -123,7 +147,15 @@ export default function AdminApiCallsPage() {
         <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
-      <DataTable columns={columns} rows={rows} loading={loading} rowKey={(row) => String(row.log_id)} />
+      <AdminTable
+        columns={columns}
+        rows={rows}
+        loading={apiCallsQuery.isLoading}
+        rowKey={(row) => String(row.log_id)}
+        rowTestId={(row) => `admin-api-calls-row-${row.request_id ?? row.occurred_at}`}
+        virtualized
+        maxHeight="70vh"
+      />
     </AdminPage>
   );
 }

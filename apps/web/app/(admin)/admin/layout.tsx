@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
-import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
-import type { AuthUser } from '@pinvi/schemas';
+import { useEffect, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
+import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -31,59 +32,50 @@ const NAV: { href: string; label: string; sprint: number }[] = [
 
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+/** 권한 가드 + 사이드바 — Query provider 내부에서 me()를 useQuery로 확인한다. */
+function AdminGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [me, setMe] = useState<AuthUser | null>(null);
-  const [state, setState] = useState<'loading' | 'ok' | 'unauth'>('loading');
-
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
 
+  const meQuery = useQuery({
+    queryKey: queryKeys.admin.me(),
+    queryFn: () => authApi(apiClient).me(),
+    enabled: !isLoginPage,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const me = meQuery.data ?? null;
+  const hasAdmin = me ? me.roles.some((r) => ADMIN_ROLES.has(r)) : false;
+
   useEffect(() => {
-    if (isLoginPage) {
-      setState('ok');
+    if (isLoginPage) return;
+    if (meQuery.isError) {
+      const err = meQuery.error;
+      if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+        router.replace('/admin/login');
+      }
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const user = await authApi(apiClient).me();
-        if (cancelled) return;
-        const hasAdmin = user.roles.some((r) => ADMIN_ROLES.has(r));
-        if (!hasAdmin) {
-          // 사용자 존재해도 admin role 없으면 404 자체 — login 페이지로 강제 이동
-          router.replace('/admin/login?reason=forbidden');
-          setState('unauth');
-          return;
-        }
-        setMe(user);
-        setState('ok');
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
-          router.replace('/admin/login');
-        }
-        setState('unauth');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoginPage, router]);
+    if (meQuery.isSuccess && me && !hasAdmin) {
+      // 사용자 존재해도 admin role 없으면 login으로 강제 이동
+      router.replace('/admin/login?reason=forbidden');
+    }
+  }, [isLoginPage, meQuery.isError, meQuery.isSuccess, meQuery.error, me, hasAdmin, router]);
 
   if (isLoginPage) {
     return <div className="min-h-screen bg-surface-soft">{children}</div>;
   }
-
-  if (state === 'loading') {
+  if (meQuery.isPending) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-muted">
         권한 확인 중...
       </div>
     );
   }
-  if (state === 'unauth') {
+  if (meQuery.isError || !me || !hasAdmin) {
     return null;
   }
 
@@ -94,15 +86,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <Link href="/admin" className="text-sm font-bold text-ink">
             Pinvi Admin
           </Link>
-          {me && (
-            <p className="mt-1 text-xs text-muted" data-testid="admin-me">
-              {me.email}
-              <br />
-              <span className="text-[10px] uppercase tracking-wide">
-                {me.roles.filter((r) => r !== 'user').join(', ') || 'user'}
-              </span>
-            </p>
-          )}
+          <p className="mt-1 text-xs text-muted" data-testid="admin-me">
+            {me.email}
+            <br />
+            <span className="text-[10px] uppercase tracking-wide">
+              {me.roles.filter((r) => r !== 'user').join(', ') || 'user'}
+            </span>
+          </p>
         </div>
         <nav className="flex flex-col gap-1 p-2 text-sm">
           {NAV.map((item) => {
@@ -127,5 +117,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
       <main className="flex-1 overflow-x-hidden px-8 py-8">{children}</main>
     </div>
+  );
+}
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return (
+    <AdminQueryProvider>
+      <AdminGuard>{children}</AdminGuard>
+    </AdminQueryProvider>
   );
 }

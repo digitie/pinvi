@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminEmailEntry } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -21,49 +22,60 @@ const STATUSES = [
 ];
 
 export default function AdminEmailsPage() {
-  const [rows, setRows] = useState<AdminEmailEntry[]>([]);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [resendingId, setResendingId] = useState<string | null>(null);
 
-  const reload = (status: string) => {
-    setLoading(true);
-    adminApi(apiClient)
-      .listEmails({ status: status || undefined, limit: 100 })
-      .then((res) => {
-        setRows(res);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : '조회 실패'))
-      .finally(() => setLoading(false));
-  };
+  const emailsQuery = useQuery({
+    queryKey: queryKeys.admin.emails({ status: statusFilter, limit: 100 }),
+    queryFn: () => adminApi(apiClient).listEmails({ status: statusFilter || undefined, limit: 100 }),
+  });
 
-  useEffect(() => {
-    reload(statusFilter);
-  }, [statusFilter]);
+  const resendMutation = useMutation({
+    mutationFn: (emailId: string) => adminApi(apiClient).resendEmail(emailId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'emails'] }),
+  });
 
-  const onResend = async (id: string) => {
-    setResendingId(id);
-    try {
-      await adminApi(apiClient).resendEmail(id);
-      reload(statusFilter);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '재발송 실패');
-    } finally {
-      setResendingId(null);
-    }
-  };
+  const error = emailsQuery.isError
+    ? emailsQuery.error instanceof ApiError
+      ? emailsQuery.error.message
+      : '조회 실패'
+    : resendMutation.isError
+      ? resendMutation.error instanceof ApiError
+        ? resendMutation.error.message
+        : '재발송 실패'
+      : null;
 
-  const columns: DataTableColumn<AdminEmailEntry>[] = [
+  const resendingId = resendMutation.isPending ? resendMutation.variables : null;
+
+  const columns: AdminTableColumn<AdminEmailEntry>[] = [
     {
       key: 'to_email',
       header: '수신자',
+      sortable: true,
+      sortValue: (r) => r.to_email,
       cell: (r) => <span className="font-mono text-xs">{r.to_email}</span>,
     },
-    { key: 'template', header: '템플릿', cell: (r) => r.template },
-    { key: 'status', header: '상태', cell: (r) => r.status },
-    { key: 'attempts', header: '시도', cell: (r) => r.attempts },
+    {
+      key: 'template',
+      header: '템플릿',
+      sortable: true,
+      sortValue: (r) => r.template,
+      cell: (r) => r.template,
+    },
+    {
+      key: 'status',
+      header: '상태',
+      sortable: true,
+      sortValue: (r) => r.status,
+      cell: (r) => r.status,
+    },
+    {
+      key: 'attempts',
+      header: '시도',
+      sortable: true,
+      sortValue: (r) => r.attempts,
+      cell: (r) => r.attempts,
+    },
     {
       key: 'bounce',
       header: 'bounce',
@@ -72,6 +84,8 @@ export default function AdminEmailsPage() {
     {
       key: 'scheduled',
       header: '예약',
+      sortable: true,
+      sortValue: (r) => new Date(r.scheduled_at).getTime(),
       cell: (r) => new Date(r.scheduled_at).toLocaleString('ko-KR'),
     },
     {
@@ -83,7 +97,7 @@ export default function AdminEmailsPage() {
           disabled={resendingId === r.email_id}
           onClick={(e) => {
             e.stopPropagation();
-            onResend(r.email_id);
+            resendMutation.mutate(r.email_id);
           }}
           className="rounded-sm border border-primary px-2 py-1 text-xs text-primary disabled:opacity-50"
           data-testid={`admin-email-resend-${r.email_id}`}
@@ -117,7 +131,13 @@ export default function AdminEmailsPage() {
         <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
-      <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r) => r.email_id} />
+      <AdminTable
+        columns={columns}
+        rows={emailsQuery.data ?? []}
+        loading={emailsQuery.isLoading}
+        rowKey={(r) => r.email_id}
+        rowTestId={(r) => `admin-emails-row-${r.email_id}`}
+      />
     </AdminPage>
   );
 }

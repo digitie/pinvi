@@ -4,8 +4,15 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminTripDetail, TripStatus } from '@pinvi/schemas';
+import type {
+  AdminAuditEntry,
+  AdminTripCompanionSummary,
+  AdminTripDetail,
+  AdminTripShareLinkSummary,
+  TripStatus,
+} from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
@@ -25,6 +32,86 @@ const formatDate = (value: string | null) =>
 
 const formatDateTime = (value: string | null) =>
   value ? new Date(value).toLocaleString('ko-KR') : '—';
+
+const companionColumns: AdminTableColumn<AdminTripCompanionSummary>[] = [
+  {
+    key: 'invited_email_masked',
+    header: '초대 이메일',
+    cell: (row) => <span className="font-mono text-xs">{row.invited_email_masked ?? '—'}</span>,
+  },
+  {
+    key: 'invited_nickname',
+    header: '닉네임',
+    cell: (row) => row.invited_nickname ?? '—',
+  },
+  {
+    key: 'role',
+    header: '역할',
+    cell: (row) => row.role,
+  },
+  {
+    key: 'joined_at',
+    header: '가입',
+    sortable: true,
+    sortValue: (row) => (row.joined_at ? new Date(row.joined_at).getTime() : 0),
+    cell: (row) => formatDateTime(row.joined_at),
+  },
+  {
+    key: 'invited_at',
+    header: '초대',
+    sortable: true,
+    sortValue: (row) => new Date(row.invited_at).getTime(),
+    cell: (row) => formatDateTime(row.invited_at),
+  },
+];
+
+const shareLinkColumns: AdminTableColumn<AdminTripShareLinkSummary>[] = [
+  {
+    key: 'share_id',
+    header: 'share_id',
+    cell: (row) => <span className="font-mono text-xs">{row.share_id}</span>,
+  },
+  {
+    key: 'visibility',
+    header: '권한',
+    cell: (row) => row.visibility,
+  },
+  {
+    key: 'expires_at',
+    header: '만료',
+    cell: (row) => formatDateTime(row.expires_at),
+  },
+  {
+    key: 'revoked_at',
+    header: '폐기',
+    cell: (row) => formatDateTime(row.revoked_at),
+  },
+  {
+    key: 'last_used_at',
+    header: '마지막 사용',
+    cell: (row) => formatDateTime(row.last_used_at),
+  },
+];
+
+const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
+  {
+    key: 'action',
+    header: '액션',
+    cell: (row) => <span className="font-mono text-xs">{row.action}</span>,
+  },
+  {
+    key: 'access_reason',
+    header: '사유',
+    cell: (row) => row.access_reason ?? '—',
+  },
+  {
+    key: 'occurred_at',
+    header: '시각',
+    sortable: true,
+    sortValue: (row) => new Date(row.occurred_at).getTime(),
+    cell: (row) => formatDateTime(row.occurred_at),
+  },
+];
 
 export default function AdminTripDetailPage() {
   const router = useRouter();
@@ -175,105 +262,35 @@ export default function AdminTripDetailPage() {
       </Section>
 
       <Section title="동반자">
-        <div className="overflow-x-auto" data-testid="admin-trip-companions">
-          <table className="min-w-full divide-y divide-hairline text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-2 py-2">초대 이메일</th>
-                <th className="px-2 py-2">닉네임</th>
-                <th className="px-2 py-2">역할</th>
-                <th className="px-2 py-2">가입</th>
-                <th className="px-2 py-2">초대</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {trip.companions.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-2 py-4 text-center text-muted">
-                    항목이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                trip.companions.map((row) => (
-                  <tr key={row.companion_id}>
-                    <td className="px-2 py-2 font-mono text-xs">
-                      {row.invited_email_masked ?? '—'}
-                    </td>
-                    <td className="px-2 py-2">{row.invited_nickname ?? '—'}</td>
-                    <td className="px-2 py-2">{row.role}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.joined_at)}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.invited_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div data-testid="admin-trip-companions">
+          <AdminTable
+            columns={companionColumns}
+            rows={trip.companions}
+            rowKey={(row) => row.companion_id}
+            empty="항목이 없습니다."
+          />
         </div>
       </Section>
 
       <Section title="공유 링크">
-        <div className="overflow-x-auto" data-testid="admin-trip-share-links">
-          <table className="min-w-full divide-y divide-hairline text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-2 py-2">share_id</th>
-                <th className="px-2 py-2">권한</th>
-                <th className="px-2 py-2">만료</th>
-                <th className="px-2 py-2">폐기</th>
-                <th className="px-2 py-2">마지막 사용</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {trip.share_links.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-2 py-4 text-center text-muted">
-                    항목이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                trip.share_links.map((row) => (
-                  <tr key={row.share_id}>
-                    <td className="px-2 py-2 font-mono text-xs">{row.share_id}</td>
-                    <td className="px-2 py-2">{row.visibility}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.expires_at)}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.revoked_at)}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.last_used_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div data-testid="admin-trip-share-links">
+          <AdminTable
+            columns={shareLinkColumns}
+            rows={trip.share_links}
+            rowKey={(row) => row.share_id}
+            empty="항목이 없습니다."
+          />
         </div>
       </Section>
 
       <Section title="최근 Audit">
-        <div className="overflow-x-auto" data-testid="admin-trip-audit-list">
-          <table className="min-w-full divide-y divide-hairline text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-2 py-2">액션</th>
-                <th className="px-2 py-2">사유</th>
-                <th className="px-2 py-2">시각</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {trip.recent_audit.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-2 py-4 text-center text-muted">
-                    기록이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                trip.recent_audit.map((row) => (
-                  <tr key={row.log_id}>
-                    <td className="px-2 py-2 font-mono text-xs">{row.action}</td>
-                    <td className="px-2 py-2">{row.access_reason ?? '—'}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.occurred_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div data-testid="admin-trip-audit-list">
+          <AdminTable
+            columns={auditColumns}
+            rows={trip.recent_audit}
+            rowKey={(row) => String(row.log_id)}
+            empty="기록이 없습니다."
+          />
         </div>
       </Section>
 
