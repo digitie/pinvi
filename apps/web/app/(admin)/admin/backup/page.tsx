@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DatabaseBackup, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
-import { ApiError, adminApi } from '@pinvi/api-client';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { DataTable } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { RestoreHotswapDialog } from '@/components/admin/RestoreHotswapDialog';
 import { apiClient } from '@/lib/api';
 
@@ -23,60 +24,112 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
+const columns: AdminTableColumn<AdminBackupSnapshot>[] = [
+  {
+    key: 'filename',
+    header: '파일',
+    sortable: true,
+    sortValue: (row) => row.filename,
+    cell: (row) => <span data-testid="admin-backup-filename">{row.filename}</span>,
+  },
+  {
+    key: 'created_at',
+    header: '생성',
+    sortable: true,
+    sortValue: (row) => new Date(row.created_at).getTime(),
+    cell: (row) => formatDateTime(row.created_at),
+  },
+  {
+    key: 'size',
+    header: '크기',
+    sortable: true,
+    sortValue: (row) => row.size_bytes,
+    cell: (row) => formatBytes(row.size_bytes),
+  },
+  {
+    key: 'status',
+    header: '상태',
+    sortable: true,
+    sortValue: (row) => row.status,
+    cell: (row) => row.status,
+  },
+  {
+    key: 'checksum',
+    header: 'sha256',
+    cell: (row) => row.checksum_sha256?.slice(0, 12) ?? '없음',
+  },
+];
+
 export default function AdminBackupPage() {
-  const [snapshots, setSnapshots] = useState<AdminBackupSnapshot[]>([]);
+  const queryClient = useQueryClient();
   const [reason, setReason] = useState('정기 수동 점검');
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [restoreSnapshot, setRestoreSnapshot] = useState<AdminBackupSnapshot | null>(null);
 
-  const loadSnapshots = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await adminApi(apiClient).listBackupSnapshots();
-      setSnapshots(items);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '백업 snapshot을 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const snapshotsQuery = useQuery({
+    queryKey: queryKeys.admin.backupSnapshots({ limit: 50 }),
+    queryFn: () => adminApi(apiClient).listBackupSnapshots(50),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (access_reason: string) =>
+      adminApi(apiClient).createBackupSnapshot({ access_reason }),
+    onSuccess: (created) => {
+      setMessage('수동 백업 snapshot을 생성했습니다.');
+      setCreateError(null);
+      // 생성된 snapshot을 캐시 목록 맨 앞에 낙관적으로 추가(원래 UX 유지 — 즉시 표시).
+      queryClient.setQueryData<AdminBackupSnapshot[]>(
+        queryKeys.admin.backupSnapshots({ limit: 50 }),
+        // snapshot_id 중복 제거(원본 동작 복원) — 재생성/경합 시 중복 행 방지.
+        (old) => [created, ...(old ?? []).filter((item) => item.snapshot_id !== created.snapshot_id)],
+      );
+    },
+    onError: (err) => {
+      setCreateError(err instanceof ApiError ? err.message : '수동 백업을 시작하지 못했습니다.');
+    },
+  });
+
+  const listError = snapshotsQuery.isError
+    ? snapshotsQuery.error instanceof ApiError
+      ? snapshotsQuery.error.message
+      : '백업 snapshot을 불러오지 못했습니다.'
+    : null;
+  const error = createError ?? listError;
 
   const completeRestore = (run: AdminBackupRestoreRun) => {
     setMessage(`핫스왑 restore 요청이 완료됐습니다. restore id: ${run.restore_id}`);
   };
 
-  useEffect(() => {
-    void loadSnapshots();
-  }, []);
-
-  const createSnapshot = async () => {
+  const createSnapshot = () => {
     const trimmed = reason.trim();
     if (!trimmed) {
-      setError('백업 사유를 입력하세요.');
+      setCreateError('백업 사유를 입력하세요.');
       return;
     }
-    setCreating(true);
     setMessage(null);
-    setError(null);
-    try {
-      const snapshot = await adminApi(apiClient).createBackupSnapshot({
-        access_reason: trimmed,
-      });
-      setSnapshots((current) => [
-        snapshot,
-        ...current.filter((item) => item.snapshot_id !== snapshot.snapshot_id),
-      ]);
-      setMessage('수동 백업 snapshot을 생성했습니다.');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '수동 백업을 시작하지 못했습니다.');
-    } finally {
-      setCreating(false);
-    }
+    setCreateError(null);
+    createMutation.mutate(trimmed);
   };
+
+  const restoreColumns: AdminTableColumn<AdminBackupSnapshot>[] = [
+    ...columns,
+    {
+      key: 'restore',
+      header: 'restore',
+      cell: (row) => (
+        <button
+          type="button"
+          onClick={() => setRestoreSnapshot(row)}
+          className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+          data-testid="admin-backup-restore"
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+          Restore
+        </button>
+      ),
+    },
+  ];
 
   return (
     <AdminPage
@@ -85,11 +138,11 @@ export default function AdminBackupPage() {
       actions={
         <button
           type="button"
-          onClick={() => void loadSnapshots()}
+          onClick={() => void snapshotsQuery.refetch()}
           className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-          disabled={loading}
+          disabled={snapshotsQuery.isFetching}
         >
-          {loading ? (
+          {snapshotsQuery.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -125,12 +178,12 @@ export default function AdminBackupPage() {
           </label>
           <button
             type="button"
-            onClick={() => void createSnapshot()}
-            disabled={creating}
+            onClick={createSnapshot}
+            disabled={createMutation.isPending}
             className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 md:mt-auto"
             data-testid="admin-backup-create"
           >
-            {creating ? (
+            {createMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
@@ -141,53 +194,13 @@ export default function AdminBackupPage() {
       </Section>
 
       <Section title="Snapshot 목록">
-        <DataTable
-          rows={snapshots}
-          loading={loading}
+        <AdminTable
+          rows={snapshotsQuery.data ?? []}
+          loading={snapshotsQuery.isLoading}
           empty="생성된 snapshot이 없습니다."
           rowKey={(row) => row.snapshot_id}
-          columns={[
-            {
-              key: 'filename',
-              header: '파일',
-              cell: (row) => <span data-testid="admin-backup-filename">{row.filename}</span>,
-            },
-            {
-              key: 'created_at',
-              header: '생성',
-              cell: (row) => formatDateTime(row.created_at),
-            },
-            {
-              key: 'size',
-              header: '크기',
-              cell: (row) => formatBytes(row.size_bytes),
-            },
-            {
-              key: 'status',
-              header: '상태',
-              cell: (row) => row.status,
-            },
-            {
-              key: 'checksum',
-              header: 'sha256',
-              cell: (row) => row.checksum_sha256?.slice(0, 12) ?? '없음',
-            },
-            {
-              key: 'restore',
-              header: 'restore',
-              cell: (row) => (
-                <button
-                  type="button"
-                  onClick={() => setRestoreSnapshot(row)}
-                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
-                  data-testid="admin-backup-restore"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                  Restore
-                </button>
-              ),
-            },
-          ]}
+          rowTestId={(row) => `admin-backup-row-${row.filename}`}
+          columns={restoreColumns}
         />
       </Section>
 

@@ -42,4 +42,44 @@ export const queryKeys = {
     festivalMarkers: (params: { year?: number; month?: number; bbox?: string }) =>
       ['public', 'festival-markers', params] as const,
   },
+  admin: {
+    all: () => ['admin'] as const,
+    me: () => ['admin', 'me'] as const,
+    stats: () => ['admin', 'stats', 'overview'] as const,
+    users: (params: { page?: number; status?: string; q?: string }) =>
+      ['admin', 'users', params] as const,
+    user: (userId: string) => ['admin', 'user', userId] as const,
+    trips: (params: {
+      page?: number;
+      status?: string;
+      visibility?: string;
+      ownerUserId?: string;
+      q?: string;
+    }) => ['admin', 'trips', params] as const,
+    trip: (tripId: string) => ['admin', 'trip', tripId] as const,
+    pois: (params: { page?: number; tripId?: string; hasBrokenLink?: boolean; q?: string }) =>
+      ['admin', 'pois', params] as const,
+    poi: (poiId: string) => ['admin', 'poi', poiId] as const,
+    featureRequests: (params: { status?: string; page?: number }) =>
+      ['admin', 'feature-requests', params] as const,
+    // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).
+    featureRequestsAll: () => ['admin', 'feature-requests'] as const,
+    emails: (params: { status?: string; limit?: number }) =>
+      ['admin', 'emails', params] as const,
+    emailsAll: () => ['admin', 'emails'] as const,
+    audit: (params: { limit?: number }) => ['admin', 'audit', params] as const,
+    locationAudit: (params: { userId?: string; from?: string; to?: string; limit?: number }) =>
+      ['admin', 'location-audit', params] as const,
+    apiCalls: (params: {
+      provider?: string;
+      statusCode?: number;
+      errorClass?: string;
+      limit?: number;
+    }) => ['admin', 'api-calls', params] as const,
+    mcpTokens: (params: { userId?: string; status?: string; q?: string; limit?: number }) =>
+      ['admin', 'mcp-tokens', params] as const,
+    mcpTokensAll: () => ['admin', 'mcp-tokens'] as const,
+    backupSnapshots: (params: { limit?: number } = {}) =>
+      ['admin', 'backup', 'snapshots', params] as const,
+  },
 } as const;

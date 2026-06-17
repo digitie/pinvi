@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminTripPagedResponse, AdminTripSummary } from '@pinvi/schemas';
+import { useState, type FormEvent } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminTripSummary } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -36,10 +37,12 @@ const formatDateRange = (trip: AdminTripSummary) => {
   return `${formatDate(trip.start_date)} ~ ${formatDate(trip.end_date)}`;
 };
 
-const columns: DataTableColumn<AdminTripSummary>[] = [
+const columns: AdminTableColumn<AdminTripSummary>[] = [
   {
     key: 'title',
     header: '여행',
+    sortable: true,
+    sortValue: (trip) => trip.title,
     cell: (trip) => (
       <Link href={`/admin/trips/${trip.trip_id}`} className="text-primary underline">
         {trip.title}
@@ -47,8 +50,20 @@ const columns: DataTableColumn<AdminTripSummary>[] = [
     ),
   },
   { key: 'owner', header: '소유자', cell: (trip) => trip.owner_email_masked },
-  { key: 'status', header: '상태', cell: (trip) => trip.status },
-  { key: 'visibility', header: '공개', cell: (trip) => trip.visibility },
+  {
+    key: 'status',
+    header: '상태',
+    sortable: true,
+    sortValue: (trip) => trip.status,
+    cell: (trip) => trip.status,
+  },
+  {
+    key: 'visibility',
+    header: '공개',
+    sortable: true,
+    sortValue: (trip) => trip.visibility,
+    cell: (trip) => trip.visibility,
+  },
   {
     key: 'region',
     header: '지역',
@@ -64,48 +79,46 @@ const columns: DataTableColumn<AdminTripSummary>[] = [
   {
     key: 'updated_at',
     header: '수정',
+    sortable: true,
+    sortValue: (trip) => new Date(trip.updated_at).getTime(),
     cell: (trip) => new Date(trip.updated_at).toLocaleString('ko-KR'),
   },
 ];
 
 export default function AdminTripsPage() {
-  const [data, setData] = useState<AdminTripPagedResponse | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState('');
   const [queryInput, setQueryInput] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    adminApi(apiClient)
-      .listTrips({
+  const tripsQuery = useQuery({
+    queryKey: queryKeys.admin.trips({
+      page,
+      status: statusFilter,
+      visibility: visibilityFilter,
+      q: submittedQuery,
+    }),
+    queryFn: () =>
+      adminApi(apiClient).listTrips({
         page,
         limit: 50,
         status: statusFilter || undefined,
         visibility: visibilityFilter || undefined,
         q: submittedQuery || undefined,
-      })
-      .then((res) => {
-        if (cancelled) return;
-        setData(res);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : '조회 실패');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [page, statusFilter, submittedQuery, visibilityFilter]);
+      }),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = tripsQuery.data ?? null;
+  const error = tripsQuery.isError
+    ? tripsQuery.error instanceof ApiError
+      ? tripsQuery.error.message
+      : '조회 실패'
+    : null;
 
   const total = data?.total ?? 0;
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / 50)), [total]);
+  const totalPages = Math.max(1, Math.ceil(total / 50));
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -184,11 +197,12 @@ export default function AdminTripsPage() {
         </p>
       )}
 
-      <DataTable
+      <AdminTable
         columns={columns}
         rows={data?.items ?? []}
-        loading={loading}
+        loading={tripsQuery.isLoading}
         rowKey={(trip) => trip.trip_id}
+        rowTestId={(trip) => `admin-trips-row-${trip.trip_id}`}
       />
 
       <div className="flex items-center justify-between text-sm">

@@ -1,19 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminAuditEntry, AdminChainVerify } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
-const columns: DataTableColumn<AdminAuditEntry>[] = [
-  { key: 'log_id', header: '#', cell: (r) => r.log_id, width: '80px' },
-  { key: 'action', header: 'Action', cell: (r) => r.action },
+const columns: AdminTableColumn<AdminAuditEntry>[] = [
+  {
+    key: 'log_id',
+    header: '#',
+    width: '80px',
+    sortable: true,
+    sortValue: (r) => r.log_id,
+    cell: (r) => r.log_id,
+  },
+  { key: 'action', header: 'Action', sortable: true, sortValue: (r) => r.action, cell: (r) => r.action },
   { key: 'resource', header: 'Resource', cell: (r) => `${r.resource_type}/${r.resource_id ?? '—'}` },
   { key: 'reason', header: '사유', cell: (r) => r.access_reason ?? '—' },
   {
@@ -28,40 +36,38 @@ const columns: DataTableColumn<AdminAuditEntry>[] = [
   {
     key: 'occurred_at',
     header: '발생',
+    sortable: true,
+    sortValue: (r) => new Date(r.occurred_at).getTime(),
     cell: (r) => new Date(r.occurred_at).toLocaleString('ko-KR'),
   },
 ];
 
 export default function AdminAuditPage() {
-  const [rows, setRows] = useState<AdminAuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [verify, setVerify] = useState<AdminChainVerify | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    adminApi(apiClient)
-      .listAudit(100)
-      .then((res) => !cancelled && setRows(res))
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : '조회 실패');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const auditQuery = useQuery({
+    queryKey: queryKeys.admin.audit({ limit: 100 }),
+    queryFn: () => adminApi(apiClient).listAudit(100),
+  });
+
+  const rows = auditQuery.data ?? [];
+  const listError = auditQuery.isError
+    ? auditQuery.error instanceof ApiError
+      ? auditQuery.error.message
+      : '조회 실패'
+    : null;
+  const error = verifyError ?? listError;
 
   const onVerify = async () => {
     setVerifying(true);
-    setError(null);
+    setVerifyError(null);
     try {
       const res = await adminApi(apiClient).verifyChain();
       setVerify(res);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '검증 실패');
+      setVerifyError(err instanceof ApiError ? err.message : '검증 실패');
     } finally {
       setVerifying(false);
     }
@@ -112,7 +118,15 @@ export default function AdminAuditPage() {
         <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
-      <DataTable columns={columns} rows={rows} loading={loading} rowKey={(r) => String(r.log_id)} />
+      <AdminTable
+        columns={columns}
+        rows={rows}
+        loading={auditQuery.isLoading}
+        rowKey={(r) => String(r.log_id)}
+        rowTestId={(r) => `admin-audit-row-${r.log_id}`}
+        virtualized
+        maxHeight="70vh"
+      />
     </AdminPage>
   );
 }

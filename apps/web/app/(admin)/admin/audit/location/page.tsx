@@ -1,17 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type FormEvent } from 'react';
-import { ApiError, adminApi } from '@pinvi/api-client';
+import { useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminLocationAuditEntry } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { apiClient } from '@/lib/api';
 
 const formatDateTime = (value: string) => new Date(value).toLocaleString('ko-KR');
 
-const columns: DataTableColumn<AdminLocationAuditEntry>[] = [
-  { key: 'log_id', header: '#', cell: (row) => row.log_id, width: '80px' },
+const columns: AdminTableColumn<AdminLocationAuditEntry>[] = [
+  {
+    key: 'log_id',
+    header: '#',
+    width: '80px',
+    sortable: true,
+    sortValue: (row) => row.log_id,
+    cell: (row) => row.log_id,
+  },
   {
     key: 'user',
     header: 'User',
@@ -21,10 +29,12 @@ const columns: DataTableColumn<AdminLocationAuditEntry>[] = [
       </span>
     ),
   },
-  { key: 'purpose', header: 'Purpose', cell: (row) => row.purpose },
+  { key: 'purpose', header: 'Purpose', sortable: true, sortValue: (row) => row.purpose, cell: (row) => row.purpose },
   {
     key: 'endpoint',
     header: 'Endpoint',
+    sortable: true,
+    sortValue: (row) => row.endpoint,
     cell: (row) => <span className="font-mono text-xs">{row.endpoint}</span>,
   },
   {
@@ -51,42 +61,43 @@ const columns: DataTableColumn<AdminLocationAuditEntry>[] = [
       </span>
     ),
   },
-  { key: 'occurred', header: '발생', cell: (row) => formatDateTime(row.occurred_at) },
+  {
+    key: 'occurred',
+    header: '발생',
+    sortable: true,
+    sortValue: (row) => new Date(row.occurred_at).getTime(),
+    cell: (row) => formatDateTime(row.occurred_at),
+  },
 ];
 
 export default function AdminLocationAuditPage() {
-  const [rows, setRows] = useState<AdminLocationAuditEntry[]>([]);
   const [userIdInput, setUserIdInput] = useState('');
   const [fromInput, setFromInput] = useState('');
   const [toInput, setToInput] = useState('');
   const [filters, setFilters] = useState({ userId: '', from: '', to: '' });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    adminApi(apiClient)
-      .listLocationAudit({
+  const locationAuditQuery = useQuery({
+    queryKey: queryKeys.admin.locationAudit({
+      userId: filters.userId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      limit: 100,
+    }),
+    queryFn: () =>
+      adminApi(apiClient).listLocationAudit({
         userId: filters.userId || undefined,
         from: filters.from || undefined,
         to: filters.to || undefined,
         limit: 100,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setRows(result);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : '위치 감사 로그를 불러오지 못했습니다.');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [filters]);
+      }),
+  });
+
+  const rows = locationAuditQuery.data ?? [];
+  const error = locationAuditQuery.isError
+    ? locationAuditQuery.error instanceof ApiError
+      ? locationAuditQuery.error.message
+      : '위치 감사 로그를 불러오지 못했습니다.'
+    : null;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -158,7 +169,15 @@ export default function AdminLocationAuditPage() {
         <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
       )}
 
-      <DataTable columns={columns} rows={rows} loading={loading} rowKey={(row) => String(row.log_id)} />
+      <AdminTable
+        columns={columns}
+        rows={rows}
+        loading={locationAuditQuery.isLoading}
+        rowKey={(row) => String(row.log_id)}
+        rowTestId={(row) => `admin-location-row-${row.log_id}`}
+        virtualized
+        maxHeight="70vh"
+      />
     </AdminPage>
   );
 }

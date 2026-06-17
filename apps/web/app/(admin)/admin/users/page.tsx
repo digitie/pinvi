@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type FormEvent } from 'react';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminPagedResponse, AdminUserSummary } from '@pinvi/schemas';
+import { useState, type FormEvent } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminUserSummary } from '@pinvi/schemas';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -19,18 +20,26 @@ const STATUSES = [
   { value: 'disabled', label: '비활성' },
 ];
 
-const columns: DataTableColumn<AdminUserSummary>[] = [
+const columns: AdminTableColumn<AdminUserSummary>[] = [
   {
     key: 'email',
     header: '이메일 (마스킹)',
+    sortable: true,
+    sortValue: (u) => u.email_masked,
     cell: (u) => (
       <Link href={`/admin/users/${u.user_id}`} className="text-primary underline">
         {u.email_masked}
       </Link>
     ),
   },
-  { key: 'nickname', header: '닉네임', cell: (u) => u.nickname ?? '—' },
-  { key: 'status', header: '상태', cell: (u) => u.status },
+  {
+    key: 'nickname',
+    header: '닉네임',
+    sortable: true,
+    sortValue: (u) => u.nickname ?? '',
+    cell: (u) => u.nickname ?? '—',
+  },
+  { key: 'status', header: '상태', sortable: true, sortValue: (u) => u.status, cell: (u) => u.status },
   {
     key: 'roles',
     header: '역할',
@@ -39,43 +48,36 @@ const columns: DataTableColumn<AdminUserSummary>[] = [
   {
     key: 'created_at',
     header: '가입',
+    sortable: true,
+    sortValue: (u) => new Date(u.created_at).getTime(),
     cell: (u) => new Date(u.created_at).toLocaleDateString('ko-KR'),
   },
 ];
 
 export default function AdminUsersPage() {
-  const [data, setData] = useState<AdminPagedResponse | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [queryInput, setQueryInput] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    adminApi(apiClient)
-      .listUsers({
+  const usersQuery = useQuery({
+    queryKey: queryKeys.admin.users({ page, status: statusFilter, q: submittedQuery }),
+    queryFn: () =>
+      adminApi(apiClient).listUsers({
         page,
         limit: 50,
         status: statusFilter || undefined,
         q: submittedQuery || undefined,
-      })
-      .then((res) => {
-        if (cancelled) return;
-        setData(res);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : '조회 실패');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [page, statusFilter, submittedQuery]);
+      }),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = usersQuery.data ?? null;
+  const error = usersQuery.isError
+    ? usersQuery.error instanceof ApiError
+      ? usersQuery.error.message
+      : '조회 실패'
+    : null;
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 50));
@@ -136,11 +138,12 @@ export default function AdminUsersPage() {
         </p>
       )}
 
-      <DataTable
+      <AdminTable
         columns={columns}
         rows={data?.items ?? []}
-        loading={loading}
+        loading={usersQuery.isLoading}
         rowKey={(u) => u.user_id}
+        rowTestId={(u) => `admin-users-row-${u.user_id}`}
       />
 
       <div className="flex items-center justify-between text-sm">

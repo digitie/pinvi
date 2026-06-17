@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-17 (claude) — Admin UI 전체 테이블 TanStack Table + Virtual + Query 전환
+
+**작업**: Admin UI(`apps/web/app/(admin)/admin/**`)의 모든 테이블 15개를 `@tanstack/react-table`
+(headless) + `@tanstack/react-virtual` 기반 단일 컴포넌트로 교체하고, 데이터 패칭을 TanStack
+Query로 전환. 사용자 결정 = (모든 테이블 / 패리티+신규기능 / Query 도입). 계획·분석은 plan mode
+에서 Explore×3 + Plan 에이전트로 수립, 페이지 마이그레이션은 frontend-developer 4개 병렬.
+
+- **공유 컴포넌트** `components/admin/AdminTable.tsx` — `useReactTable`(정렬: 렌더는 `cell`,
+  정렬키는 `sortValue`; sticky `<thead z-20>`; 정렬 헤더 `<button>`+`aria-sort`+lucide) +
+  `useVirtualizer`(스페이서 `<tr>` 윈도잉으로 네이티브 `<table>` 레이아웃·role 유지, 행수
+  ≤ threshold(30)면 전 행 렌더 → e2e 1행 mock 안정). 하위호환: `DataTable`는 re-export.
+  순수 윈도우 계산은 `lib/adminTableWindow.ts`로 분리(단위 테스트). `sortDescFirst: false`로
+  숫자 컬럼도 첫 클릭 오름차순(일관 UX).
+- **Query 도입** — `components/admin/AdminQueryProvider.tsx`를 admin 레이아웃에만 마운트
+  (root 비침범), 가드 `me()`를 `useQuery`로. `query-keys.ts`에 `admin` 네임스페이스 추가.
+  리스트 10개는 `useQuery`(+페이지네이션군은 `keepPreviousData`)로 전환, 외부 필터/검색/페이지
+  네이션·error/empty/loading testid는 그대로. 목록 리로드 mutation(emails resend / mcp revoke /
+  feature-requests approve)은 `useMutation`+invalidate, backup 생성은 `setQueryData` 낙관적
+  prepend(원래 즉시표시 UX 유지). 상세 3개의 nested raw `<table>` 5개도 `AdminTable`로 교체
+  (컨테이너 testid 보존, 데이터/뮤테이션 로직 무변경).
+- **테스트** — 단위(`AdminTable.test.tsx` jsdom RTL + `adminTableWindow.test.ts` node, vitest
+  jsdom 설정 추가) + 신규 e2e `admin-table.e2e.ts`(헤더/정렬·aria-sort/empty/loading/sticky/
+  가상화 mount-on-scroll). 행 정렬·가상화 검증 위해 `admin-table-sort-*`/행 `rowTestId`/
+  `admin-table-scroll` testid 추가.
+
+**검증**: (WSL 미러) `npm run typecheck`+`lint`+`build`+`test`(vitest 15) ✅.
+(Windows) `npm run test:e2e -- admin` **23 passed**(기존 17 + 신규 admin-table 6). 기존 admin
+스펙은 testid 보존으로 회귀 없음. 함정 메모: 응답이 ApiClient Zod 파싱을 거치므로 e2e mock의
+user_id/request_id는 UUID여야 한다(아니면 RESPONSE_SHAPE_INVALID로 행 미렌더).
+
+**상세리뷰(멀티에이전트 5차원 + adversarial verify, PR #217)**: 블로커 0, 마이너/nit 10건.
+반영: backup 낙관적 insert snapshot_id 중복제거 복원, emails 재발송 실패 배너 필터변경 시 정리,
+`queryKeys.admin.{emailsAll,mcpTokensAll,featureRequestsAll}` 추가 후 invalidate에 사용(raw 배열 제거).
+후속(별도 PR 권장 — 본 마이그레이션 범위 밖): 11개 admin 페이지 module-level ApiClient→공유
+`@/lib/api` 통일(+layout onUnauthorized 결정), 앱 전역 `apiErrorMessage` 헬퍼, `AdminPagination`
+컴포넌트 추출 + `ADMIN_PAGE_SIZE` 상수화, emails/feature-requests columns `useMemo`, pois feature
+빈값 fallback.
+
+**남은 것**: 행 선택(opt-in 설계만, 미활성), 서버측 정렬(현재 클라이언트·페이지 한정),
+나머지 route group의 Query 도입(범위 밖).
+
 ## 2026-06-17 (claude) — 이슈 #215 Expo/mobile 사후 리뷰 후속 정리 (P0 + VWorld 정책 + 문서 drift)
 
 **작업**: 이슈 #215(Expo/mobile PR 사후 리뷰)의 완료 조건을 한 묶음으로 처리. 백엔드는

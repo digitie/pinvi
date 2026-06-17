@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, KeyRound, Trash2 } from 'lucide-react';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { McpToken } from '@pinvi/schemas';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
 
@@ -35,9 +36,10 @@ function tokenStatus(token: McpToken): string {
 }
 
 export default function AdminMcpTokensPage() {
-  const [tokens, setTokens] = useState<McpToken[]>([]);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<'active' | 'expired' | 'revoked' | ''>('active');
   const [query, setQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
   const [userId, setUserId] = useState('');
   const [name, setName] = useState('관리자 대리 발급');
   const [expiry, setExpiry] = useState<(typeof EXPIRY_OPTIONS)[number]['value']>('30');
@@ -45,40 +47,66 @@ export default function AdminMcpTokensPage() {
   const [revokeReason, setRevokeReason] = useState('');
   const [issued, setIssued] = useState<string | null>(null);
   const [issueErrors, setIssueErrors] = useState<IssueFieldErrors>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const userIdRef = useRef<HTMLInputElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setTokens(
-        await adminApi(apiClient).listMcpTokens({
-          status: statusFilter || undefined,
-          q: query.trim() || undefined,
-          limit: 100,
-        }),
-      );
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '조회 실패');
-    } finally {
-      setLoading(false);
-    }
-  }, [query, statusFilter]);
+  const tokensQuery = useQuery({
+    queryKey: queryKeys.admin.mcpTokens({
+      status: statusFilter,
+      q: submittedQuery,
+      limit: 100,
+    }),
+    queryFn: () =>
+      adminApi(apiClient).listMcpTokens({
+        status: statusFilter || undefined,
+        q: submittedQuery.trim() || undefined,
+        limit: 100,
+      }),
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const issueMutation = useMutation({
+    mutationFn: (body: {
+      user_id: string;
+      name: string;
+      expires_at: string | null;
+      access_reason: string;
+    }) => adminApi(apiClient).issueMcpToken(body),
+    onSuccess: (created) => {
+      setIssued(created.token);
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.mcpTokensAll() });
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : '발급 실패');
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: ({ tokenId, access_reason }: { tokenId: string; access_reason: string }) =>
+      adminApi(apiClient).revokeMcpToken(tokenId, { access_reason }),
+    onSuccess: () => {
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.mcpTokensAll() });
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : '회수 실패');
+    },
+  });
+
+  const listError = tokensQuery.isError
+    ? tokensQuery.error instanceof ApiError
+      ? tokensQuery.error.message
+      : '조회 실패'
+    : null;
+  const error = actionError ?? listError;
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void load();
+    setSubmittedQuery(query);
   };
 
-  const onIssue = async (event: FormEvent<HTMLFormElement>) => {
+  const onIssue = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors: IssueFieldErrors = {};
     if (!userId.trim()) nextErrors.userId = '대상 user_id를 입력하세요.';
@@ -92,64 +120,60 @@ export default function AdminMcpTokensPage() {
       reasonRef.current?.focus();
       return;
     }
-    setSaving(true);
-    setError(null);
-    try {
-      const expires_at = expiry === 'never' ? null : addDays(Number(expiry));
-      const created = await adminApi(apiClient).issueMcpToken({
-        user_id: userId,
-        name,
-        expires_at,
-        access_reason: reason,
-      });
-      setIssued(created.token);
-      setTokens((prev) => [created, ...prev]);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '발급 실패');
-    } finally {
-      setSaving(false);
-    }
+    setActionError(null);
+    const expires_at = expiry === 'never' ? null : addDays(Number(expiry));
+    issueMutation.mutate({
+      user_id: userId,
+      name,
+      expires_at,
+      access_reason: reason,
+    });
   };
 
   const onRevoke = useCallback(
-    async (tokenId: string) => {
+    (tokenId: string) => {
       if (!revokeReason.trim()) {
-        setError('회수 사유를 입력하세요.');
+        setActionError('회수 사유를 입력하세요.');
         return;
       }
-      setError(null);
-      try {
-        await adminApi(apiClient).revokeMcpToken(tokenId, { access_reason: revokeReason });
-        await load();
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : '회수 실패');
-      }
+      setActionError(null);
+      revokeMutation.mutate({ tokenId, access_reason: revokeReason });
     },
-    [load, revokeReason],
+    [revokeMutation, revokeReason],
   );
 
-  const columns = useMemo<DataTableColumn<McpToken>[]>(
+  const columns = useMemo<AdminTableColumn<McpToken>[]>(
     () => [
       {
         key: 'user_id',
         header: 'User',
         cell: (t) => <span className="font-mono text-xs">{t.user_id ?? '—'}</span>,
       },
-      { key: 'name', header: '이름', cell: (t) => t.name },
+      { key: 'name', header: '이름', sortable: true, sortValue: (t) => t.name, cell: (t) => t.name },
       {
         key: 'masked',
         header: '토큰',
         cell: (t) => <span className="font-mono">{t.masked_token}</span>,
       },
-      { key: 'status', header: '상태', cell: (t) => tokenStatus(t) },
+      {
+        key: 'status',
+        header: '상태',
+        sortable: true,
+        sortValue: (t) => tokenStatus(t),
+        cell: (t) => tokenStatus(t),
+      },
       {
         key: 'expires',
         header: '만료',
+        sortable: true,
+        sortValue: (t) => (t.expires_at ? new Date(t.expires_at).getTime() : Infinity),
         cell: (t) => (t.expires_at ? new Date(t.expires_at).toLocaleString('ko-KR') : '무기한'),
       },
       {
         key: 'last_used',
         header: '마지막 사용',
+        sortable: true,
+        sortValue: (t) => (t.last_used_at ? new Date(t.last_used_at).getTime() : 0),
         cell: (t) => (t.last_used_at ? new Date(t.last_used_at).toLocaleString('ko-KR') : '—'),
       },
       {
@@ -162,7 +186,7 @@ export default function AdminMcpTokensPage() {
             title="회수"
             aria-label={`${t.name} 토큰 회수`}
             disabled={Boolean(t.revoked_at)}
-            onClick={() => void onRevoke(t.token_id)}
+            onClick={() => onRevoke(t.token_id)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-error-text disabled:opacity-40"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -267,11 +291,11 @@ export default function AdminMcpTokensPage() {
           />
           <button
             type="submit"
-            disabled={saving}
+            disabled={issueMutation.isPending}
             className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {saving ? '발급 중...' : '발급'}
+            {issueMutation.isPending ? '발급 중...' : '발급'}
           </button>
         </form>
       </Section>
@@ -312,7 +336,13 @@ export default function AdminMcpTokensPage() {
         />
       </Section>
 
-      <DataTable columns={columns} rows={tokens} loading={loading} rowKey={(t) => t.token_id} />
+      <AdminTable
+        columns={columns}
+        rows={tokensQuery.data ?? []}
+        loading={tokensQuery.isLoading}
+        rowKey={(t) => t.token_id}
+        rowTestId={(t) => `admin-mcp-row-${t.token_id ?? t.user_id}`}
+      />
     </AdminPage>
   );
 }

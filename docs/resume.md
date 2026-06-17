@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-17 (claude) — Admin UI 전체 테이블 TanStack Table + Virtual + Query 전환
+
+Admin UI 테이블 15개를 `@tanstack/react-table` + `@tanstack/react-virtual` 기반 공유
+`AdminTable`(정렬·sticky 헤더·가상화)로 교체하고, admin 데이터 패칭을 TanStack Query로
+전환했다(branch `agent/claude-admin-tanstack-tables`). 리스트 10개 + 상세 nested 5개 전부.
+헤더 클릭 정렬(클라이언트)·sticky 헤더 신규, 기존 필터/검색/페이지네이션/액션/testid는 패리티
+유지. Query provider는 admin 레이아웃에만, `query-keys.ts`에 `admin` 네임스페이스. 목록 리로드
+mutation은 invalidate, backup 생성은 낙관적 prepend. 단위(vitest jsdom RTL) + 신규 e2e
+`admin-table.e2e.ts`(정렬/aria-sort/empty/loading/sticky/가상화) 추가.
+
+**검증**: WSL typecheck+lint+build+vitest(15) ✅, Windows e2e `-- admin` 23 passed ✅.
+
+**다음 한 작업**: PR 리뷰/머지 후, 필요 시 행 선택 활성화 또는 서버측 정렬 검토(현재 정렬은
+클라이언트·현재 페이지 한정). 다른 route group(공개/앱)으로의 Query 도입은 별도.
+
 ## 2026-06-17 (claude) — 이슈 #215 Expo/mobile 사후 리뷰 후속 정리
 
 이슈 #215 완료 조건의 P0 + 정책 + 문서 항목을 한 묶음으로 처리했다(branch

@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminPoiDetail } from '@pinvi/schemas';
+import type { AdminAuditEntry, AdminPoiDetail } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
@@ -19,6 +20,26 @@ const formatAmount = (value: string | null, currency: string) =>
   value === null ? '—' : `${value} ${currency}`;
 
 const isBroken = (poi: AdminPoiDetail) => Boolean(poi.feature_link_broken_at);
+
+const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
+  {
+    key: 'action',
+    header: '액션',
+    cell: (row) => <span className="font-mono text-xs">{row.action}</span>,
+  },
+  {
+    key: 'access_reason',
+    header: '사유',
+    cell: (row) => row.access_reason ?? '—',
+  },
+  {
+    key: 'occurred_at',
+    header: '시각',
+    sortable: true,
+    sortValue: (row) => new Date(row.occurred_at).getTime(),
+    cell: (row) => formatDateTime(row.occurred_at),
+  },
+];
 
 export default function AdminPoiDetailPage() {
   const router = useRouter();
@@ -214,33 +235,13 @@ export default function AdminPoiDetailPage() {
       </Section>
 
       <Section title="최근 Audit">
-        <div className="overflow-x-auto" data-testid="admin-poi-audit-list">
-          <table className="min-w-full divide-y divide-hairline text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-2 py-2">액션</th>
-                <th className="px-2 py-2">사유</th>
-                <th className="px-2 py-2">시각</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline">
-              {poi.recent_audit.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-2 py-4 text-center text-muted">
-                    기록이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                poi.recent_audit.map((row) => (
-                  <tr key={row.log_id}>
-                    <td className="px-2 py-2 font-mono text-xs">{row.action}</td>
-                    <td className="px-2 py-2">{row.access_reason ?? '—'}</td>
-                    <td className="px-2 py-2">{formatDateTime(row.occurred_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div data-testid="admin-poi-audit-list">
+          <AdminTable
+            columns={auditColumns}
+            rows={poi.recent_audit}
+            rowKey={(row) => String(row.log_id)}
+            empty="기록이 없습니다."
+          />
         </div>
       </Section>
 
