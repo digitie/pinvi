@@ -1,8 +1,9 @@
 'use client';
 
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useMemo, useRef, useState } from 'react';
 import {
   type ColumnDef,
+  type Row,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -53,10 +54,54 @@ interface AdminColumnMeta {
 const DEFAULT_ROW_HEIGHT = 41;
 
 /**
+ * 가상화 본문 — `virtualized`가 실제로 동작할 때만 마운트한다(비가상 테이블은 이 컴포넌트를
+ * 렌더하지 않아 useVirtualizer/observer 비용·리렌더 churn이 전혀 없다). 위/아래 스페이서 `<tr>`로
+ * 스크롤 높이를 채워 네이티브 `<table>` 컬럼 폭과 role을 유지한다.
+ */
+function VirtualRows<R>({
+  scrollRef,
+  rows,
+  renderRow,
+  colCount,
+}: {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  rows: Row<R>[];
+  renderRow: (row: Row<R>) => ReactNode;
+  colCount: number;
+}) {
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => DEFAULT_ROW_HEIGHT,
+    overscan: 10,
+  });
+  const items = virtualizer.getVirtualItems();
+  const { paddingTop, paddingBottom } = computeSpacerWindow(items, virtualizer.getTotalSize());
+  return (
+    <>
+      {paddingTop > 0 && (
+        <tr aria-hidden="true">
+          <td colSpan={colCount} style={{ height: paddingTop, padding: 0, border: 0 }} />
+        </tr>
+      )}
+      {items.map((vi) => {
+        const row = rows[vi.index];
+        return row ? renderRow(row) : null;
+      })}
+      {paddingBottom > 0 && (
+        <tr aria-hidden="true">
+          <td colSpan={colCount} style={{ height: paddingBottom, padding: 0, border: 0 }} />
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
  * Admin 공통 테이블 — `@tanstack/react-table`(headless) + `@tanstack/react-virtual` 기반.
- * 시맨틱 `<table>`을 유지해 a11y/role 기반 e2e를 보존하고, 가상화는 위/아래 스페이서 `<tr>`로
- * 스크롤 높이를 채워(네이티브 컬럼 폭 유지) 보이는 행만 렌더한다. 헤더 클릭 정렬은 클라이언트
- * 측이며 페이지네이션 테이블에서는 현재 페이지 한정이다.
+ * 시맨틱 `<table>`을 유지해 a11y/role 기반 e2e를 보존하고, 가상화는 스페이서 `<tr>`로 스크롤
+ * 높이를 채워(네이티브 컬럼 폭 유지) 보이는 행만 렌더한다. 헤더 클릭 정렬은 클라이언트 측이며
+ * 페이지네이션 테이블에서는 현재 페이지 한정이다.
  */
 export function AdminTable<R>({
   columns,
@@ -112,15 +157,8 @@ export function AdminTable<R>({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const useVirtual = virtualized && tableRows.length > virtualizeThreshold;
-  const virtualizer = useVirtualizer({
-    count: tableRows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => DEFAULT_ROW_HEIGHT,
-    overscan: 10,
-    enabled: useVirtual,
-  });
 
-  const renderRow = (row: (typeof tableRows)[number]) => (
+  const renderRow = (row: Row<R>) => (
     <tr
       key={row.id}
       data-testid={rowTestId ? rowTestId(row.original) : undefined}
@@ -159,25 +197,8 @@ export function AdminTable<R>({
       </tr>
     );
   } else if (useVirtual) {
-    const items = virtualizer.getVirtualItems();
-    const { paddingTop, paddingBottom } = computeSpacerWindow(items, virtualizer.getTotalSize());
     body = (
-      <>
-        {paddingTop > 0 && (
-          <tr aria-hidden="true">
-            <td colSpan={colCount} style={{ height: paddingTop, padding: 0, border: 0 }} />
-          </tr>
-        )}
-        {items.map((vi) => {
-          const row = tableRows[vi.index];
-          return row ? renderRow(row) : null;
-        })}
-        {paddingBottom > 0 && (
-          <tr aria-hidden="true">
-            <td colSpan={colCount} style={{ height: paddingBottom, padding: 0, border: 0 }} />
-          </tr>
-        )}
-      </>
+      <VirtualRows scrollRef={scrollRef} rows={tableRows} renderRow={renderRow} colCount={colCount} />
     );
   } else {
     body = tableRows.map((row) => renderRow(row));
@@ -187,7 +208,9 @@ export function AdminTable<R>({
     <div
       ref={scrollRef}
       data-testid="admin-table-scroll"
-      className="overflow-auto rounded-sm border border-hairline"
+      // 비가상 테이블은 원래 DataTable처럼 가로 스크롤만(세로 스크롤바 feedback loop 회피).
+      // 가상화 테이블만 세로 스크롤(overflow-auto)을 켜 윈도잉이 동작하게 한다.
+      className={`${virtualized ? 'overflow-auto' : 'overflow-x-auto'} rounded-sm border border-hairline`}
       style={virtualized ? { maxHeight } : undefined}
     >
       <table className="min-w-full divide-y divide-hairline text-sm">
