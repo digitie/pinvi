@@ -49,6 +49,21 @@ def _clear_feature_cache() -> Iterator[None]:
     feature_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_buckets() -> Iterator[None]:
+    """메모리 rate-limit 버킷(모듈 싱글톤)을 테스트 간 격리.
+
+    테스트는 memory 백엔드를 쓰고 ASGITransport client IP가 고정(127.0.0.1)이라 oauth 등
+    IP 기반 정책이 같은 60s window 버킷을 공유한다. 싱글톤이 리셋되지 않으면
+    `oauth_per_minute`(10) 한도가 테스트 간 누적돼 후속 테스트가 429를 받는다(ADR-038).
+    """
+    from app.middleware.rate_limit import _MEMORY_BACKEND
+
+    _MEMORY_BACKEND.reset()
+    yield
+    _MEMORY_BACKEND.reset()
+
+
 @pytest.fixture(scope="session")
 def _database_url() -> Iterator[str]:
     """PostGIS 컨테이너 기동 + alembic upgrade head (1회) → asyncpg URL 반환."""
