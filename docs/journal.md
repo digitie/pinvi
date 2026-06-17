@@ -32,6 +32,14 @@ Query로 전환. 사용자 결정 = (모든 테이블 / 패리티+신규기능 /
 스펙은 testid 보존으로 회귀 없음. 함정 메모: 응답이 ApiClient Zod 파싱을 거치므로 e2e mock의
 user_id/request_id는 UUID여야 한다(아니면 RESPONSE_SHAPE_INVALID로 행 미렌더).
 
+**상세리뷰(멀티에이전트 5차원 + adversarial verify, PR #217)**: 블로커 0, 마이너/nit 10건.
+반영: backup 낙관적 insert snapshot_id 중복제거 복원, emails 재발송 실패 배너 필터변경 시 정리,
+`queryKeys.admin.{emailsAll,mcpTokensAll,featureRequestsAll}` 추가 후 invalidate에 사용(raw 배열 제거).
+후속(별도 PR 권장 — 본 마이그레이션 범위 밖): 11개 admin 페이지 module-level ApiClient→공유
+`@/lib/api` 통일(+layout onUnauthorized 결정), 앱 전역 `apiErrorMessage` 헬퍼, `AdminPagination`
+컴포넌트 추출 + `ADMIN_PAGE_SIZE` 상수화, emails/feature-requests columns `useMemo`, pois feature
+빈값 fallback.
+
 **남은 것**: 행 선택(opt-in 설계만, 미활성), 서버측 정렬(현재 클라이언트·페이지 한정),
 나머지 route group의 Query 도입(범위 밖).
 

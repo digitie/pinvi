@@ -344,7 +344,7 @@ export default function AdminFeatureRequestsPage() {
           onDone={(message) => {
             setSelected(null);
             setNotice(message);
-            void queryClient.invalidateQueries({ queryKey: ['admin', 'feature-requests'] });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
           }}
         />
       )}

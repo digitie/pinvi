@@ -81,7 +81,8 @@ export default function AdminBackupPage() {
       // 생성된 snapshot을 캐시 목록 맨 앞에 낙관적으로 추가(원래 UX 유지 — 즉시 표시).
       queryClient.setQueryData<AdminBackupSnapshot[]>(
         queryKeys.admin.backupSnapshots({ limit: 50 }),
-        (old) => [created, ...(old ?? [])],
+        // snapshot_id 중복 제거(원본 동작 복원) — 재생성/경합 시 중복 행 방지.
+        (old) => [created, ...(old ?? []).filter((item) => item.snapshot_id !== created.snapshot_id)],
       );
     },
     onError: (err) => {

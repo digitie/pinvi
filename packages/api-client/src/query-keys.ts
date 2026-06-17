@@ -62,8 +62,11 @@ export const queryKeys = {
     poi: (poiId: string) => ['admin', 'poi', poiId] as const,
     featureRequests: (params: { status?: string; page?: number }) =>
       ['admin', 'feature-requests', params] as const,
+    // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).
+    featureRequestsAll: () => ['admin', 'feature-requests'] as const,
     emails: (params: { status?: string; limit?: number }) =>
       ['admin', 'emails', params] as const,
+    emailsAll: () => ['admin', 'emails'] as const,
     audit: (params: { limit?: number }) => ['admin', 'audit', params] as const,
     locationAudit: (params: { userId?: string; from?: string; to?: string; limit?: number }) =>
       ['admin', 'location-audit', params] as const,
@@ -75,6 +78,7 @@ export const queryKeys = {
     }) => ['admin', 'api-calls', params] as const,
     mcpTokens: (params: { userId?: string; status?: string; q?: string; limit?: number }) =>
       ['admin', 'mcp-tokens', params] as const,
+    mcpTokensAll: () => ['admin', 'mcp-tokens'] as const,
     backupSnapshots: (params: { limit?: number } = {}) =>
       ['admin', 'backup', 'snapshots', params] as const,
   },

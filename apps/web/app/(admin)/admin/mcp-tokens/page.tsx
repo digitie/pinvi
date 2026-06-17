@@ -75,7 +75,7 @@ export default function AdminMcpTokensPage() {
     onSuccess: (created) => {
       setIssued(created.token);
       setActionError(null);
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'mcp-tokens'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.mcpTokensAll() });
     },
     onError: (err) => {
       setActionError(err instanceof ApiError ? err.message : '발급 실패');
@@ -87,7 +87,7 @@ export default function AdminMcpTokensPage() {
       adminApi(apiClient).revokeMcpToken(tokenId, { access_reason }),
     onSuccess: () => {
       setActionError(null);
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'mcp-tokens'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.mcpTokensAll() });
     },
     onError: (err) => {
       setActionError(err instanceof ApiError ? err.message : '회수 실패');

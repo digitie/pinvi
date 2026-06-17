@@ -32,7 +32,7 @@ export default function AdminEmailsPage() {
 
   const resendMutation = useMutation({
     mutationFn: (emailId: string) => adminApi(apiClient).resendEmail(emailId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'emails'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.admin.emailsAll() }),
   });
 
   const error = emailsQuery.isError
@@ -115,7 +115,11 @@ export default function AdminEmailsPage() {
         <select
           id="admin-emails-status-filter"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            // 목록 컨텍스트가 바뀌면 이전 재발송 실패 배너를 정리(원래 reload-시-에러초기화 동작 복원).
+            resendMutation.reset();
+          }}
           className="rounded-sm border border-hairline px-2 py-1 text-sm"
           data-testid="admin-emails-status-filter"
         >
