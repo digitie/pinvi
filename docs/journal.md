@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-18 (codex) — StyleSeed 디자인 규칙 적용 + 문서화
+
+**작업**: `https://styleseed-demo.vercel.app/llms.txt`와 full context의 핵심 규칙을
+Pinvi 기존 Airbnb/Rausch 톤에 맞게 흡수했다. StyleSeed는 새 브랜드 스킨이 아니라 AI
+UI 작업 품질 게이트로 해석하고, marker 16색은 데이터 표현 예외로 유지했다.
+
+- `docs/design/styleseed-rules.md` 신규 추가: semantic token, 단일 accent, shadow
+  8% cap, rhythm, 상태 UI, 접근성, motion/form 규칙과 Pinvi 충돌 해결 순서를 정리.
+- `packages/design-tokens`에 motion token(`fast`/`normal`/`moderate`, `pinvi`/`spring`
+  easing), Tailwind `min-h-touch`/`min-w-touch`, focus/motion용 토큰을 추가하고 card shadow를
+  8% opacity로 낮췄다.
+- Web 홈(`/`)을 bare text/button 화면에서 surface 기반 action hub로 정리하고,
+  `FullPageMessage`/`PageLoading`/`RouteError`에 surface, focus ring, 44px target,
+  reduced-motion 기준을 반영했다.
+- 모바일 공용 UI(`apps/mobile/components/ui.tsx`)에서 색상 hex를 semantic token import로
+  대체하고, 기본 screen/card spacing과 checkbox/chip touch target을 정렬했다.
+- `DESIGN.md`, `docs/architecture/frontend.md`, `docs/design/marker-palette.md`,
+  `CHANGELOG.md`에 StyleSeed 적용 기준과 마커 색 예외를 기록했다.
+
+**검증**: WSL ext4 미러에서 `npm install` 후 `npm run typecheck`, `npm run lint`,
+`npm --workspace apps/web run build`, `npm run test` 통과. 최초 typecheck는 미러 의존성
+미설치로 실패했고, `npm install` 후 재실행해 통과.
+
+**다음**: PR 리뷰/머지 후 v0.1.0 릴리즈 직전 smoke/tag 절차를 이어간다.
+
 ## 2026-06-17 (claude) — Admin UI 전체 테이블 TanStack Table + Virtual + Query 전환
 
 **작업**: Admin UI(`apps/web/app/(admin)/admin/**`)의 모든 테이블 15개를 `@tanstack/react-table`

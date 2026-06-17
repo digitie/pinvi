@@ -29,12 +29,16 @@ module.exports = {
         body: '#3f3f3f',
         muted: '#6a6a6a',
         'muted-soft': '#929292',
+        'star-rating': '#222222',
+        'on-primary': '#ffffff',
         // 시맨틱
         'error-text': '#c13515',
+        'error-text-hover': '#b32505',
         'error-bg': '#fdecea',
         'success-text': '#1b873f',
         'success-bg': '#e6f4ea',
         'legal-link': '#428bff',
+        scrim: '#000000',
         // 16색 마커
         marker: {
           'p-01': '#E53935',
@@ -73,10 +77,25 @@ module.exports = {
         xl: '32px',
       },
       boxShadow: {
-        card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.1)',
+        card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08)',
       },
       spacing: {
         section: '64px',
+      },
+      minHeight: {
+        touch: '44px',
+      },
+      minWidth: {
+        touch: '44px',
+      },
+      transitionDuration: {
+        fast: '100ms',
+        normal: '200ms',
+        moderate: '300ms',
+      },
+      transitionTimingFunction: {
+        pinvi: 'cubic-bezier(0.2, 0, 0, 1)',
+        spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       },
     },
   },

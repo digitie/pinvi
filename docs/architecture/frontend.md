@@ -166,8 +166,11 @@ CI에서 `import-linter` 또는 `madge` 등으로 강제 (Sprint 1 진입 후).
 - 저장소 루트 **`airbnb-marker-palette.html`** — 16색 마커 팔레트의 시각
   reference + Airbnb 폰트(Fraunces / Manrope / JetBrains Mono) 사용 데모.
 - `docs/design/marker-palette.md` — 마커 운영 규칙 (P-01~P-16 + maki 매핑).
+- `docs/design/styleseed-rules.md` — StyleSeed를 Pinvi 톤에 맞게 적용한 UI 운영
+  규칙. 단일 accent, rhythm, 상태 UI, 접근성, motion token을 AI 작업 체크리스트로
+  쓴다.
 
-본 세 문서가 v1.0 디자인 톤의 단일 기준이다. Pinvi 자체 브랜드가 확정되면
+본 네 문서가 v1.0 디자인 톤의 단일 기준이다. Pinvi 자체 브랜드가 확정되면
 별도 ADR로 토큰을 교체 — 토큰은 한 곳(`packages/design-tokens`)에서 관리하므로
 전 앱에 일관 반영.
 
@@ -257,8 +260,8 @@ export const radii = {
 } as const;
 
 export const shadows = {
-  // DESIGN.md "single elevation tier"
-  card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.1)',
+  // DESIGN.md "single elevation tier" + StyleSeed shadow cap(<= 8% opacity)
+  card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08)',
 } as const;
 
 export const spacing = {
@@ -313,6 +316,23 @@ shadcn/ui를 vendoring한 후 다음을 Airbnb 톤으로 customizing:
 - 법무 텍스트의 inline link만 `legal-link` 파랑
 
 마커 색은 데이터 카테고리 표시용. UI 강조에는 사용하지 않는다.
+
+### 3.8 StyleSeed 운영 규칙
+
+StyleSeed는 Pinvi의 새 브랜드가 아니라, AI가 UI를 만들 때 적용할 품질 게이트다.
+정본은 `docs/design/styleseed-rules.md`.
+
+- 색상은 semantic token만 사용한다. 컴포넌트 내부 hex는 금지하고, 순검정은 쓰지
+  않는다.
+- interactive target은 최소 44×44px이며, focus-visible ring을 유지한다.
+- empty/loading/error/success 상태를 화면 설계에 포함한다.
+- dashboard나 admin 화면은 metric / list / chart / 상태 surface를 반복 없이 섞어
+  시각 리듬을 만든다.
+- motion은 `fast` / `normal` / `moderate` duration token과 `pinvi` easing만 기본으로
+  쓰고, reduced-motion을 존중한다.
+- StyleSeed의 card surface 원칙은 Pinvi의 card 남발 금지 규칙과 함께 해석한다.
+  제품 데이터와 상태 메시지는 surface 안에 두되, 페이지 section을 무의미하게 card로
+  감싸거나 card 안에 card를 중첩하지 않는다.
 
 ## 4. Next.js / Expo 공용 코드 사용 패턴
 
@@ -723,6 +743,7 @@ apps/web/app/                    apps/mobile/app/
 - 본 저장소 루트 `DESIGN.md` (Airbnb 디자인 토큰 reference)
 - 본 저장소 루트 `airbnb-marker-palette.html` (16색 시각 reference)
 - `docs/design/marker-palette.md` (마커 운영 규칙)
+- `docs/design/styleseed-rules.md` (StyleSeed 기반 UI 운영 규칙)
 - `docs/architecture/user-location.md` (위치 정보 사양)
 - `docs/architecture/notice-plans.md` (notice plan 도메인)
 - `apps/mobile/README.md` (Expo Dev Client 활성화 절차)

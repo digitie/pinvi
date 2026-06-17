@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-06-18 (codex) — StyleSeed 디자인 규칙 적용 + 문서화
+
+StyleSeed `llms.txt`와 full context의 핵심 규칙을 Pinvi 디자인 기준에 맞춰 적용했다(branch
+`agent/codex-styleseed-design-rules`). 새 정본 문서 `docs/design/styleseed-rules.md`를 추가했고,
+`docs/architecture/frontend.md` / `DESIGN.md` / `docs/design/marker-palette.md`에 단일 accent,
+semantic token, shadow 8% cap, 44px touch target, 상태 UI, reduced-motion, 마커 16색 예외를
+반영했다. `packages/design-tokens`에는 motion/touch/focus용 Tailwind token과 8% shadow cap을
+추가했다. Web 홈/피드백 상태 컴포넌트와 모바일 공용 UI는 surface, focus ring, semantic color,
+touch target 기준으로 정리했다.
+
+**검증**: WSL ext4 미러에서 `npm install` 후 `npm run typecheck`, `npm run lint`,
+`npm --workspace apps/web run build`, `npm run test` 통과. 최초 typecheck는 미러 의존성
+미설치로 실패했으며, 설치 후 재실행해 통과했다.
+
+**다음 한 작업**: PR 리뷰/머지 후 v0.1.0 릴리즈 직전 최종 smoke와 tag/GitHub Release notes를
+이어간다.
+
 ## 2026-06-17 (claude) — Admin UI 전체 테이블 TanStack Table + Virtual + Query 전환
 
 Admin UI 테이블 15개를 `@tanstack/react-table` + `@tanstack/react-virtual` 기반 공유

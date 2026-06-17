@@ -9,6 +9,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '@pinvi/design-tokens';
 
 /**
  * 모바일 RN UI 키트(NativeWind). 웹 shadcn/ui 대응 — 각자 구현(frontend.md §2.1).
@@ -25,9 +26,7 @@ export function Screen({
   scroll?: boolean;
   contentClassName?: string;
 }) {
-  const inner = (
-    <View className={`flex-1 px-5 py-4 ${contentClassName ?? ''}`}>{children}</View>
-  );
+  const inner = <View className={`flex-1 px-6 py-4 ${contentClassName ?? ''}`}>{children}</View>;
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={['top', 'bottom']}>
       {scroll ? (
@@ -50,9 +49,7 @@ export function Heading({ children, className }: { children: ReactNode; classNam
 }
 
 export function Subheading({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <Text className={`text-base font-semibold text-ink ${className ?? ''}`}>{children}</Text>
-  );
+  return <Text className={`text-base font-semibold text-ink ${className ?? ''}`}>{children}</Text>;
 }
 
 export function Body({ children, className }: { children: ReactNode; className?: string }) {
@@ -65,9 +62,7 @@ export function Muted({ children, className }: { children: ReactNode; className?
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <View
-      className={`rounded-md border border-hairline-soft bg-canvas p-4 ${className ?? ''}`}
-    >
+    <View className={`rounded-md border border-hairline-soft bg-canvas p-6 ${className ?? ''}`}>
       {children}
     </View>
   );
@@ -113,7 +108,7 @@ export function Button({
       className={`min-h-12 flex-row items-center justify-center rounded-md px-4 py-3 ${BUTTON_BG[variant]} ${isOff ? 'opacity-50' : 'active:opacity-80'} ${className ?? ''}`}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#ffffff' : '#222222'} />
+        <ActivityIndicator color={variant === 'primary' ? colors['on-primary'] : colors.ink} />
       ) : (
         <Text className={`text-base font-semibold ${BUTTON_TEXT[variant]}`}>{label}</Text>
       )}
@@ -129,7 +124,7 @@ export const Field = forwardRef<TextInput, TextInputProps & { label: string; err
         <Text className="text-sm font-medium text-ink">{label}</Text>
         <TextInput
           ref={ref}
-          placeholderTextColor="#929292"
+          placeholderTextColor={colors['muted-soft']}
           className={`min-h-12 rounded-md border bg-canvas px-3 py-3 text-base text-ink ${error ? 'border-error-text' : 'border-hairline'} ${className ?? ''}`}
           {...props}
         />
@@ -188,7 +183,7 @@ export function ErrorView({ message, onRetry }: { message: string; onRetry?: () 
 export function Loading() {
   return (
     <View className="flex-1 items-center justify-center py-16">
-      <ActivityIndicator color="#ff385c" />
+      <ActivityIndicator color={colors.primary} />
     </View>
   );
 }
@@ -210,7 +205,7 @@ export function Checkbox({
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       onPress={() => onToggle(!checked)}
-      className="flex-row items-start gap-3 py-1.5"
+      className="min-h-11 flex-row items-start gap-3 py-1.5"
     >
       <View
         className={`mt-0.5 h-5 w-5 items-center justify-center rounded-sm border ${checked ? 'border-primary bg-primary' : 'border-border-strong bg-canvas'}`}
@@ -249,7 +244,7 @@ export function ChipGroup<T extends string>({
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               onPress={() => onChange(opt.value)}
-              className={`rounded-sm border px-3 py-2 ${active ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
+              className={`min-h-11 justify-center rounded-sm border px-3 py-2 ${active ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
             >
               <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-body'}`}>
                 {opt.label}

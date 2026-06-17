@@ -1,6 +1,6 @@
 /**
  * 8px base spacing + radii + shadow.
- * DESIGN.md "Shape / Shadows / Spacing".
+ * DESIGN.md "Shape / Shadows / Spacing" + StyleSeed shadow cap.
  */
 
 export const spacing = {
@@ -26,5 +26,5 @@ export const radii = {
 } as const;
 
 export const shadows = {
-  card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.1)',
+  card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08)',
 } as const;

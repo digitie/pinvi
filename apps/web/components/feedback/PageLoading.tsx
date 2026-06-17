@@ -11,14 +11,16 @@ export interface PageLoadingProps {
  */
 export function PageLoading({ label = '불러오는 중…', 'data-testid': testId }: PageLoadingProps) {
   return (
-    <div
-      className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted"
-      role="status"
-      aria-live="polite"
-      data-testid={testId}
-    >
-      <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
-      <span className="text-sm">{label}</span>
+    <div className="flex min-h-[60vh] items-center justify-center px-6 py-16 text-center">
+      <div
+        className="flex w-full max-w-sm flex-col items-center gap-3 rounded-md border border-hairline bg-canvas p-6 text-muted shadow-card"
+        role="status"
+        aria-live="polite"
+        data-testid={testId}
+      >
+        <Loader2 className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        <span className="text-[14px]">{label}</span>
+      </div>
     </div>
   );
 }
