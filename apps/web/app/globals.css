@@ -1,15 +1,20 @@
+/* Pretendard 한글 폰트 (CDN — 운영은 self-host 권장) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Pretendard 한글 폰트 (CDN — 운영은 self-host 권장) */
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
 
 :root {
   --tm-nav-h: 56px;
   --tm-trip-tab-h: 44px;
   --tm-panel-w-left: 340px;
   --tm-panel-w-right: 320px;
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-moderate: 300ms;
+  --ease-default: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 html,
@@ -17,9 +22,37 @@ body {
   height: 100%;
 }
 
-body {
-  background-color: #ffffff;
-  color: #222222;
-  font-family: 'Pretendard', 'Apple SD Gothic Neo', system-ui, -apple-system, Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  body {
+    @apply bg-canvas text-ink;
+    font-family:
+      'Pretendard',
+      'Apple SD Gothic Neo',
+      system-ui,
+      -apple-system,
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .touch-target {
+    @apply min-h-touch min-w-touch;
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

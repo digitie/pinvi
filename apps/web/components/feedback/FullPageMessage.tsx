@@ -26,23 +26,32 @@ export function FullPageMessage({
   'data-testid': testId,
 }: FullPageMessageProps) {
   return (
-    <div
-      className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 py-16 text-center"
-      data-testid={testId}
-    >
-      {Icon ? (
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-soft">
-          <Icon className="h-7 w-7 text-muted" aria-hidden="true" />
-        </span>
-      ) : null}
-      <h1 className="text-xl font-bold text-ink md:text-2xl">{title}</h1>
-      {description ? <p className="max-w-md text-sm text-muted">{description}</p> : null}
-      {children ? <div className="mt-2 flex flex-wrap items-center justify-center gap-3">{children}</div> : null}
-      {detail ? (
-        <p className="mt-2 font-mono text-xs text-muted/70" data-testid="full-page-message-detail">
-          ref: {detail}
-        </p>
-      ) : null}
+    <div className="flex min-h-[60vh] items-center justify-center px-6 py-16 text-center">
+      <div
+        className="flex w-full max-w-lg flex-col items-center gap-4 rounded-md border border-hairline bg-canvas p-6 shadow-card"
+        data-testid={testId}
+      >
+        {Icon ? (
+          <span className="flex size-14 items-center justify-center rounded-full bg-surface-soft">
+            <Icon className="size-7 text-muted" aria-hidden="true" />
+          </span>
+        ) : null}
+        <h1 className="text-[20px] font-bold leading-snug text-ink md:text-[24px]">{title}</h1>
+        {description ? (
+          <p className="max-w-md text-[14px] leading-normal text-muted">{description}</p>
+        ) : null}
+        {children ? (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">{children}</div>
+        ) : null}
+        {detail ? (
+          <p
+            className="mt-2 font-mono text-xs text-muted/70"
+            data-testid="full-page-message-detail"
+          >
+            ref: {detail}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

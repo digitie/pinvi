@@ -1,3 +1,12 @@
+## Pinvi 적용 메모
+
+본 파일은 Airbnb 톤을 설명하는 reference다. Pinvi 구현에서는
+`docs/design/styleseed-rules.md`를 추가 운영 규칙으로 적용한다. 즉 단일 Rausch
+accent, semantic token, 44px touch target, focus-visible ring, 상태 UI 네 가지,
+reduced-motion 대응을 UI 작업 체크리스트로 삼는다. 원본 reference의 shadow 값이
+10% opacity까지 보이더라도 Pinvi 토큰은 StyleSeed 기준에 맞춰 최대 8% opacity로
+낮춘다.
+
 ## Overview
 
 Airbnb is the canonical example of a generous, photography-led consumer marketplace. The base canvas is **pure white** (`{colors.canvas}` — #ffffff) with deep near-black ink (`{colors.ink}` — #222222) for headlines and body, and a single voltage of **Rausch** (`{colors.primary}` — #ff385c) carrying every primary CTA, the search-button orb, the heart save state, and inline brand links. There is no secondary brand color in mainline marketing — the **Luxe purple** (`{colors.luxe}` — #460479) and **Plus magenta** (`{colors.plus}` — #92174d) tokens are sub-brand accents that only appear inside Airbnb Luxe / Plus contexts.

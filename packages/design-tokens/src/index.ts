@@ -3,3 +3,4 @@ export type { MarkerColorKey, MarkerColor } from './colors';
 
 export { fonts, fontSize, fontWeight, lineHeight } from './typography';
 export { spacing, radii, shadows } from './spacing';
+export { motion } from './motion';
