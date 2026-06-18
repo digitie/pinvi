@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-18 (claude) — codex PR #218/#219 사후 상세리뷰 + 문서 drift 반영
+
+**작업**: 어제 fast-merge(리뷰 0건)된 codex PR #218(StyleSeed UI 토큰)·#219(Web 지도
+`vworld-map-web` 전환)을 `docs/runbooks/pr-review-sprint4.md` 기준으로 사후 리뷰했다.
+5개 차원(map 런타임 / 의존성 / ADR·문서 drift / design token·a11y / cross-PR drift)을
+멀티에이전트로 점검하고 각 발견을 적대적으로 교차검증했다(raw 5 → confirmed 5, 0 dropped).
+
+**검증 결과 — 두 PR 모두 기능 정상**:
+- #219: WSL ext4 미러 fresh install에서 `npm install`/typecheck/lint/build 전부 통과.
+  `maplibre-vworld` 완전 제거(lock 0건·`npm ls` empty·node_modules 부재), `vworld-map-web`/
+  `vworld-map-core` `file:` pin 정상 resolve, vendored tgz `index.d.ts` export가 facade
+  import을 모두 충족. 드롭한 `maplibre-vworld/style.css`는 신규 패키지가 CSS 미배포라 정합.
+- #218: token 값이 기존 hex와 일치(on-primary/ink/muted-soft/primary), `touch`/`ring`/
+  `canvas` 토큰 정의·card shadow 8% cap·motion 토큰이 globals.css와 일치.
+
+**반영(문서 drift + 죽은 코드 정리)**:
+- `README.md` 3곳(현재상태 callout 8행·책임 목록 71행·외부통합 인덱스 190행)이 여전히
+  `maplibre-vworld(-js)`를 현재 Web 지도로 표기 → `vworld-map-web`로 정정. #219가
+  AGENTS.md/CLAUDE.md/architecture.md는 갱신했지만 README는 누락(변경 파일 목록에 없었음).
+- `docs/resume.md` 릴리즈 로드맵 v0.1.0 행(778)도 `maplibre-vworld` → `vworld-map-web`
+  (같은 파일 상단 전환 엔트리·AGENTS.md:225와의 불일치 해소).
+- `apps/web/app/globals.css`의 미사용 `:root --duration-*/--ease-*` 변수 제거 — 컴포넌트는
+  Tailwind preset utility만 소비하고 `var(--duration*/--ease*)` 소비처 0건. motion 값 중복
+  3곳(motion.ts·tailwind-preset.cjs·globals.css) 중 죽은 소스 1곳 정리. canonical 토큰은
+  `packages/design-tokens`(motion.ts + preset) 유지.
+
+**검증**: 정정 후 WSL 미러에서 `apps/web` lint/build 재통과.
+
+**다음**: PR 머지 후 v0.1.0 릴리즈 직전 최종 smoke/tag/GitHub Release notes.
+
 ## 2026-06-18 (codex) — T-201 Web 지도 `vworld-map-web` 전환
 
 **작업**: 사용자 지시 — "web 지도뷰를 maplibre vworld react로 변경" + "`maplibre-vworld-js`

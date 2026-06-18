@@ -5,7 +5,7 @@
 이동 중 컨텍스트(날씨/혼잡/이벤트)를 확인하고, 결과를 기록·공유하도록 돕는다.
 
 > **현재 상태 (Sprint 4 릴리즈 게이트 충족)**: Sprint 1~3는 머지 완료, Sprint 4의
-> 지도 UI + `maplibre-vworld-js` 통합 + kor_travel_map HTTP feature read + CI/CD 게이트도
+> 지도 UI + `vworld-map-web` 통합 + kor_travel_map HTTP feature read + CI/CD 게이트도
 > 머지됐다. 현재 기준선은 `v0.1.0` tag/릴리즈 노트 정리 단계다.
 > 이전(v1) 구현은 `v1` 브랜치에 보존되어 있다. 상태 추적은 `docs/resume.md`,
 > `docs/tasks.md`, `docs/sprints/README.md`를 우선한다.
@@ -68,7 +68,7 @@ import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 - 여행 계획 도메인 (Trip, Day, POI 첨부, curated trip plan, Pinvi-native 큐레이션,
   kor_travel_map `curated_features` 1:1 import 소비, 공유)
 - Admin 콘솔 (사용자/엔티티/콘텐츠/파일)
-- 사용자 대면 UI (Next.js + maplibre-vworld 기반 지도)
+- 사용자 대면 UI (Next.js + `vworld-map-web` 기반 지도)
 - Dagster orchestration (Pinvi 자체 job + 외부 서비스 갱신 trigger)
 - 파일 스토리지(RustFS) 운영 API
 - 외부 통합 (Telegram, Resend, 소셜 로그인 provider, AI companion 호출 계약)
@@ -187,7 +187,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - 인덱스: [`docs/integrations/README.md`](docs/integrations/README.md)
 - Resend / 소셜 로그인 (현재 Google만 활성, Naver/Kakao는 future provider) /
   AI companion 호출 계약(ADR-020, provider 구현은 별도 repo) / Telegram /
-  [maplibre-vworld-js](docs/integrations/maplibre-vworld.md) / Sentry / Loki
+  [vworld-map-web](docs/integrations/maplibre-vworld.md) / Sentry / Loki
 
 **규약 (코딩 / DB / 테스트)**
 - 인덱스: [`docs/conventions/README.md`](docs/conventions/README.md)
