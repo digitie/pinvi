@@ -1,70 +1,19 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import * as ReactDOMRuntime from 'react-dom';
-import * as ReactRuntime from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import type maplibregl from 'maplibre-gl';
 import type {
-  ClusterLayerProps,
   ClusterPoint,
-  MakiMarkerProps,
-  PopupProps,
-  VWorldMapFallbackInfo,
-  VWorldMapProps,
-} from 'maplibre-vworld';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import 'maplibre-vworld/style.css';
-
-declare global {
-  interface Window {
-    require?: (moduleName: string) => unknown;
-  }
-}
-
-function installMaplibreVworldDevRequireShim() {
-  if (
-    typeof window === 'undefined' ||
-    process.env.NODE_ENV === 'production' ||
-    Reflect.has(window, 'require')
-  ) {
-    return;
-  }
-
-  Object.defineProperty(window, 'require', {
-    configurable: true,
-    value: (moduleName: string) => {
-      if (moduleName === 'react') {
-        return ReactRuntime;
-      }
-      if (moduleName === 'react-dom') {
-        return ReactDOMRuntime;
-      }
-      throw new Error(`Unsupported maplibre-vworld dev require: ${moduleName}`);
-    },
-  });
-}
-
-installMaplibreVworldDevRequireShim();
-
-const VWorldMap = dynamic<VWorldMapProps>(
-  () => import('maplibre-vworld').then((module) => module.VWorldMap),
-  { ssr: false, loading: () => <MapLoadingSkeleton /> }
-);
-
-const ClusterLayer = dynamic<ClusterLayerProps>(
-  () => import('maplibre-vworld').then((module) => module.ClusterLayer),
-  { ssr: false }
-);
-
-const MakiMarker = dynamic<MakiMarkerProps>(
-  () => import('maplibre-vworld').then((module) => module.MakiMarker),
-  { ssr: false }
-);
-
-const Popup = dynamic<PopupProps>(() => import('maplibre-vworld').then((module) => module.Popup), {
-  ssr: false,
-});
+  MapLibreEvent,
+  MapLibreMap,
+} from '@/components/map/vworldPrimitives';
+import {
+  ClusterLayer,
+  MakiMarker,
+  MapFallback,
+  MapLoadingSkeleton,
+  Popup,
+  VWorldMap,
+} from '@/components/map/vworldPrimitives';
 
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
 const DEFAULT_ZOOM = 12;
@@ -118,7 +67,7 @@ function formatLngLat(lngLat: [number, number]) {
   return `${lngLat[0].toFixed(4)}, ${lngLat[1].toFixed(4)}`;
 }
 
-function readViewport(map: maplibregl.Map, lastEvent: string): MapViewportSnapshot {
+function readViewport(map: MapLibreMap, lastEvent: string): MapViewportSnapshot {
   const center = map.getCenter();
   const bounds = map.getBounds();
 
@@ -130,36 +79,6 @@ function readViewport(map: maplibregl.Map, lastEvent: string): MapViewportSnapsh
       .toFixed(3)}, ${bounds.getNorth().toFixed(3)}`,
     lastEvent,
   };
-}
-
-function MapLoadingSkeleton() {
-  return (
-    <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft text-sm text-muted"
-      data-testid="vworld-map-loading"
-    >
-      지도 로딩 중
-    </div>
-  );
-}
-
-function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
-  const message =
-    info.reason === 'missing-api-key'
-      ? 'VWorld API 키가 설정되지 않았습니다.'
-      : '지도 엔진을 초기화할 수 없습니다.';
-
-  return (
-    <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft px-6 text-center"
-      data-testid="vworld-map-fallback"
-    >
-      <div className="max-w-sm space-y-2">
-        <p className="text-base font-semibold text-ink">{message}</p>
-        <p className="text-sm text-muted">NEXT_PUBLIC_VWORLD_API_KEY</p>
-      </div>
-    </div>
-  );
 }
 
 export function MapView({
@@ -184,16 +103,16 @@ export function MapView({
     [selectedPointId]
   );
 
-  const handleMapLoad = useCallback((map: maplibregl.Map) => {
+  const handleMapLoad = useCallback((map: MapLibreMap) => {
     setViewport(readViewport(map, 'load'));
   }, []);
 
-  const handleMoveEnd = useCallback((event: maplibregl.MapLibreEvent) => {
-    setViewport(readViewport(event.target as maplibregl.Map, 'moveend'));
+  const handleMoveEnd = useCallback((event: MapLibreEvent) => {
+    setViewport(readViewport(event.target as MapLibreMap, 'moveend'));
   }, []);
 
-  const handleZoomEnd = useCallback((event: maplibregl.MapLibreEvent) => {
-    setViewport(readViewport(event.target as maplibregl.Map, 'zoomend'));
+  const handleZoomEnd = useCallback((event: MapLibreEvent) => {
+    setViewport(readViewport(event.target as MapLibreMap, 'zoomend'));
   }, []);
 
   return (

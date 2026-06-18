@@ -23,6 +23,11 @@
 
 ## 완료
 
+- [x] T-201 — Web 지도 클라이언트 `vworld-map-web` 전환 (완료: 2026-06-18, codex).
+  기존 `maplibre-vworld-js`/`maplibre-vworld` tarball 의존성을 제거하고,
+  `maplibre-vworld-react`의 웹 패키지 `vworld-map-web`(+ `vworld-map-core`) vendored
+  tarball로 `apps/web` 지도뷰를 전환했다. ADR-046 추가, `docs/integrations/maplibre-vworld.md`
+  정합화, Web typecheck/lint/build/Vitest 검증.
 - [x] T-000 — git v1 보존 + main v2 재시작 (완료: 2026-05-25)
 - [x] T-112 — Pinvi MCP 외부 인터페이스 서빙 (완료: 2026-06-09) —
   `app.mcp_tokens`, `/users/me/mcp-tokens`, `/admin/mcp-tokens`, `/mcp/sse`,

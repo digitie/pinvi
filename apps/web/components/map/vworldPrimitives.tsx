@@ -1,13 +1,11 @@
 'use client';
 
 /**
- * maplibre-vworld 동적 import + dev require shim 공통 모듈.
+ * vworld-map-web 동적 import 공통 모듈.
  * SSR 비활성(ssr:false) — 지도 엔진은 브라우저에서만 로드.
  */
 
 import dynamic from 'next/dynamic';
-import * as ReactDOMRuntime from 'react-dom';
-import * as ReactRuntime from 'react';
 import type {
   ClusterLayerProps,
   MakiMarkerProps,
@@ -15,37 +13,16 @@ import type {
   PopupProps,
   UserLocationMarkerProps,
   VWorldMapFallbackInfo,
-  VWorldMapProps,
-} from 'maplibre-vworld';
+  VWorldMapViewProps,
+} from 'vworld-map-web';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import 'maplibre-vworld/style.css';
 
-declare global {
-  interface Window {
-    require?: (moduleName: string) => unknown;
-  }
-}
-
-// maplibre-vworld dev 빌드가 UMD `require('react')` 를 호출하는 것을 위한 shim(개발 전용, 멱등).
-function installMaplibreVworldDevRequireShim() {
-  if (
-    typeof window === 'undefined' ||
-    process.env.NODE_ENV === 'production' ||
-    Reflect.has(window, 'require')
-  ) {
-    return;
-  }
-  Object.defineProperty(window, 'require', {
-    configurable: true,
-    value: (moduleName: string) => {
-      if (moduleName === 'react') return ReactRuntime;
-      if (moduleName === 'react-dom') return ReactDOMRuntime;
-      throw new Error(`Unsupported maplibre-vworld dev require: ${moduleName}`);
-    },
-  });
-}
-
-installMaplibreVworldDevRequireShim();
+export type {
+  ClusterPoint,
+  MapLibreEvent,
+  MapLibreMap,
+  MapMouseEvent,
+} from 'vworld-map-web';
 
 export function MapLoadingSkeleton() {
   return (
@@ -76,32 +53,32 @@ export function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
   );
 }
 
-export const VWorldMap = dynamic<VWorldMapProps>(
-  () => import('maplibre-vworld').then((module) => module.VWorldMap),
+export const VWorldMap = dynamic<VWorldMapViewProps>(
+  () => import('vworld-map-web').then((module) => module.VWorldMapView),
   { ssr: false, loading: () => <MapLoadingSkeleton /> }
 );
 
 export const ClusterLayer = dynamic<ClusterLayerProps>(
-  () => import('maplibre-vworld').then((module) => module.ClusterLayer),
+  () => import('vworld-map-web').then((module) => module.ClusterLayer),
   { ssr: false }
 );
 
 export const MakiMarker = dynamic<MakiMarkerProps>(
-  () => import('maplibre-vworld').then((module) => module.MakiMarker),
+  () => import('vworld-map-web').then((module) => module.MakiMarker),
   { ssr: false }
 );
 
 export const Popup = dynamic<PopupProps>(
-  () => import('maplibre-vworld').then((module) => module.Popup),
+  () => import('vworld-map-web').then((module) => module.Popup),
   { ssr: false }
 );
 
 export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
-  () => import('maplibre-vworld').then((module) => module.UserLocationMarker),
+  () => import('vworld-map-web').then((module) => module.UserLocationMarker),
   { ssr: false }
 );
 
 export const MapContextMenu = dynamic<MapContextMenuProps>(
-  () => import('maplibre-vworld').then((module) => module.MapContextMenu),
+  () => import('vworld-map-web').then((module) => module.MapContextMenu),
   { ssr: false }
 );

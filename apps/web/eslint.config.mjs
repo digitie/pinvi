@@ -24,7 +24,7 @@ const config = [
             {
               group: ['*react-kakao-maps-sdk*'],
               message:
-                'ADR-015 — Kakao Maps SDK 폐기. maplibre-vworld 사용 (`docs/integrations/maplibre-vworld.md`).',
+                'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
             },
           ],
         },

@@ -71,7 +71,7 @@ console.log(`Synced ${ICONS_NEEDED.length} icons to public/maki/`);
 규칙:
 
 - runtime에서 raw GitHub / Mapbox CDN / 외부 URL 참조 X
-- Maki 사용을 이유로 Mapbox token / tile provider 추가 X (지도 엔진은 `maplibre-vworld-js`의 MapLibre GL JS, ADR-015)
+- Maki 사용을 이유로 Mapbox token / tile provider 추가 X (지도 엔진은 `vworld-map-web`의 MapLibre GL JS, ADR-046)
 - 새 아이콘 필요 시 `sync-maki-icons.mjs` 목록 갱신
 
 ## 4. 로그인 / 가입 화면 (DESIGN.md 톤)

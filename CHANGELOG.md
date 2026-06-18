@@ -9,7 +9,9 @@
 ### 주요 기능
 
 - Next.js 사용자 앱에서 여행 생성, 일정/POI 관리, 공유 링크, 댓글, 동반자 관리 흐름을 제공한다.
-- `maplibre-vworld-js` 기반 지도 화면을 실제 kor-travel-map feature read API와 연결했다.
+- `vworld-map-web` 기반 지도 화면을 실제 kor-travel-map feature read API와 연결했다.
+- Web 지도 의존성을 `maplibre-vworld` / `maplibre-vworld-js`에서
+  `maplibre-vworld-react`의 `vworld-map-web` + `vworld-map-core` vendored tarball로 교체했다.
 - 지도 viewport feature 로딩, 검색, 내 위치, 우클릭 메뉴, POI 편집/정렬 UI를 추가했다.
 - Admin 콘솔에 사용자, 여행, POI, feature request, 백업, RustFS, MCP token, Grafana 화면을 연결했다.
 - FastAPI 백엔드가 `kor-travel-map` OpenAPI HTTP 계약으로 feature read/batch/search/public view를 호출한다.
@@ -22,7 +24,7 @@
 - StyleSeed 기반 UI 운영 규칙을 문서화하고, 홈/피드백 상태/모바일 공용 UI에
   semantic token, 44px touch target, motion/focus 기준을 반영했다.
 - Expo 모바일 스캐폴드의 런타임 기준을 Expo Dev Client + EAS Build로 고정하고,
-  Expo Go 미사용 / React Native New Architecture / Android minSdk 23 / VWorld 서버 발급
+  Expo Go 미사용 / React Native New Architecture / Android minSdk 24 / VWorld 서버 발급
   키 구조를 문서화했다.
 
 ### 운영/보안

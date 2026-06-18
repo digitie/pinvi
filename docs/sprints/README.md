@@ -8,7 +8,7 @@ Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로
 | Sprint 1 | [SPRINT-1.md](./SPRINT-1.md) | **merged** (PR #9) | 모노레포 scaffolding + DB schema + 핵심 인증 | — |
 | Sprint 2 | [SPRINT-2.md](./SPRINT-2.md) | **merged** (PR #10) | 도메인 API + DB (Trip / POI / 4 분리 동의 / Resend / 위치 감사) | — |
 | Sprint 3 | [SPRINT-3.md](./SPRINT-3.md) | **merged** (PR #11) | Admin 콘솔 + RBAC + audit chain + seed | — |
-| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **release gate met** (tag/Release notes 대기) | 지도 UI + `maplibre-vworld-js` + 라이브 feature read + **CI/CD 재활성** | **`v0.1.0`** |
+| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **release gate met** (tag/Release notes 대기) | 지도 UI + `vworld-map-web` + 라이브 feature read + **CI/CD 재활성** | **`v0.1.0`** |
 | Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed (일부 항목 선반영: T-109/110/115) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
 | Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + LBS 신고 + 법무 + **MCP 외부 인터페이스** + **Backup UI 핫스왑** + **Korean geofencing** + **T108 N150 병행 배포** | **`v1.0.0`** |
 
@@ -47,7 +47,8 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-005** — provider 어댑터 wrapper 금지
 - **ADR-006** — Dagster code location 분리
 - **ADR-007** — PR-only workflow
-- **ADR-015** — 지도 클라이언트 `maplibre-vworld-js`
+- **ADR-015** — Kakao Maps SDK 폐기 + VWorld/MapLibre 채택
+- **ADR-046** — Web 지도 클라이언트 `vworld-map-web` 전환
 - **ADR-017** — CodeGraph + agent별 고정 worktree
 - **ADR-018** — 한국 전용 geofencing
 - **ADR-019** — MCP 외부 인터페이스

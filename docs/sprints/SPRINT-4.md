@@ -4,11 +4,11 @@
   read/kor_travel_map HTTP cutover/CI gate 충족, v0.1.0 tag + Release notes 대기)
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `kor-travel-map` OpenAPI read 활성화
-  + **`maplibre-vworld-js` 기능 finalize → v0.1.0 릴리즈**
+  + **`vworld-map-web` 전환 → v0.1.0 릴리즈**
 - **릴리즈**: `v0.1.0` (Sprint 4 종료 tag). 사용자 대면 지도/여행 흐름 첫
   사용 가능한 상태. 기능 게이트는 충족했고, 최종 tag/릴리즈 노트만 남았다.
 - **DoD**:
-  - 지도 어댑터 (`maplibre-vworld-js`) 통합 — VWorld + MapLibre GL JS (ADR-015)
+  - 지도 어댑터 (`vworld-map-web`) 통합 — VWorld + MapLibre GL JS (ADR-046)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)
   - POI D&D + 양방향 패널 (`useSelectedPoiStore`)
   - 16색 팔레트 + maki 아이콘 (`apps/web/lib/markerPalette.ts`)
@@ -24,7 +24,7 @@
     (`maplibre-vworld-js` PR #37 + PR #46, merge `f1dd74b9`).
     `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"
     모두 라이브러리에 머지된 후에만 v0.1.0 tag. Pinvi 전용 항목은 본 저장소에
-    구현.
+    구현. 이후 Web 소비 패키지는 ADR-046/T-201에서 `vworld-map-web`으로 전환.
   - `v0.1.0` git tag + GitHub Release notes.
 
 ## 산출물
@@ -67,7 +67,8 @@
 
 ### ADR
 
-- ADR-015: 지도 클라이언트 `maplibre-vworld-js` + wrapping 금지
+- ADR-015: Kakao Maps SDK 폐기 + VWorld/MapLibre 채택
+- ADR-046: Web 지도 클라이언트 `vworld-map-web` 전환 + wrapping 금지
 - ADR-026/027: kor-travel-map OpenAPI HTTP 계약과 운영급 HTTP 서비스 신설 대기
 - ADR-028: 정규 `feature_id` 포맷
 - viewport cache / feature snapshot 동기화 정책은 T-148/T-151에서 재정리
@@ -98,6 +99,8 @@
 - [x] `kor-travel-map` HTTP read/admin 연동 cutover + drift gate 통과
 - [x] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5) — PR #37 구현 +
   PR #46 카탈로그 정합화 완료
+- [x] **Web 지도 의존성 `vworld-map-web` 전환** (ADR-046/T-201) — 기존
+  `maplibre-vworld` 의존성 제거 + vendored tarball `file:` 핀
 - [x] **GitHub Actions CI/CD 게이트 복원** (ADR-021; 최종 릴리즈 전 최신 run 확인)
 - [ ] `docs/journal.md` Sprint 4 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 5
@@ -123,8 +126,8 @@
 - SSR / hydration 안정화 (§6.9)
 
 **상태 (2026-06-05)**: 라이브러리 구현 PR #37과 카탈로그 정합화 PR #46이 모두
-머지되어 선행 라이브러리 조건은 완료다. 남은 작업은 Pinvi frontend PR-C에서
-`maplibre-vworld` dependency pin, 실제 import, 지도 e2e를 처리하는 것이다.
+머지되어 선행 라이브러리 조건은 완료다. Web 소비 패키지는 이후 ADR-046/T-201에서
+`vworld-map-web` + `vworld-map-core` vendored tarball로 전환됐다.
 
 **판정 기준**: "어떤 지도 앱에서도 쓸 수 있는 일반 기능"이면 라이브러리. Pinvi
 도메인 (16색 팔레트 매핑 / POI dnd 비즈니스 룰 / Notice plan copy) 이면 Pinvi.
@@ -147,8 +150,8 @@ PR 생성.
 ## 6. v0.1.0 릴리즈 절차
 
 1. Sprint 4 DoD + 종료 체크리스트 모두 통과
-2. `maplibre-vworld-js` 신규 버전 npm 또는 git tag 발행 (라이브러리 측 PR 머지 후)
-3. Pinvi `package.json` `maplibre-vworld` 버전 pin 갱신
+2. `maplibre-vworld-react` Web package tarball provenance 확인
+3. Pinvi `apps/web/package.json` `vworld-map-web` / `vworld-map-core` `file:` pin 확인
 4. `pnpm install` / `npm install` + lockfile 갱신 commit
 5. `CHANGELOG.md` 작성 — 사용자 대면 기능 위주
 6. `git tag -a v0.1.0 -m "v0.1.0 — 지도 + 여행 + Admin 기본기능"`

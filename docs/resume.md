@@ -1,5 +1,33 @@
 # resume.md
 
+## 2026-06-18 (codex) — Web 지도 `vworld-map-web` 전환 (T-201)
+
+사용자 지시에 따라 `apps/web` 지도 클라이언트를 기존 `maplibre-vworld` /
+`maplibre-vworld-js` tarball 의존성에서 `maplibre-vworld-react`의 Web 패키지
+`vworld-map-web` + 공통 `vworld-map-core`로 전환했다(branch
+`agent/codex-web-vworld-map-web`). `apps/web/vendor/vworld-map-web-1.0.0.tgz`를 추가하고,
+`vworld-map-core`는 기존 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz` file spec을 공유하도록
+`package.json`/`package-lock.json`/`next.config.mjs`를 갱신했다.
+
+`components/map/vworldPrimitives.tsx`가 `vworld-map-web`의 `VWorldMapView`,
+`ClusterLayer`, `MakiMarker`, `Popup`, `UserLocationMarker`, `MapContextMenu`를 lazy
+import하도록 바꿨고, `MapView`/`FeatureMapView`/`TripMapView`는 이 facade의 타입과
+primitive만 사용한다. 기존 `maplibre-vworld/style.css`와 T-074 dev React `require` shim은
+제거했다.
+
+ADR-046을 추가하고 ADR-015를 superseded 처리했다. `AGENTS.md`/`CLAUDE.md`,
+`docs/integrations/maplibre-vworld.md`, frontend architecture, compliance, sprint/runbook,
+CHANGELOG, tasks를 새 기준으로 동기화했다. T-201은 완료 처리.
+
+**검증(WSL ext4 미러)**: `npm --workspace apps/web run typecheck`,
+`npm --workspace apps/web run lint`, `npm --workspace apps/web run build`,
+`npm --workspace apps/web run test` 통과. `npm ls maplibre-vworld`는 empty,
+`npm ls vworld-map-web vworld-map-core --workspace apps/web --depth=0` 정상. NTFS→ext4
+rsync 중 기존 미러의 `.venv`/`.venv-wsl` 삭제 경고가 있었지만 Web 검증 경로에는 영향 없음.
+
+**다음 한 작업**: PR 리뷰/머지 후 v0.1.0 릴리즈 직전 최종 smoke와 tag/GitHub Release notes를
+이어간다.
+
 ## 2026-06-18 (codex) — StyleSeed 디자인 규칙 적용 + 문서화
 
 StyleSeed `llms.txt`와 full context의 핵심 규칙을 Pinvi 디자인 기준에 맞춰 적용했다(branch

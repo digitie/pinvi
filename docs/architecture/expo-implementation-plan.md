@@ -110,18 +110,18 @@ config plugin이 필요해 **EAS Dev Client 빌드에서만** 동작한다.
   `GET /mobile/vworld/token`(기본 path)을 가리킨다 — 이 백엔드 endpoint는 **구현됨**(§5).
 - `maplibre-vworld-react`에 키/토큰 주입 훅(이슈 #3)이 생기면, 이 토큰을 타일 요청에 붙인다.
 
-### 4.2 소비 모델 — git-URL/tarball (npm 미발행은 의도)
+### 4.2 소비 모델 — vendored tarball (npm 미발행은 의도)
 
 `maplibre-vworld-react`를 **npm에 발행하지 않는 것은 의도된 방침**이다. Pinvi는
-`maplibre-vworld-js`와 동일하게 **GitHub archive tarball / git-URL pin**으로 소비한다
-(예: `apps/web/package.json`의 `"maplibre-vworld": "https://github.com/digitie/maplibre-vworld-js/archive/<sha>.tar.gz"`).
-모바일도 `apps/mobile/package.json`에서 같은 방식으로 `maplibre-vworld-react`(RN 패키지)를
-git-URL/tarball로 핀한다.
+Web은 `apps/web/vendor/vworld-map-web-1.0.0.tgz`, Mobile은
+`apps/mobile/vendor/vworld-map-rn-1.0.0.tgz`를 `file:` 의존으로 소비한다. 공통
+`vworld-map-core`는 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz` file spec을
+Web/Mobile이 공유한다(ADR-044/046). CI가 외부 git archive나 release asset에 의존하지
+않도록 tarball과 lockfile을 함께 커밋한다.
 
-따라서 이슈 #2의 목표는 "npm publish"가 아니라 **git-URL/tarball 한 줄 설치가 실제로
-동작하게** 하는 것이다 — `vworld-map-rn`의 `vworld-map-core: "*"` workspace 의존 해소
-(번들 또는 concrete 핀) + 빌드 산출물(`dist`) 포함. 활성화 시 모바일 `package.json` 핀은
-이 경로가 확정된 뒤 추가한다.
+따라서 이슈 #2의 목표는 "npm publish"가 아니라 **tarball 소비가 실제로 동작하게** 하는
+것이다 — `vworld-map-rn`/`vworld-map-web`의 `vworld-map-core` 의존 해소 + 빌드 산출물(`dist`)
+포함. 패키지 갱신 시 source commit/checksum provenance를 작업 일지나 통합 문서에 남긴다.
 
 ## 5. 백엔드(`apps/api`) 추가 필요
 

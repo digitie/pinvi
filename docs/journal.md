@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-18 (codex) — T-201 Web 지도 `vworld-map-web` 전환
+
+**작업**: 사용자 지시 — "web 지도뷰를 maplibre vworld react로 변경" + "`maplibre-vworld-js`
+dependency 삭제". 작업 전 미커밋 agent 설정 파일 변경은 `stash@{0}`에 보존하고,
+`origin/main`에서 `agent/codex-web-vworld-map-web` 브랜치를 만들었다.
+
+- `apps/web/vendor/vworld-map-web-1.0.0.tgz`를 `F:\dev\maplibre-vworld-react`에서
+  `npm pack`으로 생성해 vendored tarball로 추가. `vworld-map-core`는 npm workspace의
+  단일 package instance 유지를 위해 기존 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz`
+  file spec을 Web도 공유.
+- `apps/web/package.json`/`package-lock.json`: `maplibre-vworld` GitHub archive 의존성 제거,
+  `vworld-map-core` + `vworld-map-web` `file:` 의존성 추가.
+- `apps/web/components/map/vworldPrimitives.tsx`: `vworld-map-web`의 `VWorldMapView`,
+  `ClusterLayer`, `MakiMarker`, `Popup`, `UserLocationMarker`, `MapContextMenu`를 lazy import하고,
+  `ClusterPoint`/`MapLibreEvent`/`MapLibreMap`/`MapMouseEvent` 타입을 re-export.
+- `MapView`/`FeatureMapView`/`TripMapView`: 직접 `maplibre-vworld`/`maplibre-gl` 타입 import를
+  제거하고 `vworldPrimitives` facade를 사용. `maplibre-vworld/style.css`와 T-074 dev React
+  `require` shim 제거.
+- **ADR-046** 추가: Web 지도 클라이언트도 `maplibre-vworld-react`의 `vworld-map-web`으로 전환.
+  ADR-015는 Kakao 폐기 결정은 유지하되 Web 소비 패키지 결정은 ADR-046으로 superseded.
+- `AGENTS.md`/`CLAUDE.md`, `docs/integrations/maplibre-vworld.md`, frontend/compliance/sprint/runbook
+  문서, `CHANGELOG.md`, `docs/tasks.md`를 새 의존성 기준으로 동기화. T-201 완료 처리.
+
+**검증**: WSL ext4 미러에서 `npm --workspace apps/web run typecheck`, `lint`, `build`,
+`test`(Vitest 15) 통과. `npm ls maplibre-vworld`는 empty,
+`npm ls vworld-map-web vworld-map-core --workspace apps/web --depth=0` 정상. NTFS→ext4
+rsync 중 기존 미러의 `.venv`/`.venv-wsl` 삭제 경고가 있었지만 Web 검증 경로에는 영향 없음.
+
+**다음**: PR 리뷰/머지 후 v0.1.0 릴리즈 직전 최종 smoke/tag/GitHub Release notes.
+
 ## 2026-06-18 (codex) — StyleSeed 디자인 규칙 적용 + 문서화
 
 **작업**: `https://styleseed-demo.vercel.app/llms.txt`와 full context의 핵심 규칙을

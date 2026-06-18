@@ -33,7 +33,8 @@ const nextConfig = {
     '@pinvi/design-tokens',
     '@pinvi/hooks',
     '@pinvi/i18n',
-    'maplibre-vworld',
+    'vworld-map-core',
+    'vworld-map-web',
   ],
 };
 

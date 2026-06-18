@@ -113,7 +113,7 @@ Sprint 4 PR-B2 — `kor-travel-map` OpenAPI HTTP client + features read 동작 �
 - [x] docs/architecture, agent-guide, dev-environment
 - [x] docs/decisions(ADR-001~026)
 - [x] Sprint 1~3 merge
-- [ ] Sprint 4 map UI + `maplibre-vworld-js` integration
+- [ ] Sprint 4 map UI + `vworld-map-web` integration
 
 ## 다음 ADR 후보
 - ADR-027: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략

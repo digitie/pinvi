@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
-import type maplibregl from 'maplibre-gl';
-import type { ClusterPoint } from 'maplibre-vworld';
 import { ApiError, featureApi, userApi } from '@pinvi/api-client';
 import type {
   FeatureDetail,
@@ -16,6 +14,10 @@ import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { hasLocationConsent, locationConsentItems, paletteHex } from '@pinvi/domain';
 import {
   ClusterLayer,
+  type ClusterPoint,
+  type MapLibreEvent,
+  type MapLibreMap,
+  type MapMouseEvent,
   MakiMarker,
   MapContextMenu,
   MapFallback,
@@ -141,7 +143,7 @@ export function FeatureMapView({
   initialZoom = DEFAULT_ZOOM,
   initialSuggestCoord = null,
 }: FeatureMapViewProps) {
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const latestRequest = useRef(0);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -162,7 +164,7 @@ export function FeatureMapView({
   );
   const [notice, setNotice] = useState<string | null>(null);
 
-  const fetchInBounds = useCallback(async (map: maplibregl.Map) => {
+  const fetchInBounds = useCallback(async (map: MapLibreMap) => {
     const bbox = boundsToBbox(map.getBounds());
     const zoom = clampZoom(map.getZoom());
     const requestId = latestRequest.current + 1;
@@ -182,7 +184,7 @@ export function FeatureMapView({
   }, []);
 
   const scheduleFetch = useCallback(
-    (map: maplibregl.Map) => {
+    (map: MapLibreMap) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => void fetchInBounds(map), DEBOUNCE_MS);
     },
@@ -196,7 +198,7 @@ export function FeatureMapView({
   }, []);
 
   const handleMapLoad = useCallback(
-    (map: maplibregl.Map) => {
+    (map: MapLibreMap) => {
       mapRef.current = map;
       void fetchInBounds(map);
     },
@@ -204,13 +206,13 @@ export function FeatureMapView({
   );
 
   const handleViewportChange = useCallback(
-    (event: maplibregl.MapLibreEvent) => {
-      scheduleFetch(event.target as maplibregl.Map);
+    (event: MapLibreEvent) => {
+      scheduleFetch(event.target as MapLibreMap);
     },
     [scheduleFetch]
   );
 
-  const handleContextMenu = useCallback((event: maplibregl.MapMouseEvent) => {
+  const handleContextMenu = useCallback((event: MapMouseEvent) => {
     setContextMenu({
       x: event.originalEvent.clientX,
       y: event.originalEvent.clientY,

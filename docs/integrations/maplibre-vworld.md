@@ -1,30 +1,36 @@
-# maplibre-vworld-js 지도 클라이언트
+# maplibre-vworld-react 지도 클라이언트
 
-Pinvi 지도는 **내부 라이브러리 `maplibre-vworld-js`**를 사용한다 (ADR-015 —
-Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
-선언형 React 통합.
+Pinvi 지도는 **내부 라이브러리 `maplibre-vworld-react`**를 사용한다. Web은
+`vworld-map-web` + `vworld-map-core`(ADR-046), Mobile은 `vworld-map-rn` +
+`vworld-map-core`(ADR-044)를 소비한다. ADR-015의 Kakao Maps SDK 폐기와 VWorld +
+MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vworld-js` /
+`maplibre-vworld`는 ADR-046으로 대체됐다.
 
-> **상태**: `maplibre-vworld-js` 본체는 `F:\dev\maplibre-vworld-js` (별 저장소).
-> Pinvi는 git URL pin 또는 npm 배포로 의존. 본 문서는 (a) Pinvi에서 어떻게
-> 사용할지, (b) 어떤 기능이 부족해서 라이브러리에 보강해야 할지 정리.
+> **상태**: `maplibre-vworld-react` 본체는 `F:\dev\maplibre-vworld-react` (별 저장소).
+> Pinvi는 npm 발행 없이 `apps/{web,mobile}/vendor/*.tgz` vendored tarball을 `file:`로
+> 핀한다. 본 문서는 (a) Pinvi에서 어떻게 사용할지, (b) 어떤 기능이 부족해서
+> 라이브러리에 보강해야 할지 정리.
 
 ## 1. 라이브러리 식별자
 
 | 항목 | 값 |
 |------|-----|
-| 저장소 | `maplibre-vworld-js` |
-| npm 패키지 | `maplibre-vworld` |
+| 저장소 | `maplibre-vworld-react` |
+| Web 패키지 | `vworld-map-web` |
+| 공통 패키지 | `vworld-map-core` |
+| Mobile 패키지 | `vworld-map-rn` |
 | 의존 (peer) | `react`, `react-dom`, `maplibre-gl`, `zod@^4.4.3` |
 | 라이선스 | MIT |
-| 빌드 산출 | git 저장소에 `dist/` 커밋되어 있음 — 소비자 build 불필요 |
+| 빌드 산출 | 각 package tarball을 Pinvi `apps/{web,mobile}/vendor/`에 보관 |
 
 설치 (Pinvi `apps/web/package.json`):
 
 ```json
 {
   "dependencies": {
-    "maplibre-vworld": "github:digitie/maplibre-vworld-js#<sha>",
-    "maplibre-gl": "^4.0.0",
+    "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
+    "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
+    "maplibre-gl": "^5.24.0",
     "zod": "^4.4.3"
   }
 }
@@ -32,7 +38,7 @@ Kakao Maps SDK 채택을 superseded). VWorld + MapLibre GL JS (WebGL GPU)
 
 ## 2. 정책 (Kakao 대비 변경점)
 
-| 항목 | Kakao Maps SDK (이전) | maplibre-vworld-js (v2) |
+| 항목 | Kakao Maps SDK (이전) | `vworld-map-web` (v2) |
 |------|---------------------|------------------------|
 | 엔진 | Kakao Maps JavaScript SDK | MapLibre GL JS (WebGL GPU) |
 | 데이터 | Kakao 지도 타일 | VWorld WMTS (국토부) |
@@ -94,12 +100,12 @@ ADR-044로 `vworld-map-rn`(vendored tarball)으로 확정됐다.
 
 ### 3.3 키 redact
 
-라이브러리가 `redactVWorldUrl(url)` 헬퍼를 export. URL에서 키 segment를 `***`로
+`vworld-map-web`이 `redactVWorldUrl(url)` 헬퍼를 export. URL에서 키 segment를 `***`로
 마스킹. `string | undefined` 모두 입력 가능 (overload — undefined 입력 시
 undefined 반환). Sentry / Loki / structlog에 자동 적용:
 
 ```ts
-import { redactVWorldUrl } from 'maplibre-vworld';
+import { redactVWorldUrl } from 'vworld-map-web';
 
 const redacted = redactVWorldUrl(error.url);
 // "https://api.vworld.kr/req/wmts/.../tile.png?key=***"
@@ -117,21 +123,27 @@ Sentry.captureException(error, { tags: { url: redacted } });
 ### 4.1 Next.js App Router 통합
 
 ```tsx
-// apps/web/components/map/MapView.tsx
+// apps/web/components/map/vworldPrimitives.tsx
 'use client';
 import dynamic from 'next/dynamic';
-import type maplibregl from 'maplibre-gl';
-import 'maplibre-vworld/style.css';
+import type { ComponentType } from 'react';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import type { VWorldMapViewProps } from 'vworld-map-web';
 
 const VWorldMap = dynamic(
-  () => import('maplibre-vworld').then((m) => m.VWorldMap),
+  () => import('vworld-map-web').then((m) => m.VWorldMapView),
   { ssr: false, loading: () => <MapLoadingSkeleton /> }
-);
+) as ComponentType<VWorldMapViewProps>;
 
 const PlaceMarker = dynamic(
-  () => import('maplibre-vworld').then((m) => m.PlaceMarker),
+  () => import('vworld-map-web').then((m) => m.PlaceMarker),
   { ssr: false }
 );
+```
+
+```tsx
+// apps/web/components/map/MapView.tsx
+import type { MapLibreEvent } from '@/components/map/vworldPrimitives';
 
 export function MapView({ initialCenter, pois }: Props) {
   // `center` 는 필수 prop — 기본값(서울) 없음. 미정 시 caller에서 결정.
@@ -142,8 +154,8 @@ export function MapView({ initialCenter, pois }: Props) {
       center={initialCenter}
       zoom={14}
       onClick={(e) => handleMapClick(e.lngLat)}              // raw MapMouseEvent
-      onError={(e: maplibregl.ErrorEvent) => trackMapError(e)} // raw maplibregl error
-      onMoveEnd={(e) => setBounds(e.target.getBounds())}      // raw MapLibreEvent
+      onError={(e) => trackMapError(e)}                       // raw MapLibre error
+      onMoveEnd={(e: MapLibreEvent) => setBounds(e.target.getBounds())}
       animateCameraChanges
     >
       {pois.map((poi) => (
@@ -191,7 +203,7 @@ debounce 250ms + AbortController 는 Pinvi 측에서 (라이브러리는 raw 이
 ### 4.3 클러스터링
 
 ```tsx
-import { ClusterLayer, ClusterMarker } from 'maplibre-vworld';
+import { ClusterLayer } from 'vworld-map-web';
 
 <VWorldMap ...>
   <ClusterLayer
@@ -219,7 +231,7 @@ import { ClusterLayer, ClusterMarker } from 'maplibre-vworld';
 ### 4.4 Polygon (area feature)
 
 ```tsx
-import { PolygonArea } from 'maplibre-vworld';
+import { PolygonArea } from 'vworld-map-web';
 
 <VWorldMap ...>
   <PolygonArea
@@ -235,7 +247,7 @@ import { PolygonArea } from 'maplibre-vworld';
 ### 4.5 RouteLine (route feature)
 
 ```tsx
-import { RouteLine } from 'maplibre-vworld';
+import { RouteLine } from 'vworld-map-web';
 
 <VWorldMap ...>
   <RouteLine
@@ -283,7 +295,7 @@ proxy endpoint (`/api/vworld-proxy`) 추가 필요 (Sprint 4 결정).
 ```ts
 // apps/web/lib/markerAdapter.ts
 import { MARKER_PALETTE } from '@pinvi/design-tokens';
-import { MakiMarker, PlaceMarker, PriceMarker, WeatherMarker } from 'maplibre-vworld';
+import { MakiMarker, PriceMarker, WeatherMarker } from 'vworld-map-web';
 
 export function renderPoiMarker(poi: Poi) {
   const palette = MARKER_PALETTE[poi.custom_marker_color ?? poi.feature_snapshot.marker_color];
@@ -317,8 +329,9 @@ export function renderPoiMarker(poi: Poi) {
 
 ## 6. 라이브러리 측 보강 필요 항목 (Pinvi가 요청할 PR)
 
-> **카탈로그는 라이브러리 저장소가 source of truth**: `maplibre-vworld-js` 저장소의
-> [`docs/consumer-feature-catalog.md`](https://github.com/digitie/maplibre-vworld-js/blob/main/docs/consumer-feature-catalog.md)
+> **카탈로그는 라이브러리 저장소가 source of truth**: 현재는 `maplibre-vworld-react`
+> 저장소의 package source와 consumer catalog가 기준이다. 아래 `maplibre-vworld-js`
+> PR #37/#46 메모는 ADR-015 시점의 역사적 sync 결과로 보존한다.
 > 가 §1 (라이브러리 PR 대상 10항목) + §2 (소비자 전용 - 라이브러리 거부 항목)을
 > 박는다. 본 §6 / §6.1~§6.11은 Pinvi가 실제 사용하며 마주친 부족 기능의
 > snapshot 메모로만 유지. 분류 / 상태의 단일 진실은 라이브러리 doc.
@@ -332,7 +345,7 @@ export function renderPoiMarker(poi: Poi) {
 > (`apps/web/lib/markerPalette.ts` 등). 라이브러리에 박지 않는다.
 
 다음 표는 Pinvi가 사용하는 공통 기능 snapshot이다. 사용 중 추가 부족 기능이
-발견되면 `maplibre-vworld-js` 저장소에 PR 또는 이슈로 제출한다(ADR-005 mirror:
+발견되면 `maplibre-vworld-react` 저장소에 PR 또는 이슈로 제출한다(ADR-005 mirror:
 Pinvi에 wrapper 만들지 않고 라이브러리에 보강).
 
 ### 6.1 viewport 이벤트
@@ -418,7 +431,7 @@ v2 후보. VWorld TOS 확인 후 라이브러리에 PWA 가이드 추가:
 
 ### 6.11 Pinvi 도메인에 특화된 hook / 컴포넌트
 
-라이브러리는 generic primitive(`VWorldMap` / `MakiMarker` / `ClusterLayer` /
+라이브러리는 generic primitive(`VWorldMapView` / `MakiMarker` / `ClusterLayer` /
 `Popup` / `PolygonArea` / `RouteLine`)만 export. **Pinvi 도메인 wrapper
 (`PinviFeatureLayer`)와 팔레트 상수(`PINVI_MARKER_PALETTE` /
 `PINVI_CATEGORY_MARKERS` / `resolvePinviMarkerStyle`)는 라이브러리에서
@@ -442,7 +455,7 @@ export 도 사용 가능 (DevTools, custom selector 등).
 ```ts
 // apps/web/lib/featureLayer.ts — Pinvi가 직접 구현 (라이브러리는 generic primitive만 제공)
 import { useFeaturesInBounds } from '@pinvi/api-client';
-import { useMapSelector } from 'maplibre-vworld';
+import { useMapSelector } from 'vworld-map-web';
 
 export function useFeatureMarkers(kinds: FeatureKind[]) {
   const bounds = useMapSelector((s) => s.bounds);
@@ -499,7 +512,7 @@ Pinvi 클라이언트 정책:
 
 | v1 자산 | v2 처리 |
 |---------|---------|
-| `react-kakao-maps-sdk` 의존 | 제거 → `maplibre-vworld` 추가 |
+| `react-kakao-maps-sdk` 의존 | 제거 → `vworld-map-web` 추가 |
 | `KAKAO_REST_API_KEY` 백엔드 사용 | 제거 (Local 검색은 라이브러리 경유) |
 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
 | `apps/web/lib/coordAdapter.ts` (Kakao lat-lng 변환) | 제거 (VWorld는 `(lng, lat)`) |
@@ -512,8 +525,9 @@ Pinvi 클라이언트 정책:
 
 지도 관련 PR 시:
 
-- [x] `maplibre-vworld` tarball pin sha 확인 / 갱신 (T-074:
-      `f1dd74b9ef5114582cec54d1fd47a494be0113a5`)
+- [x] `vworld-map-web` / `vworld-map-core` vendored tarball pin 확인 / 갱신 (T-201:
+      Web package `apps/web/vendor/vworld-map-web-1.0.0.tgz`, shared core
+      `apps/mobile/vendor/vworld-map-core-1.0.0.tgz`)
 - [x] `apps/web/components/map/*` 컴포넌트 라이브러리 사용 (T-074:
       `MapView` shell)
 - [ ] Kakao SDK / `KAKAO_*` 환경변수 잔존 X (`rg "kakao" apps/web` 검사)
@@ -523,7 +537,7 @@ Pinvi 클라이언트 정책:
 - [ ] VWorld 콘솔 도메인 등록 확인 (개발 / staging / 운영)
 - [ ] Sentry / Loki에 `redactVWorldUrl` 자동 적용
 - [ ] 라이브러리에 부족한 기능 발견 시 — Pinvi에 wrapper 만들지 않고
-      `maplibre-vworld-js` 저장소에 issue + PR (ADR-005 mirror)
+      `maplibre-vworld-react` 저장소에 issue + PR (ADR-005 mirror)
 - [ ] 본 문서 §6 보강 필요 항목 표 갱신
 
 ### 11.1 T-063 consumer sync 결과
@@ -543,17 +557,26 @@ Pinvi 클라이언트 정책:
 > 확인했고, dev/e2e에서는 `MapView`의 좁은 React require shim으로 보완했다. 라이브러리
 > 패키징 후속 PR이 머지되면 shim 제거 후보.
 
+### 11.2 T-201 Web `vworld-map-web` 전환 결과
+
+- [x] `apps/web/package.json`에서 `maplibre-vworld` / `maplibre-vworld-js` 의존성을 제거.
+- [x] `apps/web/vendor/vworld-map-web-1.0.0.tgz`를 Web package `file:` 의존으로 추가하고,
+  `vworld-map-core`는 기존 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz` file spec을 공유.
+- [x] `apps/web/components/map/vworldPrimitives.tsx`가 `vworld-map-web`의
+  `VWorldMapView` / `ClusterLayer` / `MakiMarker` / `Popup` /
+  `UserLocationMarker` / `MapContextMenu`를 lazy import한다.
+- [x] `maplibre-vworld/style.css`와 T-074의 dev React `require` shim을 제거하고,
+  MapLibre 기본 CSS(`maplibre-gl/dist/maplibre-gl.css`)만 import한다.
+
 ## 12. AI 에이전트 (Codex / Antigravity) 대응
 
-라이브러리 본체는 Antigravity 2.0 + Gemini 3.1 Pro로 만들어진 코드. Pinvi에서
+라이브러리 본체는 `maplibre-vworld-react` 별 저장소가 소유한다. Pinvi에서
 라이브러리 사용 / 보강 작업 시 다음 진입 문서 참조:
 
 - 본 문서 (Pinvi 사용 패턴 + 보강 요청 카탈로그)
-- `maplibre-vworld-js` 저장소의 [`AGENTS.md`](https://github.com/digitie/maplibre-vworld-js/blob/main/AGENTS.md)
-  (Cursor / Copilot / Codex / Antigravity 진입 가이드)
-- `maplibre-vworld-js/AI_AGENT_GUIDE.md` (SSR + dynamic import + transformRequest 규칙)
-- `maplibre-vworld-js/ADR.md` (왜 MapLibre / WebGL / React Portal 등 결정)
-- `maplibre-vworld-js/journal.md` (작업 history + 보안 이슈)
+- `maplibre-vworld-react` 저장소의 agent guide / package README
+- `packages/vworld-map-web` source (`VWorldMapView.web`, marker/layer primitive)
+- `packages/vworld-map-core` source (좌표/스키마/공통 helper)
 
 ## 13. 관련 문서
 
@@ -562,4 +585,4 @@ Pinvi 클라이언트 정책:
 - `docs/architecture/user-location.md` — 사용자 위치 + 마커
 - `docs/api/features.md` — viewport / nearby endpoint
 - `docs/design/marker-palette.md` — P-01~P-16
-- `docs/decisions.md` ADR-015 (지도 클라이언트 변경)
+- `docs/decisions.md` ADR-015 (Kakao 폐기), ADR-046 (Web `vworld-map-web` 전환)

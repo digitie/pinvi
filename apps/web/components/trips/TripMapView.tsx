@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type maplibregl from 'maplibre-gl';
-import type { ClusterPoint } from 'maplibre-vworld';
 import {
   ClusterLayer,
+  type ClusterPoint,
+  type MapLibreMap,
   MakiMarker,
   MapFallback,
   MapLoadingSkeleton,
@@ -36,9 +36,9 @@ export function TripMapView({
   onMarkerContextMenu,
   className,
 }: TripMapViewProps) {
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
 
-  const fitToPoints = useCallback((map: maplibregl.Map) => {
+  const fitToPoints = useCallback((map: MapLibreMap) => {
     const bounds = pointsBounds(points);
     if (!bounds) return;
     const only = points[0];
@@ -56,7 +56,7 @@ export function TripMapView({
   }, [points]);
 
   const handleLoad = useCallback(
-    (map: maplibregl.Map) => {
+    (map: MapLibreMap) => {
       mapRef.current = map;
       fitToPoints(map);
     },

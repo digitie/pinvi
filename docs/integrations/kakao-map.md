@@ -1,8 +1,8 @@
 # Kakao Map 통합 (폐기 — ADR-015)
 
-> **본 문서는 폐기되었다.** Pinvi v2 지도 클라이언트는 **`maplibre-vworld-js`**
-> (VWorld + MapLibre GL JS, ADR-015)를 사용한다. Kakao Maps SDK는 v2에서 채택하지
-> 않는다.
+> **본 문서는 폐기되었다.** Pinvi v2 지도 클라이언트는 **`vworld-map-web`**
+> (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS, ADR-046)를 사용한다.
+> Kakao Maps SDK는 v2에서 채택하지 않는다.
 
 새 문서: **[`maplibre-vworld.md`](./maplibre-vworld.md)**.
 
@@ -11,17 +11,17 @@
 - 좌표 순서 불일치 — Kakao SDK는 `(lat, lng)` 어댑터 필요. Pinvi stack은
   `(lng, lat)` (GeoJSON / PostGIS / 라이브러리)
 - 오프라인 캐싱 약관상 금지 — v2 PWA 검토 시 제약
-- Pinvi 도메인 마커 (Place / Price / Weather) 구현이 `maplibre-vworld-js`에
+- Pinvi 도메인 마커 (Place / Price / Weather) 구현이 `maplibre-vworld-react`에
   이미 있음
 - VWorld는 국토부 공식 — provider 위탁자 처리방침 간소 (국내)
 - 명령형 API (`map.panTo()`) 혼용 — React 선언형 패턴과 결합 비용
 
 ## 이전 가이드
 
-| 항목 | 이전 (Kakao) | 신규 (maplibre-vworld) |
+| 항목 | 이전 (Kakao) | 신규 (`vworld-map-web`) |
 |------|------------|----------------------|
 | 환경변수 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
-| 라이브러리 | `react-kakao-maps-sdk` | `maplibre-vworld` (github:digitie/maplibre-vworld-js) |
+| 라이브러리 | `react-kakao-maps-sdk` | `vworld-map-web` (`maplibre-vworld-react`) |
 | 좌표 변환 어댑터 | `apps/web/lib/coordAdapter.ts` | **제거** — `(lng, lat)` 그대로 |
 | CSP | `https://dapi.kakao.com` + `https://t1.daumcdn.net` | `https://api.vworld.kr` |
 | 도메인 등록 | Kakao Developers 콘솔 | VWorld 개발자 센터 |
@@ -33,5 +33,6 @@
 ## 폐기 일자 / ADR
 
 - 결정 일자: 2026-05-26
-- ADR-015: 지도 클라이언트 변경 (Kakao Map → maplibre-vworld-js)
+- ADR-015: 지도 클라이언트 변경 (Kakao Map → VWorld + MapLibre GL JS)
+- ADR-046: Web 지도 클라이언트 `vworld-map-web` 전환
 - ADR-016 (이전 — frontend 스택)의 일부 정정 — react-kakao-maps-sdk 채택은 superseded

@@ -13,7 +13,7 @@ SPEC V8 6편 적용 노트는 `docs/spec/v8/`. 본 문서는 v2 아키텍처의 
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Browser / PWA                                                          │
 │   apps/web (Next.js App Router + React 19 + TanStack Query + zustand)  │
-│   maplibre-vworld-js (VWorld + MapLibre GL JS, ADR-015)                │
+│   vworld-map-web (VWorld + MapLibre GL JS, ADR-046)                    │
 └────────────────────────────────────────────────────────────────────────┘
                               │ HTTPS (cookie session / JWT)
                               ▼
@@ -103,8 +103,8 @@ forbidden_modules = [
 - **`packages/{schemas,api-client,state,design-tokens,hooks,i18n}`** 공용 코드
   — Expo `apps/mobile`(v2)이 그대로 import
 - 클라이언트가 외부 API를 직접 호출하지 않는다 (모두 백엔드 경유).
-- 지도는 `maplibre-vworld-js`를 lazy load + dynamic import로 SSR 영향 차단
-  (Kakao Maps SDK는 ADR-015로 폐기).
+- 지도는 `vworld-map-web`을 lazy load + dynamic import로 SSR 영향 차단
+  (Kakao Maps SDK는 ADR-015로 폐기, 웹 소비 패키지는 ADR-046).
 - 위치 정보는 [`useUserLocation`](architecture/user-location.md) 공용 hook +
   웹/모바일 어댑터.
 

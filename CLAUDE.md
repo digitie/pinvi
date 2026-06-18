@@ -66,7 +66,7 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-045**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-046**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -86,7 +86,10 @@ Android minSdk 24, VWorld server-issued key 구조),
 ADR-044 (모바일 지도 엔진 = `maplibre-vworld-react`/`vworld-map-rn`, vendored tarball `file:` 핀
 소비, server-issued 키),
 ADR-045 (모바일 VWorld 키 런타임 정책 — 현 단계는 인증 게이트 + 감사 로깅의 문서화된 운영
-제한, opaque token/tile proxy는 공개 배포 전 게이트). 다음 신규 = ADR-046.
+제한, opaque token/tile proxy는 공개 배포 전 게이트),
+ADR-046 (Web 지도 클라이언트도 `maplibre-vworld-react`의 `vworld-map-web` + `vworld-map-core`
+vendored tarball 소비로 전환, 기존 `maplibre-vworld`/`maplibre-vworld-js` 의존 삭제).
+다음 신규 = ADR-047.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
@@ -117,8 +120,8 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 - 백엔드: Python 3.12 / FastAPI / Uvicorn / SQLAlchemy 2 async / asyncpg /
   Pydantic v2 / httpx + tenacity / Alembic / Dagster / kor-travel-map OpenAPI HTTP client
 - 프론트엔드: Next.js 15 (App Router) + React 19 + TanStack Query v5 + Zustand +
-  React Hook Form + Zod + shadcn/ui + Tailwind + **`maplibre-vworld-js`**
-  (VWorld + MapLibre GL JS, ADR-015)
+  React Hook Form + Zod + shadcn/ui + Tailwind + **`vworld-map-web`**
+  (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS, ADR-046)
 - 모바일: Expo SDK 56 + Expo Router + **Expo Dev Client** + EAS Build + React Native
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
   24 이상이다(ADR-043, SDK 56 요구).
@@ -161,7 +164,7 @@ lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
 | Geocoding (주소/좌표/행정구역) | `docs/integrations/kor-travel-geo.md` (ADR-025, kor-travel-geo v2 REST 직접) + `docs/architecture/geocoding-open-decisions.md` |
 | 외부 통합 (이메일/OAuth/AI companion 호출 계약) | `docs/integrations/<서비스>.md` |
 | Frontend UI | `docs/architecture/frontend.md` + `DESIGN.md` |
-| 지도 (`maplibre-vworld-js`) | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md` |
+| 지도 (`vworld-map-web`) | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md` |
 | Admin 콘솔 | `docs/api/admin.md` + `docs/runbooks/admin.md` |
 | ETL asset | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md` |
 | 사용자 위치 사용 | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md` |
