@@ -426,7 +426,7 @@ C:\Python314\python.exe scripts\mcp_telegram_start.py login
 ### 4.3 Google Antigravity 2.0 (`pinvi-antigravity`)
 
 - `AGENTS.md` 진입. Gemini 3.1 Pro로 작성된
-  `maplibre-vworld-js` 등 라이브러리 작업도 본 worktree에서.
+  `maplibre-vworld-react` 등 라이브러리 작업도 본 worktree에서.
 - Antigravity는 (현 시점) codegraph MCP를 표준 지원하지 않을 수 있음 —
   설치 후 동작 안 하면 `codegraph install --print-config codex`로 수동 wiring.
 - `antigravity.json` / `.gemini/mcp.json`에 `mcp-telegram` 등록됨 — PR 후 완료 알림(§3.7).

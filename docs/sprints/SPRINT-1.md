@@ -75,7 +75,7 @@
 - `packages/hooks/` — `useUserLocation` 등 공용 React hook (RN 호환)
 - `packages/i18n/` — next-intl + i18n-js 공유 메시지 카탈로그 (ko 기본)
 - 지도 전용 React wrapper 패키지는 만들지 않는다. Sprint 4 지도 UI는
-  `apps/web`이 `maplibre-vworld-js`를 직접 import하고, Pinvi 전용 팔레트/쿼리
+  `apps/web`이 `vworld-map-web`을 직접 import하고, Pinvi 전용 팔레트/쿼리
   helper만 `apps/web/lib`에 둔다(ADR-015).
 
 본 Sprint는 패키지 skeleton만 박는다 (실제 export는 Sprint 1~2에서 점진 추가).
@@ -95,7 +95,8 @@
 
 - ADR-010: SPEC V8 6편 채택 + 책임 분담 정정
 - ADR-011: Frontend 스택 + Next.js / Expo 공용 패키지 구조
-- ADR-015: 지도 클라이언트 `maplibre-vworld-js`
+- ADR-015: Kakao Maps SDK 폐기 + VWorld/MapLibre 채택
+- ADR-046: Web 지도 클라이언트 `vworld-map-web` 전환
 - ADR-032: 인증 토큰 기준(access JWT + httpOnly cookie)
 - ADR-033: Admin RBAC(`users.roles[]` + 서버 dependency)
 - ADR-034: Admin audit hash chain

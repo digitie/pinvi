@@ -36,7 +36,7 @@
 | 이메일 | Resend | `docs/integrations/resend.md` |
 | 소셜 로그인 | Google OAuth (Naver/Kakao는 T-122 future provider) | `docs/integrations/social-login.md` |
 | 주소 / 행정구역 / geocoding | `kor-travel-geo` v2 REST | `docs/integrations/kor-travel-geo.md` |
-| 지도 SDK | `maplibre-vworld-js` (VWorld + MapLibre GL JS, ADR-015) | `docs/integrations/maplibre-vworld.md` |
+| 지도 SDK | `vworld-map-web` (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS, ADR-046) | `docs/integrations/maplibre-vworld.md` |
 | AI Research (사용자 키) | Google Gemini | `docs/integrations/gemini.md` |
 | 알림 | Telegram Bot | `docs/integrations/telegram.md` |
 | 에러 추적 | Sentry | `docs/integrations/sentry.md` |
