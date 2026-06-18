@@ -775,7 +775,7 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 | 버전 | Sprint | ETA | 핵심 |
 |------|--------|-----|------|
-| `v0.1.0` | Sprint 4 | tag 대기 | 지도 + maplibre-vworld + live feature read + CI/CD 재활성 |
+| `v0.1.0` | Sprint 4 | tag 대기 | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성 |
 | `v0.2.0` | Sprint 5 | +1 | 실시간 + ETL + Grafana embed + Backup 1차 |
 | `v1.0.0` | Sprint 6 | +2 | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
 | `v1.1.0+` | post-Sprint 6 | 후속 | PWA / 푸시 / kor-travel-concierge (별 repo) |
