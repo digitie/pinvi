@@ -33,6 +33,10 @@
 - 운영 도메인을 공개 repo에 노출하지 않고 gitignore된 `infra/.env.prod`로만 주입하도록
   정리했다(ADR-047). `docker-compose.app.yml`을 환경변수 override 가능하게 parameterize하고,
   Dagster webserver를 12802로 고정(`apps/etl/Dockerfile` 신설)했다.
+- Admin UI에서 Next 기본 전역 오류 화면(`This page couldn’t load`)으로 떨어질 수 있던 공백을
+  보강했다(kor-travel-geo T-278 이식). App Router error/global-error boundary가 chunk/RSC/
+  network 계열 오류를 같은 경로에서 1회 hard reload로 복구하고, admin 좌측 메뉴는
+  document navigation으로 이동해 `_rsc` client routing 실패를 예방한다.
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
 - 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,
