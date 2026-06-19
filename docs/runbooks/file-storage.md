@@ -110,7 +110,7 @@ mc anonymous set-json local/pinvi-media cors.json
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["http://localhost:12805", "http://127.0.0.1:12805", "https://pinvi.digitie.mywire.org"],
+      "AllowedOrigins": ["http://localhost:12805", "http://127.0.0.1:12805", "https://pinvi.example.com"],
       "AllowedMethods": ["PUT", "GET", "HEAD", "OPTIONS"],
       "AllowedHeaders": ["Content-Type", "x-amz-*"],
       "MaxAgeSeconds": 3600

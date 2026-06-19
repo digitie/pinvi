@@ -8,9 +8,9 @@ on:
         required: false
         type: string
       next_public_pinvi_api_url:
-        description: "NEXT_PUBLIC_PINVI_API_URL embedded into the web image."
+        description: "NEXT_PUBLIC_PINVI_API_URL embedded into the web image. Leave blank to use the NEXT_PUBLIC_PINVI_API_URL repo secret."
         required: false
-        default: "https://pinviapi.digitie.mywire.org"
+        default: ""
         type: string
   push:
     tags:
@@ -80,8 +80,10 @@ jobs:
           file: apps/web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          # Real prod API domain is NOT committed (public repo). It comes from the
+          # NEXT_PUBLIC_PINVI_API_URL repo secret, or the manual dispatch input.
           build-args: |
-            NEXT_PUBLIC_PINVI_API_URL=${{ github.event_name == 'workflow_dispatch' && inputs.next_public_pinvi_api_url || 'https://pinviapi.digitie.mywire.org' }}
+            NEXT_PUBLIC_PINVI_API_URL=${{ (github.event_name == 'workflow_dispatch' && inputs.next_public_pinvi_api_url) || secrets.NEXT_PUBLIC_PINVI_API_URL || 'https://pinvi-api.example.com' }}
           tags: |
             ${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.web_image }}:${{ github.sha }}

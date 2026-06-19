@@ -12,6 +12,13 @@ Pinvi의 Docker 빌드/실행은 **1차로 `kor-travel-docker-manager`**(별도 
 target 단위로 일괄 기동·복구한다. 1차 경로를 쓸 수 없을 때만 본 문서의
 `scripts/docker-app.sh`로 **폴백**한다.
 
+> **dev/prod (ADR-047)**: 별도 지시가 없으면 대상은 **dev**다. **prod**는 `ktdctl`로
+> 컨테이너를 올리고 **공식 도메인**을 적용한다 — 실도메인/시크릿은 공개 repo에 두지 않고
+> gitignore된 `infra/.env.prod`(템플릿 `infra/.env.prod.example`)에서 주입한다(§9,
+> `deploy.md`). **dev**는 이 worktree에서 직접 — native `scripts/dev-up.sh`(`127.0.0.1`의
+> 12xxx) 또는 dev Docker(`infra/docker-compose.yml`, **host 네트워크 기본** → `127.0.0.1`).
+> 고정 포트가 점유돼 있으면 새 포트로 바꾸지 않고 강제종료 여부를 사용자에게 묻는다.
+
 ### 0.1 두 책임 경계
 
 | 대상 | 경로 | 명령 |
@@ -207,24 +214,47 @@ CORS:
 |--------|------|
 | `http://localhost:12805` | 로컬 dev |
 | `http://127.0.0.1:12805` | smoke |
-| `https://pinvi.digitie.mywire.org` | 운영 |
+| `https://pinvi.example.com` | 운영 |
 
-운영 build/run 시 URL coupling:
+운영 도메인 ↔ 로컬 고정 포트 (reverse proxy가 도메인 → 포트 매핑):
+
+| 서비스 | 도메인(placeholder) | 로컬 포트 | env |
+|--------|--------------------|----------|-----|
+| Web | `pinvi.example.com` | `12805` | `PINVI_WEB_BASE_URL`, `NEXT_PUBLIC_PINVI_API_URL`(빌드) |
+| API | `pinvi-api.example.com` | `12801` | `PINVI_OAUTH_CALLBACK_BASE_URL`, CORS |
+| Dagster | `pinvi-dagster.example.com` | `12802` | webserver 고정 포트(`apps/etl/Dockerfile`) |
+| RustFS API | `s3-api.example.com` | `12101` | `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`(presigned 서명 host) |
+| RustFS 콘솔 | `s3.example.com` | `12105` | reverse proxy 전용(app env 아님) |
+
+> **실제 도메인은 공개 repo에 커밋하지 않는다(ADR-047).** 위 표는 placeholder이며,
+> 실제 값은 gitignore된 `infra/.env.prod`(템플릿 `infra/.env.prod.example`)에만 둔다.
+> 배포: `PINVI_ENV_FILE=infra/.env.prod scripts/deploy-node.sh deploy`
+> (또는 운영 노드 `/opt/pinvi/.env`).
+
+운영 build/run 시 URL coupling(placeholder 표기):
 
 ```dotenv
-PINVI_WEB_BASE_URL=https://pinvi.digitie.mywire.org
-PINVI_OAUTH_CALLBACK_BASE_URL=https://pinviapi.digitie.mywire.org
-PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.digitie.mywire.org"]
-NEXT_PUBLIC_PINVI_API_URL=https://pinviapi.digitie.mywire.org
 PINVI_ENVIRONMENT=production
+PINVI_WEB_BASE_URL=https://pinvi.example.com
+PINVI_OAUTH_CALLBACK_BASE_URL=https://pinvi-api.example.com
+PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.example.com"]
+NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
+NEXT_PUBLIC_PINVI_ENV=production
+EXPO_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
+PINVI_RUSTFS_PUBLIC_ENDPOINT_URL=https://s3-api.example.com
+PINVI_RUSTFS_PUBLIC_BASE_URL=https://s3-api.example.com
+PINVI_SENTRY_ENVIRONMENT=production
 ```
 
 보안 처리:
 
 - `NEXT_PUBLIC_PINVI_API_URL`은 web build time에 embed된다. 운영 API 도메인을
-  바꾸면 web 이미지를 다시 빌드한다.
+  바꾸면 web 이미지를 다시 빌드한다(CI는 `secrets.NEXT_PUBLIC_PINVI_API_URL`로 주입).
 - 운영 CORS는 웹 origin만 허용한다. wildcard 금지.
 - `PINVI_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
+- presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저가 접근하는
+  S3 도메인(`s3-api.*`)이어야 서명이 유효하다. 서버→RustFS 내부 endpoint
+  (`app-rustfs:9000`)와 구분한다.
 
 ## 10. ARM64 빌드
 

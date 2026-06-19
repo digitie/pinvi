@@ -5,10 +5,15 @@ set -euo pipefail
 
 ROOT_DIR="${PINVI_ROOT_DIR:-/opt/pinvi}"
 COMPOSE_FILE="${PINVI_COMPOSE_FILE:-infra/docker-compose.app.yml}"
+# 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
+ENV_FILE="${PINVI_ENV_FILE:-.env}"
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
 API_PORT="${PINVI_API_PORT:-12801}"
 WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
+DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
+# Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
+ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 
 usage() {
   cat <<'EOF'
@@ -17,6 +22,7 @@ Usage:
   scripts/deploy-node.sh pull
   scripts/deploy-node.sh migrate
   scripts/deploy-node.sh up
+  scripts/deploy-node.sh dagster   # Dagster webserver(profile etl)만 기동
   scripts/deploy-node.sh smoke
   scripts/deploy-node.sh status
 
@@ -25,6 +31,10 @@ Required on production nodes:
   PINVI_WEB_IMAGE=ghcr.io/<owner>/pinvi-web:<tag>
   PINVI_ENVIRONMENT=production
   PINVI_RATE_LIMIT_BACKEND=postgres
+
+Optional env:
+  PINVI_ENV_FILE=infra/.env.prod   # 도메인/시크릿 주입(gitignore). 기본 .env
+  PINVI_ENABLE_DAGSTER=1           # up/deploy 시 Dagster webserver(:12802)도 기동
 
 Run this script on the target node from /opt/pinvi or set PINVI_ROOT_DIR.
 EOF
@@ -42,7 +52,11 @@ require_command() {
 }
 
 compose() {
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+  if [[ -f "$ENV_FILE" ]]; then
+    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  else
+    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+  fi
 }
 
 preflight() {
@@ -67,6 +81,14 @@ migrate() {
 up() {
   log "starting API + Web"
   compose up -d app-api app-web
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    dagster_up
+  fi
+}
+
+dagster_up() {
+  log "starting Dagster webserver (port ${DAGSTER_PORT})"
+  compose --profile etl up -d app-dagster
 }
 
 wait_for_url() {
@@ -88,6 +110,9 @@ smoke() {
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
+  fi
   log "smoke passed"
 }
 
@@ -110,6 +135,7 @@ main() {
     pull) pull_images ;;
     migrate) migrate ;;
     up) up ;;
+    dagster) dagster_up ;;
     smoke) smoke ;;
     status) status ;;
     deploy) deploy ;;

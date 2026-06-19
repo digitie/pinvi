@@ -16,7 +16,7 @@ git push origin v0.1.0
 
 # 또는 GitHub Actions > Docker Images > Run workflow
 # tag: v0.1.0
-# NEXT_PUBLIC_PINVI_API_URL: https://pinviapi.digitie.mywire.org
+# NEXT_PUBLIC_PINVI_API_URL: https://pinvi-api.example.com
 ```
 
 workflow: `.github/workflows/docker-images.yml`
@@ -30,18 +30,32 @@ ghcr.io/<owner>/pinvi-web:<tag>   # linux/amd64, linux/arm64
 
 ## 2. N150 배포
 
-운영 `.env` 최소값:
+> **실제 도메인은 공개 repo에 커밋하지 않는다(ADR-047).** 운영 도메인/시크릿은
+> gitignore된 `infra/.env.prod`(템플릿 `infra/.env.prod.example`)에 두고
+> `PINVI_ENV_FILE`로 주입한다. 아래 예시는 placeholder 도메인이다.
+
+운영 env(`infra/.env.prod`) 최소값:
 
 ```dotenv
 PINVI_ENVIRONMENT=production
 PINVI_API_IMAGE=ghcr.io/digitie/pinvi-api:v0.1.0
 PINVI_WEB_IMAGE=ghcr.io/digitie/pinvi-web:v0.1.0
+PINVI_POSTGRES_PASSWORD=<secret>
 PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:<secret>@app-postgres:5432/pinvi
-PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.digitie.mywire.org"]
-NEXT_PUBLIC_PINVI_API_URL=https://pinviapi.digitie.mywire.org
+PINVI_WEB_BASE_URL=https://pinvi.example.com
+PINVI_OAUTH_CALLBACK_BASE_URL=https://pinvi-api.example.com
+PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.example.com"]
+NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
+PINVI_RUSTFS_PUBLIC_ENDPOINT_URL=https://s3-api.example.com
+PINVI_RUSTFS_PUBLIC_BASE_URL=https://s3-api.example.com
+PINVI_SENTRY_ENVIRONMENT=production
 PINVI_RATE_LIMIT_BACKEND=postgres
 PINVI_RATE_LIMIT_CLIENT_IP_HEADER=CF-Connecting-IP
+PINVI_ENABLE_DAGSTER=1   # pinvi-dagster.<domain> → Dagster webserver :12802
 ```
+
+도메인 ↔ 포트(reverse proxy): web `:12805`, api `:12801`, dagster `:12802`,
+RustFS API(`s3-api`) `:12101`, RustFS 콘솔(`s3`) `:12105`.
 
 배포:
 
@@ -50,7 +64,7 @@ ssh n150
 cd /opt/pinvi
 git pull origin main
 scripts/n150-docker-doctor.sh
-scripts/deploy-node.sh deploy
+PINVI_ENV_FILE=infra/.env.prod PINVI_ENABLE_DAGSTER=1 scripts/deploy-node.sh deploy
 scripts/n150-docker-doctor.sh
 ```
 
@@ -60,7 +74,8 @@ scripts/n150-docker-doctor.sh
 curl -fsS http://127.0.0.1:12801/health
 curl -fsS http://127.0.0.1:12801/health/db
 curl -fsS http://127.0.0.1:12805/
-curl -fsS https://pinviapi.digitie.mywire.org/health
+curl -fsS http://127.0.0.1:12802/server_info        # Dagster webserver
+curl -fsS https://pinvi-api.example.com/health
 ```
 
 ## 3. Odroid 대체 노드 배포

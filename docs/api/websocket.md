@@ -10,7 +10,7 @@
 
 ```
 ws://localhost:12801/ws/trips/<trip_id>?token=<jwt>
-wss://pinviapi.digitie.mywire.org/ws/trips/<trip_id>?token=<jwt>
+wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 ```
 
 권한 없으면 즉시 `close 4403` (`{ "code": 4403, "reason": "permission_denied" }`).

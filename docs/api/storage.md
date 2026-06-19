@@ -254,7 +254,7 @@ RustFS 컨테이너 CORS 설정:
 |---------------|------|
 | `http://localhost:12805` | 로컬 dev |
 | `http://127.0.0.1:12805` | Docker smoke |
-| `https://pinvi.digitie.mywire.org` | 운영 |
+| `https://pinvi.example.com` | 운영 |
 
 Methods: `PUT, GET, HEAD, OPTIONS`. Headers: `Content-Type, x-amz-*`.
 

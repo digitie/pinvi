@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
+# 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
+ENV_FILE="${PINVI_ENV_FILE:-.env}"
 
 API_PORT="${PINVI_API_PORT:-12801}"
 WEB_PORT="${PINVI_WEB_PORT:-12805}"
@@ -56,7 +58,11 @@ require_docker() {
 }
 
 compose() {
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+  if [[ -f "$ENV_FILE" ]]; then
+    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+  else
+    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+  fi
 }
 
 free_host_port() {
