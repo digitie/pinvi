@@ -1862,18 +1862,36 @@ web `pinvi.example.com`, api `pinvi-api.example.com`, dagster
   일치해야 유효하므로 server→RustFS 내부 endpoint(`app-rustfs:9000`)와 분리한다.
 - Dagster 포트를 12802로 통일하면 CLAUDE.md 로컬 고정 포트 정책과 dev/prod가 일치한다.
 
+### dev/prod 운영 모델
+
+- **별도 지시가 없으면 작업 대상은 dev.** dev/prod는 같은 12xxx 고정 포트를 쓴다.
+- **dev**: 이 worktree에서 직접 띄운다 — native `scripts/dev-up.sh`(uvicorn/next/dagster를
+  `127.0.0.1`의 12xxx로 bind) 또는 dev Docker(`infra/docker-compose.yml`). **dev Docker의
+  기본 네트워크는 host 모드**: 컨테이너가 호스트 net을 공유해 `127.0.0.1`의 12xxx로 직접
+  bind하고(remap·서비스 DNS 없음), 내부 참조는 `127.0.0.1:port`를 쓴다. RustFS는 host
+  모드라 `RUSTFS_ADDRESS=:12101`/`:12105`로 직접 bind한다. observability profile은 metric
+  스크레이프 타겟 때문에 bridge 유지.
+- **prod**: `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**
+  (gitignore `infra/.env.prod`, reverse proxy → 12xxx)을 적용한다.
+- **포트 충돌 정책**: 고정 포트가 이미 점유돼 있으면 **새 포트로 바꾸지 않는다.** prod/dev
+  무관하게 **강제종료 여부를 사용자에게 묻고**, 거부하면(또는 비대화형 기본) **작업을 중지**
+  한다. `scripts/dev-up.sh`는 자동 종료하지 않으며 `PINVI_DEV_FORCE_KILL=1`로만 비대화형
+  강제종료한다. `scripts/dev-down.sh`는 명시적 종료 경로다.
+
 ### 결과
 
 - 신규: `infra/.env.prod.example`(추적), `infra/.env.prod`(gitignore), `apps/etl/Dockerfile`.
 - 변경: `infra/docker-compose.app.yml`(parameterize + `app-dagster` 서비스),
-  `infra/docker-compose.yml`(dagster `12802:12802`), `scripts/{deploy-node,docker-app}.sh`
-  (`PINVI_ENV_FILE`/`PINVI_ENABLE_DAGSTER`), `.gitignore`(`.env.prod`/`.env.production`),
-  `.github/workflows/docker-images.yml`(secret 주입), 추적 문서 23곳 도메인 placeholder화.
+  `infra/docker-compose.yml`(dev 기본 host 네트워크 + RustFS 12101/12105 직접 bind + dagster
+  12802), `scripts/dev-up.sh`(127.0.0.1 bind + 포트 점유 시 ask-before-kill),
+  `scripts/{deploy-node,docker-app}.sh`(`PINVI_ENV_FILE`/`PINVI_ENABLE_DAGSTER`),
+  `.gitignore`(`.env.prod`/`.env.production`), `.github/workflows/docker-images.yml`(secret 주입),
+  `CLAUDE.md`/`AGENTS.md` 포트·dev/prod 정책, 추적 문서 23곳 도메인 placeholder화.
 
 ### 참조
 
 - ADR-024(NTFS/ext4), ADR-040/042(Docker/포트), ADR-038(rate-limit), `docs/runbooks/deploy.md`,
-  `docs/runbooks/docker-app.md`
+  `docs/runbooks/docker-app.md`, `docs/runbooks/local-dev.md`
 
 ## 다음 ADR 번호
 

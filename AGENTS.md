@@ -131,13 +131,16 @@ trunk를 절대 편집하지 않는다.
 - **Frontend 실행**: `apps/web` dev server, lint, typecheck, build, Vitest는
   WSL ext4 테스트 미러에서 실행한다. e2e 검증을 위한 Playwright runner /
   브라우저만 Windows에서 실행한다.
-- **고정 dev 포트**: 로컬 장기 실행 서비스는 PostgreSQL `5432`, API `12801`,
-  웹 `12805`, Dagster `12802`, kor-travel-map API/Admin API `12701`, RustFS API `12101`,
-  RustFS console `12105`를 항상 사용한다.
-  `scripts/dev-up.sh`는 시작 전 해당 포트를 점유한 프로세스를 종료하고 다시 올리며,
-  `scripts/dev-down.sh`는 같은 포트를 정리한다. Docker 빌드/실행은
-  `kor-travel-docker-manager`(`ktdctl`)를 1차 경로로 쓰고, 불가 시
-  `scripts/docker-app.sh`로 폴백한다 (Docker 진입 경로 ADR-040, 포트 정책 ADR-042,
+- **dev/prod 분리 + 고정 12xxx 포트 (ADR-047)**: 별도 지시가 없으면 대상은 **dev**다.
+  dev는 이 worktree에서 직접 띄우고 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다:
+  PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster `12802`,
+  kor-travel-map API/Admin API `12701`, RustFS API `12101`, RustFS console `12105`.
+  prod는 `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**
+  (gitignore `infra/.env.prod`)을 적용한다. **포트 충돌 시 새 포트로 바꾸지 않고**,
+  prod/dev 무관하게 **강제종료 여부를 사용자에게 묻는다**. 거부하면(또는 비대화형 기본)
+  `scripts/dev-up.sh`는 **중지**한다(`PINVI_DEV_FORCE_KILL=1`로만 비대화형 강제종료).
+  `scripts/dev-down.sh`는 명시적 종료다. Docker 빌드/실행은 `ktdctl` 1차 + 불가 시
+  `scripts/docker-app.sh` 폴백 (Docker 진입 경로 ADR-040, 포트 정책 ADR-042,
   `docs/runbooks/docker-app.md` §0).
 - 절차 상세는 `docs/runbooks/codegraph-worktrees.md` (ADR-017).
 

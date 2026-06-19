@@ -2,10 +2,13 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
-## 2026-06-20 (claude) — 운영 도메인 비노출 .env 주입 + Dagster webserver 12802 (ADR-047)
+## 2026-06-20 (claude) — prod=ktdctl+공식도메인 / dev=127.0.0.1:12xxx host-mode + 포트 ask-before-kill + Dagster 12802 (ADR-047)
 
-**작업**: 사용자 지시 — 운영 주소(web/api/dagster/RustFS S3·콘솔)를 외부에 노출하지 말고
-`.env`에 저장해 prod에서 동작하게 하고, Dagster webserver를 12802로 띄우도록 수정.
+**작업**: 사용자 지시 — (1) 운영 주소(web/api/dagster/RustFS S3·콘솔)를 외부에 노출하지 말고
+`.env`에 저장해 prod에서 동작, Dagster webserver 12802. (2) prod는 ktdctl + 공식 도메인,
+dev는 여기서 직접 `127.0.0.1`의 12xxx 포트(별도 지시 없으면 dev). (3) dev Docker 네트워크는
+host 모드 기본. (4) 고정 포트 점유 시 새 포트로 바꾸지 말고 강제종료 여부를 사용자에게
+물어 거부하면 중지.
 
 **문제**: `digitie/pinvi`는 공개 repo인데 운영 도메인(개인 dynamic-DNS)이 추적 파일 23곳에
 하드코딩(일부 구 표기 `pinviapi`, 하이픈 없음)되어 있었다. `docker-compose.app.yml`은
@@ -29,13 +32,25 @@
   서버→RustFS 내부는 `app-rustfs:9000`로 분리.
 - `decisions.md` ADR-047 + `CLAUDE.md`/`AGENTS.md` 동기화, deploy/docker-app 런북 갱신.
 
-**검증**: `docker compose config` (WSL) — smoke 기본값 유지, `--env-file infra/.env.prod
---profile etl`에서 ENVIRONMENT=production·CORS·RustFS public·web build arg가 실도메인으로
-치환되고 `app-dagster`가 `12802:12802`로 노출됨 확인. dev compose `--profile etl` config OK.
-`bash -n` 스크립트 OK. 추적 파일에 실도메인 0건.
+**반영(dev/prod 운영 모델)**:
+- `scripts/dev-up.sh`: api/web/dagster를 `127.0.0.1`로 bind(`--host 127.0.0.1`,
+  next `--hostname 127.0.0.1`), NEXT_PUBLIC도 `http://127.0.0.1`. 시작 시 무조건 dev-down
+  하던 것을 제거 → 고정 포트 점유 시 **새 포트로 바꾸지 않고** 강제종료 여부를 묻고(TTY),
+  거부/비대화형 기본은 **중지**(exit 3). `PINVI_DEV_FORCE_KILL=1`로만 비대화형 강제종료.
+- `infra/docker-compose.yml`: dev 기본 **host 네트워크 모드**. postgres/rustfs/rustfs-init/
+  dagster에 `network_mode: host`, RustFS는 `RUSTFS_ADDRESS=:12101`/`:12105` 직접 bind,
+  내부 참조는 `127.0.0.1`(DB/rustfs). observability profile은 metric 타겟 때문에 bridge 유지.
+- `CLAUDE.md`/`AGENTS.md` 포트 정책을 "먼저 종료 후 재기동" → "ask-before-kill + dev 127.0.0.1
+  + prod ktdctl/공식 도메인 + 기본 dev"로 정정. `local-dev.md`/`docker-app.md` 갱신.
+
+**검증**: `docker compose config` (WSL) — app.yml smoke 기본값 유지 + `--env-file
+infra/.env.prod --profile etl`에서 실도메인 치환·`app-dagster` 12802 확인. dev compose
+host 모드 default/etl/observability profile 모두 config OK. `pinvi-dagster` 이미지 빌드 +
+컨테이너 webserver가 `:12802 /server_info` 응답(1.13.10). `bash -n` 스크립트 OK. 추적 파일에
+실도메인 0건.
 
 **다음**: 운영 노드에서 `infra/.env.prod`의 시크릿(change-me) 채우기 + repo secret
-`NEXT_PUBLIC_PINVI_API_URL` 설정 + reverse proxy(도메인→포트) 구성.
+`NEXT_PUBLIC_PINVI_API_URL` 설정 + reverse proxy(공식 도메인→12xxx 포트) 구성.
 
 ## 2026-06-18 (claude) — codex PR #218/#219 사후 상세리뷰 + 문서 drift 반영
 

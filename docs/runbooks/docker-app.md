@@ -12,6 +12,13 @@ Pinvi의 Docker 빌드/실행은 **1차로 `kor-travel-docker-manager`**(별도 
 target 단위로 일괄 기동·복구한다. 1차 경로를 쓸 수 없을 때만 본 문서의
 `scripts/docker-app.sh`로 **폴백**한다.
 
+> **dev/prod (ADR-047)**: 별도 지시가 없으면 대상은 **dev**다. **prod**는 `ktdctl`로
+> 컨테이너를 올리고 **공식 도메인**을 적용한다 — 실도메인/시크릿은 공개 repo에 두지 않고
+> gitignore된 `infra/.env.prod`(템플릿 `infra/.env.prod.example`)에서 주입한다(§9,
+> `deploy.md`). **dev**는 이 worktree에서 직접 — native `scripts/dev-up.sh`(`127.0.0.1`의
+> 12xxx) 또는 dev Docker(`infra/docker-compose.yml`, **host 네트워크 기본** → `127.0.0.1`).
+> 고정 포트가 점유돼 있으면 새 포트로 바꾸지 않고 강제종료 여부를 사용자에게 묻는다.
+
 ### 0.1 두 책임 경계
 
 | 대상 | 경로 | 명령 |

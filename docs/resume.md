@@ -1,14 +1,18 @@
 # resume.md
 
-## 2026-06-20 (claude) — 운영 도메인 비노출 .env 주입 + Dagster 12802 (ADR-047)
+## 2026-06-20 (claude) — prod=ktdctl+공식도메인 / dev=127.0.0.1:12xxx host-mode + 포트 ask-before-kill + Dagster 12802 (ADR-047)
 
-운영 주소(web/api/dagster/RustFS S3·콘솔)를 공개 repo에 노출하지 않고 gitignore된
-`infra/.env.prod`(템플릿 `infra/.env.prod.example`)에만 두도록 정리했다. 추적 파일 23곳의
-실도메인은 `*.example.com` placeholder로 치환했다. `infra/docker-compose.app.yml`을
-`${VAR:-smoke기본값}`으로 parameterize하고, `app-dagster`(profile etl, `12802:12802`) +
-`apps/etl/Dockerfile`(`dagster-webserver -p 12802`)을 신설했다. `scripts/{deploy-node,
-docker-app}.sh`에 `PINVI_ENV_FILE`/`PINVI_ENABLE_DAGSTER`를 추가했다. `docker compose
-config`로 smoke 기본값 + prod env-file 주입(실도메인) + dagster 12802를 검증했다(ADR-047).
+**dev/prod 분리**: 별도 지시 없으면 대상은 dev. prod는 ktdctl로 컨테이너를 올리고 공식
+도메인을 적용하며, dev는 이 worktree에서 직접 `127.0.0.1`의 12xxx 포트로 띄운다(dev Docker는
+host 네트워크 기본). 운영 주소(web/api/dagster/RustFS S3·콘솔)는 공개 repo에 노출하지 않고
+gitignore된 `infra/.env.prod`(템플릿 `infra/.env.prod.example`)에만 둔다 — 추적 파일 23곳은
+`*.example.com` placeholder로 치환. `infra/docker-compose.app.yml`을 `${VAR:-smoke기본값}`으로
+parameterize + `app-dagster`(profile etl, 12802) + `apps/etl/Dockerfile`(`dagster-webserver
+-p 12802`) 신설. `infra/docker-compose.yml`은 dev 기본 host 모드(RustFS 12101/12105 직접
+bind). `scripts/dev-up.sh`는 127.0.0.1 bind + **포트 점유 시 새 포트로 바꾸지 않고 강제종료
+여부를 사용자에게 물어 거부 시 중지**. `scripts/{deploy-node,docker-app}.sh`에 `PINVI_ENV_FILE`/
+`PINVI_ENABLE_DAGSTER`. 검증: `docker compose config`(smoke/prod/dev host-mode) + dagster
+컨테이너 `:12802 /server_info` 응답 + `bash -n` OK + 추적 파일 실도메인 0건.
 
 **다음 한 작업(운영자 수동)**: ① `infra/.env.prod`의 시크릿(`change-me`)을 실제 값으로
 채운다. ② GitHub repo secret `NEXT_PUBLIC_PINVI_API_URL`을 운영 API 도메인으로 설정한다.

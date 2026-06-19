@@ -83,26 +83,31 @@ wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && pytest apps/api/tests 
 wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && docker compose -f infra/docker-compose.yml up -d postgres"
 ```
 
-## 4.1 고정 dev 포트
+## 4.1 고정 dev 포트 (dev = `127.0.0.1`:12xxx, ADR-047)
 
-Pinvi 로컬 개발 서버 포트는 항상 고정한다.
+별도 지시가 없으면 작업 대상은 **dev**다. dev 로컬 서버는 **내부 주소 `127.0.0.1`의 12xxx
+고정 포트**만 쓴다(외부/LAN 미노출). dev Docker(`infra/docker-compose.yml`)는 **host
+네트워크 모드 기본**이라 컨테이너가 `127.0.0.1`의 12xxx로 직접 bind한다(remap 없음).
+prod는 이 경로가 아니라 `ktdctl` + 공식 도메인(`infra/.env.prod`)으로 올린다.
 
-| 서비스 | 포트 | URL |
+| 서비스 | 포트 | dev URL (127.0.0.1) |
 |--------|------|-----|
-| PostgreSQL | 5432 | `localhost:5432` |
-| RustFS API | 12101 | `http://localhost:12101` |
-| RustFS console | 12105 | `http://localhost:12105` |
-| kor-travel-map API/Admin API | 12701 | `http://localhost:12701` |
-| FastAPI (`apps/api`) | 12801 | `http://localhost:12801` |
-| Next.js (`apps/web`) | 12805 | `http://localhost:12805` |
-| Dagster (`apps/etl`) | 12802 | `http://localhost:12802` |
-| Prometheus | 12401 | `http://localhost:12401` |
-| cAdvisor Exporter | 12301 | `http://localhost:12301` |
-| Grafana | 12205 | `http://localhost:12205` |
+| PostgreSQL | 5432 | `127.0.0.1:5432` |
+| RustFS API | 12101 | `http://127.0.0.1:12101` |
+| RustFS console | 12105 | `http://127.0.0.1:12105` |
+| kor-travel-map API/Admin API | 12701 | `http://127.0.0.1:12701` |
+| FastAPI (`apps/api`) | 12801 | `http://127.0.0.1:12801` |
+| Next.js (`apps/web`) | 12805 | `http://127.0.0.1:12805` |
+| Dagster (`apps/etl`) | 12802 | `http://127.0.0.1:12802` |
+| Prometheus | 12401 | `http://127.0.0.1:12401` |
+| cAdvisor Exporter | 12301 | `http://127.0.0.1:12301` |
+| Grafana | 12205 | `http://127.0.0.1:12205` |
 
-`scripts/dev-up.sh`는 시작 전에 12801/12805/12802을 점유한 프로세스를 종료하고 같은
-포트로 다시 올린다. PostgreSQL/RustFS는 Docker compose, kor-travel-map은 해당 sibling
-저장소 런북으로 실행한다. 수동 정리는 `scripts/dev-down.sh`.
+**포트 충돌 정책(ADR-047)**: `scripts/dev-up.sh`는 포트가 이미 점유돼 있으면 **새 포트로
+바꾸지 않고**, prod(ktdctl)/dev 무관하게 **강제종료 여부를 사용자에게 묻는다**. 거부하면
+(또는 비대화형 기본) **기동을 중지**한다 — 자동 종료하지 않는다. 비대화형에서 강제종료가
+필요하면 `PINVI_DEV_FORCE_KILL=1`. 명시적 정리는 `scripts/dev-down.sh`. PostgreSQL/RustFS는
+dev Docker compose(host 모드), kor-travel-map은 해당 sibling 저장소 런북으로 실행한다.
 
 ```bash
 cd ~/pinvi-workspaces/pinvi-codex
@@ -168,10 +173,11 @@ $EDITOR apps/api/.env
 
 ```bash
 cd apps/api
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 12801
+# dev는 내부 주소 127.0.0.1로만 bind한다(ADR-047).
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 12801
 ```
 
-`http://localhost:12801/docs` (OpenAPI), `http://localhost:12801/health`.
+`http://127.0.0.1:12801/docs` (OpenAPI), `http://127.0.0.1:12801/health`.
 
 ### 6.2 테스트
 

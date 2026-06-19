@@ -20,12 +20,17 @@
 > `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). `apps/web` dev server,
 > lint, typecheck, build, Vitest도 WSL 미러에서 실행한다. Playwright 기반 브라우저
 > e2e만 Windows Node/브라우저에서 실행한다. **rsync는 NTFS→ext4 단방향**. 절차·
-> 함정은 `docs/dev-environment.md`. 로컬 장기 실행 dev 포트는 PostgreSQL `5432`,
+> 함정은 `docs/dev-environment.md`. **dev/prod 분리(ADR-047)**: 별도 지시가 없으면
+> 작업 대상은 **dev**다. **dev**는 이 worktree에서 직접(`npm run dev:up`) 또는 ktdctl로
+> 띄우며 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다(외부 미노출). **prod**는
+> `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**(gitignore된
+> `infra/.env.prod`)을 적용한다. 로컬 장기 실행 12xxx 고정 포트는 PostgreSQL `5432`,
 > API `12801`, 웹 `12805`, Dagster `12802`, kor-travel-map API/Admin API `12701`,
-> RustFS API `12101`, RustFS console `12105`로 고정하며,
-> `npm run dev:up`은 점유
-> 중인 해당 포트를 먼저 종료한 뒤 같은 포트로 재기동한다. Docker
-> 빌드/실행은 `kor-travel-docker-manager`(`ktdctl`)를 1차 경로로 쓰고, 불가 시
+> RustFS API `12101`, RustFS console `12105`다. **포트 충돌 정책(ADR-047)**: 고정 포트가
+> 이미 점유돼 있으면 **새 포트로 바꾸지 않고**, prod/dev 무관하게 **강제종료 여부를
+> 사용자에게 묻는다**. 사용자가 거부하면(또는 비대화형 기본) **작업을 중지**한다
+> (`npm run dev:up`은 자동 종료하지 않음; `PINVI_DEV_FORCE_KILL=1`로만 비대화형 강제종료).
+> Docker 빌드/실행은 `kor-travel-docker-manager`(`ktdctl`)를 1차 경로로 쓰고, 불가 시
 > `scripts/docker-app.sh`로 폴백한다 (Docker 진입 경로 ADR-040, 포트 정책 ADR-042,
 > `docs/runbooks/docker-app.md` §0).
 >

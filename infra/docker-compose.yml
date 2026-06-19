@@ -1,17 +1,21 @@
-# Pinvi dev compose — PostgreSQL/PostGIS + RustFS + (옵션) Dagster.
+# Pinvi DEV compose — PostgreSQL/PostGIS + RustFS + (옵션) Dagster.
 # `docs/runbooks/local-dev.md` §8.
+#
+# dev 기본 네트워크는 **host 모드**(ADR-047): 컨테이너가 호스트 net을 공유해 127.0.0.1의
+# 12xxx 고정 포트로 직접 bind한다(포트 remap·서비스 DNS 없음 → 내부 주소는 127.0.0.1:port).
+# observability profile(cadvisor/prometheus/grafana)은 metric 스크레이프 타겟 때문에 bridge
+# 유지. prod는 이 파일이 아니라 ktdctl + 공식 도메인으로 올린다.
 
 services:
   postgres:
     image: postgis/postgis:16-3.5-alpine
     container_name: pinvi-postgres
     restart: unless-stopped
+    network_mode: host          # → 127.0.0.1:5432
     environment:
       POSTGRES_USER: pinvi
       POSTGRES_PASSWORD: pinvi_dev_password
       POSTGRES_DB: pinvi
-    ports:
-      - "5432:5432"
     volumes:
       - pinvi-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,32 +28,32 @@ services:
     image: rustfs/rustfs:latest
     container_name: pinvi-rustfs
     restart: unless-stopped
+    network_mode: host          # → 127.0.0.1:12101 (API) / :12105 (console)
     environment:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
       RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: ":9000"
+      # host 모드라 remap이 없으므로 12xxx 고정 포트로 직접 bind한다.
+      RUSTFS_ADDRESS: ":12101"
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_CONSOLE_ADDRESS: ":9001"
-    ports:
-      - "12101:9000"
-      - "12105:9001"
+      RUSTFS_CONSOLE_ADDRESS: ":12105"
     volumes:
       - pinvi-rustfs:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:12101/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   rustfs-init:
     image: minio/mc:latest
+    network_mode: host          # host net이라 rustfs DNS 대신 127.0.0.1:12101
     depends_on:
       rustfs:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin;
+      mc alias set local http://127.0.0.1:12101 rustfsadmin rustfsadmin;
       mc mb -p local/pinvi-media || true;
       "
 
@@ -61,12 +65,14 @@ services:
       dockerfile: apps/etl/Dockerfile
     container_name: pinvi-dagster
     restart: unless-stopped
+    network_mode: host          # webserver는 127.0.0.1:12802로 bind(apps/etl/Dockerfile)
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_dev_password@postgres:5432/pinvi
-      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:9000
+      # host net이라 서비스 DNS 대신 127.0.0.1 사용.
+      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_dev_password@127.0.0.1:5432/pinvi
+      PINVI_RUSTFS_ENDPOINT_URL: http://127.0.0.1:12101
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: rustfsadmin
       PINVI_RUSTFS_SECRET_ACCESS_KEY: rustfsadmin
@@ -74,9 +80,6 @@ services:
       PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS:-6}
       PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
       DAGSTER_HOME: /opt/pinvi/.tmp/dagster
-    ports:
-      # webserver는 컨테이너 내부에서도 12802로 바인딩(apps/etl/Dockerfile).
-      - "12802:12802"
     volumes:
       - ../apps/etl:/opt/pinvi/apps/etl
       - pinvi-dagster:/opt/pinvi/.tmp/dagster
