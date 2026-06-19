@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-20 (claude) — 운영 도메인 비노출 .env 주입 + Dagster 12802 (ADR-047)
+
+운영 주소(web/api/dagster/RustFS S3·콘솔)를 공개 repo에 노출하지 않고 gitignore된
+`infra/.env.prod`(템플릿 `infra/.env.prod.example`)에만 두도록 정리했다. 추적 파일 23곳의
+실도메인은 `*.example.com` placeholder로 치환했다. `infra/docker-compose.app.yml`을
+`${VAR:-smoke기본값}`으로 parameterize하고, `app-dagster`(profile etl, `12802:12802`) +
+`apps/etl/Dockerfile`(`dagster-webserver -p 12802`)을 신설했다. `scripts/{deploy-node,
+docker-app}.sh`에 `PINVI_ENV_FILE`/`PINVI_ENABLE_DAGSTER`를 추가했다. `docker compose
+config`로 smoke 기본값 + prod env-file 주입(실도메인) + dagster 12802를 검증했다(ADR-047).
+
+**다음 한 작업(운영자 수동)**: ① `infra/.env.prod`의 시크릿(`change-me`)을 실제 값으로
+채운다. ② GitHub repo secret `NEXT_PUBLIC_PINVI_API_URL`을 운영 API 도메인으로 설정한다.
+③ reverse proxy(도메인→로컬 포트 12805/12801/12802/12101/12105)를 구성하고
+`PINVI_ENV_FILE=infra/.env.prod PINVI_ENABLE_DAGSTER=1 scripts/deploy-node.sh deploy`로 기동한다.
+
 ## 2026-06-18 (codex) — Web 지도 `vworld-map-web` 전환 (T-201)
 
 사용자 지시에 따라 `apps/web` 지도 클라이언트를 기존 `maplibre-vworld` /
@@ -113,7 +128,7 @@ google/start` + 공통 callback `pinvi://oauth?code=` + `/mobile/auth/oauth/exch
 
 **남은 것(외부/운영 선결)**:
 - **결합 EAS 빌드 완료 확인** + Android 기기 설치 후 `expo start --dev-client`로 지도/OAuth 실동작 smoke.
-- **Google Console**: 모바일 OAuth가 실제로 동작하려면 운영 callback(`pinviapi.digitie.mywire.org/auth/oauth/google/callback`)이
+- **Google Console**: 모바일 OAuth가 실제로 동작하려면 운영 callback(`pinvi-api.example.com/auth/oauth/google/callback`)이
   승인된 redirect_uri에 있어야 하고, dev에선 공개 터널이 필요하다(코드는 완성).
 - **POI 추가** — feature 검색 UI(지도/feature 흐름 종속). **push/offline** — `expo-notifications` +
   백엔드 푸시 토큰 endpoint(미구현). naver/kakao OAuth.
@@ -590,8 +605,8 @@ kor-travel-map에 있고, Pinvi는 `feature_id` + snapshot만 저장한다.
 생성 시 `app.trip_poi_rise_sets` 초기 row를 만든다. kor-travel-map 연계 없이
 `python-kasi-api` + `DATA_GO_KR_SERVICE_KEY`만 사용한다.
 **Production URL 확정** (2026-06-05 codex) — 운영 API는
-`https://pinviapi.digitie.mywire.org`, 운영 Web은
-`https://pinvi.digitie.mywire.org`다. Google 승인된 JavaScript 원본은 Web origin,
+`https://pinvi-api.example.com`, 운영 Web은
+`https://pinvi.example.com`다. Google 승인된 JavaScript 원본은 Web origin,
 OAuth redirect URI는 API origin의 `/auth/oauth/google/callback`이다. CORS는 Web
 origin만 허용하고, 운영 cookie는 `PINVI_ENVIRONMENT=production`으로 Secure를
 강제한다.

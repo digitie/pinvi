@@ -54,7 +54,7 @@ Admin:
       "type": "stdio",
       "command": "/path/to/mcp-stdio-bridge.sh",
       "env": {
-        "PINVI_MCP_URL": "https://pinviapi.digitie.mywire.org/mcp/sse",
+        "PINVI_MCP_URL": "https://pinvi-api.example.com/mcp/sse",
         "PINVI_MCP_TOKEN": "mcp_xxxx..."
       }
     }
@@ -73,7 +73,7 @@ T-112 1차 구현은 SSE discovery와 HTTP tool-call 표면을 먼저 제공한�
   "mcpServers": {
     "pinvi": {
       "type": "sse",
-      "url": "https://pinviapi.digitie.mywire.org/mcp/sse",
+      "url": "https://pinvi-api.example.com/mcp/sse",
       "headers": {
         "Authorization": "Bearer mcp_xxxx..."
       }
@@ -87,13 +87,13 @@ T-112 1차 구현은 SSE discovery와 HTTP tool-call 표면을 먼저 제공한�
 ```bash
 # SSE 스트림
 curl -N -H "Authorization: Bearer mcp_xxxx..." \
-  https://pinviapi.digitie.mywire.org/mcp/sse
+  https://pinvi-api.example.com/mcp/sse
 
 # tool 호출
 curl -X POST -H "Authorization: Bearer mcp_xxxx..." \
   -H "Content-Type: application/json" \
   -d '{"arguments":{"bucket":"all","limit":20}}' \
-  https://pinviapi.digitie.mywire.org/mcp/tools/list_trips
+  https://pinvi-api.example.com/mcp/tools/list_trips
 ```
 
 ## 3. 토큰 회수

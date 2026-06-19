@@ -337,7 +337,7 @@ Content-Type: application/json
   "data": {
     "share_id": "uuid",
     "token": "<43-char URL-safe base64>",
-    "url": "https://pinvi.digitie.mywire.org/trips/<trip_id>/shared/<token>",
+    "url": "https://pinvi.example.com/trips/<trip_id>/shared/<token>",
     "visibility": "...",
     "expires_at": "..."
   }
@@ -345,7 +345,7 @@ Content-Type: application/json
 ```
 
 `url`은 `PINVI_WEB_BASE_URL`을 base로 생성한다. 개발 기본값은
-`http://localhost:12805`, 운영값은 `https://pinvi.digitie.mywire.org`다.
+`http://localhost:12805`, 운영값은 `https://pinvi.example.com`다.
 owner만 발급 가능하다. 현재 구현은 shared-token 조회를 제공한다. `comment` / `edit`
 visibility는 후속 shared 댓글/편집 흐름을 위한 권한 metadata이며, 로그인 없는 댓글 작성
 라우트는 아직 열지 않는다.

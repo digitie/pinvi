@@ -87,15 +87,15 @@ import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 
 | 서비스 | 로컬 고정 포트 | Production URL |
 |--------|---------------|----------------|
-| API | `12801` | `https://pinviapi.digitie.mywire.org` |
-| Web | `12805` | `https://pinvi.digitie.mywire.org` |
+| API | `12801` | `https://pinvi-api.example.com` |
+| Web | `12805` | `https://pinvi.example.com` |
 | PostgreSQL | `5432` | 내부망 |
 | RustFS API / console | `12101` / `12105` | 내부망 |
 | kor-travel-map API/Admin API | `12701` | 별도 저장소 |
 
 운영 OAuth callback은 API 도메인 기준
-`https://pinviapi.digitie.mywire.org/auth/oauth/{provider}/callback`이며, Google
-승인된 JavaScript 원본은 `https://pinvi.digitie.mywire.org`다.
+`https://pinvi-api.example.com/auth/oauth/{provider}/callback`이며, Google
+승인된 JavaScript 원본은 `https://pinvi.example.com`다.
 
 ## 빠른 시작
 

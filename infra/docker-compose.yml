@@ -75,7 +75,8 @@ services:
       PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
       DAGSTER_HOME: /opt/pinvi/.tmp/dagster
     ports:
-      - "12802:3000"
+      # webserver는 컨테이너 내부에서도 12802로 바인딩(apps/etl/Dockerfile).
+      - "12802:12802"
     volumes:
       - ../apps/etl:/opt/pinvi/apps/etl
       - pinvi-dagster:/opt/pinvi/.tmp/dagster

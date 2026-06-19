@@ -187,16 +187,16 @@ Production public URL:
 
 | 서비스 | 내부/host 포트 | 공개 URL |
 |--------|---------------|----------|
-| API | `12801` | `https://pinviapi.digitie.mywire.org` |
-| Web | `12805` | `https://pinvi.digitie.mywire.org` |
+| API | `12801` | `https://pinvi-api.example.com` |
+| Web | `12805` | `https://pinvi.example.com` |
 
 운영 `.env` 필수 URL/security 값:
 
 ```dotenv
-PINVI_WEB_BASE_URL=https://pinvi.digitie.mywire.org
-PINVI_OAUTH_CALLBACK_BASE_URL=https://pinviapi.digitie.mywire.org
-PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.digitie.mywire.org"]
-NEXT_PUBLIC_PINVI_API_URL=https://pinviapi.digitie.mywire.org
+PINVI_WEB_BASE_URL=https://pinvi.example.com
+PINVI_OAUTH_CALLBACK_BASE_URL=https://pinvi-api.example.com
+PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.example.com"]
+NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 PINVI_ENVIRONMENT=production
 ```
 
@@ -207,7 +207,7 @@ PINVI_ENVIRONMENT=production
 - proxy가 `X-Forwarded-Proto=https`를 보존해야 Secure cookie / redirect URL 판단이
   흔들리지 않는다.
 - OAuth provider 콘솔 callback은 API 공개 URL 기준
-  `https://pinviapi.digitie.mywire.org/auth/oauth/{provider}/callback`으로 등록한다.
+  `https://pinvi-api.example.com/auth/oauth/{provider}/callback`으로 등록한다.
 
 ## 6. 리소스 튜닝 (10명 환경)
 
@@ -298,8 +298,8 @@ sudo dpkg -i cloudflared.deb
 # 인증 + tunnel 생성
 cloudflared tunnel login
 cloudflared tunnel create pinvi
-cloudflared tunnel route dns pinvi pinvi.digitie.mywire.org
-cloudflared tunnel route dns pinvi pinviapi.digitie.mywire.org
+cloudflared tunnel route dns pinvi pinvi.example.com
+cloudflared tunnel route dns pinvi pinvi-api.example.com
 
 # systemd
 sudo cloudflared service install
@@ -312,7 +312,7 @@ sudo cloudflared service install
 ```bash
 # certbot + nginx
 sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d pinvi.digitie.mywire.org -d pinviapi.digitie.mywire.org
+sudo certbot --nginx -d pinvi.example.com -d pinvi-api.example.com
 
 # 갱신 cron (이미 systemd timer 등록됨)
 sudo systemctl status certbot.timer

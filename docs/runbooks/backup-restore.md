@@ -10,7 +10,7 @@
 journalctl -u pinvi-backup --since "24 hours ago" | tail -20
 
 # 또는 Dagster UI
-open https://pinviapi.digitie.mywire.org/admin/etl
+open https://pinvi-api.example.com/admin/etl
 # asset `daily_postgres_backup` 최근 실행 확인
 ```
 
@@ -80,9 +80,9 @@ sudo ./scripts/restore-db.sh /var/lib/pinvi/backups/pinvi-app-20260606-003000.du
 # 4. 정합성 점검
 docker compose -f docker-compose.app.yml start api
 sleep 5
-curl -fsS https://pinviapi.digitie.mywire.org/health/db
+curl -fsS https://pinvi-api.example.com/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
-  https://pinviapi.digitie.mywire.org/admin/audit/verify-chain | jq .
+  https://pinvi-api.example.com/admin/audit/verify-chain | jq .
 
 # 5. 트래픽 재개
 docker compose -f docker-compose.app.yml start web
@@ -158,9 +158,9 @@ sudo -E ./scripts/restore-hotswap.sh run \
 docker compose -f docker-compose.app.yml up -d api web
 
 # 3. healthcheck
-curl -fsS https://pinviapi.digitie.mywire.org/health/db
+curl -fsS https://pinvi-api.example.com/health/db
 curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
-  https://pinviapi.digitie.mywire.org/admin/audit/verify-chain | jq .
+  https://pinvi-api.example.com/admin/audit/verify-chain | jq .
 ```
 
 API `/admin/backup/restore-hotswap` 버튼/endpoint 경로는 자기 API 컨테이너를 멈추는

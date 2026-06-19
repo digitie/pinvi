@@ -1815,7 +1815,67 @@ ADR-015는 Kakao Maps SDK를 폐기하고 VWorld + MapLibre GL JS 기반 내부 
 - `docs/integrations/maplibre-vworld.md`
 - `docs/tasks.md` T-201
 
+## ADR-047: 운영 도메인은 gitignore된 `.env`로만 주입(공개 repo 비노출) + Dagster webserver는 12802
+
+- **상태**: accepted
+- **날짜**: 2026-06-20
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+`digitie/pinvi`는 **공개 repo**다. 그런데 운영 도메인(개인 dynamic-DNS 도메인)이
+`.env.example`·런북·API 예시 문서 등 추적 파일 23곳에 하드코딩되어 외부에 노출되어
+있었고, 일부는 구 표기(`pinviapi`, 하이픈 없음)였다. 또한
+`infra/docker-compose.app.yml`은 `PINVI_ENVIRONMENT: smoke`·CORS·web build arg를
+하드코딩해 운영 `.env`가 도메인을 override할 수 없었다. Dagster는 `apps/etl/Dockerfile`이
+없어 컨테이너 경로가 미완성이었고, dev compose는 `12802:3000`(컨테이너 3000)으로
+webserver 포트가 호스트 매핑과 불일치했다.
+
+사용자 운영 주소(실값은 비공개 `infra/.env.prod`에만; 여기 표기는 placeholder):
+web `pinvi.example.com`, api `pinvi-api.example.com`, dagster
+`pinvi-dagster.example.com`, RustFS API `s3-api.example.com`, RustFS 콘솔
+`s3.example.com`. 모두 reverse proxy → 로컬 고정 포트.
+
+### 결정
+
+- **실제 운영 도메인/시크릿은 공개 repo에 커밋하지 않는다.** gitignore된
+  `infra/.env.prod`(템플릿 `infra/.env.prod.example`, placeholder `*.example.com`)에만
+  두고, compose `--env-file`(scripts의 `PINVI_ENV_FILE`, 기본 `.env`)로 주입한다.
+  추적 문서/예시의 실도메인은 모두 `*.example.com` placeholder로 치환한다.
+- CI(`docker-images.yml`)의 빌드타임 `NEXT_PUBLIC_PINVI_API_URL`은
+  `secrets.NEXT_PUBLIC_PINVI_API_URL`(또는 manual dispatch input)에서 받고, 코드에는
+  placeholder fallback만 둔다.
+- `infra/docker-compose.app.yml`의 운영 민감 값(ENVIRONMENT/DATABASE_URL/JWT/CORS/
+  WEB_BASE_URL/OAUTH_CALLBACK/RUSTFS public/SENTRY env, web build arg)은
+  `${VAR:-smoke기본값}`으로 override 가능하게 한다. 모바일 app bundle id(`app.json`)는
+  앱 정체성(스토어/딥링크)이라 비노출 대상이 아니다(유지).
+- **Dagster webserver는 컨테이너/호스트 모두 12802로 바인딩한다.** `apps/etl/Dockerfile`을
+  신설(`dagster-webserver -h 0.0.0.0 -p 12802 -m pinvi.etl.definitions`)하고, dev/prod
+  compose 모두 `12802:12802` + profile `etl`로 서비스를 둔다. `pinvi-dagster.<domain>`은
+  reverse proxy → `:12802`.
+
+### 근거
+
+- 공개 repo에서 개인 운영 도메인 비노출은 기본 보안 위생이며, 단일 `.env` 진입은 운영자가
+  도메인/시크릿을 한곳에서 관리하게 한다.
+- presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저 접근 도메인(`s3-api`)과
+  일치해야 유효하므로 server→RustFS 내부 endpoint(`app-rustfs:9000`)와 분리한다.
+- Dagster 포트를 12802로 통일하면 CLAUDE.md 로컬 고정 포트 정책과 dev/prod가 일치한다.
+
+### 결과
+
+- 신규: `infra/.env.prod.example`(추적), `infra/.env.prod`(gitignore), `apps/etl/Dockerfile`.
+- 변경: `infra/docker-compose.app.yml`(parameterize + `app-dagster` 서비스),
+  `infra/docker-compose.yml`(dagster `12802:12802`), `scripts/{deploy-node,docker-app}.sh`
+  (`PINVI_ENV_FILE`/`PINVI_ENABLE_DAGSTER`), `.gitignore`(`.env.prod`/`.env.production`),
+  `.github/workflows/docker-images.yml`(secret 주입), 추적 문서 23곳 도메인 placeholder화.
+
+### 참조
+
+- ADR-024(NTFS/ext4), ADR-040/042(Docker/포트), ADR-038(rate-limit), `docs/runbooks/deploy.md`,
+  `docs/runbooks/docker-app.md`
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-047**
+- 다음 신규 ADR = **ADR-048**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

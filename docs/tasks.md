@@ -73,7 +73,7 @@
 - [x] T-068 — 최신 kor-travel-map/kor-travel-geo/KASI 계약 문서 반영 (완료: 2026-06-04,
   ADR-026 + KASI 특일/출몰시각 저장 계약)
 - [x] T-069 — production API/Web URL + OAuth/CORS 보안 문서화 (완료: 2026-06-05,
-  API `https://pinviapi.digitie.mywire.org`, Web `https://pinvi.digitie.mywire.org`)
+  API `https://pinvi-api.example.com`, Web `https://pinvi.example.com`)
 - [x] T-067 — KASI 특일/POI 출몰시각 Dagster 구현 (완료: 2026-06-05,
   `app.kasi_special_days` / `app.trip_poi_rise_sets` + Dagster asset/job)
 - [x] T-070 — Sprint 2 잔여 마감: `email_queue` SKIP LOCKED worker +

@@ -202,7 +202,7 @@ apps/web/app/
 
 ## 8. CSP / 도메인
 
-- `connect-src 'self' https://pinviapi.digitie.mywire.org` (SSE)
+- `connect-src 'self' https://pinvi-api.example.com` (SSE)
 - 추가 도메인 노출은 없음 — 본 저장소의 기존 API 도메인 안.
 
 ## 9. 절대 금지

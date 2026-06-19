@@ -88,7 +88,7 @@ apps/api/
 - `CHAR(43)` URL-safe base64, 256bit 엔트로피
 - 기본 만료 30일 (사용자가 변경 가능)
 - revoke 즉시 차단
-- URL: `https://pinvi.digitie.mywire.org/trips/{trip_id}/share/{token}`
+- URL: `https://pinvi.example.com/trips/{trip_id}/share/{token}`
 - rate limit: 토큰당 분당 60회 (스크래핑 방지)
 
 ### 3.3 소셜 로그인 매칭 (F-3, G-4)
