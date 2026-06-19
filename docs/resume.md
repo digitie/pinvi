@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-20 (claude) — Admin UI Next 기본 오류 화면 복구 보강 (kor-travel-geo T-278 #391 이식)
+
+kor-travel-geo PR #391(T-278)을 pinvi `apps/web`에 이식했다. Admin UI가 Next 기본 전역 오류
+화면으로 떨어지거나 좌측 메뉴 이동 중 RSC 실패하던 공백을 닫았다. `lib/error-recovery.ts`
+신설(chunk/RSC/network 분류 + `pinvi.web.error-reload:<path>` 키), `RouteError`/`global-error`가
+recoverable 오류를 같은 pathname에서 1회 hard reload로 복구. `components/navigation/
+DocumentNavLink.tsx` 신설 + admin 좌측 메뉴를 document navigation으로 교체해 `_rsc` client
+routing 실패를 예방. `tests/errorRecovery.test.ts` 신설. pinvi는 기존 error/global-error
+boundary와 디자인 토큰을 재사용했다(kor-travel-geo raw CSS 미이식). 검증: WSL
+typecheck/lint/unit/test/build, admin e2e는 goto 기반이라 영향 없음.
+
 ## 2026-06-20 (claude) — prod=ktdctl+공식도메인 / dev=127.0.0.1:12xxx host-mode + 포트 ask-before-kill + Dagster 12802 (ADR-047)
 
 **dev/prod 분리**: 별도 지시 없으면 대상은 dev. prod는 ktdctl로 컨테이너를 올리고 공식

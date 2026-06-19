@@ -1,11 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
 import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
+// 좌측 메뉴 이동 중 RSC/client transition 실패가 Next 기본 오류 화면으로 새지 않도록
+// document navigation으로 이동한다 (kor-travel-geo T-278 이식).
+import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -83,9 +85,9 @@ function AdminGuard({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-surface-soft">
       <aside className="w-60 shrink-0 border-r border-hairline bg-white">
         <div className="border-b border-hairline px-4 py-4">
-          <Link href="/admin" className="text-sm font-bold text-ink">
+          <DocumentNavLink href="/admin" className="text-sm font-bold text-ink">
             Pinvi Admin
-          </Link>
+          </DocumentNavLink>
           <p className="mt-1 text-xs text-muted" data-testid="admin-me">
             {me.email}
             <br />
@@ -98,7 +100,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Link
+              <DocumentNavLink
                 key={item.href}
                 href={item.href}
                 className={
@@ -110,7 +112,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
               >
                 <span>{item.label}</span>
                 <span className="ml-2 text-[10px] uppercase text-muted">S{item.sprint}</span>
-              </Link>
+              </DocumentNavLink>
             );
           })}
         </nav>

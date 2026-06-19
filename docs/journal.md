@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-20 (claude) — Admin UI Next 기본 오류 화면 복구 보강 (kor-travel-geo T-278 #391 이식)
+
+**작업**: 사용자 지시 — kor-travel-geo PR #391(T-278, issue #390)을 pinvi에 똑같이 반영.
+Firefox 등에서 Admin UI가 Next 기본 전역 오류 화면(`This page couldn’t load` /
+`Reload to try again, or go back.`)으로 떨어지고, 좌측 메뉴 이동 중 RSC/client transition
+실패가 같은 화면으로 새던 방어 공백을 닫는다.
+
+**현황 차이**: pinvi는 이미 `app/error.tsx`(→ `RouteError`)·`app/global-error.tsx`(인라인
+스타일 한국어 화면)·`components/feedback/*`를 갖고 있었다. 부족한 것은 (1) 자동 복구 로직,
+(2) `_rsc`를 만들지 않는 링크였다. kor-travel-geo의 raw CSS 패널 대신 pinvi 디자인 토큰/
+Tailwind와 기존 `FullPageMessage`를 재사용해 이식했다.
+
+**반영**:
+- `apps/web/lib/error-recovery.ts` 신설 — chunk/RSC/network 패턴 분류 +
+  `pinvi.web.error-reload:<pathname>` sessionStorage 키. (kor-travel-geo 함수 동등 이식)
+- `RouteError`/`global-error.tsx`: recoverable 오류면 같은 pathname에서 1회만 hard reload,
+  반복 실패는 복구 패널. 재시도 시 reload flag 제거. recoverable copy 분기.
+- `apps/web/components/navigation/DocumentNavLink.tsx` 신설(document navigation `<a>`).
+  admin 좌측 메뉴(`app/(admin)/admin/layout.tsx`)의 `next/link`를 DocumentNavLink로 교체해
+  메뉴 이동이 `_rsc` client routing을 만들지 않게 했다(#390 "좌측 메뉴 이동 중 RSC 실패").
+  RouteError "홈으로"도 document navigation으로 escape.
+- `apps/web/tests/errorRecovery.test.ts` 신설(Vitest) — recoverable 분류 + storage key 고정.
+
+**검증**: WSL ext4 미러에서 `apps/web` typecheck/lint/unit(errorRecovery)/전체 test/build.
+admin e2e는 nav를 `page.goto()`로 이동(클릭 아님)하고 testid 유지라 영향 없음.
+
 ## 2026-06-20 (claude) — prod=ktdctl+공식도메인 / dev=127.0.0.1:12xxx host-mode + 포트 ask-before-kill + Dagster 12802 (ADR-047)
 
 **작업**: 사용자 지시 — (1) 운영 주소(web/api/dagster/RustFS S3·콘솔)를 외부에 노출하지 말고
