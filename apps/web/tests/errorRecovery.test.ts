@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  claimErrorReloadAttempt,
+  clearErrorReloadAttempt,
   errorRecoveryMessage,
   errorReloadStorageKey,
   isLikelyRecoverableNextRuntimeError,
@@ -26,5 +28,40 @@ describe('error recovery helpers (T-278)', () => {
     const error = Object.assign(new Error('boom'), { digest: 'abc123' });
     expect(errorRecoveryMessage(error)).toContain('abc123');
     expect(errorReloadStorageKey('/admin/ops')).toBe('pinvi.web.error-reload:/admin/ops');
+  });
+
+  it('동일 pathname의 자동 reload 시도는 storage key로 한 번만 허용한다', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+      removeItem: (key: string) => {
+        values.delete(key);
+      },
+    };
+
+    expect(claimErrorReloadAttempt('/admin/ops', storage)).toBe(true);
+    expect(claimErrorReloadAttempt('/admin/ops', storage)).toBe(false);
+    clearErrorReloadAttempt('/admin/ops', storage);
+    expect(claimErrorReloadAttempt('/admin/ops', storage)).toBe(true);
+  });
+
+  it('browser storage가 막혀도 복구 helper가 error boundary를 다시 깨지 않는다', () => {
+    const storage = {
+      getItem: () => {
+        throw new Error('SecurityError');
+      },
+      setItem: () => {
+        throw new Error('SecurityError');
+      },
+      removeItem: () => {
+        throw new Error('SecurityError');
+      },
+    };
+
+    expect(claimErrorReloadAttempt('/admin/ops', storage)).toBe(false);
+    expect(() => clearErrorReloadAttempt('/admin/ops', storage)).not.toThrow();
   });
 });

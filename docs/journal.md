@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-20 (codex) — Claude PR #221~#223 사후 리뷰 + 오류 복구 storage 방어
+
+**작업**: 사용자 지시 — 2026-06-19 이후 Claude Code PR을 closed 포함 사후 리뷰하고, 코멘트 작성 후
+수정 사항을 한 PR로 모아 머지하는 작업.
+
+**리뷰**:
+- #221: ADR-047 운영 도메인 비노출 + Dagster 12802는 현재 main 기준 차단 이슈 없음. #222가
+  같은 Dockerfile을 과거 모듈명으로 중복 추가하려는 위험을 코멘트로 기록.
+- #222: stale duplicate로 리뷰 코멘트 작성 후 닫음. `apps/etl/tripmate`/`tripmate.etl.definitions`
+  경로는 현재 존재하지 않고, #221의 `pinvi.etl.definitions`/12802와 충돌.
+- #223: 방향은 정합하지만 error boundary 안에서 `sessionStorage`를 직접 호출해 storage 예외 시
+  복구 UI 자체가 다시 깨질 수 있음을 코멘트로 기록.
+
+**반영**:
+- `apps/web/lib/error-recovery.ts`에 `claimErrorReloadAttempt` / `clearErrorReloadAttempt`를 추가해
+  `window.sessionStorage` 접근을 try/catch로 방어.
+- `RouteError` / `global-error`는 직접 storage 호출 대신 새 helper만 사용.
+- `apps/web/tests/errorRecovery.test.ts`에 1회 reload guard와 storage 예외 방어 테스트 추가.
+
+**검증**: WSL ext4 미러에서 `npm --workspace apps/web run test --
+tests/errorRecovery.test.ts`(5 passed), `npm --workspace apps/web run typecheck`,
+`npm --workspace apps/web run lint`, `npm --workspace apps/web run build`,
+`npm --workspace apps/web run test`(20 passed) 통과. Windows `git diff --check` 통과.
+
+**다음**: 통합 PR merge 후 v0.1.0 릴리즈 직전 최종 smoke/tag/GitHub Release notes.
+
 ## 2026-06-20 (claude) — Admin UI Next 기본 오류 화면 복구 보강 (kor-travel-geo T-278 #391 이식)
 
 **작업**: 사용자 지시 — kor-travel-geo PR #391(T-278, issue #390)을 pinvi에 똑같이 반영.
