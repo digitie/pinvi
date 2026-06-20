@@ -3,6 +3,7 @@
 // hard reload하도록 sessionStorage 키를 만든다.
 
 const ERROR_RECOVERY_RELOAD_PREFIX = 'pinvi.web.error-reload';
+type ErrorReloadStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 const RECOVERABLE_PATTERNS = [
   'chunkloaderror',
@@ -30,4 +31,40 @@ export function isLikelyRecoverableNextRuntimeError(error: Error & { digest?: st
 
 export function errorReloadStorageKey(pathname: string): string {
   return `${ERROR_RECOVERY_RELOAD_PREFIX}:${pathname}`;
+}
+
+function currentSessionStorage(): ErrorReloadStorage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function claimErrorReloadAttempt(
+  pathname: string,
+  storage: ErrorReloadStorage | null = currentSessionStorage(),
+): boolean {
+  if (!storage) return false;
+  const key = errorReloadStorageKey(pathname);
+  try {
+    if (storage.getItem(key) === '1') return false;
+    storage.setItem(key, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearErrorReloadAttempt(
+  pathname: string,
+  storage: ErrorReloadStorage | null = currentSessionStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(errorReloadStorageKey(pathname));
+  } catch {
+    // Recovery UI must never fail because browser storage is unavailable.
+  }
 }

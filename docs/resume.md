@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-06-20 (codex) — Claude PR #221~#223 사후 리뷰 + 오류 복구 storage 방어
+
+2026-06-19 이후 Claude Code PR #221~#223을 closed 포함으로 사후 리뷰했다. #221은 현재 main
+기준 차단 이슈 없음, #222는 #221과 중복이면서 과거 `tripmate.etl.definitions`/3000 포트 기준이라
+리뷰 코멘트 후 닫음, #223은 storage 예외 방어 누락을 후속 수정으로 확정. `error-recovery.ts`에
+storage-safe `claimErrorReloadAttempt`/`clearErrorReloadAttempt`를 추가하고 `RouteError`/
+`global-error`가 직접 `sessionStorage`를 만지지 않게 했다. 테스트는 reload 1회 guard와 storage
+예외 방어를 보강했다.
+
 ## 2026-06-20 (claude) — Admin UI Next 기본 오류 화면 복구 보강 (kor-travel-geo T-278 #391 이식)
 
 kor-travel-geo PR #391(T-278)을 pinvi `apps/web`에 이식했다. Admin UI가 Next 기본 전역 오류

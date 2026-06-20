@@ -5,7 +5,8 @@ import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { FullPageMessage } from '@/components/feedback/FullPageMessage';
 import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
 import {
-  errorReloadStorageKey,
+  claimErrorReloadAttempt,
+  clearErrorReloadAttempt,
   isLikelyRecoverableNextRuntimeError,
 } from '@/lib/error-recovery';
 import { errorDigest, friendlyErrorText } from '@pinvi/domain';
@@ -39,15 +40,14 @@ export function RouteError({
 
   useEffect(() => {
     if (!recoverable || typeof window === 'undefined') return;
-    const key = errorReloadStorageKey(window.location.pathname);
-    if (window.sessionStorage.getItem(key) === '1') return;
-    window.sessionStorage.setItem(key, '1');
-    window.location.reload();
+    if (claimErrorReloadAttempt(window.location.pathname)) {
+      window.location.reload();
+    }
   }, [recoverable]);
 
   const retry = () => {
     if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(errorReloadStorageKey(window.location.pathname));
+      clearErrorReloadAttempt(window.location.pathname);
     }
     reset();
   };
