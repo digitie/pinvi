@@ -10,6 +10,7 @@ import type {
   FeatureWeatherCard,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { hasLocationConsent, locationConsentItems, paletteHex } from '@pinvi/domain';
 import {
@@ -145,6 +146,7 @@ export function FeatureMapView({
 }: FeatureMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const latestRequest = useRef(0);
+  const inBoundsAbort = useRef<AbortController | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [points, setPoints] = useState<MapPoint[]>([]);
@@ -169,14 +171,19 @@ export function FeatureMapView({
     const zoom = clampZoom(map.getZoom());
     const requestId = latestRequest.current + 1;
     latestRequest.current = requestId;
+    // 직전 in-flight 요청을 취소해 빠른 pan에서 superseded viewport 검색이 백엔드에
+    // 쌓이지 않게 한다 (kor-travel-concierge #111 — abort 미전파 패턴 예방).
+    inBoundsAbort.current?.abort();
+    const controller = new AbortController();
+    inBoundsAbort.current = controller;
     setLoading(true);
     try {
-      const data = await featureApi(apiClient).inBounds({ bbox, zoom });
+      const data = await featureApi(apiClient).inBounds({ bbox, zoom }, { signal: controller.signal });
       if (requestId !== latestRequest.current) return;
       setPoints(toPoints(data));
       setError(null);
     } catch (err) {
-      if (requestId !== latestRequest.current) return;
+      if (isAbortError(err) || requestId !== latestRequest.current) return;
       setError(err instanceof ApiError ? err.message : '지도 데이터를 불러오지 못했습니다.');
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
@@ -194,6 +201,7 @@ export function FeatureMapView({
   useEffect(() => {
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      inBoundsAbort.current?.abort();
     };
   }, []);
 

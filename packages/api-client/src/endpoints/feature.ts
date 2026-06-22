@@ -20,14 +20,19 @@ export const featureApi = (client: ApiClient) => ({
    * viewport 내 feature + cluster 응답. zoom별 라이브러리 측 클러스터링.
    * bbox format: `lng_min,lat_min,lng_max,lat_max`.
    */
-  inBounds: (params: {
-    bbox: string;
-    zoom: number;
-    kinds?: FeatureKind[];
-    category?: string;
-    clusterUnit?: string;
-    limit?: number;
-  }) => {
+  inBounds: (
+    params: {
+      bbox: string;
+      zoom: number;
+      kinds?: FeatureKind[];
+      category?: string;
+      clusterUnit?: string;
+      limit?: number;
+    },
+    // viewport pan은 빠르게 superseded되므로 호출부가 AbortSignal을 넘겨 직전 요청을
+    // 취소할 수 있다. signal은 client.fetch가 upstream fetch로 그대로 전달한다.
+    opts?: { signal?: AbortSignal },
+  ) => {
     const qs = new URLSearchParams();
     qs.set('bbox', params.bbox);
     qs.set('zoom', String(params.zoom));
@@ -38,18 +43,22 @@ export const featureApi = (client: ApiClient) => ({
     return client.request(`/features/in-bounds?${qs.toString()}`, {
       method: 'GET',
       schema: FeaturesInBoundsResponseSchema,
+      signal: opts?.signal,
     });
   },
 
   /** 반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재. */
-  nearby: (params: {
-    lat: number;
-    lon: number;
-    radius_m: number;
-    kinds?: FeatureKind[];
-    category?: string;
-    limit?: number;
-  }) => {
+  nearby: (
+    params: {
+      lat: number;
+      lon: number;
+      radius_m: number;
+      kinds?: FeatureKind[];
+      category?: string;
+      limit?: number;
+    },
+    opts?: { signal?: AbortSignal },
+  ) => {
     const qs = new URLSearchParams();
     qs.set('lat', String(params.lat));
     qs.set('lon', String(params.lon));
@@ -60,17 +69,21 @@ export const featureApi = (client: ApiClient) => ({
     return client.request(`/features/nearby?${qs.toString()}`, {
       method: 'GET',
       schema: z.array(FeatureSummarySchema),
+      signal: opts?.signal,
     });
   },
 
   /** 자유 텍스트 검색 (feature 파트만 — 인덱스/ranking은 kor_travel_map 책임). */
-  search: (params: {
-    q: string;
-    kinds?: FeatureKind[];
-    category?: string;
-    bbox?: string;
-    limit?: number;
-  }) => {
+  search: (
+    params: {
+      q: string;
+      kinds?: FeatureKind[];
+      category?: string;
+      bbox?: string;
+      limit?: number;
+    },
+    opts?: { signal?: AbortSignal },
+  ) => {
     const qs = new URLSearchParams();
     qs.set('q', params.q);
     if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
@@ -80,6 +93,7 @@ export const featureApi = (client: ApiClient) => ({
     return client.request(`/features/search?${qs.toString()}`, {
       method: 'GET',
       schema: z.array(FeatureSummarySchema),
+      signal: opts?.signal,
     });
   },
 

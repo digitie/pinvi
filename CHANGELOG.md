@@ -38,6 +38,10 @@
   network 계열 오류를 같은 경로에서 1회 hard reload로 복구하고, admin 좌측 메뉴는
   document navigation으로 이동해 `_rsc` client routing 실패를 예방한다. 브라우저 storage가
   막힌 환경에서도 복구 UI가 다시 깨지지 않도록 storage 접근을 방어했다.
+- 지도 viewport feature 검색과 검색창이 빠른 pan/재검색에서 직전 요청을 취소하도록
+  AbortSignal 전파를 추가했다(kor-travel-concierge #111 유사 패턴 예방). `@pinvi/api-client`
+  feature endpoint가 `signal`을 받아 upstream fetch까지 전달해, superseded 검색이 백엔드에
+  쌓이거나 커넥션을 낭비하지 않는다.
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
 - 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,

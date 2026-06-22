@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { isAbortError } from '@/lib/abort';
 
 export interface MapSearchBoxProps {
   onSelect: (feature: FeatureSummary) => void;
@@ -16,21 +17,29 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
   const [results, setResults] = useState<FeatureSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const term = query.trim();
     if (!term) return;
+    // 직전 검색을 취소하고(서버 작업·커넥션 낭비 방지), 이 controller가 최신일 때만
+    // 상태를 반영한다 (kor-travel-concierge #111 — abort 미전파 패턴 예방).
+    searchAbort.current?.abort();
+    const controller = new AbortController();
+    searchAbort.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const res = await featureApi(apiClient).search({ q: term, limit: 8 });
+      const res = await featureApi(apiClient).search({ q: term, limit: 8 }, { signal: controller.signal });
+      if (searchAbort.current !== controller) return;
       setResults(res);
       if (res.length === 0) setError('검색 결과가 없습니다.');
     } catch (err) {
+      if (isAbortError(err) || searchAbort.current !== controller) return;
       setError(err instanceof ApiError ? err.message : '검색에 실패했습니다.');
     } finally {
-      setLoading(false);
+      if (searchAbort.current === controller) setLoading(false);
     }
   };
 

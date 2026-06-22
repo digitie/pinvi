@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-22 (claude) — 지도 feature 검색 abort 전파 (kor-travel-concierge #111 유사 패턴 예방)
+
+**작업**: 사용자 지시 — kor-travel-concierge PR #111(BFF 프록시가 `request.signal`을 upstream
+fetch에 미전파 → 취소된 POI 검색이 백엔드에서 계속 돌고 undici 커넥션 누수 → 이후 검색
+지연/무응답)과 **동일하지 않더라도 비슷한 패턴**을 pinvi에서 검사하고 수정.
+
+**진단**: pinvi는 BFF 프록시가 없고 브라우저가 FastAPI를 `@pinvi/api-client`로 직접 호출한다
+(정확한 #111 버그는 부재). 그러나 **apps/web·packages 전체에 AbortSignal/`signal` 사용이 0건**
+이었다 — 즉 어떤 fetch도 취소 신호를 전달하지 않는다. 가장 가까운 유사 패턴은 **지도 feature
+검색**: `FeatureMapView.fetchInBounds`는 `latestRequest` 카운터로 stale 응답만 무시할 뿐
+직전 in-flight 요청을 abort하지 않아, 빠른 pan 시 superseded viewport 검색이 백엔드에서 계속
+완료된다(#111의 근본 원인과 동일). `MapSearchBox.submit`도 같은 형태.
+
+**수정**:
+- `@pinvi/api-client` feature endpoint(`inBounds`/`search`/`nearby`)에 `opts?: { signal }` 추가
+  → `client.request`가 이미 `RequestInit.signal`을 upstream fetch로 전달하므로 그대로 흐른다.
+- `FeatureMapView.fetchInBounds`: `AbortController` ref로 새 요청마다 직전 요청 abort + signal
+  전달, unmount cleanup에서도 abort, AbortError는 정상 취소로 무시.
+- `MapSearchBox.submit`: 새 검색마다 직전 abort + signal 전달, controller 동일성으로 stale
+  상태 반영 가드(loading/results/error).
+- `apps/web/lib/abort.ts`(`isAbortError`) + `apps/web/tests/apiClientSignal.test.ts`(signal 전파 고정).
+
+**범위 판단**: 다른 fetch는 admin 폼/다이얼로그(빠른 supersession 아님)거나 react-query
+`useQuery`(자체 cancellation 보유)다. #111의 typeahead/검색 abort 패턴은 지도 feature 검색뿐이라
+거기에 집중했다. api-client가 이제 `signal`을 받으므로 향후 react-query queryFn의 `signal`도 연결 가능.
+
+**검증**: WSL ext4 미러에서 `apps/web` typecheck/lint/unit(apiClientSignal)/전체 test/build 통과.
+
 ## 2026-06-20 (codex) — Claude PR #221~#223 사후 리뷰 + 오류 복구 storage 방어
 
 **작업**: 사용자 지시 — 2026-06-19 이후 Claude Code PR을 closed 포함 사후 리뷰하고, 코멘트 작성 후
