@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-06-22 (claude) — 지도 feature 검색 abort 전파 (kor-travel-concierge #111 유사 패턴)
+
+kor-travel-concierge #111(BFF abort 미전파)과 비슷한 패턴을 pinvi에서 점검했다. pinvi는 BFF가
+없지만 apps/web·packages에 AbortSignal 사용이 0건이라, 지도 feature 검색이 빠른 pan/재검색에서
+직전 요청을 취소하지 못했다. `@pinvi/api-client` feature endpoint(`inBounds`/`search`/`nearby`)에
+`signal` 옵션을 추가하고(`client.request`가 upstream fetch로 전달), `FeatureMapView`·`MapSearchBox`가
+`AbortController`로 직전 요청을 abort하도록 했다. `lib/abort.ts`(`isAbortError`) +
+`tests/apiClientSignal.test.ts` 추가. WSL typecheck/lint/unit/test/build 통과. 다른 fetch는 폼/
+react-query라 #111 패턴 아님(api-client는 이제 signal 수용).
+
 ## 2026-06-20 (codex) — Claude PR #221~#223 사후 리뷰 + 오류 복구 storage 방어
 
 2026-06-19 이후 Claude Code PR #221~#223을 closed 포함으로 사후 리뷰했다. #221은 현재 main
