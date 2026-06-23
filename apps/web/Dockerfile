@@ -11,6 +11,8 @@ COPY packages/state/package.json packages/state/
 COPY packages/design-tokens/package.json packages/design-tokens/
 COPY packages/hooks/package.json packages/hooks/
 COPY packages/i18n/package.json packages/i18n/
+COPY apps/mobile/vendor/vworld-map-core-1.0.0.tgz apps/mobile/vendor/
+COPY apps/web/vendor/vworld-map-web-1.0.0.tgz apps/web/vendor/
 
 RUN npm install --no-audit --no-fund
 
