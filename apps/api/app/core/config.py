@@ -105,9 +105,10 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
 
-    # VWorld 지도 키 (ADR-043) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
+    # VWorld 지도 키 (ADR-043/048) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
     # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후
-    # server-issued 키를 발급받는다(키 미설정 시 endpoint는 503).
+    # server-issued 키를 발급받는다(키 미설정 시 endpoint는 503). 같은 값이 kor-travel-geo
+    # v2 REST의 공개 API `key` query로도 쓰이며, 별도 geo API key 설정은 두지 않는다.
     pinvi_vworld_api_key: str = ""
     pinvi_vworld_token_ttl_seconds: int = 600
 

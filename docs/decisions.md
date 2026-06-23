@@ -1893,7 +1893,73 @@ web `pinvi.example.com`, api `pinvi-api.example.com`, dagster
 - ADR-024(NTFS/ext4), ADR-040/042(Docker/포트), ADR-038(rate-limit), `docs/runbooks/deploy.md`,
   `docs/runbooks/docker-app.md`, `docs/runbooks/local-dev.md`
 
+## ADR-048: kor-travel-geo v2 공개 API key는 VWorld key와 동일하게 사용하고 저장 책임은 kor-travel-geo에 둔다
+
+- **상태**: accepted
+- **날짜**: 2026-06-24
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+`kor-travel-geo` 최신 v2 REST 표면(`/v2/geocode`, `/v2/reverse`, `/v2/search`,
+`/v2/regions/within-radius`)은 공개 주소 API 보호를 위해 `key` query 파라미터를
+검증한다. 해당 저장소는 `ops.public_api_keys`에 공개 API key hash/hint/status를 저장하고,
+활성 DB key가 없으면 `KTG_VWORLD_API_KEY`를 기본 공개 key로 검증한다.
+
+Pinvi는 이미 모바일 지도용 server-issued key 발급(`GET /mobile/vworld/token`,
+ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
+`PINVI_KOR_TRAVEL_GEO_API_KEY`를 만들면 같은 실제 key가 두 환경변수로 갈라져 drift가
+생긴다.
+
+### 결정
+
+- Pinvi가 `kor-travel-geo` v2 REST를 호출할 때는 모든 v2 POST 요청에
+  `key=<PINVI_VWORLD_API_KEY>` query를 붙인다.
+- Pinvi에는 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 두지 않는다. 운영자는 Pinvi의
+  `PINVI_VWORLD_API_KEY`와 `kor-travel-geo`의 `KTG_VWORLD_API_KEY`를 같은 실제 값으로
+  설정한다.
+- 공개 API key의 추출, hash 저장, 활성/폐기 상태 관리는 `kor-travel-geo`가 소유한다.
+  Pinvi는 그 저장소의 공개 REST 계약을 호출하는 소비자일 뿐, `ops.public_api_keys`를
+  직접 쓰거나 관리하지 않는다.
+- `PINVI_VWORLD_API_KEY`가 비어 있으면 Pinvi geocoding client는 upstream 호출 전에
+  `GEOCODING_SERVICE_UNAVAILABLE` 계열로 degrade한다. 빈 key를 upstream에 보내지 않는다.
+- Pinvi 로그에는 key 원본과 query가 포함된 upstream URL을 남기지 않는다. 실패 로그는 기존처럼
+  path만 기록한다.
+
+### 근거
+
+- 사용자가 "키는 VWorld API 키와 동일"하다고 확정했다. 한 값을 두 환경변수로 따로 관리하지
+  않는 편이 운영 실수를 줄인다.
+- key hash 저장/폐기/감사는 `kor-travel-geo`가 이미 `ops.public_api_keys`로 소유한다.
+  Pinvi가 그 테이블을 직접 다루면 저장소 경계를 침범한다.
+- `PINVI_VWORLD_API_KEY`는 이미 서버 전용 secret이다. 웹 노출 키(`NEXT_PUBLIC_VWORLD_API_KEY`)
+  와는 별개로 유지하고, 모바일/geo server-to-server 호출만 이 값을 쓴다.
+
+### 결과
+
+- `apps/api/app/clients/kor_travel_geo.py`가 v2 POST마다 `key` query를 자동 추가한다.
+- `.env.example`, `apps/api/.env.example`, `infra/.env.prod.example`은 같은 VWorld key가
+  `kor-travel-geo` v2 공개 API key로도 쓰임을 명시한다.
+- `docs/integrations/kor-travel-geo.md`는 최신 v2 후보 좌표(`point{lon,lat}`)와 key
+  흐름을 기준으로 갱신한다.
+
+### 결과 (부정)
+
+- `PINVI_VWORLD_API_KEY`가 없는 개발 환경에서는 geocoding 호출이 실제 upstream까지 가지 않고
+  503 계열로 degrade한다. 로컬에서 `/geo/*`를 live로 검증하려면 VWorld key와
+  `kor-travel-geo`의 `KTG_VWORLD_API_KEY`가 모두 필요하다.
+- query parameter key는 upstream access log에 남을 수 있으므로 `kor-travel-geo`/reverse proxy
+  쪽 redaction도 계속 필요하다. Pinvi는 자기 로그에서 full URL을 남기지 않는 것으로 범위를
+  지킨다.
+
+### 후속
+
+- `kor-travel-geo`가 DB 생성 public API key만 허용하고 `KTG_VWORLD_API_KEY` fallback을 폐기하면
+  Pinvi도 별도 ADR로 key 공급 방식을 재검토한다.
+- 운영 배포 시 `infra/.env.prod`와 `kor-travel-geo` env에 같은 raw key가 들어갔는지 runbook
+  smoke checklist에서 확인한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-048**
+- 다음 신규 ADR = **ADR-049**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

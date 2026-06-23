@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-06-24 (codex) — kor-travel-geo 신규 v2 API key 계약 대응
+
+`kor-travel-geo` 최신 v2 REST가 공개 API `key` query를 검증하므로 Pinvi geocoding client가
+모든 v2 POST(`/v2/geocode`, `/v2/reverse`, `/v2/search`, `/v2/regions/within-radius`)에
+`key=<PINVI_VWORLD_API_KEY>`를 붙이도록 변경했다. 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`는
+두지 않고, 같은 raw key를 `kor-travel-geo`의 `KTG_VWORLD_API_KEY`로 설정해 그쪽이
+공개 API key hash 저장/검증을 소유한다(ADR-048). key 미설정 시 upstream 호출 전에
+geocoding unavailable로 degrade하며, Pinvi 로그에는 key 원본이나 query 포함 URL을 남기지 않는다.
+
 ## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
 
 `kor-travel-map` issue #508의 공개 문서 prod endpoint redaction 문제를 Pinvi에도 대입해
@@ -932,6 +941,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 - ADR-039: 운영 노드 간 Postgres streaming replication 미사용
 - ADR-040: Docker 빌드/실행은 kor-travel-docker-manager 1차 + `scripts/docker-app.sh` 폴백
 - ADR-041: Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1
+- ADR-042 ~ ADR-048: 로컬 포트 재정렬, Expo/mobile 지도 기준, Web `vworld-map-web`,
+  운영 도메인 비노출, `kor-travel-geo` v2 공개 API key 재사용 계약
 
 ## 운영 지시
 

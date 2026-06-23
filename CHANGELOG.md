@@ -42,6 +42,9 @@
   AbortSignal 전파를 추가했다(kor-travel-concierge #111 유사 패턴 예방). `@pinvi/api-client`
   feature endpoint가 `signal`을 받아 upstream fetch까지 전달해, superseded 검색이 백엔드에
   쌓이거나 커넥션을 낭비하지 않는다.
+- `kor-travel-geo` 신규 v2 공개 API key 계약에 맞춰 Pinvi geocoding 호출이 서버
+  `PINVI_VWORLD_API_KEY`를 `key` query로 전달한다. 별도 geo key는 두지 않고,
+  공개 API key hash 저장/검증은 `kor-travel-geo`가 소유한다(ADR-048).
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
 - 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,
