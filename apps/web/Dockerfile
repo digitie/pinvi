@@ -9,6 +9,7 @@ COPY packages/schemas/package.json packages/schemas/
 COPY packages/api-client/package.json packages/api-client/
 COPY packages/state/package.json packages/state/
 COPY packages/design-tokens/package.json packages/design-tokens/
+COPY packages/domain/package.json packages/domain/
 COPY packages/hooks/package.json packages/hooks/
 COPY packages/i18n/package.json packages/i18n/
 COPY apps/mobile/vendor/vworld-map-core-1.0.0.tgz apps/mobile/vendor/

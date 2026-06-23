@@ -31,6 +31,7 @@ const nextConfig = {
     '@pinvi/api-client',
     '@pinvi/state',
     '@pinvi/design-tokens',
+    '@pinvi/domain',
     '@pinvi/hooks',
     '@pinvi/i18n',
     'vworld-map-core',

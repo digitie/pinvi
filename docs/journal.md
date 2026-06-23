@@ -2,7 +2,7 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
-## 2026-06-24 (codex) — Web Docker image vendor tarball install stage 복구
+## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
 **작업**: `kor-travel-geo` v2 대응 PR merge 후 운영 배포를 위해 Docker Images workflow를
 수동 실행했으나, Web image build가 `npm install` 단계에서 vendored tarball
@@ -10,15 +10,18 @@
 
 **원인**: `apps/web/package.json`은 `vworld-map-web`과 `vworld-map-core`를 `file:` tarball로
 참조하지만, `apps/web/Dockerfile`의 deps stage는 install cache layer용 package manifest만
-복사하고 vendor tarball을 복사하지 않았다.
+복사하고 vendor tarball을 복사하지 않았다. 후속 build 단계에서는 Web 코드가 import하는
+`@pinvi/domain` workspace도 Web dependency / Next transpile 대상 / Docker deps manifest 목록에서
+빠져 있었다.
 
 **변경**: `apps/web/Dockerfile` deps stage에서 `npm install` 전에
 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz`와
-`apps/web/vendor/vworld-map-web-1.0.0.tgz`를 함께 복사하도록 수정.
+`apps/web/vendor/vworld-map-web-1.0.0.tgz`를 함께 복사하도록 수정. `@pinvi/domain`은
+`apps/web/package.json` dependency, `next.config.mjs` `transpilePackages`, Docker deps stage package
+manifest 복사 목록에 추가했다.
 
-**검증**: WSL ext4 미러에서
-`docker build --target deps -f apps/web/Dockerfile -t pinvi-web-deps-check:deploy-fix .`
-통과. 이후 PR merge, Docker Images workflow 재실행, 운영 노드 배포를 이어간다.
+**검증**: WSL ext4 미러에서 `apps/web/Dockerfile` Web Docker image 전체 build 통과. 이후
+PR merge, Docker Images workflow 재실행, 운영 노드 배포를 이어간다.
 
 ## 2026-06-24 (codex) — kor-travel-geo 신규 v2 API key 계약 대응
 
