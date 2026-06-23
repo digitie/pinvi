@@ -14,6 +14,7 @@ import type {
   UserLocationMarkerProps,
   VWorldMapFallbackInfo,
   VWorldMapViewProps,
+  WeatherMarkerProps,
 } from 'vworld-map-web';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -22,6 +23,7 @@ export type {
   MapLibreEvent,
   MapLibreMap,
   MapMouseEvent,
+  WeatherCondition,
 } from 'vworld-map-web';
 
 export function MapLoadingSkeleton() {
@@ -75,6 +77,11 @@ export const Popup = dynamic<PopupProps>(
 
 export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
   () => import('vworld-map-web').then((module) => module.UserLocationMarker),
+  { ssr: false }
+);
+
+export const WeatherMarker = dynamic<WeatherMarkerProps>(
+  () => import('vworld-map-web').then((module) => module.WeatherMarker),
   { ssr: false }
 );
 

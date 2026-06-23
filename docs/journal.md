@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-23 (codex) — kor-travel-map #512 지도 마커/viewport 튜닝 이식
+
+**작업**: 사용자 지시 — `digitie/kor-travel-map` PR #512의 admin 지도 튜닝 중 Pinvi에
+적용 가능한 부분을 점검하고 반영.
+
+**판단**:
+- PR #512의 bbox SQL `MATERIALIZED` 제거, route/area geometry 단순화, `include_geometry`
+  응답 확장은 `kor-travel-map` 소유 계층이라 Pinvi에서 직접 구현하지 않았다.
+- Pinvi 사용자 지도에는 marker 표현과 viewport 요청 churn 감소만 적용 가능하다고 판단했다.
+
+**반영**:
+- `vworld-map-web` facade에 `WeatherMarker`를 노출하고, `FeatureMapView`에서 `weather`
+  feature만 maki marker 대신 `WeatherMarker`로 렌더링한다.
+- `place`/`event`/`notice` 등 일반 feature는 기존처럼 kor-travel-map이 내려준
+  `marker_icon`/`marker_color`를 그대로 `MakiMarker`에 적용한다.
+- 낮은 zoom에서 bbox 키를 더 거칠게 만들되 범위를 안쪽으로 줄이지 않도록 west/south는
+  floor, east/north는 ceil로 양자화한다. `FeatureMapView`에는 짧은 viewport response cache를
+  추가해 같은 양자화 viewport 재진입 시 refetch를 줄였다.
+
+**검증**: WSL ext4 미러에서 `npm --workspace apps/web run test --
+tests/featureBounds.test.ts tests/apiClientSignal.test.ts`(9 passed),
+`npm --workspace apps/web run typecheck`, `npm --workspace apps/web run lint`,
+`npm --workspace apps/web run test`(25 passed), `npm --workspace apps/web run build` 통과.
+
+**다음**: PR merge 후 v0.1.0 릴리즈 직전 최종 smoke/tag/GitHub Release notes.
+
 ## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
 
 **작업**: 사용자 지시 — `kor-travel-map` issue #508의 prod endpoint 정보 redaction 문제가

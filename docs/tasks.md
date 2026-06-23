@@ -23,6 +23,12 @@
 
 ## 완료
 
+- [x] T-202 — kor-travel-map #512 지도 마커/viewport 튜닝 Pinvi 적용
+  (완료: 2026-06-23, codex). 일반 feature는 `marker_icon`/`marker_color` 기반
+  `MakiMarker` 표현을 유지하고, `weather` feature는 `vworld-map-web` `WeatherMarker`로
+  분기했다. 낮은 zoom bbox 키를 바깥쪽 확장 양자화하고 `FeatureMapView` viewport cache로
+  pan/zoom refetch churn을 줄였다. SQL/route/area geometry 확장은 kor-travel-map 소유라
+  Pinvi에서 직접 구현하지 않았다. Web typecheck/lint/test/build 검증.
 - [x] T-201 — Web 지도 클라이언트 `vworld-map-web` 전환 (완료: 2026-06-18, codex).
   기존 `maplibre-vworld-js`/`maplibre-vworld` tarball 의존성을 제거하고,
   `maplibre-vworld-react`의 웹 패키지 `vworld-map-web`(+ `vworld-map-core`) vendored

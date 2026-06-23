@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-06-23 (codex) — kor-travel-map #512 지도 마커/viewport 튜닝 반영
+
+`kor-travel-map` PR #512의 admin 지도 튜닝을 Pinvi에 대입해, 책임 경계상 SQL/route/area
+geometry 확장은 제외하고 사용자 지도 frontend 적용분만 반영했다. 일반 feature는
+`marker_icon`/`marker_color` maki 표현을 유지하고, `weather` feature는 `vworld-map-web`
+`WeatherMarker`로 표시한다. 낮은 줌 viewport bbox는 바깥쪽 확장 양자화로 cache key를
+안정화하고, `FeatureMapView`에 짧은 viewport response cache를 추가해 pan/zoom refetch churn을
+줄였다. WSL web targeted test/typecheck/lint/full test/build 통과.
+
 ## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
 
 `kor-travel-map` issue #508의 공개 문서 prod endpoint redaction 문제를 Pinvi에도 대입해
