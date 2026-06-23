@@ -22,7 +22,11 @@ def _client(handler: Handler, **kwargs: object) -> KorTravelGeoClient:
         base_url="http://kor-travel-geo.test",
         transport=httpx.MockTransport(handler),
     )
-    params: dict[str, object] = {"max_attempts": 2, "backoff_base_seconds": 0.0}
+    params: dict[str, object] = {
+        "api_key": "test-vworld-key",
+        "max_attempts": 2,
+        "backoff_base_seconds": 0.0,
+    }
     params.update(kwargs)
     return KorTravelGeoClient(http, **params)  # type: ignore[arg-type]
 
@@ -32,12 +36,14 @@ async def test_reverse_posts_v2_and_passes_lon_lat() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
+        seen["key"] = request.url.params.get("key")
         seen["body"] = _json.loads(request.content)
         return httpx.Response(200, json={"status": "ok", "candidates": [{"address": "광안동"}]})
 
     client = _client(handler)
     data = await client.reverse(lon=129.118, lat=35.155, radius_m=200)
     assert seen["path"] == "/v2/reverse"
+    assert seen["key"] == "test-vworld-key"
     assert seen["body"] == {  # None은 제거, lon/lat 그대로
         "lon": 129.118,
         "lat": 35.155,
@@ -67,15 +73,31 @@ async def test_search_uses_type_key() -> None:
 
 
 async def test_regions_within_radius_path() -> None:
-    seen: dict[str, str] = {}
+    seen: dict[str, str | None] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
+        seen["key"] = request.url.params.get("key")
         return httpx.Response(200, json={"status": "ok", "candidates": []})
 
     client = _client(handler)
     await client.regions_within_radius(lon=129.0, lat=35.0, radius_m=2000)
     assert seen["path"] == "/v2/regions/within-radius"
+    assert seen["key"] == "test-vworld-key"
+    await client.aclose()
+
+
+async def test_missing_api_key_raises_unavailable_before_request() -> None:
+    called = {"value": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["value"] = True
+        return httpx.Response(200, json={"status": "ok", "candidates": []})
+
+    client = _client(handler, api_key="")
+    with pytest.raises(KorTravelGeoUnavailable):
+        await client.search(query="테헤란로")
+    assert called["value"] is False
     await client.aclose()
 
 

@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-24 (codex) — kor-travel-geo 신규 v2 API key 계약 대응
+
+**작업**: 사용자 지시 — `kor-travel-geo` 신규 v2 API에 대응. v2 공개 REST `key`는 VWorld
+API key와 동일하게 쓰고, key 추출/저장은 `kor-travel-geo`가 소유하도록 Pinvi 소비 계약을 조정.
+
+**변경**:
+- `apps/api/app/clients/kor_travel_geo.py` — 모든 v2 POST에
+  `key=<PINVI_VWORLD_API_KEY>` query를 붙이고, key 미설정 시 upstream 호출 전
+  `KorTravelGeoUnavailable`로 degrade. 로그에는 path만 남김.
+- `apps/api/tests/unit/test_kor_travel_geo_client.py` — key query 전달과 key 미설정 시
+  네트워크 미호출을 고정.
+- ADR-048 추가, `CLAUDE.md` ADR 현황 동기화, `docs/integrations/kor-travel-geo.md`/
+  `docs/api/regions.md`/`docs/architecture/geocoding-open-decisions.md`/env 템플릿을 최신
+  v2 key·`point{lon,lat}`·`within-radius` 계약으로 정리.
+
+**결정**: 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 만들지 않는다. 운영자는 Pinvi
+`PINVI_VWORLD_API_KEY`와 `kor-travel-geo` `KTG_VWORLD_API_KEY`를 같은 raw 값으로 설정하고,
+공개 API key hash 저장/검증은 `kor-travel-geo`가 소유한다(ADR-048).
+
+**검증**: WSL ext4 미러에서 API venv를 재생성한 뒤
+`pytest tests/unit/test_kor_travel_geo_client.py tests/integration/test_geo_api.py -q`
+(16 passed), `ruff check app/clients/kor_travel_geo.py app/core/config.py
+tests/unit/test_kor_travel_geo_client.py`, `mypy app/clients/kor_travel_geo.py
+app/core/config.py`, Windows `git diff --check` 통과.
+
+**발견**: ext4 미러의 기존 `apps/api/.venv/bin/alembic` shebang이 과거
+`/mnt/f/dev/tripmate-codex/...`를 가리켜 통합 테스트 setup이 실패했다. 미러 venv만 삭제 후
+`uv sync --project apps/api --extra dev`로 재생성해 해결했다.
+
+**다음**: PR merge 후 v0.1.0 릴리즈 직전 최종 smoke/tag/GitHub Release notes.
+
 ## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
 
 **작업**: 사용자 지시 — `kor-travel-map` issue #508의 prod endpoint 정보 redaction 문제가

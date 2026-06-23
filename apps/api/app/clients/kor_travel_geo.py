@@ -45,10 +45,12 @@ class KorTravelGeoClient:
         self,
         http: httpx.AsyncClient,
         *,
+        api_key: str | None = None,
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
     ) -> None:
         self._http = http
+        self._api_key = (api_key or "").strip()
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
 
@@ -61,7 +63,7 @@ class KorTravelGeoClient:
         body = {k: v for k, v in payload.items() if v is not None}
         for attempt in range(self._max_attempts):
             try:
-                resp = await self._http.post(path, json=body)
+                resp = await self._http.post(path, params=self._auth_params(), json=body)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelGeoUnavailable(f"kor-travel-geo 요청 실패({path}): {exc!r}")
             else:
@@ -83,6 +85,11 @@ class KorTravelGeoClient:
         if not isinstance(body, dict):
             raise KorTravelGeoError(f"예상치 못한 응답 셰입({resp.request.url.path})")
         return body
+
+    def _auth_params(self) -> dict[str, str]:
+        if not self._api_key:
+            raise KorTravelGeoUnavailable("kor-travel-geo v2 공개 API key가 설정되지 않았습니다.")
+        return {"key": self._api_key}
 
     # ── v2 endpoint (docs/integrations/kor-travel-geo.md §3) ───────────────────
 
@@ -182,7 +189,11 @@ def create_kor_travel_geo_client(app_settings: Settings) -> KorTravelGeoClient:
         base_url=app_settings.pinvi_kor_travel_geo_base_url,
         timeout=app_settings.pinvi_kor_travel_geo_timeout_seconds,
     )
-    return KorTravelGeoClient(http, max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts)
+    return KorTravelGeoClient(
+        http,
+        api_key=app_settings.pinvi_vworld_api_key,
+        max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts,
+    )
 
 
 @asynccontextmanager

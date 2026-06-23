@@ -71,7 +71,7 @@
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-047**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-048**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -96,8 +96,9 @@ ADR-046 (Web 지도 클라이언트도 `maplibre-vworld-react`의 `vworld-map-we
 vendored tarball 소비로 전환, 기존 `maplibre-vworld`/`maplibre-vworld-js` 의존 삭제),
 ADR-047 (운영 도메인은 공개 repo 비노출 — gitignore `infra/.env.prod`에만 두고
 compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + Dagster webserver는
-12802로 고정).
-다음 신규 = ADR-048.
+12802로 고정), ADR-048 (`kor-travel-geo` v2 공개 API key는 서버 `PINVI_VWORLD_API_KEY`와
+동일하며, hash 저장/검증은 `kor-travel-geo`가 소유).
+다음 신규 = ADR-049.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
