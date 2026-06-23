@@ -16,6 +16,7 @@
   "dependencies": {
     "@pinvi/api-client": "*",
     "@pinvi/design-tokens": "*",
+    "@pinvi/domain": "*",
     "@pinvi/hooks": "*",
     "@pinvi/i18n": "*",
     "@pinvi/schemas": "*",
