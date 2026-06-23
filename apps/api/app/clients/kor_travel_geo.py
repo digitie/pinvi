@@ -88,9 +88,7 @@ class KorTravelGeoClient:
 
     def _auth_params(self) -> dict[str, str]:
         if not self._api_key:
-            raise KorTravelGeoUnavailable(
-                "kor-travel-geo v2 공개 API key가 설정되지 않았습니다."
-            )
+            raise KorTravelGeoUnavailable("kor-travel-geo v2 공개 API key가 설정되지 않았습니다.")
         return {"key": self._api_key}
 
     # ── v2 endpoint (docs/integrations/kor-travel-geo.md §3) ───────────────────
