@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-06-24 (codex) — Web Docker image vendor tarball install stage 복구
+
+운영 배포용 Docker Images workflow 수동 실행에서 API image는 push됐지만 Web image가
+`npm install` 중 vendored `file:` tarball을 찾지 못해 실패했다. `apps/web/Dockerfile` deps
+stage가 package manifest만 복사하고 `apps/web/vendor/vworld-map-web-1.0.0.tgz`와
+`apps/mobile/vendor/vworld-map-core-1.0.0.tgz`를 복사하지 않는 것이 원인이었다. install 전
+두 tarball을 복사하도록 수정했고, WSL ext4 미러에서 Web Docker deps stage build로 검증했다.
+PR merge 후 Docker Images workflow를 다시 실행하고 운영 노드 배포를 계속한다.
+
 ## 2026-06-24 (codex) — kor-travel-geo 신규 v2 API key 계약 대응
 
 `kor-travel-geo` 최신 v2 REST가 공개 API `key` query를 검증하므로 Pinvi geocoding client가
