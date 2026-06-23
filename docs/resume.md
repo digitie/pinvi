@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
+
+`kor-travel-map` issue #508의 공개 문서 prod endpoint redaction 문제를 Pinvi에도 대입해
+tracked 파일을 점검했다. #508에 기록된 실제 운영 도메인/IP 패턴 잔여는 없었고, 같은 성격의 잔여로
+`docs/journal.md`의 WSL private IP와 legacy API host literal, Grafana runbook의 실제처럼
+보이는 도메인 예시를 placeholder로 치환했다. 문서 변경만이라 빌드/테스트는 생략하고
+tracked 검색과 `git diff --check`로 재검증했다.
+
 ## 2026-06-22 (claude) — 지도 feature 검색 abort 전파 (kor-travel-concierge #111 유사 패턴)
 
 kor-travel-concierge #111(BFF abort 미전파)과 비슷한 패턴을 pinvi에서 점검했다. pinvi는 BFF가

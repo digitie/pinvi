@@ -22,8 +22,8 @@ org_role = Viewer
 disable_login_form = false
 
 [server]
-domain = grafana.pinvi.kr
-root_url = https://grafana.pinvi.kr/
+domain = grafana.example.com
+root_url = https://grafana.example.com/
 ```
 
 `infra/grafana/provisioning/dashboards/default.yaml`:
@@ -57,7 +57,7 @@ Sprint 6에 추가:
 'use client';
 
 export default function GrafanaPage() {
-  const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? 'https://grafana.pinvi.kr';
+  const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? 'https://grafana.example.com';
   return (
     <div className="h-screen w-full">
       <iframe
@@ -92,7 +92,7 @@ Grafana 측:
 
 ```
 X-Frame-Options: 제거 (allow_embedding=true가 처리)
-Content-Security-Policy: frame-ancestors https://app.pinvi.kr https://*.pinvi.kr;
+Content-Security-Policy: frame-ancestors https://pinvi.example.com https://*.pinvi.example.com;
 ```
 
 ## 4. RBAC
