@@ -34,7 +34,7 @@ export const authApi = (client: ApiClient) => ({
     client.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify(LoginRequestSchema.parse(body)),
-      schema: z.object({ user: AuthUserSchema }),
+      schema: AuthUserSchema,
     }),
 
   refresh: () =>
