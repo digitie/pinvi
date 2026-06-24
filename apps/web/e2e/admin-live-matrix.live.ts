@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test as base, type Page } from '@playwright/test';
+import { expect, test as base, type Browser, type Page } from '@playwright/test';
 
 interface AdminRoute {
   path: string;
@@ -21,6 +21,11 @@ interface AdminUiCase {
   run: (page: Page) => Promise<void>;
 }
 
+interface AdminAuthState {
+  path: string;
+  refreshedAt: number;
+}
+
 const liveEnabled = process.env.PINVI_ADMIN_LIVE_E2E === '1';
 const webBaseUrl =
   process.env.PINVI_ADMIN_LIVE_WEB_URL ??
@@ -39,6 +44,10 @@ const parsedRetryBackoffMs = process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS
 const retryBackoffMs = Number.isFinite(parsedRetryBackoffMs)
   ? Math.max(0, parsedRetryBackoffMs)
   : 10_000;
+const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '2700000');
+const authRefreshMs = Number.isFinite(parsedAuthRefreshMs)
+  ? Math.max(60_000, parsedAuthRefreshMs)
+  : 2_700_000;
 const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;
@@ -173,35 +182,47 @@ async function loginViaUi(page: Page) {
   await expect(page.getByTestId('admin-me')).toBeVisible();
 }
 
-const liveUiTest = base.extend<{ page: Page }, { adminAuthState: string }>({
+async function refreshAdminAuthState(browser: Browser, authState: AdminAuthState) {
+  const context = await browser.newContext({
+    baseURL: webBaseUrl,
+    ignoreHTTPSErrors: true,
+  });
+  const page = await context.newPage();
+  try {
+    await loginViaUi(page);
+    await context.storageState({ path: authState.path });
+    authState.refreshedAt = Date.now();
+  } finally {
+    await context.close();
+  }
+}
+
+const liveUiTest = base.extend<{ page: Page }, { adminAuthState: AdminAuthState | null }>({
   adminAuthState: [
     async ({ browser }, use, workerInfo) => {
       if (!liveEnabled || !adminEmail || !adminPassword) {
-        await use('');
+        await use(null);
         return;
       }
 
       const authDir = path.join(process.cwd(), 'test-results', '.auth');
       await fs.mkdir(authDir, { recursive: true });
       const authStatePath = path.join(authDir, `admin-live-ui-${workerInfo.workerIndex}.json`);
+      const authState: AdminAuthState = { path: authStatePath, refreshedAt: 0 };
 
-      const context = await browser.newContext({
-        baseURL: webBaseUrl,
-        ignoreHTTPSErrors: true,
-      });
-      const page = await context.newPage();
-      await loginViaUi(page);
-      await context.storageState({ path: authStatePath });
-      await context.close();
-      await use(authStatePath);
+      await refreshAdminAuthState(browser, authState);
+      await use(authState);
     },
     { scope: 'worker' },
   ],
   page: async ({ browser, adminAuthState }, use) => {
+    if (adminAuthState && Date.now() - adminAuthState.refreshedAt >= authRefreshMs) {
+      await refreshAdminAuthState(browser, adminAuthState);
+    }
     const context = await browser.newContext({
       baseURL: webBaseUrl,
       ignoreHTTPSErrors: true,
-      storageState: adminAuthState || undefined,
+      storageState: adminAuthState?.path,
     });
     const page = await context.newPage();
     await use(page);
