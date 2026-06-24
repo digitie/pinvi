@@ -29,6 +29,16 @@ const webBaseUrl =
 const adminEmail = process.env.PINVI_ADMIN_LIVE_EMAIL;
 const adminPassword = process.env.PINVI_ADMIN_LIVE_PASSWORD;
 const throttleMs = Number(process.env.PINVI_ADMIN_LIVE_THROTTLE_MS ?? '2100');
+const parsedCaseAttempts = Number(process.env.PINVI_ADMIN_LIVE_CASE_ATTEMPTS ?? '3');
+const caseAttempts = Number.isFinite(parsedCaseAttempts)
+  ? Math.max(1, Math.floor(parsedCaseAttempts))
+  : 3;
+const parsedRetryBackoffMs = process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS
+  ? Number(process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS)
+  : Math.max(throttleMs * 4, 10_000);
+const retryBackoffMs = Number.isFinite(parsedRetryBackoffMs)
+  ? Math.max(0, parsedRetryBackoffMs)
+  : 10_000;
 const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;
@@ -248,6 +258,21 @@ async function openRoute(page: Page, route: AdminRoute) {
 
 async function openTableRoute(page: Page, pathName: string, heading: string) {
   await openRoute(page, { path: pathName, heading, table: true });
+}
+
+async function runLiveCaseWithAttempts(page: Page, liveCase: AdminUiCase) {
+  for (let attempt = 1; attempt <= caseAttempts; attempt += 1) {
+    try {
+      await setViewport(page, liveCase.viewport);
+      await liveCase.run(page);
+      return;
+    } catch (error) {
+      if (attempt >= caseAttempts) {
+        throw error;
+      }
+      await page.waitForTimeout(retryBackoffMs * attempt);
+    }
+  }
 }
 
 function pushCase(
@@ -626,8 +651,7 @@ liveUiTest.describe('admin live UI matrix', () => {
 
   for (const [index, liveCase] of selectedLiveUiCases.entries()) {
     liveUiTest(`[${String(index + 1).padStart(4, '0')}] ${liveCase.name}`, async ({ page }) => {
-      await setViewport(page, liveCase.viewport);
-      await liveCase.run(page);
+      await runLiveCaseWithAttempts(page, liveCase);
     });
   }
 });

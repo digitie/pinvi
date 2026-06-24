@@ -28,6 +28,8 @@ export PINVI_ADMIN_LIVE_PASSWORD="<admin password>"
 
 ```bash
 export PINVI_ADMIN_LIVE_THROTTLE_MS=2100
+export PINVI_ADMIN_LIVE_CASE_ATTEMPTS=3
+export PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS=10000
 export PINVI_ADMIN_LIVE_CASE_LIMIT=200
 export PINVI_ADMIN_LIVE_WORKERS=1
 ```
@@ -36,6 +38,9 @@ export PINVI_ADMIN_LIVE_WORKERS=1
 `PINVI_ADMIN_LIVE_THROTTLE_MS` 기본값은 2100ms다. 운영 기본 authenticated rate limit
 60/min에서 Admin 화면이 `/auth/me`와 화면 API를 함께 호출하므로, live 검증에서는 이 값을
 낮추지 않는다.
+`PINVI_ADMIN_LIVE_CASE_ATTEMPTS`는 live rate limit 또는 순간 네트워크 실패를 흡수하기 위한
+case별 재시도 횟수다. 이 suite는 read-only 및 client validation 범위만 포함하므로 같은
+case 재시도가 서버 상태를 바꾸지 않는다.
 
 ## 3. N150 실행
 
