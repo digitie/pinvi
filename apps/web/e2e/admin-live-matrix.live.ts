@@ -44,10 +44,10 @@ const parsedRetryBackoffMs = process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS
 const retryBackoffMs = Number.isFinite(parsedRetryBackoffMs)
   ? Math.max(0, parsedRetryBackoffMs)
   : 10_000;
-const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '2700000');
+const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '600000');
 const authRefreshMs = Number.isFinite(parsedAuthRefreshMs)
   ? Math.max(60_000, parsedAuthRefreshMs)
-  : 2_700_000;
+  : 600_000;
 const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;

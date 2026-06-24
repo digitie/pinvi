@@ -31,7 +31,7 @@ export PINVI_ADMIN_LIVE_THROTTLE_MS=2100
 export PINVI_ADMIN_LIVE_CASE_ATTEMPTS=3
 export PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS=10000
 export PINVI_ADMIN_LIVE_TEST_TIMEOUT_MS=120000
-export PINVI_ADMIN_LIVE_AUTH_REFRESH_MS=2700000
+export PINVI_ADMIN_LIVE_AUTH_REFRESH_MS=600000
 export PINVI_ADMIN_LIVE_CASE_LIMIT=200
 export PINVI_ADMIN_LIVE_WORKERS=1
 ```
@@ -44,7 +44,7 @@ export PINVI_ADMIN_LIVE_WORKERS=1
 case별 재시도 횟수다. 이 suite는 read-only 및 client validation 범위만 포함하므로 같은
 case 재시도가 서버 상태를 바꾸지 않는다.
 재시도 backoff를 허용하기 위해 `PINVI_ADMIN_LIVE_TEST_TIMEOUT_MS` 기본값은 120000ms다.
-긴 full run은 admin session TTL을 넘을 수 있으므로, worker storage state는 기본 45분마다
+긴 full run은 access token/cookie TTL을 넘을 수 있으므로, worker storage state는 기본 10분마다
 `PINVI_ADMIN_LIVE_AUTH_REFRESH_MS` 기준으로 UI login을 다시 수행해 갱신한다.
 
 ## 3. N150 실행
