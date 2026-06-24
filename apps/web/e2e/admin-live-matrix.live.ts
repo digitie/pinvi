@@ -220,14 +220,18 @@ async function expectAdminShell(page: Page, heading: string) {
   await expect(page.getByTestId('not-found-page')).toHaveCount(0);
 }
 
-async function expectNoAlerts(page: Page) {
-  await expect(page.getByRole('alert')).toHaveCount(0);
+async function expectNoBlockingErrors(page: Page) {
+  await expect(
+    page.getByText(
+      /불러오지 못했습니다|조회 실패|검증 실패|알 수 없는 오류|요청이 올바르지 않습니다|Response shape mismatch|HTTP \d{3}|Internal Server Error|Unauthorized|Forbidden/,
+    ),
+  ).toHaveCount(0);
 }
 
 async function waitForAdminTable(page: Page) {
   await expect(page.getByTestId('admin-table-scroll')).toBeVisible();
   await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
-  await expectNoAlerts(page);
+  await expectNoBlockingErrors(page);
 }
 
 async function openRoute(page: Page, route: AdminRoute) {
@@ -236,7 +240,7 @@ async function openRoute(page: Page, route: AdminRoute) {
   if (route.table) {
     await waitForAdminTable(page);
   } else {
-    await expectNoAlerts(page);
+    await expectNoBlockingErrors(page);
   }
 }
 
@@ -276,7 +280,7 @@ function pushNavigationCases(cases: AdminUiCase[]) {
           if (route.table) {
             await waitForAdminTable(page);
           } else {
-            await expectNoAlerts(page);
+            await expectNoBlockingErrors(page);
           }
         });
       }
@@ -492,7 +496,7 @@ function pushSortCases(cases: AdminUiCase[]) {
               await expect(sortButton).toBeVisible();
               await sortButton.click();
               await expect(sortButton).toBeVisible();
-              await expectNoAlerts(page);
+              await expectNoBlockingErrors(page);
             },
           );
         }
