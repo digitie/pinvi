@@ -23,6 +23,9 @@
 
 ## 완료
 
+- [x] T-203 — Admin live UI e2e 매트릭스와 N150 재배포 검증 기반 추가 (완료: 2026-06-24, codex).
+  `apps/web`에 live 전용 Playwright config와 3233개 Admin UI 케이스를 추가하고,
+  `ktdctl` 기반 N150 재빌드/재기동 절차와 운영 Web API URL 보정 내용을 runbook으로 문서화했다.
 - [x] T-202 — `kor-travel-geo` v2 공개 API key 계약 대응 (완료: 2026-06-24, codex).
   최신 `kor-travel-geo` v2 REST가 `key` query를 검증하므로 Pinvi geocoding client가
   서버 `PINVI_VWORLD_API_KEY`를 모든 v2 POST에 붙이도록 변경했다. 별도 geo key env는 두지

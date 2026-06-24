@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-24 (codex) — Admin live UI e2e 매트릭스 + N150 재배포 검증
+
+**작업**: N150 운영 도메인(`pinvi.digitie.mywire.org`) 기준 Admin UI live e2e 2000개 이상을
+Playwright 매트릭스로 생성했다. live 안전 게이트(`PINVI_ADMIN_LIVE_E2E=1`), worker별 UI 로그인
+storage state, route/filter/sort/navigation/dashboard/MCP validation 케이스를 분리했다.
+
+**배포**: `ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했다. 운영 Web image의
+`NEXT_PUBLIC_PINVI_API_URL`이 잘못 baked-in 되어 있던 문제를 배포 host compose에서 보정했고,
+Web 번들 old URL hit 0건과 API/Web/Dagster 200/healthy를 확인했다.
+
+**검증**: Web typecheck/lint/Vitest/Prettier 통과. live e2e catalog는 3233개(매트릭스 3230 +
+login 2 + catalog 1)를 생성한다. authenticated live 실행 중 `/auth/login` 응답 shape mismatch를
+발견해 web auth client 계약 수정으로 이어간다.
+
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
 **작업**: `kor-travel-geo` v2 대응 PR merge 후 운영 배포를 위해 Docker Images workflow를

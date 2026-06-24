@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-06-24 (codex) — Admin live UI e2e / N150 재배포
+
+Admin UI live e2e 전용 Playwright config와 3233개 케이스 매트릭스를 추가했다. N150에서는
+`ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했고, 운영 Web 번들 API URL을
+`https://pinvi-api.digitie.mywire.org`로 보정했다. 현재 API/Web/Dagster health는 200/healthy.
+다음 작업은 `/auth/login` 응답 shape에 맞춘 web client 수정 배포 후 authenticated live matrix를
+실행하는 것이다.
+
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
 운영 배포용 Docker Images workflow 수동 실행에서 API image는 push됐지만 Web image가
