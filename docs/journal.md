@@ -2,19 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
-## 2026-06-24 (codex) — Admin live UI e2e 매트릭스 + N150 재배포 검증
+## 2026-06-24~25 (codex) — Admin live UI e2e 매트릭스 + N150 재배포 검증
 
-**작업**: N150 운영 도메인(`pinvi.digitie.mywire.org`) 기준 Admin UI live e2e 2000개 이상을
-Playwright 매트릭스로 생성했다. live 안전 게이트(`PINVI_ADMIN_LIVE_E2E=1`), worker별 UI 로그인
-storage state, route/filter/sort/navigation/dashboard/MCP validation 케이스를 분리했다.
+**작업**: N150 운영 도메인 기준 Admin UI live e2e 2000개 이상을 Playwright 매트릭스로
+생성했다. live 안전 게이트(`PINVI_ADMIN_LIVE_E2E=1`), worker별 UI 로그인 storage state,
+route/filter/sort/navigation/dashboard/MCP validation 케이스를 분리했다.
 
 **배포**: `ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했다. 운영 Web image의
 `NEXT_PUBLIC_PINVI_API_URL`이 잘못 baked-in 되어 있던 문제를 배포 host compose에서 보정했고,
 Web 번들 old URL hit 0건과 API/Web/Dagster 200/healthy를 확인했다.
 
+**수정**:
+- `/auth/login` live 응답이 user envelope가 아니라 user object를 직접 반환하는 계약에 맞춰
+  web auth client/login page를 정렬했다.
+- live case limit을 test registration 전에 적용해 2000개 제한 실행이 실제로 2000개 수준으로
+  잘리도록 수정했다.
+- 운영 rate-limit에 맞춰 live suite 기본 throttle, per-case retry/backoff, test timeout을 조정했다.
+- 컨테이너 내부 backup path 탐색 fallback을 보강해 `/admin/backup` live route가 500으로
+  떨어지지 않게 했다.
+- 장시간 실행 중 access token/cookie 만료로 admin route가 로그인 화면에 리다이렉트되는 문제를
+  worker storage state 10분 주기 UI 재로그인 갱신으로 막았다.
+
 **검증**: Web typecheck/lint/Vitest/Prettier 통과. live e2e catalog는 3233개(매트릭스 3230 +
-login 2 + catalog 1)를 생성한다. authenticated live 실행 중 `/auth/login` 응답 shape mismatch를
-발견해 web auth client 계약 수정으로 이어간다.
+login 2 + catalog 1)를 생성한다. N150 live authenticated 실행은
+`PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms 기준
+2004개 테스트가 모두 통과했다(`2004 passed`, 2.8h). 실행 후 임시 admin/session과
+Playwright 결과 디렉터리 정리까지 확인했다.
 
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 

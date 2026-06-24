@@ -4,9 +4,14 @@
 
 Admin UI live e2e 전용 Playwright config와 3233개 케이스 매트릭스를 추가했다. N150에서는
 `ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했고, 운영 Web 번들 API URL을
-`https://pinvi-api.digitie.mywire.org`로 보정했다. 현재 API/Web/Dagster health는 200/healthy.
-다음 작업은 `/auth/login` 응답 shape에 맞춘 web client 수정 배포 후 authenticated live matrix를
-실행하는 것이다.
+운영 API 도메인으로 보정했다. live 검증 중 발견한 `/auth/login` 응답 계약, backup container
+path, rate-limit, 장시간 access cookie 만료 문제를 수정했고 각 수정 단위는 커밋했다.
+최종 검증은 `PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms
+기준 N150 live authenticated run `2004 passed`(2.8h)로 완료했다. 임시 admin/session과
+Playwright 결과 디렉터리 정리도 확인했다.
+
+다음 작업은 이 브랜치를 push하고 PR을 한 번 생성한 뒤, PR CI/리뷰 결과에 따라 v0.1.0 릴리즈
+직전 smoke/tag 절차로 이어가는 것이다.
 
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 

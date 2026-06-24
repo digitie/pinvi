@@ -52,7 +52,8 @@
   설정을 보강했다.
 - N150/live 대상 Admin Playwright E2E matrix를 추가했다. 기존 mock e2e와 분리된
   `test:e2e:admin-live` suite가 Admin UI 기준 live 케이스 3233개를 생성하며,
-  실제 실행은 명시적 환경변수와 live admin credential이 있을 때만 수행한다.
+  실제 실행은 명시적 환경변수와 live admin credential이 있을 때만 수행한다. N150 live
+  authenticated run은 2001개 matrix 제한 기준 2004개 테스트 통과로 검증했다.
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
 - 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,
