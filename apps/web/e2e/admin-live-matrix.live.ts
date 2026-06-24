@@ -562,6 +562,9 @@ function buildUiCases() {
 }
 
 const liveUiCases = buildUiCases();
+const selectedLiveUiCases = Number.isFinite(caseLimit)
+  ? liveUiCases.slice(0, Math.max(0, caseLimit))
+  : liveUiCases;
 
 base.describe('admin live UI e2e catalog', () => {
   base('UI live case catalog has at least 2000 browser cases', () => {
@@ -600,12 +603,8 @@ liveUiTest.describe('admin live UI matrix', () => {
     'PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.',
   );
 
-  for (const [index, liveCase] of liveUiCases.entries()) {
+  for (const [index, liveCase] of selectedLiveUiCases.entries()) {
     liveUiTest(`[${String(index + 1).padStart(4, '0')}] ${liveCase.name}`, async ({ page }) => {
-      if (index >= caseLimit) {
-        liveUiTest.skip(true, `PINVI_ADMIN_LIVE_CASE_LIMIT=${caseLimit}`);
-      }
-
       await throttle();
       await setViewport(page, liveCase.viewport);
       await liveCase.run(page);
