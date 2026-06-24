@@ -28,7 +28,7 @@ const webBaseUrl =
   'http://127.0.0.1:12805';
 const adminEmail = process.env.PINVI_ADMIN_LIVE_EMAIL;
 const adminPassword = process.env.PINVI_ADMIN_LIVE_PASSWORD;
-const throttleMs = Number(process.env.PINVI_ADMIN_LIVE_THROTTLE_MS ?? '25');
+const throttleMs = Number(process.env.PINVI_ADMIN_LIVE_THROTTLE_MS ?? '2100');
 const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;
@@ -147,6 +147,7 @@ async function loginViaUi(page: Page) {
   await page.goto('/admin/login');
   await page.getByTestId('admin-login-email').fill(adminEmail);
   await page.getByTestId('admin-login-password').fill(adminPassword);
+  await throttle();
   await page.getByTestId('admin-login-submit').click();
   try {
     await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
@@ -235,6 +236,7 @@ async function waitForAdminTable(page: Page) {
 }
 
 async function openRoute(page: Page, route: AdminRoute) {
+  await throttle();
   await page.goto(route.path);
   await expectAdminShell(page, route.heading);
   if (route.table) {
@@ -275,6 +277,7 @@ function pushNavigationCases(cases: AdminUiCase[]) {
       for (const route of uiRoutes) {
         pushCase(cases, `nav clicks ${route.path} repeat=${repeat}`, viewport, async (page) => {
           await openRoute(page, dashboardRoute);
+          await throttle();
           await page.getByTestId(navTestId(route.path)).click();
           await expectAdminShell(page, route.heading);
           if (route.table) {
@@ -318,7 +321,9 @@ function pushUsersFilterCases(cases: AdminUiCase[]) {
           async (page) => {
             await openTableRoute(page, '/admin/users', '사용자');
             await page.getByTestId('admin-users-search').fill(query);
+            await throttle();
             await page.getByTestId('admin-users-search-submit').click();
+            await throttle();
             await page.getByTestId('admin-users-status-filter').selectOption(status);
             await waitForAdminTable(page);
             await expect(page.getByTestId('admin-users-search')).toHaveValue(query);
@@ -344,8 +349,11 @@ function pushTripsFilterCases(cases: AdminUiCase[]) {
             async (page) => {
               await openTableRoute(page, '/admin/trips', '여행');
               await page.getByTestId('admin-trips-search').fill(query);
+              await throttle();
               await page.getByTestId('admin-trips-search-submit').click();
+              await throttle();
               await page.getByTestId('admin-trips-status-filter').selectOption(status);
+              await throttle();
               await page.getByTestId('admin-trips-visibility-filter').selectOption(visibility);
               await waitForAdminTable(page);
               await expect(page.getByTestId('admin-trips-search')).toHaveValue(query);
@@ -373,7 +381,9 @@ function pushPoisFilterCases(cases: AdminUiCase[]) {
           async (page) => {
             await openTableRoute(page, '/admin/pois', 'POI');
             await page.getByTestId('admin-pois-search').fill(query);
+            await throttle();
             await page.getByTestId('admin-pois-search-submit').click();
+            await throttle();
             await page.getByTestId('admin-pois-broken-filter').selectOption(linkFilter);
             await waitForAdminTable(page);
             await expect(page.getByTestId('admin-pois-search')).toHaveValue(query);
@@ -402,6 +412,7 @@ function pushApiCallFilterCases(cases: AdminUiCase[]) {
               await page.getByTestId('admin-api-calls-provider').fill(provider);
               await page.getByTestId('admin-api-calls-status').fill(statusCode);
               await page.getByTestId('admin-api-calls-error').fill(errorClass);
+              await throttle();
               await page.getByTestId('admin-api-calls-submit').click();
               await waitForAdminTable(page);
               await expect(page.getByTestId('admin-api-calls-provider')).toHaveValue(provider);
@@ -426,6 +437,7 @@ function pushEmailsFilterCases(cases: AdminUiCase[]) {
           viewport,
           async (page) => {
             await openTableRoute(page, '/admin/emails', '이메일 큐');
+            await throttle();
             await page.getByTestId('admin-emails-status-filter').selectOption(status);
             await waitForAdminTable(page);
             await expect(page.getByTestId('admin-emails-status-filter')).toHaveValue(status);
@@ -448,7 +460,9 @@ function pushMcpFilterCases(cases: AdminUiCase[]) {
           async (page) => {
             await openTableRoute(page, '/admin/mcp-tokens', 'MCP 토큰');
             await page.getByTestId('admin-mcp-search').fill(query);
+            await throttle();
             await page.getByRole('button', { name: '조회' }).click();
+            await throttle();
             await page.getByTestId('admin-mcp-status').selectOption(status);
             await waitForAdminTable(page);
             await expect(page.getByTestId('admin-mcp-search')).toHaveValue(query);
@@ -471,6 +485,7 @@ function pushFeatureRequestFilterCases(cases: AdminUiCase[]) {
           viewport,
           async (page) => {
             await openTableRoute(page, '/admin/feature-requests', 'Feature 제안 검토');
+            await throttle();
             await page.getByTestId('admin-fr-status-filter').selectOption(status);
             await waitForAdminTable(page);
             await expect(page.getByTestId('admin-fr-status-filter')).toHaveValue(status);
@@ -494,6 +509,7 @@ function pushSortCases(cases: AdminUiCase[]) {
               await openTableRoute(page, spec.route, spec.heading);
               const sortButton = page.getByTestId(`admin-table-sort-${column}`).first();
               await expect(sortButton).toBeVisible();
+              await throttle();
               await sortButton.click();
               await expect(sortButton).toBeVisible();
               await expectNoBlockingErrors(page);
@@ -533,6 +549,7 @@ function pushMcpValidationCases(cases: AdminUiCase[]) {
               await openTableRoute(page, '/admin/mcp-tokens', 'MCP 토큰');
               await page.getByTestId('admin-mcp-user').fill(userId);
               await page.getByTestId('admin-mcp-reason').fill(reason);
+              await throttle();
               await page.getByRole('button', { name: /^발급$/ }).click();
               if (!userId) {
                 await expect(page.getByText('대상 user_id를 입력하세요.')).toBeVisible();
@@ -609,7 +626,6 @@ liveUiTest.describe('admin live UI matrix', () => {
 
   for (const [index, liveCase] of selectedLiveUiCases.entries()) {
     liveUiTest(`[${String(index + 1).padStart(4, '0')}] ${liveCase.name}`, async ({ page }) => {
-      await throttle();
       await setViewport(page, liveCase.viewport);
       await liveCase.run(page);
     });

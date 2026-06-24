@@ -27,12 +27,15 @@ export PINVI_ADMIN_LIVE_PASSWORD="<admin password>"
 선택:
 
 ```bash
-export PINVI_ADMIN_LIVE_THROTTLE_MS=25
+export PINVI_ADMIN_LIVE_THROTTLE_MS=2100
 export PINVI_ADMIN_LIVE_CASE_LIMIT=200
 export PINVI_ADMIN_LIVE_WORKERS=1
 ```
 
 `PINVI_ADMIN_LIVE_CASE_LIMIT`는 smoke/debug용이다. 전체 검증은 설정하지 않는다.
+`PINVI_ADMIN_LIVE_THROTTLE_MS` 기본값은 2100ms다. 운영 기본 authenticated rate limit
+60/min에서 Admin 화면이 `/auth/me`와 화면 API를 함께 호출하므로, live 검증에서는 이 값을
+낮추지 않는다.
 
 ## 3. N150 실행
 
