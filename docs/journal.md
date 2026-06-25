@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-25 (codex) — N150 Web healthcheck 포트 보정
+
+**작업**: PR #231 merge 후 N150에 `deploy-3c16b75` 태그로 API/Web을 재빌드·재기동했다.
+
+**발견**: Web 페이지와 Admin route는 `12805`에서 200으로 응답했지만, Docker image healthcheck가
+`localhost:3000`만 확인해 `pinvi-web-latest`가 `unhealthy`로 남았다.
+
+**변경**:
+- `apps/web/Dockerfile` — healthcheck가 `PINVI_WEB_PORT`, `PORT`, 운영 고정 포트 `12805`,
+  기본 포트 `3000` 후보를 검사하도록 수정했다.
+
+**검증**: `git diff --check`와 healthcheck JS 구문 확인을 통과했다. N150에서는 Web image
+재빌드 후 `pinvi-api-latest`, `pinvi-dagster-latest`, `pinvi-web-latest`를 재생성했고,
+API/DB/Web/Admin/Signup local smoke를 재확인했다.
+
 ## 2026-06-25 (codex) — 로컬 env Pinvi 키 반영 + OAuth 설정 판정
 
 **작업**: 로컬 `.env`의 Resend 키 반영 여부, 로그인 인증 시간, Google OAuth 비활성 상태,
