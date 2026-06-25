@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-25 (codex) — N150 Web healthcheck 포트 보정
+
+PR #231 merge 후 N150의 Pinvi checkout을 `3c16b75`로 fast-forward하고, docker-manager
+`.env`의 API/Web image tag를 `deploy-3c16b75`로 갱신해 재빌드·재기동했다. 1차 Web build는
+`esbuild` `ETXTBSY`로 실패했지만 Web 단독 재시도에서 통과했다.
+
+운영 Web/Admin/Signup route는 `12805`에서 200으로 응답했으나 Docker healthcheck가
+`localhost:3000`만 확인해 Web container가 `unhealthy`로 남는 문제가 있어,
+`apps/web/Dockerfile` healthcheck가 `PINVI_WEB_PORT`, `PORT`, `12805`, `3000` 후보를
+검사하도록 수정했다.
+
 ## 2026-06-25 (codex) — 로컬 env / 인증 시간 / OAuth 상태
 
 로컬 `.env`가 legacy `TRIPMATE_*` 키만 갖고 있어 현재 앱 설정(`PINVI_*`)에 Resend와

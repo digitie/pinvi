@@ -50,6 +50,8 @@
 - Web Docker image build가 vendored `vworld-map-web`/`vworld-map-core` tarball과
   `@pinvi/domain` workspace를 install/build stage에서 사용할 수 있도록 package/Dockerfile
   설정을 보강했다.
+- Web Docker healthcheck가 운영 고정 포트 `12805`에서 실행되는 컨테이너도 정상으로
+  판정하도록 포트 후보를 확장했다.
 - N150/live 대상 Admin Playwright E2E matrix를 추가했다. 기존 mock e2e와 분리된
   `test:e2e:admin-live` suite가 Admin UI 기준 live 케이스 3233개를 생성하며,
   실제 실행은 명시적 환경변수와 live admin credential이 있을 때만 수행한다. N150 live

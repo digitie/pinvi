@@ -42,6 +42,6 @@ COPY --from=build /repo/node_modules ./node_modules
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD node -e "fetch('http://localhost:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+    CMD node -e "const ports=[process.env.PINVI_WEB_PORT,process.env.PORT,'12805','3000'].filter(Boolean);Promise.any(ports.map((p)=>fetch('http://127.0.0.1:'+p).then((r)=>{if(!r.ok)throw new Error(String(r.status));}))).then(()=>process.exit(0)).catch(()=>process.exit(1))"
 
 CMD ["npx", "next", "start", "-p", "3000"]
