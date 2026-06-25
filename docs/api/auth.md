@@ -111,9 +111,11 @@ Content-Type: application/json
 { "email": "user@example.com" }
 ```
 
-- 이메일 존재 여부에 관계없이 `200 OK` (계정 enumeration 차단)
-- 미인증 user가 있으면 새 verify 토큰 발급 + 발송, 직전 토큰 `used_at = now()`로 폐기
-- Rate limit: 분당 1회 per email
+- 이메일 존재 여부에 관계없이 `200 OK`, body는 `{ "accepted": true }`만 (계정 enumeration 차단)
+- 미인증 user가 있으면 새 signup verify 토큰(24h) 발급 + 발송, 직전 미사용 signup 토큰 `used_at = now()`로 폐기
+- cooldown: 같은 사용자 재발송 최소 간격은 `pinvi_email_verification_resend_cooldown_seconds`(기본 60초).
+  cooldown 안이면 새 메일을 보내지 않는다(직전 메일 확인 유도)
+- 로그인(`POST /auth/login`)이 미인증 계정을 감지하면 이 재발송을 자동 호출한다(§3.1, 같은 cooldown 공유)
 
 ## 3. 로그인 / 로그아웃 / refresh
 
@@ -141,7 +143,9 @@ Set-Cookie 두 개.
 에러:
 
 - `401 AUTH_INVALID_CREDENTIALS` — 이메일 X 또는 비밀번호 X. user enumeration 차단 위해 동일 메시지
-- `401 EMAIL_NOT_VERIFIED` — body에 `verification_email_dispatched: bool`, 재발송 옵션 안내
+- `401 EMAIL_NOT_VERIFIED` — 비밀번호 검증을 통과한 미인증 계정. 가입 인증(재인증) 메일을 자동
+  재발송하고(§2.3, cooldown 적용), `error.details.verification_email_dispatched: bool`로 새 메일
+  발송 여부를 알린다. 클라이언트(로그인 화면)는 "인증 메일 다시 보내기" 버튼도 함께 제공한다
 - `403 PERMISSION_DENIED` — `users.status = 'disabled'`
 
 ### 3.2 `POST /auth/refresh`

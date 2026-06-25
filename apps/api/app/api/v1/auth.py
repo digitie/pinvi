@@ -25,6 +25,8 @@ from app.schemas.auth import (
     RegisterResponse,
     UserResponse,
     VerifyEmailRequest,
+    VerifyEmailResendRequest,
+    VerifyEmailResendResponse,
 )
 from app.schemas.envelope import Envelope
 from app.services.auth_session import (
@@ -43,6 +45,7 @@ from app.services.user_registration import (
     authenticate,
     register_user,
     request_password_reset,
+    resend_verification_email,
     reset_password,
     verify_email,
 )
@@ -199,6 +202,23 @@ async def verify_email_endpoint(
 
 
 @router.post(
+    "/verify-email/resend",
+    response_model=Envelope[VerifyEmailResendResponse],
+)
+async def verify_email_resend(
+    body: VerifyEmailResendRequest,
+    db: DbSession,
+) -> Envelope[VerifyEmailResendResponse]:
+    """미인증 계정의 가입 인증 메일 재발송 요청.
+
+    user enumeration을 막기 위해 대상 존재/발송 여부와 무관하게 항상 `accepted=true`를
+    반환한다(비밀번호 재설정 요청과 동일 정책). 실제 발송은 cooldown/적격 여부를 서비스가 판단.
+    """
+    await resend_verification_email(db, email=str(body.email))
+    return Envelope.of(VerifyEmailResendResponse(accepted=True))
+
+
+@router.post(
     "/password/reset-request",
     response_model=Envelope[PasswordResetRequestResponse],
 )
@@ -239,12 +259,15 @@ async def login(
     try:
         user = await authenticate(db, email=str(body.email), password=body.password)
     except EmailNotVerifiedError as exc:
+        # 비밀번호 검증을 통과한 미인증 계정 — 재인증(가입 인증) 링크를 재발송한다.
+        # 올바른 비밀번호로 소유가 증명됐으므로 dispatched 결과 노출은 enumeration 위험이 없다.
+        resend = await resend_verification_email(db, email=str(body.email))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "code": exc.code,
                 "message": str(exc),
-                "details": {"verification_email_dispatched": False},
+                "details": {"verification_email_dispatched": resend.verification_email_dispatched},
             },
         ) from exc
     except InvalidCredentialsError as exc:

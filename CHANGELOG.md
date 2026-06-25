@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 주요 기능
+
+- 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동으로 다시 보내고, 로그인
+  화면에서 "인증 메일 다시 보내기" 버튼으로도 재발송할 수 있다. `POST /auth/verify-email/resend`
+  (계정 enumeration 차단) 추가 + 로그인 `EMAIL_NOT_VERIFIED` 응답에 `verification_email_dispatched`
+  플래그를 노출한다. 같은 사용자 반복 발송은 cooldown(`pinvi_email_verification_resend_cooldown_seconds`,
+  기본 60초)으로 제한한다.
+
 ### 외부 계약 동기화 (ADR-049)
 
 - `kor-travel-map` 큐레이션 import를 admin `detail-snapshot` 계약으로 이관했다(공개

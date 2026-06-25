@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     pinvi_email_outbox_worker_enabled: bool = True
     pinvi_email_outbox_drain_interval_seconds: float = 5.0
     pinvi_email_outbox_batch_size: int = 50
+    # 미인증 로그인/재발송 요청 시 가입 인증 메일 재발송 최소 간격(초). 같은 사용자 중복 발송 방지.
+    pinvi_email_verification_resend_cooldown_seconds: int = 60
     pinvi_web_base_url: str = "http://localhost:12805"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(

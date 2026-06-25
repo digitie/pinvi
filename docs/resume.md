@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-26 (claude) — 미인증 로그인 시 재인증 메일 재발송
+
+이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동 재발송하도록 구현했다
+(`docs/api/auth.md` §2.3/§3.1의 기존 계약을 채움). `resend_verification_email` 서비스(cooldown
+`pinvi_email_verification_resend_cooldown_seconds` 기본 60초, 직전 미사용 signup 토큰 폐기 후 신규
+24h 토큰 + 메일 enqueue)를 추가하고, 로그인이 `EmailNotVerifiedError`를 잡으면 자동 호출 +
+`details.verification_email_dispatched` 노출. enumeration-safe `POST /auth/verify-email/resend` 추가.
+프론트 로그인 화면에 "인증 메일 다시 보내기" 버튼 + 안내. zod/api-client 스키마 동기. WSL 게이트
+(ruff/format/mypy + 통합 12 pass, web typecheck/lint/build) 통과. 다음: rate-limit를 cooldown 외에
+SlowAPI 한도로도 묶을지 검토(현재는 per-user cooldown만).
+
 ## 2026-06-25 (codex) — N150 Web healthcheck 포트 보정
 
 PR #231 merge 후 N150의 Pinvi checkout을 `3c16b75`로 fast-forward하고, docker-manager

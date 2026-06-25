@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-26 (claude) — 미인증 로그인 시 재인증 메일 재발송
+
+**작업**: 사용자 지시 — 이메일 인증이 안 된 아이디로 로그인 시도 시 재인증 링크를 제공.
+`docs/api/auth.md` §2.3/§3.1에 계약은 이미 문서화돼 있었으나(verify-email/resend endpoint +
+login `verification_email_dispatched`) 구현이 비어 있었다. 그 계약을 구현했다.
+
+**변경**:
+- `services/user_registration.py` — `resend_verification_email(db, *, email)` 추가. 미인증·미삭제·
+  비disabled 사용자에 한해 직전 미사용 signup 토큰을 폐기하고 새 토큰(24h) 발급 + 인증 메일 enqueue.
+  같은 사용자 cooldown(`pinvi_email_verification_resend_cooldown_seconds`, 기본 60초) 안에서는 미발송.
+- `api/v1/auth.py` — 로그인이 `EmailNotVerifiedError`(비밀번호 검증 통과 후)를 잡으면 자동 재발송하고
+  `details.verification_email_dispatched`로 결과를 노출(소유가 비밀번호로 증명돼 enumeration 위험 없음).
+  `POST /auth/verify-email/resend`(항상 `accepted=true`, enumeration-safe) 추가.
+- 스키마: `schemas/auth.py` + `packages/schemas`(zod) + `packages/api-client`(`resendVerification`).
+- 프론트: 로그인 화면이 `EMAIL_NOT_VERIFIED` 시 재발송 안내 + "인증 메일 다시 보내기" 버튼 제공.
+- `config.py`에 cooldown 설정 추가. `docs/api/auth.md` §2.3/§3.1 구현 일치하게 보강.
+
+**검증**: WSL ext4 미러 — `ruff check`/`ruff format --check`/`mypy --strict` 통과, 신규 통합
+테스트(`test_verify_email_resend_flow.py`) 6건 + 기존 auth 흐름 포함 12 pass. web typecheck/lint/build
+통과(전 workspace typecheck 포함).
+
 ## 2026-06-25 (codex) — N150 Web healthcheck 포트 보정
 
 **작업**: PR #231 merge 후 N150에 `deploy-3c16b75` 태그로 API/Web을 재빌드·재기동했다.

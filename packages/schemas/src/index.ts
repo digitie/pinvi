@@ -11,6 +11,8 @@ export {
   RegisterRequestSchema,
   RegisterResponseSchema,
   VerifyEmailRequestSchema,
+  VerifyEmailResendRequestSchema,
+  VerifyEmailResendResponseSchema,
   LoginRequestSchema,
   AuthUserOAuthIdentitySchema,
   AuthUserSchema,
@@ -23,6 +25,8 @@ export {
 } from './auth';
 export type {
   RegisterRequest,
+  VerifyEmailResendRequest,
+  VerifyEmailResendResponse,
   AuthUserOAuthIdentity,
   AuthUser,
   OAuthProvider,

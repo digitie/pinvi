@@ -47,6 +47,14 @@ class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=43, max_length=43)
 
 
+class VerifyEmailResendRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailResendResponse(BaseModel):
+    accepted: bool = True
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)

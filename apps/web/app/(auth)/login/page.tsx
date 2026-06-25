@@ -46,6 +46,9 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
   const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get('error');
@@ -96,6 +99,8 @@ export default function LoginPage() {
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    setUnverifiedEmail(null);
+    setResendNotice(null);
 
     const result = validateForm(LoginRequestSchema, { email, password });
     setFieldErrors(result.fieldErrors);
@@ -111,7 +116,13 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'EMAIL_NOT_VERIFIED') {
-          setError('이메일 인증이 필요합니다. 메일을 확인해 주세요.');
+          const dispatched = err.details?.verification_email_dispatched === true;
+          setUnverifiedEmail(result.data.email);
+          setError(
+            dispatched
+              ? '이메일 인증이 필요합니다. 인증 메일을 다시 보냈어요. 메일함(스팸함)을 확인해 주세요.'
+              : '이메일 인증이 필요합니다. 메일함을 확인하시고, 받지 못했다면 아래에서 다시 보낼 수 있어요.',
+          );
         } else if (err.code === 'AUTH_INVALID_CREDENTIALS') {
           setError('이메일 또는 비밀번호가 올바르지 않습니다.');
         } else {
@@ -122,6 +133,20 @@ export default function LoginPage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onResend = async () => {
+    if (!unverifiedEmail) return;
+    setResendLoading(true);
+    setResendNotice(null);
+    try {
+      await authApi(apiClient).resendVerification({ email: unverifiedEmail });
+      setResendNotice('인증 메일을 보냈어요. 메일함(스팸함)을 확인해 주세요.');
+    } catch {
+      setResendNotice('재발송에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -185,6 +210,32 @@ export default function LoginPage() {
           <p className="text-sm text-error-text" role="alert" data-testid="login-error">
             {error}
           </p>
+        )}
+
+        {unverifiedEmail && (
+          <div
+            className="space-y-2 rounded-sm border border-hairline bg-surface p-3"
+            data-testid="resend-verification"
+          >
+            <button
+              type="button"
+              onClick={onResend}
+              disabled={resendLoading}
+              className="text-sm font-semibold text-primary underline disabled:opacity-60"
+              data-testid="resend-verification-button"
+            >
+              {resendLoading ? '인증 메일 보내는 중...' : '인증 메일 다시 보내기'}
+            </button>
+            {resendNotice && (
+              <p
+                className="text-xs text-muted"
+                role="status"
+                data-testid="resend-verification-notice"
+              >
+                {resendNotice}
+              </p>
+            )}
+          </div>
         )}
 
         <button
