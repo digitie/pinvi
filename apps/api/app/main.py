@@ -25,6 +25,7 @@ from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
+from app.services.email_service import email_outbox_worker_lifespan
 from app.services.location_audit import location_audit_outbox_worker_lifespan
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
 
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         kor_travel_map_client_lifespan(app),
         kor_travel_map_admin_client_lifespan(app),
         kor_travel_geo_client_lifespan(app),
+        email_outbox_worker_lifespan(app),
         location_audit_outbox_worker_lifespan(app),
         telegram_outbox_worker_lifespan(app),
     ):

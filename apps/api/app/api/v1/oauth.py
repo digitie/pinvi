@@ -75,6 +75,12 @@ def _is_mobile_return(return_to_path: str | None) -> bool:
     return bool(return_to_path) and return_to_path == settings.pinvi_mobile_oauth_redirect
 
 
+def _google_oauth_configured() -> bool:
+    return bool(
+        settings.pinvi_google_oauth_client_id and settings.pinvi_google_oauth_client_secret
+    )
+
+
 def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
     """앱 딥링크(`pinvi://oauth`)로 리다이렉트. 토큰은 싣지 않고 1회용 code/에러만."""
     base = settings.pinvi_mobile_oauth_redirect
@@ -127,7 +133,7 @@ async def list_providers() -> Envelope[OAuthProvidersResponse]:
     providers = [
         OAuthProviderInfo(
             provider="google",
-            enabled=bool(settings.pinvi_google_oauth_client_id),
+            enabled=_google_oauth_configured(),
         ),
     ]
     return Envelope.of(OAuthProvidersResponse(providers=providers))
@@ -144,7 +150,7 @@ async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuth
                 "message": "계정 연결은 /auth/oauth/google/link endpoint를 사용해야 합니다.",
             },
         )
-    if not settings.pinvi_google_oauth_client_id:
+    if not _google_oauth_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
@@ -163,7 +169,7 @@ async def google_link(
     db: DbSession,
 ) -> Envelope[OAuthStartResponse]:
     """로그인된 사용자의 Google 연결 authorize URL 발급."""
-    if not settings.pinvi_google_oauth_client_id:
+    if not _google_oauth_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},

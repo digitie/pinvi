@@ -23,6 +23,14 @@
 
 ## 완료
 
+- [x] T-205 — 로컬 env Pinvi 키 반영 + OAuth 설정 판정 보강 (완료: 2026-06-25, codex).
+  로컬 `.env`의 legacy `TRIPMATE_*` 값을 현재 `PINVI_*`/`NEXT_PUBLIC_PINVI_*` 키로 복사하고,
+  dev URL은 ADR-047 고정 포트(`12801`/`12805`/`12802`)로 보정했다. access token 기본값은
+  10분으로 낮추고, Google OAuth는 client id와 secret이 모두 있을 때만 enabled로 표시한다.
+- [x] T-204 — 회원가입 이메일 outbox worker 연결 (완료: 2026-06-25, codex).
+  가입 인증/비밀번호 재설정/초대 이메일이 `app.email_queue`에만 적재되고 실제 drain되지 않는
+  문제를 고쳤다. FastAPI lifespan에서 `email_outbox_worker_lifespan`을 실행하고,
+  worker 설정/env 문서와 lifespan 테스트를 추가했다.
 - [x] T-203 — Admin live UI e2e 매트릭스와 N150 재배포 검증 기반 추가 (완료: 2026-06-24, codex).
   `apps/web`에 live 전용 Playwright config와 3233개 Admin UI 케이스를 추가하고,
   `ktdctl` 기반 N150 재빌드/재기동 절차와 운영 Web API URL 보정 내용을 runbook으로 문서화했다.

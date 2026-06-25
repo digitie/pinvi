@@ -205,7 +205,7 @@ async def mobile_oauth_google_start(db: DbSession) -> Envelope[OAuthStartRespons
     1회용 code를 `pinvi://oauth?code=`로 돌려준다. 앱은 그 URL을
     `WebBrowser.openAuthSessionAsync`로 받아 `/mobile/auth/oauth/exchange`로 교환한다.
     """
-    if not settings.pinvi_google_oauth_client_id:
+    if not (settings.pinvi_google_oauth_client_id and settings.pinvi_google_oauth_client_secret):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},

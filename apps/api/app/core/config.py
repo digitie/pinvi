@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # JWT / 세션
     pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)
-    pinvi_access_token_minutes: int = 15
+    pinvi_access_token_minutes: int = 10
     pinvi_refresh_token_days: int = 7
     pinvi_admin_session_ttl: int = 3600
     pinvi_mcp_jwt_secret: str = Field(default="pinvi-local-mcp-secret-change-me", min_length=32)
@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     pinvi_resend_timeout_seconds: int = 5
     pinvi_resend_webhook_secret: str = ""
     pinvi_resend_webhook_allow_unsigned: bool = False
+    pinvi_email_outbox_worker_enabled: bool = True
+    pinvi_email_outbox_drain_interval_seconds: float = 5.0
+    pinvi_email_outbox_batch_size: int = 50
     pinvi_web_base_url: str = "http://localhost:12805"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(
@@ -93,9 +96,14 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_admin_base_url: str = "http://localhost:12701"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Kor-Travel-Map-Service-Token 전달.
     pinvi_kor_travel_map_service_token: str = ""
+    # kor-travel-map public REST가 key query를 요구할 때 사용. 미설정 시 PINVI_VWORLD_API_KEY 사용.
+    pinvi_kor_travel_map_public_api_key: str = ""
     # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
     # §7 확정(kor_travel_map T-217c): 운영 인증은 인프라 계층(SSO/IP allowlist) — token은 선택 pass-through.
     pinvi_kor_travel_map_admin_service_token: str = ""
+    # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
+    pinvi_kor_travel_map_admin_proxy_secret: str = ""
+    pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
     pinvi_kor_travel_map_timeout_seconds: float = 5.0
     pinvi_kor_travel_map_max_attempts: int = 3
     pinvi_kor_travel_map_batch_chunk_size: int = 200  # /v1/features/batch cap
