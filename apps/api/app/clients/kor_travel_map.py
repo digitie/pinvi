@@ -518,8 +518,7 @@ def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
         http,
         service_token=app_settings.pinvi_kor_travel_map_service_token,
         public_api_key=(
-            app_settings.pinvi_kor_travel_map_public_api_key
-            or app_settings.pinvi_vworld_api_key
+            app_settings.pinvi_kor_travel_map_public_api_key or app_settings.pinvi_vworld_api_key
         ),
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
         batch_chunk_size=app_settings.pinvi_kor_travel_map_batch_chunk_size,

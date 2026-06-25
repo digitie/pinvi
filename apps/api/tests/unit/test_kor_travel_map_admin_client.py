@@ -82,9 +82,7 @@ async def test_admin_proxy_headers_are_sent_when_configured() -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["proxy_secret"] = request.headers.get(
-            "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
-        )
+        seen["proxy_secret"] = request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", "")
         seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
         return httpx.Response(201, json=_change_response(action="create"))
 

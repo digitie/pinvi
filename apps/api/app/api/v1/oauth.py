@@ -76,9 +76,7 @@ def _is_mobile_return(return_to_path: str | None) -> bool:
 
 
 def _google_oauth_configured() -> bool:
-    return bool(
-        settings.pinvi_google_oauth_client_id and settings.pinvi_google_oauth_client_secret
-    )
+    return bool(settings.pinvi_google_oauth_client_id and settings.pinvi_google_oauth_client_secret)
 
 
 def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
