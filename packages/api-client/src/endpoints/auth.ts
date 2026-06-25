@@ -8,6 +8,8 @@ import {
   RegisterRequestSchema,
   RegisterResponseSchema,
   VerifyEmailRequestSchema,
+  VerifyEmailResendRequestSchema,
+  VerifyEmailResendResponseSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -28,6 +30,13 @@ export const authApi = (client: ApiClient) => ({
         user: AuthUserSchema,
         access_token_dispatched: z.boolean(),
       }),
+    }),
+
+  resendVerification: (body: z.infer<typeof VerifyEmailResendRequestSchema>) =>
+    client.request('/auth/verify-email/resend', {
+      method: 'POST',
+      body: JSON.stringify(VerifyEmailResendRequestSchema.parse(body)),
+      schema: VerifyEmailResendResponseSchema,
     }),
 
   login: (body: z.infer<typeof LoginRequestSchema>) =>

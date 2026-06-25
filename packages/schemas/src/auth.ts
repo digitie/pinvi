@@ -62,6 +62,18 @@ export const VerifyEmailRequestSchema = z.object({
   token: z.string().length(43),
 });
 
+/** 인증(재인증) 메일 재발송 요청. */
+export const VerifyEmailResendRequestSchema = z.object({
+  email: z.string().email(),
+});
+export type VerifyEmailResendRequest = z.infer<typeof VerifyEmailResendRequestSchema>;
+
+/** 인증 메일 재발송 응답. enumeration 방지를 위해 항상 accepted=true. */
+export const VerifyEmailResendResponseSchema = z.object({
+  accepted: z.boolean(),
+});
+export type VerifyEmailResendResponse = z.infer<typeof VerifyEmailResendResponseSchema>;
+
 /** 로그인 요청. */
 export const LoginRequestSchema = z.object({
   email: z.string().email(),
