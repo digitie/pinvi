@@ -72,18 +72,37 @@ async def test_search_uses_type_key() -> None:
     await client.aclose()
 
 
-async def test_regions_within_radius_path() -> None:
-    seen: dict[str, str | None] = {}
+async def test_regions_within_radius_posts_radius_km_and_levels() -> None:
+    seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
         seen["key"] = request.url.params.get("key")
-        return httpx.Response(200, json={"status": "ok", "candidates": []})
+        seen["body"] = _json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "status": "ok",
+                "center": {"lon": 129.0, "lat": 35.0},
+                "radius_km": 2.0,
+                "sido": [],
+                "sigungu": [],
+                "emd": [],
+            },
+        )
 
     client = _client(handler)
-    await client.regions_within_radius(lon=129.0, lat=35.0, radius_m=2000)
+    await client.regions_within_radius(
+        lon=129.0, lat=35.0, radius_km=2.0, levels=["sigungu", "emd"]
+    )
     assert seen["path"] == "/v2/regions/within-radius"
     assert seen["key"] == "test-vworld-key"
+    assert seen["body"] == {  # v2 계약: radius_km + levels[] (구 radius_m/boundary_level 폐지)
+        "lon": 129.0,
+        "lat": 35.0,
+        "radius_km": 2.0,
+        "levels": ["sigungu", "emd"],
+    }
     await client.aclose()
 
 

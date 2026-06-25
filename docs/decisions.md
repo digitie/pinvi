@@ -1367,8 +1367,8 @@
   - `kor-travel-map` API/Admin API는 `12301`을 사용한다. Pinvi의
     `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`과 `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 기본값은
     모두 `http://localhost:12301`이다.
-  - `kor-travel-concierge`는 `kor-travel-concierge`로 이름이 바뀌었고 Pinvi와의 직접 관계를
-    끊는다. Pinvi는 agent API 포트를 예약하지 않고 `PINVI_AGENT_API_BASE_URL`도
+  - 이전 agent/ai-companion 서비스는 `kor-travel-concierge`로 이름이 바뀌었고 Pinvi와의
+    직접 관계를 끊는다. Pinvi는 agent API 포트를 예약하지 않고 `PINVI_AGENT_API_BASE_URL`도
     노출하지 않는다.
   - 본 저장소 Pinvi API는 `12501`, Web UI는 `12505`를 사용한다.
   - Dagster UI는 기존 고정 포트 `9023`을 유지한다.
@@ -1959,7 +1959,73 @@ ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
 - 운영 배포 시 `infra/.env.prod`와 `kor-travel-geo` env에 같은 raw key가 들어갔는지 runbook
   smoke checklist에서 확인한다.
 
+## ADR-049: 외부 계약 동기화(2026-06-25) — kor-travel-map 큐레이션 import는 admin detail-snapshot, kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]` 그룹 응답
+
+- **상태**: accepted
+- **날짜**: 2026-06-25
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+`kor-travel-map`(origin/main `88316a6`)과 `kor-travel-geo`(origin/main `5e8a5d4`)의
+최신 계약을 점검한 결과, Pinvi가 소비하던 두 표면에 breaking 변경이 있었다.
+
+- **kor-travel-map PR #533("Curated API 범용 계약 정리", 2026-06-25)**: 공개
+  `GET /v1/curated-features/{id}/pinvi-copy`를 폐지하고, item을 포함한 큐레이션
+  snapshot을 admin 표면 `GET /v1/admin/curated-features/{id}/detail-snapshot`로 옮겼다.
+  동시에 snapshot의 plan-level 객체 키를 `plan`→`content`로 개명했다(product 고유 'pinvi'
+  용어 제거). Pinvi `KorTravelMapClient.get_curated_pinvi_copy()`는 이제 404가 된다.
+- **kor-travel-geo `/v2/regions/within-radius`(geo ADR-056/060/062)**: 요청이
+  `{radius_m, boundary_level}`에서 `{radius_km, levels[]}`로, 응답이 `{status, candidates[]}`
+  에서 level별 그룹 `{center, radius_km, sido[], sigungu[], emd[]}`(각 item
+  `{code, name, relation: contains|overlaps}`)로 바뀌었다. level 어휘도 `legal_dong`→`emd`다.
+  Pinvi는 `payload['candidates']`를 읽어 항상 빈 목록을 반환하고 있었다.
+
+### 결정
+
+- **큐레이션 import**: snapshot 조회를 user client에서 admin client
+  (`KorTravelMapAdminClient.get_curated_detail_snapshot`)로 옮긴다.
+  `GET /v1/admin/curated-features/{id}/detail-snapshot`를 admin base
+  (`PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`) + `X-Kor-Travel-Map-Service-Token`으로 호출한다.
+  즉 큐레이션 import는 이제 **admin 서비스 토큰 작업**이다(import 라우터는 이미 admin RBAC
+  아래에서 동작하므로 권한 경계가 일관적이다). snapshot의 plan-level 객체는 `content` 키로 읽는다.
+- **geo within-radius**: Pinvi `/regions/within-radius`는 **endpoint 경로는 유지**하되 v2
+  계약을 그대로 반영한다 — 요청 query를 `radius_km`(≤500) + `levels[]`(sido|sigungu|emd,
+  기본 `[sigungu, emd]`)로, 응답을 level별 그룹(`RegionsWithinRadius`)으로 바꾼다.
+  `BoundaryLevel` enum의 `legal_dong`을 `emd`로 개명하고 `/regions/covering-point`의 기본값도
+  `emd`로 맞춘다.
+- Pinvi 사용자 경로의 다른 표면(feature read/search/nearby/in-bounds, geo
+  geocode/reverse/search, geo v2 공개 key=ADR-048)은 이미 최신 계약과 일치하므로 바꾸지 않는다.
+  `kor-travel-concierge`는 여전히 직접 통합 없이 문서 경계 참조만 둔다(그쪽 contract도 PinVi
+  직접 연결을 배제하므로 직접 연결을 신설하지 않는다 — Sprint 6 MCP 결정 사항으로 보류).
+
+### 근거
+
+- 두 변경 모두 upstream이 이미 origin/main에 배포한 breaking 계약이라 Pinvi가 따라가지 않으면
+  큐레이션 import는 404, within-radius는 빈 응답으로 조용히 실패한다.
+- within-radius는 Pinvi 자체 consumer(web/mobile)가 없어 라우터 표면을 v2 계약에 맞춰 바꾸는
+  편이 변환 레이어를 두는 것보다 단순하다.
+- import가 admin 토큰을 요구하는 것은 upstream이 snapshot을 admin 전용으로 옮긴 결과이며,
+  import 라우터 자체가 이미 admin 전용이라 권한 경계가 어긋나지 않는다.
+
+### 결과
+
+- `apps/api/app/clients/kor_travel_map_admin.py`에 `get_curated_detail_snapshot` 추가,
+  `apps/api/app/clients/kor_travel_map.py`에서 `get_curated_pinvi_copy` 제거,
+  `apps/api/app/services/notice_plan.py`/`app/api/v1/admin/notice_plans.py`가 admin client +
+  `content` 키를 쓴다.
+- `apps/api/app/clients/kor_travel_geo.py`/`app/api/v1/geo.py`/`app/schemas/geo.py`가
+  `radius_km`+`levels[]` 요청과 그룹 응답(`RegionsWithinRadius`)을 쓴다.
+- 관련 계약 문서(`docs/integrations/kor-travel-map-rest-api.md`,
+  `docs/kor-travel-map-requirements.md`, `docs/integrations/kor-travel-geo.md`,
+  `docs/api/regions.md`, `docs/architecture/{notice-plans,geocoding-open-decisions}.md`)를 갱신한다.
+
+### 후속
+
+- upstream 큐레이션 계약이 다시 바뀌면(예: 공개 표면 재도입) import client를 재검토한다.
+- within-radius의 `relation`(contains/overlaps) 의미를 UI에서 쓰게 되면 별도 표시 규칙을 정한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-049**
+- 다음 신규 ADR = **ADR-050**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

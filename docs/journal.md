@@ -90,6 +90,38 @@ login 2 + catalog 1)를 생성한다. N150 live authenticated 실행은
 `PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms 기준
 2004개 테스트가 모두 통과했다(`2004 passed`, 2.8h). 실행 후 임시 admin/session과
 Playwright 결과 디렉터리 정리까지 확인했다.
+## 2026-06-25 (claude) — map/geo/concierge 최신 API 계약 동기화 (ADR-049)
+
+**작업**: 사용자 지시 — `kor-travel-map`/`kor-travel-geo`/`kor-travel-concierge`의 최신
+(origin/main) API를 확인해 Pinvi를 맞춤. 각 저장소를 origin/main으로 점검(map `88316a6` /
+geo `5e8a5d4` / concierge `8720dda`). 드리프트는 워크플로(분석 13 agent + 고심각 항목 adversarial
+verify)로 도출하고 breaking/important 항목만 적용. 시작 브랜치가 origin/main보다 5 커밋 뒤(이미
+머지된 geo v2 key #228 포함)라 origin/main에서 새 브랜치를 끊고 작업.
+
+**변경**:
+- **map 큐레이션 import (breaking)** — PR #533("Curated API 범용 계약 정리")이 public
+  `GET /v1/curated-features/{id}/pinvi-copy`를 폐지하고 admin
+  `GET /v1/admin/curated-features/{id}/detail-snapshot`로 옮김 + snapshot `plan`→`content` 개명.
+  `KorTravelMapAdminClient.get_curated_detail_snapshot` 추가, user client `get_curated_pinvi_copy`
+  제거, `notice_plan.py`가 admin client + `content` 키 사용, import 라우터에 `KorTravelMapAdminClientDep`
+  주입. 큐레이션 import는 이제 admin 서비스 토큰 작업. 단위/통합 테스트 갱신.
+- **geo `/v2/regions/within-radius` (breaking)** — 요청 `{radius_m, boundary_level}`→`{radius_km, levels[]}`,
+  응답 `candidates[]`→level별 그룹 `{center, radius_km, sido[], sigungu[], emd[]}`(항목
+  `{code, name, relation: contains|overlaps}`), enum `legal_dong`→`emd`. `kor_travel_geo.py`/`geo.py`/
+  `schemas/geo.py` 갱신(`RegionsWithinRadius`/`RegionWithinRadiusItem` + `_regions_within_radius` 매퍼),
+  covering-point 기본 `emd`. Pinvi web/mobile consumer가 없어 라우터 표면을 v2 계약에 그대로 맞춤.
+  geocode/reverse/search/geo key(ADR-048)는 이미 일치 → 무변경.
+- **concierge** — Pinvi에 client 없음(그쪽 contract도 PinVi 직접 연결 배제). doc-only 유지가 정답.
+  `docs/integrations/README.md`의 부정확한 "레거시 Gemini" 표현 + ADR-037(superseded) rename
+  tautology 정정. net-new 통합은 Sprint 6 MCP 결정으로 보류.
+- ADR-049 추가, `CLAUDE.md` ADR 현황 + `CHANGELOG.md` Unreleased + 계약 문서 다수 동기화
+  (rest-api §2.11, requirements §7, api/architecture notice-plans, kor-travel-geo §3.4, api/regions,
+  geocoding-open-decisions D5).
+
+**검증**: WSL ext4 미러에서 `ruff check`/`ruff format --check`/`mypy --strict` 통과, unit 169 pass(+1 skip),
+영향 통합 테스트(`test_geo_api.py`, `test_admin_kor_travel_map_curated_import.py`) 10 pass.
+
+**후속**: within-radius `relation`(contains/overlaps)을 UI에서 쓰게 되면 표시 규칙 결정.
 
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 

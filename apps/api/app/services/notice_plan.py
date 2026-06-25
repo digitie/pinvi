@@ -41,9 +41,9 @@ class NoticePlanPolicyError(NoticePlanError):
     code = "CURATED_PLAN_POI_POLICY_ERROR"
 
 
-class KorTravelMapCuratedCopyClient(Protocol):
-    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
-        """kor-travel-map Pinvi copy snapshot 조회."""
+class KorTravelMapCuratedSnapshotClient(Protocol):
+    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
+        """kor-travel-map curated detail snapshot 조회 (admin 표면, ADR-049)."""
         ...
 
 
@@ -350,7 +350,7 @@ async def import_kor_travel_map_curated_feature(
     db: AsyncSession,
     *,
     admin_id: uuid.UUID,
-    kor_travel_map_client: KorTravelMapCuratedCopyClient,
+    kor_travel_map_client: KorTravelMapCuratedSnapshotClient,
     curated_feature_id: str,
     mode: str = "create",
     is_published: bool | None = None,
@@ -359,11 +359,14 @@ async def import_kor_travel_map_curated_feature(
     if mode not in {"create", "upsert", "refresh"}:
         raise NoticePlanPolicyError("지원하지 않는 import mode 입니다.")
 
-    snapshot = _mapping(await kor_travel_map_client.get_curated_pinvi_copy(curated_feature_id))
+    snapshot = _mapping(await kor_travel_map_client.get_curated_detail_snapshot(curated_feature_id))
     source_curated_feature_id = _optional_text(snapshot.get("curated_feature_id"))
     if source_curated_feature_id is None:
-        raise NoticePlanCopyError("kor-travel-map copy snapshot에 curated_feature_id가 없습니다.")
-    plan_payload = _mapping(snapshot.get("plan"))
+        raise NoticePlanCopyError(
+            "kor-travel-map curated snapshot에 curated_feature_id가 없습니다."
+        )
+    # PR #533(ADR-049): plan-level 객체 키가 `plan` → `content`로 개명됨.
+    plan_payload = _mapping(snapshot.get("content"))
     source_payload = _mapping(snapshot.get("source"))
     theme_payload = _mapping(snapshot.get("theme"))
     items = _snapshot_items(snapshot)

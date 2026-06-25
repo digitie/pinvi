@@ -55,10 +55,12 @@
 
 - **맥락**: 기존 `/regions/within-radius`는 "좌표 반경 내 여러 행정구역"을 준다.
   최신 `kor-travel-geo` v2에는 `POST /v2/regions/within-radius`가 추가됐다.
-- **결정됨**: Pinvi `/regions/within-radius`는 endpoint 경로/응답 envelope을 유지하고,
-  내부에서 `kor-travel-geo` `POST /v2/regions/within-radius`를 래핑한다.
-- **영향**: 별도 PostGIS 공간 쿼리나 `kor-travel-map` 경유를 Pinvi에 두지 않는다. 후보 정렬과
-  거리/신뢰도 계산은 `kor-travel-geo` 응답을 그대로 따른다.
+- **결정됨 (ADR-049)**: Pinvi `/regions/within-radius`는 endpoint **경로**(`/regions/within-radius`)
+  를 유지하되, geo v2 셰입을 그대로 미러한다. 요청 파라미터는 `radius_km` + `levels[]`
+  (이전 `radius_m` + `boundary_level`), 응답은 candidate envelope이 아니라
+  **그룹 형태**(`center`/`radius_km` + `sido[]`/`sigungu[]`/`emd[]`, 항목 `{code,name,relation}`)다.
+- **영향**: 별도 PostGIS 공간 쿼리나 `kor-travel-map` 경유를 Pinvi에 두지 않는다. 정렬·거리·
+  신뢰도 계산을 Pinvi에서 하지 않고, `relation`(`contains`/`overlaps`) 그룹 응답을 그대로 따른다.
 
 ## D6. geocoding의 MCP 외부 노출 (ADR-019 연계)
 
@@ -96,7 +98,7 @@
 | D2 | open (잠정 none) | — |
 | D3 | open (잠정 in-proc TTL) | — |
 | D4 | open (잠정 5자리) | — |
-| D5 | decided | `POST /v2/regions/within-radius` 래핑 |
+| D5 | decided | ADR-049 — `POST /v2/regions/within-radius` 미러(`radius_km`+`levels[]`, 그룹 응답) |
 | D6 | open (잠정 미포함) | — |
 | D7 | decided | ADR-048 |
 | D8 | open (잠정 최소 활용) | — |
