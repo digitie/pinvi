@@ -2,6 +2,15 @@
 
 본 문서는 사용자에게 보이는 릴리즈 변경 사항을 기록한다.
 
+## Unreleased
+
+### 외부 계약 동기화 (ADR-049)
+
+- `kor-travel-map` 큐레이션 import를 admin `detail-snapshot` 계약으로 이관했다(공개
+  `pinvi-copy` 표면 폐지 + snapshot `plan`→`content` 개명 대응, admin 서비스 토큰 필요).
+- `kor-travel-geo` `/regions/within-radius`를 v2 `radius_km`+`levels[]` 요청과 level별 그룹
+  응답(`sido`/`sigungu`/`emd`, `relation` = contains|overlaps) 계약에 맞췄다(`legal_dong`→`emd`).
+
 ## v0.1.0 — 지도 + 여행 + Admin 기본 기능
 
 릴리즈 상태: 준비 완료. Git tag와 GitHub Release 생성은 PR merge 후 main commit에서 수행한다.

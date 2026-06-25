@@ -33,8 +33,9 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 추천 여행 plan은 **Admin이 운영하는 "이렇게 여행해 보세요" 콘텐츠**다.
 
 - Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 Pinvi-native plan 작성
-- Pinvi가 kor-travel-map `GET /v1/curated-features/{id}/tripmate-copy`를 조회해
-  `curated_trip_plans` / `curated_plan_pois`로 1:1 복사
+- Pinvi가 kor-travel-map `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+  (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) 조회해
+  `curated_trip_plans` / `curated_plan_pois`로 1:1 복사 (ADR-049)
 - POI를 day별로 sort_order에 따라 배치 — 사용자 trip과 동일한 구조
 - POI는 `feature_id` 없이도 존재 가능. 단 kor-travel-map import가 feature를 제공하면
   `feature_id`로 기존 curated POI를 찾아 연결하고, 없으면 새 POI를 생성

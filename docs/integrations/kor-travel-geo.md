@@ -61,7 +61,10 @@
 
 ## 3. v2 endpoint 계약 (Pinvi가 호출하는 것)
 
-모두 `POST`, `Content-Type: application/json`, 응답 최상위 `{status, candidates[], ...}`.
+모두 `POST`, `Content-Type: application/json`. v2 성공 응답은 공통 헤더
+`{status, query_id, input}`을 항상 싣는다(search는 `total` 추가). geocode/reverse/search는
+그 위에 `candidates[]`를 노출하지만, `within-radius`는 `candidates[]` 대신
+level별 그룹 배열(`sido[]`/`sigungu[]`/`emd[]`)을 싣는다(§3.4).
 Pinvi의 server-to-server client는 모든 v2 요청에 `?key=<PINVI_VWORLD_API_KEY>`를
 붙인다(ADR-048). 이 key는 사용자 클라이언트에 노출하지 않는다.
 
@@ -123,15 +126,33 @@ curl -X POST "$KOR_TRAVEL_GEO/v2/search" -H 'Content-Type: application/json' \
 ### 3.4 `POST /v2/regions/within-radius` — 좌표 반경 내 행정구역
 
 최신 kor-travel-geo `openapi.json`에는 `POST /v2/regions/within-radius`가 있다. 좌표
-주변 행정구역 후보를 반경 기준으로 받을 때 사용한다.
+주변 행정구역을 반경 기준으로 level별 그룹으로 받을 때 사용한다.
+
+요청:
+
+| 필드 | 타입 | 기본 | 비고 |
+|------|------|------|------|
+| `lon` | float | 필수 | 경도 |
+| `lat` | float | 필수 | 위도 |
+| `radius_km` | float | `3.0` | 검색 반경(km), 최대 `500` |
+| `levels` | string[] | `[sigungu, emd]` | `sido`\|`sigungu`\|`emd` 중 요청할 level 배열 |
+
+응답: 공통 헤더 `{status, query_id, input}` + `center{lon,lat}` + `radius_km` +
+level별 그룹 배열 `sido[]`/`sigungu[]`/`emd[]`. 각 항목은 `{code, name, relation}`이며
+`relation`은 `contains`(행정구역 polygon이 중심 좌표를 포함) 또는 `overlaps`(polygon이 반경
+원과 교차하지만 중심 좌표는 포함 안 함). 요청하지 않은 level은 빈 배열로 온다.
 
 Pinvi 사용 원칙:
 
-- 여행 목적지/POI 주변 지역 label처럼 **반경 내 행정구역 후보 목록**이 필요할 때만
-  호출한다.
+- 여행 목적지/POI 주변 지역 label처럼 **반경 내 행정구역 목록**이 필요할 때만 호출한다.
 - 단일 좌표의 대표 주소/행정구역 label은 여전히 `/v2/reverse`를 우선한다.
-- 후보 정렬/표시는 `distance_m`, `confidence`, region code를 같은 응답 안에서만
-  비교한다.
+- 이 endpoint에는 `distance_m`/`confidence`/region code 정렬 필드가 없다. 후보 표시는
+  요청한 `levels`와 항목별 `relation`(`contains`/`overlaps`)으로만 구분한다.
+
+```bash
+curl -X POST "$KOR_TRAVEL_GEO/v2/regions/within-radius" -H 'Content-Type: application/json' \
+  -d '{"lon":129.118,"lat":35.155,"radius_km":2.0,"levels":["sigungu","emd"]}'
+```
 
 ## 3.5 v1 및 admin 표면 확인
 

@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_map import (
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
-    KorTravelMapHttpClientDep,
 )
+from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
@@ -153,7 +153,7 @@ async def import_kor_travel_map_curated_feature_route(
     body: KorTravelMapCuratedFeatureImportRequest,
     admin: AdminDep,
     db: DbSession,
-    kor_travel_map_client: KorTravelMapHttpClientDep,
+    kor_travel_map_client: KorTravelMapAdminClientDep,
     request: Request,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[KorTravelMapCuratedFeatureImportResponse]:

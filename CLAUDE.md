@@ -97,8 +97,10 @@ vendored tarball 소비로 전환, 기존 `maplibre-vworld`/`maplibre-vworld-js`
 ADR-047 (운영 도메인은 공개 repo 비노출 — gitignore `infra/.env.prod`에만 두고
 compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + Dagster webserver는
 12802로 고정), ADR-048 (`kor-travel-geo` v2 공개 API key는 서버 `PINVI_VWORLD_API_KEY`와
-동일하며, hash 저장/검증은 `kor-travel-geo`가 소유).
-다음 신규 = ADR-049.
+동일하며, hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
+kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
+kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답).
+다음 신규 = ADR-050.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

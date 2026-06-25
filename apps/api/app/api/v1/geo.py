@@ -17,7 +17,14 @@ from app.clients.kor_travel_geo import (
 )
 from app.core.deps import CurrentUserId
 from app.schemas.envelope import Envelope
-from app.schemas.geo import BoundaryLevel, GeoCandidateList, RegionCovering, SearchKind
+from app.schemas.geo import (
+    BoundaryLevel,
+    GeoCandidateList,
+    RegionCovering,
+    RegionsWithinRadius,
+    RegionWithinRadiusItem,
+    SearchKind,
+)
 
 geo_router = APIRouter(prefix="/geo", tags=["geo"])
 regions_router = APIRouter(prefix="/regions", tags=["regions"])
@@ -106,9 +113,11 @@ async def regions_covering_point(
     client: KorTravelGeoClientDep,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
-    boundary_level: Annotated[BoundaryLevel, Query()] = "legal_dong",
+    boundary_level: Annotated[BoundaryLevel, Query()] = "emd",
 ) -> Envelope[RegionCovering]:
-    """좌표를 포함하는 행정구역(단건) — kor-travel-geo `/v2/reverse`의 최선 후보 region. 미매치 404."""
+    """좌표를 포함하는 행정구역(단건) — kor-travel-geo `/v2/reverse`의 최선 후보 region. 미매치 404.
+
+    `boundary_level`은 응답에 echo되는 요청 hint다(reverse region에서 파생하지 않는다)."""
     try:
         payload = await client.reverse(lon=lon, lat=lat, include_region=True)
     except (KorTravelGeoUnavailable, KorTravelGeoBadRequest) as exc:
@@ -131,20 +140,49 @@ def _first_region(payload: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-@regions_router.get("/within-radius", response_model=Envelope[GeoCandidateList])
+def _regions_within_radius(payload: dict[str, Any]) -> RegionsWithinRadius:
+    def _items(level: str) -> list[RegionWithinRadiusItem]:
+        items: list[RegionWithinRadiusItem] = []
+        for raw in payload.get(level, []):
+            if not isinstance(raw, dict):
+                continue
+            code = raw.get("code")
+            relation = raw.get("relation")
+            if not isinstance(code, str) or relation not in ("contains", "overlaps"):
+                continue
+            name = raw.get("name")
+            items.append(
+                RegionWithinRadiusItem(
+                    code=code, name=name if isinstance(name, str) else None, relation=relation
+                )
+            )
+        return items
+
+    center = payload.get("center")
+    radius_km = payload.get("radius_km")
+    return RegionsWithinRadius(
+        center=center if isinstance(center, dict) else {},
+        radius_km=float(radius_km) if isinstance(radius_km, int | float) else 0.0,
+        sido=_items("sido"),
+        sigungu=_items("sigungu"),
+        emd=_items("emd"),
+    )
+
+
+@regions_router.get("/within-radius", response_model=Envelope[RegionsWithinRadius])
 async def regions_within_radius(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
-    radius_m: Annotated[int, Query(ge=100, le=50000)] = 2000,
-    boundary_level: Annotated[BoundaryLevel, Query()] = "legal_dong",
-) -> Envelope[GeoCandidateList]:
-    """좌표 반경 내 행정구역 후보 목록."""
+    radius_km: Annotated[float, Query(gt=0, le=500.0)] = 3.0,
+    levels: Annotated[list[BoundaryLevel] | None, Query()] = None,
+) -> Envelope[RegionsWithinRadius]:
+    """좌표 반경 내 행정구역 — level별(sido/sigungu/emd) 그룹. 기본 levels=[sigungu, emd]."""
     try:
         payload = await client.regions_within_radius(
-            lon=lon, lat=lat, radius_m=radius_m, boundary_level=boundary_level
+            lon=lon, lat=lat, radius_km=radius_km, levels=levels or ["sigungu", "emd"]
         )
     except (KorTravelGeoUnavailable, KorTravelGeoBadRequest) as exc:
         _raise_geo_http(exc)
-    return Envelope.of(_candidate_list(payload))
+    return Envelope.of(_regions_within_radius(payload))

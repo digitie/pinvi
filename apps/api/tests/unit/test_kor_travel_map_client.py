@@ -316,36 +316,6 @@ async def test_public_detail_404_returns_none() -> None:
     await client.aclose()
 
 
-async def test_curated_pinvi_copy_uses_public_snapshot_path() -> None:
-    seen: dict[str, str] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        return httpx.Response(
-            200,
-            json={
-                "data": {
-                    "curated_feature_id": "cf_1",
-                    "version": 3,
-                    "etag": "sha256:abc",
-                    "updated_at": "2026-06-12T00:00:00+09:00",
-                    "theme": {},
-                    "plan": {"title": "부산 코스"},
-                    "source": {},
-                    "items": [],
-                },
-                "meta": {},
-            },
-        )
-
-    client = _client(handler)
-    snapshot = await client.get_curated_pinvi_copy("cf_1")
-    assert seen["path"] == "/v1/curated-features/cf_1/tripmate-copy"
-    assert snapshot["curated_feature_id"] == "cf_1"
-    assert snapshot["etag"] == "sha256:abc"
-    await client.aclose()
-
-
 async def test_problem_json_top_level_code_parsed() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         # RFC7807 problem+json — 머신 코드는 top-level 확장 `code`.

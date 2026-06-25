@@ -175,3 +175,38 @@ async def test_5xx_retries_then_raises_unavailable() -> None:
         await client.create_feature({"reason": "x"})
     assert calls["n"] == 2
     await client.aclose()
+
+
+async def test_curated_detail_snapshot_uses_admin_path_and_token() -> None:
+    """ADR-049: 큐레이션 import snapshot은 admin detail-snapshot 표면(서비스 토큰)에서 온다."""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "curated_feature_id": "cf_1",
+                    "version": 3,
+                    "etag": "sha256:abc",
+                    "updated_at": "2026-06-12T00:00:00+09:00",
+                    "theme": {},
+                    "content": {"title": "부산 코스"},
+                    "source": {},
+                    "items": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    snapshot = await client.get_curated_detail_snapshot("cf_1")
+    assert seen["method"] == "GET"
+    assert seen["path"] == "/v1/admin/curated-features/cf_1/detail-snapshot"
+    assert seen["token"] == "svc-tok"
+    assert snapshot["curated_feature_id"] == "cf_1"
+    assert snapshot["content"] == {"title": "부산 코스"}
+    await client.aclose()

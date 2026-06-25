@@ -23,8 +23,8 @@
 > **2026-06-24 재대조 (kor_travel_map `feat/admin-auth-api-keys` `ae86783`)**:
 > REST backend 패키지 정본 경로가 `packages/kor-travel-map-api/openapi.user.json`으로
 > 이동했고, public REST surface는 설정에 따라 `key` query를 요구할 수 있다
-> (service token 요청은 우회). `curated_features` snapshot 경로는
-> `/v1/curated-features/{id}/tripmate-copy`로 확정됐다.
+> (service token 요청은 우회). `curated_features`의 item 포함 snapshot 경로는 이후 kor_travel_map
+> PR #533으로 admin `/v1/admin/curated-features/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
@@ -237,10 +237,13 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 - provider 신선도(brief/Admin 상태판), liveness, 버전. Pinvi Admin 상태판·헬스 체크용.
   `/health`·`/version`만 비버전 경로 (구 `/debug/health|version`은 kor_travel_map T-214h로 제거).
 
-### 2.11 `curated_features` — Pinvi curated trip plan import (후속, 계약 대기)
+### 2.11 `curated_features` — Pinvi curated trip plan import (Admin 전용 detail snapshot)
 
-**상태**: Pinvi가 kor-travel-map `GET /v1/curated-features/{id}/tripmate-copy`를
-소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다.
+**상태**: Pinvi가 kor-travel-map `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다. 구 public 경로
+`GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐고, item을
+담은 snapshot은 이제 admin 표면(`/v1/admin/*`, 헤더 `X-Kor-Travel-Map-Service-Token` 필요)에만
+존재한다(ADR-049).
 
 제품 의미:
 
@@ -249,11 +252,14 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   `curated_trip_plans` 1건으로 1:1 복사한다.
 - 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
 
-사용하는 kor_travel_map REST 표면:
+사용하는 kor_travel_map REST 표면 (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요):
 
 ```http
-GET /v1/curated-features/{curated_feature_id}/tripmate-copy
+GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot
 ```
+
+snapshot plan-level 객체 키는 `plan` → `content`로 개명됐다(ADR-049). version/etag/
+updated_at/theme/source/items[]는 그대로다.
 
 Pinvi import 매핑:
 

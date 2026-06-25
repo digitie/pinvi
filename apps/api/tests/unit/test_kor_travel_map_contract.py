@@ -35,7 +35,8 @@ _CLIENT_PATHS = [
     "/v1/public/festivals/monthly",
     "/v1/public/festivals/map-markers",
     "/v1/public/festivals/{feature_id}",
-    "/v1/curated-features/{curated_feature_id}/tripmate-copy",
+    # 큐레이션 import는 user 표면이 아니라 admin `/v1/admin/curated-features/{id}/detail-snapshot`을
+    # 쓴다(ADR-049 — kor_travel_map PR #533이 public `*-copy` 표면을 폐지). user-contract gate 범위 밖.
 ]
 
 # 매핑(`features.py _*_from_kor_travel_map`)이 읽는 응답 필드 — 스키마별 필수 존재.
@@ -114,22 +115,6 @@ _SCHEMA_FIELDS: dict[str, set[str]] = {
         "marker_icon",
         "marker_color",
         "items",
-    },
-    "TripmateCopySnapshotView": {
-        "curated_feature_id",
-        "version",
-        "etag",
-        "updated_at",
-        "theme",
-        "plan",
-        "source",
-        "items",
-    },
-    "TripmateCopyItemView": {
-        "curated_feature_item_id",
-        "feature_id",
-        "feature_snapshot",
-        "sort_order",
     },
 }
 

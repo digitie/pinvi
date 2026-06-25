@@ -48,6 +48,17 @@ Playwright 결과 디렉터리 정리도 확인했다.
 
 다음 작업은 이 브랜치를 push하고 PR을 한 번 생성한 뒤, PR CI/리뷰 결과에 따라 v0.1.0 릴리즈
 직전 smoke/tag 절차로 이어가는 것이다.
+## 2026-06-25 (claude) — map/geo/concierge 최신 API 계약 동기화 (ADR-049)
+
+`kor-travel-map`/`kor-travel-geo`/`kor-travel-concierge` origin/main 최신 계약을 점검해 Pinvi를
+맞췄다. (1) map: PR #533이 public `pinvi-copy`를 폐지하고 admin `detail-snapshot`(`plan`→`content`)로
+옮겨, 큐레이션 import를 `KorTravelMapAdminClient.get_curated_detail_snapshot`(admin 서비스 토큰)로
+이관했다. (2) geo: `/v2/regions/within-radius`가 `radius_km`+`levels[]` 요청과 level별 그룹 응답
+(`sido`/`sigungu`/`emd`, `relation` contains|overlaps, `legal_dong`→`emd`)으로 바뀌어 client/router/schema를
+맞췄다(consumer 없어 라우터 표면 직접 변경). (3) concierge: 직접 통합 없이 doc-only 유지가 정답
+(그쪽 contract도 PinVi 직접 연결 배제) — 부정확한 doc 표현만 정정, net-new는 Sprint 6 MCP로 보류.
+ADR-049 + 계약 문서 동기화. WSL 게이트(ruff/mypy/unit 169/영향 통합 10) 통과. 다음: within-radius
+`relation`을 UI에서 쓸지 판단되면 표시 규칙을 정한다.
 
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
@@ -396,8 +407,9 @@ Grafana dashboard 렌더링을 수동 smoke한다.
 
 kor-travel-map T-223c copy snapshot 계약을 Pinvi가 소비하도록 연결했다.
 
-- `KorTravelMapClient.get_curated_pinvi_copy()`가
-  `GET /v1/curated-features/{curated_feature_id}/pinvi-copy`를 호출한다.
+- `KorTravelMapAdminClient.get_curated_detail_snapshot()`가
+  `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+  (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) 호출한다 (ADR-049).
 - `POST /admin/notice-plans/imports/kor-travel-map-curated-features`를 추가했다. `mode`는
   `create` / `upsert` / `refresh`를 지원하고, 응답에는 `source_version` / `source_etag` /
   복사·재사용 POI 수를 포함한다.

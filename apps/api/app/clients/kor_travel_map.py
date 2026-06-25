@@ -477,12 +477,6 @@ class KorTravelMapClient:
             return None
         return self._data(resp)
 
-    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
-        """kor-travel-map curated feature → Pinvi copy snapshot."""
-        return self._data(
-            await self._send("GET", f"/v1/curated-features/{curated_feature_id}/tripmate-copy")
-        )
-
     async def healthz(self) -> dict[str, Any]:
         """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""
         resp = await self._send("GET", "/health")

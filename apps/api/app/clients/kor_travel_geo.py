@@ -3,14 +3,16 @@
 ADR-025: 사용자 대면 geocoding은 `kor-travel-geo`의 v2 REST API를 직접 HTTP 호출한다.
 in-process import / DB 직접 접근을 사용자 경로에서 쓰지 않는다. 좌표는 항상 `(lon, lat)`.
 
-응답 최상위는 kor-travel-map과 달리 `{status, candidates[], ...}` 형태(envelope `data` 없음).
+응답 최상위는 kor-travel-map과 달리 공통 헤더 `{status, query_id, input, ...}` 형태(envelope
+`data` 없음). geocode/reverse/search는 `candidates[]`를, `/v2/regions/within-radius`는
+level별 그룹 배열(`center, radius_km, sido[], sigungu[], emd[]`)을 함께 싣는다(geo ADR-060·062).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
@@ -148,17 +150,21 @@ class KorTravelGeoClient:
         *,
         lon: float,
         lat: float,
-        radius_m: int,
-        boundary_level: str | None = None,
+        radius_km: float,
+        levels: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """좌표 반경 내 행정구역 후보. data = {status, candidates[]}."""
+        """좌표 반경 내 행정구역(level별 그룹).
+
+        v2 계약: `radius_km`(≤500) + `levels`(sido|sigungu|emd, 비어있지 않음).
+        data = {status, center, radius_km, sido[], sigungu[], emd[]} (구 candidate[] 폐지).
+        """
         return await self._post(
             "/v2/regions/within-radius",
             {
                 "lon": lon,
                 "lat": lat,
-                "radius_m": radius_m,
-                "boundary_level": boundary_level,
+                "radius_km": radius_km,
+                "levels": list(levels) if levels else None,
             },
         )
 
