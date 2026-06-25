@@ -239,6 +239,7 @@ async def test_link_google_rejects_email_owned_by_another_user(session_factory) 
 
 async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatch) -> None:
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "google-client")
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "google-secret")
     monkeypatch.setattr(settings, "pinvi_naver_oauth_client_id", "naver-client")
     monkeypatch.setattr(settings, "pinvi_kakao_oauth_rest_api_key", "kakao-client")
 
@@ -247,6 +248,17 @@ async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatc
     assert resp.status_code == 200
     providers = resp.json()["data"]["providers"]
     assert providers == [{"provider": "google", "enabled": True}]
+
+
+async def test_providers_endpoint_disables_google_without_secret(client, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "google-client")
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "")
+
+    resp = await client.get("/auth/oauth/providers")
+
+    assert resp.status_code == 200
+    providers = resp.json()["data"]["providers"]
+    assert providers == [{"provider": "google", "enabled": False}]
 
 
 async def test_me_returns_linked_oauth_identities(
@@ -296,6 +308,7 @@ async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch)
         "pinvi_google_oauth_client_id",
         "test-client.apps.googleusercontent.com",
     )
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
 
     resp = await client.post(
         "/auth/oauth/google/start",
@@ -338,6 +351,7 @@ async def test_google_link_stores_user_bound_link_state(
         "pinvi_google_oauth_client_id",
         "test-client.apps.googleusercontent.com",
     )
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
 
     resp = await client.post(
         "/auth/oauth/google/link",

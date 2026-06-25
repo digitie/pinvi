@@ -6,13 +6,17 @@ worker가 PostgreSQL `FOR UPDATE SKIP LOCKED`로 pending row를 가져가 발송
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
 from typing import Any, cast
 
+from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,6 +189,47 @@ async def process_pending_email_batch(
         await db.commit()
 
     return EmailBatchResult(claimed=len(rows), sent=sent, retried=retried, failed=failed)
+
+
+async def _drain_loop(interval: float, batch_size: int) -> None:
+    from app.db.session import async_session_factory
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                result = await process_pending_email_batch(session, limit=batch_size)
+            if result.claimed < batch_size:
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning("email.outbox_drain_failed", exc_info=True)
+            await asyncio.sleep(interval)
+
+
+@asynccontextmanager
+async def email_outbox_worker_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan — email_queue drain worker를 시작/정리합니다."""
+
+    if not settings.pinvi_email_outbox_worker_enabled:
+        yield
+        return
+
+    task = asyncio.create_task(
+        _drain_loop(
+            settings.pinvi_email_outbox_drain_interval_seconds,
+            settings.pinvi_email_outbox_batch_size,
+        ),
+        name="email-outbox-drain",
+    )
+    app.state.email_outbox_worker = task
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        app.state.email_outbox_worker = None
 
 
 async def send_verification_email(

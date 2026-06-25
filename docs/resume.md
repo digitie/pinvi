@@ -1,5 +1,43 @@
 # resume.md
 
+## 2026-06-25 (codex) — 로컬 env / 인증 시간 / OAuth 상태
+
+로컬 `.env`가 legacy `TRIPMATE_*` 키만 갖고 있어 현재 앱 설정(`PINVI_*`)에 Resend와
+Google OAuth 값이 반영되지 않던 상태를 정리했다. 비밀값은 출력하지 않고 legacy 값을
+현재 키로 복사했고, dev URL은 ADR-047 기준 Web `12805`, API `12801`, Dagster `12802`로
+보정했다. Resend API key는 현재 `PINVI_RESEND_API_KEY`로 반영됐다.
+
+access token 기본 만료 시간은 10분으로 낮췄다. Google OAuth는 client id는 있으나
+client secret이 비어 있어 현 로컬 기준 비활성 상태가 맞다. provider enabled/start 판정도
+client id와 secret이 모두 있을 때만 통과하도록 API/Web/mobile 계약 문서와 테스트를 맞췄다.
+Admin 접근 URL은 `http://localhost:12805/admin`이다.
+
+## 2026-06-25 (codex) — 회원가입 이메일 발송 worker 복구
+
+회원가입 인증 메일이 `app.email_queue`에만 쌓이고 실제 발송되지 않는 문제를 수정했다.
+`process_pending_email_batch` 호출자가 없던 것이 원인이며, `email_outbox_worker_lifespan`을
+추가해 FastAPI startup에서 email queue drain worker가 실행되도록 `main.py`에 연결했다.
+worker 설정(`PINVI_EMAIL_OUTBOX_WORKER_ENABLED`, interval, batch size)을 추가하고,
+lifespan task 시작/취소 테스트와 Resend 문서/CHANGELOG/tasks/journal을 갱신했다.
+WSL ext4 미러에서 email worker focused pytest, 가입/비밀번호 재설정 관련 통합 pytest
+10건, 변경 API 파일 `ruff check`, 변경 app 파일 `mypy`를 통과했다.
+
+다음 작업은 이 변경을 기존 브랜치의 `kor-travel-map` 계약 미커밋 변경과 분리해 PR 범위를
+정리하는 것이다.
+
+## 2026-06-24 (codex) — Admin live UI e2e / N150 재배포
+
+Admin UI live e2e 전용 Playwright config와 3233개 케이스 매트릭스를 추가했다. N150에서는
+`ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했고, 운영 Web 번들 API URL을
+운영 API 도메인으로 보정했다. live 검증 중 발견한 `/auth/login` 응답 계약, backup container
+path, rate-limit, 장시간 access cookie 만료 문제를 수정했고 각 수정 단위는 커밋했다.
+최종 검증은 `PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms
+기준 N150 live authenticated run `2004 passed`(2.8h)로 완료했다. 임시 admin/session과
+Playwright 결과 디렉터리 정리도 확인했다.
+
+다음 작업은 이 브랜치를 push하고 PR을 한 번 생성한 뒤, PR CI/리뷰 결과에 따라 v0.1.0 릴리즈
+직전 smoke/tag 절차로 이어가는 것이다.
+
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
 운영 배포용 Docker Images workflow 수동 실행에서 API image는 push됐지만 Web image가

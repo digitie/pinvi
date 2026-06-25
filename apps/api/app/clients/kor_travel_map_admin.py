@@ -3,7 +3,8 @@
 Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map `/v1/admin/features*`
 (POST/PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다.
 API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
-설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)만 보낸다.
+설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)과, 운영에서 kor_travel_map
+admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
 
 §7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
 - admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
@@ -39,6 +40,8 @@ from app.core.config import Settings, settings
 logger = logging.getLogger(__name__)
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+_ADMIN_PROXY_SECRET_HEADER = "X-Kor-Travel-Map-Admin-Proxy-Secret"  # noqa: S105
+_ADMIN_ACTOR_HEADER = "X-Kor-Travel-Map-Actor"
 
 
 def _retry_after(resp: httpx.Response) -> int | None:
@@ -59,11 +62,15 @@ class KorTravelMapAdminClient:
         http: httpx.AsyncClient,
         *,
         service_token: str = "",
+        admin_proxy_secret: str = "",
+        admin_actor: str = "pinvi-admin",
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
     ) -> None:
         self._http = http
-        self._service_token = service_token
+        self._service_token = service_token.strip()
+        self._admin_proxy_secret = admin_proxy_secret.strip()
+        self._admin_actor = admin_actor.strip() or "pinvi-admin"
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
 
@@ -71,9 +78,13 @@ class KorTravelMapAdminClient:
         await self._http.aclose()
 
     def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
         if self._service_token:
-            return {_SERVICE_TOKEN_HEADER: self._service_token}
-        return {}
+            headers[_SERVICE_TOKEN_HEADER] = self._service_token
+        if self._admin_proxy_secret:
+            headers[_ADMIN_PROXY_SECRET_HEADER] = self._admin_proxy_secret
+            headers[_ADMIN_ACTOR_HEADER] = self._admin_actor
+        return headers
 
     async def _send(
         self,
@@ -215,6 +226,8 @@ def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAd
     return KorTravelMapAdminClient(
         http,
         service_token=token,
+        admin_proxy_secret=app_settings.pinvi_kor_travel_map_admin_proxy_secret,
+        admin_actor=app_settings.pinvi_kor_travel_map_admin_actor,
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
     )
 

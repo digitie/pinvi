@@ -35,6 +35,7 @@ _CLIENT_PATHS = [
     "/v1/public/festivals/monthly",
     "/v1/public/festivals/map-markers",
     "/v1/public/festivals/{feature_id}",
+    "/v1/curated-features/{curated_feature_id}/tripmate-copy",
 ]
 
 # 매핑(`features.py _*_from_kor_travel_map`)이 읽는 응답 필드 — 스키마별 필수 존재.
@@ -114,6 +115,22 @@ _SCHEMA_FIELDS: dict[str, set[str]] = {
         "marker_color",
         "items",
     },
+    "TripmateCopySnapshotView": {
+        "curated_feature_id",
+        "version",
+        "etag",
+        "updated_at",
+        "theme",
+        "plan",
+        "source",
+        "items",
+    },
+    "TripmateCopyItemView": {
+        "curated_feature_item_id",
+        "feature_id",
+        "feature_snapshot",
+        "sort_order",
+    },
 }
 
 
@@ -152,14 +169,16 @@ def _live_spec_path() -> Path | None:
     if override:
         return Path(override)
     repo_root = Path(__file__).resolve().parents[3]  # apps/api/tests/unit → pinvi-claude
-    candidate = (
-        repo_root.parent
-        / "kor-travel-map"
-        / "packages"
-        / "kor-travel-map-admin"
-        / "openapi.user.json"
-    )
-    return candidate if candidate.exists() else None
+    for repo_name in ("kor-travel-map-codex", "kor-travel-map"):
+        repo = repo_root.parent / repo_name
+        for relative in (
+            Path("packages/kor-travel-map-api/openapi.user.json"),
+            Path("packages/kor-travel-map-admin/openapi.user.json"),
+        ):
+            candidate = repo / relative
+            if candidate.exists():
+                return candidate
+    return None
 
 
 @pytest.mark.skipif(

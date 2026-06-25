@@ -78,6 +78,24 @@ async def test_create_feature_posts_with_token_and_returns_record() -> None:
     await client.aclose()
 
 
+async def test_admin_proxy_headers_are_sent_when_configured() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["proxy_secret"] = request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", "")
+        seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
+        return httpx.Response(201, json=_change_response(action="create"))
+
+    client = _client(
+        handler,
+        admin_proxy_secret="proxy-secret",
+        admin_actor="pinvi-operator",
+    )
+    await client.create_feature({"reason": "x"})
+    assert seen == {"proxy_secret": "proxy-secret", "actor": "pinvi-operator"}
+    await client.aclose()
+
+
 async def test_patch_feature_targets_feature_id() -> None:
     seen: dict[str, str] = {}
 

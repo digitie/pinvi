@@ -340,7 +340,7 @@ async def test_curated_pinvi_copy_uses_public_snapshot_path() -> None:
 
     client = _client(handler)
     snapshot = await client.get_curated_pinvi_copy("cf_1")
-    assert seen["path"] == "/v1/curated-features/cf_1/pinvi-copy"
+    assert seen["path"] == "/v1/curated-features/cf_1/tripmate-copy"
     assert snapshot["curated_feature_id"] == "cf_1"
     assert snapshot["etag"] == "sha256:abc"
     await client.aclose()
@@ -444,3 +444,31 @@ async def test_service_token_header() -> None:
     await without.features_in_bounds(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
     assert seen["token"] is None
     await without.aclose()
+
+
+async def test_public_api_key_query_added_when_service_token_absent() -> None:
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["key"] = request.url.params.get("key")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _client(handler, public_api_key="public-key-123")
+    await client.search_features(q="광안리")
+    assert seen == {"key": "public-key-123", "token": None}
+    await client.aclose()
+
+
+async def test_service_token_suppresses_public_api_key_query() -> None:
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["key"] = request.url.params.get("key")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _client(handler, service_token="svc-tok", public_api_key="public-key-123")
+    await client.search_features(q="광안리")
+    assert seen == {"key": None, "token": "svc-tok"}
+    await client.aclose()

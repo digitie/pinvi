@@ -23,6 +23,18 @@
 
 ## 완료
 
+- [x] T-205 — 로컬 env Pinvi 키 반영 + OAuth 설정 판정 보강 (완료: 2026-06-25, codex).
+  로컬 `.env`의 legacy `TRIPMATE_*` 값을 현재 `PINVI_*`/`NEXT_PUBLIC_PINVI_*` 키로 복사하고,
+  dev URL은 ADR-047 고정 포트(`12801`/`12805`/`12802`)로 보정했다. access token 기본값은
+  10분으로 낮추고, Google OAuth는 client id와 secret이 모두 있을 때만 enabled로 표시한다.
+- [x] T-204 — 회원가입 이메일 outbox worker 연결 (완료: 2026-06-25, codex).
+  가입 인증/비밀번호 재설정/초대 이메일이 `app.email_queue`에만 적재되고 실제 drain되지 않는
+  문제를 고쳤다. FastAPI lifespan에서 `email_outbox_worker_lifespan`을 실행하고,
+  worker 설정/env 문서와 lifespan 테스트를 추가했다.
+- [x] T-203 — Admin live UI e2e 매트릭스와 N150 재배포 검증 기반 추가 (완료: 2026-06-24, codex).
+  `apps/web`에 live 전용 Playwright config와 3233개 Admin UI 케이스를 추가하고,
+  `ktdctl` 기반 N150 재빌드/재기동 절차와 운영 Web API URL 보정 내용을 runbook으로 문서화했다.
+  최종 live authenticated run은 2001개 matrix 제한 기준 2004개 테스트가 모두 통과했다(2.8h).
 - [x] T-202 — `kor-travel-geo` v2 공개 API key 계약 대응 (완료: 2026-06-24, codex).
   최신 `kor-travel-geo` v2 REST가 `key` query를 검증하므로 Pinvi geocoding client가
   서버 `PINVI_VWORLD_API_KEY`를 모든 v2 POST에 붙이도록 변경했다. 별도 geo key env는 두지

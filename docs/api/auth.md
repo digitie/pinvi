@@ -289,8 +289,9 @@ Content-Type: application/json
 }
 ```
 
-`enabled`는 `PINVI_GOOGLE_OAUTH_CLIENT_ID` 존재 여부다. Naver/Kakao는 future
-provider라 설정값이 있어도 현재 응답에 포함하지 않는다.
+`enabled`는 `PINVI_GOOGLE_OAUTH_CLIENT_ID`와 `PINVI_GOOGLE_OAUTH_CLIENT_SECRET`이 모두
+설정되어 있을 때만 `true`다. Naver/Kakao는 future provider라 설정값이 있어도 현재 응답에
+포함하지 않는다.
 
 ### 6.2 `POST /auth/oauth/google/start`
 

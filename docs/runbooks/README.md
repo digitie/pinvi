@@ -11,6 +11,7 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [docker-app.md](./docker-app.md) | App 컨테이너 smoke test (`docker-compose.app.yml`) | 1 |
 | [etl.md](./etl.md) | Dagster `apps/etl` 운영 + soak | 5 |
 | [admin.md](./admin.md) | Admin 콘솔 운영 (RBAC / seed / 시나리오) | 3 |
+| [admin-live-e2e.md](./admin-live-e2e.md) | N150/live Admin UI e2e 매트릭스 실행 | 4~6 |
 | [file-storage.md](./file-storage.md) | RustFS 운영 + kor-travel-map 공유 | 2 |
 | [odroid-docker.md](./odroid-docker.md) | Odroid M1S 배포 + ARM64 빌드 | 6 |
 | [backup-restore.md](./backup-restore.md) | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6 |

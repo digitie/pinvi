@@ -2,6 +2,80 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-25 (codex) — 로컬 env Pinvi 키 반영 + OAuth 설정 판정
+
+**작업**: 로컬 `.env`의 Resend 키 반영 여부, 로그인 인증 시간, Google OAuth 비활성 상태,
+Admin 접근 URL을 점검했다.
+
+**변경**:
+- 로컬 `.env` — legacy `TRIPMATE_*`/`NEXT_PUBLIC_TRIPMATE_*` 값을 현재
+  `PINVI_*`/`NEXT_PUBLIC_PINVI_*` 키로 복사했다(비밀값 출력 없음).
+- 로컬 `.env` — ADR-047 dev 고정 포트에 맞춰 Web `12805`, API `12801`, Dagster `12802`
+  기준 URL을 보정했다.
+- `apps/api/app/core/config.py`, `.env.example` — access token 기본 만료 시간을 10분으로 변경했다.
+- `apps/api/app/api/v1/oauth.py`, `apps/api/app/api/v1/mobile.py` — Google OAuth는 client id와
+  secret이 모두 있을 때만 configured/started 상태가 되도록 강화했다.
+- OAuth 통합 테스트와 `docs/api/auth.md`, `docs/integrations/social-login.md`, `CHANGELOG.md`,
+  `docs/resume.md`, `docs/tasks.md`를 갱신했다.
+
+**발견**: Resend API key는 legacy `TRIPMATE_RESEND_API_KEY`에 있었고 현재
+`PINVI_RESEND_API_KEY`로 반영했다. Google OAuth client id는 있었지만 client secret이 비어 있어,
+현 로컬 기준 Google 로그인/회원가입은 계속 비활성 상태가 맞다.
+
+**검증**: WSL ext4 미러에서 OAuth Web/Mobile 통합 테스트 31건, security 단위 테스트 5건,
+변경 API 파일 `ruff check`, 변경 app 파일 `mypy` 통과.
+
+**다음**: Google OAuth를 실제 활성화하려면 로컬 `.env`의
+`PINVI_GOOGLE_OAUTH_CLIENT_SECRET`을 채우고 API/Web을 재시작한다. Admin 접근 URL은
+`http://localhost:12805/admin`.
+
+## 2026-06-25 (codex) — 회원가입 이메일 outbox worker 연결
+
+**작업**: 회원가입 시 인증 이메일이 실제로 발송되지 않는 문제를 추적했다.
+
+**변경**:
+- `apps/api/app/services/email_service.py` — `email_queue`를 주기적으로 drain하는
+  FastAPI lifespan worker를 추가했다.
+- `apps/api/app/main.py` — 앱 startup/shutdown lifespan에 email outbox worker를 연결했다.
+- `apps/api/app/core/config.py`, `.env.example` — worker enable/interval/batch size 환경변수를 추가했다.
+- `apps/api/tests/integration/test_email_queue_worker.py` — worker lifespan task 시작/취소와 비활성화 테스트를 추가했다.
+- `docs/integrations/resend.md`, `CHANGELOG.md`, `docs/resume.md`, `docs/tasks.md` — Resend 운영 기준과 추적 문서를 갱신했다.
+
+**발견**: `register_user`는 `app.email_queue` row를 만들지만,
+`process_pending_email_batch` 호출자가 없어 API 프로세스가 pending 이메일을 발송하지 않았다.
+
+**검증**: WSL ext4 미러에서 email worker focused pytest, 가입/비밀번호 재설정 관련
+통합 pytest 10건, 변경 API 파일 `ruff check`, 변경 app 파일 `mypy` 통과.
+
+**다음**: 기존 미커밋 `kor-travel-map` 계약 변경과 충돌 없이 PR 범위를 분리한다.
+
+## 2026-06-24~25 (codex) — Admin live UI e2e 매트릭스 + N150 재배포 검증
+
+**작업**: N150 운영 도메인 기준 Admin UI live e2e 2000개 이상을 Playwright 매트릭스로
+생성했다. live 안전 게이트(`PINVI_ADMIN_LIVE_E2E=1`), worker별 UI 로그인 storage state,
+route/filter/sort/navigation/dashboard/MCP validation 케이스를 분리했다.
+
+**배포**: `ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했다. 운영 Web image의
+`NEXT_PUBLIC_PINVI_API_URL`이 잘못 baked-in 되어 있던 문제를 배포 host compose에서 보정했고,
+Web 번들 old URL hit 0건과 API/Web/Dagster 200/healthy를 확인했다.
+
+**수정**:
+- `/auth/login` live 응답이 user envelope가 아니라 user object를 직접 반환하는 계약에 맞춰
+  web auth client/login page를 정렬했다.
+- live case limit을 test registration 전에 적용해 2000개 제한 실행이 실제로 2000개 수준으로
+  잘리도록 수정했다.
+- 운영 rate-limit에 맞춰 live suite 기본 throttle, per-case retry/backoff, test timeout을 조정했다.
+- 컨테이너 내부 backup path 탐색 fallback을 보강해 `/admin/backup` live route가 500으로
+  떨어지지 않게 했다.
+- 장시간 실행 중 access token/cookie 만료로 admin route가 로그인 화면에 리다이렉트되는 문제를
+  worker storage state 10분 주기 UI 재로그인 갱신으로 막았다.
+
+**검증**: Web typecheck/lint/Vitest/Prettier 통과. live e2e catalog는 3233개(매트릭스 3230 +
+login 2 + catalog 1)를 생성한다. N150 live authenticated 실행은
+`PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms 기준
+2004개 테스트가 모두 통과했다(`2004 passed`, 2.8h). 실행 후 임시 admin/session과
+Playwright 결과 디렉터리 정리까지 확인했다.
+
 ## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
 
 **작업**: `kor-travel-geo` v2 대응 PR merge 후 운영 배포를 위해 Docker Images workflow를

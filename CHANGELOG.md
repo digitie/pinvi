@@ -45,10 +45,20 @@
 - `kor-travel-geo` 신규 v2 공개 API key 계약에 맞춰 Pinvi geocoding 호출이 서버
   `PINVI_VWORLD_API_KEY`를 `key` query로 전달한다. 별도 geo key는 두지 않고,
   공개 API key hash 저장/검증은 `kor-travel-geo`가 소유한다(ADR-048).
+- `kor-travel-map` 최신 public/admin API 계약에 맞춰 public REST `key` query fallback,
+  admin proxy secret/actor 헤더, curated feature `tripmate-copy` snapshot 경로를 반영했다.
 - Web Docker image build가 vendored `vworld-map-web`/`vworld-map-core` tarball과
   `@pinvi/domain` workspace를 install/build stage에서 사용할 수 있도록 package/Dockerfile
   설정을 보강했다.
+- N150/live 대상 Admin Playwright E2E matrix를 추가했다. 기존 mock e2e와 분리된
+  `test:e2e:admin-live` suite가 Admin UI 기준 live 케이스 3233개를 생성하며,
+  실제 실행은 명시적 환경변수와 live admin credential이 있을 때만 수행한다. N150 live
+  authenticated run은 2001개 matrix 제한 기준 2004개 테스트 통과로 검증했다.
 - Admin audit hash chain, 위치 감사 outbox, geofence fallback, Resend webhook signature 검증을 보강했다.
+- 가입 인증/비밀번호 재설정/초대 이메일 queue를 FastAPI lifespan worker가 자동 drain하도록
+  연결해, 별도 수동 worker 없이도 Resend 발송이 진행되게 했다.
+- access token 기본 만료 시간을 10분으로 줄이고, Google OAuth는 client id와 secret이 모두
+  설정된 경우에만 활성 provider로 표시되도록 했다.
 - `PINVI_*` / `pinvi_*` 런타임 계약과 `Pinvi` / `pinvi` 프로젝트 표기로 hard cutover했다.
 - 고정 개발 포트를 PostgreSQL `5432`, RustFS `12101`/`12105`, kor-travel-map `12701`,
   API `12801`, Web `12805`, Dagster `12802`, Grafana `12205`, cAdvisor `12301`,

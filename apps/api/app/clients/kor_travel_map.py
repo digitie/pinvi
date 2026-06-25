@@ -1,6 +1,6 @@
 """kor-travel-map OpenAPI HTTP client (transport-only).
 
-`kor-travel-map`의 운영 HTTP API(`kor-travel-map-admin`, 포트 12701,
+`kor-travel-map`의 운영 HTTP API(`kor-travel-map-api`, 포트 12701,
 `openapi.user.json`)를 호출하는 httpx 기반 client다. ADR-026/027(DEC-01=B) 기준이며
 in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 
@@ -68,12 +68,14 @@ class KorTravelMapClient:
         http: httpx.AsyncClient,
         *,
         service_token: str = "",
+        public_api_key: str = "",
         max_attempts: int = 3,
         batch_chunk_size: int = 200,
         backoff_base_seconds: float = 0.2,
     ) -> None:
         self._http = http
-        self._service_token = service_token
+        self._service_token = service_token.strip()
+        self._public_api_key = public_api_key.strip()
         self._max_attempts = max(1, max_attempts)
         self._batch_chunk_size = max(1, batch_chunk_size)
         self._backoff_base_seconds = backoff_base_seconds
@@ -88,6 +90,17 @@ class KorTravelMapClient:
             return {_SERVICE_TOKEN_HEADER: self._service_token}
         return {}
 
+    def _params(self, path: str, params: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        merged = dict(params or {})
+        if (
+            self._public_api_key
+            and not self._service_token
+            and path.startswith("/v1/")
+            and "key" not in merged
+        ):
+            merged["key"] = self._public_api_key
+        return merged or None
+
     async def _send(
         self,
         method: str,
@@ -101,7 +114,11 @@ class KorTravelMapClient:
         for attempt in range(self._max_attempts):
             try:
                 resp = await self._http.request(
-                    method, path, params=params, json=json, headers=self._headers()
+                    method,
+                    path,
+                    params=self._params(path, params),
+                    json=json,
+                    headers=self._headers(),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
@@ -463,7 +480,7 @@ class KorTravelMapClient:
     async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
         """kor-travel-map curated feature → Pinvi copy snapshot."""
         return self._data(
-            await self._send("GET", f"/v1/curated-features/{curated_feature_id}/pinvi-copy")
+            await self._send("GET", f"/v1/curated-features/{curated_feature_id}/tripmate-copy")
         )
 
     async def healthz(self) -> dict[str, Any]:
@@ -500,6 +517,9 @@ def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
     return KorTravelMapClient(
         http,
         service_token=app_settings.pinvi_kor_travel_map_service_token,
+        public_api_key=(
+            app_settings.pinvi_kor_travel_map_public_api_key or app_settings.pinvi_vworld_api_key
+        ),
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
         batch_chunk_size=app_settings.pinvi_kor_travel_map_batch_chunk_size,
     )

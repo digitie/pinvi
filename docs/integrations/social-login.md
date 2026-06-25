@@ -37,7 +37,8 @@ Kakao provider 정보는 후속 구현 참고용으로만 유지한다.
 | `PINVI_OAUTH_CALLBACK_BASE_URL` | provider 콘솔에 등록한 callback URL의 base |
 
 `GET /auth/oauth/providers`는 현재 Google만 반환한다. Google은
-`PINVI_GOOGLE_OAUTH_CLIENT_ID`가 비어 있으면 `enabled: false`다.
+`PINVI_GOOGLE_OAUTH_CLIENT_ID`와 `PINVI_GOOGLE_OAUTH_CLIENT_SECRET` 중 하나라도 비어 있으면
+`enabled: false`다.
 
 ## 3. Provider별 endpoint
 

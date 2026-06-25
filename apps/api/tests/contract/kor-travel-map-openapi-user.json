@@ -482,6 +482,634 @@
         "title": "ClusterSummary",
         "type": "object"
       },
+      "CuratedFeatureResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CuratedFeatureView"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "CuratedFeatureResponse",
+        "type": "object"
+      },
+      "CuratedFeatureView": {
+        "additionalProperties": false,
+        "description": "curated feature overlay view.",
+        "properties": {
+          "address": {
+            "additionalProperties": true,
+            "title": "Address",
+            "type": "object"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "copy_version": {
+            "title": "Copy Version",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "curated_feature_id": {
+            "title": "Curated Feature Id",
+            "type": "string"
+          },
+          "curation_status": {
+            "title": "Curation Status",
+            "type": "string"
+          },
+          "dataset_key": {
+            "title": "Dataset Key",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "display_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Summary"
+          },
+          "display_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Title"
+          },
+          "feature_category": {
+            "title": "Feature Category",
+            "type": "string"
+          },
+          "feature_id": {
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "feature_kind": {
+            "title": "Feature Kind",
+            "type": "string"
+          },
+          "feature_name": {
+            "title": "Feature Name",
+            "type": "string"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "legal_dong_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Dong Code"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rank_score": {
+            "title": "Rank Score",
+            "type": "number"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          },
+          "rejected_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected By"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "selected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected At"
+          },
+          "selected_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected By"
+          },
+          "selection_origin": {
+            "title": "Selection Origin",
+            "type": "string"
+          },
+          "sido_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sido Code"
+          },
+          "sigungu_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigungu Code"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_record_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Key"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "theme_group": {
+            "title": "Theme Group",
+            "type": "string"
+          },
+          "theme_id": {
+            "title": "Theme Id",
+            "type": "string"
+          },
+          "theme_name": {
+            "title": "Theme Name",
+            "type": "string"
+          },
+          "theme_slug": {
+            "title": "Theme Slug",
+            "type": "string"
+          },
+          "tripmate_copy_policy": {
+            "title": "Tripmate Copy Policy",
+            "type": "string"
+          },
+          "tripmate_relation": {
+            "title": "Tripmate Relation",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "curated_feature_id",
+          "theme_id",
+          "theme_slug",
+          "theme_name",
+          "theme_group",
+          "feature_id",
+          "feature_name",
+          "feature_category",
+          "feature_kind",
+          "address",
+          "detail",
+          "source_id",
+          "provider",
+          "dataset_key",
+          "source_name",
+          "curation_status",
+          "selection_origin",
+          "rank_score",
+          "tripmate_relation",
+          "tripmate_copy_policy",
+          "copy_version",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CuratedFeatureView",
+        "type": "object"
+      },
+      "CuratedFeaturesData": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CuratedFeatureView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CuratedFeaturesData",
+        "type": "object"
+      },
+      "CuratedFeaturesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CuratedFeaturesData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "CuratedFeaturesResponse",
+        "type": "object"
+      },
+      "CuratedSourceView": {
+        "additionalProperties": false,
+        "description": "curated source metadata view.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_key": {
+            "title": "Dataset Key",
+            "type": "string"
+          },
+          "freshness_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Note"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_source_modified_at": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Source Modified At"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "next_expected_at": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Expected At"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_status": {
+            "title": "Provider Status",
+            "type": "string"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "update_cycle": {
+            "title": "Update Cycle",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "provider",
+          "dataset_key",
+          "source_name",
+          "source_kind",
+          "update_cycle",
+          "provider_status",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CuratedSourceView",
+        "type": "object"
+      },
+      "CuratedSourcesData": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CuratedSourceView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CuratedSourcesData",
+        "type": "object"
+      },
+      "CuratedSourcesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CuratedSourcesData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "CuratedSourcesResponse",
+        "type": "object"
+      },
+      "CuratedThemeView": {
+        "additionalProperties": false,
+        "description": "curated theme view.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_curated": {
+            "title": "Default Curated",
+            "type": "boolean"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "theme_description": {
+            "title": "Theme Description",
+            "type": "string"
+          },
+          "theme_group": {
+            "title": "Theme Group",
+            "type": "string"
+          },
+          "theme_id": {
+            "title": "Theme Id",
+            "type": "string"
+          },
+          "theme_name": {
+            "title": "Theme Name",
+            "type": "string"
+          },
+          "theme_slug": {
+            "title": "Theme Slug",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme_id",
+          "theme_slug",
+          "theme_name",
+          "theme_description",
+          "theme_group",
+          "default_curated",
+          "visibility",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CuratedThemeView",
+        "type": "object"
+      },
+      "CuratedThemesData": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CuratedThemeView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CuratedThemesData",
+        "type": "object"
+      },
+      "CuratedThemesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CuratedThemesData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "CuratedThemesResponse",
+        "type": "object"
+      },
       "FeatureBatchData": {
         "additionalProperties": false,
         "description": "feature batch 상세 data payload.",
@@ -740,6 +1368,18 @@
         "additionalProperties": false,
         "description": "지도/목록용 경량 feature 표현 (bbox 조회 결과 1건).",
         "properties": {
+          "area_square_meters": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "include_geometry=true이고 kind=area일 때 면적(m²).",
+            "title": "Area Square Meters"
+          },
           "category": {
             "title": "Category",
             "type": "string"
@@ -747,6 +1387,19 @@
           "feature_id": {
             "title": "Feature Id",
             "type": "string"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "include_geometry=true일 때 route/area용 GeoJSON geometry.",
+            "title": "Geometry"
           },
           "kind": {
             "title": "Kind",
@@ -1198,19 +1851,6 @@
         "title": "FestivalPublicView",
         "type": "object"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
       "HealthData": {
         "additionalProperties": false,
         "properties": {
@@ -1411,6 +2051,94 @@
           "page_size"
         ],
         "title": "PageMeta",
+        "type": "object"
+      },
+      "ProblemDetail": {
+        "additionalProperties": true,
+        "description": "RFC7807 ``application/problem+json`` 에러 본문 (중앙 핸들러 정본, §1.5).\n\n중앙 예외 핸들러(`app._error_response`)가 모든 4xx/5xx를 이 형식으로 통일한다.\n``code``·``request_id``는 소비자 파싱 위치 고정용 top-level 확장 멤버다.",
+        "properties": {
+          "code": {
+            "description": "기계 판독용 오류 코드(§4 enum 확장). 예: NOT_FOUND.",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "description": "이 발생 건에 대한 사람이 읽는 설명.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "description": "필드 단위 검증 오류 목록(검증 실패 시 비어 있지 않다).",
+            "items": {
+              "$ref": "#/components/schemas/ProblemDetailError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "request_id": {
+            "description": "요청 상관추적 ID(`X-Request-ID`/`meta.request_id`와 동일).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP 상태 코드.",
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "description": "사람이 읽는 짧은 요약(= detail).",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "description": "오류 유형 URI. 예: https://kor-travel-map/errors/not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "request_id"
+        ],
+        "title": "ProblemDetail",
+        "type": "object"
+      },
+      "ProblemDetailError": {
+        "additionalProperties": true,
+        "description": "RFC7807 problem 본문 ``errors`` 항목 (필드 단위 오류).\n\n§1.5 산문 계약은 ``{field, message}``를 정의하지만, 검증 실패(422)는 pydantic\n원본 오류(``loc``/``msg``/``type`` 등)를 그대로 싣는다. 두 형태를 모두 허용하도록\n추가 키를 열어 둔다(``extra='allow'``).",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "오류가 발생한 입력 필드.",
+            "title": "Field"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "사람이 읽는 오류 메시지.",
+            "title": "Message"
+          }
+        },
+        "title": "ProblemDetailError",
         "type": "object"
       },
       "ProviderLastSyncData": {
@@ -1909,44 +2637,147 @@
         "title": "SyncStateSummary",
         "type": "object"
       },
-      "ValidationError": {
+      "TripmateCopyItemView": {
+        "additionalProperties": false,
+        "description": "TripMate curated_plan_pois copy item.",
         "properties": {
-          "ctx": {
-            "title": "Context",
+          "curated_feature_item_id": {
+            "title": "Curated Feature Item Id",
+            "type": "string"
+          },
+          "day_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Index"
+          },
+          "feature_id": {
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "feature_snapshot": {
+            "additionalProperties": true,
+            "title": "Feature Snapshot",
             "type": "object"
           },
-          "input": {
-            "title": "Input"
+          "memo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memo"
           },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
+          "relation": {
+            "title": "Relation",
             "type": "string"
           },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "source_record_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Key"
           }
         },
         "required": [
-          "loc",
-          "msg",
-          "type"
+          "curated_feature_item_id",
+          "feature_id",
+          "relation",
+          "sort_order",
+          "feature_snapshot"
         ],
-        "title": "ValidationError",
+        "title": "TripmateCopyItemView",
+        "type": "object"
+      },
+      "TripmateCopySnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TripmateCopySnapshotView"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "TripmateCopySnapshotResponse",
+        "type": "object"
+      },
+      "TripmateCopySnapshotView": {
+        "additionalProperties": false,
+        "description": "TripMate import snapshot.",
+        "properties": {
+          "curated_feature_id": {
+            "title": "Curated Feature Id",
+            "type": "string"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TripmateCopyItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "plan": {
+            "additionalProperties": true,
+            "title": "Plan",
+            "type": "object"
+          },
+          "source": {
+            "additionalProperties": true,
+            "title": "Source",
+            "type": "object"
+          },
+          "theme": {
+            "additionalProperties": true,
+            "title": "Theme",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "curated_feature_id",
+          "version",
+          "etag",
+          "updated_at",
+          "theme",
+          "plan",
+          "source",
+          "items"
+        ],
+        "title": "TripmateCopySnapshotView",
         "type": "object"
       },
       "VersionData": {
@@ -1964,7 +2795,7 @@
             "title": "Commit"
           },
           "kor_travel_map_version": {
-            "title": "KorTravelMap Map Version",
+            "title": "Kor Travel Map Version",
             "type": "string"
           },
           "openapi_version": {
@@ -2169,7 +3000,7 @@
     },
     "securitySchemes": {
       "ServiceToken": {
-        "description": "Pinvi 등 외부 서비스 호출 토큰 (ADR-045 D-1).",
+        "description": "TripMate 등 외부 서비스 호출 토큰 (ADR-045 D-1).",
         "in": "header",
         "name": "X-Kor-Travel-Map-Service-Token",
         "type": "apiKey"
@@ -2177,7 +3008,7 @@
     }
   },
   "info": {
-    "description": "Pinvi/user-facing subset of kor-travel-map OpenAPI. Internal admin/debug/ops routes are intentionally excluded.",
+    "description": "TripMate/user-facing subset of kor-travel-map OpenAPI. Internal admin/debug/ops routes are intentionally excluded.",
     "title": "kor-travel-map-user",
     "version": "0.2.0-dev"
   },
@@ -2197,6 +3028,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "public liveness probe",
@@ -2232,6 +3073,26 @@
               "title": "Active Only",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -2247,13 +3108,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "PlaceCategory 정적 카탈로그(144건, 선택적 DB 분포)",
@@ -2262,9 +3133,638 @@
         ]
       }
     },
+    "/v1/curated-features": {
+      "get": {
+        "operationId": "list_curated_features_route_v1_curated_features_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "theme_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Theme Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "theme_slug",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Theme Slug"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dataset_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "curation_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "candidate",
+                    "curated",
+                    "rejected",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "curated",
+              "title": "Curation Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sido_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sido Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sigungu_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sigungu Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Lon"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Lat"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Lon"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Lat"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuratedFeaturesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "summary": "List Curated Features Route",
+        "tags": [
+          "curated"
+        ]
+      }
+    },
+    "/v1/curated-features/{curated_feature_id}": {
+      "get": {
+        "operationId": "get_curated_feature_route_v1_curated_features__curated_feature_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "curated_feature_id",
+            "required": true,
+            "schema": {
+              "title": "Curated Feature Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuratedFeatureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "summary": "Get Curated Feature Route",
+        "tags": [
+          "curated"
+        ]
+      }
+    },
+    "/v1/curated-features/{curated_feature_id}/tripmate-copy": {
+      "get": {
+        "operationId": "get_curated_tripmate_copy_route_v1_curated_features__curated_feature_id__tripmate_copy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "curated_feature_id",
+            "required": true,
+            "schema": {
+              "title": "Curated Feature Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripmateCopySnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "summary": "Get Curated Tripmate Copy Route",
+        "tags": [
+          "curated"
+        ]
+      }
+    },
+    "/v1/curated-sources": {
+      "get": {
+        "operationId": "list_curated_sources_route_v1_curated_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dataset_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "implemented",
+                    "provider_needed",
+                    "manual_only",
+                    "deprecated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuratedSourcesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "summary": "List Curated Sources Route",
+        "tags": [
+          "curated"
+        ]
+      }
+    },
+    "/v1/curated-themes": {
+      "get": {
+        "operationId": "list_curated_themes_route_v1_curated_themes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "admin_only",
+                    "public",
+                    "tripmate"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visibility"
+            }
+          },
+          {
+            "in": "query",
+            "name": "theme_group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Theme Group"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuratedThemesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "summary": "List Curated Themes Route",
+        "tags": [
+          "curated"
+        ]
+      }
+    },
     "/v1/features/batch": {
       "post": {
         "operationId": "get_features_batch_v1_features_batch_post",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2287,7 +3787,24 @@
             "description": "Successful Response"
           },
           "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "feature_ids 1~200개 필요"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "security": [
@@ -2443,6 +3960,38 @@
               "title": "Max Items",
               "type": "integer"
             }
+          },
+          {
+            "description": "route/area 지도 표시용 GeoJSON geometry 포함 여부.",
+            "in": "query",
+            "name": "include_geometry",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "route/area 지도 표시용 GeoJSON geometry 포함 여부.",
+              "title": "Include Geometry",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -2458,16 +4007,26 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
-        "summary": "bbox 안 feature 목록 (Pinvi/public envelope)",
+        "summary": "bbox 안 feature 목록 (TripMate/public envelope)",
         "tags": [
           "features"
         ]
@@ -2642,6 +4201,26 @@
               "title": "Sort",
               "type": "string"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -2656,7 +4235,24 @@
             "description": "Successful Response"
           },
           "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "cursor/sort/radius/좌표 오류"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "좌표 중심 반경 주변 feature 목록",
@@ -2670,12 +4266,12 @@
         "operationId": "list_features_nearby_by_target_v1_features_nearby_by_target_get",
         "parameters": [
           {
-            "description": "외부 시스템 이름. 예: pinvi",
+            "description": "외부 시스템 이름. 예: tripmate",
             "in": "query",
             "name": "external_system",
             "required": true,
             "schema": {
-              "description": "외부 시스템 이름. 예: pinvi",
+              "description": "외부 시스템 이름. 예: tripmate",
               "title": "External System",
               "type": "string"
             }
@@ -2837,6 +4433,26 @@
               "title": "Sort",
               "type": "string"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -2851,10 +4467,34 @@
             "description": "Successful Response"
           },
           "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "target 없음"
           },
           "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "cursor/sort/radius 오류"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "외부 POI/cache target key 기준 주변 feature 목록",
@@ -3038,6 +4678,26 @@
               "title": "Include Total",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3052,7 +4712,24 @@
             "description": "Successful Response"
           },
           "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "검색 범위 또는 cursor 오류"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "feature 검색 (이름 trgm + bbox)",
@@ -3073,6 +4750,26 @@
               "title": "Feature Id",
               "type": "string"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3087,17 +4784,34 @@
             "description": "Successful Response"
           },
           "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "feature_id 없음"
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "feature 단건 상세",
@@ -3137,6 +4851,26 @@
               "description": "이 시점 이하 weather만(미래 예보 제외).",
               "title": "Asof"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3152,13 +4886,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "feature weather card (forecast_style별 최신값 + freshness)",
@@ -3171,6 +4915,28 @@
       "get": {
         "description": "전 provider×dataset×scope의 last-sync/최근 실패 요약 (T-217g, D-07).\n\n행 수가 유한(provider×dataset 수십 개)하므로 페이지네이션 없이 전량 반환한다\n(``/v1/categories`` bounded reference 패턴). 빈 환경은 200 + 빈 ``items``.",
         "operationId": "list_providers_freshness_v1_providers_get",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3181,6 +4947,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "전 provider 데이터 신선도 목록(대시보드)",
@@ -3237,6 +5023,26 @@
               "description": "sync_scope 필터",
               "title": "Sync Scope"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3251,17 +5057,34 @@
             "description": "Successful Response"
           },
           "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
             "description": "provider sync state 없음"
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "provider 데이터 신선도(last-sync)",
@@ -3375,6 +5198,26 @@
               "title": "Include Forecast",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3390,13 +5233,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "List Public Beaches",
@@ -3529,6 +5382,26 @@
               "title": "Max Items",
               "type": "integer"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3544,13 +5417,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "List Public Beach Markers",
@@ -3592,6 +5475,26 @@
               "title": "Include Forecast",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3607,13 +5510,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "Get Public Beach",
@@ -3746,6 +5659,26 @@
               "title": "Max Items",
               "type": "integer"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3761,13 +5694,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "List Public Festival Markers",
@@ -3890,6 +5833,26 @@
               "title": "Include Months",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3905,13 +5868,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "List Public Festivals Monthly",
@@ -3933,6 +5906,26 @@
               "title": "Feature Id",
               "type": "string"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트용 VWorld 호환 공개 API 키. trusted admin proxy 또는 service token 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -3948,13 +5941,23 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
             "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "Get Public Festival",
@@ -3977,6 +5980,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
           }
         },
         "summary": "public version",

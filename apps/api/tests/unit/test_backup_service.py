@@ -50,6 +50,36 @@ def _write_script(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
+def test_repo_root_resolves_api_project_root() -> None:
+    root = backup_service.repo_root()
+
+    assert (root / "pyproject.toml").is_file()
+    assert (root / "app").is_dir()
+
+
+def test_repo_root_falls_back_for_shallow_module_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeModulePath:
+        def __init__(self, parents: tuple[Path, ...]) -> None:
+            self.parents = parents
+
+        def resolve(self) -> _FakeModulePath:
+            return self
+
+    class _FakePath:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def resolve(self) -> _FakeModulePath:
+            return _FakeModulePath((tmp_path,))
+
+    monkeypatch.setattr(backup_service, "Path", _FakePath)
+
+    assert backup_service.repo_root() == tmp_path
+
+
 @pytest.mark.asyncio
 async def test_create_backup_snapshot_from_script_output(
     tmp_path: Path,
