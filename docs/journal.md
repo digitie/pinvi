@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — Admin 계획 리뷰 차단 이슈 반영
+
+**작업**: 다른 에이전트가 `docs/execplan/admin-console-gap-plan.md`를 리뷰했고, 구현 진입 전
+차단 이슈 2건을 반환했다. 첫째, 공개 추적 문서에 N150 bootstrap admin 이메일/비밀번호 조합으로
+읽힐 수 있는 표현이 있었다. 둘째, T-214 seed/reset production 정책이 `404 또는 disabled 응답`을
+허용해 기존 `docs/api/admin.md` / SPEC의 router 미등록/404 정책보다 약했다.
+
+**변경**:
+- `docs/resume.md`, `docs/journal.md`, `docs/runbooks/{admin,deploy,docker-app}.md`,
+  `docs/architecture/map-marker-design.md`, `docs/tasks.md`에서 공개 credential 조합 표현을
+  제거하고 placeholder 또는 "bootstrap 대상 계정"으로 바꿨다.
+- T-214는 production에서 seed/reset router 미등록 + API 404로 고정했다.
+- 보완 권고를 반영해 dedup route를 기존 SPEC/API의 `/admin/dedup-review` 단수로 맞추고,
+  Grafana 메뉴 위치, T-209/T-211/T-212 최신 `kor-travel-map` OpenAPI 확인 게이트,
+  mutation reason/audit/idempotency/kill-switch 기준을 계획에 추가했다.
+
+**검증**: tracked 문서의 credential 조합 패턴 스캔, `git diff --check`, PR CI.
+
 ## 2026-06-27 (codex) — Admin 콘솔 기능 보강 계획 문서화
 
 **작업**: Admin 콘솔에 메뉴만 있고 실제 기능이 비어 있는 영역이 많아, 구현을 계속하기 전에
@@ -23,8 +41,8 @@
 
 ## 2026-06-27 (codex) — N150 bootstrap admin 복구 + quote 실패 패턴 문서화
 
-**작업**: N150에서 `admin@ad.min` 로그인이 "이메일 또는 비밀번호가 올바르지 않습니다."로
-실패하는 원인을 확인했다. 운영 DB에는 `admin@ad.min` 계정과 admin role 사용자가 모두
+**작업**: N150에서 Admin 로그인이 "이메일 또는 비밀번호가 올바르지 않습니다."로
+실패하는 원인을 확인했다. 운영 DB에는 bootstrap 대상 계정과 admin role 사용자가 모두
 없었고, 문서의 Alembic seed 설명과 실제 코드가 어긋나 있었다.
 
 **변경**:
@@ -43,8 +61,9 @@
 - `docs/agent-failure-patterns.md` — PowerShell→WSL→SSH→Docker→Python 중첩 quote 금지와
   stdin/base64 전달 표준 패턴을 추가했다.
 
-**운영 조치**: N150 현재 DB에는 `admin@ad.min` / `admin`을 수동 생성했고 `/auth/login`이
-200으로 응답함을 확인했다. 후속 배포부터는 startup bootstrap 경로가 같은 누락을 방지한다.
+**운영 조치**: N150 현재 DB에는 local-only 운영 런북의 임시 credential로 bootstrap 대상
+계정을 수동 복구했고 `/auth/login` 200을 확인했다. 후속 배포부터는 startup bootstrap
+경로가 같은 누락을 방지한다. 임시 credential은 공개 문서에 기록하지 않는다.
 
 ## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차 (concierge 패턴 정렬)
 

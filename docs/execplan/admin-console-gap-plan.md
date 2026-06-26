@@ -95,7 +95,7 @@ Pinvi에 그대로 복제하지 않고, 운영 동선과 정보 구조를 참고
 |------|-------|------|------|
 | Features | `/admin/features` | kor-travel-map proxy | feature 목록/상세/상태/source/geometry/metadata 조회 |
 | Change requests | `/admin/features/change-requests` | kor-travel-map proxy | 생성/수정/삭제 요청 approve/reject/apply |
-| Dedup review | `/admin/dedup-reviews` | kor-travel-map proxy | dedup 후보 비교 및 merge/reject |
+| Dedup review | `/admin/dedup-review` | kor-travel-map proxy | dedup 후보 비교 및 merge/reject |
 | Provider sync | `/admin/provider-sync` | kor-travel-map proxy | provider별 최신 실행, run-now/cancel, 오류 확인 |
 | Integrity | `/admin/integrity` | kor-travel-map proxy | consistency report/issue 조회와 상태 변경 |
 | Debug logs | `/admin/debug/logs` | kor-travel-map proxy | upstream system/API logs, request timeline |
@@ -105,6 +105,7 @@ Pinvi에 그대로 복제하지 않고, 운영 동선과 정보 구조를 참고
 | 메뉴 | Route | 소유 | 목표 |
 |------|-------|------|------|
 | ETL/Dagster | `/admin/etl` | Pinvi + kor-travel-map link | Pinvi Dagster 상태와 map provider job 요약 |
+| Grafana | `/admin/grafana` | Pinvi observability | 기존 iframe route 유지, T-208에서 ETL/Observability 그룹 아래 배치 |
 | API calls | `/admin/api-calls` | Pinvi | 기존 API call log 유지 + upstream request link |
 | Emails | `/admin/emails` | Pinvi | queue 상태, resend/retry, 실패 사유 |
 | Backup | `/admin/backup` | Pinvi | snapshot/restore 핫스왑 유지 |
@@ -151,6 +152,8 @@ API:
 
 범위:
 
+- 구현 시작 전 `kor-travel-map` 최신 OpenAPI/Admin 계약을 확인하고, Pinvi proxy가 사용할
+  endpoint/path/response envelope를 기록한다.
 - `KorTravelMapAdminClient`에 feature list/detail 조회와 공통 error mapping을 추가한다.
 - Pinvi API에 `/admin/features` proxy router를 추가한다.
 - `packages/api-client`와 Web query hook을 추가한다.
@@ -184,10 +187,13 @@ API:
 
 범위:
 
+- 구현 시작 전 `kor-travel-map` 최신 OpenAPI/Admin ops 계약을 확인한다.
 - `/admin/etl` placeholder를 제거한다.
 - `kor-travel-map` `/v1/ops/metrics`, `/v1/ops/providers`, import job 계열 API를 proxy한다.
 - provider별 최신 실행, 실패 사유, run-now/cancel, Dagster 링크를 제공한다.
 - Pinvi 자체 Dagster health와 map provider ops를 한 화면에서 구분한다.
+- run-now/cancel 같은 mutation은 reason 입력, audit 기록, upstream kill-switch 확인,
+  idempotency key 또는 중복 실행 방지 기준을 완료조건에 포함한다.
 
 검증:
 
@@ -198,10 +204,13 @@ API:
 
 범위:
 
-- `/admin/dedup-reviews`, `/admin/integrity`, `/admin/debug/logs` route를 추가한다.
+- 구현 시작 전 `kor-travel-map` 최신 OpenAPI/Admin dedup/integrity/log 계약을 확인한다.
+- `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs` route를 추가한다.
 - dedup 후보 비교, merge/reject action, consistency issue 상태 변경, system/API logs 필터를
   제공한다.
 - API call log에서 upstream request id가 있으면 debug timeline으로 연결한다.
+- merge/reject/status mutation은 reason 입력, audit 기록, upstream kill-switch 확인,
+  idempotency key 또는 중복 처리 방지 기준을 완료조건에 포함한다.
 
 검증:
 
@@ -232,14 +241,14 @@ API:
 범위:
 
 - `/admin/seed`, `/admin/reset` placeholder를 제거하되, 운영에서는 명시적으로 비활성화한다.
-- `PINVI_ENVIRONMENT`가 production이면 API는 404 또는 disabled 응답, UI는 destructive action을
-  렌더링하지 않는다.
+- `PINVI_ENVIRONMENT`가 production이면 seed/reset router를 include하지 않고 API는 404만
+  반환한다. UI는 destructive action을 렌더링하지 않는다.
 - dev/smoke에서는 confirmation phrase, reason, audit, dry-run, 대상 범위를 제공한다.
 
 검증:
 
-- API integration: production disabled, dev dry-run, confirmation mismatch, audit append.
-- UI e2e: production hidden/disabled, dev confirm flow.
+- API integration: production 404, dev dry-run, confirmation mismatch, audit append.
+- UI e2e: production hidden/404-safe, dev confirm flow.
 
 ### T-215 — Admin live e2e 확장 + N150 묶음 게이트
 

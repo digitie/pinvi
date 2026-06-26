@@ -130,7 +130,8 @@ export default async function LoginPage() {
 
 - 소셜 버튼 X (이메일 + 비밀번호만)
 - Admin 전용 톤 — 약간 더 sobér
-- 기본 admin `admin@ad.min` / `admin`
+- bootstrap admin은 운영 런북의 임시 credential로만 최초 진입한다. 공개 문서에는
+  이메일/비밀번호 조합을 고정하지 않는다.
 
 ## 5. 지도 화면 (Trip Workspace)
 

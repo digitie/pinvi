@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-27 (codex) — Admin 계획 리뷰 차단 이슈 반영
+
+다른 에이전트 리뷰에서 Admin 계획 PR의 차단 이슈 2건이 확인됐다. 공개 추적 문서에 남아 있던
+N150 bootstrap admin 이메일/비밀번호 조합 표현을 익명화하고, seed/reset production 정책은
+`disabled 응답` 선택지를 제거해 router 미등록/404로 고정한다. 보완 권고도 반영해 dedup route는
+기존 SPEC/API의 `/admin/dedup-review` 단수로 맞추고, T-209/T-211/T-212의 최신
+`kor-travel-map` OpenAPI 확인 게이트와 mutation reason/audit/idempotency/kill-switch 기준을
+계획에 추가했다.
+
+다음: 이 리뷰 반영 PR을 merge한 뒤 T-208(Admin IA / 메뉴 / 대시보드 상태판 보강) 구현에
+진입한다.
+
 ## 2026-06-27 (codex) — Admin 기능 보강 계획 PR
 
 Admin 콘솔은 메뉴만 있고 기능이 비어 있는 route가 많아, 구현을 더 진행하기 전에
@@ -13,8 +25,8 @@ Pinvi가 `feature` / `provider_sync` schema를 직접 소유하지 않는 책임
 
 ## 2026-06-27 (codex) — N150 bootstrap admin 복구
 
-N150 운영 DB에 `admin@ad.min`과 admin role 사용자가 없어 Admin 로그인이 실패했다. 현재 N150에는
-`admin@ad.min` / `admin` 계정을 수동 생성해 `/auth/login` 200을 확인했다.
+N150 운영 DB에 bootstrap 대상 계정과 admin role 사용자가 없어 Admin 로그인이 실패했다.
+현재 N150에는 local-only 운영 런북의 임시 credential로 복구 검증을 완료했다.
 
 재발 방지를 위해 API startup bootstrap admin 서비스를 추가했다. `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가
 설정된 환경에서만 `PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구하고, password hash가 바뀌면
