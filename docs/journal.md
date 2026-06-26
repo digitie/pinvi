@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-26 (claude) — Pinvi 이미지 GHCR 폐지 → 로컬 빌드 전환
+
+**작업**: 사용자 지시 — "ghcr에서는 내리고 앞으로는 올리지 마". Pinvi 이미지를 GHCR에서
+내리고, 앞으로 GHCR push를 중단한다. kor-travel-map/geo/concierge 스택처럼 운영 노드에서
+로컬 빌드(`pinvi-*:latest-main`)로 정렬한다.
+
+**N150 노드 조치**(`digitie@192.168.1.14`):
+- 운영 중인 `ghcr.io/digitie/pinvi-{api,web}:deploy-836a18f`(직전 배포 #233+#234 콘텐츠)를
+  로컬 `pinvi-{api,web}:latest-main`으로 retag. `~/kor-travel-docker-manager/.env`의
+  `PINVI_API_IMAGE`/`PINVI_WEB_IMAGE`를 그 로컬 태그로 변경(.env 백업 후). 운영 컨테이너는
+  콘텐츠 동일이라 재생성 없이 그대로 서비스 — GHCR 의존 제거.
+- compose에 이미 `build.context: ../pinvi`가 있어 `ktdctl pinvi --build` 로컬 빌드가 가능함을 확인.
+  빌드 소스 `~/pinvi`가 `b80ea44`(stale)였어 `origin/main`(`836a18f`)으로 ff 동기 — 다음 `--build`가
+  옛 코드로 회귀하지 않도록.
+
+**repo 변경(본 PR)**:
+- `.github/workflows/docker-images.yml`(GHCR multi-arch push workflow) 삭제.
+- `docs/runbooks/deploy.md`를 실제 흐름(ktdctl 로컬 빌드, GHCR 미사용)으로 재작성 — 기존
+  `/opt/pinvi` + `deploy-node.sh` + GHCR pull 서술이 운영 실태(`~/kor-travel-docker-manager` +
+  `ktdctl pinvi --build`)와 어긋나 있던 것도 함께 정정.
+- `infra/.env.prod.example` 이미지 태그를 로컬(`pinvi-*:latest-main`)로 변경.
+
+**남은 일(사용자 필요)**: GHCR 패키지(`pinvi-api`/`pinvi-web`) 실제 삭제는 현재 `gh` 토큰에
+`delete:packages` scope가 없어 403. `gh auth refresh -h github.com -s delete:packages,read:packages`
+후 재시도하거나 GitHub 웹 UI(Packages → 삭제)로 내린다.
+
 ## 2026-06-26 (claude) — 미인증 로그인 시 재인증 메일 재발송
 
 **작업**: 사용자 지시 — 이메일 인증이 안 된 아이디로 로그인 시도 시 재인증 링크를 제공.
