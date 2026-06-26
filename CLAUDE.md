@@ -163,7 +163,13 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 
 `pytest -q` + `ruff check` + `mypy --strict` (`apps/api`, WSL 미러) + `npm run
 lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
-`docs/journal.md` + `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시).
+`docs/journal.md` + `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시) +
+**remote 푸시 직전 보안 감사**(`git diff --cached` 비밀/민감값 스캔 — 걸리면 push 금지. AGENTS.md "remote 푸시 전 보안 감사").
+
+> **민감 운영 노트(LOCAL ONLY)**: prod 노드 접근/실 도메인/반복 배포 실수는 gitignore된
+> `docs/deploy-runbook.local.md`(`*.local.md`, kor-travel-concierge 동일 패턴)에 둔다. git 미전파 → 각
+> worktree에 수동 복사(AGENTS.md "prod 배포 & 민감 운영 노트"). 운영 배포는 GHCR 없이
+> `ktdctl pinvi --build`(`docs/runbooks/deploy.md`).
 
 ## 7. 빠른 문서 검색
 

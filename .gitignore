@@ -56,6 +56,12 @@ Thumbs.db
 .env.production
 # mcp-telegram local credential (per-worktree, never committed) — ADR-016/PR mcp-telegram
 .env.mcp-telegram
+# Local-only 민감 노트(prod 접속·배포 런북·반복 실수 로그 등) — 커밋 금지. per-worktree 수동 복사.
+# AGENTS.md "prod 배포 & 보안 감사" 참조. kor-travel-concierge 동일 패턴.
+*.local.md
+docs/deploy-runbook.local.md
+docs/prod-access.local.md
+.local/
 
 # data / artifacts (kept on NTFS, not in git per dev-environment 정책)
 dataset/
