@@ -51,6 +51,7 @@ Thumbs.db
 # env / secrets
 .env
 .env*.local
+*.local.md
 # 운영(prod) env — 실제 도메인/시크릿. 공개 repo에 커밋 금지. 템플릿은 *.example만 추적.
 .env.prod
 .env.production

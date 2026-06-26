@@ -141,7 +141,7 @@ curl -fsS http://127.0.0.1:12805/admin/login
 curl -fsS http://127.0.0.1:12101/health/live
 
 # 7) Admin 로그인
-curl -fsS -X POST http://127.0.0.1:12801/admin/auth/login \
+curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@ad.min","password":"admin"}'
 
@@ -171,8 +171,10 @@ kor-travel-map/KASI 서비스와 함께 실행한다.
 
 ## 6. 기본 admin 계정
 
-- `admin@ad.min` / `admin` (Alembic seed)
-- 운영 환경은 별도 admin 계정 생성 후 default 비활성
+- `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 설정된 API startup에서 생성/복구된다.
+- smoke/dev 기본 예시는 `admin@ad.min` / `admin`.
+- 운영 환경은 별도 admin 계정 생성 후 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`를 비우고
+  default 계정을 비활성화한다.
 
 ## 7. 마이그레이션 분리 정책
 

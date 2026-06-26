@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — N150 bootstrap admin 복구 + quote 실패 패턴 문서화
+
+**작업**: N150에서 `admin@ad.min` 로그인이 "이메일 또는 비밀번호가 올바르지 않습니다."로
+실패하는 원인을 확인했다. 운영 DB에는 `admin@ad.min` 계정과 admin role 사용자가 모두
+없었고, 문서의 Alembic seed 설명과 실제 코드가 어긋나 있었다.
+
+**변경**:
+- `apps/api/app/services/bootstrap_admin.py` — `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 설정된 경우
+  startup에서 bootstrap admin 계정을 생성/복구한다. password hash가 바뀌면 active session을
+  폐기하고, 비밀번호 원문은 로그/DB에 남기지 않는다.
+- `apps/api/app/main.py` — FastAPI lifespan에 bootstrap admin 보장을 연결했다.
+- `infra/docker-compose.app.yml`, `infra/.env.prod.example` — 운영 compose가
+  `PINVI_BOOTSTRAP_ADMIN_EMAIL/PASSWORD`를 API 컨테이너에 전달하도록 했다.
+- `apps/api/tests/integration/test_bootstrap_admin.py` — skip/create/repair/idempotent 테스트를
+  추가했다.
+- `docs/runbooks/{admin,docker-app,deploy}.md`, `CHANGELOG.md` — 초기 admin 실제 동작과
+  N150 확인 절차를 문서화했다.
+- `scripts/remote-docker-python.sh`, `scripts/README.md` — 원격 Docker 컨테이너 Python 확인을
+  stdin 전달로 고정해 중첩 quote를 피하는 helper를 추가했다.
+- `docs/agent-failure-patterns.md` — PowerShell→WSL→SSH→Docker→Python 중첩 quote 금지와
+  stdin/base64 전달 표준 패턴을 추가했다.
+
+**운영 조치**: N150 현재 DB에는 `admin@ad.min` / `admin`을 수동 생성했고 `/auth/login`이
+200으로 응답함을 확인했다. 후속 배포부터는 startup bootstrap 경로가 같은 누락을 방지한다.
+
 ## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차 (concierge 패턴 정렬)
 
 **작업**: 사용자 지시 — 반복되는 배포 실수를 민감정보 포함해 별도 md에 상세 기록하고 gitignore,

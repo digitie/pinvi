@@ -13,6 +13,7 @@
 | `ops-node-doctor.sh` | 운영 노드 공통 사전 점검(비밀값 출력 없음) | 6 |
 | `n150-docker-doctor.sh` | N150 운영 노드 사전 점검 wrapper | 6 |
 | `odroid-docker-doctor.sh` | Odroid ARM64 노드 사전 점검 wrapper | 6 |
+| `remote-docker-python.sh` | WSL에서 SSH 원격 Docker 컨테이너에 Python stdin 전달(중첩 quote 회피) | ops |
 
 루트 npm alias:
 

@@ -34,6 +34,10 @@ cd ~/kor-travel-docker-manager
 backend/ktd_venv/bin/ktdctl pinvi --build
 ```
 
+`PINVI_BOOTSTRAP_ADMIN_PASSWORD`는 첫 운영 진입용이다. 앱 startup이 이 값을 보고
+admin 계정을 생성/복구한다. 운영 admin을 별도로 만든 뒤에는 docker-manager `.env`에서
+이 값을 비우고 기본 `admin@ad.min` 계정은 비활성화한다.
+
 검증(smoke):
 
 ```bash
@@ -41,6 +45,9 @@ curl -fsS http://127.0.0.1:12801/health
 curl -fsS http://127.0.0.1:12801/health/db
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:12805/             # web
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:12802/server_info  # dagster
+curl -fsS -X POST http://127.0.0.1:12801/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@ad.min","password":"<temporary-bootstrap-password>"}' >/dev/null
 docker ps --filter name=pinvi --format '{{.Names}}  {{.Image}}  {{.Status}}'
 ```
 

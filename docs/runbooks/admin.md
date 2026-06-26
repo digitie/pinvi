@@ -24,27 +24,50 @@ UI에서는 부여하지 않음 (Telegram 정책과 동일 — `docs/integration
 
 ## 2. 초기 admin 계정
 
-Alembic seed: `apps/api/alembic/versions/.../seed_default_admin.py`
+API startup은 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 **비어 있지 않을 때만**
+`PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구한다. 이 값이 비어 있으면 의도적으로
+skip한다. 운영에서 기본 비밀번호가 우연히 살아나는 일을 막기 위한 안전장치다.
 
-```python
-def upgrade():
-    op.execute("""
-        INSERT INTO app.users (user_id, email, password_hash, status, roles, email_verified_at)
-        VALUES (
-            gen_random_uuid(),
-            'admin@ad.min',
-            -- Argon2id hash of 'admin'
-            '$argon2id$v=19$m=65536,t=3,p=4$...',
-            'active',
-            ARRAY['user', 'admin'],
-            now()
-        )
-        ON CONFLICT (email) DO NOTHING
-    """)
+| 환경변수 | 기본/예시 | 설명 |
+|----------|-----------|------|
+| `PINVI_BOOTSTRAP_ADMIN_EMAIL` | `admin@ad.min` | bootstrap 대상 이메일 |
+| `PINVI_BOOTSTRAP_ADMIN_PASSWORD` | 비어 있음 | 설정된 경우에만 Argon2id hash로 저장/복구 |
+
+동작:
+- 계정이 없으면 `status='active'`, `roles=['user','admin']`, `email_verified_at=now()`로 생성한다.
+- 계정이 있으나 비활성/미인증/admin role 누락/password 불일치면 복구한다.
+- password hash가 바뀌면 기존 active session을 폐기한다.
+- 비밀번호 원문은 로그나 DB에 저장하지 않는다.
+
+개발/smoke 예시 기본값은 `admin@ad.min` / `admin`이다. 운영 환경에서는 첫 진입 후
+별도 admin 계정을 만들거나 기존 실사용 계정에 `admin` role을 부여한 뒤,
+`PINVI_BOOTSTRAP_ADMIN_PASSWORD`를 비우고 `admin@ad.min` 계정을 비활성화한다.
+
+N150에서 계정 존재 여부만 확인:
+
+```bash
+ssh <n150-ssh-target>
+docker exec -i pinvi-api-latest python - <<'PY'
+import asyncio
+from sqlalchemy import text
+from app.db.session import async_session_factory
+
+async def main():
+    async with async_session_factory() as db:
+        rows = (await db.execute(text("""
+            SELECT email, status, roles, email_verified_at IS NOT NULL AS verified,
+                   password_hash IS NOT NULL AS has_password, is_active
+            FROM app.users
+            WHERE roles @> ARRAY['admin']::varchar[] AND deleted_at IS NULL
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT 10
+        """))).mappings().all()
+        for row in rows:
+            print(dict(row))
+
+asyncio.run(main())
+PY
 ```
-
-- 운영 환경: 첫 진입 후 비밀번호 변경 + 신규 admin 생성 → `admin@ad.min` 비활성
-- `BOOTSTRAP_ADMIN_EMAIL` 환경변수로 다른 첫 admin 지정 가능
 
 ## 3. 자주 사용하는 admin 작업
 
@@ -52,7 +75,7 @@ def upgrade():
 
 ```bash
 # Admin 로그인 (curl)
-COOKIE=$(curl -fsS -c - -X POST http://localhost:12801/admin/auth/login \
+COOKIE=$(curl -fsS -c - -X POST http://localhost:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"..."}' | grep pinvi_access | awk '{print $7}')
 

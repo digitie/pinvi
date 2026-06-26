@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-27 (codex) — N150 bootstrap admin 복구
+
+N150 운영 DB에 `admin@ad.min`과 admin role 사용자가 없어 Admin 로그인이 실패했다. 현재 N150에는
+`admin@ad.min` / `admin` 계정을 수동 생성해 `/auth/login` 200을 확인했다.
+
+재발 방지를 위해 API startup bootstrap admin 서비스를 추가했다. `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가
+설정된 환경에서만 `PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구하고, password hash가 바뀌면
+기존 세션을 폐기한다. 운영 compose가 해당 env를 컨테이너에 전달하도록 보강했고, admin/deploy
+런북과 실패 패턴 문서에 N150 확인 절차 및 PowerShell→WSL→SSH→Docker→Python 중첩 quote 금지
+규칙을 남겼다.
+
 ## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차
 
 반복 배포 실수를 민감정보 포함해 gitignore된 `docs/deploy-runbook.local.md`(LOCAL ONLY)에 상세

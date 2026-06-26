@@ -25,6 +25,7 @@ from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
+from app.services.bootstrap_admin import ensure_bootstrap_admin
 from app.services.email_service import email_outbox_worker_lifespan
 from app.services.location_audit import location_audit_outbox_worker_lifespan
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     for warning in validate_geofence_configuration():
         log.warning("pinvi.geofence.config_warning", warning=warning)
+    await ensure_bootstrap_admin()
     # kor-travel-map OpenAPI HTTP client (ADR-026/027) — feature read/batch 경로.
     # 레거시 in-process Protocol stub(etl_bridge)은 T-175에서 제거됨.
     # admin client(T-180)는 사용자 제안 승인 시 `/v1/admin/features*` change API 호출.
