@@ -23,6 +23,10 @@
 
 ## 완료
 
+- [x] T-206 — N150 bootstrap admin 생성/복구 경로 추가 (완료: 2026-06-27, codex).
+  운영 DB에 admin 계정이 없으면 `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 기반 startup bootstrap이
+  `admin@ad.min` 계정을 생성/복구한다. 운영 compose env 전달, admin/deploy 런북,
+  quote 실패 패턴 문서, 원격 Docker Python helper, 통합 테스트를 추가했다.
 - [x] T-205 — 로컬 env Pinvi 키 반영 + OAuth 설정 판정 보강 (완료: 2026-06-25, codex).
   로컬 `.env`의 legacy `TRIPMATE_*` 값을 현재 `PINVI_*`/`NEXT_PUBLIC_PINVI_*` 키로 복사하고,
   dev URL은 ADR-047 고정 포트(`12801`/`12805`/`12802`)로 보정했다. access token 기본값은

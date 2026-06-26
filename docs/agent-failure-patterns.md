@@ -18,6 +18,7 @@
 | `fatal: not a git repository: ... F:/dev/.../.git/worktrees/...` (또는 `/mnt/f/...`) | NTFS worktree의 Git metadata 포인터를 만든 환경과 다른 환경 git으로 읽음 | NTFS worktree는 **Windows `git.exe`만**. 깨졌으면 `git worktree repair` |
 | `git worktree list`에 정상 worktree가 `prunable`로 표시 | 포인터 환경 혼용(§2) | 바로 `prune` 금지 — `repair` 먼저, `prune`은 운용 환경에서만 |
 | 명령이 셸 진입 전 실패 / 대량 호출이 한꺼번에 큐잉됐다 풀림 | 런처가 복잡한 quoting·heredoc·과도한 병렬 호출을 안정적으로 못 띄움 | 명령 단순화, `cd ... &&` 단일 바이너리, 병렬 호출 수 축소(§3) |
+| PowerShell → WSL → SSH → Docker → Python 명령에서 quote가 반복적으로 깨짐 | 서로 다른 shell 4~5개가 같은 따옴표/escape를 다시 해석 | 중첩 quote 금지. 스크립트를 stdin/base64로 한 번만 전달(§3.1) |
 | `\n` / regex backslash가 코드·문서에서 깨지거나, 멀쩡한 파일이 "손상"으로 보임 | inline shell/node/python에서 escape가 여러 계층 해석 + MSYS `grep`의 `\n` 오해석(§4) | line-oriented edit + ripgrep(Grep 도구)/`od -c` 교차검증 |
 | 통합 테스트가 "table does not exist" / "another operation in progress" | async alembic 미커밋 / pytest-asyncio 루프·풀 공유(§5) | env.py commit, 함수 스코프 엔진 + NullPool |
 
@@ -74,6 +75,53 @@ git -C F:\dev\pinvi worktree repair F:\dev\pinvi-claude
 4. 권한 분류기가 한 명령을 막으면(예: `git reset --hard`, `git checkout --`)
    나머지가 cancel될 수 있으니, 파괴적 명령은 분리해 보내고 의도를 먼저 확인한다.
 5. 이 오류가 나오면 프로젝트 버그로 오판하지 말고 **런처/스케줄 문제**로 분류한다.
+
+### 3.1 PowerShell → WSL → SSH → Docker → Python quote 금지
+
+N150 같은 원격 운영 노드에서 다음 형태는 금지한다.
+
+```powershell
+# 금지: PowerShell 문자열 안에 WSL bash, ssh remote shell, docker exec, Python heredoc을
+# 모두 중첩한다. 작은따옴표/큰따옴표가 각 계층에서 다시 해석돼 반복 실패한다.
+wsl.exe -e bash -lc 'ssh user@host "docker exec app python - <<'PY' ... PY"'
+```
+
+표준 패턴은 **스크립트를 stdin으로 한 번만 전달**하는 것이다. 컨테이너 안에서 Python을
+실행할 때는 `scripts/remote-docker-python.sh`를 1차로 사용한다.
+
+```bash
+scripts/remote-docker-python.sh <n150-ssh-target> pinvi-api-latest <<'PY'
+print("hello from container")
+PY
+```
+
+PowerShell에서 WSL을 거쳐야 할 때는 스크립트 본문을 here-string으로 만들고 base64로
+WSL에 넘긴다.
+
+```powershell
+$sh = @'
+cd ~/pinvi-workspaces/pinvi-codex
+scripts/remote-docker-python.sh <n150-ssh-target> pinvi-api-latest <<'PY'
+print("hello from container")
+PY
+'@
+$sh = $sh -replace "`r`n", "`n"
+$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($sh))
+$b64 | wsl.exe -e bash -lc "base64 -d | bash"
+```
+
+```bash
+# 이미 WSL 안이고 helper를 쓸 수 없을 때만 이 fallback을 사용한다.
+ssh -o BatchMode=yes <n150-ssh-target> 'docker exec -i pinvi-api-latest python -' <<'PY'
+print("fallback")
+PY
+```
+
+원칙:
+1. remote shell command 문자열 안에 Python heredoc을 넣지 않는다.
+2. JSON payload가 필요한 `curl` smoke도 원격 bash script stdin으로 보낸다.
+3. 세 번 이상 같은 quote 실패가 나면 즉시 문서화/스크립트화하고 더 이상 inline로
+   재시도하지 않는다.
 
 ## 4. 패턴 C — escape 손상 + 도구별 `\n` 오해석 (이번 세션 실측)
 
