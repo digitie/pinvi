@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-27 (codex) — Admin 기능 보강 계획 PR
+
+Admin 콘솔은 메뉴만 있고 기능이 비어 있는 route가 많아, 구현을 더 진행하기 전에
+`docs/execplan/admin-console-gap-plan.md`로 상세 실행 계획을 먼저 정리했다. `kor-travel-map`
+Admin의 feature, change request, dedup, provider sync, integrity, debug/log 화면을 참고하되,
+Pinvi가 `feature` / `provider_sync` schema를 직접 소유하지 않는 책임 경계를 계획에 명시했다.
+
+다음 순서는 이 계획 PR을 merge하고, 다른 에이전트 리뷰를 받은 뒤 T-208부터 Task 단위 PR로
+진행한다. 단위 기능 테스트는 로컬 WSL ext4 미러에서 수행하고, N150은 여러 기능이 모인 뒤
+묶음 live API/UI/e2e 게이트로 사용한다.
+
 ## 2026-06-27 (codex) — N150 bootstrap admin 복구
 
 N150 운영 DB에 `admin@ad.min`과 admin role 사용자가 없어 Admin 로그인이 실패했다. 현재 N150에는

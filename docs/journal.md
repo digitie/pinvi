@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — Admin 콘솔 기능 보강 계획 문서화
+
+**작업**: Admin 콘솔에 메뉴만 있고 실제 기능이 비어 있는 영역이 많아, 구현을 계속하기 전에
+상세 실행 계획을 먼저 문서화했다. `docs/api/admin.md`, `docs/runbooks/admin.md`,
+`docs/spec/v8/04-admin.md`, frontend/testing 문서와 `kor-travel-map` Admin UI 구성을 비교했다.
+
+**정리**:
+- `features`, `etl`, `category-mapping`, `seed`, `reset` route가 placeholder 수준임을 명시했다.
+- `kor-travel-map` Admin의 feature 목록/상세, change request, dedup review, provider sync,
+  integrity, debug/log 화면을 Pinvi에서 참고할 기능으로 분류했다.
+- Pinvi가 직접 소유하는 영역과 `kor-travel-map` proxy로만 다룰 영역을 분리했다.
+- T-207~T-215 Task를 만들고, 각 Task를 별도 PR로 merge한 뒤 다음 Task에 들어가는 순서를
+  정했다.
+- 사용자 지시에 따라 단위 기능 검증은 로컬 WSL ext4 미러에서 수행하고, N150은 여러 기능이
+  모인 뒤 묶음 live API/UI/e2e 게이트로 사용하도록 계획에 반영했다.
+
+**다음**: 이 계획 PR을 먼저 merge한다. 다른 에이전트가 계획을 리뷰한 뒤 T-208(Admin IA /
+메뉴 / 대시보드 상태판 보강)부터 구현을 시작한다.
+
 ## 2026-06-27 (codex) — N150 bootstrap admin 복구 + quote 실패 패턴 문서화
 
 **작업**: N150에서 `admin@ad.min` 로그인이 "이메일 또는 비밀번호가 올바르지 않습니다."로

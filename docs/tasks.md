@@ -14,12 +14,31 @@
 
 ## 다음 (우선순위 순)
 
+- Admin 콘솔 기능 보강: T-207 계획 PR merge와 별도 에이전트 리뷰 후 T-208부터
+  Task 단위 PR로 순차 진행. 상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
   노드 smoke와 backup/restore 복구 훈련.
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
   T-195 공통 rate-limit middleware, T-108 운영 배포 자동화 foundation, T-200
   docker-manager 포트 대역 정렬은 완료.
+
+## Admin 콘솔 기능 보강 프로그램 (2026-06-27)
+
+> 상세 실행 계획: `docs/execplan/admin-console-gap-plan.md`. 단위 기능 검증은 로컬 WSL
+> ext4 미러에서 수행하고, N150은 기능 묶음 단위 live API/UI/e2e 게이트로 사용한다.
+
+- [x] T-207 — Admin 보강 실행 계획 문서화 (완료: 2026-06-27, codex).
+  `kor-travel-map` Admin 기능을 참고해 Pinvi 메뉴/세부 기능/책임 경계/API·UI·e2e 검증
+  계획을 문서화했다. 구현은 다른 에이전트 리뷰 후 시작한다.
+- [ ] T-208 — Admin IA / 메뉴 / 대시보드 상태판 보강.
+- [ ] T-209 — `kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면.
+- [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
+- [ ] T-211 — `/admin/etl` + provider sync + Dagster 운영 화면.
+- [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.
+- [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
+- [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.
+- [ ] T-215 — Admin live e2e 확장 + N150 묶음 게이트.
 
 ## 완료
 
