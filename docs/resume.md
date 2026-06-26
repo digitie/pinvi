@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-26 (claude) — Pinvi 이미지 GHCR 폐지 → 로컬 빌드 전환
+
+사용자 지시로 Pinvi 이미지를 GHCR에서 내리고 향후 push를 중단했다. N150에서 운영 중인
+`ghcr.io/digitie/pinvi-{api,web}:deploy-836a18f`를 로컬 `pinvi-*:latest-main`으로 retag하고
+`~/kor-travel-docker-manager/.env`를 로컬 태그로 바꿔 GHCR 의존을 제거했다(컨테이너 재생성
+없이 동일 콘텐츠 유지). `~/pinvi` 빌드 소스를 `origin/main`(836a18f)으로 동기. repo에서는
+`.github/workflows/docker-images.yml`(GHCR push)을 삭제하고 `docs/runbooks/deploy.md`를 실제
+`ktdctl pinvi --build` 로컬 빌드 흐름으로 재작성, `infra/.env.prod.example` 이미지 태그를
+로컬로 변경했다. **남은 일**: GHCR 패키지 실제 삭제는 `gh` 토큰 scope(`delete:packages`) 부족으로
+보류 — 사용자가 `gh auth refresh -s delete:packages,read:packages` 후 삭제하거나 웹 UI로 내린다.
+앞으로 운영 배포는 GHCR 없이 `cd ~/pinvi && git pull` → `ktdctl pinvi --build`.
+
 ## 2026-06-26 (claude) — 미인증 로그인 시 재인증 메일 재발송
 
 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동 재발송하도록 구현했다
