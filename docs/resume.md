@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차
+
+반복 배포 실수를 민감정보 포함해 gitignore된 `docs/deploy-runbook.local.md`(LOCAL ONLY)에 상세
+기록하고, remote push 전 보안 감사를 AGENTS.md에 절차화했다 — **kor-travel-concierge 패턴에 정렬**
+(동일 파일명/구조 + `git diff --cached` 비밀 스캔 + 런북의 "푸시 전 추가 스캔"). 이 과정에서 직전
+#235가 노드 IP를 public main(deploy.md/journal.md)에 유출한 것을 발견·redact했다. `.gitignore`에
+`*.local.md`/명시 항목/`.local/` 추가, `CLAUDE.md` 동기, 런북을 각 worktree에 복사. 다음: 신규 worktree
+셋업 시 이 런북 복사를 기본 절차에 포함(`docs/runbooks/codegraph-worktrees.md`).
+
 ## 2026-06-26 (claude) — Pinvi 이미지 GHCR 폐지 → 로컬 빌드 전환
 
 사용자 지시로 Pinvi 이미지를 GHCR에서 내리고 향후 push를 중단했다. N150에서 운영 중인

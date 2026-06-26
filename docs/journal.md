@@ -2,13 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차 (concierge 패턴 정렬)
+
+**작업**: 사용자 지시 — 반복되는 배포 실수를 민감정보 포함해 별도 md에 상세 기록하고 gitignore,
+AGENTS.md에서 참조, 각 worktree에 복사, remote push 전 보안 감사를 절차화. **kor-travel-concierge의
+기존 패턴(`docs/deploy-runbook.local.md` + AGENTS.md "remote 푸시 전 보안 감사")에 맞춰** 정렬.
+
+**발견(이번 작업이 즉시 잡은 유출)**: 직전 #235에서 노드 사설 IP를 `docs/runbooks/deploy.md`·
+`docs/journal.md`에 예시로 적어 public main에 푸시한 상태였다(외부 라우팅 위험 낮으나 ADR-047 위반).
+→ 두 곳 redact(placeholder/"런북 참조")로 정정. 보안 감사 절차가 바로 이런 유출을 막는 목적.
+
+**변경**:
+- `docs/deploy-runbook.local.md` 신규(**gitignore, LOCAL ONLY, 민감정보 포함**) — prod 접속(n150/router/
+  포트/ktdctl/빌드 소스), incident log(IP 유출·runbook drift·GHCR·ktdctl 부작용·stale 소스 등),
+  표준 배포 절차, 배포 후 체크리스트, "푸시 전 추가 스캔" 패턴. concierge 런북 구조와 동일.
+- `.gitignore`: `*.local.md` + `docs/deploy-runbook.local.md` + `docs/prod-access.local.md` + `.local/`.
+- `AGENTS.md` ADR-047 절: "prod 배포 & 민감 운영 노트" + "remote 푸시 전 보안 감사(필수 절차)" 추가
+  (`git diff --cached` 비밀 스캔 + 런북 참조). `CLAUDE.md` 체크리스트·포인터 동기(ADR-016).
+- `docs/runbooks/deploy.md`·`docs/journal.md` IP redact.
+- `docs/deploy-runbook.local.md`를 각 worktree(pinvi/pinvi-codex/pinvi-antigravity)에 복사.
+
+**검증**: 커밋 staged에 `git diff --cached`로 일반 비밀 + 프로젝트 민감값(노드 IP·SSH 사용자·도메인 등)
+스캔 — 추가 라인 클린 확인 후 push. `git check-ignore docs/deploy-runbook.local.md` 통과(미추적).
+
 ## 2026-06-26 (claude) — Pinvi 이미지 GHCR 폐지 → 로컬 빌드 전환
 
 **작업**: 사용자 지시 — "ghcr에서는 내리고 앞으로는 올리지 마". Pinvi 이미지를 GHCR에서
 내리고, 앞으로 GHCR push를 중단한다. kor-travel-map/geo/concierge 스택처럼 운영 노드에서
 로컬 빌드(`pinvi-*:latest-main`)로 정렬한다.
 
-**N150 노드 조치**(`digitie@192.168.1.14`):
+**N150 노드 조치**(prod 노드 — 접속/IP는 `docs/deploy-runbook.local.md`):
 - 운영 중인 `ghcr.io/digitie/pinvi-{api,web}:deploy-836a18f`(직전 배포 #233+#234 콘텐츠)를
   로컬 `pinvi-{api,web}:latest-main`으로 retag. `~/kor-travel-docker-manager/.env`의
   `PINVI_API_IMAGE`/`PINVI_WEB_IMAGE`를 그 로컬 태그로 변경(.env 백업 후). 운영 컨테이너는
