@@ -30,7 +30,8 @@
 
 - [x] T-207 — Admin 보강 실행 계획 문서화 (완료: 2026-06-27, codex).
   `kor-travel-map` Admin 기능을 참고해 Pinvi 메뉴/세부 기능/책임 경계/API·UI·e2e 검증
-  계획을 문서화했다. 구현은 다른 에이전트 리뷰 후 시작한다.
+  계획을 문서화했다. 다른 에이전트 리뷰의 차단 이슈를 반영해 공개 credential 조합 표현을
+  제거하고 seed/reset production 정책을 router 미등록/404로 고정한 뒤 구현에 진입한다.
 - [ ] T-208 — Admin IA / 메뉴 / 대시보드 상태판 보강.
 - [ ] T-209 — `kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면.
 - [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
@@ -44,7 +45,7 @@
 
 - [x] T-206 — N150 bootstrap admin 생성/복구 경로 추가 (완료: 2026-06-27, codex).
   운영 DB에 admin 계정이 없으면 `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 기반 startup bootstrap이
-  `admin@ad.min` 계정을 생성/복구한다. 운영 compose env 전달, admin/deploy 런북,
+  bootstrap 대상 계정을 생성/복구한다. 운영 compose env 전달, admin/deploy 런북,
   quote 실패 패턴 문서, 원격 Docker Python helper, 통합 테스트를 추가했다.
 - [x] T-205 — 로컬 env Pinvi 키 반영 + OAuth 설정 판정 보강 (완료: 2026-06-25, codex).
   로컬 `.env`의 legacy `TRIPMATE_*` 값을 현재 `PINVI_*`/`NEXT_PUBLIC_PINVI_*` 키로 복사하고,

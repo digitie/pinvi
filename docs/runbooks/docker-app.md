@@ -143,7 +143,7 @@ curl -fsS http://127.0.0.1:12101/health/live
 # 7) Admin 로그인
 curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@ad.min","password":"admin"}'
+  -d '{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}'
 
 # 8) Admin datasets
 curl -fsS -b cookies.txt http://127.0.0.1:12801/admin/datasets
@@ -172,9 +172,10 @@ kor-travel-map/KASI 서비스와 함께 실행한다.
 ## 6. 기본 admin 계정
 
 - `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 설정된 API startup에서 생성/복구된다.
-- smoke/dev 기본 예시는 `admin@ad.min` / `admin`.
+- smoke/dev 로그인은 `PINVI_BOOTSTRAP_ADMIN_EMAIL`과 명시적으로 설정한
+  `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 임시값으로만 검증한다.
 - 운영 환경은 별도 admin 계정 생성 후 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`를 비우고
-  default 계정을 비활성화한다.
+  bootstrap 대상 계정을 비활성화한다.
 
 ## 7. 마이그레이션 분리 정책
 
