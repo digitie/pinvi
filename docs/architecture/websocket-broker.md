@@ -41,8 +41,11 @@ process에 연결된 같은 trip WebSocket에만 JSON message를 보낸다.
 - process restart 시 presence는 모두 사라진다.
 - durable event log가 아니므로 offline replay는 없다.
 
-Sprint 5의 가족 베타/단일 노드 운영에서는 이 제약을 수용한다. 운영에서는 WebSocket
-worker를 1개로 고정하거나 sticky session을 적용한다.
+Sprint 5의 가족 베타/단일 노드 운영에서는 이 제약을 수용한다. Redis Streams 또는
+PostgreSQL LISTEN/NOTIFY 같은 shared broker로 전환하기 전까지 운영 API worker는
+`PINVI_API_WORKERS=1`로 고정한다. 단순 WebSocket sticky session만으로는 충분하지 않다.
+HTTP mutation request도 같은 process에 도달해야 `publish_event_nowait(...)` fan-out이
+동작하기 때문이다.
 
 ## 2.1 안전장치
 
