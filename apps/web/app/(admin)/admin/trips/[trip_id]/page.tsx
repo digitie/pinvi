@@ -4,16 +4,27 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
+import { paletteHex } from '@pinvi/domain';
 import type {
   AdminAuditEntry,
   AdminTripCompanionSummary,
+  AdminTripDaySummary,
   AdminTripDetail,
+  AdminTripPoiSummary,
   AdminTripShareLinkSummary,
   TripStatus,
 } from '@pinvi/schemas';
+import { ExternalLink, MapPin, X } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
+import {
+  MakiMarker,
+  MapFallback,
+  MapLoadingSkeleton,
+  Popup,
+  VWorldMap,
+} from '@/components/map/vworldPrimitives';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -33,7 +44,33 @@ const formatDate = (value: string | null) =>
 const formatDateTime = (value: string | null) =>
   value ? new Date(value).toLocaleString('ko-KR') : '—';
 
+const formatTime = (value: string | null) =>
+  value ? new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '—';
+
+const formatAmount = (value: string | null, currency: string) =>
+  value === null ? '—' : `${value} ${currency}`;
+
+const formatDayLabel = (dayIndex: number, date: string | null, title: string | null) => {
+  const prefix = `${dayIndex}일차`;
+  const parts = [date ? formatDate(date) : null, title].filter(Boolean);
+  return parts.length > 0 ? `${prefix} · ${parts.join(' · ')}` : prefix;
+};
+
 const companionColumns: AdminTableColumn<AdminTripCompanionSummary>[] = [
+  {
+    key: 'user',
+    header: '사용자',
+    cell: (row) =>
+      row.user_id ? (
+        <Link href={`/admin/users/${row.user_id}`} className="text-primary underline">
+          {row.invited_email_masked ?? row.user_id}
+        </Link>
+      ) : (
+        <span className="inline-flex items-center rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted">
+          미가입 초대
+        </span>
+      ),
+  },
   {
     key: 'invited_email_masked',
     header: '초대 이메일',
@@ -62,6 +99,78 @@ const companionColumns: AdminTableColumn<AdminTripCompanionSummary>[] = [
     sortable: true,
     sortValue: (row) => new Date(row.invited_at).getTime(),
     cell: (row) => formatDateTime(row.invited_at),
+  },
+];
+
+const dayColumns: AdminTableColumn<AdminTripDaySummary>[] = [
+  {
+    key: 'day_index',
+    header: '일차',
+    sortable: true,
+    sortValue: (row) => row.day_index,
+    cell: (row) => `${row.day_index}일차`,
+  },
+  {
+    key: 'date',
+    header: '날짜',
+    sortable: true,
+    sortValue: (row) => (row.date ? new Date(row.date).getTime() : 0),
+    cell: (row) => formatDate(row.date),
+  },
+  {
+    key: 'title',
+    header: '제목',
+    cell: (row) => row.title ?? '—',
+  },
+  {
+    key: 'poi_count',
+    header: 'POI',
+    sortable: true,
+    sortValue: (row) => row.poi_count,
+    cell: (row) => row.poi_count,
+  },
+  {
+    key: 'note',
+    header: '메모',
+    cell: (row) => row.note ?? '—',
+  },
+];
+
+const poiColumns: AdminTableColumn<AdminTripPoiSummary>[] = [
+  {
+    key: 'day',
+    header: '날짜',
+    sortable: true,
+    sortValue: (row) => row.day_index,
+    cell: (row) => formatDayLabel(row.day_index, row.day_date, row.day_title),
+  },
+  {
+    key: 'feature_label',
+    header: 'POI',
+    cell: (row) => (
+      <span className="inline-flex items-center gap-2">
+        <MapPin className="h-4 w-4 text-muted" aria-hidden="true" />
+        <span>{row.feature_label ?? row.feature_id ?? 'Feature 없는 POI'}</span>
+      </span>
+    ),
+  },
+  {
+    key: 'planned_arrival_at',
+    header: '도착/출발',
+    sortable: true,
+    sortValue: (row) =>
+      row.planned_arrival_at ? new Date(row.planned_arrival_at).getTime() : row.day_index,
+    cell: (row) => `${formatTime(row.planned_arrival_at)} / ${formatTime(row.planned_departure_at)}`,
+  },
+  {
+    key: 'sort_order',
+    header: '순서',
+    cell: (row) => <span className="font-mono text-xs">{row.sort_order}</span>,
+  },
+  {
+    key: 'feature_link_broken_at',
+    header: '연결',
+    cell: (row) => (row.feature_link_broken_at ? '끊김' : row.feature_id ? '정상' : '없음'),
   },
 ];
 
@@ -113,6 +222,169 @@ const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
   },
 ];
 
+function AdminPoiMapPreview({ poi }: { poi: AdminTripPoiSummary }) {
+  if (poi.lon == null || poi.lat == null) {
+    return (
+      <div
+        className="flex h-64 items-center justify-center rounded-sm border border-hairline bg-surface-soft text-sm text-muted"
+        data-testid="admin-trip-poi-map-empty"
+      >
+        좌표가 없는 POI입니다.
+      </div>
+    );
+  }
+
+  const center: [number, number] = [poi.lon, poi.lat];
+  const title = poi.feature_label ?? poi.feature_id ?? 'POI';
+  return (
+    <div
+      className="h-64 overflow-hidden rounded-sm border border-hairline"
+      data-testid="admin-trip-poi-map"
+    >
+      <VWorldMap
+        apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''}
+        center={center}
+        zoom={15}
+        layerType="Base"
+        navigation
+        scale={false}
+        geolocate={false}
+        animateCameraChanges={false}
+        fallback={(info) => <MapFallback info={info} />}
+        loadingSkeleton={<MapLoadingSkeleton />}
+        className="h-full min-h-64"
+        unsupportedTileFallback={{ label: 'VWorld tile' }}
+      >
+        <MakiMarker
+          lngLat={center}
+          icon={poi.custom_marker_icon ?? 'marker'}
+          color={paletteHex(poi.custom_marker_color)}
+          title={title}
+          selected
+          ariaLabel={title}
+        />
+        <Popup lngLat={center} maxWidth="240px" closeButton={false}>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-ink">{title}</p>
+            <p className="text-xs text-muted">
+              {poi.lon.toFixed(5)}, {poi.lat.toFixed(5)}
+            </p>
+          </div>
+        </Popup>
+      </VWorldMap>
+    </div>
+  );
+}
+
+function AdminTripPoiDialog({
+  poi,
+  onClose,
+}: {
+  poi: AdminTripPoiSummary;
+  onClose: () => void;
+}) {
+  const title = poi.feature_label ?? poi.feature_id ?? 'Feature 없는 POI';
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-trip-poi-dialog-title"
+        className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-sm bg-white p-5 shadow-lg"
+        data-testid="admin-trip-poi-dialog"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 id="admin-trip-poi-dialog-title" className="text-lg font-bold text-ink">
+              {title}
+            </h3>
+            <p className="mt-1 font-mono text-xs text-muted">{poi.attachment_id}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/admin/pois/${poi.attachment_id}`}
+              className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm text-ink hover:bg-surface-soft"
+              data-testid="admin-trip-poi-detail-link"
+            >
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              POI 상세
+            </Link>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="닫기"
+              className="flex h-10 w-10 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="space-y-4">
+            <AdminPoiMapPreview poi={poi} />
+            <pre
+              className="max-h-72 overflow-auto rounded-sm border border-hairline bg-surface-soft p-3 text-xs"
+              data-testid="admin-trip-poi-snapshot"
+            >
+              {JSON.stringify(poi.feature_snapshot, null, 2)}
+            </pre>
+          </div>
+          <dl className="grid content-start gap-3 text-sm">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">날짜</dt>
+              <dd>{formatDayLabel(poi.day_index, poi.day_date, poi.day_title)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">주소</dt>
+              <dd>{poi.address_label ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">feature_id</dt>
+              <dd className="break-all font-mono text-xs">{poi.feature_id ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">추가자</dt>
+              <dd>
+                <Link href={`/admin/users/${poi.added_by_user_id}`} className="text-primary underline">
+                  {poi.added_by_email_masked ?? poi.added_by_user_id}
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">도착 / 출발</dt>
+              <dd>
+                {formatDateTime(poi.planned_arrival_at)} / {formatDateTime(poi.planned_departure_at)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">예산 / 실사용</dt>
+              <dd>
+                {formatAmount(poi.budget_amount, poi.currency)} /{' '}
+                {formatAmount(poi.actual_amount, poi.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">마커</dt>
+              <dd>
+                {poi.custom_marker_color ?? '—'} / {poi.custom_marker_icon ?? '—'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">URL</dt>
+              <dd className="break-all">{poi.user_url ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">메모</dt>
+              <dd>{poi.user_note ?? '—'}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminTripDetailPage() {
   const router = useRouter();
   const params = useParams<{ trip_id: string }>();
@@ -123,6 +395,7 @@ export default function AdminTripDetailPage() {
   const [reason, setReason] = useState('');
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [acting, setActing] = useState(false);
+  const [selectedPoi, setSelectedPoi] = useState<AdminTripPoiSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +475,11 @@ export default function AdminTripDetailPage() {
         <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-trip-info">
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">소유자</dt>
-            <dd className="font-mono">{trip.owner_email_masked}</dd>
+            <dd>
+              <Link href={`/admin/users/${trip.owner_user_id}`} className="text-primary underline">
+                {trip.owner_email_masked}
+              </Link>
+            </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">owner_user_id</dt>
@@ -272,6 +549,31 @@ export default function AdminTripDetailPage() {
         </div>
       </Section>
 
+      <Section title="상세 계획">
+        <div className="space-y-4">
+          <div data-testid="admin-trip-days">
+            <AdminTable
+              columns={dayColumns}
+              rows={trip.days}
+              rowKey={(row) => String(row.day_index)}
+              empty="날짜가 없습니다."
+              initialSort={{ columnKey: 'day_index', desc: false }}
+            />
+          </div>
+          <div data-testid="admin-trip-pois">
+            <AdminTable
+              columns={poiColumns}
+              rows={trip.pois}
+              rowKey={(row) => row.attachment_id}
+              empty="등록된 POI가 없습니다."
+              onRowClick={(row) => setSelectedPoi(row)}
+              rowTestId={(row) => `admin-trip-poi-row-${row.attachment_id}`}
+              initialSort={{ columnKey: 'day', desc: false }}
+            />
+          </div>
+        </div>
+      </Section>
+
       <Section title="공유 링크">
         <div data-testid="admin-trip-share-links">
           <AdminTable
@@ -333,6 +635,9 @@ export default function AdminTripDetailPage() {
             </div>
           </div>
         </div>
+      )}
+      {selectedPoi && (
+        <AdminTripPoiDialog poi={selectedPoi} onClose={() => setSelectedPoi(null)} />
       )}
     </AdminPage>
   );

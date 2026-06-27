@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-216 Trip Admin 상세 운영성 보강
+
+**작업**: 추가 요청 1~4번, 11번을 T-216으로 구현했다. Admin 좌측 메뉴 active state가
+route와 무관하게 dashboard처럼 보이는 문제를 고치고, 여행 상세 운영 화면에 날짜/POI와 사용자
+동선을 보강했다.
+
+**변경**:
+- Admin sidebar를 icon-only compact view로 전환했다. active state는 가장 긴 href prefix 기준으로
+  계산하고, icon link에 title/aria-label/`aria-current`를 부여했다.
+- `/admin/trips/{trip_id}` 상세 API에 `days`와 `pois`를 추가했다. POI는 snapshot 기반
+  label/주소/좌표, 일정, 메모, 비용, URL, 추가자 마스킹 정보를 포함한다.
+- Trip 상세 UI에서 owner/가입 동반자/POI 추가자를 `/admin/users/{user_id}`로 연결하고,
+  미가입 초대자는 별도 상태로 표시한다.
+- 상세 계획 섹션에 day/POI 목록을 추가하고, POI row 클릭 시 지도 preview, snapshot, 상세정보,
+  `/admin/pois/{poi_id}` 링크를 가진 dialog를 띄우도록 했다.
+- 추가 요청 12~14번은 T-223 사용자 아바타/RustFS 이미지 관리, T-224 여행/날짜/POI 파일 업로드와
+  용량 정책, T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션으로 분리해 execplan/tasks에
+  추가했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API focused pytest 4건, API `ruff check`, focused mypy,
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, Web lint, Web production build를
+통과했다. local Playwright mock e2e는 WSL Chromium 바이너리 부재로 실행 전 실패했다.
+
+**다음**: T-216 PR merge 후 T-217 여행계획 Admin 직접 생성에 진입한다. T-210 WIP stash는
+보존 중이다.
+
 ## 2026-06-27 (codex) — T-209 Admin Features read proxy / 실제 화면
 
 **작업**: `kor-travel-map` Admin의 feature 목록/상세 화면과 API 계약을 참고해 Pinvi

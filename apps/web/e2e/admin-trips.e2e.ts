@@ -15,6 +15,8 @@ const adminUser = {
 
 const tripId = '88888888-8888-4888-8888-888888888888';
 const ownerUserId = '99999999-9999-4999-8999-999999999999';
+const companionUserId = '66666666-6666-4666-8666-666666666666';
+const poiId = '55555555-5555-4555-8555-555555555555';
 
 const tripSummary: AdminTripSummary = {
   trip_id: tripId,
@@ -112,6 +114,69 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
         invited_at: '2026-06-06T10:00:00+09:00',
         joined_at: null,
       },
+      {
+        companion_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        user_id: companionUserId,
+        invited_email_masked: 'j***@example.com',
+        invited_nickname: '가입 동반자',
+        role: 'viewer',
+        invited_at: '2026-06-06T09:00:00+09:00',
+        joined_at: '2026-06-06T12:00:00+09:00',
+      },
+    ],
+    days: [
+      {
+        day_index: 1,
+        date: '2026-07-01',
+        title: '1일차',
+        note: null,
+        poi_count: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+      {
+        day_index: 2,
+        date: '2026-07-02',
+        title: '2일차',
+        note: null,
+        poi_count: 0,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+    ],
+    pois: [
+      {
+        attachment_id: poiId,
+        day_index: 1,
+        day_date: '2026-07-01',
+        day_title: '1일차',
+        sort_order: 'a0',
+        feature_id: 'feature-place-1',
+        feature_label: '해운대',
+        feature_snapshot: {
+          name: '해운대',
+          coord: { lon: 129.1604, lat: 35.1587 },
+          address: { road: '부산 해운대구 해운대해변로' },
+        },
+        lon: 129.1604,
+        lat: 35.1587,
+        address_label: '부산 해운대구 해운대해변로',
+        added_by_user_id: ownerUserId,
+        added_by_email_masked: 'o***@example.com',
+        feature_link_broken_at: null,
+        custom_marker_color: 'P-08',
+        custom_marker_icon: 'marker',
+        planned_arrival_at: '2026-07-01T10:00:00+09:00',
+        planned_departure_at: '2026-07-01T11:00:00+09:00',
+        user_note: '오전 산책',
+        budget_amount: '12000.00',
+        actual_amount: null,
+        currency: 'KRW',
+        user_url: 'https://example.com/poi',
+        version: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
     ],
     share_links: [
       {
@@ -175,8 +240,35 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await page.goto(`/admin/trips/${tripId}`);
 
   await expect(page.getByRole('heading', { name: '부산 가족 여행' })).toBeVisible();
+  await expect(page.getByTestId('admin-nav--admin-trips')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page.getByTestId('admin-nav--admin')).not.toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'o***@example.com' })).toHaveAttribute(
+    'href',
+    `/admin/users/${ownerUserId}`,
+  );
   await expect(page.getByTestId('admin-trip-companions')).toContainText('f***@example.com');
+  await expect(page.getByTestId('admin-trip-companions')).toContainText('미가입 초대');
+  await expect(page.getByRole('link', { name: 'j***@example.com' })).toHaveAttribute(
+    'href',
+    `/admin/users/${companionUserId}`,
+  );
+  await expect(page.getByTestId('admin-trip-days')).toContainText('2026. 7. 1.');
+  await expect(page.getByTestId('admin-trip-pois')).toContainText('해운대');
   await expect(page.getByTestId('admin-trip-share-links')).toContainText('view_only');
+
+  await page.getByTestId(`admin-trip-poi-row-${poiId}`).click();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toContainText('부산 해운대구 해운대해변로');
+  await expect(page.getByTestId('admin-trip-poi-map')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-poi-detail-link')).toHaveAttribute(
+    'href',
+    `/admin/pois/${poiId}`,
+  );
+  await page.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toBeHidden();
 
   await page.getByTestId('admin-trip-status-select').selectOption('archived');
   await page.getByTestId('admin-trip-status-save').click();

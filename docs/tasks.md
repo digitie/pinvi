@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-210 Pinvi feature request와 upstream change request 운영 통합.
+- Admin 콘솔 기능 보강: T-217 Admin 여행계획 직접 생성.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -43,11 +43,24 @@
   연결하고, Web 화면을 검색/필터/table/detail inspector로 교체했다. live matrix는
   `/admin/features`를 table route로 전환하고 feature filter/sort case를 추가했다. N150 live는
   T-215 묶음 게이트에서 수행한다.
+- [x] T-216 — Trip Admin 상세 운영성 보강 (완료: 2026-06-27, codex).
+  Admin 좌측 메뉴를 icon-only compact view로 바꾸고 active state를 가장 구체적인 route 기준으로
+  고쳤다. `/admin/trips/{trip_id}`는 여행계획명을 제목으로 표시하고, owner/가입 동반자/POI
+  추가자를 `/admin/users/{user_id}`로 연결한다. 미가입 초대자는 별도 상태로 표시하며, 상세 계획의
+  day/POI listing과 POI 지도 dialog 및 `/admin/pois/{poi_id}` 링크를 추가했다.
+- [ ] T-217 — 여행계획 Admin 직접 생성.
+- [ ] T-219 — POI Admin 직접 생성.
+- [ ] T-223 — 사용자 아바타 / RustFS 이미지 관리.
+- [ ] T-224 — 여행/날짜/POI 파일 업로드와 용량 정책.
+- [ ] T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션.
 - [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
-- [ ] T-211 — `/admin/etl` + provider sync + Dagster 운영 화면.
+- [ ] T-220 — `/admin/etl` + provider sync + Dagster 운영 화면.
 - [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.
 - [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
 - [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.
+- [ ] T-218 — prod Grafana 주소 반영.
+- [ ] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기.
+- [ ] T-222 — System view Docker / 의존 API 상태.
 - [ ] T-215 — Admin live e2e 확장 + N150 묶음 게이트.
 
 ## 완료

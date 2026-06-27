@@ -349,9 +349,50 @@ class AdminTripShareLinkSummary(BaseModel):
     created_at: datetime
 
 
+class AdminTripDaySummary(BaseModel):
+    day_index: int
+    date: date | None
+    title: str | None
+    note: str | None
+    poi_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminTripPoiSummary(BaseModel):
+    attachment_id: uuid.UUID
+    day_index: int
+    day_date: date | None
+    day_title: str | None
+    sort_order: str
+    feature_id: str | None
+    feature_label: str | None
+    feature_snapshot: dict[str, Any]
+    lon: float | None = None
+    lat: float | None = None
+    address_label: str | None = None
+    added_by_user_id: uuid.UUID
+    added_by_email_masked: str | None
+    feature_link_broken_at: datetime | None
+    custom_marker_color: str | None
+    custom_marker_icon: str | None
+    planned_arrival_at: datetime | None
+    planned_departure_at: datetime | None
+    user_note: str | None
+    budget_amount: Decimal | None
+    actual_amount: Decimal | None
+    currency: str
+    user_url: str | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class AdminTripDetail(AdminTripSummary):
     description: str | None
     companions: list[AdminTripCompanionSummary] = Field(default_factory=list)
+    days: list[AdminTripDaySummary] = Field(default_factory=list)
+    pois: list[AdminTripPoiSummary] = Field(default_factory=list)
     share_links: list[AdminTripShareLinkSummary] = Field(default_factory=list)
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 

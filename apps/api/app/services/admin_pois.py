@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,4 +190,62 @@ def extract_feature_label(snapshot: dict[str, object]) -> str | None:
         value = snapshot.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _mapping(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _first_number(candidate: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _number(candidate.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def extract_feature_coord(snapshot: dict[str, object]) -> tuple[float | None, float | None]:
+    """Snapshot field names vary by source; return `(lon, lat)` when enough data exists."""
+
+    candidate_maps = [
+        snapshot,
+        _mapping(snapshot.get("coord")),
+        _mapping(snapshot.get("coordinate")),
+        _mapping(snapshot.get("location")),
+        _mapping(snapshot.get("geometry")),
+    ]
+    for candidate in candidate_maps:
+        if not candidate:
+            continue
+        lon = _first_number(candidate, ("lon", "lng", "longitude", "x"))
+        lat = _first_number(candidate, ("lat", "latitude", "y"))
+        if lon is not None and lat is not None:
+            return lon, lat
+    return None, None
+
+
+def extract_feature_address_label(snapshot: dict[str, object]) -> str | None:
+    for key in ("address_label", "address", "road_address", "jibun_address", "addr"):
+        value = snapshot.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            for nested_key in ("label", "full", "road", "jibun", "name"):
+                nested = value.get(nested_key)
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()
     return None

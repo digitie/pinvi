@@ -4,6 +4,31 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
+import {
+  Activity,
+  BarChart3,
+  Bug,
+  GitCompare,
+  GitPullRequest,
+  HardDrive,
+  KeyRound,
+  LayoutDashboard,
+  Lightbulb,
+  Mail,
+  MapPin,
+  RefreshCw,
+  RotateCcw,
+  Route,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  Sprout,
+  Tags,
+  UserRound,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from 'lucide-react';
 import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
 // 좌측 메뉴 이동 중 RSC/client transition 실패가 Next 기본 오류 화면으로 새지 않도록
 // document navigation으로 이동한다 (kor-travel-geo T-278 이식).
@@ -15,42 +40,47 @@ const apiClient = new ApiClient({
 
 const NAV_GROUPS: {
   title: string;
-  items: { href: string; label: string; sprint: number }[];
+  items: { href: string; label: string; sprint: number; icon: LucideIcon }[];
 }[] = [
   {
     title: 'Pinvi 운영',
     items: [
-      { href: '/admin', label: '대시보드', sprint: 4 },
-      { href: '/admin/users', label: '사용자', sprint: 3 },
-      { href: '/admin/trips', label: '여행', sprint: 3 },
-      { href: '/admin/pois', label: 'POI', sprint: 3 },
-      { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4 },
-      { href: '/admin/audit', label: '감사 로그', sprint: 3 },
+      { href: '/admin', label: '대시보드', sprint: 4, icon: LayoutDashboard },
+      { href: '/admin/users', label: '사용자', sprint: 3, icon: Users },
+      { href: '/admin/trips', label: '여행', sprint: 3, icon: Route },
+      { href: '/admin/pois', label: 'POI', sprint: 3, icon: MapPin },
+      { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4, icon: Lightbulb },
+      { href: '/admin/audit', label: '감사 로그', sprint: 3, icon: ScrollText },
     ],
   },
   {
     title: '지도 데이터',
     items: [
-      { href: '/admin/features', label: 'Features', sprint: 4 },
-      { href: '/admin/features/change-requests', label: '변경 요청', sprint: 4 },
-      { href: '/admin/dedup-review', label: 'Dedup review', sprint: 5 },
-      { href: '/admin/provider-sync', label: 'Provider sync', sprint: 5 },
-      { href: '/admin/integrity', label: '정합성', sprint: 5 },
-      { href: '/admin/category-mapping', label: '카테고리 매핑', sprint: 6 },
-      { href: '/admin/debug/logs', label: 'Debug logs', sprint: 5 },
+      { href: '/admin/features', label: 'Features', sprint: 4, icon: Search },
+      {
+        href: '/admin/features/change-requests',
+        label: '변경 요청',
+        sprint: 4,
+        icon: GitPullRequest,
+      },
+      { href: '/admin/dedup-review', label: 'Dedup review', sprint: 5, icon: GitCompare },
+      { href: '/admin/provider-sync', label: 'Provider sync', sprint: 5, icon: RefreshCw },
+      { href: '/admin/integrity', label: '정합성', sprint: 5, icon: ShieldCheck },
+      { href: '/admin/category-mapping', label: '카테고리 매핑', sprint: 6, icon: Tags },
+      { href: '/admin/debug/logs', label: 'Debug logs', sprint: 5, icon: Bug },
     ],
   },
   {
     title: '시스템 운영',
     items: [
-      { href: '/admin/etl', label: 'ETL', sprint: 5 },
-      { href: '/admin/grafana', label: 'Grafana', sprint: 5 },
-      { href: '/admin/api-calls', label: 'API 호출', sprint: 3 },
-      { href: '/admin/emails', label: '이메일 큐', sprint: 3 },
-      { href: '/admin/backup', label: 'Backup', sprint: 5 },
-      { href: '/admin/mcp-tokens', label: 'MCP 토큰', sprint: 6 },
-      { href: '/admin/seed', label: '시드 (dev)', sprint: 3 },
-      { href: '/admin/reset', label: '리셋 (dev)', sprint: 3 },
+      { href: '/admin/etl', label: 'ETL', sprint: 5, icon: Workflow },
+      { href: '/admin/grafana', label: 'Grafana', sprint: 5, icon: BarChart3 },
+      { href: '/admin/api-calls', label: 'API 호출', sprint: 3, icon: Activity },
+      { href: '/admin/emails', label: '이메일 큐', sprint: 3, icon: Mail },
+      { href: '/admin/backup', label: 'Backup', sprint: 5, icon: HardDrive },
+      { href: '/admin/mcp-tokens', label: 'MCP 토큰', sprint: 6, icon: KeyRound },
+      { href: '/admin/seed', label: '시드 (dev)', sprint: 3, icon: Sprout },
+      { href: '/admin/reset', label: '리셋 (dev)', sprint: 3, icon: RotateCcw },
     ],
   },
 ];
@@ -58,22 +88,11 @@ const NAV_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.h
 
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 
-function isNavItemActive(pathname: string, href: string) {
-  if (href === '/admin') {
-    return pathname === '/admin';
-  }
-  if (pathname === href) {
-    return true;
-  }
-  if (!pathname.startsWith(`${href}/`)) {
-    return false;
-  }
-  return !NAV_HREFS.some(
-    (otherHref) =>
-      otherHref !== href &&
-      otherHref.startsWith(`${href}/`) &&
-      (pathname === otherHref || pathname.startsWith(`${otherHref}/`)),
+function getActiveNavHref(pathname: string) {
+  const matches = NAV_HREFS.filter((href) =>
+    href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
   );
+  return matches.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
 /** 권한 가드 + 사이드바 — Query provider 내부에서 me()를 useQuery로 확인한다. */
@@ -122,52 +141,63 @@ function AdminGuard({ children }: { children: ReactNode }) {
   if (meQuery.isError || !me || !hasAdmin) {
     return null;
   }
+  const activeHref = getActiveNavHref(pathname);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-soft lg:flex-row">
-      <aside className="shrink-0 border-b border-hairline bg-white lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <div className="border-b border-hairline px-4 py-4">
-          <DocumentNavLink href="/admin" className="text-sm font-bold text-ink">
-            Pinvi Admin
+      <aside className="shrink-0 border-b border-hairline bg-white lg:sticky lg:top-0 lg:h-screen lg:w-20 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <div className="flex items-center gap-2 border-b border-hairline px-2 py-3 lg:flex-col">
+          <DocumentNavLink
+            href="/admin"
+            aria-label="Pinvi Admin"
+            title="Pinvi Admin"
+            className="flex h-11 w-11 items-center justify-center rounded-sm bg-ink text-sm font-bold text-white"
+          >
+            PA
           </DocumentNavLink>
-          <p className="mt-1 text-xs text-muted" data-testid="admin-me">
-            {me.email}
-            <br />
-            <span className="text-[10px] uppercase tracking-wide">
-              {me.roles.filter((r) => r !== 'user').join(', ') || 'user'}
-            </span>
-          </p>
+          <div
+            className="flex h-11 w-11 items-center justify-center rounded-sm border border-hairline text-muted"
+            data-testid="admin-me"
+            title={`${me.email} / ${me.roles.filter((r) => r !== 'user').join(', ') || 'user'}`}
+            aria-label={`로그인 사용자 ${me.email}`}
+          >
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+          </div>
         </div>
-        <nav className="space-y-4 p-2 text-sm">
+        <nav
+          className="flex gap-2 overflow-x-auto p-2 text-sm lg:block lg:space-y-3 lg:overflow-x-visible"
+          aria-label="Admin navigation"
+        >
           {NAV_GROUPS.map((group) => (
-            <div key={group.title} className="space-y-1">
-              <h2 className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <div key={group.title} className="flex gap-1 lg:block lg:space-y-1">
+              <h2 className="sr-only">
                 {group.title}
               </h2>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">
+              <div
+                aria-hidden="true"
+                className="hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline"
+              />
+              <div className="flex gap-1 lg:grid lg:grid-cols-1">
                 {group.items.map((item) => {
-                  const active = isNavItemActive(pathname, item.href);
+                  const active = activeHref === item.href;
+                  const Icon = item.icon;
                   return (
                     <DocumentNavLink
                       key={item.href}
                       href={item.href}
+                      aria-label={`${item.label} (Sprint ${item.sprint})`}
+                      aria-current={active ? 'page' : undefined}
+                      title={`${item.label} (Sprint ${item.sprint})`}
+                      data-sprint={item.sprint}
                       className={
                         active
-                          ? 'rounded-sm bg-primary px-3 py-2 text-white'
-                          : 'rounded-sm px-3 py-2 text-ink hover:bg-surface-soft'
+                          ? 'flex h-11 w-11 items-center justify-center rounded-sm bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
+                          : 'flex h-11 w-11 items-center justify-center rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
                       }
                       data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
                     >
-                      <span>{item.label}</span>
-                      <span
-                        className={
-                          active
-                            ? 'ml-2 text-[10px] uppercase text-white/75'
-                            : 'ml-2 text-[10px] uppercase text-muted'
-                        }
-                      >
-                        S{item.sprint}
-                      </span>
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                      <span className="sr-only">{item.label}</span>
                     </DocumentNavLink>
                   );
                 })}

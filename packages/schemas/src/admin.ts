@@ -376,9 +376,52 @@ export const AdminTripShareLinkSummarySchema = z.object({
 });
 export type AdminTripShareLinkSummary = z.infer<typeof AdminTripShareLinkSummarySchema>;
 
+export const AdminTripDaySummarySchema = z.object({
+  day_index: z.number().int(),
+  date: z.string().date().nullable(),
+  title: z.string().nullable(),
+  note: z.string().nullable(),
+  poi_count: z.number().int(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminTripDaySummary = z.infer<typeof AdminTripDaySummarySchema>;
+
+export const AdminTripPoiSummarySchema = z.object({
+  attachment_id: z.string().uuid(),
+  day_index: z.number().int(),
+  day_date: z.string().date().nullable(),
+  day_title: z.string().nullable(),
+  sort_order: z.string(),
+  feature_id: z.string().nullable(),
+  feature_label: z.string().nullable(),
+  feature_snapshot: z.record(z.string(), z.unknown()),
+  lon: z.number().nullable().default(null),
+  lat: z.number().nullable().default(null),
+  address_label: z.string().nullable().default(null),
+  added_by_user_id: z.string().uuid(),
+  added_by_email_masked: z.string().nullable(),
+  feature_link_broken_at: Iso8601Schema.nullable(),
+  custom_marker_color: z.string().nullable(),
+  custom_marker_icon: z.string().nullable(),
+  planned_arrival_at: Iso8601Schema.nullable(),
+  planned_departure_at: Iso8601Schema.nullable(),
+  user_note: z.string().nullable(),
+  budget_amount: NonNegativeDecimalStringSchema.nullable(),
+  actual_amount: NonNegativeDecimalStringSchema.nullable(),
+  currency: z.string(),
+  user_url: z.string().nullable(),
+  version: z.number().int(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminTripPoiSummary = z.infer<typeof AdminTripPoiSummarySchema>;
+
 export const AdminTripDetailSchema = AdminTripSummarySchema.extend({
   description: z.string().nullable(),
   companions: z.array(AdminTripCompanionSummarySchema).default([]),
+  days: z.array(AdminTripDaySummarySchema).default([]),
+  pois: z.array(AdminTripPoiSummarySchema).default([]),
   share_links: z.array(AdminTripShareLinkSummarySchema).default([]),
   recent_audit: z.array(AdminAuditEntrySchema).default([]),
 });

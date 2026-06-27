@@ -12,6 +12,9 @@
 - Admin `/admin/features`를 `kor-travel-map` Admin API read-only proxy에 연결했다. feature
   목록 검색/필터, cursor pagination, sort/order, provider/category/issue 필터와
   상세 inspector(sources/issues/overrides/versions/change requests/files)를 제공한다.
+- Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
+  Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
+  미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.
 - 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동으로 다시 보내고, 로그인
   화면에서 "인증 메일 다시 보내기" 버튼으로도 재발송할 수 있다. `POST /auth/verify-email/resend`
   (계정 enumeration 차단) 추가 + 로그인 `EMAIL_NOT_VERIFIED` 응답에 `verification_email_dispatched`

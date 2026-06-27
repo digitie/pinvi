@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,12 +14,15 @@ from app.models.audit import AdminAuditLog
 from app.models.companion import TripCompanion
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
+from app.models.trip_day import TripDay
 from app.models.user import User
 from app.schemas.admin import (
     AdminAuditEntry,
     AdminTripCompanionSummary,
+    AdminTripDaySummary,
     AdminTripDetail,
     AdminTripPagedResponse,
+    AdminTripPoiSummary,
     AdminTripShareLinkSummary,
     AdminTripStatusRequest,
     AdminTripSummary,
@@ -30,12 +33,20 @@ from app.schemas.admin import (
 )
 from app.schemas.envelope import Envelope
 from app.services.admin_audit import append_admin_audit
+from app.services.admin_pois import (
+    extract_feature_address_label,
+    extract_feature_coord,
+    extract_feature_label,
+)
 from app.services.admin_trips import (
     AdminTripNotFoundError,
+    AdminTripPoiRow,
     get_admin_trip,
     list_admin_trips,
     list_recent_trip_audit,
     list_trip_companions,
+    list_trip_days,
+    list_trip_pois,
     list_trip_share_links,
     load_owner_emails,
     load_trip_counts,
@@ -44,6 +55,7 @@ from app.services.admin_trips import (
 from app.services.admin_users import mask_email
 
 router = APIRouter(prefix="/admin/trips", tags=["admin"])
+TripPrimaryRegionSource = Literal["manual", "poi_snapshot", "geocoded"]
 
 
 def _to_audit_entry(r: AdminAuditLog) -> AdminAuditEntry:
@@ -84,6 +96,51 @@ def _to_share_link(s: TripShareLink) -> AdminTripShareLinkSummary:
     )
 
 
+def _to_day(day: TripDay, *, poi_count: int) -> AdminTripDaySummary:
+    return AdminTripDaySummary(
+        day_index=day.day_index,
+        date=day.date,
+        title=day.title,
+        note=day.note,
+        poi_count=poi_count,
+        created_at=day.created_at,
+        updated_at=day.updated_at,
+    )
+
+
+def _to_trip_poi(row: AdminTripPoiRow) -> AdminTripPoiSummary:
+    poi = row.poi
+    lon, lat = extract_feature_coord(poi.feature_snapshot)
+    return AdminTripPoiSummary(
+        attachment_id=poi.attachment_id,
+        day_index=poi.day_index,
+        day_date=row.day_date,
+        day_title=row.day_title,
+        sort_order=poi.sort_order,
+        feature_id=poi.feature_id,
+        feature_label=extract_feature_label(poi.feature_snapshot),
+        feature_snapshot=poi.feature_snapshot,
+        lon=lon,
+        lat=lat,
+        address_label=extract_feature_address_label(poi.feature_snapshot),
+        added_by_user_id=poi.added_by_user_id,
+        added_by_email_masked=mask_email(row.added_by_email) if row.added_by_email else None,
+        feature_link_broken_at=poi.feature_link_broken_at,
+        custom_marker_color=poi.custom_marker_color,
+        custom_marker_icon=poi.custom_marker_icon,
+        planned_arrival_at=poi.planned_arrival_at,
+        planned_departure_at=poi.planned_departure_at,
+        user_note=poi.user_note,
+        budget_amount=poi.budget_amount,
+        actual_amount=poi.actual_amount,
+        currency=poi.currency,
+        user_url=poi.user_url,
+        version=poi.version,
+        created_at=poi.created_at,
+        updated_at=poi.updated_at,
+    )
+
+
 def _to_summary(
     trip: Trip,
     *,
@@ -97,7 +154,7 @@ def _to_summary(
         title=trip.title,
         region_hint=trip.region_hint,
         primary_region_code=trip.primary_region_code,
-        primary_region_source=trip.primary_region_source,
+        primary_region_source=cast(TripPrimaryRegionSource | None, trip.primary_region_source),
         start_date=trip.start_date,
         end_date=trip.end_date,
         visibility=cast(TripVisibility, trip.visibility),
@@ -121,12 +178,19 @@ async def _to_detail(db: AsyncSession, trip: Trip) -> AdminTripDetail:
         counts=counts[trip.trip_id],
     )
     companions = await list_trip_companions(db, trip_id=trip.trip_id)
+    days = await list_trip_days(db, trip_id=trip.trip_id)
+    pois = await list_trip_pois(db, trip_id=trip.trip_id)
+    poi_counts_by_day: dict[int, int] = {}
+    for row in pois:
+        poi_counts_by_day[row.poi.day_index] = poi_counts_by_day.get(row.poi.day_index, 0) + 1
     share_links = await list_trip_share_links(db, trip_id=trip.trip_id)
     recent_audit = await list_recent_trip_audit(db, trip_id=trip.trip_id)
     return AdminTripDetail(
         **summary.model_dump(),
         description=trip.description,
         companions=[_to_companion(c) for c in companions],
+        days=[_to_day(d, poi_count=poi_counts_by_day.get(d.day_index, 0)) for d in days],
+        pois=[_to_trip_poi(row) for row in pois],
         share_links=[_to_share_link(s) for s in share_links],
         recent_audit=[_to_audit_entry(r) for r in recent_audit],
     )
