@@ -636,3 +636,53 @@ async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
         "/v1/ops/api-call-logs",
     ]
     await client.aclose()
+
+
+async def test_patch_admin_issue_uses_admin_issue_path_and_body() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "issue": {
+                        "issue_id": "iss-1",
+                        "violation_type": "missing_coord",
+                        "severity": "error",
+                        "message": "좌표 없음",
+                        "payload": {},
+                        "status": "resolved",
+                        "detected_at": "2026-06-12T00:00:00+09:00",
+                        "provider": "kma",
+                        "dataset_key": "places",
+                        "feature_id": "f_a",
+                        "source_record_key": "kma:places:1",
+                        "resolved_at": "2026-06-12T00:03:00+09:00",
+                    }
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    payload = await client.patch_admin_issue(
+        "iss-1",
+        action="resolve",
+        reason="source verified",
+        operator="pinvi-admin",
+    )
+    assert seen == {
+        "method": "PATCH",
+        "path": "/v1/admin/issues/iss-1",
+        "body": {
+            "action": "resolve",
+            "reason": "source verified",
+            "operator": "pinvi-admin",
+        },
+    }
+    assert payload["data"]["issue"]["status"] == "resolved"
+    await client.aclose()

@@ -20,6 +20,7 @@ export type {
   AdminDedupReviewListParams,
   AdminFeatureChangeRequestListParams,
   AdminFeatureListParams,
+  AdminIntegrityIssueActionBody,
   AdminIntegrityIssueListParams,
   AdminProviderImportJobListParams,
   AdminProviderSyncListParams,

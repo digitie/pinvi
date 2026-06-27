@@ -440,6 +440,22 @@ class KorTravelMapAdminClient:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/ops/consistency/issues", params=params))
 
+    async def patch_admin_issue(
+        self,
+        issue_id: str,
+        *,
+        action: str,
+        reason: str | None = None,
+        operator: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /v1/admin/issues/{id} — integrity issue 상태 조치 envelope 반환."""
+        body: dict[str, Any] = {"action": action}
+        if reason is not None:
+            body["reason"] = reason
+        if operator is not None:
+            body["operator"] = operator
+        return self._payload(await self._send("PATCH", f"/v1/admin/issues/{issue_id}", json=body))
+
     async def list_consistency_reports(
         self,
         *,

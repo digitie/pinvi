@@ -452,6 +452,20 @@ class AdminIntegrityIssuesResponse(BaseModel):
     next_cursor: str | None = None
 
 
+AdminIntegrityIssueAction = Literal["resolve", "ignore", "reopen"]
+
+
+class AdminIntegrityIssueActionRequest(BaseModel):
+    action: AdminIntegrityIssueAction
+    access_reason: str = Field(min_length=1, max_length=500)
+    kor_travel_map_reason: str | None = Field(default=None, max_length=500)
+
+
+class AdminIntegrityIssueActionResponse(BaseModel):
+    action: AdminIntegrityIssueAction
+    issue: AdminIntegrityIssueRecord
+
+
 class AdminConsistencyReportRecord(BaseModel):
     report_id: str
     batch_id: str

@@ -95,6 +95,7 @@ class _FakeOpsClient:
         self.system_log_kwargs: dict[str, Any] | None = None
         self.api_log_kwargs: dict[str, Any] | None = None
         self.decision_args: tuple[str, dict[str, Any]] | None = None
+        self.issue_action_args: tuple[str, dict[str, Any]] | None = None
 
     async def list_dedup_reviews(self, **kwargs: Any) -> dict[str, Any]:
         self.dedup_kwargs = kwargs
@@ -122,6 +123,13 @@ class _FakeOpsClient:
             "data": {"items": [_issue_item()]},
             "meta": {"page": {"next_cursor": "issue-next"}},
         }
+
+    async def patch_admin_issue(self, issue_id: str, **kwargs: Any) -> dict[str, Any]:
+        self.issue_action_args = (issue_id, kwargs)
+        issue = _issue_item()
+        issue["status"] = "resolved"
+        issue["resolved_at"] = "2026-06-12T00:03:00+09:00"
+        return {"data": {"issue": issue}, "meta": {}}
 
     async def list_consistency_reports(self, **kwargs: Any) -> dict[str, Any]:
         self.report_kwargs = kwargs
@@ -341,6 +349,64 @@ async def test_admin_integrity_routes_proxy_issues_and_reports(
     assert fake.issue_kwargs["severity"] == "error"
     assert fake.issue_kwargs["provider"] == "kma"
     assert fake.report_kwargs == {"severity_max": "WARN", "page_size": 50, "cursor": None}
+
+
+async def test_admin_integrity_issue_action_proxies_and_writes_audit(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-integrity-action@example.com", roles=["user", "admin"]
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/integrity/issues/iss-1/action",
+            json={
+                "action": "resolve",
+                "access_reason": "운영자가 원천 데이터를 확인함",
+                "kor_travel_map_reason": "source verified",
+            },
+            headers={"X-Request-Id": str(request_id)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["action"] == "resolve"
+    assert data["issue"]["issue_id"] == "iss-1"
+    assert data["issue"]["status"] == "resolved"
+    assert fake.issue_action_args == (
+        "iss-1",
+        {
+            "action": "resolve",
+            "reason": "source verified",
+            "operator": "pinvi-admin",
+        },
+    )
+
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert audit is not None
+    assert audit.actor_user_id == admin_id
+    assert audit.action == "integrity_issue.action"
+    assert audit.resource_type == "integrity_issue"
+    assert audit.resource_id == "iss-1"
+    assert audit.access_reason == "운영자가 원천 데이터를 확인함"
+    assert audit.after_state == {
+        "action": "resolve",
+        "status": "resolved",
+        "feature_id": "f_a",
+        "provider": "kma",
+        "dataset_key": "places",
+        "violation_type": "missing_coord",
+    }
 
 
 async def test_admin_debug_logs_routes_proxy_system_and_api_logs(

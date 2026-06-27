@@ -516,6 +516,26 @@ export const AdminIntegrityIssuesResponseSchema = z.object({
 });
 export type AdminIntegrityIssuesResponse = z.infer<typeof AdminIntegrityIssuesResponseSchema>;
 
+export const AdminIntegrityIssueActionSchema = z.enum(['resolve', 'ignore', 'reopen']);
+export type AdminIntegrityIssueAction = z.infer<typeof AdminIntegrityIssueActionSchema>;
+
+export const AdminIntegrityIssueActionRequestSchema = z.object({
+  action: AdminIntegrityIssueActionSchema,
+  access_reason: z.string().min(1).max(500),
+  kor_travel_map_reason: z.string().max(500).nullable().optional(),
+});
+export type AdminIntegrityIssueActionRequest = z.infer<
+  typeof AdminIntegrityIssueActionRequestSchema
+>;
+
+export const AdminIntegrityIssueActionResponseSchema = z.object({
+  action: AdminIntegrityIssueActionSchema,
+  issue: AdminIntegrityIssueRecordSchema,
+});
+export type AdminIntegrityIssueActionResponse = z.infer<
+  typeof AdminIntegrityIssueActionResponseSchema
+>;
+
 export const AdminConsistencyReportRecordSchema = z.object({
   report_id: z.string(),
   batch_id: z.string(),

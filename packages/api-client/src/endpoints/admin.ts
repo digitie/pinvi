@@ -44,6 +44,8 @@ import {
   AdminSeedScenarioListResponseSchema,
   AdminSeedScenarioRunRequestSchema,
   AdminConsistencyReportsResponseSchema,
+  AdminIntegrityIssueActionRequestSchema,
+  AdminIntegrityIssueActionResponseSchema,
   AdminPagedResponseSchema,
   AdminPoiCopyRequestSchema,
   AdminPoiCreateRequestSchema,
@@ -156,6 +158,8 @@ export interface AdminConsistencyReportListParams {
   pageSize?: number;
   cursor?: string;
 }
+
+export type AdminIntegrityIssueActionBody = z.infer<typeof AdminIntegrityIssueActionRequestSchema>;
 
 export interface AdminSystemLogListParams {
   level?: 'debug' | 'info' | 'warning' | 'error' | 'critical';
@@ -319,6 +323,13 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminIntegrityIssuesResponseSchema,
     });
   },
+
+  actionIntegrityIssue: (issueId: string, body: AdminIntegrityIssueActionBody) =>
+    client.request(`/admin/integrity/issues/${encodeURIComponent(issueId)}/action`, {
+      method: 'POST',
+      body: JSON.stringify(AdminIntegrityIssueActionRequestSchema.parse(body)),
+      schema: AdminIntegrityIssueActionResponseSchema,
+    }),
 
   listConsistencyReports: (params: AdminConsistencyReportListParams = {}) => {
     const qs = new URLSearchParams();

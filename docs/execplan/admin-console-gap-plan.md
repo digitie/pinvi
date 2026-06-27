@@ -2,7 +2,7 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: T-215 완료 검증 / PR 준비
+상태: T-227 구현 완료 / PR 준비
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
@@ -331,24 +331,39 @@ GET-only라 T-227로 분리했다.
   mapping.
 - UI e2e: pending 후보 선택, reason 입력, verdict submit, body 검증, 성공 notice.
 
-### T-227 — Integrity issue status/fix mutation
+### T-227 — Integrity issue status mutation
 
-상태: 보류. `kor-travel-map` OpenAPI의 `/v1/ops/consistency/issues`와
-`/v1/ops/consistency/reports`는 현재 GET-only다. Pinvi가 자체 상태를 만들면 source of truth가
-갈라지므로 upstream mutation 계약이 추가된 뒤 진행한다.
+상태: 완료(2026-06-27, codex). 확인 결과 `kor-travel-map`의
+`/v1/ops/consistency/issues`와 `/v1/ops/consistency/reports`는 read-only지만, 운영자 조치용
+계약은 이미 `PATCH /v1/admin/issues/{issue_id}`에 존재한다. Pinvi는 자체 상태를 만들지 않고 이
+admin issue 계약의 status action만 relay한다.
 
 범위:
 
-- upstream consistency issue 상태 변경/fix/ignore 계약을 먼저 확정한다.
-- Pinvi `POST /admin/integrity/issues/{issue_id}/status` 또는 upstream 계약에 맞춘 relay를 추가한다.
+- upstream `resolve` / `ignore` / `reopen` action을 Pinvi
+  `POST /admin/integrity/issues/{issue_id}/action`으로 노출한다.
 - 모든 mutation은 `access_reason`, Pinvi `admin_audit_log`, upstream operator/reason 전달,
-  idempotency 또는 중복 처리 방지, upstream lock/kill-switch 처리 기준을 포함한다.
-- Web은 issue payload detail에서 status/fix action dialog, reason validation, 실패 rollback을 제공한다.
+  upstream 404/409/429/503 error mapping을 포함한다.
+- Web은 issue table의 조치 버튼에서 status action dialog, reason validation, 성공 notice,
+  list invalidate/refetch를 제공한다.
+- upstream의 `retry_geocode`, `retry_reverse_geocode`, `apply_kor_travel_geo_address`,
+  `manual_override` 같은 주소/좌표 수동 보정 action은 `kor-travel-map` Admin 책임으로 남기고
+  Pinvi에서는 이번 범위에 노출하지 않는다.
+
+구현:
+
+- `KorTravelMapAdminClient.patch_admin_issue()`가 `PATCH /v1/admin/issues/{issue_id}`에
+  `{action, reason, operator}`를 전달한다.
+- Pinvi API `POST /admin/integrity/issues/{issue_id}/action`은 admin 전용으로 action body를
+  검증하고, upstream 성공 후 `integrity_issue.action` audit을 기록한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 issue action 요청/응답 계약을 추가했다.
+- Web `/admin/integrity` table에 해결/무시/재오픈 action 버튼과 reason dialog를 추가했다.
 
 검증:
 
-- API integration: status/fix mutation, audit append, upstream failure rollback, 409/429/503 mapping.
-- UI e2e: reason validation, status/fix flow, 실패 rollback.
+- API unit: upstream PATCH path/body.
+- API integration: status mutation, audit append, request id, upstream body.
+- UI e2e: action dialog, reason body, 성공 notice, issue/report 필터 query.
 
 ### T-228 — Admin sidebar 확장/축소 토글 정정
 
@@ -765,7 +780,7 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 13. T-212 dedup/integrity/debug read-only PR.
 14. T-226 dedup verdict mutation PR.
 15. T-213 category mapping PR.
-16. T-227 integrity issue status/fix mutation PR(upstream 계약 추가 후).
+16. T-227 integrity issue status mutation PR(`kor-travel-map` 기존 admin issue 계약 사용).
 17. T-214 seed/reset dev-only PR.
 18. T-218 Grafana prod 주소 PR.
 19. T-221 dashboard 운영 현황 PR.
