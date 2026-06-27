@@ -15,6 +15,7 @@ from app.models.audit import AdminAuditLog
 from app.models.user import User
 from app.schemas.admin import (
     AdminAuditEntry,
+    AdminPoiCreateRequest,
     AdminPoiDetail,
     AdminPoiLinkStatusRequest,
     AdminPoiPagedResponse,
@@ -25,6 +26,8 @@ from app.services.admin_audit import append_admin_audit
 from app.services.admin_pois import (
     AdminPoiNotFoundError,
     AdminPoiRow,
+    AdminPoiTripNotFoundError,
+    create_admin_poi,
     extract_feature_label,
     get_admin_poi,
     list_admin_pois,
@@ -32,6 +35,7 @@ from app.services.admin_pois import (
     update_admin_poi_link_status,
 )
 from app.services.admin_users import mask_email
+from app.services.poi import SortOrderConflictError
 
 router = APIRouter(prefix="/admin/pois", tags=["admin"])
 
@@ -139,6 +143,71 @@ async def list_pois_endpoint(
             limit=limit,
         )
     )
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=Envelope[AdminPoiDetail])
+async def create_poi_endpoint(
+    body: AdminPoiCreateRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminPoiDetail]:
+    try:
+        poi = await create_admin_poi(
+            db,
+            trip_id=body.trip_id,
+            day_index=body.day_index,
+            sort_order=body.sort_order,
+            feature_id=body.feature_id,
+            feature_snapshot=body.feature_snapshot,
+            added_by_user_id=admin.user_id,
+            custom_marker_color=body.custom_marker_color,
+            custom_marker_icon=body.custom_marker_icon,
+            planned_arrival_at=body.planned_arrival_at,
+            planned_departure_at=body.planned_departure_at,
+            user_note=body.user_note,
+            budget_amount=body.budget_amount,
+            actual_amount=body.actual_amount,
+            currency=body.currency,
+            user_url=body.user_url,
+        )
+    except AdminPoiTripNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except SortOrderConflictError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="poi.create",
+        resource_type="poi",
+        resource_id=str(poi.attachment_id),
+        before_state=None,
+        after_state={
+            "trip_id": str(poi.trip_id),
+            "day_index": poi.day_index,
+            "sort_order": poi.sort_order,
+            "feature_id": poi.feature_id,
+            "feature_label": extract_feature_label(poi.feature_snapshot),
+        },
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(poi)
+    row = await get_admin_poi(db, poi_id=poi.attachment_id)
+    return Envelope.of(await _to_detail(db, row))
 
 
 @router.get("/{poi_id}", response_model=Envelope[AdminPoiDetail])

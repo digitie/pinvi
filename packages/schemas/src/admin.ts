@@ -513,6 +513,29 @@ export const AdminPoiDetailSchema = AdminPoiSummarySchema.extend({
 });
 export type AdminPoiDetail = z.infer<typeof AdminPoiDetailSchema>;
 
+export const AdminPoiCreateRequestSchema = z.object({
+  trip_id: z.string().uuid(),
+  day_index: z.number().int().min(1),
+  sort_order: z.string().min(1).max(80),
+  feature_id: z.string().min(1).max(200).nullable().optional(),
+  feature_snapshot: z.record(z.string(), z.unknown()).default({}),
+  custom_marker_color: z
+    .string()
+    .regex(/^P-\d{2}$/)
+    .nullable()
+    .optional(),
+  custom_marker_icon: z.string().max(64).nullable().optional(),
+  planned_arrival_at: Iso8601Schema.nullable().optional(),
+  planned_departure_at: Iso8601Schema.nullable().optional(),
+  user_note: z.string().nullable().optional(),
+  budget_amount: z.number().nonnegative().nullable().optional(),
+  actual_amount: z.number().nonnegative().nullable().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).default('KRW'),
+  user_url: z.string().max(2000).nullable().optional(),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminPoiCreateRequest = z.infer<typeof AdminPoiCreateRequestSchema>;
+
 export const AdminPoiPagedResponseSchema = z.object({
   items: z.array(AdminPoiSummarySchema),
   total: z.number().int(),

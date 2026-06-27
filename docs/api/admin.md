@@ -457,7 +457,44 @@ GET /admin/pois?q=haeundae&has_broken_link=false&page=1&limit=50
   메모, 예산/실사용 금액, 사용자 URL, 최근 `admin_audit_log` 10건을 반환한다.
 - owner / added_by 이메일은 항상 마스킹한다.
 
-### 9.3 `PATCH /admin/pois/{poi_id}/link-status`
+### 9.3 `POST /admin/pois`
+
+```http
+POST /admin/pois
+Content-Type: application/json
+
+{
+  "trip_id": "uuid",
+  "day_index": 1,
+  "sort_order": "a0",
+  "feature_id": "place-haeundae",
+  "feature_snapshot": {
+    "name": "해운대 해수욕장",
+    "coord": { "lon": 129.1604, "lat": 35.1587 },
+    "address_label": "부산 해운대구"
+  },
+  "custom_marker_color": "P-08",
+  "custom_marker_icon": "beach",
+  "planned_arrival_at": "2026-07-01T10:00:00+09:00",
+  "planned_departure_at": "2026-07-01T11:00:00+09:00",
+  "user_note": "운영자 대행 등록",
+  "budget_amount": "12000.00",
+  "currency": "KRW",
+  "user_url": "https://example.com/poi",
+  "access_reason": "고객 요청 대행"
+}
+```
+
+- 권한: `admin`
+- Pinvi 소유 `app.trip_day_pois` attachment 행을 생성한다. feature 원천 정규화·저장은
+  kor-travel-map 책임이다.
+- `day_index`의 `trip_day`가 없으면 기존 사용자 POI 생성 흐름처럼 해당 날짜 row를 생성한다.
+- `added_by_user_id`는 작업 admin 사용자로 기록한다.
+- snapshot에 지역 코드가 있고 trip의 `primary_region_code`가 비어 있으면
+  `primary_region_source = "poi_snapshot"`으로 보정한다.
+- `admin_audit_log`에 `action = "poi.create"`를 같은 transaction으로 기록한다.
+
+### 9.4 `PATCH /admin/pois/{poi_id}/link-status`
 
 ```http
 PATCH /admin/pois/<poi_id>/link-status
@@ -476,7 +513,7 @@ Content-Type: application/json
 - 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
 
-### 9.4 사용자 feature 제안 검토 큐 (T-179)
+### 9.5 사용자 feature 제안 검토 큐 (T-179)
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
 kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12701 /v1/admin/*`)로 전달한다.

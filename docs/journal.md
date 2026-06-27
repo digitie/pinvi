@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-219 POI Admin 직접 생성
+
+**작업**: 추가 요청 7번을 T-219로 구현했다. Admin이 특정 여행계획/day에 POI를 직접 생성하고
+생성 사유를 감사 로그에 남길 수 있게 했다.
+
+**변경**:
+- `POST /admin/pois`를 추가했다. admin 전용이며 trip 존재 여부를 검증한다.
+- admin POI 생성은 `app.trip_day_pois` row, 필요 시 `trip_days` row, KASI rise/set 초기 row,
+  `poi.create` audit을 같은 transaction으로 처리한다.
+- snapshot 기반 trip primary region 보정은 사용자 POI 생성과 같은 규칙을 따른다.
+- `@pinvi/schemas`와 `@pinvi/api-client`에 `AdminPoiCreateRequest` / `createPoi`를 추가했다.
+- Web `/admin/pois`에 trip 검색/선택 기반 생성 dialog를 추가했다. POI 이름/좌표/주소는
+  `feature_snapshot`으로 조립하고, 생성 성공 시 POI 상세 화면으로 이동한다.
+- API 문서와 Admin 실행 계획, tasks/resume/changelog를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API focused pytest 8건, API `ruff check`, focused mypy,
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, Web lint, Web production build를
+통과했다. WSL Next 서버(12805)를 Windows Playwright runner가 재사용하는 방식으로
+`admin-pois.e2e.ts` 3건이 통과했다.
+
+**다음**: T-219 PR merge 후 T-223 사용자 아바타/RustFS 이미지 관리로 진행한다.
+
 ## 2026-06-27 (codex) — T-217 Trip Admin 직접 생성
 
 **작업**: 추가 요청 5번을 T-217로 구현했다. Admin이 사용자 owner를 선택해 여행계획을 직접

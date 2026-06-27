@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-219 POI Admin 직접 생성
+
+Admin POI 목록에 생성 dialog를 추가했다. 운영자는 `/admin/trips` 검색 결과에서 여행계획을
+선택하고, day/sort_order, feature_id 또는 POI 이름, 좌표/주소, 마커 override, 예정 시각,
+메모, 예산/실사용 금액, URL, 작업 사유를 입력해 POI를 직접 만들 수 있다. UI는 이름/좌표/주소를
+`feature_snapshot`으로 조립하고, 생성 성공 시 `/admin/pois/{poi_id}` 상세 화면으로 이동한다.
+
+백엔드는 `POST /admin/pois`를 추가했다. admin 전용이며 삭제된 trip에는 생성하지 않는다.
+없는 `trip_day`는 사용자 POI 생성 흐름과 동일하게 자동 생성하고, KASI rise/set 초기 row도 생성한다.
+snapshot에 지역 코드가 있고 trip primary region이 비어 있으면 `poi_snapshot` source로 보정한다.
+`poi.create` audit은 POI row와 같은 transaction에 기록하며, audit 실패 시 POI 생성도 rollback된다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API focused pytest 8건,
+API ruff, focused mypy, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+Web mock e2e는 WSL Next 서버(12805)를 Windows Playwright runner가 재사용하는 방식으로
+`admin-pois.e2e.ts` 3건 모두 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-223(사용자 아바타/RustFS 이미지 관리)에 진입한다. T-210 WIP
+stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
 ## 2026-06-27 (codex) — T-217 Trip Admin 직접 생성
 
 Admin 여행 목록에 생성 dialog를 추가했다. 운영자는 `/admin/users` 검색 결과에서 owner를
