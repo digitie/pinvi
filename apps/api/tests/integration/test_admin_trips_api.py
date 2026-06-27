@@ -45,6 +45,7 @@ async def _create_trip_fixture(
     session_factory,
     *,
     owner_id: uuid.UUID,
+    companion_user_id: uuid.UUID | None = None,
     title: str = "부산 가족 여행",
     region_hint: str = "부산",
     status: str = "planned",
@@ -88,8 +89,16 @@ async def _create_trip_fixture(
                     day_index=1,
                     sort_order="a0",
                     feature_id="feature-place-1",
-                    feature_snapshot={"name": "해운대"},
+                    feature_snapshot={
+                        "name": "해운대",
+                        "coord": {"lon": 129.1604, "lat": 35.1587},
+                        "address": {"road": "부산 해운대구 해운대해변로"},
+                    },
                     added_by_user_id=owner_id,
+                    planned_arrival_at=now + timedelta(hours=2),
+                    user_note="오전 산책",
+                    budget_amount=12000,
+                    user_url="https://example.com/poi",
                 ),
                 TripCompanion(
                     trip_id=trip.trip_id,
@@ -108,6 +117,18 @@ async def _create_trip_fixture(
                 ),
             ]
         )
+        if companion_user_id is not None:
+            db.add(
+                TripCompanion(
+                    trip_id=trip.trip_id,
+                    user_id=companion_user_id,
+                    invited_email="joined@example.com",
+                    invited_nickname="가입 동반자",
+                    role="viewer",
+                    invited_at=now - timedelta(hours=1),
+                    joined_at=now,
+                )
+            )
         await db.commit()
         return trip.trip_id
 
@@ -167,7 +188,12 @@ async def test_admin_trip_detail_returns_companions_share_links_and_audit(
         roles=["user", "admin"],
     )
     owner_id = await _create_user(session_factory, email="owner@example.com")
-    trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    companion_id = await _create_user(session_factory, email="joined@example.com")
+    trip_id = await _create_trip_fixture(
+        session_factory,
+        owner_id=owner_id,
+        companion_user_id=companion_id,
+    )
 
     resp = await client.get(
         f"/admin/trips/{trip_id}",
@@ -178,8 +204,23 @@ async def test_admin_trip_detail_returns_companions_share_links_and_audit(
     trip = resp.json()["data"]
     assert trip["trip_id"] == str(trip_id)
     assert trip["description"] == "운영자가 확인할 여행 상세"
-    assert trip["companions"][0]["invited_email_masked"] == "f***@example.com"
-    assert trip["companions"][0]["role"] == "editor"
+    assert {c["invited_email_masked"] for c in trip["companions"]} == {
+        "f***@example.com",
+        "j***@example.com",
+    }
+    joined = next(c for c in trip["companions"] if c["user_id"] == str(companion_id))
+    invited = next(c for c in trip["companions"] if c["user_id"] is None)
+    assert joined["role"] == "viewer"
+    assert invited["role"] == "editor"
+    assert trip["days"][0]["day_index"] == 1
+    assert trip["days"][0]["date"] == "2026-07-01"
+    assert trip["days"][0]["poi_count"] == 1
+    assert trip["pois"][0]["feature_label"] == "해운대"
+    assert trip["pois"][0]["lon"] == 129.1604
+    assert trip["pois"][0]["lat"] == 35.1587
+    assert trip["pois"][0]["address_label"] == "부산 해운대구 해운대해변로"
+    assert trip["pois"][0]["user_note"] == "오전 산책"
+    assert trip["pois"][0]["user_url"] == "https://example.com/poi"
     assert trip["share_links"][0]["visibility"] == "view_only"
     assert trip["recent_audit"] == []
 

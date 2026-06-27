@@ -297,18 +297,210 @@ N150 게이트:
   upstream `kor-travel-map` health를 확인한다.
 - 실제 운영 도메인/SSH target/env 값은 출력하지 않는다.
 
+### T-216 — Trip Admin 상세 운영성 보강
+
+추가 요청(2026-06-27) 1~4번, 11번.
+
+범위:
+
+- Admin 좌측 메뉴 active state가 현재 route와 무관하게 dashboard로 고정되는 문제를 고친다.
+- 좌측 메뉴를 icon-only compact view로 표현해 본문 공간을 확보한다. 아이콘에는 tooltip/aria label을
+  제공해 접근성을 유지한다.
+- `/admin/trips/{trip_id}` 상세 화면 제목에 여행계획명을 명확히 표시한다.
+- 상세 화면의 owner, 동반자, 초대 이메일 등 사용자 관련 표시를 클릭 가능한 Admin user
+  동선으로 연결한다. 가입 사용자는 `/admin/users/{user_id}`로 이동하고, 미가입 초대자는 이메일
+  마스킹과 초대 상태를 별도 표시한다.
+- 상세 화면에 날짜(day)와 등록 POI를 함께 listing한다.
+- POI row 클릭 시 같은 화면 안에서 상세 dialog를 띄우고, dialog에는 POI 상세정보, 지도뷰,
+  `/admin/pois/{poi_id}` 상세 페이지 링크를 포함한다.
+
+검증:
+
+- API integration: trip detail 응답이 companions/share links 외 day/POI summary와 미가입 초대자 정보를
+  포함하는지 확인.
+- UI e2e: 제목, 사용자 링크, 초대자 표시, POI dialog, POI 상세 링크 확인.
+
+### T-217 — Trip Admin 직접 생성
+
+추가 요청(2026-06-27) 5번.
+
+범위:
+
+- Admin이 여행계획을 직접 생성하는 `/admin/trips/new` 또는 inline create flow를 추가한다.
+- owner user 선택, 제목, 날짜, 공개범위, 상태를 입력받고 생성 사유를 audit에 남긴다.
+- 사용자 flow와 충돌하지 않도록 Admin 생성 출처를 audit/action으로 구분한다.
+
+검증:
+
+- API integration: admin/operator 권한, owner 존재 검증, audit append.
+- UI e2e: 생성 성공, validation error, 생성 후 상세 이동.
+
+### T-218 — Grafana prod 주소 반영
+
+추가 요청(2026-06-27) 6번.
+
+범위:
+
+- prod 환경 Grafana embed 주소 주입 경로를 확인하고, tracked 파일에는 실제 운영 도메인을 쓰지 않는다.
+- `infra/.env.prod.example`과 runbook에는 placeholder만 둔다.
+- Web `/admin/grafana`가 prod env에서 올바른 public URL을 사용하도록 env 이름과 fallback을 정리한다.
+
+검증:
+
+- Web unit/typecheck/build.
+- tracked diff secret/domain scan.
+
+### T-219 — POI Admin 직접 생성
+
+추가 요청(2026-06-27) 7번.
+
+범위:
+
+- Admin이 특정 trip/day에 POI를 직접 추가하는 API/UI를 제공한다.
+- feature_id 또는 custom POI 입력, 날짜/순서/메모/예산/URL/마커 override를 입력받는다.
+- 생성 사유를 audit에 남기고, feature 정규화·저장은 kor-travel-map에 위임한다.
+
+검증:
+
+- API integration: trip/day 권한, feature snapshot, audit append.
+- UI e2e: 생성 dialog, validation, 생성 후 list/detail refresh.
+
+### T-220 — ETL 실제 구동 상태 화면
+
+추가 요청(2026-06-27) 8번. 기존 T-211의 ETL/provider sync 구현 범위를 이 Task와 통합한다.
+
+범위:
+
+- `/admin/etl`에 현재 구동 중인 Pinvi ETL job과 Dagster 상태를 표시한다.
+- 현재 구현된 KASI job뿐 아니라 실제 등록된 asset/job 목록을 API에서 읽어 보여준다.
+- kor-travel-map provider sync는 별도 upstream proxy 섹션으로 구분한다.
+
+검증:
+
+- API integration: Dagster 미설정/응답/장애 mapping.
+- UI e2e: job 목록, 상태 필터, Dagster 링크.
+
+### T-221 — Dashboard 운영 현황 그래프 / 부하 / 용량
+
+추가 요청(2026-06-27) 9번.
+
+범위:
+
+- `/admin` dashboard에 운영 현황 상세보기와 간단한 그래프뷰를 추가한다.
+- API/Web/DB/RustFS/Dagster/kor-travel-map의 주요 부하, 용량, 실패율, queue 상태를 요약한다.
+- Grafana가 있으면 deep link를 제공하고, 없으면 Pinvi API summary만 표시한다.
+
+검증:
+
+- API unit/integration: metric source별 graceful degrade, secret/raw URL 비노출.
+- UI e2e: 그래프 카드, 오류 상태, 상세보기 링크.
+
+### T-222 — System view Docker / 의존 API 상태
+
+추가 요청(2026-06-27) 10번.
+
+범위:
+
+- `/admin/system` 또는 기존 system summary 확장 화면을 추가한다.
+- 현재 구동 중인 Docker service/container 상태와 의존 API health를 보여준다.
+- prod 접근 정보, SSH target, 실제 운영 도메인/IP는 노출하지 않는다. 수집은 로컬 agent/API가
+  제공할 수 있는 안전한 상태값으로 제한한다.
+
+검증:
+
+- API integration: Docker unavailable, permission denied, dependency down mapping.
+- UI e2e: service 상태표, dependency 상태표, secret/domain 비노출.
+
+### T-223 — 사용자 아바타 / RustFS 이미지 관리
+
+추가 요청(2026-06-27) 12번.
+
+범위:
+
+- 사용자가 프로필 아바타 이미지를 업로드·조회·교체·삭제할 수 있게 한다. 원본 이미지는
+  RustFS에 저장하고 DB에는 storage ref와 안전한 metadata만 둔다.
+- 각 사용자와 Admin은 해당 사용자의 아바타 이미지를 볼 수 있어야 한다. Admin은 사용자 상세에서
+  이미지 삭제/교체를 수행할 수 있다.
+- Admin 전역 설정에 아바타 허용 이미지 크기/용량/형식 정책을 추가한다. 설정값은 추적 파일에
+  실제 운영 bucket/endpoint/secret을 노출하지 않고 DB/env placeholder로만 문서화한다.
+- 삭제/교체는 audit log를 남기고, 기존 객체 cleanup 실패는 재시도 가능한 storage cleanup queue로
+  남기는지 검토한다.
+
+검증:
+
+- API integration: upload URL 발급, metadata 확정, 교체 시 이전 객체 cleanup 예약, 삭제 후 조회
+  fallback, 권한 거부.
+- UI e2e: 사용자 프로필과 Admin 사용자 상세에서 업로드/교체/삭제, 이미지 미리보기.
+- 보안: content-type/확장자/크기 제한, RustFS object key prefix, secret/raw endpoint 비노출.
+
+### T-224 — 여행/날짜/POI 파일 업로드와 용량 정책
+
+추가 요청(2026-06-27) 13번.
+
+범위:
+
+- 사용자가 각 여행계획, 날짜, 세부 장소(POI)에 파일을 업로드·삭제할 수 있게 한다. Admin도 같은
+  첨부를 조회·관리할 수 있다.
+- 사용자와 Admin 모두 업로드한 파일을 모아 보는 파일 라이브러리 화면을 제공한다. 사용자 화면은
+  본인/권한 있는 여행 범위만, Admin 화면은 검색/필터/삭제/audit 중심으로 둔다.
+- Admin 전역 설정에 개별 파일 최대 용량, 계획별 총 용량, 사용자별 기본 총량을 둔다.
+- Admin은 개별 사용자에게 파일/계획 총량 override를 부여할 수 있고, override가 있으면 전역
+  설정보다 우선한다.
+- 용량 계산은 RustFS metadata만 신뢰하지 않고 DB attachment metadata 기준으로 계산하며, orphan
+  객체 cleanup/reconcile task를 별도 후속으로 분리할 수 있다.
+
+검증:
+
+- API integration: trip/day/POI upload URL 발급, metadata 확정, 삭제, 권한, 전역 quota, 사용자
+  override 우선순위, 계획별 총량 초과.
+- UI e2e: 사용자 파일 모아보기, Admin 파일 관리, quota 초과 메시지, 삭제/복구 불가 확인 dialog.
+- 저장소 보안: object key prefix, presigned URL 만료, content-type/size 검증, secret/raw endpoint
+  비노출.
+
+### T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
+
+추가 요청(2026-06-27) 14번.
+
+범위:
+
+- Admin에서 여행계획, 세부 날짜, POI를 복사·이동·삭제할 수 있게 한다.
+- 계획/날짜 조작 시 하위 day/POI/첨부/댓글/공유링크 등 하위 아이템을 함께 처리할지, 삭제할지,
+  orphan으로 둘지, 다른 대상으로 옮길지 선택하게 한다.
+- 삭제/이동 dialog는 대상 검색과 이동 실행을 같은 UI에서 처리한다. 다른 곳으로 옮기는 경우
+  destination trip/day/POI 후보 검색, 사전 영향도 요약, confirm action, audit 기록을 포함한다.
+- orphan 정책은 실제 DB FK/도메인 제약과 충돌하지 않아야 하며, orphan 허용이 불가능한 하위
+  아이템은 UI에서 선택지를 비활성화하고 이유를 표시한다.
+- 사용자 경로의 협업/권한/optimistic lock과 충돌하지 않도록 버전 증가, audit, rollback 전략을
+  API 수준에서 먼저 고정한다.
+
+검증:
+
+- API integration: trip copy/move/delete, day copy/move/delete, POI copy/move/delete, cascade/delete/
+  orphan/retarget 조합, 권한, audit, optimistic lock conflict.
+- UI e2e: 하위 아이템 처리 옵션 선택, 대상 검색/선택/실행, 영향도 요약, 실패 rollback 표시.
+- 데이터 정합: 하위 attachment/comment/share/link count, orphan 가능성, 삭제 후 목록/상세 조회.
+
 ## 구현 순서
 
 1. T-207 계획 PR merge.
 2. 다른 에이전트 계획 리뷰 반영.
 3. T-208 IA/dashboard PR.
 4. T-209 feature proxy/read UI PR.
-5. T-210 change request 운영 PR.
-6. T-211 ETL/provider sync PR.
-7. T-212 dedup/integrity/debug PR.
-8. T-213 category mapping PR.
-9. T-214 seed/reset dev-only PR.
-10. T-215 묶음 live e2e/N150 게이트 PR 또는 release-gate PR.
+5. T-216 trip 상세 운영성 보강 PR.
+6. T-217 trip admin 생성 PR.
+7. T-219 POI admin 생성 PR.
+8. T-223 사용자 아바타/RustFS 이미지 관리 PR.
+9. T-224 여행/날짜/POI 파일 업로드와 용량 정책 PR.
+10. T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션 PR.
+11. T-210 change request 운영 PR.
+12. T-220 ETL/provider sync PR.
+13. T-212 dedup/integrity/debug PR.
+14. T-213 category mapping PR.
+15. T-214 seed/reset dev-only PR.
+16. T-218 Grafana prod 주소 PR.
+17. T-221 dashboard 운영 현황 PR.
+18. T-222 system view Docker/API 상태 PR.
+19. T-215 묶음 live e2e/N150 게이트 PR 또는 release-gate PR.
 
 ## 검증 정책
 

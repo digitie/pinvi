@@ -1,5 +1,31 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-216 Trip Admin 상세 운영성 보강
+
+Admin 좌측 메뉴가 현재 route와 무관하게 dashboard 선택 상태로 보일 수 있는 문제를
+가장 긴 href prefix active 판정으로 고쳤고, sidebar를 icon-only compact view로 줄여 본문
+공간을 확보했다. 각 메뉴 아이콘은 title/aria-label/`aria-current`를 갖는다.
+
+`/admin/trips/{trip_id}` 상세 응답에는 이제 `days`와 `pois`가 포함된다. `days`는 날짜별
+`poi_count`를 제공하고, `pois`는 `trip_day_pois` attachment의 snapshot 기반 label/주소/좌표,
+일정/메모/비용/URL/추가자 정보를 제공한다. Web 상세 화면은 owner/가입 동반자/POI 추가자를
+`/admin/users/{user_id}`로 연결하고, 미가입 초대자는 별도 상태로 표시한다. 상세 계획 섹션에는
+day/POI 목록을 추가했으며, POI row 클릭 시 지도 preview, snapshot, 상세 metadata,
+`/admin/pois/{poi_id}` 링크를 포함한 dialog를 띄운다.
+
+추가 요청 12~14번은 범위가 커서 T-223(사용자 아바타/RustFS 이미지 관리), T-224(여행/날짜/POI
+파일 업로드와 용량 정책), T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)로 분리해
+`docs/execplan/admin-console-gap-plan.md`와 `docs/tasks.md`에 추가했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 4건, API ruff, focused mypy,
+schemas/api-client/web typecheck, Web lint, Web production build가 통과했다. local Playwright
+mock e2e는 WSL Chromium 바이너리 부재로 실행 전 실패했으며, 추가 e2e는 CI 또는 T-215 N150
+묶음 게이트에서 확인한다.
+
+다음: PR을 만들고 merge한 뒤 T-217(여행계획 Admin 직접 생성)에 진입한다. T-210 WIP stash는
+`wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있으며, T-223~T-225 이후
+또는 우선순위 재조정 시 복원한다.
+
 ## 2026-06-27 (codex) — T-209 Admin Features read proxy / 화면 구현
 
 `kor-travel-map` Admin 최신 계약을 확인해 Pinvi `/admin/features` read-only proxy와 Web 화면을
@@ -970,11 +996,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-209 완료. 다음 작업은 **T-210 Pinvi feature request와
-> upstream change request 운영 통합**이다. `/admin/feature-requests`의 Pinvi 사용자 제보 상태와
-> `/admin/features/change-requests` upstream 큐를 연결하고, approve/reject/apply action은 reason,
-> audit, upstream error mapping, UI rollback을 포함해 구현한다. N150 live는 계속 T-215 묶음
-> 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: T-216 완료. 다음 작업은 **T-217 여행계획 Admin 직접
+> 생성**이다. 이후 T-219(POI Admin 직접 생성), T-223~T-225(아바타/파일/복사·이동·삭제
+> 오케스트레이션)를 진행한 뒤 T-210 change request 운영 통합으로 돌아간다. N150 live는 계속
+> T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

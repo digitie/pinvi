@@ -260,6 +260,11 @@ GET /admin/trips?q=busan&status_filter=planned&visibility_filter=private&page=1&
 - 권한: `admin` / `operator`
 - 기본 여행 필드 + `description`
 - `companions`: 초대 이메일은 `invited_email_masked`로만 제공
+- `days`: `day_index`, `date`, `title`, `note`, `poi_count`를 포함해 상세 계획의 날짜 구성을
+  표시한다.
+- `pois`: 여행에 등록된 `trip_day_pois` attachment 목록을 날짜/순서대로 반환한다. 각 POI는
+  `feature_id`, snapshot 기반 `feature_label`/주소/좌표, 일정 시간, 메모, 비용, 사용자 URL,
+  추가자 마스킹 정보를 포함한다. 좌표는 snapshot에서 방어적으로 추출하며 없으면 `null`이다.
 - `share_links`: token 원문/해시는 반환하지 않고 share row metadata만 제공
 - `recent_audit`: 해당 trip의 최근 `admin_audit_log` 10건
 
