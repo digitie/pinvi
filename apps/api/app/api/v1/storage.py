@@ -16,6 +16,7 @@ from app.services.rustfs_storage import (
     MimeNotAllowedError,
     make_upload_url,
 )
+from app.services.storage_policy import effective_attachment_quota, get_storage_settings
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 _ADMIN_ONLY_PURPOSES = {"curated_plan_attachment", "curated_poi_attachment"}
@@ -25,13 +26,22 @@ _ADMIN_ONLY_PURPOSES = {"curated_plan_attachment", "curated_poi_attachment"}
 async def upload_urls(
     body: UploadUrlRequest, current_user_id: CurrentUserId, db: DbSession
 ) -> Envelope[UploadUrlResponse]:
+    user = await db.scalar(select(User).where(User.user_id == uuid.UUID(current_user_id)))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
+        )
     if body.purpose in _ADMIN_ONLY_PURPOSES:
-        user = await db.scalar(select(User).where(User.user_id == uuid.UUID(current_user_id)))
-        if user is None or "admin" not in set(user.roles or []):
+        if "admin" not in set(user.roles or []):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
             )
+    max_upload_bytes: int | None = None
+    if body.purpose in {"trip_attachment", "trip_day_attachment", "poi_attachment"}:
+        settings_row = await get_storage_settings(db)
+        max_upload_bytes = effective_attachment_quota(settings_row, user).max_upload_bytes
     try:
         response = make_upload_url(
             purpose=body.purpose,
@@ -39,6 +49,7 @@ async def upload_urls(
             filename=body.filename,
             content_type=body.content_type,
             content_length=body.content_length,
+            max_upload_bytes=max_upload_bytes,
         )
     except MimeNotAllowedError as exc:
         raise HTTPException(

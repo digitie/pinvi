@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.schemas.storage import AvatarApplyRequest
+from app.schemas.storage import AttachmentLibraryItem, AvatarApplyRequest
 
 
 class AdminUserSummary(BaseModel):
@@ -284,6 +284,15 @@ class AdminFeatureDetail(BaseModel):
     files: list[AdminFeatureDetailFile] = Field(default_factory=list)
 
 
+class AdminUserFileQuota(BaseModel):
+    attachment_max_upload_bytes_override: int | None = Field(default=None, gt=0)
+    trip_attachment_quota_bytes_override: int | None = Field(default=None, gt=0)
+    user_attachment_quota_bytes_override: int | None = Field(default=None, gt=0)
+    effective_attachment_max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    effective_trip_attachment_quota_bytes: int = Field(default=100 * 1024 * 1024, gt=0)
+    effective_user_attachment_quota_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
+
+
 class AdminUserDetail(AdminUserSummary):
     email: str
     email_revealed: bool
@@ -295,6 +304,7 @@ class AdminUserDetail(AdminUserSummary):
     avatar_byte_size: int | None = None
     avatar_updated_at: datetime | None = None
     has_avatar: bool = False
+    file_quota: AdminUserFileQuota = Field(default_factory=AdminUserFileQuota)
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 
 
@@ -318,6 +328,26 @@ class AdminAvatarSettings(BaseModel):
 
 class AdminAvatarSettingsUpdateRequest(BaseModel):
     avatar_max_upload_bytes: int = Field(gt=0, le=104_857_600)
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminFileStorageSettings(BaseModel):
+    attachment_max_upload_bytes: int = Field(gt=0)
+    trip_attachment_quota_bytes: int = Field(gt=0)
+    user_attachment_quota_bytes: int = Field(gt=0)
+
+
+class AdminFileStorageSettingsUpdateRequest(BaseModel):
+    attachment_max_upload_bytes: int = Field(gt=0, le=1_073_741_824)
+    trip_attachment_quota_bytes: int = Field(gt=0, le=10_737_418_240)
+    user_attachment_quota_bytes: int = Field(gt=0, le=109_951_162_777_600)
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminUserFileQuotaUpdateRequest(BaseModel):
+    attachment_max_upload_bytes_override: int | None = Field(default=None, gt=0)
+    trip_attachment_quota_bytes_override: int | None = Field(default=None, gt=0)
+    user_attachment_quota_bytes_override: int | None = Field(default=None, gt=0)
     access_reason: str = Field(min_length=1, max_length=500)
 
 
@@ -418,6 +448,7 @@ class AdminTripDetail(AdminTripSummary):
     companions: list[AdminTripCompanionSummary] = Field(default_factory=list)
     days: list[AdminTripDaySummary] = Field(default_factory=list)
     pois: list[AdminTripPoiSummary] = Field(default_factory=list)
+    attachments: list[AttachmentLibraryItem] = Field(default_factory=list)
     share_links: list[AdminTripShareLinkSummary] = Field(default_factory=list)
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 

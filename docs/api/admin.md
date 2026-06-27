@@ -26,6 +26,9 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/users/{id}/disable`                                    | 비활성화 (refresh 전부 revoke)                       | 3      |
 | `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                     | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제    | 4      |
 | `GET/PUT /admin/settings/avatar`                                    | 전역 아바타 업로드 크기 제한                         | 4      |
+| `PUT /admin/users/{id}/file-quota`                                  | 사용자별 파일 용량 override                          | 4      |
+| `GET/PUT /admin/settings/files`                                     | 전역 파일 용량 정책                                  | 4      |
+| `GET/DELETE /admin/files[/{attachment_id}]`                         | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제        | 4      |
 | `GET /admin/trips` / `{trip_id}`                                    | trip 목록 / 상세                                     | 3      |
 | `GET /admin/features` / `{feature_id}`                              | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
 | `GET /admin/pois` / `{poi_id}`                                      | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
@@ -298,6 +301,65 @@ Content-Type: application/json
 - 기본값은 2MiB다.
 - 변경은 `admin_audit_log`에 `settings.avatar_update`로 기록한다.
 
+### 6.6 사용자 파일 용량 override
+
+Admin은 사용자 상세에서 여행/날짜/POI 첨부 파일 quota override를 설정할 수 있다. `null`이면
+전역 설정을 사용하고, 값이 있으면 전역 설정보다 우선한다.
+
+```http
+PUT /admin/users/<user_id>/file-quota
+Content-Type: application/json
+
+{
+  "attachment_max_upload_bytes_override": 10485760,
+  "trip_attachment_quota_bytes_override": 104857600,
+  "user_attachment_quota_bytes_override": 1073741824,
+  "access_reason": "고객별 용량 상향"
+}
+```
+
+- 권한: `admin`
+- 응답 `file_quota`에는 override 값과 effective 값
+  (`effective_attachment_max_upload_bytes`, `effective_trip_attachment_quota_bytes`,
+  `effective_user_attachment_quota_bytes`)을 함께 포함한다.
+- 변경은 `admin_audit_log`에 `user.file_quota_update`로 기록한다.
+
+### 6.7 전역 파일 용량 정책
+
+```http
+GET /admin/settings/files
+PUT /admin/settings/files
+Content-Type: application/json
+
+{
+  "attachment_max_upload_bytes": 10485760,
+  "trip_attachment_quota_bytes": 104857600,
+  "user_attachment_quota_bytes": 1073741824,
+  "access_reason": "운영 정책 조정"
+}
+```
+
+- 권한: 조회 `admin` / `operator`, 변경 `admin`
+- 기본값은 개별 파일 10MiB, 여행계획 총량 100MiB, 사용자 총량 1GiB다.
+- 변경은 `admin_audit_log`에 `settings.files_update`로 기록한다.
+
+### 6.8 파일 관리
+
+```http
+GET /admin/files?q=receipt&scope=trip&user_id=<uuid>&trip_id=<uuid>&page=1&limit=50
+GET /admin/files/<attachment_id>/download-url
+DELETE /admin/files/<attachment_id>
+Content-Type: application/json
+
+{ "access_reason": "사용자 요청 파일 삭제" }
+```
+
+- 권한: 목록/다운로드 URL은 `admin` / `operator`, 삭제는 `admin`
+- `scope`: `trip` / `day` / `poi` / `curated_plan` / `curated_poi`
+- 목록 응답은 `AttachmentLibraryPage`이며 업로더 이메일은 `uploaded_by_email_masked`만 포함한다.
+- 삭제는 metadata soft delete이며, RustFS object를 즉시 지우지 않는다.
+- 삭제는 `admin_audit_log`에 `attachment.delete`로 기록한다.
+
 ## 7. 여행계획 관리
 
 ### 7.1 `GET /admin/trips`
@@ -328,6 +390,8 @@ GET /admin/trips?q=busan&status_filter=planned&visibility_filter=private&page=1&
   `feature_id`, snapshot 기반 `feature_label`/주소/좌표, 일정 시간, 메모, 비용, 사용자 URL,
   추가자 마스킹 정보를 포함한다. 좌표는 snapshot에서 방어적으로 추출하며 없으면 `null`이다.
 - `share_links`: token 원문/해시는 반환하지 않고 share row metadata만 제공
+- `attachments`: 여행/날짜/POI 첨부 파일 모음(`AttachmentLibraryItem`), admin 파일 관리 화면과
+  같은 scope/파일 metadata를 사용한다.
 - `recent_audit`: 해당 trip의 최근 `admin_audit_log` 10건
 
 ### 7.3 `POST /admin/trips`

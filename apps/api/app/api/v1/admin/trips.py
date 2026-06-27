@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DbSession
 from app.core.rbac import require_role
+from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog
 from app.models.companion import TripCompanion
 from app.models.share_link import TripShareLink
@@ -33,6 +34,7 @@ from app.schemas.admin import (
     TripVisibility,
 )
 from app.schemas.envelope import Envelope
+from app.schemas.storage import AttachmentLibraryItem
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_pois import (
     extract_feature_address_label,
@@ -56,6 +58,7 @@ from app.services.admin_trips import (
     update_admin_trip_status,
 )
 from app.services.admin_users import mask_email
+from app.services.storage_policy import attachment_scope, list_admin_file_library
 
 router = APIRouter(prefix="/admin/trips", tags=["admin"])
 TripPrimaryRegionSource = Literal["manual", "poi_snapshot", "geocoded"]
@@ -144,6 +147,42 @@ def _to_trip_poi(row: AdminTripPoiRow) -> AdminTripPoiSummary:
     )
 
 
+def _to_attachment_item(
+    attachment: CuratedPlanAttachment,
+    *,
+    trip_title: str | None,
+    poi_label: str | None,
+    uploaded_by_email: str,
+) -> AttachmentLibraryItem:
+    return AttachmentLibraryItem(
+        attachment_id=attachment.attachment_id,
+        trip_id=attachment.trip_id,
+        trip_day_index=attachment.trip_day_index,
+        trip_poi_id=attachment.trip_poi_id,
+        curated_plan_id=attachment.curated_plan_id,
+        curated_poi_id=attachment.curated_poi_id,
+        notice_plan_id=attachment.notice_plan_id,
+        notice_poi_id=attachment.notice_poi_id,
+        source_attachment_id=attachment.source_attachment_id,
+        bucket=attachment.bucket,
+        storage_key=attachment.storage_key,
+        original_filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        byte_size=attachment.byte_size,
+        public_url=attachment.public_url,
+        role=attachment.role,
+        description=attachment.description,
+        sort_order=attachment.sort_order,
+        created_at=attachment.created_at,
+        updated_at=attachment.updated_at,
+        target_scope=attachment_scope(attachment),
+        uploaded_by_user_id=attachment.uploaded_by_user_id,
+        uploaded_by_email_masked=mask_email(uploaded_by_email),
+        trip_title=trip_title,
+        poi_label=poi_label,
+    )
+
+
 def _to_summary(
     trip: Trip,
     *,
@@ -188,12 +227,30 @@ async def _to_detail(db: AsyncSession, trip: Trip) -> AdminTripDetail:
         poi_counts_by_day[row.poi.day_index] = poi_counts_by_day.get(row.poi.day_index, 0) + 1
     share_links = await list_trip_share_links(db, trip_id=trip.trip_id)
     recent_audit = await list_recent_trip_audit(db, trip_id=trip.trip_id)
+    attachment_rows, _ = await list_admin_file_library(
+        db,
+        q=None,
+        scope=None,
+        user_id=None,
+        trip_id=trip.trip_id,
+        limit=100,
+        offset=0,
+    )
     return AdminTripDetail(
         **summary.model_dump(),
         description=trip.description,
         companions=[_to_companion(c) for c in companions],
         days=[_to_day(d, poi_count=poi_counts_by_day.get(d.day_index, 0)) for d in days],
         pois=[_to_trip_poi(row) for row in pois],
+        attachments=[
+            _to_attachment_item(
+                attachment,
+                trip_title=trip_title,
+                poi_label=poi_label,
+                uploaded_by_email=uploaded_by_email,
+            )
+            for attachment, trip_title, poi_label, uploaded_by_email in attachment_rows
+        ],
         share_links=[_to_share_link(s) for s in share_links],
         recent_audit=[_to_audit_entry(r) for r in recent_audit],
     )

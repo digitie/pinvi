@@ -449,6 +449,10 @@ N150 게이트:
 
 추가 요청(2026-06-27) 13번.
 
+상태: 완료(2026-06-27, codex). 여행/날짜/POI 첨부 metadata와 사용자/Admin 파일 라이브러리,
+전역 파일 용량 정책, 사용자별 quota override를 구현했다. 삭제는 metadata soft delete이며,
+RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
+
 범위:
 
 - 사용자가 각 여행계획, 날짜, 세부 장소(POI)에 파일을 업로드·삭제할 수 있게 한다. Admin도 같은
@@ -468,6 +472,18 @@ N150 게이트:
 - UI e2e: 사용자 파일 모아보기, Admin 파일 관리, quota 초과 메시지, 삭제/복구 불가 확인 dialog.
 - 저장소 보안: object key prefix, presigned URL 만료, content-type/size 검증, secret/raw endpoint
   비노출.
+
+구현:
+
+- `app.storage_settings`에 파일 정책 3종을 추가하고, `app.users`에 사용자별 override 3종을 추가했다.
+- `app.curated_plan_attachments`는 Trip day 첨부를 위해 `trip_day_index`를 갖고,
+  `trip_id + trip_day_index` FK로 day target을 표현한다.
+- 사용자 API는 `/users/me/files`, 여행 API는 `/trips/{trip_id}/files`와
+  `/trips/{trip_id}/days/{day_index}/attachments*`를 제공한다.
+- Admin API는 `/admin/settings/files`, `/admin/users/{user_id}/file-quota`,
+  `/admin/files`를 제공하고 변경/삭제 audit을 기록한다.
+- Web은 사용자 `/files`, Admin `/admin/files`, Admin 사용자 상세 quota override,
+  Trip detail의 날짜/POI attachment 패널을 추가했다.
 
 ### T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
 

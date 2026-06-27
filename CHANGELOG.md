@@ -19,6 +19,9 @@
   `trip.create` 감사 로그에 남고, 생성 후 바로 해당 여행 상세 화면으로 이동한다.
 - Admin POI 목록에서 여행계획을 검색/선택해 POI를 직접 생성할 수 있다. 이름/좌표/주소는
   snapshot으로 저장되고, 생성 사유는 `poi.create` 감사 로그에 남는다.
+- 사용자와 Admin이 여행계획/날짜/POI 첨부 파일을 모아 보고 다운로드/삭제할 수 있는 파일함을
+  추가했다. Admin은 전역 파일 용량 정책과 사용자별 quota override를 관리할 수 있고,
+  변경/삭제 사유는 감사 로그에 남는다.
 - 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동으로 다시 보내고, 로그인
   화면에서 "인증 메일 다시 보내기" 버튼으로도 재발송할 수 있다. `POST /auth/verify-email/resend`
   (계정 enumeration 차단) 추가 + 로그인 `EMAIL_NOT_VERIFIED` 응답에 `verification_email_dispatched`

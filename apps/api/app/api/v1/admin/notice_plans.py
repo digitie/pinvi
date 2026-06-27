@@ -55,6 +55,7 @@ def _to_response(attachment) -> AttachmentResponse:  # type: ignore[no-untyped-d
     return AttachmentResponse(
         attachment_id=attachment.attachment_id,
         trip_id=attachment.trip_id,
+        trip_day_index=attachment.trip_day_index,
         trip_poi_id=attachment.trip_poi_id,
         curated_plan_id=attachment.curated_plan_id,
         curated_poi_id=attachment.curated_poi_id,

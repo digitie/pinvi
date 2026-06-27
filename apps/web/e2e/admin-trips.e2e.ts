@@ -125,6 +125,7 @@ test('Admin 여행 목록에서 여행계획을 직접 생성한다', async ({ p
     companions: [],
     days: [],
     pois: [],
+    attachments: [],
     share_links: [],
     recent_audit: [
       {
@@ -309,6 +310,7 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
         updated_at: '2026-06-06T11:00:00+09:00',
       },
     ],
+    attachments: [],
     share_links: [
       {
         share_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',

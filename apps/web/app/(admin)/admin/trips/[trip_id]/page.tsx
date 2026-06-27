@@ -12,9 +12,10 @@ import type {
   AdminTripDetail,
   AdminTripPoiSummary,
   AdminTripShareLinkSummary,
+  AttachmentLibraryItem,
   TripStatus,
 } from '@pinvi/schemas';
-import { ExternalLink, MapPin, X } from 'lucide-react';
+import { Download, ExternalLink, MapPin, X } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
@@ -49,6 +50,20 @@ const formatTime = (value: string | null) =>
 
 const formatAmount = (value: string | null, currency: string) =>
   value === null ? '—' : `${value} ${currency}`;
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const attachmentScopeLabel: Record<AttachmentLibraryItem['target_scope'], string> = {
+  trip: '여행',
+  day: '날짜',
+  poi: 'POI',
+  curated_plan: '추천 계획',
+  curated_poi: '추천 POI',
+};
 
 const formatDayLabel = (dayIndex: number, date: string | null, title: string | null) => {
   const prefix = `${dayIndex}일차`;
@@ -199,6 +214,59 @@ const shareLinkColumns: AdminTableColumn<AdminTripShareLinkSummary>[] = [
     key: 'last_used_at',
     header: '마지막 사용',
     cell: (row) => formatDateTime(row.last_used_at),
+  },
+];
+
+const attachmentColumns: AdminTableColumn<AttachmentLibraryItem>[] = [
+  {
+    key: 'file',
+    header: '파일',
+    cell: (row) => (
+      <span>
+        <span className="block font-semibold text-ink">{row.original_filename}</span>
+        <span className="block text-xs text-muted">
+          {row.content_type} · {formatBytes(row.byte_size)}
+        </span>
+      </span>
+    ),
+  },
+  {
+    key: 'scope',
+    header: '대상',
+    cell: (row) => (
+      <span>
+        <span className="block">{attachmentScopeLabel[row.target_scope]}</span>
+        <span className="block text-xs text-muted">
+          {row.trip_day_index ? `${row.trip_day_index}일차` : row.poi_label ?? '—'}
+        </span>
+      </span>
+    ),
+  },
+  {
+    key: 'uploaded_by',
+    header: '업로더',
+    cell: (row) => (
+      <Link href={`/admin/users/${row.uploaded_by_user_id}`} className="text-primary underline">
+        {row.uploaded_by_email_masked ?? row.uploaded_by_user_id}
+      </Link>
+    ),
+  },
+  {
+    key: 'download',
+    header: '',
+    cell: (row) => (
+      <button
+        type="button"
+        onClick={async () => {
+          const res = await adminApi(apiClient).fileDownloadUrl(row.attachment_id);
+          window.open(res.download_url, '_blank', 'noopener,noreferrer');
+        }}
+        aria-label="다운로드"
+        className="rounded-sm p-2 text-muted hover:bg-surface-soft hover:text-ink"
+      >
+        <Download className="h-4 w-4" aria-hidden="true" />
+      </button>
+    ),
   },
 ];
 
@@ -581,6 +649,17 @@ export default function AdminTripDetailPage() {
             rows={trip.share_links}
             rowKey={(row) => row.share_id}
             empty="항목이 없습니다."
+          />
+        </div>
+      </Section>
+
+      <Section title="파일">
+        <div data-testid="admin-trip-files">
+          <AdminTable
+            columns={attachmentColumns}
+            rows={trip.attachments}
+            rowKey={(row) => row.attachment_id}
+            empty="파일이 없습니다."
           />
         </div>
       </Section>

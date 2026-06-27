@@ -129,19 +129,34 @@ Content-Type: application/json
 현재 아바타 RustFS object 삭제를 시도한 뒤 `avatar_kind = "default"`로 되돌리고 아바타 메타를
 비운다. 응답 200: `AvatarInfo`.
 
-## 5. OAuth 연결 관리
+## 5. 파일 라이브러리
+
+사용자는 본인이 업로드했거나 본인 소유 여행계획에 속한 여행/날짜/POI 파일을 한 화면에서 모아
+볼 수 있다. 파일 본문은 RustFS에 있고, API는 metadata와 presigned GET URL만 반환한다.
+
+| Endpoint | 설명 |
+|----------|------|
+| `GET /users/me/files?page=&limit=` | 내 파일 목록 |
+| `GET /users/me/files/{attachment_id}/download-url` | 파일 다운로드 URL |
+| `DELETE /users/me/files/{attachment_id}` | 파일 metadata soft delete |
+
+목록 응답은 `AttachmentLibraryPage`이며 각 item은 `target_scope`, `trip_title`, `poi_label`,
+`byte_size`, `uploaded_by_email_masked`를 포함한다. 삭제는 RustFS object를 즉시 지우지 않고
+`deleted_at` metadata만 설정한다.
+
+## 6. OAuth 연결 관리
 
 [`auth.md`](./auth.md) §6.4 / §6.5와 동일. alias:
 
 - `POST /users/me/oauth/{provider}/link`
 - `DELETE /users/me/oauth/{provider}`
 
-## 6. MCP 토큰 (ADR-019, Sprint 6)
+## 7. MCP 토큰 (ADR-019, Sprint 6)
 
 외부 AI agent가 Pinvi MCP 서버를 read-only로 호출할 때 쓰는 전용 토큰이다.
 일반 `pinvi_access` / `pinvi_refresh` cookie와 분리한다.
 
-### 6.1 `GET /users/me/mcp-tokens`
+### 7.1 `GET /users/me/mcp-tokens`
 
 내 MCP 토큰 목록. 토큰 원문은 반환하지 않고 마스킹 값과 metadata만 반환한다.
 
@@ -162,7 +177,7 @@ Content-Type: application/json
 }
 ```
 
-### 6.2 `POST /users/me/mcp-tokens`
+### 7.2 `POST /users/me/mcp-tokens`
 
 ```http
 POST /users/me/mcp-tokens
@@ -174,17 +189,17 @@ Content-Type: application/json
 - `scopes`는 1차 구현에서 `["mcp:read"]`만 허용한다.
 - 응답은 발급 직후 1회만 `token` 원문을 포함한다.
 
-### 6.3 `DELETE /users/me/mcp-tokens/{token_id}`
+### 7.3 `DELETE /users/me/mcp-tokens/{token_id}`
 
 내 토큰 회수. `revoked_at = now()` 설정 후 다음 MCP 호출부터 401.
 
-## 7. 탈퇴
+## 8. 탈퇴
 
 [`auth.md`](./auth.md) §7과 동일. alias:
 
 - `DELETE /users/me`
 
-## 8. AI agent 구현 체크리스트
+## 9. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/user.py` Pydantic + `packages/schemas/src/user.ts` Zod
 - [ ] `apps/api/app/services/user.py` (프로필 갱신 + 동의 부작용 트리거)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUserId, DbSession
+from app.models.attachment import CuratedPlanAttachment
 from app.models.user import User
 from app.schemas.consent import (
     ConsentItem,
@@ -21,6 +22,8 @@ from app.schemas.envelope import Envelope
 from app.schemas.mcp import McpTokenIssueRequest, McpTokenIssueResponse, McpTokenResponse
 from app.schemas.storage import (
     AVATAR_CONTENT_TYPES,
+    AttachmentLibraryItem,
+    AttachmentLibraryPage,
     AvatarApplyRequest,
     AvatarInfo,
     AvatarUploadUrlRequest,
@@ -55,6 +58,11 @@ from app.services.rustfs_storage import (
     MimeNotAllowedError,
     make_download_url,
     make_upload_url,
+)
+from app.services.storage_policy import (
+    attachment_scope,
+    get_user_library_attachment,
+    list_user_file_library,
 )
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -100,6 +108,40 @@ def _mcp_token_response(row) -> McpTokenResponse:  # type: ignore[no-untyped-def
         last_used_at=row.last_used_at,
         revoked_at=row.revoked_at,
         created_at=row.created_at,
+    )
+
+
+def _to_library_item(
+    attachment: CuratedPlanAttachment,
+    *,
+    trip_title: str | None,
+    poi_label: str | None,
+) -> AttachmentLibraryItem:
+    return AttachmentLibraryItem(
+        attachment_id=attachment.attachment_id,
+        trip_id=attachment.trip_id,
+        trip_day_index=attachment.trip_day_index,
+        trip_poi_id=attachment.trip_poi_id,
+        curated_plan_id=attachment.curated_plan_id,
+        curated_poi_id=attachment.curated_poi_id,
+        notice_plan_id=attachment.notice_plan_id,
+        notice_poi_id=attachment.notice_poi_id,
+        source_attachment_id=attachment.source_attachment_id,
+        bucket=attachment.bucket,
+        storage_key=attachment.storage_key,
+        original_filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        byte_size=attachment.byte_size,
+        public_url=attachment.public_url,
+        role=attachment.role,
+        description=attachment.description,
+        sort_order=attachment.sort_order,
+        created_at=attachment.created_at,
+        updated_at=attachment.updated_at,
+        target_scope=attachment_scope(attachment),
+        uploaded_by_user_id=attachment.uploaded_by_user_id,
+        trip_title=trip_title,
+        poi_label=poi_label,
     )
 
 
@@ -185,6 +227,84 @@ async def delete_my_avatar(
     await db.commit()
     await db.refresh(user)
     return Envelope.of(avatar_info(user))
+
+
+@router.get("/files", response_model=Envelope[AttachmentLibraryPage])
+async def list_my_files(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    page: int = 1,
+    limit: int = 50,
+) -> Envelope[AttachmentLibraryPage]:
+    await _get_current_user(db, current_user_id)
+    page = max(1, page)
+    limit = min(100, max(1, limit))
+    rows, total = await list_user_file_library(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        limit=limit,
+        offset=(page - 1) * limit,
+    )
+    return Envelope.of(
+        AttachmentLibraryPage(
+            items=[
+                _to_library_item(attachment, trip_title=trip_title, poi_label=poi_label)
+                for attachment, trip_title, poi_label in rows
+            ],
+            total=total,
+            page=page,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/files/{attachment_id}/download-url", response_model=Envelope[DownloadUrlResponse])
+async def get_my_file_download_url(
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    await _get_current_user(db, current_user_id)
+    attachment = await get_user_library_attachment(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        attachment_id=attachment_id,
+    )
+    if attachment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "파일을 찾을 수 없습니다."},
+        )
+    try:
+        response = make_download_url(
+            bucket=attachment.bucket,
+            storage_key=attachment.storage_key,
+            public_url=attachment.public_url,
+        )
+    except Exception as exc:
+        raise _storage_error(exc) from exc
+    return Envelope.of(response)
+
+
+@router.delete("/files/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_file(
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    await _get_current_user(db, current_user_id)
+    attachment = await get_user_library_attachment(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        attachment_id=attachment_id,
+    )
+    if attachment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "파일을 찾을 수 없습니다."},
+        )
+    attachment.deleted_at = datetime.now(UTC)
+    await db.commit()
 
 
 @router.post(

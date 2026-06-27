@@ -72,6 +72,13 @@ export default function AdminUserDetailPage() {
   const [avatarSettings, setAvatarSettings] = useState<AdminAvatarSettings | null>(null);
   const [avatarMaxBytes, setAvatarMaxBytes] = useState('');
   const [settingsReason, setSettingsReason] = useState('');
+  const [quotaDraft, setQuotaDraft] = useState({
+    attachment_max_upload_bytes_override: '',
+    trip_attachment_quota_bytes_override: '',
+    user_attachment_quota_bytes_override: '',
+  });
+  const [quotaReason, setQuotaReason] = useState('');
+  const [quotaBusy, setQuotaBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +91,19 @@ export default function AdminUserDetailPage() {
         ]);
         if (cancelled) return;
         setUser(nextUser);
+        setQuotaDraft({
+          attachment_max_upload_bytes_override: nextUser.file_quota.attachment_max_upload_bytes_override
+            ? String(nextUser.file_quota.attachment_max_upload_bytes_override)
+            : '',
+          trip_attachment_quota_bytes_override: nextUser.file_quota
+            .trip_attachment_quota_bytes_override
+            ? String(nextUser.file_quota.trip_attachment_quota_bytes_override)
+            : '',
+          user_attachment_quota_bytes_override: nextUser.file_quota
+            .user_attachment_quota_bytes_override
+            ? String(nextUser.file_quota.user_attachment_quota_bytes_override)
+            : '',
+        });
         setAvatarSettings(nextSettings);
         setAvatarMaxBytes(String(nextSettings.avatar_max_upload_bytes));
         if (!nextUser.has_avatar) {
@@ -243,6 +263,48 @@ export default function AdminUserDetailPage() {
       setError(err instanceof ApiError ? err.message : '아바타 설정을 저장하지 못했습니다.');
     } finally {
       setAvatarAction(null);
+    }
+  };
+
+  const parseNullableBytes = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error('용량 override는 비워두거나 1 이상의 정수여야 합니다.');
+    }
+    return parsed;
+  };
+
+  const onSaveQuota = async () => {
+    const accessReason = quotaReason.trim();
+    if (accessReason.length < 1) {
+      setError('파일 용량 override 변경 사유가 필요합니다.');
+      return;
+    }
+    setQuotaBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await adminApi(apiClient).updateUserFileQuota(userId, {
+        attachment_max_upload_bytes_override: parseNullableBytes(
+          quotaDraft.attachment_max_upload_bytes_override
+        ),
+        trip_attachment_quota_bytes_override: parseNullableBytes(
+          quotaDraft.trip_attachment_quota_bytes_override
+        ),
+        user_attachment_quota_bytes_override: parseNullableBytes(
+          quotaDraft.user_attachment_quota_bytes_override
+        ),
+        access_reason: accessReason,
+      });
+      setUser(updated);
+      setQuotaReason('');
+      setMessage('파일 용량 override를 저장했습니다.');
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : '저장하지 못했습니다.');
+    } finally {
+      setQuotaBusy(false);
     }
   };
 
@@ -444,6 +506,67 @@ export default function AdminUserDetailPage() {
               {avatarAction === 'settings' && (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               )}
+              저장
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="파일 용량 override">
+        <div className="grid gap-3 lg:grid-cols-4" data-testid="admin-user-file-quota">
+          {(
+            [
+              [
+                'attachment_max_upload_bytes_override',
+                'effective_attachment_max_upload_bytes',
+                '개별 파일',
+              ],
+              [
+                'trip_attachment_quota_bytes_override',
+                'effective_trip_attachment_quota_bytes',
+                '계획 총량',
+              ],
+              [
+                'user_attachment_quota_bytes_override',
+                'effective_user_attachment_quota_bytes',
+                '사용자 총량',
+              ],
+            ] as const
+          ).map(([key, effectiveKey, label]) => (
+            <label key={key} className="text-sm">
+              <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
+              <input
+                value={quotaDraft[key]}
+                onChange={(e) => setQuotaDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                inputMode="numeric"
+                placeholder="전역값 사용"
+                className="h-10 w-full rounded-sm border border-hairline px-3"
+                data-testid={`admin-user-file-quota-${key}`}
+              />
+              <span className="mt-1 block text-xs text-muted">
+                개별값 {user.file_quota[key] ? formatBytes(user.file_quota[key]) : '전역값'} · 적용{' '}
+                {formatBytes(user.file_quota[effectiveKey])}
+              </span>
+            </label>
+          ))}
+          <div className="space-y-2">
+            <FormTextArea
+              id="admin-user-file-quota-reason"
+              label="사유"
+              value={quotaReason}
+              onChange={(e) => setQuotaReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              data-testid="admin-user-file-quota-reason"
+            />
+            <button
+              type="button"
+              disabled={quotaBusy || quotaReason.trim().length < 1}
+              onClick={onSaveQuota}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              data-testid="admin-user-file-quota-save"
+            >
+              {quotaBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               저장
             </button>
           </div>

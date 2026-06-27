@@ -14,6 +14,9 @@ import {
   AdminEmailEntrySchema,
   AdminFeatureDetailSchema,
   AdminFeaturePagedResponseSchema,
+  AdminFileStorageSettingsSchema,
+  AdminFileStorageSettingsUpdateRequestSchema,
+  AdminUserFileQuotaUpdateRequestSchema,
   AdminFeatureSortOrderSchema,
   AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
@@ -40,6 +43,7 @@ import {
   McpTokenIssueResponseSchema,
   McpTokenSchema,
   UploadUrlResponseSchema,
+  AttachmentLibraryPageSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -60,6 +64,15 @@ export interface AdminFeatureListParams {
   cursor?: string;
   sort?: z.infer<typeof AdminFeatureSortSchema>;
   order?: z.infer<typeof AdminFeatureSortOrderSchema>;
+}
+
+export interface AdminFileListParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  scope?: 'trip' | 'day' | 'poi' | 'curated_plan' | 'curated_poi';
+  userId?: string;
+  tripId?: string;
 }
 
 function appendValues(qs: URLSearchParams, key: string, values: string[] | undefined) {
@@ -93,6 +106,45 @@ export const adminApi = (client: ApiClient) => ({
       method: 'PUT',
       body: JSON.stringify(AdminAvatarSettingsUpdateRequestSchema.parse(body)),
       schema: AdminAvatarSettingsSchema,
+    }),
+
+  getFileSettings: () =>
+    client.request('/admin/settings/files', {
+      method: 'GET',
+      schema: AdminFileStorageSettingsSchema,
+    }),
+
+  updateFileSettings: (body: z.infer<typeof AdminFileStorageSettingsUpdateRequestSchema>) =>
+    client.request('/admin/settings/files', {
+      method: 'PUT',
+      body: JSON.stringify(AdminFileStorageSettingsUpdateRequestSchema.parse(body)),
+      schema: AdminFileStorageSettingsSchema,
+    }),
+
+  listFiles: (params: AdminFileListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.q) qs.set('q', params.q);
+    if (params.scope) qs.set('scope', params.scope);
+    if (params.userId) qs.set('user_id', params.userId);
+    if (params.tripId) qs.set('trip_id', params.tripId);
+    return client.request(`/admin/files${qs.toString() ? `?${qs.toString()}` : ''}`, {
+      method: 'GET',
+      schema: AttachmentLibraryPageSchema,
+    });
+  },
+
+  fileDownloadUrl: (attachmentId: string) =>
+    client.request(`/admin/files/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteFile: (attachmentId: string, body: z.infer<typeof AdminActionRequestSchema>) =>
+    client.requestNoContent(`/admin/files/${attachmentId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminActionRequestSchema.parse(body)),
     }),
 
   /** kor-travel-map admin feature 목록 proxy (T-209, read-only). */
@@ -223,6 +275,16 @@ export const adminApi = (client: ApiClient) => ({
     client.request(`/admin/users/${userId}/avatar`, {
       method: 'DELETE',
       body: JSON.stringify(AdminAvatarDeleteRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  updateUserFileQuota: (
+    userId: string,
+    body: z.infer<typeof AdminUserFileQuotaUpdateRequestSchema>,
+  ) =>
+    client.request(`/admin/users/${userId}/file-quota`, {
+      method: 'PUT',
+      body: JSON.stringify(AdminUserFileQuotaUpdateRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
     }),
 

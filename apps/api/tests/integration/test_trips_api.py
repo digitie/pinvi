@@ -415,13 +415,14 @@ def _attachment_payload(
     filename: str = "trip-cover.jpg",
     *,
     purpose: str = "trip_attachment",
+    byte_size: int = 1234,
 ) -> dict[str, object]:
     return {
         "bucket": "pinvi-media",
         "storage_key": f"user-uploads/{purpose}/{user_id}/2026/06/{uuid.uuid4().hex}.jpg",
         "original_filename": filename,
         "content_type": "image/jpeg",
-        "byte_size": 1234,
+        "byte_size": byte_size,
         "role": "image",
         "description": "테스트 첨부",
         "sort_order": 0,
@@ -795,3 +796,186 @@ async def test_trip_attachment_download_url(client, verified_user, auth_cookies)
         f"/trips/{trip_id}/attachments/{uuid.uuid4()}/download-url", cookies=cookies
     )
     assert missing.status_code == 404
+
+
+async def test_trip_day_poi_and_user_file_libraries(
+    client,
+    verified_user,
+    auth_cookies,
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "파일 모음"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    day = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "date": "2026-06-10", "title": "파일 day"},
+        cookies=cookies,
+    )
+    assert day.status_code == 201, day.text
+    poi = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_poi_payload(1, "a", 126.978, 37.5665),
+        cookies=cookies,
+    )
+    assert poi.status_code == 201, poi.text
+    poi_id = poi.json()["data"]["attachment_id"]
+
+    trip_attachment = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "trip.jpg"),
+        cookies=cookies,
+    )
+    assert trip_attachment.status_code == 201, trip_attachment.text
+    day_attachment = await client.post(
+        f"/trips/{trip_id}/days/1/attachments",
+        json=_attachment_payload(
+            user_id,
+            "day.jpg",
+            purpose="trip_day_attachment",
+        ),
+        cookies=cookies,
+    )
+    assert day_attachment.status_code == 201, day_attachment.text
+    poi_attachment = await client.post(
+        f"/trips/{trip_id}/pois/{poi_id}/attachments",
+        json=_attachment_payload(user_id, "poi.jpg", purpose="poi_attachment"),
+        cookies=cookies,
+    )
+    assert poi_attachment.status_code == 201, poi_attachment.text
+
+    day_list = await client.get(f"/trips/{trip_id}/days/1/attachments", cookies=cookies)
+    assert day_list.status_code == 200, day_list.text
+    assert day_list.json()["data"][0]["trip_day_index"] == 1
+
+    trip_files = await client.get(f"/trips/{trip_id}/files", cookies=cookies)
+    assert trip_files.status_code == 200, trip_files.text
+    trip_file_data = trip_files.json()["data"]
+    assert trip_file_data["total"] == 3
+    assert {row["target_scope"] for row in trip_file_data["items"]} == {"trip", "day", "poi"}
+
+    user_files = await client.get("/users/me/files", cookies=cookies)
+    assert user_files.status_code == 200, user_files.text
+    user_file_data = user_files.json()["data"]
+    assert user_file_data["total"] == 3
+    assert {row["original_filename"] for row in user_file_data["items"]} == {
+        "trip.jpg",
+        "day.jpg",
+        "poi.jpg",
+    }
+
+    day_attachment_id = day_attachment.json()["data"]["attachment_id"]
+    day_download = await client.get(
+        f"/trips/{trip_id}/days/1/attachments/{day_attachment_id}/download-url",
+        cookies=cookies,
+    )
+    assert day_download.status_code == 200, day_download.text
+    assert day_download.json()["data"]["method"] == "GET"
+
+    poi_attachment_id = poi_attachment.json()["data"]["attachment_id"]
+    user_download = await client.get(
+        f"/users/me/files/{poi_attachment_id}/download-url",
+        cookies=cookies,
+    )
+    assert user_download.status_code == 200, user_download.text
+    assert user_download.json()["data"]["storage_key"].endswith(".jpg")
+
+    deleted = await client.delete(f"/users/me/files/{poi_attachment_id}", cookies=cookies)
+    assert deleted.status_code == 204
+    after_delete = await client.get("/users/me/files", cookies=cookies)
+    assert after_delete.status_code == 200
+    assert after_delete.json()["data"]["total"] == 2
+
+    trip_level_attachment_id = trip_attachment.json()["data"]["attachment_id"]
+    trip_level_delete = await client.delete(
+        f"/trips/{trip_id}/attachments/{trip_level_attachment_id}",
+        cookies=cookies,
+    )
+    assert trip_level_delete.status_code == 204
+
+
+async def test_attachment_upload_url_and_trip_quota_overrides(
+    client,
+    verified_user,
+    auth_cookies,
+    session_factory,
+) -> None:
+    from sqlalchemy import select
+
+    from app.models.user import User
+    from app.services.storage_policy import get_storage_settings
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "quota"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    async with session_factory() as db:
+        settings_row = await get_storage_settings(db)
+        settings_row.attachment_max_upload_bytes = 1000
+        settings_row.trip_attachment_quota_bytes = 5000
+        settings_row.user_attachment_quota_bytes = 5000
+        await db.commit()
+
+    too_large_url = await client.post(
+        "/storage/upload-urls",
+        json={
+            "purpose": "trip_attachment",
+            "filename": "too-large.jpg",
+            "content_type": "image/jpeg",
+            "content_length": 1001,
+        },
+        cookies=cookies,
+    )
+    assert too_large_url.status_code == 422, too_large_url.text
+    assert too_large_url.json()["error"]["code"] == "FILE_TOO_LARGE"
+
+    async with session_factory() as db:
+        settings_row = await get_storage_settings(db)
+        settings_row.attachment_max_upload_bytes = 2000
+        settings_row.trip_attachment_quota_bytes = 1500
+        settings_row.user_attachment_quota_bytes = 5000
+        await db.commit()
+
+    first = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "first.jpg", byte_size=900),
+        cookies=cookies,
+    )
+    assert first.status_code == 201, first.text
+
+    quota_blocked = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "second.jpg", byte_size=700),
+        cookies=cookies,
+    )
+    assert quota_blocked.status_code == 409, quota_blocked.text
+    assert quota_blocked.json()["error"]["code"] == "ATTACHMENT_QUOTA_EXCEEDED"
+
+    async with session_factory() as db:
+        user = await db.scalar(select(User).where(User.user_id == uuid.UUID(user_id)))
+        assert user is not None
+        user.attachment_max_upload_bytes_override = 3000
+        user.trip_attachment_quota_bytes_override = 3000
+        user.user_attachment_quota_bytes_override = 5000
+        await db.commit()
+
+    override_url = await client.post(
+        "/storage/upload-urls",
+        json={
+            "purpose": "trip_attachment",
+            "filename": "allowed-by-user-override.jpg",
+            "content_type": "image/jpeg",
+            "content_length": 2500,
+        },
+        cookies=cookies,
+    )
+    assert override_url.status_code == 200, override_url.text
+    assert override_url.json()["data"]["max_upload_bytes"] == 3000
+
+    second = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(user_id, "second.jpg", byte_size=700),
+        cookies=cookies,
+    )
+    assert second.status_code == 201, second.text

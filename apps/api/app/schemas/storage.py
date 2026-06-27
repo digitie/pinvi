@@ -12,12 +12,14 @@ AttachmentPurpose = Literal[
     "media_asset",
     "avatar",
     "trip_attachment",
+    "trip_day_attachment",
     "poi_attachment",
     "curated_plan_attachment",
     "curated_poi_attachment",
 ]
 
 AVATAR_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+AttachmentScope = Literal["trip", "day", "poi", "curated_plan", "curated_poi"]
 
 
 class UploadUrlRequest(BaseModel):
@@ -143,6 +145,7 @@ class AttachmentUpdate(BaseModel):
 class AttachmentResponse(BaseModel):
     attachment_id: uuid.UUID
     trip_id: uuid.UUID | None
+    trip_day_index: int | None = None
     trip_poi_id: uuid.UUID | None
     curated_plan_id: uuid.UUID | None = None
     curated_poi_id: uuid.UUID | None = None
@@ -188,3 +191,18 @@ def _sync_alias_pair(
         raise ValueError(f"{alias_name} must match {canonical_name}")
     value = canonical_value or alias_value
     return value, value
+
+
+class AttachmentLibraryItem(AttachmentResponse):
+    target_scope: AttachmentScope
+    uploaded_by_user_id: uuid.UUID
+    uploaded_by_email_masked: str | None = None
+    trip_title: str | None = None
+    poi_label: str | None = None
+
+
+class AttachmentLibraryPage(BaseModel):
+    items: list[AttachmentLibraryItem]
+    total: int
+    page: int
+    limit: int

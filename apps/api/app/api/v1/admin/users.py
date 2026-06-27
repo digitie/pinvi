@@ -19,6 +19,8 @@ from app.schemas.admin import (
     AdminAvatarDeleteRequest,
     AdminPagedResponse,
     AdminUserDetail,
+    AdminUserFileQuota,
+    AdminUserFileQuotaUpdateRequest,
     AdminUserSummary,
 )
 from app.schemas.envelope import Envelope
@@ -52,6 +54,7 @@ from app.services.rustfs_storage import (
     make_download_url,
     make_upload_url,
 )
+from app.services.storage_policy import effective_attachment_quota, user_quota_override_state
 
 router = APIRouter(prefix="/admin/users", tags=["admin"])
 
@@ -88,6 +91,7 @@ def _to_detail(
     *,
     recent_audit: list[AdminAuditEntry] | None = None,
     email_revealed: bool = False,
+    file_quota: AdminUserFileQuota | None = None,
 ) -> AdminUserDetail:
     base = _to_summary(u)
     return AdminUserDetail(
@@ -102,6 +106,12 @@ def _to_detail(
         avatar_byte_size=u.avatar_byte_size,
         avatar_updated_at=u.avatar_updated_at,
         has_avatar=bool(u.avatar_bucket and u.avatar_storage_key),
+        file_quota=file_quota
+        or AdminUserFileQuota(
+            attachment_max_upload_bytes_override=u.attachment_max_upload_bytes_override,
+            trip_attachment_quota_bytes_override=u.trip_attachment_quota_bytes_override,
+            user_attachment_quota_bytes_override=u.user_attachment_quota_bytes_override,
+        ),
         recent_audit=recent_audit or [],
     )
 
@@ -113,9 +123,19 @@ async def _detail_with_recent_audit(
     email_revealed: bool = False,
 ) -> AdminUserDetail:
     rows = await list_recent_user_audit(db, user_id=u.user_id)
+    settings_row = await get_storage_settings(db)
+    quota = effective_attachment_quota(settings_row, u)
     return _to_detail(
         u,
         email_revealed=email_revealed,
+        file_quota=AdminUserFileQuota(
+            attachment_max_upload_bytes_override=u.attachment_max_upload_bytes_override,
+            trip_attachment_quota_bytes_override=u.trip_attachment_quota_bytes_override,
+            user_attachment_quota_bytes_override=u.user_attachment_quota_bytes_override,
+            effective_attachment_max_upload_bytes=quota.max_upload_bytes,
+            effective_trip_attachment_quota_bytes=quota.trip_quota_bytes,
+            effective_user_attachment_quota_bytes=quota.user_quota_bytes,
+        ),
         recent_audit=[_to_audit_entry(row) for row in rows],
     )
 
@@ -322,6 +342,40 @@ async def delete_user_avatar_endpoint(
         after_state=avatar_state(target),
         access_reason=body.access_reason,
         target_pii_fields=["avatar"],
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(target)
+    return Envelope.of(await _detail_with_recent_audit(db, target))
+
+
+@router.put("/{user_id}/file-quota", response_model=Envelope[AdminUserDetail])
+async def update_user_file_quota_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserFileQuotaUpdateRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    target = await _get_user_or_404(db, user_id)
+    before_state = user_quota_override_state(target)
+    target.attachment_max_upload_bytes_override = body.attachment_max_upload_bytes_override
+    target.trip_attachment_quota_bytes_override = body.trip_attachment_quota_bytes_override
+    target.user_attachment_quota_bytes_override = body.user_attachment_quota_bytes_override
+    after_state = user_quota_override_state(target)
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="user.file_quota_update",
+        resource_type="user",
+        resource_id=str(target.user_id),
+        before_state=before_state,
+        after_state=after_state,
+        access_reason=body.access_reason,
+        target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),

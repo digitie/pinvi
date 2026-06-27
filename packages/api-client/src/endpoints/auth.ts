@@ -2,6 +2,7 @@ import {
   AvatarApplyRequestSchema,
   AvatarInfoSchema,
   AvatarUploadUrlRequestSchema,
+  AttachmentLibraryPageSchema,
   AuthUserSchema,
   DownloadUrlResponseSchema,
   LoginRequestSchema,
@@ -92,6 +93,27 @@ export const authApi = (client: ApiClient) => ({
     client.request('/users/me/avatar', {
       method: 'DELETE',
       schema: AvatarInfoSchema,
+    }),
+
+  listFiles: (params: { page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return client.request(`/users/me/files${qs.toString() ? `?${qs.toString()}` : ''}`, {
+      method: 'GET',
+      schema: AttachmentLibraryPageSchema,
+    });
+  },
+
+  fileDownloadUrl: (attachmentId: string) =>
+    client.request(`/users/me/files/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteFile: (attachmentId: string) =>
+    client.requestNoContent(`/users/me/files/${attachmentId}`, {
+      method: 'DELETE',
     }),
 
   oauthProviders: () =>
