@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-288 Task 문서 분리 정책 반영
+
+`kor-travel-map`의 task 문서화 정책을 확인했다. 해당 저장소는 열린 task를 `docs/tasks.md`,
+완료·아카이브를 `docs/tasks-done.md`, 현재 진척과 "다음 한 작업"을 `docs/resume.md`로 분리한다.
+Pinvi도 같은 방식으로 `docs/tasks-rule.md`와 `docs/tasks-done.md`를 추가하고, 신규 task 진입 전
+최근 2일 PR 리뷰 코멘트 확인과 task 분리 기준을 문서화했다.
+
+최근 2일 PR 확인 결과 inline review comment는 0건이었다. 사람 top-level 리뷰 코멘트는 #238과
+#264의 운영·법무 gap 리뷰 2건이며, #264에서 T-256~T-286으로 이미 반영하고 답변했다. 신규 차단
+코멘트는 없다.
+
+기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했다. 다음 작업은
+T-236 WebSocket multi-client collaboration e2e다.
+
 ## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
 
 Trip 상세 화면의 Trip/POI 편집 mutation이 `409 VERSION_CONFLICT`를 단순 오류로 표시하지 않고,
