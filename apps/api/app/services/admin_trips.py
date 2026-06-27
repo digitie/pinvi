@@ -29,6 +29,10 @@ class AdminTripNotFoundError(AdminTripError):
     code = "RESOURCE_NOT_FOUND"
 
 
+class AdminTripOwnerNotFoundError(AdminTripError):
+    code = "RESOURCE_NOT_FOUND"
+
+
 class AdminTripPoiRow(NamedTuple):
     poi: TripDayPoi
     day_date: date | None
@@ -69,6 +73,47 @@ async def get_admin_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> Trip:
     if trip is None:
         raise AdminTripNotFoundError("여행을 찾을 수 없습니다.")
     return trip
+
+
+async def create_admin_trip(
+    db: AsyncSession,
+    *,
+    owner_user_id: uuid.UUID,
+    title: str,
+    description: str | None,
+    region_hint: str | None,
+    primary_region_code: str | None,
+    start_date: date | None,
+    end_date: date | None,
+    visibility: str,
+    status: str,
+) -> tuple[Trip, str]:
+    owner = await db.scalar(
+        select(User).where(
+            User.user_id == owner_user_id,
+            User.deleted_at.is_(None),
+            User.is_active.is_(True),
+        )
+    )
+    if owner is None:
+        raise AdminTripOwnerNotFoundError("여행 소유자를 찾을 수 없습니다.")
+
+    trip = Trip(
+        owner_user_id=owner_user_id,
+        title=title,
+        description=description,
+        region_hint=region_hint,
+        primary_region_code=primary_region_code,
+        primary_region_source="manual" if primary_region_code is not None else None,
+        start_date=start_date,
+        end_date=end_date,
+        visibility=visibility,
+        status=status,
+    )
+    db.add(trip)
+    await db.flush()
+    await db.refresh(trip)
+    return trip, owner.email
 
 
 async def update_admin_trip_status(

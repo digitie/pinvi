@@ -24,6 +24,7 @@ import {
   AdminPoiPagedResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
+  AdminTripCreateRequestSchema,
   AdminTripDetailSchema,
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
@@ -206,6 +207,13 @@ export const adminApi = (client: ApiClient) => ({
   getTrip: (tripId: string) =>
     client.request(`/admin/trips/${tripId}`, {
       method: 'GET',
+      schema: AdminTripDetailSchema,
+    }),
+
+  createTrip: (body: z.infer<typeof AdminTripCreateRequestSchema>) =>
+    client.request('/admin/trips', {
+      method: 'POST',
+      body: JSON.stringify(AdminTripCreateRequestSchema.parse(body)),
       schema: AdminTripDetailSchema,
     }),
 

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AdminUserSummary(BaseModel):
@@ -395,6 +395,34 @@ class AdminTripDetail(AdminTripSummary):
     pois: list[AdminTripPoiSummary] = Field(default_factory=list)
     share_links: list[AdminTripShareLinkSummary] = Field(default_factory=list)
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
+
+
+class AdminTripCreateRequest(BaseModel):
+    owner_user_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    region_hint: str | None = Field(default=None, max_length=120)
+    primary_region_code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=10,
+        pattern=r"^[0-9]{2,10}$",
+    )
+    start_date: date | None = None
+    end_date: date | None = None
+    visibility: TripVisibility = "private"
+    status: TripStatus = "draft"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _check_date_range(self) -> AdminTripCreateRequest:
+        if self.start_date is None and self.end_date is None:
+            return self
+        if self.start_date is None or self.end_date is None:
+            raise ValueError("start_date와 end_date는 동시에 채워지거나 동시에 비어야 합니다.")
+        if self.end_date < self.start_date:
+            raise ValueError("end_date는 start_date 이후여야 합니다.")
+        return self
 
 
 class AdminTripPagedResponse(BaseModel):

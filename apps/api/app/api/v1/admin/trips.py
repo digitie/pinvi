@@ -19,6 +19,7 @@ from app.models.user import User
 from app.schemas.admin import (
     AdminAuditEntry,
     AdminTripCompanionSummary,
+    AdminTripCreateRequest,
     AdminTripDaySummary,
     AdminTripDetail,
     AdminTripPagedResponse,
@@ -40,7 +41,9 @@ from app.services.admin_pois import (
 )
 from app.services.admin_trips import (
     AdminTripNotFoundError,
+    AdminTripOwnerNotFoundError,
     AdminTripPoiRow,
+    create_admin_trip,
     get_admin_trip,
     list_admin_trips,
     list_recent_trip_audit,
@@ -253,6 +256,62 @@ async def list_trips_endpoint(
             limit=limit,
         )
     )
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=Envelope[AdminTripDetail])
+async def create_trip_endpoint(
+    body: AdminTripCreateRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminTripDetail]:
+    try:
+        trip, owner_email = await create_admin_trip(
+            db,
+            owner_user_id=body.owner_user_id,
+            title=body.title,
+            description=body.description,
+            region_hint=body.region_hint,
+            primary_region_code=body.primary_region_code,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            visibility=body.visibility,
+            status=body.status,
+        )
+    except AdminTripOwnerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="trip.create",
+        resource_type="trip",
+        resource_id=str(trip.trip_id),
+        before_state=None,
+        after_state={
+            "owner_user_id": str(trip.owner_user_id),
+            "owner_email_masked": mask_email(owner_email),
+            "title": trip.title,
+            "status": trip.status,
+            "visibility": trip.visibility,
+            "start_date": trip.start_date.isoformat() if trip.start_date else None,
+            "end_date": trip.end_date.isoformat() if trip.end_date else None,
+            "region_hint": trip.region_hint,
+            "primary_region_code": trip.primary_region_code,
+        },
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(trip)
+    return Envelope.of(await _to_detail(db, trip))
 
 
 @router.get("/{trip_id}", response_model=Envelope[AdminTripDetail])

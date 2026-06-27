@@ -324,16 +324,20 @@ N150 게이트:
 
 추가 요청(2026-06-27) 5번.
 
+상태: 구현 완료(PR 예정).
+
 범위:
 
-- Admin이 여행계획을 직접 생성하는 `/admin/trips/new` 또는 inline create flow를 추가한다.
+- Admin이 여행계획 목록에서 inline create dialog로 여행계획을 직접 생성한다.
 - owner user 선택, 제목, 날짜, 공개범위, 상태를 입력받고 생성 사유를 audit에 남긴다.
 - 사용자 flow와 충돌하지 않도록 Admin 생성 출처를 audit/action으로 구분한다.
+- owner 선택은 `/admin/users` 검색 결과를 재사용하며 email은 마스킹 표시만 사용한다.
+- API는 `POST /admin/trips`이며 `trip.create` audit을 같은 transaction에 기록한다.
 
 검증:
 
-- API integration: admin/operator 권한, owner 존재 검증, audit append.
-- UI e2e: 생성 성공, validation error, 생성 후 상세 이동.
+- API integration: admin 권한, owner 존재 검증, audit append, audit 실패 rollback.
+- UI e2e: owner 검색/선택, 생성 성공, 생성 후 상세 이동.
 
 ### T-218 — Grafana prod 주소 반영
 
