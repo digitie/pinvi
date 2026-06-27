@@ -1,4 +1,4 @@
-export { ApiClient, ApiError } from './client';
+export { ApiClient, ApiError, isVersionConflictError } from './client';
 export type { ApiClientOptions, ApiEnvelope, ApiResponseMeta } from './client';
 export { TripRealtimeClient, classifyTripRealtimeClose, tripWebSocketUrl } from './websocket';
 export type {

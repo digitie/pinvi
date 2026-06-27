@@ -131,6 +131,34 @@ async def test_poi_budget_fields_round_trip(client, verified_user, auth_cookies)
     assert invalid.status_code == 422
 
 
+async def test_poi_update_stale_version_returns_conflict(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies)
+    created = await _add_poi(client, cookies, trip_id, sort_order="c0", feature_id="conflict")
+
+    first = await client.patch(
+        f"/trips/{trip_id}/pois/{created['attachment_id']}",
+        headers={"If-Match": "1"},
+        json={"user_note": "서버 메모"},
+        cookies=cookies,
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["data"]["version"] == 2
+
+    stale = await client.patch(
+        f"/trips/{trip_id}/pois/{created['attachment_id']}",
+        headers={"If-Match": "1"},
+        json={"user_note": "내 메모"},
+        cookies=cookies,
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["error"]["code"] == "VERSION_CONFLICT"
+    assert "동시 편집 충돌" in stale.json()["error"]["message"]
+
+
 async def test_poi_snapshot_fills_empty_trip_primary_region(
     client, verified_user, auth_cookies
 ) -> None:

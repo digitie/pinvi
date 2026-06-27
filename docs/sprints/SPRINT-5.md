@@ -66,7 +66,7 @@
 남은 `v0.2.0` 후보 gate:
 
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
-  401 close token refresh, conflict UX.
+  401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
 - 사용자/Admin 지도뷰 marker palette, POI custom color/icon, feature snapshot/upstream category
   fallback, selected/broken/cluster 상태 parity.
 - Pinvi `app` schema 소유 ETL 추가 job(`email_outbox`, PII retention, location archive,

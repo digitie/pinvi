@@ -20,7 +20,7 @@ export interface TripPoiListProps {
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
   onReorder?: (orderedPoiIds: string[]) => void;
-  onEditPoi?: (poi: TripViewPoi, patch: PoiUpdate) => void;
+  onEditPoi?: (poi: TripViewPoi, patch: PoiUpdate) => void | boolean | Promise<void | boolean>;
   onDelete?: (poiId: string) => void;
   savingPoiId?: string | null;
   /** 편집 중 POI(외부 제어 — 지도 마커 우클릭 등). 미지정 시 내부 상태. */
@@ -175,8 +175,14 @@ export function TripPoiList({
                   poi={poi}
                   saving={savingPoiId === poi.poi_id}
                   onSave={(patch) => {
-                    onEditPoi(poi, patch);
-                    setEditingPoiId(null);
+                    const result = onEditPoi(poi, patch);
+                    if (result && typeof (result as Promise<void | boolean>).then === 'function') {
+                      void Promise.resolve(result).then((saved) => {
+                        if (saved !== false) setEditingPoiId(null);
+                      });
+                      return;
+                    }
+                    if (result !== false) setEditingPoiId(null);
                   }}
                   onCancel={() => setEditingPoiId(null)}
                 />

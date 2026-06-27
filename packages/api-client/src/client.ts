@@ -23,6 +23,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isVersionConflictError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 409 && error.code === 'VERSION_CONFLICT';
+}
+
 export interface ApiResponseMeta {
   cursor?: string | null;
   has_more?: boolean;

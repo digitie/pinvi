@@ -7,6 +7,7 @@ import {
   ApiError,
   TripRealtimeClient,
   authApi,
+  isVersionConflictError,
   poiApi,
   tripRealtimeInvalidationKeys,
   tripApi,
@@ -20,10 +21,12 @@ import type {
   TripStatus,
   TripUpdate,
   TripView,
+  TripViewPoi,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { appendRank, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
 import { TripActions } from '@/components/trips/TripActions';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripAttachments } from '@/components/trips/TripAttachments';
@@ -35,6 +38,7 @@ import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
 import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
+import { hasPatchFields, pickConflictPatch } from '@/lib/conflictResolution';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -65,6 +69,29 @@ interface PresenceEntry {
   isOnline: boolean;
 }
 
+type TripConflictFieldKey = Extract<keyof TripUpdate, string>;
+type PoiConflictFieldKey = Extract<keyof PoiUpdate, string>;
+
+type ConflictState =
+  | {
+      target: 'trip';
+      version: number;
+      patch: TripUpdate;
+      fields: ConflictField[];
+    }
+  | {
+      target: 'poi';
+      poiId: string;
+      title: string;
+      version: number;
+      patch: PoiUpdate;
+      fields: ConflictField[];
+    };
+
+interface MutationOptions {
+  onConflict?: (latest: TripView | null) => void;
+}
+
 function formatDate(value: string | null): string {
   if (!value) return '미정';
   return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }).format(
@@ -92,6 +119,70 @@ function realtimeStatusDetail(
   return null;
 }
 
+function displayConflictValue(value: unknown): string {
+  if (value == null || value === '') return '비움';
+  if (typeof value === 'boolean') return value ? '예' : '아니오';
+  return String(value);
+}
+
+function hasOwnField<T extends object, K extends Extract<keyof T, string>>(
+  target: T,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+const TRIP_CONFLICT_FIELDS: Array<{
+  key: TripConflictFieldKey;
+  label: string;
+  serverValue: (trip: TripView['trip']) => unknown;
+}> = [
+  { key: 'title', label: '제목', serverValue: (trip) => trip.title },
+  { key: 'region_hint', label: '지역', serverValue: (trip) => trip.region_hint },
+  { key: 'start_date', label: '시작일', serverValue: (trip) => trip.start_date },
+  { key: 'end_date', label: '종료일', serverValue: (trip) => trip.end_date },
+  { key: 'visibility', label: '공개 범위', serverValue: (trip) => trip.visibility },
+  { key: 'status', label: '상태', serverValue: (trip) => trip.status },
+];
+
+const POI_CONFLICT_FIELDS: Array<{
+  key: PoiConflictFieldKey;
+  label: string;
+  serverValue: (poi: TripViewPoi) => unknown;
+}> = [
+  { key: 'custom_marker_color', label: '마커 색', serverValue: (poi) => poi.marker_color },
+  { key: 'custom_marker_icon', label: '마커 아이콘', serverValue: (poi) => poi.marker_icon },
+  { key: 'planned_arrival_at', label: '도착', serverValue: (poi) => poi.planned_arrival_at },
+  { key: 'planned_departure_at', label: '출발', serverValue: (poi) => poi.planned_departure_at },
+  { key: 'budget_amount', label: '예산', serverValue: (poi) => poi.budget_amount },
+  { key: 'actual_amount', label: '실제 비용', serverValue: (poi) => poi.actual_amount },
+  { key: 'currency', label: '통화', serverValue: (poi) => poi.currency },
+  { key: 'user_note', label: '메모', serverValue: (poi) => poi.user_note },
+  { key: 'user_url', label: '링크', serverValue: (poi) => poi.user_url },
+];
+
+function buildTripConflictFields(patch: TripUpdate, trip: TripView['trip']): ConflictField[] {
+  return TRIP_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
+    key: field.key,
+    label: field.label,
+    serverValue: displayConflictValue(field.serverValue(trip)),
+    myValue: displayConflictValue(patch[field.key]),
+  }));
+}
+
+function buildPoiConflictFields(patch: PoiUpdate, poi: TripViewPoi): ConflictField[] {
+  return POI_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
+    key: field.key,
+    label: field.label,
+    serverValue: displayConflictValue(field.serverValue(poi)),
+    myValue: displayConflictValue(patch[field.key]),
+  }));
+}
+
+function findPoi(view: TripView | null, poiId: string): TripViewPoi | null {
+  return view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === poiId) ?? null;
+}
+
 export interface TripDetailProps {
   tripId: string;
 }
@@ -109,6 +200,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,6 +331,40 @@ export function TripDetail({ tripId }: TripDetailProps) {
       (realtimeCloseInfo?.category === 'connection-limited' ||
         realtimeCloseInfo?.category === 'rate-limited'));
 
+  const openTripConflict = (patch: TripUpdate, latest: TripView | null) => {
+    const latestTrip = latest?.trip ?? view?.trip ?? null;
+    if (!latestTrip) {
+      setMutationError('최신 여행 정보를 불러오지 못했습니다.');
+      return;
+    }
+    setMutationError(null);
+    setTripEditOpen(true);
+    setConflict({
+      target: 'trip',
+      version: latestTrip.version,
+      patch,
+      fields: buildTripConflictFields(patch, latestTrip),
+    });
+  };
+
+  const openPoiConflict = (poiId: string, patch: PoiUpdate, latest: TripView | null) => {
+    const latestPoi = findPoi(latest, poiId) ?? findPoi(view, poiId);
+    if (!latestPoi) {
+      setMutationError('최신 장소 정보를 불러오지 못했습니다.');
+      return;
+    }
+    setMutationError(null);
+    setEditingPoiId(poiId);
+    setConflict({
+      target: 'poi',
+      poiId,
+      title: latestPoi.title ?? latestPoi.feature_id ?? '장소',
+      version: latestPoi.version,
+      patch,
+      fields: buildPoiConflictFields(patch, latestPoi),
+    });
+  };
+
   const handleSelectPoi = (poiId: string) => {
     setSelectedPoiId(poiId);
     const dayIndex = poiDay.get(poiId);
@@ -252,15 +378,22 @@ export function TripDetail({ tripId }: TripDetailProps) {
   };
 
   const runMutation = useCallback(
-    async (fn: () => Promise<unknown>) => {
+    async (fn: () => Promise<unknown>, options: MutationOptions = {}): Promise<boolean> => {
       setMutationError(null);
       setBusy(true);
       try {
         await fn();
         await reload();
+        return true;
       } catch (err) {
+        if (isVersionConflictError(err) && options.onConflict) {
+          const latest = await reload();
+          options.onConflict(latest);
+          return false;
+        }
         setMutationError(err instanceof ApiError ? err.message : '변경에 실패했습니다.');
         await reload();
+        return false;
       } finally {
         setBusy(false);
       }
@@ -303,8 +436,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleEditPoi = (poi: { poi_id: string; version: number }, patch: PoiUpdate) => {
     setSavingPoiId(poi.poi_id);
-    void runMutation(() =>
-      poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch)
+    return runMutation(
+      async () => {
+        await poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch);
+        setEditingPoiId(null);
+      },
+      { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) }
     ).finally(() => setSavingPoiId(null));
   };
 
@@ -335,10 +472,82 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleEditTrip = (patch: TripUpdate) => {
     const version = view?.trip.version ?? 1;
-    void runMutation(async () => {
-      await tripApi(apiClient).update(tripId, version, patch);
-      setTripEditOpen(false);
-    });
+    void runMutation(
+      async () => {
+        await tripApi(apiClient).update(tripId, version, patch);
+        setTripEditOpen(false);
+      },
+      { onConflict: (latest) => openTripConflict(patch, latest) }
+    );
+  };
+
+  const handleUseServerConflict = () => {
+    const current = conflict;
+    setConflict(null);
+    setMutationError(null);
+    if (current?.target === 'trip') setTripEditOpen(false);
+    if (current?.target === 'poi') setEditingPoiId(null);
+    void reload();
+  };
+
+  const handleKeepEditingConflict = () => {
+    const current = conflict;
+    setConflict(null);
+    if (current?.target === 'trip') setTripEditOpen(true);
+    if (current?.target === 'poi') setEditingPoiId(current.poiId);
+  };
+
+  const handleApplyConflict = (selectedKeys: string[]) => {
+    const current = conflict;
+    if (!current) return;
+
+    void (async () => {
+      setBusy(true);
+      setMutationError(null);
+      try {
+        if (current.target === 'trip') {
+          const patch = pickConflictPatch(
+            current.patch,
+            selectedKeys as TripConflictFieldKey[]
+          ) as TripUpdate;
+          if (!hasPatchFields(patch)) {
+            handleUseServerConflict();
+            return;
+          }
+          await tripApi(apiClient).update(tripId, current.version, patch);
+          setConflict(null);
+          setTripEditOpen(false);
+          await reload();
+          return;
+        }
+
+        const patch = pickConflictPatch(
+          current.patch,
+          selectedKeys as PoiConflictFieldKey[]
+        ) as PoiUpdate;
+        if (!hasPatchFields(patch)) {
+          handleUseServerConflict();
+          return;
+        }
+        await poiApi(apiClient).update(tripId, current.poiId, current.version, patch);
+        setConflict(null);
+        setEditingPoiId(null);
+        await reload();
+      } catch (err) {
+        if (isVersionConflictError(err)) {
+          const latest = await reload();
+          if (current.target === 'trip') {
+            openTripConflict(current.patch, latest);
+          } else {
+            openPoiConflict(current.poiId, current.patch, latest);
+          }
+          return;
+        }
+        setMutationError(err instanceof ApiError ? err.message : '충돌 해결에 실패했습니다.');
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   if (loading) {
@@ -573,6 +782,19 @@ export function TripDetail({ tripId }: TripDetailProps) {
           error={mutationError}
           onSave={handleEditTrip}
           onClose={() => setTripEditOpen(false)}
+        />
+      )}
+
+      {conflict && (
+        <ConflictDialog
+          key={`${conflict.target}-${conflict.target === 'poi' ? conflict.poiId : tripId}-${conflict.version}`}
+          title={conflict.target === 'trip' ? '여행 정보 충돌' : `${conflict.title} 편집 충돌`}
+          description="다른 변경이 먼저 저장되었습니다. 각 필드에서 서버 값 또는 내 값을 고른 뒤 저장할 수 있습니다."
+          fields={conflict.fields}
+          saving={busy}
+          onApply={handleApplyConflict}
+          onUseServer={handleUseServerConflict}
+          onKeepEditing={handleKeepEditingConflict}
         />
       )}
     </div>

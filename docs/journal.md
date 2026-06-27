@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
+
+**작업**: Trip/POI optimistic lock 409 충돌을 사용자 선택 가능한 다이얼로그로 처리했다.
+
+**변경**:
+
+- `ApiError`에 대한 `isVersionConflictError()` helper를 추가했다.
+- Trip 상세 `runMutation`이 `409 VERSION_CONFLICT`를 감지하면 최신 TripView를 재조회하고,
+  `ConflictDialog`에서 필드별 서버 값/내 값을 보여준다.
+- 사용자는 선택한 내 값만 최신 version으로 재시도하거나, 내 값 전체 LWW 덮어쓰기, 서버 값 사용,
+  직접 수정 계속을 선택할 수 있다.
+- POI editor는 async 저장 결과가 성공일 때만 닫혀 충돌 시 draft 입력을 유지한다.
+- Day rename/delete는 현재 API에 `If-Match`가 없어 T-287 follow-up으로 분리했다.
+
+**검증**:
+
+- WSL ext4 미러: `npm -w @pinvi/api-client run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/mobile run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run test -- conflictResolution.test.ts`
+- WSL ext4 미러: `npm -w @pinvi/web run lint`
+- WSL ext4 미러: `npm -w @pinvi/web run build`
+- WSL ext4 미러: `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest tests/integration/test_trips_api.py::test_trip_optimistic_lock tests/integration/test_pois_reorder.py::test_poi_update_stale_version_returns_conflict`
+- Windows Playwright runner: `trip-conflict.e2e.ts` 2건
+
+**다음**: PR을 만들고 merge/N150 배포 후 T-236 WebSocket multi-client collaboration e2e로 진행한다.
+
 ## 2026-06-27 (codex) — T-234 WebSocket client invalidation / auth close handling
 
 **작업**: Trip WebSocket client의 close code 처리, auth refresh 재연결, UI 상태 안내, realtime event
