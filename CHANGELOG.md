@@ -5,7 +5,7 @@
 ## Unreleased (`v0.2.0` 후보)
 
 > `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
-> WebSocket 협업, app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
+> WebSocket backend hardening, app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
 
 ### 주요 기능
 

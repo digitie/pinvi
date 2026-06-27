@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-236 WebSocket multi-client collaboration e2e
+
+Trip 상세 협업 mock e2e를 2~5 브라우저 컨텍스트 기준으로 확장했다. 같은 여행을 보는 두 컨텍스트가
+`presence.update`와 `trip.updated` broadcast를 반영하는지, WebSocket 재연결 뒤 `poi.updated`
+broadcast가 최신 HTTP snapshot reload로 이어지는지, 5개 컨텍스트 presence fan-out와 offline cleanup이
+상태 문구에 반영되는지 검증한다.
+
+테스트 Fake WebSocket은 React Strict Mode 재마운트와 재연결에서 닫힌 이전 socket이 배열에 남아도
+마지막 active socket을 기준으로 서버 이벤트를 넣도록 정리했다. 이로써 dev server와 실제 브라우저
+runner 조합에서 재연결 케이스가 flake 없이 통과했다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. `npm -w @pinvi/web run typecheck`,
+`npm -w @pinvi/web run lint`, Windows `PLAYWRIGHT_BASE_URL=http://localhost:12805 npm -w @pinvi/web run test:e2e -- trip-collab.e2e.ts --workers=1`
+5건이 통과했다.
+
+기존 T-236 설명의 N150 staging live 검증은 별도 운영 drill 성격이 커서 T-236a로 분리했다. 다음
+작업은 T-236a WebSocket multi-client N150 live e2e drill이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-288 Task 문서 분리 정책 반영
 
 `kor-travel-map`의 task 문서화 정책을 확인했다. 해당 저장소는 열린 task를 `docs/tasks.md`,
