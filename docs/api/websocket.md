@@ -15,13 +15,13 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 
 인증/권한/제한 실패는 close code로 구분한다.
 
-| close code | reason 예 | 클라이언트 처리 |
-|------------|-----------|-----------------|
-| `4401` | `token_missing`, `token_invalid` | `/auth/refresh` 성공 시 즉시 재연결, 실패 시 로그인 복귀 |
-| `4403` | `permission_denied` | 재연결하지 않고 권한 상실 안내 + 여행 목록 CTA |
-| `4408` | `trip_connection_limit_exceeded`, `process_connection_limit_exceeded` | 제한 안내 + exponential backoff 재연결 |
-| `4429` | `rate_limited` | rate-limit 안내 + exponential backoff 재연결 |
-| `4400` | `heartbeat_timeout` | bad message/heartbeat 종료로 분류하고 backoff 재연결 |
+| close code | reason 예                                                             | 클라이언트 처리                                          |
+| ---------- | --------------------------------------------------------------------- | -------------------------------------------------------- |
+| `4401`     | `token_missing`, `token_invalid`                                      | `/auth/refresh` 성공 시 즉시 재연결, 실패 시 로그인 복귀 |
+| `4403`     | `permission_denied`                                                   | 재연결하지 않고 권한 상실 안내 + 여행 목록 CTA           |
+| `4408`     | `trip_connection_limit_exceeded`, `process_connection_limit_exceeded` | 제한 안내 + exponential backoff 재연결                   |
+| `4429`     | `rate_limited`                                                        | rate-limit 안내 + exponential backoff 재연결             |
+| `4400`     | `heartbeat_timeout`                                                   | bad message/heartbeat 종료로 분류하고 backoff 재연결     |
 
 ## 2. 이벤트 (서버 → 클라이언트)
 
@@ -31,71 +31,74 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 {
   "type": "poi.updated",
   "trip_id": "uuid",
-  "actor_user_id": "uuid",        // 변경 발생자 (자기 자신 이벤트는 클라이언트가 무시)
+  "actor_user_id": "uuid", // 변경 발생자 (자기 자신 이벤트는 클라이언트가 무시)
   "ts": "2026-05-25T14:30:00+09:00",
-  "version": 42,                   // 단조 증가
-  "payload": { /* 도메인별 */ }
+  "version": 42, // 단조 증가
+  "payload": {
+    /* 도메인별 */
+  },
 }
 ```
 
 ### 2.1 POI 이벤트
 
-| type | payload |
-|------|---------|
-| `poi.created` | `{ "poi": { /* 새 POI 전체 */ } }` |
-| `poi.updated` | `{ "poi_id": "uuid", "changes": { /* 변경된 필드 */ }, "version": 5 }` |
-| `poi.deleted` | `{ "poi_id": "uuid" }` |
-| `poi.reordered` | `{ "moves": [{ "poi_id": "uuid", "new_sort_order": "..." }] }` |
+| type            | payload                                                                |
+| --------------- | ---------------------------------------------------------------------- |
+| `poi.created`   | `{ "poi": { /* 새 POI 전체 */ } }`                                     |
+| `poi.updated`   | `{ "poi_id": "uuid", "changes": { /* 변경된 필드 */ }, "version": 5 }` |
+| `poi.deleted`   | `{ "poi_id": "uuid" }`                                                 |
+| `poi.reordered` | `{ "moves": [{ "poi_id": "uuid", "new_sort_order": "..." }] }`         |
 
 ### 2.2 Day 이벤트
 
-| type | payload |
-|------|---------|
+| type          | payload                                             |
+| ------------- | --------------------------------------------------- |
 | `day.created` | `{ "day_index": 4, "date": "...", "title": "..." }` |
-| `day.updated` | `{ "day_index": 2, "changes": {...} }` |
-| `day.deleted` | `{ "day_index": 2 }` |
+| `day.updated` | `{ "day_index": 2, "changes": {...} }`              |
+| `day.deleted` | `{ "day_index": 2 }`                                |
 
 ### 2.3 Trip 이벤트
 
-| type | payload |
-|------|---------|
-| `trip.updated` | `{ "changes": {...}, "version": 12 }` |
+| type                  | payload                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| `trip.updated`        | `{ "changes": {...}, "version": 12 }`                                      |
 | `trip.member_changed` | `{ "action": "added" \| "removed" \| "role_changed", "companion": {...} }` |
 
 ### 2.4 Presence
 
-| type | payload |
-|------|---------|
-| `presence.update` | `{ "user_id": "uuid", "viewing_day": 2, "is_online": true }` |
+| type              | payload                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `presence.update` | `{ "user_id": "uuid", "viewing_day": 2, "is_online": true }`           |
 | `presence.cursor` | `{ "user_id": "uuid", "lon": 127.0, "lat": 37.5 }` (옵션, 비활성 기본) |
 
 ### 2.5 시스템
 
-| type | payload |
-|------|---------|
-| `ping` | `{ "ts": "..." }` (서버가 30초 주기 발송) |
+| type    | payload                                        |
+| ------- | ---------------------------------------------- |
+| `ping`  | `{ "ts": "..." }` (서버가 30초 주기 발송)      |
 | `error` | `{ "code": "RATE_LIMITED", "message": "..." }` |
 
 ## 3. 이벤트 (클라이언트 → 서버)
 
-| type | payload | 비고 |
-|------|---------|------|
-| `presence.heartbeat` | `{ "viewing_day": 2 }` | 5초 주기 |
-| `presence.cursor` | `{ "lon": ..., "lat": ... }` | 옵션 (v2). 서버는 legacy `lng`/`lat` 입력도 받지만 canonical broadcast는 `longitude`/`latitude`다. |
-| `pong` | `{}` | 서버 `ping`에 응답 |
+| type                 | payload                      | 비고                                                                                                             |
+| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `presence.heartbeat` | `{ "viewing_day": 2 }`       | 5초 주기                                                                                                         |
+| `presence.cursor`    | `{ "lon": ..., "lat": ... }` | 옵션 (v2). 서버는 legacy `longitude`/`latitude`와 `lng`/`lat` 입력을 받지만 canonical broadcast는 `lon`/`lat`다. |
+| `pong`               | `{}`                         | 서버 `ping`에 응답                                                                                               |
 
-30초 무응답 → 서버가 offline 처리 + 다른 클라이언트에 `presence.update is_online=false`.
+35초 무응답 → 서버가 close `4400`(`heartbeat_timeout`) 처리하고, 연결 정리 후 다른 클라이언트에
+`presence.update is_online=false`를 broadcast한다.
 
 ## 4. 충돌 해결
 
 `docs/spec/v8/03-frontend.md` §9.2 + ADR-019 (Sprint 5 작성 예정).
 
-| 전략 | 적용 |
-|------|------|
-| LWW (Last-Write-Wins) 필드 단위 | POI memo / budget / marker_color 등 |
-| Optimistic Lock (POI 단위) | `version` + `If-Match`. 409 → 클라이언트 다이얼로그 |
-| Fractional Indexing | sort_order — D&D 충돌 안 남 (E-6 COLLATE C) |
-| Presence | 5초 heartbeat / 30초 offline |
+| 전략                            | 적용                                                |
+| ------------------------------- | --------------------------------------------------- |
+| LWW (Last-Write-Wins) 필드 단위 | POI memo / budget / marker_color 등                 |
+| Optimistic Lock (POI 단위)      | `version` + `If-Match`. 409 → 클라이언트 다이얼로그 |
+| Fractional Indexing             | sort_order — D&D 충돌 안 남 (E-6 COLLATE C)         |
+| Presence                        | 5초 heartbeat / 35초 timeout                        |
 
 ## 5. broker 구현
 
@@ -115,8 +118,10 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 ## 7. Rate limit
 
 - 클라이언트 → 서버 메시지: 초당 5개 / 분당 60개
-- 초과 시 `error` 이벤트 + broker slot 즉시 반환 + 30초 grace 후 close `4429`
+- 초과 시 `error` 이벤트 + 30초 grace 후 close `4429`
   (`rate_limited`)
+- grace 동안 broker slot은 유지한다. 닫히는 중인 socket을 cap에서 먼저 빼면
+  connect→spam→reconnect 반복으로 process cap을 우회할 수 있기 때문이다.
 - Reconnect: 클라이언트 측 exponential backoff (1s, 2s, 4s, ... max 30s)
 - `presence.cursor`는 좌표 숫자/range를 검증하고 서버가 `user_id`를 채워 broadcast한다.
 - process-local cap: trip당 10 connections, process 전체 200 connections. 초과 시
@@ -129,14 +134,14 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 
 운영 조절 환경변수:
 
-| 환경변수 | 기본 |
-|----------|------|
-| `PINVI_WS_CLIENT_RATE_PER_SECOND` | `5` |
-| `PINVI_WS_CLIENT_RATE_PER_MINUTE` | `60` |
-| `PINVI_WS_RATE_LIMIT_CLOSE_GRACE_SECONDS` | `30` |
-| `PINVI_WS_MAX_CONNECTIONS_PER_TRIP` | `10` |
-| `PINVI_WS_MAX_CONNECTIONS_TOTAL` | `200` |
-| `PINVI_WS_SEND_TIMEOUT_SECONDS` | `2` |
+| 환경변수                                  | 기본  |
+| ----------------------------------------- | ----- |
+| `PINVI_WS_CLIENT_RATE_PER_SECOND`         | `5`   |
+| `PINVI_WS_CLIENT_RATE_PER_MINUTE`         | `60`  |
+| `PINVI_WS_RATE_LIMIT_CLOSE_GRACE_SECONDS` | `30`  |
+| `PINVI_WS_MAX_CONNECTIONS_PER_TRIP`       | `10`  |
+| `PINVI_WS_MAX_CONNECTIONS_TOTAL`          | `200` |
+| `PINVI_WS_SEND_TIMEOUT_SECONDS`           | `2`   |
 
 ## 8. AI agent 구현 체크리스트
 
@@ -148,6 +153,7 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 - [x] POI / Trip CRUD route에서 broker.publish() 호출
 - [x] 연결 시 권한 검사 + heartbeat timeout
 - [x] 통합 테스트 (FastAPI TestClient WebSocket)
+- [x] close code 구조화 로그 + Prometheus WebSocket gauge/counter
 
 ### 프론트 (`packages/api-client/src/websocket.ts`)
 

@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-237 WebSocket backend hardening / metrics
+
+Trip WebSocket backend에 close code 구조화 로그와 Prometheus gauge/counter를 추가했다.
+`pinvi_api_ws_active_connections`, connection accept/reject, close code/reason, client message,
+broadcast result, send timeout/error metric을 bounded label로 기록한다. `trip_id`/`user_id`는
+metric label에는 넣지 않고 close 구조화 로그에만 남긴다.
+
+회귀 테스트는 broker 단위 metric/stale-removal/cap rejection, WebSocket permission/rate-limit/
+connection-cap/heartbeat-timeout close metric까지 보강했다. 문서의 rate-limit slot 반환 설명도
+T-185/T-236a 구현과 맞게 close grace 동안 slot을 유지하는 것으로 정정했다.
+
+검증은 WSL ext4 미러에서 수행했다. `ruff check` targeted, `ruff format --check` targeted,
+`mypy --strict app`, `pytest -q tests/unit/test_realtime_broker.py`, `pytest -q
+tests/integration/test_ws_trip_channel.py`가 통과했다.
+
+다음 작업은 T-238 Pinvi app-owned ETL 표준 / ADR이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-236a WebSocket multi-client N150 live e2e drill
 
 N150 live mutating Playwright로 실제 WebSocket broadcast와 reconnect 뒤 Trip snapshot reload를
@@ -1593,12 +1611,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 릴리즈 로드맵
 
-| 버전      | Sprint        | ETA      | 핵심                                                                     |
-| --------- | ------------- | -------- | ------------------------------------------------------------------------ |
+| 버전      | Sprint        | ETA                   | 핵심                                                                     |
+| --------- | ------------- | --------------------- | ------------------------------------------------------------------------ |
 | `v0.1.0`  | Sprint 4      | released (2026-06-13) | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성               |
-| `v0.2.0`  | Sprint 5      | +1       | 실시간 + ETL + Grafana embed + Backup 1차                                |
-| `v1.0.0`  | Sprint 6      | +2       | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
-| `v1.1.0+` | post-Sprint 6 | 후속     | PWA / 푸시 / kor-travel-concierge (별 repo)                              |
+| `v0.2.0`  | Sprint 5      | +1                    | 실시간 + ETL + Grafana embed + Backup 1차                                |
+| `v1.0.0`  | Sprint 6      | +2                    | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
+| `v1.1.0+` | post-Sprint 6 | 후속                  | PWA / 푸시 / kor-travel-concierge (별 repo)                              |
 
 ## 진척도
 

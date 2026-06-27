@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
+from app.services import realtime_metrics
 
 
 def _client() -> TestClient:
@@ -47,3 +48,18 @@ def test_prometheus_metrics_endpoint_can_be_disabled(monkeypatch) -> None:  # ty
     response = client.get("/metrics")
 
     assert response.status_code == 404
+
+
+def test_prometheus_metrics_endpoint_exports_websocket_metrics(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(settings, "pinvi_prometheus_metrics_enabled", True)
+    monkeypatch.setattr(settings, "pinvi_prometheus_exclude_paths", ["/metrics"])
+    realtime_metrics.record_ws_connection_rejected(reason="token_missing")
+    client = _client()
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "pinvi_api_ws_connections_total" in response.text
+    assert 'reason="token_missing"' in response.text

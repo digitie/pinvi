@@ -19,6 +19,7 @@ from fastapi.encoders import jsonable_encoder
 
 from app.core.config import settings
 from app.core.time import kst_now
+from app.services import realtime_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ class RealtimeConnectionLimitError(RuntimeError):
         super().__init__(reason)
 
 
+@dataclass(frozen=True)
+class _StaleConnection:
+    connection: RealtimeConnection
+    reason: str
+
+
 class RealtimeBroker:
     """In-memory trip-channel broker for one FastAPI process."""
 
@@ -57,6 +64,7 @@ class RealtimeBroker:
         max_connections_per_trip: int | None = None,
         max_connections_total: int | None = None,
         send_timeout_seconds: float | None = None,
+        metrics_enabled: bool = False,
     ) -> None:
         self._connections: dict[uuid.UUID, set[RealtimeConnection]] = defaultdict(set)
         self._lock = asyncio.Lock()
@@ -64,6 +72,7 @@ class RealtimeBroker:
         self._max_connections_total_override = max_connections_total
         self._send_timeout_seconds_override = send_timeout_seconds
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self._metrics_enabled = metrics_enabled
 
     async def connect(
         self,
@@ -77,13 +86,16 @@ class RealtimeBroker:
             trip_connections = self._connections.get(trip_id, set())
             per_trip_limit = self._max_connections_per_trip()
             if per_trip_limit > 0 and len(trip_connections) >= per_trip_limit:
+                self._record_connection_rejected("trip_connection_limit_exceeded")
                 raise RealtimeConnectionLimitError("trip_connection_limit_exceeded")
 
             total_limit = self._max_connections_total()
             if total_limit > 0 and self._connection_count_unlocked() >= total_limit:
+                self._record_connection_rejected("process_connection_limit_exceeded")
                 raise RealtimeConnectionLimitError("process_connection_limit_exceeded")
 
             self._connections[trip_id].add(connection)
+            self._record_connection_accepted()
         await self.publish_presence(connection, is_online=True)
         return connection
 
@@ -183,8 +195,12 @@ class RealtimeBroker:
                     ),
                     timeout=self._send_timeout_seconds(),
                 )
+        except TimeoutError:
+            self._record_send_failure("timeout")
+            await self._remove(connection, reason="timeout")
         except Exception:
-            await self._remove(connection)
+            self._record_send_failure("send_error")
+            await self._remove(connection, reason="send_error")
 
     async def connection_count(self, trip_id: uuid.UUID) -> int:
         async with self._lock:
@@ -202,26 +218,42 @@ class RealtimeBroker:
             await asyncio.gather(*background_tasks, return_exceptions=True)
         self._background_tasks.clear()
         async with self._lock:
+            removed_count = self._connection_count_unlocked()
             self._connections.clear()
+        self._record_connection_removed(count=removed_count)
 
     async def _broadcast(self, trip_id: uuid.UUID, message: dict[str, Any]) -> None:
         async with self._lock:
             connections = list(self._connections.get(trip_id, set()))
 
-        stale: list[RealtimeConnection] = []
+        event_type = message.get("type")
+        if not connections:
+            self._record_broadcast(event_type=event_type, result="empty")
+            return
+
+        stale: list[_StaleConnection] = []
         results = await asyncio.gather(
             *(self._send_or_stale(connection, message) for connection in connections)
         )
-        stale.extend(connection for connection in results if connection is not None)
+        stale.extend(
+            stale_connection for stale_connection in results if stale_connection is not None
+        )
 
-        for connection in stale:
-            await self._remove(connection)
+        for stale_connection in stale:
+            await self._remove(
+                stale_connection.connection,
+                reason=f"stale_{stale_connection.reason}",
+            )
+        self._record_broadcast(
+            event_type=event_type,
+            result="stale_removed" if stale else "ok",
+        )
 
     async def _send_or_stale(
         self,
         connection: RealtimeConnection,
         message: dict[str, Any],
-    ) -> RealtimeConnection | None:
+    ) -> _StaleConnection | None:
         try:
             async with connection.send_lock:
                 await asyncio.wait_for(
@@ -229,10 +261,14 @@ class RealtimeBroker:
                     timeout=self._send_timeout_seconds(),
                 )
             return None
+        except TimeoutError:
+            self._record_send_failure("timeout")
+            return _StaleConnection(connection=connection, reason="timeout")
         except Exception:
-            return connection
+            self._record_send_failure("send_error")
+            return _StaleConnection(connection=connection, reason="send_error")
 
-    async def _remove(self, connection: RealtimeConnection) -> bool:
+    async def _remove(self, connection: RealtimeConnection, *, reason: str = "disconnect") -> bool:
         async with self._lock:
             connections = self._connections.get(connection.trip_id)
             if connections is None or connection not in connections:
@@ -240,7 +276,10 @@ class RealtimeBroker:
             connections.remove(connection)
             if not connections:
                 self._connections.pop(connection.trip_id, None)
-            return True
+        self._record_connection_removed()
+        if reason.startswith("stale_"):
+            logger.info("Realtime stale connection removed.", extra={"reason": reason})
+        return True
 
     def _connection_count_unlocked(self) -> int:
         return sum(len(connections) for connections in self._connections.values())
@@ -288,5 +327,25 @@ class RealtimeBroker:
         }
         return cast(dict[str, Any], jsonable_encoder(message))
 
+    def _record_connection_accepted(self) -> None:
+        if self._metrics_enabled:
+            realtime_metrics.record_ws_connection_accepted()
 
-realtime_broker = RealtimeBroker()
+    def _record_connection_rejected(self, reason: str) -> None:
+        if self._metrics_enabled:
+            realtime_metrics.record_ws_connection_rejected(reason=reason)
+
+    def _record_connection_removed(self, *, count: int = 1) -> None:
+        if self._metrics_enabled:
+            realtime_metrics.record_ws_connection_removed(count=count)
+
+    def _record_broadcast(self, *, event_type: object, result: str) -> None:
+        if self._metrics_enabled:
+            realtime_metrics.record_ws_broadcast(event_type=event_type, result=result)
+
+    def _record_send_failure(self, reason: str) -> None:
+        if self._metrics_enabled:
+            realtime_metrics.record_ws_send_failure(reason=reason)
+
+
+realtime_broker = RealtimeBroker(metrics_enabled=True)

@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-237 — WebSocket backend hardening / metrics.
+      Trip WebSocket backend에 bounded-label Prometheus gauge/counter와 `pinvi.websocket.close`
+      구조화 로그를 추가했다. connection accept/reject, close code/reason, client message,
+      broadcast result, send timeout/error를 계측하고, permission/rate-limit/connection-cap/
+      heartbeat-timeout 회귀 테스트와 broker stale-removal metric 테스트를 보강했다. 기존 문서의
+      rate-limit grace slot 반환 설명도 실제 구현처럼 "close까지 유지"로 정정했다.
+
 - [x] T-236a — WebSocket multi-client N150 live e2e drill.
       N150 live mutating Playwright에서 실제 WebSocket broadcast/reconnect 뒤 Trip snapshot reload를
       검증했다. 첫 실패로 `pinvi-api` worker 2개와 process-local realtime broker 충돌을 확인해

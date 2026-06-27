@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 import pytest
+from prometheus_client import REGISTRY
 
 from app.services.realtime_broker import RealtimeBroker, RealtimeConnectionLimitError
 
@@ -24,6 +25,13 @@ class FakeSocket:
         if not isinstance(data, dict):
             raise TypeError("broker messages must be JSON objects")
         self.messages.append(data)
+
+
+def _metric_sample(name: str, labels: dict[str, str]) -> float:
+    value = REGISTRY.get_sample_value(name, labels)
+    if value is None:
+        return 0.0
+    return float(value)
 
 
 async def test_broker_broadcasts_event_to_trip_connections() -> None:
@@ -146,3 +154,91 @@ async def test_broker_publish_event_nowait_returns_before_slow_broadcast() -> No
     await asyncio.wait_for(task, timeout=1.0)
     assert fast_socket.messages[-1]["type"] == "trip.updated"
     assert slow_socket.messages[-1]["type"] == "trip.updated"
+
+
+async def test_broker_metrics_track_connections_broadcasts_and_stale_removal() -> None:
+    broker = RealtimeBroker(send_timeout_seconds=0.001, metrics_enabled=True)
+    trip_id = uuid.uuid4()
+    actor_id = uuid.uuid4()
+    fast_socket = FakeSocket()
+    slow_socket = FakeSocket()
+
+    active_before = _metric_sample(
+        "pinvi_api_ws_active_connections",
+        {"channel": "trip"},
+    )
+    accepted_before = _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {"channel": "trip", "result": "accepted", "reason": "accepted"},
+    )
+    broadcast_before = _metric_sample(
+        "pinvi_api_ws_broadcasts_total",
+        {"channel": "trip", "type": "trip.updated", "result": "stale_removed"},
+    )
+    failure_before = _metric_sample(
+        "pinvi_api_ws_send_failures_total",
+        {"channel": "trip", "reason": "timeout"},
+    )
+
+    await broker.connect(fast_socket, trip_id=trip_id, user_id=actor_id)
+    await broker.connect(slow_socket, trip_id=trip_id, user_id=uuid.uuid4())
+    assert _metric_sample("pinvi_api_ws_active_connections", {"channel": "trip"}) == (
+        active_before + 2
+    )
+    assert _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {"channel": "trip", "result": "accepted", "reason": "accepted"},
+    ) == (accepted_before + 2)
+
+    slow_socket.delay_seconds = 0.05
+    await broker.publish_event(
+        trip_id=trip_id,
+        event_type="trip.updated",
+        actor_user_id=actor_id,
+        payload={"changes": {"title": "metric"}},
+        version=5,
+    )
+
+    assert await broker.connection_count(trip_id) == 1
+    assert _metric_sample(
+        "pinvi_api_ws_broadcasts_total",
+        {"channel": "trip", "type": "trip.updated", "result": "stale_removed"},
+    ) == (broadcast_before + 1)
+    assert _metric_sample(
+        "pinvi_api_ws_send_failures_total",
+        {"channel": "trip", "reason": "timeout"},
+    ) == (failure_before + 1)
+
+    await broker.reset()
+    assert _metric_sample("pinvi_api_ws_active_connections", {"channel": "trip"}) == active_before
+
+
+async def test_broker_metrics_track_connection_cap_rejection() -> None:
+    broker = RealtimeBroker(
+        max_connections_per_trip=1,
+        max_connections_total=0,
+        metrics_enabled=True,
+    )
+    trip_id = uuid.uuid4()
+    rejected_before = _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {
+            "channel": "trip",
+            "result": "rejected",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    )
+
+    await broker.connect(FakeSocket(), trip_id=trip_id, user_id=uuid.uuid4())
+    with pytest.raises(RealtimeConnectionLimitError):
+        await broker.connect(FakeSocket(), trip_id=trip_id, user_id=uuid.uuid4())
+
+    assert _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {
+            "channel": "trip",
+            "result": "rejected",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    ) == (rejected_before + 1)
+    await broker.reset()

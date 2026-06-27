@@ -9,11 +9,13 @@ import uuid
 from collections import deque
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import app.db.session as db_session
 from app.core.config import settings
 from app.core.security import InvalidTokenError, decode_access_token
+from app.services import realtime_metrics
 from app.services.realtime_broker import (
     RealtimeConnection,
     RealtimeConnectionLimitError,
@@ -22,6 +24,7 @@ from app.services.realtime_broker import (
 from app.services.trip import TripNotFoundError, TripPermissionError, get_trip_for_user
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
+log = structlog.get_logger("websocket")
 
 _CLOSE_UNAUTHORIZED = 4401
 _CLOSE_PERMISSION_DENIED = 4403
@@ -33,7 +36,7 @@ _HEARTBEAT_TIMEOUT_SECONDS = 35
 
 @router.websocket("/trips/{trip_id}")
 async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
-    user_id = await _authenticate(websocket)
+    user_id = await _authenticate(websocket, trip_id=trip_id)
     if user_id is None:
         return
 
@@ -41,7 +44,13 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
         try:
             await get_trip_for_user(db, trip_id=trip_id, user_id=user_id)
         except (TripNotFoundError, TripPermissionError):
-            await _reject(websocket, code=_CLOSE_PERMISSION_DENIED, reason="permission_denied")
+            await _reject(
+                websocket,
+                code=_CLOSE_PERMISSION_DENIED,
+                reason="permission_denied",
+                trip_id=trip_id,
+                user_id=user_id,
+            )
             return
 
     await websocket.accept()
@@ -49,7 +58,13 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
         connection = await realtime_broker.connect(websocket, trip_id=trip_id, user_id=user_id)
     except RealtimeConnectionLimitError as exc:
         await websocket.send_json({"code": _CLOSE_CONNECTION_LIMIT, "reason": exc.reason})
-        await websocket.close(code=_CLOSE_CONNECTION_LIMIT, reason=exc.reason)
+        await _close_websocket(
+            websocket,
+            code=_CLOSE_CONNECTION_LIMIT,
+            reason=exc.reason,
+            trip_id=trip_id,
+            user_id=user_id,
+        )
         return
 
     active_connection: RealtimeConnection | None = connection
@@ -59,6 +74,10 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
             message = await asyncio.wait_for(
                 websocket.receive_json(),
                 timeout=_HEARTBEAT_TIMEOUT_SECONDS,
+            )
+            realtime_metrics.record_ws_message(
+                direction="client",
+                event_type=message.get("type") if isinstance(message, dict) else None,
             )
             if not rate_limiter.allow():
                 await realtime_broker.send_error(
@@ -70,22 +89,44 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
                 # cap에 계상되지 않아 connect→spam→reconnect 누적으로 FD/메모리가 새어
                 # cap을 우회한다. finally에서 close 이후 정리한다.
                 await asyncio.sleep(settings.pinvi_ws_rate_limit_close_grace_seconds)
-                await websocket.close(code=_CLOSE_RATE_LIMITED, reason="rate_limited")
+                await _close_websocket(
+                    websocket,
+                    code=_CLOSE_RATE_LIMITED,
+                    reason="rate_limited",
+                    trip_id=trip_id,
+                    user_id=user_id,
+                )
                 return
             await _handle_client_message(connection, message)
     except TimeoutError:
-        await websocket.close(code=_CLOSE_BAD_MESSAGE, reason="heartbeat_timeout")
-    except WebSocketDisconnect:
-        pass
+        await _close_websocket(
+            websocket,
+            code=_CLOSE_BAD_MESSAGE,
+            reason="heartbeat_timeout",
+            trip_id=trip_id,
+            user_id=user_id,
+        )
+    except WebSocketDisconnect as exc:
+        _record_close(
+            code=exc.code,
+            reason="client_disconnect",
+            trip_id=trip_id,
+            user_id=user_id,
+        )
     finally:
         if active_connection is not None:
             await realtime_broker.disconnect(active_connection)
 
 
-async def _authenticate(websocket: WebSocket) -> uuid.UUID | None:
+async def _authenticate(websocket: WebSocket, *, trip_id: uuid.UUID) -> uuid.UUID | None:
     token = websocket.cookies.get("pinvi_access") or websocket.query_params.get("token")
     if not token:
-        await _reject(websocket, code=_CLOSE_UNAUTHORIZED, reason="token_missing")
+        await _reject(
+            websocket,
+            code=_CLOSE_UNAUTHORIZED,
+            reason="token_missing",
+            trip_id=trip_id,
+        )
         return None
     try:
         payload = decode_access_token(token)
@@ -94,7 +135,12 @@ async def _authenticate(websocket: WebSocket) -> uuid.UUID | None:
             raise InvalidTokenError("토큰 sub 클레임이 잘못되었습니다.")
         return uuid.UUID(subject)
     except (InvalidTokenError, ValueError):
-        await _reject(websocket, code=_CLOSE_UNAUTHORIZED, reason="token_invalid")
+        await _reject(
+            websocket,
+            code=_CLOSE_UNAUTHORIZED,
+            reason="token_invalid",
+            trip_id=trip_id,
+        )
         return None
 
 
@@ -214,7 +260,53 @@ def _coordinate(value: Any, *, minimum: float, maximum: float) -> float | None:
     return round(number, 6)
 
 
-async def _reject(websocket: WebSocket, *, code: int, reason: str) -> None:
+async def _reject(
+    websocket: WebSocket,
+    *,
+    code: int,
+    reason: str,
+    trip_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+) -> None:
+    realtime_metrics.record_ws_connection_rejected(reason=reason)
     await websocket.accept()
     await websocket.send_json({"code": code, "reason": reason})
+    await _close_websocket(
+        websocket,
+        code=code,
+        reason=reason,
+        trip_id=trip_id,
+        user_id=user_id,
+    )
+
+
+async def _close_websocket(
+    websocket: WebSocket,
+    *,
+    code: int,
+    reason: str,
+    trip_id: uuid.UUID | None,
+    user_id: uuid.UUID | None,
+) -> None:
+    _record_close(code=code, reason=reason, trip_id=trip_id, user_id=user_id)
     await websocket.close(code=code, reason=reason)
+
+
+def _record_close(
+    *,
+    code: int | None,
+    reason: str,
+    trip_id: uuid.UUID | None,
+    user_id: uuid.UUID | None,
+) -> None:
+    realtime_metrics.record_ws_close(code=code, reason=reason)
+    fields: dict[str, object] = {
+        "channel": "trip",
+        "code": realtime_metrics.close_code_label(code),
+        "reason": realtime_metrics.reason_label(reason),
+    }
+    if trip_id is not None:
+        fields["trip_id"] = str(trip_id)
+    if user_id is not None:
+        fields["user_id"] = str(user_id)
+    log.info("pinvi.websocket.close", **fields)
