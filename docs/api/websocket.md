@@ -13,7 +13,15 @@ ws://localhost:12801/ws/trips/<trip_id>?token=<jwt>
 wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 ```
 
-권한 없으면 즉시 `close 4403` (`{ "code": 4403, "reason": "permission_denied" }`).
+인증/권한/제한 실패는 close code로 구분한다.
+
+| close code | reason 예 | 클라이언트 처리 |
+|------------|-----------|-----------------|
+| `4401` | `token_missing`, `token_invalid` | `/auth/refresh` 성공 시 즉시 재연결, 실패 시 로그인 복귀 |
+| `4403` | `permission_denied` | 재연결하지 않고 권한 상실 안내 + 여행 목록 CTA |
+| `4408` | `trip_connection_limit_exceeded`, `process_connection_limit_exceeded` | 제한 안내 + exponential backoff 재연결 |
+| `4429` | `rate_limited` | rate-limit 안내 + exponential backoff 재연결 |
+| `4400` | `heartbeat_timeout` | bad message/heartbeat 종료로 분류하고 backoff 재연결 |
 
 ## 2. 이벤트 (서버 → 클라이언트)
 
@@ -146,7 +154,8 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 - [x] WebSocket wrapper — exponential backoff + 자동 재연결
 - [x] 메시지 디스크리미네이터별 핸들러 등록
 - [x] Trip 상세 화면 presence summary + domain event debounce reload 1차 연결
-- [ ] TanStack Query invalidation 트리거 (poi/day/trip 이벤트별 query key)
+- [x] close code mapping + `4401` auth refresh + `4403`/`4408`/`4429` 상태 안내
+- [x] TanStack Query invalidation key 정의 (poi/day/trip/comment 이벤트별 query key)
+- [x] HTTP mutation reload와 WebSocket event reload 중복 방지
 - [ ] presence store (zustand) — 동반자 온라인 / viewing_day 공유 상태화
-- [ ] 401 close 시 토큰 refresh 후 재연결
 - [ ] 충돌 다이얼로그 컴포넌트 (`apps/web/components/poi/ConflictDialog.tsx`)
