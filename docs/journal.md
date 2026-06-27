@@ -2,6 +2,53 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-233 리뷰 코멘트 반영 / legal-ops Task 보강
+
+**작업**: PR #264 리뷰 코멘트를 반영해 Sprint 5/6 상세 Task 계획의 누락된 법무/운영/보안 표면을
+Task로 보강했다.
+
+**변경**:
+
+- Sprint 5 release gate 직전에 T-256 review gap crosswalk, T-257 email deliverability/provider
+  tracking preflight, T-258 Sprint 6 legal/ops implementation prep gate를 추가했다.
+- 기존 release candidate gate는 T-259로 조정했다.
+- Sprint 6 후속 Task로 T-275~T-286을 추가했다. PIPA incident console, retention 실행/dashboard,
+  email deliverability/suppression, DSR intake, content moderation, RBAC grant/revoke, user lifecycle,
+  rate-limit/abuse, security threat model, mobile scope, AI companion scope, cross-track #238/#264 gap
+  closure가 포함된다.
+- `docs/execplan/sprint5-v020-release-plan.md`에 리뷰 항목별 Task crosswalk를 추가했다.
+- `docs/tasks.md`, `docs/sprints/SPRINT-5.md`, `docs/sprints/SPRINT-6.md`, `docs/resume.md`를 같은
+  번호와 범위로 갱신했다.
+
+**검증**: 문서 diff check와 민감정보 패턴 스캔을 수행한다.
+
+**다음**: PR #264를 merge한 뒤 T-234 WebSocket client invalidation / auth close handling으로 진행한다.
+
+## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
+
+**작업**: Sprint 5 `v0.2.0` 잔여 구현과 Sprint 6 `v1.0.0` 후속 아이템을 Task 단위로 정리했다.
+
+**변경**:
+
+- `docs/execplan/sprint5-v020-release-plan.md`를 추가했다.
+- Sprint 5 잔여 Task를 T-234~T-259로 분리했다. WebSocket 후속, optimistic lock/conflict,
+  multi-client e2e, ETL job, request timeline/log stream, provider sync 계약, feature detail,
+  app integrity, backup/restore, Grafana, Admin live e2e, 지도 마커/색상 parity, release gate를
+  포함한다.
+- 사용자/Admin 지도뷰의 marker palette, POI custom color/icon, feature snapshot/upstream category
+  fallback, selected/broken/cluster 상태 검증을 T-255로 명시했다.
+- Sprint 6 초안을 T-260~T-286으로 정리했다. OR-Tools 스마트 정렬, category override,
+  Admin notice plan, MCP 운영 실증, backup hot-swap, geofencing, LBS/법무, 성능/보안,
+  Odroid+N150 병행 운영, AI companion 분리, v1.0 gate/release를 포함한다.
+- ARM image와 GHCR 배포는 제외하고, 운영 노드는 로컬 checkout + 로컬 Docker build 기준으로
+  정정했다.
+- `docs/tasks.md`, `docs/sprints/SPRINT-5.md`, `docs/sprints/SPRINT-6.md`,
+  `docs/resume.md`를 같은 기준으로 갱신했다.
+
+**검증**: 문서 정리 후 `git diff --check`와 민감정보 패턴 스캔을 수행한다.
+
+**다음**: PR 리뷰 반영 후 merge를 진행하고 T-234부터 시작한다.
+
 ## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
 
 **작업**: Sprint 5 WebSocket 협업 게이트의 첫 프론트엔드 수직 슬라이스를 구현했다.

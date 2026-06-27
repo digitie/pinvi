@@ -1,9 +1,12 @@
 # SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
-- **상태**: in progress / scope 재정렬. 일부 선반영: T-067 KASI, T-109 geofencing,
+- **상태**: in progress / 상세 Task 계획 수립 및 PR 리뷰 gap 반영. 일부 선반영: T-067 KASI,
+  T-109 geofencing,
   T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
   ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
   action 일부, Trip WebSocket frontend client 1차 연결이 추가됐다(T-207~T-232).
+  남은 세부 Task와 live e2e 카탈로그는 `docs/execplan/sprint5-v020-release-plan.md`
+  (T-233, PR 리뷰 반영 T-256~T-258 포함)에서 관리한다.
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
@@ -13,11 +16,14 @@
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
-  app-owned ETL 추가 job, Loki/request timeline stream, backup/restore 1차 스테이징 훈련,
-  `v0.2.0` Release notes.
+  app-owned ETL 추가 job, Loki/request timeline stream, 지도 마커/색상 parity,
+  backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
+  - PR 리뷰 gap crosswalk — PIPA incident, DSR, retention execution, email suppression,
+    moderation, RBAC, user lifecycle, rate-limit/abuse, provider tracking, mobile/AI scope가
+    Sprint 6 Task로 연결됨
   - `apps/etl` Dagster code location 활성화 + Pinvi `app` schema 소유 job:
     - `pinvi_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
@@ -61,10 +67,14 @@
 
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX.
+- 사용자/Admin 지도뷰 marker palette, POI custom color/icon, feature snapshot/upstream category
+  fallback, selected/broken/cluster 상태 parity.
 - Pinvi `app` schema 소유 ETL 추가 job(`email_outbox`, PII retention, location archive,
   telegram weekly/daily summary).
 - Loki/Promtail 또는 대체 로그 stream과 request timeline.
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
+- 리뷰 반영 legal/ops preflight: incident/DSR/retention execution/email suppression/RBAC/user lifecycle/
+  abuse 운영 표면을 Sprint 6 Task로 고정.
 - `v0.2.0` tag/GitHub Release notes.
 
 ### 백엔드 (`apps/api`)
@@ -155,6 +165,7 @@
 1. `pinvi_kasi_special_days` materialize → `app.kasi_special_days` upsert 확인
 2. `kasi_poi_rise_set_job` 단일 POI 실행 → `app.trip_poi_rise_sets` success/failed 확인
 3. `pinvi_email_outbox` / retention 계열 job은 `app` schema만 변경하는지 확인
+   - retention 계열은 Sprint 5에서 dry-run까지, 실제 delete/anonymize/archive는 T-276으로 닫는다.
 4. feature/provider materialize 검증(VisitKorea/OpiNet/KMA/KrHeritage 등)은
    `kor-travel-map` 저장소의 Sprint/런북에서 수행
 5. `/admin/dedup-review` 의심 쌍 발생 → 좌우 비교 → 판정 → 라이브러리 callback
@@ -170,6 +181,7 @@
 - [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
 - [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
 - [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**
+- [ ] **PR 리뷰 legal/ops gap crosswalk 완료 — T-256~T-258 기준**
 - [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 6
