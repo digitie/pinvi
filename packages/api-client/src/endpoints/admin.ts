@@ -12,6 +12,7 @@ import {
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
+  AdminEtlSummarySchema,
   AdminFeatureDetailSchema,
   AdminFeatureChangeRequestActionRequestSchema,
   AdminFeatureChangeRequestPagedResponseSchema,
@@ -41,6 +42,8 @@ import {
   AdminPoiLinkStatusRequestSchema,
   AdminPoiMoveRequestSchema,
   AdminPoiPagedResponseSchema,
+  AdminProviderImportJobsResponseSchema,
+  AdminProviderSyncResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
   AdminTripCopyRequestSchema,
@@ -87,6 +90,19 @@ export interface AdminFeatureChangeRequestListParams {
   pageSize?: number;
 }
 
+export interface AdminProviderSyncListParams {
+  key?: string;
+}
+
+export interface AdminProviderImportJobListParams {
+  status?: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  kind?: string;
+  loadBatchId?: string;
+  parentJobId?: string;
+  pageSize?: number;
+  cursor?: string;
+}
+
 export interface AdminFileListParams {
   page?: number;
   limit?: number;
@@ -115,6 +131,37 @@ export const adminApi = (client: ApiClient) => ({
       method: 'GET',
       schema: AdminSystemSummarySchema,
     }),
+
+  getEtlSummary: () =>
+    client.request('/admin/etl/summary', {
+      method: 'GET',
+      schema: AdminEtlSummarySchema,
+    }),
+
+  listProviderSync: (params: AdminProviderSyncListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.key) qs.set('key', params.key);
+    const path = `/admin/provider-sync${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminProviderSyncResponseSchema,
+    });
+  },
+
+  listProviderImportJobs: (params: AdminProviderImportJobListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.kind) qs.set('kind', params.kind);
+    if (params.loadBatchId) qs.set('load_batch_id', params.loadBatchId);
+    if (params.parentJobId) qs.set('parent_job_id', params.parentJobId);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/provider-sync/import-jobs${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminProviderImportJobsResponseSchema,
+    });
+  },
 
   getAvatarSettings: () =>
     client.request('/admin/settings/avatar', {

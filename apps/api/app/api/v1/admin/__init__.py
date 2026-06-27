@@ -7,12 +7,14 @@ from app.api.v1.admin import (
     audit,
     backup,
     emails,
+    etl,
     feature_requests,
     features,
     files,
     mcp_tokens,
     notice_plans,
     pois,
+    provider_sync,
     rustfs,
     settings,
     stats,
@@ -27,6 +29,7 @@ admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
 admin_router.include_router(features.router)
 admin_router.include_router(feature_requests.router)
+admin_router.include_router(provider_sync.router)
 admin_router.include_router(files.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
@@ -37,4 +40,5 @@ admin_router.include_router(mcp_tokens.router)
 admin_router.include_router(rustfs.router)
 admin_router.include_router(notice_plans.router)
 admin_router.include_router(system.router)
+admin_router.include_router(etl.router)
 admin_router.include_router(settings.router)

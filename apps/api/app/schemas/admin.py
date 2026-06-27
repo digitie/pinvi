@@ -93,6 +93,151 @@ class AdminSystemSummary(BaseModel):
     services: list[AdminSystemServiceStatus]
 
 
+class AdminEtlDefinitionAsset(BaseModel):
+    key: str
+    group_name: str | None = None
+    description: str | None = None
+
+
+class AdminEtlDefinitionJob(BaseModel):
+    name: str
+    trigger: str
+    description: str | None = None
+    asset_keys: list[str] = Field(default_factory=list)
+
+
+class AdminEtlDefinitionSchedule(BaseModel):
+    name: str
+    job_name: str
+    cron_schedule: str
+    execution_timezone: str | None = None
+    status: str = "configured"
+
+
+class AdminEtlDefinitionSensor(BaseModel):
+    name: str
+    job_name: str | None = None
+    status: str = "configured"
+
+
+class AdminPinviEtlSummary(BaseModel):
+    status: AdminSystemStatus
+    message: str | None = None
+    latency_ms: int | None = None
+    assets: list[AdminEtlDefinitionAsset] = Field(default_factory=list)
+    jobs: list[AdminEtlDefinitionJob] = Field(default_factory=list)
+    schedules: list[AdminEtlDefinitionSchedule] = Field(default_factory=list)
+    sensors: list[AdminEtlDefinitionSensor] = Field(default_factory=list)
+
+
+class AdminDagsterJobSummary(BaseModel):
+    name: str
+    is_job: bool = True
+
+
+class AdminDagsterScheduleSummary(BaseModel):
+    name: str
+    cron_schedule: str | None = None
+    execution_timezone: str | None = None
+    status: str | None = None
+
+
+class AdminDagsterSensorSummary(BaseModel):
+    name: str
+    status: str | None = None
+
+
+class AdminDagsterRepositorySummary(BaseModel):
+    name: str
+    location_name: str | None = None
+    jobs: list[AdminDagsterJobSummary] = Field(default_factory=list)
+    schedules: list[AdminDagsterScheduleSummary] = Field(default_factory=list)
+    sensors: list[AdminDagsterSensorSummary] = Field(default_factory=list)
+    asset_count: int = 0
+    asset_groups: list[str] = Field(default_factory=list)
+
+
+class AdminDagsterRunSummary(BaseModel):
+    run_id: str
+    status: str
+    job_name: str | None = None
+    start_time: float | None = None
+    end_time: float | None = None
+    update_time: float | None = None
+    tags: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminProviderImportJobRecord(BaseModel):
+    job_id: str
+    kind: str
+    status: str
+    progress: float | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status_url: str | None = None
+    current_stage: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    heartbeat_at: datetime | None = None
+    finished_at: datetime | None = None
+    load_batch_id: str | None = None
+    parent_job_id: str | None = None
+    source_checksum: str | None = None
+    links: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminProviderImportJobsResponse(BaseModel):
+    items: list[AdminProviderImportJobRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
+class AdminProviderDatasetSummary(BaseModel):
+    provider: str
+    dataset_key: str
+    sync_scope: str
+    status: str
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    consecutive_failures: int = 0
+    next_run_after: datetime | None = None
+    links: dict[str, Any] = Field(default_factory=dict)
+    refresh_policy: dict[str, Any] | None = None
+
+
+class AdminProviderSyncResponse(BaseModel):
+    items: list[AdminProviderDatasetSummary] = Field(default_factory=list)
+    total: int
+
+
+class AdminKorTravelMapEtlSummary(BaseModel):
+    status: AdminSystemStatus
+    dagster_status: str
+    checked_at: datetime | None = None
+    repository_count: int = 0
+    job_count: int = 0
+    asset_count: int = 0
+    schedule_count: int = 0
+    sensor_count: int = 0
+    run_counts: dict[str, int] = Field(default_factory=dict)
+    repositories: list[AdminDagsterRepositorySummary] = Field(default_factory=list)
+    recent_runs: list[AdminDagsterRunSummary] = Field(default_factory=list)
+    features_total: int | None = None
+    source_records_total: int | None = None
+    import_jobs_by_status: dict[str, int] = Field(default_factory=dict)
+    dedup_queue_by_status: dict[str, int] = Field(default_factory=dict)
+    provider_dataset_count: int = 0
+    provider_failure_count: int = 0
+    recent_import_jobs: list[AdminProviderImportJobRecord] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class AdminEtlSummary(BaseModel):
+    generated_at: datetime
+    pinvi: AdminPinviEtlSummary
+    kor_travel_map: AdminKorTravelMapEtlSummary
+
+
 AdminFeatureSort = Literal[
     "name",
     "updated_at",
