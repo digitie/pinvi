@@ -387,12 +387,27 @@ Pinvi는 category taxonomy/`maki_icon`을 저장하지 않고, 16색 팔레트 f
 
 ### T-214 — Seed / reset dev-only 안전장치
 
+상태: 완료(2026-06-27, codex). 실제 DB reset/seed 실행은 노출하지 않고, dev/staging 전용
+dry-run + audit으로 placeholder를 교체했다. production에서는 router include를 하지 않고, endpoint
+guard도 404를 반환한다.
+
 범위:
 
 - `/admin/seed`, `/admin/reset` placeholder를 제거하되, 운영에서는 명시적으로 비활성화한다.
 - `PINVI_ENVIRONMENT`가 production이면 seed/reset router를 include하지 않고 API는 404만
   반환한다. UI는 destructive action을 렌더링하지 않는다.
 - dev/smoke에서는 confirmation phrase, reason, audit, dry-run, 대상 범위를 제공한다.
+
+구현:
+
+- Pinvi API `GET /admin/seed/scenarios`, `POST /admin/seed/scenarios/{scenario_key}`,
+  `GET /admin/reset/status`, `POST /admin/reset`을 추가했다.
+- dev/staging route는 `dry_run=true`만 지원하고, `false`는 `422 DRY_RUN_ONLY`로 거절한다.
+- seed scenario는 scenario별 `RUN <scenario_key>`, reset은 `RESET` 확인 문구를 요구한다.
+- 성공한 dry-run은 `dev_seed.dry_run` 또는 `dev_reset.dry_run` audit을 남긴다.
+- Web `/admin/seed`, `/admin/reset`을 실제 dry-run 화면으로 교체하고 production 404 응답에서는
+  action을 렌더링하지 않는다.
+- `admin-live-matrix.live.ts`에서 seed/reset을 placeholder에서 실제 route로 전환했다.
 
 검증:
 

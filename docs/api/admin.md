@@ -62,8 +62,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/backup/snapshot`                                       | 수동 backup snapshot 생성 + audit                    | 5      |
 | `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                  | MCP 토큰 검색 / 대리 발급 / 강제 회수                | 6      |
 | `GET /admin/rustfs/objects` / `DELETE`                              | RustFS 객체 관리                                     | 2      |
-| `POST /admin/seed/*`                                                | dev/staging seed 시나리오 (운영 차단)                | 3      |
-| `POST /admin/reset`                                                 | DB reset (dev/staging only)                          | 3      |
+| `GET/POST /admin/seed/scenarios[/{scenario_key}]`                   | dev/staging seed scenario dry-run                    | 3      |
+| `GET /admin/reset/status` / `POST /admin/reset`                     | dev/staging reset dry-run                            | 3      |
 
 ## 3. 대시보드
 
@@ -1484,23 +1484,104 @@ GET /admin/mcp-tokens?user_id=<uuid>&status=active&q=Claude
 
 ## 17. Seed / Reset (dev/staging only)
 
-### 17.1 `POST /admin/seed/scenarios/{scenario_key}`
+### 17.1 `GET /admin/seed/scenarios`
+
+권한: `admin`
+
+운영 환경에서는 router를 include하지 않으며, 방어적으로 endpoint guard도 404만 반환한다.
+dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 seed 실행은 아직 제공하지 않는다.
+
+응답 `data`:
+
+```jsonc
+{
+  "environment": "development",
+  "enabled": false,
+  "mode": "dry_run_only",
+  "scenarios": [
+    {
+      "key": "new_user_first_trip",
+      "title": "새 사용자와 첫 여행",
+      "description": "가입 직후 첫 여행, day, POI, 공유 토큰 후보를 준비한다.",
+      "destructive": false,
+      "confirm_phrase": "RUN new_user_first_trip",
+      "steps": ["사용자 샘플 확인", "여행/day/POI 생성 계획"]
+    }
+  ]
+}
+```
+
+### 17.2 `POST /admin/seed/scenarios/{scenario_key}`
 
 `scenario_key`: SPEC V8 M-13 8 시나리오 키 (`new_user_first_trip` 등).
 
-운영 환경에서는 라우트 자체 비활성 (`ENABLE_SEED` 환경변수 false → router include
-안 함). 404.
-
-### 17.2 `POST /admin/reset`
+요청:
 
 ```jsonc
-{ "confirm": "RESET", "admin_password": "..." }
+{
+  "confirm": "RUN new_user_first_trip",
+  "access_reason": "개발 smoke dry-run",
+  "dry_run": true
+}
 ```
 
-- dev/staging에서만 라우트 등록
-- DB 전체 reset (`alembic downgrade base` → `upgrade head`)
-- 라이브러리 schema는 별도 reset endpoint (`POST /admin/kor-travel-map/reset`)
-- 자동으로 `new_user_first_trip` 시나리오 적용
+- 권한: `admin`
+- `dry_run=true`만 지원한다. `false`는 `422 DRY_RUN_ONLY`.
+- `confirm`은 scenario별 `confirm_phrase`와 정확히 일치해야 한다.
+- 성공 시 `admin_audit_log`에 `dev_seed.dry_run`을 기록한다.
+
+응답 202:
+
+```jsonc
+{
+  "data": {
+    "action": "dev_seed.dry_run",
+    "target": "new_user_first_trip",
+    "status": "dry_run",
+    "dry_run": true,
+    "audit_log_id": 101,
+    "would_execute": ["사용자 샘플 확인", "여행/day/POI 생성 계획"],
+    "message": "seed scenario dry-run을 기록했습니다."
+  }
+}
+```
+
+### 17.3 `GET /admin/reset/status`
+
+권한: `admin`
+
+운영 환경에서는 router를 include하지 않으며, endpoint guard도 404만 반환한다.
+
+응답 `data`:
+
+```jsonc
+{
+  "environment": "development",
+  "enabled": false,
+  "mode": "dry_run_only",
+  "confirm_phrase": "RESET",
+  "target_schemas": ["app"]
+}
+```
+
+### 17.4 `POST /admin/reset`
+
+```jsonc
+{
+  "confirm": "RESET",
+  "access_reason": "reset 절차 리허설",
+  "dry_run": true,
+  "include_seed": false
+}
+```
+
+- 권한: `admin`
+- dev/staging에서만 router 등록. 운영은 404.
+- `dry_run=true`만 지원한다. `false`는 `422 DRY_RUN_ONLY`.
+- `confirm`은 `RESET`과 정확히 일치해야 한다.
+- 성공 시 `admin_audit_log`에 `dev_reset.dry_run`을 기록한다.
+- 실제 DB reset(`alembic downgrade base` → `upgrade head`)과 seed 적용은 이번 T-214 범위가 아니다.
+  실행 모드 도입 시 별도 환경 kill-switch, admin 재인증, backup snapshot 확인, audit을 먼저 고정한다.
 
 ## 18. AI agent 구현 체크리스트
 

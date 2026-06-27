@@ -173,15 +173,26 @@ SELECT log_id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
 
 ## 6. Seed / Reset (dev/staging only)
 
-운영에서는 라우트 비활성 (`ENABLE_SEED=false`). dev/staging에서만:
+운영에서는 router를 include하지 않아 404만 반환한다. dev/staging에서도 현재 API는 dry-run만
+지원한다.
 
 ### 6.1 시나리오 적용
 
 ```bash
+curl -fsS "http://localhost:12801/admin/seed/scenarios" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE"
+
 curl -fsS -X POST "http://localhost:12801/admin/seed/scenarios/new_user_first_trip" \
   -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
-  -d '{}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirm":"RUN new_user_first_trip",
+    "access_reason":"개발 smoke dry-run",
+    "dry_run":true
+  }'
 ```
+
+dry-run은 `admin_audit_log`에 `dev_seed.dry_run`을 남긴다.
 
 8 시나리오: `new_user_first_trip`, `companion_concurrent_editing`,
 `share_link_expiring_soon`, `unverified_users_aged`, `dedup_candidates`,
@@ -190,14 +201,23 @@ curl -fsS -X POST "http://localhost:12801/admin/seed/scenarios/new_user_first_tr
 ### 6.2 Reset
 
 ```bash
+curl -fsS "http://localhost:12801/admin/reset/status" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE"
+
 curl -fsS -X POST "http://localhost:12801/admin/reset" \
   -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
-  -d '{"confirm":"RESET","admin_password":"..."}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirm":"RESET",
+    "access_reason":"reset 절차 리허설",
+    "dry_run":true,
+    "include_seed":false
+  }'
 ```
 
-- DB 전체 reset (`alembic downgrade base` → `upgrade head`)
-- 라이브러리 schema는 별도 (`POST /admin/kor-travel-map/reset`)
-- 자동으로 `new_user_first_trip` 적용
+- 현재는 dry-run만 지원하고 `admin_audit_log`에 `dev_reset.dry_run`을 남긴다.
+- 실제 DB 전체 reset(`alembic downgrade base` → `upgrade head`)은 아직 API로 노출하지 않는다.
+- 라이브러리 schema reset은 별도 운영 절차가 필요하며 Pinvi API에서 실행하지 않는다.
 
 ## 7. Daily check (운영자 일과)
 

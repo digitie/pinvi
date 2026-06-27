@@ -19,13 +19,16 @@ from app.api.v1.admin import (
     notice_plans,
     pois,
     provider_sync,
+    reset,
     rustfs,
+    seed,
     settings,
     stats,
     system,
     trips,
     users,
 )
+from app.api.v1.admin.dev_safety import is_dev_safety_route_enabled
 
 admin_router = APIRouter()
 admin_router.include_router(users.router)
@@ -50,3 +53,7 @@ admin_router.include_router(notice_plans.router)
 admin_router.include_router(system.router)
 admin_router.include_router(etl.router)
 admin_router.include_router(settings.router)
+
+if is_dev_safety_route_enabled():
+    admin_router.include_router(seed.router)
+    admin_router.include_router(reset.router)

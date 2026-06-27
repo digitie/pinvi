@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
+
+**작업**: Admin `/admin/seed`, `/admin/reset` placeholder를 dev/staging 전용 dry-run 화면으로
+교체했다. production에서는 router include를 하지 않고, endpoint guard도 404를 반환한다.
+
+**변경**:
+
+- Pinvi API에 `GET /admin/seed/scenarios`, `POST /admin/seed/scenarios/{scenario_key}`,
+  `GET /admin/reset/status`, `POST /admin/reset`를 추가했다.
+- 실제 DB reset/seed 실행은 노출하지 않고 `dry_run=true`만 지원한다. `false`는
+  `422 DRY_RUN_ONLY`로 거절한다.
+- seed는 scenario별 `RUN <scenario_key>`, reset은 `RESET` 확인 문구와 `access_reason`을 요구한다.
+- 성공한 dry-run은 `dev_seed.dry_run` 또는 `dev_reset.dry_run` audit을 남긴다.
+- Web `/admin/seed`, `/admin/reset`은 dry-run form과 production 404 비활성 상태를 표시한다.
+- `admin-live-matrix.live.ts`에서 seed/reset을 placeholder에서 실제 route로 전환했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API ruff format check, ruff check, mypy,
+`test_admin_seed_reset_api.py` 4건, schemas/api-client typecheck, Web typecheck, Web lint,
+schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-seed-reset.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 T-215 묶음 게이트로 보류한다.
+
+**다음**: PR을 만들고 merge한 뒤 T-218 prod Grafana 주소 반영으로 진행한다.
+
 ## 2026-06-27 (codex) — T-213 Category mapping 운영 뷰
 
 **작업**: Category mapping source of truth를 `kor-travel-map` `/v1/categories`로 결정하고,

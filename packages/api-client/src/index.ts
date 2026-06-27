@@ -23,6 +23,8 @@ export type {
   AdminIntegrityIssueListParams,
   AdminProviderImportJobListParams,
   AdminProviderSyncListParams,
+  AdminResetRunBody,
+  AdminSeedScenarioRunBody,
   AdminSystemLogListParams,
   AdminUpstreamApiCallLogListParams,
 } from './endpoints/admin';
