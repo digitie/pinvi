@@ -15,6 +15,7 @@ export { mobileAuthApi, MobileAuthResponseSchema } from './endpoints/mobile';
 export type { MobileAuthResult } from './endpoints/mobile';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
 export type {
+  AdminCategoryMappingListParams,
   AdminConsistencyReportListParams,
   AdminDedupReviewListParams,
   AdminFeatureChangeRequestListParams,

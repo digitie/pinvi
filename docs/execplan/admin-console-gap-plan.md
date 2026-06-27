@@ -352,6 +352,10 @@ GET-only라 T-227로 분리했다.
 
 ### T-213 — Category mapping 실제 기능
 
+상태: 완료(2026-06-27, codex). Source of truth는 `kor-travel-map` `/v1/categories`로 결정했다.
+Pinvi는 category taxonomy/`maki_icon`을 저장하지 않고, 16색 팔레트 fallback과 drift를 운영자가
+확인하는 read-only 화면만 제공한다.
+
 범위:
 
 - Pinvi 표시 카테고리, marker palette, upstream map category catalog의 연결 규칙을 정리한다.
@@ -359,14 +363,26 @@ GET-only라 T-227로 분리했다.
   별도 migration/ADR 여부를 먼저 판단한다.
 - UI는 category search, unmapped count, marker preview, export/import 초안을 제공한다.
 
-결정 필요:
+결정:
 
-- mapping source of truth가 Pinvi `app` schema인지, `kor-travel-map` catalog인지, 혹은
-  양쪽 계약인지 리뷰 후 확정한다.
+- category catalog/source of truth는 `kor-travel-map` `/v1/categories`.
+- Pinvi `packages/domain`의 `CATEGORY_MARKER`와 16색 palette는 preview/fallback/drift 확인용.
+- PUT/import mutation과 Pinvi-owned override table은 이번 범위에서 제외한다. 필요성이 확정되면
+  별도 ADR/DB migration/audit 포함 Task로 진행한다.
+
+구현:
+
+- Pinvi API `GET /admin/category-mappings`를 추가해 upstream `/v1/categories`를 service client로
+  조회하고, `include_counts`, `active_only`, 로컬 `q` 필터와 운영 summary를 제공한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 admin category mappings read 계약을 추가했다.
+- Web `/admin/category-mapping`을 placeholder에서 실제 table route로 교체했다. summary, search,
+  active/count filter, marker swatch preview, fallback/icon drift 표시, JSON export 초안을 제공한다.
+- `admin-live-matrix.live.ts`에서 route를 placeholder가 아닌 table route로 전환했다.
 
 검증:
 
-- 결정 전에는 read-only 테스트만 작성한다.
+- API integration: upstream query forwarding, local q filtering, DB count 보존, RBAC 숨김.
+- UI e2e: summary/table/marker preview, query forwarding.
 - mutation 도입 시 DB migration + API integration + UI e2e를 포함한다.
 
 ### T-214 — Seed / reset dev-only 안전장치

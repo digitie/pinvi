@@ -94,7 +94,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/dedup-review', heading: 'Dedup review', table: true },
   { path: '/admin/provider-sync', heading: 'Provider sync', table: true },
   { path: '/admin/integrity', heading: '정합성', table: true },
-  { path: '/admin/category-mapping', heading: '카테고리 매핑', placeholder: true },
+  { path: '/admin/category-mapping', heading: '카테고리 매핑', table: true },
   { path: '/admin/debug/logs', heading: 'Debug logs', table: true },
   { path: '/admin/etl', heading: 'ETL', table: true },
   { path: '/admin/grafana', heading: 'Grafana' },
@@ -175,6 +175,11 @@ const sortSpecs = [
     route: '/admin/integrity',
     heading: '정합성',
     columns: ['issue', 'severity', 'status', 'target', 'message', 'detected'],
+  },
+  {
+    route: '/admin/category-mapping',
+    heading: '카테고리 매핑',
+    columns: ['category', 'active', 'upstream icon', 'Pinvi marker', 'mapping', 'features', 'sort'],
   },
   {
     route: '/admin/debug/logs',

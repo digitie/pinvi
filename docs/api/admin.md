@@ -48,7 +48,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`                 | Notice POI                                           | 6      |
 | `GET /admin/feature-requests`                                       | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
 | `POST /admin/feature-requests/{id}/approve\|reject`                 | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
-| `GET/PUT /admin/category-mappings`                                  | maki + 16색 매핑                                     | 6      |
+| `GET /admin/category-mappings`                                      | kor-travel-map category catalog + Pinvi marker preview | 6      |
 | `GET /admin/etl/summary`                                            | Pinvi ETL registry + kor-travel-map ops 요약          | 5      |
 | `GET /admin/dedup-review`                                           | Record Linkage 후보 조회                              | 5      |
 | `POST /admin/dedup-review/{review_id}/verdict`                      | Record Linkage 후보 판정 + audit                     | 5      |
@@ -99,7 +99,10 @@ Pinvi app schema에서 계산 가능한 지표만 즉시 반환한다. `features
 SPEC V8 M-8 패턴. v1의 `admin_entity_crud.py` 이전.
 
 `entity`: `users` | `features`(read-only) | `trips` | `pois` | `notice-plans` | `notice-pois` |
-`category-mappings` | `feature-requests`.
+`feature-requests`.
+
+`category-mappings`는 통합 CRUD entity가 아니다. 정본은 `kor-travel-map` `/v1/categories`이며,
+Pinvi Admin은 `GET /admin/category-mappings` read-only 운영 뷰만 제공한다.
 
 ### 4.1 `GET /admin/entities/{entity}`
 
@@ -114,7 +117,7 @@ GET /admin/entities/users?q=email:gmail.com+-status:disabled&sort=-created_at&pa
 - `users` — ✗ (가입 흐름 사용)
 - `features` — ✗ (라이브러리에 요청)
 - `trips` — ✗ (사용자 흐름)
-- `notice-plans` / `notice-pois` / `category-mappings` / `feature-requests` — ✓
+- `notice-plans` / `notice-pois` / `feature-requests` — ✓
 
 ### 4.3 `PATCH /admin/entities/{entity}/{item_id}`
 
@@ -133,7 +136,6 @@ GET /admin/entities/users?q=email:gmail.com+-status:disabled&sort=-created_at&pa
 | `pois`              | hard delete                                                                    |
 | `notice-plans`      | soft delete                                                                    |
 | `notice-pois`       | soft delete                                                                    |
-| `category-mappings` | hard delete                                                                    |
 | `feature-requests`  | hard delete (`status='rejected'` 권장)                                         |
 
 자기 자신 disable / admin 권한 박탈 차단 — `403 PERMISSION_DENIED`
@@ -937,6 +939,64 @@ GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
   reason/audit/idempotency/kill-switch 기준을 확정한 뒤 추가한다.
 - `/admin/seed`, `/admin/reset`: dev/staging 전용 안전장치(운영 라우트 미등록, 확인 키워드,
   audit)가 들어갈 때까지 운영 기능으로 취급하지 않는다.
+
+### 11.1 `GET /admin/category-mappings`
+
+upstream: `kor-travel-map` `GET /v1/categories`.
+
+권한: `admin` / `operator`
+
+Pinvi는 category taxonomy를 저장하거나 수정하지 않는다. `kor-travel-map` 카탈로그를
+source of truth로 보고, Admin UI는 Pinvi 마커 팔레트 fallback/색상 preview와 drift 확인만 제공한다.
+
+Query:
+
+| 이름             | 설명                                                     |
+| ---------------- | -------------------------------------------------------- |
+| `q`              | code, label, path, tier name, maki icon 로컬 필터        |
+| `include_counts` | upstream `db_feature_count` 포함 요청. 기본 `true`       |
+| `active_only`    | active category만 upstream에 요청. 기본 `false`          |
+
+응답 `data`:
+
+```jsonc
+{
+  "source_of_truth": "kor-travel-map:/v1/categories",
+  "mode": "read_only",
+  "include_counts": true,
+  "active_only": false,
+  "total_count": 2,
+  "filtered_count": 1,
+  "active_count": 1,
+  "inactive_count": 0,
+  "db_feature_total": 12,
+  "items": [
+    {
+      "code": "01070100",
+      "label": "해수욕장",
+      "parent_code": "010701",
+      "depth": 3,
+      "path": ["자연", "해안", "해수욕장"],
+      "maki_icon": "swimming",
+      "is_active": true,
+      "sort_order": 5,
+      "tier1_code": "01",
+      "tier1_name": "자연",
+      "tier2_code": "0107",
+      "tier2_name": "해안",
+      "tier3_code": "010701",
+      "tier3_name": "해수욕",
+      "tier4_code": "01070100",
+      "tier4_name": "해수욕장",
+      "db_active": true,
+      "db_feature_count": 12
+    }
+  ]
+}
+```
+
+PUT/import mutation은 제공하지 않는다. Pinvi-owned override 저장소가 필요하다는 제품 결정이
+확정되면 별도 ADR/DB migration과 `access_reason`/audit을 포함한 후속 Task로 진행한다.
 
 ## 12. Notice Plan 관리
 

@@ -11,6 +11,7 @@ import {
   AdminBackupSnapshotRequestSchema,
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
+  AdminCategoryMappingsResponseSchema,
   AdminEmailEntrySchema,
   AdminEtlSummarySchema,
   AdminFeatureDetailSchema,
@@ -121,6 +122,12 @@ export interface AdminDedupReviewListParams {
   maxScore?: number;
   pageSize?: number;
   cursor?: string;
+}
+
+export interface AdminCategoryMappingListParams {
+  q?: string;
+  includeCounts?: boolean;
+  activeOnly?: boolean;
 }
 
 export interface AdminIntegrityIssueListParams {
@@ -244,6 +251,18 @@ export const adminApi = (client: ApiClient) => ({
       body: JSON.stringify(AdminDedupDecisionRequestSchema.parse(body)),
       schema: AdminDedupDecisionResponseSchema,
     }),
+
+  listCategoryMappings: (params: AdminCategoryMappingListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.includeCounts !== undefined) qs.set('include_counts', String(params.includeCounts));
+    if (params.activeOnly !== undefined) qs.set('active_only', String(params.activeOnly));
+    const path = `/admin/category-mappings${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminCategoryMappingsResponseSchema,
+    });
+  },
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {
     const qs = new URLSearchParams();
