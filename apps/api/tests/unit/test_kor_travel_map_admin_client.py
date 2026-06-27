@@ -387,3 +387,117 @@ async def test_curated_detail_snapshot_uses_admin_path_and_token() -> None:
     assert snapshot["curated_feature_id"] == "cf_1"
     assert snapshot["content"] == {"title": "부산 코스"}
     await client.aclose()
+
+
+async def test_ops_dagster_summary_uses_ops_path_and_page_size() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "status": "ok",
+                    "checked_at": "2026-06-12T00:00:00+09:00",
+                    "repository_count": 1,
+                    "job_count": 2,
+                    "asset_count": 3,
+                    "schedule_count": 1,
+                    "sensor_count": 0,
+                    "run_counts": {"STARTED": 1},
+                    "repositories": [],
+                    "recent_runs": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.get_ops_dagster_summary(page_size=7)
+    assert seen["path"] == "/v1/ops/dagster/summary"
+    assert seen["query"] == [("page_size", "7")]
+    assert data["job_count"] == 2
+    await client.aclose()
+
+
+async def test_list_ops_providers_forwards_key_filter() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "provider": "kma",
+                            "dataset_key": "special_days",
+                            "sync_scope": "daily",
+                            "status": "healthy",
+                            "last_success_at": "2026-06-12T00:00:00+09:00",
+                            "last_failure_at": None,
+                            "consecutive_failures": 0,
+                            "next_run_after": "2026-06-13T00:00:00+09:00",
+                            "links": {},
+                        }
+                    ]
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.list_ops_providers(key="kma")
+    assert seen["path"] == "/v1/ops/providers"
+    assert seen["query"] == [("key", "kma")]
+    assert data["items"][0]["provider"] == "kma"
+    await client.aclose()
+
+
+async def test_list_ops_import_jobs_returns_envelope_meta() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "job_id": "11111111-1111-4111-8111-111111111111",
+                            "kind": "provider_import",
+                            "payload": {},
+                            "status": "running",
+                            "progress": 0.25,
+                            "created_at": "2026-06-12T00:00:00+09:00",
+                            "status_url": "/v1/ops/import-jobs/11111111-1111-4111-8111-111111111111",
+                        }
+                    ]
+                },
+                "meta": {"page": {"next_cursor": "cursor-2"}},
+            },
+        )
+
+    client = _client(handler)
+    payload = await client.list_ops_import_jobs(
+        status_filter="running",
+        kind="provider_import",
+        load_batch_id="22222222-2222-4222-8222-222222222222",
+        page_size=25,
+        cursor="cursor-1",
+    )
+    assert seen["path"] == "/v1/ops/import-jobs"
+    assert ("status", "running") in seen["query"]
+    assert ("kind", "provider_import") in seen["query"]
+    assert ("load_batch_id", "22222222-2222-4222-8222-222222222222") in seen["query"]
+    assert ("page_size", "25") in seen["query"]
+    assert ("cursor", "cursor-1") in seen["query"]
+    assert payload["data"]["items"][0]["status"] == "running"
+    assert payload["meta"]["page"]["next_cursor"] == "cursor-2"
+    await client.aclose()

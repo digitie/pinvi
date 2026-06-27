@@ -99,6 +99,171 @@ export const AdminSystemSummarySchema = z.object({
 });
 export type AdminSystemSummary = z.infer<typeof AdminSystemSummarySchema>;
 
+export const AdminEtlDefinitionAssetSchema = z.object({
+  key: z.string(),
+  group_name: z.string().nullable().default(null),
+  description: z.string().nullable().default(null),
+});
+export type AdminEtlDefinitionAsset = z.infer<typeof AdminEtlDefinitionAssetSchema>;
+
+export const AdminEtlDefinitionJobSchema = z.object({
+  name: z.string(),
+  trigger: z.string(),
+  description: z.string().nullable().default(null),
+  asset_keys: z.array(z.string()).default([]),
+});
+export type AdminEtlDefinitionJob = z.infer<typeof AdminEtlDefinitionJobSchema>;
+
+export const AdminEtlDefinitionScheduleSchema = z.object({
+  name: z.string(),
+  job_name: z.string(),
+  cron_schedule: z.string(),
+  execution_timezone: z.string().nullable().default(null),
+  status: z.string().default('configured'),
+});
+export type AdminEtlDefinitionSchedule = z.infer<typeof AdminEtlDefinitionScheduleSchema>;
+
+export const AdminEtlDefinitionSensorSchema = z.object({
+  name: z.string(),
+  job_name: z.string().nullable().default(null),
+  status: z.string().default('configured'),
+});
+export type AdminEtlDefinitionSensor = z.infer<typeof AdminEtlDefinitionSensorSchema>;
+
+export const AdminPinviEtlSummarySchema = z.object({
+  status: AdminSystemStatusSchema,
+  message: z.string().nullable().default(null),
+  latency_ms: z.number().int().nullable().default(null),
+  assets: z.array(AdminEtlDefinitionAssetSchema).default([]),
+  jobs: z.array(AdminEtlDefinitionJobSchema).default([]),
+  schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
+  sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
+});
+export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
+
+export const AdminDagsterJobSummarySchema = z.object({
+  name: z.string(),
+  is_job: z.boolean().default(true),
+});
+export type AdminDagsterJobSummary = z.infer<typeof AdminDagsterJobSummarySchema>;
+
+export const AdminDagsterScheduleSummarySchema = z.object({
+  name: z.string(),
+  cron_schedule: z.string().nullable().default(null),
+  execution_timezone: z.string().nullable().default(null),
+  status: z.string().nullable().default(null),
+});
+export type AdminDagsterScheduleSummary = z.infer<typeof AdminDagsterScheduleSummarySchema>;
+
+export const AdminDagsterSensorSummarySchema = z.object({
+  name: z.string(),
+  status: z.string().nullable().default(null),
+});
+export type AdminDagsterSensorSummary = z.infer<typeof AdminDagsterSensorSummarySchema>;
+
+export const AdminDagsterRepositorySummarySchema = z.object({
+  name: z.string(),
+  location_name: z.string().nullable().default(null),
+  jobs: z.array(AdminDagsterJobSummarySchema).default([]),
+  schedules: z.array(AdminDagsterScheduleSummarySchema).default([]),
+  sensors: z.array(AdminDagsterSensorSummarySchema).default([]),
+  asset_count: z.number().int().default(0),
+  asset_groups: z.array(z.string()).default([]),
+});
+export type AdminDagsterRepositorySummary = z.infer<typeof AdminDagsterRepositorySummarySchema>;
+
+export const AdminDagsterRunSummarySchema = z.object({
+  run_id: z.string(),
+  status: z.string(),
+  job_name: z.string().nullable().default(null),
+  start_time: z.number().nullable().default(null),
+  end_time: z.number().nullable().default(null),
+  update_time: z.number().nullable().default(null),
+  tags: z.record(z.string(), z.unknown()).default({}),
+});
+export type AdminDagsterRunSummary = z.infer<typeof AdminDagsterRunSummarySchema>;
+
+const AdminJsonObjectSchema = z.record(z.string(), z.unknown());
+
+export const AdminProviderImportJobRecordSchema = z.object({
+  job_id: z.string(),
+  kind: z.string(),
+  status: z.string(),
+  progress: z.number().nullable().default(null),
+  payload: AdminJsonObjectSchema.default({}),
+  status_url: z.string().nullable().default(null),
+  current_stage: z.string().nullable().default(null),
+  error_message: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+  started_at: Iso8601Schema.nullable().default(null),
+  heartbeat_at: Iso8601Schema.nullable().default(null),
+  finished_at: Iso8601Schema.nullable().default(null),
+  load_batch_id: z.string().nullable().default(null),
+  parent_job_id: z.string().nullable().default(null),
+  source_checksum: z.string().nullable().default(null),
+  links: AdminJsonObjectSchema.default({}),
+});
+export type AdminProviderImportJobRecord = z.infer<typeof AdminProviderImportJobRecordSchema>;
+
+export const AdminProviderImportJobsResponseSchema = z.object({
+  items: z.array(AdminProviderImportJobRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminProviderImportJobsResponse = z.infer<
+  typeof AdminProviderImportJobsResponseSchema
+>;
+
+export const AdminProviderDatasetSummarySchema = z.object({
+  provider: z.string(),
+  dataset_key: z.string(),
+  sync_scope: z.string(),
+  status: z.string(),
+  last_success_at: Iso8601Schema.nullable().default(null),
+  last_failure_at: Iso8601Schema.nullable().default(null),
+  consecutive_failures: z.number().int().default(0),
+  next_run_after: Iso8601Schema.nullable().default(null),
+  links: AdminJsonObjectSchema.default({}),
+  refresh_policy: AdminJsonObjectSchema.nullable().default(null),
+});
+export type AdminProviderDatasetSummary = z.infer<typeof AdminProviderDatasetSummarySchema>;
+
+export const AdminProviderSyncResponseSchema = z.object({
+  items: z.array(AdminProviderDatasetSummarySchema).default([]),
+  total: z.number().int(),
+});
+export type AdminProviderSyncResponse = z.infer<typeof AdminProviderSyncResponseSchema>;
+
+export const AdminKorTravelMapEtlSummarySchema = z.object({
+  status: AdminSystemStatusSchema,
+  dagster_status: z.string(),
+  checked_at: Iso8601Schema.nullable().default(null),
+  repository_count: z.number().int().default(0),
+  job_count: z.number().int().default(0),
+  asset_count: z.number().int().default(0),
+  schedule_count: z.number().int().default(0),
+  sensor_count: z.number().int().default(0),
+  run_counts: z.record(z.string(), z.number().int()).default({}),
+  repositories: z.array(AdminDagsterRepositorySummarySchema).default([]),
+  recent_runs: z.array(AdminDagsterRunSummarySchema).default([]),
+  features_total: z.number().int().nullable().default(null),
+  source_records_total: z.number().int().nullable().default(null),
+  import_jobs_by_status: z.record(z.string(), z.number().int()).default({}),
+  dedup_queue_by_status: z.record(z.string(), z.number().int()).default({}),
+  provider_dataset_count: z.number().int().default(0),
+  provider_failure_count: z.number().int().default(0),
+  recent_import_jobs: z.array(AdminProviderImportJobRecordSchema).default([]),
+  errors: z.array(z.string()).default([]),
+});
+export type AdminKorTravelMapEtlSummary = z.infer<typeof AdminKorTravelMapEtlSummarySchema>;
+
+export const AdminEtlSummarySchema = z.object({
+  generated_at: Iso8601Schema,
+  pinvi: AdminPinviEtlSummarySchema,
+  kor_travel_map: AdminKorTravelMapEtlSummarySchema,
+});
+export type AdminEtlSummary = z.infer<typeof AdminEtlSummarySchema>;
+
 export const AdminFeatureSortSchema = z.enum([
   'name',
   'updated_at',

@@ -46,6 +46,18 @@ export const queryKeys = {
     all: () => ['admin'] as const,
     me: () => ['admin', 'me'] as const,
     stats: () => ['admin', 'stats', 'overview'] as const,
+    etlSummary: () => ['admin', 'etl', 'summary'] as const,
+    providerSync: (params: { key?: string }) => ['admin', 'provider-sync', params] as const,
+    providerSyncAll: () => ['admin', 'provider-sync'] as const,
+    providerImportJobs: (params: {
+      status?: string;
+      kind?: string;
+      loadBatchId?: string;
+      parentJobId?: string;
+      pageSize?: number;
+      cursor?: string;
+    }) => ['admin', 'provider-import-jobs', params] as const,
+    providerImportJobsAll: () => ['admin', 'provider-import-jobs'] as const,
     users: (params: { page?: number; status?: string; q?: string }) =>
       ['admin', 'users', params] as const,
     user: (userId: string) => ['admin', 'user', userId] as const,

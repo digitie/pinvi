@@ -307,6 +307,57 @@ class KorTravelMapAdminClient:
             )
         )
 
+    # ── ops/provider ETL read proxy (kor_travel_map admin 운영 화면) ────────────────
+
+    async def get_ops_dagster_summary(self, *, page_size: int = 10) -> dict[str, Any]:
+        """GET /v1/ops/dagster/summary — kor_travel_map Dagster repository/run 요약."""
+        return self._data(
+            await self._send(
+                "GET",
+                "/v1/ops/dagster/summary",
+                params={"page_size": page_size},
+            )
+        )
+
+    async def get_ops_metrics(self) -> dict[str, Any]:
+        """GET /v1/ops/metrics — feature/import/dedup 운영 카운터."""
+        return self._data(await self._send("GET", "/v1/ops/metrics"))
+
+    async def list_ops_providers(self, *, key: str | None = None) -> dict[str, Any]:
+        """GET /v1/ops/providers — provider/dataset sync 상태 목록."""
+        params: dict[str, Any] = {}
+        if key:
+            params["key"] = key
+        return self._data(await self._send("GET", "/v1/ops/providers", params=params))
+
+    async def get_ops_provider(self, provider: str) -> dict[str, Any]:
+        """GET /v1/ops/providers/{provider} — provider 상세."""
+        return self._data(await self._send("GET", f"/v1/ops/providers/{provider}"))
+
+    async def list_ops_import_jobs(
+        self,
+        *,
+        status_filter: str | None = None,
+        kind: str | None = None,
+        load_batch_id: str | None = None,
+        parent_job_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/import-jobs — provider import job 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if status_filter:
+            params["status"] = status_filter
+        if kind:
+            params["kind"] = kind
+        if load_batch_id:
+            params["load_batch_id"] = load_batch_id
+        if parent_job_id:
+            params["parent_job_id"] = parent_job_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/import-jobs", params=params))
+
 
 def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAdminClient:
     """설정 기반 admin client 생성. admin token 미설정 시 공용 service token으로 fallback."""

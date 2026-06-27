@@ -49,12 +49,12 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/feature-requests`                                       | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
 | `POST /admin/feature-requests/{id}/approve\|reject`                 | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
 | `GET/PUT /admin/category-mappings`                                  | maki + 16색 매핑                                     | 6      |
-| `GET /admin/etl/*`                                                  | Dagit reverse-proxy + 자체 요약                      | 5      |
+| `GET /admin/etl/summary`                                            | Pinvi ETL registry + kor-travel-map ops 요약          | 5      |
 | `GET /admin/dedup-review` / `POST /admin/dedup-review/{id}/verdict` | Record Linkage 검토 큐                               | 5      |
 | `GET /admin/features/{id}/sources`                                  | source_links                                         | 5      |
 | `GET /admin/features/{id}/overrides`                                | feature_overrides                                    | 5      |
 | `GET /admin/features/{id}/weather-values`                           | weather timeline                                     | 5      |
-| `GET /admin/provider-sync` / `POST {id}/{action}`                   | provider_sync_state 관리                             | 5      |
+| `GET /admin/provider-sync` / `import-jobs`                          | provider/dataset sync 상태와 import job 조회          | 5      |
 | `GET /admin/integrity` / `POST /admin/integrity/{rule}/fix`         | data_integrity_violations                            | 5      |
 | `WS /admin/debug/logs`                                              | Loki LogQL stream                                    | 5      |
 | `GET /admin/debug/request/{request_id}`                             | X-Request-Id 타임라인                                | 5      |
@@ -932,7 +932,9 @@ GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
 
 - `/admin/features`: feature read/edit는 `kor-travel-map` admin API 기준으로 결선한다.
   Pinvi가 feature 정규화·저장 책임을 가져오지 않는다.
-- `/admin/etl`: Dagster/Dagit reverse proxy와 자체 요약은 Sprint 5 결선.
+- `/admin/etl`: Pinvi app-owned Dagster registry와 `kor-travel-map` ops 요약은
+  `/admin/etl/summary`로 결선됐다. run-now/cancel mutation은 후속 provider sync Task에서
+  reason/audit/idempotency/kill-switch 기준을 확정한 뒤 추가한다.
 - `/admin/seed`, `/admin/reset`: dev/staging 전용 안전장치(운영 라우트 미등록, 확인 키워드,
   audit)가 들어갈 때까지 운영 기능으로 취급하지 않는다.
 
@@ -943,6 +945,62 @@ GET /admin/audit/location?user_id=<uid>&from=2026-05-01&to=2026-05-31&limit=100
 ## 13. ETL / Record Linkage / 데이터 일관성
 
 SPEC V8 M-10 ~ M-11.
+
+### 13.0 `GET /admin/etl/summary`
+
+Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한 응답으로 합쳐
+반환한다. Pinvi는 `feature` / `provider_sync` schema를 직접 조회하지 않고,
+`kor-travel-map` `/v1/ops/dagster/summary`, `/v1/ops/metrics`, `/v1/ops/providers`,
+`/v1/ops/import-jobs`를 서비스 토큰으로 호출한다. upstream 일부가 실패해도 화면은 열 수 있도록
+`kor_travel_map.status = degraded | down`과 `errors[]`로 강등한다.
+
+권한: `admin` / `operator`
+
+응답 `data`:
+
+```jsonc
+{
+  "generated_at": "2026-06-27T00:00:00Z",
+  "pinvi": {
+    "status": "ok",
+    "message": "Dagster 응답 정상",
+    "latency_ms": 11,
+    "assets": [{ "key": "pinvi_kasi_special_days", "group_name": "pinvi_kasi" }],
+    "jobs": [
+      { "name": "kasi_special_days_job", "trigger": "schedule" },
+      { "name": "kasi_poi_rise_set_job", "trigger": "on_demand" }
+    ],
+    "schedules": [
+      {
+        "name": "kasi_special_days_schedule",
+        "job_name": "kasi_special_days_job",
+        "cron_schedule": "30 3 * * *",
+        "execution_timezone": "Asia/Seoul",
+        "status": "configured"
+      }
+    ],
+    "sensors": []
+  },
+  "kor_travel_map": {
+    "status": "ok",
+    "dagster_status": "ok",
+    "repository_count": 1,
+    "job_count": 3,
+    "asset_count": 8,
+    "schedule_count": 2,
+    "sensor_count": 0,
+    "run_counts": { "STARTED": 1 },
+    "features_total": 42,
+    "source_records_total": 77,
+    "import_jobs_by_status": { "running": 1 },
+    "dedup_queue_by_status": { "pending": 2 },
+    "provider_dataset_count": 1,
+    "provider_failure_count": 0,
+    "recent_import_jobs": [],
+    "errors": []
+  }
+}
+```
 
 ### 13.1 `GET /admin/dedup-review`
 
@@ -979,28 +1037,85 @@ kor-travel-map dedup verdict는 kor-travel-map admin OpenAPI로 callback한다.
 
 ### 13.3 `GET /admin/provider-sync`
 
+upstream: `kor-travel-map` `GET /v1/ops/providers`.
+
+권한: `admin` / `operator`
+
+Query:
+
+| 이름  | 설명                               |
+| ----- | ---------------------------------- |
+| `key` | provider 또는 dataset key 검색어   |
+
+응답 `data`:
+
 ```jsonc
 {
   "data": {
     "items": [
       {
-        "provider": "python-visitkorea-api",
-        "dataset_key": "search_festival",
-        "sync_scope": "rolling_12m",
-        "cursor": "2026-05-25T10:00:00Z",
-        "last_success_at": "...",
-        "last_attempt_at": "...",
-        "next_run_after": "...",
-        "last_error": null,
+        "provider": "kma",
+        "dataset_key": "special_days",
+        "sync_scope": "daily",
+        "status": "healthy",
+        "last_success_at": "2026-06-12T00:00:00+09:00",
+        "last_failure_at": null,
+        "consecutive_failures": 0,
+        "next_run_after": "2026-06-13T03:30:00+09:00",
+        "links": {},
+        "refresh_policy": { "enabled": true }
       },
     ],
+    "total": 1
   },
 }
 ```
 
-### 13.4 `POST /admin/provider-sync/{id}/{action}`
+### 13.4 `GET /admin/provider-sync/import-jobs`
 
-`action`: `pause` | `resume` | `retry` | `reset_cursor`.
+upstream: `kor-travel-map` `GET /v1/ops/import-jobs`.
+
+권한: `admin` / `operator`
+
+Query:
+
+| 이름            | 설명                                                  |
+| --------------- | ----------------------------------------------------- |
+| `status`        | `queued` / `running` / `done` / `failed` / `cancelled` |
+| `kind`          | upstream import job kind                              |
+| `load_batch_id` | load batch UUID                                       |
+| `parent_job_id` | parent job UUID                                       |
+| `page_size`     | 1~200, 기본 50                                        |
+| `cursor`        | upstream cursor                                       |
+
+응답 `data`:
+
+```jsonc
+{
+  "items": [
+    {
+      "job_id": "uuid",
+      "kind": "provider_import",
+      "status": "running",
+      "progress": 0.5,
+      "payload": {},
+      "current_stage": "normalize",
+      "error_message": null,
+      "created_at": "2026-06-12T00:00:00+09:00",
+      "started_at": "2026-06-12T00:01:00+09:00",
+      "heartbeat_at": "2026-06-12T00:02:00+09:00",
+      "finished_at": null,
+      "links": {}
+    }
+  ],
+  "page_size": 50,
+  "next_cursor": null
+}
+```
+
+run-now/cancel/pause/resume/reset cursor mutation은 아직 노출하지 않는다. 추가 시에는
+`access_reason`, Pinvi audit, upstream kill-switch 확인, idempotency key 또는 중복 실행 방지
+기준을 먼저 확정한다.
 
 ### 13.5 `GET /admin/integrity`
 

@@ -15,6 +15,9 @@
 - Admin `/admin/features/change-requests`를 `kor-travel-map` feature change request 큐에 연결했다.
   상태/액션/검색 필터, payload 상세, approve/reject reason 입력, audit 기록, 실패 rollback을 제공하며,
   기존 사용자 feature 제안 검토 화면에서 upstream 변경 요청 큐로 이어진다.
+- Admin `/admin/etl`과 `/admin/provider-sync`를 실제 운영 조회 화면으로 교체했다. Pinvi Dagster
+  asset/job/schedule registry와 `kor-travel-map` Dagster/metrics/provider/import job 상태를
+  조회하고, provider/dataset key와 import job status 필터를 제공한다.
 - Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
   Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
   미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.

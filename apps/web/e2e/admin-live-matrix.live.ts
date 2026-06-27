@@ -92,11 +92,11 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/features', heading: 'Features', table: true },
   { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', table: true },
   { path: '/admin/dedup-review', heading: 'Dedup review', placeholder: true },
-  { path: '/admin/provider-sync', heading: 'Provider sync', placeholder: true },
+  { path: '/admin/provider-sync', heading: 'Provider sync', table: true },
   { path: '/admin/integrity', heading: '정합성', placeholder: true },
   { path: '/admin/category-mapping', heading: '카테고리 매핑', placeholder: true },
   { path: '/admin/debug/logs', heading: 'Debug logs', placeholder: true },
-  { path: '/admin/etl', heading: 'ETL', placeholder: true },
+  { path: '/admin/etl', heading: 'ETL', table: true },
   { path: '/admin/grafana', heading: 'Grafana' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
   { path: '/admin/emails', heading: '이메일 큐', table: true },
@@ -155,6 +155,16 @@ const sortSpecs = [
     route: '/admin/features',
     heading: 'Features',
     columns: ['feature', 'kind', 'provider', 'issue_count', 'updated_at'],
+  },
+  {
+    route: '/admin/provider-sync',
+    heading: 'Provider sync',
+    columns: ['provider', 'scope', 'status', 'last_success', 'failures', 'next_run'],
+  },
+  {
+    route: '/admin/etl',
+    heading: 'ETL',
+    columns: ['job', 'status', 'progress', 'stage', 'created_at', 'finished_at'],
   },
 ];
 
@@ -615,6 +625,50 @@ function pushFeaturesFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushProviderSyncFilterCases(cases: AdminUiCase[]) {
+  const providers = ['', 'kma', 'visitkorea', 'kasi'];
+  const statuses = ['running', 'all', 'queued', 'done', 'failed', 'cancelled'];
+  for (const viewport of compactViewports) {
+    for (const provider of providers) {
+      for (const status of statuses) {
+        pushCase(
+          cases,
+          `provider-sync filter provider=${provider || 'all'} status=${status}`,
+          viewport,
+          async (page) => {
+            await openTableRoute(page, '/admin/provider-sync', 'Provider sync');
+            await page.getByTestId('admin-provider-sync-key').fill(provider);
+            await throttle();
+            await page.getByTestId('admin-provider-sync-submit').click();
+            await throttle();
+            await page.getByTestId('admin-provider-sync-job-status').selectOption(status);
+            await waitForAdminTable(page);
+            await expect(page.getByTestId('admin-provider-sync-key')).toHaveValue(provider);
+            await expect(page.getByTestId('admin-provider-sync-job-status')).toHaveValue(status);
+          },
+        );
+      }
+    }
+  }
+}
+
+function pushEtlFilterCases(cases: AdminUiCase[]) {
+  const statuses = ['running', 'all', 'queued', 'done', 'failed', 'cancelled'];
+  for (let repeat = 1; repeat <= 5; repeat += 1) {
+    for (const viewport of compactViewports) {
+      for (const status of statuses) {
+        pushCase(cases, `etl import status=${status} repeat=${repeat}`, viewport, async (page) => {
+          await openTableRoute(page, '/admin/etl', 'ETL');
+          await throttle();
+          await page.getByTestId('admin-etl-import-status-filter').selectOption(status);
+          await waitForAdminTable(page);
+          await expect(page.getByTestId('admin-etl-import-status-filter')).toHaveValue(status);
+        });
+      }
+    }
+  }
+}
+
 function pushSortCases(cases: AdminUiCase[]) {
   for (let repeat = 1; repeat <= 3; repeat += 1) {
     for (const viewport of mixedViewports) {
@@ -698,6 +752,8 @@ function buildUiCases() {
   pushMcpFilterCases(cases);
   pushFeatureRequestFilterCases(cases);
   pushFeaturesFilterCases(cases);
+  pushProviderSyncFilterCases(cases);
+  pushEtlFilterCases(cases);
   pushSortCases(cases);
   pushDashboardCases(cases);
   pushMcpValidationCases(cases);

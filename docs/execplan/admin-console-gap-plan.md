@@ -406,16 +406,38 @@ N150 게이트:
 
 추가 요청(2026-06-27) 8번. 기존 T-211의 ETL/provider sync 구현 범위를 이 Task와 통합한다.
 
+상태: 완료(2026-06-27, codex). 구현 PR은 Pinvi ETL registry와 `kor-travel-map`
+`/v1/ops/*` read proxy, `/admin/etl`, `/admin/provider-sync` 실제 화면, API integration,
+Windows Playwright mock e2e를 포함한다. run-now/cancel mutation은 reason/audit/idempotency/
+kill-switch 기준이 필요한 별도 후속 범위로 유지한다.
+
 범위:
 
 - `/admin/etl`에 현재 구동 중인 Pinvi ETL job과 Dagster 상태를 표시한다.
 - 현재 구현된 KASI job뿐 아니라 실제 등록된 asset/job 목록을 API에서 읽어 보여준다.
 - kor-travel-map provider sync는 별도 upstream proxy 섹션으로 구분한다.
 
+구현:
+
+- `KorTravelMapAdminClient`에 `get_ops_dagster_summary`, `get_ops_metrics`,
+  `list_ops_providers`, `get_ops_provider`, `list_ops_import_jobs`를 추가했다.
+- Pinvi API에 `GET /admin/etl/summary`, `GET /admin/provider-sync`,
+  `GET /admin/provider-sync/import-jobs`를 추가했다.
+- `/admin/etl/summary`는 Pinvi app-owned ETL 정의(`pinvi_kasi_special_days`,
+  `kasi_special_days_job`, `kasi_poi_rise_set_job`, `kasi_special_days_schedule`)와
+  `kor-travel-map` Dagster/metrics/provider/import job 요약을 결합한다. upstream 일부 장애는
+  `kor_travel_map.status=degraded|down`으로 강등해 화면을 막지 않는다.
+- Web `/admin/etl`은 Pinvi Dagster 상태, asset/job/schedule 목록, map Dagster counts,
+  recent runs, provider import job status filter/table을 표시한다.
+- Web `/admin/provider-sync`는 provider/dataset 상태 검색, import job status filter/table을 표시한다.
+- `admin-live-matrix.live.ts`에서 두 route를 placeholder가 아닌 table route로 전환하고
+  provider/ETL filter case와 sort case를 추가했다.
+
 검증:
 
-- API integration: Dagster 미설정/응답/장애 mapping.
-- UI e2e: job 목록, 상태 필터, Dagster 링크.
+- API unit/integration: upstream ops path/query, Dagster 응답/장애 mapping,
+  provider key filter, import job status/cursor proxy.
+- UI e2e: job 목록, 상태 필터, provider key filter, import job query 전달.
 
 ### T-221 — Dashboard 운영 현황 그래프 / 부하 / 용량
 

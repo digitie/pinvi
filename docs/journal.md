@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
+
+**작업**: Admin `/admin/etl`과 `/admin/provider-sync`를 실제 운영 조회 화면으로 교체했다.
+Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 상태를 같은 Admin 흐름에서 확인할 수
+있게 했다.
+
+**변경**:
+
+- `KorTravelMapAdminClient`에 `kor-travel-map` `/v1/ops/dagster/summary`, `/v1/ops/metrics`,
+  `/v1/ops/providers`, `/v1/ops/import-jobs` read method를 추가했다.
+- Pinvi API에 `GET /admin/etl/summary`, `GET /admin/provider-sync`,
+  `GET /admin/provider-sync/import-jobs`를 추가했다. `/admin/etl/summary`는 Pinvi Dagster registry와
+  upstream ops 요약을 결합하고, upstream 일부 장애는 `degraded`/`down` 상태로 강등한다.
+- Pinvi ETL registry는 현재 실제 정의인 `pinvi_kasi_special_days`, `kasi_special_days_job`,
+  `kasi_poi_rise_set_job`, `kasi_special_days_schedule`을 노출한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 ETL/provider sync 계약을 추가했다.
+- Web `/admin/etl`은 Pinvi Dagster 상태, asset/job/schedule 목록, map Dagster counts,
+  recent runs, provider import job status filter/table을 표시한다.
+- Web `/admin/provider-sync`는 provider/dataset key 검색과 import job status filter/table을 제공한다.
+- `admin-live-matrix.live.ts`에서 `/admin/etl`, `/admin/provider-sync`를 table route로 전환하고
+  filter/sort live case를 추가했다.
+- API 문서, Admin 실행계획, tasks/resume/changelog를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API `ruff check`, mypy,
+`test_kor_travel_map_admin_client.py` + `test_admin_etl_provider_sync_api.py` 22건,
+schemas/api-client/web typecheck, Web lint, schemas Vitest, Web production build를 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-etl-provider-sync.e2e.ts` 2건과 admin-live catalog assertion 1건이 통과했다. N150 live는
+T-215 묶음 게이트로 보류한다.
+
+**다음**: 검증 후 PR을 만들고 merge한 뒤 T-212 Dedup review / integrity / debug logs 운영 화면으로
+진행한다.
+
 ## 2026-06-27 (codex) — T-210 Pinvi feature request / upstream change request 운영 통합
 
 **작업**: Admin `/admin/features/change-requests`를 실제 운영 화면으로 교체하고, Pinvi 사용자

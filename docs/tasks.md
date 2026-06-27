@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-220 `/admin/etl` + provider sync + Dagster 운영 화면.
+- Admin 콘솔 기능 보강: T-212 Dedup review / integrity / debug logs 운영 화면.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -77,7 +77,12 @@
       기존 `/admin/feature-requests`는 upstream request id가 있으면 변경 요청 큐로 이어진다.
       Web mutation은 optimistic update와 실패 rollback을 갖추고, API integration과 Windows
       Playwright mock e2e로 검증한다.
-- [ ] T-220 — `/admin/etl` + provider sync + Dagster 운영 화면.
+- [x] T-220 — `/admin/etl` + provider sync + Dagster 운영 화면
+      (완료: 2026-06-27, codex). Pinvi ETL registry와 `kor-travel-map` `/v1/ops/*`
+      read proxy를 연결하고, `/admin/etl`과 `/admin/provider-sync` placeholder를 실제 상태/필터/table
+      화면으로 교체했다. `/admin/etl/summary`는 upstream 일부 장애를 graceful degrade하고,
+      live matrix는 두 route를 table route로 전환했다. API integration과 Windows Playwright mock
+      e2e로 검증했다.
 - [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.
 - [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
 - [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.

@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
+
+Admin `/admin/etl`과 `/admin/provider-sync`를 placeholder에서 실제 운영 조회 화면으로 교체했다.
+Pinvi API는 `GET /admin/etl/summary`, `GET /admin/provider-sync`,
+`GET /admin/provider-sync/import-jobs`를 제공한다. Pinvi app-owned ETL registry는 현재 실제 Dagster
+정의에 맞춰 `pinvi_kasi_special_days`, `kasi_special_days_job`,
+`kasi_poi_rise_set_job`, `kasi_special_days_schedule`을 노출하고, feature/provider ETL 상태는
+`kor-travel-map` `/v1/ops/dagster/summary`, `/v1/ops/metrics`, `/v1/ops/providers`,
+`/v1/ops/import-jobs`를 proxy한다.
+
+Web `/admin/etl`은 Pinvi Dagster 상태, asset/job/schedule 목록, `kor-travel-map` Dagster counts,
+recent runs, provider import job status filter/table을 표시한다. Web `/admin/provider-sync`는
+provider/dataset key 검색과 import job status filter/table을 제공한다. upstream 일부 장애는
+ETL summary 전체를 실패시키지 않고 `kor_travel_map.status=degraded|down`과 `errors[]`로 강등한다.
+run-now/cancel mutation은 reason/audit/idempotency/kill-switch 기준이 필요해 후속 Task로 유지했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff check`, mypy,
+admin ops focused pytest 22건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-etl-provider-sync.e2e.ts` 2건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+다음: T-220 PR을 만들고 merge한 뒤 T-212 Dedup review / integrity / debug logs 운영 화면으로
+진행한다.
+
 ## 2026-06-27 (codex) — T-210 Pinvi feature request / upstream change request 운영 통합
 
 Admin `/admin/features/change-requests`를 placeholder에서 실제 운영 화면으로 교체했다. Pinvi API는
@@ -1135,10 +1160,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-223 완료. 다음 작업은 **T-224 여행/날짜/POI 파일
-> 업로드와 용량 정책**이다. 이후 T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)를
-> 진행한 뒤 T-210 change request 운영 통합으로 돌아간다. N150 live는 계속 T-215 묶음 게이트에서
-> 실행한다.
+> **갱신 (2026-06-27, codex)**: T-220 완료. 다음 작업은 **T-212 Dedup review /
+> integrity / debug logs 운영 화면**이다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

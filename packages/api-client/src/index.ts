@@ -17,6 +17,8 @@ export type { TripBucket, TripListPage, TripListParams, TripListSort } from './e
 export type {
   AdminFeatureChangeRequestListParams,
   AdminFeatureListParams,
+  AdminProviderImportJobListParams,
+  AdminProviderSyncListParams,
 } from './endpoints/admin';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
 export type {
