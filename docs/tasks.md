@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-210 Pinvi feature request와 upstream change request 운영 통합.
+- Admin 콘솔 기능 보강: T-220 `/admin/etl` + provider sync + Dagster 운영 화면.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -70,7 +70,13 @@
       추가하고, orphan 불가 정책을 API/UI에 사유와 함께 노출했다. 상세 화면 dialog에서 대상
       여행 검색, 대상 day 입력, 하위 항목 move/delete 정책, reason, 결과/audit refresh를 처리하며,
       API integration과 Windows Playwright e2e로 검증했다.
-- [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
+- [x] T-210 — Pinvi feature request와 upstream change request 운영 통합
+      (완료: 2026-06-27, codex). `/admin/features/change-requests` proxy/API와 Web 운영 화면을
+      추가해 `kor-travel-map` feature change request 큐를 상태/액션/검색 필터로 조회하고,
+      approve/reject mutation은 upstream 성공 후 `feature_change_request.*` audit을 남긴다.
+      기존 `/admin/feature-requests`는 upstream request id가 있으면 변경 요청 큐로 이어진다.
+      Web mutation은 optimistic update와 실패 rollback을 갖추고, API integration과 Windows
+      Playwright mock e2e로 검증한다.
 - [ ] T-220 — `/admin/etl` + provider sync + Dagster 운영 화면.
 - [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.
 - [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.

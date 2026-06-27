@@ -71,6 +71,10 @@ function ReviewPanel({
   });
 
   const busy = approveMutation.isPending || rejectMutation.isPending;
+  const upstreamRequestId =
+    request.kor_travel_map_ref && typeof request.kor_travel_map_ref.request_id === 'string'
+      ? request.kor_travel_map_ref.request_id
+      : null;
 
   const approve = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -129,9 +133,17 @@ function ReviewPanel({
       </dl>
 
       {request.kor_travel_map_ref && (
-        <p className="break-all text-xs text-muted" data-testid="admin-fr-kor_travel_map-ref">
-          kor_travel_map: {JSON.stringify(request.kor_travel_map_ref)}
-        </p>
+        <div className="space-y-1 text-xs text-muted" data-testid="admin-fr-kor_travel_map-ref">
+          <p className="break-all">kor_travel_map: {JSON.stringify(request.kor_travel_map_ref)}</p>
+          {upstreamRequestId && (
+            <a
+              href={`/admin/features/change-requests?q=${encodeURIComponent(upstreamRequestId)}`}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              변경 요청 큐에서 보기
+            </a>
+          )}
+        </div>
       )}
 
       {!isPending ? (
@@ -345,6 +357,9 @@ export default function AdminFeatureRequestsPage() {
             setSelected(null);
             setNotice(message);
             void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.admin.featureChangeRequestsAll(),
+            });
           }}
         />
       )}

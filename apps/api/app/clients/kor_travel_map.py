@@ -52,6 +52,14 @@ class KorTravelMapBadRequest(KorTravelMapError):
         self.code = code
 
 
+class KorTravelMapConflict(KorTravelMapError):
+    """409 invalid state/conflict — lock busy가 아닌 운영 상태 충돌."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class KorTravelMapRateLimited(KorTravelMapError):
     """429 RATE_LIMITED / 409 LOCK_BUSY — Retry-After 존중."""
 

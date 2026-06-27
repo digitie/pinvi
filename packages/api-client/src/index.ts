@@ -14,7 +14,10 @@ export { telegramApi } from './endpoints/telegram';
 export { mobileAuthApi, MobileAuthResponseSchema } from './endpoints/mobile';
 export type { MobileAuthResult } from './endpoints/mobile';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
-export type { AdminFeatureListParams } from './endpoints/admin';
+export type {
+  AdminFeatureChangeRequestListParams,
+  AdminFeatureListParams,
+} from './endpoints/admin';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
 export type {
   PublicBeachListParams,

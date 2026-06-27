@@ -76,6 +76,13 @@ export const queryKeys = {
       order?: string;
     }) => ['admin', 'features', params] as const,
     feature: (featureId: string) => ['admin', 'feature', featureId] as const,
+    featureChangeRequests: (params: {
+      q?: string;
+      status?: string[];
+      action?: string[];
+      pageSize?: number;
+    }) => ['admin', 'feature-change-requests', params] as const,
+    featureChangeRequestsAll: () => ['admin', 'feature-change-requests'] as const,
     featureRequests: (params: { status?: string; page?: number }) =>
       ['admin', 'feature-requests', params] as const,
     // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).

@@ -32,6 +32,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/trips` / `{trip_id}`                                    | trip 목록 / 상세                                     | 3      |
 | `GET/POST/DELETE /admin/trips/{trip_id}/operation*`                 | trip/day 복사·이동·삭제와 영향도 조회               | 4      |
 | `GET /admin/features` / `{feature_id}`                              | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
+| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]`   | kor-travel-map feature 변경 요청 큐 검수 / audit      | 4      |
 | `GET /admin/pois` / `{poi_id}`                                      | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
 | `PATCH /admin/pois/{poi_id}/link-status`                            | POI feature 연결 상태 로컬 표시                      | 3      |
 | `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                   | POI 복사·이동·삭제와 영향도 조회                    | 4      |
@@ -627,10 +628,86 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
 }
 ```
 
+### 8.3 `GET /admin/features/change-requests`
+
+upstream: `kor-travel-map` `GET /v1/admin/features/change-requests`.
+
+권한: `admin` / `operator`
+
+Pinvi는 `ops.feature_change_requests` 또는 `feature.*` 테이블을 직접 조회하지 않는다. 이 endpoint는
+`kor-travel-map` Admin HTTP 계약을 proxy해 운영 검수 큐를 보여주며, Web은 Pinvi API만 호출한다.
+
+Query:
+
+| 이름        | 설명                                                             |
+| ----------- | ---------------------------------------------------------------- |
+| `status`    | 반복 가능. 최신 upstream 계약은 `pending`, `applied`, `rejected` |
+| `action`    | 반복 가능. `add`, `update`, `delete`                             |
+| `q`         | request id, feature id, reason 등 upstream 검색어                |
+| `page_size` | 1~500, 기본 100                                                  |
+
+응답 `data`:
+
+```jsonc
+{
+  "items": [
+    {
+      "request_id": "krq_...",
+      "feature_id": "f_place_...",
+      "action": "add",
+      "status": "pending",
+      "review_mode": "require_review",
+      "payload": { "name": "해운대 카페" },
+      "reason": "사용자 제안 승인",
+      "requested_by": "pinvi-admin",
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "applied_at": null,
+      "created_at": "2026-06-12T00:00:00+09:00"
+    }
+  ],
+  "review_mode": "require_review",
+  "page_size": 100
+}
+```
+
+### 8.4 `POST /admin/features/change-requests/{request_id}/approve`
+
+upstream: `kor-travel-map`
+`POST /v1/admin/features/change-requests/{request_id}/approve`.
+
+권한: `admin`
+
+요청:
+
+```jsonc
+{
+  "access_reason": "Pinvi 운영 검수 완료",
+  "kor_travel_map_reason": "원천 확인 완료"
+}
+```
+
+- `access_reason`은 Pinvi `admin_audit_log.action = "feature_change_request.approve"`에 남긴다.
+- upstream에는 `operator = "pinvi-admin"`과 `reason = kor_travel_map_reason || access_reason`을 전달한다.
+- upstream 성공 후에만 Pinvi audit을 commit한다.
+- 응답은 `AdminFeatureChangeRequestRecord` 단건이다.
+
+### 8.5 `POST /admin/features/change-requests/{request_id}/reject`
+
+upstream: `kor-travel-map`
+`POST /v1/admin/features/change-requests/{request_id}/reject`.
+
+권한: `admin`
+
+요청/응답과 audit 규칙은 approve와 같고, audit action은
+`feature_change_request.reject`다.
+
 오류 매핑:
 
 - upstream 404 → `404 RESOURCE_NOT_FOUND`
 - upstream 429 → `429 RATE_LIMITED` + `Retry-After` 전달
+- upstream 409 `LOCK_BUSY` → `429 RATE_LIMITED` + `Retry-After` 전달
+- upstream 409 상태 충돌 → `409 INVALID_STATE` 또는 upstream `code`
 - upstream 4xx → `422 VALIDATION_ERROR` 또는 upstream `code`
 - upstream timeout/5xx → `503 FEATURE_SERVICE_UNAVAILABLE`
 - upstream envelope drift → `502 FEATURE_SERVICE_BAD_GATEWAY`

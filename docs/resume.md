@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-210 Pinvi feature request / upstream change request 운영 통합
+
+Admin `/admin/features/change-requests`를 placeholder에서 실제 운영 화면으로 교체했다. Pinvi API는
+`kor-travel-map` `GET /v1/admin/features/change-requests`와 `POST .../{request_id}/approve|reject`
+를 proxy하고, mutation 성공 후 `feature_change_request.approve|reject` audit을 남긴다.
+상태 충돌 409는 `INVALID_STATE`로 보존하고, `LOCK_BUSY` 계열 409만 retry/rate-limit로 다룬다.
+
+Web은 변경 요청 큐를 상태/액션/검색 필터, table, detail payload inspector, reason 입력,
+approve/reject action으로 운영할 수 있게 했다. mutation은 optimistic update를 적용하고 실패 시
+이전 list 상태로 rollback한다. 기존 `/admin/feature-requests` 화면은 upstream `request_id`가
+저장된 제안에서 변경 요청 큐로 이동하는 링크를 제공한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+admin client/feature/feature-request focused pytest 28건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버
+(12805)를 띄워 `admin-feature-change-requests.e2e.ts` + `admin-feature-requests.e2e.ts` 5건이
+통과했다. N150 live API/UI/e2e는 사용자 지시에 따라 기능 묶음이 더 모인 뒤 T-215 게이트에서
+진행한다.
+
+다음: T-210 PR을 만들고 merge한 뒤 T-220(`/admin/etl` + provider sync + Dagster 운영 화면)에
+진입한다.
+
 ## 2026-06-27 (codex) — T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
 
 Admin이 여행계획, 날짜, POI를 복사·이동·삭제할 수 있는 운영 작업을 추가했다.
