@@ -469,6 +469,24 @@ class AdminPoiDetail(AdminPoiSummary):
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 
 
+class AdminPoiCreateRequest(BaseModel):
+    trip_id: uuid.UUID
+    day_index: int = Field(ge=1)
+    sort_order: str = Field(min_length=1, max_length=80)
+    feature_id: str | None = Field(default=None, min_length=1, max_length=200)
+    feature_snapshot: dict[str, Any] = Field(default_factory=dict)
+    custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
+    custom_marker_icon: str | None = Field(default=None, max_length=64)
+    planned_arrival_at: datetime | None = None
+    planned_departure_at: datetime | None = None
+    user_note: str | None = None
+    budget_amount: Decimal | None = Field(default=None, ge=0)
+    actual_amount: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="KRW", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    user_url: str | None = Field(default=None, max_length=2000)
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
 class AdminPoiPagedResponse(BaseModel):
     items: list[AdminPoiSummary]
     total: int

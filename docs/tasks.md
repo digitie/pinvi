@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-219 POI Admin 직접 생성.
+- Admin 콘솔 기능 보강: T-223 사용자 아바타 / RustFS 이미지 관리.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -52,7 +52,10 @@
   Admin 여행 목록에서 owner 검색/선택 기반 inline 생성 dialog를 제공하고,
   `POST /admin/trips`가 `trip.create` audit과 같은 transaction으로 여행계획을 생성한다.
   owner email 원문은 응답/감사 로그에 남기지 않고 마스킹 값만 사용한다.
-- [ ] T-219 — POI Admin 직접 생성.
+- [x] T-219 — POI Admin 직접 생성 (완료: 2026-06-27, codex).
+  Admin POI 목록에서 trip 검색/선택 기반 생성 dialog를 제공하고, `POST /admin/pois`가
+  `poi.create` audit과 같은 transaction으로 `app.trip_day_pois` attachment 행을 생성한다.
+  feature 정규화·저장은 계속 `kor-travel-map` 책임으로 두고 snapshot만 Pinvi POI에 저장한다.
 - [ ] T-223 — 사용자 아바타 / RustFS 이미지 관리.
 - [ ] T-224 — 여행/날짜/POI 파일 업로드와 용량 정책.
 - [ ] T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션.

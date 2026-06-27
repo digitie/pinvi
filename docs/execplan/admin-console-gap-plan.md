@@ -358,16 +358,21 @@ N150 게이트:
 
 추가 요청(2026-06-27) 7번.
 
+상태: 구현 완료(PR 예정).
+
 범위:
 
 - Admin이 특정 trip/day에 POI를 직접 추가하는 API/UI를 제공한다.
 - feature_id 또는 custom POI 입력, 날짜/순서/메모/예산/URL/마커 override를 입력받는다.
 - 생성 사유를 audit에 남기고, feature 정규화·저장은 kor-travel-map에 위임한다.
+- UI는 `/admin/pois` 목록에서 trip 검색/선택 후 POI 이름/좌표/주소를 snapshot으로 조립한다.
+- API는 `POST /admin/pois`이며 `poi.create` audit을 같은 transaction에 기록한다.
 
 검증:
 
-- API integration: trip/day 권한, feature snapshot, audit append.
-- UI e2e: 생성 dialog, validation, 생성 후 list/detail refresh.
+- API integration: trip 존재 검증, day 자동 생성, feature snapshot, KASI rise/set 초기 row,
+  audit append, audit 실패 rollback.
+- UI e2e: 생성 dialog, trip 검색/선택, 생성 POST body, 생성 후 상세 이동.
 
 ### T-220 — ETL 실제 구동 상태 화면
 

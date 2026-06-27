@@ -19,6 +19,7 @@ import {
   AdminMcpTokenIssueRequestSchema,
   AdminLocationAuditEntrySchema,
   AdminPagedResponseSchema,
+  AdminPoiCreateRequestSchema,
   AdminPoiDetailSchema,
   AdminPoiLinkStatusRequestSchema,
   AdminPoiPagedResponseSchema,
@@ -254,6 +255,13 @@ export const adminApi = (client: ApiClient) => ({
   getPoi: (poiId: string) =>
     client.request(`/admin/pois/${poiId}`, {
       method: 'GET',
+      schema: AdminPoiDetailSchema,
+    }),
+
+  createPoi: (body: z.infer<typeof AdminPoiCreateRequestSchema>) =>
+    client.request('/admin/pois', {
+      method: 'POST',
+      body: JSON.stringify(AdminPoiCreateRequestSchema.parse(body)),
       schema: AdminPoiDetailSchema,
     }),
 
