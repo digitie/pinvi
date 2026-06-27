@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-236 WebSocket multi-client collaboration e2e
+
+**작업**: Trip 상세 협업 WebSocket mock e2e를 여러 브라우저 컨텍스트와 재연결 흐름까지 확장했다.
+기존 T-236의 N150 staging live 검증은 운영 drill 성격이 커서 T-236a로 분리했다.
+
+**변경**:
+
+- `trip-collab.e2e.ts`에 page별 동적 TripView 응답과 controllable Fake WebSocket helper를 추가했다.
+- 2개 브라우저 컨텍스트에서 `presence.update`와 `trip.updated` broadcast reload를 검증했다.
+- WebSocket close/reconnect 뒤 새 broadcast가 최신 HTTP snapshot reload로 이어지는지 검증했다.
+- 5개 브라우저 컨텍스트에서 presence fan-out와 offline cleanup 상태 문구를 검증했다.
+- React Strict Mode 재마운트와 재연결에서 닫힌 socket이 남아도 마지막 active socket으로 서버 이벤트를
+  주입하도록 테스트를 정리했다.
+
+**검증**:
+
+- WSL ext4 미러: `npm -w @pinvi/web run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run lint`
+- Windows Playwright runner: `PLAYWRIGHT_BASE_URL=http://localhost:12805 npm -w @pinvi/web run test:e2e -- trip-collab.e2e.ts --workers=1`
+
+**다음**: PR을 만들고 merge한 뒤 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+다음 구현은 T-236a WebSocket multi-client N150 live e2e drill이다.
+
 ## 2026-06-28 (codex) — T-288 Task 문서 분리 정책 반영
 
 **작업**: `kor-travel-map` task 문서화 정책을 확인하고 Pinvi의 task 추적 문서에도
