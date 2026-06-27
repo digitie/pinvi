@@ -219,6 +219,12 @@ class Settings(BaseSettings):
         default_factory=lambda: ["/health", "/health/db", "/metrics"]
     )
 
+    # Admin system view (T-222) — Docker Engine read API collector. The socket is not
+    # mounted by default in compose; missing/denied access is reported as unknown/down.
+    pinvi_docker_socket_path: str = "/var/run/docker.sock"
+    pinvi_docker_status_timeout_seconds: float = 2.0
+    pinvi_docker_status_container_limit: int = 80
+
     # 운영 부트스트랩
     pinvi_bootstrap_admin_email: str = "bootstrap-admin@example.com"
     pinvi_bootstrap_admin_password: str = ""

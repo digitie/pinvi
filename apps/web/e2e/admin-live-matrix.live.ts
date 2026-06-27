@@ -96,6 +96,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/integrity', heading: '정합성', table: true },
   { path: '/admin/category-mapping', heading: '카테고리 매핑', table: true },
   { path: '/admin/debug/logs', heading: 'Debug logs', table: true },
+  { path: '/admin/system', heading: '시스템', table: true },
   { path: '/admin/etl', heading: 'ETL', table: true },
   { path: '/admin/grafana', heading: 'Grafana' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
@@ -190,6 +191,11 @@ const sortSpecs = [
     route: '/admin/debug/logs',
     heading: 'Debug logs',
     columns: ['log', 'level', 'source', 'event', 'message', 'created'],
+  },
+  {
+    route: '/admin/system',
+    heading: '시스템',
+    columns: ['container', 'image', 'state', 'health', 'status'],
   },
 ];
 
@@ -637,12 +643,8 @@ function pushFeaturesFilterCases(cases: AdminUiCase[]) {
             await throttle();
             await page.getByTestId('admin-features-search-submit').click();
             await waitForAdminTable(page);
-            await expect(page.getByTestId('admin-features-provider-filter')).toHaveValue(
-              provider,
-            );
-            await expect(page.getByTestId('admin-features-category-filter')).toHaveValue(
-              category,
-            );
+            await expect(page.getByTestId('admin-features-provider-filter')).toHaveValue(provider);
+            await expect(page.getByTestId('admin-features-category-filter')).toHaveValue(category);
           },
         );
       }

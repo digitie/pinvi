@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-222 System view Docker / 의존 API 상태
+
+Admin 시스템 운영 화면을 추가했다. Pinvi API는 기존 `/admin/system/summary`를 유지하고,
+신규 `GET /admin/system/detail`에서 의존 API health와 Docker collector 상태, container 목록을
+함께 반환한다. Docker container 응답은 `container_id`, `name`, `image`, `state`, `status`,
+`health`, compose project/service만 포함하고 raw Docker labels/env, 운영 도메인, secret은 노출하지
+않는다.
+
+Docker socket은 compose에 기본 mount하지 않는다. `PINVI_DOCKER_SOCKET_PATH`가 존재하지 않거나
+권한이 없으면 `/admin/system/detail`은 실패하지 않고 `docker.status=unknown|down`과 빈
+`containers`로 강등한다. 운영에서 실제 container 수집을 켜려면 별도 안전 검토 후 host-local
+override로 socket 접근을 부여해야 한다.
+
+Web `/admin/system`은 의존 API 상태 카드와 Docker collector 상태, container table을 표시한다.
+Admin sidebar의 시스템 운영 그룹에 새 메뉴를 추가했고, live matrix route 목록에도 포함했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format/check,
+앱 코드 mypy, `test_admin_system_summary_api.py` 3건, Web Prettier check, typecheck, lint,
+Vitest 27건, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-priority3.e2e.ts` 시스템 화면 케이스 1건이 통과했다.
+
+다음: T-222 PR을 만들고 merge한 뒤 T-215 Admin live e2e 확장 + N150 묶음 게이트로 진행한다.
+
 ## 2026-06-27 (codex) — T-221 Dashboard 운영 현황 그래프 / 부하 / 용량
 
 Admin `/admin` 대시보드의 운영 현황을 실제 지표 기반으로 확장했다. Pinvi API

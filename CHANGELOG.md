@@ -30,6 +30,9 @@
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,
   가입/여행 생성 24시간 막대 그래프, load average, 디스크 사용률, 첨부 저장소 사용량/한도를
   raw 운영 경로/도메인/secret 없이 표시한다.
+- Admin `/admin/system` 화면을 추가했다. 의존 API health와 Docker collector 상태,
+  container name/image/state/health/compose service를 표시하며, Docker socket이 없거나 권한이
+  없으면 실패 대신 `unknown`/`down` 상태로 강등한다.
 - Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
   Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
   미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.

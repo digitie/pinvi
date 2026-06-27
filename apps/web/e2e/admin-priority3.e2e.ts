@@ -4,6 +4,7 @@ import type {
   AdminFeatureDetail,
   AdminFeaturePagedResponse,
   AdminLocationAuditEntry,
+  AdminSystemDetail,
   AdminSystemSummary,
 } from '@pinvi/schemas';
 
@@ -72,6 +73,40 @@ const systemSummary: AdminSystemSummary = {
       latency_ms: 12,
     },
     { key: 'rustfs', label: 'RustFS', status: 'ok', message: '응답 정상', latency_ms: 8 },
+  ],
+};
+
+const systemDetail: AdminSystemDetail = {
+  generated_at: '2026-06-09T10:00:00+09:00',
+  dependencies: systemSummary.services,
+  docker: {
+    key: 'docker',
+    label: 'Docker',
+    status: 'ok',
+    message: '2개 container 수집',
+    latency_ms: 5,
+  },
+  containers: [
+    {
+      container_id: 'abc123',
+      name: 'pinvi-api-latest',
+      image: 'pinvi-api:latest-main',
+      state: 'running',
+      status: 'Up 1 minute (healthy)',
+      health: 'healthy',
+      compose_project: 'pinvi',
+      compose_service: 'pinvi-api',
+    },
+    {
+      container_id: 'def456',
+      name: 'pinvi-web-latest',
+      image: 'pinvi-web:latest-main',
+      state: 'running',
+      status: 'Up 1 minute (healthy)',
+      health: 'healthy',
+      compose_project: 'pinvi',
+      compose_service: 'pinvi-web',
+    },
   ],
 };
 
@@ -330,6 +365,29 @@ test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page })
   await expect(page.getByTestId('admin-dashboard-capacity-disk')).toContainText('30.0%');
   await expect(page.getByTestId('admin-dashboard-capacity')).toContainText('8 files');
   await expect(page.getByText('T-209 Feature 검색')).toBeVisible();
+});
+
+test('Admin 시스템 화면이 의존 API와 Docker 상태를 표시한다', async ({ page }) => {
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/system/detail',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: systemDetail }),
+      });
+    },
+  );
+
+  await page.goto('/admin/system');
+
+  await expect(page.getByRole('heading', { name: '시스템', exact: true })).toBeVisible();
+  await expect(page.getByTestId('admin-system-dependency-pinvi_api')).toContainText('정상');
+  await expect(page.getByTestId('admin-system-dependency-kor_travel_map_api')).toContainText(
+    '주의',
+  );
+  await expect(page.getByTestId('admin-system-docker')).toContainText('2개 container 수집');
+  await expect(page.getByTestId('admin-system-containers')).toContainText('pinvi-api-latest');
+  await expect(page.getByTestId('admin-system-containers')).toContainText('pinvi-web:latest-main');
 });
 
 test('Admin API 호출 로그가 필터를 API에 전달한다', async ({ page }) => {

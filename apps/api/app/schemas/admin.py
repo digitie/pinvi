@@ -127,6 +127,24 @@ class AdminSystemSummary(BaseModel):
     services: list[AdminSystemServiceStatus]
 
 
+class AdminDockerContainerStatus(BaseModel):
+    container_id: str
+    name: str
+    image: str
+    state: str
+    status: str
+    health: str | None = None
+    compose_project: str | None = None
+    compose_service: str | None = None
+
+
+class AdminSystemDetail(BaseModel):
+    generated_at: datetime
+    dependencies: list[AdminSystemServiceStatus]
+    docker: AdminSystemServiceStatus
+    containers: list[AdminDockerContainerStatus] = Field(default_factory=list)
+
+
 class AdminEtlDefinitionAsset(BaseModel):
     key: str
     group_name: str | None = None
