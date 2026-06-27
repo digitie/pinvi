@@ -268,7 +268,33 @@ GET /admin/trips?q=busan&status_filter=planned&visibility_filter=private&page=1&
 - `share_links`: token 원문/해시는 반환하지 않고 share row metadata만 제공
 - `recent_audit`: 해당 trip의 최근 `admin_audit_log` 10건
 
-### 7.3 `PATCH /admin/trips/{trip_id}/status`
+### 7.3 `POST /admin/trips`
+
+```http
+POST /admin/trips
+Content-Type: application/json
+
+{
+  "owner_user_id": "uuid",
+  "title": "부산 가족 여행",
+  "description": "고객센터 대행 생성",
+  "region_hint": "부산",
+  "primary_region_code": "26",
+  "start_date": "2026-07-01",
+  "end_date": "2026-07-03",
+  "visibility": "private",
+  "status": "draft",
+  "access_reason": "고객 요청 대행"
+}
+```
+
+- 권한: `admin`
+- `owner_user_id`는 삭제/비활성 사용자가 아니어야 한다.
+- `start_date`와 `end_date`는 둘 다 비우거나 둘 다 채운다.
+- `primary_region_code`가 있으면 `primary_region_source = "manual"`로 저장한다.
+- `admin_audit_log`에 `action = "trip.create"`를 기록하며 owner email 원문은 감사 로그에 남기지 않는다.
+
+### 7.4 `PATCH /admin/trips/{trip_id}/status`
 
 ```http
 PATCH /admin/trips/<trip_id>/status

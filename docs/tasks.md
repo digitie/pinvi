@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-217 Admin 여행계획 직접 생성.
+- Admin 콘솔 기능 보강: T-219 POI Admin 직접 생성.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -48,7 +48,10 @@
   고쳤다. `/admin/trips/{trip_id}`는 여행계획명을 제목으로 표시하고, owner/가입 동반자/POI
   추가자를 `/admin/users/{user_id}`로 연결한다. 미가입 초대자는 별도 상태로 표시하며, 상세 계획의
   day/POI listing과 POI 지도 dialog 및 `/admin/pois/{poi_id}` 링크를 추가했다.
-- [ ] T-217 — 여행계획 Admin 직접 생성.
+- [x] T-217 — 여행계획 Admin 직접 생성 (완료: 2026-06-27, codex).
+  Admin 여행 목록에서 owner 검색/선택 기반 inline 생성 dialog를 제공하고,
+  `POST /admin/trips`가 `trip.create` audit과 같은 transaction으로 여행계획을 생성한다.
+  owner email 원문은 응답/감사 로그에 남기지 않고 마스킹 값만 사용한다.
 - [ ] T-219 — POI Admin 직접 생성.
 - [ ] T-223 — 사용자 아바타 / RustFS 이미지 관리.
 - [ ] T-224 — 여행/날짜/POI 파일 업로드와 용량 정책.

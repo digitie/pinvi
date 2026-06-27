@@ -225,6 +225,133 @@ async def test_admin_trip_detail_returns_companions_share_links_and_audit(
     assert trip["recent_audit"] == []
 
 
+async def test_admin_trip_create_writes_audit(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    request_id = uuid.uuid4()
+
+    resp = await client.post(
+        "/admin/trips",
+        json={
+            "owner_user_id": str(owner_id),
+            "title": "운영자 생성 여행",
+            "description": "고객 요청 대행 생성",
+            "region_hint": "강릉",
+            "primary_region_code": "42150",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-03",
+            "visibility": "unlisted",
+            "status": "planned",
+            "access_reason": "고객센터 요청 대행",
+        },
+        headers={"X-Request-Id": str(request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 201, resp.text
+    trip = resp.json()["data"]
+    assert trip["title"] == "운영자 생성 여행"
+    assert trip["owner_user_id"] == str(owner_id)
+    assert trip["owner_email_masked"] == "o***@example.com"
+    assert trip["status"] == "planned"
+    assert trip["visibility"] == "unlisted"
+    assert trip["primary_region_code"] == "42150"
+    assert trip["primary_region_source"] == "manual"
+    assert trip["recent_audit"][0]["action"] == "trip.create"
+    assert trip["recent_audit"][0]["access_reason"] == "고객센터 요청 대행"
+    assert "owner@example.com" not in resp.text
+
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+        saved_trip = await db.scalar(select(Trip).where(Trip.trip_id == uuid.UUID(trip["trip_id"])))
+
+    assert saved_trip is not None
+    assert saved_trip.owner_user_id == owner_id
+    assert audit is not None
+    assert audit.actor_user_id == admin_id
+    assert audit.action == "trip.create"
+    assert audit.resource_id == trip["trip_id"]
+    assert audit.before_state is None
+    assert audit.after_state["owner_email_masked"] == "o***@example.com"
+    assert "owner@example.com" not in str(audit.after_state)
+
+
+async def test_admin_trip_create_rejects_missing_owner(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+
+    resp = await client.post(
+        "/admin/trips",
+        json={
+            "owner_user_id": str(uuid.uuid4()),
+            "title": "소유자 없음",
+            "visibility": "private",
+            "status": "draft",
+            "access_reason": "소유자 검증",
+        },
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+async def test_admin_trip_create_rolls_back_when_audit_fails(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v1.admin.trips as admin_trips_router
+
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+
+    async def _fail_append(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("audit failed")
+
+    monkeypatch.setattr(admin_trips_router, "append_admin_audit", _fail_append)
+
+    with pytest.raises(RuntimeError, match="audit failed"):
+        await client.post(
+            "/admin/trips",
+            json={
+                "owner_user_id": str(owner_id),
+                "title": "감사 실패 생성",
+                "visibility": "private",
+                "status": "draft",
+                "access_reason": "테스트 감사 실패",
+            },
+            cookies=auth_cookies(str(admin_id)),
+        )
+
+    async with session_factory() as db:
+        trip = await db.scalar(select(Trip).where(Trip.title == "감사 실패 생성"))
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.action == "trip.create"))
+
+    assert trip is None
+    assert audit is None
+
+
 async def test_admin_trip_status_update_writes_audit(
     client,
     session_factory,

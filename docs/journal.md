@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-217 Trip Admin 직접 생성
+
+**작업**: 추가 요청 5번을 T-217로 구현했다. Admin이 사용자 owner를 선택해 여행계획을 직접
+생성하고, 생성 사유를 감사 로그에 남길 수 있게 했다.
+
+**변경**:
+- `POST /admin/trips`를 추가했다. admin 전용이며 owner 존재/활성 여부를 검증한다.
+- admin trip 생성은 trip row와 `trip.create` audit을 같은 transaction에 기록한다. owner email
+  원문은 응답/감사 로그에 남기지 않고 마스킹 값만 사용한다.
+- `@pinvi/schemas`와 `@pinvi/api-client`에 `AdminTripCreateRequest` / `createTrip`을 추가했다.
+- Web `/admin/trips`에 owner 검색/선택 기반 생성 dialog를 추가했다. 생성 성공 시 생성된 trip
+  상세 화면으로 이동한다.
+- API 문서와 Admin 실행 계획, tasks/resume/changelog를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API focused pytest 7건, API `ruff check`, focused mypy,
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, Web lint, Web production build를
+통과했다. WSL Playwright mock e2e는 Chromium 바이너리 부재로 실행 전 실패했으나, WSL Next
+서버(12805)를 Windows Playwright runner가 재사용하는 방식으로 `admin-trips.e2e.ts` 3건이 통과했다.
+
+**다음**: T-217 PR merge 후 T-219 POI Admin 직접 생성으로 진행한다.
+
 ## 2026-06-27 (codex) — T-216 Trip Admin 상세 운영성 보강
 
 **작업**: 추가 요청 1~4번, 11번을 T-216으로 구현했다. Admin 좌측 메뉴 active state가

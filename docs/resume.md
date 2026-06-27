@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-217 Trip Admin 직접 생성
+
+Admin 여행 목록에 생성 dialog를 추가했다. 운영자는 `/admin/users` 검색 결과에서 owner를
+마스킹 이메일/닉네임 기준으로 선택하고, 여행계획명, 날짜, 공개 범위, 상태, 지역 힌트,
+행정구역 코드, 설명, 작업 사유를 입력해 여행계획을 직접 만들 수 있다. 생성 성공 시 방금 만든
+`/admin/trips/{trip_id}` 상세 화면으로 이동한다.
+
+백엔드는 `POST /admin/trips`를 추가했다. admin 전용이며 삭제/비활성 owner에는 생성하지 않는다.
+`trip.create` audit은 trip row와 같은 transaction에 기록하고, owner email 원문은 응답/감사 로그에
+남기지 않는다. audit append 실패 시 trip 생성도 rollback된다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API focused pytest 7건,
+API ruff, focused mypy, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+WSL Playwright mock e2e는 Chromium 바이너리 부재로 실행 전 실패했지만, 같은 spec은 WSL Next
+서버(12805)를 Windows Playwright runner가 재사용하는 방식으로 3건 모두 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-219(POI Admin 직접 생성)에 진입한다. T-210 WIP stash는
+`wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
 ## 2026-06-27 (codex) — T-216 Trip Admin 상세 운영성 보강
 
 Admin 좌측 메뉴가 현재 route와 무관하게 dashboard 선택 상태로 보일 수 있는 문제를
@@ -22,7 +41,7 @@ schemas/api-client/web typecheck, Web lint, Web production build가 통과했다
 mock e2e는 WSL Chromium 바이너리 부재로 실행 전 실패했으며, 추가 e2e는 CI 또는 T-215 N150
 묶음 게이트에서 확인한다.
 
-다음: PR을 만들고 merge한 뒤 T-217(여행계획 Admin 직접 생성)에 진입한다. T-210 WIP stash는
+T-216은 PR #242로 merge 완료했다. T-210 WIP stash는
 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있으며, T-223~T-225 이후
 또는 우선순위 재조정 시 복원한다.
 

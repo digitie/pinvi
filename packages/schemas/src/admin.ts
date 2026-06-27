@@ -427,6 +427,44 @@ export const AdminTripDetailSchema = AdminTripSummarySchema.extend({
 });
 export type AdminTripDetail = z.infer<typeof AdminTripDetailSchema>;
 
+export const AdminTripCreateRequestSchema = z
+  .object({
+    owner_user_id: z.string().uuid(),
+    title: z.string().min(1).max(200),
+    description: z.string().nullable().optional(),
+    region_hint: z.string().max(120).nullable().optional(),
+    primary_region_code: z
+      .string()
+      .regex(/^[0-9]{2,10}$/)
+      .nullable()
+      .optional(),
+    start_date: z.string().date().nullable().optional(),
+    end_date: z.string().date().nullable().optional(),
+    visibility: TripVisibilitySchema.default('private'),
+    status: TripStatusSchema.default('draft'),
+    access_reason: z.string().min(1).max(500),
+  })
+  .superRefine((value, ctx) => {
+    const hasStart = Boolean(value.start_date);
+    const hasEnd = Boolean(value.end_date);
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end_date'],
+        message: 'start_date와 end_date는 함께 입력해야 합니다.',
+      });
+      return;
+    }
+    if (value.start_date && value.end_date && value.end_date < value.start_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end_date'],
+        message: 'end_date는 start_date 이후여야 합니다.',
+      });
+    }
+  });
+export type AdminTripCreateRequest = z.infer<typeof AdminTripCreateRequestSchema>;
+
 export const AdminTripPagedResponseSchema = z.object({
   items: z.array(AdminTripSummarySchema),
   total: z.number().int(),
