@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-212 Dedup review / integrity / debug logs 운영 화면.
+- Admin 콘솔 기능 보강: T-226 Dedup verdict / integrity status mutation.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -83,7 +83,11 @@
       화면으로 교체했다. `/admin/etl/summary`는 upstream 일부 장애를 graceful degrade하고,
       live matrix는 두 route를 table route로 전환했다. API integration과 Windows Playwright mock
       e2e로 검증했다.
-- [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.
+- [x] T-212 — Dedup review / integrity / debug logs 운영 화면
+      (완료: 2026-06-27, codex). `kor-travel-map` dedup review, consistency issue/report,
+      sanitized system/API logs read proxy를 추가하고 `/admin/dedup-review`, `/admin/integrity`,
+      `/admin/debug/logs`를 실제 필터/table/detail 화면으로 교체했다. mutation은 T-226으로 분리했다.
+- [ ] T-226 — Dedup verdict / integrity status mutation.
 - [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
 - [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.
 - [ ] T-218 — prod Grafana 주소 반영.

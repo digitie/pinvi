@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-212 Dedup review / integrity / debug logs 운영 화면
+
+Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 placeholder에서 실제
+read-only 운영 조회 화면으로 교체했다. Pinvi API는 `GET /admin/dedup-review`,
+`GET /admin/integrity/issues`, `GET /admin/integrity/reports`,
+`GET /admin/debug/logs/system`, `GET /admin/debug/logs/api-calls`를 제공하고,
+`kor-travel-map` `/v1/admin/dedup-reviews`, `/v1/ops/consistency/*`,
+`/v1/ops/system-logs`, `/v1/ops/api-call-logs`를 서비스 토큰으로 proxy한다.
+
+Web은 dedup 후보 status/search/min score 필터와 feature A/B detail panel, 정합성 issue/report
+필터 table, sanitized system/API log 필터 table을 제공한다. provider sync와 새 ops route의 upstream
+error mapping은 공통 helper로 합쳤다. dedup verdict와 integrity status/fix mutation은
+reason/audit/idempotency/kill-switch 기준이 필요해 T-226으로 분리했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff, mypy,
+admin ops focused pytest 28건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+다음: T-212 PR을 만들고 merge한 뒤 T-226 Dedup verdict / integrity status mutation으로 진행한다.
+
 ## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
 
 Admin `/admin/etl`과 `/admin/provider-sync`를 placeholder에서 실제 운영 조회 화면으로 교체했다.
@@ -1160,8 +1182,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-220 완료. 다음 작업은 **T-212 Dedup review /
-> integrity / debug logs 운영 화면**이다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: T-212 완료. 다음 작업은 **T-226 Dedup verdict /
+> integrity status mutation**이다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

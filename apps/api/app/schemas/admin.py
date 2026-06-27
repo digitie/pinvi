@@ -238,6 +238,110 @@ class AdminEtlSummary(BaseModel):
     kor_travel_map: AdminKorTravelMapEtlSummary
 
 
+class AdminDedupFeatureRecord(BaseModel):
+    feature_id: str
+    name: str
+    kind: str
+    category: str
+    lon: float | None = None
+    lat: float | None = None
+    provider: str | None = None
+    dataset_key: str | None = None
+
+
+class AdminDedupReviewRecord(BaseModel):
+    review_id: str
+    status: str
+    total_score: float
+    name_score: float
+    spatial_score: float
+    category_score: float
+    distance_m: float | None = None
+    feature_a: AdminDedupFeatureRecord
+    feature_b: AdminDedupFeatureRecord
+    decision_reason: str | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    created_at: datetime
+
+
+class AdminDedupReviewPagedResponse(BaseModel):
+    items: list[AdminDedupReviewRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
+class AdminIntegrityIssueRecord(BaseModel):
+    issue_id: str
+    violation_type: str
+    severity: str
+    message: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    detected_at: datetime
+    provider: str | None = None
+    dataset_key: str | None = None
+    feature_id: str | None = None
+    source_record_key: str | None = None
+    resolved_at: datetime | None = None
+
+
+class AdminIntegrityIssuesResponse(BaseModel):
+    items: list[AdminIntegrityIssueRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
+class AdminConsistencyReportRecord(BaseModel):
+    report_id: str
+    batch_id: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    severity_max: str
+    cases: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminConsistencyReportsResponse(BaseModel):
+    items: list[AdminConsistencyReportRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
+class AdminUpstreamSystemLogRecord(BaseModel):
+    log_id: str
+    level: str
+    source: str
+    event: str
+    message: str
+    detail: dict[str, Any] = Field(default_factory=dict)
+    request_id: str | None = None
+    created_at: datetime
+
+
+class AdminUpstreamSystemLogsResponse(BaseModel):
+    items: list[AdminUpstreamSystemLogRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
+class AdminUpstreamApiCallLogRecord(BaseModel):
+    log_id: str
+    method: str
+    path: str
+    status_code: int
+    duration_ms: int
+    request_id: str | None = None
+    error_code: str | None = None
+    created_at: datetime
+
+
+class AdminUpstreamApiCallLogsResponse(BaseModel):
+    items: list[AdminUpstreamApiCallLogRecord] = Field(default_factory=list)
+    page_size: int
+    next_cursor: str | None = None
+
+
 AdminFeatureSort = Literal[
     "name",
     "updated_at",

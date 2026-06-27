@@ -6,11 +6,14 @@ from app.api.v1.admin import (
     api_calls,
     audit,
     backup,
+    debug_logs,
+    dedup_review,
     emails,
     etl,
     feature_requests,
     features,
     files,
+    integrity,
     mcp_tokens,
     notice_plans,
     pois,
@@ -29,7 +32,10 @@ admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
 admin_router.include_router(features.router)
 admin_router.include_router(feature_requests.router)
+admin_router.include_router(dedup_review.router)
 admin_router.include_router(provider_sync.router)
+admin_router.include_router(integrity.router)
+admin_router.include_router(debug_logs.router)
 admin_router.include_router(files.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)

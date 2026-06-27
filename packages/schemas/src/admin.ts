@@ -264,6 +264,129 @@ export const AdminEtlSummarySchema = z.object({
 });
 export type AdminEtlSummary = z.infer<typeof AdminEtlSummarySchema>;
 
+export const AdminDedupFeatureRecordSchema = z.object({
+  feature_id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  category: z.string(),
+  lon: z.number().nullable().default(null),
+  lat: z.number().nullable().default(null),
+  provider: z.string().nullable().default(null),
+  dataset_key: z.string().nullable().default(null),
+});
+export type AdminDedupFeatureRecord = z.infer<typeof AdminDedupFeatureRecordSchema>;
+
+export const AdminDedupReviewRecordSchema = z.object({
+  review_id: z.string(),
+  status: z.string(),
+  total_score: z.number(),
+  name_score: z.number(),
+  spatial_score: z.number(),
+  category_score: z.number(),
+  distance_m: z.number().nullable().default(null),
+  feature_a: AdminDedupFeatureRecordSchema,
+  feature_b: AdminDedupFeatureRecordSchema,
+  decision_reason: z.string().nullable().default(null),
+  reviewed_at: Iso8601Schema.nullable().default(null),
+  reviewed_by: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminDedupReviewRecord = z.infer<typeof AdminDedupReviewRecordSchema>;
+
+export const AdminDedupReviewPagedResponseSchema = z.object({
+  items: z.array(AdminDedupReviewRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminDedupReviewPagedResponse = z.infer<
+  typeof AdminDedupReviewPagedResponseSchema
+>;
+
+export const AdminIntegrityIssueRecordSchema = z.object({
+  issue_id: z.string(),
+  violation_type: z.string(),
+  severity: z.string(),
+  message: z.string(),
+  payload: AdminJsonObjectSchema.default({}),
+  status: z.string(),
+  detected_at: Iso8601Schema,
+  provider: z.string().nullable().default(null),
+  dataset_key: z.string().nullable().default(null),
+  feature_id: z.string().nullable().default(null),
+  source_record_key: z.string().nullable().default(null),
+  resolved_at: Iso8601Schema.nullable().default(null),
+});
+export type AdminIntegrityIssueRecord = z.infer<typeof AdminIntegrityIssueRecordSchema>;
+
+export const AdminIntegrityIssuesResponseSchema = z.object({
+  items: z.array(AdminIntegrityIssueRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminIntegrityIssuesResponse = z.infer<typeof AdminIntegrityIssuesResponseSchema>;
+
+export const AdminConsistencyReportRecordSchema = z.object({
+  report_id: z.string(),
+  batch_id: z.string(),
+  started_at: Iso8601Schema,
+  finished_at: Iso8601Schema.nullable().default(null),
+  severity_max: z.string(),
+  cases: z.array(AdminJsonObjectSchema).default([]),
+  summary: AdminJsonObjectSchema.default({}),
+});
+export type AdminConsistencyReportRecord = z.infer<typeof AdminConsistencyReportRecordSchema>;
+
+export const AdminConsistencyReportsResponseSchema = z.object({
+  items: z.array(AdminConsistencyReportRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminConsistencyReportsResponse = z.infer<
+  typeof AdminConsistencyReportsResponseSchema
+>;
+
+export const AdminUpstreamSystemLogRecordSchema = z.object({
+  log_id: z.string(),
+  level: z.string(),
+  source: z.string(),
+  event: z.string(),
+  message: z.string(),
+  detail: AdminJsonObjectSchema.default({}),
+  request_id: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminUpstreamSystemLogRecord = z.infer<typeof AdminUpstreamSystemLogRecordSchema>;
+
+export const AdminUpstreamSystemLogsResponseSchema = z.object({
+  items: z.array(AdminUpstreamSystemLogRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminUpstreamSystemLogsResponse = z.infer<
+  typeof AdminUpstreamSystemLogsResponseSchema
+>;
+
+export const AdminUpstreamApiCallLogRecordSchema = z.object({
+  log_id: z.string(),
+  method: z.string(),
+  path: z.string(),
+  status_code: z.number().int(),
+  duration_ms: z.number().int(),
+  request_id: z.string().nullable().default(null),
+  error_code: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminUpstreamApiCallLogRecord = z.infer<typeof AdminUpstreamApiCallLogRecordSchema>;
+
+export const AdminUpstreamApiCallLogsResponseSchema = z.object({
+  items: z.array(AdminUpstreamApiCallLogRecordSchema).default([]),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+});
+export type AdminUpstreamApiCallLogsResponse = z.infer<
+  typeof AdminUpstreamApiCallLogsResponseSchema
+>;
+
 export const AdminFeatureSortSchema = z.enum([
   'name',
   'updated_at',

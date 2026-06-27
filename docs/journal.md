@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-212 Dedup / integrity / debug logs 운영 화면
+
+**작업**: Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 실제
+read-only 운영 조회 화면으로 교체했다. `kor-travel-map` dedup review, consistency issue/report,
+sanitized system/API logs를 Pinvi Admin에서 확인할 수 있게 했다.
+
+**변경**:
+
+- `KorTravelMapAdminClient`에 `list_dedup_reviews`, `list_integrity_issues`,
+  `list_consistency_reports`, `list_system_logs`, `list_ops_api_call_logs`를 추가했다.
+- Pinvi API에 `GET /admin/dedup-review`, `GET /admin/integrity/issues`,
+  `GET /admin/integrity/reports`, `GET /admin/debug/logs/system`,
+  `GET /admin/debug/logs/api-calls`를 추가했다.
+- provider sync와 dedup/integrity/debug route가 같은 upstream ops error mapping을 쓰도록
+  `ops_proxy` helper를 추가했다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 새 read-only 계약을 추가했다.
+- Web `/admin/dedup-review`는 status/search/min score 필터, 후보 table, feature A/B detail panel을
+  제공한다.
+- Web `/admin/integrity`는 issue status/severity/provider 필터와 report severity 필터, issue/report
+  table을 제공한다.
+- Web `/admin/debug/logs`는 system log level/source/q 필터와 upstream API call method/min status/path
+  필터를 제공한다.
+- `admin-live-matrix.live.ts`에서 세 route를 table route로 전환하고 filter/sort live case를 추가했다.
+- dedup verdict, integrity status/fix mutation은 reason/audit/idempotency/kill-switch 기준이 필요해
+  T-226으로 분리했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API `ruff check`, mypy,
+`test_kor_travel_map_admin_client.py` + `test_admin_dedup_integrity_debug_api.py` +
+`test_admin_etl_provider_sync_api.py` 28건, schemas/api-client/web typecheck, Web lint,
+schemas Vitest, Web production build를 통과했다. Playwright는 Windows에서 실행했고,
+WSL Next 서버(12805)를 띄워 `admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion
+1건이 통과했다. N150 live는 T-215 묶음 게이트로 보류한다.
+
+**다음**: 검증 후 PR을 만들고 merge한 뒤 T-226 Dedup verdict / integrity status mutation으로
+진행한다.
+
 ## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
 
 **작업**: Admin `/admin/etl`과 `/admin/provider-sync`를 실제 운영 조회 화면으로 교체했다.

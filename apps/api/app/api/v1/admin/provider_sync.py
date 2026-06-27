@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 
-from app.clients.kor_travel_map import (
-    KorTravelMapBadRequest,
-    KorTravelMapError,
-    KorTravelMapRateLimited,
-    KorTravelMapUnavailable,
-)
+from app.api.v1.admin.ops_proxy import map_ops_errors, next_cursor
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.core.rbac import require_role
 from app.models.user import User
@@ -29,58 +22,6 @@ from app.schemas.envelope import Envelope
 router = APIRouter(prefix="/admin/provider-sync", tags=["admin"])
 
 
-@contextmanager
-def _map_ops_errors() -> Iterator[None]:
-    try:
-        yield
-    except KorTravelMapRateLimited as exc:
-        headers = (
-            {"Retry-After": str(exc.retry_after_seconds)}
-            if exc.retry_after_seconds is not None
-            else None
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "code": "RATE_LIMITED",
-                "message": "kor_travel_map provider sync 요청이 많아 잠시 후 다시 시도하세요.",
-            },
-            headers=headers,
-        ) from exc
-    except KorTravelMapBadRequest as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": exc.code or "VALIDATION_ERROR",
-                "message": "kor_travel_map가 provider sync 요청을 거절했습니다.",
-            },
-        ) from exc
-    except KorTravelMapUnavailable as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "FEATURE_SERVICE_UNAVAILABLE",
-                "message": "kor_travel_map ops 서비스가 일시적으로 사용 불가합니다.",
-            },
-        ) from exc
-    except KorTravelMapError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "FEATURE_SERVICE_BAD_GATEWAY",
-                "message": "kor_travel_map ops 응답 형식이 올바르지 않습니다.",
-            },
-        ) from exc
-
-
-def _next_cursor(meta: dict[str, Any]) -> str | None:
-    page = meta.get("page")
-    if not isinstance(page, dict):
-        return None
-    value = page.get("next_cursor")
-    return value if isinstance(value, str) and value else None
-
-
 @router.get("", response_model=Envelope[AdminProviderSyncResponse])
 async def list_provider_sync(
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
@@ -88,7 +29,7 @@ async def list_provider_sync(
     key: Annotated[str | None, Query(description="provider 또는 dataset key 검색")] = None,
 ) -> Envelope[AdminProviderSyncResponse]:
     """kor-travel-map `/v1/ops/providers` provider/dataset 상태 proxy."""
-    with _map_ops_errors():
+    with map_ops_errors(message_subject="kor_travel_map provider sync"):
         data = await admin_client.list_ops_providers(key=key)
     items = data.get("items")
     if not isinstance(items, list):
@@ -127,7 +68,7 @@ async def list_provider_import_jobs(
     cursor: Annotated[str | None, Query()] = None,
 ) -> Envelope[AdminProviderImportJobsResponse]:
     """kor-travel-map `/v1/ops/import-jobs` provider job 목록 proxy."""
-    with _map_ops_errors():
+    with map_ops_errors(message_subject="kor_travel_map import job"):
         payload = await admin_client.list_ops_import_jobs(
             status_filter=status_filter,
             kind=kind,
@@ -169,6 +110,6 @@ async def list_provider_import_jobs(
         AdminProviderImportJobsResponse(
             items=records,
             page_size=page_size,
-            next_cursor=_next_cursor(meta),
+            next_cursor=next_cursor(meta),
         )
     )

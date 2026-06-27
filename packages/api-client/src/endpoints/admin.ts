@@ -32,8 +32,10 @@ import {
   AdminDayCopyRequestSchema,
   AdminDayDeleteRequestSchema,
   AdminDayMoveRequestSchema,
+  AdminDedupReviewPagedResponseSchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
+  AdminConsistencyReportsResponseSchema,
   AdminPagedResponseSchema,
   AdminPoiCopyRequestSchema,
   AdminPoiCreateRequestSchema,
@@ -44,6 +46,7 @@ import {
   AdminPoiPagedResponseSchema,
   AdminProviderImportJobsResponseSchema,
   AdminProviderSyncResponseSchema,
+  AdminIntegrityIssuesResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
   AdminTripCopyRequestSchema,
@@ -54,6 +57,8 @@ import {
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
   AdminUserDetailSchema,
+  AdminUpstreamApiCallLogsResponseSchema,
+  AdminUpstreamSystemLogsResponseSchema,
   AvatarUploadUrlRequestSchema,
   DownloadUrlResponseSchema,
   McpTokenRevokeRequestSchema,
@@ -99,6 +104,52 @@ export interface AdminProviderImportJobListParams {
   kind?: string;
   loadBatchId?: string;
   parentJobId?: string;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface AdminDedupReviewListParams {
+  q?: string;
+  status?: string[];
+  provider?: string[];
+  datasetKey?: string[];
+  kind?: string[];
+  category?: string[];
+  minScore?: number;
+  maxScore?: number;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface AdminIntegrityIssueListParams {
+  status?: 'open' | 'acknowledged' | 'resolved' | 'ignored';
+  severity?: 'info' | 'warning' | 'error' | 'critical';
+  violationType?: string;
+  provider?: string;
+  datasetKey?: string;
+  featureId?: string;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface AdminConsistencyReportListParams {
+  severityMax?: 'OK' | 'WARN' | 'ERROR';
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface AdminSystemLogListParams {
+  level?: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+  source?: string;
+  q?: string;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface AdminUpstreamApiCallLogListParams {
+  method?: string;
+  minStatus?: number;
+  path?: string;
   pageSize?: number;
   cursor?: string;
 }
@@ -160,6 +211,82 @@ export const adminApi = (client: ApiClient) => ({
     return client.request(path, {
       method: 'GET',
       schema: AdminProviderImportJobsResponseSchema,
+    });
+  },
+
+  listDedupReviews: (params: AdminDedupReviewListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    appendValues(qs, 'status', params.status);
+    appendValues(qs, 'provider', params.provider);
+    appendValues(qs, 'dataset_key', params.datasetKey);
+    appendValues(qs, 'kind', params.kind);
+    appendValues(qs, 'category', params.category);
+    if (params.minScore !== undefined) qs.set('min_score', String(params.minScore));
+    if (params.maxScore !== undefined) qs.set('max_score', String(params.maxScore));
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/dedup-review${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminDedupReviewPagedResponseSchema,
+    });
+  },
+
+  listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.severity) qs.set('severity', params.severity);
+    if (params.violationType) qs.set('violation_type', params.violationType);
+    if (params.provider) qs.set('provider', params.provider);
+    if (params.datasetKey) qs.set('dataset_key', params.datasetKey);
+    if (params.featureId) qs.set('feature_id', params.featureId);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/integrity/issues${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminIntegrityIssuesResponseSchema,
+    });
+  },
+
+  listConsistencyReports: (params: AdminConsistencyReportListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.severityMax) qs.set('severity_max', params.severityMax);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/integrity/reports${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminConsistencyReportsResponseSchema,
+    });
+  },
+
+  listUpstreamSystemLogs: (params: AdminSystemLogListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.level) qs.set('level', params.level);
+    if (params.source) qs.set('source', params.source);
+    if (params.q) qs.set('q', params.q);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/debug/logs/system${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminUpstreamSystemLogsResponseSchema,
+    });
+  },
+
+  listUpstreamApiCallLogs: (params: AdminUpstreamApiCallLogListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.method) qs.set('method', params.method);
+    if (params.minStatus !== undefined) qs.set('min_status', String(params.minStatus));
+    if (params.path) qs.set('path', params.path);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    const path = `/admin/debug/logs/api-calls${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminUpstreamApiCallLogsResponseSchema,
     });
   },
 

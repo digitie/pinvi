@@ -15,10 +15,15 @@ export { mobileAuthApi, MobileAuthResponseSchema } from './endpoints/mobile';
 export type { MobileAuthResult } from './endpoints/mobile';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
 export type {
+  AdminConsistencyReportListParams,
+  AdminDedupReviewListParams,
   AdminFeatureChangeRequestListParams,
   AdminFeatureListParams,
+  AdminIntegrityIssueListParams,
   AdminProviderImportJobListParams,
   AdminProviderSyncListParams,
+  AdminSystemLogListParams,
+  AdminUpstreamApiCallLogListParams,
 } from './endpoints/admin';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
 export type {

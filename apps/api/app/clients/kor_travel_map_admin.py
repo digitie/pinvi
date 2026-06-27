@@ -358,6 +358,124 @@ class KorTravelMapAdminClient:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/ops/import-jobs", params=params))
 
+    async def list_dedup_reviews(
+        self,
+        *,
+        statuses: list[str] | None = None,
+        providers: list[str] | None = None,
+        dataset_keys: list[str] | None = None,
+        kinds: list[str] | None = None,
+        categories: list[str] | None = None,
+        min_score: float | None = None,
+        max_score: float | None = None,
+        q: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/admin/dedup-reviews — dedup review queue 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "provider", providers)
+        self._put_sequence_params(params, "dataset_key", dataset_keys)
+        self._put_sequence_params(params, "kind", kinds)
+        self._put_sequence_params(params, "category", categories)
+        if min_score is not None:
+            params["min_score"] = min_score
+        if max_score is not None:
+            params["max_score"] = max_score
+        if q:
+            params["q"] = q
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/admin/dedup-reviews", params=params))
+
+    async def list_integrity_issues(
+        self,
+        *,
+        status_filter: str | None = "open",
+        severity: str | None = None,
+        violation_type: str | None = None,
+        provider: str | None = None,
+        dataset_key: str | None = None,
+        feature_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/consistency/issues — integrity issue 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if status_filter:
+            params["status"] = status_filter
+        if severity:
+            params["severity"] = severity
+        if violation_type:
+            params["violation_type"] = violation_type
+        if provider:
+            params["provider"] = provider
+        if dataset_key:
+            params["dataset_key"] = dataset_key
+        if feature_id:
+            params["feature_id"] = feature_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/consistency/issues", params=params))
+
+    async def list_consistency_reports(
+        self,
+        *,
+        severity_max: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/consistency/reports — consistency report 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if severity_max:
+            params["severity_max"] = severity_max
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/consistency/reports", params=params))
+
+    async def list_system_logs(
+        self,
+        *,
+        level: str | None = None,
+        source: str | None = None,
+        q: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/system-logs — sanitized system log 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if level:
+            params["level"] = level
+        if source:
+            params["source"] = source
+        if q:
+            params["q"] = q
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/system-logs", params=params))
+
+    async def list_ops_api_call_logs(
+        self,
+        *,
+        method: str | None = None,
+        min_status: int | None = None,
+        path: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/api-call-logs — upstream API call log 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if method:
+            params["method"] = method
+        if min_status is not None:
+            params["min_status"] = min_status
+        if path:
+            params["path"] = path
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/api-call-logs", params=params))
+
 
 def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAdminClient:
     """설정 기반 admin client 생성. admin token 미설정 시 공용 service token으로 fallback."""
