@@ -95,7 +95,7 @@ async function closeLatestLiveSocket(page: Page) {
       .__pinviLiveWebSockets;
     const socket = sockets?.[sockets.length - 1];
     if (!socket) throw new Error('닫을 live WebSocket이 없습니다.');
-    socket.close(1012, 'service_restart');
+    socket.close(4000, 'live_e2e_reconnect');
   });
 }
 

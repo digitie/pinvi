@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-236a WebSocket multi-client N150 live e2e drill
+
+**작업**: N150 public Web/API를 대상으로 실제 WebSocket broadcast와 reconnect 뒤 Trip snapshot reload를
+검증하는 live mutating Playwright drill을 수행했다.
+
+**변경/발견**:
+
+- live mutating 하네스의 클라이언트 직접 close code를 브라우저 허용 범위 밖인 `1012`에서 테스트 전용
+  `4000`으로 바꿨다. `1012`는 서버가 보낼 수 있는 close code지만, 브라우저 클라이언트가 직접 호출할
+  수 있는 값은 `1000` 또는 `3000~4999` 범위다.
+- 운영 `pinvi-api`가 worker 2개로 떠 있으면 HTTP mutation과 WebSocket 연결이 서로 다른 worker에
+  배정될 수 있어 process-local realtime broker broadcast가 누락됨을 확인했다. Pinvi compose 기본값과
+  `kor-travel-docker-manager` PR #44를 `PINVI_API_WORKERS=1` 계약으로 맞췄다.
+- public Web origin의 `/auth/login` preflight가 CORS 400으로 떨어지는 drift를 확인했다.
+  `kor-travel-docker-manager` PR #45에서 `PINVI_PUBLIC_API_URL`과 `PINVI_CORS_ALLOWED_ORIGINS`를
+  gitignore `.env` 주입값으로 분리해 운영 public origin을 코드/문서에 노출하지 않고 주입하게 했다.
+
+**검증**:
+
+- WSL ext4 미러: `npm -w @pinvi/web run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run lint`
+- Windows Playwright runner: `npm -w @pinvi/web run test:e2e:live-mutating -- --workers=1`
+- N150: `pinvi-api` process가 `--workers 1`로 기동하고 API/Web 컨테이너가 healthy임을 확인했다.
+
+**다음**: PR #269를 갱신하고 merge한 뒤 T-237 WebSocket backend hardening / metrics로 진행한다.
+
 ## 2026-06-28 (codex) — T-236 WebSocket multi-client collaboration e2e
 
 **작업**: Trip 상세 협업 WebSocket mock e2e를 여러 브라우저 컨텍스트와 재연결 흐름까지 확장했다.

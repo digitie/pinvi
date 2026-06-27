@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-236a — WebSocket multi-client N150 live e2e drill.
+      N150 live mutating Playwright에서 실제 WebSocket broadcast/reconnect 뒤 Trip snapshot reload를
+      검증했다. 첫 실패로 `pinvi-api` worker 2개와 process-local realtime broker 충돌을 확인해
+      Pinvi compose 기본 worker를 1로 낮추고, `kor-travel-docker-manager` PR #44에서 운영 compose도
+      `PINVI_API_WORKERS=1` 기본값으로 맞췄다. 두 번째 실패로 public Web/API CORS 주입 drift를 확인해
+      docker-manager PR #45에서 `PINVI_PUBLIC_API_URL`/`PINVI_CORS_ALLOWED_ORIGINS`를 gitignore `.env`
+      주입값으로 분리했다. 최종 Windows Playwright live mutating e2e 1건이 통과했다.
+
 - [x] T-236 — WebSocket multi-client collaboration e2e.
       Trip 상세 mock Playwright e2e에 2개 브라우저 컨텍스트 presence/broadcast reload,
       재연결 후 최신 snapshot 반영, 5개 컨텍스트 presence fan-out와 offline cleanup 검증을
