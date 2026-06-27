@@ -107,6 +107,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Dedup review 페이지가 후보 행과 필터 query를 표시한다', async ({ page }) => {
   const seenUrls: string[] = [];
+  let decisionBody: Record<string, unknown> | null = null;
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/dedup-review',
     async (route) => {
@@ -123,10 +124,43 @@ test('Dedup review 페이지가 후보 행과 필터 query를 표시한다', asy
       });
     },
   );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/dedup-review/review-1/verdict',
+    async (route) => {
+      decisionBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            review_id: 'review-1',
+            decision: 'merged',
+            changed: true,
+            master_feature_id: 'feature-a',
+            loser_feature_id: 'feature-b',
+            merge_id: 'merge-1',
+            source_links_moved: 2,
+            source_links_dropped: 0,
+          },
+        }),
+      });
+    },
+  );
 
   await page.goto('/admin/dedup-review');
   await expect(page.getByRole('heading', { name: 'Dedup review' })).toBeVisible();
   await expect(page.getByTestId('admin-dedup-row-review-1')).toBeVisible();
+  await page.getByTestId('admin-dedup-row-review-1').click();
+
+  await page.getByTestId('admin-dedup-access-reason').fill('중복 후보 병합');
+  await page.getByTestId('admin-dedup-map-reason').fill('동일 장소 확인');
+  await page.getByTestId('admin-dedup-submit-verdict').click();
+  await expect(page.getByTestId('admin-dedup-mutation-notice')).toContainText('병합');
+  expect(decisionBody).toEqual({
+    decision: 'merged',
+    access_reason: '중복 후보 병합',
+    kor_travel_map_reason: '동일 장소 확인',
+    master_feature_id: 'feature-a',
+  });
 
   await page.getByTestId('admin-dedup-search').fill('seoul');
   await page.getByTestId('admin-dedup-min-score').fill('85');

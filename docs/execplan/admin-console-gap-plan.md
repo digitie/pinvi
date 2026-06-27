@@ -297,25 +297,58 @@ kill-switch 기준이 필요해 T-226으로 분리한다.
 - API unit/integration: upstream path/query, pagination cursor, route RBAC, error mapping.
 - UI e2e: candidate row/detail, issue/report 필터, system/API log 필터 query 전달.
 
-### T-226 — Dedup verdict / integrity status mutation
+### T-226 — Dedup verdict mutation
 
 추가 요청에서 T-212에 포함됐던 위험 action 후속.
 
+상태: 완료(2026-06-27, codex). `kor-travel-map` 최신 OpenAPI 확인 결과 dedup verdict는
+`PATCH /v1/admin/dedup-reviews/{review_id}` 계약이 존재하고, consistency issue 상태 변경/fix는
+GET-only라 T-227로 분리했다.
+
 범위:
 
-- `kor-travel-map` dedup review verdict API와 consistency issue 상태 변경/fix API의 최신 OpenAPI
-  계약을 재확인한다.
-- `/admin/dedup-review/{review_id}/verdict` relay 또는 upstream PATCH 계약에 맞춘 endpoint를 추가한다.
-- `/admin/integrity/issues/{issue_id}` 상태 변경/fix action을 추가한다.
-- 모든 mutation은 `access_reason`, Pinvi `admin_audit_log`, upstream operator/reason 전달,
-  idempotency key 또는 중복 처리 방지, upstream kill-switch/lock busy 처리 기준을 포함한다.
-- Web은 action dialog에서 후보 비교/issue payload를 보여주고, reason 입력, optimistic rollback,
-  실패 사유 표시를 제공한다.
+- `kor-travel-map` dedup review verdict API의 최신 OpenAPI 계약을 재확인한다.
+- `/admin/dedup-review/{review_id}/verdict` relay를 upstream PATCH 계약에 맞춰 추가한다.
+- mutation은 `access_reason`, Pinvi `admin_audit_log`, upstream reason 전달, upstream 404/409/429/503
+  error mapping을 포함한다.
+- Web은 후보 비교 detail panel에서 reason 입력, master feature 선택, 실패 사유, 성공 notice를 제공한다.
+
+구현:
+
+- `KorTravelMapAdminClient.decide_dedup_review`를 추가하고 upstream
+  `PATCH /v1/admin/dedup-reviews/{review_id}`를 호출한다.
+- Pinvi API `POST /admin/dedup-review/{review_id}/verdict`가 `decision`, `access_reason`,
+  `kor_travel_map_reason`, `master_feature_id`를 검증하고, 성공 시 `dedup_review.decide` audit을
+  남긴다.
+- 공통 `ops_proxy` error mapping에 upstream 404/409와 `X-Request-Id` UUID parsing을 추가했다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 dedup verdict 계약과 list invalidate key를
+  추가했다.
+- Web `/admin/dedup-review` detail panel에 pending 후보 판정 form을 추가했다.
 
 검증:
 
-- API integration: verdict/status mutation, audit append, upstream failure rollback, 409/429/503 mapping.
-- UI e2e: reason validation, approve/reject/fix flow, 실패 rollback.
+- API unit/integration: upstream PATCH body, merged master 필수 검증, audit append, 404/409/429/503
+  mapping.
+- UI e2e: pending 후보 선택, reason 입력, verdict submit, body 검증, 성공 notice.
+
+### T-227 — Integrity issue status/fix mutation
+
+상태: 보류. `kor-travel-map` OpenAPI의 `/v1/ops/consistency/issues`와
+`/v1/ops/consistency/reports`는 현재 GET-only다. Pinvi가 자체 상태를 만들면 source of truth가
+갈라지므로 upstream mutation 계약이 추가된 뒤 진행한다.
+
+범위:
+
+- upstream consistency issue 상태 변경/fix/ignore 계약을 먼저 확정한다.
+- Pinvi `POST /admin/integrity/issues/{issue_id}/status` 또는 upstream 계약에 맞춘 relay를 추가한다.
+- 모든 mutation은 `access_reason`, Pinvi `admin_audit_log`, upstream operator/reason 전달,
+  idempotency 또는 중복 처리 방지, upstream lock/kill-switch 처리 기준을 포함한다.
+- Web은 issue payload detail에서 status/fix action dialog, reason validation, 실패 rollback을 제공한다.
+
+검증:
+
+- API integration: status/fix mutation, audit append, upstream failure rollback, 409/429/503 mapping.
+- UI e2e: reason validation, status/fix flow, 실패 rollback.
 
 ### T-213 — Category mapping 실제 기능
 
@@ -637,13 +670,14 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 11. T-210 change request 운영 PR.
 12. T-220 ETL/provider sync PR.
 13. T-212 dedup/integrity/debug read-only PR.
-14. T-226 dedup verdict / integrity status mutation PR.
+14. T-226 dedup verdict mutation PR.
 15. T-213 category mapping PR.
-16. T-214 seed/reset dev-only PR.
-17. T-218 Grafana prod 주소 PR.
-18. T-221 dashboard 운영 현황 PR.
-19. T-222 system view Docker/API 상태 PR.
-20. T-215 묶음 live e2e/N150 게이트 PR 또는 release-gate PR.
+16. T-227 integrity issue status/fix mutation PR(upstream 계약 추가 후).
+17. T-214 seed/reset dev-only PR.
+18. T-218 Grafana prod 주소 PR.
+19. T-221 dashboard 운영 현황 PR.
+20. T-222 system view Docker/API 상태 PR.
+21. T-215 묶음 live e2e/N150 게이트 PR 또는 release-gate PR.
 
 ## 검증 정책
 

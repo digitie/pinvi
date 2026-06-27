@@ -50,7 +50,8 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/feature-requests/{id}/approve\|reject`                 | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
 | `GET/PUT /admin/category-mappings`                                  | maki + 16색 매핑                                     | 6      |
 | `GET /admin/etl/summary`                                            | Pinvi ETL registry + kor-travel-map ops 요약          | 5      |
-| `GET /admin/dedup-review`                                           | Record Linkage 후보 조회(read-only)                  | 5      |
+| `GET /admin/dedup-review`                                           | Record Linkage 후보 조회                              | 5      |
+| `POST /admin/dedup-review/{review_id}/verdict`                      | Record Linkage 후보 판정 + audit                     | 5      |
 | `GET /admin/features/{id}/sources`                                  | source_links                                         | 5      |
 | `GET /admin/features/{id}/overrides`                                | feature_overrides                                    | 5      |
 | `GET /admin/features/{id}/weather-values`                           | weather timeline                                     | 5      |
@@ -1066,9 +1067,49 @@ Query:
 }
 ```
 
-dedup verdict mutation(`PATCH /v1/admin/dedup-reviews/{review_id}` relay)은 T-226에서 추가한다.
-추가 시 `access_reason`, Pinvi audit, upstream kill-switch 확인, idempotency 또는 중복 처리 방지
-기준을 먼저 고정한다.
+### 13.2 `POST /admin/dedup-review/{review_id}/verdict`
+
+upstream: `kor-travel-map` `PATCH /v1/admin/dedup-reviews/{review_id}`.
+
+권한: `admin`
+
+요청:
+
+```jsonc
+{
+  "decision": "merged",
+  "access_reason": "운영자가 확인한 중복 후보 병합",
+  "kor_travel_map_reason": "동일 장소 확인",
+  "master_feature_id": "feature-a"
+}
+```
+
+| 이름                    | 설명                                                                    |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `decision`              | `accepted` / `rejected` / `merged` / `ignored`                          |
+| `access_reason`         | Pinvi `admin_audit_log`에 남길 운영 사유. 필수, 1~500자                 |
+| `kor_travel_map_reason` | upstream decision reason. 생략하면 `access_reason`을 전달               |
+| `master_feature_id`     | `decision=merged`일 때 필수. survivor feature id                        |
+
+응답 `data`:
+
+```jsonc
+{
+  "review_id": "review-1",
+  "decision": "merged",
+  "changed": true,
+  "master_feature_id": "feature-a",
+  "loser_feature_id": "feature-b",
+  "merge_id": "merge-1",
+  "source_links_moved": 2,
+  "source_links_dropped": 0
+}
+```
+
+성공 시 Pinvi는 같은 transaction에서 `admin_audit_log`에 `dedup_review.decide`를 기록한다.
+`X-Request-Id`가 UUID이면 audit `request_id`로 보존하고, 없으면 새 UUID를 생성한다.
+잘못된 UUID는 422로 거절한다. upstream 404는 `RESOURCE_NOT_FOUND`, 409는 upstream `code`
+또는 `INVALID_STATE`로 보존한다.
 
 ### 13.3 `GET /admin/provider-sync`
 
@@ -1192,8 +1233,9 @@ Query:
 응답 `data.items[]`는 `report_id`, `batch_id`, `started_at`, `finished_at`, `severity_max`,
 `cases`, `summary`를 포함한다.
 
-integrity issue 상태 변경/fix mutation은 T-226에서 추가한다. 추가 시 `access_reason`,
-Pinvi audit, upstream kill-switch 확인, idempotency 또는 중복 처리 방지 기준을 먼저 고정한다.
+integrity issue 상태 변경/fix mutation은 현재 `kor-travel-map` OpenAPI가 GET-only라 Pinvi에서
+임의 구현하지 않는다. upstream 계약이 추가되면 T-227에서 `access_reason`, Pinvi audit,
+idempotency 또는 중복 처리 방지, lock/kill-switch 처리 기준과 함께 relay를 추가한다.
 
 ## 14. 디버그 콘솔
 

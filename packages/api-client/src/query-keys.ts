@@ -70,6 +70,7 @@ export const queryKeys = {
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'dedup-reviews', params] as const,
+    dedupReviewsAll: () => ['admin', 'dedup-reviews'] as const,
     integrityIssues: (params: {
       status?: string;
       severity?: string;

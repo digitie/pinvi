@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-226 Dedup verdict / integrity status mutation.
+- Admin 콘솔 기능 보강: T-213 Category mapping 실제 기능 및 source of truth 결정.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -87,8 +87,16 @@
       (완료: 2026-06-27, codex). `kor-travel-map` dedup review, consistency issue/report,
       sanitized system/API logs read proxy를 추가하고 `/admin/dedup-review`, `/admin/integrity`,
       `/admin/debug/logs`를 실제 필터/table/detail 화면으로 교체했다. mutation은 T-226으로 분리했다.
-- [ ] T-226 — Dedup verdict / integrity status mutation.
+- [x] T-226 — Dedup verdict mutation
+      (완료: 2026-06-27, codex). `kor-travel-map` `PATCH /v1/admin/dedup-reviews/{review_id}`
+      계약을 Pinvi `POST /admin/dedup-review/{review_id}/verdict`로 relay하고,
+      `access_reason`, upstream reason, master feature 검증, `dedup_review.decide` audit,
+      Web pending 후보 판정 form을 추가했다. integrity mutation은 upstream OpenAPI가 GET-only라
+      T-227로 분리했다.
 - [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
+- [ ] T-227 — Integrity issue status/fix mutation upstream 계약 반영.
+      `kor-travel-map` consistency issue mutation 계약이 추가된 뒤 Pinvi relay, audit, UI action을
+      구현한다. 현재 upstream `/v1/ops/consistency/*`는 GET-only라 Pinvi 단독 상태를 만들지 않는다.
 - [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.
 - [ ] T-218 — prod Grafana 주소 반영.
 - [ ] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기.

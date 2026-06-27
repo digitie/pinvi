@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
+from app.models.audit import AdminAuditLog
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -92,12 +94,26 @@ class _FakeOpsClient:
         self.report_kwargs: dict[str, Any] | None = None
         self.system_log_kwargs: dict[str, Any] | None = None
         self.api_log_kwargs: dict[str, Any] | None = None
+        self.decision_args: tuple[str, dict[str, Any]] | None = None
 
     async def list_dedup_reviews(self, **kwargs: Any) -> dict[str, Any]:
         self.dedup_kwargs = kwargs
         return {
             "data": {"items": [_dedup_item()]},
             "meta": {"page": {"next_cursor": "dedup-next"}},
+        }
+
+    async def decide_dedup_review(self, review_id: str, **kwargs: Any) -> dict[str, Any]:
+        self.decision_args = (review_id, kwargs)
+        return {
+            "review_id": review_id,
+            "decision": kwargs["decision"],
+            "changed": True,
+            "master_feature_id": kwargs.get("master_feature_id"),
+            "loser_feature_id": "f_b",
+            "merge_id": "merge-1",
+            "source_links_moved": 2,
+            "source_links_dropped": 0,
         }
 
     async def list_integrity_issues(self, **kwargs: Any) -> dict[str, Any]:
@@ -211,6 +227,85 @@ async def test_admin_dedup_review_proxies_filters(
     assert fake.dedup_kwargs["dataset_keys"] == ["places"]
     assert fake.dedup_kwargs["min_score"] == 70
     assert fake.dedup_kwargs["q"] == "해운대"
+
+
+async def test_admin_dedup_verdict_proxies_decision_and_writes_audit(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-dedup-verdict@example.com", roles=["user", "admin"]
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/dedup-review/dedup-1/verdict",
+            json={
+                "decision": "merged",
+                "master_feature_id": "f_a",
+                "access_reason": "중복 후보 병합",
+                "kor_travel_map_reason": "동일 장소 확인",
+            },
+            headers={"X-Request-Id": str(request_id)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["decision"] == "merged"
+    assert data["master_feature_id"] == "f_a"
+    assert fake.decision_args is not None
+    assert fake.decision_args[0] == "dedup-1"
+    assert fake.decision_args[1] == {
+        "decision": "merged",
+        "decision_reason": "동일 장소 확인",
+        "master_feature_id": "f_a",
+        "reviewed_by": "pinvi-admin",
+    }
+
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert audit is not None
+    assert audit.actor_user_id == admin_id
+    assert audit.action == "dedup_review.decide"
+    assert audit.resource_type == "dedup_review"
+    assert audit.resource_id == "dedup-1"
+    assert audit.access_reason == "중복 후보 병합"
+    assert audit.after_state == {
+        "decision": "merged",
+        "changed": True,
+        "master_feature_id": "f_a",
+        "loser_feature_id": "f_b",
+        "merge_id": "merge-1",
+    }
+
+
+async def test_admin_dedup_verdict_requires_master_for_merge(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-dedup-verdict-invalid@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/dedup-review/dedup-1/verdict",
+            json={"decision": "merged", "access_reason": "중복 후보 병합"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+    assert resp.status_code == 422
+    assert fake.decision_args is None
 
 
 async def test_admin_integrity_routes_proxy_issues_and_reports(

@@ -271,6 +271,33 @@ class AdminDedupReviewPagedResponse(BaseModel):
     next_cursor: str | None = None
 
 
+AdminDedupDecision = Literal["accepted", "rejected", "merged", "ignored"]
+
+
+class AdminDedupDecisionRequest(BaseModel):
+    decision: AdminDedupDecision
+    access_reason: str = Field(min_length=1, max_length=500)
+    kor_travel_map_reason: str | None = Field(default=None, min_length=1, max_length=500)
+    master_feature_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _check_master_feature_id(self) -> AdminDedupDecisionRequest:
+        if self.decision == "merged" and not self.master_feature_id:
+            raise ValueError("merged decision에는 master_feature_id가 필요합니다.")
+        return self
+
+
+class AdminDedupDecisionResponse(BaseModel):
+    review_id: str
+    decision: AdminDedupDecision
+    changed: bool
+    master_feature_id: str | None = None
+    loser_feature_id: str | None = None
+    merge_id: str | None = None
+    source_links_moved: int | None = None
+    source_links_dropped: int | None = None
+
+
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
     violation_type: str
