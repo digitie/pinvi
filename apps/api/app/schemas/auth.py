@@ -87,6 +87,11 @@ class AuthUser(BaseModel):
     email: str
     nickname: str | None
     avatar_url: str | None
+    avatar_kind: Literal["default", "upload", "external"] = "default"
+    avatar_content_type: str | None = None
+    avatar_byte_size: int | None = None
+    avatar_updated_at: datetime | None = None
+    has_avatar: bool = False
     status: Literal["pending_verification", "pending_profile", "active", "disabled"]
     roles: list[Literal["user", "admin", "operator", "cpo"]]
     email_verified_at: datetime | None

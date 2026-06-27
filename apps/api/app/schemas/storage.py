@@ -17,6 +17,8 @@ AttachmentPurpose = Literal[
     "curated_poi_attachment",
 ]
 
+AVATAR_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
 
 class UploadUrlRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
@@ -34,6 +36,41 @@ class UploadUrlResponse(BaseModel):
     expires_at: datetime
     max_upload_bytes: int
     public_url: str | None = None
+
+
+class AvatarUploadUrlRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=255)
+    content_length: int = Field(gt=0)
+
+
+class AvatarApplyRequest(BaseModel):
+    bucket: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    storage_key: str = Field(min_length=1, max_length=1024)
+    content_type: str = Field(min_length=1, max_length=255)
+    byte_size: int = Field(gt=0)
+    public_url: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_storage_refs(self) -> Self:
+        if (
+            self.storage_key.startswith("/")
+            or "\\" in self.storage_key
+            or ".." in self.storage_key.split("/")
+        ):
+            raise ValueError("storage_key 형식이 올바르지 않습니다.")
+        if self.public_url is not None and not self.public_url.startswith(("http://", "https://")):
+            raise ValueError("public_url은 http(s) URL이어야 합니다.")
+        return self
+
+
+class AvatarInfo(BaseModel):
+    avatar_kind: Literal["default", "upload", "external"] = "default"
+    avatar_url: str | None = None
+    avatar_content_type: str | None = None
+    avatar_byte_size: int | None = None
+    avatar_updated_at: datetime | None = None
+    has_avatar: bool = False
 
 
 class DownloadUrlResponse(BaseModel):

@@ -1,5 +1,9 @@
 import {
+  AvatarApplyRequestSchema,
+  AvatarInfoSchema,
+  AvatarUploadUrlRequestSchema,
   AuthUserSchema,
+  DownloadUrlResponseSchema,
   LoginRequestSchema,
   OAuthLinkRequestSchema,
   OAuthProvidersResponseSchema,
@@ -7,6 +11,7 @@ import {
   OAuthStartResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
+  UploadUrlResponseSchema,
   VerifyEmailRequestSchema,
   VerifyEmailResendRequestSchema,
   VerifyEmailResendResponseSchema,
@@ -61,6 +66,32 @@ export const authApi = (client: ApiClient) => ({
     client.request('/auth/me', {
       method: 'GET',
       schema: AuthUserSchema,
+    }),
+
+  createAvatarUploadUrl: (body: z.infer<typeof AvatarUploadUrlRequestSchema>) =>
+    client.request('/users/me/avatar/upload-url', {
+      method: 'POST',
+      body: JSON.stringify(AvatarUploadUrlRequestSchema.parse(body)),
+      schema: UploadUrlResponseSchema,
+    }),
+
+  updateAvatar: (body: z.infer<typeof AvatarApplyRequestSchema>) =>
+    client.request('/users/me/avatar', {
+      method: 'PUT',
+      body: JSON.stringify(AvatarApplyRequestSchema.parse(body)),
+      schema: AvatarInfoSchema,
+    }),
+
+  getAvatarDownloadUrl: () =>
+    client.request('/users/me/avatar/download-url', {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteAvatar: () =>
+    client.request('/users/me/avatar', {
+      method: 'DELETE',
+      schema: AvatarInfoSchema,
     }),
 
   oauthProviders: () =>

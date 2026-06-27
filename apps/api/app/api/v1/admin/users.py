@@ -15,11 +15,19 @@ from app.models.user import User
 from app.schemas.admin import (
     AdminActionRequest,
     AdminAuditEntry,
+    AdminAvatarApplyRequest,
+    AdminAvatarDeleteRequest,
     AdminPagedResponse,
     AdminUserDetail,
     AdminUserSummary,
 )
 from app.schemas.envelope import Envelope
+from app.schemas.storage import (
+    AVATAR_CONTENT_TYPES,
+    AvatarUploadUrlRequest,
+    DownloadUrlResponse,
+    UploadUrlResponse,
+)
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_users import (
     AdminUserNotFoundError,
@@ -28,6 +36,21 @@ from app.services.admin_users import (
     list_recent_user_audit,
     list_users,
     mask_email,
+)
+from app.services.avatar_storage import (
+    apply_avatar,
+    avatar_state,
+    clear_avatar,
+    get_storage_settings,
+    validate_avatar_apply,
+)
+from app.services.rustfs_admin import delete_object
+from app.services.rustfs_storage import (
+    FileTooLargeError,
+    InvalidStorageRefError,
+    MimeNotAllowedError,
+    make_download_url,
+    make_upload_url,
 )
 
 router = APIRouter(prefix="/admin/users", tags=["admin"])
@@ -73,6 +96,12 @@ def _to_detail(
         email_revealed=email_revealed,
         email_status=u.email_status,
         is_active=u.is_active,
+        avatar_url=u.avatar_url,
+        avatar_kind=u.avatar_kind,
+        avatar_content_type=u.avatar_content_type,
+        avatar_byte_size=u.avatar_byte_size,
+        avatar_updated_at=u.avatar_updated_at,
+        has_avatar=bool(u.avatar_bucket and u.avatar_storage_key),
         recent_audit=recent_audit or [],
     )
 
@@ -116,6 +145,18 @@ async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
         )
     return u
+
+
+def _storage_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, (FileTooLargeError, MimeNotAllowedError, InvalidStorageRefError)):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": "STORAGE_UNAVAILABLE", "message": "객체 저장소 요청에 실패했습니다."},
+    )
 
 
 @router.get("", response_model=Envelope[AdminPagedResponse])
@@ -164,6 +205,130 @@ async def get_user_endpoint(
         )
 
     return Envelope.of(await _detail_with_recent_audit(db, u, email_revealed=reveal))
+
+
+@router.post("/{user_id}/avatar/upload-url", response_model=Envelope[UploadUrlResponse])
+async def create_user_avatar_upload_url(
+    user_id: uuid.UUID,
+    body: AvatarUploadUrlRequest,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[UploadUrlResponse]:
+    target = await _get_user_or_404(db, user_id)
+    settings_row = await get_storage_settings(db)
+    try:
+        response = make_upload_url(
+            purpose="avatar",
+            user_id=target.user_id,
+            filename=body.filename,
+            content_type=body.content_type,
+            content_length=body.content_length,
+            max_upload_bytes=settings_row.avatar_max_upload_bytes,
+            allowed_content_types=AVATAR_CONTENT_TYPES,
+        )
+    except (FileTooLargeError, MimeNotAllowedError) as exc:
+        raise _storage_error(exc) from exc
+    return Envelope.of(response)
+
+
+@router.put("/{user_id}/avatar", response_model=Envelope[AdminUserDetail])
+async def update_user_avatar_endpoint(
+    user_id: uuid.UUID,
+    body: AdminAvatarApplyRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    target = await _get_user_or_404(db, user_id)
+    settings_row = await get_storage_settings(db)
+    try:
+        validate_avatar_apply(
+            body,
+            user_id=target.user_id,
+            max_upload_bytes=settings_row.avatar_max_upload_bytes,
+        )
+    except (FileTooLargeError, MimeNotAllowedError, InvalidStorageRefError) as exc:
+        raise _storage_error(exc) from exc
+
+    before_state = avatar_state(target)
+    apply_avatar(target, body)
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="user.avatar_replace",
+        resource_type="user",
+        resource_id=str(target.user_id),
+        before_state=before_state,
+        after_state=avatar_state(target),
+        access_reason=body.access_reason,
+        target_pii_fields=["avatar"],
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(target)
+    return Envelope.of(await _detail_with_recent_audit(db, target))
+
+
+@router.get("/{user_id}/avatar/download-url", response_model=Envelope[DownloadUrlResponse])
+async def get_user_avatar_download_url(
+    user_id: uuid.UUID,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    target = await _get_user_or_404(db, user_id)
+    if not target.avatar_bucket or not target.avatar_storage_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "아바타가 없습니다."},
+        )
+    try:
+        response = make_download_url(
+            bucket=target.avatar_bucket,
+            storage_key=target.avatar_storage_key,
+            public_url=target.avatar_url,
+        )
+    except Exception as exc:
+        raise _storage_error(exc) from exc
+    return Envelope.of(response)
+
+
+@router.delete("/{user_id}/avatar", response_model=Envelope[AdminUserDetail])
+async def delete_user_avatar_endpoint(
+    user_id: uuid.UUID,
+    body: AdminAvatarDeleteRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    target = await _get_user_or_404(db, user_id)
+    before_state = avatar_state(target)
+    if target.avatar_storage_key:
+        try:
+            await delete_object(key=target.avatar_storage_key)
+        except Exception as exc:
+            raise _storage_error(exc) from exc
+    clear_avatar(target)
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action="user.avatar_delete",
+        resource_type="user",
+        resource_id=str(target.user_id),
+        before_state=before_state,
+        after_state=avatar_state(target),
+        access_reason=body.access_reason,
+        target_pii_fields=["avatar"],
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(target)
+    return Envelope.of(await _detail_with_recent_audit(db, target))
 
 
 @router.post("/{user_id}/reveal-pii", response_model=Envelope[AdminUserDetail])

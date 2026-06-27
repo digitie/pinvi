@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Link2, Loader2, Unlink } from 'lucide-react';
+/* eslint-disable @next/next/no-img-element */
+
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ImageIcon, Link2, Loader2, Trash2, Unlink, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
+import { putToPresigned } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -33,12 +36,24 @@ function getProfileOAuthErrorMessage(code: string) {
   return PROFILE_OAUTH_ERROR_MESSAGES[code] ?? 'Google 연결을 완료하지 못했습니다.';
 }
 
+function formatBytes(value: number | null | undefined) {
+  if (!value) {
+    return '크기 기록 없음';
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const [me, setMe] = useState<AuthUser | null>(null);
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<'link-google' | 'unlink-google' | null>(null);
+  const [avatarAction, setAvatarAction] = useState<'upload' | 'delete' | null>(null);
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +61,9 @@ export default function ProfilePage() {
     () => me?.oauth_identities.find((identity) => identity.provider === 'google') ?? null,
     [me],
   );
-  const googleEnabled = providers.some((provider) => provider.provider === 'google' && provider.enabled);
+  const googleEnabled = providers.some(
+    (provider) => provider.provider === 'google' && provider.enabled,
+  );
 
   const reload = async () => {
     setLoading(true);
@@ -54,8 +71,18 @@ export default function ProfilePage() {
     try {
       const api = authApi(apiClient);
       const [user, oauthProviders] = await Promise.all([api.me(), api.oauthProviders()]);
+      let nextAvatarSrc: string | null = null;
+      if (user.has_avatar) {
+        try {
+          const avatar = await api.getAvatarDownloadUrl();
+          nextAvatarSrc = avatar.public_url ?? avatar.download_url;
+        } catch {
+          nextAvatarSrc = null;
+        }
+      }
       setMe(user);
       setProviders(oauthProviders.providers);
+      setAvatarSrc(nextAvatarSrc);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         router.replace('/login');
@@ -119,6 +146,59 @@ export default function ProfilePage() {
     }
   };
 
+  const onAvatarFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('아바타는 이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setAvatarAction('upload');
+    setError(null);
+    setMessage(null);
+    try {
+      const api = authApi(apiClient);
+      const upload = await api.createAvatarUploadUrl({
+        filename: file.name,
+        content_type: file.type,
+        content_length: file.size,
+      });
+      await putToPresigned(upload, file);
+      await api.updateAvatar({
+        bucket: upload.bucket,
+        storage_key: upload.storage_key,
+        content_type: file.type,
+        byte_size: file.size,
+        public_url: upload.public_url ?? null,
+      });
+      setMessage('아바타를 저장했습니다.');
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '아바타를 저장하지 못했습니다.');
+    } finally {
+      setAvatarAction(null);
+    }
+  };
+
+  const onDeleteAvatar = async () => {
+    if (!window.confirm('아바타 이미지를 삭제할까요?')) {
+      return;
+    }
+    setAvatarAction('delete');
+    setError(null);
+    setMessage(null);
+    try {
+      await authApi(apiClient).deleteAvatar();
+      setMessage('아바타를 삭제했습니다.');
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');
+    } finally {
+      setAvatarAction(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-40 items-center justify-center text-sm text-muted">
@@ -140,15 +220,79 @@ export default function ProfilePage() {
       </header>
 
       {message && (
-        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
-          {message}
-        </p>
+        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
       {error && (
-        <p className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text" data-testid="profile-error">
+        <p
+          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="profile-error"
+        >
           {error}
         </p>
       )}
+
+      <section
+        className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+        data-testid="profile-avatar-section"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            {avatarSrc ? (
+              <img
+                src={avatarSrc}
+                alt=""
+                className="h-16 w-16 rounded-full border border-hairline object-cover"
+                data-testid="profile-avatar-image"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
+                <ImageIcon className="h-6 w-6" aria-hidden="true" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-sm font-semibold text-ink">아바타</h2>
+              <p className="mt-1 text-xs text-muted" data-testid="profile-avatar-meta">
+                {me?.has_avatar
+                  ? `${me.avatar_content_type ?? 'image'} · ${formatBytes(me.avatar_byte_size)}`
+                  : '등록된 이미지 없음'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white">
+              {avatarAction === 'upload' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Upload className="h-4 w-4" aria-hidden="true" />
+              )}
+              {me?.has_avatar ? '교체' : '업로드'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="sr-only"
+                disabled={avatarAction !== null}
+                onChange={onAvatarFile}
+                data-testid="profile-avatar-input"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={!me?.has_avatar || avatarAction !== null}
+              onClick={onDeleteAvatar}
+              className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
+              data-testid="profile-avatar-delete"
+            >
+              {avatarAction === 'delete' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              삭제
+            </button>
+          </div>
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-sm border border-hairline bg-white p-4">
         <div className="flex items-center justify-between gap-3">

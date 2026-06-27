@@ -96,16 +96,18 @@ def make_upload_url(
     filename: str,
     content_type: str,
     content_length: int,
+    max_upload_bytes: int | None = None,
+    allowed_content_types: set[str] | None = None,
 ) -> UploadUrlResponse:
     """presigned PUT URL 응답을 만들어 반환(boto3 SigV4 query auth 실서명).
 
     `ContentType` 을 서명에 포함하므로 클라이언트는 PUT 시 동일한 `Content-Type` 헤더를
     반드시 보내야 한다(응답 `headers` 그대로). body 는 UNSIGNED-PAYLOAD(query 서명 기본).
     """
-    max_bytes = settings.pinvi_rustfs_max_upload_bytes
+    max_bytes = max_upload_bytes or settings.pinvi_rustfs_max_upload_bytes
     if content_length > max_bytes:
         raise FileTooLargeError(f"최대 {max_bytes} bytes")
-    allowed = _allowed_content_types()
+    allowed = allowed_content_types or _allowed_content_types()
     if content_type not in allowed:
         raise MimeNotAllowedError(f"허용 MIME: {sorted(allowed)}")
 

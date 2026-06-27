@@ -1,10 +1,14 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useState } from 'react';
+import { ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminAuditEntry, AdminUserDetail } from '@pinvi/schemas';
+import { putToPresigned } from '@pinvi/domain';
+import type { AdminAuditEntry, AdminAvatarSettings, AdminUserDetail } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
@@ -14,6 +18,16 @@ const apiClient = new ApiClient({
 });
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
+
+function formatBytes(value: number | null | undefined) {
+  if (!value) {
+    return '크기 기록 없음';
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
 
 const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
   {
@@ -47,24 +61,51 @@ export default function AdminUserDetailPage() {
   const params = useParams<{ user_id: string }>();
   const userId = params.user_id;
   const [user, setUser] = useState<AdminUserDetail | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<ActionKind | null>(null);
   const [reason, setReason] = useState('');
   const [acting, setActing] = useState(false);
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  const [avatarAction, setAvatarAction] = useState<'upload' | 'delete' | 'settings' | null>(null);
+  const [avatarReason, setAvatarReason] = useState('');
+  const [avatarSettings, setAvatarSettings] = useState<AdminAvatarSettings | null>(null);
+  const [avatarMaxBytes, setAvatarMaxBytes] = useState('');
+  const [settingsReason, setSettingsReason] = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    adminApi(apiClient)
-      .getUser(userId)
-      .then((u) => !cancelled && setUser(u))
-      .catch((err) => {
+    const api = adminApi(apiClient);
+    const load = async () => {
+      try {
+        const [nextUser, nextSettings] = await Promise.all([
+          api.getUser(userId),
+          api.getAvatarSettings(),
+        ]);
+        if (cancelled) return;
+        setUser(nextUser);
+        setAvatarSettings(nextSettings);
+        setAvatarMaxBytes(String(nextSettings.avatar_max_upload_bytes));
+        if (!nextUser.has_avatar) {
+          setAvatarSrc(null);
+          return;
+        }
+        try {
+          const avatar = await api.getUserAvatarDownloadUrl(userId);
+          if (!cancelled) setAvatarSrc(avatar.public_url ?? avatar.download_url);
+        } catch {
+          if (!cancelled) setAvatarSrc(null);
+        }
+      } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
           router.replace('/admin/users');
           return;
         }
         setError(err instanceof ApiError ? err.message : '조회 실패');
-      });
+      }
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -92,7 +133,120 @@ export default function AdminUserDetailPage() {
     }
   };
 
-  if (error) {
+  const refreshAvatarUrl = async (nextUser: AdminUserDetail) => {
+    if (!nextUser.has_avatar) {
+      setAvatarSrc(null);
+      return;
+    }
+    try {
+      const avatar = await adminApi(apiClient).getUserAvatarDownloadUrl(userId);
+      setAvatarSrc(avatar.public_url ?? avatar.download_url);
+    } catch {
+      setAvatarSrc(null);
+    }
+  };
+
+  const onAvatarFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    if (!file) return;
+    const accessReason = avatarReason.trim();
+    if (accessReason.length < 1) {
+      setError('아바타 변경 사유가 필요합니다.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('아바타는 이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setAvatarAction('upload');
+    setError(null);
+    setMessage(null);
+    try {
+      const api = adminApi(apiClient);
+      const upload = await api.createUserAvatarUploadUrl(userId, {
+        filename: file.name,
+        content_type: file.type,
+        content_length: file.size,
+      });
+      await putToPresigned(upload, file);
+      const updated = await api.updateUserAvatar(userId, {
+        bucket: upload.bucket,
+        storage_key: upload.storage_key,
+        content_type: file.type,
+        byte_size: file.size,
+        public_url: upload.public_url ?? null,
+        access_reason: accessReason,
+      });
+      setUser(updated);
+      setAvatarReason('');
+      setMessage('아바타를 저장했습니다.');
+      await refreshAvatarUrl(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '아바타를 저장하지 못했습니다.');
+    } finally {
+      setAvatarAction(null);
+    }
+  };
+
+  const onDeleteAvatar = async () => {
+    const accessReason = avatarReason.trim();
+    if (accessReason.length < 1) {
+      setError('아바타 삭제 사유가 필요합니다.');
+      return;
+    }
+    if (!window.confirm('이 사용자의 아바타 이미지를 삭제할까요?')) {
+      return;
+    }
+    setAvatarAction('delete');
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await adminApi(apiClient).deleteUserAvatar(userId, {
+        access_reason: accessReason,
+      });
+      setUser(updated);
+      setAvatarReason('');
+      setMessage('아바타를 삭제했습니다.');
+      await refreshAvatarUrl(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');
+    } finally {
+      setAvatarAction(null);
+    }
+  };
+
+  const onSaveAvatarSettings = async () => {
+    const nextBytes = Number(avatarMaxBytes);
+    const accessReason = settingsReason.trim();
+    if (!Number.isInteger(nextBytes) || nextBytes < 1) {
+      setError('아바타 최대 크기는 1 이상의 정수여야 합니다.');
+      return;
+    }
+    if (accessReason.length < 1) {
+      setError('아바타 설정 변경 사유가 필요합니다.');
+      return;
+    }
+    setAvatarAction('settings');
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await adminApi(apiClient).updateAvatarSettings({
+        avatar_max_upload_bytes: nextBytes,
+        access_reason: accessReason,
+      });
+      setAvatarSettings(updated);
+      setAvatarMaxBytes(String(updated.avatar_max_upload_bytes));
+      setSettingsReason('');
+      setMessage('아바타 설정을 저장했습니다.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '아바타 설정을 저장하지 못했습니다.');
+    } finally {
+      setAvatarAction(null);
+    }
+  };
+
+  if (error && !user) {
     return (
       <AdminPage title="사용자 상세">
         <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
@@ -118,6 +272,18 @@ export default function AdminUserDetailPage() {
         </Link>
       }
     >
+      {message && (
+        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
+      )}
+      {error && (
+        <p
+          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="admin-user-error"
+        >
+          {error}
+        </p>
+      )}
+
       <Section title="기본 정보">
         <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-user-info">
           <div>
@@ -163,6 +329,125 @@ export default function AdminUserDetailPage() {
             <dd>{user.email_verified_at ?? '미인증'}</dd>
           </div>
         </dl>
+      </Section>
+
+      <Section title="아바타">
+        <div className="space-y-5" data-testid="admin-user-avatar-section">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-center gap-3">
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt=""
+                  className="h-16 w-16 rounded-full border border-hairline object-cover"
+                  data-testid="admin-user-avatar-image"
+                />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
+                  <ImageIcon className="h-6 w-6" aria-hidden="true" />
+                </div>
+              )}
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-ink">
+                  {user.has_avatar ? '등록됨' : '등록된 이미지 없음'}
+                </p>
+                <p className="text-xs text-muted" data-testid="admin-user-avatar-meta">
+                  {user.has_avatar
+                    ? `${user.avatar_content_type ?? 'image'} · ${formatBytes(
+                        user.avatar_byte_size,
+                      )}`
+                    : 'RustFS 아바타 없음'}
+                </p>
+                {avatarSettings && (
+                  <p className="text-xs text-muted">
+                    전역 제한 {formatBytes(avatarSettings.avatar_max_upload_bytes)}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="w-full space-y-3 lg:max-w-md">
+              <FormTextArea
+                id="admin-user-avatar-reason"
+                label="변경 사유"
+                hint="아바타 교체/삭제 사유는 감사 로그에 기록됩니다."
+                value={avatarReason}
+                onChange={(e) => setAvatarReason(e.target.value)}
+                rows={2}
+                maxLength={500}
+                data-testid="admin-user-avatar-reason"
+              />
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white">
+                  {avatarAction === 'upload' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {user.has_avatar ? '교체' : '업로드'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={avatarAction !== null}
+                    onChange={onAvatarFile}
+                    data-testid="admin-user-avatar-input"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={!user.has_avatar || avatarAction !== null}
+                  onClick={onDeleteAvatar}
+                  className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
+                  data-testid="admin-user-avatar-delete"
+                >
+                  {avatarAction === 'delete' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  삭제
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 border-t border-hairline pt-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-end">
+            <label className="space-y-1 text-sm">
+              <span className="text-xs uppercase tracking-wide text-muted">최대 크기(bytes)</span>
+              <input
+                type="number"
+                min={1}
+                max={104857600}
+                value={avatarMaxBytes}
+                onChange={(e) => setAvatarMaxBytes(e.target.value)}
+                className="w-full rounded-sm border border-hairline px-3 py-2"
+                data-testid="admin-avatar-settings-max-bytes"
+              />
+            </label>
+            <FormTextArea
+              id="admin-avatar-settings-reason"
+              label="설정 변경 사유"
+              value={settingsReason}
+              onChange={(e) => setSettingsReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              data-testid="admin-avatar-settings-reason"
+            />
+            <button
+              type="button"
+              disabled={avatarAction !== null}
+              onClick={onSaveAvatarSettings}
+              className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              data-testid="admin-avatar-settings-save"
+            >
+              {avatarAction === 'settings' && (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
+              저장
+            </button>
+          </div>
+        </div>
       </Section>
 
       <Section title="액션 (admin role만)">

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
+import { AvatarApplyRequestSchema } from './storage';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
 /** `docs/api/admin.md` §6.4 — 목록 응답은 PII 마스킹. */
@@ -163,9 +164,7 @@ export const AdminFeatureChangeRequestRecordSchema = z.object({
   applied_at: Iso8601Schema.nullable().default(null),
   created_at: Iso8601Schema,
 });
-export type AdminFeatureChangeRequestRecord = z.infer<
-  typeof AdminFeatureChangeRequestRecordSchema
->;
+export type AdminFeatureChangeRequestRecord = z.infer<typeof AdminFeatureChangeRequestRecordSchema>;
 
 export const AdminFeatureDetailFeatureSchema = z.object({
   feature_id: z.string(),
@@ -312,6 +311,12 @@ export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email_revealed: z.boolean(),
   email_status: z.enum(['active', 'bounced', 'complained']),
   is_active: z.boolean(),
+  avatar_url: z.string().nullable().default(null),
+  avatar_kind: z.enum(['default', 'upload', 'external']).default('default'),
+  avatar_content_type: z.string().nullable().default(null),
+  avatar_byte_size: z.number().int().nullable().default(null),
+  avatar_updated_at: Iso8601Schema.nullable().default(null),
+  has_avatar: z.boolean().default(false),
   recent_audit: z.array(AdminAuditEntrySchema).default([]),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
@@ -321,6 +326,29 @@ export const AdminActionRequestSchema = z.object({
   access_reason: z.string().min(1).max(500),
 });
 export type AdminActionRequest = z.infer<typeof AdminActionRequestSchema>;
+
+export const AdminAvatarApplyRequestSchema = AvatarApplyRequestSchema.extend({
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminAvatarApplyRequest = z.infer<typeof AdminAvatarApplyRequestSchema>;
+
+export const AdminAvatarDeleteRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminAvatarDeleteRequest = z.infer<typeof AdminAvatarDeleteRequestSchema>;
+
+export const AdminAvatarSettingsSchema = z.object({
+  avatar_max_upload_bytes: z.number().int().gt(0),
+});
+export type AdminAvatarSettings = z.infer<typeof AdminAvatarSettingsSchema>;
+
+export const AdminAvatarSettingsUpdateRequestSchema = z.object({
+  avatar_max_upload_bytes: z.number().int().gt(0).max(104_857_600),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminAvatarSettingsUpdateRequest = z.infer<
+  typeof AdminAvatarSettingsUpdateRequestSchema
+>;
 
 export const AdminPagedResponseSchema = z.object({
   items: z.array(AdminUserSummarySchema),
@@ -530,7 +558,10 @@ export const AdminPoiCreateRequestSchema = z.object({
   user_note: z.string().nullable().optional(),
   budget_amount: z.number().nonnegative().nullable().optional(),
   actual_amount: z.number().nonnegative().nullable().optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).default('KRW'),
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .default('KRW'),
   user_url: z.string().max(2000).nullable().optional(),
   access_reason: z.string().min(1).max(500),
 });
