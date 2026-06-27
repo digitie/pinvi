@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from prometheus_client import REGISTRY
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
@@ -15,6 +16,13 @@ from app.models.user import User
 from app.services.realtime_broker import realtime_broker
 
 pytestmark = pytest.mark.asyncio
+
+
+def _metric_sample(name: str, labels: dict[str, str]) -> float:
+    value = REGISTRY.get_sample_value(name, labels)
+    if value is None:
+        return 0.0
+    return float(value)
 
 
 async def test_ws_trip_channel_presence_and_poi_broadcast(
@@ -93,6 +101,14 @@ async def test_ws_trip_channel_rejects_non_member(
     await realtime_broker.reset()
     owner_id, _ = verified_user
     owner_cookies = auth_cookies(owner_id)
+    rejected_before = _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {"channel": "trip", "result": "rejected", "reason": "permission_denied"},
+    )
+    close_before = _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4403", "reason": "permission_denied"},
+    )
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "비공개 여행"}, cookies=owner_cookies)
@@ -116,6 +132,14 @@ async def test_ws_trip_channel_rejects_non_member(
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 websocket.receive_json()
             assert exc_info.value.code == 4403
+    assert _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {"channel": "trip", "result": "rejected", "reason": "permission_denied"},
+    ) == (rejected_before + 1)
+    assert _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4403", "reason": "permission_denied"},
+    ) == (close_before + 1)
 
 
 async def test_ws_trip_channel_rate_limits_client_messages(
@@ -133,6 +157,10 @@ async def test_ws_trip_channel_rate_limits_client_messages(
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     token = cookies["pinvi_access"]
+    close_before = _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4429", "reason": "rate_limited"},
+    )
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "rate limited"}, cookies=cookies)
@@ -153,6 +181,10 @@ async def test_ws_trip_channel_rate_limits_client_messages(
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 websocket.receive_json()
             assert exc_info.value.code == 4429
+    assert _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4429", "reason": "rate_limited"},
+    ) == (close_before + 1)
 
 
 async def test_ws_trip_channel_holds_cap_during_rate_limit_grace_close(
@@ -219,6 +251,22 @@ async def test_ws_trip_channel_rejects_connection_cap(
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     token = cookies["pinvi_access"]
+    rejected_before = _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {
+            "channel": "trip",
+            "result": "rejected",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    )
+    close_before = _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {
+            "channel": "trip",
+            "code": "4408",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    )
 
     with TestClient(app) as sync_client:
         created = sync_client.post("/trips", json={"title": "connection cap"}, cookies=cookies)
@@ -236,6 +284,58 @@ async def test_ws_trip_channel_rejects_connection_cap(
                 with pytest.raises(WebSocketDisconnect) as exc_info:
                     second.receive_json()
                 assert exc_info.value.code == 4408
+    assert _metric_sample(
+        "pinvi_api_ws_connections_total",
+        {
+            "channel": "trip",
+            "result": "rejected",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    ) == (rejected_before + 1)
+    assert _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {
+            "channel": "trip",
+            "code": "4408",
+            "reason": "trip_connection_limit_exceeded",
+        },
+    ) == (close_before + 1)
+
+
+async def test_ws_trip_channel_closes_on_heartbeat_timeout(
+    session_factory,
+    verified_user,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import ws as ws_module
+    from app.main import app
+
+    await realtime_broker.reset()
+    monkeypatch.setattr(ws_module, "_HEARTBEAT_TIMEOUT_SECONDS", 0.01)
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    token = cookies["pinvi_access"]
+    close_before = _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4400", "reason": "heartbeat_timeout"},
+    )
+
+    with TestClient(app) as sync_client:
+        created = sync_client.post("/trips", json={"title": "heartbeat"}, cookies=cookies)
+        assert created.status_code == 201, created.text
+        trip_id = created.json()["data"]["trip_id"]
+
+        with sync_client.websocket_connect(f"/ws/trips/{trip_id}?token={token}") as websocket:
+            assert websocket.receive_json()["type"] == "presence.update"
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
+            assert exc_info.value.code == 4400
+
+    assert _metric_sample(
+        "pinvi_api_ws_closes_total",
+        {"channel": "trip", "code": "4400", "reason": "heartbeat_timeout"},
+    ) == (close_before + 1)
 
 
 async def test_ws_trip_channel_rejects_invalid_cursor(

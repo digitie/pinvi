@@ -22,12 +22,11 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-237 WebSocket backend hardening / metrics.
+- 다음 구현: T-238 Pinvi app-owned ETL 표준 / ADR.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 확인 결과,
   inline review comment는 0건이고, 사람 top-level 리뷰 코멘트는 #238/#264의
   운영·법무 gap 리뷰 2건이며 T-256~T-286으로 이미 반영됐다.
-- v0.2.0 구현 게이트: WebSocket N150 live e2e, backend hardening / metrics,
-  app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
+- v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
@@ -43,9 +42,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-237 — WebSocket backend hardening / metrics.
-      close code 구조화 로그, Prometheus gauge/counter, cap/rate/timeout/permission 회귀 테스트를
-      보강한다.
 - [ ] T-238 — Pinvi app-owned ETL 표준 / ADR.
       app schema 소유 Dagster job 표준, retry/backoff, idempotency, 알림, kor-travel-map 책임
       경계를 ADR/runbook으로 고정한다.

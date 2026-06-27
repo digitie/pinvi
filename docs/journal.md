@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-237 WebSocket backend hardening / metrics
+
+**작업**: Trip WebSocket backend의 운영 관측성과 cap/rate/timeout/permission 회귀 테스트를 보강했다.
+
+**변경**:
+
+- `apps/api/app/services/realtime_metrics.py`를 추가해 WebSocket active connection gauge,
+  connection accept/reject counter, close counter, client message counter, broadcast counter,
+  send failure counter를 등록했다. metric label은 bounded 값만 쓰고 `trip_id`/`user_id`는 넣지 않는다.
+- `RealtimeBroker`가 global broker에서 metric을 기록하도록 하고, custom test broker는
+  `metrics_enabled=True`일 때만 metric을 건드리게 했다.
+- `WS /ws/trips/{trip_id}` close 경로에 `pinvi.websocket.close` 구조화 로그와 close metric을 추가했다.
+- permission denied, rate limit, connection cap, heartbeat timeout 회귀 테스트에 metric delta 검증을
+  추가했고, broker 단위 stale-removal/send-timeout metric 테스트를 추가했다.
+- WebSocket 문서의 rate-limit grace 설명을 실제 구현처럼 "close까지 slot 유지"로 정정하고,
+  Prometheus metric 표를 추가했다.
+
+**검증**:
+
+- WSL ext4 미러: `ruff check app/services/realtime_metrics.py app/services/realtime_broker.py app/api/v1/ws.py tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+- WSL ext4 미러: `ruff format --check app/services/realtime_metrics.py app/services/realtime_broker.py app/api/v1/ws.py tests/unit/test_realtime_broker.py tests/integration/test_ws_trip_channel.py`
+- WSL ext4 미러: `mypy --strict app`
+- WSL ext4 미러: `pytest -q tests/unit/test_realtime_broker.py`
+- WSL ext4 미러: `pytest -q tests/integration/test_ws_trip_channel.py`
+
+**다음**: PR 생성 후 e2e/CI/merge를 완료하고, 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-236a WebSocket multi-client N150 live e2e drill
 
 **작업**: N150 public Web/API를 대상으로 실제 WebSocket broadcast와 reconnect 뒤 Trip snapshot reload를

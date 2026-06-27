@@ -5,7 +5,7 @@
 ## Unreleased (`v0.2.0` 후보)
 
 > `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
-> WebSocket backend hardening, app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
+> app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
 
 ### 주요 기능
 
@@ -66,6 +66,9 @@
 
 ### 운영/보안
 
+- Trip WebSocket backend가 close code 구조화 로그와 Prometheus gauge/counter를 내보낸다.
+  connection accept/reject, close reason, client message, broadcast, send timeout/error를 bounded
+  label로 기록하고, process-local broker 운영 전제(`PINVI_API_WORKERS=1`)의 감시 표면을 보강했다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder
