@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-228 Admin sidebar 확장/축소 토글 정정
+
+사용자 정정에 맞춰 Admin 좌측 메뉴를 아이콘 전용으로 고정하지 않고, 기본 expanded 상태에서
+아이콘과 메뉴 라벨을 함께 표시하도록 되돌렸다. 데스크톱에서는 sidebar toggle button으로 compact
+icon-only 상태와 expanded 상태를 전환할 수 있고, 선호 상태는 browser localStorage에 저장한다.
+
+기존 active route 판정과 `admin-nav-*` test id는 유지했다. `/admin/trips/{trip_id}` 상세 e2e에는
+sidebar 기본 expanded, toggle 후 collapsed, 다시 expanded 상태를 확인하는 assertion을 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. WSL에서 Web typecheck와 lint가
+통과했고, Windows Playwright는 WSL dev server를 대상으로 `admin-trips.e2e.ts`의 여행 상세 케이스
+1건이 통과했다.
+
+다음: T-228 PR을 만들고 merge한 뒤 N150에 배포한다. 이후 v0.1.0 릴리즈 정리로 진행한다.
+
 ## 2026-06-27 (codex) — T-215 Admin live e2e 확장 + N150 묶음 게이트
 
 Admin live Playwright gate를 최신 구현 상태에 맞게 보강하고 N150에서 묶음 검증을 완료했다.

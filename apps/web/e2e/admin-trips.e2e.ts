@@ -379,11 +379,13 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await page.goto(`/admin/trips/${tripId}`);
 
   await expect(page.getByRole('heading', { name: '부산 가족 여행' })).toBeVisible();
-  await expect(page.getByTestId('admin-nav--admin-trips')).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
+  await expect(page.getByTestId('admin-nav--admin-trips')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('admin-nav--admin')).not.toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
+  await page.getByTestId('admin-sidebar-toggle').click();
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'true');
+  await page.getByTestId('admin-sidebar-toggle').click();
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
   await expect(page.getByRole('link', { name: 'o***@example.com' })).toHaveAttribute(
     'href',
     `/admin/users/${ownerUserId}`,
@@ -400,7 +402,9 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
 
   await page.getByTestId(`admin-trip-poi-row-${poiId}`).click();
   await expect(page.getByTestId('admin-trip-poi-dialog')).toBeVisible();
-  await expect(page.getByTestId('admin-trip-poi-dialog')).toContainText('부산 해운대구 해운대해변로');
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toContainText(
+    '부산 해운대구 해운대해변로',
+  );
   await expect(page.getByTestId('admin-trip-poi-map')).toBeVisible();
   await expect(page.getByTestId('admin-trip-poi-detail-link')).toHaveAttribute(
     'href',
@@ -505,8 +509,7 @@ test('Admin 여행 상세에서 날짜 이동 운영 작업을 실행한다', as
 
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/trips/${tripId}/days/1/operation-impact`,
+      url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/operation-impact`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -516,8 +519,7 @@ test('Admin 여행 상세에서 날짜 이동 운영 작업을 실행한다', as
   );
 
   await page.route(
-    (url) =>
-      url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/move`,
+    (url) => url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/move`,
     async (route) => {
       moveBody = route.request().postDataJSON() as Record<string, unknown>;
       currentTrip = {
