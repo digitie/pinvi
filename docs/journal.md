@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-288 Task 문서 분리 정책 반영
+
+**작업**: `kor-travel-map` task 문서화 정책을 확인하고 Pinvi의 task 추적 문서에도
+`tasks.md` / `tasks-done.md` / `resume.md` 분리 규칙을 도입했다.
+
+**변경**:
+
+- `docs/tasks-rule.md`를 추가해 열린 task, 완료 아카이브, task 분리, 신규 task 진입 전
+  최근 2일 PR 리뷰 코멘트 확인 규칙을 문서화했다.
+- `docs/tasks-done.md`를 추가하고 T-232~T-235 및 T-288 완료 요약을 옮겼다.
+- `docs/tasks.md`에서 현재 Sprint 5 완료 항목을 제거하고, legacy 완료 이력 전체 이관을
+  `T-288-legacy-task-archive`로 분리했다.
+- `docs/agent-guide.md`와 `docs/resume.md`의 정본 포인터를 새 정책에 맞췄다.
+
+**발견**: 최근 2일 PR 범위에서 inline review comment는 0건이었다. 사람 top-level 리뷰 코멘트는
+#238과 #264의 운영·법무 gap 리뷰 2건이고, #264에서 T-256~T-286으로 이미 반영·답변된 상태다.
+
+**다음**: 문서-only PR을 만들고 merge한 뒤 T-236 WebSocket multi-client collaboration e2e로 진행한다.
+
 ## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
 
 **작업**: Trip/POI optimistic lock 409 충돌을 사용자 선택 가능한 다이얼로그로 처리했다.

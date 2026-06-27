@@ -1,5 +1,15 @@
 # tasks.md — 백로그
 
+진행/예정(`[ ]`) task만 두는 백로그를 목표로 한다. 완료·아카이브는
+[`docs/tasks-done.md`](tasks-done.md), 현재 진척과 "다음 한 작업"은
+[`docs/resume.md`](resume.md)가 정본이다. 작성·유지 규약은
+[`docs/tasks-rule.md`](tasks-rule.md)를 따른다.
+
+> 전환 메모(2026-06-28): `kor-travel-map`의 task 문서 분리 정책을 반영해
+> `tasks-done.md`를 도입했다. 현재 Sprint 5 흐름의 완료 항목(T-232~T-235)은
+> `tasks-done.md`로 옮겼고, 기존 legacy 완료 이력 전체 이관은
+> `T-288-legacy-task-archive`로 분리한다.
+
 > **2026-06-06 정합성 감사**: `docs/audit/2026-06-06-doc-impl-audit.md`에서
 > 모순·불일치·누락을 전수 점검하고 후속 Task(T-123~T-151)·ADR(ADR-027~031)·결정
 > (DEC-01~10)을 도출했다. 결정 결과는 `docs/decisions-needed-2026-06-06.md`,
@@ -13,6 +23,9 @@
 ## 다음 (우선순위 순)
 
 - 다음 구현: T-236 WebSocket multi-client collaboration e2e.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 확인 결과,
+  inline review comment는 0건이고, 사람 top-level 리뷰 코멘트는 #238/#264의
+  운영·법무 gap 리뷰 2건이며 T-256~T-286으로 이미 반영됐다.
 - v0.2.0 구현 게이트: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
   app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
@@ -26,33 +39,6 @@
 
 ## v0.2.0 구현 게이트 (2026-06-27)
 
-- [x] T-232 — Trip WebSocket frontend client / presence 첫 연결
-      (완료: 2026-06-27, codex). `@pinvi/api-client`에 `TripRealtimeClient`와
-      `tripWebSocketUrl`을 추가해 heartbeat, `ping`→`pong`, exponential backoff reconnect,
-      주입 가능한 WebSocket constructor를 제공한다. 사용자 Trip 상세 화면은
-      `WS /ws/trips/{trip_id}`에 연결해 presence summary를 표시하고, POI/day/trip domain event를
-      debounce reload로 반영한다. WSL ext4 미러에서 api-client/web typecheck, Web lint,
-      mobile typecheck, `tripRealtimeClient.test.ts` Vitest 3건을 통과했다.
-- [x] T-233 — Sprint 5/6 상세 Task 계획
-      (완료: 2026-06-27, codex). `docs/execplan/sprint5-v020-release-plan.md`에 Sprint 5
-      `v0.2.0` 잔여 구현 Task(T-234~T-259), API/UI/live e2e 케이스 카탈로그,
-      운영 게이트 순서, Sprint 6 `v1.0.0` 후속 Task 초안(T-260~T-286)을 정리했다.
-      사용자/Admin 지도뷰 marker palette·색상 parity를 T-255로 분리했고, Sprint 6 운영은
-      ARM image/GHCR 없이 노드 로컬 build 기준으로 정정했다. PR 리뷰에서 지적된 PIPA incident,
-      DSR, retention 실행, email deliverability/suppression, moderation, RBAC, user lifecycle,
-      abuse/rate-limit, provider tracking, mobile/AI scope도 Task로 보강했다.
-- [x] T-234 — WebSocket client invalidation / auth close handling.
-      (완료: 2026-06-27, codex). `TripRealtimeClient`가 close code/reason을 분류하고,
-      `4401`은 `authApi.refresh()` 성공 후 즉시 재연결한다. `4403`은 권한 상실 안내와 여행 목록
-      CTA를 표시하며, `4408`/`4429`는 backoff 안내를 표시한다. POI/day/trip/comment event별
-      TanStack Query invalidation key helper를 추가했고, Trip 상세 reload는 in-flight promise를
-      공유해 HTTP mutation reload와 WebSocket event reload가 같은 tick에 겹쳐도 1회로 합친다.
-      WSL ext4 미러에서 api-client/web/mobile typecheck, Web lint/build, realtime Vitest 8건을
-      통과했고, Windows Playwright mock e2e `trip-detail.e2e.ts` 3건을 통과했다.
-- [x] T-235 — Optimistic lock / conflict dialog.
-      (완료: 2026-06-27, codex). POI/Trip 409 conflict UX, LWW/수동 병합, server/my value 선택과
-      API/Vitest/Windows Playwright 회귀 테스트를 구현했다. Day API는 현재 `If-Match` 계약이 없어
-      T-287로 분리했다.
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
@@ -118,6 +104,12 @@
       mobile/AI scope를 Sprint 6 DoD와 release checklist에 고정한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
       main CI, N150 deploy/smoke, live e2e, backup snapshot, release notes/tag를 완료한다.
+
+## 문서 운영 후속
+
+- [ ] T-288-legacy-task-archive — `tasks.md` legacy 완료 이력 이관.
+      `Admin 콘솔 기능 보강 프로그램`, `완료`, `머지 히스토리`, 완료/보류 혼재 섹션을
+      `docs/tasks-done.md`로 단계적으로 옮겨 `tasks.md`를 열린 backlog 중심으로 정리한다.
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
