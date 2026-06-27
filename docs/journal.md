@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-231 v0.2.0 후보 범위 정리
+
+**작업**: `Unreleased`에 쌓인 post-v0.1.0 변경을 Sprint 5 / `v0.2.0` 후보 범위로 재정렬했다.
+
+**변경**:
+
+- `CHANGELOG.md`의 `Unreleased`를 `v0.2.0` 후보로 표시하고, 남은 gate를 명시했다.
+- Sprint 5 문서를 in-progress 상태로 바꾸고 이미 main에 반영된 Admin/ETL/Grafana/System 항목과
+  남은 gate를 분리했다.
+- `docs/sprints/README.md` Sprint 5 상태를 post-v0.1.0 일부 반영 상태로 갱신했다.
+- `docs/tasks.md` 다음 작업을 WebSocket, app-owned ETL 추가 job, Loki/request timeline,
+  backup/restore 스테이징 훈련 중심으로 정리했다.
+- `docs/resume.md` 최신 항목에 같은 범위 정리를 남겼다.
+
+**다음**: `v0.2.0` 구현 gate 중 WebSocket 협업 또는 app-owned ETL 추가 job부터 Task로 쪼개 진행한다.
+
 ## 2026-06-27 (codex) — T-230 v0.1.0 릴리즈 상태 정합화
 
 **작업**: `v0.1.0` 릴리즈가 이미 존재하는 상태와 문서의 "tag 대기" 표현 사이 drift를 정리했다.

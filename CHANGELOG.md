@@ -2,9 +2,10 @@
 
 본 문서는 사용자에게 보이는 릴리즈 변경 사항을 기록한다.
 
-## Unreleased
+## Unreleased (`v0.2.0` 후보)
 
-> `v0.1.0` 이후 main에 반영된 변경 사항이다. 다음 release train에서 버전을 확정한다.
+> `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
+> WebSocket 협업, app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
 
 ### 주요 기능
 
@@ -35,8 +36,9 @@
 - Admin `/admin/system` 화면을 추가했다. 의존 API health와 Docker collector 상태,
   container name/image/state/health/compose service를 표시하며, Docker socket이 없거나 권한이
   없으면 실패 대신 `unknown`/`down` 상태로 강등한다.
-- Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
-  Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
+- Admin 좌측 메뉴는 기본 expanded 상태에서 아이콘+라벨을 표시하고, 필요할 때 compact
+  icon-only 상태로 접을 수 있다. 현재 route active state를 정확히 표시하며, Trip 상세 화면은
+  여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
   미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.
 - Admin 여행 목록에서 owner 검색/선택 기반으로 여행계획을 직접 생성할 수 있다. 생성 사유는
   `trip.create` 감사 로그에 남고, 생성 후 바로 해당 여행 상세 화면으로 이동한다.

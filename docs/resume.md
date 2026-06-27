@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-231 v0.2.0 후보 범위 정리
+
+`Unreleased`에 쌓인 post-v0.1.0 Admin/운영 보강을 Sprint 5 / `v0.2.0` 후보 범위로 정리했다.
+이미 main에 들어온 것은 Admin 운영 화면, ETL/provider sync read view, Grafana prod URL,
+dashboard/system 운영 지표, dedup/integrity action 일부, 파일/아바타/quota/operation 기능이다.
+
+남은 `v0.2.0` 후보 gate는 WebSocket 협업, Pinvi `app` schema 소유 ETL 추가 job,
+Loki/request timeline, backup/restore 1차 스테이징 훈련, release notes로 분리했다.
+`CHANGELOG.md`의 `Unreleased` 제목을 `v0.2.0` 후보로 바꾸고, Sprint 5 문서와 tasks를 같은 기준으로
+맞췄다. sidebar 설명도 기본 expanded + 선택적 compact icon-only 기준으로 정정했다.
+
 ## 2026-06-27 (codex) — T-230 v0.1.0 릴리즈 상태 정합화
 
 `v0.1.0` tag와 GitHub Release가 이미 존재함을 확인했다. Release는 2026-06-13에 게시됐고,

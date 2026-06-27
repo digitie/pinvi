@@ -12,8 +12,8 @@
 
 ## 다음 (우선순위 순)
 
-- v0.2.0 범위 정리: Unreleased Admin/운영 보강을 Sprint 5 로드맵과 맞춰 다음 릴리즈 범위로
-  재분류한다.
+- v0.2.0 구현 게이트: WebSocket 협업, app-owned ETL 추가 job, Loki/request timeline,
+  backup/restore 1차 스테이징 훈련.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
 - 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
@@ -152,6 +152,12 @@
       "tag 대기" 표현을 실제 릴리즈 완료 상태로 정리했다. 최신 main
       `d35f49e1faafa61380d9c2c0e2d6a1cb36d29108` 기준 N150 API/DB/Web/Dagster/
       `kor-travel-map` smoke는 모두 200을 반환했다.
+- [x] T-231 — v0.2.0 후보 범위 정리
+      (완료: 2026-06-27, codex). `CHANGELOG.md`의 `Unreleased`를 `v0.2.0` 후보로
+      명시하고, Sprint 5 문서에 post-v0.1.0으로 이미 반영된 Admin/ETL/Grafana/System
+      항목과 남은 release gate(WebSocket, app-owned ETL 추가 job, Loki/request timeline,
+      backup/restore 스테이징 훈련)를 분리했다. sidebar 설명도 기본 expanded + 선택적
+      compact icon-only 기준으로 재정렬했다.
 
 ## 완료
 

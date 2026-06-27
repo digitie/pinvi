@@ -1,7 +1,9 @@
 # SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
-- **상태**: proposed (일부 선반영: T-067 KASI, T-109 geofencing, T-110 Grafana,
-  T-115 backup foundation)
+- **상태**: in progress / scope 재정렬. 일부 선반영: T-067 KASI, T-109 geofencing,
+  T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
+  ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
+  action 일부가 추가됐다(T-207~T-230).
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
@@ -10,6 +12,8 @@
   **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
+- **남은 release gate**: WebSocket 협업, app-owned ETL 추가 job, Loki/request timeline
+  stream, backup/restore 1차 스테이징 훈련, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -39,6 +43,26 @@
     운영 보강.
 
 ## 산출물
+
+### 2026-06-27 범위 정리
+
+이미 main에 반영된 항목:
+
+- `/admin/etl`, `/admin/provider-sync` read view와 Pinvi ETL registry / upstream ops proxy.
+- `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs` read view와 dedup/integrity action 일부.
+- `/admin/grafana` prod public URL 주입 경로.
+- `/admin` dashboard 운영 그래프/부하/용량 요약.
+- `/admin/system` 의존 API + Docker collector 상태 화면.
+- Admin 여행/POI 생성, 상세 drill-down, 파일/아바타/RustFS quota, 복사·이동·삭제 운영 기능.
+
+남은 `v0.2.0` 후보 gate:
+
+- `WS /ws/trips/{trip_id}` 기반 동시 편집/presence/conflict UX.
+- Pinvi `app` schema 소유 ETL 추가 job(`email_outbox`, PII retention, location archive,
+  telegram weekly/daily summary).
+- Loki/Promtail 또는 대체 로그 stream과 request timeline.
+- Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
+- `v0.2.0` tag/GitHub Release notes.
 
 ### 백엔드 (`apps/api`)
 
