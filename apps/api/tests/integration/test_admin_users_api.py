@@ -251,3 +251,127 @@ async def test_admin_user_disable_rolls_back_when_audit_fails(
     assert stored_session is not None
     assert stored_session.revoked_at is None
     assert audit_count is None
+
+
+async def test_admin_avatar_settings_and_user_avatar_audit(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-avatar@example.com",
+        nickname="관리자",
+        roles=["user", "admin"],
+    )
+    target_id = await _create_user(
+        session_factory,
+        email="avatar-target@example.com",
+        nickname="아바타 대상",
+        status="active",
+    )
+    cookies = auth_cookies(str(admin_id))
+
+    settings_resp = await client.get("/admin/settings/avatar", cookies=cookies)
+    assert settings_resp.status_code == 200
+    assert settings_resp.json()["data"]["avatar_max_upload_bytes"] == 2 * 1024 * 1024
+
+    settings_request_id = uuid.uuid4()
+    settings_update = await client.put(
+        "/admin/settings/avatar",
+        headers={"X-Request-Id": str(settings_request_id)},
+        json={
+            "avatar_max_upload_bytes": 4096,
+            "access_reason": "운영 정책상 아바타 제한 조정",
+        },
+        cookies=cookies,
+    )
+
+    assert settings_update.status_code == 200, settings_update.text
+    assert settings_update.json()["data"]["avatar_max_upload_bytes"] == 4096
+
+    upload = await client.post(
+        f"/admin/users/{target_id}/avatar/upload-url",
+        json={
+            "filename": "face.png",
+            "content_type": "image/png",
+            "content_length": 2048,
+        },
+        cookies=cookies,
+    )
+
+    assert upload.status_code == 200, upload.text
+    upload_data = upload.json()["data"]
+    assert upload_data["storage_key"].startswith(f"user-uploads/avatar/{target_id}/")
+    assert upload_data["max_upload_bytes"] == 4096
+
+    avatar_request_id = uuid.uuid4()
+    updated = await client.put(
+        f"/admin/users/{target_id}/avatar",
+        headers={"X-Request-Id": str(avatar_request_id)},
+        json={
+            "bucket": upload_data["bucket"],
+            "storage_key": upload_data["storage_key"],
+            "content_type": "image/png",
+            "byte_size": 2048,
+            "public_url": None,
+            "access_reason": "사용자 요청 대행 업로드",
+        },
+        cookies=cookies,
+    )
+
+    assert updated.status_code == 200, updated.text
+    updated_data = updated.json()["data"]
+    assert updated_data["has_avatar"] is True
+    assert updated_data["avatar_kind"] == "upload"
+    assert updated_data["recent_audit"][0]["action"] == "user.avatar_replace"
+    assert updated_data["recent_audit"][0]["target_pii_fields"] == ["avatar"]
+
+    download = await client.get(f"/admin/users/{target_id}/avatar/download-url", cookies=cookies)
+    assert download.status_code == 200
+    assert "X-Amz-Signature=" in download.json()["data"]["download_url"]
+
+    deleted_keys: list[str] = []
+
+    async def _delete_object(*, key: str) -> None:
+        deleted_keys.append(key)
+
+    import app.api.v1.admin.users as admin_users_router
+
+    monkeypatch.setattr(admin_users_router, "delete_object", _delete_object)
+
+    delete_request_id = uuid.uuid4()
+    deleted = await client.request(
+        "DELETE",
+        f"/admin/users/{target_id}/avatar",
+        headers={"X-Request-Id": str(delete_request_id)},
+        json={"access_reason": "사용자 요청 대행 삭제"},
+        cookies=cookies,
+    )
+
+    assert deleted.status_code == 200, deleted.text
+    deleted_data = deleted.json()["data"]
+    assert deleted_data["has_avatar"] is False
+    assert deleted_data["recent_audit"][0]["action"] == "user.avatar_delete"
+    assert deleted_keys == [upload_data["storage_key"]]
+
+    async with session_factory() as db:
+        settings_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == settings_request_id)
+        )
+        avatar_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == avatar_request_id)
+        )
+        delete_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == delete_request_id)
+        )
+
+    assert settings_audit is not None
+    assert settings_audit.action == "settings.avatar_update"
+    assert settings_audit.before_state == {"avatar_max_upload_bytes": 2 * 1024 * 1024}
+    assert settings_audit.after_state == {"avatar_max_upload_bytes": 4096}
+    assert avatar_audit is not None
+    assert avatar_audit.action == "user.avatar_replace"
+    assert delete_audit is not None
+    assert delete_audit.action == "user.avatar_delete"

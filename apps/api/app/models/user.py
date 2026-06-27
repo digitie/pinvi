@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Boolean, DateTime, Integer, String, text
+from sqlalchemy import ARRAY, BigInteger, Boolean, DateTime, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,11 @@ class User(Base, TimestampMixin):
     nickname: Mapped[str | None] = mapped_column(String(80))
     avatar_url: Mapped[str | None] = mapped_column(String(1024))
     avatar_kind: Mapped[str] = mapped_column(String(16), nullable=False, server_default="default")
+    avatar_bucket: Mapped[str | None] = mapped_column(String(80))
+    avatar_storage_key: Mapped[str | None] = mapped_column(String(1024))
+    avatar_content_type: Mapped[str | None] = mapped_column(String(255))
+    avatar_byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # 선택 정보 — `demographic_use` 동의 시에만 저장
     gender: Mapped[str | None] = mapped_column(String(16))

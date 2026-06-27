@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-223 사용자 아바타 / RustFS 이미지 관리
+
+사용자와 Admin이 RustFS 기반 아바타 이미지를 볼 수 있고 업로드/교체/삭제할 수 있게 했다.
+`app.users`에는 `avatar_bucket`, `avatar_storage_key`, MIME, byte size, 갱신 시각을 추가했고,
+`app.storage_settings` 단일 행으로 전역 아바타 최대 업로드 크기(기본 2MiB)를 관리한다.
+
+API는 `/users/me/avatar/upload-url`, `PUT/DELETE /users/me/avatar`,
+`GET /users/me/avatar/download-url`을 제공한다. Admin은 `/admin/users/{user_id}/avatar/*`로
+대상 사용자 아바타를 관리하고, `/admin/settings/avatar`에서 전역 크기 제한을 조회/변경한다.
+Admin 변경은 `user.avatar_replace`, `user.avatar_delete`, `settings.avatar_update` audit으로 기록한다.
+
+Web `/profile`에는 아바타 섹션을 추가했고, `/admin/users/{user_id}`에는 사용자 아바타 관리와
+전역 제한 설정을 추가했다. presigned PUT은 기존 RustFS 흐름을 재사용하되, 아바타 endpoint는
+image MIME과 전역 크기 제한을 별도로 강제한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+storage unit 9건, avatar/admin focused integration 7건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Windows Playwright는 WSL Next 서버(12805)를 재사용해
+`admin-users.e2e.ts` + `profile-avatar.e2e.ts` 4건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-224(여행/날짜/POI 파일 업로드와 용량 정책)에 진입한다. T-210 WIP
+stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
 ## 2026-06-27 (codex) — T-219 POI Admin 직접 생성
 
 Admin POI 목록에 생성 dialog를 추가했다. 운영자는 `/admin/trips` 검색 결과에서 여행계획을
@@ -220,6 +243,7 @@ Playwright 결과 디렉터리 정리도 확인했다.
 
 다음 작업은 이 브랜치를 push하고 PR을 한 번 생성한 뒤, PR CI/리뷰 결과에 따라 v0.1.0 릴리즈
 직전 smoke/tag 절차로 이어가는 것이다.
+
 ## 2026-06-25 (claude) — map/geo/concierge 최신 API 계약 동기화 (ADR-049)
 
 `kor-travel-map`/`kor-travel-geo`/`kor-travel-concierge` origin/main 최신 계약을 점검해 Pinvi를
@@ -420,6 +444,7 @@ google/start` + 공통 callback `pinvi://oauth?code=` + `/mobile/auth/oauth/exch
 (expo-web-browser) **결합 빌드** `54e933ef`를 main에서 트리거(진행 중) — 실기기 검증용 dev-client APK.
 
 **남은 것(외부/운영 선결)**:
+
 - **결합 EAS 빌드 완료 확인** + Android 기기 설치 후 `expo start --dev-client`로 지도/OAuth 실동작 smoke.
 - **Google Console**: 모바일 OAuth가 실제로 동작하려면 운영 callback(`pinvi-api.example.com/auth/oauth/google/callback`)이
   승인된 redirect_uri에 있어야 하고, dev에선 공개 터널이 필요하다(코드는 완성).
@@ -517,8 +542,9 @@ foundation을 진행했다.
 
 **검증**: WSL ext4 mirror에서 API 전체 pytest 342 passed/1 skipped, API
 ruff/format/mypy, web lint/typecheck/build/Vitest 62 passed + schemas 6 passed, ETL 3 passed
-+ ruff/format/mypy, shell `bash -n`, dev/app compose config 통과. Windows git에서
-`git diff --check` 통과.
+
+- ruff/format/mypy, shell `bash -n`, dev/app compose config 통과. Windows git에서
+  `git diff --check` 통과.
 
 **다음 한 작업**: PR 생성 후 리뷰/merge. PR merge 뒤 main에서 `v0.1.0` tag와
 GitHub Release를 생성한다.
@@ -631,6 +657,7 @@ feature-backed POI를 찾아 재사용하고 없으면 새 POI를 생성한다(A
 2026-06-12 T-223d로 구현했다.
 
 **Claude 세션: 프론트 폼 a11y 스윕 + T-106 Telegram 백엔드 완성** (2026-06-10, `agent/claude-*`, PR #151~#166):
+
 - **폼 접근성 스윕 #151~#159** — 재사용 컴포넌트 `FormField`/`FormTextArea`/`FormSelect` +
   `validateForm`(Zod→필드별 한국어 메시지 + firstField) + `useDialogAutoFocus`(모달 포커스 이동/복원)를
   앱 전반에 적용: 공개 인증(login/signup), trip 생성·profile-complete, 모달 3종(TripEdit/NoticePlanCopy/
@@ -1035,10 +1062,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-216 완료. 다음 작업은 **T-217 여행계획 Admin 직접
-> 생성**이다. 이후 T-219(POI Admin 직접 생성), T-223~T-225(아바타/파일/복사·이동·삭제
-> 오케스트레이션)를 진행한 뒤 T-210 change request 운영 통합으로 돌아간다. N150 live는 계속
-> T-215 묶음 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: T-223 완료. 다음 작업은 **T-224 여행/날짜/POI 파일
+> 업로드와 용량 정책**이다. 이후 T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)를
+> 진행한 뒤 T-210 change request 운영 통합으로 돌아간다. N150 live는 계속 T-215 묶음 게이트에서
+> 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증
@@ -1087,12 +1114,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 릴리즈 로드맵
 
-| 버전 | Sprint | ETA | 핵심 |
-|------|--------|-----|------|
-| `v0.1.0` | Sprint 4 | tag 대기 | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성 |
-| `v0.2.0` | Sprint 5 | +1 | 실시간 + ETL + Grafana embed + Backup 1차 |
-| `v1.0.0` | Sprint 6 | +2 | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
-| `v1.1.0+` | post-Sprint 6 | 후속 | PWA / 푸시 / kor-travel-concierge (별 repo) |
+| 버전      | Sprint        | ETA      | 핵심                                                                     |
+| --------- | ------------- | -------- | ------------------------------------------------------------------------ |
+| `v0.1.0`  | Sprint 4      | tag 대기 | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성               |
+| `v0.2.0`  | Sprint 5      | +1       | 실시간 + ETL + Grafana embed + Backup 1차                                |
+| `v1.0.0`  | Sprint 6      | +2       | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
+| `v1.1.0+` | post-Sprint 6 | 후속     | PWA / 푸시 / kor-travel-concierge (별 repo)                              |
 
 ## 진척도
 

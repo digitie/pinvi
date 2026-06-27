@@ -2,12 +2,7 @@ import { z } from 'zod';
 import { Iso8601Schema } from './common';
 import { ConsentTypeSchema } from './user';
 
-const RequiredRegisterConsentTypes = new Set([
-  'tos',
-  'privacy',
-  'lbs_tos',
-  'location_collection',
-]);
+const RequiredRegisterConsentTypes = new Set(['tos', 'privacy', 'lbs_tos', 'location_collection']);
 
 const RegisterConsentItemSchema = z.object({
   consent_type: ConsentTypeSchema,
@@ -15,35 +10,37 @@ const RegisterConsentItemSchema = z.object({
 });
 
 /** 회원가입 요청. `docs/api/auth.md` §2.1. */
-export const RegisterRequestSchema = z.object({
-  email: z.string().email().max(320),
-  password: z.string().min(8).max(200),
-  nickname: z.string().min(1).max(80),
-  consents: z.array(RegisterConsentItemSchema).min(1),
-}).superRefine((value, ctx) => {
-  const provided = new Set<string>();
-  for (const item of value.consents) {
-    if (provided.has(item.consent_type)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['consents'],
-        message: `동의 항목 중복: ${item.consent_type}`,
-      });
-      return;
+export const RegisterRequestSchema = z
+  .object({
+    email: z.string().email().max(320),
+    password: z.string().min(8).max(200),
+    nickname: z.string().min(1).max(80),
+    consents: z.array(RegisterConsentItemSchema).min(1),
+  })
+  .superRefine((value, ctx) => {
+    const provided = new Set<string>();
+    for (const item of value.consents) {
+      if (provided.has(item.consent_type)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['consents'],
+          message: `동의 항목 중복: ${item.consent_type}`,
+        });
+        return;
+      }
+      provided.add(item.consent_type);
     }
-    provided.add(item.consent_type);
-  }
 
-  for (const consentType of RequiredRegisterConsentTypes) {
-    if (!provided.has(consentType)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['consents'],
-        message: `필수 동의 누락: ${consentType}`,
-      });
+    for (const consentType of RequiredRegisterConsentTypes) {
+      if (!provided.has(consentType)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['consents'],
+          message: `필수 동의 누락: ${consentType}`,
+        });
+      }
     }
-  }
-});
+  });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
 /** 회원가입 응답. */
@@ -95,6 +92,11 @@ export const AuthUserSchema = z.object({
   email: z.string().max(320),
   nickname: z.string().nullable(),
   avatar_url: z.string().url().nullable(),
+  avatar_kind: z.enum(['default', 'upload', 'external']).default('default'),
+  avatar_content_type: z.string().nullable().default(null),
+  avatar_byte_size: z.number().int().nullable().default(null),
+  avatar_updated_at: Iso8601Schema.nullable().default(null),
+  has_avatar: z.boolean().default(false),
   status: z.enum(['pending_verification', 'pending_profile', 'active', 'disabled']),
   roles: z.array(z.enum(['user', 'admin', 'operator', 'cpo'])),
   email_verified_at: Iso8601Schema.nullable(),
@@ -118,7 +120,10 @@ export type OAuthProvidersResponse = z.infer<typeof OAuthProvidersResponseSchema
 
 /** OAuth authorize URL 발급 요청/응답. */
 export const OAuthStartRequestSchema = z.object({
-  return_to: z.string().regex(/^\/[\w/_\-?=&]*$/).default('/'),
+  return_to: z
+    .string()
+    .regex(/^\/[\w/_\-?=&]*$/)
+    .default('/'),
   mode: z.enum(['login', 'link']).default('login'),
 });
 export const OAuthStartResponseSchema = z.object({
@@ -128,6 +133,9 @@ export type OAuthStartRequest = z.infer<typeof OAuthStartRequestSchema>;
 export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;
 
 export const OAuthLinkRequestSchema = z.object({
-  return_to: z.string().regex(/^\/[\w/_\-?=&]*$/).default('/profile'),
+  return_to: z
+    .string()
+    .regex(/^\/[\w/_\-?=&]*$/)
+    .default('/profile'),
 });
 export type OAuthLinkRequest = z.infer<typeof OAuthLinkRequestSchema>;

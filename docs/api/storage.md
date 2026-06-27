@@ -1,6 +1,6 @@
 # Storage API (`/storage/*` + `/admin/rustfs/*`)
 
-RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부 메타 등록 + Admin 객체 관리.
+RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부/아바타 메타 등록 + Admin 객체 관리.
 공통 규약 [`common.md`](./common.md). 첨부 도메인은 [`docs/architecture/notice-plans.md`](../architecture/notice-plans.md) §3.3.
 
 ## 1. 책임 / 모델
@@ -11,20 +11,22 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부 메타 등
   (개발은 `pinvi-media`). 한 쪽 compose만 실행.
 - 라이브러리는 feature 미디어(`feature-media/` prefix)에 별도 적재. Pinvi는
   `user-uploads/` prefix만.
+- 사용자 아바타는 `app.users`의 RustFS 메타 컬럼에 저장하고, 전역 크기 제한은
+  `app.storage_settings.avatar_max_upload_bytes`가 소유한다.
 
 ## 2. 환경변수
 
-| 환경변수 | 예시 | 비고 |
-|---------|------|------|
-| `PINVI_RUSTFS_ENDPOINT_URL` | `http://rustfs:9000` | API 컨테이너 → RustFS 내부 |
-| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | `http://127.0.0.1:12101` | 브라우저 → RustFS (presigned host) |
-| `PINVI_RUSTFS_BUCKET` | `pinvi-media` | |
-| `PINVI_RUSTFS_ACCESS_KEY_ID` | `rustfsadmin` | 로컬 dev 기본값 |
-| `PINVI_RUSTFS_SECRET_ACCESS_KEY` | `rustfsadmin` | 로컬 dev 기본값 |
-| `PINVI_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | `900` | 15분 기본 |
-| `PINVI_RUSTFS_MAX_UPLOAD_BYTES` | `10485760` | 10MB 기본 |
-| `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES` | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` | JSON 배열 |
-| `PINVI_RUSTFS_PUBLIC_BASE_URL` | (선택) | CDN base URL → `public_url` 응답에 |
+| 환경변수                                     | 예시                                                                                | 비고                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------- |
+| `PINVI_RUSTFS_ENDPOINT_URL`                  | `http://rustfs:9000`                                                                | API 컨테이너 → RustFS 내부         |
+| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`           | `http://127.0.0.1:12101`                                                            | 브라우저 → RustFS (presigned host) |
+| `PINVI_RUSTFS_BUCKET`                        | `pinvi-media`                                                                       |                                    |
+| `PINVI_RUSTFS_ACCESS_KEY_ID`                 | `rustfsadmin`                                                                       | 로컬 dev 기본값                    |
+| `PINVI_RUSTFS_SECRET_ACCESS_KEY`             | `rustfsadmin`                                                                       | 로컬 dev 기본값                    |
+| `PINVI_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | `900`                                                                               | 15분 기본                          |
+| `PINVI_RUSTFS_MAX_UPLOAD_BYTES`              | `10485760`                                                                          | 10MB 기본                          |
+| `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES`         | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` | JSON 배열                          |
+| `PINVI_RUSTFS_PUBLIC_BASE_URL`               | (선택)                                                                              | CDN base URL → `public_url` 응답에 |
 
 ## 3. Upload 흐름 (2-phase)
 
@@ -72,12 +74,12 @@ Cookie: pinvi_access=...
     "storage_key": "user-uploads/trip_attachment/<user_id>/2026/05/<uuid>.jpg",
     "upload_url": "http://127.0.0.1:12101/pinvi-media/user-uploads/...?X-Amz-Signature=...",
     "headers": {
-      "Content-Type": "image/jpeg"
+      "Content-Type": "image/jpeg",
     },
     "expires_at": "2026-05-25T15:00:00+09:00",
     "max_upload_bytes": 10485760,
-    "public_url": null   // PINVI_RUSTFS_PUBLIC_BASE_URL 설정 시 채움
-  }
+    "public_url": null, // PINVI_RUSTFS_PUBLIC_BASE_URL 설정 시 채움
+  },
 }
 ```
 
@@ -94,6 +96,21 @@ Cookie: pinvi_access=...
 - `content_length <= PINVI_RUSTFS_MAX_UPLOAD_BYTES`
 - 파일명 확장자와 content_type 일치
 - 사용자 일일 업로드 quota (선택, Sprint 결정)
+
+### 4.2 Avatar 전용 업로드 URL
+
+사용자/Admin 화면은 `purpose="avatar"`를 직접 보내는 일반 endpoint 대신 아래 전용 endpoint를
+사용한다.
+
+| Endpoint                                        | 권한                 | 용도                          |
+| ----------------------------------------------- | -------------------- | ----------------------------- |
+| `POST /users/me/avatar/upload-url`              | 로그인 사용자        | 본인 아바타 업로드 URL        |
+| `POST /admin/users/{user_id}/avatar/upload-url` | `admin` / `operator` | 대상 사용자 아바타 업로드 URL |
+
+- 허용 MIME은 `image/jpeg`, `image/png`, `image/webp`, `image/gif`로 고정한다.
+- `content_length`는 `app.storage_settings.avatar_max_upload_bytes` 이하만 허용한다.
+- `storage_key`는 `user-uploads/avatar/{target_user_id}/YYYY/MM/<uuid>.<ext>` 형식이다.
+- 메타 적용은 `PUT /users/me/avatar` 또는 `PUT /admin/users/{user_id}/avatar`에서 수행한다.
 
 에러:
 
@@ -176,8 +193,8 @@ Cookie: pinvi_access=...
     "source_attachment_id": null,
     "bucket": "pinvi-media",
     "storage_key": "...",
-    "...": "..."
-  }
+    "...": "...",
+  },
 }
 ```
 
@@ -190,12 +207,13 @@ CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
 또한 metadata 등록 시 `bucket`은 `PINVI_RUSTFS_BUCKET`과 같아야 하며, `storage_key`는
 현재 사용자가 `POST /storage/upload-urls`에서 발급받은 prefix만 허용한다.
 
-| 대상 | 허용 prefix |
-|------|-------------|
-| Trip 첨부 | `user-uploads/trip_attachment/{current_user_id}/` |
-| Trip POI 첨부 | `user-uploads/poi_attachment/{current_user_id}/` |
+| 대상                    | 허용 prefix                                             |
+| ----------------------- | ------------------------------------------------------- |
+| Trip 첨부               | `user-uploads/trip_attachment/{current_user_id}/`       |
+| Trip POI 첨부           | `user-uploads/poi_attachment/{current_user_id}/`        |
 | Admin curated plan 첨부 | `user-uploads/curated_plan_attachment/{admin_user_id}/` |
-| Admin curated POI 첨부 | `user-uploads/curated_poi_attachment/{admin_user_id}/` |
+| Admin curated POI 첨부  | `user-uploads/curated_poi_attachment/{admin_user_id}/`  |
+| Avatar                  | `user-uploads/avatar/{target_user_id}/`                 |
 
 위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`.
 
@@ -225,12 +243,12 @@ GET /admin/rustfs/objects?prefix=user-uploads/trip_attachment/&limit=100
         "last_modified": "2026-05-25T10:00:00+09:00",
         "etag": "\"a1b2c3...\"",
         "storage_class": "STANDARD",
-        "public_url": null
-      }
+        "public_url": null,
+      },
     ],
     "is_truncated": true,
-    "next_continuation_token": "..."
-  }
+    "next_continuation_token": "...",
+  },
 }
 ```
 
@@ -250,11 +268,11 @@ DELETE /admin/rustfs/objects?key=user-uploads/trip_attachment/<uid>/2026/05/<u>.
 
 RustFS 컨테이너 CORS 설정:
 
-| Allowed Origin | 용도 |
-|---------------|------|
-| `http://localhost:12805` | 로컬 dev |
-| `http://127.0.0.1:12805` | Docker smoke |
-| `https://pinvi.example.com` | 운영 |
+| Allowed Origin              | 용도         |
+| --------------------------- | ------------ |
+| `http://localhost:12805`    | 로컬 dev     |
+| `http://127.0.0.1:12805`    | Docker smoke |
+| `https://pinvi.example.com` | 운영         |
 
 Methods: `PUT, GET, HEAD, OPTIONS`. Headers: `Content-Type, x-amz-*`.
 

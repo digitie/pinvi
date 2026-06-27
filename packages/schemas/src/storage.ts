@@ -19,6 +19,11 @@ export const UploadUrlRequestSchema = z.object({
 });
 export type UploadUrlRequest = z.infer<typeof UploadUrlRequestSchema>;
 
+export const AvatarUploadUrlRequestSchema = UploadUrlRequestSchema.omit({
+  purpose: true,
+});
+export type AvatarUploadUrlRequest = z.infer<typeof AvatarUploadUrlRequestSchema>;
+
 export const UploadUrlResponseSchema = z.object({
   method: z.literal('PUT'),
   bucket: z.string(),
@@ -41,6 +46,25 @@ export const DownloadUrlResponseSchema = z.object({
   public_url: z.string().nullable().optional(),
 });
 export type DownloadUrlResponse = z.infer<typeof DownloadUrlResponseSchema>;
+
+export const AvatarApplyRequestSchema = z.object({
+  bucket: z.string().min(1).max(80),
+  storage_key: z.string().min(1).max(1024),
+  content_type: z.string().min(1).max(255),
+  byte_size: z.number().int().gt(0),
+  public_url: z.string().nullable().optional(),
+});
+export type AvatarApplyRequest = z.infer<typeof AvatarApplyRequestSchema>;
+
+export const AvatarInfoSchema = z.object({
+  avatar_kind: z.enum(['default', 'upload', 'external']).default('default'),
+  avatar_url: z.string().nullable().default(null),
+  avatar_content_type: z.string().nullable().default(null),
+  avatar_byte_size: z.number().int().nullable().default(null),
+  avatar_updated_at: Iso8601Schema.nullable().default(null),
+  has_avatar: z.boolean().default(false),
+});
+export type AvatarInfo = z.infer<typeof AvatarInfoSchema>;
 
 export const AttachmentRoleSchema = z.enum(['attachment', 'image', 'document', 'reference']);
 const NullableUuidSchema = z.string().uuid().nullable();

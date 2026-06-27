@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.storage import AvatarApplyRequest
+
 
 class AdminUserSummary(BaseModel):
     """목록용 — email은 마스킹 응답."""
@@ -287,12 +289,35 @@ class AdminUserDetail(AdminUserSummary):
     email_revealed: bool
     email_status: Literal["active", "bounced", "complained"]
     is_active: bool
+    avatar_url: str | None = None
+    avatar_kind: Literal["default", "upload", "external"] = "default"
+    avatar_content_type: str | None = None
+    avatar_byte_size: int | None = None
+    avatar_updated_at: datetime | None = None
+    has_avatar: bool = False
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 
 
 class AdminActionRequest(BaseModel):
     """force-verify / disable 등 위험 액션 — 사유 필수."""
 
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminAvatarApplyRequest(AvatarApplyRequest):
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminAvatarDeleteRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminAvatarSettings(BaseModel):
+    avatar_max_upload_bytes: int = Field(gt=0)
+
+
+class AdminAvatarSettingsUpdateRequest(BaseModel):
+    avatar_max_upload_bytes: int = Field(gt=0, le=104_857_600)
     access_reason: str = Field(min_length=1, max_length=500)
 
 

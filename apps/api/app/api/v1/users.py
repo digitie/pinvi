@@ -6,8 +6,10 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
 
 from app.core.deps import CurrentUserId, DbSession
+from app.models.user import User
 from app.schemas.consent import (
     ConsentItem,
     ConsentResponse,
@@ -17,6 +19,21 @@ from app.schemas.consent import (
 )
 from app.schemas.envelope import Envelope
 from app.schemas.mcp import McpTokenIssueRequest, McpTokenIssueResponse, McpTokenResponse
+from app.schemas.storage import (
+    AVATAR_CONTENT_TYPES,
+    AvatarApplyRequest,
+    AvatarInfo,
+    AvatarUploadUrlRequest,
+    DownloadUrlResponse,
+    UploadUrlResponse,
+)
+from app.services.avatar_storage import (
+    apply_avatar,
+    avatar_info,
+    clear_avatar,
+    get_storage_settings,
+    validate_avatar_apply,
+)
 from app.services.consent import (
     ConsentNotFoundError,
     list_user_consents,
@@ -31,8 +48,40 @@ from app.services.mcp_tokens import (
     mask_mcp_token,
     revoke_mcp_token,
 )
+from app.services.rustfs_admin import delete_object
+from app.services.rustfs_storage import (
+    FileTooLargeError,
+    InvalidStorageRefError,
+    MimeNotAllowedError,
+    make_download_url,
+    make_upload_url,
+)
 
 router = APIRouter(prefix="/users/me", tags=["users"])
+
+
+async def _get_current_user(db: DbSession, current_user_id: CurrentUserId) -> User:
+    user = await db.scalar(
+        select(User).where(User.user_id == uuid.UUID(current_user_id), User.deleted_at.is_(None))
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
+        )
+    return user
+
+
+def _storage_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, (FileTooLargeError, MimeNotAllowedError, InvalidStorageRefError)):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": "STORAGE_UNAVAILABLE", "message": "객체 저장소 요청에 실패했습니다."},
+    )
 
 
 def _effective_expires_at(body: McpTokenIssueRequest) -> datetime | None:
@@ -52,6 +101,90 @@ def _mcp_token_response(row) -> McpTokenResponse:  # type: ignore[no-untyped-def
         revoked_at=row.revoked_at,
         created_at=row.created_at,
     )
+
+
+@router.post("/avatar/upload-url", response_model=Envelope[UploadUrlResponse])
+async def create_my_avatar_upload_url(
+    body: AvatarUploadUrlRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[UploadUrlResponse]:
+    await _get_current_user(db, current_user_id)
+    settings_row = await get_storage_settings(db)
+    try:
+        response = make_upload_url(
+            purpose="avatar",
+            user_id=uuid.UUID(current_user_id),
+            filename=body.filename,
+            content_type=body.content_type,
+            content_length=body.content_length,
+            max_upload_bytes=settings_row.avatar_max_upload_bytes,
+            allowed_content_types=AVATAR_CONTENT_TYPES,
+        )
+    except (FileTooLargeError, MimeNotAllowedError) as exc:
+        raise _storage_error(exc) from exc
+    return Envelope.of(response)
+
+
+@router.put("/avatar", response_model=Envelope[AvatarInfo])
+async def update_my_avatar(
+    body: AvatarApplyRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[AvatarInfo]:
+    user = await _get_current_user(db, current_user_id)
+    settings_row = await get_storage_settings(db)
+    try:
+        validate_avatar_apply(
+            body,
+            user_id=user.user_id,
+            max_upload_bytes=settings_row.avatar_max_upload_bytes,
+        )
+    except (FileTooLargeError, MimeNotAllowedError, InvalidStorageRefError) as exc:
+        raise _storage_error(exc) from exc
+    apply_avatar(user, body)
+    await db.commit()
+    await db.refresh(user)
+    return Envelope.of(avatar_info(user))
+
+
+@router.get("/avatar/download-url", response_model=Envelope[DownloadUrlResponse])
+async def get_my_avatar_download_url(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    user = await _get_current_user(db, current_user_id)
+    if not user.avatar_bucket or not user.avatar_storage_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "아바타가 없습니다."},
+        )
+    try:
+        response = make_download_url(
+            bucket=user.avatar_bucket,
+            storage_key=user.avatar_storage_key,
+            public_url=user.avatar_url,
+        )
+    except Exception as exc:
+        raise _storage_error(exc) from exc
+    return Envelope.of(response)
+
+
+@router.delete("/avatar", response_model=Envelope[AvatarInfo])
+async def delete_my_avatar(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[AvatarInfo]:
+    user = await _get_current_user(db, current_user_id)
+    if user.avatar_storage_key:
+        try:
+            await delete_object(key=user.avatar_storage_key)
+        except Exception as exc:
+            raise _storage_error(exc) from exc
+    clear_avatar(user)
+    await db.commit()
+    await db.refresh(user)
+    return Envelope.of(avatar_info(user))
 
 
 @router.post(

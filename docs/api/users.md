@@ -35,9 +35,14 @@ Cookie: pinvi_access=...
   "data": {
     "consents": [
       { "consent_type": "tos", "version": "v1.0", "agreed_at": "...", "withdrawn_at": null },
-      { "consent_type": "location_collection", "version": "v1.0", "agreed_at": "...", "withdrawn_at": null }
-    ]
-  }
+      {
+        "consent_type": "location_collection",
+        "version": "v1.0",
+        "agreed_at": "...",
+        "withdrawn_at": null,
+      },
+    ],
+  },
 }
 ```
 
@@ -71,30 +76,58 @@ Content-Type: application/json
 
 ## 4. Avatar
 
-### 4.1 `POST /users/me/avatar`
+아바타는 RustFS presigned PUT 2-phase 흐름만 사용한다. multipart 업로드는 제공하지 않는다.
+일반 `/storage/upload-urls`에도 `purpose="avatar"`가 남아 있지만, 화면과 클라이언트는
+아바타 전역 크기 제한과 image MIME 제한을 적용하는 전용 endpoint를 사용한다.
 
-옵션 A (presigned PUT 우선, 권장):
-
-1. `POST /storage/upload-urls` (purpose=`avatar`) → upload_url
-2. PUT 으로 RustFS 업로드
-3. `POST /users/me/avatar` (`storage_key` 등록)
-
-옵션 B (multipart 단순):
+### 4.1 `POST /users/me/avatar/upload-url`
 
 ```http
-POST /users/me/avatar
-Content-Type: multipart/form-data
+POST /users/me/avatar/upload-url
+Content-Type: application/json
+Cookie: pinvi_access=...
 
-(file)
+{
+  "filename": "avatar.jpg",
+  "content_type": "image/jpeg",
+  "content_length": 524288
+}
 ```
 
-- 서버에서 100x100 리사이즈 후 RustFS 저장
-- `avatar_kind = 'upload'`, `avatar_url` 채움
-- 응답 200: 갱신된 user
+- 허용 MIME: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
+- 크기 제한: Admin 전역 설정 `storage_settings.avatar_max_upload_bytes`(기본 2MiB)
+- 응답: `UploadUrlResponse` (`bucket`, `storage_key`, `upload_url`, `headers`, `max_upload_bytes`)
 
-### 4.2 `DELETE /users/me/avatar`
+### 4.2 `PUT /users/me/avatar`
 
-`avatar_kind = 'default'`, `avatar_url = NULL`. RustFS object는 별도 cleanup.
+브라우저가 RustFS `upload_url`로 PUT을 완료한 뒤 메타데이터를 등록한다.
+
+```http
+PUT /users/me/avatar
+Content-Type: application/json
+
+{
+  "bucket": "pinvi-media",
+  "storage_key": "user-uploads/avatar/<user_id>/2026/06/<uuid>.jpg",
+  "content_type": "image/jpeg",
+  "byte_size": 524288,
+  "public_url": null
+}
+```
+
+- `bucket`은 `PINVI_RUSTFS_BUCKET`과 같아야 한다.
+- `storage_key`는 `user-uploads/avatar/{current_user_id}/` prefix만 허용한다.
+- 응답 200: `AvatarInfo` (`avatar_kind`, `avatar_content_type`, `avatar_byte_size`,
+  `avatar_updated_at`, `has_avatar`)
+
+### 4.3 `GET /users/me/avatar/download-url`
+
+현재 사용자의 아바타가 있으면 private object 접근용 presigned GET URL을 반환한다.
+
+### 4.4 `DELETE /users/me/avatar`
+
+현재 아바타 RustFS object 삭제를 시도한 뒤 `avatar_kind = "default"`로 되돌리고 아바타 메타를
+비운다. 응답 200: `AvatarInfo`.
 
 ## 5. OAuth 연결 관리
 
@@ -123,9 +156,9 @@ Content-Type: multipart/form-data
       "expires_at": "2026-07-07T00:00:00Z",
       "last_used_at": null,
       "revoked_at": null,
-      "created_at": "2026-06-07T00:00:00Z"
-    }
-  ]
+      "created_at": "2026-06-07T00:00:00Z",
+    },
+  ],
 }
 ```
 

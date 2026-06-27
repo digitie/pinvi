@@ -1,5 +1,9 @@
 import {
   AdminActionRequestSchema,
+  AdminAvatarApplyRequestSchema,
+  AdminAvatarDeleteRequestSchema,
+  AdminAvatarSettingsSchema,
+  AdminAvatarSettingsUpdateRequestSchema,
   AdminApiCallEntrySchema,
   AdminAuditEntrySchema,
   AdminBackupRestoreRequestSchema,
@@ -30,9 +34,12 @@ import {
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
   AdminUserDetailSchema,
+  AvatarUploadUrlRequestSchema,
+  DownloadUrlResponseSchema,
   McpTokenRevokeRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
+  UploadUrlResponseSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -75,6 +82,19 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminSystemSummarySchema,
     }),
 
+  getAvatarSettings: () =>
+    client.request('/admin/settings/avatar', {
+      method: 'GET',
+      schema: AdminAvatarSettingsSchema,
+    }),
+
+  updateAvatarSettings: (body: z.infer<typeof AdminAvatarSettingsUpdateRequestSchema>) =>
+    client.request('/admin/settings/avatar', {
+      method: 'PUT',
+      body: JSON.stringify(AdminAvatarSettingsUpdateRequestSchema.parse(body)),
+      schema: AdminAvatarSettingsSchema,
+    }),
+
   /** kor-travel-map admin feature 목록 proxy (T-209, read-only). */
   listFeatures: (params: AdminFeatureListParams = {}) => {
     const qs = new URLSearchParams();
@@ -107,9 +127,7 @@ export const adminApi = (client: ApiClient) => ({
     }),
 
   /** 사용자 feature 제안 검토 큐 (T-179). */
-  listFeatureRequests: (
-    params: { status?: string; page?: number; limit?: number } = {}
-  ) => {
+  listFeatureRequests: (params: { status?: string; page?: number; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set('status', params.status);
     if (params.page) qs.set('page', String(params.page));
@@ -123,7 +141,7 @@ export const adminApi = (client: ApiClient) => ({
 
   approveFeatureRequest: (
     requestId: string,
-    body: z.infer<typeof AdminFeatureRequestApproveSchema>
+    body: z.infer<typeof AdminFeatureRequestApproveSchema>,
   ) =>
     client.request(`/admin/feature-requests/${requestId}/approve`, {
       method: 'POST',
@@ -133,7 +151,7 @@ export const adminApi = (client: ApiClient) => ({
 
   rejectFeatureRequest: (
     requestId: string,
-    body: z.infer<typeof AdminFeatureRequestRejectSchema>
+    body: z.infer<typeof AdminFeatureRequestRejectSchema>,
   ) =>
     client.request(`/admin/feature-requests/${requestId}/reject`, {
       method: 'POST',
@@ -181,6 +199,33 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminUserDetailSchema,
     }),
 
+  createUserAvatarUploadUrl: (userId: string, body: z.infer<typeof AvatarUploadUrlRequestSchema>) =>
+    client.request(`/admin/users/${userId}/avatar/upload-url`, {
+      method: 'POST',
+      body: JSON.stringify(AvatarUploadUrlRequestSchema.parse(body)),
+      schema: UploadUrlResponseSchema,
+    }),
+
+  updateUserAvatar: (userId: string, body: z.infer<typeof AdminAvatarApplyRequestSchema>) =>
+    client.request(`/admin/users/${userId}/avatar`, {
+      method: 'PUT',
+      body: JSON.stringify(AdminAvatarApplyRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  getUserAvatarDownloadUrl: (userId: string) =>
+    client.request(`/admin/users/${userId}/avatar/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteUserAvatar: (userId: string, body: z.infer<typeof AdminAvatarDeleteRequestSchema>) =>
+    client.request(`/admin/users/${userId}/avatar`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminAvatarDeleteRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
   listTrips: (
     params: {
       page?: number;
@@ -218,10 +263,7 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminTripDetailSchema,
     }),
 
-  updateTripStatus: (
-    tripId: string,
-    body: z.infer<typeof AdminTripStatusRequestSchema>,
-  ) =>
+  updateTripStatus: (tripId: string, body: z.infer<typeof AdminTripStatusRequestSchema>) =>
     client.request(`/admin/trips/${tripId}/status`, {
       method: 'PATCH',
       body: JSON.stringify(AdminTripStatusRequestSchema.parse(body)),
@@ -265,10 +307,7 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminPoiDetailSchema,
     }),
 
-  updatePoiLinkStatus: (
-    poiId: string,
-    body: z.infer<typeof AdminPoiLinkStatusRequestSchema>,
-  ) =>
+  updatePoiLinkStatus: (poiId: string, body: z.infer<typeof AdminPoiLinkStatusRequestSchema>) =>
     client.request(`/admin/pois/${poiId}/link-status`, {
       method: 'PATCH',
       body: JSON.stringify(AdminPoiLinkStatusRequestSchema.parse(body)),
