@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-213 Category mapping 실제 기능 및 source of truth 결정.
+- Admin 콘솔 기능 보강: T-214 Seed / reset dev-only 안전장치와 운영 비활성화.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -93,7 +93,12 @@
       `access_reason`, upstream reason, master feature 검증, `dedup_review.decide` audit,
       Web pending 후보 판정 form을 추가했다. integrity mutation은 upstream OpenAPI가 GET-only라
       T-227로 분리했다.
-- [ ] T-213 — Category mapping 실제 기능 및 source of truth 결정.
+- [x] T-213 — Category mapping 실제 기능 및 source of truth 결정
+      (완료: 2026-06-27, codex). category taxonomy/`maki_icon` 정본은 `kor-travel-map`
+      `/v1/categories`로 결정하고, Pinvi는 `GET /admin/category-mappings` read-only proxy와
+      `/admin/category-mapping` 운영 화면에서 16색 팔레트 fallback, unmapped count, icon drift,
+      JSON export 초안을 제공한다. Pinvi-owned override table/PUT/import는 별도 ADR/migration이
+      필요한 후속으로 남긴다.
 - [ ] T-227 — Integrity issue status/fix mutation upstream 계약 반영.
       `kor-travel-map` consistency issue mutation 계약이 추가된 뒤 Pinvi relay, audit, UI action을
       구현한다. 현재 upstream `/v1/ops/consistency/*`는 GET-only라 Pinvi 단독 상태를 만들지 않는다.

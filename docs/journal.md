@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-213 Category mapping 운영 뷰
+
+**작업**: Category mapping source of truth를 `kor-travel-map` `/v1/categories`로 결정하고,
+Admin `/admin/category-mapping`을 read-only 운영 화면으로 교체했다.
+
+**변경**:
+
+- Pinvi API에 `GET /admin/category-mappings`를 추가했다. `include_counts`, `active_only`는
+  upstream에 전달하고, `q`는 code/label/path/tier/icon 로컬 필터로 적용한다.
+- 응답은 `source_of_truth`, `mode=read_only`, total/filtered/active/inactive count,
+  `db_feature_total`, category tier/db count 필드를 포함한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 admin category mappings read 계약을 추가했다.
+- Web `/admin/category-mapping`은 summary, 검색, active/count filter, marker swatch preview,
+  fallback/icon drift 표시, JSON export 초안을 제공한다.
+- `docs/design/marker-palette.md`와 `docs/data-model.md`의 오래된 `app.category_mappings` 전제를
+  upstream source-of-truth 기준으로 정리했다.
+- `admin-live-matrix.live.ts`에서 category mapping route를 placeholder가 아닌 table route로 전환했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API ruff format check, mypy,
+`test_admin_category_mappings_api.py` 2건, schemas/api-client/web typecheck, Web lint,
+schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-category-mapping.e2e.ts` 1건과 admin-live catalog assertion 1건이
+통과했다. N150 live는 T-215 묶음 게이트로 보류한다.
+
+**다음**: PR을 만들고 merge한 뒤 T-214 Seed / reset dev-only 안전장치와 운영 비활성화로 진행한다.
+
 ## 2026-06-27 (codex) — T-226 Dedup verdict mutation
 
 **작업**: Admin `/admin/dedup-review`에서 pending dedup 후보를 판정할 수 있게 했다. Pinvi는

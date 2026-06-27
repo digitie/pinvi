@@ -71,11 +71,11 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
 
 ## 4. 운영 정책
 
-- 카테고리 → 색상/아이콘 매핑은 **DB(`app.category_mappings`) + 라이브러리
-  default 상수** 양쪽에서 관리.
-  - 라이브러리(`kor-travel-map`)에서 카테고리 마스터를 제공
-  - Pinvi Admin이 `/admin/category-mapping`에서 사용자 override
-  - 클라이언트 fallback: 라이브러리 default → DB override → 사용자 custom
+- 카테고리 taxonomy와 `maki_icon` 정본은 **`kor-travel-map` `/v1/categories`**다.
+  Pinvi는 feature category를 직접 저장·정규화하지 않는다.
+- Pinvi의 16색 팔레트와 `packages/domain`의 fallback 상수는 marker preview/누락 보정용이다.
+  `/admin/category-mapping`은 read-only 운영 뷰로 upstream catalog와 Pinvi fallback drift를 보여준다.
+- 클라이언트 fallback: upstream category `maki_icon` → Pinvi 색상 fallback → 사용자 custom
 - 사용자가 POI별로 색/아이콘을 직접 변경하면 `app.trip_day_pois.custom_marker_color` /
   `custom_marker_icon`에 저장 — 카테고리 매핑과 무관
 - 마커 표시는 항상 **불투명** (배경 색 + 흰 또는 검은 텍스트 1:1 매칭)

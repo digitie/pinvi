@@ -1,5 +1,29 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-213 Category mapping 운영 뷰
+
+Category mapping source of truth를 `kor-travel-map` `/v1/categories`로 결정했다. Pinvi는 category
+taxonomy/`maki_icon`을 자체 DB에 저장하지 않고, 16색 마커 팔레트 fallback과 drift만 운영 화면에서
+확인한다.
+
+Pinvi API는 `GET /admin/category-mappings`를 추가했다. `include_counts`, `active_only`를 upstream에
+전달하고, `q`는 code/label/path/tier/icon 로컬 필터로 적용한다. 응답은
+`source_of_truth`, `mode=read_only`, active/inactive/filtered count, `db_feature_total`,
+category item의 tier/db count 필드를 포함한다.
+
+Web `/admin/category-mapping`은 placeholder에서 실제 table route로 바뀌었다. summary, 검색,
+active/count filter, marker swatch preview, fallback/icon drift 표시, JSON export 초안을 제공한다.
+PUT/import와 Pinvi-owned override table은 별도 ADR/migration이 필요한 후속으로 남겼다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+mypy, `test_admin_category_mappings_api.py` 2건, schemas/api-client/web typecheck, Web lint,
+schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-category-mapping.e2e.ts` 1건과 admin-live catalog assertion 1건이
+통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+
+다음: T-213 PR을 만들고 merge한 뒤 T-214 Seed / reset dev-only 안전장치와 운영 비활성화로
+진행한다.
+
 ## 2026-06-27 (codex) — T-226 Dedup verdict mutation
 
 Admin `/admin/dedup-review` detail panel에서 pending dedup 후보를 직접 판정할 수 있게 했다.
@@ -17,8 +41,8 @@ Web production build가 통과했다. Playwright는 Windows에서 실행했고, 
 `admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
 N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
 
-다음: T-226 PR을 만들고 merge한 뒤 T-213 Category mapping 실제 기능 및 source of truth 결정으로
-진행한다. T-227은 upstream integrity mutation 계약이 추가되면 착수한다.
+후속: T-226 PR은 merge됐고, T-213에서 category mapping 운영 뷰를 진행했다. T-227은 upstream
+integrity mutation 계약이 추가되면 착수한다.
 
 ## 2026-06-27 (codex) — T-212 Dedup review / integrity / debug logs 운영 화면
 
@@ -1202,9 +1226,9 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-226 완료. 다음 작업은
-> **T-213 Category mapping 실제 기능 및 source of truth 결정**이다. T-227 integrity
-> mutation은 upstream 계약이 추가되면 진행한다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: T-213 검증 완료(PR/merge 단계). 다음 작업은
+> **T-214 Seed / reset dev-only 안전장치와 운영 비활성화**다. T-227 integrity mutation은
+> upstream 계약이 추가되면 진행한다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

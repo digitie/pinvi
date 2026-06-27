@@ -71,6 +71,8 @@ export const queryKeys = {
       cursor?: string;
     }) => ['admin', 'dedup-reviews', params] as const,
     dedupReviewsAll: () => ['admin', 'dedup-reviews'] as const,
+    categoryMappings: (params: { q?: string; includeCounts?: boolean; activeOnly?: boolean }) =>
+      ['admin', 'category-mappings', params] as const,
     integrityIssues: (params: {
       status?: string;
       severity?: string;

@@ -298,6 +298,40 @@ class AdminDedupDecisionResponse(BaseModel):
     source_links_dropped: int | None = None
 
 
+class AdminCategoryMappingItem(BaseModel):
+    code: str
+    label: str
+    parent_code: str | None = None
+    depth: int = 0
+    path: list[str] = Field(default_factory=list)
+    maki_icon: str = "marker"
+    is_active: bool = True
+    sort_order: int = 0
+    tier1_code: str | None = None
+    tier1_name: str | None = None
+    tier2_code: str | None = None
+    tier2_name: str | None = None
+    tier3_code: str | None = None
+    tier3_name: str | None = None
+    tier4_code: str | None = None
+    tier4_name: str | None = None
+    db_active: bool | None = None
+    db_feature_count: int | None = None
+
+
+class AdminCategoryMappingsResponse(BaseModel):
+    source_of_truth: str = "kor-travel-map:/v1/categories"
+    mode: Literal["read_only"] = "read_only"
+    include_counts: bool = True
+    active_only: bool = False
+    total_count: int = 0
+    filtered_count: int = 0
+    active_count: int = 0
+    inactive_count: int = 0
+    db_feature_total: int | None = None
+    items: list[AdminCategoryMappingItem] = Field(default_factory=list)
+
+
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
     violation_type: str

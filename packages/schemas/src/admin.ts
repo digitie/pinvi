@@ -335,6 +335,44 @@ export const AdminDedupDecisionResponseSchema = z.object({
 });
 export type AdminDedupDecisionResponse = z.infer<typeof AdminDedupDecisionResponseSchema>;
 
+export const AdminCategoryMappingItemSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  parent_code: z.string().nullable().default(null),
+  depth: z.number().int(),
+  path: z.array(z.string()).default([]),
+  maki_icon: z.string(),
+  is_active: z.boolean(),
+  sort_order: z.number().int(),
+  tier1_code: z.string().nullable().default(null),
+  tier1_name: z.string().nullable().default(null),
+  tier2_code: z.string().nullable().default(null),
+  tier2_name: z.string().nullable().default(null),
+  tier3_code: z.string().nullable().default(null),
+  tier3_name: z.string().nullable().default(null),
+  tier4_code: z.string().nullable().default(null),
+  tier4_name: z.string().nullable().default(null),
+  db_active: z.boolean().nullable().default(null),
+  db_feature_count: z.number().int().nullable().default(null),
+});
+export type AdminCategoryMappingItem = z.infer<typeof AdminCategoryMappingItemSchema>;
+
+export const AdminCategoryMappingsResponseSchema = z.object({
+  source_of_truth: z.string(),
+  mode: z.literal('read_only'),
+  include_counts: z.boolean(),
+  active_only: z.boolean(),
+  total_count: z.number().int(),
+  filtered_count: z.number().int(),
+  active_count: z.number().int(),
+  inactive_count: z.number().int(),
+  db_feature_total: z.number().int().nullable().default(null),
+  items: z.array(AdminCategoryMappingItemSchema).default([]),
+});
+export type AdminCategoryMappingsResponse = z.infer<
+  typeof AdminCategoryMappingsResponseSchema
+>;
+
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
   violation_type: z.string(),
