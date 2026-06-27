@@ -3,7 +3,7 @@
 - **상태**: in progress / scope 재정렬. 일부 선반영: T-067 KASI, T-109 geofencing,
   T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
   ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
-  action 일부가 추가됐다(T-207~T-230).
+  action 일부, Trip WebSocket frontend client 1차 연결이 추가됐다(T-207~T-232).
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
@@ -12,8 +12,9 @@
   **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
-- **남은 release gate**: WebSocket 협업, app-owned ETL 추가 job, Loki/request timeline
-  stream, backup/restore 1차 스테이징 훈련, `v0.2.0` Release notes.
+- **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
+  app-owned ETL 추가 job, Loki/request timeline stream, backup/restore 1차 스테이징 훈련,
+  `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -54,10 +55,12 @@
 - `/admin` dashboard 운영 그래프/부하/용량 요약.
 - `/admin/system` 의존 API + Docker collector 상태 화면.
 - Admin 여행/POI 생성, 상세 drill-down, 파일/아바타/RustFS quota, 복사·이동·삭제 운영 기능.
+- Trip 상세 화면 WebSocket wrapper + presence summary + domain event debounce reload.
 
 남은 `v0.2.0` 후보 gate:
 
-- `WS /ws/trips/{trip_id}` 기반 동시 편집/presence/conflict UX.
+- `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
+  401 close token refresh, conflict UX.
 - Pinvi `app` schema 소유 ETL 추가 job(`email_outbox`, PII retention, location archive,
   telegram weekly/daily summary).
 - Loki/Promtail 또는 대체 로그 stream과 request timeline.
@@ -92,7 +95,8 @@
 
 ### 프론트엔드
 
-- `apps/web/lib/websocket.ts` (재연결 + heartbeat)
+- `packages/api-client/src/websocket.ts` (재연결 + heartbeat)
+- `apps/web/components/trips/TripDetail.tsx` (presence summary + domain event debounce reload)
 - `apps/web/components/poi/ConflictDialog.tsx`
 - `apps/web/app/admin/etl/page.tsx`
 - `apps/web/app/admin/dedup-review/page.tsx`

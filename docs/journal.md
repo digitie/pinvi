@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
+
+**작업**: Sprint 5 WebSocket 협업 게이트의 첫 프론트엔드 수직 슬라이스를 구현했다.
+
+**변경**:
+
+- `packages/api-client/src/websocket.ts`를 추가했다. `TripRealtimeClient`는
+  `WS /ws/trips/{trip_id}` URL 생성, heartbeat, `ping`→`pong`, reconnect backoff,
+  주입 가능한 WebSocket constructor, event/status/error callback을 제공한다.
+- `@pinvi/api-client` public export에 realtime client와 테스트용 최소 WebSocket 타입을 추가했다.
+- 사용자 Trip 상세 화면이 실시간 채널에 접속해 presence summary를 보여주고,
+  `presence.update` 외 domain event는 250ms debounce reload로 반영한다.
+- `tripRealtimeClient.test.ts`를 추가해 URL 변환, open 직후 heartbeat, ping 응답,
+  server event forwarding을 검증했다.
+- `docs/api/websocket.md`, `CHANGELOG.md`, `docs/tasks.md`, `docs/resume.md`,
+  Sprint 5 추적 문서를 갱신했다.
+
+**검증**:
+
+- WSL ext4 미러: `npm -w @pinvi/api-client run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run test -- tripRealtimeClient.test.ts`
+- WSL ext4 미러: `npm -w @pinvi/web run lint`
+- WSL ext4 미러: `npm -w @pinvi/mobile run typecheck`
+
+**후속**: TanStack Query invalidation, 공유 presence store, 401 close token refresh, conflict
+dialog를 다음 WebSocket task로 분리한다.
+
 ## 2026-06-27 (codex) — T-231 v0.2.0 후보 범위 정리
 
 **작업**: `Unreleased`에 쌓인 post-v0.1.0 변경을 Sprint 5 / `v0.2.0` 후보 범위로 재정렬했다.

@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
+
+Trip 상세 사용자 화면에 Sprint 5 WebSocket 첫 수직 슬라이스를 연결했다. `@pinvi/api-client`는
+`TripRealtimeClient`와 `tripWebSocketUrl`을 export하며, heartbeat, `ping`→`pong`, exponential
+backoff reconnect, 테스트용 WebSocket constructor 주입을 지원한다. `TripDetail`은
+`WS /ws/trips/{trip_id}`에 접속해 presence summary를 표시하고, POI/day/trip domain event를 짧게
+debounce한 뒤 상세 데이터를 reload한다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. `npm -w @pinvi/api-client run typecheck`,
+`npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run test -- tripRealtimeClient.test.ts`,
+`npm -w @pinvi/web run lint`, `npm -w @pinvi/mobile run typecheck`가 통과했다. 다음
+WebSocket 후속은 TanStack Query invalidation, 공유 presence store, 401 close token refresh,
+conflict dialog 구현이다.
+
 ## 2026-06-27 (codex) — T-231 v0.2.0 후보 범위 정리
 
 `Unreleased`에 쌓인 post-v0.1.0 Admin/운영 보강을 Sprint 5 / `v0.2.0` 후보 범위로 정리했다.

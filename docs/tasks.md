@@ -12,15 +12,25 @@
 
 ## 다음 (우선순위 순)
 
-- v0.2.0 구현 게이트: WebSocket 협업, app-owned ETL 추가 job, Loki/request timeline,
-  backup/restore 1차 스테이징 훈련.
+- v0.2.0 구현 게이트: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
+  app-owned ETL 추가 job, Loki/request timeline, backup/restore 1차 스테이징 훈련.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
 - 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
   backup/restore 복구 훈련은 T-108 설명처럼 Sprint 6 운영 게이트로 남긴다.
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
   T-195 공통 rate-limit middleware, T-108 운영 배포 자동화 foundation, T-200
-  docker-manager 포트 대역 정렬은 완료.
+  docker-manager 포트 대역 정렬, T-232 Trip WebSocket frontend client 1차 연결은 완료.
+
+## v0.2.0 구현 게이트 (2026-06-27)
+
+- [x] T-232 — Trip WebSocket frontend client / presence 첫 연결
+      (완료: 2026-06-27, codex). `@pinvi/api-client`에 `TripRealtimeClient`와
+      `tripWebSocketUrl`을 추가해 heartbeat, `ping`→`pong`, exponential backoff reconnect,
+      주입 가능한 WebSocket constructor를 제공한다. 사용자 Trip 상세 화면은
+      `WS /ws/trips/{trip_id}`에 연결해 presence summary를 표시하고, POI/day/trip domain event를
+      debounce reload로 반영한다. WSL ext4 미러에서 api-client/web typecheck, Web lint,
+      mobile typecheck, `tripRealtimeClient.test.ts` Vitest 3건을 통과했다.
 
 ## Admin 콘솔 기능 보강 프로그램 (2026-06-27)
 
