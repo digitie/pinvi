@@ -1,5 +1,29 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-215 Admin live e2e 확장 + N150 묶음 게이트
+
+Admin live Playwright gate를 최신 구현 상태에 맞게 보강하고 N150에서 묶음 검증을 완료했다.
+전체 catalog는 6176건이며, 실제 UI matrix 6173건과 로그인 검증 2건, catalog sanity 1건으로
+구성된다. 이번 gate는 운영 부하를 낮추기 위해 worker 1개와 throttle을 유지하고,
+`PINVI_ADMIN_LIVE_CASE_LIMIT=2000`으로 로그인 2건 + catalog 1건 + matrix 2000건, 총 2003건을
+실행해 모두 통과했다(3.1h).
+
+테스트 하네스는 운영 환경에서 드러난 세 가지 정책을 반영했다. `provider-sync`, `integrity`,
+`debug/logs`처럼 한 route에 여러 AdminTable이 있는 화면은 첫 `admin-table-scroll`을 ready 기준으로
+삼는다. `/admin/system`은 AdminTable route가 아니라 `admin-system-containers` ready marker로
+검증하고 정렬 matrix에서 제외한다. 긴 run 도중 admin 세션이 만료되면 5분 기본 auth refresh와
+route/navigation 직후 재로그인 복귀로 원래 route를 다시 검증한다.
+
+검증은 Windows Playwright runner와 WSL ext4 미러에서 수행했다. N150 실행 전후 smoke에서 API
+`/health`, `/health/db`, Web `/admin/login`, Dagster, upstream `kor-travel-map` health, Pinvi
+컨테이너 healthy 상태를 확인했다. Windows에서 `npm run test:e2e:admin-live:list`는
+`6176 tests in 1 file`을 반환했다. WSL ext4 미러에서 Web Prettier check, Web typecheck,
+Web lint가 통과했다.
+
+다음: T-215 PR을 만들고 merge한 뒤 N150에 한 번 더 배포한다. 그 후 v0.1.0 릴리즈 정리로
+진행한다. T-227 integrity issue status/fix mutation은 upstream `kor-travel-map` mutation 계약이
+추가될 때까지 보류한다.
+
 ## 2026-06-27 (codex) — T-222 System view Docker / 의존 API 상태
 
 Admin 시스템 운영 화면을 추가했다. Pinvi API는 기존 `/admin/system/summary`를 유지하고,

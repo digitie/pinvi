@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-215 Admin live e2e 확장 + N150 묶음 게이트
+
+**작업**: 최신 Admin 구현 묶음을 N150 live authenticated Playwright gate로 검증하고, 긴 운영
+run에서 드러난 테스트 하네스 정책을 보강했다.
+
+**변경**:
+
+- Admin live catalog는 최신 기준 전체 6176건이다. UI matrix 6173건, 로그인 검증 2건,
+  catalog sanity 1건으로 구성된다.
+- 한 route에 여러 AdminTable이 있는 `provider-sync`, `integrity`, `debug/logs` 화면은 첫
+  `admin-table-scroll`을 ready 기준으로 삼도록 했다.
+- `/admin/system`은 AdminTable route가 아니므로 `admin-system-containers` ready marker로 검증하고
+  sort matrix에서 제외했다.
+- 긴 full run 도중 admin access token/cookie TTL을 넘는 경우를 대비해 기본 auth refresh를
+  5분으로 줄였다.
+- route 진입 또는 navigation 직후 로그인 화면으로 떨어진 경우 UI login을 다시 수행하고 원래
+  route로 복귀하도록 했다.
+- `docs/runbooks/admin-live-e2e.md`, 실행 계획, tasks/resume을 최신 case count와 N150 gate 결과로
+  갱신했다.
+
+**검증**: Windows Playwright runner에서 N150 운영 Web URL을 대상으로
+`PINVI_ADMIN_LIVE_CASE_LIMIT=2000` gate를 실행했다. 로그인 검증 2건 + catalog sanity 1건 +
+matrix 2000건, 총 2003건이 모두 통과했다(3.1h). 실행 전후 N150 smoke에서 API `/health`,
+API `/health/db`, Web `/admin/login`, Dagster, upstream `kor-travel-map` health, Pinvi 컨테이너
+healthy 상태를 확인했다. Windows `npm run test:e2e:admin-live:list`는 `6176 tests in 1 file`을
+반환했다. WSL ext4 미러에서 Web Prettier check, Web typecheck, Web lint가 통과했다.
+
+**다음**: PR을 만들고 merge한 뒤 N150에 한 번 더 배포한다. 그 후 v0.1.0 릴리즈 정리로 진행한다.
+
 ## 2026-06-27 (codex) — T-222 System view Docker / 의존 API 상태
 
 **작업**: Admin `/admin/system` 화면과 `GET /admin/system/detail` API를 추가해 의존 API와 Docker

@@ -7,6 +7,7 @@ interface AdminRoute {
   heading: string;
   table?: boolean;
   placeholder?: boolean;
+  readyTestId?: string;
 }
 
 interface UiViewport {
@@ -44,10 +45,10 @@ const parsedRetryBackoffMs = process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS
 const retryBackoffMs = Number.isFinite(parsedRetryBackoffMs)
   ? Math.max(0, parsedRetryBackoffMs)
   : 10_000;
-const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '600000');
+const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '300000');
 const authRefreshMs = Number.isFinite(parsedAuthRefreshMs)
   ? Math.max(60_000, parsedAuthRefreshMs)
-  : 600_000;
+  : 300_000;
 const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;
@@ -96,7 +97,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/integrity', heading: '정합성', table: true },
   { path: '/admin/category-mapping', heading: '카테고리 매핑', table: true },
   { path: '/admin/debug/logs', heading: 'Debug logs', table: true },
-  { path: '/admin/system', heading: '시스템', table: true },
+  { path: '/admin/system', heading: '시스템', readyTestId: 'admin-system-containers' },
   { path: '/admin/etl', heading: 'ETL', table: true },
   { path: '/admin/grafana', heading: 'Grafana' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
@@ -192,11 +193,6 @@ const sortSpecs = [
     heading: 'Debug logs',
     columns: ['log', 'level', 'source', 'event', 'message', 'created'],
   },
-  {
-    route: '/admin/system',
-    heading: '시스템',
-    columns: ['container', 'image', 'state', 'health', 'status'],
-  },
 ];
 
 let lastActionAt = 0;
@@ -231,6 +227,17 @@ async function loginViaUi(page: Page) {
     );
   }
   await expect(page.getByTestId('admin-me')).toBeVisible();
+}
+
+async function reloginIfNeeded(page: Page, returnPath: string) {
+  const loginVisible = await page
+    .getByTestId('admin-login-submit')
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+  if (!loginVisible) return;
+  await loginViaUi(page);
+  await throttle();
+  await page.goto(returnPath);
 }
 
 async function refreshAdminAuthState(browser: Browser, authState: AdminAuthState) {
@@ -312,7 +319,7 @@ async function expectNoBlockingErrors(page: Page) {
 }
 
 async function waitForAdminTable(page: Page) {
-  await expect(page.getByTestId('admin-table-scroll')).toBeVisible();
+  await expect(page.getByTestId('admin-table-scroll').first()).toBeVisible();
   await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
   await expectNoBlockingErrors(page);
 }
@@ -320,7 +327,11 @@ async function waitForAdminTable(page: Page) {
 async function openRoute(page: Page, route: AdminRoute) {
   await throttle();
   await page.goto(route.path);
+  await reloginIfNeeded(page, route.path);
   await expectAdminShell(page, route.heading);
+  if (route.readyTestId) {
+    await expect(page.getByTestId(route.readyTestId)).toBeVisible();
+  }
   if (route.table) {
     await waitForAdminTable(page);
   } else {
@@ -376,6 +387,7 @@ function pushNavigationCases(cases: AdminUiCase[]) {
           await openRoute(page, dashboardRoute);
           await throttle();
           await page.getByTestId(navTestId(route.path)).click();
+          await reloginIfNeeded(page, route.path);
           await expectAdminShell(page, route.heading);
           if (route.table) {
             await waitForAdminTable(page);
