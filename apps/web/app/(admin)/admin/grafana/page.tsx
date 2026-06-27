@@ -3,20 +3,11 @@
 import { useMemo, useState } from 'react';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
-
-const DEFAULT_GRAFANA_URL = 'http://localhost:12205';
-const DEFAULT_DASHBOARD_PATH = '/d/pinvi/overview?orgId=1&kiosk=tv';
-
-function buildGrafanaUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_GRAFANA_URL ?? DEFAULT_GRAFANA_URL;
-  const dashboardPath =
-    process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH ?? DEFAULT_DASHBOARD_PATH;
-  return new URL(dashboardPath, baseUrl).toString();
-}
+import { buildGrafanaEmbedUrlFromEnv, getGrafanaOrigin } from '@/lib/admin/grafana';
 
 export default function AdminGrafanaPage() {
-  const grafanaUrl = useMemo(() => buildGrafanaUrl(), []);
-  const grafanaOrigin = useMemo(() => new URL(grafanaUrl).origin, [grafanaUrl]);
+  const grafanaUrl = useMemo(() => buildGrafanaEmbedUrlFromEnv(), []);
+  const grafanaOrigin = useMemo(() => getGrafanaOrigin(grafanaUrl), [grafanaUrl]);
   const [frameKey, setFrameKey] = useState(0);
 
   return (
@@ -65,7 +56,9 @@ export default function AdminGrafanaPage() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-normal text-muted">dashboard</dt>
+            <dt className="text-xs font-semibold uppercase tracking-normal text-muted">
+              dashboard
+            </dt>
             <dd className="mt-1 break-all text-ink">{grafanaUrl}</dd>
           </div>
         </dl>

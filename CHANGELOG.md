@@ -48,6 +48,10 @@
 
 ### 운영/보안
 
+- Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
+  `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
+  app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder
+  기준을 쓰며 실제 운영 도메인은 gitignore된 env에만 둔다.
 - 추적 env 예시의 bootstrap admin 비밀번호 기본값을 비우고, bootstrap admin placeholder
   이메일을 `example.com` 도메인으로 정렬했다. 실제 임시 credential은 gitignore env에만 둔다.
 

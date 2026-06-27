@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-218 prod Grafana 주소 반영
+
+**작업**: Admin `/admin/grafana`가 prod Web 이미지에서 실제 public Grafana origin을 쓰도록
+빌드타임 env와 compose 주입 경로를 정리했다. 실제 운영 도메인은 tracked 파일에 남기지 않았다.
+
+**변경**:
+
+- Web Docker build/runtime stage에 `NEXT_PUBLIC_GRAFANA_URL`,
+  `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` ARG/ENV를 추가했다.
+- `infra/docker-compose.app.yml` app-web build args에 같은 값을 전달하고, Grafana 컨테이너
+  `GF_SERVER_ROOT_URL`도 `NEXT_PUBLIC_GRAFANA_URL`과 맞췄다.
+- dev/app compose의 Grafana 환경은 embedding/anonymous viewer 설정과 public root URL을 함께
+  갖는다.
+- `infra/.env.prod.example`, `.env.example`, docker/observability/Grafana runbook은
+  `grafana.example.com` placeholder만 사용하도록 정리했다.
+- `/admin/grafana` URL 조합 로직을 `apps/web/lib/admin/grafana.ts`로 분리하고 prod URL 조합 및
+  fallback Vitest를 추가했다.
+
+**검증**: 로컬 WSL ext4 미러에서 Web Vitest 27건, Web typecheck, Web lint, Web production build,
+compose config parse, Prettier check가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-grafana.e2e.ts` 1건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 T-215 묶음 게이트로 보류한다.
+
+**다음**: PR을 만들고 merge한 뒤 T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기로 진행한다.
+
 ## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
 
 **작업**: Admin `/admin/seed`, `/admin/reset` placeholder를 dev/staging 전용 dry-run 화면으로

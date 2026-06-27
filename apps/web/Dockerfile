@@ -23,15 +23,25 @@ WORKDIR /repo
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
 ARG NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801
+ARG NEXT_PUBLIC_GRAFANA_URL=http://localhost:12205
+ARG NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 ENV NEXT_PUBLIC_PINVI_API_URL=${NEXT_PUBLIC_PINVI_API_URL}
+ENV NEXT_PUBLIC_GRAFANA_URL=${NEXT_PUBLIC_GRAFANA_URL}
+ENV NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH}
 RUN npm --workspace apps/web run build
 
 # ─────────────────────────────────────────────
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
+ARG NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801
+ARG NEXT_PUBLIC_GRAFANA_URL=http://localhost:12205
+ARG NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV NEXT_PUBLIC_PINVI_API_URL=${NEXT_PUBLIC_PINVI_API_URL}
+ENV NEXT_PUBLIC_GRAFANA_URL=${NEXT_PUBLIC_GRAFANA_URL}
+ENV NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH}
 
 COPY --from=build /repo/apps/web/.next ./.next
 COPY --from=build /repo/apps/web/public ./public

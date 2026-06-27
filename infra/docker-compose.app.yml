@@ -87,8 +87,10 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
       args:
-        # 운영은 infra/.env.prod 의 NEXT_PUBLIC_PINVI_API_URL(빌드타임 embed)로 override.
+        # 운영은 infra/.env.prod 의 NEXT_PUBLIC_* 값(빌드타임 embed)로 override.
         NEXT_PUBLIC_PINVI_API_URL: ${NEXT_PUBLIC_PINVI_API_URL:-http://127.0.0.1:${PINVI_API_PORT:-12801}}
+        NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
+        NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH: "${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH:-/d/pinvi/overview?orgId=1&kiosk=tv}"
     image: ${PINVI_WEB_IMAGE:-pinvi-web:local}
     depends_on:
       - app-api
@@ -170,6 +172,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${PINVI_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${PINVI_GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

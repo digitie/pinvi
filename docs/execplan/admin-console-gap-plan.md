@@ -79,41 +79,41 @@ Pinvi에 그대로 복제하지 않고, 운영 동선과 정보 구조를 참고
 
 ### 1. Pinvi 운영
 
-| 메뉴 | Route | 소유 | 목표 |
-|------|-------|------|------|
-| 대시보드 | `/admin` | Pinvi | Pinvi API/Web/Dagster, kor-travel-map 연결, 최근 오류/대기 작업 요약 |
-| 회원 | `/admin/users` | Pinvi | 기존 기능 유지 + 검색/상태/audit 동선 정리 |
-| 여행 계획 | `/admin/trips` | Pinvi | 기존 기능 유지 + POI/notice plan 연결 drill-down |
-| POI | `/admin/pois` | Pinvi | 기존 기능 유지 + feature link 상태와 upstream feature 상세 연결 |
-| Notice plan | `/admin/notice-plans` | Pinvi | curated import, attachment, 공개/숨김 운영 |
-| 제보/요청 | `/admin/feature-requests` | Pinvi + kor-travel-map | Pinvi 사용자 제보와 upstream change request 상태 연결 |
-| Audit | `/admin/audit` | Pinvi | 기존 hash chain/audit 조회 유지 |
+| 메뉴        | Route                     | 소유                   | 목표                                                                 |
+| ----------- | ------------------------- | ---------------------- | -------------------------------------------------------------------- |
+| 대시보드    | `/admin`                  | Pinvi                  | Pinvi API/Web/Dagster, kor-travel-map 연결, 최근 오류/대기 작업 요약 |
+| 회원        | `/admin/users`            | Pinvi                  | 기존 기능 유지 + 검색/상태/audit 동선 정리                           |
+| 여행 계획   | `/admin/trips`            | Pinvi                  | 기존 기능 유지 + POI/notice plan 연결 drill-down                     |
+| POI         | `/admin/pois`             | Pinvi                  | 기존 기능 유지 + feature link 상태와 upstream feature 상세 연결      |
+| Notice plan | `/admin/notice-plans`     | Pinvi                  | curated import, attachment, 공개/숨김 운영                           |
+| 제보/요청   | `/admin/feature-requests` | Pinvi + kor-travel-map | Pinvi 사용자 제보와 upstream change request 상태 연결                |
+| Audit       | `/admin/audit`            | Pinvi                  | 기존 hash chain/audit 조회 유지                                      |
 
 ### 2. 지도 데이터 운영
 
-| 메뉴 | Route | 소유 | 목표 |
-|------|-------|------|------|
-| Features | `/admin/features` | kor-travel-map proxy | feature 목록/상세/상태/source/geometry/metadata 조회 |
-| Change requests | `/admin/features/change-requests` | kor-travel-map proxy | 생성/수정/삭제 요청 approve/reject/apply |
-| Dedup review | `/admin/dedup-review` | kor-travel-map proxy | dedup 후보 비교 및 merge/reject |
-| Provider sync | `/admin/provider-sync` | kor-travel-map proxy | provider별 최신 실행, run-now/cancel, 오류 확인 |
-| Integrity | `/admin/integrity` | kor-travel-map proxy | consistency report/issue 조회와 상태 변경 |
-| Debug logs | `/admin/debug/logs` | kor-travel-map proxy | upstream system/API logs, request timeline |
+| 메뉴            | Route                             | 소유                 | 목표                                                 |
+| --------------- | --------------------------------- | -------------------- | ---------------------------------------------------- |
+| Features        | `/admin/features`                 | kor-travel-map proxy | feature 목록/상세/상태/source/geometry/metadata 조회 |
+| Change requests | `/admin/features/change-requests` | kor-travel-map proxy | 생성/수정/삭제 요청 approve/reject/apply             |
+| Dedup review    | `/admin/dedup-review`             | kor-travel-map proxy | dedup 후보 비교 및 merge/reject                      |
+| Provider sync   | `/admin/provider-sync`            | kor-travel-map proxy | provider별 최신 실행, run-now/cancel, 오류 확인      |
+| Integrity       | `/admin/integrity`                | kor-travel-map proxy | consistency report/issue 조회와 상태 변경            |
+| Debug logs      | `/admin/debug/logs`               | kor-travel-map proxy | upstream system/API logs, request timeline           |
 
 ### 3. Pinvi 시스템 운영
 
-| 메뉴 | Route | 소유 | 목표 |
-|------|-------|------|------|
-| ETL/Dagster | `/admin/etl` | Pinvi + kor-travel-map link | Pinvi Dagster 상태와 map provider job 요약 |
-| Grafana | `/admin/grafana` | Pinvi observability | 기존 iframe route 유지, T-208에서 ETL/Observability 그룹 아래 배치 |
-| API calls | `/admin/api-calls` | Pinvi | 기존 API call log 유지 + upstream request link |
-| Emails | `/admin/emails` | Pinvi | queue 상태, resend/retry, 실패 사유 |
-| Backup | `/admin/backup` | Pinvi | snapshot/restore 핫스왑 유지 |
-| RustFS | `/admin/rustfs` | Pinvi | bucket/object 상태 |
-| MCP tokens | `/admin/mcp-tokens` | Pinvi | token 발급/회수 |
-| Category mapping | `/admin/category-mapping` | Pinvi + map catalog | Pinvi 표시 카테고리/마커 팔레트와 map category catalog 연결 |
-| Seed | `/admin/seed` | dev-only Pinvi | 개발/테스트 seed 실행, 운영 비활성 |
-| Reset | `/admin/reset` | dev-only Pinvi | 개발 DB reset/cleanup, 운영 비활성 |
+| 메뉴             | Route                     | 소유                        | 목표                                                               |
+| ---------------- | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
+| ETL/Dagster      | `/admin/etl`              | Pinvi + kor-travel-map link | Pinvi Dagster 상태와 map provider job 요약                         |
+| Grafana          | `/admin/grafana`          | Pinvi observability         | 기존 iframe route 유지, T-208에서 ETL/Observability 그룹 아래 배치 |
+| API calls        | `/admin/api-calls`        | Pinvi                       | 기존 API call log 유지 + upstream request link                     |
+| Emails           | `/admin/emails`           | Pinvi                       | queue 상태, resend/retry, 실패 사유                                |
+| Backup           | `/admin/backup`           | Pinvi                       | snapshot/restore 핫스왑 유지                                       |
+| RustFS           | `/admin/rustfs`           | Pinvi                       | bucket/object 상태                                                 |
+| MCP tokens       | `/admin/mcp-tokens`       | Pinvi                       | token 발급/회수                                                    |
+| Category mapping | `/admin/category-mapping` | Pinvi + map catalog         | Pinvi 표시 카테고리/마커 팔레트와 map category catalog 연결        |
+| Seed             | `/admin/seed`             | dev-only Pinvi              | 개발/테스트 seed 실행, 운영 비활성                                 |
+| Reset            | `/admin/reset`            | dev-only Pinvi              | 개발 DB reset/cleanup, 운영 비활성                                 |
 
 ## Task 분해
 
@@ -476,15 +476,22 @@ N150 게이트:
 
 추가 요청(2026-06-27) 6번.
 
+상태: 구현 완료(PR 예정).
+
 범위:
 
 - prod 환경 Grafana embed 주소 주입 경로를 확인하고, tracked 파일에는 실제 운영 도메인을 쓰지 않는다.
 - `infra/.env.prod.example`과 runbook에는 placeholder만 둔다.
 - Web `/admin/grafana`가 prod env에서 올바른 public URL을 사용하도록 env 이름과 fallback을 정리한다.
+- Web Docker build/runtime stage와 app compose build args가 `NEXT_PUBLIC_GRAFANA_URL`,
+  `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`를 전달하고, Grafana `GF_SERVER_ROOT_URL`도 같은
+  public origin으로 설정한다.
 
 검증:
 
-- Web unit/typecheck/build.
+- Web unit/typecheck/lint/build.
+- compose config parse.
+- Windows Playwright `admin-grafana.e2e.ts` + admin-live catalog.
 - tracked diff secret/domain scan.
 
 ### T-219 — POI Admin 직접 생성
