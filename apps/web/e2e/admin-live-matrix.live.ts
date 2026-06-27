@@ -86,17 +86,22 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin', heading: '대시보드' },
   { path: '/admin/users', heading: '사용자', table: true },
   { path: '/admin/trips', heading: '여행', table: true },
-  { path: '/admin/features', heading: '라이브러리', placeholder: true },
   { path: '/admin/pois', heading: 'POI', table: true },
+  { path: '/admin/feature-requests', heading: 'Feature 제안 검토', table: true },
+  { path: '/admin/audit', heading: '감사 로그', table: true },
+  { path: '/admin/features', heading: 'Features', placeholder: true },
+  { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', placeholder: true },
+  { path: '/admin/dedup-review', heading: 'Dedup review', placeholder: true },
+  { path: '/admin/provider-sync', heading: 'Provider sync', placeholder: true },
+  { path: '/admin/integrity', heading: '정합성', placeholder: true },
+  { path: '/admin/category-mapping', heading: '카테고리 매핑', placeholder: true },
+  { path: '/admin/debug/logs', heading: 'Debug logs', placeholder: true },
   { path: '/admin/etl', heading: 'ETL', placeholder: true },
   { path: '/admin/grafana', heading: 'Grafana' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
   { path: '/admin/emails', heading: '이메일 큐', table: true },
-  { path: '/admin/audit', heading: '감사 로그', table: true },
   { path: '/admin/backup', heading: 'Backup', table: true },
   { path: '/admin/mcp-tokens', heading: 'MCP 토큰', table: true },
-  { path: '/admin/feature-requests', heading: 'Feature 제안 검토', table: true },
-  { path: '/admin/category-mapping', heading: '카테고리 매핑', placeholder: true },
   { path: '/admin/seed', heading: '시드', placeholder: true },
   { path: '/admin/reset', heading: '리셋', placeholder: true },
 ];
@@ -572,6 +577,8 @@ function pushDashboardCases(cases: AdminUiCase[]) {
     for (const viewport of viewports) {
       pushCase(cases, `dashboard stat cards repeat=${repeat}`, viewport, async (page) => {
         await openRoute(page, dashboardRoute);
+        await expect(page.getByTestId('admin-system-pinvi_api')).toBeVisible();
+        await expect(page.getByTestId('admin-system-kor_travel_map_api')).toBeVisible();
         await expect(page.getByTestId('admin-stat-사용자 총 수')).toBeVisible();
         await expect(page.getByTestId('admin-stat-여행 총 수')).toBeVisible();
       });

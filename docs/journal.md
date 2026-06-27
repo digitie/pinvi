@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-208 Admin IA / 대시보드 상태판
+
+**작업**: Admin 구현 프로그램의 첫 코드 Task로 메뉴 구조와 대시보드 상태판을 보강했다.
+
+**변경**:
+- `/admin` sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬했다.
+- `Features`, `Feature 변경 요청`, `Dedup review`, `Provider sync`, `정합성`, `Debug logs`
+  placeholder route를 추가하고 기존 placeholder 문구를 Task ID + 기능 gap 중심으로 바꿨다.
+- `/admin/system/summary` read-only API를 추가했다. admin/operator만 접근 가능하며 Pinvi API,
+  DB, Web, Dagster, `kor-travel-map` API, RustFS 상태를 `ok/degraded/down/unknown`으로 요약한다.
+  raw URL, 운영 도메인, secret은 응답에 넣지 않는다.
+- `@pinvi/schemas`, `@pinvi/api-client`, Web 대시보드를 새 system summary 계약에 맞췄다.
+- `apps/web/e2e/admin-live-matrix.live.ts`에 새 route와 대시보드 상태 카드 검사를 추가했다.
+
+**검증**: 로컬 WSL ext4 미러에서
+`pytest tests/integration/test_admin_system_summary_api.py tests/integration/test_admin_priority3_api.py tests/integration/test_bootstrap_admin.py -q`
+(9 passed), API `ruff check`, `packages/schemas`/`packages/api-client`/`apps/web` typecheck,
+Web lint, Admin live catalog/list(3633 cases), Admin live catalog assertion, schemas Vitest,
+Web `next build`를 통과했다. N150 live browser 실행은 T-215 묶음 게이트로 보류했다.
+
+**다음**: T-208 PR merge 후 T-209에서 `kor-travel-map` Admin proxy foundation과 `/admin/features`
+실제 검색/상세 화면을 구현한다.
+
 ## 2026-06-27 (codex) — Admin 계획 리뷰 차단 이슈 반영
 
 **작업**: 다른 에이전트가 `docs/execplan/admin-console-gap-plan.md`를 리뷰했고, 구현 진입 전

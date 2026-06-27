@@ -32,7 +32,11 @@
   `kor-travel-map` Admin 기능을 참고해 Pinvi 메뉴/세부 기능/책임 경계/API·UI·e2e 검증
   계획을 문서화했다. 다른 에이전트 리뷰의 차단 이슈를 반영해 공개 credential 조합 표현을
   제거하고 seed/reset production 정책을 router 미등록/404로 고정한 뒤 구현에 진입한다.
-- [ ] T-208 — Admin IA / 메뉴 / 대시보드 상태판 보강.
+- [x] T-208 — Admin IA / 메뉴 / 대시보드 상태판 보강 (완료: 2026-06-27, codex).
+  Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
+  `Features`, 변경 요청, dedup review, provider sync, integrity, debug logs placeholder route를
+  추가했다. `/admin/system/summary` read-only API와 대시보드 상태 보드가 Pinvi API, DB,
+  Web, Dagster, `kor-travel-map` API, RustFS 상태를 secret/raw URL 없이 요약한다.
 - [ ] T-209 — `kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면.
 - [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
 - [ ] T-211 — `/admin/etl` + provider sync + Dagster 운영 화면.

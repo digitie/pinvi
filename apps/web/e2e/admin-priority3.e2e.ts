@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import type { AdminApiCallEntry, AdminLocationAuditEntry } from '@pinvi/schemas';
+import type {
+  AdminApiCallEntry,
+  AdminLocationAuditEntry,
+  AdminSystemSummary,
+} from '@pinvi/schemas';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -39,6 +43,36 @@ const locationAudit: AdminLocationAuditEntry = {
   content_hash: '1'.repeat(64),
 };
 
+const systemSummary: AdminSystemSummary = {
+  generated_at: '2026-06-09T10:00:00+09:00',
+  services: [
+    {
+      key: 'pinvi_api',
+      label: 'Pinvi API',
+      status: 'ok',
+      message: 'admin route 응답 정상',
+      latency_ms: 0,
+    },
+    { key: 'postgres', label: 'DB', status: 'ok', message: 'SELECT 1 정상', latency_ms: 3 },
+    { key: 'pinvi_web', label: 'Web', status: 'ok', message: '응답 정상', latency_ms: 6 },
+    {
+      key: 'dagster',
+      label: 'Dagster',
+      status: 'unknown',
+      message: 'base URL 미설정',
+      latency_ms: null,
+    },
+    {
+      key: 'kor_travel_map_api',
+      label: 'kor-travel-map API',
+      status: 'degraded',
+      message: 'HTTP 503',
+      latency_ms: 12,
+    },
+    { key: 'rustfs', label: 'RustFS', status: 'ok', message: '응답 정상', latency_ms: 8 },
+  ],
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -75,13 +109,24 @@ test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page })
       });
     },
   );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/system/summary',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: systemSummary }),
+      });
+    },
+  );
 
   await page.goto('/admin');
 
   await expect(page.getByRole('heading', { name: '대시보드' })).toBeVisible();
+  await expect(page.getByTestId('admin-system-pinvi_api')).toContainText('정상');
+  await expect(page.getByTestId('admin-system-kor_travel_map_api')).toContainText('주의');
   await expect(page.getByTestId('admin-stat-사용자 총 수')).toContainText('12');
   await expect(page.getByTestId('admin-stat-API 실패 24h')).toContainText('1');
-  await expect(page.getByText('Feature / ETL / seed-reset')).toBeVisible();
+  await expect(page.getByText('T-209 Feature 검색')).toBeVisible();
 });
 
 test('Admin API 호출 로그가 필터를 API에 전달한다', async ({ page }) => {

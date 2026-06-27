@@ -130,6 +130,9 @@ Pinvi에 그대로 복제하지 않고, 운영 동선과 정보 구조를 참고
 
 ### T-208 — Admin IA / 메뉴 / 대시보드 상태판 보강
 
+상태: 완료(2026-06-27, codex). 구현 PR은 `/admin/system/summary`, 그룹형 sidebar, gap-aware
+placeholder route, live matrix route 확장을 포함한다. N150 live 실행은 T-215 묶음 게이트에서 수행한다.
+
 범위:
 
 - Admin sidebar/menu를 위 목표 구조로 재정렬한다.

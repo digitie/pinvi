@@ -3,15 +3,14 @@ import { Placeholder } from '@/components/admin/Placeholder';
 export default function AdminFeaturesPage() {
   return (
     <Placeholder
-      title="라이브러리 (feature)"
-      sprint={5}
-      description="kor-travel-map.feature schema read-only — Record Linkage + sources/overrides/weather."
+      title="Features"
+      sprint={4}
+      taskId="T-209"
+      description="kor-travel-map OpenAPI 기반 feature 검색·상세·원천 조회."
       notes={[
-        'GET /admin/features (search, kind 필터)',
-        'GET /admin/features/{id}/sources',
-        'GET /admin/features/{id}/overrides',
-        'GET /admin/features/{id}/weather-values',
-        'admin은 직접 INSERT 금지 (라이브러리 위임)',
+        'GET /admin/features 검색, kind/status/provider 필터, bbox/행정구역 필터.',
+        'GET /admin/features/{feature_id} 상세, sources, overrides, weather/price 보조 탭.',
+        'Pinvi app DB에 직접 feature INSERT 금지, kor-travel-map HTTP 계약만 사용.',
       ]}
     />
   );

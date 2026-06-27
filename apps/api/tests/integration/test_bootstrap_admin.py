@@ -20,14 +20,14 @@ async def test_bootstrap_admin_skips_without_password(
     monkeypatch: pytest.MonkeyPatch,
     session_factory,
 ) -> None:
-    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "admin@ad.min")
+    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "bootstrap-admin@example.com")
     monkeypatch.setattr(settings, "pinvi_bootstrap_admin_password", "")
 
     result = await ensure_bootstrap_admin()
 
     assert result.action == "skipped"
     async with session_factory() as db:
-        user = await db.scalar(select(User).where(User.email == "admin@ad.min"))
+        user = await db.scalar(select(User).where(User.email == "bootstrap-admin@example.com"))
         assert user is None
 
 
@@ -35,14 +35,14 @@ async def test_bootstrap_admin_creates_active_admin(
     monkeypatch: pytest.MonkeyPatch,
     session_factory,
 ) -> None:
-    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "admin@ad.min")
+    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "bootstrap-admin@example.com")
     monkeypatch.setattr(settings, "pinvi_bootstrap_admin_password", "admin")
 
     result = await ensure_bootstrap_admin()
 
     assert result.action == "created"
     async with session_factory() as db:
-        user = await db.scalar(select(User).where(User.email == "admin@ad.min"))
+        user = await db.scalar(select(User).where(User.email == "bootstrap-admin@example.com"))
         assert user is not None
         assert user.status == "active"
         assert user.email_verified_at is not None
@@ -56,11 +56,11 @@ async def test_bootstrap_admin_repairs_existing_user_and_revokes_sessions(
     monkeypatch: pytest.MonkeyPatch,
     session_factory,
 ) -> None:
-    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "admin@ad.min")
+    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "bootstrap-admin@example.com")
     monkeypatch.setattr(settings, "pinvi_bootstrap_admin_password", "admin")
     async with session_factory() as db:
         user = User(
-            email="admin@ad.min",
+            email="bootstrap-admin@example.com",
             password_hash=hash_password("old-password"),
             nickname=None,
             status="disabled",
@@ -83,7 +83,7 @@ async def test_bootstrap_admin_repairs_existing_user_and_revokes_sessions(
 
     assert result.action == "updated"
     async with session_factory() as db:
-        user = await db.scalar(select(User).where(User.email == "admin@ad.min"))
+        user = await db.scalar(select(User).where(User.email == "bootstrap-admin@example.com"))
         assert user is not None
         assert user.status == "active"
         assert user.email_verified_at is not None
@@ -103,7 +103,7 @@ async def test_bootstrap_admin_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
     session_factory,
 ) -> None:
-    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "admin@ad.min")
+    monkeypatch.setattr(settings, "pinvi_bootstrap_admin_email", "bootstrap-admin@example.com")
     monkeypatch.setattr(settings, "pinvi_bootstrap_admin_password", "admin")
 
     first = await ensure_bootstrap_admin()

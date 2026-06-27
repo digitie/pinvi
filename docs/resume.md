@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-208 Admin IA / 상태판 보강
+
+Admin 구현 프로그램의 첫 코드 Task인 T-208을 완료했다. sidebar를 Pinvi 운영 / 지도 데이터 /
+시스템 운영 그룹으로 재정렬하고, `kor-travel-map` Admin 참고 영역인 변경 요청, dedup review,
+provider sync, integrity, debug logs route를 placeholder로 추가했다. placeholder는 더 이상 단순
+skeleton이 아니라 기능 gap, Task ID, 구현 범위를 표시한다.
+
+백엔드에는 read-only `/admin/system/summary`를 추가했다. 이 endpoint는 admin/operator만
+조회 가능하며 Pinvi API, DB, Web, Dagster, `kor-travel-map` API, RustFS 상태를 `ok/degraded/down/unknown`
+카드 데이터로 반환한다. 응답에는 raw URL, 운영 도메인, secret을 넣지 않는다. Web 대시보드는 기존
+통계 카드 위에 이 상태 보드를 표시하고, live matrix는 새 route와 대시보드 상태 카드를 검사하도록
+확장했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 9건, API ruff, schemas/api-client/web
+typecheck, Web lint, admin live catalog/list, schemas Vitest, Web production build가 통과했다. N150 live
+browser 실행은 사용자 지시에 따라 여러 기능이 더 모인 뒤 T-215 묶음 게이트에서 진행한다.
+
+다음: PR을 만들고 merge한 뒤 T-209(`kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면)에
+진입한다.
+
 ## 2026-06-27 (codex) — Admin 계획 리뷰 차단 이슈 반영
 
 다른 에이전트 리뷰에서 Admin 계획 PR의 차단 이슈 2건이 확인됐다. 공개 추적 문서에 남아 있던
