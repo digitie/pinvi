@@ -8,6 +8,10 @@ import {
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
   AdminEmailEntrySchema,
+  AdminFeatureDetailSchema,
+  AdminFeaturePagedResponseSchema,
+  AdminFeatureSortOrderSchema,
+  AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
   AdminFeatureRequestPagedResponseSchema,
   AdminFeatureRequestRejectSchema,
@@ -31,6 +35,30 @@ import {
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 
+export interface AdminFeatureListParams {
+  q?: string;
+  kind?: string[];
+  category?: string[];
+  status?: string[];
+  provider?: string[];
+  datasetKey?: string[];
+  hasCoord?: boolean;
+  hasIssue?: boolean;
+  issueType?: string[];
+  updatedFrom?: string;
+  updatedTo?: string;
+  pageSize?: number;
+  cursor?: string;
+  sort?: z.infer<typeof AdminFeatureSortSchema>;
+  order?: z.infer<typeof AdminFeatureSortOrderSchema>;
+}
+
+function appendValues(qs: URLSearchParams, key: string, values: string[] | undefined) {
+  for (const value of values ?? []) {
+    if (value) qs.append(key, value);
+  }
+}
+
 /** `docs/api/admin.md` Sprint 3 범위. */
 export const adminApi = (client: ApiClient) => ({
   getStatsOverview: () =>
@@ -43,6 +71,37 @@ export const adminApi = (client: ApiClient) => ({
     client.request('/admin/system/summary', {
       method: 'GET',
       schema: AdminSystemSummarySchema,
+    }),
+
+  /** kor-travel-map admin feature 목록 proxy (T-209, read-only). */
+  listFeatures: (params: AdminFeatureListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    appendValues(qs, 'kind', params.kind);
+    appendValues(qs, 'category', params.category);
+    appendValues(qs, 'status', params.status);
+    appendValues(qs, 'provider', params.provider);
+    appendValues(qs, 'dataset_key', params.datasetKey);
+    appendValues(qs, 'issue_type', params.issueType);
+    if (params.hasCoord !== undefined) qs.set('has_coord', String(params.hasCoord));
+    if (params.hasIssue !== undefined) qs.set('has_issue', String(params.hasIssue));
+    if (params.updatedFrom) qs.set('updated_from', params.updatedFrom);
+    if (params.updatedTo) qs.set('updated_to', params.updatedTo);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.order) qs.set('order', params.order);
+    const path = `/admin/features${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminFeaturePagedResponseSchema,
+    });
+  },
+
+  getFeature: (featureId: string) =>
+    client.request(`/admin/features/${encodeURIComponent(featureId)}`, {
+      method: 'GET',
+      schema: AdminFeatureDetailSchema,
     }),
 
   /** 사용자 feature 제안 검토 큐 (T-179). */

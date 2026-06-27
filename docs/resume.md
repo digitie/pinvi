@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-209 Admin Features read proxy / 화면 구현
+
+`kor-travel-map` Admin 최신 계약을 확인해 Pinvi `/admin/features` read-only proxy와 Web 화면을
+구현했다. upstream 계약은 `GET /v1/admin/features`(`data.items[]`,
+`meta.page.next_cursor`, `meta.duration_ms`)와 `GET /v1/admin/features/{feature_id}`
+(`feature/sources/issues/overrides/versions/change_requests/files`)를 사용한다.
+
+백엔드는 `KorTravelMapAdminClient.list_features()` / `get_feature_detail()`와 FastAPI
+`/admin/features`, `/admin/features/{feature_id}` router를 추가했다. 이 경로는 admin/operator
+전용이며 Pinvi DB의 `feature.*` table을 직접 조회하지 않는다. Web은 기존 placeholder를 검색어,
+kind/status/provider/category/issue 필터, sort/order, page_size, cursor pagination, detail inspector로
+교체했다. shared Zod schema, API client, query key, live matrix, mock e2e fixture도 함께 보강했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 15건, API ruff, schemas/api-client/web
+typecheck, Web lint, schemas Vitest, admin live catalog/list(5966 cases), catalog assertion, Web
+production build가 통과했다. local Playwright mock e2e는 WSL Chromium 바이너리 부재로 실행 전
+실패했으며, 추가한 e2e는 CI 또는 T-215 N150 묶음 게이트에서 확인한다.
+
+다음: PR을 만들고 merge한 뒤 T-210에서 Pinvi feature request와 upstream change request 운영 화면을
+연결한다.
+
 ## 2026-06-27 (codex) — T-208 Admin IA / 상태판 보강
 
 Admin 구현 프로그램의 첫 코드 Task인 T-208을 완료했다. sidebar를 Pinvi 운영 / 지도 데이터 /
@@ -948,6 +969,12 @@ visibility 의미를 구현했다.
 trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
+
+> **갱신 (2026-06-27, codex)**: T-209 완료. 다음 작업은 **T-210 Pinvi feature request와
+> upstream change request 운영 통합**이다. `/admin/feature-requests`의 Pinvi 사용자 제보 상태와
+> `/admin/features/change-requests` upstream 큐를 연결하고, approve/reject/apply action은 reason,
+> audit, upstream error mapping, UI rollback을 포함해 구현한다. N150 live는 계속 T-215 묶음
+> 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

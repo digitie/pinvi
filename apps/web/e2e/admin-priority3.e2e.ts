@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type {
   AdminApiCallEntry,
+  AdminFeatureDetail,
+  AdminFeaturePagedResponse,
   AdminLocationAuditEntry,
   AdminSystemSummary,
 } from '@pinvi/schemas';
@@ -73,6 +75,117 @@ const systemSummary: AdminSystemSummary = {
   ],
 };
 
+const featurePage: AdminFeaturePagedResponse = {
+  items: [
+    {
+      feature_id: 'f_place_1',
+      kind: 'place',
+      name: '해운대 카페',
+      category: '01070100',
+      status: 'active',
+      lon: 129.163,
+      lat: 35.158,
+      address_label: '부산 해운대구',
+      primary_provider: 'visitkorea',
+      primary_dataset_key: 'places',
+      issue_count: 1,
+      issues: [
+        {
+          issue_id: 'iss-1',
+          violation_type: 'missing_source',
+          severity: 'warning',
+          message: 'source 보강 필요',
+          detected_at: '2026-06-12T00:00:00+09:00',
+        },
+      ],
+      created_at: '2026-06-11T00:00:00+09:00',
+      updated_at: '2026-06-12T00:00:00+09:00',
+    },
+  ],
+  page_size: 50,
+  next_cursor: 'cursor-2',
+  duration_ms: 7,
+};
+
+const featureDetail: AdminFeatureDetail = {
+  feature: {
+    feature_id: 'f_place_1',
+    kind: 'place',
+    name: '해운대 카페',
+    category: '01070100',
+    status: 'active',
+    lon: 129.163,
+    lat: 35.158,
+    coord_precision_digits: null,
+    area_square_meters: null,
+    address: { road: '해운대해변로' },
+    detail: { phone: '051-000-0000' },
+    urls: { homepage: 'https://example.com/place' },
+    raw_refs: [{ provider: 'visitkorea' }],
+    legal_dong_code: null,
+    road_name_code: null,
+    road_address_management_no: null,
+    admin_dong_code: null,
+    sido_code: '26',
+    sigungu_code: '26350',
+    marker_icon: 'cafe',
+    marker_color: 'P-07',
+    parent_feature_id: null,
+    sibling_group_id: null,
+    data_origin: 'provider',
+    data_version: 3,
+    user_change_kind: null,
+    user_change_status: null,
+    user_change_request_id: null,
+    user_deleted_at: null,
+    user_deleted_by: null,
+    user_change_reason: null,
+    created_at: '2026-06-11T00:00:00+09:00',
+    updated_at: '2026-06-12T00:00:00+09:00',
+    deleted_at: null,
+  },
+  sources: [
+    {
+      source_record_key: 'visitkorea:places:1',
+      provider: 'visitkorea',
+      dataset_key: 'places',
+      source_entity_type: 'content',
+      source_entity_id: '1',
+      source_version: null,
+      source_role: 'primary',
+      match_method: 'natural_key',
+      confidence: 100,
+      is_primary_source: true,
+      raw_name: '해운대 카페',
+      raw_address: null,
+      raw_longitude: null,
+      raw_latitude: null,
+      raw_payload_hash: 'sha256:abc',
+      raw_data: { name: '해운대 카페' },
+      fetched_at: '2026-06-11T00:00:00+09:00',
+      imported_at: '2026-06-11T00:01:00+09:00',
+      expires_at: null,
+      linked_at: '2026-06-11T00:02:00+09:00',
+    },
+  ],
+  issues: [],
+  overrides: [],
+  versions: [
+    {
+      feature_id: 'f_place_1',
+      version: 3,
+      origin: 'provider',
+      change_kind: 'upsert',
+      payload: { name: '해운대 카페' },
+      request_id: null,
+      created_by: null,
+      created_at: '2026-06-12T00:00:00+09:00',
+    },
+  ],
+  change_requests: [],
+  files: [],
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -83,6 +196,62 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
+});
+
+test('Admin Features가 Pinvi proxy로 목록 필터와 상세를 조회한다', async ({ page }) => {
+  const requests: string[] = [];
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/features',
+    async (route) => {
+      requests.push(route.request().url());
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: featurePage }),
+      });
+    },
+  );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/features/f_place_1',
+    async (route) => {
+      requests.push(route.request().url());
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: featureDetail }),
+      });
+    },
+  );
+
+  await page.goto('/admin/features');
+
+  await expect(page.getByRole('heading', { name: 'Features' })).toBeVisible();
+  await expect(page.getByTestId('admin-features-row-f_place_1')).toContainText('해운대 카페');
+
+  await page.getByTestId('admin-features-search').fill('해운대');
+  await page.getByTestId('admin-features-provider-filter').fill('visitkorea');
+  await page.getByTestId('admin-features-category-filter').fill('01070100');
+  await page.getByTestId('admin-features-search-submit').click();
+  await page.getByTestId('admin-features-kind-filter').selectOption('place');
+  await page.getByTestId('admin-features-status-filter').selectOption('active');
+  await page.getByTestId('admin-features-issue-filter').selectOption('yes');
+
+  await expect
+    .poll(() =>
+      requests.some(
+        (url) =>
+          url.includes('q=') &&
+          url.includes('provider=visitkorea') &&
+          url.includes('category=01070100') &&
+          url.includes('kind=place') &&
+          url.includes('has_issue=true'),
+      ),
+    )
+    .toBe(true);
+
+  await page.getByTestId('admin-features-detail-f_place_1').click();
+  await expect(page.getByTestId('admin-features-detail')).toContainText('visitkorea / places');
+  await expect(page.getByTestId('admin-features-detail')).toContainText('해운대해변로');
+  expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });
 
 test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page }) => {

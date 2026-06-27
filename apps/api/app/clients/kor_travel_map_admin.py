@@ -22,7 +22,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -115,8 +115,8 @@ class KorTravelMapAdminClient:
         logger.warning("kor_travel_map_admin.unavailable", extra={"path": path})
         raise last or KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path})")
 
-    def _data(self, resp: httpx.Response) -> dict[str, Any]:
-        """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
+    def _payload(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답 envelope 추출. 오류 status는 도메인 예외로 변환."""
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
             raise KorTravelMapFeatureNotFound("feature 를 찾을 수 없습니다.")
@@ -130,7 +130,75 @@ class KorTravelMapAdminClient:
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
             raise KorTravelMapError(f"예상치 못한 admin 응답 셰입({resp.request.url.path})")
-        return data
+        meta = payload.get("meta") if isinstance(payload, Mapping) else None
+        if meta is not None and not isinstance(meta, dict):
+            raise KorTravelMapError(f"예상치 못한 admin meta 셰입({resp.request.url.path})")
+        return {"data": data, "meta": meta or {}}
+
+    def _data(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
+        return cast(dict[str, Any], self._payload(resp)["data"])
+
+    @staticmethod
+    def _put_sequence_params(
+        params: dict[str, Any],
+        key: str,
+        values: list[str] | tuple[str, ...] | None,
+    ) -> None:
+        cleaned = [value for value in values or [] if value]
+        if cleaned:
+            params[key] = cleaned
+
+    async def list_features(
+        self,
+        *,
+        q: str | None = None,
+        kinds: list[str] | None = None,
+        categories: list[str] | None = None,
+        statuses: list[str] | None = None,
+        providers: list[str] | None = None,
+        dataset_keys: list[str] | None = None,
+        has_coord: bool | None = None,
+        has_issue: bool | None = None,
+        issue_types: list[str] | None = None,
+        updated_from: str | None = None,
+        updated_to: str | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/admin/features — admin feature 목록(read-only) envelope 반환."""
+        params: dict[str, Any] = {}
+        if q:
+            params["q"] = q
+        self._put_sequence_params(params, "kind", kinds)
+        self._put_sequence_params(params, "category", categories)
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "provider", providers)
+        self._put_sequence_params(params, "dataset_key", dataset_keys)
+        self._put_sequence_params(params, "issue_type", issue_types)
+        if has_coord is not None:
+            params["has_coord"] = has_coord
+        if has_issue is not None:
+            params["has_issue"] = has_issue
+        if updated_from:
+            params["updated_from"] = updated_from
+        if updated_to:
+            params["updated_to"] = updated_to
+        if page_size is not None:
+            params["page_size"] = page_size
+        if cursor:
+            params["cursor"] = cursor
+        if sort:
+            params["sort"] = sort
+        if order:
+            params["order"] = order
+        return self._payload(await self._send("GET", "/v1/admin/features", params=params))
+
+    async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
+        """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
+        return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
 
     def _change_record(self, resp: httpx.Response) -> dict[str, Any]:
         """feature change 응답에서 `data.request`(AdminFeatureChangeRequestRecord) 추출.

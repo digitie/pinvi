@@ -96,6 +96,112 @@ async def test_admin_proxy_headers_are_sent_when_configured() -> None:
     await client.aclose()
 
 
+async def test_list_features_uses_admin_read_path_filters_and_returns_payload() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "feature_id": "f_1",
+                            "kind": "place",
+                            "name": "해운대 카페",
+                            "category": "01070100",
+                            "status": "active",
+                            "lon": 129.16,
+                            "lat": 35.16,
+                            "address_label": "부산",
+                            "primary_provider": "visitkorea",
+                            "primary_dataset_key": "places",
+                            "issue_count": 0,
+                            "issues": [],
+                            "created_at": "2026-06-11T00:00:00+09:00",
+                            "updated_at": "2026-06-12T00:00:00+09:00",
+                        }
+                    ]
+                },
+                "meta": {"page": {"next_cursor": "next-1"}, "duration_ms": 12},
+            },
+        )
+
+    client = _client(handler)
+    payload = await client.list_features(
+        q="해운대",
+        kinds=["place", "event"],
+        categories=["01070100"],
+        statuses=["active"],
+        providers=["visitkorea"],
+        dataset_keys=["places"],
+        has_coord=True,
+        has_issue=False,
+        issue_types=["missing_coord"],
+        page_size=100,
+        cursor="cur-1",
+        sort="updated_at",
+        order="desc",
+    )
+    assert seen["method"] == "GET"
+    assert seen["path"] == "/v1/admin/features"
+    assert ("kind", "place") in seen["query"]
+    assert ("kind", "event") in seen["query"]
+    assert ("provider", "visitkorea") in seen["query"]
+    assert ("dataset_key", "places") in seen["query"]
+    assert ("has_coord", "true") in seen["query"]
+    assert ("has_issue", "false") in seen["query"]
+    assert ("sort", "updated_at") in seen["query"]
+    assert payload["data"]["items"][0]["feature_id"] == "f_1"
+    assert payload["meta"]["page"]["next_cursor"] == "next-1"
+    await client.aclose()
+
+
+async def test_get_feature_detail_uses_admin_detail_path() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature": {
+                        "feature_id": "f_1",
+                        "kind": "place",
+                        "name": "해운대 카페",
+                        "category": "01070100",
+                        "status": "active",
+                        "address": {},
+                        "detail": {},
+                        "urls": {},
+                        "raw_refs": [],
+                        "created_at": "2026-06-11T00:00:00+09:00",
+                        "updated_at": "2026-06-12T00:00:00+09:00",
+                    },
+                    "sources": [],
+                    "issues": [],
+                    "overrides": [],
+                    "versions": [],
+                    "change_requests": [],
+                    "files": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.get_feature_detail("f_1")
+    assert seen["method"] == "GET"
+    assert seen["path"] == "/v1/admin/features/f_1"
+    assert data["feature"]["feature_id"] == "f_1"
+    await client.aclose()
+
+
 async def test_patch_feature_targets_feature_id() -> None:
     seen: dict[str, str] = {}
 
