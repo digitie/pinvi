@@ -2,21 +2,22 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: T-227 구현 완료 / PR 준비
+상태: T-207~T-229 완료
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
 
 ## 목적
 
-현재 Admin 콘솔은 Sprint 3에서 v1 골격을 이식했지만, 실제 운영에 필요한 화면과 기능이
-여러 곳에서 메뉴/placeholder 수준에 머물러 있다. 특히 `features`, `etl`,
-`category-mapping`, `seed`, `reset` 페이지는 Web route만 존재하고 기능이 비어 있으며,
-`kor-travel-map`이 이미 가진 feature 운영, dedup, provider sync, integrity, debug/log
-화면과 비교하면 Pinvi Admin의 운영 동선이 충분하지 않다.
+이 문서는 Admin 콘솔이 Sprint 3의 v1 골격에서 실제 운영 도구로 확장되기까지의
+메뉴 구조, API 경계, 세부 Task, 검증 게이트를 기록한다. 최초 작성 시점에는 `features`,
+`etl`, `category-mapping`, `seed`, `reset` 등이 메뉴/placeholder 수준이었고,
+`kor-travel-map` Admin의 feature 운영, dedup, provider sync, integrity, debug/log 화면과
+비교해 Pinvi Admin의 운영 동선이 부족했다.
 
-이 계획은 구현을 시작하기 전에 필요한 메뉴 구조, API 경계, 세부 Task, 검증 게이트를
-정리한다. 다른 에이전트가 이 문서를 리뷰한 뒤 Task 단위 PR로 순차 구현한다.
+2026-06-27 기준 T-207~T-228은 모두 main에 merge됐고, N150 배포와 live smoke를 마쳤다.
+T-229는 별도 기능 추가가 아니라 완료 상태와 사용자 명시 요구사항 1~14번의 해소 증거를
+추적 문서에 맞추는 감사 Task다.
 
 ## 작업 원칙
 
@@ -46,19 +47,37 @@
 - Bootstrap admin: T-206으로 `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 기반 startup 생성/복구
   경로가 main에 들어왔다.
 
-### 기능적으로 비어 있는 영역
+### 초기 gap 해소 상태
 
-- `apps/web/app/(admin)/admin/features/page.tsx` — T-209에서 read-only 목록/상세 구현 완료
-- `apps/web/app/(admin)/admin/etl/page.tsx`
-- `apps/web/app/(admin)/admin/category-mapping/page.tsx`
-- `apps/web/app/(admin)/admin/seed/page.tsx`
-- `apps/web/app/(admin)/admin/reset/page.tsx`
-- `packages/api-client/src/endpoints/admin.ts`에는 위 화면을 받칠 proxy/operation endpoint가
-  거의 없다.
-- `apps/api/app/clients/kor_travel_map_admin.py`는 feature change request 일부만 감싸며,
-  feature list/detail, dedup, provider ops, consistency, system/api logs 등은 아직 없다.
-- `apps/web/e2e/admin-live-matrix.live.ts`는 placeholder route를 placeholder로 인정하는
-  케이스를 갖고 있어, 실제 기능 누락을 실패로 잡지 못한다.
+| 초기 gap | 해소 Task | 현재 상태 |
+| -------- | --------- | --------- |
+| `/admin/features` placeholder | T-209 | `kor-travel-map` admin feature list/detail read proxy와 Web table/detail 구현 |
+| `/admin/etl` placeholder | T-220 | Pinvi ETL registry, Dagster 상태, upstream provider sync/read proxy 구현 |
+| `/admin/provider-sync` placeholder | T-220 | provider별 상태와 import job 필터/table 구현 |
+| `/admin/category-mapping` placeholder | T-213 | `kor-travel-map` `/v1/categories` read-only source of truth와 drift/export 화면 구현 |
+| `/admin/seed`, `/admin/reset` placeholder | T-214 | dev/staging dry-run + audit, production router 미등록/404 정책 구현 |
+| `packages/api-client` admin endpoint 부족 | T-209~T-228 | feature/change/dedup/integrity/ETL/system/trip/POI/avatar/file operation endpoint 추가 |
+| `KorTravelMapAdminClient` proxy 부족 | T-209, T-210, T-212, T-220, T-226, T-227 | feature, change request, dedup, consistency, ops, logs, issue action proxy 추가 |
+| Admin live matrix가 placeholder를 허용 | T-215 | table/ready marker 기반 live route matrix와 N150 authenticated gate로 전환 |
+
+### 사용자 명시 요구사항 완료 감사
+
+| 요청 | 완료 Task | 구현/검증 증거 |
+| ---- | --------- | -------------- |
+| 1. 여행 상세 제목에 여행계획명 표시 | T-216 | `/admin/trips/{trip_id}` Web detail, `admin-trips.e2e.ts` |
+| 2. 사용자 클릭 시 사용자 정보 이동 | T-216 | owner/동반자/POI 추가자 user link, `AdminTripDetail` companion 응답 |
+| 3. 초청받은 미가입자 표시 | T-216 | `TripCompanion` 기반 미가입 초대 표시와 e2e assertion |
+| 4. 상세 계획 day/POI listing, POI dialog 지도/상세/link | T-216 | `admin-trip-pois`, `admin-trip-poi-dialog`, `admin-trip-poi-map`, POI detail link e2e |
+| 5. Admin 여행계획 직접 생성 | T-217 | `POST /admin/trips`, `trip.create` audit, API integration/e2e |
+| 6. prod Grafana 주소 반영 | T-218 | Web Docker/env/compose `NEXT_PUBLIC_GRAFANA_URL`, placeholder-only prod example |
+| 7. Admin POI 직접 생성 | T-219 | `POST /admin/pois`, `poi.create` audit, API integration/e2e |
+| 8. 실제 구동 ETL 노출 | T-220 | `/admin/etl/summary`, Pinvi ETL registry, Dagster/provider sync e2e |
+| 9. 대시보드 상세/그래프/부하/용량 | T-221 | `/admin/stats/overview`, dashboard series/load/capacity e2e |
+| 10. 시스템 Docker/의존 API 상태 | T-222 | `/admin/system/detail`, dependency + Docker container 화면/e2e |
+| 11. 좌측 메뉴 active state와 축소 가능 sidebar | T-216, T-228 | route-specific active href, 기본 expanded + compact toggle/localStorage e2e |
+| 12. 사용자 아바타 RustFS 저장/조회/삭제/교체/전역 크기 | T-223 | avatar upload/apply/download/delete API, Admin settings, audit/e2e |
+| 13. 여행/날짜/POI 파일 업로드·삭제·모아보기·quota override | T-224 | trip/day/POI attachments, `/users/me/files`, `/admin/files`, storage quota tests/e2e |
+| 14. 여행/날짜/POI 복사·이동·삭제와 하위 처리 dialog | T-225 | operation-impact/copy/move/delete API, orphan 불가 사유, target search dialog/e2e |
 
 ## `kor-travel-map` Admin에서 참고할 기능
 
@@ -488,11 +507,14 @@ N150 게이트:
 
 추가 요청(2026-06-27) 1~4번, 11번.
 
+상태: 완료(2026-06-27, codex). T-228에서 sidebar는 아이콘 전용 고정이 아니라 기본 expanded,
+선택적 compact icon-only 토글로 정정했다.
+
 범위:
 
 - Admin 좌측 메뉴 active state가 현재 route와 무관하게 dashboard로 고정되는 문제를 고친다.
-- 좌측 메뉴를 icon-only compact view로 표현해 본문 공간을 확보한다. 아이콘에는 tooltip/aria label을
-  제공해 접근성을 유지한다.
+- 좌측 메뉴는 기본적으로 아이콘+라벨 expanded 상태로 표시하고, 필요할 때만 icon-only compact
+  상태로 접을 수 있게 한다. 아이콘에는 tooltip/aria label을 제공해 접근성을 유지한다.
 - `/admin/trips/{trip_id}` 상세 화면 제목에 여행계획명을 명확히 표시한다.
 - 상세 화면의 owner, 동반자, 초대 이메일 등 사용자 관련 표시를 클릭 가능한 Admin user
   동선으로 연결한다. 가입 사용자는 `/admin/users/{user_id}`로 이동하고, 미가입 초대자는 이메일
@@ -511,7 +533,7 @@ N150 게이트:
 
 추가 요청(2026-06-27) 5번.
 
-상태: 구현 완료(PR 예정).
+상태: 완료(2026-06-27, codex).
 
 범위:
 
@@ -530,7 +552,7 @@ N150 게이트:
 
 추가 요청(2026-06-27) 6번.
 
-상태: 구현 완료(PR 예정).
+상태: 완료(2026-06-27, codex).
 
 범위:
 
@@ -552,7 +574,7 @@ N150 게이트:
 
 추가 요청(2026-06-27) 7번.
 
-상태: 구현 완료(PR 예정).
+상태: 완료(2026-06-27, codex).
 
 범위:
 
@@ -763,6 +785,26 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 - 데이터 정합: 하위 attachment/comment/share link count, orphan 불가 사유, 삭제 후 soft delete
   metadata를 focused integration에서 검증했다.
 
+### T-229 — Admin 완료 감사 / 추적 문서 최신화
+
+상태: 완료(2026-06-27, codex).
+
+범위:
+
+- T-207~T-228 구현·PR merge·N150 배포 완료 상태를 `docs/tasks.md`, `docs/resume.md`,
+  `docs/journal.md`, 본 실행 계획에 반영한다.
+- 사용자 명시 요구사항 1~14번이 어떤 Task와 API/UI/e2e 증거로 해소됐는지 표로 남긴다.
+- T-216/T-228 sidebar 요구사항을 "아이콘 전용 고정"이 아니라 "기본 expanded + 선택적
+  compact icon-only"로 문서 전반에서 정정한다.
+- 운영 도메인, SSH target, 사설 IP, secret, 실제 credential은 추적 문서에 추가하지 않는다.
+
+검증:
+
+- `git diff --check`.
+- tracked diff에서 운영 도메인/secret 원문이 추가되지 않았는지 확인.
+- 문서 PR merge 후에는 N150 checkout만 fast-forward한다. 런타임 산출물이 없는 문서-only
+  변경이므로 컨테이너 재빌드는 생략한다.
+
 ## 구현 순서
 
 1. T-207 계획 PR merge.
@@ -787,6 +829,7 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 20. T-222 system view Docker/API 상태 PR.
 21. T-215 묶음 live e2e/N150 게이트 PR.
 22. T-228 sidebar 확장/축소 정정 PR.
+23. T-229 Admin 완료 감사 / 추적 문서 최신화 PR.
 
 ## 검증 정책
 

@@ -15,7 +15,7 @@
 ## 다음 (우선순위 순)
 
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
-- Admin 콘솔 후속: T-227 Integrity issue status mutation은 완료했다. 상세 계획은
+- Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
   노드 smoke와 backup/restore 복구 훈련.
@@ -44,10 +44,11 @@
       `/admin/features`를 table route로 전환하고 feature filter/sort case를 추가했다. N150 live는
       T-215 묶음 게이트에서 수행한다.
 - [x] T-216 — Trip Admin 상세 운영성 보강 (완료: 2026-06-27, codex).
-      Admin 좌측 메뉴를 icon-only compact view로 바꾸고 active state를 가장 구체적인 route 기준으로
-      고쳤다. `/admin/trips/{trip_id}`는 여행계획명을 제목으로 표시하고, owner/가입 동반자/POI
-      추가자를 `/admin/users/{user_id}`로 연결한다. 미가입 초대자는 별도 상태로 표시하며, 상세 계획의
-      day/POI listing과 POI 지도 dialog 및 `/admin/pois/{poi_id}` 링크를 추가했다.
+      Admin 좌측 메뉴 active state를 가장 구체적인 route 기준으로 고쳤고, sidebar compact 처리는
+      T-228에서 기본 expanded + 선택적 icon-only 토글로 정정했다. `/admin/trips/{trip_id}`는
+      여행계획명을 제목으로 표시하고, owner/가입 동반자/POI 추가자를 `/admin/users/{user_id}`로
+      연결한다. 미가입 초대자는 별도 상태로 표시하며, 상세 계획의 day/POI listing과 POI 지도
+      dialog 및 `/admin/pois/{poi_id}` 링크를 추가했다.
 - [x] T-217 — 여행계획 Admin 직접 생성 (완료: 2026-06-27, codex).
       Admin 여행 목록에서 owner 검색/선택 기반 inline 생성 dialog를 제공하고,
       `POST /admin/trips`가 `trip.create` audit과 같은 transaction으로 여행계획을 생성한다.
@@ -140,6 +141,11 @@
       expanded sidebar로 표시한다. 데스크톱에서 토글 버튼으로 compact icon-only 상태와 expanded
       상태를 전환하며, 선호 상태는 browser localStorage에 저장한다. 기존 active route 판정과
       nav test id는 유지했다.
+- [x] T-229 — Admin 완료 감사 / 추적 문서 최신화
+      (완료: 2026-06-27, codex). T-207~T-228 구현·PR merge·N150 배포 상태를 실행 계획,
+      tasks/resume/journal에 반영하고, 사용자 명시 요구사항 1~14번을 완료 Task와 API/UI/e2e
+      증거에 매핑했다. sidebar 요구사항은 기본 expanded + 선택적 compact icon-only 토글로
+      문서 전반에서 정정했으며, 운영 도메인/secret 원문은 추가하지 않았다.
 
 ## 완료
 
