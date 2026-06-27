@@ -1,19 +1,34 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-233 리뷰 코멘트 반영 / legal-ops Task 보강
+
+PR #264 리뷰 코멘트를 반영해 Sprint 5/6 상세 계획을 보강했다. Sprint 5에는 review gap
+crosswalk(T-256), email deliverability/provider tracking preflight(T-257), Sprint 6 legal/ops
+prep gate(T-258)를 추가하고 release candidate gate를 T-259로 조정했다.
+
+Sprint 6에는 PIPA incident console, retention 실행/dashboard, email deliverability/suppression,
+DSR intake, content moderation, RBAC grant/revoke, user lifecycle admin action, rate-limit/abuse
+surface, security threat model/penetration pass, mobile v1.0 scope gate, AI companion v1.0 scope gate,
+cross-track #238/#264 gap closure를 T-275~T-286으로 추가했다. `apps/mobile`은 v1.0 Web/API/Admin
+출시 필수 범위에서 제외하고 Sprint M-1 별도 gate로 관리하며, user-facing AI companion은 v1.0에
+포함하지 않는다고 명시했다.
+
+다음은 PR #264 merge 후 T-234 WebSocket client invalidation / auth close handling 구현이다.
+
 ## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
 
 `docs/execplan/sprint5-v020-release-plan.md`를 새로 작성해 Sprint 5 `v0.2.0` 잔여 작업을
-T-234~T-256으로 쪼갰다. WebSocket 후속, app-owned ETL job, request timeline/log stream,
+T-234~T-259로 쪼갰다. WebSocket 후속, app-owned ETL job, request timeline/log stream,
 provider sync 계약, feature detail, app integrity, backup/restore, Grafana, Admin live e2e,
 사용자/Admin 지도뷰 marker palette·색상 parity, release gate를 포함한다. API 테스트 케이스와
 mock/live UI e2e 카탈로그도 함께 정리했다.
 
-Sprint 6 `v1.0.0` 후속 초안은 T-260~T-274로 넣었다. OR-Tools 스마트 정렬, category mapping
+Sprint 6 `v1.0.0` 후속 초안은 T-260~T-286으로 넣었다. OR-Tools 스마트 정렬, category mapping
 override, Admin notice plan, MCP 운영 실증, backup hot-swap, geofencing, LBS/법무, 성능/보안,
 Odroid+N150 병행 운영, AI companion 분리, v1.0 live gate와 release가 포함된다. ARM image와
 GHCR 배포는 제외하고 노드 로컬 checkout/build/smoke 기준으로 정리했다.
 
-사용자 지시에 따라 문서 정리 완료 후 구현은 대기한다. 리뷰 후 진행 요청이 오면 T-234부터 시작한다.
+리뷰 반영 후 PR merge를 진행하고 T-234부터 시작한다.
 
 ## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
 
@@ -1438,9 +1453,9 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-214 검증 완료(PR/merge 단계). 다음 작업은
-> **T-218 prod Grafana 주소 반영**이다. T-227 integrity mutation은
-> upstream 계약이 추가되면 진행한다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: PR #264 리뷰 코멘트를 Sprint 5/6 상세 계획에 반영했다.
+> PR merge 후 다음 작업은 **T-234 WebSocket client invalidation / auth close handling**이다.
+> 기능 구현 Task는 단위 검증을 로컬 WSL ext4 미러에서 수행하고, 묶음 live/e2e는 N150에서 수행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

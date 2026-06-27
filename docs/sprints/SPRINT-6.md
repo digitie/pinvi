@@ -1,12 +1,16 @@
 # SPRINT-6 — 마무리 + 출시 준비 + MCP 외부 인터페이스
 
-- **상태**: proposed / Sprint 5 상세 계획에서 후속 Task 초안(T-260~T-274) 정리됨
+- **상태**: proposed / Sprint 5 상세 계획에서 후속 Task 초안(T-260~T-286) 정리됨
 - **선행**: Sprint 5 DoD 완료 (v0.2.0)
 - **목표**: 일정 자동 최적화, Admin 보강, 컴플라이언스 (LBS 신고 + 법무 4 문서),
   **MCP 외부 인터페이스 (Pinvi가 서빙)**, **Backup/Restore UI 핫스왑**,
   **한국 전용 geofencing**, **운영 하드웨어 확장 (Odroid + N150)**,
-  E2E + 성능 + 보안 점검 — 외부 정식 출시 가능 상태
-- **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-274를
+  E2E + 성능 + 보안 점검, **PIPA/DSR/retention/email suppression/moderation/RBAC/user lifecycle/
+  abuse 운영 표면** — 외부 정식 출시 가능 상태
+- **범위 명시**: v1.0.0은 Web/API/Admin 운영 출시다. `apps/mobile`은 활성 track이지만
+  Sprint M-1 별도 gate로 관리하고, user-facing AI companion은 post-v1.0 또는 별도 release train으로
+  분리한다.
+- **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-286을
   Sprint 6 진입 시 재검토해 확정한다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
@@ -17,8 +21,16 @@
   - E2E 시나리오 6가지 통과 (Playwright)
   - 성능 측정 (API p95 latency, DB pool, WebSocket 동시)
   - 보안 점검 (CSP, CORS, rate limit, Argon2, Resend webhook signature)
+  - 보안 threat model / penetration 1차 점검 — auth/session/MCP/share token/rate-limit bypass,
+    storage presigned URL, Admin RBAC
   - LBS 사업자 신고 진행 (방통위 LBSC) — 본 Sprint 시작 시 신청
   - 법무 4 문서 작성/검토 (이용약관 / 처리방침 / LBS 약관 / 위치 동의)
+  - PIPA incident console (`/admin/incidents`) + CPO 30분 review / 정보주체 통지 / KISA 60일 report
+  - DSR intake workflow(열람/정정/삭제/처리정지) + SLA/evidence/완료 통지
+  - retention 실행(delete/anonymize/archive) + last_run/overdue dashboard + kill-switch
+  - email deliverability/suppression — SPF/DKIM/DMARC/FROM verified, hard-bounce/complaint enforcement
+  - content moderation report/hide/takedown, RBAC role grant/revoke, user lifecycle admin actions,
+    rate-limit/abuse admin surface
   - 운영 환경 배포 smoke test 통과 — **Odroid M1S + N150 16GB / NVMe 1TB
     / Ubuntu 26.04 양쪽** (ADR-023)
   - 백업 + 복구 훈련 1회 — **핫스왑 패턴 검증** (ADR-022)
@@ -33,7 +45,7 @@
     ADR-018)
   - **T-107 (Gemini) 별도 서비스로 분리** — 본 저장소에서 제거, 별 repo
     (`kor-travel-concierge` 또는 사용자 지정)로 이동. local docker-to-docker
-    호출 패턴. 자세히는 ADR-020.
+    호출 패턴. v1.0에는 user-facing AI companion을 포함하지 않는다. 자세히는 ADR-020.
 
 ## 산출물
 
@@ -59,6 +71,15 @@
 - **`apps/api/app/middleware/geofence.py`** — `X-Real-IP` 기반 KR 외 차단
   (`docs/architecture/korea-only-policy.md`). Cloudflare WAF가 1차, nginx가 2차,
   본 미들웨어가 3차 안전망.
+- Legal/ops Admin API:
+  - `apps/api/app/api/v1/admin/incidents.py`
+  - `apps/api/app/api/v1/admin/dsr.py`
+  - `apps/api/app/api/v1/admin/retention.py`
+  - `apps/api/app/api/v1/admin/email_deliverability.py`
+  - `apps/api/app/api/v1/admin/moderation.py`
+  - `apps/api/app/api/v1/admin/rbac.py`
+  - `apps/api/app/api/v1/admin/user_lifecycle.py`
+  - `apps/api/app/api/v1/admin/abuse.py`
 
 ### 프론트엔드
 
@@ -82,11 +103,23 @@
   - `apps/web/app/admin/mcp-tokens/page.tsx` — admin 전체 토큰 / 발급 / revoke
   - `apps/web/app/(app)/settings/mcp-tokens/page.tsx` — 사용자 본인 토큰
   - `apps/web/components/mcp/McpTokenIssuer.tsx` (scope / 만료 / description)
+- Legal/ops Admin UI:
+  - `/admin/incidents`
+  - `/admin/dsr`
+  - `/admin/retention`
+  - `/admin/email-deliverability`
+  - `/admin/moderation`
+  - `/admin/rbac`
+  - `/admin/users/{id}/lifecycle`
+  - `/admin/abuse`
 
 ### 컴플라이언스
 
 - `docs/compliance/lbs-act.md` — 신고 상태 추적
 - `docs/compliance/pipa.md` — PIPA 2024 점검 매트릭스
+- `docs/runbooks/security-incidents.md` — CPO review / subject notification / KISA report 절차
+- `docs/runbooks/dsr.md` — 정보주체 요청 SLA/evidence 처리 절차
+- `docs/runbooks/retention-execution.md` — delete/anonymize/archive 실행과 kill-switch
 - `docs/legal/terms-of-service.md` (placeholder + 변호사 검토)
 - `docs/legal/privacy-policy.md`
 - `docs/legal/lbs-terms.md`
@@ -148,6 +181,9 @@
 - [ ] DDNS 또는 Cloudflare Tunnel 안정 동작
 - [ ] 도메인 + 브랜드명 확정 + Resend 도메인 인증 verified
 - [ ] 외부 API 키 모두 발급 + 일 호출 한도 확인
+- [ ] PIPA incident/DSR/retention/email suppression/moderation/RBAC/user lifecycle/abuse 운영 표면
+      구현과 법무 sign-off
+- [ ] v1.0 mobile 제외 / user-facing AI companion 제외 release note 문구 확정
 
 ## E2E 시나리오 (Playwright)
 
@@ -162,17 +198,24 @@
 8. **Backup 핫스왑: snapshot 생성 → 더미 변경 후 restore_hotswap → schema-swap 데이터
    복구 확인 + previous schema 자동 삭제 trigger 검증** (ADR-022)
 9. **한국 외 IP에서 접근 → 451 응답 + landing page redirect** (ADR-018)
+10. **Legal/ops staging suite**: incident 생성/상태 변경, DSR 접수/완료, retention execute dry-run→execute,
+    hard-bounce suppression, moderation takedown, RBAC grant/revoke, forced logout/reset,
+    rate-limit block/override.
 
 ## 종료 체크리스트
 
 - [ ] DoD 모두 통과
-- [ ] E2E **9** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence)
+- [ ] E2E **10** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence / Legal-ops)
 - [ ] 운영 환경 smoke test 통과 — **Odroid + N150 양쪽** (ADR-023)
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
   Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
 - [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
+- [ ] **v1.0 mobile 제외 / user-facing AI companion 제외 범위 명시**
+- [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
+  user lifecycle / abuse 운영 표면 sign-off**
+- [ ] **Security threat model / penetration 1차 점검 결과 기록**
 - [ ] 첫 외부 사용자(가족 베타) 가입 + 여행 생성 성공
 - [ ] **`v1.0.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 6 종료 + v1.0 출시 엔트리
