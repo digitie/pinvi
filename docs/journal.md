@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
+
+**작업**: Sprint 5 `v0.2.0` 잔여 구현과 Sprint 6 `v1.0.0` 후속 아이템을 Task 단위로 정리했다.
+
+**변경**:
+
+- `docs/execplan/sprint5-v020-release-plan.md`를 추가했다.
+- Sprint 5 잔여 Task를 T-234~T-256으로 분리했다. WebSocket 후속, optimistic lock/conflict,
+  multi-client e2e, ETL job, request timeline/log stream, provider sync 계약, feature detail,
+  app integrity, backup/restore, Grafana, Admin live e2e, 지도 마커/색상 parity, release gate를
+  포함한다.
+- 사용자/Admin 지도뷰의 marker palette, POI custom color/icon, feature snapshot/upstream category
+  fallback, selected/broken/cluster 상태 검증을 T-255로 명시했다.
+- Sprint 6 초안을 T-260~T-274로 정리했다. OR-Tools 스마트 정렬, category override,
+  Admin notice plan, MCP 운영 실증, backup hot-swap, geofencing, LBS/법무, 성능/보안,
+  Odroid+N150 병행 운영, AI companion 분리, v1.0 gate/release를 포함한다.
+- ARM image와 GHCR 배포는 제외하고, 운영 노드는 로컬 checkout + 로컬 Docker build 기준으로
+  정정했다.
+- `docs/tasks.md`, `docs/sprints/SPRINT-5.md`, `docs/sprints/SPRINT-6.md`,
+  `docs/resume.md`를 같은 기준으로 갱신했다.
+
+**검증**: 문서 정리 후 `git diff --check`와 민감정보 패턴 스캔을 수행한다.
+
+**다음**: 사용자 지시에 따라 구현은 대기한다. 리뷰 후 진행 요청이 오면 T-234부터 시작한다.
+
 ## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
 
 **작업**: Sprint 5 WebSocket 협업 게이트의 첫 프론트엔드 수직 슬라이스를 구현했다.

@@ -12,8 +12,11 @@
 
 ## 다음 (우선순위 순)
 
+- 리뷰 대기: `docs/execplan/sprint5-v020-release-plan.md`의 Sprint 5/6 상세 Task 계획.
+  리뷰 후 진행 요청이 오면 T-234부터 순서대로 구현한다.
 - v0.2.0 구현 게이트: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
-  app-owned ETL 추가 job, Loki/request timeline, backup/restore 1차 스테이징 훈련.
+  app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
+  backup/restore 1차 스테이징 훈련.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
 - 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
@@ -31,6 +34,84 @@
       `WS /ws/trips/{trip_id}`에 연결해 presence summary를 표시하고, POI/day/trip domain event를
       debounce reload로 반영한다. WSL ext4 미러에서 api-client/web typecheck, Web lint,
       mobile typecheck, `tripRealtimeClient.test.ts` Vitest 3건을 통과했다.
+- [x] T-233 — Sprint 5/6 상세 Task 계획
+      (완료: 2026-06-27, codex). `docs/execplan/sprint5-v020-release-plan.md`에 Sprint 5
+      `v0.2.0` 잔여 구현 Task(T-234~T-256), API/UI/live e2e 케이스 카탈로그,
+      운영 게이트 순서, Sprint 6 `v1.0.0` 후속 Task 초안(T-260~T-274)을 정리했다.
+      사용자/Admin 지도뷰 marker palette·색상 parity를 T-255로 분리했고, Sprint 6 운영은
+      ARM image/GHCR 없이 노드 로컬 build 기준으로 정정했다. 리뷰 전까지 구현은 대기한다.
+- [ ] T-234 — WebSocket client invalidation / auth close handling.
+      close code mapping, token refresh 재연결, 권한 상실 안내, TanStack Query invalidation,
+      duplicate reload 방지를 구현한다.
+- [ ] T-235 — Optimistic lock / conflict dialog.
+      POI/Trip/Day 409 conflict UX, LWW/수동 병합, server/my value 선택과 회귀 테스트를 구현한다.
+- [ ] T-236 — WebSocket multi-client collaboration e2e.
+      2~5 browser context presence/broadcast/reconnect/cleanup을 Windows Playwright와 N150 staging
+      live e2e로 검증한다.
+- [ ] T-237 — WebSocket backend hardening / metrics.
+      close code 구조화 로그, Prometheus gauge/counter, cap/rate/timeout/permission 회귀 테스트를
+      보강한다.
+- [ ] T-238 — Pinvi app-owned ETL 표준 / ADR.
+      app schema 소유 Dagster job 표준, retry/backoff, idempotency, 알림, kor-travel-map 책임
+      경계를 ADR/runbook으로 고정한다.
+- [ ] T-239 — `pinvi_email_outbox` Dagster job.
+      email queue 상태/재시도/stuck item 점검 job과 Admin ETL summary 노출을 구현한다.
+- [ ] T-240 — `pinvi_pii_retention` Dagster job.
+      PII 보존정책 dry-run job과 compliance cross-reference를 구현한다.
+- [ ] T-241 — `pinvi_location_log_archive` Dagster job.
+      location access log archive 후보 dry-run과 CPO/audit chain 정책을 구현한다.
+- [ ] T-242 — Telegram system summary/outbox ETL.
+      Telegram system notification/summary 후보 job, retry/backoff, secret 비노출 검증을 구현한다.
+- [ ] T-243 — ETL live / Dagster 운영 게이트.
+      N150 Dagster code location, app-owned job rows, Admin ETL live UI 검증을 확장한다.
+- [ ] T-244 — Request timeline API.
+      `/admin/debug/request/{request_id}` timeline API와 sanitized multi-source event 조합을 구현한다.
+- [ ] T-245 — Loki/Promtail 또는 대체 log stream.
+      N150 용량을 고려해 Loki stream 또는 sanitized polling/SSE 대체안을 선택하고 Admin stream UI를
+      구현한다.
+- [ ] T-246 — Debug live UI e2e 확장.
+      `/admin/debug/logs`와 request timeline read-only live e2e, masking assertion을 추가한다.
+- [ ] T-247 — Provider sync 운영 mutation 계약 정리.
+      upstream `kor-travel-map` mutation 계약 유무를 확인하고, 필요 시 upstream PR 후 Pinvi relay를
+      구현한다.
+- [ ] T-248 — Feature detail subpages.
+      sources/overrides/weather-values deep link 또는 tab 화면과 read-only proxy/e2e를 구현한다.
+- [ ] T-249 — App-owned integrity source.
+      Pinvi app integrity issue source 필요성을 결정하고, 필요 시 migration/API/UI를 구현한다.
+- [ ] T-250 — Backup script / snapshot endpoint hardening.
+      backup/restore script, checksum, disk guard, path masking, audit 실패 기록을 보강한다.
+- [ ] T-251 — Restore staging drill.
+      staging DB restore 훈련, audit chain verify, rollback rehearsal을 수행하고 문서화한다.
+- [ ] T-252 — Backup/restore live UI e2e.
+      backup read-only live와 staging mutating snapshot e2e를 분리해 추가한다.
+- [ ] T-253 — Prometheus/Grafana 운영 가시화 게이트.
+      scrape target, dashboard 4종, `/admin/grafana` live iframe/degraded 검증을 수행한다.
+- [ ] T-254 — Admin live e2e matrix v0.2.0 확장.
+      신규 route/case, full catalog drift, 200/2000/full N150 gate를 정리한다.
+- [ ] T-255 — 지도 마커 / 색상 적용 parity.
+      사용자/Admin 지도뷰에서 POI custom color/icon, feature snapshot, upstream category,
+      fallback palette, selected/broken/cluster 상태의 색상 규칙과 mock/live e2e를 구현한다.
+- [ ] T-256 — Release candidate gate / `v0.2.0`.
+      main CI, N150 deploy/smoke, live e2e, backup snapshot, release notes/tag를 완료한다.
+
+## Sprint 6 / v1.0.0 후속 Task 초안 (리뷰 대기)
+
+- [ ] T-260 — Sprint 6 상세 실행 계획 / ADR 정리.
+- [ ] T-261 — 경로 최적화 정책 / distance matrix.
+- [ ] T-262 — 스마트 정렬 API / OR-Tools.
+- [ ] T-263 — 스마트 정렬 UI.
+- [ ] T-264 — Admin category mapping DB override.
+- [ ] T-265 — Admin notice plan 작성기.
+- [ ] T-266 — MCP 외부 인터페이스 운영 실증.
+- [ ] T-267 — Backup/Restore UI hot-swap 완성.
+- [ ] T-268 — 한국 전용 geofencing 3중 안전망.
+- [ ] T-269 — LBS / 법무 4문서 / 동의 UX.
+- [ ] T-270 — 성능 / 부하 / 보안 점검.
+- [ ] T-271 — Odroid + N150 병행 운영. ARM image와 GHCR 배포는 제외하고 노드 로컬
+      checkout/build/smoke 기준으로 진행한다.
+- [ ] T-272 — AI companion 별도 서비스 분리.
+- [ ] T-273 — v1.0.0 E2E / Live Gate.
+- [ ] T-274 — v1.0.0 릴리즈.
 
 ## Admin 콘솔 기능 보강 프로그램 (2026-06-27)
 
@@ -338,10 +419,11 @@
       `kor-travel-concierge`으로 분리 (ADR-020). 본 저장소는 호출 컨트랙트 문서만
       (`docs/integrations/ai-companion.md`, Sprint 6 진입 시).
 - [x] T-108 — 운영 배포 자동화 foundation (완료: 2026-06-13, Codex) —
-      Odroid M1S + N150 16GB 양쪽(ADR-023). API/Web GHCR multi-platform Docker build
-      workflow, compose image override, 노드 공통 deploy/smoke script, N150/Odroid doctor,
-      노드별 배포 runbook을 추가했다. ADR-039에 따라 노드 간 DB live sync는 사용하지
-      않는다. 실제 노드 smoke와 backup/restore 복구 훈련은 Sprint 6 운영 게이트로 남는다.
+      Odroid M1S + N150 16GB 양쪽(ADR-023) deploy/smoke script, N150/Odroid doctor,
+      노드별 배포 runbook을 추가했다. 이후 2026-06-26 운영 결정으로 GHCR/multi-platform
+      image 배포는 폐기하고 노드 로컬 checkout + 로컬 Docker build 기준으로 전환했다.
+      ADR-039에 따라 노드 간 DB live sync는 사용하지 않는다. 실제 노드 smoke와
+      backup/restore 복구 훈련은 Sprint 6 운영 게이트로 남는다.
 - [ ] T-122 — Naver/Kakao OAuth provider 구현 — **미래 작업**
       (현재는 사용하지 않음. Google OAuth 안정화 후 별도 PR에서 provider별 start /
       callback / link / unlink / 버튼 활성화)

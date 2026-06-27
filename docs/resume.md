@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
+
+`docs/execplan/sprint5-v020-release-plan.md`를 새로 작성해 Sprint 5 `v0.2.0` 잔여 작업을
+T-234~T-256으로 쪼갰다. WebSocket 후속, app-owned ETL job, request timeline/log stream,
+provider sync 계약, feature detail, app integrity, backup/restore, Grafana, Admin live e2e,
+사용자/Admin 지도뷰 marker palette·색상 parity, release gate를 포함한다. API 테스트 케이스와
+mock/live UI e2e 카탈로그도 함께 정리했다.
+
+Sprint 6 `v1.0.0` 후속 초안은 T-260~T-274로 넣었다. OR-Tools 스마트 정렬, category mapping
+override, Admin notice plan, MCP 운영 실증, backup hot-swap, geofencing, LBS/법무, 성능/보안,
+Odroid+N150 병행 운영, AI companion 분리, v1.0 live gate와 release가 포함된다. ARM image와
+GHCR 배포는 제외하고 노드 로컬 checkout/build/smoke 기준으로 정리했다.
+
+사용자 지시에 따라 문서 정리 완료 후 구현은 대기한다. 리뷰 후 진행 요청이 오면 T-234부터 시작한다.
+
 ## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
 
 Trip 상세 사용자 화면에 Sprint 5 WebSocket 첫 수직 슬라이스를 연결했다. `@pinvi/api-client`는
@@ -894,8 +909,10 @@ foundation을 진행했다.
 - `RateLimitMiddleware`를 전역 적용했다. `/public/*` IP 60/min, 인증 사용자
   user/token 60/min, auth low 5/min, OAuth 10/min, storage upload 30/min,
   shared-token 60/min 정책을 적용한다.
-- T-108 foundation으로 GHCR multi-arch API/Web build workflow, compose image override,
+- T-108 foundation으로 당시 API/Web image workflow, compose image override,
   `scripts/deploy-node.sh`, N150/Odroid doctor scripts, 노드별 배포 runbook을 추가했다.
+  이후 2026-06-26 운영 결정으로 GHCR/multi-arch image 배포는 폐기하고 노드 로컬
+  checkout + 로컬 Docker build 기준으로 전환했다.
 - ADR-039를 추가해 운영 노드 간 DB live sync를 사용하지 않기로 확정하고, 관련
   runbook/doctor 점검 코드를 제거했다.
 
@@ -1458,7 +1475,7 @@ trip primary region을 `poi_snapshot` source로 보강한다.
    관리 UI·outbox·trip 링킹·trip-link UI). **남은 후속(별 스코프)**: weekly/daily summary Dagster(§7,
    Sprint 5 ETL — 날씨/유가 kor_travel_map 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
 2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023/ADR-039) — Odroid M1S + N150
-   multi-platform Docker 빌드 + backup/restore 기반 수동 대체 운영.
+   노드 로컬 checkout/build + backup/restore 기반 수동 대체 운영.
 3. **kor_travel_map 연동 cutover — ✅ 완료** — T-181(client, #170) + **T-173/174/176/178**(feature read
    라우터 cutover, #171) + **T-175**(trip view batch + `etl_bridge` 제거, #172) + **T-180**(admin
    HTTP client + admin base 12301 정정, #173) + **T-179 백엔드**(`/admin/feature-requests`

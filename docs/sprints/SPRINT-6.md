@@ -1,11 +1,13 @@
 # SPRINT-6 — 마무리 + 출시 준비 + MCP 외부 인터페이스
 
-- **상태**: proposed
+- **상태**: proposed / Sprint 5 상세 계획에서 후속 Task 초안(T-260~T-274) 정리됨
 - **선행**: Sprint 5 DoD 완료 (v0.2.0)
 - **목표**: 일정 자동 최적화, Admin 보강, 컴플라이언스 (LBS 신고 + 법무 4 문서),
   **MCP 외부 인터페이스 (Pinvi가 서빙)**, **Backup/Restore UI 핫스왑**,
   **한국 전용 geofencing**, **운영 하드웨어 확장 (Odroid + N150)**,
   E2E + 성능 + 보안 점검 — 외부 정식 출시 가능 상태
+- **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-274를
+  Sprint 6 진입 시 재검토해 확정한다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
   - `POST /trips/{id}/days/{day_index}/optimize` (OR-Tools)
@@ -95,16 +97,17 @@
 - `infra/odroid/README.md` (배포 절차) — 유지
 - `infra/n150/README.md` (ADR-023) — N150 16GB / NVMe 1TB / Ubuntu 26.04
   배포 + Odroid 대비 변경점 (x86_64 vs ARM64 이미지)
-- `.github/workflows/docker-images.yml` — API/Web `linux/amd64,linux/arm64` GHCR image build
+- Docker image는 운영 노드별 로컬 checkout + 로컬 build로 만든다. ARM image와 GHCR 배포는
+  Sprint 6 범위에서 제외한다.
 - `scripts/deploy-node.sh` + `scripts/{n150,odroid}-docker-doctor.sh`
 - `scripts/{backup-db,restore-db,restore-hotswap}.sh`
-- `infra/docker-compose.app.yml` 최종 — x86_64 / ARM64 멀티 platform
+- `infra/docker-compose.app.yml` 최종 — 노드 로컬 build 기준
 - `infra/nginx/{nginx.conf,geo-kr.conf}` — 한국 IP 화이트리스트 (ADR-018)
 - `infra/cloudflare/wrangler.toml` 또는 dashboard 설정 메모 — WAF rule "Country
   ≠ KR → Block 451" (`docs/architecture/korea-only-policy.md`)
 - nginx + Let's Encrypt + certbot 설정
 - DDNS 또는 Cloudflare Tunnel
-- **`apps/api/Dockerfile`**: multi-platform build (linux/amd64 + linux/arm64)
+- **`apps/api/Dockerfile`**: 노드 로컬 build 기준 유지
 - **MCP 서버 별 docker service** (선택, ADR-019에서 결정): `mcp` service 또는
   `api` 본체에 통합
 

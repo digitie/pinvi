@@ -1,9 +1,11 @@
 # SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
-- **상태**: in progress / scope 재정렬. 일부 선반영: T-067 KASI, T-109 geofencing,
+- **상태**: in progress / 상세 Task 계획 리뷰 대기. 일부 선반영: T-067 KASI, T-109 geofencing,
   T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
   ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
   action 일부, Trip WebSocket frontend client 1차 연결이 추가됐다(T-207~T-232).
+  남은 세부 Task와 live e2e 카탈로그는 `docs/execplan/sprint5-v020-release-plan.md`
+  (T-233)에서 관리한다.
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
@@ -13,8 +15,8 @@
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
-  app-owned ETL 추가 job, Loki/request timeline stream, backup/restore 1차 스테이징 훈련,
-  `v0.2.0` Release notes.
+  app-owned ETL 추가 job, Loki/request timeline stream, 지도 마커/색상 parity,
+  backup/restore 1차 스테이징 훈련, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -61,6 +63,8 @@
 
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX.
+- 사용자/Admin 지도뷰 marker palette, POI custom color/icon, feature snapshot/upstream category
+  fallback, selected/broken/cluster 상태 parity.
 - Pinvi `app` schema 소유 ETL 추가 job(`email_outbox`, PII retention, location archive,
   telegram weekly/daily summary).
 - Loki/Promtail 또는 대체 로그 stream과 request timeline.
