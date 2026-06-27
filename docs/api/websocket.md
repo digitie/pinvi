@@ -158,4 +158,6 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 - [x] TanStack Query invalidation key 정의 (poi/day/trip/comment 이벤트별 query key)
 - [x] HTTP mutation reload와 WebSocket event reload 중복 방지
 - [ ] presence store (zustand) — 동반자 온라인 / viewing_day 공유 상태화
-- [ ] 충돌 다이얼로그 컴포넌트 (`apps/web/components/poi/ConflictDialog.tsx`)
+- [x] 충돌 다이얼로그 컴포넌트 (`apps/web/components/trips/ConflictDialog.tsx`) — Trip/POI
+      409에서 최신 상세 재조회 후 필드별 server/my 값 선택과 LWW 재시도 지원. Day
+      optimistic lock API gap은 T-287로 분리.

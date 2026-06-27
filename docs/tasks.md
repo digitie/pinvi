@@ -12,7 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-235 Optimistic lock / conflict dialog.
+- 다음 구현: T-236 WebSocket multi-client collaboration e2e.
 - v0.2.0 구현 게이트: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
   app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
@@ -49,8 +49,13 @@
       공유해 HTTP mutation reload와 WebSocket event reload가 같은 tick에 겹쳐도 1회로 합친다.
       WSL ext4 미러에서 api-client/web/mobile typecheck, Web lint/build, realtime Vitest 8건을
       통과했고, Windows Playwright mock e2e `trip-detail.e2e.ts` 3건을 통과했다.
-- [ ] T-235 — Optimistic lock / conflict dialog.
-      POI/Trip/Day 409 conflict UX, LWW/수동 병합, server/my value 선택과 회귀 테스트를 구현한다.
+- [x] T-235 — Optimistic lock / conflict dialog.
+      (완료: 2026-06-27, codex). POI/Trip 409 conflict UX, LWW/수동 병합, server/my value 선택과
+      API/Vitest/Windows Playwright 회귀 테스트를 구현했다. Day API는 현재 `If-Match` 계약이 없어
+      T-287로 분리했다.
+- [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
+      `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
+      도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
 - [ ] T-236 — WebSocket multi-client collaboration e2e.
       2~5 browser context presence/broadcast/reconnect/cleanup을 Windows Playwright와 N150 staging
       live e2e로 검증한다.

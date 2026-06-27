@@ -159,6 +159,8 @@ async def test_trip_optimistic_lock(client, verified_user, auth_cookies) -> None
         cookies=cookies,
     )
     assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "VERSION_CONFLICT"
+    assert "동시 편집 충돌" in conflict.json()["error"]["message"]
 
 
 async def test_trip_primary_region_update_and_validation(

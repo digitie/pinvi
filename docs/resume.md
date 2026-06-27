@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
+
+Trip 상세 화면의 Trip/POI 편집 mutation이 `409 VERSION_CONFLICT`를 단순 오류로 표시하지 않고,
+최신 TripView를 다시 불러온 뒤 conflict dialog를 연다. 다이얼로그는 변경 필드별 서버 값/내 값을
+비교하고, 선택한 내 값만 최신 version으로 재시도하거나 내 값 전체 LWW 덮어쓰기를 수행한다.
+
+POI 편집기는 저장 요청 결과를 기다린 뒤 성공 시에만 닫도록 바꿔 충돌 시 사용자의 입력 draft를
+유지한다. 서버 409 응답은 현재 row를 아직 details로 내려주지 않으므로, 이번 UI는 충돌 직후 상세
+재조회 결과를 server value로 사용한다. Day rename/delete API에는 `If-Match`가 없어 T-287
+follow-up으로 분리했다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. api-client/web/mobile typecheck,
+Web lint/build, `conflictResolution.test.ts`, API 409 회귀 2건, Windows Playwright
+`trip-conflict.e2e.ts` 2건이 통과했다.
+
+다음 작업은 T-236 WebSocket multi-client collaboration e2e다.
+
 ## 2026-06-27 (codex) — T-234 WebSocket client invalidation / auth close handling
 
 `TripRealtimeClient`가 WebSocket close code/reason을 분류하고 상태로 노출한다. `4401`은

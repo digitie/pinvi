@@ -15,6 +15,8 @@
 - Trip WebSocket client가 close code를 분류한다. `4401`은 `/auth/refresh` 후 재연결하고,
   `4403`은 권한 상실 안내와 여행 목록 CTA를 표시하며, `4408`/`4429`는 backoff 안내를 표시한다.
   POI/day/trip/comment domain event별 TanStack Query invalidation key도 정의했다.
+- Trip/POI 편집 중 optimistic lock 409가 발생하면 최신 서버 값을 다시 불러와 충돌 다이얼로그를
+  표시한다. 사용자는 필드별로 서버 값/내 값을 고르거나 내 값을 전체 덮어쓰기 할 수 있다.
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
   `/admin/system/summary` 기반 대시보드 상태 보드를 추가했다. Pinvi API, DB, Web,
   Dagster, `kor-travel-map` API, RustFS 상태를 raw URL/secret 없이 표시한다.
