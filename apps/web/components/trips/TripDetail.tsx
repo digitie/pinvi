@@ -1,9 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
-import { ApiError, poiApi, tripApi } from '@pinvi/api-client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users, Wifi } from 'lucide-react';
+import {
+  ApiError,
+  TripRealtimeClient,
+  poiApi,
+  tripApi,
+  type TripRealtimeEvent,
+  type TripRealtimeStatus,
+} from '@pinvi/api-client';
 import type {
   FeatureSummary,
   PoiUpdate,
@@ -35,6 +42,13 @@ const STATUS_LABEL: Record<TripStatus, string> = {
 };
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
+const PINVI_API_URL = process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801';
+
+interface PresenceEntry {
+  userId: string;
+  viewingDay: number | null;
+  isOnline: boolean;
+}
 
 function formatDate(value: string | null): string {
   if (!value) return '미정';
@@ -51,6 +65,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [view, setView] = useState<TripView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<TripRealtimeStatus>('idle');
+  const [presence, setPresence] = useState<Map<string, PresenceEntry>>(() => new Map());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -58,6 +74,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
+  const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reload = useCallback(async (): Promise<TripView | null> => {
     try {
@@ -84,6 +102,61 @@ export function TripDetail({ tripId }: TripDetailProps) {
     };
   }, [reload]);
 
+  const scheduleRealtimeReload = useCallback(() => {
+    if (realtimeReloadTimerRef.current != null) return;
+    realtimeReloadTimerRef.current = setTimeout(() => {
+      realtimeReloadTimerRef.current = null;
+      void reload();
+    }, 250);
+  }, [reload]);
+
+  const handleRealtimeEvent = useCallback(
+    (event: TripRealtimeEvent) => {
+      if (event.type === 'presence.update') {
+        const userId = typeof event.payload?.user_id === 'string' ? event.payload.user_id : null;
+        if (!userId) return;
+        const viewingDay =
+          typeof event.payload?.viewing_day === 'number' ? event.payload.viewing_day : null;
+        const isOnline = event.payload?.is_online === true;
+        setPresence((current) => {
+          const next = new Map(current);
+          next.set(userId, { userId, viewingDay, isOnline });
+          return next;
+        });
+        return;
+      }
+
+      if (event.type === 'presence.cursor' || event.type === 'error') return;
+      scheduleRealtimeReload();
+    },
+    [scheduleRealtimeReload]
+  );
+
+  useEffect(() => {
+    setPresence(new Map());
+    const client = new TripRealtimeClient({
+      apiBaseUrl: PINVI_API_URL,
+      tripId,
+      onEvent: handleRealtimeEvent,
+      onStatus: setRealtimeStatus,
+      onError: () => undefined,
+    });
+    realtimeClientRef.current = client;
+    client.connect();
+    return () => {
+      client.disconnect();
+      realtimeClientRef.current = null;
+      if (realtimeReloadTimerRef.current != null) {
+        clearTimeout(realtimeReloadTimerRef.current);
+        realtimeReloadTimerRef.current = null;
+      }
+    };
+  }, [handleRealtimeEvent, tripId]);
+
+  useEffect(() => {
+    realtimeClientRef.current?.setViewingDay(selectedDayIndex);
+  }, [selectedDayIndex]);
+
   const mapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
   const poiDay = useMemo(() => {
     const map = new Map<string, number>();
@@ -96,6 +169,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
     selectedDay?.pois.find((poi) => poi.poi_id === selectedPoiId) ??
     view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
     null;
+  const onlinePresence = Array.from(presence.values()).filter((entry) => entry.isOnline);
+  const realtimeLabel =
+    realtimeStatus === 'open'
+      ? '연결됨'
+      : realtimeStatus === 'connecting'
+        ? '연결 중'
+        : realtimeStatus === 'error'
+          ? '재연결 대기'
+          : '오프라인';
 
   const handleSelectPoi = (poiId: string) => {
     setSelectedPoiId(poiId);
@@ -276,6 +358,23 @@ export function TripDetail({ tripId }: TripDetailProps) {
             링크가 끊긴 장소 {view.broken_feature_count}곳 — 라이브러리에서 삭제됨
           </p>
         )}
+        <p
+          className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
+          data-testid="trip-realtime-status"
+        >
+          <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+          실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
+          {onlinePresence.some((entry) => entry.viewingDay != null) && (
+            <span>
+              {' '}
+              · 보는 일자{' '}
+              {onlinePresence
+                .map((entry) => entry.viewingDay)
+                .filter((day): day is number => day != null)
+                .join(', ')}
+            </span>
+          )}
+        </p>
       </header>
 
       {view.days.length > 0 && (

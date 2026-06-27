@@ -143,9 +143,10 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 
 ### 프론트 (`packages/api-client/src/websocket.ts`)
 
-- [ ] WebSocket wrapper — exponential backoff + 자동 재연결
-- [ ] 메시지 디스크리미네이터별 핸들러 등록
+- [x] WebSocket wrapper — exponential backoff + 자동 재연결
+- [x] 메시지 디스크리미네이터별 핸들러 등록
+- [x] Trip 상세 화면 presence summary + domain event debounce reload 1차 연결
 - [ ] TanStack Query invalidation 트리거 (poi/day/trip 이벤트별 query key)
-- [ ] presence store (zustand) — 동반자 온라인 / viewing_day
+- [ ] presence store (zustand) — 동반자 온라인 / viewing_day 공유 상태화
 - [ ] 401 close 시 토큰 refresh 후 재연결
 - [ ] 충돌 다이얼로그 컴포넌트 (`apps/web/components/poi/ConflictDialog.tsx`)

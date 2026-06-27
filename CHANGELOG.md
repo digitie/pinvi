@@ -9,6 +9,9 @@
 
 ### 주요 기능
 
+- Trip 상세 화면이 `WS /ws/trips/{trip_id}`에 연결된다. 공용 `TripRealtimeClient`가
+  heartbeat/pong/reconnect를 처리하고, 여행 상세는 presence summary와 domain event debounce reload를
+  제공한다.
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
   `/admin/system/summary` 기반 대시보드 상태 보드를 추가했다. Pinvi API, DB, Web,
   Dagster, `kor-travel-map` API, RustFS 상태를 raw URL/secret 없이 표시한다.

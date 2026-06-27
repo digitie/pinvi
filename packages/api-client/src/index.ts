@@ -1,5 +1,7 @@
 export { ApiClient, ApiError } from './client';
 export type { ApiClientOptions, ApiEnvelope, ApiResponseMeta } from './client';
+export { TripRealtimeClient, tripWebSocketUrl } from './websocket';
+export type { TripRealtimeEvent, TripRealtimeStatus, WebSocketCtor, WebSocketLike } from './websocket';
 export { queryKeys } from './query-keys';
 export { authApi } from './endpoints/auth';
 export { adminApi } from './endpoints/admin';
