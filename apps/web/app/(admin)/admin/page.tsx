@@ -10,10 +10,38 @@ import type {
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { apiClient } from '@/lib/api';
 
-const formatNumber = (value: number | undefined) =>
-  value === undefined ? '—' : value.toLocaleString('ko-KR');
+const formatNumber = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : value.toLocaleString('ko-KR');
 const formatLatency = (value: number | null | undefined) =>
   value === null || value === undefined ? '—' : `${value} ms`;
+const formatPercent = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : `${value.toFixed(1)}%`;
+const formatLoad = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : value.toFixed(2);
+const formatBytes = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+};
+const formatDateTime = (value: string | undefined) =>
+  value
+    ? new Intl.DateTimeFormat('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(value))
+    : '—';
+const ratioPercent = (used: number | null | undefined, total: number | null | undefined) => {
+  if (!used || !total || total <= 0) return 0;
+  return Math.min(100, Math.round((used / total) * 100));
+};
 
 const statusMeta: Record<
   AdminSystemServiceStatus['status'],
@@ -56,6 +84,52 @@ const systemPlaceholders: AdminSystemServiceStatus[] = [
   { key: 'rustfs', label: 'RustFS', status: 'unknown', message: '확인 중', latency_ms: null },
 ];
 
+function BarSeries({
+  title,
+  values,
+  tone,
+  testId,
+}: {
+  title: string;
+  values: { label: string; primary: number; secondary?: number }[];
+  tone: 'blue' | 'green';
+  testId: string;
+}) {
+  const max = Math.max(1, ...values.map((value) => Math.max(value.primary, value.secondary ?? 0)));
+  const primaryClass = tone === 'blue' ? 'bg-info-text' : 'bg-emerald-600';
+  const secondaryClass = tone === 'blue' ? 'bg-error-text' : 'bg-amber-500';
+  return (
+    <div className="rounded-sm border border-hairline bg-white p-4" data-testid={testId}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-ink">{title}</p>
+        <p className="text-xs text-muted">최근 24시간</p>
+      </div>
+      <div className="mt-4 flex h-36 items-end gap-1" aria-hidden="true">
+        {values.map((value) => (
+          <div key={value.label} className="flex min-w-0 flex-1 items-end gap-px">
+            <div
+              className={`w-full rounded-t-sm ${primaryClass}`}
+              style={{ height: `${Math.max(4, (value.primary / max) * 100)}%` }}
+              title={`${value.label}: ${value.primary.toLocaleString('ko-KR')}`}
+            />
+            {value.secondary !== undefined && (
+              <div
+                className={`w-full rounded-t-sm ${secondaryClass}`}
+                style={{ height: `${Math.max(4, (value.secondary / max) * 100)}%` }}
+                title={`${value.label}: ${value.secondary.toLocaleString('ko-KR')}`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between text-xs text-muted">
+        <span>{values[0]?.label ?? '—'}</span>
+        <span>{values[values.length - 1]?.label ?? '—'}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStatsOverview | null>(null);
   const [systemSummary, setSystemSummary] = useState<AdminSystemSummary | null>(null);
@@ -97,9 +171,39 @@ export default function AdminDashboardPage() {
     {
       label: 'API 실패 24h',
       value: formatNumber(stats?.api_calls_failed_24h),
-      hint: `${formatNumber(stats?.api_calls_24h)} calls`,
+      hint: `${formatNumber(stats?.api_calls_24h)} calls / ${formatPercent(
+        stats?.api_failure_rate_pct,
+      )}`,
+    },
+    {
+      label: 'API P95',
+      value: formatLatency(stats?.api_latency_p95_ms),
+      hint: '최근 24시간',
     },
   ];
+  const series = stats?.series_24h ?? [];
+  const seriesLabels = series.map((bucket) => ({
+    label: new Intl.DateTimeFormat('ko-KR', { hour: '2-digit' }).format(
+      new Date(bucket.bucket_start),
+    ),
+    primary: bucket.api_calls,
+    secondary: bucket.api_failures,
+  }));
+  const growthLabels = series.map((bucket) => ({
+    label: new Intl.DateTimeFormat('ko-KR', { hour: '2-digit' }).format(
+      new Date(bucket.bucket_start),
+    ),
+    primary: bucket.users_created,
+    secondary: bucket.trips_created,
+  }));
+  const diskUsagePct = ratioPercent(
+    stats?.capacity.disk_used_bytes,
+    stats?.capacity.disk_total_bytes,
+  );
+  const attachmentQuotaPct = ratioPercent(
+    stats?.capacity.attachments_total_bytes,
+    stats?.capacity.user_attachment_quota_bytes,
+  );
 
   return (
     <AdminPage title="대시보드" description="Pinvi app DB 기준 운영 지표">
@@ -149,6 +253,108 @@ export default function AdminDashboardPage() {
           </div>
         ))}
       </div>
+
+      <Section title="운영 그래프">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <BarSeries
+            title="API 호출 / 실패"
+            values={seriesLabels}
+            tone="blue"
+            testId="admin-dashboard-series-api"
+          />
+          <BarSeries
+            title="가입 / 여행 생성"
+            values={growthLabels}
+            tone="green"
+            testId="admin-dashboard-series-growth"
+          />
+        </div>
+      </Section>
+
+      <Section title="부하와 용량">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div
+            className="rounded-sm border border-hairline bg-white p-4"
+            data-testid="admin-dashboard-load"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-ink">서버 부하</p>
+              <p className="text-xs text-muted">CPU {formatNumber(stats?.load.cpu_count)}</p>
+            </div>
+            <dl className="mt-4 grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <dt className="text-xs text-muted">1m</dt>
+                <dd className="mt-1 font-semibold text-ink">{formatLoad(stats?.load.load_1m)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">5m</dt>
+                <dd className="mt-1 font-semibold text-ink">{formatLoad(stats?.load.load_5m)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">15m</dt>
+                <dd className="mt-1 font-semibold text-ink">{formatLoad(stats?.load.load_15m)}</dd>
+              </div>
+            </dl>
+          </div>
+          <div
+            className="rounded-sm border border-hairline bg-white p-4"
+            data-testid="admin-dashboard-capacity-disk"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-ink">디스크</p>
+              <p className="text-xs text-muted">{formatPercent(diskUsagePct)}</p>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-sm bg-surface-soft">
+              <div className="h-full bg-info-text" style={{ width: `${diskUsagePct}%` }} />
+            </div>
+            <p className="mt-3 text-xs text-muted">
+              {formatBytes(stats?.capacity.disk_used_bytes)} /{' '}
+              {formatBytes(stats?.capacity.disk_total_bytes)}
+            </p>
+          </div>
+          <div
+            className="rounded-sm border border-hairline bg-white p-4"
+            data-testid="admin-dashboard-capacity"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-ink">첨부 저장소</p>
+              <p className="text-xs text-muted">
+                {formatNumber(stats?.capacity.attachments_count)} files
+              </p>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-sm bg-surface-soft">
+              <div className="h-full bg-emerald-600" style={{ width: `${attachmentQuotaPct}%` }} />
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted">
+              <div>
+                <dt>사용량</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatBytes(stats?.capacity.attachments_total_bytes)}
+                </dd>
+              </div>
+              <div>
+                <dt>사용자 기본 한도</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatBytes(stats?.capacity.user_attachment_quota_bytes)}
+                </dd>
+              </div>
+              <div>
+                <dt>개별 한도</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatNumber(stats?.capacity.users_with_quota_override)}
+                </dd>
+              </div>
+              <div>
+                <dt>최대 업로드</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatBytes(stats?.capacity.attachment_max_upload_bytes)}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted">갱신 시각 {formatDateTime(stats?.generated_at)}</p>
+      </Section>
 
       <Section title="Admin 보강 Task">
         <ul className="list-inside list-disc space-y-1 text-sm text-ink">

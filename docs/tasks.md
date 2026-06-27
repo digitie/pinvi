@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기.
+- Admin 콘솔 기능 보강: T-222 System view Docker / 의존 API 상태.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -113,7 +113,12 @@
       Grafana 컨테이너 `GF_SERVER_ROOT_URL`도 같은 public origin으로 주입한다.
       `infra/.env.prod.example`과 runbook에는 `grafana.example.com` placeholder만 남겨
       실제 운영 도메인은 gitignore된 `infra/.env.prod`에서만 다루도록 했다.
-- [ ] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기.
+- [x] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기
+      (완료: 2026-06-27, codex). `/admin/stats/overview`에 생성 시각, API 실패율/P95,
+      최근 24시간 hourly series, 서버 load average, 첨부/RustFS quota 집계, 백업 경로 기준
+      디스크 용량 snapshot을 추가했다. `/admin` 대시보드는 API 호출/실패와 가입/여행 생성
+      막대 그래프, 부하, 디스크, 첨부 저장소 요약을 표시하며 raw 운영 경로/도메인/secret은
+      응답하지 않는다.
 - [ ] T-222 — System view Docker / 의존 API 상태.
 - [ ] T-215 — Admin live e2e 확장 + N150 묶음 게이트.
 

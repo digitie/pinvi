@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-221 Dashboard 운영 현황 그래프 / 부하 / 용량
+
+**작업**: Admin `/admin` 대시보드가 단순 count 카드에서 실제 운영 현황을 훑어볼 수 있는
+그래프/부하/용량 화면으로 확장되도록 API와 Web을 보강했다.
+
+**변경**:
+
+- `GET /admin/stats/overview`에 `generated_at`, API 실패율, API latency P95, 24시간 hourly
+  series, 서버 load average, 첨부 저장소/전역 quota/사용자 quota override/디스크 사용량 snapshot을
+  추가했다.
+- 통계 endpoint는 storage settings가 없을 때 DB row를 만들지 않고 기본값만 반환한다.
+- 디스크 사용량은 `PINVI_BACKUP_DIR`의 가장 가까운 존재 경로 기준 숫자만 반환하고, raw path,
+  운영 도메인, secret은 응답하지 않는다.
+- `@pinvi/schemas`와 `@pinvi/api-client` 소비 타입을 새 응답 계약에 맞췄다.
+- Web `/admin`은 API 호출/실패와 가입/여행 생성 막대 그래프, 서버 부하, 디스크 사용률,
+  첨부 저장소 사용량/한도 요약을 표시한다.
+- `admin-priority3` API integration과 Playwright mock e2e에 새 필드를 추가했다.
+
+**검증**: 로컬 WSL ext4 미러에서 `ruff check`, 앱 코드 mypy, `test_admin_priority3_api.py` 3건,
+Web Prettier check, Web typecheck, Web lint, Web Vitest 27건, Web production build가 통과했다.
+테스트 파일까지 포함한 mypy는 기존 fixture 인자 타입 미기재 패턴에서 실패해 앱 코드 대상으로
+범위를 좁혀 확인했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-priority3.e2e.ts` 대시보드 케이스 1건이 통과했다.
+
+**다음**: PR을 만들고 merge한 뒤 T-222 System view Docker / 의존 API 상태로 진행한다.
+
 ## 2026-06-27 (codex) — T-218 prod Grafana 주소 반영
 
 **작업**: Admin `/admin/grafana`가 prod Web 이미지에서 실제 public Grafana origin을 쓰도록
