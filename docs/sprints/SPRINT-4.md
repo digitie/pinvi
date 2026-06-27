@@ -1,12 +1,12 @@
 # SPRINT-4 — 지도 + 사용자 UI + v0.1.0 릴리즈
 
-- **상태**: release gate met (PR #15/#16 + #126~#139 + #170~#180 머지. live feature
-  read/kor_travel_map HTTP cutover/CI gate 충족, v0.1.0 tag + Release notes 대기)
+- **상태**: released (`v0.1.0`, 2026-06-13). PR #15/#16 + #126~#139 + #170~#180 머지로
+  live feature read/kor_travel_map HTTP cutover/CI gate를 충족한 뒤 tag + GitHub Release를 생성했다.
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `kor-travel-map` OpenAPI read 활성화
   + **`vworld-map-web` 전환 → v0.1.0 릴리즈**
 - **릴리즈**: `v0.1.0` (Sprint 4 종료 tag). 사용자 대면 지도/여행 흐름 첫
-  사용 가능한 상태. 기능 게이트는 충족했고, 최종 tag/릴리즈 노트만 남았다.
+  사용 가능한 상태로 2026-06-13에 tag와 GitHub Release를 완료했다.
 - **DoD**:
   - 지도 어댑터 (`vworld-map-web`) 통합 — VWorld + MapLibre GL JS (ADR-046)
   - viewport 기반 feature 로딩 + 클러스터링 (zoom < 7/11/14 단계별)
@@ -22,10 +22,10 @@
     복원.
   - **`maplibre-vworld-js` 공통 기능 PR 머지 완료** — 2026-06-05 기준 완료
     (`maplibre-vworld-js` PR #37 + PR #46, merge `f1dd74b9`).
-    `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"
-    모두 라이브러리에 머지된 후에만 v0.1.0 tag. Pinvi 전용 항목은 본 저장소에
-    구현. 이후 Web 소비 패키지는 ADR-046/T-201에서 `vworld-map-web`으로 전환.
-  - `v0.1.0` git tag + GitHub Release notes.
+    `docs/integrations/maplibre-vworld.md` §6에 분류된 "라이브러리 PR 항목"은
+    `v0.1.0` tag 전 충족했다. Pinvi 전용 항목은 본 저장소에 구현했고, 이후 Web 소비
+    패키지는 ADR-046/T-201에서 `vworld-map-web`으로 전환했다.
+  - `v0.1.0` git tag + GitHub Release notes 완료.
 
 ## 산출물
 

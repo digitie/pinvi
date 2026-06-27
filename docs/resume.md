@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-230 v0.1.0 릴리즈 상태 정합화
+
+`v0.1.0` tag와 GitHub Release가 이미 존재함을 확인했다. Release는 2026-06-13에 게시됐고,
+tag는 `2f8da02345581fd3065e9d818352bc187f65b3a9`를 가리킨다. 현재 main
+`d35f49e1faafa61380d9c2c0e2d6a1cb36d29108`은 post-v0.1.0 변경이므로 같은 tag를 다시 만들지
+않는다.
+
+`CHANGELOG.md`, `docs/tasks.md`, `docs/sprints/README.md`, `docs/sprints/SPRINT-4.md`,
+`AGENTS.md`, `CLAUDE.md`를 실제 상태에 맞춰 정리했다. `Unreleased` 절은 v0.1.0 이후 변경으로
+남기고, 다음 제품 작업은 v0.2.0 범위 정리로 둔다.
+
+검증은 GitHub Release/tag 조회, main 최근 CI 조회, N150 smoke로 수행했다. 최신 N150 checkout은
+`d35f49e`이며 API `/health`, DB health, Web `/admin/login`, Dagster `/server_info`,
+`kor-travel-map` `/health`가 모두 200을 반환했다. Odroid 실제 smoke와 backup/restore 복구 훈련은
+T-108 설명대로 Sprint 6 운영 게이트로 남긴다.
+
 ## 2026-06-27 (codex) — T-229 Admin 완료 감사 / 추적 문서 최신화
 
 Admin 보강 프로그램의 코드 구현 상태를 다시 감사했다. 사용자 명시 요구사항 1~14번은
@@ -11,8 +27,8 @@ merge와 N150 배포를 완료했다.
 증거를 표로 남겼다. `docs/tasks.md`에서는 Admin 후속 항목을 T-207~T-229 완료 상태로 정리하고,
 T-216/T-228 sidebar 표현을 기본 expanded + 선택적 compact icon-only 토글로 통일했다.
 
-검증은 문서 diff 중심으로 수행한다. 다음 실제 제품 작업은 v0.1.0 릴리즈 정리이며, 이 문서-only
-PR merge 후 N150은 checkout fast-forward만 수행하고 컨테이너 재빌드는 생략한다.
+검증은 문서 diff 중심으로 수행했다. 후속 T-230에서 기존 `v0.1.0` tag/Release 존재를 확인하고
+릴리즈 상태 문서를 실제 상태로 정리했다.
 
 ## 2026-06-27 (codex) — T-227 Integrity issue status mutation
 
@@ -1433,7 +1449,7 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 | 버전      | Sprint        | ETA      | 핵심                                                                     |
 | --------- | ------------- | -------- | ------------------------------------------------------------------------ |
-| `v0.1.0`  | Sprint 4      | tag 대기 | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성               |
+| `v0.1.0`  | Sprint 4      | released (2026-06-13) | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성               |
 | `v0.2.0`  | Sprint 5      | +1       | 실시간 + ETL + Grafana embed + Backup 1차                                |
 | `v1.0.0`  | Sprint 6      | +2       | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
 | `v1.1.0+` | post-Sprint 6 | 후속     | PWA / 푸시 / kor-travel-concierge (별 repo)                              |

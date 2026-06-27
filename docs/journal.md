@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-230 v0.1.0 릴리즈 상태 정합화
+
+**작업**: `v0.1.0` 릴리즈가 이미 존재하는 상태와 문서의 "tag 대기" 표현 사이 drift를 정리했다.
+
+**확인**:
+
+- Git tag `v0.1.0`은 `2f8da02345581fd3065e9d818352bc187f65b3a9`를 가리킨다.
+- GitHub Release `v0.1.0`은 2026-06-13에 게시돼 있다.
+- 현재 main `d35f49e1faafa61380d9c2c0e2d6a1cb36d29108`은 post-v0.1.0 변경이다.
+- N150 최신 checkout 기준 API/DB/Web/Dagster/`kor-travel-map` smoke는 모두 HTTP 200을 반환했다.
+
+**변경**:
+
+- `CHANGELOG.md`에서 `v0.1.0`을 릴리즈 완료 상태로 바꾸고, `Unreleased`가 post-v0.1.0 변경임을
+  명시했다.
+- `docs/tasks.md`, `docs/sprints/README.md`, `docs/sprints/SPRINT-4.md`의 "tag 대기" 표현을
+  released 상태로 정리했다.
+- ADR-016에 맞춰 `AGENTS.md`와 `CLAUDE.md` 현 단계 요약을 함께 갱신했다.
+- `docs/resume.md` 최신 항목과 로드맵 표를 실제 release 상태로 맞췄다.
+
+**다음**: v0.2.0 범위 정리로 넘어간다. Odroid 실제 smoke와 backup/restore 복구 훈련은 T-108
+설명대로 Sprint 6 운영 게이트로 남긴다.
+
 ## 2026-06-27 (codex) — T-229 Admin 완료 감사 / 추적 문서 최신화
 
 **작업**: Admin 보강 프로그램 T-207~T-228의 완료 상태를 다시 감사하고, 추적 문서를 현재 main
@@ -21,7 +44,8 @@
 값은 민감정보 비노출 정책 문장뿐이었다. 문서-only 변경이므로 N150은 PR merge 후 checkout
 fast-forward만 수행하고 컨테이너 재빌드는 생략한다.
 
-**다음**: T-229 문서 PR을 merge한 뒤 v0.1.0 릴리즈 정리로 진행한다.
+**후속**: PR #260을 merge했다. 이후 T-230에서 기존 `v0.1.0` tag/Release 존재를 확인하고
+릴리즈 상태 문서를 실제 상태로 정리했다.
 
 ## 2026-06-27 (codex) — T-227 Integrity issue status mutation
 
