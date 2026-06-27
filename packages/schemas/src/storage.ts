@@ -5,6 +5,7 @@ export const AttachmentPurposeSchema = z.enum([
   'media_asset',
   'avatar',
   'trip_attachment',
+  'trip_day_attachment',
   'poi_attachment',
   'curated_plan_attachment',
   'curated_poi_attachment',
@@ -91,6 +92,7 @@ const AttachmentResponseBaseSchema = z
   .object({
     attachment_id: z.string().uuid(),
     trip_id: NullableUuidSchema,
+    trip_day_index: z.number().int().nullable().default(null),
     trip_poi_id: NullableUuidSchema,
     curated_plan_id: NullableUuidSchema.optional(),
     curated_poi_id: NullableUuidSchema.optional(),
@@ -146,3 +148,31 @@ export const AttachmentResponseSchema = AttachmentResponseBaseSchema.transform((
   };
 });
 export type AttachmentResponse = z.infer<typeof AttachmentResponseSchema>;
+
+export const AttachmentScopeSchema = z.enum([
+  'trip',
+  'day',
+  'poi',
+  'curated_plan',
+  'curated_poi',
+]);
+export type AttachmentScope = z.infer<typeof AttachmentScopeSchema>;
+
+export const AttachmentLibraryItemSchema = AttachmentResponseSchema.and(
+  z.object({
+    target_scope: AttachmentScopeSchema,
+    uploaded_by_user_id: z.string().uuid(),
+    uploaded_by_email_masked: z.string().nullable().optional(),
+    trip_title: z.string().nullable().optional(),
+    poi_label: z.string().nullable().optional(),
+  })
+);
+export type AttachmentLibraryItem = z.infer<typeof AttachmentLibraryItemSchema>;
+
+export const AttachmentLibraryPageSchema = z.object({
+  items: z.array(AttachmentLibraryItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  limit: z.number().int().positive(),
+});
+export type AttachmentLibraryPage = z.infer<typeof AttachmentLibraryPageSchema>;

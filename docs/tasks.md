@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-224 여행/날짜/POI 파일 업로드와 용량 정책.
+- Admin 콘솔 기능 보강: T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -61,7 +61,10 @@
       전역 아바타 최대 업로드 크기를 관리한다. 사용자는 `/profile`에서 이미지 업로드/교체/삭제와
       조회가 가능하고, Admin은 `/admin/users/{user_id}`에서 대상 사용자 아바타와 전역 크기 제한을
       관리하며 `user.avatar_*` / `settings.avatar_update` audit을 남긴다.
-- [ ] T-224 — 여행/날짜/POI 파일 업로드와 용량 정책.
+- [x] T-224 — 여행/날짜/POI 파일 업로드와 용량 정책 (완료: 2026-06-27, codex).
+      Trip/day/POI 첨부 metadata와 `/users/me/files`, `/trips/{trip_id}/files`,
+      `/admin/files` 파일 라이브러리를 추가했다. 전역 파일 용량 정책과 사용자별 override를
+      DB/API/Admin UI로 관리하고, quota 초과는 upload-url/metadata 등록 단계에서 차단한다.
 - [ ] T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션.
 - [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
 - [ ] T-220 — `/admin/etl` + provider sync + Dagster 운영 화면.

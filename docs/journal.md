@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-224 여행/날짜/POI 파일 업로드와 용량 정책
+
+**작업**: 추가 요청 13번을 T-224로 구현했다. 사용자가 여행계획, 날짜, POI에 파일을 업로드하고,
+사용자와 Admin이 업로드 파일을 모아 보며, Admin이 전역/사용자별 파일 용량 정책을 관리할 수 있게 했다.
+
+**변경**:
+
+- `app.storage_settings`에 파일 정책 3종(개별 파일 최대, 여행계획 총량, 사용자 총량)을 추가하고,
+  `app.users`에 사용자별 override 3종을 추가했다.
+- `app.curated_plan_attachments`에 `trip_day_index`를 추가해 Trip day 첨부를 표현하고,
+  여행/날짜/POI attachment quota를 DB metadata 기준으로 검사한다.
+- API에 `/trips/{trip_id}/days/{day_index}/attachments*`, `/trips/{trip_id}/files`,
+  `/users/me/files`, `/admin/files`, `/admin/settings/files`,
+  `/admin/users/{user_id}/file-quota`를 추가했다.
+- Admin 변경은 `settings.files_update`, `user.file_quota_update`, `attachment.delete` audit으로 기록한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, Web `/files`, `/admin/files`,
+  `/admin/users/{user_id}`, Trip detail attachment UI를 새 계약에 맞췄다.
+- API 문서, Admin 실행계획, tasks/resume를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API `ruff check`, mypy,
+`test_trips_api.py` + `test_admin_users_api.py` 27건, `packages/schemas` /
+`packages/api-client` / `apps/web` typecheck, Web lint, Web production build를 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 재사용해 신규 `admin-files.e2e.ts` /
+`my-files.e2e.ts` 2건과 기존 `admin-users`, `admin-trips`, `trip-attachment`, `trip-detail` 8건이 통과했다.
+
+**다음**: T-224 PR merge 후 T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션으로 진행한다.
+
 ## 2026-06-27 (codex) — T-223 사용자 아바타 / RustFS 이미지 관리
 
 **작업**: 추가 요청 12번을 T-223으로 구현했다. 사용자와 Admin이 RustFS에 저장된 아바타 이미지를

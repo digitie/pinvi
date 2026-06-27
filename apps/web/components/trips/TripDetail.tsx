@@ -92,6 +92,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   }, [mapPoints]);
 
   const selectedDay = view?.days.find((day) => day.day_index === selectedDayIndex) ?? null;
+  const selectedPoi =
+    selectedDay?.pois.find((poi) => poi.poi_id === selectedPoiId) ??
+    view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
+    null;
 
   const handleSelectPoi = (poiId: string) => {
     setSelectedPoiId(poiId);
@@ -353,6 +357,20 @@ export function TripDetail({ tripId }: TripDetailProps) {
             editingPoiId={editingPoiId}
             onEditToggle={setEditingPoiId}
           />
+          {selectedDay && (
+            <TripAttachments
+              tripId={tripId}
+              dayIndex={selectedDay.day_index}
+              title={`${selectedDay.day_index}일차 파일`}
+            />
+          )}
+          {selectedPoi && (
+            <TripAttachments
+              tripId={tripId}
+              poiId={selectedPoi.poi_id}
+              title={`${selectedPoi.title ?? '선택 장소'} 파일`}
+            />
+          )}
         </aside>
       </div>
 

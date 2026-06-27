@@ -17,6 +17,18 @@ class StorageSettings(Base, TimestampMixin):
             "avatar_max_upload_bytes > 0",
             name="storage_settings_avatar_max_upload_bytes_positive",
         ),
+        CheckConstraint(
+            "attachment_max_upload_bytes > 0",
+            name="storage_settings_attachment_max_upload_bytes_positive",
+        ),
+        CheckConstraint(
+            "trip_attachment_quota_bytes > 0",
+            name="storage_settings_trip_attachment_quota_bytes_positive",
+        ),
+        CheckConstraint(
+            "user_attachment_quota_bytes > 0",
+            name="storage_settings_user_attachment_quota_bytes_positive",
+        ),
     )
 
     settings_id: Mapped[int] = mapped_column(
@@ -28,4 +40,19 @@ class StorageSettings(Base, TimestampMixin):
         BigInteger,
         nullable=False,
         server_default=text("2097152"),
+    )
+    attachment_max_upload_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default=text("10485760"),
+    )
+    trip_attachment_quota_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default=text("104857600"),
+    )
+    user_attachment_quota_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default=text("1073741824"),
     )

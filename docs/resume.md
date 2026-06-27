@@ -1,5 +1,31 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-224 여행/날짜/POI 파일 업로드와 용량 정책
+
+여행계획, 날짜, POI에 파일 첨부 metadata를 등록/조회/삭제할 수 있게 했다. 파일 본문은 기존
+RustFS presigned PUT 흐름을 쓰고, DB에는 `app.curated_plan_attachments` metadata만 저장한다.
+T-224에서 `trip_day_index`를 추가해 day target을 표현하고, 파일 용량 정책은
+`app.storage_settings` 전역값과 `app.users` 사용자별 override를 함께 사용한다.
+
+API는 `/trips/{trip_id}/days/{day_index}/attachments*`, `/trips/{trip_id}/files`,
+`/users/me/files`, `/admin/files`, `/admin/settings/files`, `/admin/users/{user_id}/file-quota`를
+추가했다. quota는 upload-url 발급 시 개별 파일 크기를 조기 차단하고, metadata 등록 시
+개별 파일/여행계획 총량/사용자 총량을 DB attachment metadata 기준으로 검사한다. Admin 변경은
+`settings.files_update`, `user.file_quota_update`, `attachment.delete` audit으로 남긴다.
+
+Web은 사용자 `/files` 파일함, Admin `/admin/files` 파일 관리, Admin 사용자 상세의 파일 quota
+override, Trip detail의 day/POI 첨부 패널을 추가했다. `/admin/trips/{trip_id}` 상세에도 해당 여행의
+파일 목록과 다운로드 동선을 붙였다. 삭제는 metadata soft delete이며 RustFS orphan cleanup/reconcile은
+후속 후보로 남아 있다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+관련 integration 27건, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 재사용해 신규 `admin-files.e2e.ts` /
+`my-files.e2e.ts` 2건과 기존 admin/trip 관련 8건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)에 진입한다.
+T-210 WIP stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
 ## 2026-06-27 (codex) — T-223 사용자 아바타 / RustFS 이미지 관리
 
 사용자와 Admin이 RustFS 기반 아바타 이미지를 볼 수 있고 업로드/교체/삭제할 수 있게 했다.

@@ -1,5 +1,6 @@
 import {
   DownloadUrlResponseSchema,
+  AttachmentLibraryPageSchema,
   TripAttachmentCreateSchema,
   TripAttachmentResponseSchema,
   TripCommentCreateSchema,
@@ -125,6 +126,16 @@ export const tripApi = (client: ApiClient) => ({
       schema: TripViewSchema,
     }),
 
+  listFiles: (tripId: string, params: { page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return client.request(`/trips/${tripId}/files${qs.toString() ? `?${qs.toString()}` : ''}`, {
+      method: 'GET',
+      schema: AttachmentLibraryPageSchema,
+    });
+  },
+
   update: (tripId: string, version: number, body: TripUpdate) =>
     client.request(`/trips/${tripId}`, {
       method: 'PATCH',
@@ -195,6 +206,33 @@ export const tripApi = (client: ApiClient) => ({
       schema: DownloadUrlResponseSchema,
     }),
 
+  listDayAttachments: (tripId: string, dayIndex: number) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}/attachments`, {
+      method: 'GET',
+      schema: z.array(TripAttachmentResponseSchema),
+    }),
+
+  createDayAttachment: (tripId: string, dayIndex: number, body: TripAttachmentCreate) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(TripAttachmentCreateSchema.parse(body)),
+      schema: TripAttachmentResponseSchema,
+    }),
+
+  deleteDayAttachment: (tripId: string, dayIndex: number, attachmentId: string) =>
+    client.requestNoContent(`/trips/${tripId}/days/${dayIndex}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    }),
+
+  dayAttachmentDownloadUrl: (tripId: string, dayIndex: number, attachmentId: string) =>
+    client.request(
+      `/trips/${tripId}/days/${dayIndex}/attachments/${attachmentId}/download-url`,
+      {
+        method: 'GET',
+        schema: DownloadUrlResponseSchema,
+      }
+    ),
+
   listPoiAttachments: (tripId: string, poiId: string) =>
     client.request(`/trips/${tripId}/pois/${poiId}/attachments`, {
       method: 'GET',
@@ -211,6 +249,12 @@ export const tripApi = (client: ApiClient) => ({
   deletePoiAttachment: (tripId: string, poiId: string, attachmentId: string) =>
     client.requestNoContent(`/trips/${tripId}/pois/${poiId}/attachments/${attachmentId}`, {
       method: 'DELETE',
+    }),
+
+  poiAttachmentDownloadUrl: (tripId: string, poiId: string, attachmentId: string) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/attachments/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
     }),
 
   getDistanceMatrix: (tripId: string, dayIndex: number) =>

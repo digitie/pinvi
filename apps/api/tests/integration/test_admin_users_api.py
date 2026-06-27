@@ -38,6 +38,25 @@ async def _create_user(
         return user.user_id
 
 
+def _attachment_payload(
+    user_id: uuid.UUID,
+    filename: str = "admin-file.jpg",
+    *,
+    purpose: str = "trip_attachment",
+    byte_size: int = 2048,
+) -> dict[str, object]:
+    return {
+        "bucket": "pinvi-media",
+        "storage_key": f"user-uploads/{purpose}/{user_id}/2026/06/{uuid.uuid4().hex}.jpg",
+        "original_filename": filename,
+        "content_type": "image/jpeg",
+        "byte_size": byte_size,
+        "role": "image",
+        "description": "관리자 파일 테스트",
+        "sort_order": 0,
+    }
+
+
 async def test_admin_users_list_searches_and_masks_email(
     client,
     session_factory,
@@ -375,3 +394,139 @@ async def test_admin_avatar_settings_and_user_avatar_audit(
     assert avatar_audit.action == "user.avatar_replace"
     assert delete_audit is not None
     assert delete_audit.action == "user.avatar_delete"
+
+
+async def test_admin_file_settings_user_quota_and_file_management(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-files@example.com",
+        nickname="파일관리자",
+        roles=["user", "admin"],
+    )
+    target_id = await _create_user(
+        session_factory,
+        email="file-target@example.com",
+        nickname="파일사용자",
+        status="active",
+    )
+    admin_cookies = auth_cookies(str(admin_id))
+    user_cookies = auth_cookies(str(target_id))
+
+    created = await client.post(
+        "/trips",
+        json={"title": "관리 파일 여행"},
+        cookies=user_cookies,
+    )
+    assert created.status_code == 201, created.text
+    trip_id = created.json()["data"]["trip_id"]
+    attachment = await client.post(
+        f"/trips/{trip_id}/attachments",
+        json=_attachment_payload(target_id, "admin-file.jpg"),
+        cookies=user_cookies,
+    )
+    assert attachment.status_code == 201, attachment.text
+    attachment_id = attachment.json()["data"]["attachment_id"]
+
+    defaults = await client.get("/admin/settings/files", cookies=admin_cookies)
+    assert defaults.status_code == 200, defaults.text
+    assert defaults.json()["data"]["attachment_max_upload_bytes"] == 10 * 1024 * 1024
+
+    settings_request_id = uuid.uuid4()
+    settings_update = await client.put(
+        "/admin/settings/files",
+        headers={"X-Request-Id": str(settings_request_id)},
+        json={
+            "attachment_max_upload_bytes": 4096,
+            "trip_attachment_quota_bytes": 8192,
+            "user_attachment_quota_bytes": 16384,
+            "access_reason": "파일 업로드 정책 조정",
+        },
+        cookies=admin_cookies,
+    )
+    assert settings_update.status_code == 200, settings_update.text
+    assert settings_update.json()["data"] == {
+        "attachment_max_upload_bytes": 4096,
+        "trip_attachment_quota_bytes": 8192,
+        "user_attachment_quota_bytes": 16384,
+    }
+
+    quota_request_id = uuid.uuid4()
+    quota_update = await client.put(
+        f"/admin/users/{target_id}/file-quota",
+        headers={"X-Request-Id": str(quota_request_id)},
+        json={
+            "attachment_max_upload_bytes_override": 2048,
+            "trip_attachment_quota_bytes_override": 4096,
+            "user_attachment_quota_bytes_override": 8192,
+            "access_reason": "VIP 고객 개별 용량 부여",
+        },
+        cookies=admin_cookies,
+    )
+    assert quota_update.status_code == 200, quota_update.text
+    quota_data = quota_update.json()["data"]["file_quota"]
+    assert quota_data["effective_attachment_max_upload_bytes"] == 2048
+    assert quota_data["attachment_max_upload_bytes_override"] == 2048
+    assert quota_data["effective_trip_attachment_quota_bytes"] == 4096
+    assert quota_data["effective_user_attachment_quota_bytes"] == 8192
+
+    listed = await client.get(
+        f"/admin/files?scope=trip&q=admin-file&user_id={target_id}",
+        cookies=admin_cookies,
+    )
+    assert listed.status_code == 200, listed.text
+    listed_data = listed.json()["data"]
+    assert listed_data["total"] == 1
+    item = listed_data["items"][0]
+    assert item["attachment_id"] == attachment_id
+    assert item["trip_id"] == trip_id
+    assert item["target_scope"] == "trip"
+    assert item["uploaded_by_email_masked"] == "f***@example.com"
+    assert "file-target@example.com" not in listed.text
+
+    download = await client.get(
+        f"/admin/files/{attachment_id}/download-url",
+        cookies=admin_cookies,
+    )
+    assert download.status_code == 200, download.text
+    assert download.json()["data"]["storage_key"] == item["storage_key"]
+
+    delete_request_id = uuid.uuid4()
+    deleted = await client.request(
+        "DELETE",
+        f"/admin/files/{attachment_id}",
+        headers={"X-Request-Id": str(delete_request_id)},
+        json={"access_reason": "사용자 요청 파일 삭제"},
+        cookies=admin_cookies,
+    )
+    assert deleted.status_code == 204, deleted.text
+
+    after_delete = await client.get(
+        f"/admin/files?user_id={target_id}",
+        cookies=admin_cookies,
+    )
+    assert after_delete.status_code == 200
+    assert after_delete.json()["data"]["total"] == 0
+
+    async with session_factory() as db:
+        settings_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == settings_request_id)
+        )
+        quota_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == quota_request_id)
+        )
+        delete_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == delete_request_id)
+        )
+
+    assert settings_audit is not None
+    assert settings_audit.action == "settings.files_update"
+    assert settings_audit.before_state["attachment_max_upload_bytes"] == 10 * 1024 * 1024
+    assert quota_audit is not None
+    assert quota_audit.action == "user.file_quota_update"
+    assert quota_audit.after_state["attachment_max_upload_bytes_override"] == 2048
+    assert delete_audit is not None
+    assert delete_audit.action == "attachment.delete"

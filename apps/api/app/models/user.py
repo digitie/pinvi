@@ -31,6 +31,9 @@ class User(Base, TimestampMixin):
     avatar_content_type: Mapped[str | None] = mapped_column(String(255))
     avatar_byte_size: Mapped[int | None] = mapped_column(BigInteger)
     avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attachment_max_upload_bytes_override: Mapped[int | None] = mapped_column(BigInteger)
+    trip_attachment_quota_bytes_override: Mapped[int | None] = mapped_column(BigInteger)
+    user_attachment_quota_bytes_override: Mapped[int | None] = mapped_column(BigInteger)
 
     # 선택 정보 — `demographic_use` 동의 시에만 저장
     gender: Mapped[str | None] = mapped_column(String(16))

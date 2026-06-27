@@ -162,8 +162,11 @@ export {
   UploadUrlResponseSchema,
   DownloadUrlResponseSchema,
   AttachmentCreateSchema,
+  AttachmentLibraryItemSchema,
+  AttachmentLibraryPageSchema,
   AttachmentResponseSchema,
   AttachmentRoleSchema,
+  AttachmentScopeSchema,
 } from './storage';
 export type {
   AttachmentPurpose,
@@ -174,7 +177,10 @@ export type {
   UploadUrlResponse,
   DownloadUrlResponse,
   AttachmentCreate,
+  AttachmentLibraryItem,
+  AttachmentLibraryPage,
   AttachmentResponse,
+  AttachmentScope,
 } from './storage';
 
 export {
@@ -185,6 +191,10 @@ export {
   AdminAvatarDeleteRequestSchema,
   AdminAvatarSettingsSchema,
   AdminAvatarSettingsUpdateRequestSchema,
+  AdminFileStorageSettingsSchema,
+  AdminFileStorageSettingsUpdateRequestSchema,
+  AdminUserFileQuotaSchema,
+  AdminUserFileQuotaUpdateRequestSchema,
   AdminAuditEntrySchema,
   AdminLocationAuditEntrySchema,
   AdminApiCallEntrySchema,
@@ -236,6 +246,10 @@ export type {
   AdminAvatarDeleteRequest,
   AdminAvatarSettings,
   AdminAvatarSettingsUpdateRequest,
+  AdminFileStorageSettings,
+  AdminFileStorageSettingsUpdateRequest,
+  AdminUserFileQuota,
+  AdminUserFileQuotaUpdateRequest,
   AdminAuditEntry,
   AdminLocationAuditEntry,
   AdminApiCallEntry,

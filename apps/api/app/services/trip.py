@@ -26,6 +26,7 @@ from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
+from app.services.storage_policy import AttachmentQuotaError, assert_attachment_quota
 
 
 class TripError(Exception):
@@ -74,6 +75,10 @@ class TripAttachmentLimitError(TripError):
 
 class TripAttachmentStorageRefError(TripError):
     code = "INVALID_ATTACHMENT_STORAGE_REF"
+
+
+class TripAttachmentQuotaError(TripError):
+    code = "ATTACHMENT_QUOTA_EXCEEDED"
 
 
 class TripOptimizeError(TripError):
@@ -551,11 +556,16 @@ async def list_attachments(
     db: AsyncSession,
     *,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> list[CuratedPlanAttachment]:
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     result = await db.execute(
@@ -567,11 +577,19 @@ async def list_attachments(
 
 
 async def _count_attachments(
-    db: AsyncSession, *, trip_id: uuid.UUID | None, trip_poi_id: uuid.UUID | None
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID | None,
+    trip_day_index: int | None,
+    trip_poi_id: uuid.UUID | None,
 ) -> int:
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     return int(
@@ -585,21 +603,49 @@ async def create_attachment(
     *,
     uploaded_by_user_id: uuid.UUID,
     trip_id: uuid.UUID | None,
-    trip_poi_id: uuid.UUID | None,
+    trip_day_index: int | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+    quota_trip_id: uuid.UUID | None = None,
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
     limit = settings.pinvi_max_attachments_per_target
-    if await _count_attachments(db, trip_id=trip_id, trip_poi_id=trip_poi_id) >= limit:
+    if (
+        await _count_attachments(
+            db,
+            trip_id=trip_id,
+            trip_day_index=trip_day_index,
+            trip_poi_id=trip_poi_id,
+        )
+        >= limit
+    ):
         raise TripAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
     _validate_attachment_storage_ref(
         uploaded_by_user_id=uploaded_by_user_id,
         trip_id=trip_id,
+        trip_day_index=trip_day_index,
         trip_poi_id=trip_poi_id,
         payload=payload,
     )
+    uploader = await db.scalar(
+        select(User).where(User.user_id == uploaded_by_user_id, User.deleted_at.is_(None))
+    )
+    if uploader is None:
+        raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
+    if quota_trip_id is None:
+        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
+    try:
+        await assert_attachment_quota(
+            db,
+            user=uploader,
+            trip_id=quota_trip_id,
+            byte_size=int(payload.get("byte_size") or 0),
+        )
+    except AttachmentQuotaError as exc:
+        raise TripAttachmentQuotaError(str(exc)) from exc
     attachment = CuratedPlanAttachment(
         trip_id=trip_id,
+        trip_day_index=trip_day_index,
         trip_poi_id=trip_poi_id,
         uploaded_by_user_id=uploaded_by_user_id,
         **payload,
@@ -614,12 +660,18 @@ def _validate_attachment_storage_ref(
     *,
     uploaded_by_user_id: uuid.UUID,
     trip_id: uuid.UUID | None,
+    trip_day_index: int | None,
     trip_poi_id: uuid.UUID | None,
     payload: dict[str, Any],
 ) -> None:
     if trip_id is None and trip_poi_id is None:
         raise TripAttachmentStorageRefError("첨부 대상이 필요합니다.")
-    purpose = "trip_attachment" if trip_id is not None else "poi_attachment"
+    if trip_poi_id is not None:
+        purpose = "poi_attachment"
+    elif trip_day_index is not None:
+        purpose = "trip_day_attachment"
+    else:
+        purpose = "trip_attachment"
     try:
         validate_attachment_storage_ref(
             bucket=payload.get("bucket"),
@@ -636,6 +688,7 @@ async def update_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
     patch: dict[str, Any],
 ) -> CuratedPlanAttachment:
@@ -646,6 +699,10 @@ async def update_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
@@ -663,6 +720,7 @@ async def get_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> CuratedPlanAttachment:
     """단건 첨부 조회(스코프 한정). 없으면 NotFound."""
@@ -672,6 +730,10 @@ async def get_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
@@ -685,6 +747,7 @@ async def delete_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> None:
     filters = [
@@ -693,6 +756,10 @@ async def delete_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))

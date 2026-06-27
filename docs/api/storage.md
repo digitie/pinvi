@@ -13,6 +13,9 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부/아바타 
   `user-uploads/` prefix만.
 - 사용자 아바타는 `app.users`의 RustFS 메타 컬럼에 저장하고, 전역 크기 제한은
   `app.storage_settings.avatar_max_upload_bytes`가 소유한다.
+- 여행/날짜/POI 첨부의 개별 파일 크기, 여행계획 총량, 사용자 총량은
+  `app.storage_settings` 전역값과 `app.users`의 사용자별 override로 계산한다. override가
+  있으면 전역값보다 우선한다.
 
 ## 2. 환경변수
 
@@ -59,7 +62,8 @@ Cookie: pinvi_access=...
   "filename": "trip-cover.jpg",
   "content_type": "image/jpeg",
   "content_length": 524288,
-  "purpose": "media_asset" | "avatar" | "trip_attachment" | "poi_attachment" |
+  "purpose": "media_asset" | "avatar" | "trip_attachment" | "trip_day_attachment" |
+             "poi_attachment" |
              "curated_plan_attachment" | "curated_poi_attachment"
 }
 ```
@@ -93,9 +97,10 @@ Cookie: pinvi_access=...
 - `purpose` 별 권한 (예: `notice_*`는 admin만)
 - `curated_plan_attachment` / `curated_poi_attachment`는 admin만 발급 가능
 - `content_type` ∈ `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES`
-- `content_length <= PINVI_RUSTFS_MAX_UPLOAD_BYTES`
+- `trip_attachment` / `trip_day_attachment` / `poi_attachment`는 사용자의 effective
+  `attachment_max_upload_bytes` 이하만 허용한다. 그 외 일반 목적은
+  `PINVI_RUSTFS_MAX_UPLOAD_BYTES`를 따른다.
 - 파일명 확장자와 content_type 일치
-- 사용자 일일 업로드 quota (선택, Sprint 결정)
 
 ### 4.2 Avatar 전용 업로드 URL
 
@@ -120,7 +125,7 @@ Cookie: pinvi_access=...
 
 ## 5. 첨부 메타 등록 / 조회 / 삭제
 
-Trip/Trip POI 첨부 metadata 라우트는 T-132에서 구현됐다. 파일 본문은 presigned PUT로
+Trip/Trip day/Trip POI 첨부 metadata 라우트는 T-132/T-224에서 구현됐다. 파일 본문은 presigned PUT로
 RustFS에 올린 뒤, 아래 endpoint에 metadata를 등록한다.
 
 > **하드닝 (T-105)**: 대상(trip 또는 POI)당 첨부 개수 상한
@@ -133,31 +138,40 @@ RustFS에 올린 뒤, 아래 endpoint에 metadata를 등록한다.
 
 `GET /trips/{trip_id}/attachments`, `POST`, `DELETE /trips/{trip_id}/attachments/{attachment_id}`
 
-### 5.2 Trip POI 첨부
+### 5.2 Trip day 첨부
+
+`GET /trips/{trip_id}/days/{day_index}/attachments`, `POST`,
+`DELETE /trips/{trip_id}/days/{day_index}/attachments/{attachment_id}`,
+`GET /trips/{trip_id}/days/{day_index}/attachments/{attachment_id}/download-url`
+
+- `storage_key`는 `user-uploads/trip_day_attachment/{current_user_id}/` prefix만 허용한다.
+- 응답 `AttachmentResponse`에는 `trip_day_index`가 포함된다.
+
+### 5.3 Trip POI 첨부
 
 `GET /trips/{trip_id}/pois/{poi_id}/attachments`, `POST`, `DELETE`
 
-### 5.3 Curated plan 첨부 (Admin)
+### 5.4 Curated plan 첨부 (Admin)
 
 `GET /admin/notice-plans/{plan_id}/attachments`, `POST`, `DELETE /{attachment_id}`
 
 - `require_role("admin")` — 비권한은 404(존재 숨김).
 - plan 미존재(soft-delete 포함) → 404 `NOT_FOUND`. 개수 상한 초과 → 409
   `ATTACHMENT_LIMIT_EXCEEDED`(상한은 trip 첨부와 동일: `pinvi_max_attachments_per_target`).
-- POST body는 §5.5와 동일(`AttachmentCreate`). 응답은 `curated_plan_id`만 채워지고
+- POST body는 §5.6과 동일(`AttachmentCreate`). 응답은 `curated_plan_id`만 채워지고
   `notice_plan_id` alias 동기. `uploaded_by_user_id = 현재 admin`.
 - POST/DELETE는 admin_audit chain에 기록(`curated_plan.attachment_added` /
   `curated_plan.attachment_deleted`).
 
-### 5.4 Curated POI 첨부 (Admin)
+### 5.5 Curated POI 첨부 (Admin)
 
 `GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments`, `POST`,
 `DELETE /{attachment_id}`
 
-- POI가 해당 plan 소속이 아니면 404 `NOT_FOUND`. 그 외 규약은 §5.3과 동일
+- POI가 해당 plan 소속이 아니면 404 `NOT_FOUND`. 그 외 규약은 §5.4와 동일
   (audit action은 `curated_poi.attachment_*`, 응답은 `curated_poi_id`/`notice_poi_id`).
 
-### 5.5 POST body
+### 5.6 POST body
 
 ```http
 POST /trips/{trip_id}/attachments
@@ -185,6 +199,7 @@ Cookie: pinvi_access=...
   "data": {
     "attachment_id": "uuid",
     "trip_id": "uuid",
+    "trip_day_index": null,
     "trip_poi_id": null,
     "curated_plan_id": null,
     "curated_poi_id": null,
@@ -202,14 +217,17 @@ Cookie: pinvi_access=...
 `curated_plan_id` / `curated_poi_id`와 alias를 모두 포함하며 값은 항상 같다. 입력/내부
 정규화 단계에서 한쪽만 들어와도 같은 값으로 맞추고, 둘이 다르면 거부한다.
 
-서버 검증: `num_nonnulls(trip_id, trip_poi_id, curated_plan_id, curated_poi_id) = 1`
-CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
+서버 검증: 대상은 Trip, Trip day, Trip POI, curated plan, curated POI 중 하나다. Trip day는
+`trip_id + trip_day_index` 조합을 사용하고, Trip level은 `trip_id`만 채운다. POI 첨부는
+`trip_poi_id`, curated 첨부는 `curated_plan_id` 또는 `curated_poi_id`를 사용한다.
+`uploaded_by_user_id = current_user.user_id`도 함께 검증한다.
 또한 metadata 등록 시 `bucket`은 `PINVI_RUSTFS_BUCKET`과 같아야 하며, `storage_key`는
 현재 사용자가 `POST /storage/upload-urls`에서 발급받은 prefix만 허용한다.
 
 | 대상                    | 허용 prefix                                             |
 | ----------------------- | ------------------------------------------------------- |
 | Trip 첨부               | `user-uploads/trip_attachment/{current_user_id}/`       |
+| Trip day 첨부           | `user-uploads/trip_day_attachment/{current_user_id}/`   |
 | Trip POI 첨부           | `user-uploads/poi_attachment/{current_user_id}/`        |
 | Admin curated plan 첨부 | `user-uploads/curated_plan_attachment/{admin_user_id}/` |
 | Admin curated POI 첨부  | `user-uploads/curated_poi_attachment/{admin_user_id}/`  |
@@ -217,7 +235,35 @@ CHECK (도메인 매핑 자동) + `uploaded_by_user_id = current_user.user_id`.
 
 위반 시 `422 INVALID_ATTACHMENT_STORAGE_REF`.
 
-### 5.6 DELETE 동작
+### 5.7 용량 정책
+
+여행/날짜/POI 첨부 metadata 등록 시 DB attachment metadata 기준으로 용량을 계산한다.
+
+| 정책 | 기본값 | 사용자 override |
+|------|--------|-----------------|
+| 개별 파일 최대 크기 | `storage_settings.attachment_max_upload_bytes` 기본 10MiB | `users.attachment_max_upload_bytes_override` |
+| 여행계획 총량 | `storage_settings.trip_attachment_quota_bytes` 기본 100MiB | `users.trip_attachment_quota_bytes_override` |
+| 사용자 총량 | `storage_settings.user_attachment_quota_bytes` 기본 1GiB | `users.user_attachment_quota_bytes_override` |
+
+초과 시 metadata 등록은 `409 ATTACHMENT_QUOTA_EXCEEDED`를 반환한다. 개별 파일 크기 초과는
+`/storage/upload-urls`에서도 `422 FILE_TOO_LARGE`로 조기 차단된다.
+
+### 5.8 파일 라이브러리
+
+| Endpoint | 권한 | 설명 |
+|----------|------|------|
+| `GET /trips/{trip_id}/files` | 여행 접근 가능 사용자 | 해당 여행의 Trip/day/POI 첨부 모음 |
+| `GET /users/me/files` | 로그인 사용자 | 본인이 업로드했거나 본인 소유 여행에 속한 파일 모음 |
+| `GET /users/me/files/{attachment_id}/download-url` | 접근 가능 사용자 | 파일 다운로드 URL |
+| `DELETE /users/me/files/{attachment_id}` | 접근 가능 사용자 | 파일 metadata soft delete |
+| `GET /admin/files` | `admin` / `operator` | 전체 파일 검색/필터 |
+| `GET /admin/files/{attachment_id}/download-url` | `admin` / `operator` | 파일 다운로드 URL |
+| `DELETE /admin/files/{attachment_id}` | `admin` | 파일 metadata soft delete + audit |
+
+라이브러리 응답 item은 `target_scope`(`trip`, `day`, `poi`, `curated_plan`, `curated_poi`),
+`trip_title`, `poi_label`, `uploaded_by_email_masked`를 포함한다.
+
+### 5.9 DELETE 동작
 
 - `app.curated_plan_attachments.deleted_at = now()` (soft)
 - **RustFS object는 함께 삭제하지 않음** — `/admin/rustfs/objects DELETE`로만

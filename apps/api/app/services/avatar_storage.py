@@ -5,10 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.storage_settings import StorageSettings
 from app.models.user import User
 from app.schemas.storage import AVATAR_CONTENT_TYPES, AvatarApplyRequest, AvatarInfo
 from app.services.rustfs_storage import (
@@ -17,33 +13,7 @@ from app.services.rustfs_storage import (
     MimeNotAllowedError,
     validate_attachment_storage_ref,
 )
-
-DEFAULT_AVATAR_MAX_UPLOAD_BYTES = 2 * 1024 * 1024
-
-
-async def get_storage_settings(db: AsyncSession) -> StorageSettings:
-    row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
-    if row is not None:
-        return row
-    row = StorageSettings(
-        settings_id=1,
-        avatar_max_upload_bytes=DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
-    )
-    db.add(row)
-    await db.flush()
-    return row
-
-
-async def set_avatar_max_upload_bytes(
-    db: AsyncSession,
-    *,
-    avatar_max_upload_bytes: int,
-) -> tuple[StorageSettings, dict[str, int]]:
-    row = await get_storage_settings(db)
-    before_state = {"avatar_max_upload_bytes": row.avatar_max_upload_bytes}
-    row.avatar_max_upload_bytes = avatar_max_upload_bytes
-    await db.flush()
-    return row, before_state
+from app.services.storage_policy import get_storage_settings, set_avatar_max_upload_bytes
 
 
 def avatar_info(user: User) -> AvatarInfo:

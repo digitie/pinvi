@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
-import { AvatarApplyRequestSchema } from './storage';
+import { AttachmentLibraryItemSchema, AvatarApplyRequestSchema } from './storage';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
 /** `docs/api/admin.md` §6.4 — 목록 응답은 PII 마스킹. */
@@ -306,6 +306,16 @@ export const AdminFeatureDetailSchema = z.object({
 export type AdminFeatureDetail = z.infer<typeof AdminFeatureDetailSchema>;
 
 /** 상세는 기본 마스킹, 사유 기반 원본 조회 시 audit 기록. */
+export const AdminUserFileQuotaSchema = z.object({
+  attachment_max_upload_bytes_override: z.number().int().gt(0).nullable().default(null),
+  trip_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
+  user_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
+  effective_attachment_max_upload_bytes: z.number().int().gt(0).default(10 * 1024 * 1024),
+  effective_trip_attachment_quota_bytes: z.number().int().gt(0).default(100 * 1024 * 1024),
+  effective_user_attachment_quota_bytes: z.number().int().gt(0).default(1024 * 1024 * 1024),
+});
+export type AdminUserFileQuota = z.infer<typeof AdminUserFileQuotaSchema>;
+
 export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email: z.string(),
   email_revealed: z.boolean(),
@@ -317,6 +327,14 @@ export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   avatar_byte_size: z.number().int().nullable().default(null),
   avatar_updated_at: Iso8601Schema.nullable().default(null),
   has_avatar: z.boolean().default(false),
+  file_quota: AdminUserFileQuotaSchema.default({
+    attachment_max_upload_bytes_override: null,
+    trip_attachment_quota_bytes_override: null,
+    user_attachment_quota_bytes_override: null,
+    effective_attachment_max_upload_bytes: 10 * 1024 * 1024,
+    effective_trip_attachment_quota_bytes: 100 * 1024 * 1024,
+    effective_user_attachment_quota_bytes: 1024 * 1024 * 1024,
+  }),
   recent_audit: z.array(AdminAuditEntrySchema).default([]),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
@@ -348,6 +366,33 @@ export const AdminAvatarSettingsUpdateRequestSchema = z.object({
 });
 export type AdminAvatarSettingsUpdateRequest = z.infer<
   typeof AdminAvatarSettingsUpdateRequestSchema
+>;
+
+export const AdminFileStorageSettingsSchema = z.object({
+  attachment_max_upload_bytes: z.number().int().gt(0),
+  trip_attachment_quota_bytes: z.number().int().gt(0),
+  user_attachment_quota_bytes: z.number().int().gt(0),
+});
+export type AdminFileStorageSettings = z.infer<typeof AdminFileStorageSettingsSchema>;
+
+export const AdminFileStorageSettingsUpdateRequestSchema = z.object({
+  attachment_max_upload_bytes: z.number().int().gt(0).max(1_073_741_824),
+  trip_attachment_quota_bytes: z.number().int().gt(0).max(10_737_418_240),
+  user_attachment_quota_bytes: z.number().int().gt(0).max(109_951_162_777_600),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminFileStorageSettingsUpdateRequest = z.infer<
+  typeof AdminFileStorageSettingsUpdateRequestSchema
+>;
+
+export const AdminUserFileQuotaUpdateRequestSchema = z.object({
+  attachment_max_upload_bytes_override: z.number().int().gt(0).nullable().default(null),
+  trip_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
+  user_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminUserFileQuotaUpdateRequest = z.infer<
+  typeof AdminUserFileQuotaUpdateRequestSchema
 >;
 
 export const AdminPagedResponseSchema = z.object({
@@ -450,6 +495,7 @@ export const AdminTripDetailSchema = AdminTripSummarySchema.extend({
   companions: z.array(AdminTripCompanionSummarySchema).default([]),
   days: z.array(AdminTripDaySummarySchema).default([]),
   pois: z.array(AdminTripPoiSummarySchema).default([]),
+  attachments: z.array(AttachmentLibraryItemSchema).default([]),
   share_links: z.array(AdminTripShareLinkSummarySchema).default([]),
   recent_audit: z.array(AdminAuditEntrySchema).default([]),
 });
