@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-227 Integrity issue status mutation
+
+`kor-travel-map` 최신 main을 확인한 결과 `/v1/ops/consistency/*`는 read-only지만, 상태 조치
+계약은 이미 `PATCH /v1/admin/issues/{issue_id}`로 제공되고 있었다. 따라서 upstream 신규 PR 없이
+Pinvi가 기존 admin issue 계약의 `resolve` / `ignore` / `reopen`만 relay하도록 구현했다.
+
+Pinvi API는 `POST /admin/integrity/issues/{issue_id}/action`을 추가했다. admin 전용 endpoint가
+`access_reason`과 optional `kor_travel_map_reason`을 검증하고, upstream 성공 후
+`integrity_issue.action` audit을 기록한다. Web `/admin/integrity`는 issue table에 해결/무시/재오픈
+버튼과 reason dialog, 성공 notice, 목록 invalidate/refetch를 제공한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. WSL에서 admin client unit
+21건, admin dedup/integrity/debug integration 7건, ruff, mypy, Web/type package typecheck, 표준
+Web lint가 통과했다. Windows Playwright는 WSL Next server(12805)를 대상으로
+`admin-dedup-integrity-debug.e2e.ts --grep "정합성 페이지"` 1건이 통과했다.
+
+다음: T-227 PR을 만들고 merge한 뒤 N150에 배포한다. 그 후 남은 Admin 보강/릴리즈 정리를 이어간다.
+
 ## 2026-06-27 (codex) — T-228 Admin sidebar 확장/축소 토글 정정
 
 사용자 정정에 맞춰 Admin 좌측 메뉴를 아이콘 전용으로 고정하지 않고, 기본 expanded 상태에서

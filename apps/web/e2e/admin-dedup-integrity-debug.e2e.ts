@@ -177,6 +177,7 @@ test('Dedup review 페이지가 후보 행과 필터 query를 표시한다', asy
 test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한다', async ({ page }) => {
   const seenIssueUrls: string[] = [];
   const seenReportUrls: string[] = [];
+  let actionBody: Record<string, unknown> | null = null;
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/integrity/issues',
     async (route) => {
@@ -209,11 +210,42 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
       });
     },
   );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/integrity/issues/issue-1/action',
+    async (route) => {
+      actionBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            action: 'resolve',
+            issue: {
+              ...integrityIssue,
+              status: 'resolved',
+              resolved_at: '2026-06-12T00:03:00+09:00',
+            },
+          },
+        }),
+      });
+    },
+  );
 
   await page.goto('/admin/integrity');
   await expect(page.getByRole('heading', { name: '정합성' })).toBeVisible();
   await expect(page.getByTestId('admin-integrity-issue-row-issue-1')).toBeVisible();
   await expect(page.getByTestId('admin-integrity-report-row-report-1')).toBeVisible();
+
+  await page.getByTestId('admin-integrity-action-resolve-issue-1').click();
+  await expect(page.getByTestId('admin-integrity-action-dialog')).toBeVisible();
+  await page.getByTestId('admin-integrity-action-access-reason').fill('원천 데이터 확인');
+  await page.getByTestId('admin-integrity-action-map-reason').fill('source verified');
+  await page.getByTestId('admin-integrity-action-submit').click();
+  await expect(page.getByTestId('admin-integrity-action-notice')).toContainText('해결');
+  expect(actionBody).toEqual({
+    action: 'resolve',
+    access_reason: '원천 데이터 확인',
+    kor_travel_map_reason: 'source verified',
+  });
 
   await page.getByTestId('admin-integrity-status').selectOption('acknowledged');
   await page.getByTestId('admin-integrity-severity').selectOption('critical');

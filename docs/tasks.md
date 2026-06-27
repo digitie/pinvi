@@ -15,8 +15,7 @@
 ## 다음 (우선순위 순)
 
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
-- Admin 콘솔 후속: T-227 Integrity issue status/fix mutation은 upstream
-  `kor-travel-map` 계약이 추가된 뒤 진행한다. 상세 계획은
+- Admin 콘솔 후속: T-227 Integrity issue status mutation은 완료했다. 상세 계획은
   `docs/execplan/admin-console-gap-plan.md`.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
   노드 smoke와 backup/restore 복구 훈련.
@@ -100,9 +99,13 @@
       `/admin/category-mapping` 운영 화면에서 16색 팔레트 fallback, unmapped count, icon drift,
       JSON export 초안을 제공한다. Pinvi-owned override table/PUT/import는 별도 ADR/migration이
       필요한 후속으로 남긴다.
-- [ ] T-227 — Integrity issue status/fix mutation upstream 계약 반영.
-      `kor-travel-map` consistency issue mutation 계약이 추가된 뒤 Pinvi relay, audit, UI action을
-      구현한다. 현재 upstream `/v1/ops/consistency/*`는 GET-only라 Pinvi 단독 상태를 만들지 않는다.
+- [x] T-227 — Integrity issue status mutation
+      (완료: 2026-06-27, codex). `kor-travel-map`의 기존
+      `PATCH /v1/admin/issues/{issue_id}` 계약(resolve/ignore/reopen)을 Pinvi
+      `POST /admin/integrity/issues/{issue_id}/action`으로 relay하고, upstream 성공 후
+      `integrity_issue.action` audit을 남긴다. `/admin/integrity`는 issue table에서 해결/무시/재오픈
+      조치 다이얼로그를 제공하며, status/fix 중 feature 주소/좌표 수동 보정류 action은 upstream
+      admin 화면 책임으로 남긴다.
 - [x] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화
       (완료: 2026-06-27, codex). dev/staging 전용 seed/reset dry-run API와 UI를 추가하고,
       production에서는 router 미등록 + endpoint guard 404 정책을 적용했다. 실제 DB reset/seed 실행은

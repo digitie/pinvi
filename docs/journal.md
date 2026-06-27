@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-227 Integrity issue status mutation
+
+**작업**: Pinvi Admin `/admin/integrity`에서 `kor-travel-map` integrity issue 상태 조치를 직접
+수행할 수 있게 했다.
+
+**결정**:
+
+- `kor-travel-map`의 `/v1/ops/consistency/issues`와 `/v1/ops/consistency/reports`는 read-only다.
+- 상태 조치 source of truth는 기존 upstream `PATCH /v1/admin/issues/{issue_id}` 계약이다.
+- Pinvi는 `resolve` / `ignore` / `reopen`만 relay한다. 주소/좌표 보정류 action
+  (`manual_override`, geocode retry/apply)는 `kor-travel-map` Admin 책임으로 남긴다.
+
+**변경**:
+
+- `KorTravelMapAdminClient.patch_admin_issue()`를 추가해 upstream admin issue PATCH path/body를
+  감싼다.
+- Pinvi API `POST /admin/integrity/issues/{issue_id}/action`을 추가했다. admin 전용이며,
+  `access_reason`과 optional upstream reason을 검증하고 upstream 성공 후
+  `integrity_issue.action` audit을 남긴다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 issue action 요청/응답 계약을 추가했다.
+- Web `/admin/integrity` issue table에 해결/무시/재오픈 버튼과 reason dialog, 성공 notice,
+  list invalidate/refetch를 추가했다.
+- `docs/tasks.md`, `docs/resume.md`, 실행 계획을 T-227 완료 상태로 갱신했다.
+
+**검증**: WSL ext4 미러에서 `test_kor_travel_map_admin_client.py` 21건, admin
+dedup/integrity/debug integration 7건, ruff, mypy, Web/type package typecheck, 표준 Web lint가
+통과했다. Windows Playwright runner는 WSL Next server(12805)를 대상으로
+`admin-dedup-integrity-debug.e2e.ts --grep "정합성 페이지"` 1건을 실행했고 통과했다.
+
+**다음**: PR을 만들고 merge한 뒤 N150에 배포한다. 이후 남은 Admin 보강/릴리즈 정리를 계속한다.
+
 ## 2026-06-27 (codex) — T-228 Admin sidebar 확장/축소 토글 정정
 
 **작업**: 왼쪽 Admin 메뉴를 아이콘 전용으로 고정한 이전 구현을 정정해, 기본은 아이콘+라벨

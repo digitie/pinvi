@@ -83,6 +83,7 @@ export const queryKeys = {
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'integrity-issues', params] as const,
+    integrityIssuesAll: () => ['admin', 'integrity-issues'] as const,
     consistencyReports: (params: { severityMax?: string; pageSize?: number; cursor?: string }) =>
       ['admin', 'consistency-reports', params] as const,
     upstreamSystemLogs: (params: {
@@ -140,8 +141,7 @@ export const queryKeys = {
       ['admin', 'feature-requests', params] as const,
     // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).
     featureRequestsAll: () => ['admin', 'feature-requests'] as const,
-    emails: (params: { status?: string; limit?: number }) =>
-      ['admin', 'emails', params] as const,
+    emails: (params: { status?: string; limit?: number }) => ['admin', 'emails', params] as const,
     emailsAll: () => ['admin', 'emails'] as const,
     audit: (params: { limit?: number }) => ['admin', 'audit', params] as const,
     locationAudit: (params: { userId?: string; from?: string; to?: string; limit?: number }) =>
