@@ -75,6 +75,22 @@ class AdminStatsOverview(BaseModel):
     etl_last_24h: dict[str, int] = Field(default_factory=lambda: {"success": 0, "failed": 0})
 
 
+AdminSystemStatus = Literal["ok", "degraded", "down", "unknown"]
+
+
+class AdminSystemServiceStatus(BaseModel):
+    key: str
+    label: str
+    status: AdminSystemStatus
+    message: str | None = None
+    latency_ms: int | None = None
+
+
+class AdminSystemSummary(BaseModel):
+    generated_at: datetime
+    services: list[AdminSystemServiceStatus]
+
+
 class AdminUserDetail(AdminUserSummary):
     email: str
     email_revealed: bool

@@ -80,6 +80,24 @@ export const AdminStatsOverviewSchema = z.object({
 });
 export type AdminStatsOverview = z.infer<typeof AdminStatsOverviewSchema>;
 
+export const AdminSystemStatusSchema = z.enum(['ok', 'degraded', 'down', 'unknown']);
+export type AdminSystemStatus = z.infer<typeof AdminSystemStatusSchema>;
+
+export const AdminSystemServiceStatusSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  status: AdminSystemStatusSchema,
+  message: z.string().nullable().default(null),
+  latency_ms: z.number().int().nullable().default(null),
+});
+export type AdminSystemServiceStatus = z.infer<typeof AdminSystemServiceStatusSchema>;
+
+export const AdminSystemSummarySchema = z.object({
+  generated_at: Iso8601Schema,
+  services: z.array(AdminSystemServiceStatusSchema),
+});
+export type AdminSystemSummary = z.infer<typeof AdminSystemSummarySchema>;
+
 /** 상세는 기본 마스킹, 사유 기반 원본 조회 시 audit 기록. */
 export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email: z.string(),

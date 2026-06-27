@@ -5,11 +5,12 @@ export default function AdminCategoryMappingPage() {
     <Placeholder
       title="카테고리 매핑"
       sprint={6}
-      description="maki icon + 16색 P-01~P-16 마커 팔레트 매핑. category_mappings 테이블."
+      taskId="T-213"
+      description="maki icon + 16색 P-01~P-16 마커 팔레트 매핑."
       notes={[
-        'GET /admin/category-mappings',
-        'PUT /admin/category-mappings — 자유 편집',
-        '16색 팔레트: P-01 ~ P-16 (DESIGN.md 참고)',
+        'GET /admin/category-mappings, provider/category/source별 현재 매핑 조회.',
+        'PUT /admin/category-mappings는 사유, diff preview, 감사 로그를 요구.',
+        '16색 팔레트: P-01 ~ P-16, Pinvi wrapper에서만 관리.',
       ]}
     />
   );

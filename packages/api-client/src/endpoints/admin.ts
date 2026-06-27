@@ -19,6 +19,7 @@ import {
   AdminPoiLinkStatusRequestSchema,
   AdminPoiPagedResponseSchema,
   AdminStatsOverviewSchema,
+  AdminSystemSummarySchema,
   AdminTripDetailSchema,
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
@@ -36,6 +37,12 @@ export const adminApi = (client: ApiClient) => ({
     client.request('/admin/stats/overview', {
       method: 'GET',
       schema: AdminStatsOverviewSchema,
+    }),
+
+  getSystemSummary: () =>
+    client.request('/admin/system/summary', {
+      method: 'GET',
+      schema: AdminSystemSummarySchema,
     }),
 
   /** 사용자 feature 제안 검토 큐 (T-179). */

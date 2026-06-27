@@ -13,6 +13,7 @@ from app.api.v1.admin import (
     pois,
     rustfs,
     stats,
+    system,
     trips,
     users,
 )
@@ -30,3 +31,4 @@ admin_router.include_router(backup.router)
 admin_router.include_router(mcp_tokens.router)
 admin_router.include_router(rustfs.router)
 admin_router.include_router(notice_plans.router)
+admin_router.include_router(system.router)

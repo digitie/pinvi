@@ -13,26 +13,68 @@ const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
-const NAV: { href: string; label: string; sprint: number }[] = [
-  { href: '/admin', label: '대시보드', sprint: 3 },
-  { href: '/admin/users', label: '사용자', sprint: 3 },
-  { href: '/admin/trips', label: '여행', sprint: 3 },
-  { href: '/admin/features', label: '라이브러리', sprint: 3 },
-  { href: '/admin/pois', label: 'POI', sprint: 3 },
-  { href: '/admin/etl', label: 'ETL', sprint: 5 },
-  { href: '/admin/grafana', label: 'Grafana', sprint: 5 },
-  { href: '/admin/api-calls', label: 'API 호출', sprint: 3 },
-  { href: '/admin/emails', label: '이메일 큐', sprint: 3 },
-  { href: '/admin/audit', label: '감사 로그', sprint: 3 },
-  { href: '/admin/backup', label: 'Backup', sprint: 5 },
-  { href: '/admin/mcp-tokens', label: 'MCP 토큰', sprint: 6 },
-  { href: '/admin/feature-requests', label: '요청 큐', sprint: 6 },
-  { href: '/admin/category-mapping', label: '카테고리 매핑', sprint: 6 },
-  { href: '/admin/seed', label: '시드 (dev)', sprint: 3 },
-  { href: '/admin/reset', label: '리셋 (dev)', sprint: 3 },
+const NAV_GROUPS: {
+  title: string;
+  items: { href: string; label: string; sprint: number }[];
+}[] = [
+  {
+    title: 'Pinvi 운영',
+    items: [
+      { href: '/admin', label: '대시보드', sprint: 4 },
+      { href: '/admin/users', label: '사용자', sprint: 3 },
+      { href: '/admin/trips', label: '여행', sprint: 3 },
+      { href: '/admin/pois', label: 'POI', sprint: 3 },
+      { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4 },
+      { href: '/admin/audit', label: '감사 로그', sprint: 3 },
+    ],
+  },
+  {
+    title: '지도 데이터',
+    items: [
+      { href: '/admin/features', label: 'Features', sprint: 4 },
+      { href: '/admin/features/change-requests', label: '변경 요청', sprint: 4 },
+      { href: '/admin/dedup-review', label: 'Dedup review', sprint: 5 },
+      { href: '/admin/provider-sync', label: 'Provider sync', sprint: 5 },
+      { href: '/admin/integrity', label: '정합성', sprint: 5 },
+      { href: '/admin/category-mapping', label: '카테고리 매핑', sprint: 6 },
+      { href: '/admin/debug/logs', label: 'Debug logs', sprint: 5 },
+    ],
+  },
+  {
+    title: '시스템 운영',
+    items: [
+      { href: '/admin/etl', label: 'ETL', sprint: 5 },
+      { href: '/admin/grafana', label: 'Grafana', sprint: 5 },
+      { href: '/admin/api-calls', label: 'API 호출', sprint: 3 },
+      { href: '/admin/emails', label: '이메일 큐', sprint: 3 },
+      { href: '/admin/backup', label: 'Backup', sprint: 5 },
+      { href: '/admin/mcp-tokens', label: 'MCP 토큰', sprint: 6 },
+      { href: '/admin/seed', label: '시드 (dev)', sprint: 3 },
+      { href: '/admin/reset', label: '리셋 (dev)', sprint: 3 },
+    ],
+  },
 ];
+const NAV_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
 
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
+
+function isNavItemActive(pathname: string, href: string) {
+  if (href === '/admin') {
+    return pathname === '/admin';
+  }
+  if (pathname === href) {
+    return true;
+  }
+  if (!pathname.startsWith(`${href}/`)) {
+    return false;
+  }
+  return !NAV_HREFS.some(
+    (otherHref) =>
+      otherHref !== href &&
+      otherHref.startsWith(`${href}/`) &&
+      (pathname === otherHref || pathname.startsWith(`${otherHref}/`)),
+  );
+}
 
 /** 권한 가드 + 사이드바 — Query provider 내부에서 me()를 useQuery로 확인한다. */
 function AdminGuard({ children }: { children: ReactNode }) {
@@ -82,8 +124,8 @@ function AdminGuard({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-surface-soft">
-      <aside className="w-60 shrink-0 border-r border-hairline bg-white">
+    <div className="flex min-h-screen flex-col bg-surface-soft lg:flex-row">
+      <aside className="shrink-0 border-b border-hairline bg-white lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r">
         <div className="border-b border-hairline px-4 py-4">
           <DocumentNavLink href="/admin" className="text-sm font-bold text-ink">
             Pinvi Admin
@@ -96,28 +138,45 @@ function AdminGuard({ children }: { children: ReactNode }) {
             </span>
           </p>
         </div>
-        <nav className="flex flex-col gap-1 p-2 text-sm">
-          {NAV.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <DocumentNavLink
-                key={item.href}
-                href={item.href}
-                className={
-                  active
-                    ? 'rounded-sm bg-primary px-3 py-2 text-white'
-                    : 'rounded-sm px-3 py-2 text-ink hover:bg-surface-soft'
-                }
-                data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
-              >
-                <span>{item.label}</span>
-                <span className="ml-2 text-[10px] uppercase text-muted">S{item.sprint}</span>
-              </DocumentNavLink>
-            );
-          })}
+        <nav className="space-y-4 p-2 text-sm">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <h2 className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {group.title}
+              </h2>
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">
+                {group.items.map((item) => {
+                  const active = isNavItemActive(pathname, item.href);
+                  return (
+                    <DocumentNavLink
+                      key={item.href}
+                      href={item.href}
+                      className={
+                        active
+                          ? 'rounded-sm bg-primary px-3 py-2 text-white'
+                          : 'rounded-sm px-3 py-2 text-ink hover:bg-surface-soft'
+                      }
+                      data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
+                    >
+                      <span>{item.label}</span>
+                      <span
+                        className={
+                          active
+                            ? 'ml-2 text-[10px] uppercase text-white/75'
+                            : 'ml-2 text-[10px] uppercase text-muted'
+                        }
+                      >
+                        S{item.sprint}
+                      </span>
+                    </DocumentNavLink>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
       </aside>
-      <main className="flex-1 overflow-x-hidden px-8 py-8">{children}</main>
+      <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
     </div>
   );
 }
