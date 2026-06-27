@@ -76,6 +76,10 @@ services:
       PINVI_CORS_ALLOWED_ORIGINS: '${PINVI_CORS_ALLOWED_ORIGINS:-["http://127.0.0.1:12805"]}'
       PINVI_SENTRY_ENVIRONMENT: ${PINVI_SENTRY_ENVIRONMENT:-smoke}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
+      # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에
+      # 전달되지 않는다.
+      PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
       PINVI_BOOTSTRAP_ADMIN_EMAIL: ${PINVI_BOOTSTRAP_ADMIN_EMAIL:-bootstrap-admin@example.com}
       PINVI_BOOTSTRAP_ADMIN_PASSWORD: ${PINVI_BOOTSTRAP_ADMIN_PASSWORD:-}

@@ -22,7 +22,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-236a WebSocket multi-client N150 live e2e drill.
+- 다음 구현: T-237 WebSocket backend hardening / metrics.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 확인 결과,
   inline review comment는 0건이고, 사람 top-level 리뷰 코멘트는 #238/#264의
   운영·법무 gap 리뷰 2건이며 T-256~T-286으로 이미 반영됐다.
@@ -36,18 +36,13 @@
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
   T-195 공통 rate-limit middleware, T-108 운영 배포 자동화 foundation, T-200
   docker-manager 포트 대역 정렬, T-232 Trip WebSocket frontend client 1차 연결,
-  T-236 WebSocket multi-client local/mock e2e는 완료. N150 staging live 검증은
-  T-236a로 분리했다.
+  T-236 WebSocket multi-client local/mock e2e, T-236a N150 live mutating e2e는 완료.
 
 ## v0.2.0 구현 게이트 (2026-06-27)
 
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-236a — WebSocket multi-client N150 live e2e drill.
-      T-236에서 추가한 mock multi-context 시나리오와 별도로, N150 staging 또는 dev live 환경에서
-      실제 WebSocket channel의 2-client presence/broadcast/reconnect smoke를 수행하고 실패 시
-      backend/API/UI 후속 task로 분리한다.
 - [ ] T-237 — WebSocket backend hardening / metrics.
       close code 구조화 로그, Prometheus gauge/counter, cap/rate/timeout/permission 회귀 테스트를
       보강한다.
