@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { AdminPoiDetail, AdminPoiSummary, AdminTripSummary } from '@pinvi/schemas';
+import type {
+  AdminOperationImpact,
+  AdminOperationResult,
+  AdminPoiDetail,
+  AdminPoiSummary,
+  AdminTripSummary,
+} from '@pinvi/schemas';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -358,4 +364,139 @@ test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ 
   expect(patchReason).toBe('feature_id 점검 결과 끊김');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
+});
+
+test('Admin POI 상세에서 POI 이동 운영 작업을 실행한다', async ({ page }) => {
+  let moveBody: Record<string, unknown> | null = null;
+  let currentPoi: AdminPoiDetail = {
+    ...poiSummary,
+    added_by_user_id: addedByUserId,
+    added_by_email_masked: 'p***@example.com',
+    feature_snapshot: {
+      name: '해운대 해수욕장',
+      category: 'beach',
+    },
+    custom_marker_color: 'P-08',
+    custom_marker_icon: 'beach',
+    planned_arrival_at: '2026-07-01T11:00:00+09:00',
+    planned_departure_at: '2026-07-01T13:00:00+09:00',
+    user_note: '점심 전에 도착',
+    budget_amount: '12000.00',
+    actual_amount: '10000.00',
+    currency: 'KRW',
+    user_url: 'https://example.com/haeundae',
+    recent_audit: [],
+  };
+  const impact: AdminOperationImpact = {
+    target_type: 'poi',
+    target_id: poiId,
+    trip_id: tripId,
+    day_index: 1,
+    counts: { attachments: 1, comments: 1 },
+    policy_options: {
+      attachment_policy: [
+        { value: 'move', label: '대상 날짜로 이동', allowed: true, reason: null },
+        { value: 'delete', label: '함께 삭제', allowed: true, reason: null },
+        {
+          value: 'orphan',
+          label: 'orphan으로 유지',
+          allowed: false,
+          reason: 'POI 첨부와 댓글은 POI 문맥이 필요합니다.',
+        },
+      ],
+    },
+    warnings: [],
+  };
+  const result: AdminOperationResult = {
+    target_type: 'poi',
+    action: 'move',
+    source_trip_id: tripId,
+    target_trip_id: tripId,
+    target_id: poiId,
+    day_index: 2,
+    affected: { pois: 1, attachments: 1, comments: 1 },
+  };
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/pois/${poiId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentPoi }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/trips',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { items: [tripSummary], total: 1, page: 1, limit: 8 },
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/pois/${poiId}/operation-impact`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: impact }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/pois/${poiId}/move`,
+    async (route) => {
+      moveBody = route.request().postDataJSON() as Record<string, unknown>;
+      currentPoi = {
+        ...currentPoi,
+        day_index: 2,
+        recent_audit: [
+          {
+            log_id: 60,
+            actor_user_id: adminUser.user_id,
+            action: 'poi.move',
+            resource_type: 'poi',
+            resource_id: poiId,
+            access_reason: 'POI 일정 조정',
+            target_pii_fields: null,
+            prev_hash: '0'.repeat(64),
+            content_hash: '4'.repeat(64),
+            occurred_at: '2026-06-06T13:00:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: result }),
+      });
+    },
+  );
+
+  await page.goto(`/admin/pois/${poiId}`);
+  await page.getByTestId('admin-poi-move-open').click();
+  await expect(page.getByTestId('admin-poi-operation-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-poi-operation-dialog')).toContainText('orphan');
+
+  await page.getByTestId('admin-poi-operation-target-search').fill('부산');
+  await page.getByTestId('admin-poi-operation-target-trip').selectOption(tripId);
+  await page.getByTestId('admin-poi-operation-target-day').fill('2');
+  await page.getByTestId('admin-poi-operation-policy').selectOption('move');
+  await page.getByTestId('admin-poi-operation-reason').fill('POI 일정 조정');
+  await page.getByTestId('admin-poi-operation-confirm').click();
+
+  await expect(page.getByTestId('admin-poi-operation-result')).toContainText('move 완료');
+  await expect(page.getByTestId('admin-poi-audit-list')).toContainText('poi.move');
+  expect(moveBody).toMatchObject({
+    target_trip_id: tripId,
+    target_day_index: 2,
+    attachment_policy: 'move',
+    comment_policy: 'move',
+    access_reason: 'POI 일정 조정',
+  });
 });

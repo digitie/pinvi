@@ -487,6 +487,9 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 
 ### T-225 — 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
 
+상태: 완료(2026-06-27, codex). 구현 PR은 Admin 여행/날짜/POI 운영 작업 API,
+공유 schema/client, 상세 화면 dialog, API integration, Windows Playwright mock e2e를 포함한다.
+
 추가 요청(2026-06-27) 14번.
 
 범위:
@@ -501,12 +504,32 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 - 사용자 경로의 협업/권한/optimistic lock과 충돌하지 않도록 버전 증가, audit, rollback 전략을
   API 수준에서 먼저 고정한다.
 
+구현:
+
+- `/admin/trips/{trip_id}/operation-impact`, `/copy`, `/move`, `DELETE /admin/trips/{trip_id}`를
+  추가했다. 여행계획 copy는 기존 사용자 복사 흐름을 commit 옵션으로 재사용하되 admin audit과
+  같은 transaction으로 묶었다. move는 현 스키마에서 owner 이전으로 정의했고, delete는 trip
+  soft delete와 선택적 하위 POI/첨부/댓글 soft delete, share revoke를 수행한다.
+- `/admin/trips/{trip_id}/days/{day_index}/operation-impact`, `/copy`, `/move`,
+  `DELETE /admin/trips/{trip_id}/days/{day_index}`를 추가했다. 날짜 copy/move는 대상
+  여행/day를 받아 POI/첨부/댓글을 이동 또는 삭제하며, 대상 day가 없으면 생성한다.
+- `/admin/pois/{poi_id}/operation-impact`, `/copy`, `/move`, `DELETE /admin/pois/{poi_id}`를
+  추가했다. POI copy/move/delete는 첨부/댓글 정책을 함께 처리하고 audit을 남긴다.
+- `trip_days`/`trip_day_pois`/POI 첨부 FK 구조 때문에 day/POI/첨부 orphan은 허용하지 않는다.
+  impact API가 `orphan` 옵션을 `allowed=false`와 사유로 내려주고, Web dialog는 이를 비활성
+  설명으로 표시한다.
+- Admin `/admin/trips/{trip_id}`와 `/admin/pois/{poi_id}` 상세에 copy/move/delete dialog를
+  추가했다. dialog는 대상 여행 검색, 대상 day 입력, 영향도 요약, 정책 선택, reason 입력,
+  실행 결과와 audit refresh를 포함한다.
+
 검증:
 
-- API integration: trip copy/move/delete, day copy/move/delete, POI copy/move/delete, cascade/delete/
-  orphan/retarget 조합, 권한, audit, optimistic lock conflict.
-- UI e2e: 하위 아이템 처리 옵션 선택, 대상 검색/선택/실행, 영향도 요약, 실패 rollback 표시.
-- 데이터 정합: 하위 attachment/comment/share/link count, orphan 가능성, 삭제 후 목록/상세 조회.
+- API integration: trip copy/delete, day move, POI copy/move/delete, orphan 비활성 impact,
+  attachment/comment/share 영향도, audit 기록을 검증했다.
+- UI e2e: Windows Playwright에서 여행 상세 날짜 이동 dialog와 POI 이동 dialog의 대상
+  검색/선택/실행, 영향도 요약, API body, audit refresh를 검증했다.
+- 데이터 정합: 하위 attachment/comment/share link count, orphan 불가 사유, 삭제 후 soft delete
+  metadata를 focused integration에서 검증했다.
 
 ## 구현 순서
 

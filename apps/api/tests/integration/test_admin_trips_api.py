@@ -8,7 +8,9 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog
+from app.models.comment import TripComment
 from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
@@ -429,3 +431,271 @@ async def test_admin_trip_status_update_rolls_back_when_audit_fails(
     assert trip.status == "planned"
     assert trip.version == 1
     assert audit is None
+
+
+async def test_admin_trip_copy_and_delete_operations_write_audit(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    copy_request_id = uuid.uuid4()
+    delete_request_id = uuid.uuid4()
+
+    async with session_factory() as db:
+        source_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.trip_id == trip_id, TripDayPoi.day_index == 1)
+        )
+        assert source_poi is not None
+        db.add_all(
+            [
+                CuratedPlanAttachment(
+                    trip_id=trip_id,
+                    trip_day_index=1,
+                    bucket="pinvi-test",
+                    storage_key=f"trips/{trip_id}/day-note.txt",
+                    original_filename="day-note.txt",
+                    content_type="text/plain",
+                    byte_size=12,
+                    uploaded_by_user_id=owner_id,
+                ),
+                CuratedPlanAttachment(
+                    trip_poi_id=source_poi.attachment_id,
+                    bucket="pinvi-test",
+                    storage_key=f"pois/{source_poi.attachment_id}/photo.jpg",
+                    original_filename="photo.jpg",
+                    content_type="image/jpeg",
+                    byte_size=120,
+                    uploaded_by_user_id=owner_id,
+                ),
+                TripComment(
+                    trip_id=trip_id,
+                    author_user_id=owner_id,
+                    target_type="trip",
+                    day_index=1,
+                    body="날짜 댓글",
+                ),
+            ]
+        )
+        await db.commit()
+
+    copy_resp = await client.post(
+        f"/admin/trips/{trip_id}/copy",
+        json={
+            "title": "운영 복사본",
+            "scope": "all",
+            "date_shift_days": 1,
+            "access_reason": "고객 요청 복사",
+        },
+        headers={"X-Request-Id": str(copy_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert copy_resp.status_code == 200, copy_resp.text
+    copy_result = copy_resp.json()["data"]
+    copied_trip_id = uuid.UUID(copy_result["target_trip_id"])
+    assert copy_result["action"] == "copy"
+    assert copy_result["affected"]["days"] == 2
+    assert copy_result["affected"]["pois"] == 1
+    assert copy_result["affected"]["attachments"] == 2
+
+    delete_resp = await client.request(
+        "DELETE",
+        f"/admin/trips/{trip_id}",
+        json={"child_policy": "delete", "access_reason": "운영 정책 삭제"},
+        headers={"X-Request-Id": str(delete_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert delete_resp.status_code == 200, delete_resp.text
+    delete_result = delete_resp.json()["data"]
+    assert delete_result["action"] == "delete"
+    assert delete_result["affected"]["trips"] == 1
+    assert delete_result["affected"]["pois"] == 1
+    assert delete_result["affected"]["attachments"] == 2
+
+    async with session_factory() as db:
+        copied_trip = await db.scalar(select(Trip).where(Trip.trip_id == copied_trip_id))
+        copied_attachment_rows = await db.execute(
+            select(CuratedPlanAttachment).where(CuratedPlanAttachment.trip_id == copied_trip_id)
+        )
+        copied_attachments = list(copied_attachment_rows.scalars())
+        source_trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+        source_poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.trip_id == trip_id))
+        source_attachment_count = await db.scalar(
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.trip_id == trip_id,
+                CuratedPlanAttachment.deleted_at.is_not(None),
+            )
+        )
+        copy_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == copy_request_id)
+        )
+        delete_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == delete_request_id)
+        )
+
+    assert copied_trip is not None
+    assert copied_trip.title == "운영 복사본"
+    assert len(copied_attachments) >= 1
+    assert source_trip is not None
+    assert source_trip.deleted_at is not None
+    assert source_poi is not None
+    assert source_poi.deleted_at is not None
+    assert source_attachment_count is not None
+    assert copy_audit is not None
+    assert copy_audit.action == "trip.copy"
+    assert delete_audit is not None
+    assert delete_audit.action == "trip.delete"
+
+
+async def test_admin_day_move_moves_pois_files_comments_and_disables_orphan(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    source_trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    target_trip_id = await _create_trip_fixture(
+        session_factory,
+        owner_id=owner_id,
+        title="대상 여행",
+        region_hint="서울",
+    )
+    request_id = uuid.uuid4()
+
+    async with session_factory() as db:
+        source_poi = await db.scalar(
+            select(TripDayPoi).where(
+                TripDayPoi.trip_id == source_trip_id,
+                TripDayPoi.day_index == 1,
+            )
+        )
+        assert source_poi is not None
+        db.add_all(
+            [
+                CuratedPlanAttachment(
+                    trip_id=source_trip_id,
+                    trip_day_index=1,
+                    bucket="pinvi-test",
+                    storage_key=f"trips/{source_trip_id}/day.txt",
+                    original_filename="day.txt",
+                    content_type="text/plain",
+                    byte_size=10,
+                    uploaded_by_user_id=owner_id,
+                ),
+                CuratedPlanAttachment(
+                    trip_poi_id=source_poi.attachment_id,
+                    bucket="pinvi-test",
+                    storage_key=f"pois/{source_poi.attachment_id}/photo.jpg",
+                    original_filename="photo.jpg",
+                    content_type="image/jpeg",
+                    byte_size=100,
+                    uploaded_by_user_id=owner_id,
+                ),
+                TripComment(
+                    trip_id=source_trip_id,
+                    author_user_id=owner_id,
+                    target_type="day",
+                    day_index=1,
+                    body="날짜 메모",
+                ),
+                TripComment(
+                    trip_id=source_trip_id,
+                    author_user_id=owner_id,
+                    target_type="poi",
+                    target_id=source_poi.attachment_id,
+                    day_index=1,
+                    body="POI 메모",
+                ),
+            ]
+        )
+        await db.commit()
+        source_poi_id = source_poi.attachment_id
+
+    impact_resp = await client.get(
+        f"/admin/trips/{source_trip_id}/days/1/operation-impact",
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert impact_resp.status_code == 200, impact_resp.text
+    impact = impact_resp.json()["data"]
+    assert impact["counts"]["pois"] == 1
+    orphan = next(
+        option for option in impact["policy_options"]["poi_policy"] if option["value"] == "orphan"
+    )
+    assert orphan["allowed"] is False
+    assert "FK" in orphan["reason"]
+
+    move_resp = await client.post(
+        f"/admin/trips/{source_trip_id}/days/1/move",
+        json={
+            "target_trip_id": str(target_trip_id),
+            "target_day_index": 3,
+            "poi_policy": "move",
+            "attachment_policy": "move",
+            "comment_policy": "move",
+            "access_reason": "일정 통합",
+        },
+        headers={"X-Request-Id": str(request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert move_resp.status_code == 200, move_resp.text
+    result = move_resp.json()["data"]
+    assert result["action"] == "move"
+    assert result["target_trip_id"] == str(target_trip_id)
+    assert result["day_index"] == 3
+    assert result["affected"]["pois"] == 1
+    assert result["affected"]["attachments"] == 1
+    assert result["affected"]["comments"] == 2
+
+    async with session_factory() as db:
+        source_day = await db.scalar(
+            select(TripDay).where(
+                TripDay.trip_id == source_trip_id,
+                TripDay.day_index == 1,
+            )
+        )
+        target_day = await db.scalar(
+            select(TripDay).where(
+                TripDay.trip_id == target_trip_id,
+                TripDay.day_index == 3,
+            )
+        )
+        moved_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.attachment_id == source_poi_id)
+        )
+        day_attachment = await db.scalar(
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.trip_id == target_trip_id,
+                CuratedPlanAttachment.trip_day_index == 3,
+            )
+        )
+        comments = (
+            await db.execute(select(TripComment).where(TripComment.trip_id == target_trip_id))
+        ).scalars()
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert source_day is None
+    assert target_day is not None
+    assert moved_poi is not None
+    assert moved_poi.trip_id == target_trip_id
+    assert moved_poi.day_index == 3
+    assert day_attachment is not None
+    moved_comments = list(comments)
+    assert len(moved_comments) == 2
+    assert {comment.day_index for comment in moved_comments} == {3}
+    assert audit is not None
+    assert audit.action == "trip_day.move"

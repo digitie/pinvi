@@ -553,6 +553,121 @@ export const AdminTripStatusRequestSchema = z.object({
 });
 export type AdminTripStatusRequest = z.infer<typeof AdminTripStatusRequestSchema>;
 
+export const AdminOperationTargetSchema = z.enum(['trip', 'day', 'poi']);
+export type AdminOperationTarget = z.infer<typeof AdminOperationTargetSchema>;
+
+export const AdminOperationActionSchema = z.enum(['copy', 'move', 'delete']);
+export type AdminOperationAction = z.infer<typeof AdminOperationActionSchema>;
+
+export const AdminMoveDeletePolicySchema = z.enum(['move', 'delete', 'keep', 'orphan']);
+export type AdminMoveDeletePolicy = z.infer<typeof AdminMoveDeletePolicySchema>;
+
+export const AdminOperationPolicyOptionSchema = z.object({
+  value: AdminMoveDeletePolicySchema,
+  label: z.string(),
+  allowed: z.boolean(),
+  reason: z.string().nullable().default(null),
+});
+export type AdminOperationPolicyOption = z.infer<typeof AdminOperationPolicyOptionSchema>;
+
+export const AdminOperationImpactSchema = z.object({
+  target_type: AdminOperationTargetSchema,
+  target_id: z.string().uuid().nullable().default(null),
+  trip_id: z.string().uuid(),
+  day_index: z.number().int().nullable().default(null),
+  counts: z.record(z.string(), z.number().int()).default({}),
+  policy_options: z.record(z.string(), z.array(AdminOperationPolicyOptionSchema)).default({}),
+  warnings: z.array(z.string()).default([]),
+});
+export type AdminOperationImpact = z.infer<typeof AdminOperationImpactSchema>;
+
+export const AdminOperationResultSchema = z.object({
+  target_type: AdminOperationTargetSchema,
+  action: AdminOperationActionSchema,
+  source_trip_id: z.string().uuid(),
+  target_trip_id: z.string().uuid().nullable().default(null),
+  target_id: z.string().uuid().nullable().default(null),
+  day_index: z.number().int().nullable().default(null),
+  affected: z.record(z.string(), z.number().int()).default({}),
+});
+export type AdminOperationResult = z.infer<typeof AdminOperationResultSchema>;
+
+export const AdminTripCopyRequestSchema = z.object({
+  title: z.string().max(200).nullable().optional(),
+  owner_user_id: z.string().uuid().nullable().optional(),
+  scope: z.enum(['all', 'day', 'range']).default('all'),
+  day_index: z.number().int().min(1).nullable().optional(),
+  start_day_index: z.number().int().min(1).nullable().optional(),
+  end_day_index: z.number().int().min(1).nullable().optional(),
+  date_shift_days: z.number().int().min(-3650).max(3650).default(0),
+  target_trip_id: z.string().uuid().nullable().optional(),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminTripCopyRequest = z.infer<typeof AdminTripCopyRequestSchema>;
+
+export const AdminTripMoveRequestSchema = z.object({
+  owner_user_id: z.string().uuid(),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminTripMoveRequest = z.infer<typeof AdminTripMoveRequestSchema>;
+
+export const AdminTripDeleteRequestSchema = z.object({
+  child_policy: z.enum(['keep', 'delete']).default('keep'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminTripDeleteRequest = z.infer<typeof AdminTripDeleteRequestSchema>;
+
+export const AdminDayCopyRequestSchema = z.object({
+  target_trip_id: z.string().uuid(),
+  target_day_index: z.number().int().min(1),
+  include_pois: z.boolean().default(true),
+  include_attachments: z.boolean().default(true),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminDayCopyRequest = z.infer<typeof AdminDayCopyRequestSchema>;
+
+export const AdminDayMoveRequestSchema = z.object({
+  target_trip_id: z.string().uuid(),
+  target_day_index: z.number().int().min(1),
+  poi_policy: z.enum(['move', 'delete']).default('move'),
+  attachment_policy: z.enum(['move', 'delete']).default('move'),
+  comment_policy: z.enum(['move', 'delete']).default('move'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminDayMoveRequest = z.infer<typeof AdminDayMoveRequestSchema>;
+
+export const AdminDayDeleteRequestSchema = z.object({
+  poi_policy: z.literal('delete').default('delete'),
+  attachment_policy: z.literal('delete').default('delete'),
+  comment_policy: z.literal('delete').default('delete'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminDayDeleteRequest = z.infer<typeof AdminDayDeleteRequestSchema>;
+
+export const AdminPoiCopyRequestSchema = z.object({
+  target_trip_id: z.string().uuid(),
+  target_day_index: z.number().int().min(1),
+  include_attachments: z.boolean().default(true),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminPoiCopyRequest = z.infer<typeof AdminPoiCopyRequestSchema>;
+
+export const AdminPoiMoveRequestSchema = z.object({
+  target_trip_id: z.string().uuid(),
+  target_day_index: z.number().int().min(1),
+  attachment_policy: z.enum(['move', 'delete']).default('move'),
+  comment_policy: z.enum(['move', 'delete']).default('move'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminPoiMoveRequest = z.infer<typeof AdminPoiMoveRequestSchema>;
+
+export const AdminPoiDeleteRequestSchema = z.object({
+  attachment_policy: z.literal('delete').default('delete'),
+  comment_policy: z.literal('delete').default('delete'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminPoiDeleteRequest = z.infer<typeof AdminPoiDeleteRequestSchema>;
+
 export const AdminPoiSummarySchema = z.object({
   attachment_id: z.string().uuid(),
   trip_id: z.string().uuid(),

@@ -22,6 +22,9 @@
 - 사용자와 Admin이 여행계획/날짜/POI 첨부 파일을 모아 보고 다운로드/삭제할 수 있는 파일함을
   추가했다. Admin은 전역 파일 용량 정책과 사용자별 quota override를 관리할 수 있고,
   변경/삭제 사유는 감사 로그에 남는다.
+- Admin 여행/POI 상세에서 여행계획, 날짜, POI를 복사·이동·삭제할 수 있는 운영 작업을
+  추가했다. 작업 전 영향도와 orphan 불가 사유를 확인하고, 대상 여행/day와 하위 항목
+  move/delete 정책을 선택하며, 실행 사유와 결과는 감사 로그에 남는다.
 - 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동으로 다시 보내고, 로그인
   화면에서 "인증 메일 다시 보내기" 버튼으로도 재발송할 수 있다. `POST /auth/verify-email/resend`
   (계정 enumeration 차단) 추가 + 로그인 `EMAIL_NOT_VERIFIED` 응답에 `verification_email_dispatched`
