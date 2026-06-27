@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
+
+**작업**: 추가 요청 14번을 T-225로 구현했다. Admin이 여행계획, 날짜, POI를 복사·이동·삭제하고,
+삭제/이동 전 영향도와 하위 항목 처리 정책을 확인할 수 있게 했다.
+
+**변경**:
+
+- Admin operation schema와 `AdminOperationImpact` / `AdminOperationResult` 계약을 추가했다.
+- `/admin/trips/{trip_id}`에 trip operation impact, copy, owner move, delete endpoint를 추가했다.
+  trip copy는 기존 사용자 copy 흐름을 `commit=false`로 재사용해 admin audit과 같은 transaction에
+  묶는다.
+- `/admin/trips/{trip_id}/days/{day_index}`에 day operation impact, copy, move, delete endpoint를
+  추가했다. 대상 여행/day로 POI, 첨부, 댓글을 move/delete 정책에 따라 처리한다.
+- `/admin/pois/{poi_id}`에 POI operation impact, copy, move, delete endpoint를 추가했다.
+- 현 DB FK 구조상 day/POI/첨부 orphan은 허용하지 않고, impact API와 Web dialog가 불가 사유를
+  표시한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, Web `/admin/trips/{trip_id}`,
+  `/admin/pois/{poi_id}` 상세 화면에 운영 작업 dialog와 e2e 테스트를 추가했다.
+- API 문서와 Admin 실행계획, tasks/resume/changelog를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API `ruff check`, mypy,
+`pytest tests/integration/test_admin_trips_api.py tests/integration/test_admin_pois_api.py -q`
+(18 passed), schemas/api-client/web typecheck, Web lint, Web production build를 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 재사용해
+`admin-trips.e2e.ts` + `admin-pois.e2e.ts` 8건이 통과했다.
+
+**다음**: T-225 PR merge 후 T-210 Pinvi feature request와 upstream change request 운영 통합으로
+복귀한다.
+
 ## 2026-06-27 (codex) — T-224 여행/날짜/POI 파일 업로드와 용량 정책
 
 **작업**: 추가 요청 13번을 T-224로 구현했다. 사용자가 여행계획, 날짜, POI에 파일을 업로드하고,

@@ -362,6 +362,9 @@ TripStatus = Literal["draft", "planned", "in_progress", "completed", "archived"]
 TripVisibility = Literal["private", "unlisted", "public"]
 TripCompanionRole = Literal["co_owner", "editor", "viewer"]
 TripShareLinkVisibility = Literal["view_only", "comment", "edit"]
+AdminOperationTarget = Literal["trip", "day", "poi"]
+AdminOperationAction = Literal["copy", "move", "delete"]
+AdminMoveDeletePolicy = Literal["move", "delete", "keep", "orphan"]
 
 
 class AdminTripSummary(BaseModel):
@@ -490,6 +493,100 @@ class AdminTripPagedResponse(BaseModel):
 
 class AdminTripStatusRequest(BaseModel):
     status: TripStatus
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminOperationPolicyOption(BaseModel):
+    value: AdminMoveDeletePolicy
+    label: str
+    allowed: bool
+    reason: str | None = None
+
+
+class AdminOperationImpact(BaseModel):
+    target_type: AdminOperationTarget
+    target_id: uuid.UUID | None = None
+    trip_id: uuid.UUID
+    day_index: int | None = None
+    counts: dict[str, int] = Field(default_factory=dict)
+    policy_options: dict[str, list[AdminOperationPolicyOption]] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AdminOperationResult(BaseModel):
+    target_type: AdminOperationTarget
+    action: AdminOperationAction
+    source_trip_id: uuid.UUID
+    target_trip_id: uuid.UUID | None = None
+    target_id: uuid.UUID | None = None
+    day_index: int | None = None
+    affected: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminTripCopyRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    owner_user_id: uuid.UUID | None = None
+    scope: Literal["all", "day", "range"] = "all"
+    day_index: int | None = Field(default=None, ge=1)
+    start_day_index: int | None = Field(default=None, ge=1)
+    end_day_index: int | None = Field(default=None, ge=1)
+    date_shift_days: int = Field(default=0, ge=-3650, le=3650)
+    target_trip_id: uuid.UUID | None = None
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminTripMoveRequest(BaseModel):
+    owner_user_id: uuid.UUID
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminTripDeleteRequest(BaseModel):
+    child_policy: Literal["keep", "delete"] = "keep"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminDayCopyRequest(BaseModel):
+    target_trip_id: uuid.UUID
+    target_day_index: int = Field(ge=1)
+    include_pois: bool = True
+    include_attachments: bool = True
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminDayMoveRequest(BaseModel):
+    target_trip_id: uuid.UUID
+    target_day_index: int = Field(ge=1)
+    poi_policy: Literal["move", "delete"] = "move"
+    attachment_policy: Literal["move", "delete"] = "move"
+    comment_policy: Literal["move", "delete"] = "move"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminDayDeleteRequest(BaseModel):
+    poi_policy: Literal["delete"] = "delete"
+    attachment_policy: Literal["delete"] = "delete"
+    comment_policy: Literal["delete"] = "delete"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminPoiCopyRequest(BaseModel):
+    target_trip_id: uuid.UUID
+    target_day_index: int = Field(ge=1)
+    include_attachments: bool = True
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminPoiMoveRequest(BaseModel):
+    target_trip_id: uuid.UUID
+    target_day_index: int = Field(ge=1)
+    attachment_policy: Literal["move", "delete"] = "move"
+    comment_policy: Literal["move", "delete"] = "move"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminPoiDeleteRequest(BaseModel):
+    attachment_policy: Literal["delete"] = "delete"
+    comment_policy: Literal["delete"] = "delete"
     access_reason: str = Field(min_length=1, max_length=500)
 
 

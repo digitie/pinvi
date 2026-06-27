@@ -2,20 +2,23 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import { paletteHex } from '@pinvi/domain';
 import type {
   AdminAuditEntry,
+  AdminOperationImpact,
+  AdminOperationResult,
   AdminTripCompanionSummary,
   AdminTripDaySummary,
   AdminTripDetail,
   AdminTripPoiSummary,
   AdminTripShareLinkSummary,
+  AdminTripSummary,
   AttachmentLibraryItem,
   TripStatus,
 } from '@pinvi/schemas';
-import { Download, ExternalLink, MapPin, X } from 'lucide-react';
+import { Copy, Download, ExternalLink, MapPin, MoveRight, Search, Trash2, X } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
@@ -39,6 +42,32 @@ const STATUSES: { value: TripStatus; label: string }[] = [
   { value: 'archived', label: '보관' },
 ];
 
+type TripOperationMode =
+  | 'trip_copy'
+  | 'trip_move'
+  | 'trip_delete'
+  | 'day_copy'
+  | 'day_move'
+  | 'day_delete';
+
+const TRIP_OPERATION_LABELS: Record<TripOperationMode, string> = {
+  trip_copy: '여행 복사',
+  trip_move: '여행 소유자 이전',
+  trip_delete: '여행 삭제',
+  day_copy: '날짜 복사',
+  day_move: '날짜 이동',
+  day_delete: '날짜 삭제',
+};
+
+const OPERATION_MODES: { value: TripOperationMode; label: string }[] = [
+  { value: 'trip_copy', label: TRIP_OPERATION_LABELS.trip_copy },
+  { value: 'trip_move', label: TRIP_OPERATION_LABELS.trip_move },
+  { value: 'trip_delete', label: TRIP_OPERATION_LABELS.trip_delete },
+  { value: 'day_copy', label: TRIP_OPERATION_LABELS.day_copy },
+  { value: 'day_move', label: TRIP_OPERATION_LABELS.day_move },
+  { value: 'day_delete', label: TRIP_OPERATION_LABELS.day_delete },
+];
+
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleDateString('ko-KR') : '—';
 
@@ -56,6 +85,11 @@ const formatBytes = (bytes: number) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+
+const formatAffected = (affected: Record<string, number>) =>
+  Object.entries(affected)
+    .map(([key, value]) => `${key} ${value}`)
+    .join(' / ');
 
 const attachmentScopeLabel: Record<AttachmentLibraryItem['target_scope'], string> = {
   trip: '여행',
@@ -453,6 +487,48 @@ function AdminTripPoiDialog({
   );
 }
 
+function OperationImpactPanel({ impact }: { impact: AdminOperationImpact | null }) {
+  if (!impact) {
+    return <p className="text-sm text-muted">영향도를 불러오는 중...</p>;
+  }
+
+  return (
+    <div className="space-y-3 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">
+      <div>
+        <p className="text-xs uppercase tracking-wide text-muted">영향도</p>
+        <p className="mt-1 text-ink">
+          {Object.entries(impact.counts)
+            .map(([key, value]) => `${key} ${value}`)
+            .join(' / ') || '하위 항목 없음'}
+        </p>
+      </div>
+      {Object.entries(impact.policy_options).map(([key, options]) => (
+        <div key={key}>
+          <p className="font-mono text-xs text-muted">{key}</p>
+          <div className="mt-1 grid gap-1">
+            {options.map((option) => (
+              <p
+                key={`${key}-${option.value}`}
+                className={option.allowed ? 'text-ink' : 'text-muted'}
+              >
+                {option.allowed ? '허용' : '불가'} · {option.label}
+                {option.reason ? ` · ${option.reason}` : ''}
+              </p>
+            ))}
+          </div>
+        </div>
+      ))}
+      {impact.warnings.length > 0 && (
+        <div className="text-xs text-muted">
+          {impact.warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminTripDetailPage() {
   const router = useRouter();
   const params = useParams<{ trip_id: string }>();
@@ -464,6 +540,22 @@ export default function AdminTripDetailPage() {
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [acting, setActing] = useState(false);
   const [selectedPoi, setSelectedPoi] = useState<AdminTripPoiSummary | null>(null);
+  const [showOperationDialog, setShowOperationDialog] = useState(false);
+  const [operationMode, setOperationMode] = useState<TripOperationMode>('day_move');
+  const [operationDayIndex, setOperationDayIndex] = useState(1);
+  const [operationReason, setOperationReason] = useState('');
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [operationImpact, setOperationImpact] = useState<AdminOperationImpact | null>(null);
+  const [operationResult, setOperationResult] = useState<AdminOperationResult | null>(null);
+  const [targetTripQuery, setTargetTripQuery] = useState('');
+  const [targetTrips, setTargetTrips] = useState<AdminTripSummary[]>([]);
+  const [targetTripId, setTargetTripId] = useState('');
+  const [targetDayIndex, setTargetDayIndex] = useState(1);
+  const [targetOwnerUserId, setTargetOwnerUserId] = useState('');
+  const [tripDeleteChildPolicy, setTripDeleteChildPolicy] = useState<'keep' | 'delete'>('keep');
+  const [childMovePolicy, setChildMovePolicy] = useState<'move' | 'delete'>('move');
+  const [includePois, setIncludePois] = useState(true);
+  const [includeAttachments, setIncludeAttachments] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +580,80 @@ export default function AdminTripDetailPage() {
     };
   }, [router, tripId]);
 
+  const nextAvailableDayIndex = useMemo(() => {
+    if (!trip || trip.days.length === 0) return 1;
+    return Math.max(...trip.days.map((day) => day.day_index)) + 1;
+  }, [trip]);
+
+  const refreshTrip = async () => {
+    const updated = await adminApi(apiClient).getTrip(tripId);
+    setTrip(updated);
+    setStatusDraft(updated.status);
+  };
+
+  const openOperationDialog = (mode: TripOperationMode) => {
+    const firstDayIndex = trip?.days[0]?.day_index ?? 1;
+    setOperationMode(mode);
+    setOperationDayIndex(firstDayIndex);
+    setOperationReason('');
+    setOperationError(null);
+    setOperationResult(null);
+    setOperationImpact(null);
+    setTargetTripQuery('');
+    setTargetTrips(trip ? [trip] : []);
+    setTargetTripId(trip?.trip_id ?? '');
+    setTargetDayIndex(nextAvailableDayIndex);
+    setTargetOwnerUserId('');
+    setTripDeleteChildPolicy('keep');
+    setChildMovePolicy('move');
+    setIncludePois(true);
+    setIncludeAttachments(true);
+    setShowOperationDialog(true);
+  };
+
+  useEffect(() => {
+    if (!showOperationDialog) return;
+    let cancelled = false;
+    const q = targetTripQuery.trim();
+    adminApi(apiClient)
+      .listTrips({ page: 1, limit: 8, q: q || undefined })
+      .then((res) => {
+        if (cancelled) return;
+        setTargetTrips(res.items);
+        if (!targetTripId && res.items[0]) {
+          setTargetTripId(res.items[0].trip_id);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOperationError(err instanceof ApiError ? err.message : '대상 여행 검색 실패');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showOperationDialog, targetTripId, targetTripQuery]);
+
+  useEffect(() => {
+    if (!showOperationDialog) return;
+    let cancelled = false;
+    setOperationImpact(null);
+    const request = operationMode.startsWith('day_')
+      ? adminApi(apiClient).getDayOperationImpact(tripId, operationDayIndex)
+      : adminApi(apiClient).getTripOperationImpact(tripId);
+    request
+      .then((impact) => {
+        if (cancelled) return;
+        setOperationImpact(impact);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOperationError(err instanceof ApiError ? err.message : '영향도 조회 실패');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [operationDayIndex, operationMode, showOperationDialog, tripId]);
+
   const onStatusSave = async () => {
     if (!trip || reason.trim().length < 1) return;
     setActing(true);
@@ -503,6 +669,71 @@ export default function AdminTripDetailPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '상태 변경 실패');
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const onOperationSave = async () => {
+    if (!trip || operationReason.trim().length < 1) return;
+    const access_reason = operationReason.trim();
+    setActing(true);
+    setOperationError(null);
+    setOperationResult(null);
+    try {
+      let result: AdminOperationResult;
+      if (operationMode === 'trip_copy') {
+        result = await adminApi(apiClient).copyTrip(trip.trip_id, {
+          title: `${trip.title} copy`,
+          target_trip_id: targetTripId || null,
+          date_shift_days: 0,
+          scope: 'all',
+          access_reason,
+        });
+      } else if (operationMode === 'trip_move') {
+        result = await adminApi(apiClient).moveTrip(trip.trip_id, {
+          owner_user_id: targetOwnerUserId,
+          access_reason,
+        });
+      } else if (operationMode === 'trip_delete') {
+        result = await adminApi(apiClient).deleteTrip(trip.trip_id, {
+          child_policy: tripDeleteChildPolicy,
+          access_reason,
+        });
+      } else if (operationMode === 'day_copy') {
+        result = await adminApi(apiClient).copyTripDay(trip.trip_id, operationDayIndex, {
+          target_trip_id: targetTripId,
+          target_day_index: targetDayIndex,
+          include_pois: includePois,
+          include_attachments: includeAttachments,
+          access_reason,
+        });
+      } else if (operationMode === 'day_move') {
+        result = await adminApi(apiClient).moveTripDay(trip.trip_id, operationDayIndex, {
+          target_trip_id: targetTripId,
+          target_day_index: targetDayIndex,
+          poi_policy: childMovePolicy,
+          attachment_policy: childMovePolicy,
+          comment_policy: childMovePolicy,
+          access_reason,
+        });
+      } else {
+        result = await adminApi(apiClient).deleteTripDay(trip.trip_id, operationDayIndex, {
+          poi_policy: 'delete',
+          attachment_policy: 'delete',
+          comment_policy: 'delete',
+          access_reason,
+        });
+      }
+      setOperationResult(result);
+      if (operationMode === 'trip_delete') {
+        router.replace('/admin/trips');
+        return;
+      }
+      await refreshTrip();
+      setOperationReason('');
+    } catch (err) {
+      setOperationError(err instanceof ApiError ? err.message : '운영 작업 실패');
     } finally {
       setActing(false);
     }
@@ -528,6 +759,15 @@ export default function AdminTripDetailPage() {
     trip.start_date === trip.end_date
       ? formatDate(trip.start_date)
       : `${formatDate(trip.start_date)} ~ ${formatDate(trip.end_date)}`;
+  const operationNeedsTargetTrip = operationMode === 'day_copy' || operationMode === 'day_move';
+  const operationNeedsTargetDay = operationNeedsTargetTrip;
+  const operationNeedsOwner = operationMode === 'trip_move';
+  const operationConfirmDisabled =
+    acting ||
+    operationReason.trim().length < 1 ||
+    (operationNeedsTargetTrip && !targetTripId) ||
+    (operationNeedsTargetDay && targetDayIndex < 1) ||
+    (operationNeedsOwner && !targetOwnerUserId);
 
   return (
     <AdminPage
@@ -604,6 +844,65 @@ export default function AdminTripDetailPage() {
           </div>
         </dl>
         {trip.description && <p className="mt-4 text-sm text-ink">{trip.description}</p>}
+      </Section>
+
+      <Section title="운영 작업">
+        <div className="flex flex-wrap gap-2" data-testid="admin-trip-operations">
+          <button
+            type="button"
+            onClick={() => openOperationDialog('trip_copy')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+            data-testid="admin-trip-copy-open"
+          >
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            여행 복사
+          </button>
+          <button
+            type="button"
+            onClick={() => openOperationDialog('trip_move')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+            data-testid="admin-trip-move-open"
+          >
+            <MoveRight className="h-4 w-4" aria-hidden="true" />
+            소유자 이전
+          </button>
+          <button
+            type="button"
+            onClick={() => openOperationDialog('trip_delete')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
+            data-testid="admin-trip-delete-open"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            여행 삭제
+          </button>
+          <button
+            type="button"
+            onClick={() => openOperationDialog('day_copy')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+            data-testid="admin-day-copy-open"
+          >
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            날짜 복사
+          </button>
+          <button
+            type="button"
+            onClick={() => openOperationDialog('day_move')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+            data-testid="admin-day-move-open"
+          >
+            <MoveRight className="h-4 w-4" aria-hidden="true" />
+            날짜 이동
+          </button>
+          <button
+            type="button"
+            onClick={() => openOperationDialog('day_delete')}
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
+            data-testid="admin-day-delete-open"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            날짜 삭제
+          </button>
+        </div>
       </Section>
 
       <Section title="동반자">
@@ -710,6 +1009,254 @@ export default function AdminTripDetailPage() {
                 data-testid="admin-trip-action-confirm"
               >
                 {acting ? '처리 중...' : '확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showOperationDialog && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-trip-operation-title"
+            className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-sm bg-white p-6 shadow-lg"
+            data-testid="admin-trip-operation-dialog"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="admin-trip-operation-title" className="text-lg font-bold text-ink">
+                  {TRIP_OPERATION_LABELS[operationMode]}
+                </h3>
+                <p className="mt-1 font-mono text-xs text-muted">{trip.trip_id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOperationDialog(false)}
+                aria-label="닫기"
+                className="flex h-10 w-10 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
+                <select
+                  value={operationMode}
+                  onChange={(e) => {
+                    setOperationMode(e.target.value as TripOperationMode);
+                    setOperationResult(null);
+                    setOperationError(null);
+                  }}
+                  className="w-full rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-trip-operation-mode"
+                >
+                  {OPERATION_MODES.map((mode) => (
+                    <option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {operationMode.startsWith('day_') && (
+                <label className="space-y-1 text-sm">
+                  <span className="block text-xs uppercase tracking-wide text-muted">원본 날짜</span>
+                  <select
+                    value={operationDayIndex}
+                    onChange={(e) => {
+                      setOperationDayIndex(Number(e.target.value));
+                      setOperationResult(null);
+                    }}
+                    className="w-full rounded-sm border border-hairline px-3 py-2"
+                    data-testid="admin-trip-operation-source-day"
+                  >
+                    {trip.days.map((day) => (
+                      <option key={day.day_index} value={day.day_index}>
+                        {formatDayLabel(day.day_index, day.date, day.title)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {(operationMode === 'trip_copy' || operationNeedsTargetTrip) && (
+                <div className="space-y-2 md:col-span-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      대상 여행 검색
+                    </span>
+                    <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+                      <Search className="h-4 w-4 text-muted" aria-hidden="true" />
+                      <input
+                        value={targetTripQuery}
+                        onChange={(e) => setTargetTripQuery(e.target.value)}
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                        placeholder="여행 제목 또는 owner 검색"
+                        data-testid="admin-operation-target-search"
+                      />
+                    </span>
+                  </label>
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_8rem]">
+                    <label className="space-y-1 text-sm">
+                      <span className="block text-xs uppercase tracking-wide text-muted">
+                        대상 여행
+                      </span>
+                      <select
+                        value={targetTripId}
+                        onChange={(e) => setTargetTripId(e.target.value)}
+                        className="w-full rounded-sm border border-hairline px-3 py-2"
+                        data-testid="admin-operation-target-trip"
+                      >
+                        {operationMode === 'trip_copy' && <option value="">새 여행 생성</option>}
+                        {targetTrips.map((item) => (
+                          <option key={item.trip_id} value={item.trip_id}>
+                            {item.title} · {item.owner_email_masked}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {operationNeedsTargetDay && (
+                      <label className="space-y-1 text-sm">
+                        <span className="block text-xs uppercase tracking-wide text-muted">
+                          대상 일차
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={targetDayIndex}
+                          onChange={(e) => setTargetDayIndex(Number(e.target.value))}
+                          className="w-full rounded-sm border border-hairline px-3 py-2"
+                          data-testid="admin-operation-target-day"
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {operationMode === 'trip_move' && (
+                <label className="space-y-1 text-sm md:col-span-2">
+                  <span className="block text-xs uppercase tracking-wide text-muted">
+                    새 owner_user_id
+                  </span>
+                  <input
+                    value={targetOwnerUserId}
+                    onChange={(e) => setTargetOwnerUserId(e.target.value)}
+                    className="w-full rounded-sm border border-hairline px-3 py-2 font-mono text-sm"
+                    placeholder="UUID"
+                    data-testid="admin-operation-owner-id"
+                  />
+                </label>
+              )}
+
+              {operationMode === 'trip_delete' && (
+                <label className="space-y-1 text-sm">
+                  <span className="block text-xs uppercase tracking-wide text-muted">하위 항목</span>
+                  <select
+                    value={tripDeleteChildPolicy}
+                    onChange={(e) => setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')}
+                    className="w-full rounded-sm border border-hairline px-3 py-2"
+                    data-testid="admin-operation-child-policy"
+                  >
+                    <option value="keep">유지</option>
+                    <option value="delete">함께 삭제</option>
+                  </select>
+                </label>
+              )}
+
+              {operationMode === 'day_move' && (
+                <label className="space-y-1 text-sm">
+                  <span className="block text-xs uppercase tracking-wide text-muted">
+                    하위 POI/파일/댓글
+                  </span>
+                  <select
+                    value={childMovePolicy}
+                    onChange={(e) => setChildMovePolicy(e.target.value as 'move' | 'delete')}
+                    className="w-full rounded-sm border border-hairline px-3 py-2"
+                    data-testid="admin-operation-move-policy"
+                  >
+                    <option value="move">대상으로 이동</option>
+                    <option value="delete">함께 삭제</option>
+                  </select>
+                </label>
+              )}
+
+              {operationMode === 'day_copy' && (
+                <div className="grid gap-2 text-sm">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={includePois}
+                      onChange={(e) => setIncludePois(e.target.checked)}
+                      data-testid="admin-operation-include-pois"
+                    />
+                    POI 포함
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={includeAttachments}
+                      onChange={(e) => setIncludeAttachments(e.target.checked)}
+                      data-testid="admin-operation-include-attachments"
+                    />
+                    파일 포함
+                  </label>
+                </div>
+              )}
+
+              <div className="md:col-span-2">
+                <FormTextArea
+                  id="admin-trip-operation-reason"
+                  label="사유"
+                  hint="감사 로그에 기록됩니다."
+                  value={operationReason}
+                  onChange={(e) => setOperationReason(e.target.value)}
+                  rows={3}
+                  data-testid="admin-trip-operation-reason"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <OperationImpactPanel impact={operationImpact} />
+            </div>
+
+            {operationError && (
+              <p
+                className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+                data-testid="admin-trip-operation-error"
+              >
+                {operationError}
+              </p>
+            )}
+            {operationResult && (
+              <p
+                className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
+                data-testid="admin-trip-operation-result"
+              >
+                {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
+              </p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowOperationDialog(false)}
+                className="rounded-sm border border-hairline px-3 py-2 text-sm"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={operationConfirmDisabled}
+                onClick={onOperationSave}
+                className="rounded-sm bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"
+                data-testid="admin-trip-operation-confirm"
+              >
+                {acting ? '처리 중...' : '실행'}
               </button>
             </div>
           </div>

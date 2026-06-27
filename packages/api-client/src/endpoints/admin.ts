@@ -25,15 +25,26 @@ import {
   AdminFeatureRequestResultSchema,
   AdminMcpTokenIssueRequestSchema,
   AdminLocationAuditEntrySchema,
+  AdminDayCopyRequestSchema,
+  AdminDayDeleteRequestSchema,
+  AdminDayMoveRequestSchema,
+  AdminOperationImpactSchema,
+  AdminOperationResultSchema,
   AdminPagedResponseSchema,
+  AdminPoiCopyRequestSchema,
   AdminPoiCreateRequestSchema,
+  AdminPoiDeleteRequestSchema,
   AdminPoiDetailSchema,
   AdminPoiLinkStatusRequestSchema,
+  AdminPoiMoveRequestSchema,
   AdminPoiPagedResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
+  AdminTripCopyRequestSchema,
   AdminTripCreateRequestSchema,
+  AdminTripDeleteRequestSchema,
   AdminTripDetailSchema,
+  AdminTripMoveRequestSchema,
   AdminTripPagedResponseSchema,
   AdminTripStatusRequestSchema,
   AdminUserDetailSchema,
@@ -332,6 +343,72 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminTripDetailSchema,
     }),
 
+  getTripOperationImpact: (tripId: string) =>
+    client.request(`/admin/trips/${tripId}/operation-impact`, {
+      method: 'GET',
+      schema: AdminOperationImpactSchema,
+    }),
+
+  copyTrip: (tripId: string, body: z.infer<typeof AdminTripCopyRequestSchema>) =>
+    client.request(`/admin/trips/${tripId}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(AdminTripCopyRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  moveTrip: (tripId: string, body: z.infer<typeof AdminTripMoveRequestSchema>) =>
+    client.request(`/admin/trips/${tripId}/move`, {
+      method: 'POST',
+      body: JSON.stringify(AdminTripMoveRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  deleteTrip: (tripId: string, body: z.infer<typeof AdminTripDeleteRequestSchema>) =>
+    client.request(`/admin/trips/${tripId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminTripDeleteRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  getDayOperationImpact: (tripId: string, dayIndex: number) =>
+    client.request(`/admin/trips/${tripId}/days/${dayIndex}/operation-impact`, {
+      method: 'GET',
+      schema: AdminOperationImpactSchema,
+    }),
+
+  copyTripDay: (
+    tripId: string,
+    dayIndex: number,
+    body: z.infer<typeof AdminDayCopyRequestSchema>,
+  ) =>
+    client.request(`/admin/trips/${tripId}/days/${dayIndex}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDayCopyRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  moveTripDay: (
+    tripId: string,
+    dayIndex: number,
+    body: z.infer<typeof AdminDayMoveRequestSchema>,
+  ) =>
+    client.request(`/admin/trips/${tripId}/days/${dayIndex}/move`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDayMoveRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  deleteTripDay: (
+    tripId: string,
+    dayIndex: number,
+    body: z.infer<typeof AdminDayDeleteRequestSchema>,
+  ) =>
+    client.request(`/admin/trips/${tripId}/days/${dayIndex}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminDayDeleteRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
   listPois: (
     params: {
       page?: number;
@@ -374,6 +451,33 @@ export const adminApi = (client: ApiClient) => ({
       method: 'PATCH',
       body: JSON.stringify(AdminPoiLinkStatusRequestSchema.parse(body)),
       schema: AdminPoiDetailSchema,
+    }),
+
+  getPoiOperationImpact: (poiId: string) =>
+    client.request(`/admin/pois/${poiId}/operation-impact`, {
+      method: 'GET',
+      schema: AdminOperationImpactSchema,
+    }),
+
+  copyPoi: (poiId: string, body: z.infer<typeof AdminPoiCopyRequestSchema>) =>
+    client.request(`/admin/pois/${poiId}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(AdminPoiCopyRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  movePoi: (poiId: string, body: z.infer<typeof AdminPoiMoveRequestSchema>) =>
+    client.request(`/admin/pois/${poiId}/move`, {
+      method: 'POST',
+      body: JSON.stringify(AdminPoiMoveRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
+    }),
+
+  deletePoi: (poiId: string, body: z.infer<typeof AdminPoiDeleteRequestSchema>) =>
+    client.request(`/admin/pois/${poiId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminPoiDeleteRequestSchema.parse(body)),
+      schema: AdminOperationResultSchema,
     }),
 
   listAudit: (limit = 50) =>

@@ -30,9 +30,11 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET/PUT /admin/settings/files`                                     | 전역 파일 용량 정책                                  | 4      |
 | `GET/DELETE /admin/files[/{attachment_id}]`                         | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제        | 4      |
 | `GET /admin/trips` / `{trip_id}`                                    | trip 목록 / 상세                                     | 3      |
+| `GET/POST/DELETE /admin/trips/{trip_id}/operation*`                 | trip/day 복사·이동·삭제와 영향도 조회               | 4      |
 | `GET /admin/features` / `{feature_id}`                              | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
 | `GET /admin/pois` / `{poi_id}`                                      | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
 | `PATCH /admin/pois/{poi_id}/link-status`                            | POI feature 연결 상태 로컬 표시                      | 3      |
+| `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                   | POI 복사·이동·삭제와 영향도 조회                    | 4      |
 | `GET /admin/datasets`                                               | dataset 카탈로그                                     | 3      |
 | `GET /admin/datasets/{table_name}/rows`                             | row 조회 (검색/필터/정렬/page)                       | 3      |
 | `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`        | 통합 엔티티 CRUD                                     | 3      |
@@ -437,6 +439,103 @@ Content-Type: application/json
 - `trips.status`를 변경하고 `version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "trip.update_status"`를 기록한다.
 
+### 7.5 여행계획 / 날짜 운영 작업
+
+운영자가 여행계획과 날짜를 복사·이동·삭제할 때 사용하는 endpoint다. 모든 mutation은
+`admin` 전용이고 `access_reason`을 JSON body로 받는다. 결과는 `AdminOperationResult`
+형태이며 `affected`에 `days`, `pois`, `attachments`, `comments`, `share_links` 등 영향을 받은
+row 수를 담는다.
+
+```http
+GET    /admin/trips/<trip_id>/operation-impact
+POST   /admin/trips/<trip_id>/copy
+POST   /admin/trips/<trip_id>/move
+DELETE /admin/trips/<trip_id>
+
+GET    /admin/trips/<trip_id>/days/<day_index>/operation-impact
+POST   /admin/trips/<trip_id>/days/<day_index>/copy
+POST   /admin/trips/<trip_id>/days/<day_index>/move
+DELETE /admin/trips/<trip_id>/days/<day_index>
+```
+
+`operation-impact`는 `admin` / `operator` read-only이며, 대상 하위 항목 수와 선택 가능한
+정책을 반환한다. 현 DB 제약에서 날짜/POI/첨부 orphan은 허용하지 않는다. `trip_days`와
+`trip_day_pois`, POI 첨부 FK가 필수이므로 API는 `policy_options.*.allowed = false`와 사유를
+반환하고, Web은 해당 선택지를 비활성 설명으로 표시한다.
+
+여행계획 복사:
+
+```jsonc
+{
+  "title": "부산 가족 여행 copy",
+  "owner_user_id": "uuid-or-null",
+  "scope": "all",
+  "day_index": null,
+  "start_day_index": null,
+  "end_day_index": null,
+  "date_shift_days": 0,
+  "target_trip_id": null,
+  "access_reason": "고객 요청 복사"
+}
+```
+
+- `target_trip_id`가 없으면 새 여행계획을 만들고, 있으면 대상 여행계획에 day/POI/첨부를
+  병합한다.
+- `scope`는 `all` / `day` / `range`이며 사용자 복사 흐름과 같은 day 선택 규칙을 쓴다.
+- 생성/병합 결과와 `trip.copy` audit은 같은 transaction으로 commit한다.
+
+여행계획 이동은 현재 소유자 이전이다.
+
+```jsonc
+{ "owner_user_id": "new-owner-uuid", "access_reason": "고객 요청 소유자 이전" }
+```
+
+- `trips.owner_user_id`를 변경하고 `version`을 증가시킨다.
+- `admin_audit_log.action = "trip.move_owner"`.
+
+여행계획 삭제:
+
+```jsonc
+{ "child_policy": "delete", "access_reason": "운영 정책 삭제" }
+```
+
+- `child_policy = keep`이면 여행계획만 `archived` + `deleted_at` 처리한다.
+- `child_policy = delete`이면 POI, 첨부, 댓글을 soft delete하고 공유 링크를 revoke한 뒤
+  여행계획을 soft delete한다. RustFS object는 즉시 삭제하지 않는다.
+- `admin_audit_log.action = "trip.delete"`.
+
+날짜 복사:
+
+```jsonc
+{
+  "target_trip_id": "uuid",
+  "target_day_index": 3,
+  "include_pois": true,
+  "include_attachments": true,
+  "access_reason": "일정 복사"
+}
+```
+
+날짜 이동:
+
+```jsonc
+{
+  "target_trip_id": "uuid",
+  "target_day_index": 3,
+  "poi_policy": "move",
+  "attachment_policy": "move",
+  "comment_policy": "move",
+  "access_reason": "일정 통합"
+}
+```
+
+- 대상 day가 없으면 원본 day의 date/title/note를 복제해 생성한다.
+- `poi_policy`, `attachment_policy`, `comment_policy`는 `move` 또는 `delete`만 허용한다.
+  orphan은 FK와 조회 정합성 때문에 허용하지 않는다.
+- 이동 후 원본 `trip_days` row는 삭제된다. `move` 정책의 POI/첨부/댓글은 대상 여행/날짜로
+  retarget되고, `delete` 정책 항목은 삭제 처리된다.
+- audit action은 `trip_day.copy`, `trip_day.move`, `trip_day.delete`.
+
 ## 8. Feature 조회 (kor-travel-map Admin proxy)
 
 Pinvi는 `feature` / `provider_sync` schema를 소유하지 않는다. Admin feature 조회는
@@ -639,7 +738,67 @@ Content-Type: application/json
 - 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
 
-### 9.5 사용자 feature 제안 검토 큐 (T-179)
+### 9.5 POI 운영 작업
+
+```http
+GET    /admin/pois/<poi_id>/operation-impact
+POST   /admin/pois/<poi_id>/copy
+POST   /admin/pois/<poi_id>/move
+DELETE /admin/pois/<poi_id>
+```
+
+- `operation-impact`는 `admin` / `operator`, mutation은 `admin` 전용이다.
+- 모든 mutation body는 `access_reason` 필수이며 `admin_audit_log`에 `poi.copy`,
+  `poi.move`, `poi.delete`로 기록한다.
+- POI orphan은 허용하지 않는다. POI 첨부와 댓글은 POI 문맥이 필요하므로 impact 응답에서
+  `orphan` 정책을 `allowed = false`로 반환한다.
+
+POI 복사:
+
+```jsonc
+{
+  "target_trip_id": "uuid",
+  "target_day_index": 2,
+  "include_attachments": true,
+  "access_reason": "POI 복제"
+}
+```
+
+- 대상 day가 없으면 생성한다.
+- POI row를 새 `attachment_id`로 복제하고, `include_attachments = true`이면 POI 첨부 metadata를
+  `source_attachment_id`로 연결해 복제한다. RustFS object는 복제하지 않고 같은 object reference를
+  공유한다.
+
+POI 이동:
+
+```jsonc
+{
+  "target_trip_id": "uuid",
+  "target_day_index": 3,
+  "attachment_policy": "move",
+  "comment_policy": "move",
+  "access_reason": "POI 일정 조정"
+}
+```
+
+- 대상 day가 없으면 생성한다.
+- POI의 `trip_id`, `day_index`, `sort_order`, `version`을 갱신한다.
+- `attachment_policy` / `comment_policy`는 `move` 또는 `delete`만 허용한다.
+
+POI 삭제:
+
+```jsonc
+{
+  "attachment_policy": "delete",
+  "comment_policy": "delete",
+  "access_reason": "복사본 정리"
+}
+```
+
+- POI는 `deleted_at` soft delete이며, POI 첨부/댓글도 soft delete한다.
+- RustFS object는 즉시 삭제하지 않는다.
+
+### 9.6 사용자 feature 제안 검토 큐 (T-179)
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
 kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12701 /v1/admin/*`)로 전달한다.

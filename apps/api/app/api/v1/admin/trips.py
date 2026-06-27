@@ -19,10 +19,18 @@ from app.models.trip_day import TripDay
 from app.models.user import User
 from app.schemas.admin import (
     AdminAuditEntry,
+    AdminDayCopyRequest,
+    AdminDayDeleteRequest,
+    AdminDayMoveRequest,
+    AdminOperationImpact,
+    AdminOperationResult,
     AdminTripCompanionSummary,
+    AdminTripCopyRequest,
     AdminTripCreateRequest,
     AdminTripDaySummary,
+    AdminTripDeleteRequest,
     AdminTripDetail,
+    AdminTripMoveRequest,
     AdminTripPagedResponse,
     AdminTripPoiSummary,
     AdminTripShareLinkSummary,
@@ -40,6 +48,18 @@ from app.services.admin_pois import (
     extract_feature_address_label,
     extract_feature_coord,
     extract_feature_label,
+)
+from app.services.admin_trip_operations import (
+    AdminTripOperationConflictError,
+    AdminTripOperationNotFoundError,
+    copy_admin_day,
+    copy_admin_trip,
+    day_impact,
+    delete_admin_day,
+    delete_admin_trip,
+    move_admin_day,
+    move_admin_trip_owner,
+    trip_impact,
 )
 from app.services.admin_trips import (
     AdminTripNotFoundError,
@@ -271,6 +291,52 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
         ) from exc
 
 
+def _operation_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, AdminTripOperationNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    if isinstance(exc, AdminTripOperationConflictError):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={"code": "INTERNAL_ERROR", "message": "처리 중 오류가 발생했습니다."},
+    )
+
+
+async def _append_operation_audit(
+    db: AsyncSession,
+    *,
+    request: Request,
+    admin: User,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+    before_state: dict[str, object],
+    after_state: dict[str, object],
+    access_reason: str,
+    request_id: uuid.UUID,
+) -> None:
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        before_state=before_state,
+        after_state=after_state,
+        access_reason=access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=request_id,
+    )
+
+
 @router.get("", response_model=Envelope[AdminTripPagedResponse])
 async def list_trips_endpoint(
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
@@ -425,3 +491,249 @@ async def update_trip_status_endpoint(
     await db.commit()
     await db.refresh(trip)
     return Envelope.of(await _to_detail(db, trip))
+
+
+@router.get("/{trip_id}/operation-impact", response_model=Envelope[AdminOperationImpact])
+async def get_trip_operation_impact_endpoint(
+    trip_id: uuid.UUID,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[AdminOperationImpact]:
+    try:
+        impact = await trip_impact(db, trip_id=trip_id)
+    except AdminTripOperationNotFoundError as exc:
+        raise _operation_error(exc) from exc
+    return Envelope.of(impact)
+
+
+@router.post("/{trip_id}/copy", response_model=Envelope[AdminOperationResult])
+async def copy_trip_admin_endpoint(
+    trip_id: uuid.UUID,
+    body: AdminTripCopyRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await copy_admin_trip(
+            db,
+            source_trip_id=trip_id,
+            admin_user_id=admin.user_id,
+            owner_user_id=body.owner_user_id,
+            title=body.title,
+            scope=body.scope,
+            day_index=body.day_index,
+            start_day_index=body.start_day_index,
+            end_day_index=body.end_day_index,
+            date_shift_days=body.date_shift_days,
+            target_trip_id=body.target_trip_id,
+        )
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip.copy",
+        resource_type="trip",
+        resource_id=str(trip_id),
+        before_state=state.before,
+        after_state=state.after | {"result": state.result.model_dump(mode="json")},
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)
+
+
+@router.post("/{trip_id}/move", response_model=Envelope[AdminOperationResult])
+async def move_trip_admin_endpoint(
+    trip_id: uuid.UUID,
+    body: AdminTripMoveRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await move_admin_trip_owner(db, trip_id=trip_id, owner_user_id=body.owner_user_id)
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip.move_owner",
+        resource_type="trip",
+        resource_id=str(trip_id),
+        before_state=state.before,
+        after_state=state.after,
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)
+
+
+@router.delete("/{trip_id}", response_model=Envelope[AdminOperationResult])
+async def delete_trip_admin_endpoint(
+    trip_id: uuid.UUID,
+    body: AdminTripDeleteRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await delete_admin_trip(db, trip_id=trip_id, child_policy=body.child_policy)
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip.delete",
+        resource_type="trip",
+        resource_id=str(trip_id),
+        before_state=state.before,
+        after_state=state.after | {"result": state.result.model_dump(mode="json")},
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)
+
+
+@router.get(
+    "/{trip_id}/days/{day_index}/operation-impact",
+    response_model=Envelope[AdminOperationImpact],
+)
+async def get_day_operation_impact_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[AdminOperationImpact]:
+    try:
+        impact = await day_impact(db, trip_id=trip_id, day_index=day_index)
+    except AdminTripOperationNotFoundError as exc:
+        raise _operation_error(exc) from exc
+    return Envelope.of(impact)
+
+
+@router.post(
+    "/{trip_id}/days/{day_index}/copy",
+    response_model=Envelope[AdminOperationResult],
+)
+async def copy_day_admin_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: AdminDayCopyRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await copy_admin_day(
+            db,
+            source_trip_id=trip_id,
+            day_index=day_index,
+            target_trip_id=body.target_trip_id,
+            target_day_index=body.target_day_index,
+            admin_user_id=admin.user_id,
+            include_pois=body.include_pois,
+            include_attachments=body.include_attachments,
+        )
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip_day.copy",
+        resource_type="trip_day",
+        resource_id=f"{trip_id}:{day_index}",
+        before_state=state.before,
+        after_state=state.after | {"result": state.result.model_dump(mode="json")},
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)
+
+
+@router.post(
+    "/{trip_id}/days/{day_index}/move",
+    response_model=Envelope[AdminOperationResult],
+)
+async def move_day_admin_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: AdminDayMoveRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await move_admin_day(
+            db,
+            source_trip_id=trip_id,
+            day_index=day_index,
+            target_trip_id=body.target_trip_id,
+            target_day_index=body.target_day_index,
+            poi_policy=body.poi_policy,
+            attachment_policy=body.attachment_policy,
+            comment_policy=body.comment_policy,
+        )
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip_day.move",
+        resource_type="trip_day",
+        resource_id=f"{trip_id}:{day_index}",
+        before_state=state.before,
+        after_state=state.after | {"result": state.result.model_dump(mode="json")},
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)
+
+
+@router.delete(
+    "/{trip_id}/days/{day_index}",
+    response_model=Envelope[AdminOperationResult],
+)
+async def delete_day_admin_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: AdminDayDeleteRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminOperationResult]:
+    try:
+        state = await delete_admin_day(db, trip_id=trip_id, day_index=day_index)
+    except (AdminTripOperationNotFoundError, AdminTripOperationConflictError) as exc:
+        raise _operation_error(exc) from exc
+    await _append_operation_audit(
+        db,
+        request=request,
+        admin=admin,
+        action="trip_day.delete",
+        resource_type="trip_day",
+        resource_id=f"{trip_id}:{day_index}",
+        before_state=state.before,
+        after_state=state.after | {"result": state.result.model_dump(mode="json")},
+        access_reason=body.access_reason,
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    return Envelope.of(state.result)

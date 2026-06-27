@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { AdminTripDetail, AdminTripSummary, AdminUserSummary } from '@pinvi/schemas';
+import type {
+  AdminOperationImpact,
+  AdminOperationResult,
+  AdminTripDetail,
+  AdminTripSummary,
+  AdminUserSummary,
+} from '@pinvi/schemas';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -412,4 +418,153 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   expect(patchReason).toBe('운영 정책 위반 처리');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
+});
+
+test('Admin 여행 상세에서 날짜 이동 운영 작업을 실행한다', async ({ page }) => {
+  let moveBody: Record<string, unknown> | null = null;
+  let currentTrip: AdminTripDetail = {
+    ...tripSummary,
+    description: '운영자가 확인할 여행 상세',
+    companions: [],
+    days: [
+      {
+        day_index: 1,
+        date: '2026-07-01',
+        title: '1일차',
+        note: null,
+        poi_count: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+      {
+        day_index: 2,
+        date: '2026-07-02',
+        title: '2일차',
+        note: null,
+        poi_count: 0,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+    ],
+    pois: [],
+    attachments: [],
+    share_links: [],
+    recent_audit: [],
+  };
+  const dayImpact: AdminOperationImpact = {
+    target_type: 'day',
+    target_id: null,
+    trip_id: tripId,
+    day_index: 1,
+    counts: { pois: 1, attachments: 2, comments: 1 },
+    policy_options: {
+      poi_policy: [
+        { value: 'move', label: '대상 여행/날짜로 이동', allowed: true, reason: null },
+        { value: 'delete', label: '함께 삭제', allowed: true, reason: null },
+        {
+          value: 'orphan',
+          label: 'orphan으로 유지',
+          allowed: false,
+          reason: 'POI와 날짜 첨부는 day FK가 필수입니다.',
+        },
+      ],
+    },
+    warnings: [],
+  };
+  const moveResult: AdminOperationResult = {
+    target_type: 'day',
+    action: 'move',
+    source_trip_id: tripId,
+    target_trip_id: tripId,
+    target_id: null,
+    day_index: 3,
+    affected: { days: 1, pois: 1, attachments: 2, comments: 1 },
+  };
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/trips/${tripId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentTrip }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/trips',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { items: [tripSummary], total: 1, page: 1, limit: 8 },
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/trips/${tripId}/days/1/operation-impact`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: dayImpact }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/move`,
+    async (route) => {
+      moveBody = route.request().postDataJSON() as Record<string, unknown>;
+      currentTrip = {
+        ...currentTrip,
+        days: currentTrip.days.filter((day) => day.day_index !== 1),
+        recent_audit: [
+          {
+            log_id: 50,
+            actor_user_id: adminUser.user_id,
+            action: 'trip_day.move',
+            resource_type: 'trip_day',
+            resource_id: `${tripId}:1`,
+            access_reason: '일정 통합',
+            target_pii_fields: null,
+            prev_hash: '0'.repeat(64),
+            content_hash: '3'.repeat(64),
+            occurred_at: '2026-06-06T13:00:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: moveResult }),
+      });
+    },
+  );
+
+  await page.goto(`/admin/trips/${tripId}`);
+  await page.getByTestId('admin-day-move-open').click();
+  await expect(page.getByTestId('admin-trip-operation-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-operation-dialog')).toContainText('orphan');
+
+  await page.getByTestId('admin-operation-target-search').fill('부산');
+  await page.getByTestId('admin-operation-target-trip').selectOption(tripId);
+  await page.getByTestId('admin-operation-target-day').fill('3');
+  await page.getByTestId('admin-operation-move-policy').selectOption('move');
+  await page.getByTestId('admin-trip-operation-reason').fill('일정 통합');
+  await page.getByTestId('admin-trip-operation-confirm').click();
+
+  await expect(page.getByTestId('admin-trip-operation-result')).toContainText('move 완료');
+  await expect(page.getByTestId('admin-trip-audit-list')).toContainText('trip_day.move');
+  expect(moveBody).toMatchObject({
+    target_trip_id: tripId,
+    target_day_index: 3,
+    poi_policy: 'move',
+    attachment_policy: 'move',
+    comment_policy: 'move',
+    access_reason: '일정 통합',
+  });
 });

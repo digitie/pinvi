@@ -410,6 +410,7 @@ async def copy_trip(
     end_day_index: int | None,
     date_shift_days: int,
     target_trip_id: uuid.UUID | None,
+    commit: bool = True,
 ) -> tuple[Trip, bool, int, int, int]:
     days = await _select_copy_days(
         db,
@@ -514,13 +515,17 @@ async def copy_trip(
         db,
         source_trip_id=source_trip.trip_id,
         target_trip_id=target_trip.trip_id,
+        source_day_indexes=source_day_indexes,
         poi_id_map=poi_id_map,
         actor_user_id=actor_user_id,
         include_trip_level=scope == "all",
     )
     target_trip.version += 1
-    await db.commit()
-    await db.refresh(target_trip)
+    if commit:
+        await db.commit()
+        await db.refresh(target_trip)
+    else:
+        await db.flush()
     return target_trip, created_trip, copied_day_count, copied_poi_count, copied_attachment_count
 
 
@@ -1053,37 +1058,46 @@ async def _copy_trip_attachments(
     *,
     source_trip_id: uuid.UUID,
     target_trip_id: uuid.UUID,
+    source_day_indexes: list[int] | None,
     poi_id_map: dict[uuid.UUID, uuid.UUID],
     actor_user_id: uuid.UUID,
     include_trip_level: bool,
 ) -> int:
     copied = 0
-    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    target_filters: list[Any] = []
     if include_trip_level:
-        filters.append(
-            or_(
-                CuratedPlanAttachment.trip_id == source_trip_id,
-                CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())),
-            )
+        target_filters.append(
+            CuratedPlanAttachment.trip_id == source_trip_id,
         )
-    elif poi_id_map:
-        filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
-    else:
+    elif source_day_indexes:
+        target_filters.append(
+            (CuratedPlanAttachment.trip_id == source_trip_id)
+            & (CuratedPlanAttachment.trip_day_index.in_(source_day_indexes))
+        )
+    if poi_id_map:
+        target_filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
+    if not target_filters:
         return 0
+    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None), or_(*target_filters)]
     result = await db.execute(select(CuratedPlanAttachment).where(*filters))
     for attachment in result.scalars():
-        trip_id = target_trip_id if attachment.trip_id == source_trip_id else None
         source_poi_id = attachment.trip_poi_id
         trip_poi_id = (
             poi_id_map[source_poi_id]
             if source_poi_id is not None and source_poi_id in poi_id_map
             else None
         )
+        trip_id = None
+        trip_day_index = None
+        if trip_poi_id is None and attachment.trip_id == source_trip_id:
+            trip_id = target_trip_id
+            trip_day_index = attachment.trip_day_index
         if trip_id is None and trip_poi_id is None:
             continue
         db.add(
             CuratedPlanAttachment(
                 trip_id=trip_id,
+                trip_day_index=trip_day_index,
                 trip_poi_id=trip_poi_id,
                 source_attachment_id=attachment.attachment_id,
                 bucket=attachment.bucket,

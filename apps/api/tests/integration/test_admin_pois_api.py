@@ -9,7 +9,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
+from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog
+from app.models.comment import TripComment
 from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
@@ -459,3 +461,159 @@ async def test_admin_poi_link_status_rolls_back_when_audit_fails(
     assert poi.feature_link_broken_at is None
     assert poi.version == 1
     assert audit is None
+
+
+async def test_admin_poi_copy_move_delete_operations_manage_children_and_audit(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    added_by_id = await _create_user(session_factory, email="planner@example.com")
+    trip_id, active_poi_id, _broken_poi_id = await _create_poi_fixture(
+        session_factory,
+        owner_id=owner_id,
+        added_by_id=added_by_id,
+    )
+    copy_request_id = uuid.uuid4()
+    move_request_id = uuid.uuid4()
+    delete_request_id = uuid.uuid4()
+
+    async with session_factory() as db:
+        db.add_all(
+            [
+                CuratedPlanAttachment(
+                    trip_poi_id=active_poi_id,
+                    bucket="pinvi-test",
+                    storage_key=f"pois/{active_poi_id}/photo.jpg",
+                    original_filename="photo.jpg",
+                    content_type="image/jpeg",
+                    byte_size=100,
+                    uploaded_by_user_id=owner_id,
+                ),
+                TripComment(
+                    trip_id=trip_id,
+                    author_user_id=owner_id,
+                    target_type="poi",
+                    target_id=active_poi_id,
+                    day_index=1,
+                    body="POI 댓글",
+                ),
+            ]
+        )
+        await db.commit()
+
+    impact_resp = await client.get(
+        f"/admin/pois/{active_poi_id}/operation-impact",
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert impact_resp.status_code == 200, impact_resp.text
+    impact = impact_resp.json()["data"]
+    assert impact["counts"]["attachments"] == 1
+    orphan = next(
+        option
+        for option in impact["policy_options"]["attachment_policy"]
+        if option["value"] == "orphan"
+    )
+    assert orphan["allowed"] is False
+
+    copy_resp = await client.post(
+        f"/admin/pois/{active_poi_id}/copy",
+        json={
+            "target_trip_id": str(trip_id),
+            "target_day_index": 2,
+            "include_attachments": True,
+            "access_reason": "POI 복제 테스트",
+        },
+        headers={"X-Request-Id": str(copy_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert copy_resp.status_code == 200, copy_resp.text
+    copy_result = copy_resp.json()["data"]
+    copied_poi_id = uuid.UUID(copy_result["target_id"])
+    assert copy_result["action"] == "copy"
+    assert copy_result["affected"]["pois"] == 1
+    assert copy_result["affected"]["attachments"] == 1
+
+    move_resp = await client.post(
+        f"/admin/pois/{active_poi_id}/move",
+        json={
+            "target_trip_id": str(trip_id),
+            "target_day_index": 3,
+            "attachment_policy": "move",
+            "comment_policy": "move",
+            "access_reason": "POI 날짜 이동",
+        },
+        headers={"X-Request-Id": str(move_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert move_resp.status_code == 200, move_resp.text
+    move_result = move_resp.json()["data"]
+    assert move_result["action"] == "move"
+    assert move_result["day_index"] == 3
+    assert move_result["affected"]["attachments"] == 1
+    assert move_result["affected"]["comments"] == 1
+
+    delete_resp = await client.request(
+        "DELETE",
+        f"/admin/pois/{copied_poi_id}",
+        json={
+            "attachment_policy": "delete",
+            "comment_policy": "delete",
+            "access_reason": "복사본 정리",
+        },
+        headers={"X-Request-Id": str(delete_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert delete_resp.status_code == 200, delete_resp.text
+    delete_result = delete_resp.json()["data"]
+    assert delete_result["action"] == "delete"
+    assert delete_result["affected"]["pois"] == 1
+    assert delete_result["affected"]["attachments"] == 1
+
+    async with session_factory() as db:
+        moved_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.attachment_id == active_poi_id)
+        )
+        copied_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.attachment_id == copied_poi_id)
+        )
+        moved_comment = await db.scalar(
+            select(TripComment).where(TripComment.target_id == active_poi_id)
+        )
+        copied_attachment = await db.scalar(
+            select(CuratedPlanAttachment).where(CuratedPlanAttachment.trip_poi_id == copied_poi_id)
+        )
+        copy_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == copy_request_id)
+        )
+        move_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == move_request_id)
+        )
+        delete_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == delete_request_id)
+        )
+
+    assert moved_poi is not None
+    assert moved_poi.day_index == 3
+    assert moved_comment is not None
+    assert moved_comment.day_index == 3
+    assert copied_poi is not None
+    assert copied_poi.deleted_at is not None
+    assert copied_attachment is not None
+    assert copied_attachment.deleted_at is not None
+    assert copy_audit is not None
+    assert copy_audit.action == "poi.copy"
+    assert move_audit is not None
+    assert move_audit.action == "poi.move"
+    assert delete_audit is not None
+    assert delete_audit.action == "poi.delete"

@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
+
+Admin이 여행계획, 날짜, POI를 복사·이동·삭제할 수 있는 운영 작업을 추가했다.
+`/admin/trips/{trip_id}/operation-impact`, `/copy`, `/move`, `DELETE /admin/trips/{trip_id}`,
+날짜 단위 `/admin/trips/{trip_id}/days/{day_index}/*`, POI 단위 `/admin/pois/{poi_id}/*`
+operation endpoint가 추가됐고, 모든 mutation은 `access_reason`을 감사 로그에 남긴다.
+
+여행계획 copy는 기존 사용자 복사 흐름을 commit 옵션으로 재사용하되 admin audit과 같은
+transaction에 묶었다. 날짜/POI 이동은 대상 여행/day를 선택해 하위 POI, 첨부, 댓글을 move 또는
+delete 정책으로 처리한다. 현 FK 구조상 day/POI/첨부 orphan은 허용하지 않고, impact API와 Web
+dialog가 `allowed=false`와 사유를 표시한다.
+
+Web `/admin/trips/{trip_id}`와 `/admin/pois/{poi_id}` 상세에 운영 작업 dialog를 추가했다. dialog는
+대상 여행 검색, 대상 day 입력, 하위 항목 정책, 영향도 요약, reason 입력, 실행 결과, audit refresh를
+포함한다. 공유 Zod schema와 `@pinvi/api-client` operation 함수도 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff, mypy,
+`test_admin_trips_api.py` + `test_admin_pois_api.py` 18건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버
+(12805)를 재사용해 `admin-trips.e2e.ts` + `admin-pois.e2e.ts` 8건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-210(Pinvi feature request와 upstream change request 운영 통합)에
+복귀한다. T-210 WIP stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어
+있다.
+
 ## 2026-06-27 (codex) — T-224 여행/날짜/POI 파일 업로드와 용량 정책
 
 여행계획, 날짜, POI에 파일 첨부 metadata를 등록/조회/삭제할 수 있게 했다. 파일 본문은 기존
