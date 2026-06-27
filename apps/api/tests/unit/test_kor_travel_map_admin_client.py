@@ -565,6 +565,50 @@ async def test_list_dedup_reviews_forwards_filters() -> None:
     await client.aclose()
 
 
+async def test_decide_dedup_review_patches_decision_body() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "review_id": "dedup-1",
+                    "decision": "merged",
+                    "changed": True,
+                    "master_feature_id": "f_a",
+                    "loser_feature_id": "f_b",
+                    "merge_id": "merge-1",
+                    "source_links_moved": 2,
+                    "source_links_dropped": 0,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.decide_dedup_review(
+        "dedup-1",
+        decision="merged",
+        decision_reason="동일 장소",
+        master_feature_id="f_a",
+        reviewed_by="pinvi-admin",
+    )
+    assert seen["method"] == "PATCH"
+    assert seen["path"] == "/v1/admin/dedup-reviews/dedup-1"
+    assert seen["body"] == {
+        "decision": "merged",
+        "decision_reason": "동일 장소",
+        "master_feature_id": "f_a",
+        "reviewed_by": "pinvi-admin",
+    }
+    assert data["merge_id"] == "merge-1"
+    await client.aclose()
+
+
 async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
     seen_paths: list[str] = []
 

@@ -389,6 +389,27 @@ class KorTravelMapAdminClient:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/admin/dedup-reviews", params=params))
 
+    async def decide_dedup_review(
+        self,
+        review_id: str,
+        *,
+        decision: str,
+        decision_reason: str | None = None,
+        master_feature_id: str | None = None,
+        reviewed_by: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /v1/admin/dedup-reviews/{review_id} — dedup verdict data 반환."""
+        body: dict[str, Any] = {"decision": decision}
+        if decision_reason is not None:
+            body["decision_reason"] = decision_reason
+        if master_feature_id is not None:
+            body["master_feature_id"] = master_feature_id
+        if reviewed_by is not None:
+            body["reviewed_by"] = reviewed_by
+        return self._data(
+            await self._send("PATCH", f"/v1/admin/dedup-reviews/{review_id}", json=body)
+        )
+
     async def list_integrity_issues(
         self,
         *,

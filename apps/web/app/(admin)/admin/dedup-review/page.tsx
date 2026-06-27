@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
   ApiError,
@@ -9,8 +9,8 @@ import {
   queryKeys,
   type AdminDedupReviewListParams,
 } from '@pinvi/api-client';
-import type { AdminDedupReviewRecord } from '@pinvi/schemas';
-import { RefreshCw, Search } from 'lucide-react';
+import type { AdminDedupDecision, AdminDedupReviewRecord } from '@pinvi/schemas';
+import { Check, GitMerge, RefreshCw, Search, X } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -35,6 +35,13 @@ const STATUS_LABEL: Record<string, string> = {
   ignored: '무시',
 };
 
+const DECISION_OPTIONS = [
+  { value: 'merged', label: '병합' },
+  { value: 'accepted', label: '수락' },
+  { value: 'rejected', label: '거절' },
+  { value: 'ignored', label: '무시' },
+] as const;
+
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
@@ -50,6 +57,7 @@ function featureLabel(item: AdminDedupReviewRecord['feature_a']) {
 }
 
 export default function AdminDedupReviewPage() {
+  const queryClient = useQueryClient();
   const [queryInput, setQueryInput] = useState('');
   const [submittedQ, setSubmittedQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>(
@@ -57,6 +65,12 @@ export default function AdminDedupReviewPage() {
   );
   const [minScore, setMinScore] = useState('70');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [decision, setDecision] = useState<AdminDedupDecision>('merged');
+  const [masterFeatureId, setMasterFeatureId] = useState('');
+  const [accessReason, setAccessReason] = useState('');
+  const [mapReason, setMapReason] = useState('');
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [mutationNotice, setMutationNotice] = useState<string | null>(null);
 
   const params = useMemo<AdminDedupReviewListParams>(
     () => ({
@@ -76,11 +90,47 @@ export default function AdminDedupReviewPage() {
 
   const data = reviewsQuery.data ?? null;
   const selected = data?.items.find((item) => item.review_id === selectedId) ?? null;
+  const selectedReviewId = selected?.review_id ?? null;
+  const selectedDefaultMasterFeatureId = selected?.feature_a.feature_id ?? '';
   const error = reviewsQuery.isError
     ? reviewsQuery.error instanceof ApiError
       ? reviewsQuery.error.message
       : 'dedup review 조회에 실패했습니다.'
     : null;
+
+  useEffect(() => {
+    if (!selectedReviewId) return;
+    setDecision('merged');
+    setMasterFeatureId(selectedDefaultMasterFeatureId);
+    setAccessReason('');
+    setMapReason('');
+    setMutationError(null);
+    setMutationNotice(null);
+  }, [selectedDefaultMasterFeatureId, selectedReviewId]);
+
+  const decisionMutation = useMutation({
+    mutationFn: ({ item }: { item: AdminDedupReviewRecord }) =>
+      adminApi(apiClient).decideDedupReview(item.review_id, {
+        decision,
+        access_reason: accessReason.trim(),
+        kor_travel_map_reason: mapReason.trim() || undefined,
+        master_feature_id: decision === 'merged' ? masterFeatureId : null,
+      }),
+    onMutate: () => {
+      setMutationError(null);
+      setMutationNotice(null);
+    },
+    onError: (error) => {
+      setMutationError(error instanceof ApiError ? error.message : 'dedup verdict 처리에 실패했습니다.');
+    },
+    onSuccess: (result) => {
+      setMutationNotice(
+        `${STATUS_LABEL[result.decision] ?? result.decision} verdict를 반영했습니다.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.dedupReviewsAll() });
+      void reviewsQuery.refetch();
+    },
+  });
 
   const columns: AdminTableColumn<AdminDedupReviewRecord>[] = [
     {
@@ -148,6 +198,19 @@ export default function AdminDedupReviewPage() {
     event.preventDefault();
     setSubmittedQ(queryInput.trim());
     setSelectedId(null);
+  };
+
+  const submitDecision = () => {
+    if (!selected) return;
+    if (!accessReason.trim()) {
+      setMutationError('운영 사유를 입력하세요.');
+      return;
+    }
+    if (decision === 'merged' && !masterFeatureId) {
+      setMutationError('병합 master feature를 선택하세요.');
+      return;
+    }
+    decisionMutation.mutate({ item: selected });
   };
 
   return (
@@ -260,6 +323,110 @@ export default function AdminDedupReviewPage() {
                 <dt className="text-muted">reason</dt>
                 <dd>{selected.decision_reason ?? '—'}</dd>
               </dl>
+              {selected.status === 'pending' ? (
+                <form
+                  className="space-y-3 border-t border-hairline pt-3"
+                  onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                    event.preventDefault();
+                    submitDecision();
+                  }}
+                >
+                  <label className="block text-xs text-muted">
+                    verdict
+                    <select
+                      value={decision}
+                      onChange={(event) => {
+                        setDecision(event.target.value as AdminDedupDecision);
+                        setMutationError(null);
+                      }}
+                      className={`${inputClass} mt-1 w-full`}
+                      data-testid="admin-dedup-decision"
+                    >
+                      {DECISION_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {decision === 'merged' && (
+                    <fieldset className="space-y-2 text-xs text-muted">
+                      <legend>master feature</legend>
+                      {[selected.feature_a, selected.feature_b].map((feature) => (
+                        <label key={feature.feature_id} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="admin-dedup-master"
+                            value={feature.feature_id}
+                            checked={masterFeatureId === feature.feature_id}
+                            onChange={(event) => setMasterFeatureId(event.target.value)}
+                            data-testid={`admin-dedup-master-${feature.feature_id}`}
+                          />
+                          <span className="break-all">
+                            {feature.name} / {feature.feature_id}
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
+                  <label className="block text-xs text-muted">
+                    운영 사유 (Pinvi audit)
+                    <textarea
+                      value={accessReason}
+                      onChange={(event) => setAccessReason(event.target.value)}
+                      className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                      rows={2}
+                      data-testid="admin-dedup-access-reason"
+                    />
+                  </label>
+                  <label className="block text-xs text-muted">
+                    kor_travel_map 전달 사유
+                    <textarea
+                      value={mapReason}
+                      onChange={(event) => setMapReason(event.target.value)}
+                      className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                      rows={2}
+                      data-testid="admin-dedup-map-reason"
+                    />
+                  </label>
+                  {mutationError && (
+                    <p
+                      role="alert"
+                      className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+                      data-testid="admin-dedup-mutation-error"
+                    >
+                      {mutationError}
+                    </p>
+                  )}
+                  {mutationNotice && (
+                    <p
+                      className="rounded-sm bg-surface-soft p-3 text-sm text-body"
+                      data-testid="admin-dedup-mutation-notice"
+                    >
+                      {mutationNotice}
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={decisionMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                    data-testid="admin-dedup-submit-verdict"
+                  >
+                    {decision === 'merged' ? (
+                      <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : decision === 'rejected' || decision === 'ignored' ? (
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    반영
+                  </button>
+                </form>
+              ) : (
+                <p className="border-t border-hairline pt-3 text-muted">
+                  이 후보는 이미 처리되었습니다.
+                </p>
+              )}
             </>
           ) : (
             <p className="text-muted">후보를 선택하면 양쪽 feature 요약이 표시됩니다.</p>

@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-226 Dedup verdict mutation
+
+Admin `/admin/dedup-review` detail panel에서 pending dedup 후보를 직접 판정할 수 있게 했다.
+Pinvi API는 `POST /admin/dedup-review/{review_id}/verdict`를 제공하고, `kor-travel-map`
+`PATCH /v1/admin/dedup-reviews/{review_id}`로 relay한다. 요청은 `decision`, `access_reason`,
+선택 `kor_travel_map_reason`, `decision=merged`일 때 필수 `master_feature_id`를 검증한다.
+성공 시 `dedup_review.decide` audit을 같은 transaction에서 남기고, `X-Request-Id` UUID를 보존한다.
+
+`kor-travel-map` 최신 OpenAPI를 확인했을 때 consistency issue/report 경로는 GET-only라,
+integrity status/fix mutation은 Pinvi 단독 상태로 만들지 않고 T-227로 분리했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+mypy, focused pytest 26건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+다음: T-226 PR을 만들고 merge한 뒤 T-213 Category mapping 실제 기능 및 source of truth 결정으로
+진행한다. T-227은 upstream integrity mutation 계약이 추가되면 착수한다.
+
 ## 2026-06-27 (codex) — T-212 Dedup review / integrity / debug logs 운영 화면
 
 Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 placeholder에서 실제
@@ -20,7 +40,7 @@ Web production build가 통과했다. Playwright는 Windows에서 실행했고, 
 `admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
 N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
 
-다음: T-212 PR을 만들고 merge한 뒤 T-226 Dedup verdict / integrity status mutation으로 진행한다.
+후속: T-212 PR은 merge됐고, T-226에서 dedup verdict mutation을 완료했다.
 
 ## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
 
@@ -1182,8 +1202,9 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-212 완료. 다음 작업은 **T-226 Dedup verdict /
-> integrity status mutation**이다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
+> **갱신 (2026-06-27, codex)**: T-226 완료. 다음 작업은
+> **T-213 Category mapping 실제 기능 및 source of truth 결정**이다. T-227 integrity
+> mutation은 upstream 계약이 추가되면 진행한다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

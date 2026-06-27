@@ -32,6 +32,8 @@ import {
   AdminDayCopyRequestSchema,
   AdminDayDeleteRequestSchema,
   AdminDayMoveRequestSchema,
+  AdminDedupDecisionRequestSchema,
+  AdminDedupDecisionResponseSchema,
   AdminDedupReviewPagedResponseSchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
@@ -232,6 +234,16 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminDedupReviewPagedResponseSchema,
     });
   },
+
+  decideDedupReview: (
+    reviewId: string,
+    body: z.infer<typeof AdminDedupDecisionRequestSchema>,
+  ) =>
+    client.request(`/admin/dedup-review/${encodeURIComponent(reviewId)}/verdict`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDedupDecisionRequestSchema.parse(body)),
+      schema: AdminDedupDecisionResponseSchema,
+    }),
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {
     const qs = new URLSearchParams();

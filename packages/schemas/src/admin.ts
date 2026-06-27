@@ -302,6 +302,39 @@ export type AdminDedupReviewPagedResponse = z.infer<
   typeof AdminDedupReviewPagedResponseSchema
 >;
 
+export const AdminDedupDecisionSchema = z.enum(['accepted', 'rejected', 'merged', 'ignored']);
+export type AdminDedupDecision = z.infer<typeof AdminDedupDecisionSchema>;
+
+export const AdminDedupDecisionRequestSchema = z
+  .object({
+    decision: AdminDedupDecisionSchema,
+    access_reason: z.string().min(1).max(500),
+    kor_travel_map_reason: z.string().min(1).max(500).optional(),
+    master_feature_id: z.string().min(1).max(200).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.decision === 'merged' && !value.master_feature_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['master_feature_id'],
+        message: 'merged decision에는 master_feature_id가 필요합니다.',
+      });
+    }
+  });
+export type AdminDedupDecisionRequest = z.infer<typeof AdminDedupDecisionRequestSchema>;
+
+export const AdminDedupDecisionResponseSchema = z.object({
+  review_id: z.string(),
+  decision: AdminDedupDecisionSchema,
+  changed: z.boolean(),
+  master_feature_id: z.string().nullable().default(null),
+  loser_feature_id: z.string().nullable().default(null),
+  merge_id: z.string().nullable().default(null),
+  source_links_moved: z.number().int().nullable().default(null),
+  source_links_dropped: z.number().int().nullable().default(null),
+});
+export type AdminDedupDecisionResponse = z.infer<typeof AdminDedupDecisionResponseSchema>;
+
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
   violation_type: z.string(),
