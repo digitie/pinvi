@@ -2,7 +2,7 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: T-222 PR 준비
+상태: T-215 완료 검증 / PR 준비
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
@@ -416,6 +416,10 @@ guard도 404를 반환한다.
 
 ### T-215 — Admin live e2e 확장 + N150 묶음 게이트
 
+상태: 완료(2026-06-27, codex). 최신 Admin 구현 묶음을 N150에서 live authenticated
+Playwright gate로 검증했고, 테스트 하네스의 운영 세션 만료/다중 테이블/시스템 화면 ready marker
+정책을 보강했다.
+
 범위:
 
 - placeholder를 허용하던 live matrix 정책을 새 구현 상태 기준으로 조정한다.
@@ -429,6 +433,22 @@ N150 게이트:
 - 실행 전후 컨테이너 health, API `/health`, `/health/db`, Web `/admin/login`, 주요 admin route,
   upstream `kor-travel-map` health를 확인한다.
 - 실제 운영 도메인/SSH target/env 값은 출력하지 않는다.
+
+2026-06-27 결과:
+
+- Windows Playwright runner에서 N150 운영 Web URL을 대상으로 `PINVI_ADMIN_LIVE_CASE_LIMIT=2000`
+  묶음 실행을 완료했다. 로그인 검증 2건 + catalog sanity 1건 + matrix 2000건, 총 2003건이
+  통과했다(3.1h).
+- 전체 catalog는 `6176 tests in 1 file`이다. 실제 UI matrix는 6173건이고, 로그인 검증 2건과
+  catalog sanity 1건이 별도 포함된다.
+- 실행 전후 N150 smoke에서 API `/health`, API `/health/db`, Web `/admin/login`, Dagster,
+  upstream `kor-travel-map` health, Pinvi 컨테이너 healthy 상태를 확인했다.
+- `provider-sync`, `integrity`, `debug/logs`처럼 한 route에 여러 AdminTable이 있는 화면은 첫
+  `admin-table-scroll`을 route ready 기준으로 삼는다.
+- `/admin/system`은 AdminTable route가 아니라 `admin-system-containers` ready marker로 검증하고,
+  정렬 matrix에서는 제외한다.
+- 긴 live run 도중 access token/cookie TTL을 넘는 경우를 대비해 기본 auth refresh를 5분으로
+  줄이고, route 진입/navigation 직후 로그인 화면이면 재로그인 후 원래 route로 복귀한다.
 
 ### T-216 — Trip Admin 상세 운영성 보강
 
@@ -731,7 +751,7 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 18. T-218 Grafana prod 주소 PR.
 19. T-221 dashboard 운영 현황 PR.
 20. T-222 system view Docker/API 상태 PR.
-21. T-215 묶음 live e2e/N150 게이트 PR 또는 release-gate PR.
+21. T-215 묶음 live e2e/N150 게이트 PR.
 
 ## 검증 정책
 

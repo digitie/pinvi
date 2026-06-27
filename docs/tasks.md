@@ -14,9 +14,10 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-215 Admin live e2e 확장 + N150 묶음 게이트.
-  상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
+- Admin 콘솔 후속: T-227 Integrity issue status/fix mutation은 upstream
+  `kor-travel-map` 계약이 추가된 뒤 진행한다. 상세 계획은
+  `docs/execplan/admin-console-gap-plan.md`.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
   노드 smoke와 backup/restore 복구 훈련.
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
@@ -124,7 +125,13 @@
       운영 화면을 추가했다. 의존 API health와 Docker collector 상태, container name/image/state/health/
       compose service를 표시한다. Docker socket이 없거나 권한이 없으면 endpoint는 실패하지 않고
       `unknown`/`down` 상태와 빈 container 목록으로 강등한다.
-- [ ] T-215 — Admin live e2e 확장 + N150 묶음 게이트.
+- [x] T-215 — Admin live e2e 확장 + N150 묶음 게이트
+      (완료: 2026-06-27, codex). 최신 Admin 구현 묶음을 N150 대상으로 Windows Playwright
+      live authenticated gate에서 검증했다. `PINVI_ADMIN_LIVE_CASE_LIMIT=2000` 기준 로그인 2건,
+      catalog 1건, matrix 2000건 총 2003건이 통과했고(3.1h), 전체 catalog는 6176건이다.
+      테스트 하네스는 다중 AdminTable route, `/admin/system` ready marker, 5분 auth refresh와
+      mid-run 재로그인 복귀를 반영했다. 실행 전후 N150 API/DB/Web/Dagster/upstream health와
+      Pinvi 컨테이너 healthy 상태를 확인했다.
 
 ## 완료
 
