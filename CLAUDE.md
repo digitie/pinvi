@@ -65,9 +65,9 @@
 
 ## 2. 현 단계
 
-**Sprint 1~3 머지 완료**. Sprint 4의 라이브 feature read / 지도 UI / CI 게이트는
-머지되어 **v0.1.0** 릴리즈 게이트를 충족했고, 현재 기준선은 tag/릴리즈 노트 정리 단계다.
-이후 Sprint 5 (실시간 + ETL + Grafana embed + Backup 1차 → **v0.2.0**) → Sprint
+**Sprint 1~4 완료**. Sprint 4의 라이브 feature read / 지도 UI / CI 게이트는
+머지됐고, **v0.1.0** tag/GitHub Release는 2026-06-13에 완료됐다. 현재 기준선은
+post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + ETL + Grafana embed + Backup 1차 → **v0.2.0**) → Sprint
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 

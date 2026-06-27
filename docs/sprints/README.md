@@ -8,7 +8,7 @@ Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로
 | Sprint 1 | [SPRINT-1.md](./SPRINT-1.md) | **merged** (PR #9) | 모노레포 scaffolding + DB schema + 핵심 인증 | — |
 | Sprint 2 | [SPRINT-2.md](./SPRINT-2.md) | **merged** (PR #10) | 도메인 API + DB (Trip / POI / 4 분리 동의 / Resend / 위치 감사) | — |
 | Sprint 3 | [SPRINT-3.md](./SPRINT-3.md) | **merged** (PR #11) | Admin 콘솔 + RBAC + audit chain + seed | — |
-| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **release gate met** (tag/Release notes 대기) | 지도 UI + `vworld-map-web` + 라이브 feature read + **CI/CD 재활성** | **`v0.1.0`** |
+| Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **released** (`v0.1.0`, 2026-06-13) | 지도 UI + `vworld-map-web` + 라이브 feature read + **CI/CD 재활성** | **`v0.1.0`** |
 | Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | proposed (일부 항목 선반영: T-109/110/115) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
 | Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + LBS 신고 + 법무 + **MCP 외부 인터페이스** + **Backup UI 핫스왑** + **Korean geofencing** + **T108 N150 병행 배포** | **`v1.0.0`** |
 
@@ -20,7 +20,7 @@ Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로
 
 | 버전 | 시점 | 핵심 기능 |
 |------|------|----------|
-| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(kor_travel_map HTTP 연동, T-066/ADR-027) 충족. snapshot-only 조기출시 금지 조건 해소. 남은 일은 tag + Release notes. |
+| `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(kor_travel_map HTTP 연동, T-066/ADR-027) 충족. snapshot-only 조기출시 금지 조건 해소. 2026-06-13 tag + GitHub Release 완료. |
 | `v0.2.0` | Sprint 5 종료 | 실시간 + ETL + 운영 가시화 (Grafana). Backup/Restore 1차 (script + endpoint, UI는 v1.0). |
 | `v1.0.0` | Sprint 6 종료 | 외부 정식 출시. MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 양 노드 + LBS 신고 + 법무 4 문서. |
 | `v1.1.0+` | post-Sprint 6 | PWA / 푸시 알림 / 사진 업로드 / `kor-travel-concierge` 통합 |

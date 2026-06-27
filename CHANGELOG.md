@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+> `v0.1.0` 이후 main에 반영된 변경 사항이다. 다음 release train에서 버전을 확정한다.
+
 ### 주요 기능
 
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
@@ -70,7 +72,8 @@
 
 ## v0.1.0 — 지도 + 여행 + Admin 기본 기능
 
-릴리즈 상태: 준비 완료. Git tag와 GitHub Release 생성은 PR merge 후 main commit에서 수행한다.
+릴리즈 상태: 완료. Git tag와 GitHub Release는 2026-06-13에
+`2f8da02345581fd3065e9d818352bc187f65b3a9` 기준으로 생성됐다.
 
 ### 주요 기능
 
@@ -140,4 +143,5 @@
 - ETL pytest, ruff, mypy.
 - Web lint, typecheck, Vitest, Playwright e2e.
 - Docker compose observability config.
-- Docker app smoke와 수동 smoke는 release tag 직전 main에서 재확인한다.
+- Docker app smoke와 수동 smoke는 release tag 생성 전 main에서 재확인했다. 이후 post-v0.1.0
+  변경은 `Unreleased` 절에 누적한다.

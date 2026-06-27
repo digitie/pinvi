@@ -8,17 +8,16 @@
 
 ## 진행 중
 
-- [ ] v0.1.0 릴리즈 정리 — Sprint 4 기능 게이트는 충족(지도 UI + live feature read +
-      CI/CD + kor_travel_map drift gate). `CHANGELOG.md` release notes는 준비됐다.
-      남은 일은 PR merge 후 main에서 최종 CI/수동 smoke 확인, tag, GitHub Release 생성.
+- 없음.
 
 ## 다음 (우선순위 순)
 
-- v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
+- v0.2.0 범위 정리: Unreleased Admin/운영 보강을 Sprint 5 로드맵과 맞춰 다음 릴리즈 범위로
+  재분류한다.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
-- 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
-  노드 smoke와 backup/restore 복구 훈련.
+- 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
+  backup/restore 복구 훈련은 T-108 설명처럼 Sprint 6 운영 게이트로 남긴다.
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
   T-195 공통 rate-limit middleware, T-108 운영 배포 자동화 foundation, T-200
   docker-manager 포트 대역 정렬은 완료.
@@ -146,6 +145,13 @@
       tasks/resume/journal에 반영하고, 사용자 명시 요구사항 1~14번을 완료 Task와 API/UI/e2e
       증거에 매핑했다. sidebar 요구사항은 기본 expanded + 선택적 compact icon-only 토글로
       문서 전반에서 정정했으며, 운영 도메인/secret 원문은 추가하지 않았다.
+- [x] T-230 — v0.1.0 릴리즈 상태 정합화
+      (완료: 2026-06-27, codex). GitHub에 이미 존재하는 `v0.1.0` tag/Release
+      (2026-06-13, `2f8da02345581fd3065e9d818352bc187f65b3a9`)를 확인하고,
+      `CHANGELOG.md`, Sprint 문서, AGENTS/CLAUDE 진입 요약, tasks/resume/journal의
+      "tag 대기" 표현을 실제 릴리즈 완료 상태로 정리했다. 최신 main
+      `d35f49e1faafa61380d9c2c0e2d6a1cb36d29108` 기준 N150 API/DB/Web/Dagster/
+      `kor-travel-map` smoke는 모두 200을 반환했다.
 
 ## 완료
 
@@ -212,7 +218,7 @@
 - [x] T-061 — Sprint 4 진행 추적 문서 정합화 (`resume.md` / `tasks.md` / `journal.md`) (완료: 2026-06-01)
 - [x] T-060 — Sprint 4 진입 PR/기능 게이트 (완료: 2026-06-11): 지도 UI,
       `maplibre-vworld-js`, kor_travel_map live feature read, trip 상세 HTTP batch, Admin feature-request
-      릴레이, drift gate, CI/CD 재활성까지 머지. v0.1.0 tag/릴리즈 노트만 별도 정리.
+      릴레이, drift gate, CI/CD 재활성까지 머지. `v0.1.0` tag/Release는 2026-06-13 완료.
 - [x] T-062 — GitHub Actions secret / branch protection 적용 상태 확인 (완료:
       2026-06-02, Actions secret 0개 정책 확인 + `main-pr-only` ruleset 적용)
 - [x] T-064 — 최신 main 기준 문서 충돌 정정 (ADR-015/024/025 반영) (완료: 2026-06-02)
