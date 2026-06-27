@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-214 Seed / reset dev-only 안전장치와 운영 비활성화.
+- Admin 콘솔 기능 보강: T-218 prod Grafana 주소 반영.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -102,7 +102,11 @@
 - [ ] T-227 — Integrity issue status/fix mutation upstream 계약 반영.
       `kor-travel-map` consistency issue mutation 계약이 추가된 뒤 Pinvi relay, audit, UI action을
       구현한다. 현재 upstream `/v1/ops/consistency/*`는 GET-only라 Pinvi 단독 상태를 만들지 않는다.
-- [ ] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화.
+- [x] T-214 — Seed / reset dev-only 안전장치와 운영 비활성화
+      (완료: 2026-06-27, codex). dev/staging 전용 seed/reset dry-run API와 UI를 추가하고,
+      production에서는 router 미등록 + endpoint guard 404 정책을 적용했다. 실제 DB reset/seed 실행은
+      노출하지 않고, 확인 문구, 운영 사유, dry-run 결과, `dev_seed.dry_run`/`dev_reset.dry_run`
+      audit만 제공한다.
 - [ ] T-218 — prod Grafana 주소 반영.
 - [ ] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기.
 - [ ] T-222 — System view Docker / 의존 API 상태.

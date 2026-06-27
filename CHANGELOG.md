@@ -25,6 +25,8 @@
   운영 사유를 입력하면 `kor-travel-map` verdict API로 relay하고 Pinvi 감사 로그를 남긴다.
 - Admin `/admin/category-mapping`을 `kor-travel-map` category catalog read-only 운영 화면으로
   교체했다. 16색 마커 팔레트 fallback, unmapped count, icon drift, feature count를 확인할 수 있다.
+- Admin `/admin/seed`, `/admin/reset`을 dev/staging 전용 dry-run 화면으로 교체했다. production에서는
+  route가 숨겨지고, dry-run은 확인 문구와 운영 사유를 요구하며 감사 로그를 남긴다.
 - Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
   Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
   미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.

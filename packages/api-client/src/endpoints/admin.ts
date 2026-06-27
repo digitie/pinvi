@@ -36,8 +36,13 @@ import {
   AdminDedupDecisionRequestSchema,
   AdminDedupDecisionResponseSchema,
   AdminDedupReviewPagedResponseSchema,
+  AdminDevSafetyActionResultSchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
+  AdminResetRunRequestSchema,
+  AdminResetStatusResponseSchema,
+  AdminSeedScenarioListResponseSchema,
+  AdminSeedScenarioRunRequestSchema,
   AdminConsistencyReportsResponseSchema,
   AdminPagedResponseSchema,
   AdminPoiCopyRequestSchema,
@@ -129,6 +134,10 @@ export interface AdminCategoryMappingListParams {
   includeCounts?: boolean;
   activeOnly?: boolean;
 }
+
+export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
+
+export type AdminResetRunBody = z.infer<typeof AdminResetRunRequestSchema>;
 
 export interface AdminIntegrityIssueListParams {
   status?: 'open' | 'acknowledged' | 'resolved' | 'ignored';
@@ -263,6 +272,32 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminCategoryMappingsResponseSchema,
     });
   },
+
+  listSeedScenarios: () =>
+    client.request('/admin/seed/scenarios', {
+      method: 'GET',
+      schema: AdminSeedScenarioListResponseSchema,
+    }),
+
+  runSeedScenario: (scenarioKey: string, body: AdminSeedScenarioRunBody) =>
+    client.request(`/admin/seed/scenarios/${encodeURIComponent(scenarioKey)}`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSeedScenarioRunRequestSchema.parse(body)),
+      schema: AdminDevSafetyActionResultSchema,
+    }),
+
+  getResetStatus: () =>
+    client.request('/admin/reset/status', {
+      method: 'GET',
+      schema: AdminResetStatusResponseSchema,
+    }),
+
+  runReset: (body: AdminResetRunBody) =>
+    client.request('/admin/reset', {
+      method: 'POST',
+      body: JSON.stringify(AdminResetRunRequestSchema.parse(body)),
+      schema: AdminDevSafetyActionResultSchema,
+    }),
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {
     const qs = new URLSearchParams();

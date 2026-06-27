@@ -373,6 +373,61 @@ export type AdminCategoryMappingsResponse = z.infer<
   typeof AdminCategoryMappingsResponseSchema
 >;
 
+export const AdminSeedScenarioSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  description: z.string(),
+  destructive: z.boolean(),
+  confirm_phrase: z.string(),
+  steps: z.array(z.string()).default([]),
+});
+export type AdminSeedScenario = z.infer<typeof AdminSeedScenarioSchema>;
+
+export const AdminSeedScenarioListResponseSchema = z.object({
+  environment: z.string(),
+  enabled: z.boolean(),
+  mode: z.literal('dry_run_only'),
+  scenarios: z.array(AdminSeedScenarioSchema).default([]),
+});
+export type AdminSeedScenarioListResponse = z.infer<
+  typeof AdminSeedScenarioListResponseSchema
+>;
+
+export const AdminSeedScenarioRunRequestSchema = z.object({
+  confirm: z.string().min(1).max(120),
+  access_reason: z.string().min(1).max(500),
+  dry_run: z.boolean().default(true),
+});
+export type AdminSeedScenarioRunRequest = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
+
+export const AdminResetStatusResponseSchema = z.object({
+  environment: z.string(),
+  enabled: z.boolean(),
+  mode: z.literal('dry_run_only'),
+  confirm_phrase: z.string(),
+  target_schemas: z.array(z.string()).default(['app']),
+});
+export type AdminResetStatusResponse = z.infer<typeof AdminResetStatusResponseSchema>;
+
+export const AdminResetRunRequestSchema = z.object({
+  confirm: z.string().min(1).max(120),
+  access_reason: z.string().min(1).max(500),
+  dry_run: z.boolean().default(true),
+  include_seed: z.boolean().default(false),
+});
+export type AdminResetRunRequest = z.infer<typeof AdminResetRunRequestSchema>;
+
+export const AdminDevSafetyActionResultSchema = z.object({
+  action: z.string(),
+  target: z.string(),
+  status: z.literal('dry_run'),
+  dry_run: z.boolean(),
+  audit_log_id: z.number().int(),
+  would_execute: z.array(z.string()).default([]),
+  message: z.string(),
+});
+export type AdminDevSafetyActionResult = z.infer<typeof AdminDevSafetyActionResultSchema>;
+
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
   violation_type: z.string(),

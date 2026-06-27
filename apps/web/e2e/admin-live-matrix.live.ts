@@ -102,8 +102,8 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/emails', heading: '이메일 큐', table: true },
   { path: '/admin/backup', heading: 'Backup', table: true },
   { path: '/admin/mcp-tokens', heading: 'MCP 토큰', table: true },
-  { path: '/admin/seed', heading: '시드', placeholder: true },
-  { path: '/admin/reset', heading: '리셋', placeholder: true },
+  { path: '/admin/seed', heading: '시드 시나리오', table: true },
+  { path: '/admin/reset', heading: 'DB 리셋' },
 ];
 
 const dashboardRoute = uiRoutes[0]!;
@@ -180,6 +180,11 @@ const sortSpecs = [
     route: '/admin/category-mapping',
     heading: '카테고리 매핑',
     columns: ['category', 'active', 'upstream icon', 'Pinvi marker', 'mapping', 'features', 'sort'],
+  },
+  {
+    route: '/admin/seed',
+    heading: '시드 시나리오',
+    columns: ['scenario', 'confirm', 'steps'],
   },
   {
     route: '/admin/debug/logs',

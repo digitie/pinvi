@@ -157,5 +157,7 @@ export const queryKeys = {
     mcpTokensAll: () => ['admin', 'mcp-tokens'] as const,
     backupSnapshots: (params: { limit?: number } = {}) =>
       ['admin', 'backup', 'snapshots', params] as const,
+    seedScenarios: () => ['admin', 'seed', 'scenarios'] as const,
+    resetStatus: () => ['admin', 'reset', 'status'] as const,
   },
 } as const;

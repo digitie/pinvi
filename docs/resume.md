@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
+
+Admin `/admin/seed`와 `/admin/reset`을 placeholder에서 dev/staging 전용 dry-run 화면으로 교체했다.
+Pinvi API는 `GET /admin/seed/scenarios`, `POST /admin/seed/scenarios/{scenario_key}`,
+`GET /admin/reset/status`, `POST /admin/reset`를 제공한다. production에서는 router include를 하지 않고,
+endpoint guard도 404를 반환한다.
+
+실제 DB reset/seed 실행은 노출하지 않았다. dev/staging route는 `dry_run=true`만 지원하고,
+`false`는 `422 DRY_RUN_ONLY`로 거절한다. seed는 scenario별 `RUN <scenario_key>`, reset은 `RESET`
+확인 문구와 `access_reason`을 요구한다. 성공한 dry-run은 `dev_seed.dry_run` 또는
+`dev_reset.dry_run` audit을 남긴다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+ruff check, mypy, `test_admin_seed_reset_api.py` 4건, schemas/api-client typecheck, Web typecheck,
+Web lint, schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고,
+WSL Next 서버(12805)를 띄워 `admin-seed-reset.e2e.ts` 3건과 admin-live catalog assertion 1건이
+통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+
+다음: T-214 PR을 만들고 merge한 뒤 T-218 prod Grafana 주소 반영으로 진행한다.
+
 ## 2026-06-27 (codex) — T-213 Category mapping 운영 뷰
 
 Category mapping source of truth를 `kor-travel-map` `/v1/categories`로 결정했다. Pinvi는 category
@@ -1226,8 +1246,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-213 검증 완료(PR/merge 단계). 다음 작업은
-> **T-214 Seed / reset dev-only 안전장치와 운영 비활성화**다. T-227 integrity mutation은
+> **갱신 (2026-06-27, codex)**: T-214 검증 완료(PR/merge 단계). 다음 작업은
+> **T-218 prod Grafana 주소 반영**이다. T-227 integrity mutation은
 > upstream 계약이 추가되면 진행한다. N150 live는 계속 T-215 묶음 게이트에서 실행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +

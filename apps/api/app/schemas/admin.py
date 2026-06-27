@@ -332,6 +332,53 @@ class AdminCategoryMappingsResponse(BaseModel):
     items: list[AdminCategoryMappingItem] = Field(default_factory=list)
 
 
+class AdminSeedScenario(BaseModel):
+    key: str
+    title: str
+    description: str
+    destructive: bool = False
+    confirm_phrase: str
+    steps: list[str] = Field(default_factory=list)
+
+
+class AdminSeedScenarioListResponse(BaseModel):
+    environment: str
+    enabled: bool
+    mode: Literal["dry_run_only"] = "dry_run_only"
+    scenarios: list[AdminSeedScenario] = Field(default_factory=list)
+
+
+class AdminSeedScenarioRunRequest(BaseModel):
+    confirm: str = Field(min_length=1, max_length=120)
+    access_reason: str = Field(min_length=1, max_length=500)
+    dry_run: bool = True
+
+
+class AdminResetStatusResponse(BaseModel):
+    environment: str
+    enabled: bool
+    mode: Literal["dry_run_only"] = "dry_run_only"
+    confirm_phrase: str = "RESET"
+    target_schemas: list[str] = Field(default_factory=lambda: ["app"])
+
+
+class AdminResetRunRequest(BaseModel):
+    confirm: str = Field(min_length=1, max_length=120)
+    access_reason: str = Field(min_length=1, max_length=500)
+    dry_run: bool = True
+    include_seed: bool = False
+
+
+class AdminDevSafetyActionResult(BaseModel):
+    action: str
+    target: str
+    status: Literal["dry_run"]
+    dry_run: bool = True
+    audit_log_id: int
+    would_execute: list[str] = Field(default_factory=list)
+    message: str
+
+
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
     violation_type: str
