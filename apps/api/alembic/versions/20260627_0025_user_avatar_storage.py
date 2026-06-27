@@ -66,7 +66,9 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        sa.CheckConstraint("settings_id = 1", name="ck_storage_settings_storage_settings_singleton"),
+        sa.CheckConstraint(
+            "settings_id = 1", name="ck_storage_settings_storage_settings_singleton"
+        ),
         sa.CheckConstraint(
             "avatar_max_upload_bytes > 0",
             name="ck_storage_settings_storage_settings_avatar_max_upload_bytes_positive",
