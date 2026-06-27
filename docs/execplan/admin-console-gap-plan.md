@@ -203,11 +203,39 @@ API:
 
 ### T-210 — Feature request / change request 운영 통합
 
+상태: 완료(2026-06-27, codex). 구현 PR은 기존 Pinvi 사용자 feature 제안 검토 큐와
+`kor-travel-map` feature change request 큐를 Admin에서 이어 볼 수 있게 하고, upstream
+approve/reject 결과를 Pinvi audit에 남긴다. N150 live 실행은 T-215 묶음 게이트에서 수행한다.
+
 범위:
 
 - 기존 Pinvi 사용자 제보(`/admin/feature-requests`)와 upstream change request 상태를 연결한다.
-- `/admin/features/change-requests`를 추가해 pending/applied/rejected/failed 큐를 운영한다.
+- `/admin/features/change-requests`를 추가해 pending/applied/rejected 큐를 운영한다. 최초 계획의
+  `failed` 상태는 2026-06-27 확인한 `kor-travel-map` `origin/main` OpenAPI(`c3d6385`)에는 아직
+  없으므로, upstream 계약이 추가되면 Pinvi 필터만 확장한다.
 - approve/reject/apply action은 reason 입력, audit 기록, optimistic UI rollback을 갖춘다.
+
+확인한 upstream 계약:
+
+- `GET /v1/admin/features/change-requests`
+  - query: 반복 `status`(`pending`/`applied`/`rejected`), 반복 `action`(`add`/`update`/`delete`),
+    `q`, `page_size`
+  - response envelope: `data.items[]`, `data.review_mode`
+- `POST /v1/admin/features/change-requests/{request_id}/approve`
+- `POST /v1/admin/features/change-requests/{request_id}/reject`
+  - body: `operator`, `reason`
+  - response envelope: `data.request`
+
+구현:
+
+- `KorTravelMapAdminClient.list_change_requests()`에 status/action/q filter를 추가했다.
+- Pinvi API `/admin/features/change-requests`, `/approve`, `/reject` proxy endpoint를 추가했다.
+  mutation은 admin 전용이며 upstream 성공 후 `feature_change_request.*` audit을 commit한다.
+- upstream 409 중 `LOCK_BUSY`는 rate-limit 계열로, 그 외 상태 충돌은 `409 INVALID_STATE`로 보존한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 change request 목록/액션 계약을 추가했다.
+- Web `/admin/features/change-requests` placeholder를 filter/table/detail/payload/action 화면으로 교체했다.
+  pending row는 reason 입력 후 approve/reject 가능하며 실패 시 optimistic 상태를 rollback한다.
+- 기존 `/admin/feature-requests`는 upstream `request_id`가 있으면 change request 큐로 이동하는 링크를 제공한다.
 
 검증:
 

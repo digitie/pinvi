@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
-from app.clients.kor_travel_map import KorTravelMapFeatureNotFound
+from app.clients.kor_travel_map import KorTravelMapConflict, KorTravelMapFeatureNotFound
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
+from app.models.audit import AdminAuditLog
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -122,10 +124,14 @@ def _detail() -> dict[str, Any]:
 
 
 class _FakeAdminClient:
-    def __init__(self, *, not_found: bool = False) -> None:
+    def __init__(self, *, not_found: bool = False, approve_conflict: bool = False) -> None:
         self.list_kwargs: dict[str, Any] | None = None
         self.detail_id: str | None = None
+        self.change_request_kwargs: dict[str, Any] | None = None
+        self.approved: dict[str, str | None] | None = None
+        self.rejected: dict[str, str | None] | None = None
         self.not_found = not_found
+        self.approve_conflict = approve_conflict
 
     async def list_features(self, **kwargs: Any) -> dict[str, Any]:
         self.list_kwargs = kwargs
@@ -139,6 +145,68 @@ class _FakeAdminClient:
         if self.not_found:
             raise KorTravelMapFeatureNotFound("not found")
         return _detail()
+
+    async def list_change_requests(self, **kwargs: Any) -> dict[str, Any]:
+        self.change_request_kwargs = kwargs
+        return {
+            "items": [
+                {
+                    "request_id": "krq-1",
+                    "feature_id": "f_place_1",
+                    "action": "add",
+                    "status": "pending",
+                    "review_mode": "require_review",
+                    "payload": {"name": "해운대 카페"},
+                    "reason": "사용자 제안",
+                    "requested_by": "pinvi-admin",
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                    "applied_at": None,
+                    "created_at": "2026-06-12T00:00:00+09:00",
+                }
+            ],
+            "review_mode": "require_review",
+        }
+
+    async def approve_change_request(
+        self, request_id: str, *, operator: str | None = None, reason: str | None = None
+    ) -> dict[str, Any]:
+        if self.approve_conflict:
+            raise KorTravelMapConflict("already reviewed", code="INVALID_STATE")
+        self.approved = {"request_id": request_id, "operator": operator, "reason": reason}
+        return {
+            "request_id": request_id,
+            "feature_id": "f_place_1",
+            "action": "add",
+            "status": "applied",
+            "review_mode": "require_review",
+            "payload": {"name": "해운대 카페"},
+            "reason": reason,
+            "requested_by": "pinvi-admin",
+            "reviewed_by": operator,
+            "reviewed_at": "2026-06-12T01:00:00+09:00",
+            "applied_at": "2026-06-12T01:00:01+09:00",
+            "created_at": "2026-06-12T00:00:00+09:00",
+        }
+
+    async def reject_change_request(
+        self, request_id: str, *, operator: str | None = None, reason: str | None = None
+    ) -> dict[str, Any]:
+        self.rejected = {"request_id": request_id, "operator": operator, "reason": reason}
+        return {
+            "request_id": request_id,
+            "feature_id": "f_place_1",
+            "action": "update",
+            "status": "rejected",
+            "review_mode": "require_review",
+            "payload": {"name": "해운대 카페"},
+            "reason": reason,
+            "requested_by": "pinvi-admin",
+            "reviewed_by": operator,
+            "reviewed_at": "2026-06-12T01:00:00+09:00",
+            "applied_at": None,
+            "created_at": "2026-06-12T00:00:00+09:00",
+        }
 
 
 def _override(fake: Any) -> None:
@@ -239,6 +307,140 @@ async def test_get_admin_feature_maps_upstream_404(
 
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+async def test_list_admin_feature_change_requests_proxies_filters(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/features/change-requests",
+            params=[
+                ("status", "pending"),
+                ("status", "applied"),
+                ("action", "add"),
+                ("q", "해운대"),
+                ("page_size", "10"),
+            ],
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["items"][0]["request_id"] == "krq-1"
+    assert data["items"][0]["payload"] == {"name": "해운대 카페"}
+    assert data["review_mode"] == "require_review"
+    assert data["page_size"] == 10
+    assert fake.change_request_kwargs == {
+        "statuses": ["pending", "applied"],
+        "actions": ["add"],
+        "q": "해운대",
+        "page_size": 10,
+    }
+
+
+async def test_approve_admin_feature_change_request_appends_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/features/change-requests/krq-1/approve",
+            json={
+                "access_reason": "Pinvi 운영 검수 완료",
+                "kor_travel_map_reason": "원천 검수 완료",
+            },
+            headers={"X-Request-Id": str(uuid.uuid4())},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["status"] == "applied"
+    assert fake.approved == {
+        "request_id": "krq-1",
+        "operator": "pinvi-admin",
+        "reason": "원천 검수 완료",
+    }
+    async with session_factory() as db:
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.approve")
+        )
+    assert audit is not None
+    assert audit.resource_id == "krq-1"
+    assert audit.access_reason == "Pinvi 운영 검수 완료"
+
+
+async def test_reject_admin_feature_change_request_appends_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/features/change-requests/krq-2/reject",
+            json={"access_reason": "중복 변경 요청"},
+            headers={"X-Request-Id": str(uuid.uuid4())},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["status"] == "rejected"
+    assert fake.rejected == {
+        "request_id": "krq-2",
+        "operator": "pinvi-admin",
+        "reason": "중복 변경 요청",
+    }
+    async with session_factory() as db:
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.reject")
+        )
+    assert audit is not None
+    assert audit.resource_id == "krq-2"
+
+
+async def test_change_request_conflict_maps_409_without_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeAdminClient(approve_conflict=True)
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/features/change-requests/krq-1/approve",
+            json={"access_reason": "재승인 시도"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "INVALID_STATE"
+    async with session_factory() as db:
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.approve")
+        )
+    assert audit is None
 
 
 async def test_non_admin_features_route_is_hidden(

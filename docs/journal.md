@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-210 Pinvi feature request / upstream change request 운영 통합
+
+**작업**: Admin `/admin/features/change-requests`를 실제 운영 화면으로 교체하고, Pinvi 사용자
+feature 제안 검토 큐와 `kor-travel-map` upstream change request 큐를 이어 볼 수 있게 했다.
+
+**변경**:
+
+- `KorTravelMapAdminClient.list_change_requests()`에 status/action/q filter를 추가하고, upstream
+  409 중 `LOCK_BUSY`가 아닌 상태 충돌을 `INVALID_STATE` 계열 409로 보존하도록 했다.
+- Pinvi API에 `/admin/features/change-requests`, `/approve`, `/reject` proxy endpoint를 추가했다.
+  mutation은 admin 전용이며 upstream 성공 후 `feature_change_request.approve|reject` audit을 남긴다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 change request 목록/액션 계약을 추가했다.
+- Web `/admin/features/change-requests`는 filter/table/detail payload inspector, reason 입력,
+  approve/reject action, optimistic update와 실패 rollback을 제공한다.
+- 기존 `/admin/feature-requests`는 upstream `request_id`가 있으면 변경 요청 큐로 이동하는 링크를
+  표시한다.
+- API 문서, Admin 실행계획, tasks/resume/changelog와 e2e/live matrix를 갱신했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API `ruff check`, mypy,
+`test_kor_travel_map_admin_client.py` + `test_admin_features_api.py` +
+`test_admin_feature_requests_api.py` 28건, schemas/api-client/web typecheck, Web lint,
+Web production build를 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-feature-change-requests.e2e.ts` + `admin-feature-requests.e2e.ts` 5건이 통과했다.
+N150 live는 T-215 묶음 게이트로 보류한다.
+
+**다음**: 검증 후 PR을 만들고 merge한 뒤 T-220 `/admin/etl` + provider sync + Dagster 운영 화면으로
+진행한다.
+
 ## 2026-06-27 (codex) — T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
 
 **작업**: 추가 요청 14번을 T-225로 구현했다. Admin이 여행계획, 날짜, POI를 복사·이동·삭제하고,

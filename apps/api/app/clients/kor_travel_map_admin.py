@@ -29,6 +29,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
+    KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
     KorTravelMapRateLimited,
@@ -120,12 +121,15 @@ class KorTravelMapAdminClient:
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
             raise KorTravelMapFeatureNotFound("feature 를 찾을 수 없습니다.")
+        error_code = _error_code(resp)
+        if sc == status.HTTP_409_CONFLICT and error_code != "LOCK_BUSY":
+            raise KorTravelMapConflict(f"kor-travel-map admin {sc}", code=error_code)
         if sc in (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_409_CONFLICT):
             raise KorTravelMapRateLimited(
                 f"kor-travel-map admin {sc}", retry_after_seconds=_retry_after(resp)
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
-            raise KorTravelMapBadRequest(f"kor-travel-map admin {sc}", code=_error_code(resp))
+            raise KorTravelMapBadRequest(f"kor-travel-map admin {sc}", code=error_code)
         payload = resp.json()
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
@@ -240,14 +244,21 @@ class KorTravelMapAdminClient:
     # ── change-requests 큐 (kor_travel_map 운영자 검수 추적) ───────────────────────
 
     async def list_change_requests(
-        self, *, page_size: int | None = None, cursor: str | None = None
+        self,
+        *,
+        statuses: list[str] | None = None,
+        actions: list[str] | None = None,
+        q: str | None = None,
+        page_size: int | None = None,
     ) -> dict[str, Any]:
         """GET /v1/admin/features/change-requests — data = {items, review_mode}."""
         params: dict[str, Any] = {}
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "action", actions)
+        if q:
+            params["q"] = q
         if page_size is not None:
             params["page_size"] = page_size
-        if cursor is not None:
-            params["cursor"] = cursor
         return self._data(
             await self._send("GET", "/v1/admin/features/change-requests", params=params)
         )

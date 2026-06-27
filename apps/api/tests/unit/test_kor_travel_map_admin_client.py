@@ -11,6 +11,7 @@ import pytest
 
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
+    KorTravelMapConflict,
     KorTravelMapFeatureNotFound,
     KorTravelMapUnavailable,
 )
@@ -237,16 +238,86 @@ async def test_delete_feature_sends_reason_and_operator_body() -> None:
 
 
 async def test_approve_change_request_hits_action_subresource() -> None:
-    seen: dict[str, str] = {}
+    seen: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_change_response(state="applied"))
 
     client = _client(handler)
     record = await client.approve_change_request("req-9", operator="tm-admin", reason="ok")
     assert seen["path"] == "/v1/admin/features/change-requests/req-9/approve"
+    assert seen["body"] == {"operator": "tm-admin", "reason": "ok"}
     assert record["status"] == "applied"
+    await client.aclose()
+
+
+async def test_list_change_requests_forwards_filters() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "feature_id": "f_x",
+                            "request_id": "req-1",
+                            "action": "add",
+                            "status": "pending",
+                            "review_mode": "require_review",
+                            "payload": {},
+                            "created_at": "2026-06-11T00:00:00+09:00",
+                        }
+                    ],
+                    "review_mode": "require_review",
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.list_change_requests(
+        statuses=["pending", "applied"],
+        actions=["add"],
+        q="해운대",
+        page_size=25,
+    )
+    assert seen["path"] == "/v1/admin/features/change-requests"
+    assert ("status", "pending") in seen["query"]
+    assert ("status", "applied") in seen["query"]
+    assert ("action", "add") in seen["query"]
+    assert ("q", "해운대") in seen["query"]
+    assert ("page_size", "25") in seen["query"]
+    assert data["items"][0]["request_id"] == "req-1"
+    await client.aclose()
+
+
+async def test_reject_change_request_hits_action_subresource() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_change_response(action="update", state="rejected"))
+
+    client = _client(handler)
+    record = await client.reject_change_request("req-10", operator="tm-admin", reason="dup")
+    assert seen["path"] == "/v1/admin/features/change-requests/req-10/reject"
+    assert seen["body"] == {"operator": "tm-admin", "reason": "dup"}
+    assert record["status"] == "rejected"
+    await client.aclose()
+
+
+async def test_409_non_lock_busy_maps_to_conflict() -> None:
+    client = _client(lambda r: httpx.Response(409, json={"code": "INVALID_STATE", "status": 409}))
+    with pytest.raises(KorTravelMapConflict) as exc_info:
+        await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
+    assert exc_info.value.code == "INVALID_STATE"
     await client.aclose()
 
 

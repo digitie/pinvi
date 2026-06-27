@@ -166,6 +166,23 @@ export const AdminFeatureChangeRequestRecordSchema = z.object({
 });
 export type AdminFeatureChangeRequestRecord = z.infer<typeof AdminFeatureChangeRequestRecordSchema>;
 
+export const AdminFeatureChangeRequestPagedResponseSchema = z.object({
+  items: z.array(AdminFeatureChangeRequestRecordSchema).default([]),
+  review_mode: z.string().nullable().default(null),
+  page_size: z.number().int(),
+});
+export type AdminFeatureChangeRequestPagedResponse = z.infer<
+  typeof AdminFeatureChangeRequestPagedResponseSchema
+>;
+
+export const AdminFeatureChangeRequestActionRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  kor_travel_map_reason: z.string().max(500).optional(),
+});
+export type AdminFeatureChangeRequestActionRequest = z.infer<
+  typeof AdminFeatureChangeRequestActionRequestSchema
+>;
+
 export const AdminFeatureDetailFeatureSchema = z.object({
   feature_id: z.string(),
   kind: z.string(),

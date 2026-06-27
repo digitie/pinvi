@@ -90,7 +90,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/feature-requests', heading: 'Feature 제안 검토', table: true },
   { path: '/admin/audit', heading: '감사 로그', table: true },
   { path: '/admin/features', heading: 'Features', table: true },
-  { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', placeholder: true },
+  { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', table: true },
   { path: '/admin/dedup-review', heading: 'Dedup review', placeholder: true },
   { path: '/admin/provider-sync', heading: 'Provider sync', placeholder: true },
   { path: '/admin/integrity', heading: '정합성', placeholder: true },

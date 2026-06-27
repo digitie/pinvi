@@ -152,6 +152,17 @@ class AdminFeatureChangeRequestRecord(BaseModel):
     created_at: datetime
 
 
+class AdminFeatureChangeRequestPagedResponse(BaseModel):
+    items: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
+    review_mode: str | None = None
+    page_size: int
+
+
+class AdminFeatureChangeRequestActionRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+    kor_travel_map_reason: str | None = Field(default=None, max_length=500)
+
+
 class AdminFeatureDetailFeature(BaseModel):
     feature_id: str
     kind: str
