@@ -17,66 +17,69 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 
 ## 2. 인덱스
 
-| Path                                                                | 용도                                                 | Sprint |
-| ------------------------------------------------------------------- | ---------------------------------------------------- | ------ |
-| `GET /admin/stats/overview`                                         | 대시보드 카드 8개                                    | 3      |
-| `GET /admin/users` / `{user_id}` / `PATCH`                          | 사용자 목록 / 상세 / 편집                            | 3      |
-| `POST /admin/users/{id}/force-verify`                               | 강제 verify (디버그)                                 | 3      |
-| `POST /admin/users/{id}/resend-verify`                              | 인증 메일 재발송                                     | 3      |
-| `POST /admin/users/{id}/disable`                                    | 비활성화 (refresh 전부 revoke)                       | 3      |
-| `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                     | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제    | 4      |
-| `GET/PUT /admin/settings/avatar`                                    | 전역 아바타 업로드 크기 제한                         | 4      |
-| `PUT /admin/users/{id}/file-quota`                                  | 사용자별 파일 용량 override                          | 4      |
-| `GET/PUT /admin/settings/files`                                     | 전역 파일 용량 정책                                  | 4      |
-| `GET/DELETE /admin/files[/{attachment_id}]`                         | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제        | 4      |
-| `GET /admin/trips` / `{trip_id}`                                    | trip 목록 / 상세                                     | 3      |
-| `GET/POST/DELETE /admin/trips/{trip_id}/operation*`                 | trip/day 복사·이동·삭제와 영향도 조회               | 4      |
-| `GET /admin/features` / `{feature_id}`                              | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
-| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]`   | kor-travel-map feature 변경 요청 큐 검수 / audit      | 4      |
-| `GET /admin/pois` / `{poi_id}`                                      | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
-| `PATCH /admin/pois/{poi_id}/link-status`                            | POI feature 연결 상태 로컬 표시                      | 3      |
-| `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                   | POI 복사·이동·삭제와 영향도 조회                    | 4      |
-| `GET /admin/datasets`                                               | dataset 카탈로그                                     | 3      |
-| `GET /admin/datasets/{table_name}/rows`                             | row 조회 (검색/필터/정렬/page)                       | 3      |
-| `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`        | 통합 엔티티 CRUD                                     | 3      |
-| `GET /admin/api-calls`                                              | 외부 API 호출 로그 (`api_call_log`)                  | 3      |
-| `GET /admin/emails`                                                 | 이메일 발송 큐 (`email_queue`)                       | 3      |
-| `POST /admin/emails/{id}/resend`                                    | 재발송                                               | 3      |
-| `GET /admin/audit`                                                  | `admin_audit_log` (read-only, chain 검증)            | 3      |
-| `GET /admin/audit/location`                                         | `location_access_log` (CPO 권한만)                   | 3      |
-| `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`     | Notice plan CRUD                                     | 6      |
-| `POST /admin/notice-plans/{plan_id}/pois[/reorder]`                 | Notice POI                                           | 6      |
-| `GET /admin/feature-requests`                                       | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
-| `POST /admin/feature-requests/{id}/approve\|reject`                 | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
-| `GET /admin/category-mappings`                                      | kor-travel-map category catalog + Pinvi marker preview | 6      |
-| `GET /admin/etl/summary`                                            | Pinvi ETL registry + kor-travel-map ops 요약          | 5      |
-| `GET /admin/dedup-review`                                           | Record Linkage 후보 조회                              | 5      |
-| `POST /admin/dedup-review/{review_id}/verdict`                      | Record Linkage 후보 판정 + audit                     | 5      |
-| `GET /admin/features/{id}/sources`                                  | source_links                                         | 5      |
-| `GET /admin/features/{id}/overrides`                                | feature_overrides                                    | 5      |
-| `GET /admin/features/{id}/weather-values`                           | weather timeline                                     | 5      |
-| `GET /admin/provider-sync` / `import-jobs`                          | provider/dataset sync 상태와 import job 조회          | 5      |
-| `GET /admin/integrity/issues` / `reports`                           | kor-travel-map consistency issue/report 조회          | 5      |
-| `GET /admin/debug/logs/system` / `api-calls`                        | kor-travel-map sanitized system/API logs 조회         | 5      |
-| `GET /admin/backup/snapshots`                                       | `app` schema backup snapshot 목록                    | 5      |
-| `POST /admin/backup/snapshot`                                       | 수동 backup snapshot 생성 + audit                    | 5      |
-| `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                  | MCP 토큰 검색 / 대리 발급 / 강제 회수                | 6      |
-| `GET /admin/rustfs/objects` / `DELETE`                              | RustFS 객체 관리                                     | 2      |
-| `GET/POST /admin/seed/scenarios[/{scenario_key}]`                   | dev/staging seed scenario dry-run                    | 3      |
-| `GET /admin/reset/status` / `POST /admin/reset`                     | dev/staging reset dry-run                            | 3      |
+| Path                                                              | 용도                                                   | Sprint |
+| ----------------------------------------------------------------- | ------------------------------------------------------ | ------ |
+| `GET /admin/stats/overview`                                       | 대시보드 운영 통계/그래프 지표                         | 3      |
+| `GET /admin/users` / `{user_id}` / `PATCH`                        | 사용자 목록 / 상세 / 편집                              | 3      |
+| `POST /admin/users/{id}/force-verify`                             | 강제 verify (디버그)                                   | 3      |
+| `POST /admin/users/{id}/resend-verify`                            | 인증 메일 재발송                                       | 3      |
+| `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke)                         | 3      |
+| `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                   | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제      | 4      |
+| `GET/PUT /admin/settings/avatar`                                  | 전역 아바타 업로드 크기 제한                           | 4      |
+| `PUT /admin/users/{id}/file-quota`                                | 사용자별 파일 용량 override                            | 4      |
+| `GET/PUT /admin/settings/files`                                   | 전역 파일 용량 정책                                    | 4      |
+| `GET/DELETE /admin/files[/{attachment_id}]`                       | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제          | 4      |
+| `GET /admin/trips` / `{trip_id}`                                  | trip 목록 / 상세                                       | 3      |
+| `GET/POST/DELETE /admin/trips/{trip_id}/operation*`               | trip/day 복사·이동·삭제와 영향도 조회                  | 4      |
+| `GET /admin/features` / `{feature_id}`                            | kor-travel-map admin feature 검색 / 상세 (read-only)   | 4      |
+| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]` | kor-travel-map feature 변경 요청 큐 검수 / audit       | 4      |
+| `GET /admin/pois` / `{poi_id}`                                    | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터)   | 3      |
+| `PATCH /admin/pois/{poi_id}/link-status`                          | POI feature 연결 상태 로컬 표시                        | 3      |
+| `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                 | POI 복사·이동·삭제와 영향도 조회                       | 4      |
+| `GET /admin/datasets`                                             | dataset 카탈로그                                       | 3      |
+| `GET /admin/datasets/{table_name}/rows`                           | row 조회 (검색/필터/정렬/page)                         | 3      |
+| `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`      | 통합 엔티티 CRUD                                       | 3      |
+| `GET /admin/api-calls`                                            | 외부 API 호출 로그 (`api_call_log`)                    | 3      |
+| `GET /admin/emails`                                               | 이메일 발송 큐 (`email_queue`)                         | 3      |
+| `POST /admin/emails/{id}/resend`                                  | 재발송                                                 | 3      |
+| `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
+| `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
+| `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
+| `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
+| `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                     | 8      |
+| `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → kor_travel_map `/v1/admin/features*` 릴레이     | 8      |
+| `GET /admin/category-mappings`                                    | kor-travel-map category catalog + Pinvi marker preview | 6      |
+| `GET /admin/etl/summary`                                          | Pinvi ETL registry + kor-travel-map ops 요약           | 5      |
+| `GET /admin/dedup-review`                                         | Record Linkage 후보 조회                               | 5      |
+| `POST /admin/dedup-review/{review_id}/verdict`                    | Record Linkage 후보 판정 + audit                       | 5      |
+| `GET /admin/features/{id}/sources`                                | source_links                                           | 5      |
+| `GET /admin/features/{id}/overrides`                              | feature_overrides                                      | 5      |
+| `GET /admin/features/{id}/weather-values`                         | weather timeline                                       | 5      |
+| `GET /admin/provider-sync` / `import-jobs`                        | provider/dataset sync 상태와 import job 조회           | 5      |
+| `GET /admin/integrity/issues` / `reports`                         | kor-travel-map consistency issue/report 조회           | 5      |
+| `GET /admin/debug/logs/system` / `api-calls`                      | kor-travel-map sanitized system/API logs 조회          | 5      |
+| `GET /admin/backup/snapshots`                                     | `app` schema backup snapshot 목록                      | 5      |
+| `POST /admin/backup/snapshot`                                     | 수동 backup snapshot 생성 + audit                      | 5      |
+| `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                | MCP 토큰 검색 / 대리 발급 / 강제 회수                  | 6      |
+| `GET /admin/rustfs/objects` / `DELETE`                            | RustFS 객체 관리                                       | 2      |
+| `GET/POST /admin/seed/scenarios[/{scenario_key}]`                 | dev/staging seed scenario dry-run                      | 3      |
+| `GET /admin/reset/status` / `POST /admin/reset`                   | dev/staging reset dry-run                              | 3      |
 
 ## 3. 대시보드
 
 ### 3.1 `GET /admin/stats/overview`
 
-Pinvi app schema에서 계산 가능한 지표만 즉시 반환한다. `features_by_kind`와
-`etl_last_24h`는 kor-travel-map admin/ops 및 Dagster 요약 API가 결선될 때까지 빈 값/0값이다.
+Pinvi app schema에서 계산 가능한 운영 지표를 즉시 반환한다. 응답에는 raw 운영 경로,
+운영 도메인, secret을 넣지 않는다. 디스크 사용량은 `PINVI_BACKUP_DIR`의 가장 가까운
+존재 경로 기준 숫자만 반환한다. Docker/container 상세 상태는 `/admin/system` 후속 화면에서
+분리한다.
 
 응답 200:
 
 ```jsonc
 {
   "data": {
+    "generated_at": "2026-06-27T06:00:00Z",
     "users_total": 1234,
     "users_24h": 42,
     "users_pending_verification": 18,
@@ -86,8 +89,37 @@ Pinvi app schema에서 계산 가능한 지표만 즉시 반환한다. `features
     "email_queue_pending": 3,
     "api_calls_24h": 91,
     "api_calls_failed_24h": 2,
+    "api_failure_rate_pct": 2.2,
+    "api_latency_p95_ms": 312,
     "features_by_kind": {},
     "etl_last_24h": { "success": 0, "failed": 0 },
+    "series_24h": [
+      {
+        "bucket_start": "2026-06-26T07:00:00Z",
+        "users_created": 0,
+        "trips_created": 1,
+        "api_calls": 7,
+        "api_failures": 0,
+      },
+    ],
+    "load": {
+      "cpu_count": 4,
+      "load_1m": 0.62,
+      "load_5m": 0.51,
+      "load_15m": 0.44,
+    },
+    "capacity": {
+      "attachments_total_bytes": 20971520,
+      "attachments_count": 8,
+      "trip_attachment_quota_bytes": 104857600,
+      "user_attachment_quota_bytes": 1073741824,
+      "attachment_max_upload_bytes": 10485760,
+      "avatar_max_upload_bytes": 2097152,
+      "users_with_quota_override": 2,
+      "disk_total_bytes": 107374182400,
+      "disk_used_bytes": 32212254720,
+      "disk_free_bytes": 75161927680,
+    },
   },
 }
 ```
@@ -128,15 +160,15 @@ GET /admin/entities/users?q=email:gmail.com+-status:disabled&sort=-created_at&pa
 
 ### 4.4 `DELETE /admin/entities/{entity}/{item_id}`
 
-| Entity              | 동작                                                                           |
-| ------------------- | ------------------------------------------------------------------------------ |
-| `users`             | `status = 'deleted'`, `is_active = false` (soft, 30일 후 hard delete schedule) |
-| `features`          | (라이브러리에 요청 — `feature.status='hidden'`)                                |
-| `trips`             | `status = 'archived'`, `deleted_at = now()` (soft)                             |
-| `pois`              | hard delete                                                                    |
-| `notice-plans`      | soft delete                                                                    |
-| `notice-pois`       | soft delete                                                                    |
-| `feature-requests`  | hard delete (`status='rejected'` 권장)                                         |
+| Entity             | 동작                                                                           |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `users`            | `status = 'deleted'`, `is_active = false` (soft, 30일 후 hard delete schedule) |
+| `features`         | (라이브러리에 요청 — `feature.status='hidden'`)                                |
+| `trips`            | `status = 'archived'`, `deleted_at = now()` (soft)                             |
+| `pois`             | hard delete                                                                    |
+| `notice-plans`     | soft delete                                                                    |
+| `notice-pois`      | soft delete                                                                    |
+| `feature-requests` | hard delete (`status='rejected'` 권장)                                         |
 
 자기 자신 disable / admin 권한 박탈 차단 — `403 PERMISSION_DENIED`
 (`details.reason: "cannot_modify_self"`).
@@ -478,7 +510,7 @@ DELETE /admin/trips/<trip_id>/days/<day_index>
   "end_day_index": null,
   "date_shift_days": 0,
   "target_trip_id": null,
-  "access_reason": "고객 요청 복사"
+  "access_reason": "고객 요청 복사",
 }
 ```
 
@@ -515,7 +547,7 @@ DELETE /admin/trips/<trip_id>/days/<day_index>
   "target_day_index": 3,
   "include_pois": true,
   "include_attachments": true,
-  "access_reason": "일정 복사"
+  "access_reason": "일정 복사",
 }
 ```
 
@@ -528,7 +560,7 @@ DELETE /admin/trips/<trip_id>/days/<day_index>
   "poi_policy": "move",
   "attachment_policy": "move",
   "comment_policy": "move",
-  "access_reason": "일정 통합"
+  "access_reason": "일정 통합",
 }
 ```
 
@@ -665,11 +697,11 @@ Query:
       "reviewed_by": null,
       "reviewed_at": null,
       "applied_at": null,
-      "created_at": "2026-06-12T00:00:00+09:00"
-    }
+      "created_at": "2026-06-12T00:00:00+09:00",
+    },
   ],
   "review_mode": "require_review",
-  "page_size": 100
+  "page_size": 100,
 }
 ```
 
@@ -685,7 +717,7 @@ upstream: `kor-travel-map`
 ```jsonc
 {
   "access_reason": "Pinvi 운영 검수 완료",
-  "kor_travel_map_reason": "원천 확인 완료"
+  "kor_travel_map_reason": "원천 확인 완료",
 }
 ```
 
@@ -839,7 +871,7 @@ POI 복사:
   "target_trip_id": "uuid",
   "target_day_index": 2,
   "include_attachments": true,
-  "access_reason": "POI 복제"
+  "access_reason": "POI 복제",
 }
 ```
 
@@ -856,7 +888,7 @@ POI 이동:
   "target_day_index": 3,
   "attachment_policy": "move",
   "comment_policy": "move",
-  "access_reason": "POI 일정 조정"
+  "access_reason": "POI 일정 조정",
 }
 ```
 
@@ -870,7 +902,7 @@ POI 삭제:
 {
   "attachment_policy": "delete",
   "comment_policy": "delete",
-  "access_reason": "복사본 정리"
+  "access_reason": "복사본 정리",
 }
 ```
 
@@ -951,11 +983,11 @@ source of truth로 보고, Admin UI는 Pinvi 마커 팔레트 fallback/색상 pr
 
 Query:
 
-| 이름             | 설명                                                     |
-| ---------------- | -------------------------------------------------------- |
-| `q`              | code, label, path, tier name, maki icon 로컬 필터        |
-| `include_counts` | upstream `db_feature_count` 포함 요청. 기본 `true`       |
-| `active_only`    | active category만 upstream에 요청. 기본 `false`          |
+| 이름             | 설명                                               |
+| ---------------- | -------------------------------------------------- |
+| `q`              | code, label, path, tier name, maki icon 로컬 필터  |
+| `include_counts` | upstream `db_feature_count` 포함 요청. 기본 `true` |
+| `active_only`    | active category만 upstream에 요청. 기본 `false`    |
 
 응답 `data`:
 
@@ -989,9 +1021,9 @@ Query:
       "tier4_code": "01070100",
       "tier4_name": "해수욕장",
       "db_active": true,
-      "db_feature_count": 12
-    }
-  ]
+      "db_feature_count": 12,
+    },
+  ],
 }
 ```
 
@@ -1028,7 +1060,7 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
     "assets": [{ "key": "pinvi_kasi_special_days", "group_name": "pinvi_kasi" }],
     "jobs": [
       { "name": "kasi_special_days_job", "trigger": "schedule" },
-      { "name": "kasi_poi_rise_set_job", "trigger": "on_demand" }
+      { "name": "kasi_poi_rise_set_job", "trigger": "on_demand" },
     ],
     "schedules": [
       {
@@ -1036,10 +1068,10 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
         "job_name": "kasi_special_days_job",
         "cron_schedule": "30 3 * * *",
         "execution_timezone": "Asia/Seoul",
-        "status": "configured"
-      }
+        "status": "configured",
+      },
     ],
-    "sensors": []
+    "sensors": [],
   },
   "kor_travel_map": {
     "status": "ok",
@@ -1057,8 +1089,8 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
     "provider_dataset_count": 1,
     "provider_failure_count": 0,
     "recent_import_jobs": [],
-    "errors": []
-  }
+    "errors": [],
+  },
 }
 ```
 
@@ -1070,18 +1102,18 @@ upstream: `kor-travel-map` `GET /v1/admin/dedup-reviews`.
 
 Query:
 
-| 이름          | 설명                                                       |
-| ------------- | ---------------------------------------------------------- |
+| 이름          | 설명                                                                  |
+| ------------- | --------------------------------------------------------------------- |
 | `status`      | 반복 가능. `pending` / `accepted` / `rejected` / `merged` / `ignored` |
-| `provider`    | 반복 가능 provider filter                                  |
-| `dataset_key` | 반복 가능 dataset key filter                               |
-| `kind`        | 반복 가능 feature kind                                     |
-| `category`    | 반복 가능 category filter                                  |
-| `min_score`   | 0~100                                                      |
-| `max_score`   | 0~100                                                      |
-| `q`           | feature 이름/provider/source 검색어                        |
-| `page_size`   | 1~500, 기본 50                                             |
-| `cursor`      | upstream cursor                                            |
+| `provider`    | 반복 가능 provider filter                                             |
+| `dataset_key` | 반복 가능 dataset key filter                                          |
+| `kind`        | 반복 가능 feature kind                                                |
+| `category`    | 반복 가능 category filter                                             |
+| `min_score`   | 0~100                                                                 |
+| `max_score`   | 0~100                                                                 |
+| `q`           | feature 이름/provider/source 검색어                                   |
+| `page_size`   | 1~500, 기본 50                                                        |
+| `cursor`      | upstream cursor                                                       |
 
 응답 `data`:
 
@@ -1104,7 +1136,7 @@ Query:
         "lon": 126.9882,
         "lat": 37.5512,
         "provider": "visitkorea",
-        "dataset_key": "attractions"
+        "dataset_key": "attractions",
       },
       "feature_b": {
         "feature_id": "feature-b",
@@ -1114,16 +1146,16 @@ Query:
         "lon": 126.9881,
         "lat": 37.5513,
         "provider": "kma",
-        "dataset_key": "poi_weather"
+        "dataset_key": "poi_weather",
       },
       "decision_reason": null,
       "reviewed_at": null,
       "reviewed_by": null,
-      "created_at": "2026-06-12T00:00:00+09:00"
-    }
+      "created_at": "2026-06-12T00:00:00+09:00",
+    },
   ],
   "page_size": 50,
-  "next_cursor": null
+  "next_cursor": null,
 }
 ```
 
@@ -1140,16 +1172,16 @@ upstream: `kor-travel-map` `PATCH /v1/admin/dedup-reviews/{review_id}`.
   "decision": "merged",
   "access_reason": "운영자가 확인한 중복 후보 병합",
   "kor_travel_map_reason": "동일 장소 확인",
-  "master_feature_id": "feature-a"
+  "master_feature_id": "feature-a",
 }
 ```
 
-| 이름                    | 설명                                                                    |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `decision`              | `accepted` / `rejected` / `merged` / `ignored`                          |
-| `access_reason`         | Pinvi `admin_audit_log`에 남길 운영 사유. 필수, 1~500자                 |
-| `kor_travel_map_reason` | upstream decision reason. 생략하면 `access_reason`을 전달               |
-| `master_feature_id`     | `decision=merged`일 때 필수. survivor feature id                        |
+| 이름                    | 설명                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| `decision`              | `accepted` / `rejected` / `merged` / `ignored`            |
+| `access_reason`         | Pinvi `admin_audit_log`에 남길 운영 사유. 필수, 1~500자   |
+| `kor_travel_map_reason` | upstream decision reason. 생략하면 `access_reason`을 전달 |
+| `master_feature_id`     | `decision=merged`일 때 필수. survivor feature id          |
 
 응답 `data`:
 
@@ -1162,7 +1194,7 @@ upstream: `kor-travel-map` `PATCH /v1/admin/dedup-reviews/{review_id}`.
   "loser_feature_id": "feature-b",
   "merge_id": "merge-1",
   "source_links_moved": 2,
-  "source_links_dropped": 0
+  "source_links_dropped": 0,
 }
 ```
 
@@ -1179,9 +1211,9 @@ upstream: `kor-travel-map` `GET /v1/ops/providers`.
 
 Query:
 
-| 이름  | 설명                               |
-| ----- | ---------------------------------- |
-| `key` | provider 또는 dataset key 검색어   |
+| 이름  | 설명                             |
+| ----- | -------------------------------- |
+| `key` | provider 또는 dataset key 검색어 |
 
 응답 `data`:
 
@@ -1199,10 +1231,10 @@ Query:
         "consecutive_failures": 0,
         "next_run_after": "2026-06-13T03:30:00+09:00",
         "links": {},
-        "refresh_policy": { "enabled": true }
+        "refresh_policy": { "enabled": true },
       },
     ],
-    "total": 1
+    "total": 1,
   },
 }
 ```
@@ -1215,14 +1247,14 @@ upstream: `kor-travel-map` `GET /v1/ops/import-jobs`.
 
 Query:
 
-| 이름            | 설명                                                  |
-| --------------- | ----------------------------------------------------- |
+| 이름            | 설명                                                   |
+| --------------- | ------------------------------------------------------ |
 | `status`        | `queued` / `running` / `done` / `failed` / `cancelled` |
-| `kind`          | upstream import job kind                              |
-| `load_batch_id` | load batch UUID                                       |
-| `parent_job_id` | parent job UUID                                       |
-| `page_size`     | 1~200, 기본 50                                        |
-| `cursor`        | upstream cursor                                       |
+| `kind`          | upstream import job kind                               |
+| `load_batch_id` | load batch UUID                                        |
+| `parent_job_id` | parent job UUID                                        |
+| `page_size`     | 1~200, 기본 50                                         |
+| `cursor`        | upstream cursor                                        |
 
 응답 `data`:
 
@@ -1241,11 +1273,11 @@ Query:
       "started_at": "2026-06-12T00:01:00+09:00",
       "heartbeat_at": "2026-06-12T00:02:00+09:00",
       "finished_at": null,
-      "links": {}
-    }
+      "links": {},
+    },
   ],
   "page_size": 50,
-  "next_cursor": null
+  "next_cursor": null,
 }
 ```
 
@@ -1261,16 +1293,16 @@ upstream: `kor-travel-map` `GET /v1/ops/consistency/issues`.
 
 Query:
 
-| 이름                | 설명                                             |
-| ------------------- | ------------------------------------------------ |
-| `status`            | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open` |
-| `severity`          | `info` / `warning` / `error` / `critical`        |
-| `violation_type`    | violation type                                   |
-| `provider`          | provider                                         |
-| `dataset_key`       | dataset key                                      |
-| `feature_id`        | feature id                                       |
-| `page_size`         | 1~200, 기본 50                                   |
-| `cursor`            | upstream cursor                                  |
+| 이름             | 설명                                                          |
+| ---------------- | ------------------------------------------------------------- |
+| `status`         | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open` |
+| `severity`       | `info` / `warning` / `error` / `critical`                     |
+| `violation_type` | violation type                                                |
+| `provider`       | provider                                                      |
+| `dataset_key`    | dataset key                                                   |
+| `feature_id`     | feature id                                                    |
+| `page_size`      | 1~200, 기본 50                                                |
+| `cursor`         | upstream cursor                                               |
 
 응답 `data.items[]`는 `issue_id`, `violation_type`, `severity`, `message`, `payload`,
 `status`, `detected_at`, `provider`, `dataset_key`, `feature_id`, `source_record_key`,
@@ -1284,11 +1316,11 @@ upstream: `kor-travel-map` `GET /v1/ops/consistency/reports`.
 
 Query:
 
-| 이름           | 설명                         |
-| -------------- | ---------------------------- |
-| `severity_max` | `OK` / `WARN` / `ERROR`      |
-| `page_size`    | 1~200, 기본 50               |
-| `cursor`       | upstream cursor              |
+| 이름           | 설명                    |
+| -------------- | ----------------------- |
+| `severity_max` | `OK` / `WARN` / `ERROR` |
+| `page_size`    | 1~200, 기본 50          |
+| `cursor`       | upstream cursor         |
 
 응답 `data.items[]`는 `report_id`, `batch_id`, `started_at`, `finished_at`, `severity_max`,
 `cases`, `summary`를 포함한다.
@@ -1307,13 +1339,13 @@ upstream: `kor-travel-map` `GET /v1/ops/system-logs`.
 
 Query:
 
-| 이름        | 설명                                            |
-| ----------- | ----------------------------------------------- |
+| 이름        | 설명                                                |
+| ----------- | --------------------------------------------------- |
 | `level`     | `debug` / `info` / `warning` / `error` / `critical` |
-| `source`    | sanitized log source                            |
-| `q`         | message/event 검색어                            |
-| `page_size` | 1~200, 기본 50                                  |
-| `cursor`    | upstream cursor                                 |
+| `source`    | sanitized log source                                |
+| `q`         | message/event 검색어                                |
+| `page_size` | 1~200, 기본 50                                      |
+| `cursor`    | upstream cursor                                     |
 
 응답 `data.items[]`는 `log_id`, `level`, `source`, `event`, `message`, `detail`,
 `request_id`, `created_at`을 포함한다. raw secret, Authorization header, 운영 도메인/IP는
@@ -1327,13 +1359,13 @@ upstream: `kor-travel-map` `GET /v1/ops/api-call-logs`.
 
 Query:
 
-| 이름         | 설명                       |
-| ------------ | -------------------------- |
-| `method`     | HTTP method                |
-| `min_status` | 100~599                    |
-| `path`       | path prefix/search         |
-| `page_size`  | 1~200, 기본 50             |
-| `cursor`     | upstream cursor            |
+| 이름         | 설명               |
+| ------------ | ------------------ |
+| `method`     | HTTP method        |
+| `min_status` | 100~599            |
+| `path`       | path prefix/search |
+| `page_size`  | 1~200, 기본 50     |
+| `cursor`     | upstream cursor    |
 
 응답 `data.items[]`는 `log_id`, `method`, `path`, `status_code`, `duration_ms`,
 `request_id`, `error_code`, `created_at`을 포함한다.
@@ -1505,9 +1537,9 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
       "description": "가입 직후 첫 여행, day, POI, 공유 토큰 후보를 준비한다.",
       "destructive": false,
       "confirm_phrase": "RUN new_user_first_trip",
-      "steps": ["사용자 샘플 확인", "여행/day/POI 생성 계획"]
-    }
-  ]
+      "steps": ["사용자 샘플 확인", "여행/day/POI 생성 계획"],
+    },
+  ],
 }
 ```
 
@@ -1521,7 +1553,7 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
 {
   "confirm": "RUN new_user_first_trip",
   "access_reason": "개발 smoke dry-run",
-  "dry_run": true
+  "dry_run": true,
 }
 ```
 
@@ -1541,8 +1573,8 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
     "dry_run": true,
     "audit_log_id": 101,
     "would_execute": ["사용자 샘플 확인", "여행/day/POI 생성 계획"],
-    "message": "seed scenario dry-run을 기록했습니다."
-  }
+    "message": "seed scenario dry-run을 기록했습니다.",
+  },
 }
 ```
 
@@ -1560,7 +1592,7 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
   "enabled": false,
   "mode": "dry_run_only",
   "confirm_phrase": "RESET",
-  "target_schemas": ["app"]
+  "target_schemas": ["app"],
 }
 ```
 
@@ -1571,7 +1603,7 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
   "confirm": "RESET",
   "access_reason": "reset 절차 리허설",
   "dry_run": true,
-  "include_seed": false
+  "include_seed": false,
 }
 ```
 

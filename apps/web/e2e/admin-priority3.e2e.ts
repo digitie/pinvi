@@ -262,6 +262,7 @@ test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page })
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
+            generated_at: '2026-06-09T10:00:00+09:00',
             users_total: 12,
             users_24h: 3,
             users_pending_verification: 2,
@@ -271,8 +272,35 @@ test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page })
             email_queue_pending: 5,
             api_calls_24h: 21,
             api_calls_failed_24h: 1,
+            api_failure_rate_pct: 4.8,
+            api_latency_p95_ms: 320,
             features_by_kind: {},
             etl_last_24h: { success: 0, failed: 0 },
+            series_24h: Array.from({ length: 24 }, (_, index) => ({
+              bucket_start: `2026-06-09T${String(index).padStart(2, '0')}:00:00+09:00`,
+              users_created: index === 22 ? 2 : 0,
+              trips_created: index === 23 ? 1 : 0,
+              api_calls: index + 1,
+              api_failures: index === 23 ? 1 : 0,
+            })),
+            load: {
+              cpu_count: 4,
+              load_1m: 0.7,
+              load_5m: 0.5,
+              load_15m: 0.4,
+            },
+            capacity: {
+              attachments_total_bytes: 20971520,
+              attachments_count: 8,
+              trip_attachment_quota_bytes: 104857600,
+              user_attachment_quota_bytes: 1073741824,
+              attachment_max_upload_bytes: 10485760,
+              avatar_max_upload_bytes: 2097152,
+              users_with_quota_override: 2,
+              disk_total_bytes: 107374182400,
+              disk_used_bytes: 32212254720,
+              disk_free_bytes: 75161927680,
+            },
           },
         }),
       });
@@ -295,6 +323,12 @@ test('Admin 대시보드가 앱 소유 통계를 표시한다', async ({ page })
   await expect(page.getByTestId('admin-system-kor_travel_map_api')).toContainText('주의');
   await expect(page.getByTestId('admin-stat-사용자 총 수')).toContainText('12');
   await expect(page.getByTestId('admin-stat-API 실패 24h')).toContainText('1');
+  await expect(page.getByTestId('admin-stat-API P95')).toContainText('320 ms');
+  await expect(page.getByTestId('admin-dashboard-series-api')).toContainText('API 호출 / 실패');
+  await expect(page.getByTestId('admin-dashboard-series-growth')).toContainText('가입 / 여행 생성');
+  await expect(page.getByTestId('admin-dashboard-load')).toContainText('0.70');
+  await expect(page.getByTestId('admin-dashboard-capacity-disk')).toContainText('30.0%');
+  await expect(page.getByTestId('admin-dashboard-capacity')).toContainText('8 files');
   await expect(page.getByText('T-209 Feature 검색')).toBeVisible();
 });
 

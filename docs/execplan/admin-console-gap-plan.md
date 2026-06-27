@@ -2,7 +2,7 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: T-209 PR 준비
+상태: T-221 PR 준비
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
@@ -555,16 +555,25 @@ kill-switch 기준이 필요한 별도 후속 범위로 유지한다.
 
 추가 요청(2026-06-27) 9번.
 
+상태: 완료(2026-06-27, codex). Docker/container 상세 상태는 T-222 System view에서 분리해
+구현한다.
+
 범위:
 
-- `/admin` dashboard에 운영 현황 상세보기와 간단한 그래프뷰를 추가한다.
-- API/Web/DB/RustFS/Dagster/kor-travel-map의 주요 부하, 용량, 실패율, queue 상태를 요약한다.
-- Grafana가 있으면 deep link를 제공하고, 없으면 Pinvi API summary만 표시한다.
+- `/admin` dashboard에 운영 현황 상세보기와 간단한 그래프뷰를 추가했다.
+- `GET /admin/stats/overview`는 생성 시각, API 실패율/P95, 최근 24시간 hourly series,
+  서버 load average, 첨부 저장소 사용량, 전역 quota, 사용자 quota override count,
+  백업 경로 기준 디스크 사용량 snapshot을 반환한다.
+- Web `/admin`은 API 호출/실패와 가입/여행 생성 막대 그래프, 서버 부하, 디스크 사용률,
+  첨부 저장소 사용량/한도 요약을 표시한다.
+- raw 운영 경로, 운영 도메인, secret은 API 응답과 화면에 노출하지 않는다.
 
 검증:
 
-- API unit/integration: metric source별 graceful degrade, secret/raw URL 비노출.
-- UI e2e: 그래프 카드, 오류 상태, 상세보기 링크.
+- API integration: 통계 count, API 실패율/P95, 24h series, 첨부/스토리지 quota, 디스크 snapshot.
+- UI e2e: 그래프 패널, 부하 패널, 디스크/첨부 용량 패널.
+- WSL: API ruff, 앱 코드 mypy, Web Prettier/typecheck/lint/Vitest/build.
+- Windows: Playwright dashboard mock e2e.
 
 ### T-222 — System view Docker / 의존 API 상태
 

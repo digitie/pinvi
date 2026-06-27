@@ -61,7 +61,39 @@ export const AdminApiCallEntrySchema = z.object({
 export type AdminApiCallEntry = z.infer<typeof AdminApiCallEntrySchema>;
 
 /** `/admin/stats/overview` — Pinvi app-owned 지표. */
+export const AdminStatsSeriesBucketSchema = z.object({
+  bucket_start: Iso8601Schema,
+  users_created: z.number().int().default(0),
+  trips_created: z.number().int().default(0),
+  api_calls: z.number().int().default(0),
+  api_failures: z.number().int().default(0),
+});
+export type AdminStatsSeriesBucket = z.infer<typeof AdminStatsSeriesBucketSchema>;
+
+export const AdminStatsLoadSnapshotSchema = z.object({
+  cpu_count: z.number().int().nullable().default(null),
+  load_1m: z.number().nullable().default(null),
+  load_5m: z.number().nullable().default(null),
+  load_15m: z.number().nullable().default(null),
+});
+export type AdminStatsLoadSnapshot = z.infer<typeof AdminStatsLoadSnapshotSchema>;
+
+export const AdminStatsCapacitySnapshotSchema = z.object({
+  attachments_total_bytes: z.number().int().default(0),
+  attachments_count: z.number().int().default(0),
+  trip_attachment_quota_bytes: z.number().int().nullable().default(null),
+  user_attachment_quota_bytes: z.number().int().nullable().default(null),
+  attachment_max_upload_bytes: z.number().int().nullable().default(null),
+  avatar_max_upload_bytes: z.number().int().nullable().default(null),
+  users_with_quota_override: z.number().int().default(0),
+  disk_total_bytes: z.number().int().nullable().default(null),
+  disk_used_bytes: z.number().int().nullable().default(null),
+  disk_free_bytes: z.number().int().nullable().default(null),
+});
+export type AdminStatsCapacitySnapshot = z.infer<typeof AdminStatsCapacitySnapshotSchema>;
+
 export const AdminStatsOverviewSchema = z.object({
+  generated_at: Iso8601Schema,
   users_total: z.number().int(),
   users_24h: z.number().int(),
   users_pending_verification: z.number().int(),
@@ -71,6 +103,8 @@ export const AdminStatsOverviewSchema = z.object({
   email_queue_pending: z.number().int(),
   api_calls_24h: z.number().int(),
   api_calls_failed_24h: z.number().int(),
+  api_failure_rate_pct: z.number(),
+  api_latency_p95_ms: z.number().int().nullable().default(null),
   features_by_kind: z.record(z.string(), z.number().int()).default({}),
   etl_last_24h: z
     .object({
@@ -78,6 +112,25 @@ export const AdminStatsOverviewSchema = z.object({
       failed: z.number().int(),
     })
     .default({ success: 0, failed: 0 }),
+  series_24h: z.array(AdminStatsSeriesBucketSchema).default([]),
+  load: AdminStatsLoadSnapshotSchema.default({
+    cpu_count: null,
+    load_1m: null,
+    load_5m: null,
+    load_15m: null,
+  }),
+  capacity: AdminStatsCapacitySnapshotSchema.default({
+    attachments_total_bytes: 0,
+    attachments_count: 0,
+    trip_attachment_quota_bytes: null,
+    user_attachment_quota_bytes: null,
+    attachment_max_upload_bytes: null,
+    avatar_max_upload_bytes: null,
+    users_with_quota_override: 0,
+    disk_total_bytes: null,
+    disk_used_bytes: null,
+    disk_free_bytes: null,
+  }),
 });
 export type AdminStatsOverview = z.infer<typeof AdminStatsOverviewSchema>;
 
@@ -210,9 +263,7 @@ export const AdminProviderImportJobsResponseSchema = z.object({
   page_size: z.number().int(),
   next_cursor: z.string().nullable().default(null),
 });
-export type AdminProviderImportJobsResponse = z.infer<
-  typeof AdminProviderImportJobsResponseSchema
->;
+export type AdminProviderImportJobsResponse = z.infer<typeof AdminProviderImportJobsResponseSchema>;
 
 export const AdminProviderDatasetSummarySchema = z.object({
   provider: z.string(),
@@ -298,9 +349,7 @@ export const AdminDedupReviewPagedResponseSchema = z.object({
   page_size: z.number().int(),
   next_cursor: z.string().nullable().default(null),
 });
-export type AdminDedupReviewPagedResponse = z.infer<
-  typeof AdminDedupReviewPagedResponseSchema
->;
+export type AdminDedupReviewPagedResponse = z.infer<typeof AdminDedupReviewPagedResponseSchema>;
 
 export const AdminDedupDecisionSchema = z.enum(['accepted', 'rejected', 'merged', 'ignored']);
 export type AdminDedupDecision = z.infer<typeof AdminDedupDecisionSchema>;
@@ -369,9 +418,7 @@ export const AdminCategoryMappingsResponseSchema = z.object({
   db_feature_total: z.number().int().nullable().default(null),
   items: z.array(AdminCategoryMappingItemSchema).default([]),
 });
-export type AdminCategoryMappingsResponse = z.infer<
-  typeof AdminCategoryMappingsResponseSchema
->;
+export type AdminCategoryMappingsResponse = z.infer<typeof AdminCategoryMappingsResponseSchema>;
 
 export const AdminSeedScenarioSchema = z.object({
   key: z.string(),
@@ -389,9 +436,7 @@ export const AdminSeedScenarioListResponseSchema = z.object({
   mode: z.literal('dry_run_only'),
   scenarios: z.array(AdminSeedScenarioSchema).default([]),
 });
-export type AdminSeedScenarioListResponse = z.infer<
-  typeof AdminSeedScenarioListResponseSchema
->;
+export type AdminSeedScenarioListResponse = z.infer<typeof AdminSeedScenarioListResponseSchema>;
 
 export const AdminSeedScenarioRunRequestSchema = z.object({
   confirm: z.string().min(1).max(120),
@@ -467,9 +512,7 @@ export const AdminConsistencyReportsResponseSchema = z.object({
   page_size: z.number().int(),
   next_cursor: z.string().nullable().default(null),
 });
-export type AdminConsistencyReportsResponse = z.infer<
-  typeof AdminConsistencyReportsResponseSchema
->;
+export type AdminConsistencyReportsResponse = z.infer<typeof AdminConsistencyReportsResponseSchema>;
 
 export const AdminUpstreamSystemLogRecordSchema = z.object({
   log_id: z.string(),
@@ -488,9 +531,7 @@ export const AdminUpstreamSystemLogsResponseSchema = z.object({
   page_size: z.number().int(),
   next_cursor: z.string().nullable().default(null),
 });
-export type AdminUpstreamSystemLogsResponse = z.infer<
-  typeof AdminUpstreamSystemLogsResponseSchema
->;
+export type AdminUpstreamSystemLogsResponse = z.infer<typeof AdminUpstreamSystemLogsResponseSchema>;
 
 export const AdminUpstreamApiCallLogRecordSchema = z.object({
   log_id: z.string(),
@@ -741,9 +782,21 @@ export const AdminUserFileQuotaSchema = z.object({
   attachment_max_upload_bytes_override: z.number().int().gt(0).nullable().default(null),
   trip_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
   user_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
-  effective_attachment_max_upload_bytes: z.number().int().gt(0).default(10 * 1024 * 1024),
-  effective_trip_attachment_quota_bytes: z.number().int().gt(0).default(100 * 1024 * 1024),
-  effective_user_attachment_quota_bytes: z.number().int().gt(0).default(1024 * 1024 * 1024),
+  effective_attachment_max_upload_bytes: z
+    .number()
+    .int()
+    .gt(0)
+    .default(10 * 1024 * 1024),
+  effective_trip_attachment_quota_bytes: z
+    .number()
+    .int()
+    .gt(0)
+    .default(100 * 1024 * 1024),
+  effective_user_attachment_quota_bytes: z
+    .number()
+    .int()
+    .gt(0)
+    .default(1024 * 1024 * 1024),
 });
 export type AdminUserFileQuota = z.infer<typeof AdminUserFileQuotaSchema>;
 
@@ -822,9 +875,7 @@ export const AdminUserFileQuotaUpdateRequestSchema = z.object({
   user_attachment_quota_bytes_override: z.number().int().gt(0).nullable().default(null),
   access_reason: z.string().min(1).max(500),
 });
-export type AdminUserFileQuotaUpdateRequest = z.infer<
-  typeof AdminUserFileQuotaUpdateRequestSchema
->;
+export type AdminUserFileQuotaUpdateRequest = z.infer<typeof AdminUserFileQuotaUpdateRequestSchema>;
 
 export const AdminPagedResponseSchema = z.object({
   items: z.array(AdminUserSummarySchema),

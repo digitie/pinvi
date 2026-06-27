@@ -63,7 +63,36 @@ class AdminApiCallEntry(BaseModel):
     occurred_at: datetime
 
 
+class AdminStatsSeriesBucket(BaseModel):
+    bucket_start: datetime
+    users_created: int = 0
+    trips_created: int = 0
+    api_calls: int = 0
+    api_failures: int = 0
+
+
+class AdminStatsLoadSnapshot(BaseModel):
+    cpu_count: int | None = None
+    load_1m: float | None = None
+    load_5m: float | None = None
+    load_15m: float | None = None
+
+
+class AdminStatsCapacitySnapshot(BaseModel):
+    attachments_total_bytes: int = 0
+    attachments_count: int = 0
+    trip_attachment_quota_bytes: int | None = None
+    user_attachment_quota_bytes: int | None = None
+    attachment_max_upload_bytes: int | None = None
+    avatar_max_upload_bytes: int | None = None
+    users_with_quota_override: int = 0
+    disk_total_bytes: int | None = None
+    disk_used_bytes: int | None = None
+    disk_free_bytes: int | None = None
+
+
 class AdminStatsOverview(BaseModel):
+    generated_at: datetime
     users_total: int
     users_24h: int
     users_pending_verification: int
@@ -73,8 +102,13 @@ class AdminStatsOverview(BaseModel):
     email_queue_pending: int
     api_calls_24h: int
     api_calls_failed_24h: int
+    api_failure_rate_pct: float
+    api_latency_p95_ms: int | None = None
     features_by_kind: dict[str, int] = Field(default_factory=dict)
     etl_last_24h: dict[str, int] = Field(default_factory=lambda: {"success": 0, "failed": 0})
+    series_24h: list[AdminStatsSeriesBucket] = Field(default_factory=list)
+    load: AdminStatsLoadSnapshot = Field(default_factory=AdminStatsLoadSnapshot)
+    capacity: AdminStatsCapacitySnapshot = Field(default_factory=AdminStatsCapacitySnapshot)
 
 
 AdminSystemStatus = Literal["ok", "degraded", "down", "unknown"]

@@ -9,8 +9,10 @@ from decimal import Decimal
 import pytest
 
 from app.models.api_call_log import ApiCallLog
+from app.models.attachment import CuratedPlanAttachment
 from app.models.email_queue import EmailQueue
 from app.models.poi import TripDayPoi
+from app.models.storage_settings import StorageSettings
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
@@ -157,6 +159,9 @@ async def test_admin_stats_overview_counts_app_owned_tables(
         email_prefix="owner_stats",
     )
     async with session_factory() as db:
+        owner = await db.get(User, owner_id)
+        assert owner is not None
+        owner.user_attachment_quota_bytes_override = 2_147_483_648
         db.add(
             User(
                 email=f"pending_{uuid.uuid4().hex[:8]}@pinvi.test",
@@ -200,6 +205,22 @@ async def test_admin_stats_overview_counts_app_owned_tables(
                     feature_id="place-admin-stat",
                     feature_snapshot={"name": "통계 POI"},
                     added_by_user_id=owner_id,
+                ),
+                StorageSettings(
+                    settings_id=1,
+                    avatar_max_upload_bytes=1_048_576,
+                    attachment_max_upload_bytes=5_242_880,
+                    trip_attachment_quota_bytes=52_428_800,
+                    user_attachment_quota_bytes=536_870_912,
+                ),
+                CuratedPlanAttachment(
+                    trip_id=trip.trip_id,
+                    bucket="pinvi-media",
+                    storage_key=f"tests/{uuid.uuid4().hex}.pdf",
+                    original_filename="stats.pdf",
+                    content_type="application/pdf",
+                    byte_size=12_345,
+                    uploaded_by_user_id=owner_id,
                 ),
                 EmailQueue(
                     user_id=owner_id,
@@ -260,5 +281,21 @@ async def test_admin_stats_overview_counts_app_owned_tables(
     assert data["email_queue_pending"] == 1
     assert data["api_calls_24h"] == 2
     assert data["api_calls_failed_24h"] == 1
+    assert data["api_failure_rate_pct"] == 50.0
+    assert data["api_latency_p95_ms"] == 308
+    assert len(data["series_24h"]) == 24
+    assert sum(bucket["api_calls"] for bucket in data["series_24h"]) == 2
+    assert sum(bucket["api_failures"] for bucket in data["series_24h"]) == 1
+    assert sum(bucket["users_created"] for bucket in data["series_24h"]) == 3
+    assert sum(bucket["trips_created"] for bucket in data["series_24h"]) == 2
+    assert data["load"]["cpu_count"] is None or data["load"]["cpu_count"] > 0
+    assert data["capacity"]["attachments_total_bytes"] == 12_345
+    assert data["capacity"]["attachments_count"] == 1
+    assert data["capacity"]["attachment_max_upload_bytes"] == 5_242_880
+    assert data["capacity"]["avatar_max_upload_bytes"] == 1_048_576
+    assert data["capacity"]["trip_attachment_quota_bytes"] == 52_428_800
+    assert data["capacity"]["user_attachment_quota_bytes"] == 536_870_912
+    assert data["capacity"]["users_with_quota_override"] == 1
+    assert data["capacity"]["disk_total_bytes"] is None or data["capacity"]["disk_total_bytes"] > 0
     assert data["features_by_kind"] == {}
     assert data["etl_last_24h"] == {"success": 0, "failed": 0}

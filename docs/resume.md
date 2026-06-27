@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-221 Dashboard 운영 현황 그래프 / 부하 / 용량
+
+Admin `/admin` 대시보드의 운영 현황을 실제 지표 기반으로 확장했다. Pinvi API
+`GET /admin/stats/overview`는 생성 시각, API 실패율, API latency P95, 최근 24시간 hourly
+series, 서버 load average, 첨부 저장소 사용량, 전역/사용자 quota, 백업 경로 기준 디스크 사용량을
+반환한다. 응답에는 raw 운영 경로, 운영 도메인, secret을 넣지 않는다.
+
+Web 대시보드는 기존 system status와 통계 카드 위에 API 호출/실패, 가입/여행 생성 막대 그래프,
+서버 부하, 디스크 사용률, 첨부 저장소 사용량/한도 요약을 표시한다. Docker/container 상세 상태는
+T-222 System view에서 별도 화면으로 다룬다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff check,
+앱 코드 mypy, `test_admin_priority3_api.py` 3건, Web Prettier check, typecheck, lint, Vitest 27건,
+Web production build가 통과했다. 테스트 파일까지 포함한 mypy는 기존 fixture 인자 타입 미기재
+패턴에서 실패해 앱 코드 대상으로 범위를 좁혀 확인했다. Playwright는 Windows에서 실행했고,
+WSL Next 서버(12805)를 띄워 `admin-priority3.e2e.ts` 대시보드 케이스 1건이 통과했다.
+
+다음: T-221 PR을 만들고 merge한 뒤 T-222 System view Docker / 의존 API 상태로 진행한다.
+
 ## 2026-06-27 (codex) — T-218 prod Grafana 주소 반영
 
 Admin `/admin/grafana`의 prod public URL 주입 경로를 정리했다. Web Docker build/runtime stage가
@@ -16,10 +35,10 @@ prod origin/path 조합과 fallback 단위 테스트를 추가했다.
 검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. Web Vitest 27건,
 Web typecheck, Web lint, Web production build, compose config parse, Prettier check가 통과했다.
 Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워 `admin-grafana.e2e.ts` 1건과
-admin-live catalog assertion 1건이 통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+admin-live catalog assertion 1건이 통과했다. PR merge 후 N150에 배포해 API/Web/Dagster/Grafana
+smoke를 완료했다.
 
-다음: T-218 PR을 만들고 merge한 뒤 T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기로
-진행한다.
+후속: T-218 PR은 merge됐고, T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기를 완료했다.
 
 ## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
 
