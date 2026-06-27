@@ -91,6 +91,197 @@ class AdminSystemSummary(BaseModel):
     services: list[AdminSystemServiceStatus]
 
 
+AdminFeatureSort = Literal[
+    "name",
+    "updated_at",
+    "created_at",
+    "kind",
+    "status",
+    "provider",
+    "issue_count",
+]
+AdminFeatureSortOrder = Literal["asc", "desc"]
+
+
+class AdminFeatureIssueSummary(BaseModel):
+    issue_id: str | None = None
+    violation_type: str | None = None
+    severity: str | None = None
+    message: str | None = None
+    detected_at: datetime | None = None
+
+
+class AdminFeatureSummary(BaseModel):
+    feature_id: str
+    kind: str
+    name: str
+    category: str
+    status: str
+    lon: float | None = None
+    lat: float | None = None
+    address_label: str | None = None
+    primary_provider: str | None = None
+    primary_dataset_key: str | None = None
+    issue_count: int = 0
+    issues: list[AdminFeatureIssueSummary] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminFeaturePagedResponse(BaseModel):
+    items: list[AdminFeatureSummary]
+    page_size: int
+    next_cursor: str | None = None
+    duration_ms: int | None = None
+
+
+class AdminFeatureChangeRequestRecord(BaseModel):
+    request_id: str
+    feature_id: str
+    action: str
+    status: str
+    review_mode: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = None
+    requested_by: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    applied_at: datetime | None = None
+    created_at: datetime
+
+
+class AdminFeatureDetailFeature(BaseModel):
+    feature_id: str
+    kind: str
+    name: str
+    category: str
+    status: str
+    lon: float | None = None
+    lat: float | None = None
+    coord_precision_digits: int | None = None
+    area_square_meters: float | None = None
+    address: dict[str, Any] = Field(default_factory=dict)
+    detail: dict[str, Any] = Field(default_factory=dict)
+    urls: dict[str, Any] = Field(default_factory=dict)
+    raw_refs: list[dict[str, Any]] = Field(default_factory=list)
+    legal_dong_code: str | None = None
+    road_name_code: str | None = None
+    road_address_management_no: str | None = None
+    admin_dong_code: str | None = None
+    sido_code: str | None = None
+    sigungu_code: str | None = None
+    marker_icon: str | None = None
+    marker_color: str | None = None
+    parent_feature_id: str | None = None
+    sibling_group_id: str | None = None
+    data_origin: str | None = None
+    data_version: int | None = None
+    user_change_kind: str | None = None
+    user_change_status: str | None = None
+    user_change_request_id: str | None = None
+    user_deleted_at: datetime | None = None
+    user_deleted_by: str | None = None
+    user_change_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None = None
+
+
+class AdminFeatureDetailSource(BaseModel):
+    source_record_key: str
+    provider: str
+    dataset_key: str
+    source_entity_type: str
+    source_entity_id: str
+    source_version: str | None = None
+    source_role: str
+    match_method: str
+    confidence: int
+    is_primary_source: bool
+    raw_name: str | None = None
+    raw_address: str | None = None
+    raw_longitude: float | None = None
+    raw_latitude: float | None = None
+    raw_payload_hash: str | None = None
+    raw_data: dict[str, Any] = Field(default_factory=dict)
+    fetched_at: datetime
+    imported_at: datetime
+    expires_at: datetime | None = None
+    linked_at: datetime
+
+
+class AdminFeatureDetailIssue(BaseModel):
+    issue_id: str
+    provider: str | None = None
+    dataset_key: str | None = None
+    source_record_key: str | None = None
+    violation_type: str
+    severity: str
+    message: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    detected_at: datetime
+    resolved_at: datetime | None = None
+
+
+class AdminFeatureDetailOverride(BaseModel):
+    override_id: str
+    source_record_key: str | None = None
+    field_path: str
+    source_value: Any = None
+    override_value: Any = None
+    prevent_provider_reactivation: bool
+    status: str
+    reason: str | None = None
+    created_by: str | None = None
+    created_at: datetime
+
+
+class AdminFeatureDetailVersion(BaseModel):
+    feature_id: str
+    version: int
+    origin: str
+    change_kind: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    request_id: str | None = None
+    created_by: str | None = None
+    created_at: datetime
+
+
+class AdminFeatureDetailFile(BaseModel):
+    file_id: str
+    file_type: str
+    storage_backend: str
+    bucket: str
+    object_key: str
+    source_url: str | None = None
+    public_url: str | None = None
+    content_type: str | None = None
+    byte_size: int | None = None
+    checksum_sha256: str | None = None
+    width: int | None = None
+    height: int | None = None
+    role: str
+    display_order: int
+    alt_text: str | None = None
+    provider: str | None = None
+    dataset_key: str | None = None
+    source_record_key: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminFeatureDetail(BaseModel):
+    feature: AdminFeatureDetailFeature
+    sources: list[AdminFeatureDetailSource] = Field(default_factory=list)
+    issues: list[AdminFeatureDetailIssue] = Field(default_factory=list)
+    overrides: list[AdminFeatureDetailOverride] = Field(default_factory=list)
+    versions: list[AdminFeatureDetailVersion] = Field(default_factory=list)
+    change_requests: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
+    files: list[AdminFeatureDetailFile] = Field(default_factory=list)
+
+
 class AdminUserDetail(AdminUserSummary):
     email: str
     email_revealed: bool

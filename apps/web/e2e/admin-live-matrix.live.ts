@@ -89,7 +89,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/pois', heading: 'POI', table: true },
   { path: '/admin/feature-requests', heading: 'Feature 제안 검토', table: true },
   { path: '/admin/audit', heading: '감사 로그', table: true },
-  { path: '/admin/features', heading: 'Features', placeholder: true },
+  { path: '/admin/features', heading: 'Features', table: true },
   { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', placeholder: true },
   { path: '/admin/dedup-review', heading: 'Dedup review', placeholder: true },
   { path: '/admin/provider-sync', heading: 'Provider sync', placeholder: true },
@@ -150,6 +150,11 @@ const sortSpecs = [
     route: '/admin/feature-requests',
     heading: 'Feature 제안 검토',
     columns: ['type', 'name', 'status', 'created_at'],
+  },
+  {
+    route: '/admin/features',
+    heading: 'Features',
+    columns: ['feature', 'kind', 'provider', 'issue_count', 'updated_at'],
   },
 ];
 
@@ -547,6 +552,69 @@ function pushFeatureRequestFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushFeaturesFilterCases(cases: AdminUiCase[]) {
+  const kinds = ['all', 'place', 'event', 'notice', 'price', 'weather', 'route', 'area'];
+  const statuses = ['active', 'all', 'inactive', 'hidden', 'broken', 'deleted'];
+  const issues = ['all', 'yes', 'no'];
+  const providers = ['', 'visitkorea', 'kma', 'opinet'];
+  const categories = ['', '01070100', '02010100'];
+  for (const viewport of compactViewports) {
+    for (const kind of kinds) {
+      for (const status of statuses) {
+        for (const issue of issues) {
+          for (const query of shortTerms) {
+            pushCase(
+              cases,
+              `features filter kind=${kind} status=${status} issue=${issue} q=${query}`,
+              viewport,
+              async (page) => {
+                await openTableRoute(page, '/admin/features', 'Features');
+                await page.getByTestId('admin-features-search').fill(query);
+                await throttle();
+                await page.getByTestId('admin-features-search-submit').click();
+                await throttle();
+                await page.getByTestId('admin-features-kind-filter').selectOption(kind);
+                await throttle();
+                await page.getByTestId('admin-features-status-filter').selectOption(status);
+                await throttle();
+                await page.getByTestId('admin-features-issue-filter').selectOption(issue);
+                await waitForAdminTable(page);
+                await expect(page.getByTestId('admin-features-search')).toHaveValue(query);
+                await expect(page.getByTestId('admin-features-kind-filter')).toHaveValue(kind);
+                await expect(page.getByTestId('admin-features-status-filter')).toHaveValue(status);
+                await expect(page.getByTestId('admin-features-issue-filter')).toHaveValue(issue);
+              },
+            );
+          }
+        }
+      }
+    }
+    for (const provider of providers) {
+      for (const category of categories) {
+        pushCase(
+          cases,
+          `features provider=${provider || 'all'} category=${category || 'all'}`,
+          viewport,
+          async (page) => {
+            await openTableRoute(page, '/admin/features', 'Features');
+            await page.getByTestId('admin-features-provider-filter').fill(provider);
+            await page.getByTestId('admin-features-category-filter').fill(category);
+            await throttle();
+            await page.getByTestId('admin-features-search-submit').click();
+            await waitForAdminTable(page);
+            await expect(page.getByTestId('admin-features-provider-filter')).toHaveValue(
+              provider,
+            );
+            await expect(page.getByTestId('admin-features-category-filter')).toHaveValue(
+              category,
+            );
+          },
+        );
+      }
+    }
+  }
+}
+
 function pushSortCases(cases: AdminUiCase[]) {
   for (let repeat = 1; repeat <= 3; repeat += 1) {
     for (const viewport of mixedViewports) {
@@ -629,6 +697,7 @@ function buildUiCases() {
   pushEmailsFilterCases(cases);
   pushMcpFilterCases(cases);
   pushFeatureRequestFilterCases(cases);
+  pushFeaturesFilterCases(cases);
   pushSortCases(cases);
   pushDashboardCases(cases);
   pushMcpValidationCases(cases);

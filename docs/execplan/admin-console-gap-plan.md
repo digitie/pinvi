@@ -2,7 +2,7 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: 리뷰 대기
+상태: T-209 PR 준비
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
@@ -48,7 +48,7 @@
 
 ### 기능적으로 비어 있는 영역
 
-- `apps/web/app/(admin)/admin/features/page.tsx`
+- `apps/web/app/(admin)/admin/features/page.tsx` — T-209에서 read-only 목록/상세 구현 완료
 - `apps/web/app/(admin)/admin/etl/page.tsx`
 - `apps/web/app/(admin)/admin/category-mapping/page.tsx`
 - `apps/web/app/(admin)/admin/seed/page.tsx`
@@ -153,6 +153,10 @@ API:
 
 ### T-209 — `kor-travel-map` Admin proxy foundation + Features 화면
 
+상태: 완료(2026-06-27, codex). 구현 PR은 `kor-travel-map` `/v1/admin/features` read-only
+계약을 Pinvi `/admin/features` proxy와 Web 화면에 연결한다. N150 live 실행은 T-215 묶음
+게이트에서 수행한다.
+
 범위:
 
 - 구현 시작 전 `kor-travel-map` 최신 OpenAPI/Admin 계약을 확인하고, Pinvi proxy가 사용할
@@ -161,6 +165,27 @@ API:
 - Pinvi API에 `/admin/features` proxy router를 추가한다.
 - `packages/api-client`와 Web query hook을 추가한다.
 - `/admin/features` placeholder를 검색/필터/table/detail inspector로 교체한다.
+
+확인한 upstream 계약:
+
+- `GET /v1/admin/features`
+  - query: `q`, 반복 `kind`, `category`, `status`, `provider`, `dataset_key`, `issue_type`,
+    `has_coord`, `has_issue`, `updated_from`, `updated_to`, `page_size`, `cursor`, `sort`, `order`
+  - response envelope: `data.items[]`, `meta.page.next_cursor`, `meta.duration_ms`
+- `GET /v1/admin/features/{feature_id}`
+  - response envelope: `data.feature`, `data.sources`, `data.issues`, `data.overrides`,
+    `data.versions`, `data.change_requests`, `data.files`
+
+구현:
+
+- `KorTravelMapAdminClient.list_features()` / `get_feature_detail()` read method 추가.
+- Pinvi API `/admin/features` / `/admin/features/{feature_id}` 추가. admin/operator read-only이며
+  Pinvi DB `feature.*`를 직접 조회하지 않는다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 Admin feature 목록/상세 계약 추가.
+- Web `/admin/features`를 검색어, kind/status/provider/category/issue, sort/order,
+  page_size, cursor 기반 table과 detail inspector로 교체.
+- `admin-live-matrix.live.ts`에서 `/admin/features`를 placeholder가 아닌 table route로 전환하고
+  feature filter/sort live case를 추가했다.
 
 금지:
 
@@ -171,7 +196,10 @@ API:
 
 - `httpx.MockTransport` 기반 admin client unit.
 - FastAPI integration에서 upstream fake dependency로 list/detail/error mapping 검증.
-- Web component/Vitest + local Playwright table/detail navigation.
+- Web typecheck/lint/build, schemas/api-client typecheck, schemas Vitest, admin live catalog/list와
+  catalog assertion.
+- local Playwright table/detail navigation은 WSL Playwright Chromium 바이너리 부재로 실행 전
+  실패했다. mock e2e 테스트케이스는 추가했고 CI/Windows 또는 N150 묶음 게이트에서 실행한다.
 
 ### T-210 — Feature request / change request 운영 통합
 

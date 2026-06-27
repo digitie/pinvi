@@ -9,6 +9,9 @@
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
   `/admin/system/summary` 기반 대시보드 상태 보드를 추가했다. Pinvi API, DB, Web,
   Dagster, `kor-travel-map` API, RustFS 상태를 raw URL/secret 없이 표시한다.
+- Admin `/admin/features`를 `kor-travel-map` Admin API read-only proxy에 연결했다. feature
+  목록 검색/필터, cursor pagination, sort/order, provider/category/issue 필터와
+  상세 inspector(sources/issues/overrides/versions/change requests/files)를 제공한다.
 - 이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동으로 다시 보내고, 로그인
   화면에서 "인증 메일 다시 보내기" 버튼으로도 재발송할 수 있다. `POST /auth/verify-email/resend`
   (계정 enumeration 차단) 추가 + 로그인 `EMAIL_NOT_VERIFIED` 응답에 `verification_email_dispatched`

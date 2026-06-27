@@ -60,6 +60,22 @@ export const queryKeys = {
     pois: (params: { page?: number; tripId?: string; hasBrokenLink?: boolean; q?: string }) =>
       ['admin', 'pois', params] as const,
     poi: (poiId: string) => ['admin', 'poi', poiId] as const,
+    features: (params: {
+      q?: string;
+      kind?: string[];
+      category?: string[];
+      status?: string[];
+      provider?: string[];
+      datasetKey?: string[];
+      hasCoord?: boolean;
+      hasIssue?: boolean;
+      issueType?: string[];
+      pageSize?: number;
+      cursor?: string;
+      sort?: string;
+      order?: string;
+    }) => ['admin', 'features', params] as const,
+    feature: (featureId: string) => ['admin', 'feature', featureId] as const,
     featureRequests: (params: { status?: string; page?: number }) =>
       ['admin', 'feature-requests', params] as const,
     // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).

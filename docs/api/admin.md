@@ -25,7 +25,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/users/{id}/resend-verify` | 인증 메일 재발송 | 3 |
 | `POST /admin/users/{id}/disable` | 비활성화 (refresh 전부 revoke) | 3 |
 | `GET /admin/trips` / `{trip_id}` | trip 목록 / 상세 | 3 |
-| `GET /admin/features` | 라이브러리 feature 검색 (read-only) | 3 |
+| `GET /admin/features` / `{feature_id}` | kor-travel-map admin feature 검색 / 상세 (read-only) | 4 |
 | `GET /admin/pois` / `{poi_id}` | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3 |
 | `PATCH /admin/pois/{poi_id}/link-status` | POI feature 연결 상태 로컬 표시 | 3 |
 | `GET /admin/datasets` | dataset 카탈로그 | 3 |
@@ -280,13 +280,112 @@ Content-Type: application/json
 - `trips.status`를 변경하고 `version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "trip.update_status"`를 기록한다.
 
-## 8. POI 관리
+## 8. Feature 조회 (kor-travel-map Admin proxy)
+
+Pinvi는 `feature` / `provider_sync` schema를 소유하지 않는다. Admin feature 조회는
+`kor-travel-map` Admin HTTP 계약을 Pinvi API가 proxy하고, Web은 Pinvi API(`12801`)만 호출한다.
+브라우저가 `kor-travel-map` Admin 포트로 직접 접근하지 않는다.
+
+### 8.1 `GET /admin/features`
+
+upstream: `kor-travel-map` `GET /v1/admin/features`.
+
+권한: `admin` / `operator`
+
+Query:
+
+| 이름 | 설명 |
+|------|------|
+| `q` | name/address/feature/source 검색 |
+| `kind` | 반복 가능. `place`, `event`, `notice`, `price`, `weather`, `route`, `area` |
+| `category` | 반복 가능 category code |
+| `status` | 반복 가능 feature status. 미지정 시 upstream 기본 `active` |
+| `provider` | 반복 가능 primary provider |
+| `dataset_key` | 반복 가능 primary dataset key |
+| `has_coord` | 좌표 보유 여부 |
+| `has_issue` | integrity issue 보유 여부 |
+| `issue_type` | 반복 가능 issue type |
+| `updated_from`, `updated_to` | ISO-8601 timestamp |
+| `page_size` | 1~500, 기본 50 |
+| `cursor` | keyset cursor |
+| `sort` | `name`, `updated_at`, `created_at`, `kind`, `status`, `provider`, `issue_count` |
+| `order` | `asc` / `desc` |
+
+응답 `data`:
+
+```jsonc
+{
+  "items": [
+    {
+      "feature_id": "f_place_...",
+      "kind": "place",
+      "name": "해운대 카페",
+      "category": "01070100",
+      "status": "active",
+      "lon": 129.163,
+      "lat": 35.158,
+      "address_label": "부산 해운대구",
+      "primary_provider": "visitkorea",
+      "primary_dataset_key": "places",
+      "issue_count": 0,
+      "issues": [],
+      "created_at": "2026-06-11T00:00:00+09:00",
+      "updated_at": "2026-06-12T00:00:00+09:00"
+    }
+  ],
+  "page_size": 50,
+  "next_cursor": null,
+  "duration_ms": 7
+}
+```
+
+### 8.2 `GET /admin/features/{feature_id}`
+
+upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
+
+권한: `admin` / `operator`
+
+응답 `data`:
+
+```jsonc
+{
+  "feature": {
+    "feature_id": "f_place_...",
+    "kind": "place",
+    "name": "해운대 카페",
+    "category": "01070100",
+    "status": "active",
+    "address": {},
+    "detail": {},
+    "urls": {},
+    "raw_refs": [],
+    "created_at": "2026-06-11T00:00:00+09:00",
+    "updated_at": "2026-06-12T00:00:00+09:00"
+  },
+  "sources": [],
+  "issues": [],
+  "overrides": [],
+  "versions": [],
+  "change_requests": [],
+  "files": []
+}
+```
+
+오류 매핑:
+
+- upstream 404 → `404 RESOURCE_NOT_FOUND`
+- upstream 429 → `429 RATE_LIMITED` + `Retry-After` 전달
+- upstream 4xx → `422 VALIDATION_ERROR` 또는 upstream `code`
+- upstream timeout/5xx → `503 FEATURE_SERVICE_UNAVAILABLE`
+- upstream envelope drift → `502 FEATURE_SERVICE_BAD_GATEWAY`
+
+## 9. POI 관리
 
 POI Admin은 Pinvi 소유 `app.trip_day_pois` 첨부 행만 관리한다. `feature_id`
 재연결이나 feature 원천 데이터 수정은 kor-travel-map OpenAPI client 준비 후 별도 작업으로
 진행한다.
 
-### 8.1 `GET /admin/pois`
+### 9.1 `GET /admin/pois`
 
 ```http
 GET /admin/pois?q=haeundae&has_broken_link=false&page=1&limit=50
@@ -320,14 +419,14 @@ GET /admin/pois?q=haeundae&has_broken_link=false&page=1&limit=50
 }
 ```
 
-### 8.2 `GET /admin/pois/{poi_id}`
+### 9.2 `GET /admin/pois/{poi_id}`
 
 - 권한: `admin` / `operator`
 - 목록 row + `added_by_email_masked`, `feature_snapshot`, marker override, 예정 시각,
   메모, 예산/실사용 금액, 사용자 URL, 최근 `admin_audit_log` 10건을 반환한다.
 - owner / added_by 이메일은 항상 마스킹한다.
 
-### 8.3 `PATCH /admin/pois/{poi_id}/link-status`
+### 9.3 `PATCH /admin/pois/{poi_id}/link-status`
 
 ```http
 PATCH /admin/pois/<poi_id>/link-status
@@ -346,7 +445,7 @@ Content-Type: application/json
 - 실제 값이 바뀐 경우 `trip_day_pois.version`을 1 증가시킨다.
 - `admin_audit_log`에 `action = "poi.update_link_status"`를 기록한다.
 
-### 8.4 사용자 feature 제안 검토 큐 (T-179)
+### 9.4 사용자 feature 제안 검토 큐 (T-179)
 
 사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
 kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12701 /v1/admin/*`)로 전달한다.

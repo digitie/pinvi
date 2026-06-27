@@ -14,8 +14,8 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-207 계획 PR merge와 별도 에이전트 리뷰 후 T-208부터
-  Task 단위 PR로 순차 진행. 상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
+- Admin 콘솔 기능 보강: T-210 Pinvi feature request와 upstream change request 운영 통합.
+  상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
   노드 smoke와 backup/restore 복구 훈련.
@@ -37,7 +37,12 @@
   `Features`, 변경 요청, dedup review, provider sync, integrity, debug logs placeholder route를
   추가했다. `/admin/system/summary` read-only API와 대시보드 상태 보드가 Pinvi API, DB,
   Web, Dagster, `kor-travel-map` API, RustFS 상태를 secret/raw URL 없이 요약한다.
-- [ ] T-209 — `kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면.
+- [x] T-209 — `kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면
+  (완료: 2026-06-27, codex). `GET /v1/admin/features`와
+  `GET /v1/admin/features/{feature_id}` admin read 계약을 Pinvi `/admin/features` proxy로
+  연결하고, Web 화면을 검색/필터/table/detail inspector로 교체했다. live matrix는
+  `/admin/features`를 table route로 전환하고 feature filter/sort case를 추가했다. N150 live는
+  T-215 묶음 게이트에서 수행한다.
 - [ ] T-210 — Pinvi feature request와 upstream change request 운영 통합.
 - [ ] T-211 — `/admin/etl` + provider sync + Dagster 운영 화면.
 - [ ] T-212 — Dedup review / integrity / debug logs 운영 화면.

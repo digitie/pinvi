@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-209 Admin Features read proxy / 실제 화면
+
+**작업**: `kor-travel-map` Admin의 feature 목록/상세 화면과 API 계약을 참고해 Pinvi
+`/admin/features` placeholder를 실제 read-only 운영 화면으로 바꿨다.
+
+**변경**:
+- `KorTravelMapAdminClient`에 `GET /v1/admin/features`와
+  `GET /v1/admin/features/{feature_id}` read method를 추가했다. 반복 query(`kind`,
+  `category`, `status`, `provider`, `dataset_key`, `issue_type`)와 cursor/sort/order를 그대로
+  upstream에 전달한다.
+- FastAPI `/admin/features` / `/admin/features/{feature_id}` proxy router를 추가했다. admin/operator
+  전용이며 Pinvi DB `feature.*`를 직접 조회하지 않는다.
+- `@pinvi/schemas`, `@pinvi/api-client`, query keys에 Admin feature 목록/상세 계약을 추가했다.
+- Web `/admin/features`를 검색/필터/table/cursor pagination/detail inspector로 교체했다. 상세는
+  feature core, sources, issues, overrides, versions, change requests, files 묶음을 확인한다.
+- live matrix에서 `/admin/features`를 table route로 전환하고 feature filter/sort case를 추가했다.
+  mock e2e fixture도 Pinvi proxy 호출과 상세 inspector 검증을 포함하도록 보강했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API focused pytest 15건, API `ruff check`,
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, Web lint, schemas Vitest,
+Admin live catalog/list(5966 cases), Admin live catalog assertion, Web `next build`를 통과했다.
+local Playwright mock e2e는 WSL Chromium 바이너리 부재로 실행 전 실패했다. N150 live 실행은
+T-215 묶음 게이트로 보류한다.
+
+**다음**: T-209 PR merge 후 T-210에서 Pinvi feature request와 upstream change request 운영 통합을
+진행한다.
+
 ## 2026-06-27 (codex) — T-208 Admin IA / 대시보드 상태판
 
 **작업**: Admin 구현 프로그램의 첫 코드 Task로 메뉴 구조와 대시보드 상태판을 보강했다.

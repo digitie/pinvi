@@ -98,6 +98,214 @@ export const AdminSystemSummarySchema = z.object({
 });
 export type AdminSystemSummary = z.infer<typeof AdminSystemSummarySchema>;
 
+export const AdminFeatureSortSchema = z.enum([
+  'name',
+  'updated_at',
+  'created_at',
+  'kind',
+  'status',
+  'provider',
+  'issue_count',
+]);
+export type AdminFeatureSort = z.infer<typeof AdminFeatureSortSchema>;
+
+export const AdminFeatureSortOrderSchema = z.enum(['asc', 'desc']);
+export type AdminFeatureSortOrder = z.infer<typeof AdminFeatureSortOrderSchema>;
+
+const AdminFeatureJsonObjectSchema = z.record(z.string(), z.unknown());
+
+export const AdminFeatureIssueSummarySchema = z.object({
+  issue_id: z.string().nullable().default(null),
+  violation_type: z.string().nullable().default(null),
+  severity: z.string().nullable().default(null),
+  message: z.string().nullable().default(null),
+  detected_at: Iso8601Schema.nullable().default(null),
+});
+export type AdminFeatureIssueSummary = z.infer<typeof AdminFeatureIssueSummarySchema>;
+
+export const AdminFeatureSummarySchema = z.object({
+  feature_id: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  category: z.string(),
+  status: z.string(),
+  lon: z.number().nullable().default(null),
+  lat: z.number().nullable().default(null),
+  address_label: z.string().nullable().default(null),
+  primary_provider: z.string().nullable().default(null),
+  primary_dataset_key: z.string().nullable().default(null),
+  issue_count: z.number().int().default(0),
+  issues: z.array(AdminFeatureIssueSummarySchema).default([]),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminFeatureSummary = z.infer<typeof AdminFeatureSummarySchema>;
+
+export const AdminFeaturePagedResponseSchema = z.object({
+  items: z.array(AdminFeatureSummarySchema),
+  page_size: z.number().int(),
+  next_cursor: z.string().nullable().default(null),
+  duration_ms: z.number().int().nullable().default(null),
+});
+export type AdminFeaturePagedResponse = z.infer<typeof AdminFeaturePagedResponseSchema>;
+
+export const AdminFeatureChangeRequestRecordSchema = z.object({
+  request_id: z.string(),
+  feature_id: z.string(),
+  action: z.string(),
+  status: z.string(),
+  review_mode: z.string(),
+  payload: AdminFeatureJsonObjectSchema.default({}),
+  reason: z.string().nullable().default(null),
+  requested_by: z.string().nullable().default(null),
+  reviewed_by: z.string().nullable().default(null),
+  reviewed_at: Iso8601Schema.nullable().default(null),
+  applied_at: Iso8601Schema.nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminFeatureChangeRequestRecord = z.infer<
+  typeof AdminFeatureChangeRequestRecordSchema
+>;
+
+export const AdminFeatureDetailFeatureSchema = z.object({
+  feature_id: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  category: z.string(),
+  status: z.string(),
+  lon: z.number().nullable().default(null),
+  lat: z.number().nullable().default(null),
+  coord_precision_digits: z.number().int().nullable().default(null),
+  area_square_meters: z.number().nullable().default(null),
+  address: AdminFeatureJsonObjectSchema.default({}),
+  detail: AdminFeatureJsonObjectSchema.default({}),
+  urls: AdminFeatureJsonObjectSchema.default({}),
+  raw_refs: z.array(AdminFeatureJsonObjectSchema).default([]),
+  legal_dong_code: z.string().nullable().default(null),
+  road_name_code: z.string().nullable().default(null),
+  road_address_management_no: z.string().nullable().default(null),
+  admin_dong_code: z.string().nullable().default(null),
+  sido_code: z.string().nullable().default(null),
+  sigungu_code: z.string().nullable().default(null),
+  marker_icon: z.string().nullable().default(null),
+  marker_color: z.string().nullable().default(null),
+  parent_feature_id: z.string().nullable().default(null),
+  sibling_group_id: z.string().nullable().default(null),
+  data_origin: z.string().nullable().default(null),
+  data_version: z.number().int().nullable().default(null),
+  user_change_kind: z.string().nullable().default(null),
+  user_change_status: z.string().nullable().default(null),
+  user_change_request_id: z.string().nullable().default(null),
+  user_deleted_at: Iso8601Schema.nullable().default(null),
+  user_deleted_by: z.string().nullable().default(null),
+  user_change_reason: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+  deleted_at: Iso8601Schema.nullable().default(null),
+});
+export type AdminFeatureDetailFeature = z.infer<typeof AdminFeatureDetailFeatureSchema>;
+
+export const AdminFeatureDetailSourceSchema = z.object({
+  source_record_key: z.string(),
+  provider: z.string(),
+  dataset_key: z.string(),
+  source_entity_type: z.string(),
+  source_entity_id: z.string(),
+  source_version: z.string().nullable().default(null),
+  source_role: z.string(),
+  match_method: z.string(),
+  confidence: z.number().int(),
+  is_primary_source: z.boolean(),
+  raw_name: z.string().nullable().default(null),
+  raw_address: z.string().nullable().default(null),
+  raw_longitude: z.number().nullable().default(null),
+  raw_latitude: z.number().nullable().default(null),
+  raw_payload_hash: z.string().nullable().default(null),
+  raw_data: AdminFeatureJsonObjectSchema.default({}),
+  fetched_at: Iso8601Schema,
+  imported_at: Iso8601Schema,
+  expires_at: Iso8601Schema.nullable().default(null),
+  linked_at: Iso8601Schema,
+});
+export type AdminFeatureDetailSource = z.infer<typeof AdminFeatureDetailSourceSchema>;
+
+export const AdminFeatureDetailIssueSchema = z.object({
+  issue_id: z.string(),
+  provider: z.string().nullable().default(null),
+  dataset_key: z.string().nullable().default(null),
+  source_record_key: z.string().nullable().default(null),
+  violation_type: z.string(),
+  severity: z.string(),
+  message: z.string(),
+  payload: AdminFeatureJsonObjectSchema.default({}),
+  status: z.string(),
+  detected_at: Iso8601Schema,
+  resolved_at: Iso8601Schema.nullable().default(null),
+});
+export type AdminFeatureDetailIssue = z.infer<typeof AdminFeatureDetailIssueSchema>;
+
+export const AdminFeatureDetailOverrideSchema = z.object({
+  override_id: z.string(),
+  source_record_key: z.string().nullable().default(null),
+  field_path: z.string(),
+  source_value: z.unknown().nullable().default(null),
+  override_value: z.unknown().nullable().default(null),
+  prevent_provider_reactivation: z.boolean(),
+  status: z.string(),
+  reason: z.string().nullable().default(null),
+  created_by: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminFeatureDetailOverride = z.infer<typeof AdminFeatureDetailOverrideSchema>;
+
+export const AdminFeatureDetailVersionSchema = z.object({
+  feature_id: z.string(),
+  version: z.number().int(),
+  origin: z.string(),
+  change_kind: z.string(),
+  payload: AdminFeatureJsonObjectSchema.default({}),
+  request_id: z.string().nullable().default(null),
+  created_by: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+});
+export type AdminFeatureDetailVersion = z.infer<typeof AdminFeatureDetailVersionSchema>;
+
+export const AdminFeatureDetailFileSchema = z.object({
+  file_id: z.string(),
+  file_type: z.string(),
+  storage_backend: z.string(),
+  bucket: z.string(),
+  object_key: z.string(),
+  source_url: z.string().nullable().default(null),
+  public_url: z.string().nullable().default(null),
+  content_type: z.string().nullable().default(null),
+  byte_size: z.number().int().nullable().default(null),
+  checksum_sha256: z.string().nullable().default(null),
+  width: z.number().int().nullable().default(null),
+  height: z.number().int().nullable().default(null),
+  role: z.string(),
+  display_order: z.number().int(),
+  alt_text: z.string().nullable().default(null),
+  provider: z.string().nullable().default(null),
+  dataset_key: z.string().nullable().default(null),
+  source_record_key: z.string().nullable().default(null),
+  payload: AdminFeatureJsonObjectSchema.default({}),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminFeatureDetailFile = z.infer<typeof AdminFeatureDetailFileSchema>;
+
+export const AdminFeatureDetailSchema = z.object({
+  feature: AdminFeatureDetailFeatureSchema,
+  sources: z.array(AdminFeatureDetailSourceSchema).default([]),
+  issues: z.array(AdminFeatureDetailIssueSchema).default([]),
+  overrides: z.array(AdminFeatureDetailOverrideSchema).default([]),
+  versions: z.array(AdminFeatureDetailVersionSchema).default([]),
+  change_requests: z.array(AdminFeatureChangeRequestRecordSchema).default([]),
+  files: z.array(AdminFeatureDetailFileSchema).default([]),
+});
+export type AdminFeatureDetail = z.infer<typeof AdminFeatureDetailSchema>;
+
 /** 상세는 기본 마스킹, 사유 기반 원본 조회 시 audit 기록. */
 export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email: z.string(),
