@@ -1,13 +1,15 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
 import {
   Activity,
   BarChart3,
   Bug,
+  ChevronsLeft,
+  ChevronsRight,
   GitCompare,
   GitPullRequest,
   HardDrive,
@@ -91,6 +93,7 @@ const NAV_GROUPS: {
 const NAV_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
 
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'pinvi.admin.sidebar.collapsed';
 
 function getActiveNavHref(pathname: string) {
   const matches = NAV_HREFS.filter((href) =>
@@ -103,6 +106,8 @@ function getActiveNavHref(pathname: string) {
 function AdminGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarPreferenceReady, setSidebarPreferenceReady] = useState(false);
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
 
@@ -116,6 +121,17 @@ function AdminGuard({ children }: { children: ReactNode }) {
 
   const me = meQuery.data ?? null;
   const hasAdmin = me ? me.roles.some((r) => ADMIN_ROLES.has(r)) : false;
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    setSidebarCollapsed(stored === '1');
+    setSidebarPreferenceReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarPreferenceReady) return;
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? '1' : '0');
+  }, [sidebarCollapsed, sidebarPreferenceReady]);
 
   useEffect(() => {
     if (isLoginPage) return;
@@ -149,8 +165,18 @@ function AdminGuard({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-soft lg:flex-row">
-      <aside className="shrink-0 border-b border-hairline bg-white lg:sticky lg:top-0 lg:h-screen lg:w-20 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-2 border-b border-hairline px-2 py-3 lg:flex-col">
+      <aside
+        className={`shrink-0 border-b border-hairline bg-white transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r ${
+          sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
+        }`}
+        data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        data-testid="admin-sidebar"
+      >
+        <div
+          className={`flex items-center gap-2 border-b border-hairline px-2 py-3 ${
+            sidebarCollapsed ? 'lg:flex-col' : 'lg:px-4'
+          }`}
+        >
           <DocumentNavLink
             href="/admin"
             aria-label="Pinvi Admin"
@@ -159,6 +185,29 @@ function AdminGuard({ children }: { children: ReactNode }) {
           >
             PA
           </DocumentNavLink>
+          {!sidebarCollapsed && (
+            <div className="hidden min-w-0 flex-1 lg:block">
+              <p className="truncate text-sm font-semibold text-ink">Pinvi Admin</p>
+              <p className="truncate text-xs text-muted">
+                {me.roles.filter((r) => r !== 'user').join(', ') || 'user'}
+              </p>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-label={sidebarCollapsed ? 'Admin 메뉴 펼치기' : 'Admin 메뉴 접기'}
+            title={sidebarCollapsed ? 'Admin 메뉴 펼치기' : 'Admin 메뉴 접기'}
+            aria-pressed={sidebarCollapsed}
+            data-testid="admin-sidebar-toggle"
+            className="hidden h-9 w-9 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary lg:flex"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            {sidebarCollapsed ? (
+              <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
           <div
             className="flex h-11 w-11 items-center justify-center rounded-sm border border-hairline text-muted"
             data-testid="admin-me"
@@ -169,20 +218,40 @@ function AdminGuard({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav
-          className="flex gap-2 overflow-x-auto p-2 text-sm lg:block lg:space-y-3 lg:overflow-x-visible"
+          className={`flex gap-2 overflow-x-auto p-2 text-sm lg:block lg:overflow-x-visible ${
+            sidebarCollapsed ? 'lg:space-y-3' : 'lg:space-y-5 lg:p-3'
+          }`}
           aria-label="Admin navigation"
         >
           {NAV_GROUPS.map((group) => (
             <div key={group.title} className="flex gap-1 lg:block lg:space-y-1">
-              <h2 className="sr-only">{group.title}</h2>
+              <h2
+                className={
+                  sidebarCollapsed
+                    ? 'sr-only'
+                    : 'sr-only lg:not-sr-only lg:mb-2 lg:block lg:px-2 lg:text-xs lg:font-semibold lg:text-muted'
+                }
+              >
+                {group.title}
+              </h2>
               <div
                 aria-hidden="true"
-                className="hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline"
+                className={
+                  sidebarCollapsed
+                    ? 'hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline'
+                    : 'hidden'
+                }
               />
               <div className="flex gap-1 lg:grid lg:grid-cols-1">
                 {group.items.map((item) => {
                   const active = activeHref === item.href;
                   const Icon = item.icon;
+                  const linkSize = sidebarCollapsed
+                    ? 'h-11 w-11 justify-center'
+                    : 'h-11 w-11 justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
+                  const labelClass = sidebarCollapsed
+                    ? 'sr-only'
+                    : 'sr-only lg:not-sr-only lg:block lg:min-w-0 lg:flex-1 lg:truncate';
                   return (
                     <DocumentNavLink
                       key={item.href}
@@ -193,13 +262,13 @@ function AdminGuard({ children }: { children: ReactNode }) {
                       data-sprint={item.sprint}
                       className={
                         active
-                          ? 'flex h-11 w-11 items-center justify-center rounded-sm bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
-                          : 'flex h-11 w-11 items-center justify-center rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
+                          ? `flex ${linkSize} rounded-sm bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
+                          : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
                       }
                       data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
                     >
                       <Icon className="h-5 w-5" aria-hidden="true" />
-                      <span className="sr-only">{item.label}</span>
+                      <span className={labelClass}>{item.label}</span>
                     </DocumentNavLink>
                   );
                 })}

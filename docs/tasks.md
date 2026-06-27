@@ -132,6 +132,11 @@
       테스트 하네스는 다중 AdminTable route, `/admin/system` ready marker, 5분 auth refresh와
       mid-run 재로그인 복귀를 반영했다. 실행 전후 N150 API/DB/Web/Dagster/upstream health와
       Pinvi 컨테이너 healthy 상태를 확인했다.
+- [x] T-228 — Admin sidebar 확장/축소 토글 정정
+      (완료: 2026-06-27, codex). 왼쪽 메뉴를 아이콘 전용으로 고정하지 않고, 기본은 아이콘+라벨
+      expanded sidebar로 표시한다. 데스크톱에서 토글 버튼으로 compact icon-only 상태와 expanded
+      상태를 전환하며, 선호 상태는 browser localStorage에 저장한다. 기존 active route 판정과
+      nav test id는 유지했다.
 
 ## 완료
 

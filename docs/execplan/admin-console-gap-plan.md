@@ -350,6 +350,25 @@ GET-only라 T-227로 분리했다.
 - API integration: status/fix mutation, audit append, upstream failure rollback, 409/429/503 mapping.
 - UI e2e: reason validation, status/fix flow, 실패 rollback.
 
+### T-228 — Admin sidebar 확장/축소 토글 정정
+
+추가 요청 정정(2026-06-27): 왼쪽 메뉴는 아이콘으로만 고정하는 것이 아니라, 필요할 때
+아이콘 전용으로 축소할 수 있어야 한다.
+
+상태: 완료(2026-06-27, codex).
+
+범위:
+
+- Admin sidebar 기본 상태는 아이콘 + 메뉴 라벨을 표시한다.
+- 데스크톱에서 토글 버튼으로 compact icon-only 상태와 expanded 상태를 전환한다.
+- 사용자의 sidebar 선호는 browser localStorage에 저장한다.
+- 기존 active route 판정과 nav test id는 유지한다.
+
+검증:
+
+- UI e2e: sidebar 기본 expanded, toggle 후 collapsed, 다시 expanded.
+- Web typecheck/lint/Prettier.
+
 ### T-213 — Category mapping 실제 기능
 
 상태: 완료(2026-06-27, codex). Source of truth는 `kor-travel-map` `/v1/categories`로 결정했다.
@@ -752,6 +771,7 @@ RustFS orphan object cleanup/reconcile은 별도 후속 후보로 남긴다.
 19. T-221 dashboard 운영 현황 PR.
 20. T-222 system view Docker/API 상태 PR.
 21. T-215 묶음 live e2e/N150 게이트 PR.
+22. T-228 sidebar 확장/축소 정정 PR.
 
 ## 검증 정책
 
