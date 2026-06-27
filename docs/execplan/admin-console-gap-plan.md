@@ -2,7 +2,7 @@
 
 작성일: 2026-06-27
 작성자: codex
-상태: T-221 PR 준비
+상태: T-222 PR 준비
 관련 문서: `docs/api/admin.md`, `docs/runbooks/admin.md`, `docs/spec/v8/04-admin.md`,
 `docs/architecture/frontend.md`, `docs/conventions/testing.md`,
 `docs/kor-travel-map-integration.md`
@@ -579,17 +579,24 @@ kill-switch 기준이 필요한 별도 후속 범위로 유지한다.
 
 추가 요청(2026-06-27) 10번.
 
+상태: 완료(2026-06-27, codex). Docker socket은 compose에 기본 mount하지 않으며, 실제
+container 수집은 host-local override가 socket 접근을 부여한 환경에서만 활성화된다.
+
 범위:
 
-- `/admin/system` 또는 기존 system summary 확장 화면을 추가한다.
-- 현재 구동 중인 Docker service/container 상태와 의존 API health를 보여준다.
-- prod 접근 정보, SSH target, 실제 운영 도메인/IP는 노출하지 않는다. 수집은 로컬 agent/API가
-  제공할 수 있는 안전한 상태값으로 제한한다.
+- `/admin/system` 화면과 `GET /admin/system/detail` API를 추가했다.
+- 의존 API health와 Docker collector 상태, container name/image/state/status/health/compose
+  service를 표시한다.
+- Docker socket이 없거나 권한이 없으면 endpoint는 실패하지 않고 `unknown`/`down` 상태와 빈
+  container 목록으로 강등한다.
+- prod 접근 정보, SSH target, 실제 운영 도메인/IP, raw Docker labels/env/secret은 노출하지 않는다.
 
 검증:
 
-- API integration: Docker unavailable, permission denied, dependency down mapping.
-- UI e2e: service 상태표, dependency 상태표, secret/domain 비노출.
+- API integration: dependency probe, Docker collector 응답 shape, non-admin 404.
+- UI e2e: dependency 상태 카드, Docker collector 상태, container table.
+- WSL: API ruff/mypy/pytest, Web Prettier/typecheck/lint/Vitest/build.
+- Windows: Playwright system mock e2e.
 
 ### T-223 — 사용자 아바타 / RustFS 이미지 관리
 

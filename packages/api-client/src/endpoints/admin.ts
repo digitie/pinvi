@@ -57,6 +57,7 @@ import {
   AdminIntegrityIssuesResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
+  AdminSystemDetailSchema,
   AdminTripCopyRequestSchema,
   AdminTripCreateRequestSchema,
   AdminTripDeleteRequestSchema,
@@ -201,6 +202,12 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminSystemSummarySchema,
     }),
 
+  getSystemDetail: () =>
+    client.request('/admin/system/detail', {
+      method: 'GET',
+      schema: AdminSystemDetailSchema,
+    }),
+
   getEtlSummary: () =>
     client.request('/admin/etl/summary', {
       method: 'GET',
@@ -251,10 +258,7 @@ export const adminApi = (client: ApiClient) => ({
     });
   },
 
-  decideDedupReview: (
-    reviewId: string,
-    body: z.infer<typeof AdminDedupDecisionRequestSchema>,
-  ) =>
+  decideDedupReview: (reviewId: string, body: z.infer<typeof AdminDedupDecisionRequestSchema>) =>
     client.request(`/admin/dedup-review/${encodeURIComponent(reviewId)}/verdict`, {
       method: 'POST',
       body: JSON.stringify(AdminDedupDecisionRequestSchema.parse(body)),

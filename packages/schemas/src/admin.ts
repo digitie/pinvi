@@ -152,6 +152,26 @@ export const AdminSystemSummarySchema = z.object({
 });
 export type AdminSystemSummary = z.infer<typeof AdminSystemSummarySchema>;
 
+export const AdminDockerContainerStatusSchema = z.object({
+  container_id: z.string(),
+  name: z.string(),
+  image: z.string(),
+  state: z.string(),
+  status: z.string(),
+  health: z.string().nullable().default(null),
+  compose_project: z.string().nullable().default(null),
+  compose_service: z.string().nullable().default(null),
+});
+export type AdminDockerContainerStatus = z.infer<typeof AdminDockerContainerStatusSchema>;
+
+export const AdminSystemDetailSchema = z.object({
+  generated_at: Iso8601Schema,
+  dependencies: z.array(AdminSystemServiceStatusSchema),
+  docker: AdminSystemServiceStatusSchema,
+  containers: z.array(AdminDockerContainerStatusSchema).default([]),
+});
+export type AdminSystemDetail = z.infer<typeof AdminSystemDetailSchema>;
+
 export const AdminEtlDefinitionAssetSchema = z.object({
   key: z.string(),
   group_name: z.string().nullable().default(null),

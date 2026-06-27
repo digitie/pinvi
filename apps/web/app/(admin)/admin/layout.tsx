@@ -22,6 +22,7 @@ import {
   Route,
   ScrollText,
   Search,
+  ServerCog,
   ShieldCheck,
   Sprout,
   Tags,
@@ -75,6 +76,7 @@ const NAV_GROUPS: {
   {
     title: '시스템 운영',
     items: [
+      { href: '/admin/system', label: '시스템', sprint: 5, icon: ServerCog },
       { href: '/admin/etl', label: 'ETL', sprint: 5, icon: Workflow },
       { href: '/admin/grafana', label: 'Grafana', sprint: 5, icon: BarChart3 },
       { href: '/admin/api-calls', label: 'API 호출', sprint: 3, icon: Activity },
@@ -92,7 +94,7 @@ const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 
 function getActiveNavHref(pathname: string) {
   const matches = NAV_HREFS.filter((href) =>
-    href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
+    href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`),
   );
   return matches.sort((a, b) => b.length - a.length)[0] ?? null;
 }
@@ -172,9 +174,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
         >
           {NAV_GROUPS.map((group) => (
             <div key={group.title} className="flex gap-1 lg:block lg:space-y-1">
-              <h2 className="sr-only">
-                {group.title}
-              </h2>
+              <h2 className="sr-only">{group.title}</h2>
               <div
                 aria-hidden="true"
                 className="hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline"

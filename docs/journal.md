@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-222 System view Docker / 의존 API 상태
+
+**작업**: Admin `/admin/system` 화면과 `GET /admin/system/detail` API를 추가해 의존 API와 Docker
+container 상태를 한 화면에서 볼 수 있게 했다.
+
+**변경**:
+
+- 기존 `/admin/system/summary`는 유지하고, detail endpoint에서 dependency probe와 Docker collector를
+  함께 반환한다.
+- Docker collector는 Docker Engine Unix socket을 read API로 조회하되, socket 없음/권한 없음/API 오류를
+  endpoint 실패로 만들지 않고 `unknown` 또는 `down` 상태로 강등한다.
+- container 응답은 id/name/image/state/status/health/compose project/service만 포함한다. raw labels,
+  env, 운영 도메인, secret은 노출하지 않는다.
+- `PINVI_DOCKER_SOCKET_PATH`, timeout, container limit 설정과 env 예시를 추가했다. compose에는 socket을
+  기본 mount하지 않는다.
+- Web `/admin/system` route와 sidebar 메뉴를 추가하고, live matrix route/table 목록에 포함했다.
+- API integration과 Windows Playwright mock e2e를 추가했다.
+
+**검증**: 로컬 WSL ext4 미러에서 API ruff format/check, 앱 코드 mypy,
+`test_admin_system_summary_api.py` 3건, Web Prettier check, Web typecheck, Web lint,
+Web Vitest 27건, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-priority3.e2e.ts` 시스템 화면 케이스 1건이 통과했다.
+
+**다음**: PR을 만들고 merge한 뒤 T-215 Admin live e2e 확장 + N150 묶음 게이트로 진행한다.
+
 ## 2026-06-27 (codex) — T-221 Dashboard 운영 현황 그래프 / 부하 / 용량
 
 **작업**: Admin `/admin` 대시보드가 단순 count 카드에서 실제 운영 현황을 훑어볼 수 있는

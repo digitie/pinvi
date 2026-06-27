@@ -10,7 +10,7 @@ import pytest
 
 from app.api.v1.admin import system as system_module
 from app.models.user import User
-from app.schemas.admin import AdminSystemServiceStatus
+from app.schemas.admin import AdminDockerContainerStatus, AdminSystemServiceStatus
 
 pytestmark = pytest.mark.asyncio
 
@@ -92,6 +92,99 @@ async def test_admin_system_summary_reports_core_services_without_raw_urls(
     assert services["rustfs"]["latency_ms"] == 12
 
 
+async def test_admin_system_detail_reports_dependencies_and_docker_containers(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_probe_http(
+        _client: Any,
+        *,
+        key: str,
+        label: str,
+        base_url: str,
+        path: str,
+    ) -> AdminSystemServiceStatus:
+        del base_url, path
+        return AdminSystemServiceStatus(
+            key=key,
+            label=label,
+            status="ok",
+            message="응답 정상",
+            latency_ms=7,
+        )
+
+    async def fake_collect_docker_status() -> tuple[
+        AdminSystemServiceStatus, list[AdminDockerContainerStatus]
+    ]:
+        return (
+            AdminSystemServiceStatus(
+                key="docker",
+                label="Docker",
+                status="ok",
+                message="2개 container 수집",
+                latency_ms=5,
+            ),
+            [
+                AdminDockerContainerStatus(
+                    container_id="abc123",
+                    name="pinvi-api-latest",
+                    image="pinvi-api:latest-main",
+                    state="running",
+                    status="Up 1 minute (healthy)",
+                    health="healthy",
+                    compose_project="kor-travel-docker-manager",
+                    compose_service="pinvi-api",
+                ),
+                AdminDockerContainerStatus(
+                    container_id="def456",
+                    name="pinvi-web-latest",
+                    image="pinvi-web:latest-main",
+                    state="running",
+                    status="Up 1 minute (healthy)",
+                    health="healthy",
+                    compose_project="kor-travel-docker-manager",
+                    compose_service="pinvi-web",
+                ),
+            ],
+        )
+
+    monkeypatch.setattr(system_module, "_probe_http", fake_probe_http)
+    monkeypatch.setattr(system_module, "_collect_docker_status", fake_collect_docker_status)
+    admin_id = await _create_user(
+        session_factory,
+        roles=["user", "operator"],
+        email_prefix="operator_system_detail",
+    )
+
+    resp = await client.get(
+        "/admin/system/detail",
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert "localhost" not in resp.text
+    data = resp.json()["data"]
+    assert data["generated_at"]
+    assert data["docker"]["status"] == "ok"
+    assert data["docker"]["message"] == "2개 container 수집"
+    assert {service["key"] for service in data["dependencies"]} == {
+        "pinvi_api",
+        "postgres",
+        "pinvi_web",
+        "dagster",
+        "kor_travel_map_api",
+        "rustfs",
+    }
+    assert [container["name"] for container in data["containers"]] == [
+        "pinvi-api-latest",
+        "pinvi-web-latest",
+    ]
+    assert data["containers"][0]["health"] == "healthy"
+    assert data["containers"][0]["compose_service"] == "pinvi-api"
+
+
 async def test_admin_system_summary_requires_admin_or_operator(
     client,
     session_factory,
@@ -109,3 +202,9 @@ async def test_admin_system_summary_requires_admin_or_operator(
     )
 
     assert resp.status_code == 404
+
+    detail_resp = await client.get(
+        "/admin/system/detail",
+        cookies=auth_cookies(str(user_id)),
+    )
+    assert detail_resp.status_code == 404
