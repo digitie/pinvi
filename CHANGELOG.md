@@ -18,6 +18,9 @@
 - Admin `/admin/etl`과 `/admin/provider-sync`를 실제 운영 조회 화면으로 교체했다. Pinvi Dagster
   asset/job/schedule registry와 `kor-travel-map` Dagster/metrics/provider/import job 상태를
   조회하고, provider/dataset key와 import job status 필터를 제공한다.
+- Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 실제 운영 조회 화면으로
+  교체했다. `kor-travel-map` dedup 후보, consistency issue/report, sanitized system/API logs를
+  검색/상태/severity/level 필터와 table/detail 패널로 확인할 수 있다.
 - Admin 좌측 메뉴를 icon-only compact view로 바꾸고 현재 route active state를 정확히 표시한다.
   Trip 상세 화면은 여행계획명을 제목으로 표시하고, owner/동반자/POI 추가자 사용자 링크,
   미가입 초대자 상태, 날짜/POI listing, 지도 preview가 포함된 POI 상세 dialog를 제공한다.

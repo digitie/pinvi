@@ -501,3 +501,94 @@ async def test_list_ops_import_jobs_returns_envelope_meta() -> None:
     assert payload["data"]["items"][0]["status"] == "running"
     assert payload["meta"]["page"]["next_cursor"] == "cursor-2"
     await client.aclose()
+
+
+async def test_list_dedup_reviews_forwards_filters() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "review_id": "dedup-1",
+                            "status": "pending",
+                            "total_score": 88,
+                            "name_score": 90,
+                            "spatial_score": 80,
+                            "category_score": 95,
+                            "distance_m": 12.5,
+                            "feature_a": {
+                                "feature_id": "f_a",
+                                "name": "A",
+                                "kind": "place",
+                                "category": "01010100",
+                            },
+                            "feature_b": {
+                                "feature_id": "f_b",
+                                "name": "B",
+                                "kind": "place",
+                                "category": "01010100",
+                            },
+                            "created_at": "2026-06-12T00:00:00+09:00",
+                        }
+                    ]
+                },
+                "meta": {"page": {"next_cursor": "next"}},
+            },
+        )
+
+    client = _client(handler)
+    payload = await client.list_dedup_reviews(
+        statuses=["pending"],
+        providers=["kma"],
+        dataset_keys=["places"],
+        kinds=["place"],
+        categories=["01010100"],
+        min_score=70,
+        max_score=95,
+        q="해운대",
+        page_size=20,
+        cursor="cur",
+    )
+    assert seen["path"] == "/v1/admin/dedup-reviews"
+    assert ("status", "pending") in seen["query"]
+    assert ("provider", "kma") in seen["query"]
+    assert ("dataset_key", "places") in seen["query"]
+    assert ("min_score", "70") in seen["query"]
+    assert ("max_score", "95") in seen["query"]
+    assert payload["data"]["items"][0]["review_id"] == "dedup-1"
+    await client.aclose()
+
+
+async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
+    seen_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        if request.url.path.endswith("issues"):
+            data = {"items": []}
+        elif request.url.path.endswith("reports"):
+            data = {"items": []}
+        elif request.url.path.endswith("system-logs"):
+            data = {"items": []}
+        else:
+            data = {"items": []}
+        return httpx.Response(200, json={"data": data, "meta": {"page": {"next_cursor": None}}})
+
+    client = _client(handler)
+    await client.list_integrity_issues(status_filter="open", severity="error", page_size=10)
+    await client.list_consistency_reports(severity_max="WARN", page_size=10)
+    await client.list_system_logs(level="error", source="api", q="timeout", page_size=10)
+    await client.list_ops_api_call_logs(method="GET", min_status=500, path="/v1", page_size=10)
+    assert seen_paths == [
+        "/v1/ops/consistency/issues",
+        "/v1/ops/consistency/reports",
+        "/v1/ops/system-logs",
+        "/v1/ops/api-call-logs",
+    ]
+    await client.aclose()

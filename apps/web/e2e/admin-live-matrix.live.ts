@@ -91,11 +91,11 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/audit', heading: '감사 로그', table: true },
   { path: '/admin/features', heading: 'Features', table: true },
   { path: '/admin/features/change-requests', heading: 'Feature 변경 요청', table: true },
-  { path: '/admin/dedup-review', heading: 'Dedup review', placeholder: true },
+  { path: '/admin/dedup-review', heading: 'Dedup review', table: true },
   { path: '/admin/provider-sync', heading: 'Provider sync', table: true },
-  { path: '/admin/integrity', heading: '정합성', placeholder: true },
+  { path: '/admin/integrity', heading: '정합성', table: true },
   { path: '/admin/category-mapping', heading: '카테고리 매핑', placeholder: true },
-  { path: '/admin/debug/logs', heading: 'Debug logs', placeholder: true },
+  { path: '/admin/debug/logs', heading: 'Debug logs', table: true },
   { path: '/admin/etl', heading: 'ETL', table: true },
   { path: '/admin/grafana', heading: 'Grafana' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
@@ -165,6 +165,21 @@ const sortSpecs = [
     route: '/admin/etl',
     heading: 'ETL',
     columns: ['job', 'status', 'progress', 'stage', 'created_at', 'finished_at'],
+  },
+  {
+    route: '/admin/dedup-review',
+    heading: 'Dedup review',
+    columns: ['review', 'score', 'status', 'feature_a', 'feature_b', 'distance'],
+  },
+  {
+    route: '/admin/integrity',
+    heading: '정합성',
+    columns: ['issue', 'severity', 'status', 'target', 'message', 'detected'],
+  },
+  {
+    route: '/admin/debug/logs',
+    heading: 'Debug logs',
+    columns: ['log', 'level', 'source', 'event', 'message', 'created'],
   },
 ];
 
@@ -669,6 +684,57 @@ function pushEtlFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushDedupIntegrityDebugCases(cases: AdminUiCase[]) {
+  const dedupStatuses = ['pending', 'all', 'accepted', 'rejected', 'merged', 'ignored'];
+  const integrityStatuses = ['open', 'acknowledged', 'resolved', 'ignored'];
+  const severities = ['all', 'info', 'warning', 'error', 'critical'];
+  const levels = ['error', 'all', 'info', 'warning', 'critical'];
+  for (const viewport of compactViewports) {
+    for (const status of dedupStatuses) {
+      pushCase(cases, `dedup filter status=${status}`, viewport, async (page) => {
+        await openTableRoute(page, '/admin/dedup-review', 'Dedup review');
+        await page.getByTestId('admin-dedup-search').fill('kma');
+        await throttle();
+        await page.getByTestId('admin-dedup-submit').click();
+        await throttle();
+        await page.getByTestId('admin-dedup-status').selectOption(status);
+        await waitForAdminTable(page);
+        await expect(page.getByTestId('admin-dedup-status')).toHaveValue(status);
+      });
+    }
+    for (const status of integrityStatuses) {
+      for (const severity of severities) {
+        pushCase(
+          cases,
+          `integrity filter status=${status} severity=${severity}`,
+          viewport,
+          async (page) => {
+            await openTableRoute(page, '/admin/integrity', '정합성');
+            await page.getByTestId('admin-integrity-status').selectOption(status);
+            await throttle();
+            await page.getByTestId('admin-integrity-severity').selectOption(severity);
+            await waitForAdminTable(page);
+            await expect(page.getByTestId('admin-integrity-status')).toHaveValue(status);
+            await expect(page.getByTestId('admin-integrity-severity')).toHaveValue(severity);
+          },
+        );
+      }
+    }
+    for (const level of levels) {
+      pushCase(cases, `debug logs filter level=${level}`, viewport, async (page) => {
+        await openTableRoute(page, '/admin/debug/logs', 'Debug logs');
+        await page.getByTestId('admin-debug-level').selectOption(level);
+        await page.getByTestId('admin-debug-source').fill('api');
+        await page.getByTestId('admin-debug-min-status').fill('500');
+        await throttle();
+        await page.getByTestId('admin-debug-submit').click();
+        await waitForAdminTable(page);
+        await expect(page.getByTestId('admin-debug-level')).toHaveValue(level);
+      });
+    }
+  }
+}
+
 function pushSortCases(cases: AdminUiCase[]) {
   for (let repeat = 1; repeat <= 3; repeat += 1) {
     for (const viewport of mixedViewports) {
@@ -754,6 +820,7 @@ function buildUiCases() {
   pushFeaturesFilterCases(cases);
   pushProviderSyncFilterCases(cases);
   pushEtlFilterCases(cases);
+  pushDedupIntegrityDebugCases(cases);
   pushSortCases(cases);
   pushDashboardCases(cases);
   pushMcpValidationCases(cases);

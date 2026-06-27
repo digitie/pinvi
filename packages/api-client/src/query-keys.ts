@@ -58,6 +58,44 @@ export const queryKeys = {
       cursor?: string;
     }) => ['admin', 'provider-import-jobs', params] as const,
     providerImportJobsAll: () => ['admin', 'provider-import-jobs'] as const,
+    dedupReviews: (params: {
+      q?: string;
+      status?: string[];
+      provider?: string[];
+      datasetKey?: string[];
+      kind?: string[];
+      category?: string[];
+      minScore?: number;
+      maxScore?: number;
+      pageSize?: number;
+      cursor?: string;
+    }) => ['admin', 'dedup-reviews', params] as const,
+    integrityIssues: (params: {
+      status?: string;
+      severity?: string;
+      violationType?: string;
+      provider?: string;
+      datasetKey?: string;
+      featureId?: string;
+      pageSize?: number;
+      cursor?: string;
+    }) => ['admin', 'integrity-issues', params] as const,
+    consistencyReports: (params: { severityMax?: string; pageSize?: number; cursor?: string }) =>
+      ['admin', 'consistency-reports', params] as const,
+    upstreamSystemLogs: (params: {
+      level?: string;
+      source?: string;
+      q?: string;
+      pageSize?: number;
+      cursor?: string;
+    }) => ['admin', 'upstream-system-logs', params] as const,
+    upstreamApiCallLogs: (params: {
+      method?: string;
+      minStatus?: number;
+      path?: string;
+      pageSize?: number;
+      cursor?: string;
+    }) => ['admin', 'upstream-api-call-logs', params] as const,
     users: (params: { page?: number; status?: string; q?: string }) =>
       ['admin', 'users', params] as const,
     user: (userId: string) => ['admin', 'user', userId] as const,
