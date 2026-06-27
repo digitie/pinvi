@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-218 prod Grafana 주소 반영
+
+Admin `/admin/grafana`의 prod public URL 주입 경로를 정리했다. Web Docker build/runtime stage가
+`NEXT_PUBLIC_GRAFANA_URL`, `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`를 받도록 했고,
+`infra/docker-compose.app.yml`의 app-web build args도 같은 값을 전달한다. Grafana 컨테이너는
+`GF_SERVER_ROOT_URL`을 `NEXT_PUBLIC_GRAFANA_URL`과 맞춰 reverse proxy 뒤 embed/redirect origin이
+같아지도록 했다.
+
+실제 운영 도메인은 tracked 파일에 넣지 않았다. `infra/.env.prod.example`과 runbook에는
+`grafana.example.com` placeholder만 추가했고, 실제 값은 gitignore된 `infra/.env.prod`에서만
+다루도록 문서화했다. `/admin/grafana` URL 조합 로직은 `apps/web/lib/admin/grafana.ts`로 분리하고
+prod origin/path 조합과 fallback 단위 테스트를 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. Web Vitest 27건,
+Web typecheck, Web lint, Web production build, compose config parse, Prettier check가 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워 `admin-grafana.e2e.ts` 1건과
+admin-live catalog assertion 1건이 통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+
+다음: T-218 PR을 만들고 merge한 뒤 T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기로
+진행한다.
+
 ## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
 
 Admin `/admin/seed`와 `/admin/reset`을 placeholder에서 dev/staging 전용 dry-run 화면으로 교체했다.

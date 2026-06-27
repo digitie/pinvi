@@ -5,11 +5,11 @@ Prometheus + cAdvisor + Grafana 기반 성능 측정/모니터링 절차. 포트
 
 ## 1. 포트
 
-| 서비스 | Host 포트 | Container 포트 | URL |
-|--------|----------:|---------------:|-----|
-| Prometheus | `12401` | `9090` | `http://127.0.0.1:12401` |
-| cAdvisor Exporter | `12301` | `8080` | `http://127.0.0.1:12301` |
-| Grafana | `12205` | `3000` | `http://127.0.0.1:12205` |
+| 서비스            | Host 포트 | Container 포트 | URL                      |
+| ----------------- | --------: | -------------: | ------------------------ |
+| Prometheus        |   `12401` |         `9090` | `http://127.0.0.1:12401` |
+| cAdvisor Exporter |   `12301` |         `8080` | `http://127.0.0.1:12301` |
+| Grafana           |   `12205` |         `3000` | `http://127.0.0.1:12205` |
 
 FastAPI는 `GET /metrics`로 Prometheus exposition format을 노출한다. 기본 metric:
 
@@ -58,14 +58,17 @@ app compose의 Prometheus scrape target:
 
 Grafana datasource와 기본 dashboard는 provisioning으로 자동 등록된다.
 
-| 파일 | 역할 |
-|------|------|
-| `infra/grafana/provisioning/datasources/prometheus.yml` | Prometheus datasource |
-| `infra/grafana/provisioning/dashboards/default.yml` | dashboard file provider |
-| `infra/grafana/dashboards/api-performance.json` | API latency/request/container dashboard |
+| 파일                                                    | 역할                                    |
+| ------------------------------------------------------- | --------------------------------------- |
+| `infra/grafana/provisioning/datasources/prometheus.yml` | Prometheus datasource                   |
+| `infra/grafana/provisioning/dashboards/default.yml`     | dashboard file provider                 |
+| `infra/grafana/dashboards/api-performance.json`         | API latency/request/container dashboard |
 
 Admin 콘솔 `/admin/grafana` 기본 embed URL은
-`http://localhost:12205/d/pinvi/overview?orgId=1&kiosk=tv`다.
+`http://localhost:12205/d/pinvi/overview?orgId=1&kiosk=tv`다. 운영에서는
+`infra/.env.prod`의 `NEXT_PUBLIC_GRAFANA_URL=https://grafana.example.com` 및
+`NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` placeholder를 실제 값으로 바꾼 뒤 Web 이미지를
+다시 빌드한다.
 
 ## 5. 검증
 

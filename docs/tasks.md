@@ -14,7 +14,7 @@
 
 ## 다음 (우선순위 순)
 
-- Admin 콘솔 기능 보강: T-218 prod Grafana 주소 반영.
+- Admin 콘솔 기능 보강: T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기.
   상세 계획은 `docs/execplan/admin-console-gap-plan.md`.
 - v0.1.0 마무리: 최종 CI/수동 smoke 확인 + tag + Release notes.
 - 다음 운영 게이트: PR merge 후 `v0.1.0` tag/GitHub Release 생성, N150/Odroid 실제
@@ -107,7 +107,12 @@
       production에서는 router 미등록 + endpoint guard 404 정책을 적용했다. 실제 DB reset/seed 실행은
       노출하지 않고, 확인 문구, 운영 사유, dry-run 결과, `dev_seed.dry_run`/`dev_reset.dry_run`
       audit만 제공한다.
-- [ ] T-218 — prod Grafana 주소 반영.
+- [x] T-218 — prod Grafana 주소 반영
+      (완료: 2026-06-27, codex). Web Docker build/runtime stage와 app compose build args에
+      `NEXT_PUBLIC_GRAFANA_URL`, `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`를 추가하고,
+      Grafana 컨테이너 `GF_SERVER_ROOT_URL`도 같은 public origin으로 주입한다.
+      `infra/.env.prod.example`과 runbook에는 `grafana.example.com` placeholder만 남겨
+      실제 운영 도메인은 gitignore된 `infra/.env.prod`에서만 다루도록 했다.
 - [ ] T-221 — Dashboard 운영 현황 그래프/부하/용량 상세보기.
 - [ ] T-222 — System view Docker / 의존 API 상태.
 - [ ] T-215 — Admin live e2e 확장 + N150 묶음 게이트.
