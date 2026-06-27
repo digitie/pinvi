@@ -12,9 +12,7 @@
 
 ## 다음 (우선순위 순)
 
-- 리뷰 반영: `docs/execplan/sprint5-v020-release-plan.md`의 Sprint 5/6 상세 Task 계획에
-  PR 리뷰의 legal/ops gap을 T-256~T-258, T-275~T-286으로 보강했다. PR merge 후
-  T-234부터 순서대로 구현한다.
+- 다음 구현: T-235 Optimistic lock / conflict dialog.
 - v0.2.0 구현 게이트: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
   app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
@@ -43,9 +41,14 @@
       ARM image/GHCR 없이 노드 로컬 build 기준으로 정정했다. PR 리뷰에서 지적된 PIPA incident,
       DSR, retention 실행, email deliverability/suppression, moderation, RBAC, user lifecycle,
       abuse/rate-limit, provider tracking, mobile/AI scope도 Task로 보강했다.
-- [ ] T-234 — WebSocket client invalidation / auth close handling.
-      close code mapping, token refresh 재연결, 권한 상실 안내, TanStack Query invalidation,
-      duplicate reload 방지를 구현한다.
+- [x] T-234 — WebSocket client invalidation / auth close handling.
+      (완료: 2026-06-27, codex). `TripRealtimeClient`가 close code/reason을 분류하고,
+      `4401`은 `authApi.refresh()` 성공 후 즉시 재연결한다. `4403`은 권한 상실 안내와 여행 목록
+      CTA를 표시하며, `4408`/`4429`는 backoff 안내를 표시한다. POI/day/trip/comment event별
+      TanStack Query invalidation key helper를 추가했고, Trip 상세 reload는 in-flight promise를
+      공유해 HTTP mutation reload와 WebSocket event reload가 같은 tick에 겹쳐도 1회로 합친다.
+      WSL ext4 미러에서 api-client/web/mobile typecheck, Web lint/build, realtime Vitest 8건을
+      통과했고, Windows Playwright mock e2e `trip-detail.e2e.ts` 3건을 통과했다.
 - [ ] T-235 — Optimistic lock / conflict dialog.
       POI/Trip/Day 409 conflict UX, LWW/수동 병합, server/my value 선택과 회귀 테스트를 구현한다.
 - [ ] T-236 — WebSocket multi-client collaboration e2e.

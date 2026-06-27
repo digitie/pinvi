@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-27 (codex) — T-234 WebSocket client invalidation / auth close handling
+
+`TripRealtimeClient`가 WebSocket close code/reason을 분류하고 상태로 노출한다. `4401`은
+`authApi.refresh()` 성공 후 즉시 재연결하고, `4403`은 재연결 없이 권한 상실 안내와 여행 목록 CTA를
+표시한다. `4408`/`4429`는 연결 제한/rate-limit 상태와 backoff 안내를 표시한다.
+
+`queryKeys`에 realtime domain event → TanStack Query invalidation key helper를 추가했다.
+POI/day/trip 계열은 trip detail/list prefix, comment 계열은 comments key로 매핑된다. 현재 사용자
+Trip 상세는 raw fetch 기반이므로 helper로 reload 대상 event를 판정하고, in-flight reload promise를
+공유해 HTTP mutation reload와 WebSocket event reload가 같은 tick에 겹쳐도 1회만 요청한다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. api-client/web/mobile typecheck,
+Web lint, Web build, `tripRealtimeClient.test.ts` Vitest 8건이 통과했다. Windows Playwright는 WSL
+Next dev server를 대상으로 `trip-detail.e2e.ts` 3건(기본 렌더, 4403 권한 상실, 4429 backoff)을
+통과했다.
+
+다음 작업은 T-235 Optimistic lock / conflict dialog다.
+
 ## 2026-06-27 (codex) — T-233 리뷰 코멘트 반영 / legal-ops Task 보강
 
 PR #264 리뷰 코멘트를 반영해 Sprint 5/6 상세 계획을 보강했다. Sprint 5에는 review gap
@@ -13,7 +31,7 @@ cross-track #238/#264 gap closure를 T-275~T-286으로 추가했다. `apps/mobil
 출시 필수 범위에서 제외하고 Sprint M-1 별도 gate로 관리하며, user-facing AI companion은 v1.0에
 포함하지 않는다고 명시했다.
 
-다음은 PR #264 merge 후 T-234 WebSocket client invalidation / auth close handling 구현이다.
+PR #264 merge 후 T-234를 완료했다. 다음은 T-235 Optimistic lock / conflict dialog다.
 
 ## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
 
@@ -1453,9 +1471,9 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: PR #264 리뷰 코멘트를 Sprint 5/6 상세 계획에 반영했다.
-> PR merge 후 다음 작업은 **T-234 WebSocket client invalidation / auth close handling**이다.
-> 기능 구현 Task는 단위 검증을 로컬 WSL ext4 미러에서 수행하고, 묶음 live/e2e는 N150에서 수행한다.
+> **갱신 (2026-06-27, codex)**: T-234 WebSocket client invalidation / auth close handling을
+> 완료했다. 다음 작업은 **T-235 Optimistic lock / conflict dialog**다. 기능 구현 Task는 단위 검증을
+> 로컬 WSL ext4 미러에서 수행하고, 묶음 live/e2e는 N150에서 수행한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

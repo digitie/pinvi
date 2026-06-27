@@ -1,8 +1,17 @@
 export { ApiClient, ApiError } from './client';
 export type { ApiClientOptions, ApiEnvelope, ApiResponseMeta } from './client';
-export { TripRealtimeClient, tripWebSocketUrl } from './websocket';
-export type { TripRealtimeEvent, TripRealtimeStatus, WebSocketCtor, WebSocketLike } from './websocket';
-export { queryKeys } from './query-keys';
+export { TripRealtimeClient, classifyTripRealtimeClose, tripWebSocketUrl } from './websocket';
+export type {
+  TripRealtimeCloseCategory,
+  TripRealtimeCloseEvent,
+  TripRealtimeCloseInfo,
+  TripRealtimeEvent,
+  TripRealtimeStatus,
+  WebSocketCtor,
+  WebSocketLike,
+} from './websocket';
+export { queryKeys, tripRealtimeInvalidationKeys } from './query-keys';
+export type { PinviQueryKey, TripRealtimeInvalidationEvent } from './query-keys';
 export { authApi } from './endpoints/auth';
 export { adminApi } from './endpoints/admin';
 export { featureApi } from './endpoints/feature';

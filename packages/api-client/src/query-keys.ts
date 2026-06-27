@@ -161,3 +161,54 @@ export const queryKeys = {
     resetStatus: () => ['admin', 'reset', 'status'] as const,
   },
 } as const;
+
+export interface TripRealtimeInvalidationEvent {
+  type: string;
+  trip_id?: string;
+  payload?: Record<string, unknown>;
+}
+
+export type PinviQueryKey = readonly unknown[];
+
+const TRIP_DETAIL_REALTIME_EVENTS = new Set([
+  'trip.updated',
+  'trip.deleted',
+  'trip.member_changed',
+  'day.created',
+  'day.updated',
+  'day.deleted',
+  'poi.created',
+  'poi.updated',
+  'poi.deleted',
+  'poi.reordered',
+]);
+
+const TRIP_COMMENT_REALTIME_EVENTS = new Set(['comment.created', 'comment.deleted']);
+
+function tripIdForRealtimeEvent(
+  event: TripRealtimeInvalidationEvent,
+  fallbackTripId?: string,
+): string | null {
+  if (typeof event.trip_id === 'string' && event.trip_id.length > 0) return event.trip_id;
+  if (fallbackTripId && fallbackTripId.length > 0) return fallbackTripId;
+  return null;
+}
+
+export function tripRealtimeInvalidationKeys(
+  event: TripRealtimeInvalidationEvent,
+  fallbackTripId?: string,
+): PinviQueryKey[] {
+  const tripId = tripIdForRealtimeEvent(event, fallbackTripId);
+
+  if (TRIP_COMMENT_REALTIME_EVENTS.has(event.type)) {
+    return tripId ? [queryKeys.trips.comments(tripId)] : [];
+  }
+
+  if (TRIP_DETAIL_REALTIME_EVENTS.has(event.type)) {
+    const keys: PinviQueryKey[] = [queryKeys.trips.all()];
+    if (tripId) keys.push(queryKeys.trips.detail(tripId));
+    return keys;
+  }
+
+  return [];
+}

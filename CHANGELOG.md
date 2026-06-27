@@ -12,6 +12,9 @@
 - Trip 상세 화면이 `WS /ws/trips/{trip_id}`에 연결된다. 공용 `TripRealtimeClient`가
   heartbeat/pong/reconnect를 처리하고, 여행 상세는 presence summary와 domain event debounce reload를
   제공한다.
+- Trip WebSocket client가 close code를 분류한다. `4401`은 `/auth/refresh` 후 재연결하고,
+  `4403`은 권한 상실 안내와 여행 목록 CTA를 표시하며, `4408`/`4429`는 backoff 안내를 표시한다.
+  POI/day/trip/comment domain event별 TanStack Query invalidation key도 정의했다.
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
   `/admin/system/summary` 기반 대시보드 상태 보드를 추가했다. Pinvi API, DB, Web,
   Dagster, `kor-travel-map` API, RustFS 상태를 raw URL/secret 없이 표시한다.

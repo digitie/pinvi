@@ -6,8 +6,11 @@ import { AlertTriangle, ArrowLeft, CalendarDays, Loader2, MapPin, Users, Wifi } 
 import {
   ApiError,
   TripRealtimeClient,
+  authApi,
   poiApi,
+  tripRealtimeInvalidationKeys,
   tripApi,
+  type TripRealtimeCloseInfo,
   type TripRealtimeEvent,
   type TripRealtimeStatus,
 } from '@pinvi/api-client';
@@ -43,6 +46,18 @@ const STATUS_LABEL: Record<TripStatus, string> = {
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 const PINVI_API_URL = process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801';
+const REALTIME_STATUS_LABEL: Record<TripRealtimeStatus, string> = {
+  idle: '오프라인',
+  connecting: '연결 중',
+  open: '연결됨',
+  closed: '오프라인',
+  error: '오류',
+  'refreshing-auth': '인증 갱신 중',
+  reconnecting: '재연결 대기',
+  'permission-denied': '권한 없음',
+  'connection-limited': '연결 제한',
+  'rate-limited': '속도 제한',
+};
 
 interface PresenceEntry {
   userId: string;
@@ -57,6 +72,26 @@ function formatDate(value: string | null): string {
   );
 }
 
+function realtimeStatusDetail(
+  status: TripRealtimeStatus,
+  closeInfo: TripRealtimeCloseInfo | null,
+): string | null {
+  if (status === 'refreshing-auth') return '세션을 갱신한 뒤 다시 연결합니다.';
+  if (status === 'reconnecting' && closeInfo?.category === 'connection-limited') {
+    return '동시 연결 한도에 도달해 잠시 후 자동으로 다시 시도합니다.';
+  }
+  if (status === 'reconnecting' && closeInfo?.category === 'rate-limited') {
+    return '메시지 전송량이 많아 잠시 후 자동으로 다시 시도합니다.';
+  }
+  if (status === 'reconnecting') return '잠시 후 자동으로 다시 시도합니다.';
+  if (status === 'permission-denied') return '여행 접근 권한이 변경되었습니다.';
+  if (status === 'connection-limited') return '동시 연결 한도에 도달해 대기 중입니다.';
+  if (status === 'rate-limited') return '메시지 전송량이 많아 대기 중입니다.';
+  if (status === 'error') return '연결 상태를 확인하고 있습니다.';
+  if (closeInfo?.category === 'bad-message') return '마지막 연결이 heartbeat 제한으로 종료되었습니다.';
+  return null;
+}
+
 export interface TripDetailProps {
   tripId: string;
 }
@@ -66,6 +101,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<TripRealtimeStatus>('idle');
+  const [realtimeCloseInfo, setRealtimeCloseInfo] = useState<TripRealtimeCloseInfo | null>(null);
   const [presence, setPresence] = useState<Map<string, PresenceEntry>>(() => new Map());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
@@ -76,17 +112,28 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadInFlightRef = useRef<Promise<TripView | null> | null>(null);
 
   const reload = useCallback(async (): Promise<TripView | null> => {
-    try {
-      const res = await tripApi(apiClient).get(tripId);
-      setView(res);
-      setError(null);
-      return res;
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
-      return null;
-    }
+    if (reloadInFlightRef.current) return reloadInFlightRef.current;
+
+    const request = (async () => {
+      try {
+        const res = await tripApi(apiClient).get(tripId);
+        setView(res);
+        setError(null);
+        return res;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
+        return null;
+      }
+    })();
+
+    const tracked = request.finally(() => {
+      if (reloadInFlightRef.current === tracked) reloadInFlightRef.current = null;
+    });
+    reloadInFlightRef.current = tracked;
+    return tracked;
   }, [tripId]);
 
   useEffect(() => {
@@ -126,10 +173,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
         return;
       }
 
-      if (event.type === 'presence.cursor' || event.type === 'error') return;
+      const invalidationKeys = tripRealtimeInvalidationKeys(event, tripId);
+      if (invalidationKeys.length === 0) return;
       scheduleRealtimeReload();
     },
-    [scheduleRealtimeReload]
+    [scheduleRealtimeReload, tripId]
   );
 
   useEffect(() => {
@@ -138,7 +186,19 @@ export function TripDetail({ tripId }: TripDetailProps) {
       apiBaseUrl: PINVI_API_URL,
       tripId,
       onEvent: handleRealtimeEvent,
-      onStatus: setRealtimeStatus,
+      onStatus: (status) => {
+        setRealtimeStatus(status);
+        if (status === 'open') setRealtimeCloseInfo(null);
+      },
+      onClose: setRealtimeCloseInfo,
+      onAuthRefresh: async () => {
+        try {
+          await authApi(apiClient).refresh();
+          return true;
+        } catch {
+          return false;
+        }
+      },
       onError: () => undefined,
     });
     realtimeClientRef.current = client;
@@ -170,14 +230,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
     null;
   const onlinePresence = Array.from(presence.values()).filter((entry) => entry.isOnline);
-  const realtimeLabel =
-    realtimeStatus === 'open'
-      ? '연결됨'
-      : realtimeStatus === 'connecting'
-        ? '연결 중'
-        : realtimeStatus === 'error'
-          ? '재연결 대기'
-          : '오프라인';
+  const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
+  const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
+  const showRealtimeBackoffNotice =
+    realtimeStatus === 'connection-limited' ||
+    realtimeStatus === 'rate-limited' ||
+    (realtimeStatus === 'reconnecting' &&
+      (realtimeCloseInfo?.category === 'connection-limited' ||
+        realtimeCloseInfo?.category === 'rate-limited'));
 
   const handleSelectPoi = (poiId: string) => {
     setSelectedPoiId(poiId);
@@ -364,6 +424,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         >
           <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
           실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
+          {realtimeDetail && <span> · {realtimeDetail}</span>}
           {onlinePresence.some((entry) => entry.viewingDay != null) && (
             <span>
               {' '}
@@ -375,6 +436,27 @@ export function TripDetail({ tripId }: TripDetailProps) {
             </span>
           )}
         </p>
+        {realtimeStatus === 'permission-denied' && (
+          <p
+            role="alert"
+            className="inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+            data-testid="trip-realtime-permission-lost"
+          >
+            여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
+            <Link href="/trips" className="font-semibold underline">
+              여행 목록으로 이동
+            </Link>
+          </p>
+        )}
+        {showRealtimeBackoffNotice && (
+          <p
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
+            data-testid="trip-realtime-backoff-notice"
+          >
+            실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속 불러옵니다.
+          </p>
+        )}
       </header>
 
       {view.days.length > 0 && (

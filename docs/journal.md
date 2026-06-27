@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-27 (codex) — T-234 WebSocket client invalidation / auth close handling
+
+**작업**: Trip WebSocket client의 close code 처리, auth refresh 재연결, UI 상태 안내, realtime event
+invalidation key를 구현했다.
+
+**변경**:
+
+- `TripRealtimeClient`가 close code/reason을 `TripRealtimeCloseInfo`로 분류하고 `onClose`,
+  `onAuthRefresh`, `refreshing-auth`, `reconnecting`, `permission-denied`, `connection-limited`,
+  `rate-limited` 상태를 제공한다.
+- `4401` close는 웹에서 `authApi.refresh()` 성공 후 즉시 재연결한다. 실패하면 기존
+  `ApiClient.onUnauthorized` 흐름으로 로그인 복귀한다.
+- `4403` close는 재연결하지 않고 Trip 상세에 권한 상실 안내와 여행 목록 CTA를 표시한다.
+- `4408`/`4429` close는 connection cap/rate-limit 안내와 backoff 상태를 표시한다.
+- `tripRealtimeInvalidationKeys()`를 추가해 POI/day/trip/comment domain event별 TanStack Query key를
+  정의했다.
+- Trip 상세 reload는 in-flight promise를 공유해 HTTP mutation 성공 reload와 WebSocket event reload가
+  같은 tick에 겹쳐도 1회 요청으로 합친다.
+- `trip-detail.e2e.ts`에 4403 권한 상실과 4429 backoff mock Playwright 케이스를 추가했다.
+
+**검증**:
+
+- WSL ext4 미러: `npm -w @pinvi/api-client run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/mobile run typecheck`
+- WSL ext4 미러: `npm -w @pinvi/web run test -- tripRealtimeClient.test.ts`
+- WSL ext4 미러: `npm -w @pinvi/web run lint`
+- WSL ext4 미러: `npm -w @pinvi/web run build`
+- Windows Playwright runner: `trip-detail.e2e.ts` 3건
+
+**다음**: PR을 만들고 merge/N150 배포 후 T-235 Optimistic lock / conflict dialog로 진행한다.
+
 ## 2026-06-27 (codex) — T-233 리뷰 코멘트 반영 / legal-ops Task 보강
 
 **작업**: PR #264 리뷰 코멘트를 반영해 Sprint 5/6 상세 Task 계획의 누락된 법무/운영/보안 표면을
