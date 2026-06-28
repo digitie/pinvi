@@ -18,6 +18,26 @@ from dagster import DefaultSensorStatus, RunFailureSensorContext, run_failure_se
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from pinvi.etl.jobs import kasi_poi_rise_set_job
+from pinvi.etl.schedules import (
+    kasi_special_days_job,
+    pinvi_email_outbox_job,
+    pinvi_location_log_archive_job,
+    pinvi_pii_retention_job,
+    pinvi_telegram_system_outbox_job,
+)
+
+# ADR-050: app-owned Dagster job 전체를 실패 통지 대상으로 명시한다. monitored_jobs를
+# 비우면 Dagster가 sensor.jobs 조회 시 raise하므로 반드시 채운다.
+_MONITORED_JOBS = [
+    kasi_poi_rise_set_job,
+    kasi_special_days_job,
+    pinvi_email_outbox_job,
+    pinvi_pii_retention_job,
+    pinvi_location_log_archive_job,
+    pinvi_telegram_system_outbox_job,
+]
+
 OUTBOX_CATEGORY = "etl_run_failure"
 _MAX_ERROR_CLASS_LEN = 200
 
@@ -100,6 +120,7 @@ def _capture_sentry(payload: dict[str, Any]) -> bool:
         "ADR-050: app-owned Dagster job 실패를 Sentry + "
         "app.telegram_system_notification_outbox로 통지"
     ),
+    monitored_jobs=_MONITORED_JOBS,
     default_status=DefaultSensorStatus.RUNNING,
 )
 def pinvi_run_failure_sensor(context: RunFailureSensorContext) -> None:
