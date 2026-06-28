@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
+from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.admin import AdminEtlSummary
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/admin/etl", tags=["admin"])
 async def get_admin_etl_summary(
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     admin_client: KorTravelMapAdminClientDep,
+    db: DbSession,
 ) -> Envelope[AdminEtlSummary]:
     """Admin ETL 화면용 요약.
 
@@ -27,4 +29,4 @@ async def get_admin_etl_summary(
     kor-travel-map `/v1/ops/*`에서 읽는다. upstream 일부 장애는 화면을 막지 않고
     `kor_travel_map.status=degraded|down`으로 반환한다.
     """
-    return Envelope.of(await build_admin_etl_summary(admin_client))
+    return Envelope.of(await build_admin_etl_summary(admin_client, db))

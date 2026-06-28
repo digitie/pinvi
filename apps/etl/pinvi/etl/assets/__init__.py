@@ -7,6 +7,7 @@ Phase 6 T-210c, `docs/architecture/dagster-etl-bridge.md`).
 
 from __future__ import annotations
 
+from .pinvi_email_outbox import pinvi_email_outbox
 from .pinvi_kasi_special_days import pinvi_kasi_special_days
 
-__all__ = ["pinvi_kasi_special_days"]
+__all__ = ["pinvi_email_outbox", "pinvi_kasi_special_days"]

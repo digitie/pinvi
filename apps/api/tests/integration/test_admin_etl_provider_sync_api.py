@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -12,6 +12,7 @@ from app.api.v1.admin import etl as etl_router
 from app.clients.kor_travel_map import KorTravelMapUnavailable
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
+from app.models.email_queue import EmailQueue
 from app.models.user import User
 from app.services import admin_etl as admin_etl_service
 
@@ -36,6 +37,54 @@ async def _create_user(
         await db.commit()
         await db.refresh(user)
         return user.user_id
+
+
+async def _seed_email_queue(session_factory: Any) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                EmailQueue(
+                    to_email="due@example.com",
+                    template="verify_email",
+                    subject="Verify",
+                    payload={},
+                    status="pending",
+                    attempts=0,
+                    scheduled_at=now - timedelta(minutes=20),
+                ),
+                EmailQueue(
+                    to_email="backoff@example.com",
+                    template="verify_email",
+                    subject="Verify retry",
+                    payload={},
+                    status="pending",
+                    attempts=1,
+                    scheduled_at=now + timedelta(minutes=5),
+                ),
+                EmailQueue(
+                    to_email="failed@example.com",
+                    template="verify_email",
+                    subject="Verify failed",
+                    payload={},
+                    status="failed",
+                    attempts=5,
+                    last_error="provider down",
+                    scheduled_at=now - timedelta(hours=1),
+                ),
+                EmailQueue(
+                    to_email="invite@example.com",
+                    template="trip_invite",
+                    subject="Invite",
+                    payload={},
+                    status="bounced",
+                    attempts=1,
+                    bounce_type="hard",
+                    scheduled_at=now - timedelta(hours=1),
+                ),
+            ]
+        )
+        await db.commit()
 
 
 def _provider_item() -> dict[str, Any]:
@@ -175,6 +224,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     admin_id = await _create_user(
         session_factory, email="admin-etl@example.com", roles=["user", "operator"]
     )
+    await _seed_email_queue(session_factory)
     fake = _FakeOpsClient()
     _override(fake)
     try:
@@ -189,7 +239,20 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert {job["name"] for job in data["pinvi"]["jobs"]} == {
         "kasi_special_days_job",
         "kasi_poi_rise_set_job",
+        "pinvi_email_outbox_job",
     }
+    assert data["pinvi"]["email_outbox"]["pending_due"] == 1
+    assert data["pinvi"]["email_outbox"]["pending_backoff"] == 1
+    assert data["pinvi"]["email_outbox"]["stuck_pending"] == 1
+    assert data["pinvi"]["email_outbox"]["retry_exhausted"] == 1
+    verify_stats = next(
+        item
+        for item in data["pinvi"]["email_outbox"]["template_stats"]
+        if item["template"] == "verify_email"
+    )
+    assert verify_stats["total"] == 3
+    assert verify_stats["failure_count"] == 1
+    assert verify_stats["failure_rate"] == pytest.approx(1 / 3, abs=0.0001)
     assert data["kor_travel_map"]["dagster_status"] == "ok"
     assert data["kor_travel_map"]["job_count"] == 3
     assert data["kor_travel_map"]["features_total"] == 42

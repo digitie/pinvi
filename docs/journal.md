@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-239 `pinvi_email_outbox` Dagster job
+
+**작업**: Pinvi `app.email_queue` 운영 점검 Dagster asset/job과 Admin ETL summary 노출을 구현했다.
+
+**변경**:
+
+- `apps/etl`에 `pinvi_email_outbox` asset을 추가했다. 15분마다 pending due/backoff/stuck,
+  failed/bounced/complained, retry exhausted, template별 실패율을 PII 없이 bounded metadata로 남긴다.
+- Dagster definitions/schedules에 `pinvi_email_outbox_job`과 `pinvi_email_outbox_schedule`을 등록했다.
+- `/admin/etl/summary`가 `pinvi.email_outbox` summary를 반환하도록 API schema/service를 확장했다.
+- Web `/admin/etl`에 email outbox due/backoff/stuck/retry exhausted와 template failure rate를 표시했다.
+- 실제 메일 발송은 FastAPI lifespan worker가 계속 담당하고, deliverability/suppression 집행은
+  T-257/T-277로 유지했다.
+
+**검증**:
+
+- WSL ext4 미러: API targeted `ruff check` / `ruff format --check`
+- WSL ext4 미러: `python -m mypy --strict app`
+- WSL ext4 미러: `uv run --extra dev pytest tests/integration/test_admin_etl_provider_sync_api.py -q -rA`
+- WSL ext4 미러: ETL targeted `ruff check` / `ruff format --check`
+- WSL ext4 미러: `uv run --extra dev pytest -q tests/test_definitions.py tests/test_email_outbox.py`
+- WSL ext4 미러: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/web run typecheck`,
+  `npm -w @pinvi/web run lint`
+- Windows Playwright runner: `npm -w @pinvi/web run test:e2e -- admin-etl-provider-sync.e2e.ts --workers=1`
+
+**다음**: PR 생성 후 e2e/CI/merge를 완료하고, 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+다음 구현은 T-240 `pinvi_pii_retention` Dagster job이다.
+
 ## 2026-06-28 (codex) — T-238 Pinvi app-owned ETL 표준 / ADR
 
 **작업**: Sprint 5의 app-owned ETL job 구현 전에 Pinvi Dagster job 표준을 ADR-050으로 고정했다.

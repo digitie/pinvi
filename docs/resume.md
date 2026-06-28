@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-239 `pinvi_email_outbox` Dagster job
+
+`pinvi_email_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다 `app.email_queue`의
+pending due/backoff/stuck, failed/bounced/complained, retry exhausted, 최근 24시간 template별
+실패율을 PII 없이 bounded metadata로 집계한다. 실제 발송 source of truth는 기존 FastAPI lifespan
+`email_outbox_worker_lifespan`으로 유지한다.
+
+`/admin/etl/summary`는 같은 email outbox summary를 `pinvi.email_outbox`로 반환하고, Web
+`/admin/etl`은 due/backoff/stuck/retry exhausted와 template 실패율을 표시한다. hard-bounce/complaint
+suppression 집행과 domain verification 운영 체크는 T-257/T-277 범위로 남겼다.
+
+다음 작업은 T-240 `pinvi_pii_retention` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-238 Pinvi app-owned ETL 표준 / ADR
 
 ADR-050으로 Pinvi `apps/etl` app-owned Dagster job 표준을 고정했다. Pinvi ETL은 `app`

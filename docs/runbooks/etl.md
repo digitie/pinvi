@@ -35,13 +35,15 @@ apps/etl/
 │       ├── __init__.py
 │       ├── definitions.py               # Dagster code location entry (sensors=[])
 │       ├── resources.py                 # PinviDatabaseResource, KasiResource
-│       ├── schedules.py                 # kasi_special_days_job cron (KST 03:30)
+│       ├── schedules.py                 # KASI cron + email outbox 점검 cron
 │       ├── jobs.py                      # kasi_poi_rise_set_job (POI 출몰시각 one-shot)
 │       └── assets/
 │           ├── __init__.py
+│           ├── pinvi_email_outbox.py
 │           └── pinvi_kasi_special_days.py
 └── tests/
     ├── test_definitions.py
+    ├── test_email_outbox.py
     └── test_kasi_special_days.py
 ```
 
@@ -52,7 +54,6 @@ pinvi/etl/
 ├── sensors.py                           # (계획) run_failure_sensor (Sentry/outbox)
 └── assets/
     ├── pinvi_telegram_weekly.py      # (계획) 주간 브리프 — D-11
-    ├── pinvi_email_outbox.py         # (계획) 이메일 outbox worker
     ├── pinvi_pii_retention.py        # (계획) PII 보존정책
     └── pinvi_location_log_archive.py # (계획) 위치로그 archive — DEC-10
 ```
@@ -109,6 +110,14 @@ POI 출몰시각은 정기 asset이 아니라 POI 생성 시 enqueue되는 job�
 `kasi_special_days_job` schedule, `kasi_poi_rise_set_job` one-shot job이 등록되어
 있다. 날짜와 좌표가 있는 POI는 API 생성 시 `status='pending_fetch'` row를 만들고,
 Dagster job은 해당 row를 `success` 또는 `failed`로 전이한다.
+
+### 3.1 Email outbox asset
+
+구현 상태(2026-06-28): `pinvi_email_outbox` asset과 `pinvi_email_outbox_job` schedule이
+등록되어 있다. 15분마다 `app.email_queue`를 읽어 pending due/backoff/stuck, failed,
+bounced, complained, retry exhausted, template별 실패율을 PII 없이 bounded metadata로 남긴다.
+실제 발송 source of truth는 FastAPI lifespan `email_outbox_worker_lifespan`이며, Dagster asset은
+운영 점검과 Admin summary 노출만 담당한다. hard-bounce/complaint suppression 집행은 T-277 범위다.
 
 ## 4. Resource
 

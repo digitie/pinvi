@@ -124,6 +124,12 @@
   `users.email_status`, hard-bounce/complaint suppression enforcement가 빠지지 않게 metadata를
   설계한다.
 
+2026-06-28 구현: `pinvi_email_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다
+`app.email_queue`의 pending due/backoff/stuck, failed/bounced/complained, retry exhausted,
+최근 24시간 template별 실패율을 PII 없이 metadata로 남긴다. `/admin/etl/summary`와 Web
+`/admin/etl`은 같은 bounded summary를 표시한다. 실제 발송은 계속 FastAPI lifespan worker가
+소유하며, domain verification/suppression 집행은 T-257/T-277로 유지한다.
+
 검증 케이스:
 
 - ETL unit: pending 없음, due pending 있음, retry 초과, stuck item, template별 집계.

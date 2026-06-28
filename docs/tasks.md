@@ -22,10 +22,10 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-239 `pinvi_email_outbox` Dagster job.
-- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-238 진입 전
-  재확인 결과, unresolved human inline review comment와 review body는 0건이고,
-  최근 top-level comment는 검증/머지 로그 중심이라 신규 차단 없음.
+- 다음 구현: T-240 `pinvi_pii_retention` Dagster job.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-239 진입 전
+  재확인 결과, 최근 PR 37개 중 unresolved human inline review comment와 review body는 0건이고,
+  top-level comment 33건은 신규 차단 없음.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
@@ -42,9 +42,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-239 — `pinvi_email_outbox` Dagster job.
-      email queue 상태/재시도/stuck item 점검 job과 Admin ETL summary 노출을 구현한다.
-      deliverability/suppression 실행은 T-257/T-277과 연결한다.
 - [ ] T-240 — `pinvi_pii_retention` Dagster job.
       PII 보존정책 dry-run job과 compliance cross-reference를 구현한다. 실제 delete/anonymize는
       T-276에서 kill-switch와 dashboard로 구현한다.
