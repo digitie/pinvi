@@ -46,6 +46,9 @@ import {
   AdminDsrRejectRequestSchema,
   AdminDsrRequestListResponseSchema,
   AdminDsrRequestRecordSchema,
+  AdminContentModerationActionRequestSchema,
+  AdminContentReportListResponseSchema,
+  AdminContentReportRecordSchema,
   AdminEmailDeliverabilitySchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
@@ -214,6 +217,23 @@ export type AdminDsrIdentityCheckBody = z.infer<typeof AdminDsrIdentityCheckRequ
 export type AdminDsrProcessBody = z.infer<typeof AdminDsrProcessRequestSchema>;
 export type AdminDsrCompleteBody = z.infer<typeof AdminDsrCompleteRequestSchema>;
 export type AdminDsrRejectBody = z.infer<typeof AdminDsrRejectRequestSchema>;
+
+export interface AdminContentReportListParams {
+  status?:
+    | 'received'
+    | 'reviewing'
+    | 'hidden'
+    | 'taken_down'
+    | 'rejected'
+    | 'appealed'
+    | 'restored';
+  targetType?: 'trip' | 'comment' | 'attachment' | 'share_link';
+  pageSize?: number;
+}
+
+export type AdminContentModerationActionBody = z.infer<
+  typeof AdminContentModerationActionRequestSchema
+>;
 
 export interface AdminIntegrityIssueListParams {
   source?: 'all' | 'kor_travel_map' | 'pinvi_app';
@@ -516,6 +536,53 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminDsrRejectRequestSchema.parse(body)),
       schema: AdminDsrRequestRecordSchema,
+    }),
+
+  listContentReports: (params: AdminContentReportListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.targetType) qs.set('target_type', params.targetType);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    const path = `/admin/moderation/reports${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminContentReportListResponseSchema,
+    });
+  },
+
+  reviewContentReport: (reportId: string, body: AdminContentModerationActionBody) =>
+    client.request(`/admin/moderation/reports/${encodeURIComponent(reportId)}/review`, {
+      method: 'POST',
+      body: JSON.stringify(AdminContentModerationActionRequestSchema.parse(body)),
+      schema: AdminContentReportRecordSchema,
+    }),
+
+  hideContentReport: (reportId: string, body: AdminContentModerationActionBody) =>
+    client.request(`/admin/moderation/reports/${encodeURIComponent(reportId)}/hide`, {
+      method: 'POST',
+      body: JSON.stringify(AdminContentModerationActionRequestSchema.parse(body)),
+      schema: AdminContentReportRecordSchema,
+    }),
+
+  takedownContentReport: (reportId: string, body: AdminContentModerationActionBody) =>
+    client.request(`/admin/moderation/reports/${encodeURIComponent(reportId)}/takedown`, {
+      method: 'POST',
+      body: JSON.stringify(AdminContentModerationActionRequestSchema.parse(body)),
+      schema: AdminContentReportRecordSchema,
+    }),
+
+  restoreContentReport: (reportId: string, body: AdminContentModerationActionBody) =>
+    client.request(`/admin/moderation/reports/${encodeURIComponent(reportId)}/restore`, {
+      method: 'POST',
+      body: JSON.stringify(AdminContentModerationActionRequestSchema.parse(body)),
+      schema: AdminContentReportRecordSchema,
+    }),
+
+  rejectContentReport: (reportId: string, body: AdminContentModerationActionBody) =>
+    client.request(`/admin/moderation/reports/${encodeURIComponent(reportId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(AdminContentModerationActionRequestSchema.parse(body)),
+      schema: AdminContentReportRecordSchema,
     }),
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {

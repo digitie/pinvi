@@ -195,6 +195,44 @@
 | `created_at`              | `timestamptz` NOT NULL |                                                                                       |
 | `updated_at`              | `timestamptz` NOT NULL |                                                                                       |
 
+#### `app.content_reports`
+
+| 컬럼                   | 타입                   | 비고                                                                                      |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------------- |
+| `report_id`            | `uuid` (PK)            | 콘텐츠 신고 id                                                                            |
+| `target_type`          | `varchar(32)`          | `trip` / `comment` / `attachment` / `share_link`                                          |
+| `target_id`            | `uuid`                 | 대상 row id                                                                               |
+| `target_trip_id`       | `uuid` → `app.trips`   | 대상이 속한 여행, nullable                                                                |
+| `target_owner_user_id` | `uuid` → `app.users`   | 대상 소유자/작성자, nullable                                                              |
+| `reporter_user_id`     | `uuid` → `app.users`   | 신고자, 삭제 후 증적 보존 위해 nullable                                                   |
+| `reason_code`          | `varchar(32)`          | `spam` / `harassment` / `privacy` / `illegal` / `safety` / `other`                        |
+| `reason_text`          | `text`                 | 사용자 입력 신고 내용                                                                     |
+| `status`               | `varchar(32)`          | `received` / `reviewing` / `hidden` / `taken_down` / `rejected` / `appealed` / `restored` |
+| `target_snapshot`      | `jsonb`                | 접수 시점 대상 bounded metadata                                                           |
+| `evidence`             | `jsonb`                | 사용자 제공 증빙 metadata                                                                 |
+| `reviewer_user_id`     | `uuid` → `app.users`   | 마지막 admin/operator 조치자                                                              |
+| `resolution_summary`   | `text`                 | admin 처리 요약                                                                           |
+| `appeal_summary`       | `text`                 | 사용자 이의제기 사유                                                                      |
+| `reviewed_at`          | `timestamptz`          | 검토 시작 시각                                                                            |
+| `actioned_at`          | `timestamptz`          | 숨김/게시중단/기각 시각                                                                   |
+| `appealed_at`          | `timestamptz`          | 이의제기 시각                                                                             |
+| `restored_at`          | `timestamptz`          | 복구 시각                                                                                 |
+| `created_at`           | `timestamptz` NOT NULL |                                                                                           |
+| `updated_at`           | `timestamptz` NOT NULL |                                                                                           |
+
+#### `app.content_moderation_actions`
+
+| 컬럼            | 타입                           | 비고                                                             |
+| --------------- | ------------------------------ | ---------------------------------------------------------------- |
+| `action_id`     | `uuid` (PK)                    | moderation action id                                             |
+| `report_id`     | `uuid` → `app.content_reports` | 신고 id                                                          |
+| `actor_user_id` | `uuid` → `app.users`           | admin/operator 또는 appeal 사용자, nullable                      |
+| `action`        | `varchar(32)`                  | `review` / `hide` / `takedown` / `restore` / `reject` / `appeal` |
+| `action_reason` | `text`                         | admin 처리 요약 또는 사용자 appeal 사유                          |
+| `before_state`  | `jsonb`                        | 조치 전 target/report state                                      |
+| `after_state`   | `jsonb`                        | 조치 후 target/report state                                      |
+| `created_at`    | `timestamptz` NOT NULL         |                                                                  |
+
 #### `app.rate_limit_buckets`
 
 운영/staging에서 HTTP 공통 rate-limit counter를 worker/노드 간 공유하기 위한 고정

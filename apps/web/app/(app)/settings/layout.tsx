@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 const TABS = [
   { href: '/settings/consents', label: '동의 관리' },
   { href: '/settings/dsr', label: '개인정보 요청' },
+  { href: '/settings/moderation', label: '신고/이의제기' },
   { href: '/settings/mcp-tokens', label: 'MCP 토큰' },
   { href: '/settings/telegram', label: 'Telegram 알림' },
 ] as const;

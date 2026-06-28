@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-279 Content moderation / takedown workflow
+
+**작업**: 콘텐츠 신고, 게시중단, 복원, 이의제기 workflow를 구현했다.
+
+**변경**:
+
+- `app.content_reports`와 `app.content_moderation_actions` migration/model을 추가했다. 대상 유형은
+  trip/comment/attachment/share link이며, 신고 사유, target snapshot, 증거 metadata, 상태, reviewer,
+  resolution, appeal, 조치 전후 상태를 저장한다.
+- `/users/me/content-reports` API는 사용자 신고 접수/조회와 이의제기를 제공한다.
+  `/settings/moderation` 화면은 같은 self-service 흐름을 제공한다.
+- `/admin/moderation` API와 Web Admin 화면을 추가했다. 운영자는 신고 목록을 필터링하고
+  review/hide/takedown/restore/reject 조치를 수행한다.
+- hide/takedown/restore는 여행 visibility/archive, 댓글/첨부 soft-delete, 공유 링크 revoke 상태에
+  실제 반영된다.
+- 모든 운영 mutation은 `content_moderation.*` 감사 로그와 `access_reason`을 남긴다.
+- shared schema, API client, Admin query key, Admin/user mock Playwright를 추가했다.
+- `docs/runbooks/content-moderation.md`, `docs/api/admin.md`, `docs/api/users.md`,
+  `docs/compliance/pipa.md`, `docs/data-model.md`, `docs/postgres-schema.md`, task/resume,
+  `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+
+- WSL: `ruff check` targeted moderation API/model/schema/service/test files
+- WSL: `python -m mypy` targeted moderation model/schema/service/Admin/users routes
+- WSL: `npm run typecheck --workspace packages/schemas`
+- WSL: `npm run typecheck --workspace packages/api-client`
+- WSL: `npm run typecheck --workspace apps/web`
+- WSL: `npm run lint --workspace apps/web`
+- WSL: `python -m pytest tests/integration/test_content_moderation_api.py -q -s` — 3 passed
+- Playwright: N150 alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+  `npm run test:e2e --workspace apps/web -- admin-moderation.e2e.ts settings-moderation.e2e.ts` —
+  2 passed
+
+**다음**: PR·CI·머지 후 T-280 RBAC role grant/revoke / permission matrix로 진입한다.
+
 ## 2026-06-28 (codex) — T-278 DSR intake workflow
 
 **작업**: 개인정보 열람/정정/삭제/처리정지 요청 접수와 CPO 처리 workflow를 구현했다.

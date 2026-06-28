@@ -26,6 +26,12 @@ from app.schemas.dsr import (
 )
 from app.schemas.envelope import Envelope
 from app.schemas.mcp import McpTokenIssueRequest, McpTokenIssueResponse, McpTokenResponse
+from app.schemas.moderation import (
+    ContentReportAppealRequest,
+    ContentReportCreateRequest,
+    ContentReportListResponse,
+    ContentReportRecord,
+)
 from app.schemas.storage import (
     AVATAR_CONTENT_TYPES,
     AttachmentLibraryItem,
@@ -64,6 +70,15 @@ from app.services.mcp_tokens import (
     list_user_mcp_tokens,
     mask_mcp_token,
     revoke_mcp_token,
+)
+from app.services.moderation import (
+    ContentReportNotFoundError,
+    ContentReportPermissionError,
+    ContentReportTransitionError,
+    appeal_content_report,
+    create_content_report,
+    list_user_content_reports,
+    to_content_report_record,
 )
 from app.services.rustfs_admin import delete_object
 from app.services.rustfs_storage import (
@@ -382,6 +397,84 @@ async def withdraw_my_dsr_request(
         ) from exc
     await db.commit()
     return Envelope.of(to_dsr_request_record(row))
+
+
+@router.get("/content-reports", response_model=Envelope[ContentReportListResponse])
+async def list_my_content_reports(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> Envelope[ContentReportListResponse]:
+    await _get_current_user(db, current_user_id)
+    result = await list_user_content_reports(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        page_size=page_size,
+    )
+    return Envelope.of(result)
+
+
+@router.post(
+    "/content-reports",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[ContentReportRecord],
+)
+async def create_my_content_report(
+    body: ContentReportCreateRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[ContentReportRecord]:
+    await _get_current_user(db, current_user_id)
+    try:
+        row = await create_content_report(
+            db,
+            reporter_user_id=uuid.UUID(current_user_id),
+            body=body,
+        )
+    except ContentReportNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "신고 대상을 찾을 수 없습니다."},
+        ) from exc
+    except ContentReportPermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "PERMISSION_DENIED", "message": "신고 대상 접근 권한이 없습니다."},
+        ) from exc
+    await db.commit()
+    return Envelope.of(to_content_report_record(row))
+
+
+@router.post(
+    "/content-reports/{report_id}/appeal",
+    response_model=Envelope[ContentReportRecord],
+)
+async def appeal_my_content_report(
+    report_id: uuid.UUID,
+    body: ContentReportAppealRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[ContentReportRecord]:
+    await _get_current_user(db, current_user_id)
+    try:
+        row = await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uuid.UUID(current_user_id),
+            body=body,
+        )
+    except ContentReportNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "신고를 찾을 수 없습니다."},
+        ) from exc
+    except ContentReportTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INVALID_STATE", "message": str(exc)},
+        ) from exc
+    await db.commit()
+    return Envelope.of(to_content_report_record(row))
 
 
 @router.post(

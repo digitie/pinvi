@@ -60,6 +60,31 @@ export type {
 } from './user';
 
 export {
+  ContentModerationActionRecordSchema,
+  ContentModerationActionRequestSchema,
+  ContentModerationActionTypeSchema,
+  ContentReportAppealRequestSchema,
+  ContentReportCreateRequestSchema,
+  ContentReportListResponseSchema,
+  ContentReportReasonCodeSchema,
+  ContentReportRecordSchema,
+  ContentReportStatusSchema,
+  ContentReportTargetTypeSchema,
+} from './moderation';
+export type {
+  ContentModerationActionRecord,
+  ContentModerationActionRequest,
+  ContentModerationActionType,
+  ContentReportAppealRequest,
+  ContentReportCreateRequest,
+  ContentReportListResponse,
+  ContentReportReasonCode,
+  ContentReportRecord,
+  ContentReportStatus,
+  ContentReportTargetType,
+} from './moderation';
+
+export {
   AdminMcpTokenIssueRequestSchema,
   McpScopeSchema,
   McpTokenIssueRequestSchema,
@@ -280,6 +305,11 @@ export {
   AdminDsrRequestRecordSchema,
   AdminDsrRequestStatusSchema,
   AdminDsrRequestTypeSchema,
+  AdminContentModerationActionRequestSchema,
+  AdminContentReportListResponseSchema,
+  AdminContentReportRecordSchema,
+  AdminContentReportStatusSchema,
+  AdminContentReportTargetTypeSchema,
   AdminRetentionDryRunRequestSchema,
   AdminRetentionExecuteRequestSchema,
   AdminRetentionRunListResponseSchema,
@@ -440,6 +470,11 @@ export type {
   AdminDsrRequestRecord,
   AdminDsrRequestStatus,
   AdminDsrRequestType,
+  AdminContentModerationActionRequest,
+  AdminContentReportListResponse,
+  AdminContentReportRecord,
+  AdminContentReportStatus,
+  AdminContentReportTargetType,
   AdminRetentionDryRunRequest,
   AdminRetentionExecuteRequest,
   AdminRetentionRun,
