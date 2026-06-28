@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-259 v0.2.0 release candidate gate 부분 실행
+
+T-259 release candidate gate 결과를 `docs/execplan/v020-release-candidate-gate.md`에
+고정했다. 후보 SHA는 `98fb3c2c0d7b7e557dc7a5598f0340d530c4def2`다. N150 checkout을 최신 main으로
+갱신했고, `pinvi-api`, `pinvi-web`, `pinvi-dagster` 이미지를 생성해 healthy 상태로 기동했다.
+N150 내부 smoke는 API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`,
+`kor-travel-map` `/health`/OpenAPI 모두 200을 확인했다.
+
+backup snapshot은 `postgis/postgis:16-3.5` 일회성 컨테이너로 생성했고,
+`pinvi-app-20260628-094253.dump`(126826 bytes), `.sha256`, `pg_restore --list` 검증이 통과했다.
+다만 host의 `scripts/backup-db.sh`는 `pg_dump not found`로 직접 실행되지 않았다.
+
+릴리스는 보류한다. 최신 main SHA에는 PR monitor check만 있고 `api`/`web` main CI check가 없었다.
+N150 Playwright는 Chromium `libatk-1.0.so.0` 누락으로 실패했고, Windows fallback은 N150 Web SSH
+tunnel 대상 login malformed validation 1건만 통과했다. Admin live 2000/full은 credential 부재,
+restore staging drill은 staging DB URL 부재로 미실행이다. 다음 작업은 T-259 차단 해소 후
+`v0.2.0` tag/GitHub Release 생성이다.
+
 ## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
 
 Sprint 6 legal/ops 구현 준비 gate를 `docs/execplan/legal-ops-implementation-prep-gate.md`로

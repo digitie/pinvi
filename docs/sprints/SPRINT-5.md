@@ -88,6 +88,10 @@
 
 남은 `v0.2.0` 후보 gate:
 
+- Release candidate gate는 T-259에서 부분 실행했다. N150 후보 배포와 smoke, backup snapshot은
+  통과했지만 최신 main `api`/`web` CI, Admin live 2000/full credential, N150 Playwright
+  system dependency, restore staging DB가 남아 `v0.2.0` tag/GitHub Release는 보류한다.
+  상세는 `docs/execplan/v020-release-candidate-gate.md`.
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
 - 사용자/Admin 지도뷰 marker palette parity는 T-255에서 완료했다. 공용 marker resolver가
@@ -101,12 +105,13 @@
   run-now/pause/resume은 upstream 계약 부재로 후속 처리한다.
 - Feature detail subpage는 T-248에서 sources/overrides/weather-values read-only deep link와 mock e2e,
   live matrix guarded case로 완료했다.
-- Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
+- Backup snapshot 1회는 T-259에서 확인했다. Backup/restore 스테이징 복구 훈련은 staging DB
+  URL/환경 준비 후 release 차단 해소로 수행한다.
 - 리뷰 반영 legal/ops preflight: T-256에서 PR #238/#264 gap 44개와 최근 PR 사후 리뷰 후속을
   `docs/execplan/legal-ops-review-gap-crosswalk.md`에 매핑했다. T-257은 Resend
   deliverability/provider tracking 계약을 T-277로 연결하며 완료했다. T-258은 Sprint 6 legal/ops
   구현 매트릭스와 release sign-off 기준을 확정하며 완료했다.
-- `v0.2.0` tag/GitHub Release notes.
+- `v0.2.0` tag/GitHub Release notes. T-259 차단 항목 해소 전에는 생성하지 않는다.
 
 ### 백엔드 (`apps/api`)
 

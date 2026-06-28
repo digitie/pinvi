@@ -5,7 +5,10 @@
 ## Unreleased (`v0.2.0` 후보)
 
 > `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
-> app-owned ETL 추가 job, Loki stream, backup/restore 1차 게이트가 남아 있다.
+> app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
+> 2026-06-28 T-259에서 N150 smoke와 backup snapshot은 통과했다. 남은 release 차단 항목은
+> 최신 main `api`/`web` CI, Admin live 2000/full credential, N150 Playwright system dependency,
+> restore staging drill이다.
 
 ### 주요 기능
 
