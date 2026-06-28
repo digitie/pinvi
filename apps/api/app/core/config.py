@@ -237,6 +237,7 @@ class Settings(BaseSettings):
     pinvi_backup_timeout_seconds: int = 900
     pinvi_restore_timeout_seconds: int = 3600
     pinvi_backup_schema: str = "app"
+    pinvi_backup_min_free_bytes: int = 1_073_741_824
     pinvi_restore_database_url: str = ""
     pinvi_restore_hotswap_execute: bool = False
     pinvi_restore_drain_command: str = ""

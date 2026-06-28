@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-250 Backup script / snapshot endpoint hardening
+
+Backup script와 Admin snapshot endpoint를 보강했다. `scripts/backup-db.sh`는 schema name guard,
+`PINVI_BACKUP_MIN_FREE_BYTES` disk free guard, 임시 dump 생성, sha256 sidecar 생성/검증을 수행한다.
+`scripts/restore-db.sh`는 `.sha256` sidecar가 있으면 restore 전에 반드시 검증한다.
+
+API/service는 `.sha256`이 실제 dump checksum과 일치할 때만 `status="verified"`로 표시하고,
+불일치하면 `available`로 낮춘다. Admin backup/restore 응답과 audit/error message의 host 절대경로는
+`backup://<filename>`으로 mask하고, DB URL credential도 mask한다. snapshot 생성 실패도
+`backup.snapshot_failed` audit으로 남긴다.
+
+Linux/WSL에서 ruff, backup service unit/API integration, strict mypy, shell syntax check를 검증했다.
+UI 변경은 없어서 Playwright는 실행하지 않았다. 다음 작업은 T-251 Restore staging drill이다.
+
 ## 2026-06-28 (codex) — T-249 App-owned integrity source / known orphan fix
 
 Pinvi app-owned integrity source를 추가했다. `app.data_integrity_violations` migration/model을

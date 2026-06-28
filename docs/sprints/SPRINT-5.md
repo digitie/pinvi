@@ -54,7 +54,8 @@
   - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,
     `docs/runbooks/grafana-admin-embed.md`)
   - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
-    pg_restore. 핫스왑 워크플로 design은 Sprint 6에서 finalize (ADR-022).
+    pg_restore. checksum/disk guard/path masking은 T-250에서 완료했다. 핫스왑 워크플로
+    design은 Sprint 6에서 finalize (ADR-022).
   - **`POST /admin/backup/snapshot`** — manual trigger (admin role) → backup
     file 생성 + sha256 + admin_audit_log 기록. RustFS 또는 외부 위치 미러는 후속
     운영 보강.

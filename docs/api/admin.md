@@ -1840,7 +1840,9 @@ GET /admin/backup/snapshots?limit=50
 
 - 권한: `admin` / `operator` / `cpo`
 - 저장 위치: `PINVI_BACKUP_DIR`의 `*.dump`
-- `.sha256` 파일이 있으면 `status="verified"`, 없으면 `status="available"`
+- `.sha256` 파일이 있고 실제 dump checksum과 일치하면 `status="verified"`, 없거나 불일치하면
+  `status="available"`
+- 응답의 `path`는 host 절대경로를 노출하지 않고 `backup://<filename>` 형식으로 mask한다.
 
 응답 200:
 
@@ -1850,7 +1852,7 @@ GET /admin/backup/snapshots?limit=50
     {
       "snapshot_id": "pinvi-app-20260606-003000",
       "filename": "pinvi-app-20260606-003000.dump",
-      "path": "/var/lib/pinvi/backups/pinvi-app-20260606-003000.dump",
+      "path": "backup://pinvi-app-20260606-003000.dump",
       "size_bytes": 2097152,
       "checksum_sha256": "b...",
       "status": "verified",
@@ -1871,9 +1873,13 @@ Content-Type: application/json
 
 - 권한: `admin`
 - 동작: `PINVI_BACKUP_SCRIPT_PATH`를 subprocess로 실행하고 `BACKUP_FILE=...`
-  출력 또는 새 dump 파일을 snapshot으로 인식한다.
-- audit: `app.admin_audit_log`에 `action="backup.snapshot"` 기록
-- 실패: `503 SERVICE_UNAVAILABLE`, `error.code="BACKUP_FAILED"`
+  출력 또는 새 dump 파일을 snapshot으로 인식한다. 실행 전 `PINVI_BACKUP_MIN_FREE_BYTES`
+  disk guard를 확인하고, script는 custom dump 생성 후 sha256 sidecar를 검증한다.
+- audit: 성공 시 `app.admin_audit_log`에 `action="backup.snapshot"`, 실패 시
+  `action="backup.snapshot_failed"`를 기록한다. audit/error message는 DB URL credential과
+  host 절대경로를 mask한다.
+- 실패: `503 SERVICE_UNAVAILABLE`, `error.code="BACKUP_FAILED"` 또는
+  `BACKUP_DISK_GUARD_FAILED`
 
 응답 201: `GET /admin/backup/snapshots` 항목과 동일한 snapshot 객체.
 
@@ -1909,7 +1915,7 @@ Content-Type: application/json
   "data": {
     "restore_id": "20260608093000",
     "snapshot_id": "pinvi-app-20260606-003000",
-    "snapshot_path": "/var/lib/pinvi/backups/pinvi-app-20260606-003000.dump",
+    "snapshot_path": "backup://pinvi-app-20260606-003000.dump",
     "restore_schema": "app_restore_20260608093000",
     "previous_schema": "app_previous_20260608093000",
     "status": "succeeded",
