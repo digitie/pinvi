@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
+
+**작업**: Sprint 6 legal/ops 구현 준비 gate를 확정했다.
+
+**변경**:
+
+- `docs/execplan/legal-ops-implementation-prep-gate.md`를 추가했다.
+- T-275~T-286에 대해 API/UI 표면, 상태 모델, due date, evidence/audit, runbook,
+  test gate, sign-off 기준을 매핑했다.
+- 기존 `KISA 60일 report` 표현은 폐기하고 개인정보보호위원회/KISA 72시간 신고 기준으로
+  `docs/compliance/pipa.md`, Sprint 5/6 계획, tasks/crosswalk를 정정했다.
+- CPO 30분 review는 Pinvi 내부 운영 SLA로 분리했고, DSR 기본 처리 due는 공식 열람 처리기간
+  기준 10일로 문서화했다.
+- v1.0 mobile 제외와 user-facing AI companion 제외 범위를 Sprint 6 release checklist에 고정했다.
+
+**검증**:
+
+- 문서-only 변경이며 코드/브라우저 실행은 없다.
+
+**다음**: T-259 Release candidate gate / `v0.2.0`.
+
 ## 2026-06-28 (codex) — T-257 Email deliverability / provider tracking preflight
 
 **작업**: Resend deliverability/suppression/provider tracking 구현 전에 현재 repo 상태와

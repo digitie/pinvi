@@ -12,7 +12,8 @@
   분리한다.
 - **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-286을
   Sprint 6 진입 시 재검토해 확정한다. legal/ops gap의 원자료와 대응 Task는
-  `docs/execplan/legal-ops-review-gap-crosswalk.md`를 정본으로 둔다.
+  `docs/execplan/legal-ops-review-gap-crosswalk.md`를 정본으로 두고, T-275~T-286 구현 표면,
+  상태 모델, 증거, 테스트 gate는 `docs/execplan/legal-ops-implementation-prep-gate.md`를 따른다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
   - `POST /trips/{id}/days/{day_index}/optimize` (OR-Tools)
@@ -26,7 +27,8 @@
     storage presigned URL, Admin RBAC
   - LBS 사업자 신고 진행 (방통위 LBSC) — 본 Sprint 시작 시 신청
   - 법무 4 문서 작성/검토 (이용약관 / 처리방침 / LBS 약관 / 위치 동의)
-  - PIPA incident console (`/admin/incidents`) + CPO 30분 review / 정보주체 통지 / KISA 60일 report
+  - PIPA incident console (`/admin/incidents`) + CPO 30분 review / 정보주체 통지 /
+    KISA/PIPC 72시간 신고
   - DSR intake workflow(열람/정정/삭제/처리정지) + SLA/evidence/완료 통지
   - retention 실행(delete/anonymize/archive) + last_run/overdue dashboard + kill-switch
   - email deliverability/suppression — SPF/DKIM/DMARC/FROM verified, hard-bounce/complaint enforcement
@@ -184,6 +186,8 @@
 - [ ] PIPA incident/DSR/retention/email suppression/moderation/RBAC/user lifecycle/abuse 운영 표면
       구현과 법무 sign-off
 - [ ] v1.0 mobile 제외 / user-facing AI companion 제외 release note 문구 확정
+- [ ] T-258 legal/ops prep gate 기준 최신성 재확인 — 72시간 신고, DSR 10일, CPO 30분 내부 SLA,
+      mobile/AI 제외 범위
 
 ## E2E 시나리오 (Playwright)
 
@@ -215,6 +219,7 @@
 - [ ] **v1.0 mobile 제외 / user-facing AI companion 제외 범위 명시**
 - [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
       user lifecycle / abuse 운영 표면 sign-off**
+- [ ] **T-258 legal/ops 구현 매트릭스 충족** — 각 Task가 API/UI/runbook/test/sign-off를 가진다.
 - [ ] **T-256 crosswalk G-001~G-044 재감사** — 각 gap이 구현 PR, 테스트, runbook 중
       하나로 닫혔는지 확인
 - [ ] **Security threat model / penetration 1차 점검 결과 기록**

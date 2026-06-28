@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-258 — Sprint 6 legal/ops implementation prep gate.
+      `docs/execplan/legal-ops-implementation-prep-gate.md`를 추가해 T-275~T-286의 API/UI,
+      상태 모델, due date, evidence/audit, runbook, test gate, sign-off 기준을 Sprint 6 진입
+      계약으로 고정했다. 기존 `KISA 60일 report` 표현은 개인정보보호위원회/KISA 72시간 신고
+      기준으로 정정했고, CPO 30분 review는 내부 SLA로 분리했다. v1.0 mobile 제외와
+      user-facing AI companion 제외도 release checklist에 명시했다.
+
 - [x] T-257 — Email deliverability / provider tracking preflight.
       `docs/execplan/email-deliverability-provider-preflight.md`를 추가해 Resend domain
       verification, SPF/DKIM/DMARC, webhook event dedupe/precedence, hard-bounce/complaint

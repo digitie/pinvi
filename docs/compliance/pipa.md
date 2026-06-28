@@ -3,34 +3,40 @@
 2024 개정 PIPA — 과징금 산정 기준이 **전체 매출액의 최대 3%** (특정 조건 10%)로
 강화. 침해 "가능성 인지 시점" 즉시 통지. SPEC V8 O-4 ~ O-8 정합.
 
+> T-258 확인(2026-06-28): 기존 문서의 "KISA 60일 신고" 표현은 폐기한다.
+> 개인정보 유출 신고 대상이면 개인정보보호위원회/KISA에 **72시간 이내 신고**를 기준으로
+> UI due date와 runbook checklist를 설계한다. CPO 30분 review는 Pinvi 내부 운영 SLA다.
+> 자세한 Sprint 6 구현 계약은
+> [`legal-ops-implementation-prep-gate.md`](../execplan/legal-ops-implementation-prep-gate.md).
+
 ## 1. 핵심 의무
 
-| 의무 | 기준 | 본 저장소 대응 |
-|------|------|---------------|
-| 과징금 | 전체 매출액 최대 3% (고의·중대 10%) | 위반 방지 — 본 매트릭스 준수 |
-| 침해 통지 | "가능성 인지 시점" 즉시 정보주체 통지 + 신고 | §3 자동 트리거 |
-| 처리방침 의무 기재 | 자동화 결정 / 국외 이전 / 위탁자 / 보존기간 / 파기 절차 | `docs/legal/privacy-policy.md` |
-| 개인정보 영향평가 (PIA) | 일정 규모 이상 처리 시 | v1 단계 미해당, v2 사용자 사진 도입 시 재검토 |
+| 의무                    | 기준                                                     | 본 저장소 대응                                |
+| ----------------------- | -------------------------------------------------------- | --------------------------------------------- |
+| 과징금                  | 전체 매출액 최대 3% (고의·중대 10%)                      | 위반 방지 — 본 매트릭스 준수                  |
+| 침해 통지               | "가능성 인지 시점" 즉시 정보주체 통지 + 72시간 이내 신고 | §3 자동 트리거                                |
+| 처리방침 의무 기재      | 자동화 결정 / 국외 이전 / 위탁자 / 보존기간 / 파기 절차  | `docs/legal/privacy-policy.md`                |
+| 개인정보 영향평가 (PIA) | 일정 규모 이상 처리 시                                   | v1 단계 미해당, v2 사용자 사진 도입 시 재검토 |
 
 ## 2. 수집 / 보존 / 파기
 
 ### 2.1 수집 항목 (PII)
 
-| 항목 | 수집 시점 | 동의 | 보존 |
-|------|----------|------|------|
-| `email` | 가입 | `tos`, `privacy` | 탈퇴 + 30일 |
-| `password_hash` (Argon2id) | 가입 | `tos`, `privacy` | 탈퇴 + 30일 |
-| `nickname` | 가입 | `tos`, `privacy` | 탈퇴 + 30일 |
-| `avatar_url` (선택) | 프로필 완성 | `tos`, `privacy` | 탈퇴 + 30일 (RustFS object 별도 30일) |
-| `gender` (선택) | 프로필 완성 | `demographic_use` | 동의 철회 시 즉시 NULL |
-| `birth_year_month` (선택) | 프로필 완성 | `demographic_use` | 동일 |
-| `residence_sigungu_code` (선택) | 프로필 완성 | `demographic_use` | 동일 |
-| `lat`/`lng` (위치) | API 호출 시 | `location_collection` | **6개월** (위치정보법) |
-| `ip_hash` | 요청 시 | `tos`, `privacy` | 6개월 (audit chain) |
-| `user_agent` (`user_sessions`) | 로그인 시 | `tos`, `privacy` | session 만료 + 30일 |
-| `provider_email` (OAuth) | 소셜 가입 | `tos`, `privacy` | 탈퇴 + 30일 |
-| Telegram `chat_id` | target 등록 | (사용자 선택) | 해제 시 즉시 |
-| Gemini `secret_ref` | 키 등록 | (사용자 선택) | 해제 시 vault에서 삭제 |
+| 항목                            | 수집 시점   | 동의                  | 보존                                  |
+| ------------------------------- | ----------- | --------------------- | ------------------------------------- |
+| `email`                         | 가입        | `tos`, `privacy`      | 탈퇴 + 30일                           |
+| `password_hash` (Argon2id)      | 가입        | `tos`, `privacy`      | 탈퇴 + 30일                           |
+| `nickname`                      | 가입        | `tos`, `privacy`      | 탈퇴 + 30일                           |
+| `avatar_url` (선택)             | 프로필 완성 | `tos`, `privacy`      | 탈퇴 + 30일 (RustFS object 별도 30일) |
+| `gender` (선택)                 | 프로필 완성 | `demographic_use`     | 동의 철회 시 즉시 NULL                |
+| `birth_year_month` (선택)       | 프로필 완성 | `demographic_use`     | 동일                                  |
+| `residence_sigungu_code` (선택) | 프로필 완성 | `demographic_use`     | 동일                                  |
+| `lat`/`lng` (위치)              | API 호출 시 | `location_collection` | **6개월** (위치정보법)                |
+| `ip_hash`                       | 요청 시     | `tos`, `privacy`      | 6개월 (audit chain)                   |
+| `user_agent` (`user_sessions`)  | 로그인 시   | `tos`, `privacy`      | session 만료 + 30일                   |
+| `provider_email` (OAuth)        | 소셜 가입   | `tos`, `privacy`      | 탈퇴 + 30일                           |
+| Telegram `chat_id`              | target 등록 | (사용자 선택)         | 해제 시 즉시                          |
+| Gemini `secret_ref`             | 키 등록     | (사용자 선택)         | 해제 시 vault에서 삭제                |
 
 ### 2.2 보존 만료 자동 파기
 
@@ -68,7 +74,7 @@ Dagster job 일 1회:
 2) Sentry alert + CPO Telegram 알림
 3) CPO가 30분 내 검토 (`/admin/incidents`)
 4) "정보주체 통지 필요" 판정 → 사용자 이메일 자동 발송 (`POST /admin/incidents/{id}/notify`)
-5) 60일 내 KISA 신고 (자동 X — CPO 수동)
+5) 72시간 이내 개인정보보호위원회/KISA 신고 (자동 X — CPO 수동)
 ```
 
 ## 4. 처리방침 의무 기재
@@ -86,16 +92,16 @@ Dagster job 일 1회:
 
 ### 4.3 국외 이전 (위탁 처리자)
 
-| 위탁자 | 위치 | 위탁 내용 |
-|--------|------|----------|
-| Google | 미국 | OAuth 인증 + Gemini AI |
-| Resend | 미국 (AWS) | 이메일 발송 |
-| Sentry | 미국 | 에러 추적 |
-| Naver | 국내 | OAuth 인증 |
-| Kakao | 국내 | OAuth 인증 (지도 SDK / Local API는 v2에서 미사용 — ADR-015) |
-| VWorld (국토교통부) | 국내 (정부) | 지도 SDK 타일 — `vworld-map-web` 경유 |
-| Telegram | 글로벌 (LU) | 알림 봇 (사용자 선택) — 신규 여행/동반자 초대 알림 발송. 수령 정보: 사용자가 등록한 `telegram_chat_id`만(메시지 본문에 이메일 등 PII 미포함). bot token 원본 미저장(T-106 §1). |
-| BackBlaze B2 (v2) | 미국 | 백업 저장 (운영자 결정 시) |
+| 위탁자              | 위치        | 위탁 내용                                                                                                                                                                      |
+| ------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Google              | 미국        | OAuth 인증 + Gemini AI                                                                                                                                                         |
+| Resend              | 미국 (AWS)  | 이메일 발송                                                                                                                                                                    |
+| Sentry              | 미국        | 에러 추적                                                                                                                                                                      |
+| Naver               | 국내        | OAuth 인증                                                                                                                                                                     |
+| Kakao               | 국내        | OAuth 인증 (지도 SDK / Local API는 v2에서 미사용 — ADR-015)                                                                                                                    |
+| VWorld (국토교통부) | 국내 (정부) | 지도 SDK 타일 — `vworld-map-web` 경유                                                                                                                                          |
+| Telegram            | 글로벌 (LU) | 알림 봇 (사용자 선택) — 신규 여행/동반자 초대 알림 발송. 수령 정보: 사용자가 등록한 `telegram_chat_id`만(메시지 본문에 이메일 등 PII 미포함). bot token 원본 미저장(T-106 §1). |
+| BackBlaze B2 (v2)   | 미국        | 백업 저장 (운영자 결정 시)                                                                                                                                                     |
 
 ### 4.4 위탁자 명시 시 추가 정보
 

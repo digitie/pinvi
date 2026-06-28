@@ -482,19 +482,22 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - T-277이 domain verification, suppression, webhook dedupe/precedence, provider tracking을
   빠뜨리지 않도록 구현 계약을 가진다.
 
-### T-258 — Sprint 6 legal/ops implementation prep gate
+### T-258 — Sprint 6 legal/ops implementation prep gate (완료)
 
-- security incident console, DSR intake, retention execution, moderation, RBAC permission matrix,
-  user lifecycle admin actions, rate-limit/abuse admin surface를 Sprint 6 Task로 확정한다.
-- PIPA 침해 대응 시간 기준(CPO 30분 review, 정보주체 통지, KISA 60일 report)을 UI 상태와
-  runbook checklist로 연결한다.
-- mobile과 user-facing AI companion의 v1.0 포함/제외 범위를 Sprint 6 DoD에 명시한다.
+- 완료: `docs/execplan/legal-ops-implementation-prep-gate.md`를 추가했다.
+- 완료: security incident console, DSR intake, retention execution, moderation, RBAC permission
+  matrix, user lifecycle admin actions, rate-limit/abuse admin surface를 T-275~T-282 구현 계약으로
+  확정했다.
+- 완료: PIPA 침해 대응 시간 기준을 CPO 30분 내부 review와 개인정보보호위원회/KISA 72시간 신고
+  due date로 분리했다. 기존 `KISA 60일 report` 표현은 폐기했다.
+- 완료: mobile과 user-facing AI companion의 v1.0 제외 범위를 Sprint 6 DoD와 release checklist에
+  고정했다.
 
 검증 케이스:
 
-- Sprint 6 T-275~T-286 누락 없음.
-- v1.0 release checklist에 legal/ops sign-off가 들어간다.
-- mobile/AI companion scope가 "암묵적 포함" 상태로 남지 않는다.
+- 문서 diff check.
+- Sprint 6 T-275~T-286 구현 표면, 상태 모델, 증거, 테스트 gate 누락 없음.
+- v1.0 release checklist에 legal/ops sign-off, mobile 제외, user-facing AI companion 제외가 들어간다.
 
 ### T-259 — Release candidate gate / `v0.2.0`
 
@@ -621,7 +624,7 @@ AI 기능을 포함하지 않고 client contract/Admin status까지만 다룬다
 ### T-275 — PIPA security incident console
 
 - `app.security_incidents` foundation을 `/admin/incidents` query/notification/router/UI로 연결한다.
-- incident severity/status, CPO 30분 review SLA, 정보주체 통지, KISA 60일 report due date,
+- incident severity/status, CPO 30분 review SLA, 정보주체 통지, KISA/PIPC 72시간 신고 due date,
   evidence attachment, audit chain을 제공한다.
 - incident 생성/상태 변경/통지 기록은 access_reason과 audit을 요구한다.
 
