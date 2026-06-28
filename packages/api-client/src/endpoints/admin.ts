@@ -18,7 +18,10 @@ import {
   AdminFeatureChangeRequestActionRequestSchema,
   AdminFeatureChangeRequestPagedResponseSchema,
   AdminFeatureChangeRequestRecordSchema,
+  AdminFeatureOverridesResponseSchema,
   AdminFeaturePagedResponseSchema,
+  AdminFeatureSourcesResponseSchema,
+  AdminFeatureWeatherValuesResponseSchema,
   AdminFileStorageSettingsSchema,
   AdminFileStorageSettingsUpdateRequestSchema,
   AdminUserFileQuotaUpdateRequestSchema,
@@ -483,6 +486,24 @@ export const adminApi = (client: ApiClient) => ({
     client.request(`/admin/features/${encodeURIComponent(featureId)}`, {
       method: 'GET',
       schema: AdminFeatureDetailSchema,
+    }),
+
+  getFeatureSources: (featureId: string) =>
+    client.request(`/admin/features/${encodeURIComponent(featureId)}/sources`, {
+      method: 'GET',
+      schema: AdminFeatureSourcesResponseSchema,
+    }),
+
+  getFeatureOverrides: (featureId: string) =>
+    client.request(`/admin/features/${encodeURIComponent(featureId)}/overrides`, {
+      method: 'GET',
+      schema: AdminFeatureOverridesResponseSchema,
+    }),
+
+  getFeatureWeatherValues: (featureId: string) =>
+    client.request(`/admin/features/${encodeURIComponent(featureId)}/weather-values`, {
+      method: 'GET',
+      schema: AdminFeatureWeatherValuesResponseSchema,
     }),
 
   /** kor-travel-map admin change request 큐 proxy (T-210). */

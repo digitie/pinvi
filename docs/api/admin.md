@@ -710,7 +710,98 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
 }
 ```
 
-### 8.3 `GET /admin/features/change-requests`
+### 8.3 Feature detail subpages
+
+권한: `admin` / `operator`
+
+Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투영한다. `sources`와
+`overrides`는 `GET /v1/admin/features/{feature_id}` detail payload에서 필요한 list만 잘라
+반환하고, `weather-values`는 기존 사용자 feature weather card 계약
+`GET /v1/features/{feature_id}/weather`의 `metrics`를 Admin tab용 `items`로 반환한다. Pinvi는
+`feature.*` 또는 `provider_sync.*` 테이블을 직접 조회하거나 override mutation을 만들지 않는다.
+
+#### `GET /admin/features/{feature_id}/sources`
+
+응답 `data`:
+
+```jsonc
+{
+  "feature_id": "f_place_...",
+  "items": [
+    {
+      "source_record_key": "visitkorea:places:1",
+      "provider": "visitkorea",
+      "dataset_key": "places",
+      "source_role": "primary",
+      "match_method": "natural_key",
+      "confidence": 100,
+      "is_primary_source": true,
+      "fetched_at": "2026-06-11T00:00:00+09:00",
+      "imported_at": "2026-06-11T00:01:00+09:00",
+      "linked_at": "2026-06-11T00:02:00+09:00",
+    },
+  ],
+}
+```
+
+#### `GET /admin/features/{feature_id}/overrides`
+
+응답 `data`:
+
+```jsonc
+{
+  "feature_id": "f_place_...",
+  "items": [
+    {
+      "override_id": "ovr-1",
+      "source_record_key": "visitkorea:places:1",
+      "field_path": "detail.phone",
+      "source_value": "051-111-1111",
+      "override_value": "051-000-0000",
+      "prevent_provider_reactivation": true,
+      "status": "active",
+      "reason": "운영 검수",
+      "created_by": "pinvi-admin",
+      "created_at": "2026-06-12T00:10:00+09:00",
+    },
+  ],
+}
+```
+
+#### `GET /admin/features/{feature_id}/weather-values`
+
+Query:
+
+| 이름   | 설명                                              |
+| ------ | ------------------------------------------------- |
+| `asof` | 선택. ISO-8601 기준 시각. 미지정 시 upstream 최신 |
+
+응답 `data`:
+
+```jsonc
+{
+  "feature_id": "f_weather_...",
+  "asof": "2026-06-12T10:00:00+09:00",
+  "latest_at": "2026-06-12T09:30:00+09:00",
+  "is_stale": false,
+  "source_styles": ["nowcast", "short"],
+  "items": [
+    {
+      "metric_key": "T1H",
+      "metric_name": "기온",
+      "forecast_style": "nowcast",
+      "timeline_bucket": "current",
+      "valid_at": "2026-06-12T10:00:00+09:00",
+      "value_number": 24.5,
+      "value_text": null,
+      "unit": "℃",
+      "severity": "normal",
+    },
+  ],
+}
+```
+
+### 8.4 `GET /admin/features/change-requests`
 
 upstream: `kor-travel-map` `GET /v1/admin/features/change-requests`.
 
@@ -753,7 +844,7 @@ Query:
 }
 ```
 
-### 8.4 `POST /admin/features/change-requests/{request_id}/approve`
+### 8.5 `POST /admin/features/change-requests/{request_id}/approve`
 
 upstream: `kor-travel-map`
 `POST /v1/admin/features/change-requests/{request_id}/approve`.
@@ -774,7 +865,7 @@ upstream: `kor-travel-map`
 - upstream 성공 후에만 Pinvi audit을 commit한다.
 - 응답은 `AdminFeatureChangeRequestRecord` 단건이다.
 
-### 8.5 `POST /admin/features/change-requests/{request_id}/reject`
+### 8.6 `POST /admin/features/change-requests/{request_id}/reject`
 
 upstream: `kor-travel-map`
 `POST /v1/admin/features/change-requests/{request_id}/reject`.

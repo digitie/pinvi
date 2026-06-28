@@ -134,6 +134,10 @@ export const queryKeys = {
       order?: string;
     }) => ['admin', 'features', params] as const,
     feature: (featureId: string) => ['admin', 'feature', featureId] as const,
+    featureSources: (featureId: string) => ['admin', 'feature', featureId, 'sources'] as const,
+    featureOverrides: (featureId: string) => ['admin', 'feature', featureId, 'overrides'] as const,
+    featureWeatherValues: (featureId: string) =>
+      ['admin', 'feature', featureId, 'weather-values'] as const,
     featureChangeRequests: (params: {
       q?: string;
       status?: string[];

@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.feature import WeatherMetric
 from app.schemas.storage import AttachmentLibraryItem, AvatarApplyRequest
 
 
@@ -894,6 +895,25 @@ class AdminFeatureDetail(BaseModel):
     versions: list[AdminFeatureDetailVersion] = Field(default_factory=list)
     change_requests: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
     files: list[AdminFeatureDetailFile] = Field(default_factory=list)
+
+
+class AdminFeatureSourcesResponse(BaseModel):
+    feature_id: str
+    items: list[AdminFeatureDetailSource] = Field(default_factory=list)
+
+
+class AdminFeatureOverridesResponse(BaseModel):
+    feature_id: str
+    items: list[AdminFeatureDetailOverride] = Field(default_factory=list)
+
+
+class AdminFeatureWeatherValuesResponse(BaseModel):
+    feature_id: str
+    asof: datetime | None = None
+    latest_at: datetime | None = None
+    is_stale: bool = False
+    source_styles: list[str] = Field(default_factory=list)
+    items: list[WeatherMetric] = Field(default_factory=list)
 
 
 class AdminUserFileQuota(BaseModel):

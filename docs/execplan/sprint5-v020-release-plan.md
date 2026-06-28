@@ -294,16 +294,19 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-248 — Feature detail subpages
 
-- `/admin/features/{id}/sources`, `/overrides`, `/weather-values` route를 추가하거나 기존 detail
-  inspector에서 deep-link 가능한 tab으로 제공한다.
-- source links, override history, weather timeline은 upstream read-only 계약을 사용한다.
-- Pinvi-owned override mutation은 별도 ADR 전까지 추가하지 않는다.
+- 완료: `GET /admin/features/{id}/sources`, `/overrides`, `/weather-values`를 추가했다.
+  sources/overrides는 upstream admin detail payload의 read-only projection이고,
+  weather-values는 기존 `GET /features/{id}/weather` weather card를 Admin tab용 list로 투영한다.
+- 완료: Web `/admin/features/{id}/sources|overrides|weather-values` deep link tab을 추가하고,
+  기존 `/admin/features` detail inspector에서 각 tab으로 이동할 수 있게 했다.
+- 완료: Pinvi-owned override mutation은 추가하지 않았다. 별도 ADR 전까지 Admin은 read-only 확인만
+  제공한다.
 
 검증 케이스:
 
-- API integration: sources/overrides/weather-values proxy success/degraded.
-- Web e2e mock: direct deep link, tab navigation, empty state, upstream error state.
-- Admin live matrix: route render/read-only filters.
+- 완료: API integration — sources/overrides projection success, weather-values success/degraded.
+- 완료: Web e2e mock — direct deep link, tab navigation, empty state, upstream error state.
+- 완료: Admin live matrix — live catalog에 weather feature 기반 guarded read-only tab route case 추가.
 
 ### T-249 — App-owned integrity source / known orphan fix
 

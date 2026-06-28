@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-248 Feature detail subpages
+
+Admin feature detail subpage를 read-only deep link로 추가했다. `GET /admin/features/{feature_id}/sources`
+와 `/overrides`는 `kor-travel-map` admin detail payload에서 list만 투영하고,
+`/weather-values`는 기존 feature weather card의 metrics를 Admin tab용 `items`로 반환한다. Pinvi는
+`feature.*`/`provider_sync.*` 테이블을 직접 조회하지 않고, override mutation도 추가하지 않았다.
+
+Web은 `/admin/features/{feature_id}/sources`, `/overrides`, `/weather-values` route를 추가했고,
+기존 `/admin/features` detail inspector에서 세 tab으로 이동할 수 있다. mock Playwright는 direct deep
+link, tab navigation, empty state, upstream error state를 확인한다. Admin live matrix에는 live weather
+feature가 있을 때만 세 read-only tab route를 순회하는 guarded case를 추가했다.
+
+Linux/WSL에서 API integration, strict mypy, Web typecheck/lint/build를 검증했다. N150 Playwright
+runner는 현재 도구 컨텍스트에서 직접 사용할 수 없고 WSL Ubuntu 26.04 Chromium도 미지원이라,
+mock e2e는 Windows fallback runner에서 `admin-feature-detail-subpages.e2e.ts` 1건이 통과했다.
+Admin live list는 dedicated config로 6178 tests를 생성한다.
+
+다음 작업은 T-249 App-owned integrity source / known orphan fix다.
+
 ## 2026-06-28 (codex) — T-247 Provider sync 운영 mutation 계약 정리
 
 upstream `kor-travel-map` `openapi.json`과 router를 확인했다. provider 자체 run-now/pause/resume/reset

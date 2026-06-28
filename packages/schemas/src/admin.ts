@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
+import { FeatureIdSchema, WeatherMetricSchema } from './feature';
 import { AttachmentLibraryItemSchema, AvatarApplyRequestSchema } from './storage';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
@@ -1006,6 +1007,30 @@ export const AdminFeatureDetailSchema = z.object({
   files: z.array(AdminFeatureDetailFileSchema).default([]),
 });
 export type AdminFeatureDetail = z.infer<typeof AdminFeatureDetailSchema>;
+
+export const AdminFeatureSourcesResponseSchema = z.object({
+  feature_id: FeatureIdSchema,
+  items: z.array(AdminFeatureDetailSourceSchema).default([]),
+});
+export type AdminFeatureSourcesResponse = z.infer<typeof AdminFeatureSourcesResponseSchema>;
+
+export const AdminFeatureOverridesResponseSchema = z.object({
+  feature_id: FeatureIdSchema,
+  items: z.array(AdminFeatureDetailOverrideSchema).default([]),
+});
+export type AdminFeatureOverridesResponse = z.infer<typeof AdminFeatureOverridesResponseSchema>;
+
+export const AdminFeatureWeatherValuesResponseSchema = z.object({
+  feature_id: FeatureIdSchema,
+  asof: Iso8601Schema.nullable().default(null),
+  latest_at: Iso8601Schema.nullable().default(null),
+  is_stale: z.boolean().default(false),
+  source_styles: z.array(z.string()).default([]),
+  items: z.array(WeatherMetricSchema).default([]),
+});
+export type AdminFeatureWeatherValuesResponse = z.infer<
+  typeof AdminFeatureWeatherValuesResponseSchema
+>;
 
 /** 상세는 기본 마스킹, 사유 기반 원본 조회 시 audit 기록. */
 export const AdminUserFileQuotaSchema = z.object({

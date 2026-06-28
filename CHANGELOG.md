@@ -23,6 +23,9 @@
 - Admin `/admin/features`를 `kor-travel-map` Admin API read-only proxy에 연결했다. feature
   목록 검색/필터, cursor pagination, sort/order, provider/category/issue 필터와
   상세 inspector(sources/issues/overrides/versions/change requests/files)를 제공한다.
+- Admin feature detail에 `/admin/features/{id}/sources`, `/overrides`, `/weather-values` deep link
+  tab을 추가했다. source link, override history, weather metric timeline을 read-only로 확인하며,
+  Pinvi-owned override mutation은 제공하지 않는다.
 - Admin `/admin/features/change-requests`를 `kor-travel-map` feature change request 큐에 연결했다.
   상태/액션/검색 필터, payload 상세, approve/reject reason 입력, audit 기록, 실패 rollback을 제공하며,
   기존 사용자 feature 제안 검토 화면에서 upstream 변경 요청 큐로 이어진다.

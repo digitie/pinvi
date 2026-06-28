@@ -2,6 +2,48 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-248 Feature detail subpages
+
+**작업**: Admin feature detail의 source/override/weather 하위 화면을 read-only deep link로 추가했다.
+
+**변경**:
+
+- `GET /admin/features/{feature_id}/sources`, `/overrides`, `/weather-values`를 추가했다.
+  sources/overrides는 upstream admin detail payload에서 list만 투영하고, weather-values는 기존
+  feature weather card의 metrics를 Admin tab용 `items`로 반환한다.
+- shared schema/API client/query key에 `AdminFeatureSourcesResponse`,
+  `AdminFeatureOverridesResponse`, `AdminFeatureWeatherValuesResponse`를 추가했다.
+- Web `/admin/features/{feature_id}/{sources,overrides,weather-values}` route와 공통 tab component를
+  추가했다. 기존 `/admin/features` detail inspector는 세 deep link로 이동할 수 있다.
+- `admin-feature-detail-subpages.e2e.ts`로 direct deep link, tab navigation, empty state, upstream
+  error state를 검증한다.
+- `admin-live-matrix.live.ts`에 live weather feature가 있을 때 세 read-only tab route를 순회하는
+  guarded case를 추가했다.
+- Admin API 문서, Sprint 5 execplan, tasks/resume 추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `uv run --extra dev ruff check app/api/v1/admin/features.py app/schemas/admin.py tests/integration/test_admin_features_api.py`
+- Linux: `uv run --extra dev ruff format --check app/api/v1/admin/features.py app/schemas/admin.py tests/integration/test_admin_features_api.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_features_api.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux ext4 mirror: `npm -w @pinvi/web run build`
+- Linux ext4 mirror: `npm -w @pinvi/web run test:e2e:admin-live:list -- admin-live-matrix.live.ts`
+  (`Total: 6178 tests in 1 file`)
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-feature-detail-subpages.e2e.ts`
+- Linux: `npx prettier --check ...`, `git diff --check`
+
+**주의**:
+
+- mock Playwright는 N150 runner를 현재 도구 컨텍스트에서 직접 사용할 수 없어 Windows fallback으로
+  실행했다. WSL Ubuntu 26.04 Chromium은 Playwright 지원 대상이 아니라 local Linux browser run도
+  불가하다.
+- NTFS worktree에서 Playwright default config가 `next build`를 시작하면 SIGBUS가 재현된다. Next
+  build와 live-list는 ext4 mirror에서 실행한다.
+
+**다음**: T-249 App-owned integrity source / known orphan fix.
+
 ## 2026-06-28 (codex) — T-247 Provider sync 운영 mutation 계약 정리
 
 **작업**: provider sync 운영 mutation 범위를 upstream 계약에 맞춰 import job cancel로 확정하고

@@ -664,6 +664,46 @@ function pushFeaturesFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushFeatureDetailSubpageCases(cases: AdminUiCase[]) {
+  for (const viewport of compactViewports) {
+    pushCase(
+      cases,
+      `feature detail subpages route read-only tabs ${viewport.name}`,
+      viewport,
+      async (page) => {
+        await openTableRoute(page, '/admin/features', 'Features');
+        await page.getByTestId('admin-features-kind-filter').selectOption('weather');
+        await waitForAdminTable(page);
+
+        const row = page.locator('[data-testid^="admin-features-row-"]').first();
+        if ((await row.count()) === 0) return;
+
+        const testId = await row.getAttribute('data-testid');
+        const featureId = testId?.replace(/^admin-features-row-/, '');
+        if (!featureId) return;
+
+        const routes = [
+          { tab: 'sources', heading: 'Sources' },
+          { tab: 'overrides', heading: 'Overrides' },
+          { tab: 'weather-values', heading: 'Weather Values' },
+        ];
+
+        for (const route of routes) {
+          await throttle();
+          await page.goto(`/admin/features/${encodeURIComponent(featureId)}/${route.tab}`);
+          await reloginIfNeeded(page, `/admin/features/${featureId}/${route.tab}`);
+          await expectAdminShell(page, route.heading);
+          await expect(page.getByTestId(`admin-feature-tab-${route.tab}`)).toHaveAttribute(
+            'aria-current',
+            'page',
+          );
+          await waitForAdminTable(page);
+        }
+      },
+    );
+  }
+}
+
 function pushProviderSyncFilterCases(cases: AdminUiCase[]) {
   const providers = ['', 'kma', 'visitkorea', 'kasi'];
   const statuses = ['running', 'all', 'queued', 'done', 'failed', 'cancelled'];
@@ -842,6 +882,7 @@ function buildUiCases() {
   pushMcpFilterCases(cases);
   pushFeatureRequestFilterCases(cases);
   pushFeaturesFilterCases(cases);
+  pushFeatureDetailSubpageCases(cases);
   pushProviderSyncFilterCases(cases);
   pushEtlFilterCases(cases);
   pushDedupIntegrityDebugCases(cases);
