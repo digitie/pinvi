@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-247 Provider sync 운영 mutation 계약 정리
+
+upstream `kor-travel-map` `openapi.json`과 router를 확인했다. provider 자체 run-now/pause/resume/reset
+cursor mutation은 없고, 존재하는 운영 mutation은 import job cancel과 feature-update-request
+cancel/run-now, provider refresh policy upsert다. Pinvi는 provider sync 일반 mutation을 임의로 만들지
+않고, v0.2.0 범위를 import job cancel relay로 닫았다.
+
+`POST /admin/provider-sync/import-jobs/{job_id}/cancel`을 추가했다. 권한은 `admin` 전용이고
+`access_reason`은 필수다. Pinvi audit에는 `provider_import_job.cancel`을 남기며,
+`kor_travel_map_reason`이 없으면 upstream reason은 `access_reason`으로 대체한다. Web
+`/admin/provider-sync`는 queued/running import job에만 취소 버튼과 사유 입력 패널을 표시하고, 실패
+시 row를 낙관적으로 바꾸지 않는다.
+
+Linux/WSL에서 API unit/integration, strict mypy, Web typecheck/lint/build를 검증했다. WSL Ubuntu
+26.04에서는 Playwright Chromium 설치가 미지원이라 mock e2e는 Windows fallback runner에서
+`admin-etl-provider-sync.e2e.ts` 2건이 통과했다.
+
+다음 작업은 T-248 Feature detail subpages다.
+
 ## 2026-06-28 (codex) — T-246 Debug live UI e2e 확장
 
 `apps/web/e2e/admin-debug-live.live.ts`를 추가해 Admin debug live read-only 경로를 별도 live

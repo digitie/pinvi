@@ -521,6 +521,42 @@ async def test_list_ops_import_jobs_returns_envelope_meta() -> None:
     await client.aclose()
 
 
+async def test_cancel_ops_import_job_posts_reason_and_operator() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["json"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "job_id": "11111111-1111-4111-8111-111111111111",
+                    "kind": "provider_import",
+                    "payload": {"provider": "kma"},
+                    "status": "cancelled",
+                    "progress": 0.5,
+                    "created_at": "2026-06-12T00:00:00+09:00",
+                    "status_url": "/v1/ops/import-jobs/11111111-1111-4111-8111-111111111111",
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.cancel_ops_import_job(
+        "11111111-1111-4111-8111-111111111111",
+        reason="duplicate run",
+        operator="pinvi-admin",
+    )
+    assert seen["method"] == "POST"
+    assert seen["path"] == "/v1/ops/import-jobs/11111111-1111-4111-8111-111111111111/cancel"
+    assert seen["json"] == {"reason": "duplicate run", "operator": "pinvi-admin"}
+    assert data["status"] == "cancelled"
+    await client.aclose()
+
+
 async def test_list_dedup_reviews_forwards_filters() -> None:
     seen: dict[str, Any] = {}
 

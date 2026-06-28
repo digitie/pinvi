@@ -274,21 +274,23 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-247 — Provider sync 운영 mutation 계약 정리
 
-- Sprint 5 DoD의 retry/pause/resume을 구현하려면 upstream `kor-travel-map` mutation 계약이
-  필요하다.
-- 현재 Pinvi는 read-only proxy이다. 계획 리뷰 기준 upstream은 import-job cancel 계열만 확인됐고
-  provider run-now/pause/resume 계약은 없다. run-now는 Dagster trigger로 대체할지, upstream
-  mutation을 Sprint 6/v0.2.1로 미룰지 먼저 결정한다.
-- upstream OpenAPI에 필요한 mutation이 없으면 먼저 `kor-travel-map` PR을 만들고, v0.2.0은
-  read-only + cancel 수준으로 닫을 수 있는지 release gate에서 판단한다.
-- Pinvi relay는 access_reason, audit, idempotency key, upstream kill-switch, role gate를
-  포함한다.
+- 완료: upstream `kor-travel-map` `openapi.json`과 router를 확인했다. 존재하는 운영 mutation은
+  `POST /v1/ops/import-jobs/{job_id}/cancel`, feature update request `cancel/run-now`,
+  provider refresh policy upsert다. provider 자체 run-now/pause/resume/reset cursor 계약은 없다.
+- 완료: Pinvi는 `POST /admin/provider-sync/import-jobs/{job_id}/cancel`만 노출한다. 권한은 `admin`
+  전용, `access_reason` 필수, upstream reason fallback, Pinvi `provider_import_job.cancel` audit,
+  upstream 404/409/503 mapping을 적용했다.
+- 완료: Web `/admin/provider-sync`는 queued/running import job에만 취소 버튼과 사유 입력 패널을
+  표시한다. 실패 시 row를 낙관적으로 바꾸지 않고 오류를 표시하며, 성공 시 provider/import job query를
+  invalidate/refetch한다.
+- 보류: provider run-now/pause/resume은 upstream provider mutation 계약 또는 별도 ADR 전까지 Pinvi에서
+  만들지 않는다. feature-update-request `run-now`는 provider sync 일반 mutation으로 포장하지 않는다.
 
 검증 케이스:
 
-- Contract test: upstream OpenAPI path/schema drift.
-- API integration: success, upstream 404/409/503, idempotency duplicate, audit.
-- Web e2e mock: retry/pause/resume dialog, disabled state, failure rollback.
+- 완료: upstream contract 확인 — `/v1/ops/import-jobs/{job_id}/cancel` 존재, provider pause/resume 부재.
+- 완료: API integration — success/audit, upstream 409 no-audit, operator 차단.
+- 완료: Web e2e mock — cancel failure state 유지, success notice/refetch, request body 확인.
 
 ### T-248 — Feature detail subpages
 

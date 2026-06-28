@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-247 — Provider sync 운영 mutation 계약 정리.
+      upstream `kor-travel-map` 운영 mutation을 확인해 import job cancel만 Pinvi에 relay했다.
+      `POST /admin/provider-sync/import-jobs/{job_id}/cancel`은 `admin` 전용, `access_reason`
+      필수, upstream reason fallback, `provider_import_job.cancel` audit을 적용한다. Web
+      `/admin/provider-sync`는 queued/running job에 취소 사유 패널을 제공하고 실패 시 row를 유지한다.
+      provider run-now/pause/resume/reset cursor는 upstream provider mutation 또는 별도 ADR 전까지
+      추가하지 않는다.
+
 - [x] T-246 — Debug live UI e2e 확장.
       `apps/web/e2e/admin-debug-live.live.ts`를 추가해 `/admin/debug/logs` route render,
       sanitized polling fallback status, filter query 유지, live toggle/pause, request timeline 이동,

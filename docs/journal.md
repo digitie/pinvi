@@ -2,6 +2,45 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-247 Provider sync 운영 mutation 계약 정리
+
+**작업**: provider sync 운영 mutation 범위를 upstream 계약에 맞춰 import job cancel로 확정하고
+Pinvi relay/UI를 추가했다.
+
+**변경**:
+
+- upstream `kor-travel-map` `openapi.json`과 router에서 `/v1/ops/import-jobs/{job_id}/cancel`은
+  존재하지만 provider 자체 run-now/pause/resume/reset cursor 계약은 없음을 확인했다.
+- `POST /admin/provider-sync/import-jobs/{job_id}/cancel`을 추가했다. `admin` 전용,
+  `access_reason` 필수, upstream reason fallback, `provider_import_job.cancel` audit, upstream
+  409 no-audit 경로를 갖는다.
+- Web `/admin/provider-sync`에 queued/running import job 취소 버튼과 사유 입력 패널을 추가했다.
+  실패 시 row를 낙관적으로 바꾸지 않고 오류를 표시하며, 성공 시 provider/import job query를 다시
+  읽는다.
+- `AdminProvider*` schema의 `links`를 upstream list 링크 셰입도 받을 수 있게 넓혔다.
+- Admin API 문서, Sprint 5 execplan, tasks/resume 추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `uv run --extra dev ruff check app/api/v1/admin/provider_sync.py app/clients/kor_travel_map_admin.py app/schemas/admin.py tests/unit/test_kor_travel_map_admin_client.py tests/integration/test_admin_etl_provider_sync_api.py`
+- Linux: `uv run --extra dev ruff format --check app/api/v1/admin/provider_sync.py app/clients/kor_travel_map_admin.py app/schemas/admin.py tests/unit/test_kor_travel_map_admin_client.py tests/integration/test_admin_etl_provider_sync_api.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_kor_travel_map_admin_client.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_etl_provider_sync_api.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux ext4 mirror: `npm -w @pinvi/web run build`
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-etl-provider-sync.e2e.ts`
+- Linux: `npx prettier --check ...`, `git diff --check`
+
+**주의**:
+
+- WSL/N150 계열 Ubuntu 26.04에서는 Playwright Chromium 설치가 미지원이라 Linux Playwright 실행이
+  막힌다. mock e2e는 Windows fallback으로 통과했다.
+- provider run-now/pause/resume은 upstream provider mutation 계약 또는 별도 ADR 전까지 Pinvi에
+  추가하지 않는다.
+
+**다음**: T-248 Feature detail subpages.
+
 ## 2026-06-28 (codex) — T-246 Debug live UI e2e 확장
 
 **작업**: Admin debug live read-only e2e를 별도 live suite로 추가하고 N150 대상 검증까지 수행했다.
