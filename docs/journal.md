@@ -2,6 +2,44 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-282 Rate-limit / abuse admin surface
+
+**작업**: ADR-038 rate-limit bucket 운영 조회와 abuse override 흐름을 구현했다.
+
+**변경**:
+
+- `app.rate_limit_buckets` ORM mapping과 `app.rate_limit_overrides` migration을 추가했다.
+  override는 `limit_name`, HMAC `bucket_hash`, `identity_fingerprint`, `identity_label`, TTL,
+  생성/rollback admin, 사유를 저장하고 원문 IP/email/share token은 저장하지 않는다.
+- `RateLimitMiddleware`가 Postgres backend에서 active `blocked` override를
+  `429 RATE_LIMIT_BLOCKED`로 차단하고, active `allowed` override는 counter hit를 우회하도록 했다.
+- `/admin/abuse` API를 추가했다. bucket 상태, fail-closed/backend store 상태, 429 bucket count,
+  suspicious auth/share/storage activity, override 목록을 반환하고, override 생성/rollback은
+  `admin_audit_log`에 `rate_limit_override.create` / `rate_limit_override.rollback`으로 기록한다.
+- Web Admin `/admin/abuse` 페이지와 sidebar 메뉴를 추가했다. 운영자는 store 상태, suspicious
+  bucket, active overrides를 확인하고 TTL block/allow override 생성 및 rollback을 수행할 수 있다.
+- 공유 Zod schema, `@pinvi/api-client`, query key, RBAC permission matrix, API/DB/runbook 문서를
+  동기화했다.
+
+**검증**:
+
+- `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m mypy --strict app` 통과.
+- `.venv/bin/ruff check app/middleware/rate_limit.py app/models/rate_limit.py
+  app/services/admin_rate_limit_abuse.py app/api/v1/admin/abuse.py app/services/admin_rbac.py
+  app/schemas/admin.py tests/integration/test_admin_abuse_api.py` 통과.
+- `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest
+  tests/integration/test_admin_abuse_api.py tests/unit/test_rate_limit_middleware.py -q --capture=no`
+  9 passed.
+- `npm run typecheck --workspace packages/schemas` 통과.
+- `npm run typecheck --workspace packages/api-client` 통과.
+- `npm run typecheck --workspace apps/web` 통과.
+- `npm run lint --workspace apps/web` 통과.
+- N150 Docker runner:
+  `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-abuse.e2e.ts --workers=1`
+  1 passed.
+
+**다음**: PR·CI·머지 후 T-283 Security review / threat model / penetration pass로 진입한다.
+
 ## 2026-06-29 (codex) — T-281 User lifecycle admin actions
 
 **작업**: Admin 사용자 lifecycle 운영 액션과 사용자 self-delete 흐름을 구현했다.

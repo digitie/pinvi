@@ -165,7 +165,44 @@ docker compose exec dagster dagster asset materialize \
   -p partition_2026-06-01
 ```
 
-### 3.5 Notice plan publish
+### 3.5 Rate-limit / abuse override
+
+UI: `/admin/abuse`.
+
+확인 순서:
+
+1. `store_status`가 `ok`인지 확인한다. `degraded`면 ADR-038 fail-closed 경로라 일반 요청은
+   `503 SERVICE_UNAVAILABLE`이 될 수 있다.
+2. `auth_low`, `shared_trip`, `storage_upload_urls` suspicious bucket을 보고 반복 시도 여부를 확인한다.
+3. block/allow override는 TTL과 사유를 입력하고 생성한다. IP/email/share token 원문은 DB에 저장되지
+   않고 hash label만 남는다.
+4. false positive면 rollback reason을 입력하고 해당 override를 rollback한다.
+
+API:
+
+```http
+GET /admin/abuse?limit_name=auth_low&page_size=100
+POST /admin/abuse/overrides
+POST /admin/abuse/overrides/<override_id>/rollback
+```
+
+```jsonc
+{
+  "limit_name": "auth_low",
+  "identity_kind": "ip_email",
+  "ip": "127.0.0.1",
+  "email": "user@example.com",
+  "action": "blocked",
+  "ttl_minutes": 60,
+  "access_reason": "credential stuffing 대응"
+}
+```
+
+- 조회 권한: `admin` / `operator` / `cpo`.
+- override 생성/rollback 권한: `admin`.
+- audit action: `rate_limit_override.create`, `rate_limit_override.rollback`.
+
+### 3.6 Notice plan publish
 
 UI: `/admin/notice-plans/{plan_id}` → [Publish] 버튼.
 

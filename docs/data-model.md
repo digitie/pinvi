@@ -45,6 +45,7 @@
 │                                                                  │
 │  app.admin_audit_logs                                            │
 │  app.rate_limit_buckets  (운영 HTTP rate-limit counter)           │
+│  app.rate_limit_overrides (Admin abuse TTL block/allow)           │
 │                                                                  │
 │  app.import_jobs  (Dagster job/run 영속화 — ops와 분리)          │
 │                                                                  │
@@ -248,6 +249,31 @@ window bucket이다(ADR-038). 개발/테스트/smoke는 process-local memory bac
 | `created_at`, `updated_at` | `timestamptz` |                                                        |
 
 원문 IP/email/token은 저장하지 않는다.
+
+#### `app.rate_limit_overrides`
+
+Admin `/admin/abuse`의 TTL block/allow override다. 원문 IP/email/share token은 저장하지 않고
+같은 bucket hash와 `identity_fingerprint`, `identity_label`만 저장한다.
+
+| 컬럼                       | 타입          | 비고                                           |
+| -------------------------- | ------------- | ---------------------------------------------- |
+| `override_id`              | `uuid`        | PK                                             |
+| `limit_name`               | `varchar(80)` | 적용 정책                                     |
+| `bucket_hash`              | `varchar(64)` | ADR-038과 같은 HMAC bucket                    |
+| `identity_kind`            | `varchar(32)` | `ip` / `ip_email` / `user` / `shared_token`   |
+| `identity_fingerprint`     | `varchar(64)` | 원문 없이 운영 표시/감사용 hash               |
+| `identity_label`           | `varchar(160)`| `ip_email_hash:...`, `user:<uuid>` 등         |
+| `action`                   | `varchar(16)` | `blocked` 또는 `allowed`                      |
+| `reason`                   | `text`        | 생성 사유                                     |
+| `created_by_user_id`       | `uuid`        | override 생성 admin                           |
+| `expires_at`               | `timestamptz` | TTL 만료                                      |
+| `revoked_at`               | `timestamptz` | rollback 시각                                 |
+| `revoked_by_user_id`       | `uuid`        | rollback admin                                |
+| `revoked_reason`           | `text`        | rollback 사유                                 |
+| `created_at`, `updated_at` | `timestamptz` |                                                |
+
+active `blocked` row는 Postgres rate-limit backend에서 `429 RATE_LIMIT_BLOCKED`를 반환하고,
+active `allowed` row는 TTL 동안 counter hit를 우회한다.
 
 ### 2.2 여행 계획
 

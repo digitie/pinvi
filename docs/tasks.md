@@ -28,7 +28,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-282 Rate-limit / abuse admin surface. T-259의 남은 full catalog와 `v0.2.0`
+- 다음 구현: T-283 Security review / threat model / penetration pass. T-259의 남은 full catalog와 `v0.2.0`
   tag/Release는 최종 release gate로 분리해 유지한다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
@@ -97,7 +97,7 @@
 - [x] T-281 — User lifecycle admin actions. (완료: 2026-06-29, codex)
       force-resend-verify, sessions list/forced logout, force-password-reset, disable/reactivate,
       anonymize/delete account와 사용자 `DELETE /users/me` 흐름을 구현했다.
-- [ ] T-282 — Rate-limit / abuse admin surface.
+- [x] T-282 — Rate-limit / abuse admin surface. (완료: 2026-06-29, codex)
       ADR-038 bucket 상태, fail-closed 503, block/allow override, suspicious activity 조회를 구현한다.
 - [ ] T-283 — Security review / threat model / penetration pass.
       auth/session/MCP/share token/rate-limit/storage/admin RBAC/incident 권한 threat model과 1차 점검을 수행한다.

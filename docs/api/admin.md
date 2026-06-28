@@ -50,6 +50,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
 | `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
+| `GET/POST /admin/abuse[/{override_id}/...]`                       | rate-limit bucket / abuse override 운영                | 6      |
 | `GET/POST /admin/dsr[/{id}/...]`                                  | 개인정보 권리행사 DSR CPO workflow                     | 6      |
 | `GET/POST /admin/moderation/reports[/{id}/...]`                   | 콘텐츠 신고 심사 / 숨김 / 게시중단 / 복구              | 6      |
 | `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute                 | 6      |
@@ -211,6 +212,102 @@ POST /admin/incidents/{incident_id}/close
 - `report`: `receipt_ref`, `access_reason`. 개인정보보호위원회/KISA 접수번호를
   `external_report_receipt_ref`에 저장하고 `kisa_reported_at`을 기록한다.
 - `close`: `closure_note`, `access_reason`. `reported` 상태이거나 통지 불필요 판정이 있어야 한다.
+
+### 2.1.1 Rate-limit / Abuse
+
+`/admin/abuse`는 ADR-038 HTTP rate-limit 운영 상태를 노출한다. 원문 IP/email/share token은
+저장하거나 반환하지 않고, `bucket_hash_prefix`와 `identity_label` fingerprint만 표시한다.
+
+권한:
+
+- `GET /admin/abuse`: `admin` / `operator` / `cpo`
+- `POST /admin/abuse/overrides`: `admin`
+- `POST /admin/abuse/overrides/{override_id}/rollback`: `admin`
+
+조회:
+
+```http
+GET /admin/abuse?limit_name=auth_low&page_size=100
+```
+
+응답 `data` 핵심:
+
+```jsonc
+{
+  "backend": {
+    "enabled": true,
+    "configured_backend": "auto",
+    "effective_backend": "postgres",
+    "fail_closed": true,
+    "store_status": "ok"
+  },
+  "rate_limited_bucket_count": 1,
+  "active_override_count": 1,
+  "buckets": [
+    {
+      "bucket_hash_prefix": "abcdef1234567890",
+      "limit_name": "auth_low",
+      "identity_kind": "ip_email",
+      "count": 9,
+      "limit": 5,
+      "rate_limited": true,
+      "status": "blocked"
+    }
+  ],
+  "suspicious": [
+    { "signal": "auth_low_repeated_attempt", "bucket": { "limit_name": "auth_low" } }
+  ],
+  "overrides": [
+    {
+      "override_id": "00000000-0000-0000-0000-000000000000",
+      "identity_label": "ip_email_hash:123456abcdef",
+      "action": "blocked",
+      "status": "blocked",
+      "expires_at": "2026-06-29T10:00:00Z"
+    }
+  ]
+}
+```
+
+Override 생성:
+
+```http
+POST /admin/abuse/overrides
+```
+
+```jsonc
+{
+  "limit_name": "auth_low",
+  "identity_kind": "ip_email",
+  "ip": "127.0.0.1",
+  "email": "user@example.com",
+  "action": "blocked",
+  "ttl_minutes": 60,
+  "access_reason": "credential stuffing 대응"
+}
+```
+
+정책별 identity:
+
+| `limit_name`                                                    | `identity_kind` |
+| --------------------------------------------------------------- | --------------- |
+| `public`, `oauth`                                               | `ip`            |
+| `auth_low`                                                      | `ip_email`      |
+| `authenticated_default`, `feature_search`, `trip_exports`, `storage_upload_urls` | `user`          |
+| `shared_trip`                                                   | `shared_token`  |
+
+`blocked` override는 Postgres backend에서 해당 bucket을 즉시 `429 RATE_LIMIT_BLOCKED`로 막고,
+`allowed` override는 TTL 동안 counter hit를 우회한다. Rollback은 다음 body를 사용한다.
+
+```jsonc
+{
+  "access_reason": "false positive 확인",
+  "rollback_reason": "support 확인 완료"
+}
+```
+
+모든 override 생성/rollback은 `admin_audit_log.resource_type='rate_limit_override'`와
+`rate_limit_override.create` / `rate_limit_override.rollback` action으로 기록한다.
 
 ## 2.2 DSR Requests
 

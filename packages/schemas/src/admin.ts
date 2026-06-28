@@ -898,6 +898,160 @@ export type AdminSecurityIncidentCloseRequest = z.infer<
   typeof AdminSecurityIncidentCloseRequestSchema
 >;
 
+export const AdminRateLimitIdentityKindSchema = z.enum([
+  'ip',
+  'ip_email',
+  'user',
+  'shared_token',
+]);
+export type AdminRateLimitIdentityKind = z.infer<typeof AdminRateLimitIdentityKindSchema>;
+
+export const AdminRateLimitOverrideActionSchema = z.enum(['blocked', 'allowed']);
+export type AdminRateLimitOverrideAction = z.infer<typeof AdminRateLimitOverrideActionSchema>;
+
+export const AdminRateLimitBucketStatusSchema = z.enum([
+  'observed',
+  'blocked',
+  'allowed',
+  'expired',
+]);
+export type AdminRateLimitBucketStatus = z.infer<typeof AdminRateLimitBucketStatusSchema>;
+
+export const AdminRateLimitOverrideStatusSchema = z.enum([
+  'blocked',
+  'allowed',
+  'expired',
+  'revoked',
+]);
+export type AdminRateLimitOverrideStatus = z.infer<typeof AdminRateLimitOverrideStatusSchema>;
+
+export const AdminRateLimitPolicyRecordSchema = z.object({
+  name: z.string(),
+  limit_per_minute: z.number().int(),
+  identity_kind: AdminRateLimitIdentityKindSchema,
+});
+export type AdminRateLimitPolicyRecord = z.infer<typeof AdminRateLimitPolicyRecordSchema>;
+
+export const AdminRateLimitBackendStatusSchema = z.object({
+  enabled: z.boolean(),
+  configured_backend: z.string(),
+  effective_backend: z.string(),
+  window_seconds: z.number().int(),
+  fail_open: z.boolean(),
+  fail_closed: z.boolean(),
+  store_status: z.enum(['ok', 'degraded', 'not_applicable']),
+  store_error_class: z.string().nullable().default(null),
+  store_error_message: z.string().nullable().default(null),
+});
+export type AdminRateLimitBackendStatus = z.infer<typeof AdminRateLimitBackendStatusSchema>;
+
+export const AdminRateLimitOverrideRecordSchema = z.object({
+  override_id: z.string().uuid(),
+  limit_name: z.string(),
+  bucket_hash_prefix: z.string(),
+  identity_kind: AdminRateLimitIdentityKindSchema,
+  identity_label: z.string(),
+  action: AdminRateLimitOverrideActionSchema,
+  status: AdminRateLimitOverrideStatusSchema,
+  reason: z.string(),
+  created_by_user_id: z.string().uuid(),
+  expires_at: Iso8601Schema,
+  revoked_at: Iso8601Schema.nullable().default(null),
+  revoked_by_user_id: z.string().uuid().nullable().default(null),
+  revoked_reason: z.string().nullable().default(null),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminRateLimitOverrideRecord = z.infer<typeof AdminRateLimitOverrideRecordSchema>;
+
+export const AdminRateLimitBucketRecordSchema = z.object({
+  bucket_hash_prefix: z.string(),
+  limit_name: z.string(),
+  identity_kind: AdminRateLimitIdentityKindSchema,
+  count: z.number().int(),
+  limit: z.number().int(),
+  remaining: z.number().int(),
+  rate_limited: z.boolean(),
+  window_start: Iso8601Schema,
+  expires_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+  status: AdminRateLimitBucketStatusSchema,
+  active_override_id: z.string().uuid().nullable().default(null),
+  active_override_action: AdminRateLimitOverrideActionSchema.nullable().default(null),
+});
+export type AdminRateLimitBucketRecord = z.infer<typeof AdminRateLimitBucketRecordSchema>;
+
+export const AdminRateLimitSuspiciousActivityRecordSchema = z.object({
+  signal: z.enum(['auth_low_repeated_attempt', 'shared_token_pressure', 'storage_upload_pressure']),
+  bucket: AdminRateLimitBucketRecordSchema,
+});
+export type AdminRateLimitSuspiciousActivityRecord = z.infer<
+  typeof AdminRateLimitSuspiciousActivityRecordSchema
+>;
+
+export const AdminRateLimitAbuseSummarySchema = z.object({
+  generated_at: Iso8601Schema,
+  backend: AdminRateLimitBackendStatusSchema,
+  policies: z.array(AdminRateLimitPolicyRecordSchema).default([]),
+  buckets: z.array(AdminRateLimitBucketRecordSchema).default([]),
+  overrides: z.array(AdminRateLimitOverrideRecordSchema).default([]),
+  suspicious: z.array(AdminRateLimitSuspiciousActivityRecordSchema).default([]),
+  rate_limited_bucket_count: z.number().int().default(0),
+  active_override_count: z.number().int().default(0),
+  suspicious_count: z.number().int().default(0),
+});
+export type AdminRateLimitAbuseSummary = z.infer<typeof AdminRateLimitAbuseSummarySchema>;
+
+export const AdminRateLimitOverrideCreateRequestSchema = z
+  .object({
+    limit_name: z.string().min(1).max(80),
+    identity_kind: AdminRateLimitIdentityKindSchema,
+    ip: z.string().min(1).max(64).nullable().optional(),
+    email: z.string().min(3).max(320).nullable().optional(),
+    user_id: z.string().uuid().nullable().optional(),
+    shared_token: z.string().min(8).max(512).nullable().optional(),
+    action: AdminRateLimitOverrideActionSchema,
+    ttl_minutes: z.number().int().min(1).max(43_200),
+    access_reason: z.string().min(1).max(500),
+  })
+  .superRefine((value, ctx) => {
+    if (value.identity_kind === 'ip' && !value.ip) {
+      ctx.addIssue({ code: 'custom', path: ['ip'], message: 'ip identity에는 ip가 필요합니다.' });
+    }
+    if (value.identity_kind === 'ip_email' && (!value.ip || !value.email)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['email'],
+        message: 'ip_email identity에는 ip와 email이 필요합니다.',
+      });
+    }
+    if (value.identity_kind === 'user' && !value.user_id) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['user_id'],
+        message: 'user identity에는 user_id가 필요합니다.',
+      });
+    }
+    if (value.identity_kind === 'shared_token' && !value.shared_token) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['shared_token'],
+        message: 'shared_token identity에는 shared_token이 필요합니다.',
+      });
+    }
+  });
+export type AdminRateLimitOverrideCreateRequest = z.infer<
+  typeof AdminRateLimitOverrideCreateRequestSchema
+>;
+
+export const AdminRateLimitOverrideRollbackRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  rollback_reason: z.string().min(1).max(500).nullable().optional(),
+});
+export type AdminRateLimitOverrideRollbackRequest = z.infer<
+  typeof AdminRateLimitOverrideRollbackRequestSchema
+>;
+
 export const AdminDsrRequestTypeSchema = z.enum(['access', 'correction', 'delete', 'suspend']);
 export type AdminDsrRequestType = z.infer<typeof AdminDsrRequestTypeSchema>;
 

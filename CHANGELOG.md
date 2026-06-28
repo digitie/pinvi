@@ -64,6 +64,10 @@
   로그아웃, 인증 메일 재발송, 강제 비밀번호 reset, disable/reactivate, 삭제 대기, 즉시 익명화를
   사유와 감사 로그와 함께 처리할 수 있다. 사용자 `DELETE /users/me`는 `pending_delete`로 전환하고
   세션과 쿠키를 무효화한다.
+- Admin `/admin/abuse`를 추가했다. ADR-038 rate-limit bucket, 429 bucket count, fail-closed
+  store 상태, auth/share/storage suspicious bucket을 조회하고, TTL 기반 `blocked` / `allowed`
+  override를 생성·rollback할 수 있다. 원문 IP/email/share token은 저장하지 않고 hash label만
+  남기며 override mutation은 `admin_audit_log`에 기록된다.
 - Admin `/admin/emails`에 Resend deliverability 상태판을 추가했다. API key configured/console mode,
   FROM domain/domain status, webhook signature/최근 event, queue health, active suppression,
   `users.email_status` count를 raw secret 없이 표시한다. Resend 발송은 REST client로 전환되어

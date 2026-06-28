@@ -58,6 +58,10 @@ import {
   AdminOperationResultSchema,
   AdminResetRunRequestSchema,
   AdminResetStatusResponseSchema,
+  AdminRateLimitAbuseSummarySchema,
+  AdminRateLimitOverrideCreateRequestSchema,
+  AdminRateLimitOverrideRecordSchema,
+  AdminRateLimitOverrideRollbackRequestSchema,
   AdminRetentionDryRunRequestSchema,
   AdminRetentionExecuteRequestSchema,
   AdminRetentionRunListResponseSchema,
@@ -184,6 +188,18 @@ export type AdminResetRunBody = z.infer<typeof AdminResetRunRequestSchema>;
 export type AdminRetentionDryRunBody = z.infer<typeof AdminRetentionDryRunRequestSchema>;
 
 export type AdminRetentionExecuteBody = z.infer<typeof AdminRetentionExecuteRequestSchema>;
+
+export interface AdminRateLimitAbuseParams {
+  limitName?: string;
+  pageSize?: number;
+}
+
+export type AdminRateLimitOverrideCreateBody = z.infer<
+  typeof AdminRateLimitOverrideCreateRequestSchema
+>;
+export type AdminRateLimitOverrideRollbackBody = z.infer<
+  typeof AdminRateLimitOverrideRollbackRequestSchema
+>;
 
 export interface AdminSecurityIncidentListParams {
   status?: 'detected' | 'triage' | 'notification_decision' | 'reported' | 'closed';
@@ -442,6 +458,31 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminRetentionExecuteRequestSchema.parse(body)),
       schema: AdminRetentionRunSchema,
+    }),
+
+  getRateLimitAbuseSummary: (params: AdminRateLimitAbuseParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limitName) qs.set('limit_name', params.limitName);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    const path = `/admin/abuse${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminRateLimitAbuseSummarySchema,
+    });
+  },
+
+  createRateLimitOverride: (body: AdminRateLimitOverrideCreateBody) =>
+    client.request('/admin/abuse/overrides', {
+      method: 'POST',
+      body: JSON.stringify(AdminRateLimitOverrideCreateRequestSchema.parse(body)),
+      schema: AdminRateLimitOverrideRecordSchema,
+    }),
+
+  rollbackRateLimitOverride: (overrideId: string, body: AdminRateLimitOverrideRollbackBody) =>
+    client.request(`/admin/abuse/overrides/${encodeURIComponent(overrideId)}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(AdminRateLimitOverrideRollbackRequestSchema.parse(body)),
+      schema: AdminRateLimitOverrideRecordSchema,
     }),
 
   listSecurityIncidents: (params: AdminSecurityIncidentListParams = {}) => {

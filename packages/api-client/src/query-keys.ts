@@ -106,6 +106,9 @@ export const queryKeys = {
     retentionRuns: (params: { pageSize?: number } = {}) =>
       ['admin', 'retention', 'runs', params] as const,
     retentionAll: () => ['admin', 'retention'] as const,
+    rateLimitAbuse: (params: { limitName?: string; pageSize?: number } = {}) =>
+      ['admin', 'rate-limit-abuse', params] as const,
+    rateLimitAbuseAll: () => ['admin', 'rate-limit-abuse'] as const,
     consistencyReports: (params: { severityMax?: string; pageSize?: number; cursor?: string }) =>
       ['admin', 'consistency-reports', params] as const,
     upstreamSystemLogs: (params: {

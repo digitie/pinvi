@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin import (
+    abuse,
     api_calls,
     audit,
     backup,
@@ -37,6 +38,7 @@ from app.api.v1.admin import (
 from app.api.v1.admin.dev_safety import is_dev_safety_route_enabled
 
 admin_router = APIRouter()
+admin_router.include_router(abuse.router)
 admin_router.include_router(users.router)
 admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
