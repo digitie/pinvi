@@ -23,7 +23,10 @@
 - N150 smoke: API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`,
   `kor-travel-map` `/health`/OpenAPI가 모두 200.
 - N150 Playwright catalog list: `6202 tests in 5 files`.
-- N150 Playwright browser smoke: Chromium `libatk-1.0.so.0` 누락으로 실패.
+- N150 Playwright browser smoke: Chromium shared library 누락으로 실패. Ubuntu 26.04는
+  Playwright 1.60.0의 `install-deps --dry-run chromium` 대상이 아니었고, `ldd` 기준
+  `libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`, `libXdamage.so.1`, `libasound.so.2`,
+  `libatspi.so.0`가 없었다.
 - Windows fallback Playwright: N150 Web SSH tunnel 대상 `--grep malformed` 1건 통과.
 - Backup snapshot: `pinvi-app-20260628-094253.dump` 생성, sha256 통과, `pg_restore --list` 통과.
 
@@ -34,6 +37,7 @@
   N150 local env에 없다.
 - Restore staging drill에 필요한 staging DB URL/환경이 없다.
 - host `pg_dump`가 없어 `scripts/backup-db.sh`는 직접 실행되지 않는다.
+- N150 비대화형 sudo가 없어 Codex가 system dependency를 설치하지 못한다.
 
 **다음**: T-259 차단 항목을 해소하고 `v0.2.0` tag/GitHub Release를 만든다.
 

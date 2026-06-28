@@ -74,6 +74,12 @@ N150 내부 `127.0.0.1` 기준:
   - 명령: `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI login rejects malformed email" --workers=1`
   - 결과: 실패
   - 원인: Chromium headless shell load 실패, `libatk-1.0.so.0` 누락
+- N150 dependency check:
+  - `sudo -n true`: 실패. 비대화형 sudo 없음
+  - `npx playwright install-deps --dry-run chromium`: Playwright 1.60.0이 `ubuntu26.04-x64`를
+    지원하지 않아 dependency 목록 생성 실패
+  - `ldd chrome-headless-shell`: `libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`,
+    `libXdamage.so.1`, `libasound.so.2`, `libatspi.so.0` 누락
 - Windows fallback:
   - 대상: SSH tunnel을 통해 N150 Web `127.0.0.1:12805`
   - 명령: `npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1`
@@ -98,7 +104,7 @@ restore staging drill은 `PINVI_RESTORE_STAGING_DATABASE_URL` 또는 동등한 s
 
 ## 다음 조치
 
-1. N150 Playwright system dependency를 설치하거나 검증용 runner 이미지를 도입한다.
+1. N150 Playwright system dependency를 sudo 가능한 셸에서 설치하거나 검증용 runner 이미지를 도입한다.
 2. Admin live e2e credential을 N150 local-only env로 배치한다.
 3. `PINVI_RESTORE_STAGING_DATABASE_URL`이 있는 staging restore drill 환경을 준비한다.
 4. 최신 main SHA에 `api`/`web` main push CI를 재실행하거나 수동 workflow 증거를 확보한다.
