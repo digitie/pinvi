@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-259 Web clean manual evidence
+
+**작업**: 최신 main Web evidence를 WSL ext4 mirror clean install 기준으로 확보했다.
+
+**검증**:
+
+- source: `5c0a39b589a7d8d71a103f7534e116cc0f5ba83c`
+- 환경: Linux ext4 mirror `~/pinvi-workspaces/pinvi-codex`, Node `v20.20.2`, npm `10.8.2`
+- `npm ci --no-audit --no-fund` — 1082 packages 설치, 통과
+- `NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801 npm run lint` — 통과
+- `NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801 npm run typecheck` — 통과
+- `NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801 npm run build` — 통과
+
+**남은 차단**:
+
+- N150 Playwright system dependency 또는 검증용 runner image.
+- Admin live 2000/full credential.
+- Restore staging DB URL/환경.
+
 ## 2026-06-28 (codex) — T-259 N150 backup script rerun
 
 **작업**: PR #295로 보강한 `scripts/backup-db.sh`를 N150 최신 main checkout에서 재실행해 host
@@ -24,7 +43,7 @@
 - N150 Playwright system dependency 또는 검증용 runner image.
 - Admin live 2000/full credential.
 - Restore staging DB URL/환경.
-- 최신 main SHA의 Web CI 또는 WSL ext4/N150 clean install 기반 수동 workflow 증거. `4a1b71e` API push CI는 통과했다.
+- `4a1b71e` API push CI는 통과했다. Web clean manual evidence는 후속 `5c0a39b`에서 통과했다.
 
 ## 2026-06-28 (codex) — T-259 backup script Docker fallback
 
