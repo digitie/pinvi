@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
@@ -29,6 +30,7 @@ const LEVEL_OPTIONS = [
 ] as const;
 
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
@@ -43,6 +45,7 @@ function ErrorBox({ message }: { message: string }) {
 }
 
 export default function AdminDebugLogsPage() {
+  const router = useRouter();
   const [level, setLevel] = useState<(typeof LEVEL_OPTIONS)[number]['value']>('error');
   const [source, setSource] = useState('');
   const [queryInput, setQueryInput] = useState('');
@@ -50,6 +53,8 @@ export default function AdminDebugLogsPage() {
   const [method, setMethod] = useState('');
   const [minStatus, setMinStatus] = useState('500');
   const [path, setPath] = useState('');
+  const [timelineRequestId, setTimelineRequestId] = useState('');
+  const [timelineError, setTimelineError] = useState<string | null>(null);
 
   const systemParams = useMemo<AdminSystemLogListParams>(
     () => ({
@@ -198,6 +203,16 @@ export default function AdminDebugLogsPage() {
     event.preventDefault();
     setSubmittedQ(queryInput.trim());
   };
+  const onTimelineSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextRequestId = timelineRequestId.trim();
+    if (!UUID_RE.test(nextRequestId)) {
+      setTimelineError('UUID request id를 입력하세요.');
+      return;
+    }
+    setTimelineError(null);
+    router.push(`/admin/debug/request/${encodeURIComponent(nextRequestId)}`);
+  };
 
   return (
     <AdminPage
@@ -218,6 +233,35 @@ export default function AdminDebugLogsPage() {
         </button>
       }
     >
+      <FilterBar>
+        <form
+          onSubmit={onTimelineSearch}
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+        >
+          <label htmlFor="admin-debug-request-id" className="text-xs text-muted">
+            Request ID
+          </label>
+          <input
+            id="admin-debug-request-id"
+            value={timelineRequestId}
+            onChange={(event) => setTimelineRequestId(event.target.value)}
+            className={`${inputClass} w-[24rem] max-w-full font-mono`}
+            placeholder="00000000-0000-0000-0000-000000000000"
+            data-testid="admin-debug-request-id"
+          />
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm"
+            data-testid="admin-debug-request-submit"
+          >
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
+            Timeline
+          </button>
+        </form>
+      </FilterBar>
+
+      {timelineError && <ErrorBox message={timelineError} />}
+
       <FilterBar>
         <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <select

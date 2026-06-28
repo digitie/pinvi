@@ -28,7 +28,7 @@
     - `pinvi_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
       - `pinvi_email_outbox` (email_queue pending/backoff/stuck/failed + template 실패율 점검,
-       T-239 완료)
+        T-239 완료)
       - `pinvi_pii_retention` (PII 보존 기간 만료 후보 dry-run, T-240 완료)
       - `pinvi_location_log_archive` (location_access_log archive 후보 dry-run, T-241 완료)
       - `pinvi_telegram_system_outbox` (Telegram outbox retry/backoff/stuck 점검, T-242 완료)
@@ -46,7 +46,7 @@
   - `/admin/provider-sync` 재시도/일시정지/재개
   - `/admin/integrity` `app.data_integrity_violations` 1차 소스
   - `/admin/debug/logs` Loki LogQL WebSocket stream
-  - `/admin/debug/request/{id}` X-Request-Id 타임라인
+  - `/admin/debug/request/{id}` X-Request-Id 타임라인 (T-244 완료)
   - Prometheus + cAdvisor + Grafana 컨테이너 활성
   - Loki + Promtail 로그 수집은 후속 또는 운영 선택 계층
   - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,

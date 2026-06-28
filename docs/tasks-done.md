@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-244 — Request timeline API.
+      `GET /admin/debug/request/{request_id}`를 추가해 Pinvi request id 중심 timeline을 반환한다.
+      API call log, admin audit log, location access log/outbox, `payload.request_id`가 있는
+      email queue와 upstream sanitized system/API logs를 시간순 event로 조합하되,
+      `kor-travel-map` log는 보조 source로만 붙인다. upstream 보조 source 실패는
+      `status="partial"`/source `degraded`로 접고, all-source not found는 404로 반환한다.
+      Web `/admin/debug/logs`에는 request id 검색을, `/admin/debug/request/{request_id}`에는
+      source/event table을 추가했다. N150 live read-only는 PR merge 후 배포 환경 검증으로 남겼다.
+
 - [x] T-243 — ETL live / Dagster 운영 게이트.
       `/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어
       code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 반환한다.

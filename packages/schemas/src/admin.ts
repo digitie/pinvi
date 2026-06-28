@@ -727,6 +727,38 @@ export type AdminUpstreamApiCallLogsResponse = z.infer<
   typeof AdminUpstreamApiCallLogsResponseSchema
 >;
 
+export const AdminRequestTimelineSourceSchema = z.object({
+  source: z.string(),
+  status: z.enum(['ok', 'degraded']),
+  event_count: z.number().int().default(0),
+  message: z.string().nullable().default(null),
+});
+export type AdminRequestTimelineSource = z.infer<typeof AdminRequestTimelineSourceSchema>;
+
+export const AdminRequestTimelineEventSchema = z.object({
+  event_id: z.string(),
+  occurred_at: Iso8601Schema,
+  source: z.string(),
+  title: z.string(),
+  status: z.string().nullable().default(null),
+  duration_ms: z.number().int().nullable().default(null),
+  error_code: z.string().nullable().default(null),
+  detail: z.record(z.string(), z.unknown()).default({}),
+});
+export type AdminRequestTimelineEvent = z.infer<typeof AdminRequestTimelineEventSchema>;
+
+export const AdminRequestTimelineResponseSchema = z.object({
+  request_id: z.string().uuid(),
+  generated_at: Iso8601Schema,
+  status: z.enum(['ok', 'partial']),
+  started_at: Iso8601Schema.nullable().default(null),
+  finished_at: Iso8601Schema.nullable().default(null),
+  duration_ms: z.number().int().nullable().default(null),
+  sources: z.array(AdminRequestTimelineSourceSchema).default([]),
+  events: z.array(AdminRequestTimelineEventSchema).default([]),
+});
+export type AdminRequestTimelineResponse = z.infer<typeof AdminRequestTimelineResponseSchema>;
+
 export const AdminFeatureSortSchema = z.enum([
   'name',
   'updated_at',

@@ -56,6 +56,7 @@ import {
   AdminPoiPagedResponseSchema,
   AdminProviderImportJobsResponseSchema,
   AdminProviderSyncResponseSchema,
+  AdminRequestTimelineResponseSchema,
   AdminIntegrityIssuesResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
@@ -165,6 +166,7 @@ export interface AdminSystemLogListParams {
   level?: 'debug' | 'info' | 'warning' | 'error' | 'critical';
   source?: string;
   q?: string;
+  requestId?: string;
   pageSize?: number;
   cursor?: string;
 }
@@ -173,6 +175,7 @@ export interface AdminUpstreamApiCallLogListParams {
   method?: string;
   minStatus?: number;
   path?: string;
+  requestId?: string;
   pageSize?: number;
   cursor?: string;
 }
@@ -348,6 +351,7 @@ export const adminApi = (client: ApiClient) => ({
     if (params.level) qs.set('level', params.level);
     if (params.source) qs.set('source', params.source);
     if (params.q) qs.set('q', params.q);
+    if (params.requestId) qs.set('request_id', params.requestId);
     if (params.pageSize) qs.set('page_size', String(params.pageSize));
     if (params.cursor) qs.set('cursor', params.cursor);
     const path = `/admin/debug/logs/system${qs.toString() ? `?${qs.toString()}` : ''}`;
@@ -362,6 +366,7 @@ export const adminApi = (client: ApiClient) => ({
     if (params.method) qs.set('method', params.method);
     if (params.minStatus !== undefined) qs.set('min_status', String(params.minStatus));
     if (params.path) qs.set('path', params.path);
+    if (params.requestId) qs.set('request_id', params.requestId);
     if (params.pageSize) qs.set('page_size', String(params.pageSize));
     if (params.cursor) qs.set('cursor', params.cursor);
     const path = `/admin/debug/logs/api-calls${qs.toString() ? `?${qs.toString()}` : ''}`;
@@ -370,6 +375,12 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminUpstreamApiCallLogsResponseSchema,
     });
   },
+
+  getRequestTimeline: (requestId: string) =>
+    client.request(`/admin/debug/request/${encodeURIComponent(requestId)}`, {
+      method: 'GET',
+      schema: AdminRequestTimelineResponseSchema,
+    }),
 
   getAvatarSettings: () =>
     client.request('/admin/settings/avatar', {

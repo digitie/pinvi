@@ -93,6 +93,47 @@ const apiCallLog = {
   created_at: '2026-06-12T00:02:01+09:00',
 };
 
+const timelineRequestId = '11111111-2222-4333-8444-555555555555';
+
+const requestTimeline = {
+  request_id: timelineRequestId,
+  generated_at: '2026-06-12T00:03:00+09:00',
+  status: 'partial',
+  started_at: '2026-06-12T00:02:00+09:00',
+  finished_at: '2026-06-12T00:02:01+09:00',
+  duration_ms: 1000,
+  sources: [
+    {
+      source: 'pinvi_api_call_log',
+      status: 'ok',
+      event_count: 1,
+      message: null,
+    },
+    {
+      source: 'kor_travel_map_system_logs',
+      status: 'degraded',
+      event_count: 0,
+      message: 'kor_travel_map system log 조회 실패',
+    },
+  ],
+  events: [
+    {
+      event_id: 'pinvi_api_call:1',
+      occurred_at: '2026-06-12T00:02:00+09:00',
+      source: 'pinvi_api_call_log',
+      title: 'kor_travel_map API call',
+      status: '503',
+      duration_ms: 742,
+      error_code: 'UPSTREAM_TIMEOUT',
+      detail: {
+        provider: 'kor_travel_map',
+        endpoint: '/v1/features?token=[masked]',
+        has_error_message: true,
+      },
+    },
+  ],
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -297,6 +338,15 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
       });
     },
   );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/debug/request/${timelineRequestId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: requestTimeline }),
+      });
+    },
+  );
 
   await page.goto('/admin/debug/logs');
   await expect(page.getByRole('heading', { name: 'Debug logs' })).toBeVisible();
@@ -321,4 +371,13 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
   expect(apiUrl.searchParams.get('method')).toBe('POST');
   expect(apiUrl.searchParams.get('min_status')).toBe('500');
   expect(apiUrl.searchParams.get('path')).toBe('/v1/features');
+
+  await page.getByTestId('admin-debug-request-id').fill(timelineRequestId);
+  await page.getByTestId('admin-debug-request-submit').click();
+  await expect(page.getByRole('heading', { name: 'Request timeline' })).toBeVisible();
+  await expect(page.getByTestId('admin-request-timeline-summary')).toContainText('partial');
+  await expect(page.getByTestId('admin-request-source-pinvi_api_call_log')).toBeVisible();
+  await expect(page.getByTestId('admin-request-source-kor_travel_map_system_logs')).toBeVisible();
+  await expect(page.getByTestId('admin-request-event-pinvi_api_call:1')).toBeVisible();
+  await expect(page.getByText('secret')).toHaveCount(0);
 });
