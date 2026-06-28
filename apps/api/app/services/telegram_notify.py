@@ -75,3 +75,21 @@ async def deliver_user_notification(db: AsyncSession, *, user_id: uuid.UUID, tex
     finally:
         await client.aclose()
     return "sent"
+
+
+async def deliver_admin_notification(*, text: str) -> str:
+    """Admin/CPO 채널 알림을 보낸다.
+
+    시스템 봇 토큰 또는 Admin chat id가 없으면 재시도하지 않는 `"skipped"`로 끝낸다.
+    """
+    token = settings.pinvi_telegram_bot_token_default
+    chat_id = settings.pinvi_telegram_admin_chat_id.strip()
+    if not token or not chat_id:
+        return "skipped"
+
+    client = _make_client()
+    try:
+        await client.send_to_target(token, chat_id, text, parse_mode=None)
+    finally:
+        await client.aclose()
+    return "sent"

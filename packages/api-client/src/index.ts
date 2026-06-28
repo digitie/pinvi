@@ -37,6 +37,13 @@ export type {
   AdminProviderSyncListParams,
   AdminResetRunBody,
   AdminSeedScenarioRunBody,
+  AdminSecurityIncidentCloseBody,
+  AdminSecurityIncidentCreateBody,
+  AdminSecurityIncidentDecisionBody,
+  AdminSecurityIncidentListParams,
+  AdminSecurityIncidentNotifyBody,
+  AdminSecurityIncidentReportBody,
+  AdminSecurityIncidentTriageBody,
   AdminSystemLogListParams,
   AdminUpstreamApiCallLogListParams,
 } from './endpoints/admin';

@@ -641,6 +641,120 @@ export const AdminDevSafetyActionResultSchema = z.object({
 });
 export type AdminDevSafetyActionResult = z.infer<typeof AdminDevSafetyActionResultSchema>;
 
+export const AdminSecurityIncidentStatusSchema = z.enum([
+  'detected',
+  'triage',
+  'notification_decision',
+  'reported',
+  'closed',
+]);
+export type AdminSecurityIncidentStatus = z.infer<typeof AdminSecurityIncidentStatusSchema>;
+
+export const AdminSecurityIncidentSeveritySchema = z.enum(['low', 'medium', 'high', 'critical']);
+export type AdminSecurityIncidentSeverity = z.infer<typeof AdminSecurityIncidentSeveritySchema>;
+
+export const AdminSecurityIncidentRecordSchema = z.object({
+  incident_id: z.string().uuid(),
+  incident_type: z.string(),
+  severity: AdminSecurityIncidentSeveritySchema,
+  status: AdminSecurityIncidentStatusSchema,
+  source: z.string().nullable().default(null),
+  summary: z.string(),
+  details: AdminJsonObjectSchema.default({}),
+  affected_user_count: z.number().int().default(0),
+  notification_required: z.boolean().default(false),
+  assigned_cpo_user_id: z.string().uuid().nullable().default(null),
+  request_id: z.string().uuid().nullable().default(null),
+  detected_at: Iso8601Schema,
+  cpo_review_due_at: Iso8601Schema,
+  external_report_due_at: Iso8601Schema,
+  cpo_notified_at: Iso8601Schema.nullable().default(null),
+  acknowledged_at: Iso8601Schema.nullable().default(null),
+  notification_decision_at: Iso8601Schema.nullable().default(null),
+  notified_at: Iso8601Schema.nullable().default(null),
+  kisa_reported_at: Iso8601Schema.nullable().default(null),
+  resolved_at: Iso8601Schema.nullable().default(null),
+  notification_payload_hash: z.string().nullable().default(null),
+  external_report_receipt_ref: z.string().nullable().default(null),
+  evidence_attachment_id: z.string().uuid().nullable().default(null),
+  cpo_review_overdue: z.boolean().default(false),
+  external_report_overdue: z.boolean().default(false),
+  next_action: z.string(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminSecurityIncidentRecord = z.infer<typeof AdminSecurityIncidentRecordSchema>;
+
+export const AdminSecurityIncidentListResponseSchema = z.object({
+  items: z.array(AdminSecurityIncidentRecordSchema).default([]),
+  page_size: z.number().int(),
+  total: z.number().int(),
+});
+export type AdminSecurityIncidentListResponse = z.infer<
+  typeof AdminSecurityIncidentListResponseSchema
+>;
+
+export const AdminSecurityIncidentCreateRequestSchema = z.object({
+  incident_type: z.string().min(1).max(64),
+  severity: AdminSecurityIncidentSeveritySchema,
+  source: z.string().max(64).nullable().optional(),
+  summary: z.string().min(1).max(240),
+  details: AdminJsonObjectSchema.default({}),
+  affected_user_count: z.number().int().min(0).default(0),
+  detected_at: Iso8601Schema.nullable().optional(),
+  access_reason: z.string().min(1).max(500),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminSecurityIncidentCreateRequest = z.infer<
+  typeof AdminSecurityIncidentCreateRequestSchema
+>;
+
+export const AdminSecurityIncidentTriageRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminSecurityIncidentTriageRequest = z.infer<
+  typeof AdminSecurityIncidentTriageRequestSchema
+>;
+
+export const AdminSecurityIncidentDecisionRequestSchema = z.object({
+  notification_required: z.boolean(),
+  decision_reason: z.string().min(1).max(1000),
+  access_reason: z.string().min(1).max(500),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminSecurityIncidentDecisionRequest = z.infer<
+  typeof AdminSecurityIncidentDecisionRequestSchema
+>;
+
+export const AdminSecurityIncidentNotifyRequestSchema = z.object({
+  message: z.string().min(1).max(4000),
+  access_reason: z.string().min(1).max(500),
+  subject: z.string().min(1).max(255).default('Pinvi 개인정보 보호 알림'),
+  recipient_email: z.string().max(320).nullable().optional(),
+});
+export type AdminSecurityIncidentNotifyRequest = z.infer<
+  typeof AdminSecurityIncidentNotifyRequestSchema
+>;
+
+export const AdminSecurityIncidentReportRequestSchema = z.object({
+  receipt_ref: z.string().min(1).max(160),
+  access_reason: z.string().min(1).max(500),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminSecurityIncidentReportRequest = z.infer<
+  typeof AdminSecurityIncidentReportRequestSchema
+>;
+
+export const AdminSecurityIncidentCloseRequestSchema = z.object({
+  closure_note: z.string().min(1).max(1000),
+  access_reason: z.string().min(1).max(500),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminSecurityIncidentCloseRequest = z.infer<
+  typeof AdminSecurityIncidentCloseRequestSchema
+>;
+
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
   source: z.enum(['kor_travel_map', 'pinvi_app']).default('kor_travel_map'),

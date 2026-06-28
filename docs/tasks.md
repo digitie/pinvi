@@ -28,10 +28,8 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-275 PIPA security incident console. `/admin/incidents`,
-  `app.security_incidents` query/notification/router/UI, CPO 30분 review, 정보주체 통지,
-  KISA/PIPC 72시간 신고 due date를 구현한다. T-259의 남은 full catalog와 `v0.2.0` tag/Release는
-  최종 release gate로 분리해 유지한다.
+- 다음 구현: T-276 Retention execution / dashboard. T-259의 남은 full catalog와 `v0.2.0`
+  tag/Release는 최종 release gate로 분리해 유지한다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -96,9 +94,6 @@
 - [ ] T-272 — AI companion 별도 서비스 분리.
 - [ ] T-273 — v1.0.0 E2E / Live Gate.
 - [ ] T-274 — v1.0.0 릴리즈.
-- [ ] T-275 — PIPA security incident console.
-      `/admin/incidents`, `app.security_incidents` query/notification/router/UI, CPO 30분 review,
-      정보주체 통지, KISA/PIPC 72시간 신고 due date를 구현한다.
 - [ ] T-276 — Retention execution / dashboard.
       PII delete/anonymize, location archive/delete, token/session cleanup, last_run/overdue dashboard,
       kill-switch와 evidence log를 구현한다.

@@ -45,6 +45,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `POST /admin/emails/{id}/resend`                                  | 재발송                                                 | 3      |
 | `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
+| `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
 | `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                     | 8      |
@@ -66,6 +67,100 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/rustfs/objects` / `DELETE`                            | RustFS 객체 관리                                       | 2      |
 | `GET/POST /admin/seed/scenarios[/{scenario_key}]`                 | dev/staging seed scenario dry-run                      | 3      |
 | `GET /admin/reset/status` / `POST /admin/reset`                   | dev/staging reset dry-run                              | 3      |
+
+## 2.1 PIPA Security Incidents
+
+`/admin/incidents`는 `app.security_incidents`를 CPO 운영 workflow로 노출한다. 상태 모델은
+`detected` → `triage` → `notification_decision` → `reported` → `closed`이며, CPO 30분 내부
+review due와 개인정보보호위원회/KISA 72시간 신고 due를 `detected_at` 기준으로 계산한다.
+
+권한:
+
+- `GET /admin/incidents`: `admin` / `cpo`
+- `POST /admin/incidents`: `admin` / `cpo`
+- `POST /admin/incidents/{incident_id}/triage`: `cpo`
+- `POST /admin/incidents/{incident_id}/notification-decision`: `cpo`
+- `POST /admin/incidents/{incident_id}/notify`: `cpo`
+- `POST /admin/incidents/{incident_id}/report`: `cpo`
+- `POST /admin/incidents/{incident_id}/close`: `cpo`
+
+`cpo` 전용 mutation은 기존 Admin RBAC 정책과 같이 권한 없음을 `404 RESOURCE_NOT_FOUND`로
+숨긴다. 모든 mutation은 `access_reason`을 요구하고 `admin_audit_log`에
+`security_incident.*` action으로 남긴다. Incident 생성 시 CPO/Admin Telegram system outbox에
+`category="security_incident"` row를 적재하고 `cpo_notified_at`을 기록한다.
+
+조회:
+
+```http
+GET /admin/incidents?status=detected&severity=high&overdue=cpo_review&page_size=50
+```
+
+Query:
+
+| 이름        | 설명                                                                    |
+| ----------- | ----------------------------------------------------------------------- |
+| `status`    | `detected` / `triage` / `notification_decision` / `reported` / `closed` |
+| `severity`  | `low` / `medium` / `high` / `critical`                                  |
+| `overdue`   | `cpo_review` 또는 `external_report`                                     |
+| `page_size` | 1~200, 기본 50                                                          |
+
+응답 `data.items[]` 핵심 필드:
+
+```jsonc
+{
+  "incident_id": "00000000-0000-0000-0000-000000000000",
+  "incident_type": "admin_export_anomaly",
+  "severity": "high",
+  "status": "detected",
+  "summary": "1시간 내 개인정보 export 임계치 초과",
+  "affected_user_count": 1200,
+  "notification_required": false,
+  "detected_at": "2026-06-28T13:00:00Z",
+  "cpo_review_due_at": "2026-06-28T13:30:00Z",
+  "external_report_due_at": "2026-07-01T13:00:00Z",
+  "cpo_review_overdue": false,
+  "external_report_overdue": false,
+  "next_action": "triage",
+}
+```
+
+생성:
+
+```http
+POST /admin/incidents
+```
+
+```jsonc
+{
+  "incident_type": "admin_export_anomaly",
+  "severity": "high",
+  "source": "admin_audit_log",
+  "summary": "1시간 내 개인정보 export 임계치 초과",
+  "details": { "exported_rows": 1200 },
+  "affected_user_count": 1200,
+  "access_reason": "침해사고 수동 등록",
+}
+```
+
+상태 전이:
+
+```http
+POST /admin/incidents/{incident_id}/triage
+POST /admin/incidents/{incident_id}/notification-decision
+POST /admin/incidents/{incident_id}/notify
+POST /admin/incidents/{incident_id}/report
+POST /admin/incidents/{incident_id}/close
+```
+
+- `triage`: `{"access_reason": "..."}`
+- `notification-decision`:
+  `{"notification_required": true, "decision_reason": "...", "access_reason": "..."}`
+- `notify`: `message`, `access_reason`, 선택 `recipient_email`, `subject`. `recipient_email`이
+  있으면 `email_queue.template='security_incident_notice'` row를 만들고
+  `notification_payload_hash`를 incident와 email payload 양쪽에 남긴다.
+- `report`: `receipt_ref`, `access_reason`. 개인정보보호위원회/KISA 접수번호를
+  `external_report_receipt_ref`에 저장하고 `kisa_reported_at`을 기록한다.
+- `close`: `closure_note`, `access_reason`. `reported` 상태이거나 통지 불필요 판정이 있어야 한다.
 
 ## 3. 대시보드
 

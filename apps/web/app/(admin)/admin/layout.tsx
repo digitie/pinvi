@@ -25,6 +25,7 @@ import {
   ScrollText,
   Search,
   ServerCog,
+  ShieldAlert,
   ShieldCheck,
   Sprout,
   Tags,
@@ -56,6 +57,7 @@ const NAV_GROUPS: {
       { href: '/admin/files', label: '파일', sprint: 4, icon: Paperclip },
       { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4, icon: Lightbulb },
       { href: '/admin/audit', label: '감사 로그', sprint: 3, icon: ScrollText },
+      { href: '/admin/incidents', label: 'Incidents', sprint: 6, icon: ShieldAlert },
     ],
   },
   {

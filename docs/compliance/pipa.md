@@ -70,11 +70,12 @@ Dagster job 일 1회:
 ### 3.3 처리 흐름
 
 ```
-1) 자동 감지 → app.security_incidents row insert (`incident_type`, `severity`, `details`)
-2) Sentry alert + CPO Telegram 알림
-3) CPO가 30분 내 검토 (`/admin/incidents`)
-4) "정보주체 통지 필요" 판정 → 사용자 이메일 자동 발송 (`POST /admin/incidents/{id}/notify`)
-5) 72시간 이내 개인정보보호위원회/KISA 신고 (자동 X — CPO 수동)
+1) 자동 또는 수동 감지 → app.security_incidents row insert (`incident_type`, `severity`, `details`)
+2) CPO/Admin Telegram system outbox 적재 + `cpo_notified_at` 기록
+3) CPO가 30분 내 검토 (`/admin/incidents/{id}/triage`)
+4) "정보주체 통지 필요" 판정 → 사용자 이메일 outbox 적재 (`POST /admin/incidents/{id}/notify`)
+5) 72시간 이내 개인정보보호위원회/KISA 신고 (자동 X — CPO 수동) 후 접수번호 기록
+6) 증적 확인 후 `/admin/incidents/{id}/close`
 ```
 
 ## 4. 처리방침 의무 기재
@@ -176,8 +177,8 @@ ADR 필요 — Sprint 6 또는 v2.
 - [ ] PII 보존 만료 Dagster job
 - [ ] 침해 자동 트리거 (이상 IP / admin export / chain 깨짐)
 - [x] `app.security_incidents` 테이블 foundation
-- [ ] CPO 알림
-- [ ] `/admin/incidents` 페이지 + 사용자 통지 mailing
+- [x] CPO/Admin Telegram outbox 알림 (`security_incident`)
+- [x] `/admin/incidents` 페이지 + 사용자 통지 mailing outbox
 - [ ] 처리방침 placeholder (`docs/legal/privacy-policy.md`)
 - [ ] PR 템플릿에 PIPA 점검 체크리스트
 - [ ] CHANGELOG에 PII 영향 변경 명시

@@ -568,6 +568,96 @@ class AdminDevSafetyActionResult(BaseModel):
     message: str
 
 
+AdminSecurityIncidentStatus = Literal[
+    "detected",
+    "triage",
+    "notification_decision",
+    "reported",
+    "closed",
+]
+AdminSecurityIncidentSeverity = Literal["low", "medium", "high", "critical"]
+
+
+class AdminSecurityIncidentRecord(BaseModel):
+    incident_id: uuid.UUID
+    incident_type: str
+    severity: AdminSecurityIncidentSeverity
+    status: AdminSecurityIncidentStatus
+    source: str | None = None
+    summary: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    affected_user_count: int = 0
+    notification_required: bool = False
+    assigned_cpo_user_id: uuid.UUID | None = None
+    request_id: uuid.UUID | None = None
+    detected_at: datetime
+    cpo_review_due_at: datetime
+    external_report_due_at: datetime
+    cpo_notified_at: datetime | None = None
+    acknowledged_at: datetime | None = None
+    notification_decision_at: datetime | None = None
+    notified_at: datetime | None = None
+    kisa_reported_at: datetime | None = None
+    resolved_at: datetime | None = None
+    notification_payload_hash: str | None = None
+    external_report_receipt_ref: str | None = None
+    evidence_attachment_id: uuid.UUID | None = None
+    cpo_review_overdue: bool = False
+    external_report_overdue: bool = False
+    next_action: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminSecurityIncidentListResponse(BaseModel):
+    items: list[AdminSecurityIncidentRecord] = Field(default_factory=list)
+    page_size: int
+    total: int
+
+
+class AdminSecurityIncidentCreateRequest(BaseModel):
+    incident_type: str = Field(min_length=1, max_length=64)
+    severity: AdminSecurityIncidentSeverity
+    source: str | None = Field(default=None, max_length=64)
+    summary: str = Field(min_length=1, max_length=240)
+    details: dict[str, Any] = Field(default_factory=dict)
+    affected_user_count: int = Field(default=0, ge=0)
+    detected_at: datetime | None = None
+    access_reason: str = Field(min_length=1, max_length=500)
+    evidence_attachment_id: uuid.UUID | None = None
+
+
+class AdminSecurityIncidentTriageRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+    evidence_attachment_id: uuid.UUID | None = None
+
+
+class AdminSecurityIncidentDecisionRequest(BaseModel):
+    notification_required: bool
+    decision_reason: str = Field(min_length=1, max_length=1000)
+    access_reason: str = Field(min_length=1, max_length=500)
+    evidence_attachment_id: uuid.UUID | None = None
+
+
+class AdminSecurityIncidentNotifyRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    access_reason: str = Field(min_length=1, max_length=500)
+    subject: str = Field(default="Pinvi 개인정보 보호 알림", min_length=1, max_length=255)
+    recipient_email: str | None = Field(default=None, max_length=320)
+
+
+class AdminSecurityIncidentReportRequest(BaseModel):
+    receipt_ref: str = Field(min_length=1, max_length=160)
+    access_reason: str = Field(min_length=1, max_length=500)
+    evidence_attachment_id: uuid.UUID | None = None
+
+
+class AdminSecurityIncidentCloseRequest(BaseModel):
+    closure_note: str = Field(min_length=1, max_length=1000)
+    access_reason: str = Field(min_length=1, max_length=500)
+    evidence_attachment_id: uuid.UUID | None = None
+
+
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
     source: Literal["kor_travel_map", "pinvi_app"] = "kor_travel_map"
