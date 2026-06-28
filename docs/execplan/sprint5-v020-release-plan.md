@@ -512,16 +512,19 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - 완료: 최신 main API CI와 WSL ext4 clean Web lint/typecheck/build evidence를 확보했다.
 - 완료: N150 host Chromium은 shared library 누락으로 실패했지만
   `scripts/n150-playwright-runner.sh` Docker runner smoke가 malformed login validation 1건을 통과했다.
-- 차단: Admin live 2000/full gate는 N150 local env에 admin live credential이 없어 실행하지 못했다.
-- 차단: restore staging drill은 staging DB URL/환경이 없어 실행하지 못했다.
+- 완료: N150 local-only Admin live credential과 public HTTPS Web origin으로 Admin live 200/2000
+  Docker runner gate를 통과했다.
+- 완료: 운영 DB role에 `CREATEDB`가 없어 disposable PostgreSQL/PostGIS staging target으로
+  restore staging drill을 통과했다.
+- 남음: Admin live full catalog는 최종 tag/GitHub Release 직전 장시간 gate로 실행한다.
 - 보류: `CHANGELOG.md` release 전환, `v0.2.0` tag, GitHub Release 생성.
 
 검증 케이스:
 
-- GitHub Actions main 최신 pass — 미통과.
+- GitHub Actions main 최신 pass — API pass, Web clean manual evidence pass.
 - N150 API/DB/Web/Dagster/upstream smoke 200 — 통과.
-- Admin live 2000 또는 full gate 통과 — 미통과.
-- Backup snapshot 1회와 restore staging drill 완료 — snapshot 통과, restore staging drill 미통과.
+- Admin live 2000 또는 full gate 통과 — 2000 통과, full catalog 미실행.
+- Backup snapshot 1회와 restore staging drill 완료 — 통과.
 
 ## 4. Sprint 6 / v1.0.0 후속 Task 초안
 

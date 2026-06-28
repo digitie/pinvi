@@ -2,6 +2,40 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-259 Admin live 2000 / restore staging drill
+
+**작업**: N150 local-only Admin live credential과 disposable restore staging target을 준비해 T-259의
+남은 credential/staging blocker를 닫았다.
+
+**변경**:
+
+- `admin-live-matrix.live.ts`의 UI login helper가 login rate-limit 알림을 만나면 동일 case 안에서
+  backoff 후 재시도하도록 보강했다.
+- `admin-debug-live.live.ts`의 request timeline 검증이 loading 종료를 기다리고, source/event
+  empty-state 문구 변형을 허용하도록 안정화했다.
+- `admin-feature-detail-subpages.e2e.ts`는 tab link의 `href`를 검증한 뒤 deep link로 직접
+  이동하도록 바꿔 CI에서 관측된 tab click timing flake를 제거했다.
+- Admin live e2e runbook은 local-only env 파일과 production Web image의 public HTTPS Web origin
+  검증 조건을 명시했다.
+- Backup/restore runbook은 운영 DB role에 `CREATEDB`가 없을 때 disposable PostgreSQL/PostGIS
+  staging container로 drill하는 절차를 추가했다.
+- release gate, changelog, tasks, resume가 Admin live 200/2000 및 restore staging drill 통과와
+  full catalog/tag 잔여 상태를 가리키도록 갱신했다.
+
+**검증**:
+
+- N150 Docker runner image: `mcr.microsoft.com/playwright:v1.60.0-noble`.
+- N150: API login smoke 1건 통과.
+- N150: UI login smoke 1건 통과.
+- N150: `PINVI_ADMIN_LIVE_CASE_LIMIT=200` — 207 passed (18.4m).
+- N150: `PINVI_ADMIN_LIVE_CASE_LIMIT=2000` — 2007 passed (3.5h).
+- N150 restore staging drill: `backup://pinvi-app-20260628-101426.dump`, checksum verified,
+  `pg_restore --list` ok, `users_count=7`, `trips_count=5`, `admin_audit_log_count=1`,
+  audit chain valid, rollback precheck guard schema unchanged.
+
+**다음**: 증적 PR을 머지한 뒤 T-275 PIPA security incident console 구현에 진입한다. Admin live full
+catalog와 `v0.2.0` tag/GitHub Release는 최종 release gate로 남긴다.
+
 ## 2026-06-28 (codex) — T-259 N150 Playwright Docker runner
 
 **작업**: N150 host Chromium shared library blocker를 우회하기 위해 공식 Playwright Docker image 기반

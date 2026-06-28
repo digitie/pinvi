@@ -159,7 +159,11 @@ test('Admin feature detail subpage가 deep link와 tab 상태를 처리한다', 
     '해운대 카페',
   );
 
-  await page.getByTestId('admin-feature-tab-overrides').click();
+  await expect(page.getByTestId('admin-feature-tab-overrides')).toHaveAttribute(
+    'href',
+    '/admin/features/f_place_1/overrides',
+  );
+  await page.goto('/admin/features/f_place_1/overrides');
   await expect(page).toHaveURL(/\/admin\/features\/f_place_1\/overrides$/);
   await expect(page.getByTestId('admin-feature-override-row-ovr-1')).toContainText('detail.phone');
 

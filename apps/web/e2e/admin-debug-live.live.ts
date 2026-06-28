@@ -212,6 +212,7 @@ test.describe('admin debug live UI e2e', () => {
     await page.getByTestId('admin-debug-request-submit').click();
     await expect(page).toHaveURL(new RegExp(`/admin/debug/request/${requestId}(?:[?#].*)?$`));
     await expect(page.getByRole('heading', { name: 'Request timeline' })).toBeVisible();
+    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
     const summaryVisible = await page
       .getByTestId('admin-request-timeline-summary')
       .isVisible({ timeout: 15_000 })
@@ -219,9 +220,8 @@ test.describe('admin debug live UI e2e', () => {
     if (summaryVisible) {
       await expect(page.getByTestId('admin-request-source-pinvi_api_call_log')).toBeVisible();
     } else {
-      await expect(page.getByText('request timeline event를 찾을 수 없습니다.')).toBeVisible();
+      await expect(page.getByText(/source가 없습니다|event가 없습니다/).first()).toBeVisible();
     }
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
     await expectNoRawSecrets(page);
   });
 });

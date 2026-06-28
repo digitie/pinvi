@@ -1,9 +1,10 @@
 # v0.2.0 Release Candidate Gate
 
 본 문서는 T-259 `v0.2.0` release candidate gate의 2026-06-28 실행 결과를 기록한다.
-결론은 **릴리스 보류**다. N150 배포와 기본 smoke, backup snapshot, 최신 main API CI, Web clean
-manual evidence, N150 Playwright Docker runner smoke는 확인했지만, Admin live 2000/full gate와
-restore staging drill이 아직 닫히지 않았다.
+결론은 **tag/Release 보류**다. N150 배포와 기본 smoke, backup snapshot, 최신 main API CI,
+Web clean manual evidence, N150 Playwright Docker runner, Admin live 200/2000 gate,
+restore staging drill은 통과했다. 다만 Admin live full catalog와 최종 release note/tag/GitHub
+Release 생성은 아직 남아 있다.
 
 ## 대상
 
@@ -24,10 +25,11 @@ restore staging drill이 아직 닫히지 않았다.
 | N150 image build/deploy     | 부분 통과 | `pinvi-api`, `pinvi-web`, `pinvi-dagster` 이미지를 생성하고 컨테이너를 healthy로 기동                                     |
 | N150 smoke                  | 통과      | API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`, `kor-travel-map` `/health`/OpenAPI 모두 200 |
 | Backup snapshot             | 통과      | 초기 one-off와 보강 script rerun 모두 126826 bytes, `.sha256` 검증 및 `pg_restore --list` 성공                            |
-| N150 Playwright             | 부분 통과 | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 malformed login smoke 1건 통과                       |
+| N150 Playwright             | 통과      | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 smoke, 200, 2000 gate 통과                           |
 | Windows Playwright fallback | 부분 통과 | N150 Web SSH tunnel 대상 login malformed validation 1건 통과                                                              |
-| Admin live 2000/full        | 차단      | N150/local env에 `PINVI_ADMIN_LIVE_EMAIL`/`PINVI_ADMIN_LIVE_PASSWORD` 없음                                                |
-| Restore staging drill       | 차단      | staging DB URL/환경 미준비. snapshot `pg_restore --list`까지만 확인                                                       |
+| Admin live 200/2000         | 통과      | N150 local-only credential과 public HTTPS Web origin으로 Docker runner 207/2007건 통과                                    |
+| Admin live full catalog     | 미실행    | 6202건 full catalog는 최종 tag/Release 직전 별도 장시간 gate로 남김                                                       |
+| Restore staging drill       | 통과      | N150 disposable PostgreSQL/PostGIS staging target에서 latest snapshot restore/checksum/audit chain 검증 성공              |
 | 최신 main CI/evidence       | 통과      | `4a1b71e` API push CI 통과. `5c0a39b` WSL ext4 clean install 기반 Web lint/typecheck/build 통과                           |
 
 ## N150 배포 메모
@@ -91,12 +93,24 @@ N150 내부 `127.0.0.1` 기준:
   - canonical 명령: `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI login rejects malformed email" --workers=1`
   - 검증: PR branch script를 임시 경로로 복사하고 `PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT=~/pinvi`,
     `PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI=1`로 실행해 1 passed
+- N150 Admin live credential gate:
+  - credential: N150 local-only env 파일에만 저장. 추적 문서에는 email/password/origin 실제 값을
+    기록하지 않는다.
+  - Web origin: production Web image는 공개 HTTPS API origin으로 빌드되어 public HTTPS Web
+    origin으로 UI login을 검증했다. `127.0.0.1:12805`는 local origin 빌드의 dev/staging에서만
+    사용한다.
+  - API login smoke: 1 passed
+  - UI login smoke: 1 passed
+  - `PINVI_ADMIN_LIVE_CASE_LIMIT=200`: 207 passed (18.4m)
+  - `PINVI_ADMIN_LIVE_CASE_LIMIT=2000`: 2007 passed (3.5h)
+  - image: `mcr.microsoft.com/playwright:v1.60.0-noble`
+  - sanitized log: N150 `/tmp/pinvi-admin-live-2000.out`
 - Windows fallback:
   - 대상: SSH tunnel을 통해 N150 Web `127.0.0.1:12805`
   - 명령: `npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1`
   - 결과: 1 passed
 
-Admin 200/2000/full live gate는 credential이 준비될 때까지 실행하지 않는다.
+Admin full catalog(`6202 tests in 5 files`)는 최종 tag/Release 직전 별도 장시간 gate로 실행한다.
 
 ## Backup Evidence
 
@@ -119,8 +133,24 @@ PostgreSQL 16 계열의 `postgis/postgis:16-3.5` 일회성 컨테이너에서 `p
 - `sha256sum -c`: 통과
 - `pg_restore --list`: 통과
 
-restore staging drill은 `PINVI_RESTORE_STAGING_DATABASE_URL` 또는 동등한 staging DB가 준비된 뒤
-수행한다.
+## Restore Staging Drill Evidence
+
+운영 DB role에는 `CREATEDB` 권한이 없어 운영 DB 내부에 staging database를 만들지 않았다. 대신 N150
+운영 노드에서 Docker 격리 network와 disposable PostgreSQL/PostGIS staging target을 만들고,
+local-only env 파일로만 `PINVI_RESTORE_STAGING_DATABASE_URL`을 주입했다. DB URL/password/container
+세부 값은 추적 문서에 기록하지 않는다.
+
+- snapshot: `backup://pinvi-app-20260628-101426.dump`
+- checksum: verified
+- `pg_restore --list`: ok
+- before schema oid: `16385`
+- restore: success
+- `users_count`: `7`
+- `trips_count`: `5`
+- `admin_audit_log_count`: `1`
+- `admin_audit_chain_links`: valid
+- rollback rehearsal: precheck guard schema unchanged
+- result: `DRILL_PHASE=complete:success:staging restore drill completed`
 
 ## Main CI Evidence
 
@@ -138,11 +168,10 @@ restore staging drill은 `PINVI_RESTORE_STAGING_DATABASE_URL` 또는 동등한 s
 
 ## 다음 조치
 
-1. Admin live e2e credential을 N150 local-only env로 배치한 뒤 Docker runner로 `200` smoke,
-   `2000` gate, full catalog를 순서대로 실행한다.
-2. `PINVI_RESTORE_STAGING_DATABASE_URL`이 있는 staging restore drill 환경을 준비한다.
-3. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
+1. Admin live full catalog(`6202 tests in 5 files`)를 최종 tag/Release 직전 N150 Docker runner로
+   실행한다.
+2. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
    기본 release gate는 Docker runner를 사용한다.
-4. Compose에서 `pinvi-*` deploy가 외부 repo 이미지 build/recreate를 끌고 오지 않도록
+3. Compose에서 `pinvi-*` deploy가 외부 repo 이미지 build/recreate를 끌고 오지 않도록
    `--no-deps`/서비스 분리 절차를 runbook에 반영한다.
-5. 위 gate 통과 후 `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.
+4. full catalog 통과 후 `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.

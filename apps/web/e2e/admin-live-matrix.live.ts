@@ -219,23 +219,31 @@ async function loginViaUi(page: Page) {
   if (!adminEmail || !adminPassword) {
     throw new Error('PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.');
   }
-  await page.goto('/admin/login');
-  await page.getByTestId('admin-login-email').fill(adminEmail);
-  await page.getByTestId('admin-login-password').fill(adminPassword);
-  await throttle();
-  await page.getByTestId('admin-login-submit').click();
-  try {
-    await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
-  } catch {
-    const alertText = await page
-      .getByTestId('admin-login-error')
-      .textContent({ timeout: 1000 })
-      .catch(() => null);
-    throw new Error(
-      `live admin UI login failed at ${page.url()}${alertText ? `: ${alertText}` : ''}`,
-    );
+
+  for (let attempt = 1; attempt <= caseAttempts; attempt += 1) {
+    await page.goto('/admin/login');
+    await page.getByTestId('admin-login-email').fill(adminEmail);
+    await page.getByTestId('admin-login-password').fill(adminPassword);
+    await throttle();
+    await page.getByTestId('admin-login-submit').click();
+    try {
+      await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
+      await expect(page.getByTestId('admin-me')).toBeVisible();
+      return;
+    } catch {
+      const alertText = await page
+        .getByTestId('admin-login-error')
+        .textContent({ timeout: 1000 })
+        .catch(() => null);
+      if (attempt < caseAttempts && alertText?.includes('요청 한도')) {
+        await page.waitForTimeout(retryBackoffMs);
+        continue;
+      }
+      throw new Error(
+        `live admin UI login failed at ${page.url()}${alertText ? `: ${alertText}` : ''}`,
+      );
+    }
   }
-  await expect(page.getByTestId('admin-me')).toBeVisible();
 }
 
 async function reloginIfNeeded(page: Page, returnPath: string) {
@@ -803,30 +811,35 @@ function pushFeatureDetailSubpageCases(cases: AdminUiCase[]) {
 
 function pushDebugRequestTimelineCases(cases: AdminUiCase[]) {
   for (const viewport of compactViewports) {
-    pushCase(cases, 'debug request timeline resolves captured request id', viewport, async (page) => {
-      const captured = { requestIds: [] as string[] };
-      installDebugRequestIdRecorder(page, captured);
+    pushCase(
+      cases,
+      'debug request timeline resolves captured request id',
+      viewport,
+      async (page) => {
+        const captured = { requestIds: [] as string[] };
+        installDebugRequestIdRecorder(page, captured);
 
-      await openTableRoute(page, '/admin/debug/logs', 'Debug logs');
-      const requestId = await waitForCapturedRequestId(captured);
-      await throttle();
-      await page.goto(`/admin/debug/request/${requestId}`);
-      await reloginIfNeeded(page, `/admin/debug/request/${requestId}`);
-      await expectAdminShell(page, 'Request timeline');
-      await expect(page.getByTestId('admin-request-timeline-refresh')).toBeVisible();
-      await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+        await openTableRoute(page, '/admin/debug/logs', 'Debug logs');
+        const requestId = await waitForCapturedRequestId(captured);
+        await throttle();
+        await page.goto(`/admin/debug/request/${requestId}`);
+        await reloginIfNeeded(page, `/admin/debug/request/${requestId}`);
+        await expectAdminShell(page, 'Request timeline');
+        await expect(page.getByTestId('admin-request-timeline-refresh')).toBeVisible();
+        await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
 
-      const summaryVisible = await page
-        .getByTestId('admin-request-timeline-summary')
-        .isVisible({ timeout: 5000 })
-        .catch(() => false);
-      if (summaryVisible) {
-        await expect(page.getByTestId('admin-request-timeline-summary')).toBeVisible();
-      } else {
-        await expect(page.getByText(/source가 없습니다|event가 없습니다/).first()).toBeVisible();
-      }
-      await expectNoRawSecrets(page);
-    });
+        const summaryVisible = await page
+          .getByTestId('admin-request-timeline-summary')
+          .isVisible({ timeout: 5000 })
+          .catch(() => false);
+        if (summaryVisible) {
+          await expect(page.getByTestId('admin-request-timeline-summary')).toBeVisible();
+        } else {
+          await expect(page.getByText(/source가 없습니다|event가 없습니다/).first()).toBeVisible();
+        }
+        await expectNoRawSecrets(page);
+      },
+    );
   }
 }
 
