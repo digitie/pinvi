@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
 import {
   Activity,
+  Archive,
   BarChart3,
   Bug,
   ChevronsLeft,
@@ -87,6 +88,7 @@ const NAV_GROUPS: {
       { href: '/admin/emails', label: '이메일 큐', sprint: 3, icon: Mail },
       { href: '/admin/backup', label: 'Backup', sprint: 5, icon: HardDrive },
       { href: '/admin/mcp-tokens', label: 'MCP 토큰', sprint: 6, icon: KeyRound },
+      { href: '/admin/retention', label: 'Retention', sprint: 6, icon: Archive },
       { href: '/admin/seed', label: '시드 (dev)', sprint: 3, icon: Sprout },
       { href: '/admin/reset', label: '리셋 (dev)', sprint: 3, icon: RotateCcw },
     ],

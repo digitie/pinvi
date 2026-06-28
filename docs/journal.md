@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-276 Retention execution / dashboard
+
+**작업**: Sprint 6 보존기간 실행 콘솔을 추가했다.
+
+**변경**:
+
+- `app.retention_runs`와 `app.location_access_log_archive` migration을 추가했다. 모든 dry-run/execute는
+  candidate snapshot, result evidence, kill-switch 상태, actor, access reason을 저장한다.
+- `app.audit_log_append_only()`는 `location_access_log` DELETE를 retention transaction의
+  `app.retention_location_delete_allowed=on` 설정에서만 허용한다. `admin_audit_log` update/delete
+  차단은 유지한다.
+- `/admin/retention` API와 service를 추가했다. execute는 `PINVI_RETENTION_EXECUTE_ENABLED`,
+  confirm phrase, cutoff 이전 pending outbox, hash-chain bridge precheck를 통과해야 한다.
+- 실행 범위는 삭제 계정 PII anonymize, OAuth identity 삭제, 만료 verification/session/OAuth transient
+  row 삭제, 위치 로그 archive 후 active row 삭제다. `admin_audit_log` PII 후보는 skip count로 기록한다.
+- Web Admin `/admin/retention` 화면, sidebar, API client/schema/query key, API integration,
+  mock Playwright를 추가했다.
+- `docs/api/admin.md`, `docs/runbooks/retention-execution.md`, `docs/compliance/lbs-act.md`,
+  `docs/architecture/user-location.md`, `docs/postgres-schema.md`, `docs/data-model.md`, task/resume,
+  `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+
+- WSL ext4 mirror: `pytest -q tests/integration/test_admin_retention_api.py` — 3 passed
+- WSL ext4 mirror: `ruff check`, `ruff format --check`, `python -m mypy --strict` 대상 신규 API/service
+- WSL ext4 mirror: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Playwright: N150 SSH alias 후보가 이 세션에서 연결되지 않아 Windows fallback으로
+  `npx playwright test e2e/admin-retention.e2e.ts --project=chromium` — 1 passed
+- WSL: `git diff --check`
+
+**다음**: 검증·PR·CI·머지 후 T-277 Email deliverability / suppression enforcement로 진입한다.
+
 ## 2026-06-28 (codex) — T-275 PIPA security incident console
 
 **작업**: Sprint 6 legal/ops 첫 구현 태스크로 PIPA incident 운영 콘솔을 추가했다.

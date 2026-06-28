@@ -46,6 +46,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
 | `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
+| `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute                 | 6      |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
 | `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                     | 8      |
@@ -161,6 +162,87 @@ POST /admin/incidents/{incident_id}/close
 - `report`: `receipt_ref`, `access_reason`. 개인정보보호위원회/KISA 접수번호를
   `external_report_receipt_ref`에 저장하고 `kisa_reported_at`을 기록한다.
 - `close`: `closure_note`, `access_reason`. `reported` 상태이거나 통지 불필요 판정이 있어야 한다.
+
+## 2.2 Retention Execution
+
+`/admin/retention`은 T-240/T-241 dry-run 집계를 운영자가 승인·실행·감사할 수 있는 콘솔이다.
+실제 파괴 작업은 기본 비활성 kill-switch 뒤에 있고, 모든 run은 `app.retention_runs`에 후보
+snapshot과 result evidence를 남긴다.
+
+권한:
+
+- `GET /admin/retention/summary`: `admin` / `operator` / `cpo`
+- `GET /admin/retention/runs`: `admin` / `operator` / `cpo`
+- `POST /admin/retention/dry-run`: `admin` / `operator` / `cpo`
+- `POST /admin/retention/execute`: `admin` / `cpo`
+
+엔드포인트:
+
+```http
+GET /admin/retention/summary
+GET /admin/retention/runs?page_size=20
+POST /admin/retention/dry-run
+POST /admin/retention/execute
+```
+
+`summary`는 `pinvi_pii_retention` / `pinvi_location_log_archive`와 같은 bounded count를 반환하며,
+`execute_enabled`, `confirm_phrase`, `latest_runs`를 함께 포함한다. 사용자 이메일, 좌표 원문,
+host path, 운영 도메인/secret은 응답에 넣지 않는다.
+
+Mutation body:
+
+```jsonc
+{
+  "scope": "all", // all | pii | location
+  "access_reason": "보존기간 만료 데이터 정리",
+}
+```
+
+`execute`는 추가로 confirm phrase를 요구한다.
+
+```jsonc
+{
+  "scope": "all",
+  "access_reason": "보존기간 만료 데이터 정리",
+  "confirm_phrase": "EXECUTE RETENTION",
+}
+```
+
+실행 정책:
+
+- `PINVI_RETENTION_EXECUTE_ENABLED=false`이면 `409 RETENTION_KILL_SWITCH_DISABLED`.
+- confirm phrase가 다르면 `422 RETENTION_CONFIRM_PHRASE_INVALID`.
+- `location_audit_outbox`에 cutoff 이전 pending row가 있거나 archive tail과 active head의
+  hash-chain bridge가 맞지 않으면 `409 RETENTION_PRECHECK_FAILED`.
+- PII scope는 삭제 후 grace가 지난 일반 사용자 PII를 익명화하고 OAuth identity, 만료
+  verification/session/OAuth transient row를 삭제한다.
+- location scope는 6개월 초과 `location_access_log` row를 `app.location_access_log_archive`에
+  복사한 뒤 active table에서 삭제한다. trigger는 retention transaction의
+  `app.retention_location_delete_allowed=on` 설정에서만 이 DELETE를 허용한다.
+- `admin_audit_log` PII 후보는 append-only 감사 원장이라 삭제하지 않고
+  `skipped_admin_audit_pii_over_retention` result로 기록한다.
+
+응답 `AdminRetentionRun` 핵심 필드:
+
+```jsonc
+{
+  "run_id": "00000000-0000-0000-0000-000000000000",
+  "mode": "execute",
+  "scope": "all",
+  "status": "completed",
+  "candidate_snapshot": {},
+  "result": {
+    "pii": { "anonymized_users": 1, "deleted_oauth_identities": 1 },
+    "location": { "archived_rows": 1, "deleted_active_rows": 1 },
+    "skipped_admin_audit_pii_over_retention": 1,
+  },
+  "kill_switch_enabled": true,
+  "access_reason": "보존기간 만료 데이터 정리",
+  "actor_user_id": "00000000-0000-0000-0000-000000000000",
+  "started_at": "2026-06-28T13:00:00Z",
+  "completed_at": "2026-06-28T13:01:00Z",
+}
+```
 
 ## 3. 대시보드
 

@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     pinvi_location_audit_outbox_drain_interval_seconds: float = 1.0
     pinvi_location_audit_outbox_batch_size: int = 200
 
+    # Retention execution kill-switch (T-276). Dry-run은 항상 허용, execute는 운영에서 명시적으로 연다.
+    pinvi_retention_execute_enabled: bool = False
+    pinvi_retention_execute_confirm_phrase: str = "EXECUTE RETENTION"
+
     # Feature 조회 process-local TTL 캐시 (T-146 / D-26)
     pinvi_feature_cache_enabled: bool = True
     pinvi_feature_cache_ttl_seconds: float = 60.0

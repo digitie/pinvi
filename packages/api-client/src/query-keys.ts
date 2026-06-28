@@ -92,6 +92,10 @@ export const queryKeys = {
       pageSize?: number;
     }) => ['admin', 'security-incidents', params] as const,
     securityIncidentsAll: () => ['admin', 'security-incidents'] as const,
+    retentionSummary: () => ['admin', 'retention', 'summary'] as const,
+    retentionRuns: (params: { pageSize?: number } = {}) =>
+      ['admin', 'retention', 'runs', params] as const,
+    retentionAll: () => ['admin', 'retention'] as const,
     consistencyReports: (params: { severityMax?: string; pageSize?: number; cursor?: string }) =>
       ['admin', 'consistency-reports', params] as const,
     upstreamSystemLogs: (params: {

@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-276 — Retention execution / dashboard.
+      `app.retention_runs`와 `app.location_access_log_archive`를 추가해 PII/위치 로그 보존기간
+      dry-run/execute evidence를 저장한다. `/admin/retention` API는 summary, runs, dry-run,
+      execute를 제공하며, execute는 기본 비활성 kill-switch와 confirm phrase, cutoff 이전
+      pending outbox 및 hash-chain bridge precheck를 통과해야 한다. 실행은 삭제 계정 PII anonymize,
+      OAuth identity/token/session/OAuth transient row 삭제, 위치 로그 archive 후 active row 삭제를
+      수행하고 `admin_audit_log`에 사유를 남긴다. Web Admin `/admin/retention`, API client/schema,
+      mock Playwright, API integration, Admin/LBS/schema/runbook 문서를 함께 갱신했다.
+
 - [x] T-275 — PIPA security incident console.
       `app.security_incidents`를 `detected` → `triage` → `notification_decision` → `reported` →
       `closed` workflow로 확장하고, CPO 30분 review due, 72시간 외부 신고 due, 통지 payload hash,

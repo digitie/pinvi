@@ -279,6 +279,48 @@ class AdminLocationLogArchiveSummary(BaseModel):
     purpose_stats: list[AdminLocationLogArchivePurposeSummary] = Field(default_factory=list)
 
 
+class AdminRetentionRun(BaseModel):
+    run_id: uuid.UUID
+    mode: Literal["dry_run", "execute"]
+    scope: Literal["all", "pii", "location"]
+    status: Literal["dry_run", "approved", "executing", "completed", "failed", "rolled_back"]
+    candidate_snapshot: dict[str, Any] = Field(default_factory=dict)
+    result: dict[str, Any] = Field(default_factory=dict)
+    kill_switch_enabled: bool = False
+    access_reason: str
+    actor_user_id: uuid.UUID
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminRetentionSummary(BaseModel):
+    generated_at: datetime
+    execute_enabled: bool
+    confirm_phrase: str
+    pii_retention: AdminPiiRetentionSummary
+    location_log_archive: AdminLocationLogArchiveSummary
+    latest_runs: list[AdminRetentionRun] = Field(default_factory=list)
+
+
+class AdminRetentionDryRunRequest(BaseModel):
+    scope: Literal["all", "pii", "location"] = "all"
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminRetentionExecuteRequest(BaseModel):
+    scope: Literal["all", "pii", "location"] = "all"
+    access_reason: str = Field(min_length=1, max_length=500)
+    confirm_phrase: str = Field(min_length=1, max_length=80)
+
+
+class AdminRetentionRunListResponse(BaseModel):
+    items: list[AdminRetentionRun] = Field(default_factory=list)
+    page_size: int
+
+
 class AdminPinviEtlSummary(BaseModel):
     status: AdminSystemStatus
     message: str | None = None
@@ -1019,7 +1061,7 @@ class AdminUserFileQuota(BaseModel):
 class AdminUserDetail(AdminUserSummary):
     email: str
     email_revealed: bool
-    email_status: Literal["active", "bounced", "complained"]
+    email_status: Literal["active", "bounced", "complained", "suppressed"]
     is_active: bool
     avatar_url: str | None = None
     avatar_kind: Literal["default", "upload", "external"] = "default"

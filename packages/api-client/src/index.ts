@@ -36,6 +36,8 @@ export type {
   AdminProviderImportJobListParams,
   AdminProviderSyncListParams,
   AdminResetRunBody,
+  AdminRetentionDryRunBody,
+  AdminRetentionExecuteBody,
   AdminSeedScenarioRunBody,
   AdminSecurityIncidentCloseBody,
   AdminSecurityIncidentCreateBody,

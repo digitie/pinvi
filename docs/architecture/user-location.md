@@ -7,14 +7,14 @@ PIPA)과 정합되며, 동의 → 권한 → 획득 → 사용 → 감사 로그
 
 ## 1. 기능 사양 — 무엇을 위해 위치를 얻는가
 
-| 사용처 | 정확도 요구 | 빈도 |
-|--------|-------------|------|
-| 지도 초기 중심점 (앱 진입 시) | 시군구 수준 (~1km) | 세션당 1회 |
-| "내 위치로 이동" 버튼 | 높음 (~50m) | 사용자 명시 클릭 |
-| 주변 관광지 / 날씨 측정점 조회 | 시군구 수준 | 사용자 액션 |
-| 우클릭 메뉴 "이 지역 날씨" (좌표는 클릭 지점, 사용자 위치는 별도) | — | 해당 없음 |
-| 여행 중 일정 카드 자동 정렬 (다음 POI 까지 거리) | 도보/주행 정확도 | 30초 간격 (옵션) |
-| 사용자 도착 확인 (Sprint 5+ 후보, "이 POI에 도착했음" 자동 마킹) | 매우 높음 (~10m) | foreground 시 |
+| 사용처                                                            | 정확도 요구        | 빈도             |
+| ----------------------------------------------------------------- | ------------------ | ---------------- |
+| 지도 초기 중심점 (앱 진입 시)                                     | 시군구 수준 (~1km) | 세션당 1회       |
+| "내 위치로 이동" 버튼                                             | 높음 (~50m)        | 사용자 명시 클릭 |
+| 주변 관광지 / 날씨 측정점 조회                                    | 시군구 수준        | 사용자 액션      |
+| 우클릭 메뉴 "이 지역 날씨" (좌표는 클릭 지점, 사용자 위치는 별도) | —                  | 해당 없음        |
+| 여행 중 일정 카드 자동 정렬 (다음 POI 까지 거리)                  | 도보/주행 정확도   | 30초 간격 (옵션) |
+| 사용자 도착 확인 (Sprint 5+ 후보, "이 POI에 도착했음" 자동 마킹)  | 매우 높음 (~10m)   | foreground 시    |
 
 위치는 **사용자가 명시적으로 동의한 경우에만** 사용한다. 동의 없으면 모든 위치
 사용 기능은 비활성화되고, viewport 중심점 또는 사용자 선택 시군구로 fallback.
@@ -43,7 +43,8 @@ PIPA)과 정합되며, 동의 → 권한 → 획득 → 사용 → 감사 로그
 - 즉시 `withdrawn_at = now()`
 - 클라이언트는 사용자 위치 표시 정지 + 새 요청 비활성
 - 서버는 다음 요청부터 위치 추론·기록 거부
-- **`app.location_access_log`의 기존 row는 보존** (법정 6개월 retention)
+- **`app.location_access_log`의 기존 row는 보존** (법정 6개월 retention). 6개월 초과 row는
+  `/admin/retention` execute가 `app.location_access_log_archive`로 복사한 뒤 active table에서 삭제한다.
 
 ## 3. 권한 요청 흐름
 
@@ -54,14 +55,14 @@ PIPA)과 정합되며, 동의 → 권한 → 획득 → 사용 → 감사 로그
 export type UserLocation = {
   coord: { lat: number; lng: number };
   accuracy_m: number;
-  timestamp: number;        // epoch ms
+  timestamp: number; // epoch ms
   source: 'gps' | 'wifi' | 'network' | 'ip';
 };
 
 export type LocationOptions = {
-  high_accuracy?: boolean;  // 모바일에서 GPS 우선 (배터리 소모↑)
-  timeout_ms?: number;      // default 10000
-  max_age_ms?: number;      // 캐시된 위치 허용 (default 30000)
+  high_accuracy?: boolean; // 모바일에서 GPS 우선 (배터리 소모↑)
+  timeout_ms?: number; // default 10000
+  max_age_ms?: number; // 캐시된 위치 허용 (default 30000)
 };
 ```
 
@@ -76,12 +77,13 @@ export const webLocationAdapter: LocationAdapter = {
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
-          coord: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-          accuracy_m: pos.coords.accuracy,
-          timestamp: pos.timestamp,
-          source: pos.coords.accuracy < 100 ? 'gps' : 'network',
-        }),
+        (pos) =>
+          resolve({
+            coord: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            accuracy_m: pos.coords.accuracy,
+            timestamp: pos.timestamp,
+            source: pos.coords.accuracy < 100 ? 'gps' : 'network',
+          }),
         (err) => {
           if (err.code === 1) reject(new LocationError('PERMISSION_DENIED', err.message));
           else if (err.code === 2) reject(new LocationError('POSITION_UNAVAILABLE', err.message));
@@ -92,7 +94,7 @@ export const webLocationAdapter: LocationAdapter = {
           enableHighAccuracy: opts.high_accuracy ?? false,
           timeout: opts.timeout_ms ?? 10000,
           maximumAge: opts.max_age_ms ?? 30000,
-        }
+        },
       );
     });
   },
@@ -119,9 +121,7 @@ export const mobileLocationAdapter: LocationAdapter = {
     }
     // 2) 위치 획득
     const pos = await Location.getCurrentPositionAsync({
-      accuracy: opts.high_accuracy
-        ? Location.Accuracy.High
-        : Location.Accuracy.Balanced,
+      accuracy: opts.high_accuracy ? Location.Accuracy.High : Location.Accuracy.Balanced,
       // expo-location의 mayShowUserSettingsDialog 등 옵션 활용
     });
     return {
@@ -148,15 +148,12 @@ import { useEffect, useState } from 'react';
 import type { LocationAdapter, UserLocation, LocationOptions } from './types';
 
 export type UseUserLocationOptions = LocationOptions & {
-  enabled?: boolean;        // 동의 확인 후 true
+  enabled?: boolean; // 동의 확인 후 true
   on_success?: (loc: UserLocation) => void;
   on_error?: (err: LocationError) => void;
 };
 
-export const useUserLocation = (
-  adapter: LocationAdapter,
-  opts: UseUserLocationOptions = {}
-) => {
+export const useUserLocation = (adapter: LocationAdapter, opts: UseUserLocationOptions = {}) => {
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [error, setError] = useState<LocationError | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,11 +189,11 @@ import { useConsentStore } from '@/lib/stores';
 
 export default function MapPage() {
   const hasLocationConsent = useConsentStore((s) =>
-    s.consents.some((c) => c.type === 'location_collection' && !c.withdrawn_at)
+    s.consents.some((c) => c.type === 'location_collection' && !c.withdrawn_at),
   );
   const { location, error, loading, refresh } = useUserLocation(webLocationAdapter, {
     enabled: hasLocationConsent,
-    high_accuracy: false,    // 초기에는 빠른 응답
+    high_accuracy: false, // 초기에는 빠른 응답
   });
   // ...
 }
@@ -325,6 +322,8 @@ content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `doc
 - **위도/경도 정밀도 제한** — 응답·UI에 좌표 표시 시 소수점 4자리 (~10m)까지만
   허용 (디바이스에서 받은 값은 6자리지만 사용자 노출은 정밀도 줄임)
 - **CPO 만 `location_access_log` SELECT** — RBAC dependency
+- **Retention execute는 bounded evidence만 표시** — `/admin/retention`은 후보 수, archive/delete count,
+  chain bridge 상태만 보여주고 좌표 원문·사용자 식별자 목록은 노출하지 않는다.
 
 ## 8. SPEC V8 정합
 
@@ -337,16 +336,16 @@ content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `doc
 
 ## 9. Sprint 매핑
 
-| 항목 | Sprint | 산출물 |
-|------|--------|--------|
-| 동의 UI 4 분리 (`location_collection` 필수) | Sprint 2 | `apps/web/app/(auth)/.../consent.tsx` |
-| 동의 schema + 서버 검증 | Sprint 2 | `apps/api/app/services/consent.py` + `app.user_consents` |
-| `useUserLocation` 공용 hook + 웹 어댑터 | Sprint 2 | `packages/hooks/src/useUserLocation.ts` + `apps/web/lib/locationAdapter.ts` |
-| `app.location_access_log` chain | Sprint 2 | `apps/api/app/middleware/location_audit.py` |
-| 지도 "내 위치로 이동" 버튼 (Sprint 4 지도 위) | Sprint 4 | `apps/web/components/map/MyLocationButton.tsx` |
-| "내 위치 사용 내역" 페이지 | Sprint 3 | `apps/web/app/(app)/profile/consents/...` |
-| Admin `/admin/audit/location` (CPO 권한, 마스킹) | Sprint 3 | `apps/web/app/admin/audit/location/page.tsx` |
-| 모바일 `expo-location` 어댑터 (v2 단계) | (post-v1.0) | `apps/mobile/lib/locationAdapter.ts` |
+| 항목                                             | Sprint      | 산출물                                                                      |
+| ------------------------------------------------ | ----------- | --------------------------------------------------------------------------- |
+| 동의 UI 4 분리 (`location_collection` 필수)      | Sprint 2    | `apps/web/app/(auth)/.../consent.tsx`                                       |
+| 동의 schema + 서버 검증                          | Sprint 2    | `apps/api/app/services/consent.py` + `app.user_consents`                    |
+| `useUserLocation` 공용 hook + 웹 어댑터          | Sprint 2    | `packages/hooks/src/useUserLocation.ts` + `apps/web/lib/locationAdapter.ts` |
+| `app.location_access_log` chain                  | Sprint 2    | `apps/api/app/middleware/location_audit.py`                                 |
+| 지도 "내 위치로 이동" 버튼 (Sprint 4 지도 위)    | Sprint 4    | `apps/web/components/map/MyLocationButton.tsx`                              |
+| "내 위치 사용 내역" 페이지                       | Sprint 3    | `apps/web/app/(app)/profile/consents/...`                                   |
+| Admin `/admin/audit/location` (CPO 권한, 마스킹) | Sprint 3    | `apps/web/app/admin/audit/location/page.tsx`                                |
+| 모바일 `expo-location` 어댑터 (v2 단계)          | (post-v1.0) | `apps/mobile/lib/locationAdapter.ts`                                        |
 
 ## 10. 데이터 타입 (Zod 공용)
 
@@ -355,8 +354,8 @@ content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `doc
 import { z } from 'zod';
 
 export const CoordSchema = z.object({
-  lat: z.number().min(33).max(43),    // 대한민국 위도 범위
-  lng: z.number().min(124).max(132),  // 대한민국 경도 범위
+  lat: z.number().min(33).max(43), // 대한민국 위도 범위
+  lng: z.number().min(124).max(132), // 대한민국 경도 범위
 });
 
 export const UserLocationSchema = z.object({
