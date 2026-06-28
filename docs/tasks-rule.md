@@ -61,3 +61,17 @@ Task 완료 기준은 다음 순서다.
 5. 머지
 6. `docs/tasks-done.md`, `docs/journal.md`, `docs/resume.md` 갱신
 7. 다음 task 진입 전 최근 PR 리뷰 코멘트 재확인
+
+## 8. 병행 작업 기록과 충돌 회피
+
+- 신규 task 시작 전 반드시 `git fetch origin main`, `docs/tasks.md`의 `진행 중` / `다음` /
+  `최근 PR 리뷰 후속`, `docs/resume.md`, `docs/journal.md` 최신 항목, 열린 PR/브랜치를 확인한다.
+- 다른 에이전트가 특정 task, 파일, 도메인, PR을 선점 또는 진행 중으로 기록한 경우 같은
+  파일/도메인을 바로 수정하지 않는다. 충돌 가능성이 있으면 사용자에게 확인하거나 non-overlap
+  task로 전환한다.
+- Codex는 새 task 착수 전에 `tasks.md`에 작업 계획, 예상 변경 범위, 검증 계획을 남긴다.
+  작업 중 범위가 바뀌면 같은 섹션을 갱신한다.
+- 완료 후에는 해당 task를 `tasks-done.md`로 옮기고 `tasks.md`에는 열린 항목만 남긴다.
+  필요한 경우 `resume.md`와 `journal.md`에도 다음 작업과 검증 결과를 동기화한다.
+- 병행 PR이 main에 머지되면 다음 작업 시작 전 `tasks.md` 진행 표기를 최신 main 상태로 갱신한다.
+- 문서 운영 규칙처럼 반복 적용되는 내용은 `tasks.md`에 장문으로 두지 않고 본 파일에 옮긴다.

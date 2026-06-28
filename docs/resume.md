@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-288-legacy-task-archive / task 문서 정리
+
+사용자 지시에 따라 T-285 AI companion v1.0 scope gate는 현재 진행하지 않는다. T-285 착수 중
+작성했던 미커밋 문서 변경은 제거했고, 새 문서 정리 브랜치에서 `tasks.md`를 열린 backlog 중심으로
+정리했다.
+
+`docs/tasks.md`에는 진행/예정/보류 `[ ]` 항목만 남겼다. 완료된 T-281~~T-284, T-289~~T-290,
+Admin 콘솔 보강 legacy, 기존 완료/보류 혼재 섹션, 머지 히스토리는 `docs/tasks-done.md`로 옮겼다.
+병행 작업 기록과 충돌 회피 규칙은 `docs/tasks-rule.md` §8로 이동했다.
+
+현재 열린 병행 PR은 #312(T-291 ETL failure sensor)이며 변경 파일은 `apps/etl/**`,
+`docs/architecture/dagster-etl-bridge.md`, `docs/runbooks/etl.md`다. codex는 다음 task 진입 전 해당
+도메인을 피하고, 열린 PR/브랜치와 `tasks.md`를 다시 확인한다.
+
+다음 작업은 이 문서 정리 PR·CI·머지 후 T-292 App integrity pagination / producer follow-up 또는
+T-286 Cross-track review gap closure다. T-285는 사용자 지시가 바뀌기 전까지 진행하지 않는다.
+
 ## 2026-06-29 (codex) — T-284 Mobile v1.0 scope gate
 
 `apps/mobile`을 활성 Expo SDK 56 / Dev Client Sprint M-1 track으로 유지하되, `v1.0.0` Web/API/Admin
@@ -14,9 +31,9 @@ store 제출, mobile live e2e는 모바일 release train에서 검증하며, `ap
 제외 항목은 T-285로 남겼다.
 
 검증은 Linux에서 `git diff --check`와 `npm --workspace @pinvi/mobile run typecheck`를 통과했다.
-다음 작업은 PR·CI·머지 후 T-285 AI companion v1.0 scope gate 또는 T-292 App integrity pagination /
-producer follow-up이다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을 건드릴 때는
-최신 main 기준으로 영향도를 다시 확인한다.
+당시 다음 후보는 T-285 또는 T-292였으나, 2026-06-29 사용자 지시에 따라 T-285는 현재 진행하지
+않는다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을 건드릴 때는 최신 main
+기준으로 영향도를 다시 확인한다.
 
 ## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
 
@@ -711,8 +728,8 @@ Pinvi도 같은 방식으로 `docs/tasks-rule.md`와 `docs/tasks-done.md`를 추
 #264의 운영·법무 gap 리뷰 2건이며, #264에서 T-256~T-286으로 이미 반영하고 답변했다. 신규 차단
 코멘트는 없다.
 
-기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했다. 다음 작업은
-T-236 WebSocket multi-client collaboration e2e다.
+기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했고,
+2026-06-29 해당 이관을 완료했다. 당시 다음 작업은 T-236 WebSocket multi-client collaboration e2e였다.
 
 ## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
 
