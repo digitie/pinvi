@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 export interface ConflictField {
@@ -34,6 +34,23 @@ export function ConflictDialog({
 
   const selectedKeys = Array.from(selectedMineKeys);
   const canApply = selectedKeys.length > 0;
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // Move focus into the modal on open and let Escape dismiss it (a11y, T-290).
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onKeepEditing();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onKeepEditing]);
 
   const selectField = (key: string, source: 'server' | 'mine') => {
     setSelectedMineKeys((current) => {
@@ -51,8 +68,15 @@ export function ConflictDialog({
       aria-modal="true"
       aria-label={title}
       data-testid="conflict-dialog"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onKeepEditing();
+      }}
     >
-      <div className="w-full max-w-2xl space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="w-full max-w-2xl space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg outline-none"
+      >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 rounded-sm bg-error-bg p-2 text-error-text">
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />

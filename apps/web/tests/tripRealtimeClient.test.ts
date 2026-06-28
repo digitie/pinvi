@@ -242,6 +242,109 @@ describe('TripRealtimeClient', () => {
     expect(FakeWebSocket.instances).toHaveLength(1);
   });
 
+  it('4400 bad-message close는 재연결하지 않고 error 상태로 멈춘다', async () => {
+    vi.useFakeTimers();
+    const statuses: string[] = [];
+    const onClose = vi.fn();
+    const client = new TripRealtimeClient({
+      apiBaseUrl: 'http://localhost:12801',
+      tripId: 'trip-1',
+      WebSocketCtor: FakeWebSocket,
+      reconnectInitialDelayMs: 50,
+      onClose,
+      onStatus: (status) => statuses.push(status),
+    });
+
+    client.connect();
+    FakeWebSocket.instances[0]?.open();
+    FakeWebSocket.instances[0]?.serverClose(4400, 'bad_message');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(onClose).toHaveBeenCalledWith({
+      code: 4400,
+      reason: 'bad_message',
+      category: 'bad-message',
+      retryable: false,
+    });
+    expect(statuses.at(-1)).toBe('error');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    client.disconnect();
+  });
+
+  it('지속 4401에서 auth-refresh 재연결을 maxAuthRefreshAttempts로 제한한다', async () => {
+    vi.useFakeTimers();
+    const statuses: string[] = [];
+    const onAuthRefresh = vi.fn().mockResolvedValue(true);
+    const client = new TripRealtimeClient({
+      apiBaseUrl: 'http://localhost:12801',
+      tripId: 'trip-1',
+      WebSocketCtor: FakeWebSocket,
+      reconnectInitialDelayMs: 10,
+      maxAuthRefreshAttempts: 2,
+      random: () => 0,
+      onAuthRefresh,
+      onStatus: (status) => statuses.push(status),
+    });
+
+    client.connect();
+    // cycle 1: attempt 1 -> immediate (0ms) reconnect
+    FakeWebSocket.instances[0]?.open();
+    FakeWebSocket.instances[0]?.serverClose(4401, 'token_invalid');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    // cycle 2: attempt 2 -> backoff reconnect (10 * 2^1 = 20ms, jitter 0)
+    FakeWebSocket.instances[1]?.open();
+    FakeWebSocket.instances[1]?.serverClose(4401, 'token_invalid');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+
+    // cycle 3: attempt 3 exceeds cap -> give up, no refresh call, no new socket
+    FakeWebSocket.instances[2]?.open();
+    FakeWebSocket.instances[2]?.serverClose(4401, 'token_invalid');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    expect(onAuthRefresh).toHaveBeenCalledTimes(2);
+    expect(statuses.at(-1)).toBe('closed');
+    client.disconnect();
+  });
+
+  it('연결이 안정적으로 유지되면 auth-refresh 카운터가 초기화된다', async () => {
+    vi.useFakeTimers();
+    const onAuthRefresh = vi.fn().mockResolvedValue(true);
+    const client = new TripRealtimeClient({
+      apiBaseUrl: 'http://localhost:12801',
+      tripId: 'trip-1',
+      WebSocketCtor: FakeWebSocket,
+      reconnectInitialDelayMs: 10,
+      maxAuthRefreshAttempts: 1,
+      authRefreshResetMs: 100,
+      random: () => 0,
+      onAuthRefresh,
+    });
+
+    client.connect();
+    FakeWebSocket.instances[0]?.open();
+    FakeWebSocket.instances[0]?.serverClose(4401, 'token_invalid');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    // reconnect opened instance[1]; stays open past the reset window -> counter resets
+    FakeWebSocket.instances[1]?.open();
+    await vi.advanceTimersByTimeAsync(100);
+    FakeWebSocket.instances[1]?.serverClose(4401, 'token_invalid');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // counter reset, so the second 4401 is treated as attempt 1 again (not capped)
+    expect(onAuthRefresh).toHaveBeenCalledTimes(2);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    client.disconnect();
+  });
+
   it('domain event를 TanStack Query invalidation key로 매핑한다', () => {
     expect(tripRealtimeInvalidationKeys({ type: 'poi.created', trip_id: 'trip-1' })).toEqual([
       ['trips'],
@@ -249,6 +352,10 @@ describe('TripRealtimeClient', () => {
     ]);
     expect(tripRealtimeInvalidationKeys({ type: 'comment.created' }, 'trip-1')).toEqual([
       ['trips', 'comments', 'trip-1'],
+    ]);
+    expect(tripRealtimeInvalidationKeys({ type: 'trip.copied', trip_id: 'trip-1' })).toEqual([
+      ['trips'],
+      ['trips', 'detail', 'trip-1'],
     ]);
     expect(tripRealtimeInvalidationKeys({ type: 'presence.update', trip_id: 'trip-1' })).toEqual([]);
   });

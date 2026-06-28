@@ -208,6 +208,11 @@ export type PinviQueryKey = readonly unknown[];
 
 const TRIP_DETAIL_REALTIME_EVENTS = new Set([
   'trip.updated',
+  // Backend broadcasts `trip.copied` from POST /trips/{id}/copy; without it a viewer of a
+  // trip that receives copied content never live-refreshes (T-289).
+  'trip.copied',
+  // NOTE: `trip.deleted` is not yet emitted by the backend (no broadcaster). Kept as a
+  // forward-compatible mapping; broadcasting it is a backend follow-up.
   'trip.deleted',
   'trip.member_changed',
   'day.created',
