@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-240 — `pinvi_pii_retention` Dagster job.
+      `pinvi_pii_retention` asset/job/schedule을 추가해 매일 KST 04:15 삭제 계정 PII,
+      OAuth identity, 만료 verification/reset token, 오래된 session, 만료 OAuth transient row,
+      location/admin audit PII 보존 기간 만료 후보를 dry-run으로 집계한다. `/admin/etl/summary`와
+      Web `/admin/etl`은 후보 수, cutoff, 권한 계정 제외 수를 PII 없이 노출한다. 실제
+      delete/anonymize/archive 실행은 T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
 - [x] T-239 — `pinvi_email_outbox` Dagster job.
       `pinvi_email_outbox` asset/job/schedule을 추가해 15분마다 `app.email_queue`의 pending
       due/backoff/stuck, failed/bounced/complained, retry exhausted, template별 실패율을 PII 없이

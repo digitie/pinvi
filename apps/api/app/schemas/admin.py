@@ -202,6 +202,29 @@ class AdminEmailOutboxSummary(BaseModel):
     template_stats: list[AdminEmailOutboxTemplateSummary] = Field(default_factory=list)
 
 
+class AdminPiiRetentionSummary(BaseModel):
+    dry_run: bool = True
+    generated_at: datetime
+    user_pii_cutoff: datetime
+    session_cutoff: datetime
+    location_cutoff: datetime
+    user_pii_grace_days: int
+    session_grace_days: int
+    location_retention_months: int
+    total_candidates: int = 0
+    deleted_user_pii_candidates: int = 0
+    deleted_user_oauth_identity_candidates: int = 0
+    excluded_privileged_deleted_users: int = 0
+    expired_signup_verifications: int = 0
+    expired_password_reset_tokens: int = 0
+    old_revoked_sessions: int = 0
+    old_expired_sessions: int = 0
+    expired_oauth_login_states: int = 0
+    expired_mobile_oauth_exchanges: int = 0
+    location_access_logs_over_retention: int = 0
+    admin_audit_pii_over_retention: int = 0
+
+
 class AdminPinviEtlSummary(BaseModel):
     status: AdminSystemStatus
     message: str | None = None
@@ -211,6 +234,7 @@ class AdminPinviEtlSummary(BaseModel):
     schedules: list[AdminEtlDefinitionSchedule] = Field(default_factory=list)
     sensors: list[AdminEtlDefinitionSensor] = Field(default_factory=list)
     email_outbox: AdminEmailOutboxSummary | None = None
+    pii_retention: AdminPiiRetentionSummary | None = None
 
 
 class AdminDagsterJobSummary(BaseModel):

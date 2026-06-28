@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-240 `pinvi_pii_retention` Dagster job
+
+**작업**: PIPA/LBS 보존 기간 만료 후보를 파괴 작업 없이 집계하는 Pinvi app-owned Dagster asset과
+Admin ETL summary 노출을 구현했다.
+
+**변경**:
+
+- `apps/etl`에 `pinvi_pii_retention` asset을 추가했다. 매일 KST 04:15 삭제 계정 PII, OAuth identity,
+  만료 verification/reset token, 오래된 session, 만료 OAuth transient row, 6개월 초과
+  location/admin audit PII 후보를 dry-run metadata로 집계한다.
+- Dagster definitions/schedules에 `pinvi_pii_retention_job`과 `pinvi_pii_retention_schedule`을
+  등록했다.
+- `/admin/etl/summary`가 `pinvi.pii_retention` summary를 반환하도록 API schema/service를 확장했다.
+- Web `/admin/etl`에 전체 후보, 삭제 계정, session, token, location log, 권한 계정 제외 수를 표시했다.
+- `admin` / `operator` / `cpo` 역할이 있는 삭제 계정은 후보에서 제외하고
+  `excluded_privileged_deleted_users`로만 보고한다.
+- 실제 delete/anonymize/archive 실행은 T-276 kill-switch/dashboard/evidence log 범위로 유지했다.
+
+**검증**:
+
+- WSL ext4 미러: ETL targeted `ruff check`
+- WSL ext4 미러: `uv run --extra dev pytest -q tests/test_definitions.py tests/test_pii_retention.py`
+- WSL ext4 미러: API targeted `ruff check`
+- WSL ext4 미러: `uv run --extra dev pytest tests/integration/test_admin_etl_provider_sync_api.py -q -rA`
+- WSL ext4 미러: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/web run typecheck`,
+  `npm -w @pinvi/web run lint`
+
+**다음**: PR 생성 후 e2e/CI/merge를 완료하고, 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+다음 구현은 T-241 `pinvi_location_log_archive` Dagster job이다.
+
 ## 2026-06-28 (codex) — T-239 `pinvi_email_outbox` Dagster job
 
 **작업**: Pinvi `app.email_queue` 운영 점검 Dagster asset/job과 Admin ETL summary 노출을 구현했다.

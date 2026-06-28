@@ -136,19 +136,28 @@
 - API integration: `/admin/etl/summary`에 email outbox job/metadata 노출.
 - Admin e2e mock: ETL 화면에서 email outbox 상태/필터 표시.
 
-### T-240 — `pinvi_pii_retention` Dagster job
+### T-240 — `pinvi_pii_retention` Dagster job — 완료
 
 - disabled/deleted 사용자, 만료 verification token, 만료 reset token, 오래된 sessions,
   보존 기간 지난 PII 후보를 식별한다.
 - destructive action은 첫 PR에서 dry-run metadata만 제공하고, 실제 삭제/anonymize는 별도 kill-switch
   후속(T-276)으로 둔다.
 - PIPA/LBS 문서와 보존 기간을 대조한다.
+- 구현 결과: `pinvi_pii_retention` asset/job/schedule이 매일 KST 04:15 삭제 계정 PII,
+  OAuth identity, 만료 verification/reset token, 오래된 session, 만료 OAuth transient row,
+  6개월 초과 location/admin audit PII 후보를 dry-run count로 집계한다.
+- `/admin/etl/summary`와 `/admin/etl`은 후보 count와 cutoff만 노출하고 user id/email/token
+  hash/raw coordinate는 노출하지 않는다.
+- `admin` / `operator` / `cpo` 역할이 있는 삭제 계정은 후보에서 제외하고
+  `excluded_privileged_deleted_users`로만 보고한다.
 
 검증 케이스:
 
-- ETL unit: cutoff KST/UTC 경계, dry-run count, 제외 대상(active/admin/self) 필터.
-- API integration: Admin ETL summary에 retention dry-run 결과 노출.
-- 문서: compliance 문서와 retention policy cross-reference.
+- 완료: ETL unit cutoff UTC/month 경계와 dry-run metadata PII-free assertion.
+- 완료: API integration `/admin/etl/summary`에서 dry-run count, 권한 계정 제외,
+  token/session/OAuth/location/admin audit 후보 노출 확인.
+- 완료: Web mock e2e fixture에 `pii_retention` 표시 추가.
+- 문서: compliance 문서와 retention policy cross-reference는 T-276 실제 실행 설계에서 재확인한다.
 
 ### T-241 — `pinvi_location_log_archive` Dagster job
 
