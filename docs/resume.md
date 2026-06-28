@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-251 Restore staging drill
+
+Restore staging drill 진입점으로 `scripts/restore-staging-drill.sh`를 추가했다. 스크립트는
+`PINVI_RESTORE_STAGING_DATABASE_URL`이 없으면 복구를 시작하지 않고, snapshot checksum,
+`pg_restore --list`, `scripts/restore-db.sh`, staging DB health row count(`users`, `trips`,
+`admin_audit_log`), admin audit chain link, rollback rehearsal 결과를
+`DRILL_PHASE`/`DRILL_EVIDENCE`로 출력한다. host 절대경로는 `backup://<filename>`으로만 기록한다.
+
+Rollback rehearsal은 기본 `precheck` guard와 선택 `drain` 모드를 지원한다. `drain`은 임시
+restore schema까지 복구한 뒤 drain 미설정 실패를 유도하고 기존 `app` schema OID가 유지되는지
+확인한 다음 임시 schema를 drop한다. `scripts/backup-db.sh`, `restore-db.sh`,
+`restore-hotswap.sh`, `restore-staging-drill.sh`는 `.sha256` sidecar checksum 값을 실제 dump
+hash와 직접 비교하도록 맞춰 snapshot을 staging 경로로 옮겨도 검증 가능하게 했다.
+
+Linux에서 shell syntax, ruff, restore drill script unit, backup service unit을 검증했다.
+N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 실제 N150 staging DB restore는 수행하지 못했다.
+UI 변경은 없어서 Playwright는 실행하지 않았다. 다음 작업은 T-252 Backup/restore live UI e2e다.
+
 ## 2026-06-28 (codex) — T-250 Backup script / snapshot endpoint hardening
 
 Backup script와 Admin snapshot endpoint를 보강했다. `scripts/backup-db.sh`는 schema name guard,

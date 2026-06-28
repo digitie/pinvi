@@ -1633,16 +1633,16 @@ contract로 반환한다. `source=kor_travel_map` 행은 upstream
 
 Query:
 
-| 이름             | 설명                                                                 |
-| ---------------- | -------------------------------------------------------------------- |
-| `source`         | `all` / `kor_travel_map` / `pinvi_app`, 기본 `all`                   |
-| `status`         | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open`        |
-| `severity`       | `info` / `warning` / `error` / `critical`                            |
-| `violation_type` | violation type 또는 Pinvi `rule_key`                                 |
+| 이름             | 설명                                                                |
+| ---------------- | ------------------------------------------------------------------- |
+| `source`         | `all` / `kor_travel_map` / `pinvi_app`, 기본 `all`                  |
+| `status`         | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open`       |
+| `severity`       | `info` / `warning` / `error` / `critical`                           |
+| `violation_type` | violation type 또는 Pinvi `rule_key`                                |
 | `provider`       | `kor_travel_map` 전용 provider filter. 지정 시 Pinvi app row는 제외 |
 | `dataset_key`    | `kor_travel_map` 전용 dataset filter. 지정 시 Pinvi app row는 제외  |
 | `feature_id`     | feature id                                                          |
-| `page_size`      | 1~200, 기본 50                                                       |
+| `page_size`      | 1~200, 기본 50                                                      |
 | `cursor`         | upstream cursor. cursor가 있으면 Pinvi app row는 반복하지 않는다.   |
 
 응답 `data.items[]`는 `issue_id`, `source`, `violation_type`, `severity`, `message`, `payload`,
@@ -1651,13 +1651,13 @@ Query:
 
 Pinvi app source의 계산 rule:
 
-| `violation_type` | 설명 |
-| ---------------- | ---- |
-| `broken_poi_feature_link` | `trip_day_pois.feature_link_broken_at`이 남은 활성 여행 POI |
-| `trip_day_poi_sort_order_duplicate` | 활성 여행 날짜 안의 `sort_order` 중복 |
-| `invalid_trip_day_poi_marker_color` | `P-01`~`P-16` 범위를 벗어난 POI marker color |
-| `curated_import_source_drift` | curated plan과 curated POI의 원본 curated feature id 불일치 |
-| `active_attachment_deleted_target` | 활성 첨부가 soft-delete된 trip/POI/curated 대상에 연결 |
+| `violation_type`                    | 설명                                                        |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `broken_poi_feature_link`           | `trip_day_pois.feature_link_broken_at`이 남은 활성 여행 POI |
+| `trip_day_poi_sort_order_duplicate` | 활성 여행 날짜 안의 `sort_order` 중복                       |
+| `invalid_trip_day_poi_marker_color` | `P-01`~`P-16` 범위를 벗어난 POI marker color                |
+| `curated_import_source_drift`       | curated plan과 curated POI의 원본 curated feature id 불일치 |
+| `active_attachment_deleted_target`  | 활성 첨부가 soft-delete된 trip/POI/curated 대상에 연결      |
 
 ### 13.6 `GET /admin/integrity/reports`
 
@@ -1875,6 +1875,9 @@ Content-Type: application/json
 - 동작: `PINVI_BACKUP_SCRIPT_PATH`를 subprocess로 실행하고 `BACKUP_FILE=...`
   출력 또는 새 dump 파일을 snapshot으로 인식한다. 실행 전 `PINVI_BACKUP_MIN_FREE_BYTES`
   disk guard를 확인하고, script는 custom dump 생성 후 sha256 sidecar를 검증한다.
+- 신규 `.sha256` sidecar는 dump basename 기준으로 생성한다. restore 계열 스크립트는 sidecar의
+  첫 checksum 값과 실제 dump hash를 직접 비교하므로 운영 snapshot을 staging 디렉터리로
+  옮겨도 dump와 sidecar를 함께 두면 검증할 수 있다.
 - audit: 성공 시 `app.admin_audit_log`에 `action="backup.snapshot"`, 실패 시
   `action="backup.snapshot_failed"`를 기록한다. audit/error message는 DB URL credential과
   host 절대경로를 mask한다.
@@ -1932,7 +1935,8 @@ Content-Type: application/json
 }
 ```
 
-단순 restore는 API가 아니라 `scripts/restore-db.sh`와
+단순 restore와 Sprint 5 staging drill은 API가 아니라 `scripts/restore-db.sh`,
+`scripts/restore-staging-drill.sh`와
 [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md) 절차로 수행한다.
 
 ## 16. MCP 토큰 관리 (ADR-019, Sprint 6)
