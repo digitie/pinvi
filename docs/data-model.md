@@ -675,9 +675,17 @@ Pinvi-owned override 저장소가 필요하다는 제품 결정이 확정되면 
 | `id` (bigserial PK) | |
 | `rule_key` | `orphan_poi`, `sort_order_duplicate`, ... |
 | `entity_kind`, `entity_id` | |
+| `severity` | `info` / `warning` / `error` / `critical` |
+| `message` | 운영자 표시 메시지 |
 | `details` | jsonb |
+| `status` | `open` / `acknowledged` / `resolved` / `ignored` |
 | `detected_at`, `resolved_at` | |
 | `auto_fixable` | bool |
+
+T-249 기준 `/admin/integrity`는 이 table의 persisted row와 Pinvi 계산 rule
+(`broken_poi_feature_link`, `invalid_trip_day_poi_marker_color`,
+`curated_import_source_drift`, `active_attachment_deleted_target` 등)을 `source="pinvi_app"`로
+반환한다. `kor-travel-map` consistency issue는 `source="kor_travel_map"`으로 구분한다.
 
 ### 8.8 `app.admin_audit_log` (보강)
 

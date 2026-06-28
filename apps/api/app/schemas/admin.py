@@ -570,6 +570,7 @@ class AdminDevSafetyActionResult(BaseModel):
 
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
+    source: Literal["kor_travel_map", "pinvi_app"] = "kor_travel_map"
     violation_type: str
     severity: str
     message: str

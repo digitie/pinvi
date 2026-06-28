@@ -22,7 +22,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-249 App-owned integrity source / known orphan fix.
+- 다음 구현: T-250 Backup script / snapshot endpoint hardening.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-249 진입 전
   PR #281의 reminder comment, CI success, 차단 코멘트 없음, merge를 확인했다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
@@ -41,9 +41,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-249 — App-owned integrity source / known orphan fix.
-      orphan POI, curated import drift, trip/day/POI 하위 연결 깨짐, attachment/quota orphan 탐지
-      source와 Admin filter를 구현한다.
 - [ ] T-250 — Backup script / snapshot endpoint hardening.
       backup/restore script, checksum, disk guard, path masking, audit 실패 기록을 보강한다.
 - [ ] T-251 — Restore staging drill.

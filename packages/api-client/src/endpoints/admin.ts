@@ -154,6 +154,7 @@ export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunReques
 export type AdminResetRunBody = z.infer<typeof AdminResetRunRequestSchema>;
 
 export interface AdminIntegrityIssueListParams {
+  source?: 'all' | 'kor_travel_map' | 'pinvi_app';
   status?: 'open' | 'acknowledged' | 'resolved' | 'ignored';
   severity?: 'info' | 'warning' | 'error' | 'critical';
   violationType?: string;
@@ -329,6 +330,7 @@ export const adminApi = (client: ApiClient) => ({
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {
     const qs = new URLSearchParams();
+    if (params.source) qs.set('source', params.source);
     if (params.status) qs.set('status', params.status);
     if (params.severity) qs.set('severity', params.severity);
     if (params.violationType) qs.set('violation_type', params.violationType);

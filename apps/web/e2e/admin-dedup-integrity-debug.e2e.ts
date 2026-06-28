@@ -48,6 +48,7 @@ const dedupReview = {
 
 const integrityIssue = {
   issue_id: 'issue-1',
+  source: 'kor_travel_map',
   violation_type: 'missing_geometry',
   severity: 'critical',
   message: '좌표가 비어 있습니다.',
@@ -58,6 +59,22 @@ const integrityIssue = {
   dataset_key: 'attractions',
   feature_id: 'feature-a',
   source_record_key: 'visitkorea:1',
+  resolved_at: null,
+};
+
+const appIntegrityIssue = {
+  issue_id: 'pinvi-app-issue-1',
+  source: 'pinvi_app',
+  violation_type: 'broken_poi_feature_link',
+  severity: 'warning',
+  message: '여행 POI의 feature 링크가 끊어진 상태입니다.',
+  payload: { trip_id: 'trip-1', day_index: 1 },
+  status: 'open',
+  detected_at: '2026-06-12T00:01:30+09:00',
+  provider: null,
+  dataset_key: null,
+  feature_id: 'feature-pinvi',
+  source_record_key: 'trip_day_pois:poi-1',
   resolved_at: null,
 };
 
@@ -233,11 +250,14 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
     (url) => url.port === '12801' && url.pathname === '/admin/integrity/issues',
     async (route) => {
       seenIssueUrls.push(route.request().url());
+      const requestUrl = new URL(route.request().url());
+      const item =
+        requestUrl.searchParams.get('source') === 'pinvi_app' ? appIntegrityIssue : integrityIssue;
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
-            items: [integrityIssue],
+            items: [item],
             page_size: 50,
             next_cursor: null,
           },
@@ -310,7 +330,19 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
   expect(issueUrl.searchParams.get('status')).toBe('acknowledged');
   expect(issueUrl.searchParams.get('severity')).toBe('critical');
   expect(issueUrl.searchParams.get('provider')).toBe('visitkorea');
+  expect(issueUrl.searchParams.get('source')).toBe('all');
   expect(reportUrl.searchParams.get('severity_max')).toBe('ERROR');
+
+  await page.getByTestId('admin-integrity-provider').fill('');
+  await page.getByTestId('admin-integrity-severity').selectOption('all');
+  await page.getByTestId('admin-integrity-source').selectOption('pinvi_app');
+  await expect(page.getByTestId('admin-integrity-issue-row-pinvi-app-issue-1')).toBeVisible();
+  await expect(page.getByTestId('admin-integrity-issue-row-pinvi-app-issue-1')).toContainText(
+    'read-only',
+  );
+  await expect(page.getByTestId('admin-integrity-action-resolve-pinvi-app-issue-1')).toHaveCount(0);
+  const appIssueUrl = new URL(seenIssueUrls[seenIssueUrls.length - 1]!);
+  expect(appIssueUrl.searchParams.get('source')).toBe('pinvi_app');
 });
 
 test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한다', async ({ page }) => {

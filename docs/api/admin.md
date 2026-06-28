@@ -1624,26 +1624,40 @@ provider 자체 pause/resume 계약은 없다. Pinvi-owned override mutation은 
 
 ### 13.5 `GET /admin/integrity/issues`
 
-upstream: `kor-travel-map` `GET /v1/ops/consistency/issues`.
+Pinvi app-owned issue와 upstream `kor-travel-map` consistency issue를 같은 목록
+contract로 반환한다. `source=kor_travel_map` 행은 upstream
+`GET /v1/ops/consistency/issues`에서 오고, `source=pinvi_app` 행은
+`app.data_integrity_violations`와 Pinvi가 계산한 known app integrity rule에서 온다.
 
 권한: `admin` / `operator`
 
 Query:
 
-| 이름             | 설명                                                          |
-| ---------------- | ------------------------------------------------------------- |
-| `status`         | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open` |
-| `severity`       | `info` / `warning` / `error` / `critical`                     |
-| `violation_type` | violation type                                                |
-| `provider`       | provider                                                      |
-| `dataset_key`    | dataset key                                                   |
-| `feature_id`     | feature id                                                    |
-| `page_size`      | 1~200, 기본 50                                                |
-| `cursor`         | upstream cursor                                               |
+| 이름             | 설명                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
+| `source`         | `all` / `kor_travel_map` / `pinvi_app`, 기본 `all`                   |
+| `status`         | `open` / `acknowledged` / `resolved` / `ignored`, 기본 `open`        |
+| `severity`       | `info` / `warning` / `error` / `critical`                            |
+| `violation_type` | violation type 또는 Pinvi `rule_key`                                 |
+| `provider`       | `kor_travel_map` 전용 provider filter. 지정 시 Pinvi app row는 제외 |
+| `dataset_key`    | `kor_travel_map` 전용 dataset filter. 지정 시 Pinvi app row는 제외  |
+| `feature_id`     | feature id                                                          |
+| `page_size`      | 1~200, 기본 50                                                       |
+| `cursor`         | upstream cursor. cursor가 있으면 Pinvi app row는 반복하지 않는다.   |
 
-응답 `data.items[]`는 `issue_id`, `violation_type`, `severity`, `message`, `payload`,
+응답 `data.items[]`는 `issue_id`, `source`, `violation_type`, `severity`, `message`, `payload`,
 `status`, `detected_at`, `provider`, `dataset_key`, `feature_id`, `source_record_key`,
 `resolved_at`을 포함한다.
+
+Pinvi app source의 계산 rule:
+
+| `violation_type` | 설명 |
+| ---------------- | ---- |
+| `broken_poi_feature_link` | `trip_day_pois.feature_link_broken_at`이 남은 활성 여행 POI |
+| `trip_day_poi_sort_order_duplicate` | 활성 여행 날짜 안의 `sort_order` 중복 |
+| `invalid_trip_day_poi_marker_color` | `P-01`~`P-16` 범위를 벗어난 POI marker color |
+| `curated_import_source_drift` | curated plan과 curated POI의 원본 curated feature id 불일치 |
+| `active_attachment_deleted_target` | 활성 첨부가 soft-delete된 trip/POI/curated 대상에 연결 |
 
 ### 13.6 `GET /admin/integrity/reports`
 
@@ -1662,9 +1676,13 @@ Query:
 응답 `data.items[]`는 `report_id`, `batch_id`, `started_at`, `finished_at`, `severity_max`,
 `cases`, `summary`를 포함한다.
 
-integrity issue 상태 변경/fix mutation은 현재 `kor-travel-map` OpenAPI가 GET-only라 Pinvi에서
-임의 구현하지 않는다. upstream 계약이 추가되면 T-227에서 `access_reason`, Pinvi audit,
-idempotency 또는 중복 처리 방지, lock/kill-switch 처리 기준과 함께 relay를 추가한다.
+### 13.7 `POST /admin/integrity/issues/{issue_id}/action`
+
+`source=kor_travel_map` issue만 상태 조치 relay를 지원한다. `admin` 전용이며
+`access_reason`은 필수다. Pinvi는 upstream 성공 후 `integrity_issue.action` audit을 기록한다.
+`pinvi_app:` issue id는 현재 read-only이며 409
+`PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED`를 반환한다. Pinvi app-owned resolve/fix workflow는
+후속 ADR 또는 별도 task에서 lock/idempotency/fix 정책과 함께 설계한다.
 
 ## 14. 디버그 콘솔
 

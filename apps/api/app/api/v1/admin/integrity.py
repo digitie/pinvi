@@ -1,4 +1,4 @@
-"""`/admin/integrity/*` — kor-travel-map consistency read proxy."""
+"""`/admin/integrity/*` — kor-travel-map + Pinvi app consistency."""
 
 from __future__ import annotations
 
@@ -21,15 +21,23 @@ from app.schemas.admin import (
     AdminIntegrityIssuesResponse,
 )
 from app.schemas.envelope import Envelope
+from app.services.admin_app_integrity import list_pinvi_app_integrity_issues
 from app.services.admin_audit import append_admin_audit
 
 router = APIRouter(prefix="/admin/integrity", tags=["admin"])
+
+IntegrityIssueSource = Annotated[
+    str,
+    Query(pattern="^(all|kor_travel_map|pinvi_app)$"),
+]
 
 
 @router.get("/issues", response_model=Envelope[AdminIntegrityIssuesResponse])
 async def list_integrity_issues(
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     admin_client: KorTravelMapAdminClientDep,
+    db: DbSession,
+    source: IntegrityIssueSource = "all",
     status_filter: Annotated[
         str | None,
         Query(alias="status", pattern="^(open|acknowledged|resolved|ignored)$"),
@@ -45,9 +53,14 @@ async def list_integrity_issues(
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Envelope[AdminIntegrityIssuesResponse]:
-    """kor-travel-map `/v1/ops/consistency/issues` proxy."""
-    with map_ops_errors(message_subject="kor_travel_map integrity issue"):
-        payload = await admin_client.list_integrity_issues(
+    """Return kor-travel-map issues and Pinvi app-owned integrity issues."""
+    app_items: list[AdminIntegrityIssueRecord] = []
+    upstream_items: list[AdminIntegrityIssueRecord] = []
+    upstream_next_cursor: str | None = None
+
+    if source in {"all", "pinvi_app"} and cursor is None:
+        app_items = await list_pinvi_app_integrity_issues(
+            db,
             status_filter=status_filter,
             severity=severity,
             violation_type=violation_type,
@@ -55,17 +68,38 @@ async def list_integrity_issues(
             dataset_key=dataset_key,
             feature_id=feature_id,
             page_size=page_size,
-            cursor=cursor,
         )
+
+    should_fetch_upstream = source in {"all", "kor_travel_map"} and not (
+        source == "all" and cursor is None and len(app_items) >= page_size
+    )
+    if should_fetch_upstream:
+        upstream_page_size = page_size
+        if source == "all" and cursor is None:
+            upstream_page_size = page_size - len(app_items)
+        with map_ops_errors(message_subject="kor_travel_map integrity issue"):
+            payload = await admin_client.list_integrity_issues(
+                status_filter=status_filter,
+                severity=severity,
+                violation_type=violation_type,
+                provider=provider,
+                dataset_key=dataset_key,
+                feature_id=feature_id,
+                page_size=upstream_page_size,
+                cursor=cursor,
+            )
+        upstream_items = _validate_items(
+            payload,
+            AdminIntegrityIssueRecord,
+            "kor_travel_map integrity issue item 형식이 올바르지 않습니다.",
+        )
+        upstream_next_cursor = next_cursor(_meta(payload))
+
     return Envelope.of(
         AdminIntegrityIssuesResponse(
-            items=_validate_items(
-                payload,
-                AdminIntegrityIssueRecord,
-                "kor_travel_map integrity issue item 형식이 올바르지 않습니다.",
-            ),
+            items=[*app_items, *upstream_items],
             page_size=page_size,
-            next_cursor=next_cursor(_meta(payload)),
+            next_cursor=upstream_next_cursor,
         )
     )
 
@@ -84,6 +118,15 @@ async def action_integrity_issue(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminIntegrityIssueActionResponse]:
     """kor-travel-map `/v1/admin/issues/{id}` 상태 조치 relay + Pinvi audit."""
+    if issue_id.startswith("pinvi_app:"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED",
+                "message": "Pinvi app-owned integrity issue 조치는 아직 read-only입니다.",
+            },
+        )
+
     reason = body.kor_travel_map_reason or body.access_reason
     with map_ops_errors(message_subject="kor_travel_map integrity issue action"):
         payload = await admin_client.patch_admin_issue(
