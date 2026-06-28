@@ -477,6 +477,7 @@ class KorTravelMapAdminClient:
         level: str | None = None,
         source: str | None = None,
         q: str | None = None,
+        request_id: str | None = None,
         page_size: int = 50,
         cursor: str | None = None,
     ) -> dict[str, Any]:
@@ -488,6 +489,8 @@ class KorTravelMapAdminClient:
             params["source"] = source
         if q:
             params["q"] = q
+        if request_id:
+            params["request_id"] = request_id
         if cursor:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/ops/system-logs", params=params))
@@ -498,6 +501,7 @@ class KorTravelMapAdminClient:
         method: str | None = None,
         min_status: int | None = None,
         path: str | None = None,
+        request_id: str | None = None,
         page_size: int = 50,
         cursor: str | None = None,
     ) -> dict[str, Any]:
@@ -509,6 +513,8 @@ class KorTravelMapAdminClient:
             params["min_status"] = min_status
         if path:
             params["path"] = path
+        if request_id:
+            params["request_id"] = request_id
         if cursor:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/ops/api-call-logs", params=params))

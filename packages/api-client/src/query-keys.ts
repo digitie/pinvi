@@ -90,6 +90,7 @@ export const queryKeys = {
       level?: string;
       source?: string;
       q?: string;
+      requestId?: string;
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'upstream-system-logs', params] as const,
@@ -97,9 +98,11 @@ export const queryKeys = {
       method?: string;
       minStatus?: number;
       path?: string;
+      requestId?: string;
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'upstream-api-call-logs', params] as const,
+    requestTimeline: (requestId: string) => ['admin', 'request-timeline', requestId] as const,
     users: (params: { page?: number; status?: string; q?: string }) =>
       ['admin', 'users', params] as const,
     user: (userId: string) => ['admin', 'user', userId] as const,

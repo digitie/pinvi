@@ -8,6 +8,7 @@ from app.api.v1.admin import (
     backup,
     category_mappings,
     debug_logs,
+    debug_request,
     dedup_review,
     emails,
     etl,
@@ -40,6 +41,7 @@ admin_router.include_router(category_mappings.router)
 admin_router.include_router(dedup_review.router)
 admin_router.include_router(provider_sync.router)
 admin_router.include_router(integrity.router)
+admin_router.include_router(debug_request.router)
 admin_router.include_router(debug_logs.router)
 admin_router.include_router(files.router)
 admin_router.include_router(audit.router)

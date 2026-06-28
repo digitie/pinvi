@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-244 Request timeline API
+
+`GET /admin/debug/request/{request_id}`가 Pinvi request id 중심 timeline을 반환한다. 로컬 source는
+`app.api_call_log`, `app.admin_audit_log`, `app.location_access_log`/outbox, `payload.request_id`가
+있는 `app.email_queue`이며, upstream `kor-travel-map` sanitized system/API logs는 보조 source로만
+붙는다.
+
+응답은 source별 `ok`/`degraded`, 시간순 event, duration/status/error code/sanitized detail을
+포함한다. admin audit `access_reason`/state payload, email 수신자·제목·payload·`last_error`,
+위치 user id·좌표·IP hash는 노출하지 않는다. upstream 보조 source 실패는 HTTP 200
+`status="partial"`로 접고, all-source not found는 404다.
+
+Web `/admin/debug/logs`에는 request id 검색을 추가했고, `/admin/debug/request/{request_id}`는
+source/event table로 timeline을 표시한다.
+
+N150 live read-only / Playwright는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
+
+다음 작업은 T-245 Loki/Promtail 또는 대체 log stream이다. N150 용량을 보고 Loki/Promtail과
+sanitized polling/SSE 대안을 선택한다.
+
 ## 2026-06-28 (codex) — T-243 ETL live / Dagster 운영 게이트
 
 `/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어 live snapshot을 반환한다.

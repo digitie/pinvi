@@ -32,6 +32,7 @@ async def list_system_logs(
     ] = None,
     source: Annotated[str | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
+    request_id: Annotated[str | None, Query()] = None,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Envelope[AdminUpstreamSystemLogsResponse]:
@@ -41,6 +42,7 @@ async def list_system_logs(
             level=level,
             source=source,
             q=q,
+            request_id=request_id,
             page_size=page_size,
             cursor=cursor,
         )
@@ -64,6 +66,7 @@ async def list_upstream_api_call_logs(
     method: Annotated[str | None, Query()] = None,
     min_status: Annotated[int | None, Query(ge=100, le=599)] = None,
     path: Annotated[str | None, Query()] = None,
+    request_id: Annotated[str | None, Query()] = None,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Envelope[AdminUpstreamApiCallLogsResponse]:
@@ -73,6 +76,7 @@ async def list_upstream_api_call_logs(
             method=method,
             min_status=min_status,
             path=path,
+            request_id=request_id,
             page_size=page_size,
             cursor=cursor,
         )

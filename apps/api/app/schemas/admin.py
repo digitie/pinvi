@@ -638,6 +638,38 @@ class AdminUpstreamApiCallLogsResponse(BaseModel):
     next_cursor: str | None = None
 
 
+AdminRequestTimelineStatus = Literal["ok", "partial"]
+
+
+class AdminRequestTimelineSource(BaseModel):
+    source: str
+    status: Literal["ok", "degraded"]
+    event_count: int = 0
+    message: str | None = None
+
+
+class AdminRequestTimelineEvent(BaseModel):
+    event_id: str
+    occurred_at: datetime
+    source: str
+    title: str
+    status: str | None = None
+    duration_ms: int | None = None
+    error_code: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminRequestTimelineResponse(BaseModel):
+    request_id: uuid.UUID
+    generated_at: datetime
+    status: AdminRequestTimelineStatus
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    sources: list[AdminRequestTimelineSource] = Field(default_factory=list)
+    events: list[AdminRequestTimelineEvent] = Field(default_factory=list)
+
+
 AdminFeatureSort = Literal[
     "name",
     "updated_at",

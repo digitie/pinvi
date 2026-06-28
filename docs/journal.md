@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-244 Request timeline API
+
+**작업**: Pinvi request id 중심 Admin timeline API와 Web timeline 화면을 구현했다.
+
+**변경**:
+
+- `GET /admin/debug/request/{request_id}`가 `app.api_call_log`, `app.admin_audit_log`,
+  `app.location_access_log`/outbox, `payload.request_id`가 있는 `app.email_queue`를 시간순 event로
+  조합한다.
+- `kor-travel-map` sanitized system/API logs는 같은 request id로 필터해 보조 source로만 붙인다.
+  실패 시 전체 요청을 실패시키지 않고 `data.status="partial"`과 source `degraded`로 표시한다.
+- timeline detail에서 admin audit `access_reason`/state payload, email 수신자/제목/payload/
+  `last_error`, 위치 user id/좌표/IP hash, secret-like query/header 값을 노출하지 않도록 정리했다.
+- Web `/admin/debug/logs`에 request id 검색을 추가했고,
+  `/admin/debug/request/{request_id}`가 source/event table을 표시한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, Admin API 문서와 Sprint/task/resume 추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `codegraph sync`
+- Linux: `python3 -m compileall ...` (targeted)
+- Linux: `uv run --extra dev ruff check ...` (API targeted)
+- Linux: `uv run --extra dev ruff format --check ...` (API targeted)
+- Linux: `PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_admin_request_timeline.py tests/integration/test_admin_dedup_integrity_debug_api.py -rA`
+- Linux: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npx prettier --check ...`
+
+**주의**:
+
+- Playwright는 ADR-051 기준에 따라 로컬 Linux에서 실행하지 않았다. N150 live read-only
+  `/admin/debug/logs`/`/admin/debug/request/{request_id}` 검증은 PR merge 후 배포 환경에서 수행한다.
+
+**다음**: T-245 Loki/Promtail 또는 대체 log stream.
+
 ## 2026-06-28 (codex) — T-243 ETL live / Dagster 운영 게이트
 
 **작업**: Admin ETL summary와 Web `/admin/etl`에 Pinvi Dagster live snapshot을 추가했다.

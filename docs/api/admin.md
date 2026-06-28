@@ -1566,13 +1566,14 @@ upstream: `kor-travel-map` `GET /v1/ops/system-logs`.
 
 Query:
 
-| 이름        | 설명                                                |
-| ----------- | --------------------------------------------------- |
-| `level`     | `debug` / `info` / `warning` / `error` / `critical` |
-| `source`    | sanitized log source                                |
-| `q`         | message/event 검색어                                |
-| `page_size` | 1~200, 기본 50                                      |
-| `cursor`    | upstream cursor                                     |
+| 이름         | 설명                                                |
+| ------------ | --------------------------------------------------- |
+| `level`      | `debug` / `info` / `warning` / `error` / `critical` |
+| `source`     | sanitized log source                                |
+| `q`          | message/event 검색어                                |
+| `request_id` | upstream request id 문자열                          |
+| `page_size`  | 1~200, 기본 50                                      |
+| `cursor`     | upstream cursor                                     |
 
 응답 `data.items[]`는 `log_id`, `level`, `source`, `event`, `message`, `detail`,
 `request_id`, `created_at`을 포함한다. raw secret, Authorization header, 운영 도메인/IP는
@@ -1586,19 +1587,79 @@ upstream: `kor-travel-map` `GET /v1/ops/api-call-logs`.
 
 Query:
 
-| 이름         | 설명               |
-| ------------ | ------------------ |
-| `method`     | HTTP method        |
-| `min_status` | 100~599            |
-| `path`       | path prefix/search |
-| `page_size`  | 1~200, 기본 50     |
-| `cursor`     | upstream cursor    |
+| 이름         | 설명                       |
+| ------------ | -------------------------- |
+| `method`     | HTTP method                |
+| `min_status` | 100~599                    |
+| `path`       | path prefix/search         |
+| `request_id` | upstream request id 문자열 |
+| `page_size`  | 1~200, 기본 50             |
+| `cursor`     | upstream cursor            |
 
 응답 `data.items[]`는 `log_id`, `method`, `path`, `status_code`, `duration_ms`,
 `request_id`, `error_code`, `created_at`을 포함한다.
 
-Loki LogQL WebSocket stream과 `GET /admin/debug/request/{request_id}` timeline은 아직
-구현하지 않았다. 필요 시 sanitized log 계약, 접근 사유, 운영 secret 비노출 기준을 먼저 문서화한다.
+### 14.3 `GET /admin/debug/request/{request_id}`
+
+Pinvi `X-Request-Id` UUID 중심 timeline을 반환한다. `kor-travel-map` system/API logs는
+같은 request id로 필터한 보조 event source로만 붙이며, Pinvi timeline의 source of truth로
+섞지 않는다.
+
+권한: `admin` / `operator`
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "request_id": "11111111-2222-4333-8444-555555555555",
+    "generated_at": "2026-06-28T04:30:00Z",
+    "status": "ok", // ok | partial
+    "started_at": "2026-06-28T04:29:59Z",
+    "finished_at": "2026-06-28T04:30:00Z",
+    "duration_ms": 1000,
+    "sources": [
+      { "source": "pinvi_api_call_log", "status": "ok", "event_count": 1, "message": null },
+      { "source": "kor_travel_map_system_logs", "status": "ok", "event_count": 1, "message": null },
+    ],
+    "events": [
+      {
+        "event_id": "pinvi_api_call:1",
+        "occurred_at": "2026-06-28T04:29:59Z",
+        "source": "pinvi_api_call_log",
+        "title": "kor_travel_map API call",
+        "status": "503",
+        "duration_ms": 321,
+        "error_code": "UPSTREAM_TIMEOUT",
+        "detail": {
+          "provider": "kor_travel_map",
+          "endpoint": "/v1/features?token=%5Bmasked%5D",
+          "has_error_message": true,
+        },
+      },
+    ],
+  },
+}
+```
+
+로컬 source:
+
+- `app.api_call_log` — provider, path-only endpoint, status, latency, error class.
+- `app.admin_audit_log` — action/resource와 before/after 존재 여부만. `access_reason` 원문과
+  before/after payload는 반환하지 않는다.
+- `app.location_access_log` / `app.location_audit_outbox` — endpoint path와 purpose만.
+  user id, 좌표, IP hash는 반환하지 않는다.
+- `app.email_queue` — `payload.request_id`가 같은 경우 template/status/attempts만.
+  수신자, 제목, payload, `last_error` 원문은 반환하지 않는다.
+
+오류:
+
+- invalid UUID path → 422 `VALIDATION_ERROR`
+- 모든 source가 정상이고 event가 없으면 404 `RESOURCE_NOT_FOUND`
+- upstream 보조 source 조회 실패는 HTTP 200 `data.status="partial"`과 source
+  `status="degraded"`로 반환한다.
+
+Loki LogQL WebSocket stream은 T-245 범위로 남긴다.
 
 ## 15. Backup / Restore
 

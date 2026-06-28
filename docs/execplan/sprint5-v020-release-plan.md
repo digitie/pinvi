@@ -1,8 +1,8 @@
 # Sprint 5 / v0.2.0 상세 실행 계획
 
 본 문서는 `v0.2.0` 후보를 닫기 위한 남은 Sprint 5 작업을 Task 단위로 쪼갠다.
-단위 기능은 로컬 WSL ext4 미러에서 검증하고, 기능 묶음은 N150 live API/UI/e2e로
-검증한다. Playwright runner는 Windows에서 실행한다.
+단위 기능은 Linux 개발 환경에서 검증하고, 기능 묶음은 N150 live API/UI/e2e로 검증한다.
+Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows runner로 대체한다.
 
 ## 1. 범위와 원칙
 
@@ -214,21 +214,25 @@
 
 ### T-244 — Request timeline API
 
-- `GET /admin/debug/request/{request_id}`를 추가한다.
-- source 후보: API call log, admin audit log, location access log, email queue, backup run,
-  upstream sanitized API logs.
-- 응답은 시간순 event list, duration, status, error code, sanitized detail만 포함한다.
-- invalid UUID, not found, mixed-source partial failure를 명확히 반환한다.
-- Pinvi request timeline과 `kor-travel-map` upstream debug log를 같은 개념으로 섞지 않는다.
-  Pinvi request id 중심 timeline은 본 Task가 소유하고, upstream sanitized logs는 보조 event source로만
-  붙인다.
+- 완료: `GET /admin/debug/request/{request_id}`를 추가했다.
+- 완료: API call log, admin audit log, location access log/outbox, `payload.request_id`가 있는
+  email queue, upstream sanitized system/API logs를 시간순 event list로 조합한다.
+- 완료: 응답은 duration, status, error code, sanitized detail만 포함한다. admin audit
+  `access_reason`/state payload, email 수신자/제목/payload/last_error, 위치 user id/좌표/IP hash는
+  노출하지 않는다.
+- 완료: invalid UUID는 422, all-source not found는 404, upstream 보조 source 실패는
+  `status="partial"`과 source `degraded`로 반환한다.
+- 완료: Pinvi request timeline과 `kor-travel-map` upstream debug log를 같은 개념으로 섞지 않고,
+  upstream sanitized logs는 보조 event source로만 붙인다.
+- 완료: Web `/admin/debug/logs`에 request id 검색을 추가하고
+  `/admin/debug/request/{request_id}` timeline 화면에서 source/event table을 표시한다.
 
 검증 케이스:
 
-- API unit/integration: valid timeline, not found, invalid id, partial upstream failure,
+- 완료: API unit/integration: valid timeline, not found, invalid id, partial upstream failure,
   secret/header/path masking.
-- Web e2e mock: request id 검색 → timeline 단계 표시.
-- N150 live read-only: 기존 request id 하나를 찾아 timeline render.
+- 완료: Web mock e2e fixture: request id 검색 → timeline 화면 source/event 표시.
+- 미실행: N150 live read-only는 PR merge 후 배포된 환경에서 기존 request id 하나를 찾아 render한다.
 
 ### T-245 — Loki/Promtail 또는 대체 log stream
 
@@ -255,7 +259,7 @@
 
 검증 케이스:
 
-- Windows Playwright on N150: route render, filter, request id search, no raw secret pattern.
+- N150 Playwright(불가 시 Windows runner): route render, filter, request id search, no raw secret pattern.
 - failure artifact: screenshot/video/trace는 로컬에만 두고 커밋하지 않는다.
 
 ### T-247 — Provider sync 운영 mutation 계약 정리
@@ -638,25 +642,25 @@ AI 기능을 포함하지 않고 client contract/Admin status까지만 다룬다
 
 ## 4.1 리뷰 gap crosswalk
 
-| 리뷰 항목 | 반영 Task |
-| --- | --- |
-| PIPA incident console `/admin/incidents` | T-258, T-275 |
-| retention dry-run 이후 실제 delete/anonymize/archive와 dashboard | T-240, T-241, T-276 |
-| email deliverability, domain verification, hard-bounce/complaint suppression | T-239, T-257, T-277 |
-| DSR intake/SLA/evidence workflow | T-258, T-278 |
-| content moderation report/hide/takedown | T-258, T-279 |
-| RBAC role grant/revoke + permission matrix | T-258, T-280 |
-| user lifecycle admin actions/self-delete | T-258, T-281 |
-| rate-limit/abuse admin surface, fail-closed visibility | T-258, T-282 |
-| provider-health `unknown` 원인과 `ApiCallTracker`/provider tag | T-253, T-257 |
-| Pinvi debug timeline vs upstream `kor-travel-map` logs 구분 | T-244, T-245 |
-| provider run-now 부재와 upstream mutation 의존 | T-247 |
-| orphan POI/curated import integrity issue 구현 | T-249 |
-| legal ops sign-off를 법무 4문서 이상으로 확장 | T-269, T-274, T-275~T-282 |
-| auth/session/MCP/share token/rate-limit security review | T-270, T-283 |
-| mobile v1.0 포함/제외 명시 | T-284 |
-| user-facing AI companion v1.0 포함/제외 명시 | T-272, T-285 |
-| cross-track #238 review gap mapping | T-256, T-286 |
+| 리뷰 항목                                                                    | 반영 Task                 |
+| ---------------------------------------------------------------------------- | ------------------------- |
+| PIPA incident console `/admin/incidents`                                     | T-258, T-275              |
+| retention dry-run 이후 실제 delete/anonymize/archive와 dashboard             | T-240, T-241, T-276       |
+| email deliverability, domain verification, hard-bounce/complaint suppression | T-239, T-257, T-277       |
+| DSR intake/SLA/evidence workflow                                             | T-258, T-278              |
+| content moderation report/hide/takedown                                      | T-258, T-279              |
+| RBAC role grant/revoke + permission matrix                                   | T-258, T-280              |
+| user lifecycle admin actions/self-delete                                     | T-258, T-281              |
+| rate-limit/abuse admin surface, fail-closed visibility                       | T-258, T-282              |
+| provider-health `unknown` 원인과 `ApiCallTracker`/provider tag               | T-253, T-257              |
+| Pinvi debug timeline vs upstream `kor-travel-map` logs 구분                  | T-244, T-245              |
+| provider run-now 부재와 upstream mutation 의존                               | T-247                     |
+| orphan POI/curated import integrity issue 구현                               | T-249                     |
+| legal ops sign-off를 법무 4문서 이상으로 확장                                | T-269, T-274, T-275~T-282 |
+| auth/session/MCP/share token/rate-limit security review                      | T-270, T-283              |
+| mobile v1.0 포함/제외 명시                                                   | T-284                     |
+| user-facing AI companion v1.0 포함/제외 명시                                 | T-272, T-285              |
+| cross-track #238 review gap mapping                                          | T-256, T-286              |
 
 ## 5. API 테스트 케이스 카탈로그
 
