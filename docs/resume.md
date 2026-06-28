@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-06-29 (claude) — codex 병행 트랙 착수 (T-289/290 · T-291 · T-261~263)
+
+codex가 T-283(보안 리뷰, PR #308 open)을 진행하는 동안, Sprint 5 잔여 + Sprint 6에서 codex의
+admin-backend 핫존과 충돌이 적은 콜드존 작업을 병행한다. 사용자 요청(2026-06-29)으로 본 문서
+갱신을 docs-only PR로 먼저 머지(CI 생략 admin-merge)한 뒤 구현에 들어간다.
+
+**병행 묶음(서로 및 codex와 파일 비충돌)**:
+1. **T-289 + T-290** — WebSocket reconnect/invalidation + Trip conflict UX 후속. PR #265/#266 사후
+   리뷰 발견(4401 0ms refresh 루프, reconnect jitter, `trip.copied` invalidation 누락, conflict field
+   whitelist drift, `ConflictDialog` Esc/focus). 영역: `packages/api-client/src/{websocket,query-keys}.ts`,
+   `apps/web/components/trips/{TripDetail,ConflictDialog}.tsx`. 한 PR로 묶는다.
+2. **T-291** — ETL failure sensor + compliance SQL 테스트. PR #271/#273(+#276) 사후 리뷰 발견
+   (ADR-050 `run_failure_sensor` 미연결 = `sensors=[]`, asset 원시 SQL 실행 테스트 부재). 영역: `apps/etl`.
+3. **T-261~T-263** — 경로 최적화(OR-Tools) + 스마트 정렬 API/UI. 신규 `optimize` 모듈/엔드포인트/
+   다이얼로그라 기존 코드 비접촉. T-132 nearest-neighbor 위에 확장.
+
+**충돌 회피 근거**: codex 핫존은 `apps/api/app/api/v1/admin/*`·`app/services/*`(보안 리뷰 T-283).
+위 묶음은 프론트/packages, `apps/etl`, 신규 optimize 모듈로 분리됨. 공통 추적 문서
+(`tasks.md`/`resume.md`/`journal.md`)는 머지 충돌 가능성이 있어 docs PR을 먼저 빠르게 머지한다.
+
+**다음 한 작업**: T-289+T-290 구현 착수(프론트/packages).
+
 ## 2026-06-29 (codex) — T-282 Rate-limit / abuse admin surface
 
 Sprint 6 rate-limit/abuse 운영 표면을 구현했다. DB에는 `app.rate_limit_overrides`를 추가하고,
