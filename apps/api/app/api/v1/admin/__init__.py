@@ -10,6 +10,7 @@ from app.api.v1.admin import (
     debug_logs,
     debug_request,
     dedup_review,
+    dsr,
     emails,
     etl,
     feature_requests,
@@ -47,6 +48,7 @@ admin_router.include_router(debug_request.router)
 admin_router.include_router(debug_logs.router)
 admin_router.include_router(files.router)
 admin_router.include_router(incidents.router)
+admin_router.include_router(dsr.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
 admin_router.include_router(stats.router)

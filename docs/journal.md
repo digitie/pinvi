@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-278 DSR intake workflow
+
+**작업**: 개인정보 열람/정정/삭제/처리정지 요청 접수와 CPO 처리 workflow를 구현했다.
+
+**변경**:
+
+- `app.dsr_requests` migration/model을 추가했다. 요청 유형, 상태, 접수 + 10일 `due_at`,
+  본인 확인 metadata, result notice hash, export manifest, partial response, evidence attachment id를
+  저장한다.
+- DSR 행은 원문 이메일을 저장하지 않고 `requester_email_hash`와 `requester_email_masked`만
+  보존한다.
+- `/users/me/dsr-requests` API는 사용자 접수/조회/철회를 제공한다. `/settings/dsr` 화면은 같은
+  self-service 흐름을 제공한다.
+- `/admin/dsr` API와 Web Admin 화면을 추가했다. CPO 전용 본인 확인, 처리 시작, 완료/거절 조치를
+  제공하고 모든 mutation은 `admin_audit_log`에 `dsr.*` action과 `access_reason`을 남긴다.
+- 완료/거절 조치는 `email_queue.template='dsr_result_notice'` row를 만들고 `result_notice_email_id`와
+  `result_notice_hash`를 DSR 행에 연결한다.
+- shared schema, API client, Admin query key, Admin/user mock Playwright를 추가했다.
+- `docs/runbooks/dsr.md`, `docs/api/admin.md`, `docs/api/users.md`, `docs/compliance/pipa.md`,
+  `docs/data-model.md`, `docs/postgres-schema.md`, task/resume, `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+
+- WSL: `ruff check` targeted DSR API/model/schema/service/test files
+- WSL: `python -m mypy` targeted DSR model/schema/service/Admin/users routes
+- WSL: `npm run typecheck --workspace packages/schemas`
+- WSL: `npm run typecheck --workspace packages/api-client`
+- WSL: `npm run typecheck --workspace apps/web`
+- WSL: `npm run lint --workspace apps/web`
+- WSL: `PATH="$PWD/.venv/bin:$PATH" python -m pytest tests/integration/test_dsr_requests_api.py -q -s`
+  — 3 passed
+- Playwright: N150 alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+  `npm run test:e2e --workspace apps/web -- admin-dsr.e2e.ts settings-dsr.e2e.ts` — 2 passed
+
+**다음**: PR·CI·머지 후 T-279 Content moderation / takedown workflow로 진입한다.
+
 ## 2026-06-28 (codex) — T-277 Email deliverability / suppression enforcement
 
 **작업**: Resend 발송 차단, webhook 멱등/우선순위, Admin deliverability 상태판을 구현했다.

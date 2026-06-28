@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUserId, DbSession
@@ -17,6 +17,12 @@ from app.schemas.consent import (
     ConsentType,
     ConsentWithdrawRequest,
     ProfileCompleteRequest,
+)
+from app.schemas.dsr import (
+    DsrRequestCreateRequest,
+    DsrRequestListResponse,
+    DsrRequestRecord,
+    DsrRequestWithdrawRequest,
 )
 from app.schemas.envelope import Envelope
 from app.schemas.mcp import McpTokenIssueRequest, McpTokenIssueResponse, McpTokenResponse
@@ -42,6 +48,14 @@ from app.services.consent import (
     list_user_consents,
     record_consents,
     withdraw_consent,
+)
+from app.services.dsr_requests import (
+    DsrRequestNotFoundError,
+    DsrRequestTransitionError,
+    create_dsr_request,
+    list_user_dsr_requests,
+    to_dsr_request_record,
+    withdraw_dsr_request,
 )
 from app.services.mcp_tokens import (
     McpTokenNotFoundError,
@@ -305,6 +319,69 @@ async def delete_my_file(
         )
     attachment.deleted_at = datetime.now(UTC)
     await db.commit()
+
+
+@router.get("/dsr-requests", response_model=Envelope[DsrRequestListResponse])
+async def list_my_dsr_requests(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> Envelope[DsrRequestListResponse]:
+    await _get_current_user(db, current_user_id)
+    result = await list_user_dsr_requests(
+        db,
+        user_id=uuid.UUID(current_user_id),
+        page_size=page_size,
+    )
+    return Envelope.of(result)
+
+
+@router.post(
+    "/dsr-requests",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[DsrRequestRecord],
+)
+async def create_my_dsr_request(
+    body: DsrRequestCreateRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DsrRequestRecord]:
+    user = await _get_current_user(db, current_user_id)
+    row = await create_dsr_request(db, user=user, body=body)
+    await db.commit()
+    return Envelope.of(to_dsr_request_record(row))
+
+
+@router.post(
+    "/dsr-requests/{request_id}/withdraw",
+    response_model=Envelope[DsrRequestRecord],
+)
+async def withdraw_my_dsr_request(
+    request_id: uuid.UUID,
+    body: DsrRequestWithdrawRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DsrRequestRecord]:
+    await _get_current_user(db, current_user_id)
+    try:
+        row = await withdraw_dsr_request(
+            db,
+            request_id=request_id,
+            user_id=uuid.UUID(current_user_id),
+            body=body,
+        )
+    except DsrRequestNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "DSR 요청을 찾을 수 없습니다."},
+        ) from exc
+    except DsrRequestTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INVALID_STATE", "message": str(exc)},
+        ) from exc
+    await db.commit()
+    return Envelope.of(to_dsr_request_record(row))
 
 
 @router.post(

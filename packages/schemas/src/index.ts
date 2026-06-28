@@ -36,8 +36,28 @@ export type {
   OAuthLinkRequest,
 } from './auth';
 
-export { ConsentTypeSchema, UserConsentSchema, ProfileCompleteRequestSchema } from './user';
-export type { ConsentType, UserConsent, ProfileCompleteRequest } from './user';
+export {
+  ConsentTypeSchema,
+  DsrRequestCreateRequestSchema,
+  DsrRequestListResponseSchema,
+  DsrRequestRecordSchema,
+  DsrRequestStatusSchema,
+  DsrRequestTypeSchema,
+  DsrRequestWithdrawRequestSchema,
+  ProfileCompleteRequestSchema,
+  UserConsentSchema,
+} from './user';
+export type {
+  ConsentType,
+  DsrRequestCreateRequest,
+  DsrRequestListResponse,
+  DsrRequestRecord,
+  DsrRequestStatus,
+  DsrRequestType,
+  DsrRequestWithdrawRequest,
+  ProfileCompleteRequest,
+  UserConsent,
+} from './user';
 
 export {
   AdminMcpTokenIssueRequestSchema,
@@ -252,6 +272,14 @@ export {
   AdminSecurityIncidentSeveritySchema,
   AdminSecurityIncidentStatusSchema,
   AdminSecurityIncidentTriageRequestSchema,
+  AdminDsrCompleteRequestSchema,
+  AdminDsrIdentityCheckRequestSchema,
+  AdminDsrProcessRequestSchema,
+  AdminDsrRejectRequestSchema,
+  AdminDsrRequestListResponseSchema,
+  AdminDsrRequestRecordSchema,
+  AdminDsrRequestStatusSchema,
+  AdminDsrRequestTypeSchema,
   AdminRetentionDryRunRequestSchema,
   AdminRetentionExecuteRequestSchema,
   AdminRetentionRunListResponseSchema,
@@ -404,6 +432,14 @@ export type {
   AdminSecurityIncidentSeverity,
   AdminSecurityIncidentStatus,
   AdminSecurityIncidentTriageRequest,
+  AdminDsrCompleteRequest,
+  AdminDsrIdentityCheckRequest,
+  AdminDsrProcessRequest,
+  AdminDsrRejectRequest,
+  AdminDsrRequestListResponse,
+  AdminDsrRequestRecord,
+  AdminDsrRequestStatus,
+  AdminDsrRequestType,
   AdminRetentionDryRunRequest,
   AdminRetentionExecuteRequest,
   AdminRetentionRun,

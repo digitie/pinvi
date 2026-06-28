@@ -134,29 +134,79 @@ Content-Type: application/json
 사용자는 본인이 업로드했거나 본인 소유 여행계획에 속한 여행/날짜/POI 파일을 한 화면에서 모아
 볼 수 있다. 파일 본문은 RustFS에 있고, API는 metadata와 presigned GET URL만 반환한다.
 
-| Endpoint | 설명 |
-|----------|------|
-| `GET /users/me/files?page=&limit=` | 내 파일 목록 |
-| `GET /users/me/files/{attachment_id}/download-url` | 파일 다운로드 URL |
-| `DELETE /users/me/files/{attachment_id}` | 파일 metadata soft delete |
+| Endpoint                                           | 설명                      |
+| -------------------------------------------------- | ------------------------- |
+| `GET /users/me/files?page=&limit=`                 | 내 파일 목록              |
+| `GET /users/me/files/{attachment_id}/download-url` | 파일 다운로드 URL         |
+| `DELETE /users/me/files/{attachment_id}`           | 파일 metadata soft delete |
 
 목록 응답은 `AttachmentLibraryPage`이며 각 item은 `target_scope`, `trip_title`, `poi_label`,
 `byte_size`, `uploaded_by_email_masked`를 포함한다. 삭제는 RustFS object를 즉시 지우지 않고
 `deleted_at` metadata만 설정한다.
 
-## 6. OAuth 연결 관리
+## 6. DSR 권리행사 요청
+
+사용자는 `/settings/dsr` 또는 API로 개인정보 열람/정정/삭제/처리정지 요청을 접수하고, open 상태
+요청을 철회할 수 있다. 처리 due는 접수 시각 기준 10일이며 CPO 처리는 `/admin/dsr`에서 진행한다.
+
+| Endpoint                                            | 설명             |
+| --------------------------------------------------- | ---------------- |
+| `GET /users/me/dsr-requests?page_size=`             | 내 DSR 요청 목록 |
+| `POST /users/me/dsr-requests`                       | 새 요청 접수     |
+| `POST /users/me/dsr-requests/{request_id}/withdraw` | open 요청 철회   |
+
+### 6.1 `POST /users/me/dsr-requests`
+
+```jsonc
+{
+  "request_type": "access", // access | correction | delete | suspend
+  "request_summary": "최근 1년 위치 접근 로그 열람 요청",
+  "request_details": { "scope": "location_audit" },
+}
+```
+
+응답 `DsrRequestRecord` 핵심 필드:
+
+```jsonc
+{
+  "request_id": "uuid",
+  "request_type": "access",
+  "status": "received",
+  "requester_email_masked": "u***@pinvi.test",
+  "received_at": "2026-06-28T09:00:00Z",
+  "due_at": "2026-07-08T09:00:00Z",
+  "response_overdue": false,
+  "next_action": "identity_check",
+}
+```
+
+DSR 행에는 원문 이메일을 저장하지 않고 hash/masked 값만 보존한다. 결과 통지는 CPO 완료/거절
+조치 시 `dsr_result_notice` 이메일 큐로 발송된다.
+
+### 6.2 `POST /users/me/dsr-requests/{request_id}/withdraw`
+
+```jsonc
+{ "reason": "다른 채널로 요청" }
+```
+
+`received`, `identity_check`, `processing` 상태에서만 가능하다. 완료/거절/철회된 요청은
+`409 INVALID_STATE`.
+
+자세한 운영 절차는 [`docs/runbooks/dsr.md`](../runbooks/dsr.md).
+
+## 7. OAuth 연결 관리
 
 [`auth.md`](./auth.md) §6.4 / §6.5와 동일. alias:
 
 - `POST /users/me/oauth/{provider}/link`
 - `DELETE /users/me/oauth/{provider}`
 
-## 7. MCP 토큰 (ADR-019, Sprint 6)
+## 8. MCP 토큰 (ADR-019, Sprint 6)
 
 외부 AI agent가 Pinvi MCP 서버를 read-only로 호출할 때 쓰는 전용 토큰이다.
 일반 `pinvi_access` / `pinvi_refresh` cookie와 분리한다.
 
-### 7.1 `GET /users/me/mcp-tokens`
+### 8.1 `GET /users/me/mcp-tokens`
 
 내 MCP 토큰 목록. 토큰 원문은 반환하지 않고 마스킹 값과 metadata만 반환한다.
 
@@ -177,7 +227,7 @@ Content-Type: application/json
 }
 ```
 
-### 7.2 `POST /users/me/mcp-tokens`
+### 8.2 `POST /users/me/mcp-tokens`
 
 ```http
 POST /users/me/mcp-tokens
@@ -189,17 +239,17 @@ Content-Type: application/json
 - `scopes`는 1차 구현에서 `["mcp:read"]`만 허용한다.
 - 응답은 발급 직후 1회만 `token` 원문을 포함한다.
 
-### 7.3 `DELETE /users/me/mcp-tokens/{token_id}`
+### 8.3 `DELETE /users/me/mcp-tokens/{token_id}`
 
 내 토큰 회수. `revoked_at = now()` 설정 후 다음 MCP 호출부터 401.
 
-## 8. 탈퇴
+## 9. 탈퇴
 
 [`auth.md`](./auth.md) §7과 동일. alias:
 
 - `DELETE /users/me`
 
-## 9. AI agent 구현 체크리스트
+## 10. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/user.py` Pydantic + `packages/schemas/src/user.ts` Zod
 - [ ] `apps/api/app/services/user.py` (프로필 갱신 + 동의 부작용 트리거)
@@ -208,3 +258,4 @@ Content-Type: application/json
 - [ ] 동의 철회 시 부작용 트랜잭션 검증 (location_collection / demographic_use)
 - [ ] 통합 테스트 `apps/api/tests/integration/test_user_consents.py`
 - [ ] MCP 토큰 발급/회수 API + 원문 1회 노출 테스트
+- [x] DSR 접수/조회/철회 API + `/settings/dsr` self-service 화면

@@ -1,5 +1,9 @@
 import {
   ConsentTypeSchema,
+  DsrRequestCreateRequestSchema,
+  DsrRequestListResponseSchema,
+  DsrRequestRecordSchema,
+  DsrRequestWithdrawRequestSchema,
   McpTokenIssueRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
@@ -10,8 +14,11 @@ import type { ApiClient } from '../client';
 import type { ConsentType } from '@pinvi/schemas';
 
 const ConsentItemsSchema = z.array(
-  z.object({ consent_type: ConsentTypeSchema, version: z.string().min(1).max(32) })
+  z.object({ consent_type: ConsentTypeSchema, version: z.string().min(1).max(32) }),
 );
+
+export type DsrRequestCreateBody = z.input<typeof DsrRequestCreateRequestSchema>;
+export type DsrRequestWithdrawBody = z.input<typeof DsrRequestWithdrawRequestSchema>;
 
 export const userApi = (client: ApiClient) => ({
   /** 현재 사용자의 동의 목록(`docs/api/users.md` §3). */
@@ -51,5 +58,28 @@ export const userApi = (client: ApiClient) => ({
   revokeMcpToken: (tokenId: string) =>
     client.requestNoContent(`/users/me/mcp-tokens/${tokenId}`, {
       method: 'DELETE',
+    }),
+
+  listDsrRequests: (pageSize = 50) => {
+    const qs = new URLSearchParams();
+    qs.set('page_size', String(pageSize));
+    return client.request(`/users/me/dsr-requests?${qs.toString()}`, {
+      method: 'GET',
+      schema: DsrRequestListResponseSchema,
+    });
+  },
+
+  createDsrRequest: (body: DsrRequestCreateBody) =>
+    client.request('/users/me/dsr-requests', {
+      method: 'POST',
+      body: JSON.stringify(DsrRequestCreateRequestSchema.parse(body)),
+      schema: DsrRequestRecordSchema,
+    }),
+
+  withdrawDsrRequest: (requestId: string, body: DsrRequestWithdrawBody) =>
+    client.request(`/users/me/dsr-requests/${encodeURIComponent(requestId)}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(DsrRequestWithdrawRequestSchema.parse(body)),
+      schema: DsrRequestRecordSchema,
     }),
 });

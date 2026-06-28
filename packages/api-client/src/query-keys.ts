@@ -92,6 +92,13 @@ export const queryKeys = {
       pageSize?: number;
     }) => ['admin', 'security-incidents', params] as const,
     securityIncidentsAll: () => ['admin', 'security-incidents'] as const,
+    dsrRequests: (params: {
+      status?: string;
+      requestType?: string;
+      overdue?: boolean;
+      pageSize?: number;
+    }) => ['admin', 'dsr-requests', params] as const,
+    dsrRequestsAll: () => ['admin', 'dsr-requests'] as const,
     retentionSummary: () => ['admin', 'retention', 'summary'] as const,
     retentionRuns: (params: { pageSize?: number } = {}) =>
       ['admin', 'retention', 'runs', params] as const,
