@@ -294,6 +294,9 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
         feature_snapshot: {
           name: '해운대',
           coord: { lon: 129.1604, lat: 35.1587 },
+          marker_color: 'P-07',
+          marker_icon: 'swimming',
+          category: '해수욕장',
           address: { road: '부산 해운대구 해운대해변로' },
         },
         lon: 129.1604,
@@ -406,6 +409,21 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
     '부산 해운대구 해운대해변로',
   );
   await expect(page.getByTestId('admin-trip-poi-map')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-color',
+    'P-08',
+  );
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-icon',
+    'marker',
+  );
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-source',
+    'custom',
+  );
+  await expect(page.getByTestId('admin-trip-poi-resolved-marker')).toContainText(
+    '표시 P-08 / marker · custom',
+  );
   await expect(page.getByTestId('admin-trip-poi-detail-link')).toHaveAttribute(
     'href',
     `/admin/pois/${poiId}`,

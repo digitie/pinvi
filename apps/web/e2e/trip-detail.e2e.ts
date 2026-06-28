@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
 const poiId = '44444444-4444-4444-8444-444444444444';
+const snapshotPoiId = '44444444-4444-4444-8444-444444444445';
+const brokenPoiId = '44444444-4444-4444-8444-444444444446';
 const companionId = '55555555-5555-4555-8555-555555555555';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
@@ -73,7 +75,59 @@ const TRIP_VIEW = {
   broken_feature_count: 0,
 };
 
-async function mockTripDetailRoutes(page: Page) {
+const BASE_MARKER_DAY = TRIP_VIEW.days[0]!;
+const BASE_MARKER_POI = BASE_MARKER_DAY.pois[0]!;
+
+const MARKER_VIEW = {
+  ...TRIP_VIEW,
+  days: [
+    {
+      ...BASE_MARKER_DAY,
+      pois: [
+        {
+          ...BASE_MARKER_POI,
+          title: '해운대 custom',
+          feature: {
+            coord: { lon: 129.16, lat: 35.158 },
+            marker_color: 'P-07',
+            marker_icon: 'swimming',
+            category: '해수욕장',
+          },
+          marker_color: 'P-10',
+          marker_icon: 'lodging',
+        },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: snapshotPoiId,
+          feature_id: 'feat-heritage',
+          title: '국가유산 snapshot',
+          feature: {
+            coord: { lon: 126.977, lat: 37.5796 },
+            marker_color: 'P-03',
+            marker_icon: 'monument',
+            category: '국가유산',
+          },
+          marker_color: null,
+          marker_icon: null,
+        },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: brokenPoiId,
+          feature_id: 'feat-notice-broken',
+          title: '공지 broken',
+          feature: { coord: { lon: 127.02, lat: 37.56 }, category: '공지' },
+          marker_color: null,
+          marker_icon: null,
+          is_broken: true,
+          feature_link_broken_at: '2026-06-28T09:00:00+09:00',
+        },
+      ],
+    },
+  ],
+  broken_feature_count: 1,
+};
+
+async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
@@ -96,7 +150,7 @@ async function mockTripDetailRoutes(page: Page) {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ data: TRIP_VIEW }),
+      body: JSON.stringify({ data: tripView }),
     });
   });
 }
@@ -136,7 +190,9 @@ async function installClosingWebSocket(page: Page, code: number, reason: string)
 
         close() {
           this.readyState = ClosingWebSocket.CLOSED;
-          this.dispatchEvent(new CloseEvent('close', { code: 1000, reason: 'manual', wasClean: true }));
+          this.dispatchEvent(
+            new CloseEvent('close', { code: 1000, reason: 'manual', wasClean: true }),
+          );
         }
       }
 
@@ -158,6 +214,39 @@ test('trip 상세가 TripView를 받아 헤더·POI·협업 섹션을 렌더링�
   await expect(page.getByRole('heading', { name: '공유 링크' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '첨부' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '댓글' })).toBeVisible();
+});
+
+test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상태를 노출한다', async ({
+  page,
+}) => {
+  await mockTripDetailRoutes(page, MARKER_VIEW);
+
+  await page.goto(`/trips/${tripId}`);
+
+  const custom = page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${poiId}"]`);
+  const snapshot = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${snapshotPoiId}"]`,
+  );
+  const broken = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${brokenPoiId}"]`,
+  );
+
+  await expect(custom).toHaveAttribute('data-marker-color', 'P-10');
+  await expect(custom).toHaveAttribute('data-marker-icon', 'lodging');
+  await expect(custom).toHaveAttribute('data-marker-source', 'resolved');
+
+  await expect(snapshot).toHaveAttribute('data-marker-color', 'P-03');
+  await expect(snapshot).toHaveAttribute('data-marker-icon', 'monument');
+  await expect(snapshot).toHaveAttribute('data-marker-source', 'snapshot');
+  await expect(snapshot).toHaveAttribute('data-marker-category', '국가유산');
+
+  await expect(broken).toHaveAttribute('data-marker-color', 'P-14');
+  await expect(broken).toHaveAttribute('data-marker-icon', 'alert');
+  await expect(broken).toHaveAttribute('data-marker-source', 'category');
+  await expect(broken).toHaveAttribute('data-marker-broken', 'true');
+
+  await page.getByRole('button', { name: /해운대 custom/ }).click();
+  await expect(custom).toHaveAttribute('data-marker-selected', 'true');
 });
 
 test('실시간 권한 상실 close는 안내와 여행 목록 이동 링크를 보여준다', async ({ page }) => {

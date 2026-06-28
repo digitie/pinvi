@@ -12,7 +12,7 @@ import type {
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { hasLocationConsent, locationConsentItems, paletteHex } from '@pinvi/domain';
+import { hasLocationConsent, locationConsentItems, resolveMarkerStyle } from '@pinvi/domain';
 import {
   ClusterLayer,
   type ClusterPoint,
@@ -34,15 +34,20 @@ import { MapSearchBox } from '@/components/map/MapSearchBox';
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
 const DEFAULT_ZOOM = 12;
 const CLUSTER_COLOR = '#37404a';
+const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
 
 type MapPoint = ClusterPoint & {
   kind: 'feature' | 'cluster';
   color: string;
+  markerColor: string;
+  markerSource: string;
   icon: string;
   title: string;
   lon: number;
   lat: number;
+  category?: string | null;
+  status?: string | null;
   featureId?: string;
   count?: number;
 };
@@ -56,28 +61,39 @@ interface ContextMenuState {
 
 function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
   // kor_travel_map 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
-  const features: MapPoint[] = data.items.flatMap((f) =>
-    f.coord
-      ? [
-          {
-            id: f.feature_id,
-            lngLat: [f.coord.lon, f.coord.lat] as [number, number],
-            kind: 'feature' as const,
-            color: paletteHex(f.marker_color),
-            icon: f.marker_icon,
-            title: f.name,
-            lon: f.coord.lon,
-            lat: f.coord.lat,
-            featureId: f.feature_id,
-          },
-        ]
-      : []
-  );
+  const features: MapPoint[] = data.items.flatMap((f) => {
+    if (!f.coord) return [];
+    const style = resolveMarkerStyle({
+      upstreamColor: f.marker_color,
+      upstreamIcon: f.marker_icon,
+      upstreamCategory: f.category,
+      upstreamKind: f.kind,
+    });
+    return [
+      {
+        id: f.feature_id,
+        lngLat: [f.coord.lon, f.coord.lat] as [number, number],
+        kind: 'feature' as const,
+        color: style.hex,
+        markerColor: style.color,
+        markerSource: style.source,
+        icon: style.icon,
+        title: f.name,
+        lon: f.coord.lon,
+        lat: f.coord.lat,
+        category: style.category,
+        status: f.status ?? null,
+        featureId: f.feature_id,
+      },
+    ];
+  });
   const clusters: MapPoint[] = data.clusters.map((c) => ({
     id: c.cluster_key,
     lngLat: [c.coord.lon, c.coord.lat],
     kind: 'cluster',
     color: CLUSTER_COLOR,
+    markerColor: CLUSTER_MARKER_COLOR,
+    markerSource: 'cluster',
     icon: 'circle',
     title: `${c.feature_count}곳`,
     lon: c.coord.lon,
@@ -89,15 +105,25 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
 
 function featureToPoint(f: FeatureSummary): MapPoint | null {
   if (!f.coord) return null;
+  const style = resolveMarkerStyle({
+    upstreamColor: f.marker_color,
+    upstreamIcon: f.marker_icon,
+    upstreamCategory: f.category,
+    upstreamKind: f.kind,
+  });
   return {
     id: f.feature_id,
     lngLat: [f.coord.lon, f.coord.lat],
     kind: 'feature',
-    color: paletteHex(f.marker_color),
-    icon: f.marker_icon,
+    color: style.hex,
+    markerColor: style.color,
+    markerSource: style.source,
+    icon: style.icon,
     title: f.name,
     lon: f.coord.lon,
     lat: f.coord.lat,
+    category: style.category,
+    status: f.status ?? null,
     featureId: f.feature_id,
   };
 }
@@ -107,7 +133,9 @@ function addressLine(detail: FeatureDetail | null): string | null {
   const addr = detail?.address;
   if (!addr) return null;
   const pick = (key: string): string | null =>
-    typeof addr[key] === 'string' && (addr[key] as string).length > 0 ? (addr[key] as string) : null;
+    typeof addr[key] === 'string' && (addr[key] as string).length > 0
+      ? (addr[key] as string)
+      : null;
   return (
     pick('road') ??
     pick('full') ??
@@ -123,7 +151,7 @@ function currentTempC(card: FeatureWeatherCard | null): number | null {
   const metric = card?.metrics.find(
     (m) =>
       m.value_number != null &&
-      (/℃|°C/.test(m.unit ?? '') || /temp|기온|T1H|TMP|TMN|TMX/i.test(m.metric_key))
+      (/℃|°C/.test(m.unit ?? '') || /temp|기온|T1H|TMP|TMN|TMX/i.test(m.metric_key)),
   );
   return metric?.value_number ?? null;
 }
@@ -162,7 +190,7 @@ export function FeatureMapView({
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
   const [requestCoord, setRequestCoord] = useState<{ lon: number; lat: number } | null>(
-    initialSuggestCoord
+    initialSuggestCoord,
   );
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -178,7 +206,10 @@ export function FeatureMapView({
     inBoundsAbort.current = controller;
     setLoading(true);
     try {
-      const data = await featureApi(apiClient).inBounds({ bbox, zoom }, { signal: controller.signal });
+      const data = await featureApi(apiClient).inBounds(
+        { bbox, zoom },
+        { signal: controller.signal },
+      );
       if (requestId !== latestRequest.current) return;
       setPoints(toPoints(data));
       setError(null);
@@ -195,7 +226,7 @@ export function FeatureMapView({
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => void fetchInBounds(map), DEBOUNCE_MS);
     },
-    [fetchInBounds]
+    [fetchInBounds],
   );
 
   useEffect(() => {
@@ -210,14 +241,14 @@ export function FeatureMapView({
       mapRef.current = map;
       void fetchInBounds(map);
     },
-    [fetchInBounds]
+    [fetchInBounds],
   );
 
   const handleViewportChange = useCallback(
     (event: MapLibreEvent) => {
       scheduleFetch(event.target as MapLibreMap);
     },
-    [scheduleFetch]
+    [scheduleFetch],
   );
 
   const handleContextMenu = useCallback((event: MapMouseEvent) => {
@@ -271,7 +302,7 @@ export function FeatureMapView({
       }
       setSelected(point);
     },
-    [flyTo]
+    [flyTo],
   );
 
   const handleSearchSelect = useCallback(
@@ -281,7 +312,7 @@ export function FeatureMapView({
       setSelected(point);
       flyTo(point.lon, point.lat, 15);
     },
-    [flyTo]
+    [flyTo],
   );
 
   const runGeolocate = useCallback(() => {
@@ -297,7 +328,7 @@ export function FeatureMapView({
         setNotice(null);
         flyTo(lon, lat, 14);
       },
-      () => setNotice('위치 권한이 거부되었거나 가져올 수 없습니다.')
+      () => setNotice('위치 권한이 거부되었거나 가져올 수 없습니다.'),
     );
   }, [flyTo]);
 
@@ -404,7 +435,9 @@ export function FeatureMapView({
                     icon={mapPoint.icon}
                     color={mapPoint.color}
                     title={mapPoint.title}
-                    selected={mapPoint.featureId != null && mapPoint.featureId === selected?.featureId}
+                    selected={
+                      mapPoint.featureId != null && mapPoint.featureId === selected?.featureId
+                    }
                     ariaLabel={mapPoint.title}
                     onClick={() => handlePointClick(mapPoint)}
                   />
@@ -416,7 +449,9 @@ export function FeatureMapView({
               <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-ink">{detail?.name ?? selected.title}</p>
+                    <p className="text-sm font-semibold text-ink">
+                      {detail?.name ?? selected.title}
+                    </p>
                     <button
                       type="button"
                       onClick={() => setSelected(null)}
@@ -436,9 +471,36 @@ export function FeatureMapView({
               </Popup>
             )}
           </VWorldMap>
+          <div className="sr-only" aria-hidden="true" data-testid="feature-map-marker-legend">
+            {points.map((point) => (
+              <span
+                key={point.id}
+                data-testid="feature-map-marker-style"
+                data-feature-id={point.featureId ?? ''}
+                data-kind={point.kind}
+                data-marker-color={point.markerColor}
+                data-marker-hex={point.color}
+                data-marker-icon={point.icon}
+                data-marker-source={point.markerSource}
+                data-marker-selected={
+                  point.kind === 'feature' && point.featureId === selected?.featureId
+                    ? 'true'
+                    : 'false'
+                }
+                data-marker-count={point.count ?? ''}
+                data-feature-status={point.status ?? ''}
+              >
+                {point.title}
+              </span>
+            ))}
+          </div>
 
           {contextMenu && (
-            <MapContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+            <MapContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              onClose={() => setContextMenu(null)}
+            >
               <div className="min-w-44 overflow-hidden rounded-sm border border-hairline bg-white py-1 text-sm shadow-md">
                 <button
                   type="button"

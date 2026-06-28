@@ -18,22 +18,22 @@ Pinvi v2의 마커 표시 표준으로 박는다.
 
 ```ts
 export const MARKER_PALETTE = {
-  'P-01': { hex: '#E53935', name: '빨강',    label_color: '#FFFFFF' },
-  'P-02': { hex: '#FB8C00', name: '주황',    label_color: '#FFFFFF' },
-  'P-03': { hex: '#FDD835', name: '노랑',    label_color: '#222222' },
-  'P-04': { hex: '#7CB342', name: '연두',    label_color: '#FFFFFF' },
-  'P-05': { hex: '#43A047', name: '초록',    label_color: '#FFFFFF' },
-  'P-06': { hex: '#00897B', name: '청록',    label_color: '#FFFFFF' },
-  'P-07': { hex: '#00ACC1', name: '하늘색',  label_color: '#FFFFFF' },
-  'P-08': { hex: '#1E88E5', name: '파랑',    label_color: '#FFFFFF' },
-  'P-09': { hex: '#3949AB', name: '남색',    label_color: '#FFFFFF' },
-  'P-10': { hex: '#8E24AA', name: '보라',    label_color: '#FFFFFF' },
-  'P-11': { hex: '#D81B60', name: '자홍',    label_color: '#FFFFFF' },
-  'P-12': { hex: '#6D4C41', name: '갈색',    label_color: '#FFFFFF' },
-  'P-13': { hex: '#757575', name: '회색',    label_color: '#FFFFFF' },
-  'P-14': { hex: '#212121', name: '검정',    label_color: '#FFFFFF' },
-  'P-15': { hex: '#F4511E', name: '주홍',    label_color: '#FFFFFF' },
-  'P-16': { hex: '#039BE5', name: '청색',    label_color: '#FFFFFF' },
+  'P-01': { hex: '#E53935', name: '빨강', label_color: '#FFFFFF' },
+  'P-02': { hex: '#FB8C00', name: '주황', label_color: '#FFFFFF' },
+  'P-03': { hex: '#FDD835', name: '노랑', label_color: '#222222' },
+  'P-04': { hex: '#7CB342', name: '연두', label_color: '#FFFFFF' },
+  'P-05': { hex: '#43A047', name: '초록', label_color: '#FFFFFF' },
+  'P-06': { hex: '#00897B', name: '청록', label_color: '#FFFFFF' },
+  'P-07': { hex: '#00ACC1', name: '하늘색', label_color: '#FFFFFF' },
+  'P-08': { hex: '#1E88E5', name: '파랑', label_color: '#FFFFFF' },
+  'P-09': { hex: '#3949AB', name: '남색', label_color: '#FFFFFF' },
+  'P-10': { hex: '#8E24AA', name: '보라', label_color: '#FFFFFF' },
+  'P-11': { hex: '#D81B60', name: '자홍', label_color: '#FFFFFF' },
+  'P-12': { hex: '#6D4C41', name: '갈색', label_color: '#FFFFFF' },
+  'P-13': { hex: '#757575', name: '회색', label_color: '#FFFFFF' },
+  'P-14': { hex: '#212121', name: '검정', label_color: '#FFFFFF' },
+  'P-15': { hex: '#F4511E', name: '주홍', label_color: '#FFFFFF' },
+  'P-16': { hex: '#039BE5', name: '청색', label_color: '#FFFFFF' },
 } as const;
 
 export type MarkerColorKey = keyof typeof MARKER_PALETTE;
@@ -44,27 +44,27 @@ WCAG AA 대비 통과 기준으로 선정된 채도·명도. 브랜드 색상이
 
 ## 3. 카테고리 ↔ maki 아이콘 ↔ 기본 색상 매핑
 
-| 카테고리 | maki icon | 기본 색상 | 비고 |
-|---------|-----------|-----------|------|
-| 주유소 | `fuel` | P-02 주황 | price feature: `fuel` |
-| 휴게소 | `car` | P-15 주홍 | KREX 소스 |
-| 해수욕장 | `swimming` | P-07 하늘색 | KHOA 해수욕지수와 함께 |
-| 골프장 | `golf` | P-05 초록 | |
-| 숙박 | `lodging` | P-10 보라 | |
-| 카페 | `cafe` | P-12 갈색 | |
-| 음식점 | `restaurant` | P-01 빨강 | |
-| 미술관/박물관 | `museum` | P-09 남색 | |
-| 관광명소 | `attraction` | P-11 자홍 | |
-| 사찰/문화유산 | `religious-buddhist` | P-03 노랑 | |
-| 편의점/마트 | `grocery` | P-04 연두 | |
-| 약국/병원 | `hospital` | P-16 청색 | |
-| 축제(event) | `star` | P-11 자홍 | 이벤트는 별표 |
-| 공지(notice) | `alert` | P-14 검정 | 바다갈라짐/특보 |
-| 휴양림/수목원 | `park-alt1` | P-05 초록 | `python-krforest-api` 소스 |
-| 국가유산 | `monument` | P-03 노랑 | `python-krheritage-api` |
-| 트래킹 route | `walking` | P-06 청록 | 산림청 숲길 / 등산코스 |
-| 국립공원 area | `park` | P-05 초록 | KNPS / 산림청 |
-| 주차장 | `parking` | P-13 회색 | 표준데이터 15012896 |
+| 카테고리      | maki icon            | 기본 색상   | 비고                       |
+| ------------- | -------------------- | ----------- | -------------------------- |
+| 주유소        | `fuel`               | P-02 주황   | price feature: `fuel`      |
+| 휴게소        | `car`                | P-15 주홍   | KREX 소스                  |
+| 해수욕장      | `swimming`           | P-07 하늘색 | KHOA 해수욕지수와 함께     |
+| 골프장        | `golf`               | P-05 초록   |                            |
+| 숙박          | `lodging`            | P-10 보라   |                            |
+| 카페          | `cafe`               | P-12 갈색   |                            |
+| 음식점        | `restaurant`         | P-01 빨강   |                            |
+| 미술관/박물관 | `museum`             | P-09 남색   |                            |
+| 관광명소      | `attraction`         | P-11 자홍   |                            |
+| 사찰/문화유산 | `religious-buddhist` | P-03 노랑   |                            |
+| 편의점/마트   | `grocery`            | P-04 연두   |                            |
+| 약국/병원     | `hospital`           | P-16 청색   |                            |
+| 축제(event)   | `star`               | P-11 자홍   | 이벤트는 별표              |
+| 공지(notice)  | `alert`              | P-14 검정   | 바다갈라짐/특보            |
+| 휴양림/수목원 | `park-alt1`          | P-05 초록   | `python-krforest-api` 소스 |
+| 국가유산      | `monument`           | P-03 노랑   | `python-krheritage-api`    |
+| 트래킹 route  | `walking`            | P-06 청록   | 산림청 숲길 / 등산코스     |
+| 국립공원 area | `park`               | P-05 초록   | KNPS / 산림청              |
+| 주차장        | `parking`            | P-13 회색   | 표준데이터 15012896        |
 
 `maki` 아이콘은 Mapbox Maki 8.0 (`https://github.com/mapbox/maki`). `apps/web/
 public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
@@ -75,7 +75,9 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
   Pinvi는 feature category를 직접 저장·정규화하지 않는다.
 - Pinvi의 16색 팔레트와 `packages/domain`의 fallback 상수는 marker preview/누락 보정용이다.
   `/admin/category-mapping`은 read-only 운영 뷰로 upstream catalog와 Pinvi fallback drift를 보여준다.
-- 클라이언트 fallback: upstream category `maki_icon` → Pinvi 색상 fallback → 사용자 custom
+- 클라이언트 표시 우선순위: 사용자 custom marker color/icon → 서버 resolved marker →
+  upstream feature marker → feature snapshot marker → upstream category/kind fallback →
+  Pinvi `P-13` 회색 fallback.
 - 사용자가 POI별로 색/아이콘을 직접 변경하면 `app.trip_day_pois.custom_marker_color` /
   `custom_marker_icon`에 저장 — 카테고리 매핑과 무관
 - 마커 표시는 항상 **불투명** (배경 색 + 흰 또는 검은 텍스트 1:1 매칭)

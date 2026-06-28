@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import { paletteHex } from '@pinvi/domain';
+import { resolveMarkerStyle } from '@pinvi/domain';
 import type {
   AdminAuditEntry,
   AdminOperationImpact,
@@ -209,7 +209,8 @@ const poiColumns: AdminTableColumn<AdminTripPoiSummary>[] = [
     sortable: true,
     sortValue: (row) =>
       row.planned_arrival_at ? new Date(row.planned_arrival_at).getTime() : row.day_index,
-    cell: (row) => `${formatTime(row.planned_arrival_at)} / ${formatTime(row.planned_departure_at)}`,
+    cell: (row) =>
+      `${formatTime(row.planned_arrival_at)} / ${formatTime(row.planned_departure_at)}`,
   },
   {
     key: 'sort_order',
@@ -271,7 +272,7 @@ const attachmentColumns: AdminTableColumn<AttachmentLibraryItem>[] = [
       <span>
         <span className="block">{attachmentScopeLabel[row.target_scope]}</span>
         <span className="block text-xs text-muted">
-          {row.trip_day_index ? `${row.trip_day_index}일차` : row.poi_label ?? '—'}
+          {row.trip_day_index ? `${row.trip_day_index}일차` : (row.poi_label ?? '—')}
         </span>
       </span>
     ),
@@ -338,6 +339,11 @@ function AdminPoiMapPreview({ poi }: { poi: AdminTripPoiSummary }) {
 
   const center: [number, number] = [poi.lon, poi.lat];
   const title = poi.feature_label ?? poi.feature_id ?? 'POI';
+  const marker = resolveMarkerStyle({
+    customColor: poi.custom_marker_color,
+    customIcon: poi.custom_marker_icon,
+    snapshot: poi.feature_snapshot,
+  });
   return (
     <div
       className="h-64 overflow-hidden rounded-sm border border-hairline"
@@ -359,8 +365,8 @@ function AdminPoiMapPreview({ poi }: { poi: AdminTripPoiSummary }) {
       >
         <MakiMarker
           lngLat={center}
-          icon={poi.custom_marker_icon ?? 'marker'}
-          color={paletteHex(poi.custom_marker_color)}
+          icon={marker.icon}
+          color={marker.hex}
           title={title}
           selected
           ariaLabel={title}
@@ -374,18 +380,33 @@ function AdminPoiMapPreview({ poi }: { poi: AdminTripPoiSummary }) {
           </div>
         </Popup>
       </VWorldMap>
+      <div className="sr-only" aria-hidden="true" data-testid="admin-trip-poi-map-marker-legend">
+        <span
+          data-testid="admin-trip-poi-map-marker-style"
+          data-poi-id={poi.attachment_id}
+          data-marker-color={marker.color}
+          data-marker-hex={marker.hex}
+          data-marker-icon={marker.icon}
+          data-marker-source={marker.source}
+          data-marker-selected="true"
+          data-marker-broken={poi.feature_link_broken_at ? 'true' : 'false'}
+          data-marker-category={marker.category ?? ''}
+          data-marker-kind={marker.kind ?? ''}
+        >
+          {title}
+        </span>
+      </div>
     </div>
   );
 }
 
-function AdminTripPoiDialog({
-  poi,
-  onClose,
-}: {
-  poi: AdminTripPoiSummary;
-  onClose: () => void;
-}) {
+function AdminTripPoiDialog({ poi, onClose }: { poi: AdminTripPoiSummary; onClose: () => void }) {
   const title = poi.feature_label ?? poi.feature_id ?? 'Feature 없는 POI';
+  const marker = resolveMarkerStyle({
+    customColor: poi.custom_marker_color,
+    customIcon: poi.custom_marker_icon,
+    snapshot: poi.feature_snapshot,
+  });
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
       <div
@@ -448,7 +469,10 @@ function AdminTripPoiDialog({
             <div>
               <dt className="text-xs uppercase tracking-wide text-muted">추가자</dt>
               <dd>
-                <Link href={`/admin/users/${poi.added_by_user_id}`} className="text-primary underline">
+                <Link
+                  href={`/admin/users/${poi.added_by_user_id}`}
+                  className="text-primary underline"
+                >
                   {poi.added_by_email_masked ?? poi.added_by_user_id}
                 </Link>
               </dd>
@@ -456,7 +480,8 @@ function AdminTripPoiDialog({
             <div>
               <dt className="text-xs uppercase tracking-wide text-muted">도착 / 출발</dt>
               <dd>
-                {formatDateTime(poi.planned_arrival_at)} / {formatDateTime(poi.planned_departure_at)}
+                {formatDateTime(poi.planned_arrival_at)} /{' '}
+                {formatDateTime(poi.planned_departure_at)}
               </dd>
             </div>
             <div>
@@ -470,6 +495,9 @@ function AdminTripPoiDialog({
               <dt className="text-xs uppercase tracking-wide text-muted">마커</dt>
               <dd>
                 {poi.custom_marker_color ?? '—'} / {poi.custom_marker_icon ?? '—'}
+              </dd>
+              <dd className="mt-1 text-xs text-muted" data-testid="admin-trip-poi-resolved-marker">
+                표시 {marker.color} / {marker.icon} · {marker.source}
               </dd>
             </div>
             <div>
@@ -1063,7 +1091,9 @@ export default function AdminTripDetailPage() {
 
               {operationMode.startsWith('day_') && (
                 <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">원본 날짜</span>
+                  <span className="block text-xs uppercase tracking-wide text-muted">
+                    원본 날짜
+                  </span>
                   <select
                     value={operationDayIndex}
                     onChange={(e) => {
@@ -1154,7 +1184,9 @@ export default function AdminTripDetailPage() {
 
               {operationMode === 'trip_delete' && (
                 <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">하위 항목</span>
+                  <span className="block text-xs uppercase tracking-wide text-muted">
+                    하위 항목
+                  </span>
                   <select
                     value={tripDeleteChildPolicy}
                     onChange={(e) => setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')}
@@ -1262,9 +1294,7 @@ export default function AdminTripDetailPage() {
           </div>
         </div>
       )}
-      {selectedPoi && (
-        <AdminTripPoiDialog poi={selectedPoi} onClose={() => setSelectedPoi(null)} />
-      )}
+      {selectedPoi && <AdminTripPoiDialog poi={selectedPoi} onClose={() => setSelectedPoi(null)} />}
     </AdminPage>
   );
 }

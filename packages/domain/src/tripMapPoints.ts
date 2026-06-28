@@ -7,7 +7,7 @@
 
 import { CoordSchema } from '@pinvi/schemas';
 import type { TripViewDay, TripViewPoi } from '@pinvi/schemas';
-import { paletteHex } from './marker';
+import { resolveMarkerStyle, type MarkerStyleSource } from './marker';
 
 export interface TripMapPoint {
   poiId: string;
@@ -17,8 +17,12 @@ export interface TripMapPoint {
   lat: number;
   /** 렌더용 hex (marker_color → 팔레트, 없으면 회색). */
   color: string;
-  markerColor: string | null;
+  markerColor: string;
+  labelColor: string;
+  markerSource: MarkerStyleSource;
   icon: string;
+  category: string | null;
+  kind: string | null;
   isBroken: boolean;
 }
 
@@ -37,15 +41,25 @@ export function tripPoiToMapPoint(poi: TripViewPoi, dayIndex: number): TripMapPo
   if (!coord) {
     return null;
   }
+  const snapshot = poi.feature && typeof poi.feature === 'object' ? poi.feature : {};
+  const style = resolveMarkerStyle({
+    resolvedColor: poi.marker_color,
+    resolvedIcon: poi.marker_icon,
+    snapshot,
+  });
   return {
     poiId: poi.poi_id,
     dayIndex,
     title: poi.title ?? poi.feature_id ?? '장소',
     lon: coord.lon,
     lat: coord.lat,
-    color: paletteHex(poi.marker_color),
-    markerColor: poi.marker_color,
-    icon: poi.marker_icon ?? 'marker',
+    color: style.hex,
+    markerColor: style.color,
+    labelColor: style.labelColor,
+    markerSource: style.source,
+    icon: style.icon,
+    category: style.category,
+    kind: style.kind,
     isBroken: poi.is_broken,
   };
 }
