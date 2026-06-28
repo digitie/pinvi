@@ -557,6 +557,22 @@ function pushEmailsFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushBackupFilterCases(cases: AdminUiCase[]) {
+  const statuses = ['all', 'verified', 'available'];
+  for (const viewport of compactViewports) {
+    for (const status of statuses) {
+      pushCase(cases, `backup filter status=${status}`, viewport, async (page) => {
+        await openTableRoute(page, '/admin/backup', 'Backup');
+        await page.getByTestId('admin-backup-status-filter').selectOption(status);
+        await expect(page.getByTestId('admin-backup-status-filter')).toHaveValue(status);
+        await page.getByTestId('admin-backup-search').fill(`pinvi-live-no-match-${status}`);
+        await expect(page.getByTestId('admin-backup-visible-count')).toContainText('0 /');
+        await expectNoBlockingErrors(page);
+      });
+    }
+  }
+}
+
 function pushMcpFilterCases(cases: AdminUiCase[]) {
   const statuses = ['', 'active', 'expired', 'revoked'];
   for (const viewport of compactViewports) {
@@ -879,6 +895,7 @@ function buildUiCases() {
   pushPoisFilterCases(cases);
   pushApiCallFilterCases(cases);
   pushEmailsFilterCases(cases);
+  pushBackupFilterCases(cases);
   pushMcpFilterCases(cases);
   pushFeatureRequestFilterCases(cases);
   pushFeaturesFilterCases(cases);

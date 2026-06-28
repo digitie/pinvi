@@ -6,6 +6,16 @@
 
 ## 2026-06-28
 
+- [x] T-252 — Backup/restore live UI e2e.
+      `/admin/backup`에 snapshot 검색/status filter와 visible count를 추가하고,
+      production 기본 restore 버튼을 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0`으로
+      잠갔다. `admin-live-backup.live.ts`는 read-only 목록/sort/filter/empty/masking과
+      backup mutation 미발생을 검증하고, `admin-backup-live-mutating.live.ts`는
+      `PINVI_BACKUP_LIVE_MUTATING_E2E=1` + `PINVI_BACKUP_LIVE_STAGING=1`에서 staging
+      snapshot 생성, `backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을
+      확인한다. N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 실제 N150 live run은
+      수행하지 못했다.
+
 - [x] T-251 — Restore staging drill.
       `scripts/restore-staging-drill.sh`를 추가해 staging URL 없이는 restore를 시작하지 않도록
       가드하고, snapshot checksum, `pg_restore --list`, `restore-db.sh`, DB health row count,

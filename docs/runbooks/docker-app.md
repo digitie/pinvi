@@ -245,6 +245,7 @@ PINVI_OAUTH_CALLBACK_BASE_URL=https://pinvi-api.example.com
 PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.example.com"]
 NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 NEXT_PUBLIC_PINVI_ENV=production
+NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0
 NEXT_PUBLIC_GRAFANA_URL=https://grafana.example.com
 NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 EXPO_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
@@ -256,8 +257,10 @@ PINVI_SENTRY_ENVIRONMENT=production
 보안 처리:
 
 - `NEXT_PUBLIC_PINVI_API_URL`, `NEXT_PUBLIC_GRAFANA_URL`,
-  `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`는 web build time에 embed된다. 운영 API/Grafana
-  도메인이나 dashboard uid/slug를 바꾸면 web 이미지를 다시 빌드한다.
+  `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`,
+  `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED`는 web build time에 embed된다. 운영
+  API/Grafana 도메인이나 dashboard uid/slug, restore UI 안전 스위치를 바꾸면 web 이미지를
+  다시 빌드한다.
 - 운영 CORS는 웹 origin만 허용한다. wildcard 금지.
 - `PINVI_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
 - presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저가 접근하는

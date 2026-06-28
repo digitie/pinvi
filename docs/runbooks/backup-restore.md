@@ -35,7 +35,9 @@ open https://pinvi-api.example.com/admin/etl
 현재 UI는 Sprint 5 1차 범위다. `POST /admin/backup/snapshot`으로
 `scripts/backup-db.sh`를 실행하고 결과 snapshot을 표시한다. 핫스왑 restore는
 snapshot 행의 Restore 버튼에서 `POST /admin/backup/restore-hotswap`을 호출한다.
-RustFS/외부 미러 표시는 후속 운영 보강이다.
+단, Web 빌드타임 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`이 명시되지 않으면
+Restore 버튼은 비활성화된다. production Web image의 기본값은 `0`이며, staging drill에서
+UI restore를 열 때만 `1`로 빌드한다. RustFS/외부 미러 표시는 후속 운영 보강이다.
 
 ### 2.2 CLI (긴급)
 
@@ -52,12 +54,13 @@ ls -la /var/lib/pinvi/backups/
 
 환경변수:
 
-| 변수                          | 기본값               | 설명                                           |
-| ----------------------------- | -------------------- | ---------------------------------------------- |
-| `PINVI_BACKUP_DIR`            | `.tmp/backups`       | dump 저장 디렉터리                             |
-| `PINVI_BACKUP_SCHEMA`         | `app`                | Pinvi 소유 schema                              |
-| `PINVI_BACKUP_DATABASE_URL`   | `PINVI_DATABASE_URL` | backup 전용 DB URL override                    |
-| `PINVI_BACKUP_MIN_FREE_BYTES` | `1073741824`         | backup 시작 전 남아 있어야 하는 최소 여유 byte |
+| 변수                                           | 기본값               | 설명                                           |
+| ---------------------------------------------- | -------------------- | ---------------------------------------------- |
+| `PINVI_BACKUP_DIR`                             | `.tmp/backups`       | dump 저장 디렉터리                             |
+| `PINVI_BACKUP_SCHEMA`                          | `app`                | Pinvi 소유 schema                              |
+| `PINVI_BACKUP_DATABASE_URL`                    | `PINVI_DATABASE_URL` | backup 전용 DB URL override                    |
+| `PINVI_BACKUP_MIN_FREE_BYTES`                  | `1073741824`         | backup 시작 전 남아 있어야 하는 최소 여유 byte |
+| `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED` | `0`                  | Web Restore 버튼 표시/활성화 빌드타임 플래그   |
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
 단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. dump와 sidecar는 생성 직후
@@ -65,6 +68,17 @@ ls -la /var/lib/pinvi/backups/
 `backup://<filename>`만 노출한다. 신규 `.sha256` sidecar에는 dump의 basename만 기록한다.
 restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash를 비교하므로, 과거
 sidecar가 절대경로를 담고 있더라도 dump와 sidecar를 staging 경로로 함께 옮겨 검증할 수 있다.
+
+### 2.3 live e2e
+
+- read-only: `apps/web/e2e/admin-live-backup.live.ts`가 `/admin/backup` 목록, sort/filter,
+  empty state, restore 버튼 잠금, raw path/secret 미노출을 확인한다. `POST /admin/backup/*` 호출이
+  발생하면 실패한다.
+- staging mutating: `apps/web/e2e/admin-backup-live-mutating.live.ts`가
+  `PINVI_BACKUP_LIVE_MUTATING_E2E=1` + `PINVI_BACKUP_LIVE_STAGING=1`일 때만 수동 snapshot 1회를
+  생성하고 `backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을 확인한다.
+  snapshot 삭제 API는 아직 없으므로 테스트 snapshot은 audit evidence로 남기고 운영 retention/
+  스토리지 정책에서 관리한다.
 
 ## 3. Restore — 단순 (긴급)
 
