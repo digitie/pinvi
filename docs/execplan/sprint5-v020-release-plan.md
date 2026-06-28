@@ -501,17 +501,27 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-259 — Release candidate gate / `v0.2.0`
 
-- 모든 Sprint 5 Task 완료 후 release notes를 정리한다.
-- `CHANGELOG.md`, Sprint 문서, `docs/resume.md`, `docs/journal.md`를 release 상태로 갱신한다.
-- N150 final smoke와 live e2e 결과를 기록한다.
-- tag/Release 생성 전 main CI, N150 deploy, backup snapshot을 확인한다.
+- 진행 중: 2026-06-28 release candidate gate 결과는
+  `docs/execplan/v020-release-candidate-gate.md`에 기록했다.
+- 완료: N150 `~/pinvi`를 후보 SHA `98fb3c2`로 갱신했고, `pinvi-api`, `pinvi-web`,
+  `pinvi-dagster` 이미지를 `latest-main`으로 생성한 뒤 healthy 상태로 기동했다.
+- 완료: N150 내부 smoke에서 API `/health`, `/health/db`, Web `/`, `/admin/login`,
+  Dagster `/server_info`, `kor-travel-map` `/health`/OpenAPI가 모두 200을 반환했다.
+- 완료: `postgis/postgis:16-3.5` 일회성 컨테이너로 app schema backup snapshot 1회를 만들고
+  `.sha256` 및 `pg_restore --list`를 확인했다.
+- 차단: 최신 main SHA에는 PR monitor check만 있고 `api`/`web` main push CI check가 없다.
+- 차단: N150 Playwright Chromium은 `libatk-1.0.so.0` 누락으로 launch 실패했다. Windows fallback은
+  N150 Web SSH tunnel 대상 login validation 1건만 통과했다.
+- 차단: Admin live 2000/full gate는 N150 local env에 admin live credential이 없어 실행하지 못했다.
+- 차단: restore staging drill은 staging DB URL/환경이 없어 실행하지 못했다.
+- 보류: `CHANGELOG.md` release 전환, `v0.2.0` tag, GitHub Release 생성.
 
 검증 케이스:
 
-- GitHub Actions main 최신 pass.
-- N150 API/DB/Web/Dagster/upstream smoke 200.
-- Admin live 2000 또는 full gate 통과.
-- Backup snapshot 1회와 restore staging drill 완료.
+- GitHub Actions main 최신 pass — 미통과.
+- N150 API/DB/Web/Dagster/upstream smoke 200 — 통과.
+- Admin live 2000 또는 full gate 통과 — 미통과.
+- Backup snapshot 1회와 restore staging drill 완료 — snapshot 통과, restore staging drill 미통과.
 
 ## 4. Sprint 6 / v1.0.0 후속 Task 초안
 

@@ -18,11 +18,16 @@
 
 ## 진행 중
 
-- 없음.
+- T-259 — Release candidate gate / `v0.2.0`.
+  2026-06-28 N150 후보 배포와 smoke, backup snapshot은 통과했지만 최신 main `api`/`web` CI,
+  Admin live 2000/full credential, N150 Playwright system dependency, restore staging DB가
+  남아 release/tag는 보류한다. 상세는
+  `docs/execplan/v020-release-candidate-gate.md`.
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-259 Release candidate gate / `v0.2.0`.
+- 다음 구현: T-259 release 차단 해소. N150 Playwright dependency, Admin live credential,
+  restore staging DB, 최신 main CI 증거를 확보한 뒤 `v0.2.0` tag/Release를 만든다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -31,8 +36,9 @@
   candidate gate다.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
-- 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
-  backup/restore 복구 훈련은 T-108 설명처럼 Sprint 6 운영 게이트로 남긴다.
+- 운영 게이트 잔여: N150은 최신 main smoke와 backup snapshot을 확인했다. Restore staging
+  drill은 T-259 release 차단 항목이며, Odroid 실제 노드 smoke는 T-108 설명처럼 Sprint 6
+  운영 게이트로 남긴다.
 - T-129 `/geo/*`·`/regions/*`, T-146 location-audit outbox/feature cache,
   T-195 공통 rate-limit middleware, T-108 운영 배포 자동화 foundation, T-200
   docker-manager 포트 대역 정렬, T-232 Trip WebSocket frontend client 1차 연결,
@@ -44,7 +50,8 @@
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
-      main CI, N150 deploy/smoke, live e2e, backup snapshot, release notes/tag를 완료한다.
+      N150 deploy/smoke와 backup snapshot은 통과했다. main CI, Admin live 2000/full,
+      restore staging drill, release notes/tag를 완료한다.
 
 ## 최근 PR 리뷰 후속
 

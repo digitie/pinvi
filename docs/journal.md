@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-259 v0.2.0 release candidate gate 부분 실행
+
+**작업**: `v0.2.0` release candidate gate를 N150 기준으로 실행하고 차단 항목을 분리했다.
+
+**변경**:
+
+- `docs/execplan/v020-release-candidate-gate.md`를 추가했다.
+- `docs/execplan/sprint5-v020-release-plan.md`, `docs/tasks.md`, `docs/resume.md`가 T-259의
+  부분 통과와 release 보류 상태를 가리키도록 갱신했다.
+- `v0.2.0` tag/GitHub Release는 생성하지 않았다.
+
+**검증**:
+
+- 후보 SHA `98fb3c2`를 N150 `~/pinvi`에 반영했다.
+- N150 Docker build는 full `ktdctl pinvi --build`가 디스크 99%로 중단됐고, targeted compose
+  build도 dependency 때문에 외부 repo 이미지를 함께 빌드했다. Pinvi 3개 이미지를 확보한 뒤
+  디스크 98%에서 중단하고 build cache를 정리했다.
+- 새 `pinvi-api`, `pinvi-web`, `pinvi-dagster` 컨테이너를 healthy로 기동했다.
+- N150 smoke: API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`,
+  `kor-travel-map` `/health`/OpenAPI가 모두 200.
+- N150 Playwright catalog list: `6202 tests in 5 files`.
+- N150 Playwright browser smoke: Chromium `libatk-1.0.so.0` 누락으로 실패.
+- Windows fallback Playwright: N150 Web SSH tunnel 대상 `--grep malformed` 1건 통과.
+- Backup snapshot: `pinvi-app-20260628-094253.dump` 생성, sha256 통과, `pg_restore --list` 통과.
+
+**차단**:
+
+- 최신 main SHA에는 PR monitor check만 있고 `api`/`web` main push CI check가 없다.
+- Admin live 2000/full gate에 필요한 `PINVI_ADMIN_LIVE_EMAIL`/`PINVI_ADMIN_LIVE_PASSWORD`가
+  N150 local env에 없다.
+- Restore staging drill에 필요한 staging DB URL/환경이 없다.
+- host `pg_dump`가 없어 `scripts/backup-db.sh`는 직접 실행되지 않는다.
+
+**다음**: T-259 차단 항목을 해소하고 `v0.2.0` tag/GitHub Release를 만든다.
+
 ## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
 
 **작업**: Sprint 6 legal/ops 구현 준비 gate를 확정했다.
