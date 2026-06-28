@@ -128,7 +128,7 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 `app.email_queue`의 pending due/backoff/stuck, failed/bounced/complained, retry exhausted,
 최근 24시간 template별 실패율을 PII 없이 metadata로 남긴다. `/admin/etl/summary`와 Web
 `/admin/etl`은 같은 bounded summary를 표시한다. 실제 발송은 계속 FastAPI lifespan worker가
-소유하며, domain verification/suppression 집행은 T-257/T-277로 유지한다.
+소유하며, T-257 감사 결과 domain verification/suppression 집행은 T-277 구현으로 유지한다.
 
 검증 케이스:
 
@@ -399,7 +399,8 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
   `ok`/`degraded` 표시를 제공한다.
 - 완료: `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`
   httpx client factory에 provider tag hook을 붙이고, query secret/Telegram token path를
-  `api_call_log.endpoint` 저장 전에 mask한다. Resend SDK 경로는 T-257에서 후속 판단한다.
+  `api_call_log.endpoint` 저장 전에 mask한다. Resend SDK 경로는 T-257 감사에서 provider tracking
+  누락으로 확인했고, T-277에서 `provider='resend'` 기록을 구현한다.
 
 검증 케이스:
 
@@ -462,18 +463,24 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - 민감정보 패턴 스캔.
 - G-001~G-044와 R-001~R-009가 하나 이상의 대응 Task를 가진다.
 
-### T-257 — Email deliverability / provider tracking preflight
+### T-257 — Email deliverability / provider tracking preflight (완료)
 
-- Resend/FROM domain verified 상태, SPF/DKIM/DMARC 운영 체크, hard-bounce/complaint suppression,
-  unverified domain owner-only delivery 사고 재발 방지 항목을 Sprint 6 T-277로 연결한다.
-- T-239 email outbox job metadata와 T-253 provider health tracking에 필요한 필드를 먼저 식별한다.
-- prod httpx client(map/geo/telegram/Resend 등)가 provider tag를 남기는지 감사한다.
+- 완료: `docs/execplan/email-deliverability-provider-preflight.md`를 추가했다.
+- 완료: Resend 공식 domain/webhook 기준과 repo 구현을 대조해 domain verified,
+  SPF/DKIM/DMARC, webhook at-least-once/out-of-order, hard-bounce/complaint suppression,
+  provider tracking gap을 T-277 구현 계약으로 고정했다.
+- 완료: 현재 구현이 queue worker, Svix 서명 검증, queue 상태 갱신, `/admin/emails`
+  queue 화면까지 닫혀 있고, suppression enforcement, deliverability 상태판,
+  `api_call_log.provider='resend'`는 미완료임을 문서화했다.
+- 완료: `docs/integrations/resend.md`의 stale React Email/checklist 내용을 현재 inline
+  renderer와 T-277 목표 상태로 분리했다.
 
 검증 케이스:
 
-- API unit 후보: webhook event → email status/suppression state transition 설계.
-- Admin mock 후보: deliverability degraded / suppression count 표시.
-- Provider tracking 감사: unknown provider가 남는 client 목록을 문서화.
+- 문서 diff check.
+- Resend 문서의 구현 완료/잔여 checklist가 repo 상태와 일치한다.
+- T-277이 domain verification, suppression, webhook dedupe/precedence, provider tracking을
+  빠뜨리지 않도록 구현 계약을 가진다.
 
 ### T-258 — Sprint 6 legal/ops implementation prep gate
 

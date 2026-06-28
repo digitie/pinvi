@@ -22,7 +22,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-257 Email deliverability / provider tracking preflight.
+- 다음 구현: T-258 Sprint 6 legal/ops implementation prep gate.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -42,9 +42,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-257 — Email deliverability / provider tracking preflight.
-      Resend domain verification, SPF/DKIM/DMARC, hard-bounce/complaint suppression,
-      provider health tracking 선행 항목을 T-239/T-253/T-277로 연결한다.
 - [ ] T-258 — Sprint 6 legal/ops implementation prep gate.
       incident, DSR, retention execution, moderation, RBAC, user lifecycle, rate-limit/abuse,
       mobile/AI scope를 Sprint 6 DoD와 release checklist에 고정한다.

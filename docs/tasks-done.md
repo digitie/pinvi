@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-257 — Email deliverability / provider tracking preflight.
+      `docs/execplan/email-deliverability-provider-preflight.md`를 추가해 Resend domain
+      verification, SPF/DKIM/DMARC, webhook event dedupe/precedence, hard-bounce/complaint
+      suppression, provider tracking gap을 T-277 구현 계약으로 고정했다. 현재 구현은 queue
+      worker, Svix 서명 검증, queue 상태 갱신, `/admin/emails` queue 화면까지 닫혀 있고,
+      suppression enforcement, deliverability 상태판, `api_call_log.provider='resend'`는
+      T-277 잔여임을 `docs/integrations/resend.md`에 반영했다.
+
 - [x] T-256 — Review gap crosswalk / legal-ops preflight.
       `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가해 PR #238/#264 legal-ops 리뷰 gap
       44개를 T-257/T-258/T-275~T-286 등 대응 Task로 매핑했다. 최근 2일 PR #265~#289
@@ -39,8 +47,9 @@
       iframe, dashboard path, secret 미노출, degraded 상태를 검증한다. production httpx client는
       `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`
       provider tag를 `ApiCallTracker`에 연결하며 query secret과 Telegram bot token path를 mask한다.
-      Resend SDK 경로는 T-257 deliverability/provider tracking preflight로 남겼다. N150 SSH alias는
-      현재 Linux 환경에서 해석되지 않아 실제 N150 live run은 수행하지 못했다.
+      Resend SDK 경로는 T-257 감사에서 provider tracking 누락으로 확인됐고, T-277에서
+      `provider='resend'` 기록을 구현한다. N150 SSH alias는 현재 Linux 환경에서 해석되지 않아
+      실제 N150 live run은 수행하지 못했다.
 
 - [x] T-252 — Backup/restore live UI e2e.
       `/admin/backup`에 snapshot 검색/status filter와 visible count를 추가하고,
