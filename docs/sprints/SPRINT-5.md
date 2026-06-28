@@ -27,9 +27,10 @@
   - `apps/etl` Dagster code location 활성화 + Pinvi `app` schema 소유 job:
     - `pinvi_kasi_special_days` (특일 5개 dataset, 일 1회) + POI
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
-    - `pinvi_email_outbox` (email_queue pending/backoff/stuck/failed + template 실패율 점검,
-      T-239 완료)
-    - (계획) `pinvi_pii_retention`, `pinvi_location_log_archive`, `pinvi_telegram_weekly`
+      - `pinvi_email_outbox` (email_queue pending/backoff/stuck/failed + template 실패율 점검,
+       T-239 완료)
+      - `pinvi_pii_retention` (PII 보존 기간 만료 후보 dry-run, T-240 완료)
+      - (계획) `pinvi_location_log_archive`, `pinvi_telegram_weekly`
     - 신규 app-owned job은 ADR-050의 retry/backoff, idempotency, failure notification,
       dry-run gate를 따른다.
     - feature/provider 적재 asset(VisitKorea/OpiNet/KMA/KrHeritage 등)은
@@ -72,8 +73,8 @@
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
 - 사용자/Admin 지도뷰 marker palette, POI custom color/icon, feature snapshot/upstream category
   fallback, selected/broken/cluster 상태 parity.
-- Pinvi `app` schema 소유 ETL 추가 job(PII retention, location archive, telegram
-  weekly/daily summary). `email_outbox` 점검 job은 T-239로 완료.
+- Pinvi `app` schema 소유 ETL 추가 job(location archive, telegram weekly/daily summary).
+  `email_outbox` 점검 job은 T-239, PII retention dry-run job은 T-240으로 완료.
 - Loki/Promtail 또는 대체 로그 stream과 request timeline.
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
 - 리뷰 반영 legal/ops preflight: incident/DSR/retention execution/email suppression/RBAC/user lifecycle/
@@ -99,14 +100,15 @@
 - `apps/etl/pinvi/etl/resources.py` (`PinviDatabaseResource`, `KasiResource`)
 - `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
 - `apps/etl/pinvi/etl/assets/pinvi_email_outbox.py`
+- `apps/etl/pinvi/etl/assets/pinvi_pii_retention.py`
 - `apps/etl/pinvi/etl/jobs.py` (`kasi_poi_rise_set_job`)
 - `apps/etl/pinvi/etl/schedules.py`
-- `apps/etl/pinvi/etl/assets/{pinvi_pii_retention,pinvi_location_log_archive,pinvi_telegram_weekly}.py`
+- `apps/etl/pinvi/etl/assets/{pinvi_location_log_archive,pinvi_telegram_weekly}.py`
   (계획, `app` schema 소유 job일 때만)
 - `apps/etl/tests/test_definitions.py`
 - `apps/etl/tests/test_kasi_special_days.py`
 - `apps/etl/tests/test_email_outbox.py`
-- `apps/etl/tests/test_pii_retention.py` (계획)
+- `apps/etl/tests/test_pii_retention.py`
 
 ### 프론트엔드
 

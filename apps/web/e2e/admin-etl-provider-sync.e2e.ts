@@ -56,6 +56,16 @@ const etlSummary = {
         group_name: 'pinvi_kasi',
         description: 'KASI 특일·공휴일 기준 데이터',
       },
+      {
+        key: 'pinvi_email_outbox',
+        group_name: 'pinvi_email',
+        description: 'email_queue 상태',
+      },
+      {
+        key: 'pinvi_pii_retention',
+        group_name: 'pinvi_retention',
+        description: 'PII 보존 기간 만료 후보 dry-run',
+      },
     ],
     jobs: [
       {
@@ -76,6 +86,12 @@ const etlSummary = {
         description: '15분마다 email_queue 상태와 template별 실패율을 점검합니다.',
         asset_keys: ['pinvi_email_outbox'],
       },
+      {
+        name: 'pinvi_pii_retention_job',
+        trigger: 'schedule',
+        description: '매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.',
+        asset_keys: ['pinvi_pii_retention'],
+      },
     ],
     schedules: [
       {
@@ -89,6 +105,13 @@ const etlSummary = {
         name: 'pinvi_email_outbox_schedule',
         job_name: 'pinvi_email_outbox_job',
         cron_schedule: '*/15 * * * *',
+        execution_timezone: 'Asia/Seoul',
+        status: 'configured',
+      },
+      {
+        name: 'pinvi_pii_retention_schedule',
+        job_name: 'pinvi_pii_retention_job',
+        cron_schedule: '15 4 * * *',
         execution_timezone: 'Asia/Seoul',
         status: 'configured',
       },
@@ -134,6 +157,28 @@ const etlSummary = {
           failure_rate: 1,
         },
       ],
+    },
+    pii_retention: {
+      dry_run: true,
+      generated_at: '2026-06-12T00:03:00+09:00',
+      user_pii_cutoff: '2026-05-13T00:03:00+09:00',
+      session_cutoff: '2026-05-13T00:03:00+09:00',
+      location_cutoff: '2025-12-12T00:03:00+09:00',
+      user_pii_grace_days: 30,
+      session_grace_days: 30,
+      location_retention_months: 6,
+      total_candidates: 11,
+      deleted_user_pii_candidates: 2,
+      deleted_user_oauth_identity_candidates: 1,
+      excluded_privileged_deleted_users: 1,
+      expired_signup_verifications: 2,
+      expired_password_reset_tokens: 1,
+      old_revoked_sessions: 1,
+      old_expired_sessions: 1,
+      expired_oauth_login_states: 1,
+      expired_mobile_oauth_exchanges: 1,
+      location_access_logs_over_retention: 1,
+      admin_audit_pii_over_retention: 0,
     },
   },
   kor_travel_map: {
@@ -215,9 +260,14 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-job-kasi_special_days_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-job-pinvi_pii_retention_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
   await expect(page.getByTestId('admin-etl-email-stuck')).toContainText('1');
   await expect(page.getByTestId('admin-etl-email-template-verify_email')).toContainText('33.3%');
+  await expect(page.getByTestId('admin-etl-pii-retention')).toContainText('dry-run');
+  await expect(page.getByTestId('admin-etl-pii-total')).toContainText('11');
+  await expect(page.getByTestId('admin-etl-pii-tokens')).toContainText('3');
+  await expect(page.getByTestId('admin-etl-pii-privileged-excluded')).toContainText('1');
   await expect(page.getByTestId('admin-etl-kmap-dagster-status')).toContainText('정상');
   await expect(page.getByTestId('admin-etl-import-row-job-1')).toBeVisible();
 

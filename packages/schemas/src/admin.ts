@@ -235,6 +235,30 @@ export const AdminEmailOutboxSummarySchema = z.object({
 });
 export type AdminEmailOutboxSummary = z.infer<typeof AdminEmailOutboxSummarySchema>;
 
+export const AdminPiiRetentionSummarySchema = z.object({
+  dry_run: z.boolean().default(true),
+  generated_at: Iso8601Schema,
+  user_pii_cutoff: Iso8601Schema,
+  session_cutoff: Iso8601Schema,
+  location_cutoff: Iso8601Schema,
+  user_pii_grace_days: z.number().int(),
+  session_grace_days: z.number().int(),
+  location_retention_months: z.number().int(),
+  total_candidates: z.number().int().default(0),
+  deleted_user_pii_candidates: z.number().int().default(0),
+  deleted_user_oauth_identity_candidates: z.number().int().default(0),
+  excluded_privileged_deleted_users: z.number().int().default(0),
+  expired_signup_verifications: z.number().int().default(0),
+  expired_password_reset_tokens: z.number().int().default(0),
+  old_revoked_sessions: z.number().int().default(0),
+  old_expired_sessions: z.number().int().default(0),
+  expired_oauth_login_states: z.number().int().default(0),
+  expired_mobile_oauth_exchanges: z.number().int().default(0),
+  location_access_logs_over_retention: z.number().int().default(0),
+  admin_audit_pii_over_retention: z.number().int().default(0),
+});
+export type AdminPiiRetentionSummary = z.infer<typeof AdminPiiRetentionSummarySchema>;
+
 export const AdminPinviEtlSummarySchema = z.object({
   status: AdminSystemStatusSchema,
   message: z.string().nullable().default(null),
@@ -244,6 +268,7 @@ export const AdminPinviEtlSummarySchema = z.object({
   schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
   sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
   email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
+  pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
 });
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 

@@ -30,19 +30,20 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 apps/etl/
 ├── pyproject.toml
 ├── pinvi/etl/
-│   ├── definitions.py     # code location (KASI + email assets, jobs, schedules, sensors=[])
+│   ├── definitions.py     # code location (KASI + email + retention assets, jobs, schedules, sensors=[])
 │   ├── resources.py       # PinviDatabaseResource, KasiResource
-│   ├── schedules.py       # kasi_special_days_job + pinvi_email_outbox_job
+│   ├── schedules.py       # kasi_special_days_job + pinvi_email_outbox_job + pinvi_pii_retention_job
 │   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
 │   └── assets/
 │       ├── pinvi_kasi_special_days.py
-│       └── pinvi_email_outbox.py
+│       ├── pinvi_email_outbox.py
+│       └── pinvi_pii_retention.py
 └── tests/
 ```
 
 계획(미구현, `app` schema 소유 job 후보): `sensors.py`(run_failure_sensor),
-`pinvi_telegram_weekly`(D-11) / `pinvi_pii_retention` /
-`pinvi_location_log_archive`(DEC-10). POI 출몰시각은 별도 asset 파일이 아니라
+`pinvi_telegram_weekly`(D-11) / `pinvi_location_log_archive`(DEC-10).
+POI 출몰시각은 별도 asset 파일이 아니라
 `jobs.py`의 one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
 
 ## 3. KASI assets
@@ -73,6 +74,17 @@ apps/etl/
 - 이메일 주소, payload, provider raw 응답은 metadata/API 응답에 넣지 않는다.
 - 실제 발송은 FastAPI lifespan worker가 계속 담당한다.
 
+### 3.4 `pinvi_pii_retention`
+
+- 매일 KST 04:15 실행.
+- `app.users`, OAuth identity, email verification token, user session, OAuth transient table,
+  location/admin audit log의 보존 기간 만료 후보를 집계한다.
+- 삭제 계정 PII grace는 30일, session grace는 30일, location retention은 6개월이다.
+- `admin` / `operator` / `cpo` 역할이 있는 삭제 계정은 후보에서 제외하고
+  `excluded_privileged_deleted_users`로만 보고한다.
+- Sprint 5 범위는 dry-run metadata와 Admin summary 노출까지다. 실제 delete/anonymize/archive는
+  T-276 kill-switch/dashboard/evidence log 범위에서 연다.
+
 ## 4. Schedule
 
 ```python
@@ -88,6 +100,11 @@ pinvi_email_outbox_job = define_asset_job(
     selection=["pinvi_email_outbox"],
 )
 
+pinvi_pii_retention_job = define_asset_job(
+    "pinvi_pii_retention_job",
+    selection=["pinvi_pii_retention"],
+)
+
 kasi_special_days_schedule = ScheduleDefinition(
     job=kasi_special_days_job,
     cron_schedule="30 3 * * *",
@@ -97,6 +114,12 @@ kasi_special_days_schedule = ScheduleDefinition(
 pinvi_email_outbox_schedule = ScheduleDefinition(
     job=pinvi_email_outbox_job,
     cron_schedule="*/15 * * * *",
+    execution_timezone="Asia/Seoul",
+)
+
+pinvi_pii_retention_schedule = ScheduleDefinition(
+    job=pinvi_pii_retention_job,
+    cron_schedule="15 4 * * *",
     execution_timezone="Asia/Seoul",
 )
 ```

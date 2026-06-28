@@ -7,6 +7,7 @@ kor-travel-map `/v1/ops/*` HTTP 계약을 통해 읽는다.
 from __future__ import annotations
 
 import time
+from calendar import monthrange
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -33,6 +34,7 @@ from app.schemas.admin import (
     AdminEtlDefinitionSensor,
     AdminEtlSummary,
     AdminKorTravelMapEtlSummary,
+    AdminPiiRetentionSummary,
     AdminPinviEtlSummary,
     AdminProviderDatasetSummary,
     AdminProviderImportJobRecord,
@@ -43,6 +45,9 @@ EMAIL_OUTBOX_STUCK_THRESHOLD_MINUTES = 15
 EMAIL_OUTBOX_MAX_ATTEMPTS = 5
 EMAIL_OUTBOX_TEMPLATE_WINDOW_HOURS = 24
 EMAIL_OUTBOX_TEMPLATE_STATS_LIMIT = 10
+PII_RETENTION_USER_GRACE_DAYS = 30
+PII_RETENTION_SESSION_GRACE_DAYS = 30
+PII_RETENTION_LOCATION_MONTHS = 6
 
 PINVI_ETL_ASSETS = [
     AdminEtlDefinitionAsset(
@@ -54,6 +59,11 @@ PINVI_ETL_ASSETS = [
         key="pinvi_email_outbox",
         group_name="pinvi_email",
         description="email_queue pending/backoff/stuck/failed 상태를 PII 없이 집계합니다.",
+    ),
+    AdminEtlDefinitionAsset(
+        key="pinvi_pii_retention",
+        group_name="pinvi_retention",
+        description="PIPA/LBS 보존 기간 만료 후보를 dry-run metadata로 집계합니다.",
     ),
 ]
 
@@ -76,6 +86,12 @@ PINVI_ETL_JOBS = [
         description="15분마다 email_queue 상태와 template별 실패율을 점검합니다.",
         asset_keys=["pinvi_email_outbox"],
     ),
+    AdminEtlDefinitionJob(
+        name="pinvi_pii_retention_job",
+        trigger="schedule",
+        description="매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.",
+        asset_keys=["pinvi_pii_retention"],
+    ),
 ]
 
 PINVI_ETL_SCHEDULES = [
@@ -89,6 +105,12 @@ PINVI_ETL_SCHEDULES = [
         name="pinvi_email_outbox_schedule",
         job_name="pinvi_email_outbox_job",
         cron_schedule="*/15 * * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    AdminEtlDefinitionSchedule(
+        name="pinvi_pii_retention_schedule",
+        job_name="pinvi_pii_retention_job",
+        cron_schedule="15 4 * * *",
         execution_timezone="Asia/Seoul",
     ),
 ]
@@ -119,6 +141,7 @@ async def build_pinvi_etl_summary(db: AsyncSession) -> AdminPinviEtlSummary:
         schedules=PINVI_ETL_SCHEDULES,
         sensors=PINVI_ETL_SENSORS,
         email_outbox=await build_email_outbox_summary(db),
+        pii_retention=await build_pii_retention_summary(db),
     )
 
 
@@ -351,6 +374,53 @@ def _email_template_summary(item: Any) -> AdminEmailOutboxTemplateSummary:
     )
 
 
+async def build_pii_retention_summary(
+    db: AsyncSession,
+    *,
+    now: datetime | None = None,
+) -> AdminPiiRetentionSummary:
+    current = now or datetime.now(UTC)
+    user_pii_cutoff = current - timedelta(days=PII_RETENTION_USER_GRACE_DAYS)
+    session_cutoff = current - timedelta(days=PII_RETENTION_SESSION_GRACE_DAYS)
+    location_cutoff = _subtract_months(current, PII_RETENTION_LOCATION_MONTHS)
+    params = {
+        "now": current,
+        "user_pii_cutoff": user_pii_cutoff,
+        "session_cutoff": session_cutoff,
+        "location_cutoff": location_cutoff,
+    }
+    summary = (await db.execute(_PII_RETENTION_SUMMARY_SQL, params)).mappings().one()
+    counts = {
+        "deleted_user_pii_candidates": _as_int(summary["deleted_user_pii_candidates"]),
+        "deleted_user_oauth_identity_candidates": _as_int(
+            summary["deleted_user_oauth_identity_candidates"]
+        ),
+        "expired_signup_verifications": _as_int(summary["expired_signup_verifications"]),
+        "expired_password_reset_tokens": _as_int(summary["expired_password_reset_tokens"]),
+        "old_revoked_sessions": _as_int(summary["old_revoked_sessions"]),
+        "old_expired_sessions": _as_int(summary["old_expired_sessions"]),
+        "expired_oauth_login_states": _as_int(summary["expired_oauth_login_states"]),
+        "expired_mobile_oauth_exchanges": _as_int(summary["expired_mobile_oauth_exchanges"]),
+        "location_access_logs_over_retention": _as_int(
+            summary["location_access_logs_over_retention"]
+        ),
+        "admin_audit_pii_over_retention": _as_int(summary["admin_audit_pii_over_retention"]),
+    }
+    return AdminPiiRetentionSummary(
+        dry_run=True,
+        generated_at=current,
+        user_pii_cutoff=user_pii_cutoff,
+        session_cutoff=session_cutoff,
+        location_cutoff=location_cutoff,
+        user_pii_grace_days=PII_RETENTION_USER_GRACE_DAYS,
+        session_grace_days=PII_RETENTION_SESSION_GRACE_DAYS,
+        location_retention_months=PII_RETENTION_LOCATION_MONTHS,
+        total_candidates=sum(counts.values()),
+        excluded_privileged_deleted_users=_as_int(summary["excluded_privileged_deleted_users"]),
+        **counts,
+    )
+
+
 def _int_dict(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -393,6 +463,14 @@ def _as_datetime(value: Any) -> datetime | None:
 
 def _elapsed_ms(start: float) -> int:
     return max(0, int((time.perf_counter() - start) * 1000))
+
+
+def _subtract_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - months - 1
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
 
 
 def _safe_error_message(exc: Exception) -> str:
@@ -441,5 +519,80 @@ _EMAIL_OUTBOX_TEMPLATE_SQL = text(
     GROUP BY template
     ORDER BY total DESC, template ASC
     LIMIT :template_limit
+    """
+)
+
+_PII_RETENTION_SUMMARY_SQL = text(
+    """
+    WITH deleted_users AS (
+      SELECT user_id, roles
+      FROM app.users
+      WHERE status = 'deleted'
+        AND deleted_at IS NOT NULL
+        AND deleted_at <= :user_pii_cutoff
+    ),
+    eligible_deleted_users AS (
+      SELECT user_id
+      FROM deleted_users
+      WHERE NOT (roles && ARRAY['admin', 'operator', 'cpo']::varchar[])
+    )
+    SELECT
+      (SELECT count(*) FROM eligible_deleted_users)::int
+        AS deleted_user_pii_candidates,
+      (
+        SELECT count(*)
+        FROM app.user_oauth_identities identities
+        JOIN eligible_deleted_users deleted USING (user_id)
+      )::int AS deleted_user_oauth_identity_candidates,
+      (
+        SELECT count(*)
+        FROM deleted_users
+        WHERE roles && ARRAY['admin', 'operator', 'cpo']::varchar[]
+      )::int AS excluded_privileged_deleted_users,
+      (
+        SELECT count(*)
+        FROM app.user_email_verifications
+        WHERE purpose = 'signup'
+          AND expires_at <= :now
+      )::int AS expired_signup_verifications,
+      (
+        SELECT count(*)
+        FROM app.user_email_verifications
+        WHERE purpose = 'password_reset'
+          AND expires_at <= :now
+      )::int AS expired_password_reset_tokens,
+      (
+        SELECT count(*)
+        FROM app.user_sessions
+        WHERE revoked_at IS NOT NULL
+          AND revoked_at <= :session_cutoff
+      )::int AS old_revoked_sessions,
+      (
+        SELECT count(*)
+        FROM app.user_sessions
+        WHERE revoked_at IS NULL
+          AND expires_at <= :session_cutoff
+      )::int AS old_expired_sessions,
+      (
+        SELECT count(*)
+        FROM app.oauth_login_states
+        WHERE expires_at <= :now
+      )::int AS expired_oauth_login_states,
+      (
+        SELECT count(*)
+        FROM app.oauth_mobile_exchanges
+        WHERE expires_at <= :now
+      )::int AS expired_mobile_oauth_exchanges,
+      (
+        SELECT count(*)
+        FROM app.location_access_log
+        WHERE occurred_at <= :location_cutoff
+      )::int AS location_access_logs_over_retention,
+      (
+        SELECT count(*)
+        FROM app.admin_audit_log
+        WHERE occurred_at <= :location_cutoff
+          AND (target_pii_fields IS NOT NULL OR user_agent IS NOT NULL)
+      )::int AS admin_audit_pii_over_retention
     """
 )

@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-240 `pinvi_pii_retention` Dagster job
+
+`pinvi_pii_retention` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:15 `app` schema의
+삭제 계정 PII, OAuth identity, 만료 verification/reset token, 오래된 session, 만료 OAuth transient
+row, 6개월 초과 location/admin audit PII 후보를 dry-run metadata로 집계한다.
+
+`/admin/etl/summary`는 같은 retention dry-run summary를 `pinvi.pii_retention`으로 반환하고,
+Web `/admin/etl`은 전체 후보, 삭제 계정, session, token, location log, 권한 계정 제외 수를 표시한다.
+응답과 metadata에는 user id, email, token hash, raw coordinate를 넣지 않는다. 실제
+delete/anonymize/archive 실행은 T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
+다음 작업은 T-241 `pinvi_location_log_archive` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-239 `pinvi_email_outbox` Dagster job
 
 `pinvi_email_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다 `app.email_queue`의
@@ -1591,9 +1605,10 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
-> **갱신 (2026-06-27, codex)**: T-234 WebSocket client invalidation / auth close handling을
-> 완료했다. 다음 작업은 **T-235 Optimistic lock / conflict dialog**다. 기능 구현 Task는 단위 검증을
-> 로컬 WSL ext4 미러에서 수행하고, 묶음 live/e2e는 N150에서 수행한다.
+> **갱신 (2026-06-28, codex)**: T-240 `pinvi_pii_retention` Dagster job을 완료했다.
+> 다음 작업은 **T-241 `pinvi_location_log_archive` Dagster job**이다. 기능 구현 Task는 단위
+> 검증을 로컬 WSL ext4 미러에서 수행하고, PR 생성 후 사용자 지시대로 e2e/CI 확인과 merge까지
+> 진행한다. 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
 
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증

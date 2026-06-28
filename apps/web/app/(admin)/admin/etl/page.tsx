@@ -10,7 +10,7 @@ import {
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
 import type { AdminEmailOutboxTemplateSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
-import { Activity, Database, GitBranch, RefreshCw, Workflow } from 'lucide-react';
+import { Activity, Database, GitBranch, RefreshCw, ShieldCheck, Workflow } from 'lucide-react';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -118,6 +118,7 @@ export default function AdminEtlPage() {
   const summary = summaryQuery.data ?? null;
   const importJobs = jobsQuery.data?.items ?? [];
   const emailOutbox = summary?.pinvi.email_outbox ?? null;
+  const piiRetention = summary?.pinvi.pii_retention ?? null;
 
   const summaryError = summaryQuery.isError
     ? summaryQuery.error instanceof ApiError
@@ -312,6 +313,69 @@ export default function AdminEtlPage() {
                   ))}
                 </ul>
               ) : null}
+            </div>
+          ) : null}
+          {piiRetention ? (
+            <div
+              className="mt-4 rounded-sm border border-hairline p-3"
+              data-testid="admin-etl-pii-retention"
+            >
+              <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                PII retention
+              </h3>
+              <div className="grid gap-3 text-sm sm:grid-cols-4">
+                <div data-testid="admin-etl-pii-total">
+                  <div className="text-xs text-muted">candidates</div>
+                  <div className="font-semibold">
+                    {formatMetric(piiRetention.total_candidates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">deleted users</div>
+                  <div className="font-semibold">
+                    {formatMetric(piiRetention.deleted_user_pii_candidates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">sessions</div>
+                  <div className="font-semibold">
+                    {formatMetric(
+                      piiRetention.old_revoked_sessions + piiRetention.old_expired_sessions,
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">location logs</div>
+                  <div className="font-semibold">
+                    {formatMetric(piiRetention.location_access_logs_over_retention)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 text-xs text-muted sm:grid-cols-3">
+                <div data-testid="admin-etl-pii-tokens">
+                  tokens{' '}
+                  {formatMetric(
+                    piiRetention.expired_signup_verifications +
+                      piiRetention.expired_password_reset_tokens,
+                  )}
+                </div>
+                <div>
+                  OAuth{' '}
+                  {formatMetric(
+                    piiRetention.expired_oauth_login_states +
+                      piiRetention.expired_mobile_oauth_exchanges,
+                  )}
+                </div>
+                <div data-testid="admin-etl-pii-privileged-excluded">
+                  privileged excluded {formatMetric(piiRetention.excluded_privileged_deleted_users)}
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-muted">
+                dry-run / user {piiRetention.user_pii_grace_days}d / session{' '}
+                {piiRetention.session_grace_days}d / location{' '}
+                {piiRetention.location_retention_months}mo
+              </div>
             </div>
           ) : null}
           <div className="mt-4">
