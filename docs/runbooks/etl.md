@@ -309,6 +309,25 @@ soak config: `config/etl-datasets.soak.json` (12시간 이내 schedule로 압축
 
 마커 파일: `.tmp/etl-soak/started-at`.
 
+## 8.1 Admin live gate
+
+구현 상태(2026-06-28, T-243): `/admin/etl/summary`는 Pinvi Dagster
+`/server_info`와 `/graphql`을 읽어 code location repository/job/asset/schedule, 최근 run
+상태를 live snapshot으로 반환한다. `server_info` 실패는 `pinvi.status=down`, GraphQL 실패는
+`pinvi.status=degraded`로 강등하고, static app-owned registry와 outbox/retention summary는 계속
+반환한다.
+
+검증 기준:
+
+- `/server_info`가 `dagster_version`, `dagster_webserver_version`, `dagster_graphql_version`을
+  반환한다.
+- GraphQL `repositoriesOrError`에서 `pinvi.etl.definitions` code location, app-owned jobs,
+  assets, schedules가 보인다.
+- 모든 schedule의 `execution_timezone`은 `Asia/Seoul`이다.
+- `runsOrError(limit=5)`의 최신 run status를 `/admin/etl` Pinvi job row에 표시한다.
+- run tag 값은 Admin 응답에 싣지 않는다. 최신 run은 `run_id`, `status`, `job_name`,
+  timestamp만 노출한다.
+
 ## 9. 알림 정책 (Sentry + Telegram)
 
 ### 9.1 Dagster `run_failure_sensor`

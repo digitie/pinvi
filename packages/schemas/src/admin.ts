@@ -320,21 +320,6 @@ export const AdminLocationLogArchiveSummarySchema = z.object({
 });
 export type AdminLocationLogArchiveSummary = z.infer<typeof AdminLocationLogArchiveSummarySchema>;
 
-export const AdminPinviEtlSummarySchema = z.object({
-  status: AdminSystemStatusSchema,
-  message: z.string().nullable().default(null),
-  latency_ms: z.number().int().nullable().default(null),
-  assets: z.array(AdminEtlDefinitionAssetSchema).default([]),
-  jobs: z.array(AdminEtlDefinitionJobSchema).default([]),
-  schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
-  sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
-  email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
-  telegram_outbox: AdminTelegramOutboxSummarySchema.nullable().default(null),
-  pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
-  location_log_archive: AdminLocationLogArchiveSummarySchema.nullable().default(null),
-});
-export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
-
 export const AdminDagsterJobSummarySchema = z.object({
   name: z.string(),
   is_job: z.boolean().default(true),
@@ -343,6 +328,7 @@ export type AdminDagsterJobSummary = z.infer<typeof AdminDagsterJobSummarySchema
 
 export const AdminDagsterScheduleSummarySchema = z.object({
   name: z.string(),
+  job_name: z.string().nullable().default(null),
   cron_schedule: z.string().nullable().default(null),
   execution_timezone: z.string().nullable().default(null),
   status: z.string().nullable().default(null),
@@ -376,6 +362,32 @@ export const AdminDagsterRunSummarySchema = z.object({
   tags: z.record(z.string(), z.unknown()).default({}),
 });
 export type AdminDagsterRunSummary = z.infer<typeof AdminDagsterRunSummarySchema>;
+
+export const AdminPinviEtlSummarySchema = z.object({
+  status: AdminSystemStatusSchema,
+  message: z.string().nullable().default(null),
+  latency_ms: z.number().int().nullable().default(null),
+  checked_at: Iso8601Schema.nullable().default(null),
+  dagster_version: z.string().nullable().default(null),
+  dagster_webserver_version: z.string().nullable().default(null),
+  dagster_graphql_version: z.string().nullable().default(null),
+  repository_count: z.number().int().default(0),
+  job_count: z.number().int().default(0),
+  asset_count: z.number().int().default(0),
+  schedule_count: z.number().int().default(0),
+  sensor_count: z.number().int().default(0),
+  repositories: z.array(AdminDagsterRepositorySummarySchema).default([]),
+  recent_runs: z.array(AdminDagsterRunSummarySchema).default([]),
+  assets: z.array(AdminEtlDefinitionAssetSchema).default([]),
+  jobs: z.array(AdminEtlDefinitionJobSchema).default([]),
+  schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
+  sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
+  email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
+  telegram_outbox: AdminTelegramOutboxSummarySchema.nullable().default(null),
+  pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
+  location_log_archive: AdminLocationLogArchiveSummarySchema.nullable().default(null),
+});
+export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 
 const AdminJsonObjectSchema = z.record(z.string(), z.unknown());
 

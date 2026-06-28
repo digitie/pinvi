@@ -48,8 +48,82 @@ const etlSummary = {
   generated_at: '2026-06-12T00:03:00+09:00',
   pinvi: {
     status: 'ok',
-    message: 'Dagster 응답 정상',
+    message: 'Dagster server_info/live snapshot 정상',
     latency_ms: 10,
+    checked_at: '2026-06-12T00:03:00+09:00',
+    dagster_version: '1.13.11',
+    dagster_webserver_version: '1.13.11',
+    dagster_graphql_version: '1.13.11',
+    repository_count: 1,
+    job_count: 6,
+    asset_count: 5,
+    schedule_count: 5,
+    sensor_count: 0,
+    repositories: [
+      {
+        name: '__repository__',
+        location_name: 'pinvi.etl.definitions',
+        jobs: [
+          { name: 'kasi_special_days_job', is_job: true },
+          { name: 'kasi_poi_rise_set_job', is_job: true },
+          { name: 'pinvi_email_outbox_job', is_job: true },
+          { name: 'pinvi_telegram_system_outbox_job', is_job: true },
+          { name: 'pinvi_pii_retention_job', is_job: true },
+          { name: 'pinvi_location_log_archive_job', is_job: true },
+        ],
+        schedules: [
+          {
+            name: 'kasi_special_days_schedule',
+            job_name: 'kasi_special_days_job',
+            cron_schedule: '30 3 * * *',
+            execution_timezone: 'Asia/Seoul',
+            status: 'RUNNING',
+          },
+          {
+            name: 'pinvi_email_outbox_schedule',
+            job_name: 'pinvi_email_outbox_job',
+            cron_schedule: '*/15 * * * *',
+            execution_timezone: 'Asia/Seoul',
+            status: 'RUNNING',
+          },
+          {
+            name: 'pinvi_telegram_system_outbox_schedule',
+            job_name: 'pinvi_telegram_system_outbox_job',
+            cron_schedule: '*/15 * * * *',
+            execution_timezone: 'Asia/Seoul',
+            status: 'RUNNING',
+          },
+          {
+            name: 'pinvi_pii_retention_schedule',
+            job_name: 'pinvi_pii_retention_job',
+            cron_schedule: '15 4 * * *',
+            execution_timezone: 'Asia/Seoul',
+            status: 'RUNNING',
+          },
+          {
+            name: 'pinvi_location_log_archive_schedule',
+            job_name: 'pinvi_location_log_archive_job',
+            cron_schedule: '30 4 * * *',
+            execution_timezone: 'Asia/Seoul',
+            status: 'RUNNING',
+          },
+        ],
+        sensors: [],
+        asset_count: 5,
+        asset_groups: ['pinvi_email', 'pinvi_kasi', 'pinvi_retention', 'pinvi_telegram'],
+      },
+    ],
+    recent_runs: [
+      {
+        run_id: 'pinvi-run-1',
+        status: 'SUCCESS',
+        job_name: 'pinvi_email_outbox_job',
+        start_time: 1781190000,
+        end_time: 1781190010,
+        update_time: 1781190010,
+        tags: {},
+      },
+    ],
     assets: [
       {
         key: 'pinvi_kasi_special_days',
@@ -349,12 +423,31 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await page.goto('/admin/etl');
   await expect(page.getByRole('heading', { name: 'ETL' })).toBeVisible();
   await expect(page.getByTestId('admin-etl-pinvi-status')).toContainText('정상');
+  await expect(page.getByTestId('admin-etl-pinvi-live-repository-count')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-pinvi-live-job-count')).toContainText('6');
+  await expect(page.getByTestId('admin-etl-pinvi-live-schedule-count')).toContainText('5');
   await expect(page.getByTestId('admin-etl-job-kasi_special_days_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_telegram_system_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_pii_retention_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_location_log_archive_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job-live')).toContainText('live');
+  await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job-timezone')).toContainText(
+    'Asia/Seoul',
+  );
+  await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job-latest-run')).toContainText(
+    'SUCCESS',
+  );
+  await expect(page.getByTestId('admin-etl-pinvi-live-repositories')).toContainText(
+    'pinvi.etl.definitions',
+  );
+  await expect(
+    page.getByTestId('admin-etl-pinvi-live-schedule-pinvi_email_outbox_schedule'),
+  ).toContainText('Asia/Seoul');
+  await expect(page.getByTestId('admin-etl-pinvi-live-runs')).toContainText(
+    'pinvi_email_outbox_job',
+  );
   await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
   await expect(page.getByTestId('admin-etl-email-stuck')).toContainText('1');
   await expect(page.getByTestId('admin-etl-email-template-verify_email')).toContainText('33.3%');
