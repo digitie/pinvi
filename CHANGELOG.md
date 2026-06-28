@@ -48,6 +48,10 @@
   `app.data_integrity_violations` persisted row와 broken POI feature link, marker color drift,
   curated import source drift, soft-delete target attachment 같은 known app issue를
   `source="pinvi_app"`로 구분하고, kor-travel-map consistency issue와 같은 table에서 filter한다.
+- Admin `/admin/integrity`의 issue pagination을 보강했다. `source=all`은 Pinvi app issue가 page를
+  채워도 upstream `kor-travel-map` issue 조회 공간을 예약하는 opaque composite cursor를 사용하고,
+  Pinvi app issue producer/upsert helper는 active partial unique index로 중복 persisted row를 막는다.
+  Web action modal은 Escape, backdrop click, 초기 focus, Tab focus trap을 지원한다.
 - Admin `/admin/dedup-review`에서 pending dedup 후보를 직접 판정할 수 있다. 병합 master feature와
   운영 사유를 입력하면 `kor-travel-map` verdict API로 relay하고 Pinvi 감사 로그를 남긴다.
 - Admin `/admin/category-mapping`을 `kor-travel-map` category catalog read-only 운영 화면으로

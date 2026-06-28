@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -21,10 +24,11 @@ from app.schemas.admin import (
     AdminIntegrityIssuesResponse,
 )
 from app.schemas.envelope import Envelope
-from app.services.admin_app_integrity import list_pinvi_app_integrity_issues
+from app.services.admin_app_integrity import list_pinvi_app_integrity_issue_page
 from app.services.admin_audit import append_admin_audit
 
 router = APIRouter(prefix="/admin/integrity", tags=["admin"])
+_INTEGRITY_CURSOR_PREFIX = "pinvi-integrity:"
 
 IntegrityIssueSource = Annotated[
     str,
@@ -56,10 +60,28 @@ async def list_integrity_issues(
     """Return kor-travel-map issues and Pinvi app-owned integrity issues."""
     app_items: list[AdminIntegrityIssueRecord] = []
     upstream_items: list[AdminIntegrityIssueRecord] = []
+    app_next_cursor: str | None = None
     upstream_next_cursor: str | None = None
 
-    if source in {"all", "pinvi_app"} and cursor is None:
-        app_items = await list_pinvi_app_integrity_issues(
+    cursor_state = _decode_integrity_cursor(
+        cursor,
+        default_source="app" if source == "pinvi_app" else "upstream",
+    )
+    app_done = bool(cursor_state.get("app_done"))
+    upstream_done = bool(cursor_state.get("upstream_done"))
+
+    if source == "pinvi_app":
+        app_page_size = page_size
+    elif source == "all" and not app_done:
+        if upstream_done:
+            app_page_size = page_size
+        else:
+            app_page_size = 0 if page_size == 1 else max(1, page_size // 2)
+    else:
+        app_page_size = 0
+
+    if source in {"all", "pinvi_app"} and app_page_size > 0:
+        app_page = await list_pinvi_app_integrity_issue_page(
             db,
             status_filter=status_filter,
             severity=severity,
@@ -67,39 +89,59 @@ async def list_integrity_issues(
             provider=provider,
             dataset_key=dataset_key,
             feature_id=feature_id,
-            page_size=page_size,
+            page_size=app_page_size,
+            cursor=_cursor_string(cursor_state.get("app")),
         )
+        app_items = app_page.items
+        app_next_cursor = app_page.next_cursor
+        app_done = app_next_cursor is None
 
-    should_fetch_upstream = source in {"all", "kor_travel_map"} and not (
-        source == "all" and cursor is None and len(app_items) >= page_size
-    )
+    should_fetch_upstream = source in {"all", "kor_travel_map"} and not upstream_done
     if should_fetch_upstream:
-        upstream_page_size = page_size
-        if source == "all" and cursor is None:
-            upstream_page_size = page_size - len(app_items)
-        with map_ops_errors(message_subject="kor_travel_map integrity issue"):
-            payload = await admin_client.list_integrity_issues(
-                status_filter=status_filter,
-                severity=severity,
-                violation_type=violation_type,
-                provider=provider,
-                dataset_key=dataset_key,
-                feature_id=feature_id,
-                page_size=upstream_page_size,
-                cursor=cursor,
+        upstream_page_size = page_size if source == "kor_travel_map" else page_size - len(app_items)
+        if upstream_page_size > 0:
+            upstream_cursor = _cursor_string(cursor_state.get("upstream"))
+            with map_ops_errors(message_subject="kor_travel_map integrity issue"):
+                payload = await admin_client.list_integrity_issues(
+                    status_filter=status_filter,
+                    severity=severity,
+                    violation_type=violation_type,
+                    provider=provider,
+                    dataset_key=dataset_key,
+                    feature_id=feature_id,
+                    page_size=upstream_page_size,
+                    cursor=upstream_cursor,
+                )
+            upstream_items = _validate_items(
+                payload,
+                AdminIntegrityIssueRecord,
+                "kor_travel_map integrity issue item 형식이 올바르지 않습니다.",
             )
-        upstream_items = _validate_items(
-            payload,
-            AdminIntegrityIssueRecord,
-            "kor_travel_map integrity issue item 형식이 올바르지 않습니다.",
+            upstream_next_cursor = next_cursor(_meta(payload))
+            upstream_done = upstream_next_cursor is None
+
+    if source == "pinvi_app":
+        response_next_cursor = _encode_integrity_cursor(
+            app_cursor=app_next_cursor,
+            upstream_cursor=None,
+            app_done=app_done,
+            upstream_done=True,
         )
-        upstream_next_cursor = next_cursor(_meta(payload))
+    elif source == "all":
+        response_next_cursor = _encode_integrity_cursor(
+            app_cursor=app_next_cursor,
+            upstream_cursor=upstream_next_cursor,
+            app_done=app_done,
+            upstream_done=upstream_done,
+        )
+    else:
+        response_next_cursor = upstream_next_cursor
 
     return Envelope.of(
         AdminIntegrityIssuesResponse(
             items=[*app_items, *upstream_items],
             page_size=page_size,
-            next_cursor=upstream_next_cursor,
+            next_cursor=response_next_cursor,
         )
     )
 
@@ -192,6 +234,68 @@ async def list_consistency_reports(
             next_cursor=next_cursor(_meta(payload)),
         )
     )
+
+
+def _encode_integrity_cursor(
+    *,
+    app_cursor: str | None,
+    upstream_cursor: str | None,
+    app_done: bool,
+    upstream_done: bool,
+) -> str | None:
+    if app_done and upstream_done:
+        return None
+    payload = {
+        "app": app_cursor,
+        "upstream": upstream_cursor,
+        "app_done": app_done,
+        "upstream_done": upstream_done,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+    token = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return f"{_INTEGRITY_CURSOR_PREFIX}{token}"
+
+
+def _decode_integrity_cursor(
+    cursor: str | None,
+    *,
+    default_source: str,
+) -> dict[str, Any]:
+    if not cursor:
+        return {}
+    if not cursor.startswith(_INTEGRITY_CURSOR_PREFIX):
+        return {default_source: cursor}
+    token = cursor[len(_INTEGRITY_CURSOR_PREFIX) :]
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode()).decode()
+        payload = json.loads(decoded)
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "INVALID_CURSOR",
+                "message": "정합성 issue cursor 형식이 올바르지 않습니다.",
+            },
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "INVALID_CURSOR",
+                "message": "정합성 issue cursor 형식이 올바르지 않습니다.",
+            },
+        )
+    return {
+        "app": _cursor_string(payload.get("app")),
+        "upstream": _cursor_string(payload.get("upstream")),
+        "app_done": payload.get("app_done") is True,
+        "upstream_done": payload.get("upstream_done") is True,
+    }
+
+
+def _cursor_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _meta(payload: dict[str, Any]) -> dict[str, Any]:

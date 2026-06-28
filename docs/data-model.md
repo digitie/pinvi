@@ -819,6 +819,8 @@ T-249 기준 `/admin/integrity`는 이 table의 persisted row와 Pinvi 계산 ru
 (`broken_poi_feature_link`, `invalid_trip_day_poi_marker_color`,
 `curated_import_source_drift`, `active_attachment_deleted_target` 등)을 `source="pinvi_app"`로
 반환한다. `kor-travel-map` consistency issue는 `source="kor_travel_map"`으로 구분한다.
+계산 rule producer는 active `rule_key` + `entity_kind` + `entity_id` partial unique index를
+기준으로 upsert하며, `/admin/integrity` read 경로는 row를 쓰지 않는다.
 
 ### 8.10 `app.admin_audit_log` (보강)
 

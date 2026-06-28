@@ -2213,11 +2213,17 @@ Query:
 | `dataset_key`    | `kor_travel_map` 전용 dataset filter. 지정 시 Pinvi app row는 제외  |
 | `feature_id`     | feature id                                                          |
 | `page_size`      | 1~200, 기본 50                                                      |
-| `cursor`         | upstream cursor. cursor가 있으면 Pinvi app row는 반복하지 않는다.   |
+| `cursor`         | opaque pagination cursor. 응답 `next_cursor`가 있으면 그대로 echo   |
 
 응답 `data.items[]`는 `issue_id`, `source`, `violation_type`, `severity`, `message`, `payload`,
 `status`, `detected_at`, `provider`, `dataset_key`, `feature_id`, `source_record_key`,
 `resolved_at`을 포함한다.
+
+`source=kor_travel_map`의 cursor는 upstream cursor를 그대로 전달한다. `source=pinvi_app`은 Pinvi
+app row offset cursor를 사용한다. `source=all`은 Pinvi app cursor와 upstream cursor를 함께 담은
+Pinvi opaque composite cursor를 반환하며, Pinvi app issue가 많아도 upstream issue가 굶지 않도록
+upstream page 용량을 예약한다. 클라이언트는 `source`, filter, `page_size`가 바뀌면 cursor를
+버려야 한다.
 
 Pinvi app source의 계산 rule:
 
@@ -2228,6 +2234,11 @@ Pinvi app source의 계산 rule:
 | `invalid_trip_day_poi_marker_color` | `P-01`~`P-16` 범위를 벗어난 POI marker color                |
 | `curated_import_source_drift`       | curated plan과 curated POI의 원본 curated feature id 불일치 |
 | `active_attachment_deleted_target`  | 활성 첨부가 soft-delete된 trip/POI/curated 대상에 연결      |
+
+Pinvi app source read는 부작용 없이 persisted row와 계산 rule을 합쳐 반환한다. 계산 rule을
+`app.data_integrity_violations`에 남기는 producer/API/Dagster 작업은
+`produce_pinvi_app_integrity_violations` / `upsert_data_integrity_violation` helper를 사용한다.
+active `rule_key` + `entity_kind` + `entity_id` row는 partial unique index로 중복 생성하지 않는다.
 
 ### 13.6 `GET /admin/integrity/reports`
 

@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
+
+PR #313(T-288 legacy task archive)와 PR #312(T-291 failure sensor)가 main에 머지된 뒤 최신
+`origin/main`에서 `agent/codex-t292-integrity-pagination` 브랜치를 만들었다.
+
+T-292 범위인 PR #283 사후 리뷰 세 항목을 닫았다. `/admin/integrity/issues?source=all`은 Pinvi app
+issue가 page를 채워도 `kor-travel-map` upstream issue가 굶지 않도록 composite cursor를 사용한다.
+Pinvi app integrity producer/upsert helper와 active partial unique 회귀 테스트를 추가했고, Web Admin
+integrity action modal은 Escape/overlay close, 초기 포커스, Tab focus trap을 지원한다.
+
+열린 PR #227은 map marker tuning과 tracking 문서를 건드리는 오래된 PR이다. 이번 작업은 map 파일을
+건드리지 않고, tracking 문서는 최신 main 기준으로 필요한 T-292 상태만 갱신한다. T-285는 사용자
+지시가 바뀌기 전까지 진행하지 않는다.
+
+검증: API targeted ruff/mypy/pytest, `packages/schemas` typecheck, `packages/api-client` typecheck,
+`apps/web` typecheck/lint, N150 Playwright Docker runner Admin integrity e2e를 통과했다.
+
+다음 구현 후보는 T-286 Cross-track review gap closure다. 신규 task 진입 전 열린 PR/브랜치와
+`docs/tasks.md` 병행 상태를 다시 확인한다.
+
 ## 2026-06-29 (codex) — T-288-legacy-task-archive / task 문서 정리
 
 사용자 지시에 따라 T-285 AI companion v1.0 scope gate는 현재 진행하지 않는다. T-285 착수 중

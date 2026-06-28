@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
+
+**작업**: PR #283 사후 리뷰의 App integrity pagination / producer / modal 접근성 gap을 닫았다.
+
+**변경**:
+
+- `/admin/integrity/issues?source=all`에 composite cursor를 도입해 Pinvi app issue가 page를 채워도
+  upstream `kor-travel-map` issue를 함께 조회한다.
+- Pinvi app integrity producer/upsert helper를 추가하고 partial unique index를 실제로 행사하는
+  integration test를 작성했다.
+- Web Admin `/admin/integrity`에 issue pagination UI를 추가하고 action modal의 Escape/overlay close,
+  초기 포커스, Tab focus trap을 보강했다.
+- `CHANGELOG.md`, `docs/api/admin.md`, `docs/data-model.md`, `docs/postgres-schema.md`,
+  `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`를 현재 상태에 맞게 갱신했다.
+
+**검증**: API targeted ruff/mypy/pytest, `packages/schemas` typecheck, `packages/api-client`
+typecheck, `apps/web` typecheck/lint, N150 Playwright Docker runner Admin integrity e2e를 통과했다.
+
+**병행 상태**: PR #312(T-291 failure sensor)는 main에 머지됐다. 열린 PR #227은 map marker tuning과
+tracking 문서를 건드리므로 이번 작업은 map 파일을 건드리지 않는다. T-285는 진행하지 않는다.
+
 ## 2026-06-29 (codex) — T-288-legacy-task-archive / task 문서 정리
 
 **작업**: 사용자 지시에 따라 T-285는 현재 진행하지 않고, `tasks.md`의 완료/규칙/legacy 항목을

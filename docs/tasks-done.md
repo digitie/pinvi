@@ -6,6 +6,12 @@
 
 ## 2026-06-29
 
+- [x] T-292 — App integrity pagination / producer follow-up.
+      PR #283 사후 리뷰의 `/admin/integrity/issues?source=all` pagination starvation을 composite
+      cursor로 닫고, Pinvi app integrity producer/upsert helper와 active partial unique 회귀 테스트를
+      추가했다. Web Admin integrity issue pagination UI와 action modal Escape/backdrop/focus trap도
+      보강했다.
+
 - [x] T-288-legacy-task-archive — `tasks.md` legacy 완료 이력 이관.
       `docs/tasks.md`에서 완료/폐기/머지 이력/운영 규칙이 섞인 legacy 섹션을 제거하고,
       열린 backlog만 남겼다. 완료·아카이브 요약과 머지 히스토리는 본 파일로, 병행 작업

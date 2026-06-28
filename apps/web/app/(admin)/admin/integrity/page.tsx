@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
@@ -12,7 +12,7 @@ import {
   type AdminIntegrityIssueListParams,
 } from '@pinvi/api-client';
 import type { AdminConsistencyReportRecord, AdminIntegrityIssueRecord } from '@pinvi/schemas';
-import { Ban, CheckCircle2, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -103,8 +103,52 @@ export default function AdminIntegrityPage() {
   const [selectedAction, setSelectedAction] = useState<IssueAction>('resolve');
   const [accessReason, setAccessReason] = useState('');
   const [mapReason, setMapReason] = useState('');
+  const [issueCursor, setIssueCursor] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [mutationNotice, setMutationNotice] = useState<string | null>(null);
+  const actionDialogRef = useRef<HTMLElement | null>(null);
+  const accessReasonRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const closeIssueActionDialog = () => {
+    setSelectedIssue(null);
+  };
+
+  useEffect(() => {
+    if (selectedIssue) {
+      accessReasonRef.current?.focus();
+    }
+  }, [selectedIssue]);
+
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeIssueActionDialog();
+      return;
+    }
+    if (event.key !== 'Tab') {
+      return;
+    }
+    const focusable = Array.from(
+      actionDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    ).filter((element) => !element.hasAttribute('disabled') && element.tabIndex !== -1);
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) {
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const issueParams = useMemo<AdminIntegrityIssueListParams>(
     () => ({
@@ -113,8 +157,9 @@ export default function AdminIntegrityPage() {
       severity: severity === 'all' ? undefined : severity,
       provider: provider.trim() || undefined,
       pageSize: 50,
+      cursor: issueCursor ?? undefined,
     }),
-    [issueSource, issueStatus, provider, severity],
+    [issueCursor, issueSource, issueStatus, provider, severity],
   );
   const reportParams = useMemo<AdminConsistencyReportListParams>(
     () => ({
@@ -154,7 +199,7 @@ export default function AdminIntegrityPage() {
       setMutationNotice(
         `${result.issue.issue_id} issue를 ${ACTION_LABEL[result.action]} 처리했습니다.`,
       );
-      setSelectedIssue(null);
+      closeIssueActionDialog();
       setAccessReason('');
       setMapReason('');
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.integrityIssuesAll() });
@@ -315,10 +360,13 @@ export default function AdminIntegrityPage() {
     if (!selectedIssue) return;
     if (!accessReason.trim()) {
       setMutationError('운영 사유를 입력하세요.');
+      accessReasonRef.current?.focus();
       return;
     }
     actionMutation.mutate({ issue: selectedIssue, action: selectedAction });
   };
+
+  const resetIssueCursor = () => setIssueCursor(null);
 
   return (
     <AdminPage
@@ -342,7 +390,10 @@ export default function AdminIntegrityPage() {
       <FilterBar>
         <select
           value={issueSource}
-          onChange={(event) => setIssueSource(event.target.value as typeof issueSource)}
+          onChange={(event) => {
+            setIssueSource(event.target.value as typeof issueSource);
+            resetIssueCursor();
+          }}
           className={inputClass}
           data-testid="admin-integrity-source"
         >
@@ -354,7 +405,10 @@ export default function AdminIntegrityPage() {
         </select>
         <select
           value={issueStatus}
-          onChange={(event) => setIssueStatus(event.target.value as typeof issueStatus)}
+          onChange={(event) => {
+            setIssueStatus(event.target.value as typeof issueStatus);
+            resetIssueCursor();
+          }}
           className={inputClass}
           data-testid="admin-integrity-status"
         >
@@ -366,7 +420,10 @@ export default function AdminIntegrityPage() {
         </select>
         <select
           value={severity}
-          onChange={(event) => setSeverity(event.target.value as typeof severity)}
+          onChange={(event) => {
+            setSeverity(event.target.value as typeof severity);
+            resetIssueCursor();
+          }}
           className={inputClass}
           data-testid="admin-integrity-severity"
         >
@@ -378,7 +435,10 @@ export default function AdminIntegrityPage() {
         </select>
         <input
           value={provider}
-          onChange={(event) => setProvider(event.target.value)}
+          onChange={(event) => {
+            setProvider(event.target.value);
+            resetIssueCursor();
+          }}
           className={`${inputClass} w-40`}
           placeholder="provider"
           data-testid="admin-integrity-provider"
@@ -421,7 +481,31 @@ export default function AdminIntegrityPage() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Issues</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Issues</h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={resetIssueCursor}
+              disabled={!issueCursor}
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+              data-testid="admin-integrity-issues-first"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              처음
+            </button>
+            <button
+              type="button"
+              onClick={() => setIssueCursor(issuesQuery.data?.next_cursor ?? null)}
+              disabled={!issuesQuery.data?.next_cursor}
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+              data-testid="admin-integrity-issues-next"
+            >
+              다음
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
         <AdminTable
           columns={issueColumns}
           rows={issuesQuery.data?.items ?? []}
@@ -450,13 +534,18 @@ export default function AdminIntegrityPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
           role="presentation"
+          onClick={closeIssueActionDialog}
+          data-testid="admin-integrity-action-overlay"
         >
           <section
+            ref={actionDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="admin-integrity-action-title"
             className="w-full max-w-lg rounded-sm border border-hairline bg-white p-4 shadow-xl"
             data-testid="admin-integrity-action-dialog"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleDialogKeyDown}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
@@ -467,7 +556,7 @@ export default function AdminIntegrityPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedIssue(null)}
+                onClick={closeIssueActionDialog}
                 className="rounded-sm border border-hairline p-1 text-muted hover:text-ink"
                 aria-label="닫기"
                 data-testid="admin-integrity-action-close"
@@ -491,6 +580,7 @@ export default function AdminIntegrityPage() {
               <label className="block text-xs text-muted">
                 운영 사유 (Pinvi audit)
                 <textarea
+                  ref={accessReasonRef}
                   value={accessReason}
                   onChange={(event) => setAccessReason(event.target.value)}
                   className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
@@ -511,7 +601,7 @@ export default function AdminIntegrityPage() {
               <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedIssue(null)}
+                  onClick={closeIssueActionDialog}
                   className="rounded-sm border border-hairline px-3 py-1 text-sm"
                   data-testid="admin-integrity-action-cancel"
                 >
