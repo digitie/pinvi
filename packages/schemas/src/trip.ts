@@ -270,7 +270,8 @@ export const TripSharedViewSchema = z.object({
 export type TripSharedView = z.infer<typeof TripSharedViewSchema>;
 
 export const TripDayOptimizeRequestSchema = z.object({
-  strategy: z.literal('nearest_neighbor').default('nearest_neighbor'),
+  // two_opt = nearest-neighbor seed + 2-opt local search (스마트 정렬, 기본).
+  strategy: z.enum(['nearest_neighbor', 'two_opt']).default('two_opt'),
   start_poi_id: z.string().uuid().nullable().optional(),
   persist: z.boolean().default(false),
 });
@@ -289,6 +290,7 @@ export const TripDayOptimizeResponseSchema = z.object({
   ordered_poi_ids: z.array(z.string().uuid()),
   moves: z.array(TripDayOptimizeMoveSchema),
   distance_meters: z.number().int().nullable(),
+  previous_distance_meters: z.number().int().nullable().default(null),
   warnings: z.array(z.string()),
 });
 export type TripDayOptimizeResponse = z.infer<typeof TripDayOptimizeResponseSchema>;

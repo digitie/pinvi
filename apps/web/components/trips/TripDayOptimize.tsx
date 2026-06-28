@@ -27,7 +27,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
     setError(null);
     try {
       const res = await tripApi(apiClient).optimizeDay(tripId, dayIndex, {
-        strategy: 'nearest_neighbor',
+        strategy: 'two_opt',
         persist: false,
       });
       setPreview(res);
@@ -43,7 +43,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
     setError(null);
     try {
       await tripApi(apiClient).optimizeDay(tripId, dayIndex, {
-        strategy: 'nearest_neighbor',
+        strategy: 'two_opt',
         persist: true,
       });
       setPreview(null);
@@ -75,10 +75,28 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
 
       {preview && (
         <div className="space-y-2 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">
-          <p className="text-ink">
-            최단 경로 추정 거리 <strong>{formatDistanceMeters(preview.distance_meters)}</strong> ·
-            순서 변경 {preview.moves.length}곳
-          </p>
+          {preview.previous_distance_meters != null && preview.distance_meters != null ? (
+            <p className="text-ink">
+              기존 <strong>{formatDistanceMeters(preview.previous_distance_meters)}</strong> → 최적{' '}
+              <strong>{formatDistanceMeters(preview.distance_meters)}</strong>
+              {preview.previous_distance_meters > preview.distance_meters && (
+                <>
+                  {' '}
+                  (
+                  {Math.round(
+                    (1 - preview.distance_meters / preview.previous_distance_meters) * 100,
+                  )}
+                  % 단축)
+                </>
+              )}{' '}
+              · 순서 변경 {preview.moves.length}곳
+            </p>
+          ) : (
+            <p className="text-ink">
+              최단 경로 추정 거리 <strong>{formatDistanceMeters(preview.distance_meters)}</strong> ·
+              순서 변경 {preview.moves.length}곳
+            </p>
+          )}
           {preview.warnings.length > 0 && (
             <p className="flex items-start gap-1 text-xs text-error-text">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />

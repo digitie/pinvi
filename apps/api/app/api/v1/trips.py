@@ -1178,12 +1178,13 @@ async def optimize_trip_day_endpoint(
             await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         else:
             await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
-        ordered, moves, total_distance, warnings = await optimize_trip_day(
+        ordered, moves, total_distance, previous_distance, warnings = await optimize_trip_day(
             db,
             trip_id=trip_id,
             day_index=day_index,
             start_poi_id=body.start_poi_id,
             persist=body.persist,
+            strategy=body.strategy,
         )
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -1206,6 +1207,7 @@ async def optimize_trip_day_endpoint(
             for poi, old, new in moves
         ],
         distance_meters=total_distance,
+        previous_distance_meters=previous_distance,
         warnings=warnings,
     )
     if body.persist and moves:
