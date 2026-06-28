@@ -23,6 +23,9 @@
 - **2026-06-16 추가**: 지도(§4)도 통합 완료 — `vworld-map-rn`을 vendored tarball로 핀하고
   `(app)/map.tsx`에 실제 VWorld 지도를 탑재(ADR-044). 소비 중 발견한 라이브러리 gap은 #21로 수정.
   실기기 동작은 `@maplibre/maplibre-react-native` 네이티브 모듈 포함 EAS Dev Client 재빌드 필요.
+- **2026-06-29 T-284 scope gate**: 모바일은 활성 Sprint M-1 track으로 유지하지만,
+  `v1.0.0` Web/API/Admin 운영 출시의 필수 release blocker에서는 제외한다. EAS build,
+  실기기 smoke, store 제출, mobile live e2e는 모바일 release train에서 검증한다.
 
 ## 1. 공용 패키지 소비 (모바일이 그대로 가져가는 것)
 
@@ -143,7 +146,8 @@ Web/Mobile이 공유한다(ADR-044/046). CI가 외부 git archive나 release ass
 - **Expo Go 미사용**(native plugin + config plugin) — `eas build --profile development`로 dev-client
   설치 후 `expo start --dev-client`. `eas.json`에 development/preview/production 프로파일 ✓.
 - Android `minSdkVersion 24`(`expo-build-properties`), New Architecture(SDK 56 기본, RN 0.85) ✓.
-- 실행/검증은 WSL ext4 미러 + 시뮬레이터/기기(ADR-024). git/commit은 NTFS worktree.
+- 실행/검증, git/commit/push는 Linux worktree 기준이다(ADR-051). RN
+  메트로/시뮬레이터 실행은 플랫폼 제약을 따르되 Windows git/CodeGraph shim은 사용하지 않는다.
 
 ## 7. 권장 구현 순서 (Sprint M-1)
 

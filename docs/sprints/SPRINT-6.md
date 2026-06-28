@@ -185,7 +185,8 @@
 - [ ] 외부 API 키 모두 발급 + 일 호출 한도 확인
 - [ ] PIPA incident/DSR/retention/email suppression/moderation/RBAC/user lifecycle/abuse 운영 표면
       구현과 법무 sign-off
-- [ ] v1.0 mobile 제외 / user-facing AI companion 제외 release note 문구 확정
+- [x] v1.0 mobile 제외 scope와 release note 문구 확정
+- [ ] user-facing AI companion 제외 release note 문구 확정
 - [ ] T-258 legal/ops prep gate 기준 최신성 재확인 — 72시간 신고, DSR 10일, CPO 30분 내부 SLA,
       mobile/AI 제외 범위
 
@@ -216,7 +217,8 @@
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
 - [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
-- [ ] **v1.0 mobile 제외 / user-facing AI companion 제외 범위 명시**
+- [x] **v1.0 mobile 제외 범위 명시**
+- [ ] **user-facing AI companion 제외 범위 명시**
 - [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
       user lifecycle / abuse 운영 표면 sign-off**
 - [ ] **T-258 legal/ops 구현 매트릭스 충족** — 각 Task가 API/UI/runbook/test/sign-off를 가진다.
