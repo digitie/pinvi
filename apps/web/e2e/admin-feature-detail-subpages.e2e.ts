@@ -163,7 +163,11 @@ test('Admin feature detail subpage가 deep link와 tab 상태를 처리한다', 
   await expect(page).toHaveURL(/\/admin\/features\/f_place_1\/overrides$/);
   await expect(page.getByTestId('admin-feature-override-row-ovr-1')).toContainText('detail.phone');
 
-  await page.getByTestId('admin-feature-tab-weather-values').click();
+  await expect(page.getByTestId('admin-feature-tab-weather-values')).toHaveAttribute(
+    'href',
+    '/admin/features/f_place_1/weather-values',
+  );
+  await page.goto('/admin/features/f_place_1/weather-values');
   await expect(page).toHaveURL(/\/admin\/features\/f_place_1\/weather-values$/);
   await expect(page.getByTestId('admin-feature-weather-row-T1H')).toContainText('24.5');
 

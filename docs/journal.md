@@ -32,6 +32,8 @@
 - Linux: `npm -w @pinvi/web run test:e2e:admin-live -- --grep "backup live read-only" --workers=1` → 1 skipped
 - Linux: `npm -w @pinvi/web run test:e2e:live-mutating -- --grep "admin backup staging" --workers=1` → 1 skipped
 - Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-backup.e2e.ts --workers=1` → 2 passed
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-feature-detail-subpages.e2e.ts --workers=1`
+  → 1 passed (CI e2e flake 안정화)
 
 **미실행**:
 
