@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-241 `pinvi_location_log_archive` Dagster job
+
+`pinvi_location_log_archive` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:30
+`app.location_access_log`의 6개월 초과 archive 후보, archive tail과 active head 사이의
+hash-chain bridge 상태, 미처리 `location_audit_outbox` blocker, purpose별 후보 수를 dry-run
+metadata로 집계한다.
+
+`/admin/etl/summary`는 같은 archive dry-run summary를 `pinvi.location_log_archive`로 반환하고,
+Web `/admin/etl`은 후보 수, active row 수, pending outbox, chain bridge 일치 여부를 표시한다.
+응답과 metadata에는 user id, raw coordinate, IP 원문을 넣지 않는다. 실제 archive/delete/anonymize
+실행은 T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
+다음 작업은 T-242 Telegram system summary/outbox ETL이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-240 `pinvi_pii_retention` Dagster job
 
 `pinvi_pii_retention` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:15 `app` schema의

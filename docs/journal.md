@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-241 `pinvi_location_log_archive` Dagster job
+
+**작업**: 위치 접근 로그 archive 후보와 hash-chain bridge 상태를 파괴 작업 없이 집계하는
+Pinvi app-owned Dagster asset과 Admin ETL summary 노출을 구현했다.
+
+**변경**:
+
+- `apps/etl`에 `pinvi_location_log_archive` asset을 추가했다. 매일 KST 04:30
+  `app.location_access_log`의 6개월 초과 archive 후보, archive tail hash와 active head
+  `prev_hash` 연결 상태, 미처리 `location_audit_outbox` blocker, purpose별 후보 수를
+  dry-run metadata로 집계한다.
+- Dagster definitions/schedules에 `pinvi_location_log_archive_job`과
+  `pinvi_location_log_archive_schedule`을 등록했다.
+- `/admin/etl/summary`가 `pinvi.location_log_archive` summary를 반환하도록 API schema/service를
+  확장했다.
+- Web `/admin/etl`에 후보 수, active row 수, pending outbox, chain bridge 일치 여부,
+  purpose별 count를 표시했다.
+- 실제 archive/delete/anonymize 실행은 T-276 kill-switch/dashboard/evidence log 범위로 유지했다.
+
+**검증**:
+
+- WSL ext4 미러: ETL targeted `ruff check` / `ruff format --check`
+- WSL ext4 미러: `python -m pytest -q tests/test_definitions.py tests/test_location_log_archive.py`
+- WSL ext4 미러: API targeted `ruff check` / `ruff format --check`
+- WSL ext4 미러: `python -m mypy --strict app`
+- WSL ext4 미러: `python -m pytest tests/integration/test_admin_etl_provider_sync_api.py -q -rA`
+- WSL ext4 미러: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/web run typecheck`,
+  `npm -w @pinvi/web run lint`
+
+**다음**: T-241 커밋 후 멈춘다. 재시작 시 사용자 지시에 따라 PR/e2e/merge를 진행하거나,
+T-242 Telegram system summary/outbox ETL 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-240 `pinvi_pii_retention` Dagster job
 
 **작업**: PIPA/LBS 보존 기간 만료 후보를 파괴 작업 없이 집계하는 Pinvi app-owned Dagster asset과

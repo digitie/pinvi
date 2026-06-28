@@ -225,6 +225,31 @@ class AdminPiiRetentionSummary(BaseModel):
     admin_audit_pii_over_retention: int = 0
 
 
+class AdminLocationLogArchivePurposeSummary(BaseModel):
+    purpose: str
+    total: int = 0
+
+
+class AdminLocationLogArchiveSummary(BaseModel):
+    dry_run: bool = True
+    generated_at: datetime
+    archive_cutoff: datetime
+    location_retention_months: int
+    total_candidates: int = 0
+    oldest_candidate_at: datetime | None = None
+    newest_candidate_at: datetime | None = None
+    archive_tail_log_id: int | None = None
+    active_head_log_id: int | None = None
+    active_rows_after_cutoff: int = 0
+    chain_bridge_required: bool = False
+    bridge_anchor_matches: bool | None = None
+    pending_outbox_total: int = 0
+    pending_outbox_before_cutoff: int = 0
+    archive_blocked_by_pending_outbox: bool = False
+    oldest_pending_outbox_at: datetime | None = None
+    purpose_stats: list[AdminLocationLogArchivePurposeSummary] = Field(default_factory=list)
+
+
 class AdminPinviEtlSummary(BaseModel):
     status: AdminSystemStatus
     message: str | None = None
@@ -235,6 +260,7 @@ class AdminPinviEtlSummary(BaseModel):
     sensors: list[AdminEtlDefinitionSensor] = Field(default_factory=list)
     email_outbox: AdminEmailOutboxSummary | None = None
     pii_retention: AdminPiiRetentionSummary | None = None
+    location_log_archive: AdminLocationLogArchiveSummary | None = None
 
 
 class AdminDagsterJobSummary(BaseModel):

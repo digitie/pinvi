@@ -22,9 +22,9 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-241 `pinvi_location_log_archive` Dagster job.
-- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-240 진입 전
-  재확인 결과, 최근 PR 38개 중 unresolved human inline review comment와 review body는 0건이고,
+- 다음 구현: T-242 Telegram system summary/outbox ETL.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-241 진입 전
+  재확인 결과, 최근 PR 39개 중 unresolved human inline review comment와 review body는 0건이고,
   top-level comment 33건은 신규 차단 없음.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
@@ -42,9 +42,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-241 — `pinvi_location_log_archive` Dagster job.
-      location access log archive 후보 dry-run과 CPO/audit chain 정책을 구현한다. 실제 archive/delete는
-      T-276으로 연결한다.
 - [ ] T-242 — Telegram system summary/outbox ETL.
       Telegram system notification/summary 후보 job, retry/backoff, secret 비노출 검증을 구현한다.
 - [ ] T-243 — ETL live / Dagster 운영 게이트.

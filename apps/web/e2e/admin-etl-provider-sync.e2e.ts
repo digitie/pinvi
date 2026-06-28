@@ -66,6 +66,11 @@ const etlSummary = {
         group_name: 'pinvi_retention',
         description: 'PII 보존 기간 만료 후보 dry-run',
       },
+      {
+        key: 'pinvi_location_log_archive',
+        group_name: 'pinvi_retention',
+        description: 'location_access_log archive 후보 dry-run',
+      },
     ],
     jobs: [
       {
@@ -92,6 +97,12 @@ const etlSummary = {
         description: '매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.',
         asset_keys: ['pinvi_pii_retention'],
       },
+      {
+        name: 'pinvi_location_log_archive_job',
+        trigger: 'schedule',
+        description: '매일 KST 04:30 위치 접근 로그 archive 후보와 chain bridge 상태를 점검합니다.',
+        asset_keys: ['pinvi_location_log_archive'],
+      },
     ],
     schedules: [
       {
@@ -112,6 +123,13 @@ const etlSummary = {
         name: 'pinvi_pii_retention_schedule',
         job_name: 'pinvi_pii_retention_job',
         cron_schedule: '15 4 * * *',
+        execution_timezone: 'Asia/Seoul',
+        status: 'configured',
+      },
+      {
+        name: 'pinvi_location_log_archive_schedule',
+        job_name: 'pinvi_location_log_archive_job',
+        cron_schedule: '30 4 * * *',
         execution_timezone: 'Asia/Seoul',
         status: 'configured',
       },
@@ -179,6 +197,25 @@ const etlSummary = {
       expired_mobile_oauth_exchanges: 1,
       location_access_logs_over_retention: 1,
       admin_audit_pii_over_retention: 0,
+    },
+    location_log_archive: {
+      dry_run: true,
+      generated_at: '2026-06-12T00:03:00+09:00',
+      archive_cutoff: '2025-12-12T00:03:00+09:00',
+      location_retention_months: 6,
+      total_candidates: 1,
+      oldest_candidate_at: '2025-12-11T00:03:00+09:00',
+      newest_candidate_at: '2025-12-11T00:03:00+09:00',
+      archive_tail_log_id: 10,
+      active_head_log_id: 11,
+      active_rows_after_cutoff: 1,
+      chain_bridge_required: true,
+      bridge_anchor_matches: true,
+      pending_outbox_total: 1,
+      pending_outbox_before_cutoff: 0,
+      archive_blocked_by_pending_outbox: false,
+      oldest_pending_outbox_at: '2026-06-11T00:03:00+09:00',
+      purpose_stats: [{ purpose: 'nearby_attractions', total: 1 }],
     },
   },
   kor_travel_map: {
@@ -261,6 +298,7 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_pii_retention_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-job-pinvi_location_log_archive_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
   await expect(page.getByTestId('admin-etl-email-stuck')).toContainText('1');
   await expect(page.getByTestId('admin-etl-email-template-verify_email')).toContainText('33.3%');
@@ -268,6 +306,13 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-pii-total')).toContainText('11');
   await expect(page.getByTestId('admin-etl-pii-tokens')).toContainText('3');
   await expect(page.getByTestId('admin-etl-pii-privileged-excluded')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-location-archive')).toContainText('dry-run');
+  await expect(page.getByTestId('admin-etl-location-archive-total')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-location-archive-bridge')).toContainText('일치');
+  await expect(page.getByTestId('admin-etl-location-archive-pending')).toContainText('0 / 1');
+  await expect(page.getByTestId('admin-etl-location-purpose-nearby_attractions')).toContainText(
+    '1',
+  );
   await expect(page.getByTestId('admin-etl-kmap-dagster-status')).toContainText('정상');
   await expect(page.getByTestId('admin-etl-import-row-job-1')).toBeVisible();
 

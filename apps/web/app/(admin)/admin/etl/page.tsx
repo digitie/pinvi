@@ -10,7 +10,7 @@ import {
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
 import type { AdminEmailOutboxTemplateSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
-import { Activity, Database, GitBranch, RefreshCw, ShieldCheck, Workflow } from 'lucide-react';
+import { Activity, Archive, Database, GitBranch, RefreshCw, ShieldCheck, Workflow } from 'lucide-react';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -119,6 +119,7 @@ export default function AdminEtlPage() {
   const importJobs = jobsQuery.data?.items ?? [];
   const emailOutbox = summary?.pinvi.email_outbox ?? null;
   const piiRetention = summary?.pinvi.pii_retention ?? null;
+  const locationArchive = summary?.pinvi.location_log_archive ?? null;
 
   const summaryError = summaryQuery.isError
     ? summaryQuery.error instanceof ApiError
@@ -375,6 +376,71 @@ export default function AdminEtlPage() {
                 dry-run / user {piiRetention.user_pii_grace_days}d / session{' '}
                 {piiRetention.session_grace_days}d / location{' '}
                 {piiRetention.location_retention_months}mo
+              </div>
+            </div>
+          ) : null}
+          {locationArchive ? (
+            <div
+              className="mt-4 rounded-sm border border-hairline p-3"
+              data-testid="admin-etl-location-archive"
+            >
+              <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                Location log archive
+              </h3>
+              <div className="grid gap-3 text-sm sm:grid-cols-4">
+                <div data-testid="admin-etl-location-archive-total">
+                  <div className="text-xs text-muted">candidates</div>
+                  <div className="font-semibold">
+                    {formatMetric(locationArchive.total_candidates)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">active rows</div>
+                  <div className="font-semibold">
+                    {formatMetric(locationArchive.active_rows_after_cutoff)}
+                  </div>
+                </div>
+                <div data-testid="admin-etl-location-archive-pending">
+                  <div className="text-xs text-muted">pending outbox</div>
+                  <div className="font-semibold">
+                    {formatMetric(locationArchive.pending_outbox_before_cutoff)} /{' '}
+                    {formatMetric(locationArchive.pending_outbox_total)}
+                  </div>
+                </div>
+                <div data-testid="admin-etl-location-archive-bridge">
+                  <div className="text-xs text-muted">chain bridge</div>
+                  <div className="font-semibold">
+                    {locationArchive.chain_bridge_required
+                      ? locationArchive.bridge_anchor_matches
+                        ? '일치'
+                        : '불일치'
+                      : '불필요'}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 text-xs text-muted sm:grid-cols-3">
+                <div>cutoff {formatDateTime(locationArchive.archive_cutoff)}</div>
+                <div>tail {locationArchive.archive_tail_log_id ?? '—'}</div>
+                <div>head {locationArchive.active_head_log_id ?? '—'}</div>
+              </div>
+              {locationArchive.purpose_stats.length ? (
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {locationArchive.purpose_stats.map((item) => (
+                    <li
+                      key={item.purpose}
+                      className="rounded-sm bg-surface-soft p-2 text-xs"
+                      data-testid={`admin-etl-location-purpose-${item.purpose}`}
+                    >
+                      <span className="font-mono">{item.purpose}</span>
+                      <span className="ml-2 text-muted">{formatMetric(item.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-2 text-xs text-muted">
+                dry-run / retention {locationArchive.location_retention_months}mo / blocked{' '}
+                {locationArchive.archive_blocked_by_pending_outbox ? 'yes' : 'no'}
               </div>
             </div>
           ) : null}

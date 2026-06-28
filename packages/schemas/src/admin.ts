@@ -259,6 +259,37 @@ export const AdminPiiRetentionSummarySchema = z.object({
 });
 export type AdminPiiRetentionSummary = z.infer<typeof AdminPiiRetentionSummarySchema>;
 
+export const AdminLocationLogArchivePurposeSummarySchema = z.object({
+  purpose: z.string(),
+  total: z.number().int().default(0),
+});
+export type AdminLocationLogArchivePurposeSummary = z.infer<
+  typeof AdminLocationLogArchivePurposeSummarySchema
+>;
+
+export const AdminLocationLogArchiveSummarySchema = z.object({
+  dry_run: z.boolean().default(true),
+  generated_at: Iso8601Schema,
+  archive_cutoff: Iso8601Schema,
+  location_retention_months: z.number().int(),
+  total_candidates: z.number().int().default(0),
+  oldest_candidate_at: Iso8601Schema.nullable().default(null),
+  newest_candidate_at: Iso8601Schema.nullable().default(null),
+  archive_tail_log_id: z.number().int().nullable().default(null),
+  active_head_log_id: z.number().int().nullable().default(null),
+  active_rows_after_cutoff: z.number().int().default(0),
+  chain_bridge_required: z.boolean().default(false),
+  bridge_anchor_matches: z.boolean().nullable().default(null),
+  pending_outbox_total: z.number().int().default(0),
+  pending_outbox_before_cutoff: z.number().int().default(0),
+  archive_blocked_by_pending_outbox: z.boolean().default(false),
+  oldest_pending_outbox_at: Iso8601Schema.nullable().default(null),
+  purpose_stats: z.array(AdminLocationLogArchivePurposeSummarySchema).default([]),
+});
+export type AdminLocationLogArchiveSummary = z.infer<
+  typeof AdminLocationLogArchiveSummarySchema
+>;
+
 export const AdminPinviEtlSummarySchema = z.object({
   status: AdminSystemStatusSchema,
   message: z.string().nullable().default(null),
@@ -269,6 +300,7 @@ export const AdminPinviEtlSummarySchema = z.object({
   sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
   email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
   pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
+  location_log_archive: AdminLocationLogArchiveSummarySchema.nullable().default(null),
 });
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 

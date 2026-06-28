@@ -30,21 +30,21 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 apps/etl/
 ├── pyproject.toml
 ├── pinvi/etl/
-│   ├── definitions.py     # code location (KASI + email + retention assets, jobs, schedules, sensors=[])
+│   ├── definitions.py     # code location (KASI + email + retention/location assets, jobs, schedules)
 │   ├── resources.py       # PinviDatabaseResource, KasiResource
-│   ├── schedules.py       # kasi_special_days_job + pinvi_email_outbox_job + pinvi_pii_retention_job
+│   ├── schedules.py       # kasi_special_days_job + email/retention/location archive jobs
 │   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
 │   └── assets/
 │       ├── pinvi_kasi_special_days.py
 │       ├── pinvi_email_outbox.py
+│       ├── pinvi_location_log_archive.py
 │       └── pinvi_pii_retention.py
 └── tests/
 ```
 
 계획(미구현, `app` schema 소유 job 후보): `sensors.py`(run_failure_sensor),
-`pinvi_telegram_weekly`(D-11) / `pinvi_location_log_archive`(DEC-10).
-POI 출몰시각은 별도 asset 파일이 아니라
-`jobs.py`의 one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
+`pinvi_telegram_weekly`(D-11). POI 출몰시각은 별도 asset 파일이 아니라 `jobs.py`의
+one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
 
 ## 3. KASI assets
 
@@ -85,6 +85,18 @@ POI 출몰시각은 별도 asset 파일이 아니라
 - Sprint 5 범위는 dry-run metadata와 Admin summary 노출까지다. 실제 delete/anonymize/archive는
   T-276 kill-switch/dashboard/evidence log 범위에서 연다.
 
+### 3.5 `pinvi_location_log_archive`
+
+- 매일 KST 04:30 실행.
+- `app.location_access_log`의 6개월 초과 archive 후보를 집계한다.
+- archive tail `content_hash`와 active head `prev_hash`를 비교해 archive 이후 active chain
+  검증에 필요한 bridge 상태를 metadata로 남긴다.
+- 미처리 `app.location_audit_outbox` 중 cutoff 이전 row가 있으면
+  `archive_blocked_by_pending_outbox=true`로 보고한다.
+- raw 좌표, user id, IP 원문은 metadata/API 응답에 넣지 않는다.
+- Sprint 5 범위는 dry-run metadata와 Admin summary 노출까지다. 실제 archive table 이동,
+  delete/anonymize, chain tail join 검증은 T-276에서 kill-switch/dashboard/evidence log와 함께 연다.
+
 ## 4. Schedule
 
 ```python
@@ -105,6 +117,11 @@ pinvi_pii_retention_job = define_asset_job(
     selection=["pinvi_pii_retention"],
 )
 
+pinvi_location_log_archive_job = define_asset_job(
+    "pinvi_location_log_archive_job",
+    selection=["pinvi_location_log_archive"],
+)
+
 kasi_special_days_schedule = ScheduleDefinition(
     job=kasi_special_days_job,
     cron_schedule="30 3 * * *",
@@ -120,6 +137,12 @@ pinvi_email_outbox_schedule = ScheduleDefinition(
 pinvi_pii_retention_schedule = ScheduleDefinition(
     job=pinvi_pii_retention_job,
     cron_schedule="15 4 * * *",
+    execution_timezone="Asia/Seoul",
+)
+
+pinvi_location_log_archive_schedule = ScheduleDefinition(
+    job=pinvi_location_log_archive_job,
+    cron_schedule="30 4 * * *",
     execution_timezone="Asia/Seoul",
 )
 ```

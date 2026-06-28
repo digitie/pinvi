@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from .pinvi_email_outbox import pinvi_email_outbox
 from .pinvi_kasi_special_days import pinvi_kasi_special_days
+from .pinvi_location_log_archive import pinvi_location_log_archive
 from .pinvi_pii_retention import pinvi_pii_retention
 
-__all__ = ["pinvi_email_outbox", "pinvi_kasi_special_days", "pinvi_pii_retention"]
+__all__ = [
+    "pinvi_email_outbox",
+    "pinvi_kasi_special_days",
+    "pinvi_location_log_archive",
+    "pinvi_pii_retention",
+]

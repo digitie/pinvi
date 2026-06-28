@@ -35,17 +35,19 @@ apps/etl/
 │       ├── __init__.py
 │       ├── definitions.py               # Dagster code location entry (sensors=[])
 │       ├── resources.py                 # PinviDatabaseResource, KasiResource
-│       ├── schedules.py                 # KASI cron + email outbox + PII retention cron
+│       ├── schedules.py                 # KASI cron + email/retention/location archive cron
 │       ├── jobs.py                      # kasi_poi_rise_set_job (POI 출몰시각 one-shot)
 │       └── assets/
 │           ├── __init__.py
 │           ├── pinvi_email_outbox.py
 │           ├── pinvi_kasi_special_days.py
+│           ├── pinvi_location_log_archive.py
 │           └── pinvi_pii_retention.py
 └── tests/
     ├── test_definitions.py
     ├── test_email_outbox.py
     ├── test_kasi_special_days.py
+    ├── test_location_log_archive.py
     └── test_pii_retention.py
 ```
 
@@ -55,8 +57,7 @@ apps/etl/
 pinvi/etl/
 ├── sensors.py                           # (계획) run_failure_sensor (Sentry/outbox)
 └── assets/
-    ├── pinvi_telegram_weekly.py      # (계획) 주간 브리프 — D-11
-    └── pinvi_location_log_archive.py # (계획) 위치로그 archive — DEC-10
+    └── pinvi_telegram_weekly.py      # (계획) 주간 브리프 — D-11
 ```
 
 ## 2.1 App-Owned Job 표준 (ADR-050)
@@ -132,6 +133,19 @@ token hash, 원본 위치 좌표는 남기지 않는다.
 kill-switch, evidence log, Admin retention dashboard는 T-276 범위다. `admin` / `operator` /
 `cpo` 역할이 있는 삭제 계정은 후보에서 제외하고 `excluded_privileged_deleted_users`로만 보고한다.
 
+### 3.3 Location log archive asset
+
+구현 상태(2026-06-28): `pinvi_location_log_archive` asset과
+`pinvi_location_log_archive_job` schedule이 등록되어 있다. 매일 KST 04:30
+`app.location_access_log`의 6개월 초과 archive 후보, archive tail `content_hash`와 active head
+`prev_hash`의 bridge 상태, 미처리 `app.location_audit_outbox` blocker, purpose별 후보 수를
+집계한다.
+
+이 asset은 destructive 작업을 하지 않는 dry-run 전용이다. metadata와 `/admin/etl/summary`
+응답에는 row count, log id, hash bridge 상태, cutoff만 남기고 user id, raw coordinate, IP 원문은
+남기지 않는다. 실제 archive/delete/anonymize 실행과 archive table/chain tail join 정책은
+T-276 kill-switch/dashboard/evidence log 범위다.
+
 ## 4. Resource
 
 ```python
@@ -167,6 +181,10 @@ from dagster import ScheduleDefinition, define_asset_job
 kasi_special_days_job = define_asset_job("kasi_special_days_job", selection=["pinvi_kasi_special_days"])
 pinvi_email_outbox_job = define_asset_job("pinvi_email_outbox_job", selection=["pinvi_email_outbox"])
 pinvi_pii_retention_job = define_asset_job("pinvi_pii_retention_job", selection=["pinvi_pii_retention"])
+pinvi_location_log_archive_job = define_asset_job(
+    "pinvi_location_log_archive_job",
+    selection=["pinvi_location_log_archive"],
+)
 
 schedules = [
     ScheduleDefinition(job=kasi_special_days_job, cron_schedule="30 3 * * *", execution_timezone="Asia/Seoul"),
@@ -180,6 +198,12 @@ schedules = [
         name="pinvi_pii_retention_schedule",
         job=pinvi_pii_retention_job,
         cron_schedule="15 4 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    ScheduleDefinition(
+        name="pinvi_location_log_archive_schedule",
+        job=pinvi_location_log_archive_job,
+        cron_schedule="30 4 * * *",
         execution_timezone="Asia/Seoul",
     ),
 ]
