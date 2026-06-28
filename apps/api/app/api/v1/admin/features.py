@@ -16,6 +16,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
+    KorTravelMapHttpClientDep,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
@@ -28,10 +29,13 @@ from app.schemas.admin import (
     AdminFeatureChangeRequestPagedResponse,
     AdminFeatureChangeRequestRecord,
     AdminFeatureDetail,
+    AdminFeatureOverridesResponse,
     AdminFeaturePagedResponse,
     AdminFeatureSort,
     AdminFeatureSortOrder,
+    AdminFeatureSourcesResponse,
     AdminFeatureSummary,
+    AdminFeatureWeatherValuesResponse,
 )
 from app.schemas.envelope import Envelope
 from app.services.admin_audit import append_admin_audit
@@ -128,6 +132,43 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
             detail={
                 "code": "VALIDATION_ERROR",
                 "message": "X-Request-Id 형식이 올바르지 않습니다.",
+            },
+        ) from exc
+
+
+def _validate_feature_detail(data: dict[str, Any]) -> AdminFeatureDetail:
+    try:
+        return AdminFeatureDetail.model_validate(data)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "FEATURE_SERVICE_BAD_GATEWAY",
+                "message": "kor_travel_map admin 상세 응답 형식이 올바르지 않습니다.",
+            },
+        ) from exc
+
+
+def _weather_values_from_payload(
+    payload: dict[str, Any], *, feature_id: str
+) -> AdminFeatureWeatherValuesResponse:
+    try:
+        return AdminFeatureWeatherValuesResponse.model_validate(
+            {
+                "feature_id": str(payload.get("feature_id") or feature_id),
+                "asof": payload.get("asof"),
+                "latest_at": payload.get("latest_at"),
+                "is_stale": bool(payload.get("is_stale", False)),
+                "source_styles": payload.get("source_styles", []),
+                "items": payload.get("metrics", []),
+            }
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "FEATURE_SERVICE_BAD_GATEWAY",
+                "message": "kor_travel_map weather 응답 형식이 올바르지 않습니다.",
             },
         ) from exc
 
@@ -337,6 +378,58 @@ async def reject_feature_change_request_endpoint(
     return Envelope.of(record)
 
 
+@router.get(
+    "/{feature_id}/sources",
+    response_model=Envelope[AdminFeatureSourcesResponse],
+)
+async def get_feature_sources_endpoint(
+    feature_id: str,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    admin_client: KorTravelMapAdminClientDep,
+) -> Envelope[AdminFeatureSourcesResponse]:
+    """kor-travel-map admin 상세의 source links만 read-only tab 응답으로 투영."""
+    with _map_admin_errors():
+        data = await admin_client.get_feature_detail(feature_id)
+    detail = _validate_feature_detail(data)
+    return Envelope.of(
+        AdminFeatureSourcesResponse(feature_id=detail.feature.feature_id, items=detail.sources)
+    )
+
+
+@router.get(
+    "/{feature_id}/overrides",
+    response_model=Envelope[AdminFeatureOverridesResponse],
+)
+async def get_feature_overrides_endpoint(
+    feature_id: str,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    admin_client: KorTravelMapAdminClientDep,
+) -> Envelope[AdminFeatureOverridesResponse]:
+    """kor-travel-map admin 상세의 override history만 read-only tab 응답으로 투영."""
+    with _map_admin_errors():
+        data = await admin_client.get_feature_detail(feature_id)
+    detail = _validate_feature_detail(data)
+    return Envelope.of(
+        AdminFeatureOverridesResponse(feature_id=detail.feature.feature_id, items=detail.overrides)
+    )
+
+
+@router.get(
+    "/{feature_id}/weather-values",
+    response_model=Envelope[AdminFeatureWeatherValuesResponse],
+)
+async def get_feature_weather_values_endpoint(
+    feature_id: str,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    client: KorTravelMapHttpClientDep,
+    asof: Annotated[datetime | None, Query()] = None,
+) -> Envelope[AdminFeatureWeatherValuesResponse]:
+    """kor-travel-map weather card를 admin deep-link tab용 값 목록으로 투영."""
+    with _map_admin_errors():
+        data = await client.feature_weather(feature_id, asof=asof)
+    return Envelope.of(_weather_values_from_payload(data, feature_id=feature_id))
+
+
 @router.get("/{feature_id}", response_model=Envelope[AdminFeatureDetail])
 async def get_feature_endpoint(
     feature_id: str,
@@ -346,14 +439,4 @@ async def get_feature_endpoint(
     """kor-travel-map `/v1/admin/features/{feature_id}` 상세 proxy."""
     with _map_admin_errors():
         data = await admin_client.get_feature_detail(feature_id)
-    try:
-        detail = AdminFeatureDetail.model_validate(data)
-    except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "FEATURE_SERVICE_BAD_GATEWAY",
-                "message": "kor_travel_map admin 상세 응답 형식이 올바르지 않습니다.",
-            },
-        ) from exc
-    return Envelope.of(detail)
+    return Envelope.of(_validate_feature_detail(data))

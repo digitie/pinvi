@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
@@ -63,6 +64,10 @@ function coordLabel(feature: Pick<AdminFeatureSummary, 'lon' | 'lat'>) {
   return typeof feature.lon === 'number' && typeof feature.lat === 'number'
     ? `${feature.lon.toFixed(5)}, ${feature.lat.toFixed(5)}`
     : '—';
+}
+
+function featureTabHref(featureId: string, tab: 'sources' | 'overrides' | 'weather-values') {
+  return `/admin/features/${encodeURIComponent(featureId)}/${tab}`;
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -177,12 +182,39 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
 
           <CountLine detail={detail} />
 
+          <nav className="flex flex-wrap gap-2 text-xs" aria-label="feature detail tabs">
+            <Link
+              href={featureTabHref(detail.feature.feature_id, 'sources')}
+              className="rounded-sm border border-hairline px-2 py-1"
+              data-testid="admin-features-link-sources"
+            >
+              sources
+            </Link>
+            <Link
+              href={featureTabHref(detail.feature.feature_id, 'overrides')}
+              className="rounded-sm border border-hairline px-2 py-1"
+              data-testid="admin-features-link-overrides"
+            >
+              overrides
+            </Link>
+            <Link
+              href={featureTabHref(detail.feature.feature_id, 'weather-values')}
+              className="rounded-sm border border-hairline px-2 py-1"
+              data-testid="admin-features-link-weather-values"
+            >
+              weather values
+            </Link>
+          </nav>
+
           <div className="space-y-2 text-sm">
             <details open>
               <summary className="cursor-pointer font-medium">sources</summary>
               <ul className="mt-2 space-y-1 text-xs">
                 {detail.sources.slice(0, 6).map((source) => (
-                  <li key={source.source_record_key} className="break-all rounded-sm bg-surface-soft p-2">
+                  <li
+                    key={source.source_record_key}
+                    className="break-all rounded-sm bg-surface-soft p-2"
+                  >
                     {source.provider} / {source.dataset_key} / {source.source_role} /{' '}
                     {source.confidence}
                   </li>

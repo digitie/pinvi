@@ -42,7 +42,7 @@
   - vworld 법정동코드 임포트 trigger UI (`kor-travel-geo`에 위임)
   - `/admin/etl` Dagit 임베드 + 자체 요약
   - `/admin/dedup-review` (라이브러리 `dedup_review_queue` callback)
-  - `/admin/features/{id}/sources` / `/overrides` / `/weather-values` (M-15)
+  - `/admin/features/{id}/sources` / `/overrides` / `/weather-values` (M-15, T-248 완료)
   - `/admin/provider-sync` import job cancel relay (T-247 완료). provider run-now/pause/resume은
     upstream provider mutation 계약 또는 별도 ADR 전까지 후속으로 남긴다.
   - `/admin/integrity` `app.data_integrity_violations` 1차 소스
@@ -86,6 +86,8 @@
   read-only e2e를 N150/Windows fallback으로 검증했다.
 - Provider sync 운영 mutation은 T-247에서 import job cancel relay로 닫았다. provider 자체
   run-now/pause/resume은 upstream 계약 부재로 후속 처리한다.
+- Feature detail subpage는 T-248에서 sources/overrides/weather-values read-only deep link와 mock e2e,
+  live matrix guarded case로 완료했다.
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
 - 리뷰 반영 legal/ops preflight: incident/DSR/retention execution/email suppression/RBAC/user lifecycle/
   abuse 운영 표면을 Sprint 6 Task로 고정.

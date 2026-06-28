@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 
-from app.clients.kor_travel_map import KorTravelMapConflict, KorTravelMapFeatureNotFound
+from app.clients.kor_travel_map import (
+    KorTravelMapConflict,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapUnavailable,
+    get_kor_travel_map_client,
+)
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
 from app.models.audit import AdminAuditLog
@@ -107,7 +112,20 @@ def _detail() -> dict[str, Any]:
             }
         ],
         "issues": [],
-        "overrides": [],
+        "overrides": [
+            {
+                "override_id": "ovr-1",
+                "source_record_key": "visitkorea:places:1",
+                "field_path": "detail.phone",
+                "source_value": "051-111-1111",
+                "override_value": "051-000-0000",
+                "prevent_provider_reactivation": True,
+                "status": "active",
+                "reason": "운영 검수",
+                "created_by": "pinvi-admin",
+                "created_at": "2026-06-12T00:10:00+09:00",
+            }
+        ],
         "versions": [
             {
                 "feature_id": "f_place_1",
@@ -209,12 +227,46 @@ class _FakeAdminClient:
         }
 
 
+class _FakeWeatherClient:
+    def __init__(self, *, unavailable: bool = False) -> None:
+        self.calls: dict[str, Any] = {}
+        self.unavailable = unavailable
+
+    async def feature_weather(self, feature_id: str, *, asof: Any = None) -> dict[str, Any]:
+        self.calls["feature_weather"] = {"feature_id": feature_id, "asof": asof}
+        if self.unavailable:
+            raise KorTravelMapUnavailable("kor-travel-map weather down")
+        return {
+            "feature_id": feature_id,
+            "asof": "2026-06-12T10:00:00+09:00",
+            "latest_at": "2026-06-12T09:30:00+09:00",
+            "is_stale": False,
+            "source_styles": ["nowcast", "short"],
+            "metrics": [
+                {
+                    "metric_key": "T1H",
+                    "metric_name": "기온",
+                    "forecast_style": "nowcast",
+                    "timeline_bucket": "current",
+                    "valid_at": "2026-06-12T10:00:00+09:00",
+                    "value_number": 24.5,
+                    "unit": "℃",
+                }
+            ],
+        }
+
+
 def _override(fake: Any) -> None:
     app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: fake
 
 
+def _override_weather(fake: Any) -> None:
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
+
+
 def _clear() -> None:
     app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)
+    app.dependency_overrides.pop(get_kor_travel_map_client, None)
 
 
 async def test_list_admin_features_proxies_filters(
@@ -287,6 +339,85 @@ async def test_get_admin_feature_returns_detail(
     assert data["feature"]["name"] == "해운대 카페"
     assert data["sources"][0]["provider"] == "visitkorea"
     assert data["versions"][0]["version"] == 3
+
+
+async def test_get_admin_feature_sources_and_overrides_return_projections(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        sources_resp = await client.get(
+            "/admin/features/f_place_1/sources",
+            cookies=auth_cookies(str(admin_id)),
+        )
+        overrides_resp = await client.get(
+            "/admin/features/f_place_1/overrides",
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert sources_resp.status_code == 200, sources_resp.text
+    assert overrides_resp.status_code == 200, overrides_resp.text
+    sources = sources_resp.json()["data"]
+    overrides = overrides_resp.json()["data"]
+    assert sources["feature_id"] == "f_place_1"
+    assert sources["items"][0]["source_record_key"] == "visitkorea:places:1"
+    assert overrides["feature_id"] == "f_place_1"
+    assert overrides["items"][0]["field_path"] == "detail.phone"
+    assert overrides["items"][0]["prevent_provider_reactivation"] is True
+
+
+async def test_get_admin_feature_weather_values_proxies_weather_card(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeWeatherClient()
+    _override_weather(fake)
+    try:
+        resp = await client.get(
+            "/admin/features/f_weather_1/weather-values",
+            params={"asof": "2026-06-12T10:00:00+09:00"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert fake.calls["feature_weather"]["feature_id"] == "f_weather_1"
+    assert fake.calls["feature_weather"]["asof"] == datetime.fromisoformat(
+        "2026-06-12T10:00:00+09:00"
+    )
+    assert data["feature_id"] == "f_weather_1"
+    assert data["source_styles"] == ["nowcast", "short"]
+    assert data["items"][0]["metric_key"] == "T1H"
+
+
+async def test_get_admin_feature_weather_values_maps_upstream_unavailable(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeWeatherClient(unavailable=True)
+    _override_weather(fake)
+    try:
+        resp = await client.get(
+            "/admin/features/f_weather_1/weather-values",
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
 
 
 async def test_get_admin_feature_maps_upstream_404(

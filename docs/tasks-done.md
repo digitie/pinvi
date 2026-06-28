@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-248 — Feature detail subpages.
+      `GET /admin/features/{id}/sources`, `/overrides`, `/weather-values`를 추가했다.
+      sources/overrides는 `kor-travel-map` admin detail payload에서 read-only projection으로
+      반환하고, weather-values는 기존 feature weather card의 metrics를 Admin tab용 list로 투영한다.
+      Web은 `/admin/features/{id}/{sources,overrides,weather-values}` deep link tab과 기존 feature
+      inspector의 tab link를 제공한다. override mutation은 별도 ADR 전까지 추가하지 않는다.
+
 - [x] T-247 — Provider sync 운영 mutation 계약 정리.
       upstream `kor-travel-map` 운영 mutation을 확인해 import job cancel만 Pinvi에 relay했다.
       `POST /admin/provider-sync/import-jobs/{job_id}/cancel`은 `admin` 전용, `access_reason`
