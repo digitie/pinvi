@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-280 RBAC role grant/revoke / permission matrix
+
+**작업**: Admin RBAC 권한 matrix와 사용자 role 부여/회수 workflow를 구현했다.
+
+**변경**:
+
+- `GET /admin/rbac/permission-matrix` API와 Web Admin `/admin/rbac` 화면을 추가했다. role 설명,
+  resource/action/route, 허용 role, 사유 필요 여부, audit 필요 여부를 표시한다.
+- 사용자 상세 화면에 역할 관리 섹션을 추가했다. `admin` 권한자는 `admin` / `operator` / `cpo`
+  role을 사유와 함께 부여하거나 회수한다.
+- role mutation은 `admin` 전용이며, `admin_audit_log`에 `user.role_grant` /
+  `user.role_revoke` action과 before/after roles, request id를 남긴다.
+- role 배열은 `user`, `admin`, `operator`, `cpo` 순서로 정규화한다.
+- 중복 부여, 미보유 role 회수, 자기 admin 회수, 마지막 admin 회수를 guard로 차단한다.
+- shared schema, API client, Admin query key, Admin mock Playwright, Admin live matrix catalog를 갱신했다.
+- `docs/architecture/admin-rbac.md`, `docs/api/admin.md`, `docs/runbooks/admin.md`, task/resume,
+  `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+
+- WSL: `ruff check` targeted RBAC/user admin API/service/schema/test files
+- WSL: `python -m mypy` targeted RBAC/user admin API/service/schema files
+- WSL: `npm run typecheck --workspace packages/schemas`
+- WSL: `npm run typecheck --workspace packages/api-client`
+- WSL: `npm run typecheck --workspace apps/web`
+- WSL: `npm run lint --workspace apps/web`
+- WSL: `PATH="$PWD/.venv/bin:$PATH" python -m pytest tests/integration/test_admin_users_api.py -q -s`
+  — 7 passed
+- Playwright: N150 alias `n150`, `pinvi-n150`이 현재 Linux 세션에서 해석되지 않아 Windows
+  fallback으로
+  `npm run test:e2e --workspace apps/web -- admin-users.e2e.ts --project=chromium --workers=1` —
+  5 passed
+
+**다음**: PR·CI·머지 후 T-281 User lifecycle admin actions로 진입한다.
+
 ## 2026-06-29 (codex) — T-279 Content moderation / takedown workflow
 
 **작업**: 콘텐츠 신고, 게시중단, 복원, 이의제기 workflow를 구현했다.

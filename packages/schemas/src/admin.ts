@@ -25,6 +25,12 @@ export const AdminUserSummarySchema = z.object({
 });
 export type AdminUserSummary = z.infer<typeof AdminUserSummarySchema>;
 
+export const AdminRoleSchema = z.enum(['user', 'admin', 'operator', 'cpo']);
+export type AdminRole = z.infer<typeof AdminRoleSchema>;
+
+export const MutableAdminRoleSchema = z.enum(['admin', 'operator', 'cpo']);
+export type MutableAdminRole = z.infer<typeof MutableAdminRoleSchema>;
+
 /** admin_audit_log 항목 — chain hash + occurred_at. */
 export const AdminAuditEntrySchema = z.object({
   log_id: z.number().int(),
@@ -1421,6 +1427,29 @@ export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   recent_audit: z.array(AdminAuditEntrySchema).default([]),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
+
+export const AdminUserRoleMutationRequestSchema = z.object({
+  role: MutableAdminRoleSchema,
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminUserRoleMutationRequest = z.infer<typeof AdminUserRoleMutationRequestSchema>;
+
+export const AdminPermissionMatrixEntrySchema = z.object({
+  resource: z.string(),
+  action: z.string(),
+  route: z.string(),
+  roles: z.array(AdminRoleSchema),
+  access_reason_required: z.boolean().default(false),
+  audit_required: z.boolean().default(false),
+  notes: z.string().nullable().default(null),
+});
+export type AdminPermissionMatrixEntry = z.infer<typeof AdminPermissionMatrixEntrySchema>;
+
+export const AdminPermissionMatrixResponseSchema = z.object({
+  roles: z.record(AdminRoleSchema, z.string()),
+  entries: z.array(AdminPermissionMatrixEntrySchema).default([]),
+});
+export type AdminPermissionMatrixResponse = z.infer<typeof AdminPermissionMatrixResponseSchema>;
 
 /** force-verify / disable 등 위험 액션은 사유 필수. */
 export const AdminActionRequestSchema = z.object({

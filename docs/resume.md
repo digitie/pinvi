@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-280 RBAC role grant/revoke / permission matrix
+
+Sprint 6 Admin RBAC role grant/revoke와 permission matrix를 구현했다. `/admin/rbac/permission-matrix`
+API는 `admin` / `operator` / `cpo`가 조회할 수 있는 role 설명과 endpoint 권한 matrix를 제공한다.
+`/admin/rbac` 화면은 같은 matrix를 표시하고, Admin sidebar에 RBAC 메뉴를 추가했다.
+
+사용자 상세 `/admin/users/{user_id}`에는 역할 관리 섹션을 추가했다. `admin` 권한자는
+`admin` / `operator` / `cpo` role을 사유와 함께 부여·회수할 수 있고, 모든 mutation은
+`admin_audit_log`에 `user.role_grant` / `user.role_revoke` action, before/after roles, request id를
+남긴다. role 배열은 `user`, `admin`, `operator`, `cpo` 순서로 정규화한다. 중복 부여, 미보유 role
+회수, 자기 admin 회수, 마지막 admin 회수는 각각 `409 INVALID_STATE` 또는
+`403 PERMISSION_DENIED`로 차단한다.
+
+검증은 Linux에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_admin_users_api.py` 7건을 통과했다. Playwright는 N150
+alias `n150`, `pinvi-n150`이 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+`admin-users.e2e.ts` 5건을 통과했다. `docs/architecture/admin-rbac.md`, `docs/api/admin.md`,
+`docs/runbooks/admin.md`, task/resume/journal, `CHANGELOG.md`를 함께 갱신했다. 다음 작업은
+PR·CI·머지 후 T-281 User lifecycle admin actions다.
+
 ## 2026-06-29 (codex) — T-279 Content moderation / takedown workflow
 
 Sprint 6 콘텐츠 신고/게시중단 workflow를 구현했다. DB에는 `app.content_reports`와

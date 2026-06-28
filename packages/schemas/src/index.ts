@@ -230,7 +230,12 @@ export type {
 
 export {
   AdminUserSummarySchema,
+  AdminRoleSchema,
+  MutableAdminRoleSchema,
   AdminUserDetailSchema,
+  AdminUserRoleMutationRequestSchema,
+  AdminPermissionMatrixEntrySchema,
+  AdminPermissionMatrixResponseSchema,
   AdminActionRequestSchema,
   AdminAvatarApplyRequestSchema,
   AdminAvatarDeleteRequestSchema,
@@ -395,7 +400,12 @@ export {
 } from './admin';
 export type {
   AdminUserSummary,
+  AdminRole,
+  MutableAdminRole,
   AdminUserDetail,
+  AdminUserRoleMutationRequest,
+  AdminPermissionMatrixEntry,
+  AdminPermissionMatrixResponse,
   AdminActionRequest,
   AdminAvatarApplyRequest,
   AdminAvatarDeleteRequest,

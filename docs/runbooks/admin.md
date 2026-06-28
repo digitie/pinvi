@@ -5,22 +5,45 @@ Admin 콘솔 운영 — 권한 부여 / seed / 위험 액션 / audit log 검증.
 
 ## 1. 권한 모델
 
-| 역할 | 권한 |
-|------|------|
-| `user` | 일반 사용자 |
-| `admin` | 운영 admin (대부분 mutate 가능) |
-| `operator` | 데이터 운영 (notice plan / category mapping) |
-| `cpo` | 개인정보 보호 책임자 (location_access_log SELECT 등) |
+| 역할       | 권한                                  |
+| ---------- | ------------------------------------- |
+| `user`     | 일반 사용자                           |
+| `admin`    | 전체 운영 mutation과 위험 action      |
+| `operator` | 운영 조회와 데이터 운영 일부 mutation |
+| `cpo`      | 개인정보/위치 감사/침해사고/DSR 처리  |
 
-부여:
+권한 정본은 `app.users.roles` 배열이다. `/admin/rbac`는 role별 permission matrix를 표시하고,
+사용자 상세 `/admin/users/{user_id}`의 "역할 관리" 섹션에서 `admin` / `operator` / `cpo`를
+부여하거나 회수한다. `user` role은 기본 role이므로 회수하지 않는다.
 
-```sql
--- DB에서 직접 (pgAdmin 또는 psql)
-UPDATE app.users SET roles = array_append(roles, 'admin') WHERE email = 'admin@example.com';
-UPDATE app.users SET roles = array_append(roles, 'cpo') WHERE email = 'cpo@example.com';
+API:
+
+```http
+POST /admin/users/<user_id>/roles/grant
+POST /admin/users/<user_id>/roles/revoke
+Content-Type: application/json
+
+{
+  "role": "operator",
+  "access_reason": "운영 담당자 지정"
+}
 ```
 
-UI에서는 부여하지 않음 (Telegram 정책과 동일 — `docs/integrations/telegram.md` §1).
+- 실행 권한은 `admin` 전용이다. `operator`와 `cpo`는 matrix 조회는 가능하지만 role mutation은
+  할 수 없다.
+- 중복 부여 또는 미보유 role 회수는 `409 INVALID_STATE`.
+- 자기 자신의 `admin` role 회수와 마지막 `admin` role 회수는 `403 PERMISSION_DENIED`.
+- 모든 role mutation은 `admin_audit_log`에 `user.role_grant` / `user.role_revoke`로 기록한다.
+
+DB 직접 수정은 운영 UI/API가 불가능한 break-glass 상황에만 사용한다. 실행 전 backup snapshot과
+CPO 승인, 실행 후 audit 보강 기록을 남긴다.
+
+```sql
+-- break-glass 전용: 운영 UI/API 사용 불가 시에만
+UPDATE app.users
+SET roles = ARRAY['user', 'admin']::varchar[]
+WHERE email = 'admin@example.com' AND deleted_at IS NULL;
+```
 
 ## 2. 초기 admin 계정
 
@@ -28,12 +51,13 @@ API startup은 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 **비어 있지 않을 때만
 `PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구한다. 이 값이 비어 있으면 의도적으로
 skip한다. 운영에서 기본 비밀번호가 우연히 살아나는 일을 막기 위한 안전장치다.
 
-| 환경변수 | 기본/예시 | 설명 |
-|----------|-----------|------|
-| `PINVI_BOOTSTRAP_ADMIN_EMAIL` | dev/smoke 예시값 | bootstrap 대상 이메일 |
-| `PINVI_BOOTSTRAP_ADMIN_PASSWORD` | 비어 있음 | 설정된 경우에만 Argon2id hash로 저장/복구 |
+| 환경변수                         | 기본/예시        | 설명                                      |
+| -------------------------------- | ---------------- | ----------------------------------------- |
+| `PINVI_BOOTSTRAP_ADMIN_EMAIL`    | dev/smoke 예시값 | bootstrap 대상 이메일                     |
+| `PINVI_BOOTSTRAP_ADMIN_PASSWORD` | 비어 있음        | 설정된 경우에만 Argon2id hash로 저장/복구 |
 
 동작:
+
 - 계정이 없으면 `status='active'`, `roles=['user','admin']`, `email_verified_at=now()`로 생성한다.
 - 계정이 있으나 비활성/미인증/admin role 누락/password 불일치면 복구한다.
 - password hash가 바뀌면 기존 active session을 폐기한다.
@@ -147,7 +171,7 @@ X-Access-Reason: "월간 추천 콘텐츠 공개"
 
 ### 4.3 cpo가 사용자 disable 시도
 
-→ `roles`에 `admin` 없음 → `403`. CPO는 disable 권한 X (조회만).
+→ `roles`에 `admin` 없음 → `404`. CPO는 disable 권한 X이며 endpoint 존재를 숨긴다.
 
 ## 5. Audit log 검증
 

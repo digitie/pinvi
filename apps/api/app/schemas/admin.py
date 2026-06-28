@@ -1130,6 +1130,26 @@ class AdminUserDetail(AdminUserSummary):
     recent_audit: list[AdminAuditEntry] = Field(default_factory=list)
 
 
+class AdminUserRoleMutationRequest(BaseModel):
+    role: Literal["admin", "operator", "cpo"]
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminPermissionMatrixEntry(BaseModel):
+    resource: str
+    action: str
+    route: str
+    roles: list[Literal["user", "admin", "operator", "cpo"]]
+    access_reason_required: bool = False
+    audit_required: bool = False
+    notes: str | None = None
+
+
+class AdminPermissionMatrixResponse(BaseModel):
+    roles: dict[Literal["user", "admin", "operator", "cpo"], str]
+    entries: list[AdminPermissionMatrixEntry] = Field(default_factory=list)
+
+
 class AdminActionRequest(BaseModel):
     """force-verify / disable 등 위험 액션 — 사유 필수."""
 

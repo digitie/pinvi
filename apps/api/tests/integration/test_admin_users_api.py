@@ -213,6 +213,122 @@ async def test_admin_user_force_verify_writes_status_audit(
     assert audit.after_state["email_verified_at"] is not None
 
 
+async def test_admin_user_role_grant_revoke_matrix_and_guards(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-rbac@example.com",
+        nickname="RBAC관리자",
+        roles=["user", "admin"],
+    )
+    second_admin_id = await _create_user(
+        session_factory,
+        email="admin-rbac-2@example.com",
+        nickname="RBAC관리자2",
+        roles=["user", "admin"],
+    )
+    operator_id = await _create_user(
+        session_factory,
+        email="operator-rbac@example.com",
+        nickname="오퍼레이터",
+        roles=["user", "operator"],
+    )
+    target_id = await _create_user(
+        session_factory,
+        email="target-rbac@example.com",
+        nickname="대상",
+        status="active",
+    )
+    admin_cookies = auth_cookies(str(admin_id))
+
+    matrix = await client.get(
+        "/admin/rbac/permission-matrix", cookies=auth_cookies(str(operator_id))
+    )
+    assert matrix.status_code == 200, matrix.text
+    matrix_data = matrix.json()["data"]
+    assert matrix_data["roles"]["admin"]
+    assert any(
+        entry["resource"] == "admin.users" and entry["action"] == "role_grant_revoke"
+        for entry in matrix_data["entries"]
+    )
+
+    denied = await client.post(
+        f"/admin/users/{target_id}/roles/grant",
+        json={"role": "admin", "access_reason": "권한 요청 승인"},
+        cookies=auth_cookies(str(operator_id)),
+    )
+    assert denied.status_code == 404
+
+    grant_request_id = uuid.uuid4()
+    granted = await client.post(
+        f"/admin/users/{target_id}/roles/grant",
+        headers={"X-Request-Id": str(grant_request_id)},
+        json={"role": "operator", "access_reason": "운영 담당자 지정"},
+        cookies=admin_cookies,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["data"]["roles"] == ["user", "operator"]
+    assert granted.json()["data"]["recent_audit"][0]["action"] == "user.role_grant"
+
+    duplicate = await client.post(
+        f"/admin/users/{target_id}/roles/grant",
+        json={"role": "operator", "access_reason": "중복 부여"},
+        cookies=admin_cookies,
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "INVALID_STATE"
+
+    revoke_request_id = uuid.uuid4()
+    revoked = await client.post(
+        f"/admin/users/{target_id}/roles/revoke",
+        headers={"X-Request-Id": str(revoke_request_id)},
+        json={"role": "operator", "access_reason": "운영 담당 해제"},
+        cookies=admin_cookies,
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json()["data"]["roles"] == ["user"]
+    assert revoked.json()["data"]["recent_audit"][0]["action"] == "user.role_revoke"
+
+    self_admin_revoke = await client.post(
+        f"/admin/users/{admin_id}/roles/revoke",
+        json={"role": "admin", "access_reason": "자기 권한 회수 시도"},
+        cookies=admin_cookies,
+    )
+    assert self_admin_revoke.status_code == 403
+    assert self_admin_revoke.json()["error"]["code"] == "PERMISSION_DENIED"
+
+    second_admin_revoke = await client.post(
+        f"/admin/users/{second_admin_id}/roles/revoke",
+        json={"role": "admin", "access_reason": "보조 관리자 해제"},
+        cookies=admin_cookies,
+    )
+    assert second_admin_revoke.status_code == 200, second_admin_revoke.text
+    assert second_admin_revoke.json()["data"]["roles"] == ["user"]
+
+    async with session_factory() as db:
+        target = await db.scalar(select(User).where(User.user_id == target_id))
+        grant_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == grant_request_id)
+        )
+        revoke_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == revoke_request_id)
+        )
+
+    assert target is not None
+    assert target.roles == ["user"]
+    assert grant_audit is not None
+    assert grant_audit.action == "user.role_grant"
+    assert grant_audit.before_state == {"roles": ["user"]}
+    assert grant_audit.after_state == {"roles": ["user", "operator"]}
+    assert revoke_audit is not None
+    assert revoke_audit.action == "user.role_revoke"
+    assert revoke_audit.before_state == {"roles": ["user", "operator"]}
+    assert revoke_audit.after_state == {"roles": ["user"]}
+
+
 async def test_admin_user_disable_rolls_back_when_audit_fails(
     client,
     session_factory,

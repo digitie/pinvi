@@ -1,7 +1,7 @@
 # Admin API (`/admin/*`)
 
 Admin 콘솔의 모든 endpoint. 13개 페이지 인덱스는 [`docs/spec/v8/04-admin.md`](../spec/v8/04-admin.md).
-RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md) (작성 예정).
+RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md).
 공통 규약 [`common.md`](./common.md).
 
 ## 1. 인증 / 권한
@@ -22,6 +22,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/stats/overview`                                       | 대시보드 운영 통계/그래프 지표                         | 3      |
 | `GET /admin/system/summary` / `detail`                            | 의존 API / Docker container 상태                       | 4      |
 | `GET /admin/users` / `{user_id}` / `PATCH`                        | 사용자 목록 / 상세 / 편집                              | 3      |
+| `POST /admin/users/{id}/roles/grant\|revoke`                      | 사용자 role 부여 / 회수 + 감사                         | 6      |
 | `POST /admin/users/{id}/force-verify`                             | 강제 verify (디버그)                                   | 3      |
 | `POST /admin/users/{id}/resend-verify`                            | 인증 메일 재발송                                       | 3      |
 | `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke)                         | 3      |
@@ -68,9 +69,52 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/backup/snapshots`                                     | `app` schema backup snapshot 목록                      | 5      |
 | `POST /admin/backup/snapshot`                                     | 수동 backup snapshot 생성 + audit                      | 5      |
 | `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                | MCP 토큰 검색 / 대리 발급 / 강제 회수                  | 6      |
+| `GET /admin/rbac/permission-matrix`                               | Admin role별 endpoint 권한 matrix                      | 6      |
 | `GET /admin/rustfs/objects` / `DELETE`                            | RustFS 객체 관리                                       | 2      |
 | `GET/POST /admin/seed/scenarios[/{scenario_key}]`                 | dev/staging seed scenario dry-run                      | 3      |
 | `GET /admin/reset/status` / `POST /admin/reset`                   | dev/staging reset dry-run                              | 3      |
+
+## 2.0 Admin RBAC / Permission Matrix
+
+`app.users.roles` 배열이 Admin 권한의 정본이다. token claim은 표시용으로만 쓰고,
+`require_role(...)` dependency가 매 요청마다 DB 사용자 row를 다시 읽어 `admin` / `operator` /
+`cpo` 포함 여부를 검사한다. 권한이 없으면 endpoint 존재를 숨기기 위해 `404 RESOURCE_NOT_FOUND`를
+반환한다.
+
+```http
+GET /admin/rbac/permission-matrix
+```
+
+- 권한: `admin` / `operator` / `cpo`
+- 응답: role 설명 map과 endpoint 권한 matrix
+- `access_reason_required`와 `audit_required`는 UI 표시와 운영 점검용이다. 최종 권한 정본은 각
+  FastAPI route의 `require_role(...)`와 mutation service guard다.
+
+응답 예:
+
+```jsonc
+{
+  "data": {
+    "roles": {
+      "user": "일반 사용자",
+      "admin": "전체 운영 mutation과 위험 action",
+      "operator": "운영 조회와 데이터 운영 일부 mutation",
+      "cpo": "개인정보/위치/보안 사고 처리",
+    },
+    "entries": [
+      {
+        "resource": "admin.users",
+        "action": "role_grant_revoke",
+        "route": "/admin/users/{user_id}/roles/{grant|revoke}",
+        "roles": ["admin"],
+        "access_reason_required": true,
+        "audit_required": true,
+        "notes": "user role 회수, 자기 admin 회수, 마지막 admin 회수를 차단한다.",
+      },
+    ],
+  },
+}
+```
 
 ## 2.1 PIPA Security Incidents
 
@@ -647,7 +691,32 @@ X-Access-Reason: "고객 문의 처리 (TICKET-1234)"
 - 모든 `user_sessions.revoked_at = now()`
 - 응답 200: 갱신된 user + 최근 audit
 
-### 6.4 PII 마스킹
+### 6.4 `POST /admin/users/{user_id}/roles/grant|revoke`
+
+Admin은 사용자 상세 화면에서 `admin` / `operator` / `cpo` role을 부여하거나 회수할 수 있다.
+`user` role은 기본 role이므로 mutation 대상이 아니다.
+
+```http
+POST /admin/users/<user_id>/roles/grant
+POST /admin/users/<user_id>/roles/revoke
+Content-Type: application/json
+
+{
+  "role": "operator",
+  "access_reason": "운영 담당자 지정"
+}
+```
+
+- 권한: `admin`
+- 성공 응답: 갱신된 `AdminUserDetail` + 최근 audit
+- 감사: `user.role_grant` / `user.role_revoke`, `before_state.roles`, `after_state.roles`,
+  `access_reason`, `request_id`
+- role 배열은 `user`, `admin`, `operator`, `cpo` 순서로 정규화한다.
+- 중복 부여 또는 미보유 role 회수는 `409 INVALID_STATE`.
+- 자기 자신의 `admin` role 회수와 마지막 `admin` role 회수는 `403 PERMISSION_DENIED`.
+- 권한 없는 사용자는 ADR-033 정책에 따라 `404 RESOURCE_NOT_FOUND`.
+
+### 6.5 PII 마스킹
 
 `GET /admin/users` 목록 응답:
 
@@ -675,7 +744,7 @@ Content-Type: application/json
   `target_pii_fields = ["email"]`, `access_reason` 기록.
 - 사유는 URL query/header가 아닌 JSON body로만 전달한다.
 
-### 6.5 사용자 아바타 관리
+### 6.6 사용자 아바타 관리
 
 Admin은 사용자 상세에서 대상 사용자의 RustFS 아바타를 조회/교체/삭제할 수 있다.
 
@@ -720,7 +789,7 @@ Content-Type: application/json
 - 기본값은 2MiB다.
 - 변경은 `admin_audit_log`에 `settings.avatar_update`로 기록한다.
 
-### 6.6 사용자 파일 용량 override
+### 6.7 사용자 파일 용량 override
 
 Admin은 사용자 상세에서 여행/날짜/POI 첨부 파일 quota override를 설정할 수 있다. `null`이면
 전역 설정을 사용하고, 값이 있으면 전역 설정보다 우선한다.
@@ -743,7 +812,7 @@ Content-Type: application/json
   `effective_user_attachment_quota_bytes`)을 함께 포함한다.
 - 변경은 `admin_audit_log`에 `user.file_quota_update`로 기록한다.
 
-### 6.7 전역 파일 용량 정책
+### 6.8 전역 파일 용량 정책
 
 ```http
 GET /admin/settings/files
@@ -762,7 +831,7 @@ Content-Type: application/json
 - 기본값은 개별 파일 10MiB, 여행계획 총량 100MiB, 사용자 총량 1GiB다.
 - 변경은 `admin_audit_log`에 `settings.files_update`로 기록한다.
 
-### 6.8 파일 관리
+### 6.9 파일 관리
 
 ```http
 GET /admin/files?q=receipt&scope=trip&user_id=<uuid>&trip_id=<uuid>&page=1&limit=50
@@ -2449,6 +2518,6 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
 - [ ] `apps/api/app/api/v1/admin/{users,trips,features,pois,datasets,entities,audit,etl,dedup,integrity,debug,backup,seed,reset,rustfs}.py`
 - [ ] `apps/api/app/services/admin/{entity_browser,entity_crud,audit_chain,seed_scenarios,reset}.py`
 - [ ] `apps/api/app/middleware/admin_audit.py` (chain prev_hash + content_hash)
-- [ ] `apps/api/app/middleware/rbac.py` (`roles` 검사 + 404 변환)
+- [ ] `apps/api/app/core/rbac.py` (`roles` 검사 + 404 변환)
 - [ ] 통합 테스트 + RBAC 거부 e2e + chain 검증
 - [ ] 운영 환경 `ENABLE_SEED=false` 시 seed/reset 라우트 404 확인

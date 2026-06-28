@@ -23,6 +23,7 @@ from app.api.v1.admin import (
     notice_plans,
     pois,
     provider_sync,
+    rbac,
     reset,
     retention,
     rustfs,
@@ -57,6 +58,7 @@ admin_router.include_router(stats.router)
 admin_router.include_router(emails.router)
 admin_router.include_router(backup.router)
 admin_router.include_router(mcp_tokens.router)
+admin_router.include_router(rbac.router)
 admin_router.include_router(rustfs.router)
 admin_router.include_router(notice_plans.router)
 admin_router.include_router(system.router)
