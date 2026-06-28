@@ -48,6 +48,9 @@
   교체했다. 16색 마커 팔레트 fallback, unmapped count, icon drift, feature count를 확인할 수 있다.
 - Admin `/admin/seed`, `/admin/reset`을 dev/staging 전용 dry-run 화면으로 교체했다. production에서는
   route가 숨겨지고, dry-run은 확인 문구와 운영 사유를 요구하며 감사 로그를 남긴다.
+- Admin backup snapshot trigger를 보강했다. backup script는 disk guard와 sha256 검증을 수행하고,
+  restore script는 sidecar checksum을 restore 전 검증하며, Admin API/audit은 host 절대경로를
+  `backup://<filename>`으로 mask하고 snapshot 실패 audit을 남긴다.
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,
   가입/여행 생성 24시간 막대 그래프, load average, 디스크 사용률, 첨부 저장소 사용량/한도를
   raw 운영 경로/도메인/secret 없이 표시한다.

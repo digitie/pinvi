@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-250 Backup script / snapshot endpoint hardening
+
+**작업**: backup/restore script와 Admin snapshot endpoint의 checksum, disk guard, path masking,
+실패 audit을 보강했다.
+
+**변경**:
+
+- `scripts/backup-db.sh`에 schema name guard, `PINVI_BACKUP_MIN_FREE_BYTES` disk guard, tmp dump
+  생성, sha256 sidecar 생성/검증을 추가했다.
+- `scripts/restore-db.sh`는 `.sha256` sidecar가 있으면 restore 전에 `sha256sum -c`로 검증한다.
+- `backup_service`는 sidecar checksum이 실제 dump와 일치할 때만 snapshot status를 `verified`로
+  반환하고, mismatch는 `available`로 낮춘다.
+- Admin backup snapshot/restore 응답과 audit/error message에서 host 절대경로를
+  `backup://<filename>`으로 mask하고 DB URL credential을 제거한다.
+- `POST /admin/backup/snapshot` 실패도 `backup.snapshot_failed` audit으로 남긴다.
+- Admin API/runbook/Sprint/tasks/resume/changelog 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `uv run --extra dev ruff check app/services/backup_service.py app/api/v1/admin/backup.py app/core/config.py tests/unit/test_backup_service.py tests/integration/test_admin_backup_api.py`
+- Linux: `uv run --extra dev ruff format --check app/services/backup_service.py app/api/v1/admin/backup.py app/core/config.py tests/unit/test_backup_service.py tests/integration/test_admin_backup_api.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_backup_service.py tests/integration/test_admin_backup_api.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `bash -n scripts/backup-db.sh scripts/restore-db.sh scripts/restore-hotswap.sh`
+
+**주의**:
+
+- 실제 backup 생성과 `pg_restore --list` staging drill은 T-251에서 N150 또는 staging DB 대상으로
+  수행한다.
+- UI 변경은 없어서 Playwright는 실행하지 않았다.
+
+**다음**: T-251 Restore staging drill.
+
 ## 2026-06-28 (codex) — T-249 App-owned integrity source / known orphan fix
 
 **작업**: Pinvi app-owned integrity source를 `/admin/integrity`에 추가하고 known app issue를 같은

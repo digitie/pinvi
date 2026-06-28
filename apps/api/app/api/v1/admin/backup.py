@@ -25,7 +25,9 @@ from app.services.backup_service import (
     BackupSnapshotNotFoundError,
     create_backup_snapshot,
     list_backup_snapshots,
+    mask_backup_path,
     restore_backup_hotswap,
+    sanitize_backup_message,
 )
 
 router = APIRouter(prefix="/admin/backup", tags=["admin"])
@@ -35,7 +37,7 @@ def _to_snapshot(snapshot: BackupSnapshot) -> AdminBackupSnapshot:
     return AdminBackupSnapshot(
         snapshot_id=snapshot.snapshot_id,
         filename=snapshot.filename,
-        path=snapshot.path,
+        path=mask_backup_path(snapshot.path),
         size_bytes=snapshot.size_bytes,
         checksum_sha256=snapshot.checksum_sha256,
         status=snapshot.status,
@@ -47,7 +49,7 @@ def _to_restore_run(run: BackupRestoreRun) -> AdminBackupRestoreRun:
     return AdminBackupRestoreRun(
         restore_id=run.restore_id,
         snapshot_id=run.snapshot_id,
-        snapshot_path=run.snapshot_path,
+        snapshot_path=mask_backup_path(run.snapshot_path),
         restore_schema=run.restore_schema,
         previous_schema=run.previous_schema,
         status=run.status,
@@ -90,12 +92,29 @@ async def create_backup_snapshot_endpoint(
     db: DbSession,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminBackupSnapshot]:
+    request_id = _request_uuid(x_request_id)
     try:
         snapshot = await create_backup_snapshot(access_reason=body.access_reason)
     except BackupServiceError as exc:
+        message = sanitize_backup_message(str(exc))
+        await append_admin_audit(
+            db,
+            actor_user_id=admin.user_id,
+            action="backup.snapshot_failed",
+            resource_type="backup_snapshot",
+            resource_id=None,
+            before_state=None,
+            after_state={"error": {"code": exc.code, "message": message}},
+            access_reason=body.access_reason,
+            target_pii_fields=None,
+            ip_hash_input=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent"),
+            request_id=request_id,
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": exc.code, "message": str(exc)},
+            detail={"code": exc.code, "message": message},
         ) from exc
 
     response = _to_snapshot(snapshot)
@@ -111,7 +130,7 @@ async def create_backup_snapshot_endpoint(
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=_request_uuid(x_request_id),
+        request_id=request_id,
     )
     await db.commit()
     return Envelope.of(response)
@@ -157,6 +176,7 @@ async def restore_backup_hotswap_endpoint(
             access_reason=body.access_reason,
         )
     except BackupSnapshotNotFoundError as exc:
+        message = sanitize_backup_message(str(exc))
         await append_admin_audit(
             db,
             actor_user_id=admin.user_id,
@@ -164,7 +184,7 @@ async def restore_backup_hotswap_endpoint(
             resource_type="backup_snapshot",
             resource_id=body.snapshot_id,
             before_state=None,
-            after_state={"error": {"code": exc.code, "message": str(exc)}},
+            after_state={"error": {"code": exc.code, "message": message}},
             access_reason=body.access_reason,
             target_pii_fields=None,
             ip_hash_input=request.client.host if request.client else "",
@@ -174,9 +194,10 @@ async def restore_backup_hotswap_endpoint(
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": exc.code, "message": str(exc)},
+            detail={"code": exc.code, "message": message},
         ) from exc
     except BackupServiceError as exc:
+        message = sanitize_backup_message(str(exc))
         await append_admin_audit(
             db,
             actor_user_id=admin.user_id,
@@ -184,7 +205,7 @@ async def restore_backup_hotswap_endpoint(
             resource_type="backup_snapshot",
             resource_id=body.snapshot_id,
             before_state=None,
-            after_state={"error": {"code": exc.code, "message": str(exc)}},
+            after_state={"error": {"code": exc.code, "message": message}},
             access_reason=body.access_reason,
             target_pii_fields=None,
             ip_hash_input=request.client.host if request.client else "",
@@ -194,7 +215,7 @@ async def restore_backup_hotswap_endpoint(
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": exc.code, "message": str(exc)},
+            detail={"code": exc.code, "message": message},
         ) from exc
 
     response = _to_restore_run(run)

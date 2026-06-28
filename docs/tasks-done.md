@@ -6,6 +6,12 @@
 
 ## 2026-06-28
 
+- [x] T-250 — Backup script / snapshot endpoint hardening.
+      `scripts/backup-db.sh`에 schema name guard, disk free guard, tmp dump 생성, sha256 생성/검증을
+      추가했고 `scripts/restore-db.sh`는 sidecar checksum을 restore 전에 검증한다. Admin backup
+      API는 snapshot/restore path를 `backup://<filename>`으로 mask하고, snapshot 생성 실패도
+      `backup.snapshot_failed` audit으로 남긴다.
+
 - [x] T-249 — App-owned integrity source / known orphan fix.
       `app.data_integrity_violations` migration/model과 Pinvi app-owned integrity service를
       추가했다. `/admin/integrity/issues`는 `source=all|kor_travel_map|pinvi_app` filter를

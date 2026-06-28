@@ -13,6 +13,7 @@ import pytest
 from app.core.config import settings
 from app.services import backup_service
 from app.services.backup_service import (
+    BackupDiskGuardError,
     BackupServiceError,
     BackupSnapshotNotFoundError,
     create_backup_snapshot,
@@ -93,7 +94,7 @@ set -euo pipefail
 mkdir -p "$PINVI_BACKUP_DIR"
 file="$PINVI_BACKUP_DIR/pinvi-app-test.dump"
 printf 'dump' > "$file"
-printf 'abc123  %s\n' "$file" > "$file.sha256"
+sha256sum "$file" > "$file.sha256"
 printf 'BACKUP_FILE=%s\n' "$file"
 """,
     )
@@ -104,7 +105,7 @@ printf 'BACKUP_FILE=%s\n' "$file"
     assert snapshot.snapshot_id == "pinvi-app-test"
     assert snapshot.status == "verified"
     assert snapshot.size_bytes == 4
-    assert snapshot.checksum_sha256 == "abc123"
+    assert snapshot.checksum_sha256 is not None
 
 
 @pytest.mark.asyncio
@@ -139,6 +140,33 @@ def test_list_backup_snapshots_sorts_recent_first(tmp_path: Path) -> None:
     snapshots = list_backup_snapshots()
 
     assert [snapshot.filename for snapshot in snapshots] == [new.name, old.name]
+
+
+def test_list_backup_snapshots_only_verifies_matching_checksum(tmp_path: Path) -> None:
+    backup_dir = Path(settings.pinvi_backup_dir)
+    backup_dir.mkdir(parents=True)
+    dump = backup_dir / "pinvi-app-corrupt.dump"
+    dump.write_text("dump", encoding="utf-8")
+    dump.with_suffix(".dump.sha256").write_text("bad  pinvi-app-corrupt.dump\n", encoding="utf-8")
+
+    snapshot = list_backup_snapshots()[0]
+
+    assert snapshot.status == "available"
+    assert snapshot.checksum_sha256 is None
+
+
+@pytest.mark.asyncio
+async def test_create_backup_snapshot_rejects_low_disk_space(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = tmp_path / "backup.sh"
+    _write_script(script, "#!/usr/bin/env bash\nexit 0\n")
+    monkeypatch.setattr(settings, "pinvi_backup_script_path", str(script))
+    monkeypatch.setattr(settings, "pinvi_backup_min_free_bytes", 10**18)
+
+    with pytest.raises(BackupDiskGuardError):
+        await create_backup_snapshot(access_reason="디스크 가드 테스트")
 
 
 def test_restore_lock_database_url_accepts_psql_driverless_url(

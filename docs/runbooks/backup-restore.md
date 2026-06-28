@@ -56,9 +56,12 @@ ls -la /var/lib/pinvi/backups/
 | `PINVI_BACKUP_DIR` | `.tmp/backups` | dump 저장 디렉터리 |
 | `PINVI_BACKUP_SCHEMA` | `app` | Pinvi 소유 schema |
 | `PINVI_BACKUP_DATABASE_URL` | `PINVI_DATABASE_URL` | backup 전용 DB URL override |
+| `PINVI_BACKUP_MIN_FREE_BYTES` | `1073741824` | backup 시작 전 남아 있어야 하는 최소 여유 byte |
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
-단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다.
+단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. dump와 sidecar는 생성 직후
+`sha256sum -c`로 검증하며, Admin API 응답과 audit에는 host 절대경로 대신
+`backup://<filename>`만 노출한다.
 
 ## 3. Restore — 단순 (긴급)
 
@@ -97,6 +100,9 @@ docker compose -f docker-compose.app.yml start web
 | `PINVI_RESTORE_SCHEMA` | `PINVI_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema |
 | `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL` | restore 전용 DB URL override |
 | `PINVI_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
+
+`scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 있으면 restore 전에 반드시
+검증한다. sidecar가 실패하면 restore를 시작하지 않는다.
 
 `scripts/restore-hotswap.sh` / API hot-swap 환경변수:
 

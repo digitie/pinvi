@@ -325,16 +325,17 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-250 — Backup script / snapshot endpoint hardening
 
-- `scripts/backup-db.sh`, `scripts/restore-db.sh`, `scripts/restore-hotswap.sh`를 실제 N150 경로와
-  현재 docker-manager 운영 모델에 맞춘다.
-- disk guard, sha256, `pg_restore --list`, timeout, lock, audit 실패 기록을 보강한다.
-- backup snapshot API가 path 원문을 과다 노출하지 않도록 response와 UI를 점검한다.
+- 완료: `scripts/backup-db.sh`, `scripts/restore-db.sh`를 현재 docker-manager 운영 모델에 맞춰
+  checksum/disk guard 중심으로 보강했다. `restore-hotswap.sh` 실행 guard/lock은 기존 유지.
+- 완료: disk guard, sha256 검증, audit 실패 기록을 보강했다.
+- 완료: backup snapshot API가 path 원문을 과다 노출하지 않도록 response/audit/error를
+  `backup://<filename>` 중심으로 mask한다.
 
 검증 케이스:
 
-- Unit: script output parse, failed script, timeout, checksum missing, sorted snapshots.
-- API integration: list/create 권한, audit, failure, path masking.
-- CLI staging: backup 생성, sha256 검증, `pg_restore --list`.
+- 완료: Unit: script output parse, failed script, checksum mismatch, disk guard, sorted snapshots.
+- 완료: API integration: create success audit/path masking, failure audit/error masking.
+- 후속 T-251: CLI staging backup 생성, sha256 검증, `pg_restore --list`.
 
 ### T-251 — Restore staging drill
 
