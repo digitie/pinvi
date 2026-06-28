@@ -99,6 +99,9 @@ export const queryKeys = {
       pageSize?: number;
     }) => ['admin', 'dsr-requests', params] as const,
     dsrRequestsAll: () => ['admin', 'dsr-requests'] as const,
+    contentReports: (params: { status?: string; targetType?: string; pageSize?: number }) =>
+      ['admin', 'content-reports', params] as const,
+    contentReportsAll: () => ['admin', 'content-reports'] as const,
     retentionSummary: () => ['admin', 'retention', 'summary'] as const,
     retentionRuns: (params: { pageSize?: number } = {}) =>
       ['admin', 'retention', 'runs', params] as const,

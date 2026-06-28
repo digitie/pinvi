@@ -4,6 +4,17 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-06-29
+
+- [x] T-279 — Content moderation / takedown workflow.
+      `app.content_reports`와 `app.content_moderation_actions`를 추가해 trip/comment/attachment/share link
+      신고, target snapshot, 증거 metadata, review/hide/takedown/restore/reject/appeal 상태와 조치
+      history를 저장한다. `/users/me/content-reports`와 `/settings/moderation`은 사용자 신고
+      접수/조회/이의제기를 제공하고, `/admin/moderation`은 운영자 검토/숨김/게시중단/복원/반려
+      workflow와 `admin_audit_log` 기록을 제공한다. hide/takedown/restore는 여행 visibility/archive,
+      댓글/첨부 soft-delete, 공유 링크 revoke 상태에 실제 반영된다. API integration, Admin/user mock
+      Playwright, API/Admin/users/PIPA/schema/runbook 문서를 함께 갱신했다.
+
 ## 2026-06-28
 
 - [x] T-278 — DSR intake workflow.

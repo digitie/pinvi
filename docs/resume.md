@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-279 Content moderation / takedown workflow
+
+Sprint 6 콘텐츠 신고/게시중단 workflow를 구현했다. DB에는 `app.content_reports`와
+`app.content_moderation_actions`를 추가해 trip/comment/attachment/share link 신고, target snapshot,
+증거 metadata, 접수/검토/숨김/게시중단/복원/반려/이의제기 상태, reviewer/resolution/appeal 시각,
+조치 전후 상태를 저장한다.
+
+사용자 self-service는 `/users/me/content-reports` API와 `/settings/moderation` 화면으로 신고
+접수/조회/이의제기를 제공한다. 운영 처리는 `/admin/moderation` API/화면으로 검토, 숨김,
+게시중단, 복원, 반려를 수행하며 모든 mutation은 `admin_audit_log`에
+`content_moderation.*` action과 운영 사유를 남긴다. 숨김/게시중단/복원 조치는 여행 공개 상태,
+soft-delete 댓글/첨부, 공유 링크 revoke 상태에 실제 반영된다. API client/schema/query key,
+Admin/user mock Playwright, `docs/runbooks/content-moderation.md`, API/Admin/users/PIPA/schema/data-model
+문서를 함께 갱신했다.
+
+검증은 Linux/WSL에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_content_moderation_api.py` 3건을 통과했다. Playwright는 N150
+alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로 `admin-moderation.e2e.ts`와
+`settings-moderation.e2e.ts` 2건을 통과했다. 다음 작업은 PR·CI·머지 후 T-280 RBAC role
+grant/revoke / permission matrix다.
+
 ## 2026-06-28 (codex) — T-278 DSR intake workflow
 
 Sprint 6 개인정보 권리행사 DSR workflow를 구현했다. DB에는 `app.dsr_requests`를 추가해

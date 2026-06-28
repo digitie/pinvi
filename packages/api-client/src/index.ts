@@ -27,6 +27,8 @@ export type { MobileAuthResult } from './endpoints/mobile';
 export type { TripBucket, TripListPage, TripListParams, TripListSort } from './endpoints/trips';
 export type {
   AdminCategoryMappingListParams,
+  AdminContentModerationActionBody,
+  AdminContentReportListParams,
   AdminConsistencyReportListParams,
   AdminDedupReviewListParams,
   AdminDsrCompleteBody,
@@ -55,7 +57,12 @@ export type {
   AdminUpstreamApiCallLogListParams,
 } from './endpoints/admin';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
-export type { DsrRequestCreateBody, DsrRequestWithdrawBody } from './endpoints/users';
+export type {
+  ContentReportAppealBody,
+  ContentReportCreateBody,
+  DsrRequestCreateBody,
+  DsrRequestWithdrawBody,
+} from './endpoints/users';
 export type {
   PublicBeachListParams,
   PublicFestivalMarkerParams,

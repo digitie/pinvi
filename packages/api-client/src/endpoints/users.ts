@@ -1,5 +1,9 @@
 import {
   ConsentTypeSchema,
+  ContentReportAppealRequestSchema,
+  ContentReportCreateRequestSchema,
+  ContentReportListResponseSchema,
+  ContentReportRecordSchema,
   DsrRequestCreateRequestSchema,
   DsrRequestListResponseSchema,
   DsrRequestRecordSchema,
@@ -19,6 +23,8 @@ const ConsentItemsSchema = z.array(
 
 export type DsrRequestCreateBody = z.input<typeof DsrRequestCreateRequestSchema>;
 export type DsrRequestWithdrawBody = z.input<typeof DsrRequestWithdrawRequestSchema>;
+export type ContentReportCreateBody = z.input<typeof ContentReportCreateRequestSchema>;
+export type ContentReportAppealBody = z.input<typeof ContentReportAppealRequestSchema>;
 
 export const userApi = (client: ApiClient) => ({
   /** 현재 사용자의 동의 목록(`docs/api/users.md` §3). */
@@ -81,5 +87,28 @@ export const userApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(DsrRequestWithdrawRequestSchema.parse(body)),
       schema: DsrRequestRecordSchema,
+    }),
+
+  listContentReports: (pageSize = 50) => {
+    const qs = new URLSearchParams();
+    qs.set('page_size', String(pageSize));
+    return client.request(`/users/me/content-reports?${qs.toString()}`, {
+      method: 'GET',
+      schema: ContentReportListResponseSchema,
+    });
+  },
+
+  createContentReport: (body: ContentReportCreateBody) =>
+    client.request('/users/me/content-reports', {
+      method: 'POST',
+      body: JSON.stringify(ContentReportCreateRequestSchema.parse(body)),
+      schema: ContentReportRecordSchema,
+    }),
+
+  appealContentReport: (reportId: string, body: ContentReportAppealBody) =>
+    client.request(`/users/me/content-reports/${encodeURIComponent(reportId)}/appeal`, {
+      method: 'POST',
+      body: JSON.stringify(ContentReportAppealRequestSchema.parse(body)),
+      schema: ContentReportRecordSchema,
     }),
 });

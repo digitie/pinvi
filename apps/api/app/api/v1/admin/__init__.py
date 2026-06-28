@@ -19,6 +19,7 @@ from app.api.v1.admin import (
     incidents,
     integrity,
     mcp_tokens,
+    moderation,
     notice_plans,
     pois,
     provider_sync,
@@ -49,6 +50,7 @@ admin_router.include_router(debug_logs.router)
 admin_router.include_router(files.router)
 admin_router.include_router(incidents.router)
 admin_router.include_router(dsr.router)
+admin_router.include_router(moderation.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
 admin_router.include_router(stats.router)

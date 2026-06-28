@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 import { FeatureIdSchema, WeatherMetricSchema } from './feature';
+import {
+  ContentModerationActionRequestSchema,
+  ContentReportListResponseSchema,
+  ContentReportRecordSchema,
+  ContentReportStatusSchema,
+  ContentReportTargetTypeSchema,
+} from './moderation';
 import { AttachmentLibraryItemSchema, AvatarApplyRequestSchema } from './storage';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
@@ -959,6 +966,23 @@ export const AdminDsrRejectRequestSchema = z.object({
   evidence_attachment_id: z.string().uuid().nullable().optional(),
 });
 export type AdminDsrRejectRequest = z.infer<typeof AdminDsrRejectRequestSchema>;
+
+export const AdminContentReportTargetTypeSchema = ContentReportTargetTypeSchema;
+export type AdminContentReportTargetType = z.infer<typeof AdminContentReportTargetTypeSchema>;
+
+export const AdminContentReportStatusSchema = ContentReportStatusSchema;
+export type AdminContentReportStatus = z.infer<typeof AdminContentReportStatusSchema>;
+
+export const AdminContentReportRecordSchema = ContentReportRecordSchema;
+export type AdminContentReportRecord = z.infer<typeof AdminContentReportRecordSchema>;
+
+export const AdminContentReportListResponseSchema = ContentReportListResponseSchema;
+export type AdminContentReportListResponse = z.infer<typeof AdminContentReportListResponseSchema>;
+
+export const AdminContentModerationActionRequestSchema = ContentModerationActionRequestSchema;
+export type AdminContentModerationActionRequest = z.infer<
+  typeof AdminContentModerationActionRequestSchema
+>;
 
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),

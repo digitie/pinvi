@@ -48,6 +48,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
 | `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
 | `GET/POST /admin/dsr[/{id}/...]`                                  | 개인정보 권리행사 DSR CPO workflow                     | 6      |
+| `GET/POST /admin/moderation/reports[/{id}/...]`                   | 콘텐츠 신고 심사 / 숨김 / 게시중단 / 복구              | 6      |
 | `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute                 | 6      |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
@@ -233,7 +234,71 @@ Query:
 
 자세한 운영 절차는 [`docs/runbooks/dsr.md`](../runbooks/dsr.md).
 
-## 2.3 Retention Execution
+## 2.3 Content Moderation
+
+`/admin/moderation`은 `app.content_reports`와 `app.content_moderation_actions`를 운영자
+심사 큐로 노출한다. 사용자 접수는 `/users/me/content-reports`와 `/settings/moderation`에서 만들고,
+Admin은 검토 시작, 숨김, 게시중단, 복구, 기각을 수행한다.
+
+권한:
+
+- `GET /admin/moderation/reports`: `admin` / `operator`
+- `POST /admin/moderation/reports/{report_id}/review`: `admin` / `operator`
+- `POST /admin/moderation/reports/{report_id}/hide`: `admin` / `operator`
+- `POST /admin/moderation/reports/{report_id}/takedown`: `admin` / `operator`
+- `POST /admin/moderation/reports/{report_id}/restore`: `admin` / `operator`
+- `POST /admin/moderation/reports/{report_id}/reject`: `admin` / `operator`
+
+조회:
+
+```http
+GET /admin/moderation/reports?status=received&target_type=comment&page_size=50
+```
+
+Query:
+
+| 이름          | 설명                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------- |
+| `status`      | `received` / `reviewing` / `hidden` / `taken_down` / `rejected` / `appealed` / `restored` |
+| `target_type` | `trip` / `comment` / `attachment` / `share_link`                                          |
+| `page_size`   | 1~200, 기본 50                                                                            |
+
+Mutation body는 모든 조치가 동일하다.
+
+```jsonc
+{
+  "access_reason": "privacy report action",
+  "resolution_summary": "개인정보 포함 댓글 숨김",
+}
+```
+
+상태 전이:
+
+| 현재 상태    | 가능한 admin 조치                         |
+| ------------ | ----------------------------------------- |
+| `received`   | `review` / `hide` / `takedown` / `reject` |
+| `reviewing`  | `hide` / `takedown` / `reject`            |
+| `hidden`     | `restore`                                 |
+| `taken_down` | `restore`                                 |
+| `appealed`   | `restore` / `takedown` / `reject`         |
+| `rejected`   | 사용자 appeal 가능, admin 직접 조치 없음  |
+| `restored`   | 재신고 시 새 report로 처리                |
+
+실제 대상 조치:
+
+- `trip`: `hide`는 `visibility='private'`, `takedown`은 `status='archived'` + `deleted_at`,
+  `restore`는 접수 시 snapshot의 `status` / `visibility`를 복원한다.
+- `comment`: `hide` / `takedown`은 `trip_comments.deleted_at`, `restore`는 `NULL`.
+- `attachment`: `hide` / `takedown`은 `curated_plan_attachments.deleted_at`, `restore`는 `NULL`.
+- `share_link`: `hide` / `takedown`은 `trip_share_links.revoked_at`, `restore`는 `NULL`.
+
+모든 admin mutation은 `admin_audit_log.action='content_moderation.*'`, `access_reason`,
+`target_pii_fields=['user_content']`를 남긴다. 사용자 appeal은 admin audit이 아니라
+`content_moderation_actions.action='appeal'`로 report 이력에 남긴다.
+
+자세한 운영 절차는 [`docs/runbooks/content-moderation.md`](../runbooks/content-moderation.md).
+
+## 2.4 Retention Execution
 
 `/admin/retention`은 T-240/T-241 dry-run 집계를 운영자가 승인·실행·감사할 수 있는 콘솔이다.
 실제 파괴 작업은 기본 비활성 kill-switch 뒤에 있고, 모든 run은 `app.retention_runs`에 후보

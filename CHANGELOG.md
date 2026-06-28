@@ -134,6 +134,11 @@
   CPO는 `/admin/dsr`에서 본인 확인, 처리 시작, 완료/거절 통지를 수행한다. `app.dsr_requests`는
   10일 due, hash/masked 이메일, result notice hash, export manifest, partial response, audit evidence를
   저장한다.
+- 콘텐츠 신고/게시중단 workflow를 추가했다. 사용자는 `/settings/moderation`과
+  `/users/me/content-reports`에서 여행/댓글/첨부/공유 링크 신고와 이의제기를 접수·조회할 수 있고,
+  운영자는 `/admin/moderation`에서 검토, 숨김, 게시중단, 복원, 반려 조치를 수행한다.
+  `app.content_reports`와 `app.content_moderation_actions`는 target snapshot, evidence, appeal,
+  action history를 저장하고 hide/takedown/restore 조치는 대상 row 상태에 반영된다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder

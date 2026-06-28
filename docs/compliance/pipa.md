@@ -193,6 +193,8 @@ ADR 필요 — Sprint 6 또는 v2.
 - [x] CPO/Admin Telegram outbox 알림 (`security_incident`)
 - [x] `/admin/incidents` 페이지 + 사용자 통지 mailing outbox
 - [x] DSR 접수/처리 workflow (`/settings/dsr`, `/admin/dsr`, `app.dsr_requests`)
+- [x] 콘텐츠 신고/게시중단/복구/이의제기 workflow (`/settings/moderation`, `/admin/moderation`,
+      `app.content_reports`)
 - [ ] 처리방침 placeholder (`docs/legal/privacy-policy.md`)
 - [ ] PR 템플릿에 PIPA 점검 체크리스트
 - [ ] CHANGELOG에 PII 영향 변경 명시

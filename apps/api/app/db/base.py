@@ -39,6 +39,7 @@ from app.models import (  # noqa: E402,F401
     feature_suggestion,
     kasi,
     mcp_token,
+    moderation,
     oauth_identity,
     poi,
     security,
