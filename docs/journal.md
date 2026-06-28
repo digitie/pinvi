@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-256 Review gap crosswalk / legal-ops preflight
+
+**작업**: PR 리뷰에서 나온 legal/ops gap과 최근 사후 리뷰 후속을 Task 번호에 매핑했다.
+
+**변경**:
+
+- `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가했다.
+- PR #238/#264 legal/ops 리뷰 gap 44개를 G-001~G-044로 번호화하고, 각 항목을
+  T-257/T-258/T-275~T-286 등 하나 이상의 대응 Task로 연결했다.
+- 최근 2일 PR #265~#289의 사람 리뷰 코멘트를 확인했다. WebSocket, conflict UX,
+  ETL compliance SQL/failure sensor, app integrity pagination/producer 후속은 T-289~T-292로
+  새 backlog 항목을 만들었다.
+- `docs/tasks.md`, `docs/tasks-done.md`, Sprint 5/6 문서, `docs/resume.md`가 같은
+  crosswalk 정본을 가리키도록 정리했다.
+
+**검증**:
+
+- `gh issue/pr` comment 조회로 #238/#264 원자료와 #265~#289 최근 리뷰 코멘트를 확인했다.
+- 문서-only 변경이며 코드/브라우저 실행은 없다.
+
+**다음**: T-257 Email deliverability / provider tracking preflight.
+
 ## 2026-06-28 (codex) — T-255 지도 마커 / 색상 적용 parity
 
 **작업**: 사용자/Admin 지도 marker 색상·아이콘 해석을 공용 resolver로 정리하고 mock/live e2e gate를 추가했다.

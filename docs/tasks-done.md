@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-256 — Review gap crosswalk / legal-ops preflight.
+      `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가해 PR #238/#264 legal-ops 리뷰 gap
+      44개를 T-257/T-258/T-275~T-286 등 대응 Task로 매핑했다. 최근 2일 PR #265~#289
+      리뷰 코멘트도 확인해 WebSocket, conflict, ETL compliance SQL, app integrity 후속을
+      T-289~T-292로 남겼다. Sprint 5/6, tasks, resume, journal이 같은 crosswalk 정본을
+      참조하도록 정리했다.
+
 - [x] T-255 — 지도 마커 / 색상 적용 parity.
       `@pinvi/domain`에 marker resolver를 추가해 custom/resolved/upstream/snapshot/category/kind/fallback
       우선순위를 한 곳에서 계산한다. 사용자 Trip 지도, 탐색 지도, Admin Trip POI preview는 같은

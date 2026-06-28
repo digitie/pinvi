@@ -446,19 +446,21 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - Windows fallback: `npm -w @pinvi/web run test:e2e:admin-live -- admin-live-map-marker-parity.live.ts --workers=1`
   → 1 skipped (`PINVI_ADMIN_LIVE_E2E` gate).
 
-### T-256 — Review gap crosswalk / legal-ops preflight
+### T-256 — Review gap crosswalk / legal-ops preflight — 완료
 
-- PR 리뷰와 cross-track #238 리뷰 gap을 본 문서의 Task 번호에 매핑한다.
-- Sprint 5에서 구현할 것, Sprint 6 진입 전 반드시 설계할 것, v1.0 외부 출시 전 반드시 구현할 것을
-  구분한다.
-- `docs/tasks.md`, Sprint 문서, `docs/resume.md`, `docs/journal.md`가 같은 번호와 범위를 가리키게
-  한다.
+- 완료: `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가했다.
+- 완료: PR #238/#264 legal/ops 리뷰 gap 44개를 G-001~G-044로 번호화하고,
+  T-257/T-258/T-275~T-286 등 하나 이상의 대응 Task로 매핑했다.
+- 완료: 최근 2일 PR #265~#289의 사람 리뷰 코멘트를 확인하고, 사후 리뷰에서 나온
+  WebSocket/conflict/ETL/integrity 후속을 T-289~T-292로 분리했다.
+- 완료: `docs/tasks.md`, Sprint 5/6 문서, `docs/resume.md`, `docs/journal.md`가 같은
+  crosswalk 정본을 가리키게 정리했다.
 
 검증 케이스:
 
 - 문서 diff check.
 - 민감정보 패턴 스캔.
-- 리뷰 코멘트별 대응 Task가 하나 이상 존재한다.
+- G-001~G-044와 R-001~R-009가 하나 이상의 대응 Task를 가진다.
 
 ### T-257 — Email deliverability / provider tracking preflight
 
