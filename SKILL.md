@@ -38,21 +38,21 @@
 | Admin 콘솔 | `apps/web/app/admin/` |
 | 운영 노드 | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose) |
 
-### 개발 환경 (PC, WSL) — ADR-024
+### 개발 환경 (Linux / WSL / N150) — ADR-051
 
-- **git / 편집 / commit / PR**: NTFS worktree (`F:/dev/pinvi-<agent>`)에서
-  **Windows git(`git.exe`)으로만**. 여기가 git source of truth.
-- **의존성 설치 / `pytest` / `docker` / 장기 실행**: WSL ext4 **일회용 테스트
-  미러** (`~/pinvi-workspaces/pinvi-<agent>`). 미러에서 commit/push 금지.
-- **rsync는 NTFS → ext4 단방향**. 수정은 NTFS worktree에 반영 후 다시 단방향 sync.
-- **데이터(`dataset/`, `refdocs/`)**: NTFS 원본. ext4 미러는 심볼릭 링크/절대경로 참조.
+- **git / 편집 / commit / PR**: Linux worktree에서 Linux git으로 수행한다.
+- **CodeGraph**: Linux native `codegraph`만 사용한다. `/mnt/c/...`, `.exe`, `.cmd`
+  Windows shim으로 잡히면 중지하고 PATH/설치를 고친다.
+- **의존성 설치 / `pytest` / `docker` / 장기 실행 / 프론트 검증**: Linux에서 수행한다.
+- **Playwright**: N150에서 먼저 실행하고, 불가능할 때만 Windows fallback runner를 쓴다.
+- **데이터(`dataset/`, `refdocs/`)**: 변경 금지 원본은 절대경로/심볼릭 링크로 참조한다.
 - 절차·함정 전체는 `docs/dev-environment.md` + `docs/agent-workflow.md`,
   반복 실패는 `docs/agent-failure-patterns.md`.
 
 ## 2. 빠른 시작 (코드 작성 단계 이후)
 
 ```bash
-cd ~/pinvi-workspaces/pinvi-claude                    # WSL ext4 테스트 미러 (의존성/테스트 전용; git은 NTFS worktree)
+cd /mnt/f/dev/pinvi-claude                            # Linux git/source-of-truth worktree
 sudo apt install -y libgdal-dev gdal-bin libpq-dev          # 시스템 의존성
 
 # 백엔드 (uv 권장)
@@ -137,7 +137,7 @@ docs/
     SPRINT-1.md
     ...
 
-dataset/                     ← NTFS 보관 (.gitignore)
+dataset/                     ← 로컬 원본 보관 (.gitignore)
 refdocs/                     ← 외부 spec/문서 (.gitignore)
 ```
 
@@ -161,9 +161,10 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 5. **`feature` 도메인 wrapper 신규 생성 금지** — HTTP client는 transport 역할만.
    provider 변환, feature 정규화, dedup 같은 도메인 로직은 kor-travel-map 저장소에서
    처리한다.
-6. **NTFS에서 직접 `pytest`/`docker`/`npm` 실행 금지** — WSL ext4 미러에서
-   실행. 단 **git은 예외** — NTFS worktree에서 Windows `git.exe`로만 (ADR-024).
-   ext4 미러에서 commit/push 금지. PowerShell `rg.exe` 금지 (WSL native `rg`만).
+6. **Windows git / Windows shim으로 개발 명령 실행 금지** — git, CodeGraph,
+   `pytest`, `docker`, `npm`, `rg`는 Linux native로 실행한다(ADR-051). `command -v`가
+   `/mnt/c/...`, `.exe`, `.cmd`를 가리키면 중지한다. Playwright는 N150 우선,
+   Windows는 fallback만 허용한다.
 
 ### Telegram 완료 알림 MCP (모든 agent)
 
@@ -171,7 +172,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 `.gemini/mcp.json`/`antigravity.json`)과 로컬 `.env.mcp-telegram` credential
 (`API_ID`/`API_HASH`, gitignore)이 있다. **단위 작업을 PR로 마무리하면 최종 응답 전
 `send_message`로 완료 요약 + PR 링크를 Telegram에 보낸다.** GitHub secret/워크플로는
-쓰지 않는다. 셋업·로그인은 `docs/runbooks/codegraph-worktrees.md` §3.7.
+쓰지 않는다. 셋업·로그인은 `docs/runbooks/codegraph-worktrees.md`.
 7. **좌표 순서 혼동 금지** — 모든 외부 인터페이스는 `(lon, lat)`. 라이브러리
    DTO와 동일.
 8. **카테고리/마커 매핑 하드코드 금지** — `kor-travel-map`의 카테고리 표 사용.
@@ -182,7 +183,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
     datetime을 DTO/DB에 넣지 않는다. `kor-travel-map`의 `kst_now()` 또는
     동등 helper 사용.
 11. **데이터/원천 파일을 git에 커밋 금지** — `dataset/`, `refdocs/`, `data/`,
-    `artifacts/`는 `.gitignore`. NTFS 보관.
+    `artifacts/`는 `.gitignore`. 로컬 보관.
 12. **공간 쿼리 술어에서 `ST_Transform` 금지** — 입력 좌표는 CTE/파라미터로
     한 번만 변환. 술어는 `ST_DWithin(t.coord_5179, p.geom, :radius_m)`처럼
     인덱스 있는 컬럼을 그대로 둔다. **반경 검색은 `coord_5179`(meter) 기준**.
@@ -250,7 +251,7 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
 | Plan POI attachment | 단일 테이블 `curated_plan_attachments` (trip / trip_poi / curated_plan / curated_poi 중 정확히 하나 채움) |
 | RustFS | S3 호환 객체 저장소. Pinvi `app` 첨부 + `kor-travel-map` 미디어 분리 |
 | Soak test | ETL 장시간(20시간±) 검증. `scripts/etl-soak-*.sh` (v1 자산, v2에서 재정비) |
-| WSL 테스트 미러 | `~/pinvi-workspaces/pinvi-<agent>` — ext4 일회용 실행 사본(테스트/docker). git은 NTFS worktree (ADR-024) |
+| Linux agent worktree | `/mnt/f/dev/pinvi-<agent>` 또는 `~/pinvi-workspaces/pinvi-<agent>` — 개발·git·CodeGraph·검증 source of truth (ADR-051) |
 
 추가 도메인 어휘는 `docs/data-model.md` §용어 사전에 정렬.
 

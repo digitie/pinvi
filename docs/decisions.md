@@ -550,7 +550,7 @@
 
 ## ADR-017: CodeGraph 인덱스 + agent별 고정 worktree 운영
 
-- **상태**: accepted
+- **상태**: accepted (단, 2026-05-31 Windows `git.exe` amendment는 ADR-051이 supersede)
 - **날짜**: 2026-05-26
 - **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `pinvi-` 변경
   (`geo-claude` → `pinvi-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/pinvi-<agent>`.
@@ -926,8 +926,7 @@
 
 ## ADR-024: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러
 
-- **상태**: accepted (ADR-004의 "Git source of truth는 WSL ext4" 부분을 supersede.
-  ADR-017 worktree 정책을 개발 환경 모델로 확정)
+- **상태**: superseded by ADR-051
 - **날짜**: 2026-06-01
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: ADR-017로 AI 도구(Claude / Codex / Antigravity)마다 NTFS에 고정
@@ -2089,7 +2088,76 @@ Pinvi Dagster job의 공통 표준을 먼저 고정한다.
 - 실제 retention/location 삭제·익명화는 T-276에서 kill-switch와 운영 dashboard를 포함해 별도
   검증한다.
 
+## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행
+
+- **상태**: accepted
+- **날짜**: 2026-06-28
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+ADR-024는 NTFS worktree를 git source of truth로 두고 Windows `git.exe`로 branch/commit/push를
+수행하도록 정했다. 그러나 실제 Codex worktree에서 `.git` 포인터가 `F:/...`로 남아 WSL/Linux
+git이 `fatal: not a git repository`를 내고, `git worktree list`에서는 정상 worktree가
+`prunable`처럼 보이는 문제가 재현됐다. 동시에 CodeGraph도 WSL PATH에서 `/mnt/c/...` Windows npm
+shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로 혼용 문제를 다시 만든다.
+
+사용자는 2026-06-28에 “모든 개발은 WSL을 포함한 Linux 환경에서만 진행, git/CodeGraph도 Linux에서
+실행, Playwright는 N150 환경에서 실행하고 불가 시 Windows에서 실행”으로 운영 기준을 재지정했다.
+따라서 ADR-024와 ADR-017의 Windows `git.exe` amendment를 supersede한다.
+
+### 결정
+
+- **모든 개발 작업은 Linux 환경에서 수행한다.** 기본 로컬 실행 위치는 WSL/Linux이며, N150은
+  운영/live 검증 위치다. Windows는 Linux/N150에서 브라우저 검증이 불가능할 때의 Playwright
+  fallback runner로만 사용한다.
+- **git / branch / commit / push / PR은 Linux git으로 수행한다.** NTFS 경로(`/mnt/f/...`)에 있는
+  기존 고정 worktree도 Linux git 기준으로 `git worktree repair <path>`를 수행해 `.git`/`gitdir`
+  포인터를 `/mnt/...` 경로로 맞춘다. 이후 같은 worktree를 Windows `git.exe`로 조작하지 않는다.
+- **CodeGraph는 Linux native 실행만 허용한다.** `command -v codegraph`가 `/mnt/c/...`, `.exe`,
+  `.cmd` 같은 Windows shim을 가리키면 중지하고 Linux Node/npm 또는 Linux standalone 설치로
+  교정한 뒤 `codegraph status`/`codegraph sync`를 실행한다.
+- **의존성 설치, `pytest`, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 수행한다.**
+  기존 “NTFS source + ext4 테스트 미러” 모델은 폐기한다. 필요하면 `/mnt/f/...` 고정 worktree를
+  Linux git으로 직접 운용하거나, Linux ext4 worktree를 새로 만들어 그곳을 source of truth로 삼는다.
+- **Playwright 우선순위는 N150 → Windows fallback이다.** live 또는 UI e2e는 먼저 N150에서 실행한다.
+  N150에 브라우저/runtime/권한이 없거나 원격 검증이 작업 목적에 맞지 않을 때만 Windows runner를
+  fallback으로 사용하고, 그 사유와 실행 위치를 journal/PR 검증에 남긴다.
+- **기록 문서는 실행 위치를 “Linux / N150 / Windows fallback”으로 구체적으로 적는다.**
+  “WSL ext4 미러”, “NTFS git”, “Windows Playwright 기본” 같은 구 문구는 새 PR에서 발견되는 대로
+  ADR-051 기준으로 정정한다.
+
+### 근거
+
+- 한 worktree를 Windows git과 Linux git이 번갈아 만지는 모델은 `.git` 포인터 drift를 구조적으로
+  만든다. 한 환경, 즉 Linux로 통일하는 편이 장애면이 작다.
+- 현재 개발·검증 명령 대부분(`pytest`, Docker, npm, dev server, CodeGraph)은 Linux에서 더 자연스럽고
+  운영 N150도 Linux라 환경 차이가 줄어든다.
+- Playwright는 실제 운영 브라우저 접근성·네트워크·CORS·WebSocket drift를 잡기 위해 N150 live
+  검증을 우선해야 한다. Windows runner는 로컬 브라우저 의존성이 필요한 예외 경로로 남긴다.
+
+### 결과 (긍정)
+
+- `fatal: not a git repository ... F:/...`와 `prunable` 오판을 한 환경 기준으로 정리할 수 있다.
+- CodeGraph 인덱스와 git 포인터가 같은 Linux 경로 체계를 쓰므로 새 task 진입 절차가 단순해진다.
+- N150 우선 Playwright로 운영 drift를 더 빨리 발견한다.
+
+### 결과 (부정)
+
+- 기존 Windows git 기반 worktree는 1회 `git worktree repair`가 필요하다.
+- Linux native `codegraph`가 설치되지 않은 WSL은 먼저 PATH/설치를 고쳐야 한다.
+- N150 Playwright runtime이 준비되지 않은 기간에는 Windows fallback 사유를 반복 기록해야 한다.
+
+### 후속
+
+- `AGENTS.md`, `CLAUDE.md`, `SKILL.md`의 개발 환경 요약을 ADR-051 기준으로 동기화한다.
+- `docs/dev-environment.md`, `docs/agent-workflow.md`,
+  `docs/runbooks/codegraph-worktrees.md`, `docs/agent-failure-patterns.md`의 NTFS/Windows git 모델을
+  Linux-only 모델로 정정한다.
+- `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`, `docs/journal.md`에 본 전환 작업과 다음
+  작업(T-242)을 반영한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-051**
+- 다음 신규 ADR = **ADR-052**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

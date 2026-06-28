@@ -7,20 +7,21 @@
 > 진입으로 사용한다. 본 파일과 `AGENTS.md`는 같은 결정·룰·식별자를 반영해야
 > 한다 — 한 쪽 갱신 시 다른 쪽도 동기 갱신 필수.
 >
-> **Worktree + CodeGraph** (ADR-017): Claude Code는 `pinvi-claude` 전용 worktree
-> (예: `F:/dev/pinvi-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
+> **Worktree + CodeGraph** (ADR-017/051): Claude Code는 `pinvi-claude` 전용 worktree
+> (예: `/mnt/f/dev/pinvi-claude`)에서만 작업. trunk 직접 편집 금지. 작업마다
 > 브랜치만 새로 (`git fetch && git switch -c agent/claude-<task> origin/main`
 > — 로컬 `main` ref는 trunk가 점유하므로 worktree에서는 `origin/main`을 직접 사용),
-> `codegraph sync`로 인덱스 유지. 절차는 `docs/runbooks/codegraph-worktrees.md`.
+> Linux native `codegraph sync`로 인덱스 유지. 절차는
+> `docs/runbooks/codegraph-worktrees.md`.
 >
-> **개발 환경** (ADR-024): **NTFS worktree = git source of truth**(`F:/dev/pinvi-claude`)
-> — 편집/commit/push/PR은 여기서 **Windows git(`git.exe`)으로만**. WSL git으로
-> `/mnt/f/...` 같은 worktree를 다루지 않는다(포인터 환경 혼용 → `prunable`/prune
-> 사고). **WSL ext4 미러**(`~/pinvi-workspaces/pinvi-claude`)는 의존성·
-> `pytest`·docker·장기 실행 전용 **일회용**(commit 금지). `apps/web` dev server,
-> lint, typecheck, build, Vitest도 WSL 미러에서 실행한다. Playwright 기반 브라우저
-> e2e만 Windows Node/브라우저에서 실행한다. **rsync는 NTFS→ext4 단방향**. 절차·
-> 함정은 `docs/dev-environment.md`. **dev/prod 분리(ADR-047)**: 별도 지시가 없으면
+> **개발 환경** (ADR-051): **모든 개발·git·CodeGraph는 Linux에서 수행**한다.
+> 기존 `/mnt/f/...` worktree에 Windows `F:/...` 포인터가 남아 있으면 Linux에서
+> `git worktree repair <path>`를 먼저 실행한다. `command -v codegraph`가 `/mnt/c/...`,
+> `.exe`, `.cmd`를 가리키면 중지하고 Linux native 설치/PATH로 교정한다. 의존성 설치,
+> `pytest`, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 실행한다.
+> Playwright는 N150에서 먼저 실행하고, N150 runtime/권한/네트워크 문제로 불가능할 때만
+> Windows runner를 fallback으로 사용하며 사유를 기록한다. 절차·함정은
+> `docs/dev-environment.md`. **dev/prod 분리(ADR-047)**: 별도 지시가 없으면
 > 작업 대상은 **dev**다. **dev**는 이 worktree에서 직접(`npm run dev:up`) 또는 ktdctl로
 > 띄우며 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다(외부 미노출). **prod**는
 > `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**(gitignore된
@@ -42,8 +43,8 @@
 > **Telegram 완료 알림 MCP** — PR을 만들면 최종 응답 전 `mcp-telegram` MCP의
 > `send_message`(`entity` 기본 `me`)로 완료 요약 + PR 링크를 보낸다. credential은
 > worktree 로컬 `.env.mcp-telegram`(gitignore, GitHub secret 미사용)에만 둔다. 모든
-> agent(claude/codex/antigravity) 공통. 셋업 `docs/runbooks/codegraph-worktrees.md`
-> §3.7, 규칙 `AGENTS.md` "Telegram 작업 완료 알림 MCP".
+> agent(claude/codex/antigravity) 공통. 셋업 `docs/runbooks/codegraph-worktrees.md`,
+> 규칙 `AGENTS.md` "Telegram 작업 완료 알림 MCP".
 >
 > **Code Style & Rules** — 컴포넌트 / 함수 / 서비스를 수정하기 전 반드시 CodeGraph
 > 의 `codegraph_explore` 도구로 영향도를 먼저 평가한다. grep / Read fan-out 대신
@@ -71,8 +72,8 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-050**. 최근 박힘: ADR-024 (NTFS worktree=git source of
-truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
+ADR 현황: ADR-001 ~ **ADR-051**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
 ADR-029 (`notice_plans` 충돌 → 큐레이션은 `curated_trip_plans`), ADR-030 (외부 API
@@ -101,8 +102,8 @@ compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + D
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
 kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
 ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,
-destructive dry-run gate).
-다음 신규 = ADR-051.
+destructive dry-run gate), ADR-051 (개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선).
+다음 신규 = ADR-052.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
@@ -152,10 +153,10 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
    `kor-travel-map.providers`에 위임. 새 provider는 그쪽 저장소에 PR.
 4. **Pinvi 사용자 경로에서 `kor-travel-map` import 금지** — feature read/write
    request는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`의 OpenAPI HTTP 계약을 호출한다.
-5. **NTFS에서 직접 테스트/Docker 실행 금지 + ext4 미러에서 commit 금지** — 테스트·
-   docker·의존성은 WSL ext4 미러, git/commit/push는 NTFS worktree. rsync는 NTFS→ext4
-   단방향 (ADR-024, `docs/dev-environment.md`).
-6. **trunk** (`F:/dev/pinvi`, `~/pinvi-workspaces/pinvi`) **에 AI 도구가
+5. **Windows git / Windows CodeGraph shim 사용 금지** — 개발·git·CodeGraph·테스트·
+   docker·의존성은 Linux에서 실행한다. Playwright는 N150 우선, Windows는 fallback만
+   허용한다(ADR-051, `docs/dev-environment.md`).
+6. **trunk** (`/mnt/f/dev/pinvi`, `~/pinvi-workspaces/pinvi`) **에 AI 도구가
    체크아웃 / 편집 금지** — Claude는 `pinvi-claude` worktree에서만 작업 (ADR-017,
    `docs/runbooks/codegraph-worktrees.md`).
 
@@ -163,8 +164,8 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 
 ## 6. 작업 후 체크리스트 (1줄)
 
-`pytest -q` + `ruff check` + `mypy --strict` (`apps/api`, WSL 미러) + `npm run
-lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
+`pytest -q` + `ruff check` + `mypy --strict` (`apps/api`, Linux) + `npm run
+lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 우선/Windows fallback +
 `docs/journal.md` + `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시) +
 **remote 푸시 직전 보안 감사**(`git diff --cached` 비밀/민감값 스캔 — 걸리면 push 금지. AGENTS.md "remote 푸시 전 보안 감사").
 
@@ -195,7 +196,7 @@ lint` + `npm run typecheck` (`apps/web`, WSL 미러) + Playwright는 Windows +
 | Backup / Restore | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6) |
 | Admin Grafana embed | `docs/runbooks/grafana-admin-embed.md` (Sprint 5) |
 | Worktree + CodeGraph 운영 | `docs/runbooks/codegraph-worktrees.md` (ADR-017) |
-| 개발 환경 (NTFS git + WSL 테스트 미러) | `docs/agent-workflow.md` (런북) + `docs/dev-environment.md` (ADR-024) |
+| 개발 환경 (Linux git + CodeGraph) | `docs/agent-workflow.md` (런북) + `docs/dev-environment.md` (ADR-051) |
 | 환경/도구 실패 패턴 | `docs/agent-failure-patterns.md` |
 | 컴플라이언스 / PII | `docs/compliance/{lbs-act,pipa,data-policy}.md` |
 | 테스트 작성 | `docs/conventions/testing.md` |

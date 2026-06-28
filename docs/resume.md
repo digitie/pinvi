@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
+
+ADR-051로 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행으로 고정했다.
+ADR-024의 NTFS worktree + WSL ext4 테스트 미러 모델과 ADR-017의 Windows `git.exe`
+amendment를 supersede했다.
+
+`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `docs/dev-environment.md`,
+`docs/agent-workflow.md`, `docs/runbooks/codegraph-worktrees.md`,
+`docs/agent-failure-patterns.md`, README/Sprint/task 추적 문서를 같은 기준으로 맞췄다.
+현재 Codex worktree의 `.git` 포인터는 Linux `git worktree repair`로 복구했다.
+`codegraph`가 처음에는 `/mnt/c/...` Windows shim으로 잡혔지만, `npm install -g --prefix
+$HOME/.local @colbymchenry/codegraph`로 Linux native `~/.local/bin/codegraph`를 설치하고
+`codegraph status && codegraph sync`를 통과시켰다.
+
+PR #274(T-241)는 CI success와 inline review thread 0건을 확인한 뒤 squash merge했다.
+다음 작업은 T-242 Telegram system summary/outbox ETL이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-241 `pinvi_location_log_archive` Dagster job
 
 `pinvi_location_log_archive` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:30
