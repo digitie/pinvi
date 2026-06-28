@@ -169,7 +169,14 @@ async def register(body: RegisterRequest, db: DbSession) -> Envelope[RegisterRes
                 user_id=result.user.user_id,
                 email=result.user.email,
                 status=cast(
-                    Literal["pending_verification", "pending_profile", "active", "disabled"],
+                    Literal[
+                        "pending_verification",
+                        "pending_profile",
+                        "active",
+                        "disabled",
+                        "pending_delete",
+                        "deleted",
+                    ],
                     result.user.status,
                 ),
                 email_verified_at=result.user.email_verified_at,

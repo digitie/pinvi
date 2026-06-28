@@ -25,7 +25,10 @@ import {
   AdminFileStorageSettingsSchema,
   AdminFileStorageSettingsUpdateRequestSchema,
   AdminUserFileQuotaUpdateRequestSchema,
+  AdminUserLifecycleConfirmRequestSchema,
+  AdminUserLifecycleRequestSchema,
   AdminUserRoleMutationRequestSchema,
+  AdminUserSessionsResponseSchema,
   AdminFeatureSortOrderSchema,
   AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
@@ -877,6 +880,68 @@ export const adminApi = (client: ApiClient) => ({
     client.request(`/admin/users/${userId}/disable`, {
       method: 'POST',
       body: JSON.stringify(AdminActionRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  listUserSessions: (userId: string) =>
+    client.request(`/admin/users/${userId}/sessions`, {
+      method: 'GET',
+      schema: AdminUserSessionsResponseSchema,
+    }),
+
+  revokeUserSession: (
+    userId: string,
+    sessionId: string,
+    body: z.infer<typeof AdminUserLifecycleRequestSchema>,
+  ) =>
+    client.request(`/admin/users/${userId}/sessions/${sessionId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  revokeAllUserSessions: (userId: string, body: z.infer<typeof AdminUserLifecycleRequestSchema>) =>
+    client.request(`/admin/users/${userId}/sessions/revoke-all`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  resendUserVerification: (userId: string, body: z.infer<typeof AdminUserLifecycleRequestSchema>) =>
+    client.request(`/admin/users/${userId}/lifecycle/resend-verify`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  forcePasswordReset: (userId: string, body: z.infer<typeof AdminUserLifecycleRequestSchema>) =>
+    client.request(`/admin/users/${userId}/lifecycle/force-password-reset`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  reactivateUser: (userId: string, body: z.infer<typeof AdminUserLifecycleRequestSchema>) =>
+    client.request(`/admin/users/${userId}/lifecycle/reactivate`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  scheduleUserDelete: (
+    userId: string,
+    body: z.infer<typeof AdminUserLifecycleConfirmRequestSchema>,
+  ) =>
+    client.request(`/admin/users/${userId}/lifecycle/delete`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleConfirmRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  anonymizeUser: (userId: string, body: z.infer<typeof AdminUserLifecycleConfirmRequestSchema>) =>
+    client.request(`/admin/users/${userId}/lifecycle/anonymize`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserLifecycleConfirmRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
     }),
 

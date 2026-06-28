@@ -2,6 +2,42 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-281 User lifecycle admin actions
+
+**작업**: Admin 사용자 lifecycle 운영 액션과 사용자 self-delete 흐름을 구현했다.
+
+**변경**:
+
+- `app.users.status`에 `pending_delete`를 추가하는 Alembic migration을 추가했다.
+- auth dependency, refresh session, MCP token, password reset/verify 경계에서 `pending_delete` /
+  `deleted` 사용자를 차단한다.
+- Admin 사용자 상세 API에 세션 목록, 세션 단건/전체 강제 로그아웃, 인증 메일 재발송,
+  강제 비밀번호 reset, reactivate, delete schedule, anonymize endpoint를 추가했다.
+- 세션 목록 응답은 IP 원문 대신 `ip_hash`만 제공한다.
+- role 변경, 세션 강제 로그아웃, force-password-reset, disable/delete/reactivate는
+  `users.access_token_version`을 증가시켜 기존 access token을 무효화한다.
+- `/users/me` DELETE를 추가해 self-service 탈퇴를 `pending_delete` + 세션 revoke + 쿠키 삭제로 처리한다.
+- retention 후보 SQL은 `pending_delete`와 `deleted`를 모두 보며, 익명화 후 최종 `status='deleted'`로
+  고정한다.
+- Web `/admin/users/{user_id}`에 lifecycle 패널과 세션 테이블을 추가했고, API client/Zod schema와
+  E2E mock을 갱신했다.
+
+**검증**:
+
+- `apps/api/.venv/bin/ruff check ...` 통과.
+- `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m mypy --strict app` 통과.
+- `PATH="$PWD/.venv/bin:$PATH" .venv/bin/pytest tests/integration/test_admin_users_api.py -q --capture=no`
+  10 passed.
+- `npm run typecheck --workspace packages/schemas` 통과.
+- `npm run typecheck --workspace packages/api-client` 통과.
+- `npm run typecheck --workspace apps/web` 통과.
+- `npm run lint --workspace apps/web` 통과.
+- N150 Docker runner:
+  `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-users.e2e.ts --workers=1`
+  6 passed.
+
+**다음**: PR·CI·머지 후 T-282 Rate-limit / abuse admin surface로 진입한다.
+
 ## 2026-06-29 (codex) — T-280 RBAC role grant/revoke / permission matrix
 
 **작업**: Admin RBAC 권한 matrix와 사용자 role 부여/회수 workflow를 구현했다.

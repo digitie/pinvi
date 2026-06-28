@@ -9,8 +9,11 @@ import pytest
 from sqlalchemy import select
 
 from app.models.audit import AdminAuditLog
+from app.models.email_queue import EmailQueue
+from app.models.oauth_identity import UserOAuthIdentity
 from app.models.session import UserSession
 from app.models.user import User
+from app.models.user_email_verification import UserEmailVerification
 
 pytestmark = pytest.mark.asyncio
 
@@ -242,6 +245,15 @@ async def test_admin_user_role_grant_revoke_matrix_and_guards(
         nickname="대상",
         status="active",
     )
+    async with session_factory() as db:
+        db.add(
+            UserSession(
+                user_id=target_id,
+                session_token_hash=f"rbac-session-{uuid.uuid4().hex}",
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+        await db.commit()
     admin_cookies = auth_cookies(str(admin_id))
 
     matrix = await client.get(
@@ -310,6 +322,9 @@ async def test_admin_user_role_grant_revoke_matrix_and_guards(
 
     async with session_factory() as db:
         target = await db.scalar(select(User).where(User.user_id == target_id))
+        stored_session = await db.scalar(
+            select(UserSession).where(UserSession.user_id == target_id)
+        )
         grant_audit = await db.scalar(
             select(AdminAuditLog).where(AdminAuditLog.request_id == grant_request_id)
         )
@@ -319,6 +334,9 @@ async def test_admin_user_role_grant_revoke_matrix_and_guards(
 
     assert target is not None
     assert target.roles == ["user"]
+    assert target.access_token_version == 2
+    assert stored_session is not None
+    assert stored_session.revoked_at is not None
     assert grant_audit is not None
     assert grant_audit.action == "user.role_grant"
     assert grant_audit.before_state == {"roles": ["user"]}
@@ -386,6 +404,278 @@ async def test_admin_user_disable_rolls_back_when_audit_fails(
     assert stored_session is not None
     assert stored_session.revoked_at is None
     assert audit_count is None
+
+
+async def test_admin_user_lifecycle_resend_verification(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-lifecycle-resend@example.com",
+        nickname="관리자",
+        roles=["user", "admin"],
+    )
+    target_id = await _create_user(
+        session_factory,
+        email="pending-lifecycle@example.com",
+        nickname="인증대기",
+        status="pending_verification",
+    )
+    request_id = uuid.uuid4()
+
+    resp = await client.post(
+        f"/admin/users/{target_id}/lifecycle/resend-verify",
+        headers={"X-Request-Id": str(request_id)},
+        json={"access_reason": "가입 인증 메일 재발송 요청"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["status"] == "pending_verification"
+    assert data["recent_audit"][0]["action"] == "user.verification_resend"
+
+    async with session_factory() as db:
+        verification = await db.scalar(
+            select(UserEmailVerification).where(
+                UserEmailVerification.user_id == target_id,
+                UserEmailVerification.purpose == "signup",
+                UserEmailVerification.used_at.is_(None),
+            )
+        )
+        queued = await db.scalar(
+            select(EmailQueue).where(
+                EmailQueue.user_id == target_id,
+                EmailQueue.template == "verify_email",
+            )
+        )
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert verification is not None
+    assert queued is not None
+    assert audit is not None
+    assert audit.after_state["verification_id"] == str(verification.verification_id)
+
+
+async def test_admin_user_lifecycle_sessions_reset_delete_reactivate_anonymize(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-lifecycle@example.com",
+        nickname="관리자",
+        roles=["user", "admin"],
+    )
+    target_id = await _create_user(
+        session_factory,
+        email="target-lifecycle@example.com",
+        nickname="대상",
+        status="active",
+    )
+    async with session_factory() as db:
+        db.add_all(
+            [
+                UserSession(
+                    user_id=target_id,
+                    session_token_hash=f"lifecycle-session-{uuid.uuid4().hex}",
+                    expires_at=datetime.now(UTC) + timedelta(days=1),
+                    user_agent="Firefox",
+                    ip_address="203.0.113.10",
+                ),
+                UserSession(
+                    user_id=target_id,
+                    session_token_hash=f"lifecycle-session-{uuid.uuid4().hex}",
+                    expires_at=datetime.now(UTC) + timedelta(days=1),
+                    user_agent="Chrome",
+                    ip_address="203.0.113.11",
+                ),
+                UserOAuthIdentity(
+                    user_id=target_id,
+                    provider="google",
+                    provider_user_id=f"google-{uuid.uuid4().hex}",
+                    provider_email="target-lifecycle@example.com",
+                    provider_email_verified=True,
+                    display_name_snapshot="대상",
+                    linked_at=datetime.now(UTC),
+                ),
+            ]
+        )
+        await db.commit()
+
+    cookies = auth_cookies(str(admin_id))
+    sessions = await client.get(f"/admin/users/{target_id}/sessions", cookies=cookies)
+    assert sessions.status_code == 200, sessions.text
+    session_items = sessions.json()["data"]["items"]
+    assert len(session_items) == 2
+    assert session_items[0]["ip_hash"]
+    assert "203.0.113.10" not in sessions.text
+
+    revoke_one = await client.post(
+        f"/admin/users/{target_id}/sessions/{session_items[0]['session_id']}/revoke",
+        json={"access_reason": "분실 기기 세션 종료"},
+        cookies=cookies,
+    )
+    assert revoke_one.status_code == 200, revoke_one.text
+    assert revoke_one.json()["data"]["recent_audit"][0]["action"] == "user.session_revoke"
+
+    reset_request_id = uuid.uuid4()
+    reset = await client.post(
+        f"/admin/users/{target_id}/lifecycle/force-password-reset",
+        headers={"X-Request-Id": str(reset_request_id)},
+        json={"access_reason": "계정 탈취 의심"},
+        cookies=cookies,
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["data"]["recent_audit"][0]["action"] == "user.password_reset_force"
+
+    async with session_factory() as db:
+        target = await db.scalar(select(User).where(User.user_id == target_id))
+        reset_verification = await db.scalar(
+            select(UserEmailVerification).where(
+                UserEmailVerification.user_id == target_id,
+                UserEmailVerification.purpose == "password_reset",
+                UserEmailVerification.used_at.is_(None),
+            )
+        )
+        reset_email = await db.scalar(
+            select(EmailQueue).where(
+                EmailQueue.user_id == target_id,
+                EmailQueue.template == "reset_password",
+            )
+        )
+        active_session_count = len(
+            (
+                await db.execute(
+                    select(UserSession).where(
+                        UserSession.user_id == target_id,
+                        UserSession.revoked_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert target is not None
+    assert target.password_hash is None
+    assert target.access_token_version > 0
+    assert reset_verification is not None
+    assert reset_email is not None
+    assert active_session_count == 0
+
+    disabled = await client.post(
+        f"/admin/users/{target_id}/disable",
+        json={"access_reason": "고객센터 잠금"},
+        cookies=cookies,
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["data"]["status"] == "disabled"
+
+    reactivated = await client.post(
+        f"/admin/users/{target_id}/lifecycle/reactivate",
+        json={"access_reason": "본인 확인 완료"},
+        cookies=cookies,
+    )
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["data"]["status"] == "active"
+
+    deleted = await client.post(
+        f"/admin/users/{target_id}/lifecycle/delete",
+        json={"access_reason": "탈퇴 요청 접수", "confirm": "DELETE"},
+        cookies=cookies,
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["data"]["status"] == "pending_delete"
+
+    pending_list = await client.get(
+        "/admin/users?status_filter=pending_delete",
+        cookies=cookies,
+    )
+    assert pending_list.status_code == 200, pending_list.text
+    assert pending_list.json()["data"]["total"] == 1
+    assert pending_list.json()["data"]["items"][0]["user_id"] == str(target_id)
+
+    restored = await client.post(
+        f"/admin/users/{target_id}/lifecycle/reactivate",
+        json={"access_reason": "탈퇴 요청 철회"},
+        cookies=cookies,
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["data"]["status"] == "active"
+
+    await client.post(
+        f"/admin/users/{target_id}/lifecycle/delete",
+        json={"access_reason": "탈퇴 요청 재접수", "confirm": "DELETE"},
+        cookies=cookies,
+    )
+    anonymized = await client.post(
+        f"/admin/users/{target_id}/lifecycle/anonymize",
+        json={"access_reason": "즉시 익명화 승인", "confirm": "ANONYMIZE"},
+        cookies=cookies,
+    )
+    assert anonymized.status_code == 200, anonymized.text
+    anonymized_data = anonymized.json()["data"]
+    assert anonymized_data["status"] == "deleted"
+    assert anonymized_data["email_masked"].startswith("d***@deleted.pinvi.local")
+    assert anonymized_data["recent_audit"][0]["action"] == "user.anonymize"
+
+    async with session_factory() as db:
+        stored = await db.scalar(select(User).where(User.user_id == target_id))
+        identity = await db.scalar(
+            select(UserOAuthIdentity).where(UserOAuthIdentity.user_id == target_id)
+        )
+
+    assert stored is not None
+    assert stored.email == f"deleted+{target_id}@deleted.pinvi.local"
+    assert stored.nickname is None
+    assert stored.status == "deleted"
+    assert identity is None
+
+
+async def test_user_delete_me_marks_pending_delete_and_revokes_sessions(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    user_id = await _create_user(
+        session_factory,
+        email="self-delete@example.com",
+        nickname="탈퇴사용자",
+        status="active",
+    )
+    async with session_factory() as db:
+        db.add(
+            UserSession(
+                user_id=user_id,
+                session_token_hash=f"self-delete-{uuid.uuid4().hex}",
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+        await db.commit()
+
+    cookies = auth_cookies(str(user_id))
+    resp = await client.delete("/users/me", cookies=cookies)
+
+    assert resp.status_code == 204, resp.text
+    assert "pinvi_access" in resp.headers.get("set-cookie", "")
+
+    async with session_factory() as db:
+        user = await db.scalar(select(User).where(User.user_id == user_id))
+        stored_session = await db.scalar(select(UserSession).where(UserSession.user_id == user_id))
+
+    assert user is not None
+    assert user.status == "pending_delete"
+    assert user.is_active is False
+    assert user.deleted_at is not None
+    assert stored_session is not None
+    assert stored_session.revoked_at is not None
+
+    after = await client.get("/auth/me", cookies=cookies)
+    assert after.status_code == 401
 
 
 async def test_admin_avatar_settings_and_user_avatar_audit(

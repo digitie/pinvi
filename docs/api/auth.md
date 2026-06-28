@@ -9,14 +9,14 @@
 
 ## 1. 모델
 
-| 테이블 | 용도 |
-|--------|------|
-| `app.users` | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only) |
-| `app.user_sessions` | refresh 토큰 hash + IP/UA + 만료/폐기 |
-| `app.user_email_verifications` | verify/reset 토큰 (해시만 저장) |
-| `app.user_oauth_identities` | provider + provider_user_id (현재 Google sub, Naver/Kakao는 미래 작업) |
-| `app.user_consents` | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...) |
-| `app.oauth_login_states` | OAuth state/nonce/PKCE hash, TTL 10분 |
+| 테이블                         | 용도                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| `app.users`                    | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only) |
+| `app.user_sessions`            | refresh 토큰 hash + IP/UA + 만료/폐기                                    |
+| `app.user_email_verifications` | verify/reset 토큰 (해시만 저장)                                          |
+| `app.user_oauth_identities`    | provider + provider_user_id (현재 Google sub, Naver/Kakao는 미래 작업)   |
+| `app.user_consents`            | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...)        |
+| `app.oauth_login_states`       | OAuth state/nonce/PKCE hash, TTL 10분                                    |
 
 자세히는 `docs/data-model.md` + `docs/postgres-schema.md`.
 
@@ -51,10 +51,10 @@ Content-Type: application/json
       "user_id": "uuid",
       "email": "user@example.com",
       "status": "pending_verification",
-      "email_verified_at": null
+      "email_verified_at": null,
     },
-    "verification_email_dispatched": true
-  }
+    "verification_email_dispatched": true,
+  },
 }
 ```
 
@@ -90,8 +90,8 @@ Content-Type: application/json
 {
   "data": {
     "user": { "user_id": "...", "email": "...", "email_verified_at": "..." },
-    "access_token_dispatched": true   // cookie도 함께 발급
-  }
+    "access_token_dispatched": true, // cookie도 함께 발급
+  },
 }
 ```
 
@@ -133,8 +133,8 @@ Content-Type: application/json
 ```jsonc
 {
   "data": {
-    "user": { "user_id": "...", "email": "...", "status": "active", "roles": ["user"] }
-  }
+    "user": { "user_id": "...", "email": "...", "status": "active", "roles": ["user"] },
+  },
 }
 ```
 
@@ -147,6 +147,8 @@ Set-Cookie 두 개.
   재발송하고(§2.3, cooldown 적용), `error.details.verification_email_dispatched: bool`로 새 메일
   발송 여부를 알린다. 클라이언트(로그인 화면)는 "인증 메일 다시 보내기" 버튼도 함께 제공한다
 - `403 PERMISSION_DENIED` — `users.status = 'disabled'`
+- `401 AUTH_INVALID_CREDENTIALS` 또는 `TOKEN_INVALID` — `users.status`가 `pending_delete` /
+  `deleted`인 계정
 
 ### 3.2 `POST /auth/refresh`
 
@@ -194,7 +196,12 @@ Cookie: pinvi_access=...
     "has_password": true,
     "consents": [
       { "consent_type": "tos", "agreed_at": "...", "version": "v1.0" },
-      { "consent_type": "location_collection", "agreed_at": "...", "withdrawn_at": null, "version": "v1.0" }
+      {
+        "consent_type": "location_collection",
+        "agreed_at": "...",
+        "withdrawn_at": null,
+        "version": "v1.0",
+      },
     ],
     "oauth_identities": [
       {
@@ -203,10 +210,10 @@ Cookie: pinvi_access=...
         "provider_email_verified": true,
         "display_name": "...",
         "linked_at": "...",
-        "last_login_at": "..."
-      }
-    ]
-  }
+        "last_login_at": "...",
+      },
+    ],
+  },
 }
 ```
 
@@ -286,10 +293,8 @@ Content-Type: application/json
 ```jsonc
 {
   "data": {
-    "providers": [
-      { "provider": "google", "enabled": true }
-    ]
-  }
+    "providers": [{ "provider": "google", "enabled": true }],
+  },
 }
 ```
 
@@ -372,20 +377,19 @@ Cookie: pinvi_access=...
 
 ## 7. 탈퇴
 
-### 7.1 `DELETE /auth/me`
+### 7.1 `DELETE /users/me`
 
 ```http
-DELETE /auth/me
+DELETE /users/me
 Cookie: pinvi_access=...
-Content-Type: application/json
-
-{ "confirm": "DELETE" }
 ```
 
-- 리더인 trip이 있으면 `410 GONE` + `{"error": {"code": "TRIPS_OWNED",
-  "details": {"trip_ids": [...]}}}` 안내 ("trip 이관 또는 삭제 먼저")
-- 성공: `users.status = 'deleted'`, PII 마스킹 잡 schedule, 모든 session revoke,
-  `app.admin_audit_log` + `app.user_consents` `withdrawn_at` 일괄 갱신
+- 성공: `204 No Content`
+- `users.status='pending_delete'`, `is_active=false`, `deleted_at=now()`로 전환한다.
+- 모든 active session을 revoke하고 `users.access_token_version`을 증가시키며, 응답에서
+  `pinvi_access` / `pinvi_refresh` cookie를 삭제한다.
+- `admin` / `operator` / `cpo` role 계정은 self-delete를 차단한다.
+- 최종 PII 익명화는 retention 실행 또는 Admin `lifecycle/anonymize`가 `status='deleted'`로 고정한다.
 
 ## 8. 작업 체크리스트 (AI agent)
 

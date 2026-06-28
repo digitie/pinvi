@@ -68,6 +68,7 @@ class ResendVerificationResult:
 
 
 SIGNUP_VERIFICATION_TTL_HOURS = 24
+BLOCKED_AUTH_STATUSES = {"disabled", "pending_delete", "deleted"}
 
 
 def _hash_token(token: str) -> str:
@@ -138,7 +139,7 @@ async def request_password_reset(db: AsyncSession, *, email: str) -> PasswordRes
     """
 
     user = await db.scalar(select(User).where(User.email == email, User.deleted_at.is_(None)))
-    if user is None or user.email_verified_at is None or user.status == "disabled":
+    if user is None or user.email_verified_at is None or user.status in BLOCKED_AUTH_STATUSES:
         return PasswordResetRequestResult(reset_email_dispatched=False)
 
     now = datetime.now(UTC)
@@ -183,7 +184,7 @@ async def resend_verification_email(db: AsyncSession, *, email: str) -> ResendVe
     """
 
     user = await db.scalar(select(User).where(User.email == email, User.deleted_at.is_(None)))
-    if user is None or user.email_verified_at is not None or user.status == "disabled":
+    if user is None or user.email_verified_at is not None or user.status in BLOCKED_AUTH_STATUSES:
         return ResendVerificationResult(verification_email_dispatched=False)
 
     now = datetime.now(UTC)
@@ -250,7 +251,7 @@ async def reset_password(db: AsyncSession, *, token: str, new_password: str) -> 
         raise VerificationTokenInvalidError("토큰이 만료되었습니다.")
 
     user = await db.scalar(select(User).where(User.user_id == row.user_id))
-    if user is None or user.email_verified_at is None or user.status == "disabled":
+    if user is None or user.email_verified_at is None or user.status in BLOCKED_AUTH_STATUSES:
         raise VerificationTokenInvalidError("토큰이 잘못되었습니다.")
 
     now = datetime.now(UTC)
@@ -278,7 +279,7 @@ async def verify_email(db: AsyncSession, *, token: str) -> User:
         raise VerificationTokenInvalidError("토큰이 만료되었습니다.")
 
     user = await db.scalar(select(User).where(User.user_id == row.user_id))
-    if user is None:
+    if user is None or user.status in BLOCKED_AUTH_STATUSES:
         raise VerificationTokenInvalidError("사용자가 존재하지 않습니다.")
 
     now = datetime.now(UTC)
@@ -298,7 +299,7 @@ async def authenticate(db: AsyncSession, *, email: str, password: str) -> User:
         raise InvalidCredentialsError("이메일 또는 비밀번호가 올바르지 않습니다.")
     if user.email_verified_at is None:
         raise EmailNotVerifiedError("이메일 인증이 필요합니다.")
-    if user.status == "disabled":
+    if user.status in BLOCKED_AUTH_STATUSES:
         raise InvalidCredentialsError("이메일 또는 비밀번호가 올바르지 않습니다.")
     return user
 

@@ -27,6 +27,11 @@ export type ContentReportCreateBody = z.input<typeof ContentReportCreateRequestS
 export type ContentReportAppealBody = z.input<typeof ContentReportAppealRequestSchema>;
 
 export const userApi = (client: ApiClient) => ({
+  deleteMe: () =>
+    client.requestNoContent('/users/me', {
+      method: 'DELETE',
+    }),
+
   /** 현재 사용자의 동의 목록(`docs/api/users.md` §3). */
   getConsents: () =>
     client.request('/users/consents', {

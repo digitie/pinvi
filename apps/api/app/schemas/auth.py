@@ -34,7 +34,14 @@ class RegisterRequest(BaseModel):
 class UserResponse(BaseModel):
     user_id: uuid.UUID
     email: EmailStr
-    status: Literal["pending_verification", "pending_profile", "active", "disabled"]
+    status: Literal[
+        "pending_verification",
+        "pending_profile",
+        "active",
+        "disabled",
+        "pending_delete",
+        "deleted",
+    ]
     email_verified_at: datetime | None
 
 
@@ -92,7 +99,14 @@ class AuthUser(BaseModel):
     avatar_byte_size: int | None = None
     avatar_updated_at: datetime | None = None
     has_avatar: bool = False
-    status: Literal["pending_verification", "pending_profile", "active", "disabled"]
+    status: Literal[
+        "pending_verification",
+        "pending_profile",
+        "active",
+        "disabled",
+        "pending_delete",
+        "deleted",
+    ]
     roles: list[Literal["user", "admin", "operator", "cpo"]]
     email_verified_at: datetime | None
     has_password: bool

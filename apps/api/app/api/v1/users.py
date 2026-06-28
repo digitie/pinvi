@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUserId, DbSession
+from app.core.session_cookies import clear_session_cookies
 from app.models.attachment import CuratedPlanAttachment
 from app.models.user import User
 from app.schemas.consent import (
@@ -42,6 +43,8 @@ from app.schemas.storage import (
     DownloadUrlResponse,
     UploadUrlResponse,
 )
+from app.services.admin_user_lifecycle import self_delete_user
+from app.services.admin_users import AdminUserPermissionError, AdminUserRoleTransitionError
 from app.services.avatar_storage import (
     apply_avatar,
     avatar_info,
@@ -138,6 +141,30 @@ def _mcp_token_response(row) -> McpTokenResponse:  # type: ignore[no-untyped-def
         revoked_at=row.revoked_at,
         created_at=row.created_at,
     )
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    response: Response,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Response:
+    try:
+        await self_delete_user(db, user_id=uuid.UUID(current_user_id))
+    except AdminUserPermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except AdminUserRoleTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    await db.commit()
+    clear_session_cookies(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 def _to_library_item(

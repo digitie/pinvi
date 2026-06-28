@@ -60,6 +60,10 @@
   역할 관리 섹션에서 `admin` / `operator` / `cpo` role을 부여하거나 회수할 수 있다. role 변경은
   `admin` 전용, 운영 사유 필수, `admin_audit_log` 기록 대상이며 자기 admin 회수와 마지막 admin
   회수를 차단한다.
+- Admin 사용자 상세에 lifecycle 패널을 추가했다. 운영자는 세션 목록(IP hash만 노출), 세션 강제
+  로그아웃, 인증 메일 재발송, 강제 비밀번호 reset, disable/reactivate, 삭제 대기, 즉시 익명화를
+  사유와 감사 로그와 함께 처리할 수 있다. 사용자 `DELETE /users/me`는 `pending_delete`로 전환하고
+  세션과 쿠키를 무효화한다.
 - Admin `/admin/emails`에 Resend deliverability 상태판을 추가했다. API key configured/console mode,
   FROM domain/domain status, webhook signature/최근 event, queue health, active suppression,
   `users.email_status` count를 raw secret 없이 표시한다. Resend 발송은 REST client로 전환되어

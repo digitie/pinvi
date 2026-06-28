@@ -24,8 +24,10 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/users` / `{user_id}` / `PATCH`                        | 사용자 목록 / 상세 / 편집                              | 3      |
 | `POST /admin/users/{id}/roles/grant\|revoke`                      | 사용자 role 부여 / 회수 + 감사                         | 6      |
 | `POST /admin/users/{id}/force-verify`                             | 강제 verify (디버그)                                   | 3      |
-| `POST /admin/users/{id}/resend-verify`                            | 인증 메일 재발송                                       | 3      |
-| `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke)                         | 3      |
+| `GET /admin/users/{id}/sessions`                                  | 사용자 세션 목록(IP hash만 노출)                       | 6      |
+| `POST /admin/users/{id}/sessions/*`                               | 세션 단건/전체 강제 로그아웃                           | 6      |
+| `POST /admin/users/{id}/lifecycle/*`                              | 인증 재발송 / reset / 재활성화 / 삭제 대기 / 익명화    | 6      |
+| `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke, token version 증가)     | 3      |
 | `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                   | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제      | 4      |
 | `GET/PUT /admin/settings/avatar`                                  | 전역 아바타 업로드 크기 제한                           | 4      |
 | `PUT /admin/users/{id}/file-quota`                                | 사용자별 파일 용량 override                            | 4      |
@@ -663,8 +665,11 @@ GET /admin/users?q=kim&status_filter=active&page=1&limit=50
 ```
 
 - `q`: 이메일 / 닉네임 부분 일치, `user_id` UUID 정확 일치
-- `status_filter`: `pending_verification` / `pending_profile` / `active` / `disabled`
+- `status_filter`: `pending_verification` / `pending_profile` / `active` / `disabled` /
+  `pending_delete` / `deleted`
 - 목록 응답은 항상 `email_masked`만 제공하고 원본 이메일은 포함하지 않는다.
+- 필터가 없으면 최종 익명화된 `deleted` 사용자는 기본 목록에서 제외하지만, `pending_delete` 사용자는
+  후속 운영을 위해 표시한다. `status_filter=deleted`를 명시하면 익명화된 계정도 조회할 수 있다.
 
 ### 6.1 `POST /admin/users/{user_id}/force-verify`
 
@@ -680,18 +685,54 @@ X-Access-Reason: "고객 문의 처리 (TICKET-1234)"
 - `admin_audit_log` + Resend webhook 없이 강제 진입 표시
 - 응답 200: 갱신된 user
 
-### 6.2 `POST /admin/users/{user_id}/resend-verify`
+### 6.2 `POST /admin/users/{user_id}/lifecycle/resend-verify`
 
-- 새 verify 토큰 발급 + Resend 발송
-- 기존 verify 토큰 `used_at = now()`로 폐기
+- 권한: `admin`
+- body: `{ "access_reason": "가입 인증 메일 재발송 요청" }`
+- 미인증 + 삭제/비활성 상태가 아닌 사용자에 한해 새 signup verify 토큰을 발급하고, 기존 미사용
+  signup 토큰은 `used_at = now()`로 폐기한다.
+- `email_queue.template='verify_email'` row를 생성하고
+  `admin_audit_log.action="user.verification_resend"`를 기록한다.
 
 ### 6.3 `POST /admin/users/{user_id}/disable`
 
 - `users.status = 'disabled'`, `is_active = false`
 - 모든 `user_sessions.revoked_at = now()`
+- `users.access_token_version`을 증가시켜 기존 access token도 즉시 무효화한다.
 - 응답 200: 갱신된 user + 최근 audit
 
-### 6.4 `POST /admin/users/{user_id}/roles/grant|revoke`
+### 6.4 사용자 lifecycle / 세션 강제 종료
+
+```http
+GET  /admin/users/<user_id>/sessions
+POST /admin/users/<user_id>/sessions/<session_id>/revoke
+POST /admin/users/<user_id>/sessions/revoke-all
+POST /admin/users/<user_id>/lifecycle/force-password-reset
+POST /admin/users/<user_id>/lifecycle/reactivate
+POST /admin/users/<user_id>/lifecycle/delete
+POST /admin/users/<user_id>/lifecycle/anonymize
+```
+
+- 세션 목록은 `session_id`, `expires_at`, `revoked_at`, `user_agent`, `ip_hash`, `is_active`만
+  제공한다. IP 원문은 응답하지 않는다.
+- 세션 단건/전체 강제 로그아웃은 active session의 `revoked_at`을 설정하고
+  `users.access_token_version`을 증가시킨다. 감사 action은 `user.session_revoke` /
+  `user.session_revoke_all`.
+- `force-password-reset`은 기존 password reset 토큰을 폐기하고 새 reset 토큰 + email queue row를
+  만들며, `password_hash=NULL`, active session revoke, `access_token_version` 증가를 같은
+  transaction에 묶는다. 감사 action은 `user.password_reset_force`.
+- `reactivate`는 `disabled` 또는 `pending_delete`만 허용하며 `deleted_at=NULL`,
+  `is_active=true`, 상태를 `active` / `pending_profile` / `pending_verification` 중 복원 가능한
+  값으로 되돌린다. 자기 자신 대상은 `404`.
+- `delete`는 body에 `{ "access_reason": "...", "confirm": "DELETE" }`를 요구한다.
+  `status='pending_delete'`, `is_active=false`, `deleted_at=now()`, session revoke,
+  `access_token_version` 증가를 수행한다. 권한 계정(`admin`/`operator`/`cpo`)은 role 회수 후
+  실행해야 하며 아니면 `403`.
+- `anonymize`는 body에 `{ "access_reason": "...", "confirm": "ANONYMIZE" }`를 요구한다.
+  OAuth identity를 삭제하고 이메일을 `deleted+<user_id>@deleted.pinvi.local`로 바꾸며 profile,
+  password, avatar, demographic PII를 비운 뒤 `status='deleted'`로 고정한다.
+
+### 6.5 `POST /admin/users/{user_id}/roles/grant|revoke`
 
 Admin은 사용자 상세 화면에서 `admin` / `operator` / `cpo` role을 부여하거나 회수할 수 있다.
 `user` role은 기본 role이므로 mutation 대상이 아니다.
@@ -712,11 +753,12 @@ Content-Type: application/json
 - 감사: `user.role_grant` / `user.role_revoke`, `before_state.roles`, `after_state.roles`,
   `access_reason`, `request_id`
 - role 배열은 `user`, `admin`, `operator`, `cpo` 순서로 정규화한다.
+- role 변경은 active session을 revoke하고 `users.access_token_version`을 증가시킨다.
 - 중복 부여 또는 미보유 role 회수는 `409 INVALID_STATE`.
 - 자기 자신의 `admin` role 회수와 마지막 `admin` role 회수는 `403 PERMISSION_DENIED`.
 - 권한 없는 사용자는 ADR-033 정책에 따라 `404 RESOURCE_NOT_FOUND`.
 
-### 6.5 PII 마스킹
+### 6.6 PII 마스킹
 
 `GET /admin/users` 목록 응답:
 
@@ -744,7 +786,7 @@ Content-Type: application/json
   `target_pii_fields = ["email"]`, `access_reason` 기록.
 - 사유는 URL query/header가 아닌 JSON body로만 전달한다.
 
-### 6.6 사용자 아바타 관리
+### 6.7 사용자 아바타 관리
 
 Admin은 사용자 상세에서 대상 사용자의 RustFS 아바타를 조회/교체/삭제할 수 있다.
 

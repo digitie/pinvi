@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -21,7 +22,11 @@ from app.schemas.admin import (
     AdminUserDetail,
     AdminUserFileQuota,
     AdminUserFileQuotaUpdateRequest,
+    AdminUserLifecycleConfirmRequest,
+    AdminUserLifecycleRequest,
     AdminUserRoleMutationRequest,
+    AdminUserSessionRecord,
+    AdminUserSessionsResponse,
     AdminUserSummary,
 )
 from app.schemas.envelope import Envelope
@@ -32,6 +37,17 @@ from app.schemas.storage import (
     UploadUrlResponse,
 )
 from app.services.admin_audit import append_admin_audit
+from app.services.admin_user_lifecycle import (
+    AdminUserLifecycleResult,
+    anonymize_user_now,
+    force_password_reset,
+    list_user_sessions,
+    reactivate_user,
+    resend_user_verification,
+    revoke_all_user_sessions,
+    revoke_user_session_by_id,
+    schedule_user_delete,
+)
 from app.services.admin_users import (
     AdminUserNotFoundError,
     AdminUserPermissionError,
@@ -52,6 +68,7 @@ from app.services.avatar_storage import (
     get_storage_settings,
     validate_avatar_apply,
 )
+from app.services.hash_chain import sha256_hex
 from app.services.rustfs_admin import delete_object
 from app.services.rustfs_storage import (
     FileTooLargeError,
@@ -164,13 +181,78 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     from sqlalchemy import select
 
-    u = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    u = await db.scalar(select(User).where(User.user_id == user_id))
     if u is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
         )
     return u
+
+
+def _to_session_record(row) -> AdminUserSessionRecord:  # type: ignore[no-untyped-def]
+    return AdminUserSessionRecord(
+        session_id=row.session_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        user_agent=row.user_agent,
+        ip_hash=sha256_hex(str(row.ip_address)) if row.ip_address else None,
+        is_active=row.revoked_at is None and row.expires_at > datetime.now(UTC),
+    )
+
+
+def _lifecycle_http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, AdminUserNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    if isinstance(exc, AdminUserPermissionError):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    if isinstance(exc, AdminUserRoleTransitionError):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={"code": "INTERNAL_ERROR", "message": "Internal error."},
+    )
+
+
+async def _audit_lifecycle_result(
+    *,
+    db: AsyncSession,
+    request: Request,
+    actor: User,
+    result: AdminUserLifecycleResult,
+    action: str,
+    access_reason: str,
+    x_request_id: str | None,
+    target_pii_fields: list[str] | None = None,
+) -> Envelope[AdminUserDetail]:
+    await append_admin_audit(
+        db,
+        actor_user_id=actor.user_id,
+        action=action,
+        resource_type="user",
+        resource_id=str(result.user.user_id),
+        before_state=result.before_state,
+        after_state=result.after_state,
+        access_reason=access_reason,
+        target_pii_fields=target_pii_fields,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(result.user)
+    return Envelope.of(await _detail_with_recent_audit(db, result.user))
 
 
 def _storage_error(exc: Exception) -> HTTPException:
@@ -460,6 +542,215 @@ async def force_verify_endpoint(
     return Envelope.of(await _detail_with_recent_audit(db, target))
 
 
+@router.get("/{user_id}/sessions", response_model=Envelope[AdminUserSessionsResponse])
+async def list_user_sessions_endpoint(
+    user_id: uuid.UUID,
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[AdminUserSessionsResponse]:
+    try:
+        rows = await list_user_sessions(db, user_id=user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return Envelope.of(
+        AdminUserSessionsResponse(
+            user_id=user_id,
+            items=[_to_session_record(row) for row in rows],
+        )
+    )
+
+
+@router.post("/{user_id}/sessions/{session_id}/revoke", response_model=Envelope[AdminUserDetail])
+async def revoke_user_session_endpoint(
+    user_id: uuid.UUID,
+    session_id: uuid.UUID,
+    body: AdminUserLifecycleRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        result = await revoke_user_session_by_id(db, user_id=user_id, session_id=session_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.session_revoke",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["session"],
+    )
+
+
+@router.post("/{user_id}/sessions/revoke-all", response_model=Envelope[AdminUserDetail])
+async def revoke_all_user_sessions_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        result = await revoke_all_user_sessions(db, user_id=user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.session_revoke_all",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["session"],
+    )
+
+
+@router.post(
+    "/{user_id}/lifecycle/resend-verify",
+    response_model=Envelope[AdminUserDetail],
+)
+async def resend_user_verification_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        result = await resend_user_verification(db, user_id=user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.verification_resend",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["email"],
+    )
+
+
+@router.post(
+    "/{user_id}/lifecycle/force-password-reset",
+    response_model=Envelope[AdminUserDetail],
+)
+async def force_password_reset_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        result = await force_password_reset(db, user_id=user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.password_reset_force",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["email", "password_hash"],
+    )
+
+
+@router.post("/{user_id}/lifecycle/reactivate", response_model=Envelope[AdminUserDetail])
+async def reactivate_user_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        result = await reactivate_user(db, user_id=user_id, actor_id=admin.user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.reactivate",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+    )
+
+
+@router.post("/{user_id}/lifecycle/delete", response_model=Envelope[AdminUserDetail])
+async def schedule_user_delete_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleConfirmRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    if body.confirm != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "VALIDATION_ERROR", "message": "confirm 값은 DELETE여야 합니다."},
+        )
+    try:
+        result = await schedule_user_delete(db, user_id=user_id, actor_id=admin.user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.delete_schedule",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["email"],
+    )
+
+
+@router.post("/{user_id}/lifecycle/anonymize", response_model=Envelope[AdminUserDetail])
+async def anonymize_user_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserLifecycleConfirmRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    if body.confirm != "ANONYMIZE":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "VALIDATION_ERROR", "message": "confirm 값은 ANONYMIZE여야 합니다."},
+        )
+    try:
+        result = await anonymize_user_now(db, user_id=user_id, actor_id=admin.user_id)
+    except Exception as exc:
+        raise _lifecycle_http_error(exc) from exc
+    return await _audit_lifecycle_result(
+        db=db,
+        request=request,
+        actor=admin,
+        result=result,
+        action="user.anonymize",
+        access_reason=body.access_reason,
+        x_request_id=x_request_id,
+        target_pii_fields=["email", "profile", "oauth_identity"],
+    )
+
+
 async def _mutate_user_role(
     *,
     db: DbSession,
@@ -576,6 +867,11 @@ async def disable_user_endpoint(
     except AdminUserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except AdminUserRoleTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 

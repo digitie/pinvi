@@ -48,6 +48,15 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/users/${targetUserId}/sessions`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { user_id: targetUserId, items: [] } }),
+      });
+    },
+  );
 });
 
 test('Admin 사용자 목록이 검색어와 상태 필터를 API에 전달한다', async ({ page }) => {
@@ -253,6 +262,178 @@ test('Admin 사용자 상세에서 역할을 부여하고 회수한다', async (
   await expect(page.getByTestId('admin-user-role-manager')).not.toContainText('operator');
   await expect(page.getByTestId('admin-user-audit-list')).toContainText('user.role_revoke');
   expect(revokeReason).toBe('운영 담당 해제');
+});
+
+test('Admin 사용자 상세에서 lifecycle 액션과 세션 강제 로그아웃을 처리한다', async ({ page }) => {
+  const sessionId = '88888888-8888-4888-8888-888888888888';
+  let currentUser: Record<string, unknown> = { ...maskedUser };
+  let currentSessions: Array<{
+    session_id: string;
+    created_at: string;
+    updated_at: string;
+    expires_at: string;
+    revoked_at: string | null;
+    user_agent: string;
+    ip_hash: string;
+    is_active: boolean;
+  }> = [
+    {
+      session_id: sessionId,
+      created_at: '2026-06-01T09:00:00+09:00',
+      updated_at: '2026-06-01T09:00:00+09:00',
+      expires_at: '2026-06-08T09:00:00+09:00',
+      revoked_at: null,
+      user_agent: 'Firefox',
+      ip_hash: 'a'.repeat(64),
+      is_active: true,
+    },
+  ];
+  let revokedReason: string | null = null;
+  let resetReason: string | null = null;
+  let deleteReason: string | null = null;
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/users/${targetUserId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentUser }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/users/${targetUserId}/sessions`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { user_id: targetUserId, items: currentSessions } }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/users/${targetUserId}/sessions/${sessionId}/revoke`,
+    async (route) => {
+      const body = route.request().postDataJSON() as { access_reason?: string };
+      revokedReason = body.access_reason ?? null;
+      currentSessions = currentSessions.map((session) => ({
+        ...session,
+        revoked_at: '2026-06-01T10:00:00+09:00',
+        is_active: false,
+      }));
+      currentUser = {
+        ...currentUser,
+        recent_audit: [
+          {
+            log_id: 60,
+            actor_user_id: adminUser.user_id,
+            action: 'user.session_revoke',
+            resource_type: 'user',
+            resource_id: targetUserId,
+            access_reason: body.access_reason ?? null,
+            target_pii_fields: ['session'],
+            prev_hash: '0'.repeat(64),
+            content_hash: '1'.repeat(64),
+            occurred_at: '2026-06-06T12:00:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentUser }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/users/${targetUserId}/lifecycle/force-password-reset`,
+    async (route) => {
+      const body = route.request().postDataJSON() as { access_reason?: string };
+      resetReason = body.access_reason ?? null;
+      currentUser = {
+        ...currentUser,
+        recent_audit: [
+          {
+            log_id: 61,
+            actor_user_id: adminUser.user_id,
+            action: 'user.password_reset_force',
+            resource_type: 'user',
+            resource_id: targetUserId,
+            access_reason: body.access_reason ?? null,
+            target_pii_fields: ['email', 'password_hash'],
+            prev_hash: '1'.repeat(64),
+            content_hash: '2'.repeat(64),
+            occurred_at: '2026-06-06T12:05:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentUser }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' && url.pathname === `/admin/users/${targetUserId}/lifecycle/delete`,
+    async (route) => {
+      const body = route.request().postDataJSON() as { access_reason?: string; confirm?: string };
+      deleteReason = `${body.access_reason ?? ''}:${body.confirm ?? ''}`;
+      currentUser = {
+        ...currentUser,
+        status: 'pending_delete',
+        is_active: false,
+        recent_audit: [
+          {
+            log_id: 62,
+            actor_user_id: adminUser.user_id,
+            action: 'user.delete_schedule',
+            resource_type: 'user',
+            resource_id: targetUserId,
+            access_reason: body.access_reason ?? null,
+            target_pii_fields: ['email'],
+            prev_hash: '2'.repeat(64),
+            content_hash: '3'.repeat(64),
+            occurred_at: '2026-06-06T12:10:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentUser }),
+      });
+    },
+  );
+
+  page.on('dialog', (dialog) => dialog.accept());
+
+  await page.goto(`/admin/users/${targetUserId}`);
+  await expect(page.getByTestId('admin-user-lifecycle-section')).toBeVisible();
+  await expect(page.getByTestId('admin-user-sessions')).toContainText('Firefox');
+
+  await page.getByTestId('admin-user-lifecycle-reason').fill('분실 기기 세션 종료');
+  await page.getByTestId(`admin-user-session-revoke-${sessionId}`).click();
+  await expect(page.getByTestId('admin-user-sessions')).toContainText('revoked');
+  await expect(page.getByTestId('admin-user-audit-list')).toContainText('user.session_revoke');
+  expect(revokedReason).toBe('분실 기기 세션 종료');
+
+  await page.getByTestId('admin-user-lifecycle-reason').fill('계정 탈취 의심');
+  await page.getByTestId('admin-user-force-password-reset').click();
+  await expect(page.getByTestId('admin-user-audit-list')).toContainText(
+    'user.password_reset_force',
+  );
+  expect(resetReason).toBe('계정 탈취 의심');
+
+  await page.getByTestId('admin-user-lifecycle-reason').fill('탈퇴 요청 접수');
+  await page.getByTestId('admin-user-schedule-delete').click();
+  await expect(page.getByTestId('admin-user-info')).toContainText('pending_delete');
+  expect(deleteReason).toBe('탈퇴 요청 접수:DELETE');
 });
 
 test('Admin RBAC 권한 매트릭스를 표시한다', async ({ page }) => {
