@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-288-legacy-task-archive / task 문서 정리
+
+**작업**: 사용자 지시에 따라 T-285는 현재 진행하지 않고, `tasks.md`의 완료/규칙/legacy 항목을
+`tasks-done.md`와 `tasks-rule.md`로 이관했다.
+
+**변경**:
+
+- T-285 착수 중 작성했던 미커밋 문서 변경을 제거하고, 새 브랜치
+  `agent/codex-tasks-backlog-cleanup`에서 문서 정리만 진행했다.
+- `docs/tasks.md`를 열린 backlog 중심으로 축소했다. 완료된 T-281~~T-284, T-289~~T-290,
+  Admin 콘솔 보강 legacy, 기존 완료/보류 혼재 섹션, 머지 히스토리는 제거했다.
+- `docs/tasks-done.md`에 T-288-legacy-task-archive, 최근 완료 항목, legacy archive, 머지
+  히스토리 요약을 추가했다.
+- `docs/tasks-rule.md` §8에 병행 작업 기록, 선점 충돌 회피, 신규 task 착수 전 확인,
+  완료 후 이관 규칙을 추가했다.
+- `docs/resume.md`를 현재 상태와 다음 후보(T-292/T-286) 기준으로 갱신했다.
+
+**검증**:
+
+- Linux git/CodeGraph 환경에서 `git fetch origin main`, `codegraph sync`, 열린 PR 확인을 수행했다.
+- PR #312(T-291)가 `apps/etl/**`, `docs/architecture/dagster-etl-bridge.md`,
+  `docs/runbooks/etl.md`를 변경 중임을 확인했다. 이번 PR은 해당 파일을 건드리지 않는다.
+
+**다음**: 문서 정리 PR·CI·머지 후 T-292 App integrity pagination / producer follow-up 또는
+T-286 Cross-track review gap closure로 진입한다. T-285는 사용자 지시가 바뀌기 전까지 진행하지 않는다.
+
 ## 2026-06-29 (codex) — T-284 Mobile v1.0 scope gate
 
 **작업**: 활성 `apps/mobile` track을 `v1.0.0` Web/API/Admin release blocker에서 제외하는 scope gate를
@@ -22,9 +48,9 @@
 - `git diff --check` 통과.
 - `npm --workspace @pinvi/mobile run typecheck` 통과.
 
-**다음**: PR·CI·머지 후 T-285 AI companion v1.0 scope gate 또는 T-292 App integrity pagination /
-producer follow-up으로 진입한다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을
-건드릴 때는 최신 main 기준으로 영향도를 다시 확인한다.
+**다음**: 당시 다음 후보는 T-285 또는 T-292였으나, 2026-06-29 사용자 지시에 따라 T-285는 현재
+진행하지 않는다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을 건드릴 때는 최신
+main 기준으로 영향도를 다시 확인한다.
 
 ## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
 
@@ -1335,7 +1361,7 @@ Admin ETL summary 노출을 구현했다.
   최근 2일 PR 리뷰 코멘트 확인 규칙을 문서화했다.
 - `docs/tasks-done.md`를 추가하고 T-232~T-235 및 T-288 완료 요약을 옮겼다.
 - `docs/tasks.md`에서 현재 Sprint 5 완료 항목을 제거하고, legacy 완료 이력 전체 이관을
-  `T-288-legacy-task-archive`로 분리했다.
+  `T-288-legacy-task-archive`로 분리했다. 해당 이관은 2026-06-29 완료했다.
 - `docs/agent-guide.md`와 `docs/resume.md`의 정본 포인터를 새 정책에 맞췄다.
 
 **발견**: 최근 2일 PR 범위에서 inline review comment는 0건이었다. 사람 top-level 리뷰 코멘트는

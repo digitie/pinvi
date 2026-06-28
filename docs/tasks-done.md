@@ -6,11 +6,38 @@
 
 ## 2026-06-29
 
+- [x] T-288-legacy-task-archive — `tasks.md` legacy 완료 이력 이관.
+      `docs/tasks.md`에서 완료/폐기/머지 이력/운영 규칙이 섞인 legacy 섹션을 제거하고,
+      열린 backlog만 남겼다. 완료·아카이브 요약과 머지 히스토리는 본 파일로, 병행 작업
+      기록·충돌 회피 규칙은 `docs/tasks-rule.md` §8로 이동했다. T-285는 사용자 지시에 따라
+      현재 진행하지 않는 열린 보류 항목으로 유지했다.
+
+- [x] T-290 — Trip conflict UX follow-up. (완료: 2026-06-29, PR #310, claude)
+      PR #266 사후 리뷰의 Trip conflict field whitelist drift, 409 envelope current row,
+      `ConflictDialog` Esc/focus 접근성 gap을 닫았다. Day rename/delete 409는 T-287로 유지한다.
+
+- [x] T-289 — WebSocket reconnect / invalidation follow-up. (완료: 2026-06-29, PR #310, claude)
+      PR #265 사후 리뷰의 `4401` refresh tight loop, retry jitter, 수동 재연결 UX,
+      TanStack Query invalidation 실제 배선 gap을 T-290과 같은 PR에서 닫았다.
+
 - [x] T-284 — Mobile v1.0 scope gate.
       `apps/mobile`을 활성 Expo SDK 56 / Dev Client Sprint M-1 track으로 유지하되, `v1.0.0`
       Web/API/Admin 운영 출시의 필수 release blocker에서는 제외하는 scope gate를 문서화했다.
       EAS build, 실기기 smoke, store 제출, mobile live e2e는 모바일 release train에서 검증하며,
       `apps/mobile/**` 또는 공용 `packages/**` 변경 시 `mobile-typecheck` CI gate는 유지한다.
+
+- [x] T-283 — Security review / threat model / penetration pass.
+      auth/session/MCP/share token/rate-limit/storage/admin RBAC/incident 권한 threat model과
+      1차 security review를 정리했다. v1.0 user-facing AI companion 범위는 별도 scope gate로
+      분리했다가, 이후 사용자 지시에 따라 T-285는 현재 진행하지 않는다.
+
+- [x] T-282 — Rate-limit / abuse admin surface.
+      ADR-038 bucket 상태, fail-closed 503, block/allow override, suspicious activity 조회를
+      Admin/API/UI로 노출했다.
+
+- [x] T-281 — User lifecycle admin actions.
+      force-resend-verify, sessions list/forced logout, force-password-reset, disable/reactivate,
+      anonymize/delete account와 사용자 `DELETE /users/me` 흐름을 구현했다.
 
 - [x] T-280 — RBAC role grant/revoke / permission matrix.
       ADR-033의 DB-backed role 모델을 운영 가능한 Admin API/UI로 확장했다.
@@ -275,7 +302,8 @@
       `kor-travel-map`의 `tasks.md`/`tasks-done.md`/`resume.md` 분리 정책을 확인하고,
       Pinvi에 `docs/tasks-rule.md`와 본 파일을 추가했다. 신규 task 진입 전 최근 2일 PR
       리뷰 코멘트 확인, task 분리 기준, 완료 후 `tasks-done.md` 아카이브 규칙을 고정했다.
-      기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했다.
+      기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했고,
+      2026-06-29 해당 이관을 완료했다.
 
 - [x] T-235 — Optimistic lock / conflict dialog.
       Trip/POI 409 conflict UX, LWW/수동 병합, server/my value 선택과 API/Vitest/Windows
@@ -295,8 +323,88 @@
       `@pinvi/api-client`에 `TripRealtimeClient`와 `tripWebSocketUrl`을 추가하고,
       사용자 Trip 상세 화면을 `WS /ws/trips/{trip_id}` presence/reload 흐름에 연결했다.
 
-## Legacy
+## Legacy Archive (2026-06-29, T-288-legacy-task-archive)
 
-- 기존 `docs/tasks.md`의 `Admin 콘솔 기능 보강 프로그램`, `완료`, `머지 히스토리`,
-  그리고 완료/보류가 섞인 하위 legacy 섹션은 `T-288-legacy-task-archive`에서
-  단계적으로 이관한다.
+이번 정리에서 `docs/tasks.md`에서 제거한 완료/폐기/머지 이력이다. 상세 구현 내역은 각 PR,
+`docs/journal.md`, 관련 실행 계획 문서가 정본이며, 이 섹션은 task 추적과 ID 검색용 archive다.
+
+### Admin 콘솔 기능 보강 프로그램
+
+- [x] T-207~~T-229 — Admin 콘솔 보강 프로그램.
+      실행 계획(`docs/execplan/admin-console-gap-plan.md`) 작성, Admin IA/메뉴/대시보드,
+      `kor-travel-map` Admin proxy, feature/change request/dedup/integrity/debug logs,
+      ETL/provider sync, category mapping, seed/reset dev-only guard, Grafana URL,
+      dashboard 상세, system detail, trip/POI/user/avatar/file/operation 운영 기능,
+      N150 Admin live e2e 묶음 게이트, sidebar 토글 정정, 완료 감사까지 닫았다.
+- [x] T-230 — v0.1.0 릴리즈 상태 정합화.
+      GitHub의 기존 `v0.1.0` tag/Release 상태를 문서와 추적 파일에 반영했다.
+- [x] T-231 — v0.2.0 후보 범위 정리.
+      `CHANGELOG.md`와 Sprint 5 문서에서 post-v0.1.0 반영분과 남은 release gate를 분리했다.
+
+### 완료 legacy 묶음
+
+- [x] T-000~~T-023 — v2 재시작 초기 문서/ADR/API/runbook/compliance/convention/agent 절차
+      정리와 Sprint 4까지 PR 운영 runbook.
+- [x] T-030~~T-035 — Sprint 1 monorepo/API/Web/ETL/infra/CI skeleton과 진입 PR.
+- [x] T-050~~T-074 — Sprint 3/4 Admin, CI, 지도 shell, OAuth, KASI, 이메일 worker,
+      kor-travel-map 계약 동기화, production URL/CORS/OAuth 문서화.
+- [x] T-075, T-100~~T-105, T-109~~T-121 — Trip/notice shell, Resend/OAuth/Notice/RustFS/Admin
+      v2 이식, geofence, Grafana, Backup snapshot, OAuth Google-only, consent, account matching,
+      Admin user/trip/POI 관리, 첨부 도메인과 RustFS presigned 실서명.
+- [x] T-123~~T-151 — 2026-06-06 감사 후속 문서/계약/schema/API/ADR 정합화.
+- [x] T-152~~T-153 — Telegram 완료 알림 MCP와 PR 리뷰 모니터 MCP 알림 보강.
+- [x] T-154~~T-169 — Codex PR 사후 리뷰 1~2라운드 보안/무결성/가용성 후속.
+- [x] T-170~~T-182, T-210b~~T-210e, T-211 — `kor-travel-map` OpenAPI HTTP client,
+      feature/trip/public/admin 연동, drift gate, curated import 연결.
+- [x] T-183~~T-200 — backup hotswap hardening, 첨부/WS/cursor/geofence/rate-limit 후속,
+      runtime 계약 hard cutover, 프로젝트명 `pinvi` 변경, docker-manager 포트 대역 정렬.
+- [x] T-201~~T-206 — Web 지도 클라이언트 전환, geo v2 key 계약, Admin live matrix,
+      이메일 outbox worker 연결, 로컬 env 키 반영, N150 bootstrap admin 생성/복구.
+- [x] T-111, T-112, T-114, T-132 — Sprint 5~6 backlog 중 완료된 Backup/Restore UI,
+      MCP 외부 인터페이스, GitHub Actions CI/CD 복원, trip 하위 리소스 구현.
+- [x] T-066 — kor-travel-map OpenAPI HTTP client 구현 완료. drift gate는 이후 T-210e로 완료했다.
+- [x] T-107 — Gemini 통합은 ADR-020에 따라 본 저장소 직접 구현 대상에서 제외했다.
+      후속은 열린 T-113 `kor-travel-concierge` 별도 repo 신설로 유지한다.
+- [x] T-108 — 운영 배포 자동화 foundation.
+      Odroid M1S + N150 deploy/smoke script, doctor, 노드별 배포 runbook을 추가했다.
+      실제 노드 smoke와 backup/restore 복구 훈련은 Sprint 6 운영 게이트로 유지한다.
+
+### Claude Sprint 4 PR-C 프론트
+
+- [x] PR #126~~#139 — 지도 실 feature 로딩, trip 지도/POI 패널, 검색/내 위치/우클릭,
+      POI 추가/재정렬/편집/삭제, 위치 동의, notice-plan copy, 공유 링크, 첨부 업로드,
+      feature 제안, 댓글, 동반자, 동선 최적화, POI 상세 편집을 완료했다.
+
+### 머지 히스토리
+
+| PR | 제목 | merge 일 | 비고 |
+| --- | --- | --- | --- |
+| PR #9 | Sprint 1 진입 PR | 2026-05-26 | T-030 ~ T-035 |
+| PR #10 | Sprint 2 진입 PR | 2026-05-26 | 사용자/Trip/POI/동의/Storage |
+| PR #11 | Sprint 3 진입 PR | 2026-05-26 | Admin + RBAC + audit chain |
+| PR #14 | docs: Sprint 4~~6 plan + ADR-018~~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |
+| PR #15 | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A) | 2026-06-05 | T-114/T-065 |
+| PR #16 | feat: 백엔드 features API + kor-travel-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 |
+| PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
+| PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |
+| PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
+| PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |
+| PR #56 | docs: align tracking docs with merged work | 2026-06-06 | T-150 |
+| PR #57 | docs: backfill auth rbac audit ADRs | 2026-06-06 | T-151 |
+| PR #58 | docs: align map social kor-travel-geo docs | 2026-06-06 | T-143 |
+| PR #59 | docs: fix rise set and gemini SQL docs | 2026-06-06 | T-147 |
+| PR #60 | fix: use db roles for geofence admin bypass | 2026-06-06 | T-142 |
+| PR #61 | docs: define trip search and export UX | 2026-06-06 | T-144 |
+| PR #62 | docs: finalize backup schema-swap restore | 2026-06-06 | T-145 |
+| PR #63 | feat: add trip realtime websocket broker | 2026-06-06 | T-128 |
+| PR #64 | feat: add security incidents schema | 2026-06-06 | T-138 |
+| PR #65 | feat: add trip companion comments flow | 2026-06-06 | T-139 |
+| PR #67 | feat: add trip budget constraints | 2026-06-06 | T-140 |
+| PR #69 | feat: add trip primary region | 2026-06-07 | T-141 |
+| PR #70 | feat: verify resend webhook signatures | 2026-06-07 | T-136 |
+| PR #71 | feat: persist refresh sessions | 2026-06-07 | T-134 |
+| PR #120~~#123 | feat: T-105 첨부 도메인 | 2026-06-10 | T-105 |
+| PR #125 | feat: RustFS presigned 실서명 활성화 | 2026-06-10 | storage |
+| PR #126~~#131 | feat: Sprint 4 PR-C 지도 프론트 1차 | 2026-06-10 | T-060 |
+| PR #132~~#135 | feat: notice copy / 공유 링크 / 첨부 업로드 / feature 제안 | 2026-06-10 | T-060 |
+| PR #136~~#139 | feat: 댓글 / 동반자 / 동선 최적화 / POI 상세 편집 | 2026-06-10 | T-060 |
