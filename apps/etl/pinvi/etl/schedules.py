@@ -19,6 +19,11 @@ pinvi_pii_retention_job = define_asset_job(
     selection=["pinvi_pii_retention"],
 )
 
+pinvi_location_log_archive_job = define_asset_job(
+    "pinvi_location_log_archive_job",
+    selection=["pinvi_location_log_archive"],
+)
+
 schedules = [
     ScheduleDefinition(
         job=kasi_special_days_job,
@@ -35,6 +40,12 @@ schedules = [
         name="pinvi_pii_retention_schedule",
         job=pinvi_pii_retention_job,
         cron_schedule="15 4 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    ScheduleDefinition(
+        name="pinvi_location_log_archive_schedule",
+        job=pinvi_location_log_archive_job,
+        cron_schedule="30 4 * * *",
         execution_timezone="Asia/Seoul",
     ),
 ]

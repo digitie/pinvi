@@ -34,6 +34,8 @@ from app.schemas.admin import (
     AdminEtlDefinitionSensor,
     AdminEtlSummary,
     AdminKorTravelMapEtlSummary,
+    AdminLocationLogArchivePurposeSummary,
+    AdminLocationLogArchiveSummary,
     AdminPiiRetentionSummary,
     AdminPinviEtlSummary,
     AdminProviderDatasetSummary,
@@ -48,6 +50,8 @@ EMAIL_OUTBOX_TEMPLATE_STATS_LIMIT = 10
 PII_RETENTION_USER_GRACE_DAYS = 30
 PII_RETENTION_SESSION_GRACE_DAYS = 30
 PII_RETENTION_LOCATION_MONTHS = 6
+LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6
+LOCATION_LOG_ARCHIVE_PURPOSE_STATS_LIMIT = 10
 
 PINVI_ETL_ASSETS = [
     AdminEtlDefinitionAsset(
@@ -64,6 +68,11 @@ PINVI_ETL_ASSETS = [
         key="pinvi_pii_retention",
         group_name="pinvi_retention",
         description="PIPA/LBS 보존 기간 만료 후보를 dry-run metadata로 집계합니다.",
+    ),
+    AdminEtlDefinitionAsset(
+        key="pinvi_location_log_archive",
+        group_name="pinvi_retention",
+        description="location_access_log archive 후보와 hash-chain bridge 상태를 dry-run으로 집계합니다.",
     ),
 ]
 
@@ -92,6 +101,12 @@ PINVI_ETL_JOBS = [
         description="매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.",
         asset_keys=["pinvi_pii_retention"],
     ),
+    AdminEtlDefinitionJob(
+        name="pinvi_location_log_archive_job",
+        trigger="schedule",
+        description="매일 KST 04:30 위치 접근 로그 archive 후보와 chain bridge 상태를 점검합니다.",
+        asset_keys=["pinvi_location_log_archive"],
+    ),
 ]
 
 PINVI_ETL_SCHEDULES = [
@@ -111,6 +126,12 @@ PINVI_ETL_SCHEDULES = [
         name="pinvi_pii_retention_schedule",
         job_name="pinvi_pii_retention_job",
         cron_schedule="15 4 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    AdminEtlDefinitionSchedule(
+        name="pinvi_location_log_archive_schedule",
+        job_name="pinvi_location_log_archive_job",
+        cron_schedule="30 4 * * *",
         execution_timezone="Asia/Seoul",
     ),
 ]
@@ -142,6 +163,7 @@ async def build_pinvi_etl_summary(db: AsyncSession) -> AdminPinviEtlSummary:
         sensors=PINVI_ETL_SENSORS,
         email_outbox=await build_email_outbox_summary(db),
         pii_retention=await build_pii_retention_summary(db),
+        location_log_archive=await build_location_log_archive_summary(db),
     )
 
 
@@ -421,6 +443,60 @@ async def build_pii_retention_summary(
     )
 
 
+async def build_location_log_archive_summary(
+    db: AsyncSession,
+    *,
+    now: datetime | None = None,
+) -> AdminLocationLogArchiveSummary:
+    current = now or datetime.now(UTC)
+    archive_cutoff = _subtract_months(current, LOCATION_LOG_ARCHIVE_RETENTION_MONTHS)
+    params = {
+        "archive_cutoff": archive_cutoff,
+        "purpose_limit": LOCATION_LOG_ARCHIVE_PURPOSE_STATS_LIMIT,
+    }
+    summary = (await db.execute(_LOCATION_LOG_ARCHIVE_SUMMARY_SQL, params)).mappings().one()
+    purpose_rows = list((await db.execute(_LOCATION_LOG_ARCHIVE_PURPOSE_SQL, params)).mappings())
+    archive_tail_log_id = _optional_int(summary["archive_tail_log_id"])
+    active_head_log_id = _optional_int(summary["active_head_log_id"])
+    archive_tail_content_hash = _as_str(summary["archive_tail_content_hash"])
+    active_head_prev_hash = _as_str(summary["active_head_prev_hash"])
+    chain_bridge_required = archive_tail_log_id is not None and active_head_log_id is not None
+    bridge_anchor_matches = (
+        None if not chain_bridge_required else active_head_prev_hash == archive_tail_content_hash
+    )
+    pending_outbox_before_cutoff = _as_int(summary["pending_outbox_before_cutoff"])
+    return AdminLocationLogArchiveSummary(
+        dry_run=True,
+        generated_at=current,
+        archive_cutoff=archive_cutoff,
+        location_retention_months=LOCATION_LOG_ARCHIVE_RETENTION_MONTHS,
+        total_candidates=_as_int(summary["total_candidates"]),
+        oldest_candidate_at=summary["oldest_candidate_at"],
+        newest_candidate_at=summary["newest_candidate_at"],
+        archive_tail_log_id=archive_tail_log_id,
+        active_head_log_id=active_head_log_id,
+        active_rows_after_cutoff=_as_int(summary["active_rows_after_cutoff"]),
+        chain_bridge_required=chain_bridge_required,
+        bridge_anchor_matches=bridge_anchor_matches,
+        pending_outbox_total=_as_int(summary["pending_outbox_total"]),
+        pending_outbox_before_cutoff=pending_outbox_before_cutoff,
+        archive_blocked_by_pending_outbox=pending_outbox_before_cutoff > 0,
+        oldest_pending_outbox_at=summary["oldest_pending_outbox_at"],
+        purpose_stats=[_location_archive_purpose_summary(row) for row in purpose_rows],
+    )
+
+
+def _location_archive_purpose_summary(
+    item: Any,
+) -> AdminLocationLogArchivePurposeSummary:
+    row = item if isinstance(item, Mapping) else {}
+    purpose = _as_str(row.get("purpose"))
+    return AdminLocationLogArchivePurposeSummary(
+        purpose=purpose or "unknown",
+        total=_as_int(row.get("total")),
+    )
+
+
 def _int_dict(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -594,5 +670,64 @@ _PII_RETENTION_SUMMARY_SQL = text(
         WHERE occurred_at <= :location_cutoff
           AND (target_pii_fields IS NOT NULL OR user_agent IS NOT NULL)
       )::int AS admin_audit_pii_over_retention
+    """
+)
+
+_LOCATION_LOG_ARCHIVE_SUMMARY_SQL = text(
+    """
+    WITH candidates AS (
+      SELECT log_id, occurred_at, content_hash
+      FROM app.location_access_log
+      WHERE occurred_at <= :archive_cutoff
+    ),
+    archive_tail AS (
+      SELECT log_id, content_hash
+      FROM candidates
+      ORDER BY log_id DESC
+      LIMIT 1
+    ),
+    active_head AS (
+      SELECT log_id, prev_hash
+      FROM app.location_access_log
+      WHERE occurred_at > :archive_cutoff
+      ORDER BY log_id ASC
+      LIMIT 1
+    ),
+    pending_outbox AS (
+      SELECT occurred_at
+      FROM app.location_audit_outbox
+      WHERE processed_at IS NULL
+    )
+    SELECT
+      (SELECT count(*) FROM candidates)::int AS total_candidates,
+      (SELECT min(occurred_at) FROM candidates) AS oldest_candidate_at,
+      (SELECT max(occurred_at) FROM candidates) AS newest_candidate_at,
+      (SELECT log_id FROM archive_tail) AS archive_tail_log_id,
+      (SELECT content_hash FROM archive_tail) AS archive_tail_content_hash,
+      (SELECT log_id FROM active_head) AS active_head_log_id,
+      (SELECT prev_hash FROM active_head) AS active_head_prev_hash,
+      (
+        SELECT count(*)
+        FROM app.location_access_log
+        WHERE occurred_at > :archive_cutoff
+      )::int AS active_rows_after_cutoff,
+      (SELECT count(*) FROM pending_outbox)::int AS pending_outbox_total,
+      (
+        SELECT count(*)
+        FROM pending_outbox
+        WHERE occurred_at <= :archive_cutoff
+      )::int AS pending_outbox_before_cutoff,
+      (SELECT min(occurred_at) FROM pending_outbox) AS oldest_pending_outbox_at
+    """
+)
+
+_LOCATION_LOG_ARCHIVE_PURPOSE_SQL = text(
+    """
+    SELECT purpose, count(*)::int AS total
+    FROM app.location_access_log
+    WHERE occurred_at <= :archive_cutoff
+    GROUP BY purpose
+    ORDER BY total DESC, purpose ASC
+    LIMIT :purpose_limit
     """
 )

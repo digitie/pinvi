@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-241 — `pinvi_location_log_archive` Dagster job.
+      `pinvi_location_log_archive` asset/job/schedule을 추가해 매일 KST 04:30
+      `app.location_access_log`의 6개월 초과 archive 후보, active head/tail hash-chain bridge,
+      미처리 `location_audit_outbox` blocker, purpose별 후보 수를 dry-run으로 집계한다.
+      `/admin/etl/summary`와 Web `/admin/etl`은 후보 수와 bridge/pending 상태만 노출하고,
+      raw 좌표·사용자 식별자는 노출하지 않는다. 실제 archive/delete/anonymize 실행은
+      T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
 - [x] T-240 — `pinvi_pii_retention` Dagster job.
       `pinvi_pii_retention` asset/job/schedule을 추가해 매일 KST 04:15 삭제 계정 PII,
       OAuth identity, 만료 verification/reset token, 오래된 session, 만료 OAuth transient row,

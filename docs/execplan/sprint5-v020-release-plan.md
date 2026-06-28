@@ -159,17 +159,25 @@
 - 완료: Web mock e2e fixture에 `pii_retention` 표시 추가.
 - 문서: compliance 문서와 retention policy cross-reference는 T-276 실제 실행 설계에서 재확인한다.
 
-### T-241 — `pinvi_location_log_archive` Dagster job
+### T-241 — `pinvi_location_log_archive` Dagster job — 완료
 
 - `app.location_access_log` 보존/아카이브 후보를 dry-run으로 집계한다.
 - CPO 접근 로그 chain 검증과 충돌하지 않는 archive 정책을 문서화한다.
 - archive 대상은 Sprint 5에서 metadata/dry-run까지, 실제 이동/삭제/익명화는 T-276에서
   kill-switch와 retention dashboard까지 포함해 진행한다.
+- 구현 결과: `pinvi_location_log_archive` asset/job/schedule이 매일 KST 04:30
+  6개월 초과 위치 접근 로그 archive 후보, archive tail과 active head의 hash-chain bridge,
+  미처리 location audit outbox blocker, purpose별 후보 수를 dry-run으로 집계한다.
+- `/admin/etl/summary`와 `/admin/etl`은 후보 count, active row count, bridge 상태,
+  pending outbox 상태만 노출하고 raw 좌표·사용자 식별자는 노출하지 않는다.
 
 검증 케이스:
 
-- ETL unit: 기간 경계, CPO-only log 제외/포함 정책, dry-run metadata.
-- API integration: `/admin/audit/location`과 archive dry-run 결과가 동시에 조회 가능.
+- 완료: ETL unit 기간 경계, bridge anchor match, old pending outbox blocker,
+  dry-run metadata PII-free assertion.
+- 완료: API integration `/admin/etl/summary`에서 archive dry-run count와 bridge 상태를 확인하고,
+  `/admin/audit/location` CPO 조회가 같은 chain에서 깨짐 없이 읽히는지 검증.
+- 완료: Web mock e2e fixture에 `location_log_archive` 표시 추가.
 
 ### T-242 — Telegram system summary/outbox ETL
 

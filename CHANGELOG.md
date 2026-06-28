@@ -78,6 +78,9 @@
 - `pinvi_pii_retention` Dagster asset/job을 추가했다. 매일 삭제 계정 PII, 만료 token/session,
   OAuth transient row, location/admin audit PII 보존 기간 만료 후보를 dry-run으로 집계하고,
   Admin `/admin/etl` 요약에 cutoff와 bounded count만 노출한다.
+- `pinvi_location_log_archive` Dagster asset/job을 추가했다. 매일 위치 접근 로그 archive 후보,
+  hash-chain bridge 상태, pending outbox blocker를 dry-run으로 집계하고, Admin `/admin/etl`
+  요약에 raw 좌표·사용자 식별자 없이 노출한다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder

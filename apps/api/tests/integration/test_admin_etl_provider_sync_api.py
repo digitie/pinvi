@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -12,13 +13,14 @@ from app.api.v1.admin import etl as etl_router
 from app.clients.kor_travel_map import KorTravelMapUnavailable
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
-from app.models.audit import AdminAuditLog, LocationAccessLog
+from app.models.audit import AdminAuditLog, LocationAuditOutbox
 from app.models.email_queue import EmailQueue
 from app.models.oauth_identity import OAuthLoginState, OAuthMobileExchange, UserOAuthIdentity
 from app.models.session import UserSession
 from app.models.user import User
 from app.models.user_email_verification import UserEmailVerification
 from app.services import admin_etl as admin_etl_service
+from app.services.location_audit import append_location_log
 
 pytestmark = pytest.mark.asyncio
 
@@ -120,6 +122,30 @@ async def _seed_pii_retention_candidates(session_factory: Any) -> None:
         )
         db.add_all([deleted_user, privileged_deleted_user, active_user])
         await db.flush()
+        await append_location_log(
+            db,
+            user_id=active_user.user_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.123456"),
+            lng=Decimal("127.123456"),
+            request_id=uuid.uuid4(),
+            ip_hash="a" * 64,
+            occurred_at=now - timedelta(days=200),
+            commit=False,
+        )
+        await append_location_log(
+            db,
+            user_id=active_user.user_id,
+            endpoint="/features/in-bounds",
+            purpose="viewport_query",
+            lat=None,
+            lng=None,
+            request_id=uuid.uuid4(),
+            ip_hash="b" * 64,
+            occurred_at=now - timedelta(days=1),
+            commit=False,
+        )
         db.add_all(
             [
                 UserOAuthIdentity(
@@ -173,17 +199,16 @@ async def _seed_pii_retention_candidates(session_factory: Any) -> None:
                     expires_at=now - timedelta(minutes=10),
                     created_at=now - timedelta(hours=1),
                 ),
-                LocationAccessLog(
+                LocationAuditOutbox(
                     user_id=active_user.user_id,
-                    occurred_at=now - timedelta(days=200),
-                    endpoint="/mobile/vworld/token",
-                    purpose="nearby_attractions",
+                    occurred_at=now - timedelta(days=1),
+                    endpoint="/features/in-bounds",
+                    purpose="viewport_query",
                     lat=None,
                     lng=None,
                     request_id=uuid.uuid4(),
-                    ip_hash="a" * 64,
-                    prev_hash="b" * 64,
-                    content_hash="c" * 64,
+                    ip_hash="g" * 64,
+                    processed_at=None,
                 ),
                 AdminAuditLog(
                     actor_user_id=active_user.user_id,
@@ -341,7 +366,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         etl_router, "build_admin_etl_summary", admin_etl_service.build_admin_etl_summary
     )
     admin_id = await _create_user(
-        session_factory, email="admin-etl@example.com", roles=["user", "operator"]
+        session_factory, email="admin-etl@example.com", roles=["user", "operator", "cpo"]
     )
     await _seed_email_queue(session_factory)
     await _seed_pii_retention_candidates(session_factory)
@@ -361,6 +386,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         "kasi_poi_rise_set_job",
         "pinvi_email_outbox_job",
         "pinvi_pii_retention_job",
+        "pinvi_location_log_archive_job",
     }
     assert data["pinvi"]["email_outbox"]["pending_due"] == 1
     assert data["pinvi"]["email_outbox"]["pending_backoff"] == 1
@@ -379,6 +405,17 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["pinvi"]["pii_retention"]["location_access_logs_over_retention"] == 1
     assert data["pinvi"]["pii_retention"]["admin_audit_pii_over_retention"] == 1
     assert data["pinvi"]["pii_retention"]["total_candidates"] == 10
+    assert data["pinvi"]["location_log_archive"]["dry_run"] is True
+    assert data["pinvi"]["location_log_archive"]["total_candidates"] == 1
+    assert data["pinvi"]["location_log_archive"]["active_rows_after_cutoff"] == 1
+    assert data["pinvi"]["location_log_archive"]["chain_bridge_required"] is True
+    assert data["pinvi"]["location_log_archive"]["bridge_anchor_matches"] is True
+    assert data["pinvi"]["location_log_archive"]["pending_outbox_total"] == 1
+    assert data["pinvi"]["location_log_archive"]["pending_outbox_before_cutoff"] == 0
+    assert data["pinvi"]["location_log_archive"]["archive_blocked_by_pending_outbox"] is False
+    assert data["pinvi"]["location_log_archive"]["purpose_stats"] == [
+        {"purpose": "nearby_attractions", "total": 1}
+    ]
     verify_stats = next(
         item
         for item in data["pinvi"]["email_outbox"]["template_stats"]
@@ -392,6 +429,13 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["kor_travel_map"]["features_total"] == 42
     assert data["kor_travel_map"]["provider_dataset_count"] == 1
     assert data["kor_travel_map"]["recent_import_jobs"][0]["status"] == "running"
+    location_resp = await client.get(
+        "/admin/audit/location",
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert location_resp.status_code == 200, location_resp.text
+    assert location_resp.headers.get("X-Chain-Broken") != "true"
+    assert len(location_resp.json()["data"]) == 2
 
 
 async def test_admin_etl_summary_degrades_when_upstream_ops_is_unavailable(

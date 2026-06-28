@@ -142,19 +142,17 @@ def compute_content_hash(prev_hash: str, row: dict) -> str:
 
 중간 row 삭제·변조 시 chain 검증으로 탐지.
 
-### 3.4 6개월 retention
+### 3.4 6개월 retention / archive 정책
 
-Dagster job 일 1회:
+Sprint 5 기준 구현은 파괴 작업 없는 dry-run이다. `pinvi_location_log_archive` Dagster asset은
+매일 KST 04:30 `app.location_access_log`의 6개월 초과 archive 후보를 집계하고,
+archive tail `content_hash`와 active head `prev_hash`가 이어지는지 확인한다. 미처리
+`app.location_audit_outbox` 중 cutoff 이전 row가 있으면 archive 실행 blocker로 보고한다.
 
-```sql
-DELETE FROM app.location_access_log WHERE occurred_at < now() - INTERVAL '6 months';
-```
-
-단, chain 끊김 → 이후 row의 `prev_hash` 검증 실패. retention 정리 시 chain
-재계산 또는 batch 단위 삭제 시 그 batch의 마지막 hash 보존 trigger 필요.
-
-대안: `DELETE`가 아니라 archive 테이블 (`location_access_log_archive`)로 이전.
-chain 검증은 그 archive 끝과 active 시작을 join.
+직접 `DELETE FROM app.location_access_log ...`를 실행하면 이후 row의 `prev_hash` 검증이 깨질 수
+있으므로 금지한다. 실제 archive/delete/anonymize 실행은 T-276에서 별도 kill-switch, evidence log,
+Admin retention dashboard, archive table tail과 active head를 함께 검증하는 chain bridge 정책을
+포함해 연다.
 
 ### 3.5 권한
 

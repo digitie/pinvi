@@ -4,13 +4,23 @@ from __future__ import annotations
 
 from dagster import Definitions, EnvVar
 
-from pinvi.etl.assets import pinvi_email_outbox, pinvi_kasi_special_days, pinvi_pii_retention
+from pinvi.etl.assets import (
+    pinvi_email_outbox,
+    pinvi_kasi_special_days,
+    pinvi_location_log_archive,
+    pinvi_pii_retention,
+)
 from pinvi.etl.jobs import kasi_poi_rise_set_job
 from pinvi.etl.resources import KasiResource, PinviDatabaseResource
 from pinvi.etl.schedules import schedules
 
 defs = Definitions(
-    assets=[pinvi_email_outbox, pinvi_kasi_special_days, pinvi_pii_retention],
+    assets=[
+        pinvi_email_outbox,
+        pinvi_kasi_special_days,
+        pinvi_location_log_archive,
+        pinvi_pii_retention,
+    ],
     jobs=[kasi_poi_rise_set_job],
     schedules=schedules,
     sensors=[],
