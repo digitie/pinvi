@@ -382,7 +382,7 @@ _EXECUTE_PII_SQL = text(
     WITH deleted_users AS (
       SELECT user_id
       FROM app.users
-      WHERE status = 'deleted'
+      WHERE status IN ('pending_delete', 'deleted')
         AND deleted_at IS NOT NULL
         AND deleted_at <= :user_pii_cutoff
         AND NOT (roles && ARRAY['admin', 'operator', 'cpo']::varchar[])
@@ -416,6 +416,7 @@ _EXECUTE_PII_SQL = text(
           residence_sigungu_code = NULL,
           email_verified_at = NULL,
           email_status = 'suppressed',
+          status = 'deleted',
           is_active = false,
           access_token_version = access_token_version + 1
       FROM deleted_users deleted

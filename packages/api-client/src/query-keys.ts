@@ -129,6 +129,7 @@ export const queryKeys = {
     users: (params: { page?: number; status?: string; q?: string }) =>
       ['admin', 'users', params] as const,
     user: (userId: string) => ['admin', 'user', userId] as const,
+    userSessions: (userId: string) => ['admin', 'user', userId, 'sessions'] as const,
     rbacPermissionMatrix: () => ['admin', 'rbac', 'permission-matrix'] as const,
     trips: (params: {
       page?: number;

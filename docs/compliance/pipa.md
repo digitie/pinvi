@@ -42,7 +42,8 @@
 
 Dagster job 일 1회:
 
-- 탈퇴 (`users.status='deleted'`) + 30일 경과 → PII 컬럼 NULL or `deleted-<uid>@example.invalid`
+- 탈퇴 (`users.status='pending_delete'`) + 30일 경과 → PII 컬럼 NULL 또는
+  `deleted+<uid>@deleted.pinvi.local`, 최종 `users.status='deleted'`
 - `location_access_log` 6개월 경과 → archive 이전 또는 hash 보존 삭제
 - `user_sessions` `revoked_at` + 30일 → hard delete
 

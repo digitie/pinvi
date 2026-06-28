@@ -83,7 +83,7 @@ async def get_current_user_id(
             User.is_active.is_(True),
         )
     )
-    if user is None or user.status in {"disabled", "deleted"}:
+    if user is None or user.status in {"disabled", "pending_delete", "deleted"}:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "TOKEN_INVALID", "message": "사용자를 찾을 수 없습니다."},

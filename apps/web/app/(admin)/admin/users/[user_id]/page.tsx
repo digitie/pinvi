@@ -5,13 +5,26 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { type ChangeEvent, useEffect, useState } from 'react';
-import { ImageIcon, Loader2, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import {
+  Eraser,
+  ImageIcon,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Mail,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  UserX,
+} from 'lucide-react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import { putToPresigned } from '@pinvi/domain';
 import type {
   AdminAuditEntry,
   AdminAvatarSettings,
   AdminUserDetail,
+  AdminUserSessionRecord,
   MutableAdminRole,
 } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
@@ -23,6 +36,13 @@ const apiClient = new ApiClient({
 });
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
+type LifecycleActionKind =
+  | 'resend-verify'
+  | 'force-password-reset'
+  | 'revoke-all'
+  | 'reactivate'
+  | 'delete'
+  | 'anonymize';
 
 const ROLE_OPTIONS: { value: MutableAdminRole; label: string }[] = [
   { value: 'admin', label: 'admin' },
@@ -93,18 +113,24 @@ export default function AdminUserDetailPage() {
   const [roleDraft, setRoleDraft] = useState<MutableAdminRole>('operator');
   const [roleReason, setRoleReason] = useState('');
   const [roleBusy, setRoleBusy] = useState<'grant' | 'revoke' | null>(null);
+  const [sessions, setSessions] = useState<AdminUserSessionRecord[]>([]);
+  const [lifecycleReason, setLifecycleReason] = useState('');
+  const [lifecycleBusy, setLifecycleBusy] = useState<LifecycleActionKind | null>(null);
+  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const api = adminApi(apiClient);
     const load = async () => {
       try {
-        const [nextUser, nextSettings] = await Promise.all([
+        const [nextUser, nextSettings, nextSessions] = await Promise.all([
           api.getUser(userId),
           api.getAvatarSettings(),
+          api.listUserSessions(userId),
         ]);
         if (cancelled) return;
         setUser(nextUser);
+        setSessions(nextSessions.items);
         setQuotaDraft({
           attachment_max_upload_bytes_override: nextUser.file_quota
             .attachment_max_upload_bytes_override
@@ -350,6 +376,80 @@ export default function AdminUserDetailPage() {
     }
   };
 
+  const refreshSessions = async () => {
+    const nextSessions = await adminApi(apiClient).listUserSessions(userId);
+    setSessions(nextSessions.items);
+  };
+
+  const onLifecycleAction = async (kind: LifecycleActionKind) => {
+    const accessReason = lifecycleReason.trim();
+    if (accessReason.length < 1) {
+      setError('lifecycle 액션 사유가 필요합니다.');
+      return;
+    }
+    if (
+      (kind === 'delete' && !window.confirm('이 사용자를 삭제 대기 상태로 전환할까요?')) ||
+      (kind === 'anonymize' && !window.confirm('이 사용자의 계정을 즉시 익명화할까요?'))
+    ) {
+      return;
+    }
+    setLifecycleBusy(kind);
+    setError(null);
+    setMessage(null);
+    try {
+      const api = adminApi(apiClient);
+      const updated =
+        kind === 'resend-verify'
+          ? await api.resendUserVerification(userId, { access_reason: accessReason })
+          : kind === 'force-password-reset'
+            ? await api.forcePasswordReset(userId, { access_reason: accessReason })
+            : kind === 'revoke-all'
+              ? await api.revokeAllUserSessions(userId, { access_reason: accessReason })
+              : kind === 'reactivate'
+                ? await api.reactivateUser(userId, { access_reason: accessReason })
+                : kind === 'delete'
+                  ? await api.scheduleUserDelete(userId, {
+                      access_reason: accessReason,
+                      confirm: 'DELETE',
+                    })
+                  : await api.anonymizeUser(userId, {
+                      access_reason: accessReason,
+                      confirm: 'ANONYMIZE',
+                    });
+      setUser(updated);
+      setLifecycleReason('');
+      await refreshSessions();
+      setMessage('lifecycle 액션을 처리했습니다.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'lifecycle 액션을 처리하지 못했습니다.');
+    } finally {
+      setLifecycleBusy(null);
+    }
+  };
+
+  const onRevokeSession = async (sessionId: string) => {
+    const accessReason = lifecycleReason.trim();
+    if (accessReason.length < 1) {
+      setError('세션 강제 로그아웃 사유가 필요합니다.');
+      return;
+    }
+    setSessionBusy(sessionId);
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await adminApi(apiClient).revokeUserSession(userId, sessionId, {
+        access_reason: accessReason,
+      });
+      setUser(updated);
+      await refreshSessions();
+      setMessage('세션을 강제 로그아웃했습니다.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '세션을 강제 로그아웃하지 못했습니다.');
+    } finally {
+      setSessionBusy(null);
+    }
+  };
+
   if (error && !user) {
     return (
       <AdminPage title="사용자 상세">
@@ -365,6 +465,9 @@ export default function AdminUserDetailPage() {
       </AdminPage>
     );
   }
+
+  const blockedAuthStatus = ['disabled', 'pending_delete', 'deleted'].includes(user.status);
+  const activeSessionCount = sessions.filter((session) => session.is_active).length;
 
   return (
     <AdminPage
@@ -495,6 +598,187 @@ export default function AdminUserDetailPage() {
               {roleBusy === 'revoke' && <Loader2 className="h-4 w-4 animate-spin" />}
               회수
             </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Lifecycle">
+        <div className="space-y-4" data-testid="admin-user-lifecycle-section">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <FormTextArea
+              id="admin-user-lifecycle-reason"
+              label="lifecycle 액션 사유"
+              value={lifecycleReason}
+              onChange={(e) => setLifecycleReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              data-testid="admin-user-lifecycle-reason"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  !!user.email_verified_at ||
+                  blockedAuthStatus ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('resend-verify')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
+                data-testid="admin-user-resend-verify"
+              >
+                {lifecycleBusy === 'resend-verify' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Mail className="h-4 w-4" aria-hidden="true" />
+                )}
+                인증 재발송
+              </button>
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  !user.email_verified_at ||
+                  blockedAuthStatus ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('force-password-reset')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
+                data-testid="admin-user-force-password-reset"
+              >
+                {lifecycleBusy === 'force-password-reset' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <KeyRound className="h-4 w-4" aria-hidden="true" />
+                )}
+                비밀번호 재설정
+              </button>
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  activeSessionCount < 1 ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('revoke-all')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink disabled:opacity-50"
+                data-testid="admin-user-revoke-all-sessions"
+              >
+                {lifecycleBusy === 'revoke-all' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                )}
+                전체 로그아웃
+              </button>
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  !['disabled', 'pending_delete'].includes(user.status) ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('reactivate')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-success-text px-3 text-sm font-semibold text-success-text disabled:opacity-50"
+                data-testid="admin-user-reactivate"
+              >
+                {lifecycleBusy === 'reactivate' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                )}
+                재활성화
+              </button>
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  ['pending_delete', 'deleted'].includes(user.status) ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('delete')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
+                data-testid="admin-user-schedule-delete"
+              >
+                {lifecycleBusy === 'delete' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <UserX className="h-4 w-4" aria-hidden="true" />
+                )}
+                삭제 대기
+              </button>
+              <button
+                type="button"
+                disabled={
+                  lifecycleBusy !== null ||
+                  user.status === 'deleted' ||
+                  lifecycleReason.trim().length < 1
+                }
+                onClick={() => void onLifecycleAction('anonymize')}
+                className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-white disabled:opacity-50"
+                data-testid="admin-user-anonymize"
+              >
+                {lifecycleBusy === 'anonymize' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Eraser className="h-4 w-4" aria-hidden="true" />
+                )}
+                익명화
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto" data-testid="admin-user-sessions">
+            {sessions.length === 0 ? (
+              <p className="text-sm text-muted">세션 기록이 없습니다.</p>
+            ) : (
+              <table className="min-w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-hairline text-left text-xs uppercase text-muted">
+                    <th className="py-2 pr-3 font-semibold">상태</th>
+                    <th className="py-2 pr-3 font-semibold">생성</th>
+                    <th className="py-2 pr-3 font-semibold">만료</th>
+                    <th className="py-2 pr-3 font-semibold">IP hash</th>
+                    <th className="py-2 pr-3 font-semibold">UA</th>
+                    <th className="py-2 pr-3 font-semibold">액션</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.session_id} className="border-b border-hairline/70">
+                      <td className="py-2 pr-3">{session.is_active ? 'active' : 'revoked'}</td>
+                      <td className="py-2 pr-3 text-muted">
+                        {new Date(session.created_at).toLocaleString('ko-KR')}
+                      </td>
+                      <td className="py-2 pr-3 text-muted">
+                        {new Date(session.expires_at).toLocaleString('ko-KR')}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs">
+                        {session.ip_hash ? session.ip_hash.slice(0, 12) : '—'}
+                      </td>
+                      <td className="max-w-72 truncate py-2 pr-3 text-muted">
+                        {session.user_agent ?? '—'}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <button
+                          type="button"
+                          disabled={
+                            !session.is_active ||
+                            sessionBusy !== null ||
+                            lifecycleReason.trim().length < 1
+                          }
+                          onClick={() => void onRevokeSession(session.session_id)}
+                          className="rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+                          data-testid={`admin-user-session-revoke-${session.session_id}`}
+                        >
+                          {sessionBusy === session.session_id ? '처리 중...' : '강제 로그아웃'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </Section>

@@ -19,7 +19,14 @@ class AdminUserSummary(BaseModel):
     user_id: uuid.UUID
     email_masked: str
     nickname: str | None
-    status: Literal["pending_verification", "pending_profile", "active", "disabled", "deleted"]
+    status: Literal[
+        "pending_verification",
+        "pending_profile",
+        "active",
+        "disabled",
+        "pending_delete",
+        "deleted",
+    ]
     roles: list[Literal["user", "admin", "operator", "cpo"]]
     email_verified_at: datetime | None
     created_at: datetime
@@ -1133,6 +1140,30 @@ class AdminUserDetail(AdminUserSummary):
 class AdminUserRoleMutationRequest(BaseModel):
     role: Literal["admin", "operator", "cpo"]
     access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminUserLifecycleRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+
+
+class AdminUserLifecycleConfirmRequest(AdminUserLifecycleRequest):
+    confirm: str = Field(min_length=1, max_length=64)
+
+
+class AdminUserSessionRecord(BaseModel):
+    session_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    user_agent: str | None = None
+    ip_hash: str | None = None
+    is_active: bool
+
+
+class AdminUserSessionsResponse(BaseModel):
+    user_id: uuid.UUID
+    items: list[AdminUserSessionRecord] = Field(default_factory=list)
 
 
 class AdminPermissionMatrixEntry(BaseModel):

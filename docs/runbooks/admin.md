@@ -114,6 +114,14 @@ curl -fsS -X POST "http://localhost:12801/admin/users/<user_id>/force-verify" \
 
 UI: `/admin/users` → 사용자 행 클릭 → [강제 인증] 버튼 → 사유 다이얼로그.
 
+인증 메일 재발송은 실제 메일 토큰을 다시 발급하는 운영 액션이다.
+
+```http
+POST /admin/users/<user_id>/lifecycle/resend-verify
+
+{ "access_reason": "가입 인증 메일 재발송 요청" }
+```
+
 ### 3.2 사용자 disable
 
 ```http
@@ -125,15 +133,27 @@ X-Access-Reason: "약관 위반 확인 (TICKET-...)"
 
 - `users.status = 'disabled'`
 - 모든 `user_sessions.revoked_at = now()`
+- `users.access_token_version` 증가
 - `admin_audit_log` 자동
 
-### 3.3 비밀번호 재설정 메일 재발송
+### 3.3 사용자 lifecycle / 세션 강제 로그아웃
 
 ```http
-POST /admin/users/<user_id>/resend-verify
+GET  /admin/users/<user_id>/sessions
+POST /admin/users/<user_id>/sessions/<session_id>/revoke
+POST /admin/users/<user_id>/sessions/revoke-all
+POST /admin/users/<user_id>/lifecycle/force-password-reset
+POST /admin/users/<user_id>/lifecycle/reactivate
+POST /admin/users/<user_id>/lifecycle/delete
+POST /admin/users/<user_id>/lifecycle/anonymize
 ```
 
-(verify와 reset은 별 endpoint — `/admin/users/{id}/resend-reset`도 추가 권장)
+- 세션 목록은 IP 원문 대신 `ip_hash`만 노출한다.
+- 세션 강제 로그아웃과 password reset은 `users.access_token_version`을 증가시켜 기존 access token도
+  즉시 무효화한다.
+- `lifecycle/delete` body는 `{ "access_reason": "...", "confirm": "DELETE" }`.
+- `lifecycle/anonymize` body는 `{ "access_reason": "...", "confirm": "ANONYMIZE" }`.
+- 권한 계정(`admin`/`operator`/`cpo`) 삭제/익명화는 role 회수 후 수행한다.
 
 ### 3.4 Dagster ETL 수동 trigger
 

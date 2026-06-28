@@ -68,26 +68,26 @@
 
 #### `app.users`
 
-| 컬럼                     | 타입                                 | 비고                                                                               |
-| ------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------- |
-| `user_id`                | `uuid` (PK)                          | `gen_random_uuid()`                                                                |
-| `email`                  | `varchar(320)` UNIQUE NOT NULL       | 가입/로그인 email                                                                  |
-| `password_hash`          | `varchar(255)`                       | Argon2id hash. OAuth-only 계정은 null 가능                                         |
-| `nickname`               | `varchar(80)`                        | 표시 이름                                                                          |
-| `avatar_url`             | `varchar(1024)`                      | RustFS 또는 OAuth 공급자 URL                                                       |
-| `avatar_kind`            | `varchar(16)`                        | `default` 등 avatar source                                                         |
-| `gender`                 | `varchar(16)`                        | `demographic_use` 동의 시에만 저장                                                 |
-| `birth_year_month`       | `varchar(6)`                         | YYYYMM. `demographic_use` 동의 시에만 저장                                         |
-| `residence_sigungu_code` | `varchar(5)`                         | 거주 시군구. `demographic_use` 동의 시에만 저장                                    |
-| `status`                 | `varchar(32)`                        | `pending_verification` / `pending_profile` / `active` / `disabled` / `deleted`     |
-| `roles`                  | `varchar(16)[]`                      | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']`              |
-| `email_verified_at`      | `timestamptz`                        | null이면 미인증                                                                    |
-| `email_status`           | `varchar(16)`                        | `active` / `bounced` / `complained` / `suppressed`                                 |
-| `access_token_version`   | `integer` NOT NULL DEFAULT 0         | access JWT `token_version` claim 검증. 비밀번호 재설정 등 전체 세션 무효화 시 증가 |
-| `is_active`              | `boolean`                            | 서버 로그인 가능 여부                                                              |
-| `deleted_at`             | `timestamptz`                        | soft delete 시각                                                                   |
-| `created_at`             | `timestamptz` NOT NULL DEFAULT now() | KST aware는 응용에서 변환                                                          |
-| `updated_at`             | `timestamptz` NOT NULL DEFAULT now() | trigger                                                                            |
+| 컬럼                     | 타입                                 | 비고                                                                                                    |
+| ------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `user_id`                | `uuid` (PK)                          | `gen_random_uuid()`                                                                                     |
+| `email`                  | `varchar(320)` UNIQUE NOT NULL       | 가입/로그인 email                                                                                       |
+| `password_hash`          | `varchar(255)`                       | Argon2id hash. OAuth-only 계정은 null 가능                                                              |
+| `nickname`               | `varchar(80)`                        | 표시 이름                                                                                               |
+| `avatar_url`             | `varchar(1024)`                      | RustFS 또는 OAuth 공급자 URL                                                                            |
+| `avatar_kind`            | `varchar(16)`                        | `default` 등 avatar source                                                                              |
+| `gender`                 | `varchar(16)`                        | `demographic_use` 동의 시에만 저장                                                                      |
+| `birth_year_month`       | `varchar(6)`                         | YYYYMM. `demographic_use` 동의 시에만 저장                                                              |
+| `residence_sigungu_code` | `varchar(5)`                         | 거주 시군구. `demographic_use` 동의 시에만 저장                                                         |
+| `status`                 | `varchar(32)`                        | `pending_verification` / `pending_profile` / `active` / `disabled` / `pending_delete` / `deleted`       |
+| `roles`                  | `varchar(16)[]`                      | `user` / `admin` / `operator` / `cpo` (SPEC V8 M-14). 기본 `['user']`                                   |
+| `email_verified_at`      | `timestamptz`                        | null이면 미인증                                                                                         |
+| `email_status`           | `varchar(16)`                        | `active` / `bounced` / `complained` / `suppressed`                                                      |
+| `access_token_version`   | `integer` NOT NULL DEFAULT 0         | access JWT `token_version` claim 검증. role 변경, 강제 로그아웃, 비밀번호 reset, 삭제 대기 전환 시 증가 |
+| `is_active`              | `boolean`                            | 서버 로그인 가능 여부                                                                                   |
+| `deleted_at`             | `timestamptz`                        | soft delete 시각                                                                                        |
+| `created_at`             | `timestamptz` NOT NULL DEFAULT now() | KST aware는 응용에서 변환                                                                               |
+| `updated_at`             | `timestamptz` NOT NULL DEFAULT now() | trigger                                                                                                 |
 
 #### `app.user_oauth_identities`
 

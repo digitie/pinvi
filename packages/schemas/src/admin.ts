@@ -18,7 +18,14 @@ export const AdminUserSummarySchema = z.object({
   user_id: z.string().uuid(),
   email_masked: z.string(),
   nickname: z.string().nullable(),
-  status: z.enum(['pending_verification', 'pending_profile', 'active', 'disabled', 'deleted']),
+  status: z.enum([
+    'pending_verification',
+    'pending_profile',
+    'active',
+    'disabled',
+    'pending_delete',
+    'deleted',
+  ]),
   roles: z.array(z.enum(['user', 'admin', 'operator', 'cpo'])),
   email_verified_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
@@ -1433,6 +1440,36 @@ export const AdminUserRoleMutationRequestSchema = z.object({
   access_reason: z.string().min(1).max(500),
 });
 export type AdminUserRoleMutationRequest = z.infer<typeof AdminUserRoleMutationRequestSchema>;
+
+export const AdminUserLifecycleRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminUserLifecycleRequest = z.infer<typeof AdminUserLifecycleRequestSchema>;
+
+export const AdminUserLifecycleConfirmRequestSchema = AdminUserLifecycleRequestSchema.extend({
+  confirm: z.string().min(1).max(64),
+});
+export type AdminUserLifecycleConfirmRequest = z.infer<
+  typeof AdminUserLifecycleConfirmRequestSchema
+>;
+
+export const AdminUserSessionRecordSchema = z.object({
+  session_id: z.string().uuid(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+  expires_at: Iso8601Schema,
+  revoked_at: Iso8601Schema.nullable().default(null),
+  user_agent: z.string().nullable().default(null),
+  ip_hash: z.string().nullable().default(null),
+  is_active: z.boolean(),
+});
+export type AdminUserSessionRecord = z.infer<typeof AdminUserSessionRecordSchema>;
+
+export const AdminUserSessionsResponseSchema = z.object({
+  user_id: z.string().uuid(),
+  items: z.array(AdminUserSessionRecordSchema).default([]),
+});
+export type AdminUserSessionsResponse = z.infer<typeof AdminUserSessionsResponseSchema>;
 
 export const AdminPermissionMatrixEntrySchema = z.object({
   resource: z.string(),

@@ -18,6 +18,8 @@ const STATUSES = [
   { value: 'pending_profile', label: '프로필 대기' },
   { value: 'active', label: '활성' },
   { value: 'disabled', label: '비활성' },
+  { value: 'pending_delete', label: '삭제 대기' },
+  { value: 'deleted', label: '삭제 완료' },
 ];
 
 const columns: AdminTableColumn<AdminUserSummary>[] = [
@@ -39,7 +41,13 @@ const columns: AdminTableColumn<AdminUserSummary>[] = [
     sortValue: (u) => u.nickname ?? '',
     cell: (u) => u.nickname ?? '—',
   },
-  { key: 'status', header: '상태', sortable: true, sortValue: (u) => u.status, cell: (u) => u.status },
+  {
+    key: 'status',
+    header: '상태',
+    sortable: true,
+    sortValue: (u) => u.status,
+    cell: (u) => u.status,
+  },
   {
     key: 'roles',
     header: '역할',
@@ -112,7 +120,9 @@ export default function AdminUsersPage() {
             조회
           </button>
         </form>
-        <label htmlFor="admin-users-status-filter" className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-users-status-filter" className="text-xs text-muted">
+          상태
+        </label>
         <select
           id="admin-users-status-filter"
           value={statusFilter}
@@ -133,7 +143,11 @@ export default function AdminUsersPage() {
       </FilterBar>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-users-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-users-error"
+        >
           {error}
         </p>
       )}

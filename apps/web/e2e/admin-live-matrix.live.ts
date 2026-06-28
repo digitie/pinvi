@@ -481,7 +481,15 @@ function pushPlaceholderCases(cases: AdminUiCase[]) {
 }
 
 function pushUsersFilterCases(cases: AdminUiCase[]) {
-  const statuses = ['', 'pending_verification', 'pending_profile', 'active', 'disabled'];
+  const statuses = [
+    '',
+    'pending_verification',
+    'pending_profile',
+    'active',
+    'disabled',
+    'pending_delete',
+    'deleted',
+  ];
   for (const viewport of viewports) {
     for (const status of statuses) {
       for (const query of queryTerms) {

@@ -284,9 +284,19 @@ Content-Type: application/json
 
 ## 9. 탈퇴
 
-[`auth.md`](./auth.md) §7과 동일. alias:
+```http
+DELETE /users/me
+Cookie: pinvi_access=...
+```
 
-- `DELETE /users/me`
+- 응답: `204 No Content`
+- `users.status='pending_delete'`, `is_active=false`, `deleted_at=now()`로 전환한다.
+- 모든 active `user_sessions.revoked_at`을 설정하고 `users.access_token_version`을 증가시켜 기존
+  access/refresh token을 무효화한다.
+- 응답 쿠키에서 `pinvi_access`, `pinvi_refresh`를 삭제한다.
+- `admin` / `operator` / `cpo` role을 가진 권한 계정은 self-delete를 차단한다. role 회수 후 일반
+  사용자 상태에서 탈퇴해야 한다.
+- retention 실행 또는 Admin `lifecycle/anonymize`가 최종 `status='deleted'`와 PII 익명화를 수행한다.
 
 ## 10. AI agent 구현 체크리스트
 

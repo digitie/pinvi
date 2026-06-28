@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-281 User lifecycle admin actions
+
+Sprint 6 사용자 lifecycle Admin workflow를 구현했다. DB status vocabulary에 `pending_delete`를
+추가했고, auth/session/MCP/password reset/verify 경계에서 `pending_delete`와 `deleted`를 차단한다.
+Admin `/admin/users/{user_id}`는 lifecycle 패널을 제공해 인증 메일 재발송, 세션 목록, 세션 단건/전체
+강제 로그아웃, 강제 비밀번호 재설정, disable/reactivate, 삭제 대기, 즉시 익명화를 처리한다.
+
+Admin lifecycle mutation은 모두 `access_reason`을 요구하고 `admin_audit_log`에
+`user.verification_resend`, `user.session_revoke`, `user.session_revoke_all`,
+`user.password_reset_force`, `user.reactivate`, `user.delete_schedule`, `user.anonymize` action을
+남긴다. 세션 목록은 IP 원문 대신 `ip_hash`만 응답한다. 세션 강제 로그아웃, role 변경,
+force-password-reset, disable/delete/reactivate는 `users.access_token_version`을 증가시켜 기존
+access token을 즉시 무효화한다.
+
+사용자 self-service `DELETE /users/me`는 `status='pending_delete'`, `is_active=false`,
+`deleted_at=now()`로 전환하고 active session revoke + cookie clear를 수행한다. retention 실행은
+`pending_delete` / `deleted` cutoff 후보를 익명화하고 최종 상태를 `deleted`로 고정한다.
+
+검증은 Linux에서 ruff, strict mypy, API integration `test_admin_users_api.py` 10건,
+`packages/schemas`, `packages/api-client`, `apps/web` typecheck, Web lint를 통과했다. Playwright는
+N150 Docker runner `scripts/n150-playwright-runner.sh`로 `admin-users.e2e.ts` 6건을 통과했다.
+다음 작업은 PR·CI·머지 후 T-282 Rate-limit / abuse admin surface다.
+
 ## 2026-06-29 (codex) — T-280 RBAC role grant/revoke / permission matrix
 
 Sprint 6 Admin RBAC role grant/revoke와 permission matrix를 구현했다. `/admin/rbac/permission-matrix`

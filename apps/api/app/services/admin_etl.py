@@ -1058,7 +1058,7 @@ _PII_RETENTION_SUMMARY_SQL = text(
     WITH deleted_users AS (
       SELECT user_id, roles
       FROM app.users
-      WHERE status = 'deleted'
+      WHERE status IN ('pending_delete', 'deleted')
         AND deleted_at IS NOT NULL
         AND deleted_at <= :user_pii_cutoff
     ),
