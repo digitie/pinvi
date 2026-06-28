@@ -54,20 +54,34 @@ ls -la /var/lib/pinvi/backups/
 
 환경변수:
 
-| 변수                                           | 기본값               | 설명                                           |
-| ---------------------------------------------- | -------------------- | ---------------------------------------------- |
-| `PINVI_BACKUP_DIR`                             | `.tmp/backups`       | dump 저장 디렉터리                             |
-| `PINVI_BACKUP_SCHEMA`                          | `app`                | Pinvi 소유 schema                              |
-| `PINVI_BACKUP_DATABASE_URL`                    | `PINVI_DATABASE_URL` | backup 전용 DB URL override                    |
-| `PINVI_BACKUP_MIN_FREE_BYTES`                  | `1073741824`         | backup 시작 전 남아 있어야 하는 최소 여유 byte |
-| `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED` | `0`                  | Web Restore 버튼 표시/활성화 빌드타임 플래그   |
+| 변수                                           | 기본값                   | 설명                                                        |
+| ---------------------------------------------- | ------------------------ | ----------------------------------------------------------- |
+| `PINVI_BACKUP_DIR`                             | `.tmp/backups`           | dump 저장 디렉터리                                          |
+| `PINVI_BACKUP_SCHEMA`                          | `app`                    | Pinvi 소유 schema                                           |
+| `PINVI_BACKUP_DATABASE_URL`                    | `PINVI_DATABASE_URL`     | backup 전용 DB URL override                                 |
+| `PINVI_BACKUP_MIN_FREE_BYTES`                  | `1073741824`             | backup 시작 전 남아 있어야 하는 최소 여유 byte              |
+| `PINVI_BACKUP_PG_DUMP_BIN`                     | `pg_dump`                | host `pg_dump` binary                                       |
+| `PINVI_BACKUP_DOCKER_FALLBACK`                 | `1`                      | host `pg_dump`이 없을 때 Docker fallback 사용               |
+| `PINVI_BACKUP_DOCKER_BIN`                      | `docker`                 | fallback Docker CLI                                         |
+| `PINVI_BACKUP_DOCKER_IMAGE`                    | `postgis/postgis:16-3.5` | fallback `pg_dump` image                                    |
+| `PINVI_BACKUP_DOCKER_NETWORK`                  | 빈 값                    | fallback container network. compose DNS가 필요하면 명시한다 |
+| `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED` | `0`                      | Web Restore 버튼 표시/활성화 빌드타임 플래그                |
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
-단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. dump와 sidecar는 생성 직후
-`sha256sum -c`로 검증하며, Admin API 응답과 audit에는 host 절대경로 대신
-`backup://<filename>`만 노출한다. 신규 `.sha256` sidecar에는 dump의 basename만 기록한다.
-restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash를 비교하므로, 과거
-sidecar가 절대경로를 담고 있더라도 dump와 sidecar를 staging 경로로 함께 옮겨 검증할 수 있다.
+단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. host에 `pg_dump`가 없으면
+`PINVI_BACKUP_DOCKER_FALLBACK=1` 기본값에 따라 `PINVI_BACKUP_DOCKER_IMAGE` one-off container에서
+같은 명령을 실행한다. 이 fallback은 운영 노드 host CLI용이다. API Docker image는
+`scripts/backup-db.sh`와 `postgresql-client`를 포함하므로 Admin snapshot 경로에서는 host
+fallback보다 image 내부 `pg_dump`를 우선 사용한다.
+
+fallback container가 compose service DNS(`app-postgres` 같은 이름)를 해석해야 하면 운영자가
+`PINVI_BACKUP_DOCKER_NETWORK`를 compose network 이름으로 설정한다. DB URL이 host
+`127.0.0.1:5432`를 가리키는 Linux host에서는 `PINVI_BACKUP_DOCKER_NETWORK=host`를 사용할 수 있다.
+
+dump와 sidecar는 생성 직후 `sha256sum -c`로 검증하며, Admin API 응답과 audit에는 host 절대경로
+대신 `backup://<filename>`만 노출한다. 신규 `.sha256` sidecar에는 dump의 basename만 기록한다.
+restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash를 비교하므로, 과거 sidecar가
+절대경로를 담고 있더라도 dump와 sidecar를 staging 경로로 함께 옮겨 검증할 수 있다.
 
 ### 2.3 live e2e
 

@@ -10,7 +10,9 @@ N150 내부 smoke는 API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagst
 
 backup snapshot은 `postgis/postgis:16-3.5` 일회성 컨테이너로 생성했고,
 `pinvi-app-20260628-094253.dump`(126826 bytes), `.sha256`, `pg_restore --list` 검증이 통과했다.
-다만 host의 `scripts/backup-db.sh`는 `pg_dump not found`로 직접 실행되지 않았다.
+당시 host의 `scripts/backup-db.sh`는 `pg_dump not found`로 직접 실행되지 않았다. 후속으로
+`scripts/backup-db.sh`에 Docker fallback을 추가했고 API image에는 `backup-db.sh`와
+`postgresql-client`를 포함했다. N150에서 보강된 script 재실행 증거는 아직 필요하다.
 
 릴리스는 보류한다. 최신 main SHA에는 PR monitor check만 있고 `api`/`web` main CI check가 없었다.
 N150 Playwright는 Chromium `libatk`/`libatspi`/`libXdamage`/`libasound` 계열 누락으로 실패했고,
