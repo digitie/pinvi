@@ -68,6 +68,8 @@
   store 상태, auth/share/storage suspicious bucket을 조회하고, TTL 기반 `blocked` / `allowed`
   override를 생성·rollback할 수 있다. 원문 IP/email/share token은 저장하지 않고 hash label만
   남기며 override mutation은 `admin_audit_log`에 기록된다.
+- Sprint 6 보안 threat model / penetration 1차 점검을 기록하고 credential context 분리, 공유 token
+  수명주기, storage admin-only presign, incident RBAC 경계 회귀 테스트를 추가했다.
 - Admin `/admin/emails`에 Resend deliverability 상태판을 추가했다. API key configured/console mode,
   FROM domain/domain status, webhook signature/최근 event, queue health, active suppression,
   `users.email_status` count를 raw secret 없이 표시한다. Resend 발송은 REST client로 전환되어

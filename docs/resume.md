@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
+
+Sprint 6 보안 threat model / penetration 1차 점검을 수행했다. 범위는 auth/session, MCP token,
+share token, rate-limit/abuse, storage presigned URL, Admin RBAC, security incident workflow다.
+최근 2일 PR review를 확인했으며 2026-06-27 이후 inline review comment는 없었다.
+
+신규 문서 `docs/audit/2026-06-29-security-threat-model.md`에 자산/신뢰 경계, threat matrix,
+기존 테스트 증거, 신규 회귀 테스트, 잔여 운영 리스크를 정리했다. 신규 integration test
+`apps/api/tests/integration/test_security_boundaries_api.py`는 MCP token과 Web access token 상호
+재사용 차단, share token raw 값 비노출/route scope/revoke, admin-only storage presign 권한,
+incident console operator 은닉을 검증한다.
+
+검증은 Linux에서 `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest
+tests/integration/test_security_boundaries_api.py -q --capture=no` 4건을 통과했다. 다음 작업은
+PR·CI·머지 후 T-284 Mobile v1.0 scope gate다.
+
 ## 2026-06-29 (claude) — codex 병행 트랙 착수 (T-289/290 · T-291 · T-261~263)
 
 codex가 T-283(보안 리뷰, PR #308 open)을 진행하는 동안, Sprint 5 잔여 + Sprint 6에서 codex의

@@ -16,6 +16,17 @@
 > kor-travel-map 요구사항은 `docs/kor-travel-map-requirements.md`. 후속 백로그는 본 파일
 > "감사 후속 백로그(2026-06-06)" 절.
 
+## 병행 작업 메모
+
+- 여러 에이전트가 같은 저장소에서 병행 작업한다. 신규 task 시작 전 반드시 `git fetch origin main`,
+  `docs/tasks.md` 상단의 `진행 중` / `다음` / `최근 PR 리뷰 후속` / 본 섹션, `docs/resume.md`,
+  `docs/journal.md` 최신 항목, 열려 있는 PR/브랜치를 확인한다.
+- 다른 에이전트가 `tasks.md`에 특정 task, 파일, 도메인, PR을 선점 또는 진행 중으로 기록한 경우 같은
+  파일/도메인을 바로 수정하지 않는다. 충돌 가능성이 있으면 사용자에게 확인하거나 non-overlap task로
+  전환한다.
+- Codex는 새 task에 착수하기 전에 `tasks.md`에 작업 계획과 예상 변경 범위, 검증 계획을 먼저 남긴다.
+  작업 종료 시 완료 여부, PR 번호, 다음 task를 `tasks.md` / `resume.md` / `journal.md`에 동기화한다.
+
 ## 진행 중
 
 - T-259 — Release candidate gate / `v0.2.0`.
@@ -35,8 +46,16 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-283 Security review / threat model / penetration pass. T-259의 남은 full catalog와 `v0.2.0`
+- 다음 구현: T-284 Mobile v1.0 scope gate. T-259의 남은 full catalog와 `v0.2.0`
   tag/Release는 최종 release gate로 분리해 유지한다.
+- Codex T-284 진입 계획:
+  1. PR #308 머지 후 `origin/main` 기준 새 브랜치를 만들고, 다른 에이전트가 `tasks.md`에 남긴
+     진행 중 task/파일 범위를 먼저 확인한다.
+  2. `apps/mobile`을 v1.0 Web/API/Admin 출시 필수 범위에서 제외하고 Sprint M-1 track으로 분리하는
+     scope gate를 문서화한다. 예상 변경 범위는 `docs/tasks.md`, `docs/resume.md`,
+     `docs/journal.md`, `docs/sprints/SPRINT-6.md`, 필요 시 mobile 관련 architecture/runbook 문서다.
+  3. 코드 변경이 필요하다고 판단되면 착수 전 CodeGraph 영향도 확인과 `tasks.md` 계획 갱신을 먼저
+     수행한다. docs-only면 markdown 정합성, 링크/상태 문서, PR CI를 검증한다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -106,7 +125,7 @@
       anonymize/delete account와 사용자 `DELETE /users/me` 흐름을 구현했다.
 - [x] T-282 — Rate-limit / abuse admin surface. (완료: 2026-06-29, codex)
       ADR-038 bucket 상태, fail-closed 503, block/allow override, suspicious activity 조회를 구현한다.
-- [ ] T-283 — Security review / threat model / penetration pass.
+- [x] T-283 — Security review / threat model / penetration pass. (완료: 2026-06-29, codex)
       auth/session/MCP/share token/rate-limit/storage/admin RBAC/incident 권한 threat model과 1차 점검을 수행한다.
 - [ ] T-284 — Mobile v1.0 scope gate.
       `apps/mobile`은 활성 track이지만 v1.0 Web/API/Admin 출시 필수 범위에서 제외하고 Sprint M-1로 분리한다.
