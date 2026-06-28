@@ -67,6 +67,10 @@
   - **Backup live e2e** — T-252에서 `/admin/backup` read-only live suite와 staging mutating
     snapshot suite를 분리했다. production live의 restore 버튼은
     `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이는 비활성화된다.
+  - **Admin live matrix** — T-254에서 read-only matrix catalog를 6,195건으로 고정하고
+    `/admin/debug/request/{id}`, feature detail subpages, backup read-only variants,
+    ETL app-owned rows, Grafana dashboard selector/WebSocket dashboard, raw secret pattern
+    미노출 검사를 추가했다.
 
 ## 산출물
 
@@ -215,6 +219,8 @@
 - [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**
 - [x] **Backup read-only/staging mutating live e2e suite 추가(T-252)** — 실제 N150 실행은
       runner/접속 가능 환경에서 수행한다.
+- [x] **Admin live e2e matrix v0.2.0 확장(T-254)** — 6,195건 catalog와
+      200/2000/full gate 절차를 고정했다. 실제 N150 실행은 runner/접속 가능 환경에서 수행한다.
 - [ ] **PR 리뷰 legal/ops gap crosswalk 완료 — T-256~T-258 기준**
 - [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리

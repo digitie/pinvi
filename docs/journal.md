@@ -2,6 +2,40 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-254 Admin live e2e matrix v0.2.0 확장
+
+**작업**: Admin live read-only matrix를 v0.2.0 release gate용 catalog와 gate 절차로 확장했다.
+
+**변경**:
+
+- `admin-live-matrix.live.ts` catalog를 6,195건 exact count로 고정해 full catalog drift를 잡는다.
+- matrix 공통 route 검증 후 raw secret pattern 미노출을 확인한다.
+- `/admin/debug/request/{id}` captured request timeline, feature detail subpage tabs,
+  backup restore-lock/mutation guard, ETL app-owned job rows, Grafana dashboard selector와
+  WebSocket dashboard case를 추가했다.
+- `docs/runbooks/admin-live-e2e.md`에 N150 우선 실행과 `PINVI_ADMIN_LIVE_CASE_LIMIT=200`,
+  `2000`, full catalog gate 순서를 고정했다.
+- `docs/tasks.md`의 다음 구현을 T-255 지도 마커 / 색상 적용 parity로 넘기고, T-254는
+  `docs/tasks-done.md`로 이동했다.
+
+**검증**:
+
+- Linux:
+  - `npm -w @pinvi/web run typecheck`
+  - `npm -w @pinvi/web run lint`
+  - `npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI live case catalog" --workers=1` → 1 passed
+  - `git diff --check`
+- Playwright:
+  - N150 1차 실행은 `ssh n150` alias가 현재 Linux 환경에서 해석되지 않아 실패했다.
+  - Windows fallback: `npm -w @pinvi/web run test:e2e:admin-live -- --grep catalog --workers=1` → 1 passed
+
+**미실행**:
+
+- 실제 N150 `PINVI_ADMIN_LIVE_CASE_LIMIT=200`, `2000`, full live run은 SSH alias 미해결로
+  미실행. 실행 순서와 env gate는 runbook에 고정했다.
+
+**다음**: T-255 지도 마커 / 색상 적용 parity.
+
 ## 2026-06-28 (codex) — T-253 Prometheus/Grafana 운영 가시화 게이트
 
 **작업**: Prometheus scrape target, Grafana dashboard provisioning, Admin Grafana degraded

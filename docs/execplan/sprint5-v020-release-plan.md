@@ -407,19 +407,23 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - N150 smoke: Prometheus target UP, Grafana login/embed route 200.
 - Windows Playwright live: `/admin/grafana` iframe visible, blocked/degraded state.
 
-### T-254 — Admin live e2e matrix v0.2.0 확장
+### T-254 — Admin live e2e matrix v0.2.0 확장 — 완료
 
-- read-only matrix에 신규 route/case를 추가한다.
-- route: `/admin/debug/request/{id}`, feature detail subpages/tabs, backup read-only variants,
-  ETL app-owned rows, Grafana dashboards, system WebSocket metrics.
-- mutating live suite는 별도 파일과 env gate로 분리한다.
-- full run 전 200 case smoke, 이후 2000 case gate, release 직전 full catalog를 수행한다.
+- 완료: read-only matrix catalog를 6,195건 exact count로 고정해 full catalog drift를 잡는다.
+- 완료: `/admin/debug/request/{id}` captured request timeline, feature detail subpages/tabs,
+  backup read-only variants, ETL app-owned rows, Grafana dashboards/WebSocket dashboard,
+  raw secret pattern 미노출 검사를 matrix에 추가했다.
+- 완료: mutating live suite는 backup staging 파일과 env gate로 분리돼 있고, T-254는 read-only
+  matrix만 확장했다.
+- 완료: runbook에 full run 전 200 case smoke, 이후 2000 case gate, release 직전 full catalog
+  순서를 고정했다.
 
 검증 케이스:
 
-- Windows list: catalog count drift 기록.
-- Windows N150: `PINVI_ADMIN_LIVE_CASE_LIMIT=200`, `2000`, full.
-- auth refresh, throttle, relogin 복귀, no raw secret regex.
+- Linux catalog drift: `npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI live case catalog" --workers=1`.
+- N150 우선: `PINVI_ADMIN_LIVE_CASE_LIMIT=200`, `2000`, full. 현재 환경은 `ssh n150`
+  alias 미해결로 실제 N150 run 미수행.
+- matrix fixture: auth refresh, throttle, relogin 복귀, no raw secret regex.
 
 ### T-255 — 지도 마커 / 색상 적용 parity
 
