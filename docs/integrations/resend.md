@@ -205,7 +205,7 @@ T-277 목표:
 - [x] `apps/api/app/webhooks/resend.py` (Svix 서명 검증 + queue 상태 갱신)
 - [x] backend inline HTML 템플릿 3종 (`verify_email`, `reset_password`, `trip_invite`) + generic fallback
 - [x] `app.email_queue` Alembic (Sprint 1 또는 2)
-- [x] `app.users.email_status` 컬럼 (`active` / `bounced` / `complained`)
+- [x] `app.users.email_status` 컬럼 (`active` / `bounced` / `complained` / `suppressed`)
 - [x] FastAPI lifespan email outbox worker (`email_outbox_worker_lifespan`)
 - [x] Admin `/admin/emails` queue page
 - [ ] Resend provider tracking (`api_call_log.provider='resend'`)

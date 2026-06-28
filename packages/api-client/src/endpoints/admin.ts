@@ -44,6 +44,11 @@ import {
   AdminOperationResultSchema,
   AdminResetRunRequestSchema,
   AdminResetStatusResponseSchema,
+  AdminRetentionDryRunRequestSchema,
+  AdminRetentionExecuteRequestSchema,
+  AdminRetentionRunListResponseSchema,
+  AdminRetentionRunSchema,
+  AdminRetentionSummarySchema,
   AdminSeedScenarioListResponseSchema,
   AdminSeedScenarioRunRequestSchema,
   AdminSecurityIncidentCloseRequestSchema,
@@ -160,6 +165,10 @@ export interface AdminCategoryMappingListParams {
 export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
 
 export type AdminResetRunBody = z.infer<typeof AdminResetRunRequestSchema>;
+
+export type AdminRetentionDryRunBody = z.infer<typeof AdminRetentionDryRunRequestSchema>;
+
+export type AdminRetentionExecuteBody = z.infer<typeof AdminRetentionExecuteRequestSchema>;
 
 export interface AdminSecurityIncidentListParams {
   status?: 'detected' | 'triage' | 'notification_decision' | 'reported' | 'closed';
@@ -360,6 +369,35 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminResetRunRequestSchema.parse(body)),
       schema: AdminDevSafetyActionResultSchema,
+    }),
+
+  getRetentionSummary: () =>
+    client.request('/admin/retention/summary', {
+      method: 'GET',
+      schema: AdminRetentionSummarySchema,
+    }),
+
+  listRetentionRuns: (pageSize = 20) => {
+    const qs = new URLSearchParams();
+    qs.set('page_size', String(pageSize));
+    return client.request(`/admin/retention/runs?${qs.toString()}`, {
+      method: 'GET',
+      schema: AdminRetentionRunListResponseSchema,
+    });
+  },
+
+  createRetentionDryRun: (body: AdminRetentionDryRunBody) =>
+    client.request('/admin/retention/dry-run', {
+      method: 'POST',
+      body: JSON.stringify(AdminRetentionDryRunRequestSchema.parse(body)),
+      schema: AdminRetentionRunSchema,
+    }),
+
+  executeRetention: (body: AdminRetentionExecuteBody) =>
+    client.request('/admin/retention/execute', {
+      method: 'POST',
+      body: JSON.stringify(AdminRetentionExecuteRequestSchema.parse(body)),
+      schema: AdminRetentionRunSchema,
     }),
 
   listSecurityIncidents: (params: AdminSecurityIncidentListParams = {}) => {

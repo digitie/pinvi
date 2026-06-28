@@ -4,6 +4,8 @@ import { FeatureIdSchema, WeatherMetricSchema } from './feature';
 import { AttachmentLibraryItemSchema, AvatarApplyRequestSchema } from './storage';
 import { TripPrimaryRegionSourceSchema, TripStatusSchema, TripVisibilitySchema } from './trip';
 
+const AdminJsonObjectSchema = z.record(z.string(), z.unknown());
+
 /** `docs/api/admin.md` §6.4 — 목록 응답은 PII 마스킹. */
 export const AdminUserSummarySchema = z.object({
   user_id: z.string().uuid(),
@@ -321,6 +323,63 @@ export const AdminLocationLogArchiveSummarySchema = z.object({
 });
 export type AdminLocationLogArchiveSummary = z.infer<typeof AdminLocationLogArchiveSummarySchema>;
 
+export const AdminRetentionRunStatusSchema = z.enum([
+  'dry_run',
+  'approved',
+  'executing',
+  'completed',
+  'failed',
+  'rolled_back',
+]);
+export type AdminRetentionRunStatus = z.infer<typeof AdminRetentionRunStatusSchema>;
+
+export const AdminRetentionRunSchema = z.object({
+  run_id: z.string().uuid(),
+  mode: z.enum(['dry_run', 'execute']),
+  scope: z.enum(['all', 'pii', 'location']),
+  status: AdminRetentionRunStatusSchema,
+  candidate_snapshot: AdminJsonObjectSchema.default({}),
+  result: AdminJsonObjectSchema.default({}),
+  kill_switch_enabled: z.boolean().default(false),
+  access_reason: z.string(),
+  actor_user_id: z.string().uuid(),
+  error_message: z.string().nullable().default(null),
+  started_at: Iso8601Schema.nullable().default(null),
+  completed_at: Iso8601Schema.nullable().default(null),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminRetentionRun = z.infer<typeof AdminRetentionRunSchema>;
+
+export const AdminRetentionSummarySchema = z.object({
+  generated_at: Iso8601Schema,
+  execute_enabled: z.boolean(),
+  confirm_phrase: z.string(),
+  pii_retention: AdminPiiRetentionSummarySchema,
+  location_log_archive: AdminLocationLogArchiveSummarySchema,
+  latest_runs: z.array(AdminRetentionRunSchema).default([]),
+});
+export type AdminRetentionSummary = z.infer<typeof AdminRetentionSummarySchema>;
+
+export const AdminRetentionDryRunRequestSchema = z.object({
+  scope: z.enum(['all', 'pii', 'location']).default('all'),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminRetentionDryRunRequest = z.infer<typeof AdminRetentionDryRunRequestSchema>;
+
+export const AdminRetentionExecuteRequestSchema = z.object({
+  scope: z.enum(['all', 'pii', 'location']).default('all'),
+  access_reason: z.string().min(1).max(500),
+  confirm_phrase: z.string().min(1).max(80),
+});
+export type AdminRetentionExecuteRequest = z.infer<typeof AdminRetentionExecuteRequestSchema>;
+
+export const AdminRetentionRunListResponseSchema = z.object({
+  items: z.array(AdminRetentionRunSchema).default([]),
+  page_size: z.number().int(),
+});
+export type AdminRetentionRunListResponse = z.infer<typeof AdminRetentionRunListResponseSchema>;
+
 export const AdminDagsterJobSummarySchema = z.object({
   name: z.string(),
   is_job: z.boolean().default(true),
@@ -390,7 +449,6 @@ export const AdminPinviEtlSummarySchema = z.object({
 });
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 
-const AdminJsonObjectSchema = z.record(z.string(), z.unknown());
 const AdminProviderLinkSchema = z.object({
   rel: z.string(),
   href: z.string(),
@@ -1173,7 +1231,7 @@ export type AdminUserFileQuota = z.infer<typeof AdminUserFileQuotaSchema>;
 export const AdminUserDetailSchema = AdminUserSummarySchema.extend({
   email: z.string(),
   email_revealed: z.boolean(),
-  email_status: z.enum(['active', 'bounced', 'complained']),
+  email_status: z.enum(['active', 'bounced', 'complained', 'suppressed']),
   is_active: z.boolean(),
   avatar_url: z.string().nullable().default(null),
   avatar_kind: z.enum(['default', 'upload', 'external']).default('default'),

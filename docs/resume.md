@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-276 Retention execution / dashboard
+
+Sprint 6 보존기간 실행 콘솔을 추가했다. DB에는 `app.retention_runs`와
+`app.location_access_log_archive`를 추가했고, `location_access_log` append-only trigger는 retention
+transaction의 `app.retention_location_delete_allowed=on` 설정에서만 DELETE를 허용하도록 좁혔다.
+`/admin/retention` API는 summary, runs, dry-run, execute를 제공하며 execute는 기본 비활성
+`PINVI_RETENTION_EXECUTE_ENABLED`, confirm phrase, cutoff 이전 pending outbox, hash-chain bridge
+precheck를 통과해야 한다.
+
+실행은 삭제 후 grace가 지난 일반 사용자 PII anonymize, OAuth identity 삭제, 만료
+verification/session/OAuth transient row 삭제, 6개월 초과 위치 로그 archive 후 active row 삭제를 수행한다.
+`admin_audit_log` PII 후보는 append-only 원장이라 삭제하지 않고 run result의
+`skipped_admin_audit_pii_over_retention`으로 기록한다. Web Admin `/admin/retention`은 kill-switch 상태,
+bounded 후보 수, dry-run/execute form, 최근 run evidence를 표시한다. API client/schema/query key,
+API integration, mock Playwright, Admin/LBS/schema/runbook 문서를 함께 갱신했다.
+
+검증은 WSL ext4 미러에서 API retention integration 3건, ruff/format, strict mypy, schemas/api-client/web
+typecheck, Web lint를 통과했다. Playwright는 N150 SSH alias가 이 세션에서 연결되지 않아 Windows
+fallback으로 `admin-retention.e2e.ts` 1건을 통과시켰다. 다음 작업은 PR·CI·머지 후 T-277 Email
+deliverability / suppression enforcement다.
+
 ## 2026-06-28 (codex) — T-275 PIPA security incident console
 
 Sprint 6 첫 실제 구현 태스크로 PIPA security incident workflow를 추가했다. `app.security_incidents`

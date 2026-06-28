@@ -19,6 +19,7 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [deploy.md](./deploy.md)                           | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
 | [observability.md](./observability.md)             | Prometheus + cAdvisor + Grafana 운영                             | 5        |
 | [security-incidents.md](./security-incidents.md)   | 인시던트 대응 + PIPA 통지                                        | 6        |
+| [retention-execution.md](./retention-execution.md) | PII/위치 로그 보존기간 dry-run/execute                           | 6        |
 | [codegraph-worktrees.md](./codegraph-worktrees.md) | CodeGraph + agent별 고정 worktree (ADR-017)                      | 0 (상시) |
 | [pr-review-sprint4.md](./pr-review-sprint4.md)     | Sprint 4까지 PR 리뷰·머지 운영                                   | 1~4      |
 | [mcp-server.md](./mcp-server.md)                   | Pinvi MCP 외부 인터페이스 운영 (ADR-019)                         | 6        |

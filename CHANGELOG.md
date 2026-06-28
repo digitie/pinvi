@@ -120,6 +120,10 @@
 - `pinvi_location_log_archive` Dagster asset/job을 추가했다. 매일 위치 접근 로그 archive 후보,
   hash-chain bridge 상태, pending outbox blocker를 dry-run으로 집계하고, Admin `/admin/etl`
   요약에 raw 좌표·사용자 식별자 없이 노출한다.
+- Admin `/admin/retention` 실행 콘솔을 추가했다. 기본 비활성 kill-switch와 confirm phrase,
+  pending outbox/hash-chain precheck 뒤에서 삭제 계정 PII anonymize, 만료 token/session/OAuth
+  transient row 삭제, 위치 로그 archive/delete를 실행하고 `app.retention_runs`와 `admin_audit_log`에
+  bounded evidence를 남긴다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder

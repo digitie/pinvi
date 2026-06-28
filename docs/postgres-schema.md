@@ -64,7 +64,9 @@ CREATE TABLE app.users (
   CONSTRAINT ck_users_status CHECK (
     status IN ('pending_verification', 'pending_profile', 'active', 'disabled', 'deleted')
   ),
-  CONSTRAINT ck_users_email_status CHECK (email_status IN ('active', 'bounced', 'complained')),
+  CONSTRAINT ck_users_email_status CHECK (
+    email_status IN ('active', 'bounced', 'complained', 'suppressed')
+  ),
   CONSTRAINT ck_users_gender CHECK (
     gender IS NULL OR gender IN ('female', 'male', 'non_binary', 'no_answer')
   ),
@@ -815,7 +817,56 @@ PIPA 침해 가능성 감지와 CPO workflow 상태를 저장한다. `/admin/inc
 접수번호, 종결 증거를 이 테이블과 `admin_audit_log`에 남긴다. 이상 IP/admin bulk export/
 audit chain 깨짐 같은 자동 트리거는 후속 security review/abuse surface에서 확장한다.
 
-### 7.2 운영 권한
+### 7.2 `app.retention_runs` / `app.location_access_log_archive`
+
+```sql
+CREATE TABLE app.retention_runs (
+  run_id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  mode                varchar(16) NOT NULL,
+  scope               varchar(32) NOT NULL DEFAULT 'all',
+  status              varchar(32) NOT NULL,
+  candidate_snapshot  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  result              jsonb NOT NULL DEFAULT '{}'::jsonb,
+  kill_switch_enabled boolean NOT NULL DEFAULT false,
+  confirm_phrase      text,
+  access_reason       text NOT NULL,
+  actor_user_id       uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  error_message       text,
+  started_at          timestamptz,
+  completed_at        timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_retention_runs_mode CHECK (mode IN ('dry_run', 'execute')),
+  CONSTRAINT ck_retention_runs_scope CHECK (scope IN ('all', 'pii', 'location')),
+  CONSTRAINT ck_retention_runs_status CHECK (
+    status IN ('dry_run', 'approved', 'executing', 'completed', 'failed', 'rolled_back')
+  )
+);
+
+CREATE TABLE app.location_access_log_archive (
+  log_id            bigint PRIMARY KEY,
+  user_id           uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  occurred_at       timestamptz NOT NULL,
+  endpoint          text NOT NULL,
+  purpose           varchar(64) NOT NULL,
+  lat               numeric(9,6),
+  lng               numeric(9,6),
+  request_id        uuid NOT NULL,
+  ip_hash           varchar(64) NOT NULL,
+  prev_hash         varchar(64) NOT NULL,
+  content_hash      varchar(64) NOT NULL,
+  retention_run_id  uuid NOT NULL REFERENCES app.retention_runs(run_id) ON DELETE RESTRICT,
+  archived_at       timestamptz NOT NULL DEFAULT now()
+);
+```
+
+`/admin/retention`은 dry-run/execute batch evidence를 `retention_runs`에 남긴다.
+위치 로그 execute는 6개월 초과 `location_access_log` row를 archive table에 복사한 뒤 active
+table에서 삭제한다. `app.audit_log_append_only()`는
+`current_setting('app.retention_location_delete_allowed', true) = 'on'`인 retention transaction의
+`location_access_log` DELETE만 허용하고, `admin_audit_log` update/delete 차단은 유지한다.
+
+### 7.3 운영 권한
 
 - DB 사용자 `pinvi`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
   CRUD. 단 `feature`, `provider_sync`의 DDL은 `kor-travel-map` Alembic으로만 실행.
@@ -823,7 +874,7 @@ audit chain 깨짐 같은 자동 트리거는 후속 security review/abuse surfa
 - 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
 - `app.admin_audit_log`는 append-only — DELETE 막는 trigger 또는 권한 분리.
 
-### 7.3 `app.rate_limit_buckets`
+### 7.4 `app.rate_limit_buckets`
 
 HTTP 공통 rate-limit의 운영/staging shared counter다(ADR-038). 원문 IP/email/token은
 저장하지 않고 정책명+식별자를 HMAC-SHA256한 bucket hash만 저장한다.
