@@ -339,15 +339,25 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-251 — Restore staging drill
 
-- N150 또는 staging DB에서 `scripts/restore-db.sh` 단순 restore 훈련을 수행한다.
-- production data를 쓰는 경우 PII export/로그를 남기지 않고, 결과는 status와 checksum만 문서화한다.
-- schema-swap은 Sprint 6 정식 범위지만, Sprint 5에서는 dry-run/precheck까지 수행한다.
+- 완료: `scripts/restore-staging-drill.sh`를 추가해 staging DB restore 훈련 진입점을
+  고정했다. `PINVI_RESTORE_STAGING_DATABASE_URL`이 없으면 복구를 시작하지 않으며,
+  checksum, `pg_restore --list`, `restore-db.sh`, DB health row count, admin audit chain link를
+  evidence로 출력한다.
+- 완료: rollback rehearsal은 기본 `precheck` guard와 선택 `drain` 실패 유도 모드를 지원한다.
+  `drain` 모드는 임시 restore schema를 만든 뒤 drain 미설정 실패를 유도하고 기존 `app` schema
+  OID가 유지되는지 확인한 뒤 임시 schema를 drop한다.
+- 완료: 신규 backup `.sha256` sidecar는 dump basename 기준으로 생성하고, restore 검증은
+  sidecar checksum 값을 실제 dump hash와 직접 비교하게 정리했다. 운영 snapshot을 staging
+  경로로 복사해도 dump와 sidecar를 함께 두면 검증할 수 있다.
+- 미실행: 이 세션의 Linux 환경에서는 `n150` SSH alias가 해석되지 않아 실제 N150 staging DB
+  restore는 수행하지 못했다. fake DB tool 기반 스크립트 회귀로 path masking과 guard 흐름을 검증했다.
 
 검증 케이스:
 
-- staging restore: app schema restore, DB health, audit chain verify.
-- rollback rehearsal: restore 실패 시 기존 schema 유지 확인.
-- 문서: `docs/runbooks/backup-restore.md` 실제 명령/경로 정합화.
+- 완료: script contract: staging URL 강제, snapshot path masking, checksum/`pg_restore --list`,
+  DB health evidence, admin audit chain link evidence.
+- 완료: rollback rehearsal: restore 실패/guard 거부 시 기존 schema OID 유지 확인.
+- 완료: 문서: `docs/runbooks/backup-restore.md` 실제 명령/경로 정합화.
 
 ### T-252 — Backup/restore live UI e2e
 

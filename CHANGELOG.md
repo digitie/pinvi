@@ -51,6 +51,11 @@
 - Admin backup snapshot trigger를 보강했다. backup script는 disk guard와 sha256 검증을 수행하고,
   restore script는 sidecar checksum을 restore 전 검증하며, Admin API/audit은 host 절대경로를
   `backup://<filename>`으로 mask하고 snapshot 실패 audit을 남긴다.
+- Restore staging drill 스크립트를 추가했다. staging DB URL 없이는 복구를 시작하지 않고,
+  checksum, `pg_restore --list`, DB health row count, admin audit chain link, rollback rehearsal
+  evidence를 PII/host path 없이 출력한다. 신규 backup sidecar는 basename 기준으로 생성하고,
+  restore는 checksum 값을 실제 dump hash와 비교해 staging 경로로 이동한 snapshot도 검증할 수
+  있다.
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,
   가입/여행 생성 24시간 막대 그래프, load average, 디스크 사용률, 첨부 저장소 사용량/한도를
   raw 운영 경로/도메인/secret 없이 표시한다.

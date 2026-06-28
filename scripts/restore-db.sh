@@ -37,7 +37,12 @@ if [[ -f "${BACKUP_FILE}.sha256" ]]; then
     echo "sha256sum not found" >&2
     exit 127
   fi
-  sha256sum -c "${BACKUP_FILE}.sha256" >/dev/null
+  expected_checksum="$(awk 'NR == 1 { print $1 }' "${BACKUP_FILE}.sha256")"
+  actual_checksum="$(sha256sum "${BACKUP_FILE}" | awk 'NR == 1 { print $1 }')"
+  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
+    echo "backup checksum failed" >&2
+    exit 3
+  fi
 fi
 
 if ! command -v pg_restore >/dev/null 2>&1; then

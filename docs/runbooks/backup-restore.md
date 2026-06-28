@@ -15,6 +15,7 @@ open https://pinvi-api.example.com/admin/etl
 ```
 
 상태:
+
 - last_backup_at < 25시간 전이어야 정상
 - backup_size_bytes 갑작스러운 감소 (10% 이상) → 의심
 - backup_duration_seconds > 600s → 의심 (네트워크 / 디스크)
@@ -51,17 +52,19 @@ ls -la /var/lib/pinvi/backups/
 
 환경변수:
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `PINVI_BACKUP_DIR` | `.tmp/backups` | dump 저장 디렉터리 |
-| `PINVI_BACKUP_SCHEMA` | `app` | Pinvi 소유 schema |
-| `PINVI_BACKUP_DATABASE_URL` | `PINVI_DATABASE_URL` | backup 전용 DB URL override |
-| `PINVI_BACKUP_MIN_FREE_BYTES` | `1073741824` | backup 시작 전 남아 있어야 하는 최소 여유 byte |
+| 변수                          | 기본값               | 설명                                           |
+| ----------------------------- | -------------------- | ---------------------------------------------- |
+| `PINVI_BACKUP_DIR`            | `.tmp/backups`       | dump 저장 디렉터리                             |
+| `PINVI_BACKUP_SCHEMA`         | `app`                | Pinvi 소유 schema                              |
+| `PINVI_BACKUP_DATABASE_URL`   | `PINVI_DATABASE_URL` | backup 전용 DB URL override                    |
+| `PINVI_BACKUP_MIN_FREE_BYTES` | `1073741824`         | backup 시작 전 남아 있어야 하는 최소 여유 byte |
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
 단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. dump와 sidecar는 생성 직후
 `sha256sum -c`로 검증하며, Admin API 응답과 audit에는 host 절대경로 대신
-`backup://<filename>`만 노출한다.
+`backup://<filename>`만 노출한다. 신규 `.sha256` sidecar에는 dump의 basename만 기록한다.
+restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash를 비교하므로, 과거
+sidecar가 절대경로를 담고 있더라도 dump와 sidecar를 staging 경로로 함께 옮겨 검증할 수 있다.
 
 ## 3. Restore — 단순 (긴급)
 
@@ -84,7 +87,7 @@ sudo ./scripts/restore-db.sh /var/lib/pinvi/backups/pinvi-app-20260606-003000.du
 docker compose -f docker-compose.app.yml start api
 sleep 5
 curl -fsS https://pinvi-api.example.com/health/db
-curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
+curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
   https://pinvi-api.example.com/admin/audit/verify-chain | jq .
 
 # 5. 트래픽 재개
@@ -95,24 +98,26 @@ docker compose -f docker-compose.app.yml start web
 
 `scripts/restore-db.sh` 환경변수:
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `PINVI_RESTORE_SCHEMA` | `PINVI_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema |
-| `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL` | restore 전용 DB URL override |
-| `PINVI_RESTORE_JOBS` | `2` | `pg_restore --jobs` 값 |
+| 변수                         | 기본값                           | 설명                         |
+| ---------------------------- | -------------------------------- | ---------------------------- |
+| `PINVI_RESTORE_SCHEMA`       | `PINVI_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema             |
+| `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL`             | restore 전용 DB URL override |
+| `PINVI_RESTORE_JOBS`         | `2`                              | `pg_restore --jobs` 값       |
 
 `scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 있으면 restore 전에 반드시
-검증한다. sidecar가 실패하면 restore를 시작하지 않는다.
+검증한다. sidecar가 실패하면 restore를 시작하지 않는다. 검증은 sidecar의 첫 checksum 값과
+실제 dump hash를 직접 비교하므로 운영 snapshot을 staging 디렉터리로 복사한 뒤에도 같은
+sidecar를 그대로 쓸 수 있다.
 
 `scripts/restore-hotswap.sh` / API hot-swap 환경변수:
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override |
-| `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0` | staging drill 후 운영 노드에서만 `1` |
-| `PINVI_RESTORE_DRAIN_COMMAND` | 빈 값 | CLI 경로에서만 실행할 write drain 명령 |
-| `PINVI_RESTORE_ALLOW_NO_DRAIN` | `0` | API 경로에서 외부 drain 완료 후 `1` |
-| `PINVI_RESTORE_APP_ROLE` | 빈 값 | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
+| 변수                            | 기본값               | 설명                                                 |
+| ------------------------------- | -------------------- | ---------------------------------------------------- |
+| `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override                    |
+| `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0`                  | staging drill 후 운영 노드에서만 `1`                 |
+| `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
+| `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | API 경로에서 외부 drain 완료 후 `1`                  |
+| `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -165,7 +170,7 @@ docker compose -f docker-compose.app.yml up -d api web
 
 # 3. healthcheck
 curl -fsS https://pinvi-api.example.com/health/db
-curl -fsS -H "Authorization: Bearer $CPO_TOKEN" \
+curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
   https://pinvi-api.example.com/admin/audit/verify-chain | jq .
 ```
 
@@ -198,6 +203,7 @@ COMMIT;
 ### 4.3 실패 시
 
 다이얼로그가 자동 rollback을 트리거. 운영자는:
+
 - 진행 단계 확인
 - 실패 원인 (UI 로그 + Loki `request_id` 검색)
 - 필요 시 별 backup으로 재시도
@@ -208,15 +214,51 @@ COMMIT;
 
 ### 5.1 staging (안전)
 
-```bash
-# 1. staging DB로 prod backup restore
-./scripts/restore-db.sh /var/lib/pinvi/backups/backup-latest.dump
-# (staging의 DATABASE_URL로 실행)
+Sprint 5의 정본 진입점은 `scripts/restore-staging-drill.sh`다. 이 스크립트는
+`PINVI_RESTORE_STAGING_DATABASE_URL`이 없으면 복구를 시작하지 않는다. 실수로 운영
+`PINVI_DATABASE_URL`을 잡는 것을 막기 위한 가드이며, 로컬 disposable DB에서만
+`PINVI_RESTORE_DRILL_ALLOW_NON_STAGING=1`로 우회할 수 있다.
 
-# 2. UI에서 trip / poi 데이터 검증
-# 3. audit chain verify
-# 4. journal 기록
+```bash
+# 운영 snapshot을 staging 노드 또는 staging DB 접근 가능한 위치로 복사한 뒤 실행한다.
+SNAPSHOT=/var/lib/pinvi/backups/pinvi-app-20260606-003000.dump
+
+PINVI_RESTORE_STAGING_DATABASE_URL="$STAGING_DATABASE_URL" \
+PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=precheck \
+./scripts/restore-staging-drill.sh run "$SNAPSHOT"
 ```
+
+출력은 `DRILL_PHASE=...`와 `DRILL_EVIDENCE=...` 형식이다. 기록해도 되는 값은
+`backup://<filename>`, checksum 검증 여부, `pg_restore --list` 성공, `users`/`trips`/
+`admin_audit_log` row count, `admin_audit_chain_links=valid`, rollback rehearsal 결과다.
+DB URL, host 절대경로, 사용자 PII, query 결과 원문은 기록하지 않는다.
+
+`PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL`:
+
+| 값         | 용도                                                                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `precheck` | 기본값. `restore-hotswap.sh` execute guard가 schema-swap을 거부하고 기존 `app` schema OID가 유지되는지 확인한다.                                                                                   |
+| `drain`    | staging 여유 디스크가 충분할 때 사용한다. 임시 `app_restore_drill_<ts>` schema까지 복구한 뒤 drain 미설정 실패를 유도하고 기존 `app` schema가 유지되는지 확인한다. 완료 후 임시 schema를 drop한다. |
+| `none`     | 단순 restore와 DB health만 확인한다.                                                                                                                                                               |
+
+복구 후 API/Web을 staging에 연결할 수 있으면 CPO 토큰으로 full content-hash 검증도 수행한다.
+
+```bash
+curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
+  https://pinvi-api-staging.example.com/admin/audit/verify-chain | jq .
+```
+
+스크립트의 `admin_audit_chain_links=valid`는 DB-only 링크 연속성 검증이다. 위 API는
+`content_hash` 재계산까지 포함하는 full 검증이므로 staging API가 뜬 경우 둘 다 기록한다.
+
+훈련 기록에는 다음만 남긴다.
+
+- 실행 일시와 대상 환경(staging/N150/local disposable)
+- snapshot 파일명(`backup://...`)과 checksum 검증 여부
+- row count 3종(`users`, `trips`, `admin_audit_log`)
+- `admin_audit_chain_links`와 API `verify-chain` 결과
+- rollback rehearsal mode와 결과
+- 실패가 있었다면 sanitized phase 이름과 원인 분류
 
 ### 5.2 prod (분기 1회)
 
@@ -231,13 +273,13 @@ COMMIT;
 
 ## 6. 트러블슈팅
 
-| 증상 | 원인 후보 | 해결 |
-|------|----------|------|
-| backup 실패 (디스크 full) | `/var/lib/pinvi/backups/` 가득 | 30+30 정책 미작동 → 수동 정리 + cron 점검 |
-| backup duration 급증 | DB 행 수 폭증 / 네트워크 / RustFS 응답 지연 | Grafana로 원인 단계 식별, jobs 수 늘리기 |
-| pg_restore 실패 (FK 충돌) | --schema=app 외부 의존 (예: feature.feature_id) | restore 순서 변경 또는 `--data-only` |
-| audit chain verify-chain BROKEN | restore 중 row 일부 누락 | snapshot 검증 후 별 snapshot으로 재시도 |
-| schema swap 후 app 502 | schema rename/grant 실패 / app DB 연결 잔존 | API/Web 정지 → previous schema rollback → grants 점검 |
+| 증상                            | 원인 후보                                       | 해결                                                  |
+| ------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| backup 실패 (디스크 full)       | `/var/lib/pinvi/backups/` 가득                  | 30+30 정책 미작동 → 수동 정리 + cron 점검             |
+| backup duration 급증            | DB 행 수 폭증 / 네트워크 / RustFS 응답 지연     | Grafana로 원인 단계 식별, jobs 수 늘리기              |
+| pg_restore 실패 (FK 충돌)       | --schema=app 외부 의존 (예: feature.feature_id) | restore 순서 변경 또는 `--data-only`                  |
+| audit chain verify-chain BROKEN | restore 중 row 일부 누락                        | snapshot 검증 후 별 snapshot으로 재시도               |
+| schema swap 후 app 502          | schema rename/grant 실패 / app DB 연결 잔존     | API/Web 정지 → previous schema rollback → grants 점검 |
 
 ## 7. RustFS 백업
 

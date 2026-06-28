@@ -58,13 +58,17 @@ pg_dump \
   --file="${tmp_file}" \
   "${DATABASE_URL}"
 
-sha256sum "${tmp_file}" >"${tmp_file}.sha256"
-sha256sum -c "${tmp_file}.sha256" >/dev/null
+tmp_dir="$(dirname "${tmp_file}")"
+tmp_name="$(basename "${tmp_file}")"
+(cd "${tmp_dir}" && sha256sum "${tmp_name}" >"${tmp_name}.sha256")
+(cd "${tmp_dir}" && sha256sum -c "${tmp_name}.sha256") >/dev/null
 
 mv "${tmp_file}" "${backup_file}"
 trap - EXIT
 rm -f "${tmp_file}.sha256"
-sha256sum "${backup_file}" >"${backup_file}.sha256"
-sha256sum -c "${backup_file}.sha256" >/dev/null
+backup_dirname="$(dirname "${backup_file}")"
+backup_name="$(basename "${backup_file}")"
+(cd "${backup_dirname}" && sha256sum "${backup_name}" >"${backup_name}.sha256")
+(cd "${backup_dirname}" && sha256sum -c "${backup_name}.sha256") >/dev/null
 
 echo "BACKUP_FILE=${backup_file}"

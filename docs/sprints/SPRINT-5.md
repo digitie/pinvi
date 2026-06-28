@@ -17,7 +17,7 @@
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
   app-owned ETL 추가 job, Loki/request timeline stream, 지도 마커/색상 parity,
-  backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk, `v0.2.0` Release notes.
+  backup/restore live e2e, legal/ops preflight crosswalk, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -56,6 +56,9 @@
   - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
     pg_restore. checksum/disk guard/path masking은 T-250에서 완료했다. 핫스왑 워크플로
     design은 Sprint 6에서 finalize (ADR-022).
+    T-251에서 `scripts/restore-staging-drill.sh`를 추가해 staging DB URL 강제,
+    checksum/`pg_restore --list`, DB health, admin audit chain link, rollback rehearsal을
+    문서화했다.
   - **`POST /admin/backup/snapshot`** — manual trigger (admin role) → backup
     file 생성 + sha256 + admin_audit_log 기록. RustFS 또는 외부 위치 미러는 후속
     운영 보강.

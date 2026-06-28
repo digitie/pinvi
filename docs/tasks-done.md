@@ -6,6 +6,16 @@
 
 ## 2026-06-28
 
+- [x] T-251 — Restore staging drill.
+      `scripts/restore-staging-drill.sh`를 추가해 staging URL 없이는 restore를 시작하지 않도록
+      가드하고, snapshot checksum, `pg_restore --list`, `restore-db.sh`, DB health row count,
+      admin audit chain link, rollback rehearsal(precheck/drain)을 한 번에 수행한다.
+      backup sidecar는 dump basename 기준으로 생성하고, restore 검증은 sidecar checksum 값을
+      실제 dump hash와 비교하도록 정리해 staging 경로로 dump와 sidecar를 함께 옮겨도 검증이
+      가능하다. N150 SSH alias는 현재 Linux 환경에서
+      해석되지 않아 실제 N150 drill은 실행하지 못했고, fake DB tool 기반 스크립트 회귀로
+      가드와 path masking을 검증했다.
+
 - [x] T-250 — Backup script / snapshot endpoint hardening.
       `scripts/backup-db.sh`에 schema name guard, disk free guard, tmp dump 생성, sha256 생성/검증을
       추가했고 `scripts/restore-db.sh`는 sidecar checksum을 restore 전에 검증한다. Admin backup

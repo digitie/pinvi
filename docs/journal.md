@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-251 Restore staging drill
+
+**작업**: restore staging drill 스크립트와 runbook 정합화.
+
+**변경**:
+
+- `scripts/restore-staging-drill.sh`를 추가했다. `PINVI_RESTORE_STAGING_DATABASE_URL`이 없으면
+  restore를 시작하지 않으며, snapshot은 `backup://<filename>`으로만 출력한다.
+- drill은 checksum, `pg_restore --list`, `restore-db.sh`, staging DB health row count,
+  `admin_audit_chain_links`, rollback rehearsal 결과를 `DRILL_PHASE`/`DRILL_EVIDENCE`로 남긴다.
+- rollback rehearsal은 기본 `precheck`와 선택 `drain` 모드를 지원한다. `drain`은 임시 restore
+  schema를 만든 뒤 drain failure를 유도하고 기존 `app` schema OID가 유지되는지 확인한다.
+- 신규 backup `.sha256` sidecar는 dump basename 기준으로 생성하고, restore 검증은 sidecar
+  checksum 값을 실제 dump hash와 직접 비교하게 정리했다. 운영 snapshot을 staging 경로로
+  복사해도 dump와 sidecar를 함께 두면 검증할 수 있다.
+- `docs/runbooks/backup-restore.md`, `docs/api/admin.md`, Sprint 5 실행 계획/추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `bash -n scripts/backup-db.sh scripts/restore-db.sh scripts/restore-hotswap.sh scripts/restore-staging-drill.sh`
+- Linux: `cd apps/api && uv run --extra dev ruff check tests/unit/test_restore_staging_drill_script.py`
+- Linux: `cd apps/api && uv run --extra dev ruff format --check tests/unit/test_restore_staging_drill_script.py`
+- Linux: `cd apps/api && PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_restore_staging_drill_script.py tests/unit/test_backup_service.py -rA`
+
+**미실행**:
+
+- N150 SSH alias가 현재 Linux 환경에서 해석되지 않아 실제 N150 staging DB restore는 수행하지 못했다.
+- UI 변경은 없어서 Playwright는 실행하지 않았다.
+
+**다음**: T-252 Backup/restore live UI e2e.
+
 ## 2026-06-28 (codex) — T-250 Backup script / snapshot endpoint hardening
 
 **작업**: backup/restore script와 Admin snapshot endpoint의 checksum, disk guard, path masking,
