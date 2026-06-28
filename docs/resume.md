@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-278 DSR intake workflow
+
+Sprint 6 개인정보 권리행사 DSR workflow를 구현했다. DB에는 `app.dsr_requests`를 추가해
+`access` / `correction` / `delete` / `suspend` 요청, `received` → `identity_check` →
+`processing` → `completed` / `rejected` / `withdrawn` 상태, 접수 + 10일 `due_at`, 본인 확인
+metadata, result notice hash, export manifest, partial response, evidence attachment id를 저장한다.
+DSR 행은 원문 이메일을 저장하지 않고 `requester_email_hash`와 `requester_email_masked`만 보존한다.
+
+사용자 self-service는 `/users/me/dsr-requests` API와 `/settings/dsr` 화면으로 접수/조회/철회를
+제공한다. CPO 처리는 `/admin/dsr` API/화면으로 본인 확인, 처리 시작, 완료/거절 통지를 수행하며
+모든 mutation은 `admin_audit_log`에 `dsr.*` action과 `access_reason`을 남긴다. 완료/거절은
+`email_queue.template='dsr_result_notice'` row를 만들고 `result_notice_email_id`와
+`result_notice_hash`로 연결한다. API client/schema/query key, Admin/user mock Playwright,
+`docs/runbooks/dsr.md`, API/Admin/users/PIPA/schema/data-model 문서를 함께 갱신했다.
+
+검증은 Linux/WSL에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_dsr_requests_api.py` 3건을 통과했다. Playwright는 N150
+alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로 `admin-dsr.e2e.ts`와
+`settings-dsr.e2e.ts` 2건을 통과했다. 다음 작업은 PR·CI·머지 후 T-279 Content moderation /
+takedown workflow다.
+
 ## 2026-06-28 (codex) — T-277 Email deliverability / suppression enforcement
 
 Sprint 6 이메일 deliverability/suppression enforcement를 구현했다. DB에는

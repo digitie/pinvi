@@ -922,7 +922,68 @@ PIPA 침해 가능성 감지와 CPO workflow 상태를 저장한다. `/admin/inc
 접수번호, 종결 증거를 이 테이블과 `admin_audit_log`에 남긴다. 이상 IP/admin bulk export/
 audit chain 깨짐 같은 자동 트리거는 후속 security review/abuse surface에서 확장한다.
 
-### 7.2 `app.retention_runs` / `app.location_access_log_archive`
+### 7.2 `app.dsr_requests`
+
+```sql
+CREATE TABLE app.dsr_requests (
+  request_id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                 uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  request_type            varchar(16) NOT NULL,
+  status                  varchar(32) NOT NULL DEFAULT 'received',
+  request_summary         varchar(500) NOT NULL,
+  request_details         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  identity_proof_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  requester_email_hash    varchar(64) NOT NULL,
+  requester_email_masked  varchar(320) NOT NULL,
+  assigned_cpo_user_id    uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  result_notice_email_id  uuid REFERENCES app.email_queue(email_id) ON DELETE SET NULL,
+  evidence_attachment_id  uuid,
+  received_at             timestamptz NOT NULL DEFAULT now(),
+  due_at                  timestamptz NOT NULL DEFAULT now() + interval '10 days',
+  identity_verified_at    timestamptz,
+  processing_started_at   timestamptz,
+  completed_at            timestamptz,
+  rejected_at             timestamptz,
+  withdrawn_at            timestamptz,
+  rejection_reason        text,
+  result_summary          text,
+  result_notice_hash      varchar(64),
+  export_manifest         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  partial_response        boolean NOT NULL DEFAULT false,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_dsr_requests_request_type_allowed CHECK (
+    request_type IN ('access', 'correction', 'delete', 'suspend')
+  ),
+  CONSTRAINT ck_dsr_requests_status_allowed CHECK (
+    status IN ('received', 'identity_check', 'processing', 'completed', 'rejected', 'withdrawn')
+  )
+);
+
+CREATE INDEX ix_dsr_requests_user_created
+  ON app.dsr_requests (user_id, created_at DESC);
+CREATE INDEX ix_dsr_requests_status_due
+  ON app.dsr_requests (status, due_at);
+CREATE INDEX ix_dsr_requests_type_status
+  ON app.dsr_requests (request_type, status);
+CREATE INDEX ix_dsr_requests_assigned_cpo
+  ON app.dsr_requests (assigned_cpo_user_id)
+  WHERE assigned_cpo_user_id IS NOT NULL;
+CREATE INDEX ix_dsr_requests_open_due
+  ON app.dsr_requests (due_at)
+  WHERE status IN ('received', 'identity_check', 'processing');
+
+CREATE TRIGGER trg_dsr_requests_touch_updated_at
+BEFORE UPDATE ON app.dsr_requests
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+`/users/me/dsr-requests`는 사용자 self-service 접수/조회/철회를 제공하고, `/admin/dsr`는
+CPO 본인 확인, 처리 시작, 완료/거절 통지를 제공한다. 완료/거절 시
+`email_queue.template='dsr_result_notice'` row를 만들고 `result_notice_hash`와
+`result_notice_email_id`로 결과 통지 증적을 연결한다.
+
+### 7.3 `app.retention_runs` / `app.location_access_log_archive`
 
 ```sql
 CREATE TABLE app.retention_runs (
@@ -971,7 +1032,7 @@ table에서 삭제한다. `app.audit_log_append_only()`는
 `current_setting('app.retention_location_delete_allowed', true) = 'on'`인 retention transaction의
 `location_access_log` DELETE만 허용하고, `admin_audit_log` update/delete 차단은 유지한다.
 
-### 7.3 운영 권한
+### 7.4 운영 권한
 
 - DB 사용자 `pinvi`는 `app`, `ops`, `feature`, `provider_sync` schema에 모두
   CRUD. 단 `feature`, `provider_sync`의 DDL은 `kor-travel-map` Alembic으로만 실행.
@@ -979,7 +1040,7 @@ table에서 삭제한다. `app.audit_log_append_only()`는
 - 패스워드/토큰 hash 컬럼은 절대 평문 저장 금지 (argon2/bcrypt).
 - `app.admin_audit_log`는 append-only — DELETE 막는 trigger 또는 권한 분리.
 
-### 7.4 `app.rate_limit_buckets`
+### 7.5 `app.rate_limit_buckets`
 
 HTTP 공통 rate-limit의 운영/staging shared counter다(ADR-038). 원문 IP/email/token은
 저장하지 않고 정책명+식별자를 HMAC-SHA256한 bucket hash만 저장한다.

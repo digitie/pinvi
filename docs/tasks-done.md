@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-278 — DSR intake workflow.
+      `app.dsr_requests`를 추가해 개인정보 열람/정정/삭제/처리정지 요청의 접수, 10일 due,
+      본인 확인, 처리 시작, 완료/거절/철회 상태, result notice hash, export manifest, partial
+      response evidence를 저장한다. `/users/me/dsr-requests`와 `/settings/dsr`는 사용자
+      self-service 접수/조회/철회를 제공하고, `/admin/dsr`는 CPO 전용 본인 확인/처리/완료/거절
+      workflow와 `admin_audit_log` 기록을 제공한다. 완료/거절은 `dsr_result_notice` email queue
+      row를 만들며 DSR 행은 원문 이메일 대신 hash/masked 값만 보존한다. API integration,
+      Admin/user mock Playwright, API/Admin/users/PIPA/schema/runbook 문서를 함께 갱신했다.
+
 - [x] T-277 — Email deliverability / suppression enforcement.
       `app.email_suppressions`와 `app.resend_webhook_events`를 추가해 Resend hard bounce,
       complaint, provider suppression을 발송 차단 source로 저장한다. `email_queue.status`는

@@ -123,10 +123,23 @@ Dagster job 일 1회:
 
 ### 4.6 정보주체 권리
 
-- 열람: `GET /users/me` (본인) / `GET /admin/entities/users/{id}` (CPO + admin)
-- 정정: `PATCH /users/me`
-- 삭제: `DELETE /users/me` (탈퇴)
-- 처리정지: 동의 철회 (`POST /users/me/consents/withdraw`)
+- 접수/조회/철회: `/settings/dsr`, `GET/POST /users/me/dsr-requests`,
+  `POST /users/me/dsr-requests/{request_id}/withdraw`
+- CPO 처리: `/admin/dsr`
+- 상태: `received` → `identity_check` → `processing` → `completed` / `rejected` /
+  `withdrawn`
+- 처리 due: 접수 시각 + 10일
+- 결과 통지: `email_queue.template='dsr_result_notice'`, `result_notice_hash`,
+  `result_notice_email_id`
+- 열람/정정/삭제/처리정지 유형은 `request_type = access | correction | delete | suspend`
+- 기존 즉시 처리 alias:
+  - 내 정보 조회: `GET /users/me`
+  - 프로필 정정: `PATCH /users/me`
+  - 탈퇴: `DELETE /users/me`
+  - 동의 철회: `POST /users/me/consents/withdraw`
+
+자세한 운영 절차는 [`docs/runbooks/dsr.md`](../runbooks/dsr.md).
+
 - 이의제기 / 손해배상: support@example.com
 
 ## 5. 고유식별정보 (v2 이후)
@@ -179,6 +192,7 @@ ADR 필요 — Sprint 6 또는 v2.
 - [x] `app.security_incidents` 테이블 foundation
 - [x] CPO/Admin Telegram outbox 알림 (`security_incident`)
 - [x] `/admin/incidents` 페이지 + 사용자 통지 mailing outbox
+- [x] DSR 접수/처리 workflow (`/settings/dsr`, `/admin/dsr`, `app.dsr_requests`)
 - [ ] 처리방침 placeholder (`docs/legal/privacy-policy.md`)
 - [ ] PR 템플릿에 PIPA 점검 체크리스트
 - [ ] CHANGELOG에 PII 영향 변경 명시

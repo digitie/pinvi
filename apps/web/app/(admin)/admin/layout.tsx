@@ -11,6 +11,7 @@ import {
   Bug,
   ChevronsLeft,
   ChevronsRight,
+  ClipboardCheck,
   GitCompare,
   GitPullRequest,
   HardDrive,
@@ -59,6 +60,7 @@ const NAV_GROUPS: {
       { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4, icon: Lightbulb },
       { href: '/admin/audit', label: '감사 로그', sprint: 3, icon: ScrollText },
       { href: '/admin/incidents', label: 'Incidents', sprint: 6, icon: ShieldAlert },
+      { href: '/admin/dsr', label: 'DSR', sprint: 6, icon: ClipboardCheck },
     ],
   },
   {

@@ -40,6 +40,12 @@ import {
   AdminDedupDecisionResponseSchema,
   AdminDedupReviewPagedResponseSchema,
   AdminDevSafetyActionResultSchema,
+  AdminDsrCompleteRequestSchema,
+  AdminDsrIdentityCheckRequestSchema,
+  AdminDsrProcessRequestSchema,
+  AdminDsrRejectRequestSchema,
+  AdminDsrRequestListResponseSchema,
+  AdminDsrRequestRecordSchema,
   AdminEmailDeliverabilitySchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
@@ -196,6 +202,18 @@ export type AdminSecurityIncidentReportBody = z.infer<
 export type AdminSecurityIncidentCloseBody = z.infer<
   typeof AdminSecurityIncidentCloseRequestSchema
 >;
+
+export interface AdminDsrRequestListParams {
+  status?: 'received' | 'identity_check' | 'processing' | 'completed' | 'rejected' | 'withdrawn';
+  requestType?: 'access' | 'correction' | 'delete' | 'suspend';
+  overdue?: boolean;
+  pageSize?: number;
+}
+
+export type AdminDsrIdentityCheckBody = z.infer<typeof AdminDsrIdentityCheckRequestSchema>;
+export type AdminDsrProcessBody = z.infer<typeof AdminDsrProcessRequestSchema>;
+export type AdminDsrCompleteBody = z.infer<typeof AdminDsrCompleteRequestSchema>;
+export type AdminDsrRejectBody = z.infer<typeof AdminDsrRejectRequestSchema>;
 
 export interface AdminIntegrityIssueListParams {
   source?: 'all' | 'kor_travel_map' | 'pinvi_app';
@@ -457,6 +475,47 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminSecurityIncidentCloseRequestSchema.parse(body)),
       schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  listDsrRequests: (params: AdminDsrRequestListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.requestType) qs.set('request_type', params.requestType);
+    if (params.overdue !== undefined) qs.set('overdue', String(params.overdue));
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    const path = `/admin/dsr${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminDsrRequestListResponseSchema,
+    });
+  },
+
+  identityCheckDsrRequest: (requestId: string, body: AdminDsrIdentityCheckBody) =>
+    client.request(`/admin/dsr/${encodeURIComponent(requestId)}/identity-check`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDsrIdentityCheckRequestSchema.parse(body)),
+      schema: AdminDsrRequestRecordSchema,
+    }),
+
+  processDsrRequest: (requestId: string, body: AdminDsrProcessBody) =>
+    client.request(`/admin/dsr/${encodeURIComponent(requestId)}/process`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDsrProcessRequestSchema.parse(body)),
+      schema: AdminDsrRequestRecordSchema,
+    }),
+
+  completeDsrRequest: (requestId: string, body: AdminDsrCompleteBody) =>
+    client.request(`/admin/dsr/${encodeURIComponent(requestId)}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDsrCompleteRequestSchema.parse(body)),
+      schema: AdminDsrRequestRecordSchema,
+    }),
+
+  rejectDsrRequest: (requestId: string, body: AdminDsrRejectBody) =>
+    client.request(`/admin/dsr/${encodeURIComponent(requestId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(AdminDsrRejectRequestSchema.parse(body)),
+      schema: AdminDsrRequestRecordSchema,
     }),
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {

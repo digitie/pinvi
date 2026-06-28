@@ -29,6 +29,11 @@ export type {
   AdminCategoryMappingListParams,
   AdminConsistencyReportListParams,
   AdminDedupReviewListParams,
+  AdminDsrCompleteBody,
+  AdminDsrIdentityCheckBody,
+  AdminDsrProcessBody,
+  AdminDsrRejectBody,
+  AdminDsrRequestListParams,
   AdminFeatureChangeRequestListParams,
   AdminFeatureListParams,
   AdminIntegrityIssueActionBody,
@@ -50,6 +55,7 @@ export type {
   AdminUpstreamApiCallLogListParams,
 } from './endpoints/admin';
 export type { NoticePlanListParams } from './endpoints/notice-plans';
+export type { DsrRequestCreateBody, DsrRequestWithdrawBody } from './endpoints/users';
 export type {
   PublicBeachListParams,
   PublicFestivalMarkerParams,

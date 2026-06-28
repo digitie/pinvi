@@ -164,6 +164,37 @@
 | `created_at`                  | `timestamptz` NOT NULL |                                                                         |
 | `updated_at`                  | `timestamptz` NOT NULL |                                                                         |
 
+#### `app.dsr_requests`
+
+| 컬럼                      | 타입                   | 비고                                                                                  |
+| ------------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `request_id`              | `uuid` (PK)            | 개인정보 권리행사 요청 id                                                             |
+| `user_id`                 | `uuid` → `app.users`   | 요청 사용자, 삭제 후 증적 보존 위해 nullable                                          |
+| `request_type`            | `varchar(16)`          | `access` / `correction` / `delete` / `suspend`                                        |
+| `status`                  | `varchar(32)`          | `received` / `identity_check` / `processing` / `completed` / `rejected` / `withdrawn` |
+| `request_summary`         | `varchar(500)`         | 사용자 입력 요약                                                                      |
+| `request_details`         | `jsonb`                | 범위/상세 요청 payload                                                                |
+| `identity_proof_metadata` | `jsonb`                | authenticated session, CPO 확인 결과, 증적 metadata                                   |
+| `requester_email_hash`    | `varchar(64)`          | 원문 이메일 미저장, normalized hash                                                   |
+| `requester_email_masked`  | `varchar(320)`         | 목록 표시용 마스킹 이메일                                                             |
+| `assigned_cpo_user_id`    | `uuid` → `app.users`   | 담당 CPO, nullable                                                                    |
+| `received_at`             | `timestamptz` NOT NULL | 접수 시각                                                                             |
+| `due_at`                  | `timestamptz` NOT NULL | 접수 + 10일 처리 due                                                                  |
+| `identity_verified_at`    | `timestamptz`          | 본인 확인 완료 시각                                                                   |
+| `processing_started_at`   | `timestamptz`          | 처리 시작 시각                                                                        |
+| `completed_at`            | `timestamptz`          | 완료 시각                                                                             |
+| `rejected_at`             | `timestamptz`          | 거절 시각                                                                             |
+| `withdrawn_at`            | `timestamptz`          | 사용자 철회 시각                                                                      |
+| `rejection_reason`        | `text`                 | 거절 사유                                                                             |
+| `result_summary`          | `text`                 | 완료/거절 결과 요약                                                                   |
+| `result_notice_hash`      | `varchar(64)`          | 결과 통지 payload hash                                                                |
+| `result_notice_email_id`  | `uuid` → `email_queue` | `dsr_result_notice` queue row                                                         |
+| `export_manifest`         | `jsonb`                | export 파일/마스킹/부분 제공 bounded evidence                                         |
+| `partial_response`        | `boolean`              | 부분 제공 여부                                                                        |
+| `evidence_attachment_id`  | `uuid`                 | 증적 첨부 id, nullable                                                                |
+| `created_at`              | `timestamptz` NOT NULL |                                                                                       |
+| `updated_at`              | `timestamptz` NOT NULL |                                                                                       |
+
 #### `app.rate_limit_buckets`
 
 운영/staging에서 HTTP 공통 rate-limit counter를 worker/노드 간 공유하기 위한 고정
@@ -735,7 +766,13 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 | `target_pii_fields`         | text[] — 접근한 PII 필드 목록                                                                                        |
 | `prev_hash`, `content_hash` | chain (audit log chain 깨짐 → 즉시 CPO 알림). `prev_hash`는 unique이며 append 경로는 advisory lock으로 head를 직렬화 |
 
-### 8.11 `app.retention_runs` / `app.location_access_log_archive`
+### 8.11 `app.dsr_requests`
+
+`/settings/dsr`와 `/admin/dsr`의 개인정보 권리행사 접수/처리 증적이다. 원문 이메일은 저장하지
+않고 hash/masked 값만 보존하며, 완료/거절 결과 통지는 `email_queue`의 `dsr_result_notice`와
+`result_notice_hash`로 연결한다.
+
+### 8.12 `app.retention_runs` / `app.location_access_log_archive`
 
 `/admin/retention` 실행 증적과 위치 로그 archive 저장소:
 

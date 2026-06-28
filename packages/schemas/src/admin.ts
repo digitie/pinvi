@@ -878,6 +878,88 @@ export type AdminSecurityIncidentCloseRequest = z.infer<
   typeof AdminSecurityIncidentCloseRequestSchema
 >;
 
+export const AdminDsrRequestTypeSchema = z.enum(['access', 'correction', 'delete', 'suspend']);
+export type AdminDsrRequestType = z.infer<typeof AdminDsrRequestTypeSchema>;
+
+export const AdminDsrRequestStatusSchema = z.enum([
+  'received',
+  'identity_check',
+  'processing',
+  'completed',
+  'rejected',
+  'withdrawn',
+]);
+export type AdminDsrRequestStatus = z.infer<typeof AdminDsrRequestStatusSchema>;
+
+export const AdminDsrRequestRecordSchema = z.object({
+  request_id: z.string().uuid(),
+  user_id: z.string().uuid().nullable().default(null),
+  request_type: AdminDsrRequestTypeSchema,
+  status: AdminDsrRequestStatusSchema,
+  request_summary: z.string(),
+  request_details: AdminJsonObjectSchema.default({}),
+  identity_proof_metadata: AdminJsonObjectSchema.default({}),
+  requester_email_masked: z.string(),
+  assigned_cpo_user_id: z.string().uuid().nullable().default(null),
+  received_at: Iso8601Schema,
+  due_at: Iso8601Schema,
+  identity_verified_at: Iso8601Schema.nullable().default(null),
+  processing_started_at: Iso8601Schema.nullable().default(null),
+  completed_at: Iso8601Schema.nullable().default(null),
+  rejected_at: Iso8601Schema.nullable().default(null),
+  withdrawn_at: Iso8601Schema.nullable().default(null),
+  rejection_reason: z.string().nullable().default(null),
+  result_summary: z.string().nullable().default(null),
+  result_notice_hash: z.string().nullable().default(null),
+  result_notice_email_id: z.string().uuid().nullable().default(null),
+  export_manifest: AdminJsonObjectSchema.default({}),
+  partial_response: z.boolean().default(false),
+  evidence_attachment_id: z.string().uuid().nullable().default(null),
+  response_overdue: z.boolean().default(false),
+  next_action: z.string(),
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type AdminDsrRequestRecord = z.infer<typeof AdminDsrRequestRecordSchema>;
+
+export const AdminDsrRequestListResponseSchema = z.object({
+  items: z.array(AdminDsrRequestRecordSchema).default([]),
+  page_size: z.number().int(),
+  total: z.number().int(),
+});
+export type AdminDsrRequestListResponse = z.infer<typeof AdminDsrRequestListResponseSchema>;
+
+export const AdminDsrIdentityCheckRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  identity_verified: z.boolean().default(true),
+  identity_note: z.string().max(1000).nullable().optional(),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminDsrIdentityCheckRequest = z.infer<typeof AdminDsrIdentityCheckRequestSchema>;
+
+export const AdminDsrProcessRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  processing_note: z.string().max(1000).nullable().optional(),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminDsrProcessRequest = z.infer<typeof AdminDsrProcessRequestSchema>;
+
+export const AdminDsrCompleteRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  result_summary: z.string().min(1).max(4000),
+  export_manifest: AdminJsonObjectSchema.default({}),
+  partial_response: z.boolean().default(false),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminDsrCompleteRequest = z.infer<typeof AdminDsrCompleteRequestSchema>;
+
+export const AdminDsrRejectRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  rejection_reason: z.string().min(1).max(4000),
+  evidence_attachment_id: z.string().uuid().nullable().optional(),
+});
+export type AdminDsrRejectRequest = z.infer<typeof AdminDsrRejectRequestSchema>;
+
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
   source: z.enum(['kor_travel_map', 'pinvi_app']).default('kor_travel_map'),

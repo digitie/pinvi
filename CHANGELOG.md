@@ -129,6 +129,11 @@
   pending outbox/hash-chain precheck 뒤에서 삭제 계정 PII anonymize, 만료 token/session/OAuth
   transient row 삭제, 위치 로그 archive/delete를 실행하고 `app.retention_runs`와 `admin_audit_log`에
   bounded evidence를 남긴다.
+- DSR 권리행사 접수/처리 workflow를 추가했다. 사용자는 `/settings/dsr`와
+  `/users/me/dsr-requests`에서 열람/정정/삭제/처리정지 요청을 접수·조회·철회할 수 있고,
+  CPO는 `/admin/dsr`에서 본인 확인, 처리 시작, 완료/거절 통지를 수행한다. `app.dsr_requests`는
+  10일 due, hash/masked 이메일, result notice hash, export manifest, partial response, audit evidence를
+  저장한다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder

@@ -47,6 +47,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
 | `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
+| `GET/POST /admin/dsr[/{id}/...]`                                  | 개인정보 권리행사 DSR CPO workflow                     | 6      |
 | `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute                 | 6      |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
@@ -164,7 +165,75 @@ POST /admin/incidents/{incident_id}/close
   `external_report_receipt_ref`에 저장하고 `kisa_reported_at`을 기록한다.
 - `close`: `closure_note`, `access_reason`. `reported` 상태이거나 통지 불필요 판정이 있어야 한다.
 
-## 2.2 Retention Execution
+## 2.2 DSR Requests
+
+`/admin/dsr`는 `app.dsr_requests`를 CPO 운영 workflow로 노출한다. 사용자 접수는
+`/users/me/dsr-requests`와 `/settings/dsr`에서 만들고, Admin은 본인 확인, 처리 시작, 완료/거절
+통지를 담당한다. 상태 모델은 `received` → `identity_check` → `processing` →
+`completed` / `rejected` / `withdrawn`이며, 접수 시각 기준 10일 `due_at`을 계산한다.
+
+권한:
+
+- `GET /admin/dsr`: `admin` / `cpo`
+- `POST /admin/dsr/{request_id}/identity-check`: `cpo`
+- `POST /admin/dsr/{request_id}/process`: `cpo`
+- `POST /admin/dsr/{request_id}/complete`: `cpo`
+- `POST /admin/dsr/{request_id}/reject`: `cpo`
+
+모든 mutation은 `access_reason`을 요구하고 `admin_audit_log`에 `dsr.*` action으로 남긴다.
+`complete`와 `reject`는 `email_queue.template='dsr_result_notice'` row를 만들며,
+`result_notice_hash`와 `result_notice_email_id`를 DSR 행에 기록한다. DSR 행은 원문 이메일을
+저장하지 않고 `requester_email_hash` / `requester_email_masked`만 보존한다.
+
+조회:
+
+```http
+GET /admin/dsr?status=received&request_type=access&overdue=true&page_size=50
+```
+
+Query:
+
+| 이름           | 설명                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `status`       | `received` / `identity_check` / `processing` / `completed` / `rejected` / `withdrawn` |
+| `request_type` | `access` / `correction` / `delete` / `suspend`                                        |
+| `overdue`      | `true`면 open 상태 중 `due_at` 초과 요청만 조회                                       |
+| `page_size`    | 1~200, 기본 50                                                                        |
+
+상태 조치 body:
+
+```jsonc
+// identity-check
+{
+  "access_reason": "본인 확인",
+  "identity_verified": true,
+  "identity_note": "인증 세션과 계정 이메일 일치"
+}
+
+// process
+{
+  "access_reason": "처리 시작",
+  "processing_note": "자료 추출 시작"
+}
+
+// complete
+{
+  "access_reason": "결과 통지",
+  "result_summary": "프로필과 위치 접근 로그 export 제공",
+  "export_manifest": { "files": ["profile.json"], "masked_fields": ["email"] },
+  "partial_response": false
+}
+
+// reject
+{
+  "access_reason": "거절 통지",
+  "rejection_reason": "본인 확인을 완료할 수 없음"
+}
+```
+
+자세한 운영 절차는 [`docs/runbooks/dsr.md`](../runbooks/dsr.md).
+
+## 2.3 Retention Execution
 
 `/admin/retention`은 T-240/T-241 dry-run 집계를 운영자가 승인·실행·감사할 수 있는 콘솔이다.
 실제 파괴 작업은 기본 비활성 kill-switch 뒤에 있고, 모든 run은 `app.retention_runs`에 후보

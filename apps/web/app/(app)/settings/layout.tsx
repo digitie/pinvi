@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 
 const TABS = [
   { href: '/settings/consents', label: '동의 관리' },
+  { href: '/settings/dsr', label: '개인정보 요청' },
   { href: '/settings/mcp-tokens', label: 'MCP 토큰' },
   { href: '/settings/telegram', label: 'Telegram 알림' },
 ] as const;
@@ -15,7 +16,10 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="space-y-6">
-      <nav className="flex gap-1 overflow-x-auto border-b border-hairline pb-2 text-sm" aria-label="설정 메뉴">
+      <nav
+        className="flex gap-1 overflow-x-auto border-b border-hairline pb-2 text-sm"
+        aria-label="설정 메뉴"
+      >
         {TABS.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
