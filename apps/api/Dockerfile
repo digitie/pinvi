@@ -13,6 +13,7 @@ RUN apt-get update \
         curl \
         git \
         libpq5 \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,6 +27,7 @@ RUN pip install --upgrade pip && pip install -e .
 COPY apps/api/app ./app
 COPY apps/api/alembic ./alembic
 COPY apps/api/alembic.ini ./alembic.ini
+COPY scripts/backup-db.sh ./scripts/backup-db.sh
 
 EXPOSE 8000
 

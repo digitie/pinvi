@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-259 backup script Docker fallback
+
+**작업**: N150 release gate에서 드러난 host `pg_dump` 부재 blocker를 줄이기 위해 backup script
+fallback을 보강했다.
+
+**변경**:
+
+- `scripts/backup-db.sh`가 host `pg_dump`를 우선 사용하고, 없으면
+  `PINVI_BACKUP_DOCKER_IMAGE` one-off container로 같은 custom-format dump를 생성한다.
+- fallback network/image/binary를 `PINVI_BACKUP_DOCKER_*` 환경변수로 조정할 수 있게 했다.
+- API Docker image에 `postgresql-client`와 `scripts/backup-db.sh`를 포함해 Admin snapshot 경로가
+  image 내부 `pg_dump`를 사용할 수 있게 했다.
+- backup/restore runbook, release gate, tasks/resume 추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `bash -n scripts/backup-db.sh`
+- Linux: `cd apps/api && .venv/bin/python -m pytest -s tests/unit/test_backup_db_script.py -q` — 2
+  passed
+- Linux: `cd apps/api && .venv/bin/ruff format --check tests/unit/test_backup_db_script.py && .venv/bin/ruff check tests/unit/test_backup_db_script.py`
+- Linux: `docker build --check -f apps/api/Dockerfile .`
+- Linux: `npx prettier --check` 대상 문서
+- 참고: 같은 pytest를 capture 기본값으로 실행하면 현재 NTFS/WSL venv에서 pytest capture tempfile
+  오류가 나며, `-s`에서는 통과한다.
+
+**다음**: 보강된 script를 N150 checkout에 반영한 뒤 `scripts/backup-db.sh` 재실행 증거를
+release gate에 추가한다.
+
 ## 2026-06-28 (codex) — T-259 v0.2.0 release candidate gate 부분 실행
 
 **작업**: `v0.2.0` release candidate gate를 N150 기준으로 실행하고 차단 항목을 분리했다.

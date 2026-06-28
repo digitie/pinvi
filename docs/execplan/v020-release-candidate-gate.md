@@ -89,9 +89,11 @@ Admin 200/2000/full live gate는 credential이 준비될 때까지 실행하지 
 
 ## Backup Evidence
 
-host에는 `pg_dump`가 없어 `scripts/backup-db.sh`는 `pg_dump not found`로 실패했다. 대신 같은
+host에는 `pg_dump`가 없어 당시 `scripts/backup-db.sh`는 `pg_dump not found`로 실패했다. 대신 같은
 PostgreSQL 16 계열의 `postgis/postgis:16-3.5` 일회성 컨테이너에서 `pg_dump --format=custom
---schema=app --no-owner --no-privileges`를 실행했다.
+--schema=app --no-owner --no-privileges`를 실행했다. 후속 작업에서 `scripts/backup-db.sh`는 host
+`pg_dump` 부재 시 Docker fallback을 지원하도록 보강했다. N150 release gate에서는 보강된 script를
+운영 checkout에 반영한 뒤 한 번 더 실행해 이 blocker를 닫는다.
 
 - snapshot: `pinvi-app-20260628-094253.dump`
 - size: `126826`

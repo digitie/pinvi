@@ -56,7 +56,9 @@
   route가 숨겨지고, dry-run은 확인 문구와 운영 사유를 요구하며 감사 로그를 남긴다.
 - Admin backup snapshot trigger를 보강했다. backup script는 disk guard와 sha256 검증을 수행하고,
   restore script는 sidecar checksum을 restore 전 검증하며, Admin API/audit은 host 절대경로를
-  `backup://<filename>`으로 mask하고 snapshot 실패 audit을 남긴다.
+  `backup://<filename>`으로 mask하고 snapshot 실패 audit을 남긴다. host `pg_dump`가 없으면
+  Docker fallback으로 같은 custom-format dump를 만들 수 있고, API image에는 backup script와
+  Postgres client를 포함한다.
 - Restore staging drill 스크립트를 추가했다. staging DB URL 없이는 복구를 시작하지 않고,
   checksum, `pg_restore --list`, DB health row count, admin audit chain link, rollback rehearsal
   evidence를 PII/host path 없이 출력한다. 신규 backup sidecar는 basename 기준으로 생성하고,

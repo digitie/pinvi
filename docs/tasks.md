@@ -21,7 +21,8 @@
 - T-259 — Release candidate gate / `v0.2.0`.
   2026-06-28 N150 후보 배포와 smoke, backup snapshot은 통과했지만 최신 main `api`/`web` CI,
   Admin live 2000/full credential, N150 Playwright system dependency, restore staging DB가
-  남아 release/tag는 보류한다. 상세는
+  남아 release/tag는 보류한다. `scripts/backup-db.sh`는 host `pg_dump` 부재 시 Docker fallback을
+  지원하도록 보강했으며 N150 재실행 증거가 필요하다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
 ## 다음 (우선순위 순)
