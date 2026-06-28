@@ -35,7 +35,7 @@ Sprint 5 release gate와 Sprint 6 진입 계획이 이 문서를 참조한다.
 | ----- | ---------------------------------------------------------------------------------- | -------------------------- | -------------------------------- |
 | G-001 | PIPA 침해사고 콘솔 `/admin/incidents` 부재                                         | T-275                      | v1.0 전 구현                     |
 | G-002 | 이상 IP, admin bulk export, audit chain 깨짐 등 incident 자동 트리거 부재          | T-275, T-283               | v1.0 전 구현                     |
-| G-003 | CPO 30분 검토, 정보주체 통지, KISA 60일 report 상태/메일 흐름 부재                 | T-275                      | v1.0 전 구현                     |
+| G-003 | CPO 30분 검토, 정보주체 통지, KISA/PIPC 72시간 신고 상태/메일 흐름 부재            | T-275                      | v1.0 전 구현                     |
 | G-004 | LBS 위치 감사 화면이 IA/role matrix/live matrix에서 고아화될 위험                  | T-258, T-269, T-286        | Sprint 6 진입 전 설계            |
 | G-005 | 위치 감사 chain on-demand verify 액션 부재                                         | T-276, T-283               | v1.0 전 구현                     |
 | G-006 | 위치 감사 6개월 archive/delete 실행과 chain bridge 정책 부재                       | T-276                      | v1.0 전 구현                     |

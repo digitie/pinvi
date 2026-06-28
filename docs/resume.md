@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
+
+Sprint 6 legal/ops 구현 준비 gate를 `docs/execplan/legal-ops-implementation-prep-gate.md`로
+고정했다. T-275~T-286은 각각 API/UI, 상태 모델, due date, evidence/audit, runbook,
+test gate, sign-off 기준을 가진다. 기존 문서의 `KISA 60일 report` 표현은 폐기하고,
+개인정보보호위원회/KISA 72시간 신고 기준으로 정정했다. CPO 30분 review는 법정 기한이 아니라
+Pinvi 내부 운영 SLA로 분리했다.
+
+Sprint 6 문서와 compliance index는 새 gate 문서를 참조한다. v1.0 기본 범위는 Web/API/Admin
+운영 출시이며, `apps/mobile`과 user-facing AI companion은 v1.0 필수 gate에서 제외된다.
+다음 작업은 T-259 Release candidate gate / `v0.2.0`이다.
+
 ## 2026-06-28 (codex) — T-257 Email deliverability / provider tracking preflight
 
 Resend domain/webhook 공식 기준과 현재 repo 구현을 대조해

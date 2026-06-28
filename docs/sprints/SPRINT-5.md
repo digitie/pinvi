@@ -17,7 +17,7 @@
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
   app-owned ETL 추가 job, Loki/request timeline stream,
-  backup/restore live e2e, legal/ops prep gate(T-258), `v0.2.0` Release notes.
+  backup/restore live e2e, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -104,8 +104,8 @@
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
 - 리뷰 반영 legal/ops preflight: T-256에서 PR #238/#264 gap 44개와 최근 PR 사후 리뷰 후속을
   `docs/execplan/legal-ops-review-gap-crosswalk.md`에 매핑했다. T-257은 Resend
-  deliverability/provider tracking 계약을 T-277로 연결하며 완료했고, 남은 preflight는
-  T-258 Sprint 6 legal/ops prep gate다.
+  deliverability/provider tracking 계약을 T-277로 연결하며 완료했다. T-258은 Sprint 6 legal/ops
+  구현 매트릭스와 release sign-off 기준을 확정하며 완료했다.
 - `v0.2.0` tag/GitHub Release notes.
 
 ### 백엔드 (`apps/api`)
@@ -229,7 +229,8 @@
       후속을 Task 번호에 매핑했다.
 - [x] **Email deliverability/provider tracking preflight(T-257)** — Resend domain/webhook
       기준과 suppression/provider tracking gap을 T-277 구현 계약으로 고정했다.
-- [ ] **Legal/ops implementation prep gate(T-258)**
+- [x] **Legal/ops implementation prep gate(T-258)** — T-275~T-286 구현 표면, 상태 모델,
+      evidence/test/runbook/sign-off 기준과 mobile/AI 제외 gate를 고정했다.
 - [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 6

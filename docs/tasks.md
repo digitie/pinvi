@@ -22,12 +22,13 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-258 Sprint 6 legal/ops implementation prep gate.
+- 다음 구현: T-259 Release candidate gate / `v0.2.0`.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline,
-  backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
+  backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk 완료. 남은 것은 T-259 release
+  candidate gate다.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
   `docs/execplan/admin-console-gap-plan.md`.
 - 운영 게이트 잔여: N150은 최신 main smoke를 확인했다. Odroid 실제 노드 smoke와
@@ -42,9 +43,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-258 — Sprint 6 legal/ops implementation prep gate.
-      incident, DSR, retention execution, moderation, RBAC, user lifecycle, rate-limit/abuse,
-      mobile/AI scope를 Sprint 6 DoD와 release checklist에 고정한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
       main CI, N150 deploy/smoke, live e2e, backup snapshot, release notes/tag를 완료한다.
 
@@ -89,7 +87,7 @@
 - [ ] T-274 — v1.0.0 릴리즈.
 - [ ] T-275 — PIPA security incident console.
       `/admin/incidents`, `app.security_incidents` query/notification/router/UI, CPO 30분 review,
-      정보주체 통지, KISA 60일 report due date를 구현한다.
+      정보주체 통지, KISA/PIPC 72시간 신고 due date를 구현한다.
 - [ ] T-276 — Retention execution / dashboard.
       PII delete/anonymize, location archive/delete, token/session cleanup, last_run/overdue dashboard,
       kill-switch와 evidence log를 구현한다.
