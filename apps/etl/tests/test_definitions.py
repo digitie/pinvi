@@ -22,3 +22,5 @@ def test_definitions_load() -> None:
     assert defs.get_schedule_def("pinvi_pii_retention_schedule") is not None
     assert defs.get_schedule_def("pinvi_location_log_archive_schedule") is not None
     assert defs.get_schedule_def("pinvi_telegram_system_outbox_schedule") is not None
+    # ADR-050: app-owned job 실패 통지 sensor가 등록돼 있어야 한다 (T-291).
+    assert defs.get_sensor_def("pinvi_run_failure_sensor") is not None

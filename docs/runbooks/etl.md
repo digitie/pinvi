@@ -33,10 +33,11 @@ apps/etl/
 │   ├── __init__.py
 │   └── etl/
 │       ├── __init__.py
-│       ├── definitions.py               # Dagster code location entry (sensors=[])
+│       ├── definitions.py               # Dagster code location entry (sensors=[pinvi_run_failure_sensor])
 │       ├── resources.py                 # PinviDatabaseResource, KasiResource
 │       ├── schedules.py                 # KASI cron + email/telegram/retention/location cron
 │       ├── jobs.py                      # kasi_poi_rise_set_job (POI 출몰시각 one-shot)
+│       ├── sensors.py                   # pinvi_run_failure_sensor (ADR-050 실패 통지, T-291)
 │       └── assets/
 │           ├── __init__.py
 │           ├── pinvi_email_outbox.py
@@ -46,6 +47,7 @@ apps/etl/
 │           └── pinvi_telegram_system_outbox.py
 └── tests/
     ├── test_definitions.py
+    ├── test_run_failure_sensor.py
     ├── test_email_outbox.py
     ├── test_kasi_special_days.py
     ├── test_location_log_archive.py
@@ -57,7 +59,6 @@ apps/etl/
 
 ```
 pinvi/etl/
-├── sensors.py                           # (계획) run_failure_sensor (Sentry/outbox)
 └── assets/
     └── pinvi_telegram_weekly.py         # (계획) 주간/일간 사용자 브리프 — D-11/D-1
 ```
