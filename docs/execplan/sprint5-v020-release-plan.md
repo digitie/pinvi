@@ -181,15 +181,19 @@
 
 ### T-242 — Telegram system summary/outbox ETL
 
-- Telegram system notification outbox와 weekly/daily summary 후보 job을 추가한다.
-- 실제 credential은 `.env.mcp-telegram` 또는 운영 secret에만 둔다.
-- 실패 시 retry/backoff와 Sentry tag를 남긴다.
+- 완료: `pinvi_telegram_system_outbox` asset/job/schedule을 추가해
+  `app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,
+  failed, retry exhausted, category별 retry exhausted 비율을 payload 없이 집계한다.
+- 완료: `/admin/etl/summary`와 Web `/admin/etl`에 Telegram outbox summary를 노출한다.
+- payload, message text, user id, chat id, token, last_error 원문은 metadata/API 응답에 남기지 않는다.
+- weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 남긴다.
 
 검증 케이스:
 
-- ETL unit: no credential skip, pending notification, retryable failure, permanent failure.
-- API integration: Admin ETL summary에 telegram job 상태 노출.
-- Telegram live는 PR 완료 알림 MCP와 분리하고, 운영 credential 원문을 로그에 남기지 않는다.
+- 완료: ETL unit에서 due/backoff/stuck/retry exhausted와 PII/secret-free metadata를 검증.
+- 완료: API integration에서 Admin ETL summary의 telegram job과 summary count/category를 검증.
+- 완료: Web mock e2e fixture에 Telegram outbox 표시를 추가.
+- 미실행: Playwright live는 ADR-051에 따라 N150 runner에서 수행한다.
 
 ### T-243 — ETL live / Dagster 운영 게이트
 

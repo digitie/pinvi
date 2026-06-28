@@ -235,6 +235,38 @@ export const AdminEmailOutboxSummarySchema = z.object({
 });
 export type AdminEmailOutboxSummary = z.infer<typeof AdminEmailOutboxSummarySchema>;
 
+export const AdminTelegramOutboxCategorySummarySchema = z.object({
+  category: z.string(),
+  total: z.number().int().default(0),
+  pending: z.number().int().default(0),
+  sent: z.number().int().default(0),
+  skipped: z.number().int().default(0),
+  failed: z.number().int().default(0),
+  retry_exhausted: z.number().int().default(0),
+  retry_exhausted_rate: z.number().default(0),
+});
+export type AdminTelegramOutboxCategorySummary = z.infer<
+  typeof AdminTelegramOutboxCategorySummarySchema
+>;
+
+export const AdminTelegramOutboxSummarySchema = z.object({
+  total: z.number().int().default(0),
+  pending_total: z.number().int().default(0),
+  pending_due: z.number().int().default(0),
+  pending_backoff: z.number().int().default(0),
+  stuck_pending: z.number().int().default(0),
+  sent: z.number().int().default(0),
+  skipped: z.number().int().default(0),
+  failed: z.number().int().default(0),
+  retry_exhausted: z.number().int().default(0),
+  oldest_pending_scheduled_at: Iso8601Schema.nullable().default(null),
+  stuck_threshold_minutes: z.number().int(),
+  max_attempts: z.number().int(),
+  category_window_hours: z.number().int(),
+  category_stats: z.array(AdminTelegramOutboxCategorySummarySchema).default([]),
+});
+export type AdminTelegramOutboxSummary = z.infer<typeof AdminTelegramOutboxSummarySchema>;
+
 export const AdminPiiRetentionSummarySchema = z.object({
   dry_run: z.boolean().default(true),
   generated_at: Iso8601Schema,
@@ -286,9 +318,7 @@ export const AdminLocationLogArchiveSummarySchema = z.object({
   oldest_pending_outbox_at: Iso8601Schema.nullable().default(null),
   purpose_stats: z.array(AdminLocationLogArchivePurposeSummarySchema).default([]),
 });
-export type AdminLocationLogArchiveSummary = z.infer<
-  typeof AdminLocationLogArchiveSummarySchema
->;
+export type AdminLocationLogArchiveSummary = z.infer<typeof AdminLocationLogArchiveSummarySchema>;
 
 export const AdminPinviEtlSummarySchema = z.object({
   status: AdminSystemStatusSchema,
@@ -299,6 +329,7 @@ export const AdminPinviEtlSummarySchema = z.object({
   schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
   sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
   email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
+  telegram_outbox: AdminTelegramOutboxSummarySchema.nullable().default(null),
   pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
   location_log_archive: AdminLocationLogArchiveSummarySchema.nullable().default(null),
 });

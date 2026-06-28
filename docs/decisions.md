@@ -2154,8 +2154,8 @@ shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로
 - `docs/dev-environment.md`, `docs/agent-workflow.md`,
   `docs/runbooks/codegraph-worktrees.md`, `docs/agent-failure-patterns.md`의 NTFS/Windows git 모델을
   Linux-only 모델로 정정한다.
-- `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`, `docs/journal.md`에 본 전환 작업과 다음
-  작업(T-242)을 반영한다.
+- `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`, `docs/journal.md`에 본 전환 작업과 후속
+  작업 흐름을 반영한다.
 
 ## 다음 ADR 번호
 

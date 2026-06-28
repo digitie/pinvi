@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-242 — Telegram system summary/outbox ETL.
+      `pinvi_telegram_system_outbox` asset/job/schedule을 추가해 15분마다
+      `app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,
+      failed, retry exhausted, category별 retry exhausted 비율을 집계한다.
+      `/admin/etl/summary`와 Web `/admin/etl`은 같은 bounded Telegram outbox summary를
+      노출하고, payload·message text·user id·chat id·token·last_error 원문은 노출하지 않는다.
+      weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 남겼다.
+
 - [x] T-289 — Linux-only 개발 환경 / ADR-051 문서화.
       ADR-051로 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행으로 고정했다.
       ADR-024의 NTFS source / WSL 테스트 미러 모델과 ADR-017의 Windows `git.exe` amendment를

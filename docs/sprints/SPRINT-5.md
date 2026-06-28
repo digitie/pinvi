@@ -30,7 +30,9 @@
       - `pinvi_email_outbox` (email_queue pending/backoff/stuck/failed + template 실패율 점검,
        T-239 완료)
       - `pinvi_pii_retention` (PII 보존 기간 만료 후보 dry-run, T-240 완료)
-      - (계획) `pinvi_location_log_archive`, `pinvi_telegram_weekly`
+      - `pinvi_location_log_archive` (location_access_log archive 후보 dry-run, T-241 완료)
+      - `pinvi_telegram_system_outbox` (Telegram outbox retry/backoff/stuck 점검, T-242 완료)
+      - (후속) `pinvi_telegram_weekly` 사용자 weekly/daily 브리프
     - 신규 app-owned job은 ADR-050의 retry/backoff, idempotency, failure notification,
       dry-run gate를 따른다.
     - feature/provider 적재 asset(VisitKorea/OpiNet/KMA/KrHeritage 등)은
@@ -101,14 +103,18 @@
 - `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
 - `apps/etl/pinvi/etl/assets/pinvi_email_outbox.py`
 - `apps/etl/pinvi/etl/assets/pinvi_pii_retention.py`
+- `apps/etl/pinvi/etl/assets/pinvi_location_log_archive.py`
+- `apps/etl/pinvi/etl/assets/pinvi_telegram_system_outbox.py`
 - `apps/etl/pinvi/etl/jobs.py` (`kasi_poi_rise_set_job`)
 - `apps/etl/pinvi/etl/schedules.py`
-- `apps/etl/pinvi/etl/assets/{pinvi_location_log_archive,pinvi_telegram_weekly}.py`
-  (계획, `app` schema 소유 job일 때만)
+- `apps/etl/pinvi/etl/assets/pinvi_telegram_weekly.py`
+  (후속 계획, 사용자 weekly/daily 브리프가 `app` schema 소유 job일 때만)
 - `apps/etl/tests/test_definitions.py`
 - `apps/etl/tests/test_kasi_special_days.py`
 - `apps/etl/tests/test_email_outbox.py`
 - `apps/etl/tests/test_pii_retention.py`
+- `apps/etl/tests/test_location_log_archive.py`
+- `apps/etl/tests/test_telegram_system_outbox.py`
 
 ### 프론트엔드
 

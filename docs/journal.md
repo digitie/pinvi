@@ -2,6 +2,50 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-242 Telegram system summary/outbox ETL
+
+**작업**: Telegram system outbox 상태를 발송 없이 집계하는 Pinvi app-owned Dagster asset과
+Admin ETL summary 노출을 구현했다.
+
+**변경**:
+
+- `apps/etl`에 `pinvi_telegram_system_outbox` asset을 추가했다. 15분마다
+  `app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,
+  failed, retry exhausted, category별 retry exhausted 비율을 payload 없이 집계한다.
+- Dagster definitions/schedules에 `pinvi_telegram_system_outbox_job`과
+  `pinvi_telegram_system_outbox_schedule`을 등록했다.
+- `/admin/etl/summary`가 `pinvi.telegram_outbox` summary를 반환하도록 API schema/service와
+  `@pinvi/schemas`를 확장했다.
+- Web `/admin/etl`에 due/backoff/stuck/retry exhausted, sent/skipped/failed,
+  category별 retry exhausted 비율을 표시했다.
+- `docs/runbooks/etl.md`, `docs/architecture/dagster-etl-bridge.md`,
+  `docs/integrations/telegram.md`, task/resume 추적 문서를 T-242 완료 상태로 갱신했다.
+- weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 유지했다.
+
+**검증**:
+
+- Linux: `codegraph sync`
+- Linux: `uv run --extra dev ruff check ...` (ETL/API targeted)
+- Linux: `uv run --extra dev ruff format --check ...` (ETL/API targeted)
+- Linux: `PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/test_definitions.py tests/test_telegram_system_outbox.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_etl_provider_sync_api.py -rA`
+- Linux: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npx prettier --check ...`, `git diff --check`
+
+**주의**:
+
+- `uv run` 첫 실행에서 NTFS pytest capture가 임시 파일을 잃어 직접 `.venv/bin/python -m pytest -s`
+  방식으로 재실행했다. API 통합 테스트는 fixture가 subprocess로 `alembic`을 호출하므로
+  `PATH="$PWD/.venv/bin:$PATH"`가 필요했다.
+- root `node_modules/@pinvi/*`가 과거 `tripmate-codex` 경로를 가리켜 웹 typecheck가 처음 실패했다.
+  `npm install`을 중단하기 전 workspace symlink가 현재 repo 상대경로로 복구됐고 이후 typecheck/lint는
+  통과했다.
+- Playwright는 ADR-051 정책상 N150 우선 실행 대상이다. 현재 Codex 세션에는 N150 Playwright runner
+  접근 도구가 없어 로컬 Linux/Windows Playwright는 실행하지 않았다.
+
+**다음**: T-243 ETL live / Dagster 운영 게이트로 진행한다.
+
 ## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
 
 **작업**: 사용자 지시에 따라 개발·git·CodeGraph 실행 위치를 Linux로 통일하고, Playwright는

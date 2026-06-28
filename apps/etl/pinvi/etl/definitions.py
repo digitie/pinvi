@@ -9,6 +9,7 @@ from pinvi.etl.assets import (
     pinvi_kasi_special_days,
     pinvi_location_log_archive,
     pinvi_pii_retention,
+    pinvi_telegram_system_outbox,
 )
 from pinvi.etl.jobs import kasi_poi_rise_set_job
 from pinvi.etl.resources import KasiResource, PinviDatabaseResource
@@ -20,6 +21,7 @@ defs = Definitions(
         pinvi_kasi_special_days,
         pinvi_location_log_archive,
         pinvi_pii_retention,
+        pinvi_telegram_system_outbox,
     ],
     jobs=[kasi_poi_rise_set_job],
     schedules=schedules,

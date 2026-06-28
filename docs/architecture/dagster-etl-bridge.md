@@ -30,20 +30,21 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 apps/etl/
 ├── pyproject.toml
 ├── pinvi/etl/
-│   ├── definitions.py     # code location (KASI + email + retention/location assets, jobs, schedules)
+│   ├── definitions.py     # code location (KASI + email/telegram/retention/location assets)
 │   ├── resources.py       # PinviDatabaseResource, KasiResource
-│   ├── schedules.py       # kasi_special_days_job + email/retention/location archive jobs
+│   ├── schedules.py       # kasi_special_days_job + email/telegram/retention/location jobs
 │   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
 │   └── assets/
 │       ├── pinvi_kasi_special_days.py
 │       ├── pinvi_email_outbox.py
 │       ├── pinvi_location_log_archive.py
-│       └── pinvi_pii_retention.py
+│       ├── pinvi_pii_retention.py
+│       └── pinvi_telegram_system_outbox.py
 └── tests/
 ```
 
 계획(미구현, `app` schema 소유 job 후보): `sensors.py`(run_failure_sensor),
-`pinvi_telegram_weekly`(D-11). POI 출몰시각은 별도 asset 파일이 아니라 `jobs.py`의
+`pinvi_telegram_weekly`(D-11/D-1). POI 출몰시각은 별도 asset 파일이 아니라 `jobs.py`의
 one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
 
 ## 3. KASI assets
@@ -97,6 +98,16 @@ one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
 - Sprint 5 범위는 dry-run metadata와 Admin summary 노출까지다. 실제 archive table 이동,
   delete/anonymize, chain tail join 검증은 T-276에서 kill-switch/dashboard/evidence log와 함께 연다.
 
+### 3.6 `pinvi_telegram_system_outbox`
+
+- 15분마다 KST 실행.
+- `app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,
+  failed, retry exhausted를 집계한다.
+- category별 retry exhausted 비율은 최근 24시간 상위 10개 category만 metadata로 남긴다.
+- payload, message text, user id, chat id, token, last_error 원문은 metadata/API 응답에 넣지 않는다.
+- 실제 발송은 FastAPI lifespan worker가 계속 담당한다. 주간/일간 사용자 브리프 생성은
+  `pinvi_telegram_weekly` 후속 범위다.
+
 ## 4. Schedule
 
 ```python
@@ -122,6 +133,11 @@ pinvi_location_log_archive_job = define_asset_job(
     selection=["pinvi_location_log_archive"],
 )
 
+pinvi_telegram_system_outbox_job = define_asset_job(
+    "pinvi_telegram_system_outbox_job",
+    selection=["pinvi_telegram_system_outbox"],
+)
+
 kasi_special_days_schedule = ScheduleDefinition(
     job=kasi_special_days_job,
     cron_schedule="30 3 * * *",
@@ -143,6 +159,12 @@ pinvi_pii_retention_schedule = ScheduleDefinition(
 pinvi_location_log_archive_schedule = ScheduleDefinition(
     job=pinvi_location_log_archive_job,
     cron_schedule="30 4 * * *",
+    execution_timezone="Asia/Seoul",
+)
+
+pinvi_telegram_system_outbox_schedule = ScheduleDefinition(
+    job=pinvi_telegram_system_outbox_job,
+    cron_schedule="*/15 * * * *",
     execution_timezone="Asia/Seoul",
 )
 ```
