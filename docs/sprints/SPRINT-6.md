@@ -222,7 +222,7 @@
 - [ ] **T-258 legal/ops 구현 매트릭스 충족** — 각 Task가 API/UI/runbook/test/sign-off를 가진다.
 - [ ] **T-256 crosswalk G-001~G-044 재감사** — 각 gap이 구현 PR, 테스트, runbook 중
       하나로 닫혔는지 확인
-- [ ] **Security threat model / penetration 1차 점검 결과 기록**
+- [x] **Security threat model / penetration 1차 점검 결과 기록**
 - [ ] 첫 외부 사용자(가족 베타) 가입 + 여행 생성 성공
 - [ ] **`v1.0.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 6 종료 + v1.0 출시 엔트리
