@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-259 Admin live credential / restore staging drill
+
+N150 local-only Admin live credential을 준비하고 production Web image의 빌드타임 API origin에 맞춰
+public HTTPS Web origin으로 UI login을 검증했다. API login smoke 1건과 UI login smoke 1건이
+통과했고, N150 Playwright Docker runner(`mcr.microsoft.com/playwright:v1.60.0-noble`)에서
+`PINVI_ADMIN_LIVE_CASE_LIMIT=200`은 207 passed (18.4m), `PINVI_ADMIN_LIVE_CASE_LIMIT=2000`은
+2007 passed (3.5h)로 통과했다. full catalog 6202건은 최종 tag/Release 직전 별도 장시간 gate로
+남긴다.
+
+운영 DB role에는 `CREATEDB` 권한이 없어 N150에 disposable PostgreSQL/PostGIS staging target을
+만들고 latest snapshot `backup://pinvi-app-20260628-101426.dump`로 restore staging drill을 수행했다.
+checksum과 `pg_restore --list`가 통과했고, restore 후 `users_count=7`, `trips_count=5`,
+`admin_audit_log_count=1`, audit chain link valid, rollback precheck guard schema unchanged를
+확인했다. DB URL/password/container 세부 값은 local-only 파일에만 둔다.
+
+이번 보강에서 Admin live e2e는 login rate-limit 알림을 만나면 동일 case 안에서 backoff 후
+재시도하도록 고쳤고, request timeline live e2e는 loading 종료와 empty-state 문구 변형을 안정적으로
+처리한다. 다음 작업은 이 증적 PR을 머지한 뒤 Sprint 6 실제 구현 태스크인 T-275 PIPA security
+incident console로 진입하는 것이다.
+
 ## 2026-06-28 (codex) — T-259 v0.2.0 release candidate gate 부분 실행
 
 T-259 release candidate gate 결과를 `docs/execplan/v020-release-candidate-gate.md`에
@@ -22,7 +42,9 @@ Playwright 1.60.0 `install-deps --dry-run chromium`은 Ubuntu 26.04를 지원하
 `scripts/n150-playwright-runner.sh` Docker runner가 `mcr.microsoft.com/playwright:v1.60.0-noble`에서
 malformed login smoke 1건을 통과했다. Admin live 2000/full은 credential 부재, restore staging
 drill은 staging DB URL 부재로 미실행이다. 다음 작업은 N150 local-only Admin live credential과
-restore staging DB를 확보한 뒤 `v0.2.0` tag/GitHub Release 생성이다.
+restore staging DB를 확보한 뒤 `v0.2.0` tag/GitHub Release 생성이다. 이 차단 중 Admin live
+200/2000과 restore staging drill은 같은 날짜 상단 엔트리에서 해소됐고, full catalog와 tag/Release만
+남아 있다.
 
 ## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
 

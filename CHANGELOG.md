@@ -7,8 +7,8 @@
 > `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
 > app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
 > 2026-06-28 T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence, N150
-> Playwright Docker runner smoke는 통과했다. 남은 release 차단 항목은 Admin live 2000/full
-> credential과 restore staging drill이다.
+> Playwright Docker runner smoke, Admin live 200/2000 gate, restore staging drill은 통과했다.
+> 남은 release 차단 항목은 Admin live full catalog와 `v0.2.0` tag/GitHub Release 생성이다.
 
 ### 주요 기능
 

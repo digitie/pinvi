@@ -20,16 +20,18 @@
 
 - T-259 — Release candidate gate / `v0.2.0`.
   2026-06-28 N150 후보 배포와 smoke, backup snapshot, 최신 main API CI, Web clean manual evidence,
-  N150 Playwright Docker runner smoke는 통과했지만 Admin live 2000/full credential과 restore staging
-  DB가 남아 release/tag는 보류한다. `scripts/backup-db.sh`는 host `pg_dump` 부재 시 Docker fallback을
-  지원하도록 보강했고 N150 재실행 증거까지 확보했다. 상세는
+  N150 Playwright Docker runner smoke, Admin live 200/2000, restore staging drill은 통과했다.
+  Admin live full catalog와 release note/tag/GitHub Release 생성이 남아 release/tag는 보류한다.
+  `scripts/backup-db.sh`는 host `pg_dump` 부재 시 Docker fallback을 지원하도록 보강했고 N150
+  재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-259 release 차단 해소. N150 local-only Admin live credential과 restore staging DB를
-  확보한 뒤 Docker runner로 Admin live `200`/`2000`/full gate를 실행하고 `v0.2.0` tag/Release를
-  만든다.
+- 다음 구현: T-275 PIPA security incident console. `/admin/incidents`,
+  `app.security_incidents` query/notification/router/UI, CPO 30분 review, 정보주체 통지,
+  KISA/PIPC 72시간 신고 due date를 구현한다. T-259의 남은 full catalog와 `v0.2.0` tag/Release는
+  최종 release gate로 분리해 유지한다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -52,8 +54,8 @@
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
-      N150 deploy/smoke와 backup snapshot은 통과했다. main CI, Admin live 2000/full,
-      restore staging drill, release notes/tag를 완료한다.
+      N150 deploy/smoke, backup snapshot, main API/Web evidence, Admin live 200/2000,
+      restore staging drill은 통과했다. Admin live full catalog와 release notes/tag를 완료한다.
 
 ## 최근 PR 리뷰 후속
 
