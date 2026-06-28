@@ -172,6 +172,36 @@ class AdminEtlDefinitionSensor(BaseModel):
     status: str = "configured"
 
 
+class AdminEmailOutboxTemplateSummary(BaseModel):
+    template: str
+    total: int = 0
+    pending: int = 0
+    sent: int = 0
+    delivered: int = 0
+    failed: int = 0
+    bounced: int = 0
+    complained: int = 0
+    failure_count: int = 0
+    failure_rate: float = 0.0
+
+
+class AdminEmailOutboxSummary(BaseModel):
+    total: int = 0
+    pending_total: int = 0
+    pending_due: int = 0
+    pending_backoff: int = 0
+    stuck_pending: int = 0
+    failed: int = 0
+    bounced: int = 0
+    complained: int = 0
+    retry_exhausted: int = 0
+    oldest_pending_scheduled_at: datetime | None = None
+    stuck_threshold_minutes: int
+    max_attempts: int
+    template_window_hours: int
+    template_stats: list[AdminEmailOutboxTemplateSummary] = Field(default_factory=list)
+
+
 class AdminPinviEtlSummary(BaseModel):
     status: AdminSystemStatus
     message: str | None = None
@@ -180,6 +210,7 @@ class AdminPinviEtlSummary(BaseModel):
     jobs: list[AdminEtlDefinitionJob] = Field(default_factory=list)
     schedules: list[AdminEtlDefinitionSchedule] = Field(default_factory=list)
     sensors: list[AdminEtlDefinitionSensor] = Field(default_factory=list)
+    email_outbox: AdminEmailOutboxSummary | None = None
 
 
 class AdminDagsterJobSummary(BaseModel):

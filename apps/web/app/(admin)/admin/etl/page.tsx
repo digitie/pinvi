@@ -9,7 +9,7 @@ import {
   queryKeys,
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
-import type { AdminProviderImportJobRecord } from '@pinvi/schemas';
+import type { AdminEmailOutboxTemplateSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
 import { Activity, Database, GitBranch, RefreshCw, Workflow } from 'lucide-react';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
@@ -61,6 +61,29 @@ function progressLabel(value: number | null | undefined) {
   return `${Math.round(normalized)}%`;
 }
 
+function percentLabel(value: number | null | undefined) {
+  if (typeof value !== 'number') return '—';
+  return `${Math.round(value * 1000) / 10}%`;
+}
+
+function EmailTemplateStat({ item }: { item: AdminEmailOutboxTemplateSummary }) {
+  return (
+    <li
+      key={item.template}
+      className="rounded-sm bg-surface-soft p-2"
+      data-testid={`admin-etl-email-template-${item.template}`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-mono text-xs">{item.template}</span>
+        <span className="text-xs text-muted">{percentLabel(item.failure_rate)}</span>
+      </div>
+      <div className="mt-1 text-xs text-muted">
+        total {formatMetric(item.total)} / failed {formatMetric(item.failure_count)}
+      </div>
+    </li>
+  );
+}
+
 function ErrorBox({ message }: { message: string }) {
   return (
     <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
@@ -94,6 +117,7 @@ export default function AdminEtlPage() {
 
   const summary = summaryQuery.data ?? null;
   const importJobs = jobsQuery.data?.items ?? [];
+  const emailOutbox = summary?.pinvi.email_outbox ?? null;
 
   const summaryError = summaryQuery.isError
     ? summaryQuery.error instanceof ApiError
@@ -253,6 +277,43 @@ export default function AdminEtlPage() {
               </ul>
             </div>
           </div>
+          {emailOutbox ? (
+            <div
+              className="mt-4 rounded-sm border border-hairline p-3"
+              data-testid="admin-etl-email-outbox"
+            >
+              <h3 className="mb-3 text-xs font-semibold uppercase text-muted">Email outbox</h3>
+              <div className="grid gap-3 text-sm sm:grid-cols-4">
+                <div>
+                  <div className="text-xs text-muted">due</div>
+                  <div className="font-semibold">{formatMetric(emailOutbox.pending_due)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">backoff</div>
+                  <div className="font-semibold">{formatMetric(emailOutbox.pending_backoff)}</div>
+                </div>
+                <div data-testid="admin-etl-email-stuck">
+                  <div className="text-xs text-muted">stuck</div>
+                  <div className="font-semibold">{formatMetric(emailOutbox.stuck_pending)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">retry exhausted</div>
+                  <div className="font-semibold">{formatMetric(emailOutbox.retry_exhausted)}</div>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-muted">
+                threshold {emailOutbox.stuck_threshold_minutes}m / max attempts{' '}
+                {emailOutbox.max_attempts} / {emailOutbox.template_window_hours}h templates
+              </div>
+              {emailOutbox.template_stats.length ? (
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {emailOutbox.template_stats.map((item) => (
+                    <EmailTemplateStat key={item.template} item={item} />
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           <div className="mt-4">
             <h3 className="mb-2 text-xs font-semibold uppercase text-muted">Schedules</h3>
             <ul className="space-y-2 text-sm">
@@ -272,7 +333,9 @@ export default function AdminEtlPage() {
           <div className="grid gap-3 text-sm sm:grid-cols-3">
             <div data-testid="admin-etl-kmap-dagster-status">
               <div className="text-xs text-muted">Dagster</div>
-              <div className="font-semibold">{statusLabel(summary?.kor_travel_map.dagster_status)}</div>
+              <div className="font-semibold">
+                {statusLabel(summary?.kor_travel_map.dagster_status)}
+              </div>
               <div className="text-xs text-muted">
                 {statusLabel(summary?.kor_travel_map.status)}
               </div>

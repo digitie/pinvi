@@ -203,6 +203,38 @@ export const AdminEtlDefinitionSensorSchema = z.object({
 });
 export type AdminEtlDefinitionSensor = z.infer<typeof AdminEtlDefinitionSensorSchema>;
 
+export const AdminEmailOutboxTemplateSummarySchema = z.object({
+  template: z.string(),
+  total: z.number().int().default(0),
+  pending: z.number().int().default(0),
+  sent: z.number().int().default(0),
+  delivered: z.number().int().default(0),
+  failed: z.number().int().default(0),
+  bounced: z.number().int().default(0),
+  complained: z.number().int().default(0),
+  failure_count: z.number().int().default(0),
+  failure_rate: z.number().default(0),
+});
+export type AdminEmailOutboxTemplateSummary = z.infer<typeof AdminEmailOutboxTemplateSummarySchema>;
+
+export const AdminEmailOutboxSummarySchema = z.object({
+  total: z.number().int().default(0),
+  pending_total: z.number().int().default(0),
+  pending_due: z.number().int().default(0),
+  pending_backoff: z.number().int().default(0),
+  stuck_pending: z.number().int().default(0),
+  failed: z.number().int().default(0),
+  bounced: z.number().int().default(0),
+  complained: z.number().int().default(0),
+  retry_exhausted: z.number().int().default(0),
+  oldest_pending_scheduled_at: Iso8601Schema.nullable().default(null),
+  stuck_threshold_minutes: z.number().int(),
+  max_attempts: z.number().int(),
+  template_window_hours: z.number().int(),
+  template_stats: z.array(AdminEmailOutboxTemplateSummarySchema).default([]),
+});
+export type AdminEmailOutboxSummary = z.infer<typeof AdminEmailOutboxSummarySchema>;
+
 export const AdminPinviEtlSummarySchema = z.object({
   status: AdminSystemStatusSchema,
   message: z.string().nullable().default(null),
@@ -211,6 +243,7 @@ export const AdminPinviEtlSummarySchema = z.object({
   jobs: z.array(AdminEtlDefinitionJobSchema).default([]),
   schedules: z.array(AdminEtlDefinitionScheduleSchema).default([]),
   sensors: z.array(AdminEtlDefinitionSensorSchema).default([]),
+  email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
 });
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 

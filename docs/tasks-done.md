@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-239 — `pinvi_email_outbox` Dagster job.
+      `pinvi_email_outbox` asset/job/schedule을 추가해 15분마다 `app.email_queue`의 pending
+      due/backoff/stuck, failed/bounced/complained, retry exhausted, template별 실패율을 PII 없이
+      집계한다. `/admin/etl/summary`와 Web `/admin/etl`은 같은 bounded email outbox summary를
+      노출한다. 실제 발송 source of truth는 FastAPI lifespan worker로 유지하고,
+      deliverability/suppression 집행은 T-257/T-277로 남겼다.
+
 - [x] T-238 — Pinvi app-owned ETL 표준 / ADR.
       ADR-050으로 Pinvi `apps/etl` app-owned Dagster job 표준을 고정했다. 신규 job은
       `app` schema 소유 범위, import-time side effect 금지, KST schedule, retry/backoff,

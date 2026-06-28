@@ -24,22 +24,24 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 > 없으므로 kor-travel-map으로 이관할 레거시 스켈레톤도 없다. 아래는 현재 구현과
 > 계획(미구현)을 구분한 것이며, 상세 트리는 [`docs/runbooks/etl.md`](../runbooks/etl.md) §2.
 
-현재 구현(2026-06-06):
+현재 구현(2026-06-28):
 
 ```
 apps/etl/
 ├── pyproject.toml
 ├── pinvi/etl/
-│   ├── definitions.py     # code location (assets=[pinvi_kasi_special_days], jobs, schedules, sensors=[])
+│   ├── definitions.py     # code location (KASI + email assets, jobs, schedules, sensors=[])
 │   ├── resources.py       # PinviDatabaseResource, KasiResource
-│   ├── schedules.py       # kasi_special_days_job (KST 03:30)
+│   ├── schedules.py       # kasi_special_days_job + pinvi_email_outbox_job
 │   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
-│   └── assets/pinvi_kasi_special_days.py
+│   └── assets/
+│       ├── pinvi_kasi_special_days.py
+│       └── pinvi_email_outbox.py
 └── tests/
 ```
 
 계획(미구현, `app` schema 소유 job 후보): `sensors.py`(run_failure_sensor),
-`pinvi_telegram_weekly`(D-11) / `pinvi_email_outbox` / `pinvi_pii_retention` /
+`pinvi_telegram_weekly`(D-11) / `pinvi_pii_retention` /
 `pinvi_location_log_archive`(DEC-10). POI 출몰시각은 별도 asset 파일이 아니라
 `jobs.py`의 one-shot job(`kasi_poi_rise_set_job`)으로 구현돼 있다.
 
@@ -62,6 +64,15 @@ apps/etl/
 - 날짜/좌표가 있으면 `pending_fetch` → `success` / `failed`로 전이한다.
 - 날짜/좌표가 없으면 `pending_date` / `pending_coord` 상태로 남긴다.
 
+### 3.3 `pinvi_email_outbox`
+
+- 15분마다 KST 실행.
+- `app.email_queue`의 pending due/backoff/stuck, failed, bounced, complained, retry exhausted를
+  집계한다.
+- template별 실패율은 최근 24시간 상위 10개 template만 metadata로 남긴다.
+- 이메일 주소, payload, provider raw 응답은 metadata/API 응답에 넣지 않는다.
+- 실제 발송은 FastAPI lifespan worker가 계속 담당한다.
+
 ## 4. Schedule
 
 ```python
@@ -72,9 +83,20 @@ kasi_special_days_job = define_asset_job(
     selection=["pinvi_kasi_special_days"],
 )
 
+pinvi_email_outbox_job = define_asset_job(
+    "pinvi_email_outbox_job",
+    selection=["pinvi_email_outbox"],
+)
+
 kasi_special_days_schedule = ScheduleDefinition(
     job=kasi_special_days_job,
     cron_schedule="30 3 * * *",
+    execution_timezone="Asia/Seoul",
+)
+
+pinvi_email_outbox_schedule = ScheduleDefinition(
+    job=pinvi_email_outbox_job,
+    cron_schedule="*/15 * * * *",
     execution_timezone="Asia/Seoul",
 )
 ```

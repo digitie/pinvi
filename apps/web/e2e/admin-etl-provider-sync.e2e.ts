@@ -70,6 +70,12 @@ const etlSummary = {
         description: 'POI별 일출·일몰 보강을 1회 실행합니다.',
         asset_keys: [],
       },
+      {
+        name: 'pinvi_email_outbox_job',
+        trigger: 'schedule',
+        description: '15분마다 email_queue 상태와 template별 실패율을 점검합니다.',
+        asset_keys: ['pinvi_email_outbox'],
+      },
     ],
     schedules: [
       {
@@ -79,8 +85,56 @@ const etlSummary = {
         execution_timezone: 'Asia/Seoul',
         status: 'configured',
       },
+      {
+        name: 'pinvi_email_outbox_schedule',
+        job_name: 'pinvi_email_outbox_job',
+        cron_schedule: '*/15 * * * *',
+        execution_timezone: 'Asia/Seoul',
+        status: 'configured',
+      },
     ],
     sensors: [],
+    email_outbox: {
+      total: 4,
+      pending_total: 2,
+      pending_due: 1,
+      pending_backoff: 1,
+      stuck_pending: 1,
+      failed: 1,
+      bounced: 1,
+      complained: 0,
+      retry_exhausted: 1,
+      oldest_pending_scheduled_at: '2026-06-12T00:00:00+09:00',
+      stuck_threshold_minutes: 15,
+      max_attempts: 5,
+      template_window_hours: 24,
+      template_stats: [
+        {
+          template: 'verify_email',
+          total: 3,
+          pending: 2,
+          sent: 0,
+          delivered: 0,
+          failed: 1,
+          bounced: 0,
+          complained: 0,
+          failure_count: 1,
+          failure_rate: 0.3333,
+        },
+        {
+          template: 'trip_invite',
+          total: 1,
+          pending: 0,
+          sent: 0,
+          delivered: 0,
+          failed: 0,
+          bounced: 1,
+          complained: 0,
+          failure_count: 1,
+          failure_rate: 1,
+        },
+      ],
+    },
   },
   kor_travel_map: {
     status: 'ok',
@@ -160,6 +214,10 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-pinvi-status')).toContainText('정상');
   await expect(page.getByTestId('admin-etl-job-kasi_special_days_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
+  await expect(page.getByTestId('admin-etl-email-stuck')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-email-template-verify_email')).toContainText('33.3%');
   await expect(page.getByTestId('admin-etl-kmap-dagster-status')).toContainText('정상');
   await expect(page.getByTestId('admin-etl-import-row-job-1')).toBeVisible();
 
