@@ -390,6 +390,12 @@ export const AdminPinviEtlSummarySchema = z.object({
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;
 
 const AdminJsonObjectSchema = z.record(z.string(), z.unknown());
+const AdminProviderLinkSchema = z.object({
+  rel: z.string(),
+  href: z.string(),
+  label: z.string().nullable().default(null),
+});
+const AdminProviderLinksSchema = z.union([AdminJsonObjectSchema, z.array(AdminProviderLinkSchema)]);
 
 export const AdminProviderImportJobRecordSchema = z.object({
   job_id: z.string(),
@@ -407,7 +413,7 @@ export const AdminProviderImportJobRecordSchema = z.object({
   load_batch_id: z.string().nullable().default(null),
   parent_job_id: z.string().nullable().default(null),
   source_checksum: z.string().nullable().default(null),
-  links: AdminJsonObjectSchema.default({}),
+  links: AdminProviderLinksSchema.default([]),
 });
 export type AdminProviderImportJobRecord = z.infer<typeof AdminProviderImportJobRecordSchema>;
 
@@ -418,6 +424,14 @@ export const AdminProviderImportJobsResponseSchema = z.object({
 });
 export type AdminProviderImportJobsResponse = z.infer<typeof AdminProviderImportJobsResponseSchema>;
 
+export const AdminProviderImportJobCancelRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+  kor_travel_map_reason: z.string().min(1).max(500).optional(),
+});
+export type AdminProviderImportJobCancelRequest = z.infer<
+  typeof AdminProviderImportJobCancelRequestSchema
+>;
+
 export const AdminProviderDatasetSummarySchema = z.object({
   provider: z.string(),
   dataset_key: z.string(),
@@ -427,7 +441,7 @@ export const AdminProviderDatasetSummarySchema = z.object({
   last_failure_at: Iso8601Schema.nullable().default(null),
   consecutive_failures: z.number().int().default(0),
   next_run_after: Iso8601Schema.nullable().default(null),
-  links: AdminJsonObjectSchema.default({}),
+  links: AdminProviderLinksSchema.default([]),
   refresh_policy: AdminJsonObjectSchema.nullable().default(null),
 });
 export type AdminProviderDatasetSummary = z.infer<typeof AdminProviderDatasetSummarySchema>;

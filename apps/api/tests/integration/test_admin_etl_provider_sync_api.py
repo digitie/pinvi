@@ -8,9 +8,10 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
 from app.api.v1.admin import etl as etl_router
-from app.clients.kor_travel_map import KorTravelMapUnavailable
+from app.clients.kor_travel_map import KorTravelMapConflict, KorTravelMapUnavailable
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
 from app.models.audit import AdminAuditLog, LocationAuditOutbox
@@ -322,10 +323,12 @@ def _import_job() -> dict[str, Any]:
 
 
 class _FakeOpsClient:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, cancel_conflict: bool = False) -> None:
         self.fail = fail
+        self.cancel_conflict = cancel_conflict
         self.provider_key: str | None = None
         self.import_kwargs: dict[str, Any] | None = None
+        self.cancel_args: tuple[str, dict[str, Any]] | None = None
 
     async def get_ops_dagster_summary(self, *, page_size: int = 10) -> dict[str, Any]:
         if self.fail:
@@ -396,6 +399,29 @@ class _FakeOpsClient:
             "data": {"items": [_import_job()]},
             "meta": {"page": {"next_cursor": "cursor-2"}},
         }
+
+    async def cancel_ops_import_job(
+        self,
+        job_id: str,
+        *,
+        reason: str | None = None,
+        operator: str | None = None,
+    ) -> dict[str, Any]:
+        if self.cancel_conflict:
+            raise KorTravelMapConflict("already terminal", code="INVALID_STATE")
+        self.cancel_args = (job_id, {"reason": reason, "operator": operator})
+        job = _import_job()
+        job["status"] = "cancelled"
+        job["error_message"] = reason
+        job["finished_at"] = "2026-06-12T00:03:00+09:00"
+        job["links"] = [
+            {
+                "rel": "self",
+                "href": f"/v1/ops/import-jobs/{job_id}",
+                "label": "import job",
+            }
+        ]
+        return job
 
 
 def _override(fake: Any) -> None:
@@ -658,6 +684,108 @@ async def test_admin_provider_import_jobs_proxies_filters_and_cursor(
     }
     assert data["items"][0]["job_id"] == "11111111-1111-4111-8111-111111111111"
     assert data["next_cursor"] == "cursor-2"
+
+
+async def test_admin_provider_import_job_cancel_proxies_and_writes_audit(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-provider-cancel@example.com", roles=["user", "admin"]
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/provider-sync/import-jobs/11111111-1111-4111-8111-111111111111/cancel",
+            json={
+                "access_reason": "운영자가 중복 실행을 확인함",
+                "kor_travel_map_reason": "duplicate run",
+            },
+            headers={"X-Request-Id": str(request_id)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["status"] == "cancelled"
+    assert isinstance(data["links"], list)
+    assert fake.cancel_args == (
+        "11111111-1111-4111-8111-111111111111",
+        {"reason": "duplicate run", "operator": "pinvi-admin"},
+    )
+
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert audit is not None
+    assert audit.actor_user_id == admin_id
+    assert audit.action == "provider_import_job.cancel"
+    assert audit.resource_type == "provider_import_job"
+    assert audit.resource_id == "11111111-1111-4111-8111-111111111111"
+    assert audit.access_reason == "운영자가 중복 실행을 확인함"
+    assert audit.after_state == {
+        "status": "cancelled",
+        "kind": "provider_import",
+        "load_batch_id": None,
+        "parent_job_id": None,
+        "provider": "kma",
+        "dataset_key": None,
+    }
+
+
+async def test_admin_provider_import_job_cancel_conflict_does_not_write_audit(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-provider-cancel-conflict@example.com", roles=["user", "admin"]
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeOpsClient(cancel_conflict=True)
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/provider-sync/import-jobs/11111111-1111-4111-8111-111111111111/cancel",
+            json={"access_reason": "이미 끝난 job 취소 확인"},
+            headers={"X-Request-Id": str(request_id)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 409, resp.text
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+    assert audit is None
+
+
+async def test_operator_cannot_cancel_provider_import_job(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    operator_id = await _create_user(
+        session_factory, email="operator-provider-cancel@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/provider-sync/import-jobs/11111111-1111-4111-8111-111111111111/cancel",
+            json={"access_reason": "권한 검증"},
+            cookies=auth_cookies(str(operator_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 404
+    assert fake.cancel_args is None
 
 
 async def test_non_admin_provider_sync_route_is_hidden(

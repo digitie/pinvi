@@ -374,6 +374,23 @@ class KorTravelMapAdminClient:
             params["cursor"] = cursor
         return self._payload(await self._send("GET", "/v1/ops/import-jobs", params=params))
 
+    async def cancel_ops_import_job(
+        self,
+        job_id: str,
+        *,
+        reason: str | None = None,
+        operator: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /v1/ops/import-jobs/{job_id}/cancel — import job cancel data 반환."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        if operator is not None:
+            body["operator"] = operator
+        return self._data(
+            await self._send("POST", f"/v1/ops/import-jobs/{job_id}/cancel", json=body)
+        )
+
     async def list_dedup_reviews(
         self,
         *,

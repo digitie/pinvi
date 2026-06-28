@@ -1457,7 +1457,7 @@ Query:
         "last_failure_at": null,
         "consecutive_failures": 0,
         "next_run_after": "2026-06-13T03:30:00+09:00",
-        "links": {},
+        "links": [],
         "refresh_policy": { "enabled": true },
       },
     ],
@@ -1500,7 +1500,7 @@ Query:
       "started_at": "2026-06-12T00:01:00+09:00",
       "heartbeat_at": "2026-06-12T00:02:00+09:00",
       "finished_at": null,
-      "links": {},
+      "links": [],
     },
   ],
   "page_size": 50,
@@ -1508,9 +1508,28 @@ Query:
 }
 ```
 
-run-now/cancel/pause/resume/reset cursor mutation은 아직 노출하지 않는다. 추가 시에는
-`access_reason`, Pinvi audit, upstream kill-switch 확인, idempotency key 또는 중복 실행 방지
-기준을 먼저 확정한다.
+### 13.4.1 `POST /admin/provider-sync/import-jobs/{job_id}/cancel`
+
+upstream: `kor-travel-map` `POST /v1/ops/import-jobs/{job_id}/cancel`.
+
+권한: `admin` 전용. `operator`는 조회만 가능하다.
+
+요청 body:
+
+| 이름                    | 설명                                           |
+| ----------------------- | ---------------------------------------------- |
+| `access_reason`         | Pinvi `admin_audit_log`에 남기는 운영 사유     |
+| `kor_travel_map_reason` | upstream cancel reason. 없으면 `access_reason` |
+
+응답 `data`는 취소 후 upstream import job record다. Pinvi는 성공한 cancel만
+`provider_import_job.cancel` audit으로 기록하고, upstream 404/409/503은 각각
+`RESOURCE_NOT_FOUND` / upstream code 또는 `INVALID_STATE` / `FEATURE_SERVICE_UNAVAILABLE`로
+전달한다.
+
+provider run-now/pause/resume/reset cursor mutation은 아직 노출하지 않는다. 2026-06-28 기준
+upstream `kor-travel-map` OpenAPI에는 import job cancel과 feature-update-request `run-now`만 있고,
+provider 자체 pause/resume 계약은 없다. Pinvi-owned override mutation은 별도 ADR 또는 upstream
+계약 전까지 추가하지 않는다.
 
 ### 13.5 `GET /admin/integrity/issues`
 

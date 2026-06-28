@@ -479,6 +479,9 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
 }) => {
   const seenProviderUrls: string[] = [];
   const seenJobUrls: string[] = [];
+  const seenCancelBodies: unknown[] = [];
+  let cancelFailed = false;
+  let cancelSucceeded = false;
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/provider-sync',
     async (route) => {
@@ -498,13 +501,46 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
     (url) => url.port === '12801' && url.pathname === '/admin/provider-sync/import-jobs',
     async (route) => {
       seenJobUrls.push(route.request().url());
+      const item = cancelSucceeded ? { ...importJob, status: 'cancelled' } : importJob;
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
-            items: [importJob],
+            items: [item],
             page_size: 50,
             next_cursor: null,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.port === '12801' && url.pathname === '/admin/provider-sync/import-jobs/job-1/cancel',
+    async (route) => {
+      seenCancelBodies.push(route.request().postDataJSON());
+      if (!cancelFailed) {
+        cancelFailed = true;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'INVALID_STATE',
+              message: 'kor_travel_map import job cancel 상태 전이가 허용되지 않습니다.',
+            },
+          }),
+        });
+        return;
+      }
+      cancelSucceeded = true;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            ...importJob,
+            status: 'cancelled',
+            error_message: 'duplicate run',
           },
         }),
       });
@@ -525,4 +561,29 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   const jobUrl = new URL(seenJobUrls[seenJobUrls.length - 1]!);
   expect(providerUrl.searchParams.get('key')).toBe('kma');
   expect(jobUrl.searchParams.get('status')).toBe('failed');
+
+  await page.getByTestId('admin-provider-sync-job-status').selectOption('running');
+  await page.getByTestId('admin-provider-job-cancel-job-1').click();
+  await expect(page.getByTestId('admin-provider-job-cancel-panel')).toBeVisible();
+  await page.getByTestId('admin-provider-job-cancel-reason').fill('운영자가 중복 실행을 확인함');
+  await page.getByTestId('admin-provider-job-cancel-map-reason').fill('duplicate run');
+  await page.getByTestId('admin-provider-job-cancel-submit').click();
+  await expect(page.getByTestId('admin-provider-sync-error')).toContainText('상태 전이');
+  await expect(page.getByTestId('admin-provider-job-row-job-1')).toContainText('실행 중');
+
+  await page.getByTestId('admin-provider-job-cancel-submit').click();
+  await expect(page.getByTestId('admin-provider-sync-mutation-notice')).toContainText(
+    '취소 요청을 반영했습니다.',
+  );
+  await expect(page.getByTestId('admin-provider-job-row-job-1')).toContainText('취소');
+  expect(seenCancelBodies).toEqual([
+    {
+      access_reason: '운영자가 중복 실행을 확인함',
+      kor_travel_map_reason: 'duplicate run',
+    },
+    {
+      access_reason: '운영자가 중복 실행을 확인함',
+      kor_travel_map_reason: 'duplicate run',
+    },
+  ]);
 });

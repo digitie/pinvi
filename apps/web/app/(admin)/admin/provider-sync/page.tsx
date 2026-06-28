@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
   ApiError,
@@ -11,7 +11,7 @@ import {
   type AdminProviderSyncListParams,
 } from '@pinvi/api-client';
 import type { AdminProviderDatasetSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
-import { RefreshCw, Search } from 'lucide-react';
+import { Ban, RefreshCw, Search, X } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -55,6 +55,10 @@ function progressLabel(value: number | null | undefined) {
   return `${Math.round(normalized)}%`;
 }
 
+function canCancelJob(item: AdminProviderImportJobRecord) {
+  return item.status === 'queued' || item.status === 'running';
+}
+
 function ErrorBox({ message }: { message: string }) {
   return (
     <p
@@ -68,10 +72,16 @@ function ErrorBox({ message }: { message: string }) {
 }
 
 export default function AdminProviderSyncPage() {
+  const queryClient = useQueryClient();
   const [keyInput, setKeyInput] = useState('');
   const [submittedKey, setSubmittedKey] = useState('');
   const [jobStatus, setJobStatus] =
     useState<(typeof IMPORT_JOB_STATUS_OPTIONS)[number]['value']>('running');
+  const [cancelJobId, setCancelJobId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelMapReason, setCancelMapReason] = useState('');
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [mutationNotice, setMutationNotice] = useState<string | null>(null);
 
   const providerParams = useMemo<AdminProviderSyncListParams>(
     () => ({
@@ -101,6 +111,7 @@ export default function AdminProviderSyncPage() {
 
   const providers = providersQuery.data?.items ?? [];
   const importJobs = jobsQuery.data?.items ?? [];
+  const cancelJob = importJobs.find((item) => item.job_id === cancelJobId) ?? null;
 
   const providerError = providersQuery.isError
     ? providersQuery.error instanceof ApiError
@@ -112,6 +123,33 @@ export default function AdminProviderSyncPage() {
       ? jobsQuery.error.message
       : 'import job 조회에 실패했습니다.'
     : null;
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ item }: { item: AdminProviderImportJobRecord }) =>
+      adminApi(apiClient).cancelProviderImportJob(item.job_id, {
+        access_reason: cancelReason.trim(),
+        kor_travel_map_reason: cancelMapReason.trim() || undefined,
+      }),
+    onMutate: () => {
+      setMutationError(null);
+      setMutationNotice(null);
+    },
+    onError: (error) => {
+      setMutationError(
+        error instanceof ApiError ? error.message : 'import job 취소 요청에 실패했습니다.',
+      );
+    },
+    onSuccess: (job) => {
+      setMutationNotice(`${job.job_id} 취소 요청을 반영했습니다.`);
+      setCancelJobId(null);
+      setCancelReason('');
+      setCancelMapReason('');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.providerImportJobsAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.providerSyncAll() });
+      void jobsQuery.refetch();
+      void providersQuery.refetch();
+    },
+  });
 
   const providerColumns: AdminTableColumn<AdminProviderDatasetSummary>[] = [
     {
@@ -206,11 +244,45 @@ export default function AdminProviderSyncPage() {
       sortValue: (item) => new Date(item.created_at).getTime(),
       cell: (item) => formatDateTime(item.created_at),
     },
+    {
+      key: 'actions',
+      header: '작업',
+      cell: (item) =>
+        canCancelJob(item) ? (
+          <button
+            type="button"
+            onClick={() => {
+              setCancelJobId(item.job_id);
+              setCancelReason('');
+              setCancelMapReason('');
+              setMutationError(null);
+              setMutationNotice(null);
+            }}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs"
+            data-testid={`admin-provider-job-cancel-${item.job_id}`}
+          >
+            <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+            취소
+          </button>
+        ) : (
+          '—'
+        ),
+    },
   ];
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmittedKey(keyInput.trim());
+  };
+
+  const submitCancel = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cancelJob) return;
+    if (!cancelReason.trim()) {
+      setMutationError('운영 사유를 입력하세요.');
+      return;
+    }
+    cancelMutation.mutate({ item: cancelJob });
   };
 
   return (
@@ -292,6 +364,15 @@ export default function AdminProviderSyncPage() {
       </section>
 
       {jobsError && <ErrorBox message={jobsError} />}
+      {mutationError && <ErrorBox message={mutationError} />}
+      {mutationNotice && (
+        <p
+          className="rounded-sm bg-surface-soft p-3 text-sm text-body"
+          data-testid="admin-provider-sync-mutation-notice"
+        >
+          {mutationNotice}
+        </p>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Import jobs</h2>
@@ -304,6 +385,70 @@ export default function AdminProviderSyncPage() {
           empty="조회된 import job이 없습니다."
         />
       </section>
+
+      {cancelJob && (
+        <section
+          className="space-y-3 rounded-sm border border-hairline bg-white p-4 text-sm"
+          data-testid="admin-provider-job-cancel-panel"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Import job 취소</h2>
+              <p className="break-all font-mono text-xs text-muted">{cancelJob.job_id}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCancelJobId(null)}
+              className="rounded-sm border border-hairline p-1 text-muted hover:text-ink"
+              aria-label="닫기"
+              data-testid="admin-provider-job-cancel-close"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <form className="space-y-3" onSubmit={submitCancel}>
+            <label className="block text-xs text-muted">
+              운영 사유 (Pinvi audit)
+              <textarea
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                rows={2}
+                data-testid="admin-provider-job-cancel-reason"
+              />
+            </label>
+            <label className="block text-xs text-muted">
+              kor_travel_map 전달 사유
+              <textarea
+                value={cancelMapReason}
+                onChange={(event) => setCancelMapReason(event.target.value)}
+                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                rows={2}
+                data-testid="admin-provider-job-cancel-map-reason"
+              />
+            </label>
+            <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
+              <button
+                type="button"
+                onClick={() => setCancelJobId(null)}
+                className="rounded-sm border border-hairline px-3 py-1 text-sm"
+                data-testid="admin-provider-job-cancel-abort"
+              >
+                닫기
+              </button>
+              <button
+                type="submit"
+                disabled={cancelMutation.isPending}
+                className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                data-testid="admin-provider-job-cancel-submit"
+              >
+                <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                취소 요청
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
     </AdminPage>
   );
 }

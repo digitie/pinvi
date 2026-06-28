@@ -55,6 +55,8 @@ import {
   AdminPoiLinkStatusRequestSchema,
   AdminPoiMoveRequestSchema,
   AdminPoiPagedResponseSchema,
+  AdminProviderImportJobCancelRequestSchema,
+  AdminProviderImportJobRecordSchema,
   AdminProviderImportJobsResponseSchema,
   AdminProviderSyncResponseSchema,
   AdminRequestTimelineResponseSchema,
@@ -120,6 +122,10 @@ export interface AdminProviderImportJobListParams {
   pageSize?: number;
   cursor?: string;
 }
+
+export type AdminProviderImportJobCancelBody = z.infer<
+  typeof AdminProviderImportJobCancelRequestSchema
+>;
 
 export interface AdminDedupReviewListParams {
   q?: string;
@@ -246,6 +252,13 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminProviderImportJobsResponseSchema,
     });
   },
+
+  cancelProviderImportJob: (jobId: string, body: AdminProviderImportJobCancelBody) =>
+    client.request(`/admin/provider-sync/import-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      schema: AdminProviderImportJobRecordSchema,
+    }),
 
   listDedupReviews: (params: AdminDedupReviewListParams = {}) => {
     const qs = new URLSearchParams();

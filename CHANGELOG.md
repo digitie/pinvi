@@ -29,6 +29,9 @@
 - Admin `/admin/etl`과 `/admin/provider-sync`를 실제 운영 조회 화면으로 교체했다. Pinvi Dagster
   asset/job/schedule registry와 `kor-travel-map` Dagster/metrics/provider/import job 상태를
   조회하고, provider/dataset key와 import job status 필터를 제공한다.
+- Admin `/admin/provider-sync`에서 실행 중/대기 중인 upstream import job을 취소할 수 있다.
+  취소는 `admin` 전용, 운영 사유 필수, Pinvi 감사 로그 기록 후 `kor-travel-map` cancel 계약으로
+  relay한다. provider run-now/pause/resume은 upstream provider mutation 계약 전까지 제공하지 않는다.
 - Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 실제 운영 조회 화면으로
   교체했다. `kor-travel-map` dedup 후보, consistency issue/report, sanitized system/API logs를
   검색/상태/severity/level 필터와 table/detail 패널로 확인할 수 있다.

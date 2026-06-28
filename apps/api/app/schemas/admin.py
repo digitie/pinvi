@@ -341,6 +341,15 @@ class AdminDagsterRunSummary(BaseModel):
     tags: dict[str, Any] = Field(default_factory=dict)
 
 
+class AdminProviderLink(BaseModel):
+    rel: str
+    href: str
+    label: str | None = None
+
+
+AdminProviderLinks = dict[str, Any] | list[AdminProviderLink]
+
+
 class AdminProviderImportJobRecord(BaseModel):
     job_id: str
     kind: str
@@ -357,13 +366,18 @@ class AdminProviderImportJobRecord(BaseModel):
     load_batch_id: str | None = None
     parent_job_id: str | None = None
     source_checksum: str | None = None
-    links: dict[str, Any] = Field(default_factory=dict)
+    links: AdminProviderLinks = Field(default_factory=list)
 
 
 class AdminProviderImportJobsResponse(BaseModel):
     items: list[AdminProviderImportJobRecord] = Field(default_factory=list)
     page_size: int
     next_cursor: str | None = None
+
+
+class AdminProviderImportJobCancelRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+    kor_travel_map_reason: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class AdminProviderDatasetSummary(BaseModel):
@@ -375,7 +389,7 @@ class AdminProviderDatasetSummary(BaseModel):
     last_failure_at: datetime | None = None
     consecutive_failures: int = 0
     next_run_after: datetime | None = None
-    links: dict[str, Any] = Field(default_factory=dict)
+    links: AdminProviderLinks = Field(default_factory=list)
     refresh_policy: dict[str, Any] | None = None
 
 
