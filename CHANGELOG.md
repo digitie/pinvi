@@ -6,9 +6,9 @@
 
 > `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
 > app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
-> 2026-06-28 T-259에서 N150 smoke와 backup snapshot은 통과했다. 남은 release 차단 항목은
-> 최신 main `api`/`web` CI, Admin live 2000/full credential, N150 Playwright system dependency,
-> restore staging drill이다.
+> 2026-06-28 T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence, N150
+> Playwright Docker runner smoke는 통과했다. 남은 release 차단 항목은 Admin live 2000/full
+> credential과 restore staging drill이다.
 
 ### 주요 기능
 
@@ -64,6 +64,9 @@
   evidence를 PII/host path 없이 출력한다. 신규 backup sidecar는 basename 기준으로 생성하고,
   restore는 checksum 값을 실제 dump hash와 비교해 staging 경로로 이동한 snapshot도 검증할 수
   있다.
+- N150 Playwright 검증용 Docker runner를 추가했다. `scripts/n150-playwright-runner.sh`는
+  lockfile의 Playwright 버전에 맞는 공식 image를 사용하고, N150 host에 Chromium system dependency를
+  직접 설치하지 않아도 live/mock e2e를 실행할 수 있게 한다.
 - Admin `/admin/backup` snapshot 목록에 검색/status filter와 visible count를 추가했다.
   production 기본 restore 버튼은 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이
   비활성화되며, backup read-only live e2e와 staging mutating snapshot e2e를 분리했다.

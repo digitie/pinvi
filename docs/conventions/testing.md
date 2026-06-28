@@ -5,15 +5,15 @@ SPEC V8 N-5 정리.
 
 ## 1. 매트릭스
 
-| 계층 | 범위 | 도구 | 위치 |
-|------|------|------|------|
-| 백엔드 단위 | 순수 함수 / 서비스 로직 / schema | `pytest` | `apps/api/tests/unit/` |
-| 백엔드 통합 | 라우터 + DB + 외부 HTTP 계약 | `pytest` + `httpx.AsyncClient(app=...)` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` |
-| 백엔드 e2e | API 시나리오 | `pytest` + 실제 stack | `apps/api/tests/e2e/` |
-| 프론트 단위 | 컴포넌트 / hook / utility | Vitest + Testing Library | `apps/web/tests/unit/` |
-| 프론트 E2E | 사용자 흐름 | Playwright | `apps/web/tests/e2e/` |
-| ETL asset | Dagster materialize | `materialize_to_memory` + fixture | `apps/etl/tests/` |
-| 정합성 게이트 | OpenAPI drift / import-linter / coverage | CI workflow | `.github/workflows/` |
+| 계층          | 범위                                     | 도구                                                                                     | 위치                          |
+| ------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
+| 백엔드 단위   | 순수 함수 / 서비스 로직 / schema         | `pytest`                                                                                 | `apps/api/tests/unit/`        |
+| 백엔드 통합   | 라우터 + DB + 외부 HTTP 계약             | `pytest` + `httpx.AsyncClient(app=...)` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` |
+| 백엔드 e2e    | API 시나리오                             | `pytest` + 실제 stack                                                                    | `apps/api/tests/e2e/`         |
+| 프론트 단위   | 컴포넌트 / hook / utility                | Vitest + Testing Library                                                                 | `apps/web/tests/unit/`        |
+| 프론트 E2E    | 사용자 흐름                              | Playwright                                                                               | `apps/web/tests/e2e/`         |
+| ETL asset     | Dagster materialize                      | `materialize_to_memory` + fixture                                                        | `apps/etl/tests/`             |
+| 정합성 게이트 | OpenAPI drift / import-linter / coverage | CI workflow                                                                              | `.github/workflows/`          |
 
 ## 2. 우선순위 (어느 테스트를 먼저)
 
@@ -27,10 +27,11 @@ SPEC V8 N-5 정리.
 
 ## 3. 실행 위치
 
-- 백엔드 / DB / geospatial / ETL / Alembic 검증은 WSL2 ext4 테스트 미러에서 실행
-  (ADR-024). NTFS worktree에서 직접 `pytest`/Docker를 돌리지 않는다.
-- git/commit/push는 NTFS worktree에서 Windows `git.exe`로만 수행한다.
-- 예: `wsl.exe -e bash -lc "cd ~/pinvi-workspaces/pinvi-codex && pytest apps/api/tests -q"`
+- 백엔드 / DB / geospatial / ETL / Alembic 검증은 Linux worktree에서 실행한다(ADR-051).
+- git / commit / push / PR도 같은 Linux worktree에서 Linux `git`으로 수행한다.
+- Playwright는 N150에서 먼저 실행하고, N150 Docker runner 또는 host browser 실행이 불가능할
+  때만 Windows fallback을 사용한다.
+- 예: `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && pytest apps/api/tests -q"`
 
 ## 4. 백엔드 단위 테스트
 
@@ -238,16 +239,16 @@ async def test_resend_delivered_webhook(client, db_session):
 
 ## 9. 정합성 게이트 (CI)
 
-| 게이트 | 워크플로 | 실패 정책 |
-|--------|----------|-----------|
-| pytest unit | `.github/workflows/api.yml` | blocker |
-| pytest integration | `.github/workflows/api.yml` | blocker (PostGIS) |
-| ruff + mypy + import-linter | `.github/workflows/api.yml` | blocker |
-| npm lint typecheck build | `.github/workflows/web.yml` | blocker |
-| Playwright smoke | `.github/workflows/web.yml` | blocker (3분 budget) |
-| OpenAPI drift | `.github/workflows/openapi.yml` | blocker |
-| Coverage 단계적 | `.github/workflows/api.yml` | Sprint별 상향 |
-| Dagster asset sanity | `.github/workflows/etl.yml` | blocker |
+| 게이트                      | 워크플로                        | 실패 정책            |
+| --------------------------- | ------------------------------- | -------------------- |
+| pytest unit                 | `.github/workflows/api.yml`     | blocker              |
+| pytest integration          | `.github/workflows/api.yml`     | blocker (PostGIS)    |
+| ruff + mypy + import-linter | `.github/workflows/api.yml`     | blocker              |
+| npm lint typecheck build    | `.github/workflows/web.yml`     | blocker              |
+| Playwright smoke            | `.github/workflows/web.yml`     | blocker (3분 budget) |
+| OpenAPI drift               | `.github/workflows/openapi.yml` | blocker              |
+| Coverage 단계적             | `.github/workflows/api.yml`     | Sprint별 상향        |
+| Dagster asset sanity        | `.github/workflows/etl.yml`     | blocker              |
 
 ## 10. 시나리오 / 데이터
 

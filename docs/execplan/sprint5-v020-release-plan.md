@@ -450,8 +450,8 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 ### T-256 — Review gap crosswalk / legal-ops preflight — 완료
 
 - 완료: `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가했다.
-- 완료: PR #238/#264 legal/ops 리뷰 gap 44개를 G-001~G-044로 번호화하고,
-  T-257/T-258/T-275~T-286 등 하나 이상의 대응 Task로 매핑했다.
+- 완료: PR #238/#264 legal/ops 리뷰 gap 44개를 G-001~~G-044로 번호화하고,
+  T-257/T-258/T-275~~T-286 등 하나 이상의 대응 Task로 매핑했다.
 - 완료: 최근 2일 PR #265~#289의 사람 리뷰 코멘트를 확인하고, 사후 리뷰에서 나온
   WebSocket/conflict/ETL/integrity 후속을 T-289~T-292로 분리했다.
 - 완료: `docs/tasks.md`, Sprint 5/6 문서, `docs/resume.md`, `docs/journal.md`가 같은
@@ -461,7 +461,7 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 - 문서 diff check.
 - 민감정보 패턴 스캔.
-- G-001~G-044와 R-001~R-009가 하나 이상의 대응 Task를 가진다.
+- G-001~~G-044와 R-001~~R-009가 하나 이상의 대응 Task를 가진다.
 
 ### T-257 — Email deliverability / provider tracking preflight (완료)
 
@@ -509,9 +509,9 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
   Dagster `/server_info`, `kor-travel-map` `/health`/OpenAPI가 모두 200을 반환했다.
 - 완료: `postgis/postgis:16-3.5` 일회성 컨테이너로 app schema backup snapshot 1회를 만들고
   `.sha256` 및 `pg_restore --list`를 확인했다.
-- 차단: 최신 main SHA에는 PR monitor check만 있고 `api`/`web` main push CI check가 없다.
-- 차단: N150 Playwright Chromium은 `libatk-1.0.so.0` 누락으로 launch 실패했다. Windows fallback은
-  N150 Web SSH tunnel 대상 login validation 1건만 통과했다.
+- 완료: 최신 main API CI와 WSL ext4 clean Web lint/typecheck/build evidence를 확보했다.
+- 완료: N150 host Chromium은 shared library 누락으로 실패했지만
+  `scripts/n150-playwright-runner.sh` Docker runner smoke가 malformed login validation 1건을 통과했다.
 - 차단: Admin live 2000/full gate는 N150 local env에 admin live credential이 없어 실행하지 못했다.
 - 차단: restore staging drill은 staging DB URL/환경이 없어 실행하지 못했다.
 - 보류: `CHANGELOG.md` release 전환, `v0.2.0` tag, GitHub Release 생성.

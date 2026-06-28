@@ -13,9 +13,9 @@ v1 `skills/coding-style.ko.md` 정리 + 본 저장소 컨텍스트.
   경계에만
 - 모든 datetime은 timezone-aware (UTC 저장 + KST 응용 변환)
 - 모든 좌표는 EPSG:4326, `(longitude, latitude)` 순서 (`docs/conventions/geospatial.md`)
-- git/commit/push는 NTFS worktree에서 Windows `git.exe`로 실행하고, 테스트·Docker·
-  의존성 설치는 WSL ext4 테스트 미러에서 실행한다 (`docs/runbooks/local-dev.md`,
-  ADR-024)
+- git/commit/push는 Linux worktree에서 Linux `git`으로 실행하고, 테스트·Docker·의존성 설치도
+  Linux에서 수행한다. Playwright는 N150 우선, 불가 시 Windows fallback이다
+  (`docs/runbooks/local-dev.md`, ADR-051)
 
 ## 2. Python (FastAPI / Pydantic v2 / SQLAlchemy 2)
 
@@ -284,7 +284,7 @@ async function TripsPage() {
 }
 
 // Client Component — TanStack Query
-'use client';
+('use client');
 import { useTripsList } from '@pinvi/api-client';
 
 export function TripsDashboard() {
@@ -300,12 +300,12 @@ export function TripsDashboard() {
 
 ```tsx
 // 나쁜 예
-<button>로그인</button>
+<button>로그인</button>;
 
 // 좋은 예
 import { useTranslations } from 'next-intl';
 const t = useTranslations('Auth');
-<button>{t('login')}</button>
+<button>{t('login')}</button>;
 ```
 
 ## 4. 주석 / 문서화
@@ -325,18 +325,18 @@ const t = useTranslations('Auth');
 
 ## 6. 자주 묻는 작업
 
-| 작업 | 시작 파일 |
-|------|----------|
-| 새 라우터 추가 | `apps/api/app/api/v1/<resource>.py` + schemas + services |
+| 작업           | 시작 파일                                                                      |
+| -------------- | ------------------------------------------------------------------------------ |
+| 새 라우터 추가 | `apps/api/app/api/v1/<resource>.py` + schemas + services                       |
 | 새 schema 추가 | `apps/api/app/schemas/<x>.py` (Pydantic) + `packages/schemas/src/<x>.ts` (Zod) |
-| 새 모델 추가 | `apps/api/app/models/<x>.py` + Alembic migration |
-| 새 service | `apps/api/app/services/<x>.py` |
-| 새 dependency | `apps/api/app/core/deps.py` |
-| 새 UI 컴포넌트 | `apps/web/components/<domain>/<X>.tsx` |
-| 새 페이지 | `apps/web/app/<route>/page.tsx` |
-| 새 hook | `packages/hooks/src/useX.ts` 또는 `apps/web/lib/hooks/useX.ts` |
-| 새 API 호출 | `packages/api-client/src/endpoints/<x>.ts` |
-| 새 store | `packages/state/src/<x>-store.ts` |
+| 새 모델 추가   | `apps/api/app/models/<x>.py` + Alembic migration                               |
+| 새 service     | `apps/api/app/services/<x>.py`                                                 |
+| 새 dependency  | `apps/api/app/core/deps.py`                                                    |
+| 새 UI 컴포넌트 | `apps/web/components/<domain>/<X>.tsx`                                         |
+| 새 페이지      | `apps/web/app/<route>/page.tsx`                                                |
+| 새 hook        | `packages/hooks/src/useX.ts` 또는 `apps/web/lib/hooks/useX.ts`                 |
+| 새 API 호출    | `packages/api-client/src/endpoints/<x>.ts`                                     |
+| 새 store       | `packages/state/src/<x>-store.ts`                                              |
 
 ## 7. AI agent 작업 체크리스트
 
