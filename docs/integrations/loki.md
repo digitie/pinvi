@@ -34,7 +34,7 @@ services:
       resources:
         limits: { memory: 384M }
     ports:
-      - "12205:3000"    # observability 대역(Grafana)
+      - '12205:3000' # observability 대역(Grafana)
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PW}
     volumes:
@@ -150,16 +150,16 @@ JSON 출력 예시:
 
 ## 4. Sentry vs Loki
 
-| 용도 | Sentry | Loki |
-|------|--------|------|
-| 에러/예외 | ✓ | ✗ |
-| 성능 추적 | ✓ Transactions | ✗ |
-| INFO 로그 | ✗ (event 한도) | ✓ |
-| DB query 로그 | ✗ | ✓ slow query |
-| 외부 API 호출 | △ 실패만 | ✓ 전체 |
-| 사용자 행동 추적 | △ Breadcrumbs | ✓ 시계열 |
-| ETL 진행 | ✗ | ✓ Dagster stream |
-| 알림 | ✓ 즉시 | ✗ (Grafana alerting v2) |
+| 용도             | Sentry         | Loki                    |
+| ---------------- | -------------- | ----------------------- |
+| 에러/예외        | ✓              | ✗                       |
+| 성능 추적        | ✓ Transactions | ✗                       |
+| INFO 로그        | ✗ (event 한도) | ✓                       |
+| DB query 로그    | ✗              | ✓ slow query            |
+| 외부 API 호출    | △ 실패만       | ✓ 전체                  |
+| 사용자 행동 추적 | △ Breadcrumbs  | ✓ 시계열                |
+| ETL 진행         | ✗              | ✓ Dagster stream        |
+| 알림             | ✓ 즉시         | ✗ (Grafana alerting v2) |
 
 ## 5. Grafana 대시보드 (핵심 패널)
 
@@ -172,7 +172,13 @@ JSON 출력 예시:
 
 ## 6. Admin 페이지 연계 (`/admin/debug/logs`)
 
-`docs/api/admin.md` §10. WebSocket으로 Loki LogQL stream:
+2026-06-28 T-245 기준 v0.2.0은 N150 운영 부담을 줄이기 위해 Loki/Promtail LogQL WebSocket을
+필수 구성으로 올리지 않는다. Admin debug live mode는
+`GET /admin/debug/logs/stream/status`의 `mode="polling"` 계약과 기존 sanitized system/API log
+endpoint 재조회로 닫는다. 아래 LogQL stream은 Loki retention/용량 정책이 확정된 뒤의 후속 운영
+선택이다.
+
+`docs/api/admin.md` §14. WebSocket으로 Loki LogQL stream:
 
 ```
 LogQL 예시:
@@ -190,12 +196,13 @@ LogQL 예시:
 
 ## 8. AI agent 구현 체크리스트
 
-- [ ] `infra/docker-compose.yml`에 loki / promtail / grafana 추가 (Sprint 5)
+- [ ] `infra/docker-compose.yml`에 loki / promtail / grafana 추가 (후속 운영 선택)
 - [ ] `infra/loki/local-config.yaml`, `infra/promtail/config.yml`, `infra/grafana/`
 - [ ] `apps/api/app/core/logging.py` structlog 설정
 - [ ] `apps/api/app/middleware/request_id.py` (request_id 미들웨어)
 - [ ] `apps/api/app/middleware/api_call_logging.py` (httpx 외부 호출 로그)
-- [ ] `/admin/debug/logs` WebSocket LogQL stream
+- [x] `/admin/debug/logs` sanitized polling fallback (T-245)
+- [ ] `/admin/debug/logs` WebSocket LogQL stream (후속 운영 선택)
 - [ ] PostgreSQL slow query log 활성화 (`postgresql.conf`)
 - [ ] Grafana 대시보드 5종 import
 - [ ] 위치 access log는 별도 (CPO 권한)

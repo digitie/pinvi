@@ -45,10 +45,11 @@
   - `/admin/features/{id}/sources` / `/overrides` / `/weather-values` (M-15)
   - `/admin/provider-sync` 재시도/일시정지/재개
   - `/admin/integrity` `app.data_integrity_violations` 1차 소스
-  - `/admin/debug/logs` Loki LogQL WebSocket stream
+  - `/admin/debug/logs` sanitized polling fallback live mode (T-245 완료; Loki LogQL WebSocket은
+    운영 선택 계층)
   - `/admin/debug/request/{id}` X-Request-Id 타임라인 (T-244 완료)
   - Prometheus + cAdvisor + Grafana 컨테이너 활성
-  - Loki + Promtail 로그 수집은 후속 또는 운영 선택 계층
+  - Loki + Promtail 로그 수집은 후속 또는 운영 선택 계층 (T-245에서 v0.2.0 fallback 결정)
   - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,
     `docs/runbooks/grafana-admin-embed.md`)
   - **`scripts/backup-db.sh` + `scripts/restore-db.sh`** — pg_dump --custom +
@@ -79,7 +80,8 @@
   fallback, selected/broken/cluster 상태 parity.
 - Pinvi `app` schema 소유 ETL 추가 job(location archive, telegram weekly/daily summary).
   `email_outbox` 점검 job은 T-239, PII retention dry-run job은 T-240으로 완료.
-- Loki/Promtail 또는 대체 로그 stream과 request timeline.
+- Loki/Promtail 또는 대체 로그 stream과 request timeline. Request timeline은 T-244 완료,
+  Admin debug live mode는 T-245에서 sanitized polling fallback으로 완료.
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
 - 리뷰 반영 legal/ops preflight: incident/DSR/retention execution/email suppression/RBAC/user lifecycle/
   abuse 운영 표면을 Sprint 6 Task로 고정.
@@ -192,7 +194,7 @@
 - [ ] WebSocket 동시 편집 5명 시뮬레이션 통과
 - [ ] Dagster app-owned asset/job 첫 적재 통과
 - [ ] Prometheus scrape target UP + API p95/request dashboard 확인
-- [ ] Loki LogQL stream Admin에서 확인(후속/선택)
+- [x] Admin debug log polling fallback live mode 확인(T-245). Loki LogQL stream은 후속/선택.
 - [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
 - [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
 - [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**

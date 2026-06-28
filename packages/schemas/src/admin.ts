@@ -727,6 +727,17 @@ export type AdminUpstreamApiCallLogsResponse = z.infer<
   typeof AdminUpstreamApiCallLogsResponseSchema
 >;
 
+export const AdminDebugLogStreamStatusSchema = z.object({
+  mode: z.literal('polling'),
+  status: z.literal('ok'),
+  poll_interval_ms: z.number().int(),
+  sources: z.array(z.string()).default([]),
+  loki_enabled: z.boolean().default(false),
+  sse_enabled: z.boolean().default(false),
+  message: z.string(),
+});
+export type AdminDebugLogStreamStatus = z.infer<typeof AdminDebugLogStreamStatusSchema>;
+
 export const AdminRequestTimelineSourceSchema = z.object({
   source: z.string(),
   status: z.enum(['ok', 'degraded']),

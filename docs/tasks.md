@@ -22,9 +22,9 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-245 Loki/Promtail 또는 대체 log stream.
-- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-244 진입 전
-  PR #277의 reminder comment와 CI success를 확인하고 merge했다. 신규 차단 코멘트는 없다.
+- 다음 구현: T-246 Debug live UI e2e 확장.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-245 진입 전
+  PR #278의 reminder comment와 CI success를 확인하고 merge했다. 신규 차단 코멘트는 없다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
@@ -41,9 +41,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-245 — Loki/Promtail 또는 대체 log stream.
-      N150 용량을 고려해 Loki stream 또는 sanitized polling/SSE 대체안을 선택하고 Admin stream UI를
-      구현한다.
 - [ ] T-246 — Debug live UI e2e 확장.
       `/admin/debug/logs`와 request timeline read-only live e2e, masking assertion을 추가한다.
 - [ ] T-247 — Provider sync 운영 mutation 계약 정리.

@@ -12,7 +12,7 @@ import {
   type AdminUpstreamApiCallLogListParams,
 } from '@pinvi/api-client';
 import type { AdminUpstreamApiCallLogRecord, AdminUpstreamSystemLogRecord } from '@pinvi/schemas';
-import { RefreshCw, Search } from 'lucide-react';
+import { Pause, Play, Radio, RefreshCw, Search } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -55,6 +55,8 @@ export default function AdminDebugLogsPage() {
   const [path, setPath] = useState('');
   const [timelineRequestId, setTimelineRequestId] = useState('');
   const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [liveEnabled, setLiveEnabled] = useState(false);
+  const [livePaused, setLivePaused] = useState(false);
 
   const systemParams = useMemo<AdminSystemLogListParams>(
     () => ({
@@ -75,15 +77,24 @@ export default function AdminDebugLogsPage() {
     [method, minStatus, path],
   );
 
+  const streamStatusQuery = useQuery({
+    queryKey: queryKeys.admin.debugLogStreamStatus(),
+    queryFn: () => adminApi(apiClient).getDebugLogStreamStatus(),
+  });
+  const pollIntervalMs = streamStatusQuery.data?.poll_interval_ms ?? 5000;
+  const liveRefetchInterval = liveEnabled && !livePaused ? pollIntervalMs : false;
+
   const systemLogsQuery = useQuery({
     queryKey: queryKeys.admin.upstreamSystemLogs(systemParams),
     queryFn: () => adminApi(apiClient).listUpstreamSystemLogs(systemParams),
     placeholderData: keepPreviousData,
+    refetchInterval: liveRefetchInterval,
   });
   const apiLogsQuery = useQuery({
     queryKey: queryKeys.admin.upstreamApiCallLogs(apiParams),
     queryFn: () => adminApi(apiClient).listUpstreamApiCallLogs(apiParams),
     placeholderData: keepPreviousData,
+    refetchInterval: liveRefetchInterval,
   });
 
   const systemError = systemLogsQuery.isError
@@ -213,6 +224,24 @@ export default function AdminDebugLogsPage() {
     setTimelineError(null);
     router.push(`/admin/debug/request/${encodeURIComponent(nextRequestId)}`);
   };
+  const onLiveToggle = () => {
+    const nextEnabled = !liveEnabled;
+    setLiveEnabled(nextEnabled);
+    setLivePaused(false);
+    if (nextEnabled) {
+      void systemLogsQuery.refetch();
+      void apiLogsQuery.refetch();
+    }
+  };
+  const onPauseToggle = () => {
+    const nextPaused = !livePaused;
+    setLivePaused(nextPaused);
+    if (liveEnabled && livePaused) {
+      void systemLogsQuery.refetch();
+      void apiLogsQuery.refetch();
+    }
+  };
+  const liveState = liveEnabled ? (livePaused ? 'paused' : 'live') : 'off';
 
   return (
     <AdminPage
@@ -261,6 +290,43 @@ export default function AdminDebugLogsPage() {
       </FilterBar>
 
       {timelineError && <ErrorBox message={timelineError} />}
+
+      <FilterBar>
+        <div
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm"
+          data-testid="admin-debug-live-status"
+        >
+          <Radio className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+          <span className="font-mono">{streamStatusQuery.data?.mode ?? 'polling'}</span>
+          <span className="rounded-sm border border-hairline px-2 py-0.5 font-mono text-xs">
+            {liveState}
+          </span>
+          <span className="font-mono text-xs text-muted">{pollIntervalMs / 1000}s</span>
+        </div>
+        <button
+          type="button"
+          onClick={onLiveToggle}
+          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm"
+          data-testid="admin-debug-live-toggle"
+        >
+          <Radio className="h-3.5 w-3.5" aria-hidden="true" />
+          {liveEnabled ? 'Live 끄기' : 'Live 켜기'}
+        </button>
+        <button
+          type="button"
+          onClick={onPauseToggle}
+          disabled={!liveEnabled}
+          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm disabled:opacity-50"
+          data-testid="admin-debug-live-pause"
+        >
+          {livePaused ? (
+            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          {livePaused ? '재개' : '일시정지'}
+        </button>
+      </FilterBar>
 
       <FilterBar>
         <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
