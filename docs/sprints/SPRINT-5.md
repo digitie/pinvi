@@ -81,7 +81,8 @@
 - Pinvi `app` schema 소유 ETL 추가 job(location archive, telegram weekly/daily summary).
   `email_outbox` 점검 job은 T-239, PII retention dry-run job은 T-240으로 완료.
 - Loki/Promtail 또는 대체 로그 stream과 request timeline. Request timeline은 T-244 완료,
-  Admin debug live mode는 T-245에서 sanitized polling fallback으로 완료.
+  Admin debug live mode는 T-245에서 sanitized polling fallback으로 완료했고, T-246에서 debug live
+  read-only e2e를 N150/Windows fallback으로 검증했다.
 - Backup/restore 1차 스크립트/endpoint의 스테이징 복구 훈련.
 - 리뷰 반영 legal/ops preflight: incident/DSR/retention execution/email suppression/RBAC/user lifecycle/
   abuse 운영 표면을 Sprint 6 Task로 고정.

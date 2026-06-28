@@ -97,6 +97,24 @@ async def test_admin_proxy_headers_are_sent_when_configured() -> None:
     await client.aclose()
 
 
+async def test_request_id_header_is_sent_from_per_request_wrapper() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["request_id"] = request.headers.get("X-Request-Id", "")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _client(handler)
+    scoped = client.with_request_id("00000000-0000-4000-8000-000000000123")
+    await scoped.list_system_logs(page_size=10)
+    assert seen == {
+        "request_id": "00000000-0000-4000-8000-000000000123",
+        "token": "svc-tok",
+    }
+    await client.aclose()
+
+
 async def test_list_features_uses_admin_read_path_filters_and_returns_payload() -> None:
     seen: dict[str, Any] = {}
 

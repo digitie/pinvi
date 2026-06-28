@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-246 — Debug live UI e2e 확장.
+      `apps/web/e2e/admin-debug-live.live.ts`를 추가해 `/admin/debug/logs` route render,
+      sanitized polling fallback status, filter query 유지, live toggle/pause, request timeline 이동,
+      raw secret pattern 미노출을 read-only로 검증한다. Pinvi admin client는 현재 `X-Request-Id`를
+      `kor-travel-map` admin/ops 호출에 전달하며, debug live test는 UI credential 대신
+      `PINVI_ADMIN_LIVE_STORAGE_STATE`도 지원한다. N150에서는 API/Web 재빌드·health 확인 후
+      Playwright Chromium이 Ubuntu 26.04 미지원으로 실패했고, Windows fallback runner에서 N150
+      Web/API 대상 live test 1건이 통과했다.
+
 - [x] T-245 — Loki/Promtail 또는 대체 log stream.
       v0.2.0에서는 Loki/Promtail LogQL WebSocket을 필수 운영 구성으로 올리지 않고,
       `kor-travel-map` sanitized system/API logs polling fallback을 선택했다.

@@ -1637,6 +1637,10 @@ Pinvi `X-Request-Id` UUID 중심 timeline을 반환한다. `kor-travel-map` syst
 같은 request id로 필터한 보조 event source로만 붙이며, Pinvi timeline의 source of truth로
 섞지 않는다.
 
+Pinvi admin client는 현재 요청의 `X-Request-Id`를 `kor-travel-map` admin/ops HTTP 호출에도
+전달한다. 따라서 `/admin/debug/logs`에서 발생한 read-only upstream 조회도 같은 request id로
+`/admin/debug/request/{request_id}`에서 추적할 수 있다.
+
 권한: `admin` / `operator`
 
 응답 200:

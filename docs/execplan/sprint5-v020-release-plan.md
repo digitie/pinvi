@@ -256,14 +256,20 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-246 — Debug live UI e2e 확장
 
-- `apps/web/e2e/admin-debug-live.live.ts`를 분리한다.
-- live read-only: `/admin/debug/logs`, `/admin/debug/request/{id}`, masking, filter/pagination,
-  stream fallback.
+상태: 완료(2026-06-28, codex).
+
+- 완료: `apps/web/e2e/admin-debug-live.live.ts`를 분리했다.
+- 완료: live read-only 범위는 `/admin/debug/logs`, `/admin/debug/request/{id}`, masking,
+  filter query, polling fallback이다.
+- 완료: Pinvi admin client가 현재 `X-Request-Id`를 `kor-travel-map` admin/ops 호출에 전달한다.
+- 완료: test는 UI credential 또는 `PINVI_ADMIN_LIVE_STORAGE_STATE`를 사용할 수 있다.
 - mutating 없음. 운영 rate limit을 고려해 worker 1, throttle 기본 2100ms를 유지한다.
 
 검증 케이스:
 
-- N150 Playwright(불가 시 Windows runner): route render, filter, request id search, no raw secret pattern.
+- 완료: N150 checkout에서 API/Web 재빌드·health 확인.
+- 완료: N150 Playwright는 Ubuntu 26.04 Chromium 미지원으로 실패했고, Windows fallback runner에서
+  N150 Web/API 대상 route render, filter, request id search, no raw secret pattern 1건이 통과했다.
 - failure artifact: screenshot/video/trace는 로컬에만 두고 커밋하지 않는다.
 
 ### T-247 — Provider sync 운영 mutation 계약 정리
