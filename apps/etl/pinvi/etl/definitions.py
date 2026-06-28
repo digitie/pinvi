@@ -14,6 +14,7 @@ from pinvi.etl.assets import (
 from pinvi.etl.jobs import kasi_poi_rise_set_job
 from pinvi.etl.resources import KasiResource, PinviDatabaseResource
 from pinvi.etl.schedules import schedules
+from pinvi.etl.sensors import pinvi_run_failure_sensor
 
 defs = Definitions(
     assets=[
@@ -25,7 +26,7 @@ defs = Definitions(
     ],
     jobs=[kasi_poi_rise_set_job],
     schedules=schedules,
-    sensors=[],
+    sensors=[pinvi_run_failure_sensor],
     resources={
         "db": PinviDatabaseResource(
             dsn=EnvVar("PINVI_DATABASE_URL"),
