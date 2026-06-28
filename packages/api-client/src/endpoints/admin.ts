@@ -44,6 +44,7 @@ import {
   AdminSeedScenarioListResponseSchema,
   AdminSeedScenarioRunRequestSchema,
   AdminConsistencyReportsResponseSchema,
+  AdminDebugLogStreamStatusSchema,
   AdminIntegrityIssueActionRequestSchema,
   AdminIntegrityIssueActionResponseSchema,
   AdminPagedResponseSchema,
@@ -375,6 +376,12 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminUpstreamApiCallLogsResponseSchema,
     });
   },
+
+  getDebugLogStreamStatus: () =>
+    client.request('/admin/debug/logs/stream/status', {
+      method: 'GET',
+      schema: AdminDebugLogStreamStatusSchema,
+    }),
 
   getRequestTimeline: (requestId: string) =>
     client.request(`/admin/debug/request/${encodeURIComponent(requestId)}`, {

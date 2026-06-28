@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-245 — Loki/Promtail 또는 대체 log stream.
+      v0.2.0에서는 Loki/Promtail LogQL WebSocket을 필수 운영 구성으로 올리지 않고,
+      `kor-travel-map` sanitized system/API logs polling fallback을 선택했다.
+      `GET /admin/debug/logs/stream/status`는 `mode="polling"`, 5초 polling interval,
+      source 목록, `loki_enabled=false`, `sse_enabled=false`를 반환한다.
+      Web `/admin/debug/logs`에는 live toggle과 pause/resume을 추가했고, live 상태에서는 기존
+      sanitized system/API endpoint를 같은 filter로 재조회한다. N150 live read-only 검증은 T-246에서
+      request timeline masking 검증과 함께 수행한다.
+
 - [x] T-244 — Request timeline API.
       `GET /admin/debug/request/{request_id}`를 추가해 Pinvi request id 중심 timeline을 반환한다.
       API call log, admin audit log, location access log/outbox, `payload.request_id`가 있는

@@ -638,6 +638,16 @@ class AdminUpstreamApiCallLogsResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class AdminDebugLogStreamStatus(BaseModel):
+    mode: Literal["polling"]
+    status: Literal["ok"]
+    poll_interval_ms: int
+    sources: list[str] = Field(default_factory=list)
+    loki_enabled: bool = False
+    sse_enabled: bool = False
+    message: str
+
+
 AdminRequestTimelineStatus = Literal["ok", "partial"]
 
 

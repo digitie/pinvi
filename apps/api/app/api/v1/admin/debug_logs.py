@@ -12,6 +12,7 @@ from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.admin import (
+    AdminDebugLogStreamStatus,
     AdminUpstreamApiCallLogRecord,
     AdminUpstreamApiCallLogsResponse,
     AdminUpstreamSystemLogRecord,
@@ -20,6 +21,24 @@ from app.schemas.admin import (
 from app.schemas.envelope import Envelope
 
 router = APIRouter(prefix="/admin/debug/logs", tags=["admin"])
+
+
+@router.get("/stream/status", response_model=Envelope[AdminDebugLogStreamStatus])
+async def get_debug_log_stream_status(
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+) -> Envelope[AdminDebugLogStreamStatus]:
+    """v0.2.0 debug log live mode. Loki는 운영 선택 계층으로 두고 sanitized polling을 사용한다."""
+    return Envelope.of(
+        AdminDebugLogStreamStatus(
+            mode="polling",
+            status="ok",
+            poll_interval_ms=5000,
+            sources=["kor_travel_map_system_logs", "kor_travel_map_api_call_logs"],
+            loki_enabled=False,
+            sse_enabled=False,
+            message="sanitized polling fallback",
+        )
+    )
 
 
 @router.get("/system", response_model=Envelope[AdminUpstreamSystemLogsResponse])

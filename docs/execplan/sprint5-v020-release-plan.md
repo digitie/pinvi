@@ -236,19 +236,23 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-245 — Loki/Promtail 또는 대체 log stream
 
-- 운영 선택지 A: Loki/Promtail compose + LogQL proxy/stream.
-- 운영 선택지 B: 현재 sanitized API/system logs polling + server-sent stream.
-- Sprint 5에서 실제 인프라 부담과 N150 디스크 여유를 보고 하나를 선택한다.
-- `/admin/debug/logs`에 live stream toggle, pause/resume, level/source filter를 추가한다.
-- raw log, Authorization, cookie, 운영 도메인/IP, secret value는 API와 UI 양쪽에서 마스킹한다.
-- T-220의 upstream debug log table은 대체/삭제 대상이 아니라 read-only upstream view다. 본 Task는
-  Pinvi 런타임 로그 stream을 추가하거나, 운영 비용 때문에 polling fallback으로 명시한다.
+- 완료: 운영 선택지 B를 선택했다. v0.2.0에서는 Loki/Promtail compose + LogQL proxy/stream을
+  필수 운영 구성으로 올리지 않고, 현재 `kor-travel-map` sanitized system/API logs polling fallback을
+  Admin live mode로 명시한다.
+- 완료: `GET /admin/debug/logs/stream/status`가 `mode="polling"`, `poll_interval_ms=5000`,
+  source 목록, `loki_enabled=false`, `sse_enabled=false`를 반환한다.
+- 완료: `/admin/debug/logs`에 live toggle, pause/resume, level/source/query/API filter 유지 상태를
+  추가했다. live 상태에서는 기존 sanitized endpoint를 interval로 재조회한다.
+- 완료: raw stdout/stderr, Authorization, cookie, 운영 도메인/IP, secret value는 새 API가 노출하지
+  않는다. log row 자체는 기존 upstream sanitized 계약만 소비한다.
+- 완료: T-220의 upstream debug log table은 대체/삭제하지 않고 read-only upstream view로 유지한다.
 
 검증 케이스:
 
-- API integration: LogQL success, Loki down graceful degrade, sanitization.
-- Web e2e mock: stream open, new row append, pause, resume, filter 유지.
-- N150 live read-only: stream 또는 polling fallback으로 최근 log render.
+- 완료: API integration: polling fallback status contract.
+- 완료: Web e2e mock: live on polling refetch, pause count 유지, resume refetch, filter 유지.
+- 미실행: N150 live read-only는 T-246에서 `/admin/debug/logs`와 request timeline masking 검증으로
+  수행한다.
 
 ### T-246 — Debug live UI e2e 확장
 

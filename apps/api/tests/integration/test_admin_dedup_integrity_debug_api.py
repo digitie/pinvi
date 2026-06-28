@@ -441,11 +441,25 @@ async def test_admin_debug_logs_routes_proxy_system_and_api_logs(
             },
             cookies=auth_cookies(str(admin_id)),
         )
+        live_status = await client.get(
+            "/admin/debug/logs/stream/status",
+            cookies=auth_cookies(str(admin_id)),
+        )
     finally:
         _clear()
 
     assert system_logs.status_code == 200, system_logs.text
     assert api_logs.status_code == 200, api_logs.text
+    assert live_status.status_code == 200, live_status.text
+    assert live_status.json()["data"] == {
+        "mode": "polling",
+        "status": "ok",
+        "poll_interval_ms": 5000,
+        "sources": ["kor_travel_map_system_logs", "kor_travel_map_api_call_logs"],
+        "loki_enabled": False,
+        "sse_enabled": False,
+        "message": "sanitized polling fallback",
+    }
     assert system_logs.json()["data"]["items"][0]["log_id"] == "log-1"
     assert api_logs.json()["data"]["items"][0]["status_code"] == 503
     assert fake.system_log_kwargs is not None

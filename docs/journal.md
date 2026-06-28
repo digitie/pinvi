@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-245 Debug log polling fallback
+
+**작업**: Loki/Promtail LogQL WebSocket 대신 v0.2.0 Admin debug live mode를 sanitized polling
+fallback으로 확정하고 구현했다.
+
+**변경**:
+
+- `GET /admin/debug/logs/stream/status`를 추가했다. 응답은 `mode="polling"`,
+  `poll_interval_ms=5000`, `loki_enabled=false`, `sse_enabled=false`, source 목록을 반환한다.
+- Web `/admin/debug/logs`에 live toggle과 pause/resume을 추가했다. live 상태에서는 기존
+  sanitized system/API logs endpoint를 현재 filter 그대로 interval 재조회한다.
+- `@pinvi/schemas`, `@pinvi/api-client`, Admin API 문서와 Sprint/task/resume 추적 문서를 갱신했다.
+- Loki/Promtail 실제 도입은 운영 용량과 retention 정책이 확정된 뒤 별도 선택 계층으로 남겼다.
+
+**검증**:
+
+- Linux: `codegraph sync`
+- Linux: `uv run --extra dev ruff check ...` (API targeted)
+- Linux: `uv run --extra dev ruff format --check ...` (API targeted)
+- Linux: `PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_dedup_integrity_debug_api.py -rA`
+- Linux: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npx prettier --check ...`
+
+**주의**:
+
+- Playwright는 N150-first 기준에 따라 로컬 Linux에서 실행하지 않았다. T-246에서 N150 read-only
+  `/admin/debug/logs`/`/admin/debug/request/{request_id}`와 masking assertion을 실행한다.
+
+**다음**: T-246 Debug live UI e2e 확장.
+
 ## 2026-06-28 (codex) — T-244 Request timeline API
 
 **작업**: Pinvi request id 중심 Admin timeline API와 Web timeline 화면을 구현했다.

@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-245 Debug log polling fallback
+
+v0.2.0 Admin debug live mode는 Loki/Promtail LogQL WebSocket 대신 sanitized polling fallback으로
+닫았다. `GET /admin/debug/logs/stream/status`가 `mode="polling"`, `poll_interval_ms=5000`,
+`sources=["kor_travel_map_system_logs", "kor_travel_map_api_call_logs"]`, `loki_enabled=false`,
+`sse_enabled=false`를 반환한다.
+
+Web `/admin/debug/logs`는 live toggle과 pause/resume을 제공한다. live 상태에서는 기존
+`/admin/debug/logs/system`과 `/admin/debug/logs/api-calls`를 현재 filter 그대로 interval 재조회하고,
+pause는 interval만 멈춘다. raw stdout/stderr, 운영 도메인/IP, secret value를 새로 노출하지 않는다.
+
+N150 live read-only / Playwright는 T-246에서 `/admin/debug/logs`, request timeline, masking assertion과
+함께 수행한다.
+
+다음 작업은 T-246 Debug live UI e2e 확장이다.
+
 ## 2026-06-28 (codex) — T-244 Request timeline API
 
 `GET /admin/debug/request/{request_id}`가 Pinvi request id 중심 timeline을 반환한다. 로컬 source는

@@ -93,6 +93,16 @@ const apiCallLog = {
   created_at: '2026-06-12T00:02:01+09:00',
 };
 
+const debugLogStreamStatus = {
+  mode: 'polling',
+  status: 'ok',
+  poll_interval_ms: 500,
+  sources: ['kor_travel_map_system_logs', 'kor_travel_map_api_call_logs'],
+  loki_enabled: false,
+  sse_enabled: false,
+  message: 'sanitized polling fallback',
+};
+
 const timelineRequestId = '11111111-2222-4333-8444-555555555555';
 
 const requestTimeline = {
@@ -307,6 +317,15 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
   const seenSystemUrls: string[] = [];
   const seenApiUrls: string[] = [];
   await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/debug/logs/stream/status',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: debugLogStreamStatus }),
+      });
+    },
+  );
+  await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/debug/logs/system',
     async (route) => {
       seenSystemUrls.push(route.request().url());
@@ -352,6 +371,8 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
   await expect(page.getByRole('heading', { name: 'Debug logs' })).toBeVisible();
   await expect(page.getByTestId('admin-debug-system-row-sys-1')).toBeVisible();
   await expect(page.getByTestId('admin-debug-api-row-api-1')).toBeVisible();
+  await expect(page.getByTestId('admin-debug-live-status')).toContainText('polling');
+  await expect(page.getByTestId('admin-debug-live-status')).toContainText('off');
 
   await page.getByTestId('admin-debug-level').selectOption('critical');
   await page.getByTestId('admin-debug-source').fill('worker');
@@ -371,6 +392,26 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
   expect(apiUrl.searchParams.get('method')).toBe('POST');
   expect(apiUrl.searchParams.get('min_status')).toBe('500');
   expect(apiUrl.searchParams.get('path')).toBe('/v1/features');
+
+  const systemCountBeforeLive = seenSystemUrls.length;
+  await page.getByTestId('admin-debug-live-toggle').click();
+  await expect(page.getByTestId('admin-debug-live-status')).toContainText('live');
+  await expect
+    .poll(() => seenSystemUrls.length, { timeout: 3000 })
+    .toBeGreaterThan(systemCountBeforeLive);
+
+  await page.getByTestId('admin-debug-live-pause').click();
+  await expect(page.getByTestId('admin-debug-live-status')).toContainText('paused');
+  await page.waitForTimeout(100);
+  const pausedSystemCount = seenSystemUrls.length;
+  await page.waitForTimeout(900);
+  expect(seenSystemUrls.length).toBe(pausedSystemCount);
+
+  await page.getByTestId('admin-debug-live-pause').click();
+  await expect(page.getByTestId('admin-debug-live-status')).toContainText('live');
+  await expect
+    .poll(() => seenSystemUrls.length, { timeout: 3000 })
+    .toBeGreaterThan(pausedSystemCount);
 
   await page.getByTestId('admin-debug-request-id').fill(timelineRequestId);
   await page.getByTestId('admin-debug-request-submit').click();

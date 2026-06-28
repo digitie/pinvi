@@ -102,6 +102,7 @@ export const queryKeys = {
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'upstream-api-call-logs', params] as const,
+    debugLogStreamStatus: () => ['admin', 'debug-log-stream-status'] as const,
     requestTimeline: (requestId: string) => ['admin', 'request-timeline', requestId] as const,
     users: (params: { page?: number; status?: string; q?: string }) =>
       ['admin', 'users', params] as const,

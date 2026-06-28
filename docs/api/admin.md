@@ -1599,7 +1599,39 @@ Query:
 응답 `data.items[]`는 `log_id`, `method`, `path`, `status_code`, `duration_ms`,
 `request_id`, `error_code`, `created_at`을 포함한다.
 
-### 14.3 `GET /admin/debug/request/{request_id}`
+### 14.3 `GET /admin/debug/logs/stream/status`
+
+v0.2.0 Admin debug live mode를 반환한다. Sprint 5에서는 Loki/Promtail을 필수 운영 구성으로
+올리지 않고, N150 부담을 줄이기 위해 기존 `kor-travel-map` sanitized system/API log endpoint를
+짧은 interval로 polling하는 fallback을 선택한다. raw stdout/stderr stream이나 LogQL endpoint는
+노출하지 않는다.
+
+권한: `admin` / `operator`
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "mode": "polling",
+    "status": "ok",
+    "poll_interval_ms": 5000,
+    "sources": ["kor_travel_map_system_logs", "kor_travel_map_api_call_logs"],
+    "loki_enabled": false,
+    "sse_enabled": false,
+    "message": "sanitized polling fallback",
+  },
+}
+```
+
+UI는 이 값을 기준으로 `/admin/debug/logs/system`과 `/admin/debug/logs/api-calls`를 재조회한다.
+Live toggle은 polling을 켜고, pause/resume은 polling interval만 멈추거나 재개한다. 필터(`level`,
+`source`, `q`, `method`, `min_status`, `path`, `request_id`)는 기존 endpoint query 그대로 유지한다.
+
+Loki/Promtail/LogQL WebSocket stream은 운영 용량과 retention 정책이 확정된 뒤 별도 PR에서
+추가한다.
+
+### 14.4 `GET /admin/debug/request/{request_id}`
 
 Pinvi `X-Request-Id` UUID 중심 timeline을 반환한다. `kor-travel-map` system/API logs는
 같은 request id로 필터한 보조 event source로만 붙이며, Pinvi timeline의 source of truth로
@@ -1659,7 +1691,8 @@ Pinvi `X-Request-Id` UUID 중심 timeline을 반환한다. `kor-travel-map` syst
 - upstream 보조 source 조회 실패는 HTTP 200 `data.status="partial"`과 source
   `status="degraded"`로 반환한다.
 
-Loki LogQL WebSocket stream은 T-245 범위로 남긴다.
+Loki LogQL WebSocket stream은 T-245에서 polling fallback으로 닫고, 실제 Loki 도입은 운영 선택
+계층으로 남긴다.
 
 ## 15. Backup / Restore
 
