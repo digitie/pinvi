@@ -70,6 +70,9 @@
   남기며 override mutation은 `admin_audit_log`에 기록된다.
 - Sprint 6 보안 threat model / penetration 1차 점검을 기록하고 credential context 분리, 공유 token
   수명주기, storage admin-only presign, incident RBAC 경계 회귀 테스트를 추가했다.
+- `v1.0.0` 출시 범위를 Web/API/Admin 운영 출시로 고정하고, 활성 Expo 모바일 앱(`apps/mobile`)은
+  Sprint M-1 또는 별도 모바일 release train의 gate로 분리했다. EAS build, 실기기 smoke,
+  store 제출, mobile live e2e는 `v1.0.0` release blocker가 아니다.
 - Admin `/admin/emails`에 Resend deliverability 상태판을 추가했다. API key configured/console mode,
   FROM domain/domain status, webhook signature/최근 event, queue health, active suppression,
   `users.email_status` count를 raw secret 없이 표시한다. Resend 발송은 REST client로 전환되어

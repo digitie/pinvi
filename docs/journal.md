@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-284 Mobile v1.0 scope gate
+
+**작업**: 활성 `apps/mobile` track을 `v1.0.0` Web/API/Admin release blocker에서 제외하는 scope gate를
+확정했다.
+
+**변경**:
+
+- `apps/mobile/README.md`에 T-284 scope gate를 추가했다. EAS build, 실기기 smoke, store 제출,
+  mobile live e2e는 모바일 release train에서 검증하고, `mobile-typecheck` CI gate는 유지한다.
+- `docs/architecture/frontend.md`와 `docs/architecture/expo-implementation-plan.md`의 mobile 상태
+  drift를 현재 활성 Sprint M-1 track으로 갱신했다.
+- ADR-024 WSL/NTFS 실행 문구를 ADR-051 Linux-only 기준으로 교체했다.
+- `docs/sprints/SPRINT-6.md`, `CHANGELOG.md`, `docs/tasks.md`, `docs/tasks-done.md`,
+  `docs/resume.md`를 T-284 완료 상태로 동기화했다.
+
+**검증**:
+
+- `git diff --check` 통과.
+- `npm --workspace @pinvi/mobile run typecheck` 통과.
+
+**다음**: PR·CI·머지 후 T-285 AI companion v1.0 scope gate 또는 T-292 App integrity pagination /
+producer follow-up으로 진입한다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을
+건드릴 때는 최신 main 기준으로 영향도를 다시 확인한다.
+
 ## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
 
 **작업**: Sprint 6 auth/session/MCP/share token/rate-limit/storage/Admin RBAC/incident 보안 경계

@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-284 Mobile v1.0 scope gate
+
+`apps/mobile`을 활성 Expo SDK 56 / Dev Client Sprint M-1 track으로 유지하되, `v1.0.0` Web/API/Admin
+운영 출시의 필수 release blocker에서는 제외하는 scope gate를 문서화했다. EAS build, 실기기 smoke,
+store 제출, mobile live e2e는 모바일 release train에서 검증하며, `apps/mobile/**` 또는 공용
+`packages/**` 변경 시 `mobile-typecheck` CI gate는 유지한다.
+
+정합성 drift도 함께 정리했다. `docs/architecture/frontend.md`의 비활성/후속 표현을 현재 활성
+상태와 T-284 scope로 갱신했고, `apps/mobile/README.md`와
+`docs/architecture/expo-implementation-plan.md`의 ADR-024 WSL/NTFS 문구를 ADR-051 Linux-only 기준으로
+교체했다. Sprint 6 release checklist는 mobile 제외 항목을 완료로 분리하고, user-facing AI companion
+제외 항목은 T-285로 남겼다.
+
+검증은 Linux에서 `git diff --check`와 `npm --workspace @pinvi/mobile run typecheck`를 통과했다.
+다음 작업은 PR·CI·머지 후 T-285 AI companion v1.0 scope gate 또는 T-292 App integrity pagination /
+producer follow-up이다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을 건드릴 때는
+최신 main 기준으로 영향도를 다시 확인한다.
+
 ## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
 
 Sprint 6 보안 threat model / penetration 1차 점검을 수행했다. 범위는 auth/session, MCP token,

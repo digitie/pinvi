@@ -6,6 +6,12 @@
 
 ## 2026-06-29
 
+- [x] T-284 — Mobile v1.0 scope gate.
+      `apps/mobile`을 활성 Expo SDK 56 / Dev Client Sprint M-1 track으로 유지하되, `v1.0.0`
+      Web/API/Admin 운영 출시의 필수 release blocker에서는 제외하는 scope gate를 문서화했다.
+      EAS build, 실기기 smoke, store 제출, mobile live e2e는 모바일 release train에서 검증하며,
+      `apps/mobile/**` 또는 공용 `packages/**` 변경 시 `mobile-typecheck` CI gate는 유지한다.
+
 - [x] T-280 — RBAC role grant/revoke / permission matrix.
       ADR-033의 DB-backed role 모델을 운영 가능한 Admin API/UI로 확장했다.
       `/admin/rbac/permission-matrix`는 role 설명과 endpoint 권한 matrix를 제공하고,

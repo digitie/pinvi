@@ -37,25 +37,17 @@
   재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
-- 병행 트랙 (claude, 2026-06-29) — codex가 T-283(보안 리뷰, PR #308)을 진행하는 동안 충돌이 적은
-  콜드존을 병행한다. 묶음 (1) T-289+T-290 WebSocket reconnect/conflict UX 후속(`apps/web` +
-  `packages/api-client`), (2) T-291 ETL failure sensor + compliance SQL 테스트(`apps/etl`),
-  (3) T-261~T-263 경로 최적화(OR-Tools) + 스마트 정렬 API/UI(신규 `optimize` 모듈). 세 묶음은 서로
-  및 codex admin-backend 핫존과 파일이 겹치지 않는다. 선정 근거/충돌 등급은 resume.md
-  2026-06-29 (claude) 병행 작업 리포트.
+- 병행 트랙 (claude, 2026-06-29) — T-289+T-290 WebSocket reconnect/conflict UX 후속은
+  PR #310으로 main에 머지됐다. 남은 병행 후보는 T-291 ETL failure sensor + compliance SQL 테스트
+  (`apps/etl`)와 T-261~T-263 경로 최적화(OR-Tools) + 스마트 정렬 API/UI(신규 `optimize` 모듈)다.
+  codex는 신규 task 시작 전 PR/브랜치와 본 섹션을 다시 확인한다.
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-284 Mobile v1.0 scope gate. T-259의 남은 full catalog와 `v0.2.0`
-  tag/Release는 최종 release gate로 분리해 유지한다.
-- Codex T-284 진입 계획:
-  1. PR #308 머지 후 `origin/main` 기준 새 브랜치를 만들고, 다른 에이전트가 `tasks.md`에 남긴
-     진행 중 task/파일 범위를 먼저 확인한다.
-  2. `apps/mobile`을 v1.0 Web/API/Admin 출시 필수 범위에서 제외하고 Sprint M-1 track으로 분리하는
-     scope gate를 문서화한다. 예상 변경 범위는 `docs/tasks.md`, `docs/resume.md`,
-     `docs/journal.md`, `docs/sprints/SPRINT-6.md`, 필요 시 mobile 관련 architecture/runbook 문서다.
-  3. 코드 변경이 필요하다고 판단되면 착수 전 CodeGraph 영향도 확인과 `tasks.md` 계획 갱신을 먼저
-     수행한다. docs-only면 markdown 정합성, 링크/상태 문서, PR CI를 검증한다.
+- 다음 구현: T-285 AI companion v1.0 scope gate 또는 T-292 App integrity pagination / producer
+  follow-up. T-259의 남은 full catalog와 `v0.2.0` tag/Release는 최종 release gate로 분리해 유지한다.
+  T-289/T-290은 PR #310으로 머지됐으므로 같은 영역을 건드릴 때는 최신 main 기준으로 다시
+  CodeGraph 영향도를 확인한다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
@@ -83,10 +75,10 @@
 
 ## 최근 PR 리뷰 후속
 
-- [ ] T-289 — WebSocket reconnect / invalidation follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
+- [x] T-289 — WebSocket reconnect / invalidation follow-up. (완료: 2026-06-29, PR #310, claude)
       PR #265 사후 리뷰의 `4401` refresh tight loop, retry jitter, 수동 재연결 UX,
       TanStack Query invalidation 실제 배선 gap을 닫는다. T-290과 한 PR로 묶는다.
-- [ ] T-290 — Trip conflict UX follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
+- [x] T-290 — Trip conflict UX follow-up. (완료: 2026-06-29, PR #310, claude)
       PR #266 사후 리뷰의 Trip conflict field whitelist drift, 409 envelope current row,
       `ConflictDialog` Esc/focus 접근성 gap을 닫는다. Day rename/delete 409는 T-287로 유지한다.
 - [ ] T-291 — ETL compliance SQL / failure notification follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
@@ -127,8 +119,9 @@
       ADR-038 bucket 상태, fail-closed 503, block/allow override, suspicious activity 조회를 구현한다.
 - [x] T-283 — Security review / threat model / penetration pass. (완료: 2026-06-29, codex)
       auth/session/MCP/share token/rate-limit/storage/admin RBAC/incident 권한 threat model과 1차 점검을 수행한다.
-- [ ] T-284 — Mobile v1.0 scope gate.
-      `apps/mobile`은 활성 track이지만 v1.0 Web/API/Admin 출시 필수 범위에서 제외하고 Sprint M-1로 분리한다.
+- [x] T-284 — Mobile v1.0 scope gate. (완료: 2026-06-29, codex)
+      `apps/mobile`은 활성 Expo SDK 56 / Dev Client track으로 유지하되, v1.0 Web/API/Admin 운영 출시
+      필수 release blocker에서 제외하고 Sprint M-1 또는 별도 모바일 release train으로 분리했다.
 - [ ] T-285 — AI companion v1.0 scope gate.
       v1.0 user-facing AI companion은 제외하고 client contract/Admin status까지만 유지한다.
 - [ ] T-286 — Cross-track review gap closure.

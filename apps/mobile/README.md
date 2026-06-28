@@ -24,6 +24,20 @@ React Native 앱이다.
 
 남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
 
+## v1.0 scope gate (T-284)
+
+`apps/mobile`은 활성 Sprint M-1 track으로 계속 관리하지만, `v1.0.0` release blocker는 아니다.
+`v1.0.0`은 Web/API/Admin 운영 출시를 기준으로 하며, 아래 항목은 모바일 Sprint M-1 또는 별도
+모바일 release train의 gate로 남긴다.
+
+- EAS development/preview/production build 생성과 Expo project 연결.
+- 실기기/에뮬레이터 지도 smoke, store 제출, mobile live e2e.
+- push notification, offline mode, 모바일 전용 성능/배터리 검증.
+
+모바일이 다시 `v1.0.0` 필수 범위에 들어오려면 사용자 승인과 Sprint 6 release checklist 갱신이
+먼저 필요하다. 단, `apps/mobile/**` 또는 공용 `packages/**`를 변경하는 PR은 기존처럼
+`mobile-typecheck` CI gate를 통과해야 한다.
+
 ## 모바일 런타임 기준선
 
 - **Expo Dev Client 사용**: `expo-dev-client`를 포함한 development build를 설치한 뒤
@@ -95,5 +109,5 @@ apps/mobile/
    ```
 5. 화면 구현 — 라우트 파일명은 웹과 같게 유지(frontend.md §8). 배포 빌드는 EAS Build.
 
-> ADR-024: 설치·실행·테스트는 WSL ext4 미러. git/commit/push는 NTFS worktree.
-> RN 메트로/시뮬레이터 실행은 플랫폼 제약을 따른다.
+> ADR-051: 설치·실행·테스트·git·commit·push는 Linux worktree에서 수행한다. RN
+> 메트로/시뮬레이터 실행은 플랫폼 제약을 따르되, Windows git/CodeGraph shim은 사용하지 않는다.
