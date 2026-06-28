@@ -38,7 +38,7 @@ import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
 import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
-import { hasPatchFields, pickConflictPatch } from '@/lib/conflictResolution';
+import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -205,6 +205,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloadInFlightRef = useRef<Promise<TripView | null> | null>(null);
+  // Track the latest viewing day so a freshly (re)created realtime client can re-apply it
+  // without adding selectedDayIndex to the client-creation effect deps (T-289).
+  const selectedDayIndexRef = useRef(selectedDayIndex);
+  selectedDayIndexRef.current = selectedDayIndex;
 
   const reload = useCallback(async (): Promise<TripView | null> => {
     if (reloadInFlightRef.current) return reloadInFlightRef.current;
@@ -295,6 +299,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
     realtimeClientRef.current = client;
     client.connect();
+    client.setViewingDay(selectedDayIndexRef.current);
     return () => {
       client.disconnect();
       realtimeClientRef.current = null;
@@ -501,6 +506,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const current = conflict;
     if (!current) return;
 
+    // Carry through any patch field not represented in the dialog so a hardcoded
+    // conflict-field-list drift cannot silently drop the user's edit (T-290).
+    const effectiveKeys = resolveConflictKeys(
+      Object.keys(current.patch),
+      current.fields.map((field) => field.key),
+      selectedKeys,
+    );
+
     void (async () => {
       setBusy(true);
       setMutationError(null);
@@ -508,7 +521,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         if (current.target === 'trip') {
           const patch = pickConflictPatch(
             current.patch,
-            selectedKeys as TripConflictFieldKey[]
+            effectiveKeys as TripConflictFieldKey[]
           ) as TripUpdate;
           if (!hasPatchFields(patch)) {
             handleUseServerConflict();
@@ -523,7 +536,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
         const patch = pickConflictPatch(
           current.patch,
-          selectedKeys as PoiConflictFieldKey[]
+          effectiveKeys as PoiConflictFieldKey[]
         ) as PoiUpdate;
         if (!hasPatchFields(patch)) {
           handleUseServerConflict();
@@ -665,6 +678,17 @@ export function TripDetail({ tripId }: TripDetailProps) {
           >
             실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속 불러옵니다.
           </p>
+        )}
+        {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
+          <button
+            type="button"
+            onClick={() => realtimeClientRef.current?.reconnect()}
+            className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+            data-testid="trip-realtime-reconnect"
+          >
+            <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+            실시간 다시 연결
+          </button>
         )}
       </header>
 

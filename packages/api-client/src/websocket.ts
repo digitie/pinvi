@@ -71,6 +71,21 @@ export interface TripRealtimeClientOptions {
   heartbeatIntervalMs?: number;
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
+  /** Fraction of the backoff window to randomize as jitter (0..1). Default 0.25. */
+  reconnectJitterRatio?: number;
+  /**
+   * Cap on consecutive auth-refresh-driven reconnects before giving up, so a server
+   * that keeps closing with 4401 even after a "successful" refresh cannot pin the
+   * client in a tight reconnect loop. Default 5.
+   */
+  maxAuthRefreshAttempts?: number;
+  /**
+   * How long a connection must stay open before the consecutive-auth-refresh counter
+   * resets. Prevents an open→4401→open flap from silently resetting the cap. Default 10s.
+   */
+  authRefreshResetMs?: number;
+  /** Injectable RNG for jitter (testing). Default Math.random. */
+  random?: () => number;
   onEvent?: (event: TripRealtimeEvent) => void;
   onStatus?: (status: TripRealtimeStatus) => void;
   onClose?: (info: TripRealtimeCloseInfo) => void;
@@ -109,7 +124,9 @@ export function classifyTripRealtimeClose(event: Partial<TripRealtimeCloseEvent>
     return { code, reason, category: 'rate-limited', retryable: true };
   }
   if (code === TRIP_REALTIME_CLOSE_CODES.badMessage) {
-    return { code, reason, category: 'bad-message', retryable: true };
+    // A protocol/version mismatch will not be fixed by reconnecting and resending the
+    // same frame, so do not auto-retry — surface it instead of looping (T-289).
+    return { code, reason, category: 'bad-message', retryable: false };
   }
 
   return { code, reason, category: 'closed', retryable: code !== 1000 };
@@ -119,7 +136,9 @@ export class TripRealtimeClient {
   private socket: WebSocketLike | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private authStableTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
+  private authRefreshAttempts = 0;
   private manualClose = false;
   private viewingDay: number | null = null;
   private authRefreshInFlight = false;
@@ -128,6 +147,23 @@ export class TripRealtimeClient {
 
   connect(): void {
     if (this.socket != null) return;
+    // A pending reconnect timer would otherwise open a second socket after this one
+    // (re-entrant connect during the reconnect window) — clear it first (T-289).
+    this.clearReconnect();
+    this.manualClose = false;
+    this.openSocket();
+  }
+
+  /** Operator-driven reconnect: reset backoff/auth counters and reopen immediately. */
+  reconnect(): void {
+    this.reconnectAttempts = 0;
+    this.authRefreshAttempts = 0;
+    this.clearReconnect();
+    this.clearAuthStableReset();
+    this.stopHeartbeat();
+    const existing = this.socket;
+    this.detachSocket();
+    existing?.close();
     this.manualClose = false;
     this.openSocket();
   }
@@ -135,6 +171,7 @@ export class TripRealtimeClient {
   disconnect(): void {
     this.manualClose = true;
     this.clearReconnect();
+    this.clearAuthStableReset();
     this.stopHeartbeat();
     const socket = this.socket;
     this.detachSocket();
@@ -163,6 +200,13 @@ export class TripRealtimeClient {
       return;
     }
 
+    // Defensive: never overwrite a live socket without detaching/closing it first.
+    if (this.socket != null) {
+      const stale = this.socket;
+      this.detachSocket();
+      stale.close();
+    }
+
     this.emitStatus('connecting');
     const socket = new Ctor(tripWebSocketUrl(this.opts.apiBaseUrl, this.opts.tripId, this.opts.token));
     this.socket = socket;
@@ -175,6 +219,9 @@ export class TripRealtimeClient {
 
   private readonly handleOpen = () => {
     this.reconnectAttempts = 0;
+    // Reset the auth-refresh cap only after the connection proves stable, so a rapid
+    // open→4401→open flap cannot silently clear the cap (T-289).
+    this.scheduleAuthStableReset();
     this.emitStatus('open');
     this.startHeartbeat();
     this.sendHeartbeat();
@@ -196,6 +243,7 @@ export class TripRealtimeClient {
     const closeInfo = classifyTripRealtimeClose(event);
     this.detachSocket();
     this.stopHeartbeat();
+    this.clearAuthStableReset();
     this.opts.onClose?.(closeInfo);
 
     if (this.manualClose) {
@@ -210,6 +258,12 @@ export class TripRealtimeClient {
 
     if (closeInfo.category === 'permission-denied') {
       this.emitStatus('permission-denied');
+      return;
+    }
+
+    if (closeInfo.category === 'bad-message') {
+      // Non-retryable protocol error: surface as error, do not reconnect (T-289).
+      this.emitStatus('error');
       return;
     }
 
@@ -266,6 +320,14 @@ export class TripRealtimeClient {
 
   private async handleUnauthorizedClose(closeInfo: TripRealtimeCloseInfo): Promise<void> {
     if (this.authRefreshInFlight) return;
+    const maxAuthAttempts = this.opts.maxAuthRefreshAttempts ?? 5;
+    this.authRefreshAttempts += 1;
+    if (this.authRefreshAttempts > maxAuthAttempts) {
+      // Refresh keeps "succeeding" but the socket keeps closing 4401 — stop hammering
+      // /auth/refresh and the WS endpoint (T-289).
+      this.emitStatus('closed');
+      return;
+    }
     this.authRefreshInFlight = true;
     this.emitStatus('refreshing-auth');
     try {
@@ -275,7 +337,10 @@ export class TripRealtimeClient {
         this.emitStatus('closed');
         return;
       }
-      this.scheduleReconnect(0);
+      // First refresh reconnects promptly; repeats back off (with jitter) instead of
+      // a zero-delay loop.
+      const delay = this.authRefreshAttempts <= 1 ? 0 : this.backoffDelay(this.authRefreshAttempts - 1);
+      this.scheduleReconnect(delay);
     } catch (error) {
       this.opts.onError?.(error);
       if (!this.manualClose) this.emitStatus('error');
@@ -286,15 +351,31 @@ export class TripRealtimeClient {
 
   private scheduleReconnect(delayOverrideMs?: number): void {
     this.clearReconnect();
-    const initial = this.opts.reconnectInitialDelayMs ?? 1000;
-    const max = this.opts.reconnectMaxDelayMs ?? 30_000;
-    const delay = delayOverrideMs ?? Math.min(max, initial * 2 ** this.reconnectAttempts);
-    if (delayOverrideMs == null) this.reconnectAttempts += 1;
+    let delay: number;
+    if (delayOverrideMs != null) {
+      delay = delayOverrideMs;
+    } else {
+      delay = this.backoffDelay(this.reconnectAttempts);
+      this.reconnectAttempts += 1;
+    }
     this.emitStatus('reconnecting');
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.openSocket();
     }, delay);
+  }
+
+  private backoffDelay(attempt: number): number {
+    const initial = this.opts.reconnectInitialDelayMs ?? 1000;
+    const max = this.opts.reconnectMaxDelayMs ?? 30_000;
+    const base = Math.min(max, initial * 2 ** attempt);
+    // Keep the first reconnect deterministic; jitter the rest to avoid a thundering
+    // herd after a server restart / rate-limit window (T-289).
+    if (attempt <= 0) return base;
+    const ratio = this.opts.reconnectJitterRatio ?? 0.25;
+    const random = this.opts.random ?? Math.random;
+    const jitter = base * ratio * random();
+    return Math.max(0, base - jitter);
   }
 
   private startHeartbeat(): void {
@@ -310,6 +391,20 @@ export class TripRealtimeClient {
   private clearReconnect(): void {
     if (this.reconnectTimer != null) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+  }
+
+  private scheduleAuthStableReset(): void {
+    this.clearAuthStableReset();
+    const resetMs = this.opts.authRefreshResetMs ?? 10_000;
+    this.authStableTimer = setTimeout(() => {
+      this.authStableTimer = null;
+      this.authRefreshAttempts = 0;
+    }, resetMs);
+  }
+
+  private clearAuthStableReset(): void {
+    if (this.authStableTimer != null) clearTimeout(this.authStableTimer);
+    this.authStableTimer = null;
   }
 
   private sendHeartbeat(): void {
