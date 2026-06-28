@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
@@ -803,9 +804,7 @@ async def optimize_trip_day(
     start_poi_id: uuid.UUID | None,
     persist: bool,
     strategy: str = "two_opt",
-) -> tuple[
-    list[TripDayPoi], list[tuple[TripDayPoi, str, str]], int | None, int | None, list[str]
-]:
+) -> tuple[list[TripDayPoi], list[tuple[TripDayPoi, str, str]], int | None, int | None, list[str]]:
     pois = await _list_day_pois(db, trip_id=trip_id, day_index=day_index)
     if not pois:
         raise TripDayNotFoundError("최적화할 POI가 없습니다.")
@@ -1195,7 +1194,7 @@ def _path_distance_m(
     coord_by_id: dict[uuid.UUID, Coord | None],
 ) -> int:
     total = 0
-    for left, right in zip(order, order[1:]):
+    for left, right in pairwise(order):
         left_coord = coord_by_id[left.attachment_id]
         right_coord = coord_by_id[right.attachment_id]
         if left_coord is None or right_coord is None:

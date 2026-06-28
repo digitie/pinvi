@@ -6,7 +6,6 @@ import uuid
 from types import SimpleNamespace
 
 from app.services.trip import (
-    _nearest_neighbor_seed,
     _optimize_day_order,
     _path_distance_m,
     _two_opt_improve,
