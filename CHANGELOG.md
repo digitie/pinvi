@@ -17,6 +17,9 @@
   POI/day/trip/comment domain event별 TanStack Query invalidation key도 정의했다.
 - Trip/POI 편집 중 optimistic lock 409가 발생하면 최신 서버 값을 다시 불러와 충돌 다이얼로그를
   표시한다. 사용자는 필드별로 서버 값/내 값을 고르거나 내 값을 전체 덮어쓰기 할 수 있다.
+- 사용자 Trip 지도, 탐색 지도, Admin Trip POI preview가 공용 marker resolver를 사용한다.
+  marker 색/아이콘은 custom/resolved/upstream/snapshot/category/kind/fallback 순서로 계산하고,
+  selected/broken/cluster 상태 metadata를 mock/live e2e에서 확인한다.
 - Admin sidebar를 Pinvi 운영 / 지도 데이터 / 시스템 운영 그룹으로 재정렬하고,
   `/admin/system/summary` 기반 대시보드 상태 보드를 추가했다. Pinvi API, DB, Web,
   Dagster, `kor-travel-map` API, RustFS 상태를 raw URL/secret 없이 표시한다.

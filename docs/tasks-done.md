@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-255 — 지도 마커 / 색상 적용 parity.
+      `@pinvi/domain`에 marker resolver를 추가해 custom/resolved/upstream/snapshot/category/kind/fallback
+      우선순위를 한 곳에서 계산한다. 사용자 Trip 지도, 탐색 지도, Admin Trip POI preview는 같은
+      marker style metadata를 노출하고, Trip 지도는 selected/broken 상태를 DOM/e2e에서 확인한다.
+      mock e2e는 Trip detail/Admin trip dialog marker parity를 검증하고, live read-only spec은
+      `PINVI_ADMIN_LIVE_E2E=1` gate에서 `/map` marker metadata를 데이터 유무에 독립적으로 확인한다.
+      N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 Windows fallback Playwright로 검증했다.
+
 - [x] T-254 — Admin live e2e matrix v0.2.0 확장.
       `admin-live-matrix.live.ts` catalog를 6,195건으로 고정해 drift를 감지하고,
       read-only matrix에 `/admin/debug/request/{id}` captured request timeline,

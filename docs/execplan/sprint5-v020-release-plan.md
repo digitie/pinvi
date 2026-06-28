@@ -425,33 +425,26 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
   alias 미해결로 실제 N150 run 미수행.
 - matrix fixture: auth refresh, throttle, relogin 복귀, no raw secret regex.
 
-### T-255 — 지도 마커 / 색상 적용 parity
+### T-255 — 지도 마커 / 색상 적용 parity — 완료
 
-- 사용자 화면 지도뷰(`FeatureMapView`, `TripMapView`, 공유 Trip 지도)와 Admin 화면 지도뷰
-  또는 지도 preview(Admin Trip POI dialog, Admin POI detail, category mapping preview)가 같은
-  색상 해석 규칙을 쓰도록 정리한다.
-- 우선순위: POI custom marker color/icon → feature snapshot marker color/icon →
-  upstream category `maki_icon`/marker color → Pinvi fallback palette → invalid 값은 `P-13`.
-- marker color는 `P-01`~`P-16` token만 정상값으로 취급한다. raw hex 저장/응답이 들어와도
-  UI에서는 안전 fallback 또는 운영 오류 상태로 표시한다.
-- selected/hover/focus marker state는 색을 임의 변경하지 않고 stroke/ring/scale로만 구분한다.
-- broken feature, orphan POI, 좌표 없음, cluster, route line, user location marker의 색상 규칙을
-  문서화한다.
-- Admin category mapping은 upstream category 색/아이콘과 Pinvi fallback drift를 지도 preview로
-  확인할 수 있게 한다.
+- 완료: `@pinvi/domain` marker resolver가 custom → server-resolved → upstream feature →
+  feature snapshot → upstream category/kind → `P-13` fallback 순서로 색/아이콘/source를 계산한다.
+- 완료: `FeatureMapView`, `TripMapView`, Admin Trip POI preview가 같은 resolver를 사용한다.
+  Trip 지도는 selected/broken 상태를 marker metadata와 `MakiMarker` selected/highlighted 상태로
+  구분한다.
+- 완료: `축제`, `공지`, `트래킹 route`, `국립공원` fallback mapping을 팔레트 문서와 맞췄다.
+- 완료: mock e2e는 Trip detail/Admin trip dialog marker parity를 검증한다. live read-only spec은
+  `PINVI_ADMIN_LIVE_E2E=1` gate에서 `/map` marker metadata를 데이터 유무에 독립적으로 확인한다.
 
 검증 케이스:
 
-- Domain/Vitest: `paletteHex`, invalid marker color fallback, custom override 우선순위,
-  label color contrast.
-- Playwright mock: 사용자 map shell feature P-01/P-07/P-13, Trip POI custom P-08,
-  shared trip marker, broken feature fallback, selected marker ring.
-- Playwright mock: Admin Trip POI dialog map preview, Admin POI detail marker swatch/map preview,
-  category mapping palette preview.
-- Windows Playwright visual/pixel smoke: marker canvas 또는 DOM marker가 비어 있지 않고,
-  대표 P-01/P-07/P-13 색상 swatch가 렌더된다.
-- N150 live read-only: `/trips/{id}` 샘플 지도와 `/admin/trips/{id}` POI preview에서 marker
-  legend/swatch가 raw hex/undefined 없이 보인다.
+- Linux: `npm -w @pinvi/domain run test -- marker.test.ts tripMapPoints.test.ts`.
+- Linux: `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`.
+- N150 우선: `ssh n150` alias 미해결로 실행 불가.
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts admin-trips.e2e.ts --workers=1`
+  → 8 passed.
+- Windows fallback: `npm -w @pinvi/web run test:e2e:admin-live -- admin-live-map-marker-parity.live.ts --workers=1`
+  → 1 skipped (`PINVI_ADMIN_LIVE_E2E` gate).
 
 ### T-256 — Review gap crosswalk / legal-ops preflight
 

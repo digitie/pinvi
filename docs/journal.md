@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-255 지도 마커 / 색상 적용 parity
+
+**작업**: 사용자/Admin 지도 marker 색상·아이콘 해석을 공용 resolver로 정리하고 mock/live e2e gate를 추가했다.
+
+**변경**:
+
+- `@pinvi/domain`에 `resolveMarkerStyle`을 추가했다. 우선순위는 custom → server-resolved →
+  upstream feature → feature snapshot → category/kind fallback → `P-13` fallback이다.
+- `TripMapView`, `FeatureMapView`, Admin Trip POI preview가 같은 resolver를 사용한다.
+- Trip 지도와 탐색 지도, Admin POI preview에 marker metadata legend를 추가해 VWorld key가 없어도
+  mock e2e에서 색/아이콘/source/selected/broken/cluster 상태를 검증할 수 있게 했다.
+- `축제`, `공지`, `트래킹 route`, `국립공원` fallback mapping을 팔레트 문서와 맞췄다.
+- `admin-live-map-marker-parity.live.ts`를 추가해 `/map` marker metadata를 read-only live gate로
+  확인한다.
+
+**검증**:
+
+- Linux:
+  - `npm -w @pinvi/domain run test -- marker.test.ts tripMapPoints.test.ts` → 14 passed
+  - `npm -w @pinvi/web run typecheck`
+  - `npm -w @pinvi/web run lint`
+- Playwright:
+  - N150 1차 실행은 `ssh n150` alias가 현재 Linux 환경에서 해석되지 않아 실패했다.
+  - Windows fallback: `npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts admin-trips.e2e.ts --workers=1` → 8 passed
+  - Windows fallback: `npm -w @pinvi/web run test:e2e:admin-live -- admin-live-map-marker-parity.live.ts --workers=1` → 1 skipped
+
+**미실행**:
+
+- 실제 N150 live marker parity run은 SSH alias 미해결로 미실행. live spec은 env gate와 데이터 유무
+  독립 read-only 검증으로 추가했다.
+
+**다음**: T-256 Review gap crosswalk / legal-ops preflight.
+
 ## 2026-06-28 (codex) — T-254 Admin live e2e matrix v0.2.0 확장
 
 **작업**: Admin live read-only matrix를 v0.2.0 release gate용 catalog와 gate 절차로 확장했다.

@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-255 지도 마커 / 색상 적용 parity
+
+지도 marker resolver를 공용 도메인 로직으로 정리했다. `@pinvi/domain`의
+`resolveMarkerStyle`은 custom → server-resolved → upstream feature → feature snapshot →
+category/kind fallback → `P-13` fallback 순서로 색/아이콘/source를 계산한다. 사용자 Trip 지도,
+탐색 지도, Admin Trip POI preview가 같은 resolver를 사용하고, selected/broken/cluster 상태는
+marker metadata와 `MakiMarker` selected/highlighted 상태로 확인한다.
+
+mock e2e는 Trip detail/Admin trip dialog marker parity를 검증한다. live read-only spec은
+`PINVI_ADMIN_LIVE_E2E=1` gate에서 `/map` marker metadata를 데이터 유무와 독립적으로 확인한다.
+Linux에서 domain tests, Web typecheck/lint가 통과했고, N150 SSH alias는 현재 환경에서 해석되지
+않아 Windows fallback Playwright로 mock e2e 8건 pass와 live spec 1건 skip을 확인했다.
+다음 작업은 T-256 Review gap crosswalk / legal-ops preflight다.
+
 ## 2026-06-28 (codex) — T-254 Admin live e2e matrix v0.2.0 확장
 
 Admin live read-only matrix를 v0.2.0 release gate용으로 확장했다. `admin-live-matrix.live.ts`

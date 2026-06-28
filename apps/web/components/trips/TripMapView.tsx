@@ -38,29 +38,32 @@ export function TripMapView({
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
 
-  const fitToPoints = useCallback((map: MapLibreMap) => {
-    const bounds = pointsBounds(points);
-    if (!bounds) return;
-    const only = points[0];
-    if (points.length === 1 && only) {
-      map.flyTo({ center: [only.lon, only.lat], zoom: 13 });
-      return;
-    }
-    map.fitBounds(
-      [
-        [bounds.west, bounds.south],
-        [bounds.east, bounds.north],
-      ],
-      { padding: 64, maxZoom: 15, animate: false }
-    );
-  }, [points]);
+  const fitToPoints = useCallback(
+    (map: MapLibreMap) => {
+      const bounds = pointsBounds(points);
+      if (!bounds) return;
+      const only = points[0];
+      if (points.length === 1 && only) {
+        map.flyTo({ center: [only.lon, only.lat], zoom: 13 });
+        return;
+      }
+      map.fitBounds(
+        [
+          [bounds.west, bounds.south],
+          [bounds.east, bounds.north],
+        ],
+        { padding: 64, maxZoom: 15, animate: false },
+      );
+    },
+    [points],
+  );
 
   const handleLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
       fitToPoints(map);
     },
-    [fitToPoints]
+    [fitToPoints],
   );
 
   // POI 목록이 바뀌면 경계 재조정.
@@ -70,12 +73,12 @@ export function TripMapView({
 
   const markerPoints = useMemo<MarkerPoint[]>(
     () => points.map((p) => ({ id: p.poiId, lngLat: [p.lon, p.lat], point: p })),
-    [points]
+    [points],
   );
 
   const selected = useMemo(
     () => points.find((p) => p.poiId === selectedPoiId) ?? null,
-    [points, selectedPoiId]
+    [points, selectedPoiId],
   );
 
   // 외부에서 POI 를 선택하면 해당 위치로 이동.
@@ -115,8 +118,11 @@ export function TripMapView({
                   lngLat={marker.lngLat}
                   icon={marker.point.icon}
                   color={marker.point.color}
-                  title={marker.point.title}
+                  title={
+                    marker.point.isBroken ? `${marker.point.title} (링크 끊김)` : marker.point.title
+                  }
                   selected={marker.point.poiId === selectedPoiId}
+                  highlighted={marker.point.isBroken}
                   ariaLabel={marker.point.title}
                   onClick={() => onSelectPoi?.(marker.point.poiId)}
                   onContextMenu={(event) => {
@@ -138,6 +144,26 @@ export function TripMapView({
             </Popup>
           )}
         </VWorldMap>
+        <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
+          {points.map((point) => (
+            <span
+              key={point.poiId}
+              data-testid="trip-map-marker-style"
+              data-poi-id={point.poiId}
+              data-day-index={point.dayIndex}
+              data-marker-color={point.markerColor}
+              data-marker-hex={point.color}
+              data-marker-icon={point.icon}
+              data-marker-source={point.markerSource}
+              data-marker-selected={point.poiId === selectedPoiId ? 'true' : 'false'}
+              data-marker-broken={point.isBroken ? 'true' : 'false'}
+              data-marker-category={point.category ?? ''}
+              data-marker-kind={point.kind ?? ''}
+            >
+              {point.title}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

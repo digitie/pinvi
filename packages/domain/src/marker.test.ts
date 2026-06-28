@@ -5,6 +5,7 @@ import {
   markerStyleFor,
   paletteHex,
   paletteLabelColor,
+  resolveMarkerStyle,
 } from './marker';
 
 describe('markerPalette', () => {
@@ -33,9 +34,57 @@ describe('markerPalette', () => {
 
   it('markerStyleFor: 카테고리 우선 → kind fallback → marker', () => {
     expect(markerStyleFor('음식점', 'place')).toEqual({ icon: 'restaurant', color: 'P-01' });
+    expect(markerStyleFor('축제', 'place')).toEqual({ icon: 'star', color: 'P-11' });
+    expect(markerStyleFor('공지', 'place')).toEqual({ icon: 'alert', color: 'P-14' });
     expect(markerStyleFor(null, 'event')).toEqual({ icon: 'star', color: 'P-11' });
     expect(markerStyleFor('미지의카테고리', 'notice')).toEqual({ icon: 'alert', color: 'P-14' });
     expect(markerStyleFor(null, null)).toEqual({ icon: 'marker', color: 'P-13' });
+  });
+
+  it('resolveMarkerStyle: custom → resolved → upstream → snapshot → category → kind 순서', () => {
+    expect(
+      resolveMarkerStyle({
+        customColor: 'P-10',
+        customIcon: 'lodging',
+        resolvedColor: 'P-07',
+        resolvedIcon: 'swimming',
+        snapshot: { marker_color: 'P-03', marker_icon: 'monument', category: '국가유산' },
+      }),
+    ).toMatchObject({ color: 'P-10', icon: 'lodging', source: 'custom' });
+
+    expect(
+      resolveMarkerStyle({
+        resolvedColor: 'P-07',
+        resolvedIcon: 'swimming',
+        snapshot: { marker_color: 'P-03', marker_icon: 'monument', category: '국가유산' },
+      }),
+    ).toMatchObject({ color: 'P-07', icon: 'swimming', source: 'resolved' });
+
+    expect(
+      resolveMarkerStyle({
+        upstreamColor: 'P-02',
+        upstreamIcon: 'fuel',
+        upstreamCategory: '주유소',
+        upstreamKind: 'price',
+      }),
+    ).toMatchObject({ color: 'P-02', icon: 'fuel', source: 'upstream' });
+
+    expect(
+      resolveMarkerStyle({
+        snapshot: { marker_color: 'P-03', marker_icon: 'monument', category: '국가유산' },
+      }),
+    ).toMatchObject({ color: 'P-03', icon: 'monument', source: 'snapshot' });
+
+    expect(resolveMarkerStyle({ upstreamCategory: '해수욕장' })).toMatchObject({
+      color: 'P-07',
+      icon: 'swimming',
+      source: 'category',
+    });
+    expect(resolveMarkerStyle({ upstreamKind: 'notice' })).toMatchObject({
+      color: 'P-14',
+      icon: 'alert',
+      source: 'kind',
+    });
   });
 
   it('CATEGORY_MARKER 색상은 전부 팔레트에 존재', () => {

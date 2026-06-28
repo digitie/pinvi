@@ -16,7 +16,7 @@
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
 - **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
 - **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
-  app-owned ETL 추가 job, Loki/request timeline stream, 지도 마커/색상 parity,
+  app-owned ETL 추가 job, Loki/request timeline stream,
   backup/restore live e2e, legal/ops preflight crosswalk, `v0.2.0` Release notes.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
@@ -90,8 +90,8 @@
 
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
-- 사용자/Admin 지도뷰 marker palette, POI custom color/icon, feature snapshot/upstream category
-  fallback, selected/broken/cluster 상태 parity.
+- 사용자/Admin 지도뷰 marker palette parity는 T-255에서 완료했다. 공용 marker resolver가
+  custom/resolved/upstream/snapshot/category/kind/fallback 순서를 계산하고 mock/live e2e gate를 둔다.
 - Pinvi `app` schema 소유 ETL 추가 job(location archive, telegram weekly/daily summary).
   `email_outbox` 점검 job은 T-239, PII retention dry-run job은 T-240으로 완료.
 - Loki/Promtail 또는 대체 로그 stream과 request timeline. Request timeline은 T-244 완료,
@@ -221,6 +221,8 @@
       runner/접속 가능 환경에서 수행한다.
 - [x] **Admin live e2e matrix v0.2.0 확장(T-254)** — 6,195건 catalog와
       200/2000/full gate 절차를 고정했다. 실제 N150 실행은 runner/접속 가능 환경에서 수행한다.
+- [x] **지도 마커 / 색상 적용 parity(T-255)** — 사용자 Trip 지도, 탐색 지도, Admin Trip POI
+      preview가 공용 resolver를 쓰며 selected/broken/cluster metadata와 mock/live e2e gate를 둔다.
 - [ ] **PR 리뷰 legal/ops gap crosswalk 완료 — T-256~T-258 기준**
 - [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리
