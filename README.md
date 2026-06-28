@@ -100,8 +100,8 @@ import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 ## 빠른 시작
 
 ```bash
-# WSL ext4 테스트 미러 (의존성/테스트 전용; git/commit/push는 NTFS worktree)
-cd ~/pinvi-workspaces/pinvi-codex
+# Linux worktree (개발·git·검증 source of truth)
+cd /mnt/f/dev/pinvi-codex
 
 # 시스템 의존성
 sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev

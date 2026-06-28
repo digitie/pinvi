@@ -6,6 +6,12 @@
 
 ## 2026-06-28
 
+- [x] T-289 — Linux-only 개발 환경 / ADR-051 문서화.
+      ADR-051로 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행으로 고정했다.
+      ADR-024의 NTFS source / WSL 테스트 미러 모델과 ADR-017의 Windows `git.exe` amendment를
+      supersede하고, AGENTS/CLAUDE/SKILL, 개발 환경 런북, CodeGraph worktree 런북,
+      실패 패턴 문서, README/Sprint 문서를 같은 기준으로 동기화했다.
+
 - [x] T-241 — `pinvi_location_log_archive` Dagster job.
       `pinvi_location_log_archive` asset/job/schedule을 추가해 매일 KST 04:30
       `app.location_access_log`의 6개월 초과 archive 후보, active head/tail hash-chain bridge,

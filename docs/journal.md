@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
+
+**작업**: 사용자 지시에 따라 개발·git·CodeGraph 실행 위치를 Linux로 통일하고, Playwright는
+N150 우선 / Windows fallback으로 정리했다.
+
+**변경**:
+
+- `docs/decisions.md`에 ADR-051을 추가하고 ADR-024를 superseded로 표시했다. ADR-017의
+  Windows `git.exe` amendment도 ADR-051이 supersede한다고 명시했다.
+- `AGENTS.md`, `CLAUDE.md`, `SKILL.md`를 ADR-051 기준으로 동기화했다.
+- `docs/dev-environment.md`, `docs/agent-workflow.md`,
+  `docs/runbooks/codegraph-worktrees.md`, `docs/agent-failure-patterns.md`를 Linux git /
+  Linux native CodeGraph / N150 Playwright 우선 기준으로 재작성했다.
+- README 빠른 시작, Sprint ADR 목록, tasks/resume/tasks-done 추적 문서를 갱신했다.
+- PR #274(T-241)는 CI success와 inline review thread 0건을 확인하고 squash merge했다.
+
+**검증**:
+
+- Linux: `git worktree repair /mnt/f/dev/pinvi-codex`
+- Linux: `git fetch origin && git switch -c agent/codex-linux-dev-workflow origin/main`
+- Linux: 최초 `command -v codegraph`가 `/mnt/c/Users/digit/AppData/Roaming/npm/codegraph`로
+  잡혀 `npm install -g --prefix "$HOME/.local" @colbymchenry/codegraph`로 Linux native
+  `/home/digitie/.local/bin/codegraph`를 설치했다.
+- Linux: Linux native `codegraph status && codegraph sync` 통과.
+
+**다음**: 정책 문서 PR 생성/머지 후 T-242 Telegram system summary/outbox ETL로 진행한다.
+
 ## 2026-06-28 (codex) — T-241 `pinvi_location_log_archive` Dagster job
 
 **작업**: 위치 접근 로그 archive 후보와 hash-chain bridge 상태를 파괴 작업 없이 집계하는

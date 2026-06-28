@@ -23,9 +23,8 @@
 ## 다음 (우선순위 순)
 
 - 다음 구현: T-242 Telegram system summary/outbox ETL.
-- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-241 진입 전
-  재확인 결과, 최근 PR 39개 중 unresolved human inline review comment와 review body는 0건이고,
-  top-level comment 33건은 신규 차단 없음.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-289 진입 중
+  PR #274의 inline review thread 0건과 CI success를 확인하고 merge했다. 신규 차단 코멘트는 없다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는

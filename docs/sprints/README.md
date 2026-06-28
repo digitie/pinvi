@@ -56,7 +56,7 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-021** — GitHub Actions CI/CD 재활성화
 - **ADR-022** — Backup / Restore 핫스왑 정책
 - **ADR-023** — Odroid M1S + N150 병행 운영
-- **ADR-024** — NTFS worktree + WSL ext4 테스트 미러
+- **ADR-024** — NTFS worktree + WSL ext4 테스트 미러 (ADR-051로 superseded)
 - **ADR-025** — geocoding은 kor-travel-geo v2 REST 직접
 - **ADR-026** — Pinvi ↔ `kor-travel-map` OpenAPI HTTP 계약
 - **ADR-027** — kor-travel-map 운영급 HTTP 서비스 신설 대기
@@ -68,6 +68,7 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-041** — Expo `apps/mobile` 구조 스캐폴드
 - **ADR-043** — 모바일 Expo Dev Client + EAS Build 기준선
 - **ADR-050** — Pinvi app-owned Dagster job 표준
+- **ADR-051** — 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선
 
 ## 참조
 
