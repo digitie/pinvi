@@ -195,18 +195,22 @@
 - 완료: Web mock e2e fixture에 Telegram outbox 표시를 추가.
 - 미실행: Playwright live는 ADR-051에 따라 N150 runner에서 수행한다.
 
-### T-243 — ETL live / Dagster 운영 게이트
+### T-243 — ETL live / Dagster 운영 게이트 — 완료
 
-- N150 Dagster `/server_info`와 code location repository/job/asset/schedule 목록을 live로 검증한다.
-- app-owned job materialize dry-run을 staging에서 실행한다.
-- Admin `/admin/etl` live UI matrix에 app-owned job rows, upstream degraded 상태, import jobs
-  pagination/filter를 추가한다.
+- 완료: `/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어
+  code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 반환한다.
+- 완료: GraphQL 실패 시 `pinvi.status=degraded`로 강등하고 static app-owned registry와
+  email/Telegram/PII/location summary는 계속 반환한다.
+- 완료: Web `/admin/etl` live UI matrix에 app-owned job rows의 live/registry 상태,
+  schedule cron/timezone, 최신 run status, live code location, recent Pinvi runs를 추가했다.
+- 보류: app-owned job materialize dry-run과 N150 live Playwright는 PR merge 후 배포된 환경에서 수행한다.
 
 검증 케이스:
 
-- Windows Playwright live: `/admin/etl`, `/admin/provider-sync` read-only 확장.
-- N150 API smoke: `/admin/etl/summary` authenticated read.
-- Dagster live: job list, schedule timezone, latest run status.
+- 완료: API unit에서 `/server_info` + GraphQL repository/run parser와 GraphQL degraded fallback 검증.
+- 완료: API integration에서 Admin ETL summary의 Pinvi live repository/schedule/recent run 필드 검증.
+- 완료: Web mock e2e fixture에 Pinvi live code location/job row/recent runs 표시 추가.
+- 미실행: N150 API smoke / Playwright live는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
 
 ### T-244 — Request timeline API
 

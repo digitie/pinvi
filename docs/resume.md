@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-243 ETL live / Dagster 운영 게이트
+
+`/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어 live snapshot을 반환한다.
+응답에는 Dagster version, repository/job/asset/schedule count, code location repository 목록,
+최근 run 상태가 들어간다. GraphQL 조회 실패는 `pinvi.status=degraded`로 강등하고 static
+app-owned registry와 email/Telegram/PII/location summary는 계속 반환한다. run tag 값은
+Admin 응답에 싣지 않는다.
+
+Web `/admin/etl`은 Pinvi app-owned job row마다 live/registry 상태, schedule cron/timezone,
+최신 run status를 표시하고, live code location과 recent Pinvi runs 영역을 추가했다.
+
+N150 API smoke / Playwright live는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
+
+다음 작업은 T-244 Request timeline API다. Pinvi request id 중심 timeline과 upstream
+`kor-travel-map` sanitized logs를 보조 event source로만 붙이는 경계를 유지한다.
+
 ## 2026-06-28 (codex) — T-242 Telegram system summary/outbox ETL
 
 `pinvi_telegram_system_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다
@@ -12,8 +28,8 @@ Web `/admin/etl`은 due/backoff/stuck/retry exhausted, sent/skipped/failed, cate
 표시한다. 응답과 metadata에는 payload, message text, user id, chat id, token, last_error 원문을
 넣지 않는다. weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 남겼다.
 
-다음 작업은 T-243 ETL live / Dagster 운영 게이트다. N150 Dagster code location과 app-owned job
-rows, Admin ETL live UI 검증을 확장한다.
+후속으로 T-243 ETL live / Dagster 운영 게이트에서 N150 Dagster code location과 app-owned job
+rows, Admin ETL live UI 검증을 확장했다.
 
 ## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
 

@@ -178,6 +178,18 @@ Dagster `run_failure_sensor`는 retry가 모두 소진된 실패를 Sentry와
 직접 호출하지 않는다. 외부 API 호출 실패 시 서비스키나 요청 URL의 `serviceKey` 값은
 마스킹한다.
 
+## 5.1 Admin live snapshot
+
+T-243 기준 `/admin/etl/summary`는 Pinvi Dagster webserver의 `/server_info`와 `/graphql`을
+읽는다. `/server_info`는 Dagster version과 webserver health를 확인하고, GraphQL
+`repositoriesOrError` / `runsOrError`는 code location repository, job, asset, schedule,
+최근 run 상태를 가져온다.
+
+이 live snapshot은 운영 관측용이며 mutation을 수행하지 않는다. GraphQL이 실패하면
+`pinvi.status=degraded`로 표시하고 static registry(`assets`, `jobs`, `schedules`)와
+app-owned DB summary는 유지한다. Admin 응답에는 Dagster run tag 값을 싣지 않고
+`run_id`, `status`, `job_name`, timestamp만 노출한다.
+
 ## 6. AI agent 체크리스트
 
 - [ ] 새 feature provider 적재가 필요하면 Pinvi가 아니라 `kor-travel-map`에 PR.

@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-243 — ETL live / Dagster 운영 게이트.
+      `/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어
+      code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 반환한다.
+      Web `/admin/etl`은 app-owned job row에 live/registry 상태, schedule timezone, 최신 run
+      status를 표시한다. GraphQL 실패 시 `pinvi.status=degraded`로 강등하고 static registry와
+      app-owned outbox/retention summary는 유지한다. run tag 값은 Admin 응답에 노출하지 않는다.
+      N150 API smoke / Playwright live는 PR merge 후 배포 환경 검증으로 남겼다.
+
 - [x] T-242 — Telegram system summary/outbox ETL.
       `pinvi_telegram_system_outbox` asset/job/schedule을 추가해 15분마다
       `app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,

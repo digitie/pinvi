@@ -10,6 +10,7 @@ import {
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
 import type {
+  AdminDagsterRunSummary,
   AdminEmailOutboxTemplateSummary,
   AdminProviderImportJobRecord,
   AdminTelegramOutboxCategorySummary,
@@ -58,6 +59,10 @@ const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
+}
+
+function formatUnixTime(value: number | null | undefined) {
+  return typeof value === 'number' ? new Date(value * 1000).toLocaleString('ko-KR') : '—';
 }
 
 function statusLabel(value: string | null | undefined) {
@@ -152,6 +157,43 @@ export default function AdminEtlPage() {
   const telegramOutbox = summary?.pinvi.telegram_outbox ?? null;
   const piiRetention = summary?.pinvi.pii_retention ?? null;
   const locationArchive = summary?.pinvi.location_log_archive ?? null;
+  const pinviRepositories = useMemo(
+    () => summary?.pinvi.repositories ?? [],
+    [summary?.pinvi.repositories],
+  );
+  const pinviRecentRuns = useMemo(
+    () => summary?.pinvi.recent_runs ?? [],
+    [summary?.pinvi.recent_runs],
+  );
+  const liveJobNames = useMemo(() => {
+    return new Set(
+      pinviRepositories.flatMap((repository) => repository.jobs.map((job) => job.name)),
+    );
+  }, [pinviRepositories]);
+  const liveScheduleByJobName = useMemo(() => {
+    const schedules = new Map<
+      string,
+      {
+        name: string;
+        cron_schedule: string | null;
+        execution_timezone: string | null;
+        status: string | null;
+      }
+    >();
+    for (const repository of pinviRepositories) {
+      for (const schedule of repository.schedules) {
+        if (schedule.job_name) schedules.set(schedule.job_name, schedule);
+      }
+    }
+    return schedules;
+  }, [pinviRepositories]);
+  const latestRunByJobName = useMemo(() => {
+    const runs = new Map<string, AdminDagsterRunSummary>();
+    for (const run of pinviRecentRuns) {
+      if (run.job_name && !runs.has(run.job_name)) runs.set(run.job_name, run);
+    }
+    return runs;
+  }, [pinviRecentRuns]);
 
   const summaryError = summaryQuery.isError
     ? summaryQuery.error instanceof ApiError
@@ -260,19 +302,27 @@ export default function AdminEtlPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Section title="Pinvi Dagster">
-          <div className="grid gap-3 text-sm sm:grid-cols-3">
+          <div className="grid gap-3 text-sm sm:grid-cols-5">
             <div data-testid="admin-etl-pinvi-status">
               <div className="text-xs text-muted">상태</div>
               <div className="font-semibold">{statusLabel(summary?.pinvi.status)}</div>
               <div className="text-xs text-muted">{summary?.pinvi.message ?? '—'}</div>
             </div>
-            <div>
-              <div className="text-xs text-muted">assets</div>
-              <div className="font-semibold">{formatMetric(summary?.pinvi.assets.length)}</div>
+            <div data-testid="admin-etl-pinvi-live-repository-count">
+              <div className="text-xs text-muted">code locations</div>
+              <div className="font-semibold">{formatMetric(summary?.pinvi.repository_count)}</div>
             </div>
-            <div>
-              <div className="text-xs text-muted">jobs</div>
-              <div className="font-semibold">{formatMetric(summary?.pinvi.jobs.length)}</div>
+            <div data-testid="admin-etl-pinvi-live-asset-count">
+              <div className="text-xs text-muted">live assets</div>
+              <div className="font-semibold">{formatMetric(summary?.pinvi.asset_count)}</div>
+            </div>
+            <div data-testid="admin-etl-pinvi-live-job-count">
+              <div className="text-xs text-muted">live jobs</div>
+              <div className="font-semibold">{formatMetric(summary?.pinvi.job_count)}</div>
+            </div>
+            <div data-testid="admin-etl-pinvi-live-schedule-count">
+              <div className="text-xs text-muted">schedules</div>
+              <div className="font-semibold">{formatMetric(summary?.pinvi.schedule_count)}</div>
             </div>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -302,15 +352,109 @@ export default function AdminEtlPage() {
                     className="rounded-sm bg-surface-soft p-2"
                     data-testid={`admin-etl-job-${job.name}`}
                   >
-                    <div className="font-mono text-xs">{job.name}</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-mono text-xs">{job.name}</span>
+                      <span
+                        className="text-xs text-muted"
+                        data-testid={`admin-etl-job-${job.name}-live`}
+                      >
+                        {liveJobNames.has(job.name) ? 'live' : 'registry'}
+                      </span>
+                    </div>
                     <div className="text-xs text-muted">
                       {job.trigger} / {job.description ?? '—'}
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs text-muted sm:grid-cols-3">
+                      <span>
+                        schedule{' '}
+                        {liveScheduleByJobName.get(job.name)?.cron_schedule ??
+                          summary?.pinvi.schedules.find((item) => item.job_name === job.name)
+                            ?.cron_schedule ??
+                          '—'}
+                      </span>
+                      <span data-testid={`admin-etl-job-${job.name}-timezone`}>
+                        {liveScheduleByJobName.get(job.name)?.execution_timezone ??
+                          summary?.pinvi.schedules.find((item) => item.job_name === job.name)
+                            ?.execution_timezone ??
+                          '—'}
+                      </span>
+                      <span data-testid={`admin-etl-job-${job.name}-latest-run`}>
+                        {statusLabel(latestRunByJobName.get(job.name)?.status)}
+                      </span>
                     </div>
                   </li>
                 ))}
               </ul>
             </div>
           </div>
+          {pinviRepositories.length ? (
+            <div className="mt-4" data-testid="admin-etl-pinvi-live-repositories">
+              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+                Live code locations
+              </h3>
+              <ul className="space-y-2 text-sm">
+                {pinviRepositories.map((repository) => (
+                  <li
+                    key={`${repository.location_name ?? 'unknown'}-${repository.name}`}
+                    className="rounded-sm bg-surface-soft p-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-xs">{repository.name}</span>
+                      <span className="text-xs text-muted">{repository.location_name ?? '—'}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted">
+                      jobs {formatMetric(repository.jobs.length)} / assets{' '}
+                      {formatMetric(repository.asset_count)} / schedules{' '}
+                      {formatMetric(repository.schedules.length)}
+                    </div>
+                    {repository.asset_groups.length ? (
+                      <div className="mt-1 text-xs text-muted">
+                        {repository.asset_groups.join(', ')}
+                      </div>
+                    ) : null}
+                    {repository.schedules.length ? (
+                      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {repository.schedules.map((schedule) => (
+                          <li
+                            key={schedule.name}
+                            className="rounded-sm border border-hairline px-2 py-1 text-xs"
+                            data-testid={`admin-etl-pinvi-live-schedule-${schedule.name}`}
+                          >
+                            <span className="font-mono">{schedule.name}</span>
+                            <span className="ml-2 text-muted">
+                              {schedule.execution_timezone ?? '—'} / {statusLabel(schedule.status)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {pinviRecentRuns.length ? (
+            <div className="mt-4" data-testid="admin-etl-pinvi-live-runs">
+              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+                Recent Pinvi runs
+              </h3>
+              <ul className="space-y-2 text-sm">
+                {pinviRecentRuns.map((run) => (
+                  <li key={run.run_id} className="rounded-sm bg-surface-soft p-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-mono text-xs">{run.job_name ?? run.run_id}</span>
+                      <span className="text-xs text-muted">{statusLabel(run.status)}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted">
+                      {formatUnixTime(run.start_time)} → {formatUnixTime(run.end_time)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {emailOutbox ? (
             <div
               className="mt-4 rounded-sm border border-hairline p-3"

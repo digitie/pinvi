@@ -1094,6 +1094,11 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
 `/v1/ops/import-jobs`를 서비스 토큰으로 호출한다. upstream 일부가 실패해도 화면은 열 수 있도록
 `kor_travel_map.status = degraded | down`과 `errors[]`로 강등한다.
 
+Pinvi 자체 Dagster는 `PINVI_DAGSTER_BASE_URL`의 `/server_info`와 `/graphql`을 읽어
+code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 노출한다.
+GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static registry
+(`assets` / `jobs` / `schedules`)와 app-owned outbox/retention summary는 계속 반환한다.
+
 권한: `admin` / `operator`
 
 응답 `data`:
@@ -1103,11 +1108,51 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
   "generated_at": "2026-06-27T00:00:00Z",
   "pinvi": {
     "status": "ok",
-    "message": "Dagster 응답 정상",
+    "message": "Dagster server_info/live snapshot 정상",
     "latency_ms": 11,
+    "checked_at": "2026-06-27T00:00:00Z",
+    "dagster_version": "1.13.11",
+    "dagster_webserver_version": "1.13.11",
+    "dagster_graphql_version": "1.13.11",
+    "repository_count": 1,
+    "job_count": 6,
+    "asset_count": 5,
+    "schedule_count": 5,
+    "sensor_count": 0,
+    "repositories": [
+      {
+        "name": "__repository__",
+        "location_name": "pinvi.etl.definitions",
+        "jobs": [{ "name": "pinvi_email_outbox_job", "is_job": true }],
+        "schedules": [
+          {
+            "name": "pinvi_email_outbox_schedule",
+            "job_name": "pinvi_email_outbox_job",
+            "cron_schedule": "*/15 * * * *",
+            "execution_timezone": "Asia/Seoul",
+            "status": "RUNNING",
+          },
+        ],
+        "sensors": [],
+        "asset_count": 5,
+        "asset_groups": ["pinvi_email", "pinvi_kasi", "pinvi_retention", "pinvi_telegram"],
+      },
+    ],
+    "recent_runs": [
+      {
+        "run_id": "pinvi-run-1",
+        "status": "SUCCESS",
+        "job_name": "pinvi_email_outbox_job",
+        "start_time": 1781190000,
+        "end_time": 1781190010,
+        "update_time": 1781190010,
+        "tags": {},
+      },
+    ],
     "assets": [
       { "key": "pinvi_kasi_special_days", "group_name": "pinvi_kasi" },
       { "key": "pinvi_email_outbox", "group_name": "pinvi_email" },
+      { "key": "pinvi_telegram_system_outbox", "group_name": "pinvi_telegram" },
       { "key": "pinvi_pii_retention", "group_name": "pinvi_retention" },
       { "key": "pinvi_location_log_archive", "group_name": "pinvi_retention" },
     ],
@@ -1115,6 +1160,7 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
       { "name": "kasi_special_days_job", "trigger": "schedule" },
       { "name": "kasi_poi_rise_set_job", "trigger": "on_demand" },
       { "name": "pinvi_email_outbox_job", "trigger": "schedule" },
+      { "name": "pinvi_telegram_system_outbox_job", "trigger": "schedule" },
       { "name": "pinvi_pii_retention_job", "trigger": "schedule" },
       { "name": "pinvi_location_log_archive_job", "trigger": "schedule" },
     ],
@@ -1129,6 +1175,13 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
       {
         "name": "pinvi_email_outbox_schedule",
         "job_name": "pinvi_email_outbox_job",
+        "cron_schedule": "*/15 * * * *",
+        "execution_timezone": "Asia/Seoul",
+        "status": "configured",
+      },
+      {
+        "name": "pinvi_telegram_system_outbox_schedule",
+        "job_name": "pinvi_telegram_system_outbox_job",
         "cron_schedule": "*/15 * * * *",
         "execution_timezone": "Asia/Seoul",
         "status": "configured",
@@ -1175,6 +1228,33 @@ Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한
           "complained": 0,
           "failure_count": 1,
           "failure_rate": 0.3333,
+        },
+      ],
+    },
+    "telegram_outbox": {
+      "total": 5,
+      "pending_total": 2,
+      "pending_due": 1,
+      "pending_backoff": 1,
+      "stuck_pending": 1,
+      "sent": 1,
+      "skipped": 1,
+      "failed": 1,
+      "retry_exhausted": 1,
+      "oldest_pending_scheduled_at": "2026-06-27T23:45:00Z",
+      "stuck_threshold_minutes": 15,
+      "max_attempts": 5,
+      "category_window_hours": 24,
+      "category_stats": [
+        {
+          "category": "trip_created",
+          "total": 4,
+          "pending": 2,
+          "sent": 0,
+          "skipped": 1,
+          "failed": 1,
+          "retry_exhausted": 1,
+          "retry_exhausted_rate": 0.25,
         },
       ],
     },

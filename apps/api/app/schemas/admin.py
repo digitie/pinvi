@@ -282,6 +282,17 @@ class AdminPinviEtlSummary(BaseModel):
     status: AdminSystemStatus
     message: str | None = None
     latency_ms: int | None = None
+    checked_at: datetime | None = None
+    dagster_version: str | None = None
+    dagster_webserver_version: str | None = None
+    dagster_graphql_version: str | None = None
+    repository_count: int = 0
+    job_count: int = 0
+    asset_count: int = 0
+    schedule_count: int = 0
+    sensor_count: int = 0
+    repositories: list[AdminDagsterRepositorySummary] = Field(default_factory=list)
+    recent_runs: list[AdminDagsterRunSummary] = Field(default_factory=list)
     assets: list[AdminEtlDefinitionAsset] = Field(default_factory=list)
     jobs: list[AdminEtlDefinitionJob] = Field(default_factory=list)
     schedules: list[AdminEtlDefinitionSchedule] = Field(default_factory=list)
@@ -299,6 +310,7 @@ class AdminDagsterJobSummary(BaseModel):
 
 class AdminDagsterScheduleSummary(BaseModel):
     name: str
+    job_name: str | None = None
     cron_schedule: str | None = None
     execution_timezone: str | None = None
     status: str | None = None

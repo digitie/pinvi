@@ -2,6 +2,43 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-243 ETL live / Dagster 운영 게이트
+
+**작업**: Admin ETL summary와 Web `/admin/etl`에 Pinvi Dagster live snapshot을 추가했다.
+
+**변경**:
+
+- `/admin/etl/summary`가 `PINVI_DAGSTER_BASE_URL`의 `/server_info`와 `/graphql`을 읽어
+  Dagster version, code location repository/job/asset/schedule, 최근 run 상태를 반환한다.
+- GraphQL 조회 실패는 `pinvi.status=degraded`로 강등하고, static app-owned registry와
+  email/Telegram/PII/location summary는 계속 반환한다.
+- Admin 응답의 Pinvi recent run은 `run_id`, `status`, `job_name`, timestamp만 노출하고 run tag
+  값은 싣지 않는다.
+- Web `/admin/etl`은 app-owned job row마다 live/registry 상태, schedule cron/timezone,
+  최신 run status를 표시하고, live code location / recent Pinvi runs 영역을 추가했다.
+- `docs/api/admin.md`, `docs/runbooks/etl.md`, `docs/architecture/dagster-etl-bridge.md`,
+  Sprint/task/resume 추적 문서를 T-243 상태로 갱신했다.
+
+**검증**:
+
+- Linux: `codegraph sync`
+- Linux: `uv run --extra dev ruff check ...` (API targeted)
+- Linux: `uv run --extra dev ruff format --check ...` (API targeted)
+- Linux: `PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_admin_etl_dagster_probe.py tests/integration/test_admin_etl_provider_sync_api.py -rA`
+- Linux: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npx prettier --check ...`
+
+**주의**:
+
+- `uv run mypy`는 `.venv/bin/mypy` shebang이 과거 worktree 경로를 가리켜 실패했다.
+  현재 Python으로 `python -m mypy`를 실행해 통과시켰다.
+- N150 API smoke / Playwright live는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
+  PR merge 후 배포된 환경에서 `/admin/etl`, `/admin/provider-sync` read-only live를 실행한다.
+
+**다음**: T-244 Request timeline API로 진행한다.
+
 ## 2026-06-28 (codex) — T-242 Telegram system summary/outbox ETL
 
 **작업**: Telegram system outbox 상태를 발송 없이 집계하는 Pinvi app-owned Dagster asset과

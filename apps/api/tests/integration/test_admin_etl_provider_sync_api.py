@@ -20,6 +20,12 @@ from app.models.session import UserSession
 from app.models.telegram_outbox import TelegramNotificationOutbox
 from app.models.user import User
 from app.models.user_email_verification import UserEmailVerification
+from app.schemas.admin import (
+    AdminDagsterJobSummary,
+    AdminDagsterRepositorySummary,
+    AdminDagsterRunSummary,
+    AdminDagsterScheduleSummary,
+)
 from app.services import admin_etl as admin_etl_service
 from app.services.location_audit import append_location_log
 
@@ -406,8 +412,49 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     auth_cookies: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_probe() -> tuple[str, str, int | None]:
-        return "ok", "Dagster 응답 정상", 11
+    async def fake_probe() -> admin_etl_service._PinviDagsterProbeResult:
+        return admin_etl_service._PinviDagsterProbeResult(
+            status="ok",
+            message="Dagster server_info/live snapshot 정상",
+            latency_ms=11,
+            checked_at=datetime.now(UTC),
+            dagster_version="1.13.11",
+            dagster_webserver_version="1.13.11",
+            dagster_graphql_version="1.13.11",
+            repositories=[
+                AdminDagsterRepositorySummary(
+                    name="__repository__",
+                    location_name="pinvi.etl.definitions",
+                    jobs=[
+                        AdminDagsterJobSummary(name="kasi_special_days_job"),
+                        AdminDagsterJobSummary(name="pinvi_email_outbox_job"),
+                    ],
+                    schedules=[
+                        AdminDagsterScheduleSummary(
+                            name="pinvi_email_outbox_schedule",
+                            job_name="pinvi_email_outbox_job",
+                            cron_schedule="*/15 * * * *",
+                            execution_timezone="Asia/Seoul",
+                            status="RUNNING",
+                        )
+                    ],
+                    sensors=[],
+                    asset_count=5,
+                    asset_groups=["pinvi_email", "pinvi_kasi"],
+                )
+            ],
+            recent_runs=[
+                AdminDagsterRunSummary(
+                    run_id="pinvi-run-1",
+                    status="SUCCESS",
+                    job_name="pinvi_email_outbox_job",
+                    start_time=1781190000.0,
+                    end_time=1781190010.0,
+                    update_time=1781190010.0,
+                    tags={},
+                )
+            ],
+        )
 
     monkeypatch.setattr(admin_etl_service, "_probe_pinvi_dagster", fake_probe)
     monkeypatch.setattr(
@@ -430,6 +477,16 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert "localhost" not in resp.text
     data = resp.json()["data"]
     assert data["pinvi"]["status"] == "ok"
+    assert data["pinvi"]["dagster_version"] == "1.13.11"
+    assert data["pinvi"]["repository_count"] == 1
+    assert data["pinvi"]["job_count"] == 2
+    assert data["pinvi"]["asset_count"] == 5
+    assert data["pinvi"]["schedule_count"] == 1
+    assert data["pinvi"]["repositories"][0]["location_name"] == "pinvi.etl.definitions"
+    assert data["pinvi"]["repositories"][0]["schedules"][0]["job_name"] == "pinvi_email_outbox_job"
+    assert data["pinvi"]["repositories"][0]["schedules"][0]["execution_timezone"] == "Asia/Seoul"
+    assert data["pinvi"]["recent_runs"][0]["job_name"] == "pinvi_email_outbox_job"
+    assert data["pinvi"]["recent_runs"][0]["tags"] == {}
     assert {job["name"] for job in data["pinvi"]["jobs"]} == {
         "kasi_special_days_job",
         "kasi_poi_rise_set_job",
@@ -508,8 +565,13 @@ async def test_admin_etl_summary_degrades_when_upstream_ops_is_unavailable(
     auth_cookies: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_probe() -> tuple[str, str, int | None]:
-        return "ok", "Dagster 응답 정상", 11
+    async def fake_probe() -> admin_etl_service._PinviDagsterProbeResult:
+        return admin_etl_service._PinviDagsterProbeResult(
+            status="ok",
+            message="Dagster server_info/live snapshot 정상",
+            latency_ms=11,
+            checked_at=datetime.now(UTC),
+        )
 
     monkeypatch.setattr(admin_etl_service, "_probe_pinvi_dagster", fake_probe)
     monkeypatch.setattr(

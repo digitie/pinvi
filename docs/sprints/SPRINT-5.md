@@ -32,6 +32,8 @@
       - `pinvi_pii_retention` (PII 보존 기간 만료 후보 dry-run, T-240 완료)
       - `pinvi_location_log_archive` (location_access_log archive 후보 dry-run, T-241 완료)
       - `pinvi_telegram_system_outbox` (Telegram outbox retry/backoff/stuck 점검, T-242 완료)
+      - `/admin/etl/summary` Pinvi Dagster live snapshot (`/server_info` + GraphQL repository/run,
+        T-243 완료)
       - (후속) `pinvi_telegram_weekly` 사용자 weekly/daily 브리프
     - 신규 app-owned job은 ADR-050의 retry/backoff, idempotency, failure notification,
       dry-run gate를 따른다.
