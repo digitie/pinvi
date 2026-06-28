@@ -6,14 +6,14 @@
 
 ## 1. 한눈에 보는 분류
 
-| 증상 | 실제 원인 | 1차 대응 |
-|------|-----------|-----------|
-| `fatal: not a git repository: ... F:/dev/.../.git/worktrees/...` | worktree 포인터가 Windows 경로로 남아 Linux git이 해석하지 못함 | Linux에서 `git worktree repair <worktree>` |
-| `git worktree list`에 정상 worktree가 `prunable`로 표시 | `.git`/`gitdir` 포인터가 서로 다른 OS 경로 체계를 가리킴 | `prune` 금지, repair 먼저 |
-| `command -v codegraph`가 `/mnt/c/...`를 가리킴 | Windows npm shim이 WSL PATH 앞에 있음 | Linux native CodeGraph 설치/PATH 교정 |
-| `node`, `npm`, `rg`, `git`이 `.exe`/`.cmd`로 잡힘 | Windows shim 오염 | 해당 셸에서 중지하고 Linux 도구로 교정 |
-| PowerShell → WSL → SSH → Docker → Python quote가 반복 실패 | 여러 shell이 따옴표/escape를 재해석 | Linux 셸에서 stdin script 방식 사용 |
-| 통합 테스트가 "table does not exist" / "another operation in progress" | async alembic commit 또는 pytest-asyncio loop/pool 문제 | env.py commit, 함수 스코프 엔진 + NullPool |
+| 증상                                                                   | 실제 원인                                                       | 1차 대응                                   |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
+| `fatal: not a git repository: ... F:/dev/.../.git/worktrees/...`       | worktree 포인터가 Windows 경로로 남아 Linux git이 해석하지 못함 | Linux에서 `git worktree repair <worktree>` |
+| `git worktree list`에 정상 worktree가 `prunable`로 표시                | `.git`/`gitdir` 포인터가 서로 다른 OS 경로 체계를 가리킴        | `prune` 금지, repair 먼저                  |
+| `command -v codegraph`가 `/mnt/c/...`를 가리킴                         | Windows npm shim이 WSL PATH 앞에 있음                           | Linux native CodeGraph 설치/PATH 교정      |
+| `node`, `npm`, `rg`, `git`이 `.exe`/`.cmd`로 잡힘                      | Windows shim 오염                                               | 해당 셸에서 중지하고 Linux 도구로 교정     |
+| PowerShell → WSL → SSH → Docker → Python quote가 반복 실패             | 여러 shell이 따옴표/escape를 재해석                             | Linux 셸에서 stdin script 방식 사용        |
+| 통합 테스트가 "table does not exist" / "another operation in progress" | async alembic commit 또는 pytest-asyncio loop/pool 문제         | env.py commit, 함수 스코프 엔진 + NullPool |
 
 ## 2. 패턴 A — worktree 포인터가 Windows 경로로 남음
 
@@ -139,6 +139,10 @@ SH
 2. 브라우저 runtime, 권한, display, 네트워크 문제로 N150 실행이 불가능하면 Windows
    fallback을 사용한다.
 3. fallback을 쓴 경우 journal/PR에 N150 실패 사유와 Windows 실행 명령을 적는다.
+
+- Ubuntu 26.04 N150에서 `npx playwright install chromium`이 "Playwright does not support
+  chromium on ubuntu26.04-x64"로 실패할 수 있다. 이 경우 N150 Web/API health를 먼저 확인한 뒤
+  Windows fallback runner로 동일 live suite를 실행하고, 실패 사유를 journal/PR에 남긴다.
 
 ## 8. 표준 fallback 순서
 

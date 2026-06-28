@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-246 Debug live UI e2e 확장
+
+`apps/web/e2e/admin-debug-live.live.ts`를 추가해 Admin debug live read-only 경로를 별도 live
+suite로 고정했다. 테스트는 `/admin/debug/logs` render, sanitized polling fallback 상태,
+filter query 유지, live toggle/pause, request timeline 이동, raw secret pattern 미노출을 확인한다.
+운영 데이터에 matching timeline event가 없을 수 있어 summary 또는 "event 없음" alert 둘 다 정상
+route render로 인정한다.
+
+Pinvi admin client는 현재 요청의 `X-Request-Id`를 `kor-travel-map` admin/ops 호출에 전달한다.
+Debug live test는 UI credential 대신 `PINVI_ADMIN_LIVE_STORAGE_STATE`도 받을 수 있어 N150에서
+짧은 수명 storage state를 만들어 비밀번호 없이 실행할 수 있다.
+
+N150에서는 브랜치 checkout을 배포해 API/Web을 재빌드·재기동하고 health를 확인했다. N150 자체
+Playwright는 Ubuntu 26.04에서 Chromium 설치가 미지원이라 실행 불가했고, Windows fallback runner에서
+N150 Web/API 대상 `admin-debug-live.live.ts` 1건이 통과했다.
+
+다음 작업은 T-247 Provider sync 운영 mutation 계약 정리다.
+
 ## 2026-06-28 (codex) — T-245 Debug log polling fallback
 
 v0.2.0 Admin debug live mode는 Loki/Promtail LogQL WebSocket 대신 sanitized polling fallback으로

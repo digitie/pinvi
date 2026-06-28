@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-246 Debug live UI e2e 확장
+
+**작업**: Admin debug live read-only e2e를 별도 live suite로 추가하고 N150 대상 검증까지 수행했다.
+
+**변경**:
+
+- `apps/web/e2e/admin-debug-live.live.ts`를 추가했다. `/admin/debug/logs` render, polling fallback
+  status, filter query, live toggle/pause, request timeline 이동, raw secret pattern 미노출을 확인한다.
+- 운영 데이터에 matching timeline event가 없을 수 있어 timeline summary 또는 not-found alert를 모두
+  정상 route render로 인정한다.
+- `KorTravelMapAdminClient.with_request_id()`를 추가해 현재 Pinvi `X-Request-Id`를 upstream
+  `kor-travel-map` admin/ops 호출에도 전달한다.
+- debug live test는 `PINVI_ADMIN_LIVE_STORAGE_STATE`를 지원한다. N150에서는 짧은 수명의 storage
+  state를 생성해 UI password를 셸에 싣지 않고 실행했다.
+- Admin API 문서와 Admin live e2e runbook을 갱신했다.
+
+**검증**:
+
+- Linux: `uv run --extra dev ruff check app/clients/kor_travel_map_admin.py tests/unit/test_kor_travel_map_admin_client.py`
+- Linux: `uv run --extra dev ruff format --check app/clients/kor_travel_map_admin.py tests/unit/test_kor_travel_map_admin_client.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/unit/test_kor_travel_map_admin_client.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_dedup_integrity_debug_api.py -rA`
+- Linux: `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npm -w @pinvi/web run test:e2e:admin-live:list -- admin-debug-live.live.ts`
+- Linux: `npx prettier --check ...`, `git diff --check`
+- N150: branch checkout 후 `pinvi-api`/`pinvi-web` rebuild/recreate, API `/health`, API `/health/db`,
+  Web `/admin/login` health 확인.
+- N150 Playwright: `npx playwright install chromium`이 Ubuntu 26.04 미지원으로 실패했다.
+- Windows fallback: N150 Web/API 대상 `admin-debug-live.live.ts` 1건 통과.
+
+**다음**: T-247 Provider sync 운영 mutation 계약 정리.
+
 ## 2026-06-28 (codex) — T-245 Debug log polling fallback
 
 **작업**: Loki/Promtail LogQL WebSocket 대신 v0.2.0 Admin debug live mode를 sanitized polling

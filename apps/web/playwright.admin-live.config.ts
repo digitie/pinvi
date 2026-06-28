@@ -8,7 +8,7 @@ const testTimeoutMs = Number(process.env.PINVI_ADMIN_LIVE_TEST_TIMEOUT_MS ?? '12
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'admin-live-*.live.ts',
+  testMatch: ['admin-live-*.live.ts', 'admin-debug-live.live.ts'],
   timeout: Number.isFinite(testTimeoutMs) ? testTimeoutMs : 120_000,
   expect: {
     timeout: 15_000,

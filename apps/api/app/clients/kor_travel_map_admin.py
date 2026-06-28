@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 _ADMIN_PROXY_SECRET_HEADER = "X-Kor-Travel-Map-Admin-Proxy-Secret"  # noqa: S105
 _ADMIN_ACTOR_HEADER = "X-Kor-Travel-Map-Actor"
+_REQUEST_ID_HEADER = "X-Request-Id"
 
 
 def _retry_after(resp: httpx.Response) -> int | None:
@@ -67,6 +68,7 @@ class KorTravelMapAdminClient:
         admin_actor: str = "pinvi-admin",
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
+        request_id: str | None = None,
     ) -> None:
         self._http = http
         self._service_token = service_token.strip()
@@ -74,18 +76,32 @@ class KorTravelMapAdminClient:
         self._admin_actor = admin_actor.strip() or "pinvi-admin"
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
+        self._request_id = (request_id or "").strip()
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
+        if self._request_id:
+            headers[_REQUEST_ID_HEADER] = self._request_id
         if self._service_token:
             headers[_SERVICE_TOKEN_HEADER] = self._service_token
         if self._admin_proxy_secret:
             headers[_ADMIN_PROXY_SECRET_HEADER] = self._admin_proxy_secret
             headers[_ADMIN_ACTOR_HEADER] = self._admin_actor
         return headers
+
+    def with_request_id(self, request_id: str | None) -> KorTravelMapAdminClient:
+        return KorTravelMapAdminClient(
+            self._http,
+            service_token=self._service_token,
+            admin_proxy_secret=self._admin_proxy_secret,
+            admin_actor=self._admin_actor,
+            max_attempts=self._max_attempts,
+            backoff_base_seconds=self._backoff_base_seconds,
+            request_id=request_id,
+        )
 
     async def _send(
         self,
@@ -566,7 +582,7 @@ def get_kor_travel_map_admin_client(request: Request) -> KorTravelMapAdminClient
                 "message": "지도 admin 서비스가 일시적으로 사용 불가합니다.",
             },
         )
-    return client
+    return client.with_request_id(getattr(request.state, "request_id", None))
 
 
 KorTravelMapAdminClientDep = Annotated[

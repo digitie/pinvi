@@ -22,9 +22,9 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-246 Debug live UI e2e 확장.
+- 다음 구현: T-247 Provider sync 운영 mutation 계약 정리.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-245 진입 전
-  PR #278의 reminder comment와 CI success를 확인하고 merge했다. 신규 차단 코멘트는 없다.
+  PR #279의 reminder comment, CI success, 차단 코멘트 없음, merge를 확인했다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
@@ -41,8 +41,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-246 — Debug live UI e2e 확장.
-      `/admin/debug/logs`와 request timeline read-only live e2e, masking assertion을 추가한다.
 - [ ] T-247 — Provider sync 운영 mutation 계약 정리.
       upstream `kor-travel-map` mutation 계약 유무를 확인한다. provider run-now/pause/resume이 없으면
       upstream PR 또는 v0.2.0 read-only + cancel 범위로 닫는 대안을 결정한다.
