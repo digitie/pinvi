@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-249 App-owned integrity source / known orphan fix
+
+**작업**: Pinvi app-owned integrity source를 `/admin/integrity`에 추가하고 known app issue를 같은
+table UI에서 구분했다.
+
+**변경**:
+
+- `app.data_integrity_violations` migration/model을 추가했다. active `rule_key`/`entity` 중복 방지
+  unique index, status/severity check, entity/status 조회 index를 둔다.
+- `GET /admin/integrity/issues`에 `source=all|kor_travel_map|pinvi_app` filter를 추가했다.
+  `pinvi_app` source는 persisted row와 broken POI feature link, invalid marker color,
+  curated import source drift, active attachment deleted target 계산 rule을 반환한다.
+- `pinvi_app:` issue action은 read-only guard로 409
+  `PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED`를 반환한다. upstream action relay/audit은
+  `kor_travel_map` issue에만 유지한다.
+- shared schema/API client/query key에 issue `source`를 추가했다.
+- Web `/admin/integrity`에 source filter/column/badge를 추가하고 Pinvi app issue row는 read-only로
+  표시한다.
+- Admin API, data model, postgres schema, Sprint 5 execplan, tasks/resume/changelog 추적 문서를
+  갱신했다.
+
+**검증**:
+
+- Linux: `uv run --extra dev ruff check app/api/v1/admin/integrity.py app/services/admin_app_integrity.py app/models/data_integrity.py app/schemas/admin.py tests/integration/test_admin_dedup_integrity_debug_api.py alembic/versions/20260628_0027_data_integrity_violations.py`
+- Linux: `uv run --extra dev ruff format --check app/api/v1/admin/integrity.py app/services/admin_app_integrity.py app/models/data_integrity.py app/schemas/admin.py tests/integration/test_admin_dedup_integrity_debug_api.py alembic/versions/20260628_0027_data_integrity_violations.py`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_admin_dedup_integrity_debug_api.py -rA`
+- Linux: `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+- Linux: `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- Linux: `npm -w @pinvi/api-client run typecheck --if-present`, `npm -w @pinvi/schemas run typecheck --if-present`
+- Linux: `npx prettier --check packages/schemas/src/admin.ts packages/api-client/src/endpoints/admin.ts packages/api-client/src/query-keys.ts apps/web/app/'(admin)'/admin/integrity/page.tsx apps/web/e2e/admin-dedup-integrity-debug.e2e.ts`
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-dedup-integrity-debug.e2e.ts --workers=1`
+
+**주의**:
+
+- N150 Playwright는 이 세션에 `n150` SSH alias가 없어 직접 실행하지 못했다. mock e2e는 규칙대로
+  Windows fallback runner에서 실행했다.
+- Pinvi app-owned integrity issue는 아직 read-only다. resolve/fix workflow는 별도 task/ADR에서
+  lock, idempotency, audit, auto-fix 정책을 먼저 정한다.
+
+**다음**: T-250 Backup script / snapshot endpoint hardening.
+
 ## 2026-06-28 (codex) — T-248 Feature detail subpages
 
 **작업**: Admin feature detail의 source/override/weather 하위 화면을 read-only deep link로 추가했다.

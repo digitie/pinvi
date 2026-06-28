@@ -6,6 +6,14 @@
 
 ## 2026-06-28
 
+- [x] T-249 — App-owned integrity source / known orphan fix.
+      `app.data_integrity_violations` migration/model과 Pinvi app-owned integrity service를
+      추가했다. `/admin/integrity/issues`는 `source=all|kor_travel_map|pinvi_app` filter를
+      받고, persisted row와 broken POI feature link, marker color drift, curated import source
+      drift, active attachment deleted target 같은 known app issue를 `source="pinvi_app"`로
+      반환한다. Web `/admin/integrity`는 source filter/column을 표시하고 Pinvi app issue는
+      read-only로 둔다.
+
 - [x] T-248 — Feature detail subpages.
       `GET /admin/features/{id}/sources`, `/overrides`, `/weather-values`를 추가했다.
       sources/overrides는 `kor-travel-map` admin detail payload에서 read-only projection으로

@@ -27,6 +27,12 @@ const ISSUE_STATUS_OPTIONS = [
   { value: 'ignored', label: '무시' },
 ] as const;
 
+const ISSUE_SOURCE_OPTIONS = [
+  { value: 'all', label: 'source 전체' },
+  { value: 'kor_travel_map', label: 'kor-travel-map' },
+  { value: 'pinvi_app', label: 'Pinvi app' },
+] as const;
+
 const SEVERITY_OPTIONS = [
   { value: 'all', label: 'severity 전체' },
   { value: 'info', label: 'info' },
@@ -65,6 +71,9 @@ function ErrorBox({ message }: { message: string }) {
 }
 
 function issueActions(item: AdminIntegrityIssueRecord): IssueAction[] {
+  if (item.source === 'pinvi_app') {
+    return [];
+  }
   return item.status === 'resolved' || item.status === 'ignored'
     ? ['reopen']
     : ['resolve', 'ignore'];
@@ -82,6 +91,8 @@ function IssueActionIcon({ action }: { action: IssueAction }) {
 
 export default function AdminIntegrityPage() {
   const queryClient = useQueryClient();
+  const [issueSource, setIssueSource] =
+    useState<(typeof ISSUE_SOURCE_OPTIONS)[number]['value']>('all');
   const [issueStatus, setIssueStatus] =
     useState<(typeof ISSUE_STATUS_OPTIONS)[number]['value']>('open');
   const [severity, setSeverity] = useState<(typeof SEVERITY_OPTIONS)[number]['value']>('all');
@@ -97,12 +108,13 @@ export default function AdminIntegrityPage() {
 
   const issueParams = useMemo<AdminIntegrityIssueListParams>(
     () => ({
+      source: issueSource,
       status: issueStatus,
       severity: severity === 'all' ? undefined : severity,
       provider: provider.trim() || undefined,
       pageSize: 50,
     }),
-    [issueStatus, provider, severity],
+    [issueSource, issueStatus, provider, severity],
   );
   const reportParams = useMemo<AdminConsistencyReportListParams>(
     () => ({
@@ -170,9 +182,19 @@ export default function AdminIntegrityPage() {
       cell: (item) => (
         <div>
           <div className="font-mono text-xs">{item.issue_id}</div>
-          <div className="text-xs text-muted">{item.violation_type}</div>
+          <div className="flex flex-wrap items-center gap-1 text-xs text-muted">
+            <span>{item.violation_type}</span>
+            <span className="rounded-sm border border-hairline px-1 font-mono">{item.source}</span>
+          </div>
         </div>
       ),
+    },
+    {
+      key: 'source',
+      header: 'source',
+      sortable: true,
+      sortValue: (item) => item.source,
+      cell: (item) => item.source,
     },
     {
       key: 'severity',
@@ -219,6 +241,7 @@ export default function AdminIntegrityPage() {
       header: '조치',
       cell: (item) => (
         <div className="flex items-center gap-1">
+          {issueActions(item).length === 0 && <span className="text-xs text-muted">read-only</span>}
           {issueActions(item).map((action) => (
             <button
               key={action}
@@ -300,7 +323,7 @@ export default function AdminIntegrityPage() {
   return (
     <AdminPage
       title="정합성"
-      description="kor-travel-map consistency issue와 report 조회"
+      description="kor-travel-map consistency issue와 Pinvi app integrity issue 조회"
       actions={
         <button
           type="button"
@@ -317,6 +340,18 @@ export default function AdminIntegrityPage() {
       }
     >
       <FilterBar>
+        <select
+          value={issueSource}
+          onChange={(event) => setIssueSource(event.target.value as typeof issueSource)}
+          className={inputClass}
+          data-testid="admin-integrity-source"
+        >
+          {ISSUE_SOURCE_OPTIONS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
         <select
           value={issueStatus}
           onChange={(event) => setIssueStatus(event.target.value as typeof issueStatus)}

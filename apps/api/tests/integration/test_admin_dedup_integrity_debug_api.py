@@ -14,8 +14,14 @@ from app.clients.kor_travel_map import KorTravelMapUnavailable
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
 from app.models.api_call_log import ApiCallLog
+from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog, LocationAccessLog
+from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
+from app.models.data_integrity import DataIntegrityViolation
 from app.models.email_queue import EmailQueue
+from app.models.poi import TripDayPoi
+from app.models.trip import Trip
+from app.models.trip_day import TripDay
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -349,12 +355,140 @@ async def test_admin_integrity_routes_proxy_issues_and_reports(
     assert issues.status_code == 200, issues.text
     assert reports.status_code == 200, reports.text
     assert issues.json()["data"]["items"][0]["issue_id"] == "iss-1"
+    assert issues.json()["data"]["items"][0]["source"] == "kor_travel_map"
     assert reports.json()["data"]["items"][0]["report_id"] == "rep-1"
     assert fake.issue_kwargs is not None
     assert fake.issue_kwargs["status_filter"] == "open"
     assert fake.issue_kwargs["severity"] == "error"
     assert fake.issue_kwargs["provider"] == "kma"
     assert fake.report_kwargs == {"severity_max": "WARN", "page_size": 50, "cursor": None}
+
+
+async def test_admin_integrity_pinvi_app_source_lists_known_violations(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-integrity-app@example.com", roles=["user", "admin"]
+    )
+    trip_id = uuid.uuid4()
+    broken_poi_id = uuid.uuid4()
+    invalid_marker_poi_id = uuid.uuid4()
+    deleted_poi_id = uuid.uuid4()
+    curated_plan_id = uuid.uuid4()
+    curated_poi_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add(
+            Trip(
+                trip_id=trip_id,
+                owner_user_id=admin_id,
+                title="정합성 테스트 여행",
+                status="planned",
+            )
+        )
+        await db.flush()
+        db.add(TripDay(trip_id=trip_id, day_index=1))
+        await db.flush()
+        db.add_all(
+            [
+                TripDayPoi(
+                    attachment_id=broken_poi_id,
+                    trip_id=trip_id,
+                    day_index=1,
+                    sort_order="a0",
+                    feature_id="feature-broken",
+                    feature_link_broken_at=now,
+                    added_by_user_id=admin_id,
+                ),
+                TripDayPoi(
+                    attachment_id=invalid_marker_poi_id,
+                    trip_id=trip_id,
+                    day_index=1,
+                    sort_order="a1",
+                    feature_id="feature-invalid-marker",
+                    custom_marker_color="P-99",
+                    added_by_user_id=admin_id,
+                ),
+                TripDayPoi(
+                    attachment_id=deleted_poi_id,
+                    trip_id=trip_id,
+                    day_index=1,
+                    sort_order="a2",
+                    feature_id="feature-deleted",
+                    deleted_at=now,
+                    added_by_user_id=admin_id,
+                ),
+                CuratedTripPlan(
+                    curated_plan_id=curated_plan_id,
+                    slug=f"integrity-{uuid.uuid4().hex[:8]}",
+                    title="정합성 테스트 큐레이션",
+                    category="recommended",
+                    source_system="kor-travel-map",
+                    source_curated_feature_id="curated-feature-plan",
+                    created_by_admin_id=admin_id,
+                    updated_by_admin_id=admin_id,
+                ),
+                DataIntegrityViolation(
+                    rule_key="manual_quota_orphan",
+                    entity_kind="user_quota",
+                    entity_id=str(admin_id),
+                    severity="critical",
+                    message="사용자 quota override 점검 필요",
+                    details={"feature_id": "feature-persisted", "quota_scope": "trip"},
+                    detected_at=now,
+                ),
+            ]
+        )
+        await db.flush()
+        db.add_all(
+            [
+                CuratedPlanPoi(
+                    curated_poi_id=curated_poi_id,
+                    curated_plan_id=curated_plan_id,
+                    day_index=1,
+                    sort_order="a0",
+                    feature_id="feature-curated",
+                    source_curated_feature_id="curated-feature-other",
+                    source_curated_feature_item_id="curated-item-1",
+                ),
+                CuratedPlanAttachment(
+                    trip_poi_id=deleted_poi_id,
+                    bucket="pinvi-test",
+                    storage_key="integrity/deleted-poi.jpg",
+                    original_filename="deleted-poi.jpg",
+                    content_type="image/jpeg",
+                    byte_size=1024,
+                    uploaded_by_user_id=admin_id,
+                ),
+            ]
+        )
+        await db.commit()
+
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/integrity/issues",
+            params={"source": "pinvi_app", "status": "open", "page_size": "20"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]["items"]
+    assert {item["source"] for item in items} == {"pinvi_app"}
+    assert {item["violation_type"] for item in items} >= {
+        "manual_quota_orphan",
+        "broken_poi_feature_link",
+        "invalid_trip_day_poi_marker_color",
+        "curated_import_source_drift",
+        "active_attachment_deleted_target",
+    }
+    assert any(item["feature_id"] == "feature-broken" for item in items)
+    assert fake.issue_kwargs is None
 
 
 async def test_admin_integrity_issue_action_proxies_and_writes_audit(
@@ -413,6 +547,30 @@ async def test_admin_integrity_issue_action_proxies_and_writes_audit(
         "dataset_key": "places",
         "violation_type": "missing_coord",
     }
+
+
+async def test_admin_integrity_pinvi_app_issue_action_is_read_only(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-integrity-action-app@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/integrity/issues/pinvi_app:broken_poi_feature_link:poi-1/action",
+            json={"action": "resolve", "access_reason": "운영자가 앱 정합성 issue를 확인함"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["error"]["code"] == "PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED"
+    assert fake.issue_action_args is None
 
 
 async def test_admin_debug_logs_routes_proxy_system_and_api_logs(

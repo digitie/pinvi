@@ -45,7 +45,7 @@
   - `/admin/features/{id}/sources` / `/overrides` / `/weather-values` (M-15, T-248 완료)
   - `/admin/provider-sync` import job cancel relay (T-247 완료). provider run-now/pause/resume은
     upstream provider mutation 계약 또는 별도 ADR 전까지 후속으로 남긴다.
-  - `/admin/integrity` `app.data_integrity_violations` 1차 소스
+  - `/admin/integrity` `app.data_integrity_violations` 1차 소스 (T-249 완료)
   - `/admin/debug/logs` sanitized polling fallback live mode (T-245 완료; Loki LogQL WebSocket은
     운영 선택 계층)
   - `/admin/debug/request/{id}` X-Request-Id 타임라인 (T-244 완료)

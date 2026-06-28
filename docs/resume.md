@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-249 App-owned integrity source / known orphan fix
+
+Pinvi app-owned integrity source를 추가했다. `app.data_integrity_violations` migration/model을
+추가하고, `/admin/integrity/issues`에 `source=all|kor_travel_map|pinvi_app` filter를 붙였다.
+`source=pinvi_app`는 persisted row와 Pinvi 계산 rule을 반환하고, `source=kor_travel_map`은 기존
+upstream consistency issue proxy를 유지한다. `provider`/`dataset_key` filter는 upstream 전용이므로
+지정 시 Pinvi app row를 제외한다.
+
+known app issue는 broken POI feature link, invalid POI marker color, curated import source drift,
+active attachment deleted target을 우선 계산한다. 기존 sort 중복 rule도 service에 포함했지만 DB
+unique index가 정상 동작하는 한 일반 데이터에서는 나타나지 않는다. Pinvi app issue는 read-only로
+두고, `pinvi_app:` issue action은 409 `PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED`를 반환한다.
+
+Web `/admin/integrity`는 source filter와 source column/badge를 추가했고, Pinvi app issue row는
+조치 버튼 대신 read-only로 표시한다. API/admin/data-model/postgres schema 문서와 Sprint 5 추적
+문서를 갱신했다.
+
+Linux/WSL에서 ruff, API integration, strict mypy, Web/API-client/schema typecheck, Web lint,
+Prettier를 검증했다. Playwright는 N150 SSH alias가 이 세션에 없어 직접 실행할 수 없었고, Windows
+fallback runner에서 `admin-dedup-integrity-debug.e2e.ts` 3건이 통과했다.
+
+다음 작업은 T-250 Backup script / snapshot endpoint hardening이다.
+
 ## 2026-06-28 (codex) — T-248 Feature detail subpages
 
 Admin feature detail subpage를 read-only deep link로 추가했다. `GET /admin/features/{feature_id}/sources`

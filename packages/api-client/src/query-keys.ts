@@ -74,6 +74,7 @@ export const queryKeys = {
     categoryMappings: (params: { q?: string; includeCounts?: boolean; activeOnly?: boolean }) =>
       ['admin', 'category-mappings', params] as const,
     integrityIssues: (params: {
+      source?: string;
       status?: string;
       severity?: string;
       violationType?: string;

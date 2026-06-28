@@ -310,16 +310,17 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-249 — App-owned integrity source / known orphan fix
 
-- `app.data_integrity_violations` 또는 동등한 Pinvi-owned integrity source를 구현한다.
-- known issue: orphan POI, curated import source drift, trip/day/POI 하위 연결 깨짐,
+- 완료: `app.data_integrity_violations` Pinvi-owned integrity source를 구현했다.
+- 완료: known issue: orphan POI, curated import source drift, trip/day/POI 하위 연결 깨짐,
   attachment/quota orphan을 우선 탐지한다.
-- migration, service, Admin `/admin/integrity` source filter를 추가한다.
-- kor-travel-map consistency issue와 Pinvi app integrity issue를 같은 table UI에서 구분한다.
+- 완료: migration, service, Admin `/admin/integrity` source filter를 추가했다.
+- 완료: kor-travel-map consistency issue와 Pinvi app integrity issue를 같은 table UI에서 구분한다.
 
 검증 케이스:
 
-- DB migration contract: indexes/status enum/cascade.
-- API integration: Pinvi issue list, upstream issue list, combined source filter.
+- 완료: DB migration contract: index/status enum/active unique.
+- 완료: API integration: Pinvi issue list, upstream issue list, read-only action guard.
+- 완료: Web e2e mock: source filter, source column, Pinvi app row read-only.
 - Web e2e mock/live: source filter, severity/status filter, action availability.
 
 ### T-250 — Backup script / snapshot endpoint hardening

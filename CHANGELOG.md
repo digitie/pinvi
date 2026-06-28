@@ -38,6 +38,10 @@
 - Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 실제 운영 조회 화면으로
   교체했다. `kor-travel-map` dedup 후보, consistency issue/report, sanitized system/API logs를
   검색/상태/severity/level 필터와 table/detail 패널로 확인할 수 있다.
+- Admin `/admin/integrity`가 Pinvi app-owned integrity source를 함께 표시한다.
+  `app.data_integrity_violations` persisted row와 broken POI feature link, marker color drift,
+  curated import source drift, soft-delete target attachment 같은 known app issue를
+  `source="pinvi_app"`로 구분하고, kor-travel-map consistency issue와 같은 table에서 filter한다.
 - Admin `/admin/dedup-review`에서 pending dedup 후보를 직접 판정할 수 있다. 병합 master feature와
   운영 사유를 입력하면 `kor-travel-map` verdict API로 relay하고 Pinvi 감사 로그를 남긴다.
 - Admin `/admin/category-mapping`을 `kor-travel-map` category catalog read-only 운영 화면으로

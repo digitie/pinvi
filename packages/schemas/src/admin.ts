@@ -643,6 +643,7 @@ export type AdminDevSafetyActionResult = z.infer<typeof AdminDevSafetyActionResu
 
 export const AdminIntegrityIssueRecordSchema = z.object({
   issue_id: z.string(),
+  source: z.enum(['kor_travel_map', 'pinvi_app']).default('kor_travel_map'),
   violation_type: z.string(),
   severity: z.string(),
   message: z.string(),

@@ -527,6 +527,39 @@ CREATE INDEX ix_curated_plan_attachments_storage_key
   ON app.curated_plan_attachments (bucket, storage_key);
 ```
 
+### 3.8 `app.data_integrity_violations`
+
+Pinvi app-owned `/admin/integrity` persisted source다. `kor-travel-map` consistency issue는
+별도 OpenAPI source로만 조회하며, 이 table에 복제하지 않는다.
+
+```sql
+CREATE TABLE app.data_integrity_violations (
+  id           bigserial PRIMARY KEY,
+  rule_key     varchar(120) NOT NULL,
+  entity_kind  varchar(80) NOT NULL,
+  entity_id    text NOT NULL,
+  severity     varchar(16) NOT NULL DEFAULT 'warning'
+    CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+  message      text NOT NULL,
+  details      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status       varchar(16) NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open', 'acknowledged', 'resolved', 'ignored')),
+  detected_at  timestamptz NOT NULL DEFAULT now(),
+  resolved_at  timestamptz,
+  auto_fixable boolean NOT NULL DEFAULT false,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_data_integrity_violations_status_severity_detected
+  ON app.data_integrity_violations (status, severity, detected_at);
+CREATE INDEX ix_data_integrity_violations_entity
+  ON app.data_integrity_violations (entity_kind, entity_id);
+CREATE UNIQUE INDEX uq_data_integrity_violations_active_rule_entity
+  ON app.data_integrity_violations (rule_key, entity_kind, entity_id)
+  WHERE status IN ('open', 'acknowledged') AND resolved_at IS NULL;
+```
+
 ## 4. 첨부
 
 ### 4.1 `app.attachments`
