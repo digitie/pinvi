@@ -59,6 +59,9 @@
 - Admin `/admin/backup` snapshot 목록에 검색/status filter와 visible count를 추가했다.
   production 기본 restore 버튼은 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이
   비활성화되며, backup read-only live e2e와 staging mutating snapshot e2e를 분리했다.
+- Admin live e2e matrix를 v0.2.0 release gate용으로 확장했다. catalog는 6,195건으로 drift를
+  감지하고, request timeline, feature detail subpages, backup read-only guard, ETL app-owned
+  rows, Grafana dashboard selector/WebSocket dashboard, raw secret pattern 미노출을 확인한다.
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,
   가입/여행 생성 24시간 막대 그래프, load average, 디스크 사용률, 첨부 저장소 사용량/한도를
   raw 운영 경로/도메인/secret 없이 표시한다.

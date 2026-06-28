@@ -6,6 +6,15 @@
 
 ## 2026-06-28
 
+- [x] T-254 — Admin live e2e matrix v0.2.0 확장.
+      `admin-live-matrix.live.ts` catalog를 6,195건으로 고정해 drift를 감지하고,
+      read-only matrix에 `/admin/debug/request/{id}` captured request timeline,
+      feature detail subpage tabs, backup restore-lock/mutation guard, ETL app-owned job rows,
+      Grafana dashboard selector/WebSocket dashboard, raw secret pattern 미노출 검사를 추가했다.
+      runbook은 N150 우선 실행과 `PINVI_ADMIN_LIVE_CASE_LIMIT=200`, `2000`, full catalog gate를
+      명시한다. N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 실제 N150 live run은
+      수행하지 못했고, catalog/typecheck 중심으로 검증했다.
+
 - [x] T-253 — Prometheus/Grafana 운영 가시화 게이트.
       observability profile에 blackbox exporter를 추가해 Web/Dagster HTTP health를
       Prometheus target으로 확인하고, API `/metrics`에 SQLAlchemy DB pool gauge를 추가했다.

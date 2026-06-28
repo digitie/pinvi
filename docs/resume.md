@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-254 Admin live e2e matrix v0.2.0 확장
+
+Admin live read-only matrix를 v0.2.0 release gate용으로 확장했다. `admin-live-matrix.live.ts`
+catalog는 6,195건 exact count로 고정해 drift를 감지한다. 신규 case는
+`/admin/debug/request/{id}` captured request timeline, feature detail subpage tabs,
+backup restore-lock/mutation guard, ETL app-owned job rows, Grafana dashboard selector와
+WebSocket dashboard, raw secret pattern 미노출을 포함한다.
+
+runbook은 N150 우선 실행과 `PINVI_ADMIN_LIVE_CASE_LIMIT=200` smoke, `2000` gate, full catalog
+순서를 고정했다. Linux에서 Web typecheck/lint와 catalog drift 테스트가 통과했고, N150 SSH
+alias는 현재 환경에서 해석되지 않아 실제 N150 live run은 미실행이다. Windows fallback runner로
+catalog 테스트 1건이 통과했다. 다음 작업은 T-255 지도 마커 / 색상 적용 parity다.
+
 ## 2026-06-28 (codex) — T-253 Prometheus/Grafana 운영 가시화 게이트
 
 Prometheus/Grafana 운영 가시화 게이트를 보강했다. observability compose profile에

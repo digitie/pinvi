@@ -35,6 +35,7 @@ const webBaseUrl =
 const adminEmail = process.env.PINVI_ADMIN_LIVE_EMAIL;
 const adminPassword = process.env.PINVI_ADMIN_LIVE_PASSWORD;
 const throttleMs = Number(process.env.PINVI_ADMIN_LIVE_THROTTLE_MS ?? '2100');
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const parsedCaseAttempts = Number(process.env.PINVI_ADMIN_LIVE_CASE_ATTEMPTS ?? '3');
 const caseAttempts = Number.isFinite(parsedCaseAttempts)
   ? Math.max(1, Math.floor(parsedCaseAttempts))
@@ -82,6 +83,14 @@ const queryTerms = [
   '한글',
 ];
 const shortTerms = queryTerms.slice(0, 8);
+const rawSecretPatterns = [
+  /Authorization\s*[:=]\s*(?:Bearer|Basic)\s+\S+/i,
+  /Cookie\s*[:=]\s*\S+/i,
+  /Set-Cookie\s*[:=]\s*\S+/i,
+  /(api[_-]?key|secret|password|passwd|token)\s*[:=]\s*(?!\[masked\]|%5Bmasked%5D|redacted|<redacted>|\*\*\*)[A-Za-z0-9_./+=-]{8,}/i,
+  /AKIA[0-9A-Z]{16}/,
+  /BEGIN [A-Z ]*PRIVATE KEY/,
+];
 
 const uiRoutes: AdminRoute[] = [
   { path: '/admin', heading: '대시보드' },
@@ -296,6 +305,14 @@ function navTestId(pathname: string) {
   return `admin-nav-${pathname.replace(/[^a-z0-9]+/gi, '-')}`;
 }
 
+function pathnameOf(value: string) {
+  try {
+    return new URL(value).pathname;
+  } catch {
+    return '';
+  }
+}
+
 async function setViewport(page: Page, viewport: UiViewport) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
 }
@@ -318,6 +335,41 @@ async function expectNoBlockingErrors(page: Page) {
   ).toHaveCount(0);
 }
 
+async function expectNoRawSecrets(page: Page) {
+  const bodyText = await page.locator('main').innerText();
+  for (const pattern of rawSecretPatterns) {
+    expect(bodyText).not.toMatch(pattern);
+  }
+}
+
+function installDebugRequestIdRecorder(page: Page, captured: { requestIds: string[] }) {
+  page.on('response', (response) => {
+    const pathname = pathnameOf(response.url());
+    if (pathname !== '/admin/debug/logs/system' && pathname !== '/admin/debug/logs/api-calls') {
+      return;
+    }
+    const requestId = response.headers()['x-request-id'];
+    if (requestId && UUID_RE.test(requestId)) {
+      captured.requestIds.push(requestId);
+    }
+  });
+}
+
+async function waitForCapturedRequestId(captured: { requestIds: string[] }) {
+  await expect
+    .poll(() => captured.requestIds.find((value) => UUID_RE.test(value)) ?? null, {
+      timeout: 15_000,
+    })
+    .not.toBeNull();
+  return captured.requestIds.find((value) => UUID_RE.test(value))!;
+}
+
+function backupMutationPath(value: string, method: string) {
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null;
+  const pathname = pathnameOf(value);
+  return pathname.startsWith('/admin/backup') ? pathname : null;
+}
+
 async function waitForAdminTable(page: Page) {
   await expect(page.getByTestId('admin-table-scroll').first()).toBeVisible();
   await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
@@ -337,6 +389,7 @@ async function openRoute(page: Page, route: AdminRoute) {
   } else {
     await expectNoBlockingErrors(page);
   }
+  await expectNoRawSecrets(page);
 }
 
 async function openTableRoute(page: Page, pathName: string, heading: string) {
@@ -573,6 +626,34 @@ function pushBackupFilterCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushBackupReadOnlyGuardCases(cases: AdminUiCase[]) {
+  for (const viewport of compactViewports) {
+    pushCase(cases, 'backup restore controls stay locked read-only', viewport, async (page) => {
+      const backupMutations: string[] = [];
+      page.on('request', (request) => {
+        const pathName = backupMutationPath(request.url(), request.method());
+        if (pathName) backupMutations.push(pathName);
+      });
+
+      await openTableRoute(page, '/admin/backup', 'Backup');
+      await page.getByTestId('admin-table-sort-filename').click();
+      await throttle();
+      await page.getByTestId('admin-backup-status-filter').selectOption('verified');
+      await expect(page.getByTestId('admin-backup-status-filter')).toHaveValue('verified');
+
+      const restoreButtons = page.getByTestId('admin-backup-restore');
+      const restoreCount = await restoreButtons.count();
+      for (let index = 0; index < restoreCount; index += 1) {
+        await expect(restoreButtons.nth(index)).toBeDisabled();
+      }
+
+      await page.getByTestId('admin-backup-search').fill(`pinvi-live-no-match-${Date.now()}`);
+      await expect(page.getByTestId('admin-backup-visible-count')).toContainText('0 /');
+      expect(backupMutations).toEqual([]);
+    });
+  }
+}
+
 function pushMcpFilterCases(cases: AdminUiCase[]) {
   const statuses = ['', 'active', 'expired', 'revoked'];
   for (const viewport of compactViewports) {
@@ -720,6 +801,35 @@ function pushFeatureDetailSubpageCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushDebugRequestTimelineCases(cases: AdminUiCase[]) {
+  for (const viewport of compactViewports) {
+    pushCase(cases, 'debug request timeline resolves captured request id', viewport, async (page) => {
+      const captured = { requestIds: [] as string[] };
+      installDebugRequestIdRecorder(page, captured);
+
+      await openTableRoute(page, '/admin/debug/logs', 'Debug logs');
+      const requestId = await waitForCapturedRequestId(captured);
+      await throttle();
+      await page.goto(`/admin/debug/request/${requestId}`);
+      await reloginIfNeeded(page, `/admin/debug/request/${requestId}`);
+      await expectAdminShell(page, 'Request timeline');
+      await expect(page.getByTestId('admin-request-timeline-refresh')).toBeVisible();
+      await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+
+      const summaryVisible = await page
+        .getByTestId('admin-request-timeline-summary')
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
+      if (summaryVisible) {
+        await expect(page.getByTestId('admin-request-timeline-summary')).toBeVisible();
+      } else {
+        await expect(page.getByText(/source가 없습니다|event가 없습니다/).first()).toBeVisible();
+      }
+      await expectNoRawSecrets(page);
+    });
+  }
+}
+
 function pushProviderSyncFilterCases(cases: AdminUiCase[]) {
   const providers = ['', 'kma', 'visitkorea', 'kasi'];
   const statuses = ['running', 'all', 'queued', 'done', 'failed', 'cancelled'];
@@ -761,6 +871,32 @@ function pushEtlFilterCases(cases: AdminUiCase[]) {
         });
       }
     }
+  }
+}
+
+function pushEtlAppOwnedCases(cases: AdminUiCase[]) {
+  const appOwnedJobs = [
+    'pinvi_email_outbox_job',
+    'pinvi_telegram_system_outbox_job',
+    'pinvi_location_log_archive_job',
+  ];
+  for (const viewport of compactViewports) {
+    pushCase(cases, 'etl app-owned job rows expose live metadata', viewport, async (page) => {
+      await openTableRoute(page, '/admin/etl', 'ETL');
+      await expect(page.getByTestId('admin-etl-pinvi-status')).toBeVisible();
+      await expect(page.getByTestId('admin-etl-pinvi-live-job-count')).toBeVisible();
+      await expect(page.getByTestId('admin-etl-pinvi-live-schedule-count')).toBeVisible();
+      for (const jobName of appOwnedJobs) {
+        await expect(page.getByTestId(`admin-etl-job-${jobName}`)).toBeVisible();
+        await expect(page.getByTestId(`admin-etl-job-${jobName}-live`)).toBeVisible();
+        await expect(page.getByTestId(`admin-etl-job-${jobName}-timezone`)).toBeVisible();
+        await expect(page.getByTestId(`admin-etl-job-${jobName}-latest-run`)).toBeVisible();
+      }
+      await expect(page.getByTestId('admin-etl-email-outbox')).toBeVisible();
+      await expect(page.getByTestId('admin-etl-telegram-outbox')).toBeVisible();
+      await expect(page.getByTestId('admin-etl-location-archive')).toBeVisible();
+      await expectNoBlockingErrors(page);
+    });
   }
 }
 
@@ -854,6 +990,33 @@ function pushDashboardCases(cases: AdminUiCase[]) {
   }
 }
 
+function pushGrafanaDashboardCases(cases: AdminUiCase[]) {
+  const dashboards = {
+    api: '/d/pinvi-api-http',
+    db: '/d/pinvi-db-pool',
+    websocket: '/d/pinvi-websocket',
+    'etl-backup': '/d/pinvi-etl-backup',
+  };
+  for (const viewport of compactViewports) {
+    for (const [dashboard, expectedPath] of Object.entries(dashboards)) {
+      pushCase(cases, `grafana dashboard selector ${dashboard}`, viewport, async (page) => {
+        await openRoute(page, {
+          path: '/admin/grafana',
+          heading: 'Grafana',
+          readyTestId: 'admin-grafana-health-status',
+        });
+        await page.getByTestId(`admin-grafana-dashboard-${dashboard}`).click();
+        await throttle();
+        await expect(page.getByTestId('admin-grafana-dashboard-path')).toContainText(expectedPath);
+        await expect(page.getByTestId('admin-grafana-frame')).toHaveAttribute(
+          'src',
+          new RegExp(escapeRegExp(expectedPath)),
+        );
+      });
+    }
+  }
+}
+
 function pushMcpValidationCases(cases: AdminUiCase[]) {
   const invalidUsers = ['', '00000000-0000-4000-8000-000000000001'];
   const reasons = ['', 'UI live validation'];
@@ -896,19 +1059,24 @@ function buildUiCases() {
   pushApiCallFilterCases(cases);
   pushEmailsFilterCases(cases);
   pushBackupFilterCases(cases);
+  pushBackupReadOnlyGuardCases(cases);
   pushMcpFilterCases(cases);
   pushFeatureRequestFilterCases(cases);
   pushFeaturesFilterCases(cases);
   pushFeatureDetailSubpageCases(cases);
+  pushDebugRequestTimelineCases(cases);
   pushProviderSyncFilterCases(cases);
   pushEtlFilterCases(cases);
+  pushEtlAppOwnedCases(cases);
   pushDedupIntegrityDebugCases(cases);
   pushSortCases(cases);
   pushDashboardCases(cases);
+  pushGrafanaDashboardCases(cases);
   pushMcpValidationCases(cases);
   return cases;
 }
 
+const EXPECTED_LIVE_UI_CASE_COUNT = 6195;
 const liveUiCases = buildUiCases();
 const selectedLiveUiCases = Number.isFinite(caseLimit)
   ? liveUiCases.slice(0, Math.max(0, caseLimit))
@@ -916,6 +1084,7 @@ const selectedLiveUiCases = Number.isFinite(caseLimit)
 
 base.describe('admin live UI e2e catalog', () => {
   base('UI live case catalog has at least 2000 browser cases', () => {
+    expect(liveUiCases).toHaveLength(EXPECTED_LIVE_UI_CASE_COUNT);
     expect(liveUiCases.length).toBeGreaterThanOrEqual(2000);
     expect(liveUiCases.every((liveCase) => typeof liveCase.run === 'function')).toBe(true);
   });
