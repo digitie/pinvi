@@ -540,6 +540,8 @@ CREATE INDEX ix_curated_plan_attachments_storage_key
 
 Pinvi app-owned `/admin/integrity` persisted source다. `kor-travel-map` consistency issue는
 별도 OpenAPI source로만 조회하며, 이 table에 복제하지 않는다.
+Pinvi app 계산 rule producer는 active `rule_key` + `entity_kind` + `entity_id` partial unique
+index를 conflict target으로 upsert하고, `/admin/integrity` read 경로는 이 table에 쓰지 않는다.
 
 ```sql
 CREATE TABLE app.data_integrity_violations (

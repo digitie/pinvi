@@ -32,9 +32,10 @@
   재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
-- 병행 트랙 (claude, 2026-06-29) — T-291 ETL failure sensor PR #312가 열려 있으며,
-  변경 파일은 `apps/etl/**`, `docs/architecture/dagster-etl-bridge.md`, `docs/runbooks/etl.md`다.
-  codex는 해당 파일/도메인을 건드리지 않는다.
+- 병행 트랙 (claude, 2026-06-29) — T-291 ETL failure sensor는 PR #312로 main에 머지됐다.
+  T-291 잔여는 app-owned ETL SQL 실행 수준 integration/schema-compile smoke와 audit retention
+  정책 분리다. codex는 T-292에서 `apps/etl/**`, `docs/architecture/dagster-etl-bridge.md`,
+  `docs/runbooks/etl.md`를 건드리지 않는다.
 
 - 병행 후보 (claude, 2026-06-29) — T-261~T-263 경로 최적화(OR-Tools) + 스마트 정렬 API/UI
   트랙은 신규 `optimize` 모듈 중심이다. codex가 다음 task에 진입하기 전 PR/브랜치와 본 섹션을
@@ -42,8 +43,8 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-292 App integrity pagination / producer follow-up 또는 T-286 Cross-track review gap
-  closure. T-285는 사용자 지시에 따라 현재 진행하지 않는다.
+- 다음 구현 후보: T-286 Cross-track review gap closure. T-285는 사용자 지시에 따라 현재 진행하지
+  않는다.
 - T-259의 남은 full catalog와 `v0.2.0` tag/Release는 최종 release gate로 분리해 유지한다.
 - T-289/T-290은 PR #310으로 머지됐으므로 같은 영역을 건드릴 때는 최신 main 기준으로 다시
   CodeGraph 영향도를 확인한다.
@@ -62,13 +63,9 @@
 
 ## 최근 PR 리뷰 후속
 
-- [ ] T-291 — ETL compliance SQL / failure notification follow-up. (진행: claude, 2026-06-29)
-      PR #271/#273 사후 리뷰의 Dagster failure sensor drift, app-owned ETL SQL statement
-      integration/schema-compile smoke, audit retention 정책 분리 gap을 닫는다.
-- [ ] T-292 — App integrity pagination / producer follow-up.
-      PR #283 사후 리뷰의 `source=all` pagination starvation, persisted integrity producer/upsert
-      테스트, Admin integrity action modal 접근성 gap을 닫는다.
-
+- [ ] T-291 — ETL compliance SQL / failure notification follow-up. (부분 완료: PR #312, claude)
+      PR #271/#273 사후 리뷰의 Dagster failure sensor drift는 닫혔다. app-owned ETL SQL statement
+      integration/schema-compile smoke와 audit retention 정책 분리 gap은 잔여다.
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
 - [ ] T-260 — Sprint 6 상세 실행 계획 / ADR 정리.

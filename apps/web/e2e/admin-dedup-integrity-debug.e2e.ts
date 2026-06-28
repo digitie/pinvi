@@ -246,20 +246,34 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
   const seenIssueUrls: string[] = [];
   const seenReportUrls: string[] = [];
   let actionBody: Record<string, unknown> | null = null;
+  const nextIntegrityIssue = {
+    ...integrityIssue,
+    issue_id: 'issue-2',
+    message: '두 번째 정합성 issue입니다.',
+    source_record_key: 'visitkorea:2',
+  };
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/integrity/issues',
     async (route) => {
       seenIssueUrls.push(route.request().url());
       const requestUrl = new URL(route.request().url());
       const item =
-        requestUrl.searchParams.get('source') === 'pinvi_app' ? appIntegrityIssue : integrityIssue;
+        requestUrl.searchParams.get('source') === 'pinvi_app'
+          ? appIntegrityIssue
+          : requestUrl.searchParams.get('cursor')
+            ? nextIntegrityIssue
+            : integrityIssue;
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
             items: [item],
             page_size: 50,
-            next_cursor: null,
+            next_cursor:
+              requestUrl.searchParams.get('source') === 'pinvi_app' ||
+              requestUrl.searchParams.get('cursor')
+                ? null
+                : 'cursor-2',
           },
         }),
       });
@@ -308,6 +322,19 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
 
   await page.getByTestId('admin-integrity-action-resolve-issue-1').click();
   await expect(page.getByTestId('admin-integrity-action-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-integrity-action-access-reason')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('admin-integrity-action-dialog')).toHaveCount(0);
+
+  await page.getByTestId('admin-integrity-action-resolve-issue-1').click();
+  await expect(page.getByTestId('admin-integrity-action-dialog')).toBeVisible();
+  await page.getByTestId('admin-integrity-action-overlay').click({ position: { x: 2, y: 2 } });
+  await expect(page.getByTestId('admin-integrity-action-dialog')).toHaveCount(0);
+
+  await page.getByTestId('admin-integrity-action-resolve-issue-1').click();
+  await expect(page.getByTestId('admin-integrity-action-dialog')).toBeVisible();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByTestId('admin-integrity-action-close')).toBeFocused();
   await page.getByTestId('admin-integrity-action-access-reason').fill('원천 데이터 확인');
   await page.getByTestId('admin-integrity-action-map-reason').fill('source verified');
   await page.getByTestId('admin-integrity-action-submit').click();
@@ -317,6 +344,13 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
     access_reason: '원천 데이터 확인',
     kor_travel_map_reason: 'source verified',
   });
+
+  await page.getByTestId('admin-integrity-issues-next').click();
+  await expect(page.getByTestId('admin-integrity-issue-row-issue-2')).toBeVisible();
+  const nextIssueUrl = new URL(seenIssueUrls[seenIssueUrls.length - 1]!);
+  expect(nextIssueUrl.searchParams.get('cursor')).toBe('cursor-2');
+  await page.getByTestId('admin-integrity-issues-first').click();
+  await expect(page.getByTestId('admin-integrity-issue-row-issue-1')).toBeVisible();
 
   await page.getByTestId('admin-integrity-status').selectOption('acknowledged');
   await page.getByTestId('admin-integrity-severity').selectOption('critical');

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attachment import CuratedPlanAttachment
@@ -18,6 +21,12 @@ APP_INTEGRITY_SOURCE = "pinvi_app"
 MARKER_COLOR_RE = r"^P-(0[1-9]|1[0-6])$"
 
 
+@dataclass(frozen=True)
+class PinviAppIntegrityIssuePage:
+    items: list[AdminIntegrityIssueRecord]
+    next_cursor: str | None
+
+
 async def list_pinvi_app_integrity_issues(
     db: AsyncSession,
     *,
@@ -29,6 +38,32 @@ async def list_pinvi_app_integrity_issues(
     feature_id: str | None,
     page_size: int,
 ) -> list[AdminIntegrityIssueRecord]:
+    page = await list_pinvi_app_integrity_issue_page(
+        db,
+        status_filter=status_filter,
+        severity=severity,
+        violation_type=violation_type,
+        provider=provider,
+        dataset_key=dataset_key,
+        feature_id=feature_id,
+        page_size=page_size,
+        cursor=None,
+    )
+    return page.items
+
+
+async def list_pinvi_app_integrity_issue_page(
+    db: AsyncSession,
+    *,
+    status_filter: str | None,
+    severity: str | None,
+    violation_type: str | None,
+    provider: str | None,
+    dataset_key: str | None,
+    feature_id: str | None,
+    page_size: int,
+    cursor: str | None,
+) -> PinviAppIntegrityIssuePage:
     """Return persisted and computed Pinvi integrity issues.
 
     `provider`/`dataset_key` are kor-travel-map dimensions, so a request scoped by
@@ -36,8 +71,110 @@ async def list_pinvi_app_integrity_issues(
     """
 
     if provider or dataset_key:
-        return []
+        return PinviAppIntegrityIssuePage(items=[], next_cursor=None)
 
+    offset = _decode_app_cursor(cursor)
+    scan_limit = offset + page_size + 1
+    issues = await _collect_pinvi_app_integrity_issues(
+        db,
+        status_filter=status_filter,
+        severity=severity,
+        violation_type=violation_type,
+        feature_id=feature_id,
+        limit=scan_limit,
+    )
+    page_items = issues[offset : offset + page_size]
+    next_offset = offset + page_size
+    next_cursor = str(next_offset) if len(issues) > next_offset else None
+    return PinviAppIntegrityIssuePage(items=page_items, next_cursor=next_cursor)
+
+
+async def produce_pinvi_app_integrity_violations(
+    db: AsyncSession,
+    *,
+    limit: int = 500,
+) -> int:
+    """Persist currently computed Pinvi app-owned integrity issues.
+
+    The writer is intentionally a service helper so Dagster/API producers can share the same
+    partial-unique upsert contract without adding read-side side effects.
+    """
+
+    issues = await _computed_known_violations(
+        db,
+        status_filter="open",
+        severity=None,
+        violation_type=None,
+        feature_id=None,
+        limit=limit,
+    )
+    for issue in issues:
+        entity_kind, entity_id = _entity_from_issue(issue)
+        await upsert_data_integrity_violation(
+            db,
+            rule_key=issue.violation_type,
+            entity_kind=entity_kind,
+            entity_id=entity_id,
+            severity=issue.severity,
+            message=issue.message,
+            details={
+                **issue.payload,
+                "source_record_key": issue.source_record_key,
+                "feature_id": issue.feature_id,
+            },
+            detected_at=issue.detected_at,
+        )
+    return len(issues)
+
+
+async def upsert_data_integrity_violation(
+    db: AsyncSession,
+    *,
+    rule_key: str,
+    entity_kind: str,
+    entity_id: str,
+    severity: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+    detected_at: datetime | None = None,
+    auto_fixable: bool = False,
+) -> DataIntegrityViolation:
+    detected = detected_at or datetime.now(UTC)
+    insert_stmt = pg_insert(DataIntegrityViolation).values(
+        rule_key=rule_key,
+        entity_kind=entity_kind,
+        entity_id=entity_id,
+        severity=severity,
+        message=message,
+        details=details or {},
+        status="open",
+        detected_at=detected,
+        auto_fixable=auto_fixable,
+    )
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["rule_key", "entity_kind", "entity_id"],
+        index_where=text("status IN ('open', 'acknowledged') AND resolved_at IS NULL"),
+        set_={
+            "severity": severity,
+            "message": message,
+            "details": details or {},
+            "detected_at": detected,
+            "auto_fixable": auto_fixable,
+            "updated_at": func.now(),
+        },
+    ).returning(DataIntegrityViolation)
+    return (await db.scalars(stmt)).one()
+
+
+async def _collect_pinvi_app_integrity_issues(
+    db: AsyncSession,
+    *,
+    status_filter: str | None,
+    severity: str | None,
+    violation_type: str | None,
+    feature_id: str | None,
+    limit: int,
+) -> list[AdminIntegrityIssueRecord]:
     issues: list[AdminIntegrityIssueRecord] = []
     issues.extend(
         await _persisted_violations(
@@ -46,12 +183,12 @@ async def list_pinvi_app_integrity_issues(
             severity=severity,
             violation_type=violation_type,
             feature_id=feature_id,
-            limit=page_size,
+            limit=limit,
         )
     )
-    remaining = max(page_size - len(issues), 0)
+    remaining = max(limit - len(issues), 0)
     if remaining == 0:
-        return issues
+        return _dedupe_issues(issues)
 
     computed = await _computed_known_violations(
         db,
@@ -63,7 +200,7 @@ async def list_pinvi_app_integrity_issues(
     )
     issues.extend(computed)
     issues.sort(key=lambda item: item.detected_at, reverse=True)
-    return issues[:page_size]
+    return _dedupe_issues(issues)[:limit]
 
 
 async def _persisted_violations(
@@ -450,6 +587,35 @@ def _computed_rule_matches(
 def _detail_string(details: dict[str, Any], key: str) -> str | None:
     value = details.get(key)
     return value if isinstance(value, str) else None
+
+
+def _dedupe_issues(issues: list[AdminIntegrityIssueRecord]) -> list[AdminIntegrityIssueRecord]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[AdminIntegrityIssueRecord] = []
+    for issue in issues:
+        key = (issue.violation_type, issue.source_record_key or issue.issue_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(issue)
+    return deduped
+
+
+def _decode_app_cursor(cursor: str | None) -> int:
+    if not cursor:
+        return 0
+    try:
+        offset = int(cursor)
+    except ValueError:
+        return 0
+    return max(offset, 0)
+
+
+def _entity_from_issue(issue: AdminIntegrityIssueRecord) -> tuple[str, str]:
+    if issue.source_record_key and ":" in issue.source_record_key:
+        entity_kind, entity_id = issue.source_record_key.split(":", 1)
+        return entity_kind, entity_id
+    return issue.violation_type, issue.issue_id
 
 
 def _string_or_none(value: object) -> str | None:

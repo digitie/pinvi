@@ -23,6 +23,7 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
+from app.services.admin_app_integrity import produce_pinvi_app_integrity_violations
 
 pytestmark = pytest.mark.asyncio
 
@@ -489,6 +490,207 @@ async def test_admin_integrity_pinvi_app_source_lists_known_violations(
     }
     assert any(item["feature_id"] == "feature-broken" for item in items)
     assert fake.issue_kwargs is None
+
+
+async def test_admin_integrity_source_all_reserves_upstream_page_capacity(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-integrity-all@example.com", roles=["user", "admin"]
+    )
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                DataIntegrityViolation(
+                    rule_key="app_issue_one",
+                    entity_kind="test_entity",
+                    entity_id=f"one:{admin_id}",
+                    severity="warning",
+                    message="첫 번째 앱 issue",
+                    details={"feature_id": "feature-app-one"},
+                    detected_at=now,
+                ),
+                DataIntegrityViolation(
+                    rule_key="app_issue_two",
+                    entity_kind="test_entity",
+                    entity_id=f"two:{admin_id}",
+                    severity="warning",
+                    message="두 번째 앱 issue",
+                    details={"feature_id": "feature-app-two"},
+                    detected_at=now - timedelta(minutes=1),
+                ),
+            ]
+        )
+        await db.commit()
+
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/integrity/issues",
+            params={"source": "all", "status": "open", "page_size": "2"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert {item["source"] for item in data["items"]} == {"pinvi_app", "kor_travel_map"}
+    assert data["next_cursor"]
+    assert fake.issue_kwargs is not None
+    assert fake.issue_kwargs["page_size"] == 1
+    assert fake.issue_kwargs["cursor"] is None
+
+
+async def test_admin_integrity_pinvi_app_source_paginates_with_cursor(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-integrity-app-cursor@example.com", roles=["user", "admin"]
+    )
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                DataIntegrityViolation(
+                    rule_key="cursor_issue_one",
+                    entity_kind="cursor_entity",
+                    entity_id=f"one:{admin_id}",
+                    severity="warning",
+                    message="cursor one",
+                    details={},
+                    detected_at=now,
+                ),
+                DataIntegrityViolation(
+                    rule_key="cursor_issue_two",
+                    entity_kind="cursor_entity",
+                    entity_id=f"two:{admin_id}",
+                    severity="warning",
+                    message="cursor two",
+                    details={},
+                    detected_at=now - timedelta(minutes=1),
+                ),
+            ]
+        )
+        await db.commit()
+
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        first = await client.get(
+            "/admin/integrity/issues",
+            params={"source": "pinvi_app", "status": "open", "page_size": "1"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert first.status_code == 200, first.text
+        first_data = first.json()["data"]
+        assert first_data["next_cursor"]
+        second = await client.get(
+            "/admin/integrity/issues",
+            params={
+                "source": "pinvi_app",
+                "status": "open",
+                "page_size": "1",
+                "cursor": first_data["next_cursor"],
+            },
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert second.status_code == 200, second.text
+    finally:
+        _clear()
+    assert fake.issue_kwargs is None
+    assert second.json()["data"]["items"][0]["issue_id"] != first_data["items"][0]["issue_id"]
+
+
+async def test_admin_integrity_kor_travel_map_source_accepts_composite_cursor(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-integrity-upstream-composite-cursor@example.com",
+        roles=["user", "admin"],
+    )
+    fake = _FakeOpsClient()
+    _override(fake)
+    try:
+        first = await client.get(
+            "/admin/integrity/issues",
+            params={"source": "all", "status": "open", "page_size": "2"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert first.status_code == 200, first.text
+        composite_cursor = first.json()["data"]["next_cursor"]
+        assert composite_cursor
+
+        second = await client.get(
+            "/admin/integrity/issues",
+            params={
+                "source": "kor_travel_map",
+                "status": "open",
+                "page_size": "5",
+                "cursor": composite_cursor,
+            },
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert second.status_code == 200, second.text
+    finally:
+        _clear()
+
+    assert fake.issue_kwargs is not None
+    assert fake.issue_kwargs["page_size"] == 5
+    assert fake.issue_kwargs["cursor"] == "issue-next"
+
+
+async def test_pinvi_app_integrity_producer_upserts_active_violation(
+    session_factory: Any,
+) -> None:
+    owner_id = await _create_user(
+        session_factory, email="integrity-producer@example.com", roles=["user", "admin"]
+    )
+    trip_id = uuid.uuid4()
+    poi_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add(Trip(trip_id=trip_id, owner_user_id=owner_id, title="producer", status="planned"))
+        await db.flush()
+        db.add(TripDay(trip_id=trip_id, day_index=1))
+        await db.flush()
+        db.add(
+            TripDayPoi(
+                attachment_id=poi_id,
+                trip_id=trip_id,
+                day_index=1,
+                sort_order="a0",
+                feature_id="feature-producer",
+                feature_link_broken_at=now,
+                added_by_user_id=owner_id,
+            )
+        )
+        await db.flush()
+
+        assert await produce_pinvi_app_integrity_violations(db, limit=10) == 1
+        assert await produce_pinvi_app_integrity_violations(db, limit=10) == 1
+
+        rows = (
+            await db.scalars(
+                select(DataIntegrityViolation).where(
+                    DataIntegrityViolation.rule_key == "broken_poi_feature_link",
+                    DataIntegrityViolation.entity_kind == "trip_day_pois",
+                    DataIntegrityViolation.entity_id == str(poi_id),
+                )
+            )
+        ).all()
+
+    assert len(rows) == 1
+    assert rows[0].details["feature_id"] == "feature-producer"
 
 
 async def test_admin_integrity_issue_action_proxies_and_writes_audit(
