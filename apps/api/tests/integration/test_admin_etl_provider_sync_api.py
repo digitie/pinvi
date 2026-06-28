@@ -17,6 +17,7 @@ from app.models.audit import AdminAuditLog, LocationAuditOutbox
 from app.models.email_queue import EmailQueue
 from app.models.oauth_identity import OAuthLoginState, OAuthMobileExchange, UserOAuthIdentity
 from app.models.session import UserSession
+from app.models.telegram_outbox import TelegramNotificationOutbox
 from app.models.user import User
 from app.models.user_email_verification import UserEmailVerification
 from app.services import admin_etl as admin_etl_service
@@ -87,6 +88,53 @@ async def _seed_email_queue(session_factory: Any) -> None:
                     attempts=1,
                     bounce_type="hard",
                     scheduled_at=now - timedelta(hours=1),
+                ),
+            ]
+        )
+        await db.commit()
+
+
+async def _seed_telegram_outbox(session_factory: Any) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                TelegramNotificationOutbox(
+                    category="trip_created",
+                    payload={"user_id": str(uuid.uuid4()), "text": "due"},
+                    status="pending",
+                    attempts=0,
+                    scheduled_at=now - timedelta(minutes=20),
+                ),
+                TelegramNotificationOutbox(
+                    category="trip_created",
+                    payload={"user_id": str(uuid.uuid4()), "text": "backoff"},
+                    status="pending",
+                    attempts=1,
+                    scheduled_at=now + timedelta(minutes=5),
+                ),
+                TelegramNotificationOutbox(
+                    category="trip_created",
+                    payload={"user_id": str(uuid.uuid4()), "text": "failed"},
+                    status="failed",
+                    attempts=5,
+                    last_error="provider down",
+                    scheduled_at=now - timedelta(hours=1),
+                ),
+                TelegramNotificationOutbox(
+                    category="trip_created",
+                    payload={"user_id": str(uuid.uuid4()), "text": "skipped"},
+                    status="skipped",
+                    attempts=1,
+                    scheduled_at=now - timedelta(hours=1),
+                ),
+                TelegramNotificationOutbox(
+                    category="companion_invited",
+                    payload={"user_id": str(uuid.uuid4()), "text": "sent"},
+                    status="sent",
+                    attempts=1,
+                    sent_at=now - timedelta(minutes=5),
+                    scheduled_at=now - timedelta(minutes=10),
                 ),
             ]
         )
@@ -369,6 +417,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         session_factory, email="admin-etl@example.com", roles=["user", "operator", "cpo"]
     )
     await _seed_email_queue(session_factory)
+    await _seed_telegram_outbox(session_factory)
     await _seed_pii_retention_candidates(session_factory)
     fake = _FakeOpsClient()
     _override(fake)
@@ -385,6 +434,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         "kasi_special_days_job",
         "kasi_poi_rise_set_job",
         "pinvi_email_outbox_job",
+        "pinvi_telegram_system_outbox_job",
         "pinvi_pii_retention_job",
         "pinvi_location_log_archive_job",
     }
@@ -392,6 +442,20 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["pinvi"]["email_outbox"]["pending_backoff"] == 1
     assert data["pinvi"]["email_outbox"]["stuck_pending"] == 1
     assert data["pinvi"]["email_outbox"]["retry_exhausted"] == 1
+    assert data["pinvi"]["telegram_outbox"]["pending_due"] == 1
+    assert data["pinvi"]["telegram_outbox"]["pending_backoff"] == 1
+    assert data["pinvi"]["telegram_outbox"]["stuck_pending"] == 1
+    assert data["pinvi"]["telegram_outbox"]["sent"] == 1
+    assert data["pinvi"]["telegram_outbox"]["skipped"] == 1
+    assert data["pinvi"]["telegram_outbox"]["retry_exhausted"] == 1
+    trip_created_stats = next(
+        item
+        for item in data["pinvi"]["telegram_outbox"]["category_stats"]
+        if item["category"] == "trip_created"
+    )
+    assert trip_created_stats["total"] == 4
+    assert trip_created_stats["retry_exhausted"] == 1
+    assert trip_created_stats["retry_exhausted_rate"] == pytest.approx(0.25, abs=0.0001)
     assert data["pinvi"]["pii_retention"]["dry_run"] is True
     assert data["pinvi"]["pii_retention"]["deleted_user_pii_candidates"] == 1
     assert data["pinvi"]["pii_retention"]["deleted_user_oauth_identity_candidates"] == 1

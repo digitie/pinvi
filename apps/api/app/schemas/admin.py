@@ -202,6 +202,34 @@ class AdminEmailOutboxSummary(BaseModel):
     template_stats: list[AdminEmailOutboxTemplateSummary] = Field(default_factory=list)
 
 
+class AdminTelegramOutboxCategorySummary(BaseModel):
+    category: str
+    total: int = 0
+    pending: int = 0
+    sent: int = 0
+    skipped: int = 0
+    failed: int = 0
+    retry_exhausted: int = 0
+    retry_exhausted_rate: float = 0.0
+
+
+class AdminTelegramOutboxSummary(BaseModel):
+    total: int = 0
+    pending_total: int = 0
+    pending_due: int = 0
+    pending_backoff: int = 0
+    stuck_pending: int = 0
+    sent: int = 0
+    skipped: int = 0
+    failed: int = 0
+    retry_exhausted: int = 0
+    oldest_pending_scheduled_at: datetime | None = None
+    stuck_threshold_minutes: int
+    max_attempts: int
+    category_window_hours: int
+    category_stats: list[AdminTelegramOutboxCategorySummary] = Field(default_factory=list)
+
+
 class AdminPiiRetentionSummary(BaseModel):
     dry_run: bool = True
     generated_at: datetime
@@ -259,6 +287,7 @@ class AdminPinviEtlSummary(BaseModel):
     schedules: list[AdminEtlDefinitionSchedule] = Field(default_factory=list)
     sensors: list[AdminEtlDefinitionSensor] = Field(default_factory=list)
     email_outbox: AdminEmailOutboxSummary | None = None
+    telegram_outbox: AdminTelegramOutboxSummary | None = None
     pii_retention: AdminPiiRetentionSummary | None = None
     location_log_archive: AdminLocationLogArchiveSummary | None = None
 

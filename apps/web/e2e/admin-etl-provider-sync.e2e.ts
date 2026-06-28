@@ -62,6 +62,11 @@ const etlSummary = {
         description: 'email_queue 상태',
       },
       {
+        key: 'pinvi_telegram_system_outbox',
+        group_name: 'pinvi_telegram',
+        description: 'telegram_system_notification_outbox 상태',
+      },
+      {
         key: 'pinvi_pii_retention',
         group_name: 'pinvi_retention',
         description: 'PII 보존 기간 만료 후보 dry-run',
@@ -92,6 +97,12 @@ const etlSummary = {
         asset_keys: ['pinvi_email_outbox'],
       },
       {
+        name: 'pinvi_telegram_system_outbox_job',
+        trigger: 'schedule',
+        description: '15분마다 Telegram system outbox 상태를 점검합니다.',
+        asset_keys: ['pinvi_telegram_system_outbox'],
+      },
+      {
         name: 'pinvi_pii_retention_job',
         trigger: 'schedule',
         description: '매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.',
@@ -115,6 +126,13 @@ const etlSummary = {
       {
         name: 'pinvi_email_outbox_schedule',
         job_name: 'pinvi_email_outbox_job',
+        cron_schedule: '*/15 * * * *',
+        execution_timezone: 'Asia/Seoul',
+        status: 'configured',
+      },
+      {
+        name: 'pinvi_telegram_system_outbox_schedule',
+        job_name: 'pinvi_telegram_system_outbox_job',
         cron_schedule: '*/15 * * * *',
         execution_timezone: 'Asia/Seoul',
         status: 'configured',
@@ -173,6 +191,43 @@ const etlSummary = {
           complained: 0,
           failure_count: 1,
           failure_rate: 1,
+        },
+      ],
+    },
+    telegram_outbox: {
+      total: 5,
+      pending_total: 2,
+      pending_due: 1,
+      pending_backoff: 1,
+      stuck_pending: 1,
+      sent: 1,
+      skipped: 1,
+      failed: 1,
+      retry_exhausted: 2,
+      oldest_pending_scheduled_at: '2026-06-12T00:00:00+09:00',
+      stuck_threshold_minutes: 15,
+      max_attempts: 5,
+      category_window_hours: 24,
+      category_stats: [
+        {
+          category: 'trip_created',
+          total: 3,
+          pending: 1,
+          sent: 0,
+          skipped: 1,
+          failed: 1,
+          retry_exhausted: 2,
+          retry_exhausted_rate: 0.6667,
+        },
+        {
+          category: 'companion_invited',
+          total: 2,
+          pending: 1,
+          sent: 1,
+          skipped: 0,
+          failed: 0,
+          retry_exhausted: 0,
+          retry_exhausted_rate: 0,
         },
       ],
     },
@@ -297,11 +352,15 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-job-kasi_special_days_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
+  await expect(page.getByTestId('admin-etl-job-pinvi_telegram_system_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_pii_retention_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_location_log_archive_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
   await expect(page.getByTestId('admin-etl-email-stuck')).toContainText('1');
   await expect(page.getByTestId('admin-etl-email-template-verify_email')).toContainText('33.3%');
+  await expect(page.getByTestId('admin-etl-telegram-outbox')).toContainText('backoff');
+  await expect(page.getByTestId('admin-etl-telegram-stuck')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-telegram-category-trip_created')).toContainText('66.7%');
   await expect(page.getByTestId('admin-etl-pii-retention')).toContainText('dry-run');
   await expect(page.getByTestId('admin-etl-pii-total')).toContainText('11');
   await expect(page.getByTestId('admin-etl-pii-tokens')).toContainText('3');

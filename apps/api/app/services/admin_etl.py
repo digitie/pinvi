@@ -40,6 +40,8 @@ from app.schemas.admin import (
     AdminPinviEtlSummary,
     AdminProviderDatasetSummary,
     AdminProviderImportJobRecord,
+    AdminTelegramOutboxCategorySummary,
+    AdminTelegramOutboxSummary,
 )
 
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
@@ -47,6 +49,10 @@ EMAIL_OUTBOX_STUCK_THRESHOLD_MINUTES = 15
 EMAIL_OUTBOX_MAX_ATTEMPTS = 5
 EMAIL_OUTBOX_TEMPLATE_WINDOW_HOURS = 24
 EMAIL_OUTBOX_TEMPLATE_STATS_LIMIT = 10
+TELEGRAM_OUTBOX_STUCK_THRESHOLD_MINUTES = 15
+TELEGRAM_OUTBOX_MAX_ATTEMPTS = 5
+TELEGRAM_OUTBOX_CATEGORY_WINDOW_HOURS = 24
+TELEGRAM_OUTBOX_CATEGORY_STATS_LIMIT = 10
 PII_RETENTION_USER_GRACE_DAYS = 30
 PII_RETENTION_SESSION_GRACE_DAYS = 30
 PII_RETENTION_LOCATION_MONTHS = 6
@@ -63,6 +69,11 @@ PINVI_ETL_ASSETS = [
         key="pinvi_email_outbox",
         group_name="pinvi_email",
         description="email_queue pending/backoff/stuck/failed 상태를 PII 없이 집계합니다.",
+    ),
+    AdminEtlDefinitionAsset(
+        key="pinvi_telegram_system_outbox",
+        group_name="pinvi_telegram",
+        description="telegram_system_notification_outbox retry/backoff/stuck 상태를 payload 없이 집계합니다.",
     ),
     AdminEtlDefinitionAsset(
         key="pinvi_pii_retention",
@@ -96,6 +107,12 @@ PINVI_ETL_JOBS = [
         asset_keys=["pinvi_email_outbox"],
     ),
     AdminEtlDefinitionJob(
+        name="pinvi_telegram_system_outbox_job",
+        trigger="schedule",
+        description="15분마다 Telegram system outbox의 retry/backoff/stuck 상태를 점검합니다.",
+        asset_keys=["pinvi_telegram_system_outbox"],
+    ),
+    AdminEtlDefinitionJob(
         name="pinvi_pii_retention_job",
         trigger="schedule",
         description="매일 KST 04:15 PII 보존 기간 만료 후보를 dry-run으로 점검합니다.",
@@ -119,6 +136,12 @@ PINVI_ETL_SCHEDULES = [
     AdminEtlDefinitionSchedule(
         name="pinvi_email_outbox_schedule",
         job_name="pinvi_email_outbox_job",
+        cron_schedule="*/15 * * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    AdminEtlDefinitionSchedule(
+        name="pinvi_telegram_system_outbox_schedule",
+        job_name="pinvi_telegram_system_outbox_job",
         cron_schedule="*/15 * * * *",
         execution_timezone="Asia/Seoul",
     ),
@@ -162,6 +185,7 @@ async def build_pinvi_etl_summary(db: AsyncSession) -> AdminPinviEtlSummary:
         schedules=PINVI_ETL_SCHEDULES,
         sensors=PINVI_ETL_SENSORS,
         email_outbox=await build_email_outbox_summary(db),
+        telegram_outbox=await build_telegram_outbox_summary(db),
         pii_retention=await build_pii_retention_summary(db),
         location_log_archive=await build_location_log_archive_summary(db),
     )
@@ -197,6 +221,39 @@ async def build_email_outbox_summary(
         max_attempts=EMAIL_OUTBOX_MAX_ATTEMPTS,
         template_window_hours=EMAIL_OUTBOX_TEMPLATE_WINDOW_HOURS,
         template_stats=[_email_template_summary(row) for row in templates],
+    )
+
+
+async def build_telegram_outbox_summary(
+    db: AsyncSession,
+    *,
+    now: datetime | None = None,
+) -> AdminTelegramOutboxSummary:
+    current = now or datetime.now(UTC)
+    params = {
+        "now": current,
+        "stuck_before": current - timedelta(minutes=TELEGRAM_OUTBOX_STUCK_THRESHOLD_MINUTES),
+        "max_attempts": TELEGRAM_OUTBOX_MAX_ATTEMPTS,
+        "category_window_start": current - timedelta(hours=TELEGRAM_OUTBOX_CATEGORY_WINDOW_HOURS),
+        "category_limit": TELEGRAM_OUTBOX_CATEGORY_STATS_LIMIT,
+    }
+    summary = (await db.execute(_TELEGRAM_OUTBOX_SUMMARY_SQL, params)).mappings().one()
+    categories = list((await db.execute(_TELEGRAM_OUTBOX_CATEGORY_SQL, params)).mappings())
+    return AdminTelegramOutboxSummary(
+        total=_as_int(summary["total"]),
+        pending_total=_as_int(summary["pending_total"]),
+        pending_due=_as_int(summary["pending_due"]),
+        pending_backoff=_as_int(summary["pending_backoff"]),
+        stuck_pending=_as_int(summary["stuck_pending"]),
+        sent=_as_int(summary["sent"]),
+        skipped=_as_int(summary["skipped"]),
+        failed=_as_int(summary["failed"]),
+        retry_exhausted=_as_int(summary["retry_exhausted"]),
+        oldest_pending_scheduled_at=summary["oldest_pending_scheduled_at"],
+        stuck_threshold_minutes=TELEGRAM_OUTBOX_STUCK_THRESHOLD_MINUTES,
+        max_attempts=TELEGRAM_OUTBOX_MAX_ATTEMPTS,
+        category_window_hours=TELEGRAM_OUTBOX_CATEGORY_WINDOW_HOURS,
+        category_stats=[_telegram_category_summary(row) for row in categories],
     )
 
 
@@ -393,6 +450,23 @@ def _email_template_summary(item: Any) -> AdminEmailOutboxTemplateSummary:
         complained=complained,
         failure_count=failure_count,
         failure_rate=0.0 if total == 0 else round(failure_count / total, 4),
+    )
+
+
+def _telegram_category_summary(item: Any) -> AdminTelegramOutboxCategorySummary:
+    row = item if isinstance(item, Mapping) else {}
+    category = _as_str(row.get("category"))
+    retry_exhausted = _as_int(row.get("retry_exhausted"))
+    total = _as_int(row.get("total"))
+    return AdminTelegramOutboxCategorySummary(
+        category=category or "unknown",
+        total=total,
+        pending=_as_int(row.get("pending")),
+        sent=_as_int(row.get("sent")),
+        skipped=_as_int(row.get("skipped")),
+        failed=_as_int(row.get("failed")),
+        retry_exhausted=retry_exhausted,
+        retry_exhausted_rate=0.0 if total == 0 else round(retry_exhausted / total, 4),
     )
 
 
@@ -595,6 +669,51 @@ _EMAIL_OUTBOX_TEMPLATE_SQL = text(
     GROUP BY template
     ORDER BY total DESC, template ASC
     LIMIT :template_limit
+    """
+)
+
+_TELEGRAM_OUTBOX_SUMMARY_SQL = text(
+    """
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE status = 'pending')::int AS pending_total,
+      count(*) FILTER (
+        WHERE status = 'pending' AND scheduled_at <= :now
+      )::int AS pending_due,
+      count(*) FILTER (
+        WHERE status = 'pending' AND scheduled_at > :now
+      )::int AS pending_backoff,
+      count(*) FILTER (
+        WHERE status = 'pending' AND scheduled_at <= :stuck_before
+      )::int AS stuck_pending,
+      count(*) FILTER (WHERE status = 'sent')::int AS sent,
+      count(*) FILTER (WHERE status = 'skipped')::int AS skipped,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed,
+      count(*) FILTER (
+        WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
+      )::int AS retry_exhausted,
+      min(scheduled_at) FILTER (WHERE status = 'pending') AS oldest_pending_scheduled_at
+    FROM app.telegram_system_notification_outbox
+    """
+)
+
+_TELEGRAM_OUTBOX_CATEGORY_SQL = text(
+    """
+    SELECT
+      category,
+      count(*)::int AS total,
+      count(*) FILTER (WHERE status = 'pending')::int AS pending,
+      count(*) FILTER (WHERE status = 'sent')::int AS sent,
+      count(*) FILTER (WHERE status = 'skipped')::int AS skipped,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed,
+      count(*) FILTER (
+        WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
+      )::int AS retry_exhausted
+    FROM app.telegram_system_notification_outbox
+    WHERE created_at >= :category_window_start
+    GROUP BY category
+    ORDER BY total DESC, category ASC
+    LIMIT :category_limit
     """
 )
 

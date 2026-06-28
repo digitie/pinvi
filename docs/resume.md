@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-242 Telegram system summary/outbox ETL
+
+`pinvi_telegram_system_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다
+`app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped, failed,
+retry exhausted, 최근 24시간 category별 retry exhausted 비율을 payload 없이 bounded metadata로
+집계한다.
+
+`/admin/etl/summary`는 같은 Telegram outbox summary를 `pinvi.telegram_outbox`로 반환하고,
+Web `/admin/etl`은 due/backoff/stuck/retry exhausted, sent/skipped/failed, category별 이상률을
+표시한다. 응답과 metadata에는 payload, message text, user id, chat id, token, last_error 원문을
+넣지 않는다. weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 남겼다.
+
+다음 작업은 T-243 ETL live / Dagster 운영 게이트다. N150 Dagster code location과 app-owned job
+rows, Admin ETL live UI 검증을 확장한다.
+
 ## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
 
 ADR-051로 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행으로 고정했다.

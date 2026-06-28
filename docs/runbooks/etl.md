@@ -35,20 +35,22 @@ apps/etl/
 │       ├── __init__.py
 │       ├── definitions.py               # Dagster code location entry (sensors=[])
 │       ├── resources.py                 # PinviDatabaseResource, KasiResource
-│       ├── schedules.py                 # KASI cron + email/retention/location archive cron
+│       ├── schedules.py                 # KASI cron + email/telegram/retention/location cron
 │       ├── jobs.py                      # kasi_poi_rise_set_job (POI 출몰시각 one-shot)
 │       └── assets/
 │           ├── __init__.py
 │           ├── pinvi_email_outbox.py
 │           ├── pinvi_kasi_special_days.py
 │           ├── pinvi_location_log_archive.py
-│           └── pinvi_pii_retention.py
+│           ├── pinvi_pii_retention.py
+│           └── pinvi_telegram_system_outbox.py
 └── tests/
     ├── test_definitions.py
     ├── test_email_outbox.py
     ├── test_kasi_special_days.py
     ├── test_location_log_archive.py
-    └── test_pii_retention.py
+    ├── test_pii_retention.py
+    └── test_telegram_system_outbox.py
 ```
 
 계획(미구현 — `app` schema 소유 job 후보):
@@ -57,7 +59,7 @@ apps/etl/
 pinvi/etl/
 ├── sensors.py                           # (계획) run_failure_sensor (Sentry/outbox)
 └── assets/
-    └── pinvi_telegram_weekly.py      # (계획) 주간 브리프 — D-11
+    └── pinvi_telegram_weekly.py         # (계획) 주간/일간 사용자 브리프 — D-11/D-1
 ```
 
 ## 2.1 App-Owned Job 표준 (ADR-050)
@@ -146,6 +148,18 @@ kill-switch, evidence log, Admin retention dashboard는 T-276 범위다. `admin`
 남기지 않는다. 실제 archive/delete/anonymize 실행과 archive table/chain tail join 정책은
 T-276 kill-switch/dashboard/evidence log 범위다.
 
+### 3.4 Telegram system outbox asset
+
+구현 상태(2026-06-28): `pinvi_telegram_system_outbox` asset과
+`pinvi_telegram_system_outbox_job` schedule이 등록되어 있다. 15분마다
+`app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped,
+failed, retry exhausted, category별 retry exhausted 비율을 집계한다.
+
+이 asset은 발송을 수행하지 않는 운영 점검 전용이다. 실제 발송 source of truth는 FastAPI
+lifespan `telegram_outbox_worker_lifespan`이며, Dagster asset은 retry/backoff 상태와
+Admin summary 노출만 담당한다. metadata와 `/admin/etl/summary` 응답에는 category와 count만
+남기고 payload, message text, user id, chat id, token, last_error 원문은 넣지 않는다.
+
 ## 4. Resource
 
 ```python
@@ -185,6 +199,10 @@ pinvi_location_log_archive_job = define_asset_job(
     "pinvi_location_log_archive_job",
     selection=["pinvi_location_log_archive"],
 )
+pinvi_telegram_system_outbox_job = define_asset_job(
+    "pinvi_telegram_system_outbox_job",
+    selection=["pinvi_telegram_system_outbox"],
+)
 
 schedules = [
     ScheduleDefinition(job=kasi_special_days_job, cron_schedule="30 3 * * *", execution_timezone="Asia/Seoul"),
@@ -204,6 +222,12 @@ schedules = [
         name="pinvi_location_log_archive_schedule",
         job=pinvi_location_log_archive_job,
         cron_schedule="30 4 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    ScheduleDefinition(
+        name="pinvi_telegram_system_outbox_schedule",
+        job=pinvi_telegram_system_outbox_job,
+        cron_schedule="*/15 * * * *",
         execution_timezone="Asia/Seoul",
     ),
 ]

@@ -9,8 +9,21 @@ import {
   queryKeys,
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
-import type { AdminEmailOutboxTemplateSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
-import { Activity, Archive, Database, GitBranch, RefreshCw, ShieldCheck, Workflow } from 'lucide-react';
+import type {
+  AdminEmailOutboxTemplateSummary,
+  AdminProviderImportJobRecord,
+  AdminTelegramOutboxCategorySummary,
+} from '@pinvi/schemas';
+import {
+  Activity,
+  Archive,
+  Bell,
+  Database,
+  GitBranch,
+  RefreshCw,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
@@ -84,6 +97,24 @@ function EmailTemplateStat({ item }: { item: AdminEmailOutboxTemplateSummary }) 
   );
 }
 
+function TelegramCategoryStat({ item }: { item: AdminTelegramOutboxCategorySummary }) {
+  return (
+    <li
+      key={item.category}
+      className="rounded-sm bg-surface-soft p-2"
+      data-testid={`admin-etl-telegram-category-${item.category}`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-mono text-xs">{item.category}</span>
+        <span className="text-xs text-muted">{percentLabel(item.retry_exhausted_rate)}</span>
+      </div>
+      <div className="mt-1 text-xs text-muted">
+        total {formatMetric(item.total)} / retry exhausted {formatMetric(item.retry_exhausted)}
+      </div>
+    </li>
+  );
+}
+
 function ErrorBox({ message }: { message: string }) {
   return (
     <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
@@ -118,6 +149,7 @@ export default function AdminEtlPage() {
   const summary = summaryQuery.data ?? null;
   const importJobs = jobsQuery.data?.items ?? [];
   const emailOutbox = summary?.pinvi.email_outbox ?? null;
+  const telegramOutbox = summary?.pinvi.telegram_outbox ?? null;
   const piiRetention = summary?.pinvi.pii_retention ?? null;
   const locationArchive = summary?.pinvi.location_log_archive ?? null;
 
@@ -316,6 +348,55 @@ export default function AdminEtlPage() {
               ) : null}
             </div>
           ) : null}
+          {telegramOutbox ? (
+            <div
+              className="mt-4 rounded-sm border border-hairline p-3"
+              data-testid="admin-etl-telegram-outbox"
+            >
+              <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                Telegram outbox
+              </h3>
+              <div className="grid gap-3 text-sm sm:grid-cols-4">
+                <div>
+                  <div className="text-xs text-muted">due</div>
+                  <div className="font-semibold">{formatMetric(telegramOutbox.pending_due)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">backoff</div>
+                  <div className="font-semibold">
+                    {formatMetric(telegramOutbox.pending_backoff)}
+                  </div>
+                </div>
+                <div data-testid="admin-etl-telegram-stuck">
+                  <div className="text-xs text-muted">stuck</div>
+                  <div className="font-semibold">{formatMetric(telegramOutbox.stuck_pending)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">retry exhausted</div>
+                  <div className="font-semibold">
+                    {formatMetric(telegramOutbox.retry_exhausted)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 text-xs text-muted sm:grid-cols-3">
+                <div>sent {formatMetric(telegramOutbox.sent)}</div>
+                <div>skipped {formatMetric(telegramOutbox.skipped)}</div>
+                <div>failed {formatMetric(telegramOutbox.failed)}</div>
+              </div>
+              <div className="mt-2 text-xs text-muted">
+                threshold {telegramOutbox.stuck_threshold_minutes}m / max attempts{' '}
+                {telegramOutbox.max_attempts} / {telegramOutbox.category_window_hours}h categories
+              </div>
+              {telegramOutbox.category_stats.length ? (
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {telegramOutbox.category_stats.map((item) => (
+                    <TelegramCategoryStat key={item.category} item={item} />
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           {piiRetention ? (
             <div
               className="mt-4 rounded-sm border border-hairline p-3"
@@ -328,9 +409,7 @@ export default function AdminEtlPage() {
               <div className="grid gap-3 text-sm sm:grid-cols-4">
                 <div data-testid="admin-etl-pii-total">
                   <div className="text-xs text-muted">candidates</div>
-                  <div className="font-semibold">
-                    {formatMetric(piiRetention.total_candidates)}
-                  </div>
+                  <div className="font-semibold">{formatMetric(piiRetention.total_candidates)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-muted">deleted users</div>
