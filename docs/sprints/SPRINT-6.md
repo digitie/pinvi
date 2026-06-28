@@ -11,7 +11,8 @@
   Sprint M-1 별도 gate로 관리하고, user-facing AI companion은 post-v1.0 또는 별도 release train으로
   분리한다.
 - **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-286을
-  Sprint 6 진입 시 재검토해 확정한다.
+  Sprint 6 진입 시 재검토해 확정한다. legal/ops gap의 원자료와 대응 Task는
+  `docs/execplan/legal-ops-review-gap-crosswalk.md`를 정본으로 둔다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
   - `POST /trips/{id}/days/{day_index}/optimize` (OR-Tools)
@@ -37,8 +38,8 @@
   - **MCP 외부 인터페이스 서빙** — `apps/api/app/mcp/` 모듈 + `/mcp/sse`
     엔드포인트. 외부 AI agent가 Pinvi의 trip/poi/feature 데이터를
     토큰 인증으로 read. 자세히는 `docs/architecture/mcp-server.md` (ADR-019).
-  - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록
-    + 복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
+  - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록을 보여주고,
+    복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
     `docs/runbooks/backup-restore.md`)
   - **한국 전용 geofencing** — Cloudflare WAF + nginx geo + FastAPI middleware
     (3중 안전) — KR 외 IP는 451 (`docs/architecture/korea-only-policy.md`,
@@ -94,8 +95,7 @@
   - `apps/web/components/admin/NoticePoiEditor.tsx`
   - 첨부 업로드 + 미리보기 (`POST /storage/upload-urls` + presigned PUT)
 - **Backup/Restore UI 핫스왑** (ADR-022):
-  - `apps/web/app/admin/backup/page.tsx` 확장 — snapshot 목록 + manual trigger
-    + 복구 시작
+  - `apps/web/app/admin/backup/page.tsx` 확장 — snapshot 목록, manual trigger, 복구 시작
   - `apps/web/components/admin/RestoreHotswapDialog.tsx` — snapshot 선택 →
     progress (schema 준비 / pg_restore / validate / drain / schema-swap 단계 표시) → 결과
   - `apps/web/components/admin/SnapshotTable.tsx`
@@ -208,13 +208,15 @@
 - [ ] E2E **10** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence / Legal-ops)
 - [ ] 운영 환경 smoke test 통과 — **Odroid + N150 양쪽** (ADR-023)
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
-  Pinvi trip 조회 성공)
+      Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
 - [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
 - [ ] **v1.0 mobile 제외 / user-facing AI companion 제외 범위 명시**
 - [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
-  user lifecycle / abuse 운영 표면 sign-off**
+      user lifecycle / abuse 운영 표면 sign-off**
+- [ ] **T-256 crosswalk G-001~G-044 재감사** — 각 gap이 구현 PR, 테스트, runbook 중
+      하나로 닫혔는지 확인
 - [ ] **Security threat model / penetration 1차 점검 결과 기록**
 - [ ] 첫 외부 사용자(가족 베타) 가입 + 여행 생성 성공
 - [ ] **`v1.0.0` git tag + GitHub Release notes**

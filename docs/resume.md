@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-256 Review gap crosswalk / legal-ops preflight
+
+PR #238/#264 리뷰에서 나온 legal/ops gap을
+`docs/execplan/legal-ops-review-gap-crosswalk.md`에 44개 항목(G-001~G-044)으로 고정했다.
+각 gap은 T-257/T-258/T-275~T-286 등 하나 이상의 Task로 연결했고, 이미 T-244~T-253에서
+닫힌 항목은 완료 Task와 Sprint 6 재감사(T-286)를 함께 표기했다.
+
+최근 2일 PR #265~#289의 사람 리뷰 코멘트도 확인했다. WebSocket reconnect/invalidation,
+Trip conflict UX, ETL compliance SQL/failure sensor, app integrity pagination/producer 후속은
+T-289~T-292로 새로 남겼다. 다음 작업은 T-257 Email deliverability / provider tracking
+preflight다.
+
 ## 2026-06-28 (codex) — T-255 지도 마커 / 색상 적용 parity
 
 지도 marker resolver를 공용 도메인 로직으로 정리했다. `@pinvi/domain`의

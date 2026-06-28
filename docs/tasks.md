@@ -22,9 +22,10 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-256 Review gap crosswalk / legal-ops preflight.
-- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-249 진입 전
-  PR #281의 reminder comment, CI success, 차단 코멘트 없음, merge를 확인했다.
+- 다음 구현: T-257 Email deliverability / provider tracking preflight.
+- 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
+  PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
+  후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline,
   backup/restore 1차 스테이징 훈련, legal/ops preflight crosswalk.
 - Admin 콘솔 보강 프로그램: T-207~T-229 완료 상태로 정리했다. 상세 계획과 완료 감사는
@@ -41,8 +42,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-256 — Review gap crosswalk / legal-ops preflight.
-      PR 리뷰와 cross-track #238 gap을 Task 번호에 매핑하고 Sprint 5/6 문서 정합을 맞춘다.
 - [ ] T-257 — Email deliverability / provider tracking preflight.
       Resend domain verification, SPF/DKIM/DMARC, hard-bounce/complaint suppression,
       provider health tracking 선행 항목을 T-239/T-253/T-277로 연결한다.
@@ -51,6 +50,21 @@
       mobile/AI scope를 Sprint 6 DoD와 release checklist에 고정한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
       main CI, N150 deploy/smoke, live e2e, backup snapshot, release notes/tag를 완료한다.
+
+## 최근 PR 리뷰 후속
+
+- [ ] T-289 — WebSocket reconnect / invalidation follow-up.
+      PR #265 사후 리뷰의 `4401` refresh tight loop, retry jitter, 수동 재연결 UX,
+      TanStack Query invalidation 실제 배선 gap을 닫는다.
+- [ ] T-290 — Trip conflict UX follow-up.
+      PR #266 사후 리뷰의 Trip conflict field whitelist drift, 409 envelope current row,
+      `ConflictDialog` Esc/focus 접근성 gap을 닫는다. Day rename/delete 409는 T-287로 유지한다.
+- [ ] T-291 — ETL compliance SQL / failure notification follow-up.
+      PR #271/#273 사후 리뷰의 Dagster failure sensor drift, app-owned ETL SQL statement
+      integration/schema-compile smoke, audit retention 정책 분리 gap을 닫는다.
+- [ ] T-292 — App integrity pagination / producer follow-up.
+      PR #283 사후 리뷰의 `source=all` pagination starvation, persisted integrity producer/upsert
+      테스트, Admin integrity action modal 접근성 gap을 닫는다.
 
 ## 문서 운영 후속
 
