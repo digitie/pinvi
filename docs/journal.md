@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — codex 병행 트랙 착수 + 추적 문서 선반영
+
+**작업**: 사용자 요청 — codex가 T-283(보안 리뷰, PR #308)을 진행하는 동안 충돌이 적은 작업을
+병행한다. 추적 문서를 먼저 docs-only PR로 머지(CI 생략 admin-merge)한 뒤 구현에 들어간다.
+
+**선정(2026-06-29 병행 작업 리포트 기준)**:
+- T-289 + T-290 — WebSocket reconnect/invalidation + Trip conflict UX 후속(프론트/`packages/api-client`).
+- T-291 — ETL failure sensor + compliance SQL 테스트(`apps/etl`).
+- T-261~T-263 — 경로 최적화(OR-Tools) + 스마트 정렬 API/UI(신규 `optimize` 모듈).
+
+**변경(본 docs PR)**: `tasks.md`(진행 중에 병행 트랙 노트 + T-289/290/291·T-261~263 진행 표기),
+`resume.md`/`journal.md` 2026-06-29 (claude) 엔트리.
+
+**다음**: T-289+T-290 구현.
+
 ## 2026-06-29 (codex) — T-282 Rate-limit / abuse admin surface
 
 **작업**: ADR-038 rate-limit bucket 운영 조회와 abuse override 흐름을 구현했다.

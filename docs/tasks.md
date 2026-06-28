@@ -26,6 +26,13 @@
   재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
+- 병행 트랙 (claude, 2026-06-29) — codex가 T-283(보안 리뷰, PR #308)을 진행하는 동안 충돌이 적은
+  콜드존을 병행한다. 묶음 (1) T-289+T-290 WebSocket reconnect/conflict UX 후속(`apps/web` +
+  `packages/api-client`), (2) T-291 ETL failure sensor + compliance SQL 테스트(`apps/etl`),
+  (3) T-261~T-263 경로 최적화(OR-Tools) + 스마트 정렬 API/UI(신규 `optimize` 모듈). 세 묶음은 서로
+  및 codex admin-backend 핫존과 파일이 겹치지 않는다. 선정 근거/충돌 등급은 resume.md
+  2026-06-29 (claude) 병행 작업 리포트.
+
 ## 다음 (우선순위 순)
 
 - 다음 구현: T-283 Security review / threat model / penetration pass. T-259의 남은 full catalog와 `v0.2.0`
@@ -57,13 +64,13 @@
 
 ## 최근 PR 리뷰 후속
 
-- [ ] T-289 — WebSocket reconnect / invalidation follow-up.
+- [ ] T-289 — WebSocket reconnect / invalidation follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
       PR #265 사후 리뷰의 `4401` refresh tight loop, retry jitter, 수동 재연결 UX,
-      TanStack Query invalidation 실제 배선 gap을 닫는다.
-- [ ] T-290 — Trip conflict UX follow-up.
+      TanStack Query invalidation 실제 배선 gap을 닫는다. T-290과 한 PR로 묶는다.
+- [ ] T-290 — Trip conflict UX follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
       PR #266 사후 리뷰의 Trip conflict field whitelist drift, 409 envelope current row,
       `ConflictDialog` Esc/focus 접근성 gap을 닫는다. Day rename/delete 409는 T-287로 유지한다.
-- [ ] T-291 — ETL compliance SQL / failure notification follow-up.
+- [ ] T-291 — ETL compliance SQL / failure notification follow-up. (진행: claude, 2026-06-29 · codex T-283 병행)
       PR #271/#273 사후 리뷰의 Dagster failure sensor drift, app-owned ETL SQL statement
       integration/schema-compile smoke, audit retention 정책 분리 gap을 닫는다.
 - [ ] T-292 — App integrity pagination / producer follow-up.
@@ -79,9 +86,9 @@
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
 - [ ] T-260 — Sprint 6 상세 실행 계획 / ADR 정리.
-- [ ] T-261 — 경로 최적화 정책 / distance matrix.
-- [ ] T-262 — 스마트 정렬 API / OR-Tools.
-- [ ] T-263 — 스마트 정렬 UI.
+- [ ] T-261 — 경로 최적화 정책 / distance matrix. (진행: claude, 2026-06-29 · codex 병행)
+- [ ] T-262 — 스마트 정렬 API / OR-Tools. (진행: claude, 2026-06-29 · codex 병행)
+- [ ] T-263 — 스마트 정렬 UI. (진행: claude, 2026-06-29 · codex 병행)
 - [ ] T-264 — Admin category mapping DB override.
 - [ ] T-265 — Admin notice plan 작성기.
 - [ ] T-266 — MCP 외부 인터페이스 운영 실증.
