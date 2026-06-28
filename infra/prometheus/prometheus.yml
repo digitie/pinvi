@@ -13,8 +13,45 @@ scrape_configs:
       - targets:
           - cadvisor:8080
 
+  - job_name: blackbox
+    static_configs:
+      - targets:
+          - blackbox:9115
+
   - job_name: pinvi-api-dev
     metrics_path: /metrics
     static_configs:
       - targets:
           - host.docker.internal:12801
+
+  - job_name: pinvi-web-health-dev
+    metrics_path: /probe
+    params:
+      module:
+        - http_2xx
+    static_configs:
+      - targets:
+          - http://host.docker.internal:12805/
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: pinvi-dagster-health-dev
+    metrics_path: /probe
+    params:
+      module:
+        - http_2xx
+    static_configs:
+      - targets:
+          - http://host.docker.internal:12802/server_info
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

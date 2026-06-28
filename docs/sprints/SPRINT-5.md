@@ -49,7 +49,9 @@
   - `/admin/debug/logs` sanitized polling fallback live mode (T-245 완료; Loki LogQL WebSocket은
     운영 선택 계층)
   - `/admin/debug/request/{id}` X-Request-Id 타임라인 (T-244 완료)
-  - Prometheus + cAdvisor + Grafana 컨테이너 활성
+  - Prometheus + cAdvisor + blackbox + Grafana 컨테이너 활성. T-253에서 API `/metrics`,
+    Web/Dagster HTTP health target, DB pool gauge, Grafana dashboard 4종(API/DB/WebSocket/ETL·backup),
+    `/admin/grafana` health `ok`/`degraded` 표시와 live e2e gate를 추가했다.
   - Loki + Promtail 로그 수집은 후속 또는 운영 선택 계층 (T-245에서 v0.2.0 fallback 결정)
   - **`/admin/grafana` Grafana iframe embed** (ADR-022 보조,
     `docs/runbooks/grafana-admin-embed.md`)

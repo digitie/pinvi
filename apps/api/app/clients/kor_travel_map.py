@@ -26,6 +26,8 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.core.config import Settings, settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -515,6 +517,9 @@ def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
     http = httpx.AsyncClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory, provider="kor_travel_map"
+        ),
     )
     return KorTravelMapClient(
         http,

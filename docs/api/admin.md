@@ -59,6 +59,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/provider-sync` / `import-jobs`                        | provider/dataset sync 상태와 import job 조회           | 5      |
 | `GET /admin/integrity/issues` / `reports`                         | kor-travel-map consistency issue/report 조회           | 5      |
 | `GET /admin/debug/logs/system` / `api-calls`                      | kor-travel-map sanitized system/API logs 조회          | 5      |
+| `GET /admin/grafana/health`                                       | Grafana embed origin health probe                      | 5      |
 | `GET /admin/backup/snapshots`                                     | `app` schema backup snapshot 목록                      | 5      |
 | `POST /admin/backup/snapshot`                                     | 수동 backup snapshot 생성 + audit                      | 5      |
 | `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                | MCP 토큰 검색 / 대리 발급 / 강제 회수                  | 6      |
@@ -173,6 +174,27 @@ socket이 없거나 권한이 없으면 `docker.status`를 `unknown` 또는 `dow
 ```
 
 권한: `admin` / `operator`.
+
+### 3.3 `GET /admin/grafana/health`
+
+Admin Grafana iframe이 참조하는 Grafana origin의 `/api/health`를 Next route handler가 서버
+측에서 probe한다. 서버사이드 probe URL은 `PINVI_GRAFANA_HEALTH_URL`이 있으면 그 origin을,
+없으면 `NEXT_PUBLIC_GRAFANA_URL` origin을 사용한다. 응답은 `ok` 또는 `degraded`만 구분하며,
+credential이나 dashboard URL query secret은 반환하지 않는다.
+
+응답 200 또는 503:
+
+```jsonc
+{
+  "status": "ok",
+  "origin": "https://grafana.example.com",
+  "status_code": 200,
+  "message": "Grafana health 확인",
+}
+```
+
+권한: Admin UI route 아래에 있으나 route handler 자체는 health 신호만 반환한다. 운영
+reverse proxy에서는 `/admin/*` 접근 정책을 동일하게 적용한다.
 
 ## 4. 통합 엔티티 CRUD (`/admin/entities/{entity}`)
 
@@ -1087,6 +1109,12 @@ GET /admin/api-calls?provider=kma&status_code=200&error_class=Timeout&limit=100
 - 필터: `provider`, `status_code`, `error_class`, `limit(1~500)`
 - 응답 row: `log_id`, `provider`, `endpoint`, `status_code`, `latency_ms`,
   `error_class`, `error_message`, `request_id`, `occurred_at`
+- T-253 기준 production httpx client는 `kor_travel_map`, `kor_travel_map_admin`,
+  `kor_travel_geo`, `telegram`, `google_oauth` provider tag를 `ApiCallTracker` event hook에
+  부착한다. query `key`/`token`/`secret` 계열 값과 Telegram bot token path는 저장 전에
+  `***`로 mask한다.
+- Resend 발송은 현재 `resend` SDK 직접 호출 경로라 httpx event hook 감사 대상이 아니다.
+  domain verification/suppression과 함께 T-257에서 provider tracking 보강 여부를 다시 결정한다.
 
 ## 10. 위치 감사 로그 (CPO 권한)
 

@@ -37,6 +37,8 @@ from app.clients.kor_travel_map import (
     _error_code,
 )
 from app.core.config import Settings, settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +118,12 @@ class KorTravelMapAdminClient:
         for attempt in range(self._max_attempts):
             try:
                 resp = await self._http.request(
-                    method, path, json=json, params=params, headers=self._headers()
+                    method,
+                    path,
+                    json=json,
+                    params=params,
+                    headers=self._headers(),
+                    extensions=self._extensions(),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path}): {exc!r}")
@@ -154,6 +161,11 @@ class KorTravelMapAdminClient:
         if meta is not None and not isinstance(meta, dict):
             raise KorTravelMapError(f"예상치 못한 admin meta 셰입({resp.request.url.path})")
         return {"data": data, "meta": meta or {}}
+
+    def _extensions(self) -> dict[str, str]:
+        if self._request_id:
+            return {"pinvi_request_id": self._request_id}
+        return {}
 
     def _data(self, resp: httpx.Response) -> dict[str, Any]:
         """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
@@ -562,6 +574,10 @@ def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAd
     http = httpx.AsyncClient(
         base_url=app_settings.pinvi_kor_travel_map_admin_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory,
+            provider="kor_travel_map_admin",
+        ),
     )
     return KorTravelMapAdminClient(
         http,

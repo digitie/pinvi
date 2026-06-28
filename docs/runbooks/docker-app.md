@@ -80,6 +80,7 @@ ktdctl logs storage --follow
 | `PINVI_CADVISOR_PORT`        | `12301`                                                                                                                   |
 | `PINVI_GRAFANA_PORT`         | `12205`                                                                                                                   |
 | `NEXT_PUBLIC_PINVI_API_URL`  | `http://127.0.0.1:12801`                                                                                                  |
+| `PINVI_GRAFANA_HEALTH_URL`   | `http://grafana:3000` (app compose 내부 probe용. iframe public origin은 `NEXT_PUBLIC_GRAFANA_URL`)                       |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `vworld-map-web` 지도 SDK용 (ADR-046). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록                             |
 | `PINVI_VWORLD_API_KEY`       | 서버 전용 VWorld key. 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST `key` query에 같은 값을 사용(ADR-048) |
 | 기타 `PINVI_*`               | 일반 `.env`와 동일                                                                                                        |
@@ -111,6 +112,7 @@ scripts/docker-app.sh reset   # down -v --remove-orphans
 | RustFS API     | `http://127.0.0.1:12101` |
 | RustFS console | `http://127.0.0.1:12105` |
 | Prometheus     | `http://127.0.0.1:12401` |
+| Blackbox       | compose 내부 전용        |
 | Grafana        | `http://127.0.0.1:12205` |
 
 기존 `scripts/docker-app-smoke-test.sh`는 호환 wrapper이며 내부적으로
@@ -158,7 +160,7 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 
 ```bash
 scripts/docker-app.sh smoke --keep-running
-docker compose -p pinvi-app -f infra/docker-compose.app.yml --profile observability up -d cadvisor prometheus grafana
+docker compose -p pinvi-app -f infra/docker-compose.app.yml --profile observability up -d cadvisor blackbox prometheus grafana
 curl -fsS http://127.0.0.1:12401/-/ready
 curl -fsS http://127.0.0.1:12205/api/health
 ```
@@ -247,6 +249,7 @@ NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 NEXT_PUBLIC_PINVI_ENV=production
 NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0
 NEXT_PUBLIC_GRAFANA_URL=https://grafana.example.com
+PINVI_GRAFANA_HEALTH_URL=http://grafana:3000
 NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 EXPO_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 PINVI_RUSTFS_PUBLIC_ENDPOINT_URL=https://s3-api.example.com

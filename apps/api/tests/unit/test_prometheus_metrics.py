@@ -39,6 +39,8 @@ def test_prometheus_metrics_endpoint_emits_route_template_labels(
     assert 'route="/items/{item_id}"' in metrics.text
     assert 'status_code="200"' in metrics.text
     assert "pinvi_api_http_request_duration_seconds_bucket" in metrics.text
+    assert "pinvi_api_db_pool_connections" in metrics.text
+    assert 'state="checked_out"' in metrics.text
 
 
 def test_prometheus_metrics_endpoint_can_be_disabled(monkeypatch) -> None:  # type: ignore[no-untyped-def]

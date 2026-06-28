@@ -6,6 +6,18 @@
 
 ## 2026-06-28
 
+- [x] T-253 — Prometheus/Grafana 운영 가시화 게이트.
+      observability profile에 blackbox exporter를 추가해 Web/Dagster HTTP health를
+      Prometheus target으로 확인하고, API `/metrics`에 SQLAlchemy DB pool gauge를 추가했다.
+      Grafana provisioning은 기존 Overview에 API p95/error, DB pool, WebSocket, ETL/backup
+      4종 dashboard를 더한다. `/admin/grafana`는 dashboard selector와
+      `GET /admin/grafana/health` 기반 `ok`/`degraded` 표시를 제공하고, mock/live e2e가
+      iframe, dashboard path, secret 미노출, degraded 상태를 검증한다. production httpx client는
+      `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`
+      provider tag를 `ApiCallTracker`에 연결하며 query secret과 Telegram bot token path를 mask한다.
+      Resend SDK 경로는 T-257 deliverability/provider tracking preflight로 남겼다. N150 SSH alias는
+      현재 Linux 환경에서 해석되지 않아 실제 N150 live run은 수행하지 못했다.
+
 - [x] T-252 — Backup/restore live UI e2e.
       `/admin/backup`에 snapshot 검색/status filter와 visible count를 추가하고,
       production 기본 restore 버튼을 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0`으로

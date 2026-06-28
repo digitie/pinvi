@@ -2,6 +2,51 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-253 Prometheus/Grafana 운영 가시화 게이트
+
+**작업**: Prometheus scrape target, Grafana dashboard provisioning, Admin Grafana degraded
+표시, provider tag tracking을 보강했다.
+
+**변경**:
+
+- observability compose profile에 blackbox exporter를 추가했다. Prometheus target은 API
+  `/metrics`, cAdvisor, blackbox, Web health, Dagster health를 분리한다.
+- API `/metrics`에 `pinvi_api_db_pool_connections{state=...}` SQLAlchemy pool gauge를 추가했다.
+- Grafana provisioning에 API p95/error, DB pool, WebSocket, ETL/backup dashboard 4종을 추가했다.
+- `/admin/grafana`에 dashboard selector와 `GET /admin/grafana/health` 기반 `정상`/`강등`
+  상태 표시를 추가했다. 서버사이드 health probe는 `PINVI_GRAFANA_HEALTH_URL`이 있으면 해당
+  origin을 우선 사용한다.
+- production httpx client factory에 `ApiCallTracker` provider tag를 붙였다. 대상은
+  `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`다.
+  `api_call_log.endpoint`는 query secret과 Telegram bot token path를 저장 전에 mask한다.
+- Resend는 SDK 직접 호출 경로라 T-257 deliverability/provider tracking preflight로 남겼다.
+- Grafana mock/live e2e와 observability/Grafana/Admin API runbook을 갱신했다.
+
+**검증**:
+
+- Linux:
+  - `cd apps/api && uv run --extra dev ruff check app/api/v1/telegram_targets.py app/clients/kor_travel_geo.py app/clients/kor_travel_map.py app/clients/kor_travel_map_admin.py app/middleware/api_call_logging.py app/middleware/prometheus.py app/services/oauth_google.py app/services/telegram_notify.py tests/integration/test_api_call_logging.py tests/unit/test_prometheus_metrics.py`
+  - `cd apps/api && PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m pytest -q -s tests/integration/test_api_call_logging.py tests/unit/test_prometheus_metrics.py -rA` → 6 passed, known `StarletteDeprecationWarning` 1건
+  - `cd apps/api && PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=. .venv/bin/python -m mypy --strict app`
+  - `npm -w @pinvi/web run typecheck`
+  - `npm -w @pinvi/web run lint`
+  - `npm -w @pinvi/web run test -- grafanaEmbedConfig.test.ts` → 7 passed
+  - `docker compose -f infra/docker-compose.yml --profile observability config`
+  - `docker compose -f infra/docker-compose.app.yml --profile observability config`
+  - Grafana dashboard JSON parse 검증
+  - `git diff --check`
+- Playwright:
+  - N150 1차 실행은 `ssh n150` alias가 현재 Linux 환경에서 해석되지 않아 실패했다.
+  - Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-grafana.e2e.ts --workers=1` → 2 passed
+  - Windows fallback: `npm -w @pinvi/web run test:e2e:admin-live -- admin-live-grafana.live.ts --workers=1` → 1 skipped (`PINVI_ADMIN_LIVE_E2E` gate)
+
+**미실행**:
+
+- 실제 N150 live Grafana e2e는 SSH alias 미해결로 미실행. Windows fallback으로 mock e2e와 env-gated
+  live spec skip까지만 확인했다.
+
+**다음**: T-254 Admin live e2e matrix v0.2.0 확장.
+
 ## 2026-06-28 (codex) — T-252 Backup/restore live UI e2e
 
 **작업**: `/admin/backup` live read-only와 staging mutating e2e를 분리하고 production restore UI
