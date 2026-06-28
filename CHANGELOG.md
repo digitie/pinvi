@@ -56,6 +56,9 @@
   evidence를 PII/host path 없이 출력한다. 신규 backup sidecar는 basename 기준으로 생성하고,
   restore는 checksum 값을 실제 dump hash와 비교해 staging 경로로 이동한 snapshot도 검증할 수
   있다.
+- Admin `/admin/backup` snapshot 목록에 검색/status filter와 visible count를 추가했다.
+  production 기본 restore 버튼은 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이
+  비활성화되며, backup read-only live e2e와 staging mutating snapshot e2e를 분리했다.
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,
   가입/여행 생성 24시간 막대 그래프, load average, 디스크 사용률, 첨부 저장소 사용량/한도를
   raw 운영 경로/도메인/secret 없이 표시한다.

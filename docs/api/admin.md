@@ -1906,6 +1906,9 @@ Content-Type: application/json
   `app_restore_<ts>` → `app` schema rename을 수행한다.
 - `PINVI_RESTORE_DRAIN_COMMAND`가 있으면 switch 전 write drain 단계에서 실행한다.
   없으면 `PINVI_RESTORE_ALLOW_NO_DRAIN=1`일 때만 drain을 skip할 수 있다.
+- Web `/admin/backup`의 Restore 버튼은
+  `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`로 빌드된 staging/운영 검증 이미지에서만
+  활성화된다. production 기본값은 `0`이며, API endpoint의 서버 측 실행 가드는 별도로 유지한다.
 - audit: 성공 시 `action="backup.restore_hotswap"`, 실패 시
   `action="backup.restore_hotswap_failed"` 기록
 - 실패: snapshot 없음 `404 BACKUP_SNAPSHOT_NOT_FOUND`, 스크립트 실패

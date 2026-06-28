@@ -361,16 +361,27 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-252 — Backup/restore live UI e2e
 
-- read-only live: `/admin/backup` snapshot list, sort/filter, empty/error state.
-- staging mutating live: manual snapshot 생성, audit 확인, cleanup/retention 확인.
-- restore-hotswap 버튼은 production live에서 disabled 또는 explicit staging flag 없이는 실행하지
-  않는다.
+- 완료: `/admin/backup`에 client-side snapshot 검색/status filter와 visible count를 추가했다.
+  기존 AdminTable 정렬과 함께 live read-only에서 목록/sort/filter/empty state를 검증할 수 있다.
+- 완료: restore-hotswap UI는 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`로 빌드된
+  staging/검증 이미지에서만 활성화된다. 기본값은 `0`이라 production live read-only에서는 버튼이
+  disabled이며, 서버 측 `PINVI_RESTORE_HOTSWAP_EXECUTE` guard는 그대로 유지한다.
+- 완료: `apps/web/e2e/admin-live-backup.live.ts`를 추가했다. live read-only에서 snapshot 목록,
+  sort/filter, empty state, restore 버튼 잠금, raw backup path/secret pattern 미노출을 검증하고,
+  `POST /admin/backup/*` 호출이 발생하면 실패한다.
+- 완료: `apps/web/e2e/admin-backup-live-mutating.live.ts`를 추가했다. `PINVI_BACKUP_LIVE_MUTATING_E2E=1`
+  - `PINVI_BACKUP_LIVE_STAGING=1`일 때만 staging admin 계정으로 수동 snapshot 1회를 생성하고,
+    `backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을 확인한다. snapshot 삭제
+    API는 아직 없으므로 테스트 snapshot은 audit evidence로 남기고 운영 retention/스토리지 정책에서
+    관리한다.
 
 검증 케이스:
 
-- Windows Playwright live read-only on N150.
-- Windows Playwright staging mutating with `PINVI_BACKUP_LIVE_MUTATING_E2E=1`.
-- UI에서 raw absolute path/secret/domain이 노출되지 않는지 regex assertion.
+- 완료: mock Playwright — backup list/filter/sort/manual trigger/empty/error/restore disabled.
+- 완료: Admin live catalog — backup filter case 추가.
+- 미실행: N150 Playwright live read-only / staging mutating은 현재 Linux 환경에서 `n150` SSH alias가
+  해석되지 않아 실행하지 못했다. 원칙은 N150 runner 우선, 불가 시 Windows fallback이다.
+- 완료: UI/response에서 raw absolute path/secret pattern이 노출되지 않는지 regex assertion 추가.
 
 ### T-253 — Prometheus/Grafana 운영 가시화 게이트
 

@@ -62,6 +62,9 @@
   - **`POST /admin/backup/snapshot`** — manual trigger (admin role) → backup
     file 생성 + sha256 + admin_audit_log 기록. RustFS 또는 외부 위치 미러는 후속
     운영 보강.
+  - **Backup live e2e** — T-252에서 `/admin/backup` read-only live suite와 staging mutating
+    snapshot suite를 분리했다. production live의 restore 버튼은
+    `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이는 비활성화된다.
 
 ## 산출물
 
@@ -208,6 +211,8 @@
 - [ ] **Grafana iframe `/admin/grafana`에서 표시 + dashboard 4개 동작**
 - [ ] **`scripts/backup-db.sh` 수동 실행 → restore까지 통과 (스테이징)**
 - [ ] **`POST /admin/backup/snapshot` 1회 트리거 후 admin_audit_log 기록 확인**
+- [x] **Backup read-only/staging mutating live e2e suite 추가(T-252)** — 실제 N150 실행은
+      runner/접속 가능 환경에서 수행한다.
 - [ ] **PR 리뷰 legal/ops gap crosswalk 완료 — T-256~T-258 기준**
 - [ ] **`v0.2.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 5 종료 엔트리

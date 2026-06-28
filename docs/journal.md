@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-252 Backup/restore live UI e2e
+
+**작업**: `/admin/backup` live read-only와 staging mutating e2e를 분리하고 production restore UI
+안전 스위치를 추가했다.
+
+**변경**:
+
+- `/admin/backup` snapshot 목록에 filename/snapshot id/checksum 검색, status filter,
+  visible count를 추가했다. 수동 snapshot 생성 후 낙관적 목록도 API limit 50개를 넘지 않게 맞췄다.
+- Restore 버튼은 Web 빌드타임 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`일 때만
+  활성화된다. 기본값은 `0`이며 서버 측 `PINVI_RESTORE_HOTSWAP_EXECUTE` guard는 별도로 유지한다.
+- `apps/web/e2e/admin-live-backup.live.ts`를 추가해 live read-only에서 목록/sort/filter/empty,
+  restore 버튼 잠금, raw backup path/secret pattern 미노출, backup POST 미발생을 검증한다.
+- `apps/web/e2e/admin-backup-live-mutating.live.ts`를 추가했다.
+  `PINVI_BACKUP_LIVE_MUTATING_E2E=1` + `PINVI_BACKUP_LIVE_STAGING=1`에서만 staging snapshot 1회 생성,
+  `backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을 확인한다.
+- `.env.example`, Web Docker build args, app compose, `scripts/dev-up.sh`, backup/admin/live e2e
+  runbook과 Sprint 추적 문서를 갱신했다.
+
+**검증**:
+
+- Linux: `npm -w @pinvi/web run typecheck`
+- Linux: `npm -w @pinvi/web run lint`
+- Linux: `bash -n scripts/dev-up.sh`
+- Linux: `docker compose -f infra/docker-compose.app.yml config`
+- Linux: `npx prettier --check ...`
+- Linux: `npm -w @pinvi/web run test:e2e:admin-live -- --grep "catalog" --workers=1`
+- Linux: `npm -w @pinvi/web run test:e2e:admin-live -- --grep "backup live read-only" --workers=1` → 1 skipped
+- Linux: `npm -w @pinvi/web run test:e2e:live-mutating -- --grep "admin backup staging" --workers=1` → 1 skipped
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-backup.e2e.ts --workers=1` → 2 passed
+- Windows fallback: `npm -w @pinvi/web run test:e2e -- admin-feature-detail-subpages.e2e.ts --workers=1`
+  → 1 passed (CI e2e flake 안정화)
+
+**미실행**:
+
+- N150 runner는 `ssh n150` alias가 현재 Linux 환경에서 해석되지 않아 접근하지 못했다. 따라서 실제
+  N150 live read-only와 staging mutating snapshot 생성은 수행하지 못했다.
+
+**다음**: T-253 Prometheus/Grafana 운영 가시화 게이트.
+
 ## 2026-06-28 (codex) — T-251 Restore staging drill
 
 **작업**: restore staging drill 스크립트와 runbook 정합화.

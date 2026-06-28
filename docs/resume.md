@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-252 Backup/restore live UI e2e
+
+`/admin/backup` snapshot 목록에 filename/snapshot id/checksum 검색, `verified`/`available`
+status filter, visible count를 추가했다. production live에서 restore-hotswap을 실수로 누르지
+않도록 Web 빌드타임 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`이 없으면 Restore 버튼이
+비활성화된다. 서버 측 `PINVI_RESTORE_HOTSWAP_EXECUTE` 가드는 그대로 유지한다.
+
+Playwright는 세 층으로 분리했다. 기존 mock e2e는 list/filter/sort/manual trigger/empty/error와
+restore disabled를 확인한다. `admin-live-backup.live.ts`는 N150/live read-only에서 snapshot 목록,
+sort/filter, empty state, restore 잠금, raw backup path/secret pattern 미노출을 검증하고
+backup POST가 발생하면 실패한다. `admin-backup-live-mutating.live.ts`는
+`PINVI_BACKUP_LIVE_MUTATING_E2E=1` + `PINVI_BACKUP_LIVE_STAGING=1`에서만 staging snapshot 1회 생성,
+`backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을 확인한다.
+
+Linux에서 Web typecheck/lint, live catalog/skip, compose/shell 검증을 수행했다. N150 SSH alias는
+현재 Linux 환경에서 해석되지 않아 실제 N150 live read-only/staging mutating run은 수행하지
+못했고, mock Playwright는 Windows fallback runner에서 통과했다. 다음 작업은 T-253
+Prometheus/Grafana 운영 가시화 게이트다.
+
 ## 2026-06-28 (codex) — T-251 Restore staging drill
 
 Restore staging drill 진입점으로 `scripts/restore-staging-drill.sh`를 추가했다. 스크립트는
