@@ -1149,11 +1149,53 @@ CREATE TABLE app.rate_limit_buckets (
 
 CREATE INDEX ix_rate_limit_buckets_expires_at
   ON app.rate_limit_buckets (expires_at);
+CREATE INDEX ix_rate_limit_buckets_limit_updated
+  ON app.rate_limit_buckets (limit_name, updated_at);
 ```
 
 `RateLimitMiddleware`가 요청마다 atomic upsert로 `count`를 증가시키고, 만료 bucket은
 opportunistic cleanup으로 제거한다. 로컬 개발/테스트/smoke는 기본 memory backend를
 사용해 이 테이블에 쓰지 않는다.
+
+### 7.7 `app.rate_limit_overrides`
+
+Admin `/admin/abuse`의 TTL block/allow override다. override도 원문 IP/email/share token을
+저장하지 않고, 같은 HMAC bucket hash와 표시용 fingerprint만 저장한다.
+
+```sql
+CREATE TABLE app.rate_limit_overrides (
+  override_id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  limit_name           varchar(80) NOT NULL,
+  bucket_hash          varchar(64) NOT NULL,
+  identity_kind        varchar(32) NOT NULL,
+  identity_fingerprint varchar(64) NOT NULL,
+  identity_label       varchar(160) NOT NULL,
+  action               varchar(16) NOT NULL,
+  reason               text NOT NULL,
+  created_by_user_id   uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  expires_at           timestamptz NOT NULL,
+  revoked_at           timestamptz,
+  revoked_by_user_id   uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  revoked_reason       text,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_rate_limit_overrides_identity_kind_allowed
+    CHECK (identity_kind IN ('ip', 'ip_email', 'user', 'shared_token')),
+  CONSTRAINT ck_rate_limit_overrides_action_allowed
+    CHECK (action IN ('blocked', 'allowed'))
+);
+
+CREATE INDEX ix_rate_limit_overrides_bucket_active
+  ON app.rate_limit_overrides (bucket_hash, limit_name, expires_at);
+CREATE INDEX ix_rate_limit_overrides_created_at
+  ON app.rate_limit_overrides (created_at);
+CREATE INDEX ix_rate_limit_overrides_expires_at
+  ON app.rate_limit_overrides (expires_at);
+```
+
+`blocked` active row는 Postgres backend에서 `429 RATE_LIMIT_BLOCKED`를 반환하고,
+`allowed` active row는 TTL 동안 해당 bucket의 counter hit를 우회한다. `revoked_at`이 있거나
+`expires_at <= now()`이면 적용하지 않는다.
 
 ## 8. 데이터 보존 / GDPR / 탈퇴
 

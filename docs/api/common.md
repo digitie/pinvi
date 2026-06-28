@@ -227,7 +227,9 @@ GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
 | 그 외 인증 사용자 경로 | 분당 60회 | user_id 또는 token |
 | 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token |
 
-초과 시 `429 RATE_LIMITED` + `Retry-After` 헤더.
+초과 시 `429 RATE_LIMITED` + `Retry-After` 헤더. Admin `/admin/abuse`에서 생성한 active
+`blocked` override는 `429 RATE_LIMIT_BLOCKED`, active `allowed` override는 TTL 동안 counter hit
+우회로 적용된다(Postgres backend 한정).
 
 구현은 `RateLimitMiddleware`가 전역으로 적용한다(ADR-038/T-195). 기본
 `PINVI_RATE_LIMIT_BACKEND=auto`는 `PINVI_ENVIRONMENT=production`/`staging`에서

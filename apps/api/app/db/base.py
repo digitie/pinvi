@@ -42,6 +42,7 @@ from app.models import (  # noqa: E402,F401
     moderation,
     oauth_identity,
     poi,
+    rate_limit,
     security,
     session,
     share_link,

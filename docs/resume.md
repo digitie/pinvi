@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-282 Rate-limit / abuse admin surface
+
+Sprint 6 rate-limit/abuse 운영 표면을 구현했다. DB에는 `app.rate_limit_overrides`를 추가하고,
+기존 `app.rate_limit_buckets`에 admin 조회용 `limit_name, updated_at` index를 보강했다.
+`RateLimitMiddleware`는 Postgres backend에서 active `blocked` override를 `429 RATE_LIMIT_BLOCKED`로
+차단하고, active `allowed` override는 TTL 동안 counter hit를 우회한다. 원문 IP/email/share token은
+저장하지 않고 HMAC bucket hash와 표시용 hash label만 보존한다.
+
+Admin API는 `/admin/abuse` 조회와 `/admin/abuse/overrides`, `/rollback` mutation을 제공한다.
+조회는 `admin`/`operator`/`cpo`, mutation은 `admin` 전용이며 모든 override mutation은
+`admin_audit_log`에 `rate_limit_override.*` action으로 기록된다. Web Admin에는 `/admin/abuse`
+페이지와 sidebar 메뉴를 추가해 backend store 상태, fail-closed 여부, 429 bucket 수, suspicious
+auth/share/storage bucket, override 생성/rollback을 처리한다.
+
+문서는 `docs/api/admin.md`, `docs/postgres-schema.md`, `docs/data-model.md`, `docs/runbooks/admin.md`,
+`CHANGELOG.md`, `docs/tasks.md`를 갱신했다. 다음 작업은 PR·CI·머지 후 T-283 Security review /
+threat model / penetration pass다.
+
+검증은 Linux에서 API ruff, strict mypy, API integration/unit targeted 테스트 9건,
+`packages/schemas`, `packages/api-client`, `apps/web` typecheck, Web lint를 통과했다. Playwright는
+N150 Docker runner `scripts/n150-playwright-runner.sh`로 `admin-abuse.e2e.ts` 1건을 통과했다.
+
 ## 2026-06-29 (codex) — T-281 User lifecycle admin actions
 
 Sprint 6 사용자 lifecycle Admin workflow를 구현했다. DB status vocabulary에 `pending_delete`를

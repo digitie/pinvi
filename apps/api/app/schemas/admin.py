@@ -764,6 +764,110 @@ class AdminSecurityIncidentCloseRequest(BaseModel):
     evidence_attachment_id: uuid.UUID | None = None
 
 
+AdminRateLimitIdentityKind = Literal["ip", "ip_email", "user", "shared_token"]
+AdminRateLimitOverrideAction = Literal["blocked", "allowed"]
+AdminRateLimitBucketStatus = Literal["observed", "blocked", "allowed", "expired"]
+AdminRateLimitOverrideStatus = Literal["blocked", "allowed", "expired", "revoked"]
+
+
+class AdminRateLimitPolicyRecord(BaseModel):
+    name: str
+    limit_per_minute: int
+    identity_kind: AdminRateLimitIdentityKind
+
+
+class AdminRateLimitBackendStatus(BaseModel):
+    enabled: bool
+    configured_backend: str
+    effective_backend: str
+    window_seconds: int
+    fail_open: bool
+    fail_closed: bool
+    store_status: Literal["ok", "degraded", "not_applicable"]
+    store_error_class: str | None = None
+    store_error_message: str | None = None
+
+
+class AdminRateLimitOverrideRecord(BaseModel):
+    override_id: uuid.UUID
+    limit_name: str
+    bucket_hash_prefix: str
+    identity_kind: AdminRateLimitIdentityKind
+    identity_label: str
+    action: AdminRateLimitOverrideAction
+    status: AdminRateLimitOverrideStatus
+    reason: str
+    created_by_user_id: uuid.UUID
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    revoked_by_user_id: uuid.UUID | None = None
+    revoked_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminRateLimitBucketRecord(BaseModel):
+    bucket_hash_prefix: str
+    limit_name: str
+    identity_kind: AdminRateLimitIdentityKind
+    count: int
+    limit: int
+    remaining: int
+    rate_limited: bool
+    window_start: datetime
+    expires_at: datetime
+    updated_at: datetime
+    status: AdminRateLimitBucketStatus
+    active_override_id: uuid.UUID | None = None
+    active_override_action: AdminRateLimitOverrideAction | None = None
+
+
+class AdminRateLimitSuspiciousActivityRecord(BaseModel):
+    signal: Literal["auth_low_repeated_attempt", "shared_token_pressure", "storage_upload_pressure"]
+    bucket: AdminRateLimitBucketRecord
+
+
+class AdminRateLimitAbuseSummary(BaseModel):
+    generated_at: datetime
+    backend: AdminRateLimitBackendStatus
+    policies: list[AdminRateLimitPolicyRecord] = Field(default_factory=list)
+    buckets: list[AdminRateLimitBucketRecord] = Field(default_factory=list)
+    overrides: list[AdminRateLimitOverrideRecord] = Field(default_factory=list)
+    suspicious: list[AdminRateLimitSuspiciousActivityRecord] = Field(default_factory=list)
+    rate_limited_bucket_count: int = 0
+    active_override_count: int = 0
+    suspicious_count: int = 0
+
+
+class AdminRateLimitOverrideCreateRequest(BaseModel):
+    limit_name: str = Field(min_length=1, max_length=80)
+    identity_kind: AdminRateLimitIdentityKind
+    ip: str | None = Field(default=None, min_length=1, max_length=64)
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    user_id: uuid.UUID | None = None
+    shared_token: str | None = Field(default=None, min_length=8, max_length=512)
+    action: AdminRateLimitOverrideAction
+    ttl_minutes: int = Field(ge=1, le=43_200)
+    access_reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _check_identity_fields(self) -> AdminRateLimitOverrideCreateRequest:
+        if self.identity_kind == "ip" and not self.ip:
+            raise ValueError("ip identity에는 ip가 필요합니다.")
+        if self.identity_kind == "ip_email" and (not self.ip or not self.email):
+            raise ValueError("ip_email identity에는 ip와 email이 필요합니다.")
+        if self.identity_kind == "user" and self.user_id is None:
+            raise ValueError("user identity에는 user_id가 필요합니다.")
+        if self.identity_kind == "shared_token" and not self.shared_token:
+            raise ValueError("shared_token identity에는 shared_token이 필요합니다.")
+        return self
+
+
+class AdminRateLimitOverrideRollbackRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
+    rollback_reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+
 class AdminIntegrityIssueRecord(BaseModel):
     issue_id: str
     source: Literal["kor_travel_map", "pinvi_app"] = "kor_travel_map"

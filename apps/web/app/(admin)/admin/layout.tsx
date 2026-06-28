@@ -7,6 +7,7 @@ import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
 import {
   Activity,
   Archive,
+  Ban,
   BarChart3,
   Bug,
   ChevronsLeft,
@@ -63,6 +64,7 @@ const NAV_GROUPS: {
       { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4, icon: Lightbulb },
       { href: '/admin/audit', label: '감사 로그', sprint: 3, icon: ScrollText },
       { href: '/admin/incidents', label: 'Incidents', sprint: 6, icon: ShieldAlert },
+      { href: '/admin/abuse', label: 'Abuse', sprint: 6, icon: Ban },
       { href: '/admin/dsr', label: 'DSR', sprint: 6, icon: ClipboardCheck },
       { href: '/admin/moderation', label: 'Moderation', sprint: 6, icon: Gavel },
     ],
