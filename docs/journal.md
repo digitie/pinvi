@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-259 N150 Playwright Docker runner
+
+**작업**: N150 host Chromium shared library blocker를 우회하기 위해 공식 Playwright Docker image 기반
+runner를 추가하고, Linux-only 개발/Playwright 문서의 stale Windows git/runner 문구를 정리했다.
+
+**변경**:
+
+- `scripts/n150-playwright-runner.sh` 추가. lockfile의 `@playwright/test` 버전에 맞춰
+  `mcr.microsoft.com/playwright:v<version>-noble` image를 사용하고, `PINVI_*`/`NEXT_PUBLIC_*`
+  환경변수는 Docker argv에 값을 노출하지 않고 이름만 전달한다.
+- Admin live e2e runbook은 N150 Docker runner를 기본 경로로, host Chromium dependency 설치는
+  직접 host 실행이 필요할 때의 보조 절차로 정리했다.
+- `local-dev`, runbook index, testing/coding-style, AGENTS/CLAUDE/SKILL, release gate/resume/tasks를
+  ADR-051 + N150 Docker runner 기준으로 동기화했다.
+
+**검증**:
+
+- N150 `~/pinvi` checkout `497c7f5414036e8674336a9ad23091d9f03fd489`.
+- Docker image: `mcr.microsoft.com/playwright:v1.60.0-noble`.
+- N150: `scripts/n150-playwright-runner.sh` 후보 script를 임시 경로로 복사해
+  `PINVI_ADMIN_LIVE_E2E=1`, `PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805`,
+  `--grep "UI login rejects malformed email"` smoke 1건 통과.
+
+**남은 차단**:
+
+- Admin live 2000/full credential.
+- Restore staging DB URL/환경.
+
 ## 2026-06-28 (codex) — T-259 Web clean manual evidence
 
 **작업**: 최신 main Web evidence를 WSL ext4 mirror clean install 기준으로 확보했다.

@@ -98,13 +98,13 @@ codegraph status
 
 ## 1.6 명령 치트시트 + 작업 룰
 
-| 명령 | 용도 | 주기 |
-|------|------|------|
-| `codegraph init -i` | 인덱싱 초기화 | worktree마다 1회 |
-| `codegraph sync` | 변경 incremental 반영 | 새 task 시작 시 / 큰 git switch 후 |
-| `codegraph status` | 동기화 상태 확인 | 의심될 때 |
-| `codegraph query <name>` | 심볼 이름 lookup | 수시 |
-| `codegraph index --force` | 전체 재빌드 | stale 의심 + sync 실패 시 최후 수단 |
+| 명령                      | 용도                  | 주기                                |
+| ------------------------- | --------------------- | ----------------------------------- |
+| `codegraph init -i`       | 인덱싱 초기화         | worktree마다 1회                    |
+| `codegraph sync`          | 변경 incremental 반영 | 새 task 시작 시 / 큰 git switch 후  |
+| `codegraph status`        | 동기화 상태 확인      | 의심될 때                           |
+| `codegraph query <name>`  | 심볼 이름 lookup      | 수시                                |
+| `codegraph index --force` | 전체 재빌드           | stale 의심 + sync 실패 시 최후 수단 |
 
 ### 코드 수정 룰 — 영향도 평가 먼저
 
@@ -112,12 +112,12 @@ codegraph status
 평가한다. grep / Read fan-out 대신 한 번의 MCP 호출로 관련 심볼 source + 호출 관계를
 가져온다.
 
-| 의도 | 1차 도구 | 보조 |
-|------|---------|------|
+| 의도                      | 1차 도구            | 보조                |
+| ------------------------- | ------------------- | ------------------- |
 | 컴포넌트 / 모듈 주변 파악 | `codegraph_explore` | `codegraph_context` |
-| 변경 영향 반경 | `codegraph_impact` | `codegraph_callers` |
-| 호출 경로 추적 | `codegraph_trace` | — |
-| 심볼 이름 lookup | `codegraph_search` | `codegraph_node` |
+| 변경 영향 반경            | `codegraph_impact`  | `codegraph_callers` |
+| 호출 경로 추적            | `codegraph_trace`   | —                   |
+| 심볼 이름 lookup          | `codegraph_search`  | `codegraph_node`    |
 
 답이 인덱스에서 나오면 같은 소스를 다시 파일 read로 펼치지 않는다.
 
@@ -205,8 +205,9 @@ Windows git 사용을 중지한다.
 
 ## 5. N150 / Playwright
 
-UI 또는 live 검증은 N150 Playwright를 우선한다. N150에서 브라우저 runtime, 권한,
-display, 네트워크 문제로 실행할 수 없을 때만 Windows runner를 fallback으로 사용한다.
+UI 또는 live 검증은 N150 Playwright를 우선한다. 기본은
+`scripts/n150-playwright-runner.sh` Docker runner이고, N150 Docker runner와 host browser 실행이
+모두 runtime, 권한, display, 네트워크 문제로 불가능할 때만 Windows runner를 fallback으로 사용한다.
 fallback을 쓰면 journal/PR 검증에 사유와 명령을 남긴다.
 
 ## 참고

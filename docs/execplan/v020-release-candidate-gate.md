@@ -2,8 +2,8 @@
 
 본 문서는 T-259 `v0.2.0` release candidate gate의 2026-06-28 실행 결과를 기록한다.
 결론은 **릴리스 보류**다. N150 배포와 기본 smoke, backup snapshot, 최신 main API CI, Web clean
-manual evidence는 확인했지만, Admin live 2000/full gate와 restore staging drill이 아직 닫히지
-않았다.
+manual evidence, N150 Playwright Docker runner smoke는 확인했지만, Admin live 2000/full gate와
+restore staging drill이 아직 닫히지 않았다.
 
 ## 대상
 
@@ -11,8 +11,9 @@ manual evidence는 확인했지만, Admin live 2000/full gate와 restore staging
 - 후속 검증 SHA:
   - `4a1b71e273cda443243618eee1df364d350ba3d4` (backup script rerun / API main CI)
   - `5c0a39b589a7d8d71a103f7534e116cc0f5ba83c` (Web clean manual evidence)
+  - `497c7f5414036e8674336a9ad23091d9f03fd489` (N150 Playwright Docker runner smoke 대상 checkout)
 - 기준 브랜치: `main`
-- 실행 위치: N150 운영 노드 우선, Playwright fallback만 Windows runner
+- 실행 위치: N150 운영 노드 우선, Playwright는 N150 Docker runner 우선, 최종 fallback만 Windows runner
 - tag/Release: 생성하지 않음
 
 ## 실행 결과
@@ -23,7 +24,7 @@ manual evidence는 확인했지만, Admin live 2000/full gate와 restore staging
 | N150 image build/deploy     | 부분 통과 | `pinvi-api`, `pinvi-web`, `pinvi-dagster` 이미지를 생성하고 컨테이너를 healthy로 기동                                     |
 | N150 smoke                  | 통과      | API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`, `kor-travel-map` `/health`/OpenAPI 모두 200 |
 | Backup snapshot             | 통과      | 초기 one-off와 보강 script rerun 모두 126826 bytes, `.sha256` 검증 및 `pg_restore --list` 성공                            |
-| N150 Playwright             | 차단      | Chromium launch가 `libatk-1.0.so.0` 누락으로 실패                                                                         |
+| N150 Playwright             | 부분 통과 | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 malformed login smoke 1건 통과                       |
 | Windows Playwright fallback | 부분 통과 | N150 Web SSH tunnel 대상 login malformed validation 1건 통과                                                              |
 | Admin live 2000/full        | 차단      | N150/local env에 `PINVI_ADMIN_LIVE_EMAIL`/`PINVI_ADMIN_LIVE_PASSWORD` 없음                                                |
 | Restore staging drill       | 차단      | staging DB URL/환경 미준비. snapshot `pg_restore --list`까지만 확인                                                       |
@@ -84,6 +85,12 @@ N150 내부 `127.0.0.1` 기준:
     지원하지 않아 dependency 목록 생성 실패
   - `ldd chrome-headless-shell`: `libatk-1.0.so.0`, `libatk-bridge-2.0.so.0`,
     `libXdamage.so.1`, `libasound.so.2`, `libatspi.so.0` 누락
+- N150 Docker runner smoke:
+  - checkout: `497c7f5414036e8674336a9ad23091d9f03fd489`
+  - image: `mcr.microsoft.com/playwright:v1.60.0-noble`
+  - canonical 명령: `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI login rejects malformed email" --workers=1`
+  - 검증: PR branch script를 임시 경로로 복사하고 `PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT=~/pinvi`,
+    `PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI=1`로 실행해 1 passed
 - Windows fallback:
   - 대상: SSH tunnel을 통해 N150 Web `127.0.0.1:12805`
   - 명령: `npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1`
@@ -131,9 +138,11 @@ restore staging drill은 `PINVI_RESTORE_STAGING_DATABASE_URL` 또는 동등한 s
 
 ## 다음 조치
 
-1. N150 Playwright system dependency를 sudo 가능한 셸에서 설치하거나 검증용 runner 이미지를 도입한다.
-2. Admin live e2e credential을 N150 local-only env로 배치한다.
-3. `PINVI_RESTORE_STAGING_DATABASE_URL`이 있는 staging restore drill 환경을 준비한다.
+1. Admin live e2e credential을 N150 local-only env로 배치한 뒤 Docker runner로 `200` smoke,
+   `2000` gate, full catalog를 순서대로 실행한다.
+2. `PINVI_RESTORE_STAGING_DATABASE_URL`이 있는 staging restore drill 환경을 준비한다.
+3. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
+   기본 release gate는 Docker runner를 사용한다.
 4. Compose에서 `pinvi-*` deploy가 외부 repo 이미지 build/recreate를 끌고 오지 않도록
    `--no-deps`/서비스 분리 절차를 runbook에 반영한다.
 5. 위 gate 통과 후 `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.

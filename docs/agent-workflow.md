@@ -7,11 +7,11 @@
 
 ## 0. 큰 그림
 
-| 위치 | 정체 | 여기서 하는 것 | 주의 |
-|------|------|----------------|------|
+| 위치                 | 정체            | 여기서 하는 것                                                     | 주의                                                       |
+| -------------------- | --------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
 | Linux agent worktree | source of truth | 편집, git, CodeGraph, commit, push, PR, 테스트, Docker, dev server | 기존 `/mnt/f/...` worktree도 Linux 포인터로 repair 후 사용 |
-| N150 | live 검증 | 운영/스테이징 smoke, live API/UI, Playwright 우선 실행 | 민감 host/IP/domain은 로컬 런북에만 기록 |
-| Windows | fallback runner | N150 Playwright가 불가능할 때 브라우저 e2e fallback | 사유를 journal/PR에 기록 |
+| N150                 | live 검증       | 운영/스테이징 smoke, live API/UI, Playwright 우선 실행             | 민감 host/IP/domain은 로컬 런북에만 기록                   |
+| Windows              | fallback runner | N150 Playwright가 불가능할 때 브라우저 e2e fallback                | 사유를 journal/PR에 기록                                   |
 
 - 에이전트별 worktree 이름은 고정이다(ADR-017): Claude=`pinvi-claude`,
   Codex=`pinvi-codex`, Antigravity=`pinvi-antigravity`.
@@ -87,10 +87,11 @@ npm -w @pinvi/web run build
 ```bash
 # N150 셸에서 실행하거나 ssh stdin script로 실행
 cd ~/pinvi
-npm -w @pinvi/web run test:e2e -- <spec> --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- <spec> --workers=1
 ```
 
-N150에서 브라우저 runtime/권한/네트워크 문제로 불가능할 때만 Windows runner를 쓴다.
+N150 Docker runner와 host browser 실행이 모두 runtime/권한/네트워크 문제로 불가능할 때만
+Windows runner를 쓴다.
 그 경우 검증 기록에 다음 정보를 남긴다.
 
 - N150에서 실패한 이유

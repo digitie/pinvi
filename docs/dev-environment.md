@@ -11,7 +11,8 @@
 >   Windows shim으로 잡히면 중지하고 PATH/설치를 고친다.
 > - **의존성 설치, 테스트, Docker, dev server, lint/typecheck/build/Vitest도
 >   Linux에서 수행한다.**
-> - **Playwright는 N150에서 먼저 실행한다.** N150에서 브라우저/runtime/권한 문제로
+> - **Playwright는 N150에서 먼저 실행한다.** 기본은 `scripts/n150-playwright-runner.sh`
+>   Docker runner다. N150 Docker runner와 host browser 실행이 모두 브라우저/runtime/권한 문제로
 >   불가능할 때만 Windows runner를 fallback으로 사용하고, 사유를 journal/PR에 남긴다.
 >
 > ADR-024의 "NTFS worktree = git source of truth + Windows git" 모델과 ADR-017의
@@ -49,14 +50,14 @@ Linux로 고정한다.
 ~/pinvi-workspaces/pinvi-antigravity
 ```
 
-| 종류 | 표준 위치 | 비고 |
-|------|-----------|------|
-| git / 편집 / commit / PR | Linux에서 접근 가능한 agent worktree | `/mnt/f/...` 기존 worktree도 Linux git 포인터로 복구 후 사용 가능 |
-| 의존성·테스트·Docker·장기 실행 | Linux worktree | 별도 rsync 미러를 source of truth로 쓰지 않는다 |
-| 프론트 dev/lint/typecheck/build/Vitest | Linux worktree | Linux Node/npm |
-| Playwright 브라우저 e2e | N150 우선 | 불가 시 Windows fallback, 사유 기록 |
-| 데이터 (`dataset/`, `refdocs/`) | 로컬 원본 또는 symlink | 변경 금지 데이터는 절대경로/symlink로 참조 |
-| 빌드 산출물 (`.next`, `build`) | Linux worktree 내부 | `.gitignore` 대상, 폐기 가능 |
+| 종류                                   | 표준 위치                            | 비고                                                              |
+| -------------------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| git / 편집 / commit / PR               | Linux에서 접근 가능한 agent worktree | `/mnt/f/...` 기존 worktree도 Linux git 포인터로 복구 후 사용 가능 |
+| 의존성·테스트·Docker·장기 실행         | Linux worktree                       | 별도 rsync 미러를 source of truth로 쓰지 않는다                   |
+| 프론트 dev/lint/typecheck/build/Vitest | Linux worktree                       | Linux Node/npm                                                    |
+| Playwright 브라우저 e2e                | N150 우선                            | Docker runner 우선, 불가 시 Windows fallback과 사유 기록          |
+| 데이터 (`dataset/`, `refdocs/`)        | 로컬 원본 또는 symlink               | 변경 금지 데이터는 절대경로/symlink로 참조                        |
+| 빌드 산출물 (`.next`, `build`)         | Linux worktree 내부                  | `.gitignore` 대상, 폐기 가능                                      |
 
 ## 2. 기존 worktree Linux 포인터 복구
 

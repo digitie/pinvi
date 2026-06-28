@@ -4,9 +4,9 @@
   T-109 geofencing,
   T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
   ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
-  action 일부, Trip WebSocket frontend client 1차 연결이 추가됐다(T-207~T-232).
+  action 일부, Trip WebSocket frontend client 1차 연결이 추가됐다(T-207~~T-232).
   남은 세부 Task와 live e2e 카탈로그는 `docs/execplan/sprint5-v020-release-plan.md`
-  (T-233, PR 리뷰 반영 T-256~T-258 포함)에서 관리한다.
+  (T-233, PR 리뷰 반영 T-256~~T-258 포함)에서 관리한다.
 - **선행**: Sprint 4 DoD 완료 (v0.1.0 릴리즈됨). 단 DEC-06에 따라 live feature
   read(T-066)가 v0.1.0 게이트다.
 - **목표**: WebSocket 동시 편집 + Dagster 첫 적재 활성화 + Prometheus/Grafana +
@@ -89,9 +89,9 @@
 남은 `v0.2.0` 후보 gate:
 
 - Release candidate gate는 T-259에서 부분 실행했다. N150 후보 배포와 smoke, backup snapshot은
-  통과했지만 최신 main `api`/`web` CI, Admin live 2000/full credential, N150 Playwright
-  system dependency, restore staging DB가 남아 `v0.2.0` tag/GitHub Release는 보류한다.
-  상세는 `docs/execplan/v020-release-candidate-gate.md`.
+  통과했다. 후속으로 최신 main API/Web evidence와 N150 Playwright Docker runner smoke도 통과했지만
+  Admin live 2000/full credential과 restore staging DB가 남아 `v0.2.0` tag/GitHub Release는
+  보류한다. 상세는 `docs/execplan/v020-release-candidate-gate.md`.
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
 - 사용자/Admin 지도뷰 marker palette parity는 T-255에서 완료했다. 공용 marker resolver가

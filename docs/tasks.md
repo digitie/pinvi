@@ -19,16 +19,17 @@
 ## 진행 중
 
 - T-259 — Release candidate gate / `v0.2.0`.
-  2026-06-28 N150 후보 배포와 smoke, backup snapshot, 최신 main API CI, Web clean manual evidence는
-  통과했지만 Admin live 2000/full credential, N150 Playwright system dependency, restore staging DB가
-  남아 release/tag는 보류한다. `scripts/backup-db.sh`는 host `pg_dump` 부재 시 Docker fallback을
+  2026-06-28 N150 후보 배포와 smoke, backup snapshot, 최신 main API CI, Web clean manual evidence,
+  N150 Playwright Docker runner smoke는 통과했지만 Admin live 2000/full credential과 restore staging
+  DB가 남아 release/tag는 보류한다. `scripts/backup-db.sh`는 host `pg_dump` 부재 시 Docker fallback을
   지원하도록 보강했고 N150 재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-259 release 차단 해소. N150 Playwright dependency, Admin live credential,
-  restore staging DB를 확보한 뒤 `v0.2.0` tag/Release를 만든다.
+- 다음 구현: T-259 release 차단 해소. N150 local-only Admin live credential과 restore staging DB를
+  확보한 뒤 Docker runner로 Admin live `200`/`2000`/full gate를 실행하고 `v0.2.0` tag/Release를
+  만든다.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-256에서
   PR #238/#264 legal/ops 리뷰와 PR #265~#289 사람 리뷰 코멘트를 확인했고,
   후속은 `docs/execplan/legal-ops-review-gap-crosswalk.md` 및 T-289~T-292로 연결했다.
