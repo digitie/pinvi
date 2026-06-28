@@ -2025,7 +2025,71 @@ ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
 - upstream 큐레이션 계약이 다시 바뀌면(예: 공개 표면 재도입) import client를 재검토한다.
 - within-radius의 `relation`(contains/overlaps) 의미를 UI에서 쓰게 되면 별도 표시 규칙을 정한다.
 
+## ADR-050: Pinvi app-owned Dagster job 표준
+
+- **상태**: accepted
+- **날짜**: 2026-06-28
+- **결정자**: Codex
+
+### 컨텍스트
+
+Sprint 5 `v0.2.0` 범위에는 KASI 외에도 email outbox, PII retention, location log
+archive, Telegram system summary 같은 Pinvi `app` schema 소유 운영 job이 남아 있다.
+반면 feature/provider 적재, raw provider 변환, dedup, coverage는 ADR-026/027 이후
+`kor-travel-map`이 소유한다. T-238은 이후 ETL 구현이 이 책임 경계를 흔들지 않도록
+Pinvi Dagster job의 공통 표준을 먼저 고정한다.
+
+### 결정
+
+- Pinvi `apps/etl`에는 **Pinvi `app` schema 소유 job만** 둔다. `feature` /
+  `provider_sync` schema 적재, provider raw → DTO 변환, record linkage, coverage 갱신은
+  `kor-travel-map` PR로 처리한다.
+- Dagster module import 시점에는 DB, network, 파일 write 같은 side effect를 만들지 않는다.
+  외부 client와 DB engine은 resource에서 lazy 생성한다.
+- 모든 schedule은 `execution_timezone="Asia/Seoul"`을 명시한다.
+- 외부 API, DB write, outbox delivery처럼 transient failure가 가능한 job은 기본
+  `RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL)`를 쓴다. 이미
+  queue worker나 provider client가 자체 retry를 수행하는 경우에는 이중 retry를 피하려고
+  Dagster retry를 낮추거나 끈다.
+- 모든 mutating job은 idempotency key를 갖는다. 반복 실행 가능한 daily/month bucket,
+  `(provider, business_key)`, `(category, idempotency_key)` unique key, 또는 queue row
+  claim(`FOR UPDATE SKIP LOCKED`) 중 하나로 중복 실행을 막는다.
+- run metadata와 log에는 bounded summary만 남긴다. PII, secret, raw token, full URL query,
+  긴 raw payload는 남기지 않는다.
+- retry가 모두 소진된 실패는 Dagster `run_failure_sensor`에서 Sentry와
+  `app.telegram_system_notification_outbox`로 전달한다. 개별 asset/job은 Telegram을 직접
+  호출하지 않는다.
+- PII delete/anonymize, location archive/delete, backup/restore처럼 파괴적이거나 복구가 필요한
+  작업은 Sprint 5에서 dry-run이 기본이다. 실제 실행은 별도 task에서 kill-switch,
+  `access_reason`, admin audit, staging mutating e2e, rollback 절차가 모두 갖춰진 뒤 허용한다.
+- Admin `/admin/etl/summary`는 Pinvi app-owned job registry와 최신 실행 metadata를 표시하고,
+  `kor-travel-map` upstream 상태는 read-only degraded state로 분리한다.
+
+### 근거
+
+- Pinvi와 `kor-travel-map`의 책임 경계를 job 코드 수준에서 강제하지 않으면 Sprint 5 ETL 구현이
+  다시 provider 적재 wrapper로 흐를 위험이 있다.
+- outbox/retention/archive 계열은 재시도와 수동 재실행이 잦으므로 idempotency와 bounded log가
+  선행되어야 운영 사고를 줄일 수 있다.
+- 파괴적 job을 dry-run으로 먼저 닫으면 Sprint 5 범위 안에서 관측성과 UI를 검증하면서도
+  Sprint 6 법무/운영 게이트 전 실제 삭제·익명화 위험을 피할 수 있다.
+
+### 결과
+
+- `docs/runbooks/etl.md`는 ADR-050을 새 app-owned job 체크리스트의 기준으로 삼는다.
+- `docs/architecture/dagster-etl-bridge.md`와 Sprint 5 문서는 `app` schema job 표준, retry,
+  idempotency, 알림, dry-run gate를 명시한다.
+- T-239~T-243은 이 ADR을 기준으로 구현·검증한다.
+
+### 후속
+
+- T-239 `pinvi_email_outbox`, T-240 `pinvi_pii_retention`, T-241
+  `pinvi_location_log_archive`, T-242 Telegram summary/outbox, T-243 Dagster live gate에서
+  각 job별 idempotency key와 dry-run/실행 경계를 구체화한다.
+- 실제 retention/location 삭제·익명화는 T-276에서 kill-switch와 운영 dashboard를 포함해 별도
+  검증한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-050**
+- 다음 신규 ADR = **ADR-051**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

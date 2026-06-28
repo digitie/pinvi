@@ -6,6 +6,13 @@
 
 ## 2026-06-28
 
+- [x] T-238 — Pinvi app-owned ETL 표준 / ADR.
+      ADR-050으로 Pinvi `apps/etl` app-owned Dagster job 표준을 고정했다. 신규 job은
+      `app` schema 소유 범위, import-time side effect 금지, KST schedule, retry/backoff,
+      idempotency key, bounded metadata, `run_failure_sensor` 기반 Sentry/Telegram outbox 알림,
+      destructive dry-run gate를 따른다. ETL runbook, Dagster architecture 문서, Sprint 5 DoD,
+      AGENTS/CLAUDE 진입 요약을 같은 기준으로 동기화했다.
+
 - [x] T-237 — WebSocket backend hardening / metrics.
       Trip WebSocket backend에 bounded-label Prometheus gauge/counter와 `pinvi.websocket.close`
       구조화 로그를 추가했다. connection accept/reject, close code/reason, client message,

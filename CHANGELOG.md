@@ -69,6 +69,9 @@
 - Trip WebSocket backend가 close code 구조화 로그와 Prometheus gauge/counter를 내보낸다.
   connection accept/reject, close reason, client message, broadcast, send timeout/error를 bounded
   label로 기록하고, process-local broker 운영 전제(`PINVI_API_WORKERS=1`)의 감시 표면을 보강했다.
+- Pinvi app-owned Dagster job 표준(ADR-050)을 추가했다. 신규 `apps/etl` job은 `app` schema
+  소유 범위, retry/backoff, idempotency, bounded metadata, failure notification, destructive dry-run
+  gate를 따른다.
 - Admin Grafana embed의 prod public URL을 `NEXT_PUBLIC_GRAFANA_URL` /
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder

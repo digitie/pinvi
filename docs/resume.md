@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-238 Pinvi app-owned ETL 표준 / ADR
+
+ADR-050으로 Pinvi `apps/etl` app-owned Dagster job 표준을 고정했다. Pinvi ETL은 `app`
+schema 소유 job만 담고, feature/provider 적재와 `feature` / `provider_sync` schema 작업은
+`kor-travel-map` 책임으로 유지한다.
+
+신규 job 표준은 import-time side effect 금지, `Asia/Seoul` schedule, transient failure
+기본 retry/backoff, idempotency key 또는 queue claim, bounded run metadata/log, retry exhausted
+failure의 `run_failure_sensor` 기반 Sentry/Telegram outbox 알림, destructive job dry-run gate다.
+ETL runbook과 Dagster bridge 문서, Sprint 5 DoD, AGENTS/CLAUDE 진입 요약을 같은 기준으로 맞췄다.
+
+검증은 Windows worktree에서 `git diff --check`로 수행했다. PR 생성 후 사용자 지시대로 Windows
+Playwright e2e와 GitHub checks를 확인하고 merge한다.
+
+다음 작업은 T-239 `pinvi_email_outbox` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
 ## 2026-06-28 (codex) — T-237 WebSocket backend hardening / metrics
 
 Trip WebSocket backend에 close code 구조화 로그와 Prometheus gauge/counter를 추가했다.

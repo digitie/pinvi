@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-238 Pinvi app-owned ETL 표준 / ADR
+
+**작업**: Sprint 5의 app-owned ETL job 구현 전에 Pinvi Dagster job 표준을 ADR-050으로 고정했다.
+
+**변경**:
+
+- `docs/decisions.md`에 ADR-050을 추가해 Pinvi `apps/etl`에는 `app` schema 소유 job만 두고,
+  feature/provider 적재와 `feature` / `provider_sync` schema 작업은 `kor-travel-map` 책임으로
+  유지한다고 명시했다.
+- 신규 job 표준으로 import-time side effect 금지, KST schedule, retry/backoff, idempotency,
+  bounded metadata/log, `run_failure_sensor` 기반 Sentry/Telegram outbox 알림, destructive dry-run
+  gate를 정했다.
+- `docs/runbooks/etl.md`와 `docs/architecture/dagster-etl-bridge.md`에 ADR-050 체크리스트와 실패
+  알림/파괴적 작업 gate를 반영했다.
+- Sprint 5 문서, `AGENTS.md`, `CLAUDE.md`, `docs/tasks.md`, `docs/tasks-done.md`,
+  `docs/resume.md`를 같은 기준으로 동기화했다.
+
+**검증**:
+
+- Windows worktree: `git diff --check`
+
+**다음**: PR 생성 후 e2e/CI/merge를 완료하고, 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+다음 구현은 T-239 `pinvi_email_outbox` Dagster job이다.
+
 ## 2026-06-28 (codex) — T-237 WebSocket backend hardening / metrics
 
 **작업**: Trip WebSocket backend의 운영 관측성과 cap/rate/timeout/permission 회귀 테스트를 보강했다.
