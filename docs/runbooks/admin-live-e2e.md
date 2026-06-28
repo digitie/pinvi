@@ -110,6 +110,40 @@ Playwright runner는 N150에서 먼저 실행한다. N150의 OS/브라우저 지
 없을 때만 Windows runner를 fallback으로 사용하고, fallback 사유와 대상 Web/API URL 범위를
 `docs/journal.md`에 남긴다.
 
+### 3.1 N150 Chromium dependency 점검
+
+2026-06-28 T-259 기준 N150은 Ubuntu 26.04 LTS다. Playwright 1.60.0의
+`npx playwright install-deps --dry-run chromium`은 `ubuntu26.04-x64`를 직접 지원하지 않아
+자동 dependency 설치 목록을 만들지 못한다. 이 경우 브라우저 binary를 `ldd`로 직접 확인한다.
+
+```bash
+chromium="$(find ~/.cache/ms-playwright -path '*chrome-headless-shell' -type f | head -1)"
+ldd "$chromium" | grep 'not found'
+```
+
+T-259에서 확인한 누락 라이브러리:
+
+- `libatk-1.0.so.0`
+- `libatk-bridge-2.0.so.0`
+- `libXdamage.so.1`
+- `libasound.so.2`
+- `libatspi.so.0`
+
+sudo 가능한 N150 셸에서 최소 후보 패키지를 설치한 뒤 `--grep malformed` smoke를 먼저 재시도한다.
+Ubuntu 26.04 패키지명은 apt index 기준으로 다시 확인한다.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libxdamage1 libasound2t64 libatspi2.0-0
+
+PINVI_ADMIN_LIVE_E2E=1 \
+PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 \
+npm run test:e2e:admin-live -- --grep malformed --workers=1
+```
+
+비대화형 sudo가 없으면 Codex/CI가 직접 설치하지 않는다. 이때는 Windows fallback runner를 쓰고,
+N150 missing library 목록을 release gate 문서에 남긴다.
+
 ## 4. 실패 처리
 
 - 로그인 실패: live admin credential 또는 cookie/CORS 설정 확인.
