@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-257 Email deliverability / provider tracking preflight
+
+**작업**: Resend deliverability/suppression/provider tracking 구현 전에 현재 repo 상태와
+T-277 구현 계약을 분리했다.
+
+**변경**:
+
+- `docs/execplan/email-deliverability-provider-preflight.md`를 추가했다.
+- Resend domain verified, SPF/DKIM/DMARC, webhook at-least-once/out-of-order, hard bounce,
+  complaint, suppression, provider tracking 기준을 T-277 구현 계약으로 정리했다.
+- 현재 구현 완료 범위를 queue worker, Svix 서명 검증, queue 상태 갱신, `/admin/emails`
+  queue 화면으로 고정했다.
+- `docs/integrations/resend.md`의 stale React Email/checklist를 현재 inline HTML renderer와
+  잔여 T-277 항목으로 갱신했다.
+- `docs/tasks.md`, `docs/tasks-done.md`, Sprint 5 계획, `docs/resume.md`가 T-257 완료와
+  다음 T-258을 가리키도록 정리했다.
+
+**검증**:
+
+- 문서-only 변경이며 코드/브라우저 실행은 없다.
+
+**다음**: T-258 Sprint 6 legal/ops implementation prep gate.
+
 ## 2026-06-28 (codex) — T-256 Review gap crosswalk / legal-ops preflight
 
 **작업**: PR 리뷰에서 나온 legal/ops gap과 최근 사후 리뷰 후속을 Task 번호에 매핑했다.
@@ -108,7 +131,8 @@
 - production httpx client factory에 `ApiCallTracker` provider tag를 붙였다. 대상은
   `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`다.
   `api_call_log.endpoint`는 query secret과 Telegram bot token path를 저장 전에 mask한다.
-- Resend는 SDK 직접 호출 경로라 T-257 deliverability/provider tracking preflight로 남겼다.
+- Resend는 SDK 직접 호출 경로라 T-257 deliverability/provider tracking preflight로 남겼고,
+  T-257 감사에서 T-277의 `provider='resend'` 구현 항목으로 확정했다.
 - Grafana mock/live e2e와 observability/Grafana/Admin API runbook을 갱신했다.
 
 **검증**:

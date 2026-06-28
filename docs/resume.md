@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-257 Email deliverability / provider tracking preflight
+
+Resend domain/webhook 공식 기준과 현재 repo 구현을 대조해
+`docs/execplan/email-deliverability-provider-preflight.md`에 T-277 구현 계약을 고정했다. 현재
+구현은 `app.email_queue` worker, Resend/Svix 서명 검증, queue 상태 갱신,
+`/admin/emails` queue 화면까지 닫혀 있다. 반면 발송 전 suppression enforcement,
+`users.email_status` 또는 별도 suppression source 갱신, webhook event dedupe/out-of-order
+precedence, deliverability 상태판, `api_call_log.provider='resend'` 기록은 T-277 잔여다.
+
+`docs/integrations/resend.md`는 stale React Email/checklist 내용을 현재 inline HTML renderer와
+구현 완료/잔여 상태로 분리했다. 다음 작업은 T-258 Sprint 6 legal/ops implementation prep
+gate다.
+
 ## 2026-06-28 (codex) — T-256 Review gap crosswalk / legal-ops preflight
 
 PR #238/#264 리뷰에서 나온 legal/ops gap을
@@ -57,8 +70,8 @@ mock e2e는 iframe, dashboard path, degraded 상태를 검증하고, live e2e는
 provider-health `unknown` 방지를 위해 production httpx client factory에 `ApiCallTracker`
 provider tag를 연결했다. 대상은 `kor_travel_map`, `kor_travel_map_admin`,
 `kor_travel_geo`, `telegram`, `google_oauth`다. `api_call_log.endpoint`는 query secret과
-Telegram bot token path를 저장 전에 mask한다. Resend는 현재 SDK 직접 호출 경로라 T-257에서
-deliverability/provider tracking preflight와 함께 후속 판단한다.
+Telegram bot token path를 저장 전에 mask한다. Resend는 T-257 감사에서 SDK 직접 호출로 인해
+provider tracking이 누락됨을 확인했고, T-277에서 `provider='resend'` 기록을 구현한다.
 
 검증은 Linux에서 API ruff/pytest/mypy, Web typecheck/lint/Vitest, observability compose
 config, Grafana dashboard JSON parse, `git diff --check`를 통과했다. Playwright는 N150 SSH
