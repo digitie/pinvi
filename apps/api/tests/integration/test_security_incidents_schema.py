@@ -36,11 +36,13 @@ async def test_security_incident_model_round_trip(session_factory, verified_user
             select(SecurityIncident).where(SecurityIncident.incident_id == incident.incident_id)
         )
         assert saved is not None
-        assert saved.status == "open"
+        assert saved.status == "detected"
         assert saved.details["exported_rows"] == 1200
         assert saved.notification_required is True
         assert saved.assigned_cpo_user_id == uuid.UUID(cpo_user_id)
         assert saved.request_id == request_id
+        assert saved.cpo_review_due_at > saved.detected_at
+        assert saved.external_report_due_at > saved.detected_at
 
 
 async def test_security_incidents_table_has_status_index(session_factory) -> None:

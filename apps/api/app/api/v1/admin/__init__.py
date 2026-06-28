@@ -15,6 +15,7 @@ from app.api.v1.admin import (
     feature_requests,
     features,
     files,
+    incidents,
     integrity,
     mcp_tokens,
     notice_plans,
@@ -44,6 +45,7 @@ admin_router.include_router(integrity.router)
 admin_router.include_router(debug_request.router)
 admin_router.include_router(debug_logs.router)
 admin_router.include_router(files.router)
+admin_router.include_router(incidents.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
 admin_router.include_router(stats.router)

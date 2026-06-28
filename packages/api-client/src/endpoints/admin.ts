@@ -46,6 +46,14 @@ import {
   AdminResetStatusResponseSchema,
   AdminSeedScenarioListResponseSchema,
   AdminSeedScenarioRunRequestSchema,
+  AdminSecurityIncidentCloseRequestSchema,
+  AdminSecurityIncidentCreateRequestSchema,
+  AdminSecurityIncidentDecisionRequestSchema,
+  AdminSecurityIncidentListResponseSchema,
+  AdminSecurityIncidentNotifyRequestSchema,
+  AdminSecurityIncidentRecordSchema,
+  AdminSecurityIncidentReportRequestSchema,
+  AdminSecurityIncidentTriageRequestSchema,
   AdminConsistencyReportsResponseSchema,
   AdminDebugLogStreamStatusSchema,
   AdminIntegrityIssueActionRequestSchema,
@@ -152,6 +160,32 @@ export interface AdminCategoryMappingListParams {
 export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
 
 export type AdminResetRunBody = z.infer<typeof AdminResetRunRequestSchema>;
+
+export interface AdminSecurityIncidentListParams {
+  status?: 'detected' | 'triage' | 'notification_decision' | 'reported' | 'closed';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  overdue?: 'cpo_review' | 'external_report';
+  pageSize?: number;
+}
+
+export type AdminSecurityIncidentCreateBody = z.infer<
+  typeof AdminSecurityIncidentCreateRequestSchema
+>;
+export type AdminSecurityIncidentTriageBody = z.infer<
+  typeof AdminSecurityIncidentTriageRequestSchema
+>;
+export type AdminSecurityIncidentDecisionBody = z.infer<
+  typeof AdminSecurityIncidentDecisionRequestSchema
+>;
+export type AdminSecurityIncidentNotifyBody = z.infer<
+  typeof AdminSecurityIncidentNotifyRequestSchema
+>;
+export type AdminSecurityIncidentReportBody = z.infer<
+  typeof AdminSecurityIncidentReportRequestSchema
+>;
+export type AdminSecurityIncidentCloseBody = z.infer<
+  typeof AdminSecurityIncidentCloseRequestSchema
+>;
 
 export interface AdminIntegrityIssueListParams {
   source?: 'all' | 'kor_travel_map' | 'pinvi_app';
@@ -326,6 +360,64 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminResetRunRequestSchema.parse(body)),
       schema: AdminDevSafetyActionResultSchema,
+    }),
+
+  listSecurityIncidents: (params: AdminSecurityIncidentListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.severity) qs.set('severity', params.severity);
+    if (params.overdue) qs.set('overdue', params.overdue);
+    if (params.pageSize) qs.set('page_size', String(params.pageSize));
+    const path = `/admin/incidents${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminSecurityIncidentListResponseSchema,
+    });
+  },
+
+  createSecurityIncident: (body: AdminSecurityIncidentCreateBody) =>
+    client.request('/admin/incidents', {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentCreateRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  triageSecurityIncident: (incidentId: string, body: AdminSecurityIncidentTriageBody) =>
+    client.request(`/admin/incidents/${encodeURIComponent(incidentId)}/triage`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentTriageRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  decideSecurityIncidentNotification: (
+    incidentId: string,
+    body: AdminSecurityIncidentDecisionBody,
+  ) =>
+    client.request(`/admin/incidents/${encodeURIComponent(incidentId)}/notification-decision`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentDecisionRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  notifySecurityIncidentSubjects: (incidentId: string, body: AdminSecurityIncidentNotifyBody) =>
+    client.request(`/admin/incidents/${encodeURIComponent(incidentId)}/notify`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentNotifyRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  reportSecurityIncidentExternal: (incidentId: string, body: AdminSecurityIncidentReportBody) =>
+    client.request(`/admin/incidents/${encodeURIComponent(incidentId)}/report`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentReportRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
+    }),
+
+  closeSecurityIncident: (incidentId: string, body: AdminSecurityIncidentCloseBody) =>
+    client.request(`/admin/incidents/${encodeURIComponent(incidentId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify(AdminSecurityIncidentCloseRequestSchema.parse(body)),
+      schema: AdminSecurityIncidentRecordSchema,
     }),
 
   listIntegrityIssues: (params: AdminIntegrityIssueListParams = {}) => {

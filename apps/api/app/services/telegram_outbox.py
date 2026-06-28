@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.telegram import TelegramError
 from app.core.config import settings
 from app.models.telegram_outbox import TelegramNotificationOutbox
-from app.services.telegram_notify import deliver_user_notification
+from app.services.telegram_notify import deliver_admin_notification, deliver_user_notification
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,25 @@ async def enqueue_user_notification(
     return row
 
 
+async def enqueue_admin_notification(
+    db: AsyncSession,
+    *,
+    category: str,
+    text: str,
+    payload: dict[str, object] | None = None,
+) -> TelegramNotificationOutbox:
+    """Admin/CPO 채널 알림을 outbox에 적재한다(전송은 worker). commit은 호출자."""
+    row = TelegramNotificationOutbox(
+        category=category,
+        payload={"audience": "admin", "text": text, **(payload or {})},
+        status="pending",
+        scheduled_at=datetime.now(UTC),
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
 async def process_pending_telegram_batch(
     db: AsyncSession,
     *,
@@ -88,9 +107,12 @@ async def process_pending_telegram_batch(
     for row in rows:
         row.attempts += 1
         try:
-            user_id = uuid.UUID(str(row.payload.get("user_id")))
             text = str(row.payload.get("text") or "")
-            outcome = await deliver_user_notification(db, user_id=user_id, text=text)
+            if row.payload.get("audience") == "admin":
+                outcome = await deliver_admin_notification(text=text)
+            else:
+                user_id = uuid.UUID(str(row.payload.get("user_id")))
+                outcome = await deliver_user_notification(db, user_id=user_id, text=text)
         except TelegramError as exc:
             if row.attempts >= MAX_TELEGRAM_ATTEMPTS:
                 row.status = "failed"

@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-275 PIPA security incident console
+
+Sprint 6 첫 실제 구현 태스크로 PIPA security incident workflow를 추가했다. `app.security_incidents`
+상태는 `detected` → `triage` → `notification_decision` → `reported` → `closed`로 정리했고,
+CPO 30분 review due, 정보주체 통지 payload hash, 개인정보보호위원회/KISA 72시간 신고 due와
+접수번호, evidence attachment id를 migration/model/schema/API에 반영했다. 신규
+`/admin/incidents` API는 CPO 전용 상태 전이를 `admin_audit_log`와 함께 기록하고, incident 생성 시
+Admin Telegram outbox를 생성한다. 통지 조치는 `security_incident_notice` email queue row와
+payload hash를 남긴다.
+
+Web Admin에는 `/admin/incidents` 화면을 추가했다. 목록 필터(status/severity/SLA), 신규 incident
+등록, triage/notification decision/notify/report/close 조치 패널을 제공하고, API client/schema/query
+key와 mock Playwright 회귀 테스트를 연결했다. `docs/api/admin.md`, `docs/compliance/pipa.md`,
+`docs/postgres-schema.md`, `docs/data-model.md`, `docs/runbooks/security-incidents.md`,
+`CHANGELOG.md`도 같은 계약을 가리킨다.
+
+검증은 WSL/NTFS에서 Python compileall, Prettier를 확인했고, WSL ext4 미러에서 API targeted pytest
+5건, ruff check/format, strict mypy, Web typecheck/lint를 통과했다. mock Playwright는 ext4 미러의
+브라우저 캐시 부재로 실행 전 실패했고, 이 세션에서 N150 SSH alias가 잡히지 않아 Windows fallback으로
+`admin-incidents.e2e.ts` 1건을 통과시켰다. live 운영 데이터 조치가 아니므로 N150 live Playwright는
+이 PR에서 별도 실행 대상이 아니다. 다음 작업은 PR 생성·CI·머지 후 T-276 Retention execution /
+dashboard다.
+
 ## 2026-06-28 (codex) — T-259 Admin live credential / restore staging drill
 
 N150 local-only Admin live credential을 준비하고 production Web image의 빌드타임 API origin에 맞춰

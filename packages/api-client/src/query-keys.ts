@@ -85,6 +85,13 @@ export const queryKeys = {
       cursor?: string;
     }) => ['admin', 'integrity-issues', params] as const,
     integrityIssuesAll: () => ['admin', 'integrity-issues'] as const,
+    securityIncidents: (params: {
+      status?: string;
+      severity?: string;
+      overdue?: string;
+      pageSize?: number;
+    }) => ['admin', 'security-incidents', params] as const,
+    securityIncidentsAll: () => ['admin', 'security-incidents'] as const,
     consistencyReports: (params: { severityMax?: string; pageSize?: number; cursor?: string }) =>
       ['admin', 'consistency-reports', params] as const,
     upstreamSystemLogs: (params: {

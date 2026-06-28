@@ -141,7 +141,7 @@
 | `incident_id` | `uuid` (PK) | |
 | `incident_type` | `varchar(64)` | `admin_export_anomaly`, `audit_chain_broken` 등 |
 | `severity` | `varchar(16)` | `low` / `medium` / `high` / `critical` |
-| `status` | `varchar(24)` | `open` / `acknowledged` / `resolved` / `false_positive` |
+| `status` | `varchar(32)` | `detected` / `triage` / `notification_decision` / `reported` / `closed` |
 | `source` | `varchar(64)` | 감지 소스 |
 | `summary` | `varchar(240)` | CPO 목록용 한 줄 설명 |
 | `details` | `jsonb` | 원인/근거 payload |
@@ -150,10 +150,17 @@
 | `assigned_cpo_user_id` | `uuid` → `app.users` | 담당 CPO, nullable |
 | `request_id` | `uuid` | 관련 API request id, nullable |
 | `detected_at` | `timestamptz` NOT NULL | 감지 시각 |
+| `cpo_review_due_at` | `timestamptz` NOT NULL | 내부 CPO review due (`detected_at + 30m`) |
+| `external_report_due_at` | `timestamptz` NOT NULL | 개인정보보호위원회/KISA 신고 due (`detected_at + 72h`) |
+| `cpo_notified_at` | `timestamptz` | CPO/Admin Telegram outbox 적재 시각 |
 | `acknowledged_at` | `timestamptz` | CPO 확인 시각 |
+| `notification_decision_at` | `timestamptz` | 정보주체 통지 필요성 판정 시각 |
 | `resolved_at` | `timestamptz` | 종료 시각 |
 | `notified_at` | `timestamptz` | 사용자 통지 시각 |
 | `kisa_reported_at` | `timestamptz` | KISA 신고 시각 |
+| `notification_payload_hash` | `varchar(64)` | 정보주체 통지 payload hash |
+| `external_report_receipt_ref` | `varchar(160)` | 개인정보보호위원회/KISA 접수번호 |
+| `evidence_attachment_id` | `uuid` | 증적 첨부 id, nullable |
 | `created_at` | `timestamptz` NOT NULL | |
 | `updated_at` | `timestamptz` NOT NULL | |
 

@@ -6,6 +6,16 @@
 
 ## 2026-06-28
 
+- [x] T-275 — PIPA security incident console.
+      `app.security_incidents`를 `detected` → `triage` → `notification_decision` → `reported` →
+      `closed` workflow로 확장하고, CPO 30분 review due, 72시간 외부 신고 due, 통지 payload hash,
+      신고 접수번호, evidence attachment id를 migration/model/schema에 추가했다. `/admin/incidents`
+      API는 incident 생성 시 Admin Telegram outbox를 만들고 CPO 전용 triage/decision/notify/report/close
+      전이를 `admin_audit_log`에 남긴다. 정보주체 통지는 `security_incident_notice` email queue와
+      deterministic payload hash를 기록한다. Web Admin `/admin/incidents`는 목록 필터, 신규 등록,
+      상태별 조치 패널을 제공하며, admin API 문서, PIPA compliance, schema/data-model/runbook,
+      mock Playwright와 API integration 테스트를 함께 갱신했다.
+
 - [x] T-258 — Sprint 6 legal/ops implementation prep gate.
       `docs/execplan/legal-ops-implementation-prep-gate.md`를 추가해 T-275~T-286의 API/UI,
       상태 모델, due date, evidence/audit, runbook, test gate, sign-off 기준을 Sprint 6 진입
@@ -23,7 +33,7 @@
 
 - [x] T-256 — Review gap crosswalk / legal-ops preflight.
       `docs/execplan/legal-ops-review-gap-crosswalk.md`를 추가해 PR #238/#264 legal-ops 리뷰 gap
-      44개를 T-257/T-258/T-275~T-286 등 대응 Task로 매핑했다. 최근 2일 PR #265~#289
+      44개를 T-257/T-258/T-275~~T-286 등 대응 Task로 매핑했다. 최근 2일 PR #265~~#289
       리뷰 코멘트도 확인해 WebSocket, conflict, ETL compliance SQL, app integrity 후속을
       T-289~T-292로 남겼다. Sprint 5/6, tasks, resume, journal이 같은 crosswalk 정본을
       참조하도록 정리했다.
