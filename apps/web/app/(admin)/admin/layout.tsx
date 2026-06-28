@@ -28,6 +28,7 @@ import {
   ScrollText,
   Search,
   ServerCog,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sprout,
@@ -55,6 +56,7 @@ const NAV_GROUPS: {
     items: [
       { href: '/admin', label: '대시보드', sprint: 4, icon: LayoutDashboard },
       { href: '/admin/users', label: '사용자', sprint: 3, icon: Users },
+      { href: '/admin/rbac', label: 'RBAC', sprint: 6, icon: Shield },
       { href: '/admin/trips', label: '여행', sprint: 3, icon: Route },
       { href: '/admin/pois', label: 'POI', sprint: 3, icon: MapPin },
       { href: '/admin/files', label: '파일', sprint: 4, icon: Paperclip },

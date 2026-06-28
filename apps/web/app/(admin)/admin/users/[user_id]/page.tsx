@@ -5,10 +5,15 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { type ChangeEvent, useEffect, useState } from 'react';
-import { ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
+import { ImageIcon, Loader2, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import { putToPresigned } from '@pinvi/domain';
-import type { AdminAuditEntry, AdminAvatarSettings, AdminUserDetail } from '@pinvi/schemas';
+import type {
+  AdminAuditEntry,
+  AdminAvatarSettings,
+  AdminUserDetail,
+  MutableAdminRole,
+} from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
@@ -18,6 +23,12 @@ const apiClient = new ApiClient({
 });
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
+
+const ROLE_OPTIONS: { value: MutableAdminRole; label: string }[] = [
+  { value: 'admin', label: 'admin' },
+  { value: 'operator', label: 'operator' },
+  { value: 'cpo', label: 'cpo' },
+];
 
 function formatBytes(value: number | null | undefined) {
   if (!value) {
@@ -79,6 +90,9 @@ export default function AdminUserDetailPage() {
   });
   const [quotaReason, setQuotaReason] = useState('');
   const [quotaBusy, setQuotaBusy] = useState(false);
+  const [roleDraft, setRoleDraft] = useState<MutableAdminRole>('operator');
+  const [roleReason, setRoleReason] = useState('');
+  const [roleBusy, setRoleBusy] = useState<'grant' | 'revoke' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +106,8 @@ export default function AdminUserDetailPage() {
         if (cancelled) return;
         setUser(nextUser);
         setQuotaDraft({
-          attachment_max_upload_bytes_override: nextUser.file_quota.attachment_max_upload_bytes_override
+          attachment_max_upload_bytes_override: nextUser.file_quota
+            .attachment_max_upload_bytes_override
             ? String(nextUser.file_quota.attachment_max_upload_bytes_override)
             : '',
           trip_attachment_quota_bytes_override: nextUser.file_quota
@@ -288,13 +303,13 @@ export default function AdminUserDetailPage() {
     try {
       const updated = await adminApi(apiClient).updateUserFileQuota(userId, {
         attachment_max_upload_bytes_override: parseNullableBytes(
-          quotaDraft.attachment_max_upload_bytes_override
+          quotaDraft.attachment_max_upload_bytes_override,
         ),
         trip_attachment_quota_bytes_override: parseNullableBytes(
-          quotaDraft.trip_attachment_quota_bytes_override
+          quotaDraft.trip_attachment_quota_bytes_override,
         ),
         user_attachment_quota_bytes_override: parseNullableBytes(
-          quotaDraft.user_attachment_quota_bytes_override
+          quotaDraft.user_attachment_quota_bytes_override,
         ),
         access_reason: accessReason,
       });
@@ -302,9 +317,36 @@ export default function AdminUserDetailPage() {
       setQuotaReason('');
       setMessage('파일 용량 override를 저장했습니다.');
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : '저장하지 못했습니다.');
+      setError(
+        err instanceof ApiError || err instanceof Error ? err.message : '저장하지 못했습니다.',
+      );
     } finally {
       setQuotaBusy(false);
+    }
+  };
+
+  const onRoleMutation = async (kind: 'grant' | 'revoke') => {
+    const accessReason = roleReason.trim();
+    if (accessReason.length < 1) {
+      setError('역할 변경 사유가 필요합니다.');
+      return;
+    }
+    setRoleBusy(kind);
+    setError(null);
+    setMessage(null);
+    try {
+      const api = adminApi(apiClient);
+      const updated =
+        kind === 'grant'
+          ? await api.grantUserRole(userId, { role: roleDraft, access_reason: accessReason })
+          : await api.revokeUserRole(userId, { role: roleDraft, access_reason: accessReason });
+      setUser(updated);
+      setRoleReason('');
+      setMessage(kind === 'grant' ? '역할을 부여했습니다.' : '역할을 회수했습니다.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '역할을 변경하지 못했습니다.');
+    } finally {
+      setRoleBusy(null);
     }
   };
 
@@ -391,6 +433,70 @@ export default function AdminUserDetailPage() {
             <dd>{user.email_verified_at ?? '미인증'}</dd>
           </div>
         </dl>
+      </Section>
+
+      <Section title="역할 관리">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_auto] lg:items-end">
+          <div className="space-y-2" data-testid="admin-user-role-manager">
+            <div className="flex flex-wrap gap-2">
+              {user.roles.map((role) => (
+                <span
+                  key={role}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-white px-2 py-1 text-xs font-semibold text-ink"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  {role}
+                </span>
+              ))}
+            </div>
+            <FormTextArea
+              id="admin-user-role-reason"
+              label="역할 변경 사유"
+              value={roleReason}
+              onChange={(e) => setRoleReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              data-testid="admin-user-role-reason"
+            />
+          </div>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-semibold text-muted">역할</span>
+            <select
+              value={roleDraft}
+              onChange={(e) => setRoleDraft(e.target.value as MutableAdminRole)}
+              className="h-10 w-full rounded-sm border border-hairline px-3"
+              data-testid="admin-user-role-select"
+            >
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={roleBusy !== null || user.roles.includes(roleDraft)}
+              onClick={() => void onRoleMutation('grant')}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              data-testid="admin-user-role-grant"
+            >
+              {roleBusy === 'grant' && <Loader2 className="h-4 w-4 animate-spin" />}
+              부여
+            </button>
+            <button
+              type="button"
+              disabled={roleBusy !== null || !user.roles.includes(roleDraft)}
+              onClick={() => void onRoleMutation('revoke')}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
+              data-testid="admin-user-role-revoke"
+            >
+              {roleBusy === 'revoke' && <Loader2 className="h-4 w-4 animate-spin" />}
+              회수
+            </button>
+          </div>
+        </div>
       </Section>
 
       <Section title="아바타">

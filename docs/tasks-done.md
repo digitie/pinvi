@@ -6,6 +6,14 @@
 
 ## 2026-06-29
 
+- [x] T-280 — RBAC role grant/revoke / permission matrix.
+      ADR-033의 DB-backed role 모델을 운영 가능한 Admin API/UI로 확장했다.
+      `/admin/rbac/permission-matrix`는 role 설명과 endpoint 권한 matrix를 제공하고,
+      사용자 상세의 역할 관리 섹션은 `admin` / `operator` / `cpo` role 부여·회수를 수행한다.
+      role mutation은 `admin` 전용, 운영 사유 필수, `admin_audit_log` 기록 대상이며 중복 부여,
+      미보유 role 회수, 자기 admin 회수, 마지막 admin 회수를 차단한다. API integration,
+      Admin mock Playwright, Admin API/runbook/RBAC architecture 문서를 함께 갱신했다.
+
 - [x] T-279 — Content moderation / takedown workflow.
       `app.content_reports`와 `app.content_moderation_actions`를 추가해 trip/comment/attachment/share link
       신고, target snapshot, 증거 metadata, review/hide/takedown/restore/reject/appeal 상태와 조치

@@ -21,6 +21,7 @@ from app.schemas.admin import (
     AdminUserDetail,
     AdminUserFileQuota,
     AdminUserFileQuotaUpdateRequest,
+    AdminUserRoleMutationRequest,
     AdminUserSummary,
 )
 from app.schemas.envelope import Envelope
@@ -33,11 +34,16 @@ from app.schemas.storage import (
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_users import (
     AdminUserNotFoundError,
+    AdminUserPermissionError,
+    AdminUserRoleTransitionError,
     disable_user,
     force_verify,
+    grant_user_role,
     list_recent_user_audit,
     list_users,
     mask_email,
+    normalize_roles,
+    revoke_user_role,
 )
 from app.services.avatar_storage import (
     apply_avatar,
@@ -65,7 +71,7 @@ def _to_summary(u: User) -> AdminUserSummary:
         email_masked=mask_email(u.email),
         nickname=u.nickname,
         status=u.status,
-        roles=u.roles,
+        roles=normalize_roles(u.roles),
         email_verified_at=u.email_verified_at,
         created_at=u.created_at,
     )
@@ -452,6 +458,108 @@ async def force_verify_endpoint(
     await db.commit()
     await db.refresh(target)
     return Envelope.of(await _detail_with_recent_audit(db, target))
+
+
+async def _mutate_user_role(
+    *,
+    db: DbSession,
+    request: Request,
+    actor: User,
+    user_id: uuid.UUID,
+    body: AdminUserRoleMutationRequest,
+    action: str,
+    x_request_id: str | None,
+) -> Envelope[AdminUserDetail]:
+    try:
+        if action == "grant":
+            target, before_state = await grant_user_role(
+                db,
+                user_id=user_id,
+                actor_id=actor.user_id,
+                role=body.role,
+            )
+            audit_action = "user.role_grant"
+        else:
+            target, before_state = await revoke_user_role(
+                db,
+                user_id=user_id,
+                actor_id=actor.user_id,
+                role=body.role,
+            )
+            audit_action = "user.role_revoke"
+    except AdminUserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except AdminUserPermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except AdminUserRoleTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    await append_admin_audit(
+        db,
+        actor_user_id=actor.user_id,
+        action=audit_action,
+        resource_type="user",
+        resource_id=str(target.user_id),
+        before_state=before_state,
+        after_state={"roles": normalize_roles(target.roles)},
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=_parse_request_id(x_request_id),
+    )
+    await db.commit()
+    await db.refresh(target)
+    return Envelope.of(await _detail_with_recent_audit(db, target))
+
+
+@router.post("/{user_id}/roles/grant", response_model=Envelope[AdminUserDetail])
+async def grant_user_role_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserRoleMutationRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    return await _mutate_user_role(
+        db=db,
+        request=request,
+        actor=admin,
+        user_id=user_id,
+        body=body,
+        action="grant",
+        x_request_id=x_request_id,
+    )
+
+
+@router.post("/{user_id}/roles/revoke", response_model=Envelope[AdminUserDetail])
+async def revoke_user_role_endpoint(
+    user_id: uuid.UUID,
+    body: AdminUserRoleMutationRequest,
+    request: Request,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    db: DbSession,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminUserDetail]:
+    return await _mutate_user_role(
+        db=db,
+        request=request,
+        actor=admin,
+        user_id=user_id,
+        body=body,
+        action="revoke",
+        x_request_id=x_request_id,
+    )
 
 
 @router.post("/{user_id}/disable", response_model=Envelope[AdminUserDetail])

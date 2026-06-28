@@ -95,6 +95,7 @@ const rawSecretPatterns = [
 const uiRoutes: AdminRoute[] = [
   { path: '/admin', heading: '대시보드' },
   { path: '/admin/users', heading: '사용자', table: true },
+  { path: '/admin/rbac', heading: 'RBAC', table: true },
   { path: '/admin/trips', heading: '여행', table: true },
   { path: '/admin/pois', heading: 'POI', table: true },
   { path: '/admin/feature-requests', heading: 'Feature 제안 검토', table: true },

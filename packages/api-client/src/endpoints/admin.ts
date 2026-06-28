@@ -25,6 +25,7 @@ import {
   AdminFileStorageSettingsSchema,
   AdminFileStorageSettingsUpdateRequestSchema,
   AdminUserFileQuotaUpdateRequestSchema,
+  AdminUserRoleMutationRequestSchema,
   AdminFeatureSortOrderSchema,
   AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
@@ -87,6 +88,7 @@ import {
   AdminProviderSyncResponseSchema,
   AdminRequestTimelineResponseSchema,
   AdminIntegrityIssuesResponseSchema,
+  AdminPermissionMatrixResponseSchema,
   AdminStatsOverviewSchema,
   AdminSystemSummarySchema,
   AdminSystemDetailSchema,
@@ -851,6 +853,12 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminUserDetailSchema,
     }),
 
+  getRbacPermissionMatrix: () =>
+    client.request('/admin/rbac/permission-matrix', {
+      method: 'GET',
+      schema: AdminPermissionMatrixResponseSchema,
+    }),
+
   revealUserPii: (userId: string, body: z.infer<typeof AdminActionRequestSchema>) =>
     client.request(`/admin/users/${userId}/reveal-pii`, {
       method: 'POST',
@@ -869,6 +877,20 @@ export const adminApi = (client: ApiClient) => ({
     client.request(`/admin/users/${userId}/disable`, {
       method: 'POST',
       body: JSON.stringify(AdminActionRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  grantUserRole: (userId: string, body: z.infer<typeof AdminUserRoleMutationRequestSchema>) =>
+    client.request(`/admin/users/${userId}/roles/grant`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserRoleMutationRequestSchema.parse(body)),
+      schema: AdminUserDetailSchema,
+    }),
+
+  revokeUserRole: (userId: string, body: z.infer<typeof AdminUserRoleMutationRequestSchema>) =>
+    client.request(`/admin/users/${userId}/roles/revoke`, {
+      method: 'POST',
+      body: JSON.stringify(AdminUserRoleMutationRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
     }),
 
