@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # Resend
     pinvi_resend_api_key: str = ""
+    pinvi_resend_api_base_url: str = "https://api.resend.com"
     pinvi_resend_from_email: str = "Pinvi <noreply@send.pinvi.local>"
     pinvi_resend_timeout_seconds: int = 5
     pinvi_resend_webhook_secret: str = ""

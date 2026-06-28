@@ -15,7 +15,9 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.models.email_deliverability import EmailSuppression, ResendWebhookEvent
 from app.models.email_queue import EmailQueue
+from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,13 +35,25 @@ def _clear_resend_webhook_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", False)
 
 
-async def _seed_email(session_factory) -> str:
+async def _seed_email(session_factory, *, with_user: bool = False) -> tuple[str, str | None]:
     """email_queue row 1건 seed 후 email_id(UUID 문자열) 반환."""
     email_id = uuid.uuid4()
+    user_id = None
     async with session_factory() as db:
+        if with_user:
+            user = User(
+                email="x@pinvi.test",
+                status="active",
+                email_status="active",
+                email_verified_at=datetime.now(UTC),
+            )
+            db.add(user)
+            await db.flush()
+            user_id = user.user_id
         db.add(
             EmailQueue(
                 email_id=email_id,
+                user_id=user_id,
                 to_email="x@pinvi.test",
                 subject="인증",
                 template="verify_email",
@@ -48,7 +62,7 @@ async def _seed_email(session_factory) -> str:
             )
         )
         await db.commit()
-    return str(email_id)
+    return str(email_id), None if user_id is None else str(user_id)
 
 
 def _payload(body: dict[str, Any]) -> bytes:
@@ -85,7 +99,7 @@ async def test_unsigned_webhook_rejects_missing_secret_without_local_opt_in(
     client,
     session_factory,
 ) -> None:
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
         json={
@@ -109,7 +123,7 @@ async def test_unsigned_delivered_updates_status_with_local_opt_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
         json={
@@ -134,7 +148,7 @@ async def test_unsigned_webhook_rejects_missing_secret_in_production(
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_environment", "production")
     monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
 
     resp = await client.post(
         "/webhooks/resend",
@@ -159,7 +173,7 @@ async def test_signed_delivered_updates_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     payload = _payload(
         {
             "type": "email.delivered",
@@ -188,7 +202,7 @@ async def test_signed_webhook_rejects_urlsafe_secret_config(
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_environment", "production")
     monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _URLSAFE_WEBHOOK_SECRET)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     payload = _payload(
         {
             "type": "email.delivered",
@@ -217,7 +231,7 @@ async def test_signed_webhook_rejects_missing_signature_headers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     payload = _payload(
         {
             "type": "email.delivered",
@@ -246,7 +260,7 @@ async def test_signed_webhook_rejects_invalid_signature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     payload = _payload(
         {
             "type": "email.delivered",
@@ -272,7 +286,7 @@ async def test_signed_webhook_rejects_old_timestamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_secret", _WEBHOOK_SECRET)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     payload = _payload(
         {
             "type": "email.delivered",
@@ -300,7 +314,7 @@ async def test_unsigned_bounced_updates_status_with_local_opt_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
-    email_id = await _seed_email(session_factory)
+    email_id, _ = await _seed_email(session_factory)
     resp = await client.post(
         "/webhooks/resend",
         json={
@@ -332,3 +346,155 @@ async def test_unsigned_missing_entity_ref_is_ok_with_local_opt_in(
     )
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
+
+
+async def test_unsigned_bounced_updates_user_status_and_suppression(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
+    email_id, user_id = await _seed_email(session_factory, with_user=True)
+    assert user_id is not None
+
+    resp = await client.post(
+        "/webhooks/resend",
+        json={
+            "id": "evt_bounce_user",
+            "type": "email.bounced",
+            "created_at": "2026-06-28T10:00:00Z",
+            "data": {
+                "id": "email_resend_1",
+                "headers": {"X-Entity-Ref-ID": email_id},
+                "bounce": {"type": "hard", "message": "mailbox unavailable"},
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    async with session_factory() as db:
+        queue = await db.scalar(
+            select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id))
+        )
+        user = await db.scalar(select(User).where(User.user_id == uuid.UUID(user_id)))
+        suppression = await db.scalar(select(EmailSuppression))
+        event = await db.scalar(
+            select(ResendWebhookEvent).where(ResendWebhookEvent.event_id == "evt_bounce_user")
+        )
+        assert queue is not None
+        assert queue.status == "bounced"
+        assert queue.last_provider_event_id == "evt_bounce_user"
+        assert user is not None
+        assert user.email_status == "bounced"
+        assert suppression is not None
+        assert suppression.reason == "hard_bounce"
+        assert suppression.released_at is None
+        assert event is not None
+        assert event.resend_email_id == "email_resend_1"
+
+
+async def test_unsigned_duplicate_event_is_idempotent(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
+    email_id, _ = await _seed_email(session_factory)
+    body = {
+        "id": "evt_duplicate",
+        "type": "email.delivery_delayed",
+        "created_at": "2026-06-28T10:00:00Z",
+        "data": {
+            "headers": {"X-Entity-Ref-ID": email_id},
+            "message": "temporary provider delay",
+        },
+    }
+
+    first = await client.post("/webhooks/resend", json=body)
+    second = await client.post("/webhooks/resend", json=body)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    async with session_factory() as db:
+        events = list((await db.execute(select(ResendWebhookEvent))).scalars())
+        queue = await db.scalar(
+            select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id))
+        )
+        assert len(events) == 1
+        assert queue is not None
+        assert queue.status == "delivery_delayed"
+        assert queue.attempts == 0
+
+
+async def test_unsigned_delivered_after_bounce_does_not_revert_terminal_status(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
+    email_id, _ = await _seed_email(session_factory)
+    bounce = {
+        "id": "evt_terminal_bounce",
+        "type": "email.bounced",
+        "created_at": "2026-06-28T10:00:00Z",
+        "data": {
+            "headers": {"X-Entity-Ref-ID": email_id},
+            "bounce": {"type": "hard"},
+        },
+    }
+    delivered = {
+        "id": "evt_terminal_delivered",
+        "type": "email.delivered",
+        "created_at": "2026-06-28T10:05:00Z",
+        "data": {"headers": {"X-Entity-Ref-ID": email_id}},
+    }
+
+    assert (await client.post("/webhooks/resend", json=bounce)).status_code == 200
+    assert (await client.post("/webhooks/resend", json=delivered)).status_code == 200
+
+    async with session_factory() as db:
+        queue = await db.scalar(
+            select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id))
+        )
+        assert queue is not None
+        assert queue.status == "bounced"
+        assert queue.last_provider_event_id == "evt_terminal_bounce"
+
+
+async def test_unsigned_bounce_after_complaint_does_not_downgrade_terminal_status(
+    client,
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_resend_webhook_allow_unsigned", True)
+    email_id, _ = await _seed_email(session_factory)
+    complaint = {
+        "id": "evt_terminal_complaint",
+        "type": "email.complained",
+        "created_at": "2026-06-28T10:00:00Z",
+        "data": {"headers": {"X-Entity-Ref-ID": email_id}},
+    }
+    bounce = {
+        "id": "evt_terminal_bounce_after_complaint",
+        "type": "email.bounced",
+        "created_at": "2026-06-28T10:05:00Z",
+        "data": {
+            "headers": {"X-Entity-Ref-ID": email_id},
+            "bounce": {"type": "hard"},
+        },
+    }
+
+    assert (await client.post("/webhooks/resend", json=complaint)).status_code == 200
+    assert (await client.post("/webhooks/resend", json=bounce)).status_code == 200
+
+    async with session_factory() as db:
+        queue = await db.scalar(
+            select(EmailQueue).where(EmailQueue.email_id == uuid.UUID(email_id))
+        )
+        suppression = await db.scalar(select(EmailSuppression))
+        assert queue is not None
+        assert queue.status == "complained"
+        assert queue.last_provider_event_id == "evt_terminal_complaint"
+        assert suppression is not None
+        assert suppression.reason == "complaint"
+        assert suppression.provider_event_id == "evt_terminal_complaint"

@@ -729,7 +729,112 @@ CREATE INDEX import_jobs_kind_state_idx ON app.import_jobs (kind, state);
 CREATE INDEX import_jobs_started_idx ON app.import_jobs (started_at DESC) WHERE started_at IS NOT NULL;
 ```
 
-### 6.3 `app.kasi_special_days`
+### 6.3 Email outbox / deliverability
+
+```sql
+CREATE TABLE app.email_queue (
+  email_id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  to_email               varchar(320) NOT NULL,
+  template               varchar(64) NOT NULL,
+  subject                varchar(255) NOT NULL,
+  payload                jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status                 varchar(16) NOT NULL DEFAULT 'pending',
+  resend_id              varchar(128),
+  last_provider_event_id varchar(128),
+  last_provider_event_at timestamptz,
+  bounce_type            varchar(16),
+  attempts               integer NOT NULL DEFAULT 0,
+  last_error             text,
+  scheduled_at           timestamptz NOT NULL DEFAULT now(),
+  sent_at                timestamptz,
+  delivered_at           timestamptz,
+  bounced_at             timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_email_queue_status CHECK (
+    status IN (
+      'pending', 'sent', 'delivered', 'delivery_delayed',
+      'bounced', 'complained', 'suppressed', 'failed'
+    )
+  ),
+  CONSTRAINT ck_email_queue_bounce_type CHECK (
+    bounce_type IS NULL OR bounce_type IN ('hard', 'soft')
+  )
+);
+
+CREATE INDEX ix_email_queue_pending ON app.email_queue (scheduled_at)
+  WHERE status = 'pending';
+CREATE INDEX ix_email_queue_to_email ON app.email_queue (to_email);
+CREATE INDEX ix_email_queue_provider_event ON app.email_queue (last_provider_event_id);
+
+CREATE TABLE app.email_suppressions (
+  suppression_id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email_hash          varchar(64) NOT NULL UNIQUE,
+  reason              varchar(32) NOT NULL,
+  source              varchar(32) NOT NULL DEFAULT 'resend',
+  provider_event_id   varchar(128),
+  first_seen_at       timestamptz NOT NULL DEFAULT now(),
+  last_seen_at        timestamptz NOT NULL DEFAULT now(),
+  released_at         timestamptz,
+  released_by_user_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  release_reason      text,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_email_suppressions_reason CHECK (
+    reason IN ('hard_bounce', 'complaint', 'provider_suppressed', 'manual')
+  ),
+  CONSTRAINT ck_email_suppressions_source CHECK (source IN ('resend', 'admin'))
+);
+
+CREATE INDEX ix_email_suppressions_active_hash ON app.email_suppressions (email_hash)
+  WHERE released_at IS NULL;
+
+CREATE TABLE app.resend_webhook_events (
+  event_id         varchar(128) PRIMARY KEY,
+  svix_id          varchar(128) UNIQUE,
+  event_type       varchar(64) NOT NULL,
+  entity_ref       uuid,
+  resend_email_id  varchar(128),
+  event_created_at timestamptz,
+  payload_summary  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  processed_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_resend_webhook_events_processed
+  ON app.resend_webhook_events (processed_at);
+CREATE INDEX ix_resend_webhook_events_entity
+  ON app.resend_webhook_events (entity_ref, processed_at);
+```
+
+`email_suppressions.email_hash`는 normalized email SHA-256이며 원문 이메일을 저장하지 않는다.
+worker는 `users.email_status`, active suppression, `marketing` consent를 발송 전 확인한다.
+Resend webhook은 `resend_webhook_events`로 중복을 제거하고 terminal suppression event가
+`delivered`보다 우선한다.
+
+### 6.4 `app.api_call_log`
+
+```sql
+CREATE TABLE app.api_call_log (
+  log_id        bigserial PRIMARY KEY,
+  provider      varchar(64) NOT NULL,
+  endpoint      text NOT NULL,
+  status_code   integer,
+  latency_ms    integer,
+  error_class   varchar(64),
+  error_message text,
+  request_id    uuid,
+  occurred_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_api_call_log_occurred ON app.api_call_log USING brin (occurred_at);
+CREATE INDEX ix_api_call_log_provider_time
+  ON app.api_call_log (provider, occurred_at DESC);
+```
+
+T-277 기준 Resend REST 발송도 `provider='resend'`로 이 테이블에 남는다.
+
+### 6.5 `app.kasi_special_days`
 
 ```sql
 CREATE TABLE app.kasi_special_days (

@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-28 (codex) — T-277 Email deliverability / suppression enforcement
+
+**작업**: Resend 발송 차단, webhook 멱등/우선순위, Admin deliverability 상태판을 구현했다.
+
+**변경**:
+
+- `app.email_suppressions`와 `app.resend_webhook_events` migration/model을 추가하고,
+  `email_queue.status`에 `delivery_delayed`, `suppressed`를 추가했다.
+- `process_pending_email_batch()`가 발송 전 `users.email_status`, active suppression,
+  `marketing` consent를 확인해 provider 호출 없이 terminal 상태로 차단한다.
+- Resend SDK 직접 호출을 `httpx` 기반 `ResendClient`로 바꾸고
+  `api_call_event_hooks(..., provider='resend')`를 연결했다.
+- `/webhooks/resend`는 event id/`svix-id` dedupe와 terminal precedence를 적용하고,
+  hard bounce/complaint/provider suppression을 suppression source와 사용자 `email_status`에 반영한다.
+- `GET /admin/emails/deliverability`, Web Admin `/admin/emails` 상태판, shared schema/API client,
+  mock Playwright를 추가했다.
+- `docs/execplan/email-deliverability-suppression.md`, `docs/integrations/resend.md`,
+  `docs/api/admin.md`, `docs/data-model.md`, `docs/postgres-schema.md`,
+  `docs/compliance/data-policy.md`, task/resume, `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+
+- WSL: `python3 -m compileall app`
+- WSL: `ruff check` targeted files
+- WSL: `python -m mypy --strict` targeted email client/service/webhook/admin route
+- WSL: `npm -w @pinvi/schemas run typecheck`, `npm -w @pinvi/api-client run typecheck`,
+  `npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run lint`
+- WSL: `pytest --capture=no -q tests/integration/test_email_queue_worker.py
+tests/integration/test_resend_webhook.py tests/integration/test_admin_email_deliverability_api.py
+tests/integration/test_api_call_logging.py` — 24 passed
+- Playwright: N150 alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+  `npm -w @pinvi/web run test:e2e -- admin-emails.e2e.ts --project=chromium --workers=1` — 1 passed
+
+**다음**: PR·CI·머지 후 T-278 DSR intake workflow로 진입한다.
+
 ## 2026-06-28 (codex) — T-276 Retention execution / dashboard
 
 **작업**: Sprint 6 보존기간 실행 콘솔을 추가했다.

@@ -33,6 +33,7 @@ from app.models import (  # noqa: E402,F401
     companion,
     curated_plan,
     data_integrity,
+    email_deliverability,
     email_queue,
     feature_suggestion,
     kasi,

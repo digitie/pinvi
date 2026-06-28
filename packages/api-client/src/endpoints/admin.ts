@@ -40,6 +40,7 @@ import {
   AdminDedupDecisionResponseSchema,
   AdminDedupReviewPagedResponseSchema,
   AdminDevSafetyActionResultSchema,
+  AdminEmailDeliverabilitySchema,
   AdminOperationImpactSchema,
   AdminOperationResultSchema,
   AdminResetRunRequestSchema,
@@ -1025,6 +1026,12 @@ export const adminApi = (client: ApiClient) => ({
       schema: z.array(AdminEmailEntrySchema),
     });
   },
+
+  getEmailDeliverability: () =>
+    client.request('/admin/emails/deliverability', {
+      method: 'GET',
+      schema: AdminEmailDeliverabilitySchema,
+    }),
 
   resendEmail: (emailId: string) =>
     client.request(`/admin/emails/${emailId}/resend`, {

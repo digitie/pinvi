@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-277 Email deliverability / suppression enforcement
+
+Sprint 6 이메일 deliverability/suppression enforcement를 구현했다. DB에는
+`app.email_suppressions`와 `app.resend_webhook_events`를 추가했고, `app.email_queue`는
+`delivery_delayed`, `suppressed`, `last_provider_event_id`, `last_provider_event_at`을 가진다.
+worker는 발송 전 `users.email_status`, active suppression source, `marketing*` template의
+`marketing` consent를 확인해 차단 대상이면 Resend 호출 없이 terminal 상태와
+`last_error='suppressed:<reason>'`을 남긴다.
+
+Resend 발송은 Python SDK 직접 호출에서 `httpx` 기반 `ResendClient`로 전환했다.
+`api_call_event_hooks(..., provider='resend')`를 사용하므로 `app.api_call_log`에 canonical endpoint와
+status가 남고, API key는 endpoint에 저장되지 않는다. `/webhooks/resend`는 event id/`svix-id`
+중복을 no-op으로 처리하고, `email.bounced` / `email.complained` / `email.suppressed` terminal
+event가 `delivered`보다 우선하도록 했다. hard bounce/complaint/provider suppression은
+suppression source와 연결 사용자 `email_status`를 갱신한다.
+
+Admin에는 `GET /admin/emails/deliverability`와 `/admin/emails` 상태판을 추가했다. 상태판은 Resend
+API configured/console mode, FROM domain/domain status/sending capability, webhook signature/최근 event,
+queue health, suppression/user status count, SPF/DKIM/DMARC manual checklist를 raw secret 없이 표시한다.
+검증은 WSL에서 ruff, strict mypy, schemas/api-client/web typecheck, Web lint, API integration 24건을
+통과했다. Playwright는 N150 alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+`admin-emails.e2e.ts` 1건을 통과했다. 다음 작업은 PR·CI·머지 후 T-278 DSR intake workflow다.
+
 ## 2026-06-28 (codex) — T-276 Retention execution / dashboard
 
 Sprint 6 보존기간 실행 콘솔을 추가했다. DB에는 `app.retention_runs`와

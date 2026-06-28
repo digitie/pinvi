@@ -94,9 +94,6 @@
 - [ ] T-272 — AI companion 별도 서비스 분리.
 - [ ] T-273 — v1.0.0 E2E / Live Gate.
 - [ ] T-274 — v1.0.0 릴리즈.
-- [ ] T-277 — Email deliverability / suppression enforcement.
-      SPF/DKIM/DMARC/FROM domain verified 상태, Resend webhook hard-bounce/complaint,
-      `users.email_status`/suppression enforcement와 alert를 구현한다.
 - [ ] T-278 — DSR intake workflow.
       개인정보 열람/정정/삭제/처리정지 요청 접수, SLA, evidence, 완료 통지 workflow를 구현한다.
 - [ ] T-279 — Content moderation / takedown workflow.

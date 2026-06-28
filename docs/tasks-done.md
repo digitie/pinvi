@@ -6,6 +6,17 @@
 
 ## 2026-06-28
 
+- [x] T-277 — Email deliverability / suppression enforcement.
+      `app.email_suppressions`와 `app.resend_webhook_events`를 추가해 Resend hard bounce,
+      complaint, provider suppression을 발송 차단 source로 저장한다. `email_queue.status`는
+      `delivery_delayed`와 `suppressed`를 포함하며, worker는 발송 전 `users.email_status`,
+      active suppression, `marketing` consent를 검사해 provider 호출 없이 terminal 상태로 멈춘다.
+      Resend 발송은 SDK 직접 호출에서 REST `ResendClient`로 전환되어 `api_call_log.provider='resend'`
+      기록을 남긴다. `/webhooks/resend`는 event id/`svix-id` dedupe와 terminal precedence를 적용하고,
+      `/admin/emails/deliverability` 및 Web Admin 이메일 큐 상태판은 domain/webhook/queue/suppression
+      health를 raw secret 없이 표시한다. API integration, provider tracking test, mock Playwright,
+      Resend/Admin/schema/compliance 문서를 함께 갱신했다.
+
 - [x] T-276 — Retention execution / dashboard.
       `app.retention_runs`와 `app.location_access_log_archive`를 추가해 PII/위치 로그 보존기간
       dry-run/execute evidence를 저장한다. `/admin/retention` API는 summary, runs, dry-run,

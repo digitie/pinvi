@@ -42,6 +42,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`      | 통합 엔티티 CRUD                                       | 3      |
 | `GET /admin/api-calls`                                            | 외부 API 호출 로그 (`api_call_log`)                    | 3      |
 | `GET /admin/emails`                                               | 이메일 발송 큐 (`email_queue`)                         | 3      |
+| `GET /admin/emails/deliverability`                                | Resend 발송 가능 상태 / suppression 상태판             | 6      |
 | `POST /admin/emails/{id}/resend`                                  | 재발송                                                 | 3      |
 | `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
 | `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
@@ -1290,8 +1291,30 @@ GET /admin/api-calls?provider=kma&status_code=200&error_class=Timeout&limit=100
   `kor_travel_geo`, `telegram`, `google_oauth` provider tag를 `ApiCallTracker` event hook에
   부착한다. query `key`/`token`/`secret` 계열 값과 Telegram bot token path는 저장 전에
   `***`로 mask한다.
-- Resend 발송은 현재 `resend` SDK 직접 호출 경로라 httpx event hook 감사 대상이 아니다.
-  domain verification/suppression과 함께 T-257에서 provider tracking 보강 여부를 다시 결정한다.
+- T-277 기준 Resend 발송도 `ResendClient` REST 경로로 전환되어
+  `api_call_log.provider='resend'`와 canonical endpoint(`https://api.resend.com/emails`)를 남긴다.
+  API key는 Authorization header로만 전달되고 `api_call_log.endpoint`에는 저장되지 않는다.
+
+## 9.2 `GET /admin/emails/deliverability`
+
+```http
+GET /admin/emails/deliverability
+```
+
+- 권한: `admin` / `operator`
+- Resend API key configured 여부만 boolean으로 반환한다. key 원문, hint, webhook secret 원문은 노출하지
+  않는다.
+- `PINVI_RESEND_FROM_EMAIL`에서 `from_domain`을 파싱하고, API key가 있으면 Resend `GET /domains`의
+  같은 domain `status` / `capabilities.sending`을 조회한다. `verified`가 아니거나 domain mismatch면
+  `status='degraded'`다.
+- webhook health는 secret configured/unsigned opt-in, 최근 24시간 `app.resend_webhook_events`
+  event count, latest processed time을 반환한다.
+- suppression health는 `app.email_suppressions` active/released count와 `users.email_status` count를
+  반환한다.
+- queue health는 `pending`, `sent`, `delivered`, `delivery_delayed`, `bounced`, `complained`,
+  `suppressed`, `failed` count를 반환한다.
+- SPF/DKIM/DMARC는 Resend DNS record 세부 상태가 API에서 안정적으로 주어지지 않을 수 있어
+  `manual check required` checklist로 표시한다.
 
 ## 10. 위치 감사 로그 (CPO 권한)
 
