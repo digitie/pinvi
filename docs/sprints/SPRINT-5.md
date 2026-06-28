@@ -29,6 +29,8 @@
       `kasi_poi_rise_set_job` one-shot (T-067 선행 완료)
     - (계획) `pinvi_email_outbox`, `pinvi_pii_retention`,
       `pinvi_location_log_archive`, `pinvi_telegram_weekly`
+    - 신규 app-owned job은 ADR-050의 retry/backoff, idempotency, failure notification,
+      dry-run gate를 따른다.
     - feature/provider 적재 asset(VisitKorea/OpiNet/KMA/KrHeritage 등)은
       `kor-travel-map` 소유이며 본 저장소 ETL에 추가하지 않는다(ADR-026/T-210c).
   - vworld 법정동코드 임포트 trigger UI (`kor-travel-geo`에 위임)
@@ -145,7 +147,7 @@
 - **ADR-035**: WebSocket broker 모델 (단일 프로세스 in-memory, v2 Redis Streams 또는
   PostgreSQL LISTEN/NOTIFY)
 - 후속 ADR 후보(번호 미배정): optimistic lock + `If-Match` 정책
-- 후속 ADR 후보(번호 미배정): Pinvi Dagster `app` schema job 표준 (KASI/알림/보존정책)
+- **ADR-050**: Pinvi Dagster `app` schema job 표준 (KASI/알림/보존정책)
 - 후속 ADR 후보(번호 미배정): Loki retention 정책 (7일, Odroid 용량)
 - ADR-022 (참조): Backup/Restore 핫스왑 정책 — 본 Sprint는 script + endpoint만,
   Sprint 6에서 UI + 핫스왑 finalize

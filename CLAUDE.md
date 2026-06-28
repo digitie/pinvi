@@ -71,7 +71,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-048**. 최근 박힘: ADR-024 (NTFS worktree=git source of
+ADR 현황: ADR-001 ~ **ADR-050**. 최근 박힘: ADR-024 (NTFS worktree=git source of
 truth), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -99,8 +99,10 @@ compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + D
 12802로 고정), ADR-048 (`kor-travel-geo` v2 공개 API key는 서버 `PINVI_VWORLD_API_KEY`와
 동일하며, hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
-kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답).
-다음 신규 = ADR-050.
+kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
+ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,
+destructive dry-run gate).
+다음 신규 = ADR-051.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

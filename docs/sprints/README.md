@@ -67,6 +67,7 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-036** — Curated trip plan POI nullable feature link + 외부 feature-backed upsert
 - **ADR-041** — Expo `apps/mobile` 구조 스캐폴드
 - **ADR-043** — 모바일 Expo Dev Client + EAS Build 기준선
+- **ADR-050** — Pinvi app-owned Dagster job 표준
 
 ## 참조
 
