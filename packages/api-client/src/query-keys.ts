@@ -162,6 +162,7 @@ export const queryKeys = {
     // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).
     featureRequestsAll: () => ['admin', 'feature-requests'] as const,
     emails: (params: { status?: string; limit?: number }) => ['admin', 'emails', params] as const,
+    emailDeliverability: () => ['admin', 'emails', 'deliverability'] as const,
     emailsAll: () => ['admin', 'emails'] as const,
     audit: (params: { limit?: number }) => ['admin', 'audit', params] as const,
     locationAudit: (params: { userId?: string; from?: string; to?: string; limit?: number }) =>

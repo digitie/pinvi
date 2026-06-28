@@ -56,6 +56,11 @@
   `detected` → `triage` → `notification_decision` → `reported` → `closed` workflow로 확장됐고,
   CPO 30분 review due, KISA/PIPC 72시간 신고 due, CPO Telegram outbox, 정보주체 통지 email outbox,
   notification payload hash, 접수번호, audit 기록을 제공한다.
+- Admin `/admin/emails`에 Resend deliverability 상태판을 추가했다. API key configured/console mode,
+  FROM domain/domain status, webhook signature/최근 event, queue health, active suppression,
+  `users.email_status` count를 raw secret 없이 표시한다. Resend 발송은 REST client로 전환되어
+  `api_call_log.provider='resend'`를 남기며, hard bounce/complaint/provider suppression은
+  `email_suppressions`와 발송 전 차단 정책에 반영된다.
 - Admin `/admin/seed`, `/admin/reset`을 dev/staging 전용 dry-run 화면으로 교체했다. production에서는
   route가 숨겨지고, dry-run은 확인 문구와 운영 사유를 요구하며 감사 로그를 남긴다.
 - Admin backup snapshot trigger를 보강했다. backup script는 disk guard와 sha256 검증을 수행하고,

@@ -306,6 +306,8 @@ async def build_email_outbox_summary(
         failed=_as_int(summary["failed"]),
         bounced=_as_int(summary["bounced"]),
         complained=_as_int(summary["complained"]),
+        suppressed=_as_int(summary["suppressed"]),
+        delivery_delayed=_as_int(summary["delivery_delayed"]),
         retry_exhausted=_as_int(summary["retry_exhausted"]),
         oldest_pending_scheduled_at=summary["oldest_pending_scheduled_at"],
         stuck_threshold_minutes=EMAIL_OUTBOX_STUCK_THRESHOLD_MINUTES,
@@ -763,7 +765,9 @@ def _email_template_summary(item: Any) -> AdminEmailOutboxTemplateSummary:
     failed = _as_int(row.get("failed"))
     bounced = _as_int(row.get("bounced"))
     complained = _as_int(row.get("complained"))
-    failure_count = failed + bounced + complained
+    suppressed = _as_int(row.get("suppressed"))
+    delivery_delayed = _as_int(row.get("delivery_delayed"))
+    failure_count = failed + bounced + complained + suppressed
     total = _as_int(row.get("total"))
     return AdminEmailOutboxTemplateSummary(
         template=template or "unknown",
@@ -771,9 +775,11 @@ def _email_template_summary(item: Any) -> AdminEmailOutboxTemplateSummary:
         pending=_as_int(row.get("pending")),
         sent=_as_int(row.get("sent")),
         delivered=_as_int(row.get("delivered")),
+        delivery_delayed=delivery_delayed,
         failed=failed,
         bounced=bounced,
         complained=complained,
+        suppressed=suppressed,
         failure_count=failure_count,
         failure_rate=0.0 if total == 0 else round(failure_count / total, 4),
     )
@@ -971,6 +977,8 @@ _EMAIL_OUTBOX_SUMMARY_SQL = text(
       count(*) FILTER (WHERE status = 'failed')::int AS failed,
       count(*) FILTER (WHERE status = 'bounced')::int AS bounced,
       count(*) FILTER (WHERE status = 'complained')::int AS complained,
+      count(*) FILTER (WHERE status = 'suppressed')::int AS suppressed,
+      count(*) FILTER (WHERE status = 'delivery_delayed')::int AS delivery_delayed,
       count(*) FILTER (
         WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
       )::int AS retry_exhausted,
@@ -987,9 +995,11 @@ _EMAIL_OUTBOX_TEMPLATE_SQL = text(
       count(*) FILTER (WHERE status = 'pending')::int AS pending,
       count(*) FILTER (WHERE status = 'sent')::int AS sent,
       count(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+      count(*) FILTER (WHERE status = 'delivery_delayed')::int AS delivery_delayed,
       count(*) FILTER (WHERE status = 'failed')::int AS failed,
       count(*) FILTER (WHERE status = 'bounced')::int AS bounced,
-      count(*) FILTER (WHERE status = 'complained')::int AS complained
+      count(*) FILTER (WHERE status = 'complained')::int AS complained,
+      count(*) FILTER (WHERE status = 'suppressed')::int AS suppressed
     FROM app.email_queue
     WHERE created_at >= :template_window_start
     GROUP BY template

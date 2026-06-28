@@ -2,6 +2,8 @@
 
 작성일: 2026-06-28
 
+후속: T-277 구현 기록은 `docs/execplan/email-deliverability-suppression.md`가 정본이다.
+
 ## 1. 목적
 
 T-257의 산출물이다. Sprint 5에서 email outbox와 provider health 기반은 갖췄지만,

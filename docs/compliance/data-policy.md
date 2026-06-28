@@ -53,7 +53,9 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 ### 2.4 Resend 이메일
 
 - 도메인 인증 (SPF/DKIM/DMARC) 없이 발송 금지
-- bounce / complaint → 발송 차단 + audit
+- bounce / complaint / provider suppression → 발송 차단
+- suppression source는 `app.email_suppressions`에 normalized email SHA-256 hash와 reason만 저장하고
+  raw webhook payload는 `app.resend_webhook_events.payload_summary`의 bounded metadata로만 보존
 - 마케팅 발송은 별도 동의 (`marketing` consent)
 - 자세히는 `docs/integrations/resend.md`
 
@@ -130,14 +132,14 @@ Pinvi 책임이다.
 
 ## 6. 로깅 / 마스킹
 
-| 키 패턴 | 마스킹 |
-|--------|--------|
-| `re_*` | `[redacted-resend-key]` |
-| `AIza*` | `[redacted-google-key]` |
-| `\d{8,}:[A-Za-z0-9_-]{20,}` | `[redacted-telegram-token]` |
-| `service[_-]?key=...` (query) | `service_key=[f]` |
-| `apikey=...` | `apikey=[f]` |
-| 위도/경도 정규식 (`3[3-8]\.\d+, 12[4-9]\.\d+`) | `[coord]` |
+| 키 패턴                                        | 마스킹                      |
+| ---------------------------------------------- | --------------------------- |
+| `re_*`                                         | `[redacted-resend-key]`     |
+| `AIza*`                                        | `[redacted-google-key]`     |
+| `\d{8,}:[A-Za-z0-9_-]{20,}`                    | `[redacted-telegram-token]` |
+| `service[_-]?key=...` (query)                  | `service_key=[f]`           |
+| `apikey=...`                                   | `apikey=[f]`                |
+| 위도/경도 정규식 (`3[3-8]\.\d+, 12[4-9]\.\d+`) | `[coord]`                   |
 
 Sentry / Loki / structlog 모두 동일.
 

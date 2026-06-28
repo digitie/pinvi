@@ -14,7 +14,9 @@ from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.email_queue import EmailQueue
 from app.models.user import User
+from app.schemas.admin import AdminEmailDeliverability
 from app.schemas.envelope import Envelope
+from app.services.email_deliverability import build_email_deliverability_summary
 
 router = APIRouter(prefix="/admin/emails", tags=["admin"])
 
@@ -23,7 +25,16 @@ class EmailQueueEntry(BaseModel):
     email_id: uuid.UUID
     to_email: str
     template: str
-    status: Literal["pending", "sent", "delivered", "bounced", "complained", "failed"]
+    status: Literal[
+        "pending",
+        "sent",
+        "delivered",
+        "delivery_delayed",
+        "bounced",
+        "complained",
+        "suppressed",
+        "failed",
+    ]
     attempts: int
     last_error: str | None
     resend_id: str | None
@@ -45,6 +56,14 @@ async def list_emails(
     result = await db.execute(q)
     rows = list(result.scalars())
     return Envelope.of([_to_entry(r) for r in rows])
+
+
+@router.get("/deliverability", response_model=Envelope[AdminEmailDeliverability])
+async def get_email_deliverability(
+    _admin: Annotated[User, Depends(require_role("admin", "operator"))],
+    db: DbSession,
+) -> Envelope[AdminEmailDeliverability]:
+    return Envelope.of(await build_email_deliverability_summary(db))
 
 
 @router.post("/{email_id}/resend", response_model=Envelope[EmailQueueEntry])

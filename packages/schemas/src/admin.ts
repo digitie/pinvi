@@ -212,9 +212,11 @@ export const AdminEmailOutboxTemplateSummarySchema = z.object({
   pending: z.number().int().default(0),
   sent: z.number().int().default(0),
   delivered: z.number().int().default(0),
+  delivery_delayed: z.number().int().default(0),
   failed: z.number().int().default(0),
   bounced: z.number().int().default(0),
   complained: z.number().int().default(0),
+  suppressed: z.number().int().default(0),
   failure_count: z.number().int().default(0),
   failure_rate: z.number().default(0),
 });
@@ -229,6 +231,8 @@ export const AdminEmailOutboxSummarySchema = z.object({
   failed: z.number().int().default(0),
   bounced: z.number().int().default(0),
   complained: z.number().int().default(0),
+  suppressed: z.number().int().default(0),
+  delivery_delayed: z.number().int().default(0),
   retry_exhausted: z.number().int().default(0),
   oldest_pending_scheduled_at: Iso8601Schema.nullable().default(null),
   stuck_threshold_minutes: z.number().int(),
@@ -237,6 +241,67 @@ export const AdminEmailOutboxSummarySchema = z.object({
   template_stats: z.array(AdminEmailOutboxTemplateSummarySchema).default([]),
 });
 export type AdminEmailOutboxSummary = z.infer<typeof AdminEmailOutboxSummarySchema>;
+
+export const AdminEmailDeliverabilityCheckSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  status: z.enum(['ok', 'warn', 'error', 'unknown']),
+  message: z.string().nullable().default(null),
+});
+export type AdminEmailDeliverabilityCheck = z.infer<typeof AdminEmailDeliverabilityCheckSchema>;
+
+export const AdminEmailDeliverabilityDomainSchema = z.object({
+  from_email: z.string(),
+  from_domain: z.string().nullable().default(null),
+  domain_status: z.string().nullable().default(null),
+  sending_capability: z.string().nullable().default(null),
+  domain_matched: z.boolean().nullable().default(null),
+  domains_checked: z.number().int().default(0),
+  error_class: z.string().nullable().default(null),
+});
+export type AdminEmailDeliverabilityDomain = z.infer<typeof AdminEmailDeliverabilityDomainSchema>;
+
+export const AdminEmailDeliverabilityWebhookSchema = z.object({
+  signature_configured: z.boolean(),
+  unsigned_allowed: z.boolean(),
+  latest_processed_at: Iso8601Schema.nullable().default(null),
+  recent_events: z.record(z.string(), z.number().int()).default({}),
+});
+export type AdminEmailDeliverabilityWebhook = z.infer<typeof AdminEmailDeliverabilityWebhookSchema>;
+
+export const AdminEmailDeliverabilitySuppressionSchema = z.object({
+  active_suppressions: z.number().int().default(0),
+  released_suppressions: z.number().int().default(0),
+  users_by_email_status: z.record(z.string(), z.number().int()).default({}),
+});
+export type AdminEmailDeliverabilitySuppression = z.infer<
+  typeof AdminEmailDeliverabilitySuppressionSchema
+>;
+
+export const AdminEmailDeliverabilityQueueSchema = z.object({
+  pending: z.number().int().default(0),
+  sent: z.number().int().default(0),
+  delivered: z.number().int().default(0),
+  delivery_delayed: z.number().int().default(0),
+  bounced: z.number().int().default(0),
+  complained: z.number().int().default(0),
+  suppressed: z.number().int().default(0),
+  failed: z.number().int().default(0),
+});
+export type AdminEmailDeliverabilityQueue = z.infer<typeof AdminEmailDeliverabilityQueueSchema>;
+
+export const AdminEmailDeliverabilitySchema = z.object({
+  generated_at: Iso8601Schema,
+  status: z.enum(['ok', 'degraded', 'unknown']),
+  resend_api_configured: z.boolean(),
+  console_mode: z.boolean(),
+  domain: AdminEmailDeliverabilityDomainSchema,
+  webhook: AdminEmailDeliverabilityWebhookSchema,
+  suppression: AdminEmailDeliverabilitySuppressionSchema,
+  queue: AdminEmailDeliverabilityQueueSchema,
+  checks: z.array(AdminEmailDeliverabilityCheckSchema).default([]),
+});
+export type AdminEmailDeliverability = z.infer<typeof AdminEmailDeliverabilitySchema>;
 
 export const AdminTelegramOutboxCategorySummarySchema = z.object({
   category: z.string(),
@@ -1657,7 +1722,16 @@ export const AdminEmailEntrySchema = z.object({
   email_id: z.string().uuid(),
   to_email: z.string(),
   template: z.string(),
-  status: z.enum(['pending', 'sent', 'delivered', 'bounced', 'complained', 'failed']),
+  status: z.enum([
+    'pending',
+    'sent',
+    'delivered',
+    'delivery_delayed',
+    'bounced',
+    'complained',
+    'suppressed',
+    'failed',
+  ]),
   attempts: z.number().int(),
   last_error: z.string().nullable(),
   resend_id: z.string().nullable(),

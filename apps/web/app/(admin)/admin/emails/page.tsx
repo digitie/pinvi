@@ -2,24 +2,59 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminEmailEntry } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import type { AdminEmailDeliverability, AdminEmailEntry } from '@pinvi/schemas';
+import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-
-const apiClient = new ApiClient({
-  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
-});
+import { apiClient } from '@/lib/api';
 
 const STATUSES = [
   { value: '', label: '전체' },
   { value: 'pending', label: '대기' },
   { value: 'sent', label: '전송' },
   { value: 'delivered', label: '도달' },
+  { value: 'delivery_delayed', label: '지연' },
   { value: 'bounced', label: '반송' },
   { value: 'complained', label: '신고' },
+  { value: 'suppressed', label: '차단' },
   { value: 'failed', label: '실패' },
 ];
+
+function formatMetric(value: number | null | undefined) {
+  return new Intl.NumberFormat('ko-KR').format(value ?? 0);
+}
+
+function statusClass(status: AdminEmailDeliverability['status']) {
+  if (status === 'ok') return 'bg-success-bg text-success-text';
+  if (status === 'degraded') return 'bg-error-bg text-error-text';
+  return 'bg-surface-soft text-muted';
+}
+
+function checkClass(status: 'ok' | 'warn' | 'error' | 'unknown') {
+  if (status === 'ok') return 'bg-success-bg text-success-text';
+  if (status === 'error') return 'bg-error-bg text-error-text';
+  return 'bg-surface-soft text-muted';
+}
+
+function MetricBox({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: number | string | null | undefined;
+  testId?: string;
+}) {
+  return (
+    <div className="rounded-sm border border-hairline bg-white p-3" data-testid={testId}>
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-1 truncate text-lg font-semibold text-ink">
+        {typeof value === 'number' ? formatMetric(value) : (value ?? '-')}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminEmailsPage() {
   const queryClient = useQueryClient();
@@ -27,7 +62,13 @@ export default function AdminEmailsPage() {
 
   const emailsQuery = useQuery({
     queryKey: queryKeys.admin.emails({ status: statusFilter, limit: 100 }),
-    queryFn: () => adminApi(apiClient).listEmails({ status: statusFilter || undefined, limit: 100 }),
+    queryFn: () =>
+      adminApi(apiClient).listEmails({ status: statusFilter || undefined, limit: 100 }),
+  });
+
+  const deliverabilityQuery = useQuery({
+    queryKey: queryKeys.admin.emailDeliverability(),
+    queryFn: () => adminApi(apiClient).getEmailDeliverability(),
   });
 
   const resendMutation = useMutation({
@@ -39,13 +80,21 @@ export default function AdminEmailsPage() {
     ? emailsQuery.error instanceof ApiError
       ? emailsQuery.error.message
       : '조회 실패'
-    : resendMutation.isError
-      ? resendMutation.error instanceof ApiError
-        ? resendMutation.error.message
-        : '재발송 실패'
-      : null;
+    : deliverabilityQuery.isError
+      ? deliverabilityQuery.error instanceof ApiError
+        ? deliverabilityQuery.error.message
+        : 'deliverability 조회 실패'
+      : resendMutation.isError
+        ? resendMutation.error instanceof ApiError
+          ? resendMutation.error.message
+          : '재발송 실패'
+        : null;
 
   const resendingId = resendMutation.isPending ? resendMutation.variables : null;
+  const deliverability = deliverabilityQuery.data ?? null;
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.emailsAll() });
+  };
 
   const columns: AdminTableColumn<AdminEmailEntry>[] = [
     {
@@ -109,9 +158,108 @@ export default function AdminEmailsPage() {
   ];
 
   return (
-    <AdminPage title="이메일 큐" description="email_queue 행 + 재발송 trigger (status=pending로 reset).">
+    <AdminPage
+      title="이메일 큐"
+      description="email_queue 행 + deliverability 상태"
+      actions={
+        <button
+          type="button"
+          onClick={refresh}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          data-testid="admin-emails-refresh"
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          새로고침
+        </button>
+      }
+    >
+      <Section title="Deliverability">
+        <div className="grid gap-3 text-sm lg:grid-cols-4" data-testid="admin-email-deliverability">
+          <MetricBox
+            label="status"
+            value={deliverability?.status}
+            testId="admin-email-deliverability-status"
+          />
+          <MetricBox label="from domain" value={deliverability?.domain.from_domain} />
+          <MetricBox
+            label="domain"
+            value={deliverability?.domain.domain_status ?? deliverability?.domain.error_class}
+            testId="admin-email-domain-status"
+          />
+          <MetricBox
+            label="active suppressions"
+            value={deliverability?.suppression.active_suppressions}
+            testId="admin-email-suppression-count"
+          />
+        </div>
+
+        <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-sm border border-hairline p-3">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-ink">
+              {deliverability?.status === 'ok' ? (
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span
+                className={`rounded-sm px-2 py-1 text-xs ${statusClass(deliverability?.status ?? 'unknown')}`}
+              >
+                {deliverability?.status ?? 'unknown'}
+              </span>
+            </div>
+            <div className="grid gap-1 text-xs text-muted">
+              <div>api {deliverability?.resend_api_configured ? 'configured' : 'missing'}</div>
+              <div>console {deliverability?.console_mode ? 'on' : 'off'}</div>
+              <div>sending {deliverability?.domain.sending_capability ?? '-'}</div>
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-hairline p-3">
+            <div className="mb-2 text-sm font-semibold text-ink">Webhook</div>
+            <div className="grid gap-1 text-xs text-muted">
+              <div>
+                signature {deliverability?.webhook.signature_configured ? 'configured' : 'missing'}
+              </div>
+              <div>
+                unsigned {deliverability?.webhook.unsigned_allowed ? 'allowed' : 'disabled'}
+              </div>
+              <div>
+                bounced {formatMetric(deliverability?.webhook.recent_events['email.bounced'])}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-hairline p-3">
+            <div className="mb-2 text-sm font-semibold text-ink">Queue</div>
+            <div className="grid grid-cols-2 gap-1 text-xs text-muted">
+              <div>pending {formatMetric(deliverability?.queue.pending)}</div>
+              <div>failed {formatMetric(deliverability?.queue.failed)}</div>
+              <div>delayed {formatMetric(deliverability?.queue.delivery_delayed)}</div>
+              <div>suppressed {formatMetric(deliverability?.queue.suppressed)}</div>
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-hairline p-3">
+            <div className="mb-2 text-sm font-semibold text-ink">Checks</div>
+            <div className="flex flex-wrap gap-1" data-testid="admin-email-checks">
+              {(deliverability?.checks ?? []).map((check) => (
+                <span
+                  key={check.key}
+                  className={`rounded-sm px-2 py-1 text-xs ${checkClass(check.status)}`}
+                  title={check.message ?? undefined}
+                >
+                  {check.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <FilterBar>
-        <label htmlFor="admin-emails-status-filter" className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-emails-status-filter" className="text-xs text-muted">
+          상태
+        </label>
         <select
           id="admin-emails-status-filter"
           value={statusFilter}
@@ -132,7 +280,9 @@ export default function AdminEmailsPage() {
       </FilterBar>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
+          {error}
+        </p>
       )}
 
       <AdminTable

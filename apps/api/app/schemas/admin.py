@@ -179,9 +179,11 @@ class AdminEmailOutboxTemplateSummary(BaseModel):
     pending: int = 0
     sent: int = 0
     delivered: int = 0
+    delivery_delayed: int = 0
     failed: int = 0
     bounced: int = 0
     complained: int = 0
+    suppressed: int = 0
     failure_count: int = 0
     failure_rate: float = 0.0
 
@@ -195,12 +197,67 @@ class AdminEmailOutboxSummary(BaseModel):
     failed: int = 0
     bounced: int = 0
     complained: int = 0
+    suppressed: int = 0
+    delivery_delayed: int = 0
     retry_exhausted: int = 0
     oldest_pending_scheduled_at: datetime | None = None
     stuck_threshold_minutes: int
     max_attempts: int
     template_window_hours: int
     template_stats: list[AdminEmailOutboxTemplateSummary] = Field(default_factory=list)
+
+
+class AdminEmailDeliverabilityCheck(BaseModel):
+    key: str
+    label: str
+    status: Literal["ok", "warn", "error", "unknown"]
+    message: str | None = None
+
+
+class AdminEmailDeliverabilityDomain(BaseModel):
+    from_email: str
+    from_domain: str | None = None
+    domain_status: str | None = None
+    sending_capability: str | None = None
+    domain_matched: bool | None = None
+    domains_checked: int = 0
+    error_class: str | None = None
+
+
+class AdminEmailDeliverabilityWebhook(BaseModel):
+    signature_configured: bool
+    unsigned_allowed: bool
+    latest_processed_at: datetime | None = None
+    recent_events: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminEmailDeliverabilitySuppression(BaseModel):
+    active_suppressions: int = 0
+    released_suppressions: int = 0
+    users_by_email_status: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminEmailDeliverabilityQueue(BaseModel):
+    pending: int = 0
+    sent: int = 0
+    delivered: int = 0
+    delivery_delayed: int = 0
+    bounced: int = 0
+    complained: int = 0
+    suppressed: int = 0
+    failed: int = 0
+
+
+class AdminEmailDeliverability(BaseModel):
+    generated_at: datetime
+    status: Literal["ok", "degraded", "unknown"]
+    resend_api_configured: bool
+    console_mode: bool
+    domain: AdminEmailDeliverabilityDomain
+    webhook: AdminEmailDeliverabilityWebhook
+    suppression: AdminEmailDeliverabilitySuppression
+    queue: AdminEmailDeliverabilityQueue
+    checks: list[AdminEmailDeliverabilityCheck] = Field(default_factory=list)
 
 
 class AdminTelegramOutboxCategorySummary(BaseModel):

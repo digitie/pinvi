@@ -37,6 +37,8 @@ class EmailQueue(Base, TimestampMixin):
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     resend_id: Mapped[str | None] = mapped_column(String(128))
+    last_provider_event_id: Mapped[str | None] = mapped_column(String(128))
+    last_provider_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     bounce_type: Mapped[str | None] = mapped_column(String(16))
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     last_error: Mapped[str | None] = mapped_column(Text())

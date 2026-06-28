@@ -8,17 +8,20 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import update
 from starlette.datastructures import Headers
 
 from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.logging import get_logger
-from app.core.time import utc_now
-from app.models.email_queue import EmailQueue
+from app.services.email_deliverability import (
+    apply_resend_event_to_queue,
+    record_resend_webhook_event,
+)
 
 router = APIRouter(prefix="/webhooks/resend", tags=["webhooks"])
 log = get_logger("resend_webhook")
@@ -113,6 +116,34 @@ def _verify_resend_signature(
         raise ResendWebhookSignatureError("signature mismatch")
 
 
+def _dict_get_case_insensitive(values: dict[str, Any], key: str) -> Any:
+    for item_key, item_value in values.items():
+        if item_key.lower() == key.lower():
+            return item_value
+    return None
+
+
+def _as_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _parse_event_time(value: Any) -> datetime | None:
+    if isinstance(value, int | float):
+        return datetime.fromtimestamp(value, UTC)
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
 @router.post("", status_code=status.HTTP_200_OK)
 async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
     payload = await request.body()
@@ -171,32 +202,65 @@ async def resend_webhook(request: Request, db: DbSession) -> dict[str, bool]:
     data: dict[str, Any] = data_raw if isinstance(data_raw, dict) else {}
     headers_raw = data.get("headers", {})
     data_headers: dict[str, Any] = headers_raw if isinstance(headers_raw, dict) else {}
-    entity_ref = data_headers.get("X-Entity-Ref-ID")
+    entity_ref_raw = _dict_get_case_insensitive(data_headers, "X-Entity-Ref-ID")
+    entity_ref = entity_ref_raw if isinstance(entity_ref_raw, str) else None
+    entity_uuid: uuid.UUID | None = None
+    if entity_ref is not None:
+        try:
+            entity_uuid = uuid.UUID(entity_ref)
+        except ValueError:
+            entity_uuid = None
 
-    if not isinstance(entity_ref, str):
-        log.info("resend_webhook.no_entity_ref", event_type=event_type)
+    svix_id = _get_header(request.headers, "svix-id", "webhook-id")
+    event_created_at = (
+        _parse_event_time(body.get("created_at"))
+        or _parse_event_time(body.get("createdAt"))
+        or _parse_event_time(data.get("created_at"))
+        or _parse_event_time(data.get("createdAt"))
+    )
+    event_id = (
+        _as_str(body.get("id"))
+        or _as_str(data.get("event_id"))
+        or _as_str(data.get("id"))
+        or (svix_id or "")
+    )
+    if not event_id:
+        fingerprint = hashlib.sha256(payload).hexdigest()[:32]
+        event_id = f"{event_type or 'unknown'}:{entity_ref or 'none'}:{fingerprint}"
+
+    resend_email_id = _as_str(data.get("email_id")) or _as_str(data.get("id")) or None
+    bounce = _as_dict(data.get("bounce"))
+    inserted = await record_resend_webhook_event(
+        db,
+        event_id=event_id,
+        svix_id=svix_id,
+        event_type=_as_str(event_type) or "unknown",
+        entity_ref=entity_uuid,
+        resend_email_id=resend_email_id,
+        event_created_at=event_created_at,
+        payload_summary={
+            "has_entity_ref": entity_uuid is not None,
+            "bounce_type": _as_str(bounce.get("type")) or None,
+        },
+    )
+    if not inserted:
+        await db.commit()
+        log.info("resend_webhook.duplicate", event_type=event_type, event_id=event_id)
         return {"ok": True}
 
-    now = utc_now()
-    if event_type == "email.delivered":
-        await db.execute(
-            update(EmailQueue)
-            .where(EmailQueue.email_id == entity_ref)
-            .values(status="delivered", delivered_at=now)
-        )
-    elif event_type == "email.bounced":
-        bounce_raw = data.get("bounce", {})
-        bounce = bounce_raw if isinstance(bounce_raw, dict) else {}
-        bounce_type = bounce.get("type")
-        await db.execute(
-            update(EmailQueue)
-            .where(EmailQueue.email_id == entity_ref)
-            .values(status="bounced", bounced_at=now, bounce_type=bounce_type)
-        )
-    elif event_type == "email.complained":
-        await db.execute(
-            update(EmailQueue).where(EmailQueue.email_id == entity_ref).values(status="complained")
-        )
+    if entity_uuid is None:
+        log.info("resend_webhook.no_entity_ref", event_type=event_type)
+        await db.commit()
+        return {"ok": True}
+
+    await apply_resend_event_to_queue(
+        db,
+        event_id=event_id,
+        event_type=_as_str(event_type),
+        entity_ref=entity_uuid,
+        event_created_at=event_created_at,
+        data=data,
+    )
 
     await db.commit()
     log.info("resend_webhook.processed", event_type=event_type, entity_ref=entity_ref)
