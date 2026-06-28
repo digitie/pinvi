@@ -101,6 +101,16 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
 
+  blackbox:
+    profiles: ["observability"]
+    image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
+    container_name: pinvi-blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
@@ -122,6 +132,8 @@ services:
       - pinvi-prometheus:/prometheus
     depends_on:
       cadvisor:
+        condition: service_started
+      blackbox:
         condition: service_started
 
   grafana:

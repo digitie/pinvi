@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 from app.models.oauth_identity import (
     OAuthLoginState,
     OAuthMobileExchange,
@@ -250,7 +252,10 @@ async def exchange_code_for_claims(
 ) -> GoogleClaims:
     redirect_uri = f"{settings.pinvi_oauth_callback_base_url}/auth/oauth/google/callback"
     owns_client = client is None
-    http = client or httpx.AsyncClient(timeout=settings.pinvi_oauth_http_timeout_seconds)
+    http = client or httpx.AsyncClient(
+        timeout=settings.pinvi_oauth_http_timeout_seconds,
+        event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="google_oauth"),
+    )
     try:
         token_resp = await http.post(
             _GOOGLE_TOKEN_URL,

@@ -99,7 +99,7 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/debug/logs', heading: 'Debug logs', table: true },
   { path: '/admin/system', heading: '시스템', readyTestId: 'admin-system-containers' },
   { path: '/admin/etl', heading: 'ETL', table: true },
-  { path: '/admin/grafana', heading: 'Grafana' },
+  { path: '/admin/grafana', heading: 'Grafana', readyTestId: 'admin-grafana-health-status' },
   { path: '/admin/api-calls', heading: 'API 호출 로그', table: true },
   { path: '/admin/emails', heading: '이메일 큐', table: true },
   { path: '/admin/backup', heading: 'Backup', table: true },

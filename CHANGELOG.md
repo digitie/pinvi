@@ -106,6 +106,14 @@
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH` build env로 주입하도록 정리했다. Web Docker build/runtime,
   app compose build args, Grafana `GF_SERVER_ROOT_URL`, runbook/env template이 같은 placeholder
   기준을 쓰며 실제 운영 도메인은 gitignore된 env에만 둔다.
+- Admin `/admin/grafana`에 Grafana health probe와 `ok`/`degraded` 상태 표시, dashboard selector를
+  추가했다. Grafana provisioning은 API p95/error, DB pool, WebSocket, ETL/backup 4종 dashboard와
+  기존 Overview를 제공한다.
+- Prometheus observability profile에 blackbox exporter를 추가해 Web/Dagster HTTP health를
+  scrape target으로 확인한다. API `/metrics`는 SQLAlchemy DB pool gauge를 함께 노출한다.
+- production httpx client의 `api_call_log` provider tag를 `kor_travel_map`,
+  `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`로 고정하고, endpoint 저장 전
+  query secret과 Telegram bot token path를 mask한다.
 - 추적 env 예시의 bootstrap admin 비밀번호 기본값을 비우고, bootstrap admin placeholder
   이메일을 `example.com` 도메인으로 정렬했다. 실제 임시 credential은 gitignore env에만 둔다.
 

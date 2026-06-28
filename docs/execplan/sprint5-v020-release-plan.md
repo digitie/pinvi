@@ -390,6 +390,16 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 - `/admin/grafana` iframe에서 dashboard path와 frame policy가 실제로 동작하는지 검증한다.
 - provider-health가 `unknown`으로 남지 않도록 map/geo/telegram 등 prod httpx client에
   `ApiCallTracker` 또는 동등한 provider tag가 붙는지 선행 점검하고, 누락 시 본 Task에 포함한다.
+- 완료: observability profile에 blackbox exporter를 추가해 Web/Dagster health를 Prometheus
+  target으로 probe한다.
+- 완료: API `/metrics`에 `pinvi_api_db_pool_connections` gauge를 추가했다.
+- 완료: Grafana provisioning은 API, DB pool, WebSocket, ETL/backup dashboard 4종과 기존
+  Overview를 포함한다.
+- 완료: `/admin/grafana`는 dashboard selector와 `GET /admin/grafana/health` 기반
+  `ok`/`degraded` 표시를 제공한다.
+- 완료: `kor_travel_map`, `kor_travel_map_admin`, `kor_travel_geo`, `telegram`, `google_oauth`
+  httpx client factory에 provider tag hook을 붙이고, query secret/Telegram token path를
+  `api_call_log.endpoint` 저장 전에 mask한다. Resend SDK 경로는 T-257에서 후속 판단한다.
 
 검증 케이스:
 

@@ -97,6 +97,8 @@ services:
         NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH: "${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH:-/d/pinvi/overview?orgId=1&kiosk=tv}"
         NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED: ${NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED:-0}
     image: ${PINVI_WEB_IMAGE:-pinvi-web:local}
+    environment:
+      PINVI_GRAFANA_HEALTH_URL: ${PINVI_GRAFANA_HEALTH_URL:-http://grafana:3000}
     depends_on:
       - app-api
     ports:
@@ -145,6 +147,16 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
 
+  blackbox:
+    profiles: ["observability"]
+    image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
+    container_name: pinvi-app-blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
@@ -166,6 +178,8 @@ services:
       app-api:
         condition: service_started
       cadvisor:
+        condition: service_started
+      blackbox:
         condition: service_started
 
   grafana:

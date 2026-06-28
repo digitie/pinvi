@@ -45,6 +45,12 @@ HTTP_REQUESTS_IN_PROGRESS = Gauge(
     ("method",),
     multiprocess_mode="livesum",
 )
+DB_POOL_CONNECTIONS = Gauge(
+    "pinvi_api_db_pool_connections",
+    "Pinvi SQLAlchemy DB pool connection counts by state.",
+    ("state",),
+    multiprocess_mode="livesum",
+)
 
 
 class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
@@ -78,6 +84,7 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
 async def prometheus_metrics() -> Response:
     if not settings.pinvi_prometheus_metrics_enabled:
         raise HTTPException(status_code=404)
+    update_db_pool_metrics()
     return Response(content=_generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
@@ -102,3 +109,35 @@ def _generate_latest() -> bytes:
         multi_process_collector(registry)
         return bytes(generate_latest(registry))
     return bytes(generate_latest())
+
+
+def update_db_pool_metrics() -> None:
+    """SQLAlchemy pool 상태를 scrape 직전에 gauge로 반영한다."""
+
+    for state, value in _db_pool_snapshot().items():
+        DB_POOL_CONNECTIONS.labels(state=state).set(value)
+
+
+def _db_pool_snapshot() -> dict[str, float]:
+    try:
+        from app.db import session as db_session
+
+        pool = db_session.engine.sync_engine.pool
+        return {
+            "size": _pool_value(pool, "size"),
+            "checked_in": _pool_value(pool, "checkedin"),
+            "checked_out": _pool_value(pool, "checkedout"),
+            "overflow": _pool_value(pool, "overflow"),
+        }
+    except Exception:
+        return {"size": 0.0, "checked_in": 0.0, "checked_out": 0.0, "overflow": 0.0}
+
+
+def _pool_value(pool: object, attr: str) -> float:
+    value = getattr(pool, attr, None)
+    if not callable(value):
+        return 0.0
+    try:
+        return float(value())
+    except Exception:
+        return 0.0

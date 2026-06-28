@@ -1,5 +1,32 @@
 # resume.md
 
+## 2026-06-28 (codex) — T-253 Prometheus/Grafana 운영 가시화 게이트
+
+Prometheus/Grafana 운영 가시화 게이트를 보강했다. observability compose profile에
+blackbox exporter를 추가했고, Prometheus scrape target은 API `/metrics`, cAdvisor,
+blackbox 자체, Web health, Dagster health를 분리한다. API `/metrics`는
+`pinvi_api_db_pool_connections{state=...}` SQLAlchemy pool gauge를 함께 노출한다.
+
+Grafana provisioning은 기존 Overview에 API p95/error, DB pool, WebSocket, ETL/backup
+dashboard 4종을 추가했다. Admin `/admin/grafana`는 dashboard selector와
+`GET /admin/grafana/health` 서버사이드 probe 기반 `정상`/`강등` 표시를 제공한다.
+health probe는 `PINVI_GRAFANA_HEALTH_URL`을 우선 사용해 app compose 내부 Grafana origin을
+찌를 수 있다.
+mock e2e는 iframe, dashboard path, degraded 상태를 검증하고, live e2e는
+`PINVI_ADMIN_LIVE_E2E=1`에서 iframe/health 상태와 secret pattern 미노출을 확인한다.
+
+provider-health `unknown` 방지를 위해 production httpx client factory에 `ApiCallTracker`
+provider tag를 연결했다. 대상은 `kor_travel_map`, `kor_travel_map_admin`,
+`kor_travel_geo`, `telegram`, `google_oauth`다. `api_call_log.endpoint`는 query secret과
+Telegram bot token path를 저장 전에 mask한다. Resend는 현재 SDK 직접 호출 경로라 T-257에서
+deliverability/provider tracking preflight와 함께 후속 판단한다.
+
+검증은 Linux에서 API ruff/pytest/mypy, Web typecheck/lint/Vitest, observability compose
+config, Grafana dashboard JSON parse, `git diff --check`를 통과했다. Playwright는 N150 SSH
+alias가 현재 환경에서 해석되지 않아 Windows fallback runner로 `admin-grafana.e2e.ts` 2건
+통과와 `admin-live-grafana.live.ts` env-gated skip 1건을 확인했다. 다음 작업은 T-254 Admin
+live e2e matrix v0.2.0 확장이다.
+
 ## 2026-06-28 (codex) — T-252 Backup/restore live UI e2e
 
 `/admin/backup` snapshot 목록에 filename/snapshot id/checksum 검색, `verified`/`available`

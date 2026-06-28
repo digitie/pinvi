@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.clients.telegram import TelegramClient
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 from app.models.telegram_target import TelegramTarget
 from app.schemas.envelope import Envelope
 from app.schemas.telegram import TelegramTargetCreate, TelegramTargetResponse
@@ -32,7 +34,10 @@ router = APIRouter(prefix="/users/me/telegram-targets", tags=["telegram"])
 
 
 async def get_telegram_client() -> AsyncIterator[TelegramClient]:
-    http = httpx.AsyncClient(base_url=settings.pinvi_telegram_api_base)
+    http = httpx.AsyncClient(
+        base_url=settings.pinvi_telegram_api_base,
+        event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="telegram"),
+    )
     client = TelegramClient(http, timeout_seconds=settings.pinvi_telegram_timeout_seconds)
     try:
         yield client

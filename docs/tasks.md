@@ -22,7 +22,7 @@
 
 ## 다음 (우선순위 순)
 
-- 다음 구현: T-253 Prometheus/Grafana 운영 가시화 게이트.
+- 다음 구현: T-254 Admin live e2e matrix v0.2.0 확장.
 - 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 확인한다. 2026-06-28 T-249 진입 전
   PR #281의 reminder comment, CI success, 차단 코멘트 없음, merge를 확인했다.
 - v0.2.0 구현 게이트: app-owned ETL 추가 job, Loki/request timeline, 지도 마커/색상 parity,
@@ -41,10 +41,6 @@
 - [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
       `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
       도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
-- [ ] T-253 — Prometheus/Grafana 운영 가시화 게이트.
-      scrape target, dashboard 4종, `/admin/grafana` live iframe/degraded 검증을 수행한다.
-      provider-health가 unknown으로 남지 않도록 prod httpx client의 provider tag/`ApiCallTracker`
-      누락도 감사한다.
 - [ ] T-254 — Admin live e2e matrix v0.2.0 확장.
       신규 route/case, full catalog drift, 200/2000/full N150 gate를 정리한다.
 - [ ] T-255 — 지도 마커 / 색상 적용 parity.
