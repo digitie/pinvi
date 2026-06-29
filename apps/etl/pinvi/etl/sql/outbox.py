@@ -29,6 +29,10 @@ EMAIL_OUTBOX_SUMMARY_SQL = text(
     """
 )
 
+# NOTE: kept column-for-column equivalent to the API copy
+# `app.services.admin_etl._EMAIL_OUTBOX_TEMPLATE_SQL` (includes the
+# `delivery_delayed` / `suppressed` Resend status columns). The two copies must
+# stay in sync — see apps/etl/tests + apps/api/tests/integration/test_etl_sql_smoke.py.
 EMAIL_OUTBOX_TEMPLATE_SQL = text(
     """
     SELECT
@@ -37,9 +41,11 @@ EMAIL_OUTBOX_TEMPLATE_SQL = text(
       count(*) FILTER (WHERE status = 'pending')::int AS pending,
       count(*) FILTER (WHERE status = 'sent')::int AS sent,
       count(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+      count(*) FILTER (WHERE status = 'delivery_delayed')::int AS delivery_delayed,
       count(*) FILTER (WHERE status = 'failed')::int AS failed,
       count(*) FILTER (WHERE status = 'bounced')::int AS bounced,
-      count(*) FILTER (WHERE status = 'complained')::int AS complained
+      count(*) FILTER (WHERE status = 'complained')::int AS complained,
+      count(*) FILTER (WHERE status = 'suppressed')::int AS suppressed
     FROM app.email_queue
     WHERE created_at >= :template_window_start
     GROUP BY template
