@@ -21,9 +21,6 @@
 
 ## v0.2.0 구현 게이트
 
-- [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
-      `PATCH/DELETE /trips/{trip_id}/days/{day_index}`에 `If-Match` 기준을 도입할지 결정하고,
-      도입 시 API 409 회귀, day rename/delete 충돌 다이얼로그, live e2e를 추가한다.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
       남은 범위: Admin live full catalog, release notes, tag, GitHub Release.
 

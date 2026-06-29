@@ -164,6 +164,7 @@ export const TripDayResponseSchema = z.object({
   date: z.string().date().nullable(),
   title: z.string().nullable(),
   note: z.string().nullable(),
+  version: z.number().int(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
 });
@@ -238,6 +239,7 @@ export const TripViewDaySchema = z.object({
   day_index: z.number().int(),
   date: z.string().date().nullable(),
   title: z.string().nullable(),
+  version: z.number().int(),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;

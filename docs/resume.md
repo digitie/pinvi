@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-29 (claude) — T-287 Trip Day optimistic lock
+
+day rename/delete에 trip/POI와 동일한 정수 version optimistic lock(`If-Match` 헤더)을 도입했다.
+migration 0036(`app.trip_days.version`), 서비스 version 검증/bump, `PATCH/DELETE /days/{index}`
+409 `VERSION_CONFLICT`, TripDay/TripView/CRUD + zod/api-client version 노출, TripDetail rename/delete
+version 전달 + 충돌 reload 안내, mobile deleteDay version 전달, 통합 테스트 추가. 검증: api
+ruff/format clean(py_compile OK; pytest/mypy는 CI), web typecheck 신규 0 + mobile typecheck pass +
+vitest(web 46 / domain 61) pass. live e2e는 T-259 게이트.
+
+**다음 한 작업**: backlog non-overlap task 선택(예 T-265 notice plan 작성기 / T-291-etl-sql-tests).
+신규 task 전 최근 PR 리뷰 코멘트 + 선점 확인(tasks-rule §6/§8).
+
 ## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
 
 `docs/execplan/sprint6-v1.0-plan.md`(남은 Sprint 6 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,

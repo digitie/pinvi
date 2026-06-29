@@ -6,6 +6,14 @@
 
 ## 2026-06-29
 
+- [x] T-287 — Trip Day optimistic lock API / conflict UX. (완료: 2026-06-29, claude)
+      day rename/delete 동시성을 trip/POI와 동일한 정수 version optimistic lock(`If-Match` 헤더)으로
+      도입. migration 0036으로 `app.trip_days.version` 추가(server_default 1), `PATCH/DELETE
+      /trips/{id}/days/{day_index}`가 If-Match version을 검증해 불일치 시 409 `VERSION_CONFLICT`.
+      TripDay/TripView/CRUD 응답 + zod/api-client에 version 노출, TripDetail rename/delete가 version
+      전달 + 충돌 시 reload+안내, mobile deleteDay도 version 전달. 통합 테스트(stale If-Match 409 +
+      정상 204/version bump) 추가. live e2e는 T-259 게이트에서.
+
 - [x] T-260 — Sprint 6 상세 실행 계획 / ADR 정리. (완료: 2026-06-29, claude)
       `docs/execplan/sprint6-v1.0-plan.md`(남은 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
       #315(T-261~263)에서 보류했던 경로 최적화 정책을 **ADR-053**(nearest-neighbor + 2-opt,
