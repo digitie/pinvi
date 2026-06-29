@@ -1,11 +1,14 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ProfileCompleteRequestSchema } from '@pinvi/schemas';
+import type { ConsentType } from '@pinvi/schemas';
 import { ApiClient, ApiError } from '@pinvi/api-client';
 import { z } from 'zod';
 import { FormField } from '@/components/forms/FormField';
+import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
@@ -120,6 +123,17 @@ export default function ProfileCompletePage() {
                 data-testid={`consent-required-${c.type}`}
               />
               <span>(필수) {c.label}</span>
+              {CONSENT_LEGAL_SLUG[c.type as ConsentType] && (
+                <Link
+                  href={`/legal/${CONSENT_LEGAL_SLUG[c.type as ConsentType]}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-legal-link underline"
+                  data-testid={`legal-link-${c.type}`}
+                >
+                  전문 보기
+                </Link>
+              )}
             </label>
           ))}
         </fieldset>
