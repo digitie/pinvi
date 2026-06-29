@@ -7,10 +7,8 @@
 
 ## 현재 선점 / 충돌 회피
 
-- 현재 Codex 선점 없음.
-- 열린 PR #321 — T-287 Trip Day optimistic lock / conflict UX.
+- Codex 다음 선점 예정: T-291-etl-sql-tests — `apps/etl/**` / audit retention 정책.
 - 열린 PR #227 — map marker tuning / tracking 문서.
-- T-291-etl-sql-tests — `apps/etl/**` / audit retention 정책.
 
 ## v0.2.0 구현 게이트
 
@@ -22,7 +20,6 @@
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
-- [ ] T-265 — Admin notice plan 작성기.
 - [ ] T-266 — MCP 외부 인터페이스 운영 실증.
 - [ ] T-268 — 한국 전용 geofencing 3중 안전망.
 - [ ] T-269 — LBS / 법무 4문서 / 동의 UX.

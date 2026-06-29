@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 완료
+
+**작업**: `/admin/notice-plans` 운영 작성기를 API/Web/Admin 문서까지 완료했다.
+
+**변경**:
+
+- `apps/api/app/api/v1/admin/notice_plans.py`, `apps/api/app/services/notice_plan.py`,
+  `apps/api/app/schemas/notice.py`에 plan CRUD, `If-Match` version conflict, POI CRUD/reorder,
+  soft delete, audit snapshot을 추가했다.
+- `packages/schemas`와 `packages/api-client`에 Admin notice plan/POI create/update/reorder 및
+  attachment client 계약을 추가했다.
+- Web Admin에 `/admin/notice-plans` 목록/필터, 신규 생성, 편집, `NoticePoiEditor`,
+  `NoticeAttachmentPanel`을 추가하고 sidebar/dashboard entry를 연결했다.
+- `docs/tasks.md`에서 완료된 T-265를 제거하고 `tasks-done.md`로 이관했다. 사용자 지시에 따라 다음
+  작업은 `T-291-etl-sql-tests`로 기록했다.
+- `docs/api/admin.md`에 Admin notice plan CRUD/POI/reorder/첨부 계약을 추가했다.
+- 로컬 `.env`의 RustFS bucket 값을 `pinvi-media`로 정렬했다.
+
+**검증**:
+
+- `ruff check` / `ruff format --check` (notice plan API/service/schema/tests)
+- `python -m mypy --strict` (notice plan API/service/schema)
+- `npm run typecheck --workspace packages/schemas`
+- `npm run typecheck --workspace packages/api-client`
+- `npm run typecheck --workspace apps/web`
+- `npm run lint --workspace apps/web`
+- `pytest test_admin_notice_plan_crud_api.py test_admin_curated_attachments_api.py test_admin_kor_travel_map_curated_import.py`
+  — 8 passed
+- `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-notice-plans.e2e.ts --workers=1`
+  — 2 passed
+
+**다음**: T-265 PR 머지 후 최신 main에서 T-291-etl-sql-tests를 진행한다.
+
 ## 2026-06-29 (claude) — T-287 Trip Day optimistic lock / conflict UX
 
 **작업**: day rename/delete에 trip/POI와 동일한 정수 version optimistic lock(If-Match) 도입.
@@ -15,6 +48,22 @@
 typecheck pass + vitest(web 46 / domain 61) pass.
 
 **다음**: backlog non-overlap task.
+
+## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 착수
+
+**작업**: PR #322 문서 정리 머지 후 T-265 Admin notice plan 작성기 브랜치를 시작했다.
+
+**변경**:
+
+- `docs/tasks.md`에 T-265 Codex 선점과 충돌 회피 범위를 기록했다.
+- `docs/resume.md`에 T-265 다음 작업과 병행 PR 회피 범위를 기록했다.
+
+**발견**: 최근 inline PR review comment는 없고, 최근 issue comments는 대부분 MCP review reminder다.
+열린 PR #321은 trip day optimistic lock 파일을 수정하므로 T-265에서 `trips` 영역은 건드리지 않는다.
+
+**다음**: CodeGraph로 existing `/admin/notice-plans`, curated plan/POI, Web notice plan 흐름을 확인한 뒤
+목록/생성/편집/POI editor 구현 범위를 확정한다.
+
 ## 2026-06-29 (codex) — T-113 / T-271 / T-272 / T-285 제거
 
 **작업**: 사용자 지시에 따라 T-113, T-271, T-272, T-285를 열린 backlog에서 제거했다.
@@ -208,7 +257,7 @@ main 기준으로 영향도를 다시 확인한다.
 
 - 최근 2일 PR review 확인: 2026-06-27 이후 inline review comment 없음.
 - `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest
-  tests/integration/test_security_boundaries_api.py -q --capture=no` 4 passed.
+tests/integration/test_security_boundaries_api.py -q --capture=no` 4 passed.
 
 **다음**: PR·CI·머지 후 T-284 Mobile v1.0 scope gate로 진입한다.
 
@@ -218,6 +267,7 @@ main 기준으로 영향도를 다시 확인한다.
 병행한다. 추적 문서를 먼저 docs-only PR로 머지(CI 생략 admin-merge)한 뒤 구현에 들어간다.
 
 **선정(2026-06-29 병행 작업 리포트 기준)**:
+
 - T-289 + T-290 — WebSocket reconnect/invalidation + Trip conflict UX 후속(프론트/`packages/api-client`).
 - T-291 — ETL failure sensor + compliance SQL 테스트(`apps/etl`).
 - T-261~T-263 — 경로 최적화(OR-Tools) + 스마트 정렬 API/UI(신규 `optimize` 모듈).
@@ -250,10 +300,10 @@ main 기준으로 영향도를 다시 확인한다.
 
 - `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m mypy --strict app` 통과.
 - `.venv/bin/ruff check app/middleware/rate_limit.py app/models/rate_limit.py
-  app/services/admin_rate_limit_abuse.py app/api/v1/admin/abuse.py app/services/admin_rbac.py
-  app/schemas/admin.py tests/integration/test_admin_abuse_api.py` 통과.
+app/services/admin_rate_limit_abuse.py app/api/v1/admin/abuse.py app/services/admin_rbac.py
+app/schemas/admin.py tests/integration/test_admin_abuse_api.py` 통과.
 - `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest
-  tests/integration/test_admin_abuse_api.py tests/unit/test_rate_limit_middleware.py -q --capture=no`
+tests/integration/test_admin_abuse_api.py tests/unit/test_rate_limit_middleware.py -q --capture=no`
   9 passed.
 - `npm run typecheck --workspace packages/schemas` 통과.
 - `npm run typecheck --workspace packages/api-client` 통과.

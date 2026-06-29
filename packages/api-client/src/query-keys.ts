@@ -73,6 +73,18 @@ export const queryKeys = {
     dedupReviewsAll: () => ['admin', 'dedup-reviews'] as const,
     categoryMappings: (params: { q?: string; includeCounts?: boolean; activeOnly?: boolean }) =>
       ['admin', 'category-mappings', params] as const,
+    noticePlans: (params: {
+      q?: string;
+      category?: string;
+      isPublished?: boolean;
+      limit?: number;
+    }) => ['admin', 'notice-plans', params] as const,
+    noticePlansAll: () => ['admin', 'notice-plans'] as const,
+    noticePlan: (planId: string) => ['admin', 'notice-plan', planId] as const,
+    noticePlanAttachments: (planId: string) =>
+      ['admin', 'notice-plan', planId, 'attachments'] as const,
+    noticePoiAttachments: (planId: string, poiId: string) =>
+      ['admin', 'notice-plan', planId, 'poi', poiId, 'attachments'] as const,
     integrityIssues: (params: {
       source?: string;
       status?: string;

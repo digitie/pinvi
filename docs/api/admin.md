@@ -17,65 +17,65 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 
 ## 2. 인덱스
 
-| Path                                                              | 용도                                                   | Sprint |
-| ----------------------------------------------------------------- | ------------------------------------------------------ | ------ |
-| `GET /admin/stats/overview`                                       | 대시보드 운영 통계/그래프 지표                         | 3      |
-| `GET /admin/system/summary` / `detail`                            | 의존 API / Docker container 상태                       | 4      |
-| `GET /admin/users` / `{user_id}` / `PATCH`                        | 사용자 목록 / 상세 / 편집                              | 3      |
-| `POST /admin/users/{id}/roles/grant\|revoke`                      | 사용자 role 부여 / 회수 + 감사                         | 6      |
-| `POST /admin/users/{id}/force-verify`                             | 강제 verify (디버그)                                   | 3      |
-| `GET /admin/users/{id}/sessions`                                  | 사용자 세션 목록(IP hash만 노출)                       | 6      |
-| `POST /admin/users/{id}/sessions/*`                               | 세션 단건/전체 강제 로그아웃                           | 6      |
-| `POST /admin/users/{id}/lifecycle/*`                              | 인증 재발송 / reset / 재활성화 / 삭제 대기 / 익명화    | 6      |
-| `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke, token version 증가)     | 3      |
-| `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                   | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제      | 4      |
-| `GET/PUT /admin/settings/avatar`                                  | 전역 아바타 업로드 크기 제한                           | 4      |
-| `PUT /admin/users/{id}/file-quota`                                | 사용자별 파일 용량 override                            | 4      |
-| `GET/PUT /admin/settings/files`                                   | 전역 파일 용량 정책                                    | 4      |
-| `GET/DELETE /admin/files[/{attachment_id}]`                       | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제          | 4      |
-| `GET /admin/trips` / `{trip_id}`                                  | trip 목록 / 상세                                       | 3      |
-| `GET/POST/DELETE /admin/trips/{trip_id}/operation*`               | trip/day 복사·이동·삭제와 영향도 조회                  | 4      |
-| `GET /admin/features` / `{feature_id}`                            | kor-travel-map admin feature 검색 / 상세 (read-only)   | 4      |
-| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]` | kor-travel-map feature 변경 요청 큐 검수 / audit       | 4      |
-| `GET /admin/pois` / `{poi_id}`                                    | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터)   | 3      |
-| `PATCH /admin/pois/{poi_id}/link-status`                          | POI feature 연결 상태 로컬 표시                        | 3      |
-| `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                 | POI 복사·이동·삭제와 영향도 조회                       | 4      |
-| `GET /admin/datasets`                                             | dataset 카탈로그                                       | 3      |
-| `GET /admin/datasets/{table_name}/rows`                           | row 조회 (검색/필터/정렬/page)                         | 3      |
-| `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`      | 통합 엔티티 CRUD                                       | 3      |
-| `GET /admin/api-calls`                                            | 외부 API 호출 로그 (`api_call_log`)                    | 3      |
-| `GET /admin/emails`                                               | 이메일 발송 큐 (`email_queue`)                         | 3      |
-| `GET /admin/emails/deliverability`                                | Resend 발송 가능 상태 / suppression 상태판             | 6      |
-| `POST /admin/emails/{id}/resend`                                  | 재발송                                                 | 3      |
-| `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)              | 3      |
-| `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                     | 3      |
-| `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                             | 6      |
-| `GET/POST /admin/abuse[/{override_id}/...]`                       | rate-limit bucket / abuse override 운영                | 6      |
-| `GET/POST /admin/dsr[/{id}/...]`                                  | 개인정보 권리행사 DSR CPO workflow                     | 6      |
-| `GET/POST /admin/moderation/reports[/{id}/...]`                   | 콘텐츠 신고 심사 / 숨김 / 게시중단 / 복구              | 6      |
-| `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute                 | 6      |
-| `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                       | 6      |
-| `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                             | 6      |
-| `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                     | 8      |
-| `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → kor_travel_map `/v1/admin/features*` 릴레이     | 8      |
-| `GET/PATCH/DELETE /admin/category-mappings[/{category_key}]`      | category catalog + Pinvi marker override               | 6      |
-| `GET /admin/etl/summary`                                          | Pinvi ETL registry + kor-travel-map ops 요약           | 5      |
-| `GET /admin/dedup-review`                                         | Record Linkage 후보 조회                               | 5      |
-| `POST /admin/dedup-review/{review_id}/verdict`                    | Record Linkage 후보 판정 + audit                       | 5      |
-| `GET /admin/features/{id}/sources`                                | source_links                                           | 5      |
-| `GET /admin/features/{id}/overrides`                              | feature_overrides                                      | 5      |
-| `GET /admin/features/{id}/weather-values`                         | weather timeline                                       | 5      |
-| `GET /admin/provider-sync` / `import-jobs`                        | provider/dataset sync 상태와 import job 조회           | 5      |
-| `GET /admin/integrity/issues` / `reports`                         | kor-travel-map consistency issue/report 조회           | 5      |
-| `GET /admin/debug/logs/system` / `api-calls`                      | kor-travel-map sanitized system/API logs 조회          | 5      |
-| `GET /admin/grafana/health`                                       | Grafana embed origin health probe                      | 5      |
-| `GET /admin/backup/snapshots`                                     | `app` schema backup snapshot 목록                      | 5      |
-| `POST /admin/backup/snapshot`                                     | 수동 backup snapshot 생성 + audit                      | 5      |
-| `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                | MCP 토큰 검색 / 대리 발급 / 강제 회수                  | 6      |
-| `GET /admin/rbac/permission-matrix`                               | Admin role별 endpoint 권한 matrix                      | 6      |
-| `GET /admin/rustfs/objects` / `DELETE`                            | RustFS 객체 관리                                       | 2      |
-| `GET/POST /admin/seed/scenarios[/{scenario_key}]`                 | dev/staging seed scenario dry-run                      | 3      |
-| `GET /admin/reset/status` / `POST /admin/reset`                   | dev/staging reset dry-run                              | 3      |
+| Path                                                              | 용도                                                 | Sprint |
+| ----------------------------------------------------------------- | ---------------------------------------------------- | ------ |
+| `GET /admin/stats/overview`                                       | 대시보드 운영 통계/그래프 지표                       | 3      |
+| `GET /admin/system/summary` / `detail`                            | 의존 API / Docker container 상태                     | 4      |
+| `GET /admin/users` / `{user_id}` / `PATCH`                        | 사용자 목록 / 상세 / 편집                            | 3      |
+| `POST /admin/users/{id}/roles/grant\|revoke`                      | 사용자 role 부여 / 회수 + 감사                       | 6      |
+| `POST /admin/users/{id}/force-verify`                             | 강제 verify (디버그)                                 | 3      |
+| `GET /admin/users/{id}/sessions`                                  | 사용자 세션 목록(IP hash만 노출)                     | 6      |
+| `POST /admin/users/{id}/sessions/*`                               | 세션 단건/전체 강제 로그아웃                         | 6      |
+| `POST /admin/users/{id}/lifecycle/*`                              | 인증 재발송 / reset / 재활성화 / 삭제 대기 / 익명화  | 6      |
+| `POST /admin/users/{id}/disable`                                  | 비활성화 (refresh 전부 revoke, token version 증가)   | 3      |
+| `POST/PUT/GET/DELETE /admin/users/{id}/avatar*`                   | 사용자 아바타 업로드 URL / 교체 / 조회 URL / 삭제    | 4      |
+| `GET/PUT /admin/settings/avatar`                                  | 전역 아바타 업로드 크기 제한                         | 4      |
+| `PUT /admin/users/{id}/file-quota`                                | 사용자별 파일 용량 override                          | 4      |
+| `GET/PUT /admin/settings/files`                                   | 전역 파일 용량 정책                                  | 4      |
+| `GET/DELETE /admin/files[/{attachment_id}]`                       | 여행/날짜/POI 파일 검색 / 다운로드 URL / 삭제        | 4      |
+| `GET /admin/trips` / `{trip_id}`                                  | trip 목록 / 상세                                     | 3      |
+| `GET/POST/DELETE /admin/trips/{trip_id}/operation*`               | trip/day 복사·이동·삭제와 영향도 조회                | 4      |
+| `GET /admin/features` / `{feature_id}`                            | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
+| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]` | kor-travel-map feature 변경 요청 큐 검수 / audit     | 4      |
+| `GET /admin/pois` / `{poi_id}`                                    | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
+| `PATCH /admin/pois/{poi_id}/link-status`                          | POI feature 연결 상태 로컬 표시                      | 3      |
+| `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                 | POI 복사·이동·삭제와 영향도 조회                     | 4      |
+| `GET /admin/datasets`                                             | dataset 카탈로그                                     | 3      |
+| `GET /admin/datasets/{table_name}/rows`                           | row 조회 (검색/필터/정렬/page)                       | 3      |
+| `GET/POST/PATCH/DELETE /admin/entities/{entity}[/{item_id}]`      | 통합 엔티티 CRUD                                     | 3      |
+| `GET /admin/api-calls`                                            | 외부 API 호출 로그 (`api_call_log`)                  | 3      |
+| `GET /admin/emails`                                               | 이메일 발송 큐 (`email_queue`)                       | 3      |
+| `GET /admin/emails/deliverability`                                | Resend 발송 가능 상태 / suppression 상태판           | 6      |
+| `POST /admin/emails/{id}/resend`                                  | 재발송                                               | 3      |
+| `GET /admin/audit`                                                | `admin_audit_log` (read-only, chain 검증)            | 3      |
+| `GET /admin/audit/location`                                       | `location_access_log` (CPO 권한만)                   | 3      |
+| `GET/POST /admin/incidents[/{id}/...]`                            | PIPA 침해사고 CPO workflow                           | 6      |
+| `GET/POST /admin/abuse[/{override_id}/...]`                       | rate-limit bucket / abuse override 운영              | 6      |
+| `GET/POST /admin/dsr[/{id}/...]`                                  | 개인정보 권리행사 DSR CPO workflow                   | 6      |
+| `GET/POST /admin/moderation/reports[/{id}/...]`                   | 콘텐츠 신고 심사 / 숨김 / 게시중단 / 복구            | 6      |
+| `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute               | 6      |
+| `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                     | 6      |
+| `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                           | 6      |
+| `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
+| `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
+| `GET/PATCH/DELETE /admin/category-mappings[/{category_key}]`      | category catalog + Pinvi marker override             | 6      |
+| `GET /admin/etl/summary`                                          | Pinvi ETL registry + kor-travel-map ops 요약         | 5      |
+| `GET /admin/dedup-review`                                         | Record Linkage 후보 조회                             | 5      |
+| `POST /admin/dedup-review/{review_id}/verdict`                    | Record Linkage 후보 판정 + audit                     | 5      |
+| `GET /admin/features/{id}/sources`                                | source_links                                         | 5      |
+| `GET /admin/features/{id}/overrides`                              | feature_overrides                                    | 5      |
+| `GET /admin/features/{id}/weather-values`                         | weather timeline                                     | 5      |
+| `GET /admin/provider-sync` / `import-jobs`                        | provider/dataset sync 상태와 import job 조회         | 5      |
+| `GET /admin/integrity/issues` / `reports`                         | kor-travel-map consistency issue/report 조회         | 5      |
+| `GET /admin/debug/logs/system` / `api-calls`                      | kor-travel-map sanitized system/API logs 조회        | 5      |
+| `GET /admin/grafana/health`                                       | Grafana embed origin health probe                    | 5      |
+| `GET /admin/backup/snapshots`                                     | `app` schema backup snapshot 목록                    | 5      |
+| `POST /admin/backup/snapshot`                                     | 수동 backup snapshot 생성 + audit                    | 5      |
+| `GET/POST /admin/mcp-tokens` / `{token_id}/revoke`                | MCP 토큰 검색 / 대리 발급 / 강제 회수                | 6      |
+| `GET /admin/rbac/permission-matrix`                               | Admin role별 endpoint 권한 matrix                    | 6      |
+| `GET /admin/rustfs/objects` / `DELETE`                            | RustFS 객체 관리                                     | 2      |
+| `GET/POST /admin/seed/scenarios[/{scenario_key}]`                 | dev/staging seed scenario dry-run                    | 3      |
+| `GET /admin/reset/status` / `POST /admin/reset`                   | dev/staging reset dry-run                            | 3      |
 
 ## 2.0 Admin RBAC / Permission Matrix
 
@@ -239,7 +239,7 @@ GET /admin/abuse?limit_name=auth_low&page_size=100
     "configured_backend": "auto",
     "effective_backend": "postgres",
     "fail_closed": true,
-    "store_status": "ok"
+    "store_status": "ok",
   },
   "rate_limited_bucket_count": 1,
   "active_override_count": 1,
@@ -251,21 +251,19 @@ GET /admin/abuse?limit_name=auth_low&page_size=100
       "count": 9,
       "limit": 5,
       "rate_limited": true,
-      "status": "blocked"
-    }
+      "status": "blocked",
+    },
   ],
-  "suspicious": [
-    { "signal": "auth_low_repeated_attempt", "bucket": { "limit_name": "auth_low" } }
-  ],
+  "suspicious": [{ "signal": "auth_low_repeated_attempt", "bucket": { "limit_name": "auth_low" } }],
   "overrides": [
     {
       "override_id": "00000000-0000-0000-0000-000000000000",
       "identity_label": "ip_email_hash:123456abcdef",
       "action": "blocked",
       "status": "blocked",
-      "expires_at": "2026-06-29T10:00:00Z"
-    }
-  ]
+      "expires_at": "2026-06-29T10:00:00Z",
+    },
+  ],
 }
 ```
 
@@ -283,18 +281,18 @@ POST /admin/abuse/overrides
   "email": "user@example.com",
   "action": "blocked",
   "ttl_minutes": 60,
-  "access_reason": "credential stuffing 대응"
+  "access_reason": "credential stuffing 대응",
 }
 ```
 
 정책별 identity:
 
-| `limit_name`                                                    | `identity_kind` |
-| --------------------------------------------------------------- | --------------- |
-| `public`, `oauth`                                               | `ip`            |
-| `auth_low`                                                      | `ip_email`      |
+| `limit_name`                                                                     | `identity_kind` |
+| -------------------------------------------------------------------------------- | --------------- |
+| `public`, `oauth`                                                                | `ip`            |
+| `auth_low`                                                                       | `ip_email`      |
 | `authenticated_default`, `feature_search`, `trip_exports`, `storage_upload_urls` | `user`          |
-| `shared_trip`                                                   | `shared_token`  |
+| `shared_trip`                                                                    | `shared_token`  |
 
 `blocked` override는 Postgres backend에서 해당 bucket을 즉시 `429 RATE_LIMIT_BLOCKED`로 막고,
 `allowed` override는 TTL 동안 counter hit를 우회한다. Rollback은 다음 body를 사용한다.
@@ -302,7 +300,7 @@ POST /admin/abuse/overrides
 ```jsonc
 {
   "access_reason": "false positive 확인",
-  "rollback_reason": "support 확인 완료"
+  "rollback_reason": "support 확인 완료",
 }
 ```
 
@@ -1762,7 +1760,7 @@ upstream category code가 존재할 때만 Pinvi-local override를 upsert한다.
   "display_name_ko": "부산 해수욕장",
   "marker_color": "P-03",
   "marker_icon": "beach",
-  "access_reason": "운영 팔레트 정정"
+  "access_reason": "운영 팔레트 정정",
 }
 ```
 
@@ -1779,7 +1777,7 @@ Pinvi-local override row를 삭제한다. upstream `kor-travel-map` category cat
 
 ```jsonc
 {
-  "access_reason": "override 원복"
+  "access_reason": "override 원복",
 }
 ```
 
@@ -1787,7 +1785,122 @@ Pinvi-local override row를 삭제한다. upstream `kor-travel-map` category cat
 
 ## 12. Notice Plan 관리
 
-자세히는 [`notice-plans.md`](./notice-plans.md) Admin 섹션.
+`/admin/notice-plans`는 `app.curated_trip_plans` / `app.curated_plan_pois`를 운영자가 직접
+작성·편집하는 표면이다. 내부 정본은 curated 명명이고, 외부 Admin/Web 계약은 기존 public
+`/notice-plans` 호환을 위해 `notice_plan_id` / `notice_poi_id` alias를 유지한다. Public 사용자
+복사 흐름은 [`notice-plans.md`](./notice-plans.md)를 따른다.
+
+권한: `admin`
+
+공통:
+
+- 모든 mutation은 `admin_audit_log`에 `curated_plan.*` 또는 `curated_poi.*` action으로 기록된다.
+- `PATCH` / `DELETE`는 선택적으로 `If-Match: <version>`을 받는다. 현재 row `version`과 다르면
+  `409 VERSION_CONFLICT`를 반환한다.
+- 삭제는 soft delete다. RustFS object 삭제는 수행하지 않는다.
+
+### 12.1 Plan CRUD
+
+```http
+GET /admin/notice-plans?q=서울&category=cafe&is_published=false&limit=100
+POST /admin/notice-plans
+GET /admin/notice-plans/{plan_id}
+PATCH /admin/notice-plans/{plan_id}
+DELETE /admin/notice-plans/{plan_id}
+```
+
+`GET /admin/notice-plans` query:
+
+| 이름           | 설명                                     |
+| -------------- | ---------------------------------------- |
+| `q`            | slug/title/summary/destination 부분 검색 |
+| `category`     | category 완전 일치                       |
+| `is_published` | 공개 여부 필터                           |
+| `limit`        | 1~200, 기본 100                          |
+
+생성 요청:
+
+```jsonc
+{
+  "slug": "seoul-cafe",
+  "title": "서울 카페 산책",
+  "category": "cafe",
+  "summary": "성수와 한남을 잇는 반나절 코스",
+  "source_name": "Pinvi",
+  "destination": "서울",
+  "starts_on": "2026-07-01",
+  "ends_on": "2026-07-02",
+  "is_published": false,
+}
+```
+
+응답은 `NoticePlanResponse`이며 상세 조회에는 `pois[]`가 포함된다.
+
+### 12.2 POI CRUD / Reorder
+
+```http
+POST /admin/notice-plans/{plan_id}/pois
+POST /admin/notice-plans/{plan_id}/pois/reorder
+PATCH /admin/notice-plans/{plan_id}/pois/{poi_id}
+DELETE /admin/notice-plans/{plan_id}/pois/{poi_id}
+```
+
+POI 생성 요청:
+
+```jsonc
+{
+  "day_index": 1,
+  "sort_order": "001000",
+  "feature_id": "feature::cafe::seongsu",
+  "feature_snapshot": { "display_name": "성수 카페" },
+  "memo": "오후 방문",
+  "budget_amount": "12000",
+  "currency": "KRW",
+  "user_url": "https://example.com/cafe",
+  "custom_marker_color": "P-07",
+  "custom_marker_icon": "cafe",
+}
+```
+
+Reorder 요청:
+
+```jsonc
+{
+  "items": [
+    {
+      "notice_poi_id": "00000000-0000-0000-0000-000000000000",
+      "day_index": 2,
+      "sort_order": "000500",
+    },
+  ],
+}
+```
+
+`notice_poi_id` 중복, 존재하지 않는 POI, 다른 plan의 POI는 거부한다.
+
+### 12.3 첨부
+
+기존 curated attachment 경로를 Admin 작성기에서도 사용한다.
+
+```http
+GET /admin/notice-plans/{plan_id}/attachments
+POST /admin/notice-plans/{plan_id}/attachments
+DELETE /admin/notice-plans/{plan_id}/attachments/{attachment_id}
+
+GET /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments
+POST /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments
+DELETE /admin/notice-plans/{plan_id}/pois/{poi_id}/attachments/{attachment_id}
+```
+
+업로드 순서:
+
+1. `POST /storage/upload-urls`에 `purpose=curated_plan_attachment` 또는 `curated_poi_attachment`
+   로 presigned PUT URL을 발급받는다.
+2. RustFS에 PUT 업로드한다.
+3. 위 Admin attachment POST에 `bucket`, `storage_key`, 파일 metadata를 등록한다.
+
+`bucket`은 `PINVI_RUSTFS_BUCKET`(`pinvi-media`)과 같아야 하고, `storage_key` prefix는 발급받은
+purpose/관리자 사용자 id와 일치해야 한다. 불일치 시 `422 INVALID_ATTACHMENT_STORAGE_REF`를 반환한다.
 
 ## 13. ETL / Record Linkage / 데이터 일관성
 

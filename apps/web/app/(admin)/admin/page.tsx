@@ -364,6 +364,7 @@ export default function AdminDashboardPage() {
           <li>T-211 ETL/provider sync 운영 화면과 Dagster 연결.</li>
           <li>T-212 Dedup review, integrity, debug logs.</li>
           <li>T-213 카테고리 매핑, T-214 dev-only seed/reset, T-215 N150 배치 검증.</li>
+          <li>T-265 추천 여행 작성기: 목록/생성/편집/POI/첨부 관리.</li>
         </ul>
       </Section>
     </AdminPage>
