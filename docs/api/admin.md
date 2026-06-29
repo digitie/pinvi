@@ -2536,6 +2536,9 @@ Content-Type: application/json
 - Web `/admin/backup`의 Restore 버튼은
   `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`로 빌드된 staging/운영 검증 이미지에서만
   활성화된다. production 기본값은 `0`이며, API endpoint의 서버 측 실행 가드는 별도로 유지한다.
+  UI는 운영 사유, schema-swap 확인 체크, snapshot 파일명 직접 입력을 모두 통과해야 요청을 보낸다.
+  요청 중에는 dialog 닫기를 잠그고 pending phase를 표시하며, 완료 후 응답의 phase/schema 결과를
+  표시한다.
 - audit: 성공 시 `action="backup.restore_hotswap"`, 실패 시
   `action="backup.restore_hotswap_failed"` 기록
 - 실패: snapshot 없음 `404 BACKUP_SNAPSHOT_NOT_FOUND`, 스크립트 실패

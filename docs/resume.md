@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 착수
+
+신규 개발 task 진입 전 `tasks.md`를 다시 정리했다. 완료·머지·검증 이력은 계속
+`tasks-done.md`에만 두고, 반복 계획·체크리스트는 `tasks-rule.md`로 올렸다. `tasks.md`에는 현재
+선점(T-267), 충돌 회피(PR #227 map marker/tracking, T-291-etl-sql-tests), 열린 backlog만 남겼다.
+
+Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap, 실행 중 닫기
+잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/result 표시를 추가했다.
+`admin-backup.e2e.ts`는 기본 잠금 경로와 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` enabled
+경로를 모두 검증한다. Admin API 계약은 변경하지 않았다.
+
+검증: `npm run typecheck --workspace apps/web`, `npm run lint --workspace apps/web`, `git diff --check`,
+N150 Playwright Docker runner 기본 `admin-backup.e2e.ts`(2 passed, 1 skipped), enabled flag
+`admin-backup.e2e.ts`(3 passed)를 통과했다. CodeGraph sync/status도 up to date다.
+
+**다음 한 작업**: PR CI/머지 후 `tasks.md`에서 T-267 선점을 제거하고 `tasks-done.md`로 이관한 뒤,
+T-285를 피하고 열린 PR #227/T-291-etl-sql-tests 충돌 영역을 제외한 다음 task로 이동한다.
+
 ## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
 
 `docs/execplan/sprint6-v1.0-plan.md`(남은 Sprint 6 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
