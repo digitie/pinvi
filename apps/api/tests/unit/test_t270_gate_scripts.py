@@ -50,6 +50,62 @@ def test_api_p95_latency_summary_fails_on_error_rate() -> None:
     assert summary.error_rate == 0.5
 
 
+def test_api_p95_latency_summary_counts_4xx_as_error_by_default() -> None:
+    script = _load_script("tests/load/api_p95_latency.py")
+    samples = [
+        script.Sample(path="/secret", status_code=200, elapsed_ms=10.0),
+        script.Sample(path="/secret", status_code=401, elapsed_ms=5.0),
+        script.Sample(path="/secret", status_code=404, elapsed_ms=5.0),
+    ]
+
+    summary = script.summarize(samples, p95_ms_threshold=50.0, max_error_rate=0.0)
+
+    # Without this, a 401/403/404 path returns quickly and yields a false PASS.
+    assert summary.passed is False
+    assert summary.errors == 2
+
+
+def test_api_p95_latency_summary_honors_expect_status_allowlist() -> None:
+    script = _load_script("tests/load/api_p95_latency.py")
+    samples = [
+        script.Sample(path="/secret", status_code=401, elapsed_ms=5.0),
+        script.Sample(path="/secret", status_code=401, elapsed_ms=6.0),
+    ]
+
+    summary = script.summarize(
+        samples,
+        p95_ms_threshold=50.0,
+        max_error_rate=0.0,
+        expected_statuses=frozenset({401}),
+    )
+
+    assert summary.passed is True
+    assert summary.errors == 0
+
+
+def test_cors_rejection_flags_reflected_attacker_origin() -> None:
+    script = _load_script("tests/security/csp_cors_rate_limit.py")
+    headers = {
+        "access-control-allow-origin": "https://evil.example.com",
+        "access-control-allow-credentials": "true",
+    }
+
+    findings = script.cors_rejection_findings(headers, attacker_origin="https://evil.example.com")
+
+    assert any("reflected" in finding for finding in findings)
+    assert any("granted to disallowed origin" in finding for finding in findings)
+
+
+def test_cors_rejection_passes_when_attacker_origin_not_reflected() -> None:
+    script = _load_script("tests/security/csp_cors_rate_limit.py")
+    # Starlette omits the header entirely for a disallowed origin.
+    headers: dict[str, str] = {}
+
+    findings = script.cors_rejection_findings(headers, attacker_origin="https://evil.example.com")
+
+    assert findings == []
+
+
 def test_security_header_findings_accept_expected_headers() -> None:
     script = _load_script("tests/security/csp_cors_rate_limit.py")
     headers = {

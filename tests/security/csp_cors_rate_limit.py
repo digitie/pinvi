@@ -44,7 +44,9 @@ def security_header_findings(
             findings.append(f"{name}: expected {expected!r}, got {actual!r}")
     if require_csp and not headers.get("content-security-policy"):
         findings.append("content-security-policy: missing")
-    if require_hsts and not headers.get("strict-transport-security", "").startswith("max-age="):
+    if require_hsts and not headers.get("strict-transport-security", "").startswith(
+        "max-age="
+    ):
         findings.append("strict-transport-security: missing or invalid")
     return findings
 
@@ -59,11 +61,44 @@ def cors_findings(
     allow_origin = headers.get("access-control-allow-origin")
     allow_credentials = headers.get("access-control-allow-credentials")
     if allow_origin != origin:
-        findings.append(f"access-control-allow-origin: expected {origin!r}, got {allow_origin!r}")
+        findings.append(
+            f"access-control-allow-origin: expected {origin!r}, got {allow_origin!r}"
+        )
     if require_credentials and allow_credentials != "true":
         findings.append("access-control-allow-credentials: expected 'true'")
     if allow_origin == "*" and allow_credentials == "true":
         findings.append("cors: wildcard origin cannot be combined with credentials")
+    return findings
+
+
+def cors_rejection_findings(
+    headers: dict[str, str],
+    *,
+    attacker_origin: str,
+) -> list[str]:
+    """Findings for a preflight from a disallowed (attacker-controlled) origin.
+
+    A server that echoes *any* Origin back in ``Access-Control-Allow-Origin``
+    (origin reflection) together with credentials is the classic exploitable
+    CORS bug. The happy-path probe in :func:`cors_findings` never catches it
+    because it only sends the legitimate origin, so this probe sends a hostile
+    origin and asserts it is NOT reflected and credentials are NOT granted.
+    """
+    findings: list[str] = []
+    allow_origin = headers.get("access-control-allow-origin")
+    allow_credentials = headers.get("access-control-allow-credentials")
+    if allow_origin == attacker_origin:
+        findings.append(
+            f"access-control-allow-origin: attacker origin {attacker_origin!r} was reflected"
+        )
+    if allow_origin == "*":
+        findings.append(
+            "access-control-allow-origin: wildcard returned for disallowed origin"
+        )
+    if allow_credentials == "true" and allow_origin in {attacker_origin, "*"}:
+        findings.append(
+            "access-control-allow-credentials: granted to disallowed origin"
+        )
     return findings
 
 
@@ -104,6 +139,7 @@ def run_probe(
     require_hsts: bool,
     rate_limit_path: str | None,
     rate_limit_attempts: int,
+    attacker_origin: str = "https://evil.example.com",
 ) -> list[ProbeResult]:
     _, security_headers = _request(
         base_url,
@@ -112,7 +148,9 @@ def run_probe(
         timeout_seconds=timeout_seconds,
     )
     security = security_header_findings(security_headers, require_hsts=require_hsts)
-    results = [ProbeResult(name="security_headers", findings=security, passed=not security)]
+    results = [
+        ProbeResult(name="security_headers", findings=security, passed=not security)
+    ]
 
     _, cors_headers = _request(
         base_url,
@@ -128,26 +166,61 @@ def run_probe(
     cors = cors_findings(cors_headers, origin=origin)
     results.append(ProbeResult(name="cors", findings=cors, passed=not cors))
 
+    _, attacker_cors_headers = _request(
+        base_url,
+        security_path,
+        method="OPTIONS",
+        headers={
+            "Origin": attacker_origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+        timeout_seconds=timeout_seconds,
+    )
+    cors_rejection = cors_rejection_findings(
+        attacker_cors_headers, attacker_origin=attacker_origin
+    )
+    results.append(
+        ProbeResult(
+            name="cors_rejection", findings=cors_rejection, passed=not cors_rejection
+        )
+    )
+
     if rate_limit_path and rate_limit_attempts > 0:
         status_codes = [
             _request(base_url, rate_limit_path, timeout_seconds=timeout_seconds)[0]
             for _ in range(rate_limit_attempts)
         ]
         rate_limit = rate_limit_findings(status_codes)
-        results.append(ProbeResult(name="rate_limit", findings=rate_limit, passed=not rate_limit))
+        results.append(
+            ProbeResult(name="rate_limit", findings=rate_limit, passed=not rate_limit)
+        )
     else:
-        results.append(ProbeResult(name="rate_limit", findings=["probe skipped"], passed=True))
+        results.append(
+            ProbeResult(name="rate_limit", findings=["probe skipped"], passed=True)
+        )
 
     return results
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Check API CSP/CORS/rate-limit boundaries.")
+    parser = argparse.ArgumentParser(
+        description="Check API CSP/CORS/rate-limit boundaries."
+    )
     parser.add_argument(
         "--base-url",
         default=os.environ.get("PINVI_API_BASE_URL", "http://127.0.0.1:12801"),
     )
-    parser.add_argument("--origin", default=os.environ.get("PINVI_WEB_ORIGIN", "http://127.0.0.1:12805"))
+    parser.add_argument(
+        "--origin", default=os.environ.get("PINVI_WEB_ORIGIN", "http://127.0.0.1:12805")
+    )
+    parser.add_argument(
+        "--attacker-origin",
+        default=os.environ.get(
+            "PINVI_CORS_ATTACKER_ORIGIN", "https://evil.example.com"
+        ),
+        help="Disallowed origin used to probe for CORS origin reflection.",
+    )
     parser.add_argument("--security-path", default="/health")
     parser.add_argument("--timeout-seconds", type=float, default=5.0)
     parser.add_argument("--require-hsts", action="store_true")
@@ -166,6 +239,7 @@ def main() -> int:
         require_hsts=bool(args.require_hsts),
         rate_limit_path=str(args.rate_limit_path) or None,
         rate_limit_attempts=max(0, int(args.rate_limit_attempts)),
+        attacker_origin=str(args.attacker_origin),
     )
     payload: dict[str, Any] = {
         "base_url": args.base_url,

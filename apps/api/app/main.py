@@ -25,7 +25,10 @@ from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
-from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.security_headers import (
+    SecurityHeadersMiddleware,
+    security_headers_exception_handler,
+)
 from app.services.bootstrap_admin import ensure_bootstrap_admin
 from app.services.email_service import email_outbox_worker_lifespan
 from app.services.location_audit import location_audit_outbox_worker_lifespan
@@ -84,6 +87,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+# Unhandled errors → 500 carrying baseline security headers. Registered as a handler
+# (not caught in SecurityHeadersMiddleware) so ServerErrorMiddleware still re-raises:
+# the traceback is logged by the server and exception-propagation tests keep working. (#343)
+app.add_exception_handler(Exception, security_headers_exception_handler)
 
 if settings.pinvi_prometheus_metrics_enabled:
     app.add_api_route(
