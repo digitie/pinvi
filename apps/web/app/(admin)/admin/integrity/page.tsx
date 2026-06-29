@@ -108,9 +108,20 @@ export default function AdminIntegrityPage() {
   const [mutationNotice, setMutationNotice] = useState<string | null>(null);
   const actionDialogRef = useRef<HTMLElement | null>(null);
   const accessReasonRef = useRef<HTMLTextAreaElement | null>(null);
+  const actionTriggerRef = useRef<HTMLElement | null>(null);
 
   const closeIssueActionDialog = () => {
     setSelectedIssue(null);
+    // Clear per-issue input/error so reopening for a different issue never shows
+    // the previous issue's reason text or error (#347).
+    setAccessReason('');
+    setMapReason('');
+    setMutationError(null);
+    // Return focus to the row action button that opened the dialog (WCAG 2.4.3);
+    // Esc/backdrop/cancel would otherwise drop focus to <body> (#347).
+    const trigger = actionTriggerRef.current;
+    actionTriggerRef.current = null;
+    trigger?.focus();
   };
 
   useEffect(() => {
@@ -200,8 +211,6 @@ export default function AdminIntegrityPage() {
         `${result.issue.issue_id} issue를 ${ACTION_LABEL[result.action]} 처리했습니다.`,
       );
       closeIssueActionDialog();
-      setAccessReason('');
-      setMapReason('');
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.integrityIssuesAll() });
       void issuesQuery.refetch();
     },
@@ -291,7 +300,8 @@ export default function AdminIntegrityPage() {
             <button
               key={action}
               type="button"
-              onClick={() => {
+              onClick={(event) => {
+                actionTriggerRef.current = event.currentTarget;
                 setSelectedIssue(item);
                 setSelectedAction(action);
                 setAccessReason('');

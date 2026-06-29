@@ -175,6 +175,17 @@ async def _collect_pinvi_app_integrity_issues(
     feature_id: str | None,
     limit: int,
 ) -> list[AdminIntegrityIssueRecord]:
+    if limit <= 0:
+        return []
+
+    # Persisted rows and recomputed rules overlap (the producer persists an active
+    # issue that the read-side rules also re-derive), so dedup must run over the FULL
+    # candidate stream before the page is sliced. If we capped the computed scan at
+    # ``limit - len(persisted)`` and deduped afterwards, a duplicate would shrink the
+    # window below ``limit`` and silently consume the ``+1`` probe used to compute
+    # ``next_cursor`` (#345). Each unique issue appears at most once per source, so
+    # scanning ``limit`` from each source guarantees at least ``limit`` unique issues
+    # survive dedup whenever that many exist.
     issues: list[AdminIntegrityIssueRecord] = []
     issues.extend(
         await _persisted_violations(
@@ -186,20 +197,19 @@ async def _collect_pinvi_app_integrity_issues(
             limit=limit,
         )
     )
-    remaining = max(limit - len(issues), 0)
-    if remaining == 0:
-        return _dedupe_issues(issues)
-
-    computed = await _computed_known_violations(
-        db,
-        status_filter=status_filter,
-        severity=severity,
-        violation_type=violation_type,
-        feature_id=feature_id,
-        limit=remaining,
+    issues.extend(
+        await _computed_known_violations(
+            db,
+            status_filter=status_filter,
+            severity=severity,
+            violation_type=violation_type,
+            feature_id=feature_id,
+            limit=limit,
+        )
     )
-    issues.extend(computed)
-    issues.sort(key=lambda item: item.detected_at, reverse=True)
+    # Stable secondary key (issue_id) keeps offset pagination deterministic when rows
+    # share ``detected_at`` (bulk-produced rows often do) (#346).
+    issues.sort(key=lambda item: (item.detected_at, item.issue_id), reverse=True)
     return _dedupe_issues(issues)[:limit]
 
 
@@ -229,7 +239,12 @@ async def _persisted_violations(
                 DataIntegrityViolation.details["feature_id"].astext == feature_id,
             )
         )
-    stmt = stmt.order_by(DataIntegrityViolation.detected_at.desc()).limit(limit)
+    # Stable secondary key (id) so equal ``detected_at`` rows keep a deterministic
+    # order across re-scanned offset pages (#346).
+    stmt = stmt.order_by(
+        DataIntegrityViolation.detected_at.desc(),
+        DataIntegrityViolation.id.desc(),
+    ).limit(limit)
     rows = (await db.scalars(stmt)).all()
     return [_stored_violation_to_issue(row) for row in rows]
 

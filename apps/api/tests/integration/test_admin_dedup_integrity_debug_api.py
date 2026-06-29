@@ -23,7 +23,10 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
-from app.services.admin_app_integrity import produce_pinvi_app_integrity_violations
+from app.services.admin_app_integrity import (
+    list_pinvi_app_integrity_issue_page,
+    produce_pinvi_app_integrity_violations,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -691,6 +694,141 @@ async def test_pinvi_app_integrity_producer_upserts_active_violation(
 
     assert len(rows) == 1
     assert rows[0].details["feature_id"] == "feature-producer"
+
+
+async def _list_app_integrity_page(db: Any, *, page_size: int, cursor: str | None) -> Any:
+    return await list_pinvi_app_integrity_issue_page(
+        db,
+        status_filter="open",
+        severity=None,
+        violation_type=None,
+        provider=None,
+        dataset_key=None,
+        feature_id=None,
+        page_size=page_size,
+        cursor=cursor,
+    )
+
+
+async def test_pinvi_app_integrity_pagination_survives_persisted_overlap(
+    session_factory: Any,
+) -> None:
+    """#345: reading after the producer persists rows that the read-side rules also
+    recompute must still paginate every issue.
+
+    Dedup of the persisted/recomputed overlap must not consume the ``has_more`` probe
+    and silently drop the tail. Before the fix, page 1 returned only the two persisted
+    issues with ``next_cursor=None``, dropping the recompute-only third issue.
+    """
+    owner_id = await _create_user(
+        session_factory, email="integrity-overlap@example.com", roles=["user", "admin"]
+    )
+    trip_id = uuid.uuid4()
+    poi_a = uuid.uuid4()
+    poi_b = uuid.uuid4()
+    poi_c = uuid.uuid4()
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add(Trip(trip_id=trip_id, owner_user_id=owner_id, title="overlap", status="planned"))
+        await db.flush()
+        db.add(TripDay(trip_id=trip_id, day_index=1))
+        await db.flush()
+        db.add_all(
+            [
+                TripDayPoi(
+                    attachment_id=poi_a,
+                    trip_id=trip_id,
+                    day_index=1,
+                    sort_order="a0",
+                    feature_id="feature-overlap-a",
+                    feature_link_broken_at=now,
+                    added_by_user_id=owner_id,
+                ),
+                TripDayPoi(
+                    attachment_id=poi_b,
+                    trip_id=trip_id,
+                    day_index=1,
+                    sort_order="a1",
+                    feature_id="feature-overlap-b",
+                    feature_link_broken_at=now - timedelta(minutes=2),
+                    added_by_user_id=owner_id,
+                ),
+            ]
+        )
+        await db.flush()
+        # Producer persists the two issues known at this point.
+        assert await produce_pinvi_app_integrity_violations(db, limit=10) == 2
+        # A third issue appears AFTER the producer ran: poi_a/poi_b now exist both
+        # persisted and recomputed (overlap), while poi_c exists only as a recomputed
+        # rule row. Its detected_at sits between poi_a and poi_b so the recompute probe
+        # would otherwise be spent on a duplicate of poi_a.
+        db.add(
+            TripDayPoi(
+                attachment_id=poi_c,
+                trip_id=trip_id,
+                day_index=1,
+                sort_order="a2",
+                feature_id="feature-overlap-c",
+                feature_link_broken_at=now - timedelta(minutes=1),
+                added_by_user_id=owner_id,
+            )
+        )
+        await db.commit()
+
+    async with session_factory() as db:
+        first = await _list_app_integrity_page(db, page_size=2, cursor=None)
+        assert first.next_cursor is not None, "tail issue would be dropped without a next page"
+        second = await _list_app_integrity_page(db, page_size=2, cursor=first.next_cursor)
+
+    assert len(first.items) == 2
+    seen = {item.source_record_key for item in [*first.items, *second.items]}
+    assert seen == {
+        f"trip_day_pois:{poi_a}",
+        f"trip_day_pois:{poi_b}",
+        f"trip_day_pois:{poi_c}",
+    }
+
+
+async def test_pinvi_app_integrity_pagination_stable_on_detected_at_ties(
+    session_factory: Any,
+) -> None:
+    """#346: rows sharing ``detected_at`` must paginate in a deterministic order so no
+    issue is skipped or duplicated across re-scanned offset pages."""
+    owner_id = await _create_user(
+        session_factory, email="integrity-ties@example.com", roles=["user", "admin"]
+    )
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                DataIntegrityViolation(
+                    rule_key="tie_rule",
+                    entity_kind="tie_entity",
+                    entity_id=f"{idx}:{owner_id}",
+                    severity="warning",
+                    message=f"tie {idx}",
+                    details={},
+                    detected_at=now,
+                )
+                for idx in range(4)
+            ]
+        )
+        await db.commit()
+
+    async with session_factory() as db:
+        first = await _list_app_integrity_page(db, page_size=2, cursor=None)
+        assert first.next_cursor is not None
+        second = await _list_app_integrity_page(db, page_size=2, cursor=first.next_cursor)
+        # Re-fetch page 1 to confirm the order is stable across requests.
+        first_again = await _list_app_integrity_page(db, page_size=2, cursor=None)
+
+    first_ids = [item.issue_id for item in first.items]
+    second_ids = [item.issue_id for item in second.items]
+    assert [item.issue_id for item in first_again.items] == first_ids
+    assert len(first_ids) == 2
+    assert len(second_ids) == 2
+    assert set(first_ids).isdisjoint(second_ids)
+    assert len(set(first_ids) | set(second_ids)) == 4
 
 
 async def test_admin_integrity_issue_action_proxies_and_writes_audit(
