@@ -8,10 +8,13 @@ from datetime import UTC, datetime
 from typing import Any, Mapping, Sequence
 
 from dagster import Backoff, RetryPolicy, asset
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
+from pinvi.etl.sql.retention import (
+    LOCATION_LOG_ARCHIVE_PURPOSE_SQL as _LOCATION_LOG_ARCHIVE_PURPOSE_SQL,
+    LOCATION_LOG_ARCHIVE_SUMMARY_SQL as _LOCATION_LOG_ARCHIVE_SUMMARY_SQL,
+)
 
 DEFAULT_LOCATION_RETENTION_MONTHS = 6
 PURPOSE_STATS_LIMIT = 10
@@ -201,63 +204,3 @@ def _optional_int(value: Any) -> int | None:
 
 def _optional_str(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
-
-
-_LOCATION_LOG_ARCHIVE_SUMMARY_SQL = text(
-    """
-    WITH candidates AS (
-      SELECT log_id, occurred_at, content_hash
-      FROM app.location_access_log
-      WHERE occurred_at <= :archive_cutoff
-    ),
-    archive_tail AS (
-      SELECT log_id, content_hash
-      FROM candidates
-      ORDER BY log_id DESC
-      LIMIT 1
-    ),
-    active_head AS (
-      SELECT log_id, prev_hash
-      FROM app.location_access_log
-      WHERE occurred_at > :archive_cutoff
-      ORDER BY log_id ASC
-      LIMIT 1
-    ),
-    pending_outbox AS (
-      SELECT occurred_at
-      FROM app.location_audit_outbox
-      WHERE processed_at IS NULL
-    )
-    SELECT
-      (SELECT count(*) FROM candidates)::int AS total_candidates,
-      (SELECT min(occurred_at) FROM candidates) AS oldest_candidate_at,
-      (SELECT max(occurred_at) FROM candidates) AS newest_candidate_at,
-      (SELECT log_id FROM archive_tail) AS archive_tail_log_id,
-      (SELECT content_hash FROM archive_tail) AS archive_tail_content_hash,
-      (SELECT log_id FROM active_head) AS active_head_log_id,
-      (SELECT prev_hash FROM active_head) AS active_head_prev_hash,
-      (
-        SELECT count(*)
-        FROM app.location_access_log
-        WHERE occurred_at > :archive_cutoff
-      )::int AS active_rows_after_cutoff,
-      (SELECT count(*) FROM pending_outbox)::int AS pending_outbox_total,
-      (
-        SELECT count(*)
-        FROM pending_outbox
-        WHERE occurred_at <= :archive_cutoff
-      )::int AS pending_outbox_before_cutoff,
-      (SELECT min(occurred_at) FROM pending_outbox) AS oldest_pending_outbox_at
-    """
-)
-
-_LOCATION_LOG_ARCHIVE_PURPOSE_SQL = text(
-    """
-    SELECT purpose, count(*)::int AS total
-    FROM app.location_access_log
-    WHERE occurred_at <= :archive_cutoff
-    GROUP BY purpose
-    ORDER BY total DESC, purpose ASC
-    LIMIT :purpose_limit
-    """
-)

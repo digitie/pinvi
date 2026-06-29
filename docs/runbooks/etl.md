@@ -126,11 +126,12 @@ bounced, complained, retry exhausted, template별 실패율을 PII 없이 bounde
 
 ### 3.2 PII retention asset
 
-구현 상태(2026-06-28): `pinvi_pii_retention` asset과 `pinvi_pii_retention_job` schedule이
+구현 상태(2026-06-29): `pinvi_pii_retention` asset과 `pinvi_pii_retention_job` schedule이
 등록되어 있다. 매일 KST 04:15 `app` schema의 삭제 계정 PII, OAuth identity, 만료 verification/reset
-token, 오래된 session, 만료 OAuth transient row, 6개월 초과 location/admin audit PII 후보를
-집계한다. metadata와 `/admin/etl/summary` 응답에는 카운트와 cutoff만 남기고 user id, email,
-token hash, 원본 위치 좌표는 남기지 않는다.
+token, 오래된 session, 만료 OAuth transient row를 집계한다. 6개월 초과 `location_access_log`는
+`pinvi_location_log_archive`가 단독으로 집계하고, `admin_audit_log` PII 후보는 `/admin/etl`과
+`/admin/retention`의 별도 `audit_retention` summary로만 집계한다. metadata와 API 응답에는 카운트와
+cutoff만 남기고 user id, email, token hash, 원본 위치 좌표는 남기지 않는다.
 
 이 asset은 destructive 작업을 하지 않는 dry-run 전용이다. 실제 delete/anonymize/archive 실행,
 kill-switch, evidence log, Admin retention dashboard는 T-276 범위다. `admin` / `operator` /

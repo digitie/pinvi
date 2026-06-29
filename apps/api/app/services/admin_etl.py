@@ -22,6 +22,7 @@ from app.clients.kor_travel_map import KorTravelMapError
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
 from app.core.config import settings
 from app.schemas.admin import (
+    AdminAuditRetentionSummary,
     AdminDagsterJobSummary,
     AdminDagsterRepositorySummary,
     AdminDagsterRunSummary,
@@ -41,6 +42,7 @@ from app.schemas.admin import (
     AdminPinviEtlSummary,
     AdminProviderDatasetSummary,
     AdminProviderImportJobRecord,
+    AdminSystemStatus,
     AdminTelegramOutboxCategorySummary,
     AdminTelegramOutboxSummary,
 )
@@ -57,7 +59,7 @@ TELEGRAM_OUTBOX_CATEGORY_WINDOW_HOURS = 24
 TELEGRAM_OUTBOX_CATEGORY_STATS_LIMIT = 10
 PII_RETENTION_USER_GRACE_DAYS = 30
 PII_RETENTION_SESSION_GRACE_DAYS = 30
-PII_RETENTION_LOCATION_MONTHS = 6
+AUDIT_RETENTION_DAYS = 90
 LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6
 LOCATION_LOG_ARCHIVE_PURPOSE_STATS_LIMIT = 10
 
@@ -211,7 +213,7 @@ query PinviDagsterLive($runLimit: Int!) {
 
 @dataclass(frozen=True, slots=True)
 class _PinviDagsterProbeResult:
-    status: str
+    status: AdminSystemStatus
     message: str | None
     latency_ms: int | None
     checked_at: datetime
@@ -278,6 +280,7 @@ async def build_pinvi_etl_summary(db: AsyncSession) -> AdminPinviEtlSummary:
         email_outbox=await build_email_outbox_summary(db),
         telegram_outbox=await build_telegram_outbox_summary(db),
         pii_retention=await build_pii_retention_summary(db),
+        audit_retention=await build_audit_retention_summary(db),
         location_log_archive=await build_location_log_archive_summary(db),
     )
 
@@ -402,7 +405,7 @@ def _build_kor_travel_map_summary(
     errors: list[str],
 ) -> AdminKorTravelMapEtlSummary:
     dagster_status = _as_str(dagster.get("status")) or ("unavailable" if errors else "unknown")
-    status = "ok"
+    status: AdminSystemStatus = "ok"
     if errors:
         status = "degraded" if dagster or metrics or providers or recent_import_jobs else "down"
     if dagster_status in {"unavailable", "error"}:
@@ -810,12 +813,10 @@ async def build_pii_retention_summary(
     current = now or datetime.now(UTC)
     user_pii_cutoff = current - timedelta(days=PII_RETENTION_USER_GRACE_DAYS)
     session_cutoff = current - timedelta(days=PII_RETENTION_SESSION_GRACE_DAYS)
-    location_cutoff = _subtract_months(current, PII_RETENTION_LOCATION_MONTHS)
     params = {
         "now": current,
         "user_pii_cutoff": user_pii_cutoff,
         "session_cutoff": session_cutoff,
-        "location_cutoff": location_cutoff,
     }
     summary = (await db.execute(_PII_RETENTION_SUMMARY_SQL, params)).mappings().one()
     counts = {
@@ -829,23 +830,38 @@ async def build_pii_retention_summary(
         "old_expired_sessions": _as_int(summary["old_expired_sessions"]),
         "expired_oauth_login_states": _as_int(summary["expired_oauth_login_states"]),
         "expired_mobile_oauth_exchanges": _as_int(summary["expired_mobile_oauth_exchanges"]),
-        "location_access_logs_over_retention": _as_int(
-            summary["location_access_logs_over_retention"]
-        ),
-        "admin_audit_pii_over_retention": _as_int(summary["admin_audit_pii_over_retention"]),
     }
     return AdminPiiRetentionSummary(
         dry_run=True,
         generated_at=current,
         user_pii_cutoff=user_pii_cutoff,
         session_cutoff=session_cutoff,
-        location_cutoff=location_cutoff,
         user_pii_grace_days=PII_RETENTION_USER_GRACE_DAYS,
         session_grace_days=PII_RETENTION_SESSION_GRACE_DAYS,
-        location_retention_months=PII_RETENTION_LOCATION_MONTHS,
         total_candidates=sum(counts.values()),
         excluded_privileged_deleted_users=_as_int(summary["excluded_privileged_deleted_users"]),
         **counts,
+    )
+
+
+async def build_audit_retention_summary(
+    db: AsyncSession,
+    *,
+    now: datetime | None = None,
+) -> AdminAuditRetentionSummary:
+    current = now or datetime.now(UTC)
+    audit_cutoff = current - timedelta(days=AUDIT_RETENTION_DAYS)
+    summary = (
+        (await db.execute(_AUDIT_RETENTION_SUMMARY_SQL, {"audit_cutoff": audit_cutoff}))
+        .mappings()
+        .one()
+    )
+    return AdminAuditRetentionSummary(
+        dry_run=True,
+        generated_at=current,
+        audit_cutoff=audit_cutoff,
+        audit_retention_days=AUDIT_RETENTION_DAYS,
+        admin_audit_pii_over_retention=_as_int(summary["admin_audit_pii_over_retention"]),
     )
 
 
@@ -1113,18 +1129,16 @@ _PII_RETENTION_SUMMARY_SQL = text(
         SELECT count(*)
         FROM app.oauth_mobile_exchanges
         WHERE expires_at <= :now
-      )::int AS expired_mobile_oauth_exchanges,
-      (
-        SELECT count(*)
-        FROM app.location_access_log
-        WHERE occurred_at <= :location_cutoff
-      )::int AS location_access_logs_over_retention,
-      (
-        SELECT count(*)
-        FROM app.admin_audit_log
-        WHERE occurred_at <= :location_cutoff
-          AND (target_pii_fields IS NOT NULL OR user_agent IS NOT NULL)
-      )::int AS admin_audit_pii_over_retention
+      )::int AS expired_mobile_oauth_exchanges
+    """
+)
+
+_AUDIT_RETENTION_SUMMARY_SQL = text(
+    """
+    SELECT count(*)::int AS admin_audit_pii_over_retention
+    FROM app.admin_audit_log
+    WHERE occurred_at <= :audit_cutoff
+      AND (target_pii_fields IS NOT NULL OR user_agent IS NOT NULL)
     """
 )
 

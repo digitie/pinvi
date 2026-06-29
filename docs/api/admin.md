@@ -461,9 +461,9 @@ POST /admin/retention/dry-run
 POST /admin/retention/execute
 ```
 
-`summary`는 `pinvi_pii_retention` / `pinvi_location_log_archive`와 같은 bounded count를 반환하며,
-`execute_enabled`, `confirm_phrase`, `latest_runs`를 함께 포함한다. 사용자 이메일, 좌표 원문,
-host path, 운영 도메인/secret은 응답에 넣지 않는다.
+`summary`는 `pinvi_pii_retention`, 별도 audit retention 정책, `pinvi_location_log_archive`와 같은
+bounded count를 반환하며, `execute_enabled`, `confirm_phrase`, `latest_runs`를 함께 포함한다.
+사용자 이메일, 좌표 원문, host path, 운영 도메인/secret은 응답에 넣지 않는다.
 
 Mutation body:
 
@@ -495,8 +495,8 @@ Mutation body:
 - location scope는 6개월 초과 `location_access_log` row를 `app.location_access_log_archive`에
   복사한 뒤 active table에서 삭제한다. trigger는 retention transaction의
   `app.retention_location_delete_allowed=on` 설정에서만 이 DELETE를 허용한다.
-- `admin_audit_log` PII 후보는 append-only 감사 원장이라 삭제하지 않고
-  `skipped_admin_audit_pii_over_retention` result로 기록한다.
+- `admin_audit_log` PII 후보는 PII 삭제 후보가 아니라 별도 audit retention 정책으로 집계한다.
+  append-only 감사 원장이므로 삭제하지 않고 `skipped_admin_audit_pii_over_retention` result로 기록한다.
 
 응답 `AdminRetentionRun` 핵심 필드:
 
@@ -2083,11 +2083,9 @@ GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static 
       "generated_at": "2026-06-27T00:00:00Z",
       "user_pii_cutoff": "2026-05-28T00:00:00Z",
       "session_cutoff": "2026-05-28T00:00:00Z",
-      "location_cutoff": "2025-12-27T00:00:00Z",
       "user_pii_grace_days": 30,
       "session_grace_days": 30,
-      "location_retention_months": 6,
-      "total_candidates": 10,
+      "total_candidates": 8,
       "deleted_user_pii_candidates": 1,
       "deleted_user_oauth_identity_candidates": 1,
       "excluded_privileged_deleted_users": 1,
@@ -2097,7 +2095,13 @@ GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static 
       "old_expired_sessions": 1,
       "expired_oauth_login_states": 1,
       "expired_mobile_oauth_exchanges": 1,
-      "location_access_logs_over_retention": 1,
+    },
+    "audit_retention": {
+      "dry_run": true,
+      "generated_at": "2026-06-27T00:00:00Z",
+      "audit_cutoff": "2026-03-29T00:00:00Z",
+      "audit_retention_days": 90,
+      "policy": "append_only_cold_storage",
       "admin_audit_pii_over_retention": 1,
     },
     "location_log_archive": {

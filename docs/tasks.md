@@ -7,15 +7,11 @@
 
 ## 현재 선점 / 충돌 회피
 
-- Codex 다음 선점 예정: T-291-etl-sql-tests — `apps/etl/**` / audit retention 정책.
+- 현재 활성 선점 없음.
 
 ## v0.2.0 구현 게이트
 
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
-
-## 최근 PR 리뷰 후속
-
-- [ ] T-291-etl-sql-tests — app-owned ETL SQL 실행 테스트 + audit retention 정책 분리.
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 

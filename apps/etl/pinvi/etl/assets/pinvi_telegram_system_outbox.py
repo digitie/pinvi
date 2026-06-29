@@ -7,10 +7,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Mapping, Sequence
 
 from dagster import Backoff, RetryPolicy, asset
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
+from pinvi.etl.sql.outbox import (
+    TELEGRAM_OUTBOX_CATEGORY_SQL as _TELEGRAM_OUTBOX_CATEGORY_SQL,
+    TELEGRAM_OUTBOX_SUMMARY_SQL as _TELEGRAM_OUTBOX_SUMMARY_SQL,
+)
 
 DEFAULT_STUCK_THRESHOLD_MINUTES = 15
 DEFAULT_MAX_ATTEMPTS = 5
@@ -189,49 +192,3 @@ def _category_stats_from_rows(
 
 def _as_int(value: Any) -> int:
     return int(value or 0)
-
-
-_TELEGRAM_OUTBOX_SUMMARY_SQL = text(
-    """
-    SELECT
-      count(*)::int AS total,
-      count(*) FILTER (WHERE status = 'pending')::int AS pending_total,
-      count(*) FILTER (
-        WHERE status = 'pending' AND scheduled_at <= :now
-      )::int AS pending_due,
-      count(*) FILTER (
-        WHERE status = 'pending' AND scheduled_at > :now
-      )::int AS pending_backoff,
-      count(*) FILTER (
-        WHERE status = 'pending' AND scheduled_at <= :stuck_before
-      )::int AS stuck_pending,
-      count(*) FILTER (WHERE status = 'sent')::int AS sent,
-      count(*) FILTER (WHERE status = 'skipped')::int AS skipped,
-      count(*) FILTER (WHERE status = 'failed')::int AS failed,
-      count(*) FILTER (
-        WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
-      )::int AS retry_exhausted,
-      min(scheduled_at) FILTER (WHERE status = 'pending') AS oldest_pending_scheduled_at
-    FROM app.telegram_system_notification_outbox
-    """
-)
-
-_TELEGRAM_OUTBOX_CATEGORY_SQL = text(
-    """
-    SELECT
-      category,
-      count(*)::int AS total,
-      count(*) FILTER (WHERE status = 'pending')::int AS pending,
-      count(*) FILTER (WHERE status = 'sent')::int AS sent,
-      count(*) FILTER (WHERE status = 'skipped')::int AS skipped,
-      count(*) FILTER (WHERE status = 'failed')::int AS failed,
-      count(*) FILTER (
-        WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
-      )::int AS retry_exhausted
-    FROM app.telegram_system_notification_outbox
-    WHERE created_at >= :category_window_start
-    GROUP BY category
-    ORDER BY total DESC, category ASC
-    LIMIT :category_limit
-    """
-)

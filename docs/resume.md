@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-291 ETL SQL 실행 테스트 완료
+
+`agent/codex-t291-etl-sql-tests`에서 T-291 잔여 범위를 완료했다. ETL 원시 SQL은 asset 밖의
+`pinvi.etl.sql` 모듈로 분리했고, ETL PostgreSQL dialect compile smoke와 API 통합 테스트의 Alembic
+schema 실행 smoke를 추가했다. Admin ETL/Retention API는 `admin_audit_log` PII 후보를 PII 삭제 후보에서
+분리해 `audit_retention` summary로 노출한다. `location_access_log` 후보는 location archive summary가
+단독 소유한다.
+
+검증: API/ETL ruff, API strict mypy targeted, ETL 전체 pytest 13건, API 통합 테스트 12건,
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, `apps/web` lint, N150 Playwright
+`admin-etl-provider-sync.e2e.ts`/`admin-retention.e2e.ts` 통과.
+
+**다음 한 작업**: T-291 PR 머지 후 최신 main에서 `docs/tasks.md`와 열린 PR을 확인하고, 남은 Sprint 6
+task 중 충돌이 없는 항목으로 이동한다.
+
 ## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
 
 codex PR #227(map marker tuning / viewport caching)을 98커밋 뒤처진 상태에서 main에 동기화·충돌

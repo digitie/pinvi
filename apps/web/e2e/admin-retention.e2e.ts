@@ -49,11 +49,9 @@ function retentionSummary(rows: ReturnType<typeof retentionRun>[]) {
       generated_at: '2026-06-28T09:05:00+09:00',
       user_pii_cutoff: '2026-05-29T09:05:00+09:00',
       session_cutoff: '2026-05-29T09:05:00+09:00',
-      location_cutoff: '2025-12-28T09:05:00+09:00',
       user_pii_grace_days: 30,
       session_grace_days: 30,
-      location_retention_months: 6,
-      total_candidates: 10,
+      total_candidates: 8,
       deleted_user_pii_candidates: 1,
       deleted_user_oauth_identity_candidates: 1,
       excluded_privileged_deleted_users: 1,
@@ -63,7 +61,13 @@ function retentionSummary(rows: ReturnType<typeof retentionRun>[]) {
       old_expired_sessions: 1,
       expired_oauth_login_states: 1,
       expired_mobile_oauth_exchanges: 1,
-      location_access_logs_over_retention: 1,
+    },
+    audit_retention: {
+      dry_run: true,
+      generated_at: '2026-06-28T09:05:00+09:00',
+      audit_cutoff: '2026-03-30T09:05:00+09:00',
+      audit_retention_days: 90,
+      policy: 'append_only_cold_storage',
       admin_audit_pii_over_retention: 1,
     },
     location_log_archive: {
@@ -150,9 +154,10 @@ test('Admin retention page가 summary, dry-run, kill-switch guard를 렌더링�
 
   await page.goto('/admin/retention');
 
-  await expect(page.getByRole('heading', { name: 'Retention' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Retention', exact: true })).toBeVisible();
   await expect(page.getByTestId('admin-nav--admin-retention')).toBeVisible();
-  await expect(page.getByTestId('admin-retention-pii-total')).toContainText('10');
+  await expect(page.getByTestId('admin-retention-pii-total')).toContainText('8');
+  await expect(page.getByTestId('admin-retention-audit-total')).toContainText('1');
   await expect(page.getByTestId('admin-retention-location-total')).toContainText('1');
   await expect(page.getByTestId('admin-retention-execute-enabled')).toContainText('disabled');
 

@@ -360,10 +360,8 @@ export const AdminPiiRetentionSummarySchema = z.object({
   generated_at: Iso8601Schema,
   user_pii_cutoff: Iso8601Schema,
   session_cutoff: Iso8601Schema,
-  location_cutoff: Iso8601Schema,
   user_pii_grace_days: z.number().int(),
   session_grace_days: z.number().int(),
-  location_retention_months: z.number().int(),
   total_candidates: z.number().int().default(0),
   deleted_user_pii_candidates: z.number().int().default(0),
   deleted_user_oauth_identity_candidates: z.number().int().default(0),
@@ -374,10 +372,18 @@ export const AdminPiiRetentionSummarySchema = z.object({
   old_expired_sessions: z.number().int().default(0),
   expired_oauth_login_states: z.number().int().default(0),
   expired_mobile_oauth_exchanges: z.number().int().default(0),
-  location_access_logs_over_retention: z.number().int().default(0),
-  admin_audit_pii_over_retention: z.number().int().default(0),
 });
 export type AdminPiiRetentionSummary = z.infer<typeof AdminPiiRetentionSummarySchema>;
+
+export const AdminAuditRetentionSummarySchema = z.object({
+  dry_run: z.boolean().default(true),
+  generated_at: Iso8601Schema,
+  audit_cutoff: Iso8601Schema,
+  audit_retention_days: z.number().int(),
+  policy: z.literal('append_only_cold_storage').default('append_only_cold_storage'),
+  admin_audit_pii_over_retention: z.number().int().default(0),
+});
+export type AdminAuditRetentionSummary = z.infer<typeof AdminAuditRetentionSummarySchema>;
 
 export const AdminLocationLogArchivePurposeSummarySchema = z.object({
   purpose: z.string(),
@@ -441,6 +447,7 @@ export const AdminRetentionSummarySchema = z.object({
   execute_enabled: z.boolean(),
   confirm_phrase: z.string(),
   pii_retention: AdminPiiRetentionSummarySchema,
+  audit_retention: AdminAuditRetentionSummarySchema,
   location_log_archive: AdminLocationLogArchiveSummarySchema,
   latest_runs: z.array(AdminRetentionRunSchema).default([]),
 });
@@ -530,6 +537,7 @@ export const AdminPinviEtlSummarySchema = z.object({
   email_outbox: AdminEmailOutboxSummarySchema.nullable().default(null),
   telegram_outbox: AdminTelegramOutboxSummarySchema.nullable().default(null),
   pii_retention: AdminPiiRetentionSummarySchema.nullable().default(null),
+  audit_retention: AdminAuditRetentionSummarySchema.nullable().default(null),
   location_log_archive: AdminLocationLogArchiveSummarySchema.nullable().default(null),
 });
 export type AdminPinviEtlSummary = z.infer<typeof AdminPinviEtlSummarySchema>;

@@ -8,6 +8,7 @@ import {
   Loader2,
   PlayCircle,
   RefreshCw,
+  ScrollText,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
@@ -103,6 +104,7 @@ export default function AdminRetentionPage() {
 
   const summary = summaryQuery.data ?? null;
   const pii = summary?.pii_retention ?? null;
+  const audit = summary?.audit_retention ?? null;
   const location = summary?.location_log_archive ?? null;
   const runs = runsQuery.data?.items ?? summary?.latest_runs ?? [];
   const expectedConfirmPhrase = summary?.confirm_phrase ?? 'EXECUTE RETENTION';
@@ -264,7 +266,7 @@ export default function AdminRetentionPage() {
       </Section>
 
       <Section title="대상 요약">
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-3">
           <div className="rounded-sm border border-hairline p-3">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -285,8 +287,26 @@ export default function AdminRetentionPage() {
             <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
               <div>OAuth {formatMetric(pii?.expired_oauth_login_states)}</div>
               <div>mobile OAuth {formatMetric(pii?.expired_mobile_oauth_exchanges)}</div>
-              <div>admin audit skip {formatMetric(pii?.admin_audit_pii_over_retention)}</div>
               <div>privileged excluded {formatMetric(pii?.excluded_privileged_deleted_users)}</div>
+            </div>
+          </div>
+
+          <div className="rounded-sm border border-hairline p-3">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+              <ScrollText className="h-4 w-4" aria-hidden="true" />
+              Audit retention
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <MetricBox
+                label="append-only skip"
+                value={audit?.admin_audit_pii_over_retention}
+                testId="admin-retention-audit-total"
+              />
+              <MetricBox label="retention days" value={audit?.audit_retention_days} />
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-muted">
+              <div>cutoff {formatDateTime(audit?.audit_cutoff)}</div>
+              <div>policy {audit?.policy ?? '-'}</div>
             </div>
           </div>
 
