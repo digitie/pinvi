@@ -17,8 +17,8 @@
       `docs/execplan/legal-ops-review-gap-crosswalk.md` §6에 closure 재감사를 추가. G-001~G-044 +
       R-001~R-009의 대응 Task가 모두 머지됨을 tasks-done.md와 교차 확인(legal/ops T-275~282, 보안
       T-283, RBAC/lifecycle/DSR/retention/moderation/email, integrity T-292, WS/conflict T-289/290,
-      ETL sensor T-291 등). 잔여 open 2건만 별도 추적: T-259(release), G-044 AI companion scope 제거.
-      T-291-etl-sql-tests는 codex 머지(a85f832)로 closed. 미추적 gap 없음 → closed.
+      ETL sensor T-291, ETL SQL/audit split T-291-etl-sql-tests 등). 잔여 확인은 T-259 release gate와
+      G-044 AI companion scope 제거 후속뿐이다. 미추적 gap 없음 → closed.
 
 - [x] T-291-etl-sql-tests — app-owned ETL SQL 실행 테스트 + audit retention 정책 분리.
       (완료: 2026-06-29, codex)
