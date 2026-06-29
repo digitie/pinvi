@@ -741,7 +741,7 @@ export const AdminCategoryMappingItemSchema = z.object({
     .regex(/^P-(0[1-9]|1[0-6])$/)
     .nullable()
     .default(null),
-  effective_maki_icon: z.string(),
+  effective_maki_icon: z.string().default('marker'),
   has_override: z.boolean().default(false),
   override_updated_at: Iso8601Schema.nullable().default(null),
   override_updated_by_user_id: z.string().uuid().nullable().default(null),
@@ -763,20 +763,32 @@ export const AdminCategoryMappingsResponseSchema = z.object({
 });
 export type AdminCategoryMappingsResponse = z.infer<typeof AdminCategoryMappingsResponseSchema>;
 
-export const AdminCategoryMappingUpdateRequestSchema = z.object({
-  display_name_ko: z.string().min(1).max(120).nullable().optional(),
-  marker_color: z
-    .string()
-    .regex(/^P-(0[1-9]|1[0-6])$/)
-    .nullable()
-    .optional(),
-  marker_icon: z
-    .string()
-    .regex(/^[a-z0-9_-]{1,64}$/)
-    .nullable()
-    .optional(),
-  access_reason: z.string().min(1).max(500),
-});
+export const AdminCategoryMappingUpdateRequestSchema = z
+  .object({
+    display_name_ko: z.string().min(1).max(120).nullable().optional(),
+    marker_color: z
+      .string()
+      .regex(/^P-(0[1-9]|1[0-6])$/)
+      .nullable()
+      .optional(),
+    marker_icon: z
+      .string()
+      .regex(/^[a-z0-9_-]{1,64}$/)
+      .nullable()
+      .optional(),
+    access_reason: z.string().min(1).max(500),
+  })
+  // 서버 pydantic `@model_validator`와 동일: 최소 1개의 override 필드가 있어야 한다.
+  .refine(
+    (value) =>
+      value.display_name_ko !== undefined ||
+      value.marker_color !== undefined ||
+      value.marker_icon !== undefined,
+    {
+      message: '변경할 category mapping override 필드가 필요합니다.',
+      path: ['display_name_ko'],
+    },
+  );
 export type AdminCategoryMappingUpdateRequest = z.infer<
   typeof AdminCategoryMappingUpdateRequestSchema
 >;

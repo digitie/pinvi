@@ -303,6 +303,244 @@ async def test_admin_category_mapping_rollback_deletes_override_and_audit(
         assert audit.after_state is None
 
 
+@pytest.mark.parametrize(
+    ("email", "roles"),
+    [
+        ("operator-category-patch-denied@example.com", ["user", "operator"]),
+        ("regular-category-patch-denied@example.com", ["user"]),
+    ],
+)
+async def test_admin_category_mapping_patch_denied_for_non_admin(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    email: str,
+    roles: list[str],
+) -> None:
+    user_id = await _create_user(session_factory, email=email, roles=roles)
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.patch(
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(user_id),
+            json={
+                "display_name_ko": "무단 변경",
+                "marker_color": "P-04",
+                "marker_icon": "park",
+                "access_reason": "권한 없음 검증",
+            },
+        )
+    finally:
+        _clear()
+
+    # RBAC: 존재 자체를 숨기므로 404 (require_role("admin"))
+    assert resp.status_code == 404, resp.text
+    async with session_factory() as db:
+        assert await db.get(CategoryMappingOverride, "01070100") is None
+        audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.update",
+                AdminAuditLog.resource_id == "01070100",
+            )
+        )
+        assert audit is None
+
+
+@pytest.mark.parametrize(
+    ("email", "roles"),
+    [
+        ("operator-category-delete-denied@example.com", ["user", "operator"]),
+        ("regular-category-delete-denied@example.com", ["user"]),
+    ],
+)
+async def test_admin_category_mapping_delete_denied_for_non_admin(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    email: str,
+    roles: list[str],
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email=f"admin-seed-{email}",
+        roles=["user", "admin"],
+    )
+    async with session_factory() as db:
+        db.add(
+            CategoryMappingOverride(
+                category_key="01070100",
+                display_name_ko="부산 해수욕장",
+                marker_color="P-03",
+                marker_icon="beach",
+                created_by_user_id=uuid.UUID(admin_id),
+                updated_by_user_id=uuid.UUID(admin_id),
+            )
+        )
+        await db.commit()
+
+    user_id = await _create_user(session_factory, email=email, roles=roles)
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.request(
+            "DELETE",
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(user_id),
+            json={"access_reason": "권한 없음 검증"},
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 404, resp.text
+    async with session_factory() as db:
+        # override row가 그대로 남아 있어야 한다 (삭제되지 않음)
+        assert await db.get(CategoryMappingOverride, "01070100") is not None
+        audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.rollback",
+                AdminAuditLog.resource_id == "01070100",
+            )
+        )
+        assert audit is None
+
+
+async def test_admin_category_mapping_all_null_patch_rolls_back_existing(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-allnull@example.com",
+        roles=["user", "admin"],
+    )
+    async with session_factory() as db:
+        db.add(
+            CategoryMappingOverride(
+                category_key="01070100",
+                display_name_ko="부산 해수욕장",
+                marker_color="P-03",
+                marker_icon="beach",
+                created_by_user_id=uuid.UUID(admin_id),
+                updated_by_user_id=uuid.UUID(admin_id),
+            )
+        )
+        await db.commit()
+
+    request_id = uuid.uuid4()
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.patch(
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(admin_id),
+            headers={"X-Request-Id": str(request_id)},
+            json={
+                "display_name_ko": None,
+                "marker_color": None,
+                "marker_icon": None,
+                "access_reason": "override 비우기",
+            },
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]
+    assert item["has_override"] is False
+    assert item["effective_label"] == "해수욕장"
+
+    async with session_factory() as db:
+        # all-null override는 무의미 → row 삭제 + rollback 감사
+        assert await db.get(CategoryMappingOverride, "01070100") is None
+        update_audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.update",
+                AdminAuditLog.request_id == request_id,
+            )
+        )
+        assert update_audit is None
+        rollback_audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.rollback",
+                AdminAuditLog.request_id == request_id,
+            )
+        )
+        assert rollback_audit is not None
+        assert rollback_audit.before_state is not None
+        assert rollback_audit.before_state["marker_icon"] == "beach"
+        assert rollback_audit.after_state is None
+
+
+async def test_admin_category_mapping_all_null_patch_without_existing_is_noop(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-allnull-noop@example.com",
+        roles=["user", "admin"],
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.patch(
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(admin_id),
+            headers={"X-Request-Id": str(request_id)},
+            json={
+                "display_name_ko": None,
+                "marker_color": None,
+                "marker_icon": None,
+                "access_reason": "override 없음",
+            },
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]
+    assert item["has_override"] is False
+
+    async with session_factory() as db:
+        # override가 없었으므로 row도, 감사도 생기지 않는다 (noise 없음)
+        assert await db.get(CategoryMappingOverride, "01070100") is None
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+        assert audit is None
+
+
+async def test_admin_category_mapping_delete_without_override_short_circuits(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-delete-noop@example.com",
+        roles=["user", "admin"],
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.request(
+            "DELETE",
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(admin_id),
+            headers={"X-Request-Id": str(request_id)},
+            json={"access_reason": "없는 override 원복"},
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]
+    assert item["code"] == "01070100"
+    assert item["has_override"] is False
+
+    async with session_factory() as db:
+        # override가 없으면 rollback 감사 noise를 남기지 않는다
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+        assert audit is None
+
+
 async def test_admin_category_mappings_is_hidden_for_regular_user(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:

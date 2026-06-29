@@ -9,7 +9,10 @@ import {
   queryKeys,
   type AdminCategoryMappingListParams,
 } from '@pinvi/api-client';
-import type { AdminCategoryMappingItem } from '@pinvi/schemas';
+import type {
+  AdminCategoryMappingItem,
+  AdminCategoryMappingUpdateRequest,
+} from '@pinvi/schemas';
 import { CATEGORY_MARKER, markerStyleFor, paletteHex, paletteLabelColor } from '@pinvi/domain';
 import { Download, Edit3, RefreshCw, RotateCcw, Save, Search, X } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
@@ -59,6 +62,7 @@ export default function AdminCategoryMappingPage() {
   const [draftDisplayName, setDraftDisplayName] = useState('');
   const [draftColor, setDraftColor] = useState('');
   const [draftIcon, setDraftIcon] = useState('');
+  const [baseline, setBaseline] = useState({ displayName: '', color: '', icon: '' });
   const [accessReason, setAccessReason] = useState('');
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
 
@@ -86,12 +90,19 @@ export default function AdminCategoryMappingPage() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!selectedCode) throw new Error('수정할 카테고리를 선택하세요.');
-      return adminApi(apiClient).updateCategoryMapping(selectedCode, {
-        display_name_ko: draftDisplayName.trim() || null,
-        marker_color: draftColor || null,
-        marker_icon: draftIcon.trim() || null,
-        access_reason: accessReason.trim(),
-      });
+      // 편집된 필드만 전송한다. 손대지 않은 fallback 값을 그대로 보내면
+      // 오늘자 로컬 fallback을 override로 "동결"시켜 has_override를 잘못 켠다 (#341).
+      const payload: AdminCategoryMappingUpdateRequest = { access_reason: accessReason.trim() };
+      if (draftDisplayName !== baseline.displayName) {
+        payload.display_name_ko = draftDisplayName.trim() || null;
+      }
+      if (draftColor !== baseline.color) {
+        payload.marker_color = draftColor || null;
+      }
+      if (draftIcon !== baseline.icon) {
+        payload.marker_icon = draftIcon.trim() || null;
+      }
+      return adminApi(apiClient).updateCategoryMapping(selectedCode, payload);
     },
     onSuccess: async () => {
       setMutationMessage('override 저장 완료');
@@ -142,12 +153,22 @@ export default function AdminCategoryMappingPage() {
           : '카테고리 override 저장에 실패했습니다.'
       : null;
   const mutationPending = updateMutation.isPending || rollbackMutation.isPending;
+  const isDirty =
+    draftDisplayName !== baseline.displayName ||
+    draftColor !== baseline.color ||
+    draftIcon !== baseline.icon;
 
   const openEditor = (row: (typeof enrichedRows)[number]) => {
+    const seed = {
+      displayName: row.item.display_name_ko ?? '',
+      color: row.item.marker_color ?? row.marker.defaultColor,
+      icon: row.item.marker_icon ?? row.marker.defaultIcon,
+    };
     setSelectedCode(row.item.code);
-    setDraftDisplayName(row.item.display_name_ko ?? '');
-    setDraftColor(row.item.marker_color ?? row.marker.defaultColor);
-    setDraftIcon(row.item.marker_icon ?? row.marker.defaultIcon);
+    setDraftDisplayName(seed.displayName);
+    setDraftColor(seed.color);
+    setDraftIcon(seed.icon);
+    setBaseline(seed);
     setAccessReason('');
     setMutationMessage(null);
     updateMutation.reset();
@@ -159,6 +180,7 @@ export default function AdminCategoryMappingPage() {
     setDraftDisplayName('');
     setDraftColor('');
     setDraftIcon('');
+    setBaseline({ displayName: '', color: '', icon: '' });
     setAccessReason('');
     setMutationMessage(null);
     updateMutation.reset();
@@ -489,7 +511,7 @@ export default function AdminCategoryMappingPage() {
             <div className="flex items-end gap-2">
               <button
                 type="submit"
-                disabled={!accessReason.trim() || mutationPending}
+                disabled={!accessReason.trim() || !isDirty || mutationPending}
                 className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm disabled:opacity-50"
                 data-testid="admin-category-save"
               >
