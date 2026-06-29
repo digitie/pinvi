@@ -300,10 +300,8 @@ class AdminPiiRetentionSummary(BaseModel):
     generated_at: datetime
     user_pii_cutoff: datetime
     session_cutoff: datetime
-    location_cutoff: datetime
     user_pii_grace_days: int
     session_grace_days: int
-    location_retention_months: int
     total_candidates: int = 0
     deleted_user_pii_candidates: int = 0
     deleted_user_oauth_identity_candidates: int = 0
@@ -314,7 +312,14 @@ class AdminPiiRetentionSummary(BaseModel):
     old_expired_sessions: int = 0
     expired_oauth_login_states: int = 0
     expired_mobile_oauth_exchanges: int = 0
-    location_access_logs_over_retention: int = 0
+
+
+class AdminAuditRetentionSummary(BaseModel):
+    dry_run: bool = True
+    generated_at: datetime
+    audit_cutoff: datetime
+    audit_retention_days: int
+    policy: Literal["append_only_cold_storage"] = "append_only_cold_storage"
     admin_audit_pii_over_retention: int = 0
 
 
@@ -365,6 +370,7 @@ class AdminRetentionSummary(BaseModel):
     execute_enabled: bool
     confirm_phrase: str
     pii_retention: AdminPiiRetentionSummary
+    audit_retention: AdminAuditRetentionSummary
     location_log_archive: AdminLocationLogArchiveSummary
     latest_runs: list[AdminRetentionRun] = Field(default_factory=list)
 
@@ -407,6 +413,7 @@ class AdminPinviEtlSummary(BaseModel):
     email_outbox: AdminEmailOutboxSummary | None = None
     telegram_outbox: AdminTelegramOutboxSummary | None = None
     pii_retention: AdminPiiRetentionSummary | None = None
+    audit_retention: AdminAuditRetentionSummary | None = None
     location_log_archive: AdminLocationLogArchiveSummary | None = None
 
 

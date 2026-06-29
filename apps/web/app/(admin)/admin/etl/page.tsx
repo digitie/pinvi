@@ -22,6 +22,7 @@ import {
   Database,
   GitBranch,
   RefreshCw,
+  ScrollText,
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
@@ -156,6 +157,7 @@ export default function AdminEtlPage() {
   const emailOutbox = summary?.pinvi.email_outbox ?? null;
   const telegramOutbox = summary?.pinvi.telegram_outbox ?? null;
   const piiRetention = summary?.pinvi.pii_retention ?? null;
+  const auditRetention = summary?.pinvi.audit_retention ?? null;
   const locationArchive = summary?.pinvi.location_log_archive ?? null;
   const pinviRepositories = useMemo(
     () => summary?.pinvi.repositories ?? [],
@@ -550,7 +552,7 @@ export default function AdminEtlPage() {
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 PII retention
               </h3>
-              <div className="grid gap-3 text-sm sm:grid-cols-4">
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
                 <div data-testid="admin-etl-pii-total">
                   <div className="text-xs text-muted">candidates</div>
                   <div className="font-semibold">{formatMetric(piiRetention.total_candidates)}</div>
@@ -567,12 +569,6 @@ export default function AdminEtlPage() {
                     {formatMetric(
                       piiRetention.old_revoked_sessions + piiRetention.old_expired_sessions,
                     )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted">location logs</div>
-                  <div className="font-semibold">
-                    {formatMetric(piiRetention.location_access_logs_over_retention)}
                   </div>
                 </div>
               </div>
@@ -597,8 +593,39 @@ export default function AdminEtlPage() {
               </div>
               <div className="mt-2 text-xs text-muted">
                 dry-run / user {piiRetention.user_pii_grace_days}d / session{' '}
-                {piiRetention.session_grace_days}d / location{' '}
-                {piiRetention.location_retention_months}mo
+                {piiRetention.session_grace_days}d
+              </div>
+            </div>
+          ) : null}
+          {auditRetention ? (
+            <div
+              className="mt-4 rounded-sm border border-hairline p-3"
+              data-testid="admin-etl-audit-retention"
+            >
+              <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+                <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+                Audit retention
+              </h3>
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <div data-testid="admin-etl-audit-total">
+                  <div className="text-xs text-muted">append-only skip</div>
+                  <div className="font-semibold">
+                    {formatMetric(auditRetention.admin_audit_pii_over_retention)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">retention days</div>
+                  <div className="font-semibold">
+                    {formatMetric(auditRetention.audit_retention_days)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted">policy</div>
+                  <div className="font-semibold">{auditRetention.policy}</div>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-muted">
+                dry-run / cutoff {formatDateTime(auditRetention.audit_cutoff)}
               </div>
             </div>
           ) : null}
