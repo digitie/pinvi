@@ -596,10 +596,12 @@ class AdminDedupDecisionResponse(BaseModel):
 class AdminCategoryMappingItem(BaseModel):
     code: str
     label: str
+    upstream_label: str | None = None
     parent_code: str | None = None
     depth: int = 0
     path: list[str] = Field(default_factory=list)
     maki_icon: str = "marker"
+    upstream_maki_icon: str | None = None
     is_active: bool = True
     sort_order: int = 0
     tier1_code: str | None = None
@@ -612,11 +614,20 @@ class AdminCategoryMappingItem(BaseModel):
     tier4_name: str | None = None
     db_active: bool | None = None
     db_feature_count: int | None = None
+    display_name_ko: str | None = None
+    marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
+    marker_icon: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    effective_label: str
+    effective_marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
+    effective_maki_icon: str = "marker"
+    has_override: bool = False
+    override_updated_at: datetime | None = None
+    override_updated_by_user_id: uuid.UUID | None = None
 
 
 class AdminCategoryMappingsResponse(BaseModel):
     source_of_truth: str = "kor-travel-map:/v1/categories"
-    mode: Literal["read_only"] = "read_only"
+    mode: Literal["pinvi_override"] = "pinvi_override"
     include_counts: bool = True
     active_only: bool = False
     total_count: int = 0
@@ -624,7 +635,25 @@ class AdminCategoryMappingsResponse(BaseModel):
     active_count: int = 0
     inactive_count: int = 0
     db_feature_total: int | None = None
+    override_count: int = 0
     items: list[AdminCategoryMappingItem] = Field(default_factory=list)
+
+
+class AdminCategoryMappingUpdateRequest(BaseModel):
+    display_name_ko: str | None = Field(default=None, min_length=1, max_length=120)
+    marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
+    marker_icon: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    access_reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _check_override_fields(self) -> AdminCategoryMappingUpdateRequest:
+        if {"display_name_ko", "marker_color", "marker_icon"}.isdisjoint(self.model_fields_set):
+            raise ValueError("변경할 category mapping override 필드가 필요합니다.")
+        return self
+
+
+class AdminCategoryMappingRollbackRequest(BaseModel):
+    access_reason: str = Field(min_length=1, max_length=500)
 
 
 class AdminSeedScenario(BaseModel):

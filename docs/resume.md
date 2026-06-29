@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-264 Admin category mapping DB override 완료
+
+upstream `kor-travel-map` category taxonomy를 계속 정본으로 두고, Pinvi 표시명/마커 색/마커 아이콘
+override만 `app.category_mappings`에 저장하도록 ADR-052, migration/model, Admin API
+조회/PATCH/DELETE rollback/audit, Web editor, schema/api-client/e2e/integration test를 추가했다.
+
+사용자 지시에 따라 `tasks.md`도 더 공격적으로 정리했다. 완료/머지/검증 이력은 `tasks-done.md`로,
+반복 계획·체크리스트는 `tasks-rule.md`로 옮기고 `tasks.md`에는 열린 항목과 현재 선점만 남겼다.
+
+검증: py_compile, targeted ruff check/format, API mypy, API integration pytest(5 passed),
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, `apps/web` lint, `git diff --check`,
+N150 Playwright Docker runner `admin-category-mapping.e2e.ts`(2 passed)를 통과했다.
+
+**다음 한 작업**: PR 머지 후 최신 PR/브랜치와 `docs/tasks.md` 선점 상태를 다시 확인하고,
+T-291-etl-sql-tests와 열린 PR #227 map marker tuning 파일을 피하는 unclaimed Sprint 6 구현 task로
+이동한다. T-285는 사용자 지시에 따라 진행하지 않는다.
+
 ## 2026-06-29 (claude) — 병행 트랙 3건 머지 + tasks 위생
 
 codex 병행 트랙 3개 그룹을 모두 main에 머지했다: **#310**(T-289/T-290 WebSocket reconnect +

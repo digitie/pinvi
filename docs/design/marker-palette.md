@@ -74,7 +74,8 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
 - 카테고리 taxonomy와 `maki_icon` 정본은 **`kor-travel-map` `/v1/categories`**다.
   Pinvi는 feature category를 직접 저장·정규화하지 않는다.
 - Pinvi의 16색 팔레트와 `packages/domain`의 fallback 상수는 marker preview/누락 보정용이다.
-  `/admin/category-mapping`은 read-only 운영 뷰로 upstream catalog와 Pinvi fallback drift를 보여준다.
+  `/admin/category-mapping`은 upstream catalog와 Pinvi fallback drift를 보여주고,
+  `app.category_mappings`에 표시명/색/아이콘 override만 감사 로그와 함께 저장한다(ADR-052).
 - 클라이언트 표시 우선순위: 사용자 custom marker color/icon → 서버 resolved marker →
   upstream feature marker → feature snapshot marker → upstream category/kind fallback →
   Pinvi `P-13` 회색 fallback.

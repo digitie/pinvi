@@ -1,14 +1,18 @@
-"""Admin category mapping read-only proxy tests (T-213)."""
+"""Admin category mapping override tests (T-264)."""
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
 from app.clients.kor_travel_map import get_kor_travel_map_client
 from app.main import app
+from app.models.audit import AdminAuditLog
+from app.models.category_mapping import CategoryMappingOverride
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -114,15 +118,189 @@ async def test_admin_category_mappings_proxies_and_filters_catalog(
     data = resp.json()["data"]
     assert fake.calls["categories"] == {"include_counts": True, "active_only": False}
     assert data["source_of_truth"] == "kor-travel-map:/v1/categories"
-    assert data["mode"] == "read_only"
+    assert data["mode"] == "pinvi_override"
     assert data["total_count"] == 2
     assert data["filtered_count"] == 1
     assert data["active_count"] == 1
     assert data["inactive_count"] == 0
     assert data["db_feature_total"] == 12
+    assert data["override_count"] == 0
     assert data["items"][0]["code"] == "01070100"
     assert data["items"][0]["tier1_name"] == "자연"
     assert data["items"][0]["db_feature_count"] == 12
+    assert data["items"][0]["upstream_label"] == "해수욕장"
+    assert data["items"][0]["effective_label"] == "해수욕장"
+    assert data["items"][0]["effective_maki_icon"] == "swimming"
+    assert data["items"][0]["has_override"] is False
+
+
+async def test_admin_category_mappings_merges_pinvi_overrides(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-merge@example.com",
+        roles=["user", "admin"],
+    )
+    operator_id = await _create_user(
+        session_factory,
+        email="operator-category-merge@example.com",
+        roles=["user", "operator"],
+    )
+    async with session_factory() as db:
+        db.add(
+            CategoryMappingOverride(
+                category_key="01070100",
+                display_name_ko="부산 해수욕장",
+                marker_color="P-03",
+                marker_icon="beach",
+                created_by_user_id=uuid.UUID(admin_id),
+                updated_by_user_id=uuid.UUID(admin_id),
+            )
+        )
+        await db.commit()
+
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/category-mappings?q=부산",
+            cookies=auth_cookies(operator_id),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["filtered_count"] == 1
+    assert data["override_count"] == 1
+    item = data["items"][0]
+    assert item["code"] == "01070100"
+    assert item["label"] == "해수욕장"
+    assert item["display_name_ko"] == "부산 해수욕장"
+    assert item["marker_color"] == "P-03"
+    assert item["marker_icon"] == "beach"
+    assert item["effective_label"] == "부산 해수욕장"
+    assert item["effective_marker_color"] == "P-03"
+    assert item["effective_maki_icon"] == "beach"
+    assert item["has_override"] is True
+    assert item["override_updated_by_user_id"] == admin_id
+
+
+async def test_admin_category_mapping_update_writes_override_and_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-update@example.com",
+        roles=["user", "admin"],
+    )
+    request_id = uuid.uuid4()
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.patch(
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(admin_id),
+            headers={"X-Request-Id": str(request_id)},
+            json={
+                "display_name_ko": "테스트 해변",
+                "marker_color": "P-04",
+                "marker_icon": "park",
+                "access_reason": "운영 팔레트 정정",
+            },
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]
+    assert item["code"] == "01070100"
+    assert item["display_name_ko"] == "테스트 해변"
+    assert item["effective_marker_color"] == "P-04"
+    assert item["effective_maki_icon"] == "park"
+
+    async with session_factory() as db:
+        row = await db.get(CategoryMappingOverride, "01070100")
+        assert row is not None
+        assert row.display_name_ko == "테스트 해변"
+        assert row.marker_color == "P-04"
+        assert row.marker_icon == "park"
+        assert row.updated_by_user_id == uuid.UUID(admin_id)
+
+        audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.update",
+                AdminAuditLog.request_id == request_id,
+            )
+        )
+        assert audit is not None
+        assert audit.actor_user_id == uuid.UUID(admin_id)
+        assert audit.resource_type == "category_mapping"
+        assert audit.resource_id == "01070100"
+        assert audit.access_reason == "운영 팔레트 정정"
+        assert audit.request_id == request_id
+        assert audit.after_state is not None
+        assert audit.after_state["marker_color"] == "P-04"
+
+
+async def test_admin_category_mapping_rollback_deletes_override_and_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin-category-rollback@example.com",
+        roles=["user", "admin"],
+    )
+    async with session_factory() as db:
+        db.add(
+            CategoryMappingOverride(
+                category_key="01070100",
+                display_name_ko="부산 해수욕장",
+                marker_color="P-03",
+                marker_icon="beach",
+                created_by_user_id=uuid.UUID(admin_id),
+                updated_by_user_id=uuid.UUID(admin_id),
+            )
+        )
+        await db.commit()
+
+    request_id = uuid.uuid4()
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.request(
+            "DELETE",
+            "/admin/category-mappings/01070100",
+            cookies=auth_cookies(admin_id),
+            headers={"X-Request-Id": str(request_id)},
+            json={"access_reason": "override 원복"},
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]
+    assert item["code"] == "01070100"
+    assert item["has_override"] is False
+    assert item["effective_label"] == "해수욕장"
+
+    async with session_factory() as db:
+        assert await db.get(CategoryMappingOverride, "01070100") is None
+        audit = await db.scalar(
+            select(AdminAuditLog).where(
+                AdminAuditLog.action == "category_mapping.rollback",
+                AdminAuditLog.request_id == request_id,
+            )
+        )
+        assert audit is not None
+        assert audit.actor_user_id == uuid.UUID(admin_id)
+        assert audit.resource_id == "01070100"
+        assert audit.access_reason == "override 원복"
+        assert audit.request_id == request_id
+        assert audit.before_state is not None
+        assert audit.before_state["marker_icon"] == "beach"
+        assert audit.after_state is None
 
 
 async def test_admin_category_mappings_is_hidden_for_regular_user(

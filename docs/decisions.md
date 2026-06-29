@@ -2157,7 +2157,54 @@ shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로
 - `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`, `docs/journal.md`에 본 전환 작업과 후속
   작업 흐름을 반영한다.
 
+## ADR-052: Pinvi category mapping은 taxonomy가 아니라 Admin presentation override만 저장
+
+- **상태**: accepted
+- **날짜**: 2026-06-29
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+`kor-travel-map`이 category taxonomy와 upstream `maki_icon` 정본을 소유한다는 결정은
+ADR-026/027과 marker 팔레트 정책에 이미 박혀 있다. 다만 Pinvi Admin에서는 운영자가 특정 category
+code의 표시명, 마커 색, 마커 아이콘을 Pinvi UX에 맞게 보정해야 하는 요구가 생겼다. 이 값을
+`kor-travel-map` taxonomy에 다시 쓰면 책임 경계가 흐려지고, 반대로 Pinvi에 category tree를 복제하면
+동기화 drift가 생긴다.
+
+### 결정
+
+- Pinvi는 `app.category_mappings`에 **presentation override만** 저장한다.
+- `category_key`는 `kor-travel-map` `/v1/categories`의 category code이며 Pinvi FK를 두지 않는다.
+  존재 확인은 Admin mutation 시 최신 upstream catalog 조회로 수행한다.
+- 저장 가능한 override는 `display_name_ko`, `marker_color`(`P-01`~`P-16`), `marker_icon`(maki id)
+  세 필드로 제한한다. category tree, active 여부, sort order, feature count는 계속 upstream 응답을
+  따른다.
+- `GET /admin/category-mappings`는 upstream item과 Pinvi override를 merge해 `upstream_*`,
+  `effective_*`, `has_override`를 함께 반환한다. 응답 `mode`는 `pinvi_override`다.
+- `PATCH /admin/category-mappings/{category_key}`와 `DELETE /admin/category-mappings/{category_key}`는
+  `admin` 전용이며 `access_reason`과 `admin_audit_log` 기록을 필수로 한다. `operator`는 조회만
+  가능하다.
+- rollback은 override row 삭제다. upstream taxonomy에는 어떤 mutation도 보내지 않는다.
+
+### 근거
+
+- category code 정본과 Pinvi UX 표시 보정을 분리하면 `kor-travel-map` 계약을 침범하지 않으면서도
+  운영자가 즉시 마커 표현을 보정할 수 있다.
+- override row를 삭제하는 rollback은 감사와 복구 절차가 단순하고, upstream drift가 있을 때도
+  최신 catalog를 기준으로 다시 계산할 수 있다.
+
+### 결과
+
+- `app.category_mappings`는 Pinvi `app` schema 소유 table이지만, category taxonomy table이 아니다.
+- Admin category mapping UI는 read-only preview가 아니라 audited override editor를 포함한다.
+- JSON export는 upstream/effective/override 값을 함께 내보내 운영자가 적용 상태를 검토할 수 있다.
+
+### 후속
+
+- bulk JSON import가 필요하면 같은 contract 위에 별도 PR로 추가한다. bulk import도 단건 mutation과
+  동일하게 `access_reason`, validation, audit 기록을 요구한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-052**
+- 다음 신규 ADR = **ADR-053**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

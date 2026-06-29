@@ -6,6 +6,12 @@
 
 ## 2026-06-29
 
+- [x] T-264 — Admin category mapping DB override. (완료: 2026-06-29, PR #316, codex)
+      ADR-052로 Pinvi category mapping 범위를 taxonomy가 아닌 presentation override로 고정하고,
+      `app.category_mappings` migration/model, `/admin/category-mappings` 조회/PATCH/DELETE rollback,
+      `admin_audit_log` 기록, Web Admin editor, schema/api-client, API integration, N150 Playwright
+      e2e를 추가했다. `tasks.md`도 완료/머지/검증 이력을 제거하고 열린 항목만 남기도록 정리했다.
+
 - [x] T-261 / T-262 / T-263 — 스마트 정렬 (경로 최적화). (완료: 2026-06-29, PR #315, claude)
       사용자 결정으로 OR-Tools 대신 순수 Python **2-opt** local search 채택(거리 haversine 유지,
       신규 의존성 0, Odroid ARM/N150 안전, trip day POI 수에 충분). `services/trip.py`에
