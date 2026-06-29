@@ -6,6 +6,13 @@
 
 ## 2026-06-29
 
+- [x] T-265 — Admin notice plan 작성기. (완료: 2026-06-29, codex)
+      `/admin/notice-plans` Admin CRUD를 목록/생성/상세/수정/삭제로 확장하고, `If-Match` 기반
+      version conflict, POI 생성/수정/삭제/reorder, plan/POI 첨부 관리 흐름을 구현했다. Web Admin에는
+      `/admin/notice-plans` 목록/필터, 신규 생성, 편집, `NoticePoiEditor`, 첨부 업로드 패널을 추가했다.
+      `packages/schemas`/`packages/api-client` 계약과 query key를 갱신했고 API 통합 테스트 및 N150
+      Playwright e2e로 검증했다.
+
 - [x] T-287 — Trip Day optimistic lock API / conflict UX. (완료: 2026-06-29, claude)
       day rename/delete 동시성을 trip/POI와 동일한 정수 version optimistic lock(`If-Match` 헤더)으로
       도입. migration 0036으로 `app.trip_days.version` 추가(server_default 1), `PATCH/DELETE

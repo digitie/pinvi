@@ -64,6 +64,29 @@ class NoticePoiCreate(NoticePoiBase):
     pass
 
 
+class NoticePoiUpdate(BaseModel):
+    day_index: int | None = Field(default=None, ge=1)
+    sort_order: str | None = Field(default=None, min_length=1, max_length=80)
+    feature_id: str | None = Field(default=None, min_length=1, max_length=200)
+    feature_snapshot: dict[str, Any] | None = None
+    memo: str | None = None
+    budget_amount: Decimal | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    user_url: str | None = Field(default=None, max_length=2000)
+    custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
+    custom_marker_icon: str | None = Field(default=None, max_length=64)
+
+
+class NoticePoiReorderItem(BaseModel):
+    notice_poi_id: uuid.UUID
+    day_index: int = Field(ge=1)
+    sort_order: str = Field(min_length=1, max_length=80)
+
+
+class NoticePoiReorderRequest(BaseModel):
+    items: list[NoticePoiReorderItem] = Field(min_length=1)
+
+
 class NoticePoiResponse(NoticePoiBase):
     notice_poi_id: uuid.UUID
     notice_plan_id: uuid.UUID

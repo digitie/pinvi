@@ -21,46 +21,45 @@
 - **scope gate(T-284 mobile)**: 문서화 완료. T-113/T-285 AI 관련 task는 2026-06-29 사용자 지시로 제거.
 - **병행 트랙(claude)**: T-289/290(WS reconnect/conflict UX, #310), T-291(ETL run-failure sensor, #312),
   T-261~263(스마트 정렬 2-opt, #315, ADR-053), T-292(integrity pagination), T-264(category override, #316, ADR-052),
-  T-267(Backup/Restore UI hot-swap, #319).
+  T-267(Backup/Restore UI hot-swap, #319), T-287(Trip Day optimistic lock, #321).
+- **Admin 보강(T-265)**: `/admin/notice-plans` 작성기, POI editor, 첨부 업로드, Admin API CRUD 완료.
 - **Sprint 5/v0.2.0 게이트**: 대부분 완료, release/tag만 T-259로 분리.
 
 ## 3. 남은 Task Backlog (그룹별)
 
-### A. 일정 최적화 마감
-- **T-287** Trip Day optimistic lock / conflict UX — `PATCH/DELETE /days/{day_index}`에 `If-Match` 도입
-  여부 결정 → 도입 시 409 회귀 + day rename/delete 충돌 다이얼로그 + live e2e. (경로 최적화 자체는
-  ADR-053/T-261~263으로 완료.)
+### A. MCP 외부 인터페이스
 
-### B. Admin 보강
-- **T-265** Admin notice plan 작성기 — `/admin/notice-plans` 목록/편집/생성 + `NoticePoiEditor` +
-  첨부 업로드. 백엔드 curated import(T-211)·`curated_trip_plans` 위에 UI 추가.
-
-### C. MCP 외부 인터페이스
 - **T-266** MCP 운영 실증 — MCP 서버(T-112)는 구현됨. Claude Code MCP client 등록 → `list_trips`/
   `search_features` 호출 성공 실증(E2E 시나리오 7) + 토큰 발급/회수 운영 확인.
 
-### D. 한국 전용 geofencing (ADR-018)
+### B. 한국 전용 geofencing (ADR-018)
+
 - **T-268** 3중 안전망 — FastAPI `middleware/geofence.py`(구현됨, T-109/142/187) 위에 nginx geo +
   Cloudflare WAF 설정/문서 마감. KR 외 IP 451 + VPN 검증.
 
-### E. 법무 / 컴플라이언스
+### C. 법무 / 컴플라이언스
+
 - **T-269** LBS / 법무 4문서 / 동의 UX — `docs/legal/{terms-of-service,privacy-policy,lbs-terms,location-consent}.md`
   (변호사 검토 placeholder) + 동의 UX. PIPA/LBS 운영 표면은 T-275~282로 구현됨; 본 task는 문서/동의 흐름.
 
-### F. 운영 / 성능 / 보안
+### D. 운영 / 성능 / 보안
+
 - **T-270** 성능 / 부하 / 보안 점검 — `tests/load/*`, `tests/security/*`. T-283 보안 리뷰와 중복 영역은 조율.
 
-### G. 범위 제거 / 미래 분리
+### E. 범위 제거 / 미래 분리
+
 - **T-113 / T-271 / T-272 / T-285 제거** — 2026-06-29 사용자 지시로 열린 backlog에서 제외했다.
   AI companion 연동이 다시 필요하면 신규 repo 신설이 아니라 기존 `kor-travel-concierge` API를
   활용하는 consumer/client 통합 task로 정의한다.
 
-### H. 정합/잔여
+### F. 정합/잔여
+
 - **T-286** Cross-track review gap closure — #238 리뷰 44 gap + PR #264 리뷰를 task/문서/검증으로 매핑.
 - **T-291-etl-sql-tests** — ETL asset 원시 SQL 실행 테스트(etl Postgres fixture) + pii_retention audit
   retention 정책 분리(api/zod 파급). ETL 격리 트랙.
 
-### I. 릴리즈
+### G. 릴리즈
+
 - **T-259** v0.2.0 release gate — Admin live full catalog + release notes/tag/GitHub Release. (선행 릴리즈)
 - **T-273** v1.0.0 E2E / Live Gate — E2E 10 시나리오 + Odroid/N150 양쪽 smoke + backup 핫스왑 훈련 +
   geofence 검증.
@@ -76,23 +75,23 @@
 
 ## 5. DoD → Task 매핑 (요약)
 
-| SPRINT-6 DoD | Task |
-|---|---|
-| optimize 엔드포인트 + 스마트 정렬 UI | ✅ T-261~263 (ADR-053) |
-| category-mapping | ✅ T-264 (ADR-052) |
-| PIPA incident/DSR/retention/suppression/moderation/RBAC/lifecycle/abuse | ✅ T-275~282 |
-| Day optimistic lock / conflict | T-287 |
-| notice plan 작성기 | T-265 |
-| MCP 외부 인터페이스 실증 | T-266 |
-| Backup/Restore UI 핫스왑 | ✅ T-267 |
-| 한국 전용 geofencing | T-268 |
-| 법무 4문서 / 동의 UX | T-269 |
-| 성능/부하/보안 점검 | T-270, T-283(1차) |
-| Odroid+N150 운영 smoke | 제거(T-271) |
-| AI companion 분리 | 제거(T-113/T-272/T-285), 필요 시 기존 `kor-travel-concierge` API 활용 |
-| cross-track gap closure | T-286 |
-| ETL SQL 테스트 / audit retention | T-291-etl-sql-tests |
-| 릴리즈 | T-259 → T-273 → T-274 |
+| SPRINT-6 DoD                                                            | Task                                                                  |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| optimize 엔드포인트 + 스마트 정렬 UI                                    | ✅ T-261~263 (ADR-053)                                                |
+| category-mapping                                                        | ✅ T-264 (ADR-052)                                                    |
+| PIPA incident/DSR/retention/suppression/moderation/RBAC/lifecycle/abuse | ✅ T-275~282                                                          |
+| Day optimistic lock / conflict                                          | ✅ T-287                                                              |
+| notice plan 작성기                                                      | ✅ T-265                                                              |
+| MCP 외부 인터페이스 실증                                                | T-266                                                                 |
+| Backup/Restore UI 핫스왑                                                | ✅ T-267                                                              |
+| 한국 전용 geofencing                                                    | T-268                                                                 |
+| 법무 4문서 / 동의 UX                                                    | T-269                                                                 |
+| 성능/부하/보안 점검                                                     | T-270, T-283(1차)                                                     |
+| Odroid+N150 운영 smoke                                                  | 제거(T-271)                                                           |
+| AI companion 분리                                                       | 제거(T-113/T-272/T-285), 필요 시 기존 `kor-travel-concierge` API 활용 |
+| cross-track gap closure                                                 | T-286                                                                 |
+| ETL SQL 테스트 / audit retention                                        | T-291-etl-sql-tests                                                   |
+| 릴리즈                                                                  | T-259 → T-273 → T-274                                                 |
 
 ## 6. ADR 현황 (Sprint 6 관련)
 

@@ -57,6 +57,9 @@
 - Admin `/admin/category-mapping`을 `kor-travel-map` category catalog와 Pinvi-local override 화면으로
   교체했다. 16색 마커 팔레트 fallback, unmapped count, icon drift, feature count를 확인하고,
   표시명/마커 색/아이콘 override를 감사 로그와 함께 저장·rollback할 수 있다.
+- Admin `/admin/notice-plans` 작성기를 추가했다. 추천 여행 plan 목록/필터, 생성, 편집, 삭제,
+  POI 생성/수정/삭제/reorder, plan/POI 첨부 업로드를 운영자가 처리할 수 있고, Admin API는
+  `If-Match` version conflict와 `admin_audit_log` 기록을 제공한다.
 - Admin `/admin/incidents`를 추가했다. `app.security_incidents`는
   `detected` → `triage` → `notification_decision` → `reported` → `closed` workflow로 확장됐고,
   CPO 30분 review due, KISA/PIPC 72시간 신고 due, CPO Telegram outbox, 정보주체 통지 email outbox,

@@ -112,11 +112,20 @@ import {
   AdminUserDetailSchema,
   AdminUpstreamApiCallLogsResponseSchema,
   AdminUpstreamSystemLogsResponseSchema,
+  AttachmentCreateSchema,
+  AttachmentResponseSchema,
   AvatarUploadUrlRequestSchema,
   DownloadUrlResponseSchema,
   McpTokenRevokeRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
+  NoticePlanCreateSchema,
+  NoticePlanResponseSchema,
+  NoticePlanUpdateSchema,
+  NoticePoiCreateSchema,
+  NoticePoiReorderRequestSchema,
+  NoticePoiResponseSchema,
+  NoticePoiUpdateSchema,
   UploadUrlResponseSchema,
   AttachmentLibraryPageSchema,
 } from '@pinvi/schemas';
@@ -184,12 +193,25 @@ export interface AdminCategoryMappingListParams {
   activeOnly?: boolean;
 }
 
+export interface AdminNoticePlanListParams {
+  q?: string;
+  category?: string;
+  isPublished?: boolean;
+  limit?: number;
+}
+
 export type AdminCategoryMappingUpdateBody = z.infer<
   typeof AdminCategoryMappingUpdateRequestSchema
 >;
 export type AdminCategoryMappingRollbackBody = z.infer<
   typeof AdminCategoryMappingRollbackRequestSchema
 >;
+export type AdminNoticePlanCreateBody = z.infer<typeof NoticePlanCreateSchema>;
+export type AdminNoticePlanUpdateBody = z.infer<typeof NoticePlanUpdateSchema>;
+export type AdminNoticePoiCreateBody = z.infer<typeof NoticePoiCreateSchema>;
+export type AdminNoticePoiUpdateBody = z.infer<typeof NoticePoiUpdateSchema>;
+export type AdminNoticePoiReorderBody = z.infer<typeof NoticePoiReorderRequestSchema>;
+export type AdminNoticeAttachmentCreateBody = z.infer<typeof AttachmentCreateSchema>;
 
 export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
 
@@ -428,6 +450,133 @@ export const adminApi = (client: ApiClient) => ({
       body: JSON.stringify(AdminCategoryMappingRollbackRequestSchema.parse(body)),
       schema: AdminCategoryMappingItemSchema,
     }),
+
+  listNoticePlans: (params: AdminNoticePlanListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.category) qs.set('category', params.category);
+    if (params.isPublished !== undefined) qs.set('is_published', String(params.isPublished));
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/notice-plans${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: z.array(NoticePlanResponseSchema),
+    });
+  },
+
+  createNoticePlan: (body: AdminNoticePlanCreateBody) =>
+    client.request('/admin/notice-plans', {
+      method: 'POST',
+      body: JSON.stringify(NoticePlanCreateSchema.parse(body)),
+      schema: NoticePlanResponseSchema,
+    }),
+
+  getNoticePlan: (planId: string) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}`, {
+      method: 'GET',
+      schema: NoticePlanResponseSchema,
+    }),
+
+  updateNoticePlan: (planId: string, body: AdminNoticePlanUpdateBody, version?: number) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}`, {
+      method: 'PATCH',
+      headers: version ? { 'If-Match': String(version) } : undefined,
+      body: JSON.stringify(NoticePlanUpdateSchema.parse(body)),
+      schema: NoticePlanResponseSchema,
+    }),
+
+  deleteNoticePlan: (planId: string, version?: number) =>
+    client.requestNoContent(`/admin/notice-plans/${encodeURIComponent(planId)}`, {
+      method: 'DELETE',
+      headers: version ? { 'If-Match': String(version) } : undefined,
+    }),
+
+  createNoticePoi: (planId: string, body: AdminNoticePoiCreateBody) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}/pois`, {
+      method: 'POST',
+      body: JSON.stringify(NoticePoiCreateSchema.parse(body)),
+      schema: NoticePoiResponseSchema,
+    }),
+
+  updateNoticePoi: (
+    planId: string,
+    poiId: string,
+    body: AdminNoticePoiUpdateBody,
+    version?: number,
+  ) =>
+    client.request(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/pois/${encodeURIComponent(poiId)}`,
+      {
+        method: 'PATCH',
+        headers: version ? { 'If-Match': String(version) } : undefined,
+        body: JSON.stringify(NoticePoiUpdateSchema.parse(body)),
+        schema: NoticePoiResponseSchema,
+      },
+    ),
+
+  deleteNoticePoi: (planId: string, poiId: string, version?: number) =>
+    client.requestNoContent(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/pois/${encodeURIComponent(poiId)}`,
+      {
+        method: 'DELETE',
+        headers: version ? { 'If-Match': String(version) } : undefined,
+      },
+    ),
+
+  reorderNoticePois: (planId: string, body: AdminNoticePoiReorderBody) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}/pois/reorder`, {
+      method: 'POST',
+      body: JSON.stringify(NoticePoiReorderRequestSchema.parse(body)),
+      schema: z.array(NoticePoiResponseSchema),
+    }),
+
+  listNoticePlanAttachments: (planId: string) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}/attachments`, {
+      method: 'GET',
+      schema: z.array(AttachmentResponseSchema),
+    }),
+
+  createNoticePlanAttachment: (planId: string, body: AdminNoticeAttachmentCreateBody) =>
+    client.request(`/admin/notice-plans/${encodeURIComponent(planId)}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify(AttachmentCreateSchema.parse(body)),
+      schema: AttachmentResponseSchema,
+    }),
+
+  deleteNoticePlanAttachment: (planId: string, attachmentId: string) =>
+    client.requestNoContent(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/attachments/${encodeURIComponent(attachmentId)}`,
+      { method: 'DELETE' },
+    ),
+
+  listNoticePoiAttachments: (planId: string, poiId: string) =>
+    client.request(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/pois/${encodeURIComponent(poiId)}/attachments`,
+      {
+        method: 'GET',
+        schema: z.array(AttachmentResponseSchema),
+      },
+    ),
+
+  createNoticePoiAttachment: (
+    planId: string,
+    poiId: string,
+    body: AdminNoticeAttachmentCreateBody,
+  ) =>
+    client.request(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/pois/${encodeURIComponent(poiId)}/attachments`,
+      {
+        method: 'POST',
+        body: JSON.stringify(AttachmentCreateSchema.parse(body)),
+        schema: AttachmentResponseSchema,
+      },
+    ),
+
+  deleteNoticePoiAttachment: (planId: string, poiId: string, attachmentId: string) =>
+    client.requestNoContent(
+      `/admin/notice-plans/${encodeURIComponent(planId)}/pois/${encodeURIComponent(poiId)}/attachments/${encodeURIComponent(attachmentId)}`,
+      { method: 'DELETE' },
+    ),
 
   listSeedScenarios: () =>
     client.request('/admin/seed/scenarios', {

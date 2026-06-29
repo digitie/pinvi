@@ -188,12 +188,24 @@ export type { PoiReorderRequest, PoiUpdate } from './poi';
 export {
   NoticePoiSchema,
   NoticePlanResponseSchema,
+  NoticePlanCreateSchema,
+  NoticePlanUpdateSchema,
+  NoticePoiCreateSchema,
+  NoticePoiResponseSchema,
+  NoticePoiUpdateSchema,
+  NoticePoiReorderRequestSchema,
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
 } from './notice-plan';
 export type {
   NoticePoi,
+  NoticePoiResponse,
   NoticePlan,
+  NoticePlanCreate,
+  NoticePlanUpdate,
+  NoticePoiCreate,
+  NoticePoiUpdate,
+  NoticePoiReorderRequest,
   NoticePlanCopyRequest,
   NoticePlanCopyResponse,
 } from './notice-plan';
