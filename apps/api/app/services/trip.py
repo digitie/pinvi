@@ -381,19 +381,27 @@ async def update_trip_day(
     *,
     trip_id: uuid.UUID,
     day_index: int,
+    expected_version: int,
     patch: dict[str, Any],
 ) -> TripDay:
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    if day.version != expected_version:
+        raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     for key, value in patch.items():
         setattr(day, key, value)
+    day.version += 1
     await _bump_trip_version(db, trip_id=trip_id)
     await db.commit()
     await db.refresh(day)
     return day
 
 
-async def delete_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> None:
+async def delete_trip_day(
+    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int, expected_version: int
+) -> None:
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    if day.version != expected_version:
+        raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     await db.delete(day)
     await _bump_trip_version(db, trip_id=trip_id)
     await db.commit()

@@ -164,16 +164,18 @@ export const tripApi = (client: ApiClient) => ({
       schema: TripDayResponseSchema,
     }),
 
-  updateDay: (tripId: string, dayIndex: number, body: TripDayUpdate) =>
+  updateDay: (tripId: string, dayIndex: number, version: number, body: TripDayUpdate) =>
     client.request(`/trips/${tripId}/days/${dayIndex}`, {
       method: 'PATCH',
+      headers: { 'If-Match': String(version) },
       body: JSON.stringify(TripDayUpdateSchema.parse(body)),
       schema: TripDayResponseSchema,
     }),
 
-  deleteDay: (tripId: string, dayIndex: number) =>
+  deleteDay: (tripId: string, dayIndex: number, version: number) =>
     client.requestNoContent(`/trips/${tripId}/days/${dayIndex}`, {
       method: 'DELETE',
+      headers: { 'If-Match': String(version) },
     }),
 
   getShared: (tripId: string, token: string) =>

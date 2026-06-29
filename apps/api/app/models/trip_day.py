@@ -30,3 +30,5 @@ class TripDay(Base, TimestampMixin):
     date: Mapped[date | None] = mapped_column(Date())
     title: Mapped[str | None] = mapped_column(String(200))
     note: Mapped[str | None] = mapped_column(Text())
+    # optimistic lock — trip/POI와 동일한 정수 version (If-Match 헤더로 검증, T-287).
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

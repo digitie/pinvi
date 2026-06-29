@@ -164,6 +164,8 @@ export const TripDayResponseSchema = z.object({
   date: z.string().date().nullable(),
   title: z.string().nullable(),
   note: z.string().nullable(),
+  // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
+  version: z.number().int().default(1),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
 });
@@ -238,6 +240,8 @@ export const TripViewDaySchema = z.object({
   day_index: z.number().int(),
   date: z.string().date().nullable(),
   title: z.string().nullable(),
+  // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
+  version: z.number().int().default(1),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;

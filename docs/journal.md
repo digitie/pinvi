@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — T-287 Trip Day optimistic lock / conflict UX
+
+**작업**: day rename/delete에 trip/POI와 동일한 정수 version optimistic lock(If-Match) 도입.
+
+**변경**: migration 0036(`app.trip_days.version`), `models/trip_day.py`, `services/trip.py`
+(update/delete_trip_day expected_version 검증+bump), `api/v1/trips.py`(If-Match + 409),
+`schemas/trip.py`(TripDayResponse/TripViewDay version) + `trip_view_builder`, zod/api-client,
+`TripDetail.tsx`(version 전달+충돌 reload 안내), mobile `edit.tsx` deleteDay version, 통합 테스트.
+
+**검증**: api ruff/format clean(py_compile OK; pytest/mypy CI), web typecheck 신규 0 + mobile
+typecheck pass + vitest(web 46 / domain 61) pass.
+
+**다음**: backlog non-overlap task.
 ## 2026-06-29 (codex) — T-113 / T-271 / T-272 / T-285 제거
 
 **작업**: 사용자 지시에 따라 T-113, T-271, T-272, T-285를 열린 backlog에서 제거했다.

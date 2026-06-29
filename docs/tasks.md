@@ -14,7 +14,6 @@
 
 ## v0.2.0 구현 게이트
 
-- [ ] T-287 — Trip Day optimistic lock API / conflict UX follow-up.
 - [ ] T-259 — Release candidate gate / `v0.2.0`.
 
 ## 최근 PR 리뷰 후속

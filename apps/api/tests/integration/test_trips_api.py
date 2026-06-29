@@ -460,10 +460,22 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     patched = await client.patch(
         f"/trips/{trip_id}/days/1",
         json={"title": "도착일", "note": "비행기"},
+        headers={"If-Match": "1"},
         cookies=cookies,
     )
     assert patched.status_code == 200, patched.text
     assert patched.json()["data"]["note"] == "비행기"
+    assert patched.json()["data"]["version"] == 2
+
+    # 동시 편집 충돌 — stale If-Match는 409 (T-287 optimistic lock)
+    stale = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"title": "변경"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["error"]["code"] == "VERSION_CONFLICT"
 
     poi = await client.post(
         f"/trips/{trip_id}/pois",
@@ -472,7 +484,14 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     )
     assert poi.status_code == 201, poi.text
 
-    deleted = await client.request("DELETE", f"/trips/{trip_id}/days/1", cookies=cookies)
+    # stale delete도 409, 올바른 version은 204
+    stale_delete = await client.request(
+        "DELETE", f"/trips/{trip_id}/days/1", headers={"If-Match": "1"}, cookies=cookies
+    )
+    assert stale_delete.status_code == 409, stale_delete.text
+    deleted = await client.request(
+        "DELETE", f"/trips/{trip_id}/days/1", headers={"If-Match": "2"}, cookies=cookies
+    )
     assert deleted.status_code == 204
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text

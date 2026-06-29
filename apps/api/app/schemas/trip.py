@@ -145,6 +145,7 @@ class TripDayResponse(BaseModel):
     date: Date | None
     title: str | None
     note: str | None
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -222,6 +223,7 @@ class TripViewDay(BaseModel):
     day_index: int
     date: Date | None
     title: str | None
+    version: int
     pois: list[TripViewPoi]
 
 

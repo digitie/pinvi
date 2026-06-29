@@ -164,6 +164,7 @@ def _to_day_response(day) -> TripDayResponse:  # type: ignore[no-untyped-def]
         date=day.date,
         title=day.title,
         note=day.note,
+        version=day.version,
         created_at=day.created_at,
         updated_at=day.updated_at,
     )
@@ -633,6 +634,7 @@ async def update_trip_day_endpoint(
     body: TripDayUpdate,
     current_user_id: CurrentUserId,
     db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
@@ -641,6 +643,7 @@ async def update_trip_day_endpoint(
             db,
             trip_id=trip_id,
             day_index=day_index,
+            expected_version=if_match,
             patch=body.model_dump(exclude_unset=True),
         )
     except (TripNotFoundError, TripPermissionError) as exc:
@@ -648,6 +651,11 @@ async def update_trip_day_endpoint(
     except TripDayNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripVersionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_day_response(day)
@@ -666,16 +674,22 @@ async def delete_trip_day_endpoint(
     day_index: int,
     current_user_id: CurrentUserId,
     db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
 ) -> None:
     actor_id = uuid.UUID(current_user_id)
     try:
         await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
-        await delete_trip_day(db, trip_id=trip_id, day_index=day_index)
+        await delete_trip_day(db, trip_id=trip_id, day_index=day_index, expected_version=if_match)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     except TripDayNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripVersionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     realtime_broker.publish_event_nowait(

@@ -462,17 +462,26 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
   };
 
+  const dayConflictNotice = () =>
+    setMutationError('다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.');
+
   const handleRenameDay = (dayIndex: number, title: string) => {
-    void runMutation(() =>
-      tripApi(apiClient).updateDay(tripId, dayIndex, { title: title || null })
+    const version = view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
+    void runMutation(
+      () => tripApi(apiClient).updateDay(tripId, dayIndex, version, { title: title || null }),
+      { onConflict: dayConflictNotice }
     );
   };
 
   const handleDeleteDay = (dayIndex: number) => {
-    void runMutation(async () => {
-      await tripApi(apiClient).deleteDay(tripId, dayIndex);
-      setSelectedDayIndex(null);
-    });
+    const version = view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
+    void runMutation(
+      async () => {
+        await tripApi(apiClient).deleteDay(tripId, dayIndex, version);
+        setSelectedDayIndex(null);
+      },
+      { onConflict: dayConflictNotice }
+    );
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
