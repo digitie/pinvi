@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
+
+codex PR #227(map marker tuning / viewport caching)을 98커밋 뒤처진 상태에서 main에 동기화·충돌
+해소(FeatureMapView: resolveMarkerStyle + featureKind 병합, isSelected; docs는 main 기준)하고
+typecheck/lint/vitest/CI 통과 후 머지했다. 같은 흐름에서 T-268(geofencing 3중 안전망, #323)·
+T-269(법무 4문서+동의 UX, #324) 완료를 tasks/done/resume/journal에 반영(완료처리)했다.
+
+**다음 한 작업**: 열린 backlog 중 non-overlap task. T-291-etl-sql-tests는 codex 선점 예정이라 피하고,
+T-266(MCP 운영 실증) / T-270(성능·보안 점검) / T-286(cross-track gap) 중 택1.
+
 ## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 완료
 
 `/admin/notice-plans` Admin CRUD를 구현했다. 백엔드는 plan 목록/생성/상세/수정/삭제,

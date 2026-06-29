@@ -16,6 +16,7 @@ import { hasLocationConsent, locationConsentItems, resolveMarkerStyle } from '@p
 import {
   ClusterLayer,
   type ClusterPoint,
+  type WeatherCondition,
   type MapLibreEvent,
   type MapLibreMap,
   type MapMouseEvent,
@@ -26,6 +27,7 @@ import {
   Popup,
   UserLocationMarker,
   VWorldMap,
+  WeatherMarker,
 } from '@/components/map/vworldPrimitives';
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
@@ -36,6 +38,8 @@ const DEFAULT_ZOOM = 12;
 const CLUSTER_COLOR = '#37404a';
 const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
+const VIEWPORT_CACHE_MAX = 32;
+const VIEWPORT_CACHE_TTL_MS = 60_000;
 
 type MapPoint = ClusterPoint & {
   kind: 'feature' | 'cluster';
@@ -49,6 +53,7 @@ type MapPoint = ClusterPoint & {
   category?: string | null;
   status?: string | null;
   featureId?: string;
+  featureKind?: FeatureSummary['kind'];
   count?: number;
 };
 
@@ -58,6 +63,11 @@ interface ContextMenuState {
   lon: number;
   lat: number;
 }
+
+type ViewportCacheEntry = {
+  data: FeaturesInBoundsResponse;
+  cachedAt: number;
+};
 
 function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
   // kor_travel_map 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
@@ -84,6 +94,7 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
         category: style.category,
         status: f.status ?? null,
         featureId: f.feature_id,
+        featureKind: f.kind,
       },
     ];
   });
@@ -125,7 +136,43 @@ function featureToPoint(f: FeatureSummary): MapPoint | null {
     category: style.category,
     status: f.status ?? null,
     featureId: f.feature_id,
+    featureKind: f.kind,
   };
+}
+
+function weatherConditionFromIcon(icon: string | null | undefined): WeatherCondition {
+  const value = (icon ?? '').toLowerCase();
+  if (/snow|sleet|ice|hail|blizzard|눈|한파/.test(value)) return 'snowy';
+  if (/rain|shower|storm|thunder|drizzle|precip|비|호우/.test(value)) return 'rainy';
+  if (/sun|clear|day|맑/.test(value)) return 'sunny';
+  return 'cloudy';
+}
+
+function rememberViewport(
+  cache: Map<string, ViewportCacheEntry>,
+  key: string,
+  data: FeaturesInBoundsResponse
+) {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, { data, cachedAt: Date.now() });
+  while (cache.size > VIEWPORT_CACHE_MAX) {
+    const first = cache.keys().next().value;
+    if (first == null) break;
+    cache.delete(first);
+  }
+}
+
+function cachedViewport(
+  cache: Map<string, ViewportCacheEntry>,
+  key: string
+): FeaturesInBoundsResponse | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > VIEWPORT_CACHE_TTL_MS) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
 }
 
 /** kor_travel_map 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
@@ -176,6 +223,7 @@ export function FeatureMapView({
   const latestRequest = useRef(0);
   const inBoundsAbort = useRef<AbortController | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewportCache = useRef<Map<string, ViewportCacheEntry>>(new Map());
 
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -195,13 +243,23 @@ export function FeatureMapView({
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchInBounds = useCallback(async (map: MapLibreMap) => {
-    const bbox = boundsToBbox(map.getBounds());
     const zoom = clampZoom(map.getZoom());
+    const bbox = boundsToBbox(map.getBounds(), zoom);
+    const cacheKey = `${zoom}:${bbox}`;
     const requestId = latestRequest.current + 1;
     latestRequest.current = requestId;
     // 직전 in-flight 요청을 취소해 빠른 pan에서 superseded viewport 검색이 백엔드에
     // 쌓이지 않게 한다 (kor-travel-concierge #111 — abort 미전파 패턴 예방).
     inBoundsAbort.current?.abort();
+
+    const cached = cachedViewport(viewportCache.current, cacheKey);
+    if (cached) {
+      setPoints(toPoints(cached));
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     inBoundsAbort.current = controller;
     setLoading(true);
@@ -211,6 +269,7 @@ export function FeatureMapView({
         { signal: controller.signal },
       );
       if (requestId !== latestRequest.current) return;
+      rememberViewport(viewportCache.current, cacheKey, data);
       setPoints(toPoints(data));
       setError(null);
     } catch (err) {
@@ -428,6 +487,23 @@ export function FeatureMapView({
               maxZoom={15}
               renderMarker={(point) => {
                 const mapPoint = point as MapPoint;
+                const isSelected =
+                  mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
+                if (mapPoint.featureKind === 'weather') {
+                  return (
+                    <WeatherMarker
+                      key={mapPoint.id}
+                      lngLat={mapPoint.lngLat}
+                      temperature={isSelected && currentTemp != null ? Math.round(currentTemp) : 0}
+                      condition={weatherConditionFromIcon(mapPoint.icon)}
+                      title={mapPoint.title}
+                      selected={isSelected}
+                      ariaLabel={mapPoint.title}
+                      simplifyAtZoom={isSelected ? 5 : 20}
+                      onClick={() => handlePointClick(mapPoint)}
+                    />
+                  );
+                }
                 return (
                   <MakiMarker
                     key={mapPoint.id}
@@ -435,9 +511,7 @@ export function FeatureMapView({
                     icon={mapPoint.icon}
                     color={mapPoint.color}
                     title={mapPoint.title}
-                    selected={
-                      mapPoint.featureId != null && mapPoint.featureId === selected?.featureId
-                    }
+                    selected={isSelected}
                     ariaLabel={mapPoint.title}
                     onClick={() => handlePointClick(mapPoint)}
                   />

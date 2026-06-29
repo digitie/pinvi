@@ -201,6 +201,9 @@
 - Web 지도 의존성을 `maplibre-vworld` / `maplibre-vworld-js`에서
   `maplibre-vworld-react`의 `vworld-map-web` + `vworld-map-core` vendored tarball로 교체했다.
 - 지도 viewport feature 로딩, 검색, 내 위치, 우클릭 메뉴, POI 편집/정렬 UI를 추가했다.
+- 지도 marker는 kor-travel-map의 `marker_icon`/`marker_color` maki 표현을 유지하되,
+  `weather` feature는 `vworld-map-web`의 `WeatherMarker`로 표시한다. 낮은 줌 viewport
+  조회는 bbox 키를 더 거칠게 묶고 짧은 클라이언트 캐시를 사용해 pan/zoom refetch churn을 줄였다.
 - Admin 콘솔에 사용자, 여행, POI, feature request, 백업, RustFS, MCP token, Grafana 화면을 연결했다.
 - FastAPI 백엔드가 `kor-travel-map` OpenAPI HTTP 계약으로 feature read/batch/search/public view를 호출한다.
 - `kor-travel-map` curated feature copy snapshot을 Pinvi `curated_trip_plans`로 import할 수 있다.
