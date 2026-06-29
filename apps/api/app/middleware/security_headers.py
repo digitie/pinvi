@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Final
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -10,6 +11,8 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
 from app.core.errors import build_error
+
+_log = logging.getLogger("pinvi.middleware.security_headers")
 
 API_CONTENT_SECURITY_POLICY: Final[str] = (
     "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
@@ -32,7 +35,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # An unhandled exception escapes every inner middleware/handler and is
             # otherwise emitted by Starlette's outermost ServerErrorMiddleware with
             # *no* security headers (scanners flag missing nosniff on 500s, #343).
-            # Build the fallback 500 here so the baseline headers are still applied.
+            # We build the fallback 500 here so the baseline headers are still applied,
+            # but because we intercept it before ServerErrorMiddleware we MUST log the
+            # traceback ourselves — otherwise the error is silently swallowed (#330 review).
+            _log.exception(
+                "unhandled exception in request %s %s; returning 500 with security headers",
+                request.method,
+                request.url.path,
+            )
             response = _fallback_server_error_response()
         apply_security_headers(
             response,
