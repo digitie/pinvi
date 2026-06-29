@@ -1,17 +1,18 @@
-"""Admin 사용자 관리 — force-verify / disable / resend-verify."""
+"""Admin 사용자 관리 — force-verify / disable / role grant/revoke."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Literal
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ColumnElement
 
 from app.models.audit import AdminAuditLog
-from app.models.session import UserSession
 from app.models.user import User
+from app.services.auth_session import revoke_active_user_sessions
 
 
 class AdminUserError(Exception):
@@ -20,6 +21,27 @@ class AdminUserError(Exception):
 
 class AdminUserNotFoundError(AdminUserError):
     code = "RESOURCE_NOT_FOUND"
+
+
+class AdminUserRoleTransitionError(AdminUserError):
+    code = "INVALID_STATE"
+
+
+class AdminUserPermissionError(AdminUserError):
+    code = "PERMISSION_DENIED"
+
+
+AdminRole = Literal["user", "admin", "operator", "cpo"]
+MutableAdminRole = Literal["admin", "operator", "cpo"]
+ROLE_ORDER: tuple[AdminRole, ...] = ("user", "admin", "operator", "cpo")
+
+
+def normalize_roles(roles: list[str] | None) -> list[AdminRole]:
+    """정해진 role vocabulary와 순서로 roles 배열을 정규화한다."""
+
+    role_set = set(roles or [])
+    role_set.add("user")
+    return [role for role in ROLE_ORDER if role in role_set]
 
 
 async def force_verify(
@@ -39,24 +61,80 @@ async def force_verify(
     return user, before_state
 
 
+async def grant_user_role(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    role: MutableAdminRole,
+) -> tuple[User, dict[str, list[AdminRole]]]:
+    user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    if user is None:
+        raise AdminUserNotFoundError("Not found.")
+    before_state = {"roles": normalize_roles(user.roles)}
+    if role in before_state["roles"]:
+        raise AdminUserRoleTransitionError(f"{role} role은 이미 부여되어 있습니다.")
+    user.roles = [str(existing) for existing in normalize_roles([*before_state["roles"], role])]
+    user.access_token_version = (user.access_token_version or 0) + 1
+    await revoke_active_user_sessions(db, user_id=user.user_id)
+    return user, before_state
+
+
+async def revoke_user_role(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    role: MutableAdminRole,
+) -> tuple[User, dict[str, list[AdminRole]]]:
+    user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    if user is None:
+        raise AdminUserNotFoundError("Not found.")
+    before_roles = normalize_roles(user.roles)
+    before_state = {"roles": before_roles}
+    if role not in before_roles:
+        raise AdminUserRoleTransitionError(f"{role} role은 부여되어 있지 않습니다.")
+    if role == "admin" and actor_id == user_id:
+        raise AdminUserPermissionError("자기 자신의 admin role은 회수할 수 없습니다.")
+    if role == "admin":
+        other_admin_rows = await db.execute(
+            select(User.roles).where(
+                User.user_id != user_id,
+                User.deleted_at.is_(None),
+            )
+        )
+        other_admin_count = sum(
+            1 for roles in other_admin_rows.scalars() if "admin" in normalize_roles(roles)
+        )
+        if other_admin_count < 1:
+            raise AdminUserPermissionError("마지막 admin role은 회수할 수 없습니다.")
+    user.roles = [
+        str(existing)
+        for existing in normalize_roles([existing for existing in before_roles if existing != role])
+    ]
+    user.access_token_version = (user.access_token_version or 0) + 1
+    await revoke_active_user_sessions(db, user_id=user.user_id)
+    return user, before_state
+
+
 async def disable_user(
     db: AsyncSession, *, user_id: uuid.UUID, actor_id: uuid.UUID
 ) -> tuple[User, dict[str, str | bool]]:
     user = await db.scalar(select(User).where(User.user_id == user_id))
     if user is None or actor_id == user_id:
         raise AdminUserNotFoundError("Not found.")
+    if user.status in {"pending_delete", "deleted"}:
+        raise AdminUserRoleTransitionError(
+            "삭제 대기 또는 삭제 완료 사용자는 비활성화할 수 없습니다."
+        )
     before_state: dict[str, str | bool] = {
         "status": user.status,
         "is_active": user.is_active,
     }
     user.status = "disabled"
     user.is_active = False
-    # 모든 active 세션 폐기
-    await db.execute(
-        update(UserSession)
-        .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(UTC))
-    )
+    user.access_token_version = (user.access_token_version or 0) + 1
+    await revoke_active_user_sessions(db, user_id=user_id, revoked_at=datetime.now(UTC))
     return user, before_state
 
 
@@ -68,9 +146,11 @@ async def list_users(
     status_filter: str | None = None,
     q: str | None = None,
 ) -> tuple[list[User], int]:
-    filters: list[ColumnElement[bool]] = [User.deleted_at.is_(None)]
+    filters: list[ColumnElement[bool]] = []
     if status_filter:
         filters.append(User.status == status_filter)
+    else:
+        filters.append(or_(User.deleted_at.is_(None), User.status == "pending_delete"))
     q_value = q.strip() if q else ""
     if q_value:
         pattern = f"%{q_value}%"

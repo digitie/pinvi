@@ -5,7 +5,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +26,14 @@ class CuratedPlanAttachment(Base, TimestampMixin):
     """trip / trip_poi / curated_plan / curated_poi 중 정확히 하나."""
 
     __tablename__ = "curated_plan_attachments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["trip_id", "trip_day_index"],
+            ["app.trip_days.trip_id", "app.trip_days.day_index"],
+            name="fk_curated_plan_attachments_trip_day",
+            ondelete="CASCADE",
+        ),
+    )
 
     attachment_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -27,6 +44,7 @@ class CuratedPlanAttachment(Base, TimestampMixin):
         PgUUID(as_uuid=True),
         ForeignKey("app.trips.trip_id", ondelete="CASCADE"),
     )
+    trip_day_index: Mapped[int | None] = mapped_column(Integer)
     trip_poi_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("app.trip_day_pois.attachment_id", ondelete="CASCADE"),

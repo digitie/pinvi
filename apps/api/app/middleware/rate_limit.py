@@ -12,12 +12,13 @@ import hashlib
 import hmac
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Final, Literal, Protocol, cast
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -50,6 +51,13 @@ class RateLimitPolicy:
     name: str
     limit_per_minute: int
     identity_kind: IdentityKind
+
+
+@dataclass(frozen=True)
+class RateLimitOverrideDecision:
+    override_id: uuid.UUID
+    action: Literal["blocked", "allowed"]
+    expires_at: datetime
 
 
 class RateLimitBackend(Protocol):
@@ -177,6 +185,36 @@ class RateLimitMiddleware:
         bucket_hash = _bucket_hash(policy.name, raw_key)
 
         try:
+            override_decision = None
+            if self._uses_postgres_store():
+                override_decision = await _active_override_decision(
+                    bucket_hash=bucket_hash,
+                    limit_name=policy.name,
+                    now=now,
+                )
+            if override_decision is not None and override_decision.action == "blocked":
+                retry_after = max(
+                    1,
+                    min(3600, ceil((override_decision.expires_at - now).total_seconds())),
+                )
+                response = JSONResponse(
+                    status_code=429,
+                    content=build_error(
+                        "RATE_LIMIT_BLOCKED",
+                        "운영 정책에 따라 요청이 일시 차단되었습니다.",
+                        {
+                            "limit_name": policy.name,
+                            "override_id": str(override_decision.override_id),
+                            "expires_at": override_decision.expires_at.isoformat(),
+                        },
+                    ),
+                    headers={"Retry-After": str(retry_after)},
+                )
+                await response(scope, receive, send)
+                return
+            if override_decision is not None and override_decision.action == "allowed":
+                await self.app(scope, receive, send)
+                return
             count = await self._backend_for_settings().hit(
                 bucket_hash=bucket_hash,
                 limit_name=policy.name,
@@ -213,6 +251,9 @@ class RateLimitMiddleware:
 
         await self.app(scope, receive, send)
 
+    def _uses_postgres_store(self) -> bool:
+        return self._backend is None and _effective_backend_name() == "postgres"
+
     def _backend_for_settings(self) -> RateLimitBackend:
         if self._backend is not None:
             return self._backend
@@ -232,55 +273,95 @@ def _effective_backend_name() -> BackendName:
     return "memory"
 
 
-def _policy_for_request(path: str) -> RateLimitPolicy:
-    normalized_path = _normalize_path(path)
-    if normalized_path.startswith("/public/"):
+def effective_rate_limit_backend_name() -> BackendName:
+    return _effective_backend_name()
+
+
+def rate_limit_policy_for_name(name: str) -> RateLimitPolicy:
+    if name == "public":
         return RateLimitPolicy(
             "public",
             settings.pinvi_rate_limit_public_per_minute,
             "ip",
         )
-    if normalized_path in AUTH_LOW_PATHS:
+    if name == "auth_low":
         return RateLimitPolicy(
             "auth_low",
             settings.pinvi_rate_limit_auth_per_minute,
             "ip_email",
         )
-    if OAUTH_LIMIT_PATH_RE.match(normalized_path):
+    if name == "oauth":
         return RateLimitPolicy(
             "oauth",
             settings.pinvi_rate_limit_oauth_per_minute,
             "ip",
         )
-    if normalized_path == "/storage/upload-urls":
+    if name == "storage_upload_urls":
         return RateLimitPolicy(
             "storage_upload_urls",
             settings.pinvi_rate_limit_storage_upload_per_minute,
             "user",
         )
-    if normalized_path in {"/features/in-bounds", "/features/search", "/search"}:
+    if name == "feature_search":
         return RateLimitPolicy(
             "feature_search",
             settings.pinvi_rate_limit_feature_search_per_minute,
             "user",
         )
-    if TRIP_EXPORT_PATH_RE.match(normalized_path):
+    if name == "trip_exports":
         return RateLimitPolicy(
             "trip_exports",
             settings.pinvi_rate_limit_trip_export_per_minute,
             "user",
         )
-    if SHARED_TRIP_PATH_RE.match(normalized_path):
+    if name == "shared_trip":
         return RateLimitPolicy(
             "shared_trip",
             settings.pinvi_rate_limit_shared_token_per_minute,
             "shared_token",
         )
-    return RateLimitPolicy(
-        "authenticated_default",
-        settings.pinvi_rate_limit_authenticated_per_minute,
-        "user",
-    )
+    if name == "authenticated_default":
+        return RateLimitPolicy(
+            "authenticated_default",
+            settings.pinvi_rate_limit_authenticated_per_minute,
+            "user",
+        )
+    raise KeyError(name)
+
+
+def rate_limit_policies() -> list[RateLimitPolicy]:
+    return [
+        rate_limit_policy_for_name(name)
+        for name in [
+            "public",
+            "auth_low",
+            "oauth",
+            "storage_upload_urls",
+            "feature_search",
+            "trip_exports",
+            "shared_trip",
+            "authenticated_default",
+        ]
+    ]
+
+
+def _policy_for_request(path: str) -> RateLimitPolicy:
+    normalized_path = _normalize_path(path)
+    if normalized_path.startswith("/public/"):
+        return rate_limit_policy_for_name("public")
+    if normalized_path in AUTH_LOW_PATHS:
+        return rate_limit_policy_for_name("auth_low")
+    if OAUTH_LIMIT_PATH_RE.match(normalized_path):
+        return rate_limit_policy_for_name("oauth")
+    if normalized_path == "/storage/upload-urls":
+        return rate_limit_policy_for_name("storage_upload_urls")
+    if normalized_path in {"/features/in-bounds", "/features/search", "/search"}:
+        return rate_limit_policy_for_name("feature_search")
+    if TRIP_EXPORT_PATH_RE.match(normalized_path):
+        return rate_limit_policy_for_name("trip_exports")
+    if SHARED_TRIP_PATH_RE.match(normalized_path):
+        return rate_limit_policy_for_name("shared_trip")
+    return rate_limit_policy_for_name("authenticated_default")
 
 
 def _normalize_path(path: str) -> str:
@@ -320,6 +401,24 @@ def _identity_key(
     if bearer_token:
         return f"bearer:{bearer_token}"
     return f"ip:{_client_ip(request)}"
+
+
+def rate_limit_identity_key(
+    identity_kind: IdentityKind,
+    *,
+    ip: str | None = None,
+    email: str | None = None,
+    user_id: str | None = None,
+    shared_token: str | None = None,
+) -> str:
+    if identity_kind == "ip":
+        return f"ip:{ip or 'unknown'}"
+    if identity_kind == "ip_email":
+        email_part = (email or "unknown").strip().lower() or "unknown"
+        return f"ip:{ip or 'unknown'}:email:{email_part}"
+    if identity_kind == "shared_token":
+        return f"shared:{shared_token or 'unknown'}"
+    return f"user:{user_id or 'unknown'}"
 
 
 def _client_ip(request: Request) -> str:
@@ -376,6 +475,45 @@ def _bucket_hash(policy_name: str, raw_key: str) -> str:
         hashlib.sha256,
     )
     return digest.hexdigest()
+
+
+def rate_limit_bucket_hash(policy_name: str, raw_key: str) -> str:
+    return _bucket_hash(policy_name, raw_key)
+
+
+async def _active_override_decision(
+    *,
+    bucket_hash: str,
+    limit_name: str,
+    now: datetime,
+) -> RateLimitOverrideDecision | None:
+    from app.models.rate_limit import RateLimitOverride
+
+    async with db_session.async_session_factory() as session:
+        row = (
+            await session.execute(
+                select(
+                    RateLimitOverride.override_id,
+                    RateLimitOverride.action,
+                    RateLimitOverride.expires_at,
+                )
+                .where(
+                    RateLimitOverride.bucket_hash == bucket_hash,
+                    RateLimitOverride.limit_name == limit_name,
+                    RateLimitOverride.revoked_at.is_(None),
+                    RateLimitOverride.expires_at > now,
+                )
+                .order_by(RateLimitOverride.created_at.desc())
+                .limit(1)
+            )
+        ).one_or_none()
+    if row is None:
+        return None
+    return RateLimitOverrideDecision(
+        override_id=row.override_id,
+        action=cast(Literal["blocked", "allowed"], row.action),
+        expires_at=row.expires_at,
+    )
 
 
 async def _collect_body(receive: Receive) -> list[Message]:

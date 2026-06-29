@@ -76,7 +76,13 @@ services:
       PINVI_CORS_ALLOWED_ORIGINS: '${PINVI_CORS_ALLOWED_ORIGINS:-["http://127.0.0.1:12805"]}'
       PINVI_SENTRY_ENVIRONMENT: ${PINVI_SENTRY_ENVIRONMENT:-smoke}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
+      # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에
+      # 전달되지 않는다.
+      PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
+      PINVI_BOOTSTRAP_ADMIN_EMAIL: ${PINVI_BOOTSTRAP_ADMIN_EMAIL:-bootstrap-admin@example.com}
+      PINVI_BOOTSTRAP_ADMIN_PASSWORD: ${PINVI_BOOTSTRAP_ADMIN_PASSWORD:-}
     ports:
       - "${PINVI_API_PORT:-12801}:8000"
 
@@ -85,9 +91,14 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
       args:
-        # 운영은 infra/.env.prod 의 NEXT_PUBLIC_PINVI_API_URL(빌드타임 embed)로 override.
+        # 운영은 infra/.env.prod 의 NEXT_PUBLIC_* 값(빌드타임 embed)로 override.
         NEXT_PUBLIC_PINVI_API_URL: ${NEXT_PUBLIC_PINVI_API_URL:-http://127.0.0.1:${PINVI_API_PORT:-12801}}
+        NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
+        NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH: "${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH:-/d/pinvi/overview?orgId=1&kiosk=tv}"
+        NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED: ${NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED:-0}
     image: ${PINVI_WEB_IMAGE:-pinvi-web:local}
+    environment:
+      PINVI_GRAFANA_HEALTH_URL: ${PINVI_GRAFANA_HEALTH_URL:-http://grafana:3000}
     depends_on:
       - app-api
     ports:
@@ -136,6 +147,16 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
 
+  blackbox:
+    profiles: ["observability"]
+    image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
+    container_name: pinvi-app-blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
@@ -158,6 +179,8 @@ services:
         condition: service_started
       cadvisor:
         condition: service_started
+      blackbox:
+        condition: service_started
 
   grafana:
     profiles: ["observability"]
@@ -168,6 +191,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${PINVI_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${PINVI_GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

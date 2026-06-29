@@ -54,12 +54,13 @@
 ## D5. `within-radius`(반경 내 행정구역) 대응
 
 - **맥락**: 기존 `/regions/within-radius`는 "좌표 반경 내 여러 행정구역"을 준다.
-  v2에는 1:1 대응이 없다(reverse는 점 포함 행정구역, search district는 이름 검색).
-- **선택지**: (A) 보류(미구현) / (B) v2 reverse를 반경 키워 근사 / (C) kor-travel-geo
-  에 신규 endpoint 요청(그쪽 PR).
-- **잠정 기본값**: **(A) 보류**. 실제 사용처가 약하고(현재 "근사 매칭" 라벨), v2
-  미대응.
-- **추천**: 사용처 확정 시 (C) — kor-travel-geo에 `/v2/regions-in-radius` 요청.
+  최신 `kor-travel-geo` v2에는 `POST /v2/regions/within-radius`가 추가됐다.
+- **결정됨 (ADR-049)**: Pinvi `/regions/within-radius`는 endpoint **경로**(`/regions/within-radius`)
+  를 유지하되, geo v2 셰입을 그대로 미러한다. 요청 파라미터는 `radius_km` + `levels[]`
+  (이전 `radius_m` + `boundary_level`), 응답은 candidate envelope이 아니라
+  **그룹 형태**(`center`/`radius_km` + `sido[]`/`sigungu[]`/`emd[]`, 항목 `{code,name,relation}`)다.
+- **영향**: 별도 PostGIS 공간 쿼리나 `kor-travel-map` 경유를 Pinvi에 두지 않는다. 정렬·거리·
+  신뢰도 계산을 Pinvi에서 하지 않고, `relation`(`contains`/`overlaps`) 그룹 응답을 그대로 따른다.
 
 ## D6. geocoding의 MCP 외부 노출 (ADR-019 연계)
 
@@ -72,10 +73,14 @@
 ## D7. 네트워크 · 인증 모델 (Pinvi ↔ kor-travel-geo REST)
 
 - **맥락**: v2 REST 호출의 신뢰 경계.
-- **잠정 기본값**: 같은 **docker network 내부 호출**(`http://kor-travel-geo:12501`),
-  외부 비노출, 별도 인증 없음(내부망). Pinvi가 자기 rate-limit으로 보호.
-- **추천**: 내부망 유지. 만약 kor-travel-geo를 다른 호스트/외부에 두면 mTLS 또는
-  토큰 + 별도 ADR.
+- **결정됨 (ADR-048)**: 기본 네트워크 경계는 같은 docker network 내부 호출
+  (`http://kor-travel-geo:12501`)을 유지하되, `kor-travel-geo` v2 공개 REST 계약에 맞춰
+  Pinvi가 모든 v2 POST에 `key=<PINVI_VWORLD_API_KEY>` query를 붙인다.
+- **key 소유**: 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`는 두지 않는다. 운영자는
+  `PINVI_VWORLD_API_KEY`와 `kor-travel-geo`의 `KTG_VWORLD_API_KEY`를 같은 값으로 설정하고,
+  공개 API key hash 저장/폐기/검증은 `kor-travel-geo`가 소유한다.
+- **로그 원칙**: Pinvi는 key 원본이나 query 포함 upstream URL을 로그에 남기지 않는다.
+  외부 노출·cross-host 배치가 필요하면 mTLS/서비스 토큰 여부를 별도 ADR로 재검토한다.
 
 ## D8. v2 `point_precision` / `match_kind` 활용 깊이
 
@@ -93,9 +98,9 @@
 | D2 | open (잠정 none) | — |
 | D3 | open (잠정 in-proc TTL) | — |
 | D4 | open (잠정 5자리) | — |
-| D5 | open (잠정 보류) | — |
+| D5 | decided | ADR-049 — `POST /v2/regions/within-radius` 미러(`radius_km`+`levels[]`, 그룹 응답) |
 | D6 | open (잠정 미포함) | — |
-| D7 | open (잠정 내부망) | — |
+| D7 | decided | ADR-048 |
 | D8 | open (잠정 최소 활용) | — |
 
 ## 관련 문서

@@ -5,46 +5,95 @@ Admin 콘솔 운영 — 권한 부여 / seed / 위험 액션 / audit log 검증.
 
 ## 1. 권한 모델
 
-| 역할 | 권한 |
-|------|------|
-| `user` | 일반 사용자 |
-| `admin` | 운영 admin (대부분 mutate 가능) |
-| `operator` | 데이터 운영 (notice plan / category mapping) |
-| `cpo` | 개인정보 보호 책임자 (location_access_log SELECT 등) |
+| 역할       | 권한                                  |
+| ---------- | ------------------------------------- |
+| `user`     | 일반 사용자                           |
+| `admin`    | 전체 운영 mutation과 위험 action      |
+| `operator` | 운영 조회와 데이터 운영 일부 mutation |
+| `cpo`      | 개인정보/위치 감사/침해사고/DSR 처리  |
 
-부여:
+권한 정본은 `app.users.roles` 배열이다. `/admin/rbac`는 role별 permission matrix를 표시하고,
+사용자 상세 `/admin/users/{user_id}`의 "역할 관리" 섹션에서 `admin` / `operator` / `cpo`를
+부여하거나 회수한다. `user` role은 기본 role이므로 회수하지 않는다.
 
-```sql
--- DB에서 직접 (pgAdmin 또는 psql)
-UPDATE app.users SET roles = array_append(roles, 'admin') WHERE email = 'admin@example.com';
-UPDATE app.users SET roles = array_append(roles, 'cpo') WHERE email = 'cpo@example.com';
+API:
+
+```http
+POST /admin/users/<user_id>/roles/grant
+POST /admin/users/<user_id>/roles/revoke
+Content-Type: application/json
+
+{
+  "role": "operator",
+  "access_reason": "운영 담당자 지정"
+}
 ```
 
-UI에서는 부여하지 않음 (Telegram 정책과 동일 — `docs/integrations/telegram.md` §1).
+- 실행 권한은 `admin` 전용이다. `operator`와 `cpo`는 matrix 조회는 가능하지만 role mutation은
+  할 수 없다.
+- 중복 부여 또는 미보유 role 회수는 `409 INVALID_STATE`.
+- 자기 자신의 `admin` role 회수와 마지막 `admin` role 회수는 `403 PERMISSION_DENIED`.
+- 모든 role mutation은 `admin_audit_log`에 `user.role_grant` / `user.role_revoke`로 기록한다.
+
+DB 직접 수정은 운영 UI/API가 불가능한 break-glass 상황에만 사용한다. 실행 전 backup snapshot과
+CPO 승인, 실행 후 audit 보강 기록을 남긴다.
+
+```sql
+-- break-glass 전용: 운영 UI/API 사용 불가 시에만
+UPDATE app.users
+SET roles = ARRAY['user', 'admin']::varchar[]
+WHERE email = 'admin@example.com' AND deleted_at IS NULL;
+```
 
 ## 2. 초기 admin 계정
 
-Alembic seed: `apps/api/alembic/versions/.../seed_default_admin.py`
+API startup은 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 **비어 있지 않을 때만**
+`PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구한다. 이 값이 비어 있으면 의도적으로
+skip한다. 운영에서 기본 비밀번호가 우연히 살아나는 일을 막기 위한 안전장치다.
 
-```python
-def upgrade():
-    op.execute("""
-        INSERT INTO app.users (user_id, email, password_hash, status, roles, email_verified_at)
-        VALUES (
-            gen_random_uuid(),
-            'admin@ad.min',
-            -- Argon2id hash of 'admin'
-            '$argon2id$v=19$m=65536,t=3,p=4$...',
-            'active',
-            ARRAY['user', 'admin'],
-            now()
-        )
-        ON CONFLICT (email) DO NOTHING
-    """)
+| 환경변수                         | 기본/예시        | 설명                                      |
+| -------------------------------- | ---------------- | ----------------------------------------- |
+| `PINVI_BOOTSTRAP_ADMIN_EMAIL`    | dev/smoke 예시값 | bootstrap 대상 이메일                     |
+| `PINVI_BOOTSTRAP_ADMIN_PASSWORD` | 비어 있음        | 설정된 경우에만 Argon2id hash로 저장/복구 |
+
+동작:
+
+- 계정이 없으면 `status='active'`, `roles=['user','admin']`, `email_verified_at=now()`로 생성한다.
+- 계정이 있으나 비활성/미인증/admin role 누락/password 불일치면 복구한다.
+- password hash가 바뀌면 기존 active session을 폐기한다.
+- 비밀번호 원문은 로그나 DB에 저장하지 않는다.
+
+개발/smoke에서는 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`에 명시적으로 설정한 임시값으로만
+bootstrap 로그인을 검증한다. 운영 환경에서는 첫 진입 후 별도 admin 계정을 만들거나
+기존 실사용 계정에 `admin` role을 부여한 뒤, `PINVI_BOOTSTRAP_ADMIN_PASSWORD`를
+비우고 bootstrap 대상 계정을 비활성화한다. 공개 문서에는 이메일/비밀번호 조합을
+고정하지 않는다.
+
+N150에서 계정 존재 여부만 확인:
+
+```bash
+ssh <n150-ssh-target>
+docker exec -i pinvi-api-latest python - <<'PY'
+import asyncio
+from sqlalchemy import text
+from app.db.session import async_session_factory
+
+async def main():
+    async with async_session_factory() as db:
+        rows = (await db.execute(text("""
+            SELECT email, status, roles, email_verified_at IS NOT NULL AS verified,
+                   password_hash IS NOT NULL AS has_password, is_active
+            FROM app.users
+            WHERE roles @> ARRAY['admin']::varchar[] AND deleted_at IS NULL
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT 10
+        """))).mappings().all()
+        for row in rows:
+            print(dict(row))
+
+asyncio.run(main())
+PY
 ```
-
-- 운영 환경: 첫 진입 후 비밀번호 변경 + 신규 admin 생성 → `admin@ad.min` 비활성
-- `BOOTSTRAP_ADMIN_EMAIL` 환경변수로 다른 첫 admin 지정 가능
 
 ## 3. 자주 사용하는 admin 작업
 
@@ -52,7 +101,7 @@ def upgrade():
 
 ```bash
 # Admin 로그인 (curl)
-COOKIE=$(curl -fsS -c - -X POST http://localhost:12801/admin/auth/login \
+COOKIE=$(curl -fsS -c - -X POST http://localhost:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"..."}' | grep pinvi_access | awk '{print $7}')
 
@@ -65,6 +114,14 @@ curl -fsS -X POST "http://localhost:12801/admin/users/<user_id>/force-verify" \
 
 UI: `/admin/users` → 사용자 행 클릭 → [강제 인증] 버튼 → 사유 다이얼로그.
 
+인증 메일 재발송은 실제 메일 토큰을 다시 발급하는 운영 액션이다.
+
+```http
+POST /admin/users/<user_id>/lifecycle/resend-verify
+
+{ "access_reason": "가입 인증 메일 재발송 요청" }
+```
+
 ### 3.2 사용자 disable
 
 ```http
@@ -76,15 +133,27 @@ X-Access-Reason: "약관 위반 확인 (TICKET-...)"
 
 - `users.status = 'disabled'`
 - 모든 `user_sessions.revoked_at = now()`
+- `users.access_token_version` 증가
 - `admin_audit_log` 자동
 
-### 3.3 비밀번호 재설정 메일 재발송
+### 3.3 사용자 lifecycle / 세션 강제 로그아웃
 
 ```http
-POST /admin/users/<user_id>/resend-verify
+GET  /admin/users/<user_id>/sessions
+POST /admin/users/<user_id>/sessions/<session_id>/revoke
+POST /admin/users/<user_id>/sessions/revoke-all
+POST /admin/users/<user_id>/lifecycle/force-password-reset
+POST /admin/users/<user_id>/lifecycle/reactivate
+POST /admin/users/<user_id>/lifecycle/delete
+POST /admin/users/<user_id>/lifecycle/anonymize
 ```
 
-(verify와 reset은 별 endpoint — `/admin/users/{id}/resend-reset`도 추가 권장)
+- 세션 목록은 IP 원문 대신 `ip_hash`만 노출한다.
+- 세션 강제 로그아웃과 password reset은 `users.access_token_version`을 증가시켜 기존 access token도
+  즉시 무효화한다.
+- `lifecycle/delete` body는 `{ "access_reason": "...", "confirm": "DELETE" }`.
+- `lifecycle/anonymize` body는 `{ "access_reason": "...", "confirm": "ANONYMIZE" }`.
+- 권한 계정(`admin`/`operator`/`cpo`) 삭제/익명화는 role 회수 후 수행한다.
 
 ### 3.4 Dagster ETL 수동 trigger
 
@@ -96,7 +165,44 @@ docker compose exec dagster dagster asset materialize \
   -p partition_2026-06-01
 ```
 
-### 3.5 Notice plan publish
+### 3.5 Rate-limit / abuse override
+
+UI: `/admin/abuse`.
+
+확인 순서:
+
+1. `store_status`가 `ok`인지 확인한다. `degraded`면 ADR-038 fail-closed 경로라 일반 요청은
+   `503 SERVICE_UNAVAILABLE`이 될 수 있다.
+2. `auth_low`, `shared_trip`, `storage_upload_urls` suspicious bucket을 보고 반복 시도 여부를 확인한다.
+3. block/allow override는 TTL과 사유를 입력하고 생성한다. IP/email/share token 원문은 DB에 저장되지
+   않고 hash label만 남는다.
+4. false positive면 rollback reason을 입력하고 해당 override를 rollback한다.
+
+API:
+
+```http
+GET /admin/abuse?limit_name=auth_low&page_size=100
+POST /admin/abuse/overrides
+POST /admin/abuse/overrides/<override_id>/rollback
+```
+
+```jsonc
+{
+  "limit_name": "auth_low",
+  "identity_kind": "ip_email",
+  "ip": "127.0.0.1",
+  "email": "user@example.com",
+  "action": "blocked",
+  "ttl_minutes": 60,
+  "access_reason": "credential stuffing 대응"
+}
+```
+
+- 조회 권한: `admin` / `operator` / `cpo`.
+- override 생성/rollback 권한: `admin`.
+- audit action: `rate_limit_override.create`, `rate_limit_override.rollback`.
+
+### 3.6 Notice plan publish
 
 UI: `/admin/notice-plans/{plan_id}` → [Publish] 버튼.
 
@@ -122,7 +228,7 @@ X-Access-Reason: "월간 추천 콘텐츠 공개"
 
 ### 4.3 cpo가 사용자 disable 시도
 
-→ `roles`에 `admin` 없음 → `403`. CPO는 disable 권한 X (조회만).
+→ `roles`에 `admin` 없음 → `404`. CPO는 disable 권한 X이며 endpoint 존재를 숨긴다.
 
 ## 5. Audit log 검증
 
@@ -148,15 +254,26 @@ SELECT log_id FROM rows WHERE prev_hash IS DISTINCT FROM expected_prev;
 
 ## 6. Seed / Reset (dev/staging only)
 
-운영에서는 라우트 비활성 (`ENABLE_SEED=false`). dev/staging에서만:
+운영에서는 router를 include하지 않아 404만 반환한다. dev/staging에서도 현재 API는 dry-run만
+지원한다.
 
 ### 6.1 시나리오 적용
 
 ```bash
+curl -fsS "http://localhost:12801/admin/seed/scenarios" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE"
+
 curl -fsS -X POST "http://localhost:12801/admin/seed/scenarios/new_user_first_trip" \
   -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
-  -d '{}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirm":"RUN new_user_first_trip",
+    "access_reason":"개발 smoke dry-run",
+    "dry_run":true
+  }'
 ```
+
+dry-run은 `admin_audit_log`에 `dev_seed.dry_run`을 남긴다.
 
 8 시나리오: `new_user_first_trip`, `companion_concurrent_editing`,
 `share_link_expiring_soon`, `unverified_users_aged`, `dedup_candidates`,
@@ -165,14 +282,23 @@ curl -fsS -X POST "http://localhost:12801/admin/seed/scenarios/new_user_first_tr
 ### 6.2 Reset
 
 ```bash
+curl -fsS "http://localhost:12801/admin/reset/status" \
+  -H "Cookie: pinvi_access=$ADMIN_COOKIE"
+
 curl -fsS -X POST "http://localhost:12801/admin/reset" \
   -H "Cookie: pinvi_access=$ADMIN_COOKIE" \
-  -d '{"confirm":"RESET","admin_password":"..."}'
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirm":"RESET",
+    "access_reason":"reset 절차 리허설",
+    "dry_run":true,
+    "include_seed":false
+  }'
 ```
 
-- DB 전체 reset (`alembic downgrade base` → `upgrade head`)
-- 라이브러리 schema는 별도 (`POST /admin/kor-travel-map/reset`)
-- 자동으로 `new_user_first_trip` 적용
+- 현재는 dry-run만 지원하고 `admin_audit_log`에 `dev_reset.dry_run`을 남긴다.
+- 실제 DB 전체 reset(`alembic downgrade base` → `upgrade head`)은 아직 API로 노출하지 않는다.
+- 라이브러리 schema reset은 별도 운영 절차가 필요하며 Pinvi API에서 실행하지 않는다.
 
 ## 7. Daily check (운영자 일과)
 

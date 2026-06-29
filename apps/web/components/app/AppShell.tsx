@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Map,
   Newspaper,
+  Paperclip,
   Settings,
   UserCircle,
 } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
 const NAV_ITEMS = [
   { href: '/', label: '홈', icon: LayoutDashboard },
   { href: '/trips', label: '여행', icon: CalendarDays },
+  { href: '/files', label: '파일', icon: Paperclip },
   { href: '/notice-plans', label: '추천', icon: Newspaper },
   { href: '/trips/map-shell', label: '지도', icon: Map },
   { href: '/profile', label: '프로필', icon: UserCircle },

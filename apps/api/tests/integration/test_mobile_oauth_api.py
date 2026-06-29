@@ -148,6 +148,7 @@ async def test_mobile_oauth_start_returns_authorize_url(client, monkeypatch) -> 
     monkeypatch.setattr(
         settings, "pinvi_google_oauth_client_id", "test-client.apps.googleusercontent.com"
     )
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
     resp = await client.post("/mobile/auth/oauth/google/start")
     assert resp.status_code == 200, resp.text
     url = resp.json()["data"]["authorize_url"]
@@ -158,6 +159,7 @@ async def test_mobile_oauth_start_returns_authorize_url(client, monkeypatch) -> 
 
 async def test_mobile_oauth_start_503_when_unconfigured(client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "")
+    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
     resp = await client.post("/mobile/auth/oauth/google/start")
     assert resp.status_code == 503
 

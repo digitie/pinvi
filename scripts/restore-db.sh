@@ -22,9 +22,27 @@ if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
 fi
 
+if [[ ! "${SCHEMA}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  echo "invalid restore schema name" >&2
+  exit 2
+fi
+
 if [[ ! -f "${BACKUP_FILE}" ]]; then
   echo "backup file not found: ${BACKUP_FILE}" >&2
   exit 2
+fi
+
+if [[ -f "${BACKUP_FILE}.sha256" ]]; then
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "sha256sum not found" >&2
+    exit 127
+  fi
+  expected_checksum="$(awk 'NR == 1 { print $1 }' "${BACKUP_FILE}.sha256")"
+  actual_checksum="$(sha256sum "${BACKUP_FILE}" | awk 'NR == 1 { print $1 }')"
+  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
+    echo "backup checksum failed" >&2
+    exit 3
+  fi
 fi
 
 if ! command -v pg_restore >/dev/null 2>&1; then

@@ -201,6 +201,7 @@ async def build_trip_view(
                 "day_index": d.day_index,
                 "date": d.date,
                 "title": d.title,
+                "version": d.version,
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days

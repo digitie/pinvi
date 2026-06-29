@@ -34,7 +34,10 @@ function poi(over: Partial<TripViewPoi> & { feature: Record<string, unknown> }):
 
 describe('tripMapPoints', () => {
   it('extractCoord: feature.coord 추출, 한국 범위 밖/누락은 null', () => {
-    expect(extractCoord({ coord: { lon: 126.97, lat: 37.57 } })).toEqual({ lon: 126.97, lat: 37.57 });
+    expect(extractCoord({ coord: { lon: 126.97, lat: 37.57 } })).toEqual({
+      lon: 126.97,
+      lat: 37.57,
+    });
     expect(extractCoord({ coord: { lon: 0, lat: 0 } })).toBeNull(); // 범위 밖
     expect(extractCoord({})).toBeNull();
     expect(extractCoord(null)).toBeNull();
@@ -50,8 +53,64 @@ describe('tripMapPoints', () => {
       lon: 126.977,
       lat: 37.5796,
       color: '#3949AB',
+      markerColor: 'P-09',
+      markerSource: 'resolved',
       icon: 'museum',
       isBroken: false,
+    });
+  });
+
+  it('tripPoiToMapPoint: marker가 없으면 snapshot marker를 사용', () => {
+    const point = tripPoiToMapPoint(
+      poi({
+        marker_color: null,
+        marker_icon: null,
+        feature: {
+          coord: { lon: 127, lat: 37 },
+          marker_color: 'P-03',
+          marker_icon: 'monument',
+          category: '국가유산',
+        },
+      }),
+      1,
+    );
+    expect(point).toMatchObject({
+      color: '#FDD835',
+      markerColor: 'P-03',
+      markerSource: 'snapshot',
+      labelColor: '#222222',
+      icon: 'monument',
+      category: '국가유산',
+    });
+  });
+
+  it('tripPoiToMapPoint: snapshot marker가 없으면 category/kind fallback을 사용', () => {
+    const categoryPoint = tripPoiToMapPoint(
+      poi({
+        marker_color: null,
+        marker_icon: null,
+        feature: { coord: { lon: 127, lat: 37 }, category: '해수욕장' },
+      }),
+      1,
+    );
+    expect(categoryPoint).toMatchObject({
+      markerColor: 'P-07',
+      markerSource: 'category',
+      icon: 'swimming',
+    });
+
+    const kindPoint = tripPoiToMapPoint(
+      poi({
+        marker_color: null,
+        marker_icon: null,
+        feature: { coord: { lon: 127, lat: 37 }, kind: 'notice' },
+      }),
+      1,
+    );
+    expect(kindPoint).toMatchObject({
+      markerColor: 'P-14',
+      markerSource: 'kind',
+      icon: 'alert',
     });
   });
 
@@ -62,7 +121,7 @@ describe('tripMapPoints', () => {
   it('tripPoiToMapPoint: title 없으면 feature_id fallback', () => {
     const point = tripPoiToMapPoint(
       poi({ title: null, feature_id: 'feat-x', feature: { coord: { lon: 127, lat: 37 } } }),
-      2
+      2,
     );
     expect(point?.title).toBe('feat-x');
   });
@@ -73,6 +132,7 @@ describe('tripMapPoints', () => {
         day_index: 1,
         date: null,
         title: '1일차',
+        version: 1,
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),
           poi({ feature: {} }), // 제외
@@ -82,6 +142,7 @@ describe('tripMapPoints', () => {
         day_index: 2,
         date: null,
         title: '2일차',
+        version: 1,
         pois: [poi({ feature: { coord: { lon: 129.0, lat: 35.1 } } })],
       },
     ];
@@ -97,6 +158,7 @@ describe('tripMapPoints', () => {
         day_index: 1,
         date: null,
         title: null,
+        version: 1,
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),
           poi({ feature: { coord: { lon: 129.0, lat: 35.1 } } }),

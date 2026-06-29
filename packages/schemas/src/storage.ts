@@ -5,6 +5,7 @@ export const AttachmentPurposeSchema = z.enum([
   'media_asset',
   'avatar',
   'trip_attachment',
+  'trip_day_attachment',
   'poi_attachment',
   'curated_plan_attachment',
   'curated_poi_attachment',
@@ -18,6 +19,11 @@ export const UploadUrlRequestSchema = z.object({
   purpose: AttachmentPurposeSchema,
 });
 export type UploadUrlRequest = z.infer<typeof UploadUrlRequestSchema>;
+
+export const AvatarUploadUrlRequestSchema = UploadUrlRequestSchema.omit({
+  purpose: true,
+});
+export type AvatarUploadUrlRequest = z.infer<typeof AvatarUploadUrlRequestSchema>;
 
 export const UploadUrlResponseSchema = z.object({
   method: z.literal('PUT'),
@@ -41,6 +47,25 @@ export const DownloadUrlResponseSchema = z.object({
   public_url: z.string().nullable().optional(),
 });
 export type DownloadUrlResponse = z.infer<typeof DownloadUrlResponseSchema>;
+
+export const AvatarApplyRequestSchema = z.object({
+  bucket: z.string().min(1).max(80),
+  storage_key: z.string().min(1).max(1024),
+  content_type: z.string().min(1).max(255),
+  byte_size: z.number().int().gt(0),
+  public_url: z.string().nullable().optional(),
+});
+export type AvatarApplyRequest = z.infer<typeof AvatarApplyRequestSchema>;
+
+export const AvatarInfoSchema = z.object({
+  avatar_kind: z.enum(['default', 'upload', 'external']).default('default'),
+  avatar_url: z.string().nullable().default(null),
+  avatar_content_type: z.string().nullable().default(null),
+  avatar_byte_size: z.number().int().nullable().default(null),
+  avatar_updated_at: Iso8601Schema.nullable().default(null),
+  has_avatar: z.boolean().default(false),
+});
+export type AvatarInfo = z.infer<typeof AvatarInfoSchema>;
 
 export const AttachmentRoleSchema = z.enum(['attachment', 'image', 'document', 'reference']);
 const NullableUuidSchema = z.string().uuid().nullable();
@@ -67,6 +92,7 @@ const AttachmentResponseBaseSchema = z
   .object({
     attachment_id: z.string().uuid(),
     trip_id: NullableUuidSchema,
+    trip_day_index: z.number().int().nullable().default(null),
     trip_poi_id: NullableUuidSchema,
     curated_plan_id: NullableUuidSchema.optional(),
     curated_poi_id: NullableUuidSchema.optional(),
@@ -122,3 +148,31 @@ export const AttachmentResponseSchema = AttachmentResponseBaseSchema.transform((
   };
 });
 export type AttachmentResponse = z.infer<typeof AttachmentResponseSchema>;
+
+export const AttachmentScopeSchema = z.enum([
+  'trip',
+  'day',
+  'poi',
+  'curated_plan',
+  'curated_poi',
+]);
+export type AttachmentScope = z.infer<typeof AttachmentScopeSchema>;
+
+export const AttachmentLibraryItemSchema = AttachmentResponseSchema.and(
+  z.object({
+    target_scope: AttachmentScopeSchema,
+    uploaded_by_user_id: z.string().uuid(),
+    uploaded_by_email_masked: z.string().nullable().optional(),
+    trip_title: z.string().nullable().optional(),
+    poi_label: z.string().nullable().optional(),
+  })
+);
+export type AttachmentLibraryItem = z.infer<typeof AttachmentLibraryItemSchema>;
+
+export const AttachmentLibraryPageSchema = z.object({
+  items: z.array(AttachmentLibraryItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  limit: z.number().int().positive(),
+});
+export type AttachmentLibraryPage = z.infer<typeof AttachmentLibraryPageSchema>;

@@ -17,7 +17,7 @@ class _FakeKorTravelMapClient:
         self.snapshot = snapshot
         self.seen: list[str] = []
 
-    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
+    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
         self.seen.append(curated_feature_id)
         return self.snapshot
 
@@ -47,7 +47,7 @@ def _snapshot() -> dict[str, Any]:
         "etag": "sha256:abc123",
         "updated_at": "2026-06-12T00:00:00+09:00",
         "theme": {"theme_slug": "festival", "theme_name": "축제"},
-        "plan": {
+        "content": {
             "title": "부산 축제 코스",
             "summary": "광안리와 해운대를 잇는 축제 일정",
             "destination_name": "부산",
@@ -87,13 +87,13 @@ def _snapshot() -> dict[str, Any]:
 async def test_admin_imports_kor_travel_map_curated_feature_and_upserts(
     client, session_factory, auth_cookies
 ) -> None:  # type: ignore[no-untyped-def]
-    from app.clients.kor_travel_map import get_kor_travel_map_client
+    from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
     from app.main import app
     from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
 
     admin_id = await _admin(session_factory)
     fake = _FakeKorTravelMapClient(_snapshot())
-    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
+    app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: fake
     try:
         created = await client.post(
             "/admin/notice-plans/imports/kor-travel-map-curated-features",
@@ -167,4 +167,4 @@ async def test_admin_imports_kor_travel_map_curated_feature_and_upserts(
             assert plan is not None
             assert plan.is_published is True
     finally:
-        app.dependency_overrides.pop(get_kor_travel_map_client, None)
+        app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)

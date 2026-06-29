@@ -550,7 +550,7 @@
 
 ## ADR-017: CodeGraph 인덱스 + agent별 고정 worktree 운영
 
-- **상태**: accepted
+- **상태**: accepted (단, 2026-05-31 Windows `git.exe` amendment는 ADR-051이 supersede)
 - **날짜**: 2026-05-26
 - **amendment (2026-05-27)**: worktree 이름 prefix `geo-` → `pinvi-` 변경
   (`geo-claude` → `pinvi-claude` 등). 사용자 지시. 경로 예시도 `F:/dev/pinvi-<agent>`.
@@ -714,6 +714,10 @@
 - **상태**: accepted
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
+- **amendment (2026-06-29)**: `kor-travel-concierge` API가 이미 존재하므로 T-113
+  `kor-travel-concierge` 별 repo 신설 task는 backlog에서 제거한다. 향후 Pinvi의 AI companion
+  연동이 필요하면 신규 repo/scaffold를 만들지 않고 기존 `kor-travel-concierge` API를 활용하는
+  consumer/client 통합 task로 정의한다.
 - **컨텍스트**: 원래 backlog T-107은 본 저장소에 Gemini 통합 (Sprint 4 후보).
   하지만 AI provider (Gemini / Claude / GPT)는 빠르게 진화하고 모델 변경 /
   rate limit / 비용 / 책임 분리 측면에서 본 서비스와 lifecycle이 다르다. 또
@@ -741,13 +745,13 @@
   - AI 모델 / provider 변경이 본 서비스 배포에 영향 없음
   - 본 저장소 PR 수 / 복잡도 감소
 - **결과 (부정)**:
-  - 별 repo 신설 / 운영 부담
+  - 별도 서비스 운영 부담
   - docker-to-docker 호출 leg 추가 (latency / failure mode)
   - 두 repo CI/CD 동기 필요
 - **후속**:
-  - 별 repo 생성 — 사용자 결정 시점 / 명명
+  - 기존 `kor-travel-concierge` API 계약 확인 — Pinvi consumer/client 연동 task 착수 시점
   - `docs/integrations/ai-companion.md` 신규 (Sprint 6 진입 시)
-  - `docs/tasks.md`에서 T-107 → "deferred to `kor-travel-concierge` repo"
+  - `docs/tasks.md`에서 T-107 제거. 후속 T-113 별 repo 신설 task도 2026-06-29 제거.
 - **참조**: ADR-019 (MCP), ADR-018 (한국 전용)
 
 ## ADR-021: GitHub Actions CI/CD 재활성화
@@ -926,8 +930,7 @@
 
 ## ADR-024: NTFS worktree = git source of truth + WSL ext4 일회용 테스트 미러
 
-- **상태**: accepted (ADR-004의 "Git source of truth는 WSL ext4" 부분을 supersede.
-  ADR-017 worktree 정책을 개발 환경 모델로 확정)
+- **상태**: superseded by ADR-051
 - **날짜**: 2026-06-01
 - **결정자**: 사용자 + Claude
 - **컨텍스트**: ADR-017로 AI 도구(Claude / Codex / Antigravity)마다 NTFS에 고정
@@ -1367,8 +1370,8 @@
   - `kor-travel-map` API/Admin API는 `12301`을 사용한다. Pinvi의
     `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`과 `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL` 기본값은
     모두 `http://localhost:12301`이다.
-  - `kor-travel-concierge`는 `kor-travel-concierge`로 이름이 바뀌었고 Pinvi와의 직접 관계를
-    끊는다. Pinvi는 agent API 포트를 예약하지 않고 `PINVI_AGENT_API_BASE_URL`도
+  - 이전 agent/ai-companion 서비스는 `kor-travel-concierge`로 이름이 바뀌었고 Pinvi와의
+    직접 관계를 끊는다. Pinvi는 agent API 포트를 예약하지 않고 `PINVI_AGENT_API_BASE_URL`도
     노출하지 않는다.
   - 본 저장소 Pinvi API는 `12501`, Web UI는 `12505`를 사용한다.
   - Dagster UI는 기존 고정 포트 `9023`을 유지한다.
@@ -1893,7 +1896,358 @@ web `pinvi.example.com`, api `pinvi-api.example.com`, dagster
 - ADR-024(NTFS/ext4), ADR-040/042(Docker/포트), ADR-038(rate-limit), `docs/runbooks/deploy.md`,
   `docs/runbooks/docker-app.md`, `docs/runbooks/local-dev.md`
 
+## ADR-048: kor-travel-geo v2 공개 API key는 VWorld key와 동일하게 사용하고 저장 책임은 kor-travel-geo에 둔다
+
+- **상태**: accepted
+- **날짜**: 2026-06-24
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+`kor-travel-geo` 최신 v2 REST 표면(`/v2/geocode`, `/v2/reverse`, `/v2/search`,
+`/v2/regions/within-radius`)은 공개 주소 API 보호를 위해 `key` query 파라미터를
+검증한다. 해당 저장소는 `ops.public_api_keys`에 공개 API key hash/hint/status를 저장하고,
+활성 DB key가 없으면 `KTG_VWORLD_API_KEY`를 기본 공개 key로 검증한다.
+
+Pinvi는 이미 모바일 지도용 server-issued key 발급(`GET /mobile/vworld/token`,
+ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
+`PINVI_KOR_TRAVEL_GEO_API_KEY`를 만들면 같은 실제 key가 두 환경변수로 갈라져 drift가
+생긴다.
+
+### 결정
+
+- Pinvi가 `kor-travel-geo` v2 REST를 호출할 때는 모든 v2 POST 요청에
+  `key=<PINVI_VWORLD_API_KEY>` query를 붙인다.
+- Pinvi에는 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 두지 않는다. 운영자는 Pinvi의
+  `PINVI_VWORLD_API_KEY`와 `kor-travel-geo`의 `KTG_VWORLD_API_KEY`를 같은 실제 값으로
+  설정한다.
+- 공개 API key의 추출, hash 저장, 활성/폐기 상태 관리는 `kor-travel-geo`가 소유한다.
+  Pinvi는 그 저장소의 공개 REST 계약을 호출하는 소비자일 뿐, `ops.public_api_keys`를
+  직접 쓰거나 관리하지 않는다.
+- `PINVI_VWORLD_API_KEY`가 비어 있으면 Pinvi geocoding client는 upstream 호출 전에
+  `GEOCODING_SERVICE_UNAVAILABLE` 계열로 degrade한다. 빈 key를 upstream에 보내지 않는다.
+- Pinvi 로그에는 key 원본과 query가 포함된 upstream URL을 남기지 않는다. 실패 로그는 기존처럼
+  path만 기록한다.
+
+### 근거
+
+- 사용자가 "키는 VWorld API 키와 동일"하다고 확정했다. 한 값을 두 환경변수로 따로 관리하지
+  않는 편이 운영 실수를 줄인다.
+- key hash 저장/폐기/감사는 `kor-travel-geo`가 이미 `ops.public_api_keys`로 소유한다.
+  Pinvi가 그 테이블을 직접 다루면 저장소 경계를 침범한다.
+- `PINVI_VWORLD_API_KEY`는 이미 서버 전용 secret이다. 웹 노출 키(`NEXT_PUBLIC_VWORLD_API_KEY`)
+  와는 별개로 유지하고, 모바일/geo server-to-server 호출만 이 값을 쓴다.
+
+### 결과
+
+- `apps/api/app/clients/kor_travel_geo.py`가 v2 POST마다 `key` query를 자동 추가한다.
+- `.env.example`, `apps/api/.env.example`, `infra/.env.prod.example`은 같은 VWorld key가
+  `kor-travel-geo` v2 공개 API key로도 쓰임을 명시한다.
+- `docs/integrations/kor-travel-geo.md`는 최신 v2 후보 좌표(`point{lon,lat}`)와 key
+  흐름을 기준으로 갱신한다.
+
+### 결과 (부정)
+
+- `PINVI_VWORLD_API_KEY`가 없는 개발 환경에서는 geocoding 호출이 실제 upstream까지 가지 않고
+  503 계열로 degrade한다. 로컬에서 `/geo/*`를 live로 검증하려면 VWorld key와
+  `kor-travel-geo`의 `KTG_VWORLD_API_KEY`가 모두 필요하다.
+- query parameter key는 upstream access log에 남을 수 있으므로 `kor-travel-geo`/reverse proxy
+  쪽 redaction도 계속 필요하다. Pinvi는 자기 로그에서 full URL을 남기지 않는 것으로 범위를
+  지킨다.
+
+### 후속
+
+- `kor-travel-geo`가 DB 생성 public API key만 허용하고 `KTG_VWORLD_API_KEY` fallback을 폐기하면
+  Pinvi도 별도 ADR로 key 공급 방식을 재검토한다.
+- 운영 배포 시 `infra/.env.prod`와 `kor-travel-geo` env에 같은 raw key가 들어갔는지 runbook
+  smoke checklist에서 확인한다.
+
+## ADR-049: 외부 계약 동기화(2026-06-25) — kor-travel-map 큐레이션 import는 admin detail-snapshot, kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]` 그룹 응답
+
+- **상태**: accepted
+- **날짜**: 2026-06-25
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+`kor-travel-map`(origin/main `88316a6`)과 `kor-travel-geo`(origin/main `5e8a5d4`)의
+최신 계약을 점검한 결과, Pinvi가 소비하던 두 표면에 breaking 변경이 있었다.
+
+- **kor-travel-map PR #533("Curated API 범용 계약 정리", 2026-06-25)**: 공개
+  `GET /v1/curated-features/{id}/pinvi-copy`를 폐지하고, item을 포함한 큐레이션
+  snapshot을 admin 표면 `GET /v1/admin/curated-features/{id}/detail-snapshot`로 옮겼다.
+  동시에 snapshot의 plan-level 객체 키를 `plan`→`content`로 개명했다(product 고유 'pinvi'
+  용어 제거). Pinvi `KorTravelMapClient.get_curated_pinvi_copy()`는 이제 404가 된다.
+- **kor-travel-geo `/v2/regions/within-radius`(geo ADR-056/060/062)**: 요청이
+  `{radius_m, boundary_level}`에서 `{radius_km, levels[]}`로, 응답이 `{status, candidates[]}`
+  에서 level별 그룹 `{center, radius_km, sido[], sigungu[], emd[]}`(각 item
+  `{code, name, relation: contains|overlaps}`)로 바뀌었다. level 어휘도 `legal_dong`→`emd`다.
+  Pinvi는 `payload['candidates']`를 읽어 항상 빈 목록을 반환하고 있었다.
+
+### 결정
+
+- **큐레이션 import**: snapshot 조회를 user client에서 admin client
+  (`KorTravelMapAdminClient.get_curated_detail_snapshot`)로 옮긴다.
+  `GET /v1/admin/curated-features/{id}/detail-snapshot`를 admin base
+  (`PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`) + `X-Kor-Travel-Map-Service-Token`으로 호출한다.
+  즉 큐레이션 import는 이제 **admin 서비스 토큰 작업**이다(import 라우터는 이미 admin RBAC
+  아래에서 동작하므로 권한 경계가 일관적이다). snapshot의 plan-level 객체는 `content` 키로 읽는다.
+- **geo within-radius**: Pinvi `/regions/within-radius`는 **endpoint 경로는 유지**하되 v2
+  계약을 그대로 반영한다 — 요청 query를 `radius_km`(≤500) + `levels[]`(sido|sigungu|emd,
+  기본 `[sigungu, emd]`)로, 응답을 level별 그룹(`RegionsWithinRadius`)으로 바꾼다.
+  `BoundaryLevel` enum의 `legal_dong`을 `emd`로 개명하고 `/regions/covering-point`의 기본값도
+  `emd`로 맞춘다.
+- Pinvi 사용자 경로의 다른 표면(feature read/search/nearby/in-bounds, geo
+  geocode/reverse/search, geo v2 공개 key=ADR-048)은 이미 최신 계약과 일치하므로 바꾸지 않는다.
+  `kor-travel-concierge`는 여전히 직접 통합 없이 문서 경계 참조만 둔다(그쪽 contract도 PinVi
+  직접 연결을 배제하므로 직접 연결을 신설하지 않는다 — Sprint 6 MCP 결정 사항으로 보류).
+
+### 근거
+
+- 두 변경 모두 upstream이 이미 origin/main에 배포한 breaking 계약이라 Pinvi가 따라가지 않으면
+  큐레이션 import는 404, within-radius는 빈 응답으로 조용히 실패한다.
+- within-radius는 Pinvi 자체 consumer(web/mobile)가 없어 라우터 표면을 v2 계약에 맞춰 바꾸는
+  편이 변환 레이어를 두는 것보다 단순하다.
+- import가 admin 토큰을 요구하는 것은 upstream이 snapshot을 admin 전용으로 옮긴 결과이며,
+  import 라우터 자체가 이미 admin 전용이라 권한 경계가 어긋나지 않는다.
+
+### 결과
+
+- `apps/api/app/clients/kor_travel_map_admin.py`에 `get_curated_detail_snapshot` 추가,
+  `apps/api/app/clients/kor_travel_map.py`에서 `get_curated_pinvi_copy` 제거,
+  `apps/api/app/services/notice_plan.py`/`app/api/v1/admin/notice_plans.py`가 admin client +
+  `content` 키를 쓴다.
+- `apps/api/app/clients/kor_travel_geo.py`/`app/api/v1/geo.py`/`app/schemas/geo.py`가
+  `radius_km`+`levels[]` 요청과 그룹 응답(`RegionsWithinRadius`)을 쓴다.
+- 관련 계약 문서(`docs/integrations/kor-travel-map-rest-api.md`,
+  `docs/kor-travel-map-requirements.md`, `docs/integrations/kor-travel-geo.md`,
+  `docs/api/regions.md`, `docs/architecture/{notice-plans,geocoding-open-decisions}.md`)를 갱신한다.
+
+### 후속
+
+- upstream 큐레이션 계약이 다시 바뀌면(예: 공개 표면 재도입) import client를 재검토한다.
+- within-radius의 `relation`(contains/overlaps) 의미를 UI에서 쓰게 되면 별도 표시 규칙을 정한다.
+
+## ADR-050: Pinvi app-owned Dagster job 표준
+
+- **상태**: accepted
+- **날짜**: 2026-06-28
+- **결정자**: Codex
+
+### 컨텍스트
+
+Sprint 5 `v0.2.0` 범위에는 KASI 외에도 email outbox, PII retention, location log
+archive, Telegram system summary 같은 Pinvi `app` schema 소유 운영 job이 남아 있다.
+반면 feature/provider 적재, raw provider 변환, dedup, coverage는 ADR-026/027 이후
+`kor-travel-map`이 소유한다. T-238은 이후 ETL 구현이 이 책임 경계를 흔들지 않도록
+Pinvi Dagster job의 공통 표준을 먼저 고정한다.
+
+### 결정
+
+- Pinvi `apps/etl`에는 **Pinvi `app` schema 소유 job만** 둔다. `feature` /
+  `provider_sync` schema 적재, provider raw → DTO 변환, record linkage, coverage 갱신은
+  `kor-travel-map` PR로 처리한다.
+- Dagster module import 시점에는 DB, network, 파일 write 같은 side effect를 만들지 않는다.
+  외부 client와 DB engine은 resource에서 lazy 생성한다.
+- 모든 schedule은 `execution_timezone="Asia/Seoul"`을 명시한다.
+- 외부 API, DB write, outbox delivery처럼 transient failure가 가능한 job은 기본
+  `RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL)`를 쓴다. 이미
+  queue worker나 provider client가 자체 retry를 수행하는 경우에는 이중 retry를 피하려고
+  Dagster retry를 낮추거나 끈다.
+- 모든 mutating job은 idempotency key를 갖는다. 반복 실행 가능한 daily/month bucket,
+  `(provider, business_key)`, `(category, idempotency_key)` unique key, 또는 queue row
+  claim(`FOR UPDATE SKIP LOCKED`) 중 하나로 중복 실행을 막는다.
+- run metadata와 log에는 bounded summary만 남긴다. PII, secret, raw token, full URL query,
+  긴 raw payload는 남기지 않는다.
+- retry가 모두 소진된 실패는 Dagster `run_failure_sensor`에서 Sentry와
+  `app.telegram_system_notification_outbox`로 전달한다. 개별 asset/job은 Telegram을 직접
+  호출하지 않는다.
+- PII delete/anonymize, location archive/delete, backup/restore처럼 파괴적이거나 복구가 필요한
+  작업은 Sprint 5에서 dry-run이 기본이다. 실제 실행은 별도 task에서 kill-switch,
+  `access_reason`, admin audit, staging mutating e2e, rollback 절차가 모두 갖춰진 뒤 허용한다.
+- Admin `/admin/etl/summary`는 Pinvi app-owned job registry와 최신 실행 metadata를 표시하고,
+  `kor-travel-map` upstream 상태는 read-only degraded state로 분리한다.
+
+### 근거
+
+- Pinvi와 `kor-travel-map`의 책임 경계를 job 코드 수준에서 강제하지 않으면 Sprint 5 ETL 구현이
+  다시 provider 적재 wrapper로 흐를 위험이 있다.
+- outbox/retention/archive 계열은 재시도와 수동 재실행이 잦으므로 idempotency와 bounded log가
+  선행되어야 운영 사고를 줄일 수 있다.
+- 파괴적 job을 dry-run으로 먼저 닫으면 Sprint 5 범위 안에서 관측성과 UI를 검증하면서도
+  Sprint 6 법무/운영 게이트 전 실제 삭제·익명화 위험을 피할 수 있다.
+
+### 결과
+
+- `docs/runbooks/etl.md`는 ADR-050을 새 app-owned job 체크리스트의 기준으로 삼는다.
+- `docs/architecture/dagster-etl-bridge.md`와 Sprint 5 문서는 `app` schema job 표준, retry,
+  idempotency, 알림, dry-run gate를 명시한다.
+- T-239~T-243은 이 ADR을 기준으로 구현·검증한다.
+
+### 후속
+
+- T-239 `pinvi_email_outbox`, T-240 `pinvi_pii_retention`, T-241
+  `pinvi_location_log_archive`, T-242 Telegram summary/outbox, T-243 Dagster live gate에서
+  각 job별 idempotency key와 dry-run/실행 경계를 구체화한다.
+- 실제 retention/location 삭제·익명화는 T-276에서 kill-switch와 운영 dashboard를 포함해 별도
+  검증한다.
+
+## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행
+
+- **상태**: accepted
+- **날짜**: 2026-06-28
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+ADR-024는 NTFS worktree를 git source of truth로 두고 Windows `git.exe`로 branch/commit/push를
+수행하도록 정했다. 그러나 실제 Codex worktree에서 `.git` 포인터가 `F:/...`로 남아 WSL/Linux
+git이 `fatal: not a git repository`를 내고, `git worktree list`에서는 정상 worktree가
+`prunable`처럼 보이는 문제가 재현됐다. 동시에 CodeGraph도 WSL PATH에서 `/mnt/c/...` Windows npm
+shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로 혼용 문제를 다시 만든다.
+
+사용자는 2026-06-28에 “모든 개발은 WSL을 포함한 Linux 환경에서만 진행, git/CodeGraph도 Linux에서
+실행, Playwright는 N150 환경에서 실행하고 불가 시 Windows에서 실행”으로 운영 기준을 재지정했다.
+따라서 ADR-024와 ADR-017의 Windows `git.exe` amendment를 supersede한다.
+
+### 결정
+
+- **모든 개발 작업은 Linux 환경에서 수행한다.** 기본 로컬 실행 위치는 WSL/Linux이며, N150은
+  운영/live 검증 위치다. Windows는 Linux/N150에서 브라우저 검증이 불가능할 때의 Playwright
+  fallback runner로만 사용한다.
+- **git / branch / commit / push / PR은 Linux git으로 수행한다.** NTFS 경로(`/mnt/f/...`)에 있는
+  기존 고정 worktree도 Linux git 기준으로 `git worktree repair <path>`를 수행해 `.git`/`gitdir`
+  포인터를 `/mnt/...` 경로로 맞춘다. 이후 같은 worktree를 Windows `git.exe`로 조작하지 않는다.
+- **CodeGraph는 Linux native 실행만 허용한다.** `command -v codegraph`가 `/mnt/c/...`, `.exe`,
+  `.cmd` 같은 Windows shim을 가리키면 중지하고 Linux Node/npm 또는 Linux standalone 설치로
+  교정한 뒤 `codegraph status`/`codegraph sync`를 실행한다.
+- **의존성 설치, `pytest`, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 수행한다.**
+  기존 “NTFS source + ext4 테스트 미러” 모델은 폐기한다. 필요하면 `/mnt/f/...` 고정 worktree를
+  Linux git으로 직접 운용하거나, Linux ext4 worktree를 새로 만들어 그곳을 source of truth로 삼는다.
+- **Playwright 우선순위는 N150 → Windows fallback이다.** live 또는 UI e2e는 먼저 N150에서 실행한다.
+  N150에 브라우저/runtime/권한이 없거나 원격 검증이 작업 목적에 맞지 않을 때만 Windows runner를
+  fallback으로 사용하고, 그 사유와 실행 위치를 journal/PR 검증에 남긴다.
+- **기록 문서는 실행 위치를 “Linux / N150 / Windows fallback”으로 구체적으로 적는다.**
+  “WSL ext4 미러”, “NTFS git”, “Windows Playwright 기본” 같은 구 문구는 새 PR에서 발견되는 대로
+  ADR-051 기준으로 정정한다.
+
+### 근거
+
+- 한 worktree를 Windows git과 Linux git이 번갈아 만지는 모델은 `.git` 포인터 drift를 구조적으로
+  만든다. 한 환경, 즉 Linux로 통일하는 편이 장애면이 작다.
+- 현재 개발·검증 명령 대부분(`pytest`, Docker, npm, dev server, CodeGraph)은 Linux에서 더 자연스럽고
+  운영 N150도 Linux라 환경 차이가 줄어든다.
+- Playwright는 실제 운영 브라우저 접근성·네트워크·CORS·WebSocket drift를 잡기 위해 N150 live
+  검증을 우선해야 한다. Windows runner는 로컬 브라우저 의존성이 필요한 예외 경로로 남긴다.
+
+### 결과 (긍정)
+
+- `fatal: not a git repository ... F:/...`와 `prunable` 오판을 한 환경 기준으로 정리할 수 있다.
+- CodeGraph 인덱스와 git 포인터가 같은 Linux 경로 체계를 쓰므로 새 task 진입 절차가 단순해진다.
+- N150 우선 Playwright로 운영 drift를 더 빨리 발견한다.
+
+### 결과 (부정)
+
+- 기존 Windows git 기반 worktree는 1회 `git worktree repair`가 필요하다.
+- Linux native `codegraph`가 설치되지 않은 WSL은 먼저 PATH/설치를 고쳐야 한다.
+- N150 Playwright runtime이 준비되지 않은 기간에는 Windows fallback 사유를 반복 기록해야 한다.
+
+### 후속
+
+- `AGENTS.md`, `CLAUDE.md`, `SKILL.md`의 개발 환경 요약을 ADR-051 기준으로 동기화한다.
+- `docs/dev-environment.md`, `docs/agent-workflow.md`,
+  `docs/runbooks/codegraph-worktrees.md`, `docs/agent-failure-patterns.md`의 NTFS/Windows git 모델을
+  Linux-only 모델로 정정한다.
+- `docs/tasks.md`, `docs/tasks-done.md`, `docs/resume.md`, `docs/journal.md`에 본 전환 작업과 후속
+  작업 흐름을 반영한다.
+
+## ADR-052: Pinvi category mapping은 taxonomy가 아니라 Admin presentation override만 저장
+
+- **상태**: accepted
+- **날짜**: 2026-06-29
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+`kor-travel-map`이 category taxonomy와 upstream `maki_icon` 정본을 소유한다는 결정은
+ADR-026/027과 marker 팔레트 정책에 이미 박혀 있다. 다만 Pinvi Admin에서는 운영자가 특정 category
+code의 표시명, 마커 색, 마커 아이콘을 Pinvi UX에 맞게 보정해야 하는 요구가 생겼다. 이 값을
+`kor-travel-map` taxonomy에 다시 쓰면 책임 경계가 흐려지고, 반대로 Pinvi에 category tree를 복제하면
+동기화 drift가 생긴다.
+
+### 결정
+
+- Pinvi는 `app.category_mappings`에 **presentation override만** 저장한다.
+- `category_key`는 `kor-travel-map` `/v1/categories`의 category code이며 Pinvi FK를 두지 않는다.
+  존재 확인은 Admin mutation 시 최신 upstream catalog 조회로 수행한다.
+- 저장 가능한 override는 `display_name_ko`, `marker_color`(`P-01`~`P-16`), `marker_icon`(maki id)
+  세 필드로 제한한다. category tree, active 여부, sort order, feature count는 계속 upstream 응답을
+  따른다.
+- `GET /admin/category-mappings`는 upstream item과 Pinvi override를 merge해 `upstream_*`,
+  `effective_*`, `has_override`를 함께 반환한다. 응답 `mode`는 `pinvi_override`다.
+- `PATCH /admin/category-mappings/{category_key}`와 `DELETE /admin/category-mappings/{category_key}`는
+  `admin` 전용이며 `access_reason`과 `admin_audit_log` 기록을 필수로 한다. `operator`는 조회만
+  가능하다.
+- rollback은 override row 삭제다. upstream taxonomy에는 어떤 mutation도 보내지 않는다.
+
+### 근거
+
+- category code 정본과 Pinvi UX 표시 보정을 분리하면 `kor-travel-map` 계약을 침범하지 않으면서도
+  운영자가 즉시 마커 표현을 보정할 수 있다.
+- override row를 삭제하는 rollback은 감사와 복구 절차가 단순하고, upstream drift가 있을 때도
+  최신 catalog를 기준으로 다시 계산할 수 있다.
+
+### 결과
+
+- `app.category_mappings`는 Pinvi `app` schema 소유 table이지만, category taxonomy table이 아니다.
+- Admin category mapping UI는 read-only preview가 아니라 audited override editor를 포함한다.
+- JSON export는 upstream/effective/override 값을 함께 내보내 운영자가 적용 상태를 검토할 수 있다.
+
+### 후속
+
+- bulk JSON import가 필요하면 같은 contract 위에 별도 PR로 추가한다. bulk import도 단건 mutation과
+  동일하게 `access_reason`, validation, audit 기록을 요구한다.
+
+## ADR-053: Trip day 경로 최적화는 순수 Python nearest-neighbor + 2-opt(haversine)로 한다 — OR-Tools/실도로 거리 보류
+
+- **상태**: accepted
+- **날짜**: 2026-06-29
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+Sprint 6 일정 최적화(T-261~263, SPEC H-8/I-8)는 trip day의 POI 순서를 최단 동선으로 재정렬한다.
+초안(SPRINT-6 산출물)은 Google OR-Tools(TSP/VRP)를 후보로 적었으나 OR-Tools는 무거운 native
+의존성이라 운영 이미지/Odroid M1S(ARM) 빌드 부담이 크다. trip day의 POI 수는 대개 적다(≈≤20).
+
+### 결정
+
+- 최적화 엔진은 **순수 Python**: nearest-neighbor seed → **2-opt** open-path local search
+  (`services/trip.py` `_optimize_day_order`/`_two_opt_improve`). 신규 의존성을 추가하지 않는다.
+- 거리 기준은 **haversine 직선거리**를 유지한다. 카카오 모빌리티 실도로 거리는 도입하지 않는다
+  (쿼터/비용/캐시 인프라 부담).
+- `start_poi_id` 지정 시 index 0을 고정한다. 좌표 없는 POI는 기존 순서로 뒤에 둔다.
+- POI 수가 `_TWO_OPT_MAX_POIS`(기본 60)를 넘으면 2-opt를 생략하고 NN seed만 적용한다
+  (full-recompute 기반 2-opt 비용 상한).
+- API `strategy`는 `two_opt`(기본)·`nearest_neighbor`(seed만)를 받고, 응답은
+  `previous_distance_meters`를 함께 반환해 UI가 단축률을 표시한다.
+
+### 근거
+
+- trip day 규모에서 NN + 2-opt는 사실상 최적에 근접하며 native 의존성 0으로 Odroid ARM/N150 양쪽에서
+  동일 동작한다. haversine는 도보/관광 동선 재정렬에 충분하고 외부 호출이 없어 비용/장애 표면이 없다.
+
+### 결과
+
+- `optimize_trip_day(strategy=)`는 `(ordered, moves, total_distance, previous_distance, warnings)`를
+  반환한다. 계약 변경은 pydantic/zod/api-client에 반영됐다(PR #315, T-261~263).
+
+### 후속
+
+- 대규모(>60 POI)·실도로 거리·OR-Tools가 실제로 필요해지면 본 ADR을 supersede하는 별도 ADR로
+  엔진을 교체한다(`strategy` 확장 또는 distance provider 추가).
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-048**
+- 다음 신규 ADR = **ADR-054**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

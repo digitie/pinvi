@@ -1,45 +1,62 @@
 # SPRINT-6 — 마무리 + 출시 준비 + MCP 외부 인터페이스
 
-- **상태**: proposed
+- **상태**: proposed / Sprint 5 상세 계획에서 후속 Task 초안(T-260~T-286) 정리됨
 - **선행**: Sprint 5 DoD 완료 (v0.2.0)
 - **목표**: 일정 자동 최적화, Admin 보강, 컴플라이언스 (LBS 신고 + 법무 4 문서),
   **MCP 외부 인터페이스 (Pinvi가 서빙)**, **Backup/Restore UI 핫스왑**,
   **한국 전용 geofencing**, **운영 하드웨어 확장 (Odroid + N150)**,
-  E2E + 성능 + 보안 점검 — 외부 정식 출시 가능 상태
+  E2E + 성능 + 보안 점검, **PIPA/DSR/retention/email suppression/moderation/RBAC/user lifecycle/
+  abuse 운영 표면** — 외부 정식 출시 가능 상태
+- **범위 명시**: v1.0.0은 Web/API/Admin 운영 출시다. `apps/mobile`은 활성 track이지만
+  Sprint M-1 별도 gate로 관리하고, user-facing AI companion은 post-v1.0 또는 별도 release train으로
+  분리한다.
+- **Task 초안**: `docs/execplan/sprint5-v020-release-plan.md` §4의 T-260~T-286을
+  Sprint 6 진입 시 재검토해 확정한다. legal/ops gap의 원자료와 대응 Task는
+  `docs/execplan/legal-ops-review-gap-crosswalk.md`를 정본으로 두고, T-275~T-286 구현 표면,
+  상태 모델, 증거, 테스트 gate는 `docs/execplan/legal-ops-implementation-prep-gate.md`를 따른다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
-  - `POST /trips/{id}/days/{day_index}/optimize` (OR-Tools)
-  - 스마트 정렬 미리보기 UI (I-8)
+  - `POST /trips/{id}/days/{day_index}/optimize` (nearest-neighbor + 2-opt, haversine — ADR-053; T-261~263 완료)
+  - 스마트 정렬 미리보기 UI (I-8) — `TripDayOptimize.tsx` "기존 → 최적" 표시 (완료)
   - `/admin/feature-requests` (사용자 요청 → 라이브러리 trigger)
   - `/admin/category-mapping` (`app.category_mappings`)
   - E2E 시나리오 6가지 통과 (Playwright)
   - 성능 측정 (API p95 latency, DB pool, WebSocket 동시)
   - 보안 점검 (CSP, CORS, rate limit, Argon2, Resend webhook signature)
+  - 보안 threat model / penetration 1차 점검 — auth/session/MCP/share token/rate-limit bypass,
+    storage presigned URL, Admin RBAC
   - LBS 사업자 신고 진행 (방통위 LBSC) — 본 Sprint 시작 시 신청
   - 법무 4 문서 작성/검토 (이용약관 / 처리방침 / LBS 약관 / 위치 동의)
+  - PIPA incident console (`/admin/incidents`) + CPO 30분 review / 정보주체 통지 /
+    KISA/PIPC 72시간 신고
+  - DSR intake workflow(열람/정정/삭제/처리정지) + SLA/evidence/완료 통지
+  - retention 실행(delete/anonymize/archive) + last_run/overdue dashboard + kill-switch
+  - email deliverability/suppression — SPF/DKIM/DMARC/FROM verified, hard-bounce/complaint enforcement
+  - content moderation report/hide/takedown, RBAC role grant/revoke, user lifecycle admin actions,
+    rate-limit/abuse admin surface
   - 운영 환경 배포 smoke test 통과 — **Odroid M1S + N150 16GB / NVMe 1TB
     / Ubuntu 26.04 양쪽** (ADR-023)
   - 백업 + 복구 훈련 1회 — **핫스왑 패턴 검증** (ADR-022)
   - **MCP 외부 인터페이스 서빙** — `apps/api/app/mcp/` 모듈 + `/mcp/sse`
     엔드포인트. 외부 AI agent가 Pinvi의 trip/poi/feature 데이터를
     토큰 인증으로 read. 자세히는 `docs/architecture/mcp-server.md` (ADR-019).
-  - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록
-    + 복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
+  - **Backup/Restore UI 핫스왑** — `/admin/backup` 페이지에서 snapshot 목록을 보여주고,
+    복구 시 동일 DB `app_restore_<ts>` schema로 hot import → schema-swap cut-over (ADR-022,
     `docs/runbooks/backup-restore.md`)
   - **한국 전용 geofencing** — Cloudflare WAF + nginx geo + FastAPI middleware
     (3중 안전) — KR 외 IP는 451 (`docs/architecture/korea-only-policy.md`,
     ADR-018)
-  - **T-107 (Gemini) 별도 서비스로 분리** — 본 저장소에서 제거, 별 repo
-    (`kor-travel-concierge` 또는 사용자 지정)로 이동. local docker-to-docker
-    호출 패턴. 자세히는 ADR-020.
+  - **AI companion 제외** — v1.0에는 user-facing AI companion을 포함하지 않는다. 신규 repo 신설
+    task(T-113)는 제거했고, 향후 필요 시 이미 존재하는 `kor-travel-concierge` API를 활용한다.
+    자세히는 ADR-020과 `docs/tasks-rule.md` §10.
 
 ## 산출물
 
 ### 백엔드
 
-- `apps/api/app/services/route_optimizer.py` (OR-Tools)
-- `apps/api/app/api/v1/optimize.py` (`POST /trips/{id}/days/{day_index}/optimize`,
-  `GET /trips/{id}/days/{day_index}/distance-matrix`)
+- 경로 최적화는 `apps/api/app/services/trip.py`의 `_optimize_day_order`/`_two_opt_improve`
+  (nearest-neighbor + 2-opt, ADR-053). 별도 `route_optimizer.py`/`optimize.py`는 만들지 않았고
+  `POST /trips/{id}/days/{day_index}/optimize`·`GET .../distance-matrix`는 `api/v1/trips.py`에 있다. (완료)
 - `apps/api/app/api/v1/admin/{feature_requests,category_mappings}.py`
 - `apps/api/app/services/distance_matrix.py` (PostGIS + 카카오 모빌리티 + cache)
 - **`apps/api/app/mcp/`** — Pinvi MCP 서버 (ADR-019):
@@ -57,6 +74,15 @@
 - **`apps/api/app/middleware/geofence.py`** — `X-Real-IP` 기반 KR 외 차단
   (`docs/architecture/korea-only-policy.md`). Cloudflare WAF가 1차, nginx가 2차,
   본 미들웨어가 3차 안전망.
+- Legal/ops Admin API:
+  - `apps/api/app/api/v1/admin/incidents.py`
+  - `apps/api/app/api/v1/admin/dsr.py`
+  - `apps/api/app/api/v1/admin/retention.py`
+  - `apps/api/app/api/v1/admin/email_deliverability.py`
+  - `apps/api/app/api/v1/admin/moderation.py`
+  - `apps/api/app/api/v1/admin/rbac.py`
+  - `apps/api/app/api/v1/admin/user_lifecycle.py`
+  - `apps/api/app/api/v1/admin/abuse.py`
 
 ### 프론트엔드
 
@@ -64,15 +90,14 @@
 - `apps/web/app/admin/feature-requests/page.tsx`
 - `apps/web/app/admin/category-mapping/page.tsx`
 - `apps/web/components/admin/CategoryMappingEditor.tsx` (P-01~P-16 색상 + maki 선택)
-- Admin notice plan 작성기 (`docs/architecture/notice-plans.md`):
+- Admin notice plan 작성기 (`docs/architecture/notice-plans.md`, 완료 T-265):
   - `apps/web/app/admin/notice-plans/page.tsx` (목록)
   - `apps/web/app/admin/notice-plans/[planId]/page.tsx` (편집)
   - `apps/web/app/admin/notice-plans/new/page.tsx` (생성)
   - `apps/web/components/admin/NoticePoiEditor.tsx`
   - 첨부 업로드 + 미리보기 (`POST /storage/upload-urls` + presigned PUT)
 - **Backup/Restore UI 핫스왑** (ADR-022):
-  - `apps/web/app/admin/backup/page.tsx` 확장 — snapshot 목록 + manual trigger
-    + 복구 시작
+  - `apps/web/app/admin/backup/page.tsx` 확장 — snapshot 목록, manual trigger, 복구 시작
   - `apps/web/components/admin/RestoreHotswapDialog.tsx` — snapshot 선택 →
     progress (schema 준비 / pg_restore / validate / drain / schema-swap 단계 표시) → 결과
   - `apps/web/components/admin/SnapshotTable.tsx`
@@ -80,11 +105,23 @@
   - `apps/web/app/admin/mcp-tokens/page.tsx` — admin 전체 토큰 / 발급 / revoke
   - `apps/web/app/(app)/settings/mcp-tokens/page.tsx` — 사용자 본인 토큰
   - `apps/web/components/mcp/McpTokenIssuer.tsx` (scope / 만료 / description)
+- Legal/ops Admin UI:
+  - `/admin/incidents`
+  - `/admin/dsr`
+  - `/admin/retention`
+  - `/admin/email-deliverability`
+  - `/admin/moderation`
+  - `/admin/rbac`
+  - `/admin/users/{id}/lifecycle`
+  - `/admin/abuse`
 
 ### 컴플라이언스
 
 - `docs/compliance/lbs-act.md` — 신고 상태 추적
 - `docs/compliance/pipa.md` — PIPA 2024 점검 매트릭스
+- `docs/runbooks/security-incidents.md` — CPO review / subject notification / KISA report 절차
+- `docs/runbooks/dsr.md` — 정보주체 요청 SLA/evidence 처리 절차
+- `docs/runbooks/retention-execution.md` — delete/anonymize/archive 실행과 kill-switch
 - `docs/legal/terms-of-service.md` (placeholder + 변호사 검토)
 - `docs/legal/privacy-policy.md`
 - `docs/legal/lbs-terms.md`
@@ -95,16 +132,17 @@
 - `infra/odroid/README.md` (배포 절차) — 유지
 - `infra/n150/README.md` (ADR-023) — N150 16GB / NVMe 1TB / Ubuntu 26.04
   배포 + Odroid 대비 변경점 (x86_64 vs ARM64 이미지)
-- `.github/workflows/docker-images.yml` — API/Web `linux/amd64,linux/arm64` GHCR image build
+- Docker image는 운영 노드별 로컬 checkout + 로컬 build로 만든다. ARM image와 GHCR 배포는
+  Sprint 6 범위에서 제외한다.
 - `scripts/deploy-node.sh` + `scripts/{n150,odroid}-docker-doctor.sh`
 - `scripts/{backup-db,restore-db,restore-hotswap}.sh`
-- `infra/docker-compose.app.yml` 최종 — x86_64 / ARM64 멀티 platform
+- `infra/docker-compose.app.yml` 최종 — 노드 로컬 build 기준
 - `infra/nginx/{nginx.conf,geo-kr.conf}` — 한국 IP 화이트리스트 (ADR-018)
 - `infra/cloudflare/wrangler.toml` 또는 dashboard 설정 메모 — WAF rule "Country
   ≠ KR → Block 451" (`docs/architecture/korea-only-policy.md`)
 - nginx + Let's Encrypt + certbot 설정
 - DDNS 또는 Cloudflare Tunnel
-- **`apps/api/Dockerfile`**: multi-platform build (linux/amd64 + linux/arm64)
+- **`apps/api/Dockerfile`**: 노드 로컬 build 기준 유지
 - **MCP 서버 별 docker service** (선택, ADR-019에서 결정): `mcp` service 또는
   `api` 본체에 통합
 
@@ -116,8 +154,9 @@
 
 ### ADR
 
-- 후속 ADR 후보(번호 미배정): OR-Tools 경로 최적화 정책 (POI ≤10/11-20/20+ 분기)
-- 후속 ADR 후보(번호 미배정): 카테고리 매핑 운영 정책 (라이브러리 default + DB override + 사용자 custom)
+- **ADR-053** (확정): Trip day 경로 최적화 = nearest-neighbor + 2-opt(haversine), OR-Tools/실도로 거리 보류 (T-261~263)
+- **ADR-052** (확정): category mapping은 Admin presentation override만 저장 (T-264)
+- 상세 실행 계획: `docs/execplan/sprint6-v1.0-plan.md`
 - **ADR-018** (참조): 한국 전용 서비스 정책 + geofencing 3중 안전망
 - **ADR-019** (참조): Pinvi MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리
@@ -145,6 +184,12 @@
 - [ ] DDNS 또는 Cloudflare Tunnel 안정 동작
 - [ ] 도메인 + 브랜드명 확정 + Resend 도메인 인증 verified
 - [ ] 외부 API 키 모두 발급 + 일 호출 한도 확인
+- [ ] PIPA incident/DSR/retention/email suppression/moderation/RBAC/user lifecycle/abuse 운영 표면
+      구현과 법무 sign-off
+- [x] v1.0 mobile 제외 scope와 release note 문구 확정
+- [ ] user-facing AI companion 제외 release note 문구 확정
+- [ ] T-258 legal/ops prep gate 기준 최신성 재확인 — 72시간 신고, DSR 10일, CPO 30분 내부 SLA,
+      mobile/AI 제외 범위
 
 ## E2E 시나리오 (Playwright)
 
@@ -159,17 +204,28 @@
 8. **Backup 핫스왑: snapshot 생성 → 더미 변경 후 restore_hotswap → schema-swap 데이터
    복구 확인 + previous schema 자동 삭제 trigger 검증** (ADR-022)
 9. **한국 외 IP에서 접근 → 451 응답 + landing page redirect** (ADR-018)
+10. **Legal/ops staging suite**: incident 생성/상태 변경, DSR 접수/완료, retention execute dry-run→execute,
+    hard-bounce suppression, moderation takedown, RBAC grant/revoke, forced logout/reset,
+    rate-limit block/override.
 
 ## 종료 체크리스트
 
 - [ ] DoD 모두 통과
-- [ ] E2E **9** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence)
+- [ ] E2E **10** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence / Legal-ops)
 - [ ] 운영 환경 smoke test 통과 — **Odroid + N150 양쪽** (ADR-023)
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
-  Pinvi trip 조회 성공)
+      Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
-- [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
+- [x] **v1.0 mobile 제외 범위 명시**
+- [x] **user-facing AI companion 제외 범위 명시** — T-113 신규 repo 신설 task 제거, 기존
+      `kor-travel-concierge` API 활용 원칙 기록.
+- [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
+      user lifecycle / abuse 운영 표면 sign-off**
+- [ ] **T-258 legal/ops 구현 매트릭스 충족** — 각 Task가 API/UI/runbook/test/sign-off를 가진다.
+- [ ] **T-256 crosswalk G-001~G-044 재감사** — 각 gap이 구현 PR, 테스트, runbook 중
+      하나로 닫혔는지 확인
+- [x] **Security threat model / penetration 1차 점검 결과 기록**
 - [ ] 첫 외부 사용자(가족 베타) 가입 + 여행 생성 성공
 - [ ] **`v1.0.0` git tag + GitHub Release notes**
 - [ ] `docs/journal.md` Sprint 6 종료 + v1.0 출시 엔트리
@@ -179,9 +235,8 @@
 
 - v2 후보: PWA, Redis Streams, 푸시 알림, 사진 업로드, 다국어, 결제,
   GPX 업로드, 공개 여행 / 커뮤니티, 댓글
-- AI 추천 / 챗봇은 별 repo (`kor-travel-concierge`, ADR-020) — Gemini /
-  Claude / Codex 등 provider 선택 가능. local docker-to-docker 호출로 본
-  서비스 통합.
+- AI 추천 / 챗봇은 신규 repo 신설 없이 기존 `kor-travel-concierge` API를 활용한다(ADR-020).
+  provider 선택과 내부 구현은 해당 서비스가 소유하고, Pinvi는 consumer/client 통합만 담당한다.
 - `docs/tasks.md`에 T-100 ~ T-200 백로그로 관리
 - v1.0 → v1.1 마이너: PWA + 푸시 알림 + 사진 업로드 우선
 - 해외 진출 시 ADR-018 (한국 전용) supersede 필요

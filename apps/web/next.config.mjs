@@ -1,8 +1,13 @@
 const DEFAULT_GRAFANA_URL = 'http://localhost:12205';
 
+function envValue(name, fallback) {
+  const value = process.env[name]?.trim();
+  return value || fallback;
+}
+
 function grafanaOrigin() {
   try {
-    return new URL(process.env.NEXT_PUBLIC_GRAFANA_URL ?? DEFAULT_GRAFANA_URL).origin;
+    return new URL(envValue('NEXT_PUBLIC_GRAFANA_URL', DEFAULT_GRAFANA_URL)).origin;
   } catch {
     return DEFAULT_GRAFANA_URL;
   }
@@ -31,6 +36,7 @@ const nextConfig = {
     '@pinvi/api-client',
     '@pinvi/state',
     '@pinvi/design-tokens',
+    '@pinvi/domain',
     '@pinvi/hooks',
     '@pinvi/i18n',
     'vworld-map-core',

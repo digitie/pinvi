@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol, cast
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attachment import CuratedPlanAttachment
@@ -41,9 +41,13 @@ class NoticePlanPolicyError(NoticePlanError):
     code = "CURATED_PLAN_POI_POLICY_ERROR"
 
 
-class KorTravelMapCuratedCopyClient(Protocol):
-    async def get_curated_pinvi_copy(self, curated_feature_id: str) -> dict[str, Any]:
-        """kor-travel-map Pinvi copy snapshot 조회."""
+class NoticePlanVersionConflictError(NoticePlanError):
+    code = "VERSION_CONFLICT"
+
+
+class KorTravelMapCuratedSnapshotClient(Protocol):
+    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
+        """kor-travel-map curated detail snapshot 조회 (admin 표면, ADR-049)."""
         ...
 
 
@@ -155,6 +159,272 @@ async def list_plan_pois(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> list
         .order_by(CuratedPlanPoi.day_index, CuratedPlanPoi.sort_order)
     )
     return list(result.scalars())
+
+
+async def list_admin_plans(
+    db: AsyncSession,
+    *,
+    q: str | None = None,
+    category: str | None = None,
+    is_published: bool | None = None,
+    limit: int = 100,
+) -> list[CuratedTripPlan]:
+    stmt = select(CuratedTripPlan).where(CuratedTripPlan.deleted_at.is_(None))
+    normalized_q = _optional_text(q)
+    if normalized_q is not None:
+        pattern = f"%{normalized_q}%"
+        stmt = stmt.where(
+            or_(
+                CuratedTripPlan.slug.ilike(pattern),
+                CuratedTripPlan.title.ilike(pattern),
+                CuratedTripPlan.destination.ilike(pattern),
+            )
+        )
+    if category is not None:
+        stmt = stmt.where(CuratedTripPlan.category == category)
+    if is_published is not None:
+        stmt = stmt.where(CuratedTripPlan.is_published.is_(is_published))
+    stmt = stmt.order_by(CuratedTripPlan.updated_at.desc()).limit(max(1, min(limit, 200)))
+    result = await db.execute(stmt)
+    return list(result.scalars())
+
+
+async def get_admin_plan(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> CuratedTripPlan:
+    plan = await db.scalar(
+        select(CuratedTripPlan).where(
+            CuratedTripPlan.curated_plan_id == notice_plan_id,
+            CuratedTripPlan.deleted_at.is_(None),
+        )
+    )
+    if plan is None:
+        raise NoticePlanNotFoundError("추천 여행을 찾을 수 없습니다.")
+    return plan
+
+
+def _validate_plan_period(starts_on: date | None, ends_on: date | None) -> None:
+    if starts_on is None and ends_on is None:
+        return
+    if starts_on is None or ends_on is None:
+        raise NoticePlanPolicyError("starts_on / ends_on 동시에 채우거나 비워야 합니다.")
+    if ends_on < starts_on:
+        raise NoticePlanPolicyError("ends_on은 starts_on 이후여야 합니다.")
+
+
+def _check_version(*, actual: int, expected: int | None) -> None:
+    if expected is not None and actual != expected:
+        raise NoticePlanVersionConflictError("최신 버전이 아닙니다. 새로고침 후 다시 시도하세요.")
+
+
+def _require_values(values: Mapping[str, Any]) -> None:
+    if not values:
+        raise NoticePlanPolicyError("수정할 필드가 필요합니다.")
+
+
+async def create_admin_plan(
+    db: AsyncSession,
+    *,
+    admin_id: uuid.UUID,
+    values: Mapping[str, Any],
+) -> CuratedTripPlan:
+    _validate_plan_period(
+        cast(date | None, values.get("starts_on")),
+        cast(date | None, values.get("ends_on")),
+    )
+    plan = CuratedTripPlan(
+        slug=cast(str, values["slug"]),
+        title=cast(str, values["title"]),
+        category=cast(str, values.get("category") or "recommended"),
+        summary=cast(str | None, values.get("summary")),
+        source_name=cast(str | None, values.get("source_name")),
+        destination=cast(str | None, values.get("destination")),
+        starts_on=cast(date | None, values.get("starts_on")),
+        ends_on=cast(date | None, values.get("ends_on")),
+        is_published=cast(bool, values.get("is_published", False)),
+        created_by_admin_id=admin_id,
+        updated_by_admin_id=admin_id,
+    )
+    db.add(plan)
+    await db.flush()
+    await db.refresh(plan)
+    return plan
+
+
+async def update_admin_plan(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    admin_id: uuid.UUID,
+    values: Mapping[str, Any],
+    expected_version: int | None = None,
+) -> CuratedTripPlan:
+    _require_values(values)
+    _check_version(actual=plan.version, expected=expected_version)
+    next_starts_on = cast(date | None, values.get("starts_on", plan.starts_on))
+    next_ends_on = cast(date | None, values.get("ends_on", plan.ends_on))
+    _validate_plan_period(next_starts_on, next_ends_on)
+    for field in (
+        "title",
+        "category",
+        "summary",
+        "source_name",
+        "destination",
+        "starts_on",
+        "ends_on",
+        "is_published",
+    ):
+        if field in values:
+            setattr(plan, field, values[field])
+    plan.updated_by_admin_id = admin_id
+    plan.version += 1
+    await db.flush()
+    await db.refresh(plan)
+    return plan
+
+
+async def soft_delete_admin_plan(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    admin_id: uuid.UUID,
+    expected_version: int | None = None,
+) -> CuratedTripPlan:
+    _check_version(actual=plan.version, expected=expected_version)
+    plan.deleted_at = datetime.now(UTC)
+    plan.updated_by_admin_id = admin_id
+    plan.version += 1
+    await db.flush()
+    await db.refresh(plan)
+    return plan
+
+
+async def get_admin_poi(
+    db: AsyncSession,
+    *,
+    notice_plan_id: uuid.UUID,
+    notice_poi_id: uuid.UUID,
+) -> CuratedPlanPoi:
+    poi = await db.scalar(
+        select(CuratedPlanPoi).where(
+            CuratedPlanPoi.curated_plan_id == notice_plan_id,
+            CuratedPlanPoi.curated_poi_id == notice_poi_id,
+            CuratedPlanPoi.deleted_at.is_(None),
+        )
+    )
+    if poi is None:
+        raise NoticePlanNotFoundError("추천 여행 POI를 찾을 수 없습니다.")
+    return poi
+
+
+async def create_admin_poi(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    admin_id: uuid.UUID,
+    values: Mapping[str, Any],
+) -> CuratedPlanPoi:
+    poi = CuratedPlanPoi(
+        curated_plan_id=plan.curated_plan_id,
+        day_index=cast(int, values.get("day_index", 1)),
+        sort_order=cast(str, values["sort_order"]),
+        feature_id=_optional_feature_id(values.get("feature_id")),
+        feature_snapshot=dict(_mapping(values.get("feature_snapshot"))),
+        memo=cast(str | None, values.get("memo")),
+        budget_amount=values.get("budget_amount"),
+        currency=cast(str, values.get("currency") or "KRW"),
+        user_url=cast(str | None, values.get("user_url")),
+        custom_marker_color=cast(str | None, values.get("custom_marker_color")),
+        custom_marker_icon=cast(str | None, values.get("custom_marker_icon")),
+    )
+    db.add(poi)
+    plan.updated_by_admin_id = admin_id
+    plan.version += 1
+    await db.flush()
+    await db.refresh(poi)
+    return poi
+
+
+async def update_admin_poi(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    poi: CuratedPlanPoi,
+    values: Mapping[str, Any],
+    expected_version: int | None = None,
+) -> CuratedPlanPoi:
+    _require_values(values)
+    _check_version(actual=poi.version, expected=expected_version)
+    if "feature_id" in values:
+        poi.feature_id = _optional_feature_id(values.get("feature_id"))
+    if "feature_snapshot" in values:
+        poi.feature_snapshot = dict(_mapping(values.get("feature_snapshot")))
+    for field in (
+        "day_index",
+        "sort_order",
+        "memo",
+        "budget_amount",
+        "currency",
+        "user_url",
+        "custom_marker_color",
+        "custom_marker_icon",
+    ):
+        if field in values:
+            setattr(poi, field, values[field])
+    poi.version += 1
+    plan.version += 1
+    await db.flush()
+    await db.refresh(poi)
+    return poi
+
+
+async def soft_delete_admin_poi(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    poi: CuratedPlanPoi,
+    expected_version: int | None = None,
+) -> CuratedPlanPoi:
+    _check_version(actual=poi.version, expected=expected_version)
+    poi.deleted_at = datetime.now(UTC)
+    poi.version += 1
+    plan.version += 1
+    await db.flush()
+    await db.refresh(poi)
+    return poi
+
+
+async def reorder_admin_pois(
+    db: AsyncSession,
+    *,
+    plan: CuratedTripPlan,
+    admin_id: uuid.UUID,
+    items: list[Mapping[str, Any]],
+) -> list[CuratedPlanPoi]:
+    ids = [cast(uuid.UUID, item["notice_poi_id"]) for item in items]
+    if len(set(ids)) != len(ids):
+        raise NoticePlanPolicyError("중복된 POI가 있습니다.")
+    result = await db.execute(
+        select(CuratedPlanPoi).where(
+            CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
+            CuratedPlanPoi.curated_poi_id.in_(ids),
+            CuratedPlanPoi.deleted_at.is_(None),
+        )
+    )
+    rows = list(result.scalars())
+    by_id = {row.curated_poi_id: row for row in rows}
+    if set(by_id) != set(ids):
+        raise NoticePlanNotFoundError("추천 여행 POI를 찾을 수 없습니다.")
+    for item in items:
+        poi = by_id[cast(uuid.UUID, item["notice_poi_id"])]
+        poi.day_index = cast(int, item["day_index"])
+        poi.sort_order = cast(str, item["sort_order"])
+        poi.version += 1
+    plan.updated_by_admin_id = admin_id
+    plan.version += 1
+    await db.flush()
+    ordered = [by_id[poi_id] for poi_id in ids]
+    for poi in ordered:
+        await db.refresh(poi)
+    return ordered
 
 
 async def copy_plan_to_trip(
@@ -350,7 +620,7 @@ async def import_kor_travel_map_curated_feature(
     db: AsyncSession,
     *,
     admin_id: uuid.UUID,
-    kor_travel_map_client: KorTravelMapCuratedCopyClient,
+    kor_travel_map_client: KorTravelMapCuratedSnapshotClient,
     curated_feature_id: str,
     mode: str = "create",
     is_published: bool | None = None,
@@ -359,11 +629,14 @@ async def import_kor_travel_map_curated_feature(
     if mode not in {"create", "upsert", "refresh"}:
         raise NoticePlanPolicyError("지원하지 않는 import mode 입니다.")
 
-    snapshot = _mapping(await kor_travel_map_client.get_curated_pinvi_copy(curated_feature_id))
+    snapshot = _mapping(await kor_travel_map_client.get_curated_detail_snapshot(curated_feature_id))
     source_curated_feature_id = _optional_text(snapshot.get("curated_feature_id"))
     if source_curated_feature_id is None:
-        raise NoticePlanCopyError("kor-travel-map copy snapshot에 curated_feature_id가 없습니다.")
-    plan_payload = _mapping(snapshot.get("plan"))
+        raise NoticePlanCopyError(
+            "kor-travel-map curated snapshot에 curated_feature_id가 없습니다."
+        )
+    # PR #533(ADR-049): plan-level 객체 키가 `plan` → `content`로 개명됨.
+    plan_payload = _mapping(snapshot.get("content"))
     source_payload = _mapping(snapshot.get("source"))
     theme_payload = _mapping(snapshot.get("theme"))
     items = _snapshot_items(snapshot)

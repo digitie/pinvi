@@ -12,7 +12,7 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 |------|--------|--------|
 | [resend.md](./resend.md) | Resend (이메일 transactional) | 2 |
 | [social-login.md](./social-login.md) | Google OAuth (Naver/Kakao는 T-122 future provider) | 2 |
-| ~~[gemini.md](./gemini.md)~~ | 보류 — `kor-travel-concierge` 참고용 레거시 Gemini 메모 | deferred |
+| ~~[gemini.md](./gemini.md)~~ | 보류 — pinvi 자체 user-key Gemini enrichment 설계 메모(deferred). AI provider 구현체는 `kor-travel-concierge`가 소유 | deferred |
 | [telegram.md](./telegram.md) | Telegram Bot (알림) | 4+ |
 | [maplibre-vworld.md](./maplibre-vworld.md) | **지도 클라이언트** — `vworld-map-web` (`maplibre-vworld-react`, VWorld + MapLibre GL) (ADR-046) | 4 |
 | [kor-travel-map-rest-api.md](./kor-travel-map-rest-api.md) | **kor-travel-map REST API 계약** — feature 데이터 OpenAPI HTTP(포트 12701, ADR-026/027) + Pinvi 연결 작업 | 4 |

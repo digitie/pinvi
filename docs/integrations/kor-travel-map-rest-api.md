@@ -20,8 +20,13 @@
 > **2026-06-12 추가**: kor-travel-map `curated_features`는 Pinvi
 > `curated_trip_plans`의 추가 import 소스다. Pinvi-native 큐레이션을 대체하지 않는다.
 > 상세 REST 계약은 아직 미확정이므로 §2.11은 후속 소비 설계로만 기록한다.
-> **정본 소스**: kor-travel-map `packages/kor-travel-map-admin/openapi.user.json`(사용자 표면) +
-> `docs/pinvi-rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
+> **2026-06-24 재대조 (kor_travel_map `feat/admin-auth-api-keys` `ae86783`)**:
+> REST backend 패키지 정본 경로가 `packages/kor-travel-map-api/openapi.user.json`으로
+> 이동했고, public REST surface는 설정에 따라 `key` query를 요구할 수 있다
+> (service token 요청은 우회). `curated_features`의 item 포함 snapshot 경로는 이후 kor_travel_map
+> PR #533으로 admin `/v1/admin/curated-features/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
+> **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
+> `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
 
@@ -30,7 +35,7 @@
 ## 0. 한눈에 — 무엇이 바뀌었나
 
 `docs/kor-travel-map-requirements.md`(2026-06-06)가 "kor-travel-map에 없다"고 한 능력 대부분이
-**구현 완료**됐다. kor-travel-map은 `packages/kor-travel-map-admin`(FastAPI, 포트 **12701**)에
+**구현 완료**됐다. kor-travel-map은 `packages/kor-travel-map-api`(FastAPI, 포트 **12701**)에
 Pinvi-facing `openapi.user.json`을 export하고, 다음 사용자 표면 엔드포인트를 제공한다:
 
 | 능력 | 엔드포인트 | 직전 상태 → 현재 |
@@ -69,10 +74,16 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   kor_travel_map `0e45bd7`에서 머지 완료** — client의 `{error:{code}}`·`data.next_cursor` 파싱은
   이제 실계약과 불일치, **T-181 잔여 즉시 실행 대상**(problem+json `code`,
   `meta.page.next_cursor`, batch `found`, in-bounds `max_items`).
-- **인증**: 코드에는 인증 없음(kor_travel_map ADR-005). 운영 인증은 **네트워크/인프라 계층**에서
-  강제 — reverse proxy SSO / IP allowlist / `X-Kor-Travel-Map-Service-Token` pass-through(kor_travel_map
-  D-1). → Pinvi client는 설정된 서비스 토큰 헤더를 **그대로 전달**할 수 있어야 한다
-  (`PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`, 선택). **사용자 토큰을 kor_travel_map로 전달하지 않는다.**
+- **인증**: kor_travel_map ADR-060 이후 public REST surface(`/v1/features*`,
+  `/v1/public*`, `/v1/categories`, `/v1/providers*`)는 운영 설정
+  `KOR_TRAVEL_MAP_API_PUBLIC_API_KEY_REQUIRED=true`에서 VWorld 호환 `key` query를
+  요구할 수 있다. trusted admin proxy 또는 `X-Kor-Travel-Map-Service-Token` 요청은
+  이 검증을 우회한다. Pinvi client는 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`이 있으면
+  service token 헤더를 보내고, 없으면 `PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY`(미설정 시
+  `PINVI_VWORLD_API_KEY`)를 `key` query로 붙인다. **사용자 토큰을 kor_travel_map로
+  전달하지 않는다.** `/v1/admin/*`는 운영에서
+  `X-Kor-Travel-Map-Admin-Proxy-Secret` + `X-Kor-Travel-Map-Actor`가 필요할 수 있으며,
+  Pinvi admin client는 `PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET`/`..._ACTOR`로 전송한다.
 - **응답 envelope (확정 — kor_travel_map 0e45bd7 라이브)**: 성공 = `{ "data": <payload>, "meta": <Meta> }`.
   `data`는 **payload만** — 단건 `<object>`, 목록 `{items:[]}`, in-bounds `{clusters:[],items:[]}`,
   batch `{found:{<id>:Feature}, missing:[]}`. pagination·추적은 `meta`로 일원화:
@@ -226,10 +237,13 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 - provider 신선도(brief/Admin 상태판), liveness, 버전. Pinvi Admin 상태판·헬스 체크용.
   `/health`·`/version`만 비버전 경로 (구 `/debug/health|version`은 kor_travel_map T-214h로 제거).
 
-### 2.11 `curated_features` — Pinvi curated trip plan import (후속, 계약 대기)
+### 2.11 `curated_features` — Pinvi curated trip plan import (Admin 전용 detail snapshot)
 
-**상태**: Pinvi가 kor-travel-map `GET /v1/curated-features/{id}/pinvi-copy`를
-소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다.
+**상태**: Pinvi가 kor-travel-map `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다. 구 public 경로
+`GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐고, item을
+담은 snapshot은 이제 admin 표면(`/v1/admin/*`, 헤더 `X-Kor-Travel-Map-Service-Token` 필요)에만
+존재한다(ADR-049).
 
 제품 의미:
 
@@ -238,11 +252,14 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   `curated_trip_plans` 1건으로 1:1 복사한다.
 - 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
 
-사용하는 kor_travel_map REST 표면:
+사용하는 kor_travel_map REST 표면 (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요):
 
 ```http
-GET /v1/curated-features/{curated_feature_id}/pinvi-copy
+GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot
 ```
+
+snapshot plan-level 객체 키는 `plan` → `content`로 개명됐다(ADR-049). version/etag/
+updated_at/theme/source/items[]는 그대로다.
 
 Pinvi import 매핑:
 
@@ -438,7 +455,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   (3) 로컬 전용: sibling `kor-travel-map` 스펙과 경로 집합 일치
   (핀 신선도, CI에서는 skip — `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
-  1. `cp ../kor-travel-map/packages/kor-travel-map-admin/openapi.user.json
+  1. `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
      apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py` 실행.
   3. 실패하면 사라진/바뀐 경로·필드를 `clients/kor_travel_map.py` + `features.py`/`public.py` 매핑 +

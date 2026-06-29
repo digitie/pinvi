@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { AdminTripDetail, AdminTripSummary } from '@pinvi/schemas';
+import type {
+  AdminOperationImpact,
+  AdminOperationResult,
+  AdminTripDetail,
+  AdminTripSummary,
+  AdminUserSummary,
+} from '@pinvi/schemas';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -15,6 +21,9 @@ const adminUser = {
 
 const tripId = '88888888-8888-4888-8888-888888888888';
 const ownerUserId = '99999999-9999-4999-8999-999999999999';
+const companionUserId = '66666666-6666-4666-8666-666666666666';
+const poiId = '55555555-5555-4555-8555-555555555555';
+const createdTripId = '44444444-4444-4444-8444-444444444444';
 
 const tripSummary: AdminTripSummary = {
   trip_id: tripId,
@@ -35,6 +44,16 @@ const tripSummary: AdminTripSummary = {
   share_link_count: 1,
   created_at: '2026-06-06T10:00:00+09:00',
   updated_at: '2026-06-06T11:00:00+09:00',
+};
+
+const ownerSummary: AdminUserSummary = {
+  user_id: ownerUserId,
+  email_masked: 'o***@example.com',
+  nickname: '소유자',
+  status: 'active',
+  roles: ['user'],
+  email_verified_at: '2026-06-01T09:00:00+09:00',
+  created_at: '2026-06-01T09:00:00+09:00',
 };
 
 test.beforeEach(async ({ page }) => {
@@ -96,6 +115,127 @@ test('Admin 여행 목록이 검색어와 필터를 API에 전달한다', async 
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });
 
+test('Admin 여행 목록에서 여행계획을 직접 생성한다', async ({ page }) => {
+  let createBody: Record<string, unknown> | null = null;
+  const createdTrip: AdminTripDetail = {
+    ...tripSummary,
+    trip_id: createdTripId,
+    title: '운영자 생성 여행',
+    region_hint: '강릉',
+    primary_region_code: '42150',
+    start_date: '2026-08-01',
+    end_date: '2026-08-03',
+    visibility: 'unlisted',
+    status: 'planned',
+    description: '고객 요청 대행 생성',
+    companions: [],
+    days: [],
+    pois: [],
+    attachments: [],
+    share_links: [],
+    recent_audit: [
+      {
+        log_id: 30,
+        actor_user_id: adminUser.user_id,
+        action: 'trip.create',
+        resource_type: 'trip',
+        resource_id: createdTripId,
+        access_reason: '고객센터 요청 대행',
+        target_pii_fields: null,
+        prev_hash: '0'.repeat(64),
+        content_hash: '2'.repeat(64),
+        occurred_at: '2026-06-06T12:00:00+09:00',
+      },
+    ],
+  };
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/users',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [ownerSummary],
+            total: 1,
+            page: 1,
+            limit: 8,
+          },
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/trips',
+    async (route) => {
+      if (route.request().method() === 'POST') {
+        createBody = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: createdTrip }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [],
+            total: 0,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/trips/${createdTripId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: createdTrip }),
+      });
+    },
+  );
+
+  await page.goto('/admin/trips');
+  await page.getByTestId('admin-trip-create-open').click();
+  await expect(page.getByTestId('admin-trip-create-dialog')).toBeVisible();
+
+  await page.getByTestId('admin-trip-owner-search').fill('owner');
+  await page.getByTestId('admin-trip-owner-search-submit').click();
+  await page.getByTestId(`admin-trip-owner-result-${ownerUserId}`).click();
+  await expect(page.getByTestId('admin-trip-owner-selected')).toContainText(ownerUserId);
+
+  await page.getByTestId('admin-trip-create-title').fill('운영자 생성 여행');
+  await page.getByTestId('admin-trip-create-region').fill('강릉');
+  await page.getByTestId('admin-trip-create-region-code').fill('42150');
+  await page.getByTestId('admin-trip-create-visibility').selectOption('unlisted');
+  await page.getByTestId('admin-trip-create-status').selectOption('planned');
+  await page.getByTestId('admin-trip-create-start').fill('2026-08-01');
+  await page.getByTestId('admin-trip-create-end').fill('2026-08-03');
+  await page.getByTestId('admin-trip-create-description').fill('고객 요청 대행 생성');
+  await page.getByTestId('admin-trip-create-reason').fill('고객센터 요청 대행');
+  await page.getByTestId('admin-trip-create-submit').click();
+
+  await expect(page).toHaveURL(new RegExp(`/admin/trips/${createdTripId}$`));
+  expect(createBody).toMatchObject({
+    owner_user_id: ownerUserId,
+    title: '운영자 생성 여행',
+    region_hint: '강릉',
+    primary_region_code: '42150',
+    start_date: '2026-08-01',
+    end_date: '2026-08-03',
+    visibility: 'unlisted',
+    status: 'planned',
+    access_reason: '고객센터 요청 대행',
+  });
+});
+
 test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page }) => {
   const requests: string[] = [];
   let patchReason: string | null = null;
@@ -112,7 +252,74 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
         invited_at: '2026-06-06T10:00:00+09:00',
         joined_at: null,
       },
+      {
+        companion_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        user_id: companionUserId,
+        invited_email_masked: 'j***@example.com',
+        invited_nickname: '가입 동반자',
+        role: 'viewer',
+        invited_at: '2026-06-06T09:00:00+09:00',
+        joined_at: '2026-06-06T12:00:00+09:00',
+      },
     ],
+    days: [
+      {
+        day_index: 1,
+        date: '2026-07-01',
+        title: '1일차',
+        note: null,
+        poi_count: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+      {
+        day_index: 2,
+        date: '2026-07-02',
+        title: '2일차',
+        note: null,
+        poi_count: 0,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+    ],
+    pois: [
+      {
+        attachment_id: poiId,
+        day_index: 1,
+        day_date: '2026-07-01',
+        day_title: '1일차',
+        sort_order: 'a0',
+        feature_id: 'feature-place-1',
+        feature_label: '해운대',
+        feature_snapshot: {
+          name: '해운대',
+          coord: { lon: 129.1604, lat: 35.1587 },
+          marker_color: 'P-07',
+          marker_icon: 'swimming',
+          category: '해수욕장',
+          address: { road: '부산 해운대구 해운대해변로' },
+        },
+        lon: 129.1604,
+        lat: 35.1587,
+        address_label: '부산 해운대구 해운대해변로',
+        added_by_user_id: ownerUserId,
+        added_by_email_masked: 'o***@example.com',
+        feature_link_broken_at: null,
+        custom_marker_color: 'P-08',
+        custom_marker_icon: 'marker',
+        planned_arrival_at: '2026-07-01T10:00:00+09:00',
+        planned_departure_at: '2026-07-01T11:00:00+09:00',
+        user_note: '오전 산책',
+        budget_amount: '12000.00',
+        actual_amount: null,
+        currency: 'KRW',
+        user_url: 'https://example.com/poi',
+        version: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+    ],
+    attachments: [],
     share_links: [
       {
         share_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -175,8 +382,54 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await page.goto(`/admin/trips/${tripId}`);
 
   await expect(page.getByRole('heading', { name: '부산 가족 여행' })).toBeVisible();
+  await expect(page.getByTestId('admin-nav--admin-trips')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('admin-nav--admin')).not.toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
+  await page.getByTestId('admin-sidebar-toggle').click();
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'true');
+  await page.getByTestId('admin-sidebar-toggle').click();
+  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.getByRole('link', { name: 'o***@example.com' })).toHaveAttribute(
+    'href',
+    `/admin/users/${ownerUserId}`,
+  );
   await expect(page.getByTestId('admin-trip-companions')).toContainText('f***@example.com');
+  await expect(page.getByTestId('admin-trip-companions')).toContainText('미가입 초대');
+  await expect(page.getByRole('link', { name: 'j***@example.com' })).toHaveAttribute(
+    'href',
+    `/admin/users/${companionUserId}`,
+  );
+  await expect(page.getByTestId('admin-trip-days')).toContainText('2026. 7. 1.');
+  await expect(page.getByTestId('admin-trip-pois')).toContainText('해운대');
   await expect(page.getByTestId('admin-trip-share-links')).toContainText('view_only');
+
+  await page.getByTestId(`admin-trip-poi-row-${poiId}`).click();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toContainText(
+    '부산 해운대구 해운대해변로',
+  );
+  await expect(page.getByTestId('admin-trip-poi-map')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-color',
+    'P-08',
+  );
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-icon',
+    'marker',
+  );
+  await expect(page.getByTestId('admin-trip-poi-map-marker-style')).toHaveAttribute(
+    'data-marker-source',
+    'custom',
+  );
+  await expect(page.getByTestId('admin-trip-poi-resolved-marker')).toContainText(
+    '표시 P-08 / marker · custom',
+  );
+  await expect(page.getByTestId('admin-trip-poi-detail-link')).toHaveAttribute(
+    'href',
+    `/admin/pois/${poiId}`,
+  );
+  await page.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('admin-trip-poi-dialog')).toBeHidden();
 
   await page.getByTestId('admin-trip-status-select').selectOption('archived');
   await page.getByTestId('admin-trip-status-save').click();
@@ -187,4 +440,151 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   expect(patchReason).toBe('운영 정책 위반 처리');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
+});
+
+test('Admin 여행 상세에서 날짜 이동 운영 작업을 실행한다', async ({ page }) => {
+  let moveBody: Record<string, unknown> | null = null;
+  let currentTrip: AdminTripDetail = {
+    ...tripSummary,
+    description: '운영자가 확인할 여행 상세',
+    companions: [],
+    days: [
+      {
+        day_index: 1,
+        date: '2026-07-01',
+        title: '1일차',
+        note: null,
+        poi_count: 1,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+      {
+        day_index: 2,
+        date: '2026-07-02',
+        title: '2일차',
+        note: null,
+        poi_count: 0,
+        created_at: '2026-06-06T10:00:00+09:00',
+        updated_at: '2026-06-06T11:00:00+09:00',
+      },
+    ],
+    pois: [],
+    attachments: [],
+    share_links: [],
+    recent_audit: [],
+  };
+  const dayImpact: AdminOperationImpact = {
+    target_type: 'day',
+    target_id: null,
+    trip_id: tripId,
+    day_index: 1,
+    counts: { pois: 1, attachments: 2, comments: 1 },
+    policy_options: {
+      poi_policy: [
+        { value: 'move', label: '대상 여행/날짜로 이동', allowed: true, reason: null },
+        { value: 'delete', label: '함께 삭제', allowed: true, reason: null },
+        {
+          value: 'orphan',
+          label: 'orphan으로 유지',
+          allowed: false,
+          reason: 'POI와 날짜 첨부는 day FK가 필수입니다.',
+        },
+      ],
+    },
+    warnings: [],
+  };
+  const moveResult: AdminOperationResult = {
+    target_type: 'day',
+    action: 'move',
+    source_trip_id: tripId,
+    target_trip_id: tripId,
+    target_id: null,
+    day_index: 3,
+    affected: { days: 1, pois: 1, attachments: 2, comments: 1 },
+  };
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/trips/${tripId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: currentTrip }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/trips',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { items: [tripSummary], total: 1, page: 1, limit: 8 },
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) =>
+      url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/operation-impact`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: dayImpact }),
+      });
+    },
+  );
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/trips/${tripId}/days/1/move`,
+    async (route) => {
+      moveBody = route.request().postDataJSON() as Record<string, unknown>;
+      currentTrip = {
+        ...currentTrip,
+        days: currentTrip.days.filter((day) => day.day_index !== 1),
+        recent_audit: [
+          {
+            log_id: 50,
+            actor_user_id: adminUser.user_id,
+            action: 'trip_day.move',
+            resource_type: 'trip_day',
+            resource_id: `${tripId}:1`,
+            access_reason: '일정 통합',
+            target_pii_fields: null,
+            prev_hash: '0'.repeat(64),
+            content_hash: '3'.repeat(64),
+            occurred_at: '2026-06-06T13:00:00+09:00',
+          },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: moveResult }),
+      });
+    },
+  );
+
+  await page.goto(`/admin/trips/${tripId}`);
+  await page.getByTestId('admin-day-move-open').click();
+  await expect(page.getByTestId('admin-trip-operation-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-trip-operation-dialog')).toContainText('orphan');
+
+  await page.getByTestId('admin-operation-target-search').fill('부산');
+  await page.getByTestId('admin-operation-target-trip').selectOption(tripId);
+  await page.getByTestId('admin-operation-target-day').fill('3');
+  await page.getByTestId('admin-operation-move-policy').selectOption('move');
+  await page.getByTestId('admin-trip-operation-reason').fill('일정 통합');
+  await page.getByTestId('admin-trip-operation-confirm').click();
+
+  await expect(page.getByTestId('admin-trip-operation-result')).toContainText('move 완료');
+  await expect(page.getByTestId('admin-trip-audit-list')).toContainText('trip_day.move');
+  expect(moveBody).toMatchObject({
+    target_trip_id: tripId,
+    target_day_index: 3,
+    poi_policy: 'move',
+    attachment_policy: 'move',
+    comment_policy: 'move',
+    access_reason: '일정 통합',
+  });
 });

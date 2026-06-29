@@ -1,5 +1,10 @@
 import {
+  AvatarApplyRequestSchema,
+  AvatarInfoSchema,
+  AvatarUploadUrlRequestSchema,
+  AttachmentLibraryPageSchema,
   AuthUserSchema,
+  DownloadUrlResponseSchema,
   LoginRequestSchema,
   OAuthLinkRequestSchema,
   OAuthProvidersResponseSchema,
@@ -7,7 +12,10 @@ import {
   OAuthStartResponseSchema,
   RegisterRequestSchema,
   RegisterResponseSchema,
+  UploadUrlResponseSchema,
   VerifyEmailRequestSchema,
+  VerifyEmailResendRequestSchema,
+  VerifyEmailResendResponseSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -30,11 +38,18 @@ export const authApi = (client: ApiClient) => ({
       }),
     }),
 
+  resendVerification: (body: z.infer<typeof VerifyEmailResendRequestSchema>) =>
+    client.request('/auth/verify-email/resend', {
+      method: 'POST',
+      body: JSON.stringify(VerifyEmailResendRequestSchema.parse(body)),
+      schema: VerifyEmailResendResponseSchema,
+    }),
+
   login: (body: z.infer<typeof LoginRequestSchema>) =>
     client.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify(LoginRequestSchema.parse(body)),
-      schema: z.object({ user: AuthUserSchema }),
+      schema: AuthUserSchema,
     }),
 
   refresh: () =>
@@ -52,6 +67,53 @@ export const authApi = (client: ApiClient) => ({
     client.request('/auth/me', {
       method: 'GET',
       schema: AuthUserSchema,
+    }),
+
+  createAvatarUploadUrl: (body: z.infer<typeof AvatarUploadUrlRequestSchema>) =>
+    client.request('/users/me/avatar/upload-url', {
+      method: 'POST',
+      body: JSON.stringify(AvatarUploadUrlRequestSchema.parse(body)),
+      schema: UploadUrlResponseSchema,
+    }),
+
+  updateAvatar: (body: z.infer<typeof AvatarApplyRequestSchema>) =>
+    client.request('/users/me/avatar', {
+      method: 'PUT',
+      body: JSON.stringify(AvatarApplyRequestSchema.parse(body)),
+      schema: AvatarInfoSchema,
+    }),
+
+  getAvatarDownloadUrl: () =>
+    client.request('/users/me/avatar/download-url', {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteAvatar: () =>
+    client.request('/users/me/avatar', {
+      method: 'DELETE',
+      schema: AvatarInfoSchema,
+    }),
+
+  listFiles: (params: { page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return client.request(`/users/me/files${qs.toString() ? `?${qs.toString()}` : ''}`, {
+      method: 'GET',
+      schema: AttachmentLibraryPageSchema,
+    });
+  },
+
+  fileDownloadUrl: (attachmentId: string) =>
+    client.request(`/users/me/files/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
+
+  deleteFile: (attachmentId: string) =>
+    client.requestNoContent(`/users/me/files/${attachmentId}`, {
+      method: 'DELETE',
     }),
 
   oauthProviders: () =>

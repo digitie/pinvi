@@ -3,30 +3,71 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin import (
+    abuse,
     api_calls,
     audit,
     backup,
+    category_mappings,
+    debug_logs,
+    debug_request,
+    dedup_review,
+    dsr,
     emails,
+    etl,
     feature_requests,
+    features,
+    files,
+    incidents,
+    integrity,
     mcp_tokens,
+    moderation,
     notice_plans,
     pois,
+    provider_sync,
+    rbac,
+    reset,
+    retention,
     rustfs,
+    seed,
+    settings,
     stats,
+    system,
     trips,
     users,
 )
+from app.api.v1.admin.dev_safety import is_dev_safety_route_enabled
 
 admin_router = APIRouter()
+admin_router.include_router(abuse.router)
 admin_router.include_router(users.router)
 admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
+admin_router.include_router(features.router)
 admin_router.include_router(feature_requests.router)
+admin_router.include_router(category_mappings.router)
+admin_router.include_router(dedup_review.router)
+admin_router.include_router(provider_sync.router)
+admin_router.include_router(integrity.router)
+admin_router.include_router(debug_request.router)
+admin_router.include_router(debug_logs.router)
+admin_router.include_router(files.router)
+admin_router.include_router(incidents.router)
+admin_router.include_router(dsr.router)
+admin_router.include_router(moderation.router)
 admin_router.include_router(audit.router)
 admin_router.include_router(api_calls.router)
 admin_router.include_router(stats.router)
 admin_router.include_router(emails.router)
 admin_router.include_router(backup.router)
 admin_router.include_router(mcp_tokens.router)
+admin_router.include_router(rbac.router)
 admin_router.include_router(rustfs.router)
 admin_router.include_router(notice_plans.router)
+admin_router.include_router(system.router)
+admin_router.include_router(etl.router)
+admin_router.include_router(retention.router)
+admin_router.include_router(settings.router)
+
+if is_dev_safety_route_enabled():
+    admin_router.include_router(seed.router)
+    admin_router.include_router(reset.router)

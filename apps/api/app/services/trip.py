@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
@@ -26,6 +27,7 @@ from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
+from app.services.storage_policy import AttachmentQuotaError, assert_attachment_quota
 
 
 class TripError(Exception):
@@ -74,6 +76,10 @@ class TripAttachmentLimitError(TripError):
 
 class TripAttachmentStorageRefError(TripError):
     code = "INVALID_ATTACHMENT_STORAGE_REF"
+
+
+class TripAttachmentQuotaError(TripError):
+    code = "ATTACHMENT_QUOTA_EXCEEDED"
 
 
 class TripOptimizeError(TripError):
@@ -375,19 +381,27 @@ async def update_trip_day(
     *,
     trip_id: uuid.UUID,
     day_index: int,
+    expected_version: int,
     patch: dict[str, Any],
 ) -> TripDay:
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    if day.version != expected_version:
+        raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     for key, value in patch.items():
         setattr(day, key, value)
+    day.version += 1
     await _bump_trip_version(db, trip_id=trip_id)
     await db.commit()
     await db.refresh(day)
     return day
 
 
-async def delete_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> None:
+async def delete_trip_day(
+    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int, expected_version: int
+) -> None:
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    if day.version != expected_version:
+        raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     await db.delete(day)
     await _bump_trip_version(db, trip_id=trip_id)
     await db.commit()
@@ -405,6 +419,7 @@ async def copy_trip(
     end_day_index: int | None,
     date_shift_days: int,
     target_trip_id: uuid.UUID | None,
+    commit: bool = True,
 ) -> tuple[Trip, bool, int, int, int]:
     days = await _select_copy_days(
         db,
@@ -509,13 +524,17 @@ async def copy_trip(
         db,
         source_trip_id=source_trip.trip_id,
         target_trip_id=target_trip.trip_id,
+        source_day_indexes=source_day_indexes,
         poi_id_map=poi_id_map,
         actor_user_id=actor_user_id,
         include_trip_level=scope == "all",
     )
     target_trip.version += 1
-    await db.commit()
-    await db.refresh(target_trip)
+    if commit:
+        await db.commit()
+        await db.refresh(target_trip)
+    else:
+        await db.flush()
     return target_trip, created_trip, copied_day_count, copied_poi_count, copied_attachment_count
 
 
@@ -551,11 +570,16 @@ async def list_attachments(
     db: AsyncSession,
     *,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> list[CuratedPlanAttachment]:
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     result = await db.execute(
@@ -567,11 +591,19 @@ async def list_attachments(
 
 
 async def _count_attachments(
-    db: AsyncSession, *, trip_id: uuid.UUID | None, trip_poi_id: uuid.UUID | None
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID | None,
+    trip_day_index: int | None,
+    trip_poi_id: uuid.UUID | None,
 ) -> int:
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     return int(
@@ -585,21 +617,49 @@ async def create_attachment(
     *,
     uploaded_by_user_id: uuid.UUID,
     trip_id: uuid.UUID | None,
-    trip_poi_id: uuid.UUID | None,
+    trip_day_index: int | None = None,
+    trip_poi_id: uuid.UUID | None = None,
+    quota_trip_id: uuid.UUID | None = None,
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
     limit = settings.pinvi_max_attachments_per_target
-    if await _count_attachments(db, trip_id=trip_id, trip_poi_id=trip_poi_id) >= limit:
+    if (
+        await _count_attachments(
+            db,
+            trip_id=trip_id,
+            trip_day_index=trip_day_index,
+            trip_poi_id=trip_poi_id,
+        )
+        >= limit
+    ):
         raise TripAttachmentLimitError(f"첨부는 대상당 최대 {limit}개까지 등록할 수 있습니다.")
     _validate_attachment_storage_ref(
         uploaded_by_user_id=uploaded_by_user_id,
         trip_id=trip_id,
+        trip_day_index=trip_day_index,
         trip_poi_id=trip_poi_id,
         payload=payload,
     )
+    uploader = await db.scalar(
+        select(User).where(User.user_id == uploaded_by_user_id, User.deleted_at.is_(None))
+    )
+    if uploader is None:
+        raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
+    if quota_trip_id is None:
+        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
+    try:
+        await assert_attachment_quota(
+            db,
+            user=uploader,
+            trip_id=quota_trip_id,
+            byte_size=int(payload.get("byte_size") or 0),
+        )
+    except AttachmentQuotaError as exc:
+        raise TripAttachmentQuotaError(str(exc)) from exc
     attachment = CuratedPlanAttachment(
         trip_id=trip_id,
+        trip_day_index=trip_day_index,
         trip_poi_id=trip_poi_id,
         uploaded_by_user_id=uploaded_by_user_id,
         **payload,
@@ -614,12 +674,18 @@ def _validate_attachment_storage_ref(
     *,
     uploaded_by_user_id: uuid.UUID,
     trip_id: uuid.UUID | None,
+    trip_day_index: int | None,
     trip_poi_id: uuid.UUID | None,
     payload: dict[str, Any],
 ) -> None:
     if trip_id is None and trip_poi_id is None:
         raise TripAttachmentStorageRefError("첨부 대상이 필요합니다.")
-    purpose = "trip_attachment" if trip_id is not None else "poi_attachment"
+    if trip_poi_id is not None:
+        purpose = "poi_attachment"
+    elif trip_day_index is not None:
+        purpose = "trip_day_attachment"
+    else:
+        purpose = "trip_attachment"
     try:
         validate_attachment_storage_ref(
             bucket=payload.get("bucket"),
@@ -636,6 +702,7 @@ async def update_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
     patch: dict[str, Any],
 ) -> CuratedPlanAttachment:
@@ -646,6 +713,10 @@ async def update_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
@@ -663,6 +734,7 @@ async def get_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> CuratedPlanAttachment:
     """단건 첨부 조회(스코프 한정). 없으면 NotFound."""
@@ -672,6 +744,10 @@ async def get_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
@@ -685,6 +761,7 @@ async def delete_attachment(
     *,
     attachment_id: uuid.UUID,
     trip_id: uuid.UUID | None = None,
+    trip_day_index: int | None = None,
     trip_poi_id: uuid.UUID | None = None,
 ) -> None:
     filters = [
@@ -693,6 +770,10 @@ async def delete_attachment(
     ]
     if trip_id is not None:
         filters.append(CuratedPlanAttachment.trip_id == trip_id)
+        if trip_day_index is None and trip_poi_id is None:
+            filters.append(CuratedPlanAttachment.trip_day_index.is_(None))
+    if trip_day_index is not None:
+        filters.append(CuratedPlanAttachment.trip_day_index == trip_day_index)
     if trip_poi_id is not None:
         filters.append(CuratedPlanAttachment.trip_poi_id == trip_poi_id)
     attachment = await db.scalar(select(CuratedPlanAttachment).where(*filters))
@@ -730,11 +811,14 @@ async def optimize_trip_day(
     day_index: int,
     start_poi_id: uuid.UUID | None,
     persist: bool,
-) -> tuple[list[TripDayPoi], list[tuple[TripDayPoi, str, str]], int | None, list[str]]:
+    strategy: str = "two_opt",
+) -> tuple[list[TripDayPoi], list[tuple[TripDayPoi, str, str]], int | None, int | None, list[str]]:
     pois = await _list_day_pois(db, trip_id=trip_id, day_index=day_index)
     if not pois:
         raise TripDayNotFoundError("최적화할 POI가 없습니다.")
-    ordered, total_distance, warnings = _nearest_neighbor_order(pois, start_poi_id=start_poi_id)
+    ordered, total_distance, previous_distance, warnings = _optimize_day_order(
+        pois, start_poi_id=start_poi_id, strategy=strategy
+    )
     moves: list[tuple[TripDayPoi, str, str]] = []
     next_sort: str | None = None
     for poi in ordered:
@@ -750,7 +834,7 @@ async def optimize_trip_day(
         await db.commit()
         for poi, _, _ in moves:
             await db.refresh(poi)
-    return ordered, moves, total_distance, warnings
+    return ordered, moves, total_distance, previous_distance, warnings
 
 
 async def invite_companion(
@@ -986,37 +1070,46 @@ async def _copy_trip_attachments(
     *,
     source_trip_id: uuid.UUID,
     target_trip_id: uuid.UUID,
+    source_day_indexes: list[int] | None,
     poi_id_map: dict[uuid.UUID, uuid.UUID],
     actor_user_id: uuid.UUID,
     include_trip_level: bool,
 ) -> int:
     copied = 0
-    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    target_filters: list[Any] = []
     if include_trip_level:
-        filters.append(
-            or_(
-                CuratedPlanAttachment.trip_id == source_trip_id,
-                CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())),
-            )
+        target_filters.append(
+            CuratedPlanAttachment.trip_id == source_trip_id,
         )
-    elif poi_id_map:
-        filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
-    else:
+    elif source_day_indexes:
+        target_filters.append(
+            (CuratedPlanAttachment.trip_id == source_trip_id)
+            & (CuratedPlanAttachment.trip_day_index.in_(source_day_indexes))
+        )
+    if poi_id_map:
+        target_filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
+    if not target_filters:
         return 0
+    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None), or_(*target_filters)]
     result = await db.execute(select(CuratedPlanAttachment).where(*filters))
     for attachment in result.scalars():
-        trip_id = target_trip_id if attachment.trip_id == source_trip_id else None
         source_poi_id = attachment.trip_poi_id
         trip_poi_id = (
             poi_id_map[source_poi_id]
             if source_poi_id is not None and source_poi_id in poi_id_map
             else None
         )
+        trip_id = None
+        trip_day_index = None
+        if trip_poi_id is None and attachment.trip_id == source_trip_id:
+            trip_id = target_trip_id
+            trip_day_index = attachment.trip_day_index
         if trip_id is None and trip_poi_id is None:
             continue
         db.add(
             CuratedPlanAttachment(
                 trip_id=trip_id,
+                trip_day_index=trip_day_index,
                 trip_poi_id=trip_poi_id,
                 source_attachment_id=attachment.attachment_id,
                 bucket=attachment.bucket,
@@ -1101,20 +1194,29 @@ def _distance_meters(left: Coord, right: Coord) -> int:
     return round(2 * radius_m * asin(sqrt(a)))
 
 
-def _nearest_neighbor_order(
-    pois: list[TripDayPoi],
+_TWO_OPT_MAX_POIS = 60
+
+
+def _path_distance_m(
+    order: list[TripDayPoi],
+    coord_by_id: dict[uuid.UUID, Coord | None],
+) -> int:
+    total = 0
+    for left, right in pairwise(order):
+        left_coord = coord_by_id[left.attachment_id]
+        right_coord = coord_by_id[right.attachment_id]
+        if left_coord is None or right_coord is None:
+            continue
+        total += _distance_meters(left_coord, right_coord)
+    return total
+
+
+def _nearest_neighbor_seed(
+    with_coords: list[TripDayPoi],
+    coord_by_id: dict[uuid.UUID, Coord | None],
     *,
     start_poi_id: uuid.UUID | None,
-) -> tuple[list[TripDayPoi], int | None, list[str]]:
-    coord_by_id = {poi.attachment_id: _extract_coord(poi.feature_snapshot) for poi in pois}
-    with_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is not None]
-    without_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is None]
-    warnings: list[str] = []
-    if without_coords:
-        warnings.append(f"{len(without_coords)}개 POI는 좌표가 없어 기존 순서로 뒤에 둡니다.")
-    if not with_coords:
-        return pois, None, warnings
-
+) -> list[TripDayPoi]:
     remaining = with_coords[:]
     if start_poi_id is not None:
         start = next((poi for poi in remaining if poi.attachment_id == start_poi_id), None)
@@ -1125,7 +1227,6 @@ def _nearest_neighbor_order(
 
     ordered = [start]
     remaining.remove(start)
-    total = 0
     while remaining:
         current_coord = coord_by_id[ordered[-1].attachment_id]
         assert current_coord is not None
@@ -1136,12 +1237,76 @@ def _nearest_neighbor_order(
             return _distance_meters(base_coord, candidate_coord)
 
         nearest = min(remaining, key=distance_from_current)
-        nearest_coord = coord_by_id[nearest.attachment_id]
-        assert nearest_coord is not None
-        total += _distance_meters(current_coord, nearest_coord)
         ordered.append(nearest)
         remaining.remove(nearest)
-    return ordered + without_coords, total, warnings
+    return ordered
+
+
+def _two_opt_improve(
+    order: list[TripDayPoi],
+    coord_by_id: dict[uuid.UUID, Coord | None],
+    *,
+    fix_start: bool,
+) -> list[TripDayPoi]:
+    """Open-path 2-opt local search — 교차 구간을 뒤집어 총 이동거리를 줄인다.
+
+    `fix_start`이면 index 0(시작 POI)을 고정한다. trip day의 POI 수가 적어
+    후보마다 전체 거리를 재계산해도 충분히 빠르다(`_TWO_OPT_MAX_POIS`로 상한).
+    """
+    n = len(order)
+    if n < 4:
+        return order
+    best = list(order)
+    best_dist = _path_distance_m(best, coord_by_id)
+    start_i = 1 if fix_start else 0
+    improved = True
+    passes = 0
+    while improved and passes < n:
+        improved = False
+        passes += 1
+        for i in range(start_i, n - 1):
+            for j in range(i + 1, n):
+                candidate = best[:i] + best[i : j + 1][::-1] + best[j + 1 :]
+                dist = _path_distance_m(candidate, coord_by_id)
+                if dist < best_dist:
+                    best = candidate
+                    best_dist = dist
+                    improved = True
+    return best
+
+
+def _optimize_day_order(
+    pois: list[TripDayPoi],
+    *,
+    start_poi_id: uuid.UUID | None,
+    strategy: str,
+) -> tuple[list[TripDayPoi], int | None, int | None, list[str]]:
+    """좌표 보유 POI를 nearest-neighbor seed 후 (two_opt면) 2-opt로 정렬한다.
+
+    좌표가 없는 POI는 기존 순서로 뒤에 둔다. 반환: (정렬 순서, 최적 거리,
+    기존 순서 거리, warnings). 거리는 haversine 직선거리(m).
+    """
+    coord_by_id: dict[uuid.UUID, Coord | None] = {
+        poi.attachment_id: _extract_coord(poi.feature_snapshot) for poi in pois
+    }
+    with_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is not None]
+    without_coords = [poi for poi in pois if coord_by_id[poi.attachment_id] is None]
+    warnings: list[str] = []
+    if without_coords:
+        warnings.append(f"{len(without_coords)}개 POI는 좌표가 없어 기존 순서로 뒤에 둡니다.")
+    if not with_coords:
+        return pois, None, None, warnings
+
+    previous_distance = _path_distance_m(with_coords, coord_by_id)
+    seed = _nearest_neighbor_seed(with_coords, coord_by_id, start_poi_id=start_poi_id)
+    if strategy == "two_opt" and len(seed) <= _TWO_OPT_MAX_POIS:
+        optimized = _two_opt_improve(seed, coord_by_id, fix_start=start_poi_id is not None)
+    else:
+        if strategy == "two_opt" and len(seed) > _TWO_OPT_MAX_POIS:
+            warnings.append("POI가 많아 2-opt 미세조정은 생략하고 근접 휴리스틱만 적용합니다.")
+        optimized = seed
+    total = _path_distance_m(optimized, coord_by_id)
+    return optimized + without_coords, total, previous_distance, warnings
 
 
 async def _is_companion(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:

@@ -6,19 +6,25 @@ worker가 PostgreSQL `FOR UPDATE SKIP LOCKED`로 pending row를 가져가 발송
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
-from typing import Any, cast
+from typing import Any
 
+from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.resend import create_resend_client
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.email_queue import EmailQueue
+from app.services.email_deliverability import get_email_suppression_decision
 
 log = get_logger("email")
 
@@ -32,6 +38,7 @@ class EmailBatchResult:
     sent: int
     retried: int
     failed: int
+    suppressed: int = 0
 
 
 async def enqueue_verification_email(
@@ -153,9 +160,22 @@ async def process_pending_email_batch(
     sent = 0
     retried = 0
     failed = 0
+    suppressed = 0
 
     for row in rows:
         row.attempts += 1
+        suppression = await get_email_suppression_decision(db, row)
+        if suppression is not None:
+            row.status = suppression.status
+            row.last_error = f"suppressed:{suppression.reason}"
+            suppressed += 1
+            log.info(
+                "email.suppressed",
+                email_id=str(row.email_id),
+                template=row.template,
+                reason=suppression.reason,
+            )
+            continue
         try:
             row.resend_id = await _send_email_row(row)
         except Exception as exc:
@@ -184,7 +204,54 @@ async def process_pending_email_batch(
     if rows:
         await db.commit()
 
-    return EmailBatchResult(claimed=len(rows), sent=sent, retried=retried, failed=failed)
+    return EmailBatchResult(
+        claimed=len(rows),
+        sent=sent,
+        retried=retried,
+        failed=failed,
+        suppressed=suppressed,
+    )
+
+
+async def _drain_loop(interval: float, batch_size: int) -> None:
+    from app.db.session import async_session_factory
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                result = await process_pending_email_batch(session, limit=batch_size)
+            if result.claimed < batch_size:
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning("email.outbox_drain_failed", exc_info=True)
+            await asyncio.sleep(interval)
+
+
+@asynccontextmanager
+async def email_outbox_worker_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan — email_queue drain worker를 시작/정리합니다."""
+
+    if not settings.pinvi_email_outbox_worker_enabled:
+        yield
+        return
+
+    task = asyncio.create_task(
+        _drain_loop(
+            settings.pinvi_email_outbox_drain_interval_seconds,
+            settings.pinvi_email_outbox_batch_size,
+        ),
+        name="email-outbox-drain",
+    )
+    app.state.email_outbox_worker = task
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        app.state.email_outbox_worker = None
 
 
 async def send_verification_email(
@@ -239,9 +306,6 @@ async def _send_email_payload(
         log.info("email.console_mode", **payload)
         return None
 
-    import resend
-
-    resend.api_key = settings.pinvi_resend_api_key
     resend_payload: dict[str, Any] = {
         "from": settings.pinvi_resend_from_email,
         "to": [to_email],
@@ -254,8 +318,8 @@ async def _send_email_payload(
     }
     if entity_ref is not None:
         resend_payload["headers"] = {"X-Entity-Ref-ID": str(entity_ref)}
-    response = cast(Any, resend.Emails.send)(resend_payload)
-    resend_id = response.get("id") if isinstance(response, dict) else None
+    async with create_resend_client() as client:
+        resend_id = await client.send_email(resend_payload)
     log.info("email.sent", resend_id=resend_id, **payload)
     return None if resend_id is None else str(resend_id)
 

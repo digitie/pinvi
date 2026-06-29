@@ -1,5 +1,13 @@
 import {
   ConsentTypeSchema,
+  ContentReportAppealRequestSchema,
+  ContentReportCreateRequestSchema,
+  ContentReportListResponseSchema,
+  ContentReportRecordSchema,
+  DsrRequestCreateRequestSchema,
+  DsrRequestListResponseSchema,
+  DsrRequestRecordSchema,
+  DsrRequestWithdrawRequestSchema,
   McpTokenIssueRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
@@ -10,10 +18,20 @@ import type { ApiClient } from '../client';
 import type { ConsentType } from '@pinvi/schemas';
 
 const ConsentItemsSchema = z.array(
-  z.object({ consent_type: ConsentTypeSchema, version: z.string().min(1).max(32) })
+  z.object({ consent_type: ConsentTypeSchema, version: z.string().min(1).max(32) }),
 );
 
+export type DsrRequestCreateBody = z.input<typeof DsrRequestCreateRequestSchema>;
+export type DsrRequestWithdrawBody = z.input<typeof DsrRequestWithdrawRequestSchema>;
+export type ContentReportCreateBody = z.input<typeof ContentReportCreateRequestSchema>;
+export type ContentReportAppealBody = z.input<typeof ContentReportAppealRequestSchema>;
+
 export const userApi = (client: ApiClient) => ({
+  deleteMe: () =>
+    client.requestNoContent('/users/me', {
+      method: 'DELETE',
+    }),
+
   /** 현재 사용자의 동의 목록(`docs/api/users.md` §3). */
   getConsents: () =>
     client.request('/users/consents', {
@@ -51,5 +69,51 @@ export const userApi = (client: ApiClient) => ({
   revokeMcpToken: (tokenId: string) =>
     client.requestNoContent(`/users/me/mcp-tokens/${tokenId}`, {
       method: 'DELETE',
+    }),
+
+  listDsrRequests: (pageSize = 50) => {
+    const qs = new URLSearchParams();
+    qs.set('page_size', String(pageSize));
+    return client.request(`/users/me/dsr-requests?${qs.toString()}`, {
+      method: 'GET',
+      schema: DsrRequestListResponseSchema,
+    });
+  },
+
+  createDsrRequest: (body: DsrRequestCreateBody) =>
+    client.request('/users/me/dsr-requests', {
+      method: 'POST',
+      body: JSON.stringify(DsrRequestCreateRequestSchema.parse(body)),
+      schema: DsrRequestRecordSchema,
+    }),
+
+  withdrawDsrRequest: (requestId: string, body: DsrRequestWithdrawBody) =>
+    client.request(`/users/me/dsr-requests/${encodeURIComponent(requestId)}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(DsrRequestWithdrawRequestSchema.parse(body)),
+      schema: DsrRequestRecordSchema,
+    }),
+
+  listContentReports: (pageSize = 50) => {
+    const qs = new URLSearchParams();
+    qs.set('page_size', String(pageSize));
+    return client.request(`/users/me/content-reports?${qs.toString()}`, {
+      method: 'GET',
+      schema: ContentReportListResponseSchema,
+    });
+  },
+
+  createContentReport: (body: ContentReportCreateBody) =>
+    client.request('/users/me/content-reports', {
+      method: 'POST',
+      body: JSON.stringify(ContentReportCreateRequestSchema.parse(body)),
+      schema: ContentReportRecordSchema,
+    }),
+
+  appealContentReport: (reportId: string, body: ContentReportAppealBody) =>
+    client.request(`/users/me/content-reports/${encodeURIComponent(reportId)}/appeal`, {
+      method: 'POST',
+      body: JSON.stringify(ContentReportAppealRequestSchema.parse(body)),
+      schema: ContentReportRecordSchema,
     }),
 });

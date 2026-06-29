@@ -51,6 +51,32 @@ function poi() {
   };
 }
 
+function poiMutationResponse() {
+  const item = poi();
+  return {
+    attachment_id: item.poi_id,
+    trip_id: tripId,
+    day_index: 1,
+    sort_order: item.sort_order,
+    feature_id: item.feature_id,
+    feature_link_broken_at: item.feature_link_broken_at,
+    feature_snapshot: item.feature,
+    custom_marker_color: item.marker_color,
+    custom_marker_icon: item.marker_icon,
+    planned_arrival_at: item.planned_arrival_at,
+    planned_departure_at: item.planned_departure_at,
+    user_note: item.user_note,
+    budget_amount: item.budget_amount,
+    actual_amount: item.actual_amount,
+    currency: item.currency,
+    user_url: item.user_url,
+    rise_set: item.rise_set,
+    version: 2,
+    created_at: item.created_at,
+    updated_at: item.updated_at,
+  };
+}
+
 function day(pois: ReturnType<typeof poi>[]) {
   return { day_index: 1, date: null, title: '1일차', pois };
 }
@@ -167,7 +193,10 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     if (request.method() === 'PATCH') {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: poi() }) });
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: poiMutationResponse() }),
+      });
       return;
     }
     await route.continue();

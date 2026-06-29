@@ -48,7 +48,12 @@ if [[ -f "${SNAPSHOT}.sha256" ]]; then
     phase preparing failed "sha256sum not found"
     exit 127
   fi
-  sha256sum -c "${SNAPSHOT}.sha256" >/dev/null
+  expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
+  actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
+  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
+    phase preparing failed "snapshot checksum failed"
+    exit 3
+  fi
 fi
 
 pg_restore --list "${SNAPSHOT}" >/dev/null

@@ -15,6 +15,12 @@
 권위 출처는 kor-travel-geo 최신 `main`의 `openapi.json` +
 `docs/api-reference/llm-summary.md`다. 본 문서는 Pinvi 입장의 사용 계약이다.
 
+> **v2 공개 API key (ADR-048)**: Pinvi는 `kor-travel-geo` v2 REST 호출마다
+> `key=<PINVI_VWORLD_API_KEY>` query를 붙인다. 별도
+> `PINVI_KOR_TRAVEL_GEO_API_KEY`는 두지 않는다. `kor-travel-geo`는 같은 raw 값을
+> `KTG_VWORLD_API_KEY`로 받아 공개 API key hash 저장/검증(`ops.public_api_keys`)을
+> 소유한다. Pinvi 로그에는 key 원본과 query 포함 upstream URL을 남기지 않는다.
+
 ## 1. 개관
 
 ```
@@ -41,19 +47,26 @@
 
 ## 2. 좌표·코드 규약 (전 구간 공통)
 
-- **좌표는 외부 표면에서 항상 `(lon, lat)`** (kor-travel-geo `Point`는 `x=lon, y=lat`).
-  Pinvi 내부도 동일 — `(lat, lng)` 뒤집기 어댑터를 두지 않는다(ADR-015 mirror).
+- **좌표는 외부 표면에서 항상 `(lon, lat)`**. v2 후보 좌표는
+  `point{lon,lat}`이며, v1 호환 표면만 `Point{x,y}`(`x=lon`, `y=lat`)를 쓴다.
+  Pinvi 내부도 `(lon, lat)` — `(lat, lng)` 뒤집기 어댑터를 두지 않는다(ADR-015 mirror).
 - `crs` 기본 `EPSG:4326`.
 - `sig_cd`: 2자리 시도 또는 5자리 시군구. `bjd_cd`: 8자리 prefix 또는 10자리 법정동.
 - `confidence`는 **endpoint-local 점수** — geocode/reverse/search/regions 사이에서 직접
   비교하지 않는다(같은 endpoint 안 정렬/표시 보조값으로만).
 - 거리 기반 후보는 `distance_m`이 정식 필드(`metadata.distance_m`보다 우선).
-- `point_precision`은 `exact` / `interpolated` / `centroid` / `approximate` /
-  `null`이다. UI 문구나 저장 품질 판단은 이 필드를 우선한다.
+- 현재 published `point_precision`은 `centroid` / `grid_cell`이다. `exact` /
+  `interpolated` / `approximate` 등은 예약값이라, UI는 모르는 값을 표시하지 않고
+  내부 정렬/품질 보조로만 쓴다.
 
 ## 3. v2 endpoint 계약 (Pinvi가 호출하는 것)
 
-모두 `POST`, `Content-Type: application/json`, 응답 최상위 `{status, candidates[], ...}`.
+모두 `POST`, `Content-Type: application/json`. v2 성공 응답은 공통 헤더
+`{status, query_id, input}`을 항상 싣는다(search는 `total` 추가). geocode/reverse/search는
+그 위에 `candidates[]`를 노출하지만, `within-radius`는 `candidates[]` 대신
+level별 그룹 배열(`sido[]`/`sigungu[]`/`emd[]`)을 싣는다(§3.4).
+Pinvi의 server-to-server client는 모든 v2 요청에 `?key=<PINVI_VWORLD_API_KEY>`를
+붙인다(ADR-048). 이 key는 사용자 클라이언트에 노출하지 않는다.
 
 ### 3.1 `POST /v2/reverse` — 좌표 → 주소/행정구역
 
@@ -69,8 +82,9 @@
 | `include_zipcode` | bool | `true` | 우편번호 보강 |
 | `sig_cd`/`bjd_cd` | string | — | hint |
 
-응답 `candidates[]` 항목: `match_kind`(`road`/`parcel`/`sppn` 등), `address`,
-`point{x,y}`, `region{sig_cd,bjd_cd,...}`, `source`, `distance_m`, `confidence`.
+응답 `candidates[]` 항목: `match_kind`(`road`/`parcel`/`keyword`/`region`/`sppn`/`poi`),
+`address`, `point{lon,lat}`, `region{sig_cd,bjd_cd,...}`, `source`, `distance_m`,
+`confidence`.
 - `confidence = 1 - distance_m/radius_m` (반경 내 근접도).
 - 국가지점번호 의무지역이면 `match_kind="sppn"` 후보가 함께 올 수 있다(`address`
   없을 수 있음). Pinvi region label 용도로는 `sppn`을 무시한다.
@@ -100,8 +114,8 @@ curl -X POST "$KOR_TRAVEL_GEO/v2/search" -H 'Content-Type: application/json' \
 `sig_cd`/`bjd_cd`/`bbox`/`limit`(10)/`fallback`(`none`|`api`)/`include_geometry`(false).
 
 응답: `{status, query_id, input, candidates[]}`. 각 후보 `confidence`, `match_kind`,
-`source`, `point{x,y}`, `point_precision`(`exact`/`interpolated`/`centroid`/
-`approximate`/null), `address{type,full,road_name_code,postal_code}`, `region`.
+`source`, `point{lon,lat}`, `point_precision`(`centroid`/`grid_cell`, 그 외 예약값),
+`address{type,full,road_name_code,postal_code}`, `region`.
 `include_geometry=true`면 `point + geometry`(GeoJSON, `kind`=building/region/road)
 구조로 함께 반환(point가 도형으로 대체되지 않음).
 
@@ -112,15 +126,33 @@ curl -X POST "$KOR_TRAVEL_GEO/v2/search" -H 'Content-Type: application/json' \
 ### 3.4 `POST /v2/regions/within-radius` — 좌표 반경 내 행정구역
 
 최신 kor-travel-geo `openapi.json`에는 `POST /v2/regions/within-radius`가 있다. 좌표
-주변 행정구역 후보를 반경 기준으로 받을 때 사용한다.
+주변 행정구역을 반경 기준으로 level별 그룹으로 받을 때 사용한다.
+
+요청:
+
+| 필드 | 타입 | 기본 | 비고 |
+|------|------|------|------|
+| `lon` | float | 필수 | 경도 |
+| `lat` | float | 필수 | 위도 |
+| `radius_km` | float | `3.0` | 검색 반경(km), 최대 `500` |
+| `levels` | string[] | `[sigungu, emd]` | `sido`\|`sigungu`\|`emd` 중 요청할 level 배열 |
+
+응답: 공통 헤더 `{status, query_id, input}` + `center{lon,lat}` + `radius_km` +
+level별 그룹 배열 `sido[]`/`sigungu[]`/`emd[]`. 각 항목은 `{code, name, relation}`이며
+`relation`은 `contains`(행정구역 polygon이 중심 좌표를 포함) 또는 `overlaps`(polygon이 반경
+원과 교차하지만 중심 좌표는 포함 안 함). 요청하지 않은 level은 빈 배열로 온다.
 
 Pinvi 사용 원칙:
 
-- 여행 목적지/POI 주변 지역 label처럼 **반경 내 행정구역 후보 목록**이 필요할 때만
-  호출한다.
+- 여행 목적지/POI 주변 지역 label처럼 **반경 내 행정구역 목록**이 필요할 때만 호출한다.
 - 단일 좌표의 대표 주소/행정구역 label은 여전히 `/v2/reverse`를 우선한다.
-- 후보 정렬/표시는 `distance_m`, `confidence`, region code를 같은 응답 안에서만
-  비교한다.
+- 이 endpoint에는 `distance_m`/`confidence`/region code 정렬 필드가 없다. 후보 표시는
+  요청한 `levels`와 항목별 `relation`(`contains`/`overlaps`)으로만 구분한다.
+
+```bash
+curl -X POST "$KOR_TRAVEL_GEO/v2/regions/within-radius" -H 'Content-Type: application/json' \
+  -d '{"lon":129.118,"lat":35.155,"radius_km":2.0,"levels":["sigungu","emd"]}'
+```
 
 ## 3.5 v1 및 admin 표면 확인
 
@@ -166,6 +198,7 @@ geocoding은 HTTP 의존이므로 kor-travel-map과 별개의 httpx client를 li
 pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"   # 운영: http://kor-travel-geo:12501
 pinvi_kor_travel_geo_timeout_seconds: float = 3.0
 pinvi_kor_travel_geo_enabled: bool = True       # False면 geocoding 기능 비활성(503)
+pinvi_vworld_api_key: str = ""                  # ADR-048: kor-travel-geo v2 `key` query
 ```
 
 ```python
@@ -179,8 +212,9 @@ class GeocodingUnavailableError(Exception):
 
 class GeocodingClient:
     """kor-travel-geo v2 REST 얇은 클라이언트. httpx.AsyncClient 주입."""
-    def __init__(self, http: httpx.AsyncClient) -> None:
+    def __init__(self, http: httpx.AsyncClient, *, api_key: str) -> None:
         self._http = http
+        self._api_key = api_key
 
     async def reverse(self, *, lon: float, lat: float, radius_m: int = 200,
                       include_region: bool = True, include_zipcode: bool = True) -> dict:
@@ -201,7 +235,7 @@ class GeocodingClient:
 
     async def _post(self, path: str, body: dict) -> dict:
         try:
-            resp = await self._http.post(path, json=body)
+            resp = await self._http.post(path, params={"key": self._api_key}, json=body)
         except httpx.HTTPError as exc:
             raise GeocodingUnavailableError(str(exc)) from exc
         if resp.status_code >= 500:
@@ -308,8 +342,10 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 ## 11. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/core/config.py` — `pinvi_kor_travel_geo_base_url` /
-      `_timeout_seconds` / `_enabled` 추가 (+ `.env.example`).
+      `_timeout_seconds` / `_enabled` 추가 (+ `.env.example`). v2 공개 API key는
+      `PINVI_VWORLD_API_KEY`를 재사용하고 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 두지 않는다.
 - [ ] `apps/api/app/services/geocoding.py` — `GeocodingClient` + 예외.
+      모든 v2 POST에 `key=<PINVI_VWORLD_API_KEY>` query를 붙이고, key 원본을 로그에 남기지 않는다.
 - [ ] `apps/api/app/main.py` lifespan — `httpx.AsyncClient` 1개 생성/close.
 - [ ] `apps/api/app/core/deps.py` — `GeocodingDep` (503 fallback).
 - [ ] `apps/api/app/schemas/geo.py` + `packages/schemas/src/geo.ts` (Zod) —
@@ -329,10 +365,14 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
 PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
 PINVI_KOR_TRAVEL_GEO_ENABLED=true
+PINVI_VWORLD_API_KEY=                                # kor-travel-geo v2 `key` query와 모바일 token 발급 공용
 ```
 
-kor-travel-geo REST 서비스의 VWorld/juso API 키·포트·재시도는 **kor-travel-geo 서비스
-설정**이다(Pinvi 무관). Pinvi는 base URL + timeout만 안다.
+`PINVI_VWORLD_API_KEY`는 서버 전용 secret이다. 웹의 `NEXT_PUBLIC_VWORLD_API_KEY`와
+분리해 관리하고, 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST
+`key` query에만 쓴다. 운영자는 `kor-travel-geo` 쪽 `KTG_VWORLD_API_KEY`도 같은 값으로
+설정한다. VWorld/juso 외부 fallback 실행, 공개 API key hash 저장/폐기, 포트·재시도는
+**kor-travel-geo 서비스 설정과 DB**가 소유한다(Pinvi가 직접 저장하지 않음).
 
 ## 13. 관련 문서
 

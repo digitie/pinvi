@@ -97,6 +97,36 @@ def test_make_upload_url_rejects_too_large() -> None:
         )
 
 
+def test_make_upload_url_accepts_scope_specific_limits() -> None:
+    user_id = uuid.uuid4()
+    response = make_upload_url(
+        purpose="avatar",
+        user_id=user_id,
+        filename="face.webp",
+        content_type="image/webp",
+        content_length=2048,
+        max_upload_bytes=4096,
+        allowed_content_types={"image/webp"},
+    )
+
+    assert response.max_upload_bytes == 4096
+    assert response.storage_key.startswith(f"user-uploads/avatar/{user_id}/")
+
+
+def test_make_upload_url_rejects_scope_specific_mime() -> None:
+    user_id = uuid.uuid4()
+    with pytest.raises(MimeNotAllowedError):
+        make_upload_url(
+            purpose="avatar",
+            user_id=user_id,
+            filename="doc.pdf",
+            content_type="application/pdf",
+            content_length=1024,
+            max_upload_bytes=4096,
+            allowed_content_types={"image/jpeg"},
+        )
+
+
 def test_settings_reads_rustfs_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PINVI_RUSTFS_ENDPOINT_URL", "http://127.0.0.1:12101")
     monkeypatch.setenv("PINVI_RUSTFS_BUCKET", "pinvi-test")

@@ -15,9 +15,12 @@ function formatBytes(bytes: number): string {
 
 export interface TripAttachmentsProps {
   tripId: string;
+  dayIndex?: number;
+  poiId?: string;
+  title?: string;
 }
 
-export function TripAttachments({ tripId }: TripAttachmentsProps) {
+export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: TripAttachmentsProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [items, setItems] = useState<TripAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,12 +30,18 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
 
   const reload = useCallback(async () => {
     try {
-      setItems(await tripApi(apiClient).listAttachments(tripId));
+      if (poiId) {
+        setItems(await tripApi(apiClient).listPoiAttachments(tripId, poiId));
+      } else if (dayIndex != null) {
+        setItems(await tripApi(apiClient).listDayAttachments(tripId, dayIndex));
+      } else {
+        setItems(await tripApi(apiClient).listAttachments(tripId));
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '첨부를 불러오지 못했습니다.');
     }
-  }, [tripId]);
+  }, [dayIndex, poiId, tripId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,10 +65,20 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
         filename: file.name,
         content_type: file.type || 'application/octet-stream',
         content_length: file.size,
-        purpose: 'trip_attachment',
+        purpose: poiId ? 'poi_attachment' : dayIndex != null ? 'trip_day_attachment' : 'trip_attachment',
       });
       await putToPresigned(up, file);
-      await tripApi(apiClient).createAttachment(tripId, buildAttachmentCreate(up, file));
+      if (poiId) {
+        await tripApi(apiClient).createPoiAttachment(tripId, poiId, buildAttachmentCreate(up, file));
+      } else if (dayIndex != null) {
+        await tripApi(apiClient).createDayAttachment(
+          tripId,
+          dayIndex,
+          buildAttachmentCreate(up, file)
+        );
+      } else {
+        await tripApi(apiClient).createAttachment(tripId, buildAttachmentCreate(up, file));
+      }
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '업로드에 실패했습니다.');
@@ -73,7 +92,11 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
     setBusyId(attachmentId);
     setError(null);
     try {
-      const res = await tripApi(apiClient).attachmentDownloadUrl(tripId, attachmentId);
+      const res = poiId
+        ? await tripApi(apiClient).poiAttachmentDownloadUrl(tripId, poiId, attachmentId)
+        : dayIndex != null
+          ? await tripApi(apiClient).dayAttachmentDownloadUrl(tripId, dayIndex, attachmentId)
+          : await tripApi(apiClient).attachmentDownloadUrl(tripId, attachmentId);
       window.open(res.download_url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '다운로드 링크를 만들지 못했습니다.');
@@ -86,7 +109,13 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
     setBusyId(attachmentId);
     setError(null);
     try {
-      await tripApi(apiClient).deleteAttachment(tripId, attachmentId);
+      if (poiId) {
+        await tripApi(apiClient).deletePoiAttachment(tripId, poiId, attachmentId);
+      } else if (dayIndex != null) {
+        await tripApi(apiClient).deleteDayAttachment(tripId, dayIndex, attachmentId);
+      } else {
+        await tripApi(apiClient).deleteAttachment(tripId, attachmentId);
+      }
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '삭제에 실패했습니다.');
@@ -100,7 +129,7 @@ export function TripAttachments({ tripId }: TripAttachmentsProps) {
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
           <Paperclip className="h-4 w-4 text-primary" aria-hidden="true" />
-          첨부
+          {title}
         </h2>
         <label className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white hover:opacity-90">
           {uploading ? (

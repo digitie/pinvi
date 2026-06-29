@@ -218,7 +218,9 @@ async def authenticate_mcp_token(db: AsyncSession, *, raw_token: str) -> McpPrin
             User.user_id == user_id,
             User.deleted_at.is_(None),
             User.is_active.is_(True),
-            and_(User.status != "disabled", User.status != "deleted"),
+            and_(
+                User.status != "disabled", User.status != "pending_delete", User.status != "deleted"
+            ),
         )
     )
     if user is None:

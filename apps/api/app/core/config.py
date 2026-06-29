@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # JWT / 세션
     pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)
-    pinvi_access_token_minutes: int = 15
+    pinvi_access_token_minutes: int = 10
     pinvi_refresh_token_days: int = 7
     pinvi_admin_session_ttl: int = 3600
     pinvi_mcp_jwt_secret: str = Field(default="pinvi-local-mcp-secret-change-me", min_length=32)
@@ -39,11 +39,18 @@ class Settings(BaseSettings):
 
     # Resend
     pinvi_resend_api_key: str = ""
+    pinvi_resend_api_base_url: str = "https://api.resend.com"
     pinvi_resend_from_email: str = "Pinvi <noreply@send.pinvi.local>"
     pinvi_resend_timeout_seconds: int = 5
     pinvi_resend_webhook_secret: str = ""
     pinvi_resend_webhook_allow_unsigned: bool = False
+    pinvi_email_outbox_worker_enabled: bool = True
+    pinvi_email_outbox_drain_interval_seconds: float = 5.0
+    pinvi_email_outbox_batch_size: int = 50
+    # 미인증 로그인/재발송 요청 시 가입 인증 메일 재발송 최소 간격(초). 같은 사용자 중복 발송 방지.
+    pinvi_email_verification_resend_cooldown_seconds: int = 60
     pinvi_web_base_url: str = "http://localhost:12805"
+    pinvi_dagster_base_url: str = "http://localhost:12802"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(
         default="/reset-password",
@@ -93,9 +100,14 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_admin_base_url: str = "http://localhost:12701"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Kor-Travel-Map-Service-Token 전달.
     pinvi_kor_travel_map_service_token: str = ""
+    # kor-travel-map public REST가 key query를 요구할 때 사용. 미설정 시 PINVI_VWORLD_API_KEY 사용.
+    pinvi_kor_travel_map_public_api_key: str = ""
     # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
     # §7 확정(kor_travel_map T-217c): 운영 인증은 인프라 계층(SSO/IP allowlist) — token은 선택 pass-through.
     pinvi_kor_travel_map_admin_service_token: str = ""
+    # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
+    pinvi_kor_travel_map_admin_proxy_secret: str = ""
+    pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
     pinvi_kor_travel_map_timeout_seconds: float = 5.0
     pinvi_kor_travel_map_max_attempts: int = 3
     pinvi_kor_travel_map_batch_chunk_size: int = 200  # /v1/features/batch cap
@@ -105,9 +117,10 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
 
-    # VWorld 지도 키 (ADR-043) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
+    # VWorld 지도 키 (ADR-043/048) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
     # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후
-    # server-issued 키를 발급받는다(키 미설정 시 endpoint는 503).
+    # server-issued 키를 발급받는다(키 미설정 시 endpoint는 503). 같은 값이 kor-travel-geo
+    # v2 REST의 공개 API `key` query로도 쓰이며, 별도 geo API key 설정은 두지 않는다.
     pinvi_vworld_api_key: str = ""
     pinvi_vworld_token_ttl_seconds: int = 600
 
@@ -126,6 +139,10 @@ class Settings(BaseSettings):
     pinvi_location_audit_outbox_worker_enabled: bool = True
     pinvi_location_audit_outbox_drain_interval_seconds: float = 1.0
     pinvi_location_audit_outbox_batch_size: int = 200
+
+    # Retention execution kill-switch (T-276). Dry-run은 항상 허용, execute는 운영에서 명시적으로 연다.
+    pinvi_retention_execute_enabled: bool = False
+    pinvi_retention_execute_confirm_phrase: str = "EXECUTE RETENTION"
 
     # Feature 조회 process-local TTL 캐시 (T-146 / D-26)
     pinvi_feature_cache_enabled: bool = True
@@ -207,8 +224,14 @@ class Settings(BaseSettings):
         default_factory=lambda: ["/health", "/health/db", "/metrics"]
     )
 
+    # Admin system view (T-222) — Docker Engine read API collector. The socket is not
+    # mounted by default in compose; missing/denied access is reported as unknown/down.
+    pinvi_docker_socket_path: str = "/var/run/docker.sock"
+    pinvi_docker_status_timeout_seconds: float = 2.0
+    pinvi_docker_status_container_limit: int = 80
+
     # 운영 부트스트랩
-    pinvi_bootstrap_admin_email: str = "admin@ad.min"
+    pinvi_bootstrap_admin_email: str = "bootstrap-admin@example.com"
     pinvi_bootstrap_admin_password: str = ""
 
     # Backup / Restore (ADR-022)
@@ -219,6 +242,7 @@ class Settings(BaseSettings):
     pinvi_backup_timeout_seconds: int = 900
     pinvi_restore_timeout_seconds: int = 3600
     pinvi_backup_schema: str = "app"
+    pinvi_backup_min_free_bytes: int = 1_073_741_824
     pinvi_restore_database_url: str = ""
     pinvi_restore_hotswap_execute: bool = False
     pinvi_restore_drain_command: str = ""

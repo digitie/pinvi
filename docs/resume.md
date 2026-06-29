@@ -1,13 +1,1559 @@
 # resume.md
 
-## 2026-06-23 (codex) — kor-travel-map #512 지도 마커/viewport 튜닝 반영
+## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 완료
 
-`kor-travel-map` PR #512의 admin 지도 튜닝을 Pinvi에 대입해, 책임 경계상 SQL/route/area
-geometry 확장은 제외하고 사용자 지도 frontend 적용분만 반영했다. 일반 feature는
-`marker_icon`/`marker_color` maki 표현을 유지하고, `weather` feature는 `vworld-map-web`
-`WeatherMarker`로 표시한다. 낮은 줌 viewport bbox는 바깥쪽 확장 양자화로 cache key를
-안정화하고, `FeatureMapView`에 짧은 viewport response cache를 추가해 pan/zoom refetch churn을
-줄였다. WSL web targeted test/typecheck/lint/full test/build 통과.
+`/admin/notice-plans` Admin CRUD를 구현했다. 백엔드는 plan 목록/생성/상세/수정/삭제,
+`If-Match` version conflict, POI 생성/수정/삭제/reorder, plan/POI 첨부 관리를 제공한다. Web Admin은
+목록/필터, 신규 생성, 편집, `NoticePoiEditor`, 첨부 업로드 패널을 제공한다.
+
+검증: `ruff check`/`ruff format --check`, API strict mypy, `packages/schemas`/`packages/api-client`/
+`apps/web` typecheck, `apps/web` lint, API 통합 테스트 8건, N150 Playwright Docker runner
+`admin-notice-plans.e2e.ts` 2건 통과. 로컬 `.env`의 RustFS bucket도 사용자 지시에 맞춰
+`pinvi-media`로 정렬했다.
+
+**다음 한 작업**: T-265 PR 머지 후 최신 main에서 `T-291-etl-sql-tests`를 진행한다. 작업 범위는
+`apps/etl/**` 원시 SQL 실행 테스트와 audit retention 정책 분리이며, 열린 PR #227(map marker/tracking
+문서)와 충돌하지 않도록 진입 전 다시 확인한다.
+
+## 2026-06-29 (claude) — T-287 Trip Day optimistic lock
+
+day rename/delete에 trip/POI와 동일한 정수 version optimistic lock(`If-Match` 헤더)을 도입했다.
+Migration 0036(`app.trip_days.version`), 서비스 version 검증/bump, `PATCH/DELETE /days/{index}`
+409 `VERSION_CONFLICT`, TripDay/TripView/CRUD + zod/api-client version 노출, TripDetail rename/delete
+version 전달 + 충돌 reload 안내, mobile deleteDay version 전달, 통합 테스트 추가. 검증: api
+ruff/format clean(py_compile OK; pytest/mypy는 CI), web typecheck 신규 0 + mobile typecheck pass +
+vitest(web 46 / domain 61) pass. live e2e는 T-259 게이트.
+
+**다음 한 작업**: backlog non-overlap task 선택(예 T-291-etl-sql-tests). 신규 task 전 최근 PR 리뷰
+코멘트 + 선점 확인(tasks-rule §6/§8).
+
+## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 착수
+
+PR #322 문서 정리 머지 후 최신 main에서 `agent/codex-t265-notice-plan-writer` 브랜치를 만들었다.
+열린 PR #321은 T-287 trip day optimistic lock 영역, #227은 map marker/tracking 문서 영역,
+T-291-etl-sql-tests는 `apps/etl/**`/audit retention 영역이므로 T-265는 `/admin/notice-plans`,
+curated plan/POI, 관련 schema/api-client/web admin으로 범위를 제한한다.
+
+**다음 한 작업**: CodeGraph로 기존 notice plan API/Web 흐름 영향도를 확인한 뒤, Admin 목록/생성/편집과
+POI editor/첨부 흐름 중 현재 코드에 없는 최소 완성 단위를 구현한다.
+
+## 2026-06-29 (codex) — T-113 / T-271 / T-272 / T-285 제거
+
+사용자 지시에 따라 T-113(`kor-travel-concierge` 별 repo 신설), T-271(Odroid+N150 병행 운영),
+T-272(AI companion 별도 서비스 분리), T-285(AI companion v1.0 scope gate)를 열린 backlog에서
+제거했다. 구현하지 않고 `tasks-done.md`에 scope 제거 아카이브로 남겼으며,
+`docs/execplan/sprint6-v1.0-plan.md`의 남은 task 그룹과 DoD 매핑도 같은 기준으로 정리했다.
+향후 AI companion 연동은 신규 repo 신설 대신 이미 존재하는 `kor-travel-concierge` API를 활용한다.
+
+**다음 한 작업**: 이 문서 정리 PR 머지 후 열린 PR #321(T-287), #227, T-291-etl-sql-tests 충돌 영역을
+다시 확인하고, 겹치지 않는 다음 task를 선점한다.
+
+## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 완료
+
+신규 개발 task 진입 전 `tasks.md`를 다시 정리했다. 완료·머지·검증 이력은 계속
+`tasks-done.md`에만 두고, 반복 계획·체크리스트는 `tasks-rule.md`로 올렸다. `tasks.md`에는 현재
+충돌 회피(PR #227 map marker/tracking, T-291-etl-sql-tests)와 열린 backlog만 남겼다.
+
+Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap, 실행 중 닫기
+잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/result 표시를 추가했다.
+`admin-backup.e2e.ts`는 기본 잠금 경로와 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` enabled
+경로를 모두 검증한다. Admin API 계약은 변경하지 않았다.
+
+검증: `npm run typecheck --workspace apps/web`, `npm run lint --workspace apps/web`, `git diff --check`,
+N150 Playwright Docker runner 기본 `admin-backup.e2e.ts`(2 passed, 1 skipped), enabled flag
+`admin-backup.e2e.ts`(3 passed), PR #319 CI를 통과했다. CodeGraph sync/status도 up to date다.
+
+PR #319는 squash merge됐고 merge commit은 `40a781a`다. 완료 이관 docs PR도 머지됐다.
+
+## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
+
+`docs/execplan/sprint6-v1.0-plan.md`(남은 Sprint 6 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
+#315(T-261~263)에서 보류했던 경로 최적화 정책을 **ADR-053**(nearest-neighbor + 2-opt, haversine,
+OR-Tools/실도로 거리 보류)으로 박았다. SPRINT-6.md ADR 후보 노트를 확정 ADR-053/ADR-052 +
+execplan 참조로 정정하고 optimize DoD/산출물을 실제 구현에 맞췄다. 다음 신규 ADR = ADR-054.
+
+**다음 한 작업**: T-287 — Trip Day optimistic lock(`PATCH/DELETE /days/{day_index}` If-Match 도입 여부
+결정 → 409 회귀 + day rename/delete 충돌 다이얼로그 + e2e).
+
+## 2026-06-29 (codex) — T-264 Admin category mapping DB override 완료
+
+upstream `kor-travel-map` category taxonomy를 계속 정본으로 두고, Pinvi 표시명/마커 색/마커 아이콘
+override만 `app.category_mappings`에 저장하도록 ADR-052, migration/model, Admin API
+조회/PATCH/DELETE rollback/audit, Web editor, schema/api-client/e2e/integration test를 추가했다.
+
+사용자 지시에 따라 `tasks.md`도 더 공격적으로 정리했다. 완료/머지/검증 이력은 `tasks-done.md`로,
+반복 계획·체크리스트는 `tasks-rule.md`로 옮기고 `tasks.md`에는 열린 항목과 현재 선점만 남겼다.
+
+검증: py_compile, targeted ruff check/format, API mypy, API integration pytest(5 passed),
+`packages/schemas`/`packages/api-client`/`apps/web` typecheck, `apps/web` lint, `git diff --check`,
+N150 Playwright Docker runner `admin-category-mapping.e2e.ts`(2 passed)를 통과했다.
+
+**다음 한 작업**: PR 머지 후 최신 PR/브랜치와 `docs/tasks.md` 선점 상태를 다시 확인하고,
+T-291-etl-sql-tests와 열린 PR #227 map marker tuning 파일을 피하는 unclaimed Sprint 6 구현 task로
+이동한다. T-285는 사용자 지시에 따라 진행하지 않는다.
+
+## 2026-06-29 (claude) — 병행 트랙 3건 머지 + tasks 위생
+
+codex 병행 트랙 3개 그룹을 모두 main에 머지했다: **#310**(T-289/T-290 WebSocket reconnect +
+Trip conflict UX), **#312**(T-291 ADR-050 ETL run-failure sensor), **#315**(T-261~263 스마트 정렬
+2-opt). 사용자 지시로 신규 task 진입 전 `tasks.md`를 정리했다 — 완료된 T-261/262/263·T-291을
+`tasks-done.md`로 옮기고, 스테일 병행 노트를 제거했다. T-291 잔여(ETL SQL 실행 테스트 + audit
+retention 분리)는 `T-291-etl-sql-tests`로 분리했다.
+
+**다음 한 작업**: 다음 task 진입 전 최근 PR 리뷰 코멘트 확인 후 backlog에서 non-overlap task 선택
+(Admin 핫존 task는 `tasks.md` 선점 상태와 열린 PR을 먼저 확인).
+앞으로 task는 번호 부여→todo→완료 시 `tasks-done.md` 이관 규칙을 따른다(tasks-rule §7/§8).
+
+## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
+
+PR #313(T-288 legacy task archive)와 PR #312(T-291 failure sensor)가 main에 머지된 뒤 최신
+`origin/main`에서 `agent/codex-t292-integrity-pagination` 브랜치를 만들었다.
+
+T-292 범위인 PR #283 사후 리뷰 세 항목을 닫았다. `/admin/integrity/issues?source=all`은 Pinvi app
+issue가 page를 채워도 `kor-travel-map` upstream issue가 굶지 않도록 composite cursor를 사용한다.
+Pinvi app integrity producer/upsert helper와 active partial unique 회귀 테스트를 추가했고, Web Admin
+integrity action modal은 Escape/overlay close, 초기 포커스, Tab focus trap을 지원한다.
+
+열린 PR #227은 map marker tuning과 tracking 문서를 건드리는 오래된 PR이다. 이번 작업은 map 파일을
+건드리지 않고, tracking 문서는 최신 main 기준으로 필요한 T-292 상태만 갱신한다. T-285는 사용자
+지시가 바뀌기 전까지 진행하지 않는다.
+
+검증: API targeted ruff/mypy/pytest, `packages/schemas` typecheck, `packages/api-client` typecheck,
+`apps/web` typecheck/lint, N150 Playwright Docker runner Admin integrity e2e를 통과했다.
+
+다음 구현 후보는 T-286 Cross-track review gap closure다. 신규 task 진입 전 열린 PR/브랜치와
+`docs/tasks.md` 병행 상태를 다시 확인한다.
+
+## 2026-06-29 (codex) — T-288-legacy-task-archive / task 문서 정리
+
+사용자 지시에 따라 T-285 AI companion v1.0 scope gate는 현재 진행하지 않는다. T-285 착수 중
+작성했던 미커밋 문서 변경은 제거했고, 새 문서 정리 브랜치에서 `tasks.md`를 열린 backlog 중심으로
+정리했다.
+
+`docs/tasks.md`에는 진행/예정/보류 `[ ]` 항목만 남겼다. 완료된 T-281~~T-284, T-289~~T-290,
+Admin 콘솔 보강 legacy, 기존 완료/보류 혼재 섹션, 머지 히스토리는 `docs/tasks-done.md`로 옮겼다.
+병행 작업 기록과 충돌 회피 규칙은 `docs/tasks-rule.md` §8로 이동했다.
+
+현재 열린 병행 PR은 #312(T-291 ETL failure sensor)이며 변경 파일은 `apps/etl/**`,
+`docs/architecture/dagster-etl-bridge.md`, `docs/runbooks/etl.md`다. codex는 다음 task 진입 전 해당
+도메인을 피하고, 열린 PR/브랜치와 `tasks.md`를 다시 확인한다.
+
+다음 작업은 이 문서 정리 PR·CI·머지 후 T-292 App integrity pagination / producer follow-up 또는
+T-286 Cross-track review gap closure다. T-285는 사용자 지시가 바뀌기 전까지 진행하지 않는다.
+
+## 2026-06-29 (codex) — T-284 Mobile v1.0 scope gate
+
+`apps/mobile`을 활성 Expo SDK 56 / Dev Client Sprint M-1 track으로 유지하되, `v1.0.0` Web/API/Admin
+운영 출시의 필수 release blocker에서는 제외하는 scope gate를 문서화했다. EAS build, 실기기 smoke,
+store 제출, mobile live e2e는 모바일 release train에서 검증하며, `apps/mobile/**` 또는 공용
+`packages/**` 변경 시 `mobile-typecheck` CI gate는 유지한다.
+
+정합성 drift도 함께 정리했다. `docs/architecture/frontend.md`의 비활성/후속 표현을 현재 활성
+상태와 T-284 scope로 갱신했고, `apps/mobile/README.md`와
+`docs/architecture/expo-implementation-plan.md`의 ADR-024 WSL/NTFS 문구를 ADR-051 Linux-only 기준으로
+교체했다. Sprint 6 release checklist는 mobile 제외 항목을 완료로 분리하고, user-facing AI companion
+제외 항목은 T-285로 남겼다.
+
+검증은 Linux에서 `git diff --check`와 `npm --workspace @pinvi/mobile run typecheck`를 통과했다.
+당시 다음 후보는 T-285 또는 T-292였으나, 2026-06-29 사용자 지시에 따라 T-285는 현재 진행하지
+않는다. T-289/T-290은 PR #310으로 main에 머지됐으므로, 같은 영역을 건드릴 때는 최신 main
+기준으로 영향도를 다시 확인한다.
+
+## 2026-06-29 (codex) — T-283 Security review / threat model / penetration pass
+
+Sprint 6 보안 threat model / penetration 1차 점검을 수행했다. 범위는 auth/session, MCP token,
+share token, rate-limit/abuse, storage presigned URL, Admin RBAC, security incident workflow다.
+최근 2일 PR review를 확인했으며 2026-06-27 이후 inline review comment는 없었다.
+
+신규 문서 `docs/audit/2026-06-29-security-threat-model.md`에 자산/신뢰 경계, threat matrix,
+기존 테스트 증거, 신규 회귀 테스트, 잔여 운영 리스크를 정리했다. 신규 integration test
+`apps/api/tests/integration/test_security_boundaries_api.py`는 MCP token과 Web access token 상호
+재사용 차단, share token raw 값 비노출/route scope/revoke, admin-only storage presign 권한,
+incident console operator 은닉을 검증한다.
+
+검증은 Linux에서 `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest
+tests/integration/test_security_boundaries_api.py -q --capture=no` 4건을 통과했다. 다음 작업은
+PR·CI·머지 후 T-284 Mobile v1.0 scope gate다.
+
+## 2026-06-29 (claude) — codex 병행 트랙 착수 (T-289/290 · T-291 · T-261~263)
+
+codex가 T-283(보안 리뷰, PR #308 open)을 진행하는 동안, Sprint 5 잔여 + Sprint 6에서 codex의
+admin-backend 핫존과 충돌이 적은 콜드존 작업을 병행한다. 사용자 요청(2026-06-29)으로 본 문서
+갱신을 docs-only PR로 먼저 머지(CI 생략 admin-merge)한 뒤 구현에 들어간다.
+
+**병행 묶음(서로 및 codex와 파일 비충돌)**:
+
+1. **T-289 + T-290** — WebSocket reconnect/invalidation + Trip conflict UX 후속. PR #265/#266 사후
+   리뷰 발견(4401 0ms refresh 루프, reconnect jitter, `trip.copied` invalidation 누락, conflict field
+   whitelist drift, `ConflictDialog` Esc/focus). 영역: `packages/api-client/src/{websocket,query-keys}.ts`,
+   `apps/web/components/trips/{TripDetail,ConflictDialog}.tsx`. 한 PR로 묶는다.
+2. **T-291** — ETL failure sensor + compliance SQL 테스트. PR #271/#273(+#276) 사후 리뷰 발견
+   (ADR-050 `run_failure_sensor` 미연결 = `sensors=[]`, asset 원시 SQL 실행 테스트 부재). 영역: `apps/etl`.
+3. **T-261~T-263** — 경로 최적화(OR-Tools) + 스마트 정렬 API/UI. 신규 `optimize` 모듈/엔드포인트/
+   다이얼로그라 기존 코드 비접촉. T-132 nearest-neighbor 위에 확장.
+
+**충돌 회피 근거**: codex 핫존은 `apps/api/app/api/v1/admin/*`·`app/services/*`(보안 리뷰 T-283).
+위 묶음은 프론트/packages, `apps/etl`, 신규 optimize 모듈로 분리됨. 공통 추적 문서
+(`tasks.md`/`resume.md`/`journal.md`)는 머지 충돌 가능성이 있어 docs PR을 먼저 빠르게 머지한다.
+
+**다음 한 작업**: T-289+T-290 구현 착수(프론트/packages).
+
+## 2026-06-29 (codex) — T-282 Rate-limit / abuse admin surface
+
+Sprint 6 rate-limit/abuse 운영 표면을 구현했다. DB에는 `app.rate_limit_overrides`를 추가하고,
+기존 `app.rate_limit_buckets`에 admin 조회용 `limit_name, updated_at` index를 보강했다.
+`RateLimitMiddleware`는 Postgres backend에서 active `blocked` override를 `429 RATE_LIMIT_BLOCKED`로
+차단하고, active `allowed` override는 TTL 동안 counter hit를 우회한다. 원문 IP/email/share token은
+저장하지 않고 HMAC bucket hash와 표시용 hash label만 보존한다.
+
+Admin API는 `/admin/abuse` 조회와 `/admin/abuse/overrides`, `/rollback` mutation을 제공한다.
+조회는 `admin`/`operator`/`cpo`, mutation은 `admin` 전용이며 모든 override mutation은
+`admin_audit_log`에 `rate_limit_override.*` action으로 기록된다. Web Admin에는 `/admin/abuse`
+페이지와 sidebar 메뉴를 추가해 backend store 상태, fail-closed 여부, 429 bucket 수, suspicious
+auth/share/storage bucket, override 생성/rollback을 처리한다.
+
+문서는 `docs/api/admin.md`, `docs/postgres-schema.md`, `docs/data-model.md`, `docs/runbooks/admin.md`,
+`CHANGELOG.md`, `docs/tasks.md`를 갱신했다. 다음 작업은 PR·CI·머지 후 T-283 Security review /
+threat model / penetration pass다.
+
+검증은 Linux에서 API ruff, strict mypy, API integration/unit targeted 테스트 9건,
+`packages/schemas`, `packages/api-client`, `apps/web` typecheck, Web lint를 통과했다. Playwright는
+N150 Docker runner `scripts/n150-playwright-runner.sh`로 `admin-abuse.e2e.ts` 1건을 통과했다.
+
+## 2026-06-29 (codex) — T-281 User lifecycle admin actions
+
+Sprint 6 사용자 lifecycle Admin workflow를 구현했다. DB status vocabulary에 `pending_delete`를
+추가했고, auth/session/MCP/password reset/verify 경계에서 `pending_delete`와 `deleted`를 차단한다.
+Admin `/admin/users/{user_id}`는 lifecycle 패널을 제공해 인증 메일 재발송, 세션 목록, 세션 단건/전체
+강제 로그아웃, 강제 비밀번호 재설정, disable/reactivate, 삭제 대기, 즉시 익명화를 처리한다.
+
+Admin lifecycle mutation은 모두 `access_reason`을 요구하고 `admin_audit_log`에
+`user.verification_resend`, `user.session_revoke`, `user.session_revoke_all`,
+`user.password_reset_force`, `user.reactivate`, `user.delete_schedule`, `user.anonymize` action을
+남긴다. 세션 목록은 IP 원문 대신 `ip_hash`만 응답한다. 세션 강제 로그아웃, role 변경,
+force-password-reset, disable/delete/reactivate는 `users.access_token_version`을 증가시켜 기존
+access token을 즉시 무효화한다.
+
+사용자 self-service `DELETE /users/me`는 `status='pending_delete'`, `is_active=false`,
+`deleted_at=now()`로 전환하고 active session revoke + cookie clear를 수행한다. retention 실행은
+`pending_delete` / `deleted` cutoff 후보를 익명화하고 최종 상태를 `deleted`로 고정한다.
+
+검증은 Linux에서 ruff, strict mypy, API integration `test_admin_users_api.py` 10건,
+`packages/schemas`, `packages/api-client`, `apps/web` typecheck, Web lint를 통과했다. Playwright는
+N150 Docker runner `scripts/n150-playwright-runner.sh`로 `admin-users.e2e.ts` 6건을 통과했다.
+다음 작업은 PR·CI·머지 후 T-282 Rate-limit / abuse admin surface다.
+
+## 2026-06-29 (codex) — T-280 RBAC role grant/revoke / permission matrix
+
+Sprint 6 Admin RBAC role grant/revoke와 permission matrix를 구현했다. `/admin/rbac/permission-matrix`
+API는 `admin` / `operator` / `cpo`가 조회할 수 있는 role 설명과 endpoint 권한 matrix를 제공한다.
+`/admin/rbac` 화면은 같은 matrix를 표시하고, Admin sidebar에 RBAC 메뉴를 추가했다.
+
+사용자 상세 `/admin/users/{user_id}`에는 역할 관리 섹션을 추가했다. `admin` 권한자는
+`admin` / `operator` / `cpo` role을 사유와 함께 부여·회수할 수 있고, 모든 mutation은
+`admin_audit_log`에 `user.role_grant` / `user.role_revoke` action, before/after roles, request id를
+남긴다. role 배열은 `user`, `admin`, `operator`, `cpo` 순서로 정규화한다. 중복 부여, 미보유 role
+회수, 자기 admin 회수, 마지막 admin 회수는 각각 `409 INVALID_STATE` 또는
+`403 PERMISSION_DENIED`로 차단한다.
+
+검증은 Linux에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_admin_users_api.py` 7건을 통과했다. Playwright는 N150
+alias `n150`, `pinvi-n150`이 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+`admin-users.e2e.ts` 5건을 통과했다. `docs/architecture/admin-rbac.md`, `docs/api/admin.md`,
+`docs/runbooks/admin.md`, task/resume/journal, `CHANGELOG.md`를 함께 갱신했다. 다음 작업은
+PR·CI·머지 후 T-281 User lifecycle admin actions다.
+
+## 2026-06-29 (codex) — T-279 Content moderation / takedown workflow
+
+Sprint 6 콘텐츠 신고/게시중단 workflow를 구현했다. DB에는 `app.content_reports`와
+`app.content_moderation_actions`를 추가해 trip/comment/attachment/share link 신고, target snapshot,
+증거 metadata, 접수/검토/숨김/게시중단/복원/반려/이의제기 상태, reviewer/resolution/appeal 시각,
+조치 전후 상태를 저장한다.
+
+사용자 self-service는 `/users/me/content-reports` API와 `/settings/moderation` 화면으로 신고
+접수/조회/이의제기를 제공한다. 운영 처리는 `/admin/moderation` API/화면으로 검토, 숨김,
+게시중단, 복원, 반려를 수행하며 모든 mutation은 `admin_audit_log`에
+`content_moderation.*` action과 운영 사유를 남긴다. 숨김/게시중단/복원 조치는 여행 공개 상태,
+soft-delete 댓글/첨부, 공유 링크 revoke 상태에 실제 반영된다. API client/schema/query key,
+Admin/user mock Playwright, `docs/runbooks/content-moderation.md`, API/Admin/users/PIPA/schema/data-model
+문서를 함께 갱신했다.
+
+검증은 Linux/WSL에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_content_moderation_api.py` 3건을 통과했다. Playwright는 N150
+alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로 `admin-moderation.e2e.ts`와
+`settings-moderation.e2e.ts` 2건을 통과했다. 다음 작업은 PR·CI·머지 후 T-280 RBAC role
+grant/revoke / permission matrix다.
+
+## 2026-06-28 (codex) — T-278 DSR intake workflow
+
+Sprint 6 개인정보 권리행사 DSR workflow를 구현했다. DB에는 `app.dsr_requests`를 추가해
+`access` / `correction` / `delete` / `suspend` 요청, `received` → `identity_check` →
+`processing` → `completed` / `rejected` / `withdrawn` 상태, 접수 + 10일 `due_at`, 본인 확인
+metadata, result notice hash, export manifest, partial response, evidence attachment id를 저장한다.
+DSR 행은 원문 이메일을 저장하지 않고 `requester_email_hash`와 `requester_email_masked`만 보존한다.
+
+사용자 self-service는 `/users/me/dsr-requests` API와 `/settings/dsr` 화면으로 접수/조회/철회를
+제공한다. CPO 처리는 `/admin/dsr` API/화면으로 본인 확인, 처리 시작, 완료/거절 통지를 수행하며
+모든 mutation은 `admin_audit_log`에 `dsr.*` action과 `access_reason`을 남긴다. 완료/거절은
+`email_queue.template='dsr_result_notice'` row를 만들고 `result_notice_email_id`와
+`result_notice_hash`로 연결한다. API client/schema/query key, Admin/user mock Playwright,
+`docs/runbooks/dsr.md`, API/Admin/users/PIPA/schema/data-model 문서를 함께 갱신했다.
+
+검증은 Linux/WSL에서 API ruff, targeted mypy, `packages/schemas`, `packages/api-client`, `apps/web`
+typecheck, Web lint, API integration `test_dsr_requests_api.py` 3건을 통과했다. Playwright는 N150
+alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로 `admin-dsr.e2e.ts`와
+`settings-dsr.e2e.ts` 2건을 통과했다. 다음 작업은 PR·CI·머지 후 T-279 Content moderation /
+takedown workflow다.
+
+## 2026-06-28 (codex) — T-277 Email deliverability / suppression enforcement
+
+Sprint 6 이메일 deliverability/suppression enforcement를 구현했다. DB에는
+`app.email_suppressions`와 `app.resend_webhook_events`를 추가했고, `app.email_queue`는
+`delivery_delayed`, `suppressed`, `last_provider_event_id`, `last_provider_event_at`을 가진다.
+worker는 발송 전 `users.email_status`, active suppression source, `marketing*` template의
+`marketing` consent를 확인해 차단 대상이면 Resend 호출 없이 terminal 상태와
+`last_error='suppressed:<reason>'`을 남긴다.
+
+Resend 발송은 Python SDK 직접 호출에서 `httpx` 기반 `ResendClient`로 전환했다.
+`api_call_event_hooks(..., provider='resend')`를 사용하므로 `app.api_call_log`에 canonical endpoint와
+status가 남고, API key는 endpoint에 저장되지 않는다. `/webhooks/resend`는 event id/`svix-id`
+중복을 no-op으로 처리하고, `email.bounced` / `email.complained` / `email.suppressed` terminal
+event가 `delivered`보다 우선하도록 했다. hard bounce/complaint/provider suppression은
+suppression source와 연결 사용자 `email_status`를 갱신한다.
+
+Admin에는 `GET /admin/emails/deliverability`와 `/admin/emails` 상태판을 추가했다. 상태판은 Resend
+API configured/console mode, FROM domain/domain status/sending capability, webhook signature/최근 event,
+queue health, suppression/user status count, SPF/DKIM/DMARC manual checklist를 raw secret 없이 표시한다.
+검증은 WSL에서 ruff, strict mypy, schemas/api-client/web typecheck, Web lint, API integration 24건을
+통과했다. Playwright는 N150 alias가 현재 Linux 세션에서 해석되지 않아 Windows fallback으로
+`admin-emails.e2e.ts` 1건을 통과했다. 다음 작업은 PR·CI·머지 후 T-278 DSR intake workflow다.
+
+## 2026-06-28 (codex) — T-276 Retention execution / dashboard
+
+Sprint 6 보존기간 실행 콘솔을 추가했다. DB에는 `app.retention_runs`와
+`app.location_access_log_archive`를 추가했고, `location_access_log` append-only trigger는 retention
+transaction의 `app.retention_location_delete_allowed=on` 설정에서만 DELETE를 허용하도록 좁혔다.
+`/admin/retention` API는 summary, runs, dry-run, execute를 제공하며 execute는 기본 비활성
+`PINVI_RETENTION_EXECUTE_ENABLED`, confirm phrase, cutoff 이전 pending outbox, hash-chain bridge
+precheck를 통과해야 한다.
+
+실행은 삭제 후 grace가 지난 일반 사용자 PII anonymize, OAuth identity 삭제, 만료
+verification/session/OAuth transient row 삭제, 6개월 초과 위치 로그 archive 후 active row 삭제를 수행한다.
+`admin_audit_log` PII 후보는 append-only 원장이라 삭제하지 않고 run result의
+`skipped_admin_audit_pii_over_retention`으로 기록한다. Web Admin `/admin/retention`은 kill-switch 상태,
+bounded 후보 수, dry-run/execute form, 최근 run evidence를 표시한다. API client/schema/query key,
+API integration, mock Playwright, Admin/LBS/schema/runbook 문서를 함께 갱신했다.
+
+검증은 WSL ext4 미러에서 API retention integration 3건, ruff/format, strict mypy, schemas/api-client/web
+typecheck, Web lint를 통과했다. Playwright는 N150 SSH alias가 이 세션에서 연결되지 않아 Windows
+fallback으로 `admin-retention.e2e.ts` 1건을 통과시켰다. 다음 작업은 PR·CI·머지 후 T-277 Email
+deliverability / suppression enforcement다.
+
+## 2026-06-28 (codex) — T-275 PIPA security incident console
+
+Sprint 6 첫 실제 구현 태스크로 PIPA security incident workflow를 추가했다. `app.security_incidents`
+상태는 `detected` → `triage` → `notification_decision` → `reported` → `closed`로 정리했고,
+CPO 30분 review due, 정보주체 통지 payload hash, 개인정보보호위원회/KISA 72시간 신고 due와
+접수번호, evidence attachment id를 migration/model/schema/API에 반영했다. 신규
+`/admin/incidents` API는 CPO 전용 상태 전이를 `admin_audit_log`와 함께 기록하고, incident 생성 시
+Admin Telegram outbox를 생성한다. 통지 조치는 `security_incident_notice` email queue row와
+payload hash를 남긴다.
+
+Web Admin에는 `/admin/incidents` 화면을 추가했다. 목록 필터(status/severity/SLA), 신규 incident
+등록, triage/notification decision/notify/report/close 조치 패널을 제공하고, API client/schema/query
+key와 mock Playwright 회귀 테스트를 연결했다. `docs/api/admin.md`, `docs/compliance/pipa.md`,
+`docs/postgres-schema.md`, `docs/data-model.md`, `docs/runbooks/security-incidents.md`,
+`CHANGELOG.md`도 같은 계약을 가리킨다.
+
+검증은 WSL/NTFS에서 Python compileall, Prettier를 확인했고, WSL ext4 미러에서 API targeted pytest
+5건, ruff check/format, strict mypy, Web typecheck/lint를 통과했다. mock Playwright는 ext4 미러의
+브라우저 캐시 부재로 실행 전 실패했고, 이 세션에서 N150 SSH alias가 잡히지 않아 Windows fallback으로
+`admin-incidents.e2e.ts` 1건을 통과시켰다. live 운영 데이터 조치가 아니므로 N150 live Playwright는
+이 PR에서 별도 실행 대상이 아니다. 다음 작업은 PR 생성·CI·머지 후 T-276 Retention execution /
+dashboard다.
+
+## 2026-06-28 (codex) — T-259 Admin live credential / restore staging drill
+
+N150 local-only Admin live credential을 준비하고 production Web image의 빌드타임 API origin에 맞춰
+public HTTPS Web origin으로 UI login을 검증했다. API login smoke 1건과 UI login smoke 1건이
+통과했고, N150 Playwright Docker runner(`mcr.microsoft.com/playwright:v1.60.0-noble`)에서
+`PINVI_ADMIN_LIVE_CASE_LIMIT=200`은 207 passed (18.4m), `PINVI_ADMIN_LIVE_CASE_LIMIT=2000`은
+2007 passed (3.5h)로 통과했다. full catalog 6202건은 최종 tag/Release 직전 별도 장시간 gate로
+남긴다.
+
+운영 DB role에는 `CREATEDB` 권한이 없어 N150에 disposable PostgreSQL/PostGIS staging target을
+만들고 latest snapshot `backup://pinvi-app-20260628-101426.dump`로 restore staging drill을 수행했다.
+checksum과 `pg_restore --list`가 통과했고, restore 후 `users_count=7`, `trips_count=5`,
+`admin_audit_log_count=1`, audit chain link valid, rollback precheck guard schema unchanged를
+확인했다. DB URL/password/container 세부 값은 local-only 파일에만 둔다.
+
+이번 보강에서 Admin live e2e는 login rate-limit 알림을 만나면 동일 case 안에서 backoff 후
+재시도하도록 고쳤고, request timeline live e2e는 loading 종료와 empty-state 문구 변형을 안정적으로
+처리한다. 다음 작업은 이 증적 PR을 머지한 뒤 Sprint 6 실제 구현 태스크인 T-275 PIPA security
+incident console로 진입하는 것이다.
+
+## 2026-06-28 (codex) — T-259 v0.2.0 release candidate gate 부분 실행
+
+T-259 release candidate gate 결과를 `docs/execplan/v020-release-candidate-gate.md`에
+고정했다. 후보 SHA는 `98fb3c2c0d7b7e557dc7a5598f0340d530c4def2`다. N150 checkout을 최신 main으로
+갱신했고, `pinvi-api`, `pinvi-web`, `pinvi-dagster` 이미지를 생성해 healthy 상태로 기동했다.
+N150 내부 smoke는 API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`,
+`kor-travel-map` `/health`/OpenAPI 모두 200을 확인했다.
+
+backup snapshot은 `postgis/postgis:16-3.5` 일회성 컨테이너로 생성했고,
+`pinvi-app-20260628-094253.dump`(126826 bytes), `.sha256`, `pg_restore --list` 검증이 통과했다.
+당시 host의 `scripts/backup-db.sh`는 `pg_dump not found`로 직접 실행되지 않았다. 후속으로
+`scripts/backup-db.sh`에 Docker fallback을 추가했고 API image에는 `backup-db.sh`와
+`postgresql-client`를 포함했다. N150 checkout `4a1b71e`에서 보강된 script를 재실행해
+`pinvi-app-20260628-101426.dump`(126826 bytes), `.sha256`, `pg_restore --list` 검증이 통과했다.
+
+릴리스는 보류한다. PR #295 merge 후 최신 main `4a1b71e`의 API push CI가 통과했고, PR #296 merge
+후 최신 main `5c0a39b` 기준 WSL ext4 clean install에서 Web lint/typecheck/build도 통과했다.
+N150 host Chromium은 `libatk`/`libatspi`/`libXdamage`/`libasound` 계열 누락으로 실패했고,
+Playwright 1.60.0 `install-deps --dry-run chromium`은 Ubuntu 26.04를 지원하지 않았지만,
+`scripts/n150-playwright-runner.sh` Docker runner가 `mcr.microsoft.com/playwright:v1.60.0-noble`에서
+malformed login smoke 1건을 통과했다. Admin live 2000/full은 credential 부재, restore staging
+drill은 staging DB URL 부재로 미실행이다. 다음 작업은 N150 local-only Admin live credential과
+restore staging DB를 확보한 뒤 `v0.2.0` tag/GitHub Release 생성이다. 이 차단 중 Admin live
+200/2000과 restore staging drill은 같은 날짜 상단 엔트리에서 해소됐고, full catalog와 tag/Release만
+남아 있다.
+
+## 2026-06-28 (codex) — T-258 Sprint 6 legal/ops implementation prep gate
+
+Sprint 6 legal/ops 구현 준비 gate를 `docs/execplan/legal-ops-implementation-prep-gate.md`로
+고정했다. T-275~T-286은 각각 API/UI, 상태 모델, due date, evidence/audit, runbook,
+test gate, sign-off 기준을 가진다. 기존 문서의 `KISA 60일 report` 표현은 폐기하고,
+개인정보보호위원회/KISA 72시간 신고 기준으로 정정했다. CPO 30분 review는 법정 기한이 아니라
+Pinvi 내부 운영 SLA로 분리했다.
+
+Sprint 6 문서와 compliance index는 새 gate 문서를 참조한다. v1.0 기본 범위는 Web/API/Admin
+운영 출시이며, `apps/mobile`과 user-facing AI companion은 v1.0 필수 gate에서 제외된다.
+다음 작업은 T-259 Release candidate gate / `v0.2.0`이다.
+
+## 2026-06-28 (codex) — T-257 Email deliverability / provider tracking preflight
+
+Resend domain/webhook 공식 기준과 현재 repo 구현을 대조해
+`docs/execplan/email-deliverability-provider-preflight.md`에 T-277 구현 계약을 고정했다. 현재
+구현은 `app.email_queue` worker, Resend/Svix 서명 검증, queue 상태 갱신,
+`/admin/emails` queue 화면까지 닫혀 있다. 반면 발송 전 suppression enforcement,
+`users.email_status` 또는 별도 suppression source 갱신, webhook event dedupe/out-of-order
+precedence, deliverability 상태판, `api_call_log.provider='resend'` 기록은 T-277 잔여다.
+
+`docs/integrations/resend.md`는 stale React Email/checklist 내용을 현재 inline HTML renderer와
+구현 완료/잔여 상태로 분리했다. 다음 작업은 T-258 Sprint 6 legal/ops implementation prep
+gate다.
+
+## 2026-06-28 (codex) — T-256 Review gap crosswalk / legal-ops preflight
+
+PR #238/#264 리뷰에서 나온 legal/ops gap을
+`docs/execplan/legal-ops-review-gap-crosswalk.md`에 44개 항목(G-001~~G-044)으로 고정했다.
+각 gap은 T-257/T-258/T-275~~T-286 등 하나 이상의 Task로 연결했고, 이미 T-244~T-253에서
+닫힌 항목은 완료 Task와 Sprint 6 재감사(T-286)를 함께 표기했다.
+
+최근 2일 PR #265~#289의 사람 리뷰 코멘트도 확인했다. WebSocket reconnect/invalidation,
+Trip conflict UX, ETL compliance SQL/failure sensor, app integrity pagination/producer 후속은
+T-289~T-292로 새로 남겼다. 다음 작업은 T-257 Email deliverability / provider tracking
+preflight다.
+
+## 2026-06-28 (codex) — T-255 지도 마커 / 색상 적용 parity
+
+지도 marker resolver를 공용 도메인 로직으로 정리했다. `@pinvi/domain`의
+`resolveMarkerStyle`은 custom → server-resolved → upstream feature → feature snapshot →
+category/kind fallback → `P-13` fallback 순서로 색/아이콘/source를 계산한다. 사용자 Trip 지도,
+탐색 지도, Admin Trip POI preview가 같은 resolver를 사용하고, selected/broken/cluster 상태는
+marker metadata와 `MakiMarker` selected/highlighted 상태로 확인한다.
+
+mock e2e는 Trip detail/Admin trip dialog marker parity를 검증한다. live read-only spec은
+`PINVI_ADMIN_LIVE_E2E=1` gate에서 `/map` marker metadata를 데이터 유무와 독립적으로 확인한다.
+Linux에서 domain tests, Web typecheck/lint가 통과했고, N150 SSH alias는 현재 환경에서 해석되지
+않아 Windows fallback Playwright로 mock e2e 8건 pass와 live spec 1건 skip을 확인했다.
+다음 작업은 T-256 Review gap crosswalk / legal-ops preflight다.
+
+## 2026-06-28 (codex) — T-254 Admin live e2e matrix v0.2.0 확장
+
+Admin live read-only matrix를 v0.2.0 release gate용으로 확장했다. `admin-live-matrix.live.ts`
+catalog는 6,195건 exact count로 고정해 drift를 감지한다. 신규 case는
+`/admin/debug/request/{id}` captured request timeline, feature detail subpage tabs,
+backup restore-lock/mutation guard, ETL app-owned job rows, Grafana dashboard selector와
+WebSocket dashboard, raw secret pattern 미노출을 포함한다.
+
+runbook은 N150 우선 실행과 `PINVI_ADMIN_LIVE_CASE_LIMIT=200` smoke, `2000` gate, full catalog
+순서를 고정했다. Linux에서 Web typecheck/lint와 catalog drift 테스트가 통과했고, N150 SSH
+alias는 현재 환경에서 해석되지 않아 실제 N150 live run은 미실행이다. Windows fallback runner로
+catalog 테스트 1건이 통과했다. 다음 작업은 T-255 지도 마커 / 색상 적용 parity다.
+
+## 2026-06-28 (codex) — T-253 Prometheus/Grafana 운영 가시화 게이트
+
+Prometheus/Grafana 운영 가시화 게이트를 보강했다. observability compose profile에
+blackbox exporter를 추가했고, Prometheus scrape target은 API `/metrics`, cAdvisor,
+blackbox 자체, Web health, Dagster health를 분리한다. API `/metrics`는
+`pinvi_api_db_pool_connections{state=...}` SQLAlchemy pool gauge를 함께 노출한다.
+
+Grafana provisioning은 기존 Overview에 API p95/error, DB pool, WebSocket, ETL/backup
+dashboard 4종을 추가했다. Admin `/admin/grafana`는 dashboard selector와
+`GET /admin/grafana/health` 서버사이드 probe 기반 `정상`/`강등` 표시를 제공한다.
+health probe는 `PINVI_GRAFANA_HEALTH_URL`을 우선 사용해 app compose 내부 Grafana origin을
+찌를 수 있다.
+mock e2e는 iframe, dashboard path, degraded 상태를 검증하고, live e2e는
+`PINVI_ADMIN_LIVE_E2E=1`에서 iframe/health 상태와 secret pattern 미노출을 확인한다.
+
+provider-health `unknown` 방지를 위해 production httpx client factory에 `ApiCallTracker`
+provider tag를 연결했다. 대상은 `kor_travel_map`, `kor_travel_map_admin`,
+`kor_travel_geo`, `telegram`, `google_oauth`다. `api_call_log.endpoint`는 query secret과
+Telegram bot token path를 저장 전에 mask한다. Resend는 T-257 감사에서 SDK 직접 호출로 인해
+provider tracking이 누락됨을 확인했고, T-277에서 `provider='resend'` 기록을 구현한다.
+
+검증은 Linux에서 API ruff/pytest/mypy, Web typecheck/lint/Vitest, observability compose
+config, Grafana dashboard JSON parse, `git diff --check`를 통과했다. Playwright는 N150 SSH
+alias가 현재 환경에서 해석되지 않아 Windows fallback runner로 `admin-grafana.e2e.ts` 2건
+통과와 `admin-live-grafana.live.ts` env-gated skip 1건을 확인했다. 다음 작업은 T-254 Admin
+live e2e matrix v0.2.0 확장이다.
+
+## 2026-06-28 (codex) — T-252 Backup/restore live UI e2e
+
+`/admin/backup` snapshot 목록에 filename/snapshot id/checksum 검색, `verified`/`available`
+status filter, visible count를 추가했다. production live에서 restore-hotswap을 실수로 누르지
+않도록 Web 빌드타임 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`이 없으면 Restore 버튼이
+비활성화된다. 서버 측 `PINVI_RESTORE_HOTSWAP_EXECUTE` 가드는 그대로 유지한다.
+
+Playwright는 세 층으로 분리했다. 기존 mock e2e는 list/filter/sort/manual trigger/empty/error와
+restore disabled를 확인한다. `admin-live-backup.live.ts`는 N150/live read-only에서 snapshot 목록,
+sort/filter, empty state, restore 잠금, raw backup path/secret pattern 미노출을 검증하고
+backup POST가 발생하면 실패한다. `admin-backup-live-mutating.live.ts`는
+`PINVI_BACKUP_LIVE_MUTATING_E2E=1` + `PINVI_BACKUP_LIVE_STAGING=1`에서만 staging snapshot 1회 생성,
+`backup.snapshot` audit, `backup://<filename>` masking, 목록 limit cap을 확인한다.
+
+Linux에서 Web typecheck/lint, live catalog/skip, compose/shell 검증을 수행했다. N150 SSH alias는
+현재 Linux 환경에서 해석되지 않아 실제 N150 live read-only/staging mutating run은 수행하지
+못했고, mock Playwright는 Windows fallback runner에서 통과했다. 다음 작업은 T-253
+Prometheus/Grafana 운영 가시화 게이트다.
+
+## 2026-06-28 (codex) — T-251 Restore staging drill
+
+Restore staging drill 진입점으로 `scripts/restore-staging-drill.sh`를 추가했다. 스크립트는
+`PINVI_RESTORE_STAGING_DATABASE_URL`이 없으면 복구를 시작하지 않고, snapshot checksum,
+`pg_restore --list`, `scripts/restore-db.sh`, staging DB health row count(`users`, `trips`,
+`admin_audit_log`), admin audit chain link, rollback rehearsal 결과를
+`DRILL_PHASE`/`DRILL_EVIDENCE`로 출력한다. host 절대경로는 `backup://<filename>`으로만 기록한다.
+
+Rollback rehearsal은 기본 `precheck` guard와 선택 `drain` 모드를 지원한다. `drain`은 임시
+restore schema까지 복구한 뒤 drain 미설정 실패를 유도하고 기존 `app` schema OID가 유지되는지
+확인한 다음 임시 schema를 drop한다. `scripts/backup-db.sh`, `restore-db.sh`,
+`restore-hotswap.sh`, `restore-staging-drill.sh`는 `.sha256` sidecar checksum 값을 실제 dump
+hash와 직접 비교하도록 맞춰 snapshot을 staging 경로로 옮겨도 검증 가능하게 했다.
+
+Linux에서 shell syntax, ruff, restore drill script unit, backup service unit을 검증했다.
+N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 실제 N150 staging DB restore는 수행하지 못했다.
+UI 변경은 없어서 Playwright는 실행하지 않았다. 다음 작업은 T-252 Backup/restore live UI e2e다.
+
+## 2026-06-28 (codex) — T-250 Backup script / snapshot endpoint hardening
+
+Backup script와 Admin snapshot endpoint를 보강했다. `scripts/backup-db.sh`는 schema name guard,
+`PINVI_BACKUP_MIN_FREE_BYTES` disk free guard, 임시 dump 생성, sha256 sidecar 생성/검증을 수행한다.
+`scripts/restore-db.sh`는 `.sha256` sidecar가 있으면 restore 전에 반드시 검증한다.
+
+API/service는 `.sha256`이 실제 dump checksum과 일치할 때만 `status="verified"`로 표시하고,
+불일치하면 `available`로 낮춘다. Admin backup/restore 응답과 audit/error message의 host 절대경로는
+`backup://<filename>`으로 mask하고, DB URL credential도 mask한다. snapshot 생성 실패도
+`backup.snapshot_failed` audit으로 남긴다.
+
+Linux/WSL에서 ruff, backup service unit/API integration, strict mypy, shell syntax check를 검증했다.
+UI 변경은 없어서 Playwright는 실행하지 않았다. 다음 작업은 T-251 Restore staging drill이다.
+
+## 2026-06-28 (codex) — T-249 App-owned integrity source / known orphan fix
+
+Pinvi app-owned integrity source를 추가했다. `app.data_integrity_violations` migration/model을
+추가하고, `/admin/integrity/issues`에 `source=all|kor_travel_map|pinvi_app` filter를 붙였다.
+`source=pinvi_app`는 persisted row와 Pinvi 계산 rule을 반환하고, `source=kor_travel_map`은 기존
+upstream consistency issue proxy를 유지한다. `provider`/`dataset_key` filter는 upstream 전용이므로
+지정 시 Pinvi app row를 제외한다.
+
+known app issue는 broken POI feature link, invalid POI marker color, curated import source drift,
+active attachment deleted target을 우선 계산한다. 기존 sort 중복 rule도 service에 포함했지만 DB
+unique index가 정상 동작하는 한 일반 데이터에서는 나타나지 않는다. Pinvi app issue는 read-only로
+두고, `pinvi_app:` issue action은 409 `PINVI_APP_INTEGRITY_ACTION_UNSUPPORTED`를 반환한다.
+
+Web `/admin/integrity`는 source filter와 source column/badge를 추가했고, Pinvi app issue row는
+조치 버튼 대신 read-only로 표시한다. API/admin/data-model/postgres schema 문서와 Sprint 5 추적
+문서를 갱신했다.
+
+Linux/WSL에서 ruff, API integration, strict mypy, Web/API-client/schema typecheck, Web lint,
+Prettier를 검증했다. Playwright는 N150 SSH alias가 이 세션에 없어 직접 실행할 수 없었고, Windows
+fallback runner에서 `admin-dedup-integrity-debug.e2e.ts` 3건이 통과했다.
+
+다음 작업은 T-250 Backup script / snapshot endpoint hardening이다.
+
+## 2026-06-28 (codex) — T-248 Feature detail subpages
+
+Admin feature detail subpage를 read-only deep link로 추가했다. `GET /admin/features/{feature_id}/sources`
+와 `/overrides`는 `kor-travel-map` admin detail payload에서 list만 투영하고,
+`/weather-values`는 기존 feature weather card의 metrics를 Admin tab용 `items`로 반환한다. Pinvi는
+`feature.*`/`provider_sync.*` 테이블을 직접 조회하지 않고, override mutation도 추가하지 않았다.
+
+Web은 `/admin/features/{feature_id}/sources`, `/overrides`, `/weather-values` route를 추가했고,
+기존 `/admin/features` detail inspector에서 세 tab으로 이동할 수 있다. mock Playwright는 direct deep
+link, tab navigation, empty state, upstream error state를 확인한다. Admin live matrix에는 live weather
+feature가 있을 때만 세 read-only tab route를 순회하는 guarded case를 추가했다.
+
+Linux/WSL에서 API integration, strict mypy, Web typecheck/lint/build를 검증했다. N150 Playwright
+runner는 현재 도구 컨텍스트에서 직접 사용할 수 없고 WSL Ubuntu 26.04 Chromium도 미지원이라,
+mock e2e는 Windows fallback runner에서 `admin-feature-detail-subpages.e2e.ts` 1건이 통과했다.
+Admin live list는 dedicated config로 6178 tests를 생성한다.
+
+다음 작업은 T-249 App-owned integrity source / known orphan fix다.
+
+## 2026-06-28 (codex) — T-247 Provider sync 운영 mutation 계약 정리
+
+upstream `kor-travel-map` `openapi.json`과 router를 확인했다. provider 자체 run-now/pause/resume/reset
+cursor mutation은 없고, 존재하는 운영 mutation은 import job cancel과 feature-update-request
+cancel/run-now, provider refresh policy upsert다. Pinvi는 provider sync 일반 mutation을 임의로 만들지
+않고, v0.2.0 범위를 import job cancel relay로 닫았다.
+
+`POST /admin/provider-sync/import-jobs/{job_id}/cancel`을 추가했다. 권한은 `admin` 전용이고
+`access_reason`은 필수다. Pinvi audit에는 `provider_import_job.cancel`을 남기며,
+`kor_travel_map_reason`이 없으면 upstream reason은 `access_reason`으로 대체한다. Web
+`/admin/provider-sync`는 queued/running import job에만 취소 버튼과 사유 입력 패널을 표시하고, 실패
+시 row를 낙관적으로 바꾸지 않는다.
+
+Linux/WSL에서 API unit/integration, strict mypy, Web typecheck/lint/build를 검증했다. WSL Ubuntu
+26.04에서는 Playwright Chromium 설치가 미지원이라 mock e2e는 Windows fallback runner에서
+`admin-etl-provider-sync.e2e.ts` 2건이 통과했다.
+
+다음 작업은 T-248 Feature detail subpages다.
+
+## 2026-06-28 (codex) — T-246 Debug live UI e2e 확장
+
+`apps/web/e2e/admin-debug-live.live.ts`를 추가해 Admin debug live read-only 경로를 별도 live
+suite로 고정했다. 테스트는 `/admin/debug/logs` render, sanitized polling fallback 상태,
+filter query 유지, live toggle/pause, request timeline 이동, raw secret pattern 미노출을 확인한다.
+운영 데이터에 matching timeline event가 없을 수 있어 summary 또는 "event 없음" alert 둘 다 정상
+route render로 인정한다.
+
+Pinvi admin client는 현재 요청의 `X-Request-Id`를 `kor-travel-map` admin/ops 호출에 전달한다.
+Debug live test는 UI credential 대신 `PINVI_ADMIN_LIVE_STORAGE_STATE`도 받을 수 있어 N150에서
+짧은 수명 storage state를 만들어 비밀번호 없이 실행할 수 있다.
+
+N150에서는 브랜치 checkout을 배포해 API/Web을 재빌드·재기동하고 health를 확인했다. N150 자체
+Playwright는 Ubuntu 26.04에서 Chromium 설치가 미지원이라 실행 불가했고, Windows fallback runner에서
+N150 Web/API 대상 `admin-debug-live.live.ts` 1건이 통과했다.
+
+다음 작업은 T-247 Provider sync 운영 mutation 계약 정리다.
+
+## 2026-06-28 (codex) — T-245 Debug log polling fallback
+
+v0.2.0 Admin debug live mode는 Loki/Promtail LogQL WebSocket 대신 sanitized polling fallback으로
+닫았다. `GET /admin/debug/logs/stream/status`가 `mode="polling"`, `poll_interval_ms=5000`,
+`sources=["kor_travel_map_system_logs", "kor_travel_map_api_call_logs"]`, `loki_enabled=false`,
+`sse_enabled=false`를 반환한다.
+
+Web `/admin/debug/logs`는 live toggle과 pause/resume을 제공한다. live 상태에서는 기존
+`/admin/debug/logs/system`과 `/admin/debug/logs/api-calls`를 현재 filter 그대로 interval 재조회하고,
+pause는 interval만 멈춘다. raw stdout/stderr, 운영 도메인/IP, secret value를 새로 노출하지 않는다.
+
+N150 live read-only / Playwright는 T-246에서 `/admin/debug/logs`, request timeline, masking assertion과
+함께 수행한다.
+
+다음 작업은 T-246 Debug live UI e2e 확장이다.
+
+## 2026-06-28 (codex) — T-244 Request timeline API
+
+`GET /admin/debug/request/{request_id}`가 Pinvi request id 중심 timeline을 반환한다. 로컬 source는
+`app.api_call_log`, `app.admin_audit_log`, `app.location_access_log`/outbox, `payload.request_id`가
+있는 `app.email_queue`이며, upstream `kor-travel-map` sanitized system/API logs는 보조 source로만
+붙는다.
+
+응답은 source별 `ok`/`degraded`, 시간순 event, duration/status/error code/sanitized detail을
+포함한다. admin audit `access_reason`/state payload, email 수신자·제목·payload·`last_error`,
+위치 user id·좌표·IP hash는 노출하지 않는다. upstream 보조 source 실패는 HTTP 200
+`status="partial"`로 접고, all-source not found는 404다.
+
+Web `/admin/debug/logs`에는 request id 검색을 추가했고, `/admin/debug/request/{request_id}`는
+source/event table로 timeline을 표시한다.
+
+N150 live read-only / Playwright는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
+
+다음 작업은 T-245 Loki/Promtail 또는 대체 log stream이다. N150 용량을 보고 Loki/Promtail과
+sanitized polling/SSE 대안을 선택한다.
+
+## 2026-06-28 (codex) — T-243 ETL live / Dagster 운영 게이트
+
+`/admin/etl/summary`가 Pinvi Dagster `/server_info`와 `/graphql`을 읽어 live snapshot을 반환한다.
+응답에는 Dagster version, repository/job/asset/schedule count, code location repository 목록,
+최근 run 상태가 들어간다. GraphQL 조회 실패는 `pinvi.status=degraded`로 강등하고 static
+app-owned registry와 email/Telegram/PII/location summary는 계속 반환한다. run tag 값은
+Admin 응답에 싣지 않는다.
+
+Web `/admin/etl`은 Pinvi app-owned job row마다 live/registry 상태, schedule cron/timezone,
+최신 run status를 표시하고, live code location과 recent Pinvi runs 영역을 추가했다.
+
+N150 API smoke / Playwright live는 현재 브랜치가 아직 운영 배포되지 않아 수행하지 않았다.
+
+다음 작업은 T-244 Request timeline API다. Pinvi request id 중심 timeline과 upstream
+`kor-travel-map` sanitized logs를 보조 event source로만 붙이는 경계를 유지한다.
+
+## 2026-06-28 (codex) — T-242 Telegram system summary/outbox ETL
+
+`pinvi_telegram_system_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다
+`app.telegram_system_notification_outbox`의 pending due/backoff/stuck, sent, skipped, failed,
+retry exhausted, 최근 24시간 category별 retry exhausted 비율을 payload 없이 bounded metadata로
+집계한다.
+
+`/admin/etl/summary`는 같은 Telegram outbox summary를 `pinvi.telegram_outbox`로 반환하고,
+Web `/admin/etl`은 due/backoff/stuck/retry exhausted, sent/skipped/failed, category별 이상률을
+표시한다. 응답과 metadata에는 payload, message text, user id, chat id, token, last_error 원문을
+넣지 않는다. weekly/daily 사용자 브리프 생성은 후속 `pinvi_telegram_weekly` 범위로 남겼다.
+
+후속으로 T-243 ETL live / Dagster 운영 게이트에서 N150 Dagster code location과 app-owned job
+rows, Admin ETL live UI 검증을 확장했다.
+
+## 2026-06-28 (codex) — T-289 Linux-only 개발 환경 / ADR-051
+
+ADR-051로 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행으로 고정했다.
+ADR-024의 NTFS worktree + WSL ext4 테스트 미러 모델과 ADR-017의 Windows `git.exe`
+amendment를 supersede했다.
+
+`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `docs/dev-environment.md`,
+`docs/agent-workflow.md`, `docs/runbooks/codegraph-worktrees.md`,
+`docs/agent-failure-patterns.md`, README/Sprint/task 추적 문서를 같은 기준으로 맞췄다.
+현재 Codex worktree의 `.git` 포인터는 Linux `git worktree repair`로 복구했다.
+`codegraph`가 처음에는 `/mnt/c/...` Windows shim으로 잡혔지만, `npm install -g --prefix
+$HOME/.local @colbymchenry/codegraph`로 Linux native `~/.local/bin/codegraph`를 설치하고
+`codegraph status && codegraph sync`를 통과시켰다.
+
+PR #274(T-241)는 CI success와 inline review thread 0건을 확인한 뒤 squash merge했다.
+다음 작업은 T-242 Telegram system summary/outbox ETL이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-241 `pinvi_location_log_archive` Dagster job
+
+`pinvi_location_log_archive` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:30
+`app.location_access_log`의 6개월 초과 archive 후보, archive tail과 active head 사이의
+hash-chain bridge 상태, 미처리 `location_audit_outbox` blocker, purpose별 후보 수를 dry-run
+metadata로 집계한다.
+
+`/admin/etl/summary`는 같은 archive dry-run summary를 `pinvi.location_log_archive`로 반환하고,
+Web `/admin/etl`은 후보 수, active row 수, pending outbox, chain bridge 일치 여부를 표시한다.
+응답과 metadata에는 user id, raw coordinate, IP 원문을 넣지 않는다. 실제 archive/delete/anonymize
+실행은 T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
+다음 작업은 T-242 Telegram system summary/outbox ETL이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-240 `pinvi_pii_retention` Dagster job
+
+`pinvi_pii_retention` asset/job/schedule을 추가했다. Dagster는 매일 KST 04:15 `app` schema의
+삭제 계정 PII, OAuth identity, 만료 verification/reset token, 오래된 session, 만료 OAuth transient
+row, 6개월 초과 location/admin audit PII 후보를 dry-run metadata로 집계한다.
+
+`/admin/etl/summary`는 같은 retention dry-run summary를 `pinvi.pii_retention`으로 반환하고,
+Web `/admin/etl`은 전체 후보, 삭제 계정, session, token, location log, 권한 계정 제외 수를 표시한다.
+응답과 metadata에는 user id, email, token hash, raw coordinate를 넣지 않는다. 실제
+delete/anonymize/archive 실행은 T-276 kill-switch/dashboard/evidence log 범위로 남겼다.
+
+다음 작업은 T-241 `pinvi_location_log_archive` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-239 `pinvi_email_outbox` Dagster job
+
+`pinvi_email_outbox` asset/job/schedule을 추가했다. Dagster는 15분마다 `app.email_queue`의
+pending due/backoff/stuck, failed/bounced/complained, retry exhausted, 최근 24시간 template별
+실패율을 PII 없이 bounded metadata로 집계한다. 실제 발송 source of truth는 기존 FastAPI lifespan
+`email_outbox_worker_lifespan`으로 유지한다.
+
+`/admin/etl/summary`는 같은 email outbox summary를 `pinvi.email_outbox`로 반환하고, Web
+`/admin/etl`은 due/backoff/stuck/retry exhausted와 template 실패율을 표시한다. hard-bounce/complaint
+suppression 집행과 domain verification 운영 체크는 T-257/T-277 범위로 남겼다.
+
+다음 작업은 T-240 `pinvi_pii_retention` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-238 Pinvi app-owned ETL 표준 / ADR
+
+ADR-050으로 Pinvi `apps/etl` app-owned Dagster job 표준을 고정했다. Pinvi ETL은 `app`
+schema 소유 job만 담고, feature/provider 적재와 `feature` / `provider_sync` schema 작업은
+`kor-travel-map` 책임으로 유지한다.
+
+신규 job 표준은 import-time side effect 금지, `Asia/Seoul` schedule, transient failure
+기본 retry/backoff, idempotency key 또는 queue claim, bounded run metadata/log, retry exhausted
+failure의 `run_failure_sensor` 기반 Sentry/Telegram outbox 알림, destructive job dry-run gate다.
+ETL runbook과 Dagster bridge 문서, Sprint 5 DoD, AGENTS/CLAUDE 진입 요약을 같은 기준으로 맞췄다.
+
+검증은 Windows worktree에서 `git diff --check`로 수행했다. PR 생성 후 사용자 지시대로 Windows
+Playwright e2e와 GitHub checks를 확인하고 merge한다.
+
+다음 작업은 T-239 `pinvi_email_outbox` Dagster job이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-237 WebSocket backend hardening / metrics
+
+Trip WebSocket backend에 close code 구조화 로그와 Prometheus gauge/counter를 추가했다.
+`pinvi_api_ws_active_connections`, connection accept/reject, close code/reason, client message,
+broadcast result, send timeout/error metric을 bounded label로 기록한다. `trip_id`/`user_id`는
+metric label에는 넣지 않고 close 구조화 로그에만 남긴다.
+
+회귀 테스트는 broker 단위 metric/stale-removal/cap rejection, WebSocket permission/rate-limit/
+connection-cap/heartbeat-timeout close metric까지 보강했다. 문서의 rate-limit slot 반환 설명도
+T-185/T-236a 구현과 맞게 close grace 동안 slot을 유지하는 것으로 정정했다.
+
+검증은 WSL ext4 미러에서 수행했다. `ruff check` targeted, `ruff format --check` targeted,
+`mypy --strict app`, `pytest -q tests/unit/test_realtime_broker.py`, `pytest -q
+tests/integration/test_ws_trip_channel.py`가 통과했다.
+
+다음 작업은 T-238 Pinvi app-owned ETL 표준 / ADR이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-236a WebSocket multi-client N150 live e2e drill
+
+N150 live mutating Playwright로 실제 WebSocket broadcast와 reconnect 뒤 Trip snapshot reload를
+검증했다. 테스트는 public Web/API를 대상으로 임시 verified 사용자를 만들고, 두 브라우저 컨텍스트가
+같은 Trip을 연 상태에서 API mutation broadcast와 reconnect 이후 추가 mutation reload를 확인한다.
+
+드릴 중 운영 drift 2건을 발견해 함께 고쳤다. 먼저 `pinvi-api`가 `uvicorn --workers 2`로 떠 있어
+process-local realtime broker가 worker 간 broadcast를 전달하지 못했다. Pinvi Docker/compose 기본값을
+`PINVI_API_WORKERS=1`로 맞추고, `kor-travel-docker-manager` PR #44도 같은 운영 compose 계약으로
+머지했다. 다음으로 public Web origin의 CORS preflight가 로컬 origin 고정값 때문에 400으로 떨어져,
+docker-manager PR #45에서 `PINVI_PUBLIC_API_URL`과 `PINVI_CORS_ALLOWED_ORIGINS`를 gitignore `.env`
+주입값으로 분리했다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. `npm -w @pinvi/web run typecheck`,
+`npm -w @pinvi/web run lint`, Windows `npm -w @pinvi/web run test:e2e:live-mutating -- --workers=1`
+1건이 통과했다. 운영 `ktdctl pinvi --build`는 알려진 geo source empty check 때문에 exit code 1로
+끝나지만, Pinvi API/Web 컨테이너는 재생성 후 healthy이며 live e2e가 통과했다.
+
+다음 작업은 T-237 WebSocket backend hardening / metrics다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-236 WebSocket multi-client collaboration e2e
+
+Trip 상세 협업 mock e2e를 2~5 브라우저 컨텍스트 기준으로 확장했다. 같은 여행을 보는 두 컨텍스트가
+`presence.update`와 `trip.updated` broadcast를 반영하는지, WebSocket 재연결 뒤 `poi.updated`
+broadcast가 최신 HTTP snapshot reload로 이어지는지, 5개 컨텍스트 presence fan-out와 offline cleanup이
+상태 문구에 반영되는지 검증한다.
+
+테스트 Fake WebSocket은 React Strict Mode 재마운트와 재연결에서 닫힌 이전 socket이 배열에 남아도
+마지막 active socket을 기준으로 서버 이벤트를 넣도록 정리했다. 이로써 dev server와 실제 브라우저
+runner 조합에서 재연결 케이스가 flake 없이 통과했다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. `npm -w @pinvi/web run typecheck`,
+`npm -w @pinvi/web run lint`, Windows `PLAYWRIGHT_BASE_URL=http://localhost:12805 npm -w @pinvi/web run test:e2e -- trip-collab.e2e.ts --workers=1`
+5건이 통과했다.
+
+기존 T-236 설명의 N150 staging live 검증은 별도 운영 drill 성격이 커서 T-236a로 분리했다. 다음
+작업은 T-236a WebSocket multi-client N150 live e2e drill이다. 신규 Task 진입 전 최근 2일 PR 리뷰
+코멘트를 다시 확인한다.
+
+## 2026-06-28 (codex) — T-288 Task 문서 분리 정책 반영
+
+`kor-travel-map`의 task 문서화 정책을 확인했다. 해당 저장소는 열린 task를 `docs/tasks.md`,
+완료·아카이브를 `docs/tasks-done.md`, 현재 진척과 "다음 한 작업"을 `docs/resume.md`로 분리한다.
+Pinvi도 같은 방식으로 `docs/tasks-rule.md`와 `docs/tasks-done.md`를 추가하고, 신규 task 진입 전
+최근 2일 PR 리뷰 코멘트 확인과 task 분리 기준을 문서화했다.
+
+최근 2일 PR 확인 결과 inline review comment는 0건이었다. 사람 top-level 리뷰 코멘트는 #238과
+#264의 운영·법무 gap 리뷰 2건이며, #264에서 T-256~T-286으로 이미 반영하고 답변했다. 신규 차단
+코멘트는 없다.
+
+기존 `tasks.md`의 legacy 완료 이력 전체 이관은 `T-288-legacy-task-archive`로 분리했고,
+2026-06-29 해당 이관을 완료했다. 당시 다음 작업은 T-236 WebSocket multi-client collaboration e2e였다.
+
+## 2026-06-27 (codex) — T-235 Optimistic lock / conflict dialog
+
+Trip 상세 화면의 Trip/POI 편집 mutation이 `409 VERSION_CONFLICT`를 단순 오류로 표시하지 않고,
+최신 TripView를 다시 불러온 뒤 conflict dialog를 연다. 다이얼로그는 변경 필드별 서버 값/내 값을
+비교하고, 선택한 내 값만 최신 version으로 재시도하거나 내 값 전체 LWW 덮어쓰기를 수행한다.
+
+POI 편집기는 저장 요청 결과를 기다린 뒤 성공 시에만 닫도록 바꿔 충돌 시 사용자의 입력 draft를
+유지한다. 서버 409 응답은 현재 row를 아직 details로 내려주지 않으므로, 이번 UI는 충돌 직후 상세
+재조회 결과를 server value로 사용한다. Day rename/delete API에는 `If-Match`가 없어 T-287
+follow-up으로 분리했다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. api-client/web/mobile typecheck,
+Web lint/build, `conflictResolution.test.ts`, API 409 회귀 2건, Windows Playwright
+`trip-conflict.e2e.ts` 2건이 통과했다.
+
+다음 작업은 T-236 WebSocket multi-client collaboration e2e다.
+
+## 2026-06-27 (codex) — T-234 WebSocket client invalidation / auth close handling
+
+`TripRealtimeClient`가 WebSocket close code/reason을 분류하고 상태로 노출한다. `4401`은
+`authApi.refresh()` 성공 후 즉시 재연결하고, `4403`은 재연결 없이 권한 상실 안내와 여행 목록 CTA를
+표시한다. `4408`/`4429`는 연결 제한/rate-limit 상태와 backoff 안내를 표시한다.
+
+`queryKeys`에 realtime domain event → TanStack Query invalidation key helper를 추가했다.
+POI/day/trip 계열은 trip detail/list prefix, comment 계열은 comments key로 매핑된다. 현재 사용자
+Trip 상세는 raw fetch 기반이므로 helper로 reload 대상 event를 판정하고, in-flight reload promise를
+공유해 HTTP mutation reload와 WebSocket event reload가 같은 tick에 겹쳐도 1회만 요청한다.
+
+검증은 WSL ext4 미러와 Windows Playwright runner에서 수행했다. api-client/web/mobile typecheck,
+Web lint, Web build, `tripRealtimeClient.test.ts` Vitest 8건이 통과했다. Windows Playwright는 WSL
+Next dev server를 대상으로 `trip-detail.e2e.ts` 3건(기본 렌더, 4403 권한 상실, 4429 backoff)을
+통과했다.
+
+다음 작업은 T-235 Optimistic lock / conflict dialog다.
+
+## 2026-06-27 (codex) — T-233 리뷰 코멘트 반영 / legal-ops Task 보강
+
+PR #264 리뷰 코멘트를 반영해 Sprint 5/6 상세 계획을 보강했다. Sprint 5에는 review gap
+crosswalk(T-256), email deliverability/provider tracking preflight(T-257), Sprint 6 legal/ops
+prep gate(T-258)를 추가하고 release candidate gate를 T-259로 조정했다.
+
+Sprint 6에는 PIPA incident console, retention 실행/dashboard, email deliverability/suppression,
+DSR intake, content moderation, RBAC grant/revoke, user lifecycle admin action, rate-limit/abuse
+surface, security threat model/penetration pass, mobile v1.0 scope gate, AI companion v1.0 scope gate,
+cross-track #238/#264 gap closure를 T-275~T-286으로 추가했다. `apps/mobile`은 v1.0 Web/API/Admin
+출시 필수 범위에서 제외하고 Sprint M-1 별도 gate로 관리하며, user-facing AI companion은 v1.0에
+포함하지 않는다고 명시했다.
+
+PR #264 merge 후 T-234를 완료했다. 다음은 T-235 Optimistic lock / conflict dialog다.
+
+## 2026-06-27 (codex) — T-233 Sprint 5/6 상세 Task 계획
+
+`docs/execplan/sprint5-v020-release-plan.md`를 새로 작성해 Sprint 5 `v0.2.0` 잔여 작업을
+T-234~T-259로 쪼갰다. WebSocket 후속, app-owned ETL job, request timeline/log stream,
+provider sync 계약, feature detail, app integrity, backup/restore, Grafana, Admin live e2e,
+사용자/Admin 지도뷰 marker palette·색상 parity, release gate를 포함한다. API 테스트 케이스와
+mock/live UI e2e 카탈로그도 함께 정리했다.
+
+Sprint 6 `v1.0.0` 후속 초안은 T-260~T-286으로 넣었다. OR-Tools 스마트 정렬, category mapping
+override, Admin notice plan, MCP 운영 실증, backup hot-swap, geofencing, LBS/법무, 성능/보안,
+Odroid+N150 병행 운영, AI companion 분리, v1.0 live gate와 release가 포함된다. ARM image와
+GHCR 배포는 제외하고 노드 로컬 checkout/build/smoke 기준으로 정리했다.
+
+리뷰 반영 후 PR merge를 진행하고 T-234부터 시작한다.
+
+## 2026-06-27 (codex) — T-232 Trip WebSocket frontend client / presence 첫 연결
+
+Trip 상세 사용자 화면에 Sprint 5 WebSocket 첫 수직 슬라이스를 연결했다. `@pinvi/api-client`는
+`TripRealtimeClient`와 `tripWebSocketUrl`을 export하며, heartbeat, `ping`→`pong`, exponential
+backoff reconnect, 테스트용 WebSocket constructor 주입을 지원한다. `TripDetail`은
+`WS /ws/trips/{trip_id}`에 접속해 presence summary를 표시하고, POI/day/trip domain event를 짧게
+debounce한 뒤 상세 데이터를 reload한다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. `npm -w @pinvi/api-client run typecheck`,
+`npm -w @pinvi/web run typecheck`, `npm -w @pinvi/web run test -- tripRealtimeClient.test.ts`,
+`npm -w @pinvi/web run lint`, `npm -w @pinvi/mobile run typecheck`가 통과했다. 다음
+WebSocket 후속은 TanStack Query invalidation, 공유 presence store, 401 close token refresh,
+conflict dialog 구현이다.
+
+## 2026-06-27 (codex) — T-231 v0.2.0 후보 범위 정리
+
+`Unreleased`에 쌓인 post-v0.1.0 Admin/운영 보강을 Sprint 5 / `v0.2.0` 후보 범위로 정리했다.
+이미 main에 들어온 것은 Admin 운영 화면, ETL/provider sync read view, Grafana prod URL,
+dashboard/system 운영 지표, dedup/integrity action 일부, 파일/아바타/quota/operation 기능이다.
+
+남은 `v0.2.0` 후보 gate는 WebSocket 협업, Pinvi `app` schema 소유 ETL 추가 job,
+Loki/request timeline, backup/restore 1차 스테이징 훈련, release notes로 분리했다.
+`CHANGELOG.md`의 `Unreleased` 제목을 `v0.2.0` 후보로 바꾸고, Sprint 5 문서와 tasks를 같은 기준으로
+맞췄다. sidebar 설명도 기본 expanded + 선택적 compact icon-only 기준으로 정정했다.
+
+## 2026-06-27 (codex) — T-230 v0.1.0 릴리즈 상태 정합화
+
+`v0.1.0` tag와 GitHub Release가 이미 존재함을 확인했다. Release는 2026-06-13에 게시됐고,
+tag는 `2f8da02345581fd3065e9d818352bc187f65b3a9`를 가리킨다. 현재 main
+`d35f49e1faafa61380d9c2c0e2d6a1cb36d29108`은 post-v0.1.0 변경이므로 같은 tag를 다시 만들지
+않는다.
+
+`CHANGELOG.md`, `docs/tasks.md`, `docs/sprints/README.md`, `docs/sprints/SPRINT-4.md`,
+`AGENTS.md`, `CLAUDE.md`를 실제 상태에 맞춰 정리했다. `Unreleased` 절은 v0.1.0 이후 변경으로
+남기고, 다음 제품 작업은 v0.2.0 범위 정리로 둔다.
+
+검증은 GitHub Release/tag 조회, main 최근 CI 조회, N150 smoke로 수행했다. 최신 N150 checkout은
+`d35f49e`이며 API `/health`, DB health, Web `/admin/login`, Dagster `/server_info`,
+`kor-travel-map` `/health`가 모두 200을 반환했다. Odroid 실제 smoke와 backup/restore 복구 훈련은
+T-108 설명대로 Sprint 6 운영 게이트로 남긴다.
+
+## 2026-06-27 (codex) — T-229 Admin 완료 감사 / 추적 문서 최신화
+
+Admin 보강 프로그램의 코드 구현 상태를 다시 감사했다. 사용자 명시 요구사항 1~~14번은
+T-216~~T-225, T-218, T-220~T-222, T-228로 해소됐고, T-227 integrity issue action까지 PR
+merge와 N150 배포를 완료했다.
+
+이번 Task는 기능 추가가 아니라 추적 문서 정합화다. `docs/execplan/admin-console-gap-plan.md`의
+초기 placeholder/gap 표현을 현재 완료 상태로 갱신하고, 명시 요구사항별 완료 Task와 API/UI/e2e
+증거를 표로 남겼다. `docs/tasks.md`에서는 Admin 후속 항목을 T-207~T-229 완료 상태로 정리하고,
+T-216/T-228 sidebar 표현을 기본 expanded + 선택적 compact icon-only 토글로 통일했다.
+
+검증은 문서 diff 중심으로 수행했다. 후속 T-230에서 기존 `v0.1.0` tag/Release 존재를 확인하고
+릴리즈 상태 문서를 실제 상태로 정리했다.
+
+## 2026-06-27 (codex) — T-227 Integrity issue status mutation
+
+`kor-travel-map` 최신 main을 확인한 결과 `/v1/ops/consistency/*`는 read-only지만, 상태 조치
+계약은 이미 `PATCH /v1/admin/issues/{issue_id}`로 제공되고 있었다. 따라서 upstream 신규 PR 없이
+Pinvi가 기존 admin issue 계약의 `resolve` / `ignore` / `reopen`만 relay하도록 구현했다.
+
+Pinvi API는 `POST /admin/integrity/issues/{issue_id}/action`을 추가했다. admin 전용 endpoint가
+`access_reason`과 optional `kor_travel_map_reason`을 검증하고, upstream 성공 후
+`integrity_issue.action` audit을 기록한다. Web `/admin/integrity`는 issue table에 해결/무시/재오픈
+버튼과 reason dialog, 성공 notice, 목록 invalidate/refetch를 제공한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. WSL에서 admin client unit
+21건, admin dedup/integrity/debug integration 7건, ruff, mypy, Web/type package typecheck, 표준
+Web lint가 통과했다. Windows Playwright는 WSL Next server(12805)를 대상으로
+`admin-dedup-integrity-debug.e2e.ts --grep "정합성 페이지"` 1건이 통과했다.
+
+후속: PR #259를 merge했고 N150 배포와 API/Web/Dagster/upstream smoke를 완료했다.
+
+## 2026-06-27 (codex) — T-228 Admin sidebar 확장/축소 토글 정정
+
+사용자 정정에 맞춰 Admin 좌측 메뉴를 아이콘 전용으로 고정하지 않고, 기본 expanded 상태에서
+아이콘과 메뉴 라벨을 함께 표시하도록 되돌렸다. 데스크톱에서는 sidebar toggle button으로 compact
+icon-only 상태와 expanded 상태를 전환할 수 있고, 선호 상태는 browser localStorage에 저장한다.
+
+기존 active route 판정과 `admin-nav-*` test id는 유지했다. `/admin/trips/{trip_id}` 상세 e2e에는
+sidebar 기본 expanded, toggle 후 collapsed, 다시 expanded 상태를 확인하는 assertion을 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. WSL에서 Web typecheck와 lint가
+통과했고, Windows Playwright는 WSL dev server를 대상으로 `admin-trips.e2e.ts`의 여행 상세 케이스
+1건이 통과했다.
+
+후속: PR merge와 N150 배포를 완료했다. 이후 T-229 완료 감사로 추적 문서를 정리했다.
+
+## 2026-06-27 (codex) — T-215 Admin live e2e 확장 + N150 묶음 게이트
+
+Admin live Playwright gate를 최신 구현 상태에 맞게 보강하고 N150에서 묶음 검증을 완료했다.
+전체 catalog는 6176건이며, 실제 UI matrix 6173건과 로그인 검증 2건, catalog sanity 1건으로
+구성된다. 이번 gate는 운영 부하를 낮추기 위해 worker 1개와 throttle을 유지하고,
+`PINVI_ADMIN_LIVE_CASE_LIMIT=2000`으로 로그인 2건 + catalog 1건 + matrix 2000건, 총 2003건을
+실행해 모두 통과했다(3.1h).
+
+테스트 하네스는 운영 환경에서 드러난 세 가지 정책을 반영했다. `provider-sync`, `integrity`,
+`debug/logs`처럼 한 route에 여러 AdminTable이 있는 화면은 첫 `admin-table-scroll`을 ready 기준으로
+삼는다. `/admin/system`은 AdminTable route가 아니라 `admin-system-containers` ready marker로
+검증하고 정렬 matrix에서 제외한다. 긴 run 도중 admin 세션이 만료되면 5분 기본 auth refresh와
+route/navigation 직후 재로그인 복귀로 원래 route를 다시 검증한다.
+
+검증은 Windows Playwright runner와 WSL ext4 미러에서 수행했다. N150 실행 전후 smoke에서 API
+`/health`, `/health/db`, Web `/admin/login`, Dagster, upstream `kor-travel-map` health, Pinvi
+컨테이너 healthy 상태를 확인했다. Windows에서 `npm run test:e2e:admin-live:list`는
+`6176 tests in 1 file`을 반환했다. WSL ext4 미러에서 Web Prettier check, Web typecheck,
+Web lint가 통과했다.
+
+다음: T-215 PR을 만들고 merge한 뒤 N150에 한 번 더 배포한다. 그 후 v0.1.0 릴리즈 정리로
+진행한다. T-227 integrity issue status/fix mutation은 upstream `kor-travel-map` mutation 계약이
+추가될 때까지 보류한다.
+
+## 2026-06-27 (codex) — T-222 System view Docker / 의존 API 상태
+
+Admin 시스템 운영 화면을 추가했다. Pinvi API는 기존 `/admin/system/summary`를 유지하고,
+신규 `GET /admin/system/detail`에서 의존 API health와 Docker collector 상태, container 목록을
+함께 반환한다. Docker container 응답은 `container_id`, `name`, `image`, `state`, `status`,
+`health`, compose project/service만 포함하고 raw Docker labels/env, 운영 도메인, secret은 노출하지
+않는다.
+
+Docker socket은 compose에 기본 mount하지 않는다. `PINVI_DOCKER_SOCKET_PATH`가 존재하지 않거나
+권한이 없으면 `/admin/system/detail`은 실패하지 않고 `docker.status=unknown|down`과 빈
+`containers`로 강등한다. 운영에서 실제 container 수집을 켜려면 별도 안전 검토 후 host-local
+override로 socket 접근을 부여해야 한다.
+
+Web `/admin/system`은 의존 API 상태 카드와 Docker collector 상태, container table을 표시한다.
+Admin sidebar의 시스템 운영 그룹에 새 메뉴를 추가했고, live matrix route 목록에도 포함했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format/check,
+앱 코드 mypy, `test_admin_system_summary_api.py` 3건, Web Prettier check, typecheck, lint,
+Vitest 27건, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-priority3.e2e.ts` 시스템 화면 케이스 1건이 통과했다.
+
+다음: T-222 PR을 만들고 merge한 뒤 T-215 Admin live e2e 확장 + N150 묶음 게이트로 진행한다.
+
+## 2026-06-27 (codex) — T-221 Dashboard 운영 현황 그래프 / 부하 / 용량
+
+Admin `/admin` 대시보드의 운영 현황을 실제 지표 기반으로 확장했다. Pinvi API
+`GET /admin/stats/overview`는 생성 시각, API 실패율, API latency P95, 최근 24시간 hourly
+series, 서버 load average, 첨부 저장소 사용량, 전역/사용자 quota, 백업 경로 기준 디스크 사용량을
+반환한다. 응답에는 raw 운영 경로, 운영 도메인, secret을 넣지 않는다.
+
+Web 대시보드는 기존 system status와 통계 카드 위에 API 호출/실패, 가입/여행 생성 막대 그래프,
+서버 부하, 디스크 사용률, 첨부 저장소 사용량/한도 요약을 표시한다. Docker/container 상세 상태는
+T-222 System view에서 별도 화면으로 다룬다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff check,
+앱 코드 mypy, `test_admin_priority3_api.py` 3건, Web Prettier check, typecheck, lint, Vitest 27건,
+Web production build가 통과했다. 테스트 파일까지 포함한 mypy는 기존 fixture 인자 타입 미기재
+패턴에서 실패해 앱 코드 대상으로 범위를 좁혀 확인했다. Playwright는 Windows에서 실행했고,
+WSL Next 서버(12805)를 띄워 `admin-priority3.e2e.ts` 대시보드 케이스 1건이 통과했다.
+
+다음: T-221 PR을 만들고 merge한 뒤 T-222 System view Docker / 의존 API 상태로 진행한다.
+
+## 2026-06-27 (codex) — T-218 prod Grafana 주소 반영
+
+Admin `/admin/grafana`의 prod public URL 주입 경로를 정리했다. Web Docker build/runtime stage가
+`NEXT_PUBLIC_GRAFANA_URL`, `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`를 받도록 했고,
+`infra/docker-compose.app.yml`의 app-web build args도 같은 값을 전달한다. Grafana 컨테이너는
+`GF_SERVER_ROOT_URL`을 `NEXT_PUBLIC_GRAFANA_URL`과 맞춰 reverse proxy 뒤 embed/redirect origin이
+같아지도록 했다.
+
+실제 운영 도메인은 tracked 파일에 넣지 않았다. `infra/.env.prod.example`과 runbook에는
+`grafana.example.com` placeholder만 추가했고, 실제 값은 gitignore된 `infra/.env.prod`에서만
+다루도록 문서화했다. `/admin/grafana` URL 조합 로직은 `apps/web/lib/admin/grafana.ts`로 분리하고
+prod origin/path 조합과 fallback 단위 테스트를 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. Web Vitest 27건,
+Web typecheck, Web lint, Web production build, compose config parse, Prettier check가 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워 `admin-grafana.e2e.ts` 1건과
+admin-live catalog assertion 1건이 통과했다. PR merge 후 N150에 배포해 API/Web/Dagster/Grafana
+smoke를 완료했다.
+
+후속: T-218 PR은 merge됐고, T-221 Dashboard 운영 현황 그래프/부하/용량 상세보기를 완료했다.
+
+## 2026-06-27 (codex) — T-214 Seed / reset dev-only 안전장치
+
+Admin `/admin/seed`와 `/admin/reset`을 placeholder에서 dev/staging 전용 dry-run 화면으로 교체했다.
+Pinvi API는 `GET /admin/seed/scenarios`, `POST /admin/seed/scenarios/{scenario_key}`,
+`GET /admin/reset/status`, `POST /admin/reset`를 제공한다. production에서는 router include를 하지 않고,
+endpoint guard도 404를 반환한다.
+
+실제 DB reset/seed 실행은 노출하지 않았다. dev/staging route는 `dry_run=true`만 지원하고,
+`false`는 `422 DRY_RUN_ONLY`로 거절한다. seed는 scenario별 `RUN <scenario_key>`, reset은 `RESET`
+확인 문구와 `access_reason`을 요구한다. 성공한 dry-run은 `dev_seed.dry_run` 또는
+`dev_reset.dry_run` audit을 남긴다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+ruff check, mypy, `test_admin_seed_reset_api.py` 4건, schemas/api-client typecheck, Web typecheck,
+Web lint, schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고,
+WSL Next 서버(12805)를 띄워 `admin-seed-reset.e2e.ts` 3건과 admin-live catalog assertion 1건이
+통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+
+다음: T-214 PR을 만들고 merge한 뒤 T-218 prod Grafana 주소 반영으로 진행한다.
+
+## 2026-06-27 (codex) — T-213 Category mapping 운영 뷰
+
+Category mapping source of truth를 `kor-travel-map` `/v1/categories`로 결정했다. Pinvi는 category
+taxonomy/`maki_icon`을 자체 DB에 저장하지 않고, 16색 마커 팔레트 fallback과 drift만 운영 화면에서
+확인한다.
+
+Pinvi API는 `GET /admin/category-mappings`를 추가했다. `include_counts`, `active_only`를 upstream에
+전달하고, `q`는 code/label/path/tier/icon 로컬 필터로 적용한다. 응답은
+`source_of_truth`, `mode=read_only`, active/inactive/filtered count, `db_feature_total`,
+category item의 tier/db count 필드를 포함한다.
+
+Web `/admin/category-mapping`은 placeholder에서 실제 table route로 바뀌었다. summary, 검색,
+active/count filter, marker swatch preview, fallback/icon drift 표시, JSON export 초안을 제공한다.
+PUT/import와 Pinvi-owned override table은 별도 ADR/migration이 필요한 후속으로 남겼다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+mypy, `test_admin_category_mappings_api.py` 2건, schemas/api-client/web typecheck, Web lint,
+schemas Vitest, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next
+서버(12805)를 띄워 `admin-category-mapping.e2e.ts` 1건과 admin-live catalog assertion 1건이
+통과했다. N150 live는 T-215 묶음 게이트에서 수행한다.
+
+다음: T-213 PR을 만들고 merge한 뒤 T-214 Seed / reset dev-only 안전장치와 운영 비활성화로
+진행한다.
+
+## 2026-06-27 (codex) — T-226 Dedup verdict mutation
+
+Admin `/admin/dedup-review` detail panel에서 pending dedup 후보를 직접 판정할 수 있게 했다.
+Pinvi API는 `POST /admin/dedup-review/{review_id}/verdict`를 제공하고, `kor-travel-map`
+`PATCH /v1/admin/dedup-reviews/{review_id}`로 relay한다. 요청은 `decision`, `access_reason`,
+선택 `kor_travel_map_reason`, `decision=merged`일 때 필수 `master_feature_id`를 검증한다.
+성공 시 `dedup_review.decide` audit을 같은 transaction에서 남기고, `X-Request-Id` UUID를 보존한다.
+
+`kor-travel-map` 최신 OpenAPI를 확인했을 때 consistency issue/report 경로는 GET-only라,
+integrity status/fix mutation은 Pinvi 단독 상태로 만들지 않고 T-227로 분리했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff format check,
+mypy, focused pytest 26건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+후속: T-226 PR은 merge됐고, T-213에서 category mapping 운영 뷰를 진행했다. T-227은 upstream
+integrity mutation 계약이 추가되면 착수한다.
+
+## 2026-06-27 (codex) — T-212 Dedup review / integrity / debug logs 운영 화면
+
+Admin `/admin/dedup-review`, `/admin/integrity`, `/admin/debug/logs`를 placeholder에서 실제
+read-only 운영 조회 화면으로 교체했다. Pinvi API는 `GET /admin/dedup-review`,
+`GET /admin/integrity/issues`, `GET /admin/integrity/reports`,
+`GET /admin/debug/logs/system`, `GET /admin/debug/logs/api-calls`를 제공하고,
+`kor-travel-map` `/v1/admin/dedup-reviews`, `/v1/ops/consistency/*`,
+`/v1/ops/system-logs`, `/v1/ops/api-call-logs`를 서비스 토큰으로 proxy한다.
+
+Web은 dedup 후보 status/search/min score 필터와 feature A/B detail panel, 정합성 issue/report
+필터 table, sanitized system/API log 필터 table을 제공한다. provider sync와 새 ops route의 upstream
+error mapping은 공통 helper로 합쳤다. dedup verdict와 integrity status/fix mutation은
+reason/audit/idempotency/kill-switch 기준이 필요해 T-226으로 분리했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff, mypy,
+admin ops focused pytest 28건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-dedup-integrity-debug.e2e.ts` 3건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+후속: T-212 PR은 merge됐고, T-226에서 dedup verdict mutation을 완료했다.
+
+## 2026-06-27 (codex) — T-220 ETL / provider sync / Dagster 운영 화면
+
+Admin `/admin/etl`과 `/admin/provider-sync`를 placeholder에서 실제 운영 조회 화면으로 교체했다.
+Pinvi API는 `GET /admin/etl/summary`, `GET /admin/provider-sync`,
+`GET /admin/provider-sync/import-jobs`를 제공한다. Pinvi app-owned ETL registry는 현재 실제 Dagster
+정의에 맞춰 `pinvi_kasi_special_days`, `kasi_special_days_job`,
+`kasi_poi_rise_set_job`, `kasi_special_days_schedule`을 노출하고, feature/provider ETL 상태는
+`kor-travel-map` `/v1/ops/dagster/summary`, `/v1/ops/metrics`, `/v1/ops/providers`,
+`/v1/ops/import-jobs`를 proxy한다.
+
+Web `/admin/etl`은 Pinvi Dagster 상태, asset/job/schedule 목록, `kor-travel-map` Dagster counts,
+recent runs, provider import job status filter/table을 표시한다. Web `/admin/provider-sync`는
+provider/dataset key 검색과 import job status filter/table을 제공한다. upstream 일부 장애는
+ETL summary 전체를 실패시키지 않고 `kor_travel_map.status=degraded|down`과 `errors[]`로 강등한다.
+run-now/cancel mutation은 reason/audit/idempotency/kill-switch 기준이 필요해 후속 Task로 유지했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff check`, mypy,
+admin ops focused pytest 22건, schemas/api-client/web typecheck, Web lint, schemas Vitest,
+Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 띄워
+`admin-etl-provider-sync.e2e.ts` 2건과 admin-live catalog assertion 1건이 통과했다.
+N150 live는 기능 묶음 게이트(T-215)에서 수행한다.
+
+다음: T-220 PR을 만들고 merge한 뒤 T-212 Dedup review / integrity / debug logs 운영 화면으로
+진행한다.
+
+## 2026-06-27 (codex) — T-210 Pinvi feature request / upstream change request 운영 통합
+
+Admin `/admin/features/change-requests`를 placeholder에서 실제 운영 화면으로 교체했다. Pinvi API는
+`kor-travel-map` `GET /v1/admin/features/change-requests`와 `POST .../{request_id}/approve|reject`
+를 proxy하고, mutation 성공 후 `feature_change_request.approve|reject` audit을 남긴다.
+상태 충돌 409는 `INVALID_STATE`로 보존하고, `LOCK_BUSY` 계열 409만 retry/rate-limit로 다룬다.
+
+Web은 변경 요청 큐를 상태/액션/검색 필터, table, detail payload inspector, reason 입력,
+approve/reject action으로 운영할 수 있게 했다. mutation은 optimistic update를 적용하고 실패 시
+이전 list 상태로 rollback한다. 기존 `/admin/feature-requests` 화면은 upstream `request_id`가
+저장된 제안에서 변경 요청 큐로 이동하는 링크를 제공한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+admin client/feature/feature-request focused pytest 28건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버
+(12805)를 띄워 `admin-feature-change-requests.e2e.ts` + `admin-feature-requests.e2e.ts` 5건이
+통과했다. N150 live API/UI/e2e는 사용자 지시에 따라 기능 묶음이 더 모인 뒤 T-215 게이트에서
+진행한다.
+
+다음: T-210 PR을 만들고 merge한 뒤 T-220(`/admin/etl` + provider sync + Dagster 운영 화면)에
+진입한다.
+
+## 2026-06-27 (codex) — T-225 여행계획/날짜/POI 복사·이동·삭제 오케스트레이션
+
+Admin이 여행계획, 날짜, POI를 복사·이동·삭제할 수 있는 운영 작업을 추가했다.
+`/admin/trips/{trip_id}/operation-impact`, `/copy`, `/move`, `DELETE /admin/trips/{trip_id}`,
+날짜 단위 `/admin/trips/{trip_id}/days/{day_index}/*`, POI 단위 `/admin/pois/{poi_id}/*`
+operation endpoint가 추가됐고, 모든 mutation은 `access_reason`을 감사 로그에 남긴다.
+
+여행계획 copy는 기존 사용자 복사 흐름을 commit 옵션으로 재사용하되 admin audit과 같은
+transaction에 묶었다. 날짜/POI 이동은 대상 여행/day를 선택해 하위 POI, 첨부, 댓글을 move 또는
+delete 정책으로 처리한다. 현 FK 구조상 day/POI/첨부 orphan은 허용하지 않고, impact API와 Web
+dialog가 `allowed=false`와 사유를 표시한다.
+
+Web `/admin/trips/{trip_id}`와 `/admin/pois/{poi_id}` 상세에 운영 작업 dialog를 추가했다. dialog는
+대상 여행 검색, 대상 day 입력, 하위 항목 정책, 영향도 요약, reason 입력, 실행 결과, audit refresh를
+포함한다. 공유 Zod schema와 `@pinvi/api-client` operation 함수도 추가했다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API ruff, mypy,
+`test_admin_trips_api.py` + `test_admin_pois_api.py` 18건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Playwright는 Windows에서 실행했고, WSL Next 서버
+(12805)를 재사용해 `admin-trips.e2e.ts` + `admin-pois.e2e.ts` 8건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-210(Pinvi feature request와 upstream change request 운영 통합)에
+복귀한다. T-210 WIP stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어
+있다.
+
+## 2026-06-27 (codex) — T-224 여행/날짜/POI 파일 업로드와 용량 정책
+
+여행계획, 날짜, POI에 파일 첨부 metadata를 등록/조회/삭제할 수 있게 했다. 파일 본문은 기존
+RustFS presigned PUT 흐름을 쓰고, DB에는 `app.curated_plan_attachments` metadata만 저장한다.
+T-224에서 `trip_day_index`를 추가해 day target을 표현하고, 파일 용량 정책은
+`app.storage_settings` 전역값과 `app.users` 사용자별 override를 함께 사용한다.
+
+API는 `/trips/{trip_id}/days/{day_index}/attachments*`, `/trips/{trip_id}/files`,
+`/users/me/files`, `/admin/files`, `/admin/settings/files`, `/admin/users/{user_id}/file-quota`를
+추가했다. quota는 upload-url 발급 시 개별 파일 크기를 조기 차단하고, metadata 등록 시
+개별 파일/여행계획 총량/사용자 총량을 DB attachment metadata 기준으로 검사한다. Admin 변경은
+`settings.files_update`, `user.file_quota_update`, `attachment.delete` audit으로 남긴다.
+
+Web은 사용자 `/files` 파일함, Admin `/admin/files` 파일 관리, Admin 사용자 상세의 파일 quota
+override, Trip detail의 day/POI 첨부 패널을 추가했다. `/admin/trips/{trip_id}` 상세에도 해당 여행의
+파일 목록과 다운로드 동선을 붙였다. 삭제는 metadata soft delete이며 RustFS orphan cleanup/reconcile은
+후속 후보로 남아 있다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+관련 integration 27건, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+Playwright는 Windows에서 실행했고, WSL Next 서버(12805)를 재사용해 신규 `admin-files.e2e.ts` /
+`my-files.e2e.ts` 2건과 기존 admin/trip 관련 8건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)에 진입한다.
+T-210 WIP stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
+## 2026-06-27 (codex) — T-223 사용자 아바타 / RustFS 이미지 관리
+
+사용자와 Admin이 RustFS 기반 아바타 이미지를 볼 수 있고 업로드/교체/삭제할 수 있게 했다.
+`app.users`에는 `avatar_bucket`, `avatar_storage_key`, MIME, byte size, 갱신 시각을 추가했고,
+`app.storage_settings` 단일 행으로 전역 아바타 최대 업로드 크기(기본 2MiB)를 관리한다.
+
+API는 `/users/me/avatar/upload-url`, `PUT/DELETE /users/me/avatar`,
+`GET /users/me/avatar/download-url`을 제공한다. Admin은 `/admin/users/{user_id}/avatar/*`로
+대상 사용자 아바타를 관리하고, `/admin/settings/avatar`에서 전역 크기 제한을 조회/변경한다.
+Admin 변경은 `user.avatar_replace`, `user.avatar_delete`, `settings.avatar_update` audit으로 기록한다.
+
+Web `/profile`에는 아바타 섹션을 추가했고, `/admin/users/{user_id}`에는 사용자 아바타 관리와
+전역 제한 설정을 추가했다. presigned PUT은 기존 RustFS 흐름을 재사용하되, 아바타 endpoint는
+image MIME과 전역 크기 제한을 별도로 강제한다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API `ruff`, mypy,
+storage unit 9건, avatar/admin focused integration 7건, schemas/api-client/web typecheck,
+Web lint, Web production build가 통과했다. Windows Playwright는 WSL Next 서버(12805)를 재사용해
+`admin-users.e2e.ts` + `profile-avatar.e2e.ts` 4건이 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-224(여행/날짜/POI 파일 업로드와 용량 정책)에 진입한다. T-210 WIP
+stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
+## 2026-06-27 (codex) — T-219 POI Admin 직접 생성
+
+Admin POI 목록에 생성 dialog를 추가했다. 운영자는 `/admin/trips` 검색 결과에서 여행계획을
+선택하고, day/sort_order, feature_id 또는 POI 이름, 좌표/주소, 마커 override, 예정 시각,
+메모, 예산/실사용 금액, URL, 작업 사유를 입력해 POI를 직접 만들 수 있다. UI는 이름/좌표/주소를
+`feature_snapshot`으로 조립하고, 생성 성공 시 `/admin/pois/{poi_id}` 상세 화면으로 이동한다.
+
+백엔드는 `POST /admin/pois`를 추가했다. admin 전용이며 삭제된 trip에는 생성하지 않는다.
+없는 `trip_day`는 사용자 POI 생성 흐름과 동일하게 자동 생성하고, KASI rise/set 초기 row도 생성한다.
+snapshot에 지역 코드가 있고 trip primary region이 비어 있으면 `poi_snapshot` source로 보정한다.
+`poi.create` audit은 POI row와 같은 transaction에 기록하며, audit 실패 시 POI 생성도 rollback된다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API focused pytest 8건,
+API ruff, focused mypy, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+Web mock e2e는 WSL Next 서버(12805)를 Windows Playwright runner가 재사용하는 방식으로
+`admin-pois.e2e.ts` 3건 모두 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-223(사용자 아바타/RustFS 이미지 관리)에 진입한다. T-210 WIP
+stash는 `wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
+## 2026-06-27 (codex) — T-217 Trip Admin 직접 생성
+
+Admin 여행 목록에 생성 dialog를 추가했다. 운영자는 `/admin/users` 검색 결과에서 owner를
+마스킹 이메일/닉네임 기준으로 선택하고, 여행계획명, 날짜, 공개 범위, 상태, 지역 힌트,
+행정구역 코드, 설명, 작업 사유를 입력해 여행계획을 직접 만들 수 있다. 생성 성공 시 방금 만든
+`/admin/trips/{trip_id}` 상세 화면으로 이동한다.
+
+백엔드는 `POST /admin/trips`를 추가했다. admin 전용이며 삭제/비활성 owner에는 생성하지 않는다.
+`trip.create` audit은 trip row와 같은 transaction에 기록하고, owner email 원문은 응답/감사 로그에
+남기지 않는다. audit append 실패 시 trip 생성도 rollback된다.
+
+검증은 로컬 WSL ext4 미러와 Windows Playwright runner에서 수행했다. API focused pytest 7건,
+API ruff, focused mypy, schemas/api-client/web typecheck, Web lint, Web production build가 통과했다.
+WSL Playwright mock e2e는 Chromium 바이너리 부재로 실행 전 실패했지만, 같은 spec은 WSL Next
+서버(12805)를 Windows Playwright runner가 재사용하는 방식으로 3건 모두 통과했다.
+
+다음: PR을 만들고 merge한 뒤 T-219(POI Admin 직접 생성)에 진입한다. T-210 WIP stash는
+`wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있다.
+
+## 2026-06-27 (codex) — T-216 Trip Admin 상세 운영성 보강
+
+Admin 좌측 메뉴가 현재 route와 무관하게 dashboard 선택 상태로 보일 수 있는 문제를
+가장 긴 href prefix active 판정으로 고쳤고, sidebar를 icon-only compact view로 줄여 본문
+공간을 확보했다. 각 메뉴 아이콘은 title/aria-label/`aria-current`를 갖는다.
+
+`/admin/trips/{trip_id}` 상세 응답에는 이제 `days`와 `pois`가 포함된다. `days`는 날짜별
+`poi_count`를 제공하고, `pois`는 `trip_day_pois` attachment의 snapshot 기반 label/주소/좌표,
+일정/메모/비용/URL/추가자 정보를 제공한다. Web 상세 화면은 owner/가입 동반자/POI 추가자를
+`/admin/users/{user_id}`로 연결하고, 미가입 초대자는 별도 상태로 표시한다. 상세 계획 섹션에는
+day/POI 목록을 추가했으며, POI row 클릭 시 지도 preview, snapshot, 상세 metadata,
+`/admin/pois/{poi_id}` 링크를 포함한 dialog를 띄운다.
+
+추가 요청 12~14번은 범위가 커서 T-223(사용자 아바타/RustFS 이미지 관리), T-224(여행/날짜/POI
+파일 업로드와 용량 정책), T-225(여행계획/날짜/POI 복사·이동·삭제 오케스트레이션)로 분리해
+`docs/execplan/admin-console-gap-plan.md`와 `docs/tasks.md`에 추가했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 4건, API ruff, focused mypy,
+schemas/api-client/web typecheck, Web lint, Web production build가 통과했다. local Playwright
+mock e2e는 WSL Chromium 바이너리 부재로 실행 전 실패했으며, 추가 e2e는 CI 또는 T-215 N150
+묶음 게이트에서 확인한다.
+
+T-216은 PR #242로 merge 완료했다. T-210 WIP stash는
+`wip-t210-change-requests-before-admin-addendum` 이름으로 보존되어 있으며, T-223~T-225 이후
+또는 우선순위 재조정 시 복원한다.
+
+## 2026-06-27 (codex) — T-209 Admin Features read proxy / 화면 구현
+
+`kor-travel-map` Admin 최신 계약을 확인해 Pinvi `/admin/features` read-only proxy와 Web 화면을
+구현했다. upstream 계약은 `GET /v1/admin/features`(`data.items[]`,
+`meta.page.next_cursor`, `meta.duration_ms`)와 `GET /v1/admin/features/{feature_id}`
+(`feature/sources/issues/overrides/versions/change_requests/files`)를 사용한다.
+
+백엔드는 `KorTravelMapAdminClient.list_features()` / `get_feature_detail()`와 FastAPI
+`/admin/features`, `/admin/features/{feature_id}` router를 추가했다. 이 경로는 admin/operator
+전용이며 Pinvi DB의 `feature.*` table을 직접 조회하지 않는다. Web은 기존 placeholder를 검색어,
+kind/status/provider/category/issue 필터, sort/order, page_size, cursor pagination, detail inspector로
+교체했다. shared Zod schema, API client, query key, live matrix, mock e2e fixture도 함께 보강했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 15건, API ruff, schemas/api-client/web
+typecheck, Web lint, schemas Vitest, admin live catalog/list(5966 cases), catalog assertion, Web
+production build가 통과했다. local Playwright mock e2e는 WSL Chromium 바이너리 부재로 실행 전
+실패했으며, 추가한 e2e는 CI 또는 T-215 N150 묶음 게이트에서 확인한다.
+
+다음: PR을 만들고 merge한 뒤 T-210에서 Pinvi feature request와 upstream change request 운영 화면을
+연결한다.
+
+## 2026-06-27 (codex) — T-208 Admin IA / 상태판 보강
+
+Admin 구현 프로그램의 첫 코드 Task인 T-208을 완료했다. sidebar를 Pinvi 운영 / 지도 데이터 /
+시스템 운영 그룹으로 재정렬하고, `kor-travel-map` Admin 참고 영역인 변경 요청, dedup review,
+provider sync, integrity, debug logs route를 placeholder로 추가했다. placeholder는 더 이상 단순
+skeleton이 아니라 기능 gap, Task ID, 구현 범위를 표시한다.
+
+백엔드에는 read-only `/admin/system/summary`를 추가했다. 이 endpoint는 admin/operator만
+조회 가능하며 Pinvi API, DB, Web, Dagster, `kor-travel-map` API, RustFS 상태를 `ok/degraded/down/unknown`
+카드 데이터로 반환한다. 응답에는 raw URL, 운영 도메인, secret을 넣지 않는다. Web 대시보드는 기존
+통계 카드 위에 이 상태 보드를 표시하고, live matrix는 새 route와 대시보드 상태 카드를 검사하도록
+확장했다.
+
+검증은 로컬 WSL ext4 미러에서 수행했다. API focused pytest 9건, API ruff, schemas/api-client/web
+typecheck, Web lint, admin live catalog/list, schemas Vitest, Web production build가 통과했다. N150 live
+browser 실행은 사용자 지시에 따라 여러 기능이 더 모인 뒤 T-215 묶음 게이트에서 진행한다.
+
+다음: PR을 만들고 merge한 뒤 T-209(`kor-travel-map` Admin proxy foundation + `/admin/features` 실제 화면)에
+진입한다.
+
+## 2026-06-27 (codex) — Admin 계획 리뷰 차단 이슈 반영
+
+다른 에이전트 리뷰에서 Admin 계획 PR의 차단 이슈 2건이 확인됐다. 공개 추적 문서에 남아 있던
+N150 bootstrap admin 이메일/비밀번호 조합 표현을 익명화하고, seed/reset production 정책은
+`disabled 응답` 선택지를 제거해 router 미등록/404로 고정한다. 보완 권고도 반영해 dedup route는
+기존 SPEC/API의 `/admin/dedup-review` 단수로 맞추고, T-209/T-211/T-212의 최신
+`kor-travel-map` OpenAPI 확인 게이트와 mutation reason/audit/idempotency/kill-switch 기준을
+계획에 추가했다.
+
+다음: 이 리뷰 반영 PR을 merge한 뒤 T-208(Admin IA / 메뉴 / 대시보드 상태판 보강) 구현에
+진입한다.
+
+## 2026-06-27 (codex) — Admin 기능 보강 계획 PR
+
+Admin 콘솔은 메뉴만 있고 기능이 비어 있는 route가 많아, 구현을 더 진행하기 전에
+`docs/execplan/admin-console-gap-plan.md`로 상세 실행 계획을 먼저 정리했다. `kor-travel-map`
+Admin의 feature, change request, dedup, provider sync, integrity, debug/log 화면을 참고하되,
+Pinvi가 `feature` / `provider_sync` schema를 직접 소유하지 않는 책임 경계를 계획에 명시했다.
+
+다음 순서는 이 계획 PR을 merge하고, 다른 에이전트 리뷰를 받은 뒤 T-208부터 Task 단위 PR로
+진행한다. 단위 기능 테스트는 로컬 WSL ext4 미러에서 수행하고, N150은 여러 기능이 모인 뒤
+묶음 live API/UI/e2e 게이트로 사용한다.
+
+## 2026-06-27 (codex) — N150 bootstrap admin 복구
+
+N150 운영 DB에 bootstrap 대상 계정과 admin role 사용자가 없어 Admin 로그인이 실패했다.
+현재 N150에는 local-only 운영 런북의 임시 credential로 복구 검증을 완료했다.
+
+재발 방지를 위해 API startup bootstrap admin 서비스를 추가했다. `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가
+설정된 환경에서만 `PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구하고, password hash가 바뀌면
+기존 세션을 폐기한다. 운영 compose가 해당 env를 컨테이너에 전달하도록 보강했고, admin/deploy
+런북과 실패 패턴 문서에 N150 확인 절차 및 PowerShell→WSL→SSH→Docker→Python 중첩 quote 금지
+규칙을 남겼다.
+
+## 2026-06-26 (claude) — 민감 배포 노트(LOCAL) + 푸시 전 보안 감사 절차
+
+반복 배포 실수를 민감정보 포함해 gitignore된 `docs/deploy-runbook.local.md`(LOCAL ONLY)에 상세
+기록하고, remote push 전 보안 감사를 AGENTS.md에 절차화했다 — **kor-travel-concierge 패턴에 정렬**
+(동일 파일명/구조 + `git diff --cached` 비밀 스캔 + 런북의 "푸시 전 추가 스캔"). 이 과정에서 직전
+#235가 노드 IP를 public main(deploy.md/journal.md)에 유출한 것을 발견·redact했다. `.gitignore`에
+`*.local.md`/명시 항목/`.local/` 추가, `CLAUDE.md` 동기, 런북을 각 worktree에 복사. 다음: 신규 worktree
+셋업 시 이 런북 복사를 기본 절차에 포함(`docs/runbooks/codegraph-worktrees.md`).
+
+## 2026-06-26 (claude) — Pinvi 이미지 GHCR 폐지 → 로컬 빌드 전환
+
+사용자 지시로 Pinvi 이미지를 GHCR에서 내리고 향후 push를 중단했다. N150에서 운영 중인
+`ghcr.io/digitie/pinvi-{api,web}:deploy-836a18f`를 로컬 `pinvi-*:latest-main`으로 retag하고
+`~/kor-travel-docker-manager/.env`를 로컬 태그로 바꿔 GHCR 의존을 제거했다(컨테이너 재생성
+없이 동일 콘텐츠 유지). `~/pinvi` 빌드 소스를 `origin/main`(836a18f)으로 동기. repo에서는
+`.github/workflows/docker-images.yml`(GHCR push)을 삭제하고 `docs/runbooks/deploy.md`를 실제
+`ktdctl pinvi --build` 로컬 빌드 흐름으로 재작성, `infra/.env.prod.example` 이미지 태그를
+로컬로 변경했다. **남은 일**: GHCR 패키지 실제 삭제는 `gh` 토큰 scope(`delete:packages`) 부족으로
+보류 — 사용자가 `gh auth refresh -s delete:packages,read:packages` 후 삭제하거나 웹 UI로 내린다.
+앞으로 운영 배포는 GHCR 없이 `cd ~/pinvi && git pull` → `ktdctl pinvi --build`.
+
+## 2026-06-26 (claude) — 미인증 로그인 시 재인증 메일 재발송
+
+이메일 인증이 안 된 계정으로 로그인하면 가입 인증(재인증) 메일을 자동 재발송하도록 구현했다
+(`docs/api/auth.md` §2.3/§3.1의 기존 계약을 채움). `resend_verification_email` 서비스(cooldown
+`pinvi_email_verification_resend_cooldown_seconds` 기본 60초, 직전 미사용 signup 토큰 폐기 후 신규
+24h 토큰 + 메일 enqueue)를 추가하고, 로그인이 `EmailNotVerifiedError`를 잡으면 자동 호출 +
+`details.verification_email_dispatched` 노출. enumeration-safe `POST /auth/verify-email/resend` 추가.
+프론트 로그인 화면에 "인증 메일 다시 보내기" 버튼 + 안내. zod/api-client 스키마 동기. WSL 게이트
+(ruff/format/mypy + 통합 12 pass, web typecheck/lint/build) 통과. 다음: rate-limit를 cooldown 외에
+SlowAPI 한도로도 묶을지 검토(현재는 per-user cooldown만).
+
+## 2026-06-25 (codex) — N150 Web healthcheck 포트 보정
+
+PR #231 merge 후 N150의 Pinvi checkout을 `3c16b75`로 fast-forward하고, docker-manager
+`.env`의 API/Web image tag를 `deploy-3c16b75`로 갱신해 재빌드·재기동했다. 1차 Web build는
+`esbuild` `ETXTBSY`로 실패했지만 Web 단독 재시도에서 통과했다.
+
+운영 Web/Admin/Signup route는 `12805`에서 200으로 응답했으나 Docker healthcheck가
+`localhost:3000`만 확인해 Web container가 `unhealthy`로 남는 문제가 있어,
+`apps/web/Dockerfile` healthcheck가 `PINVI_WEB_PORT`, `PORT`, `12805`, `3000` 후보를
+검사하도록 수정했다.
+
+## 2026-06-25 (codex) — 로컬 env / 인증 시간 / OAuth 상태
+
+로컬 `.env`가 legacy `TRIPMATE_*` 키만 갖고 있어 현재 앱 설정(`PINVI_*`)에 Resend와
+Google OAuth 값이 반영되지 않던 상태를 정리했다. 비밀값은 출력하지 않고 legacy 값을
+현재 키로 복사했고, dev URL은 ADR-047 기준 Web `12805`, API `12801`, Dagster `12802`로
+보정했다. Resend API key는 현재 `PINVI_RESEND_API_KEY`로 반영됐다.
+
+access token 기본 만료 시간은 10분으로 낮췄다. Google OAuth는 client id는 있으나
+client secret이 비어 있어 현 로컬 기준 비활성 상태가 맞다. provider enabled/start 판정도
+client id와 secret이 모두 있을 때만 통과하도록 API/Web/mobile 계약 문서와 테스트를 맞췄다.
+Admin 접근 URL은 `http://localhost:12805/admin`이다.
+
+## 2026-06-25 (codex) — 회원가입 이메일 발송 worker 복구
+
+회원가입 인증 메일이 `app.email_queue`에만 쌓이고 실제 발송되지 않는 문제를 수정했다.
+`process_pending_email_batch` 호출자가 없던 것이 원인이며, `email_outbox_worker_lifespan`을
+추가해 FastAPI startup에서 email queue drain worker가 실행되도록 `main.py`에 연결했다.
+worker 설정(`PINVI_EMAIL_OUTBOX_WORKER_ENABLED`, interval, batch size)을 추가하고,
+lifespan task 시작/취소 테스트와 Resend 문서/CHANGELOG/tasks/journal을 갱신했다.
+WSL ext4 미러에서 email worker focused pytest, 가입/비밀번호 재설정 관련 통합 pytest
+10건, 변경 API 파일 `ruff check`, 변경 app 파일 `mypy`를 통과했다.
+
+다음 작업은 이 변경을 기존 브랜치의 `kor-travel-map` 계약 미커밋 변경과 분리해 PR 범위를
+정리하는 것이다.
+
+## 2026-06-24 (codex) — Admin live UI e2e / N150 재배포
+
+Admin UI live e2e 전용 Playwright config와 3233개 케이스 매트릭스를 추가했다. N150에서는
+`ktdctl`로 Pinvi API/Web/Dagster를 재빌드·재기동했고, 운영 Web 번들 API URL을
+운영 API 도메인으로 보정했다. live 검증 중 발견한 `/auth/login` 응답 계약, backup container
+path, rate-limit, 장시간 access cookie 만료 문제를 수정했고 각 수정 단위는 커밋했다.
+최종 검증은 `PINVI_ADMIN_LIVE_CASE_LIMIT=2001`, worker 1, throttle 2100ms, auth refresh 600000ms
+기준 N150 live authenticated run `2004 passed`(2.8h)로 완료했다. 임시 admin/session과
+Playwright 결과 디렉터리 정리도 확인했다.
+
+다음 작업은 이 브랜치를 push하고 PR을 한 번 생성한 뒤, PR CI/리뷰 결과에 따라 v0.1.0 릴리즈
+직전 smoke/tag 절차로 이어가는 것이다.
+
+## 2026-06-25 (claude) — map/geo/concierge 최신 API 계약 동기화 (ADR-049)
+
+`kor-travel-map`/`kor-travel-geo`/`kor-travel-concierge` origin/main 최신 계약을 점검해 Pinvi를
+맞췄다. (1) map: PR #533이 public `pinvi-copy`를 폐지하고 admin `detail-snapshot`(`plan`→`content`)로
+옮겨, 큐레이션 import를 `KorTravelMapAdminClient.get_curated_detail_snapshot`(admin 서비스 토큰)로
+이관했다. (2) geo: `/v2/regions/within-radius`가 `radius_km`+`levels[]` 요청과 level별 그룹 응답
+(`sido`/`sigungu`/`emd`, `relation` contains|overlaps, `legal_dong`→`emd`)으로 바뀌어 client/router/schema를
+맞췄다(consumer 없어 라우터 표면 직접 변경). (3) concierge: 직접 통합 없이 doc-only 유지가 정답
+(그쪽 contract도 PinVi 직접 연결 배제) — 부정확한 doc 표현만 정정, net-new는 Sprint 6 MCP로 보류.
+ADR-049 + 계약 문서 동기화. WSL 게이트(ruff/mypy/unit 169/영향 통합 10) 통과. 다음: within-radius
+`relation`을 UI에서 쓸지 판단되면 표시 규칙을 정한다.
+
+## 2026-06-24 (codex) — Web Docker image vendor/domain workspace build 복구
+
+운영 배포용 Docker Images workflow 수동 실행에서 API image는 push됐지만 Web image가
+`npm install` 중 vendored `file:` tarball을 찾지 못해 실패했다. tarball 복사 후에는 build 단계에서
+`@pinvi/domain` workspace 해석이 빠진 문제가 드러났다. install 전
+`apps/web/vendor/vworld-map-web-1.0.0.tgz` / `apps/mobile/vendor/vworld-map-core-1.0.0.tgz`와
+`packages/domain/package.json`을 복사하도록 보강하고, `apps/web/package.json` dependency와
+`next.config.mjs` transpile 대상에도 `@pinvi/domain`을 추가한다. PR merge 후 Docker Images
+workflow를 다시 실행하고 운영 노드 배포를 계속한다.
+
+## 2026-06-24 (codex) — kor-travel-geo 신규 v2 API key 계약 대응
+
+`kor-travel-geo` 최신 v2 REST가 공개 API `key` query를 검증하므로 Pinvi geocoding client가
+모든 v2 POST(`/v2/geocode`, `/v2/reverse`, `/v2/search`, `/v2/regions/within-radius`)에
+`key=<PINVI_VWORLD_API_KEY>`를 붙이도록 변경했다. 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`는
+두지 않고, 같은 raw key를 `kor-travel-geo`의 `KTG_VWORLD_API_KEY`로 설정해 그쪽이
+공개 API key hash 저장/검증을 소유한다(ADR-048). key 미설정 시 upstream 호출 전에
+geocoding unavailable로 degrade하며, Pinvi 로그에는 key 원본이나 query 포함 URL을 남기지 않는다.
 
 ## 2026-06-23 (codex) — kor-travel-map #508 계열 prod endpoint redaction 점검
 
@@ -178,6 +1724,7 @@ google/start` + 공통 callback `pinvi://oauth?code=` + `/mobile/auth/oauth/exch
 (expo-web-browser) **결합 빌드** `54e933ef`를 main에서 트리거(진행 중) — 실기기 검증용 dev-client APK.
 
 **남은 것(외부/운영 선결)**:
+
 - **결합 EAS 빌드 완료 확인** + Android 기기 설치 후 `expo start --dev-client`로 지도/OAuth 실동작 smoke.
 - **Google Console**: 모바일 OAuth가 실제로 동작하려면 운영 callback(`pinvi-api.example.com/auth/oauth/google/callback`)이
   승인된 redirect_uri에 있어야 하고, dev에선 공개 터널이 필요하다(코드는 완성).
@@ -268,15 +1815,18 @@ foundation을 진행했다.
 - `RateLimitMiddleware`를 전역 적용했다. `/public/*` IP 60/min, 인증 사용자
   user/token 60/min, auth low 5/min, OAuth 10/min, storage upload 30/min,
   shared-token 60/min 정책을 적용한다.
-- T-108 foundation으로 GHCR multi-arch API/Web build workflow, compose image override,
+- T-108 foundation으로 당시 API/Web image workflow, compose image override,
   `scripts/deploy-node.sh`, N150/Odroid doctor scripts, 노드별 배포 runbook을 추가했다.
+  이후 2026-06-26 운영 결정으로 GHCR/multi-arch image 배포는 폐기하고 노드 로컬
+  checkout + 로컬 Docker build 기준으로 전환했다.
 - ADR-039를 추가해 운영 노드 간 DB live sync를 사용하지 않기로 확정하고, 관련
   runbook/doctor 점검 코드를 제거했다.
 
 **검증**: WSL ext4 mirror에서 API 전체 pytest 342 passed/1 skipped, API
 ruff/format/mypy, web lint/typecheck/build/Vitest 62 passed + schemas 6 passed, ETL 3 passed
-+ ruff/format/mypy, shell `bash -n`, dev/app compose config 통과. Windows git에서
-`git diff --check` 통과.
+
+- ruff/format/mypy, shell `bash -n`, dev/app compose config 통과. Windows git에서
+  `git diff --check` 통과.
 
 **다음 한 작업**: PR 생성 후 리뷰/merge. PR merge 뒤 main에서 `v0.1.0` tag와
 GitHub Release를 생성한다.
@@ -337,8 +1887,9 @@ Grafana dashboard 렌더링을 수동 smoke한다.
 
 kor-travel-map T-223c copy snapshot 계약을 Pinvi가 소비하도록 연결했다.
 
-- `KorTravelMapClient.get_curated_pinvi_copy()`가
-  `GET /v1/curated-features/{curated_feature_id}/pinvi-copy`를 호출한다.
+- `KorTravelMapAdminClient.get_curated_detail_snapshot()`가
+  `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+  (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) 호출한다 (ADR-049).
 - `POST /admin/notice-plans/imports/kor-travel-map-curated-features`를 추가했다. `mode`는
   `create` / `upsert` / `refresh`를 지원하고, 응답에는 `source_version` / `source_etag` /
   복사·재사용 POI 수를 포함한다.
@@ -388,6 +1939,7 @@ feature-backed POI를 찾아 재사용하고 없으면 새 POI를 생성한다(A
 2026-06-12 T-223d로 구현했다.
 
 **Claude 세션: 프론트 폼 a11y 스윕 + T-106 Telegram 백엔드 완성** (2026-06-10, `agent/claude-*`, PR #151~#166):
+
 - **폼 접근성 스윕 #151~#159** — 재사용 컴포넌트 `FormField`/`FormTextArea`/`FormSelect` +
   `validateForm`(Zod→필드별 한국어 메시지 + firstField) + `useDialogAutoFocus`(모달 포커스 이동/복원)를
   앱 전반에 적용: 공개 인증(login/signup), trip 생성·profile-complete, 모달 3종(TripEdit/NoticePlanCopy/
@@ -610,7 +2162,7 @@ DB/ORM을 `app.curated_trip_plans` / `app.curated_plan_pois` /
 ## 현재 상태
 
 **Sprint 2 핵심 DoD 마감 완료** (2026-06-01). OAuth G-4 + Notice copy + 통합
-테스트 27개 green. Sprint 1~3 + Sprint 4 PR-A(#15 CI 복원) / PR-B(#16 features
+테스트 27개 green. Sprint 1~~3 + Sprint 4 PR-A(#15 CI 복원) / PR-B(#16 features
 API scaffolding) 머지 완료. 통합 테스트 harness(PostGIS testcontainer)가
 `apps/api/tests/integration` 에 박힘 — 이후 백엔드 검증의 기반. async alembic 의
 DDL 미커밋 잠재 버그도 함께 수정(`alembic/env.py`). 진행 추적 문서 정합성은
@@ -648,7 +2200,7 @@ Pinvi ↔ kor-travel-map은 더 이상 함수 직접 호출이 아니라 OpenAPI
 `12301`)이다. `feature` / `provider_sync` schema 소유권은 그대로
 kor-travel-map에 있고, Pinvi는 `feature_id` + snapshot만 저장한다.
 **KASI 특일/출몰시각 계약 추가** (2026-06-04 codex) — `python-kasi-api`를 통해
-특일 계열 5개 dataset을 하루 1회, 과거 6개월~미래 18개월 범위로 upsert한다.
+특일 계열 5개 dataset을 하루 1회, 과거 6개월~~미래 18개월 범위로 upsert한다.
 삭제는 없다. POI 생성 시에는 좌표와 방문일로 "위치별 해달 출몰시각 정보조회"를
 1회 호출해 `app.trip_poi_rise_sets`에 저장한다.
 **T-067 KASI 구현 완료** (2026-06-05 codex) — `apps/etl`에
@@ -792,6 +2344,11 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 다음 한 작업
 
+> **갱신 (2026-06-28, codex)**: T-240 `pinvi_pii_retention` Dagster job을 완료했다.
+> 다음 작업은 **T-241 `pinvi_location_log_archive` Dagster job**이다. 기능 구현 Task는 단위
+> 검증을 로컬 WSL ext4 미러에서 수행하고, PR 생성 후 사용자 지시대로 e2e/CI 확인과 merge까지
+> 진행한다. 신규 Task 진입 전 최근 2일 PR 리뷰 코멘트를 다시 확인한다.
+
 > **갱신 (2026-06-16, claude)**: Expo/web 공용 코드 정리 — `apps/web/lib` 순수 로직 16개 +
 > 마커 스타일을 `@pinvi/domain`(신설)으로 모음, markerPalette↔design-tokens 중복 통합. 검증
 > typecheck/Vitest 68/build/lint/e2e 52 전부 green. maplibre-vworld-react 이슈 9건 등록
@@ -825,7 +2382,7 @@ trip primary region을 `poi_snapshot` source로 보강한다.
    관리 UI·outbox·trip 링킹·trip-link UI). **남은 후속(별 스코프)**: weekly/daily summary Dagster(§7,
    Sprint 5 ETL — 날씨/유가 kor_travel_map 의존), per-user 봇 토큰 vault(현재 단일 시스템 봇).
 2. **T-108 운영 배포 자동화** (Sprint 6, ADR-023/ADR-039) — Odroid M1S + N150
-   multi-platform Docker 빌드 + backup/restore 기반 수동 대체 운영.
+   노드 로컬 checkout/build + backup/restore 기반 수동 대체 운영.
 3. **kor_travel_map 연동 cutover — ✅ 완료** — T-181(client, #170) + **T-173/174/176/178**(feature read
    라우터 cutover, #171) + **T-175**(trip view batch + `etl_bridge` 제거, #172) + **T-180**(admin
    HTTP client + admin base 12301 정정, #173) + **T-179 백엔드**(`/admin/feature-requests`
@@ -839,12 +2396,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 ## 릴리즈 로드맵
 
-| 버전 | Sprint | ETA | 핵심 |
-|------|--------|-----|------|
-| `v0.1.0` | Sprint 4 | tag 대기 | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성 |
-| `v0.2.0` | Sprint 5 | +1 | 실시간 + ETL + Grafana embed + Backup 1차 |
-| `v1.0.0` | Sprint 6 | +2 | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
-| `v1.1.0+` | post-Sprint 6 | 후속 | PWA / 푸시 / kor-travel-concierge (별 repo) |
+| 버전      | Sprint        | ETA                   | 핵심                                                                     |
+| --------- | ------------- | --------------------- | ------------------------------------------------------------------------ |
+| `v0.1.0`  | Sprint 4      | released (2026-06-13) | 지도 + `vworld-map-web` + live feature read + CI/CD 재활성               |
+| `v0.2.0`  | Sprint 5      | +1                    | 실시간 + ETL + Grafana embed + Backup 1차                                |
+| `v1.0.0`  | Sprint 6      | +2                    | MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 |
+| `v1.1.0+` | post-Sprint 6 | 후속                  | PWA / 푸시 / kor-travel-concierge (별 repo)                              |
 
 ## 진척도
 
@@ -941,6 +2498,8 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 - ADR-039: 운영 노드 간 Postgres streaming replication 미사용
 - ADR-040: Docker 빌드/실행은 kor-travel-docker-manager 1차 + `scripts/docker-app.sh` 폴백
 - ADR-041: Expo `apps/mobile` 구조 스캐폴드 — 활성화는 Sprint M-1
+- ADR-042 ~ ADR-048: 로컬 포트 재정렬, Expo/mobile 지도 기준, Web `vworld-map-web`,
+  운영 도메인 비노출, `kor-travel-geo` v2 공개 API key 재사용 계약
 
 ## 운영 지시
 

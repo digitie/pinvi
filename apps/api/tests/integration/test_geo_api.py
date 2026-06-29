@@ -32,7 +32,14 @@ class _FakeKorTravelGeoClient:
 
     async def regions_within_radius(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("regions", kwargs))
-        return {"status": "ok", "candidates": [{"region_name": "광안동"}]}
+        return {
+            "status": "ok",
+            "center": {"lon": 129.0, "lat": 35.0},
+            "radius_km": 2.0,
+            "sido": [],
+            "sigungu": [{"code": "26500", "name": "수영구", "relation": "overlaps"}],
+            "emd": [{"code": "2650053000", "name": "광안동", "relation": "contains"}],
+        }
 
     async def geocode(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("geocode", kwargs))
@@ -68,16 +75,25 @@ async def test_geo_reverse_returns_candidates(
     assert fake_geo_client.calls[0][1] == {"lon": 129.118, "lat": 35.155, "radius_m": 200}
 
 
-async def test_regions_within_radius_returns_candidates(
+async def test_regions_within_radius_returns_grouped_levels(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any, fake_geo_client: Any
 ) -> None:
     user_id, _ = verified_user
     resp = await client.get(
-        "/regions/within-radius?lon=129.0&lat=35.0&radius_m=2000",
+        "/regions/within-radius?lon=129.0&lat=35.0&radius_km=2.0",
         cookies=auth_cookies(user_id),
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["data"]["candidates"][0]["region_name"] == "광안동"
+    data = resp.json()["data"]
+    assert data["radius_km"] == 2.0
+    assert data["emd"][0]["code"] == "2650053000"
+    assert data["emd"][0]["relation"] == "contains"
+    assert data["sigungu"][0]["name"] == "수영구"
+    # 라우터가 v2 계약(radius_km + levels[]) 그대로 전달하는지 확인.
+    assert fake_geo_client.calls[-1] == (
+        "regions",
+        {"lon": 129.0, "lat": 35.0, "radius_km": 2.0, "levels": ["sigungu", "emd"]},
+    )
 
 
 async def test_geo_reverse_rejects_out_of_korea(
@@ -119,7 +135,7 @@ async def test_regions_covering_point_returns_region(
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
-    assert data["boundary_level"] == "legal_dong"
+    assert data["boundary_level"] == "emd"
     assert data["region"]["region_name"] == "광안동"
 
 

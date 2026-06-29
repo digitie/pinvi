@@ -136,6 +136,7 @@ start_service api \
 
 start_service web \
   env NEXT_PUBLIC_PINVI_API_URL="http://127.0.0.1:${API_PORT}" \
+    NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED="${NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED:-0}" \
     npm --workspace apps/web run dev -- --hostname "${HOST}"
 
 start_service dagster \

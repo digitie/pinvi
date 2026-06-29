@@ -12,10 +12,14 @@ AttachmentPurpose = Literal[
     "media_asset",
     "avatar",
     "trip_attachment",
+    "trip_day_attachment",
     "poi_attachment",
     "curated_plan_attachment",
     "curated_poi_attachment",
 ]
+
+AVATAR_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+AttachmentScope = Literal["trip", "day", "poi", "curated_plan", "curated_poi"]
 
 
 class UploadUrlRequest(BaseModel):
@@ -34,6 +38,41 @@ class UploadUrlResponse(BaseModel):
     expires_at: datetime
     max_upload_bytes: int
     public_url: str | None = None
+
+
+class AvatarUploadUrlRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=255)
+    content_length: int = Field(gt=0)
+
+
+class AvatarApplyRequest(BaseModel):
+    bucket: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    storage_key: str = Field(min_length=1, max_length=1024)
+    content_type: str = Field(min_length=1, max_length=255)
+    byte_size: int = Field(gt=0)
+    public_url: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_storage_refs(self) -> Self:
+        if (
+            self.storage_key.startswith("/")
+            or "\\" in self.storage_key
+            or ".." in self.storage_key.split("/")
+        ):
+            raise ValueError("storage_key 형식이 올바르지 않습니다.")
+        if self.public_url is not None and not self.public_url.startswith(("http://", "https://")):
+            raise ValueError("public_url은 http(s) URL이어야 합니다.")
+        return self
+
+
+class AvatarInfo(BaseModel):
+    avatar_kind: Literal["default", "upload", "external"] = "default"
+    avatar_url: str | None = None
+    avatar_content_type: str | None = None
+    avatar_byte_size: int | None = None
+    avatar_updated_at: datetime | None = None
+    has_avatar: bool = False
 
 
 class DownloadUrlResponse(BaseModel):
@@ -106,6 +145,7 @@ class AttachmentUpdate(BaseModel):
 class AttachmentResponse(BaseModel):
     attachment_id: uuid.UUID
     trip_id: uuid.UUID | None
+    trip_day_index: int | None = None
     trip_poi_id: uuid.UUID | None
     curated_plan_id: uuid.UUID | None = None
     curated_poi_id: uuid.UUID | None = None
@@ -151,3 +191,18 @@ def _sync_alias_pair(
         raise ValueError(f"{alias_name} must match {canonical_name}")
     value = canonical_value or alias_value
     return value, value
+
+
+class AttachmentLibraryItem(AttachmentResponse):
+    target_scope: AttachmentScope
+    uploaded_by_user_id: uuid.UUID
+    uploaded_by_email_masked: str | None = None
+    trip_title: str | None = None
+    poi_label: str | None = None
+
+
+class AttachmentLibraryPage(BaseModel):
+    items: list[AttachmentLibraryItem]
+    total: int
+    page: int
+    limit: int

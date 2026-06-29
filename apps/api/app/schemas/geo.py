@@ -11,11 +11,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 SearchKind = Literal["address", "place", "district", "road", "category"]
-BoundaryLevel = Literal["sido", "sigungu", "legal_dong"]
+# kor-travel-geo v2 행정구역 level 어휘 (구 `legal_dong` → `emd`, ADR-049 / geo ADR-056·062).
+BoundaryLevel = Literal["sido", "sigungu", "emd"]
+RegionRelation = Literal["contains", "overlaps"]
 
 
 class GeoCandidateList(BaseModel):
-    """v2 reverse/geocode/search/regions 공통 — candidate pass-through + 상태."""
+    """v2 reverse/geocode/search 공통 — candidate pass-through + 상태."""
 
     status: str
     candidates: list[dict[str, Any]] = Field(default_factory=list)
@@ -27,6 +29,28 @@ class RegionCovering(BaseModel):
 
     boundary_level: BoundaryLevel
     region: dict[str, Any]
+
+
+class RegionWithinRadiusItem(BaseModel):
+    """반경 내 행정구역 1건. `relation`: contains(중심 포함) | overlaps(반경 원과 교차)."""
+
+    code: str
+    name: str | None = None
+    relation: RegionRelation
+
+
+class RegionsWithinRadius(BaseModel):
+    """좌표 반경 내 행정구역 — level별 그룹. kor-travel-geo v2 `/v2/regions/within-radius`.
+
+    응답은 후보(candidate) 목록이 아니라 sido/sigungu/emd level별 배열이다(geo ADR-062).
+    `center`는 `{lon, lat}`, 요청하지 않은 level은 빈 배열로 온다.
+    """
+
+    center: dict[str, Any] = Field(default_factory=dict)
+    radius_km: float
+    sido: list[RegionWithinRadiusItem] = Field(default_factory=list)
+    sigungu: list[RegionWithinRadiusItem] = Field(default_factory=list)
+    emd: list[RegionWithinRadiusItem] = Field(default_factory=list)
 
 
 class UnifiedSearchResult(BaseModel):

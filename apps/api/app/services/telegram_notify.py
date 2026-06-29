@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.telegram import TelegramClient, TelegramError
 from app.core.config import settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 from app.models.telegram_target import TelegramTarget
 
 logger = logging.getLogger(__name__)
@@ -23,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 def _make_client() -> TelegramClient:
     """실 전송용 client. 테스트는 이 함수를 monkeypatch한다."""
-    http = httpx.AsyncClient(base_url=settings.pinvi_telegram_api_base)
+    http = httpx.AsyncClient(
+        base_url=settings.pinvi_telegram_api_base,
+        event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="telegram"),
+    )
     return TelegramClient(http, timeout_seconds=settings.pinvi_telegram_timeout_seconds)
 
 
@@ -67,6 +72,24 @@ async def deliver_user_notification(db: AsyncSession, *, user_id: uuid.UUID, tex
             target.is_enabled = False
         logger.warning("telegram notify 실패 user_id=%s code=%s", user_id, exc.code)
         raise
+    finally:
+        await client.aclose()
+    return "sent"
+
+
+async def deliver_admin_notification(*, text: str) -> str:
+    """Admin/CPO 채널 알림을 보낸다.
+
+    시스템 봇 토큰 또는 Admin chat id가 없으면 재시도하지 않는 `"skipped"`로 끝낸다.
+    """
+    token = settings.pinvi_telegram_bot_token_default
+    chat_id = settings.pinvi_telegram_admin_chat_id.strip()
+    if not token or not chat_id:
+        return "skipped"
+
+    client = _make_client()
+    try:
+        await client.send_to_target(token, chat_id, text, parse_mode=None)
     finally:
         await client.aclose()
     return "sent"

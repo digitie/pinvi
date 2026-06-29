@@ -430,16 +430,25 @@ Content-Type: application/json
 shared-token 사용자의 댓글 작성은 후속 shared comment 라우트에서 같은
 `app.trip_comments` 테이블에 연결한다.
 
-## 9. 첨부 (`/trips/{trip_id}/attachments`)
+## 9. 첨부 / 파일 (`/trips/{trip_id}/attachments`, `/files`)
 
 자세히는 [`storage.md`](./storage.md). 핵심 endpoint:
 
 - `GET /trips/{trip_id}/attachments`
 - `POST /trips/{trip_id}/attachments`
 - `DELETE /trips/{trip_id}/attachments/{attachment_id}`
+- `GET /trips/{trip_id}/days/{day_index}/attachments`
+- `POST /trips/{trip_id}/days/{day_index}/attachments`
+- `DELETE /trips/{trip_id}/days/{day_index}/attachments/{attachment_id}`
+- `GET /trips/{trip_id}/days/{day_index}/attachments/{attachment_id}/download-url`
 - `GET /trips/{trip_id}/pois/{poi_id}/attachments`
 - `POST /trips/{trip_id}/pois/{poi_id}/attachments`
 - `DELETE /trips/{trip_id}/pois/{poi_id}/attachments/{attachment_id}`
+- `GET /trips/{trip_id}/pois/{poi_id}/attachments/{attachment_id}/download-url`
+- `GET /trips/{trip_id}/files`
+
+여행/날짜/POI 첨부 등록은 DB metadata 기준 용량 quota를 검사한다. 개별 파일, 여행계획 총량,
+사용자 총량의 전역값과 사용자별 override 정책은 `storage.md` §5.7을 따른다.
 
 ## 10. 일정 자동 최적화
 

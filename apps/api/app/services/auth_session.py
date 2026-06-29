@@ -78,7 +78,7 @@ async def issue_user_session(
             User.is_active.is_(True),
         )
     )
-    if user is None or user.status in {"disabled", "deleted"}:
+    if user is None or user.status in {"disabled", "pending_delete", "deleted"}:
         raise RefreshTokenInvalidError("세션 사용자를 찾을 수 없습니다.")
 
     issue = _issue_tokens(user=user)
@@ -124,7 +124,7 @@ async def refresh_user_session(
             User.is_active.is_(True),
         )
     )
-    if user is None or user.status in {"disabled", "deleted"}:
+    if user is None or user.status in {"disabled", "pending_delete", "deleted"}:
         session.revoked_at = now
         await db.commit()
         raise RefreshTokenInvalidError("세션 사용자를 찾을 수 없습니다.")

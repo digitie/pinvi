@@ -10,12 +10,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:admin-live": "playwright test -c playwright.admin-live.config.ts",
+    "test:e2e:admin-live:list": "playwright test -c playwright.admin-live.config.ts --list",
+    "test:e2e:live-mutating": "playwright test -c playwright.live-mutating.config.ts",
+    "test:e2e:live-mutating:list": "playwright test -c playwright.live-mutating.config.ts --list",
     "test:e2e:map": "playwright test map-shell.e2e.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@pinvi/api-client": "*",
     "@pinvi/design-tokens": "*",
+    "@pinvi/domain": "*",
     "@pinvi/hooks": "*",
     "@pinvi/i18n": "*",
     "@pinvi/schemas": "*",

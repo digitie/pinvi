@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
+import shutil
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -25,6 +27,8 @@ RestorePhaseName = Literal["preparing", "restoring", "validating", "draining", "
 RestorePhaseStatus = Literal["pending", "running", "success", "failed", "skipped"]
 
 _BACKUP_FILE_RE = re.compile(r"^BACKUP_FILE=(?P<path>.+)$", re.MULTILINE)
+_DATABASE_URL_RE = re.compile(r"postgresql(?:\+asyncpg)?://[^\s]+")
+_DUMP_PATH_RE = re.compile(r"(?<![A-Za-z0-9_])(?:/[A-Za-z0-9_.@%+=:,~-]+)+\.dump")
 _RESTORE_PHASE_RE = re.compile(
     r"^RESTORE_PHASE=(?P<name>[a-z_]+):(?P<status>[a-z_]+)(?::(?P<message>.*))?$",
     re.MULTILINE,
@@ -49,6 +53,12 @@ class BackupSnapshotNotFoundError(BackupServiceError):
     """선택한 backup snapshot을 찾을 수 없음."""
 
     code = "BACKUP_SNAPSHOT_NOT_FOUND"
+
+
+class BackupDiskGuardError(BackupServiceError):
+    """backup 대상 volume 여유 공간 부족."""
+
+    code = "BACKUP_DISK_GUARD_FAILED"
 
 
 class BackupRestoreAlreadyRunningError(BackupServiceError):
@@ -89,7 +99,11 @@ class BackupRestoreRun:
 
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "pyproject.toml").is_file() and (parent / "app").is_dir():
+            return parent
+    return current.parents[min(4, len(current.parents) - 1)]
 
 
 def resolve_repo_path(value: str) -> Path:
@@ -116,7 +130,19 @@ def _checksum_for(path: Path) -> str | None:
     if not checksum_file.exists():
         return None
     first = checksum_file.read_text(encoding="utf-8").strip().split(maxsplit=1)[0]
-    return first or None
+    expected = first or None
+    if expected is None:
+        return None
+    actual = _sha256_file(path)
+    return expected if actual == expected else None
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _snapshot_from_file(path: Path) -> BackupSnapshot:
@@ -140,6 +166,32 @@ def list_backup_snapshots(*, limit: int = 50) -> list[BackupSnapshot]:
     snapshots = [_snapshot_from_file(path) for path in directory.glob("*.dump") if path.is_file()]
     snapshots.sort(key=lambda snapshot: snapshot.created_at, reverse=True)
     return snapshots[:limit]
+
+
+def mask_backup_path(path: str) -> str:
+    """Return a stable non-host path for Admin responses and audits."""
+
+    filename = Path(path).name
+    return f"backup://{filename}" if filename else "backup://snapshot"
+
+
+def sanitize_backup_message(message: str) -> str:
+    """Remove local paths and database credentials from operator-facing errors."""
+
+    sanitized = message
+    for database_url in (settings.pinvi_database_url, settings.pinvi_restore_database_url):
+        if database_url:
+            sanitized = sanitized.replace(database_url, "postgresql://[masked]")
+    sanitized = _DATABASE_URL_RE.sub("postgresql://[masked]", sanitized)
+    sanitized = _DUMP_PATH_RE.sub(lambda match: mask_backup_path(match.group(0)), sanitized)
+
+    backup_root = backup_dir()
+    for path, replacement in ((backup_root, "<backup-dir>"), (repo_root(), "<repo>")):
+        path_text = str(path)
+        if path_text:
+            sanitized = sanitized.replace(path_text, replacement)
+
+    return sanitized
 
 
 def get_backup_snapshot(*, snapshot_id: str) -> BackupSnapshot:
@@ -177,12 +229,14 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
 
     directory = backup_dir()
     directory.mkdir(parents=True, exist_ok=True)
+    _ensure_backup_disk_space(directory)
 
     before = {path.resolve() for path in directory.glob("*.dump")}
     env = {
         **os.environ,
         "PINVI_BACKUP_DIR": str(directory),
         "PINVI_BACKUP_SCHEMA": settings.pinvi_backup_schema,
+        "PINVI_BACKUP_MIN_FREE_BYTES": str(settings.pinvi_backup_min_free_bytes),
         "PINVI_BACKUP_REASON": access_reason,
         "PINVI_DATABASE_URL": settings.pinvi_database_url,
     }
@@ -202,18 +256,30 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
     except TimeoutError as exc:
         proc.kill()
         await proc.wait()
-        raise BackupServiceError("backup script timed out") from exc
+        raise BackupServiceError(sanitize_backup_message("backup script timed out")) from exc
 
     stdout = stdout_raw.decode("utf-8", errors="replace")
     stderr = stderr_raw.decode("utf-8", errors="replace")
     if proc.returncode != 0:
-        raise BackupServiceError(stderr or stdout or f"backup script exited {proc.returncode}")
+        message = stderr or stdout or f"backup script exited {proc.returncode}"
+        raise BackupServiceError(sanitize_backup_message(message))
 
     snapshot = _snapshot_from_script_result(stdout=stdout, directory=directory, before=before)
     if snapshot:
         return snapshot
 
     raise BackupServiceError("backup script completed without creating a dump")
+
+
+def _ensure_backup_disk_space(directory: Path) -> None:
+    min_free_bytes = settings.pinvi_backup_min_free_bytes
+    if min_free_bytes <= 0:
+        return
+    free_bytes = shutil.disk_usage(directory).free
+    if free_bytes < min_free_bytes:
+        raise BackupDiskGuardError(
+            f"backup disk guard failed: free_bytes={free_bytes} required_bytes={min_free_bytes}"
+        )
 
 
 # 동시 복원은 동일 DB에 두 개의 비가역 schema-swap을 겹쳐 무결성을 깨뜨린다.
@@ -319,7 +385,9 @@ async def _restore_backup_hotswap_locked(
     except TimeoutError as exc:
         proc.kill()
         await proc.wait()
-        raise BackupServiceError("restore hotswap script timed out") from exc
+        raise BackupServiceError(
+            sanitize_backup_message("restore hotswap script timed out")
+        ) from exc
 
     stdout = stdout_raw.decode("utf-8", errors="replace")
     stderr = stderr_raw.decode("utf-8", errors="replace")
@@ -327,7 +395,7 @@ async def _restore_backup_hotswap_locked(
     completed_at = datetime.now(UTC)
     if proc.returncode != 0:
         message = stderr or stdout or f"restore hotswap script exited {proc.returncode}"
-        raise BackupServiceError(message)
+        raise BackupServiceError(sanitize_backup_message(message))
 
     return BackupRestoreRun(
         restore_id=restore_id,

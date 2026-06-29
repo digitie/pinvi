@@ -101,6 +101,16 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
 
+  blackbox:
+    profiles: ["observability"]
+    image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
+    container_name: pinvi-blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
@@ -123,6 +133,8 @@ services:
     depends_on:
       cadvisor:
         condition: service_started
+      blackbox:
+        condition: service_started
 
   grafana:
     profiles: ["observability"]
@@ -133,6 +145,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${PINVI_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${PINVI_GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

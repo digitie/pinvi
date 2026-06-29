@@ -8,7 +8,9 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog
+from app.models.comment import TripComment
 from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
@@ -45,6 +47,7 @@ async def _create_trip_fixture(
     session_factory,
     *,
     owner_id: uuid.UUID,
+    companion_user_id: uuid.UUID | None = None,
     title: str = "부산 가족 여행",
     region_hint: str = "부산",
     status: str = "planned",
@@ -88,8 +91,16 @@ async def _create_trip_fixture(
                     day_index=1,
                     sort_order="a0",
                     feature_id="feature-place-1",
-                    feature_snapshot={"name": "해운대"},
+                    feature_snapshot={
+                        "name": "해운대",
+                        "coord": {"lon": 129.1604, "lat": 35.1587},
+                        "address": {"road": "부산 해운대구 해운대해변로"},
+                    },
                     added_by_user_id=owner_id,
+                    planned_arrival_at=now + timedelta(hours=2),
+                    user_note="오전 산책",
+                    budget_amount=12000,
+                    user_url="https://example.com/poi",
                 ),
                 TripCompanion(
                     trip_id=trip.trip_id,
@@ -108,6 +119,18 @@ async def _create_trip_fixture(
                 ),
             ]
         )
+        if companion_user_id is not None:
+            db.add(
+                TripCompanion(
+                    trip_id=trip.trip_id,
+                    user_id=companion_user_id,
+                    invited_email="joined@example.com",
+                    invited_nickname="가입 동반자",
+                    role="viewer",
+                    invited_at=now - timedelta(hours=1),
+                    joined_at=now,
+                )
+            )
         await db.commit()
         return trip.trip_id
 
@@ -167,7 +190,12 @@ async def test_admin_trip_detail_returns_companions_share_links_and_audit(
         roles=["user", "admin"],
     )
     owner_id = await _create_user(session_factory, email="owner@example.com")
-    trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    companion_id = await _create_user(session_factory, email="joined@example.com")
+    trip_id = await _create_trip_fixture(
+        session_factory,
+        owner_id=owner_id,
+        companion_user_id=companion_id,
+    )
 
     resp = await client.get(
         f"/admin/trips/{trip_id}",
@@ -178,10 +206,152 @@ async def test_admin_trip_detail_returns_companions_share_links_and_audit(
     trip = resp.json()["data"]
     assert trip["trip_id"] == str(trip_id)
     assert trip["description"] == "운영자가 확인할 여행 상세"
-    assert trip["companions"][0]["invited_email_masked"] == "f***@example.com"
-    assert trip["companions"][0]["role"] == "editor"
+    assert {c["invited_email_masked"] for c in trip["companions"]} == {
+        "f***@example.com",
+        "j***@example.com",
+    }
+    joined = next(c for c in trip["companions"] if c["user_id"] == str(companion_id))
+    invited = next(c for c in trip["companions"] if c["user_id"] is None)
+    assert joined["role"] == "viewer"
+    assert invited["role"] == "editor"
+    assert trip["days"][0]["day_index"] == 1
+    assert trip["days"][0]["date"] == "2026-07-01"
+    assert trip["days"][0]["poi_count"] == 1
+    assert trip["pois"][0]["feature_label"] == "해운대"
+    assert trip["pois"][0]["lon"] == 129.1604
+    assert trip["pois"][0]["lat"] == 35.1587
+    assert trip["pois"][0]["address_label"] == "부산 해운대구 해운대해변로"
+    assert trip["pois"][0]["user_note"] == "오전 산책"
+    assert trip["pois"][0]["user_url"] == "https://example.com/poi"
     assert trip["share_links"][0]["visibility"] == "view_only"
     assert trip["recent_audit"] == []
+
+
+async def test_admin_trip_create_writes_audit(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    request_id = uuid.uuid4()
+
+    resp = await client.post(
+        "/admin/trips",
+        json={
+            "owner_user_id": str(owner_id),
+            "title": "운영자 생성 여행",
+            "description": "고객 요청 대행 생성",
+            "region_hint": "강릉",
+            "primary_region_code": "42150",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-03",
+            "visibility": "unlisted",
+            "status": "planned",
+            "access_reason": "고객센터 요청 대행",
+        },
+        headers={"X-Request-Id": str(request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 201, resp.text
+    trip = resp.json()["data"]
+    assert trip["title"] == "운영자 생성 여행"
+    assert trip["owner_user_id"] == str(owner_id)
+    assert trip["owner_email_masked"] == "o***@example.com"
+    assert trip["status"] == "planned"
+    assert trip["visibility"] == "unlisted"
+    assert trip["primary_region_code"] == "42150"
+    assert trip["primary_region_source"] == "manual"
+    assert trip["recent_audit"][0]["action"] == "trip.create"
+    assert trip["recent_audit"][0]["access_reason"] == "고객센터 요청 대행"
+    assert "owner@example.com" not in resp.text
+
+    async with session_factory() as db:
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+        saved_trip = await db.scalar(select(Trip).where(Trip.trip_id == uuid.UUID(trip["trip_id"])))
+
+    assert saved_trip is not None
+    assert saved_trip.owner_user_id == owner_id
+    assert audit is not None
+    assert audit.actor_user_id == admin_id
+    assert audit.action == "trip.create"
+    assert audit.resource_id == trip["trip_id"]
+    assert audit.before_state is None
+    assert audit.after_state["owner_email_masked"] == "o***@example.com"
+    assert "owner@example.com" not in str(audit.after_state)
+
+
+async def test_admin_trip_create_rejects_missing_owner(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+
+    resp = await client.post(
+        "/admin/trips",
+        json={
+            "owner_user_id": str(uuid.uuid4()),
+            "title": "소유자 없음",
+            "visibility": "private",
+            "status": "draft",
+            "access_reason": "소유자 검증",
+        },
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+async def test_admin_trip_create_rolls_back_when_audit_fails(
+    client,
+    session_factory,
+    auth_cookies,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v1.admin.trips as admin_trips_router
+
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+
+    async def _fail_append(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("audit failed")
+
+    monkeypatch.setattr(admin_trips_router, "append_admin_audit", _fail_append)
+
+    with pytest.raises(RuntimeError, match="audit failed"):
+        await client.post(
+            "/admin/trips",
+            json={
+                "owner_user_id": str(owner_id),
+                "title": "감사 실패 생성",
+                "visibility": "private",
+                "status": "draft",
+                "access_reason": "테스트 감사 실패",
+            },
+            cookies=auth_cookies(str(admin_id)),
+        )
+
+    async with session_factory() as db:
+        trip = await db.scalar(select(Trip).where(Trip.title == "감사 실패 생성"))
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.action == "trip.create"))
+
+    assert trip is None
+    assert audit is None
 
 
 async def test_admin_trip_status_update_writes_audit(
@@ -261,3 +431,271 @@ async def test_admin_trip_status_update_rolls_back_when_audit_fails(
     assert trip.status == "planned"
     assert trip.version == 1
     assert audit is None
+
+
+async def test_admin_trip_copy_and_delete_operations_write_audit(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    copy_request_id = uuid.uuid4()
+    delete_request_id = uuid.uuid4()
+
+    async with session_factory() as db:
+        source_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.trip_id == trip_id, TripDayPoi.day_index == 1)
+        )
+        assert source_poi is not None
+        db.add_all(
+            [
+                CuratedPlanAttachment(
+                    trip_id=trip_id,
+                    trip_day_index=1,
+                    bucket="pinvi-test",
+                    storage_key=f"trips/{trip_id}/day-note.txt",
+                    original_filename="day-note.txt",
+                    content_type="text/plain",
+                    byte_size=12,
+                    uploaded_by_user_id=owner_id,
+                ),
+                CuratedPlanAttachment(
+                    trip_poi_id=source_poi.attachment_id,
+                    bucket="pinvi-test",
+                    storage_key=f"pois/{source_poi.attachment_id}/photo.jpg",
+                    original_filename="photo.jpg",
+                    content_type="image/jpeg",
+                    byte_size=120,
+                    uploaded_by_user_id=owner_id,
+                ),
+                TripComment(
+                    trip_id=trip_id,
+                    author_user_id=owner_id,
+                    target_type="trip",
+                    day_index=1,
+                    body="날짜 댓글",
+                ),
+            ]
+        )
+        await db.commit()
+
+    copy_resp = await client.post(
+        f"/admin/trips/{trip_id}/copy",
+        json={
+            "title": "운영 복사본",
+            "scope": "all",
+            "date_shift_days": 1,
+            "access_reason": "고객 요청 복사",
+        },
+        headers={"X-Request-Id": str(copy_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert copy_resp.status_code == 200, copy_resp.text
+    copy_result = copy_resp.json()["data"]
+    copied_trip_id = uuid.UUID(copy_result["target_trip_id"])
+    assert copy_result["action"] == "copy"
+    assert copy_result["affected"]["days"] == 2
+    assert copy_result["affected"]["pois"] == 1
+    assert copy_result["affected"]["attachments"] == 2
+
+    delete_resp = await client.request(
+        "DELETE",
+        f"/admin/trips/{trip_id}",
+        json={"child_policy": "delete", "access_reason": "운영 정책 삭제"},
+        headers={"X-Request-Id": str(delete_request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert delete_resp.status_code == 200, delete_resp.text
+    delete_result = delete_resp.json()["data"]
+    assert delete_result["action"] == "delete"
+    assert delete_result["affected"]["trips"] == 1
+    assert delete_result["affected"]["pois"] == 1
+    assert delete_result["affected"]["attachments"] == 2
+
+    async with session_factory() as db:
+        copied_trip = await db.scalar(select(Trip).where(Trip.trip_id == copied_trip_id))
+        copied_attachment_rows = await db.execute(
+            select(CuratedPlanAttachment).where(CuratedPlanAttachment.trip_id == copied_trip_id)
+        )
+        copied_attachments = list(copied_attachment_rows.scalars())
+        source_trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+        source_poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.trip_id == trip_id))
+        source_attachment_count = await db.scalar(
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.trip_id == trip_id,
+                CuratedPlanAttachment.deleted_at.is_not(None),
+            )
+        )
+        copy_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == copy_request_id)
+        )
+        delete_audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.request_id == delete_request_id)
+        )
+
+    assert copied_trip is not None
+    assert copied_trip.title == "운영 복사본"
+    assert len(copied_attachments) >= 1
+    assert source_trip is not None
+    assert source_trip.deleted_at is not None
+    assert source_poi is not None
+    assert source_poi.deleted_at is not None
+    assert source_attachment_count is not None
+    assert copy_audit is not None
+    assert copy_audit.action == "trip.copy"
+    assert delete_audit is not None
+    assert delete_audit.action == "trip.delete"
+
+
+async def test_admin_day_move_moves_pois_files_comments_and_disables_orphan(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:
+    admin_id = await _create_user(
+        session_factory,
+        email="admin@example.com",
+        roles=["user", "admin"],
+    )
+    owner_id = await _create_user(session_factory, email="owner@example.com")
+    source_trip_id = await _create_trip_fixture(session_factory, owner_id=owner_id)
+    target_trip_id = await _create_trip_fixture(
+        session_factory,
+        owner_id=owner_id,
+        title="대상 여행",
+        region_hint="서울",
+    )
+    request_id = uuid.uuid4()
+
+    async with session_factory() as db:
+        source_poi = await db.scalar(
+            select(TripDayPoi).where(
+                TripDayPoi.trip_id == source_trip_id,
+                TripDayPoi.day_index == 1,
+            )
+        )
+        assert source_poi is not None
+        db.add_all(
+            [
+                CuratedPlanAttachment(
+                    trip_id=source_trip_id,
+                    trip_day_index=1,
+                    bucket="pinvi-test",
+                    storage_key=f"trips/{source_trip_id}/day.txt",
+                    original_filename="day.txt",
+                    content_type="text/plain",
+                    byte_size=10,
+                    uploaded_by_user_id=owner_id,
+                ),
+                CuratedPlanAttachment(
+                    trip_poi_id=source_poi.attachment_id,
+                    bucket="pinvi-test",
+                    storage_key=f"pois/{source_poi.attachment_id}/photo.jpg",
+                    original_filename="photo.jpg",
+                    content_type="image/jpeg",
+                    byte_size=100,
+                    uploaded_by_user_id=owner_id,
+                ),
+                TripComment(
+                    trip_id=source_trip_id,
+                    author_user_id=owner_id,
+                    target_type="day",
+                    day_index=1,
+                    body="날짜 메모",
+                ),
+                TripComment(
+                    trip_id=source_trip_id,
+                    author_user_id=owner_id,
+                    target_type="poi",
+                    target_id=source_poi.attachment_id,
+                    day_index=1,
+                    body="POI 메모",
+                ),
+            ]
+        )
+        await db.commit()
+        source_poi_id = source_poi.attachment_id
+
+    impact_resp = await client.get(
+        f"/admin/trips/{source_trip_id}/days/1/operation-impact",
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert impact_resp.status_code == 200, impact_resp.text
+    impact = impact_resp.json()["data"]
+    assert impact["counts"]["pois"] == 1
+    orphan = next(
+        option for option in impact["policy_options"]["poi_policy"] if option["value"] == "orphan"
+    )
+    assert orphan["allowed"] is False
+    assert "FK" in orphan["reason"]
+
+    move_resp = await client.post(
+        f"/admin/trips/{source_trip_id}/days/1/move",
+        json={
+            "target_trip_id": str(target_trip_id),
+            "target_day_index": 3,
+            "poi_policy": "move",
+            "attachment_policy": "move",
+            "comment_policy": "move",
+            "access_reason": "일정 통합",
+        },
+        headers={"X-Request-Id": str(request_id)},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert move_resp.status_code == 200, move_resp.text
+    result = move_resp.json()["data"]
+    assert result["action"] == "move"
+    assert result["target_trip_id"] == str(target_trip_id)
+    assert result["day_index"] == 3
+    assert result["affected"]["pois"] == 1
+    assert result["affected"]["attachments"] == 1
+    assert result["affected"]["comments"] == 2
+
+    async with session_factory() as db:
+        source_day = await db.scalar(
+            select(TripDay).where(
+                TripDay.trip_id == source_trip_id,
+                TripDay.day_index == 1,
+            )
+        )
+        target_day = await db.scalar(
+            select(TripDay).where(
+                TripDay.trip_id == target_trip_id,
+                TripDay.day_index == 3,
+            )
+        )
+        moved_poi = await db.scalar(
+            select(TripDayPoi).where(TripDayPoi.attachment_id == source_poi_id)
+        )
+        day_attachment = await db.scalar(
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.trip_id == target_trip_id,
+                CuratedPlanAttachment.trip_day_index == 3,
+            )
+        )
+        comments = (
+            await db.execute(select(TripComment).where(TripComment.trip_id == target_trip_id))
+        ).scalars()
+        audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
+
+    assert source_day is None
+    assert target_day is not None
+    assert moved_poi is not None
+    assert moved_poi.trip_id == target_trip_id
+    assert moved_poi.day_index == 3
+    assert day_attachment is not None
+    moved_comments = list(comments)
+    assert len(moved_comments) == 2
+    assert {comment.day_index for comment in moved_comments} == {3}
+    assert audit is not None
+    assert audit.action == "trip_day.move"

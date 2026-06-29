@@ -53,7 +53,7 @@ function AdminLoginForm() {
 
     setLoading(true);
     try {
-      const { user } = await authApi(apiClient).login(result.data);
+      const user = await authApi(apiClient).login(result.data);
       const hasAdmin = user.roles.some((r) => ADMIN_ROLES.has(r));
       if (!hasAdmin) {
         setError('관리자 권한이 없는 계정입니다.');

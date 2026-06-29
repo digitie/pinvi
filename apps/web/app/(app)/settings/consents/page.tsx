@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type { ConsentType, UserConsent } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
 
 interface ConsentMeta {
   type: ConsentType;
@@ -112,6 +114,17 @@ export default function ConsentsSettingsPage() {
                     <span className="rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-medium text-muted">
                       {meta.required ? '필수' : '선택'}
                     </span>
+                    {CONSENT_LEGAL_SLUG[meta.type] && (
+                      <Link
+                        href={`/legal/${CONSENT_LEGAL_SLUG[meta.type]}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-legal-link underline"
+                        data-testid={`legal-link-${meta.type}`}
+                      >
+                        전문 보기
+                      </Link>
+                    )}
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     {status === 'agreed' && '동의함'}

@@ -25,6 +25,8 @@ from app.schemas.auth import (
     RegisterResponse,
     UserResponse,
     VerifyEmailRequest,
+    VerifyEmailResendRequest,
+    VerifyEmailResendResponse,
 )
 from app.schemas.envelope import Envelope
 from app.services.auth_session import (
@@ -43,6 +45,7 @@ from app.services.user_registration import (
     authenticate,
     register_user,
     request_password_reset,
+    resend_verification_email,
     reset_password,
     verify_email,
 )
@@ -166,7 +169,14 @@ async def register(body: RegisterRequest, db: DbSession) -> Envelope[RegisterRes
                 user_id=result.user.user_id,
                 email=result.user.email,
                 status=cast(
-                    Literal["pending_verification", "pending_profile", "active", "disabled"],
+                    Literal[
+                        "pending_verification",
+                        "pending_profile",
+                        "active",
+                        "disabled",
+                        "pending_delete",
+                        "deleted",
+                    ],
                     result.user.status,
                 ),
                 email_verified_at=result.user.email_verified_at,
@@ -196,6 +206,23 @@ async def verify_email_endpoint(
 
     await _issue_session_and_set_cookies(response, db=db, request=request, user_id=user.user_id)
     return Envelope.of(_to_auth_user(user))
+
+
+@router.post(
+    "/verify-email/resend",
+    response_model=Envelope[VerifyEmailResendResponse],
+)
+async def verify_email_resend(
+    body: VerifyEmailResendRequest,
+    db: DbSession,
+) -> Envelope[VerifyEmailResendResponse]:
+    """미인증 계정의 가입 인증 메일 재발송 요청.
+
+    user enumeration을 막기 위해 대상 존재/발송 여부와 무관하게 항상 `accepted=true`를
+    반환한다(비밀번호 재설정 요청과 동일 정책). 실제 발송은 cooldown/적격 여부를 서비스가 판단.
+    """
+    await resend_verification_email(db, email=str(body.email))
+    return Envelope.of(VerifyEmailResendResponse(accepted=True))
 
 
 @router.post(
@@ -239,12 +266,15 @@ async def login(
     try:
         user = await authenticate(db, email=str(body.email), password=body.password)
     except EmailNotVerifiedError as exc:
+        # 비밀번호 검증을 통과한 미인증 계정 — 재인증(가입 인증) 링크를 재발송한다.
+        # 올바른 비밀번호로 소유가 증명됐으므로 dispatched 결과 노출은 enumeration 위험이 없다.
+        resend = await resend_verification_email(db, email=str(body.email))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "code": exc.code,
                 "message": str(exc),
-                "details": {"verification_email_dispatched": False},
+                "details": {"verification_email_dispatched": resend.verification_email_dispatched},
             },
         ) from exc
     except InvalidCredentialsError as exc:
@@ -324,6 +354,11 @@ def _to_auth_user(
         email=user.email,
         nickname=user.nickname,
         avatar_url=user.avatar_url,
+        avatar_kind=user.avatar_kind,
+        avatar_content_type=user.avatar_content_type,
+        avatar_byte_size=user.avatar_byte_size,
+        avatar_updated_at=user.avatar_updated_at,
+        has_avatar=bool(user.avatar_bucket and user.avatar_storage_key),
         status=user.status,
         roles=cast(list[Literal["user", "admin", "operator", "cpo"]], user.roles),
         email_verified_at=user.email_verified_at,

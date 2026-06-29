@@ -14,9 +14,16 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
+from app.models.attachment import CuratedPlanAttachment
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
-from app.schemas.storage import AttachmentCreate, AttachmentUpdate, DownloadUrlResponse
+from app.schemas.storage import (
+    AttachmentCreate,
+    AttachmentLibraryItem,
+    AttachmentLibraryPage,
+    AttachmentUpdate,
+    DownloadUrlResponse,
+)
 from app.schemas.trip import (
     TripAttachmentResponse,
     TripCommentCreate,
@@ -41,6 +48,7 @@ from app.schemas.trip import (
 from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
 from app.services.rustfs_storage import make_download_url
+from app.services.storage_policy import attachment_scope, list_admin_file_library
 from app.services.telegram_messages import (
     build_companion_invited_message,
     build_trip_created_message,
@@ -49,6 +57,7 @@ from app.services.telegram_outbox import enqueue_user_notification
 from app.services.trip import (
     TripAttachmentLimitError,
     TripAttachmentNotFoundError,
+    TripAttachmentQuotaError,
     TripAttachmentStorageRefError,
     TripBucket,
     TripCommentNotFoundError,
@@ -77,6 +86,7 @@ from app.services.trip import (
     delete_trip_day,
     get_attachment,
     get_trip_access,
+    get_trip_day,
     get_trip_for_share_token,
     get_trip_for_user,
     get_trip_for_user_write,
@@ -154,6 +164,7 @@ def _to_day_response(day) -> TripDayResponse:  # type: ignore[no-untyped-def]
         date=day.date,
         title=day.title,
         note=day.note,
+        version=day.version,
         created_at=day.created_at,
         updated_at=day.updated_at,
     )
@@ -163,6 +174,7 @@ def _to_attachment_response(attachment) -> TripAttachmentResponse:  # type: igno
     return TripAttachmentResponse(
         attachment_id=attachment.attachment_id,
         trip_id=attachment.trip_id,
+        trip_day_index=attachment.trip_day_index,
         trip_poi_id=attachment.trip_poi_id,
         curated_plan_id=attachment.curated_plan_id,
         curated_poi_id=attachment.curated_poi_id,
@@ -183,6 +195,40 @@ def _to_attachment_response(attachment) -> TripAttachmentResponse:  # type: igno
     )
 
 
+def _to_attachment_library_item(
+    attachment: CuratedPlanAttachment,
+    *,
+    trip_title: str | None,
+    poi_label: str | None,
+) -> AttachmentLibraryItem:
+    return AttachmentLibraryItem(
+        attachment_id=attachment.attachment_id,
+        trip_id=attachment.trip_id,
+        trip_day_index=attachment.trip_day_index,
+        trip_poi_id=attachment.trip_poi_id,
+        curated_plan_id=attachment.curated_plan_id,
+        curated_poi_id=attachment.curated_poi_id,
+        notice_plan_id=attachment.notice_plan_id,
+        notice_poi_id=attachment.notice_poi_id,
+        source_attachment_id=attachment.source_attachment_id,
+        bucket=attachment.bucket,
+        storage_key=attachment.storage_key,
+        original_filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        byte_size=attachment.byte_size,
+        public_url=attachment.public_url,
+        role=attachment.role,
+        description=attachment.description,
+        sort_order=attachment.sort_order,
+        created_at=attachment.created_at,
+        updated_at=attachment.updated_at,
+        target_scope=attachment_scope(attachment),
+        uploaded_by_user_id=attachment.uploaded_by_user_id,
+        trip_title=trip_title,
+        poi_label=poi_label,
+    )
+
+
 def _raise_attachment_limit(exc: TripAttachmentLimitError) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -193,6 +239,13 @@ def _raise_attachment_limit(exc: TripAttachmentLimitError) -> NoReturn:
 def _raise_attachment_storage_ref(exc: TripAttachmentStorageRefError) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
+
+
+def _raise_attachment_quota(exc: TripAttachmentQuotaError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
         detail={"code": exc.code, "message": str(exc)},
     ) from exc
 
@@ -374,6 +427,46 @@ async def get_trip_endpoint(
     )
 
 
+@router.get("/{trip_id}/files", response_model=Envelope[AttachmentLibraryPage])
+async def list_trip_files_endpoint(
+    trip_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    page: int = 1,
+    limit: int = 50,
+) -> Envelope[AttachmentLibraryPage]:
+    try:
+        await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    page = max(1, page)
+    limit = min(100, max(1, limit))
+    rows, total = await list_admin_file_library(
+        db,
+        q=None,
+        scope=None,
+        user_id=None,
+        trip_id=trip_id,
+        limit=limit,
+        offset=(page - 1) * limit,
+    )
+    return Envelope.of(
+        AttachmentLibraryPage(
+            items=[
+                _to_attachment_library_item(
+                    attachment,
+                    trip_title=trip_title,
+                    poi_label=poi_label,
+                )
+                for attachment, trip_title, poi_label, _uploaded_by_email in rows
+            ],
+            total=total,
+            page=page,
+            limit=limit,
+        )
+    )
+
+
 @router.patch("/{trip_id}", response_model=Envelope[TripResponse])
 async def update_trip_endpoint(
     trip_id: uuid.UUID,
@@ -541,6 +634,7 @@ async def update_trip_day_endpoint(
     body: TripDayUpdate,
     current_user_id: CurrentUserId,
     db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
@@ -549,6 +643,7 @@ async def update_trip_day_endpoint(
             db,
             trip_id=trip_id,
             day_index=day_index,
+            expected_version=if_match,
             patch=body.model_dump(exclude_unset=True),
         )
     except (TripNotFoundError, TripPermissionError) as exc:
@@ -556,6 +651,11 @@ async def update_trip_day_endpoint(
     except TripDayNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripVersionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_day_response(day)
@@ -574,16 +674,22 @@ async def delete_trip_day_endpoint(
     day_index: int,
     current_user_id: CurrentUserId,
     db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
 ) -> None:
     actor_id = uuid.UUID(current_user_id)
     try:
         await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
-        await delete_trip_day(db, trip_id=trip_id, day_index=day_index)
+        await delete_trip_day(db, trip_id=trip_id, day_index=day_index, expected_version=if_match)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     except TripDayNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripVersionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     realtime_broker.publish_event_nowait(
@@ -664,13 +770,17 @@ async def create_trip_attachment_endpoint(
             db,
             uploaded_by_user_id=actor_id,
             trip_id=trip_id,
+            trip_day_index=None,
             trip_poi_id=None,
+            quota_trip_id=trip_id,
             payload=body.model_dump(),
         )
     except TripAttachmentLimitError as exc:
         _raise_attachment_limit(exc)
     except TripAttachmentStorageRefError as exc:
         _raise_attachment_storage_ref(exc)
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
     return Envelope.of(_to_attachment_response(attachment))
 
 
@@ -756,6 +866,137 @@ async def trip_attachment_download_url_endpoint(
 
 
 @router.get(
+    "/{trip_id}/days/{day_index}/attachments",
+    response_model=Envelope[list[TripAttachmentResponse]],
+)
+async def list_trip_day_attachments_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[list[TripAttachmentResponse]]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    attachments = await list_attachments(db, trip_id=trip_id, trip_day_index=day_index)
+    return Envelope.of([_to_attachment_response(attachment) for attachment in attachments])
+
+
+@router.post(
+    "/{trip_id}/days/{day_index}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[TripAttachmentResponse],
+)
+async def create_trip_day_attachment_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    body: AttachmentCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripAttachmentResponse]:
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except TripDayNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    try:
+        attachment = await create_attachment(
+            db,
+            uploaded_by_user_id=actor_id,
+            trip_id=trip_id,
+            trip_day_index=day_index,
+            trip_poi_id=None,
+            quota_trip_id=trip_id,
+            payload=body.model_dump(),
+        )
+    except TripAttachmentLimitError as exc:
+        _raise_attachment_limit(exc)
+    except TripAttachmentStorageRefError as exc:
+        _raise_attachment_storage_ref(exc)
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
+    return Envelope.of(_to_attachment_response(attachment))
+
+
+@router.delete(
+    "/{trip_id}/days/{day_index}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_trip_day_attachment_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    try:
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+        await delete_attachment(
+            db,
+            attachment_id=attachment_id,
+            trip_id=trip_id,
+            trip_day_index=day_index,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (TripDayNotFoundError, TripAttachmentNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+
+@router.get(
+    "/{trip_id}/days/{day_index}/attachments/{attachment_id}/download-url",
+    response_model=Envelope[DownloadUrlResponse],
+)
+async def trip_day_attachment_download_url_endpoint(
+    trip_id: uuid.UUID,
+    day_index: int,
+    attachment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[DownloadUrlResponse]:
+    try:
+        await get_trip_for_user(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
+        await get_trip_day(db, trip_id=trip_id, day_index=day_index)
+        attachment = await get_attachment(
+            db,
+            attachment_id=attachment_id,
+            trip_id=trip_id,
+            trip_day_index=day_index,
+        )
+    except (TripNotFoundError, TripPermissionError) as exc:
+        _raise_trip_http(exc)
+    except (TripDayNotFoundError, TripAttachmentNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    return Envelope.of(
+        make_download_url(
+            bucket=attachment.bucket,
+            storage_key=attachment.storage_key,
+            public_url=attachment.public_url,
+        )
+    )
+
+
+@router.get(
     "/{trip_id}/pois/{poi_id}/attachments",
     response_model=Envelope[list[TripAttachmentResponse]],
 )
@@ -808,12 +1049,15 @@ async def create_trip_poi_attachment_endpoint(
             uploaded_by_user_id=actor_id,
             trip_id=None,
             trip_poi_id=poi_id,
+            quota_trip_id=trip_id,
             payload=body.model_dump(),
         )
     except TripAttachmentLimitError as exc:
         _raise_attachment_limit(exc)
     except TripAttachmentStorageRefError as exc:
         _raise_attachment_storage_ref(exc)
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
     return Envelope.of(_to_attachment_response(attachment))
 
 
@@ -948,12 +1192,13 @@ async def optimize_trip_day_endpoint(
             await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         else:
             await get_trip_for_user(db, trip_id=trip_id, user_id=actor_id)
-        ordered, moves, total_distance, warnings = await optimize_trip_day(
+        ordered, moves, total_distance, previous_distance, warnings = await optimize_trip_day(
             db,
             trip_id=trip_id,
             day_index=day_index,
             start_poi_id=body.start_poi_id,
             persist=body.persist,
+            strategy=body.strategy,
         )
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -976,6 +1221,7 @@ async def optimize_trip_day_endpoint(
             for poi, old, new in moves
         ],
         distance_meters=total_distance,
+        previous_distance_meters=previous_distance,
         warnings=warnings,
     )
     if body.persist and moves:

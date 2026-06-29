@@ -3,14 +3,16 @@
 ADR-025: 사용자 대면 geocoding은 `kor-travel-geo`의 v2 REST API를 직접 HTTP 호출한다.
 in-process import / DB 직접 접근을 사용자 경로에서 쓰지 않는다. 좌표는 항상 `(lon, lat)`.
 
-응답 최상위는 kor-travel-map과 달리 `{status, candidates[], ...}` 형태(envelope `data` 없음).
+응답 최상위는 kor-travel-map과 달리 공통 헤더 `{status, query_id, input, ...}` 형태(envelope
+`data` 없음). geocode/reverse/search는 `candidates[]`를, `/v2/regions/within-radius`는
+level별 그룹 배열(`center, radius_km, sido[], sigungu[], emd[]`)을 함께 싣는다(geo ADR-060·062).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
@@ -18,6 +20,8 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.core.config import Settings, settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +49,12 @@ class KorTravelGeoClient:
         self,
         http: httpx.AsyncClient,
         *,
+        api_key: str | None = None,
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
     ) -> None:
         self._http = http
+        self._api_key = (api_key or "").strip()
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
 
@@ -61,7 +67,7 @@ class KorTravelGeoClient:
         body = {k: v for k, v in payload.items() if v is not None}
         for attempt in range(self._max_attempts):
             try:
-                resp = await self._http.post(path, json=body)
+                resp = await self._http.post(path, params=self._auth_params(), json=body)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelGeoUnavailable(f"kor-travel-geo 요청 실패({path}): {exc!r}")
             else:
@@ -83,6 +89,11 @@ class KorTravelGeoClient:
         if not isinstance(body, dict):
             raise KorTravelGeoError(f"예상치 못한 응답 셰입({resp.request.url.path})")
         return body
+
+    def _auth_params(self) -> dict[str, str]:
+        if not self._api_key:
+            raise KorTravelGeoUnavailable("kor-travel-geo v2 공개 API key가 설정되지 않았습니다.")
+        return {"key": self._api_key}
 
     # ── v2 endpoint (docs/integrations/kor-travel-geo.md §3) ───────────────────
 
@@ -141,17 +152,21 @@ class KorTravelGeoClient:
         *,
         lon: float,
         lat: float,
-        radius_m: int,
-        boundary_level: str | None = None,
+        radius_km: float,
+        levels: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """좌표 반경 내 행정구역 후보. data = {status, candidates[]}."""
+        """좌표 반경 내 행정구역(level별 그룹).
+
+        v2 계약: `radius_km`(≤500) + `levels`(sido|sigungu|emd, 비어있지 않음).
+        data = {status, center, radius_km, sido[], sigungu[], emd[]} (구 candidate[] 폐지).
+        """
         return await self._post(
             "/v2/regions/within-radius",
             {
                 "lon": lon,
                 "lat": lat,
-                "radius_m": radius_m,
-                "boundary_level": boundary_level,
+                "radius_km": radius_km,
+                "levels": list(levels) if levels else None,
             },
         )
 
@@ -181,8 +196,15 @@ def create_kor_travel_geo_client(app_settings: Settings) -> KorTravelGeoClient:
     http = httpx.AsyncClient(
         base_url=app_settings.pinvi_kor_travel_geo_base_url,
         timeout=app_settings.pinvi_kor_travel_geo_timeout_seconds,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory, provider="kor_travel_geo"
+        ),
     )
-    return KorTravelGeoClient(http, max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts)
+    return KorTravelGeoClient(
+        http,
+        api_key=app_settings.pinvi_vworld_api_key,
+        max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts,
+    )
 
 
 @asynccontextmanager

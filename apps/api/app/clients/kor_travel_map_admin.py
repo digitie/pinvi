@@ -3,7 +3,8 @@
 Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map `/v1/admin/features*`
 (POST/PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다.
 API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
-설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)만 보낸다.
+설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)과, 운영에서 kor_travel_map
+admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
 
 §7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
 - admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
@@ -21,13 +22,14 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
+    KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
     KorTravelMapRateLimited,
@@ -35,10 +37,15 @@ from app.clients.kor_travel_map import (
     _error_code,
 )
 from app.core.config import Settings, settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+_ADMIN_PROXY_SECRET_HEADER = "X-Kor-Travel-Map-Admin-Proxy-Secret"  # noqa: S105
+_ADMIN_ACTOR_HEADER = "X-Kor-Travel-Map-Actor"
+_REQUEST_ID_HEADER = "X-Request-Id"
 
 
 def _retry_after(resp: httpx.Response) -> int | None:
@@ -59,21 +66,44 @@ class KorTravelMapAdminClient:
         http: httpx.AsyncClient,
         *,
         service_token: str = "",
+        admin_proxy_secret: str = "",
+        admin_actor: str = "pinvi-admin",
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
+        request_id: str | None = None,
     ) -> None:
         self._http = http
-        self._service_token = service_token
+        self._service_token = service_token.strip()
+        self._admin_proxy_secret = admin_proxy_secret.strip()
+        self._admin_actor = admin_actor.strip() or "pinvi-admin"
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
+        self._request_id = (request_id or "").strip()
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self._request_id:
+            headers[_REQUEST_ID_HEADER] = self._request_id
         if self._service_token:
-            return {_SERVICE_TOKEN_HEADER: self._service_token}
-        return {}
+            headers[_SERVICE_TOKEN_HEADER] = self._service_token
+        if self._admin_proxy_secret:
+            headers[_ADMIN_PROXY_SECRET_HEADER] = self._admin_proxy_secret
+            headers[_ADMIN_ACTOR_HEADER] = self._admin_actor
+        return headers
+
+    def with_request_id(self, request_id: str | None) -> KorTravelMapAdminClient:
+        return KorTravelMapAdminClient(
+            self._http,
+            service_token=self._service_token,
+            admin_proxy_secret=self._admin_proxy_secret,
+            admin_actor=self._admin_actor,
+            max_attempts=self._max_attempts,
+            backoff_base_seconds=self._backoff_base_seconds,
+            request_id=request_id,
+        )
 
     async def _send(
         self,
@@ -88,7 +118,12 @@ class KorTravelMapAdminClient:
         for attempt in range(self._max_attempts):
             try:
                 resp = await self._http.request(
-                    method, path, json=json, params=params, headers=self._headers()
+                    method,
+                    path,
+                    json=json,
+                    params=params,
+                    headers=self._headers(),
+                    extensions=self._extensions(),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path}): {exc!r}")
@@ -104,22 +139,98 @@ class KorTravelMapAdminClient:
         logger.warning("kor_travel_map_admin.unavailable", extra={"path": path})
         raise last or KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path})")
 
-    def _data(self, resp: httpx.Response) -> dict[str, Any]:
-        """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
+    def _payload(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답 envelope 추출. 오류 status는 도메인 예외로 변환."""
         sc = resp.status_code
         if sc == status.HTTP_404_NOT_FOUND:
             raise KorTravelMapFeatureNotFound("feature 를 찾을 수 없습니다.")
+        error_code = _error_code(resp)
+        if sc == status.HTTP_409_CONFLICT and error_code != "LOCK_BUSY":
+            raise KorTravelMapConflict(f"kor-travel-map admin {sc}", code=error_code)
         if sc in (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_409_CONFLICT):
             raise KorTravelMapRateLimited(
                 f"kor-travel-map admin {sc}", retry_after_seconds=_retry_after(resp)
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
-            raise KorTravelMapBadRequest(f"kor-travel-map admin {sc}", code=_error_code(resp))
+            raise KorTravelMapBadRequest(f"kor-travel-map admin {sc}", code=error_code)
         payload = resp.json()
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
             raise KorTravelMapError(f"예상치 못한 admin 응답 셰입({resp.request.url.path})")
-        return data
+        meta = payload.get("meta") if isinstance(payload, Mapping) else None
+        if meta is not None and not isinstance(meta, dict):
+            raise KorTravelMapError(f"예상치 못한 admin meta 셰입({resp.request.url.path})")
+        return {"data": data, "meta": meta or {}}
+
+    def _extensions(self) -> dict[str, str]:
+        if self._request_id:
+            return {"pinvi_request_id": self._request_id}
+        return {}
+
+    def _data(self, resp: httpx.Response) -> dict[str, Any]:
+        """성공 응답 `data` 추출. 오류 status는 도메인 예외로 변환."""
+        return cast(dict[str, Any], self._payload(resp)["data"])
+
+    @staticmethod
+    def _put_sequence_params(
+        params: dict[str, Any],
+        key: str,
+        values: list[str] | tuple[str, ...] | None,
+    ) -> None:
+        cleaned = [value for value in values or [] if value]
+        if cleaned:
+            params[key] = cleaned
+
+    async def list_features(
+        self,
+        *,
+        q: str | None = None,
+        kinds: list[str] | None = None,
+        categories: list[str] | None = None,
+        statuses: list[str] | None = None,
+        providers: list[str] | None = None,
+        dataset_keys: list[str] | None = None,
+        has_coord: bool | None = None,
+        has_issue: bool | None = None,
+        issue_types: list[str] | None = None,
+        updated_from: str | None = None,
+        updated_to: str | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/admin/features — admin feature 목록(read-only) envelope 반환."""
+        params: dict[str, Any] = {}
+        if q:
+            params["q"] = q
+        self._put_sequence_params(params, "kind", kinds)
+        self._put_sequence_params(params, "category", categories)
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "provider", providers)
+        self._put_sequence_params(params, "dataset_key", dataset_keys)
+        self._put_sequence_params(params, "issue_type", issue_types)
+        if has_coord is not None:
+            params["has_coord"] = has_coord
+        if has_issue is not None:
+            params["has_issue"] = has_issue
+        if updated_from:
+            params["updated_from"] = updated_from
+        if updated_to:
+            params["updated_to"] = updated_to
+        if page_size is not None:
+            params["page_size"] = page_size
+        if cursor:
+            params["cursor"] = cursor
+        if sort:
+            params["sort"] = sort
+        if order:
+            params["order"] = order
+        return self._payload(await self._send("GET", "/v1/admin/features", params=params))
+
+    async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
+        """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
+        return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
 
     def _change_record(self, resp: httpx.Response) -> dict[str, Any]:
         """feature change 응답에서 `data.request`(AdminFeatureChangeRequestRecord) 추출.
@@ -161,14 +272,21 @@ class KorTravelMapAdminClient:
     # ── change-requests 큐 (kor_travel_map 운영자 검수 추적) ───────────────────────
 
     async def list_change_requests(
-        self, *, page_size: int | None = None, cursor: str | None = None
+        self,
+        *,
+        statuses: list[str] | None = None,
+        actions: list[str] | None = None,
+        q: str | None = None,
+        page_size: int | None = None,
     ) -> dict[str, Any]:
         """GET /v1/admin/features/change-requests — data = {items, review_mode}."""
         params: dict[str, Any] = {}
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "action", actions)
+        if q:
+            params["q"] = q
         if page_size is not None:
             params["page_size"] = page_size
-        if cursor is not None:
-            params["cursor"] = cursor
         return self._data(
             await self._send("GET", "/v1/admin/features/change-requests", params=params)
         )
@@ -201,6 +319,251 @@ class KorTravelMapAdminClient:
             )
         )
 
+    # ── curated feature import (ADR-049) ───────────────────────────────────────
+
+    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
+        """GET /v1/admin/curated-features/{id}/detail-snapshot — 큐레이션 import용 snapshot.
+
+        data = {curated_feature_id, version, etag, updated_at, theme, content, source, items}.
+        kor-travel-map PR #533이 public `/v1/curated-features/{id}/pinvi-copy`를 폐지하고
+        item 포함 snapshot을 admin 표면(서비스 토큰 필요)으로 옮겼다(ADR-049). plan-level 객체
+        키는 `plan`에서 `content`로 개명됐다.
+        """
+        return self._data(
+            await self._send(
+                "GET", f"/v1/admin/curated-features/{curated_feature_id}/detail-snapshot"
+            )
+        )
+
+    # ── ops/provider ETL read proxy (kor_travel_map admin 운영 화면) ────────────────
+
+    async def get_ops_dagster_summary(self, *, page_size: int = 10) -> dict[str, Any]:
+        """GET /v1/ops/dagster/summary — kor_travel_map Dagster repository/run 요약."""
+        return self._data(
+            await self._send(
+                "GET",
+                "/v1/ops/dagster/summary",
+                params={"page_size": page_size},
+            )
+        )
+
+    async def get_ops_metrics(self) -> dict[str, Any]:
+        """GET /v1/ops/metrics — feature/import/dedup 운영 카운터."""
+        return self._data(await self._send("GET", "/v1/ops/metrics"))
+
+    async def list_ops_providers(self, *, key: str | None = None) -> dict[str, Any]:
+        """GET /v1/ops/providers — provider/dataset sync 상태 목록."""
+        params: dict[str, Any] = {}
+        if key:
+            params["key"] = key
+        return self._data(await self._send("GET", "/v1/ops/providers", params=params))
+
+    async def get_ops_provider(self, provider: str) -> dict[str, Any]:
+        """GET /v1/ops/providers/{provider} — provider 상세."""
+        return self._data(await self._send("GET", f"/v1/ops/providers/{provider}"))
+
+    async def list_ops_import_jobs(
+        self,
+        *,
+        status_filter: str | None = None,
+        kind: str | None = None,
+        load_batch_id: str | None = None,
+        parent_job_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/import-jobs — provider import job 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if status_filter:
+            params["status"] = status_filter
+        if kind:
+            params["kind"] = kind
+        if load_batch_id:
+            params["load_batch_id"] = load_batch_id
+        if parent_job_id:
+            params["parent_job_id"] = parent_job_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/import-jobs", params=params))
+
+    async def cancel_ops_import_job(
+        self,
+        job_id: str,
+        *,
+        reason: str | None = None,
+        operator: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /v1/ops/import-jobs/{job_id}/cancel — import job cancel data 반환."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        if operator is not None:
+            body["operator"] = operator
+        return self._data(
+            await self._send("POST", f"/v1/ops/import-jobs/{job_id}/cancel", json=body)
+        )
+
+    async def list_dedup_reviews(
+        self,
+        *,
+        statuses: list[str] | None = None,
+        providers: list[str] | None = None,
+        dataset_keys: list[str] | None = None,
+        kinds: list[str] | None = None,
+        categories: list[str] | None = None,
+        min_score: float | None = None,
+        max_score: float | None = None,
+        q: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/admin/dedup-reviews — dedup review queue 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        self._put_sequence_params(params, "status", statuses)
+        self._put_sequence_params(params, "provider", providers)
+        self._put_sequence_params(params, "dataset_key", dataset_keys)
+        self._put_sequence_params(params, "kind", kinds)
+        self._put_sequence_params(params, "category", categories)
+        if min_score is not None:
+            params["min_score"] = min_score
+        if max_score is not None:
+            params["max_score"] = max_score
+        if q:
+            params["q"] = q
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/admin/dedup-reviews", params=params))
+
+    async def decide_dedup_review(
+        self,
+        review_id: str,
+        *,
+        decision: str,
+        decision_reason: str | None = None,
+        master_feature_id: str | None = None,
+        reviewed_by: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /v1/admin/dedup-reviews/{review_id} — dedup verdict data 반환."""
+        body: dict[str, Any] = {"decision": decision}
+        if decision_reason is not None:
+            body["decision_reason"] = decision_reason
+        if master_feature_id is not None:
+            body["master_feature_id"] = master_feature_id
+        if reviewed_by is not None:
+            body["reviewed_by"] = reviewed_by
+        return self._data(
+            await self._send("PATCH", f"/v1/admin/dedup-reviews/{review_id}", json=body)
+        )
+
+    async def list_integrity_issues(
+        self,
+        *,
+        status_filter: str | None = "open",
+        severity: str | None = None,
+        violation_type: str | None = None,
+        provider: str | None = None,
+        dataset_key: str | None = None,
+        feature_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/consistency/issues — integrity issue 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if status_filter:
+            params["status"] = status_filter
+        if severity:
+            params["severity"] = severity
+        if violation_type:
+            params["violation_type"] = violation_type
+        if provider:
+            params["provider"] = provider
+        if dataset_key:
+            params["dataset_key"] = dataset_key
+        if feature_id:
+            params["feature_id"] = feature_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/consistency/issues", params=params))
+
+    async def patch_admin_issue(
+        self,
+        issue_id: str,
+        *,
+        action: str,
+        reason: str | None = None,
+        operator: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /v1/admin/issues/{id} — integrity issue 상태 조치 envelope 반환."""
+        body: dict[str, Any] = {"action": action}
+        if reason is not None:
+            body["reason"] = reason
+        if operator is not None:
+            body["operator"] = operator
+        return self._payload(await self._send("PATCH", f"/v1/admin/issues/{issue_id}", json=body))
+
+    async def list_consistency_reports(
+        self,
+        *,
+        severity_max: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/consistency/reports — consistency report 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if severity_max:
+            params["severity_max"] = severity_max
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/consistency/reports", params=params))
+
+    async def list_system_logs(
+        self,
+        *,
+        level: str | None = None,
+        source: str | None = None,
+        q: str | None = None,
+        request_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/system-logs — sanitized system log 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if level:
+            params["level"] = level
+        if source:
+            params["source"] = source
+        if q:
+            params["q"] = q
+        if request_id:
+            params["request_id"] = request_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/system-logs", params=params))
+
+    async def list_ops_api_call_logs(
+        self,
+        *,
+        method: str | None = None,
+        min_status: int | None = None,
+        path: str | None = None,
+        request_id: str | None = None,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/ops/api-call-logs — upstream API call log 목록 envelope 반환."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if method:
+            params["method"] = method
+        if min_status is not None:
+            params["min_status"] = min_status
+        if path:
+            params["path"] = path
+        if request_id:
+            params["request_id"] = request_id
+        if cursor:
+            params["cursor"] = cursor
+        return self._payload(await self._send("GET", "/v1/ops/api-call-logs", params=params))
+
 
 def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAdminClient:
     """설정 기반 admin client 생성. admin token 미설정 시 공용 service token으로 fallback."""
@@ -211,10 +574,16 @@ def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAd
     http = httpx.AsyncClient(
         base_url=app_settings.pinvi_kor_travel_map_admin_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory,
+            provider="kor_travel_map_admin",
+        ),
     )
     return KorTravelMapAdminClient(
         http,
         service_token=token,
+        admin_proxy_secret=app_settings.pinvi_kor_travel_map_admin_proxy_secret,
+        admin_actor=app_settings.pinvi_kor_travel_map_admin_actor,
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
     )
 
@@ -246,7 +615,7 @@ def get_kor_travel_map_admin_client(request: Request) -> KorTravelMapAdminClient
                 "message": "지도 admin 서비스가 일시적으로 사용 불가합니다.",
             },
         )
-    return client
+    return client.with_request_id(getattr(request.state, "request_id", None))
 
 
 KorTravelMapAdminClientDep = Annotated[

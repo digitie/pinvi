@@ -115,7 +115,8 @@ export default function TripEditScreen() {
   });
 
   const deleteDayMutation = useMutation({
-    mutationFn: (dayIndex: number) => api.trips.deleteDay(tripId, dayIndex),
+    mutationFn: ({ dayIndex, version }: { dayIndex: number; version: number }) =>
+      api.trips.deleteDay(tripId, dayIndex, version),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
     onError: (err) => Alert.alert('일자 삭제 실패', friendlyErrorText(err)),
   });
@@ -151,10 +152,14 @@ export default function TripEditScreen() {
   }
   const nextDayIndex = days.reduce((max, d) => Math.max(max, d.day_index), 0) + 1;
 
-  const onDeleteDay = (dayIndex: number) => {
+  const onDeleteDay = (dayIndex: number, version: number) => {
     Alert.alert('일자 삭제', `Day ${dayIndex}와(과) 그 안의 장소를 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => deleteDayMutation.mutate(dayIndex) },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => deleteDayMutation.mutate({ dayIndex, version }),
+      },
     ]);
   };
 
@@ -279,8 +284,11 @@ export default function TripEditScreen() {
                   <Button
                     label="일자 삭제"
                     variant="secondary"
-                    loading={deleteDayMutation.isPending && deleteDayMutation.variables === day.day_index}
-                    onPress={() => onDeleteDay(day.day_index)}
+                    loading={
+                      deleteDayMutation.isPending &&
+                      deleteDayMutation.variables?.dayIndex === day.day_index
+                    }
+                    onPress={() => onDeleteDay(day.day_index, day.version)}
                   />
                 </View>
                 {ids.length === 0 ? (

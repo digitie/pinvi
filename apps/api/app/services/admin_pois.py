@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import NamedTuple
+from decimal import Decimal
+from typing import Any, NamedTuple
 
 from sqlalchemy import Text, cast, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement
@@ -15,6 +17,12 @@ from app.models.audit import AdminAuditLog
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.user import User
+from app.services.kasi import build_initial_poi_rise_set
+from app.services.poi import (
+    SortOrderConflictError,
+    _fill_trip_primary_region_from_snapshot,
+    ensure_trip_day,
+)
 
 
 class AdminPoiError(Exception):
@@ -22,6 +30,10 @@ class AdminPoiError(Exception):
 
 
 class AdminPoiNotFoundError(AdminPoiError):
+    code = "RESOURCE_NOT_FOUND"
+
+
+class AdminPoiTripNotFoundError(AdminPoiError):
     code = "RESOURCE_NOT_FOUND"
 
 
@@ -114,6 +126,67 @@ async def get_admin_poi(db: AsyncSession, *, poi_id: uuid.UUID) -> AdminPoiRow:
     )
 
 
+async def create_admin_poi(
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+    sort_order: str,
+    feature_id: str | None,
+    feature_snapshot: dict[str, Any],
+    added_by_user_id: uuid.UUID,
+    custom_marker_color: str | None = None,
+    custom_marker_icon: str | None = None,
+    planned_arrival_at: datetime | None = None,
+    planned_departure_at: datetime | None = None,
+    user_note: str | None = None,
+    budget_amount: Decimal | None = None,
+    actual_amount: Decimal | None = None,
+    currency: str = "KRW",
+    user_url: str | None = None,
+) -> TripDayPoi:
+    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
+    if trip is None:
+        raise AdminPoiTripNotFoundError("여행을 찾을 수 없습니다.")
+
+    day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
+    poi = TripDayPoi(
+        trip_id=trip_id,
+        day_index=day_index,
+        sort_order=sort_order,
+        feature_id=feature_id,
+        feature_snapshot=feature_snapshot,
+        custom_marker_color=custom_marker_color,
+        custom_marker_icon=custom_marker_icon,
+        planned_arrival_at=planned_arrival_at,
+        planned_departure_at=planned_departure_at,
+        user_note=user_note,
+        budget_amount=budget_amount,
+        actual_amount=actual_amount,
+        currency=currency,
+        user_url=user_url,
+        added_by_user_id=added_by_user_id,
+    )
+    db.add(poi)
+    await _fill_trip_primary_region_from_snapshot(
+        db,
+        trip_id=trip_id,
+        feature_snapshot=feature_snapshot,
+    )
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise SortOrderConflictError("같은 위치(sort_order)에 이미 POI가 있습니다.") from exc
+    db.add(
+        build_initial_poi_rise_set(
+            poi=poi,
+            locdate=day.date,
+            feature_snapshot=feature_snapshot,
+        )
+    )
+    return poi
+
+
 async def update_admin_poi_link_status(
     db: AsyncSession, *, poi_id: uuid.UUID, broken: bool
 ) -> tuple[TripDayPoi, datetime | None]:
@@ -190,4 +263,62 @@ def extract_feature_label(snapshot: dict[str, object]) -> str | None:
         value = snapshot.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _mapping(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _first_number(candidate: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _number(candidate.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def extract_feature_coord(snapshot: dict[str, object]) -> tuple[float | None, float | None]:
+    """Snapshot field names vary by source; return `(lon, lat)` when enough data exists."""
+
+    candidate_maps = [
+        snapshot,
+        _mapping(snapshot.get("coord")),
+        _mapping(snapshot.get("coordinate")),
+        _mapping(snapshot.get("location")),
+        _mapping(snapshot.get("geometry")),
+    ]
+    for candidate in candidate_maps:
+        if not candidate:
+            continue
+        lon = _first_number(candidate, ("lon", "lng", "longitude", "x"))
+        lat = _first_number(candidate, ("lat", "latitude", "y"))
+        if lon is not None and lat is not None:
+            return lon, lat
+    return None, None
+
+
+def extract_feature_address_label(snapshot: dict[str, object]) -> str | None:
+    for key in ("address_label", "address", "road_address", "jibun_address", "addr"):
+        value = snapshot.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            for nested_key in ("label", "full", "road", "jibun", "name"):
+                nested = value.get(nested_key)
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()
     return None

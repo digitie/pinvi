@@ -164,6 +164,8 @@ export const TripDayResponseSchema = z.object({
   date: z.string().date().nullable(),
   title: z.string().nullable(),
   note: z.string().nullable(),
+  // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
+  version: z.number().int().default(1),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
 });
@@ -238,6 +240,8 @@ export const TripViewDaySchema = z.object({
   day_index: z.number().int(),
   date: z.string().date().nullable(),
   title: z.string().nullable(),
+  // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
+  version: z.number().int().default(1),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;
@@ -270,7 +274,8 @@ export const TripSharedViewSchema = z.object({
 export type TripSharedView = z.infer<typeof TripSharedViewSchema>;
 
 export const TripDayOptimizeRequestSchema = z.object({
-  strategy: z.literal('nearest_neighbor').default('nearest_neighbor'),
+  // two_opt = nearest-neighbor seed + 2-opt local search (스마트 정렬, 기본).
+  strategy: z.enum(['nearest_neighbor', 'two_opt']).default('two_opt'),
   start_poi_id: z.string().uuid().nullable().optional(),
   persist: z.boolean().default(false),
 });
@@ -289,6 +294,7 @@ export const TripDayOptimizeResponseSchema = z.object({
   ordered_poi_ids: z.array(z.string().uuid()),
   moves: z.array(TripDayOptimizeMoveSchema),
   distance_meters: z.number().int().nullable(),
+  previous_distance_meters: z.number().int().nullable().default(null),
   warnings: z.array(z.string()),
 });
 export type TripDayOptimizeResponse = z.infer<typeof TripDayOptimizeResponseSchema>;
