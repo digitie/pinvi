@@ -698,10 +698,12 @@ export type AdminDedupDecisionResponse = z.infer<typeof AdminDedupDecisionRespon
 export const AdminCategoryMappingItemSchema = z.object({
   code: z.string(),
   label: z.string(),
+  upstream_label: z.string().nullable().default(null),
   parent_code: z.string().nullable().default(null),
   depth: z.number().int(),
   path: z.array(z.string()).default([]),
   maki_icon: z.string(),
+  upstream_maki_icon: z.string().nullable().default(null),
   is_active: z.boolean(),
   sort_order: z.number().int(),
   tier1_code: z.string().nullable().default(null),
@@ -714,12 +716,33 @@ export const AdminCategoryMappingItemSchema = z.object({
   tier4_name: z.string().nullable().default(null),
   db_active: z.boolean().nullable().default(null),
   db_feature_count: z.number().int().nullable().default(null),
+  display_name_ko: z.string().nullable().default(null),
+  marker_color: z
+    .string()
+    .regex(/^P-(0[1-9]|1[0-6])$/)
+    .nullable()
+    .default(null),
+  marker_icon: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,64}$/)
+    .nullable()
+    .default(null),
+  effective_label: z.string(),
+  effective_marker_color: z
+    .string()
+    .regex(/^P-(0[1-9]|1[0-6])$/)
+    .nullable()
+    .default(null),
+  effective_maki_icon: z.string(),
+  has_override: z.boolean().default(false),
+  override_updated_at: Iso8601Schema.nullable().default(null),
+  override_updated_by_user_id: z.string().uuid().nullable().default(null),
 });
 export type AdminCategoryMappingItem = z.infer<typeof AdminCategoryMappingItemSchema>;
 
 export const AdminCategoryMappingsResponseSchema = z.object({
   source_of_truth: z.string(),
-  mode: z.literal('read_only'),
+  mode: z.literal('pinvi_override'),
   include_counts: z.boolean(),
   active_only: z.boolean(),
   total_count: z.number().int(),
@@ -727,9 +750,35 @@ export const AdminCategoryMappingsResponseSchema = z.object({
   active_count: z.number().int(),
   inactive_count: z.number().int(),
   db_feature_total: z.number().int().nullable().default(null),
+  override_count: z.number().int().default(0),
   items: z.array(AdminCategoryMappingItemSchema).default([]),
 });
 export type AdminCategoryMappingsResponse = z.infer<typeof AdminCategoryMappingsResponseSchema>;
+
+export const AdminCategoryMappingUpdateRequestSchema = z.object({
+  display_name_ko: z.string().min(1).max(120).nullable().optional(),
+  marker_color: z
+    .string()
+    .regex(/^P-(0[1-9]|1[0-6])$/)
+    .nullable()
+    .optional(),
+  marker_icon: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,64}$/)
+    .nullable()
+    .optional(),
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminCategoryMappingUpdateRequest = z.infer<
+  typeof AdminCategoryMappingUpdateRequestSchema
+>;
+
+export const AdminCategoryMappingRollbackRequestSchema = z.object({
+  access_reason: z.string().min(1).max(500),
+});
+export type AdminCategoryMappingRollbackRequest = z.infer<
+  typeof AdminCategoryMappingRollbackRequestSchema
+>;
 
 export const AdminSeedScenarioSchema = z.object({
   key: z.string(),

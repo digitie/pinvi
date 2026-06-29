@@ -11,6 +11,9 @@ import {
   AdminBackupSnapshotRequestSchema,
   AdminBackupSnapshotSchema,
   AdminChainVerifySchema,
+  AdminCategoryMappingItemSchema,
+  AdminCategoryMappingRollbackRequestSchema,
+  AdminCategoryMappingUpdateRequestSchema,
   AdminCategoryMappingsResponseSchema,
   AdminEmailEntrySchema,
   AdminEtlSummarySchema,
@@ -180,6 +183,13 @@ export interface AdminCategoryMappingListParams {
   includeCounts?: boolean;
   activeOnly?: boolean;
 }
+
+export type AdminCategoryMappingUpdateBody = z.infer<
+  typeof AdminCategoryMappingUpdateRequestSchema
+>;
+export type AdminCategoryMappingRollbackBody = z.infer<
+  typeof AdminCategoryMappingRollbackRequestSchema
+>;
 
 export type AdminSeedScenarioRunBody = z.infer<typeof AdminSeedScenarioRunRequestSchema>;
 
@@ -404,6 +414,20 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminCategoryMappingsResponseSchema,
     });
   },
+
+  updateCategoryMapping: (categoryKey: string, body: AdminCategoryMappingUpdateBody) =>
+    client.request(`/admin/category-mappings/${encodeURIComponent(categoryKey)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(AdminCategoryMappingUpdateRequestSchema.parse(body)),
+      schema: AdminCategoryMappingItemSchema,
+    }),
+
+  rollbackCategoryMapping: (categoryKey: string, body: AdminCategoryMappingRollbackBody) =>
+    client.request(`/admin/category-mappings/${encodeURIComponent(categoryKey)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminCategoryMappingRollbackRequestSchema.parse(body)),
+      schema: AdminCategoryMappingItemSchema,
+    }),
 
   listSeedScenarios: () =>
     client.request('/admin/seed/scenarios', {

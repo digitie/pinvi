@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-264 Admin category mapping DB override 완료
+
+**작업**: Sprint 6 T-264 Admin category mapping DB override를 구현했다.
+
+**변경**:
+
+- ADR-052로 upstream category taxonomy는 `kor-travel-map` 정본, Pinvi는 표시명/마커 색/마커 아이콘
+  override만 소유한다는 결정을 남겼다.
+- `app.category_mappings` migration/model과 Admin API 조회·수정·rollback/audit을 추가했다.
+- Web `/admin/category-mapping`에 override editor와 rollback 흐름을 연결하고 API client/schema/e2e를
+  갱신했다.
+- 사용자 지시에 따라 `tasks.md`에서 완료/머지/검증 이력을 제거하고, 완료 기록은
+  `tasks-done.md`, 반복 계획·체크리스트는 `tasks-rule.md`로 이동했다.
+
+**검증**:
+
+- `apps/api/.venv/bin/python -m py_compile ...`
+- `apps/api/.venv/bin/ruff check ...`
+- `apps/api/.venv/bin/ruff format --check ...`
+- `apps/api/.venv/bin/python -m mypy --strict apps/api/app/api/v1/admin/category_mappings.py apps/api/app/models/category_mapping.py`
+- `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/pytest apps/api/tests/integration/test_admin_category_mappings_api.py -q --capture=no`
+- `npm run typecheck --workspace packages/schemas`
+- `npm run typecheck --workspace packages/api-client`
+- `npm run typecheck --workspace apps/web`
+- `npm run lint --workspace apps/web`
+- `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-category-mapping.e2e.ts --workers=1`
+- `git diff --check`
+
+**병행 상태**: T-291-etl-sql-tests는 `apps/etl/**`와 audit retention 정책을 건드리는 잔여 task다.
+열린 PR #227은 map marker tuning과 tracking 문서를 건드리는 오래된 PR이므로 map 파일은 제외한다.
+T-285는 진행하지 않는다.
+
 ## 2026-06-29 (claude) — 병행 트랙 3건 머지 + tasks 위생
 
 **작업**: codex 병행 트랙(T-289/290, T-291, T-261~263)을 구현·머지하고, 신규 task 진입 전

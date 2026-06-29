@@ -686,6 +686,40 @@ FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 사용자 `POST /features/requests`는 이 테이블에만 적재하고 kor-travel-map을 직접 호출하지
 않는다. Admin 검사/승인 후 kor_travel_map feature change API로 반영하는 단계는 T-179에서 연결한다.
 
+### 5.4 `app.category_mappings`
+
+Pinvi-local category presentation override. Category taxonomy 정본은 `kor-travel-map`
+`/v1/categories`이며, 이 테이블은 표시명/마커 색/아이콘만 저장한다.
+
+```sql
+CREATE TABLE app.category_mappings (
+  category_key       text PRIMARY KEY,
+  display_name_ko    text,
+  marker_color       text,
+  marker_icon        text,
+  created_by_user_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  updated_by_user_id uuid REFERENCES app.users(user_id) ON DELETE SET NULL,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_category_mappings_display_name
+    CHECK (display_name_ko IS NULL OR length(btrim(display_name_ko)) BETWEEN 1 AND 120),
+  CONSTRAINT ck_category_mappings_marker_color
+    CHECK (marker_color IS NULL OR marker_color ~ '^P-(0[1-9]|1[0-6])$'),
+  CONSTRAINT ck_category_mappings_marker_icon
+    CHECK (marker_icon IS NULL OR marker_icon ~ '^[a-z0-9_-]{1,64}$')
+);
+
+CREATE INDEX ix_category_mappings_updated_at
+  ON app.category_mappings (updated_at);
+
+CREATE TRIGGER trg_category_mappings_touch_updated_at
+BEFORE UPDATE ON app.category_mappings
+FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+```
+
+Admin mutation은 `admin_audit_log`에 `category_mapping.update` /
+`category_mapping.rollback`으로 기록한다. Upstream `kor-travel-map` category table에는 쓰지 않는다.
+
 ## 6. 운영 / 로그
 
 ### 6.1 `app.admin_audit_log`

@@ -29,6 +29,7 @@ from app.models import (  # noqa: E402,F401
     api_call_log,
     attachment,
     audit,
+    category_mapping,
     comment,
     companion,
     curated_plan,
