@@ -25,6 +25,7 @@ from app.middleware.location_audit import LocationAuditMiddleware
 from app.middleware.prometheus import PrometheusMetricsMiddleware, prometheus_metrics
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.services.bootstrap_admin import ensure_bootstrap_admin
 from app.services.email_service import email_outbox_worker_lifespan
 from app.services.location_audit import location_audit_outbox_worker_lifespan
@@ -79,6 +80,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

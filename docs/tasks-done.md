@@ -6,6 +6,13 @@
 
 ## 2026-06-29
 
+- [x] T-270 — 성능 / 부하 / 보안 점검. (완료: 2026-06-29, codex)
+      API에 `SecurityHeadersMiddleware`를 추가해 기본 보안 헤더와 API CSP를 적용했다. HSTS는
+      production/HTTPS 요청에서만 붙이고, `/docs`/`/redoc`/`/openapi.json`은 CSP 예외로 둔다.
+      반복 실행 가능한 gate로 `tests/load/api_p95_latency.py`와
+      `tests/security/csp_cors_rate_limit.py`를 추가했으며, N150/Odroid 결과는
+      `docs/runbooks/performance-security-gate.md` 기준으로 분리 기록한다.
+
 - [x] T-266 — MCP 외부 인터페이스 운영 실증. (완료: 2026-06-29, PR #326, claude)
       MCP 서버(T-112)는 구현 완료였고, 기존 테스트는 토큰 lifecycle + list_trips만 다뤘다.
       `test_mcp_read_only_tool_scenario`로 read-only tool 5종(list_trips/get_trip/list_pois/

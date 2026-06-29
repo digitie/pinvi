@@ -63,6 +63,9 @@
 - Admin ETL/Retention summary에서 `admin_audit_log` PII 후보를 PII 삭제 후보와 분리한
   `audit_retention`으로 노출한다. `location_access_log` 후보는 location archive summary가 단독
   소유하며, ETL 원시 SQL은 PostgreSQL compile smoke와 Alembic schema 실행 smoke로 검증한다.
+- API 응답에 기본 보안 헤더(`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`,
+  `X-Frame-Options`, API CSP)를 적용하고, T-270 성능/보안 gate 스크립트
+  `tests/load/api_p95_latency.py`, `tests/security/csp_cors_rate_limit.py`를 추가했다.
 - Admin `/admin/incidents`를 추가했다. `app.security_incidents`는
   `detected` → `triage` → `notification_decision` → `reported` → `closed` workflow로 확장됐고,
   CPO 30분 review due, KISA/PIPC 72시간 신고 due, CPO Telegram outbox, 정보주체 통지 email outbox,
