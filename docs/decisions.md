@@ -714,6 +714,10 @@
 - **상태**: accepted
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
+- **amendment (2026-06-29)**: `kor-travel-concierge` API가 이미 존재하므로 T-113
+  `kor-travel-concierge` 별 repo 신설 task는 backlog에서 제거한다. 향후 Pinvi의 AI companion
+  연동이 필요하면 신규 repo/scaffold를 만들지 않고 기존 `kor-travel-concierge` API를 활용하는
+  consumer/client 통합 task로 정의한다.
 - **컨텍스트**: 원래 backlog T-107은 본 저장소에 Gemini 통합 (Sprint 4 후보).
   하지만 AI provider (Gemini / Claude / GPT)는 빠르게 진화하고 모델 변경 /
   rate limit / 비용 / 책임 분리 측면에서 본 서비스와 lifecycle이 다르다. 또
@@ -741,13 +745,13 @@
   - AI 모델 / provider 변경이 본 서비스 배포에 영향 없음
   - 본 저장소 PR 수 / 복잡도 감소
 - **결과 (부정)**:
-  - 별 repo 신설 / 운영 부담
+  - 별도 서비스 운영 부담
   - docker-to-docker 호출 leg 추가 (latency / failure mode)
   - 두 repo CI/CD 동기 필요
 - **후속**:
-  - 별 repo 생성 — 사용자 결정 시점 / 명명
+  - 기존 `kor-travel-concierge` API 계약 확인 — Pinvi consumer/client 연동 task 착수 시점
   - `docs/integrations/ai-companion.md` 신규 (Sprint 6 진입 시)
-  - `docs/tasks.md`에서 T-107 → "deferred to `kor-travel-concierge` repo"
+  - `docs/tasks.md`에서 T-107 제거. 후속 T-113 별 repo 신설 task도 2026-06-29 제거.
 - **참조**: ADR-019 (MCP), ADR-018 (한국 전용)
 
 ## ADR-021: GitHub Actions CI/CD 재활성화

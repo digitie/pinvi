@@ -7,7 +7,8 @@
 ## 1. 범위와 원칙
 
 - **v1.0.0 = Web/API/Admin 운영 출시.** `apps/mobile`(Sprint M-1)과 user-facing AI companion은
-  release blocker에서 제외한다(T-284/T-285, 후자는 사용자 지시로 현재 미진행).
+  release blocker에서 제외한다(T-284). AI companion 관련 T-113/T-272/T-285는 2026-06-29 사용자
+  지시로 열린 backlog에서 제거했고, 향후 필요 시 기존 `kor-travel-concierge` API를 활용한다.
 - Docker 이미지는 운영 노드 로컬 checkout + 로컬 build 기준. ARM 이미지/GHCR 배포는 범위 밖(ADR-040/042/047).
 - 노드 간 DB live sync 미사용(ADR-039). dev/prod 분리(ADR-047).
 - 신규 결정은 ADR로 박는다(다음 신규 = ADR-054). 신규 native 의존성은 운영/ARM 빌드 영향을 먼저 평가한다.
@@ -17,9 +18,10 @@
 - **legal/ops 운영 표면(T-275~T-282)**: incident console, retention 실행, email suppression, DSR,
   content moderation, RBAC grant/revoke, user lifecycle, rate-limit/abuse — 머지 완료.
 - **보안 1차(T-283)**: threat model / security review 정리.
-- **scope gate(T-284 mobile, T-285 AI)**: 문서화(T-285 현재 미진행).
+- **scope gate(T-284 mobile)**: 문서화 완료. T-113/T-285 AI 관련 task는 2026-06-29 사용자 지시로 제거.
 - **병행 트랙(claude)**: T-289/290(WS reconnect/conflict UX, #310), T-291(ETL run-failure sensor, #312),
-  T-261~263(스마트 정렬 2-opt, #315, ADR-053), T-292(integrity pagination), T-264(category override, #316, ADR-052).
+  T-261~263(스마트 정렬 2-opt, #315, ADR-053), T-292(integrity pagination), T-264(category override, #316, ADR-052),
+  T-267(Backup/Restore UI hot-swap, #319).
 - **Sprint 5/v0.2.0 게이트**: 대부분 완료, release/tag만 T-259로 분리.
 
 ## 3. 남은 Task Backlog (그룹별)
@@ -37,32 +39,28 @@
 - **T-266** MCP 운영 실증 — MCP 서버(T-112)는 구현됨. Claude Code MCP client 등록 → `list_trips`/
   `search_features` 호출 성공 실증(E2E 시나리오 7) + 토큰 발급/회수 운영 확인.
 
-### D. Backup / Restore
-- **T-267** Backup/Restore UI hot-swap 완성 — backup hardening(T-250)·restore drill(T-251)·e2e(T-252)
-  위에 `/admin/backup` RestoreHotswapDialog(snapshot 선택 → 단계 progress → schema-swap) 마감. (codex
-  backup 영역과 겹치므로 선점 확인 필요.)
-
-### E. 한국 전용 geofencing (ADR-018)
+### D. 한국 전용 geofencing (ADR-018)
 - **T-268** 3중 안전망 — FastAPI `middleware/geofence.py`(구현됨, T-109/142/187) 위에 nginx geo +
   Cloudflare WAF 설정/문서 마감. KR 외 IP 451 + VPN 검증.
 
-### F. 법무 / 컴플라이언스
+### E. 법무 / 컴플라이언스
 - **T-269** LBS / 법무 4문서 / 동의 UX — `docs/legal/{terms-of-service,privacy-policy,lbs-terms,location-consent}.md`
   (변호사 검토 placeholder) + 동의 UX. PIPA/LBS 운영 표면은 T-275~282로 구현됨; 본 task는 문서/동의 흐름.
 
-### G. 운영 / 성능 / 보안
+### F. 운영 / 성능 / 보안
 - **T-270** 성능 / 부하 / 보안 점검 — `tests/load/*`, `tests/security/*`. T-283 보안 리뷰와 중복 영역은 조율.
-- **T-271** Odroid + N150 병행 운영 — 노드 로컬 checkout/build/smoke(ARM/GHCR 제외). T-108 foundation 위.
 
-### H. AI companion 분리
-- **T-272** AI companion 별도 서비스 분리 + **T-113** `kor-travel-concierge` repo 신설(ADR-020). v1.0 제외.
+### G. 범위 제거 / 미래 분리
+- **T-113 / T-271 / T-272 / T-285 제거** — 2026-06-29 사용자 지시로 열린 backlog에서 제외했다.
+  AI companion 연동이 다시 필요하면 신규 repo 신설이 아니라 기존 `kor-travel-concierge` API를
+  활용하는 consumer/client 통합 task로 정의한다.
 
-### I. 정합/잔여
+### H. 정합/잔여
 - **T-286** Cross-track review gap closure — #238 리뷰 44 gap + PR #264 리뷰를 task/문서/검증으로 매핑.
 - **T-291-etl-sql-tests** — ETL asset 원시 SQL 실행 테스트(etl Postgres fixture) + pii_retention audit
   retention 정책 분리(api/zod 파급). ETL 격리 트랙.
 
-### J. 릴리즈
+### I. 릴리즈
 - **T-259** v0.2.0 release gate — Admin live full catalog + release notes/tag/GitHub Release. (선행 릴리즈)
 - **T-273** v1.0.0 E2E / Live Gate — E2E 10 시나리오 + Odroid/N150 양쪽 smoke + backup 핫스왑 훈련 +
   geofence 검증.
@@ -86,12 +84,12 @@
 | Day optimistic lock / conflict | T-287 |
 | notice plan 작성기 | T-265 |
 | MCP 외부 인터페이스 실증 | T-266 |
-| Backup/Restore UI 핫스왑 | T-267 |
+| Backup/Restore UI 핫스왑 | ✅ T-267 |
 | 한국 전용 geofencing | T-268 |
 | 법무 4문서 / 동의 UX | T-269 |
 | 성능/부하/보안 점검 | T-270, T-283(1차) |
-| Odroid+N150 운영 smoke | T-271 |
-| AI companion 분리 | T-272 / T-113 |
+| Odroid+N150 운영 smoke | 제거(T-271) |
+| AI companion 분리 | 제거(T-113/T-272/T-285), 필요 시 기존 `kor-travel-concierge` API 활용 |
 | cross-track gap closure | T-286 |
 | ETL SQL 테스트 / audit retention | T-291-etl-sql-tests |
 | 릴리즈 | T-259 → T-273 → T-274 |

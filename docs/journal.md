@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-113 / T-271 / T-272 / T-285 제거
+
+**작업**: 사용자 지시에 따라 T-113, T-271, T-272, T-285를 열린 backlog에서 제거했다.
+
+**변경**:
+
+- `docs/tasks.md`에서 T-113, T-271, T-272, T-285를 제거했다.
+- `docs/tasks-rule.md`에 AI companion 연동 시 신규 repo 신설 대신 기존 `kor-travel-concierge` API를
+  활용하는 규칙을 추가했다.
+- `docs/tasks-done.md`에 네 task를 "사용자 지시로 scope 제거" 아카이브로 추가했다.
+- `docs/execplan/sprint6-v1.0-plan.md`와 `docs/sprints/SPRINT-6.md`의 남은 task/DoD 매핑에서
+  T-113/T-271/T-272/T-285를 제거했다.
+- `docs/decisions.md` ADR-020에 기존 `kor-travel-concierge` API 활용 amendment를 추가했다.
+
+**병행 상태**: 열린 PR #321은 T-287 Trip Day optimistic lock / conflict UX, 열린 PR #227은 map
+marker/tracking 문서 영역이고, T-291-etl-sql-tests는 `apps/etl/**`와 audit retention 정책 영역이다.
+문서 정리 PR 머지 후 겹치지 않는 다음 task를 선점한다.
+
 ## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 완료
 
 **작업**: 다음 개발 task 진입 전 task 추적 문서를 정리하고 T-267 Backup/Restore UI hot-swap을
