@@ -250,7 +250,9 @@ class TripSharedView(BaseModel):
 
 
 class TripDayOptimizeRequest(BaseModel):
-    strategy: Literal["nearest_neighbor"] = "nearest_neighbor"
+    # two_opt = nearest-neighbor seed + 2-opt local search (스마트 정렬, 기본).
+    # nearest_neighbor = seed만(legacy).
+    strategy: Literal["nearest_neighbor", "two_opt"] = "two_opt"
     start_poi_id: uuid.UUID | None = None
     persist: bool = False
 
@@ -267,6 +269,7 @@ class TripDayOptimizeResponse(BaseModel):
     ordered_poi_ids: list[uuid.UUID]
     moves: list[TripDayOptimizeMove]
     distance_meters: int | None
+    previous_distance_meters: int | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

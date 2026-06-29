@@ -266,7 +266,7 @@ export const tripApi = (client: ApiClient) => ({
   optimizeDay: (
     tripId: string,
     dayIndex: number,
-    body: TripDayOptimizeRequest = { strategy: 'nearest_neighbor', persist: false },
+    body: TripDayOptimizeRequest = { strategy: 'two_opt', persist: false },
   ) =>
     client.request(`/trips/${tripId}/days/${dayIndex}/optimize`, {
       method: 'POST',
