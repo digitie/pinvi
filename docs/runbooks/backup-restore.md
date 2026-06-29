@@ -37,7 +37,10 @@ open https://pinvi-api.example.com/admin/etl
 snapshot 행의 Restore 버튼에서 `POST /admin/backup/restore-hotswap`을 호출한다.
 단, Web 빌드타임 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1`이 명시되지 않으면
 Restore 버튼은 비활성화된다. production Web image의 기본값은 `0`이며, staging drill에서
-UI restore를 열 때만 `1`로 빌드한다. RustFS/외부 미러 표시는 후속 운영 보강이다.
+UI restore를 열 때만 `1`로 빌드한다. Restore dialog는 snapshot 파일명 직접 입력,
+schema-swap 확인 체크, 운영 사유를 모두 요구한다. 실행 중에는 Escape/backdrop/닫기 버튼으로
+dialog를 닫을 수 없고, 완료 후 API가 반환한 phase와 restore/previous schema를 표시한다.
+RustFS/외부 미러 표시는 후속 운영 보강이다.
 
 ### 2.2 CLI (긴급)
 
@@ -156,13 +159,14 @@ sidecar를 그대로 쓸 수 있다.
 2. snapshot 목록에서 복구 대상 선택
 3. "Restore (schema-swap)" 버튼 → 다이얼로그
 4. 사유 입력 (audit log)
-5. "시작" → progress 단계 추적:
+5. snapshot 파일명을 그대로 입력하고 schema-swap 확인 체크
+6. "Restore" → progress 단계 추적:
    - preparing: app_restore_<ts> schema 준비 + disk guard (10s)
    - restoring: pg_restore 실행 (수 분 ~ 수십 분, 사이즈 의존)
    - validating: row count + audit chain (10s)
    - draining: write drain + API/Web 연결 종료 (10~30s)
    - switching: schema rename + 권한 재부여 + API/Web 재시작 (30~90s)
-6. 완료 후 previous schema 보존 기한 안내 (N150 7일 / Odroid 24시간)
+7. 완료 후 previous schema 보존 기한 안내 (N150 7일 / Odroid 24시간)
 ```
 
 신규 DB instance 방식은 사용하지 않는다. 같은 Postgres database 안에서

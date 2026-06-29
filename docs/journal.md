@@ -15,6 +15,35 @@
 typecheck pass + vitest(web 46 / domain 61) pass.
 
 **다음**: backlog non-overlap task.
+## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 완료
+
+**작업**: 다음 개발 task 진입 전 task 추적 문서를 정리하고 T-267 Backup/Restore UI hot-swap을
+완료했다.
+
+**변경**:
+
+- `docs/tasks.md`에서 반복 계획과 긴 task 설명을 줄이고 현재 선점, 충돌 회피, 열린 backlog만 남겼다.
+- 반복 체크리스트와 `tasks.md` 금지 항목은 `docs/tasks-rule.md`로 옮겼다.
+- Web restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap, 실행 중 닫기 잠금,
+  성공 후 재제출 방지, 요청 중 pending phase와 완료 phase/result 표시를 추가했다.
+- `admin-backup.e2e.ts`에 기본 잠금 경로와 enabled flag restore dialog 경로를 추가했다.
+- `CHANGELOG.md`, `docs/api/admin.md`, `docs/runbooks/backup-restore.md`를 UI 안전장치 기준으로 갱신했다.
+- PR #319를 squash merge했다(`40a781a`).
+- 완료 이관으로 T-267을 `tasks-done.md`에 추가하고 `tasks.md`에서는 제거했다.
+
+**검증**:
+
+- `npm run typecheck --workspace apps/web`
+- `npm run lint --workspace apps/web`
+- `git diff --check`
+- `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-backup.e2e.ts --workers=1`
+- `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- admin-backup.e2e.ts --workers=1`
+- `codegraph sync && codegraph status`
+- PR #319 CI: Aggregate CI gate, web lint-typecheck-build, web e2e 통과
+
+**병행 상태**: 열린 PR #227은 map marker/tracking 문서 영역이다. T-291-etl-sql-tests는
+`apps/etl/**`와 audit retention 정책 영역이다. 다음 task에서도 두 영역을 선점 없이 섞지 않는다.
+T-285는 진행하지 않는다.
 
 ## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
 

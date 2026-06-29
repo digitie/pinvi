@@ -13,6 +13,13 @@
       TripDay/TripView/CRUD 응답 + zod/api-client에 version 노출, TripDetail rename/delete가 version
       전달 + 충돌 시 reload+안내, mobile deleteDay도 version 전달. 통합 테스트(stale If-Match 409 +
       정상 204/version bump) 추가. live e2e는 T-259 게이트에서.
+- [x] T-267 — Backup/Restore UI hot-swap 완성. (완료: 2026-06-29, PR #319, codex)
+      Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap,
+      실행 중 닫기 잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/schema
+      result 표시를 추가했다. 기본 restore 잠금 e2e와
+      `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` enabled e2e를 N150 Playwright Docker runner로
+      검증했고, Admin API 계약은 변경하지 않았다. 완료 후 `tasks.md`에서 T-267 선점/열린 항목을
+      제거했다.
 
 - [x] T-260 — Sprint 6 상세 실행 계획 / ADR 정리. (완료: 2026-06-29, claude)
       `docs/execplan/sprint6-v1.0-plan.md`(남은 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
