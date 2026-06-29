@@ -13,6 +13,13 @@
       TripDay/TripView/CRUD 응답 + zod/api-client에 version 노출, TripDetail rename/delete가 version
       전달 + 충돌 시 reload+안내, mobile deleteDay도 version 전달. 통합 테스트(stale If-Match 409 +
       정상 204/version bump) 추가. live e2e는 T-259 게이트에서.
+- [x] T-113 / T-271 / T-272 / T-285 — backlog scope 제거. (제거: 2026-06-29, 사용자 지시)
+      구현하지 않고 열린 backlog에서 제거했다. T-113(`kor-travel-concierge` 별 repo 신설),
+      T-271(Odroid+N150 병행 운영), T-272(AI companion 별도 서비스 분리),
+      T-285(AI companion v1.0 scope gate)는 더 이상 열린 task로 추적하지 않는다.
+      향후 AI companion 연동은 신규 repo 신설 대신 이미 존재하는 `kor-travel-concierge` API를
+      활용하는 consumer/client 통합 task로 정의한다.
+
 - [x] T-267 — Backup/Restore UI hot-swap 완성. (완료: 2026-06-29, PR #319, codex)
       Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap,
       실행 중 닫기 잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/schema
@@ -414,7 +421,8 @@
       MCP 외부 인터페이스, GitHub Actions CI/CD 복원, trip 하위 리소스 구현.
 - [x] T-066 — kor-travel-map OpenAPI HTTP client 구현 완료. drift gate는 이후 T-210e로 완료했다.
 - [x] T-107 — Gemini 통합은 ADR-020에 따라 본 저장소 직접 구현 대상에서 제외했다.
-      후속은 열린 T-113 `kor-travel-concierge` 별도 repo 신설로 유지한다.
+      후속 T-113(`kor-travel-concierge` 별도 repo 신설)은 2026-06-29 사용자 지시로 backlog에서 제거했다.
+      향후 필요 시 이미 존재하는 `kor-travel-concierge` API를 활용한다.
 - [x] T-108 — 운영 배포 자동화 foundation.
       Odroid M1S + N150 deploy/smoke script, doctor, 노드별 배포 runbook을 추가했다.
       실제 노드 smoke와 backup/restore 복구 훈련은 Sprint 6 운영 게이트로 유지한다.

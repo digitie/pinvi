@@ -46,9 +46,9 @@
   - **한국 전용 geofencing** — Cloudflare WAF + nginx geo + FastAPI middleware
     (3중 안전) — KR 외 IP는 451 (`docs/architecture/korea-only-policy.md`,
     ADR-018)
-  - **T-107 (Gemini) 별도 서비스로 분리** — 본 저장소에서 제거, 별 repo
-    (`kor-travel-concierge` 또는 사용자 지정)로 이동. local docker-to-docker
-    호출 패턴. v1.0에는 user-facing AI companion을 포함하지 않는다. 자세히는 ADR-020.
+  - **AI companion 제외** — v1.0에는 user-facing AI companion을 포함하지 않는다. 신규 repo 신설
+    task(T-113)는 제거했고, 향후 필요 시 이미 존재하는 `kor-travel-concierge` API를 활용한다.
+    자세히는 ADR-020과 `docs/tasks-rule.md` §10.
 
 ## 산출물
 
@@ -217,9 +217,9 @@
       Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
 - [ ] **한국 외 IP 차단 검증 (VPN 미국/일본 노드에서 451 응답 확인)**
-- [ ] **T-107 (Gemini) 별도 repo 분리 + 호출 컨트랙트 문서 (`docs/integrations/ai-companion.md`)**
 - [x] **v1.0 mobile 제외 범위 명시**
-- [ ] **user-facing AI companion 제외 범위 명시**
+- [x] **user-facing AI companion 제외 범위 명시** — T-113 신규 repo 신설 task 제거, 기존
+      `kor-travel-concierge` API 활용 원칙 기록.
 - [ ] **PIPA incident / DSR / retention execution / email suppression / moderation / RBAC /
       user lifecycle / abuse 운영 표면 sign-off**
 - [ ] **T-258 legal/ops 구현 매트릭스 충족** — 각 Task가 API/UI/runbook/test/sign-off를 가진다.
@@ -235,9 +235,8 @@
 
 - v2 후보: PWA, Redis Streams, 푸시 알림, 사진 업로드, 다국어, 결제,
   GPX 업로드, 공개 여행 / 커뮤니티, 댓글
-- AI 추천 / 챗봇은 별 repo (`kor-travel-concierge`, ADR-020) — Gemini /
-  Claude / Codex 등 provider 선택 가능. local docker-to-docker 호출로 본
-  서비스 통합.
+- AI 추천 / 챗봇은 신규 repo 신설 없이 기존 `kor-travel-concierge` API를 활용한다(ADR-020).
+  provider 선택과 내부 구현은 해당 서비스가 소유하고, Pinvi는 consumer/client 통합만 담당한다.
 - `docs/tasks.md`에 T-100 ~ T-200 백로그로 관리
 - v1.0 → v1.1 마이너: PWA + 푸시 알림 + 사진 업로드 우선
 - 해외 진출 시 ADR-018 (한국 전용) supersede 필요

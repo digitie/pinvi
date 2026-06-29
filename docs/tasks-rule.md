@@ -98,3 +98,12 @@ Task 완료 기준은 다음 순서다.
 6. 구현 범위와 검증 계획을 `resume.md` 또는 `journal.md`에 기록.
 7. Linux git/개발 환경만 사용하고, Playwright는 N150 runner를 먼저 사용.
 8. 완료된 task는 다음 task 진입 전에 `tasks-done.md`로 옮기고 `tasks.md`에서는 언급을 제거한다.
+
+## 10. AI companion / `kor-travel-concierge` 범위
+
+- T-113(`kor-travel-concierge` 별 repo 신설)은 2026-06-29 사용자 지시로 backlog에서 제거했다.
+  다시 열린 task로 만들지 않는다.
+- Pinvi에서 AI companion 연동이 필요하면 신규 repo를 만들지 않고, 이미 존재하는
+  `kor-travel-concierge` API 계약을 확인한 뒤 consumer/client 통합 task로 정의한다.
+- Pinvi 저장소에서는 AI provider 내부 구현, `kor-travel-concierge` repo scaffold, 독립 서비스 내부
+  로직 구현을 하지 않는다.
