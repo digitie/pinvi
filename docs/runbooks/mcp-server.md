@@ -178,7 +178,30 @@ mutating tool 추가 (v1.1+) 전:
 4. 영향 받은 사용자 데이터 범위 평가 (read-only이지만)
 5. 사용자 / CPO에게 통지 (PIPA)
 
-## 8. 참조
+## 8. 운영 실증 체크리스트 (E2E 시나리오 7 — T-266)
+
+배포/릴리즈 전 MCP 외부 인터페이스가 토큰 발급 → 호출 → 회수까지 동작하는지 실증한다.
+
+### 8.1 자동 (CI)
+
+`apps/api/tests/integration/test_mcp_tokens_api.py::test_mcp_read_only_tool_scenario`가 읽기 전용
+tool 5종(`list_trips`/`get_trip`/`list_pois`/`get_user_profile`/`search_features`)과 미존재 tool
+404, 잘못된 인자 422, 토큰 회수 후 401을 자동 검증한다(`search_features`는 kor-travel-map client
+stub 주입). 쓰기 tool이 없음(read-only)도 descriptor 집합으로 확인한다.
+
+### 8.2 라이브 (운영 노드 / 클라이언트 등록 전)
+
+1. 토큰 발급: `/users/me/mcp-tokens`(본인) 또는 `/admin/mcp-tokens`(대리, §1).
+2. 스모크: `MCP_TOKEN=mcp_... API_BASE=https://<host> scripts/verify-mcp.sh`
+   — `/mcp/tools`, `list_trips`, `search_features` 200 + 본문 구조 확인.
+3. 클라이언트 등록(§2): Claude Code(SSE) 또는 Claude Desktop(stdio)에서 `list_trips`/
+   `search_features` 호출 성공 확인.
+4. 회수 검증: 토큰 회수(§3) 후 동일 호출이 401인지 확인.
+5. 감사: 호출이 `api_call_log`(provider=`mcp`) + 토큰 `last_used_at`에 남는지 확인.
+
+`search_features`가 503이면 kor-travel-map feature 서비스 의존성을 먼저 점검한다(§6).
+
+## 9. 참조
 
 - ADR-019 (본 정책)
 - `docs/architecture/mcp-server.md` (아키텍처)
