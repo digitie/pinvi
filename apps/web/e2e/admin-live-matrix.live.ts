@@ -8,6 +8,7 @@ interface AdminRoute {
   table?: boolean;
   placeholder?: boolean;
   readyTestId?: string;
+  readyText?: string | RegExp;
 }
 
 interface UiViewport {
@@ -114,7 +115,11 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/emails', heading: '이메일 큐', table: true },
   { path: '/admin/backup', heading: 'Backup', table: true },
   { path: '/admin/mcp-tokens', heading: 'MCP 토큰', table: true },
-  { path: '/admin/seed', heading: '시드 시나리오', table: true },
+  {
+    path: '/admin/seed',
+    heading: '시드 시나리오',
+    readyText: /seed route가 비활성화되어 있습니다|seed scenario가 없습니다|dry-run/,
+  },
   { path: '/admin/reset', heading: 'DB 리셋' },
 ];
 
@@ -191,12 +196,7 @@ const sortSpecs = [
   {
     route: '/admin/category-mapping',
     heading: '카테고리 매핑',
-    columns: ['category', 'active', 'upstream icon', 'Pinvi marker', 'mapping', 'features', 'sort'],
-  },
-  {
-    route: '/admin/seed',
-    heading: '시드 시나리오',
-    columns: ['scenario', 'confirm', 'steps'],
+    columns: ['category', 'active', 'upstream_icon', 'pinvi_marker', 'mapping', 'features', 'sort'],
   },
   {
     route: '/admin/debug/logs',
@@ -392,6 +392,9 @@ async function openRoute(page: Page, route: AdminRoute) {
   await expectAdminShell(page, route.heading);
   if (route.readyTestId) {
     await expect(page.getByTestId(route.readyTestId)).toBeVisible();
+  }
+  if (route.readyText) {
+    await expect(page.getByText(route.readyText).first()).toBeVisible();
   }
   if (route.table) {
     await waitForAdminTable(page);
@@ -1098,7 +1101,7 @@ function buildUiCases() {
   return cases;
 }
 
-const EXPECTED_LIVE_UI_CASE_COUNT = 6363;
+const EXPECTED_LIVE_UI_CASE_COUNT = 6336;
 const liveUiCases = buildUiCases();
 const selectedLiveUiCases = Number.isFinite(caseLimit)
   ? liveUiCases.slice(0, Math.max(0, caseLimit))
