@@ -7,7 +7,9 @@
 
 ## 현재 선점 / 충돌 회피
 
-- 현재 활성 선점 없음.
+- T-259 — codex 진행 중. 브랜치 `agent/codex-t259-v020-release-gate`.
+  범위는 `v0.2.0` Admin live full catalog, release note/tag/GitHub Release, gate 문서 마감이다.
+  열린 PR #212는 AGENTS 전용이라 직접 충돌 없음.
 
 ## v0.2.0 구현 게이트
 

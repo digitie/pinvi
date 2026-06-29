@@ -410,7 +410,7 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
 
 ### T-254 — Admin live e2e matrix v0.2.0 확장 — 완료
 
-- 완료: read-only matrix catalog를 6,195건 exact count로 고정해 full catalog drift를 잡는다.
+- 완료: read-only matrix catalog를 exact count로 고정해 full catalog drift를 잡는다.
 - 완료: `/admin/debug/request/{id}` captured request timeline, feature detail subpages/tabs,
   backup read-only variants, ETL app-owned rows, Grafana dashboards/WebSocket dashboard,
   raw secret pattern 미노출 검사를 matrix에 추가했다.

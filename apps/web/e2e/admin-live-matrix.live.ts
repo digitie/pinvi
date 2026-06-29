@@ -1098,7 +1098,7 @@ function buildUiCases() {
   return cases;
 }
 
-const EXPECTED_LIVE_UI_CASE_COUNT = 6195;
+const EXPECTED_LIVE_UI_CASE_COUNT = 6363;
 const liveUiCases = buildUiCases();
 const selectedLiveUiCases = Number.isFinite(caseLimit)
   ? liveUiCases.slice(0, Math.max(0, caseLimit))

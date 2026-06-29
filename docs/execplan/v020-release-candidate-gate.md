@@ -28,7 +28,7 @@ Release 생성은 아직 남아 있다.
 | N150 Playwright             | 통과      | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 smoke, 200, 2000 gate 통과                           |
 | Windows Playwright fallback | 부분 통과 | N150 Web SSH tunnel 대상 login malformed validation 1건 통과                                                              |
 | Admin live 200/2000         | 통과      | N150 local-only credential과 public HTTPS Web origin으로 Docker runner 207/2007건 통과                                    |
-| Admin live full catalog     | 미실행    | 6202건 full catalog는 최종 tag/Release 직전 별도 장시간 gate로 남김                                                       |
+| Admin live full catalog     | 미실행    | 최신 main 기준 6370건 full catalog는 최종 tag/Release 직전 별도 장시간 gate로 남김                                       |
 | Restore staging drill       | 통과      | N150 disposable PostgreSQL/PostGIS staging target에서 latest snapshot restore/checksum/audit chain 검증 성공              |
 | 최신 main CI/evidence       | 통과      | `4a1b71e` API push CI 통과. `5c0a39b` WSL ext4 clean install 기반 Web lint/typecheck/build 통과                           |
 
@@ -76,7 +76,8 @@ N150 내부 `127.0.0.1` 기준:
 ## Playwright Evidence
 
 - N150 catalog list: `npm -w @pinvi/web run test:e2e:admin-live:list`
-  - 결과: `6202 tests in 5 files`
+  - 2026-06-28 결과: `6202 tests in 5 files`
+  - 2026-06-29 최신 main 결과: `6370 tests in 5 files`
 - N150 browser smoke:
   - 명령: `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI login rejects malformed email" --workers=1`
   - 결과: 실패
@@ -110,7 +111,8 @@ N150 내부 `127.0.0.1` 기준:
   - 명령: `npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1`
   - 결과: 1 passed
 
-Admin full catalog(`6202 tests in 5 files`)는 최종 tag/Release 직전 별도 장시간 gate로 실행한다.
+Admin full catalog(`6370 tests in 5 files`, 2026-06-29 최신 main 기준)는 최종 tag/Release 직전 별도
+장시간 gate로 실행한다.
 
 ## Backup Evidence
 
@@ -168,7 +170,7 @@ local-only env 파일로만 `PINVI_RESTORE_STAGING_DATABASE_URL`을 주입했다
 
 ## 다음 조치
 
-1. Admin live full catalog(`6202 tests in 5 files`)를 최종 tag/Release 직전 N150 Docker runner로
+1. Admin live full catalog(`6370 tests in 5 files`)를 최종 tag/Release 직전 N150 Docker runner로
    실행한다.
 2. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
    기본 release gate는 Docker runner를 사용한다.
