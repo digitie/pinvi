@@ -7,12 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.security_headers import (
+    SecurityHeadersMiddleware,
+    security_headers_exception_handler,
+)
 
 
 def _client() -> TestClient:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(SecurityHeadersMiddleware)
+    # Mirror real wiring (main.py): unhandled errors → 500 with security headers via the
+    # exception handler (ServerErrorMiddleware still re-raises). The middleware itself does
+    # NOT catch — that would swallow exceptions and break rollback-on-error tests.
+    app.add_exception_handler(Exception, security_headers_exception_handler)
 
     @app.get("/health")
     async def health() -> dict[str, bool]:
