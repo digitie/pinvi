@@ -1,14 +1,17 @@
 # resume.md
 
-## 2026-06-29 (claude) — T-266 MCP 운영 실증 + T-286 review gap closure
+## 2026-06-29 (claude/codex) — T-266/T-286 완료처리 + T-291 잔여 종료
 
-T-266: MCP read-only tool 5종 + 회수까지의 운영 실증을 통합 테스트(`test_mcp_read_only_tool_scenario`)
-+ 라이브 스크립트(`scripts/verify-mcp.sh`) + runbook §8로 보강(#326 머지). T-286: legal-ops-review-gap
--crosswalk §6에 closure 재감사 추가 — G-001~G-044 + R-001~R-009 대응 Task 전부 머지 확인, 잔여 open은
-T-259/T-291-etl-sql-tests/G-044(scope 제거)뿐. 두 task 완료처리(tasks/done/resume/journal).
+T-266 MCP 운영 실증은 PR #326으로 머지됐다. read-only tool 5종 + 토큰 회수까지의 운영 실증을
+통합 테스트(`test_mcp_read_only_tool_scenario`), 라이브 스크립트(`scripts/verify-mcp.sh`), runbook
+§8로 보강했다.
 
-**다음 한 작업**: 열린 backlog — T-270(성능·부하·보안 점검) 또는 T-273/T-274(릴리즈 게이트).
-T-291-etl-sql-tests는 codex 선점 예정이라 회피. T-259는 release 작업.
+T-286 cross-track review gap closure는 PR #328로 머지됐다. T-291-etl-sql-tests도 PR #327로 머지되어
+R-005 잔여가 닫혔으므로, 열린 구현 backlog는 T-270/T-273/T-274와 release gate T-259 중심으로 남는다.
+
+**다음 한 작업**: 최신 main에서 `docs/tasks.md`와 열린 PR을 확인하고, T-270(성능·부하·보안 점검)
+또는 T-273/T-274(릴리즈 게이트) 중 충돌 없는 항목을 선점한다.
+
 ## 2026-06-29 (codex) — T-291 ETL SQL 실행 테스트 완료
 
 `agent/codex-t291-etl-sql-tests`에서 T-291 잔여 범위를 완료했다. ETL 원시 SQL은 asset 밖의
@@ -31,8 +34,8 @@ codex PR #227(map marker tuning / viewport caching)을 98커밋 뒤처진 상태
 typecheck/lint/vitest/CI 통과 후 머지했다. 같은 흐름에서 T-268(geofencing 3중 안전망, #323)·
 T-269(법무 4문서+동의 UX, #324) 완료를 tasks/done/resume/journal에 반영(완료처리)했다.
 
-**다음 한 작업**: 열린 backlog 중 non-overlap task. T-291-etl-sql-tests는 codex 선점 예정이라 피하고,
-T-266(MCP 운영 실증) / T-270(성능·보안 점검) / T-286(cross-track gap) 중 택1.
+**당시 다음 후보**: T-266(MCP 운영 실증) / T-270(성능·보안 점검) / T-286(cross-track gap). 이후
+T-266, T-286, T-291-etl-sql-tests는 완료됐다.
 
 ## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 완료
 
