@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, X, XCircle } from 'lucide-react';
 import { ApiError, adminApi } from '@pinvi/api-client';
@@ -53,21 +54,78 @@ export function RestoreHotswapDialog({
 }: RestoreHotswapDialogProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
-  const [reason, setReason] = useState('운영 복구 훈련');
+  const openerRef = useRef<HTMLElement | null>(null);
+  const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [run, setRun] = useState<AdminBackupRestoreRun | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [portalEl] = useState<HTMLDivElement | null>(() =>
+    typeof document === 'undefined' ? null : document.createElement('div'),
+  );
+
+  useEffect(() => {
+    if (!portalEl) return;
+    document.body.appendChild(portalEl);
+    return () => {
+      portalEl.remove();
+    };
+  }, [portalEl]);
 
   useEffect(() => {
     if (!snapshot) return;
-    setReason('운영 복구 훈련');
+    setReason('');
     setConfirmed(false);
     setConfirmation('');
     setRestoring(false);
     setRun(null);
     setError(null);
+  }, [snapshot]);
+
+  // Capture the element that opened the dialog BEFORE the inert effect blurs it,
+  // so we can restore focus to it on close (WAI-ARIA dialog focus management).
+  useEffect(() => {
+    if (!snapshot || typeof document === 'undefined') return;
+    openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+  }, [snapshot]);
+
+  // Mark background content inert + aria-hidden so AT virtual cursor / focus
+  // cannot wander behind the modal while it is open. Declared before the
+  // focus-restore effect so its cleanup (un-inert) runs first — otherwise the
+  // opener would still be inert when we try to refocus it on close.
+  useEffect(() => {
+    if (!snapshot || typeof document === 'undefined' || !portalEl) return;
+    const siblings = Array.from(document.body.children).filter(
+      (element): element is HTMLElement => element !== portalEl && element instanceof HTMLElement,
+    );
+    const previous = siblings.map((element) => ({
+      element,
+      inert: element.hasAttribute('inert'),
+      ariaHidden: element.getAttribute('aria-hidden'),
+    }));
+    siblings.forEach((element) => {
+      element.setAttribute('inert', '');
+      element.setAttribute('aria-hidden', 'true');
+    });
+    return () => {
+      previous.forEach(({ element, inert, ariaHidden }) => {
+        if (inert) element.setAttribute('inert', '');
+        else element.removeAttribute('inert');
+        if (ariaHidden === null) element.removeAttribute('aria-hidden');
+        else element.setAttribute('aria-hidden', ariaHidden);
+      });
+    };
+  }, [snapshot, portalEl]);
+
+  // Restore focus to the opener on close. Declared after the inert effect so its
+  // cleanup runs last — i.e. after the background is re-enabled, otherwise
+  // focusing an element still marked inert would be a no-op.
+  useEffect(() => {
+    if (!snapshot) return;
+    return () => {
+      openerRef.current?.focus?.();
+    };
   }, [snapshot]);
 
   useEffect(() => {
@@ -128,7 +186,7 @@ export function RestoreHotswapDialog({
     [],
   );
 
-  if (!snapshot) return null;
+  if (!snapshot || !portalEl) return null;
 
   const phases = run?.phases ?? (restoring ? pendingPhases : []);
   const confirmationText = snapshot.filename;
@@ -137,6 +195,10 @@ export function RestoreHotswapDialog({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // In-handler re-entry guard: never re-issue a destructive schema-swap once a
+    // request is in flight or has already succeeded (defense in depth on top of
+    // the disabled submit button).
+    if (restoring || run) return;
     const trimmed = reason.trim();
     if (!trimmed) {
       setError('복구 사유를 입력하세요.');
@@ -152,6 +214,10 @@ export function RestoreHotswapDialog({
     }
     setRestoring(true);
     setError(null);
+    // The submit button becomes disabled while the request is in flight, which
+    // would drop focus to <body> (outside the trap container). Move focus to the
+    // dialog container so the Tab/Escape trap stays active mid-restore.
+    dialogRef.current?.focus();
     try {
       const result = await adminApi(apiClient).restoreBackupHotswap({
         snapshot_id: snapshot.snapshot_id,
@@ -167,7 +233,7 @@ export function RestoreHotswapDialog({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       data-testid="restore-hotswap-overlay"
@@ -228,8 +294,10 @@ export function RestoreHotswapDialog({
               ref={reasonRef}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-none focus:border-primary"
+              disabled={restoring || Boolean(run)}
+              className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
               maxLength={500}
+              placeholder="복구 사유를 입력하세요."
               data-testid="restore-reason"
             />
           </label>
@@ -239,6 +307,7 @@ export function RestoreHotswapDialog({
               type="checkbox"
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
+              disabled={restoring || Boolean(run)}
               className="mt-1"
               data-testid="restore-confirm"
             />
@@ -252,7 +321,8 @@ export function RestoreHotswapDialog({
             <input
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-none focus:border-primary"
+              disabled={restoring || Boolean(run)}
+              className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
               aria-invalid={confirmation.length > 0 && !confirmationMatches ? 'true' : undefined}
               data-testid="restore-confirmation"
             />
@@ -327,6 +397,7 @@ export function RestoreHotswapDialog({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    portalEl,
   );
 }
