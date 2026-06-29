@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-29 (claude) — 병행 트랙 3건 머지 + tasks 위생
+
+codex 병행 트랙 3개 그룹을 모두 main에 머지했다: **#310**(T-289/T-290 WebSocket reconnect +
+Trip conflict UX), **#312**(T-291 ADR-050 ETL run-failure sensor), **#315**(T-261~263 스마트 정렬
+2-opt). 사용자 지시로 신규 task 진입 전 `tasks.md`를 정리했다 — 완료된 T-261/262/263·T-291을
+`tasks-done.md`로 옮기고, 스테일 병행 노트를 제거했다. T-291 잔여(ETL SQL 실행 테스트 + audit
+retention 분리)는 `T-291-etl-sql-tests`로 분리했다.
+
+**다음 한 작업**: 다음 task 진입 전 최근 PR 리뷰 코멘트 확인 후 backlog에서 non-overlap task 선택
+(T-264 admin category mapping override, T-267 backup UI 등은 codex admin 핫존과 조율 필요).
+앞으로 task는 번호 부여→todo→완료 시 `tasks-done.md` 이관 규칙을 따른다(tasks-rule §7/§8).
+
 ## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
 
 PR #313(T-288 legacy task archive)와 PR #312(T-291 failure sensor)가 main에 머지된 뒤 최신

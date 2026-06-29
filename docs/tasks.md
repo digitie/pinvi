@@ -32,15 +32,6 @@
   재실행 증거까지 확보했다. 상세는
   `docs/execplan/v020-release-candidate-gate.md`.
 
-- 병행 트랙 (claude, 2026-06-29) — T-291 ETL failure sensor는 PR #312로 main에 머지됐다.
-  T-291 잔여는 app-owned ETL SQL 실행 수준 integration/schema-compile smoke와 audit retention
-  정책 분리다. codex는 T-292에서 `apps/etl/**`, `docs/architecture/dagster-etl-bridge.md`,
-  `docs/runbooks/etl.md`를 건드리지 않는다.
-
-- 병행 후보 (claude, 2026-06-29) — T-261~T-263 경로 최적화(OR-Tools) + 스마트 정렬 API/UI
-  트랙은 신규 `optimize` 모듈 중심이다. codex가 다음 task에 진입하기 전 PR/브랜치와 본 섹션을
-  다시 확인한다.
-
 ## 다음 (우선순위 순)
 
 - 다음 구현 후보: T-286 Cross-track review gap closure. T-285는 사용자 지시에 따라 현재 진행하지
@@ -63,15 +54,15 @@
 
 ## 최근 PR 리뷰 후속
 
-- [ ] T-291 — ETL compliance SQL / failure notification follow-up. (부분 완료: PR #312, claude)
-      PR #271/#273 사후 리뷰의 Dagster failure sensor drift는 닫혔다. app-owned ETL SQL statement
-      integration/schema-compile smoke와 audit retention 정책 분리 gap은 잔여다.
+- [ ] T-291-etl-sql-tests — app-owned ETL SQL 실행 테스트 + audit retention 정책 분리.
+      T-291(PR #312, run-failure sensor 완료)에서 분리한 잔여. ① etl Postgres fixture로 asset 원시
+      SQL을 실행하는 integration/schema-compile smoke 추가, ② `pii_retention`이 append-only
+      hash-chain `admin_audit_log`을 location cutoff로 PII 후보 카운트하는 정책을 자체 보존정책으로
+      분리(api/zod 계약 파급 주의).
+
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
 - [ ] T-260 — Sprint 6 상세 실행 계획 / ADR 정리.
-- [ ] T-261 — 경로 최적화 정책 / distance matrix. (진행: claude, 2026-06-29 · codex 병행 금지)
-- [ ] T-262 — 스마트 정렬 API / OR-Tools. (진행: claude, 2026-06-29 · codex 병행 금지)
-- [ ] T-263 — 스마트 정렬 UI. (진행: claude, 2026-06-29 · codex 병행 금지)
 - [ ] T-264 — Admin category mapping DB override.
 - [ ] T-265 — Admin notice plan 작성기.
 - [ ] T-266 — MCP 외부 인터페이스 운영 실증.

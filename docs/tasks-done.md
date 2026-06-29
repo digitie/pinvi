@@ -6,6 +6,22 @@
 
 ## 2026-06-29
 
+- [x] T-261 / T-262 / T-263 — 스마트 정렬 (경로 최적화). (완료: 2026-06-29, PR #315, claude)
+      사용자 결정으로 OR-Tools 대신 순수 Python **2-opt** local search 채택(거리 haversine 유지,
+      신규 의존성 0, Odroid ARM/N150 안전, trip day POI 수에 충분). `services/trip.py`에
+      nearest-neighbor seed → 2-opt(`_optimize_day_order`/`_two_opt_improve`, 시작 POI 고정·
+      `_TWO_OPT_MAX_POIS=60` 상한) + 기존 순서 거리(previous) 반환. 계약(strategy `two_opt` 기본 +
+      `previous_distance_meters`)을 pydantic/zod/api-client에 반영하고 `TripDayOptimize.tsx`에
+      "기존 → 최적 (N% 단축)" 표시. 2-opt 단위 테스트 추가. 최적화 정책 ADR과 카카오 실도로
+      거리는 후속(보류).
+
+- [x] T-291 — ETL compliance SQL / failure notification follow-up. (완료: 2026-06-29, PR #312, claude)
+      PR #271/#273(+#276) 사후 리뷰의 ADR-050 conformance gap을 닫았다. `pinvi_run_failure_sensor`
+      (retry 소진 실패를 Sentry + `app.telegram_system_notification_outbox`로 PII-free 통지)를 추가하고
+      `Definitions(sensors=[...])`에 등록(monitored_jobs + asset job 명시 등록으로 get_job_def 충돌 해소).
+      dagster-etl-bridge/etl 런북 doc drift 정정. 잔여(SQL 실행 테스트 + audit retention 분리)는
+      `T-291-etl-sql-tests`로 분리.
+
 - [x] T-292 — App integrity pagination / producer follow-up.
       PR #283 사후 리뷰의 `/admin/integrity/issues?source=all` pagination starvation을 composite
       cursor로 닫고, Pinvi app integrity producer/upsert helper와 active partial unique 회귀 테스트를
