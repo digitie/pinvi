@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-06-29 (claude) — codex PR 사후 리뷰 21건 수정 (#331-351 → PR #352-357)
+
+codex 6개 머지 PR(#325/#316/#330/#314/#327/#319) 사후 상세 리뷰에서 만든 이슈 21건(#331-351)을
+ultracode 워크플로(6 worktree 에이전트 구현 + 적대적 verify)로 전부 수정해 6개 PR(#352-357)로
+머지하고 이슈를 모두 close했다. CI 게이트만 사용(N150/Playwright 라이브 미실행 — 다른 에이전트 롱런 중).
+주요: notice-plan reorder 2단계 업데이트 + IntegrityError→409, RBAC read/write 분리, FOR UPDATE 잠금
+(#352); category 트리거 마이그레이션 0037 + zod refine + 무수정 override 방지(#353); 보안 헤더는
+500 exception handler로 적용(미들웨어 catch가 rollback 테스트를 깨뜨린 CI 회귀를 직접 수정)(#354);
+integrity dedupe-before-limit + 안정 tiebreaker(#355); ETL SQL 실행 테스트 강화 + email-template 수렴
+(#356); backup 다이얼로그 a11y + re-entry guard(#357).
+
+**다음 한 작업**: 열린 backlog — T-270은 codex 완료, 남은 것은 T-259(release) / T-273·T-274(v1.0 게이트).
+
 ## 2026-06-29 (codex) — T-270 성능 / 부하 / 보안 점검 완료
 
 `agent/codex-t270-perf-security-check`에서 T-270을 완료했다. API 응답에 기본 보안 헤더와 API CSP를

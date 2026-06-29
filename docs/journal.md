@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — codex PR 사후 리뷰 수정 21건 (#331-351 → PR #352-357)
+
+**작업**: codex 6개 머지 PR 사후 리뷰 이슈 21건을 전부 수정·머지·close.
+
+**방법**: ultracode 워크플로 — 6개 worktree 격리 에이전트가 영역별 구현 + 적대적 verify, 이후
+메인 루프에서 PR→CI→merge(N150 미실행, CI 게이트만). verify가 잡은 보안헤더 회귀(미들웨어
+except가 rollback 테스트를 깨뜨림)를 CI 실패 후 exception-handler 방식으로 직접 재수정.
+
+**머지**: #352 notice-plan(reorder 2단계 + IntegrityError→409 + RBAC + FOR UPDATE), #353 category
+(트리거 mig 0037 + zod refine + 무수정 override 방지), #354 security(500 exception handler), #355
+integrity(dedupe-before-limit + tiebreaker), #356 etl-sql(실행 테스트 강화 + email-template 수렴),
+#357 backup(다이얼로그 a11y).
+
+**검증**: 6개 PR 모두 CI(api/web/etl + mock e2e) 통과. #331-351 전부 close.
+
+**다음**: T-259 release / T-273·T-274.
+
 ## 2026-06-29 (codex) — T-270 성능 / 부하 / 보안 점검 완료
 
 **작업**: T-270 성능 / 부하 / 보안 점검 산출물을 구현했다.
