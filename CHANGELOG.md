@@ -101,6 +101,9 @@
 - Admin `/admin/backup` snapshot 목록에 검색/status filter와 visible count를 추가했다.
   production 기본 restore 버튼은 `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` 없이
   비활성화되며, backup read-only live e2e와 staging mutating snapshot e2e를 분리했다.
+- Admin `/admin/backup` restore dialog는 schema-swap 전에 snapshot 파일명 직접 입력과 확인 체크를
+  요구하고, Escape/backdrop/focus trap을 지원하며, 실행 중에는 닫기 동작을 잠근다. Restore 요청 중
+  pending phase를 표시하고 완료 후 API가 반환한 schema-swap phase/result를 보여준다.
 - Admin live e2e matrix를 v0.2.0 release gate용으로 확장했다. catalog는 6,195건으로 drift를
   감지하고, request timeline, feature detail subpages, backup read-only guard, ETL app-owned
   rows, Grafana dashboard selector/WebSocket dashboard, raw secret pattern 미노출을 확인한다.
