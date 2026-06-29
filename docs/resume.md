@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
+
+`docs/execplan/sprint6-v1.0-plan.md`(남은 Sprint 6 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
+#315(T-261~263)에서 보류했던 경로 최적화 정책을 **ADR-053**(nearest-neighbor + 2-opt, haversine,
+OR-Tools/실도로 거리 보류)으로 박았다. SPRINT-6.md ADR 후보 노트를 확정 ADR-053/ADR-052 +
+execplan 참조로 정정하고 optimize DoD/산출물을 실제 구현에 맞췄다. 다음 신규 ADR = ADR-054.
+
+**다음 한 작업**: T-287 — Trip Day optimistic lock(`PATCH/DELETE /days/{day_index}` If-Match 도입 여부
+결정 → 409 회귀 + day rename/delete 충돌 다이얼로그 + e2e).
+
 ## 2026-06-29 (codex) — T-264 Admin category mapping DB override 완료
 
 upstream `kor-travel-map` category taxonomy를 계속 정본으로 두고, Pinvi 표시명/마커 색/마커 아이콘

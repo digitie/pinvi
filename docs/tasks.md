@@ -36,7 +36,6 @@
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
-- [ ] T-260 — Sprint 6 상세 실행 계획 / ADR 정리.
 - [ ] T-265 — Admin notice plan 작성기.
 - [ ] T-266 — MCP 외부 인터페이스 운영 실증.
 - [ ] T-267 — Backup/Restore UI hot-swap 완성.

@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
+
+**작업**: Sprint 6 상세 실행 계획 문서화 + 보류 ADR 정리.
+
+**변경**: `docs/execplan/sprint6-v1.0-plan.md` 신규(남은 task 그룹·DoD 매핑·병행 회피),
+`decisions.md` **ADR-053**(경로 최적화 = NN + 2-opt, haversine; OR-Tools/실도로 거리 보류; 다음=ADR-054),
+`SPRINT-6.md` ADR 후보 노트→확정 ADR-053/052 + execplan 참조 + optimize DoD/산출물 실구현 정합.
+docs-only.
+
+**다음**: T-287 Trip Day optimistic lock / conflict UX.
+
 ## 2026-06-29 (codex) — T-264 Admin category mapping DB override 완료
 
 **작업**: Sprint 6 T-264 Admin category mapping DB override를 구현했다.

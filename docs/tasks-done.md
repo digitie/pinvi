@@ -6,6 +6,13 @@
 
 ## 2026-06-29
 
+- [x] T-260 — Sprint 6 상세 실행 계획 / ADR 정리. (완료: 2026-06-29, claude)
+      `docs/execplan/sprint6-v1.0-plan.md`(남은 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
+      #315(T-261~263)에서 보류했던 경로 최적화 정책을 **ADR-053**(nearest-neighbor + 2-opt,
+      haversine, OR-Tools/실도로 거리 보류)으로 박았다. SPRINT-6.md의 OR-Tools/category-mapping
+      ADR 후보 노트를 확정 ADR-053/ADR-052 + execplan 참조로 정정하고, optimize DoD/산출물 항목을
+      실제 구현(`services/trip.py`, `api/v1/trips.py`)에 맞췄다. 다음 신규 ADR = ADR-054.
+
 - [x] T-264 — Admin category mapping DB override. (완료: 2026-06-29, PR #316, codex)
       ADR-052로 Pinvi category mapping 범위를 taxonomy가 아닌 presentation override로 고정하고,
       `app.category_mappings` migration/model, `/admin/category-mappings` 조회/PATCH/DELETE rollback,
