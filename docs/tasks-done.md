@@ -6,6 +6,14 @@
 
 ## 2026-06-29
 
+- [x] T-267 — Backup/Restore UI hot-swap 완성. (완료: 2026-06-29, PR #319, codex)
+      Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap,
+      실행 중 닫기 잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/schema
+      result 표시를 추가했다. 기본 restore 잠금 e2e와
+      `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1` enabled e2e를 N150 Playwright Docker runner로
+      검증했고, Admin API 계약은 변경하지 않았다. 완료 후 `tasks.md`에서 T-267 선점/열린 항목을
+      제거했다.
+
 - [x] T-260 — Sprint 6 상세 실행 계획 / ADR 정리. (완료: 2026-06-29, claude)
       `docs/execplan/sprint6-v1.0-plan.md`(남은 task 그룹·의존성·DoD 매핑·병행 회피)를 작성하고,
       #315(T-261~263)에서 보류했던 경로 최적화 정책을 **ADR-053**(nearest-neighbor + 2-opt,
