@@ -6,6 +6,20 @@
 
 ## 2026-06-29
 
+- [x] T-266 — MCP 외부 인터페이스 운영 실증. (완료: 2026-06-29, PR #326, claude)
+      MCP 서버(T-112)는 구현 완료였고, 기존 테스트는 토큰 lifecycle + list_trips만 다뤘다.
+      `test_mcp_read_only_tool_scenario`로 read-only tool 5종(list_trips/get_trip/list_pois/
+      get_user_profile/search_features) + 미존재 tool 404 + 잘못된 인자 422 + 회수 후 401을 자동
+      실증(search_features는 KorTravelMapClient stub 주입). `scripts/verify-mcp.sh` 라이브 스모크 +
+      runbook §8 운영 실증 체크리스트(클라이언트 등록/회수/감사) 추가.
+
+- [x] T-286 — Cross-track review gap closure. (완료: 2026-06-29, claude)
+      `docs/execplan/legal-ops-review-gap-crosswalk.md` §6에 closure 재감사를 추가. G-001~G-044 +
+      R-001~R-009의 대응 Task가 모두 머지됨을 tasks-done.md와 교차 확인(legal/ops T-275~282, 보안
+      T-283, RBAC/lifecycle/DSR/retention/moderation/email, integrity T-292, WS/conflict T-289/290,
+      ETL sensor T-291 등). 잔여 open 3건만 별도 추적: T-259(release), T-291-etl-sql-tests(ETL SQL+audit
+      retention 분리, codex), G-044 AI companion은 scope 제거. 미추적 gap 없음 → closed.
+
 - [x] PR #227 — Web 지도 마커 튜닝 + viewport 캐싱. (완료: 2026-06-29, codex 작성 / claude 마무리)
       `featureBounds`에 zoom별 bbox precision(floor/ceil 바깥 확장)으로 낮은 줌 pan refetch churn 감소,
       `FeatureMapView`에 LRU(32)+TTL(60s) viewport 캐시, weather kind feature를 `WeatherMarker`로 렌더

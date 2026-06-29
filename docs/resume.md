@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-06-29 (claude) — T-266 MCP 운영 실증 + T-286 review gap closure
+
+T-266: MCP read-only tool 5종 + 회수까지의 운영 실증을 통합 테스트(`test_mcp_read_only_tool_scenario`)
++ 라이브 스크립트(`scripts/verify-mcp.sh`) + runbook §8로 보강(#326 머지). T-286: legal-ops-review-gap
+-crosswalk §6에 closure 재감사 추가 — G-001~G-044 + R-001~R-009 대응 Task 전부 머지 확인, 잔여 open은
+T-259/T-291-etl-sql-tests/G-044(scope 제거)뿐. 두 task 완료처리(tasks/done/resume/journal).
+
+**다음 한 작업**: 열린 backlog — T-270(성능·부하·보안 점검) 또는 T-273/T-274(릴리즈 게이트).
+T-291-etl-sql-tests는 codex 선점 예정이라 회피. T-259는 release 작업.
+
 ## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
 
 codex PR #227(map marker tuning / viewport caching)을 98커밋 뒤처진 상태에서 main에 동기화·충돌

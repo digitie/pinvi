@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — T-266 MCP 운영 실증 + T-286 review gap closure
+
+**작업**: T-266 MCP 외부 인터페이스 운영 실증 + T-286 cross-track review gap closure.
+
+**변경**: T-266 — `test_mcp_read_only_tool_scenario`(read-only tool 5종 + 404/422/회수 401, KTM client
+stub), `scripts/verify-mcp.sh`, runbook §8(#326). T-286 — `legal-ops-review-gap-crosswalk.md` §6
+closure 재감사(G-001~044 + R-001~009 머지 확인, 잔여 open 3건 추적). 두 task 완료처리.
+
+**검증**: T-266 ruff/py_compile/bash -n OK + api CI 통과(#326 머지). T-286 docs-only.
+
+**다음**: T-270 / T-273·T-274(릴리즈). T-291-etl-sql-tests는 codex 선점.
+
 ## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
 
 **작업**: codex PR #227(map marker tuning + viewport caching) 마무리 머지 + T-268/T-269 완료처리.
