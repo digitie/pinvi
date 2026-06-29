@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-270 성능 / 부하 / 보안 점검 완료
+
+`agent/codex-t270-perf-security-check`에서 T-270을 완료했다. API 응답에 기본 보안 헤더와 API CSP를
+적용하는 `SecurityHeadersMiddleware`를 추가했고, HSTS는 production/HTTPS에서만 붙도록 했다.
+`/docs`/`/redoc`/`/openapi.json`은 API CSP 예외로 둬 FastAPI 문서 UI를 막지 않는다.
+
+`tests/load/api_p95_latency.py`와 `tests/security/csp_cors_rate_limit.py`를 추가해 N150/Odroid에서 같은
+명령으로 p95/error-rate, CSP/CORS/security header, 선택 rate-limit probe를 확인할 수 있게 했다.
+runbook은 `docs/runbooks/performance-security-gate.md`에 정리했다.
+
+검증: ruff, strict mypy(`security_headers.py`, 두 gate script), API unit/integration security targeted
+27건, script `--help`, `py_compile`, `git diff --check`.
+
+**다음 한 작업**: PR 머지 후 최신 main에서 T-273(v1.0.0 E2E / Live Gate) 또는 T-259 release gate로
+이동한다.
+
 ## 2026-06-29 (claude/codex) — T-266/T-286 완료처리 + T-291 잔여 종료
 
 T-266 MCP 운영 실증은 PR #326으로 머지됐다. read-only tool 5종 + 토큰 회수까지의 운영 실증을

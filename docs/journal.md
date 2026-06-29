@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (codex) — T-270 성능 / 부하 / 보안 점검 완료
+
+**작업**: T-270 성능 / 부하 / 보안 점검 산출물을 구현했다.
+
+**변경**:
+
+- API에 `SecurityHeadersMiddleware`를 추가해 `nosniff`, `Referrer-Policy`, `Permissions-Policy`,
+  `X-Frame-Options`, API CSP를 적용했다. HSTS는 production/HTTPS에서만 적용한다.
+- `tests/load/api_p95_latency.py`와 `tests/security/csp_cors_rate_limit.py`를 추가했다.
+- `docs/runbooks/performance-security-gate.md`와 runbook index를 추가했다.
+- `docs/tasks.md`에서 T-270을 제거하고 본 파일과 `tasks-done.md`로 이관했다.
+
+**검증**: ruff, strict mypy, API unit/integration security targeted 27 passed, script `--help`,
+`py_compile`, `git diff --check`.
+
+**다음**: PR 머지 후 T-273 또는 T-259 release gate.
+
 ## 2026-06-29 (claude/codex) — T-266/T-286 완료처리 + T-291 잔여 종료
 
 **작업**: T-266 MCP 외부 인터페이스 운영 실증, T-286 cross-track review gap closure, T-291 잔여

@@ -18,6 +18,7 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [backup-restore.md](./backup-restore.md)           | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |
 | [deploy.md](./deploy.md)                           | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
 | [observability.md](./observability.md)             | Prometheus + cAdvisor + Grafana 운영                             | 5        |
+| [performance-security-gate.md](./performance-security-gate.md) | 성능 / 부하 / 보안 smoke gate                                    | 6        |
 | [security-incidents.md](./security-incidents.md)   | 인시던트 대응 + PIPA 통지                                        | 6        |
 | [retention-execution.md](./retention-execution.md) | PII/위치 로그 보존기간 dry-run/execute                           | 6        |
 | [codegraph-worktrees.md](./codegraph-worktrees.md) | CodeGraph + agent별 고정 worktree (ADR-017)                      | 0 (상시) |
