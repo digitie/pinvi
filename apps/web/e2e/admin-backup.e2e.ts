@@ -194,6 +194,10 @@ test('Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST b
 
   await page.keyboard.press('Shift+Tab');
   await expect(page.getByTestId('restore-close')).toBeFocused();
+  // forward Tab from the last focusable element cycles back to the first (focus trap).
+  await page.getByRole('button', { name: '닫기' }).last().focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('restore-close')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('restore-hotswap-dialog')).toHaveCount(0);
 
@@ -228,11 +232,88 @@ test('Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST b
   await expect(
     page.getByText('핫스왑 restore 요청이 완료됐습니다. restore id: restore-20260606-003000'),
   ).toBeVisible();
+  // re-submit-after-success prevention: submit stays disabled once a run succeeds.
+  await expect(page.getByTestId('restore-submit')).toBeDisabled();
   expect(restoreBody).toEqual({
     snapshot_id: 'pinvi-app-20260606-003000',
     access_reason: '스테이징 schema-swap 훈련',
     confirm_schema_swap: true,
   });
+});
+
+test('Admin backup restore dialog가 restore POST 500 오류를 표시하고 재시도를 허용한다', async ({
+  page,
+}) => {
+  test.skip(
+    !restoreUiEnabled,
+    'NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1 빌드에서만 restore dialog를 검증합니다.',
+  );
+
+  await mockAdminAuth(page);
+
+  await page.route(/.*\/admin\/backup\/snapshots(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            snapshot_id: 'pinvi-app-20260606-003000',
+            filename: 'pinvi-app-20260606-003000.dump',
+            path: 'backup://pinvi-app-20260606-003000.dump',
+            size_bytes: 2097152,
+            checksum_sha256: 'b'.repeat(64),
+            status: 'verified',
+            created_at: '2026-06-06T00:30:00+09:00',
+          },
+        ],
+      }),
+    });
+  });
+
+  let restoreCalls = 0;
+  await page.route(/.*\/admin\/backup\/restore-hotswap$/, async (route) => {
+    restoreCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        detail: { code: 'RESTORE_FAILED', message: 'schema-swap 복구에 실패했습니다.' },
+      }),
+    });
+  });
+
+  await page.goto('/admin/backup');
+  await expect(page.getByRole('heading', { name: 'Backup' })).toBeVisible();
+  await page.getByTestId('admin-backup-restore').first().click();
+
+  await expect(page.getByTestId('restore-hotswap-dialog')).toBeVisible();
+  await page.getByTestId('restore-reason').fill('스테이징 schema-swap 훈련');
+  await page.getByTestId('restore-confirm').check();
+  await page.getByTestId('restore-confirmation').fill('pinvi-app-20260606-003000.dump');
+  await expect(page.getByTestId('restore-submit')).toBeEnabled();
+
+  const restoreResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/admin/backup/restore-hotswap') &&
+      response.request().method() === 'POST',
+  );
+  await page.getByTestId('restore-submit').click();
+  expect((await restoreResponse).status()).toBe(500);
+
+  // restore-POST error surfaces in the dialog and the run does not complete.
+  await expect(page.getByTestId('restore-error')).toBeVisible();
+  await expect(page.getByTestId('restore-run-id')).toHaveCount(0);
+
+  // retry is re-enabled: inputs editable again and submit clickable.
+  await expect(page.getByTestId('restore-submit')).toBeEnabled();
+  await expect(page.getByTestId('restore-close')).toBeEnabled();
+  await page.getByTestId('restore-submit').click();
+  await page.waitForResponse(
+    (response) =>
+      response.url().includes('/admin/backup/restore-hotswap') &&
+      response.request().method() === 'POST',
+  );
+  expect(restoreCalls).toBe(2);
 });
 
 test('Admin backup page가 empty와 error 상태를 렌더링한다', async ({ page }) => {
