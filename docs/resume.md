@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-06-29 (codex) — T-113 / T-271 / T-272 / T-285 제거
+
+사용자 지시에 따라 T-113(`kor-travel-concierge` 별 repo 신설), T-271(Odroid+N150 병행 운영),
+T-272(AI companion 별도 서비스 분리), T-285(AI companion v1.0 scope gate)를 열린 backlog에서
+제거했다. 구현하지 않고 `tasks-done.md`에 scope 제거 아카이브로 남겼으며,
+`docs/execplan/sprint6-v1.0-plan.md`의 남은 task 그룹과 DoD 매핑도 같은 기준으로 정리했다.
+향후 AI companion 연동은 신규 repo 신설 대신 이미 존재하는 `kor-travel-concierge` API를 활용한다.
+
+**다음 한 작업**: 이 문서 정리 PR 머지 후 열린 PR #321(T-287), #227, T-291-etl-sql-tests 충돌 영역을
+다시 확인하고, 겹치지 않는 다음 task를 선점한다.
+
 ## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 완료
 
 신규 개발 task 진입 전 `tasks.md`를 다시 정리했다. 완료·머지·검증 이력은 계속
@@ -15,9 +26,7 @@ Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/back
 N150 Playwright Docker runner 기본 `admin-backup.e2e.ts`(2 passed, 1 skipped), enabled flag
 `admin-backup.e2e.ts`(3 passed), PR #319 CI를 통과했다. CodeGraph sync/status도 up to date다.
 
-PR #319는 squash merge됐고 merge commit은 `40a781a`다. 완료 이관 docs PR 머지 후 다음 작업은
-T-287 Trip Day optimistic lock / conflict UX를 우선 후보로 삼되, 착수 직전 열린 PR/브랜치와
-`tasks.md`를 다시 확인한다. T-285는 진행하지 않는다.
+PR #319는 squash merge됐고 merge commit은 `40a781a`다. 완료 이관 docs PR도 머지됐다.
 
 ## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
 
