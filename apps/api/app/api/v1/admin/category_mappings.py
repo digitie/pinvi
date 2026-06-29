@@ -229,13 +229,13 @@ async def update_category_mapping(
 
     row = await db.get(CategoryMappingOverride, category_key)
     before_state = _override_state(row)
+    existed = row is not None
     if row is None:
         row = CategoryMappingOverride(
             category_key=category_key,
             created_by_user_id=admin.user_id,
             updated_by_user_id=admin.user_id,
         )
-        db.add(row)
 
     if "display_name_ko" in body.model_fields_set:
         row.display_name_ko = _clean_optional_text(body.display_name_ko)
@@ -243,6 +243,29 @@ async def update_category_mapping(
         row.marker_color = body.marker_color
     if "marker_icon" in body.model_fields_set:
         row.marker_icon = _clean_optional_text(body.marker_icon)
+
+    # 아무것도 override하지 않는 override row(전부 NULL)는 무의미하다 → rollback으로 취급.
+    # 기존 override가 있으면 삭제 + rollback 감사, 없으면 noise 없이 short-circuit.
+    if row.display_name_ko is None and row.marker_color is None and row.marker_icon is None:
+        if existed:
+            await db.delete(row)
+            await db.flush()
+            await _append_category_mapping_audit(
+                db=db,
+                request=request,
+                actor=admin,
+                action="category_mapping.rollback",
+                resource_id=category_key,
+                before_state=before_state,
+                after_state=None,
+                access_reason=body.access_reason,
+                request_id=request_id,
+            )
+            await db.commit()
+        return Envelope.of(upstream_item)
+
+    if not existed:
+        db.add(row)
     row.updated_by_user_id = admin.user_id
 
     await db.flush()
@@ -277,10 +300,13 @@ async def rollback_category_mapping(
     upstream_items, _ = await _load_upstream_items(client, include_counts=True, active_only=False)
     upstream_item = _item_by_code(upstream_items, category_key)
     row = await db.get(CategoryMappingOverride, category_key)
+    # override가 없으면 idempotent하게 short-circuit: 삭제할 대상이 없으므로
+    # `category_mapping.rollback` 감사 noise를 남기지 않고 upstream item을 반환한다.
+    if row is None:
+        return Envelope.of(upstream_item)
     before_state = _override_state(row)
-    if row is not None:
-        await db.delete(row)
-        await db.flush()
+    await db.delete(row)
+    await db.flush()
     await _append_category_mapping_audit(
         db=db,
         request=request,
