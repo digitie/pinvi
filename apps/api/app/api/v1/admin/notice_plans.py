@@ -47,6 +47,7 @@ from app.services.admin_curated_attachment import (
     list_curated_attachments,
 )
 from app.services.notice_plan import (
+    NoticePlanConflictError,
     NoticePlanCopyError,
     NoticePlanNotFoundError,
     NoticePlanPolicyError,
@@ -68,6 +69,8 @@ from app.services.notice_plan import (
 router = APIRouter(prefix="/admin/notice-plans", tags=["admin"])
 
 AdminDep = Annotated[User, Depends(require_role("admin"))]
+# 읽기(GET list/detail/attachments)는 operator도 허용 — 쓰기는 admin 전용 유지(#334).
+AdminReadDep = Annotated[User, Depends(require_role("admin", "operator"))]
 
 
 def _to_response(attachment) -> AttachmentResponse:  # type: ignore[no-untyped-def]
@@ -209,6 +212,13 @@ def _raise_version_conflict(exc: NoticePlanVersionConflictError) -> NoReturn:
     ) from exc
 
 
+def _raise_conflict(exc: NoticePlanConflictError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
+
+
 def _raise_limit(exc: CuratedAttachmentLimitError) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -340,15 +350,16 @@ async def import_kor_travel_map_curated_feature_route(
 
 @router.get("", response_model=Envelope[list[NoticePlanResponse]])
 async def list_notice_plans(
-    _admin: AdminDep,
+    _admin: AdminReadDep,
     db: DbSession,
     q: str | None = None,
     category: str | None = None,
     is_published: bool | None = None,
     limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ) -> Envelope[list[NoticePlanResponse]]:
     rows = await list_admin_plans(
-        db, q=q, category=category, is_published=is_published, limit=limit
+        db, q=q, category=category, is_published=is_published, limit=limit, offset=offset
     )
     return Envelope.of([_plan_to_response(plan, []) for plan in rows])
 
@@ -369,6 +380,8 @@ async def create_notice_plan(
         )
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     await _audit(
         db,
         admin,
@@ -386,7 +399,7 @@ async def create_notice_plan(
 
 @router.get("/{plan_id}", response_model=Envelope[NoticePlanResponse])
 async def get_notice_plan(
-    plan_id: uuid.UUID, _admin: AdminDep, db: DbSession
+    plan_id: uuid.UUID, _admin: AdminReadDep, db: DbSession
 ) -> Envelope[NoticePlanResponse]:
     try:
         plan = await get_admin_plan(db, notice_plan_id=plan_id)
@@ -407,7 +420,7 @@ async def update_notice_plan(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> Envelope[NoticePlanResponse]:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         before = _snapshot_plan(plan)
         plan = await update_admin_plan(
             db,
@@ -420,6 +433,8 @@ async def update_notice_plan(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
     await _audit(
@@ -448,7 +463,7 @@ async def delete_notice_plan(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         before = _snapshot_plan(plan)
         await soft_delete_admin_plan(
             db,
@@ -488,7 +503,7 @@ async def create_notice_poi(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[NoticePoiResponse]:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         poi = await create_admin_poi(
             db,
             plan=plan,
@@ -497,6 +512,8 @@ async def create_notice_poi(
         )
     except NoticePlanNotFoundError as exc:
         _raise_notice_not_found(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     await _audit(
         db,
         admin,
@@ -522,7 +539,7 @@ async def reorder_notice_pois(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[list[NoticePoiResponse]]:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         before = [_snapshot_poi(p) for p in await list_plan_pois(db, notice_plan_id=plan_id)]
         rows = await reorder_admin_pois(
             db,
@@ -532,6 +549,8 @@ async def reorder_notice_pois(
         )
     except NoticePlanNotFoundError as exc:
         _raise_notice_not_found(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
     await _audit(
@@ -561,13 +580,14 @@ async def update_notice_poi(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> Envelope[NoticePoiResponse]:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         poi = await get_admin_poi(db, notice_plan_id=plan_id, notice_poi_id=poi_id)
         before = _snapshot_poi(poi)
         poi = await update_admin_poi(
             db,
             plan=plan,
             poi=poi,
+            admin_id=admin.user_id,
             values=body.model_dump(exclude_unset=True),
             expected_version=_parse_if_match(if_match),
         )
@@ -575,6 +595,8 @@ async def update_notice_poi(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
     await _audit(
@@ -603,13 +625,14 @@ async def delete_notice_poi(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     try:
-        plan = await get_admin_plan(db, notice_plan_id=plan_id)
+        plan = await get_admin_plan(db, notice_plan_id=plan_id, for_update=True)
         poi = await get_admin_poi(db, notice_plan_id=plan_id, notice_poi_id=poi_id)
         before = _snapshot_poi(poi)
         await soft_delete_admin_poi(
             db,
             plan=plan,
             poi=poi,
+            admin_id=admin.user_id,
             expected_version=_parse_if_match(if_match),
         )
     except NoticePlanNotFoundError as exc:
@@ -635,7 +658,7 @@ async def delete_notice_poi(
 
 @router.get("/{plan_id}/attachments", response_model=Envelope[list[AttachmentResponse]])
 async def list_plan_attachments(
-    plan_id: uuid.UUID, _admin: AdminDep, db: DbSession
+    plan_id: uuid.UUID, _admin: AdminReadDep, db: DbSession
 ) -> Envelope[list[AttachmentResponse]]:
     try:
         await ensure_plan(db, curated_plan_id=plan_id)
@@ -722,7 +745,7 @@ async def delete_plan_attachment(
     response_model=Envelope[list[AttachmentResponse]],
 )
 async def list_poi_attachments(
-    plan_id: uuid.UUID, poi_id: uuid.UUID, _admin: AdminDep, db: DbSession
+    plan_id: uuid.UUID, poi_id: uuid.UUID, _admin: AdminReadDep, db: DbSession
 ) -> Envelope[list[AttachmentResponse]]:
     try:
         await ensure_poi(db, curated_plan_id=plan_id, curated_poi_id=poi_id)
