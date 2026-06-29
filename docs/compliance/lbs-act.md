@@ -3,6 +3,11 @@
 Pinvi는 사용자 좌표를 서버로 전송·처리하는 위치기반서비스(LBS)이므로 본 법의
 규제를 받음. SPEC V8 O-1 / O-2 / O-3 / O-9 정합.
 
+> 관련 법무 문서(초안, T-269): `docs/legal/lbs-terms.md`(위치기반서비스 이용약관),
+> `docs/legal/location-consent.md`(개인위치정보 수집·이용 별도 동의). 동의 UX는
+> `/settings/consents` · 가입 시 `profile-complete`에서 `/legal/<slug>`로 전문을 링크한다.
+> 위치 이용·제공사실 확인자료(제16조, 6개월+)는 운영 `location_access_log`에 자동 기록된다.
+
 ## 1. 사업자 신고 (제9조) — Sprint 6 마감
 
 ### 1.1 신고 의무
