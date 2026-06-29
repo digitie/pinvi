@@ -28,6 +28,35 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
         return str(user.user_id)
 
 
+async def _operator(session_factory) -> str:  # type: ignore[no-untyped-def]
+    from app.models.user import User
+
+    async with session_factory() as db:
+        user = User(
+            email=f"notice_plan_operator_{uuid.uuid4().hex[:8]}@pinvi.test",
+            password_hash="x",
+            nickname="운영자",
+            status="active",
+            roles=["user", "operator"],
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return str(user.user_id)
+
+
+async def _create_plan(client, cookies) -> dict:  # type: ignore[no-untyped-def]
+    slug = f"seoul-cafe-{uuid.uuid4().hex[:8]}"
+    created = await client.post(
+        "/admin/notice-plans",
+        json={"slug": slug, "title": "서울 카페 산책", "category": "cafe", "is_published": False},
+        cookies=cookies,
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["data"]
+
+
 async def test_admin_notice_plan_crud_and_poi_editor(client, session_factory, auth_cookies) -> None:  # type: ignore[no-untyped-def]
     admin_id = await _admin(session_factory)
     cookies = auth_cookies(admin_id)
@@ -145,3 +174,117 @@ async def test_admin_notice_plan_crud_and_poi_editor(client, session_factory, au
     listed_after_delete = await client.get(f"/admin/notice-plans?q={slug}", cookies=cookies)
     assert listed_after_delete.status_code == 200, listed_after_delete.text
     assert listed_after_delete.json()["data"] == []
+
+
+async def test_operator_can_read_but_not_write_notice_plans(  # type: ignore[no-untyped-def]
+    client, session_factory, auth_cookies
+) -> None:
+    """#334: operator는 GET(list/detail)은 보되, 쓰기(POST)는 admin 전용(404)."""
+    admin_cookies = auth_cookies(await _admin(session_factory))
+    plan = await _create_plan(client, admin_cookies)
+    plan_id = plan["notice_plan_id"]
+
+    operator_cookies = auth_cookies(await _operator(session_factory))
+
+    # operator는 list / detail 읽기 가능
+    listed = await client.get("/admin/notice-plans", cookies=operator_cookies)
+    assert listed.status_code == 200, listed.text
+    detail = await client.get(f"/admin/notice-plans/{plan_id}", cookies=operator_cookies)
+    assert detail.status_code == 200, detail.text
+
+    # operator는 쓰기 불가 — require_role("admin")은 존재 자체 숨김(404)
+    denied = await client.post(
+        "/admin/notice-plans",
+        json={"slug": f"op-{uuid.uuid4().hex[:8]}", "title": "운영자 작성 시도"},
+        cookies=operator_cookies,
+    )
+    assert denied.status_code == 404, denied.text
+    denied_poi = await client.post(
+        f"/admin/notice-plans/{plan_id}/pois",
+        json={"day_index": 1, "sort_order": "001000"},
+        cookies=operator_cookies,
+    )
+    assert denied_poi.status_code == 404, denied_poi.text
+
+
+async def test_reorder_permutation_of_two_pois(  # type: ignore[no-untyped-def]
+    client, session_factory, auth_cookies
+) -> None:
+    """#331: 기존 두 POI 위치 swap(001↔002)이 IntegrityError 500 없이 200."""
+    cookies = auth_cookies(await _admin(session_factory))
+    plan = await _create_plan(client, cookies)
+    plan_id = plan["notice_plan_id"]
+
+    poi_a = (
+        await client.post(
+            f"/admin/notice-plans/{plan_id}/pois",
+            json={"day_index": 1, "sort_order": "001000"},
+            cookies=cookies,
+        )
+    ).json()["data"]
+    poi_b = (
+        await client.post(
+            f"/admin/notice-plans/{plan_id}/pois",
+            json={"day_index": 1, "sort_order": "002000"},
+            cookies=cookies,
+        )
+    ).json()["data"]
+
+    reordered = await client.post(
+        f"/admin/notice-plans/{plan_id}/pois/reorder",
+        json={
+            "items": [
+                {"notice_poi_id": poi_a["notice_poi_id"], "day_index": 1, "sort_order": "002000"},
+                {"notice_poi_id": poi_b["notice_poi_id"], "day_index": 1, "sort_order": "001000"},
+            ]
+        },
+        cookies=cookies,
+    )
+    assert reordered.status_code == 200, reordered.text
+    by_id = {row["notice_poi_id"]: row["sort_order"] for row in reordered.json()["data"]}
+    assert by_id[poi_a["notice_poi_id"]] == "002000"
+    assert by_id[poi_b["notice_poi_id"]] == "001000"
+
+
+async def test_duplicate_slug_create_returns_409(  # type: ignore[no-untyped-def]
+    client, session_factory, auth_cookies
+) -> None:
+    """#332: 활성 plan 간 slug 중복은 500이 아니라 409 CONFLICT."""
+    cookies = auth_cookies(await _admin(session_factory))
+    slug = f"dup-slug-{uuid.uuid4().hex[:8]}"
+    first = await client.post(
+        "/admin/notice-plans",
+        json={"slug": slug, "title": "첫 번째"},
+        cookies=cookies,
+    )
+    assert first.status_code == 201, first.text
+    dup = await client.post(
+        "/admin/notice-plans",
+        json={"slug": slug, "title": "중복 slug"},
+        cookies=cookies,
+    )
+    assert dup.status_code == 409, dup.text
+    assert dup.json()["error"]["code"] == "CONFLICT"
+
+
+async def test_duplicate_poi_day_sort_create_returns_409(  # type: ignore[no-untyped-def]
+    client, session_factory, auth_cookies
+) -> None:
+    """#333: 같은 (day_index, sort_order) POI 생성은 500이 아니라 409 CONFLICT."""
+    cookies = auth_cookies(await _admin(session_factory))
+    plan = await _create_plan(client, cookies)
+    plan_id = plan["notice_plan_id"]
+
+    first = await client.post(
+        f"/admin/notice-plans/{plan_id}/pois",
+        json={"day_index": 1, "sort_order": "001000"},
+        cookies=cookies,
+    )
+    assert first.status_code == 201, first.text
+    dup = await client.post(
+        f"/admin/notice-plans/{plan_id}/pois",
+        json={"day_index": 1, "sort_order": "001000"},
+        cookies=cookies,
+    )
+    assert dup.status_code == 409, dup.text
+    assert dup.json()["error"]["code"] == "CONFLICT"

@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime
 from typing import Any, Protocol, cast
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attachment import CuratedPlanAttachment
@@ -43,6 +44,12 @@ class NoticePlanPolicyError(NoticePlanError):
 
 class NoticePlanVersionConflictError(NoticePlanError):
     code = "VERSION_CONFLICT"
+
+
+class NoticePlanConflictError(NoticePlanError):
+    """DB unique 위반(slug 중복 / (day_index, sort_order) 충돌)을 409로 매핑."""
+
+    code = "CONFLICT"
 
 
 class KorTravelMapCuratedSnapshotClient(Protocol):
@@ -161,6 +168,11 @@ async def list_plan_pois(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> list
     return list(result.scalars())
 
 
+def _escape_like(value: str) -> str:
+    """ILIKE 메타문자(`\\`, `%`, `_`)를 escape — ESCAPE '\\' 와 함께 사용."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def list_admin_plans(
     db: AsyncSession,
     *,
@@ -168,34 +180,43 @@ async def list_admin_plans(
     category: str | None = None,
     is_published: bool | None = None,
     limit: int = 100,
+    offset: int = 0,
 ) -> list[CuratedTripPlan]:
     stmt = select(CuratedTripPlan).where(CuratedTripPlan.deleted_at.is_(None))
     normalized_q = _optional_text(q)
     if normalized_q is not None:
-        pattern = f"%{normalized_q}%"
+        pattern = f"%{_escape_like(normalized_q)}%"
         stmt = stmt.where(
             or_(
-                CuratedTripPlan.slug.ilike(pattern),
-                CuratedTripPlan.title.ilike(pattern),
-                CuratedTripPlan.destination.ilike(pattern),
+                CuratedTripPlan.slug.ilike(pattern, escape="\\"),
+                CuratedTripPlan.title.ilike(pattern, escape="\\"),
+                CuratedTripPlan.destination.ilike(pattern, escape="\\"),
             )
         )
     if category is not None:
         stmt = stmt.where(CuratedTripPlan.category == category)
     if is_published is not None:
         stmt = stmt.where(CuratedTripPlan.is_published.is_(is_published))
-    stmt = stmt.order_by(CuratedTripPlan.updated_at.desc()).limit(max(1, min(limit, 200)))
+    stmt = (
+        stmt.order_by(CuratedTripPlan.updated_at.desc(), CuratedTripPlan.curated_plan_id.desc())
+        .offset(max(0, offset))
+        .limit(max(1, min(limit, 200)))
+    )
     result = await db.execute(stmt)
     return list(result.scalars())
 
 
-async def get_admin_plan(db: AsyncSession, *, notice_plan_id: uuid.UUID) -> CuratedTripPlan:
-    plan = await db.scalar(
-        select(CuratedTripPlan).where(
-            CuratedTripPlan.curated_plan_id == notice_plan_id,
-            CuratedTripPlan.deleted_at.is_(None),
-        )
+async def get_admin_plan(
+    db: AsyncSession, *, notice_plan_id: uuid.UUID, for_update: bool = False
+) -> CuratedTripPlan:
+    stmt = select(CuratedTripPlan).where(
+        CuratedTripPlan.curated_plan_id == notice_plan_id,
+        CuratedTripPlan.deleted_at.is_(None),
     )
+    if for_update:
+        # 동시 writer 직렬화(lost update 방지) — PATCH / POI mutate / reorder / delete.
+        stmt = stmt.with_for_update()
+    plan = await db.scalar(stmt)
     if plan is None:
         raise NoticePlanNotFoundError("추천 여행을 찾을 수 없습니다.")
     return plan
@@ -244,7 +265,12 @@ async def create_admin_plan(
         updated_by_admin_id=admin_id,
     )
     db.add(plan)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        # uq_curated_trip_plans_slug_active: 활성 plan 간 slug 중복.
+        raise NoticePlanConflictError("이미 사용 중인 slug 입니다.") from exc
     await db.refresh(plan)
     return plan
 
@@ -276,7 +302,11 @@ async def update_admin_plan(
             setattr(plan, field, values[field])
     plan.updated_by_admin_id = admin_id
     plan.version += 1
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise NoticePlanConflictError("이미 사용 중인 값과 충돌합니다.") from exc
     await db.refresh(plan)
     return plan
 
@@ -338,7 +368,14 @@ async def create_admin_poi(
     db.add(poi)
     plan.updated_by_admin_id = admin_id
     plan.version += 1
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        # uq_curated_plan_pois_plan_day_sort: (day_index, sort_order) 충돌.
+        raise NoticePlanConflictError(
+            "같은 위치(day_index, sort_order)에 이미 POI가 있습니다."
+        ) from exc
     await db.refresh(poi)
     return poi
 
@@ -348,6 +385,7 @@ async def update_admin_poi(
     *,
     plan: CuratedTripPlan,
     poi: CuratedPlanPoi,
+    admin_id: uuid.UUID,
     values: Mapping[str, Any],
     expected_version: int | None = None,
 ) -> CuratedPlanPoi:
@@ -370,8 +408,15 @@ async def update_admin_poi(
         if field in values:
             setattr(poi, field, values[field])
     poi.version += 1
+    plan.updated_by_admin_id = admin_id
     plan.version += 1
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise NoticePlanConflictError(
+            "같은 위치(day_index, sort_order)에 이미 POI가 있습니다."
+        ) from exc
     await db.refresh(poi)
     return poi
 
@@ -381,11 +426,13 @@ async def soft_delete_admin_poi(
     *,
     plan: CuratedTripPlan,
     poi: CuratedPlanPoi,
+    admin_id: uuid.UUID,
     expected_version: int | None = None,
 ) -> CuratedPlanPoi:
     _check_version(actual=poi.version, expected=expected_version)
     poi.deleted_at = datetime.now(UTC)
     poi.version += 1
+    plan.updated_by_admin_id = admin_id
     plan.version += 1
     await db.flush()
     await db.refresh(poi)
@@ -413,14 +460,30 @@ async def reorder_admin_pois(
     by_id = {row.curated_poi_id: row for row in rows}
     if set(by_id) != set(ids):
         raise NoticePlanNotFoundError("추천 여행 POI를 찾을 수 없습니다.")
-    for item in items:
-        poi = by_id[cast(uuid.UUID, item["notice_poi_id"])]
-        poi.day_index = cast(int, item["day_index"])
-        poi.sort_order = cast(str, item["sort_order"])
-        poi.version += 1
-    plan.updated_by_admin_id = admin_id
-    plan.version += 1
-    await db.flush()
+
+    # `uq_curated_plan_pois_plan_day_sort`는 partial unique index라 non-deferrable —
+    # row-by-row UPDATE 중간 상태에서 검사된다. 두 POI를 swap(A:001↔B:002)하면
+    # A→002 UPDATE가 아직 안 옮겨진 B의 002와 충돌한다. 따라서 2단계로 적용한다:
+    # (1) 먼저 모든 대상 POI의 sort_order를 plan 안에서 절대 안 겹치는 임시값으로
+    #     옮겨 flush, (2) 그 다음 실제 (day_index, sort_order)로 옮겨 flush.
+    try:
+        for idx, item in enumerate(items):
+            poi = by_id[cast(uuid.UUID, item["notice_poi_id"])]
+            poi.sort_order = f"tmp-{idx}-{poi.curated_poi_id}"
+        await db.flush()
+        for item in items:
+            poi = by_id[cast(uuid.UUID, item["notice_poi_id"])]
+            poi.day_index = cast(int, item["day_index"])
+            poi.sort_order = cast(str, item["sort_order"])
+            poi.version += 1
+        plan.updated_by_admin_id = admin_id
+        plan.version += 1
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise NoticePlanConflictError(
+            "같은 위치(day_index, sort_order)에 이미 POI가 있습니다."
+        ) from exc
     ordered = [by_id[poi_id] for poi_id in ids]
     for poi in ordered:
         await db.refresh(poi)
