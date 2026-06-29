@@ -6,6 +6,24 @@
 
 ## 2026-06-29
 
+- [x] PR #227 — Web 지도 마커 튜닝 + viewport 캐싱. (완료: 2026-06-29, codex 작성 / claude 마무리)
+      `featureBounds`에 zoom별 bbox precision(floor/ceil 바깥 확장)으로 낮은 줌 pan refetch churn 감소,
+      `FeatureMapView`에 LRU(32)+TTL(60s) viewport 캐시, weather kind feature를 `WeatherMarker`로 렌더
+      (icon→condition 매핑, 선택 시 기온). 98커밋 뒤처진 PR을 main에 동기화(resolveMarkerStyle와
+      featureKind 병합, isSelected 추출)하고 typecheck/lint/vitest/CI 통과 후 머지.
+
+- [x] T-268 — 한국 전용 geofencing 3중 안전망. (완료: 2026-06-29, PR #323, claude)
+      middleware(3차 fallback)는 구현/배선/테스트 완료였고, runbook이 inline으로만 기술하던 Cloudflare
+      WAF(1차)·nginx GeoIP2(선택 edge)·GeoIP 갱신을 실제 아티팩트로 구체화. `infra/cloudflare/
+      waf-korea-only.md`, `infra/nginx/{Dockerfile,conf.d/geo-kr*.conf,README}`, `scripts/update-geoip.sh`,
+      `scripts/verify-geofence.sh`(T-273 게이트용) 추가 + korea-only 문서 DRY 정리.
+
+- [x] T-269 — LBS / 법무 4문서 + 동의 UX. (완료: 2026-06-29, PR #324, claude)
+      `docs/legal/{terms-of-service,privacy-policy,lbs-terms,location-consent}.md` 초안(변호사 검토 전,
+      시행일/사업자정보 미정) + README, `apps/web/lib/legalDocs.ts` + 공개 `/legal/[slug]` 뷰어(초안 배너),
+      동의 UX(settings/consents, profile-complete) 필수 4항목 "전문 보기" 링크, lbs-act 참조. 운영표면
+      (동의 기록/철회, DSR, retention)은 T-275~282로 기구현.
+
 - [x] T-265 — Admin notice plan 작성기. (완료: 2026-06-29, codex)
       `/admin/notice-plans` Admin CRUD를 목록/생성/상세/수정/삭제로 확장하고, `If-Match` 기반
       version conflict, POI 생성/수정/삭제/reorder, plan/POI 첨부 관리 흐름을 구현했다. Web Admin에는

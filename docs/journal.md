@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
+
+**작업**: codex PR #227(map marker tuning + viewport caching) 마무리 머지 + T-268/T-269 완료처리.
+
+**변경**: #227을 main에 동기화(98커밋)·충돌 해소 — `FeatureMapView.tsx`(main resolveMarkerStyle +
+PR featureKind 병합, isSelected 추출, weather→WeatherMarker, LRU+TTL viewport 캐시), `featureBounds`
+(zoom별 bbox precision). docs(tasks/done/resume/journal)에 T-268(#323)·T-269(#324)·#227 완료 반영.
+
+**검증**: lint clean, featureBounds vitest 6 pass, CI(lint-typecheck-build/e2e) 통과 후 머지.
+로컬 typecheck의 vworld-map-web implicit-any는 벤더 타입 미해소 아티팩트(CI 신규 설치에서 해소).
+
+**다음**: non-overlap backlog (T-266/T-270/T-286).
+
 ## 2026-06-29 (codex) — T-265 Admin notice plan 작성기 완료
 
 **작업**: `/admin/notice-plans` 운영 작성기를 API/Web/Admin 문서까지 완료했다.
