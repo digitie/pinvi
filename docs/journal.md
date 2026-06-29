@@ -13,6 +13,35 @@ closure 재감사(G-001~044 + R-001~009 머지 확인, 잔여 open 3건 추적).
 **검증**: T-266 ruff/py_compile/bash -n OK + api CI 통과(#326 머지). T-286 docs-only.
 
 **다음**: T-270 / T-273·T-274(릴리즈). T-291-etl-sql-tests는 codex 선점.
+## 2026-06-29 (codex) — T-291 ETL SQL 실행 테스트 완료
+
+**작업**: PR #273 사후 리뷰의 ETL SQL 실행 테스트와 audit retention 정책 분리를 완료했다.
+
+**변경**:
+
+- ETL 원시 SQL 상수를 `pinvi.etl.sql.outbox` / `pinvi.etl.sql.retention`으로 분리하고,
+  ETL asset은 해당 상수를 import하도록 바꿨다.
+- `pinvi_pii_retention`은 삭제 계정 PII, OAuth identity, verification/session/OAuth transient 후보만
+  집계한다. `location_access_log`는 location archive asset/API summary 단독 책임으로 남겼다.
+- Admin ETL/Retention API에 `audit_retention` summary를 추가했다. `admin_audit_log` PII 후보는
+  90일 `append_only_cold_storage` 정책으로 집계하고, append-only 원장이므로 execute 결과에는
+  `skipped_admin_audit_pii_over_retention` evidence만 남긴다.
+- Pydantic/zod/Web Admin retention/ETL 화면과 e2e fixture, Admin API/ETL runbook/architecture 문서를
+  같은 계약으로 갱신했다.
+- `docs/tasks.md`에서 완료된 T-291 잔여 항목을 제거하고 본 파일과 `tasks-done.md`로 이관했다.
+
+**검증**:
+
+- API ruff targeted, API strict mypy targeted
+- ETL ruff targeted, ETL pytest 전체 13 passed
+- API integration `test_etl_sql_smoke.py`, `test_admin_etl_provider_sync_api.py`,
+  `test_admin_retention_api.py` — 12 passed
+- `packages/schemas`, `packages/api-client`, `apps/web` typecheck
+- `apps/web` lint
+- N150 Playwright Docker runner `admin-etl-provider-sync.e2e.ts` 2 passed,
+  `admin-retention.e2e.ts` 1 passed
+
+**다음**: PR 머지 후 최신 main에서 남은 Sprint 6 task를 다시 선점한다.
 
 ## 2026-06-29 (claude) — PR #227 지도 마커 튜닝 마무리 + T-268/T-269 완료처리
 

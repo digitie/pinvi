@@ -78,9 +78,11 @@ apps/etl/
 ### 3.4 `pinvi_pii_retention`
 
 - 매일 KST 04:15 실행.
-- `app.users`, OAuth identity, email verification token, user session, OAuth transient table,
-  location/admin audit log의 보존 기간 만료 후보를 집계한다.
-- 삭제 계정 PII grace는 30일, session grace는 30일, location retention은 6개월이다.
+- `app.users`, OAuth identity, email verification token, user session, OAuth transient table의
+  보존 기간 만료 후보를 집계한다.
+- 삭제 계정 PII grace는 30일, session grace는 30일이다. `location_access_log` 6개월 retention은
+  `pinvi_location_log_archive`가 단독 책임을 갖고, `admin_audit_log`는 append-only audit retention
+  정책으로 분리한다.
 - `admin` / `operator` / `cpo` 역할이 있는 삭제 계정은 후보에서 제외하고
   `excluded_privileged_deleted_users`로만 보고한다.
 - Sprint 5 범위는 dry-run metadata와 Admin summary 노출까지다. 실제 delete/anonymize/archive는

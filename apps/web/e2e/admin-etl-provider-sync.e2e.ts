@@ -310,11 +310,9 @@ const etlSummary = {
       generated_at: '2026-06-12T00:03:00+09:00',
       user_pii_cutoff: '2026-05-13T00:03:00+09:00',
       session_cutoff: '2026-05-13T00:03:00+09:00',
-      location_cutoff: '2025-12-12T00:03:00+09:00',
       user_pii_grace_days: 30,
       session_grace_days: 30,
-      location_retention_months: 6,
-      total_candidates: 11,
+      total_candidates: 10,
       deleted_user_pii_candidates: 2,
       deleted_user_oauth_identity_candidates: 1,
       excluded_privileged_deleted_users: 1,
@@ -324,7 +322,13 @@ const etlSummary = {
       old_expired_sessions: 1,
       expired_oauth_login_states: 1,
       expired_mobile_oauth_exchanges: 1,
-      location_access_logs_over_retention: 1,
+    },
+    audit_retention: {
+      dry_run: true,
+      generated_at: '2026-06-12T00:03:00+09:00',
+      audit_cutoff: '2026-03-14T00:03:00+09:00',
+      audit_retention_days: 90,
+      policy: 'append_only_cold_storage',
       admin_audit_pii_over_retention: 0,
     },
     location_log_archive: {
@@ -455,9 +459,10 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-telegram-stuck')).toContainText('1');
   await expect(page.getByTestId('admin-etl-telegram-category-trip_created')).toContainText('66.7%');
   await expect(page.getByTestId('admin-etl-pii-retention')).toContainText('dry-run');
-  await expect(page.getByTestId('admin-etl-pii-total')).toContainText('11');
+  await expect(page.getByTestId('admin-etl-pii-total')).toContainText('10');
   await expect(page.getByTestId('admin-etl-pii-tokens')).toContainText('3');
   await expect(page.getByTestId('admin-etl-pii-privileged-excluded')).toContainText('1');
+  await expect(page.getByTestId('admin-etl-audit-total')).toContainText('0');
   await expect(page.getByTestId('admin-etl-location-archive')).toContainText('dry-run');
   await expect(page.getByTestId('admin-etl-location-archive-total')).toContainText('1');
   await expect(page.getByTestId('admin-etl-location-archive-bridge')).toContainText('일치');

@@ -13,12 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.schemas.admin import (
+    AdminAuditRetentionSummary,
     AdminLocationLogArchiveSummary,
     AdminPiiRetentionSummary,
     AdminRetentionRun,
     AdminRetentionSummary,
 )
-from app.services.admin_etl import build_location_log_archive_summary, build_pii_retention_summary
+from app.services.admin_etl import (
+    build_audit_retention_summary,
+    build_location_log_archive_summary,
+    build_pii_retention_summary,
+)
 
 RetentionScope = Literal["all", "pii", "location"]
 
@@ -48,12 +53,14 @@ async def build_retention_summary(
     current = now or datetime.now(UTC)
     settings = get_settings()
     pii = await build_pii_retention_summary(db, now=current)
+    audit = await build_audit_retention_summary(db, now=current)
     location = await build_location_log_archive_summary(db, now=current)
     return AdminRetentionSummary(
         generated_at=current,
         execute_enabled=settings.pinvi_retention_execute_enabled,
         confirm_phrase=settings.pinvi_retention_execute_confirm_phrase,
         pii_retention=pii,
+        audit_retention=audit,
         location_log_archive=location,
         latest_runs=await list_retention_runs(db, page_size=page_size),
     )
@@ -91,8 +98,8 @@ async def create_retention_dry_run(
     now: datetime | None = None,
 ) -> AdminRetentionRun:
     current = now or datetime.now(UTC)
-    pii, location = await _collect_candidates(db, scope=scope, now=current)
-    snapshot = _candidate_snapshot(pii, location, scope=scope)
+    pii, audit, location = await _collect_candidates(db, scope=scope, now=current)
+    snapshot = _candidate_snapshot(pii, audit, location, scope=scope)
     row = (
         (
             await db.execute(
@@ -135,9 +142,9 @@ async def execute_retention(
     if confirm_phrase != settings.pinvi_retention_execute_confirm_phrase:
         raise RetentionConfirmPhraseError("retention execute confirm phrase mismatch")
 
-    pii, location = await _collect_candidates(db, scope=scope, now=current)
+    pii, audit, location = await _collect_candidates(db, scope=scope, now=current)
     _assert_location_precheck(location, scope=scope)
-    snapshot = _candidate_snapshot(pii, location, scope=scope)
+    snapshot = _candidate_snapshot(pii, audit, location, scope=scope)
     run = (
         (
             await db.execute(
@@ -171,8 +178,8 @@ async def execute_retention(
             result["location"] = await _execute_location_archive(
                 db, location=location, run_id=run_id
             )
-        if pii:
-            result["skipped_admin_audit_pii_over_retention"] = pii.admin_audit_pii_over_retention
+        if audit:
+            result["skipped_admin_audit_pii_over_retention"] = audit.admin_audit_pii_over_retention
         row = (
             (
                 await db.execute(
@@ -217,18 +224,24 @@ async def _collect_candidates(
     *,
     scope: RetentionScope,
     now: datetime,
-) -> tuple[AdminPiiRetentionSummary | None, AdminLocationLogArchiveSummary | None]:
+) -> tuple[
+    AdminPiiRetentionSummary | None,
+    AdminAuditRetentionSummary | None,
+    AdminLocationLogArchiveSummary | None,
+]:
     pii = await build_pii_retention_summary(db, now=now) if scope in ("all", "pii") else None
+    audit = await build_audit_retention_summary(db, now=now) if scope in ("all", "pii") else None
     location = (
         await build_location_log_archive_summary(db, now=now)
         if scope in ("all", "location")
         else None
     )
-    return pii, location
+    return pii, audit, location
 
 
 def _candidate_snapshot(
     pii: AdminPiiRetentionSummary | None,
+    audit: AdminAuditRetentionSummary | None,
     location: AdminLocationLogArchiveSummary | None,
     *,
     scope: RetentionScope,
@@ -236,6 +249,7 @@ def _candidate_snapshot(
     return {
         "scope": scope,
         "pii_retention": None if pii is None else pii.model_dump(mode="json"),
+        "audit_retention": None if audit is None else audit.model_dump(mode="json"),
         "location_log_archive": None if location is None else location.model_dump(mode="json"),
     }
 

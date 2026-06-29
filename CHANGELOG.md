@@ -60,6 +60,9 @@
 - Admin `/admin/notice-plans` 작성기를 추가했다. 추천 여행 plan 목록/필터, 생성, 편집, 삭제,
   POI 생성/수정/삭제/reorder, plan/POI 첨부 업로드를 운영자가 처리할 수 있고, Admin API는
   `If-Match` version conflict와 `admin_audit_log` 기록을 제공한다.
+- Admin ETL/Retention summary에서 `admin_audit_log` PII 후보를 PII 삭제 후보와 분리한
+  `audit_retention`으로 노출한다. `location_access_log` 후보는 location archive summary가 단독
+  소유하며, ETL 원시 SQL은 PostgreSQL compile smoke와 Alembic schema 실행 smoke로 검증한다.
 - Admin `/admin/incidents`를 추가했다. `app.security_incidents`는
   `detected` → `triage` → `notification_decision` → `reported` → `closed` workflow로 확장됐고,
   CPO 30분 review due, KISA/PIPC 72시간 신고 due, CPO Telegram outbox, 정보주체 통지 email outbox,

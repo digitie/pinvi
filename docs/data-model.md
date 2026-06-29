@@ -849,7 +849,8 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 | `app.location_access_log_archive` | 6개월 초과 `location_access_log` row를 active table 삭제 전에 동일 payload로 복사. `retention_run_id`로 실행 run에 연결      |
 
 실행 전 `location_audit_outbox` cutoff 이전 pending row와 hash-chain bridge mismatch를 차단한다.
-`admin_audit_log` PII 후보는 append-only 감사 원장이라 삭제하지 않고 run result에 skip count로 남긴다.
+`admin_audit_log` PII 후보는 별도 `audit_retention` summary로 집계한다. append-only 감사 원장이라
+삭제하지 않고 run result에 skip count로 남긴다.
 
 ## 9. 향후 확장 후보 (ADR 후보)
 

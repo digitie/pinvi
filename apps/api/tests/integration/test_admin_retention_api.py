@@ -262,6 +262,10 @@ async def test_retention_execute_anonymizes_pii_and_archives_location_logs(
     assert run["result"]["location"]["archived_rows"] == 1
     assert run["result"]["location"]["deleted_active_rows"] == 1
     assert run["result"]["skipped_admin_audit_pii_over_retention"] == 1
+    assert run["candidate_snapshot"]["pii_retention"]["total_candidates"] == 8
+    assert run["candidate_snapshot"]["audit_retention"]["policy"] == "append_only_cold_storage"
+    assert run["candidate_snapshot"]["audit_retention"]["admin_audit_pii_over_retention"] == 1
+    assert run["candidate_snapshot"]["location_log_archive"]["total_candidates"] == 1
 
     async with session_factory() as db:
         deleted_user = await db.get(User, deleted_user_id)

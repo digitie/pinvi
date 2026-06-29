@@ -549,9 +549,10 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["pinvi"]["pii_retention"]["old_expired_sessions"] == 1
     assert data["pinvi"]["pii_retention"]["expired_oauth_login_states"] == 1
     assert data["pinvi"]["pii_retention"]["expired_mobile_oauth_exchanges"] == 1
-    assert data["pinvi"]["pii_retention"]["location_access_logs_over_retention"] == 1
-    assert data["pinvi"]["pii_retention"]["admin_audit_pii_over_retention"] == 1
-    assert data["pinvi"]["pii_retention"]["total_candidates"] == 10
+    assert data["pinvi"]["pii_retention"]["total_candidates"] == 8
+    assert data["pinvi"]["audit_retention"]["policy"] == "append_only_cold_storage"
+    assert data["pinvi"]["audit_retention"]["audit_retention_days"] == 90
+    assert data["pinvi"]["audit_retention"]["admin_audit_pii_over_retention"] == 1
     assert data["pinvi"]["location_log_archive"]["dry_run"] is True
     assert data["pinvi"]["location_log_archive"]["total_candidates"] == 1
     assert data["pinvi"]["location_log_archive"]["active_rows_after_cutoff"] == 1
