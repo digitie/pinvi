@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-29 (claude) — 병행 트랙 3건 머지 + tasks 위생
+
+**작업**: codex 병행 트랙(T-289/290, T-291, T-261~263)을 구현·머지하고, 신규 task 진입 전
+`tasks.md`를 정리했다.
+
+**머지**: #310(T-289/290 WS reconnect/conflict UX), #312(T-291 ETL run-failure sensor),
+#315(T-261~263 스마트 정렬 2-opt). 각 PR CI green(typecheck/lint/vitest/pytest/e2e) 후 머지.
+
+**tasks 위생**: 완료 T-261/262/263·T-291을 `tasks-done.md`로 이관, 스테일 병행 노트 제거,
+T-291 잔여를 `T-291-etl-sql-tests`로 분리. 이후 task는 번호 부여→todo→완료 시 done 이관
+규칙(tasks-rule §7/§8)을 따른다.
+
 ## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
 
 **작업**: PR #283 사후 리뷰의 App integrity pagination / producer / modal 접근성 gap을 닫았다.
