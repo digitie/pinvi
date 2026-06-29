@@ -15,11 +15,9 @@
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
-- [ ] T-266 — MCP 외부 인터페이스 운영 실증.
 - [ ] T-270 — 성능 / 부하 / 보안 점검.
 - [ ] T-273 — v1.0.0 E2E / Live Gate.
 - [ ] T-274 — v1.0.0 릴리즈.
-- [ ] T-286 — Cross-track review gap closure.
 
 ## 보류 / 미래 작업
 

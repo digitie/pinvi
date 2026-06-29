@@ -104,3 +104,37 @@ T-256 완료 기준:
 - `docs/tasks.md`, `docs/sprints/SPRINT-5.md`, `docs/sprints/SPRINT-6.md`,
   `docs/resume.md`, `docs/journal.md`가 이 문서를 같은 정본으로 참조한다.
 - 본 문서는 실제 운영 도메인, IP, SSH target, credential, secret 값을 포함하지 않는다.
+
+## 6. Gap closure 재감사 (T-286, 2026-06-29)
+
+T-286은 §3(G-001~G-044) + §4(R-001~R-009)의 대응 Task가 실제로 **머지**됐는지 재검증하는 후속
+감사다(§2-30). 완료/머지 이력의 정본은 `docs/tasks-done.md`이며, 본 절은 그 결과 요약이다.
+
+### 6.1 결론
+
+- **G-001~G-044 — 모두 closed.** 대응 Task가 전부 머지됐다:
+  - PIPA incident/위치감사/RBAC/lifecycle/DSR/retention/moderation/email/abuse 운영 표면:
+    T-275~T-282 (incident T-275, 위치감사·retention·archive T-276, email suppression T-277,
+    DSR T-278, moderation T-279, RBAC T-280, user lifecycle T-281, rate-limit/abuse T-282).
+  - 보안 threat model/penetration 1차: T-283. 파괴적 action 매트릭스/role-aware sidebar: T-280/T-283.
+  - debug/provider route 경계·X-Request-Id·provider tag: T-244~T-247, T-249, T-253, T-292.
+  - category mapping DB override: T-264(ADR-052). backup 핫스왑: T-267. app integrity: T-249/T-292.
+  - Telegram system outbox / runtime config 운영면 계획: T-258/T-260(Sprint 6 계획 확정).
+  - mobile scope gate: T-284. cross-track 재감사 자기참조(T-286)는 본 절로 닫는다.
+- **R-001~R-009 — 모두 closed.** WebSocket reconnect/invalidation·conflict UX T-289/T-290(#310),
+  ETL run-failure sensor/문서 drift T-291(#312), integrity pagination/producer/접근성 T-292.
+
+### 6.2 잔여 open (closure 예외 — 별도 Task로 추적, 미추적 gap 없음)
+
+| 항목                                              | 상태                                                                 | 추적                                   |
+| ------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------- |
+| G-039 backup RC verify / janitor / mirror status  | 핫스왑 UI는 T-267 머지; v0.2 RC 최종 확인만 잔여                      | **T-259** (release gate)               |
+| R-005 ETL SQL 실행 테스트 + audit retention 분리  | T-291(sensor/문서) + T-291-etl-sql-tests(SQL compile/schema smoke + audit retention 90일 정책 분리)로 closed | **closed** (codex, a85f832) |
+| G-044 user-facing AI companion 범위               | mobile은 T-284 scope gate; AI companion은 2026-06-29 사용자 지시로 v1.0 범위 제거 | scope 제거(T-285/T-113/T-271/T-272) — 필요 시 기존 `kor-travel-concierge` API consumer task로 재정의 |
+
+### 6.3 검증
+
+`docs/tasks-done.md`에서 위 대응 Task의 완료/머지 이력을 교차 확인했다. 잔여 open 2건(T-259,
+G-044 scope 제거)은 모두 열린
+backlog(`docs/tasks.md`) 또는 명시적 scope 제거로 추적되며, 어떤 G/R 항목도 미추적 상태로 남지
+않는다. 따라서 cross-track review gap은 closed로 간주한다.
