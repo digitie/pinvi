@@ -7,6 +7,9 @@
 
 ### 1.1 Cloudflare WAF (1차)
 
+> 정본 사양·운영자 우회·예외 룰: `infra/cloudflare/waf-korea-only.md`. 변경 시 그 문서와
+> 실제 Cloudflare 룰을 함께 갱신한다.
+
 대시보드 → Security → WAF → Custom Rules → Create:
 
 ```
@@ -24,6 +27,11 @@ Custom Response:
 - ASN 화이트리스트 (한국 통신 3사 만 허용 — 옵션)
 
 ### 1.2 nginx geo (선택 계층)
+
+> 실제 아티팩트(T-268): `infra/nginx/Dockerfile`(geoip2 모듈 + load_module),
+> `infra/nginx/conf.d/geo-kr.conf`(map 정의), `infra/nginx/conf.d/geo-kr-server.example.conf`
+> (server 적용 예시), `infra/nginx/README.md`(활성 절차). 적용 후 반드시 `nginx -t`로 검증한다.
+> 아래 스니펫은 개념 설명용이며 정본은 위 파일이다.
 
 단일 Cloudflare Tunnel 뒤에서 운영하는 기본 배포는 Cloudflare WAF + FastAPI fallback
 두 계층이면 충분하다. nginx GeoIP2는 공인 reverse proxy를 별도로 노출하거나
@@ -126,6 +134,9 @@ fallback이다.
 
 MaxMind GeoLite2 무료 라이선스 — 매월 첫 화요일에 갱신.
 
+> 스크립트: `scripts/update-geoip.sh` (env `MAXMIND_LICENSE_KEY`, `GEOIP_DEST_DIRS`,
+> `NGINX_RELOAD_CMD`). 원자적 교체 + 파일 크기 sanity 체크 포함. 아래는 동등한 inline 예시다.
+
 ### 2.1 자동 (cron)
 
 ```bash
@@ -201,7 +212,11 @@ docker logs pinvi-nginx | tail -20
 2. CPO가 검토 → 1회용 access code 발급 (v1.1 이후 정식 검토)
 3. v1.1까지는 case-by-case 수동 처리 (admin이 사용자 cookie 강제 발급)
 
-## 5. 트러블슈팅
+## 5. 검증 / 트러블슈팅
+
+> FastAPI fallback 스모크: `scripts/verify-geofence.sh` (env `API_BASE`, `GEOFENCE_PROXY_SECRET`
+> 등) — KR 통과 / 비KR 451 / 헬스체크 bypass를 확인한다. Cloudflare 1차는 KR 외 실 IP(또는
+> VPN)로 직접 요청해 451 + 본문/상태를 확인한다. T-273 라이브 게이트의 geofence 검증 항목.
 
 | 증상 | 원인 | 해결 |
 |------|------|------|

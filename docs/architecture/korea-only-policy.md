@@ -13,6 +13,11 @@ Cloudflare Tunnel 뒤 단일 진입점 운영은 Cloudflare WAF + FastAPI fallba
 한다. nginx GeoIP2는 Cloudflare를 우회하는 별도 공인 reverse proxy나 self-host edge를
 둘 때만 차단 계층으로 추가한다.
 
+> 배포 아티팩트(T-268): 1차 `infra/cloudflare/waf-korea-only.md`,
+> 2차 `apps/api/app/middleware/geofence.py`, 선택 edge `infra/nginx/`(Dockerfile + conf.d),
+> GeoIP 갱신 `scripts/update-geoip.sh`, 검증 `scripts/verify-geofence.sh`. 운영 절차는
+> `docs/runbooks/korea-only.md`.
+
 ```
 External Internet
        ↓
