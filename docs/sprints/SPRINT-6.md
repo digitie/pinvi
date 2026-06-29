@@ -16,8 +16,8 @@
   상태 모델, 증거, 테스트 gate는 `docs/execplan/legal-ops-implementation-prep-gate.md`를 따른다.
 - **릴리즈**: `v1.0.0` (Sprint 6 종료 시 tag) — 외부 정식 출시.
 - **DoD**:
-  - `POST /trips/{id}/days/{day_index}/optimize` (OR-Tools)
-  - 스마트 정렬 미리보기 UI (I-8)
+  - `POST /trips/{id}/days/{day_index}/optimize` (nearest-neighbor + 2-opt, haversine — ADR-053; T-261~263 완료)
+  - 스마트 정렬 미리보기 UI (I-8) — `TripDayOptimize.tsx` "기존 → 최적" 표시 (완료)
   - `/admin/feature-requests` (사용자 요청 → 라이브러리 trigger)
   - `/admin/category-mapping` (`app.category_mappings`)
   - E2E 시나리오 6가지 통과 (Playwright)
@@ -54,9 +54,9 @@
 
 ### 백엔드
 
-- `apps/api/app/services/route_optimizer.py` (OR-Tools)
-- `apps/api/app/api/v1/optimize.py` (`POST /trips/{id}/days/{day_index}/optimize`,
-  `GET /trips/{id}/days/{day_index}/distance-matrix`)
+- 경로 최적화는 `apps/api/app/services/trip.py`의 `_optimize_day_order`/`_two_opt_improve`
+  (nearest-neighbor + 2-opt, ADR-053). 별도 `route_optimizer.py`/`optimize.py`는 만들지 않았고
+  `POST /trips/{id}/days/{day_index}/optimize`·`GET .../distance-matrix`는 `api/v1/trips.py`에 있다. (완료)
 - `apps/api/app/api/v1/admin/{feature_requests,category_mappings}.py`
 - `apps/api/app/services/distance_matrix.py` (PostGIS + 카카오 모빌리티 + cache)
 - **`apps/api/app/mcp/`** — Pinvi MCP 서버 (ADR-019):
@@ -154,8 +154,9 @@
 
 ### ADR
 
-- 후속 ADR 후보(번호 미배정): OR-Tools 경로 최적화 정책 (POI ≤10/11-20/20+ 분기)
-- 후속 ADR 후보(번호 미배정): 카테고리 매핑 운영 정책 (라이브러리 default + DB override + 사용자 custom)
+- **ADR-053** (확정): Trip day 경로 최적화 = nearest-neighbor + 2-opt(haversine), OR-Tools/실도로 거리 보류 (T-261~263)
+- **ADR-052** (확정): category mapping은 Admin presentation override만 저장 (T-264)
+- 상세 실행 계획: `docs/execplan/sprint6-v1.0-plan.md`
 - **ADR-018** (참조): 한국 전용 서비스 정책 + geofencing 3중 안전망
 - **ADR-019** (참조): Pinvi MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리
