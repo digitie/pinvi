@@ -1,10 +1,10 @@
 # resume.md
 
-## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 착수
+## 2026-06-29 (codex) — T-267 Backup/Restore UI hot-swap 완료
 
 신규 개발 task 진입 전 `tasks.md`를 다시 정리했다. 완료·머지·검증 이력은 계속
 `tasks-done.md`에만 두고, 반복 계획·체크리스트는 `tasks-rule.md`로 올렸다. `tasks.md`에는 현재
-선점(T-267), 충돌 회피(PR #227 map marker/tracking, T-291-etl-sql-tests), 열린 backlog만 남겼다.
+충돌 회피(PR #227 map marker/tracking, T-291-etl-sql-tests)와 열린 backlog만 남겼다.
 
 Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/backdrop/focus trap, 실행 중 닫기
 잠금, 성공 후 재제출 방지, 요청 중 pending phase와 완료 후 API phase/result 표시를 추가했다.
@@ -13,10 +13,11 @@ Web Admin restore dialog에 snapshot 파일명 직접 입력 확인, Escape/back
 
 검증: `npm run typecheck --workspace apps/web`, `npm run lint --workspace apps/web`, `git diff --check`,
 N150 Playwright Docker runner 기본 `admin-backup.e2e.ts`(2 passed, 1 skipped), enabled flag
-`admin-backup.e2e.ts`(3 passed)를 통과했다. CodeGraph sync/status도 up to date다.
+`admin-backup.e2e.ts`(3 passed), PR #319 CI를 통과했다. CodeGraph sync/status도 up to date다.
 
-**다음 한 작업**: PR CI/머지 후 `tasks.md`에서 T-267 선점을 제거하고 `tasks-done.md`로 이관한 뒤,
-T-285를 피하고 열린 PR #227/T-291-etl-sql-tests 충돌 영역을 제외한 다음 task로 이동한다.
+PR #319는 squash merge됐고 merge commit은 `40a781a`다. 완료 이관 docs PR 머지 후 다음 작업은
+T-287 Trip Day optimistic lock / conflict UX를 우선 후보로 삼되, 착수 직전 열린 PR/브랜치와
+`tasks.md`를 다시 확인한다. T-285는 진행하지 않는다.
 
 ## 2026-06-29 (claude) — T-260 Sprint 6 실행 계획 + ADR-053
 
@@ -54,7 +55,7 @@ Trip conflict UX), **#312**(T-291 ADR-050 ETL run-failure sensor), **#315**(T-26
 retention 분리)는 `T-291-etl-sql-tests`로 분리했다.
 
 **다음 한 작업**: 다음 task 진입 전 최근 PR 리뷰 코멘트 확인 후 backlog에서 non-overlap task 선택
-(T-264 admin category mapping override, T-267 backup UI 등은 codex admin 핫존과 조율 필요).
+(Admin 핫존 task는 `tasks.md` 선점 상태와 열린 PR을 먼저 확인).
 앞으로 task는 번호 부여→todo→완료 시 `tasks-done.md` 이관 규칙을 따른다(tasks-rule §7/§8).
 
 ## 2026-06-29 (codex) — T-292 App integrity pagination / producer follow-up 완료
