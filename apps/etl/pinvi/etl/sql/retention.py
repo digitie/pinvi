@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+# deleted_users intentionally matches both 'pending_delete' and 'deleted' (kept
+# equivalent to the API copy `admin_etl._PII_RETENTION_SUMMARY_SQL`). A soft-deleted
+# account sits in 'pending_delete' during its grace window and still becomes a PII
+# anonymization candidate once `deleted_at <= user_pii_cutoff`; this is locked by a
+# `status='pending_delete'` fixture row in tests/test_pii_retention.py.
+#
+# Audit-PII retention is a *separate, API-only* window (90 days,
+# `admin_etl.AUDIT_RETENTION_DAYS`): the admin_audit_log is append-only cold storage,
+# so over-retention rows are flagged (skip-not-delete) rather than removed — nothing
+# is deleted, so there is no KISA/PIPC audit-retention conflict.
 PII_RETENTION_SUMMARY_SQL = text(
     """
     WITH deleted_users AS (
