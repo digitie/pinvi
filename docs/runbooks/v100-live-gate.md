@@ -124,6 +124,19 @@ PINVI_V100_RESTORE_SNAPSHOT="/path/to/snapshot.dump" \
   scripts/verify-v100-live-gate.sh run restore-staging
 ```
 
+대상 host에 `pg_restore` / `psql`이 없으면 PostgreSQL Docker image를 일회성 runner로 사용한다. 이
+방식은 repo와 snapshot directory를 read-only mount하고, staging DB URL은 host env에서 container env로만
+전달한다.
+
+```bash
+PINVI_V100_LIVE_GATE=1 \
+PINVI_V100_RESTORE_DOCKER_RUNNER=1 \
+PINVI_V100_RESTORE_DOCKER_NETWORK="container:<staging-postgres-container>" \
+PINVI_V100_RESTORE_SNAPSHOT="/path/to/snapshot.dump" \
+PINVI_RESTORE_STAGING_DATABASE_URL="$STAGING_DATABASE_URL" \
+  scripts/verify-v100-live-gate.sh run restore-staging
+```
+
 ## 6. Read-only 운영 검증
 
 geofence와 MCP 검증은 각 스크립트의 하위 환경변수와 guard를 따른다.

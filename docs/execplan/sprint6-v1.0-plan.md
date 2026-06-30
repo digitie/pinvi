@@ -39,12 +39,14 @@
   이 과정에서 `verify-mcp.sh`의 Bash 기본값 expansion이 JSON 뒤에 `}`를 덧붙이던 문제를 수정했다.
 - **Perf/Security smoke**: 통과. API p95 `81.09ms`, error rate `0.0`, 100 요청 OK. security script는
   CSP/CORS/header 검사를 통과했고 rate-limit 검사는 운영 안전상 skip 상태로 남았다.
+- **Restore staging drill**: 통과. N150 host에는 `pg_restore` / `psql`이 없어 `postgres:16-alpine`
+  Docker runner로 staging Postgres에 snapshot을 복구했다. checksum / `pg_restore --list` /
+  restored schema health / admin audit hash chain / rollback precheck guard가 모두 통과했다.
 - **Geofence**: 차단. 운영 API 컨테이너에 `PINVI_GEOFENCE*` env가 없고,
   `scripts/verify-geofence.sh` 결과 KR health 200 / US root 404 / health bypass 200이다. release 전
   ADR-018 운영 설정을 적용해 US root 451을 확인해야 한다.
-- **Mutating/Restore staging**: 차단. 운영 public DB 대상 mutating/restore drill은 실행하지 않는다.
-  전용 staging env와 snapshot guard가 준비된 뒤 `trip-realtime-mutating`, `backup-mutating`,
-  `restore-staging` phase를 실행한다.
+- **Mutating staging Playwright**: 차단. 운영 public DB 대상 mutating suite는 실행하지 않는다.
+  전용 staging Web/API가 준비된 뒤 `trip-realtime-mutating`, `backup-mutating` phase를 실행한다.
 
 ## 3. 남은 Task Backlog (그룹별)
 
@@ -85,8 +87,8 @@
 - **T-273** v1.0.0 E2E / Live Gate — `scripts/verify-v100-live-gate.sh`와
   `docs/runbooks/v100-live-gate.md` 기준으로 E2E 10 시나리오 + N150 smoke + backup 핫스왑 훈련 +
   geofence 검증을 실행한다. T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
-  2026-06-30 기준 Admin full catalog와 MCP/perf/security smoke는 완료했고, geofence 운영 설정과
-  mutating/restore staging env가 release blocker로 남았다.
+  2026-07-01 기준 Admin full catalog, MCP/perf/security smoke, restore staging drill은 완료했고,
+  geofence 운영 설정과 mutating staging Web/API가 release blocker로 남았다.
 - **T-274** v1.0.0 릴리즈 — tag + Release notes + journal/resume 마감.
 
 ## 4. 병행 / 충돌 회피 (tasks-rule §8)

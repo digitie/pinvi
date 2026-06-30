@@ -41,6 +41,9 @@ Environment:
   PINVI_ADMIN_LIVE_CASE_START         Optional 1-based Admin matrix start for resumed full catalog.
   PINVI_ADMIN_LIVE_CASE_END           Optional 1-based Admin matrix end for resumed full catalog.
   PINVI_V100_RESTORE_SNAPSHOT         Snapshot path for restore-staging.
+  PINVI_V100_RESTORE_DOCKER_RUNNER=1  Run restore-staging inside a PostgreSQL Docker image.
+  PINVI_V100_RESTORE_DOCKER_IMAGE     Default postgres:16-alpine.
+  PINVI_V100_RESTORE_DOCKER_NETWORK   Optional docker --network value, e.g. container:<postgres>.
   PINVI_V100_PERF_PATHS               Default /health,/health/db.
   PINVI_V100_PERF_REQUESTS            Default 100.
   PINVI_V100_PERF_CONCURRENCY         Default 10.
@@ -89,6 +92,59 @@ run_playwright() {
   fi
 }
 
+run_restore_staging() {
+  local snapshot="$1"
+  if [[ "${PINVI_V100_RESTORE_DOCKER_RUNNER:-0}" != "1" ]]; then
+    run_cmd "restore-staging" "${ROOT_DIR}/scripts/restore-staging-drill.sh" run "${snapshot}"
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "error: docker is required when PINVI_V100_RESTORE_DOCKER_RUNNER=1" >&2
+    exit 127
+  fi
+  if [[ ! -f "${snapshot}" ]]; then
+    echo "error: restore snapshot not found: ${snapshot}" >&2
+    exit 2
+  fi
+
+  local snapshot_dir
+  local snapshot_file
+  snapshot_dir="$(cd "$(dirname "${snapshot}")" && pwd)"
+  snapshot_file="$(basename "${snapshot}")"
+
+  local -a docker_args=(
+    run
+    --rm
+    -v "${ROOT_DIR}:/workspace:ro"
+    -v "${snapshot_dir}:/snapshot:ro"
+    -w /workspace
+  )
+  if [[ -n "${PINVI_V100_RESTORE_DOCKER_NETWORK:-}" ]]; then
+    docker_args+=(--network "${PINVI_V100_RESTORE_DOCKER_NETWORK}")
+  fi
+
+  local -a passthrough_env=(
+    PINVI_RESTORE_STAGING_DATABASE_URL
+    PINVI_RESTORE_DRILL_SCHEMA
+    PINVI_BACKUP_SCHEMA
+    PINVI_RESTORE_DRILL_JOBS
+    PINVI_RESTORE_JOBS
+    PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL
+    PINVI_RESTORE_DRILL_ALLOW_NON_STAGING
+  )
+  local name
+  for name in "${passthrough_env[@]}"; do
+    if [[ -n "${!name:-}" ]]; then
+      docker_args+=(-e "${name}")
+    fi
+  done
+
+  run_cmd "restore-staging" docker "${docker_args[@]}" \
+    "${PINVI_V100_RESTORE_DOCKER_IMAGE:-postgres:16-alpine}" \
+    bash scripts/restore-staging-drill.sh run "/snapshot/${snapshot_file}"
+}
+
 require_run_guard() {
   if [[ "${PINVI_V100_LIVE_GATE:-0}" != "1" ]]; then
     echo "error: PINVI_V100_LIVE_GATE=1 is required for run" >&2
@@ -132,8 +188,7 @@ run_phase() {
       ;;
     restore-staging)
       : "${PINVI_V100_RESTORE_SNAPSHOT:?PINVI_V100_RESTORE_SNAPSHOT is required}"
-      run_cmd "${phase}" "${ROOT_DIR}/scripts/restore-staging-drill.sh" run \
-        "${PINVI_V100_RESTORE_SNAPSHOT}"
+      run_restore_staging "${PINVI_V100_RESTORE_SNAPSHOT}"
       ;;
     perf)
       run_cmd "${phase}" "${PYTHON_BIN}" "${ROOT_DIR}/tests/load/api_p95_latency.py" \
