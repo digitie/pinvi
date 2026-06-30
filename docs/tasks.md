@@ -7,7 +7,13 @@
 
 ## 현재 선점 / 충돌 회피
 
-- 현재 codex 선점 없음. 다음 신규 작업 전 열린 PR과 이 파일을 다시 확인한다.
+- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-v100-e2e-live-gate`.
+  범위는 `v1.0.0` Web/API/Admin E2E / live gate 정리와 실행 자산 보강이다. T-271 제거 기준에 따라
+  Odroid 병행 운영 smoke는 blocker로 재도입하지 않고, N150 우선 + Playwright N150 runner + 불가 시
+  Windows fallback만 사용한다.
+  현재 PR 범위는 기존 e2e/live 스크립트 inventory를 바탕으로 `scripts/verify-v100-live-gate.sh`와
+  `docs/runbooks/v100-live-gate.md`를 추가하고, staging mutating phase와 운영 read-only phase를
+  분리해 다음 실제 gate 실행의 충돌 위험을 낮추는 것이다.
 
 ## v0.2.0 구현 게이트
 

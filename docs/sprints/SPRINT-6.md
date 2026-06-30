@@ -4,7 +4,7 @@
 - **선행**: Sprint 5 DoD 완료 (v0.2.0)
 - **목표**: 일정 자동 최적화, Admin 보강, 컴플라이언스 (LBS 신고 + 법무 4 문서),
   **MCP 외부 인터페이스 (Pinvi가 서빙)**, **Backup/Restore UI 핫스왑**,
-  **한국 전용 geofencing**, **운영 하드웨어 확장 (Odroid + N150)**,
+  **한국 전용 geofencing**, **N150 운영 gate**,
   E2E + 성능 + 보안 점검, **PIPA/DSR/retention/email suppression/moderation/RBAC/user lifecycle/
   abuse 운영 표면** — 외부 정식 출시 가능 상태
 - **범위 명시**: v1.0.0은 Web/API/Admin 운영 출시다. `apps/mobile`은 활성 track이지만
@@ -34,8 +34,8 @@
   - email deliverability/suppression — SPF/DKIM/DMARC/FROM verified, hard-bounce/complaint enforcement
   - content moderation report/hide/takedown, RBAC role grant/revoke, user lifecycle admin actions,
     rate-limit/abuse admin surface
-  - 운영 환경 배포 smoke test 통과 — **Odroid M1S + N150 16GB / NVMe 1TB
-    / Ubuntu 26.04 양쪽** (ADR-023)
+  - 운영 환경 배포 smoke test 통과 — **N150 16GB / NVMe 1TB / Ubuntu 26.04** 기준.
+    T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
   - 백업 + 복구 훈련 1회 — **핫스왑 패턴 검증** (ADR-022)
   - **MCP 외부 인터페이스 서빙** — `apps/api/app/mcp/` 모듈 + `/mcp/sse`
     엔드포인트. 외부 AI agent가 Pinvi의 trip/poi/feature 데이터를
@@ -212,7 +212,8 @@
 
 - [ ] DoD 모두 통과
 - [ ] E2E **10** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence / Legal-ops)
-- [ ] 운영 환경 smoke test 통과 — **Odroid + N150 양쪽** (ADR-023)
+- [ ] `scripts/verify-v100-live-gate.sh` 기준 v1.0 live gate phase와 결과 기록
+- [ ] 운영 환경 smoke test 통과 — **N150 기준**. Odroid 병행 운영 smoke는 T-271 제거로 제외.
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
       Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**
