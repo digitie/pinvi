@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 staging/mutating blocker 재확인
+
+**작업**: PR #364 merge 후 T-273 잔여 mutating Playwright를 운영 public DB가 아닌 local dev/staging으로
+닫을 수 있는지 확인했다.
+
+**확인**:
+
+- 고정 dev 포트 `12801`, `12805`, `12802`는 비어 있었다.
+- `npm run dev:up` 실행 결과 Web과 Dagster는 기동했지만 API는 2분 동안 `12801`을 열지 못했다.
+  로그상 `uv run` dependency/import 단계에서 멈춘 상태였고, direct `.venv/bin/python -c 'from app.main import app'`
+  도 15초 timeout으로 끝났다.
+- `npm run dev:down`으로 pid와 잔여 포트를 정리했고 `12801`, `12805`, `12802`는 free 상태로 복구했다.
+
+**판단**: mutating Playwright는 계속 전용 staging Web/API blocker로 둔다. 운영 public DB 대상 실행은
+runbook 원칙에 맞지 않으므로 실행하지 않았다.
+
+**다음**: docker-manager/edge proxy geofence 설정이 가능하면 N150 geofence smoke를 먼저 닫고,
+불가하면 staging Web/API 준비 task로 분리한다.
+
 ## 2026-07-01 (codex) — T-273 geofence env passthrough 보강
 
 **작업**: T-273 geofence blocker 중 Pinvi repo에서 닫을 수 있는 compose/env 템플릿 누락을 보강했다.

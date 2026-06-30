@@ -1,8 +1,9 @@
 # resume.md
 
-## 2026-07-01 (codex) — T-273 geofence env passthrough 보강 중
+## 2026-07-01 (codex) — T-273 geofence repo 템플릿 보강 완료 / staging blocker 확인
 
-`agent/codex-t273-geofence`에서 Pinvi repo 쪽 geofence 운영 템플릿 누락을 보강 중이다.
+`agent/codex-t273-geofence`에서 Pinvi repo 쪽 geofence 운영 템플릿 누락을 보강했고 PR #364로
+main에 머지했다.
 `infra/docker-compose.app.yml`의 `app-api`에 `PINVI_GEOFENCE_*` passthrough를 추가했고,
 `infra/.env.prod.example`와 `docs/runbooks/docker-app.md`에 ADR-018 placeholder와
 `PINVI_GEOFENCE_BLOCK_UNKNOWN` 주의사항을 넣었다.
@@ -11,8 +12,14 @@ N150 실제 운영은 `kor-travel-docker-manager` compose가 별도 정본이므
 container env가 바뀌지는 않는다. edge proxy가 `CF-IPCountry`와 trusted signal을 API로 전달하는지
 확인한 뒤에만 `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`로 전환한다.
 
-**다음 한 작업**: 이 PR을 머지한 뒤 docker-manager/edge proxy 설정이 가능하면 N150 geofence smoke를
-실행한다. 불가하면 blocker로 유지하고 전용 staging Web/API 준비로 넘어간다.
+mutating Playwright를 local dev/staging으로 닫을 수 있는지도 확인했다. 고정 dev 포트
+`12801/12805/12802`는 비어 있었고 `npm run dev:up`은 Web/Dagster까지 기동했지만, API는 2분 동안
+`uv run`/import 단계에서 `12801`을 열지 못했다. 서버는 `npm run dev:down`으로 정리했고 포트는
+모두 free 상태로 복구했다.
+
+**다음 한 작업**: T-273 잔여 blocker 해소 — docker-manager/edge proxy geofence 설정을 적용할 수
+있으면 N150 geofence smoke를 실행한다. 별도 staging Web/API가 준비되기 전까지 mutating Playwright는
+운영 public DB 대상으로 실행하지 않는다.
 
 ## 2026-07-01 (codex) — T-273 restore staging drill 완료
 
