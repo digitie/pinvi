@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 restore staging drill 완료
+
+`agent/codex-t273-gate-blockers`에서 T-273 잔여 gate 중 restore staging drill을 완료했다. N150의
+restore staging Postgres는 떠 있었지만 host에는 `pg_restore` / `psql`이 없어,
+`scripts/verify-v100-live-gate.sh`에 `PINVI_V100_RESTORE_DOCKER_RUNNER=1` Docker runner 옵션을
+추가했다.
+
+검증은 N150 최신 checkout `4942ec3` 기준으로 `verify-v100-live-gate` restore Docker runner를
+실행했다. 최신 snapshot basename에 대해 checksum, `pg_restore --list`, schema restore,
+users/trips/admin audit count, admin audit chain `valid`, rollback precheck guard `schema_unchanged`가
+모두 통과했고 `complete:success`로 종료됐다.
+
+**다음 한 작업**: T-273 잔여 blocker 해소 — 운영 geofence 설정 적용 후 US root 451 확인,
+전용 staging Web/API 준비 후 mutating Playwright phase 실행.
+
 ## 2026-06-30 (codex) — T-273 live gate 부분 완료 / geofence 차단
 
 `agent/codex-t273-v100-gate-run`에서 T-273 실제 gate를 이어서 실행했다.

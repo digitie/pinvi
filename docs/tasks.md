@@ -7,14 +7,14 @@
 
 ## 현재 선점 / 충돌 회피
 
-- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-v100-gate-run`.
+- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-gate-blockers`.
   범위는 `v1.0.0` Web/API/Admin E2E / live gate 실제 실행과 결과 기록이다. T-271 제거 기준에 따라
   Odroid 병행 운영 smoke는 blocker로 재도입하지 않고, N150 우선 + Playwright N150 runner + 불가 시
   Windows fallback만 사용한다.
   Admin full catalog는 N150 runner/host browser 차단 후 Windows fallback partition으로 완료했고,
-  MCP live phase도 통과했다. 남은 release blocker는 운영 geofence 설정 미적용
-  (`PINVI_GEOFENCE*` unset, US root 451 미발생)과 전용 staging env가 필요한 mutating/restore phase다.
-  이 차단 상태를 sprint plan·journal·resume에 기록한 뒤 PR을 올린다.
+  MCP live phase와 restore staging drill도 통과했다. 남은 release blocker는 운영 geofence 설정 미적용
+  (`PINVI_GEOFENCE*` unset, US root 451 미발생)과 전용 staging Web/API가 필요한 mutating Playwright
+  phase다.
 
 ## v0.2.0 구현 게이트
 

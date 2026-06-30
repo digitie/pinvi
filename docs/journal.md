@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 restore staging drill 완료
+
+**작업**: T-273 잔여 gate 중 `restore-staging` phase를 N150 staging Postgres에서 실행했다.
+
+**변경**:
+
+- `scripts/verify-v100-live-gate.sh`에 `PINVI_V100_RESTORE_DOCKER_RUNNER=1` 옵션을 추가했다.
+  대상 host에 `pg_restore` / `psql`이 없으면 `postgres:16-alpine` 같은 PostgreSQL image를 일회성
+  runner로 사용한다.
+- `docs/runbooks/v100-live-gate.md`에 Docker restore runner 실행 예시를 추가했다.
+- `docs/tasks.md`, Sprint 6 plan, resume를 restore staging drill 완료와 남은 blocker 기준으로 갱신했다.
+
+**검증**:
+
+- N150 checkout: `4942ec3`로 fast-forward.
+- N150 `verify-v100-live-gate` restore Docker runner: 최신 snapshot basename 기준 checksum verified,
+  `pg_restore --list` OK, restore success, users `7`, trips `5`, admin audit log `1`, audit chain `valid`,
+  rollback precheck guard `schema_unchanged`, complete success.
+- host에는 `pg_restore` / `psql`이 없어 Docker runner 방식으로 실행했다.
+
+**다음**: T-273 잔여 blocker는 운영 geofence 설정(`PINVI_GEOFENCE*` + trusted country-header source)
+적용 후 US root 451 확인, 그리고 전용 staging Web/API 준비 후 mutating Playwright phase 실행이다.
+
 ## 2026-06-30 (codex) — T-273 Admin full catalog + MCP live 검증
 
 **작업**: PR #361 머지 후 최신 main 기준으로 T-273 `v1.0.0` live gate 실제 실행을 이어서 진행했다.
