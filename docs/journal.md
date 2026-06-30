@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 geofence env passthrough 보강
+
+**작업**: T-273 geofence blocker 중 Pinvi repo에서 닫을 수 있는 compose/env 템플릿 누락을 보강했다.
+
+**변경**:
+
+- `infra/docker-compose.app.yml`의 `app-api`에 `PINVI_GEOFENCE_*` env passthrough를 추가했다.
+- `infra/.env.prod.example`에 ADR-018 geofence placeholder와 안전 주의사항을 추가했다.
+- `docs/runbooks/docker-app.md` 운영 env 예시에 geofence 기본값과 `BLOCK_UNKNOWN` 주의사항을 추가했다.
+- `docs/tasks.md` 선점 브랜치를 현재 geofence 브랜치로 갱신했다.
+
+**남은 차단**: N150 실제 배포는 `kor-travel-docker-manager` compose가 별도 정본이므로 같은 env
+passthrough를 그쪽에도 반영해야 한다. 또한 edge proxy가 `CF-IPCountry`와 trusted signal을 API로
+전달하는지 확인하기 전에는 운영에서 `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`로 전환하지 않는다.
+
+**다음**: 이 PR을 머지한 뒤 docker-manager/edge proxy 설정을 적용할 수 있으면 N150에서
+`scripts/verify-geofence.sh`로 KR health 200 / US root 451 / health bypass 200을 확인한다.
+
 ## 2026-07-01 (codex) — T-273 restore staging drill 완료
 
 **작업**: T-273 잔여 gate 중 `restore-staging` phase를 N150 staging Postgres에서 실행했다.

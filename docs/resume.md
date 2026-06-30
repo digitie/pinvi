@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 geofence env passthrough 보강 중
+
+`agent/codex-t273-geofence`에서 Pinvi repo 쪽 geofence 운영 템플릿 누락을 보강 중이다.
+`infra/docker-compose.app.yml`의 `app-api`에 `PINVI_GEOFENCE_*` passthrough를 추가했고,
+`infra/.env.prod.example`와 `docs/runbooks/docker-app.md`에 ADR-018 placeholder와
+`PINVI_GEOFENCE_BLOCK_UNKNOWN` 주의사항을 넣었다.
+
+N150 실제 운영은 `kor-travel-docker-manager` compose가 별도 정본이므로, 이 PR만으로 운영 API
+container env가 바뀌지는 않는다. edge proxy가 `CF-IPCountry`와 trusted signal을 API로 전달하는지
+확인한 뒤에만 `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`로 전환한다.
+
+**다음 한 작업**: 이 PR을 머지한 뒤 docker-manager/edge proxy 설정이 가능하면 N150 geofence smoke를
+실행한다. 불가하면 blocker로 유지하고 전용 staging Web/API 준비로 넘어간다.
+
 ## 2026-07-01 (codex) — T-273 restore staging drill 완료
 
 `agent/codex-t273-gate-blockers`에서 T-273 잔여 gate 중 restore staging drill을 완료했다. N150의
