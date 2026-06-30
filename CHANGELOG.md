@@ -2,14 +2,20 @@
 
 본 문서는 사용자에게 보이는 릴리즈 변경 사항을 기록한다.
 
-## Unreleased (`v0.2.0` 후보)
+## Unreleased
 
-> `v0.1.0` 이후 main에 반영된 변경 사항이다. 현 기준으로는 Sprint 5 / `v0.2.0` 후보이며,
+- 다음 릴리즈 후보 변경 없음.
+
+## v0.2.0 — 실시간 + ETL + 운영 가시화
+
+릴리즈 상태: 완료. Git tag와 GitHub Release는 2026-06-30에 생성했다.
+
+> `v0.1.0` 이후 main에 반영된 Sprint 5 / `v0.2.0` 변경 사항이다.
 > app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
 > 2026-06-28 T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence, N150
 > Playwright Docker runner smoke, Admin live 200/2000 gate, restore staging drill은 통과했다.
 > 2026-06-30 보정된 Admin live full catalog도 N150 우선 + Windows fallback으로 통과했다.
-> 남은 release 차단 항목은 `v0.2.0` tag/GitHub Release 생성이다.
+> `v0.2.0` release gate는 T-259에서 닫았다.
 
 ### 주요 기능
 

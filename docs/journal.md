@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-30 (codex) — T-259 v0.2.0 release 완료
+
+**작업**: `v0.2.0` release gate 문서를 최종 release 상태로 전환했다.
+
+**변경**:
+
+- `CHANGELOG.md`의 `v0.2.0` 후보 섹션을 release 섹션으로 확정했다.
+- `docs/tasks.md`에서 T-259를 제거하고 `docs/tasks-done.md`로 이관했다.
+- release gate, Sprint 5, resume/journal 문서를 tag/GitHub Release 생성 기준으로 갱신했다.
+
+**검증**:
+
+- PR #359 merge: Admin live full catalog evidence와 retry harness 보강 main 반영.
+- release gate 핵심 증적: N150 smoke, backup snapshot, 최신 main API/Web evidence, Admin live
+  200/2000, restore staging drill, full catalog `6343 tests in 5 files` 통과.
+
+**다음**: T-273 — `v1.0.0` E2E / Live Gate.
+
 ## 2026-06-30 (codex) — T-259 Admin live full catalog 완료
 
 **작업**: 보정된 Admin live full catalog(`6343 tests in 5 files`)를 N150 우선 실행 후 필요한

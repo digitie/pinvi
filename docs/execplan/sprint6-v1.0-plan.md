@@ -23,7 +23,7 @@
   T-261~263(스마트 정렬 2-opt, #315, ADR-053), T-292(integrity pagination), T-264(category override, #316, ADR-052),
   T-267(Backup/Restore UI hot-swap, #319), T-287(Trip Day optimistic lock, #321).
 - **Admin 보강(T-265)**: `/admin/notice-plans` 작성기, POI editor, 첨부 업로드, Admin API CRUD 완료.
-- **Sprint 5/v0.2.0 게이트**: 대부분 완료, release/tag만 T-259로 분리.
+- **Sprint 5/v0.2.0 게이트**: T-259로 완료. 다음 gate는 T-273/T-274다.
 
 ## 3. 남은 Task Backlog (그룹별)
 

@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-06-30 (codex) — T-259 v0.2.0 release 완료
+
+T-259 release gate를 닫았다. PR #359로 Admin live full catalog evidence와 retry harness 보강을
+main에 머지했고, 이어 `CHANGELOG.md`를 `v0.2.0` release 상태로 전환했다. `v0.2.0` tag와 GitHub
+Release는 이 release 문서 merge commit 기준으로 생성한다.
+
+검증 기준은 `docs/execplan/v020-release-candidate-gate.md`에 정리했다. 핵심 gate는 N150 smoke,
+backup snapshot, 최신 main API/Web evidence, N150 Playwright Docker runner, Admin live 200/2000,
+restore staging drill, Admin live full catalog(`6343 tests in 5 files`) 통과다.
+
+**다음 한 작업**: T-273 — `v1.0.0` E2E / Live Gate.
+
 ## 2026-06-30 (codex) — T-259 Admin live full catalog 완료
 
 `agent/codex-t259-v020-release-gate`에서 보정된 Admin live full catalog를 완료했다.
