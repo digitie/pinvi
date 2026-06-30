@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-30 (codex) — T-273 v1.0 live gate 실행 자산 1차
+
+**작업**: `v1.0.0` E2E / live gate를 실제 실행하기 전에 phase wrapper와 runbook을 추가했다.
+
+**변경**:
+
+- `docs/tasks.md`에 T-273 선점 브랜치와 충돌 회피 범위를 기록했다.
+- T-271 제거 기준에 맞춰 Sprint 6 문서의 Odroid 병행 운영 smoke를 v1.0 blocker에서 제외하고,
+  N150 기준 gate로 정렬했다.
+- `scripts/verify-v100-live-gate.sh`를 추가했다. 기본 phase는 read-only/list이며,
+  `PINVI_V100_LIVE_GATE=1` 없이는 `run`을 거부한다.
+- `docs/runbooks/v100-live-gate.md`를 추가해 read-only, mutating/staging, restore, perf/security phase와
+  N150 우선 / Windows fallback 기록 기준을 분리했다.
+- Admin live runbook의 catalog 수치를 최신 `6343 tests in 5 files` 기준으로 정정했다.
+
+**검증**:
+
+- `bash -n scripts/verify-v100-live-gate.sh`
+- `scripts/verify-v100-live-gate.sh plan`
+- guard 실패 확인: `scripts/verify-v100-live-gate.sh run admin-live-list` → exit 2
+- `PINVI_V100_LIVE_GATE=1 scripts/verify-v100-live-gate.sh run admin-live-list live-mutating-list`
+  → Admin live `Total: 6343 tests in 5 files`, live mutating `Total: 2 tests in 2 files`
+- `git diff --check`
+
+`shellcheck`는 현재 Linux 환경에 설치되어 있지 않아 실행하지 못했다. 실제 N150 Playwright smoke/full
+gate는 이 PR merge 후 T-273 후속 phase로 진행한다.
+
+**다음**: PR을 머지한 뒤 N150 기준 T-273 실제 gate phase를 순서대로 실행한다.
+
 ## 2026-06-30 (codex) — T-259 v0.2.0 release 완료
 
 **작업**: `v0.2.0` release gate 문서를 최종 release 상태로 전환했다.

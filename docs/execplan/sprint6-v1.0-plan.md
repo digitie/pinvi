@@ -61,8 +61,9 @@
 ### G. 릴리즈
 
 - **T-259** v0.2.0 release gate — Admin live full catalog + release notes/tag/GitHub Release. (선행 릴리즈)
-- **T-273** v1.0.0 E2E / Live Gate — E2E 10 시나리오 + Odroid/N150 양쪽 smoke + backup 핫스왑 훈련 +
-  geofence 검증.
+- **T-273** v1.0.0 E2E / Live Gate — `scripts/verify-v100-live-gate.sh`와
+  `docs/runbooks/v100-live-gate.md` 기준으로 E2E 10 시나리오 + N150 smoke + backup 핫스왑 훈련 +
+  geofence 검증을 실행한다. T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
 - **T-274** v1.0.0 릴리즈 — tag + Release notes + journal/resume 마감.
 
 ## 4. 병행 / 충돌 회피 (tasks-rule §8)

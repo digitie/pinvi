@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-06-30 (codex) — T-273 v1.0 live gate 실행 자산 1차
+
+`agent/codex-t273-v100-e2e-live-gate`에서 T-273을 선점했다. `tasks.md`에 충돌 회피 기록을 남겼고,
+T-271 제거 기준에 맞춰 Sprint 6 문서의 Odroid 병행 운영 smoke 요구를 v1.0 blocker에서 제외했다.
+
+이번 1차 범위는 실제 장시간 gate 실행 전에 공통 wrapper와 runbook을 추가하는 것이다.
+`scripts/verify-v100-live-gate.sh`는 read-only/list phase와 mutating/staging phase를 분리하고,
+`PINVI_V100_LIVE_GATE=1` guard 없이는 실행하지 않는다. runbook은
+`docs/runbooks/v100-live-gate.md`에 추가했다.
+
+검증: `bash -n scripts/verify-v100-live-gate.sh`, `scripts/verify-v100-live-gate.sh plan`,
+guard 실패(exit 2), `PINVI_V100_LIVE_GATE=1 scripts/verify-v100-live-gate.sh run admin-live-list live-mutating-list`
+통과. list 결과는 Admin live `Total: 6343 tests in 5 files`, live mutating `Total: 2 tests in 2 files`다.
+`git diff --check`도 통과했다. `shellcheck`는 현재 Linux 환경에 설치되어 있지 않다.
+
+**다음 한 작업**: 이 1차 PR을 머지한 뒤 T-273 실제 N150 gate phase를 순서대로 실행하고 결과를
+release gate 문서에 기록한다.
+
 ## 2026-06-30 (codex) — T-259 v0.2.0 release 완료
 
 T-259 release gate를 닫았다. PR #359로 Admin live full catalog evidence와 retry harness 보강을

@@ -11,6 +11,7 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [docker-app.md](./docker-app.md)                   | App 컨테이너 smoke test (`docker-compose.app.yml`)               | 1        |
 | [etl.md](./etl.md)                                 | Dagster `apps/etl` 운영 + soak                                   | 5        |
 | [admin.md](./admin.md)                             | Admin 콘솔 운영 (RBAC / seed / 시나리오)                         | 3        |
+| [v100-live-gate.md](./v100-live-gate.md)           | v1.0.0 E2E / live gate 오케스트레이션                            | 6        |
 | [admin-live-e2e.md](./admin-live-e2e.md)           | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
 | [live-mutating-e2e.md](./live-mutating-e2e.md)     | N150/live 상태 변경 e2e 실행                                     | 5~6      |
 | [file-storage.md](./file-storage.md)               | RustFS 운영 + kor-travel-map 공유                                | 2        |

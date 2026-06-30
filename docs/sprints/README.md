@@ -22,7 +22,7 @@ Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로
 |------|------|----------|
 | `v0.1.0` | Sprint 4 종료 | 지도 + 여행 + Admin 기본 기능 가능. **출시 게이트(DEC-06, 2026-06-06 확정)**: 라이브 feature read(kor_travel_map HTTP 연동, T-066/ADR-027) 충족. snapshot-only 조기출시 금지 조건 해소. 2026-06-13 tag + GitHub Release 완료. |
 | `v0.2.0` | Sprint 5 종료 | 실시간 + ETL + 운영 가시화 (Grafana). Backup/Restore 1차 (script + endpoint, UI는 v1.0). |
-| `v1.0.0` | Sprint 6 종료 | 외부 정식 출시. MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + Odroid+N150 양 노드 + LBS 신고 + 법무 4 문서. |
+| `v1.0.0` | Sprint 6 종료 | 외부 정식 출시. MCP 외부 인터페이스 + Backup 핫스왑 UI + Korean geofencing + N150 운영 gate + LBS 신고 + 법무 4 문서. |
 | `v1.1.0+` | post-Sprint 6 | PWA / 푸시 알림 / 사진 업로드 / `kor-travel-concierge` 통합 |
 
 SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞** — 데이터
