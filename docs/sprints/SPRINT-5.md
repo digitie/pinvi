@@ -1,6 +1,6 @@
 # SPRINT-5 — 실시간 + ETL + 운영 가시화 + Backup/Restore 1차
 
-- **상태**: in progress / 상세 Task 계획 수립 및 PR 리뷰 gap 반영. 일부 선반영: T-067 KASI,
+- **상태**: released (`v0.2.0`, 2026-06-30). 일부 선반영: T-067 KASI,
   T-109 geofencing,
   T-110 Grafana, T-115 backup foundation. post-v0.1.0 main에는 Admin 운영 화면,
   ETL/provider sync read view, Grafana prod URL, dashboard/system 운영 지표, dedup/integrity
@@ -14,10 +14,10 @@
   운영 화면 (Record Linkage, provider sync, integrity, debug logs) +
   **Grafana iframe embed** + **Backup/Restore 1차 (script + endpoint + 수동
   snapshot UI, 핫스왑 restore UI는 Sprint 6)**
-- **릴리즈**: `v0.2.0` (Sprint 5 종료 시 tag). 운영 가시화 + 데이터 적재 활성화.
-- **남은 release gate**: WebSocket 후속(conflict UX, token refresh, TanStack invalidation),
-  app-owned ETL 추가 job, Loki/request timeline stream,
-  backup/restore live e2e, `v0.2.0` Release notes.
+- **릴리즈**: `v0.2.0` (2026-06-30 tag/GitHub Release). 운영 가시화 + 데이터 적재 활성화.
+- **release gate**: T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence,
+  N150 Playwright Docker runner, Admin live 200/2000, restore staging drill, Admin live full
+  catalog, release notes/tag를 완료했다.
 - **DoD**:
   - `WS /ws/trips/{trip_id}` 동작 — POI CRUD/reorder broadcast + presence
   - LWW + optimistic lock 충돌 다이얼로그
@@ -86,12 +86,12 @@
 - Admin 여행/POI 생성, 상세 drill-down, 파일/아바타/RustFS quota, 복사·이동·삭제 운영 기능.
 - Trip 상세 화면 WebSocket wrapper + presence summary + domain event debounce reload.
 
-남은 `v0.2.0` 후보 gate:
+`v0.2.0` gate 완료 요약:
 
-- Release candidate gate는 T-259에서 부분 실행했다. N150 후보 배포와 smoke, backup snapshot은
-  통과했다. 후속으로 최신 main API/Web evidence, N150 Playwright Docker runner smoke,
-  Admin live 200/2000, restore staging drill, Admin live full catalog도 통과했지만 `v0.2.0`
-  tag/GitHub Release가 남아 보류한다. 상세는 `docs/execplan/v020-release-candidate-gate.md`.
+- Release candidate gate는 T-259에서 완료했다. N150 후보 배포와 smoke, backup snapshot,
+  최신 main API/Web evidence, N150 Playwright Docker runner smoke, Admin live 200/2000,
+  restore staging drill, Admin live full catalog, `v0.2.0` tag/GitHub Release까지 닫았다.
+  상세는 `docs/execplan/v020-release-candidate-gate.md`.
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
 - 사용자/Admin 지도뷰 marker palette parity는 T-255에서 완료했다. 공용 marker resolver가
@@ -111,7 +111,7 @@
   `docs/execplan/legal-ops-review-gap-crosswalk.md`에 매핑했다. T-257은 Resend
   deliverability/provider tracking 계약을 T-277로 연결하며 완료했다. T-258은 Sprint 6 legal/ops
   구현 매트릭스와 release sign-off 기준을 확정하며 완료했다.
-- `v0.2.0` tag/GitHub Release notes. full catalog 차단은 해소됐고, tag/Release 생성만 남았다.
+- `v0.2.0` tag/GitHub Release notes는 T-259에서 완료했다.
 
 ### 백엔드 (`apps/api`)
 
@@ -236,6 +236,6 @@
       기준과 suppression/provider tracking gap을 T-277 구현 계약으로 고정했다.
 - [x] **Legal/ops implementation prep gate(T-258)** — T-275~T-286 구현 표면, 상태 모델,
       evidence/test/runbook/sign-off 기준과 mobile/AI 제외 gate를 고정했다.
-- [ ] **`v0.2.0` git tag + GitHub Release notes**
-- [ ] `docs/journal.md` Sprint 5 종료 엔트리
-- [ ] `docs/resume.md` "다음 한 작업" → Sprint 6
+- [x] **`v0.2.0` git tag + GitHub Release notes**
+- [x] `docs/journal.md` Sprint 5 종료 엔트리
+- [x] `docs/resume.md` "다음 한 작업" → Sprint 6

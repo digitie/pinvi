@@ -9,7 +9,7 @@ Pinvi v2 코드 작성 단계 Sprint 계획. 각 Sprint는 별도 markdown으로
 | Sprint 2 | [SPRINT-2.md](./SPRINT-2.md) | **merged** (PR #10) | 도메인 API + DB (Trip / POI / 4 분리 동의 / Resend / 위치 감사) | — |
 | Sprint 3 | [SPRINT-3.md](./SPRINT-3.md) | **merged** (PR #11) | Admin 콘솔 + RBAC + audit chain + seed | — |
 | Sprint 4 | [SPRINT-4.md](./SPRINT-4.md) | **released** (`v0.1.0`, 2026-06-13) | 지도 UI + `vworld-map-web` + 라이브 feature read + **CI/CD 재활성** | **`v0.1.0`** |
-| Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | in progress (Admin/ETL/Grafana/System + WebSocket client 1차 post-v0.1.0 반영) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
+| Sprint 5 | [SPRINT-5.md](./SPRINT-5.md) | **released** (`v0.2.0`, 2026-06-30) | 실시간 WebSocket + Dagster ETL + Loki + Grafana embed + **Backup/Restore 1차** | **`v0.2.0`** |
 | Sprint 6 | [SPRINT-6.md](./SPRINT-6.md) | proposed | 일정 최적화 + LBS 신고 + 법무 + **MCP 외부 인터페이스** + **Backup UI 핫스왑** + **Korean geofencing** + **T108 N150 병행 배포** | **`v1.0.0`** |
 
 > **상태 정합 주의 (감사 P-04, 2026-06-06 / T-150 반영)**: Sprint 5/6 항목 일부

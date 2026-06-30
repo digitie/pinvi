@@ -4,6 +4,14 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-06-30
+
+- [x] T-259 — Release candidate gate / `v0.2.0`. (완료: 2026-06-30, codex)
+      N150 배포 smoke, backup snapshot, 최신 main API/Web evidence, N150 Playwright Docker runner,
+      Admin live 200/2000, restore staging drill, Admin live full catalog를 모두 닫았다. full catalog는
+      `6343 tests in 5 files` 기준이며 N150 우선 실행 후 N150 runtime 한계 구간만 Windows fallback으로
+      검증했다. `CHANGELOG.md`를 `v0.2.0` release 상태로 전환하고 tag/GitHub Release를 생성했다.
+
 ## 2026-06-29
 
 - [x] T-270 — 성능 / 부하 / 보안 점검. (완료: 2026-06-29, codex)

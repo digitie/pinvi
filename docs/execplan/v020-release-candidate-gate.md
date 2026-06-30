@@ -1,10 +1,10 @@
 # v0.2.0 Release Candidate Gate
 
 본 문서는 T-259 `v0.2.0` release candidate gate의 2026-06-28부터 2026-06-30까지의 실행
-결과를 기록한다. 결론은 **tag/Release 보류**다. N150 배포와 기본 smoke, backup snapshot,
+결과를 기록한다. 결론은 **완료**다. N150 배포와 기본 smoke, backup snapshot,
 최신 main API CI, Web clean manual evidence, N150 Playwright Docker runner, Admin live
-200/2000 gate, restore staging drill, Admin live full catalog는 통과했다. 최종 release
-note/tag/GitHub Release 생성은 아직 남아 있다.
+200/2000 gate, restore staging drill, Admin live full catalog가 통과했고, `CHANGELOG.md`
+release 전환과 `v0.2.0` tag/GitHub Release 생성으로 gate를 닫았다.
 
 ## 대상
 
@@ -15,7 +15,7 @@ note/tag/GitHub Release 생성은 아직 남아 있다.
   - `497c7f5414036e8674336a9ad23091d9f03fd489` (N150 Playwright Docker runner smoke 대상 checkout)
 - 기준 브랜치: `main`
 - 실행 위치: N150 운영 노드 우선, Playwright는 N150 Docker runner 우선, 최종 fallback만 Windows runner
-- tag/Release: 생성하지 않음
+- tag/Release: `v0.2.0` / GitHub Release 생성
 
 ## 실행 결과
 
@@ -31,6 +31,7 @@ note/tag/GitHub Release 생성은 아직 남아 있다.
 | Admin live full catalog     | 통과      | `6343 tests in 5 files`. N150 우선 실행 후 N150 runtime 한계 구간만 Windows fallback으로 닫고 focused rerun 4건 통과       |
 | Restore staging drill       | 통과      | N150 disposable PostgreSQL/PostGIS staging target에서 latest snapshot restore/checksum/audit chain 검증 성공              |
 | 최신 main CI/evidence       | 통과      | `4a1b71e` API push CI 통과. `5c0a39b` WSL ext4 clean install 기반 Web lint/typecheck/build 통과                           |
+| Release note/tag            | 통과      | `CHANGELOG.md`를 `v0.2.0` release 상태로 전환하고 tag/GitHub Release 생성                                                 |
 
 ## N150 배포 메모
 
@@ -194,7 +195,7 @@ local-only env 파일로만 `PINVI_RESTORE_STAGING_DATABASE_URL`을 주입했다
 
 ## 다음 조치
 
-1. `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.
+1. Sprint 6 / `v1.0.0` gate는 T-273부터 진행한다.
 2. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
    기본 release gate는 Docker runner를 사용한다.
 3. Compose에서 `pinvi-*` deploy가 외부 repo 이미지 build/recreate를 끌고 오지 않도록
