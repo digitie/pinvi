@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-30 (codex) — T-273 Admin full catalog + MCP live 검증
+
+**작업**: PR #361 머지 후 최신 main 기준으로 T-273 `v1.0.0` live gate 실제 실행을 이어서 진행했다.
+
+**변경**:
+
+- `admin-live-matrix.live.ts`에 `PINVI_ADMIN_LIVE_CASE_START` /
+  `PINVI_ADMIN_LIVE_CASE_END`를 추가해 full catalog를 1-based inclusive 범위로 재개할 수 있게 했다.
+- `scripts/verify-mcp.sh`의 Bash 기본값 expansion 문제를 수정했다. 기존 `${3:-{}}`가 POST JSON 뒤에
+  `}`를 하나 더 붙여 live MCP POST가 422가 되던 문제다.
+- `scripts/verify-geofence.sh` 기본 health path를 운영 API의 `/health`에 맞췄다.
+- `docs/tasks.md`, Sprint 6 plan, Admin live / v100 live gate runbook에 재개 범위와 차단 상태를 기록했다.
+
+**검증**:
+
+- Admin live full catalog: N150 Docker runner와 N150 host browser가 각각 runtime 문제로 차단되어
+  Windows runner fallback을 사용했다. `CASE_LIMIT=200` smoke `207 passed`, `[0201]` `8 passed`,
+  `[0202]..[6336]` 장시간 구간 `6141 passed` + transient `[1755]` 1건, focused rerun `[1755]`
+  `8 passed`로 matrix `[0001]..[6336]`을 모두 닫았다.
+- catalog list 재개 검증: `PINVI_ADMIN_LIVE_CASE_START=201` → `6143 tests in 5 files`,
+  `PINVI_ADMIN_LIVE_CASE_START=201 PINVI_ADMIN_LIVE_CASE_END=203` → `10 tests in 5 files`.
+- MCP live phase: 운영 내부 API에서 일회성 token 발급 → `GET /mcp/tools`, `POST list_trips`,
+  `POST search_features` 통과 → token 회수 확인.
+- geofence live phase: 운영 API에 `PINVI_GEOFENCE*` env가 없어서 KR health 200 / US root 404 /
+  health bypass 200, `verify-geofence` exit 1. release 전 ADR-018 운영 설정 적용이 필요하다.
+- `bash -n scripts/verify-mcp.sh scripts/verify-geofence.sh scripts/verify-v100-live-gate.sh`
+
+**다음**: geofence 운영 설정과 전용 staging env가 준비되면 T-273 잔여 `geofence`,
+`trip-realtime-mutating`, `backup-mutating`, `restore-staging` phase를 실행한다.
+
 ## 2026-06-30 (codex) — T-273 v1.0 live gate 실행 자산 1차
 
 **작업**: `v1.0.0` E2E / live gate를 실제 실행하기 전에 phase wrapper와 runbook을 추가했다.

@@ -12,14 +12,14 @@
 #   GEOFENCE_COUNTRY_HEADER (선택) 기본 CF-IPCountry
 #   GEOFENCE_PROXY_HEADER   (선택) 기본 X-Pinvi-Geofence-Proxy
 #   GEOFENCE_PROXY_SECRET   (선택) PINVI_GEOFENCE_TRUSTED_PROXY_SECRET와 동일 값
-#   HEALTH_PATH             (선택) 기본 /api/v1/healthz
+#   HEALTH_PATH             (선택) 기본 /health
 set -euo pipefail
 
 API_BASE="${API_BASE:-http://127.0.0.1:12801}"
 COUNTRY_HEADER="${GEOFENCE_COUNTRY_HEADER:-CF-IPCountry}"
 PROXY_HEADER="${GEOFENCE_PROXY_HEADER:-X-Pinvi-Geofence-Proxy}"
 PROXY_SECRET="${GEOFENCE_PROXY_SECRET:-}"
-HEALTH_PATH="${HEALTH_PATH:-/api/v1/healthz}"
+HEALTH_PATH="${HEALTH_PATH:-/health}"
 
 fail=0
 proxy_args=()
@@ -40,7 +40,7 @@ check() { # check <label> <expected> <actual>
 }
 
 echo "[verify-geofence] target=$API_BASE country_header=$COUNTRY_HEADER secret=$([ -n "$PROXY_SECRET" ] && echo set || echo unset)"
-check "KR 통과 (root)"        200 "$(status KR /api/v1/healthz)"
+check "KR 통과 (health)"      200 "$(status KR "$HEALTH_PATH")"
 check "비KR 차단 (US, root)"  451 "$(status US /)"
 check "헬스체크 bypass"       200 "$(status US "$HEALTH_PATH")"
 

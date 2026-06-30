@@ -62,6 +62,18 @@ const parsedCaseLimit = process.env.PINVI_ADMIN_LIVE_CASE_LIMIT
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_LIMIT)
   : Number.POSITIVE_INFINITY;
 const caseLimit = Number.isFinite(parsedCaseLimit) ? parsedCaseLimit : Number.POSITIVE_INFINITY;
+const parsedCaseStart = process.env.PINVI_ADMIN_LIVE_CASE_START
+  ? Number(process.env.PINVI_ADMIN_LIVE_CASE_START)
+  : 1;
+const caseStart = Number.isFinite(parsedCaseStart)
+  ? Math.max(1, Math.floor(parsedCaseStart))
+  : 1;
+const parsedCaseEnd = process.env.PINVI_ADMIN_LIVE_CASE_END
+  ? Number(process.env.PINVI_ADMIN_LIVE_CASE_END)
+  : Number.POSITIVE_INFINITY;
+const caseEnd = Number.isFinite(parsedCaseEnd)
+  ? Math.max(caseStart - 1, Math.floor(parsedCaseEnd))
+  : Number.POSITIVE_INFINITY;
 
 const viewports: UiViewport[] = [
   { name: 'desktop', width: 1366, height: 900 },
@@ -1110,9 +1122,10 @@ function buildUiCases() {
 
 const EXPECTED_LIVE_UI_CASE_COUNT = 6336;
 const liveUiCases = buildUiCases();
-const selectedLiveUiCases = Number.isFinite(caseLimit)
-  ? liveUiCases.slice(0, Math.max(0, caseLimit))
-  : liveUiCases;
+const selectedLiveUiCases = liveUiCases
+  .map((liveCase, index) => ({ liveCase, caseNumber: index + 1 }))
+  .filter(({ caseNumber }) => caseNumber >= caseStart && caseNumber <= caseEnd)
+  .slice(0, Number.isFinite(caseLimit) ? Math.max(0, caseLimit) : undefined);
 
 base.describe('admin live UI e2e catalog', () => {
   base('UI live case catalog has at least 2000 browser cases', () => {
@@ -1152,8 +1165,8 @@ liveUiTest.describe('admin live UI matrix', () => {
     'PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.',
   );
 
-  for (const [index, liveCase] of selectedLiveUiCases.entries()) {
-    liveUiTest(`[${String(index + 1).padStart(4, '0')}] ${liveCase.name}`, async ({ page }) => {
+  for (const { liveCase, caseNumber } of selectedLiveUiCases) {
+    liveUiTest(`[${String(caseNumber).padStart(4, '0')}] ${liveCase.name}`, async ({ page }) => {
       await runLiveCaseWithAttempts(page, liveCase);
     });
   }

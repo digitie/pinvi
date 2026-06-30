@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-06-30 (codex) — T-273 live gate 부분 완료 / geofence 차단
+
+`agent/codex-t273-v100-gate-run`에서 T-273 실제 gate를 이어서 실행했다.
+Admin live full catalog는 N150 Playwright Docker runner와 N150 host browser가 각각 runtime 문제로
+차단되어 Windows fallback을 사용했다. `CASE_LIMIT=200` smoke `207 passed`, `[0201]` 단일 재개
+`8 passed`, `[0202]..[6336]` 장시간 구간 `6141 passed` 후 transient `[1755]` focused rerun
+`8 passed`로 matrix `[0001]..[6336]`을 닫았다.
+
+MCP live phase는 운영 내부 API에서 일회성 token 발급 → `scripts/verify-mcp.sh` →
+token 회수까지 통과했다. 이 과정에서 `verify-mcp.sh`의 `${3:-{}}` expansion이 POST JSON 뒤에
+`}`를 덧붙이던 422 원인을 수정했다. `verify-geofence.sh`는 `/health` 기준으로 보정했지만 운영
+API에 `PINVI_GEOFENCE*` env가 없어 KR health 200 / US root 404 / health bypass 200으로 차단됐다.
+
+**다음 한 작업**: T-273 잔여 blocker 해소 — ADR-018 운영 geofence 설정 적용 후 US root 451 확인,
+전용 staging env 준비 후 mutating/restore phase 실행.
+
 ## 2026-06-30 (codex) — T-273 v1.0 live gate 실행 자산 1차
 
 `agent/codex-t273-v100-e2e-live-gate`에서 T-273을 선점했다. `tasks.md`에 충돌 회피 기록을 남겼고,

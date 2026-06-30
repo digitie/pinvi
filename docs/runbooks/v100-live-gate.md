@@ -89,6 +89,17 @@ PINVI_V100_GATE_N150_RUNNER=1 \
   scripts/verify-v100-live-gate.sh run admin-live-full
 ```
 
+장시간 실행이 중간에 끊긴 경우 `PINVI_ADMIN_LIVE_CASE_START` / `PINVI_ADMIN_LIVE_CASE_END`로
+matrix 번호를 1-based inclusive 범위로 나누어 재개한다. test title의 `[0001]` 번호는 원 catalog
+번호를 유지하므로, 통과 구간은 PR/journal에 `[0001]..[0200]`처럼 기록한다.
+
+```bash
+PINVI_V100_LIVE_GATE=1 \
+PINVI_ADMIN_LIVE_CASE_START=201 \
+PINVI_V100_GATE_N150_RUNNER=1 \
+  scripts/verify-v100-live-gate.sh run admin-live-full
+```
+
 ## 5. Mutating / Staging 실행
 
 mutating phase는 dev/staging 대상에서만 실행한다. 운영 public DB에 직접 restore drill을 실행하지 않는다.

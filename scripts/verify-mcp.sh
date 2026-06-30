@@ -23,8 +23,10 @@ req() { # req METHOD PATH [json] → echoes http_code, writes body to $body
   if [ "$1" = "GET" ]; then
     curl -s -o "$body" -w '%{http_code}' -H "$auth" "${API_BASE}$2"
   else
+    local payload="${3:-}"
+    [ -n "$payload" ] || payload='{}'
     curl -s -o "$body" -w '%{http_code}' -X "$1" -H "$auth" \
-      -H 'Content-Type: application/json' -d "${3:-{}}" "${API_BASE}$2"
+      -H 'Content-Type: application/json' -d "$payload" "${API_BASE}$2"
   fi
 }
 

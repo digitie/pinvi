@@ -60,7 +60,9 @@ export PINVI_ADMIN_LIVE_WORKERS=1
 ```
 
 `PINVI_ADMIN_LIVE_CASE_LIMIT`는 smoke/debug용이다. 전체 검증은 설정하지 않는다.
-release gate는 `200` smoke → `2000` gate → full catalog 순서로 실행한다.
+장시간 full catalog가 중단되면 `PINVI_ADMIN_LIVE_CASE_START` / `PINVI_ADMIN_LIVE_CASE_END`로
+matrix 번호를 1-based inclusive 범위로 나누어 이어서 검증한다. test title의 `[0001]` 번호는 원
+catalog 번호를 유지한다. release gate는 `200` smoke → `2000` gate → full catalog 순서로 실행한다.
 `PINVI_ADMIN_LIVE_THROTTLE_MS` 기본값은 2100ms다. 운영 기본 authenticated rate limit
 60/min에서 Admin 화면이 `/auth/me`와 화면 API를 함께 호출하므로, live 검증에서는 이 값을
 낮추지 않는다.
