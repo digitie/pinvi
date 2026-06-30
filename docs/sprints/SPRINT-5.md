@@ -90,7 +90,7 @@
 
 - Release candidate gate는 T-259에서 부분 실행했다. N150 후보 배포와 smoke, backup snapshot은
   통과했다. 후속으로 최신 main API/Web evidence, N150 Playwright Docker runner smoke,
-  Admin live 200/2000, restore staging drill도 통과했지만 Admin live full catalog와 `v0.2.0`
+  Admin live 200/2000, restore staging drill, Admin live full catalog도 통과했지만 `v0.2.0`
   tag/GitHub Release가 남아 보류한다. 상세는 `docs/execplan/v020-release-candidate-gate.md`.
 - `WS /ws/trips/{trip_id}` 후속: TanStack Query invalidation, 공유 presence store,
   401 close token refresh, conflict UX. Day rename/delete optimistic lock API gap은 T-287로 분리한다.
@@ -111,7 +111,7 @@
   `docs/execplan/legal-ops-review-gap-crosswalk.md`에 매핑했다. T-257은 Resend
   deliverability/provider tracking 계약을 T-277로 연결하며 완료했다. T-258은 Sprint 6 legal/ops
   구현 매트릭스와 release sign-off 기준을 확정하며 완료했다.
-- `v0.2.0` tag/GitHub Release notes. T-259 차단 항목 해소 전에는 생성하지 않는다.
+- `v0.2.0` tag/GitHub Release notes. full catalog 차단은 해소됐고, tag/Release 생성만 남았다.
 
 ### 백엔드 (`apps/api`)
 

@@ -8,7 +8,8 @@
 > app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
 > 2026-06-28 T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence, N150
 > Playwright Docker runner smoke, Admin live 200/2000 gate, restore staging drill은 통과했다.
-> 남은 release 차단 항목은 Admin live full catalog와 `v0.2.0` tag/GitHub Release 생성이다.
+> 2026-06-30 보정된 Admin live full catalog도 N150 우선 + Windows fallback으로 통과했다.
+> 남은 release 차단 항목은 `v0.2.0` tag/GitHub Release 생성이다.
 
 ### 주요 기능
 

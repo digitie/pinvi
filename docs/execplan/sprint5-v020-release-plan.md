@@ -516,7 +516,8 @@ Playwright runner는 N150에서 먼저 실행하고, 불가할 때만 Windows ru
   Docker runner gate를 통과했다.
 - 완료: 운영 DB role에 `CREATEDB`가 없어 disposable PostgreSQL/PostGIS staging target으로
   restore staging drill을 통과했다.
-- 남음: Admin live full catalog는 최종 tag/GitHub Release 직전 장시간 gate로 실행한다.
+- 완료: Admin live full catalog(`6343 tests in 5 files`)는 N150 우선 실행 후 N150 runtime 한계
+  구간만 Windows fallback으로 닫았다.
 - 보류: `CHANGELOG.md` release 전환, `v0.2.0` tag, GitHub Release 생성.
 
 검증 케이스:

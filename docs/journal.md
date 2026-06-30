@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-06-30 (codex) — T-259 Admin live full catalog 완료
+
+**작업**: 보정된 Admin live full catalog(`6343 tests in 5 files`)를 N150 우선 실행 후 필요한
+구간만 Windows fallback으로 완료했다.
+
+**변경**:
+
+- `admin-live-matrix.live.ts`에 login retry 횟수(`PINVI_ADMIN_LIVE_LOGIN_ATTEMPTS`)를 분리하고,
+  generic login alert도 retry 대상에 포함했다.
+- 장시간 catalog retry backoff를 case 단위로 상한 처리해 transient shell/auth 실패 재시도 시간을
+  제한했다.
+- `docs/tasks.md`, `CHANGELOG.md`, release gate/resume 문서를 full catalog 완료 기준으로 갱신했다.
+
+**검증**:
+
+- N150 Docker runner full catalog: `[0001]..[3672]` 진행 후 exit 137. OOM 근거 없음.
+- N150 Docker runner targeted: `[3673|3674]` 2 passed.
+- Windows fallback partition: `[3675]..[6335]` 완료. transient 실패는 focused rerun으로 모두 통과.
+- 최종 focused rerun: `[1615|3412|3413|6232]` 4 passed.
+- catalog list: `Total: 6343 tests in 5 files`.
+- Web lint: 통과.
+
+**다음**: `CHANGELOG.md` release 전환, `v0.2.0` tag/GitHub Release 생성.
+
 ## 2026-06-29 (claude) — codex PR 사후 리뷰 수정 21건 (#331-351 → PR #352-357)
 
 **작업**: codex 6개 머지 PR 사후 리뷰 이슈 21건을 전부 수정·머지·close.

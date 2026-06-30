@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-06-30 (codex) — T-259 Admin live full catalog 완료
+
+`agent/codex-t259-v020-release-gate`에서 보정된 Admin live full catalog를 완료했다.
+catalog count는 `6343 tests in 5 files`로 유지됐다. N150 Docker runner를 먼저 사용했으나
+장시간 full run은 `[3672]` 이후 외부 `SIGKILL` exit 137로 중단됐고, N150 host browser는 Chromium
+shared library 누락과 비대화형 sudo 불가로 실행하지 않았다. 이후 Windows fallback으로 잔여 구간
+`[3675]..[6335]`를 분할 검증하고 transient 실패를 focused rerun으로 닫았다.
+
+초기 N150 transient 실패 `[1615|3412|3413]`와 마지막 잔여 `[6232]`는 최종 focused rerun에서
+4 passed로 재검증했다. `npm -w @pinvi/web run test:e2e:admin-live:list | tail -n 1`은
+`Total: 6343 tests in 5 files`, `npm -w @pinvi/web run lint`는 통과했다. release gate 문서와
+`CHANGELOG.md`는 full catalog 완료 기준으로 갱신 중이다.
+
+**다음 한 작업**: `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.
+
 ## 2026-06-29 (claude) — codex PR 사후 리뷰 21건 수정 (#331-351 → PR #352-357)
 
 codex 6개 머지 PR(#325/#316/#330/#314/#327/#319) 사후 상세 리뷰에서 만든 이슈 21건(#331-351)을

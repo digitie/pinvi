@@ -1,10 +1,10 @@
 # v0.2.0 Release Candidate Gate
 
-본 문서는 T-259 `v0.2.0` release candidate gate의 2026-06-28 실행 결과를 기록한다.
-결론은 **tag/Release 보류**다. N150 배포와 기본 smoke, backup snapshot, 최신 main API CI,
-Web clean manual evidence, N150 Playwright Docker runner, Admin live 200/2000 gate,
-restore staging drill은 통과했다. 다만 Admin live full catalog와 최종 release note/tag/GitHub
-Release 생성은 아직 남아 있다.
+본 문서는 T-259 `v0.2.0` release candidate gate의 2026-06-28부터 2026-06-30까지의 실행
+결과를 기록한다. 결론은 **tag/Release 보류**다. N150 배포와 기본 smoke, backup snapshot,
+최신 main API CI, Web clean manual evidence, N150 Playwright Docker runner, Admin live
+200/2000 gate, restore staging drill, Admin live full catalog는 통과했다. 최종 release
+note/tag/GitHub Release 생성은 아직 남아 있다.
 
 ## 대상
 
@@ -26,9 +26,9 @@ Release 생성은 아직 남아 있다.
 | N150 smoke                  | 통과      | API `/health`, `/health/db`, Web `/`, `/admin/login`, Dagster `/server_info`, `kor-travel-map` `/health`/OpenAPI 모두 200 |
 | Backup snapshot             | 통과      | 초기 one-off와 보강 script rerun 모두 126826 bytes, `.sha256` 검증 및 `pg_restore --list` 성공                            |
 | N150 Playwright             | 통과      | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 smoke, 200, 2000 gate 통과                           |
-| Windows Playwright fallback | 부분 통과 | N150 Web SSH tunnel 대상 login malformed validation 1건 통과                                                              |
+| Windows Playwright fallback | 통과      | N150 Docker runner 장시간 SIGKILL 이후 full catalog 잔여 구간과 transient 실패 focused rerun 통과                         |
 | Admin live 200/2000         | 통과      | N150 local-only credential과 public HTTPS Web origin으로 Docker runner 207/2007건 통과                                    |
-| Admin live full catalog     | 재실행 대기 | 2026-06-29 N150 Docker runner 1차 full run은 6322 passed / 48 failed. live catalog 보정 후 `6343 tests in 5 files`로 재실행 대기 |
+| Admin live full catalog     | 통과      | `6343 tests in 5 files`. N150 우선 실행 후 N150 runtime 한계 구간만 Windows fallback으로 닫고 focused rerun 4건 통과       |
 | Restore staging drill       | 통과      | N150 disposable PostgreSQL/PostGIS staging target에서 latest snapshot restore/checksum/audit chain 검증 성공              |
 | 최신 main CI/evidence       | 통과      | `4a1b71e` API push CI 통과. `5c0a39b` WSL ext4 clean install 기반 Web lint/typecheck/build 통과                           |
 
@@ -121,8 +121,22 @@ sort case가 header label을 `AdminTable` test id로 사용한 문제와, produc
 - seed route/nav + category mapping sort key + debug logs cascade 확인 grep: 17 passed (1.2m)
 - 기존 timeout case grep(`features filter kind=route status=all issue=no q=admin`): 2 passed (32.0s)
 
-보정된 Admin full catalog(`6343 tests in 5 files`)는 최종 tag/Release 직전 다시 N150 Docker runner로
-장시간 gate를 실행한다.
+보정된 Admin full catalog(`6343 tests in 5 files`)는 2026-06-29부터 2026-06-30까지 N150 우선,
+불가 구간 Windows fallback으로 완료했다.
+
+- N150 Docker runner full catalog: `[0001]..[3672]`까지 진행 후 외부 `SIGKILL`로 exit 137.
+  `dmesg`에는 OOM 근거가 없었다. 이 구간의 transient 실패 `[1615]`, `[3412]`, `[3413]`은
+  최종 focused rerun에서 재검증했다.
+- N150 Docker runner targeted: `[3673|3674]` 2 passed.
+- N150 host browser: `libatk-1.0.so.0` 등 Chromium shared library 누락과 비대화형 sudo 불가로
+  host 실행을 중단했다.
+- Windows fallback: `[3675]..[6335]`를 분할 실행했다. 장시간 인증/네트워크 transient로 실패한
+  `[4277]`, `[4358]`, `[4414]`, `[4472]`, `[4530]`, `[4590]`, `[4647]`, `[4703]`, `[4761]`,
+  `[4816]`, `[4874]`, `[4930]`, `[4988]`, `[5058]`, `[5127]`, `[5328]`, `[5548]`, `[5843]`,
+  `[6057]`, `[6232]`는 focused rerun에서 모두 통과했다.
+- 최종 focused rerun: `[1615|3412|3413|6232]` 4 passed.
+- 검증: `npm -w @pinvi/web run test:e2e:admin-live:list | tail -n 1` → `Total: 6343 tests in 5 files`.
+- 검증: `npm -w @pinvi/web run lint` → 통과.
 
 ## Backup Evidence
 
@@ -180,10 +194,8 @@ local-only env 파일로만 `PINVI_RESTORE_STAGING_DATABASE_URL`을 주입했다
 
 ## 다음 조치
 
-1. Admin live full catalog(`6343 tests in 5 files`)를 최종 tag/Release 직전 N150 Docker runner로
-   실행한다.
+1. `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.
 2. host Chromium 직접 실행이 꼭 필요하면 sudo 가능한 셸에서 system dependency를 설치한다.
    기본 release gate는 Docker runner를 사용한다.
 3. Compose에서 `pinvi-*` deploy가 외부 repo 이미지 build/recreate를 끌고 오지 않도록
    `--no-deps`/서비스 분리 절차를 runbook에 반영한다.
-4. full catalog 통과 후 `CHANGELOG.md`를 release 상태로 전환하고 `v0.2.0` tag/GitHub Release를 만든다.
