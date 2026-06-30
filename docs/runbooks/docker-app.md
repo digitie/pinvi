@@ -255,6 +255,8 @@ EXPO_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 PINVI_RUSTFS_PUBLIC_ENDPOINT_URL=https://s3-api.example.com
 PINVI_RUSTFS_PUBLIC_BASE_URL=https://s3-api.example.com
 PINVI_SENTRY_ENVIRONMENT=production
+PINVI_GEOFENCE_ENABLED=false
+PINVI_GEOFENCE_BLOCK_UNKNOWN=false
 ```
 
 보안 처리:
@@ -269,6 +271,10 @@ PINVI_SENTRY_ENVIRONMENT=production
 - presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저가 접근하는
   S3 도메인(`s3-api.*`)이어야 서명이 유효하다. 서버→RustFS 내부 endpoint
   (`app-rustfs:9000`)와 구분한다.
+- 한국 전용 geofence는 edge proxy가 `CF-IPCountry`와 trusted signal
+  (`X-Pinvi-Geofence-Proxy`, CIDR, 또는 mTLS verified header)을 API로 전달하는 것을 먼저 확인한 뒤
+  켠다. `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`는 trusted signal 누락 요청도 451로 차단하므로,
+  `docs/runbooks/korea-only.md`의 smoke를 통과하기 전 운영 기본값으로 두지 않는다.
 
 ## 10. ARM64 빌드
 

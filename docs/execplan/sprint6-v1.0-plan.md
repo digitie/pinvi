@@ -42,7 +42,9 @@
 - **Restore staging drill**: 통과. N150 host에는 `pg_restore` / `psql`이 없어 `postgres:16-alpine`
   Docker runner로 staging Postgres에 snapshot을 복구했다. checksum / `pg_restore --list` /
   restored schema health / admin audit hash chain / rollback precheck guard가 모두 통과했다.
-- **Geofence**: 차단. 운영 API 컨테이너에 `PINVI_GEOFENCE*` env가 없고,
+- **Geofence**: 차단. Pinvi repo의 `infra/docker-compose.app.yml` / `infra/.env.prod.example`에는
+  `PINVI_GEOFENCE_*` passthrough를 보강했다. 실제 N150 배포는 `kor-travel-docker-manager` compose와
+  edge proxy header 주입이 별도 정본이므로, 운영 API 컨테이너에는 아직 geofence env가 없다.
   `scripts/verify-geofence.sh` 결과 KR health 200 / US root 404 / health bypass 200이다. release 전
   ADR-018 운영 설정을 적용해 US root 451을 확인해야 한다.
 - **Mutating staging Playwright**: 차단. 운영 public DB 대상 mutating suite는 실행하지 않는다.
