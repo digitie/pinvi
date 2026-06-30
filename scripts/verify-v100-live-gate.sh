@@ -38,6 +38,8 @@ Environment:
   PINVI_V100_GATE_PHASES              Space or comma separated phase list.
   PINVI_V100_GATE_N150_RUNNER=1       Wrap Playwright phases with scripts/n150-playwright-runner.sh.
   PINVI_V100_ADMIN_LIVE_CASE_LIMIT    Default 200 for admin-live-smoke.
+  PINVI_ADMIN_LIVE_CASE_START         Optional 1-based Admin matrix start for resumed full catalog.
+  PINVI_ADMIN_LIVE_CASE_END           Optional 1-based Admin matrix end for resumed full catalog.
   PINVI_V100_RESTORE_SNAPSHOT         Snapshot path for restore-staging.
   PINVI_V100_PERF_PATHS               Default /health,/health/db.
   PINVI_V100_PERF_REQUESTS            Default 100.

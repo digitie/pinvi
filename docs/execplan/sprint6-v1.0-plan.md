@@ -25,6 +25,27 @@
 - **Admin 보강(T-265)**: `/admin/notice-plans` 작성기, POI editor, 첨부 업로드, Admin API CRUD 완료.
 - **Sprint 5/v0.2.0 게이트**: T-259로 완료. 다음 gate는 T-273/T-274다.
 
+## 2.1 T-273 live gate 실행 현황 (2026-06-30)
+
+- **Admin read-only full catalog**: 통과. N150 Playwright Docker runner는 image pull/runtime 문제로
+  완료하지 못했고, N150 host browser는 Chromium shared library 누락으로 실행 불가했다. fallback 기준에
+  따라 Windows runner에서 `PINVI_ADMIN_LIVE_CASE_LIMIT=200` smoke(`207 passed`), `[0201]` 단일
+  재개(`8 passed`), `[0202]..[6336]` 장시간 구간(`6141 passed`, transient HTTP/2 stream 거부 1건),
+  focused rerun `[1755]`(`8 passed`)로 matrix `[0001]..[6336]`을 모두 닫았다.
+- **Admin live inventory**: `6343 tests in 5 files`. `PINVI_ADMIN_LIVE_CASE_START` /
+  `PINVI_ADMIN_LIVE_CASE_END`로 장시간 catalog를 1-based inclusive 범위 재개할 수 있게 보강했다.
+- **MCP 외부 인터페이스**: 통과. 운영 내부 API에서 일회성 MCP token 발급 → `scripts/verify-mcp.sh`
+  (`GET /mcp/tools`, `POST list_trips`, `POST search_features`) → token 회수까지 확인했다.
+  이 과정에서 `verify-mcp.sh`의 Bash 기본값 expansion이 JSON 뒤에 `}`를 덧붙이던 문제를 수정했다.
+- **Perf/Security smoke**: 통과. API p95 `81.09ms`, error rate `0.0`, 100 요청 OK. security script는
+  CSP/CORS/header 검사를 통과했고 rate-limit 검사는 운영 안전상 skip 상태로 남았다.
+- **Geofence**: 차단. 운영 API 컨테이너에 `PINVI_GEOFENCE*` env가 없고,
+  `scripts/verify-geofence.sh` 결과 KR health 200 / US root 404 / health bypass 200이다. release 전
+  ADR-018 운영 설정을 적용해 US root 451을 확인해야 한다.
+- **Mutating/Restore staging**: 차단. 운영 public DB 대상 mutating/restore drill은 실행하지 않는다.
+  전용 staging env와 snapshot guard가 준비된 뒤 `trip-realtime-mutating`, `backup-mutating`,
+  `restore-staging` phase를 실행한다.
+
 ## 3. 남은 Task Backlog (그룹별)
 
 ### A. MCP 외부 인터페이스
@@ -64,6 +85,8 @@
 - **T-273** v1.0.0 E2E / Live Gate — `scripts/verify-v100-live-gate.sh`와
   `docs/runbooks/v100-live-gate.md` 기준으로 E2E 10 시나리오 + N150 smoke + backup 핫스왑 훈련 +
   geofence 검증을 실행한다. T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
+  2026-06-30 기준 Admin full catalog와 MCP/perf/security smoke는 완료했고, geofence 운영 설정과
+  mutating/restore staging env가 release blocker로 남았다.
 - **T-274** v1.0.0 릴리즈 — tag + Release notes + journal/resume 마감.
 
 ## 4. 병행 / 충돌 회피 (tasks-rule §8)
