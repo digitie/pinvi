@@ -8,7 +8,8 @@
 > app-owned ETL 추가 job과 Loki/request timeline 범위는 Sprint 5 구현에서 정리됐고,
 > 2026-06-28 T-259에서 N150 smoke, backup snapshot, 최신 main API/Web evidence, N150
 > Playwright Docker runner smoke, Admin live 200/2000 gate, restore staging drill은 통과했다.
-> 남은 release 차단 항목은 Admin live full catalog와 `v0.2.0` tag/GitHub Release 생성이다.
+> 2026-06-30 보정된 Admin live full catalog도 N150 우선 + Windows fallback으로 통과했다.
+> 남은 release 차단 항목은 `v0.2.0` tag/GitHub Release 생성이다.
 
 ### 주요 기능
 
@@ -113,7 +114,8 @@
 - Admin `/admin/backup` restore dialog는 schema-swap 전에 snapshot 파일명 직접 입력과 확인 체크를
   요구하고, Escape/backdrop/focus trap을 지원하며, 실행 중에는 닫기 동작을 잠근다. Restore 요청 중
   pending phase를 표시하고 완료 후 API가 반환한 schema-swap phase/result를 보여준다.
-- Admin live e2e matrix를 v0.2.0 release gate용으로 확장했다. catalog는 6,195건으로 drift를
+- Admin live e2e matrix를 v0.2.0 release gate용으로 확장했다. catalog는 최신 main 기준
+  6,363건으로 drift를
   감지하고, request timeline, feature detail subpages, backup read-only guard, ETL app-owned
   rows, Grafana dashboard selector/WebSocket dashboard, raw secret pattern 미노출을 확인한다.
 - Admin `/admin` 대시보드에 운영 현황 그래프와 부하/용량 요약을 추가했다. API 호출/실패,

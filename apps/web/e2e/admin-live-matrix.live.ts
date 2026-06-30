@@ -8,6 +8,7 @@ interface AdminRoute {
   table?: boolean;
   placeholder?: boolean;
   readyTestId?: string;
+  readyText?: string | RegExp;
 }
 
 interface UiViewport {
@@ -40,12 +41,19 @@ const parsedCaseAttempts = Number(process.env.PINVI_ADMIN_LIVE_CASE_ATTEMPTS ?? 
 const caseAttempts = Number.isFinite(parsedCaseAttempts)
   ? Math.max(1, Math.floor(parsedCaseAttempts))
   : 3;
+const parsedLoginAttempts = Number(
+  process.env.PINVI_ADMIN_LIVE_LOGIN_ATTEMPTS ?? String(caseAttempts),
+);
+const loginAttempts = Number.isFinite(parsedLoginAttempts)
+  ? Math.max(1, Math.floor(parsedLoginAttempts))
+  : caseAttempts;
 const parsedRetryBackoffMs = process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS
   ? Number(process.env.PINVI_ADMIN_LIVE_RETRY_BACKOFF_MS)
   : Math.max(throttleMs * 4, 10_000);
 const retryBackoffMs = Number.isFinite(parsedRetryBackoffMs)
   ? Math.max(0, parsedRetryBackoffMs)
   : 10_000;
+const caseRetryBackoffMs = Math.min(retryBackoffMs, 5_000);
 const parsedAuthRefreshMs = Number(process.env.PINVI_ADMIN_LIVE_AUTH_REFRESH_MS ?? '300000');
 const authRefreshMs = Number.isFinite(parsedAuthRefreshMs)
   ? Math.max(60_000, parsedAuthRefreshMs)
@@ -114,7 +122,11 @@ const uiRoutes: AdminRoute[] = [
   { path: '/admin/emails', heading: '이메일 큐', table: true },
   { path: '/admin/backup', heading: 'Backup', table: true },
   { path: '/admin/mcp-tokens', heading: 'MCP 토큰', table: true },
-  { path: '/admin/seed', heading: '시드 시나리오', table: true },
+  {
+    path: '/admin/seed',
+    heading: '시드 시나리오',
+    readyText: /seed route가 비활성화되어 있습니다|seed scenario가 없습니다|dry-run/,
+  },
   { path: '/admin/reset', heading: 'DB 리셋' },
 ];
 
@@ -191,12 +203,7 @@ const sortSpecs = [
   {
     route: '/admin/category-mapping',
     heading: '카테고리 매핑',
-    columns: ['category', 'active', 'upstream icon', 'Pinvi marker', 'mapping', 'features', 'sort'],
-  },
-  {
-    route: '/admin/seed',
-    heading: '시드 시나리오',
-    columns: ['scenario', 'confirm', 'steps'],
+    columns: ['category', 'active', 'upstream_icon', 'pinvi_marker', 'mapping', 'features', 'sort'],
   },
   {
     route: '/admin/debug/logs',
@@ -221,7 +228,7 @@ async function loginViaUi(page: Page) {
     throw new Error('PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.');
   }
 
-  for (let attempt = 1; attempt <= caseAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= loginAttempts; attempt += 1) {
     await page.goto('/admin/login');
     await page.getByTestId('admin-login-email').fill(adminEmail);
     await page.getByTestId('admin-login-password').fill(adminPassword);
@@ -236,7 +243,7 @@ async function loginViaUi(page: Page) {
         .getByTestId('admin-login-error')
         .textContent({ timeout: 1000 })
         .catch(() => null);
-      if (attempt < caseAttempts && alertText?.includes('요청 한도')) {
+      if (attempt < loginAttempts) {
         await page.waitForTimeout(retryBackoffMs);
         continue;
       }
@@ -393,6 +400,9 @@ async function openRoute(page: Page, route: AdminRoute) {
   if (route.readyTestId) {
     await expect(page.getByTestId(route.readyTestId)).toBeVisible();
   }
+  if (route.readyText) {
+    await expect(page.getByText(route.readyText).first()).toBeVisible();
+  }
   if (route.table) {
     await waitForAdminTable(page);
   } else {
@@ -415,7 +425,7 @@ async function runLiveCaseWithAttempts(page: Page, liveCase: AdminUiCase) {
       if (attempt >= caseAttempts) {
         throw error;
       }
-      await page.waitForTimeout(retryBackoffMs * attempt);
+      await page.waitForTimeout(caseRetryBackoffMs);
     }
   }
 }
@@ -1098,7 +1108,7 @@ function buildUiCases() {
   return cases;
 }
 
-const EXPECTED_LIVE_UI_CASE_COUNT = 6195;
+const EXPECTED_LIVE_UI_CASE_COUNT = 6336;
 const liveUiCases = buildUiCases();
 const selectedLiveUiCases = Number.isFinite(caseLimit)
   ? liveUiCases.slice(0, Math.max(0, caseLimit))

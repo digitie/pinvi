@@ -240,7 +240,7 @@
       N150 SSH alias는 현재 Linux 환경에서 해석되지 않아 Windows fallback Playwright로 검증했다.
 
 - [x] T-254 — Admin live e2e matrix v0.2.0 확장.
-      `admin-live-matrix.live.ts` catalog를 6,195건으로 고정해 drift를 감지하고,
+      `admin-live-matrix.live.ts` catalog를 exact count로 고정해 drift를 감지하고,
       read-only matrix에 `/admin/debug/request/{id}` captured request timeline,
       feature detail subpage tabs, backup restore-lock/mutation guard, ETL app-owned job rows,
       Grafana dashboard selector/WebSocket dashboard, raw secret pattern 미노출 검사를 추가했다.
