@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 full catalog 재개 시도 / 실행 env 차단
+
+사용자 지시에 따라 T-122로 넘어가지 않고 T-273 Admin full catalog를 계속 진행하는 방향으로 되돌렸다.
+최신 main 기준 `agent/codex-t273-infra-blockers`에서 충돌 상태를 확인했고, 열린 PR은 문서 PR #212뿐이다.
+
+full catalog list는 Windows fallback에서 다시 확인했다. 결과는 `6343 tests in 5 files`로 유지된다.
+다만 실 browser run은 현재 환경에서 실행 조건을 충족하지 못했다. Linux 세션에는 N150 SSH alias/config가
+없어 N150 Docker runner와 host browser 경로를 사용할 수 없고, Windows/WSL 모두 `PINVI_ADMIN_LIVE_E2E`,
+`PINVI_ADMIN_LIVE_WEB_URL`, `PINVI_ADMIN_LIVE_EMAIL`, `PINVI_ADMIN_LIVE_PASSWORD`가 설정되어 있지 않다.
+
+local dev fallback도 재확인했다. `npm run dev:up`은 Web/Dagster를 열었지만 API는 2분 이상 `12801`에
+응답하지 않았다. `npm run dev:down`으로 `12801/12802/12805`를 정리했고 포트는 모두 free 상태다.
+
+**다음 한 작업**: T-273 full catalog 실실행 unblock — N150 SSH/env 또는 Windows fallback
+`PINVI_ADMIN_LIVE_*` 실행 env가 준비되면 `admin-live-full`을 재개한다. 전용 staging Web/API가 준비되기
+전까지 mutating Playwright는 운영 public DB 대상으로 실행하지 않는다.
+
 ## 2026-07-01 (codex) — T-273 geofence repo 템플릿 보강 완료 / staging blocker 확인
 
 `agent/codex-t273-geofence`에서 Pinvi repo 쪽 geofence 운영 템플릿 누락을 보강했고 PR #364로

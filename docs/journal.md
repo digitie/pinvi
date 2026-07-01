@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 Admin full catalog 재개 시도
+
+**작업**: 최신 사용자 지시에 따라 T-122 진입을 중단하고 T-273 Admin full catalog 재실행을 먼저
+확인했다.
+
+**확인**:
+
+- 브랜치: `agent/codex-t273-infra-blockers`는 최신 `origin/main`과 동일하고 worktree는 clean.
+- 열린 PR: #212 문서 PR만 확인.
+- N150: 현재 Linux 세션에는 SSH alias/config가 없어 호스트명 해석 단계에서 실패했다.
+- Windows fallback: `cmd.exe`에서는 Node/NPM이 동작하지만 `PINVI_ADMIN_LIVE_*` 실행 env가 없다.
+- catalog list: Windows fallback에서 `npm -w @pinvi/web run test:e2e:admin-live:list`를 실행해
+  `6343 tests in 5 files`를 재확인했다.
+- local dev fallback: `npm run dev:up`은 Web/Dagster를 열었지만 API는 `12801`에 2분 이상 응답하지
+  않았다. `npm run dev:down`으로 `12801/12802/12805`를 정리했다.
+
+**결론**: 현재 세션만으로는 full catalog browser run을 실질 실행할 수 없다. N150 실행 env 또는
+Windows fallback `PINVI_ADMIN_LIVE_*` env가 준비되면 `admin-live-full`을 재개한다.
+
 ## 2026-07-01 (codex) — T-273 staging/mutating blocker 재확인
 
 **작업**: PR #364 merge 후 T-273 잔여 mutating Playwright를 운영 public DB가 아닌 local dev/staging으로
