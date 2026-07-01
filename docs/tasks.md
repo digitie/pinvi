@@ -7,14 +7,12 @@
 
 ## 현재 선점 / 충돌 회피
 
-- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-staging-mutating`.
-  범위는 `v1.0.0` Web/API/Admin E2E / live gate 실제 실행과 결과 기록이다. T-271 제거 기준에 따라
-  Odroid 병행 운영 smoke는 blocker로 재도입하지 않고, N150 우선 + Playwright N150 runner + 불가 시
-  Windows fallback만 사용한다.
-  Admin full catalog는 N150 runner/host browser 차단 후 Windows fallback partition으로 완료했고,
-  MCP live phase, restore staging drill, Pinvi repo geofence env passthrough 보강도 통과했다.
-  남은 release blocker는 N150 docker-manager/edge proxy geofence 설정과 전용 staging Web/API가 필요한
-  mutating Playwright phase다.
+- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-infra-blockers`.
+  현재 범위는 `v1.0.0` Web/API/Admin E2E / live gate 중 Admin full catalog 재실행 조건 확인과
+  잔여 blocker 정리다. N150 우선 + Playwright N150 runner + 불가 시 Windows fallback만 사용한다.
+  현 세션에서는 N150 alias가 없고 Windows/WSL에 `PINVI_ADMIN_LIVE_*` 실행 env가 없어 browser full
+  catalog 실실행이 막혔다. local dev fallback도 API `12801` 미기동으로 사용할 수 없다.
+  운영 public DB 대상 mutating Playwright는 전용 staging Web/API 없이는 실행하지 않는다.
 
 ## v0.2.0 구현 게이트
 
