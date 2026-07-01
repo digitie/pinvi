@@ -26,6 +26,7 @@ interface AdminUiCase {
 interface AdminAuthState {
   path: string;
   refreshedAt: number;
+  canRefresh: boolean;
 }
 
 const liveEnabled = process.env.PINVI_ADMIN_LIVE_E2E === '1';
@@ -35,6 +36,9 @@ const webBaseUrl =
   'http://127.0.0.1:12805';
 const adminEmail = process.env.PINVI_ADMIN_LIVE_EMAIL;
 const adminPassword = process.env.PINVI_ADMIN_LIVE_PASSWORD;
+const adminStorageState = process.env.PINVI_ADMIN_LIVE_STORAGE_STATE;
+const hasAdminCredentials = Boolean(adminEmail && adminPassword);
+const hasAdminLiveAuth = hasAdminCredentials || Boolean(adminStorageState);
 const throttleMs = Number(process.env.PINVI_ADMIN_LIVE_THROTTLE_MS ?? '2100');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const parsedCaseAttempts = Number(process.env.PINVI_ADMIN_LIVE_CASE_ATTEMPTS ?? '3');
@@ -65,9 +69,7 @@ const caseLimit = Number.isFinite(parsedCaseLimit) ? parsedCaseLimit : Number.PO
 const parsedCaseStart = process.env.PINVI_ADMIN_LIVE_CASE_START
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_START)
   : 1;
-const caseStart = Number.isFinite(parsedCaseStart)
-  ? Math.max(1, Math.floor(parsedCaseStart))
-  : 1;
+const caseStart = Number.isFinite(parsedCaseStart) ? Math.max(1, Math.floor(parsedCaseStart)) : 1;
 const parsedCaseEnd = process.env.PINVI_ADMIN_LIVE_CASE_END
   ? Number(process.env.PINVI_ADMIN_LIVE_CASE_END)
   : Number.POSITIVE_INFINITY;
@@ -272,6 +274,11 @@ async function reloginIfNeeded(page: Page, returnPath: string) {
     .isVisible({ timeout: 1000 })
     .catch(() => false);
   if (!loginVisible) return;
+  if (!hasAdminCredentials) {
+    throw new Error(
+      'PINVI_ADMIN_LIVE_STORAGE_STATE 세션이 만료됐습니다. PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD로 갱신 가능한 인증을 제공하세요.',
+    );
+  }
   await loginViaUi(page);
   await throttle();
   await page.goto(returnPath);
@@ -295,15 +302,20 @@ async function refreshAdminAuthState(browser: Browser, authState: AdminAuthState
 const liveUiTest = base.extend<{ page: Page }, { adminAuthState: AdminAuthState | null }>({
   adminAuthState: [
     async ({ browser }, use, workerInfo) => {
-      if (!liveEnabled || !adminEmail || !adminPassword) {
+      if (!liveEnabled || !hasAdminLiveAuth) {
         await use(null);
+        return;
+      }
+
+      if (!hasAdminCredentials && adminStorageState) {
+        await use({ path: adminStorageState, refreshedAt: Date.now(), canRefresh: false });
         return;
       }
 
       const authDir = path.join(process.cwd(), 'test-results', '.auth');
       await fs.mkdir(authDir, { recursive: true });
       const authStatePath = path.join(authDir, `admin-live-ui-${workerInfo.workerIndex}.json`);
-      const authState: AdminAuthState = { path: authStatePath, refreshedAt: 0 };
+      const authState: AdminAuthState = { path: authStatePath, refreshedAt: 0, canRefresh: true };
 
       await refreshAdminAuthState(browser, authState);
       await use(authState);
@@ -311,7 +323,7 @@ const liveUiTest = base.extend<{ page: Page }, { adminAuthState: AdminAuthState 
     { scope: 'worker' },
   ],
   page: async ({ browser, adminAuthState }, use) => {
-    if (adminAuthState && Date.now() - adminAuthState.refreshedAt >= authRefreshMs) {
+    if (adminAuthState?.canRefresh && Date.now() - adminAuthState.refreshedAt >= authRefreshMs) {
       await refreshAdminAuthState(browser, adminAuthState);
     }
     const context = await browser.newContext({
@@ -1161,8 +1173,8 @@ base.describe('admin live UI login', () => {
 liveUiTest.describe('admin live UI matrix', () => {
   liveUiTest.skip(!liveEnabled, 'PINVI_ADMIN_LIVE_E2E=1 일 때만 N150/live 대상에 실행합니다.');
   liveUiTest.skip(
-    !adminEmail || !adminPassword,
-    'PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.',
+    !hasAdminLiveAuth,
+    'PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD 또는 PINVI_ADMIN_LIVE_STORAGE_STATE가 필요합니다.',
   );
 
   for (const { liveCase, caseNumber } of selectedLiveUiCases) {

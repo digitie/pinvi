@@ -89,6 +89,11 @@ PINVI_V100_GATE_N150_RUNNER=1 \
   scripts/verify-v100-live-gate.sh run admin-live-full
 ```
 
+`PINVI_ADMIN_LIVE_EMAIL` / `PINVI_ADMIN_LIVE_PASSWORD`를 runner 환경에 둘 수 없는 경우,
+짧은 수명의 Playwright storage state를 `PINVI_ADMIN_LIVE_STORAGE_STATE`로 전달해 read-only
+Admin full catalog를 실행할 수 있다. 장시간 full run에서 세션이 만료되면 자동 갱신되지 않으므로,
+release evidence에는 storage state 생성 시각과 만료 가능성을 함께 기록한다.
+
 장시간 실행이 중간에 끊긴 경우 `PINVI_ADMIN_LIVE_CASE_START` / `PINVI_ADMIN_LIVE_CASE_END`로
 matrix 번호를 1-based inclusive 범위로 나누어 재개한다. test title의 `[0001]` 번호는 원 catalog
 번호를 유지하므로, 통과 구간은 PR/journal에 `[0001]..[0200]`처럼 기록한다.

@@ -42,9 +42,10 @@ export PINVI_ADMIN_LIVE_EMAIL="<admin email>"
 export PINVI_ADMIN_LIVE_PASSWORD="<admin password>"
 ```
 
-`apps/web/e2e/admin-debug-live.live.ts`만 단독 실행할 때는 UI credential 대신 짧은 수명의
-Playwright storage state를 `PINVI_ADMIN_LIVE_STORAGE_STATE`로 전달할 수 있다. 이 경우 test는
-`/admin`에서 인증 상태만 확인하고 `/admin/login` 입력은 수행하지 않는다.
+UI credential 대신 짧은 수명의 Playwright storage state를 `PINVI_ADMIN_LIVE_STORAGE_STATE`로
+전달할 수 있다. 이 경우 test는 저장된 인증 상태로 시작하고 `/admin/login` 입력은 수행하지 않는다.
+단, full matrix 장시간 실행 중 storage state 세션이 만료되면 자동 갱신할 수 없으므로
+`PINVI_ADMIN_LIVE_EMAIL` / `PINVI_ADMIN_LIVE_PASSWORD`를 함께 제공하는 credential 방식이 더 안정적이다.
 
 선택:
 

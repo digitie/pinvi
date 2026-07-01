@@ -1,5 +1,29 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 Admin full matrix storage state 경로 보강
+
+`agent/codex-t273-admin-live-storage-state`에서 Admin live full matrix가
+`PINVI_ADMIN_LIVE_STORAGE_STATE`를 인증 입력으로 사용할 수 있게 보강했다. 기존
+`PINVI_ADMIN_LIVE_EMAIL` / `PINVI_ADMIN_LIVE_PASSWORD` 방식은 그대로 유지하며, credential이 있으면
+기존처럼 주기적으로 UI login storage state를 갱신한다. storage state만 제공된 경우에는 자동 갱신하지
+않고, 세션이 만료돼 login 화면으로 떨어지면 갱신 가능한 credential이 필요하다는 오류를 낸다.
+
+runbook에는 storage state 방식의 한계를 추가했다. 장시간 full catalog에서는 session TTL을 넘을 수
+있으므로 release evidence에는 storage state 생성 시각과 만료 가능성을 같이 남긴다.
+
+검증:
+
+- `npm -w @pinvi/web run typecheck`
+- `npm -w @pinvi/web run test:e2e:admin-live:list` → `Total: 6343 tests in 5 files`
+- `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_STORAGE_STATE=/tmp/pinvi-nonexistent-storage-state.json PINVI_ADMIN_LIVE_CASE_LIMIT=1 npm -w @pinvi/web run test:e2e:admin-live:list` → `Total: 8 tests in 5 files`
+- `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_STORAGE_STATE=/tmp/pinvi-nonexistent-storage-state.json npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI live case catalog" --workers=1` → 1 passed
+- `npx prettier --check apps/web/e2e/admin-live-matrix.live.ts docs/tasks.md docs/runbooks/admin-live-e2e.md docs/runbooks/v100-live-gate.md`
+- `git diff --check`
+
+**다음 한 작업**: PR 머지 후 N150 실행 env 또는 fallback storage state가 준비되면 T-273
+`admin-live-full`을 재개한다. 전용 staging Web/API가 준비되기 전까지 mutating Playwright는 운영
+public DB 대상으로 실행하지 않는다.
+
 ## 2026-07-01 (codex) — T-273 full catalog 재개 시도 / 실행 env 차단
 
 사용자 지시에 따라 T-122로 넘어가지 않고 T-273 Admin full catalog를 계속 진행하는 방향으로 되돌렸다.
