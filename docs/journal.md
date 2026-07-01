@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 local dev API dev-up 수정
+
+**작업**: full catalog local fallback 확인 중 `scripts/dev-up.sh`의 API 프로세스가
+`uv run uvicorn` console script를 찾지 못해 실패하는 원인을 수정했다.
+
+**변경**:
+
+- `scripts/dev-up.sh` API 시작 명령을 `uv run python -m uvicorn app.main:app ...`으로 변경했다.
+- `docs/runbooks/local-dev.md`의 수동 backend dev 명령도 같은 방식으로 정정했다.
+
+**검증**:
+
+- `uv run python -m uvicorn --version` 성공.
+- `bash -n scripts/dev-up.sh scripts/dev-down.sh`
+- `npx prettier --check docs/runbooks/local-dev.md`
+- `UV_LINK_MODE=copy npm run dev:up` 후 API `/health`와 Web `/admin/login` 모두 응답.
+- `npm run dev:down` 후 `12801/12802/12805` free 확인.
+
+**남은 제약**: API는 열리지만 local DB schema/env가 full catalog 실행 조건을 아직 충족하지 않는다.
+outbox worker는 `email_queue.last_provider_event_id` 누락 warning을 남겼고 bootstrap admin password는
+현재 API 실행 env에서 비활성으로 기록됐다.
+
 ## 2026-07-01 (codex) — T-273 Admin live matrix storage state 보강
 
 **작업**: full catalog 실실행이 N150 alias/env와 live credential 부재로 막혀 있어, repo-side에서

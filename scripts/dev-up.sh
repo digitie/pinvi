@@ -132,7 +132,7 @@ start_service() {
 }
 
 start_service api \
-  bash -lc "cd apps/api && uv run uvicorn app.main:app --reload --host ${HOST} --port ${API_PORT}"
+  bash -lc "cd apps/api && uv run python -m uvicorn app.main:app --reload --host ${HOST} --port ${API_PORT}"
 
 start_service web \
   env NEXT_PUBLIC_PINVI_API_URL="http://127.0.0.1:${API_PORT}" \
