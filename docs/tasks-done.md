@@ -4,6 +4,17 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-01
+
+- [x] T-122 — Naver/Kakao OAuth provider 구현. (완료: 2026-07-01, PR #370, codex)
+      기존 Google OAuth 흐름을 provider 공통 service/router로 일반화하고 Google 호환 wrapper를
+      유지했다. Naver/Kakao start/callback/link/unlink를 `/auth/oauth/{provider}` 패턴으로 추가하고,
+      Naver 신규 user는 `pending_verification` + Pinvi 인증 메일, Kakao 신규 user는 provider verified
+      email 신호가 있을 때만 active 생성 정책으로 고정했다. Web 로그인/프로필 UI와
+      `@pinvi/api-client`, `.env.example`, OAuth API/integration 문서를 함께 갱신했다. CI는
+      api/web/mobile/e2e aggregate gate 통과, N150 Docker runner로 OAuth account-match target spec을
+      별도 확인했다.
+
 ## 2026-06-30
 
 - [x] T-259 — Release candidate gate / `v0.2.0`. (완료: 2026-06-30, codex)

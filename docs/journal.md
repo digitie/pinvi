@@ -28,7 +28,9 @@
 - N150 Docker runner: `npm -w @pinvi/web run test:e2e -- e2e/oauth-account-match.e2e.ts --workers=1` 2 passed
 - `npm -w @pinvi/web run lint`는 `next lint` deprecation 경고 후 90초 이상 무출력 상태라 중단했다.
 
-**다음**: PR 생성/머지 후 release gate backlog로 복귀한다.
+**결과**: PR #370을 squash merge했다. merge commit은 `55040865`다.
+
+**다음**: `tasks.md` cleanup PR을 머지한 뒤 release gate backlog로 복귀한다.
 
 ## 2026-07-01 (codex) — T-273 local fallback smoke 확인
 
