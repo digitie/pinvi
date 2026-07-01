@@ -101,6 +101,9 @@ class BackupRestoreRun:
 def repo_root() -> Path:
     current = Path(__file__).resolve()
     for parent in current.parents:
+        if (parent / "package.json").is_file() and (parent / "scripts" / "backup-db.sh").is_file():
+            return parent
+    for parent in current.parents:
         if (parent / "pyproject.toml").is_file() and (parent / "app").is_dir():
             return parent
     return current.parents[min(4, len(current.parents) - 1)]

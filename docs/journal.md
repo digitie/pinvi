@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 local mutating smoke + backup root fix
+
+**작업**: T-273의 mutating blocker가 repo/local dev에서 닫히는지 확인하고, backup snapshot local
+실행 실패를 수정했다.
+
+**확인**:
+
+- local dev API/Web을 기동했고 N150 Docker Playwright runner를 사용했다.
+- `live-mutating` list는 `Total: 2 tests in 2 files`.
+- `trip-realtime-live-mutating.live.ts`는 local dev에서 1 passed.
+- `admin-backup-live-mutating.live.ts`는 최초 503으로 실패했다.
+
+**수정**:
+
+- `apps/api/app/services/backup_service.py`의 `repo_root()`가 local monorepo에서 `apps/api`를 먼저
+  반환해 `apps/api/scripts/backup-db.sh`를 찾던 문제를 수정했다.
+- monorepo root는 `package.json` + `scripts/backup-db.sh`로 우선 판별한다.
+- Docker image처럼 API package root만 있는 배치는 기존 `pyproject.toml` + `app/` fallback을 유지한다.
+- `apps/api/tests/unit/test_backup_service.py`의 repo root 테스트를 새 기준으로 갱신했다.
+
+**검증**:
+
+- `ruff format --check` / `ruff check` 대상: backup service + unit test.
+- `tests/unit/test_backup_service.py` 11 passed.
+- N150 Docker runner local dev `trip-realtime-live-mutating.live.ts` 1 passed.
+- N150 Docker runner local dev `admin-backup-live-mutating.live.ts` 1 passed.
+- `npm run dev:down` 후 dev 포트 clear.
+
+**다음**: PR 머지 후 geofence 운영 설정 준비 여부를 확인한다. 전용 staging Web/API는 release evidence
+재실행 조건으로 남긴다.
+
 ## 2026-07-01 (codex) — T-273 release gate blocker 정리
 
 **작업**: full live e2e를 지금 다시 실행할 필요가 있는지에 대한 판단을 T-273 runbook과 Sprint 6

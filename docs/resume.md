@@ -1,5 +1,34 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 local mutating smoke + backup root fix
+
+`agent/codex-t273-blocker-audit`에서 T-273의 mutating blocker를 local dev 대상으로 검증했다. API/Web
+local dev를 띄우고 N150 Docker Playwright runner로 `live-mutating` suite를 실행했다.
+
+결과:
+
+- `trip-realtime-mutating`: 1 passed.
+- `backup-mutating`: 최초 503 실패 후 원인 수정, 재실행 1 passed.
+
+원인은 `apps/api/app/services/backup_service.py`의 `repo_root()`가 monorepo root가 아니라
+`apps/api` package root를 먼저 잡아 local dev에서 `apps/api/scripts/backup-db.sh`를 찾던 문제였다.
+monorepo root(`package.json` + `scripts/backup-db.sh`)를 우선하고, Docker image 배치에서는 기존
+`pyproject.toml` + `app/` fallback을 유지하도록 수정했다.
+
+검증:
+
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev ruff format --check app/services/backup_service.py tests/unit/test_backup_service.py`
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev ruff check app/services/backup_service.py tests/unit/test_backup_service.py`
+- `cd apps/api && UV_LINK_MODE=copy PYTHONPATH=. uv run --extra dev python -m pytest -q -s tests/unit/test_backup_service.py -rA` → 11 passed
+- `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating:list` → `Total: 2 tests in 2 files`
+- N150 Docker runner local dev `trip-realtime-live-mutating.live.ts` → 1 passed
+- N150 Docker runner local dev `admin-backup-live-mutating.live.ts` → 1 passed
+- `npm run dev:down` 후 `12801/12802/12805` free 확인
+
+**다음 한 작업**: 이 PR을 머지한 뒤 T-273 hard blocker인 geofence 운영 설정 준비 여부를 확인한다.
+전용 staging Web/API는 release evidence 재실행 조건으로 남긴다. 준비 전에는 full live e2e를 반복하지
+않는다.
+
 ## 2026-07-01 (codex) — T-273 release gate blocker 정리 / full live defer
 
 `agent/codex-t273-release-gate-followup`에서 T-273의 현재 판단을 runbook과 Sprint 6 execplan에
