@@ -7,13 +7,11 @@
 
 ## 현재 선점 / 충돌 회피
 
-- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-dev-up-uvicorn-module`.
-  현재 범위는 `v1.0.0` Web/API/Admin E2E / live gate 중 Admin full catalog 재실행 조건 확인과
-  잔여 blocker 정리다. N150 우선 + Playwright N150 runner + 불가 시 Windows fallback만 사용한다.
-  현 세션에서는 N150 alias가 없고 Windows/WSL에 `PINVI_ADMIN_LIVE_*` 실행 env가 없어 browser full
-  catalog 실실행이 막혔다. local dev fallback은 API dev-up을 `python -m uvicorn` 경로로 고쳐
-  `12801/12805` health까지 확인했고, DB schema/env는 별도 정비가 필요하다.
-  운영 public DB 대상 mutating Playwright는 전용 staging Web/API 없이는 실행하지 않는다.
+- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-local-smoke-record`.
+  현재 범위는 `v1.0.0` Web/API/Admin E2E / live gate 중 Admin 실행 가능성 회복과 잔여 blocker
+  정리다. full live e2e는 지금 필요하지 않고, release gate 또는 N150/live env 준비 시 재개한다.
+  N150 우선 + Playwright N150 runner + 불가 시 Windows fallback만 사용한다. 운영 public DB 대상
+  mutating Playwright는 전용 staging Web/API 없이는 실행하지 않는다.
 
 ## v0.2.0 구현 게이트
 

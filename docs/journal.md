@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 local fallback smoke 확인
+
+**작업**: full live e2e가 지금 필요한지 재판단하고, 현 시점에 필요한 local/fallback smoke evidence를
+정리했다.
+
+**확인**:
+
+- local dev DB를 Alembic head까지 migration했다.
+- bootstrap admin env는 문서와 shell history에 값을 남기지 않는 방식으로 주입했다.
+- `npm run dev:up` 후 API `/health`와 Web `/admin/login` 응답을 확인했다.
+- 현재 세션에는 N150 alias/config가 없어 Playwright는 Windows fallback으로만 확인했다.
+- Windows fallback Admin live login smoke는 1 passed.
+- Windows fallback `PINVI_ADMIN_LIVE_CASE_LIMIT=1` catalog slice는 8 passed.
+- `PINVI_ADMIN_LIVE_CASE_LIMIT=200` smoke는 full live e2e가 지금 필요하지 않다는 판단에 따라
+  의도적으로 중단했다. 중단 전 33/207 tests가 통과했다.
+- `npm run dev:down` 후 `12801/12802/12805`가 모두 free 상태임을 확인했다.
+
+**판단**: 지금은 full live e2e를 실행하지 않는다. full catalog는 release gate 또는 N150/live env가
+준비된 시점에 재개하고, 현재 PR은 smoke 근거와 실행 기준만 남긴다.
+
+**다음**: PR 머지 후 T-122 Naver/Kakao OAuth provider 구현으로 이동한다.
+
 ## 2026-07-01 (codex) — T-273 local dev API dev-up 수정
 
 **작업**: full catalog local fallback 확인 중 `scripts/dev-up.sh`의 API 프로세스가

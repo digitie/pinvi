@@ -1,5 +1,34 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 local fallback smoke 확인 / full live defer
+
+`agent/codex-t273-local-smoke-record`에서 T-273의 현재 실행 판단과 smoke 근거를 정리한다.
+full live e2e는 지금 필요하지 않다. 현재 목적은 repo-side 실행 가능성 회복과 local/fallback smoke
+근거 확보이며, full catalog는 release gate 또는 N150/live env가 준비된 시점에 다시 실행한다.
+
+local dev DB는 Alembic `20260613_0023`에서 head `20260629_0037`까지 migration을 적용했다
+(local dev DB 한정). bootstrap admin env를 shell history와 문서에 노출하지 않는 방식으로 주입해
+`npm run dev:up`을 실행했고, API `http://127.0.0.1:12801/health`와 Web
+`http://127.0.0.1:12805/admin/login` 응답을 확인했다.
+
+N150 alias/config가 현재 Linux와 Windows SSH 설정에 없어 Playwright는 Windows fallback으로만 확인했다.
+fallback에서는 local Web `127.0.0.1:12805` 대상으로 Admin login smoke 1건이 통과했고,
+`PINVI_ADMIN_LIVE_CASE_LIMIT=1` catalog slice는 `8 passed`로 통과했다. 이후
+`PINVI_ADMIN_LIVE_CASE_LIMIT=200` 장시간 smoke를 시작했지만, full live e2e가 지금 필요하지 않다는
+판단에 따라 의도적으로 중단했다. 중단 전에는 33/207 tests가 통과했다.
+
+검증:
+
+- local DB `uv run python -m alembic upgrade head`
+- `npm run dev:up` 후 API `/health`와 Web `/admin/login` 응답 확인
+- Windows fallback Admin live login smoke: 1 passed
+- Windows fallback `PINVI_ADMIN_LIVE_CASE_LIMIT=1`: 8 passed
+- `PINVI_ADMIN_LIVE_CASE_LIMIT=200`: 사용자 확인 후 의도 중단, 중단 전 33/207 tests 통과
+- `npm run dev:down` 후 `12801/12802/12805` free 확인
+
+**다음 한 작업**: 이 기록 PR을 머지한 뒤 T-122 Naver/Kakao OAuth provider 구현으로 이동한다.
+T-273 full catalog는 N150/live env가 준비된 release gate에서 재개한다.
+
 ## 2026-07-01 (codex) — T-273 local dev API 기동 경로 수정
 
 `agent/codex-t273-dev-up-uvicorn-module`에서 local dev fallback blocker 중 하나를 닫았다.
