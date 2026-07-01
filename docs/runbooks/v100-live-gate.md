@@ -82,6 +82,8 @@ PINVI_V100_ADMIN_LIVE_CASE_LIMIT=200 \
 ```
 
 full catalog는 장시간 실행이다. 실행 전 N150 smoke, credential, rate-limit 상태를 먼저 확인한다.
+repo-side 실행 가능성 수정 직후에는 `admin-live-smoke` 또는 작은 `CASE_LIMIT` slice만으로 충분하며,
+full catalog는 release gate 증거가 필요할 때 실행한다.
 
 ```bash
 PINVI_V100_LIVE_GATE=1 \

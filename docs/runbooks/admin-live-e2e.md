@@ -60,7 +60,8 @@ export PINVI_ADMIN_LIVE_CASE_LIMIT=200
 export PINVI_ADMIN_LIVE_WORKERS=1
 ```
 
-`PINVI_ADMIN_LIVE_CASE_LIMIT`는 smoke/debug용이다. 전체 검증은 설정하지 않는다.
+`PINVI_ADMIN_LIVE_CASE_LIMIT`는 smoke/debug용이다. repo-side 실행 가능성 수정 직후에는 작은 slice로
+충분하며, 전체 검증은 설정하지 않는다.
 장시간 full catalog가 중단되면 `PINVI_ADMIN_LIVE_CASE_START` / `PINVI_ADMIN_LIVE_CASE_END`로
 matrix 번호를 1-based inclusive 범위로 나누어 이어서 검증한다. test title의 `[0001]` 번호는 원
 catalog 번호를 유지한다. release gate는 `200` smoke → `2000` gate → full catalog 순서로 실행한다.
