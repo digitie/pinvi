@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 release gate blocker 정리
+
+**작업**: full live e2e를 지금 다시 실행할 필요가 있는지에 대한 판단을 T-273 runbook과 Sprint 6
+계획에 반영했다.
+
+**변경**:
+
+- `docs/runbooks/v100-live-gate.md`에 2026-07-01 현재 상태 표를 추가했다.
+- `docs/execplan/sprint6-v1.0-plan.md`에 local/fallback smoke 통과와 full live defer 판단을 반영했다.
+- `docs/tasks.md`의 T-273 문구를 남은 blocker 중심으로 좁혔다.
+- `docs/resume.md`에 다음 에이전트용 판단과 남은 blocker를 기록했다.
+
+**판단**:
+
+- 지금 full live e2e 반복 실행은 필요하지 않다.
+- Admin read-only full catalog, local/fallback smoke, MCP live, perf/security smoke, restore staging drill은 이미
+  통과 근거가 있다.
+- 남은 T-273 blocker는 geofence 운영 설정과 전용 staging Web/API 준비다. 둘 다 repo 코드가 아니라
+  외부 운영 상태다.
+
+**검증**:
+
+- `npx prettier --check docs/tasks.md docs/runbooks/v100-live-gate.md docs/execplan/sprint6-v1.0-plan.md`
+- `git diff --check`
+- `PINVI_V100_LIVE_GATE=1 scripts/verify-v100-live-gate.sh plan admin-live-list live-mutating-list geofence mcp restore-staging perf security`
+
+**다음**: 문서 PR을 머지한 뒤 T-273 외부 blocker 준비 여부를 확인한다. 준비 전에는 full live e2e를
+반복하지 않는다.
+
 ## 2026-07-01 (codex) — T-122 Naver/Kakao OAuth provider 구현
 
 **작업**: 기존 Google OAuth 안전 매칭을 provider 공통 흐름으로 일반화하고 Naver/Kakao OAuth를 추가했다.
