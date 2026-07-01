@@ -17,15 +17,18 @@ from app.core.config import settings
 from app.models.oauth_identity import OAuthLoginState, UserOAuthIdentity
 from app.models.session import UserSession
 from app.models.user import User
+from app.models.user_email_verification import UserEmailVerification
 from app.services.auth_session import hash_session_token
 from app.services.oauth_google import (
     GoogleClaims,
     OAuthAccountLinkRequiredError,
+    OAuthClaims,
     OAuthEmailUnverifiedError,
     consume_login_state,
     issue_login_state,
     link_google_to_user,
     resolve_google_login,
+    resolve_oauth_login,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -37,6 +40,17 @@ def _claims(*, sub: str, email: str | None, verified: bool) -> GoogleClaims:
         email=email,
         email_verified=verified,
         display_name="구글 사용자",
+    )
+
+
+def _oauth_claims(
+    *, sub: str, email: str | None, verified: bool, display_name: str = "소셜 사용자"
+) -> OAuthClaims:
+    return OAuthClaims(
+        provider_user_id=sub,
+        email=email,
+        email_verified=verified,
+        display_name=display_name,
     )
 
 
@@ -133,6 +147,74 @@ async def test_no_link_when_email_unverified(session_factory) -> None:
             select(UserOAuthIdentity).where(UserOAuthIdentity.user_id == local_id)
         )
         assert linked is None
+
+
+async def test_naver_new_user_requires_pinvi_email_verification(session_factory) -> None:
+    async with session_factory() as db:
+        with pytest.raises(OAuthEmailUnverifiedError):
+            await resolve_oauth_login(
+                db,
+                provider="naver",
+                claims=_oauth_claims(
+                    sub="naver-1",
+                    email="naver-new@example.com",
+                    verified=False,
+                    display_name="네이버 사용자",
+                ),
+            )
+
+    async with session_factory() as db:
+        user = await db.scalar(select(User).where(User.email == "naver-new@example.com"))
+        assert user is not None
+        assert user.status == "pending_verification"
+        assert user.email_verified_at is None
+        identity = await db.scalar(
+            select(UserOAuthIdentity).where(
+                UserOAuthIdentity.provider == "naver",
+                UserOAuthIdentity.provider_user_id == "naver-1",
+            )
+        )
+        assert identity is not None
+        assert identity.user_id == user.user_id
+        verification = await db.scalar(
+            select(UserEmailVerification).where(UserEmailVerification.user_id == user.user_id)
+        )
+        assert verification is not None
+        assert verification.purpose == "signup"
+
+
+async def test_kakao_new_user_created_when_email_verified(session_factory) -> None:
+    async with session_factory() as db:
+        result = await resolve_oauth_login(
+            db,
+            provider="kakao",
+            claims=_oauth_claims(
+                sub="kakao-1",
+                email="kakao-new@example.com",
+                verified=True,
+                display_name="카카오 사용자",
+            ),
+        )
+        assert result.created_user is True
+        assert result.user.email == "kakao-new@example.com"
+        assert result.user.status == "active"
+        assert result.user.email_verified_at is not None
+
+
+async def test_kakao_rejects_unverified_email(session_factory) -> None:
+    async with session_factory() as db:
+        with pytest.raises(OAuthEmailUnverifiedError):
+            await resolve_oauth_login(
+                db,
+                provider="kakao",
+                claims=_oauth_claims(
+                    sub="kakao-2", email="kakao-unverified@example.com", verified=False
+                ),
+            )
+
+    async with session_factory() as db:
+        user = await db.scalar(select(User).where(User.email == "kakao-unverified@example.com"))
+        assert user is None
 
 
 async def test_link_google_rejects_identity_owned_by_another_user(session_factory) -> None:
@@ -237,17 +319,23 @@ async def test_link_google_rejects_email_owned_by_another_user(session_factory) 
             )
 
 
-async def test_providers_endpoint_exposes_google_only_for_now(client, monkeypatch) -> None:
+async def test_providers_endpoint_exposes_configured_social_providers(client, monkeypatch) -> None:
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "google-client")
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "google-secret")
     monkeypatch.setattr(settings, "pinvi_naver_oauth_client_id", "naver-client")
-    monkeypatch.setattr(settings, "pinvi_kakao_oauth_rest_api_key", "kakao-client")
+    monkeypatch.setattr(settings, "pinvi_naver_oauth_client_secret", "naver-secret")
+    monkeypatch.setattr(settings, "pinvi_kakao_oauth_rest_api_key", "kakao-rest-key")
+    monkeypatch.setattr(settings, "pinvi_kakao_oauth_client_secret", "")
 
     resp = await client.get("/auth/oauth/providers")
 
     assert resp.status_code == 200
     providers = resp.json()["data"]["providers"]
-    assert providers == [{"provider": "google", "enabled": True}]
+    assert providers == [
+        {"provider": "google", "enabled": True},
+        {"provider": "naver", "enabled": True},
+        {"provider": "kakao", "enabled": True},
+    ]
 
 
 async def test_providers_endpoint_disables_google_without_secret(client, monkeypatch) -> None:
@@ -258,7 +346,11 @@ async def test_providers_endpoint_disables_google_without_secret(client, monkeyp
 
     assert resp.status_code == 200
     providers = resp.json()["data"]["providers"]
-    assert providers == [{"provider": "google", "enabled": False}]
+    assert providers == [
+        {"provider": "google", "enabled": False},
+        {"provider": "naver", "enabled": False},
+        {"provider": "kakao", "enabled": False},
+    ]
 
 
 async def test_me_returns_linked_oauth_identities(
@@ -326,6 +418,54 @@ async def test_google_start_returns_enveloped_authorize_url(client, monkeypatch)
     assert params["state"][0]
     assert params["code_challenge"][0]
     assert params["code_challenge_method"] == ["S256"]
+
+
+@pytest.mark.parametrize(
+    ("provider", "client_attr", "secret_attr", "client_value", "expected_netloc"),
+    [
+        (
+            "naver",
+            "pinvi_naver_oauth_client_id",
+            "pinvi_naver_oauth_client_secret",
+            "naver-client",
+            "nid.naver.com",
+        ),
+        (
+            "kakao",
+            "pinvi_kakao_oauth_rest_api_key",
+            "pinvi_kakao_oauth_client_secret",
+            "kakao-rest-key",
+            "kauth.kakao.com",
+        ),
+    ],
+)
+async def test_social_start_returns_provider_authorize_url(
+    client,
+    monkeypatch,
+    provider: str,
+    client_attr: str,
+    secret_attr: str,
+    client_value: str,
+    expected_netloc: str,
+) -> None:
+    monkeypatch.setattr(settings, client_attr, client_value)
+    monkeypatch.setattr(settings, secret_attr, "test-secret")
+
+    resp = await client.post(
+        f"/auth/oauth/{provider}/start",
+        json={"return_to": "/trips", "mode": "login"},
+    )
+
+    assert resp.status_code == 200
+    authorize_url = resp.json()["data"]["authorize_url"]
+    parsed = urlparse(authorize_url)
+    params = parse_qs(parsed.query)
+    assert parsed.netloc == expected_netloc
+    assert params["client_id"] == [client_value]
+    assert params["redirect_uri"] == [f"http://localhost:12801/auth/oauth/{provider}/callback"]
+    assert params["response_type"] == ["code"]
+    assert params["state"][0]
+    assert "code_challenge" not in params
 
 
 async def test_google_start_rejects_link_mode_without_authenticated_link_endpoint(client) -> None:

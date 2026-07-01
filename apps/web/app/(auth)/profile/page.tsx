@@ -23,17 +23,38 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-const PROFILE_OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  OAUTH_ACCOUNT_LINK_REQUIRED:
-    '이 Google 계정은 다른 Pinvi 계정과 충돌합니다. 연결할 계정을 다시 확인해 주세요.',
-  OAUTH_EMAIL_UNVERIFIED:
-    'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 연결해 주세요.',
-  OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-  OAUTH_STATE_INVALID: 'Google 연결 요청이 만료되었습니다. 다시 시작해 주세요.',
+type OAuthProviderName = OAuthProvider['provider'];
+
+const OAUTH_PROVIDER_NAMES: OAuthProviderName[] = ['google', 'naver', 'kakao'];
+const OAUTH_PROVIDER_LABELS: Record<OAuthProviderName, string> = {
+  google: 'Google',
+  naver: 'Naver',
+  kakao: 'Kakao',
 };
 
-function getProfileOAuthErrorMessage(code: string) {
-  return PROFILE_OAUTH_ERROR_MESSAGES[code] ?? 'Google 연결을 완료하지 못했습니다.';
+const PROFILE_OAUTH_ERROR_CODES = new Set([
+  'OAUTH_ACCOUNT_LINK_REQUIRED',
+  'OAUTH_EMAIL_UNVERIFIED',
+  'OAUTH_PROVIDER_ERROR',
+  'OAUTH_STATE_INVALID',
+]);
+
+function parseOAuthProvider(provider: string | null): OAuthProviderName {
+  if (provider === 'naver' || provider === 'kakao') {
+    return provider;
+  }
+  return 'google';
+}
+
+function getProfileOAuthErrorMessage(code: string, provider: OAuthProviderName = 'google') {
+  const label = OAUTH_PROVIDER_LABELS[provider];
+  const messages: Record<string, string> = {
+    OAUTH_ACCOUNT_LINK_REQUIRED: `${label} 계정은 다른 Pinvi 계정과 충돌합니다. 연결할 계정을 다시 확인해 주세요.`,
+    OAUTH_EMAIL_UNVERIFIED: `${label} 계정의 이메일 인증을 확인할 수 없습니다. 인증 메일 또는 provider 이메일 설정을 확인해 주세요.`,
+    OAUTH_PROVIDER_ERROR: `${label} 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.`,
+    OAUTH_STATE_INVALID: `${label} 연결 요청이 만료되었습니다. 다시 시작해 주세요.`,
+  };
+  return messages[code] ?? `${label} 연결을 완료하지 못했습니다.`;
 }
 
 function formatBytes(value: number | null | undefined) {
@@ -51,18 +72,33 @@ export default function ProfilePage() {
   const [me, setMe] = useState<AuthUser | null>(null);
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [action, setAction] = useState<'link-google' | 'unlink-google' | null>(null);
+  const [action, setAction] = useState<
+    `link-${OAuthProviderName}` | `unlink-${OAuthProviderName}` | null
+  >(null);
   const [avatarAction, setAvatarAction] = useState<'upload' | 'delete' | null>(null);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const googleIdentity = useMemo(
-    () => me?.oauth_identities.find((identity) => identity.provider === 'google') ?? null,
+  const oauthIdentities = useMemo(
+    () =>
+      Object.fromEntries(
+        OAUTH_PROVIDER_NAMES.map((provider) => [
+          provider,
+          me?.oauth_identities.find((identity) => identity.provider === provider) ?? null,
+        ]),
+      ) as Record<OAuthProviderName, AuthUser['oauth_identities'][number] | null>,
     [me],
   );
-  const googleEnabled = providers.some(
-    (provider) => provider.provider === 'google' && provider.enabled,
+  const enabledProviders = useMemo(
+    () =>
+      Object.fromEntries(
+        OAUTH_PROVIDER_NAMES.map((providerName) => [
+          providerName,
+          providers.some((provider) => provider.provider === providerName && provider.enabled),
+        ]),
+      ) as Record<OAuthProviderName, boolean>,
+    [providers],
   );
 
   const reload = async () => {
@@ -100,46 +136,49 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('error');
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('error');
     if (code) {
-      setError(getProfileOAuthErrorMessage(code));
+      setError(getProfileOAuthErrorMessage(code, parseOAuthProvider(params.get('provider'))));
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
 
-  const onLinkGoogle = async () => {
-    setAction('link-google');
+  const onLinkProvider = async (provider: OAuthProviderName) => {
+    const label = OAUTH_PROVIDER_LABELS[provider];
+    setAction(`link-${provider}`);
     setError(null);
     setMessage(null);
     try {
-      const result = await authApi(apiClient).linkGoogleOAuth({ return_to: '/profile' });
+      const result = await authApi(apiClient).linkOAuth(provider, { return_to: '/profile' });
       window.location.assign(result.authorize_url);
     } catch (err) {
-      if (err instanceof ApiError && err.code in PROFILE_OAUTH_ERROR_MESSAGES) {
-        setError(getProfileOAuthErrorMessage(err.code));
+      if (err instanceof ApiError && PROFILE_OAUTH_ERROR_CODES.has(err.code)) {
+        setError(getProfileOAuthErrorMessage(err.code, provider));
       } else {
-        setError(err instanceof ApiError ? err.message : 'Google 연결을 시작하지 못했습니다.');
+        setError(err instanceof ApiError ? err.message : `${label} 연결을 시작하지 못했습니다.`);
       }
       setAction(null);
     }
   };
 
-  const onUnlinkGoogle = async () => {
-    if (!window.confirm('Google 연결을 해제할까요?')) {
+  const onUnlinkProvider = async (provider: OAuthProviderName) => {
+    const label = OAUTH_PROVIDER_LABELS[provider];
+    if (!window.confirm(`${label} 연결을 해제할까요?`)) {
       return;
     }
-    setAction('unlink-google');
+    setAction(`unlink-${provider}`);
     setError(null);
     setMessage(null);
     try {
-      await authApi(apiClient).unlinkGoogleOAuth();
-      setMessage('Google 연결을 해제했습니다.');
+      await authApi(apiClient).unlinkOAuth(provider);
+      setMessage(`${label} 연결을 해제했습니다.`);
       await reload();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'OAUTH_UNLINK_PASSWORD_REQUIRED') {
-        setError('비밀번호가 없는 계정은 Google 연결을 해제할 수 없습니다.');
+        setError(`비밀번호가 없는 계정은 ${label} 연결을 해제할 수 없습니다.`);
       } else {
-        setError(err instanceof ApiError ? err.message : 'Google 연결을 해제하지 못했습니다.');
+        setError(err instanceof ApiError ? err.message : `${label} 연결을 해제하지 못했습니다.`);
       }
     } finally {
       setAction(null);
@@ -294,58 +333,69 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-sm border border-hairline bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-ink">Google</h2>
-            <p className="mt-1 text-xs text-muted" data-testid="google-oauth-status">
-              {googleIdentity
-                ? `${googleIdentity.provider_email ?? '이메일 없음'} · 연결 ${formatDateTime(
-                    googleIdentity.linked_at,
-                  )}`
-                : '연결되지 않음'}
-            </p>
-          </div>
+      {OAUTH_PROVIDER_NAMES.map((provider) => {
+        const label = OAUTH_PROVIDER_LABELS[provider];
+        const identity = oauthIdentities[provider];
+        const linkAction = `link-${provider}` as const;
+        const unlinkAction = `unlink-${provider}` as const;
+        return (
+          <section
+            key={provider}
+            className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-ink">{label}</h2>
+                <p className="mt-1 text-xs text-muted" data-testid={`${provider}-oauth-status`}>
+                  {identity
+                    ? `${identity.provider_email ?? '이메일 없음'} · 연결 ${formatDateTime(
+                        identity.linked_at,
+                      )}`
+                    : '연결되지 않음'}
+                </p>
+              </div>
 
-          {googleIdentity ? (
-            <button
-              type="button"
-              onClick={onUnlinkGoogle}
-              disabled={action !== null || !me?.has_password}
-              className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
-              data-testid="google-oauth-unlink"
-            >
-              {action === 'unlink-google' ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              {identity ? (
+                <button
+                  type="button"
+                  onClick={() => onUnlinkProvider(provider)}
+                  disabled={action !== null || !me?.has_password}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
+                  data-testid={`${provider}-oauth-unlink`}
+                >
+                  {action === unlinkAction ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Unlink className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  해제
+                </button>
               ) : (
-                <Unlink className="h-4 w-4" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => onLinkProvider(provider)}
+                  disabled={action !== null || !enabledProviders[provider]}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  data-testid={`${provider}-oauth-link`}
+                >
+                  {action === linkAction ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Link2 className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  연결
+                </button>
               )}
-              해제
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onLinkGoogle}
-              disabled={action !== null || !googleEnabled}
-              className="inline-flex shrink-0 items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              data-testid="google-oauth-link"
-            >
-              {action === 'link-google' ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Link2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              연결
-            </button>
-          )}
-        </div>
+            </div>
 
-        {googleIdentity && !me?.has_password && (
-          <p className="text-xs text-muted">
-            비밀번호를 먼저 설정해야 Google 연결을 해제할 수 있습니다.
-          </p>
-        )}
-      </section>
+            {identity && !me?.has_password && (
+              <p className="text-xs text-muted">
+                비밀번호를 먼저 설정해야 {label} 연결을 해제할 수 있습니다.
+              </p>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

@@ -1,5 +1,36 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-122 Naver/Kakao OAuth provider 구현
+
+`agent/codex-t122-naver-kakao-oauth`에서 기존 Google OAuth 흐름을 유지하면서 Naver/Kakao provider를
+추가했다. `oauth_google.py`는 기존 import 호환 wrapper를 남기고 provider 공통 service로 일반화했다.
+`/auth/oauth/{provider}/start`, `/link`, `/callback`, `DELETE /auth/oauth/{provider}`가 Google/Naver/Kakao를
+같은 패턴으로 처리한다.
+
+정책:
+
+- Google/Kakao는 provider verified email 신호가 있어야 신규 provider-only user를 active로 만든다.
+- Naver는 verified email 신호가 없으므로 신규 user를 `pending_verification`으로 만들고 Pinvi 자체
+  인증 메일을 발송한다.
+- 같은 이메일의 기존 Pinvi 계정은 provider가 달라도 자동 연결하지 않고 명시 연결을 요구한다.
+- Web 로그인/프로필 UI는 provider 목록 응답 기반으로 Google/Naver/Kakao 버튼과 연결/해제를 렌더링한다.
+
+검증:
+
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev ruff format --check app/api/v1/oauth.py app/services/oauth_google.py tests/integration/test_oauth_google.py`
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev ruff check app/api/v1/oauth.py app/services/oauth_google.py tests/integration/test_oauth_google.py`
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev python -m mypy --strict app` → no issues found
+- `cd apps/api && UV_LINK_MODE=copy PYTHONPATH=. uv run --extra dev python -m pytest -q -s tests/integration/test_oauth_google.py -rA` → 25 passed
+- `cd apps/api && UV_LINK_MODE=copy PYTHONPATH=. uv run --extra dev python -m pytest -q -s tests/integration/test_mobile_oauth_api.py -rA` → 11 passed
+- `npm -w @pinvi/web run typecheck`
+- `npm -w @pinvi/api-client run typecheck`
+- `npx prettier --check ...` (OAuth Web/API docs 및 client files)
+- `PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI=1 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- e2e/oauth-account-match.e2e.ts --workers=1` → 2 passed
+- `npm -w @pinvi/web run lint`는 `next lint` deprecation 경고 후 90초 이상 무출력 상태라 중단했다.
+
+**다음 한 작업**: PR 생성/머지 후 T-273/T-274 release gate backlog로 복귀한다. full live e2e는
+release gate 또는 N150/live env 준비 시점에 실행한다.
+
 ## 2026-07-01 (codex) — T-273 local fallback smoke 확인 / full live defer
 
 `agent/codex-t273-local-smoke-record`에서 T-273의 현재 실행 판단과 smoke 근거를 정리한다.

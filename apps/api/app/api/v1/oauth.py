@@ -1,4 +1,4 @@
-"""`/auth/oauth/google/*` — Google 소셜 로그인 (G-4 안전 매칭).
+"""`/auth/oauth/*` — Social OAuth (Google/Naver/Kakao) 안전 매칭.
 
 `docs/api/auth.md` §6 / `docs/integrations/social-login.md`.
 """
@@ -23,6 +23,7 @@ from app.schemas.auth import AuthUser
 from app.schemas.envelope import Envelope
 from app.schemas.oauth import (
     OAuthLinkRequest,
+    OAuthProvider,
     OAuthProviderInfo,
     OAuthProvidersResponse,
     OAuthStartRequest,
@@ -31,17 +32,22 @@ from app.schemas.oauth import (
 from app.services.auth_session import IssuedAuthSession, issue_user_session
 from app.services.oauth_google import (
     OAuthError,
+    OAuthProviderName,
     OAuthStateInvalidError,
     build_authorize_url,
     consume_login_state,
     exchange_code_for_claims,
     issue_login_state,
-    link_google_to_user,
+    link_oauth_to_user,
     mint_mobile_exchange,
-    resolve_google_login,
+    provider_configured,
+    provider_label,
+    resolve_oauth_login,
 )
 
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
+
+_PROVIDERS: tuple[OAuthProviderName, ...] = ("google", "naver", "kakao")
 
 
 def _request_user_agent(request: Request) -> str | None:
@@ -60,8 +66,17 @@ def _set_issue_cookies(response: RedirectResponse, issue: IssuedAuthSession) -> 
     )
 
 
-def _oauth_error_redirect(*, code: str, message: str, path: str = "/login") -> RedirectResponse:
-    query = urlencode({"error": code, "error_description": message})
+def _oauth_error_redirect(
+    *,
+    code: str,
+    message: str,
+    path: str = "/login",
+    provider: OAuthProvider | None = None,
+) -> RedirectResponse:
+    params = {"error": code, "error_description": message}
+    if provider is not None:
+        params["provider"] = provider
+    query = urlencode(params)
     target_path = path if path.startswith("/") else "/login"
     separator = "&" if "?" in target_path else "?"
     return RedirectResponse(
@@ -75,10 +90,6 @@ def _is_mobile_return(return_to_path: str | None) -> bool:
     return bool(return_to_path) and return_to_path == settings.pinvi_mobile_oauth_redirect
 
 
-def _google_oauth_configured() -> bool:
-    return bool(settings.pinvi_google_oauth_client_id and settings.pinvi_google_oauth_client_secret)
-
-
 def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
     """앱 딥링크(`pinvi://oauth`)로 리다이렉트. 토큰은 싣지 않고 1회용 code/에러만."""
     base = settings.pinvi_mobile_oauth_redirect
@@ -90,15 +101,21 @@ def _mobile_redirect(*, params: dict[str, str]) -> RedirectResponse:
 
 
 async def _provider_error_redirect(
-    db: AsyncSession, *, state: str | None, error_description: str | None
+    db: AsyncSession,
+    *,
+    provider: OAuthProvider,
+    state: str | None,
+    error_description: str | None,
 ) -> RedirectResponse:
-    """Google이 callback에 error를 실어 보낸 경우 — state를 조회해 모바일/웹/연결 흐름에 맞게 라우팅."""
+    """Provider가 callback에 error를 실어 보낸 경우 — state를 조회해 모바일/웹/연결 흐름에 맞게 라우팅."""
     code = "OAUTH_PROVIDER_DENIED"
-    message = error_description or "Google 인증이 취소되었습니다."
+    message = error_description or f"{provider_label(provider)} 인증이 취소되었습니다."
     login_state = None
     if state:
         try:
             login_state = await consume_login_state(db, state=state)
+            if login_state.provider != provider:
+                login_state = None
         except OAuthStateInvalidError:
             login_state = None
     if login_state is not None and _is_mobile_return(login_state.return_to_path):
@@ -106,7 +123,7 @@ async def _provider_error_redirect(
     error_path = "/login"
     if login_state is not None and login_state.mode == "link":
         error_path = login_state.return_to_path or "/login"
-    return _oauth_error_redirect(code=code, message=message, path=error_path)
+    return _oauth_error_redirect(code=code, message=message, path=error_path, provider=provider)
 
 
 def _to_auth_user(user: Any) -> AuthUser:
@@ -124,53 +141,63 @@ def _to_auth_user(user: Any) -> AuthUser:
 
 @router.get("/providers", response_model=Envelope[OAuthProvidersResponse])
 async def list_providers() -> Envelope[OAuthProvidersResponse]:
-    """현재 사용 중인 OAuth provider 목록.
-
-    Naver/Kakao는 미래 작업으로 보류했기 때문에 설정값이 있어도 노출하지 않는다.
-    """
+    """현재 사용 중인 OAuth provider 목록."""
     providers = [
         OAuthProviderInfo(
-            provider="google",
-            enabled=_google_oauth_configured(),
-        ),
+            provider=provider,
+            enabled=provider_configured(provider),
+        )
+        for provider in _PROVIDERS
     ]
     return Envelope.of(OAuthProvidersResponse(providers=providers))
 
 
-@router.post("/google/start", response_model=Envelope[OAuthStartResponse])
-async def google_start(body: OAuthStartRequest, db: DbSession) -> Envelope[OAuthStartResponse]:
-    """authorize URL 발급. 프론트는 반환된 URL 로 redirect."""
+@router.post("/{provider}/start", response_model=Envelope[OAuthStartResponse])
+async def oauth_start(
+    provider: OAuthProvider,
+    body: OAuthStartRequest,
+    db: DbSession,
+) -> Envelope[OAuthStartResponse]:
+    """authorize URL 발급. 프론트는 반환된 URL로 redirect."""
+    label = provider_label(provider)
     if body.mode != "login":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "OAUTH_LINK_REQUIRES_AUTH",
-                "message": "계정 연결은 /auth/oauth/google/link endpoint를 사용해야 합니다.",
+                "message": f"계정 연결은 /auth/oauth/{provider}/link endpoint를 사용해야 합니다.",
             },
         )
-    if not _google_oauth_configured():
+    if not provider_configured(provider):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
+            detail={"code": "OAUTH_NOT_CONFIGURED", "message": f"{label} OAuth 미설정."},
         )
     state, nonce, code_verifier = await issue_login_state(
-        db, mode=body.mode, return_to=body.return_to
+        db, provider=provider, mode=body.mode, return_to=body.return_to
     )
-    url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
+    url = build_authorize_url(
+        provider=provider,
+        state=state,
+        nonce=nonce,
+        code_verifier=code_verifier,
+    )
     return Envelope.of(OAuthStartResponse(authorize_url=url))
 
 
-@router.post("/google/link", response_model=Envelope[OAuthStartResponse])
-async def google_link(
+@router.post("/{provider}/link", response_model=Envelope[OAuthStartResponse])
+async def oauth_link(
+    provider: OAuthProvider,
     body: OAuthLinkRequest,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[OAuthStartResponse]:
-    """로그인된 사용자의 Google 연결 authorize URL 발급."""
-    if not _google_oauth_configured():
+    """로그인된 사용자의 provider 연결 authorize URL 발급."""
+    label = provider_label(provider)
+    if not provider_configured(provider):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
+            detail={"code": "OAUTH_NOT_CONFIGURED", "message": f"{label} OAuth 미설정."},
         )
 
     user_id = uuid.UUID(current_user_id)
@@ -183,16 +210,23 @@ async def google_link(
 
     state, nonce, code_verifier = await issue_login_state(
         db,
+        provider=provider,
         mode="link",
         return_to=body.return_to,
         user_id=user_id,
     )
-    url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
+    url = build_authorize_url(
+        provider=provider,
+        state=state,
+        nonce=nonce,
+        code_verifier=code_verifier,
+    )
     return Envelope.of(OAuthStartResponse(authorize_url=url))
 
 
-@router.get("/google/callback")
-async def google_callback(
+@router.get("/{provider}/callback")
+async def oauth_callback(
+    provider: OAuthProvider,
     request: Request,
     db: DbSession,
     code: str | None = None,
@@ -200,19 +234,28 @@ async def google_callback(
     error: str | None = None,
     error_description: str | None = None,
 ) -> RedirectResponse:
-    """Google redirect 처리 — state 검증 → 토큰 교환 → 안전 매칭 → 세션 쿠키."""
+    """Provider redirect 처리 — state 검증 → 토큰 교환 → 안전 매칭 → 세션 쿠키."""
+    label = provider_label(provider)
     if error:
-        return await _provider_error_redirect(db, state=state, error_description=error_description)
+        return await _provider_error_redirect(
+            db,
+            provider=provider,
+            state=state,
+            error_description=error_description,
+        )
     if not code or not state:
         return _oauth_error_redirect(
             code="OAUTH_CALLBACK_INVALID",
-            message="Google OAuth callback 파라미터가 올바르지 않습니다.",
+            message=f"{label} OAuth callback 파라미터가 올바르지 않습니다.",
+            provider=provider,
         )
 
     try:
         login_state = await consume_login_state(db, state=state)
+        if login_state.provider != provider:
+            raise OAuthStateInvalidError("state provider가 callback provider와 일치하지 않습니다.")
     except OAuthStateInvalidError as exc:
-        return _oauth_error_redirect(code=exc.code, message=str(exc))
+        return _oauth_error_redirect(code=exc.code, message=str(exc), provider=provider)
 
     is_mobile = _is_mobile_return(login_state.return_to_path)
 
@@ -220,11 +263,18 @@ async def google_callback(
         if is_mobile:
             return _mobile_redirect(params={"error": exc.code, "error_description": str(exc)})
         error_path = login_state.return_to_path if login_state.mode == "link" else "/login"
-        return _oauth_error_redirect(code=exc.code, message=str(exc), path=error_path or "/login")
+        return _oauth_error_redirect(
+            code=exc.code,
+            message=str(exc),
+            path=error_path or "/login",
+            provider=provider,
+        )
 
     try:
         claims = await exchange_code_for_claims(
+            provider=provider,
             code=code,
+            state=state,
             code_verifier=login_state.code_verifier,
         )
     except OAuthError as exc:
@@ -232,15 +282,19 @@ async def google_callback(
 
     try:
         if login_state.mode == "link" and login_state.user_id is not None:
-            await link_google_to_user(db, user_id=login_state.user_id, claims=claims)
+            await link_oauth_to_user(
+                db,
+                provider=provider,
+                user_id=login_state.user_id,
+                claims=claims,
+            )
             user_id = login_state.user_id
         else:
-            result = await resolve_google_login(db, claims=claims)
+            result = await resolve_oauth_login(db, provider=provider, claims=claims)
             user_id = result.user.user_id
     except OAuthError as exc:
         return _flow_error(exc)
 
-    # 모바일: 쿠키/세션 대신 1회용 code를 앱 딥링크로 전달(세션은 exchange 시점 발급).
     if is_mobile:
         exchange_code = await mint_mobile_exchange(db, user_id=user_id)
         return _mobile_redirect(params={"code": exchange_code})
@@ -260,9 +314,11 @@ async def google_callback(
     return redirect
 
 
-@router.delete("/google", status_code=status.HTTP_204_NO_CONTENT)
-async def unlink_google(current_user_id: CurrentUserId, db: DbSession) -> None:
-    """Google 연결 해제."""
+@router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_oauth(
+    provider: OAuthProvider, current_user_id: CurrentUserId, db: DbSession
+) -> None:
+    """Provider 연결 해제."""
     user_id = uuid.UUID(current_user_id)
     user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
     if user is None:
@@ -282,7 +338,7 @@ async def unlink_google(current_user_id: CurrentUserId, db: DbSession) -> None:
     await db.execute(
         delete(UserOAuthIdentity).where(
             UserOAuthIdentity.user_id == user_id,
-            UserOAuthIdentity.provider == "google",
+            UserOAuthIdentity.provider == provider,
         )
     )
     await db.commit()

@@ -1,22 +1,22 @@
 # 인증 API (`/auth/*`)
 
-이메일 가입 + verify + JWT 로그인 + Google OAuth + 비밀번호 재설정.
+이메일 가입 + verify + JWT 로그인 + Google/Naver/Kakao OAuth + 비밀번호 재설정.
 공통 규약은 [`common.md`](./common.md). 소셜 로그인 흐름 디테일은
 [`docs/integrations/social-login.md`](../integrations/social-login.md).
 
-현재 OAuth provider는 **Google만 활성**이다. Naver/Kakao OAuth는 미래 작업으로
-분리했고, 현재 `/auth/oauth/providers`에는 노출하지 않는다.
+현재 OAuth provider는 **Google, Naver, Kakao**다. `/auth/oauth/providers`는 세 provider를
+반환하고 설정값이 없는 provider는 `enabled: false`다.
 
 ## 1. 모델
 
-| 테이블                         | 용도                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| `app.users`                    | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only) |
-| `app.user_sessions`            | refresh 토큰 hash + IP/UA + 만료/폐기                                    |
-| `app.user_email_verifications` | verify/reset 토큰 (해시만 저장)                                          |
-| `app.user_oauth_identities`    | provider + provider_user_id (현재 Google sub, Naver/Kakao는 미래 작업)   |
-| `app.user_consents`            | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...)        |
-| `app.oauth_login_states`       | OAuth state/nonce/PKCE hash, TTL 10분                                    |
+| 테이블                         | 용도                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `app.users`                    | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only)    |
+| `app.user_sessions`            | refresh 토큰 hash + IP/UA + 만료/폐기                                       |
+| `app.user_email_verifications` | verify/reset 토큰 (해시만 저장)                                             |
+| `app.user_oauth_identities`    | provider + provider_user_id (Google `sub`, Naver `response.id`, Kakao `id`) |
+| `app.user_consents`            | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...)           |
+| `app.oauth_login_states`       | OAuth state/nonce/PKCE hash, TTL 10분                                       |
 
 자세히는 `docs/data-model.md` + `docs/postgres-schema.md`.
 
@@ -293,16 +293,19 @@ Content-Type: application/json
 ```jsonc
 {
   "data": {
-    "providers": [{ "provider": "google", "enabled": true }],
+    "providers": [
+      { "provider": "google", "enabled": true },
+      { "provider": "naver", "enabled": false },
+      { "provider": "kakao", "enabled": false },
+    ],
   },
 }
 ```
 
-`enabled`는 `PINVI_GOOGLE_OAUTH_CLIENT_ID`와 `PINVI_GOOGLE_OAUTH_CLIENT_SECRET`이 모두
-설정되어 있을 때만 `true`다. Naver/Kakao는 future provider라 설정값이 있어도 현재 응답에
-포함하지 않는다.
+Google/Naver는 client id와 client secret이 모두 설정되어 있을 때만 `enabled: true`다. Kakao는
+REST API key가 설정되어 있으면 `enabled: true`다.
 
-### 6.2 `POST /auth/oauth/google/start`
+### 6.2 `POST /auth/oauth/{provider}/start`
 
 ```http
 POST /auth/oauth/google/start
@@ -319,7 +322,7 @@ Content-Type: application/json
 - `app.oauth_login_states` row 생성 (state/nonce/PKCE hash, TTL 10분). PKCE verifier는
   `state`와 서버 secret으로 재생성하므로 DB에는 hash만 남긴다.
 
-### 6.3 `GET /auth/oauth/google/callback`
+### 6.3 `GET /auth/oauth/{provider}/callback`
 
 ```http
 GET /auth/oauth/google/callback?code=...&state=...
@@ -328,28 +331,27 @@ GET /auth/oauth/google/callback?code=...&state=...
 처리:
 
 1. `state` hash 검증 + `expires_at > now()` + `consumed_at IS NULL`
-2. `code` → Google access token 교환
-3. Google userinfo 호출 → `provider_user_id`, `email`, `email_verified`
+2. `code` → provider access token 교환
+3. provider userinfo 호출 → `provider_user_id`, `email`, `email_verified`
 4. `app.user_oauth_identities` 조회/upsert
 5. 로그인 / 신규 가입 분기:
    - 기존 identity(`provider + provider_user_id`) 있음 → 해당 user 로그인
    - 기존 identity 없음 + 같은 이메일 로컬 계정 있음 → 자동 연결 금지,
      `OAUTH_ACCOUNT_LINK_REQUIRED`
-   - 기존 identity 없음 + Google `email_verified=true` + 신규 이메일 → provider-only user 생성
-   - Google 또는 Pinvi 이메일 인증 불확실 → `OAUTH_EMAIL_UNVERIFIED`
-   - Naver/Kakao → 미래 작업. 현재 callback route 없음.
+   - 기존 identity 없음 + Google/Kakao verified email + 신규 이메일 → provider-only active user 생성
+   - 기존 identity 없음 + Naver 신규 이메일 → `pending_verification` user 생성 + Pinvi 인증 메일 발송
+   - provider 또는 Pinvi 이메일 인증 불확실 → `OAUTH_EMAIL_UNVERIFIED`
 
 응답:
 
 - 성공: 303 → `${return_to}` + Set-Cookie 두 개
-- 실패: 303 → `${PINVI_WEB_BASE_URL}/login?error=<code>&error_description=...`
+- 실패: 303 → `${PINVI_WEB_BASE_URL}/login?error=<code>&error_description=...&provider=<provider>`
   - `mode=link` state 소비 뒤의 실패는 `return_to`(기본 `/profile`)로 redirect한다.
-  - 현재 Google 구현: `OAUTH_ACCOUNT_LINK_REQUIRED` / `OAUTH_CALLBACK_INVALID` /
+  - 현재 구현: `OAUTH_ACCOUNT_LINK_REQUIRED` / `OAUTH_CALLBACK_INVALID` /
     `OAUTH_EMAIL_UNVERIFIED` / `OAUTH_PROVIDER_DENIED` / `OAUTH_STATE_INVALID` /
     `OAUTH_PROVIDER_ERROR`
-  - Naver/Kakao 후속 구현 시 provider별 세부 code를 추가한다.
 
-### 6.4 `POST /auth/oauth/google/link`
+### 6.4 `POST /auth/oauth/{provider}/link`
 
 기존 user 계정에 provider 연결 (이미 로그인 상태).
 
@@ -364,7 +366,7 @@ Cookie: pinvi_access=...
 응답 200: `{ "data": { "authorize_url": "..." } }`. 클라이언트가 top-level
 navigation.
 
-### 6.5 `DELETE /auth/oauth/google`
+### 6.5 `DELETE /auth/oauth/{provider}`
 
 ```http
 DELETE /auth/oauth/google
