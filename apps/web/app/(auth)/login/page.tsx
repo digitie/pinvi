@@ -12,25 +12,38 @@ const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
-type OAuthProviderName = 'google';
+type OAuthProviderName = 'google' | 'naver' | 'kakao';
 
 const DISABLED_OAUTH_PROVIDERS: Record<OAuthProviderName, boolean> = {
   google: false,
+  naver: false,
+  kakao: false,
 };
 
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  OAUTH_ACCOUNT_LINK_REQUIRED:
-    '이미 같은 이메일의 Pinvi 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 Google을 연결해 주세요.',
-  OAUTH_CALLBACK_INVALID: 'Google 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.',
-  OAUTH_EMAIL_UNVERIFIED:
-    'Google 계정의 이메일 인증을 확인할 수 없습니다. Google 이메일 인증 후 다시 시도해 주세요.',
-  OAUTH_PROVIDER_DENIED: 'Google 로그인이 취소되었습니다.',
-  OAUTH_PROVIDER_ERROR: 'Google 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
-  OAUTH_STATE_INVALID: 'Google 로그인 요청이 만료되었습니다. 다시 시작해 주세요.',
+const OAUTH_PROVIDER_LABELS: Record<OAuthProviderName, string> = {
+  google: 'Google',
+  naver: 'Naver',
+  kakao: 'Kakao',
 };
 
-function getOAuthErrorMessage(code: string) {
-  return OAUTH_ERROR_MESSAGES[code] ?? 'Google 로그인을 완료하지 못했습니다.';
+function parseOAuthProvider(provider: string | null): OAuthProviderName {
+  if (provider === 'naver' || provider === 'kakao') {
+    return provider;
+  }
+  return 'google';
+}
+
+function getOAuthErrorMessage(code: string, provider: OAuthProviderName = 'google') {
+  const label = OAUTH_PROVIDER_LABELS[provider];
+  const messages: Record<string, string> = {
+    OAUTH_ACCOUNT_LINK_REQUIRED: `이미 같은 이메일의 Pinvi 계정이 있습니다. 이메일로 로그인한 뒤 프로필에서 ${label}을 연결해 주세요.`,
+    OAUTH_CALLBACK_INVALID: `${label} 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.`,
+    OAUTH_EMAIL_UNVERIFIED: `${label} 계정의 이메일 인증을 확인할 수 없습니다. 인증 메일 또는 provider 이메일 설정을 확인해 주세요.`,
+    OAUTH_PROVIDER_DENIED: `${label} 로그인이 취소되었습니다.`,
+    OAUTH_PROVIDER_ERROR: `${label} 계정 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.`,
+    OAUTH_STATE_INVALID: `${label} 로그인 요청이 만료되었습니다. 다시 시작해 주세요.`,
+  };
+  return messages[code] ?? `${label} 로그인을 완료하지 못했습니다.`;
 }
 
 export default function LoginPage() {
@@ -51,9 +64,10 @@ export default function LoginPage() {
   const [resendNotice, setResendNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('error');
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('error');
     if (code) {
-      setOauthError(getOAuthErrorMessage(code));
+      setOauthError(getOAuthErrorMessage(code, parseOAuthProvider(params.get('provider'))));
     }
   }, []);
 
@@ -68,8 +82,8 @@ export default function LoginPage() {
         }
         const next = { ...DISABLED_OAUTH_PROVIDERS };
         for (const provider of result.providers) {
-          if (provider.provider === 'google') {
-            next.google = provider.enabled;
+          if (provider.provider in next) {
+            next[provider.provider] = provider.enabled;
           }
         }
         setOauthProviders(next);
@@ -150,30 +164,34 @@ export default function LoginPage() {
     }
   };
 
-  const onGoogleStart = async () => {
+  const onOAuthStart = async (provider: OAuthProviderName) => {
     setOauthError(null);
-    setOauthLoading('google');
+    setOauthLoading(provider);
+    const label = OAUTH_PROVIDER_LABELS[provider];
     try {
-      const result = await authApi(apiClient).startGoogleOAuth({
+      const result = await authApi(apiClient).startOAuth(provider, {
         return_to: '/trips',
         mode: 'login',
       });
       window.location.assign(result.authorize_url);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'OAUTH_NOT_CONFIGURED') {
-        setOauthError('Google 로그인이 아직 설정되지 않았습니다.');
+        setOauthError(`${label} 로그인이 아직 설정되지 않았습니다.`);
       } else if (err instanceof ApiError) {
         setOauthError(err.message);
       } else {
-        setOauthError('Google 로그인을 시작하지 못했습니다.');
+        setOauthError(`${label} 로그인을 시작하지 못했습니다.`);
       }
     } finally {
       setOauthLoading(null);
     }
   };
 
-  const googleOAuthDisabled =
-    oauthProvidersLoading || !oauthProviders.google || oauthLoading !== null;
+  const oauthDisabled = (provider: OAuthProviderName) =>
+    oauthProvidersLoading || !oauthProviders[provider] || oauthLoading !== null;
+  const visibleOAuthProviders = (['google', 'naver', 'kakao'] as const).filter(
+    (provider) => oauthProvidersLoading || oauthProviders[provider],
+  );
 
   return (
     <div className="space-y-6">
@@ -268,22 +286,28 @@ export default function LoginPage() {
           </p>
         )}
 
-        <button
-          type="button"
-          disabled={googleOAuthDisabled}
-          onClick={onGoogleStart}
-          className="flex w-full items-center justify-center gap-2 rounded-sm border border-hairline bg-white px-3 py-3 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-60"
-          data-testid="google-oauth-start"
-          aria-busy={oauthLoading === 'google'}
-        >
-          <span
-            className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline text-xs font-bold"
-            aria-hidden="true"
-          >
-            G
-          </span>
-          {oauthLoading === 'google' ? 'Google 연결 중...' : 'Google로 시작'}
-        </button>
+        {visibleOAuthProviders.map((provider) => {
+          const label = OAUTH_PROVIDER_LABELS[provider];
+          return (
+            <button
+              key={provider}
+              type="button"
+              disabled={oauthDisabled(provider)}
+              onClick={() => onOAuthStart(provider)}
+              className="flex w-full items-center justify-center gap-2 rounded-sm border border-hairline bg-white px-3 py-3 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-60"
+              data-testid={`${provider}-oauth-start`}
+              aria-busy={oauthLoading === provider}
+            >
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline text-xs font-bold"
+                aria-hidden="true"
+              >
+                {label[0]}
+              </span>
+              {oauthLoading === provider ? `${label} 연결 중...` : `${label}로 시작`}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

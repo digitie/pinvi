@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-122 Naver/Kakao OAuth provider 구현
+
+**작업**: 기존 Google OAuth 안전 매칭을 provider 공통 흐름으로 일반화하고 Naver/Kakao OAuth를 추가했다.
+
+**변경**:
+
+- `apps/api/app/services/oauth_google.py`를 Google 호환 wrapper를 유지한 provider 공통 service로 확장했다.
+- `/auth/oauth/{provider}/start`, `/link`, `/callback`, `DELETE /auth/oauth/{provider}` 라우터를
+  Google/Naver/Kakao 공통으로 열었다.
+- Naver 신규 user는 `pending_verification`으로 생성하고 Pinvi 인증 메일을 발송한다.
+- Kakao 신규 user는 `kakao_account.is_email_valid && is_email_verified`가 참일 때만 active로 만든다.
+- Web 로그인/프로필 UI와 `@pinvi/api-client`에 provider 공통 OAuth 호출을 추가했다.
+- `.env.example`, `docs/api/auth.md`, `docs/integrations/social-login.md`를 T-122 구현 기준으로 갱신했다.
+
+**검증**:
+
+- `ruff format --check` / `ruff check` 대상: OAuth router/service/test
+- `cd apps/api && UV_LINK_MODE=copy uv run --extra dev python -m mypy --strict app`
+- `tests/integration/test_oauth_google.py` 25 passed
+- `tests/integration/test_mobile_oauth_api.py` 11 passed
+- `npm -w @pinvi/web run typecheck`
+- `npm -w @pinvi/api-client run typecheck`
+- OAuth 관련 docs/client/Web 파일 Prettier check
+- N150 Docker runner: `npm -w @pinvi/web run test:e2e -- e2e/oauth-account-match.e2e.ts --workers=1` 2 passed
+- `npm -w @pinvi/web run lint`는 `next lint` deprecation 경고 후 90초 이상 무출력 상태라 중단했다.
+
+**다음**: PR 생성/머지 후 release gate backlog로 복귀한다.
+
 ## 2026-07-01 (codex) — T-273 local fallback smoke 확인
 
 **작업**: full live e2e가 지금 필요한지 재판단하고, 현 시점에 필요한 local/fallback smoke evidence를

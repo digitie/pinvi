@@ -7,6 +7,7 @@ import {
   DownloadUrlResponseSchema,
   LoginRequestSchema,
   OAuthLinkRequestSchema,
+  OAuthProviderNameSchema,
   OAuthProvidersResponseSchema,
   OAuthStartRequestSchema,
   OAuthStartResponseSchema,
@@ -122,10 +123,30 @@ export const authApi = (client: ApiClient) => ({
       schema: OAuthProvidersResponseSchema,
     }),
 
+  startOAuth: (
+    provider: z.infer<typeof OAuthProviderNameSchema>,
+    body: z.infer<typeof OAuthStartRequestSchema>,
+  ) =>
+    client.request(`/auth/oauth/${provider}/start`, {
+      method: 'POST',
+      body: JSON.stringify(OAuthStartRequestSchema.parse(body)),
+      schema: OAuthStartResponseSchema,
+    }),
+
   startGoogleOAuth: (body: z.infer<typeof OAuthStartRequestSchema>) =>
     client.request('/auth/oauth/google/start', {
       method: 'POST',
       body: JSON.stringify(OAuthStartRequestSchema.parse(body)),
+      schema: OAuthStartResponseSchema,
+    }),
+
+  linkOAuth: (
+    provider: z.infer<typeof OAuthProviderNameSchema>,
+    body: z.infer<typeof OAuthLinkRequestSchema>,
+  ) =>
+    client.request(`/auth/oauth/${provider}/link`, {
+      method: 'POST',
+      body: JSON.stringify(OAuthLinkRequestSchema.parse(body)),
       schema: OAuthStartResponseSchema,
     }),
 
@@ -134,6 +155,11 @@ export const authApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(OAuthLinkRequestSchema.parse(body)),
       schema: OAuthStartResponseSchema,
+    }),
+
+  unlinkOAuth: (provider: z.infer<typeof OAuthProviderNameSchema>) =>
+    client.requestNoContent(`/auth/oauth/${provider}`, {
+      method: 'DELETE',
     }),
 
   unlinkGoogleOAuth: () =>

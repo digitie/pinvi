@@ -7,11 +7,10 @@
 
 ## 현재 선점 / 충돌 회피
 
-- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-local-smoke-record`.
-  현재 범위는 `v1.0.0` Web/API/Admin E2E / live gate 중 Admin 실행 가능성 회복과 잔여 blocker
-  정리다. full live e2e는 지금 필요하지 않고, release gate 또는 N150/live env 준비 시 재개한다.
-  N150 우선 + Playwright N150 runner + 불가 시 Windows fallback만 사용한다. 운영 public DB 대상
-  mutating Playwright는 전용 staging Web/API 없이는 실행하지 않는다.
+- T-122 — codex 진행 중. 브랜치 `agent/codex-t122-naver-kakao-oauth`.
+  현재 범위는 기존 Google OAuth 흐름을 유지하면서 Naver/Kakao OAuth provider를 추가하는 것이다.
+  공식 provider 문서 확인 후 API 설정, provider client/service, callback/exchange 흐름, 테스트,
+  runbook/env 예시를 같은 PR에서 갱신한다.
 
 ## v0.2.0 구현 게이트
 
@@ -23,5 +22,3 @@
 - [ ] T-274 — v1.0.0 릴리즈.
 
 ## 보류 / 미래 작업
-
-- [ ] T-122 — Naver/Kakao OAuth provider 구현.
