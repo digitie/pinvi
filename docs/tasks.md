@@ -7,11 +7,12 @@
 
 ## 현재 선점 / 충돌 회피
 
-- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-infra-blockers`.
+- T-273 — codex 진행 중. 브랜치 `agent/codex-t273-admin-live-storage-state`.
   현재 범위는 `v1.0.0` Web/API/Admin E2E / live gate 중 Admin full catalog 재실행 조건 확인과
   잔여 blocker 정리다. N150 우선 + Playwright N150 runner + 불가 시 Windows fallback만 사용한다.
   현 세션에서는 N150 alias가 없고 Windows/WSL에 `PINVI_ADMIN_LIVE_*` 실행 env가 없어 browser full
-  catalog 실실행이 막혔다. local dev fallback도 API `12801` 미기동으로 사용할 수 없다.
+  catalog 실실행이 막혔다. repo-side로 full matrix의 `PINVI_ADMIN_LIVE_STORAGE_STATE` 경로를 보강해
+  credential 원문 없이 사전 인증 state로 재개할 수 있게 한다.
   운영 public DB 대상 mutating Playwright는 전용 staging Web/API 없이는 실행하지 않는다.
 
 ## v0.2.0 구현 게이트

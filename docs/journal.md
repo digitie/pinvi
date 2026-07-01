@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-01 (codex) — T-273 Admin live matrix storage state 보강
+
+**작업**: full catalog 실실행이 N150 alias/env와 live credential 부재로 막혀 있어, repo-side에서
+credential 원문 없이 재개할 수 있는 실행 경로를 보강했다.
+
+**변경**:
+
+- `apps/web/e2e/admin-live-matrix.live.ts`의 full matrix fixture가
+  `PINVI_ADMIN_LIVE_STORAGE_STATE`를 인증 state로 사용할 수 있게 했다.
+- email/password가 있으면 기존처럼 주기적 UI login으로 storage state를 갱신한다.
+- storage state만 제공된 경우 자동 갱신하지 않고, 세션 만료로 login 화면이 보이면 갱신 가능한
+  credential이 필요하다는 오류를 낸다.
+- `docs/runbooks/admin-live-e2e.md`, `docs/runbooks/v100-live-gate.md`, `docs/tasks.md`에 storage state
+  경로와 한계를 기록했다.
+
+**검증**:
+
+- `npm -w @pinvi/web run typecheck`
+- `npm -w @pinvi/web run test:e2e:admin-live:list` → `Total: 6343 tests in 5 files`
+- `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_STORAGE_STATE=/tmp/pinvi-nonexistent-storage-state.json PINVI_ADMIN_LIVE_CASE_LIMIT=1 npm -w @pinvi/web run test:e2e:admin-live:list` → `Total: 8 tests in 5 files`
+- `PINVI_ADMIN_LIVE_E2E=1 PINVI_ADMIN_LIVE_STORAGE_STATE=/tmp/pinvi-nonexistent-storage-state.json npm -w @pinvi/web run test:e2e:admin-live -- --grep "UI live case catalog" --workers=1` → 1 passed
+- `npx prettier --check apps/web/e2e/admin-live-matrix.live.ts docs/tasks.md docs/runbooks/admin-live-e2e.md docs/runbooks/v100-live-gate.md`
+- `git diff --check`
+
+**다음**: PR 머지 후 N150 env 또는 fallback storage state가 준비되면 `admin-live-full`을 재개한다.
+
 ## 2026-07-01 (codex) — T-273 Admin full catalog 재개 시도
 
 **작업**: 최신 사용자 지시에 따라 T-122 진입을 중단하고 T-273 Admin full catalog 재실행을 먼저
