@@ -51,11 +51,13 @@ def _write_script(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
-def test_repo_root_resolves_api_project_root() -> None:
+def test_repo_root_resolves_monorepo_root() -> None:
     root = backup_service.repo_root()
 
-    assert (root / "pyproject.toml").is_file()
-    assert (root / "app").is_dir()
+    assert (root / "package.json").is_file()
+    assert (root / "scripts" / "backup-db.sh").is_file()
+    assert (root / "apps" / "api" / "pyproject.toml").is_file()
+    assert backup_service.backup_script_path() == root / "scripts" / "backup-db.sh"
 
 
 def test_repo_root_falls_back_for_shallow_module_path(
