@@ -166,7 +166,7 @@ $EDITOR apps/api/.env
 ```bash
 cd apps/api
 # dev는 내부 주소 127.0.0.1로만 bind한다(ADR-047).
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 12801
+uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 12801
 ```
 
 `http://127.0.0.1:12801/docs` (OpenAPI), `http://127.0.0.1:12801/health`.
@@ -289,7 +289,7 @@ uv run dagster dev --host 0.0.0.0 --port 12802   # http://localhost:12802
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 전체 dev up      | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && scripts/dev-up.sh"`                                                                                           |
 | 전체 dev down    | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && scripts/dev-down.sh"`                                                                                         |
-| 백엔드 dev       | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex/apps/api && uv run uvicorn app.main:app --reload --port 12801"`                                                  |
+| 백엔드 dev       | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex/apps/api && uv run python -m uvicorn app.main:app --reload --port 12801"`                                        |
 | 프론트 dev       | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && npm --workspace apps/web run dev"`                                                                            |
 | 백엔드 테스트    | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && uv run pytest apps/api/tests -q"`                                                                             |
 | 프론트 lint      | `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && npm --workspace apps/web run lint"`                                                                           |

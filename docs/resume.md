@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 local dev API 기동 경로 수정
+
+`agent/codex-t273-dev-up-uvicorn-module`에서 local dev fallback blocker 중 하나를 닫았다.
+기존 `scripts/dev-up.sh`는 API를 `uv run uvicorn ...`으로 시작했는데, 현재 Linux uv 환경에서는
+`uvicorn` console script spawn이 `No such file or directory`로 실패했다. 같은 환경에서
+`uv run python -m uvicorn --version`은 성공하므로 API 시작 명령을 module 실행으로 바꿨고,
+`docs/runbooks/local-dev.md`의 수동 실행 예시도 같은 방식으로 맞췄다.
+
+검증:
+
+- `bash -n scripts/dev-up.sh scripts/dev-down.sh`
+- `npx prettier --check docs/runbooks/local-dev.md`
+- `UV_LINK_MODE=copy npm run dev:up` 후 `curl http://127.0.0.1:12801/health`와
+  `curl http://127.0.0.1:12805/admin/login` 모두 성공
+- `npm run dev:down` 후 `12801/12802/12805` free 확인
+
+남은 local fallback 제약은 DB schema/env다. API health는 열렸지만 local DB에는 최신
+`email_queue.last_provider_event_id` 컬럼이 없어 outbox worker warning이 발생했고,
+bootstrap admin password도 현재 API 실행 env에는 주입되지 않았다.
+
+**다음 한 작업**: PR 머지 후 local DB migration/env 또는 N150/fallback live env가 준비되면
+`admin-live-full`을 재개한다.
+
 ## 2026-07-01 (codex) — T-273 Admin full matrix storage state 경로 보강
 
 `agent/codex-t273-admin-live-storage-state`에서 Admin live full matrix가
