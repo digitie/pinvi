@@ -169,3 +169,22 @@ PINVI_V100_REQUIRE_HSTS=1 \
 - 실제 credential, token, 운영 origin, SSH target, IP는 공개 문서에 기록하지 않는다.
 - Admin live catalog는 `npm -w @pinvi/web run test:e2e:admin-live:list`의 최종 total을 함께 기록한다.
 - JSON 출력 전체를 붙이지 않고, 통과 여부와 핵심 수치만 기록한다.
+
+## 8. 현재 상태 (2026-07-01)
+
+T-273의 repo-side 실행 가능성 보강과 read-only gate evidence는 대부분 닫혔다. full live e2e는
+현재 시점의 추가 필수 작업이 아니며, `v1.0.0` release gate 또는 N150/live env가 다시 준비된 시점에
+재개한다.
+
+| Phase                        | 현재 상태                                                                                                                      | 다음 조건                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Admin read-only full catalog | 통과. `6343 tests in 5 files` 기준이며 N150 우선 시도 후 Windows fallback으로 잔여 구간을 닫았다.                              | release 직전 drift가 있으면 `admin-live-smoke` → 필요한 범위만 재실행         |
+| Local/fallback smoke         | 통과. local DB migration, API `/health`, Web `/admin/login`, Windows fallback `CASE_LIMIT=1` 확인.                             | release evidence 대체가 아니라 repo-side 실행 가능성 확인용                   |
+| MCP live                     | 통과. 일회성 token 발급, tool list, `list_trips`, `search_features`, token 회수 확인.                                          | release 직전 token/도메인 변경 시 재실행                                      |
+| Perf/Security smoke          | 통과. API p95/error-rate와 CSP/CORS/security header 확인. rate-limit probe는 운영 안전상 skip.                                 | release 직전 운영 HTTPS 대상 재실행                                           |
+| Restore staging drill        | 통과. N150 staging Postgres에 PostgreSQL Docker runner로 snapshot restore, checksum, audit chain, rollback guard 확인.         | snapshot/schema가 바뀌면 staging에서 재실행                                   |
+| Geofence                     | 차단. Pinvi repo passthrough는 보강됐지만 실제 운영은 `kor-travel-docker-manager` compose와 edge proxy header 주입이 정본이다. | 운영 API에 ADR-018 env/header 적용 후 KR health 200 / non-KR root 451 확인    |
+| Mutating staging Playwright  | 차단. 운영 public DB 대상 실행은 금지한다.                                                                                     | 전용 staging Web/API 준비 후 `trip-realtime-mutating`, `backup-mutating` 실행 |
+
+따라서 현재 남은 T-273 blocker는 repo 코드가 아니라 외부 운영 상태다: geofence 운영 배포 설정과
+전용 staging Web/API 준비. 이 둘이 준비되기 전에는 full live e2e를 반복 실행하지 않는다.

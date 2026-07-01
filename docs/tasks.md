@@ -11,5 +11,5 @@
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
-- [ ] T-273 — v1.0.0 E2E / Live Gate.
+- [ ] T-273 — v1.0.0 E2E / Live Gate. 남은 blocker는 geofence 운영 설정과 전용 staging Web/API다.
 - [ ] T-274 — v1.0.0 릴리즈.

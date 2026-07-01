@@ -25,7 +25,7 @@
 - **Admin 보강(T-265)**: `/admin/notice-plans` 작성기, POI editor, 첨부 업로드, Admin API CRUD 완료.
 - **Sprint 5/v0.2.0 게이트**: T-259로 완료. 다음 gate는 T-273/T-274다.
 
-## 2.1 T-273 live gate 실행 현황 (2026-06-30)
+## 2.1 T-273 live gate 실행 현황 (2026-07-01)
 
 - **Admin read-only full catalog**: 통과. N150 Playwright Docker runner는 image pull/runtime 문제로
   완료하지 못했고, N150 host browser는 Chromium shared library 누락으로 실행 불가했다. fallback 기준에
@@ -42,6 +42,9 @@
 - **Restore staging drill**: 통과. N150 host에는 `pg_restore` / `psql`이 없어 `postgres:16-alpine`
   Docker runner로 staging Postgres에 snapshot을 복구했다. checksum / `pg_restore --list` /
   restored schema health / admin audit hash chain / rollback precheck guard가 모두 통과했다.
+- **Local/fallback smoke**: 통과. local dev DB를 Alembic head까지 올리고 API `/health`, Web
+  `/admin/login`, Windows fallback Admin login smoke와 `CASE_LIMIT=1` catalog slice를 확인했다. 이는
+  release evidence 대체가 아니라 repo-side 실행 가능성 확인이다.
 - **Geofence**: 차단. Pinvi repo의 `infra/docker-compose.app.yml` / `infra/.env.prod.example`에는
   `PINVI_GEOFENCE_*` passthrough를 보강했다. 실제 N150 배포는 `kor-travel-docker-manager` compose와
   edge proxy header 주입이 별도 정본이므로, 운영 API 컨테이너에는 아직 geofence env가 없다.
@@ -49,6 +52,8 @@
   ADR-018 운영 설정을 적용해 US root 451을 확인해야 한다.
 - **Mutating staging Playwright**: 차단. 운영 public DB 대상 mutating suite는 실행하지 않는다.
   전용 staging Web/API가 준비된 뒤 `trip-realtime-mutating`, `backup-mutating` phase를 실행한다.
+- **현 시점 판단**: full live e2e 반복 실행은 지금 필요하지 않다. release gate 또는 N150/live env가
+  준비된 시점에 smoke → 필요한 범위 재실행 순서로 재개한다.
 
 ## 3. 남은 Task Backlog (그룹별)
 
@@ -90,7 +95,8 @@
   `docs/runbooks/v100-live-gate.md` 기준으로 E2E 10 시나리오 + N150 smoke + backup 핫스왑 훈련 +
   geofence 검증을 실행한다. T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
   2026-07-01 기준 Admin full catalog, MCP/perf/security smoke, restore staging drill은 완료했고,
-  geofence 운영 설정과 mutating staging Web/API가 release blocker로 남았다.
+  geofence 운영 설정과 mutating staging Web/API가 release blocker로 남았다. 이 blocker는 repo 코드가
+  아니라 외부 운영 상태이므로, 준비 전에는 full live e2e를 반복 실행하지 않는다.
 - **T-274** v1.0.0 릴리즈 — tag + Release notes + journal/resume 마감.
 
 ## 4. 병행 / 충돌 회피 (tasks-rule §8)

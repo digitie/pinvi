@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-07-01 (codex) — T-273 release gate blocker 정리 / full live defer
+
+`agent/codex-t273-release-gate-followup`에서 T-273의 현재 판단을 runbook과 Sprint 6 execplan에
+반영했다. 지금 full live e2e를 반복 실행하지 않는다. Admin read-only full catalog, local/fallback smoke,
+MCP live, perf/security smoke, restore staging drill은 이미 통과 근거가 있으며, 현재 남은 blocker는 repo
+코드가 아니라 외부 운영 상태다.
+
+남은 blocker:
+
+- geofence: `kor-travel-docker-manager` compose와 edge proxy header 주입에 ADR-018 운영 설정을 적용한 뒤
+  KR health 200 / non-KR root 451을 확인해야 한다.
+- mutating staging Playwright: 운영 public DB 대상 실행은 금지한다. 전용 staging Web/API가 준비된 뒤
+  `trip-realtime-mutating`, `backup-mutating` phase를 실행한다.
+
+검증:
+
+- `npx prettier --check docs/tasks.md docs/runbooks/v100-live-gate.md docs/execplan/sprint6-v1.0-plan.md`
+- `git diff --check`
+- `PINVI_V100_LIVE_GATE=1 scripts/verify-v100-live-gate.sh plan admin-live-list live-mutating-list geofence mcp restore-staging perf security`
+
+**다음 한 작업**: 이 문서 PR을 머지한 뒤 T-273 외부 blocker 준비 여부를 확인한다. 준비 전에는 full
+live e2e를 반복 실행하지 않고, T-274 릴리즈도 T-273 blocker 해소 이후에 진행한다.
+
 ## 2026-07-01 (codex) — T-122 Naver/Kakao OAuth provider 구현
 
 `agent/codex-t122-naver-kakao-oauth`에서 기존 Google OAuth 흐름을 유지하면서 Naver/Kakao provider를
