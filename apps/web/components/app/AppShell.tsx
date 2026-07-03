@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-surface-soft">
       <header className="border-b border-hairline bg-white">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
+        <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-ink">
             <Compass className="h-5 w-5 text-primary" aria-hidden="true" />
             Pinvi
@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">{children}</main>
+      <main className="w-full px-4 py-6 md:px-6 md:py-8">{children}</main>
     </div>
   );
 }

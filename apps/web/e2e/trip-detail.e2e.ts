@@ -155,6 +155,38 @@ async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
   });
 }
 
+async function expectTripMapSurface(page: Page) {
+  const fallback = page.getByTestId('vworld-map-fallback');
+  const canvas = page.locator('.maplibregl-canvas').first();
+
+  if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
+    await expect(canvas).toBeVisible({ timeout: 20_000 });
+    const box = await canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(300);
+    expect(box?.height ?? 0).toBeGreaterThan(300);
+    await expect(fallback).toHaveCount(0);
+    return;
+  }
+
+  await expect(fallback.or(canvas)).toBeVisible({ timeout: 20_000 });
+}
+
+async function expectMyMapsDetailLayout(page: Page) {
+  const panel = page.getByTestId('trip-detail-panel');
+  const map = page.getByTestId('trip-detail-map');
+
+  await expect(panel).toBeVisible();
+  await expect(map).toBeVisible();
+
+  const panelBox = await panel.boundingBox();
+  const mapBox = await map.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(mapBox).not.toBeNull();
+  expect(panelBox?.x ?? 0).toBeLessThan(mapBox?.x ?? 0);
+  expect(mapBox?.width ?? 0).toBeGreaterThan(panelBox?.width ?? 0);
+  expect(mapBox?.height ?? 0).toBeGreaterThan(600);
+}
+
 async function installClosingWebSocket(page: Page, code: number, reason: string) {
   await page.addInitScript(
     ({ closeCode, closeReason }) => {
@@ -207,13 +239,16 @@ test('trip 상세가 TripView를 받아 헤더·POI·협업 섹션을 렌더링�
 
   await page.goto(`/trips/${tripId}`);
 
+  await expect(page.getByTestId('trip-detail-shell')).toBeVisible();
+  await expectMyMapsDetailLayout(page);
+  await expectTripMapSurface(page);
   await expect(page.getByRole('heading', { name: '부산 2박 3일' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
   await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
   await expect(page.getByTestId('companion-list')).toContainText('동행');
-  await expect(page.getByRole('heading', { name: '공유 링크' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '첨부' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '댓글' })).toBeVisible();
+  await expect(page.getByTestId('trip-detail-panel')).toContainText('공유 링크');
+  await expect(page.getByTestId('trip-detail-panel')).toContainText('첨부');
+  await expect(page.getByTestId('trip-detail-panel')).toContainText('댓글');
 });
 
 test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상태를 노출한다', async ({

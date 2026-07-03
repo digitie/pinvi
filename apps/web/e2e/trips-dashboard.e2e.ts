@@ -73,6 +73,22 @@ async function mockTripDetail(page: Page) {
   });
 }
 
+async function expectTripMapSurface(page: Page) {
+  const fallback = page.getByTestId('vworld-map-fallback');
+  const canvas = page.locator('.maplibregl-canvas').first();
+
+  if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
+    await expect(canvas).toBeVisible({ timeout: 20_000 });
+    const box = await canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(300);
+    expect(box?.height ?? 0).toBeGreaterThan(300);
+    await expect(fallback).toHaveCount(0);
+    return;
+  }
+
+  await expect(fallback.or(canvas)).toBeVisible({ timeout: 20_000 });
+}
+
 test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다', async ({ page }) => {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
@@ -98,6 +114,7 @@ test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다'
   await expect(page.getByRole('heading', { name: '여행' })).toBeVisible();
   await expect(page.getByTestId('trip-list')).toContainText('서울 주말 산책');
   await expect(page.getByTestId('trip-map')).toBeVisible();
+  await expectTripMapSurface(page);
   await expect(
     page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${poiId}"]`),
   ).toHaveText('경복궁');

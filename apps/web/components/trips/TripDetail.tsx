@@ -635,145 +635,222 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const { trip, companions } = view;
 
   return (
-    <div className="space-y-5">
-      <Link
-        href="/trips"
-        className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        여행 목록
-      </Link>
-
-      <header className="space-y-3 border-b border-hairline pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold text-ink md:text-3xl">{trip.title}</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                {formatDate(trip.start_date)} – {formatDate(trip.end_date)}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-4 w-4" aria-hidden="true" />
-                {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Users className="h-4 w-4" aria-hidden="true" />
-                동반 {companions.length}명
-              </span>
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
-                {STATUS_LABEL[trip.status]}
-              </span>
-              <button
-                type="button"
-                onClick={() => setTripEditOpen(true)}
-                className="h-8 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
-              >
-                편집
-              </button>
-            </div>
-            <TripActions tripId={tripId} />
-          </div>
-        </div>
-        {view.broken_feature_count > 0 && (
-          <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-            링크가 끊긴 장소 {view.broken_feature_count}곳 — 라이브러리에서 삭제됨
-          </p>
-        )}
-        <p
-          className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
-          data-testid="trip-realtime-status"
+    <div className="-mx-4 -my-6 bg-surface-soft md:-mx-6 md:-my-8" data-testid="trip-detail-shell">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col lg:grid lg:h-[calc(100vh-4.5rem)] lg:min-h-0 lg:grid-cols-[400px_minmax(0,1fr)] xl:grid-cols-[440px_minmax(0,1fr)]">
+        <aside
+          className="z-10 flex min-h-0 flex-col border-b border-hairline bg-white lg:h-full lg:border-b-0 lg:border-r"
+          aria-label="여행 상세"
+          data-testid="trip-detail-panel"
         >
-          <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-          실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
-          {realtimeDetail && <span> · {realtimeDetail}</span>}
-          {onlinePresence.some((entry) => entry.viewingDay != null) && (
-            <span>
-              {' '}
-              · 보는 일자{' '}
-              {onlinePresence
-                .map((entry) => entry.viewingDay)
-                .filter((day): day is number => day != null)
-                .join(', ')}
-            </span>
-          )}
-        </p>
-        {realtimeStatus === 'permission-denied' && (
-          <p
-            role="alert"
-            className="inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
-            data-testid="trip-realtime-permission-lost"
-          >
-            여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
-            <Link href="/trips" className="font-semibold underline">
-              여행 목록으로 이동
+          <header className="space-y-3 border-b border-hairline p-4 md:p-5">
+            <Link
+              href="/trips"
+              className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              여행 목록
             </Link>
-          </p>
-        )}
-        {showRealtimeBackoffNotice && (
-          <p
-            role="status"
-            className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
-            data-testid="trip-realtime-backoff-notice"
-          >
-            실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속
-            불러옵니다.
-          </p>
-        )}
-        {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
-          <button
-            type="button"
-            onClick={() => realtimeClientRef.current?.reconnect()}
-            className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-xs font-semibold text-ink hover:bg-surface-soft"
-            data-testid="trip-realtime-reconnect"
-          >
-            <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-            실시간 다시 연결
-          </button>
-        )}
-      </header>
 
-      {view.days.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="일자 선택">
-          {view.days.map((day) => {
-            const active = day.day_index === selectedDayIndex;
-            return (
-              <button
-                key={day.day_index}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSelectedDayIndex(day.day_index)}
-                className={
-                  active
-                    ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
-                    : 'h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
-                }
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="truncate text-xl font-bold text-ink md:text-2xl">{trip.title}</h1>
+                  <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                      {formatDate(trip.start_date)} – {formatDate(trip.end_date)}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-4 w-4" aria-hidden="true" />
+                      {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Users className="h-4 w-4" aria-hidden="true" />
+                      동반 {companions.length}명
+                    </span>
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+                  {STATUS_LABEL[trip.status]}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTripEditOpen(true)}
+                  className="h-8 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                >
+                  편집
+                </button>
+                <TripActions tripId={tripId} />
+              </div>
+            </div>
+
+            {view.broken_feature_count > 0 && (
+              <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                링크가 끊긴 장소 {view.broken_feature_count}곳 — 라이브러리에서 삭제됨
+              </p>
+            )}
+            <p
+              className="inline-flex flex-wrap items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
+              data-testid="trip-realtime-status"
+            >
+              <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+              실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
+              {realtimeDetail && <span> · {realtimeDetail}</span>}
+              {onlinePresence.some((entry) => entry.viewingDay != null) && (
+                <span>
+                  {' '}
+                  · 보는 일자{' '}
+                  {onlinePresence
+                    .map((entry) => entry.viewingDay)
+                    .filter((day): day is number => day != null)
+                    .join(', ')}
+                </span>
+              )}
+            </p>
+            {realtimeStatus === 'permission-denied' && (
+              <p
+                role="alert"
+                className="inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+                data-testid="trip-realtime-permission-lost"
               >
-                {day.title ?? `${day.day_index}일차`}
+                여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
+                <Link href="/trips" className="font-semibold underline">
+                  여행 목록으로 이동
+                </Link>
+              </p>
+            )}
+            {showRealtimeBackoffNotice && (
+              <p
+                role="status"
+                className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
+                data-testid="trip-realtime-backoff-notice"
+              >
+                실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속
+                불러옵니다.
+              </p>
+            )}
+            {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
+              <button
+                type="button"
+                onClick={() => realtimeClientRef.current?.reconnect()}
+                className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+                data-testid="trip-realtime-reconnect"
+              >
+                <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+                실시간 다시 연결
               </button>
-            );
-          })}
-        </div>
-      )}
+            )}
+          </header>
 
-      <TripDayControls
-        selectedDay={selectedDay}
-        onAdd={handleAddDay}
-        onRename={handleRenameDay}
-        onDelete={handleDeleteDay}
-        canAdd={canAddDay}
-        addDisabledReason={addDayDisabledReason}
-        busy={busy}
-      />
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 md:p-5">
+            {view.days.length > 0 && (
+              <div
+                className="flex gap-2 overflow-x-auto pb-1"
+                role="tablist"
+                aria-label="일자 선택"
+              >
+                {view.days.map((day) => {
+                  const active = day.day_index === selectedDayIndex;
+                  return (
+                    <button
+                      key={day.day_index}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setSelectedDayIndex(day.day_index)}
+                      className={
+                        active
+                          ? 'h-9 shrink-0 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
+                          : 'h-9 shrink-0 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
+                      }
+                    >
+                      {day.title ?? `${day.day_index}일차`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <section className="min-h-[460px]" aria-label="여행 지도">
+            <TripDayControls
+              selectedDay={selectedDay}
+              onAdd={handleAddDay}
+              onRename={handleRenameDay}
+              onDelete={handleDeleteDay}
+              canAdd={canAddDay}
+              addDisabledReason={addDayDisabledReason}
+              busy={busy}
+            />
+
+            <section className="space-y-3" aria-label="장소 목록">
+              {selectedDay && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-ink">장소 추가</p>
+                  <MapSearchBox onSelect={handleAddFeature} />
+                </div>
+              )}
+              {selectedDay && (
+                <TripDayOptimize
+                  tripId={tripId}
+                  dayIndex={selectedDay.day_index}
+                  poiCount={selectedDay.pois.length}
+                  onApplied={reload}
+                />
+              )}
+              {mutationError && (
+                <p
+                  role="alert"
+                  className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+                  data-testid="poi-mutation-error"
+                >
+                  {mutationError}
+                </p>
+              )}
+              <TripPoiList
+                pois={selectedDay?.pois ?? []}
+                selectedPoiId={selectedPoiId}
+                onSelectPoi={handleSelectPoi}
+                editable={!busy}
+                onReorder={handleReorder}
+                onEditPoi={handleEditPoi}
+                onDelete={handleDelete}
+                savingPoiId={savingPoiId}
+                editingPoiId={editingPoiId}
+                onEditToggle={setEditingPoiId}
+              />
+            </section>
+
+            {selectedDay && (
+              <TripAttachments
+                tripId={tripId}
+                dayIndex={selectedDay.day_index}
+                title={`${selectedDay.day_index}일차 파일`}
+              />
+            )}
+            {selectedPoi && (
+              <TripAttachments
+                tripId={tripId}
+                poiId={selectedPoi.poi_id}
+                title={`${selectedPoi.title ?? '선택 장소'} 파일`}
+              />
+            )}
+
+            <TripCompanions tripId={tripId} companions={companions} onChanged={reload} />
+            <TripAttachments tripId={tripId} />
+            <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
+            <TripTelegramTargets tripId={tripId} />
+            <TripComments tripId={tripId} />
+          </div>
+        </aside>
+
+        <section
+          className="relative min-h-[70vh] bg-canvas lg:h-full lg:min-h-0"
+          aria-label="여행 지도"
+          data-testid="trip-detail-map"
+        >
           <TripMapView
             apiKey={VWORLD_API_KEY}
             points={mapPoints}
@@ -781,71 +858,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
             onSelectPoi={handleSelectPoi}
             onMarkerContextMenu={handleMarkerContextMenu}
             className="h-full"
+            chrome="flush"
           />
         </section>
-        <aside className="space-y-3" aria-label="장소 목록">
-          {selectedDay && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-ink">장소 추가</p>
-              <MapSearchBox onSelect={handleAddFeature} />
-            </div>
-          )}
-          {selectedDay && (
-            <TripDayOptimize
-              tripId={tripId}
-              dayIndex={selectedDay.day_index}
-              poiCount={selectedDay.pois.length}
-              onApplied={reload}
-            />
-          )}
-          {mutationError && (
-            <p
-              role="alert"
-              className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
-              data-testid="poi-mutation-error"
-            >
-              {mutationError}
-            </p>
-          )}
-          <TripPoiList
-            pois={selectedDay?.pois ?? []}
-            selectedPoiId={selectedPoiId}
-            onSelectPoi={handleSelectPoi}
-            editable={!busy}
-            onReorder={handleReorder}
-            onEditPoi={handleEditPoi}
-            onDelete={handleDelete}
-            savingPoiId={savingPoiId}
-            editingPoiId={editingPoiId}
-            onEditToggle={setEditingPoiId}
-          />
-          {selectedDay && (
-            <TripAttachments
-              tripId={tripId}
-              dayIndex={selectedDay.day_index}
-              title={`${selectedDay.day_index}일차 파일`}
-            />
-          )}
-          {selectedPoi && (
-            <TripAttachments
-              tripId={tripId}
-              poiId={selectedPoi.poi_id}
-              title={`${selectedPoi.title ?? '선택 장소'} 파일`}
-            />
-          )}
-        </aside>
       </div>
-
-      <TripCompanions tripId={tripId} companions={companions} onChanged={reload} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TripAttachments tripId={tripId} />
-        <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
-      </div>
-
-      <TripTelegramTargets tripId={tripId} />
-
-      <TripComments tripId={tripId} />
 
       {tripEditOpen && (
         <TripEditDialog
