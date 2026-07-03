@@ -4,7 +4,13 @@
 
 ## Unreleased
 
-- 다음 릴리즈 후보 변경 없음.
+- `/trips`를 지도 중심 대시보드로 재구성했다. 전체 여행의 POI를 지도에 모아 표시하고,
+  초안 여행 저장 버튼/상태 문구를 명확히 했다.
+- API envelope `meta.total/page/version`의 `null` 응답을 허용해 `/trips` 목록 로딩의 response shape
+  mismatch를 수정했다.
+- 여행 기간이 있는 여행은 기간보다 많은 일자를 추가할 수 없게 API와 Web UI에서 제한한다.
+- `NEXT_PUBLIC_VWORLD_API_KEY`가 Pinvi web Docker build/runtime에 전달되도록 compose/Dockerfile
+  설정과 운영 runbook을 보강했다.
 
 ## v0.2.0 — 실시간 + ETL + 운영 가시화
 

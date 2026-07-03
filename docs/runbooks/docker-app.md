@@ -267,6 +267,8 @@ PINVI_GEOFENCE_BLOCK_UNKNOWN=false
   `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED`, `NEXT_PUBLIC_VWORLD_API_KEY`는 web build
   time에 embed된다. 운영 API/Grafana 도메인이나 dashboard uid/slug, restore UI 안전 스위치,
   VWorld 웹 키를 바꾸면 web 이미지를 다시 빌드한다.
+- `kor-travel-docker-manager` 같은 외부 운영 compose를 정본으로 사용할 때도 `pinvi-web` build args와
+  runtime env에 `NEXT_PUBLIC_VWORLD_API_KEY`를 함께 전달한다. 값은 로그에 출력하지 말고 길이만 확인한다.
 - 운영 CORS는 웹 origin만 허용한다. wildcard 금지.
 - `PINVI_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
 - presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저가 접근하는
