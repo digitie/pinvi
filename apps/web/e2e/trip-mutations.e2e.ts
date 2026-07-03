@@ -143,6 +143,7 @@ test('동반자를 초대하면 목록에 나타난다', async ({ page }) => {
   await page.goto(`/trips/${tripId}`);
   await expect(page.getByRole('heading', { name: '변경 테스트 여행' })).toBeVisible();
 
+  await page.getByRole('tab', { name: /동행/ }).click();
   await page.getByLabel('이메일').fill('friend@example.com');
   await page.getByRole('button', { name: '초대' }).click();
 

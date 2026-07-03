@@ -234,6 +234,7 @@ test('공유 링크를 만들면 생성된 URL이 1회 표시된다', async ({ p
   });
 
   await page.goto(`/trips/${tripId}`);
+  await page.getByRole('tab', { name: /공유/ }).click();
   await expect(page.getByRole('heading', { name: '공유 링크' })).toBeVisible();
 
   await page.getByRole('button', { name: '링크 만들기' }).click();

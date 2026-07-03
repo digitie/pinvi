@@ -91,6 +91,7 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
 
   await page.goto(`/trips/${tripId}`);
 
+  await page.getByRole('tab', { name: /공유/ }).click();
   const section = page.getByTestId('trip-telegram-targets');
   await expect(section.getByRole('heading', { name: 'Telegram 알림 대상' })).toBeVisible();
   // 초기: A 연결됨.
