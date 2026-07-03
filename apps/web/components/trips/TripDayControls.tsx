@@ -10,6 +10,7 @@ export interface TripDayControlsProps {
   onDelete: (dayIndex: number) => void;
   canAdd?: boolean;
   addDisabledReason?: string | null;
+  showAdd?: boolean;
   busy?: boolean;
 }
 
@@ -20,6 +21,7 @@ export function TripDayControls({
   onDelete,
   canAdd = true,
   addDisabledReason = null,
+  showAdd = true,
   busy = false,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
@@ -31,18 +33,20 @@ export function TripDayControls({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="trip-day-controls">
-      <button
-        type="button"
-        onClick={onAdd}
-        disabled={addDisabled}
-        title={addDisabledReason ?? undefined}
-        aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
-        className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
-      >
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        일자 추가
-      </button>
-      {addDisabledReason && (
+      {showAdd && (
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={addDisabled}
+          title={addDisabledReason ?? undefined}
+          aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
+          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          일자 추가
+        </button>
+      )}
+      {showAdd && addDisabledReason && (
         <p id="trip-day-add-disabled-reason" className="text-xs text-muted">
           {addDisabledReason}
         </p>

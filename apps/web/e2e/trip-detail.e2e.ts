@@ -127,6 +127,35 @@ const MARKER_VIEW = {
   broken_feature_count: 1,
 };
 
+const LAYER_VIEW = {
+  ...TRIP_VIEW,
+  days: [
+    BASE_MARKER_DAY,
+    {
+      ...BASE_MARKER_DAY,
+      day_index: 2,
+      date: '2026-07-02',
+      title: '2일차',
+      pois: [
+        {
+          ...BASE_MARKER_POI,
+          poi_id: snapshotPoiId,
+          feature_id: 'feat-gamcheon',
+          title: '감천문화마을',
+          feature: {
+            coord: { lon: 129.01, lat: 35.1 },
+            marker_color: 'P-04',
+            marker_icon: 'camera',
+            category: '마을',
+          },
+          marker_color: 'P-04',
+          marker_icon: 'camera',
+        },
+      ],
+    },
+  ],
+};
+
 async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
@@ -184,7 +213,7 @@ async function expectMyMapsDetailLayout(page: Page) {
   expect(mapBox).not.toBeNull();
   expect(panelBox?.x ?? 0).toBeLessThan(mapBox?.x ?? 0);
   expect(mapBox?.width ?? 0).toBeGreaterThan(panelBox?.width ?? 0);
-  expect(mapBox?.height ?? 0).toBeGreaterThan(600);
+  expect(mapBox?.height ?? 0).toBeGreaterThan(500);
 }
 
 async function installClosingWebSocket(page: Page, code: number, reason: string) {
@@ -240,15 +269,41 @@ test('trip 상세가 TripView를 받아 헤더·POI·협업 섹션을 렌더링�
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByTestId('trip-detail-shell')).toBeVisible();
+  await expect(page.getByTestId('trip-top-panel')).toBeVisible();
   await expectMyMapsDetailLayout(page);
   await expectTripMapSurface(page);
   await expect(page.getByRole('heading', { name: '부산 2박 3일' })).toBeVisible();
+  await expect(page.getByTestId('trip-layer-list')).toContainText('지도 레이어');
   await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: '1일차 표시' })).toBeChecked();
+  await expect(page.getByTestId('trip-map-place-search')).toBeVisible();
+  await expect(page.getByTestId('trip-detail-map').locator('aside')).toHaveCount(0);
   await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
+
+  await page.getByRole('tab', { name: /동행/ }).click();
   await expect(page.getByTestId('companion-list')).toContainText('동행');
+  await page.getByRole('tab', { name: '공유' }).click();
   await expect(page.getByTestId('trip-detail-panel')).toContainText('공유 링크');
+  await page.getByRole('tab', { name: '파일' }).click();
   await expect(page.getByTestId('trip-detail-panel')).toContainText('첨부');
+  await page.getByRole('tab', { name: '댓글' }).click();
   await expect(page.getByTestId('trip-detail-panel')).toContainText('댓글');
+});
+
+test('상세 지도는 왼쪽 일자 레이어 표시 상태만 반영하고 오른쪽 패널을 두지 않는다', async ({
+  page,
+}) => {
+  await mockTripDetailRoutes(page, LAYER_VIEW);
+
+  await page.goto(`/trips/${tripId}`);
+
+  const secondMarker = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${snapshotPoiId}"]`,
+  );
+  await expect(secondMarker).toHaveText('감천문화마을');
+  await page.getByRole('checkbox', { name: '2일차 표시' }).uncheck();
+  await expect(secondMarker).toHaveCount(0);
+  await expect(page.getByTestId('trip-detail-map').locator('aside')).toHaveCount(0);
 });
 
 test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상태를 노출한다', async ({
@@ -296,8 +351,7 @@ test('여행 기간보다 많은 일자는 추가할 수 없다', async ({ page 
 
   await page.goto(`/trips/${tripId}`);
 
-  const addDay = page.getByRole('button', { name: '일자 추가' });
-  await expect(addDay).toBeDisabled();
+  await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
   await expect(page.getByText('여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.')).toBeVisible();
 });
 
