@@ -94,9 +94,25 @@ interface MutationOptions {
 
 function formatDate(value: string | null): string {
   if (!value) return '미정';
-  return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }).format(
-    new Date(value)
-  );
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value));
+}
+
+function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
+  if (!startDate || !endDate) return null;
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+function addDays(dateValue: string, offsetDays: number): string {
+  const next = new Date(`${dateValue}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + offsetDays);
+  return next.toISOString().slice(0, 10);
 }
 
 function realtimeStatusDetail(
@@ -115,7 +131,8 @@ function realtimeStatusDetail(
   if (status === 'connection-limited') return '동시 연결 한도에 도달해 대기 중입니다.';
   if (status === 'rate-limited') return '메시지 전송량이 많아 대기 중입니다.';
   if (status === 'error') return '연결 상태를 확인하고 있습니다.';
-  if (closeInfo?.category === 'bad-message') return '마지막 연결이 heartbeat 제한으로 종료되었습니다.';
+  if (closeInfo?.category === 'bad-message')
+    return '마지막 연결이 heartbeat 제한으로 종료되었습니다.';
   return null;
 }
 
@@ -273,7 +290,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       if (invalidationKeys.length === 0) return;
       scheduleRealtimeReload();
     },
-    [scheduleRealtimeReload, tripId]
+    [scheduleRealtimeReload, tripId],
   );
 
   useEffect(() => {
@@ -329,6 +346,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const onlinePresence = Array.from(presence.values()).filter((entry) => entry.isOnline);
   const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
   const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
+  const nextDayIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
+  const maxTripDayCount = view ? tripDurationDays(view.trip.start_date, view.trip.end_date) : null;
+  const canAddDay = maxTripDayCount == null || nextDayIndex <= maxTripDayCount;
+  const addDayDisabledReason =
+    !canAddDay && maxTripDayCount != null
+      ? `여행 기간은 최대 ${maxTripDayCount}일입니다. 기간을 먼저 늘려주세요.`
+      : null;
   const showRealtimeBackoffNotice =
     realtimeStatus === 'connection-limited' ||
     realtimeStatus === 'rate-limited' ||
@@ -403,7 +427,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         setBusy(false);
       }
     },
-    [reload]
+    [reload],
   );
 
   const handleAddFeature = (feature: FeatureSummary) => {
@@ -427,7 +451,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           category: feature.category ?? null,
         },
         currency: 'KRW',
-      })
+      }),
     );
   };
 
@@ -446,7 +470,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         await poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch);
         setEditingPoiId(null);
       },
-      { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) }
+      { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) },
     ).finally(() => setSavingPoiId(null));
   };
 
@@ -455,10 +479,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
   };
 
   const handleAddDay = () => {
-    const nextIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
+    if (!canAddDay) {
+      setMutationError(addDayDisabledReason ?? '여행 기간보다 많은 일자를 추가할 수 없습니다.');
+      return;
+    }
+    const nextDate = view?.trip.start_date
+      ? addDays(view.trip.start_date, nextDayIndex - 1)
+      : undefined;
     void runMutation(async () => {
-      await tripApi(apiClient).createDay(tripId, { day_index: nextIndex });
-      setSelectedDayIndex(nextIndex);
+      await tripApi(apiClient).createDay(tripId, { day_index: nextDayIndex, date: nextDate });
+      setSelectedDayIndex(nextDayIndex);
     });
   };
 
@@ -469,7 +499,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const version = view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
     void runMutation(
       () => tripApi(apiClient).updateDay(tripId, dayIndex, version, { title: title || null }),
-      { onConflict: dayConflictNotice }
+      { onConflict: dayConflictNotice },
     );
   };
 
@@ -480,7 +510,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         await tripApi(apiClient).deleteDay(tripId, dayIndex, version);
         setSelectedDayIndex(null);
       },
-      { onConflict: dayConflictNotice }
+      { onConflict: dayConflictNotice },
     );
   };
 
@@ -491,7 +521,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         await tripApi(apiClient).update(tripId, version, patch);
         setTripEditOpen(false);
       },
-      { onConflict: (latest) => openTripConflict(patch, latest) }
+      { onConflict: (latest) => openTripConflict(patch, latest) },
     );
   };
 
@@ -530,7 +560,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         if (current.target === 'trip') {
           const patch = pickConflictPatch(
             current.patch,
-            effectiveKeys as TripConflictFieldKey[]
+            effectiveKeys as TripConflictFieldKey[],
           ) as TripUpdate;
           if (!hasPatchFields(patch)) {
             handleUseServerConflict();
@@ -545,7 +575,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
         const patch = pickConflictPatch(
           current.patch,
-          effectiveKeys as PoiConflictFieldKey[]
+          effectiveKeys as PoiConflictFieldKey[],
         ) as PoiUpdate;
         if (!hasPatchFields(patch)) {
           handleUseServerConflict();
@@ -584,7 +614,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   if (error || !view) {
     return (
       <div className="space-y-4">
-        <Link href="/trips" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <Link
+          href="/trips"
+          className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+        >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           여행 목록
         </Link>
@@ -603,7 +636,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   return (
     <div className="space-y-5">
-      <Link href="/trips" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+      <Link
+        href="/trips"
+        className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+      >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         여행 목록
       </Link>
@@ -685,7 +721,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
             className="inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted"
             data-testid="trip-realtime-backoff-notice"
           >
-            실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속 불러옵니다.
+            실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속
+            불러옵니다.
           </p>
         )}
         {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
@@ -730,6 +767,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
         onAdd={handleAddDay}
         onRename={handleRenameDay}
         onDelete={handleDeleteDay}
+        canAdd={canAddDay}
+        addDisabledReason={addDayDisabledReason}
         busy={busy}
       />
 

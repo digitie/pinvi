@@ -8,6 +8,8 @@ export interface TripDayControlsProps {
   onAdd: () => void;
   onRename: (dayIndex: number, title: string) => void;
   onDelete: (dayIndex: number) => void;
+  canAdd?: boolean;
+  addDisabledReason?: string | null;
   busy?: boolean;
 }
 
@@ -16,9 +18,12 @@ export function TripDayControls({
   onAdd,
   onRename,
   onDelete,
+  canAdd = true,
+  addDisabledReason = null,
   busy = false,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
+  const addDisabled = busy || !canAdd;
 
   useEffect(() => {
     setTitle(selectedDay?.title ?? '');
@@ -29,12 +34,19 @@ export function TripDayControls({
       <button
         type="button"
         onClick={onAdd}
-        disabled={busy}
+        disabled={addDisabled}
+        title={addDisabledReason ?? undefined}
+        aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
         className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
       >
         <Plus className="h-4 w-4" aria-hidden="true" />
         일자 추가
       </button>
+      {addDisabledReason && (
+        <p id="trip-day-add-disabled-reason" className="text-xs text-muted">
+          {addDisabledReason}
+        </p>
+      )}
       {selectedDay && (
         <>
           <input

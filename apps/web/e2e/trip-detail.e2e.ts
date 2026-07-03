@@ -249,6 +249,23 @@ test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상�
   await expect(custom).toHaveAttribute('data-marker-selected', 'true');
 });
 
+test('여행 기간보다 많은 일자는 추가할 수 없다', async ({ page }) => {
+  await mockTripDetailRoutes(page, {
+    ...TRIP_VIEW,
+    trip: {
+      ...TRIP_VIEW.trip,
+      start_date: '2026-07-01',
+      end_date: '2026-07-01',
+    },
+  });
+
+  await page.goto(`/trips/${tripId}`);
+
+  const addDay = page.getByRole('button', { name: '일자 추가' });
+  await expect(addDay).toBeDisabled();
+  await expect(page.getByText('여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.')).toBeVisible();
+});
+
 test('실시간 권한 상실 close는 안내와 여행 목록 이동 링크를 보여준다', async ({ page }) => {
   await installClosingWebSocket(page, 4403, 'permission_denied');
   await mockTripDetailRoutes(page);

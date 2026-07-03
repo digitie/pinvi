@@ -498,6 +498,35 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     assert detail.json()["data"]["days"] == []
 
 
+async def test_trip_day_create_rejects_day_beyond_trip_period(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post(
+        "/trips",
+        json={"title": "기간 제한", "start_date": "2026-06-10", "end_date": "2026-06-11"},
+        cookies=cookies,
+    )
+    assert created.status_code == 201, created.text
+    trip_id = created.json()["data"]["trip_id"]
+
+    in_range = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 2, "date": "2026-06-11", "title": "둘째 날"},
+        cookies=cookies,
+    )
+    assert in_range.status_code == 201, in_range.text
+
+    beyond_range = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 3, "date": "2026-06-12", "title": "셋째 날"},
+        cookies=cookies,
+    )
+    assert beyond_range.status_code == 422, beyond_range.text
+    assert beyond_range.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 async def test_trip_copy_shared_view_and_attachments(
     client,
     verified_user,

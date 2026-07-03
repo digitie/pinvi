@@ -262,6 +262,12 @@ def _raise_trip_http(exc: TripNotFoundError | TripPermissionError) -> NoReturn:
     ) from exc
 
 
+def _trip_day_limit(start_date: date | None, end_date: date | None) -> int | None:
+    if start_date is None or end_date is None:
+        return None
+    return (end_date - start_date).days + 1
+
+
 @router.get("", response_model=EnvelopeWithMeta[list[TripResponse]])
 async def list_trips(
     current_user_id: CurrentUserId,
@@ -601,7 +607,16 @@ async def create_trip_day_endpoint(
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        trip = await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        day_limit = _trip_day_limit(trip.start_date, trip.end_date)
+        if day_limit is not None and body.day_index > day_limit:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": f"여행 기간은 최대 {day_limit}일입니다.",
+                },
+            )
         day = await create_trip_day(
             db,
             trip_id=trip_id,
