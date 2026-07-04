@@ -18,7 +18,13 @@ test('지도 shell이 kor-travel-map feature 조회 없이 렌더링된다', asy
 
   await expect(renderedMapState).toBeVisible();
 
-  if (await fallback.isVisible()) {
+  if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
+    await expect(canvas).toBeVisible();
+    const box = await canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(300);
+    expect(box?.height ?? 0).toBeGreaterThan(300);
+    await expect(fallback).toHaveCount(0);
+  } else if (await fallback.isVisible()) {
     await expect(fallback).toContainText('VWorld API 키가 설정되지 않았습니다.');
   } else {
     await expect(canvas).toBeVisible();

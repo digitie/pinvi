@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-03 (codex) — `/trips` 지도 중심 화면과 draft 저장 수정
+
+**작업**: 사용자 지시에 따라 `/trips` response shape mismatch, VWorld key 누락, draft 저장 UX, 여행
+기간보다 많은 일자 추가, 지도 중심 레이아웃을 한 번에 정리했다.
+
+**변경**:
+
+- envelope meta의 `total/page/limit/version/has_more`가 `null`일 수 있게 schema/client 타입을 완화했다.
+- `/trips`를 지도 중심 화면으로 바꾸고, trip detail의 POI를 모아 전체 지도에 표시한다.
+- 날짜 없는 draft 여행 저장을 허용하고 `초안 저장` 버튼과 성공 메시지를 추가했다.
+- 기간이 있는 trip은 API와 Web 모두 기간보다 큰 day index 추가를 차단한다.
+- Pinvi web Docker build/runtime에 `NEXT_PUBLIC_VWORLD_API_KEY`를 전달하도록 Dockerfile, app compose,
+  dev-up, runbook을 보강했다.
+
+**N150**:
+
+- `kor-travel-docker-manager` `.env`에서 VWorld key 길이를 확인하고 `PINVI_VWORLD_API_KEY`도 같은 길이로
+  보강했다. 값은 출력/문서화하지 않았다.
+- 운영 정본 compose의 `pinvi-web` service가 `NEXT_PUBLIC_VWORLD_API_KEY`를 build arg/runtime env로
+  전달하지 않아 web env length가 0이었다. N150 운영 compose에 해당 env 전달을 반영하고 web을 재빌드했다.
+- 재빌드 후 API/Web/Dagster smoke와 web/api VWorld env length 확인을 통과했다.
+
+**검증**:
+
+- Web/schema/client typecheck 통과.
+- API trips integration file 22 passed.
+- Next production build 통과.
+- N150 deploy smoke: API health/db, Web `/trips`, Dagster `/server_info` 통과.
+- N150 Docker runner `trips-dashboard.e2e.ts` 2 passed.
+
+**주의**:
+
+- 최초 `ktdctl pinvi --build`는 Pinvi 컨테이너를 재생성했지만 마지막 geo data check가 빈 `/data/juso`로
+  exit 1을 반환했다. Pinvi smoke와 `/trips` e2e는 이후 통과했다.
+- 배포 web 대상 `trip-detail.e2e.ts`는 live auth redirect 때문에 기존 mock 테스트가 실패한다. 이번
+  `/trips` 검증은 dashboard e2e와 API integration으로 닫았다.
+
+**다음**: PR 머지 후 운영 compose 정본의 Pinvi web VWorld env 전달이 배포 관리 저장소에도 남아 있는지
+확인한다.
+
 ## 2026-07-01 (codex) — T-273 local mutating smoke + backup root fix
 
 **작업**: T-273의 mutating blocker가 repo/local dev에서 닫히는지 확인하고, backup snapshot local

@@ -29,11 +29,11 @@ export function isVersionConflictError(error: unknown): error is ApiError {
 
 export interface ApiResponseMeta {
   cursor?: string | null;
-  has_more?: boolean;
-  total?: number;
-  page?: number;
-  limit?: number;
-  version?: number;
+  has_more?: boolean | null;
+  total?: number | null;
+  page?: number | null;
+  limit?: number | null;
+  version?: number | null;
 }
 
 export interface ApiEnvelope<T> {
@@ -58,10 +58,7 @@ export class ApiClient {
     });
   }
 
-  async request<T>(
-    path: string,
-    init: RequestInit & { schema: z.ZodType<T> },
-  ): Promise<T> {
+  async request<T>(path: string, init: RequestInit & { schema: z.ZodType<T> }): Promise<T> {
     const envelope = await this.requestEnvelope(path, init);
     return envelope.data;
   }

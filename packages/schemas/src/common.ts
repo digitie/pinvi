@@ -20,11 +20,11 @@ export const SuccessEnvelopeSchema = <T extends z.ZodTypeAny>(data: T) =>
     meta: z
       .object({
         cursor: z.string().nullable().optional(),
-        has_more: z.boolean().optional(),
-        total: z.number().int().optional(),
-        page: z.number().int().optional(),
-        limit: z.number().int().optional(),
-        version: z.number().int().optional(),
+        has_more: z.boolean().nullable().optional(),
+        total: z.number().int().nullable().optional(),
+        page: z.number().int().nullable().optional(),
+        limit: z.number().int().nullable().optional(),
+        version: z.number().int().nullable().optional(),
       })
       .partial()
       .optional(),

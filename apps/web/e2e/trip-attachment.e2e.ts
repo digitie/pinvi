@@ -115,6 +115,7 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByRole('heading', { name: '첨부 테스트 여행' })).toBeVisible();
+  await page.getByRole('tab', { name: /파일/ }).click();
   await expect(page.getByRole('heading', { name: '첨부', exact: true })).toBeVisible();
 
   await page.getByTestId('attachment-input').setInputFiles({

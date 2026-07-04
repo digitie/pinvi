@@ -1,5 +1,50 @@
 # resume.md
 
+## 2026-07-03 (codex) — `/trips` 지도 중심 레이아웃 + N150 배포 검증
+
+`agent/codex-trips-map-save`에서 `/trips` 사용자 화면을 지도 중심으로 재구성하고, draft 저장과 여행
+일자 제한 문제를 함께 수정했다.
+
+변경:
+
+- `@pinvi/schemas` / `@pinvi/api-client`의 envelope meta에서 `total`, `page`, `limit`,
+  `version`, `has_more`가 `null`일 수 있게 허용해 `/trips` 목록 response shape mismatch를 수정했다.
+- `/trips`는 전체 여행을 먼저 조회하고 각 trip detail의 POI를 모아 `TripMapView`에 표시한다. 우측에는
+  새 여행 저장 form, 전체/예정/지난 여행 필터, 여행 목록을 둔다.
+- 날짜 없는 draft 여행 저장을 허용하고, 버튼/성공 문구를 `초안 저장` / `초안 여행을 저장했습니다.`로
+  바꿨다.
+- trip 기간이 있는 경우 API `POST /trips/{trip_id}/days`와 Web `일자 추가` 버튼 모두 기간보다 많은
+  day 추가를 막는다. 날짜 없는 draft trip은 제한하지 않는다.
+- Pinvi web Dockerfile과 compose/runbook에 `NEXT_PUBLIC_VWORLD_API_KEY` build/runtime 전달을 추가했다.
+  N150에서는 운영 정본 compose에도 `pinvi-web` build args/runtime env를 반영했고, web/api 컨테이너
+  env 길이만 확인했다.
+
+검증:
+
+- `npm -w @pinvi/web run typecheck`
+- `npm -w @pinvi/api-client run typecheck`
+- `npm -w @pinvi/schemas run typecheck`
+- `cd apps/api && ./.venv/bin/ruff format --check app/api/v1/trips.py tests/integration/test_trips_api.py`
+- `cd apps/api && ./.venv/bin/ruff check app/api/v1/trips.py tests/integration/test_trips_api.py`
+- `cd apps/api && PATH="$PWD/.venv/bin:$PATH" ./.venv/bin/python -m pytest -q -s tests/integration/test_trips_api.py -rA` → 22 passed
+- `NEXT_PUBLIC_VWORLD_API_KEY=<dummy> npm -w @pinvi/web run build`
+- 로컬 Playwright 직접 실행은 browser binary 미설치로 실패했으나, N150 Docker runner로 `/trips`
+  dashboard e2e를 실행했다.
+- N150 deploy smoke: API `/health`, `/health/db`, Web `/trips`, Dagster `/server_info` 200.
+- N150 web/api VWorld env length 확인: web 36, api 36.
+- N150 Docker runner: `trips-dashboard.e2e.ts` → 2 passed.
+
+주의:
+
+- `ktdctl pinvi --build`는 Pinvi 컨테이너를 healthy로 재생성했지만 마지막 geo data check가 빈
+  `/data/juso`로 exit 1을 반환했다. Pinvi 자체 smoke와 `/trips` e2e는 이후 통과했다.
+- `trip-detail.e2e.ts`를 배포 web에 함께 실행하면 live auth middleware가 `/login`으로 redirect하여
+  기존 mock detail tests가 실패한다. 이번 `/trips` 회귀는 `trips-dashboard.e2e.ts`로 닫고,
+  일자 제한은 API 통합 테스트로 확인했다.
+
+**다음 한 작업**: PR 리뷰/머지 후 N150 운영 정본 compose의 `pinvi-web` VWorld build/runtime env 전달이
+배포 관리 저장소에도 반영되어 있는지 별도 확인한다.
+
 ## 2026-07-01 (codex) — T-273 local mutating smoke + backup root fix
 
 `agent/codex-t273-blocker-audit`에서 T-273의 mutating blocker를 local dev 대상으로 검증했다. API/Web

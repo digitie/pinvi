@@ -80,7 +80,7 @@ ktdctl logs storage --follow
 | `PINVI_CADVISOR_PORT`        | `12301`                                                                                                                   |
 | `PINVI_GRAFANA_PORT`         | `12205`                                                                                                                   |
 | `NEXT_PUBLIC_PINVI_API_URL`  | `http://127.0.0.1:12801`                                                                                                  |
-| `PINVI_GRAFANA_HEALTH_URL`   | `http://grafana:3000` (app compose 내부 probe용. iframe public origin은 `NEXT_PUBLIC_GRAFANA_URL`)                       |
+| `PINVI_GRAFANA_HEALTH_URL`   | `http://grafana:3000` (app compose 내부 probe용. iframe public origin은 `NEXT_PUBLIC_GRAFANA_URL`)                        |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `vworld-map-web` 지도 SDK용 (ADR-046). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록                             |
 | `PINVI_VWORLD_API_KEY`       | 서버 전용 VWorld key. 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST `key` query에 같은 값을 사용(ADR-048) |
 | 기타 `PINVI_*`               | 일반 `.env`와 동일                                                                                                        |
@@ -248,6 +248,7 @@ PINVI_CORS_ALLOWED_ORIGINS=["https://pinvi.example.com"]
 NEXT_PUBLIC_PINVI_API_URL=https://pinvi-api.example.com
 NEXT_PUBLIC_PINVI_ENV=production
 NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0
+NEXT_PUBLIC_VWORLD_API_KEY=
 NEXT_PUBLIC_GRAFANA_URL=https://grafana.example.com
 PINVI_GRAFANA_HEALTH_URL=http://grafana:3000
 NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
@@ -263,9 +264,11 @@ PINVI_GEOFENCE_BLOCK_UNKNOWN=false
 
 - `NEXT_PUBLIC_PINVI_API_URL`, `NEXT_PUBLIC_GRAFANA_URL`,
   `NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH`,
-  `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED`는 web build time에 embed된다. 운영
-  API/Grafana 도메인이나 dashboard uid/slug, restore UI 안전 스위치를 바꾸면 web 이미지를
-  다시 빌드한다.
+  `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED`, `NEXT_PUBLIC_VWORLD_API_KEY`는 web build
+  time에 embed된다. 운영 API/Grafana 도메인이나 dashboard uid/slug, restore UI 안전 스위치,
+  VWorld 웹 키를 바꾸면 web 이미지를 다시 빌드한다.
+- `kor-travel-docker-manager` 같은 외부 운영 compose를 정본으로 사용할 때도 `pinvi-web` build args와
+  runtime env에 `NEXT_PUBLIC_VWORLD_API_KEY`를 함께 전달한다. 값은 로그에 출력하지 말고 길이만 확인한다.
 - 운영 CORS는 웹 origin만 허용한다. wildcard 금지.
 - `PINVI_ENVIRONMENT=production`으로 cookie `Secure` 속성을 강제한다.
 - presigned 서명 host(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`)는 브라우저가 접근하는
