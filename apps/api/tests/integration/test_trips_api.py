@@ -839,7 +839,8 @@ async def test_trip_attachment_download_url(client, verified_user, auth_cookies)
     assert data["method"] == "GET"
     assert data["bucket"] == payload["bucket"]
     assert data["storage_key"] == payload["storage_key"]
-    assert payload["storage_key"] in data["download_url"]
+    assert "/storage/downloads/" in data["download_url"]
+    assert "127.0.0.1" not in data["download_url"]
 
     # 없는 첨부 → 404
     missing = await client.get(
@@ -1022,6 +1023,7 @@ async def test_attachment_upload_url_and_trip_quota_overrides(
     )
     assert override_url.status_code == 200, override_url.text
     assert override_url.json()["data"]["max_upload_bytes"] == 3000
+    assert "/storage/uploads/" in override_url.json()["data"]["upload_url"]
 
     second = await client.post(
         f"/trips/{trip_id}/attachments",

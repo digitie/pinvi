@@ -755,7 +755,8 @@ async def test_admin_avatar_settings_and_user_avatar_audit(
 
     download = await client.get(f"/admin/users/{target_id}/avatar/download-url", cookies=cookies)
     assert download.status_code == 200
-    assert "X-Amz-Signature=" in download.json()["data"]["download_url"]
+    assert "/storage/downloads/" in download.json()["data"]["download_url"]
+    assert "127.0.0.1" not in download.json()["data"]["download_url"]
 
     deleted_keys: list[str] = []
 

@@ -12,6 +12,8 @@ import {
   MapPin,
   MessageSquare,
   Paperclip,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Share2,
   Users,
@@ -231,6 +233,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [visibleDayIndexes, setVisibleDayIndexes] = useState<Set<number>>(() => new Set());
   const [activePanel, setActivePanel] = useState<TripDetailPanelTab>('plan');
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
@@ -734,6 +738,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     { id: 'people', label: '동행', count: companions.length, icon: Users },
     { id: 'comments', label: '댓글', icon: MessageSquare },
   ];
+  const detailGridClassName = desktopPanelCollapsed
+    ? 'flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
+    : 'flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
+  const detailPanelClassName = `${
+    mobilePanelOpen ? 'flex' : 'hidden'
+  } z-10 min-h-0 flex-col border-b border-hairline bg-white lg:h-full lg:border-b-0 lg:border-r ${
+    desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
+  }`;
 
   return (
     <div
@@ -782,6 +794,34 @@ export function TripDetail({ tripId }: TripDetailProps) {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setMobilePanelOpen((open) => !open)}
+              aria-controls="trip-detail-panel"
+              aria-expanded={mobilePanelOpen}
+              className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:hidden"
+            >
+              {mobilePanelOpen ? (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              )}
+              {mobilePanelOpen ? '패널 닫기' : '패널 열기'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
+              aria-controls="trip-detail-panel"
+              aria-expanded={!desktopPanelCollapsed}
+              className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+            >
+              {desktopPanelCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
+              {desktopPanelCollapsed ? '패널 열기' : '패널 접기'}
+            </button>
+            <button
+              type="button"
               onClick={handleAddDay}
               disabled={!canAddDay || busy}
               title={addDayDisabledReason ?? undefined}
@@ -818,7 +858,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-hairline px-4 py-2 md:flex-row md:items-center md:justify-between md:px-5">
+        <div
+          className={`${
+            mobilePanelOpen ? 'flex' : 'hidden'
+          } flex-col gap-2 border-t border-hairline px-4 py-2 md:flex-row md:items-center md:justify-between md:px-5 lg:flex`}
+        >
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
             {panelTabs.map((tab) => {
               const Icon = tab.icon;
@@ -923,9 +967,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]">
+      <div className={detailGridClassName}>
         <aside
-          className="z-10 flex min-h-0 flex-col border-b border-hairline bg-white lg:h-full lg:border-b-0 lg:border-r"
+          id="trip-detail-panel"
+          className={detailPanelClassName}
           aria-label="여행 상세"
           data-testid="trip-detail-panel"
         >
@@ -1189,7 +1234,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
         <section
           id="trip-map-canvas"
-          className="relative min-h-[70vh] bg-canvas lg:h-full lg:min-h-0"
+          className="relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0"
           aria-label="여행 지도"
           data-testid="trip-detail-map"
         >

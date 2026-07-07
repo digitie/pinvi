@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.request_url import public_api_base_url
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.audit import AdminAuditLog
@@ -319,6 +320,7 @@ async def get_user_endpoint(
 async def create_user_avatar_upload_url(
     user_id: uuid.UUID,
     body: AvatarUploadUrlRequest,
+    request: Request,
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     db: DbSession,
 ) -> Envelope[UploadUrlResponse]:
@@ -333,6 +335,7 @@ async def create_user_avatar_upload_url(
             content_length=body.content_length,
             max_upload_bytes=settings_row.avatar_max_upload_bytes,
             allowed_content_types=AVATAR_CONTENT_TYPES,
+            public_api_base_url=public_api_base_url(request),
         )
     except (FileTooLargeError, MimeNotAllowedError) as exc:
         raise _storage_error(exc) from exc
@@ -383,6 +386,7 @@ async def update_user_avatar_endpoint(
 @router.get("/{user_id}/avatar/download-url", response_model=Envelope[DownloadUrlResponse])
 async def get_user_avatar_download_url(
     user_id: uuid.UUID,
+    request: Request,
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -397,6 +401,7 @@ async def get_user_avatar_download_url(
             bucket=target.avatar_bucket,
             storage_key=target.avatar_storage_key,
             public_url=target.avatar_url,
+            public_api_base_url=public_api_base_url(request),
         )
     except Exception as exc:
         raise _storage_error(exc) from exc

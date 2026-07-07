@@ -27,6 +27,42 @@ export function isVersionConflictError(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 409 && error.code === 'VERSION_CONFLICT';
 }
 
+function parseJson(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function nonJsonErrorMessage(text: string, status: number): string {
+  const trimmed = text.trim();
+  if (trimmed && !trimmed.startsWith('<')) return trimmed;
+  return `요청에 실패했습니다. (HTTP ${status})`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function fallbackApiError(json: unknown, text: string, status: number): ApiError {
+  const detail = isRecord(json) ? json.detail : null;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return new ApiError('HTTP_ERROR', detail.trim(), status);
+  }
+
+  if (isRecord(detail)) {
+    const code = typeof detail.code === 'string' && detail.code ? detail.code : 'HTTP_ERROR';
+    const message = typeof detail.message === 'string' ? detail.message.trim() : '';
+    if (message) {
+      return new ApiError(code, message, status, detail);
+    }
+  }
+
+  return new ApiError('HTTP_ERROR', nonJsonErrorMessage(text, status), status);
+}
+
 export interface ApiResponseMeta {
   cursor?: string | null;
   has_more?: boolean | null;
@@ -74,7 +110,7 @@ export class ApiClient {
     }
 
     const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : {};
+    const json: unknown = text ? parseJson(text) : {};
 
     if (!res.ok) {
       const parsed = ErrorEnvelopeSchema.safeParse(json);
@@ -86,7 +122,7 @@ export class ApiClient {
           parsed.data.error.details,
         );
       }
-      throw new ApiError('INTERNAL_ERROR', `HTTP ${res.status}`, res.status);
+      throw fallbackApiError(json, text, res.status);
     }
 
     // `data` 필드와 선택적 `meta` 필드 파싱
@@ -113,7 +149,7 @@ export class ApiClient {
     }
 
     const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : {};
+    const json: unknown = text ? parseJson(text) : {};
     const parsed = ErrorEnvelopeSchema.safeParse(json);
     if (parsed.success) {
       throw new ApiError(
@@ -123,6 +159,6 @@ export class ApiClient {
         parsed.data.error.details,
       );
     }
-    throw new ApiError('INTERNAL_ERROR', `HTTP ${res.status}`, res.status);
+    throw fallbackApiError(json, text, res.status);
   }
 }

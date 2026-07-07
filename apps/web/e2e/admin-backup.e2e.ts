@@ -341,5 +341,7 @@ test('Admin backup page가 empty와 error 상태를 렌더링한다', async ({ p
 
   shouldError = true;
   await page.reload();
-  await expect(page.getByTestId('admin-backup-error')).toContainText('HTTP 503');
+  await expect(page.getByTestId('admin-backup-error')).toContainText(
+    'backup://snapshot unavailable',
+  );
 });

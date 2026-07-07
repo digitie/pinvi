@@ -41,7 +41,7 @@ export function TripMapView({
   const mapRef = useRef<MapLibreMap | null>(null);
   const surfaceClassName =
     chrome === 'flush'
-      ? 'h-full min-h-[420px] overflow-hidden bg-canvas lg:min-h-0'
+      ? 'h-full min-h-[420px] overflow-hidden bg-canvas'
       : 'h-full min-h-[420px] overflow-hidden rounded-sm border border-hairline bg-canvas';
 
   const fitToPoints = useCallback(

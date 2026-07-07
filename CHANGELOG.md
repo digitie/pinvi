@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+- 파일 업로드/다운로드 URL이 RustFS의 `127.0.0.1` 주소를 직접 노출하지 않고 API 프록시
+  `/storage/uploads/*`, `/storage/downloads/*`를 사용한다. Reverse proxy의
+  `X-Forwarded-Proto`도 반영해 HTTPS 화면에서 mixed content 업로드 차단이 나지 않게 했다.
+  Samsung Internet처럼 파일 MIME이 비어 들어오는 브라우저는 확장자로 MIME을 보정하고, 허용되지
+  않는 파일 형식은 한국어 문장 메시지로 안내한다.
+- 여행 지도 화면의 모바일 레이아웃을 지도 우선으로 조정했다. 여행 상세 왼쪽 패널은 접을 수 있고,
+  모바일에서는 기본 숨김 상태로 지도 영역을 넓게 보여준다.
 - `/trips`를 지도 중심 대시보드로 재구성했다. 전체 여행의 POI를 지도에 모아 표시하고,
   초안 여행 저장 버튼/상태 문구를 명확히 했다.
 - API envelope `meta.total/page/version`의 `null` 응답을 허용해 `/trips` 목록 로딩의 response shape

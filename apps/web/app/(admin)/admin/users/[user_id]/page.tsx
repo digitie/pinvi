@@ -19,7 +19,13 @@ import {
   UserX,
 } from 'lucide-react';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import { putToPresigned } from '@pinvi/domain';
+import {
+  IMAGE_UPLOAD_CONTENT_TYPES,
+  allowedUploadMessage,
+  contentTypeFromFile,
+  isAllowedUploadContentType,
+  putToPresigned,
+} from '@pinvi/domain';
 import type {
   AdminAuditEntry,
   AdminAvatarSettings,
@@ -216,8 +222,9 @@ export default function AdminUserDetailPage() {
       setError('아바타 변경 사유가 필요합니다.');
       return;
     }
-    if (!file.type.startsWith('image/')) {
-      setError('아바타는 이미지 파일만 업로드할 수 있습니다.');
+    const contentType = contentTypeFromFile(file);
+    if (!isAllowedUploadContentType(contentType, IMAGE_UPLOAD_CONTENT_TYPES)) {
+      setError(allowedUploadMessage(IMAGE_UPLOAD_CONTENT_TYPES));
       return;
     }
     setAvatarAction('upload');
@@ -227,14 +234,14 @@ export default function AdminUserDetailPage() {
       const api = adminApi(apiClient);
       const upload = await api.createUserAvatarUploadUrl(userId, {
         filename: file.name,
-        content_type: file.type,
+        content_type: contentType,
         content_length: file.size,
       });
       await putToPresigned(upload, file);
       const updated = await api.updateUserAvatar(userId, {
         bucket: upload.bucket,
         storage_key: upload.storage_key,
-        content_type: file.type,
+        content_type: contentType,
         byte_size: file.size,
         public_url: upload.public_url ?? null,
         access_reason: accessReason,

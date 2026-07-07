@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 
+from app.api.request_url import public_api_base_url
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.attachment import CuratedPlanAttachment
@@ -142,6 +143,7 @@ async def list_files_endpoint(
 @router.get("/{attachment_id}/download-url", response_model=Envelope[DownloadUrlResponse])
 async def get_file_download_url_endpoint(
     attachment_id: uuid.UUID,
+    request: Request,
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -151,6 +153,7 @@ async def get_file_download_url_endpoint(
             bucket=attachment.bucket,
             storage_key=attachment.storage_key,
             public_url=attachment.public_url,
+            public_api_base_url=public_api_base_url(request),
         )
     )
 

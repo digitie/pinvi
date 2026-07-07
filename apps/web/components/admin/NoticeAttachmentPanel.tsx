@@ -3,9 +3,17 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys, storageApi } from '@pinvi/api-client';
-import { buildAttachmentCreate, putToPresigned } from '@pinvi/domain';
+import {
+  allowedUploadMessage,
+  buildAttachmentCreate,
+  contentTypeFromFile,
+  isAllowedUploadFile,
+  putToPresigned,
+} from '@pinvi/domain';
 import type { AttachmentResponse } from '@pinvi/schemas';
 import { ExternalLink, Loader2, Paperclip, Trash2, Upload } from 'lucide-react';
+
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,application/pdf';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -50,9 +58,11 @@ export function NoticeAttachmentPanel({
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (file.size === 0) throw new Error('빈 파일은 업로드할 수 없습니다.');
+      if (!isAllowedUploadFile(file)) throw new Error(allowedUploadMessage());
+      const contentType = contentTypeFromFile(file);
       const upload = await storageApi(apiClient).createUploadUrl({
         filename: file.name,
-        content_type: file.type || 'application/octet-stream',
+        content_type: contentType,
         content_length: file.size,
         purpose: poiId ? 'curated_poi_attachment' : 'curated_plan_attachment',
       });
@@ -109,6 +119,7 @@ export function NoticeAttachmentPanel({
           <input
             ref={inputRef}
             type="file"
+            accept={ATTACHMENT_ACCEPT}
             className="sr-only"
             data-testid={
               poiId ? 'admin-notice-poi-attachment-input' : 'admin-notice-attachment-input'

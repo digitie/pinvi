@@ -7,7 +7,13 @@ import { ImageIcon, Link2, Loader2, Trash2, Unlink, Upload } from 'lucide-react'
 import { useRouter } from 'next/navigation';
 import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
-import { putToPresigned } from '@pinvi/domain';
+import {
+  IMAGE_UPLOAD_CONTENT_TYPES,
+  allowedUploadMessage,
+  contentTypeFromFile,
+  isAllowedUploadContentType,
+  putToPresigned,
+} from '@pinvi/domain';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -189,8 +195,9 @@ export default function ProfilePage() {
     const file = event.target.files?.[0] ?? null;
     event.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('아바타는 이미지 파일만 업로드할 수 있습니다.');
+    const contentType = contentTypeFromFile(file);
+    if (!isAllowedUploadContentType(contentType, IMAGE_UPLOAD_CONTENT_TYPES)) {
+      setError(allowedUploadMessage(IMAGE_UPLOAD_CONTENT_TYPES));
       return;
     }
     setAvatarAction('upload');
@@ -200,14 +207,14 @@ export default function ProfilePage() {
       const api = authApi(apiClient);
       const upload = await api.createAvatarUploadUrl({
         filename: file.name,
-        content_type: file.type,
+        content_type: contentType,
         content_length: file.size,
       });
       await putToPresigned(upload, file);
       await api.updateAvatar({
         bucket: upload.bucket,
         storage_key: upload.storage_key,
-        content_type: file.type,
+        content_type: contentType,
         byte_size: file.size,
         public_url: upload.public_url ?? null,
       });
