@@ -2,6 +2,52 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-07 (codex) — 모바일 업로드 / 지도 패널 레이아웃 수정
+
+**작업**: Samsung Internet 파일 업로드 실패, MIME 오류 메시지, 업로드 파일 클릭 시 `127.0.0.1` URL
+노출, PC 지도 빈 화면 가능성, 모바일 지도 우선 레이아웃을 정리했다.
+
+**수정**:
+
+- Storage URL 발급을 브라우저용 API 프록시로 전환했다. `/storage/upload-urls`는
+  `/storage/uploads/{token}`, 다운로드 URL endpoint들은 `/storage/downloads/{token}`을 반환한다.
+- API 프록시 URL은 reverse proxy의 `X-Forwarded-Proto`/`X-Forwarded-Host`를 반영해 공개 HTTPS
+  화면에서 `http://pinvi-api...` mixed content 업로드 차단이 나지 않게 했다.
+- API 프록시 token은 HMAC 서명과 만료, method, bucket/key, content-type, content-length를 검증하고
+  API가 RustFS 내부 endpoint로 PUT/GET을 중계한다.
+- MIME 미허용 오류 메시지를 `업로드 가능한 파일 형식은 ...입니다.` 형태로 정리하고, frontend API
+  client가 non-JSON 오류도 사람이 읽는 `ApiError`로 처리하게 했다.
+- `@pinvi/domain` 업로드 헬퍼가 `File.type`이 비어 있을 때 확장자로 MIME을 추론한다. 여행 첨부,
+  Admin 추천 여행 첨부, 사용자/관리자 아바타에 적용했다.
+- 여행 상세 왼쪽 패널 접기, 모바일 기본 패널 숨김, `/trips` 모바일 관리 패널 숨김/지도 높이 확대를
+  적용했다. `TripMapView` flush 모드의 데스크톱 최소 높이 fallback도 유지했다.
+
+**검증**:
+
+- `python3 -m py_compile` 수정 API 파일 통과.
+- `apps/api/.venv/bin/python -m ruff check ...` 통과.
+- `cd apps/api && .venv/bin/python -m pytest tests/unit/test_request_url.py tests/unit/test_storage_keys.py -q -s`
+  → 13 passed.
+- `cd apps/api && PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest ...` 관련 통합 테스트 3개
+  → 3 passed.
+- `npx tsc --noEmit --pretty false --project packages/domain/tsconfig.json` 통과.
+- `npx tsc --noEmit --pretty false --project packages/api-client/tsconfig.json` 통과.
+- `npm --workspace @pinvi/web run typecheck` 통과.
+- `npm --workspace @pinvi/web run test:e2e:live-mutating:list -- trip-upload-layout-live-mutating.live.ts`
+  → 1 test listed.
+- N150 배포 smoke: API `/health`, `/health/db`, Web `/` 200.
+- N150 Docker Playwright runner:
+  `PINVI_LIVE_ATTACHMENT_E2E=1 npm -w @pinvi/web run test:e2e:live-mutating -- trip-upload-layout-live-mutating.live.ts --workers=1`
+  → 1 passed.
+- `git diff --check` 통과.
+
+**주의**:
+
+- `npm --workspace @pinvi/domain test -- upload.test.ts`는 Rollup optional native package
+  `@rollup/rollup-linux-x64-gnu` 누락으로 Vitest 시작 전에 실패했다.
+
+**다음**: PR을 생성하고 머지한다.
+
 ## 2026-07-03 (codex) — `/trips` 지도 중심 화면과 draft 저장 수정
 
 **작업**: 사용자 지시에 따라 `/trips` response shape mismatch, VWorld key 누락, draft 저장 UX, 여행

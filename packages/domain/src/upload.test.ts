@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { UploadUrlResponse } from '@pinvi/schemas';
-import { buildAttachmentCreate, roleFromContentType } from './upload';
+import {
+  allowedUploadMessage,
+  buildAttachmentCreate,
+  contentTypeFromFile,
+  isAllowedUploadFile,
+  roleFromContentType,
+} from './upload';
 
 const up: UploadUrlResponse = {
   method: 'PUT',
@@ -16,13 +22,16 @@ const up: UploadUrlResponse = {
 describe('upload', () => {
   it('roleFromContentType: image / document / 기타', () => {
     expect(roleFromContentType('image/png')).toBe('image');
+    expect(roleFromContentType('IMAGE/PNG')).toBe('image');
     expect(roleFromContentType('application/pdf')).toBe('document');
     expect(roleFromContentType('text/plain')).toBe('attachment');
     expect(roleFromContentType('')).toBe('attachment');
   });
 
   it('buildAttachmentCreate: presigned + 파일메타 → 등록 본문', () => {
-    expect(buildAttachmentCreate(up, { name: 'cover.jpg', type: 'image/jpeg', size: 1024 })).toEqual({
+    expect(
+      buildAttachmentCreate(up, { name: 'cover.jpg', type: 'image/jpeg', size: 1024 }),
+    ).toEqual({
       bucket: 'pinvi-media',
       storage_key: 'user-uploads/trip_attachment/u/2026/06/x.jpg',
       original_filename: 'cover.jpg',
@@ -38,5 +47,13 @@ describe('upload', () => {
     const res = buildAttachmentCreate(up, { name: 'data.bin', type: '', size: 5 });
     expect(res.content_type).toBe('application/octet-stream');
     expect(res.role).toBe('attachment');
+  });
+
+  it('contentTypeFromFile: 브라우저 MIME 누락 시 확장자로 보정', () => {
+    expect(contentTypeFromFile({ name: 'photo.JPG', type: '', size: 5 })).toBe('image/jpeg');
+    expect(contentTypeFromFile({ name: 'plan.pdf', type: '', size: 5 })).toBe('application/pdf');
+    expect(isAllowedUploadFile({ name: 'photo.JPG', type: '', size: 5 })).toBe(true);
+    expect(isAllowedUploadFile({ name: 'script.exe', type: '', size: 5 })).toBe(false);
+    expect(allowedUploadMessage()).toContain('JPG');
   });
 });

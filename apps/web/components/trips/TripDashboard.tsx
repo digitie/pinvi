@@ -2,7 +2,15 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Loader2, Map as MapIcon, MapPin, RefreshCw, Save } from 'lucide-react';
+import {
+  CalendarDays,
+  Loader2,
+  Map as MapIcon,
+  MapPin,
+  RefreshCw,
+  Save,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { ApiError, tripApi, type TripBucket } from '@pinvi/api-client';
 import type { TripCreate, TripResponse, TripStatus } from '@pinvi/schemas';
 import { tripDaysToMapPoints, type TripMapPoint } from '@pinvi/domain';
@@ -98,6 +106,7 @@ export function TripDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [mapPointsByTripId, setMapPointsByTripId] = useState<
     Record<string, TripDashboardMapPoint[]>
   >({});
@@ -244,19 +253,31 @@ export function TripDashboard() {
             전체 {trips.length} · 예정 {upcomingCount} · 초안 {draftCount}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadTrips()}
-          className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          )}
-          새로고침
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileToolsOpen((open) => !open)}
+            aria-controls="trip-dashboard-tools"
+            aria-expanded={mobileToolsOpen}
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft xl:hidden"
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            {mobileToolsOpen ? '관리 닫기' : '관리 열기'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadTrips()}
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            )}
+            새로고침
+          </button>
+        </div>
       </header>
 
       {message && (
@@ -273,13 +294,16 @@ export function TripDashboard() {
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="relative min-h-[560px]" aria-label="전체 여행 지도">
+        <section
+          className="relative min-h-[calc(100svh-14rem)] xl:min-h-[560px]"
+          aria-label="전체 여행 지도"
+        >
           <TripMapView
             apiKey={VWORLD_API_KEY}
             points={filteredMapPoints}
             selectedPoiId={selectedPoiId}
             onSelectPoi={setSelectedPoiId}
-            className="h-[560px] xl:h-[calc(100vh-14rem)]"
+            className="h-[calc(100svh-14rem)] min-h-[520px] xl:h-[calc(100vh-14rem)]"
           />
 
           <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
@@ -313,7 +337,11 @@ export function TripDashboard() {
           )}
         </section>
 
-        <aside className="space-y-4" aria-label="여행 관리">
+        <aside
+          id="trip-dashboard-tools"
+          className={`${mobileToolsOpen ? 'space-y-4' : 'hidden'} xl:block xl:space-y-4`}
+          aria-label="여행 관리"
+        >
           <section className="rounded-sm border border-hairline bg-white p-4">
             <form onSubmit={onCreate} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-ink">

@@ -79,7 +79,8 @@ async def test_user_avatar_upload_apply_download_and_delete(
 
     assert download.status_code == 200
     assert download.json()["data"]["bucket"] == settings.pinvi_rustfs_bucket
-    assert "X-Amz-Signature=" in download.json()["data"]["download_url"]
+    assert "/storage/downloads/" in download.json()["data"]["download_url"]
+    assert "127.0.0.1" not in download.json()["data"]["download_url"]
 
     deleted_keys: list[str] = []
 
@@ -123,6 +124,7 @@ async def test_user_avatar_rejects_non_image_and_too_large(
 
     assert bad_mime.status_code == 422
     assert bad_mime.json()["error"]["code"] == "MIME_NOT_ALLOWED"
+    assert "업로드 가능한 파일 형식" in bad_mime.json()["error"]["message"]
 
     too_large = await client.post(
         "/users/me/avatar/upload-url",

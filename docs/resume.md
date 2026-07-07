@@ -1,5 +1,55 @@
 # resume.md
 
+## 2026-07-07 (codex) — 모바일 업로드/지도 레이아웃 수정
+
+`agent/codex-mobile-map-upload-fixes`에서 모바일 Samsung Internet 업로드 실패, RustFS `127.0.0.1`
+다운로드 URL 노출, 지도/패널 모바일 레이아웃 문제를 함께 수정했다.
+
+변경:
+
+- `/storage/upload-urls`와 다운로드 URL 발급 endpoint가 브라우저용 API 프록시 URL
+  `/storage/uploads/{token}`, `/storage/downloads/{token}`을 반환한다. RustFS 내부/public endpoint는
+  서버 내부 저장소 접근과 레거시 presign fallback에만 남긴다.
+- API 프록시 URL은 reverse proxy의 `X-Forwarded-Proto`/`X-Forwarded-Host`를 반영해 공개 HTTPS
+  화면에서 mixed content로 차단되지 않게 했다.
+- 업로드 token은 method/bucket/key/content-type/content-length/expiry를 HMAC으로 검증하고,
+  API가 RustFS 내부 endpoint로 PUT/GET을 중계한다.
+- 허용되지 않는 MIME 오류는 Python list/JSON 느낌의 메시지 대신 `업로드 가능한 파일 형식은 ...입니다.`
+  문장으로 반환한다.
+- Web 업로드 헬퍼가 브라우저가 비운 `File.type`을 확장자로 보정한다. 여행 첨부, 추천 여행 첨부,
+  사용자/관리자 아바타 업로드에 적용했다.
+- 여행 상세 왼쪽 패널은 접을 수 있고, 모바일에서는 기본 숨김으로 지도 화면을 먼저 크게 보여준다.
+  `/trips` 대시보드도 모바일에서 관리 폼/목록을 기본 숨김으로 두고 지도 높이를 키웠다.
+- `TripMapView` flush 모드의 데스크톱 최소 높이 fallback을 유지해 부모 높이 계산이 깨져도 지도가
+  0px로 접히지 않게 했다.
+
+검증:
+
+- `python3 -m py_compile ...` (수정한 API 파일)
+- `apps/api/.venv/bin/python -m ruff check ...`
+- `cd apps/api && .venv/bin/python -m pytest tests/unit/test_request_url.py tests/unit/test_storage_keys.py -q -s`
+  → 13 passed
+- `cd apps/api && PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest ...` 관련 통합 테스트 3개
+  → 3 passed
+- `npx tsc --noEmit --pretty false --project packages/domain/tsconfig.json`
+- `npx tsc --noEmit --pretty false --project packages/api-client/tsconfig.json`
+- `npm --workspace @pinvi/web run typecheck`
+- `npm --workspace @pinvi/web run test:e2e:live-mutating:list -- trip-upload-layout-live-mutating.live.ts`
+  → 1 test listed
+- N150 배포 smoke: API `/health`, `/health/db`, Web `/` 200
+- N150 Docker Playwright runner:
+  `PINVI_LIVE_ATTACHMENT_E2E=1 npm -w @pinvi/web run test:e2e:live-mutating -- trip-upload-layout-live-mutating.live.ts --workers=1`
+  → 1 passed
+- `git diff --check`
+
+주의:
+
+- `npm --workspace @pinvi/domain test -- upload.test.ts`는 Rollup optional native package
+  `@rollup/rollup-linux-x64-gnu` 누락으로 Vitest 시작 전에 실패했다. TypeScript 검사와 백엔드 테스트는
+  통과했다.
+
+**다음 한 작업**: PR을 생성하고 머지한다.
+
 ## 2026-07-03 (codex) — `/trips` 지도 중심 레이아웃 + N150 배포 검증
 
 `agent/codex-trips-map-save`에서 `/trips` 사용자 화면을 지도 중심으로 재구성하고, draft 저장과 여행

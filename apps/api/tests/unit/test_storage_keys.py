@@ -75,7 +75,7 @@ def test_make_download_url_is_really_signed() -> None:
 
 def test_make_upload_url_rejects_unknown_mime() -> None:
     user_id = uuid.uuid4()
-    with pytest.raises(MimeNotAllowedError):
+    with pytest.raises(MimeNotAllowedError) as exc_info:
         make_upload_url(
             purpose="trip_attachment",
             user_id=user_id,
@@ -83,6 +83,38 @@ def test_make_upload_url_rejects_unknown_mime() -> None:
             content_type="application/x-executable",
             content_length=1024,
         )
+    message = str(exc_info.value)
+    assert "업로드 가능한 파일 형식" in message
+    assert "[" not in message
+    assert "image/jpeg" not in message
+
+
+def test_make_upload_url_can_return_api_proxy_url() -> None:
+    user_id = uuid.uuid4()
+    response = make_upload_url(
+        purpose="trip_attachment",
+        user_id=user_id,
+        filename="photo.JPG",
+        content_type="IMAGE/JPEG",
+        content_length=1024,
+        public_api_base_url="https://api.example.test",
+    )
+
+    assert response.upload_url.startswith("https://api.example.test/storage/uploads/")
+    assert "127.0.0.1" not in response.upload_url
+    assert response.headers["Content-Type"] == "image/jpeg"
+
+
+def test_make_download_url_can_return_api_proxy_url() -> None:
+    response = make_download_url(
+        bucket=settings.pinvi_rustfs_bucket,
+        storage_key="user-uploads/trip_attachment/x/2026/06/abc.jpg",
+        public_url=None,
+        public_api_base_url="https://api.example.test",
+    )
+
+    assert response.download_url.startswith("https://api.example.test/storage/downloads/")
+    assert "127.0.0.1" not in response.download_url
 
 
 def test_make_upload_url_rejects_too_large() -> None:

@@ -180,6 +180,8 @@ async def test_curated_upload_url_requires_admin(
     data = allowed.json()["data"]
     assert data["bucket"] == "pinvi-media"
     assert data["storage_key"].startswith(f"user-uploads/curated_plan_attachment/{admin_id}/")
+    assert "/storage/uploads/" in data["upload_url"]
+    assert "127.0.0.1" not in data["upload_url"]
 
 
 async def test_non_admin_hidden(client, verified_user, auth_cookies) -> None:  # type: ignore[no-untyped-def]

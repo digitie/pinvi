@@ -5,7 +5,15 @@ import { Download, Loader2, Paperclip, Trash2, Upload } from 'lucide-react';
 import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
 import type { TripAttachmentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { buildAttachmentCreate, putToPresigned } from '@pinvi/domain';
+import {
+  allowedUploadMessage,
+  buildAttachmentCreate,
+  contentTypeFromFile,
+  isAllowedUploadFile,
+  putToPresigned,
+} from '@pinvi/domain';
+
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,application/pdf';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -58,30 +66,49 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
       setError('빈 파일은 업로드할 수 없습니다.');
       return;
     }
+    if (!isAllowedUploadFile(file)) {
+      setError(allowedUploadMessage());
+      return;
+    }
+    const contentType = contentTypeFromFile(file);
     setUploading(true);
     setError(null);
     try {
       const up = await storageApi(apiClient).createUploadUrl({
         filename: file.name,
-        content_type: file.type || 'application/octet-stream',
+        content_type: contentType,
         content_length: file.size,
-        purpose: poiId ? 'poi_attachment' : dayIndex != null ? 'trip_day_attachment' : 'trip_attachment',
+        purpose: poiId
+          ? 'poi_attachment'
+          : dayIndex != null
+            ? 'trip_day_attachment'
+            : 'trip_attachment',
       });
       await putToPresigned(up, file);
       if (poiId) {
-        await tripApi(apiClient).createPoiAttachment(tripId, poiId, buildAttachmentCreate(up, file));
+        await tripApi(apiClient).createPoiAttachment(
+          tripId,
+          poiId,
+          buildAttachmentCreate(up, file),
+        );
       } else if (dayIndex != null) {
         await tripApi(apiClient).createDayAttachment(
           tripId,
           dayIndex,
-          buildAttachmentCreate(up, file)
+          buildAttachmentCreate(up, file),
         );
       } else {
         await tripApi(apiClient).createAttachment(tripId, buildAttachmentCreate(up, file));
       }
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '업로드에 실패했습니다.');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : '업로드에 실패했습니다.',
+      );
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -141,6 +168,7 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
           <input
             ref={inputRef}
             type="file"
+            accept={ATTACHMENT_ACCEPT}
             className="sr-only"
             data-testid="attachment-input"
             disabled={uploading}
@@ -152,7 +180,11 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
         </label>
       </div>
 
-      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && (
+        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+          {error}
+        </p>
+      )}
 
       {loading ? (
         <div className="flex h-16 items-center justify-center text-sm text-muted">
@@ -169,7 +201,9 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
               className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm"
             >
               <span className="min-w-0">
-                <span className="block truncate font-medium text-ink">{item.original_filename}</span>
+                <span className="block truncate font-medium text-ink">
+                  {item.original_filename}
+                </span>
                 <span className="text-xs text-muted">
                   {item.content_type} · {formatBytes(item.byte_size)}
                 </span>

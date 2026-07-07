@@ -1,6 +1,6 @@
 # Storage API (`/storage/*` + `/admin/rustfs/*`)
 
-RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부/아바타 메타 등록 + Admin 객체 관리.
+RustFS (S3 호환) 객체 저장소 — API 프록시 업로드/다운로드 URL 발급 + 첨부/아바타 메타 등록 + Admin 객체 관리.
 공통 규약 [`common.md`](./common.md). 첨부 도메인은 [`docs/architecture/notice-plans.md`](../architecture/notice-plans.md) §3.3.
 
 ## 1. 책임 / 모델
@@ -22,7 +22,7 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부/아바타 
 | 환경변수                                     | 예시                                                                                | 비고                               |
 | -------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------- |
 | `PINVI_RUSTFS_ENDPOINT_URL`                  | `http://rustfs:9000`                                                                | API 컨테이너 → RustFS 내부         |
-| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`           | `http://127.0.0.1:12101`                                                            | 브라우저 → RustFS (presigned host) |
+| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`           | `http://127.0.0.1:12101`                                                            | 내부 호환 presign fallback host    |
 | `PINVI_RUSTFS_BUCKET`                        | `pinvi-media`                                                                       |                                    |
 | `PINVI_RUSTFS_ACCESS_KEY_ID`                 | `rustfsadmin`                                                                       | 로컬 dev 기본값                    |
 | `PINVI_RUSTFS_SECRET_ACCESS_KEY`             | `rustfsadmin`                                                                       | 로컬 dev 기본값                    |
@@ -37,19 +37,23 @@ RustFS (S3 호환) 객체 저장소 — presigned PUT 발급 + 첨부/아바타 
 1) 클라이언트 ──[POST /storage/upload-urls]──> API
                                                   ↓ 검증 (MIME / size / purpose)
                                                   ↓ object_key 생성
-                                                  ↓ presigned PUT 생성 (AWS4-HMAC-SHA256)
+                                                  ↓ 짧은 수명 API upload token 생성
    클라이언트 <──{ upload_url, headers, ... }──── API
 
-2) 클라이언트 ──[PUT (file body)]──> RustFS
-                                       ↓ object 저장
-   클라이언트 <──{ 201 Created, ETag }── RustFS
+2) 클라이언트 ──[PUT /storage/uploads/{token}]──> API
+                                                    ↓ token 검증
+                                                    ↓ API → RustFS 내부 endpoint로 object 저장
+   클라이언트 <──{ 204 No Content }──────────────── API
 
 3) 클라이언트 ──[POST /trips/{...}/attachments]──> API
                                                      ↓ DB row 생성 (bucket, storage_key, ...)
    클라이언트 <──{ attachment }──────────────────── API
 ```
 
-## 4. Presigned PUT 발급
+다운로드도 `GET .../download-url` 응답의 `download_url`이 `/storage/downloads/{token}`을 가리킨다.
+브라우저는 RustFS 내부 주소나 로컬 `127.0.0.1` 주소를 직접 열지 않는다.
+
+## 4. 업로드 URL 발급
 
 ### 4.1 `POST /storage/upload-urls`
 
@@ -76,7 +80,7 @@ Cookie: pinvi_access=...
     "method": "PUT",
     "bucket": "pinvi-media",
     "storage_key": "user-uploads/trip_attachment/<user_id>/2026/05/<uuid>.jpg",
-    "upload_url": "http://127.0.0.1:12101/pinvi-media/user-uploads/...?X-Amz-Signature=...",
+    "upload_url": "https://api.example.com/storage/uploads/<token>",
     "headers": {
       "Content-Type": "image/jpeg",
     },
@@ -87,16 +91,17 @@ Cookie: pinvi_access=...
 }
 ```
 
-> 서명: boto3 `generate_presigned_url`(SigV4 query auth). 서명 host 는 **public
-> endpoint**(`PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`), path-style addressing. `ContentType`
-> 가 서명에 포함되므로 PUT 시 `Content-Type` 헤더를 응답 `headers` 그대로 보내야 한다.
-> body 는 UNSIGNED-PAYLOAD 이라 별도 `x-amz-content-sha256` 헤더 불필요.
+> 브라우저 응답은 API 프록시 URL을 사용한다. 서비스 함수는 `public_api_base_url`이 없을 때만
+> 기존 boto3 `generate_presigned_url`(SigV4 query auth)을 반환해 내부 단위 테스트와 레거시 호출
+> 호환을 유지한다. API 프록시 PUT도 `Content-Type`을 token에 묶으므로 클라이언트는 응답
+> `headers`를 그대로 보내야 한다.
 
 검증:
 
 - `purpose` 별 권한 (예: `notice_*`는 admin만)
 - `curated_plan_attachment` / `curated_poi_attachment`는 admin만 발급 가능
-- `content_type` ∈ `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES`
+- `content_type` ∈ `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES` (`image/jpeg` 같은 MIME 원문 목록 대신
+  `업로드 가능한 파일 형식은 JPG, PNG, ...입니다.` 형식의 사용자 메시지를 반환)
 - `trip_attachment` / `trip_day_attachment` / `poi_attachment`는 사용자의 effective
   `attachment_max_upload_bytes` 이하만 허용한다. 그 외 일반 목적은
   `PINVI_RUSTFS_MAX_UPLOAD_BYTES`를 따른다.
@@ -239,26 +244,26 @@ Cookie: pinvi_access=...
 
 여행/날짜/POI 첨부 metadata 등록 시 DB attachment metadata 기준으로 용량을 계산한다.
 
-| 정책 | 기본값 | 사용자 override |
-|------|--------|-----------------|
-| 개별 파일 최대 크기 | `storage_settings.attachment_max_upload_bytes` 기본 10MiB | `users.attachment_max_upload_bytes_override` |
-| 여행계획 총량 | `storage_settings.trip_attachment_quota_bytes` 기본 100MiB | `users.trip_attachment_quota_bytes_override` |
-| 사용자 총량 | `storage_settings.user_attachment_quota_bytes` 기본 1GiB | `users.user_attachment_quota_bytes_override` |
+| 정책                | 기본값                                                     | 사용자 override                              |
+| ------------------- | ---------------------------------------------------------- | -------------------------------------------- |
+| 개별 파일 최대 크기 | `storage_settings.attachment_max_upload_bytes` 기본 10MiB  | `users.attachment_max_upload_bytes_override` |
+| 여행계획 총량       | `storage_settings.trip_attachment_quota_bytes` 기본 100MiB | `users.trip_attachment_quota_bytes_override` |
+| 사용자 총량         | `storage_settings.user_attachment_quota_bytes` 기본 1GiB   | `users.user_attachment_quota_bytes_override` |
 
 초과 시 metadata 등록은 `409 ATTACHMENT_QUOTA_EXCEEDED`를 반환한다. 개별 파일 크기 초과는
 `/storage/upload-urls`에서도 `422 FILE_TOO_LARGE`로 조기 차단된다.
 
 ### 5.8 파일 라이브러리
 
-| Endpoint | 권한 | 설명 |
-|----------|------|------|
-| `GET /trips/{trip_id}/files` | 여행 접근 가능 사용자 | 해당 여행의 Trip/day/POI 첨부 모음 |
-| `GET /users/me/files` | 로그인 사용자 | 본인이 업로드했거나 본인 소유 여행에 속한 파일 모음 |
-| `GET /users/me/files/{attachment_id}/download-url` | 접근 가능 사용자 | 파일 다운로드 URL |
-| `DELETE /users/me/files/{attachment_id}` | 접근 가능 사용자 | 파일 metadata soft delete |
-| `GET /admin/files` | `admin` / `operator` | 전체 파일 검색/필터 |
-| `GET /admin/files/{attachment_id}/download-url` | `admin` / `operator` | 파일 다운로드 URL |
-| `DELETE /admin/files/{attachment_id}` | `admin` | 파일 metadata soft delete + audit |
+| Endpoint                                           | 권한                  | 설명                                                |
+| -------------------------------------------------- | --------------------- | --------------------------------------------------- |
+| `GET /trips/{trip_id}/files`                       | 여행 접근 가능 사용자 | 해당 여행의 Trip/day/POI 첨부 모음                  |
+| `GET /users/me/files`                              | 로그인 사용자         | 본인이 업로드했거나 본인 소유 여행에 속한 파일 모음 |
+| `GET /users/me/files/{attachment_id}/download-url` | 접근 가능 사용자      | 파일 다운로드 URL                                   |
+| `DELETE /users/me/files/{attachment_id}`           | 접근 가능 사용자      | 파일 metadata soft delete                           |
+| `GET /admin/files`                                 | `admin` / `operator`  | 전체 파일 검색/필터                                 |
+| `GET /admin/files/{attachment_id}/download-url`    | `admin` / `operator`  | 파일 다운로드 URL                                   |
+| `DELETE /admin/files/{attachment_id}`              | `admin`               | 파일 metadata soft delete + audit                   |
 
 라이브러리 응답 item은 `target_scope`(`trip`, `day`, `poi`, `curated_plan`, `curated_poi`),
 `trip_title`, `poi_label`, `uploaded_by_email_masked`를 포함한다.

@@ -9,8 +9,9 @@ from datetime import date, datetime
 from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
+from app.api.request_url import public_api_base_url
 from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
@@ -857,6 +858,7 @@ async def delete_trip_attachment_endpoint(
 async def trip_attachment_download_url_endpoint(
     trip_id: uuid.UUID,
     attachment_id: uuid.UUID,
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -876,6 +878,7 @@ async def trip_attachment_download_url_endpoint(
             bucket=attachment.bucket,
             storage_key=attachment.storage_key,
             public_url=attachment.public_url,
+            public_api_base_url=public_api_base_url(request),
         )
     )
 
@@ -983,6 +986,7 @@ async def trip_day_attachment_download_url_endpoint(
     trip_id: uuid.UUID,
     day_index: int,
     attachment_id: uuid.UUID,
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -1007,6 +1011,7 @@ async def trip_day_attachment_download_url_endpoint(
             bucket=attachment.bucket,
             storage_key=attachment.storage_key,
             public_url=attachment.public_url,
+            public_api_base_url=public_api_base_url(request),
         )
     )
 
@@ -1140,6 +1145,7 @@ async def trip_poi_attachment_download_url_endpoint(
     trip_id: uuid.UUID,
     poi_id: uuid.UUID,
     attachment_id: uuid.UUID,
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -1160,6 +1166,7 @@ async def trip_poi_attachment_download_url_endpoint(
             bucket=attachment.bucket,
             storage_key=attachment.storage_key,
             public_url=attachment.public_url,
+            public_api_base_url=public_api_base_url(request),
         )
     )
 

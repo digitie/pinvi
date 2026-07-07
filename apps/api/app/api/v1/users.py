@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
+from app.api.request_url import public_api_base_url
 from app.core.deps import CurrentUserId, DbSession
 from app.core.session_cookies import clear_session_cookies
 from app.models.attachment import CuratedPlanAttachment
@@ -204,6 +205,7 @@ def _to_library_item(
 @router.post("/avatar/upload-url", response_model=Envelope[UploadUrlResponse])
 async def create_my_avatar_upload_url(
     body: AvatarUploadUrlRequest,
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[UploadUrlResponse]:
@@ -218,6 +220,7 @@ async def create_my_avatar_upload_url(
             content_length=body.content_length,
             max_upload_bytes=settings_row.avatar_max_upload_bytes,
             allowed_content_types=AVATAR_CONTENT_TYPES,
+            public_api_base_url=public_api_base_url(request),
         )
     except (FileTooLargeError, MimeNotAllowedError) as exc:
         raise _storage_error(exc) from exc
@@ -248,6 +251,7 @@ async def update_my_avatar(
 
 @router.get("/avatar/download-url", response_model=Envelope[DownloadUrlResponse])
 async def get_my_avatar_download_url(
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -262,6 +266,7 @@ async def get_my_avatar_download_url(
             bucket=user.avatar_bucket,
             storage_key=user.avatar_storage_key,
             public_url=user.avatar_url,
+            public_api_base_url=public_api_base_url(request),
         )
     except Exception as exc:
         raise _storage_error(exc) from exc
@@ -317,6 +322,7 @@ async def list_my_files(
 @router.get("/files/{attachment_id}/download-url", response_model=Envelope[DownloadUrlResponse])
 async def get_my_file_download_url(
     attachment_id: uuid.UUID,
+    request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[DownloadUrlResponse]:
@@ -336,6 +342,7 @@ async def get_my_file_download_url(
             bucket=attachment.bucket,
             storage_key=attachment.storage_key,
             public_url=attachment.public_url,
+            public_api_base_url=public_api_base_url(request),
         )
     except Exception as exc:
         raise _storage_error(exc) from exc
