@@ -739,11 +739,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
     { id: 'comments', label: '댓글', icon: MessageSquare },
   ];
   const detailGridClassName = desktopPanelCollapsed
-    ? 'flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
-    : 'flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
+    ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
+    : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
   const detailPanelClassName = `${
     mobilePanelOpen ? 'flex' : 'hidden'
-  } z-10 min-h-0 flex-col border-b border-hairline bg-white lg:h-full lg:border-b-0 lg:border-r ${
+  } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
     desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
   }`;
 
@@ -791,7 +791,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0 [&>*]:shrink-0">
             <button
               type="button"
               onClick={() => setMobilePanelOpen((open) => !open)}
