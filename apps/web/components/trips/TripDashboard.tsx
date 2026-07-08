@@ -257,9 +257,9 @@ export function TripDashboard() {
           <button
             type="button"
             onClick={() => setMobileToolsOpen((open) => !open)}
-            aria-controls="trip-dashboard-tools"
+            aria-controls="trip-dashboard-create"
             aria-expanded={mobileToolsOpen}
-            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft xl:hidden"
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:hidden"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
             {mobileToolsOpen ? '관리 닫기' : '관리 열기'}
@@ -293,9 +293,9 @@ export function TripDashboard() {
         </p>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section
-          className="relative min-h-[calc(100svh-14rem)] xl:min-h-[560px]"
+          className="relative hidden min-h-[calc(100svh-14rem)] lg:block lg:min-h-[560px]"
           aria-label="전체 여행 지도"
         >
           <TripMapView
@@ -303,7 +303,7 @@ export function TripDashboard() {
             points={filteredMapPoints}
             selectedPoiId={selectedPoiId}
             onSelectPoi={setSelectedPoiId}
-            className="h-[calc(100svh-14rem)] min-h-[520px] xl:h-[calc(100vh-14rem)]"
+            className="h-[calc(100svh-14rem)] min-h-[520px] lg:h-[calc(100vh-14rem)]"
           />
 
           <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
@@ -338,11 +338,13 @@ export function TripDashboard() {
         </section>
 
         <aside
-          id="trip-dashboard-tools"
-          className={`${mobileToolsOpen ? 'space-y-4' : 'hidden'} xl:block xl:space-y-4`}
+          className="space-y-4"
           aria-label="여행 관리"
         >
-          <section className="rounded-sm border border-hairline bg-white p-4">
+          <section
+            id="trip-dashboard-create"
+            className={`${mobileToolsOpen ? 'block' : 'hidden'} rounded-sm border border-hairline bg-white p-4 lg:block`}
+          >
             <form onSubmit={onCreate} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-ink">
                 <Save className="h-4 w-4 text-primary" aria-hidden="true" />새 여행 저장

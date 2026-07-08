@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-08 (codex) — `/trips` 모바일 목록 우선 레이아웃
+
+**작업**: 사용자 지시에 따라 모바일 웹의 여행 목록 페이지에서 지도를 숨기고, Samsung Internet에서도
+모바일 viewport가 명시적으로 적용되도록 보강했다. PC 웹은 `/trips` 지도 + 관리 패널 레이아웃을
+유지한다.
+
+**변경**:
+
+- `TripDashboard`에서 지도 섹션은 `lg` 이상에서만 노출하고, 모바일에서는 여행 목록을 기본 노출한다.
+- 모바일의 새 여행 생성 폼은 기존 `관리 열기` 버튼으로 필요할 때만 연다.
+- root viewport metadata에 `width=device-width`, `initial-scale=1`, `viewport-fit=cover`를 명시했다.
+- `trips-dashboard.e2e.ts`에 Samsung Internet Android UA + 412px viewport에서 지도 숨김, 목록 기본 노출,
+  관리 폼 토글을 검증하는 케이스를 추가했다.
+
+**검증 예정**:
+
+- 로컬에서는 `git diff --check` 중심으로 확인한다.
+- 빌드/평가와 Playwright 검증은 PR/GitHub Actions 및 N150 배포 절차에서 확인한다.
+
+**다음**: PR 생성 후 머지하고 N150에 배포한다.
+
 ## 2026-07-08 (codex) — 여행 상세 모바일 웹 드로어 레이아웃 보강
 
 **작업**: 사용자 지시에 따라 여행 상세 페이지의 모바일 웹 레이아웃을 지도 중심으로 조정했다.
