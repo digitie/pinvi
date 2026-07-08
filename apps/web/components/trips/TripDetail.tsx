@@ -40,6 +40,7 @@ import type {
   TripViewPoi,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
@@ -223,6 +224,7 @@ export interface TripDetailProps {
 }
 
 export function TripDetail({ tripId }: TripDetailProps) {
+  const mobileWebLayout = useMobileWebLayout();
   const [view, setView] = useState<TripView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -738,18 +740,28 @@ export function TripDetail({ tripId }: TripDetailProps) {
     { id: 'people', label: '동행', count: companions.length, icon: Users },
     { id: 'comments', label: '댓글', icon: MessageSquare },
   ];
-  const detailGridClassName = desktopPanelCollapsed
-    ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
-    : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
-  const detailPanelClassName = `${
-    mobilePanelOpen ? 'flex' : 'hidden'
-  } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
-    desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
-  }`;
+  const detailGridClassName = mobileWebLayout
+    ? 'relative flex min-h-0 flex-1 flex-col'
+    : desktopPanelCollapsed
+      ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
+      : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
+  const detailPanelClassName = mobileWebLayout
+    ? `${
+        mobilePanelOpen ? 'flex' : 'hidden'
+      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card`
+    : `${
+        mobilePanelOpen ? 'flex' : 'hidden'
+      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
+        desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
+      }`;
 
   return (
     <div
-      className="-mx-4 -my-6 flex min-h-[calc(100vh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8"
+      className={
+        mobileWebLayout
+          ? '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft'
+          : '-mx-4 -my-6 flex min-h-[calc(100vh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
+      }
       data-testid="trip-detail-shell"
     >
       <header
@@ -757,7 +769,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
         aria-label="여행 작업 패널"
         data-testid="trip-top-panel"
       >
-        <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5">
+        <div
+          className={
+            mobileWebLayout
+              ? 'flex flex-col gap-3 px-4 py-3'
+              : 'flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5'
+          }
+        >
           <div className="flex min-w-0 items-start gap-3">
             <Link
               href="/trips"
@@ -791,13 +809,21 @@ export function TripDetail({ tripId }: TripDetailProps) {
             </div>
           </div>
 
-          <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0 [&>*]:shrink-0">
+          <div
+            className={
+              mobileWebLayout
+                ? 'flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 [&>*]:shrink-0'
+                : 'flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0 [&>*]:shrink-0'
+            }
+          >
             <button
               type="button"
               onClick={() => setMobilePanelOpen((open) => !open)}
               aria-controls="trip-detail-panel"
               aria-expanded={mobilePanelOpen}
-              className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:hidden"
+              className={`h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
+                mobileWebLayout ? 'inline-flex' : 'inline-flex lg:hidden'
+              }`}
             >
               {mobilePanelOpen ? (
                 <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
@@ -811,7 +837,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
               onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
               aria-controls="trip-detail-panel"
               aria-expanded={!desktopPanelCollapsed}
-              className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+              className={`h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
+                mobileWebLayout ? 'hidden' : 'hidden lg:inline-flex'
+              }`}
             >
               {desktopPanelCollapsed ? (
                 <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
@@ -861,7 +889,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
         <div
           className={`${
             mobilePanelOpen ? 'flex' : 'hidden'
-          } flex-col gap-2 border-t border-hairline px-4 py-2 md:flex-row md:items-center md:justify-between md:px-5 lg:flex`}
+          } flex-col gap-2 border-t border-hairline px-4 py-2 ${
+            mobileWebLayout ? '' : 'md:flex-row md:items-center md:justify-between md:px-5 lg:flex'
+          }`}
         >
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
             {panelTabs.map((tab) => {
@@ -1234,11 +1264,21 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
         <section
           id="trip-map-canvas"
-          className="relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0"
+          className={
+            mobileWebLayout
+              ? 'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas'
+              : 'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0'
+          }
           aria-label="여행 지도"
           data-testid="trip-detail-map"
         >
-          <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]">
+          <div
+            className={
+              mobileWebLayout
+                ? 'pointer-events-none absolute left-3 right-3 top-3 z-10'
+                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
+            }
+          >
             <div
               className="pointer-events-auto rounded-sm border border-hairline bg-white/95 p-2 shadow-card backdrop-blur"
               data-testid="trip-map-place-search"
@@ -1259,7 +1299,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
             className="h-full"
             chrome="flush"
           />
-          <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4">
+          <div
+            className={
+              mobileWebLayout
+                ? 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2'
+                : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
+            }
+          >
             <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {visibleLayerCount}개 레이어
             </span>
