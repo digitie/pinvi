@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-07-08 (codex) — 모바일 여행 상세 지도 우선 레이아웃 압축
+
+Samsung Internet 모바일 상세 화면 캡처에서 전역 앱 헤더와 상세 상단 정보가 지도 화면을 과하게
+밀어내는 것을 확인했다. 모바일 상세는 지도 화면을 우선하고, 메뉴는 필요할 때 드로어로 꺼내 쓰는
+방향으로 한 번 더 압축한다.
+
+변경:
+
+- `AppShell`은 모바일 웹 + `/trips/{uuid}` 상세 경로에서만 전역 사용자 메뉴와 main padding을 제거한다.
+- 모바일 웹 판정은 폭/모바일 UA에 더해 touch + coarse pointer 조건도 반영한다.
+- `TripDetail`은 모바일에서 `100svh` 지도 surface를 기본으로 잡고, 뒤로가기·패널 열기·레이어 추가만
+  담은 얇은 지도 오버레이를 사용한다.
+- 상세 탭, 실시간 상태, 편집/복사/삭제 액션은 모바일 드로어 내부로 이동한다.
+- Samsung Internet 상세 e2e는 전역 메뉴 제거, compact top panel 높이, 지도 상단 배치를 검증한다.
+
+검증 예정:
+
+- N150: Web typecheck/build
+- N150 Playwright: `trip-detail.e2e.ts`
+- PR/GitHub Actions
+
+**다음 한 작업**: PR을 생성해 머지하고 N150에 배포한다.
+
 ## 2026-07-08 (codex) — Samsung Internet 모바일 웹 레이아웃 판정 보강
 
 Samsung Internet에서 `/trips`와 `/trips/[tripId]`가 PC 레이아웃처럼 보이는 문제를 재점검했다.

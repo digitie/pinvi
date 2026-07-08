@@ -13,6 +13,7 @@ import {
   Settings,
   UserCircle,
 } from 'lucide-react';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 const NAV_ITEMS = [
   { href: '/', label: '홈', icon: LayoutDashboard },
@@ -36,39 +37,50 @@ function isActivePath(pathname: string, href: string): boolean {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const mobileWebLayout = useMobileWebLayout();
+  const pathParts = pathname.split('/').filter(Boolean);
+  const mobileTripDetail =
+    mobileWebLayout &&
+    pathParts.length === 2 &&
+    pathParts[0] === 'trips' &&
+    pathParts[1] !== 'map-shell';
 
   return (
     <div className="min-h-screen bg-surface-soft">
-      <header className="border-b border-hairline bg-white">
-        <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-ink">
-            <Compass className="h-5 w-5 text-primary" aria-hidden="true" />
-            Pinvi
-          </Link>
-          <nav className="flex gap-1 overflow-x-auto text-sm" aria-label="사용자 메뉴">
-            {NAV_ITEMS.map((item) => {
-              const active = isActivePath(pathname, item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={
-                    active
-                      ? 'inline-flex h-10 shrink-0 items-center gap-2 rounded-sm bg-primary px-3 font-semibold text-white'
-                      : 'inline-flex h-10 shrink-0 items-center gap-2 rounded-sm px-3 font-semibold text-ink hover:bg-surface-soft'
-                  }
-                  data-testid={`app-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
-      <main className="w-full px-4 py-6 md:px-6 md:py-8">{children}</main>
+      {!mobileTripDetail && (
+        <header className="border-b border-hairline bg-white">
+          <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-ink">
+              <Compass className="h-5 w-5 text-primary" aria-hidden="true" />
+              Pinvi
+            </Link>
+            <nav className="flex gap-1 overflow-x-auto text-sm" aria-label="사용자 메뉴">
+              {NAV_ITEMS.map((item) => {
+                const active = isActivePath(pathname, item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={
+                      active
+                        ? 'inline-flex h-10 shrink-0 items-center gap-2 rounded-sm bg-primary px-3 font-semibold text-white'
+                        : 'inline-flex h-10 shrink-0 items-center gap-2 rounded-sm px-3 font-semibold text-ink hover:bg-surface-soft'
+                    }
+                    data-testid={`app-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </header>
+      )}
+      <main className={mobileTripDetail ? 'w-full' : 'w-full px-4 py-6 md:px-6 md:py-8'}>
+        {children}
+      </main>
     </div>
   );
 }

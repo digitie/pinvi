@@ -157,6 +157,14 @@ const LAYER_VIEW = {
 };
 
 async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
+  await page.route(/.*\/auth\/refresh$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { user_id: userId } }),
+    });
+  });
+
   await page.route(/.*\/auth\/me$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
@@ -170,7 +178,17 @@ async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
-  await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments$/, async (route, request) => {
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/.*attachments(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+  });
+
+  await page.route(/.*\/users\/me\/telegram-targets$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+  });
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/telegram-targets$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
@@ -232,6 +250,23 @@ async function expectMobileDrawerLayout(page: Page) {
   expect(panelBox?.y ?? 0).toBeGreaterThanOrEqual((mapBox?.y ?? 0) - 1);
   expect(panelBox?.width ?? 0).toBeLessThan(mapBox?.width ?? 0);
   expect(mapBox?.height ?? 0).toBeGreaterThan(500);
+}
+
+async function expectMobileMapFirstLayout(page: Page) {
+  const topPanel = page.getByTestId('trip-top-panel');
+  const map = page.getByTestId('trip-detail-map');
+
+  await expect(topPanel).toBeVisible();
+  await expect(map).toBeVisible();
+  await expect(page.getByLabel('사용자 메뉴')).toHaveCount(0);
+
+  const topPanelBox = await topPanel.boundingBox();
+  const mapBox = await map.boundingBox();
+  expect(topPanelBox).not.toBeNull();
+  expect(mapBox).not.toBeNull();
+  expect(topPanelBox?.height ?? 999).toBeLessThan(72);
+  expect(mapBox?.y ?? 999).toBeLessThan(4);
+  expect(mapBox?.height ?? 0).toBeGreaterThan(850);
 }
 
 async function installClosingWebSocket(page: Page, code: number, reason: string) {
@@ -325,7 +360,7 @@ test.describe('Samsung Internet 모바일 상세 레이아웃', () => {
 
     await page.goto(`/trips/${tripId}`);
 
-    await expect(page.getByTestId('trip-top-panel')).toBeVisible();
+    await expectMobileMapFirstLayout(page);
     await expect(page.getByRole('button', { name: '패널 열기' })).toBeVisible();
     await expect(page.getByRole('button', { name: '패널 접기' })).toBeHidden();
     await expect(page.getByTestId('trip-detail-panel')).toBeHidden();

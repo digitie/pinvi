@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-08 (codex) — 모바일 여행 상세 지도 우선 레이아웃 압축
+
+**작업**: N150 배포본을 Samsung Internet 모바일 UA로 캡처해 보니 모바일 분기는 적용됐지만, 전역 앱
+헤더와 상세 상단 정보가 커서 지도 화면이 충분히 우선되지 않았다. 사용자 지시에 따라 모바일 상세를
+지도 중심 화면으로 더 압축했다.
+
+**변경**:
+
+- `AppShell`에서 모바일 웹 + `/trips/{uuid}` 상세 경로일 때만 전역 사용자 메뉴와 main padding을
+  제거한다. `/trips` 목록과 PC 웹은 기존 shell을 유지한다.
+- 모바일 웹 판정은 폭/모바일 UA뿐 아니라 touch + coarse pointer 조건도 함께 본다.
+- `TripDetail` 모바일 루트를 `100svh` 풀스크린 지도 surface로 바꾸고, 뒤로가기·패널 열기·레이어 추가
+  아이콘만 담은 compact overlay를 지도 위에 띄운다.
+- 상세 탭, 실시간 상태, 편집/복사/삭제 액션은 모바일 드로어 내부로 옮겨 닫힌 상태의 지도 영역을
+  최대화한다.
+- `trip-detail.e2e.ts`의 Samsung Internet 케이스가 전역 사용자 메뉴 제거, compact top panel 높이,
+  지도 surface 상단 배치를 검증하도록 보강했다.
+
+**검증 예정**:
+
+- N150: Web typecheck/build
+- N150 Playwright: `trip-detail.e2e.ts`
+- PR/GitHub Actions
+
+**다음**: PR 생성 후 머지하고 N150에 배포한다.
+
 ## 2026-07-08 (codex) — Samsung Internet 모바일 웹 레이아웃 판정 보강
 
 **작업**: Samsung Internet에서 여행 목록/상세가 PC 레이아웃처럼 보이는 문제를 전체 재점검했다.
