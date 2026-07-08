@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- 여행 목록은 기본적으로 예정 여행만 날짜 오름차순으로 보여주고, 같은 날짜는 여행명 오름차순으로
+  정렬한다. 지난 여행은 별도 탭에서 관리한다.
 - 파일 업로드/다운로드 URL이 RustFS의 `127.0.0.1` 주소를 직접 노출하지 않고 API 프록시
   `/storage/uploads/*`, `/storage/downloads/*`를 사용한다. Reverse proxy의
   `X-Forwarded-Proto`도 반영해 HTTPS 화면에서 mixed content 업로드 차단이 나지 않게 했다.
