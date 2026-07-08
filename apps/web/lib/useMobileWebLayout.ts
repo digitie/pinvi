@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 const MOBILE_WIDTH_QUERY = '(max-width: 1023px)';
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
 const MOBILE_BROWSER_RE = /SamsungBrowser|Android|Mobile|iPhone|iPad|iPod/i;
 
 function shouldUseMobileWebLayout() {
@@ -12,6 +13,7 @@ function shouldUseMobileWebLayout() {
 
   return (
     window.matchMedia(MOBILE_WIDTH_QUERY).matches ||
+    (window.navigator.maxTouchPoints > 0 && window.matchMedia(COARSE_POINTER_QUERY).matches) ||
     MOBILE_BROWSER_RE.test(window.navigator.userAgent)
   );
 }
