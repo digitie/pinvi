@@ -15,6 +15,7 @@ import { ApiError, tripApi, type TripBucket } from '@pinvi/api-client';
 import type { TripCreate, TripResponse, TripStatus } from '@pinvi/schemas';
 import { tripDaysToMapPoints, type TripMapPoint } from '@pinvi/domain';
 import { apiClient } from '@/lib/api';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { FormField } from '@/components/forms/FormField';
 import { TripMapView } from '@/components/trips/TripMapView';
 
@@ -91,6 +92,7 @@ function validateDateRange(startDate: string, endDate: string): string | null {
 }
 
 export function TripDashboard() {
+  const mobileWebLayout = useMobileWebLayout();
   const [trips, setTrips] = useState<TripResponse[]>([]);
   const [bucket, setBucket] = useState<TripBucket>('all');
   const [loading, setLoading] = useState(true);
@@ -259,7 +261,9 @@ export function TripDashboard() {
             onClick={() => setMobileToolsOpen((open) => !open)}
             aria-controls="trip-dashboard-create"
             aria-expanded={mobileToolsOpen}
-            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:hidden"
+            className={`h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
+              mobileWebLayout ? 'inline-flex' : 'inline-flex lg:hidden'
+            }`}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
             {mobileToolsOpen ? '관리 닫기' : '관리 열기'}
@@ -293,9 +297,17 @@ export function TripDashboard() {
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div
+        className={
+          mobileWebLayout ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]'
+        }
+      >
         <section
-          className="relative hidden min-h-[calc(100svh-14rem)] lg:block lg:min-h-[560px]"
+          className={
+            mobileWebLayout
+              ? 'hidden'
+              : 'relative hidden min-h-[calc(100svh-14rem)] lg:block lg:min-h-[560px]'
+          }
           aria-label="전체 여행 지도"
         >
           <TripMapView
@@ -343,7 +355,9 @@ export function TripDashboard() {
         >
           <section
             id="trip-dashboard-create"
-            className={`${mobileToolsOpen ? 'block' : 'hidden'} rounded-sm border border-hairline bg-white p-4 lg:block`}
+            className={`${
+              mobileToolsOpen ? 'block' : 'hidden'
+            } rounded-sm border border-hairline bg-white p-4 ${mobileWebLayout ? '' : 'lg:block'}`}
           >
             <form onSubmit={onCreate} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-ink">

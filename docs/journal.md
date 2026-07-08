@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-08 (codex) — Samsung Internet 모바일 웹 레이아웃 판정 보강
+
+**작업**: Samsung Internet에서 여행 목록/상세가 PC 레이아웃처럼 보이는 문제를 전체 재점검했다.
+`/m/...` 같은 별도 모바일 URI는 만들지 않고, 같은 URI에서 모바일 브라우저/모바일 폭이면 모바일
+레이아웃을 선택하도록 보강하는 방향으로 진행한다.
+
+**변경**:
+
+- `useMobileWebLayout` hook을 추가해 `max-width: 1023px` 또는 모바일 브라우저 UA를 모바일 웹
+  레이아웃으로 판정한다.
+- `/trips`는 hook 판정이 모바일이면 지도 섹션을 숨기고 목록 + 접이식 생성 폼 구조를 유지한다.
+- `/trips/[tripId]`는 hook 판정이 모바일이면 `lg:grid`/`lg:flex` 데스크톱 class를 제거해 상세 패널을
+  기본 숨김 + 왼쪽 드로어로 유지한다.
+- Samsung Internet Android UA + 넓은 layout viewport 조건에서 목록/상세 모바일 레이아웃을 검증하도록
+  e2e를 보강했다.
+
+**검증 예정**:
+
+- 로컬: `git diff --check`
+- PR/GitHub Actions: `lint-typecheck-build`, `e2e`
+
+**다음**: PR 생성 후 머지한다.
+
 ## 2026-07-08 (codex) — `/trips` 모바일 목록 우선 레이아웃
 
 **작업**: 사용자 지시에 따라 모바일 웹의 여행 목록 페이지에서 지도를 숨기고, Samsung Internet에서도

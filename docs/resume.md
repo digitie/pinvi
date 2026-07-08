@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-07-08 (codex) — Samsung Internet 모바일 웹 레이아웃 판정 보강
+
+Samsung Internet에서 `/trips`와 `/trips/[tripId]`가 PC 레이아웃처럼 보이는 문제를 재점검했다.
+서브에이전트 검토 결과 `/m/...` 별도 URI는 만들지 않고 canonical URI를 유지하되, 내부 모바일/PC
+레이아웃을 명시적으로 분리하는 방향이 맞다는 결론이다.
+
+변경:
+
+- `useMobileWebLayout` hook 추가: `max-width: 1023px` 또는 모바일 브라우저 UA를 모바일 웹 레이아웃으로
+  판정한다.
+- `/trips`는 모바일 판정 시 지도 섹션을 숨기고 목록/관리 폼 토글 레이아웃을 유지한다.
+- `/trips/[tripId]`는 모바일 판정 시 `lg:grid`/`lg:flex` 데스크톱 class를 넣지 않아 상세 패널을
+  기본 숨김 + 왼쪽 드로어로 유지한다.
+- Samsung Internet Android UA + 큰 layout viewport 조건의 e2e 회귀를 목록/상세에 추가했다.
+
+검증 예정:
+
+- `git diff --check`
+- PR/GitHub Actions
+
+**다음 한 작업**: PR을 생성해 머지한다.
+
 ## 2026-07-08 (codex) — `/trips` 모바일 목록 우선 레이아웃
 
 모바일 웹의 여행 목록 페이지에서 지도를 숨기고 목록을 기본 화면으로 보여주도록 조정했다. PC 웹은
