@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-09 (codex) — Day Plan inline 파일·날씨·모바일 선택 개선
+
+**작업**: 여행 상세 Day Plan에서 일자 생성, 장소 선택, 날짜/장소별 파일, 날짜 기반 날씨 표시, 모바일
+공간 사용 문제를 함께 정리했다.
+
+**변경**:
+
+- Day Plan 헤더와 빈 상태에 `일자 추가` 버튼을 추가해 여행 날짜가 비어 있어도 새 일자를 만들 수 있게
+  했다.
+- `TripAttachments`에 compact 모드를 추가하고, Day Plan의 날짜별/장소별 영역에 업로드·목록·삭제
+  UI를 노출했다.
+- `TripWeatherSummary`를 추가해 feature weather metric 중 day date와 맞는 현재 날씨·예보·미세먼지만
+  표시한다. 날짜가 없거나 부합 metric이 없으면 렌더링하지 않는다.
+- 모바일 상세 드로어에서 장소를 누르면 선택 상태를 지도에 반영하고 드로어를 닫아 지도 위치 변화를
+  바로 볼 수 있게 했다.
+- Day Plan 요약 카드와 일자/장소 카드의 테두리·여백을 줄여 모바일 공간 점유를 낮췄다.
+- `trip-detail.e2e.ts`에 날짜 없는 일자 생성, inline 날짜/장소 파일·날씨, Samsung Internet 모바일
+  장소 선택 회귀 테스트를 추가했다.
+
+**검증**:
+
+- 로컬 `git diff --check` 통과.
+- N150 `npm -w @pinvi/web run typecheck` 통과.
+- N150 `npm -w @pinvi/web run build` 통과.
+- N150 Playwright `trip-detail.e2e.ts` 9 passed. 12805에 배포 컨테이너가 떠 있어 branch code 검증은
+  임시 Next 서버 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:12855`로 실행했다.
+
+**다음**: PR을 생성해 머지하고 N150에 배포한다.
+
 ## 2026-07-09 (codex) — 여행 목록 예정/지난 탭 정렬
 
 **작업**: 여행 목록을 앞으로 예정된 여행 순서대로 표시하고, 지난 여행은 별도 탭에서 관리하도록

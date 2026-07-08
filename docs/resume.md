@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-07-09 (codex) — Day Plan inline 파일·날씨·모바일 선택 개선
+
+여행 상세 Day Plan에서 날짜가 없는 여행도 패널 내부의 `일자 추가` 버튼으로 새 일자를 만들 수 있게
+했다. 각 일자/장소 카드 안에서 파일 업로드와 목록 확인을 바로 할 수 있고, 날짜에 맞는 weather
+metric이 있을 때만 현재 날씨·예보·미세먼지를 표시한다.
+
+변경:
+
+- Day Plan 헤더와 빈 상태에 `일자 추가` 버튼을 추가했다.
+- 날짜별/장소별 첨부를 Day Plan 안에 compact 모드로 노출했다.
+- 날짜에 맞는 feature weather metric만 골라 표시하는 `TripWeatherSummary`를 추가했다.
+- 모바일 상세 드로어에서 장소를 선택하면 패널을 닫아 지도 선택 위치를 바로 보게 했다.
+- Day Plan 통계 카드와 일자/장소 카드의 테두리·여백을 줄였다.
+
+검증:
+
+- 로컬: `git diff --check`
+- N150: `npm -w @pinvi/web run typecheck`
+- N150: `npm -w @pinvi/web run build`
+- N150 Playwright: `trip-detail.e2e.ts` 9 passed (`PLAYWRIGHT_BASE_URL=http://127.0.0.1:12855`)
+
+**다음 한 작업**: PR을 생성해 머지하고 N150에 배포한다.
+
 ## 2026-07-09 (codex) — 여행 목록 예정/지난 탭 정렬
 
 여행 목록의 기본 표시를 예정 여행 중심으로 바꿨다. 지난 여행은 별도 탭에서 관리하고, 각 탭의 목록은

@@ -26,9 +26,16 @@ export interface TripAttachmentsProps {
   dayIndex?: number;
   poiId?: string;
   title?: string;
+  compact?: boolean;
 }
 
-export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: TripAttachmentsProps) {
+export function TripAttachments({
+  tripId,
+  dayIndex,
+  poiId,
+  title = '첨부',
+  compact = false,
+}: TripAttachmentsProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [items, setItems] = useState<TripAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,19 +159,41 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
   };
 
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4" aria-label="첨부">
+    <section
+      className={
+        compact
+          ? 'space-y-2 rounded-sm bg-surface-soft/70 p-2'
+          : 'space-y-3 rounded-sm border border-hairline bg-white p-4'
+      }
+      aria-label="첨부"
+    >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
-          <Paperclip className="h-4 w-4 text-primary" aria-hidden="true" />
+        <h2
+          className={
+            compact
+              ? 'flex items-center gap-1.5 text-xs font-bold text-ink'
+              : 'flex items-center gap-2 text-sm font-bold text-ink'
+          }
+        >
+          <Paperclip
+            className={compact ? 'h-3.5 w-3.5 text-primary' : 'h-4 w-4 text-primary'}
+            aria-hidden="true"
+          />
           {title}
         </h2>
-        <label className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white hover:opacity-90">
+        <label
+          className={
+            compact
+              ? 'inline-flex h-7 cursor-pointer items-center gap-1 rounded-sm bg-primary px-2 text-xs font-semibold text-white hover:opacity-90'
+              : 'inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white hover:opacity-90'
+          }
+        >
           {uploading ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <Upload className="h-4 w-4" aria-hidden="true" />
           )}
-          파일 올리기
+          {compact ? '올리기' : '파일 올리기'}
           <input
             ref={inputRef}
             type="file"
@@ -187,18 +216,36 @@ export function TripAttachments({ tripId, dayIndex, poiId, title = '첨부' }: T
       )}
 
       {loading ? (
-        <div className="flex h-16 items-center justify-center text-sm text-muted">
+        <div
+          className={
+            compact
+              ? 'flex h-8 items-center justify-center text-xs text-muted'
+              : 'flex h-16 items-center justify-center text-sm text-muted'
+          }
+        >
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
           불러오는 중…
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">첨부가 없습니다.</p>
+        <p
+          className={
+            compact
+              ? 'px-1 text-xs text-muted'
+              : 'rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted'
+          }
+        >
+          파일 없음
+        </p>
       ) : (
         <ul className="space-y-1" data-testid="trip-attachment-list">
           {items.map((item) => (
             <li
               key={item.attachment_id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm"
+              className={
+                compact
+                  ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-white px-2 py-1.5 text-xs'
+                  : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
+              }
             >
               <span className="min-w-0">
                 <span className="block truncate font-medium text-ink">

@@ -77,6 +77,33 @@ const TRIP_VIEW = {
 
 const BASE_MARKER_DAY = TRIP_VIEW.days[0]!;
 const BASE_MARKER_POI = BASE_MARKER_DAY.pois[0]!;
+const DAY_ATTACHMENT = {
+  attachment_id: '66666666-6666-4666-8666-666666666666',
+  trip_id: tripId,
+  trip_poi_id: null,
+  source_attachment_id: null,
+  bucket: 'pinvi-media',
+  storage_key: 'user-uploads/trip_day_attachment/u/2026/07/day-plan.pdf',
+  original_filename: 'day-plan.pdf',
+  content_type: 'application/pdf',
+  byte_size: 2048,
+  public_url: null,
+  role: 'document',
+  description: null,
+  sort_order: 0,
+  created_at: '2026-06-01T09:00:00+09:00',
+  updated_at: '2026-06-01T09:00:00+09:00',
+};
+const POI_ATTACHMENT = {
+  ...DAY_ATTACHMENT,
+  attachment_id: '77777777-7777-4777-8777-777777777777',
+  trip_poi_id: poiId,
+  storage_key: 'user-uploads/poi_attachment/u/2026/07/ticket.jpg',
+  original_filename: 'ticket.jpg',
+  content_type: 'image/jpeg',
+  byte_size: 1024,
+  role: 'image',
+};
 
 const MARKER_VIEW = {
   ...TRIP_VIEW,
@@ -156,7 +183,24 @@ const LAYER_VIEW = {
   ],
 };
 
-async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
+type MutableTripDetailView = Omit<typeof TRIP_VIEW, 'trip' | 'days'> & {
+  trip: Omit<typeof TRIP_VIEW.trip, 'start_date' | 'end_date'> & {
+    start_date: string | null;
+    end_date: string | null;
+  };
+  days: unknown[];
+};
+
+interface MockTripDetailOptions {
+  attachmentsByPath?: (pathname: string) => unknown[];
+  weatherByFeatureId?: Record<string, unknown>;
+}
+
+async function mockTripDetailRoutes(
+  page: Page,
+  tripView: unknown | (() => unknown) = TRIP_VIEW,
+  options: MockTripDetailOptions = {},
+) {
   await page.route(/.*\/auth\/refresh$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
@@ -180,7 +224,30 @@ async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/.*attachments(\?.*)?$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+    const pathname = new URL(request.url()).pathname;
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: options.attachmentsByPath?.(pathname) ?? [] }),
+    });
+  });
+
+  await page.route(/.*\/features\/[^/]+\/weather(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    const parts = new URL(request.url()).pathname.split('/');
+    const featureId = decodeURIComponent(parts[parts.length - 2] ?? '');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: options.weatherByFeatureId?.[featureId] ?? {
+          feature_id: featureId,
+          asof: null,
+          latest_at: null,
+          is_stale: false,
+          source_styles: [],
+          metrics: [],
+        },
+      }),
+    });
   });
 
   await page.route(/.*\/users\/me\/telegram-targets$/, async (route, request) => {
@@ -197,7 +264,7 @@ async function mockTripDetailRoutes(page: Page, tripView: unknown = TRIP_VIEW) {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ data: tripView }),
+      body: JSON.stringify({ data: typeof tripView === 'function' ? tripView() : tripView }),
     });
   });
 }
@@ -368,6 +435,11 @@ test.describe('Samsung Internet 모바일 상세 레이아웃', () => {
     await page.getByRole('button', { name: '패널 열기' }).click();
     await expectMobileDrawerLayout(page);
     await expect(page.getByTestId('trip-detail-panel')).toContainText('지도 레이어');
+    await page.getByRole('button', { name: /해운대 해수욕장/ }).first().click();
+    await expect(page.getByTestId('trip-detail-panel')).toBeHidden();
+    await expect(
+      page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${poiId}"]`),
+    ).toHaveAttribute('data-marker-selected', 'true');
   });
 });
 
@@ -433,7 +505,136 @@ test('여행 기간보다 많은 일자는 추가할 수 없다', async ({ page 
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
-  await expect(page.getByText('여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.')).toBeVisible();
+  await expect(page.getByTestId('trip-add-day-inline')).toBeDisabled();
+  await expect(page.getByTestId('trip-top-panel')).toContainText(
+    '여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.',
+  );
+});
+
+test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가할 수 있다', async ({ page }) => {
+  let currentView: MutableTripDetailView = {
+    ...TRIP_VIEW,
+    trip: {
+      ...TRIP_VIEW.trip,
+      start_date: null,
+      end_date: null,
+    },
+    days: [],
+  };
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    const body = request.postDataJSON() as { day_index: number; date?: string | null };
+    const day = {
+      trip_id: tripId,
+      day_index: body.day_index,
+      date: body.date ?? null,
+      title: null,
+      note: null,
+      version: 1,
+      created_at: '2026-06-01T09:00:00+09:00',
+      updated_at: '2026-06-01T09:00:00+09:00',
+    };
+    currentView = {
+      ...currentView,
+      days: [{ ...day, pois: [] }],
+    };
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: day }),
+    });
+  });
+  await mockTripDetailRoutes(page, () => currentView);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByTestId('trip-layer-list')).toContainText('아직 일정 레이어가 없습니다.');
+  await page.getByTestId('trip-add-day-inline').click();
+  await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
+  await expect(page.getByTestId('trip-layer-list')).toContainText('미정');
+});
+
+test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
+  await mockTripDetailRoutes(page, TRIP_VIEW, {
+    attachmentsByPath: (pathname) => {
+      if (pathname.endsWith('/days/1/attachments')) return [DAY_ATTACHMENT];
+      if (pathname.endsWith(`/pois/${poiId}/attachments`)) return [POI_ATTACHMENT];
+      return [];
+    },
+    weatherByFeatureId: {
+      'feat-haeundae': {
+        feature_id: 'feat-haeundae',
+        asof: '2026-07-01T09:00:00+09:00',
+        latest_at: '2026-07-01T09:00:00+09:00',
+        is_stale: false,
+        source_styles: ['observed', 'short'],
+        metrics: [
+          {
+            metric_key: 'T1H',
+            metric_name: '기온',
+            forecast_style: 'observed',
+            timeline_bucket: 'now',
+            valid_at: null,
+            issued_at: null,
+            observed_at: '2026-07-01T09:00:00+09:00',
+            value_number: 24,
+            value_text: null,
+            unit: '℃',
+            severity: null,
+          },
+          {
+            metric_key: 'TMP',
+            metric_name: '기온',
+            forecast_style: 'short',
+            timeline_bucket: 'forecast',
+            valid_at: '2026-07-01T15:00:00+09:00',
+            issued_at: '2026-07-01T05:00:00+09:00',
+            observed_at: null,
+            value_number: 27,
+            value_text: null,
+            unit: '℃',
+            severity: null,
+          },
+          {
+            metric_key: 'PM10',
+            metric_name: '미세',
+            forecast_style: 'observed',
+            timeline_bucket: 'now',
+            valid_at: null,
+            issued_at: null,
+            observed_at: '2026-07-01T09:00:00+09:00',
+            value_number: 32,
+            value_text: null,
+            unit: '㎍/㎥',
+            severity: '보통',
+          },
+          {
+            metric_key: 'TMP',
+            metric_name: '기온',
+            forecast_style: 'short',
+            timeline_bucket: 'forecast',
+            valid_at: '2026-07-02T15:00:00+09:00',
+            issued_at: '2026-07-01T05:00:00+09:00',
+            observed_at: null,
+            value_number: 99,
+            value_text: null,
+            unit: '℃',
+            severity: null,
+          },
+        ],
+      },
+    },
+  });
+
+  await page.goto(`/trips/${tripId}`);
+
+  const plan = page.getByTestId('trip-layer-list');
+  await expect(plan).toContainText('day-plan.pdf');
+  await expect(plan).toContainText('ticket.jpg');
+  await expect(plan).toContainText('현재');
+  await expect(plan).toContainText('예보');
+  await expect(plan).toContainText('미세먼지');
+  await expect(plan).not.toContainText('99℃');
 });
 
 test('실시간 권한 상실 close는 안내와 여행 목록 이동 링크를 보여준다', async ({ page }) => {

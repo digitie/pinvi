@@ -56,6 +56,7 @@ import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
 import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
+import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
@@ -458,6 +459,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         return next;
       });
     }
+    if (mobileWebLayout) setMobilePanelOpen(false);
   };
 
   const handleSelectDay = (dayIndex: number) => {
@@ -1133,7 +1135,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 id="trip-panel-plan"
                 role="tabpanel"
                 aria-label="일정"
-                className="space-y-4 p-4 md:p-5"
+                className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
               >
                 <section className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -1143,26 +1145,40 @@ export function TripDetail({ tripId }: TripDetailProps) {
                       </p>
                       <h2 className="mt-1 text-base font-bold text-ink">일정 레이어</h2>
                     </div>
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+                    <button
+                      type="button"
+                      onClick={handleAddDay}
+                      disabled={!canAddDay || busy}
+                      title={addDayDisabledReason ?? '일자 추가'}
+                      aria-describedby={
+                        addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
+                      }
+                      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                      data-testid="trip-add-day-inline"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      일자 추가
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-sm bg-surface-soft px-2 py-1 font-semibold text-muted">
                       {visibleLayerCount}/{view.days.length} 표시
                     </span>
+                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
+                      일자 {view.days.length}
+                    </span>
+                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
+                      장소 {totalPoiCount}
+                    </span>
+                    <span className="min-w-0 rounded-sm bg-surface-soft px-2 py-1 text-muted">
+                      선택 {selectedDay ? selectedDayLabel : '없음'}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-sm border border-hairline bg-white px-3 py-2">
-                      <p className="text-[11px] font-semibold text-muted">일자</p>
-                      <p className="mt-1 text-lg font-bold text-ink">{view.days.length}</p>
-                    </div>
-                    <div className="rounded-sm border border-hairline bg-white px-3 py-2">
-                      <p className="text-[11px] font-semibold text-muted">장소</p>
-                      <p className="mt-1 text-lg font-bold text-ink">{totalPoiCount}</p>
-                    </div>
-                    <div className="rounded-sm border border-hairline bg-white px-3 py-2">
-                      <p className="text-[11px] font-semibold text-muted">선택</p>
-                      <p className="mt-1 truncate text-sm font-bold text-ink">
-                        {selectedDay ? selectedDayLabel : '없음'}
-                      </p>
-                    </div>
-                  </div>
+                  {addDayDisabledReason && (
+                    <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
+                      {addDayDisabledReason}
+                    </p>
+                  )}
                 </section>
 
                 <section
@@ -1184,8 +1200,17 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   </div>
 
                   {view.days.length === 0 ? (
-                    <div className="rounded-sm border border-dashed border-hairline bg-white p-4 text-sm text-muted">
-                      아직 일정 레이어가 없습니다.
+                    <div className="space-y-3 rounded-sm bg-white p-3 text-sm text-muted">
+                      <p>아직 일정 레이어가 없습니다.</p>
+                      <button
+                        type="button"
+                        onClick={handleAddDay}
+                        disabled={!canAddDay || busy}
+                        className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        일자 추가
+                      </button>
                     </div>
                   ) : (
                     <div className="space-y-2" role="tablist" aria-label="일자 레이어">
@@ -1199,8 +1224,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
                             key={day.day_index}
                             className={
                               active
-                                ? 'rounded-sm border border-primary bg-white shadow-card'
-                                : 'rounded-sm border border-hairline bg-white'
+                                ? 'rounded-sm bg-white shadow-card ring-1 ring-primary/35'
+                                : 'rounded-sm bg-white'
                             }
                           >
                             <div className="flex items-start gap-3 p-3">
@@ -1234,7 +1259,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                             </div>
 
                             {active ? (
-                              <div className="space-y-3 border-t border-hairline p-3">
+                              <div className="space-y-3 px-3 pb-3">
                                 <TripDayControls
                                   selectedDay={selectedDay}
                                   onAdd={handleAddDay}
@@ -1244,6 +1269,18 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   addDisabledReason={addDayDisabledReason}
                                   showAdd={false}
                                   busy={busy}
+                                />
+                                <TripWeatherSummary
+                                  featureId={day.pois[0]?.feature_id ?? null}
+                                  date={day.date}
+                                  label="날짜 날씨"
+                                  compact={mobileWebLayout}
+                                />
+                                <TripAttachments
+                                  tripId={tripId}
+                                  dayIndex={day.day_index}
+                                  title={`${day.day_index}일차 파일`}
+                                  compact
                                 />
                                 <div className="space-y-1">
                                   <p className="text-xs font-semibold text-ink">장소 추가</p>
@@ -1268,6 +1305,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   pois={day.pois}
                                   selectedPoiId={selectedPoiId}
                                   onSelectPoi={handleSelectPoi}
+                                  tripId={tripId}
+                                  dayDate={day.date}
+                                  showInlineAttachments
+                                  showWeather
+                                  compact={mobileWebLayout}
                                   editable={!busy}
                                   onReorder={handleReorder}
                                   onEditPoi={handleEditPoi}
@@ -1278,7 +1320,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 />
                               </div>
                             ) : (
-                              <div className="space-y-1 border-t border-hairline px-3 py-2">
+                              <div className="space-y-1 px-3 pb-2">
                                 {day.pois.length === 0 ? (
                                   <p className="pl-7 text-xs text-muted">등록된 장소가 없습니다.</p>
                                 ) : (
