@@ -120,6 +120,39 @@ test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다'
   ).toHaveText('경복궁');
 });
 
+test.describe('/trips Samsung Internet 모바일 레이아웃', () => {
+  test.use({
+    viewport: { width: 412, height: 915 },
+    deviceScaleFactor: 2.625,
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36',
+  });
+
+  test('지도 없이 여행 목록을 먼저 렌더링하고 관리 폼은 필요할 때 연다', async ({ page }) => {
+    await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
+      if (!isFetch(request.resourceType())) return route.continue();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [trip()] }),
+      });
+    });
+    await mockTripDetail(page);
+
+    await page.goto('/trips');
+
+    await expect(page.getByRole('heading', { name: '여행' })).toBeVisible();
+    await expect(page.getByTestId('trip-list')).toBeVisible();
+    await expect(page.getByTestId('trip-list')).toContainText('서울 주말 산책');
+    await expect(page.getByTestId('trip-map')).toBeHidden();
+    await expect(page.getByTestId('trip-create-title')).toBeHidden();
+
+    await page.getByRole('button', { name: '관리 열기' }).click();
+    await expect(page.getByTestId('trip-create-title')).toBeVisible();
+  });
+});
+
 test('/trips에서 날짜가 없는 초안 여행을 저장할 수 있다', async ({ page }) => {
   let created = false;
 

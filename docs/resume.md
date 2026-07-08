@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-07-08 (codex) — `/trips` 모바일 목록 우선 레이아웃
+
+모바일 웹의 여행 목록 페이지에서 지도를 숨기고 목록을 기본 화면으로 보여주도록 조정했다. PC 웹은
+기존처럼 지도와 관리 패널을 함께 보여준다. Samsung Internet에서 모바일 viewport가 확실히 적용되도록
+root viewport metadata도 명시했다.
+
+변경:
+
+- `/trips` 지도 섹션을 `lg` 이상에서만 노출한다.
+- 모바일에서는 여행 목록을 기본 노출하고, 새 여행 생성 폼은 `관리 열기`로 필요할 때 연다.
+- Samsung Internet Android UA + 412px viewport e2e 케이스를 추가했다.
+
+검증 예정:
+
+- `git diff --check`
+- PR/GitHub Actions
+- N150 배포 smoke
+
+**다음 한 작업**: PR을 생성해 머지하고 N150에 배포한다.
+
 ## 2026-07-08 (codex) — 여행 상세 모바일 웹 드로어 레이아웃 보강
 
 여행 상세 페이지를 모바일 웹에서 지도 중심으로 쓰도록 조정했다. PC 웹은 기존 좌측 상세 패널 +
