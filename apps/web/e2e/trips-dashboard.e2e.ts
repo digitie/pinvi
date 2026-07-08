@@ -6,7 +6,7 @@ const poiId = '44444444-4444-4444-8444-444444444444';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
-function trip(title = '서울 주말 산책') {
+function trip(title = '서울 주말 산책', overrides: Record<string, unknown> = {}) {
   return {
     trip_id: tripId,
     owner_user_id: userId,
@@ -15,13 +15,14 @@ function trip(title = '서울 주말 산책') {
     region_hint: '서울',
     primary_region_code: '11',
     primary_region_source: 'manual',
-    start_date: '2026-06-20',
-    end_date: '2026-06-21',
+    start_date: '2099-06-20',
+    end_date: '2099-06-21',
     visibility: 'private',
     status: 'draft',
     version: 1,
     created_at: '2026-06-01T09:00:00+09:00',
     updated_at: '2026-06-01T09:00:00+09:00',
+    ...overrides,
   };
 }
 
@@ -120,6 +121,62 @@ test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다'
   ).toHaveText('경복궁');
 });
 
+test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 여행은 탭으로 분리한다', async ({
+  page,
+}) => {
+  const trips = [
+    trip('제주 여름휴가', {
+      trip_id: '11111111-1111-4111-8111-111111111113',
+      start_date: '2099-08-01',
+      end_date: '2099-08-03',
+      status: 'planned',
+    }),
+    trip('부산 1박 2일', {
+      trip_id: '11111111-1111-4111-8111-111111111114',
+      start_date: '2099-07-01',
+      end_date: '2099-07-02',
+      status: 'planned',
+    }),
+    trip('속초 겨울 여행', {
+      trip_id: '11111111-1111-4111-8111-111111111115',
+      start_date: '2000-01-01',
+      end_date: '2000-01-03',
+      status: 'completed',
+    }),
+    trip('강릉 당일치기', {
+      trip_id: '11111111-1111-4111-8111-111111111116',
+      start_date: '2099-07-01',
+      end_date: '2099-07-01',
+      status: 'planned',
+    }),
+  ];
+
+  await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: trips }),
+    });
+  });
+  await mockTripDetail(page);
+
+  await page.goto('/trips');
+
+  await expect(page.getByRole('tab', { name: '예정' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByTestId('trip-list').locator('h2')).toHaveText([
+    '강릉 당일치기',
+    '부산 1박 2일',
+    '제주 여름휴가',
+  ]);
+  await expect(page.getByTestId('trip-list')).not.toContainText('속초 겨울 여행');
+
+  await page.getByRole('tab', { name: '지난 여행' }).click();
+  await expect(page.getByTestId('trip-list').locator('h2')).toHaveText(['속초 겨울 여행']);
+});
+
 test.describe('/trips Samsung Internet 모바일 레이아웃', () => {
   test.use({
     viewport: { width: 1180, height: 915 },
@@ -172,7 +229,9 @@ test('/trips에서 날짜가 없는 초안 여행을 저장할 수 있다', asyn
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
-        body: JSON.stringify({ data: trip('날짜 미정 초안') }),
+        body: JSON.stringify({
+          data: trip('날짜 미정 초안', { start_date: null, end_date: null }),
+        }),
       });
       return;
     }

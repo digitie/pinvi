@@ -29,11 +29,18 @@ const STATUS_LABEL: Record<TripStatus, string> = {
   archived: '보관',
 };
 
-const BUCKETS: { value: TripBucket; label: string }[] = [
-  { value: 'all', label: '전체' },
+type TripListTab = Exclude<TripBucket, 'all'>;
+
+const BUCKETS: { value: TripListTab; label: string }[] = [
   { value: 'future', label: '예정' },
   { value: 'past', label: '지난 여행' },
 ];
+
+const TRIP_TITLE_COLLATOR = new Intl.Collator('ko-KR', {
+  numeric: true,
+  sensitivity: 'base',
+});
+const UNDATED_TRIP_SORT_DATE = '9999-12-31';
 
 type TripDashboardMapPoint = TripMapPoint & {
   tripId: string;
@@ -71,11 +78,26 @@ function isPastTrip(trip: TripResponse): boolean {
   return new Date(`${trip.end_date}T00:00:00`) < today;
 }
 
-function visibleTrips(trips: TripResponse[], bucket: TripBucket): TripResponse[] {
-  if (bucket === 'all') {
-    return trips;
+function tripSortDate(trip: Pick<TripResponse, 'start_date' | 'end_date'>): string {
+  return trip.start_date ?? trip.end_date ?? UNDATED_TRIP_SORT_DATE;
+}
+
+function compareTripsBySchedule(a: TripResponse, b: TripResponse): number {
+  const dateCompare = tripSortDate(a).localeCompare(tripSortDate(b));
+  if (dateCompare !== 0) {
+    return dateCompare;
   }
-  return trips.filter((trip) => (bucket === 'past' ? isPastTrip(trip) : !isPastTrip(trip)));
+  const titleCompare = TRIP_TITLE_COLLATOR.compare(a.title, b.title);
+  if (titleCompare !== 0) {
+    return titleCompare;
+  }
+  return a.trip_id.localeCompare(b.trip_id);
+}
+
+function visibleTrips(trips: TripResponse[], bucket: TripListTab): TripResponse[] {
+  return trips
+    .filter((trip) => (bucket === 'past' ? isPastTrip(trip) : !isPastTrip(trip)))
+    .sort(compareTripsBySchedule);
 }
 
 function validateDateRange(startDate: string, endDate: string): string | null {
@@ -94,7 +116,7 @@ function validateDateRange(startDate: string, endDate: string): string | null {
 export function TripDashboard() {
   const mobileWebLayout = useMobileWebLayout();
   const [trips, setTrips] = useState<TripResponse[]>([]);
-  const [bucket, setBucket] = useState<TripBucket>('all');
+  const [bucket, setBucket] = useState<TripListTab>('future');
   const [loading, setLoading] = useState(true);
   const [mapLoading, setMapLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -121,6 +143,7 @@ export function TripDashboard() {
     [filteredTrips, mapPointsByTripId],
   );
   const upcomingCount = useMemo(() => trips.filter((trip) => !isPastTrip(trip)).length, [trips]);
+  const pastCount = useMemo(() => trips.filter((trip) => isPastTrip(trip)).length, [trips]);
   const draftCount = useMemo(() => trips.filter((trip) => trip.status === 'draft').length, [trips]);
   const selectedMapPoint = useMemo(
     () => filteredMapPoints.find((point) => point.poiId === selectedPoiId) ?? null,
@@ -232,7 +255,7 @@ export function TripDashboard() {
       const created = await tripApi(apiClient).create(body);
       setTrips((current) => [created, ...current]);
       setMapPointsByTripId((current) => ({ ...current, [created.trip_id]: [] }));
-      setBucket('all');
+      setBucket('future');
       setTitle('');
       setRegionHint('');
       setStartDate('');
@@ -252,7 +275,7 @@ export function TripDashboard() {
           <p className="text-xs font-semibold uppercase tracking-normal text-primary">Trips</p>
           <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">여행</h1>
           <p className="mt-2 text-sm text-muted">
-            전체 {trips.length} · 예정 {upcomingCount} · 초안 {draftCount}
+            예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
