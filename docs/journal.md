@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-08 (codex) — 여행 상세 모바일 웹 드로어 레이아웃 보강
+
+**작업**: 사용자 지시에 따라 여행 상세 페이지의 모바일 웹 레이아웃을 지도 중심으로 조정했다.
+PC 웹은 기존 좌측 패널 + 우측 지도 구조를 유지하고, 모바일 웹에서는 상단 메뉴만 남긴 뒤 상세
+패널을 필요할 때 지도 위 왼쪽 드로어로 열도록 바꿨다.
+
+**변경 파일**:
+
+- `apps/web/components/trips/TripDetail.tsx` — 모바일 상세 패널을 문서 흐름에서 빼고 지도 위
+  absolute 드로어로 표시. 상단 버튼 메뉴는 모바일에서 한 줄 가로 스크롤로 유지.
+- `apps/web/e2e/trip-detail.e2e.ts` — 모바일 viewport에서 기본 패널 숨김과 왼쪽 드로어 overlay
+  위치를 검증하는 mock e2e 추가.
+
+**검증**:
+
+- `npm -w @pinvi/web run typecheck` 통과.
+- `git diff --check` 통과.
+- `npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts --workers=1`은 테스트 본문 진입 전
+  Playwright `webServer` 준비 180초 timeout으로 실패했다. 이후 사용자 지시에 따라 로컬
+  `next build`는 중단했고, 남은 빌드/평가는 로컬에서 진행하지 않았다.
+
+**주의**:
+
+- `/mnt/f` 용량 0 상태에서 시작해 재생성 캐시(`apps/web/.next`, Playwright 결과, mypy/ruff cache,
+  깨진 `.codegraph`)만 삭제했다. 삭제 후 약 1.3GB 여유가 생겼다.
+- CodeGraph 인덱스는 최초 `disk I/O error`로 조회/동기화가 실패했고, 캐시 삭제 후 `Not initialized`
+  상태다. 이번 변경의 영향도 평가는 인덱스 기반으로 완료하지 못했다.
+
+**다음**: N150 기준 빌드/평가 정책에 맞춰 여행 상세 모바일 웹 드로어 e2e를 다시 검증한 뒤 PR을
+정리한다.
+
 ## 2026-07-07 (codex) — 모바일 업로드 / 지도 패널 레이아웃 수정
 
 **작업**: Samsung Internet 파일 업로드 실패, MIME 오류 메시지, 업로드 파일 클릭 시 `127.0.0.1` URL

@@ -216,6 +216,24 @@ async function expectMyMapsDetailLayout(page: Page) {
   expect(mapBox?.height ?? 0).toBeGreaterThan(500);
 }
 
+async function expectMobileDrawerLayout(page: Page) {
+  const panel = page.getByTestId('trip-detail-panel');
+  const map = page.getByTestId('trip-detail-map');
+
+  await expect(panel).toBeVisible();
+  await expect(map).toBeVisible();
+
+  const panelBox = await panel.boundingBox();
+  const mapBox = await map.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(mapBox).not.toBeNull();
+  expect(panelBox?.x ?? 0).toBeGreaterThanOrEqual(mapBox?.x ?? 0);
+  expect(panelBox?.x ?? 0).toBeLessThan((mapBox?.x ?? 0) + 4);
+  expect(panelBox?.y ?? 0).toBeGreaterThanOrEqual((mapBox?.y ?? 0) - 1);
+  expect(panelBox?.width ?? 0).toBeLessThan(mapBox?.width ?? 0);
+  expect(mapBox?.height ?? 0).toBeGreaterThan(500);
+}
+
 async function installClosingWebSocket(page: Page, code: number, reason: string) {
   await page.addInitScript(
     ({ closeCode, closeReason }) => {
@@ -288,6 +306,20 @@ test('trip 상세가 TripView를 받아 헤더·POI·협업 섹션을 렌더링�
   await expect(page.getByTestId('trip-detail-panel')).toContainText('첨부');
   await page.getByRole('tab', { name: '댓글' }).click();
   await expect(page.getByTestId('trip-detail-panel')).toContainText('댓글');
+});
+
+test('모바일 상세는 상단 메뉴만 남기고 상세 패널을 왼쪽 드로어로 연다', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await mockTripDetailRoutes(page);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByTestId('trip-top-panel')).toBeVisible();
+  await expect(page.getByTestId('trip-detail-panel')).toBeHidden();
+  await expect(page.getByTestId('trip-detail-map')).toBeVisible();
+  await page.getByRole('button', { name: '패널 열기' }).click();
+  await expectMobileDrawerLayout(page);
+  await expect(page.getByTestId('trip-detail-panel')).toContainText('지도 레이어');
 });
 
 test('상세 지도는 왼쪽 일자 레이어 표시 상태만 반영하고 오른쪽 패널을 두지 않는다', async ({

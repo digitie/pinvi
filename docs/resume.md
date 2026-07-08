@@ -1,5 +1,35 @@
 # resume.md
 
+## 2026-07-08 (codex) — 여행 상세 모바일 웹 드로어 레이아웃 보강
+
+여행 상세 페이지를 모바일 웹에서 지도 중심으로 쓰도록 조정했다. PC 웹은 기존 좌측 상세 패널 +
+우측 지도 grid를 유지하고, 모바일 웹은 기본적으로 상세 패널을 숨긴다. 사용자가 `패널 열기`를 누르면
+상세 메뉴가 지도 영역을 밀지 않고 왼쪽 드로어로 겹쳐 열린다. 상단 버튼 메뉴는 모바일에서 한 줄
+가로 스크롤로 유지해 닫힌 상태의 지도 높이를 확보했다.
+
+변경:
+
+- `TripDetail` 모바일 상세 패널을 `absolute` drawer로 바꾸고 `lg` 이상에서는 기존 static grid
+  패널로 유지했다.
+- 모바일 상단 작업 버튼은 wrap 대신 horizontal scroll 메뉴로 바꿔 여러 줄 점유를 줄였다.
+- `trip-detail.e2e.ts`에 모바일 viewport에서 기본 패널 숨김과 드로어 overlay 위치를 검증하는 mock
+  테스트를 추가했다.
+
+검증:
+
+- `npm -w @pinvi/web run typecheck`
+- `git diff --check`
+
+주의:
+
+- `/mnt/f` 용량 0 상태로 `codegraph`가 `disk I/O error`를 냈고, 캐시 삭제 후에는 `Not initialized`
+  상태다.
+- `npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts --workers=1`은 Playwright `webServer` 준비
+  180초 timeout으로 테스트 본문 전 실패했다. 이후 사용자 지시에 따라 로컬 `next build`는 중단했다.
+
+**다음 한 작업**: N150 기준 빌드/평가 정책에 맞춰 여행 상세 모바일 웹 드로어 e2e를 다시 검증하고
+PR을 정리한다.
+
 ## 2026-07-07 (codex) — 모바일 업로드/지도 레이아웃 수정
 
 `agent/codex-mobile-map-upload-fixes`에서 모바일 Samsung Internet 업로드 실패, RustFS `127.0.0.1`
