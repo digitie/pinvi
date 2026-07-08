@@ -5,6 +5,8 @@ import { AlertTriangle, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
 import { arrayMove, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
+import { TripAttachments } from '@/components/trips/TripAttachments';
+import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 
 function formatTime(value: string | null): string | null {
   if (!value) return null;
@@ -17,6 +19,11 @@ export interface TripPoiListProps {
   pois: TripViewPoi[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poiId: string) => void;
+  tripId?: string;
+  dayDate?: string | null;
+  showInlineAttachments?: boolean;
+  showWeather?: boolean;
+  compact?: boolean;
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
   onReorder?: (orderedPoiIds: string[]) => void;
@@ -32,6 +39,11 @@ export function TripPoiList({
   pois,
   selectedPoiId = null,
   onSelectPoi,
+  tripId,
+  dayDate = null,
+  showInlineAttachments = false,
+  showWeather = false,
+  compact = false,
   editable = false,
   onReorder,
   onEditPoi,
@@ -51,7 +63,13 @@ export function TripPoiList({
 
   if (pois.length === 0) {
     return (
-      <div className="flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center text-sm text-muted">
+      <div
+        className={
+          compact
+            ? 'flex min-h-20 items-center justify-center rounded-sm bg-surface-soft px-3 text-center text-xs text-muted'
+            : 'flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center text-sm text-muted'
+        }
+      >
         이 날에 등록된 장소가 없습니다.
       </div>
     );
@@ -74,7 +92,7 @@ export function TripPoiList({
   };
 
   return (
-    <ol className="space-y-2" data-testid="trip-poi-list">
+    <ol className={compact ? 'space-y-1.5' : 'space-y-2'} data-testid="trip-poi-list">
       {pois.map((poi, index) => {
         const arrival = formatTime(poi.planned_arrival_at);
         const selected = poi.poi_id === selectedPoiId;
@@ -91,9 +109,13 @@ export function TripPoiList({
           >
             <div
               className={
-                selected
-                  ? 'rounded-sm border border-primary bg-surface-soft p-3'
-                  : 'rounded-sm border border-hairline bg-white p-3'
+                compact
+                  ? selected
+                    ? 'rounded-sm bg-primary/5 p-2 ring-1 ring-primary/35'
+                    : 'rounded-sm bg-white p-2'
+                  : selected
+                    ? 'rounded-sm border border-primary bg-surface-soft p-3'
+                    : 'rounded-sm border border-hairline bg-white p-3'
               }
             >
               <div className="flex items-start gap-2">
@@ -186,6 +208,26 @@ export function TripPoiList({
                   }}
                   onCancel={() => setEditingPoiId(null)}
                 />
+              )}
+              {(showWeather || (showInlineAttachments && tripId)) && (
+                <div className={compact ? 'mt-2 space-y-2 pl-8' : 'mt-3 space-y-2 pl-9'}>
+                  {showWeather && (
+                    <TripWeatherSummary
+                      featureId={poi.feature_id}
+                      date={dayDate}
+                      label="장소 날씨"
+                      compact
+                    />
+                  )}
+                  {showInlineAttachments && tripId && (
+                    <TripAttachments
+                      tripId={tripId}
+                      poiId={poi.poi_id}
+                      title="장소 파일"
+                      compact
+                    />
+                  )}
+                </div>
               )}
             </div>
           </li>
