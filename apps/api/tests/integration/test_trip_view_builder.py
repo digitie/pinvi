@@ -145,6 +145,60 @@ async def test_build_trip_view_skips_null_feature_ids(session_factory) -> None: 
     assert built_poi["title"] == "지도 밖 메모 장소"
 
 
+async def test_build_trip_view_includes_public_holidays(session_factory) -> None:  # type: ignore[no-untyped-def]
+    from app.models.kasi import KasiSpecialDay
+    from app.models.trip import Trip
+    from app.models.trip_day import TripDay
+    from app.models.user import User
+    from app.services.trip_view_builder import build_trip_view
+
+    user_id = uuid.uuid4()
+    trip_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=user_id,
+                email=f"holiday_{uuid.uuid4().hex[:8]}@pinvi.test",
+                status="active",
+                email_verified_at=now,
+            )
+        )
+        await db.flush()
+        trip = Trip(trip_id=trip_id, owner_user_id=user_id, title="공휴일 여행")
+        db.add_all(
+            [
+                trip,
+                TripDay(trip_id=trip_id, day_index=1, date=date(2026, 8, 15), title="광복절"),
+                TripDay(trip_id=trip_id, day_index=2, date=date(2026, 8, 16), title="둘째 날"),
+                KasiSpecialDay(
+                    dataset="holidays",
+                    sol_date=date(2026, 8, 15),
+                    name="광복절",
+                    sequence="1",
+                    is_holiday=True,
+                ),
+                KasiSpecialDay(
+                    dataset="anniversaries",
+                    sol_date=date(2026, 8, 15),
+                    name="광복절 기념일",
+                    sequence="2",
+                    is_holiday=False,
+                ),
+            ]
+        )
+        await db.commit()
+        await db.refresh(trip)
+
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=None)
+
+    assert view["days"][0]["holidays"] == [
+        {"date": date(2026, 8, 15), "name": "광복절", "dataset": "holidays"}
+    ]
+    assert view["days"][1]["holidays"] == []
+
+
 class _CountingFeatureClient:
     def __init__(self) -> None:
         self.call_count = 0

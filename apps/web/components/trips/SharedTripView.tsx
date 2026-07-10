@@ -9,15 +9,9 @@ import { apiClient } from '@/lib/api';
 import { tripDaysToMapPoints } from '@pinvi/domain';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
+import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
-
-function formatDate(value: string | null): string {
-  if (!value) return '미정';
-  return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }).format(
-    new Date(value)
-  );
-}
 
 export interface SharedTripViewProps {
   tripId: string;
@@ -61,6 +55,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
   }, [mapPoints]);
 
   const selectedDay = view?.days.find((day) => day.day_index === selectedDayIndex) ?? null;
+  const holidayMap = useMemo(() => holidaysByDate(view?.days ?? []), [view?.days]);
 
   const handleSelectPoi = (poiId: string) => {
     setSelectedPoiId(poiId);
@@ -107,7 +102,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <span className="inline-flex items-center gap-1">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            {formatDate(trip.start_date)} – {formatDate(trip.end_date)}
+            {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
           </span>
           <span className="inline-flex items-center gap-1">
             <MapPin className="h-4 w-4" aria-hidden="true" />
@@ -120,6 +115,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="일자 선택">
           {view.days.map((day) => {
             const active = day.day_index === selectedDayIndex;
+            const dayHolidayLabel = holidayLabel(day.holidays);
             return (
               <button
                 key={day.day_index}
@@ -134,6 +130,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
                 }
               >
                 {day.title ?? `${day.day_index}일차`}
+                {dayHolidayLabel && <span className="ml-2 text-xs opacity-85">{dayHolidayLabel}</span>}
               </button>
             );
           })}

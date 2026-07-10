@@ -62,6 +62,12 @@ import { TripShareLinks } from '@/components/trips/TripShareLinks';
 import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
+import {
+  formatTripDate,
+  formatTripDateRange,
+  holidaysByDate,
+  holidayLabel,
+} from '@/lib/tripDateLabels';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -115,15 +121,6 @@ type TripDetailPanelTab = 'plan' | 'files' | 'share' | 'people' | 'comments';
 
 interface MutationOptions {
   onConflict?: (latest: TripView | null) => void;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '미정';
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(value));
 }
 
 function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
@@ -508,6 +505,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
     null;
   const onlinePresence = Array.from(presence.values()).filter((entry) => entry.isOnline);
+  const holidayMap = useMemo(() => holidaysByDate(view?.days ?? []), [view?.days]);
   const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
   const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
   const nextDayIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
@@ -1076,7 +1074,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:text-sm">
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                    {formatDate(trip.start_date)} - {formatDate(trip.end_date)}
+                    {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-4 w-4" aria-hidden="true" />
@@ -1086,7 +1084,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                     <Layers className="h-4 w-4" aria-hidden="true" />
                     {view.days.length}일 · {totalPoiCount}개 장소
                   </span>
-                  <span>업데이트 {formatDate(trip.updated_at)}</span>
+                  <span>업데이트 {formatTripDate(trip.updated_at)}</span>
                 </p>
               </div>
             </div>
@@ -1233,7 +1231,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {formatDate(trip.start_date)} - {formatDate(trip.end_date)}
+                    {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
                   </p>
                 </div>
                 <button
@@ -1367,6 +1365,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         const visible =
                           visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index);
                         const dayLabel = day.title ?? `${day.day_index}일차`;
+                        const dayHolidayLabel = holidayLabel(day.holidays);
                         return (
                           <article
                             key={day.day_index}
@@ -1404,8 +1403,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       </span>
                                     </span>
                                     <span className="mt-1 block text-xs text-muted">
-                                      {formatDate(day.date)} · {visible ? '표시' : '숨김'}
+                                      {formatTripDate(day.date)} · {visible ? '표시' : '숨김'}
                                     </span>
+                                    {dayHolidayLabel && (
+                                      <span
+                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        data-testid="trip-day-holiday"
+                                      >
+                                        {dayHolidayLabel}
+                                      </span>
+                                    )}
                                   </button>
                                   <TripDayControls
                                     selectedDay={day}

@@ -236,12 +236,26 @@ export const TripViewPoiSchema = z.object({
 });
 export type TripViewPoi = z.infer<typeof TripViewPoiSchema>;
 
+export const TripDayHolidaySchema = z.object({
+  date: z.string().date(),
+  name: z.string(),
+  dataset: z.enum([
+    'holidays',
+    'national_holidays',
+    'anniversaries',
+    'solar_terms_24',
+    'sundry_days',
+  ]),
+});
+export type TripDayHoliday = z.infer<typeof TripDayHolidaySchema>;
+
 export const TripViewDaySchema = z.object({
   day_index: z.number().int(),
   date: z.string().date().nullable(),
   title: z.string().nullable(),
   // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
   version: z.number().int().default(1),
+  holidays: z.array(TripDayHolidaySchema).default([]),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;

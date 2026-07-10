@@ -261,8 +261,8 @@ function AdminGuard({ children }: { children: ReactNode }) {
                   const active = activeHref === item.href;
                   const Icon = item.icon;
                   const linkSize = sidebarCollapsed
-                    ? 'h-11 w-11 justify-center'
-                    : 'h-11 w-11 justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
+                    ? 'h-11 w-11 items-center justify-center'
+                    : 'h-11 w-11 items-center justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
                   const labelClass = sidebarCollapsed
                     ? 'sr-only'
                     : 'sr-only lg:not-sr-only lg:block lg:min-w-0 lg:flex-1 lg:truncate';

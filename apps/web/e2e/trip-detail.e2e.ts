@@ -32,6 +32,7 @@ const TRIP_VIEW = {
       day_index: 1,
       date: '2026-07-01',
       title: '1일차',
+      holidays: [],
       pois: [
         {
           poi_id: poiId,
@@ -180,6 +181,22 @@ const LAYER_VIEW = {
           marker_icon: 'camera',
         },
       ],
+    },
+  ],
+};
+
+const HOLIDAY_VIEW = {
+  ...TRIP_VIEW,
+  trip: {
+    ...TRIP_VIEW.trip,
+    start_date: '2026-08-15',
+    end_date: '2026-08-16',
+  },
+  days: [
+    {
+      ...BASE_MARKER_DAY,
+      date: '2026-08-15',
+      holidays: [{ date: '2026-08-15', name: '광복절', dataset: 'holidays' }],
     },
   ],
 };
@@ -439,6 +456,15 @@ test('trip 상세가 TripView를 받아 헤더·POI·협업 섹션을 렌더링�
   await expect(page.getByTestId('trip-detail-panel')).toContainText('첨부');
   await page.getByRole('tab', { name: '댓글' }).click();
   await expect(page.getByTestId('trip-detail-panel')).toContainText('댓글');
+});
+
+test('trip 상세가 공휴일인 일자를 날짜 UI에 표시한다', async ({ page }) => {
+  await mockTripDetailRoutes(page, HOLIDAY_VIEW);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByTestId('trip-top-panel')).toContainText('공휴일 · 광복절');
+  await expect(page.getByTestId('trip-day-holiday')).toContainText('공휴일 · 광복절');
 });
 
 test.describe('Samsung Internet 모바일 상세 레이아웃', () => {

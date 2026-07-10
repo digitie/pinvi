@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Admin 좌측 메뉴에서 선택된 항목의 아이콘/글자 세로 정렬이 깨지지 않게 정렬 클래스를 보정했다.
+- 여행 상세/공유 화면 날짜 UI가 KASI 공휴일 데이터를 받아 공휴일 이름을 함께 표시한다.
 - 여행 상세 지도에서 현재 viewport의 `kor-travel-map` feature를 함께 표시한다. 이미 여행에 담긴
   feature는 중복 표시하지 않고, feature marker 팝업에서 선택 일자에 추가할 수 있다. feature가 없는
   지도 지점은 PC 우클릭 또는 모바일 long-touch로 POI 생성 다이얼로그를 열고, `/geo/reverse` 주소를

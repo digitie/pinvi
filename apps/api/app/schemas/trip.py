@@ -219,11 +219,24 @@ class TripViewPoi(BaseModel):
     updated_at: datetime
 
 
+class TripDayHoliday(BaseModel):
+    date: Date
+    name: str
+    dataset: Literal[
+        "holidays",
+        "national_holidays",
+        "anniversaries",
+        "solar_terms_24",
+        "sundry_days",
+    ]
+
+
 class TripViewDay(BaseModel):
     day_index: int
     date: Date | None
     title: str | None
     version: int
+    holidays: list[TripDayHoliday] = Field(default_factory=list)
     pois: list[TripViewPoi]
 
 
