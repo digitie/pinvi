@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-10 (codex) — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시
+
+**작업**: 사용자 지시에 따라 Admin UI 좌측 메뉴의 선택 항목 글자/아이콘 세로 정렬을 보정하고, 사용자
+여행 날짜 UI가 공휴일이면 공휴일명을 함께 표시하도록 했다.
+
+**변경**:
+
+- Admin layout의 좌측 nav link에 `items-center`를 명시해 선택/hover 상태에서도 아이콘과 텍스트 높이가
+  어긋나지 않게 했다.
+- TripView API 응답 day에 `holidays` 배열을 추가하고, `app.kasi_special_days`의 `is_holiday=true`
+  항목만 날짜별로 묶어 내려준다.
+- Web 공용 날짜 label helper를 추가해 여행 상세 헤더, 모바일 drawer, 공유 화면, 여행 목록 날짜 범위가
+  같은 포맷으로 공휴일을 표시하게 했다.
+- 여행 상세 day 목록에 `공휴일 · <이름>` badge를 추가했다.
+- API 통합 테스트, Web 단위 테스트, 여행 상세 E2E에 공휴일 표시 검증을 추가했다.
+- `CHANGELOG.md` Unreleased에 사용자 가시 변경을 기록했다.
+
+**검증**:
+
+- 로컬 `git diff --check` 통과.
+- 로컬
+  `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/python -m py_compile apps/api/app/schemas/trip.py apps/api/app/services/trip_view_builder.py apps/api/tests/integration/test_trip_view_builder.py`
+  통과.
+- 로컬
+  `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/python -m pytest -s apps/api/tests/integration/test_trip_view_builder.py -q`
+  → 4 passed.
+- N150 Docker runner 임시 worktree에서 `npm -w @pinvi/web run typecheck` 통과.
+- N150 Docker runner 임시 worktree에서 `npm -w @pinvi/web run test -- tripDateLabels.test.ts`
+  → 2 passed.
+- N150 Docker runner 임시 worktree에서 `npm -w @pinvi/web run build` 통과.
+- N150 Docker runner 임시 worktree에서
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:12855 npx playwright test -c .codex-playwright.no-webserver.config.ts trip-detail.e2e.ts --grep 공휴일 --workers=1`
+  → 1 passed.
+
+**발견**:
+
+- N150의 `12805`는 운영 `pinvi-web-latest` 컨테이너가 점유 중이라 branch code mock E2E는 기존 live
+  서버를 재사용하지 않도록 임시 Next 서버 `12855`에서 실행했다.
+
+**다음**: PR을 생성해 머지하고 N150 라이브 UI E2E와 스크린샷 확인을 진행한다.
+
 ## 2026-07-10 (codex) — 여행 상세 지도 feature 표시 + 수동 POI 생성
 
 **작업**: 사용자 지시에 따라 여행 상세 지도에서 `kor-travel-map` feature를 보이게 하고, feature가 없는

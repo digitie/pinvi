@@ -1,5 +1,44 @@
 # resume.md
 
+## 2026-07-10 (codex) — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시
+
+Admin UI 좌측 메뉴의 선택 항목에서 아이콘/글자 세로 정렬이 흔들리지 않도록 nav link 정렬을 보정했다.
+사용자 여행 날짜 UI는 TripView day의 `holidays` 배열을 통해 KASI 공휴일이면 `공휴일 · <이름>`을 함께
+표시한다. API는 `app.kasi_special_days` 중 `is_holiday=true` 항목만 날짜별로 묶어 TripView day에 포함한다.
+
+변경:
+
+- `apps/web/app/(admin)/admin/layout.tsx` nav link class에 `items-center`를 추가했다.
+- `apps/api/app/schemas/trip.py`, `apps/api/app/services/trip_view_builder.py`에 TripView day 공휴일
+  응답을 추가했다.
+- `packages/schemas/src/trip.ts`와 `packages/schemas/src/index.ts`에 `TripDayHoliday` schema/type을
+  추가했다.
+- `apps/web/lib/tripDateLabels.ts`를 추가하고 여행 상세/공유/목록 날짜 표시가 같은 helper를 쓰게 했다.
+- `apps/web/components/trips/TripDetail.tsx` day 목록에 공휴일 badge를 추가했다.
+- API 통합 테스트, Web 단위 테스트, 여행 상세 E2E에 공휴일 표시 검증을 추가했다.
+
+검증:
+
+- 로컬: `git diff --check`
+- 로컬:
+  `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/python -m py_compile apps/api/app/schemas/trip.py apps/api/app/services/trip_view_builder.py apps/api/tests/integration/test_trip_view_builder.py`
+- 로컬:
+  `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/python -m pytest -s apps/api/tests/integration/test_trip_view_builder.py -q`
+  → 4 passed
+- N150 Docker runner: `npm -w @pinvi/web run typecheck`
+- N150 Docker runner: `npm -w @pinvi/web run test -- tripDateLabels.test.ts` → 2 passed
+- N150 Docker runner: `npm -w @pinvi/web run build`
+- N150 Docker runner:
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:12855 npx playwright test -c .codex-playwright.no-webserver.config.ts trip-detail.e2e.ts --grep 공휴일 --workers=1`
+  → 1 passed
+
+주의:
+
+- N150 `12805`는 운영 Web 컨테이너가 점유 중이다. branch code mock E2E는 임시 Next 서버 `12855`에서
+  실행했다.
+
+**다음 한 작업**: PR을 생성해 머지하고 N150 라이브 UI E2E와 스크린샷 확인을 진행한다.
+
 ## 2026-07-10 (codex) — 여행 상세 지도 feature 표시 + 수동 POI 생성
 
 여행 상세 지도에서 `features/in-bounds`를 조회해 현재 viewport의 `kor-travel-map` feature marker를
