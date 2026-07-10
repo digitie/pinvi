@@ -9,10 +9,7 @@ import {
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type {
-  FeatureKind,
-  FeatureRequestCreate,
-} from '@pinvi/schemas';
+import type { FeatureKind, FeatureRequestCreate } from '@pinvi/schemas';
 
 /** `docs/api/features.md` — Sprint 4 (v0.1.0 게이트). */
 export const featureApi = (client: ApiClient) => ({
@@ -105,11 +102,14 @@ export const featureApi = (client: ApiClient) => ({
     }),
 
   /** KMA 시간축 weather card. */
-  weather: (featureId: string) =>
-    client.request(`/features/${featureId}/weather`, {
+  weather: (featureId: string, params: { asof?: string | null } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.asof) qs.set('asof', params.asof);
+    return client.request(`/features/${featureId}/weather${qs.toString() ? `?${qs}` : ''}`, {
       method: 'GET',
       schema: FeatureWeatherCardSchema,
-    }),
+    });
+  },
 
   /** 카테고리 카탈로그 (마커 범례 / 필터 칩). 저빈도 → 긴 staleTime 권장. */
   categories: (params: { activeOnly?: boolean } = {}) => {

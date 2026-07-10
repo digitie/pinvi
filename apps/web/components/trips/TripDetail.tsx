@@ -53,6 +53,10 @@ import { TripCompanions } from '@/components/trips/TripCompanions';
 import { TripDayControls } from '@/components/trips/TripDayControls';
 import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
 import { TripMapView } from '@/components/trips/TripMapView';
+import {
+  TripManualPoiDialog,
+  type ManualPoiCreateInput,
+} from '@/components/trips/TripManualPoiDialog';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { TripShareLinks } from '@/components/trips/TripShareLinks';
 import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
@@ -134,6 +138,107 @@ function addDays(dateValue: string, offsetDays: number): string {
   const next = new Date(`${dateValue}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + offsetDays);
   return next.toISOString().slice(0, 10);
+}
+
+function validDateValue(value: string | null): boolean {
+  if (!value) return true;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function addDayValidation(view: TripView, nextDayIndex: number): string | null {
+  const { start_date: startDate, end_date: endDate } = view.trip;
+
+  if (!Number.isInteger(nextDayIndex) || nextDayIndex < 1) {
+    return '추가할 일자 순서를 확인해주세요.';
+  }
+  if (!validDateValue(startDate) || !validDateValue(endDate)) {
+    return '여행 기간을 먼저 확인해주세요.';
+  }
+  if (
+    startDate &&
+    endDate &&
+    Date.parse(`${endDate}T00:00:00Z`) < Date.parse(`${startDate}T00:00:00Z`)
+  ) {
+    return '종료일이 시작일보다 빠릅니다. 여행 기간을 먼저 수정해주세요.';
+  }
+
+  const maxTripDayCount = tripDurationDays(startDate, endDate);
+  if (maxTripDayCount != null && nextDayIndex > maxTripDayCount) {
+    return `여행 기간은 최대 ${maxTripDayCount}일입니다. 기간을 먼저 늘려주세요.`;
+  }
+
+  const nextDate = startDate ? addDays(startDate, nextDayIndex - 1) : null;
+  if (nextDate && endDate && nextDate > endDate) {
+    return '추가할 일자가 여행 종료일을 넘어갑니다. 기간을 먼저 늘려주세요.';
+  }
+  if (view.days.some((day) => day.day_index === nextDayIndex)) {
+    return '이미 같은 일자가 있습니다.';
+  }
+
+  return null;
+}
+
+function isKoreaCoord(coord: { lon: number; lat: number }): boolean {
+  return coord.lon >= 124 && coord.lon <= 132 && coord.lat >= 33 && coord.lat <= 43;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cleanString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function optionalNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function buildManualPoiSnapshot(input: ManualPoiCreateInput): Record<string, unknown> {
+  const candidate = input.candidate;
+  const snapshot: Record<string, unknown> = {
+    coord: { lon: input.coord.lon, lat: input.coord.lat },
+    name: input.title,
+    title: input.title,
+    kind: 'place',
+    marker_color: 'P-08',
+    marker_icon: 'marker',
+    source: 'manual',
+  };
+
+  if (input.addressLabel) snapshot.address_label = input.addressLabel;
+  if (candidate) {
+    const address = candidate.address;
+    if (isRecord(address) || typeof address === 'string') {
+      snapshot.address = address;
+    } else if (input.addressLabel) {
+      snapshot.address = { label: input.addressLabel };
+    }
+    if (isRecord(candidate.region)) snapshot.region = candidate.region;
+
+    const reverseGeocode: Record<string, unknown> = {};
+    const source = cleanString(candidate.source);
+    const distanceM = optionalNumber(candidate.distance_m);
+    const confidence = optionalNumber(candidate.confidence);
+    if (source) reverseGeocode.source = source;
+    if (distanceM != null) reverseGeocode.distance_m = distanceM;
+    if (confidence != null) reverseGeocode.confidence = confidence;
+    if (Object.keys(reverseGeocode).length > 0) snapshot.reverse_geocode = reverseGeocode;
+  } else if (input.addressLabel) {
+    snapshot.address = { label: input.addressLabel };
+  }
+
+  return snapshot;
 }
 
 function realtimeStatusDetail(
@@ -242,6 +347,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
+  const [manualPoiCoord, setManualPoiCoord] = useState<{ lon: number; lat: number } | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -381,6 +487,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (visibleDayIndexes.size === 0) return allMapPoints;
     return allMapPoints.filter((point) => visibleDayIndexes.has(point.dayIndex));
   }, [allMapPoints, visibleDayIndexes]);
+  const plannedFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const day of view?.days ?? []) {
+      for (const poi of day.pois) {
+        if (poi.feature_id) ids.add(poi.feature_id);
+      }
+    }
+    return ids;
+  }, [view]);
   const poiDay = useMemo(() => {
     const map = new Map<string, number>();
     for (const point of allMapPoints) map.set(point.poiId, point.dayIndex);
@@ -396,12 +511,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
   const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
   const nextDayIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
-  const maxTripDayCount = view ? tripDurationDays(view.trip.start_date, view.trip.end_date) : null;
-  const canAddDay = maxTripDayCount == null || nextDayIndex <= maxTripDayCount;
-  const addDayDisabledReason =
-    !canAddDay && maxTripDayCount != null
-      ? `여행 기간은 최대 ${maxTripDayCount}일입니다. 기간을 먼저 늘려주세요.`
-      : null;
+  const addDayDisabledReason = view ? addDayValidation(view, nextDayIndex) : null;
+  const canAddDay = addDayDisabledReason == null;
   const visibleLayerCount =
     view?.days.filter((day) => visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index))
       .length ?? 0;
@@ -522,7 +633,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
   );
 
   const handleAddFeature = (feature: FeatureSummary) => {
-    if (selectedDay == null) return;
+    if (selectedDay == null) {
+      setActivePanel('plan');
+      setMutationError('일자를 먼저 선택해주세요.');
+      if (mobileWebLayout) setMobilePanelOpen(true);
+      return;
+    }
     const coord = feature.coord;
     if (!coord) return;
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
@@ -544,6 +660,48 @@ export function TripDetail({ tripId }: TripDetailProps) {
         currency: 'KRW',
       }),
     );
+  };
+
+  const handleCreatePoiAtCoordinate = (coord: { lon: number; lat: number }) => {
+    if (selectedDay == null) {
+      setActivePanel('plan');
+      setMutationError('일자를 먼저 선택해주세요.');
+      if (mobileWebLayout) setMobilePanelOpen(true);
+      return;
+    }
+    if (!isKoreaCoord(coord)) {
+      setMutationError('대한민국 범위 좌표만 추가할 수 있습니다.');
+      return;
+    }
+    setMutationError(null);
+    setManualPoiCoord({
+      lon: Number(coord.lon.toFixed(6)),
+      lat: Number(coord.lat.toFixed(6)),
+    });
+  };
+
+  const handleCreateManualPoi = (input: ManualPoiCreateInput): Promise<boolean> => {
+    if (selectedDay == null) {
+      setMutationError('일자를 먼저 선택해주세요.');
+      return Promise.resolve(false);
+    }
+    const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
+    return runMutation(async () => {
+      const created = await poiApi(apiClient).create(tripId, {
+        day_index: selectedDay.day_index,
+        sort_order: appendRank(last),
+        feature_id: null,
+        feature_snapshot: buildManualPoiSnapshot(input),
+        custom_marker_color: 'P-08',
+        custom_marker_icon: 'marker',
+        currency: 'KRW',
+      });
+      setSelectedDayIndex(selectedDay.day_index);
+      setSelectedPoiId(created.attachment_id);
+    }).then((ok) => {
+      if (ok) setManualPoiCoord(null);
+      return ok;
+    });
   };
 
   const handleReorder = (orderedPoiIds: string[]) => {
@@ -570,11 +728,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
   };
 
   const handleAddDay = () => {
-    if (!canAddDay) {
-      setMutationError(addDayDisabledReason ?? '여행 기간보다 많은 일자를 추가할 수 없습니다.');
+    if (!view) {
+      setMutationError('여행 정보를 불러온 뒤 일자를 추가할 수 있습니다.');
       return;
     }
-    const nextDate = view?.trip.start_date
+    const validationMessage = addDayValidation(view, nextDayIndex);
+    if (validationMessage) {
+      setMutationError(validationMessage);
+      return;
+    }
+    const nextDate = view.trip.start_date
       ? addDays(view.trip.start_date, nextDayIndex - 1)
       : undefined;
     void runMutation(async () => {
@@ -817,9 +980,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </Link>
             <div className="min-w-0 flex-1 px-1">
-              <div className="flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                 <h1 className="truncate text-sm font-bold text-ink">{trip.title}</h1>
-                <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted min-[390px]:inline">
                   {STATUS_LABEL[trip.status]}
                 </span>
               </div>
@@ -851,8 +1014,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
               type="button"
               onClick={handleAddDay}
               disabled={!canAddDay || busy}
-              title={addDayDisabledReason ?? '레이어 추가'}
-              aria-label="레이어 추가"
+              title={addDayDisabledReason ?? '일자 추가'}
+              aria-label="일자 추가"
               aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-white hover:bg-ink/90 disabled:opacity-50"
               data-testid="trip-add-layer"
@@ -955,7 +1118,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 data-testid="trip-add-layer"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                레이어 추가
+                일자 추가
               </button>
               <button
                 type="button"
@@ -1082,6 +1245,36 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTripEditOpen(true)}
+                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  편집
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddDay}
+                  disabled={!canAddDay || busy}
+                  title={addDayDisabledReason ?? '일자 추가'}
+                  aria-describedby={
+                    addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
+                  }
+                  className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                  data-testid="trip-add-day-drawer"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  일자 추가
+                </button>
+                <TripActions tripId={tripId} />
+              </div>
+              {addDayDisabledReason && (
+                <p id="trip-drawer-add-disabled-reason" className="mt-2 text-xs text-muted">
+                  {addDayDisabledReason}
+                </p>
+              )}
               <div
                 className="mt-3 flex gap-1 overflow-x-auto"
                 role="tablist"
@@ -1116,17 +1309,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   </button>
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTripEditOpen(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
-                >
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                  편집
-                </button>
-                <TripActions tripId={tripId} />
-              </div>
             </div>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1138,28 +1320,24 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
               >
                 <section className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-normal text-primary">
-                        Day plan
-                      </p>
-                      <h2 className="mt-1 text-base font-bold text-ink">일정 레이어</h2>
+                  {!mobileWebLayout && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddDay}
+                        disabled={!canAddDay || busy}
+                        title={addDayDisabledReason ?? '일자 추가'}
+                        aria-describedby={
+                          addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
+                        }
+                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                        data-testid="trip-add-day-inline"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        일자 추가
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddDay}
-                      disabled={!canAddDay || busy}
-                      title={addDayDisabledReason ?? '일자 추가'}
-                      aria-describedby={
-                        addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
-                      }
-                      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
-                      data-testid="trip-add-day-inline"
-                    >
-                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                      일자 추가
-                    </button>
-                  </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="rounded-sm bg-surface-soft px-2 py-1 font-semibold text-muted">
                       {visibleLayerCount}/{view.days.length} 표시
@@ -1174,46 +1352,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
                       선택 {selectedDay ? selectedDayLabel : '없음'}
                     </span>
                   </div>
-                  {addDayDisabledReason && (
+                  {!mobileWebLayout && addDayDisabledReason && (
                     <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
                       {addDayDisabledReason}
                     </p>
                   )}
                 </section>
 
-                <section
-                  className="space-y-3"
-                  aria-label="여행 레이어"
-                  data-testid="trip-layer-list"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Layers className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-ink">지도 레이어</h3>
-                        <p className="truncate text-xs text-muted">일자별 지도 표시</p>
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-xs font-semibold text-muted">
-                      {mapPoints.length}개 표시
-                    </span>
-                  </div>
-
-                  {view.days.length === 0 ? (
-                    <div className="space-y-3 rounded-sm bg-white p-3 text-sm text-muted">
-                      <p>아직 일정 레이어가 없습니다.</p>
-                      <button
-                        type="button"
-                        onClick={handleAddDay}
-                        disabled={!canAddDay || busy}
-                        className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
-                      >
-                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                        일자 추가
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2" role="tablist" aria-label="일자 레이어">
+                <section className="space-y-3" aria-label="일자 목록" data-testid="trip-layer-list">
+                  {view.days.length > 0 && (
+                    <div className="space-y-2" role="tablist" aria-label="일자 목록">
                       {view.days.map((day) => {
                         const active = day.day_index === selectedDayIndex;
                         const visible =
@@ -1237,39 +1385,42 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 aria-label={`${dayLabel} 표시`}
                                 className="mt-1 h-4 w-4 rounded border-hairline text-primary focus:ring-primary"
                               />
-                              <button
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                onClick={() => handleSelectDay(day.day_index)}
-                                className="min-w-0 flex-1 text-left"
-                              >
-                                <span className="flex items-center justify-between gap-2">
-                                  <span className="truncate text-sm font-bold text-ink">
-                                    {dayLabel}
-                                  </span>
-                                  <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                                    {day.pois.length}곳
-                                  </span>
-                                </span>
-                                <span className="mt-1 block text-xs text-muted">
-                                  {formatDate(day.date)} · 레이어 {visible ? '표시' : '숨김'}
-                                </span>
-                              </button>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start gap-2">
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-label={dayLabel}
+                                    aria-selected={active}
+                                    onClick={() => handleSelectDay(day.day_index)}
+                                    className="min-w-0 flex-1 text-left"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      <span className="truncate text-sm font-bold text-ink">
+                                        {dayLabel}
+                                      </span>
+                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                        {day.pois.length}곳
+                                      </span>
+                                    </span>
+                                    <span className="mt-1 block text-xs text-muted">
+                                      {formatDate(day.date)} · {visible ? '표시' : '숨김'}
+                                    </span>
+                                  </button>
+                                  <TripDayControls
+                                    selectedDay={day}
+                                    onAdd={handleAddDay}
+                                    onRename={handleRenameDay}
+                                    onDelete={handleDeleteDay}
+                                    showAdd={false}
+                                    busy={busy}
+                                  />
+                                </div>
+                              </div>
                             </div>
 
                             {active ? (
                               <div className="space-y-3 px-3 pb-3">
-                                <TripDayControls
-                                  selectedDay={selectedDay}
-                                  onAdd={handleAddDay}
-                                  onRename={handleRenameDay}
-                                  onDelete={handleDeleteDay}
-                                  canAdd={canAddDay}
-                                  addDisabledReason={addDayDisabledReason}
-                                  showAdd={false}
-                                  busy={busy}
-                                />
                                 <TripWeatherSummary
                                   featureId={day.pois[0]?.feature_id ?? null}
                                   date={day.date}
@@ -1282,10 +1433,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   title={`${day.day_index}일차 파일`}
                                   compact
                                 />
-                                <div className="space-y-1">
-                                  <p className="text-xs font-semibold text-ink">장소 추가</p>
-                                  <MapSearchBox onSelect={handleAddFeature} />
-                                </div>
+                                <MapSearchBox onSelect={handleAddFeature} />
                                 <TripDayOptimize
                                   tripId={tripId}
                                   dayIndex={day.day_index}
@@ -1321,9 +1469,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                               </div>
                             ) : (
                               <div className="space-y-1 px-3 pb-2">
-                                {day.pois.length === 0 ? (
-                                  <p className="pl-7 text-xs text-muted">등록된 장소가 없습니다.</p>
-                                ) : (
+                                {day.pois.length > 0 &&
                                   day.pois.slice(0, 4).map((poi, index) => (
                                     <button
                                       key={poi.poi_id}
@@ -1342,8 +1488,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                         {poi.title ?? poi.feature_id ?? '장소'}
                                       </span>
                                     </button>
-                                  ))
-                                )}
+                                  ))}
                                 {day.pois.length > 4 && (
                                   <p className="pl-7 text-[11px] text-muted">
                                     외 {day.pois.length - 4}곳
@@ -1440,7 +1585,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           <div
             className={
               mobileWebLayout
-                ? 'pointer-events-none absolute left-2 right-2 top-16 z-10'
+                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10'
                 : 'pointer-events-none absolute left-3 right-3 top-3 z-10 md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
             }
           >
@@ -1459,23 +1604,30 @@ export function TripDetail({ tripId }: TripDetailProps) {
             apiKey={VWORLD_API_KEY}
             points={mapPoints}
             selectedPoiId={selectedPoiId}
+            showFeatures
+            hiddenFeatureIds={plannedFeatureIds}
+            canAddFeature={selectedDay != null && !busy}
             onSelectPoi={handleSelectPoi}
             onMarkerContextMenu={handleMarkerContextMenu}
+            onAddFeature={handleAddFeature}
+            onCreatePoiAtCoordinate={handleCreatePoiAtCoordinate}
+            showNavigationControls={!mobileWebLayout}
             className="h-full"
             chrome="flush"
           />
           <div
+            data-testid="trip-map-stats"
             className={
               mobileWebLayout
-                ? 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2'
+                ? 'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'
                 : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
             }
           >
             <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-              {visibleLayerCount}개 레이어
+              {visibleLayerCount}일 표시
             </span>
             <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-              {mapPoints.length}개 지도 장소
+              장소 {mapPoints.length}곳
             </span>
           </div>
         </section>
@@ -1488,6 +1640,17 @@ export function TripDetail({ tripId }: TripDetailProps) {
           error={mutationError}
           onSave={handleEditTrip}
           onClose={() => setTripEditOpen(false)}
+        />
+      )}
+
+      {manualPoiCoord && selectedDay && (
+        <TripManualPoiDialog
+          coord={manualPoiCoord}
+          dayLabel={selectedDay.title ?? `${selectedDay.day_index}일차`}
+          saving={busy}
+          error={mutationError}
+          onClose={() => setManualPoiCoord(null)}
+          onCreate={handleCreateManualPoi}
         />
       )}
 

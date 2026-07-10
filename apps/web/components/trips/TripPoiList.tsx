@@ -11,7 +11,7 @@ import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 function formatTime(value: string | null): string | null {
   if (!value) return null;
   return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(value)
+    new Date(value),
   );
 }
 
@@ -61,19 +61,7 @@ export function TripPoiList({
     else setEditingInternal(next);
   };
 
-  if (pois.length === 0) {
-    return (
-      <div
-        className={
-          compact
-            ? 'flex min-h-20 items-center justify-center rounded-sm bg-surface-soft px-3 text-center text-xs text-muted'
-            : 'flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center text-sm text-muted'
-        }
-      >
-        이 날에 등록된 장소가 없습니다.
-      </div>
-    );
-  }
+  if (pois.length === 0) return null;
 
   const dndEnabled = editable && onReorder != null;
 
@@ -85,7 +73,7 @@ export function TripPoiList({
     const order = arrayMove(
       pois.map((p) => p.poi_id),
       dragIndex,
-      toIndex
+      toIndex,
     );
     onReorder?.(order);
     setDragIndex(null);
@@ -220,12 +208,7 @@ export function TripPoiList({
                     />
                   )}
                   {showInlineAttachments && tripId && (
-                    <TripAttachments
-                      tripId={tripId}
-                      poiId={poi.poi_id}
-                      title="장소 파일"
-                      compact
-                    />
+                    <TripAttachments tripId={tripId} poiId={poi.poi_id} title="장소 파일" compact />
                   )}
                 </div>
               )}
