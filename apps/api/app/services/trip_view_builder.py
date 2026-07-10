@@ -14,6 +14,7 @@ SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 from sqlalchemy import select
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_map import KorTravelMapClient
 from app.core.config import settings
 from app.models.companion import TripCompanion
+from app.models.kasi import KasiSpecialDay
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
@@ -69,6 +71,7 @@ async def build_trip_view(
     day_query = select(TripDay).where(TripDay.trip_id == trip.trip_id).order_by(TripDay.day_index)
     days_result = await db.execute(day_query)
     days = list(days_result.scalars())
+    holidays_by_date = await _load_holidays_by_date(db, [day.date for day in days])
 
     companion_query = (
         select(TripCompanion)
@@ -202,6 +205,7 @@ async def build_trip_view(
                 "date": d.date,
                 "title": d.title,
                 "version": d.version,
+                "holidays": holidays_by_date.get(d.date, []),
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days
@@ -229,6 +233,40 @@ def _trip_to_dict(trip: Trip) -> dict[str, Any]:
         "created_at": trip.created_at,
         "updated_at": trip.updated_at,
     }
+
+
+async def _load_holidays_by_date(
+    db: AsyncSession,
+    dates: list[date | None],
+) -> dict[date, list[dict[str, Any]]]:
+    unique_dates = sorted({value for value in dates if value is not None})
+    if not unique_dates:
+        return {}
+
+    result = await db.execute(
+        select(KasiSpecialDay)
+        .where(
+            KasiSpecialDay.sol_date.in_(unique_dates),
+            KasiSpecialDay.is_holiday.is_(True),
+        )
+        .order_by(KasiSpecialDay.sol_date.asc(), KasiSpecialDay.name.asc())
+    )
+    holidays_by_date: dict[date, list[dict[str, Any]]] = {}
+    seen: dict[date, set[tuple[str, str]]] = {}
+    for row in result.scalars():
+        key = (row.dataset, row.name)
+        row_seen = seen.setdefault(row.sol_date, set())
+        if key in row_seen:
+            continue
+        row_seen.add(key)
+        holidays_by_date.setdefault(row.sol_date, []).append(
+            {
+                "date": row.sol_date,
+                "name": row.name,
+                "dataset": row.dataset,
+            }
+        )
+    return holidays_by_date
 
 
 def _canonical_feature_id(feature_id: str | None) -> str | None:

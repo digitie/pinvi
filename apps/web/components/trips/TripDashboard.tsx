@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { FormField } from '@/components/forms/FormField';
 import { TripMapView } from '@/components/trips/TripMapView';
+import { formatTripDateRange } from '@/lib/tripDateLabels';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 
@@ -50,19 +51,8 @@ type TripDashboardMapPoint = TripMapPoint & {
   tripStatus: TripStatus;
 };
 
-function formatDate(value: string | null): string {
-  if (!value) {
-    return '미정';
-  }
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(value));
-}
-
 function formatDateRange(trip: Pick<TripResponse, 'start_date' | 'end_date'>): string {
-  return `${formatDate(trip.start_date)} - ${formatDate(trip.end_date)}`;
+  return formatTripDateRange(trip.start_date, trip.end_date);
 }
 
 function tripRegion(trip: Pick<TripResponse, 'region_hint' | 'primary_region_code'>): string {
