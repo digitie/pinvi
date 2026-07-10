@@ -205,7 +205,7 @@ async def build_trip_view(
                 "date": d.date,
                 "title": d.title,
                 "version": d.version,
-                "holidays": holidays_by_date.get(d.date, []),
+                "holidays": holidays_by_date.get(d.date, []) if d.date is not None else [],
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days
