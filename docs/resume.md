@@ -1,5 +1,89 @@
 # resume.md
 
+## 2026-07-10 (codex) — 여행 상세 지도 feature 표시 + 수동 POI 생성
+
+여행 상세 지도에서 `features/in-bounds`를 조회해 현재 viewport의 `kor-travel-map` feature marker를
+함께 표시한다. 이미 여행에 담긴 feature id는 보조 feature layer에서 숨기고, feature marker popup에서
+선택 일자에 추가할 수 있다. feature가 없는 지점은 PC 우클릭 또는 모바일 long-touch로 POI 생성
+다이얼로그를 열며, 다이얼로그는 `/geo/reverse` 주소 후보를 보여주고 POI snapshot에 주소/행정구역을
+저장한다.
+
+변경:
+
+- `geoApi.reverse({ lon, lat })` endpoint를 api-client에 추가했다.
+- `TripMapView`가 선택적으로 feature layer를 조회·렌더링하고, 우클릭/long-touch 좌표를 부모로 전달한다.
+- `TripManualPoiDialog`를 추가해 reverse geocode 주소를 표시하고 이름 기본값으로 사용한다.
+- 수동 POI는 `feature_id: null`, `feature_snapshot.coord/address_label/address/region`, 기본
+  `P-08/marker`로 저장한다.
+- `trip-detail.e2e.ts`에 feature marker 표시와 빈 좌표 POI 생성 payload 검증을 추가했다.
+- `NEXT_PUBLIC_VWORLD_API_KEY`는 root `.env`에서 `apps/web/.env.local`로 로컬 복사해 N150 web build가
+  실제 VWorld canvas를 띄우도록 했다(값 미출력, ignore 대상).
+
+검증:
+
+- N150 Docker runner: `npm -w @pinvi/web run build` 통과.
+- N150 Docker runner:
+  `PINVI_E2E_EXPECT_VWORLD_CANVAS=1 npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts --workers=1`
+  → 11 passed.
+- N150 Docker runner:
+  `PINVI_E2E_EXPECT_VWORLD_CANVAS=1 npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts trip-mutations.e2e.ts trip-attachment.e2e.ts --workers=1`
+  → 15 passed.
+- 스크린샷 3장 생성: `01-desktop-feature-map.png`, `02-desktop-poi-dialog.png`,
+  `03-mobile-longpress-poi-dialog.png`.
+- 로컬: `git diff --check`.
+
+**다음 한 작업**: PR을 생성해 머지한다.
+
+## 2026-07-10 (codex) — 여행 상세 Day Plan 문구·날씨 API 정합성 정리
+
+여행 상세 Day Plan의 weather 조회를 `kor-travel-map` 최신 weather 계약의 `asof` query 기준으로 맞췄다.
+Day Plan 안의 중복 `레이어` 문구와 빈 장소 안내 문장을 제거하고, 일자 이름 변경은 별도 팝업으로
+분리했다. 모바일 상세 상단 버튼/상태 배지 겹침을 줄이고, 여행 기간이 잘못된 상태에서는 일자 추가를
+막도록 검증을 추가했다. 모바일 드로워의 `일자 추가`는 `편집`/복사/삭제 액션 줄로 올렸고, 일자별
+이름 변경·삭제와 파일 업로드는 제목 오른쪽 아이콘 버튼으로 정리했다. 파일 목록은 기본 닫힘 상태로
+접히며, 여행 상세 지도 마커는 27px 크기에서도 maki 아이콘이 실제 표시되도록 보정했다.
+
+변경:
+
+- `featureApi.weather(featureId, { asof })`를 추가하고, 여행 일자 끝 시각
+  `YYYY-MM-DDT23:59:59+09:00`로 날씨를 조회한다.
+- Day Plan에서 `일정 레이어`, `지도 레이어`, `등록된 장소가 없습니다` 같은 자리만 차지하는 안내
+  문구를 제거했다.
+- 일자 이름 변경 input을 Day Plan 본문에서 빼고 `이름 변경` 팝업으로 옮겼다.
+- 모바일 상세 드로어에서 `편집`/`일자 추가`/`TripActions`를 최상단으로 올리고, 상단 overlay 겹침을
+  줄였다.
+- 일자 추가 전 start/end date 형식, 종료일 역전, 기간 초과, 중복 day index를 검증한다.
+- `TripAttachments`의 업로드 버튼을 아이콘으로 줄이고, 목록 토글을 추가해 기본 닫힘 상태로 렌더링한다.
+- 여행 상세 지도 마커는 `PinMarker` 위에 maki SVG 이미지를 올려 CSS mask 로딩 문제 없이 아이콘을
+  표시하고, `alert`/`camera`/`walking`은 Maki 8.0.0에 존재하는 아이콘으로 alias 처리한다.
+
+검증:
+
+- 로컬: `git diff --check`
+- 로컬: `apps/api/.venv/bin/ruff check apps/api/tests/integration/test_features_api.py`
+- 로컬: `apps/api/.venv/bin/python -m py_compile apps/api/tests/integration/test_features_api.py`
+- 로컬:
+  `PATH="$PWD/apps/api/.venv/bin:$PATH" apps/api/.venv/bin/python -m pytest -s apps/api/tests/integration/test_features_api.py::test_weather_maps_flat_metrics -q`
+  → 1 passed
+- N150 Docker runner: 임시 worktree + `PLAYWRIGHT_BASE_URL=http://127.0.0.1:12855`에서
+  `npm -w @pinvi/web run build` 통과.
+- N150 Docker runner:
+  `npm -w @pinvi/web run test:e2e -- trip-detail.e2e.ts trip-mutations.e2e.ts trip-attachment.e2e.ts --workers=1`
+  → 14 passed
+- N150 모바일 스크린샷 4장 생성:
+  `01-mobile-map.png`, `02-mobile-drawer.png`, `03-mobile-day-title-dialog.png`,
+  `04-mobile-files-collapsed.png`. 스크린샷 summary에서 marker `27 x 40.5`, maki `swimming`
+  `naturalWidth=15`, 하단 chip/attribution 비겹침, 파일 목록 기본 접힘을 확인했다.
+
+주의:
+
+- 로컬 Web/API client standalone typecheck는 `node_modules` 부재 상태에서 `/mnt/f` 여유 공간 부족으로
+  `npm ci`가 `ENOSPC`/`EIO`를 내 실행하지 못했다. 생성된 partial `node_modules`는 삭제했다.
+- N150 검증은 운영 checkout을 더럽히지 않도록 임시 detached worktree에서 수행했고, 실행 후 임시 worktree,
+  patch, 임시 VWorld key 파일을 삭제했다.
+
+**다음 한 작업**: PR을 생성해 머지한다.
+
 ## 2026-07-09 (codex) — Day Plan inline 파일·날씨·모바일 선택 개선
 
 여행 상세 Day Plan에서 날짜가 없는 여행도 패널 내부의 `일자 추가` 버튼으로 새 일자를 만들 수 있게

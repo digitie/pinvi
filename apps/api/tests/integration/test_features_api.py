@@ -250,13 +250,18 @@ async def test_weather_maps_flat_metrics(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _email = verified_user
-    _override(_FakeKorTravelMapClient())
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
     try:
-        resp = await client.get("/features/f_x_p_1/weather", cookies=auth_cookies(user_id))
+        resp = await client.get(
+            "/features/f_x_p_1/weather?asof=2026-07-01T23:59:59%2B09:00",
+            cookies=auth_cookies(user_id),
+        )
     finally:
         _clear()
 
     assert resp.status_code == 200, resp.text
+    assert fake.calls["weather"]["asof"].isoformat() == "2026-07-01T23:59:59+09:00"
     data = resp.json()["data"]
     assert data["is_stale"] is False
     assert data["source_styles"] == ["nowcast", "short"]

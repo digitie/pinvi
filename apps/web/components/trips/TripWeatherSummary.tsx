@@ -24,7 +24,8 @@ const WEATHER_LABELS: Record<string, string> = {
 const CURRENT_STYLE_RE = /observed|nowcast|current/i;
 const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;
 const DUST_RE = /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i;
-const WEATHER_RE = /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i;
+const WEATHER_RE =
+  /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i;
 
 function metricDate(metric: WeatherMetric): string | null {
   return (
@@ -33,6 +34,10 @@ function metricDate(metric: WeatherMetric): string | null {
     metric.issued_at?.slice(0, 10) ??
     null
   );
+}
+
+function weatherAsof(date: string): string {
+  return `${date}T23:59:59+09:00`;
 }
 
 function metricHaystack(metric: WeatherMetric): string {
@@ -75,7 +80,8 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
   const dust = matched.filter((metric) => DUST_RE.test(metricHaystack(metric)));
   const nonDust = matched.filter((metric) => !DUST_RE.test(metricHaystack(metric)));
   const current = nonDust.filter(
-    (metric) => CURRENT_STYLE_RE.test(metric.forecast_style) && WEATHER_RE.test(metricHaystack(metric)),
+    (metric) =>
+      CURRENT_STYLE_RE.test(metric.forecast_style) && WEATHER_RE.test(metricHaystack(metric)),
   );
   const forecast = nonDust.filter(
     (metric) =>
@@ -84,12 +90,18 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
   );
 
   return {
-    current: current.map(formatMetric).filter((value): value is string => value != null).slice(0, 2),
+    current: current
+      .map(formatMetric)
+      .filter((value): value is string => value != null)
+      .slice(0, 2),
     forecast: forecast
       .map(formatMetric)
       .filter((value): value is string => value != null)
       .slice(0, 2),
-    dust: dust.map(formatMetric).filter((value): value is string => value != null).slice(0, 2),
+    dust: dust
+      .map(formatMetric)
+      .filter((value): value is string => value != null)
+      .slice(0, 2),
   };
 }
 
@@ -117,7 +129,7 @@ export function TripWeatherSummary({
     let active = true;
     setCard(null);
     void featureApi(apiClient)
-      .weather(featureId)
+      .weather(featureId, { asof: weatherAsof(date) })
       .then((next) => {
         if (active) setCard(next);
       })

@@ -10,6 +10,7 @@ import type {
   ClusterLayerProps,
   MakiMarkerProps,
   MapContextMenuProps,
+  PinMarkerProps,
   PopupProps,
   UserLocationMarkerProps,
   VWorldMapFallbackInfo,
@@ -67,6 +68,11 @@ export const ClusterLayer = dynamic<ClusterLayerProps>(
 
 export const MakiMarker = dynamic<MakiMarkerProps>(
   () => import('vworld-map-web').then((module) => module.MakiMarker),
+  { ssr: false }
+);
+
+export const PinMarker = dynamic<PinMarkerProps>(
+  () => import('vworld-map-web').then((module) => module.PinMarker),
   { ssr: false }
 );
 

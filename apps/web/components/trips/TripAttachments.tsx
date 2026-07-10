@@ -1,7 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Loader2, Paperclip, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  Paperclip,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
 import type { TripAttachmentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
@@ -37,11 +45,13 @@ export function TripAttachments({
   compact = false,
 }: TripAttachmentsProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const listId = useId();
   const [items, setItems] = useState<TripAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -108,6 +118,7 @@ export function TripAttachments({
         await tripApi(apiClient).createAttachment(tripId, buildAttachmentCreate(up, file));
       }
       await reload();
+      setListOpen(true);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -181,32 +192,55 @@ export function TripAttachments({
           />
           {title}
         </h2>
-        <label
-          className={
-            compact
-              ? 'inline-flex h-7 cursor-pointer items-center gap-1 rounded-sm bg-primary px-2 text-xs font-semibold text-white hover:opacity-90'
-              : 'inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white hover:opacity-90'
-          }
-        >
-          {uploading ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Upload className="h-4 w-4" aria-hidden="true" />
-          )}
-          {compact ? '올리기' : '파일 올리기'}
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ATTACHMENT_ACCEPT}
-            className="sr-only"
-            data-testid="attachment-input"
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void onPick(file);
-            }}
-          />
-        </label>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setListOpen((open) => !open)}
+            aria-label={`${title} 목록 ${listOpen ? '닫기' : '열기'}`}
+            aria-controls={listId}
+            aria-expanded={listOpen}
+            title={listOpen ? '파일 목록 닫기' : '파일 목록 열기'}
+            className={
+              compact
+                ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-white text-muted hover:bg-surface-soft hover:text-ink'
+                : 'inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
+            }
+            data-testid="trip-attachment-toggle"
+          >
+            {listOpen ? (
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+          <label
+            aria-label={`${title} 올리기`}
+            title="파일 올리기"
+            className={
+              compact
+                ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-primary text-white hover:opacity-90'
+                : 'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm bg-primary text-white hover:opacity-90'
+            }
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Upload className="h-4 w-4" aria-hidden="true" />
+            )}
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ATTACHMENT_ACCEPT}
+              className="sr-only"
+              data-testid="attachment-input"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void onPick(file);
+              }}
+            />
+          </label>
+        </div>
       </div>
 
       {error && (
@@ -215,69 +249,73 @@ export function TripAttachments({
         </p>
       )}
 
-      {loading ? (
-        <div
-          className={
-            compact
-              ? 'flex h-8 items-center justify-center text-xs text-muted'
-              : 'flex h-16 items-center justify-center text-sm text-muted'
-          }
-        >
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중…
-        </div>
-      ) : items.length === 0 ? (
-        <p
-          className={
-            compact
-              ? 'px-1 text-xs text-muted'
-              : 'rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted'
-          }
-        >
-          파일 없음
-        </p>
-      ) : (
-        <ul className="space-y-1" data-testid="trip-attachment-list">
-          {items.map((item) => (
-            <li
-              key={item.attachment_id}
+      {listOpen && (
+        <div id={listId}>
+          {loading ? (
+            <div
               className={
                 compact
-                  ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-white px-2 py-1.5 text-xs'
-                  : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
+                  ? 'flex h-8 items-center justify-center text-xs text-muted'
+                  : 'flex h-16 items-center justify-center text-sm text-muted'
               }
             >
-              <span className="min-w-0">
-                <span className="block truncate font-medium text-ink">
-                  {item.original_filename}
-                </span>
-                <span className="text-xs text-muted">
-                  {item.content_type} · {formatBytes(item.byte_size)}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => void download(item.attachment_id)}
-                  disabled={busyId === item.attachment_id}
-                  aria-label="다운로드"
-                  className="rounded-sm p-1.5 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+              불러오는 중…
+            </div>
+          ) : items.length === 0 ? (
+            <p
+              className={
+                compact
+                  ? 'px-1 text-xs text-muted'
+                  : 'rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted'
+              }
+            >
+              파일 없음
+            </p>
+          ) : (
+            <ul className="space-y-1" data-testid="trip-attachment-list">
+              {items.map((item) => (
+                <li
+                  key={item.attachment_id}
+                  className={
+                    compact
+                      ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-white px-2 py-1.5 text-xs'
+                      : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
+                  }
                 >
-                  <Download className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void remove(item.attachment_id)}
-                  disabled={busyId === item.attachment_id}
-                  aria-label="삭제"
-                  className="rounded-sm p-1.5 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-ink">
+                      {item.original_filename}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {item.content_type} · {formatBytes(item.byte_size)}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void download(item.attachment_id)}
+                      disabled={busyId === item.attachment_id}
+                      aria-label="다운로드"
+                      className="rounded-sm p-1.5 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void remove(item.attachment_id)}
+                      disabled={busyId === item.attachment_id}
+                      aria-label="삭제"
+                      className="rounded-sm p-1.5 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   );

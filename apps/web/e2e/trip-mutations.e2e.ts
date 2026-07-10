@@ -150,7 +150,7 @@ test('동반자를 초대하면 목록에 나타난다', async ({ page }) => {
   await expect(page.getByTestId('companion-list')).toContainText('friend@example.com');
 });
 
-test('POI를 삭제하면 빈 안내가 표시된다', async ({ page }) => {
+test('POI를 삭제하면 장소 목록에서 제거된다', async ({ page }) => {
   let deleted = false;
   await commonRoutes(page);
 
@@ -185,7 +185,8 @@ test('POI를 삭제하면 빈 안내가 표시된다', async ({ page }) => {
 
   await page.getByRole('button', { name: '장소 삭제' }).click();
 
-  await expect(page.getByText('이 날에 등록된 장소가 없습니다.')).toBeVisible();
+  await expect(page.getByTestId('trip-poi-list')).toHaveCount(0);
+  await expect(page.getByText('등록된 장소가 없습니다')).toHaveCount(0);
 });
 
 test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) => {
