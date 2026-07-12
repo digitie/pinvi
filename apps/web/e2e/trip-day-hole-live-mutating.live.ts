@@ -102,7 +102,7 @@ test.describe('Trip day hole live mutating flow', () => {
       await screenshot(page, '01-auto-created-1-to-4-days.png');
 
       await page.getByRole('tab', { name: '1일차' }).click();
-      await page.getByTestId('trip-day-delete').click();
+      await page.getByRole('button', { name: '1일차 삭제' }).click();
       await expect(page.getByRole('tab', { name: '1일차' })).toHaveCount(0);
       await expect(page.getByTestId('trip-add-day-inline')).toBeEnabled();
       await expect(page.getByTestId('trip-add-day-inline')).toContainText('1일차 추가');
@@ -115,11 +115,11 @@ test.describe('Trip day hole live mutating flow', () => {
       await screenshot(page, '03-recreated-day-1.png');
 
       await page.getByRole('tab', { name: '4일차' }).click();
-      await page.getByTestId('trip-day-delete').click();
+      await page.getByRole('button', { name: '4일차 삭제' }).click();
       await expect(page.getByRole('tab', { name: '4일차' })).toHaveCount(0);
 
       await page.getByRole('tab', { name: '1일차' }).click();
-      await page.getByTestId('trip-day-rename').click();
+      await page.getByRole('button', { name: '1일차 설정' }).click();
       await expect(page.getByTestId('trip-day-title-dialog')).toBeVisible();
       await page.locator('#trip-day-date-input').fill('2026-11-04');
       await page.getByRole('button', { name: '저장' }).click();
