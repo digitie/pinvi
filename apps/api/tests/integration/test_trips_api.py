@@ -498,7 +498,30 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     assert detail.json()["data"]["days"] == []
 
 
-async def test_trip_day_create_rejects_day_beyond_trip_period(
+async def test_trip_create_with_date_range_creates_day_layers(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post(
+        "/trips",
+        json={"title": "3박 4일", "start_date": "2026-06-10", "end_date": "2026-06-13"},
+        cookies=cookies,
+    )
+    assert created.status_code == 201, created.text
+    trip_id = created.json()["data"]["trip_id"]
+
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    assert detail.status_code == 200, detail.text
+    assert [(day["day_index"], day["date"]) for day in detail.json()["data"]["days"]] == [
+        (1, "2026-06-10"),
+        (2, "2026-06-11"),
+        (3, "2026-06-12"),
+        (4, "2026-06-13"),
+    ]
+
+
+async def test_trip_day_create_fills_deleted_hole_and_validates_date_conflicts(
     client, verified_user, auth_cookies
 ) -> None:
     user_id, _ = verified_user
@@ -511,12 +534,41 @@ async def test_trip_day_create_rejects_day_beyond_trip_period(
     assert created.status_code == 201, created.text
     trip_id = created.json()["data"]["trip_id"]
 
-    in_range = await client.post(
+    full = await client.post(f"/trips/{trip_id}/days", json={}, cookies=cookies)
+    assert full.status_code == 422, full.text
+    assert full.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    deleted = await client.request(
+        "DELETE", f"/trips/{trip_id}/days/1", headers={"If-Match": "1"}, cookies=cookies
+    )
+    assert deleted.status_code == 204, deleted.text
+
+    recreated = await client.post(
         f"/trips/{trip_id}/days",
-        json={"day_index": 2, "date": "2026-06-11", "title": "둘째 날"},
+        json={"title": "다시 첫날"},
         cookies=cookies,
     )
-    assert in_range.status_code == 201, in_range.text
+    assert recreated.status_code == 201, recreated.text
+    assert recreated.json()["data"]["day_index"] == 1
+    assert recreated.json()["data"]["date"] == "2026-06-10"
+
+    duplicate_date = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"date": "2026-06-11"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert duplicate_date.status_code == 409, duplicate_date.text
+    assert duplicate_date.json()["error"]["code"] == "TRIP_DAY_CONFLICT"
+
+    out_of_range = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"date": "2026-06-12"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert out_of_range.status_code == 422, out_of_range.text
+    assert out_of_range.json()["error"]["code"] == "VALIDATION_ERROR"
 
     beyond_range = await client.post(
         f"/trips/{trip_id}/days",
@@ -544,12 +596,13 @@ async def test_trip_copy_shared_view_and_attachments(
         cookies=cookies,
     )
     trip_id = created.json()["data"]["trip_id"]
-    day = await client.post(
-        f"/trips/{trip_id}/days",
-        json={"day_index": 1, "date": "2026-06-10", "title": "원본 day"},
+    day = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"title": "원본 day"},
+        headers={"If-Match": "1"},
         cookies=cookies,
     )
-    assert day.status_code == 201, day.text
+    assert day.status_code == 200, day.text
     poi = await client.post(
         f"/trips/{trip_id}/pois",
         json=_poi_payload(1, "a", 126.978, 37.5665),

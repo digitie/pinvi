@@ -8,6 +8,7 @@ Windows runner를 fallback으로 사용한다.
 ## 1. 범위
 
 - `apps/web/e2e/trip-realtime-live-mutating.live.ts`
+- `apps/web/e2e/trip-day-hole-live-mutating.live.ts`
 - `apps/web/e2e/admin-backup-live-mutating.live.ts`
 - verified 사용자 계정으로 두 browser context를 로그인한다.
 - test prefix가 붙은 임시 Trip을 생성하고, 실제 `WS /ws/trips/{trip_id}` 연결 상태를 확인한다.
@@ -16,6 +17,8 @@ Windows runner를 fallback으로 사용한다.
 - browser에서 WebSocket을 닫아 client reconnect를 유도한 뒤, 두 번째 mutation이 최신 snapshot으로
   보이는지 확인한다.
 - 종료 시 생성한 Trip은 사용자 API `DELETE /trips/{trip_id}` `soft_delete`로 정리한다.
+- Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
+  1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
   `backup://<filename>` masking, 최근 audit의 `backup.snapshot`, snapshot 목록 limit cap을 확인한다.
   restore hotswap endpoint는 호출하지 않으며, 호출이 발생하면 실패한다. snapshot 삭제 API는 아직
@@ -66,6 +69,18 @@ PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
 npm run test:e2e:live-mutating
+```
+
+Trip day hole 단건:
+
+```bash
+PINVI_LIVE_MUTATING_E2E=1 \
+PINVI_LIVE_WEB_URL=http://127.0.0.1:12805 \
+PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
+PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
+PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
+PINVI_LIVE_SCREENSHOT_DIR="$PWD/../../.codex_tmp/live-e2e/trip-day-hole" \
+npm run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
 ```
 
 Backup staging:

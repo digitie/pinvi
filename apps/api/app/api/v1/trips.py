@@ -66,6 +66,7 @@ from app.services.trip import (
     TripCopyError,
     TripDayConflictError,
     TripDayNotFoundError,
+    TripDayValidationError,
     TripListCursor,
     TripListSort,
     TripNotFoundError,
@@ -81,6 +82,7 @@ from app.services.trip import (
     create_comment,
     create_trip,
     create_trip_day,
+    default_trip_day_date,
     delete_attachment,
     delete_comment,
     delete_or_transfer_trip,
@@ -97,12 +99,14 @@ from app.services.trip import (
     list_attachments,
     list_comments,
     list_trips_for_owner,
+    next_available_trip_day_index,
     optimize_trip_day,
     remove_companion,
     revoke_share_link,
     update_attachment,
     update_trip,
     update_trip_day,
+    validate_trip_day_payload,
 )
 from app.services.trip_view_builder import build_trip_view
 
@@ -261,12 +265,6 @@ def _raise_trip_http(exc: TripNotFoundError | TripPermissionError) -> NoReturn:
         status_code=status.HTTP_403_FORBIDDEN,
         detail={"code": exc.code, "message": str(exc)},
     ) from exc
-
-
-def _trip_day_limit(start_date: date | None, end_date: date | None) -> int | None:
-    if start_date is None or end_date is None:
-        return None
-    return (end_date - start_date).days + 1
 
 
 @router.get("", response_model=EnvelopeWithMeta[list[TripResponse]])
@@ -609,20 +607,23 @@ async def create_trip_day_endpoint(
     actor_id = uuid.UUID(current_user_id)
     try:
         trip = await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
-        day_limit = _trip_day_limit(trip.start_date, trip.end_date)
-        if day_limit is not None and body.day_index > day_limit:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "VALIDATION_ERROR",
-                    "message": f"여행 기간은 최대 {day_limit}일입니다.",
-                },
-            )
+        day_index = body.day_index
+        if day_index is None:
+            day_index = await next_available_trip_day_index(db, trip=trip)
+        date_value = body.date
+        if date_value is None:
+            date_value = default_trip_day_date(trip.start_date, day_index)
+        await validate_trip_day_payload(
+            db,
+            trip=trip,
+            day_index=day_index,
+            date_value=date_value,
+        )
         day = await create_trip_day(
             db,
             trip_id=trip_id,
-            day_index=body.day_index,
-            date_value=body.date,
+            day_index=day_index,
+            date_value=date_value,
             title=body.title,
             note=body.note,
         )
@@ -631,6 +632,11 @@ async def create_trip_day_endpoint(
     except TripDayConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripDayValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_day_response(day)
@@ -654,13 +660,22 @@ async def update_trip_day_endpoint(
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        trip = await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        patch = body.model_dump(exclude_unset=True)
+        if "date" in patch:
+            await validate_trip_day_payload(
+                db,
+                trip=trip,
+                day_index=day_index,
+                date_value=patch["date"],
+                exclude_day_index=day_index,
+            )
         day = await update_trip_day(
             db,
             trip_id=trip_id,
             day_index=day_index,
             expected_version=if_match,
-            patch=body.model_dump(exclude_unset=True),
+            patch=patch,
         )
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -672,6 +687,16 @@ async def update_trip_day_endpoint(
     except TripVersionConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripDayConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripDayValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     response = _to_day_response(day)

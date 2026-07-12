@@ -65,7 +65,8 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
 
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text
-    detail_poi = detail.json()["data"]["days"][0]["pois"][0]
+    detail_day = next(day for day in detail.json()["data"]["days"] if day["day_index"] == 2)
+    detail_poi = detail_day["pois"][0]
     assert detail_poi["poi_id"] == poi_id
     assert detail_poi["rise_set"]["status"] == "pending_fetch"
     assert detail_poi["rise_set"]["locdate"] == "2026-05-06"

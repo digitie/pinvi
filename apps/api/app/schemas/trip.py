@@ -127,7 +127,7 @@ class TripDeleteRequest(BaseModel):
 
 
 class TripDayCreate(BaseModel):
-    day_index: int = Field(ge=1)
+    day_index: int | None = Field(default=None, ge=1)
     date: Date | None = None
     title: str | None = Field(default=None, max_length=200)
     note: str | None = None

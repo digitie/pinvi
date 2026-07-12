@@ -58,6 +58,10 @@ class TripDayConflictError(TripError):
     code = "TRIP_DAY_CONFLICT"
 
 
+class TripDayValidationError(TripError):
+    code = "VALIDATION_ERROR"
+
+
 class TripDayNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
 
@@ -119,6 +123,16 @@ async def create_trip(
         visibility=visibility,
     )
     db.add(trip)
+    await db.flush()
+    if start_date is not None and end_date is not None:
+        for offset in range((end_date - start_date).days + 1):
+            db.add(
+                TripDay(
+                    trip_id=trip.trip_id,
+                    day_index=offset + 1,
+                    date=start_date + timedelta(days=offset),
+                )
+            )
     await db.commit()
     await db.refresh(trip)
     return trip
@@ -365,6 +379,64 @@ async def create_trip_day(
         raise TripDayConflictError("이미 존재하는 day_index입니다.") from exc
     await db.refresh(day)
     return day
+
+
+def trip_day_limit(start_date: date | None, end_date: date | None) -> int | None:
+    if start_date is None or end_date is None:
+        return None
+    return (end_date - start_date).days + 1
+
+
+def default_trip_day_date(start_date: date | None, day_index: int) -> date | None:
+    if start_date is None:
+        return None
+    return start_date + timedelta(days=day_index - 1)
+
+
+async def validate_trip_day_payload(
+    db: AsyncSession,
+    *,
+    trip: Trip,
+    day_index: int,
+    date_value: date | None,
+    exclude_day_index: int | None = None,
+) -> None:
+    limit = trip_day_limit(trip.start_date, trip.end_date)
+    if limit is not None and day_index > limit:
+        raise TripDayValidationError(f"여행 기간은 최대 {limit}일입니다.")
+
+    if date_value is None:
+        if trip.start_date is not None and trip.end_date is not None:
+            raise TripDayValidationError("여행 기간이 있는 경우 일자 날짜가 필요합니다.")
+        return
+    if trip.start_date is not None and date_value < trip.start_date:
+        raise TripDayValidationError("일자 날짜는 여행 시작일 이후여야 합니다.")
+    if trip.end_date is not None and date_value > trip.end_date:
+        raise TripDayValidationError("일자 날짜는 여행 종료일 이전이어야 합니다.")
+
+    filters = [TripDay.trip_id == trip.trip_id, TripDay.date == date_value]
+    if exclude_day_index is not None:
+        filters.append(TripDay.day_index != exclude_day_index)
+    existing = await db.scalar(select(TripDay.day_index).where(*filters).limit(1))
+    if existing is not None:
+        raise TripDayConflictError("이미 같은 날짜 일자가 있습니다.")
+
+
+async def next_available_trip_day_index(db: AsyncSession, *, trip: Trip) -> int:
+    result = await db.execute(
+        select(TripDay.day_index)
+        .where(TripDay.trip_id == trip.trip_id)
+        .order_by(TripDay.day_index.asc())
+    )
+    used = set(result.scalars())
+    limit = trip_day_limit(trip.start_date, trip.end_date)
+    max_candidate = limit if limit is not None else (max(used) if used else 0) + 1
+    for day_index in range(1, max_candidate + 1):
+        if day_index not in used:
+            return day_index
+    if limit is not None:
+        raise TripDayValidationError(f"여행 기간 {limit}일의 일자가 모두 만들어졌습니다.")
+    return max_candidate + 1
 
 
 async def get_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> TripDay:

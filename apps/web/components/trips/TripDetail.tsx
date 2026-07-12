@@ -34,6 +34,7 @@ import {
 } from '@pinvi/api-client';
 import type {
   FeatureSummary,
+  TripDayUpdate,
   PoiUpdate,
   TripStatus,
   TripUpdate,
@@ -152,6 +153,29 @@ function validDateValue(value: string | null): boolean {
   );
 }
 
+function nextAvailableDayIndex(view: TripView): number {
+  const used = new Set(view.days.map((day) => day.day_index));
+  const maxExisting = view.days.reduce((max, day) => Math.max(max, day.day_index), 0);
+  const limit = tripDurationDays(view.trip.start_date, view.trip.end_date);
+  const maxCandidate = limit ?? maxExisting + 1;
+  for (let dayIndex = 1; dayIndex <= maxCandidate; dayIndex += 1) {
+    if (!used.has(dayIndex)) return dayIndex;
+  }
+  return maxCandidate + 1;
+}
+
+function plannedDateForDay(view: TripView, dayIndex: number): string | null {
+  if (!view.trip.start_date) return null;
+  return addDays(view.trip.start_date, dayIndex - 1);
+}
+
+function dayUsingDate(view: TripView, date: string, excludeDayIndex: number): number | null {
+  return (
+    view.days.find((day) => day.day_index !== excludeDayIndex && day.date === date)?.day_index ??
+    null
+  );
+}
+
 function addDayValidation(view: TripView, nextDayIndex: number): string | null {
   const { start_date: startDate, end_date: endDate } = view.trip;
 
@@ -174,14 +198,45 @@ function addDayValidation(view: TripView, nextDayIndex: number): string | null {
     return `여행 기간은 최대 ${maxTripDayCount}일입니다. 기간을 먼저 늘려주세요.`;
   }
 
-  const nextDate = startDate ? addDays(startDate, nextDayIndex - 1) : null;
+  const nextDate = plannedDateForDay(view, nextDayIndex);
   if (nextDate && endDate && nextDate > endDate) {
     return '추가할 일자가 여행 종료일을 넘어갑니다. 기간을 먼저 늘려주세요.';
   }
   if (view.days.some((day) => day.day_index === nextDayIndex)) {
     return '이미 같은 일자가 있습니다.';
   }
+  if (nextDate) {
+    const duplicateDayIndex = dayUsingDate(view, nextDate, nextDayIndex);
+    if (duplicateDayIndex != null) {
+      return `${duplicateDayIndex}일차에서 이미 쓰는 날짜입니다.`;
+    }
+  }
 
+  return null;
+}
+
+function dayDateUpdateValidation(
+  view: TripView,
+  dayIndex: number,
+  nextDate: string | null,
+): string | null {
+  const { start_date: startDate, end_date: endDate } = view.trip;
+  if (nextDate && !validDateValue(nextDate)) {
+    return '일자 날짜를 확인해주세요.';
+  }
+  if (!nextDate) {
+    return startDate && endDate ? '여행 기간이 있는 경우 일자 날짜가 필요합니다.' : null;
+  }
+  if (startDate && nextDate < startDate) {
+    return '여행 기간 밖의 날짜입니다. 기간을 먼저 늘려주세요.';
+  }
+  if (endDate && nextDate > endDate) {
+    return '여행 기간 밖의 날짜입니다. 기간을 먼저 늘려주세요.';
+  }
+  const duplicateDayIndex = dayUsingDate(view, nextDate, dayIndex);
+  if (duplicateDayIndex != null) {
+    return `이미 ${duplicateDayIndex}일차에서 쓰는 날짜입니다.`;
+  }
   return null;
 }
 
@@ -508,9 +563,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const holidayMap = useMemo(() => holidaysByDate(view?.days ?? []), [view?.days]);
   const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
   const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
-  const nextDayIndex = (view?.days.reduce((max, d) => Math.max(max, d.day_index), 0) ?? 0) + 1;
+  const nextDayIndex = view ? nextAvailableDayIndex(view) : 1;
+  const nextDayDate = view ? plannedDateForDay(view, nextDayIndex) : null;
   const addDayDisabledReason = view ? addDayValidation(view, nextDayIndex) : null;
   const canAddDay = addDayDisabledReason == null;
+  const addDayLabel = `${nextDayIndex}일차 추가`;
+  const addDayTitle = addDayDisabledReason ?? addDayLabel;
   const visibleLayerCount =
     view?.days.filter((day) => visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index))
       .length ?? 0;
@@ -735,11 +793,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
       setMutationError(validationMessage);
       return;
     }
-    const nextDate = view.trip.start_date
-      ? addDays(view.trip.start_date, nextDayIndex - 1)
-      : undefined;
     void runMutation(async () => {
-      await tripApi(apiClient).createDay(tripId, { day_index: nextDayIndex, date: nextDate });
+      await tripApi(apiClient).createDay(tripId, { day_index: nextDayIndex, date: nextDayDate });
       setSelectedDayIndex(nextDayIndex);
       setVisibleDayIndexes((current) => {
         const next = new Set(current.size === 0 ? dayIndexes : Array.from(current));
@@ -752,10 +807,25 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const dayConflictNotice = () =>
     setMutationError('다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.');
 
-  const handleRenameDay = (dayIndex: number, title: string) => {
-    const version = view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
+  const handleUpdateDay = (
+    dayIndex: number,
+    next: { title: string; date: string | null },
+  ) => {
+    if (!view) return;
+    const day = view.days.find((d) => d.day_index === dayIndex);
+    if (!day) return;
+    const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
+    if (validationMessage) {
+      setMutationError(validationMessage);
+      return;
+    }
+    const patch: TripDayUpdate = {};
+    const nextTitle = next.title || null;
+    if (nextTitle !== day.title) patch.title = nextTitle;
+    if (next.date !== day.date) patch.date = next.date;
+    if (!hasPatchFields(patch)) return;
     void runMutation(
-      () => tripApi(apiClient).updateDay(tripId, dayIndex, version, { title: title || null }),
+      () => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch),
       { onConflict: dayConflictNotice },
     );
   };
@@ -1012,8 +1082,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
               type="button"
               onClick={handleAddDay}
               disabled={!canAddDay || busy}
-              title={addDayDisabledReason ?? '일자 추가'}
-              aria-label="일자 추가"
+              title={addDayTitle}
+              aria-label={addDayLabel}
               aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-white hover:bg-ink/90 disabled:opacity-50"
               data-testid="trip-add-layer"
@@ -1108,7 +1178,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 type="button"
                 onClick={handleAddDay}
                 disabled={!canAddDay || busy}
-                title={addDayDisabledReason ?? undefined}
+                title={addDayTitle}
                 aria-describedby={
                   addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined
                 }
@@ -1116,7 +1186,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 data-testid="trip-add-layer"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                일자 추가
+                {addDayLabel}
               </button>
               <button
                 type="button"
@@ -1256,7 +1326,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   type="button"
                   onClick={handleAddDay}
                   disabled={!canAddDay || busy}
-                  title={addDayDisabledReason ?? '일자 추가'}
+                  title={addDayTitle}
+                  aria-label={addDayLabel}
                   aria-describedby={
                     addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
                   }
@@ -1264,7 +1335,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   data-testid="trip-add-day-drawer"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  일자 추가
+                  {addDayLabel}
                 </button>
                 <TripActions tripId={tripId} />
               </div>
@@ -1324,7 +1395,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         type="button"
                         onClick={handleAddDay}
                         disabled={!canAddDay || busy}
-                        title={addDayDisabledReason ?? '일자 추가'}
+                        title={addDayTitle}
                         aria-describedby={
                           addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
                         }
@@ -1332,7 +1403,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         data-testid="trip-add-day-inline"
                       >
                         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                        일자 추가
+                        {addDayLabel}
                       </button>
                     </div>
                   )}
@@ -1417,7 +1488,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   <TripDayControls
                                     selectedDay={day}
                                     onAdd={handleAddDay}
-                                    onRename={handleRenameDay}
+                                    onUpdate={handleUpdateDay}
                                     onDelete={handleDeleteDay}
                                     showAdd={false}
                                     busy={busy}
