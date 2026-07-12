@@ -81,6 +81,9 @@ Content-Type: application/json
 ```
 
 응답 201: `{ "data": { "...": "TripResponse" } }`. 동반자가 있으면 invite 이메일 발송.
+`start_date`와 `end_date`가 모두 있으면 생성 시 기간 전체의 `trip_days`가 함께 생성된다.
+예를 들어 3박 4일(`2026-06-01`~`2026-06-04`) 여행은 `day_index` 1~4와 각 날짜 row를
+초기 상태로 가진다. 기간이 없는 여행은 day를 자동 생성하지 않는다.
 
 `primary_region_code`는 `region_hint` 자유텍스트와 별개로 지역 기반 weather/oil/
 Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigungu/bjd code)를
@@ -246,9 +249,17 @@ Content-Type: application/json
 { "day_index": 4, "date": "2026-06-04", "title": "마지막 날" }
 ```
 
+`day_index`는 optional이다. 생략하면 기존 day 중 비어 있는 가장 작은 `day_index`를
+사용한다. 여행 기간이 있는 경우 `date`도 생략 가능하며, 서버가 `start_date + (day_index - 1)`로
+기본 날짜를 채운다. 이미 모든 기간 day가 존재하면 `422 VALIDATION_ERROR`다.
+
+기간이 있는 여행의 day는 `day_index`가 기간 길이를 넘을 수 없고, `date`는 여행 기간 안에 있어야 한다.
+같은 trip 안에서 같은 `date`를 두 day가 동시에 사용할 수 없으며, 이 경우 `409 TRIP_DAY_CONFLICT`다.
+
 ### 4.2 `PATCH /trips/{trip_id}/days/{day_index}`
 
-`title`, `date`, `note` 갱신.
+`title`, `date`, `note` 갱신. `date`는 여행 기간 안에서 다른 day와 겹치지 않는 값으로 바꿀 수 있다.
+날짜 중복은 `409 TRIP_DAY_CONFLICT`, 기간 밖 날짜는 `422 VALIDATION_ERROR`다.
 
 ### 4.3 `DELETE /trips/{trip_id}/days/{day_index}`
 

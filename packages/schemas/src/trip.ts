@@ -144,7 +144,7 @@ export const TripResponseSchema = z.object({
 export type TripResponse = z.infer<typeof TripResponseSchema>;
 
 export const TripDayCreateSchema = z.object({
-  day_index: z.number().int().min(1),
+  day_index: z.number().int().min(1).optional(),
   date: z.string().date().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
   note: z.string().nullable().optional(),

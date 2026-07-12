@@ -565,7 +565,10 @@ test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상�
   await expect(broken).toHaveAttribute('data-marker-source', 'category');
   await expect(broken).toHaveAttribute('data-marker-broken', 'true');
 
-  await page.getByRole('button', { name: /해운대 custom/ }).click();
+  await page
+    .getByTestId('trip-poi-list')
+    .getByRole('button', { name: /해운대 custom/ })
+    .click();
   await expect(custom).toHaveAttribute('data-marker-selected', 'true');
 });
 
@@ -800,6 +803,109 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
   await page.getByTestId('trip-add-day-inline').click();
   await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
   await expect(page.getByTestId('trip-layer-list')).toContainText('미정');
+});
+
+test('삭제로 비어 있는 가장 빠른 일자를 다시 생성한다', async ({ page }) => {
+  let createdBody: { day_index?: number; date?: string | null } | null = null;
+  const makeEmptyDay = (dayIndex: number, date: string) => ({
+    ...BASE_MARKER_DAY,
+    day_index: dayIndex,
+    date,
+    title: `${dayIndex}일차`,
+    pois: [],
+  });
+  let currentView: MutableTripDetailView = {
+    ...TRIP_VIEW,
+    trip: {
+      ...TRIP_VIEW.trip,
+      start_date: '2026-07-01',
+      end_date: '2026-07-04',
+    },
+    days: [
+      makeEmptyDay(2, '2026-07-02'),
+      makeEmptyDay(3, '2026-07-03'),
+      makeEmptyDay(4, '2026-07-04'),
+    ],
+  };
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    createdBody = request.postDataJSON() as { day_index?: number; date?: string | null };
+    const day = {
+      trip_id: tripId,
+      day_index: createdBody.day_index,
+      date: createdBody.date ?? null,
+      title: null,
+      note: null,
+      version: 1,
+      created_at: '2026-06-01T09:00:00+09:00',
+      updated_at: '2026-06-01T09:00:00+09:00',
+    };
+    currentView = {
+      ...currentView,
+      days: [
+        { ...makeEmptyDay(Number(createdBody.day_index), String(createdBody.date)), title: null },
+        ...currentView.days,
+      ].sort((a, b) => {
+        const left = (a as { day_index: number }).day_index;
+        const right = (b as { day_index: number }).day_index;
+        return left - right;
+      }),
+    };
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: day }),
+    });
+  });
+  await mockTripDetailRoutes(page, () => currentView);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByTestId('trip-layer-list')).not.toContainText('1일차');
+  await expect(page.getByTestId('trip-add-day-inline')).toContainText('1일차 추가');
+  await page.getByTestId('trip-add-day-inline').click();
+  await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
+  expect(createdBody).toMatchObject({ day_index: 1, date: '2026-07-01' });
+});
+
+test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
+  let patchedBody: Record<string, unknown> | null = null;
+  let currentView: MutableTripDetailView = {
+    ...TRIP_VIEW,
+    days: [{ ...BASE_MARKER_DAY, title: '첫날', pois: [] }],
+  };
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() !== 'PATCH') return route.continue();
+    patchedBody = request.postDataJSON() as Record<string, unknown>;
+    expect(request.headers()['if-match']).toBe('1');
+    const currentDay = currentView.days[0] as typeof BASE_MARKER_DAY;
+    const updatedDay = {
+      ...currentDay,
+      ...patchedBody,
+      trip_id: tripId,
+      note: null,
+      version: 2,
+      created_at: '2026-06-01T09:00:00+09:00',
+      updated_at: '2026-06-01T09:00:00+09:00',
+    };
+    currentView = { ...currentView, days: [{ ...updatedDay, pois: [] }] };
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: updatedDay }),
+    });
+  });
+  await mockTripDetailRoutes(page, () => currentView);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await page.getByTestId('trip-day-rename').click();
+  await page.locator('#trip-day-date-input').fill('2026-07-02');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  await expect(page.getByTestId('trip-layer-list')).toContainText('2026년 7월 2일');
+  expect(patchedBody).toMatchObject({ date: '2026-07-02' });
 });
 
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
