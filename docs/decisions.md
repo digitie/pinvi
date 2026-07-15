@@ -2247,7 +2247,435 @@ Sprint 6 일정 최적화(T-261~263, SPEC H-8/I-8)는 trip day의 POI 순서를 
 - 대규모(>60 POI)·실도로 거리·OR-Tools가 실제로 필요해지면 본 ADR을 supersede하는 별도 ADR로
   엔진을 교체한다(`strategy` 확장 또는 distance provider 추가).
 
+## ADR-054: 외부 장소 provider(Kakao Local + Naver Local)는 서버측 display-only 검색·place-link으로 도입한다 — ADR-015의 "Local 검색 kor-travel-map 경유" 부분을 supersede
+
+- **상태**: accepted
+- **날짜**: 2026-07-15
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+ADR-015는 지도 클라이언트를 Kakao Maps SDK → VWorld/MapLibre로 바꾸면서 부수적으로 **Local(장소)
+검색도 kor-travel-map 라이브러리 경유로 라우팅**한다고 박았다(`docs/integrations/kakao-map.md` 표
+"Local 검색"). 지도 엔진·좌표 순서 결정 자체는 유효하다(ADR-046). 문제는 검색 경로다.
+
+Trip detail 재작성(TDR)의 F3/F4 요구는 두 가지 구체적 gap을 만든다.
+
+- **주소 자동완성 gap**: 현재 `MapSearchBox`는 `GET /features/search`(FeatureSummary: name+category,
+  **주소 없음**)만 소비한다. 사용자가 "장소명이 아니라 주소로" 찾을 때, feature 카탈로그에는 없지만
+  실제로 존재하는 장소를 찾을 때 결과가 비어 버린다.
+- **place-link gap**: kor-travel-geo(주소→좌표)와 kor-travel-map(등록된 feature)만으로는 "지금 카카오/네이버
+  지도에 있는 임의의 장소"를 검색·선택·딥링크할 수 없다. kor-travel-map은 **큐레이션된 feature 카탈로그**이지
+  전국 POI 검색 인덱스가 아니다(ADR-026/027). 이 gap을 kor-travel-map에 신규 계약으로 요구하는 것은
+  그쪽 범위 밖이고, kor-travel-map이 Kakao/Naver를 대신 프록시하게 만드는 책임 전가다.
+
+즉 ADR-015 시점의 "라이브러리 경유" 가정은 **feature 카탈로그 read**에는 맞지만
+**주소 자동완성 + 임의 장소 검색/딥링크**에는 애초에 채울 수 없는 계약이었다. 그래서 Kakao Local /
+Naver Local(검색)을 Pinvi 서버에서 **직접, 단 display-only로** 호출하는 경로를 다시 연다. ADR-015의
+지도 엔진·좌표 순서 결정은 그대로 두고, "Local 검색은 kor-travel-map 경유" 항목만 supersede한다.
+
+### 결정
+
+#### 1. 서버측 provider client 2개 (`clients/kor_travel_geo.py` 패턴)
+
+- `clients/kakao_local.py`, `clients/naver_local.py`를 `KorTravelGeoClient`와 동일 골격으로 만든다:
+  단일 `httpx.AsyncClient` 팩토리 + `api_call_event_hooks(async_session_factory, provider=…)` +
+  수동 지수 백오프 재시도 + `*_client_lifespan`(app.state 등록) + `Depends` 게이트(503 fallback).
+  provider tag는 각각 `"kakao_local"`, `"naver_search"`로 두어 `app.api_call_log`에 집계된다.
+- **모든 provider 호출은 서버측 httpx**다. 브라우저는 provider API를 직접 치지 않는다.
+
+#### 2. 시크릿 / 헤더 인증 (M18)
+
+- **Kakao Local: 신규 키를 발급하지 않는다.** 기존 OAuth 앱 키 `pinvi_kakao_oauth_rest_api_key`에
+  **로컬(Local) product를 활성화**해 그대로 재사용하고, `Authorization: KakaoAK {REST_API_KEY}`
+  헤더로 인증한다. 중복 Kakao 키 발급 금지.
+- **Naver는 별도 검색(Search) API 앱 credential이 필요**하다(OAuth 앱과 다른 앱). 신규 설정
+  `pinvi_naver_search_client_id` / `pinvi_naver_search_client_secret`를 추가하고
+  `X-Naver-Client-Id` / `X-Naver-Client-Secret` 헤더로 인증한다. 기존 `pinvi_naver_oauth_*`(로그인
+  전용)와 혼용 금지.
+- 신규 시크릿은 `core/config.py`에서 `SecretStr`로 타입한다. Kakao는 **query가 아니라 헤더** 인증이라
+  `api_call_logging.sanitize_api_call_endpoint`의 query 마스킹 대상이 아니며, `Authorization`/
+  `X-Naver-Client-Secret` 헤더가 로그로 새지 않도록 endpoint 로깅은 URL만 남긴다(헤더 미기록).
+
+#### 3. CSP 정정 (M18) — 서버측 호출이므로 provider host는 connect-src에서 뺀다
+
+- provider API host(`dapi.kakao.com`, `openapi.naver.com`)는 브라우저가 호출하지 않으므로 web
+  `connect-src`에 **넣지 않는다**. (ADR-015 이전 문서의 `dapi.kakao.com` CSP 항목은 폐기 상태 유지.)
+- 브라우저가 직접 여는 것은 **딥링크 내비게이션 host**뿐이다: `map.kakao.com`, `map.naver.com`.
+  이는 새 탭 이동(anchor navigation)이라 `connect-src`가 아니라 필요 시 navigation 허용이면 충분하다.
+- **어트리뷰션 로고는 원격 img-src가 아니라 로컬 asset으로 번들**한다(카카오/네이버 CI). 원격
+  이미지 host를 CSP에 추가하지 않는다.
+- **maki glyph unpkg 문제는 modal PR 전에 self-host로 확정**한다. detail modal이 maki 아이콘을
+  unpkg 등 원격에서 끌지 않도록, glyph/sprite를 Pinvi asset으로 self-host해 CSP 원격 host 0을 유지한다.
+
+#### 4. ToS = display-only / 비영속 / 비전달 (M1/D4)
+
+- Kakao/Naver 결과는 **표시 전용**이다. provider 파생 콘텐츠(phone/address/road_address/category/
+  rating 등)를 **절대 영속하거나 하류로 전달하지 않는다**.
+- 영속 대상은 **사용자 작성 필드**뿐: 사용자가 입력/유지한 name, 사용자가 놓은 좌표, 사용자 note +
+  불투명 참조 `{provider, external_id, deep_link_url}`. 상세는 **조회 시 provider를 live 재호출**한다.
+- 기본 자동완성 소스는 kor-travel-geo(주소) + kor-travel-map(feature)이며, Kakao/Naver는 display-only
+  보강이다(내부 우선, §7).
+
+#### 5. 어트리뷰션 UI (M19) — 하드 요구
+
+- Kakao/Naver 소스가 붙은 **모든 검색 행과 상세 뷰**에 가시적 "카카오" / "네이버 검색" 어트리뷰션 +
+  provider 백링크(딥링크)를 표시한다. 어트리뷰션 없는 provider 결과 렌더링 금지.
+
+#### 6. location_audit — 제3자 제공 커버 (M12)
+
+- `/search`의 near-coordinate를 Kakao/Naver로 보내는 것은 **위치정보 제3자 제공**이다(LBS법).
+- `/search`(또는 `/v1/search`)를 `middleware/location_audit.py`의 `PURPOSE_BY_PATH`에 purpose
+  `"third_party_place_search"`로 등록한다. 핸들러에서 좌표를 `request.state.location_audit_coord`에
+  세팅해 `_extract_coord`가 집는다.
+- 좌표는 별도 `lat`/`lon` query 파라미터로 받고(문자열/자유형 아님), **위치 동의 플로우** 뒤에
+  게이트한다. 사용자가 "내 주변 검색"을 고른 경우에만 provider로 좌표를 전송한다. 동의 없으면
+  키워드-only 검색(좌표 미전송, 감사 미기록).
+
+#### 7. 쿼터 / 캐시 / 내부 우선 short-circuit (M20)
+
+- Kakao/Naver는 **내부 결과(feature + my_poi + address)가 K개 미만일 때만** 호출한다(internal-first
+  short-circuit). 내부로 충분하면 외부 provider 미호출.
+- 서버 short-TTL 캐시를 `(q, 반올림된 coord-cell)` 키로 둔다. 클라이언트 debounce / min query length /
+  cancel-in-flight를 유지한다. Naver 오픈 쿼터 ≈25k/day 기준으로 예산을 잡는다.
+- **degraded-source 동작**: provider 호출 실패는 검색 전체를 실패시키지 않는다. 내부 결과는 그대로
+  반환하고 실패한 소스를 `degraded_sources`에 담아 UI가 "일부 소스 일시 불가"를 표시한다.
+
+#### 8. 통합 검색 계약 — `GET /search` 단일화 (M14/D1, 계약 정본은 검색 doc)
+
+- 경로는 `GET /search` 하나만 유지한다. 응답은 타입드 `{results: PlaceSearchResult[],
+  degraded_sources: string[]}`. `PlaceSearchResult`는 **source-tagged union**:
+  `source ∈ {feature, my_poi, kakao, naver, address}`.
+  필드 = `{source, feature_id?, external_id?, name, address, road_address?, coord{lon,lat},
+  category?, marker_color?, marker_icon?, provider_url?, phone?}` — 단 `phone`은 display-only이며
+  절대 영속하지 않는다.
+- **ordering**: 내부(feature + my_poi + address) 먼저, 그다음 kakao, 그다음 naver. 부분 degradation
+  에서도 순서 안정.
+- `address` source는 kor-travel-geo geocode 결과다(주소 자동완성 gap 해결).
+- 기존 `unified_search`/`UnifiedSearchResult`가 흘리던 untyped `list[dict]`를 이 타입드 계약으로
+  대체한다. **`GET /features/search`는 삭제**한다(그것은 `source=feature` 한 갈래일 뿐).
+  **`/search/places`는 만들지 않는다**(경로 분열 방지).
+
+#### 9. feature-request 파이프라인 확장 (M2/M3)
+
+- `source`(`feature|kakao|naver|manual`) + 불투명 `external_ref({provider, external_id,
+  deep_link_url})`를 **`FeatureSuggestion`과 `trip_day_pois` 둘 다**에 둔다. POI 쪽은 snapshot에
+  묻지 않고 **1급 컬럼**으로 둔다(reconciliation·조회 성능).
+- **자동 발화(auto-fire)는 best-effort이며 POI 생성과 디커플**한다: 비-feature Kakao/Naver pick으로
+  POI를 만들면 POI 생성은 **항상 성공**하고, feature-request enqueue는 rate-limit/중복 시 조용히
+  skip한다(사용자 흐름 비차단).
+- 자동 발화는 **수동 20/day 한도(`FEATURE_SUGGESTION_DAILY_LIMIT`)와 분리된 비차단 예산**을 쓰고,
+  자체 idempotency 키 `(user, provider, external_id)`를 24h 유지해 재클릭/재추가 중복 발화를 막는다.
+  (기존 per-user `_find_duplicate_feature_suggestion`과 별개 레이어.)
+- **GLOBAL dedup**: 서로 다른 요청자라도 `(provider, external_id)`가 같으면 suggestion 하나로 병합하고
+  interested-user count만 증가시킨다.
+- **승인 후 reconciliation**: admin 승인 → `KorTravelMapAdminClient.create_feature`가 opaque
+  `feature_id`를 mint하면, 그 `(provider, external_id)`와 일치하는 **모든 `trip_day_pois`에
+  feature_id를 부착**하고 snapshot-only 상태를 해제한다.
+- **create_feature로 전달하는 것은 사용자 작성 name + 좌표 + note + external_ref뿐**이다. provider
+  파생 콘텐츠(phone/address/category 등)는 절대 전달하지 않는다(§4 ToS와 정합).
+
+### 근거
+
+- kor-travel-geo/kor-travel-map만으로는 **주소 자동완성 + 임의 장소 place-link**를 채울 수 없다는 것이
+  ADR-015 이후 실제 확인된 gap이다. 그 gap을 kor-travel-map 계약으로 밀면 책임 경계(ADR-026/027)를
+  침범한다 → Pinvi 서버에서 provider를 직접, 단 display-only로 호출하는 것이 최소 침습 경로다.
+- display-only + 사용자 작성 필드만 영속하는 규칙은 Kakao/Naver Local ToS(콘텐츠 재배포/영속 금지)를
+  위반하지 않으면서도 사용자 흐름(검색→선택→딥링크→feature-request)을 완결한다.
+- 서버측 호출이므로 provider host를 `connect-src`에 넣을 이유가 없다. CSP 표면을 딥링크 navigation
+  host + 로컬 asset으로 국한하면 원격 스크립트/이미지/연결 host 0을 유지한다.
+- 좌표를 별도 파라미터 + 동의 게이트 + `PURPOSE_BY_PATH` 감사로 다루면 제3자 위치 제공(LBS법)이
+  기존 감사 체인에 그대로 편입되고, 동의 없는 사용자는 키워드 검색으로 저하 없이 동작한다.
+- 자동 발화를 POI 생성과 20/day 한도에서 디커플하면 "임의 장소를 담았는데 POI가 실패"하는 UX 사고를
+  구조적으로 제거하고, GLOBAL dedup + reconciliation이 중복 요청 폭주와 승인 후 수기 재연결을 없앤다.
+
+### 결과
+
+- 신규 client 2개, 신규 `SecretStr` 설정 2개(Naver Search), Kakao 키 재사용(로컬 product 활성화),
+  provider 태그 2개가 `api_call_log`에 추가된다. `docs/integrations/kakao-map.md`의 "Local 검색은
+  kor-travel-map 경유" 항목은 본 ADR로 superseded(문서에 supersede 주석 추가).
+- `GET /search`가 타입드 source-tagged 계약으로 재작성되고 `GET /features/search`는 삭제된다.
+  api-client / zod schema / OpenAPI 슬라이스가 T-302 PR과 함께 갱신된다.
+- `FeatureSuggestion`·`trip_day_pois`에 `source` + `external_ref` 컬럼이 생긴다(마이그레이션은 T-303).
+  자동 발화·GLOBAL dedup·reconciliation은 T-303 범위.
+- web은 provider 콘텐츠를 캐시/영속하지 않고 상세를 열 때마다 서버가 live 재호출한다. 어트리뷰션은
+  모든 Kakao/Naver 행·상세의 하드 요구.
+
+### 후속
+
+- T-302: client + config + `GET /search` 재작성 + location_audit + quota/cache + api-client (본 ADR 라이딩).
+- T-303: feature-request 파이프라인 확장(컬럼/자동 발화/dedup/reconciliation).
+- detail-card의 opt-in 외부 enrichment(`?providers=kakao,naver`, display-only, match-confidence
+  guard)는 ADR-056(T-304)에서 같은 display-only·어트리뷰션 규칙을 재사용한다.
+- 공개 배포 전, VWorld/Kakao 키 런타임 정책(ADR-045)과 정합하게 provider 응답의 opaque token/tile
+  proxy 필요성을 재검토한다(현재는 서버측 호출 + 감사 로깅으로 게이트).
+
+## ADR-055: Trip-day 표시 모델 — 파생 effective_date + 일자 팔레트 색 + 서버 계산 display_marker_color + 일자 rise/set
+
+- **상태**: accepted
+- **날짜**: 2026-07-15
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+Trip detail 재작성(TDR)의 6·8번 feature는 (a) trip 지도가 POI를 **일자별 16색 마커**로 칠하고
+(b) 일자 행이 공휴일 + 일출/일몰을 보이게 한다. 동시에 여행 기간이 줄면 범위를 벗어난 일자를
+경고하고(F1), POI가 있는 일자 삭제를 확인해야 한다(F2). 이 화면들의 근본 데이터는 **일자
+표시 모델**이다. 현재 구현에는 이 모델을 깨뜨리는 결함이 있다.
+
+- `services/poi.py#ensure_trip_day`(≈58–60행)는 auto-생성 일자에 대해 `trip_days.date =
+  trip.start_date + (day_index-1)`을 **materialize**한다. 반면 `services/trip.py#update_trip`은
+  start_date 편집 시 기존 일자의 `date`를 건드리지 않는다. 결과적으로 `trip_days.date`는
+  **frozen 값 + NULL이 섞인 상태**가 되어, `date ?? derived` 류의 어떤 로직도 틀린다(start_date를
+  바꿔도 예전에 만들어진 일자는 옛 날짜를 그대로 보인다).
+- 마커 색은 지금 feature/snapshot에서 온 값만 있고 **일자 축(day_index)** 개념이 없다. per-POI
+  custom override(F7, `trip_day_pois.custom_marker_color/custom_marker_icon` + `resolveMarkerStyle`
+  custom tier)는 이미 있으나 "이 일자 전체를 한 색으로"가 없다.
+- 일출/일몰은 `app.trip_poi_rise_sets`(PER-POI, ETL-fill, snapshot-only)만 있다. **일자 단위**
+  값이 없고, per-POI 최초값을 그냥 골라 쓰면 sort_order(LexoRank)가 사용자 드래그로 바뀔 때
+  기준점이 흔들린다.
+- 공휴일은 unmerged branch `agent/codex-admin-holiday-ui`에서 `TripViewDay.holidays[]`(KASI
+  `app.kasi_special_days` join, `services/trip_view_builder.py`)로 이미 계산된다.
+
+`day_index`는 (trip_id, day_index) composite PK이며 reorder 연산이 없어 **영구적으로
+sparse/gappy**하다. 모든 civil date는 Asia/Seoul plain DATE이고 `now()` 파생을 쓰지 않는다.
+
+### 결정
+
+#### 1. effective_date는 항상 파생한다 (materialize 폐지)
+
+- `ensure_trip_day`는 더 이상 `date`를 채우지 않는다 — 신규 일자는 `date=None`으로 생성한다.
+- `trip_days.date`는 **명시적 per-day override 전용** 컬럼으로 의미를 바꾼다.
+- 서버가 언제나 `effective_date = date ?? (start_date + (day_index - 1))`를 계산한다. start_date가
+  NULL이면 effective_date도 NULL이다.
+- start_date 편집은 override가 없는 모든 일자를 자동 reflow한다(별도 UPDATE 불필요 — 파생이므로).
+- `trip_days`에 `CHECK (day_index >= 1)`를 추가한다. day_index는 sparse/gappy를 유지한다.
+- **backfill 없음**: 기존 frozen `date` 값은 그대로 두면 override로 해석되어 동작이 바뀐다.
+  마이그레이션은 `start_date + (day_index-1)`과 동일한 frozen `date`를 NULL로 정규화한다(사용자가
+  실제로 조정한 값만 override로 남긴다).
+
+#### 2. out_of_range는 서버 필드다 (클라 재계산 금지)
+
+- `TripViewDay`에 `out_of_range: bool` — start_date가 있고 `effective_date > end_date`일 때 true.
+- `apps/web/lib/tripDateLabels.ts`는 effective_date/out_of_range를 **더 이상 파생하지 않고** 서버
+  값을 consume만 한다. 공유 뷰·shared endpoint view-builder도 같은 필드를 emit한다.
+
+#### 3. marker_color: nullable + 일자 팔레트 기본값 (공용 resolver에서 계산)
+
+- `trip_days.marker_color` = **NULLABLE `String(16)`**. NULL은 팔레트 기본값
+  `P-{((day_index-1) % 16) + 1:02d}`을 뜻한다(P-01~P-16 순환).
+- 이 팔레트 파생은 **공용 `@pinvi/domain` resolver**(`packages/domain/src/marker.ts`)에서 계산하고,
+  `services/trip_view_builder.py`가 이를 **mirror**한다(서버·웹·모바일 단일 정의).
+- backfill·3-insert-site materialize 없음. `PATCH /days/{i}`는 **`exclude_unset`**로 처리해
+  요청에서 생략된 `marker_color`가 저장된 override를 clobber하지 못하게 한다(명시적 `null`만
+  "기본값으로 되돌리기").
+
+#### 4. 우선순위 체인 (PIN)
+
+일자 색을 도입하며 마커 색 우선순위를 다음으로 **고정**한다:
+
+```
+custom(POI) > dayColor > resolved > upstream > snapshot > category > kind > fallback
+```
+
+- `dayColor`는 **항상 존재하는 server-resolved tier보다 위**에 놓는다. 그렇지 않으면 resolved가
+  늘 채워져 있으므로 trip 지도에서 per-day 색이 절대 이기지 못한다.
+- 이는 trip 지도에서 per-feature 색을 **의도적으로 일자 색으로 덮는다**. 단, per-POI custom(F7)은
+  여전히 최상위로 이긴다.
+- resolver 순수성 유지: `dayColor`는 `MarkerStyleInput`에 **선택적으로 주입되는 입력**으로 추가하고
+  (custom과 resolved 사이 tier), 기존 `resolveMarkerStyle`의 나머지 순서·순수성은 그대로 둔다.
+
+#### 5. display_marker_color: 서버가 POI마다 1개 계산 (지도 = 리스트 badge)
+
+- `TripView`의 각 POI에 서버가 `display_marker_color`를 계산한다(`custom > dayColor > resolved >
+  upstream` 축약 — §4 체인의 색 부분).
+- 웹은 이 값을 **지도 핀과 `TripPoiList` 번호 badge 양쪽에 동일하게** 렌더한다. 클라이언트 측
+  우선순위 계산 없음 → 지도/리스트 색 parity 보장, mobile-safe.
+
+#### 6. 일자 일출/일몰: 전용 `app.trip_day_rise_sets`
+
+- 신규 table `app.trip_day_rise_sets`, key `(trip_id, day_index)`, 자체 ETL asset,
+  status `pending|success|error`.
+- **결정적 기준 좌표**: (1) 그 일자 POI centroid → (2) 없으면 `created_at` 최선(first-ADDED) POI →
+  (3) 그래도 없으면 `primary_region_code` centroid fallback. **"earliest-by-sort_order"는 거부**한다
+  (LexoRank는 사용자 드래그로 바뀌어 기준점이 불안정).
+- `TripViewDay`에 `rise_set` + `rise_set_reference`("XX 장소 기준")를 노출한다.
+
+#### 7. 비동기 pending/stale
+
+- effective_date가 바뀌면 rise/set을 **파생-date 일자에만 scope된 단일 batched UPDATE**로 re-seed한다.
+- 마지막 성공값은 **null로 지우지 않고** `stale`/`needs_refetch` 플래그를 세워 유지한다(UI는
+  "계산 중" 표시).
+- ETL 완료 신호(WS 이벤트 또는 bounded client poll)를 emit해 값이 도착하면 헤더가 갱신된다.
+
+#### 8. DELETE-day 관용구
+
+- **1차**: 클라이언트가 이미 로드된 `poi_count`로 confirm(round-trip 0). POI가 있으면 확인 다이얼로그.
+- **서버 self-defense**: `?cascade=true` 없이 DELETE하면 POI가 있을 때만 `409 DAY_HAS_POIS`(body에
+  **고유 `code`** + `poi_count`)를 반환한다. version-conflict 409는 자기 code를 유지한다. 항상-204가
+  아니다.
+
+#### 9. 공유 뷰 per-feature 가시성 매트릭스 (PIN)
+
+`SharedTripView.tsx`(공개 read-only)와 shared endpoint view-builder는 아래를 따른다:
+
+| feature | trip detail(소유자) | SharedTripView(공개) |
+| --- | --- | --- |
+| 일자 색 마커(display_marker_color) | O | O |
+| 공휴일 badge(holidays[]) | O | O |
+| 일출/일몰(rise_set) | O | O |
+| out_of_range 경고/연장 배너 | O | **X** |
+| F4 자동 feature-request | O | **X** |
+| F3 검색/autocomplete | O | **X** |
+
+shared endpoint view-builder는 소유자 뷰와 **동일한 일자 필드**(effective_date, display_marker_color,
+holidays, rise_set/reference)를 emit한다.
+
+### 근거
+
+- **파생 > materialize**: day_index가 sparse/reorder-free이므로 effective_date는 순수 함수다.
+  materialize는 start_date 편집과 영원히 어긋나므로(현 결함) 저장할 이유가 없다. override 컬럼만
+  남기면 "사용자가 특정 일자만 다른 날짜로"라는 실제 요구도 그대로 표현된다.
+- **dayColor를 resolved 위에**: server-resolved는 늘 채워져 있으므로 그 아래에 두면 per-day 색이
+  구조적으로 死문(dead)이 된다. 반대로 per-POI custom은 사용자가 개별 지정한 최상위 의도라 dayColor
+  위에 둔다.
+- **서버 단일 display_marker_color**: 지도와 리스트가 각자 우선순위를 계산하면 drift가 난다. 서버가
+  1개로 확정해 내려주면 parity가 자명하고 모바일도 `paletteHex(display_marker_color)` 직접 소비로
+  안전하다.
+- **결정적 기준 좌표**: 일출/일몰은 좌표 1개에 대한 계산이므로 기준점이 안정해야 캐시·재계산이
+  결정적이다. LexoRank sort_order 기반은 드래그마다 기준이 바뀌어 부적합하다.
+- **stale-keep**: 값을 null로 지우면 헤더가 깜빡이며 비어 UX가 나쁘다. 마지막 성공값 + "계산 중"이
+  더 낫다.
+- **exclude_unset**: PATCH가 부분 갱신인데 생략 필드를 기본값으로 덮으면 저장된 override를 조용히
+  잃는다. `null`(초기화)과 생략(무변경)을 구분해야 한다.
+
+### 결과
+
+- `trip_days`: `date` 의미 변경(override-only) + `CHECK (day_index >= 1)` + nullable `marker_color
+  String(16)`. `ensure_trip_day`는 `date=None`으로 생성.
+- 신규 table `app.trip_day_rise_sets(trip_id, day_index, status, stale, rise_set 값, reference…)`
+  + 전용 ETL asset + batched re-seed + 완료 signal(T-305).
+- `resolveMarkerStyle`에 `dayColor` optional tier 추가(순수 유지). `trip_view_builder.py`가 팔레트
+  파생·display_marker_color·effective_date·out_of_range를 mirror/계산.
+- `TripViewDay` 확장: `effective_date`, `out_of_range`, `marker_color`(effective), `holidays[]`,
+  `rise_set`, `rise_set_reference`. per-POI `display_marker_color`.
+- `tripDateLabels.ts`는 파생 로직 제거 → 서버 필드 consume. DELETE `/days/{i}`에 409 `DAY_HAS_POIS`
+  가드 추가.
+- pydantic/zod(`packages/schemas`)/api-client 계약 동기 갱신(T-301과 함께). 공유 endpoint
+  view-builder도 동일 필드 emit.
+- **copy_trip 주의(범위 외, 문서화)**: 기존 target 일자로 merge-into할 때는 **target 일자 색을
+  유지**하고 source 색은 버린다. 버그가 아니라 정의된 동작이다.
+
+### 후속
+
+- **모바일 범위 외**(T-284 scope gate): resolver는 순수 유지하되 모바일 지도는 이번 스프린트에
+  `dayColor`를 threading하지 않는다(모바일이 조용히 recolor되지 않게). 이후 별도 task로 모바일 지도에
+  dayColor 주입 + 공유 화면 enrichment를 mirror한다.
+- 다중-일자 cluster 색 규칙(neutral/mixed)은 별도로 정하거나 명시적으로 defer한다.
+- `prefers-reduced-motion`(flyTo/fitBounds/day-color churn)은 알려진 gap으로 남긴다.
+
+## ADR-056: Feature 상세는 kind별 투영 `detail-card` + 옵트인 외부 enrichment로 읽고, 풀스크린 모달을 공용 `useModalDialog`로 연다
+
+- **상태**: accepted
+- **날짜**: 2026-07-15
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+현재 사용자 상세 읽기는 `GET /features/{id}`(`FeatureDetail`) 하나뿐인데, 이 응답은
+kor_travel_map 원본을 그대로 투영한 **불투명 dict**다: `address: dict[str, Any]`,
+`urls: dict[str, Any]`, `detail: dict[str, Any]`. `FeatureMapView`는 이걸
+`featureApi.get` + `weather`로 읽어 260px `Popup`에 `addressLine()`/`currentTempC()`
+같은 **클라이언트 방어 파서**로 겨우 한 줄씩 뽑아 쓰고 있다(키 미확정 → `pick('road') ??
+pick('full') ??…`). 이 구조로는 place/event/notice/price 각각의 사용자 표시 필드를
+타입 안전하게 노출할 수 없고, F5(뷰포트 feature 풀스크린 상세 모달) 요구를 지탱하지 못한다.
+
+추가로 세 가지 갭이 있다: (1) `_DEFAULT_INBOUNDS_KINDS`가 `[place, event, notice]`라
+price 마커가 기본 뷰포트에서 빠진다. (2) trip POI 중 `feature_id=null`인 항목(ADR-031
+soft-delete / ADR-054 외부 소스 스냅샷 POI)은 참조할 feature가 없어 상세 모달을 열 근거가
+없다. (3) Kakao/Naver 실시간 상세(전화/링크)를 붙이고 싶지만 ADR-054가 이를 **display-only,
+비영속**으로 못박았으므로 상세 읽기 계약도 그 규칙을 지켜야 한다. UI 쪽은 기존
+`ConflictDialog`가 focus trap/restoration 없이 `document` keydown만 걸어 WCAG 2.4.3/2.1.2를
+위반하고, 새 상세 모달·확인 모달이 같은 결함을 복제할 위험이 있다.
+
+### 결정
+
+- **`GET /features/{id}/detail-card`를 THE 사용자 상세 읽기로 신설한다.** 응답 스키마
+  `FeatureDetailCard`는 **kind로 판별하는 discriminated union**(Pydantic `Field(discriminator=
+  "kind")`, `packages/schemas` Zod 미러)이며, kind별 arm은 **일반 사용자 노출 필드만** 담는다:
+  - `place` — name/category/address(한 줄 표시용 정규화)/marker/좌표/영업정보 등 일반 필드
+  - `event` — name/기간/장소/카테고리
+  - `notice` — name/공지 본문·기간
+  - `price` — name/품목·가격 표시 필드
+  - **GENERIC FALLBACK arm** — `name`/`category`/`address`/`kind`만. `weather`/`route`/`area`는
+    이 fallback으로 처리하고 kind별 리치 arm을 만들지 않는다(현 스프린트 스코프 밖).
+  원본 `detail`/`urls` 불투명 dict는 이 응답에 그대로 노출하지 않는다(서버가 투영·정제).
+- **`GET /features/{id}`(`FeatureDetail`)는 raw/debug passthrough로 강등한다.** 불투명 dict를
+  그대로 반환하는 이 엔드포인트는 디버그/관리 용도로만 유지하고, 사용자 경로(모달·팝업)는
+  `detail-card`로 전환한다. `FeatureMapView`의 클라이언트 파서(`addressLine`/`currentTempC`
+  중 상세용)는 제거하고 서버 투영 값을 소비한다.
+- **외부 enrichment는 옵트인 `?providers=kakao,naver`**다. 미지정이 기본(내부만). enrichment는
+  ADR-054대로 **display-only·라이브 재조회·비영속**이며, provider당 실패는 응답의 `degraded`
+  마커(`/search`의 `degraded_sources`와 동일 패턴)로 표시하고 카드 본문은 내부 값으로 degrade한다.
+  가시적 "카카오"/"네이버 검색" attribution + back-link는 enrichment 행마다 필수(ADR-054 M19).
+- **match-confidence 가드**: 외부 매칭은 name + 좌표 fuzzy match다. 신뢰도가 임계 미만이면
+  틀린 전화/URL을 붙이는 대신 **"일치하는 외부 정보 없음"**을 표시한다(오귀속 방지).
+- **feature-less trip POI(`feature_id=null`)는 저장된 POI 스냅샷으로 모달을 렌더한다.**
+  `feature_id` 없이도 `trip_day_pois`의 user-authored name/좌표/note + 불투명 `external_ref`
+  (ADR-054)만으로 모달을 구성한다. 옵트인 enrichment는 `external_ref`의 `(provider, external_id)`
+  로 라이브 재조회한다.
+- **`price`를 `_DEFAULT_INBOUNDS_KINDS`에 추가**한다(`[place, event, notice, price]`).
+- **공용 `useModalDialog` 훅**을 신설한다: focus trap + focus restoration + Escape + backdrop
+  클릭 닫기 + `aria-modal` + `history`/`popstate` 뒤로가기 닫기. `ConfirmDialog`,
+  `FeatureDetailModal`, **리팩터된 `ConflictDialog`**가 모두 이 훅을 경유한다(현
+  `ConflictDialog`의 trap/restoration 결여를 해소).
+- **`FeatureDetailModal`은 모바일에서 bottom sheet**다: drag-handle + X를 thumb zone에 두고
+  `overflow-y-auto overscroll-contain`, `padding: max(1rem, env(safe-area-inset-*))`. 모바일에서
+  마커 탭은 중간 아이콘 없이 **시트를 바로 연다**.
+- **weather는 인라인 기온 팝업을 유지**하고 "상세보기"(풀스크린 모달) 대상에서 제외한다.
+  `WeatherMarker` + `currentTempC` 인라인 표시는 그대로 둔다.
+
+### 근거
+
+- kor_travel_map 원본을 불투명하게 흘리던 계약을 kind별 투영으로 바꾸면, 클라이언트가 응답 키를
+  추측(`pick(...)`)하지 않고 타입 안전하게 표시할 수 있고 kind마다 다른 사용자 필드를 정확히
+  노출한다. weather/route/area까지 리치 arm을 만드는 대신 GENERIC FALLBACK으로 덮어 스코프를
+  좁게 유지한다.
+- enrichment를 옵트인·display-only로 두면 ADR-054의 ToS(비영속) 경계를 상세 읽기에서도 그대로
+  지키면서, 기본 경로는 외부 호출 0으로 비용/장애 표면이 없다. match-confidence 가드는 오귀속
+  (엉뚱한 장소의 전화/URL)이라는 신뢰 리스크를 UX 레벨에서 차단한다.
+- 스냅샷 기반 모달은 `feature_id=null` POI(soft-delete·외부 소스)도 동일 UI로 열게 해
+  "상세를 못 여는 POI"라는 빈틈을 없앤다 — Pinvi 소유 스냅샷만 읽으므로 kor_travel_map 소유
+  경계를 침범하지 않는다.
+- 모달 3종(`ConfirmDialog`/`FeatureDetailModal`/`ConflictDialog`)이 접근성 로직을 각자 복제하면
+  drift와 WCAG 회귀가 반복된다. 단일 `useModalDialog`로 focus trap/restoration/Escape/popstate를
+  한 곳에서 보장한다.
+
+### 결과
+
+- `apps/api/app/schemas/feature.py`에 `FeatureDetailCard`(discriminated union) + kind별 arm +
+  generic fallback arm이 추가되고, `apps/api/app/api/v1/features.py`에
+  `GET /features/{id}/detail-card`(옵트인 `providers`, `degraded` 필드)가 신설된다.
+  `GET /features/{id}`는 raw/debug로 문서에 명시된다. `_DEFAULT_INBOUNDS_KINDS`에 `price` 추가.
+  Zod 미러는 `packages/schemas/src/feature.ts`, 클라이언트 메서드는 `api-client`에 반영한다.
+- `apps/web/components/map/FeatureMapView.tsx`는 상세 소비를 `detail-card`로 전환하고 상세용
+  클라이언트 파서를 제거한다. 마커 팝업 → "상세보기" → `FeatureDetailModal`(양 지도: 뷰포트
+  지도·trip 지도)로 흐름이 이어진다. weather 마커는 인라인 기온 팝업으로 유지(모달 제외).
+- `apps/web`에 `useModalDialog` 훅 + `FeatureDetailModal`(모바일 bottom sheet) 신규,
+  `ConfirmDialog`·`ConflictDialog`는 이 훅으로 리팩터된다.
+- ToS 준수: enrichment로 받은 provider 콘텐츠(전화/주소/카테고리/평점)는 어떤 경로로도 영속하지
+  않는다(ADR-054). 저장은 user-authored 필드 + 불투명 `external_ref`만.
+
+### 후속
+
+- weather/route/area 리치 상세 arm은 필요 시 본 ADR을 확장하는 후속 PR로 추가한다(현재는 generic
+  fallback). weather는 기존 `GET /features/{id}/weather` 카드가 별도로 존재한다.
+- enrichment provider 확대(예: 추가 로컬 검색 소스)는 `providers` 파라미터·`degraded` 계약을 그대로
+  두고 소스만 추가한다.
+- match-confidence 임계값은 운영 데이터로 튜닝하고, 임계 근처 로그를 남겨 오귀속/누락 비율을 관측한다.
+- `prefers-reduced-motion`(시트 슬라이드/flyTo)은 알려진 갭으로 남기고 후속에서 다룬다(ADR-055 후속과 동일).
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-054**
+- 다음 신규 ADR = **ADR-057**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

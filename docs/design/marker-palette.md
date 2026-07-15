@@ -76,11 +76,19 @@ public/maki/` 에 사용한 SVG를 vendoring (v1에서도 사용한 패턴).
 - Pinvi의 16색 팔레트와 `packages/domain`의 fallback 상수는 marker preview/누락 보정용이다.
   `/admin/category-mapping`은 upstream catalog와 Pinvi fallback drift를 보여주고,
   `app.category_mappings`에 표시명/색/아이콘 override만 감사 로그와 함께 저장한다(ADR-052).
-- 클라이언트 표시 우선순위: 사용자 custom marker color/icon → 서버 resolved marker →
-  upstream feature marker → feature snapshot marker → upstream category/kind fallback →
-  Pinvi `P-13` 회색 fallback.
+- 마커 색 우선순위(ADR-055에서 **일자 색 tier 추가·고정**):
+  **custom(POI) > dayColor(일자) > resolved(서버) > upstream(feature) > snapshot >
+  category > kind > `P-13` 회색 fallback.**
+  `dayColor`는 항상 채워지는 서버 resolved tier **위**에 둔다(안 그러면 trip 지도에서 일자 색이
+  구조적으로 이길 수 없음). trip 지도 POI는 기본적으로 **일자별 팔레트 색**으로 칠하되 per-POI
+  custom(아래)이 여전히 최상위로 이긴다.
+- **일자(day) 색(ADR-055/F6)**: `app.trip_days.marker_color`(nullable `String(16)`). NULL =
+  팔레트 기본 `P-{((day_index-1)%16)+1:02d}`를 공용 `@pinvi/domain` resolver에서 해석(생성 시
+  materialize 없음, `PATCH /days/{i}`는 `exclude_unset`으로 override 보존). 서버는 POI마다
+  `display_marker_color`(custom > day > resolved > upstream)를 계산해 지도 핀과 `TripPoiList`
+  뱃지가 **동일 색**을 쓰게 한다.
 - 사용자가 POI별로 색/아이콘을 직접 변경하면 `app.trip_day_pois.custom_marker_color` /
-  `custom_marker_icon`에 저장 — 카테고리 매핑과 무관
+  `custom_marker_icon`에 저장 — 카테고리 매핑·일자 색과 무관(최상위 override, F7)
 - 마커 표시는 항상 **불투명** (배경 색 + 흰 또는 검은 텍스트 1:1 매칭)
 - 클러스터 마커는 별도 디자인 (숫자 강조)
 - StyleSeed 적용 후에도 마커 16색은 **데이터 카테고리 표현 예외**로 유지한다.

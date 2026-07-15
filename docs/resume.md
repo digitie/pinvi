@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-07-15 (claude) — TDR(Trip Detail Rewrite) 계획 + 문서화 (ADR-054/055/056)
+
+여행 상세 페이지 8개 feature 재작성을 **계획→문서화**했다(구현은 후속). 7개 서브시스템 이해 패스 →
+플랜 초안 → **6차원 적대적 리뷰**(아키텍처/데이터모델/외부-ToS/UX-모바일/task분할/완결성) + 합의
+directive → 문서 작성 워크플로로 진행했다. 적대적 리뷰가 잡은 실제 blocker를 설계에 반영: (1)
+`ensure_trip_day`가 day.date를 materialize해 `date ?? derived`가 깨짐 → effective_date는 항상 파생,
+`trip_days.date`는 override 전용; (2) Kakao/Naver ToS는 provider 콘텐츠 영속·제3자 전달 금지 →
+display-only, user-authored 필드 + opaque external_ref만 저장; (3) auto-fire는 POI 생성과 decouple +
+global dedup + 승인 후 reconciliation; (4) day 일출/일몰은 sort_order 불안정 → 전용
+`trip_day_rise_sets`(결정적 기준 좌표); (5) 지도/리스트 색 divergence → 서버 `display_marker_color`
+단일화; (6) 검색 3중 엔드포인트 → `GET /search` 단일 typed 계약(`/features/search` 삭제); (7) A 레인
+intra-collision → `TripDayHeader.tsx` 추출 + 파일 소유 규칙.
+
+**산출물(docs PR)**: ADR-054(외부 provider Kakao/Naver Local + `/search` 통합 + feature-request 확장,
+ADR-015 supersede), ADR-055(trip-day 표시 모델 — effective_date/out_of_range/일자 색/display_marker_color/
+전용 rise_set), ADR-056(feature `detail-card` kind별 투영 + 옵트인 enrichment + 공용 `useModalDialog`);
+`docs/execplan/trip-detail-rewrite.md`(마스터 계획 + task DAG); `docs/integrations/kakao-naver-local.md`;
+`docs/tasks.md` TDR 백로그(T-301~T-309c, 레인 A=Claude / B=Codex); `docs/design/marker-palette.md`
+일자 색 tier; CLAUDE.md ADR 현황(→ADR-056, 다음=057). **T-300(공휴일 read-path)은 PR #383로 이미 머지됨.**
+
+**다음 한 작업**: 이 docs PR 머지 후 — Codex(B)는 T-301(day presentation backend)부터, Claude(A)는
+shared 파일을 안 건드리는 **unblocked 스타터**(`useModalDialog` 훅 + `ConfirmDialog` +
+`FeatureDetailModal` shell)를 T-301 계약 window 동안 착수. A UI task(T-306~)는 T-301 스키마 확정 후 진입,
+자주 rebase. 각 task 완료 시 tasks-rule §7 + 교차 에이전트 PR 리뷰(execplan §5).
+
 ## 2026-07-10 (codex) — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시
 
 Admin UI 좌측 메뉴의 선택 항목에서 아이콘/글자 세로 정렬이 흔들리지 않도록 nav link 정렬을 보정했다.
