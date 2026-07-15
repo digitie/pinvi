@@ -2,6 +2,37 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-15 (claude) — TDR 계획·문서화 (ADR-054/055/056 + 실행계획 + task 백로그)
+
+**작업**: 여행 상세 페이지 8개 feature 재작성을 계획하고 문서화했다(구현 전 단계). 사용자 지시대로
+플랜 단계부터 적대적 리뷰어를 두고, 플랜 확정 후 문서화까지 진행하는 docs PR이다.
+
+**방법**: (1) 7개 서브시스템(웹 trip-detail/지도·마커/API trip·day·poi/feature·kor-travel-map/검색·geo/
+외부 gap/packages 계약) 병렬 이해 패스. (2) 플랜 초안 → 6차원 적대적 리뷰(아키텍처·데이터모델·외부
+ToS/보안·UX/모바일·task분할·완결성) + 합의 directive. (3) 5개 문서 병렬 저작 워크플로.
+
+**설계 확정(적대적 리뷰 반영)**: effective_date 항상 파생(materialize 폐지) · 일자 팔레트 색
+nullable+inherit · 서버 `display_marker_color` 단일화(지도=리스트) · 전용 `trip_day_rise_sets`(결정적
+기준 좌표) · Kakao/Naver **display-only**(ToS: provider 콘텐츠 비영속·비전달, user-authored + opaque
+external_ref만) · auto-fire decouple + global dedup + 승인 후 reconciliation · `GET /search` 단일 typed
+계약(`/features/search` 삭제) · `detail-card` kind별 투영 + generic fallback + 옵트인 enrichment · 공용
+`useModalDialog`(focus trap/restoration/popstate) + 모바일 bottom sheet · DELETE-day 409 `DAY_HAS_POIS`.
+
+**변경(문서만)**:
+
+- `docs/decisions.md`: ADR-054/055/056 추가, "다음 신규 ADR = ADR-057"로 갱신.
+- `docs/execplan/trip-detail-rewrite.md`(신규): 마스터 실행계획 + task 표 + DAG + 파일 소유 규칙 +
+  테스트/롤아웃 게이트 + out-of-scope.
+- `docs/integrations/kakao-naver-local.md`(신규): Kakao Local + Naver Local 표시 전용 provider 계약.
+- `docs/tasks.md`: TDR 백로그(T-301~T-309c, 레인 A=Claude / B=Codex, 파일 소유 기반 충돌 회피).
+- `docs/design/marker-palette.md`: 일자 색 tier(ADR-055) 반영.
+- `CLAUDE.md`: ADR 현황 ADR-056까지, 다음=057, TDR 실행계획 포인터.
+- `docs/resume.md`: 계획 세션 기록 + 다음 한 작업.
+
+**주의**: T-300(공휴일 read-path)은 PR #383로 이미 main에 머지됨 → Lane A holiday gate 충족. 검증:
+문서 전용 PR(코드 변경 없음). 후속 각 구현 PR에서 tasks-rule §7 게이트(pytest/ruff/mypy/typecheck/lint/
+N150 e2e) 적용.
+
 ## 2026-07-10 (codex) — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시
 
 **작업**: 사용자 지시에 따라 Admin UI 좌측 메뉴의 선택 항목 글자/아이콘 세로 정렬을 보정하고, 사용자

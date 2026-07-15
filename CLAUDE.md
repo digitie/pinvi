@@ -80,7 +80,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-051**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+ADR 현황: ADR-001 ~ **ADR-056**. 최근 박힘: ADR-024 (ADR-051로 superseded —
 과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -110,8 +110,15 @@ compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + D
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
 kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
 ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,
-destructive dry-run gate), ADR-051 (개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선).
-다음 신규 = ADR-052.
+destructive dry-run gate), ADR-051 (개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선),
+ADR-052 (category mapping은 taxonomy가 아니라 Admin presentation override만 저장),
+ADR-053 (trip day 경로 최적화 = 순수 Python nearest-neighbor + 2-opt, haversine),
+ADR-054 (외부 장소 provider Kakao/Naver Local = 서버측 display-only 검색·place-link + `GET /search`
+통합 + feature-request 확장, ADR-015의 Local-검색 부분 supersede),
+ADR-055 (Trip-day 표시 모델 — 파생 effective_date + 일자 팔레트 색 + 서버 display_marker_color +
+전용 `trip_day_rise_sets`),
+ADR-056 (Feature 상세 = kind별 `detail-card` 투영 + 옵트인 외부 enrichment + 공용 `useModalDialog`).
+다음 신규 = ADR-057. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
