@@ -6,9 +6,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 
 
 class Settings(BaseSettings):
@@ -20,7 +24,7 @@ class Settings(BaseSettings):
     )
 
     # 환경
-    pinvi_environment: str = Field(default="development")
+    pinvi_environment: PinviEnvironment = "development"
 
     # Database
     pinvi_database_url: str = Field(
@@ -108,6 +112,10 @@ class Settings(BaseSettings):
     # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
     pinvi_kor_travel_map_admin_proxy_secret: str = ""
     pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
+    # canonical /v1/ops/datasets*·/v1/ops/pipeline* 전용 server principal.
+    # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
+    pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
+    pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
     pinvi_kor_travel_map_timeout_seconds: float = 5.0
     pinvi_kor_travel_map_max_attempts: int = 3
     pinvi_kor_travel_map_batch_chunk_size: int = 200  # /v1/features/batch cap
@@ -251,6 +259,65 @@ class Settings(BaseSettings):
 
     # Feature flag
     pinvi_enable_seed: bool = False
+
+    @model_validator(mode="after")
+    def validate_kor_travel_map_ops(self) -> Self:
+        """canonical ops URL과 read/cancel 자격을 fail-closed로 검증한다."""
+
+        is_production = self.pinvi_environment == "production"
+        if is_production:
+            try:
+                admin_base_url = urlsplit(self.pinvi_kor_travel_map_admin_base_url)
+                hostname = admin_base_url.hostname
+                port = admin_base_url.port
+            except ValueError as exc:
+                raise ValueError(
+                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
+                    "root HTTP(S) URL on port 12701"
+                ) from exc
+            if (
+                admin_base_url.scheme not in {"http", "https"}
+                or hostname not in {"127.0.0.1", "host.docker.internal"}
+                or port != 12701
+                or admin_base_url.path not in {"", "/"}
+                or admin_base_url.username is not None
+                or admin_base_url.password is not None
+                or bool(admin_base_url.query)
+                or bool(admin_base_url.fragment)
+            ):
+                raise ValueError(
+                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
+                    "root HTTP(S) URL on port 12701"
+                )
+
+        read_token = (
+            self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
+            if self.pinvi_kor_travel_map_ops_read_token is not None
+            else ""
+        )
+        cancel_token = (
+            self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
+            if self.pinvi_kor_travel_map_ops_cancel_token is not None
+            else ""
+        )
+        if not read_token and not cancel_token and not is_production:
+            return self
+        if not read_token or not cancel_token:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN and "
+                "PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN must be configured together"
+            )
+        for env_name, token in (
+            ("PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN", read_token),
+            ("PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN", cancel_token),
+        ):
+            if len(token) < 32:
+                raise ValueError(f"{env_name} must contain at least 32 characters")
+            if any(character.isspace() for character in token):
+                raise ValueError(f"{env_name} must not contain whitespace")
+        if read_token == cancel_token:
+            raise ValueError("kor-travel-map ops read/cancel tokens must differ")
+        return self
 
 
 @lru_cache(maxsize=1)

@@ -14,7 +14,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +44,14 @@ from app.schemas.admin import (
     AdminSystemStatus,
     AdminTelegramOutboxCategorySummary,
     AdminTelegramOutboxSummary,
+)
+from app.services.kor_travel_map_ops_projection import (
+    KorTravelMapOpsContractError,
+    pipeline_executions_canonical_url,
+    project_dataset_grid_snapshot,
+    project_pipeline_executions,
+    project_pipeline_page_next_cursor,
+    validate_pipeline_overview,
 )
 
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
@@ -357,81 +364,118 @@ async def build_kor_travel_map_etl_summary(
     admin_client: KorTravelMapAdminClient,
 ) -> AdminKorTravelMapEtlSummary:
     errors: list[str] = []
-    dagster: dict[str, Any] = {}
-    metrics: dict[str, Any] = {}
+    overview: dict[str, Any] = {}
     providers: list[AdminProviderDatasetSummary] = []
     recent_import_jobs: list[AdminProviderImportJobRecord] = []
+    overview_available = False
+    datasets_available = False
+    executions_available = False
+    schedule_source_status: str | None = None
 
     try:
-        dagster = await admin_client.get_ops_dagster_summary(page_size=10)
-    except KorTravelMapError as exc:
+        overview = validate_pipeline_overview(
+            await admin_client.get_ops_pipeline_overview(run_limit=10)
+        )
+        overview_available = True
+    except (KorTravelMapError, KorTravelMapOpsContractError) as exc:
         errors.append(_safe_error_message(exc))
     try:
-        metrics = await admin_client.get_ops_metrics()
-    except KorTravelMapError as exc:
-        errors.append(_safe_error_message(exc))
-    try:
-        provider_data = await admin_client.list_ops_providers()
-        raw_items = provider_data.get("items", [])
-        if isinstance(raw_items, list):
-            providers = [AdminProviderDatasetSummary.model_validate(item) for item in raw_items]
-    except (KorTravelMapError, ValidationError) as exc:
-        errors.append(_safe_error_message(exc))
-    try:
-        import_payload = await admin_client.list_ops_import_jobs(page_size=10)
-        raw_jobs = import_payload.get("data", {}).get("items", [])
-        if isinstance(raw_jobs, list):
-            recent_import_jobs = [
-                AdminProviderImportJobRecord.model_validate(item) for item in raw_jobs
+        provider_data = await admin_client.list_ops_datasets()
+        provider_snapshot = project_dataset_grid_snapshot(provider_data)
+        providers = provider_snapshot.items
+        datasets_available = True
+        schedule_source_status = provider_snapshot.schedule_source_status
+        if schedule_source_status != "ok":
+            schedule_errors = provider_snapshot.schedule_source_errors or [
+                "Dagster schedule 출처를 사용할 수 없습니다."
             ]
-    except (KorTravelMapError, ValidationError) as exc:
+            errors.extend(f"dataset schedule: {message}" for message in schedule_errors)
+    except (KorTravelMapError, KorTravelMapOpsContractError) as exc:
+        errors.append(_safe_error_message(exc))
+    try:
+        import_payload = await admin_client.list_ops_pipeline_executions(page_size=10)
+        raw_data = import_payload.get("data")
+        raw_meta = import_payload.get("meta")
+        if not isinstance(raw_data, dict) or not isinstance(raw_meta, dict):
+            raise KorTravelMapOpsContractError("pipeline execution data must be an object")
+        recent_import_jobs = project_pipeline_executions(
+            raw_data,
+            expected_canonical_url=pipeline_executions_canonical_url(
+                status_filter=None,
+                load_batch_id=None,
+                parent_job_id=None,
+            ),
+        )
+        project_pipeline_page_next_cursor(raw_meta, expected_page_size=10)
+        executions_available = True
+    except (KorTravelMapError, KorTravelMapOpsContractError) as exc:
         errors.append(_safe_error_message(exc))
 
     return _build_kor_travel_map_summary(
-        dagster=dagster,
-        metrics=metrics,
+        overview=overview,
         providers=providers,
         recent_import_jobs=recent_import_jobs,
         errors=errors,
+        overview_available=overview_available,
+        datasets_available=datasets_available,
+        executions_available=executions_available,
+        schedule_source_status=schedule_source_status,
     )
 
 
 def _build_kor_travel_map_summary(
     *,
-    dagster: dict[str, Any],
-    metrics: dict[str, Any],
+    overview: dict[str, Any],
     providers: list[AdminProviderDatasetSummary],
     recent_import_jobs: list[AdminProviderImportJobRecord],
     errors: list[str],
+    overview_available: bool,
+    datasets_available: bool,
+    executions_available: bool,
+    schedule_source_status: str | None,
 ) -> AdminKorTravelMapEtlSummary:
+    raw_dagster = overview.get("dagster")
+    dagster = raw_dagster if isinstance(raw_dagster, dict) else {}
     dagster_status = _as_str(dagster.get("status")) or ("unavailable" if errors else "unknown")
-    status: AdminSystemStatus = "ok"
-    if errors:
-        status = "degraded" if dagster or metrics or providers or recent_import_jobs else "down"
-    if dagster_status in {"unavailable", "error"}:
-        status = "degraded" if status == "ok" else status
+    available_endpoint_count = sum((overview_available, datasets_available, executions_available))
+    status: AdminSystemStatus
+    if available_endpoint_count == 0:
+        status = "down"
+    elif (
+        errors
+        or dagster_status in {"unavailable", "error"}
+        or schedule_source_status in {"unavailable", "error"}
+    ):
+        status = "degraded"
+    else:
+        status = "ok"
 
     provider_failure_count = sum(1 for item in providers if item.consecutive_failures > 0)
+    operations_by_status = _int_dict(overview.get("operations_by_status"))
     return AdminKorTravelMapEtlSummary(
         status=status,
         dagster_status=dagster_status,
-        checked_at=_as_datetime(dagster.get("checked_at"))
-        or _as_datetime(metrics.get("checked_at")),
-        repository_count=_as_int(dagster.get("repository_count")),
-        job_count=_as_int(dagster.get("job_count")),
-        asset_count=_as_int(dagster.get("asset_count")),
-        schedule_count=_as_int(dagster.get("schedule_count")),
-        sensor_count=_as_int(dagster.get("sensor_count")),
+        checked_at=_as_datetime(overview.get("checked_at")),
+        repository_count=None,
+        job_count=None,
+        asset_count=None,
+        schedule_count=(_as_int(dagster.get("schedule_count")) if overview_available else None),
+        sensor_count=(_as_int(dagster.get("sensor_count")) if overview_available else None),
         run_counts=_int_dict(dagster.get("run_counts")),
-        repositories=_repositories(dagster.get("repositories")),
+        dagster_errors=[str(error) for error in dagster.get("errors", [])],
+        operations_by_status=operations_by_status,
+        active_operations=(
+            _as_int(overview.get("active_operations")) if overview_available else None
+        ),
+        failed_operations_24h=(
+            _as_int(overview.get("failed_operations_24h")) if overview_available else None
+        ),
         recent_runs=_runs(dagster.get("recent_runs")),
-        features_total=_optional_int(metrics.get("features_total")),
-        source_records_total=_optional_int(metrics.get("source_records_total")),
-        import_jobs_by_status=_int_dict(metrics.get("import_jobs_by_status")),
-        dedup_queue_by_status=_int_dict(metrics.get("dedup_queue_by_status")),
-        provider_dataset_count=len(providers),
-        provider_failure_count=provider_failure_count,
-        recent_import_jobs=recent_import_jobs,
+        features_total=None,
+        source_records_total=None,
+        provider_dataset_count=len(providers) if datasets_available else None,
+        provider_failure_count=(provider_failure_count if datasets_available else None),
+        recent_import_jobs=recent_import_jobs if executions_available else [],
         errors=errors,
     )
 
@@ -686,53 +730,6 @@ def _json_object(response: httpx.Response) -> dict[str, Any]:
     except ValueError:
         return {}
     return payload if isinstance(payload, dict) else {}
-
-
-def _repositories(value: Any) -> list[AdminDagsterRepositorySummary]:
-    if not isinstance(value, list):
-        return []
-    repositories: list[AdminDagsterRepositorySummary] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        repositories.append(
-            AdminDagsterRepositorySummary(
-                name=_as_str(item.get("name")) or "unknown",
-                location_name=_as_str(item.get("location_name")),
-                jobs=[
-                    AdminDagsterJobSummary(
-                        name=_as_str(job.get("name")) or "unknown",
-                        is_job=bool(job.get("is_job", True)),
-                    )
-                    for job in item.get("jobs", [])
-                    if isinstance(job, dict)
-                ],
-                schedules=[
-                    AdminDagsterScheduleSummary(
-                        name=_as_str(schedule.get("name")) or "unknown",
-                        job_name=_as_str(schedule.get("job_name")),
-                        cron_schedule=_as_str(schedule.get("cron_schedule")),
-                        execution_timezone=_as_str(schedule.get("execution_timezone")),
-                        status=_as_str(schedule.get("status")),
-                    )
-                    for schedule in item.get("schedules", [])
-                    if isinstance(schedule, dict)
-                ],
-                sensors=[
-                    AdminDagsterSensorSummary(
-                        name=_as_str(sensor.get("name")) or "unknown",
-                        status=_as_str(sensor.get("status")),
-                    )
-                    for sensor in item.get("sensors", [])
-                    if isinstance(sensor, dict)
-                ],
-                asset_count=_as_int(item.get("asset_count")),
-                asset_groups=[
-                    group for group in item.get("asset_groups", []) if isinstance(group, str)
-                ],
-            )
-        )
-    return repositories
 
 
 def _runs(value: Any) -> list[AdminDagsterRunSummary]:

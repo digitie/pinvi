@@ -8,8 +8,8 @@
 ## 현재 선점 / 충돌 회피
 
 - **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
-  client·provider-sync/ETL projection, 공용 schema·문서만 수정한다. TDR 레인과 파일이 겹치면
-  C6c가 선행하며, Web 화면 구조는 바꾸지 않는다.
+  client·provider-sync/ETL projection, 공용 schema·provider-sync UI/E2E·문서를 수정한다. TDR
+  레인과 파일이 겹치면 C6c가 선행하며, provider-sync 밖의 Web 화면 구조는 바꾸지 않는다.
 - **TDR(Trip Detail Rewrite) 레인 분리** — 마스터 계획 `docs/execplan/trip-detail-rewrite.md`.
   파일 소유로 A/B 충돌을 막는다.
   - **레인 B = Codex**(`agent/codex-tdr-*`): `apps/api`, `apps/etl`, `packages/schemas`,
@@ -24,9 +24,14 @@
 - [ ] **T-ADM-C6c** — PR #724 이후 삭제된
   `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*` 호출을 제거하고,
   `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·canonical cancellation으로
-  전환한다. kor-travel-map 전용 service/operator principal은 read/write scope를 분리하며,
+  전환한다. kor-travel-map 전용 service/operator principal은 read/cancel capability를 분리하며,
   Pinvi server가 frontend BFF secret을 전송하거나 trusted CIDR 확대에 의존하지 않는다.
   양 저장소 contract test, 배포 순서(map → Pinvi), 직전 image rollback smoke가 완료 조건이다.
+  - 구현 완료, 검증 대기: exact 운영 URL allowlist, canonical `PINVI_ENVIRONMENT`, 비운영 token pair
+    fail-close, 취소 detail/list reconciliation과 blind retry 잠금, provider schedule 출처 degraded 배너.
+    결정적 400/401/403/422/429와 exact `404 PIPELINE_EXECUTION_NOT_FOUND` 거절은 reconciliation에서
+    제외하고 사유 수정·재시도를 허용하며, 그 밖의 404는 미확정 잠금을 유지한다.
+  - 남은 완료 gate: WSL 정적/단위/통합/Web gate, map·Pinvi 동일 image 조합, N150 prod live UI E2E.
 
 ## TDR — Trip Detail Rewrite (T-300~T-309c)
 

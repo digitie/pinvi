@@ -19,32 +19,42 @@ from app.clients.kor_travel_map import (
 )
 
 
+def retry_after_headers(seconds: int | None) -> dict[str, str] | None:
+    if isinstance(seconds, int) and not isinstance(seconds, bool) and 1 <= seconds <= 300:
+        return {"Retry-After": str(seconds)}
+    return None
+
+
 @contextmanager
 def map_ops_errors(*, message_subject: str = "kor_travel_map ops") -> Iterator[None]:
     try:
         yield
     except KorTravelMapFeatureNotFound as exc:
+        detail: dict[str, Any] = {
+            "code": exc.code or "RESOURCE_NOT_FOUND",
+            "message": f"{message_subject} 대상을 찾을 수 없습니다.",
+        }
+        if exc.details is not None:
+            detail["details"] = exc.details
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "RESOURCE_NOT_FOUND",
-                "message": f"{message_subject} 대상을 찾을 수 없습니다.",
-            },
+            detail=detail,
         ) from exc
     except KorTravelMapConflict as exc:
+        headers = retry_after_headers(exc.retry_after_seconds)
+        detail = {
+            "code": exc.code or "INVALID_STATE",
+            "message": f"{message_subject} 상태 전이가 허용되지 않습니다.",
+        }
+        if exc.details is not None:
+            detail["details"] = exc.details
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": exc.code or "INVALID_STATE",
-                "message": f"{message_subject} 상태 전이가 허용되지 않습니다.",
-            },
+            detail=detail,
+            headers=headers,
         ) from exc
     except KorTravelMapRateLimited as exc:
-        headers = (
-            {"Retry-After": str(exc.retry_after_seconds)}
-            if exc.retry_after_seconds is not None
-            else None
-        )
+        headers = retry_after_headers(exc.retry_after_seconds)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
@@ -62,12 +72,22 @@ def map_ops_errors(*, message_subject: str = "kor_travel_map ops") -> Iterator[N
             },
         ) from exc
     except KorTravelMapUnavailable as exc:
+        headers = retry_after_headers(exc.retry_after_seconds)
+        detail = {
+            "code": exc.code or "FEATURE_SERVICE_UNAVAILABLE",
+            "message": f"{message_subject} 서비스가 일시적으로 사용 불가합니다.",
+        }
+        if exc.details is not None:
+            detail["details"] = exc.details
+        upstream_status = (
+            exc.status_code
+            if exc.status_code in {status.HTTP_502_BAD_GATEWAY, status.HTTP_503_SERVICE_UNAVAILABLE}
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "FEATURE_SERVICE_UNAVAILABLE",
-                "message": f"{message_subject} 서비스가 일시적으로 사용 불가합니다.",
-            },
+            status_code=upstream_status,
+            detail=detail,
+            headers=headers,
         ) from exc
     except KorTravelMapError as exc:
         raise HTTPException(

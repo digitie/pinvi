@@ -462,24 +462,38 @@ class AdminProviderLink(BaseModel):
 
 
 AdminProviderLinks = dict[str, Any] | list[AdminProviderLink]
+AdminOperationState = Literal["queued", "running", "done", "failed", "cancelled"]
+
+
+class AdminProviderCancellationSummary(BaseModel):
+    cancellation_id: str
+    status: Literal["in_progress", "retryable", "completed", "failed"]
+    requested_at: datetime
+    requested_by: str
+    reason: str | None = None
+    retryable: bool
+    unresolved_member_count: int = Field(ge=0)
 
 
 class AdminProviderImportJobRecord(BaseModel):
     job_id: str
-    kind: str
-    status: str
-    progress: float | None = None
+    kind: Literal["import_job"]
+    status: AdminOperationState
+    progress: int | None = Field(default=None, ge=0, le=100)
+    projected_job_id: str
+    projected_job_kind: str
+    projected_job_status: AdminOperationState
+    projected_job_progress: int = Field(ge=0, le=100)
+    projected_job_load_batch_id: str | None = None
+    projected_job_parent_job_id: str | None = None
+    cancellation: AdminProviderCancellationSummary | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     status_url: str | None = None
     current_stage: str | None = None
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None
-    heartbeat_at: datetime | None = None
     finished_at: datetime | None = None
-    load_batch_id: str | None = None
-    parent_job_id: str | None = None
-    source_checksum: str | None = None
     links: AdminProviderLinks = Field(default_factory=list)
 
 
@@ -494,6 +508,20 @@ class AdminProviderImportJobCancelRequest(BaseModel):
     kor_travel_map_reason: str | None = Field(default=None, min_length=1, max_length=500)
 
 
+class AdminProviderImportJobCancellationResult(BaseModel):
+    requested_job_id: str
+    root_kind: Literal["import_job", "update_request"]
+    root_id: str
+    cancellation_id: str
+    status: Literal["in_progress", "retryable", "completed", "failed"]
+    requested_at: datetime
+    requested_by: str
+    reason: str | None = None
+    retryable: bool
+    unresolved_member_count: int = Field(ge=0)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class AdminProviderDatasetSummary(BaseModel):
     provider: str
     dataset_key: str
@@ -502,7 +530,8 @@ class AdminProviderDatasetSummary(BaseModel):
     last_success_at: datetime | None = None
     last_failure_at: datetime | None = None
     consecutive_failures: int = 0
-    next_run_after: datetime | None = None
+    eligible_after: datetime | None = None
+    schedule_next_scheduled_at: datetime | None = None
     links: AdminProviderLinks = Field(default_factory=list)
     refresh_policy: dict[str, Any] | None = None
 
@@ -510,26 +539,29 @@ class AdminProviderDatasetSummary(BaseModel):
 class AdminProviderSyncResponse(BaseModel):
     items: list[AdminProviderDatasetSummary] = Field(default_factory=list)
     total: int
+    schedule_source_status: Literal["ok", "unavailable", "error"]
+    schedule_source_errors: list[str] = Field(default_factory=list)
 
 
 class AdminKorTravelMapEtlSummary(BaseModel):
     status: AdminSystemStatus
     dagster_status: str
     checked_at: datetime | None = None
-    repository_count: int = 0
-    job_count: int = 0
-    asset_count: int = 0
-    schedule_count: int = 0
-    sensor_count: int = 0
+    repository_count: int | None = None
+    job_count: int | None = None
+    asset_count: int | None = None
+    schedule_count: int | None = None
+    sensor_count: int | None = None
     run_counts: dict[str, int] = Field(default_factory=dict)
-    repositories: list[AdminDagsterRepositorySummary] = Field(default_factory=list)
+    dagster_errors: list[str] = Field(default_factory=list)
+    operations_by_status: dict[AdminOperationState, int] = Field(default_factory=dict)
+    active_operations: int | None = None
+    failed_operations_24h: int | None = None
     recent_runs: list[AdminDagsterRunSummary] = Field(default_factory=list)
     features_total: int | None = None
     source_records_total: int | None = None
-    import_jobs_by_status: dict[str, int] = Field(default_factory=dict)
-    dedup_queue_by_status: dict[str, int] = Field(default_factory=dict)
-    provider_dataset_count: int = 0
-    provider_failure_count: int = 0
+    provider_dataset_count: int | None = None
+    provider_failure_count: int | None = None
     recent_import_jobs: list[AdminProviderImportJobRecord] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 

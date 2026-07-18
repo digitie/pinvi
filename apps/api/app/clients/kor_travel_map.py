@@ -41,9 +41,35 @@ class KorTravelMapError(Exception):
 class KorTravelMapUnavailable(KorTravelMapError):
     """timeout / 연결 실패 / 5xx — 재시도 후에도 실패(503 매핑 대상)."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        retry_after_seconds: int | None = None,
+        status_code: int = status.HTTP_503_SERVICE_UNAVAILABLE,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = details
+        self.retry_after_seconds = retry_after_seconds
+        self.status_code = status_code
+
 
 class KorTravelMapFeatureNotFound(KorTravelMapError):
     """404 FEATURE_NOT_FOUND."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = details
 
 
 class KorTravelMapBadRequest(KorTravelMapError):
@@ -57,9 +83,18 @@ class KorTravelMapBadRequest(KorTravelMapError):
 class KorTravelMapConflict(KorTravelMapError):
     """409 invalid state/conflict — lock busy가 아닌 운영 상태 충돌."""
 
-    def __init__(self, message: str, *, code: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        retry_after_seconds: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.details = details
+        self.retry_after_seconds = retry_after_seconds
 
 
 class KorTravelMapRateLimited(KorTravelMapError):

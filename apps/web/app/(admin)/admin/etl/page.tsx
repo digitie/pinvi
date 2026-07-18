@@ -76,8 +76,7 @@ function formatMetric(value: number | null | undefined) {
 
 function progressLabel(value: number | null | undefined) {
   if (typeof value !== 'number') return '—';
-  const normalized = value <= 1 ? value * 100 : value;
-  return `${Math.round(normalized)}%`;
+  return `${value}%`;
 }
 
 function percentLabel(value: number | null | undefined) {
@@ -217,7 +216,9 @@ export default function AdminEtlPage() {
       cell: (item) => (
         <div>
           <div className="break-all font-mono text-xs">{item.job_id}</div>
-          <div className="text-xs text-muted">{item.kind}</div>
+          <div className="text-xs text-muted">
+            대표 {item.projected_job_kind} · {item.projected_job_id}
+          </div>
         </div>
       ),
     },
@@ -226,14 +227,28 @@ export default function AdminEtlPage() {
       header: '상태',
       sortable: true,
       sortValue: (item) => item.status,
-      cell: (item) => statusLabel(item.status),
+      cell: (item) => (
+        <div>
+          <div>{statusLabel(item.status)}</div>
+          <div className="text-xs text-muted">
+            대표 job {statusLabel(item.projected_job_status)}
+          </div>
+        </div>
+      ),
     },
     {
       key: 'progress',
       header: '진행',
       sortable: true,
       sortValue: (item) => item.progress ?? 0,
-      cell: (item) => progressLabel(item.progress),
+      cell: (item) => (
+        <div>
+          <div>{progressLabel(item.progress)}</div>
+          <div className="text-xs text-muted">
+            대표 job {progressLabel(item.projected_job_progress)}
+          </div>
+        </div>
+      ),
       align: 'right',
     },
     {
@@ -710,7 +725,7 @@ export default function AdminEtlPage() {
         </Section>
 
         <Section title="kor-travel-map Dagster">
-          <div className="grid gap-3 text-sm sm:grid-cols-3">
+          <div className="grid gap-3 text-sm sm:grid-cols-6">
             <div data-testid="admin-etl-kmap-dagster-status">
               <div className="text-xs text-muted">Dagster</div>
               <div className="font-semibold">
@@ -720,10 +735,16 @@ export default function AdminEtlPage() {
                 {statusLabel(summary?.kor_travel_map.status)}
               </div>
             </div>
-            <div>
+            <div data-testid="admin-etl-kmap-features">
               <div className="text-xs text-muted">features</div>
               <div className="font-semibold">
                 {formatMetric(summary?.kor_travel_map.features_total)}
+              </div>
+            </div>
+            <div data-testid="admin-etl-kmap-source-records">
+              <div className="text-xs text-muted">source records</div>
+              <div className="font-semibold">
+                {formatMetric(summary?.kor_travel_map.source_records_total)}
               </div>
             </div>
             <div>
@@ -732,19 +753,49 @@ export default function AdminEtlPage() {
                 {formatMetric(summary?.kor_travel_map.provider_dataset_count)}
               </div>
             </div>
-          </div>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-5">
             <div>
+              <div className="text-xs text-muted">active operations</div>
+              <div className="font-semibold">
+                {formatMetric(summary?.kor_travel_map.active_operations)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-muted">failed 24h</div>
+              <div className="font-semibold">
+                {formatMetric(summary?.kor_travel_map.failed_operations_24h)}
+              </div>
+            </div>
+          </div>
+          {Object.keys(summary?.kor_travel_map.operations_by_status ?? {}).length ? (
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
+              {Object.entries(summary?.kor_travel_map.operations_by_status ?? {}).map(
+                ([status, count]) => (
+                  <span key={status} className="rounded-sm bg-surface-soft px-2 py-1">
+                    {statusLabel(status)} {formatMetric(count)}
+                  </span>
+                ),
+              )}
+            </div>
+          ) : null}
+          {summary?.kor_travel_map.dagster_errors.length ? (
+            <ul className="mt-4 space-y-1 text-xs text-error-text">
+              {summary.kor_travel_map.dagster_errors.map((error) => (
+                <li key={`dagster-${error}`}>Dagster: {error}</li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-5">
+            <div data-testid="admin-etl-kmap-repositories">
               <div className="text-xs text-muted">repositories</div>
               <div className="font-semibold">
                 {formatMetric(summary?.kor_travel_map.repository_count)}
               </div>
             </div>
-            <div>
+            <div data-testid="admin-etl-kmap-jobs">
               <div className="text-xs text-muted">jobs</div>
               <div className="font-semibold">{formatMetric(summary?.kor_travel_map.job_count)}</div>
             </div>
-            <div>
+            <div data-testid="admin-etl-kmap-assets">
               <div className="text-xs text-muted">assets</div>
               <div className="font-semibold">
                 {formatMetric(summary?.kor_travel_map.asset_count)}

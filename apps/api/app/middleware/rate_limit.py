@@ -266,8 +266,7 @@ class RateLimitMiddleware:
 def _effective_backend_name() -> BackendName:
     configured = settings.pinvi_rate_limit_backend.lower().strip()
     if configured == "auto":
-        environment = settings.pinvi_environment.lower().strip()
-        return "postgres" if environment in {"production", "staging"} else "memory"
+        return "postgres" if settings.pinvi_environment in {"production", "staging"} else "memory"
     if configured == "postgres":
         return "postgres"
     return "memory"

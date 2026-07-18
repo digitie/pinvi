@@ -86,6 +86,11 @@ services:
       PINVI_GEOFENCE_BYPASS_PATHS: '${PINVI_GEOFENCE_BYPASS_PATHS:-["/health","/health/db","/metrics","/docs","/redoc","/openapi.json"]}'
       PINVI_SENTRY_ENVIRONMENT: ${PINVI_SENTRY_ENVIRONMENT:-smoke}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      # canonical kor-travel-map ops는 API container에서 host service로만 호출한다.
+      # read/cancel token은 같은 header를 쓰지만 capability별로 서로 다른 값을 전달한다.
+      PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
+      PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN:-}
+      PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN:-}
       # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
       # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에
       # 전달되지 않는다.

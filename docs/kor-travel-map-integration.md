@@ -55,10 +55,17 @@ PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY=
 # kor_travel_map admin proxy gate가 켜진 운영 API용.
 PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET=
 PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR=pinvi-admin
+# /v1/ops/datasets*·/v1/ops/pipeline* scope별 server principal
+PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN=
+PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN=
 ```
 
 kor-travel-map 쪽 런북에서는 동일 API URL을 `KOR_TRAVEL_MAP_API_URL`로 부를 수 있다.
 Pinvi 설정 prefix는 항상 `PINVI_*`다.
+
+운영 admin base URL은 HTTP(S), host `127.0.0.1|host.docker.internal`, port `12701`, root
+path만 허용한다. 비운영은 ops token 두 값이 모두 비었을 때만 opt-out하며, 하나라도 설정하면
+read/cancel token 모두 32자 이상·Unicode whitespace 없음·서로 다름을 강제한다.
 
 ## 3. Pinvi/user-facing OpenAPI
 
@@ -99,8 +106,8 @@ Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 
 | offline upload | `/v1/admin/offline-uploads/*` |
 | POI cache target | `/v1/admin/poi-cache-targets/*` |
 | backup/restore | `/v1/admin/backups*`, `/v1/admin/restore/*` |
-| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/import-jobs`, `/v1/ops/metrics`, `/v1/ops/health-deep` |
-| dagster summary | `/v1/ops/dagster/summary` |
+| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/health-deep` |
+| dataset/pipeline | `/v1/ops/datasets*`, `/v1/ops/pipeline/{overview,executions}`와 canonical cancellation |
 | debug | `/v1/debug/etl/*`, `/v1/debug/mois-license` |
 
 `/health`·`/version`만 비버전 경로다 (구 `/debug/health`·`/debug/version`은 kor_travel_map

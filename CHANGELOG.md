@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+- Admin의 kor-travel-map provider/ETL 연동을 canonical dataset·pipeline API로 전환했다.
+  삭제된 legacy ops 경로와 frontend BFF 자격 공유를 제거하고, read/cancel scope가 분리된
+  server-to-server principal로 상태 조회와 계층 취소를 수행한다.
+- Canonical ops 응답을 fail-closed로 검증하고 import root와 projected job 표현을 분리했다.
+  Provider 표는 rate-limit 재호출 시각과 Dagster 다음 예약을 구분하며, 0~100 정수 진행률과
+  cancellation overlay를 그대로 표시한다. ETL 요약은 endpoint별 가용성, operation 집계,
+  Dagster 오류를 보존하고 지원되지 않는 집계는 `0` 대신 미가용으로 표시한다.
+- 운영 map base URL을 loopback/docker host의 `:12701` root로 제한하고
+  `PINVI_ENVIRONMENT`를 다섯 canonical 값으로 고정했다. 비운영도 ops token을 하나라도 설정하면
+  read/cancel 쌍의 길이·Unicode whitespace·분리 조건을 동일하게 검증한다.
+- 취소 409/502/503의 status/code/details/`Retry-After`를 보존하고 import job 상세 reconciliation
+  GET을 추가했다. UI는 canonical 상세 확인 전 재시도를 잠그며, provider schedule 출처 장애와
+  오류를 degraded 배너로 표시한다. 단 400/401/403/422/429와 정확한
+  `404 PIPELINE_EXECUTION_NOT_FOUND`처럼 결과가 확정된 요청 거절은 polling과 잠금을 해제하고 사유
+  입력을 보존한다. 그 밖의 404는 미확정 상태로 reconciliation하며, 사유 입력은 backend와 같은 500자
+  제한과 카운터를 제공한다.
 - Admin 좌측 메뉴에서 선택된 항목의 아이콘/글자 세로 정렬이 깨지지 않게 정렬 클래스를 보정했다.
 - 여행 상세/공유 화면 날짜 UI가 KASI 공휴일 데이터를 받아 공휴일 이름을 함께 표시한다.
 - 날짜가 있는 여행 생성 시 기간 전체의 일자 레이어를 자동 생성한다. 여행 상세에서 일자를 다시 추가할
