@@ -7,6 +7,9 @@
 
 ## 현재 선점 / 충돌 회피
 
+- **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
+  client·provider-sync/ETL projection, 공용 schema·문서만 수정한다. TDR 레인과 파일이 겹치면
+  C6c가 선행하며, Web 화면 구조는 바꾸지 않는다.
 - **TDR(Trip Detail Rewrite) 레인 분리** — 마스터 계획 `docs/execplan/trip-detail-rewrite.md`.
   파일 소유로 A/B 충돌을 막는다.
   - **레인 B = Codex**(`agent/codex-tdr-*`): `apps/api`, `apps/etl`, `packages/schemas`,
@@ -15,6 +18,15 @@
     `packages/domain`(small). → T-306~T-309c.
   - 공유 계약 필드는 **B가 먼저 정의**, A가 소비. `packages/domain/src/marker.ts`는 A가 소유하되
     web+mobile 공유이므로 pure 유지(`dayColor` optional). 자세한 파일 소유·DAG는 execplan §3.2/§3.1.
+
+## kor-travel-map admin ops 계약 복구
+
+- [ ] **T-ADM-C6c** — PR #724 이후 삭제된
+  `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*` 호출을 제거하고,
+  `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·canonical cancellation으로
+  전환한다. kor-travel-map 전용 service/operator principal은 read/write scope를 분리하며,
+  Pinvi server가 frontend BFF secret을 전송하거나 trusted CIDR 확대에 의존하지 않는다.
+  양 저장소 contract test, 배포 순서(map → Pinvi), 직전 image rollback smoke가 완료 조건이다.
 
 ## TDR — Trip Detail Rewrite (T-300~T-309c)
 

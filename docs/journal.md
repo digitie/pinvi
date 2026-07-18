@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-18 — T-ADM-C6c 구현 전 cross-repo 계약 고정
+
+- kor-travel-map `main@d0609226`과 Pinvi `main@48085afb`를 대조해 삭제된 legacy ops caller를
+  재확인했다. alias 복구, frontend BFF secret 공유, trusted CIDR 확대는 선택지에서 제외했다.
+- map service/operator principal과 Pinvi canonical caller를 별도 PR로 나눴다. map PR이 인증·
+  OpenAPI를 먼저 제공하고, Pinvi PR이 grid/overview/executions/cancel 소비와 projection을 잇는다.
+- principal의 read/write scope, typed 401/403/422, 고정 server actor, ops 경로 한정, 양 저장소
+  삭제 경로 0건 contract test를 구현 전 완료 조건으로 고정했다.
+
 ## 2026-07-15 (claude) — TDR 계획·문서화 (ADR-054/055/056 + 실행계획 + task 백로그)
 
 **작업**: 여행 상세 페이지 8개 feature 재작성을 계획하고 문서화했다(구현 전 단계). 사용자 지시대로

@@ -29,6 +29,12 @@
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
+>
+> **2026-07-18 T-ADM-C6c clean cut**: admin ops 소비는
+> `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·pipeline cancellation이 정본이다.
+> 삭제된 `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*`를 호출하거나
+> alias로 복구하지 않는다. Pinvi server는 ops 호출에 frontend BFF secret을 쓰지 않고,
+> map 전용 service/operator token과 method별 scope만 보낸다.
 
 ---
 
@@ -84,6 +90,13 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   전달하지 않는다.** `/v1/admin/*`는 운영에서
   `X-Kor-Travel-Map-Admin-Proxy-Secret` + `X-Kor-Travel-Map-Actor`가 필요할 수 있으며,
   Pinvi admin client는 `PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET`/`..._ACTOR`로 전송한다.
+  단, canonical `/v1/ops/datasets*`·`/v1/ops/pipeline*`의 server-to-server 호출은 이
+  frontend 자격을 전송하지 않는다. `PINVI_KOR_TRAVEL_MAP_OPS_TOKEN`을
+  `X-Kor-Travel-Map-Ops-Token`으로 보내고, GET은
+  `X-Kor-Travel-Map-Ops-Scope: ops:read`, mutation은 `ops:write`를 보낸다. actor는
+  kor_travel_map 서버 설정의 `service:pinvi`로 고정해 요청 header로 위조할 수 없게 한다.
+  토큰이 없는 환경에서도 BFF gate 미설정 local-dev 동작은 유지하지만, production cross-repo
+  smoke는 반드시 service principal 경로를 사용한다.
 - **응답 envelope (확정 — kor_travel_map 0e45bd7 라이브)**: 성공 = `{ "data": <payload>, "meta": <Meta> }`.
   `data`는 **payload만** — 단건 `<object>`, 목록 `{items:[]}`, in-bounds `{clusters:[],items:[]}`,
   batch `{found:{<id>:Feature}, missing:[]}`. pagination·추적은 `meta`로 일원화:

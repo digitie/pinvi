@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-07-18 (codex) — T-ADM-C6c canonical admin ops 계약 확정
+
+kor-travel-map PR #724가 legacy admin ops API를 clean-cut했지만 Pinvi `origin/main@48085afb`의
+admin client가 삭제된 경로를 계속 호출하는 배포 차단을 확인했다. 경로 alias나 frontend BFF
+secret 공유로 되돌리지 않고 다음 두 PR로 복구한다.
+
+- kor-travel-map: `/v1/ops/datasets*`와 `/v1/ops/pipeline*`에만 적용되는 고정 actor 기반
+  service/operator principal을 추가한다. `X-Kor-Travel-Map-Ops-Token`은 서버 전용이고,
+  `X-Kor-Travel-Map-Ops-Scope`는 GET의 `ops:read`, mutation의 `ops:write`를 명시한다.
+  token 누락은 401, 유효하지만 method와 맞지 않는 scope는 403, 알 수 없는 scope는 422로
+  RFC7807 응답한다. 기존 admin frontend proxy 인증과 CIDR 정책은 그대로 유지한다.
+- Pinvi: provider grid는 `GET /v1/ops/datasets`, ETL 상태는
+  `GET /v1/ops/pipeline/overview`, import job 목록은
+  `GET /v1/ops/pipeline/executions?kind=import_job`, 취소는
+  `POST /v1/ops/pipeline/executions/import_job/{id}/cancel`만 호출한다. 삭제 경로 문자열은
+  production·test에서 모두 제거하고 upstream canonical DTO를 Pinvi admin 표시 DTO로 한 곳에서
+  투영한다. ops 호출에는 BFF secret/actor header를 보내지 않는다.
+
+**다음 한 작업**: 문서 계약대로 map principal PR을 먼저 완료한 뒤 Pinvi caller PR을 rebase하고,
+양 저장소 contract test와 동일 image 조합 smoke를 거쳐 map → Pinvi 순으로 배포한다.
+
 ## 2026-07-15 (claude) — TDR(Trip Detail Rewrite) 계획 + 문서화 (ADR-054/055/056)
 
 여행 상세 페이지 8개 feature 재작성을 **계획→문서화**했다(구현은 후속). 7개 서브시스템 이해 패스 →
