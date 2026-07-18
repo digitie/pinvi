@@ -98,12 +98,21 @@ PERMISSION_MATRIX: tuple[AdminPermissionMatrixEntry, ...] = (
     ),
     AdminPermissionMatrixEntry(
         resource="admin.map_ops",
-        action="feature_provider_integrity",
+        action="feature_provider_integrity_read",
         route="/admin/{features|provider-sync|dedup-review|integrity|category-mapping}",
         roles=["admin", "operator"],
         access_reason_required=False,
+        audit_required=False,
+        notes="운영 조회 표면이며 파괴 작업 capability를 포함하지 않는다.",
+    ),
+    AdminPermissionMatrixEntry(
+        resource="admin.map_ops",
+        action="provider_import_job_cancel",
+        route="/admin/provider-sync/import-jobs/{job_id}/cancel",
+        roles=["admin"],
+        access_reason_required=True,
         audit_required=True,
-        notes="mutation은 upstream 성공 후 Pinvi audit을 남긴다.",
+        notes="dispatch 전에 intent를 commit하고 결과를 같은 request_id로 추가 기록한다.",
     ),
     AdminPermissionMatrixEntry(
         resource="admin.system",

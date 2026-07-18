@@ -51,13 +51,13 @@ export const queryKeys = {
     providerSyncAll: () => ['admin', 'provider-sync'] as const,
     providerImportJobs: (params: {
       status?: string;
-      kind?: string;
       loadBatchId?: string;
       parentJobId?: string;
       pageSize?: number;
       cursor?: string;
     }) => ['admin', 'provider-import-jobs', params] as const,
     providerImportJobsAll: () => ['admin', 'provider-import-jobs'] as const,
+    providerImportJob: (jobId: string) => ['admin', 'provider-import-job', jobId] as const,
     dedupReviews: (params: {
       q?: string;
       status?: string[];

@@ -32,6 +32,9 @@ Admin RBAC의 정본은 `app.users.roles` 배열이다. access token의 role cla
   `audit_required`, notes
 - matrix는 UI와 문서화를 돕는 운영 표면이다. 최종 권한 정본은 각 route의 `require_role(...)`와
   service guard다.
+- provider sync/dataset/import-job 조회는 `admin`/`operator`가 가능하지만
+  `POST /admin/provider-sync/import-jobs/{job_id}/cancel`은 `admin` 전용 capability다. Web도
+  `/auth/me`의 DB-backed role을 사용해 `operator`에게 취소 버튼·사유 form을 렌더링하지 않는다.
 
 ## Role Mutation
 
@@ -66,7 +69,8 @@ Guard:
 
 - API integration: matrix 조회, operator의 role mutation 404, grant/revoke 성공, 중복/미보유 guard,
   자기 admin 회수 guard, 마지막 admin 회수 guard, audit action 기록
-- Web Playwright: 사용자 상세 role 부여/회수 mock flow, `/admin/rbac` matrix 표시
+- Web Playwright: 사용자 상세 role 부여/회수 mock flow, `/admin/rbac` matrix 표시, operator의
+  provider 조회 허용과 취소 form 은닉
 - 정적 검증: API ruff/mypy, shared schema/API client/web typecheck, Web lint
 
 ## 관련 문서

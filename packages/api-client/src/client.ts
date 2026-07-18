@@ -17,6 +17,7 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public details?: Record<string, unknown>,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -45,22 +46,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function fallbackApiError(json: unknown, text: string, status: number): ApiError {
+function retryAfterSeconds(res: Response): number | undefined {
+  const raw = res.headers.get('Retry-After');
+  if (raw === null || !/^[0-9]+$/.test(raw)) return undefined;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 1 && value <= 300 ? value : undefined;
+}
+
+function fallbackApiError(
+  json: unknown,
+  text: string,
+  status: number,
+  retryAfter?: number,
+): ApiError {
   const detail = isRecord(json) ? json.detail : null;
 
   if (typeof detail === 'string' && detail.trim()) {
-    return new ApiError('HTTP_ERROR', detail.trim(), status);
+    return new ApiError('HTTP_ERROR', detail.trim(), status, undefined, retryAfter);
   }
 
   if (isRecord(detail)) {
     const code = typeof detail.code === 'string' && detail.code ? detail.code : 'HTTP_ERROR';
     const message = typeof detail.message === 'string' ? detail.message.trim() : '';
     if (message) {
-      return new ApiError(code, message, status, detail);
+      return new ApiError(code, message, status, detail, retryAfter);
     }
   }
 
-  return new ApiError('HTTP_ERROR', nonJsonErrorMessage(text, status), status);
+  return new ApiError(
+    'HTTP_ERROR',
+    nonJsonErrorMessage(text, status),
+    status,
+    undefined,
+    retryAfter,
+  );
 }
 
 export interface ApiResponseMeta {
@@ -120,9 +139,10 @@ export class ApiClient {
           parsed.data.error.message,
           res.status,
           parsed.data.error.details,
+          retryAfterSeconds(res),
         );
       }
-      throw fallbackApiError(json, text, res.status);
+      throw fallbackApiError(json, text, res.status, retryAfterSeconds(res));
     }
 
     // `data` 필드와 선택적 `meta` 필드 파싱
@@ -157,8 +177,9 @@ export class ApiClient {
         parsed.data.error.message,
         res.status,
         parsed.data.error.details,
+        retryAfterSeconds(res),
       );
     }
-    throw fallbackApiError(json, text, res.status);
+    throw fallbackApiError(json, text, res.status, retryAfterSeconds(res));
   }
 }

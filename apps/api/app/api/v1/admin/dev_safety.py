@@ -8,7 +8,7 @@ from app.core.config import settings
 
 
 def is_dev_safety_route_enabled() -> bool:
-    return settings.pinvi_environment.lower() != "production"
+    return settings.pinvi_environment != "production"
 
 
 def ensure_dev_safety_route_enabled() -> None:

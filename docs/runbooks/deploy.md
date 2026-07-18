@@ -39,6 +39,29 @@ admin 계정을 생성/복구한다. 운영 admin을 별도로 만든 뒤에는 
 이 값을 비우고 bootstrap 대상 계정은 비활성화한다. 실제 bootstrap 이메일/비밀번호는
 gitignore된 운영 env와 local-only runbook에만 둔다.
 
+kor-travel-map canonical ops를 사용하는 배포는 API container에
+`PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`과 서로 다른 32자 이상
+`PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN`/`PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN`을 주입한다.
+bridge network compose는 `http://host.docker.internal:12701`, docker-manager host network는
+`http://127.0.0.1:12701`을 사용한다. 운영 base URL은 HTTP(S), host
+`127.0.0.1|host.docker.internal`, port `12701`, root path만 허용한다. 다른 host/port/path와
+userinfo/query/fragment는 API startup이 거부한다. 빈 값, Unicode whitespace 포함 token, 같은
+read/cancel token도 거부한다. 값 자체를 출력하지 않고 주입 여부만 확인한다.
+
+`PINVI_ENVIRONMENT`는 `development|test|smoke|staging|production` 중 하나만 사용한다. 운영
+별칭 `prod`, 대소문자 drift, 앞뒤 공백, 알 수 없는 값은 시작 단계에서 거부한다.
+
+```bash
+docker compose exec app-api sh -lc \
+  'test ${#PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN} -ge 32 && \
+   test ${#PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN} -ge 32 && \
+   test "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN" != "$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" && \
+   case "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" in \
+     *[[:space:]]*) exit 1 ;; \
+     *) exit 0 ;; \
+   esac'
+```
+
 검증(smoke):
 
 ```bash

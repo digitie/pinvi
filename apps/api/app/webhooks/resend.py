@@ -27,7 +27,7 @@ router = APIRouter(prefix="/webhooks/resend", tags=["webhooks"])
 log = get_logger("resend_webhook")
 
 _WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 300
-_UNSIGNED_WEBHOOK_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
+_UNSIGNED_WEBHOOK_ENVIRONMENTS = {"development", "test"}
 
 
 class ResendWebhookSignatureError(Exception):
@@ -41,7 +41,7 @@ class ResendWebhookSecretError(Exception):
 def _allows_unsigned_resend_webhook() -> bool:
     return (
         settings.pinvi_resend_webhook_allow_unsigned
-        and settings.pinvi_environment.lower() in _UNSIGNED_WEBHOOK_ENVIRONMENTS
+        and settings.pinvi_environment in _UNSIGNED_WEBHOOK_ENVIRONMENTS
     )
 
 

@@ -93,6 +93,7 @@ import {
   AdminPoiMoveRequestSchema,
   AdminPoiPagedResponseSchema,
   AdminProviderImportJobCancelRequestSchema,
+  AdminProviderImportJobCancellationResultSchema,
   AdminProviderImportJobRecordSchema,
   AdminProviderImportJobsResponseSchema,
   AdminProviderSyncResponseSchema,
@@ -163,7 +164,6 @@ export interface AdminProviderSyncListParams {
 
 export interface AdminProviderImportJobListParams {
   status?: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
-  kind?: string;
   loadBatchId?: string;
   parentJobId?: string;
   pageSize?: number;
@@ -380,7 +380,6 @@ export const adminApi = (client: ApiClient) => ({
   listProviderImportJobs: (params: AdminProviderImportJobListParams = {}) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set('status', params.status);
-    if (params.kind) qs.set('kind', params.kind);
     if (params.loadBatchId) qs.set('load_batch_id', params.loadBatchId);
     if (params.parentJobId) qs.set('parent_job_id', params.parentJobId);
     if (params.pageSize) qs.set('page_size', String(params.pageSize));
@@ -392,11 +391,17 @@ export const adminApi = (client: ApiClient) => ({
     });
   },
 
+  getProviderImportJob: (jobId: string) =>
+    client.request(`/admin/provider-sync/import-jobs/${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+      schema: AdminProviderImportJobRecordSchema,
+    }),
+
   cancelProviderImportJob: (jobId: string, body: AdminProviderImportJobCancelBody) =>
     client.request(`/admin/provider-sync/import-jobs/${encodeURIComponent(jobId)}/cancel`, {
       method: 'POST',
       body: JSON.stringify(body),
-      schema: AdminProviderImportJobRecordSchema,
+      schema: AdminProviderImportJobCancellationResultSchema,
     }),
 
   listDedupReviews: (params: AdminDedupReviewListParams = {}) => {

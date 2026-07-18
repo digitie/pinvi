@@ -29,6 +29,46 @@
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
+>
+> **2026-07-18 T-ADM-C6c clean cut**: admin ops 소비는
+> `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·pipeline cancellation이 정본이다.
+> 삭제된 `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*`를 호출하거나
+> alias로 복구하지 않는다. Pinvi server는 ops 호출에 frontend BFF secret을 쓰지 않고,
+> map 전용 service/operator token과 method별 scope만 보낸다.
+> import-job 목록의 `load_batch_id`/`parent_job_id`는 Pinvi 경계에서 UUID 정규형으로 고정한다.
+> cancellation POST가 dispatch된 뒤 invalid JSON·envelope drift·비계약 5xx 또는 projection drift가
+> 발생하면 실패로 단정하지 않고 503 `PIPELINE_CANCELLATION_OUTCOME_UNCERTAIN`과 canonical detail GET
+> reconciliation으로 수렴한다. Map의 typed 502는 `DAGSTER_TERMINATE_FAILED`, typed 503은
+> `DAGSTER_UNAVAILABLE|DAGSTER_TERMINATION_TIMEOUT` status/code 쌍만 그대로 보존한다.
+> Admin UI는 409·5xx·전송 오류처럼 결과가 불확실할 때만 job별 reconciliation을 잠근다.
+> 400/401/403/422/429와 exact `404 PIPELINE_EXECUTION_NOT_FOUND`의 확정 거절은 polling 없이 form과
+> 입력을 보존해 수정·재시도한다. code 누락·불일치·route drift 404는 미확정 reconciliation을 유지하며,
+> 두 사유는 Pinvi body 계약과 같은 최대 500자다.
+> update request 원 scope는 optional이지만 있으면 canonical이며 effective scope와 같아야 한다.
+> selector-none은 원 scope null/effective `dataset_wide`이고 직접 pair member는 effective scope를 쓴다.
+> non-exact root의 provider/dataset 배열은 요청 filter이며 대표 pair가 없을 수 있다. root는 child
+> provider/dataset pair를 함께 가질 수 있고 상세 요청 job은 anchor/대표가 아닌 same-root child일 수 있다.
+> 모든 ops 성공의 `meta.duration_ms/request_id`와 전달 `X-Request-Id` 상관관계를 검증한다. typed
+> cancellation problem은 전체 detail과 member/run 불변식을 통과해야 하며, 404는 정확한
+> `PIPELINE_EXECUTION_NOT_FOUND`만 보존한다. grid는 canonical detail URL, preview/scope-refresh,
+> canonical/orphan 조합과 pair 기준 active/latest를 정본으로 검증한다.
+> effective provider/dataset vector는 request filter와 representative pair의 exact 합집합이다. standalone
+> child lookup은 recursive lineage이므로 직계 parent만으로 제한하지 않는다. 409 `IN_PROGRESS`는 full
+> `in_progress` detail/root-only, `UNSAFE`는 full `failed` detail/root-only/detail 없음 shape만 보존한다.
+> attempt `failed`의 member `cancel_failed`는 frozen base mismatch가 근거이므로 모든 canonical run
+> 결과와 조합될 수 있다. `retryable`은 run-backed failed member와 matching run이 모두
+> `cancel_failed`이고 세 error가 retry-capable code인 exact 조합만 허용한다. resolved member 불가능
+> 전이와 noncanonical run enum은 허용하지 않는다. attempt `failed`의 attempt error는 failed canonical
+> code여야 하지만 exact-base retryable member/run evidence와 definitive failed evidence는 섞일 수 있다.
+> `cancel_failed` run error는 retryable/failed canonical code만 허용한다. 최초 attempt만 full root
+> topology를 요구하고 retry lineage는 unresolved subset에서 resolved root/requested member 누락을
+> 허용한다. attempt/run timestamp와 termination flag, resolved member/Dagster terminal mapping은 Map DB
+> lifecycle을 따른다. typed 502/503은 detail `status=retryable`과 outer/detail attempt error code exact
+> 일치까지 검증한다. 409 in-progress와 typed 502/503의 `Retry-After`는 digit-only 1..300이 필수이며
+> 409 unsafe에는 header가 없어야 한다. Python/TS relay도 같은 범위만 파싱한다. attempt finish 전
+> `in_progress/error=null`에서 member `cancel_failed`와 terminal run이 잠시 공존하는 CAS snapshot은
+> 허용하지만 pending run·unknown error policy는 거부한다. error code/message와 member operation kind는
+> 각각 Map invariant와 DB의 trim/non-empty 제약을 따른다.
 
 ---
 
@@ -84,6 +124,26 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   전달하지 않는다.** `/v1/admin/*`는 운영에서
   `X-Kor-Travel-Map-Admin-Proxy-Secret` + `X-Kor-Travel-Map-Actor`가 필요할 수 있으며,
   Pinvi admin client는 `PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET`/`..._ACTOR`로 전송한다.
+  단, canonical `/v1/ops/datasets*`·`/v1/ops/pipeline*`의 server-to-server 호출은 이
+  frontend 자격을 전송하지 않는다. GET은 `PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN`,
+  canonical cancellation은 별도 `PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN`을
+  `X-Kor-Travel-Map-Ops-Token`으로 보내고, 각각
+  `X-Kor-Travel-Map-Ops-Scope: ops:read`와 `ops:cancel`을 보낸다. cancel token은 pipeline
+  cancellation POST 이외의 mutation에는 사용할 수 없다. 두 token은 서로 달라야
+  하며 한 token과 caller가 주장한 scope를 조합하는 방식으로 대체할 수 없다. actor는
+  kor_travel_map 서버 설정의 `service:pinvi`로 고정해 요청 header로 위조할 수 없게 한다.
+  비운영에서는 두 token이 모두 비어 있을 때만 local-dev opt-out을 허용한다. 하나라도 설정하면
+  두 token을 모두 설정해야 하고, 각각 32자 이상, 모든 Unicode whitespace 금지, 서로 다름을
+  동일하게 강제한다. production은 opt-out을 허용하지 않는다. 운영 admin base URL은 HTTP(S),
+  host `127.0.0.1|host.docker.internal`, port `12701`, root path만 허용한다. cross-repo smoke는
+  반드시 두 service principal 경로를 각각 사용한다.
+  Pinvi cancellation relay는 POST 전에 운영자·`access_reason`·`request_id` intent를 감사 원장에
+  commit하고 결과를 같은 `request_id`로 추가 기록한다. 응답 성공/typed 실패/network loss 모두
+  canonical detail과 import-job/provider grid 목록 GET으로 재조정하며 blind POST retry는 하지 않는다.
+  detail의 요청 job id, execution/import job, standalone 또는 update-request root, frozen cancellation
+  member identity가 서로 맞지 않으면 502로 fail-close한다. 취소 typed 409는
+  `PIPELINE_CANCELLATION_IN_PROGRESS|PIPELINE_CANCELLATION_UNSAFE`만 보존하고, 404
+  `PIPELINE_EXECUTION_NOT_FOUND`의 code/details도 그대로 보존한다.
 - **응답 envelope (확정 — kor_travel_map 0e45bd7 라이브)**: 성공 = `{ "data": <payload>, "meta": <Meta> }`.
   `data`는 **payload만** — 단건 `<object>`, 목록 `{items:[]}`, in-bounds `{clusters:[],items:[]}`,
   batch `{found:{<id>:Feature}, missing:[]}`. pagination·추적은 `meta`로 일원화:
@@ -93,6 +153,10 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   항상 present, `next_cursor` 소진 시 `null` (불변식 §1.4/E). `data.next_cursor`/
   `data.total_count`/`count`는 **폐기됨** — **T-170 client list 메서드의
   `meta.page.next_cursor` threading 교체 = T-181 잔여**(현재 `data`만 반환·`meta` 폐기).
+  canonical ops client는 `meta`를 선택값으로 완화하지 않는다. `duration_ms` 누락/음수, non-string
+  `request_id`, 전달한 `X-Request-Id`와 다른 응답 ID는 upstream 성공으로 인정하지 않는다.
+  dataset `sync_scope`는 `dataset_wide|target_grids|external_system:<name>`만 허용하고,
+  `poi_cache_targets.allowed_sync_scopes`에는 `dataset_wide`를 섞지 않는다.
 - **에러 envelope (확정 — RFC7807 라이브)**: `Content-Type: application/problem+json`,
   body = `{ type, title, status, detail, code, request_id }` — 머신 코드는 **top-level 확장
   멤버 `code`**. 표준 코드: `FEATURE_NOT_FOUND`(404), `INVALID_BBOX`(422),

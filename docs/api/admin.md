@@ -1419,7 +1419,7 @@ upstream: `kor-travel-map`
 
 - upstream 404 → `404 RESOURCE_NOT_FOUND`
 - upstream 429 → `429 RATE_LIMITED` + `Retry-After` 전달
-- upstream 409 `LOCK_BUSY` → `429 RATE_LIMITED` + `Retry-After` 전달
+- upstream 409 `LOCK_BUSY` → `409 LOCK_BUSY` + `Retry-After` 그대로 전달
 - upstream 409 상태 충돌 → `409 INVALID_STATE` 또는 upstream `code`
 - upstream 4xx → `422 VALIDATION_ERROR` 또는 upstream `code`
 - upstream timeout/5xx → `503 FEATURE_SERVICE_UNAVAILABLE`
@@ -1910,9 +1910,15 @@ SPEC V8 M-10 ~ M-11.
 
 Pinvi app-owned ETL 정의와 `kor-travel-map` provider ETL 운영 상태를 한 응답으로 합쳐
 반환한다. Pinvi는 `feature` / `provider_sync` schema를 직접 조회하지 않고,
-`kor-travel-map` `/v1/ops/dagster/summary`, `/v1/ops/metrics`, `/v1/ops/providers`,
-`/v1/ops/import-jobs`를 서비스 토큰으로 호출한다. upstream 일부가 실패해도 화면은 열 수 있도록
+`kor-travel-map` `/v1/ops/pipeline/overview`, `/v1/ops/datasets`,
+`/v1/ops/pipeline/executions?kind=import_job`를 ops service principal로 호출한다.
+upstream 일부가 실패해도 화면은 열 수 있도록
 `kor_travel_map.status = degraded | down`과 `errors[]`로 강등한다.
+세 upstream endpoint 호출의 성공 여부를 각각 추적하며, 모두 실패했을 때만 `down`, 하나라도
+성공했지만 계약 오류·schedule 출처 오류가 있으면 `degraded`다. overview의
+`operations_by_status`, `active_operations`, `failed_operations_24h`, Dagster `errors`는 그대로
+보존한다. upstream overview가 제공하지 않는 repository/job/asset/feature/source-record 집계는
+성공처럼 보이는 `0` 대신 `null`을 반환한다.
 
 Pinvi 자체 Dagster는 `PINVI_DAGSTER_BASE_URL`의 `/server_info`와 `/graphql`을 읽어
 code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 노출한다.
@@ -2127,16 +2133,18 @@ GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static 
   "kor_travel_map": {
     "status": "ok",
     "dagster_status": "ok",
-    "repository_count": 1,
-    "job_count": 3,
-    "asset_count": 8,
+    "repository_count": null,
+    "job_count": null,
+    "asset_count": null,
     "schedule_count": 2,
     "sensor_count": 0,
     "run_counts": { "STARTED": 1 },
-    "features_total": 42,
-    "source_records_total": 77,
-    "import_jobs_by_status": { "running": 1 },
-    "dedup_queue_by_status": { "pending": 2 },
+    "dagster_errors": [],
+    "operations_by_status": { "queued": 0, "running": 1, "done": 9, "failed": 0, "cancelled": 0 },
+    "active_operations": 1,
+    "failed_operations_24h": 0,
+    "features_total": null,
+    "source_records_total": null,
     "provider_dataset_count": 1,
     "provider_failure_count": 0,
     "recent_import_jobs": [],
@@ -2256,7 +2264,8 @@ upstream: `kor-travel-map` `PATCH /v1/admin/dedup-reviews/{review_id}`.
 
 ### 13.3 `GET /admin/provider-sync`
 
-upstream: `kor-travel-map` `GET /v1/ops/providers`.
+upstream: `kor-travel-map` `GET /v1/ops/datasets`. `key` 검색은 Pinvi가 canonical
+grid를 받은 뒤 provider/dataset 이름에 적용한다.
 
 권한: `admin` / `operator`
 
@@ -2280,19 +2289,30 @@ Query:
         "last_success_at": "2026-06-12T00:00:00+09:00",
         "last_failure_at": null,
         "consecutive_failures": 0,
-        "next_run_after": "2026-06-13T03:30:00+09:00",
+        "eligible_after": "2026-06-13T03:30:00+09:00",
+        "schedule_next_scheduled_at": "2026-06-14T03:30:00+09:00",
         "links": [],
         "refresh_policy": { "enabled": true },
       },
     ],
     "total": 1,
+    "schedule_source_status": "unavailable",
+    "schedule_source_errors": ["Dagster GraphQL unavailable"],
   },
 }
 ```
 
+`eligible_after`는 provider rate-limit/backoff 기준의 **재호출 가능 시각**이고,
+`schedule_next_scheduled_at`은 Dagster schedule 기준의 **다음 예약 시각**이다. 두 값을 서로
+대체하거나 한 필드로 합치지 않는다. 행 식별자는 `provider + dataset_key + sync_scope`의 exact
+scope를 사용한다.
+`schedule_source_status`가 `unavailable` 또는 `error`이면 응답을 정상으로 가장하지 않고
+`schedule_source_errors`를 그대로 보존한다. Admin UI는 provider 표 위에 degraded 배너를 표시해
+다음 예약 시각이 불완전할 수 있음을 알린다.
+
 ### 13.4 `GET /admin/provider-sync/import-jobs`
 
-upstream: `kor-travel-map` `GET /v1/ops/import-jobs`.
+upstream: `kor-travel-map` `GET /v1/ops/pipeline/executions?kind=import_job`.
 
 권한: `admin` / `operator`
 
@@ -2301,11 +2321,14 @@ Query:
 | 이름            | 설명                                                   |
 | --------------- | ------------------------------------------------------ |
 | `status`        | `queued` / `running` / `done` / `failed` / `cancelled` |
-| `kind`          | upstream import job kind                               |
 | `load_batch_id` | load batch UUID                                        |
 | `parent_job_id` | parent job UUID                                        |
 | `page_size`     | 1~200, 기본 50                                         |
 | `cursor`        | upstream cursor                                        |
+
+`load_batch_id`와 `parent_job_id`는 Pinvi 경계에서 UUID로 검증한다. 대문자 또는 중괄호를 포함한 유효
+표현도 입력은 가능하지만 upstream query와 `canonical_url` provenance에는 소문자 hyphen 정규형만
+사용한다. UUID로 해석할 수 없으면 upstream을 호출하지 않고 422 `VALIDATION_ERROR`로 거절한다.
 
 응답 `data`:
 
@@ -2314,15 +2337,21 @@ Query:
   "items": [
     {
       "job_id": "uuid",
-      "kind": "provider_import",
+      "kind": "import_job",
       "status": "running",
-      "progress": 0.5,
+      "progress": 1,
+      "projected_job_id": "projected-job-uuid",
+      "projected_job_kind": "provider_import",
+      "projected_job_status": "running",
+      "projected_job_progress": 1,
+      "projected_job_load_batch_id": null,
+      "projected_job_parent_job_id": null,
+      "cancellation": null,
       "payload": {},
       "current_stage": "normalize",
       "error_message": null,
       "created_at": "2026-06-12T00:00:00+09:00",
       "started_at": "2026-06-12T00:01:00+09:00",
-      "heartbeat_at": "2026-06-12T00:02:00+09:00",
       "finished_at": null,
       "links": [],
     },
@@ -2332,9 +2361,71 @@ Query:
 }
 ```
 
-### 13.4.1 `POST /admin/provider-sync/import-jobs/{job_id}/cancel`
+`job_id/kind/status/progress`는 canonical import root를 한 묶음으로 나타내고,
+`projected_job_*`는 대표 import job을 별도 묶음으로 나타낸다. root와 projected 값을 섞지 않는다.
+진행률은 `0..100` 정수 percent이며 `1`은 1%다. `cancellation` overlay가 `in_progress`이면 취소
+버튼을 비활성화하고, `retryable`이면 `취소 재시도`를 허용하며, `failed`/`completed`이면
+비활성화한다.
 
-upstream: `kor-travel-map` `POST /v1/ops/import-jobs/{job_id}/cancel`.
+Admin 표는 upstream `next_cursor`를 다음/이전 버튼과 cursor history에 연결한다. filter 변경 시
+cursor를 첫 page로 초기화하므로 50개 이후 job도 조회·상태 확인·취소할 수 있다. BFF는
+`kind=import_job`과 요청 filter가 반영된 upstream
+`canonical_url`, 필수 `meta.page.page_size/next_cursor`를 검증한다. legacy URL, page metadata 누락,
+요청과 다른 page size는 빈 마지막 page로 간주하지 않고 `502 FEATURE_SERVICE_BAD_GATEWAY`로 거부한다.
+페이지 전환 fetch/placeholder 동안 다음·이전 버튼을 모두 잠그고, 현재 cursor와 같은 stale
+`next_cursor`는 history에 다시 넣지 않는다. 모든 ops 성공 envelope는 `meta.duration_ms/request_id`를
+포함해야 하며 전송한 `X-Request-Id`와 `meta.request_id`가 다르면 같은 502 계약 오류로 처리한다.
+status filter 전환도 같은 placeholder 잠금을 적용해 stale 행의 취소 버튼과 이미 열린 submit이
+새 조회 완료 전에 mutation을 보내지 못하게 한다.
+
+### 13.4.1 `GET /admin/provider-sync/import-jobs/{job_id}`
+
+upstream: `kor-travel-map`
+`GET /v1/ops/pipeline/executions/import_job/{job_id}`.
+
+권한: `admin` / `operator`
+
+목록의 한 행과 같은 `AdminProviderImportJobRecord`를 반환한다. 요청 path job id는
+`execution.id/detail_url`, `import_job.job_id`, standalone root id 또는 update-request root의
+`requested_job_id/request_id`, cancellation frozen member와 reciprocal하게 일치해야 한다. import job의
+provider/dataset은 root의 exact member 한 건과 맞아야 하지만, import payload의 sync scope를 nullable
+root member와 직접 비교하지 않는다. update request는 scope type/provider/dataset과 root
+`provider_datasets`를 대조한다. `provider_dataset`의 provider/dataset filter 배열은 비어 있어야 하며,
+원 `scope.sync_scope`와 `requested_sync_scope`는 둘 다 null이거나 같은 canonical 값이어야 한다.
+원 scope가 있으면 `effective_sync_scope`와도 같아야 한다. selector-none dataset의
+`requested_sync_scope=null`, `effective_sync_scope=dataset_wide`는 정상 계약이고 직접 요청 pair의
+root member scope는 항상 effective 값이다. non-exact scope의 root provider/dataset 배열은 요청
+filter와 대표 pair vector의 exact 합집합이며 `provider_datasets=[]`일 수 있다. 대표 pair 누락이나 두
+출처에 없는 무관 vector는 거부한다. root에는 실행 중 생성된 다른 provider/dataset child pair가
+함께 있을 수 있으며 상세 요청 job도 anchor나 대표 pair에 고정하지 않는다. update root는 reciprocal
+`execution.request_id`, standalone root는 Map의 recursive root projection과 non-null lineage 증거로
+임의 깊이의 비대표 descendant를 허용하며 직계 `parent_job_id == root.id`를 강제하지 않는다.
+cancellation은 `linked_job_count`와 frozen member ID 집합뿐 아니라 요청 job의 operation kind/Dagster
+run을 대조하고, 모든 frozen member의 non-null Dagster run ID exact 집합과 `dagster_runs`가 같아야 한다.
+최초 attempt의 frozen 목록에는 root anchor와 노출된 모든 `operation_member_id`가 포함되어야 하며 무관
+UUID로 개수만 맞출 수 없다. `previous_cancellation_id`가 있는 retry attempt는 이전 attempt의 unresolved
+run-backed `cancel_failed` subset만 복사하므로 이미 해결된 root/requested member가 빠질 수 있고 full
+`linked_job_count`를 다시 요구하지 않는다. 종료가 필요한 member에 run ID가 없거나 run이
+누락·추가·중복되면 거부한다.
+`pending/cancelled/cancel_failed`의 terminal/error 조합, 예약 run initial status와 run-backed member/run
+result도 대조한다. attempt status와 `finished_at/error`, run result와 engine timestamp,
+`requires_run_termination`은 Map DB lifecycle constraint와 exact하게 맞아야 한다. resolved run-backed
+member는 `cancelled↔CANCELED`, `done↔SUCCESS`, `failed↔FAILURE` mapping을 따르며 provider
+feature-load tracking failure 예외만 허용한다. 같은 검증을 상세 GET과
+취소 POST 성공 응답에 모두 적용한다. dataset grid의 실행 member는 provider/dataset pair별 유일해야
+하고 선택된 member의 scope/status가 행과 맞아야 한다. active/latest 분류는 root가 아닌 pair status를
+정본으로 하며 동일 root/member가 두 슬롯에 동시에 나타날 수 없다. detail URL, preview,
+scope-refresh와 canonical/orphan capability 조합도 fail-close한다. 취소 POST 성공과 결과가 불확실한
+오류 뒤 이 endpoint가 reconciliation 정본이다. UI는 fresh GET이 terminal 또는 `retryable`을 확인할
+때까지 해당 job의 취소 재시도를 잠그고, `in_progress` 동안 주기적으로 다시 조회한다. stale 목록
+행만으로 잠금을 풀지 않는다. 반면 400/401/403/422/429와 exact
+`404 PIPELINE_EXECUTION_NOT_FOUND`처럼 취소 결과가 확정된 요청 거절은 reconciliation 대상에서 즉시
+제거하고 입력 form을 보존한다. code가 없거나 다른 404와 route drift는 결과 미확정으로 처리한다.
+
+### 13.4.2 `POST /admin/provider-sync/import-jobs/{job_id}/cancel`
+
+upstream: `kor-travel-map`
+`POST /v1/ops/pipeline/executions/import_job/{job_id}/cancel`.
 
 권한: `admin` 전용. `operator`는 조회만 가능하다.
 
@@ -2345,10 +2436,70 @@ upstream: `kor-travel-map` `POST /v1/ops/import-jobs/{job_id}/cancel`.
 | `access_reason`         | Pinvi `admin_audit_log`에 남기는 운영 사유     |
 | `kor_travel_map_reason` | upstream cancel reason. 없으면 `access_reason` |
 
-응답 `data`는 취소 후 upstream import job record다. Pinvi는 성공한 cancel만
-`provider_import_job.cancel` audit으로 기록하고, upstream 404/409/503은 각각
-`RESOURCE_NOT_FOUND` / upstream code 또는 `INVALID_STATE` / `FEATURE_SERVICE_UNAVAILABLE`로
-전달한다.
+두 사유는 각각 1~500자이며 Admin UI도 `maxLength=500`, submit 검증과 현재 글자 수를 같은 계약으로
+표시한다.
+
+응답 `data`는 `requested_job_id`, canonical `root_kind/root_id`, `cancellation_id`,
+`status`, `retryable`, `unresolved_member_count`, `warnings`를 포함하는 취소 결과다.
+성공 안내는 요청 id뿐 아니라 canonical root, 최종 status, warnings도 표시한다.
+Pinvi는 upstream POST 전에 `provider_import_job.cancel.started`를 별도 commit하고, 성공은
+`provider_import_job.cancel`, typed 실패와 응답 불확실은 `provider_import_job.cancel.result`로 같은
+`request_id`·운영자·`access_reason`에 연결한다. upstream 404
+`PIPELINE_EXECUTION_NOT_FOUND`는 원본 code/details를 보존한다. 409/502/503은 명시된 cancellation
+status/code 쌍만 보존한다. 409/502/503의
+취소 결과는 `cancellation_id`, `previous_cancellation_id`, `root`, `status`, 요청·갱신·완료 시각과
+요청자/사유, attempt error, `retryable`, `unresolved_member_count`, `members`, `dagster_runs`,
+`committed_data_rolled_back`, `warnings` 전체를 자격 증명만 마스킹해 전달한다. 이 전체 detail이 strict
+schema와 공통 불변식을 통과하지 못하면 typed 실패가 아니라 결과 불확실이다. `Retry-After`는 그대로 응답한다.
+
+취소 POST에는 `ops:cancel` 전용 자격만 사용하고 조회와 결과 조정용 GET에는 `ops:read` 전용
+자격만 사용한다. 두 자격은 공유하지 않는다. 취소 요청 뒤 응답이 유실되거나 2xx invalid JSON,
+`data` 누락/malformed envelope, 예상 밖 5xx, cancellation projection 불일치로 결과를 확정할 수 없으면
+POST를 자동 재시도하지 않고 503 `PIPELINE_CANCELLATION_OUTCOME_UNCERTAIN`과 canonical import job
+GET 경로를 반환하고 같은 `request_id`의 `cancel.result outcome=uncertain` 감사를 남긴다. 명시적으로
+계약된 409 `PIPELINE_CANCELLATION_IN_PROGRESS|PIPELINE_CANCELLATION_UNSAFE`와 502
+`DAGSTER_TERMINATE_FAILED`, 503
+`DAGSTER_UNAVAILABLE|DAGSTER_TERMINATION_TIMEOUT` status/code 쌍만 원본 상태를 보존한다. 같은
+502/503의 임의 code는 결과 불확실이다. 허용된 outer code라도 full detail attempt가 `retryable`이
+아니거나 attempt error code가 outer code와 다르면 mixed/mutated evidence이므로 결과 불확실이다.
+409 `PIPELINE_CANCELLATION_IN_PROGRESS`와 typed 502/503은 raw `Retry-After`가 ASCII digit-only 1..300초
+정수여야 한다. 누락, `0`, 음수, 300 초과, trailing garbage/whitespace는 결과 불확실로 처리한다.
+409 `PIPELINE_CANCELLATION_UNSAFE`는 definitive 결과이므로 `Retry-After` header가 존재하면 값이
+올바르더라도 결과 불확실이다. 검증된 값만 Pinvi proxy가 decimal string으로 relay하고 공용 TS API
+client도 같은 범위 밖 값은 `retryAfterSeconds`로 노출하지 않는다.
+Pinvi API client와 BFF는 `Retry-After`와
+안전한 `details`를 보존하고 CORS
+`Access-Control-Expose-Headers`로 `Retry-After`를 browser에 노출한다. Admin UI는 network loss,
+Pinvi 500과 409처럼 결과가 불확실한 오류에서 상세 GET과 import-job/provider grid 목록을 다시
+조회한다. fresh 상세 확인 전에는 같은 POST를 다시 보내지 않는다. 400/401/403/422/429와 exact
+`404 PIPELINE_EXECUTION_NOT_FOUND`는 확정 거절로 표시하고 form·입력을 유지한 채 polling과 행 잠금을
+해제한다. 그 밖의 404는 같은 미확정 잠금을 적용한다. 이 잠금은 해당 job 행에만 적용해
+다른 job 작업을 막지 않지만 job별 미확정 집합을 유지하므로 두 번째 취소가 첫 행 잠금을 풀지 않는다.
+404는 code가 정확히 `PIPELINE_EXECUTION_NOT_FOUND`일 때만 typed not-found이며 나머지는 결과
+불확실이다. `operator` 화면에는 취소 버튼과
+사유 form을 렌더링하지 않는다.
+
+409 typed shape도 code별로 고정한다. `PIPELINE_CANCELLATION_IN_PROGRESS`는 full `in_progress`
+detail 또는 exact `{root,cancellation:null}`, `PIPELINE_CANCELLATION_UNSAFE`는 full `failed` detail,
+같은 root-only shape 또는 details 없음만 보존한다. full detail이면 member/run 검증을 항상 적용한다.
+단 attempt `failed`의 definitive snapshot에서 member `cancel_failed`는 frozen base mismatch가 독립
+근거이므로 run의 canonical 결과(`pending|cancelled|already_terminal|cancel_failed`)와 무관하게 허용한다. 각 run 결과의
+terminal/error shape, resolved member의 불가능 전이와 noncanonical enum은 계속 거부한다. attempt
+`retryable`은 모든 failed member가 `requires_run_termination=true`인 run-backed `cancel_failed`이고,
+matching run도 `cancel_failed`이며 attempt/member/run error가 Dagster retry-capable code일 때만 허용한다.
+attempt `failed`의 attempt error는 Map failed canonical code여야 하지만 exact-base retryable member/run
+증거와 hidden-base definitive failed member 증거는 실제 Map finish invariant처럼 함께 존재할 수 있다.
+`cancel_failed` run error는 retryable/failed canonical code 합집합만 허용한다. hidden-base 때문에 모든
+canonical run 결과를 허용하는 완화는 failed-code definitive member에만 적용한다.
+단 attempt가 아직 `in_progress`, `error=null`, `finished_at=null`일 때 member `cancel_failed`와 terminal
+run `cancelled|already_terminal`이 writer CAS 순서 때문에 잠시 공존하는 snapshot은 허용한다. attempt
+종결 뒤에는 해당 완화를 적용하지 않으며 pending run, unknown error code와 member/run error policy
+불일치는 거부한다. structured error `code/message`는 trim 결과가 non-empty여야 하고 member
+`operation_kind`는 null 또는 exact trimmed non-empty text여야 한다.
+dataset row
+`sync_scope`는 canonical parser를 통과해야 하고
+`poi_cache_targets.allowed_sync_scopes`는 `target_grids` 다음 `external_system:*`만 허용한다.
+reconciliation 경고·notice·retryable 문구는 job ID별 상태와 결합하며 다른 job의 상세 결과로 바꾸지 않는다.
 
 provider run-now/pause/resume/reset cursor mutation은 아직 노출하지 않는다. 2026-06-28 기준
 upstream `kor-travel-map` OpenAPI에는 import job cancel과 feature-update-request `run-now`만 있고,

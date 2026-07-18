@@ -2,6 +2,140 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-18 (codex) — T-ADM-C6c 최종 리뷰·로컬 gate
+
+- 사용자 지시에 따라 최종 기능 diff는 단일 적대적 리뷰어가 검토했고 blocker 없이 승인했다.
+- API 전체 unit `565 passed, 1 skipped`, integration `354 passed`; 마지막 Python 보정 뒤 Ruff·format·
+  strict mypy와 cancellation/config/client 회귀 `361 passed`를 확인했다.
+- Web/workspace lint·typecheck, Vitest `120 passed`, Next production build 57 routes를 확인했다.
+- 첫 회귀 pytest는 NTFS capture 임시파일 소실로 test collection 뒤 환경 중단됐고, Linux `/tmp`를
+  사용한 동일 명령은 `361 passed`로 종료됐다. T-ADM-C6c 완료는 PR/CI와 N150 prod live UI E2E 뒤다.
+- push 전 감사에서 테스트 이메일 28곳의 운영 도메인을 `example.com`으로 바꾸고 API 통합 파일을
+  최종 상태로 재실행해 `32 passed`를 확인했다. 금지 파일·비밀 재료·운영 식별자 추가는 0건이다.
+- PR #387 Web E2E 127 pass/1 fail을 확인했다. 실패 fixture는 `Retry-After: 7`만 주고 실제 API가
+  보장하는 CORS expose header를 빠뜨려 브라우저가 값을 읽지 못했다. mock을 실제 계약과 정렬했다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass13 exact 404 분류
+
+- `404 PIPELINE_EXECUTION_NOT_FOUND`만 확정 거절로 분류해 no-poll/no-lock/form 보존·재시도를 적용했다.
+- code 누락·불일치·route drift 404는 미확정 잠금/reconciliation을 유지하고 exact/wrong-code E2E
+  fixture를 추가했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass12 결정적 취소 거절 복구
+
+- 400/401/403/422/429 취소 거절은 canonical 상세 polling과 행 잠금을 즉시 해제하고 입력 form을
+  보존해 운영자가 수정 후 재시도할 수 있게 했다. 409·5xx·전송 오류의 job별 reconciliation은 유지한다.
+- Pinvi/upstream 사유의 500자 제한·검증·카운터와 422 no-poll/no-lock/retry UI E2E를 추가했다.
+  테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass11 retry header/CAS snapshot 고정
+
+- typed in-progress/502/503 raw `Retry-After`를 digit-only 1..300으로 고정하고 unsafe 409에는 header를
+  금지했다. Python proxy와 공용 TS API client parser도 같은 범위로 정렬했다.
+- attempt finish 전 in-progress member `cancel_failed`/terminal run CAS 중간 snapshot을 허용하되 pending
+  run, unknown error와 member/run policy mismatch는 거부했다.
+- structured error code/message trim non-empty, member operation kind null/exact trimmed non-empty 제약과
+  양·음성 fixture 및 한국어 계약을 갱신했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass10 retry/failed lifecycle 정합화
+
+- retry lineage는 이전 unresolved run-backed `cancel_failed` subset만 보존하므로 resolved root/requested
+  member 누락을 허용하고, 최초 attempt만 full current root topology를 강제했다.
+- failed attempt의 definitive attempt error 아래 retryable exact-base evidence와 definitive hidden-base
+  evidence가 혼재하는 Map invariant/test 행렬을 반영했다.
+- attempt/run timestamp, exact `requires_run_termination`, resolved member/Dagster terminal mapping과 typed
+  502/503 outer status/code-detail attempt evidence 결박을 구현했다.
+- 양·음성 unit/integration fixture와 한국어 계약을 갱신했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass9 failed 오류 정책 고정
+
+- attempt `failed`의 attempt/member definitive error는 Map failed canonical code만 허용하고,
+  `cancel_failed` run error는 retryable/failed canonical code 합집합만 허용하도록 고정했다.
+- hidden frozen-base mismatch의 canonical run 결과 완화와 definitive error 근거를 분리했다.
+- allowed failed code 양성, retryable attempt/member error 및 비계약 run error 음성 fixture와 한국어
+  계약을 갱신했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass8 attempt 분기 교정
+
+- canonical run 결과 완화는 definitive `failed`의 frozen-base mismatch에만 적용했다.
+- `retryable`은 run-backed failed member/matching run의 exact `cancel_failed`와 attempt/member/run
+  retry-capable error code를 모두 요구한다.
+- failed 양성, retryable 양성 및 non-run-backed·terminal run·비재시도 오류 음성 fixture와 한국어
+  계약을 갱신했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass7 cancellation transition 보정
+
+- frozen base mismatch가 definitive failure의 근거인 `cancel_failed` member는 모든 canonical run 결과와
+  조합할 수 있도록 Map invariant에 맞췄다.
+- run `cancelled`·`pending`·`already_terminal` 양성 fixture와 resolved member 불가능 전이/noncanonical
+  run enum 음성 fixture를 고정했다.
+- 한국어 계약 문서를 갱신했으며 지시대로 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass6 적대적 리뷰 보강
+
+- root effective vector를 request filter와 representative pair의 exact 합집합으로 검증하고 standalone
+  임의 깊이 descendant를 recursive lineage projection으로 허용했다.
+- 409 typed problem의 full/root-only/empty shape와 workflow status를 code별로 고정했다. definitive
+  failed의 run terminal/member `cancel_failed` 조합은 Map transition matrix에 따라 보존했다.
+- dataset row canonical scope, POI allowed scope 순서·종류와 selected projected member status를 검증했다.
+- pagination/status placeholder에서 stale 행 action/submit을 잠그고, reconciliation message와 retryable
+  안내를 job ID별 상태에 결합했다.
+- 단위·통합·UI 음성 fixture와 한국어 계약을 갱신했다. 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c pass5 적대적 리뷰 보강
+
+- non-exact update filter와 빈 `provider_datasets`, update/standalone same-root 비대표 child 상세을 실제
+  Map 계약대로 허용하고 대표 projection과 filter 배열을 분리했다.
+- cancellation full detail, frozen anchor/노출 member topology, member/run 결과와 terminal/error 불변식,
+  exact typed 404 및 성공 `meta.duration_ms/request_id` 상관관계를 fail-close했다.
+- dataset detail URL, preview/scope-refresh, canonical/orphan 조합과 pair status 기준 active/latest를 검증했다.
+- cursor fetch/placeholder 중 이동을 잠그고 stale next cursor 중복을 막았다. reconciliation은 job ID
+  집합으로 바꿔 여러 미확정 취소 행의 잠금을 독립적으로 유지했다.
+- 단위·통합·UI 회귀 fixture와 한국어 계약 문서를 갱신했다. 지시대로 테스트/lint/build는 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c 최종 적대적 리뷰 blocker 반영
+
+- 취소 dispatch 뒤 2xx invalid JSON·누락 envelope·예상 밖 5xx·projection drift도 transport loss와 같은
+  `PIPELINE_CANCELLATION_OUTCOME_UNCERTAIN`으로 수렴시키고 correlated result audit와 상세 GET 경로를
+  보존했다. 502/503은 Map이 정의한 status/code whitelist 쌍만 원형을 유지한다.
+- import-job detail의 import/update scope와 root exact member, cancellation operation kind/Dagster run
+  topology를 대조했다. provider_dataset 원 scope는 optional이지만 canonical/effective 동일성을 강제하고,
+  selector-none의 null 원 scope와 `dataset_wide` effective/direct-member scope를 고정했다. root의 다른
+  child pair와 child 상세 요청은 허용하되 pair 중복은 거부한다. cancellation POST/상세는 frozen member의
+  non-null run exact 집합과 termination-required non-null을 같은 검증기로 확인한다. 목록 UUID filter는
+  Pinvi 경계에서 소문자 hyphen 정규형으로 고정했다.
+- import-job 목록 canonical URL/page metadata provenance와 상세의 requested job/execution/import job/
+  standalone·update-request root/frozen cancellation member reciprocal identity를 fail-close 검증했다.
+- 취소 intent를 upstream POST 전에 감사 원장에 commit하고 성공·typed 실패·transport loss를 같은
+  `request_id`와 운영자/사유로 추가 기록하도록 바꿨다.
+- 취소 typed 409 whitelist를 cancellation in-progress/unsafe로 한정하고 404 execution-not-found의
+  code/details를 보존했다. UI는 성공 뒤 stale 목록과 모든 오류에서 해당 행만 reconciliation 잠그며,
+  cursor 다음/이전 이동으로 50개 이후 job도 상태 확인·취소할 수 있다.
+- provider read는 operator에게 유지하되 취소 capability/form은 admin에게만 보이도록 RBAC matrix와
+  API/UI 음성 fixture를 보강했다.
+- 사용자 지시대로 두 적대적 리뷰 승인 전에는 테스트/lint/build를 실행하지 않았다.
+
+## 2026-07-18 (codex) — T-ADM-C6c Alpha 적대적 리뷰 보강
+
+- Codegraph로 `Settings` 변경 반경 94 symbols/49 files를 확인하고 cookie/HSTS/dev safety/webhook/
+  rate-limit 소비 지점을 canonical 환경 enum으로 정렬했다.
+- 운영 map URL exact allowlist와 비운영 token pair fail-close를 구현했다.
+- 취소 typed 409/502/503, 안전한 details, `Retry-After`, transport-loss uncertain 상태를 보존하고
+  Pinvi import-job 상세 reconciliation GET을 추가했다.
+- UI는 reconciliation 전 취소 재시도를 잠그며, E2E의 blind 두 번째 POST를 제거했다.
+- provider schedule 출처 상태/오류를 Python·Zod schema와 API/UI까지 보존하고 degraded 배너를 추가했다.
+- 이 단계 지시에 따라 테스트/lint/build는 실행하지 않는다. 최종 확인은 `git diff --check`만 수행하고,
+  WSL/N150 gate 전에는 task와 이슈를 완료 처리하지 않는다.
+
+## 2026-07-18 — T-ADM-C6c 구현 전 cross-repo 계약 고정
+
+- kor-travel-map `main@d0609226`과 Pinvi `main@48085afb`를 대조해 삭제된 legacy ops caller를
+  재확인했다. alias 복구, frontend BFF secret 공유, trusted CIDR 확대는 선택지에서 제외했다.
+- map service/operator principal과 Pinvi canonical caller를 별도 PR로 나눴다. map PR이 인증·
+  OpenAPI를 먼저 제공하고, Pinvi PR이 grid/overview/executions/cancel 소비와 projection을 잇는다.
+- principal의 read/cancel capability, typed 401/403/422, 고정 server actor, ops 경로 한정, 양 저장소
+  삭제 경로 0건 contract test를 구현 전 완료 조건으로 고정했다.
+
 ## 2026-07-15 (claude) — TDR 계획·문서화 (ADR-054/055/056 + 실행계획 + task 백로그)
 
 **작업**: 여행 상세 페이지 8개 feature 재작성을 계획하고 문서화했다(구현 전 단계). 사용자 지시대로

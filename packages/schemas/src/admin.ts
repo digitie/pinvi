@@ -549,22 +549,47 @@ const AdminProviderLinkSchema = z.object({
 });
 const AdminProviderLinksSchema = z.union([AdminJsonObjectSchema, z.array(AdminProviderLinkSchema)]);
 
+export const AdminOperationStateSchema = z.enum([
+  'queued',
+  'running',
+  'done',
+  'failed',
+  'cancelled',
+]);
+export type AdminOperationState = z.infer<typeof AdminOperationStateSchema>;
+
+export const AdminProviderCancellationSummarySchema = z.object({
+  cancellation_id: z.string().uuid(),
+  status: z.enum(['in_progress', 'retryable', 'completed', 'failed']),
+  requested_at: Iso8601Schema,
+  requested_by: z.string(),
+  reason: z.string().nullable().default(null),
+  retryable: z.boolean(),
+  unresolved_member_count: z.number().int().nonnegative(),
+});
+export type AdminProviderCancellationSummary = z.infer<
+  typeof AdminProviderCancellationSummarySchema
+>;
+
 export const AdminProviderImportJobRecordSchema = z.object({
-  job_id: z.string(),
-  kind: z.string(),
-  status: z.string(),
-  progress: z.number().nullable().default(null),
+  job_id: z.string().uuid(),
+  kind: z.literal('import_job'),
+  status: AdminOperationStateSchema,
+  progress: z.number().int().min(0).max(100).nullable().default(null),
+  projected_job_id: z.string().uuid(),
+  projected_job_kind: z.string(),
+  projected_job_status: AdminOperationStateSchema,
+  projected_job_progress: z.number().int().min(0).max(100),
+  projected_job_load_batch_id: z.string().uuid().nullable().default(null),
+  projected_job_parent_job_id: z.string().uuid().nullable().default(null),
+  cancellation: AdminProviderCancellationSummarySchema.nullable().default(null),
   payload: AdminJsonObjectSchema.default({}),
   status_url: z.string().nullable().default(null),
   current_stage: z.string().nullable().default(null),
   error_message: z.string().nullable().default(null),
   created_at: Iso8601Schema,
   started_at: Iso8601Schema.nullable().default(null),
-  heartbeat_at: Iso8601Schema.nullable().default(null),
   finished_at: Iso8601Schema.nullable().default(null),
-  load_batch_id: z.string().nullable().default(null),
-  parent_job_id: z.string().nullable().default(null),
-  source_checksum: z.string().nullable().default(null),
   links: AdminProviderLinksSchema.default([]),
 });
 export type AdminProviderImportJobRecord = z.infer<typeof AdminProviderImportJobRecordSchema>;
@@ -584,6 +609,23 @@ export type AdminProviderImportJobCancelRequest = z.infer<
   typeof AdminProviderImportJobCancelRequestSchema
 >;
 
+export const AdminProviderImportJobCancellationResultSchema = z.object({
+  requested_job_id: z.string().uuid(),
+  root_kind: z.enum(['import_job', 'update_request']),
+  root_id: z.string().uuid(),
+  cancellation_id: z.string().uuid(),
+  status: z.enum(['in_progress', 'retryable', 'completed', 'failed']),
+  requested_at: Iso8601Schema,
+  requested_by: z.string(),
+  reason: z.string().nullable().default(null),
+  retryable: z.boolean(),
+  unresolved_member_count: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([]),
+});
+export type AdminProviderImportJobCancellationResult = z.infer<
+  typeof AdminProviderImportJobCancellationResultSchema
+>;
+
 export const AdminProviderDatasetSummarySchema = z.object({
   provider: z.string(),
   dataset_key: z.string(),
@@ -592,7 +634,8 @@ export const AdminProviderDatasetSummarySchema = z.object({
   last_success_at: Iso8601Schema.nullable().default(null),
   last_failure_at: Iso8601Schema.nullable().default(null),
   consecutive_failures: z.number().int().default(0),
-  next_run_after: Iso8601Schema.nullable().default(null),
+  eligible_after: Iso8601Schema.nullable().default(null),
+  schedule_next_scheduled_at: Iso8601Schema.nullable().default(null),
   links: AdminProviderLinksSchema.default([]),
   refresh_policy: AdminJsonObjectSchema.nullable().default(null),
 });
@@ -601,6 +644,8 @@ export type AdminProviderDatasetSummary = z.infer<typeof AdminProviderDatasetSum
 export const AdminProviderSyncResponseSchema = z.object({
   items: z.array(AdminProviderDatasetSummarySchema).default([]),
   total: z.number().int(),
+  schedule_source_status: z.enum(['ok', 'unavailable', 'error']),
+  schedule_source_errors: z.array(z.string()).default([]),
 });
 export type AdminProviderSyncResponse = z.infer<typeof AdminProviderSyncResponseSchema>;
 
@@ -608,20 +653,23 @@ export const AdminKorTravelMapEtlSummarySchema = z.object({
   status: AdminSystemStatusSchema,
   dagster_status: z.string(),
   checked_at: Iso8601Schema.nullable().default(null),
-  repository_count: z.number().int().default(0),
-  job_count: z.number().int().default(0),
-  asset_count: z.number().int().default(0),
-  schedule_count: z.number().int().default(0),
-  sensor_count: z.number().int().default(0),
+  repository_count: z.number().int().nullable().default(null),
+  job_count: z.number().int().nullable().default(null),
+  asset_count: z.number().int().nullable().default(null),
+  schedule_count: z.number().int().nullable().default(null),
+  sensor_count: z.number().int().nullable().default(null),
   run_counts: z.record(z.string(), z.number().int()).default({}),
-  repositories: z.array(AdminDagsterRepositorySummarySchema).default([]),
+  dagster_errors: z.array(z.string()).default([]),
+  operations_by_status: z
+    .partialRecord(AdminOperationStateSchema, z.number().int())
+    .default({}),
+  active_operations: z.number().int().nullable().default(null),
+  failed_operations_24h: z.number().int().nullable().default(null),
   recent_runs: z.array(AdminDagsterRunSummarySchema).default([]),
   features_total: z.number().int().nullable().default(null),
   source_records_total: z.number().int().nullable().default(null),
-  import_jobs_by_status: z.record(z.string(), z.number().int()).default({}),
-  dedup_queue_by_status: z.record(z.string(), z.number().int()).default({}),
-  provider_dataset_count: z.number().int().default(0),
-  provider_failure_count: z.number().int().default(0),
+  provider_dataset_count: z.number().int().nullable().default(null),
+  provider_failure_count: z.number().int().nullable().default(null),
   recent_import_jobs: z.array(AdminProviderImportJobRecordSchema).default([]),
   errors: z.array(z.string()).default([]),
 });
