@@ -11,6 +11,8 @@ Zod `partialRecord` 계약까지 최종 diff를 승인했다. 승인 뒤에만 W
 - Web/workspace: lint·typecheck 통과, Vitest `120 passed`, Next production build 57 routes 통과.
 - 보안 감사에서 테스트 이메일의 운영 도메인 28곳을 `example.com`으로 redaction했고, 해당 API 통합
   파일을 최종 상태로 다시 실행해 `32 passed`를 확인했다. 금지 파일·비밀 재료·운영 식별자 추가는 0건이다.
+- PR #387 첫 Web E2E는 cross-origin mock이 실제 API의 `Access-Control-Expose-Headers: Retry-After`
+  계약을 누락해 127 pass/1 fail이었다. fixture를 실제 CORS 계약과 맞추고 CI 재실행을 대기한다.
 - 남은 완료 gate: PR CI/merge, map·Pinvi 동일 image 조합, N150 prod live UI E2E와 rollback smoke.
 
 T-ADM-C6c는 운영 증거가 생기기 전까지 열린 상태로 유지한다. **다음 한 작업**은 보안 감사를 통과한

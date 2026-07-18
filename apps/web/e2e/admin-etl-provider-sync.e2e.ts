@@ -562,7 +562,10 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
       seenCancelBodies.push(route.request().postDataJSON());
       await route.fulfill({
         status: 503,
-        headers: { 'Retry-After': '7' },
+        headers: {
+          'Retry-After': '7',
+          'Access-Control-Expose-Headers': 'Retry-After',
+        },
         contentType: 'application/json',
         body: JSON.stringify({
           error: {

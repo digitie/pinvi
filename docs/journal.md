@@ -12,6 +12,8 @@
   사용한 동일 명령은 `361 passed`로 종료됐다. T-ADM-C6c 완료는 PR/CI와 N150 prod live UI E2E 뒤다.
 - push 전 감사에서 테스트 이메일 28곳의 운영 도메인을 `example.com`으로 바꾸고 API 통합 파일을
   최종 상태로 재실행해 `32 passed`를 확인했다. 금지 파일·비밀 재료·운영 식별자 추가는 0건이다.
+- PR #387 Web E2E 127 pass/1 fail을 확인했다. 실패 fixture는 `Retry-After: 7`만 주고 실제 API가
+  보장하는 CORS expose header를 빠뜨려 브라우저가 값을 읽지 못했다. mock을 실제 계약과 정렬했다.
 
 ## 2026-07-18 (codex) — T-ADM-C6c pass13 exact 404 분류
 
