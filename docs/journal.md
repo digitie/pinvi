@@ -13,6 +13,8 @@
   DB/schema/DTO/signature 변경은 없다.
 - PinVi+Map exact heads를 C6c manifest v4 source pair에 함께 결박하고 동일 리뷰어의 테스트 전 교차
   승인을 받은 뒤에만 gate와 n150 production live E2E를 실행한다.
+- source pair 추적 정본은 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와 Map
+  [PR #782](https://github.com/digitie/kor-travel-map/pull/782)다.
 
 ## 2026-07-19 (codex) — kor-travel-map T-VN-13 ETag 소비자 결선
 

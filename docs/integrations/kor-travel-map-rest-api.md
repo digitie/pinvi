@@ -141,6 +141,9 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   반드시 두 service principal 경로를 각각 사용한다. `/v1/ops/metrics`와
   `/v1/ops/health-deep`는 현재 PinVi runtime direct caller가 없으며 새 caller도 같은
   `ops:read` 계약 없이는 추가하지 않는다.
+  이 전환의 source 정본은 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와
+  kor-travel-map [PR #782](https://github.com/digitie/kor-travel-map/pull/782)의 exact head pair이며,
+  docker-manager C6c manifest v4에 동일 배포 단위로 기록한다.
   Pinvi cancellation relay는 POST 전에 운영자·`access_reason`·`request_id` intent를 감사 원장에
   commit하고 결과를 같은 `request_id`로 추가 기록한다. 응답 성공/typed 실패/network loss 모두
   canonical detail과 import-job/provider grid 목록 GET으로 재조정하며 blind POST retry는 하지 않는다.

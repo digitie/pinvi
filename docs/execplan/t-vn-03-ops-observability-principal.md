@@ -4,7 +4,9 @@
 
 kor-travel-map T-VN-03의 잔여 ops 관측 route gate보다 먼저 PinVi의 모든 실제 관측 read
 caller를 PR #387에서 도입한 `ops:read` principal에 연결한다. 관련 추적은 issue
-[#392](https://github.com/digitie/pinvi/issues/392)다.
+[#392](https://github.com/digitie/pinvi/issues/392), 구현은 PinVi
+[PR #393](https://github.com/digitie/pinvi/pull/393), 대응 Map gate는
+[kor-travel-map PR #782](https://github.com/digitie/kor-travel-map/pull/782)에서 추적한다.
 
 삭제된 legacy route, frontend BFF secret 공유, public service token fallback, legacy header
 fallback을 추가하지 않는다. 경로와 응답 DTO는 유지하고 transport credential 선택만 단일화한다.
@@ -49,8 +51,8 @@ PinVi 소비자 head를 먼저 준비하되 단독 활성화하지 않는다. �
 compatible-pair manifest v4의 exact source revision으로 고정한 동일 maintenance cutover에서만
 활성화한다.
 
-- 본 issue #392 구현 PinVi head
-- kor-travel-map T-VN-03 route-gate head
+- PinVi [PR #393](https://github.com/digitie/pinvi/pull/393) exact head
+- kor-travel-map [PR #782](https://github.com/digitie/kor-travel-map/pull/782) exact head
 - 두 source/image를 기록하고 검증하는 docker-manager C6c manifest v4 head
 
 배포 순서는 consumer image 준비 → Map gate image 준비 → v4 pair capture → 양방향 smoke → live UI다.

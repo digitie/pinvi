@@ -111,6 +111,11 @@ Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 
 | dataset/pipeline | `/v1/ops/datasets*`, `/v1/ops/pipeline/{overview,executions}`와 canonical cancellation |
 | debug | `/v1/debug/etl/*`; kor-travel-map `/v1/debug/mois-license` raw projection은 PinVi가 소비하지 않음 |
 
+T-VN-03 배포 source 정본은 PinVi
+[PR #393](https://github.com/digitie/pinvi/pull/393)와 kor-travel-map
+[PR #782](https://github.com/digitie/kor-travel-map/pull/782)의 exact head pair다. docker-manager
+C6c manifest v4에는 어느 한쪽만 기록하거나 활성화하지 않는다.
+
 `/health`·`/version`만 비버전 경로다 (구 `/debug/health`·`/debug/version`은 kor_travel_map
 T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이다. 구현과
 테스트는 OpenAPI 파일을 우선한다.
