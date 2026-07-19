@@ -14,10 +14,9 @@ archive 내부 canonical control file·고정된 환경/revision만 허용하며
 운영 1차 경로인 `kor-travel-docker-manager` compose/service가 같은 build arg를 전달하고 label을 C6c
 compatible-pair 증거에 결박해야 cross-repo gate가 완결된다. 단일 적대적 리뷰는 P0-P2 없이
 `ACCEPT FOR TESTS`를 판정했다. provenance focused unit 39개와 API 전체 unit 604개가 통과했고,
-Ruff lint/format, 신규 helper mypy strict, Bash syntax, Docker Compose v5 mapping, 실제 Docker
-production 음성/smoke 양성 label 검증도 통과했다. 전체 API mypy strict의 기존 22개 파일 47개 오류는
-이번 범위 밖 baseline이다. **다음 한 작업**은 최신 main rebase와 PR/CI 후 manager 연동 및 N150 prod
-image provenance/live UI E2E를 확인하는 것이다.
+Ruff lint/format, API mypy strict 188개 source, Bash syntax, Docker Compose v5 mapping, 실제 Docker
+production 음성/smoke 양성 label 검증도 통과했다. **다음 한 작업**은 PR/CI 후 manager 연동 및 N150
+prod image provenance/live UI E2E를 확인하는 것이다.
 
 ## 2026-07-19 (codex) — kor-travel-map T-VN-07 소비자 clean-cut 보완
 

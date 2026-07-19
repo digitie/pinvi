@@ -44,8 +44,7 @@ worktree drift/ignored 파일 배제, 로컬 Docker build의 development/product
 - 단일 적대적 리뷰: `ACCEPT FOR TESTS`, P0-P2 없음
 - provenance focused unit: 39 passed
 - API 전체 unit: 604 passed, 1 skipped
-- Ruff lint/format, 신규 Python helper mypy strict, Bash syntax: 통과
+- Ruff lint/format, API mypy strict 188개 source, Bash syntax: 통과
 - Docker Compose v5 resolved build mapping: 통과
 - 실제 Docker: production + `development` revision 거부, smoke image build와 OCI label/image ID 대조 통과
-- 전체 API mypy strict: 기존 22개 파일 47개 baseline 오류로 실패했으며 신규 helper에는 오류가 없다.
 - 남은 gate: 최신 main rebase/CI, manager 연동, N150 prod image provenance와 live UI E2E
