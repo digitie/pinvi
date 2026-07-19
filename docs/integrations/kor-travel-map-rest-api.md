@@ -124,8 +124,10 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   전달하지 않는다.** `/v1/admin/*`는 운영에서
   `X-Kor-Travel-Map-Admin-Proxy-Secret` + `X-Kor-Travel-Map-Actor`가 필요할 수 있으며,
   Pinvi admin client는 `PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET`/`..._ACTOR`로 전송한다.
-  단, canonical `/v1/ops/datasets*`·`/v1/ops/pipeline*`의 server-to-server 호출은 이
-  frontend 자격을 전송하지 않는다. GET은 `PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN`,
+  단, canonical `/v1/ops/datasets*`·`/v1/ops/pipeline*`와 관측 read
+  (`/v1/ops/consistency/*`, `/v1/ops/system-logs`, `/v1/ops/api-call-logs`)의
+  server-to-server 호출은 이 frontend 자격을 전송하지 않는다. GET은
+  `PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN`,
   canonical cancellation은 별도 `PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN`을
   `X-Kor-Travel-Map-Ops-Token`으로 보내고, 각각
   `X-Kor-Travel-Map-Ops-Scope: ops:read`와 `ops:cancel`을 보낸다. cancel token은 pipeline
@@ -136,7 +138,9 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   두 token을 모두 설정해야 하고, 각각 32자 이상, 모든 Unicode whitespace 금지, 서로 다름을
   동일하게 강제한다. production은 opt-out을 허용하지 않는다. 운영 admin base URL은 HTTP(S),
   host `127.0.0.1|host.docker.internal`, port `12701`, root path만 허용한다. cross-repo smoke는
-  반드시 두 service principal 경로를 각각 사용한다.
+  반드시 두 service principal 경로를 각각 사용한다. `/v1/ops/metrics`와
+  `/v1/ops/health-deep`는 현재 PinVi runtime direct caller가 없으며 새 caller도 같은
+  `ops:read` 계약 없이는 추가하지 않는다.
   Pinvi cancellation relay는 POST 전에 운영자·`access_reason`·`request_id` intent를 감사 원장에
   commit하고 결과를 같은 `request_id`로 추가 기록한다. 응답 성공/typed 실패/network loss 모두
   canonical detail과 import-job/provider grid 목록 GET으로 재조정하며 blind POST retry는 하지 않는다.

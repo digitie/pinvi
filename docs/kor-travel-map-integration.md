@@ -106,9 +106,10 @@ Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 
 | offline upload | `/v1/admin/offline-uploads/*` |
 | POI cache target | `/v1/admin/poi-cache-targets/*` |
 | backup/restore | `/v1/admin/backups*`, `/v1/admin/restore/*` |
-| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/health-deep` |
+| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/health-deep` — T-VN-03부터 모든 runtime read는 `ops:read`; `health-deep` direct caller는 현재 없음 |
+| ops/logs | `/v1/ops/system-logs`, `/v1/ops/api-call-logs` — `ops:read` 전용, Admin BFF/service credential fallback 없음 |
 | dataset/pipeline | `/v1/ops/datasets*`, `/v1/ops/pipeline/{overview,executions}`와 canonical cancellation |
-| debug | `/v1/debug/etl/*`, `/v1/debug/mois-license` |
+| debug | `/v1/debug/etl/*`; kor-travel-map `/v1/debug/mois-license` raw projection은 PinVi가 소비하지 않음 |
 
 `/health`·`/version`만 비버전 경로다 (구 `/debug/health`·`/debug/version`은 kor_travel_map
 T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이다. 구현과
