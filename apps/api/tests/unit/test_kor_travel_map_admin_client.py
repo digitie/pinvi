@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Callable
 from typing import Any
@@ -18,7 +19,10 @@ from app.clients.kor_travel_map import (
     KorTravelMapPreconditionFailed,
     KorTravelMapUnavailable,
 )
-from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
+from app.clients.kor_travel_map_admin import (
+    _OPS_OBSERVABILITY_READ_PATHS,
+    KorTravelMapAdminClient,
+)
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -204,15 +208,29 @@ async def test_request_id_header_is_sent_from_per_request_wrapper() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["request_id"] = request.headers.get("X-Request-Id", "")
-        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        seen["ops_token"] = request.headers.get("X-Kor-Travel-Map-Ops-Token", "")
+        seen["ops_scope"] = request.headers.get("X-Kor-Travel-Map-Ops-Scope", "")
+        seen["service_token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        seen["proxy_secret"] = request.headers.get(
+            "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
+        )
+        seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
         return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
 
-    client = _client(handler)
+    client = _client(
+        handler,
+        admin_proxy_secret="proxy-secret",
+        admin_actor="pinvi-operator",
+    )
     scoped = client.with_request_id("00000000-0000-4000-8000-000000000123")
     await scoped.list_system_logs(page_size=10)
     assert seen == {
         "request_id": "00000000-0000-4000-8000-000000000123",
-        "token": "svc-tok",
+        "ops_token": "ops-read-tok",
+        "ops_scope": "ops:read",
+        "service_token": "",
+        "proxy_secret": "",
+        "actor": "",
     }
     await client.aclose()
 
@@ -1349,10 +1367,24 @@ async def test_decide_dedup_review_patches_decision_body() -> None:
 
 
 async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
-    seen_paths: list[str] = []
+    seen: list[dict[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen_paths.append(request.url.path)
+        seen.append(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "scope": request.headers.get("X-Kor-Travel-Map-Ops-Scope", ""),
+                "ops_token": request.headers.get("X-Kor-Travel-Map-Ops-Token", ""),
+                "service_token": request.headers.get(
+                    "X-Kor-Travel-Map-Service-Token", ""
+                ),
+                "proxy_secret": request.headers.get(
+                    "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
+                ),
+                "actor": request.headers.get("X-Kor-Travel-Map-Actor", ""),
+            }
+        )
         if request.url.path.endswith("issues"):
             data = {"items": []}
         elif request.url.path.endswith("reports"):
@@ -1363,17 +1395,75 @@ async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
             data = {"items": []}
         return httpx.Response(200, json={"data": data, "meta": {"page": {"next_cursor": None}}})
 
-    client = _client(handler)
+    client = _client(
+        handler,
+        admin_proxy_secret="proxy-secret",
+        admin_actor="pinvi-operator",
+    )
     await client.list_integrity_issues(status_filter="open", severity="error", page_size=10)
     await client.list_consistency_reports(severity_max="WARN", page_size=10)
     await client.list_system_logs(level="error", source="api", q="timeout", page_size=10)
     await client.list_ops_api_call_logs(method="GET", min_status=500, path="/v1", page_size=10)
-    assert seen_paths == [
+    assert [request["path"] for request in seen] == [
         "/v1/ops/consistency/issues",
         "/v1/ops/consistency/reports",
         "/v1/ops/system-logs",
         "/v1/ops/api-call-logs",
     ]
+    assert all(request["method"] == "GET" for request in seen)
+    assert all(request["scope"] == "ops:read" for request in seen)
+    assert all(request["ops_token"] == "ops-read-tok" for request in seen)
+    assert all(request["service_token"] == "" for request in seen)
+    assert all(request["proxy_secret"] == "" for request in seen)
+    assert all(request["actor"] == "" for request in seen)
+    await client.aclose()
+
+
+def test_ops_observability_runtime_inventory_is_closed() -> None:
+    assert _OPS_OBSERVABILITY_READ_PATHS == {
+        "/v1/ops/consistency/issues",
+        "/v1/ops/consistency/reports",
+        "/v1/ops/system-logs",
+        "/v1/ops/api-call-logs",
+    }
+    client_source = inspect.getsource(KorTravelMapAdminClient)
+    assert "/v1/ops/metrics" not in client_source
+    assert "/v1/ops/health-deep" not in client_source
+
+
+async def test_ops_observability_read_never_falls_back_to_admin_credentials() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(
+            {
+                "scope": request.headers.get("X-Kor-Travel-Map-Ops-Scope", ""),
+                "ops_token": request.headers.get("X-Kor-Travel-Map-Ops-Token", ""),
+                "service_token": request.headers.get(
+                    "X-Kor-Travel-Map-Service-Token", ""
+                ),
+                "proxy_secret": request.headers.get(
+                    "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
+                ),
+                "actor": request.headers.get("X-Kor-Travel-Map-Actor", ""),
+            }
+        )
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _client(
+        handler,
+        ops_read_token="",
+        admin_proxy_secret="proxy-secret",
+        admin_actor="pinvi-operator",
+    )
+    await client.list_integrity_issues(page_size=1)
+    assert seen == {
+        "scope": "ops:read",
+        "ops_token": "",
+        "service_token": "",
+        "proxy_secret": "",
+        "actor": "",
+    }
     await client.aclose()
 
 

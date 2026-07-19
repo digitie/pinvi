@@ -6,8 +6,9 @@ PR #387의 canonical ops principal이 consistency/log client 네 메서드에는
 cross-repo blocker를 확인해 issue #392를 만들었다. exact route inventory상 PinVi runtime의
 `/v1/ops/metrics`·`health-deep` direct caller는 없다. 설계 정본은
 `docs/execplan/t-vn-03-ops-observability-principal.md`이며, 네 메서드는 `ops:read`만 전송하고
-BFF/service fallback은 두지 않는다. **다음 한 작업**은 docs-first draft PR 뒤 Map T-VN-03과
-함께 구현한 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와 Map
+BFF/service fallback은 두지 않는다. 네 direct caller는 exact 관측 registry를 거쳐
+`OpsToken`/`ops:read`만 전송하도록 구현했고, 외부 route·DTO가 그대로라 생성 artifact 변경은 없다.
+**다음 한 작업**은 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와 Map
 [PR #782](https://github.com/digitie/kor-travel-map/pull/782)의 exact head를 동일 전문 리뷰어에게
 교차 제출하는 것이다. 승인 전 테스트·lint·build는 실행하지 않는다.
 

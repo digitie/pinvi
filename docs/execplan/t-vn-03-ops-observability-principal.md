@@ -44,6 +44,8 @@ request timeline 2개로 확인했다. client 파일 수준 자동 impact는 1 s
 4. read token 누락을 admin/service credential로 보충하지 않는다. non-production의 둘 다 빈 opt-out은
    Map local-dev와 함께 쓸 때만 기존 설정 계약대로 유지하며 production은 시작 단계에서 거부한다.
 5. `/v1/ops/metrics`/`health-deep` 문자열이 runtime client에 새로 생기면 inventory gate가 실패한다.
+6. PinVi 외부 route·DTO·OpenAPI는 바뀌지 않으므로 생성 client/schema artifact는 갱신하지 않는다.
+   변경 계약은 outgoing client registry와 unit contract가 소유한다.
 
 ## 배포와 rollback
 

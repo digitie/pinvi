@@ -15,6 +15,10 @@
   승인을 받은 뒤에만 gate와 n150 production live E2E를 실행한다.
 - source pair 추적 정본은 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와 Map
   [PR #782](https://github.com/digitie/kor-travel-map/pull/782)다.
+- 네 direct caller를 닫힌 관측 read registry로 모으고 `ops:read` helper만 통과하게 했다. 계약
+  테스트는 exact method/path/token/scope, BFF/service/actor 부재, 빈 read token의 fallback 금지,
+  metrics/deep-health direct caller 부재를 고정한다. 외부 route·DTO 변화가 없어 생성 artifact는
+  갱신하지 않았으며, 전문 리뷰 승인 전이므로 테스트·lint·build는 실행하지 않았다.
 
 ## 2026-07-19 (codex) — kor-travel-map T-VN-13 ETag 소비자 결선
 
