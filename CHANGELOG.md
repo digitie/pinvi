@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Admin 무결성·일관성·system/API log 조회가 kor-travel-map frontend/service 자격을 보내지 않고
+  전용 `ops:read` principal만 사용한다. 현재 소비하지 않는 ops metrics/deep-health route는 runtime
+  client에 추가하지 않으며 exact 관측 route registry로 drift를 차단한다.
 - kor-travel-map Admin feature 수정·삭제 전에 전용 revision endpoint의 strong ETag를 읽어 exact
   `If-Match`로 전달한다. 그 사이 데이터가 바뀐 412는 `PRECONDITION_FAILED`로 보존해 최신 상태를
   다시 확인하도록 하며 stale 변경을 자동 재시도하거나 덮어쓰지 않는다.

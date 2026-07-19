@@ -5,8 +5,8 @@ Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map
 API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
 설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)과, 운영에서 kor_travel_map
 admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
-`/v1/ops/datasets*`·`/v1/ops/pipeline*`는 별도 server principal token/scope만 보내며
-frontend BFF 자격은 전송하지 않는다(T-ADM-C6c).
+`/v1/ops/datasets*`·`/v1/ops/pipeline*`와 consistency/log 관측 read는 별도 server
+principal token/scope만 보내며 frontend BFF 자격은 전송하지 않는다(T-ADM-C6c, T-VN-03).
 
 §7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
 - admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
@@ -60,6 +60,15 @@ _REQUEST_ID_HEADER = "X-Request-Id"
 _REVISION_ETAG_PATTERN = re.compile(r'^"[1-9][0-9]*"$')
 
 OpsScope = Literal["ops:read", "ops:cancel"]
+
+_OPS_OBSERVABILITY_READ_PATHS = frozenset(
+    {
+        "/v1/ops/consistency/issues",
+        "/v1/ops/consistency/reports",
+        "/v1/ops/system-logs",
+        "/v1/ops/api-call-logs",
+    }
+)
 
 _SENSITIVE_DETAIL_KEYS = frozenset(
     {
@@ -319,6 +328,18 @@ class KorTravelMapAdminClient:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
         logger.warning("kor_travel_map_admin.unavailable", extra={"path": path})
         raise last or KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path})")
+
+    async def _send_ops_observability_read(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+    ) -> httpx.Response:
+        """등록된 관측 GET만 `ops:read` principal로 보낸다."""
+
+        if path not in _OPS_OBSERVABILITY_READ_PATHS:
+            raise ValueError(f"등록되지 않은 kor-travel-map 관측 read 경로: {path}")
+        return await self._send("GET", path, params=params, ops_scope="ops:read")
 
     def _payload(
         self,
@@ -809,7 +830,12 @@ class KorTravelMapAdminClient:
             params["feature_id"] = feature_id
         if cursor:
             params["cursor"] = cursor
-        return self._payload(await self._send("GET", "/v1/ops/consistency/issues", params=params))
+        return self._payload(
+            await self._send_ops_observability_read(
+                "/v1/ops/consistency/issues",
+                params=params,
+            )
+        )
 
     async def patch_admin_issue(
         self,
@@ -840,7 +866,12 @@ class KorTravelMapAdminClient:
             params["severity_max"] = severity_max
         if cursor:
             params["cursor"] = cursor
-        return self._payload(await self._send("GET", "/v1/ops/consistency/reports", params=params))
+        return self._payload(
+            await self._send_ops_observability_read(
+                "/v1/ops/consistency/reports",
+                params=params,
+            )
+        )
 
     async def list_system_logs(
         self,
@@ -864,7 +895,12 @@ class KorTravelMapAdminClient:
             params["request_id"] = request_id
         if cursor:
             params["cursor"] = cursor
-        return self._payload(await self._send("GET", "/v1/ops/system-logs", params=params))
+        return self._payload(
+            await self._send_ops_observability_read(
+                "/v1/ops/system-logs",
+                params=params,
+            )
+        )
 
     async def list_ops_api_call_logs(
         self,
@@ -888,7 +924,12 @@ class KorTravelMapAdminClient:
             params["request_id"] = request_id
         if cursor:
             params["cursor"] = cursor
-        return self._payload(await self._send("GET", "/v1/ops/api-call-logs", params=params))
+        return self._payload(
+            await self._send_ops_observability_read(
+                "/v1/ops/api-call-logs",
+                params=params,
+            )
+        )
 
 
 def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAdminClient:

@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-19 (codex) — T-VN-03 관측 read principal docs-first
+
+- PinVi PR #387의 `_ops_headers()`와 실제 관측 read 네 메서드를 대조해, 메서드들이 일반
+  `_send()`를 사용하여 Map T-VN-03 gate 뒤 403이 되는 blocker를 확인했다.
+- issue #392와 execplan을 만들고 네 메서드를 `ops:read` token/scope 전용으로 전환하며
+  BFF/service/legacy fallback을 금지했다. `/ops/metrics`·`health-deep` runtime direct caller는
+  전체 exact 문자열 inventory에서 없으므로 새 호출 없이 부재를 계약으로 고정한다.
+- CodeGraph 직접 caller는 integrity route 2개, debug-log route 2개, request timeline 2개다.
+  DB/schema/DTO/signature 변경은 없다.
+- PinVi+Map exact heads를 C6c manifest v4 source pair에 함께 결박하고 동일 리뷰어의 테스트 전 교차
+  승인을 받은 뒤에만 gate와 n150 production live E2E를 실행한다.
+- source pair 추적 정본은 PinVi [PR #393](https://github.com/digitie/pinvi/pull/393)와 Map
+  [PR #782](https://github.com/digitie/kor-travel-map/pull/782)다.
+- 네 direct caller를 닫힌 관측 read registry로 모으고 `ops:read` helper만 통과하게 했다. 계약
+  테스트는 exact method/path/token/scope, BFF/service/actor 부재, 빈 read token의 fallback 금지,
+  metrics/deep-health direct caller 부재를 고정한다. 외부 route·DTO 변화가 없어 생성 artifact는
+  갱신하지 않았으며, 전문 리뷰 승인 전이므로 테스트·lint·build는 실행하지 않았다.
+
 ## 2026-07-19 (codex) — kor-travel-map T-VN-13 ETag 소비자 결선
 
 - Agent A PR #772을 전문 리뷰어 1명이 테스트 전에 적대적으로 검토해 PinVi Admin의 feature

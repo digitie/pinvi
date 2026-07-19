@@ -21,6 +21,14 @@
 
 ## kor-travel-map admin ops 계약 복구
 
+- [ ] **T-VN-03-P / issue #392** — 잔여 관측 read
+  (`consistency/{issues,reports}`, `system-logs`, `api-call-logs`)를 PR #387의
+  `ops:read` principal로 결선한다. `/ops/metrics`·`health-deep` direct caller는 부재를 고정하고
+  새 caller를 만들지 않는다. PinVi [PR #393](https://github.com/digitie/pinvi/pull/393) head와
+  Map [PR #782](https://github.com/digitie/kor-travel-map/pull/782) head는 C6c manifest v4 exact
+  pair source에 포함해 동일 배포 단위로 전환한다. 설계는
+  [`docs/execplan/t-vn-03-ops-observability-principal.md`](execplan/t-vn-03-ops-observability-principal.md).
+
 - [ ] **T-ADM-C6c** — PR #724 이후 삭제된
   `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*` 호출을 제거하고,
   `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·canonical cancellation으로
