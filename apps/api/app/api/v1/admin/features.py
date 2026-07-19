@@ -17,6 +17,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
     KorTravelMapHttpClientDep,
+    KorTravelMapPreconditionFailed,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
@@ -84,6 +85,14 @@ def _map_admin_errors() -> Iterator[None]:
             detail={
                 "code": exc.code or "INVALID_STATE",
                 "message": "kor_travel_map change request 상태가 현재 작업을 허용하지 않습니다.",
+            },
+        ) from exc
+    except KorTravelMapPreconditionFailed as exc:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail={
+                "code": exc.code or "PRECONDITION_FAILED",
+                "message": "feature가 변경되었습니다. 최신 정보를 확인한 뒤 다시 시도하세요.",
             },
         ) from exc
     except KorTravelMapUnavailable as exc:

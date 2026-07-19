@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- kor-travel-map Admin feature 수정·삭제 전에 전용 revision endpoint의 strong ETag를 읽어 exact
+  `If-Match`로 전달한다. 그 사이 데이터가 바뀐 412는 `PRECONDITION_FAILED`로 보존해 최신 상태를
+  다시 확인하도록 하며 stale 변경을 자동 재시도하거나 덮어쓰지 않는다.
 - kor-travel-map에서 제거된 해수욕장 `include_quality`·`include_forecast` no-op query를
   PinVi 공개 route와 Python/TypeScript client에서도 제거했다. vendored OpenAPI와 계약 게이트가
   공개 해수욕장 query shape까지 대조해 같은 소비자 drift가 재발하지 않게 한다.

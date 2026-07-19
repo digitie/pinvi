@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.clients.kor_travel_map import (
     KorTravelMapConflict,
     KorTravelMapFeatureNotFound,
+    KorTravelMapPreconditionFailed,
     KorTravelMapUnavailable,
     get_kor_travel_map_client,
 )
@@ -142,7 +143,13 @@ def _detail() -> dict[str, Any]:
 
 
 class _FakeAdminClient:
-    def __init__(self, *, not_found: bool = False, approve_conflict: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        not_found: bool = False,
+        approve_conflict: bool = False,
+        approve_precondition: bool = False,
+    ) -> None:
         self.list_kwargs: dict[str, Any] | None = None
         self.detail_id: str | None = None
         self.change_request_kwargs: dict[str, Any] | None = None
@@ -150,6 +157,7 @@ class _FakeAdminClient:
         self.rejected: dict[str, str | None] | None = None
         self.not_found = not_found
         self.approve_conflict = approve_conflict
+        self.approve_precondition = approve_precondition
 
     async def list_features(self, **kwargs: Any) -> dict[str, Any]:
         self.list_kwargs = kwargs
@@ -191,6 +199,11 @@ class _FakeAdminClient:
     ) -> dict[str, Any]:
         if self.approve_conflict:
             raise KorTravelMapConflict("already reviewed", code="INVALID_STATE")
+        if self.approve_precondition:
+            raise KorTravelMapPreconditionFailed(
+                "stale feature",
+                code="PRECONDITION_FAILED",
+            )
         self.approved = {"request_id": request_id, "operator": operator, "reason": reason}
         return {
             "request_id": request_id,
@@ -567,6 +580,32 @@ async def test_change_request_conflict_maps_409_without_audit(
 
     assert resp.status_code == 409
     assert resp.json()["error"]["code"] == "INVALID_STATE"
+    async with session_factory() as db:
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.approve")
+        )
+    assert audit is None
+
+
+async def test_change_request_stale_revision_maps_412_without_audit(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-stale@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeAdminClient(approve_precondition=True)
+    _override(fake)
+    try:
+        resp = await client.post(
+            "/admin/features/change-requests/krq-stale/approve",
+            json={"access_reason": "stale 승인 시도"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 412
+    assert resp.json()["error"]["code"] == "PRECONDITION_FAILED"
     async with session_factory() as db:
         audit = await db.scalar(
             select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.approve")

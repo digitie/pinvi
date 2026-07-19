@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-19 (codex) — kor-travel-map T-VN-13 ETag 소비자 결선
+
+- Agent A PR #772을 전문 리뷰어 1명이 테스트 전에 적대적으로 검토해 PinVi Admin의 feature
+  PATCH/DELETE가 새 필수 `If-Match` 계약을 소비하지 않는 문제와 upstream 412 손실을 확인했다.
+- Admin client는 안정된 revision endpoint를 먼저 조회하고 raw strong ETag를 PATCH/DELETE에
+  그대로 전달한다. malformed/missing ETag는 fail-closed하며 upstream 412는
+  `KorTravelMapPreconditionFailed`로 분류한다.
+- PinVi Admin feature/change-request API는 이 오류를 HTTP 412 `PRECONDITION_FAILED`로 보존해
+  운영자가 최신 상태를 새로고침하고 재검토할 수 있게 한다. 자동 재시도나 stale overwrite는 하지 않는다.
+- 리뷰 후 Admin client 단위 110건, focused ETag/412 단위 4건, change-request 412/no-audit 통합
+  1건과 Ruff·strict mypy 188개 소스를 통과했다.
+
+
 ## 2026-07-19 (codex) — kor-travel-map PR #748 소비자 clean-cut 후속
 
 - Agent A PR #748을 전문 리뷰어 1명이 적대적으로 검토해, 서버에서 제거한 beach

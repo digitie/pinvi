@@ -15,6 +15,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
+    KorTravelMapPreconditionFailed,
     KorTravelMapUnavailable,
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
@@ -323,17 +324,24 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
 
 
 async def test_patch_feature_targets_feature_id() -> None:
-    seen: dict[str, str] = {}
+    seen: list[tuple[str, str, str | None]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["method"] = request.method
-        seen["path"] = request.url.path
+        seen.append((request.method, request.url.path, request.headers.get("If-Match")))
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                headers={"ETag": '"7"'},
+                json={"data": {"feature_id": "f_abc", "row_revision": 7}},
+            )
         return httpx.Response(200, json=_change_response(action="update"))
 
     client = _client(handler)
     record = await client.patch_feature("f_abc", {"name": "수정", "reason": "correction"})
-    assert seen["method"] == "PATCH"
-    assert seen["path"] == "/v1/admin/features/f_abc"
+    assert seen == [
+        ("GET", "/v1/admin/features/f_abc/revision", None),
+        ("PATCH", "/v1/admin/features/f_abc", '"7"'),
+    ]
     assert record["action"] == "update"
     await client.aclose()
 
@@ -342,9 +350,16 @@ async def test_delete_feature_sends_reason_and_operator_body() -> None:
     seen: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                headers={"ETag": '"9"'},
+                json={"data": {"feature_id": "f_abc", "row_revision": 9}},
+            )
         seen["method"] = request.method
         seen["path"] = request.url.path
         seen["body"] = json.loads(request.content)
+        seen["if_match"] = request.headers.get("If-Match")
         return httpx.Response(200, json=_change_response(action="delete"))
 
     client = _client(handler)
@@ -352,7 +367,21 @@ async def test_delete_feature_sends_reason_and_operator_body() -> None:
     assert seen["method"] == "DELETE"
     assert seen["path"] == "/v1/admin/features/f_abc"
     assert seen["body"] == {"reason": "영구 폐업", "operator": "tm-admin"}
+    assert seen["if_match"] == '"9"'
     assert record["action"] == "delete"
+    await client.aclose()
+
+
+async def test_patch_feature_rejects_revision_response_without_canonical_etag() -> None:
+    client = _client(
+        lambda _request: httpx.Response(
+            200,
+            headers={"ETag": "7"},
+            json={"data": {"feature_id": "f_abc", "row_revision": 7}},
+        )
+    )
+    with pytest.raises(KorTravelMapError, match="canonical ETag"):
+        await client.patch_feature("f_abc", {"reason": "correction"})
     await client.aclose()
 
 
@@ -452,6 +481,19 @@ async def test_409_lock_busy_keeps_conflict_code_and_retry_after() -> None:
         await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
     assert exc_info.value.code == "LOCK_BUSY"
     assert exc_info.value.retry_after_seconds == 11
+    await client.aclose()
+
+
+async def test_412_maps_to_precondition_failed() -> None:
+    client = _client(
+        lambda _request: httpx.Response(
+            412,
+            json={"code": "PRECONDITION_FAILED", "status": 412},
+        )
+    )
+    with pytest.raises(KorTravelMapPreconditionFailed) as exc_info:
+        await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
+    assert exc_info.value.code == "PRECONDITION_FAILED"
     await client.aclose()
 
 

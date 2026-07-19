@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-07-19 (codex) — kor-travel-map T-VN-13 ETag 소비자 결선
+
+PR #772의 단일 전문 리뷰 결과에 따라 Admin feature PATCH/DELETE가 먼저
+`/v1/admin/features/{feature_id}/revision`을 조회하고 raw ETag를 exact `If-Match`로 전달하도록
+수정했다. upstream 412는 PinVi API에서도 412 `PRECONDITION_FAILED`로 보존하며 자동 재시도하지
+않는다. **다음 한 작업**은 API gate·보안 감사를 통과시킨 소비자 PR을 main에 먼저 머지하고,
+kor-travel-map PR #772를 `integration/t-vn`에 머지하는 것이다.
+
+
 ## 2026-07-19 (codex) — T-ADM-C7P API image provenance 머지 완료
 
 C7 적대적 리뷰에서 PinVi API immutable image ID와 실제 source commit 사이에 검증 가능한 결박이
