@@ -61,18 +61,8 @@ class _FakeKorTravelMapPublicClient:
             ],
         }
 
-    async def get_public_beach(
-        self,
-        feature_id: str,
-        *,
-        include_quality: bool = False,
-        include_forecast: bool = False,
-    ) -> dict[str, Any] | None:
-        self.calls["beach_detail"] = {
-            "feature_id": feature_id,
-            "include_quality": include_quality,
-            "include_forecast": include_forecast,
-        }
+    async def get_public_beach(self, feature_id: str) -> dict[str, Any] | None:
+        self.calls["beach_detail"] = {"feature_id": feature_id}
         if feature_id == "missing":
             return None
         return {
@@ -155,7 +145,6 @@ async def test_public_beaches_is_unauthenticated_and_maps_meta(client: Any) -> N
     try:
         resp = await client.get(
             "/public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=20"
-            "&include_quality=true&include_forecast=true"
         )
     finally:
         _clear()
@@ -174,7 +163,18 @@ async def test_public_beaches_is_unauthenticated_and_maps_meta(client: Any) -> N
         "version": None,
     }
     assert fake.calls["beaches"]["q"] == "광안리"
-    assert fake.calls["beaches"]["include_quality"] is True
+    assert "include_quality" not in fake.calls["beaches"]
+    assert "include_forecast" not in fake.calls["beaches"]
+
+
+async def test_public_beach_openapi_omits_removed_noop_parameters(client: Any) -> None:
+    spec = app.openapi()
+    for path in ("/public/beaches", "/public/beaches/{feature_id}"):
+        parameter_names = {
+            parameter["name"] for parameter in spec["paths"][path]["get"].get("parameters", [])
+        }
+        assert "include_quality" not in parameter_names
+        assert "include_forecast" not in parameter_names
 
 
 async def test_public_markers_validate_bbox_and_map_items(client: Any) -> None:

@@ -39,6 +39,18 @@ _CLIENT_PATHS = [
     # 쓴다(ADR-049 — kor_travel_map PR #533이 public `*-copy` 표면을 폐지). user-contract gate 범위 밖.
 ]
 
+_CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
+    "/v1/public/beaches": {
+        "sido_code",
+        "sigungu_code",
+        "q",
+        "page_size",
+        "cursor",
+        "key",
+    },
+    "/v1/public/beaches/{feature_id}": {"key"},
+}
+
 # 매핑(`features.py _*_from_kor_travel_map`)이 읽는 응답 필드 — 스키마별 필수 존재.
 _SCHEMA_FIELDS: dict[str, set[str]] = {
     "FeatureSummary": {
@@ -135,6 +147,24 @@ def test_client_paths_exist_in_snapshot() -> None:
     )
 
 
+def _query_parameter_names(spec: dict[str, Any], path: str) -> set[str]:
+    parameters = spec["paths"][path]["get"].get("parameters", [])
+    return {parameter["name"] for parameter in parameters if parameter.get("in") == "query"}
+
+
+def test_client_query_parameters_match_snapshot() -> None:
+    spec = _spec()
+    problems = {
+        path: {
+            "expected": sorted(expected),
+            "actual": sorted(_query_parameter_names(spec, path)),
+        }
+        for path, expected in _CLIENT_QUERY_PARAMETERS.items()
+        if _query_parameter_names(spec, path) != expected
+    }
+    assert not problems, f"client query 계약이 스냅샷과 다름(드리프트): {problems}"
+
+
 def test_mapped_response_fields_exist_in_snapshot() -> None:
     schemas = _spec()["components"]["schemas"]
     problems: list[str] = []
@@ -170,11 +200,18 @@ def _live_spec_path() -> Path | None:
     _live_spec_path() is None, reason="kor_travel_map repo 미존재(CI/타 환경) — 핀 신선도 검사 생략"
 )
 def test_vendored_snapshot_matches_live_kor_travel_map() -> None:
-    """로컬 전용: vendored 스냅샷 경로 집합이 kor_travel_map live와 같은지(핀 신선도). CI에서는 skip."""
+    """로컬 전용: vendored beach query가 kor_travel_map live와 같은지 확인."""
     live_path = _live_spec_path()
     assert live_path is not None
     live = json.loads(live_path.read_text(encoding="utf-8"))
-    assert set(live["paths"]) == set(_spec()["paths"]), (
-        "vendored 스냅샷 경로가 kor_travel_map live와 다름 — 스냅샷 갱신 필요"
-        " (cp openapi.user.json → tests/contract/kor-travel-map-openapi-user.json)"
+    query_problems = {
+        path: {
+            "snapshot": sorted(_query_parameter_names(_spec(), path)),
+            "live": sorted(_query_parameter_names(live, path)),
+        }
+        for path in _CLIENT_QUERY_PARAMETERS
+        if _query_parameter_names(_spec(), path) != _query_parameter_names(live, path)
+    }
+    assert not query_problems, (
+        f"vendored 스냅샷 query parameter가 kor_travel_map live와 다름: {query_problems}"
     )

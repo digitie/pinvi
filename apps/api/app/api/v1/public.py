@@ -125,8 +125,6 @@ async def list_public_beaches(
     q: Annotated[str | None, Query(max_length=100)] = None,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[str | None, Query()] = None,
-    include_quality: Annotated[bool, Query()] = False,
-    include_forecast: Annotated[bool, Query()] = False,
 ) -> EnvelopeWithMeta[PublicBeachList]:
     """공개 해수욕장 목록."""
     with _map_kor_travel_map_errors():
@@ -136,8 +134,6 @@ async def list_public_beaches(
             q=q,
             page_size=page_size,
             cursor=cursor,
-            include_quality=include_quality,
-            include_forecast=include_forecast,
         )
     _set_public_cache(response)
     return EnvelopeWithMeta.of(
@@ -185,14 +181,10 @@ async def get_public_beach(
     response: Response,
     client: KorTravelMapHttpClientDep,
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
-    include_quality: Annotated[bool, Query()] = False,
-    include_forecast: Annotated[bool, Query()] = False,
 ) -> Envelope[PublicBeachView]:
     """공개 해수욕장 상세."""
     with _map_kor_travel_map_errors():
-        data = await client.get_public_beach(
-            feature_id, include_quality=include_quality, include_forecast=include_forecast
-        )
+        data = await client.get_public_beach(feature_id)
     if data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -395,14 +395,9 @@ class KorTravelMapClient:
         q: str | None = None,
         page_size: int | None = None,
         cursor: str | None = None,
-        include_quality: bool = False,
-        include_forecast: bool = False,
     ) -> dict[str, Any]:
         """공개 해수욕장 목록. data = {items} + threaded next_cursor/total."""
-        params: dict[str, Any] = {
-            "include_quality": include_quality,
-            "include_forecast": include_forecast,
-        }
+        params: dict[str, Any] = {}
         if sido_code is not None:
             params["sido_code"] = sido_code
         if sigungu_code is not None:
@@ -442,19 +437,9 @@ class KorTravelMapClient:
                 params[key] = value
         return self._data(await self._send("GET", "/v1/public/beaches/map-markers", params=params))
 
-    async def get_public_beach(
-        self,
-        feature_id: str,
-        *,
-        include_quality: bool = False,
-        include_forecast: bool = False,
-    ) -> dict[str, Any] | None:
+    async def get_public_beach(self, feature_id: str) -> dict[str, Any] | None:
         """공개 해수욕장 상세. 404 → None."""
-        resp = await self._send(
-            "GET",
-            f"/v1/public/beaches/{feature_id}",
-            params={"include_quality": include_quality, "include_forecast": include_forecast},
-        )
+        resp = await self._send("GET", f"/v1/public/beaches/{feature_id}")
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)

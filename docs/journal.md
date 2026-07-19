@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-19 (codex) — kor-travel-map PR #748 소비자 clean-cut 후속
+
+- Agent A PR #748을 전문 리뷰어 1명이 적대적으로 검토해, 서버에서 제거한 beach
+  `include_quality`/`include_forecast` no-op query가 PinVi route·Python/TS client와
+  vendored OpenAPI에 남아 모든 목록 호출이 새 계약 밖 query를 전송하는 S2를 확인했다.
+- 공개 route와 양 client에서 두 옵션을 제거하고, vendored OpenAPI의 beach operation만
+  최신 `integration/t-vn` query shape로 동기화했다. 계약 테스트는 path 집합뿐 아니라
+  beach query parameter exact shape와 sibling live spec의 소비 query shape도 대조하도록
+  강화했다.
+- 같은 리뷰어의 후속 검토에서 scoped snapshot과 전체 path freshness assertion의 충돌,
+  상세 client wire assertion 누락을 수정한 뒤 승인받았다. 관련 Python 테스트 31개,
+  Ruff lint/format, mypy 188개 소스, API client typecheck, JSON 검증을 통과했다.
+
 ## 2026-07-18 (codex) — T-ADM-C6c 최종 리뷰·로컬 gate
 
 - 사용자 지시에 따라 최종 기능 diff는 단일 적대적 리뷰어가 검토했고 blocker 없이 승인했다.
