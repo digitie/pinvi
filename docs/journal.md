@@ -15,6 +15,25 @@
   상세 client wire assertion 누락을 수정한 뒤 승인받았다. 관련 Python 테스트 31개,
   Ruff lint/format, mypy 188개 소스, API client typecheck, JSON 검증을 통과했다.
 
+## 2026-07-19 (codex) — T-ADM-C7P API image provenance
+
+- C7 운영 증거가 임의의 PinVi source commit을 image ID에 대응시킬 수 있던 차단점을 별도 task로
+  분리하고, 구현 전 `docs/tasks.md`와 execplan에 source·build·label 계약을 고정했다.
+- `apps/api/Dockerfile`은 `development` 로컬 기본값을 유지하되 staging/production에서 exact 40자리
+  소문자 revision만 허용하고 OCI 표준 revision label을 기록한다.
+- PinVi compose/wrapper는 immutable build의 worktree root·clean 상태·`HEAD`/요청 arg 일치를 확인하고,
+  build·pull·migration·up·smoke에서 실제 image label을 다시 확인한다.
+- 적대 리뷰의 TOCTOU 지적에 따라 immutable build context를 exact commit `git archive`로 교체했다.
+  ignored/untracked 파일과 symlink control path를 배제하고 최초 환경/revision을 고정한다. tag 검증 뒤
+  canonical image ID를 pin해 기동 container와 대조하며, 불일치한 API/Web은 제거한다.
+- 운영 entry의 smoke 기본값 fail-open을 막아 mutation 명령은 명시적 staging/production에서만 진행한다.
+- 운영 정본 `ktdctl`의 compose/service는 별도 docker-manager 저장소 소유이므로 같은 arg 전달과 C6c
+  pair 증거 결박을 cross-repo 후속으로 명시했다. 단일 적대적 리뷰 전에는 테스트를 실행하지 않는다.
+- 단일 적대적 리뷰는 P0-P2 없이 `ACCEPT FOR TESTS`를 판정했다. 이후 provenance focused unit 39개,
+  API 전체 unit 604개, Ruff lint/format, 신규 helper mypy strict, Bash syntax, Compose v5 mapping과 실제
+  Docker production 음성/smoke 양성 label 검증을 통과했다. 전체 API mypy의 기존 47개 오류는 별도
+  baseline으로 남겼다.
+
 ## 2026-07-18 (codex) — T-ADM-C6c 최종 리뷰·로컬 gate
 
 - 사용자 지시에 따라 최종 기능 diff는 단일 적대적 리뷰어가 검토했고 blocker 없이 승인했다.

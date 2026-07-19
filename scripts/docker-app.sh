@@ -65,6 +65,10 @@ compose() {
   fi
 }
 
+# compose()가 env file까지 해석한 뒤 source revision을 확정해야 한다.
+# shellcheck source=scripts/api-image-provenance.sh
+source "$ROOT_DIR/scripts/api-image-provenance.sh"
+
 free_host_port() {
   local port="$1"
   local docker_ids pids
@@ -118,8 +122,18 @@ wait_for_url() {
 
 build() {
   require_docker
+  require_python
+  pinvi_prepare_api_image_provenance
   log "building app-api and app-web"
   compose build app-api app-web
+  pinvi_verify_api_image_provenance
+}
+
+require_python() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 not found" >&2
+    exit 127
+  fi
 }
 
 up_deps() {
@@ -130,6 +144,8 @@ up_deps() {
 
 migrate() {
   require_docker
+  require_python
+  pinvi_verify_api_image_provenance
   local attempt
   for attempt in 1 2 3 4 5; do
     log "running Alembic upgrade head (attempt ${attempt}/5)"
@@ -144,11 +160,14 @@ migrate() {
 
 up() {
   require_docker
+  require_python
+  pinvi_verify_api_image_provenance
   free_app_ports
   up_deps
   migrate
   log "starting API + Web"
   compose up -d app-api app-web
+  pinvi_verify_or_remove_running_app
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
@@ -189,7 +208,7 @@ smoke() {
       reset
     fi
   }
-  trap cleanup_smoke EXIT
+  trap 'cleanup_smoke; pinvi_cleanup_api_build_context' EXIT
 
   reset
   build
@@ -213,6 +232,7 @@ smoke() {
 
 main() {
   cd "$ROOT_DIR"
+  trap pinvi_cleanup_api_build_context EXIT
   local command="${1:-}"
   [[ -n "$command" ]] || { usage; exit 2; }
   shift || true
@@ -229,6 +249,8 @@ main() {
     help|-h|--help) usage ;;
     *) echo "unknown command: $command" >&2; usage; exit 2 ;;
   esac
+  pinvi_cleanup_api_build_context
+  trap - EXIT
 }
 
 main "$@"

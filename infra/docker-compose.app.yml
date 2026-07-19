@@ -47,8 +47,14 @@ services:
 
   app-api:
     build:
-      context: ..
+      # immutable 환경의 wrapper는 exact commit `git archive` 임시 디렉터리로 override한다.
+      context: ${PINVI_API_BUILD_CONTEXT:-..}
       dockerfile: apps/api/Dockerfile
+      args:
+        # wrapper는 immutable 환경에서 clean HEAD를 PINVI_SOURCE_REVISION으로 export한다.
+        # 직접 compose build를 실행해도 production + 누락/development 조합은 Dockerfile이 거부한다.
+        - PINVI_SOURCE_REVISION
+        - PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}
     image: ${PINVI_API_IMAGE:-pinvi-api:local}
     extra_hosts:
       - "host.docker.internal:host-gateway"

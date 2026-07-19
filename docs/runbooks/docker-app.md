@@ -103,6 +103,24 @@ scripts/docker-app.sh down
 scripts/docker-app.sh reset   # down -v --remove-orphans
 ```
 
+`scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
+확인한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
+허용한다. exact commit을 지정하면 환경과 무관하게 clean worktree의 `HEAD`와 같아야 한다.
+`staging|production`은 wrapper가 clean `HEAD`를 자동 주입하며, wrapper를 우회한 직접 Compose
+build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
+build context는 exact commit `git archive` 임시 디렉터리이며 live worktree와 ignored/untracked 파일을
+읽지 않는다. Dockerfile·Compose·검증 helper는 archive 내부 regular file만 허용하고 symlink를
+거부하며, preflight에서 확정한 환경/revision은 env-file이 바뀌어도 유지한다. build 뒤 tag는 검증된
+image ID로 pin되고 기동 container ID까지 다시 대조한다. 불일치한 API/Web container는 제거한다.
+
+```bash
+# 로컬 개발 기본값
+scripts/docker-app.sh build
+
+# 재현 가능한 immutable build. 현재 worktree가 clean이고 HEAD와 같아야 한다.
+PINVI_SOURCE_REVISION="$(git rev-parse --verify HEAD^{commit})" scripts/docker-app.sh build
+```
+
 기본 URL:
 
 | 서비스         | URL                      |

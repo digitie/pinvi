@@ -19,6 +19,7 @@ usage() {
   cat <<'EOF'
 Usage:
   scripts/deploy-node.sh deploy
+  scripts/deploy-node.sh build
   scripts/deploy-node.sh pull
   scripts/deploy-node.sh migrate
   scripts/deploy-node.sh up
@@ -27,8 +28,8 @@ Usage:
   scripts/deploy-node.sh status
 
 Required on production nodes:
-  PINVI_API_IMAGE=ghcr.io/<owner>/pinvi-api:<tag>
-  PINVI_WEB_IMAGE=ghcr.io/<owner>/pinvi-web:<tag>
+  PINVI_API_IMAGE=pinvi-api:latest-main
+  PINVI_WEB_IMAGE=pinvi-web:latest-main
   PINVI_ENVIRONMENT=production
   PINVI_RATE_LIMIT_BACKEND=postgres
 
@@ -59,19 +60,38 @@ compose() {
   fi
 }
 
+# compose()가 env file까지 해석한 뒤 source revision을 확정해야 한다.
+# shellcheck source=scripts/api-image-provenance.sh
+source "$ROOT_DIR/scripts/api-image-provenance.sh"
+
 preflight() {
   require_command docker
   require_command curl
+  require_command git
+  require_command python3
   docker compose version >/dev/null
   [[ -f "$COMPOSE_FILE" ]] || { echo "compose file missing: $COMPOSE_FILE" >&2; exit 2; }
 }
 
 pull_images() {
+  pinvi_prepare_api_image_provenance
   log "pulling app images"
   compose pull app-api app-web
+  pinvi_verify_api_image_provenance
+}
+
+build_images() {
+  pinvi_prepare_api_image_provenance
+  log "building app images from the attested source revision"
+  compose build app-api app-web
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    compose --profile etl build app-dagster
+  fi
+  pinvi_verify_api_image_provenance
 }
 
 migrate() {
+  pinvi_verify_api_image_provenance
   log "starting database dependencies"
   compose up -d app-postgres app-rustfs app-rustfs-init
   log "running Pinvi Alembic migration"
@@ -79,8 +99,10 @@ migrate() {
 }
 
 up() {
+  pinvi_verify_api_image_provenance
   log "starting API + Web"
   compose up -d app-api app-web
+  pinvi_verify_or_remove_running_app
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then
     dagster_up
   fi
@@ -106,6 +128,8 @@ wait_for_url() {
 }
 
 smoke() {
+  pinvi_verify_api_image_provenance
+  pinvi_verify_or_remove_running_app
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB"
@@ -121,7 +145,7 @@ status() {
 }
 
 deploy() {
-  pull_images
+  build_images
   migrate
   up
   smoke
@@ -130,8 +154,15 @@ deploy() {
 
 main() {
   cd "$ROOT_DIR"
+  trap pinvi_cleanup_api_build_context EXIT
   preflight
   case "${1:-}" in
+    deploy|build|pull|migrate|up|dagster|smoke)
+      pinvi_prepare_api_image_provenance require-immutable
+      ;;
+  esac
+  case "${1:-}" in
+    build) build_images ;;
     pull) pull_images ;;
     migrate) migrate ;;
     up) up ;;
@@ -142,6 +173,8 @@ main() {
     help|-h|--help) usage ;;
     *) usage; exit 2 ;;
   esac
+  pinvi_cleanup_api_build_context
+  trap - EXIT
 }
 
 main "$@"
