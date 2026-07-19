@@ -97,6 +97,14 @@ class KorTravelMapConflict(KorTravelMapError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class KorTravelMapPreconditionFailed(KorTravelMapError):
+    """412 stale resource revision — 최신 snapshot 재조회 후 재시도 대상."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class KorTravelMapRateLimited(KorTravelMapError):
     """429 RATE_LIMITED / 409 LOCK_BUSY — Retry-After 존중."""
 

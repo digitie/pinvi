@@ -285,8 +285,15 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 | 비활성 | `POST /admin/features/{feature_id}/deactivate` | `AdminFeatureDeactivateRequest` | — |
 | 검수 큐 | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason) | 〃 |
 
+- **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
+  `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
+  변형하지 않은 채 PATCH/DELETE의 단일 `If-Match` 헤더로 전달한다. 누락은 `428`, malformed는
+  `422`, 제출 뒤 provider/user write가 끼어든 stale revision은 `412 PRECONDITION_FAILED`다.
+  `412`를 자동 재시도하거나 마지막 write wins로 바꾸지 않고, 최신 feature를 다시 읽은 뒤 운영자가
+  변경을 재검토·재제출하게 한다. change-request approve는 제출 당시 kor_travel_map이 저장한
+  `base_row_revision`을 사용하므로 Pinvi가 별도 `If-Match`를 보내지 않는다.
 - **응답 `data.request`(AdminFeatureChangeRequestRecord)**: `feature_id, request_id, action,
-  state, review_mode, payload, applied_at, reviewed_at/by, created_at`. → Pinvi는
+  state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, created_at`. → Pinvi는
   `feature_id`+`request_id`를 `feature_suggestions` row에 저장하고 state로 확정 추적.
 - **review_mode(kor_travel_map 설정 `KOR_TRAVEL_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`, 기본 `require_review`)**:
   `require_review`=`ops.feature_change_requests`에 pending → kor_travel_map 운영자 approve 후 적용.

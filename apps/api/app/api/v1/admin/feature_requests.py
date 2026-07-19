@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapFeatureNotFound,
+    KorTravelMapPreconditionFailed,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
@@ -92,6 +93,14 @@ def _map_admin_errors() -> Iterator[None]:
                 "message": "kor_travel_map 요청이 많아 잠시 후 다시 시도하세요.",
             },
             headers=headers,
+        ) from exc
+    except KorTravelMapPreconditionFailed as exc:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail={
+                "code": exc.code or "PRECONDITION_FAILED",
+                "message": "feature가 변경되었습니다. 최신 정보를 확인한 뒤 다시 시도하세요.",
+            },
         ) from exc
     except KorTravelMapBadRequest as exc:
         raise HTTPException(

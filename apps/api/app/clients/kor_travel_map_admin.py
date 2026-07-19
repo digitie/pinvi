@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, cast
@@ -34,6 +35,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
+    KorTravelMapPreconditionFailed,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
     _error_code,
@@ -55,6 +57,7 @@ _ADMIN_ACTOR_HEADER = "X-Kor-Travel-Map-Actor"
 _OPS_TOKEN_HEADER = "X-Kor-Travel-Map-Ops-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 _OPS_SCOPE_HEADER = "X-Kor-Travel-Map-Ops-Scope"
 _REQUEST_ID_HEADER = "X-Request-Id"
+_REVISION_ETAG_PATTERN = re.compile(r'^"[1-9][0-9]*"$')
 
 OpsScope = Literal["ops:read", "ops:cancel"]
 
@@ -279,6 +282,7 @@ class KorTravelMapAdminClient:
         *,
         json: Any | None = None,
         params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
         ops_scope: OpsScope | None = None,
         retry_transient: bool = True,
     ) -> httpx.Response:
@@ -287,14 +291,19 @@ class KorTravelMapAdminClient:
         max_attempts = self._max_attempts if retry_transient else 1
         for attempt in range(max_attempts):
             try:
+                request_headers = (
+                    self._ops_headers(ops_scope)
+                    if ops_scope is not None
+                    else self._headers()
+                )
+                if headers is not None:
+                    request_headers.update(headers)
                 resp = await self._http.request(
                     method,
                     path,
                     json=json,
                     params=params,
-                    headers=(
-                        self._ops_headers(ops_scope) if ops_scope is not None else self._headers()
-                    ),
+                    headers=request_headers,
                     extensions=self._extensions(),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
@@ -350,6 +359,11 @@ class KorTravelMapAdminClient:
                 code=error_code,
                 details=_cancellation_problem_details(resp),
                 retry_after_seconds=_retry_after(resp),
+            )
+        if sc == status.HTTP_412_PRECONDITION_FAILED:
+            raise KorTravelMapPreconditionFailed(
+                f"kor-travel-map admin {sc}",
+                code=error_code,
             )
         if sc == status.HTTP_429_TOO_MANY_REQUESTS:
             raise KorTravelMapRateLimited(
@@ -459,6 +473,15 @@ class KorTravelMapAdminClient:
         """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
         return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
 
+    async def _feature_revision_etag(self, feature_id: str) -> str:
+        """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
+        resp = await self._send("GET", f"/v1/admin/features/{feature_id}/revision")
+        self._data(resp)
+        entity_tag = cast(str | None, resp.headers.get("ETag"))
+        if entity_tag is None or _REVISION_ETAG_PATTERN.fullmatch(entity_tag) is None:
+            raise KorTravelMapError("admin feature revision 응답에 canonical ETag가 없습니다.")
+        return entity_tag
+
     def _change_record(self, resp: httpx.Response) -> dict[str, Any]:
         """feature change 응답에서 `data.request`(AdminFeatureChangeRequestRecord) 추출.
 
@@ -481,8 +504,14 @@ class KorTravelMapAdminClient:
 
     async def patch_feature(self, feature_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """PATCH /v1/admin/features/{id} — 정보 수정(correction). `reason` 필수."""
+        entity_tag = await self._feature_revision_etag(feature_id)
         return self._change_record(
-            await self._send("PATCH", f"/v1/admin/features/{feature_id}", json=dict(payload))
+            await self._send(
+                "PATCH",
+                f"/v1/admin/features/{feature_id}",
+                json=dict(payload),
+                headers={"If-Match": entity_tag},
+            )
         )
 
     async def delete_feature(
@@ -492,8 +521,14 @@ class KorTravelMapAdminClient:
         body: dict[str, Any] = {"reason": reason}
         if operator is not None:
             body["operator"] = operator
+        entity_tag = await self._feature_revision_etag(feature_id)
         return self._change_record(
-            await self._send("DELETE", f"/v1/admin/features/{feature_id}", json=body)
+            await self._send(
+                "DELETE",
+                f"/v1/admin/features/{feature_id}",
+                json=body,
+                headers={"If-Match": entity_tag},
+            )
         )
 
     # ── change-requests 큐 (kor_travel_map 운영자 검수 추적) ───────────────────────
