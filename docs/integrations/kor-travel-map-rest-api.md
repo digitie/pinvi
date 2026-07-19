@@ -516,13 +516,15 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
   FeatureDetailResponse/WeatherCardData/WeatherMetricOut/CategorySummary/FeatureBatchData/
   BeachPublicView/FestivalPublicView/PublicMapMarkerLayerData 등) ⊆ 스냅샷 component schemas,
-  (3) 로컬 전용: sibling `kor-travel-map` 스펙과 경로 집합 일치
+  (3) public beach query parameter exact shape,
+  (4) 로컬 전용: sibling `kor-travel-map` 스펙과 public beach query shape 일치
   (핀 신선도, CI에서는 skip — `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
   1. `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
      apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py` 실행.
-  3. 실패하면 사라진/바뀐 경로·필드를 `clients/kor_travel_map.py` + `features.py`/`public.py` 매핑 +
-     `_CLIENT_PATHS`/`_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+  3. 실패하면 사라진/바뀐 경로·필드·query를 `clients/kor_travel_map.py` +
+     `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
+     `_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).

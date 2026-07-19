@@ -211,8 +211,6 @@ async def test_public_beaches_uses_public_path_and_threads_page_meta() -> None:
         q="광안리",
         page_size=20,
         cursor="c1",
-        include_quality=True,
-        include_forecast=True,
     )
     assert seen["path"] == "/v1/public/beaches"
     for token in (
@@ -221,20 +219,20 @@ async def test_public_beaches_uses_public_path_and_threads_page_meta() -> None:
         "q=",
         "page_size=20",
         "cursor=c1",
-        "include_quality=true",
-        "include_forecast=true",
     ):
         assert token in seen["query"], seen["query"]
+    assert "include_quality" not in seen["query"]
+    assert "include_forecast" not in seen["query"]
     assert data["next_cursor"] == "n2"
     assert data["total"] == 3
     await client.aclose()
 
 
 async def test_public_marker_and_detail_paths() -> None:
-    seen: list[str] = []
+    seen: list[httpx.URL] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request.url.path)
+        seen.append(request.url)
         if request.url.path.endswith("/map-markers"):
             return httpx.Response(
                 200,
@@ -267,7 +265,14 @@ async def test_public_marker_and_detail_paths() -> None:
     await client.public_beach_markers(min_lon=129.0, min_lat=35.0, max_lon=129.2, max_lat=35.2)
     beach = await client.get_public_beach("f_beach")
     assert beach is not None
-    assert seen == ["/v1/public/beaches/map-markers", "/v1/public/beaches/f_beach"]
+    assert [url.path for url in seen] == [
+        "/v1/public/beaches/map-markers",
+        "/v1/public/beaches/f_beach",
+    ]
+    detail_query = str(seen[1].query, "utf-8")
+    assert detail_query == ""
+    assert "include_quality" not in detail_query
+    assert "include_forecast" not in detail_query
     await client.aclose()
 
 

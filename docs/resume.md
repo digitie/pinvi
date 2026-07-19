@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-07-19 (codex) — kor-travel-map T-VN-07 소비자 clean-cut 보완
+
+PR #748의 단일 전문 리뷰에서 제거된 beach no-op query가 PinVi 공개 route·Python/TS
+client·vendored OpenAPI에 남은 S2를 확인했다. 두 query를 소비자 전 계층에서 제거하고,
+contract gate가 path뿐 아니라 query parameter shape도 검증하도록 강화했다.
+
+같은 리뷰어가 scoped snapshot freshness와 상세 wire assertion까지 보완한 최종 diff를
+승인했다. 관련 Python 테스트 31개, Ruff lint/format, mypy 188개 소스, API client
+typecheck, JSON 검증을 통과했다.
+
+**다음 한 작업**: PinVi PR과 kor-travel-map 문서 후속 PR을 열고 CI green으로 머지한다.
+
 ## 2026-07-18 (codex) — T-ADM-C6c 단일 적대적 리뷰 승인·WSL gate 통과
 
 사용자 지시에 따라 최종 리뷰어 수를 1명으로 전환했다. 리뷰어는 exact 5초 preview timeout,

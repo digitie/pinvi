@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- kor-travel-map에서 제거된 해수욕장 `include_quality`·`include_forecast` no-op query를
+  PinVi 공개 route와 Python/TypeScript client에서도 제거했다. vendored OpenAPI와 계약 게이트가
+  공개 해수욕장 query shape까지 대조해 같은 소비자 drift가 재발하지 않게 한다.
 - Admin의 kor-travel-map provider/ETL 연동을 canonical dataset·pipeline API로 전환했다.
   삭제된 legacy ops 경로와 frontend BFF 자격 공유를 제거하고, read/cancel scope가 분리된
   server-to-server principal로 상태 조회와 계층 취소를 수행한다.

@@ -30,7 +30,6 @@ GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cur
 
 - `sido_code`(2자리) / `sigungu_code`(5자리) / `q`(최대 100자)
 - `page_size` 1~200, 기본 50 / `cursor`
-- `include_quality`, `include_forecast` boolean. 기본 `false`.
 
 응답 200:
 

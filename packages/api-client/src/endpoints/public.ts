@@ -17,8 +17,6 @@ export interface PublicBeachListParams {
   q?: string;
   page_size?: number;
   cursor?: string;
-  include_quality?: boolean;
-  include_forecast?: boolean;
 }
 
 export interface PublicFestivalMonthlyParams {
@@ -84,8 +82,8 @@ export const publicApi = (client: ApiClient) => ({
       schema: PublicMapMarkerLayerSchema,
     }),
 
-  beach: (featureId: string, params: Pick<PublicBeachListParams, 'include_quality' | 'include_forecast'> = {}) =>
-    client.request(buildPath(`/public/beaches/${featureId}`, params), {
+  beach: (featureId: string) =>
+    client.request(`/public/beaches/${featureId}`, {
       method: 'GET',
       schema: PublicBeachViewSchema,
     }),
