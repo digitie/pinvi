@@ -292,9 +292,7 @@ class KorTravelMapAdminClient:
         for attempt in range(max_attempts):
             try:
                 request_headers = (
-                    self._ops_headers(ops_scope)
-                    if ops_scope is not None
-                    else self._headers()
+                    self._ops_headers(ops_scope) if ops_scope is not None else self._headers()
                 )
                 if headers is not None:
                     request_headers.update(headers)

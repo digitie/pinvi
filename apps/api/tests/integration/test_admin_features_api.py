@@ -608,9 +608,7 @@ async def test_change_request_stale_revision_maps_412_without_audit(
     assert resp.json()["error"]["code"] == "PRECONDITION_FAILED"
     async with session_factory() as db:
         audit = await db.scalar(
-            select(AdminAuditLog).where(
-                AdminAuditLog.action == "feature_change_request.approve"
-            )
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_change_request.approve")
         )
     assert audit is None
 
