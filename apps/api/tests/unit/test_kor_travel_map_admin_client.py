@@ -211,9 +211,7 @@ async def test_request_id_header_is_sent_from_per_request_wrapper() -> None:
         seen["ops_token"] = request.headers.get("X-Kor-Travel-Map-Ops-Token", "")
         seen["ops_scope"] = request.headers.get("X-Kor-Travel-Map-Ops-Scope", "")
         seen["service_token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
-        seen["proxy_secret"] = request.headers.get(
-            "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
-        )
+        seen["proxy_secret"] = request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", "")
         seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
         return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
 
@@ -1376,12 +1374,8 @@ async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
                 "path": request.url.path,
                 "scope": request.headers.get("X-Kor-Travel-Map-Ops-Scope", ""),
                 "ops_token": request.headers.get("X-Kor-Travel-Map-Ops-Token", ""),
-                "service_token": request.headers.get(
-                    "X-Kor-Travel-Map-Service-Token", ""
-                ),
-                "proxy_secret": request.headers.get(
-                    "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
-                ),
+                "service_token": request.headers.get("X-Kor-Travel-Map-Service-Token", ""),
+                "proxy_secret": request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", ""),
                 "actor": request.headers.get("X-Kor-Travel-Map-Actor", ""),
             }
         )
@@ -1439,12 +1433,8 @@ async def test_ops_observability_read_never_falls_back_to_admin_credentials() ->
             {
                 "scope": request.headers.get("X-Kor-Travel-Map-Ops-Scope", ""),
                 "ops_token": request.headers.get("X-Kor-Travel-Map-Ops-Token", ""),
-                "service_token": request.headers.get(
-                    "X-Kor-Travel-Map-Service-Token", ""
-                ),
-                "proxy_secret": request.headers.get(
-                    "X-Kor-Travel-Map-Admin-Proxy-Secret", ""
-                ),
+                "service_token": request.headers.get("X-Kor-Travel-Map-Service-Token", ""),
+                "proxy_secret": request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", ""),
                 "actor": request.headers.get("X-Kor-Travel-Map-Actor", ""),
             }
         )
