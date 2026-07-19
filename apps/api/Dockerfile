@@ -1,6 +1,39 @@
 # syntax=docker/dockerfile:1.7-labs
 FROM python:3.12-slim AS base
 
+ARG PINVI_BUILD_ENVIRONMENT=development
+ARG PINVI_SOURCE_REVISION=development
+
+RUN set -eu; \
+    is_commit() { \
+        case "$1" in \
+            ''|*[!0-9a-f]*) return 1 ;; \
+        esac; \
+        [ "${#1}" -eq 40 ]; \
+    }; \
+    case "$PINVI_BUILD_ENVIRONMENT" in \
+        development|test|smoke) ;; \
+        staging|production) \
+            is_commit "$PINVI_SOURCE_REVISION" || { \
+                echo 'staging/production API image requires an exact source commit' >&2; \
+                exit 2; \
+            } \
+            ;; \
+        *) \
+            echo 'PINVI_BUILD_ENVIRONMENT is not canonical' >&2; \
+            exit 2 \
+            ;; \
+    esac; \
+    if [ "$PINVI_SOURCE_REVISION" != development ]; then \
+        is_commit "$PINVI_SOURCE_REVISION" || { \
+            echo 'PINVI_SOURCE_REVISION must be development or an exact source commit' >&2; \
+            exit 2; \
+        }; \
+    fi
+
+LABEL org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}" \
+      io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \

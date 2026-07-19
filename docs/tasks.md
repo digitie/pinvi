@@ -7,6 +7,10 @@
 
 ## 현재 선점 / 충돌 회피
 
+- **T-ADM-C7P = Codex**(`fix/c7-image-provenance`): PinVi API Docker image의 source
+  revision label, compose build arg, 운영 build/deploy fail-closed preflight와 관련 문서를 수정한다.
+  `apps/api/Dockerfile`, `infra/docker-compose.app.yml`, `scripts/{docker-app,deploy-node}.sh`는 이
+  task가 소유하며 외부 docker-manager의 운영 compose는 별도 저장소에서 연동한다.
 - **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
   client·provider-sync/ETL projection, 공용 schema·provider-sync UI/E2E·문서를 수정한다. TDR
   레인과 파일이 겹치면 C6c가 선행하며, provider-sync 밖의 Web 화면 구조는 바꾸지 않는다.
@@ -32,6 +36,16 @@
     결정적 400/401/403/422/429와 exact `404 PIPELINE_EXECUTION_NOT_FOUND` 거절은 reconciliation에서
     제외하고 사유 수정·재시도를 허용하며, 그 밖의 404는 미확정 잠금을 유지한다.
   - 남은 완료 gate: WSL 정적/단위/통합/Web gate, map·Pinvi 동일 image 조합, N150 prod live UI E2E.
+
+## C7 운영 image provenance
+
+- [ ] **T-ADM-C7P** — PinVi API 최종 image에 exact source commit OCI revision label을 넣고,
+  production/C6c build·deploy에서 clean Git `HEAD`, build arg, image label이 같은 40자리 소문자
+  commit인지 fail-closed 검증한다. immutable build는 exact commit `git archive` context만 사용하고,
+  archive 내부 canonical control file과 고정된 환경/revision만 허용한다. 검증한 image ID를 pin해
+  기동 container와 재대조하고 불일치한 API/Web을 제거한다. 로컬 개발 build만 명시적
+  `development`를 허용하고 운영 node mutation은 `staging|production`만 허용한다. docker-manager
+  운영 compose의 같은 계약은 cross-repo로 연결한다.
 
 ## TDR — Trip Detail Rewrite (T-300~T-309c)
 
