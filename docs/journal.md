@@ -30,8 +30,10 @@
 - 운영 정본 `ktdctl`의 compose/service는 별도 docker-manager 저장소 소유이므로 같은 arg 전달과 C6c
   pair 증거 결박을 cross-repo 후속으로 명시했다. 단일 적대적 리뷰 전에는 테스트를 실행하지 않는다.
 - 단일 적대적 리뷰는 P0-P2 없이 `ACCEPT FOR TESTS`를 판정했다. 이후 provenance focused unit 39개,
-  API 전체 unit 604개, Ruff lint/format, API mypy strict 188개 source, Bash syntax, Compose v5 mapping과
-  실제 Docker production 음성/smoke 양성 label 검증을 통과했다.
+  API 전체 unit 605개(1 skipped), Ruff lint/format, API mypy strict 188개 source, Bash syntax,
+  Compose v5 mapping과 실제 Docker production 음성/smoke 양성 label 검증을 통과했다.
+- PR #389의 전체 CI green을 확인하고 squash merge commit `1c5c89c`로 main에 반영했다. 완료된
+  T-ADM-C7P는 task archive로 이동했으며 manager 연동과 N150 실증은 cross-repo C6c/C7 gate로 남겼다.
 
 ## 2026-07-18 (codex) — T-ADM-C6c 최종 리뷰·로컬 gate
 

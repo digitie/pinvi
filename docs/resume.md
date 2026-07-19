@@ -1,6 +1,6 @@
 # resume.md
 
-## 2026-07-19 (codex) — T-ADM-C7P API image provenance 로컬 gate 통과
+## 2026-07-19 (codex) — T-ADM-C7P API image provenance 머지 완료
 
 C7 적대적 리뷰에서 PinVi API immutable image ID와 실제 source commit 사이에 검증 가능한 결박이
 없음을 확인했다. Dockerfile의 OCI revision label, PinVi Compose build arg, clean `HEAD`/요청 revision,
@@ -13,10 +13,11 @@ archive 내부 canonical control file·고정된 환경/revision만 허용하며
 
 운영 1차 경로인 `kor-travel-docker-manager` compose/service가 같은 build arg를 전달하고 label을 C6c
 compatible-pair 증거에 결박해야 cross-repo gate가 완결된다. 단일 적대적 리뷰는 P0-P2 없이
-`ACCEPT FOR TESTS`를 판정했다. provenance focused unit 39개와 API 전체 unit 604개가 통과했고,
+`ACCEPT FOR TESTS`를 판정했다. provenance focused unit 39개와 API 전체 unit 605개(1 skipped)가 통과했고,
 Ruff lint/format, API mypy strict 188개 source, Bash syntax, Docker Compose v5 mapping, 실제 Docker
-production 음성/smoke 양성 label 검증도 통과했다. **다음 한 작업**은 PR/CI 후 manager 연동 및 N150
-prod image provenance/live UI E2E를 확인하는 것이다.
+production 음성/smoke 양성 label 검증과 PR CI도 통과했다. PR #389는 squash merge commit
+`1c5c89c`로 main에 반영됐다. **다음 한 작업**은 manager 연동 및 N150 prod image
+provenance/live UI E2E를 확인하는 것이다.
 
 ## 2026-07-19 (codex) — kor-travel-map T-VN-07 소비자 clean-cut 보완
 

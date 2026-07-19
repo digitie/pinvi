@@ -43,8 +43,9 @@ worktree drift/ignored 파일 배제, 로컬 Docker build의 development/product
 
 - 단일 적대적 리뷰: `ACCEPT FOR TESTS`, P0-P2 없음
 - provenance focused unit: 39 passed
-- API 전체 unit: 604 passed, 1 skipped
+- API 전체 unit: 605 passed, 1 skipped
 - Ruff lint/format, API mypy strict 188개 source, Bash syntax: 통과
 - Docker Compose v5 resolved build mapping: 통과
 - 실제 Docker: production + `development` revision 거부, smoke image build와 OCI label/image ID 대조 통과
-- 남은 gate: 최신 main rebase/CI, manager 연동, N150 prod image provenance와 live UI E2E
+- PR #389 CI green, squash merge commit: `1c5c89c`
+- 남은 cross-repo gate: manager 연동, N150 prod image provenance와 live UI E2E

@@ -4,6 +4,17 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-19
+
+- [x] **T-ADM-C7P** — PinVi API image provenance. (완료: 2026-07-19, PR #389, codex)
+      exact source commit의 `git archive`만 immutable build context로 사용하고 Dockerfile·Compose·검증
+      helper를 archive 내부 regular file로 제한했다. clean `HEAD`, build arg, OCI revision/environment
+      label을 fail-closed로 결박하고, 검증한 image ID를 pin해 실행 container와 재대조하며 불일치한
+      API/Web을 제거한다. 운영 node mutation은 명시적 `staging|production`에서만 허용한다. 단일
+      적대적 리뷰 승인, focused unit 39개, 전체 unit 605개(1 skipped), Ruff/format/mypy/Bash/Compose와
+      실제 production Docker 양·음성 검증 및 CI를 통과해 `1c5c89c`로 squash merge했다. 외부
+      docker-manager의 동일 계약 연동과 N150 운영 실증은 cross-repo C6c/C7 gate에서 계속한다.
+
 ## 2026-07-01
 
 - [x] T-122 — Naver/Kakao OAuth provider 구현. (완료: 2026-07-01, PR #370, codex)
