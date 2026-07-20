@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.kakao_local import KakaoLocalClient, KakaoLocalClientDep, KakaoLocalError
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapFeatureNotFound,
@@ -30,6 +31,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
+from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
 from app.core.deps import CurrentUserId, DbSession
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
@@ -37,9 +39,11 @@ from app.schemas.feature import (
     BBox,
     Coord,
     ExternalRef,
+    ExternalRefProvider,
     FeatureCategory,
     FeatureCluster,
     FeatureDetail,
+    FeatureDetailCard,
     FeatureKind,
     FeatureRequestCreate,
     FeatureRequestResponse,
@@ -48,8 +52,10 @@ from app.schemas.feature import (
     FeaturesInBoundsResponse,
     FeatureSummary,
     FeatureWeatherCard,
+    PlaceDetailCard,
     WeatherMetric,
 )
+from app.services.feature_detail import best_match_enrichment, build_detail_card
 from app.services.feature_request import find_active_suggestion_by_external_ref
 
 router = APIRouter(prefix="/features", tags=["features"])
@@ -60,7 +66,8 @@ LAT_MIN, LAT_MAX = 33.0, 43.0
 MIN_ZOOM, MAX_ZOOM = 5, 19
 FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
-_DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice"]
+# ADR-056: price 마커도 기본 뷰포트에 포함(주유소/휴게소 가격 등 일반 표시).
+_DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice", "price"]
 _DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
 
 
@@ -488,6 +495,97 @@ async def get_feature(
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
         )
     return Envelope.of(_detail_from_kor_travel_map(dto))
+
+
+def _parse_providers(raw: str | None) -> list[ExternalRefProvider]:
+    """`?providers=kakao,naver` → 순서 보존 + 중복 제거된 provider 목록."""
+    if not raw:
+        return []
+    out: list[ExternalRefProvider] = []
+    for token in raw.split(","):
+        name = token.strip().lower()
+        if name in ("kakao", "naver") and name not in out:
+            out.append(cast(ExternalRefProvider, name))
+    return out
+
+
+async def _enrich_place_card(
+    card: PlaceDetailCard,
+    *,
+    kakao_local: KakaoLocalClient | None,
+    naver_local: NaverLocalClient | None,
+    providers: list[ExternalRefProvider],
+) -> None:
+    """옵트인 외부 enrichment(display-only). provider당 실패는 degrade로 표시하고 카드는 내부 값 유지.
+
+    좌표는 feature 자신의 공개 좌표(사용자 위치 아님)이므로 위치 감사 대상이 아니다.
+    """
+    lon = card.coord.lon if card.coord else None
+    lat = card.coord.lat if card.coord else None
+    for provider in providers:
+        if provider == "kakao":
+            if kakao_local is None:
+                card.degraded_providers.append("kakao")
+                continue
+            try:
+                data = await kakao_local.search_keyword(query=card.name, size=5, x=lon, y=lat)
+                docs = data.get("documents") or []
+            except KakaoLocalError:
+                card.degraded_providers.append("kakao")
+                continue
+            card.enrichment.append(
+                best_match_enrichment(
+                    "kakao",
+                    feature_name=card.name,
+                    feature_coord=card.coord,
+                    documents=[d for d in docs if isinstance(d, dict)],
+                )
+            )
+        else:  # naver (좌표 파라미터 없음)
+            if naver_local is None:
+                card.degraded_providers.append("naver")
+                continue
+            try:
+                data = await naver_local.search_local(query=card.name, display=5)
+                items = data.get("items") or []
+            except NaverLocalError:
+                card.degraded_providers.append("naver")
+                continue
+            card.enrichment.append(
+                best_match_enrichment(
+                    "naver",
+                    feature_name=card.name,
+                    feature_coord=card.coord,
+                    documents=[i for i in items if isinstance(i, dict)],
+                )
+            )
+
+
+@router.get("/{feature_id}/detail-card", response_model=Envelope[FeatureDetailCard])
+async def get_feature_detail_card(
+    feature_id: Annotated[str, Path(min_length=1, max_length=200)],
+    _current_user: CurrentUserId,
+    client: KorTravelMapHttpClientDep,
+    kakao_local: KakaoLocalClientDep,
+    naver_local: NaverLocalClientDep,
+    providers: Annotated[str | None, Query()] = None,
+) -> Envelope[FeatureDetailCard]:
+    """사용자 상세 읽기 — kind별 투영 detail-card + 옵트인 외부 enrichment(ADR-056)."""
+    with _map_kor_travel_map_errors():
+        dto = await client.get_feature(feature_id)
+    if dto is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
+        )
+    card = build_detail_card(dto)
+    requested = _parse_providers(providers)
+    # enrichment은 place kind + 이름이 있을 때만(다른 kind는 매칭 근거가 약함).
+    if requested and isinstance(card, PlaceDetailCard) and card.name:
+        await _enrich_place_card(
+            card, kakao_local=kakao_local, naver_local=naver_local, providers=requested
+        )
+    return Envelope.of(card)
 
 
 @router.get("/{feature_id}/weather", response_model=Envelope[FeatureWeatherCard])

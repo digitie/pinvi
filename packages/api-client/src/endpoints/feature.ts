@@ -1,5 +1,6 @@
 import {
   FeatureCategorySchema,
+  FeatureDetailCardSchema,
   FeatureDetailSchema,
   FeatureRequestCreateSchema,
   FeatureRequestResponseSchema,
@@ -73,12 +74,31 @@ export const featureApi = (client: ApiClient) => ({
   // NOTE: 자유 텍스트 feature 검색은 통합 `GET /search`(geoApi.searchPlaces, ADR-054)로 이전됐다.
   // `/features/search`는 삭제됐고 feature는 통합 검색의 source=feature 행으로 나온다.
 
-  /** feature 1건 상세. */
+  /** feature 1건 상세(raw/debug passthrough). 사용자 표시는 detailCard를 쓴다(ADR-056). */
   get: (featureId: string) =>
     client.request(`/features/${featureId}`, {
       method: 'GET',
       schema: FeatureDetailSchema,
     }),
+
+  /**
+   * 사용자 상세 읽기 — kind별 투영 detail-card. `providers`(kakao/naver)로 옵트인 외부
+   * enrichment(display-only, ADR-056). 미지정이 기본(내부만).
+   */
+  detailCard: (
+    featureId: string,
+    params: { providers?: Array<'kakao' | 'naver'> } = {},
+    opts?: { signal?: AbortSignal },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.providers && params.providers.length > 0) {
+      qs.set('providers', params.providers.join(','));
+    }
+    return client.request(
+      `/features/${featureId}/detail-card${qs.toString() ? `?${qs}` : ''}`,
+      { method: 'GET', schema: FeatureDetailCardSchema, signal: opts?.signal },
+    );
+  },
 
   /** KMA 시간축 weather card. */
   weather: (featureId: string, params: { asof?: string | null } = {}) => {
