@@ -647,6 +647,13 @@ export {
   ExternalRefProviderSchema,
   ExternalRefSchema,
   FeatureRequestSourceSchema,
+  ExternalEnrichmentSchema,
+  PlaceDetailCardSchema,
+  EventDetailCardSchema,
+  NoticeDetailCardSchema,
+  PriceItemSchema,
+  PriceDetailCardSchema,
+  FeatureDetailCardSchema,
 } from './feature';
 export type {
   FeatureKind,
@@ -667,6 +674,8 @@ export type {
   ExternalRefProvider,
   ExternalRef,
   FeatureRequestSource,
+  ExternalEnrichment,
+  FeatureDetailCard,
 } from './feature';
 export {
   PublicBeachListSchema,

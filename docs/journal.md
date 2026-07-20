@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-21 08:40 (claude) — TDR T-304 feature detail-card + 외부 enrichment
+
+- T-303 PR #399 머지 완료(main d0a438b). 이어 T-304(ADR-056) 착수.
+- `GET /features/{id}/detail-card` 신설: `FeatureDetailCard` = kind별 discriminated union
+  (place/event/notice/price 리치 arm + weather/route/area generic fallback). 서버가 kor_travel_map
+  원본 dto(불투명 detail/urls/address dict)를 일반 사용자 노출 필드로 투영하고 원본 dict는 미노출.
+  `GET /features/{id}`(FeatureDetail)는 raw/debug로 유지.
+- `services/feature_detail.py`: 방어적 키 추출 투영 + address_line 정규화 + **match-confidence 가드**
+  (이름 유사도=정규화 포함/문자 bigram(한국어 '점' 접미사 대응) + 좌표 haversine ≤300m). 임계 미만이면
+  matched=false로 오귀속(엉뚱한 전화/URL) 차단.
+- 옵트인 `?providers=kakao,naver`: **place kind만** 외부 enrichment(T-302 client, display-only·비영속).
+  provider당 실패/부재는 `degraded_providers`. 좌표는 feature 공개 좌표(사용자 위치 아님→위치 감사 X).
+- `price`를 `_DEFAULT_INBOUNDS_KINDS`에 추가.
+- 계약: py+zod `FeatureDetailCard` union + api-client `feature.detailCard(providers)`.
+- **단일 적대적 리뷰** 반영: match-confidence 오귀속(false positive) 2건 — (P2) 포함 관계가 짧은
+  generic 이름('중앙시장')을 근처 다른 장소('중앙시장주차장')로 매칭 → 포함은 길이비 ≥0.7일 때만
+  1.0, 임계 0.6으로 상향. (P3) 좌표 앵커 없으면 동명 타지역 장소 매칭 → 양쪽 좌표 필수(없으면 매칭 안
+  함). 나머지(미노출/union/opt-in gating/robustness/공개 좌표만 전달)는 sound로 확인.
+- 검증(WSL): ruff/`mypy --strict`(195) + detail-card 15(투영/match/오귀속 2건/enrichment/degrade/404)
+  passed; web typecheck/lint/build/schemas·web vitest 통과.
+- **다음**: T-305(전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set + re-seed).
+
 ## 2026-07-21 08:20 (claude) — TDR T-303 외부 pick feature-request 파이프라인
 
 - T-302 PR #398 머지 완료(main 4ae8c8a). 이어 T-303(ADR-054 §7, F4) 착수.

@@ -6,6 +6,12 @@
 
 ## 2026-07-21
 
+- [x] **T-303** — 외부 pick feature-request 파이프라인. (완료: 2026-07-21, PR #399, claude)
+      `source`/`external_ref`(POI+suggestion, 마이그레이션 0039), 전역 dedup(partial unique index),
+      best-effort decoupled auto-fire(분리 세션·예외 미전파), post-approval reconciliation(external_ref→
+      feature_id), 이미 added면 즉시 연결. 단일 적대적 리뷰 P2/P2/P3(교차사용자 note 미노출·auto-fire
+      한도·require_review 문서화) 반영. ADR-054.
+
 - [x] **T-302** — Kakao/Naver Local + 통합 `GET /search` source-tagged. (완료: 2026-07-21, PR #398, claude)
       표시 전용 provider client 2종(kor_travel_geo 미러, 부재/키 미설정=degrade), `GET /search`
       `{results: PlaceSearchResult[], degraded_sources}` 재작성(internal-first short-circuit +

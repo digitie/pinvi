@@ -85,6 +85,80 @@ export const FeatureDetailSchema = z.object({
 });
 export type FeatureDetail = z.infer<typeof FeatureDetailSchema>;
 
+/** detail-card 옵트인 외부 enrichment 1행(ADR-056, display-only). matched=false면 "일치 정보 없음". */
+export const ExternalEnrichmentSchema = z.object({
+  provider: z.enum(['kakao', 'naver']),
+  matched: z.boolean().default(false),
+  name: z.string().nullable().default(null),
+  address: z.string().nullable().default(null),
+  phone: z.string().nullable().default(null),
+  provider_url: z.string().nullable().default(null),
+  external_id: z.string().nullable().default(null),
+});
+export type ExternalEnrichment = z.infer<typeof ExternalEnrichmentSchema>;
+
+// kind별 detail-card 공통 필드(일반 사용자 노출용). 원본 detail/urls dict는 노출하지 않는다.
+const detailCardBase = {
+  feature_id: z.string().min(1).max(200),
+  name: z.string(),
+  coord: CoordSchema.nullable().default(null),
+  category: z.string().nullable().default(null),
+  address_line: z.string().nullable().default(null),
+  marker_color: z.string().default('P-13'),
+  marker_icon: z.string().default('marker'),
+  homepage_url: z.string().nullable().default(null),
+  status: z.string().nullable().default(null),
+  enrichment: z.array(ExternalEnrichmentSchema).default([]),
+  degraded_providers: z.array(z.string()).default([]),
+};
+
+export const PlaceDetailCardSchema = z.object({
+  ...detailCardBase,
+  kind: z.literal('place'),
+  phone: z.string().nullable().default(null),
+  business_hours: z.string().nullable().default(null),
+});
+export const EventDetailCardSchema = z.object({
+  ...detailCardBase,
+  kind: z.literal('event'),
+  start_date: z.string().nullable().default(null),
+  end_date: z.string().nullable().default(null),
+  venue: z.string().nullable().default(null),
+});
+export const NoticeDetailCardSchema = z.object({
+  ...detailCardBase,
+  kind: z.literal('notice'),
+  body: z.string().nullable().default(null),
+  start_date: z.string().nullable().default(null),
+  end_date: z.string().nullable().default(null),
+});
+export const PriceItemSchema = z.object({
+  name: z.string(),
+  price: z.string().nullable().default(null),
+});
+export const PriceDetailCardSchema = z.object({
+  ...detailCardBase,
+  kind: z.literal('price'),
+  unit: z.string().nullable().default(null),
+  items: z.array(PriceItemSchema).default([]),
+});
+// weather/route/area는 리치 arm 없이 공통 필드만(generic fallback).
+export const WeatherDetailCardSchema = z.object({ ...detailCardBase, kind: z.literal('weather') });
+export const RouteDetailCardSchema = z.object({ ...detailCardBase, kind: z.literal('route') });
+export const AreaDetailCardSchema = z.object({ ...detailCardBase, kind: z.literal('area') });
+
+/** `GET /features/{id}/detail-card` — kind로 판별하는 discriminated union(ADR-056). */
+export const FeatureDetailCardSchema = z.discriminatedUnion('kind', [
+  PlaceDetailCardSchema,
+  EventDetailCardSchema,
+  NoticeDetailCardSchema,
+  PriceDetailCardSchema,
+  WeatherDetailCardSchema,
+  RouteDetailCardSchema,
+  AreaDetailCardSchema,
+]);
+export type FeatureDetailCard = z.infer<typeof FeatureDetailCardSchema>;
+
 /** kor_travel_map 평탄 weather metric (forecast_style 태그). */
 export const WeatherMetricSchema = z.object({
   metric_key: z.string(),

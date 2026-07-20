@@ -125,6 +125,82 @@ class FeatureDetail(BaseModel):
     updated_at: datetime
 
 
+class ExternalEnrichment(BaseModel):
+    """detail-card의 옵트인 외부 enrichment 1행(ADR-054/056, display-only, 비영속).
+
+    match-confidence가 임계 미만이면 `matched=False`로 두어 오귀속(엉뚱한 전화/URL)을 막고
+    "일치하는 외부 정보 없음"을 표시하게 한다. 가시적 attribution + back-link(`provider_url`)는 필수.
+    """
+
+    provider: ExternalRefProvider
+    matched: bool = False
+    name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    provider_url: str | None = None
+    external_id: str | None = None
+
+
+class DetailCardBase(BaseModel):
+    """kind별 detail-card 공통 필드(일반 사용자 노출용). 원본 detail/urls dict는 노출하지 않는다."""
+
+    feature_id: str = Field(min_length=1, max_length=200)
+    name: str
+    coord: Coord | None = None
+    category: str | None = None
+    address_line: str | None = None  # 서버가 정규화한 한 줄 주소
+    marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
+    marker_icon: str = Field(default="marker", max_length=64)
+    homepage_url: str | None = None
+    status: str | None = None
+    # 옵트인 enrichment 결과 + provider별 degrade(내부 값으로 fallback).
+    enrichment: list[ExternalEnrichment] = Field(default_factory=list)
+    degraded_providers: list[str] = Field(default_factory=list)
+
+
+class PlaceDetailCard(DetailCardBase):
+    kind: Literal["place"] = "place"
+    phone: str | None = None
+    business_hours: str | None = None
+
+
+class EventDetailCard(DetailCardBase):
+    kind: Literal["event"] = "event"
+    start_date: str | None = None
+    end_date: str | None = None
+    venue: str | None = None
+
+
+class NoticeDetailCard(DetailCardBase):
+    kind: Literal["notice"] = "notice"
+    body: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class PriceItem(BaseModel):
+    name: str
+    price: str | None = None
+
+
+class PriceDetailCard(DetailCardBase):
+    kind: Literal["price"] = "price"
+    unit: str | None = None
+    items: list[PriceItem] = Field(default_factory=list)
+
+
+class GenericDetailCard(DetailCardBase):
+    """weather/route/area + 리치 arm이 없는 kind의 fallback(공통 필드만)."""
+
+    kind: Literal["weather", "route", "area"]
+
+
+FeatureDetailCard = Annotated[
+    PlaceDetailCard | EventDetailCard | NoticeDetailCard | PriceDetailCard | GenericDetailCard,
+    Field(discriminator="kind"),
+]
+
+
 class WeatherMetric(BaseModel):
     """kor_travel_map 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
 
