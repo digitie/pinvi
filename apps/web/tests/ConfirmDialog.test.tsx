@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 describe('ConfirmDialog', () => {
@@ -66,6 +66,12 @@ describe('ConfirmDialog', () => {
     );
     expect(screen.getByTestId('confirm-dialog-confirm')).toBeDisabled();
     expect(screen.getByTestId('confirm-dialog-cancel')).toBeDisabled();
+  });
+
+  it('busy로 열려도 포커스가 다이얼로그 안으로 들어간다', async () => {
+    render(<ConfirmDialog open busy title="삭제할까요?" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    // busy면 취소 버튼이 disabled라 훅이 패널로 폴백 포커스한다.
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toHaveFocus());
   });
 
   it('커스텀 testId 접두어를 적용한다', () => {

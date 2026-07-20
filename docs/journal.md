@@ -13,9 +13,15 @@
   `apps/web/components/map/FeatureDetailModal.tsx`(F5 상세 shell, 모바일 bottom-sheet
   반응형, loading/error/children/footer 슬롯, 데이터 계약 무의존).
 - 기존 `ConflictDialog`/`useDialogAutoFocus`/`useEscapeKey`가 흩어놓던 모달 a11y를 한 훅으로 수렴.
-- 테스트 신설 3파일(22): 훅(Escape/backdrop 드래그 안전/aria/scroll-lock/focus-trap),
-  ConfirmDialog(confirm·cancel·danger·busy·testId), FeatureDetailModal(loading/error/footer).
-- WSL ext4 mirror 게이트: 전체 web unit `72 passed`, `tsc --noEmit` 클린, `next lint` 무경고,
+- 테스트 신설 3파일: 훅(Escape/backdrop 드래그 안전/aria/scroll-lock/focus-trap/중첩/패널 Shift+Tab),
+  ConfirmDialog(confirm·cancel·danger·busy 포커스·testId), FeatureDetailModal(loading/error/footer).
+- **적대적 리뷰 2명**(correctness/React-19 + a11y/API 렌즈, workflow)에서 real 3건 반영:
+  (P2) 중첩 모달에서 document keydown 리스너에 최상단 가드가 없어 Escape가 전체를 닫고 Tab이 서로
+  뺏김 → 모듈 스택 topmost 가드. (P2) 패널 자체 포커스 상태의 Shift+Tab이 트랩 밖으로 누수 →
+  `activeEl===panel` 분기 추가. (P3) `ConfirmDialog busy`가 disabled 취소 버튼에 초기 포커스해 다이얼로그
+  밖에 머묾 → 훅 rAF에서 패널 폴백 포커스. scroll-lock refcount·SSR 안전·backdrop pointer 로직·aria 배선은
+  두 리뷰어 모두 sound로 확인.
+- WSL ext4 mirror 게이트: 전체 web unit `76 passed`, `tsc --noEmit` 클린, `next lint` 무경고,
   `next build` 성공. (Playwright e2e는 백엔드 계약 소비 시작 후 T-306/309에서 수행.)
 - 태스크: `docs/tasks.md`에 T-306a 신설, T-306/T-309c dep에 T-306a 추가.
 

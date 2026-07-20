@@ -2,17 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useModalDialog } from '@/lib/useModalDialog';
 
-function Harness(props: { onClose: () => void; ariaLabel?: string }) {
+function Harness(props: { onClose: () => void; ariaLabel?: string; idPrefix?: string }) {
+  const p = props.idPrefix ?? '';
   const { titleId, backdropProps, dialogProps } = useModalDialog({
     onClose: props.onClose,
     ariaLabel: props.ariaLabel,
   });
   return (
-    <div data-testid="backdrop" {...backdropProps}>
-      <div {...dialogProps} data-testid="panel">
+    <div data-testid={`${p}backdrop`} {...backdropProps}>
+      <div {...dialogProps} data-testid={`${p}panel`}>
         {props.ariaLabel == null && <h2 id={titleId}>제목</h2>}
-        <button data-testid="first">first</button>
-        <button data-testid="last">last</button>
+        <button data-testid={`${p}first`}>first</button>
+        <button data-testid={`${p}last`}>last</button>
       </div>
     </div>
   );
@@ -96,5 +97,33 @@ describe('useModalDialog', () => {
     screen.getByTestId('first').focus();
     fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true });
     expect(screen.getByTestId('last')).toHaveFocus();
+  });
+
+  it('패널에 포커스가 있을 때 Shift+Tab하면 마지막 요소로 가둔다(뒤로 누수 방지)', () => {
+    render(<Harness onClose={vi.fn()} />);
+    screen.getByTestId('panel').focus();
+    fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true });
+    expect(screen.getByTestId('last')).toHaveFocus();
+  });
+
+  it('패널에 포커스가 있을 때 Tab하면 첫 요소로 가둔다', () => {
+    render(<Harness onClose={vi.fn()} />);
+    screen.getByTestId('panel').focus();
+    fireEvent.keyDown(document.body, { key: 'Tab' });
+    expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('중첩 모달에서 Escape는 최상단 하나만 닫는다', () => {
+    const onCloseA = vi.fn();
+    const onCloseB = vi.fn();
+    render(
+      <>
+        <Harness onClose={onCloseA} idPrefix="a-" />
+        <Harness onClose={onCloseB} idPrefix="b-" />
+      </>,
+    );
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onCloseB).toHaveBeenCalledTimes(1);
+    expect(onCloseA).not.toHaveBeenCalled();
   });
 });

@@ -71,6 +71,10 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+// 중첩 모달에서 최상단 하나만 Escape/Tab에 반응하도록 활성 인스턴스를 쌓는다.
+// (document 리스너는 stopPropagation으로 서로 막을 수 없으므로 최상단 가드가 필요.)
+const modalStack: string[] = [];
+
 export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y {
   const {
     onClose,
@@ -102,6 +106,12 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     // paint 이후 요소가 마운트된 상태에서 포커스하도록 rAF로 지연.
     const raf = window.requestAnimationFrame(() => {
       (initialFocusRef?.current ?? dialogRef.current)?.focus();
+      // 초기 대상이 포커스 불가(예: busy로 disabled된 버튼)라 포커스가 안 들어갔으면
+      // 패널로 폴백해 항상 다이얼로그 안에 포커스가 놓이게 한다(WCAG 2.4.3).
+      const panel = dialogRef.current;
+      if (panel && !panel.contains(document.activeElement)) {
+        panel.focus();
+      }
     });
     return () => {
       window.cancelAnimationFrame(raf);
@@ -128,10 +138,13 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     };
   }, [active, lockScroll]);
 
-  // Escape 닫기 + Tab focus-trap.
+  // Escape 닫기 + Tab focus-trap. 최상단 모달만 반응한다.
   useEffect(() => {
     if (!active) return;
+    modalStack.push(generatedTitleId);
     const handler = (event: KeyboardEvent) => {
+      // 중첩 시 최상단 모달만 키를 처리(Escape가 전체를 닫거나 Tab을 서로 뺏는 것 방지).
+      if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
       if (event.key === 'Escape' && closeOnEscape) {
         event.stopPropagation();
         onCloseRef.current();
@@ -151,9 +164,11 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       const last = focusable[focusable.length - 1];
       if (!first || !last) return;
       const activeEl = document.activeElement as HTMLElement | null;
-      if (!panel.contains(activeEl)) {
+      // 패널 자체(tabIndex -1)나 패널 밖에 포커스가 있으면 방향에 따라 양 끝으로 가둔다.
+      // (패널 focus 상태에서 Shift+Tab이 뒤 요소로 새는 것을 막는다.)
+      if (activeEl === panel || !panel.contains(activeEl)) {
         event.preventDefault();
-        first.focus();
+        (event.shiftKey ? last : first).focus();
         return;
       }
       if (event.shiftKey && activeEl === first) {
@@ -165,8 +180,12 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       }
     };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [active, closeOnEscape]);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      const idx = modalStack.lastIndexOf(generatedTitleId);
+      if (idx !== -1) modalStack.splice(idx, 1);
+    };
+  }, [active, closeOnEscape, generatedTitleId]);
 
   const dialogProps: ModalDialogA11y['dialogProps'] = {
     ref: dialogRef,
