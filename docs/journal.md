@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-20 21:00 (claude) — TDR T-306a 웹 모달 기반 착수
+
+- TDR 문서 PR #386 머지 확인(main `e60d171`). #387~#395는 admin/ops/kor-travel-map만
+  건드려 TDR 파일 소유(trip/day/poi/search)와 무충돌 → 레인 A 파일 소유 계획 그대로 유효.
+- 레인 B(Codex)는 `agent/codex-tdr-*` PR 미착수 상태 → 백엔드 무의존 선행분부터 시작.
+- 신설: `apps/web/lib/useModalDialog.ts`(focus in/restore, Escape, body scroll-lock
+  중첩 참조 카운트, Tab focus-trap, backdrop pointer-safe close, aria 배선),
+  `apps/web/components/ui/ConfirmDialog.tsx`(제네릭 확인, danger tone),
+  `apps/web/components/map/FeatureDetailModal.tsx`(F5 상세 shell, 모바일 bottom-sheet
+  반응형, loading/error/children/footer 슬롯, 데이터 계약 무의존).
+- 기존 `ConflictDialog`/`useDialogAutoFocus`/`useEscapeKey`가 흩어놓던 모달 a11y를 한 훅으로 수렴.
+- 테스트 신설 3파일(22): 훅(Escape/backdrop 드래그 안전/aria/scroll-lock/focus-trap),
+  ConfirmDialog(confirm·cancel·danger·busy·testId), FeatureDetailModal(loading/error/footer).
+- WSL ext4 mirror 게이트: 전체 web unit `72 passed`, `tsc --noEmit` 클린, `next lint` 무경고,
+  `next build` 성공. (Playwright e2e는 백엔드 계약 소비 시작 후 T-306/309에서 수행.)
+- 태스크: `docs/tasks.md`에 T-306a 신설, T-306/T-309c dep에 T-306a 추가.
+
 ## 2026-07-20 09:50 (codex) — T-VN-20 public API key header-only 착수
 
 - kor-travel-map PR #794의 merge commit `cf1f0bb`를 소비 정본으로 확인했다.

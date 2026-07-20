@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-07-20 (claude) — TDR T-306a 웹 모달 기반 (레인 A 착수)
+
+TDR 문서 PR #386이 main에 머지된 뒤, 레인 A(Claude)의 **백엔드 무의존 선행 작업**을
+시작했다. 공용 `apps/web/lib/useModalDialog.ts`(focus-in/restore + Escape +
+body scroll-lock(중첩 참조 카운트) + Tab focus-trap + backdrop pointer-safe close +
+`role/aria-modal/aria-label(ledby)` 배선)와 제네릭 `components/ui/ConfirmDialog.tsx`
+(danger tone = 경고 아이콘 + 빨간 버튼 + 취소 기본 포커스), Feature 상세 `components/map/
+FeatureDetailModal.tsx` shell(데스크톱 중앙 / 모바일 bottom-sheet 반응형, loading/error/
+children/footer 슬롯, 데이터 계약 무의존)을 신설했다. 기존에 `ConflictDialog` 등이
+focus/Escape를 제각기 inline 재구현하던 것을 한 훅으로 수렴한다. 후속 T-306(F2 day-delete
+confirm), T-309c(detail-card 본문)가 이 위에 올라간다.
+WSL ext4 mirror 게이트 통과: 신규 vitest 22 + 전체 web unit `72 passed`, `tsc --noEmit`
+클린, `next lint` 무경고, `next build` 성공. Codex는 아직 레인 B(T-301~) PR 미착수.
+**다음 한 작업**은 T-306a PR을 열고, Codex가 T-301(day presentation backend, `out_of_range`/
+`display_marker_color` 계약)을 랜딩하면 그 위에서 T-306(F2 confirm + F1 out-of-range 배너)을
+잇는 것. 그 전까지 레인 A는 이 shell 소비처(T-309c 본문) 설계로 대기.
+
 ## 2026-07-20 (codex) — T-VN-20 public API key header-only docs-first
 
 kor-travel-map PR #794가 public API key의 `?key=` query를 제거하고
