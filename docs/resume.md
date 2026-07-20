@@ -9,9 +9,22 @@ T-304(ADR-056) 구현·검증 완료: `GET /features/{id}/detail-card` kind별 d
 display-only, degraded_providers), `price` in-bounds 추가, py+zod+api-client 계약. WSL: ruff/mypy
 --strict(195)/detail-card 13 pytest + web typecheck/lint/build/vitest 통과. 단일 적대적 리뷰 진행 중.
 브랜치 `agent/claude-tdr-detail-card`.
-**다음 한 작업**: 리뷰 반영 → T-304 PR·CI·머지 → **T-305**(전용 `app.trip_day_rise_sets` table +
-ETL asset + day-level rise/set read + batched re-seed(파생-date only) + 완료 시그널, ADR-055).
-이후 web UI(T-306/307/308/309a-c) → N150 live e2e.
+**T-304는 PR #400로 머지 완료**(main 77aedbd). **다음 한 작업 = T-305**(ADR-055 §6, backend 마지막).
+스코프(그라운딩 완료, 브랜치 `agent/claude-tdr-day-rise-set`):
+  1) 마이그레이션 신규 `app.trip_day_rise_sets` key `(trip_id, day_index)` — `TripPoiRiseSet`
+     (`app/models/kasi.py`) 미러하되 day-keyed + reference_poi_id/reference_label 추가.
+  2) **결정적 기준 좌표**: 그 일자 POI centroid → 없으면 created_at-earliest(first-added) POI →
+     없으면 pending_coord. locdate = effective_date(파생).
+  3) 서비스: day 생성 시 seed + effective_date 변경 시 **파생-date 일자에만 scope된 단일 batched
+     UPDATE로 re-seed**(ADR-055). `build_initial_poi_rise_set`(`services/kasi.py`) 패턴 참고.
+  4) **Dagster asset** `pinvi_trip_day_rise_sets` — `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
+     미러(KasiResource + RetryPolicy + PinviDatabaseResource), pending 행을 KASI 출몰시각으로 fill.
+     `assets/__init__.py`·`definitions.py`·`jobs.py`·`schedules.py`에 등록. (현재 poi rise/set fill
+     asset은 없음 — day asset 신설.) 완료 시그널.
+  5) 읽기: `build_trip_view`가 `TripViewDay.rise_set` + `rise_set_reference`("XX 장소 기준") emit.
+     py+zod 계약(`schemas/trip.py` + `packages/schemas/src/trip.ts`).
+  6) 테스트: 기준좌표 해석 단위 + reseed + build_trip_view day rise/set + ETL asset(KASI provider mock).
+이후 **web UI: T-306/307/308/309a-c** → N150 live e2e. 검증 [[wsl-verify-gate]] + apps/api pytest/ruff/mypy.
 
 ## 2026-07-21 (claude) — TDR T-303 외부 pick feature-request 파이프라인 (PR 대기)
 
