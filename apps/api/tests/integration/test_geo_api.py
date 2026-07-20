@@ -363,3 +363,89 @@ async def test_unified_search_near_me_passes_coord_to_kakao_only(
         assert kakao.calls[0]["y"] == 37.5
     finally:
         _clear_search_clients()
+
+
+async def _search_audit_rows(session_factory: Any) -> list[Any]:
+    from sqlalchemy import select
+
+    from app.models.audit import LocationAuditOutbox
+
+    async with session_factory() as db:
+        return list(
+            (
+                await db.execute(
+                    select(LocationAuditOutbox).where(LocationAuditOutbox.endpoint == "/search")
+                )
+            ).scalars()
+        )
+
+
+async def test_unified_search_keyword_only_not_audited(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    session_factory: Any,
+) -> None:
+    """좌표 없는 키워드 검색은 위치정보 제3자 제공이 아니므로 감사 기록을 남기지 않는다(§9)."""
+    user_id, _ = verified_user
+    _override_search_clients(
+        _FakeKorTravelMapClient(),
+        _FakeKorTravelGeoClient(),
+        kakao=_FakeKakaoLocalClient(),
+        naver=_FakeNaverLocalClient(),
+    )
+    try:
+        resp = await client.get("/search?q=카페", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        assert await _search_audit_rows(session_factory) == []
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_near_me_disclosure_is_audited(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    session_factory: Any,
+) -> None:
+    """실제로 Kakao에 좌표를 제공하면 third_party_place_search 감사 기록이 남는다."""
+    user_id, _ = verified_user
+    _override_search_clients(
+        _FakeKorTravelMapClient(),
+        _FakeKorTravelGeoClient(),
+        kakao=_FakeKakaoLocalClient(),
+        naver=_FakeNaverLocalClient(),
+    )
+    try:
+        resp = await client.get("/search?q=카페&lat=37.5&lon=127.0", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        rows = await _search_audit_rows(session_factory)
+        assert len(rows) == 1
+        assert rows[0].purpose == "third_party_place_search"
+        assert rows[0].lat is not None and rows[0].lng is not None
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_near_me_short_circuit_not_audited(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    session_factory: Any,
+) -> None:
+    """near-me라도 내부 결과 ≥ K로 Kakao를 호출하지 않으면 좌표는 제공되지 않아 감사도 없다."""
+    user_id, _ = verified_user
+    kakao = _FakeKakaoLocalClient()
+    _override_search_clients(
+        _FakeKorTravelMapClient(item_count=5),  # ≥ K → short-circuit
+        _FakeKorTravelGeoClient(),
+        kakao=kakao,
+        naver=_FakeNaverLocalClient(),
+    )
+    try:
+        resp = await client.get("/search?q=카페&lat=37.5&lon=127.0", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        assert kakao.calls == []  # 좌표가 Kakao에 전달되지 않음
+        assert await _search_audit_rows(session_factory) == []
+    finally:
+        _clear_search_clients()

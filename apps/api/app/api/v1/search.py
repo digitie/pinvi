@@ -107,10 +107,13 @@ async def unified_search(
 ) -> Envelope[PlaceSearchResponse]:
     user_id = uuid.UUID(current_user_id)
     degraded: list[str] = []
-    # "내 주변 검색": lat+lon이 함께 오면 좌표를 Kakao에만 전달 + 위치 감사(§9).
+    # "내 주변 검색": lat+lon이 함께 오면 좌표를 Kakao에만 전달한다. 위치 감사(§9)는 좌표가 실제로
+    # Kakao에 제3자 제공된 경우에만 기록해야 하므로, near-me라도 우선 no-disclosure((None,None))로 두어
+    # location_audit 미들웨어의 query 파라미터 fallback을 무력화하고, 실제 Kakao 호출 지점에서만
+    # 좌표로 덮어쓴다(short-circuit/ provider 부재 시 거짓 제3자 제공 기록 방지).
     near_me = lat is not None and lon is not None
     if near_me:
-        request.state.location_audit_coord = (lat, lon)
+        request.state.location_audit_coord = (None, None)
 
     results: list[PlaceSearchResult] = []
 
@@ -138,6 +141,9 @@ async def unified_search(
     if len(results) < settings.pinvi_place_search_internal_threshold:
         if kakao_local is not None:
             try:
+                if near_me:
+                    # 좌표를 실제로 Kakao에 제3자 제공하는 지점 — 여기서만 감사 기록(§9).
+                    request.state.location_audit_coord = (lat, lon)
                 kakao_data = await kakao_local.search_keyword(
                     query=q,
                     size=limit,

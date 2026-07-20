@@ -53,6 +53,12 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return response
 
+        # 좌표가 실제로 없으면 위치정보 제3자 제공/사용이 없었던 것이므로 감사하지 않는다.
+        # (좌표 없는 키워드-only `/search` 등이 거짓 감사 기록을 남기지 않게 한다. 다른 감사 경로는
+        # 모두 필수 좌표를 지니므로 영향 없음.)
+        if lat is None and lng is None:
+            return response
+
         user_id_str = getattr(request.state, "user_id", None)
         if user_id_str is None:
             return response
