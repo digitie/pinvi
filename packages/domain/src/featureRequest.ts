@@ -35,5 +35,7 @@ export function buildNewPlaceRequest(
     coord: { lon: coord.lon, lat: coord.lat },
     categories: parseCategories(form.categories),
     note: form.note.trim() || null,
+    source: 'user',
+    external_ref: null,
   };
 }

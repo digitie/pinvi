@@ -1,9 +1,14 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
+import { ExternalRefSchema } from './feature';
 
 /** `docs/api/pois.md`. */
 const MarkerColorPattern = /^P-(0[1-9]|1[0-6])$/;
 const CurrencyPattern = /^[A-Z]{3}$/;
+
+/** POI 출처 — feature 연결 / 수동 / 외부 provider pick(ADR-054). */
+export const PoiSourceSchema = z.enum(['feature', 'manual', 'kakao', 'naver']);
+export type PoiSource = z.infer<typeof PoiSourceSchema>;
 
 export const PoiRiseSetStatusSchema = z.enum([
   'pending_date',
@@ -31,6 +36,9 @@ export const PoiCreateSchema = z.object({
   sort_order: z.string().min(1).max(80),
   feature_id: z.string().min(1).max(200).nullable().optional(),
   feature_snapshot: z.record(z.string(), z.unknown()).default({}),
+  // ADR-054: 외부 pick(kakao/naver)이면 source + external_ref를 실어 보낸다(서버가 auto-fire).
+  source: PoiSourceSchema.nullable().optional(),
+  external_ref: ExternalRefSchema.nullable().optional(),
   custom_marker_color: z.string().regex(MarkerColorPattern).nullable().optional(),
   custom_marker_icon: z.string().max(64).nullable().optional(),
   planned_arrival_at: Iso8601Schema.nullable().optional(),
@@ -81,6 +89,8 @@ export const PoiResponseSchema = z.object({
   feature_snapshot: z.record(z.string(), z.unknown()),
   custom_marker_color: z.string().nullable(),
   custom_marker_icon: z.string().nullable(),
+  source: z.string().nullable().default(null),
+  external_ref: ExternalRefSchema.nullable().default(null),
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
   user_note: z.string().nullable(),

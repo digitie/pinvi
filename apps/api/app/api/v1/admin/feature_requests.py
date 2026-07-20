@@ -45,9 +45,16 @@ from app.schemas.admin_feature_request import (
     AdminFeatureRequestSummary,
 )
 from app.schemas.envelope import Envelope
-from app.schemas.feature import Coord, FeatureKind, FeatureRequestStatus, FeatureRequestType
+from app.schemas.feature import (
+    Coord,
+    ExternalRef,
+    FeatureKind,
+    FeatureRequestStatus,
+    FeatureRequestType,
+)
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_users import mask_email
+from app.services.feature_request import reconcile_pois_for_external_ref
 
 router = APIRouter(prefix="/admin/feature-requests", tags=["admin"])
 
@@ -132,6 +139,8 @@ def _summary(row: FeatureSuggestion, email: str | None) -> AdminFeatureRequestSu
         categories=row.categories,
         note=row.note,
         target_feature_id=row.target_feature_id,
+        source=row.source,
+        external_ref=ExternalRef.model_validate(row.external_ref) if row.external_ref else None,
         status=cast(FeatureRequestStatus, row.status),
         kor_travel_map_ref=row.kor_travel_map_ref,
         reviewed_by_admin_id=row.reviewed_by_admin_id,
@@ -281,12 +290,35 @@ async def approve_feature_request_endpoint(
     # require_review면 kor_travel_map 큐 적재(approved), immediate/applied면 반영 완료(added).
     new_status = "added" if kor_travel_map_state == "applied" else "approved"
     before = {"status": suggestion.status}
+
+    # ADR-054 post-approval reconciliation: feature가 실제로 반영(added)돼 feature_id가 생기면, 이
+    # external_ref를 참조하던 미연결 POI들을 새 feature_id에 연결한다(라이브 feature만 연결해 broken 방지).
+    feature_id_val = record.get("feature_id")
+    ref = suggestion.external_ref
+    reconciled = 0
+    if (
+        new_status == "added"
+        and isinstance(feature_id_val, str)
+        and feature_id_val
+        and isinstance(ref, dict)
+        and isinstance(ref.get("provider"), str)
+        and isinstance(ref.get("external_id"), str)
+    ):
+        reconciled = await reconcile_pois_for_external_ref(
+            db,
+            provider=ref["provider"],
+            external_id=ref["external_id"],
+            feature_id=feature_id_val,
+        )
+
+    # kor_travel_map_ref는 완성된 뒤 한 번에 대입한다(JSONB 컬럼은 in-place 변경을 추적하지 않음).
     kor_travel_map_ref = {
         "feature_id": record.get("feature_id"),
         "request_id": record.get("request_id"),
         "state": kor_travel_map_state,
         "review_mode": record.get("review_mode"),
         "action": record.get("action"),
+        "reconciled_poi_count": reconciled,
     }
     suggestion.status = new_status
     suggestion.kor_travel_map_ref = kor_travel_map_ref

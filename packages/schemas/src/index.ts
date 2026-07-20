@@ -183,8 +183,9 @@ export {
   PoiUpdateSchema,
   PoiReorderRequestSchema,
   PoiResponseSchema,
+  PoiSourceSchema,
 } from './poi';
-export type { PoiCreate, PoiResponse, PoiRiseSetResponse, PoiRiseSetStatus } from './poi';
+export type { PoiCreate, PoiResponse, PoiRiseSetResponse, PoiRiseSetStatus, PoiSource } from './poi';
 export type { PoiReorderRequest, PoiUpdate } from './poi';
 
 export {
@@ -643,6 +644,9 @@ export {
   FeatureRequestCreateSchema,
   FeatureRequestStatusSchema,
   FeatureRequestResponseSchema,
+  ExternalRefProviderSchema,
+  ExternalRefSchema,
+  FeatureRequestSourceSchema,
 } from './feature';
 export type {
   FeatureKind,
@@ -660,6 +664,9 @@ export type {
   FeatureSuggestionKind,
   FeatureRequestCreate,
   FeatureRequestResponse,
+  ExternalRefProvider,
+  ExternalRef,
+  FeatureRequestSource,
 } from './feature';
 export {
   PublicBeachListSchema,

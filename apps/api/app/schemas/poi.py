@@ -9,7 +9,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.feature import ExternalRef
+
 PoiRiseSetStatus = Literal["pending_date", "pending_coord", "pending_fetch", "success", "failed"]
+
+# POI 출처 — feature 연결 / 수동 입력 / 외부 provider pick(ADR-054).
+PoiSource = Literal["feature", "manual", "kakao", "naver"]
 
 
 class PoiCreate(BaseModel):
@@ -17,6 +22,10 @@ class PoiCreate(BaseModel):
     sort_order: str = Field(min_length=1, max_length=80)
     feature_id: str | None = Field(default=None, min_length=1, max_length=200)
     feature_snapshot: dict[str, Any] = Field(default_factory=dict)
+    # ADR-054: 외부 pick(kakao/naver)이면 source + external_ref를 실어 보낸다. 서버가 POI 생성 후
+    # best-effort로 feature-request를 auto-fire하고, 승인되면 reconciliation이 feature_id를 채운다.
+    source: PoiSource | None = None
+    external_ref: ExternalRef | None = None
     custom_marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
     custom_marker_icon: str | None = Field(default=None, max_length=64)
     planned_arrival_at: datetime | None = None
@@ -74,6 +83,8 @@ class PoiResponse(BaseModel):
     feature_snapshot: dict[str, Any]
     custom_marker_color: str | None
     custom_marker_icon: str | None
+    source: str | None = None
+    external_ref: ExternalRef | None = None
     planned_arrival_at: datetime | None
     planned_departure_at: datetime | None
     user_note: str | None

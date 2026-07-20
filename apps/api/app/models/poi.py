@@ -64,6 +64,10 @@ class TripDayPoi(Base, TimestampMixin):
     )
     custom_marker_color: Mapped[str | None] = mapped_column(String(16))
     custom_marker_icon: Mapped[str | None] = mapped_column(String(64))
+    # ADR-054: POI 출처('feature'|'manual'|'kakao'|'naver'). 외부 pick은 external_ref로 opaque 참조를
+    # 저장하고(제공자 콘텐츠 미저장), 승인된 feature가 생기면 reconciliation이 feature_id를 채운다.
+    source: Mapped[str | None] = mapped_column(String(16))
+    external_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB(astext_type=Text()))
     planned_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     planned_departure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     user_note: Mapped[str | None] = mapped_column(Text())

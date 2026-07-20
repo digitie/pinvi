@@ -36,6 +36,7 @@ from app.schemas.envelope import Envelope
 from app.schemas.feature import (
     BBox,
     Coord,
+    ExternalRef,
     FeatureCategory,
     FeatureCluster,
     FeatureDetail,
@@ -49,6 +50,7 @@ from app.schemas.feature import (
     FeatureWeatherCard,
     WeatherMetric,
 )
+from app.services.feature_request import find_active_suggestion_by_external_ref
 
 router = APIRouter(prefix="/features", tags=["features"])
 
@@ -276,6 +278,8 @@ def _feature_request_response(row: FeatureSuggestion) -> FeatureRequestResponse:
         categories=row.categories,
         note=row.note,
         target_feature_id=row.target_feature_id,
+        source=row.source,
+        external_ref=ExternalRef.model_validate(row.external_ref) if row.external_ref else None,
         created_at=row.created_at,
         resolved_at=row.resolved_at,
     )
@@ -490,16 +494,26 @@ async def request_feature(
     request.state.location_audit_coord = (lat, lng)
     categories = _normalise_categories(body.categories)
 
-    duplicate = await _find_duplicate_feature_suggestion(
-        db,
-        user_id=user_id,
-        suggestion_type=body.type,
-        target_feature_id=body.target_feature_id,
-        kind=body.kind,
-        name=name,
-        lng=lng,
-        lat=lat,
-    )
+    external_ref = body.external_ref.model_dump() if body.external_ref is not None else None
+
+    # dedup: external_ref가 있으면 (provider, external_id) 전역 dedup(ADR-054), 없으면 기존 per-user dedup.
+    if body.external_ref is not None:
+        duplicate = await find_active_suggestion_by_external_ref(
+            db,
+            provider=body.external_ref.provider,
+            external_id=body.external_ref.external_id,
+        )
+    else:
+        duplicate = await _find_duplicate_feature_suggestion(
+            db,
+            user_id=user_id,
+            suggestion_type=body.type,
+            target_feature_id=body.target_feature_id,
+            kind=body.kind,
+            name=name,
+            lng=lng,
+            lat=lat,
+        )
     if duplicate is not None:
         return Envelope.of(_feature_request_response(duplicate))
 
@@ -514,22 +528,31 @@ async def request_feature(
         lat=lat,
         categories=categories,
         note=body.note,
+        source=body.source,
+        external_ref=external_ref,
     )
     db.add(row)
     try:
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        duplicate = await _find_duplicate_feature_suggestion(
-            db,
-            user_id=user_id,
-            suggestion_type=body.type,
-            target_feature_id=body.target_feature_id,
-            kind=body.kind,
-            name=name,
-            lng=lng,
-            lat=lat,
-        )
+        if body.external_ref is not None:
+            duplicate = await find_active_suggestion_by_external_ref(
+                db,
+                provider=body.external_ref.provider,
+                external_id=body.external_ref.external_id,
+            )
+        else:
+            duplicate = await _find_duplicate_feature_suggestion(
+                db,
+                user_id=user_id,
+                suggestion_type=body.type,
+                target_feature_id=body.target_feature_id,
+                kind=body.kind,
+                name=name,
+                lng=lng,
+                lat=lat,
+            )
         if duplicate is not None:
             return Envelope.of(_feature_request_response(duplicate))
         raise

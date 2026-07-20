@@ -94,6 +94,8 @@ async def create_poi(
     actual_amount: Decimal | None = None,
     currency: str = "KRW",
     user_url: str | None = None,
+    source: str | None = None,
+    external_ref: dict[str, Any] | None = None,
 ) -> TripDayPoi:
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
@@ -108,6 +110,8 @@ async def create_poi(
         feature_snapshot=feature_snapshot,
         custom_marker_color=custom_marker_color,
         custom_marker_icon=custom_marker_icon,
+        source=source,
+        external_ref=external_ref,
         planned_arrival_at=planned_arrival_at,
         planned_departure_at=planned_departure_at,
         user_note=user_note,

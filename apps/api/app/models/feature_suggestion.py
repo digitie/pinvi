@@ -85,6 +85,10 @@ class FeatureSuggestion(Base, TimestampMixin):
         server_default=text("ARRAY[]::varchar[]"),
     )
     note: Mapped[str | None] = mapped_column(Text())
+    # ADR-054: 제안 출처('user'|'kakao'|'naver') + 외부 opaque 참조({provider, external_id,
+    # deep_link_url}). external_ref가 있으면 (provider, external_id)로 전역 dedup된다(active 1건).
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="user")
+    external_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB(astext_type=Text()))
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     reviewed_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
