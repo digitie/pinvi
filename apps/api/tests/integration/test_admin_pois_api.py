@@ -283,8 +283,10 @@ async def test_admin_poi_create_writes_audit(
     assert stored_poi is not None
     assert stored_poi.added_by_user_id == admin_id
     assert stored_day is not None
-    assert stored_day.date == date(2026, 7, 2)
+    # ADR-055: auto-생성 day의 date는 NULL(override-only). rise/set seed는 파생 effective_date를 쓴다.
+    assert stored_day.date is None
     assert rise_set is not None
+    assert rise_set.locdate == date(2026, 7, 2)
     assert audit is not None
     assert audit.action == "poi.create"
     assert audit.resource_id == str(poi_id)

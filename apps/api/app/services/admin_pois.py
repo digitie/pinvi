@@ -22,6 +22,7 @@ from app.services.poi import (
     SortOrderConflictError,
     _fill_trip_primary_region_from_snapshot,
     ensure_trip_day,
+    trip_day_effective_locdate,
 )
 
 
@@ -150,6 +151,10 @@ async def create_admin_poi(
         raise AdminPoiTripNotFoundError("여행을 찾을 수 없습니다.")
 
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
+    # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
+    locdate = await trip_day_effective_locdate(
+        db, trip_id=trip_id, day_index=day_index, override=day.date
+    )
     poi = TripDayPoi(
         trip_id=trip_id,
         day_index=day_index,
@@ -180,7 +185,7 @@ async def create_admin_poi(
     db.add(
         build_initial_poi_rise_set(
             poi=poi,
-            locdate=day.date,
+            locdate=locdate,
             feature_snapshot=feature_snapshot,
         )
     )

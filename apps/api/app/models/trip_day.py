@@ -27,8 +27,11 @@ class TripDay(Base, TimestampMixin):
 
     trip_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     day_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # ADR-055: override-only. NULL이면 effective_date = trip.start_date + (day_index-1)로 파생.
     date: Mapped[date | None] = mapped_column(Date())
     title: Mapped[str | None] = mapped_column(String(200))
     note: Mapped[str | None] = mapped_column(Text())
+    # ADR-055: 일자 마커 색 override(팔레트 키 P-01~P-16). NULL이면 인덱스 기본색으로 파생.
+    marker_color: Mapped[str | None] = mapped_column(String(16))
     # optimistic lock — trip/POI와 동일한 정수 version (If-Match 헤더로 검증, T-287).
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

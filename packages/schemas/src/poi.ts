@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
 
 /** `docs/api/pois.md`. */
-const MarkerColorPattern = /^P-\d{2}$/;
+const MarkerColorPattern = /^P-(0[1-9]|1[0-6])$/;
 const CurrencyPattern = /^[A-Z]{3}$/;
 
 export const PoiRiseSetStatusSchema = z.enum([

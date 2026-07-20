@@ -143,11 +143,15 @@ export const TripResponseSchema = z.object({
 });
 export type TripResponse = z.infer<typeof TripResponseSchema>;
 
+// 일자/POI 마커 색 override — 팔레트 키 P-01~P-16 (ADR-055).
+const MarkerColorKeySchema = z.string().regex(/^P-(0[1-9]|1[0-6])$/, 'marker color는 P-01~P-16 형식.');
+
 export const TripDayCreateSchema = z.object({
   day_index: z.number().int().min(1).optional(),
   date: z.string().date().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
   note: z.string().nullable().optional(),
+  marker_color: MarkerColorKeySchema.nullable().optional(),
 });
 export type TripDayCreate = z.infer<typeof TripDayCreateSchema>;
 
@@ -155,6 +159,7 @@ export const TripDayUpdateSchema = z.object({
   date: z.string().date().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
   note: z.string().nullable().optional(),
+  marker_color: MarkerColorKeySchema.nullable().optional(),
 });
 export type TripDayUpdate = z.infer<typeof TripDayUpdateSchema>;
 
@@ -164,6 +169,8 @@ export const TripDayResponseSchema = z.object({
   date: z.string().date().nullable(),
   title: z.string().nullable(),
   note: z.string().nullable(),
+  // 일자 색 override(팔레트 키). NULL이면 인덱스 기본색으로 파생(ADR-055).
+  marker_color: z.string().nullable().default(null),
   // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
   version: z.number().int().default(1),
   created_at: Iso8601Schema,
@@ -220,6 +227,8 @@ export const TripViewPoiSchema = z.object({
   feature: z.record(z.string(), z.unknown()),
   marker_color: z.string().nullable(),
   marker_icon: z.string().nullable(),
+  // 지도 핀·목록 뱃지 parity용 서버 계산 색(custom > 일자색). 항상 유효 팔레트 키(ADR-055).
+  display_marker_color: z.string().nullable().default(null),
   is_broken: z.boolean(),
   user_note: z.string().nullable(),
   planned_arrival_at: Iso8601Schema.nullable(),
@@ -252,6 +261,12 @@ export type TripDayHoliday = z.infer<typeof TripDayHolidaySchema>;
 export const TripViewDaySchema = z.object({
   day_index: z.number().int(),
   date: z.string().date().nullable(),
+  // date는 override-only, effective_date는 파생(override 또는 start_date+day_index) — ADR-055.
+  effective_date: z.string().date().nullable().default(null),
+  // effective_date가 여행 [start,end] 밖이면 true(F1: 기간 축소 시 경고).
+  out_of_range: z.boolean().default(false),
+  // 일자 색 override(팔레트 키). NULL이면 인덱스 기본색으로 파생.
+  marker_color: z.string().nullable().default(null),
   title: z.string().nullable(),
   // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
   version: z.number().int().default(1),
