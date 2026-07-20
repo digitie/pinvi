@@ -14,14 +14,10 @@
 - **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
   client·provider-sync/ETL projection, 공용 schema·provider-sync UI/E2E·문서를 수정한다. TDR
   레인과 파일이 겹치면 C6c가 선행하며, provider-sync 밖의 Web 화면 구조는 바꾸지 않는다.
-- **TDR(Trip Detail Rewrite) 레인 분리** — 마스터 계획 `docs/execplan/trip-detail-rewrite.md`.
-  파일 소유로 A/B 충돌을 막는다.
-  - **레인 B = Codex**(`agent/codex-tdr-*`): `apps/api`, `apps/etl`, `packages/schemas`,
-    `packages/api-client`, `docs/`(ADR/api), migrations, CHANGELOG, seed. → T-301~T-305.
-  - **레인 A = Claude**(`agent/claude-tdr-*`): `apps/web/components`, `apps/web/lib`,
-    `packages/domain`(small). → T-306~T-309c.
-  - 공유 계약 필드는 **B가 먼저 정의**, A가 소비. `packages/domain/src/marker.ts`는 A가 소유하되
-    web+mobile 공유이므로 pure 유지(`dayColor` optional). 자세한 파일 소유·DAG는 execplan §3.2/§3.1.
+- **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
+  마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
+  T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
+  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(구현 완료, PR 대기).
 
 ## kor-travel-map 공개 API 인증 계약 정합
 
@@ -56,14 +52,14 @@
 ## TDR — Trip Detail Rewrite (T-300~T-309c)
 
 > 계약·설계 정본: ADR-054/055/056(`docs/decisions.md`) + `docs/execplan/trip-detail-rewrite.md`.
-> T-300(공휴일 read-path)은 **PR #383로 main 머지 완료** → 아래 open task만 남는다.
+> Claude 단독 진행(레인 분리 폐지). 완료: T-300(#383), T-306a 모달 기반(#396).
 
-### 레인 B (Codex, backend/data/external)
+### 백엔드 / 데이터 (T-301~T-305)
 
-- [ ] T-301 — Day presentation backend. `trip_days.marker_color`(nullable+inherit),
-      effective_date 파생(ensure_trip_day materialize 폐지), out_of_range, POI별
-      `display_marker_color`, DELETE-day 409 `DAY_HAS_POIS` guard, day schema 양 언어,
-      shared-view emit. **ADR-055**. (선점 시 `agent/codex-tdr-day-presentation`)
+- [~] T-301 — Day presentation backend. `trip_days.marker_color`(nullable+inherit),
+      effective_date 파생(materialize 폐지: create_trip/ensure_trip_day/create_day), out_of_range,
+      POI별 `display_marker_color`, DELETE-day 409 `DAY_HAS_POIS`+`?force`, copy 색 보존, py+zod 계약.
+      **구현 완료·검증(ruff/mypy/pytest) 통과, PR 대기.** `agent/claude-tdr-day-presentation`. **ADR-055**.
 - [ ] T-302 — Kakao/Naver Local client + config + `GET /search` typed source-tagged(address 포함,
       `/features/search` 삭제) + location_audit + quota/cache + api-client + `docs/api/search.md` +
       `docs/integrations/kakao-naver-local.md` 연결. **ADR-054**.
@@ -74,14 +70,8 @@
 - [ ] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
       re-seed(파생-date only) + 완료 시그널 + e2e seed/provider mock. (ADR-055)
 
-### 레인 A (Claude, web/domain UI)
+### 웹 UI (T-306~T-309c) — T-306a 모달 기반은 #396 머지 완료
 
-- [ ] T-306a — **TDR 웹 모달 기반**(백엔드 무의존, 선행). 공용 `useModalDialog`
-      훅(focus-in/restore + Escape + body scroll-lock(중첩 카운트) + Tab focus-trap +
-      backdrop pointer-safe close + aria 배선) + 제네릭 `ConfirmDialog`(danger tone) +
-      `FeatureDetailModal` shell(bottom-sheet 반응형, loading/error/children/footer 슬롯).
-      T-306의 F2 confirm과 T-309c의 detail 본문이 이 위에 올라간다. (dep 없음)
-      (선점: `agent/claude-tdr-web-modal-foundation`) (ADR-056)
 - [ ] T-306 — day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
       배너/아이콘(F1). (dep T-301, T-306a) (ADR-056/055)
 - [ ] T-307 — per-day color picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트 뱃지

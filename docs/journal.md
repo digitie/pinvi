@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-20 22:30 (claude) — TDR T-301 day 표시 모델 backend
+
+- 결정: **TDR 전체를 Claude 단독 진행**(레인 A/B 분리 폐지, Codex 미사용). #396(T-306a) 머지 완료.
+- ADR-055 구현: `trip_days.date`를 override-only로 전환, effective_date를 read-path에서 파생.
+  materialize를 세 경로(create_trip / ensure_trip_day / create_trip_day_endpoint)에서 폐지하고,
+  마이그레이션 0038이 과거 auto-derived date를 NULL로 되돌린다(우연 override는 구분 불가→auto 간주).
+- 신설 `app/core/markers.py`: 일자 기본색 `P-{((i-1)%16)+1}` + display 색 해석(custom>일자색).
+  build_trip_view가 일자별 effective_date/out_of_range/marker_color + POI display_marker_color를 emit,
+  공휴일 조회를 effective_date 기준으로 전환.
+- `trip_days.marker_color`(nullable 팔레트 키) + PATCH/create/response·zod 계약. rise/set seed는
+  공용 `trip_day_effective_locdate`로 파생(정규 create_poi + admin_pois 양쪽 — admin 경로 누락이
+  테스트로 드러나 수정).
+- DELETE day: POI 있으면 409 `DAY_HAS_POIS`, `?force=true`면 FK CASCADE 삭제. copy_trip 색 보존.
+- **단일 적대적 리뷰**(1명, 사용자 지시) 반영: P0/P1 없음. P3 3건 fix(POI custom_marker_color 정규식
+  P-01~16 정밀화 py+zod, copy 색 보존, 마이그레이션 주석 정확화), soft-delete cascade는 기존 FK
+  동작으로 수용.
+- 검증(WSL ext4 mirror): ruff clean, `mypy --strict` 189 files clean, blast-radius pytest 63 passed.
+  materialize 가정 테스트 5건(day-layer/hole-fill/cascade/copy/admin-poi) 갱신. 전체 suite 최종 확인 중.
+- **다음**: T-302(Kakao/Naver Local + `GET /search`).
+
 ## 2026-07-20 21:00 (claude) — TDR T-306a 웹 모달 기반 착수
 
 - TDR 문서 PR #386 머지 확인(main `e60d171`). #387~#395는 admin/ops/kor-travel-map만

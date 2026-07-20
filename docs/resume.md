@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-07-20 (claude) — TDR T-301 day 표시 모델 backend (PR 대기)
+
+**TDR는 Claude 단독 진행**(레인 분리 폐지). #396(T-306a 모달 기반) 머지 완료. T-301(ADR-055
+day presentation backend) 구현·검증 완료: `trip_days.date` override-only + effective_date 파생
+(materialize 3경로 폐지 + 마이그레이션 0038), `core/markers.py`(일자 기본색+display 색), 일자
+`marker_color` + POI `display_marker_color`, 공휴일 effective_date 기준, DELETE day 409
+`DAY_HAS_POIS`+`?force`, rise/set seed 공용 `trip_day_effective_locdate`(admin 경로 포함), copy 색
+보존, py+zod 계약. 단일 적대적 리뷰 P3 3건 반영. WSL: ruff/mypy --strict/blast-radius 63 passed
+(전체 suite 최종 확인 중). 브랜치 `agent/claude-tdr-day-presentation`.
+**다음 한 작업**: 전체 pytest 그린 확인 → T-301 PR 생성·머지 → **T-302**(Kakao/Naver Local
+display-only client + config + `GET /search` typed source-tagged + location_audit + quota/cache +
+api-client + `docs/api/search.md`, ADR-054).
+
 ## 2026-07-20 (claude) — TDR T-306a 웹 모달 기반 (레인 A 착수)
 
 TDR 문서 PR #386이 main에 머지된 뒤, 레인 A(Claude)의 **백엔드 무의존 선행 작업**을
