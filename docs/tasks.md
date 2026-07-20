@@ -17,7 +17,8 @@
 - **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
   마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
-  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398). 진행: T-303(PR 대기).
+  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399).
+  진행: T-304(PR 대기).
 
 ## kor-travel-map 공개 API 인증 계약 정합
 
@@ -58,12 +59,12 @@
 
 - [x] T-301 — Day presentation backend. **PR #397 머지 완료**(main c703bb6). **ADR-055**.
 - [x] T-302 — Kakao/Naver Local + 통합 `GET /search` source-tagged. **PR #398 머지 완료**(main 4ae8c8a). **ADR-054**.
-- [~] T-303 — feature-request 파이프라인: `source`/`external_ref` first-class(POI+suggestion),
-      best-effort decoupled auto-fire, GLOBAL dedup, post-approval reconciliation.
+- [x] T-303 — feature-request 파이프라인(source/external_ref + auto-fire + reconciliation).
+      **PR #399 머지 완료**(main d0a438b). (ADR-054)
+- [~] T-304 — detail-card: `GET /features/{id}/detail-card` kind별 + generic fallback + opt-in 외부
+      enrichment(display-only) + in-bounds `price` kind.
       **구현 완료·검증(ruff/mypy/pytest + web) 통과, 단일 리뷰 후 PR 대기.**
-      `agent/claude-tdr-feature-request`. (ADR-054)
-- [ ] T-304 — detail-card: `GET /features/{id}/detail-card` kind별 + generic fallback + opt-in 외부
-      enrichment(display-only) + in-bounds `price` kind. **ADR-056**.
+      `agent/claude-tdr-detail-card`. **ADR-056**.
 - [ ] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
       re-seed(파생-date only) + 완료 시그널 + e2e seed/provider mock. (ADR-055)
 

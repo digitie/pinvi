@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-304 feature detail-card + 외부 enrichment (PR 대기)
+
+**TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399).
+T-304(ADR-056) 구현·검증 완료: `GET /features/{id}/detail-card` kind별 discriminated union 투영
+(place/event/notice/price + generic fallback, 원본 detail/urls 미노출), match-confidence 가드
+(정규화 포함/문자 bigram + haversine ≤300m, 오귀속 차단), 옵트인 `?providers=kakao,naver`(place만,
+display-only, degraded_providers), `price` in-bounds 추가, py+zod+api-client 계약. WSL: ruff/mypy
+--strict(195)/detail-card 13 pytest + web typecheck/lint/build/vitest 통과. 단일 적대적 리뷰 진행 중.
+브랜치 `agent/claude-tdr-detail-card`.
+**다음 한 작업**: 리뷰 반영 → T-304 PR·CI·머지 → **T-305**(전용 `app.trip_day_rise_sets` table +
+ETL asset + day-level rise/set read + batched re-seed(파생-date only) + 완료 시그널, ADR-055).
+이후 web UI(T-306/307/308/309a-c) → N150 live e2e.
+
 ## 2026-07-21 (claude) — TDR T-303 외부 pick feature-request 파이프라인 (PR 대기)
 
 **TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397), T-302(#398). T-303(ADR-054 §7, F4)
