@@ -4,6 +4,14 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-21
+
+- [x] **T-301** — TDR day 표시 모델 backend. (완료: 2026-07-21, PR #397, claude)
+      `trip_days.date`를 override-only로 전환, effective_date 파생(materialize 3경로 폐지 + 마이그레이션
+      0038), `core/markers.py`(일자 기본색+display 색), 일자 `marker_color` + POI `display_marker_color`,
+      공휴일 effective_date 기준, DELETE day 409 `DAY_HAS_POIS`+`?force`, 공용 `trip_day_effective_locdate`
+      (admin 경로 포함), copy 색 보존, py+zod 계약. 단일 적대적 리뷰 P3 3건 반영. ADR-055.
+
 ## 2026-07-20
 
 - [x] **T-306a** — TDR 웹 모달 기반. (완료: 2026-07-20, PR #396, claude)
