@@ -8,10 +8,13 @@ from typing import Annotated
 from fastapi import APIRouter, Header, HTTPException, status
 
 from app.core.deps import CurrentUserId, DbSession
+from app.db import session as db_session
 from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.schemas.envelope import Envelope
+from app.schemas.feature import ExternalRef
 from app.schemas.poi import PoiCreate, PoiReorderRequest, PoiResponse, PoiUpdate
+from app.services.feature_request import auto_fire_external_feature_request
 from app.services.poi import (
     PoiNotFoundError,
     PoiVersionConflictError,
@@ -50,6 +53,8 @@ def _to_response(
         feature_snapshot=poi.feature_snapshot,
         custom_marker_color=poi.custom_marker_color,
         custom_marker_icon=poi.custom_marker_icon,
+        source=poi.source,
+        external_ref=poi.external_ref,
         planned_arrival_at=poi.planned_arrival_at,
         planned_departure_at=poi.planned_departure_at,
         user_note=poi.user_note,
@@ -61,6 +66,40 @@ def _to_response(
         version=poi.version,
         created_at=poi.created_at,
         updated_at=poi.updated_at,
+    )
+
+
+async def _auto_fire_feature_request(
+    *,
+    poi: TripDayPoi,
+    requester_user_id: uuid.UUID,
+    external_ref: ExternalRef,
+    feature_snapshot: dict[str, object],
+    user_note: str | None,
+) -> None:
+    """외부 pick POI의 user-authored name/coord를 뽑아 feature-request auto-fire로 넘긴다."""
+    name = feature_snapshot.get("name") or feature_snapshot.get("title")
+    coord = feature_snapshot.get("coord")
+    if not isinstance(name, str) or not name.strip() or not isinstance(coord, dict):
+        return  # user-authored name/coord가 없으면 auto-fire 불가(조용히 스킵)
+    raw_lon = coord.get("lon", coord.get("longitude"))
+    raw_lat = coord.get("lat", coord.get("latitude"))
+    try:
+        lon = float(raw_lon)  # type: ignore[arg-type]
+        lat = float(raw_lat)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return
+    await auto_fire_external_feature_request(
+        db_session.async_session_factory,
+        poi_id=poi.attachment_id,
+        requester_user_id=requester_user_id,
+        provider=external_ref.provider,
+        external_id=external_ref.external_id,
+        deep_link_url=external_ref.deep_link_url,
+        name=name.strip(),
+        lon=lon,
+        lat=lat,
+        note=user_note,
     )
 
 
@@ -90,7 +129,9 @@ async def create_poi_endpoint(
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[PoiResponse]:
-    await _trip_or_404(db, trip_id, uuid.UUID(current_user_id))
+    actor_id = uuid.UUID(current_user_id)
+    await _trip_or_404(db, trip_id, actor_id)
+    external_ref = body.external_ref.model_dump() if body.external_ref is not None else None
     try:
         poi = await create_poi(
             db,
@@ -99,7 +140,7 @@ async def create_poi_endpoint(
             sort_order=body.sort_order,
             feature_id=body.feature_id,
             feature_snapshot=body.feature_snapshot,
-            added_by_user_id=uuid.UUID(current_user_id),
+            added_by_user_id=actor_id,
             custom_marker_color=body.custom_marker_color,
             custom_marker_icon=body.custom_marker_icon,
             planned_arrival_at=body.planned_arrival_at,
@@ -109,12 +150,28 @@ async def create_poi_endpoint(
             actual_amount=body.actual_amount,
             currency=body.currency,
             user_url=body.user_url,
+            source=body.source,
+            external_ref=external_ref,
         )
     except SortOrderConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+
+    # ADR-054 F4: 외부 pick(kakao/naver)이고 아직 feature에 연결되지 않았으면 feature-request를
+    # best-effort로 auto-fire한다(POI 트랜잭션과 분리, 실패해도 POI 생성은 유지). 이후 admin 승인 시
+    # reconciliation이 feature_id를 채운다. name/coord는 user-authored snapshot에서 가져온다.
+    if body.external_ref is not None and body.feature_id is None:
+        await _auto_fire_feature_request(
+            poi=poi,
+            requester_user_id=actor_id,
+            external_ref=body.external_ref,
+            feature_snapshot=body.feature_snapshot,
+            user_note=body.user_note,
+        )
+        await db.refresh(poi)
+
     rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
     response = _to_response(poi, rise_set=rise_set)
     realtime_broker.publish_event_nowait(

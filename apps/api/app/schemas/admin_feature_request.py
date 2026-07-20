@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.feature import (
     Coord,
+    ExternalRef,
     FeatureKind,
     FeatureRequestStatus,
     FeatureRequestType,
@@ -33,6 +34,8 @@ class AdminFeatureRequestSummary(BaseModel):
     categories: list[str] = Field(default_factory=list)
     note: str | None = None
     target_feature_id: str | None = None
+    source: str = "user"
+    external_ref: ExternalRef | None = None
     status: FeatureRequestStatus
     kor_travel_map_ref: dict[str, Any] | None = None
     reviewed_by_admin_id: uuid.UUID | None = None

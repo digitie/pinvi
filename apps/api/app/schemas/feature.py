@@ -41,6 +41,17 @@ class Coord(BaseModel):
     lat: float = Field(ge=33.0, le=43.0)
 
 
+ExternalRefProvider = Literal["kakao", "naver"]
+
+
+class ExternalRef(BaseModel):
+    """외부 provider opaque 참조(ADR-054 §7). provider 콘텐츠가 아니라 식별자/딥링크만 저장·전달한다."""
+
+    provider: ExternalRefProvider
+    external_id: str = Field(min_length=1, max_length=200)
+    deep_link_url: str | None = Field(default=None, max_length=2000)
+
+
 class BBox(BaseModel):
     """viewport bounding box."""
 
@@ -173,6 +184,10 @@ class FeatureRequestCreate(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
     # correction/closure(기존 feature 참조) 시 필수, new_place 시 금지.
     target_feature_id: str | None = Field(default=None, min_length=1, max_length=200)
+    # ADR-054: 제안 출처 + 외부 opaque 참조(Kakao/Naver pick에서 온 경우). external_ref가 있으면
+    # (provider, external_id)로 전역 dedup된다.
+    source: Literal["user", "kakao", "naver"] = "user"
+    external_ref: ExternalRef | None = None
 
     @model_validator(mode="after")
     def validate_target_feature_id(self) -> Self:
@@ -180,6 +195,11 @@ class FeatureRequestCreate(BaseModel):
             raise ValueError("correction/closure 제안은 target_feature_id가 필요합니다.")
         if self.type == "new_place" and self.target_feature_id is not None:
             raise ValueError("new_place 제안은 target_feature_id를 가질 수 없습니다.")
+        if self.external_ref is not None:
+            if self.type != "new_place":
+                raise ValueError("외부 참조(external_ref) 제안은 new_place만 가능합니다.")
+            if self.source != self.external_ref.provider:
+                raise ValueError("source는 external_ref.provider와 일치해야 합니다.")
         return self
 
 
@@ -193,5 +213,7 @@ class FeatureRequestResponse(BaseModel):
     categories: list[FeatureRequestCategory] = Field(default_factory=list, max_length=10)
     note: str | None = None
     target_feature_id: str | None = None
+    source: str = "user"
+    external_ref: ExternalRef | None = None
     created_at: datetime
     resolved_at: datetime | None = None

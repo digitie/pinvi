@@ -135,6 +135,21 @@ export type FeatureRequestType = z.infer<typeof FeatureRequestTypeSchema>;
 export const FeatureSuggestionKindSchema = z.enum(['place', 'event']);
 export type FeatureSuggestionKind = z.infer<typeof FeatureSuggestionKindSchema>;
 
+export const ExternalRefProviderSchema = z.enum(['kakao', 'naver']);
+export type ExternalRefProvider = z.infer<typeof ExternalRefProviderSchema>;
+
+/** 외부 provider opaque 참조(ADR-054 §7) — 식별자/딥링크만, provider 콘텐츠는 저장 안 함. */
+export const ExternalRefSchema = z.object({
+  provider: ExternalRefProviderSchema,
+  external_id: z.string().min(1).max(200),
+  deep_link_url: z.string().max(2000).nullable().optional(),
+});
+export type ExternalRef = z.infer<typeof ExternalRefSchema>;
+
+/** 제안/POI 출처 태그. */
+export const FeatureRequestSourceSchema = z.enum(['user', 'kakao', 'naver']);
+export type FeatureRequestSource = z.infer<typeof FeatureRequestSourceSchema>;
+
 export const FeatureRequestCreateSchema = z
   .object({
     type: FeatureRequestTypeSchema.optional().default('new_place'),
@@ -145,6 +160,9 @@ export const FeatureRequestCreateSchema = z
     note: z.string().max(2000).nullable().optional(),
     // correction/closure(기존 feature 참조) 시 필수, new_place 시 금지.
     target_feature_id: z.string().min(1).max(200).nullable().optional(),
+    // ADR-054: Kakao/Naver pick에서 온 제안이면 source + external_ref(전역 dedup 키).
+    source: FeatureRequestSourceSchema.optional().default('user'),
+    external_ref: ExternalRefSchema.nullable().optional(),
   })
   .refine((v) => v.type === 'new_place' || v.target_feature_id != null, {
     message: 'correction/closure 제안은 target_feature_id가 필요합니다.',
@@ -153,6 +171,14 @@ export const FeatureRequestCreateSchema = z
   .refine((v) => v.type !== 'new_place' || v.target_feature_id == null, {
     message: 'new_place 제안은 target_feature_id를 가질 수 없습니다.',
     path: ['target_feature_id'],
+  })
+  .refine((v) => v.external_ref == null || v.type === 'new_place', {
+    message: '외부 참조(external_ref) 제안은 new_place만 가능합니다.',
+    path: ['external_ref'],
+  })
+  .refine((v) => v.external_ref == null || v.source === v.external_ref.provider, {
+    message: 'source는 external_ref.provider와 일치해야 합니다.',
+    path: ['source'],
   });
 export type FeatureRequestCreate = z.infer<typeof FeatureRequestCreateSchema>;
 
@@ -175,6 +201,8 @@ export const FeatureRequestResponseSchema = z.object({
   categories: z.array(FeatureRequestCategorySchema).max(10),
   note: z.string().nullable().optional(),
   target_feature_id: z.string().nullable().optional(),
+  source: z.string().default('user'),
+  external_ref: ExternalRefSchema.nullable().default(null),
   created_at: Iso8601Schema,
   resolved_at: Iso8601Schema.nullable().optional(),
 });
