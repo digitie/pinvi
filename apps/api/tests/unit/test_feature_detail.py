@@ -126,6 +126,20 @@ def test_is_confident_match_name_and_distance() -> None:
     assert is_confident_match("스타벅스 광안리", feature, "스타벅스 광안리", far) is False
 
 
+def test_short_generic_name_not_swallowed_by_longer_place() -> None:
+    """리뷰 P2: 짧은 generic 이름('중앙시장')이 근처 다른 장소('중앙시장주차장')로 오귀속되지 않는다."""
+    feature = Coord(lon=129.12, lat=35.15)
+    near = Coord(lon=129.1215, lat=35.1512)  # ~150 m(거리 게이트는 통과)
+    assert is_confident_match("중앙시장", feature, "중앙시장주차장", near) is False
+
+
+def test_no_match_without_coord_anchor() -> None:
+    """리뷰 P3: 좌표 앵커가 없으면 이름이 같아도 매칭하지 않는다(다른 지역 동명 장소 오귀속 차단)."""
+    other = Coord(lon=126.98, lat=37.57)  # 서울
+    assert is_confident_match("중앙식당", None, "중앙식당", other) is False
+    assert is_confident_match("중앙식당", other, "중앙식당", None) is False
+
+
 def test_best_match_enrichment_matched_and_unmatched() -> None:
     docs = [
         {

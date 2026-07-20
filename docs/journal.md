@@ -16,8 +16,12 @@
   provider당 실패/부재는 `degraded_providers`. 좌표는 feature 공개 좌표(사용자 위치 아님→위치 감사 X).
 - `price`를 `_DEFAULT_INBOUNDS_KINDS`에 추가.
 - 계약: py+zod `FeatureDetailCard` union + api-client `feature.detailCard(providers)`.
-- 검증(WSL): ruff/`mypy --strict`(195) + detail-card 13(투영/match/enrichment/degrade/404) passed;
-  web typecheck/lint/build/schemas·web vitest 통과. 단일 리뷰 진행 중.
+- **단일 적대적 리뷰** 반영: match-confidence 오귀속(false positive) 2건 — (P2) 포함 관계가 짧은
+  generic 이름('중앙시장')을 근처 다른 장소('중앙시장주차장')로 매칭 → 포함은 길이비 ≥0.7일 때만
+  1.0, 임계 0.6으로 상향. (P3) 좌표 앵커 없으면 동명 타지역 장소 매칭 → 양쪽 좌표 필수(없으면 매칭 안
+  함). 나머지(미노출/union/opt-in gating/robustness/공개 좌표만 전달)는 sound로 확인.
+- 검증(WSL): ruff/`mypy --strict`(195) + detail-card 15(투영/match/오귀속 2건/enrichment/degrade/404)
+  passed; web typecheck/lint/build/schemas·web vitest 통과.
 - **다음**: T-305(전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set + re-seed).
 
 ## 2026-07-21 08:20 (claude) — TDR T-303 외부 pick feature-request 파이프라인

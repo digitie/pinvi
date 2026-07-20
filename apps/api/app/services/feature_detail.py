@@ -26,8 +26,11 @@ from app.schemas.feature import (
 from app.services.place_search import kakao_document_to_result, naver_item_to_result
 
 # name 유사도/거리 임계 — 둘 다 만족해야 confident match(오귀속 방지, ADR-056).
-_NAME_SIM_THRESHOLD = 0.5
+_NAME_SIM_THRESHOLD = 0.6
 _MATCH_DISTANCE_M = 300.0
+# 포함 관계를 1.0으로 볼 최소 길이 비율(짧은 이름/긴 이름). '중앙시장' ⊂ '중앙시장주차장'(0.57)처럼
+# 짧은 generic 이름이 다른 장소에 삼켜지는 오귀속을 막고, '광안리' vs '광안리점' 같은 지점 접미사만 통과.
+_CONTAINMENT_MIN_RATIO = 0.7
 
 
 class _LatLon(Protocol):
@@ -168,8 +171,12 @@ def _name_similarity(a: str, b: str) -> float:
     na, nb = _normalize_name(a), _normalize_name(b)
     if not na or not nb:
         return 0.0
+    # 포함 관계는 짧은 쪽이 긴 쪽의 큰 비율(≥0.7)일 때만 1.0 — 지점 접미사('점' 등)는 통과하고
+    # 짧은 generic 이름이 다른 상호에 삼켜지는 경우는 bigram으로 떨어뜨린다.
     if na in nb or nb in na:
-        return 1.0
+        shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+        if len(shorter) / len(longer) >= _CONTAINMENT_MIN_RATIO:
+            return 1.0
     ba, bb = _bigrams(na), _bigrams(nb)
     if not ba or not bb:
         return 0.0
@@ -188,13 +195,16 @@ def _haversine_m(a: _LatLon, b: _LatLon) -> float:
 def is_confident_match(
     feature_name: str, feature_coord: _LatLon | None, cand_name: str, cand_coord: _LatLon | None
 ) -> bool:
-    """name 유사도 + 좌표 근접이 모두 임계를 넘으면 confident(오귀속 방지)."""
+    """name 유사도 + 좌표 근접이 모두 임계를 넘어야 confident(오귀속 방지, ADR-056).
+
+    좌표 앵커(양쪽 좌표)가 없으면 같은 이름의 다른 지역 장소를 구분할 수 없으므로 매칭하지 않는다
+    (이름만으로 전화/URL을 붙이는 오귀속 차단).
+    """
     if _name_similarity(feature_name, cand_name) < _NAME_SIM_THRESHOLD:
         return False
-    if feature_coord is not None and cand_coord is not None:
-        return _haversine_m(feature_coord, cand_coord) <= _MATCH_DISTANCE_M
-    # 좌표가 없으면 name 유사도만으로 판단(느슨하지만 name threshold는 통과한 상태).
-    return True
+    if feature_coord is None or cand_coord is None:
+        return False
+    return _haversine_m(feature_coord, cand_coord) <= _MATCH_DISTANCE_M
 
 
 def _enrichment_from_result(
