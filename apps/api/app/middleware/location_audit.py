@@ -28,6 +28,9 @@ PURPOSE_BY_PATH: dict[str, str] = {
     "/features/nearby": "nearby_attractions",
     "/regions/covering-point": "region_covering",
     "/regions/within-radius": "region_radius",
+    # "내 주변 검색"으로 사용자 좌표를 Kakao에 제3자 제공(ADR-054 §9). 좌표는 핸들러가
+    # request.state.location_audit_coord로 세팅하며, 좌표 없는 키워드 검색은 감사 대상이 아니다.
+    "/search": "third_party_place_search",
 }
 
 

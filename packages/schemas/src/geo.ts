@@ -24,11 +24,39 @@ export const RegionCoveringSchema = z.object({
 });
 export type RegionCovering = z.infer<typeof RegionCoveringSchema>;
 
-/** `GET /search` 통합 결과 — feature + address + 내 POI(소스별 degrade 가능). */
-export const UnifiedSearchResultSchema = z.object({
-  features: z.array(CandidateSchema),
-  addresses: z.array(CandidateSchema),
-  my_pois: z.array(CandidateSchema),
+/** 통합 검색 결과 소스 태그(ADR-054). internal(feature/my_poi/address) + 외부(kakao/naver). */
+export const PlaceSearchSourceSchema = z.enum(['feature', 'my_poi', 'address', 'kakao', 'naver']);
+export type PlaceSearchSource = z.infer<typeof PlaceSearchSourceSchema>;
+
+export const PlaceCoordSchema = z.object({ lon: z.number(), lat: z.number() });
+export type PlaceCoord = z.infer<typeof PlaceCoordSchema>;
+
+/**
+ * `GET /search`의 한 행. source에 따라 채워지는 필드가 다르다. kakao/naver row의 phone/category
+ * 등 provider 파생 콘텐츠는 표시 전용이며 저장 대상은 external_ref뿐이다(ADR-054 §7).
+ */
+export const PlaceSearchResultSchema = z.object({
+  source: PlaceSearchSourceSchema,
+  name: z.string(),
+  coord: PlaceCoordSchema.nullable().default(null),
+  feature_id: z.string().nullable().default(null),
+  poi_id: z.string().nullable().default(null),
+  trip_id: z.string().nullable().default(null),
+  trip_title: z.string().nullable().default(null),
+  external_id: z.string().nullable().default(null),
+  address: z.string().nullable().default(null),
+  road_address: z.string().nullable().default(null),
+  category: z.string().nullable().default(null),
+  marker_color: z.string().nullable().default(null),
+  marker_icon: z.string().nullable().default(null),
+  provider_url: z.string().nullable().default(null),
+  phone: z.string().nullable().default(null),
+});
+export type PlaceSearchResult = z.infer<typeof PlaceSearchResultSchema>;
+
+/** `GET /search` 응답 — internal → kakao → naver 순 정렬 + 소스별 degrade. */
+export const PlaceSearchResponseSchema = z.object({
+  results: z.array(PlaceSearchResultSchema),
   degraded_sources: z.array(z.string()),
 });
-export type UnifiedSearchResult = z.infer<typeof UnifiedSearchResultSchema>;
+export type PlaceSearchResponse = z.infer<typeof PlaceSearchResponseSchema>;

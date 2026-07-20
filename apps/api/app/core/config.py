@@ -69,6 +69,22 @@ class Settings(BaseSettings):
     pinvi_kakao_oauth_rest_api_key: str = ""
     pinvi_kakao_oauth_client_secret: str = ""
     pinvi_oauth_callback_base_url: str = "http://localhost:12801"
+
+    # 외부 장소 provider(표시 전용, ADR-054 / docs/integrations/kakao-naver-local.md)
+    # Kakao Local은 기존 OAuth REST 키(pinvi_kakao_oauth_rest_api_key)를 재사용한다(신규 키 없음).
+    pinvi_kakao_local_enabled: bool = True
+    pinvi_kakao_local_base_url: str = "https://dapi.kakao.com"
+    # Naver Local은 OAuth 로그인용과 다른 검색 API 전용 앱 credential(SecretStr).
+    pinvi_naver_local_enabled: bool = True
+    pinvi_naver_local_base_url: str = "https://openapi.naver.com"
+    pinvi_naver_search_client_id: SecretStr = SecretStr("")
+    pinvi_naver_search_client_secret: SecretStr = SecretStr("")
+    # 공통 전송/보강 정책
+    pinvi_place_provider_timeout_seconds: float = 2.5
+    pinvi_place_provider_max_attempts: int = 2
+    # K: 내부 결과(feature+my_poi+address)가 이 수 미만일 때만 Kakao/Naver를 호출한다.
+    pinvi_place_search_internal_threshold: int = 5
+    pinvi_place_search_cache_ttl_seconds: int = 60
     pinvi_oauth_state_ttl_seconds: int = 600
     pinvi_oauth_http_timeout_seconds: int = 5
     # 모바일 OAuth: callback이 이 앱 딥링크로 1회용 code를 실어 리다이렉트한다(ADR-044/032).

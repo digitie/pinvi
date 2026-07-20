@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiClient, featureApi } from '@pinvi/api-client';
+import { ApiClient, featureApi, geoApi } from '@pinvi/api-client';
 
 // kor-travel-concierge #111 패턴: 호출부가 넘긴 AbortSignal이 upstream fetch까지 전달되어야
 // 취소된 검색이 백엔드에 쌓이지 않는다. fetcher override로 전달 여부를 고정한다.
@@ -25,10 +25,12 @@ async function ignoreSchema(run: () => Promise<unknown>): Promise<void> {
 }
 
 describe('api-client AbortSignal 전파 (kor-travel-concierge #111 패턴)', () => {
-  it('feature search가 넘긴 AbortSignal을 upstream fetch로 전달한다', async () => {
+  it('통합 검색(searchPlaces)이 넘긴 AbortSignal을 upstream fetch로 전달한다', async () => {
     const { client, received } = recordingClient();
     const controller = new AbortController();
-    await featureApi(client).search({ q: 'busan' }, { signal: controller.signal });
+    await ignoreSchema(() =>
+      geoApi(client).searchPlaces({ q: 'busan' }, { signal: controller.signal }),
+    );
     expect(received()?.signal).toBe(controller.signal);
   });
 
@@ -43,7 +45,7 @@ describe('api-client AbortSignal 전파 (kor-travel-concierge #111 패턴)', () 
 
   it('signal을 주지 않으면 fetch에 signal이 실리지 않는다(기존 동작 유지)', async () => {
     const { client, received } = recordingClient();
-    await featureApi(client).search({ q: 'busan' });
+    await ignoreSchema(() => geoApi(client).searchPlaces({ q: 'busan' }));
     expect(received()?.signal == null).toBe(true);
   });
 });

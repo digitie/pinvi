@@ -354,7 +354,7 @@ def _policy_for_request(path: str) -> RateLimitPolicy:
         return rate_limit_policy_for_name("oauth")
     if normalized_path == "/storage/upload-urls":
         return rate_limit_policy_for_name("storage_upload_urls")
-    if normalized_path in {"/features/in-bounds", "/features/search", "/search"}:
+    if normalized_path in {"/features/in-bounds", "/search"}:
         return rate_limit_policy_for_name("feature_search")
     if TRIP_EXPORT_PATH_RE.match(normalized_path):
         return rate_limit_policy_for_name("trip_exports")

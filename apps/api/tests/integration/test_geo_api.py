@@ -162,48 +162,146 @@ async def test_regions_covering_point_404_when_no_region(
 
 
 class _FakeKorTravelMapClient:
-    def __init__(self, *, raise_error: bool = False) -> None:
+    def __init__(self, *, raise_error: bool = False, item_count: int = 1) -> None:
         self.raise_error = raise_error
+        self.item_count = item_count
 
     async def search_features(self, **kwargs: Any) -> dict[str, Any]:
         if self.raise_error:
             from app.clients.kor_travel_map import KorTravelMapUnavailable
 
             raise KorTravelMapUnavailable("down")
-        return {"items": [{"feature_id": "f_1", "name": "광안리 해수욕장"}], "next_cursor": None}
+        items = [
+            {"feature_id": f"f_{i}", "name": f"광안 feature {i}", "lon": 129.1, "lat": 35.1}
+            for i in range(self.item_count)
+        ]
+        return {"items": items, "next_cursor": None}
 
 
-def _override_search_clients(kor_travel_map: Any, kor_travel_geo: Any) -> None:
+class _FakeKakaoLocalClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(kwargs)
+        return {
+            "documents": [
+                {
+                    "id": "k1",
+                    "place_name": "카카오 카페",
+                    "address_name": "부산 수영구",
+                    "x": "129.12",
+                    "y": "35.15",
+                    "place_url": "http://place.map.kakao.com/k1",
+                    "phone": "051-000-0000",
+                }
+            ]
+        }
+
+
+class _FakeNaverLocalClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(kwargs)
+        return {
+            "items": [
+                {
+                    "title": "<b>네이버</b> 식당",
+                    "address": "부산 수영구",
+                    "mapx": "1291200000",
+                    "mapy": "351500000",
+                    "link": "https://map.naver.com/p/n1",
+                }
+            ]
+        }
+
+
+def _override_search_clients(
+    kor_travel_map: Any,
+    kor_travel_geo: Any,
+    *,
+    kakao: Any = None,
+    naver: Any = None,
+) -> None:
+    from app.clients.kakao_local import get_kakao_local_client
     from app.clients.kor_travel_geo import get_kor_travel_geo_client
     from app.clients.kor_travel_map import get_kor_travel_map_client
+    from app.clients.naver_local import get_naver_local_client
     from app.main import app
 
     app.dependency_overrides[get_kor_travel_map_client] = lambda: kor_travel_map
     app.dependency_overrides[get_kor_travel_geo_client] = lambda: kor_travel_geo
+    app.dependency_overrides[get_kakao_local_client] = lambda: kakao
+    app.dependency_overrides[get_naver_local_client] = lambda: naver
 
 
 def _clear_search_clients() -> None:
+    from app.clients.kakao_local import get_kakao_local_client
     from app.clients.kor_travel_geo import get_kor_travel_geo_client
     from app.clients.kor_travel_map import get_kor_travel_map_client
+    from app.clients.naver_local import get_naver_local_client
     from app.main import app
 
-    app.dependency_overrides.pop(get_kor_travel_map_client, None)
-    app.dependency_overrides.pop(get_kor_travel_geo_client, None)
+    for dep in (
+        get_kor_travel_map_client,
+        get_kor_travel_geo_client,
+        get_kakao_local_client,
+        get_naver_local_client,
+    ):
+        app.dependency_overrides.pop(dep, None)
 
 
-async def test_unified_search_merges_sources(
+async def test_unified_search_merges_all_sources(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _ = verified_user
-    _override_search_clients(_FakeKorTravelMapClient(), _FakeKorTravelGeoClient())
+    _override_search_clients(
+        _FakeKorTravelMapClient(),
+        _FakeKorTravelGeoClient(),
+        kakao=_FakeKakaoLocalClient(),
+        naver=_FakeNaverLocalClient(),
+    )
     try:
         resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
         assert resp.status_code == 200, resp.text
         data = resp.json()["data"]
-        assert data["features"][0]["feature_id"] == "f_1"
-        assert data["addresses"][0]["address"] == "테헤란로"
-        assert data["my_pois"] == []
+        by_source: dict[str, list[dict[str, Any]]] = {}
+        for r in data["results"]:
+            by_source.setdefault(r["source"], []).append(r)
+        assert by_source["feature"][0]["feature_id"] == "f_0"
+        assert by_source["address"][0]["name"] == "테헤란로"
+        assert by_source["kakao"][0]["name"] == "카카오 카페"
+        assert by_source["naver"][0]["name"] == "네이버 식당"  # <b> strip
+        # 정렬: internal(feature/address) → kakao → naver.
+        sources = [r["source"] for r in data["results"]]
+        assert sources.index("kakao") < sources.index("naver")
+        assert sources.index("feature") < sources.index("kakao")
         assert data["degraded_sources"] == []
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_internal_first_short_circuits_providers(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _ = verified_user
+    kakao, naver = _FakeKakaoLocalClient(), _FakeNaverLocalClient()
+    # 내부 feature 5건 ≥ K(5) → provider 미호출.
+    _override_search_clients(
+        _FakeKorTravelMapClient(item_count=5),
+        _FakeKorTravelGeoClient(),
+        kakao=kakao,
+        naver=naver,
+    )
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert kakao.calls == []  # 호출되지 않음
+        assert naver.calls == []
+        assert data["degraded_sources"] == []  # 미호출은 degrade 아님
     finally:
         _clear_search_clients()
 
@@ -212,13 +310,56 @@ async def test_unified_search_degrades_on_feature_outage(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     user_id, _ = verified_user
-    _override_search_clients(_FakeKorTravelMapClient(raise_error=True), _FakeKorTravelGeoClient())
+    _override_search_clients(
+        _FakeKorTravelMapClient(raise_error=True),
+        _FakeKorTravelGeoClient(),
+        kakao=_FakeKakaoLocalClient(),
+        naver=_FakeNaverLocalClient(),
+    )
     try:
         resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
         assert resp.status_code == 200, resp.text
         data = resp.json()["data"]
-        assert data["features"] == []
         assert "features" in data["degraded_sources"]
-        assert data["addresses"][0]["address"] == "테헤란로"
+        assert not any(r["source"] == "feature" for r in data["results"])
+        assert any(r["source"] == "address" for r in data["results"])
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_degrades_when_providers_absent(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _ = verified_user
+    # kakao/naver client None(비활성/미기동) → hard fail 아니라 degrade.
+    _override_search_clients(_FakeKorTravelMapClient(), _FakeKorTravelGeoClient())
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert "kakao" in data["degraded_sources"]
+        assert "naver" in data["degraded_sources"]
+        assert any(r["source"] == "feature" for r in data["results"])
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_near_me_passes_coord_to_kakao_only(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _ = verified_user
+    kakao = _FakeKakaoLocalClient()
+    _override_search_clients(
+        _FakeKorTravelMapClient(),
+        _FakeKorTravelGeoClient(),
+        kakao=kakao,
+        naver=_FakeNaverLocalClient(),
+    )
+    try:
+        resp = await client.get("/search?q=카페&lat=37.5&lon=127.0", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        # 좌표가 Kakao에 x=lon, y=lat로 전달된다(Naver는 좌표 파라미터 없음).
+        assert kakao.calls[0]["x"] == 127.0
+        assert kakao.calls[0]["y"] == 37.5
     finally:
         _clear_search_clients()
