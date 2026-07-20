@@ -51,10 +51,23 @@
 
 `kor-travel-map` 최신 `openapi.user.json`과의 계약을 본 저장소에서도 검증:
 
-- `apps/api/tests/integration/kor_travel_map/test_contract.py` — `GET /features/in-bounds`,
-  `GET /features/search`, `GET /features/{feature_id}`,
-  `POST /v1/features/batch` 응답 변환 확인.
-- 선택적 live mode는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`이 reachable할 때만 실행.
+- `apps/api/tests/unit/test_kor_travel_map_contract.py` — pinned SHA-256, 전체 vendored 파일,
+  client path/query/security와 표준 workspace sibling의 byte equality를 검증한다.
+- 실제 HTTP 검증은 base URL의 우연한 reachability로 자동 실행하지 않는다. 아래 live smoke를
+  `PINVI_KOR_TRAVEL_MAP_LIVE_SMOKE=1`로 명시적으로 opt-in한 경우에만 실행한다.
+
+Public/service 인증 live smoke는
+`apps/api/tests/integration/kor_travel_map/test_public_auth_live.py`가 담당한다. 기본은 skip이며
+`PINVI_KOR_TRAVEL_MAP_LIVE_SMOKE=1`을 명시한 환경에서만 실제 HTTP를 호출한다. 실행 환경은 다음
+값을 secret source에서 주입해야 하며 문서나 커밋 파일에 실제 값·운영 주소를 기록하지 않는다.
+
+- `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`
+- `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`
+- `PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY`
+- `PINVI_KOR_TRAVEL_MAP_LIVE_FEATURE_ID`(batch read 대상)
+
+smoke는 public-key-only header 호출, service token 우선순위, service-only batch를 각각 검증하며
+URL `key` query가 생성되지 않는 것도 outbound request에서 확인한다.
 
 ## 7. Dagster asset 테스트
 

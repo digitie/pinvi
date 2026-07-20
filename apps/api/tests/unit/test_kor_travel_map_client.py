@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 import pytest
@@ -421,29 +422,97 @@ async def test_service_token_header() -> None:
     await without.aclose()
 
 
-async def test_public_api_key_query_added_when_service_token_absent() -> None:
+async def test_public_api_key_header_added_when_service_token_absent() -> None:
     seen: dict[str, str | None] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["key"] = request.url.params.get("key")
+        seen["query_key"] = request.url.params.get("key")
+        seen["api_key"] = request.headers.get("X-Kor-Travel-Map-Api-Key")
         seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
         return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
 
     client = _client(handler, public_api_key="public-key-123")
     await client.search_features(q="광안리")
-    assert seen == {"key": "public-key-123", "token": None}
+    assert seen == {"query_key": None, "api_key": "public-key-123", "token": None}
     await client.aclose()
 
 
-async def test_service_token_suppresses_public_api_key_query() -> None:
+async def test_service_token_suppresses_public_api_key_header() -> None:
     seen: dict[str, str | None] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["key"] = request.url.params.get("key")
+        seen["query_key"] = request.url.params.get("key")
+        seen["api_key"] = request.headers.get("X-Kor-Travel-Map-Api-Key")
         seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
         return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
 
     client = _client(handler, service_token="svc-tok", public_api_key="public-key-123")
     await client.search_features(q="광안리")
-    assert seen == {"key": None, "token": "svc-tok"}
+    assert seen == {"query_key": None, "api_key": None, "token": "svc-tok"}
     await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("service_token", "public_api_key", "expected_token"),
+    [
+        ("svc-only", "", "svc-only"),
+        ("", "public-only", None),
+        ("svc-both", "public-both", "svc-both"),
+    ],
+    ids=["service-only", "public-only", "both"],
+)
+async def test_batch_is_service_token_only(
+    service_token: str,
+    public_api_key: str,
+    expected_token: str | None,
+) -> None:
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query_key"] = request.url.params.get("key")
+        seen["api_key"] = request.headers.get("X-Kor-Travel-Map-Api-Key")
+        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
+        return httpx.Response(
+            200,
+            json={"data": {"found": {}, "missing": ["f_1"]}, "meta": {}},
+        )
+
+    client = _client(
+        handler,
+        service_token=service_token,
+        public_api_key=public_api_key,
+    )
+    assert await client.get_features(["f_1"]) == {"found": {}, "missing": ["f_1"]}
+    assert seen == {"query_key": None, "api_key": None, "token": expected_token}
+    await client.aclose()
+
+
+def test_deploy_contract_wires_map_user_credentials_to_api_only() -> None:
+    root = Path(__file__).resolve().parents[4]
+    compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    api_block, non_api_block = compose.split("  app-web:", maxsplit=1)
+    expected_compose_lines = {
+        "PINVI_KOR_TRAVEL_MAP_API_BASE_URL": (
+            "PINVI_KOR_TRAVEL_MAP_API_BASE_URL: "
+            "${PINVI_KOR_TRAVEL_MAP_API_BASE_URL:-http://host.docker.internal:12701}"
+        ),
+        "PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN": (
+            "PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN: ${PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN:-}"
+        ),
+        "PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY": (
+            "PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY: ${PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY:-}"
+        ),
+    }
+    for env_name, compose_line in expected_compose_lines.items():
+        assert compose_line in api_block
+        assert env_name not in non_api_block
+
+    for relative in (".env.example", "apps/api/.env.example", "infra/.env.prod.example"):
+        example = (root / relative).read_text(encoding="utf-8")
+        for env_name in expected_compose_lines:
+            assert f"{env_name}=" in example
+        public_key_context = example.split("PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY=", maxsplit=1)[
+            0
+        ].rsplit("\n", maxsplit=2)
+        assert "X-Kor-Travel-Map-Api-Key" in "\n".join(public_key_context)
+        assert "query" not in "\n".join(public_key_context).lower()

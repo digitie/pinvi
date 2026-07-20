@@ -22,11 +22,17 @@
 > 상세 REST 계약은 아직 미확정이므로 §2.11은 후속 소비 설계로만 기록한다.
 > **2026-06-24 재대조 (kor_travel_map `feat/admin-auth-api-keys` `ae86783`)**:
 > REST backend 패키지 정본 경로가 `packages/kor-travel-map-api/openapi.user.json`으로
-> 이동했고, public REST surface는 설정에 따라 `key` query를 요구할 수 있다
-> (service token 요청은 우회). `curated_features`의 item 포함 snapshot 경로는 이후 kor_travel_map
+> 이동했다. 당시 public REST 인증은 `key` query였으나, kor-travel-map PR #794에서
+> `X-Kor-Travel-Map-Api-Key` header-only로 clean-cut됐다(service token 요청은 우회).
+> `curated_features`의 item 포함 snapshot 경로는 이후 kor_travel_map
 > PR #533으로 admin `/v1/admin/curated-features/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
+> T-VN-20 vendored 정본은 kor-travel-map PR #794 merge commit
+> `cf1f0bba6a2ea18f23eb647216236b84fc7b5a80`의 전체 파일이며 SHA-256은
+> `91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f`다. 2026-07-20 최신
+> `origin/main`도 같은 hash임을 확인했다. Pinvi contract gate는 이 pinned hash와 선택적 live 전체
+> 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
 >
@@ -116,11 +122,16 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   `meta.page.next_cursor`, batch `found`, in-bounds `max_items`).
 - **인증**: kor_travel_map ADR-060 이후 public REST surface(`/v1/features*`,
   `/v1/public*`, `/v1/categories`, `/v1/providers*`)는 운영 설정
-  `KOR_TRAVEL_MAP_API_PUBLIC_API_KEY_REQUIRED=true`에서 VWorld 호환 `key` query를
-  요구할 수 있다. trusted admin proxy 또는 `X-Kor-Travel-Map-Service-Token` 요청은
+  `KOR_TRAVEL_MAP_API_PUBLIC_API_KEY_REQUIRED=true`에서 `X-Kor-Travel-Map-Api-Key` header를
+  요구할 수 있다. URL `key` query는 인증에 사용하지 않는다(kor-travel-map PR #794).
+  trusted admin proxy 또는 `X-Kor-Travel-Map-Service-Token` 요청은
   이 검증을 우회한다. Pinvi client는 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`이 있으면
   service token 헤더를 보내고, 없으면 `PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY`(미설정 시
-  `PINVI_VWORLD_API_KEY`)를 `key` query로 붙인다. **사용자 토큰을 kor_travel_map로
+  `PINVI_VWORLD_API_KEY`)를 `X-Kor-Travel-Map-Api-Key` header로 보낸다. 두 credential이
+  모두 있으면 service token만 보내며 public key header나 URL query를 함께 보내지 않는다.
+  public API key는 OpenAPI `PublicApiKey` security가 붙은 client 호출에서만 허용하고,
+  `POST /v1/features/batch`는 `ServiceToken` 전용이므로 public key를 보내지 않는다.
+  **사용자 토큰을 kor_travel_map로
   전달하지 않는다.** `/v1/admin/*`는 운영에서
   `X-Kor-Travel-Map-Admin-Proxy-Secret` + `X-Kor-Travel-Map-Actor`가 필요할 수 있으며,
   Pinvi admin client는 `PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET`/`..._ACTOR`로 전송한다.
@@ -524,20 +535,24 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map user 스펙 pin.
+  삼은 kor_travel_map PR #794 merge commit의 **전체 파일**. pinned SHA-256은 본 문서 상단과
+  `test_kor_travel_map_contract.py`가 함께 고정한다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
   FeatureDetailResponse/WeatherCardData/WeatherMetricOut/CategorySummary/FeatureBatchData/
   BeachPublicView/FestivalPublicView/PublicMapMarkerLayerData 등) ⊆ 스냅샷 component schemas,
-  (3) public beach query parameter exact shape,
-  (4) 로컬 전용: sibling `kor-travel-map` 스펙과 public beach query shape 일치
-  (핀 신선도, CI에서는 skip — `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
+  (3) public beach 업무 query의 exact shape와 인증 `key` query 부재,
+  (4) public route `PublicApiKey|ServiceToken` header security와 batch `ServiceToken`-only,
+  (5) pinned SHA-256 및 표준 workspace sibling `kor-travel-map-*` 전체 파일 byte equality
+  (sibling이 없는 CI에서는 pinned hash는 항상 실행, live equality만 skip —
+  `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
-  1. `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
+  1. 검토한 upstream exact commit에서 `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
      apps/api/tests/contract/kor-travel-map-openapi-user.json`
-  2. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py` 실행.
-  3. 실패하면 사라진/바뀐 경로·필드·query를 `clients/kor_travel_map.py` +
+  2. `_UPSTREAM_COMMIT`과 `_SNAPSHOT_SHA256`을 같은 원본으로 갱신한다.
+  3. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py`를 실행한다.
+  4. 실패하면 사라진/바뀐 경로·필드·query/security를 `clients/kor_travel_map.py` +
      `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
      `_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본

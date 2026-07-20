@@ -1,6 +1,7 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-vendor된 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
+kor_travel_map PR #794 merge commit의 전체 스냅샷을 byte-for-byte vendor하고 pinned SHA-256으로
+수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 매핑(`api/v1/features.py _*_from_kor_travel_map`)이 의존하는 **경로·응답
 필드**가 존재하는지 검증한다.
 
@@ -11,6 +12,7 @@ vendor된 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +21,8 @@ from typing import Any
 import pytest
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
+_UPSTREAM_COMMIT = "cf1f0bba6a2ea18f23eb647216236b84fc7b5a80"
+_SNAPSHOT_SHA256 = "91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -46,10 +50,16 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "q",
         "page_size",
         "cursor",
-        "key",
     },
-    "/v1/public/beaches/{feature_id}": {"key"},
+    "/v1/public/beaches/{feature_id}": set(),
 }
+
+_PUBLIC_API_KEY_SCHEME = {
+    "type": "apiKey",
+    "in": "header",
+    "name": "X-Kor-Travel-Map-Api-Key",
+}
+_PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 
 # 매핑(`features.py _*_from_kor_travel_map`)이 읽는 응답 필드 — 스키마별 필수 존재.
 _SCHEMA_FIELDS: dict[str, set[str]] = {
@@ -136,6 +146,9 @@ def _spec() -> dict[str, Any]:
 
 
 def test_snapshot_is_kor_travel_map_user_surface() -> None:
+    assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256, (
+        f"vendored openapi.user.json이 kor_travel_map {_UPSTREAM_COMMIT} 원본과 다름"
+    )
     assert _spec()["info"]["title"] == "kor-travel-map-user"
 
 
@@ -165,6 +178,45 @@ def test_client_query_parameters_match_snapshot() -> None:
     assert not problems, f"client query 계약이 스냅샷과 다름(드리프트): {problems}"
 
 
+def test_public_api_key_contract_is_header_only() -> None:
+    spec = _spec()
+    actual_scheme = spec["components"]["securitySchemes"].get("PublicApiKey")
+    assert isinstance(actual_scheme, dict)
+    assert {key: actual_scheme.get(key) for key in _PUBLIC_API_KEY_SCHEME} == (
+        _PUBLIC_API_KEY_SCHEME
+    )
+
+    query_leaks = {
+        path: sorted(
+            {
+                parameter["name"]
+                for operation in spec["paths"][path].values()
+                if isinstance(operation, dict)
+                for parameter in operation.get("parameters", [])
+                if parameter.get("in") == "query" and parameter.get("name") == "key"
+            }
+        )
+        for path in _CLIENT_PATHS
+    }
+    assert not {path: names for path, names in query_leaks.items() if names}, (
+        f"public API key가 client 경로의 URL query에 남아 있음: {query_leaks}"
+    )
+
+    security_problems = {
+        path: operation.get("security")
+        for path in _CLIENT_PATHS
+        if path != "/v1/features/batch"
+        for method, operation in spec["paths"][path].items()
+        if method in {"get", "post"}
+        if operation.get("security") != _PUBLIC_API_KEY_SECURITY
+    }
+    assert not security_problems, (
+        f"public client 경로의 header security 계약이 다름: {security_problems}"
+    )
+
+    assert spec["paths"]["/v1/features/batch"]["post"].get("security") == [{"ServiceToken": []}]
+
+
 def test_mapped_response_fields_exist_in_snapshot() -> None:
     schemas = _spec()["components"]["schemas"]
     problems: list[str] = []
@@ -178,14 +230,21 @@ def test_mapped_response_fields_exist_in_snapshot() -> None:
     )
 
 
-def _live_spec_path() -> Path | None:
-    """sibling `kor-travel-map` repo의 live 스펙 경로(있으면). env override 가능."""
-    override = os.environ.get("PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH")
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[4]
+
+
+def _find_live_spec_path(project_root: Path, override: str | None) -> Path | None:
+    """표준 workspace sibling 또는 명시 override에서 Map user spec을 찾는다."""
     if override:
         return Path(override)
-    repo_root = Path(__file__).resolve().parents[3]  # apps/api/tests/unit → pinvi-claude
-    for repo_name in ("kor-travel-map-codex", "kor-travel-map"):
-        repo = repo_root.parent / repo_name
+    for repo_name in (
+        "kor-travel-map-codex",
+        "kor-travel-map-claude",
+        "kor-travel-map-antigravity",
+        "kor-travel-map",
+    ):
+        repo = project_root.parent / repo_name
         for relative in (
             Path("packages/kor-travel-map-api/openapi.user.json"),
             Path("packages/kor-travel-map-admin/openapi.user.json"),
@@ -196,22 +255,35 @@ def _live_spec_path() -> Path | None:
     return None
 
 
+def _live_spec_path() -> Path | None:
+    """sibling `kor-travel-map` repo의 live 스펙 경로(있으면). env override 가능."""
+    return _find_live_spec_path(
+        _project_root(), os.environ.get("PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH")
+    )
+
+
+def test_live_spec_search_starts_at_repository_root() -> None:
+    project_root = _project_root()
+    assert (project_root / "AGENTS.md").is_file()
+    assert (project_root / "apps/api/tests/unit").is_dir()
+
+
+def test_live_spec_search_finds_standard_workspace_sibling(tmp_path: Path) -> None:
+    project_root = tmp_path / "pinvi-codex"
+    candidate = tmp_path / "kor-travel-map-codex" / "packages/kor-travel-map-api/openapi.user.json"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("{}\n", encoding="utf-8")
+
+    assert _find_live_spec_path(project_root, None) == candidate
+
+
 @pytest.mark.skipif(
     _live_spec_path() is None, reason="kor_travel_map repo 미존재(CI/타 환경) — 핀 신선도 검사 생략"
 )
 def test_vendored_snapshot_matches_live_kor_travel_map() -> None:
-    """로컬 전용: vendored beach query가 kor_travel_map live와 같은지 확인."""
+    """로컬 전용: vendored 문서 전체가 kor_travel_map live와 byte 단위로 같은지 확인."""
     live_path = _live_spec_path()
     assert live_path is not None
-    live = json.loads(live_path.read_text(encoding="utf-8"))
-    query_problems = {
-        path: {
-            "snapshot": sorted(_query_parameter_names(_spec(), path)),
-            "live": sorted(_query_parameter_names(live, path)),
-        }
-        for path in _CLIENT_QUERY_PARAMETERS
-        if _query_parameter_names(_spec(), path) != _query_parameter_names(live, path)
-    }
-    assert not query_problems, (
-        f"vendored 스냅샷 query parameter가 kor_travel_map live와 다름: {query_problems}"
+    assert _SNAPSHOT.read_bytes() == live_path.read_bytes(), (
+        "vendored openapi.user.json 전체가 kor_travel_map live 원본과 다름"
     )

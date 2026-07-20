@@ -32,6 +32,7 @@ from app.middleware.api_call_logging import api_call_event_hooks
 logger = logging.getLogger(__name__)
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
+_PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
 
 
 class KorTravelMapError(Exception):
@@ -138,21 +139,12 @@ class KorTravelMapClient:
 
     # ── 내부 ────────────────────────────────────────────────────────────────
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, allow_public_api_key: bool) -> dict[str, str]:
         if self._service_token:
             return {_SERVICE_TOKEN_HEADER: self._service_token}
+        if allow_public_api_key and self._public_api_key:
+            return {_PUBLIC_API_KEY_HEADER: self._public_api_key}
         return {}
-
-    def _params(self, path: str, params: Mapping[str, Any] | None) -> dict[str, Any] | None:
-        merged = dict(params or {})
-        if (
-            self._public_api_key
-            and not self._service_token
-            and path.startswith("/v1/")
-            and "key" not in merged
-        ):
-            merged["key"] = self._public_api_key
-        return merged or None
 
     async def _send(
         self,
@@ -161,6 +153,7 @@ class KorTravelMapClient:
         *,
         params: Mapping[str, Any] | None = None,
         json: Any | None = None,
+        allow_public_api_key: bool = False,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
         last: KorTravelMapUnavailable | None = None
@@ -169,9 +162,9 @@ class KorTravelMapClient:
                 resp = await self._http.request(
                     method,
                     path,
-                    params=self._params(path, params),
+                    params=params,
                     json=json,
-                    headers=self._headers(),
+                    headers=self._headers(allow_public_api_key=allow_public_api_key),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
@@ -267,7 +260,14 @@ class KorTravelMapClient:
             params["cluster_unit"] = cluster_unit
         if max_items is not None:
             params["max_items"] = max_items
-        data, meta = self._payload(await self._send("GET", "/v1/features/in-bounds", params=params))
+        data, meta = self._payload(
+            await self._send(
+                "GET",
+                "/v1/features/in-bounds",
+                params=params,
+                allow_public_api_key=True,
+            )
+        )
         cluster = meta.get("cluster")
         if isinstance(cluster, Mapping) and "cluster_unit" in cluster:
             data["cluster_unit"] = cluster.get("cluster_unit")
@@ -275,7 +275,7 @@ class KorTravelMapClient:
 
     async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
         """단건 상세. 404 → None."""
-        resp = await self._send("GET", f"/v1/features/{feature_id}")
+        resp = await self._send("GET", f"/v1/features/{feature_id}", allow_public_api_key=True)
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
@@ -330,7 +330,9 @@ class KorTravelMapClient:
             params["cursor"] = cursor
         if sort is not None:
             params["sort"] = sort
-        data, meta = self._payload(await self._send("GET", "/v1/features/nearby", params=params))
+        data, meta = self._payload(
+            await self._send("GET", "/v1/features/nearby", params=params, allow_public_api_key=True)
+        )
         return self._thread_page(data, meta)
 
     async def search_features(
@@ -374,7 +376,9 @@ class KorTravelMapClient:
             params["cursor"] = cursor
         if include_total:
             params["include_total"] = True
-        data, meta = self._payload(await self._send("GET", "/v1/features/search", params=params))
+        data, meta = self._payload(
+            await self._send("GET", "/v1/features/search", params=params, allow_public_api_key=True)
+        )
         return self._thread_page(data, meta)
 
     async def feature_weather(
@@ -385,7 +389,12 @@ class KorTravelMapClient:
         if asof is not None:
             params["asof"] = asof.isoformat()
         return self._data(
-            await self._send("GET", f"/v1/features/{feature_id}/weather", params=params)
+            await self._send(
+                "GET",
+                f"/v1/features/{feature_id}/weather",
+                params=params,
+                allow_public_api_key=True,
+            )
         )
 
     async def categories(
@@ -393,7 +402,9 @@ class KorTravelMapClient:
     ) -> dict[str, Any]:
         """카테고리 카탈로그. data = {count, include_counts, items}."""
         params = {"include_counts": include_counts, "active_only": active_only}
-        return self._data(await self._send("GET", "/v1/categories", params=params))
+        return self._data(
+            await self._send("GET", "/v1/categories", params=params, allow_public_api_key=True)
+        )
 
     async def public_beaches(
         self,
@@ -416,7 +427,9 @@ class KorTravelMapClient:
             params["page_size"] = page_size
         if cursor is not None:
             params["cursor"] = cursor
-        data, meta = self._payload(await self._send("GET", "/v1/public/beaches", params=params))
+        data, meta = self._payload(
+            await self._send("GET", "/v1/public/beaches", params=params, allow_public_api_key=True)
+        )
         return self._thread_page(data, meta)
 
     async def public_beach_markers(
@@ -443,11 +456,20 @@ class KorTravelMapClient:
         ):
             if value is not None:
                 params[key] = value
-        return self._data(await self._send("GET", "/v1/public/beaches/map-markers", params=params))
+        return self._data(
+            await self._send(
+                "GET",
+                "/v1/public/beaches/map-markers",
+                params=params,
+                allow_public_api_key=True,
+            )
+        )
 
     async def get_public_beach(self, feature_id: str) -> dict[str, Any] | None:
         """공개 해수욕장 상세. 404 → None."""
-        resp = await self._send("GET", f"/v1/public/beaches/{feature_id}")
+        resp = await self._send(
+            "GET", f"/v1/public/beaches/{feature_id}", allow_public_api_key=True
+        )
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
@@ -476,7 +498,12 @@ class KorTravelMapClient:
             if value is not None:
                 params[key] = value
         data, meta = self._payload(
-            await self._send("GET", "/v1/public/festivals/monthly", params=params)
+            await self._send(
+                "GET",
+                "/v1/public/festivals/monthly",
+                params=params,
+                allow_public_api_key=True,
+            )
         )
         return self._thread_page(data, meta)
 
@@ -505,12 +532,19 @@ class KorTravelMapClient:
             if value is not None:
                 params[key] = value
         return self._data(
-            await self._send("GET", "/v1/public/festivals/map-markers", params=params)
+            await self._send(
+                "GET",
+                "/v1/public/festivals/map-markers",
+                params=params,
+                allow_public_api_key=True,
+            )
         )
 
     async def get_public_festival(self, feature_id: str) -> dict[str, Any] | None:
         """공개 축제 상세. 404 → None."""
-        resp = await self._send("GET", f"/v1/public/festivals/{feature_id}")
+        resp = await self._send(
+            "GET", f"/v1/public/festivals/{feature_id}", allow_public_api_key=True
+        )
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)

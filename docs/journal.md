@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-20 09:50 (codex) — T-VN-20 public API key header-only 착수
+
+- kor-travel-map PR #794의 merge commit `cf1f0bb`를 소비 정본으로 확인했다.
+- Pinvi public client의 URL `key` query 제거, `X-Kor-Travel-Map-Api-Key` header 전송,
+  service token 우선순위와 vendored OpenAPI 계약 갱신 범위를 선점했다.
+- `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`이 있으면 service token 헤더만 보내고, 없을 때만
+  `PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY` 또는 VWorld fallback 값을 public API key 헤더로 보낸다.
+  호환 query나 이중 전송은 두지 않는다.
+- Map의 header-only clean-cut 뒤 Pinvi main의 public-key-only 호출은 계속 `?key=`를 보내므로 401이
+  발생한다. 현재 n150 service-token 경로는 이 drift를 가릴 수 있다.
+- client·unit·contract snapshot·통합 문서 diff를 만든 뒤 단일 적대적 리뷰 승인 전에는
+  테스트·lint·build를 실행하지 않는다.
+- 첫 단일 리뷰의 P1 2건/P2 2건을 반영했다. public auth는 호출별 allowlist로 바꿔 batch에 public key를
+  보내지 않고 service-only/public-only/both unit 행렬을 추가했다. 수기 OpenAPI graft는 폐기하고 Map
+  #794 전체 파일을 exact vendor했으며 merge commit과 최신 main hash가 모두
+  `91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f`임을 확인했다.
+- root/API/prod env example과 app-api Compose에 API base/service/public credential 배선을 추가하고,
+  actual secret/주소를 기록하지 않는 opt-in live HTTP smoke를 추가했다. 재리뷰 승인 전이라 여전히
+  테스트·lint·build는 실행하지 않는다.
+- 2차 리뷰의 P2 두 건도 반영했다. sibling gate의 project root를 `parents[4]`로 바로잡고 표준
+  `kor-travel-map-{codex,claude,antigravity}`/기본 checkout 탐색 helper와 unit 증거를 추가했다.
+  VWorld 값은 Geo의 `key` query와 Map의 header fallback을 분리해 설명하고, test strategy와 drift
+  gate 문서는 실제 파일·명시적 opt-in·pinned full-byte/security 계약만 가리키도록 정정했다.
+- 3차 단일 적대적 리뷰에서 P0~P2 지적 없이 테스트 진행 승인을 받았다. focused auth/contract/live
+  smoke는 `32 passed, 4 skipped`, API 전체 unit은 `616 passed, 1 skipped`, Ruff lint/format과 mypy,
+  Compose config, exact OpenAPI SHA-256/byte equality, `git diff --check`가 모두 통과했다. 첫 focused
+  실행은 이 환경의 pytest capture 임시 파일 오류로 수집 전에 중단되어 동일 범위를 `-s`로 재실행했다.
+  live HTTP 4건은 실제 credential/feature id를 커밋하거나 임의 추정하지 않도록 opt-in skip 상태이며,
+  배포 시 N150 값으로 실행한다.
+
 ## 2026-07-19 (codex) — T-VN-03 관측 read principal docs-first
 
 - PinVi PR #387의 `_ops_headers()`와 실제 관측 read 네 메서드를 대조해, 메서드들이 일반
