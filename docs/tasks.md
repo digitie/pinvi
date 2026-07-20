@@ -76,8 +76,14 @@
 
 ### 레인 A (Claude, web/domain UI)
 
-- [ ] T-306 — 공용 `useModalDialog` 훅 + `ConfirmDialog` + day-delete confirm(F2) + out-of-range
-      actionable 배너/아이콘(F1). (dep T-301) (ADR-056/055)
+- [ ] T-306a — **TDR 웹 모달 기반**(백엔드 무의존, 선행). 공용 `useModalDialog`
+      훅(focus-in/restore + Escape + body scroll-lock(중첩 카운트) + Tab focus-trap +
+      backdrop pointer-safe close + aria 배선) + 제네릭 `ConfirmDialog`(danger tone) +
+      `FeatureDetailModal` shell(bottom-sheet 반응형, loading/error/children/footer 슬롯).
+      T-306의 F2 confirm과 T-309c의 detail 본문이 이 위에 올라간다. (dep 없음)
+      (선점: `agent/claude-tdr-web-modal-foundation`) (ADR-056)
+- [ ] T-306 — day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
+      배너/아이콘(F1). (dep T-301, T-306a) (ADR-056/055)
 - [ ] T-307 — per-day color picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트 뱃지
       parity) + PoiEditor F7 polish + fit-bounds 확인(F6/F7). (dep T-301) (ADR-055)
 - [ ] T-308 — 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) +
@@ -86,8 +92,9 @@
       debounce + attribution(F3-UI). (dep T-302) (ADR-054)
 - [ ] T-309b — 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(F4-UI).
       (dep T-303) (ADR-054)
-- [ ] T-309c — `FeatureDetailModal`(bottom sheet, kind별, opt-in enrichment 링크+attribution, 마커
-      팝업→detail→modal 양 지도, price kind, weather 제외)(F5-UI). (dep T-304) (ADR-056)
+- [ ] T-309c — `FeatureDetailModal` **본문**(T-306a shell 소비, kind별 detail-card, opt-in enrichment
+      링크+attribution, 마커 팝업→detail→modal 양 지도, price kind, weather 제외)(F5-UI).
+      (dep T-304, T-306a) (ADR-056)
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
