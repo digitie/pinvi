@@ -285,6 +285,34 @@ def _feature_request_response(row: FeatureSuggestion) -> FeatureRequestResponse:
     )
 
 
+def _dedup_response(
+    duplicate: FeatureSuggestion,
+    *,
+    current_user_id: uuid.UUID,
+    body: FeatureRequestCreate,
+    name: str,
+) -> FeatureRequestResponse:
+    """전역 external_ref dedup 응답. **다른 사용자**의 제안이면 그 사용자의 note/name을 노출하지
+    않고(PIPA) 현재 사용자 입력값으로 되돌려준다(status/request_id/시각만 기존 제안에서 취함)."""
+    if duplicate.requester_user_id == current_user_id:
+        return _feature_request_response(duplicate)
+    return FeatureRequestResponse(
+        request_id=duplicate.request_id,
+        status=cast(FeatureRequestStatus, duplicate.status),
+        type="new_place",
+        kind=cast(FeatureKind, body.kind),
+        title=name,
+        coord=body.coord,
+        categories=_normalise_categories(body.categories),
+        note=body.note,
+        target_feature_id=None,
+        source=body.source,
+        external_ref=body.external_ref,
+        created_at=duplicate.created_at,
+        resolved_at=duplicate.resolved_at,
+    )
+
+
 async def _find_duplicate_feature_suggestion(
     db: AsyncSession,
     *,
@@ -503,6 +531,10 @@ async def request_feature(
             provider=body.external_ref.provider,
             external_id=body.external_ref.external_id,
         )
+        if duplicate is not None:
+            return Envelope.of(
+                _dedup_response(duplicate, current_user_id=user_id, body=body, name=name)
+            )
     else:
         duplicate = await _find_duplicate_feature_suggestion(
             db,
@@ -514,8 +546,8 @@ async def request_feature(
             lng=lng,
             lat=lat,
         )
-    if duplicate is not None:
-        return Envelope.of(_feature_request_response(duplicate))
+        if duplicate is not None:
+            return Envelope.of(_feature_request_response(duplicate))
 
     await _enforce_feature_suggestion_rate_limit(db, user_id=user_id)
     row = FeatureSuggestion(
@@ -542,6 +574,10 @@ async def request_feature(
                 provider=body.external_ref.provider,
                 external_id=body.external_ref.external_id,
             )
+            if duplicate is not None:
+                return Envelope.of(
+                    _dedup_response(duplicate, current_user_id=user_id, body=body, name=name)
+                )
         else:
             duplicate = await _find_duplicate_feature_suggestion(
                 db,
@@ -553,8 +589,8 @@ async def request_feature(
                 lng=lng,
                 lat=lat,
             )
-        if duplicate is not None:
-            return Envelope.of(_feature_request_response(duplicate))
+            if duplicate is not None:
+                return Envelope.of(_feature_request_response(duplicate))
         raise
     await db.refresh(row)
     return Envelope.of(_feature_request_response(row))

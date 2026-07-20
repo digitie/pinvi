@@ -6,6 +6,8 @@ external_ref POI auto-fire / 전역 dedup / best-effort / 승인 reconciliation 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -15,8 +17,22 @@ from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
 from app.models.feature_suggestion import FeatureSuggestion
 from app.models.poi import TripDayPoi
+from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _make_second_user(session_factory: Any) -> str:
+    async with session_factory() as db:
+        u = User(
+            email=f"u2_{uuid.uuid4().hex[:8]}@pinvi.test",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(u)
+        await db.commit()
+        await db.refresh(u)
+        return str(u.user_id)
 
 
 class _FakeAdminClient:
@@ -107,25 +123,11 @@ async def test_global_dedup_across_users(
     auth_cookies: Any,
     session_factory: Any,
 ) -> None:
-    from datetime import UTC, datetime
-
-    from app.models.user import User
-
     user1_id, _ = verified_user
     cookies1 = auth_cookies(user1_id)
     trip1 = await _make_trip(client, cookies1)
 
-    # 두 번째 사용자.
-    async with session_factory() as db:
-        u2 = User(
-            email=f"u2_{uuid.uuid4().hex[:8]}@pinvi.test",
-            status="active",
-            email_verified_at=datetime.now(UTC),
-        )
-        db.add(u2)
-        await db.commit()
-        await db.refresh(u2)
-        user2_id = str(u2.user_id)
+    user2_id = await _make_second_user(session_factory)
     cookies2 = auth_cookies(user2_id)
     trip2 = await _make_trip(client, cookies2)
 
@@ -251,3 +253,74 @@ async def test_manual_request_feature_external_ref_global_dedup(
     # 같은 external_ref → 두 번째는 첫 제안을 dedup으로 반환(전역 1건).
     assert r1.json()["data"]["request_id"] == r2.json()["data"]["request_id"]
     assert await _suggestion_count(session_factory, "n500") == 1
+
+
+async def test_cross_user_dedup_does_not_leak_note(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, session_factory: Any
+) -> None:
+    """전역 dedup 시 다른 사용자의 private note/name을 노출하지 않는다(PIPA, 리뷰 P2)."""
+    user1_id, _ = verified_user
+    secret_note = "내 병원 예약 메모"
+    body1 = {
+        "type": "new_place",
+        "kind": "place",
+        "title": "유저1 비밀 장소명",
+        "coord": {"lon": 129.1, "lat": 35.1},
+        "note": secret_note,
+        "source": "kakao",
+        "external_ref": {"provider": "kakao", "external_id": "shared1"},
+    }
+    r1 = await client.post("/features/requests", json=body1, cookies=auth_cookies(user1_id))
+    assert r1.status_code in (200, 201), r1.text
+
+    user2_id = await _make_second_user(session_factory)
+    body2 = {
+        "type": "new_place",
+        "kind": "place",
+        "title": "유저2 입력 장소명",
+        "coord": {"lon": 129.1, "lat": 35.1},
+        "note": "유저2 메모",
+        "source": "kakao",
+        "external_ref": {"provider": "kakao", "external_id": "shared1"},
+    }
+    r2 = await client.post("/features/requests", json=body2, cookies=auth_cookies(user2_id))
+    assert r2.status_code in (200, 201), r2.text
+    # user2 응답에 user1의 note/name이 새지 않고, user2 자신의 입력값으로 되돌려준다.
+    assert secret_note not in r2.text
+    assert "유저1 비밀 장소명" not in r2.text
+    assert r2.json()["data"]["note"] == "유저2 메모"
+    assert r2.json()["data"]["title"] == "유저2 입력 장소명"
+
+
+async def test_auto_fire_respects_daily_limit(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, session_factory: Any
+) -> None:
+    """auto-fire도 per-user 일일 제안 한도(20)를 지킨다(admin 큐 flooding 방지, 리뷰 P2)."""
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies)
+
+    # 이미 한도(20)만큼 pending 제안이 쌓여 있는 상태를 시드.
+    async with session_factory() as db:
+        for i in range(20):
+            db.add(
+                FeatureSuggestion(
+                    requester_user_id=uuid.UUID(user_id),
+                    suggestion_type="new_place",
+                    kind="place",
+                    name=f"기존 {i}",
+                    lng=Decimal("129.100000"),
+                    lat=Decimal("35.100000"),
+                    status="pending",
+                )
+            )
+        await db.commit()
+
+    resp = await client.post(
+        f"/trips/{trip_id}/pois",
+        json=_external_poi_payload(sort_order="a0", external_id="k800"),
+        cookies=cookies,
+    )
+    # POI 생성은 성공하되(한도 초과는 best-effort로 skip), 새 제안은 만들어지지 않는다.
+    assert resp.status_code == 201, resp.text
+    assert await _suggestion_count(session_factory, "k800") == 0

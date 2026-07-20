@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -28,6 +29,20 @@ logger = logging.getLogger(__name__)
 
 _ACTIVE_STATUSES = ("pending", "approved", "added")
 _LON = Decimal("0.000001")
+# 수동 제안(features.py)과 동일한 per-user 일일 한도 — auto-fire도 우회하지 않는다(어뷰즈 방지).
+_DAILY_SUGGESTION_LIMIT = 20
+
+
+async def _over_daily_suggestion_limit(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    since = datetime.now(UTC) - timedelta(days=1)
+    count = await db.scalar(
+        select(func.count(FeatureSuggestion.request_id)).where(
+            FeatureSuggestion.requester_user_id == user_id,
+            FeatureSuggestion.created_at >= since,
+            FeatureSuggestion.status.in_(("pending", "approved", "added")),
+        )
+    )
+    return int(count or 0) >= _DAILY_SUGGESTION_LIMIT
 
 
 def _quantize(value: float, exp: Decimal = _LON) -> Decimal:
@@ -112,6 +127,14 @@ async def auto_fire_external_feature_request(
                         .values(feature_id=feature_id)
                     )
                     await db.commit()
+                return
+
+            # 수동 제안과 동일한 per-user 일일 한도를 auto-fire도 지킨다(admin 큐 flooding 방지).
+            # best-effort이므로 초과 시 예외 없이 조용히 건너뛴다(POI는 그대로 유지).
+            if await _over_daily_suggestion_limit(db, requester_user_id):
+                logger.info(
+                    "feature_request.auto_fire_rate_limited", extra={"user": str(requester_user_id)}
+                )
                 return
 
             db.add(

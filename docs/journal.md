@@ -15,8 +15,13 @@
   admin approve: `added`+feature_id면 reconciliation, `kor_travel_map_ref.reconciled_poi_count` 기록.
 - 계약: `ExternalRef` + source(py+zod), Poi/FeatureRequest create·response, admin summary.
   JSONB in-place 미추적 이슈로 reconciled_poi_count는 dict 완성 후 한 번에 대입.
-- 검증(WSL): ruff/`mypy --strict`(194) + pipeline 5(auto-fire/전역dedup/best-effort/reconcile/수동
-  dedup) + blast-radius 41 passed; web typecheck/lint/build/schemas·web vitest 통과. 단일 리뷰 진행 중.
+- **단일 적대적 리뷰** 반영: P2(전역 dedup이 다른 사용자의 note/name을 응답에 노출 → 교차 사용자
+  dedup은 현재 사용자 입력값으로 되돌리는 `_dedup_response`로 차단, PIPA), P2(auto-fire가 per-user 일일
+  한도 우회 → 서비스에서 동일 한도 best-effort 적용), P3(require_review 승인은 reconcile 안 됨 → 코드에
+  한계 명시). 계약 gap(zod AdminFeatureRequestSummary source/external_ref) 보강. transaction/best-effort/
+  마이그레이션/미저장은 sound로 확인.
+- 검증(WSL): ruff/`mypy --strict`(194) + pipeline 7(auto-fire/전역dedup/best-effort/reconcile/수동
+  dedup/교차사용자 미노출/한도) + 전체 suite 1019 passed; web typecheck/lint/build/schemas·web vitest 통과.
 - **다음**: T-304(detail-card — `GET /features/{id}/detail-card` kind별 + 외부 enrichment).
 
 ## 2026-07-21 07:10 (claude) — TDR T-302 Kakao/Naver Local + 통합 검색

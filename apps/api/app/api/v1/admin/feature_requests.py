@@ -293,6 +293,10 @@ async def approve_feature_request_endpoint(
 
     # ADR-054 post-approval reconciliation: feature가 실제로 반영(added)돼 feature_id가 생기면, 이
     # external_ref를 참조하던 미연결 POI들을 새 feature_id에 연결한다(라이브 feature만 연결해 broken 방지).
+    # 한계(문서화): kor_travel_map review_mode=require_review이면 승인 시 status='approved'(not added)라
+    # 여기서 연결하지 않는다. approved→added 전이를 Pinvi에 알리는 webhook/poll이 아직 없어(범위 밖) 그런
+    # POI는 feature_id NULL(자유 snapshot POI)로 남는다 — 표시는 정상이며 broken이 아니다. 이후 같은
+    # 외부 장소를 다시 pick하면 auto-fire가 'added' 제안을 만나 즉시 연결한다.
     feature_id_val = record.get("feature_id")
     ref = suggestion.external_ref
     reconciled = 0

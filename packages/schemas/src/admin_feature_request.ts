@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CoordSchema, Iso8601Schema } from './common';
 import {
+  ExternalRefSchema,
   FeatureKindSchema,
   FeatureRequestStatusSchema,
   FeatureRequestTypeSchema,
@@ -18,6 +19,8 @@ export const AdminFeatureRequestSummarySchema = z.object({
   categories: z.array(z.string()),
   note: z.string().nullable().optional(),
   target_feature_id: z.string().nullable().optional(),
+  source: z.string().default('user'),
+  external_ref: ExternalRefSchema.nullable().default(null),
   status: FeatureRequestStatusSchema,
   kor_travel_map_ref: z.record(z.string(), z.unknown()).nullable().optional(),
   reviewed_by_admin_id: z.string().uuid().nullable().optional(),
