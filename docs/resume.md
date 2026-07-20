@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-303 외부 pick feature-request 파이프라인 (PR 대기)
+
+**TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397), T-302(#398). T-303(ADR-054 §7, F4)
+구현·검증 완료: `source`+`external_ref`(POI+suggestion, 마이그레이션 0039), 전역 dedup(partial
+unique index), best-effort decoupled auto-fire(분리 세션·예외 미전파), post-approval reconciliation
+(external_ref→feature_id, added만), 이미 added면 즉시 연결, 수동 request_feature 전역 dedup,
+py+zod 계약. WSL: ruff/mypy --strict(194)/pipeline 5+blast 41 pytest + web typecheck/lint/build/vitest 통과.
+단일 적대적 리뷰 진행 중. 브랜치 `agent/claude-tdr-feature-request`.
+**다음 한 작업**: 리뷰 반영 → T-303 PR·CI·머지 → **T-304**(detail-card: `GET /features/{id}/detail-card`
+kind별 투영 + generic fallback + opt-in 외부 enrichment(display-only) + in-bounds price kind, ADR-056).
+
 ## 2026-07-21 (claude) — TDR T-302 Kakao/Naver Local + 통합 검색 (PR 대기)
 
 **TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397). T-302(ADR-054) 구현·검증 완료:

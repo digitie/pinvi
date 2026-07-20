@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-21 08:20 (claude) — TDR T-303 외부 pick feature-request 파이프라인
+
+- T-302 PR #398 머지 완료(main 4ae8c8a). 이어 T-303(ADR-054 §7, F4) 착수.
+- `trip_day_pois` + `feature_suggestions`에 `source` + `external_ref`(JSONB) 추가(마이그레이션 0039).
+  전역 dedup partial unique index(active 제안, provider+external_id) + reconciliation 조회 index.
+- `services/feature_request.py`: 전역 dedup 조회 + **best-effort decoupled auto-fire**(분리 세션,
+  예외 미전파 → POI 생성 미롤백) + **reconciliation**(external_ref 참조 미연결 POI → feature_id).
+  auto-fire는 이미 반영된(`added`) 제안이면 방금 만든 POI를 즉시 연결.
+- POI create: source/external_ref 저장 + 외부 pick이면 auto-fire(user-authored name/coord만 사용,
+  provider 콘텐츠 미저장). 수동 `request_feature`: external_ref면 전역 dedup(없으면 기존 per-user).
+  admin approve: `added`+feature_id면 reconciliation, `kor_travel_map_ref.reconciled_poi_count` 기록.
+- 계약: `ExternalRef` + source(py+zod), Poi/FeatureRequest create·response, admin summary.
+  JSONB in-place 미추적 이슈로 reconciled_poi_count는 dict 완성 후 한 번에 대입.
+- 검증(WSL): ruff/`mypy --strict`(194) + pipeline 5(auto-fire/전역dedup/best-effort/reconcile/수동
+  dedup) + blast-radius 41 passed; web typecheck/lint/build/schemas·web vitest 통과. 단일 리뷰 진행 중.
+- **다음**: T-304(detail-card — `GET /features/{id}/detail-card` kind별 + 외부 enrichment).
+
 ## 2026-07-21 07:10 (claude) — TDR T-302 Kakao/Naver Local + 통합 검색
 
 - T-301 PR #397 머지 완료(main c703bb6). 이어 T-302(ADR-054) 착수.

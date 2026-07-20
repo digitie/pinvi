@@ -6,6 +6,13 @@
 
 ## 2026-07-21
 
+- [x] **T-302** — Kakao/Naver Local + 통합 `GET /search` source-tagged. (완료: 2026-07-21, PR #398, claude)
+      표시 전용 provider client 2종(kor_travel_geo 미러, 부재/키 미설정=degrade), `GET /search`
+      `{results: PlaceSearchResult[], degraded_sources}` 재작성(internal-first short-circuit +
+      internal→kakao→naver + 소스별 degrade), "내 주변" 좌표 Kakao-only + location_audit
+      third_party_place_search, `/features/search` 삭제, 순수 매핑(HTML strip·mapx/mapy /1e7). 단일
+      적대적 리뷰 P1/P2(위치 감사 오기록) 반영. ADR-054.
+
 - [x] **T-301** — TDR day 표시 모델 backend. (완료: 2026-07-21, PR #397, claude)
       `trip_days.date`를 override-only로 전환, effective_date 파생(materialize 3경로 폐지 + 마이그레이션
       0038), `core/markers.py`(일자 기본색+display 색), 일자 `marker_color` + POI `display_marker_color`,
