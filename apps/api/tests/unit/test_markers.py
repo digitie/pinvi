@@ -22,8 +22,16 @@ def test_default_day_marker_color_cycles_16(day_index: int, expected: str) -> No
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [("P-01", True), ("P-16", True), ("P-00", False), ("P-17", False), ("P-1", False),
-     ("red", False), (None, False), ("", False)],
+    [
+        ("P-01", True),
+        ("P-16", True),
+        ("P-00", False),
+        ("P-17", False),
+        ("P-1", False),
+        ("red", False),
+        (None, False),
+        ("", False),
+    ],
 )
 def test_is_marker_color_key(value: str | None, expected: bool) -> None:
     assert is_marker_color_key(value) is expected

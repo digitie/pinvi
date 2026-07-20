@@ -570,9 +570,7 @@ async def test_trip_create_with_date_range_creates_day_layers(
     assert detail.status_code == 200, detail.text
     days = detail.json()["data"]["days"]
     # ADR-055: date는 override-only(NULL)로 두고 effective_date를 파생한다.
-    assert [
-        (d["day_index"], d["date"], d["effective_date"], d["out_of_range"]) for d in days
-    ] == [
+    assert [(d["day_index"], d["date"], d["effective_date"], d["out_of_range"]) for d in days] == [
         (1, None, "2026-06-10", False),
         (2, None, "2026-06-11", False),
         (3, None, "2026-06-12", False),
