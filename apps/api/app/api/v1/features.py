@@ -401,32 +401,8 @@ async def features_nearby(
     )
 
 
-@router.get("/search", response_model=Envelope[list[FeatureSummary]])
-async def search_features(
-    _current_user: CurrentUserId,
-    client: KorTravelMapHttpClientDep,
-    q: Annotated[str, Query(min_length=1, max_length=200)],
-    kinds: Annotated[list[FeatureKind] | None, Query()] = None,
-    category: Annotated[str | None, Query()] = None,
-    bbox: Annotated[str | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> Envelope[list[FeatureSummary]]:
-    """자유 텍스트 검색 (feature 파트만 — 검색 인덱스/ranking은 kor_travel_map 책임)."""
-    bbox_obj = _parse_bbox(bbox) if bbox else None
-    with _map_kor_travel_map_errors():
-        data = await client.search_features(
-            q=q,
-            min_lon=bbox_obj.lng_min if bbox_obj else None,
-            min_lat=bbox_obj.lat_min if bbox_obj else None,
-            max_lon=bbox_obj.lng_max if bbox_obj else None,
-            max_lat=bbox_obj.lat_max if bbox_obj else None,
-            kinds=[str(k) for k in kinds] if kinds else None,
-            category=category,
-            page_size=limit,
-        )
-    return Envelope.of(
-        [_summary_from_kor_travel_map(x) for x in data.get("items", []) if isinstance(x, dict)]
-    )
+# NOTE: `/features/search`(feature-only)는 통합 `GET /search`(source-tagged, ADR-054)로 대체됐다.
+# feature 텍스트 검색은 이제 `app/api/v1/search.py`의 unified_search가 feature source로 포함한다.
 
 
 @router.get("/requests/{request_id}", response_model=Envelope[FeatureRequestResponse])

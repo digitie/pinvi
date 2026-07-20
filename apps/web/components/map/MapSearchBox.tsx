@@ -2,14 +2,29 @@
 
 import { useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
-import { ApiError, featureApi } from '@pinvi/api-client';
-import type { FeatureSummary } from '@pinvi/schemas';
+import { ApiError, geoApi } from '@pinvi/api-client';
+import type { FeatureSummary, PlaceSearchResult } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 
 export interface MapSearchBoxProps {
   onSelect: (feature: FeatureSummary) => void;
   className?: string;
+}
+
+// T-302 bridge: 통합 `GET /search`의 feature-source 행을 기존 onSelect(FeatureSummary) 계약으로
+// 매핑한다. address/kakao/naver source 행 + source 아이콘/attribution UI는 T-309a에서 재작성한다.
+function featureResultToSummary(r: PlaceSearchResult): FeatureSummary | null {
+  if (r.feature_id == null) return null;
+  return {
+    feature_id: r.feature_id,
+    kind: 'place',
+    name: r.name,
+    coord: r.coord,
+    category: r.category,
+    marker_color: r.marker_color ?? 'P-13',
+    marker_icon: r.marker_icon ?? 'marker',
+  };
 }
 
 export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
@@ -31,10 +46,16 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await featureApi(apiClient).search({ q: term, limit: 8 }, { signal: controller.signal });
+      const res = await geoApi(apiClient).searchPlaces(
+        { q: term, limit: 8 },
+        { signal: controller.signal },
+      );
       if (searchAbort.current !== controller) return;
-      setResults(res);
-      if (res.length === 0) setError('검색 결과가 없습니다.');
+      const features = res.results
+        .map(featureResultToSummary)
+        .filter((f): f is FeatureSummary => f !== null);
+      setResults(features);
+      if (features.length === 0) setError('검색 결과가 없습니다.');
     } catch (err) {
       if (isAbortError(err) || searchAbort.current !== controller) return;
       setError(err instanceof ApiError ? err.message : '검색에 실패했습니다.');

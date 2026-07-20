@@ -17,7 +17,7 @@
 - **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
   마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
-  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(구현 완료, PR 대기).
+  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397). 진행: T-302(PR 대기).
 
 ## kor-travel-map 공개 API 인증 계약 정합
 
@@ -56,13 +56,11 @@
 
 ### 백엔드 / 데이터 (T-301~T-305)
 
-- [~] T-301 — Day presentation backend. `trip_days.marker_color`(nullable+inherit),
-      effective_date 파생(materialize 폐지: create_trip/ensure_trip_day/create_day), out_of_range,
-      POI별 `display_marker_color`, DELETE-day 409 `DAY_HAS_POIS`+`?force`, copy 색 보존, py+zod 계약.
-      **구현 완료·검증(ruff/mypy/pytest) 통과, PR 대기.** `agent/claude-tdr-day-presentation`. **ADR-055**.
-- [ ] T-302 — Kakao/Naver Local client + config + `GET /search` typed source-tagged(address 포함,
-      `/features/search` 삭제) + location_audit + quota/cache + api-client + `docs/api/search.md` +
-      `docs/integrations/kakao-naver-local.md` 연결. **ADR-054**.
+- [x] T-301 — Day presentation backend. **PR #397 머지 완료**(main c703bb6). **ADR-055**.
+- [~] T-302 — Kakao/Naver Local client + config + `GET /search` typed source-tagged(address 포함,
+      `/features/search` 삭제) + location_audit + api-client + `docs/api/search.md`.
+      **구현 완료·검증(ruff/mypy/pytest + web) 통과, 단일 리뷰 후 PR 대기.**
+      `agent/claude-tdr-search`. **ADR-054**.
 - [ ] T-303 — feature-request 파이프라인: `source`/`external_ref` first-class(POI+suggestion),
       best-effort decoupled auto-fire, GLOBAL dedup, post-approval reconciliation. (ADR-054)
 - [ ] T-304 — detail-card: `GET /features/{id}/detail-card` kind별 + generic fallback + opt-in 외부

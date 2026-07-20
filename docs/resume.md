@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-302 Kakao/Naver Local + 통합 검색 (PR 대기)
+
+**TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397). T-302(ADR-054) 구현·검증 완료:
+Kakao/Naver Local **표시 전용** client 2종(`kor_travel_geo` 미러, 부재/키 미설정=degrade),
+`GET /search` source-tagged 재작성(`PlaceSearchResult[]` + internal-first short-circuit +
+internal→kakao→naver + 소스별 degrade), "내 주변 검색" 좌표 Kakao-only + `location_audit`
+`third_party_place_search`, `/features/search` 삭제, 순수 매핑 `services/place_search.py`,
+py+zod+api-client 계약, `MapSearchBox` feature-source 브리지, `docs/api/search.md`. WSL:
+API ruff/mypy --strict(193)/29+44 pytest + web typecheck/vitest 76/build 통과. 단일 적대적 리뷰 진행 중.
+브랜치 `agent/claude-tdr-search`.
+**다음 한 작업**: 적대적 리뷰 반영 → T-302 PR 생성·CI·머지 → **T-303**(feature-request 파이프라인:
+`source`/`external_ref` first-class(POI+suggestion), best-effort decoupled auto-fire, GLOBAL dedup,
+post-approval reconciliation, ADR-054).
+
 ## 2026-07-20 (claude) — TDR T-301 day 표시 모델 backend (PR 대기)
 
 **TDR는 Claude 단독 진행**(레인 분리 폐지). #396(T-306a 모달 기반) 머지 완료. T-301(ADR-055

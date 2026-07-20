@@ -702,14 +702,20 @@ export {
   GeoSearchKindSchema,
   GeoCandidateListSchema,
   RegionCoveringSchema,
-  UnifiedSearchResultSchema,
+  PlaceSearchSourceSchema,
+  PlaceCoordSchema,
+  PlaceSearchResultSchema,
+  PlaceSearchResponseSchema,
 } from './geo';
 export type {
   BoundaryLevel,
   GeoSearchKind,
   GeoCandidateList,
   RegionCovering,
-  UnifiedSearchResult,
+  PlaceSearchSource,
+  PlaceCoord,
+  PlaceSearchResult,
+  PlaceSearchResponse,
 } from './geo';
 export { TelegramTargetCreateSchema, TelegramTargetSchema } from './telegram';
 export type { TelegramTarget, TelegramTargetCreate } from './telegram';

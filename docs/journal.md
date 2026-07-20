@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-21 07:10 (claude) — TDR T-302 Kakao/Naver Local + 통합 검색
+
+- T-301 PR #397 머지 완료(main c703bb6). 이어 T-302(ADR-054) 착수.
+- 외부 장소 provider Kakao Local + Naver Local을 **표시 전용**으로 도입. client 2종은
+  `kor_travel_geo` 미러(factory + `api_call_event_hooks(provider)` + 수동 백오프 + lifespan +
+  `app.state` + Depends). client 부재/키 미설정은 hard fail이 아니라 degrade. Kakao=`KakaoAK`
+  헤더(기존 OAuth REST 키 재사용), Naver=`X-Naver-Client-Id/Secret`(신규 SecretStr, display≤5).
+- `GET /search` 재작성: `{results: PlaceSearchResult[], degraded_sources}` source-tagged
+  (feature|my_poi|address|kakao|naver). internal-first short-circuit(내부 ≥ K면 provider 미호출),
+  정렬 internal→kakao→naver, 소스별 degrade. "내 주변 검색"(lat+lon) 좌표는 Kakao에만 전달 +
+  `location_audit` `third_party_place_search`. `/features/search`(feature-only) 삭제.
+- 순수 매핑 `services/place_search.py`(HTML strip, Naver mapx/mapy /1e7, link→external_id).
+  provider 파생 콘텐츠(phone/address/category)는 표시 전용 — 저장 대상은 user-authored +
+  external_ref뿐(코드 경로상 persist 없음).
+- 계약: `schemas/search.py` + `geo.ts` `PlaceSearchResult`/`PlaceSearchResponse`, api-client
+  `geoApi.searchPlaces`, `feature.search` 제거. `MapSearchBox`는 통합 검색의 feature-source로
+  브리지(전체 union UX는 T-309a). rate-limit `/search` 유지. `docs/api/search.md` 계약 정본.
+- 검증(WSL): API ruff/`mypy --strict`(193) + 매핑/2 client/geo 통합 29 + blast-radius 44 passed;
+  web typecheck/vitest 76/build 통과. 단일 적대적 리뷰 진행 중.
+- **다음**: T-303(feature-request 파이프라인 — source/external_ref first-class).
+
 ## 2026-07-20 22:30 (claude) — TDR T-301 day 표시 모델 backend
 
 - 결정: **TDR 전체를 Claude 단독 진행**(레인 A/B 분리 폐지, Codex 미사용). #396(T-306a) 머지 완료.

@@ -28,6 +28,9 @@ PURPOSE_BY_PATH: dict[str, str] = {
     "/features/nearby": "nearby_attractions",
     "/regions/covering-point": "region_covering",
     "/regions/within-radius": "region_radius",
+    # "내 주변 검색"으로 사용자 좌표를 Kakao에 제3자 제공(ADR-054 §9). 좌표는 핸들러가
+    # request.state.location_audit_coord로 세팅하며, 좌표 없는 키워드 검색은 감사 대상이 아니다.
+    "/search": "third_party_place_search",
 }
 
 
@@ -48,6 +51,12 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         try:
             lat, lng = _extract_coord(request)
         except ValueError:
+            return response
+
+        # 좌표가 실제로 없으면 위치정보 제3자 제공/사용이 없었던 것이므로 감사하지 않는다.
+        # (좌표 없는 키워드-only `/search` 등이 거짓 감사 기록을 남기지 않게 한다. 다른 감사 경로는
+        # 모두 필수 좌표를 지니므로 영향 없음.)
+        if lat is None and lng is None:
             return response
 
         user_id_str = getattr(request.state, "user_id", None)

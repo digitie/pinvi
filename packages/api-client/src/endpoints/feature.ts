@@ -70,29 +70,8 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** 자유 텍스트 검색 (feature 파트만 — 인덱스/ranking은 kor_travel_map 책임). */
-  search: (
-    params: {
-      q: string;
-      kinds?: FeatureKind[];
-      category?: string;
-      bbox?: string;
-      limit?: number;
-    },
-    opts?: { signal?: AbortSignal },
-  ) => {
-    const qs = new URLSearchParams();
-    qs.set('q', params.q);
-    if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
-    if (params.category) qs.set('category', params.category);
-    if (params.bbox) qs.set('bbox', params.bbox);
-    if (params.limit) qs.set('limit', String(params.limit));
-    return client.request(`/features/search?${qs.toString()}`, {
-      method: 'GET',
-      schema: z.array(FeatureSummarySchema),
-      signal: opts?.signal,
-    });
-  },
+  // NOTE: 자유 텍스트 feature 검색은 통합 `GET /search`(geoApi.searchPlaces, ADR-054)로 이전됐다.
+  // `/features/search`는 삭제됐고 feature는 통합 검색의 source=feature 행으로 나온다.
 
   /** feature 1건 상세. */
   get: (featureId: string) =>
