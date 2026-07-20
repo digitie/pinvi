@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-07-20 (codex) — T-VN-20 public API key header-only docs-first
+
+kor-travel-map PR #794가 public API key의 `?key=` query를 제거하고
+`X-Kor-Travel-Map-Api-Key` header-only로 clean-cut했다. Pinvi issue #394에서 public client의 query
+주입을 제거하고, service token이 없을 때만 public API key 헤더를 보내도록 소비 계약을 정렬한다.
+vendored `openapi.user.json`과 contract gate도 security scheme/header 및 query 비노출을 검증한다.
+첫 단일 리뷰의 P1 2건/P2 2건에 따라 batch ServiceToken-only allowlist, Map #794 전체 exact snapshot과
+pinned hash/full equality gate, 세 env example·app-api Compose 배선, opt-in 실제 HTTP 인증 smoke까지
+보강했다.
+2차 리뷰의 P2 두 건에 따라 sibling 탐색 root off-by-one과 탐색 unit을 보정했고, VWorld Geo query와
+Map header fallback, 실제 contract/live test 경로·opt-in 조건도 분리해 문서 drift를 제거했다.
+3차 단일 적대적 리뷰에서 P0~P2 없이 승인받은 뒤 focused `32 passed, 4 skipped`, 전체 unit
+`616 passed, 1 skipped`, Ruff lint/format, mypy, Compose config, exact snapshot hash/byte equality를
+통과했다. live HTTP는 실제 credential과 feature id가 필요한 명시적 opt-in으로 남겼다.
+**다음 한 작업**은 최신 main에 정렬한 커밋으로 draft PR을 열고 CI·리뷰 코멘트를 추적하는 것이다.
+
 ## 2026-07-19 (codex) — T-VN-03 관측 read principal docs-first
 
 PR #387의 canonical ops principal이 consistency/log client 네 메서드에는 연결되지 않은

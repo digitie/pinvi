@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- kor-travel-map public API key를 URL `key` query에 노출하지 않고
+  `X-Kor-Travel-Map-Api-Key` header로만 전송한다. service token이 설정된 호출은 기존처럼 우선하며
+  public API key를 함께 보내지 않는다. `POST /v1/features/batch`는 service token 전용으로 유지하고,
+  API container에는 map API base/service token/public key 설정을 명시적으로 전달한다.
 - Admin 무결성·일관성·system/API log 조회가 kor-travel-map frontend/service 자격을 보내지 않고
   전용 `ops:read` principal만 사용한다. 현재 소비하지 않는 ops metrics/deep-health route는 runtime
   client에 추가하지 않으며 exact 관측 route registry로 drift를 차단한다.

@@ -7,6 +7,10 @@
 
 ## 현재 선점 / 충돌 회피
 
+- **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
+  `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
+  수정한다. service token 우선순위는 유지하고 `key` query를 제거하며
+  `X-Kor-Travel-Map-Api-Key` header-only 계약으로 전환한다.
 - **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
   client·provider-sync/ETL projection, 공용 schema·provider-sync UI/E2E·문서를 수정한다. TDR
   레인과 파일이 겹치면 C6c가 선행하며, provider-sync 밖의 Web 화면 구조는 바꾸지 않는다.
@@ -18,6 +22,14 @@
     `packages/domain`(small). → T-306~T-309c.
   - 공유 계약 필드는 **B가 먼저 정의**, A가 소비. `packages/domain/src/marker.ts`는 A가 소유하되
     web+mobile 공유이므로 pure 유지(`dayColor` optional). 자세한 파일 소유·DAG는 execplan §3.2/§3.1.
+
+## kor-travel-map 공개 API 인증 계약 정합
+
+- [ ] **T-VN-20 / issue #394** — kor-travel-map PR #794의 clean-cut에 맞춰 public API key를
+  `X-Kor-Travel-Map-Api-Key` header로만 전송한다. URL `key` query를 제거하고 service token 우선순위,
+  batch의 ServiceToken-only allowlist, exact vendored OpenAPI hash/equality, 운영 Compose env 배선과
+  opt-in live HTTP smoke를 unit/contract gate로 고정한다. 단일 적대적 리뷰 승인과 로컬 gate는
+  완료했으며 draft PR·CI·N150 live smoke·머지가 남았다.
 
 ## kor-travel-map admin ops 계약 복구
 

@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_admin_base_url: str = "http://localhost:12701"
     # 인증은 인프라 계층(reverse proxy / IP allowlist). 설정 시 X-Kor-Travel-Map-Service-Token 전달.
     pinvi_kor_travel_map_service_token: str = ""
-    # kor-travel-map public REST가 key query를 요구할 때 사용. 미설정 시 PINVI_VWORLD_API_KEY 사용.
+    # public REST의 X-Kor-Travel-Map-Api-Key header. 미설정 시 PINVI_VWORLD_API_KEY 사용.
     pinvi_kor_travel_map_public_api_key: str = ""
     # admin-path 전용 서비스 토큰(미설정 시 공용 service token fallback).
     # §7 확정(kor_travel_map T-217c): 운영 인증은 인프라 계층(SSO/IP allowlist) — token은 선택 pass-through.

@@ -92,6 +92,10 @@ services:
       PINVI_GEOFENCE_BYPASS_PATHS: '${PINVI_GEOFENCE_BYPASS_PATHS:-["/health","/health/db","/metrics","/docs","/redoc","/openapi.json"]}'
       PINVI_SENTRY_ENVIRONMENT: ${PINVI_SENTRY_ENVIRONMENT:-smoke}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      # user-facing read는 service token 우선, public route만 전용 API key header fallback을 쓴다.
+      PINVI_KOR_TRAVEL_MAP_API_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_API_BASE_URL:-http://host.docker.internal:12701}
+      PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN: ${PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN:-}
+      PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY: ${PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY:-}
       # canonical kor-travel-map ops는 API container에서 host service로만 호출한다.
       # read/cancel token은 같은 header를 쓰지만 capability별로 서로 다른 값을 전달한다.
       PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
