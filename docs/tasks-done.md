@@ -4,6 +4,14 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-20
+
+- [x] **T-306a** — TDR 웹 모달 기반. (완료: 2026-07-20, PR #396, claude)
+      공용 `useModalDialog` 훅(focus in/restore·Escape·body scroll-lock 참조카운트·Tab focus-trap·
+      backdrop pointer-safe close·중첩 모달 topmost 가드·aria 배선) + 제네릭 `ConfirmDialog`(danger
+      tone) + `FeatureDetailModal` shell(모바일 bottom-sheet 반응형, loading/error/children/footer).
+      단일 적대적 리뷰 2라운드(2인)로 중첩 모달/focus-trap 누수/busy 포커스 3건 반영. 웹 unit 76 passed.
+
 ## 2026-07-19
 
 - [x] **T-ADM-C7P** — PinVi API image provenance. (완료: 2026-07-19, PR #389, codex)

@@ -66,6 +66,16 @@ class TripDayNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
 
 
+class DayHasPoisError(TripError):
+    """일자에 POI가 남아 있는데 force 없이 삭제하려 할 때(ADR-055 F2). 409로 매핑."""
+
+    code = "DAY_HAS_POIS"
+
+    def __init__(self, message: str, *, poi_count: int) -> None:
+        super().__init__(message)
+        self.poi_count = poi_count
+
+
 class TripCopyError(TripError):
     code = "TRIP_COPY_ERROR"
 
@@ -125,14 +135,10 @@ async def create_trip(
     db.add(trip)
     await db.flush()
     if start_date is not None and end_date is not None:
+        # ADR-055: date는 override-only. day layer는 만들되 date는 NULL로 두고
+        # effective_date를 read-path에서 파생한다.
         for offset in range((end_date - start_date).days + 1):
-            db.add(
-                TripDay(
-                    trip_id=trip.trip_id,
-                    day_index=offset + 1,
-                    date=start_date + timedelta(days=offset),
-                )
-            )
+            db.add(TripDay(trip_id=trip.trip_id, day_index=offset + 1))
     await db.commit()
     await db.refresh(trip)
     return trip
@@ -368,8 +374,16 @@ async def create_trip_day(
     date_value: date | None,
     title: str | None,
     note: str | None,
+    marker_color: str | None = None,
 ) -> TripDay:
-    day = TripDay(trip_id=trip_id, day_index=day_index, date=date_value, title=title, note=note)
+    day = TripDay(
+        trip_id=trip_id,
+        day_index=day_index,
+        date=date_value,
+        title=title,
+        note=note,
+        marker_color=marker_color,
+    )
     db.add(day)
     await _bump_trip_version(db, trip_id=trip_id)
     try:
@@ -406,8 +420,8 @@ async def validate_trip_day_payload(
         raise TripDayValidationError(f"여행 기간은 최대 {limit}일입니다.")
 
     if date_value is None:
-        if trip.start_date is not None and trip.end_date is not None:
-            raise TripDayValidationError("여행 기간이 있는 경우 일자 날짜가 필요합니다.")
+        # ADR-055: date는 override-only. 비우면 effective_date가 start_date+day_index로 파생되므로
+        # 여행 기간이 있어도 명시 날짜를 요구하지 않는다.
         return
     if trip.start_date is not None and date_value < trip.start_date:
         raise TripDayValidationError("일자 날짜는 여행 시작일 이후여야 합니다.")
@@ -469,14 +483,43 @@ async def update_trip_day(
 
 
 async def delete_trip_day(
-    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int, expected_version: int
-) -> None:
+    db: AsyncSession,
+    *,
+    trip_id: uuid.UUID,
+    day_index: int,
+    expected_version: int,
+    force: bool = False,
+) -> int:
+    """일자를 삭제한다. POI가 남아 있으면 `force`가 없는 한 `DayHasPoisError`(409, ADR-055 F2).
+
+    Returns:
+        함께 삭제된(FK CASCADE) 활성 POI 수.
+    """
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
     if day.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    poi_count = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(TripDayPoi)
+            .where(
+                TripDayPoi.trip_id == trip_id,
+                TripDayPoi.day_index == day_index,
+                TripDayPoi.deleted_at.is_(None),
+            )
+        )
+        or 0
+    )
+    if poi_count > 0 and not force:
+        raise DayHasPoisError(
+            f"이 일자에는 POI {poi_count}개가 있습니다. 삭제하면 함께 제거됩니다.",
+            poi_count=poi_count,
+        )
+    # FK(trip_id, day_index) ON DELETE CASCADE로 trip_day_pois도 함께 하드 삭제된다.
     await db.delete(day)
     await _bump_trip_version(db, trip_id=trip_id)
     await db.commit()
+    return poi_count
 
 
 async def copy_trip(
@@ -546,6 +589,7 @@ async def copy_trip(
                     date=_shift_date(source_day.date, date_shift_days),
                     title=source_day.title,
                     note=source_day.note,
+                    marker_color=source_day.marker_color,
                 )
             )
             copied_day_count += 1

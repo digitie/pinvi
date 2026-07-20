@@ -131,6 +131,9 @@ describe('tripMapPoints', () => {
       {
         day_index: 1,
         date: null,
+        effective_date: null,
+        out_of_range: false,
+        marker_color: null,
         title: '1일차',
         version: 1,
         holidays: [],
@@ -142,6 +145,9 @@ describe('tripMapPoints', () => {
       {
         day_index: 2,
         date: null,
+        effective_date: null,
+        out_of_range: false,
+        marker_color: null,
         title: '2일차',
         version: 1,
         holidays: [],
@@ -159,6 +165,9 @@ describe('tripMapPoints', () => {
       {
         day_index: 1,
         date: null,
+        effective_date: null,
+        out_of_range: false,
+        marker_color: null,
         title: null,
         version: 1,
         holidays: [],

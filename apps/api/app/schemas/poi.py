@@ -17,7 +17,7 @@ class PoiCreate(BaseModel):
     sort_order: str = Field(min_length=1, max_length=80)
     feature_id: str | None = Field(default=None, min_length=1, max_length=200)
     feature_snapshot: dict[str, Any] = Field(default_factory=dict)
-    custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
+    custom_marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
     custom_marker_icon: str | None = Field(default=None, max_length=64)
     planned_arrival_at: datetime | None = None
     planned_departure_at: datetime | None = None
@@ -31,7 +31,7 @@ class PoiCreate(BaseModel):
 class PoiUpdate(BaseModel):
     sort_order: str | None = Field(default=None, min_length=1, max_length=80)
     feature_snapshot: dict[str, Any] | None = None
-    custom_marker_color: str | None = Field(default=None, pattern=r"^P-\d{2}$")
+    custom_marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
     custom_marker_icon: str | None = Field(default=None, max_length=64)
     planned_arrival_at: datetime | None = None
     planned_departure_at: datetime | None = None

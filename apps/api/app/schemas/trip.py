@@ -6,14 +6,17 @@ import uuid
 from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
 from app.schemas.poi import PoiRiseSetResponse
 from app.schemas.storage import AttachmentResponse
 
 RegionSource = Literal["manual", "poi_snapshot", "geocoded"]
+
+#: 팔레트 키(P-01~P-16) 형식 검증 문자열. None 허용은 각 필드에서 `| None`으로.
+MarkerColorStr = Annotated[str, StringConstraints(pattern=r"^P-(0[1-9]|1[0-6])$")]
 
 
 class TripBase(BaseModel):
@@ -131,12 +134,14 @@ class TripDayCreate(BaseModel):
     date: Date | None = None
     title: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    marker_color: MarkerColorStr | None = None
 
 
 class TripDayUpdate(BaseModel):
     date: Date | None = None
     title: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    marker_color: MarkerColorStr | None = None
 
 
 class TripDayResponse(BaseModel):
@@ -145,6 +150,7 @@ class TripDayResponse(BaseModel):
     date: Date | None
     title: str | None
     note: str | None
+    marker_color: str | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -204,6 +210,8 @@ class TripViewPoi(BaseModel):
     feature: dict[str, Any]
     marker_color: str | None
     marker_icon: str | None
+    # ADR-055: 지도 핀·목록 뱃지 parity용 서버 계산 색(custom > 일자색). 항상 유효 팔레트 키.
+    display_marker_color: str | None = None
     is_broken: bool
     user_note: str | None
     planned_arrival_at: datetime | None
@@ -234,6 +242,12 @@ class TripDayHoliday(BaseModel):
 class TripViewDay(BaseModel):
     day_index: int
     date: Date | None
+    # ADR-055: date는 override-only, effective_date는 파생(override 또는 start_date+day_index).
+    effective_date: Date | None = None
+    # effective_date가 여행 [start,end] 밖이면 True(F1: 기간 축소 시 경고).
+    out_of_range: bool = False
+    # 일자 색 override(팔레트 키). NULL이면 클라이언트가 인덱스 기본색으로 해석.
+    marker_color: str | None = None
     title: str | None
     version: int
     holidays: list[TripDayHoliday] = Field(default_factory=list)

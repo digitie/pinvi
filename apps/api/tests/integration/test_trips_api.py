@@ -484,18 +484,73 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     )
     assert poi.status_code == 201, poi.text
 
-    # stale delete도 409, 올바른 version은 204
+    # stale delete도 409 (version)
     stale_delete = await client.request(
         "DELETE", f"/trips/{trip_id}/days/1", headers={"If-Match": "1"}, cookies=cookies
     )
     assert stale_delete.status_code == 409, stale_delete.text
-    deleted = await client.request(
+    assert stale_delete.json()["error"]["code"] == "VERSION_CONFLICT"
+
+    # ADR-055 F2: POI가 있는 일자는 force 없이 삭제 시 409 DAY_HAS_POIS.
+    blocked = await client.request(
         "DELETE", f"/trips/{trip_id}/days/1", headers={"If-Match": "2"}, cookies=cookies
+    )
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["error"]["code"] == "DAY_HAS_POIS"
+
+    # force=true면 POI까지 cascade 삭제 후 204.
+    deleted = await client.request(
+        "DELETE", f"/trips/{trip_id}/days/1?force=true", headers={"If-Match": "2"}, cookies=cookies
     )
     assert deleted.status_code == 204
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text
     assert detail.json()["data"]["days"] == []
+
+
+async def test_trip_day_marker_color_crud_and_validation(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "일자 색"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+
+    # 색 override(팔레트 키)로 일자 생성.
+    day = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 1, "marker_color": "P-07", "title": "1일차"},
+        cookies=cookies,
+    )
+    assert day.status_code == 201, day.text
+    assert day.json()["data"]["marker_color"] == "P-07"
+
+    patched = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"marker_color": "P-12"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["marker_color"] == "P-12"
+
+    # 명시적 NULL은 override 제거(기본색 사용).
+    reset = await client.patch(
+        f"/trips/{trip_id}/days/1",
+        json={"marker_color": None},
+        headers={"If-Match": "2"},
+        cookies=cookies,
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["data"]["marker_color"] is None
+
+    # 무효 팔레트 키는 422.
+    invalid = await client.post(
+        f"/trips/{trip_id}/days",
+        json={"day_index": 2, "marker_color": "P-99"},
+        cookies=cookies,
+    )
+    assert invalid.status_code == 422, invalid.text
 
 
 async def test_trip_create_with_date_range_creates_day_layers(
@@ -513,11 +568,13 @@ async def test_trip_create_with_date_range_creates_day_layers(
 
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text
-    assert [(day["day_index"], day["date"]) for day in detail.json()["data"]["days"]] == [
-        (1, "2026-06-10"),
-        (2, "2026-06-11"),
-        (3, "2026-06-12"),
-        (4, "2026-06-13"),
+    days = detail.json()["data"]["days"]
+    # ADR-055: date는 override-only(NULL)로 두고 effective_date를 파생한다.
+    assert [(d["day_index"], d["date"], d["effective_date"], d["out_of_range"]) for d in days] == [
+        (1, None, "2026-06-10", False),
+        (2, None, "2026-06-11", False),
+        (3, None, "2026-06-12", False),
+        (4, None, "2026-06-13", False),
     ]
 
 
@@ -550,11 +607,20 @@ async def test_trip_day_create_fills_deleted_hole_and_validates_date_conflicts(
     )
     assert recreated.status_code == 201, recreated.text
     assert recreated.json()["data"]["day_index"] == 1
-    assert recreated.json()["data"]["date"] == "2026-06-10"
+    # ADR-055: date override 없이 만들면 NULL(effective_date는 view에서 파생).
+    assert recreated.json()["data"]["date"] is None
 
-    duplicate_date = await client.patch(
+    # 명시 override 날짜끼리 충돌하면 409. 먼저 day1을 06-10으로 고정.
+    pin_day1 = await client.patch(
         f"/trips/{trip_id}/days/1",
-        json={"date": "2026-06-11"},
+        json={"date": "2026-06-10"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert pin_day1.status_code == 200, pin_day1.text
+    duplicate_date = await client.patch(
+        f"/trips/{trip_id}/days/2",
+        json={"date": "2026-06-10"},
         headers={"If-Match": "1"},
         cookies=cookies,
     )
@@ -562,7 +628,7 @@ async def test_trip_day_create_fills_deleted_hole_and_validates_date_conflicts(
     assert duplicate_date.json()["error"]["code"] == "TRIP_DAY_CONFLICT"
 
     out_of_range = await client.patch(
-        f"/trips/{trip_id}/days/1",
+        f"/trips/{trip_id}/days/2",
         json={"date": "2026-06-12"},
         headers={"If-Match": "1"},
         cookies=cookies,
@@ -598,7 +664,7 @@ async def test_trip_copy_shared_view_and_attachments(
     trip_id = created.json()["data"]["trip_id"]
     day = await client.patch(
         f"/trips/{trip_id}/days/1",
-        json={"title": "원본 day"},
+        json={"title": "원본 day", "marker_color": "P-05"},
         headers={"If-Match": "1"},
         cookies=cookies,
     )
@@ -639,7 +705,11 @@ async def test_trip_copy_shared_view_and_attachments(
 
     copied_detail = await client.get(f"/trips/{copied_trip_id}", cookies=cookies)
     copied_day = copied_detail.json()["data"]["days"][0]
-    assert copied_day["date"] == "2026-06-17"
+    # ADR-055: date는 override-only(NULL). effective_date가 shift된 start_date에서 파생된다.
+    assert copied_day["date"] is None
+    assert copied_day["effective_date"] == "2026-06-17"
+    # 일자 색 override는 copy에 보존된다.
+    assert copied_day["marker_color"] == "P-05"
     copied_poi_id = copied_day["pois"][0]["poi_id"]
 
     copied_trip_attachments = await client.get(

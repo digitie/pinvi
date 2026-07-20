@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -53,14 +53,27 @@ async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: in
         select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
     )
     if day is None:
-        trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
-        date = None
-        if trip is not None and trip.start_date is not None:
-            date = trip.start_date + timedelta(days=day_index - 1)
-        day = TripDay(trip_id=trip_id, day_index=day_index, date=date)
+        # ADR-055: date는 override-only. auto-create는 NULL로 두고 effective_date를 파생한다.
+        day = TripDay(trip_id=trip_id, day_index=day_index)
         db.add(day)
         await db.flush()
     return day
+
+
+async def trip_day_effective_locdate(
+    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int, override: date | None
+) -> date | None:
+    """POI rise/set seed용 effective 날짜(ADR-055).
+
+    day.date override가 있으면 그것, 없으면 trip.start_date + (day_index-1)로 파생한다.
+    trip.start_date가 없으면 None(rise/set은 pending_date로 남는다).
+    """
+    if override is not None:
+        return override
+    start_date = await db.scalar(select(Trip.start_date).where(Trip.trip_id == trip_id))
+    if start_date is None:
+        return None
+    return start_date + timedelta(days=day_index - 1)
 
 
 async def create_poi(
@@ -83,6 +96,10 @@ async def create_poi(
     user_url: str | None = None,
 ) -> TripDayPoi:
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
+    # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
+    locdate = await trip_day_effective_locdate(
+        db, trip_id=trip_id, day_index=day_index, override=day.date
+    )
     poi = TripDayPoi(
         trip_id=trip_id,
         day_index=day_index,
@@ -111,7 +128,7 @@ async def create_poi(
         db.add(
             build_initial_poi_rise_set(
                 poi=poi,
-                locdate=day.date,
+                locdate=locdate,
                 feature_snapshot=feature_snapshot,
             )
         )

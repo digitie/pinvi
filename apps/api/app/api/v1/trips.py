@@ -56,6 +56,7 @@ from app.services.telegram_messages import (
 )
 from app.services.telegram_outbox import enqueue_user_notification
 from app.services.trip import (
+    DayHasPoisError,
     TripAttachmentLimitError,
     TripAttachmentNotFoundError,
     TripAttachmentQuotaError,
@@ -82,7 +83,6 @@ from app.services.trip import (
     create_comment,
     create_trip,
     create_trip_day,
-    default_trip_day_date,
     delete_attachment,
     delete_comment,
     delete_or_transfer_trip,
@@ -169,6 +169,7 @@ def _to_day_response(day) -> TripDayResponse:  # type: ignore[no-untyped-def]
         date=day.date,
         title=day.title,
         note=day.note,
+        marker_color=day.marker_color,
         version=day.version,
         created_at=day.created_at,
         updated_at=day.updated_at,
@@ -610,9 +611,8 @@ async def create_trip_day_endpoint(
         day_index = body.day_index
         if day_index is None:
             day_index = await next_available_trip_day_index(db, trip=trip)
+        # ADR-055: date는 override-only. 비우면 effective_date를 read-path에서 파생한다.
         date_value = body.date
-        if date_value is None:
-            date_value = default_trip_day_date(trip.start_date, day_index)
         await validate_trip_day_payload(
             db,
             trip=trip,
@@ -626,6 +626,7 @@ async def create_trip_day_endpoint(
             date_value=date_value,
             title=body.title,
             note=body.note,
+            marker_color=body.marker_color,
         )
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
@@ -716,11 +717,19 @@ async def delete_trip_day_endpoint(
     current_user_id: CurrentUserId,
     db: DbSession,
     if_match: Annotated[int, Header(alias="If-Match")],
+    force: Annotated[bool, Query()] = False,
 ) -> None:
     actor_id = uuid.UUID(current_user_id)
     try:
         await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
-        await delete_trip_day(db, trip_id=trip_id, day_index=day_index, expected_version=if_match)
+        # ADR-055 F2: POI가 남아 있으면 force 없이는 409 DAY_HAS_POIS(클라이언트 확인 후 재요청).
+        await delete_trip_day(
+            db,
+            trip_id=trip_id,
+            day_index=day_index,
+            expected_version=if_match,
+            force=force,
+        )
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     except TripDayNotFoundError as exc:
@@ -732,6 +741,11 @@ async def delete_trip_day_endpoint(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except DayHasPoisError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc), "poi_count": exc.poi_count},
         ) from exc
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
