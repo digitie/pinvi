@@ -47,6 +47,7 @@ import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinv
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripActions } from '@/components/trips/TripActions';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripAttachments } from '@/components/trips/TripAttachments';
@@ -1556,6 +1557,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
                             {active ? (
                               <div className="space-y-3 px-3 pb-3">
+                                {/* 선택된 일자의 요약(effective date + 공휴일 + 기간 벗어남 + 일출/일몰). */}
+                                <TripDayHeader day={day} />
                                 <TripWeatherSummary
                                   featureId={day.pois[0]?.feature_id ?? null}
                                   date={day.date}
