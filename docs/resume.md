@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-305(일자 rise/set backend) + T-309c(상세 모달) — backend 완료
+
+**TDR Claude 단독 진행, 병행 착수.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
+T-304(#400), **T-309c(#402 상세 모달 본문)**. **T-305(PR #401, backend 마지막)** 구현·검증·리뷰 완료
+(ETL lost-update 경합 P2 반영: fill UPDATE snapshot guard) — CI green, 머지 대기.
+전용 `app.trip_day_rise_sets`(centroid 기준좌표) + `sync_trip_day_rise_sets`(get_trip 유지) +
+build_trip_view emit + Dagster asset(KASI 배치 fill, 20분) + py/zod 계약. 부수: latent domain vitest
+회귀(featureRequest source/external_ref) 수정.
+**TDR backend(T-301~305) 전부 완료. 남은 것 = web UI + N150 live e2e.**
+**다음 한 작업**: #401 머지 확인 후 남은 web UI 착수 —
+  - **T-306**(dep T-301,T-306a): day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
+    배너/아이콘(F1). `TripDayControls`/`TripDetail`.
+  - **T-307**(dep T-301): per-day 색 picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트
+    뱃지 parity) + PoiEditor F7 + fit-bounds(F6/F7).
+  - **T-308**(dep T-301,T-305): 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰
+    (`rise_set`/`rise_set_reference`)) + SharedTripView 렌더.
+  - **T-309a**(dep T-302): `MapSearchBox` onSelect union + address + source 아이콘 + 정렬 + attribution.
+  - **T-309b**(dep T-303): 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(+ T-309c의
+    feature-less POI 모달 통합).
+  T-306/307/308은 trip-detail 파일(TripDetail/TripDayControls/TripDayHeader)에서 겹치므로 순차, T-309a/b는
+  분리 가능. 검증 [[wsl-verify-gate]], live e2e는 N150.
+
 ## 2026-07-21 (claude) — TDR T-304 feature detail-card + 외부 enrichment (PR 대기)
 
 **TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399).

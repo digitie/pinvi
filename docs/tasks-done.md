@@ -6,6 +6,16 @@
 
 ## 2026-07-21
 
+- [x] **T-309c** — FeatureDetailModal 본문 + 마커→상세 모달. (완료: 2026-07-21, PR #402, claude)
+      #396 shell 위 kind별 detail-card 본문(place/event/notice/price/generic) + 양 지도 마커→상세 모달
+      (모바일 bottom-sheet, weather 제외) + 옵트인 Kakao/Naver enrichment UI(attribution+back-link,
+      matched=false 처리). T-305와 병행(fork worktree agent) 후 cherry-pick verify + 링크 보안 검토 후 머지. ADR-056.
+
+- [x] **T-304** — feature detail-card kind별 투영 + 옵트인 외부 enrichment. (완료: 2026-07-21, PR #400, claude)
+      `GET /features/{id}/detail-card` discriminated union(place/event/notice/price + generic) + 서버 투영
+      (원본 detail/urls 미노출) + match-confidence 가드(정규화 포함/bigram + haversine ≤300m) + opt-in
+      enrichment(place만, display-only) + in-bounds price. 단일 적대적 리뷰 오귀속 2건 반영. ADR-056.
+
 - [x] **T-303** — 외부 pick feature-request 파이프라인. (완료: 2026-07-21, PR #399, claude)
       `source`/`external_ref`(POI+suggestion, 마이그레이션 0039), 전역 dedup(partial unique index),
       best-effort decoupled auto-fire(분리 세션·예외 미전파), post-approval reconciliation(external_ref→
