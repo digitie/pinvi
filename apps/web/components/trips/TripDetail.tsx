@@ -1557,8 +1557,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
                             {active ? (
                               <div className="space-y-3 px-3 pb-3">
-                                {/* 선택된 일자의 요약(effective date + 공휴일 + 기간 벗어남 + 일출/일몰). */}
-                                <TripDayHeader day={day} />
+                                {/* 일자 탭이 이미 날짜/공휴일/기간-벗어남을 보이므로 여기선 일출/일몰만. */}
+                                <TripDayHeader day={day} showSummary={false} />
                                 <TripWeatherSummary
                                   featureId={day.pois[0]?.feature_id ?? null}
                                   date={day.date}

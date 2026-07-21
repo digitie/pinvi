@@ -85,4 +85,39 @@ describe('TripDayHeader', () => {
     expect(screen.queryByTestId('trip-day-rise-set')).not.toBeInTheDocument();
     expect(screen.queryByTestId('trip-day-rise-set-pending')).not.toBeInTheDocument();
   });
+
+  it('rise_set이 failed면 "준비 중"으로 오인 표시하지 않는다', () => {
+    render(
+      <TripDayHeader
+        day={makeDay({
+          rise_set: {
+            status: 'failed',
+            locdate: '2026-06-10',
+            sunrise_at: null,
+            sunset_at: null,
+            moonrise_at: null,
+            moonset_at: null,
+            fetched_at: '2026-06-09T00:00:00+09:00',
+            updated_at: '2026-06-09T00:00:00+09:00',
+          },
+        })}
+      />,
+    );
+    expect(screen.queryByTestId('trip-day-rise-set-pending')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('trip-day-rise-set')).not.toBeInTheDocument();
+  });
+
+  it('showSummary=false면 날짜/공휴일 요약 행을 숨기고 일출/일몰만 남긴다', () => {
+    render(
+      <TripDayHeader
+        showSummary={false}
+        day={makeDay({
+          out_of_range: true,
+          holidays: [{ date: '2026-06-10', name: '광복절', dataset: 'holidays' }],
+        })}
+      />,
+    );
+    expect(screen.queryByTestId('trip-day-header-out-of-range')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('trip-day-header-holiday')).not.toBeInTheDocument();
+  });
 });
