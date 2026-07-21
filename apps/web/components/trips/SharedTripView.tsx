@@ -7,6 +7,7 @@ import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { tripDaysToMapPoints } from '@pinvi/domain';
+import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
@@ -135,6 +136,10 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
             );
           })}
         </div>
+      )}
+
+      {selectedDay && (
+        <TripDayHeader day={selectedDay} className="mb-3 rounded-sm bg-white p-3 shadow-card" />
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

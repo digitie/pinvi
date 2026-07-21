@@ -9,6 +9,17 @@ export function formatTripDate(value: string | null): string {
   }).format(new Date(value));
 }
 
+/** ISO 시각 → 한국시(KST) `HH:MM`. rise/set 시각 표시용. 값 없으면 null. */
+export function formatKstTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  }).format(new Date(value));
+}
+
 export function holidayLabel(holidays: TripDayHoliday[] | undefined): string | null {
   const names = Array.from(new Set((holidays ?? []).map((holiday) => holiday.name).filter(Boolean)));
   if (names.length === 0) return null;
