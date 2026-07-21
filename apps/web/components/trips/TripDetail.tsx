@@ -34,6 +34,7 @@ import {
 } from '@pinvi/api-client';
 import type {
   FeatureSummary,
+  PlaceSearchResult,
   TripDayUpdate,
   PoiUpdate,
   TripStatus,
@@ -404,6 +405,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  // 외부(kakao/naver) pick 추가 후 best-effort auto-request 안내(F4). 다음 변경 시 자동 소거.
+  const [addNotice, setAddNotice] = useState<string | null>(null);
   const [savingPoiId, setSavingPoiId] = useState<string | null>(null);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [manualPoiCoord, setManualPoiCoord] = useState<{ lon: number; lat: number } | null>(null);
@@ -674,6 +677,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const runMutation = useCallback(
     async (fn: () => Promise<unknown>, options: MutationOptions = {}): Promise<boolean> => {
       setMutationError(null);
+      setAddNotice(null);
       setBusy(true);
       try {
         await fn();
@@ -695,34 +699,107 @@ export function TripDetail({ tripId }: TripDetailProps) {
     [reload],
   );
 
-  const handleAddFeature = (feature: FeatureSummary) => {
-    if (selectedDay == null) {
-      setActivePanel('plan');
-      setMutationError('일자를 먼저 선택해주세요.');
-      if (mobileWebLayout) setMobilePanelOpen(true);
-      return;
-    }
-    const coord = feature.coord;
-    if (!coord) return;
+  // 공용 POI 생성 — feature marker(handleAddFeature)와 검색 결과(handleAddPlace)가 함께 쓴다.
+  const addPoiToSelectedDay = (input: {
+    feature_id: string | null;
+    source: 'feature' | 'manual' | 'kakao' | 'naver';
+    external_ref: { provider: 'kakao' | 'naver'; external_id: string; deep_link_url: string | null } | null;
+    coord: { lon: number; lat: number };
+    name: string;
+    category: string | null;
+    marker_color: string | null;
+    marker_icon: string | null;
+    kind?: string | null;
+  }): Promise<boolean> => {
+    if (selectedDay == null) return Promise.resolve(false);
+    setAddNotice(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    void runMutation(() =>
+    return runMutation(() =>
       poiApi(apiClient).create(tripId, {
         day_index: selectedDay.day_index,
         sort_order: appendRank(last),
-        feature_id: feature.feature_id,
+        feature_id: input.feature_id,
+        source: input.source,
+        external_ref: input.external_ref,
         feature_snapshot: {
-          coord: { lon: coord.lon, lat: coord.lat },
-          name: feature.name,
+          coord: { lon: input.coord.lon, lat: input.coord.lat },
+          name: input.name,
           // 구 snapshot 읽기(`feature_snapshot.title`) 호환을 위해 title 도 함께 보존.
-          title: feature.name,
-          kind: feature.kind,
-          marker_color: feature.marker_color,
-          marker_icon: feature.marker_icon,
-          category: feature.category ?? null,
+          title: input.name,
+          marker_color: input.marker_color,
+          marker_icon: input.marker_icon,
+          category: input.category,
+          ...(input.kind != null ? { kind: input.kind } : {}),
         },
         currency: 'KRW',
       }),
     );
+  };
+
+  const guardDaySelected = (): boolean => {
+    if (selectedDay != null) return true;
+    setActivePanel('plan');
+    setMutationError('일자를 먼저 선택해주세요.');
+    if (mobileWebLayout) setMobilePanelOpen(true);
+    return false;
+  };
+
+  // 지도 feature marker "추가" — feature_id 연결.
+  const handleAddFeature = (feature: FeatureSummary) => {
+    if (!guardDaySelected() || !feature.coord) return;
+    void addPoiToSelectedDay({
+      feature_id: feature.feature_id,
+      source: 'feature',
+      external_ref: null,
+      coord: feature.coord,
+      name: feature.name,
+      category: feature.category ?? null,
+      marker_color: feature.marker_color,
+      marker_icon: feature.marker_icon,
+      kind: feature.kind,
+    });
+  };
+
+  // 검색 결과 pick(F3/F4) — 외부(kakao/naver)는 source + external_ref만 저장 → 서버가 feature-request를
+  // best-effort auto-fire. feature는 feature_id 연결, address/my_poi는 manual snapshot.
+  const handleAddPlace = (result: PlaceSearchResult) => {
+    if (!guardDaySelected()) return;
+    if (!result.coord) {
+      setMutationError('좌표가 없는 항목은 지도에 추가할 수 없습니다.');
+      return;
+    }
+    // external_ref는 external_id가 있을 때만 만든다. external_id 없는 kakao/naver 행은
+    // auto-fire할 참조가 없으므로 manual snapshot으로 저장한다(source=kakao+ref=null 금지 —
+    // 서버 auto-request 계약 준수).
+    const provider = result.source === 'kakao' || result.source === 'naver' ? result.source : null;
+    const externalRef =
+      provider && result.external_id
+        ? {
+            provider,
+            external_id: result.external_id,
+            deep_link_url: result.provider_url ?? null,
+          }
+        : null;
+    // §5.1(ADR-054): kakao/naver 파생 콘텐츠(category/마커 스타일 등)는 DB에 저장 금지.
+    // provider 소스면 name + coord + external_ref만 남기고 provider 파생 필드는 null로 보낸다
+    // (external_id가 없어 manual로 저장되는 provider 행도 동일하게 콘텐츠 미저장).
+    const providerSourced = provider != null;
+    void addPoiToSelectedDay({
+      feature_id: result.feature_id,
+      source: externalRef ? externalRef.provider : result.feature_id ? 'feature' : 'manual',
+      external_ref: externalRef,
+      coord: result.coord,
+      name: result.name,
+      category: providerSourced ? null : (result.category ?? null),
+      marker_color: providerSourced ? null : (result.marker_color ?? null),
+      marker_icon: providerSourced ? null : (result.marker_icon ?? null),
+    }).then((ok) => {
+      // external_ref로 저장된 경우에만 서버가 상세 정보를 best-effort로 요청한다.
+      if (ok && externalRef) {
+        const label = externalRef.provider === 'kakao' ? '카카오' : '네이버';
+        setAddNotice(`${label} 장소를 추가했어요. 상세 정보는 준비되는 대로 표시됩니다.`);
+      }
+    });
   };
 
   const handleCreatePoiAtCoordinate = (coord: { lon: number; lat: number }) => {
@@ -1571,7 +1648,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   title={`${day.day_index}일차 파일`}
                                   compact
                                 />
-                                <MapSearchBox onSelect={handleAddFeature} />
+                                <MapSearchBox onSelect={handleAddPlace} />
                                 <TripDayOptimize
                                   tripId={tripId}
                                   dayIndex={day.day_index}
@@ -1585,6 +1662,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     data-testid="poi-mutation-error"
                                   >
                                     {mutationError}
+                                  </p>
+                                )}
+                                {addNotice && !mutationError && (
+                                  <p
+                                    role="status"
+                                    className="rounded-sm bg-primary/10 px-3 py-2 text-xs text-primary"
+                                    data-testid="poi-add-notice"
+                                  >
+                                    {addNotice}
                                   </p>
                                 )}
                                 <TripPoiList
@@ -1732,7 +1818,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               data-testid="trip-map-place-search"
             >
               {selectedDay ? (
-                <MapSearchBox onSelect={handleAddFeature} />
+                <MapSearchBox onSelect={handleAddPlace} />
               ) : (
                 <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
               )}

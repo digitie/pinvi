@@ -69,16 +69,16 @@
 
 ### 웹 UI (T-306~T-309c) — T-306a 모달 기반은 #396 머지 완료
 
-- [ ] T-306 — day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
-      배너/아이콘(F1). (dep T-301, T-306a) (ADR-056/055)
-- [ ] T-307 — per-day color picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트 뱃지
-      parity) + PoiEditor F7 polish + fit-bounds 확인(F6/F7). (dep T-301) (ADR-055)
-- [ ] T-308 — 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) +
-      SharedTripView 렌더(F8-UI, F1 empty-date). (dep T-301, T-305) (ADR-055)
-- [ ] T-309a — autocomplete 재작성: `MapSearchBox` `onSelect` union + address + source 아이콘 + 정렬 +
-      debounce + attribution(F3-UI). (dep T-302) (ADR-054)
-- [ ] T-309b — 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(F4-UI).
-      (dep T-303) (ADR-054)
+- [x] T-306 — day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
+      배너/아이콘(F1). **PR #404 머지 완료**. (dep T-301, T-306a) (ADR-056/055)
+- [x] T-307 — per-day color picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트 뱃지
+      parity) + PoiEditor F7 polish + fit-bounds 확인(F6/F7). **PR #405 머지 완료**. (dep T-301) (ADR-055)
+- [x] T-308 — 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) +
+      SharedTripView 렌더(F8-UI, F1 empty-date). **PR #406 머지 완료**. (dep T-301, T-305) (ADR-055)
+- [x] T-309a — autocomplete 재작성: `MapSearchBox` `onSelect` union + address + source 아이콘 + 정렬 +
+      debounce + attribution + back-link(F3-UI). **T-309b와 1 PR로 진행**. (dep T-302) (ADR-054)
+- [x] T-309b — 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(F4-UI) +
+      provider 파생 콘텐츠 미저장(§5.1). **T-309a와 1 PR로 진행**. (dep T-303) (ADR-054)
 - [x] T-309c — `FeatureDetailModal` 본문 + 마커→상세 모달(양 지도, opt-in enrichment, weather 제외).
       **PR #402 머지 완료**. feature-less POI 모달은 T-309b 통합. (ADR-056)
 

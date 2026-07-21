@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-309a+T-309b(통합 검색 autocomplete + 외부 pick add-POI) — web UI 마지막
+
+**TDR Claude 단독 진행.** web UI DAG 전부 구현 완료: T-306(#404), T-307(#405), T-308(#406),
+T-309c(#402), 그리고 **T-309a+T-309b(1 PR, `MapSearchBox`/`TripDetail` 커플링)** 구현·검증·리뷰 완료.
+`MapSearchBox`를 `PlaceSearchResult` union autocomplete로 재작성(디바운스 2자·250ms + in-flight 취소 +
+source 아이콘/배지 + address + kakao/naver attribution **및 provider_url back-link**), 소비자 2곳
+(`TripDetail` add-POI, `FeatureMapView` fly-to) 갱신. `handleAddPlace`가 feature/external/manual 분기 —
+**kakao/naver는 name+coord+external_ref만 저장(provider 파생 콘텐츠 미저장, §5.1)**, 서버 auto-fire용
+source+external_ref, 외부 pick 성공 시 auto-request 안내. 단일 적대적 리뷰 P1(§5.1 category 영속화)/
+P2(orphan external POI)/P3(§5.2 back-link 누락) 전부 반영. WSL 검증: web tsc 0 + lint 0 + vitest 93.
+
+**다음 한 작업**: 이 PR CI green → 머지 후 **N150 live UI e2e**(파괴적 허용, WSL→SSH). trip detail의
+day-delete/색 picker/일자 헤더/통합 검색/외부 pick add-POI/상세 모달 전 흐름을 실제 UI로 확인,
+이어 N150 prod 최종 테스트. (TDR web UI 구현은 이로써 종료 — 남은 것은 라이브 검증뿐.)
+
 ## 2026-07-21 (claude) — TDR T-305(일자 rise/set backend) + T-309c(상세 모달) — backend 완료
 
 **TDR Claude 단독 진행, 병행 착수.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),

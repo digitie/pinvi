@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-21 11:10 (claude) — TDR T-309a+T-309b(통합 검색 autocomplete + 외부 pick add-POI, web UI 마지막)
+
+- T-302/T-303 backend 계약이 머지돼 unblock. 두 task는 `MapSearchBox`/`TripDetail`를 공유해 커플링이
+  커서 1 PR로 진행. **web UI DAG 마무리**.
+- **T-309a(autocomplete 재작성)**: `MapSearchBox.onSelect`를 `FeatureSummary` → `PlaceSearchResult`
+  union으로 교체(T-302 bridge 제거). 디바운스(2자·250ms) 자동완성 + in-flight 취소(controller identity
+  guard) + source별 아이콘/배지(feature/my_poi/address/kakao/naver) + address(road_address ?? address ??
+  category) 렌더. 서버 정렬(internal→kakao→naver) 유지. 소비자 2곳 갱신: `TripDetail`(add-POI),
+  `FeatureMapView`(fly-to; feature 행만 마커 선택, 외부/주소는 이동만).
+- **T-309b(외부 pick add-POI)**: `handleAddPlace`가 feature=feature_id 연결, kakao/naver=source+
+  external_ref(서버 best-effort auto-fire), address/my_poi=manual snapshot으로 분기. add 후 외부 pick
+  성공 시에만 auto-request 안내(`runMutation` 성공 gate → false-positive 방지, 다음 mutation에서 소거).
+- **단일 적대적 리뷰**(effort high) 3건 반영:
+  - **P1(§5.1 위반, CONFIRMED)**: kakao/naver pick의 `feature_snapshot.category`(provider 파생)를
+    영속화 → ADR-054 §7/§5.1이 금지. **provider 소스면 name+coord+external_ref만 저장**, category/
+    marker_color/marker_icon은 null로 전송(external_id 없어 manual로 저장되는 provider 행도 동일).
+  - **P2(orphan external POI, CONFIRMED-작업트리 선반영)**: external_id=null인 kakao/naver 행이
+    source=kakao+external_ref=null이 되는 문제 → external_id 있을 때만 external_ref 생성, 없으면 manual
+    fallback(리뷰 시점 이미 반영).
+  - **P3(§5.2 HARD, 반영)**: kakao/naver 행에 가시적 attribution만 있고 `provider_url` back-link 누락 →
+    pick 버튼 형제로 `<a target=_blank rel=noopener noreferrer>` back-link 추가(중첩 앵커 회피).
+- 신규 `MapSearchBox.test.tsx`(디바운스 검색·source 배지·attribution·back-link·onSelect union·2자 게이트).
+- 검증(WSL 미러): web typecheck(tsc 0) + lint(0) + vitest **93 통과**. **다음: N150 live UI e2e**(파괴적 허용).
+
 ## 2026-07-21 09:40 (claude) — TDR T-305(일자 rise/set backend) + T-309c(상세 모달 본문) 병행
 
 - 사용자 지시 "병행 가능한 task는 병행해" → T-301~T-304 머지로 web UI가 unblock돼, **T-305(backend)를
