@@ -497,6 +497,8 @@ async def test_trip_day_crud_and_delete_cascades_pois(client, verified_user, aut
     )
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["error"]["code"] == "DAY_HAS_POIS"
+    # poi_count는 error envelope의 details 아래에 노출된다(클라이언트가 F2 경고에 사용).
+    assert blocked.json()["error"]["details"]["poi_count"] == 1
 
     # force=true면 POI까지 cascade 삭제 후 204.
     deleted = await client.request(

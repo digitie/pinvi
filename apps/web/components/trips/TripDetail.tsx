@@ -46,6 +46,7 @@ import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { TripActions } from '@/components/trips/TripActions';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripAttachments } from '@/components/trips/TripAttachments';
@@ -392,6 +393,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [presence, setPresence] = useState<Map<string, PresenceEntry>>(() => new Map());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  // ADR-055 F2: POI가 있는 일자 삭제는 확인 다이얼로그를 거친다(409 DAY_HAS_POIS → force 재요청).
+  const [dayDeleteConfirm, setDayDeleteConfirm] = useState<{
+    dayIndex: number;
+    poiCount: number;
+  } | null>(null);
   const [visibleDayIndexes, setVisibleDayIndexes] = useState<Set<number>>(() => new Set());
   const [activePanel, setActivePanel] = useState<TripDetailPanelTab>('plan');
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
@@ -830,15 +836,52 @@ export function TripDetail({ tripId }: TripDetailProps) {
     );
   };
 
-  const handleDeleteDay = (dayIndex: number) => {
-    const version = view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
-    void runMutation(
+  const dayVersion = (dayIndex: number) =>
+    view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
+
+  const deleteDayRequest = (dayIndex: number, force: boolean) =>
+    runMutation(
       async () => {
-        await tripApi(apiClient).deleteDay(tripId, dayIndex, version);
+        await tripApi(apiClient).deleteDay(tripId, dayIndex, dayVersion(dayIndex), { force });
         setSelectedDayIndex(null);
       },
       { onConflict: dayConflictNotice },
     );
+
+  const handleDeleteDay = (dayIndex: number) => {
+    // POI가 없으면 바로 삭제. 있으면(409 DAY_HAS_POIS) 확인 다이얼로그를 띄운다(F2).
+    void (async () => {
+      setMutationError(null);
+      setBusy(true);
+      try {
+        await tripApi(apiClient).deleteDay(tripId, dayIndex, dayVersion(dayIndex));
+        setSelectedDayIndex(null);
+        await reload();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409 && err.code === 'DAY_HAS_POIS') {
+          const poiCount =
+            typeof err.details?.poi_count === 'number' ? err.details.poi_count : 0;
+          setDayDeleteConfirm({ dayIndex, poiCount });
+          return;
+        }
+        if (isVersionConflictError(err)) {
+          await reload();
+          dayConflictNotice();
+          return;
+        }
+        setMutationError(err instanceof ApiError ? err.message : '변경에 실패했습니다.');
+        await reload();
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  const confirmForceDeleteDay = () => {
+    const target = dayDeleteConfirm;
+    if (!target) return;
+    setDayDeleteConfirm(null);
+    void deleteDayRequest(target.dayIndex, true);
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
@@ -1474,8 +1517,20 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       </span>
                                     </span>
                                     <span className="mt-1 block text-xs text-muted">
-                                      {formatTripDate(day.date)} · {visible ? '표시' : '숨김'}
+                                      {/* ADR-055: date는 override-only → effective_date 표시. */}
+                                      {formatTripDate(day.effective_date ?? day.date)} ·{' '}
+                                      {visible ? '표시' : '숨김'}
                                     </span>
+                                    {day.out_of_range && (
+                                      <span
+                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        data-testid="trip-day-out-of-range"
+                                        title="이 일자의 날짜가 여행 기간을 벗어났습니다."
+                                      >
+                                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                                        기간 벗어남
+                                      </span>
+                                    )}
                                     {dayHolidayLabel && (
                                       <span
                                         className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
@@ -1744,6 +1799,24 @@ export function TripDetail({ tripId }: TripDetailProps) {
           onKeepEditing={handleKeepEditingConflict}
         />
       )}
+
+      {/* ADR-055 F2: POI가 있는 일자 삭제 경고 — 확인 시 force로 함께 삭제. */}
+      <ConfirmDialog
+        open={dayDeleteConfirm != null}
+        tone="danger"
+        title={`${dayDeleteConfirm?.dayIndex ?? ''}일차를 삭제할까요?`}
+        description={
+          dayDeleteConfirm
+            ? `이 일자에는 POI ${dayDeleteConfirm.poiCount}곳이 있습니다. 삭제하면 함께 제거되며 되돌릴 수 없습니다.`
+            : undefined
+        }
+        confirmLabel="일자와 POI 삭제"
+        cancelLabel="취소"
+        busy={busy}
+        onConfirm={confirmForceDeleteDay}
+        onCancel={() => setDayDeleteConfirm(null)}
+        testId="day-delete-confirm"
+      />
     </div>
   );
 }

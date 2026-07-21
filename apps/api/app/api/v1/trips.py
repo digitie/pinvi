@@ -748,9 +748,11 @@ async def delete_trip_day_endpoint(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     except DayHasPoisError as exc:
+        # poi_count는 error envelope의 details 아래에 둔다(ErrorEnvelopeSchema가 details만 보존 —
+        # code/message의 형제로 두면 클라이언트에서 사라진다).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": exc.code, "message": str(exc), "poi_count": exc.poi_count},
+            detail={"code": exc.code, "message": str(exc), "details": {"poi_count": exc.poi_count}},
         ) from exc
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
