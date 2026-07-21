@@ -271,6 +271,9 @@ export const TripViewDaySchema = z.object({
   // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
   version: z.number().int().default(1),
   holidays: z.array(TripDayHolidaySchema).default([]),
+  // ADR-055 §6: 일자 단위 일출/일몰 + "XX 장소 기준" 라벨.
+  rise_set: PoiRiseSetResponseSchema.nullable().default(null),
+  rise_set_reference: z.string().nullable().default(null),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;

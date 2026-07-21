@@ -108,6 +108,7 @@ from app.services.trip import (
     update_trip_day,
     validate_trip_day_payload,
 )
+from app.services.trip_day_rise_set import sync_trip_day_rise_sets
 from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -421,6 +422,10 @@ async def get_trip_endpoint(
         trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
+    # ADR-055 §6: 관리 권한 열람 시 일자 rise/set 행을 재계산·유지한다(좌표/날짜 변경분은 refetch 표시).
+    # best-effort — 실패해도 조회를 막지 않는다. ETL asset이 pending_fetch를 채운다.
+    if can_manage_trip(role):
+        await sync_trip_day_rise_sets(db, trip_id=trip_id)
     return Envelope.of(
         TripView.model_validate(
             await build_trip_view(

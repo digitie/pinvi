@@ -24,7 +24,7 @@ from app.clients.kor_travel_map import KorTravelMapClient
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
 from app.models.companion import TripCompanion
-from app.models.kasi import KasiSpecialDay
+from app.models.kasi import KasiSpecialDay, TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
@@ -72,6 +72,14 @@ async def build_trip_view(
     day_query = select(TripDay).where(TripDay.trip_id == trip.trip_id).order_by(TripDay.day_index)
     days_result = await db.execute(day_query)
     days = list(days_result.scalars())
+
+    # ADR-055 §6: 일자 rise/set 행(전용 table) 로드 — day header 일출/일몰 표시용.
+    day_rise_sets = {
+        row.day_index: row
+        for row in await db.scalars(
+            select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip.trip_id)
+        )
+    }
 
     # ADR-055: effective_date(파생) + out_of_range + 일자 색 override를 일자별로 미리 계산한다.
     # date는 override-only이므로 비면 trip.start_date + (day_index-1)로 파생한다.
@@ -243,6 +251,10 @@ async def build_trip_view(
                 "title": d.title,
                 "version": d.version,
                 "holidays": day_holidays[d.day_index],
+                "rise_set": _day_rise_set_to_dict(day_rise_sets.get(d.day_index)),
+                "rise_set_reference": (
+                    ref.reference_label if (ref := day_rise_sets.get(d.day_index)) else None
+                ),
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days
@@ -250,6 +262,22 @@ async def build_trip_view(
         "companions": companions_view,
         "share_links": share_links_view,
         "broken_feature_count": broken_count,
+    }
+
+
+def _day_rise_set_to_dict(rise_set: TripDayRiseSet | None) -> dict[str, Any] | None:
+    """일자 rise/set → `PoiRiseSetResponse` 셰입(POI rise/set과 동일 표시 계약)."""
+    if rise_set is None:
+        return None
+    return {
+        "status": rise_set.status,
+        "locdate": rise_set.locdate,
+        "sunrise_at": rise_set.sunrise_at,
+        "sunset_at": rise_set.sunset_at,
+        "moonrise_at": rise_set.moonrise_at,
+        "moonset_at": rise_set.moonset_at,
+        "fetched_at": rise_set.fetched_at,
+        "updated_at": rise_set.updated_at,
     }
 
 

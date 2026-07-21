@@ -21,6 +21,9 @@ describe('featureRequest', () => {
       coord: { lon: 126.97, lat: 37.57 },
       categories: ['카페'],
       note: null,
+      // T-303(ADR-054): 빌더는 source/external_ref 기본값을 채운다.
+      source: 'user',
+      external_ref: null,
     });
   });
 
