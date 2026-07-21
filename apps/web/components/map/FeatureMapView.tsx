@@ -32,6 +32,8 @@ import {
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
 const DEFAULT_ZOOM = 12;
@@ -229,6 +231,9 @@ export function FeatureMapView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MapPoint | null>(null);
+  // F5: feature 상세 풀스크린 모달(weather 제외). null이면 닫힘.
+  const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
+  const mobileLayout = useMobileWebLayout();
   const [detail, setDetail] = useState<FeatureDetail | null>(null);
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -360,8 +365,12 @@ export function FeatureMapView({
         return;
       }
       setSelected(point);
+      // 모바일: weather가 아닌 feature 마커 탭은 중간 팝업 없이 상세 시트를 바로 연다(ADR-056).
+      if (mobileLayout && point.featureId && point.featureKind !== 'weather') {
+        setDetailFeatureId(point.featureId);
+      }
     },
-    [flyTo],
+    [flyTo, mobileLayout],
   );
 
   const handleSearchSelect = useCallback(
@@ -541,6 +550,17 @@ export function FeatureMapView({
                     <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
                   )}
                   {!detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
+                  {/* weather는 인라인 기온만(풀스크린 상세 제외, ADR-056). */}
+                  {selected.featureId && selected.featureKind !== 'weather' && (
+                    <button
+                      type="button"
+                      onClick={() => setDetailFeatureId(selected.featureId ?? null)}
+                      data-testid="feature-map-detail-open"
+                      className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-white hover:bg-ink/90"
+                    >
+                      상세보기
+                    </button>
+                  )}
                 </div>
               </Popup>
             )}
@@ -642,6 +662,11 @@ export function FeatureMapView({
           onSubmitted={() => setNotice('장소 제안이 접수됐습니다.')}
         />
       )}
+      <FeatureDetailModalController
+        featureId={detailFeatureId}
+        fallbackTitle={selected?.title}
+        onClose={() => setDetailFeatureId(null)}
+      />
     </div>
   );
 }

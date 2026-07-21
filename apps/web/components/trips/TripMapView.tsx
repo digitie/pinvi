@@ -25,6 +25,8 @@ import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { pointsBounds, resolveMarkerStyle, type TripMapPoint } from '@pinvi/domain';
+import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
@@ -136,6 +138,9 @@ export function TripMapView({
   const longPressCreatedAtRef = useRef(0);
   const [features, setFeatures] = useState<FeatureSummary[]>([]);
   const [selectedFeature, setSelectedFeature] = useState<FeatureSummary | null>(null);
+  // F5: feature 상세 풀스크린 모달(weather 제외).
+  const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
+  const mobileLayout = useMobileWebLayout();
   const surfaceClassName =
     chrome === 'flush'
       ? 'h-full min-h-[420px] overflow-hidden bg-canvas'
@@ -437,7 +442,13 @@ export function TripMapView({
                     className="trip-map-feature-marker"
                     title={marker.feature.name}
                     ariaLabel={marker.feature.name}
-                    onClick={() => setSelectedFeature(marker.feature)}
+                    onClick={() => {
+                      setSelectedFeature(marker.feature);
+                      // 모바일: weather 외 feature는 상세 시트를 바로 연다(ADR-056).
+                      if (mobileLayout && marker.feature.kind !== 'weather') {
+                        setDetailFeatureId(marker.feature.feature_id);
+                      }
+                    }}
                     onContextMenu={(event) => event.preventDefault()}
                   />
                 );
@@ -479,6 +490,16 @@ export function TripMapView({
                     닫기
                   </button>
                 </div>
+                {selectedFeature.kind !== 'weather' && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailFeatureId(selectedFeature.feature_id)}
+                    data-testid="trip-map-detail-open"
+                    className="h-8 w-full rounded-sm border border-hairline px-3 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  >
+                    상세보기
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={!canAddFeature}
@@ -533,6 +554,11 @@ export function TripMapView({
           ))}
         </div>
       </div>
+      <FeatureDetailModalController
+        featureId={detailFeatureId}
+        fallbackTitle={selectedFeature?.name}
+        onClose={() => setDetailFeatureId(null)}
+      />
     </div>
   );
 }
