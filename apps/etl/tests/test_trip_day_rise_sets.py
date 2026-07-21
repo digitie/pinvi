@@ -5,7 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from pinvi.etl.assets.pinvi_trip_day_rise_sets import _parse_kasi_time, _rise_set_payload
+from pinvi.etl.assets.pinvi_trip_day_rise_sets import (
+    _MARK_FAILED,
+    _UPDATE_SUCCESS,
+    _parse_kasi_time,
+    _rise_set_payload,
+)
+
+
+def test_fill_updates_are_snapshot_guarded() -> None:
+    """select~fill 사이 좌표/날짜 변경 시 stale 좌표로 덮어쓰지 않도록 UPDATE에 snapshot guard가 있어야 한다."""
+    for stmt in (_UPDATE_SUCCESS, _MARK_FAILED):
+        sql = str(stmt)
+        assert "locdate = :g_locdate" in sql
+        assert "longitude = :g_longitude" in sql
+        assert "latitude = :g_latitude" in sql
 
 
 def test_parse_kasi_time_hhmm_to_kst() -> None:

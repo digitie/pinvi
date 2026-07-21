@@ -73,8 +73,20 @@ async def _select_fillable(conn: AsyncConnection, *, limit: int) -> list[dict[st
 
 
 async def _fill_one(*, conn_engine: Any, client: Any, row: dict[str, Any]) -> str:
-    """단일 (trip_id, day_index) 행을 KASI로 채운다. 행별 독립 트랜잭션(부분 실패 격리)."""
-    params = {"trip_id": str(row["trip_id"]), "day_index": row["day_index"]}
+    """단일 (trip_id, day_index) 행을 KASI로 채운다. 행별 독립 트랜잭션(부분 실패 격리).
+
+    select~fill 사이에 좌표/날짜가 바뀌면(사용자가 POI 이동 등) 이 fill이 stale 좌표로 덮어쓰지
+    않도록, UPDATE는 fetch 당시 snapshot (locdate, lon, lat)과 여전히 일치할 때만 적용한다(변경 시
+    no-op → 다음 ETL run이 새 좌표로 다시 채운다).
+    """
+    # snapshot guard 파라미터 — WHERE에서 현재 행이 우리가 fetch한 좌표/날짜와 같은지 확인.
+    guard = {
+        "trip_id": str(row["trip_id"]),
+        "day_index": row["day_index"],
+        "g_locdate": row["locdate"],
+        "g_longitude": row["longitude"],
+        "g_latitude": row["latitude"],
+    }
     try:
         page = await client.location_rise_set(
             locdate=row["locdate"],
@@ -84,14 +96,16 @@ async def _fill_one(*, conn_engine: Any, client: Any, row: dict[str, Any]) -> st
         item = page.first
         if item is None:
             async with conn_engine.begin() as conn:
-                await _mark_failed(conn, params, error={"message": "KASI 응답 없음"})
+                await conn.execute(
+                    _MARK_FAILED, {**guard, **_failed_params({"message": "KASI 응답 없음"})}
+                )
             return "failed"
         payload = _rise_set_payload(item)
         async with conn_engine.begin() as conn:
             await conn.execute(
                 _UPDATE_SUCCESS,
                 {
-                    **params,
+                    **guard,
                     "sunrise_at": _parse_kasi_time(row["locdate"], getattr(item, "sunrise", None)),
                     "sunset_at": _parse_kasi_time(row["locdate"], getattr(item, "sunset", None)),
                     "moonrise_at": _parse_kasi_time(
@@ -105,14 +119,26 @@ async def _fill_one(*, conn_engine: Any, client: Any, row: dict[str, Any]) -> st
         return "success"
     except Exception as exc:
         async with conn_engine.begin() as conn:
-            await _mark_failed(
-                conn, params, error={"type": type(exc).__name__, "message": str(exc)}
+            await conn.execute(
+                _MARK_FAILED,
+                {**guard, **_failed_params({"type": type(exc).__name__, "message": str(exc)})},
             )
         return "failed"
 
 
+def _failed_params(error: dict[str, str]) -> dict[str, Any]:
+    return {"error": error, "fetched_at": datetime.now(UTC)}
+
+
+# snapshot guard 공통 WHERE — (trip_id, day_index)가 우리가 fetch한 좌표/날짜와 아직 같을 때만.
+_GUARD_WHERE = (
+    "WHERE trip_id = :trip_id AND day_index = :day_index "
+    "AND locdate = :g_locdate AND longitude = :g_longitude AND latitude = :g_latitude"
+)
+
+
 _UPDATE_SUCCESS = text(
-    """
+    f"""
         UPDATE app.trip_day_rise_sets
         SET sunrise_at = :sunrise_at,
             sunset_at = :sunset_at,
@@ -124,26 +150,21 @@ _UPDATE_SUCCESS = text(
             error = NULL,
             fetched_at = :fetched_at,
             updated_at = now()
-        WHERE trip_id = :trip_id AND day_index = :day_index
+        {_GUARD_WHERE}
         """
 ).bindparams(bindparam("raw_payload", type_=JSONB))
 
-
-async def _mark_failed(
-    conn: AsyncConnection, params: dict[str, Any], *, error: dict[str, str]
-) -> None:
-    stmt = text(
-        """
+_MARK_FAILED = text(
+    f"""
         UPDATE app.trip_day_rise_sets
         SET status = 'failed',
             stale = false,
             error = :error,
             fetched_at = :fetched_at,
             updated_at = now()
-        WHERE trip_id = :trip_id AND day_index = :day_index
+        {_GUARD_WHERE}
         """
-    ).bindparams(bindparam("error", type_=JSONB))
-    await conn.execute(stmt, {**params, "error": error, "fetched_at": datetime.now(UTC)})
+).bindparams(bindparam("error", type_=JSONB))
 
 
 def _rise_set_payload(item: Any) -> dict[str, Any]:
