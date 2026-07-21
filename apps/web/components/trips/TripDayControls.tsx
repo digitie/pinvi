@@ -1,14 +1,25 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
+import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
 import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 
+const PALETTE_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
+
 export interface TripDayControlsProps {
-  selectedDay: { day_index: number; title: string | null; date: string | null } | null;
+  selectedDay: {
+    day_index: number;
+    title: string | null;
+    date: string | null;
+    marker_color?: string | null;
+  } | null;
   onAdd: () => void;
-  onUpdate: (dayIndex: number, patch: { title: string; date: string | null }) => void;
+  onUpdate: (
+    dayIndex: number,
+    patch: { title: string; date: string | null; marker_color: string | null },
+  ) => void;
   onDelete: (dayIndex: number) => void;
   canAdd?: boolean;
   addDisabledReason?: string | null;
@@ -28,26 +39,35 @@ export function TripDayControls({
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
+  const [color, setColor] = useState<string | null>(selectedDay?.marker_color ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const addDisabled = busy || !canAdd;
 
   useEffect(() => {
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
+    setColor(selectedDay?.marker_color ?? null);
     setSettingsOpen(false);
-  }, [selectedDay?.date, selectedDay?.day_index, selectedDay?.title]);
+  }, [
+    selectedDay?.date,
+    selectedDay?.day_index,
+    selectedDay?.title,
+    selectedDay?.marker_color,
+  ]);
 
   const saveSettings = () => {
     if (!selectedDay) return;
     onUpdate(selectedDay.day_index, {
       title: title.trim(),
       date: date || null,
+      marker_color: color,
     });
     setSettingsOpen(false);
   };
   const closeSettings = () => {
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
+    setColor(selectedDay?.marker_color ?? null);
     setSettingsOpen(false);
   };
 
@@ -100,11 +120,14 @@ export function TripDayControls({
               dayIndex={selectedDay.day_index}
               currentTitle={selectedDay.title}
               currentDate={selectedDay.date}
+              currentColor={selectedDay.marker_color ?? null}
               title={title}
               date={date}
+              color={color}
               busy={busy}
               onTitleChange={setTitle}
               onDateChange={setDate}
+              onColorChange={setColor}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -119,11 +142,14 @@ interface DaySettingsDialogProps {
   dayIndex: number;
   currentTitle: string | null;
   currentDate: string | null;
+  currentColor: string | null;
   title: string;
   date: string;
+  color: string | null;
   busy: boolean;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
+  onColorChange: (color: string | null) => void;
   onSave: () => void;
   onClose: () => void;
 }
@@ -132,11 +158,14 @@ function DaySettingsDialog({
   dayIndex,
   currentTitle,
   currentDate,
+  currentColor,
   title,
   date,
+  color,
   busy,
   onTitleChange,
   onDateChange,
+  onColorChange,
   onSave,
   onClose,
 }: DaySettingsDialogProps) {
@@ -144,7 +173,10 @@ function DaySettingsDialog({
   useEscapeKey(onClose);
   useDialogAutoFocus(inputRef);
   const normalizedTitle = title.trim();
-  const unchanged = normalizedTitle === (currentTitle ?? '') && (date || null) === currentDate;
+  const unchanged =
+    normalizedTitle === (currentTitle ?? '') &&
+    (date || null) === currentDate &&
+    color === currentColor;
 
   return (
     <div
@@ -184,6 +216,43 @@ function DaySettingsDialog({
           onChange={(event) => onDateChange(event.target.value)}
           className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
         />
+        <span className="block text-sm font-semibold text-ink">일자 색</span>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="일자 마커 색" data-testid="trip-day-color-picker">
+          {/* 기본색(팔레트 순환) = null override 제거. */}
+          <button
+            type="button"
+            onClick={() => onColorChange(null)}
+            aria-pressed={color === null}
+            aria-label="기본 색"
+            title="기본 색(일자 순서 팔레트)"
+            className={
+              color === null
+                ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted ring-2 ring-primary ring-offset-1'
+                : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted'
+            }
+          >
+            기본
+          </button>
+          {PALETTE_KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onColorChange(key)}
+              aria-pressed={color === key}
+              aria-label={`${MARKER_PALETTE[key].name} 색`}
+              title={MARKER_PALETTE[key].name}
+              data-testid={`trip-day-color-${key}`}
+              style={{ backgroundColor: paletteHex(key) }}
+              className={
+                color === key
+                  ? 'flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-primary ring-offset-1'
+                  : 'h-7 w-7 rounded-full'
+              }
+            >
+              {color === key && <Check className="h-4 w-4 text-white" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
         <div className="flex justify-end gap-2">
           <button
             type="button"
