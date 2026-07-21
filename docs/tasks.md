@@ -17,8 +17,8 @@
 - **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
   마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
-  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399).
-  진행: T-304(PR 대기).
+  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
+  T-304(#400), T-309c(#402). 진행: T-305(PR #401 대기). **backend(T-301~305) 완료 임박, 남은 것=web UI.**
 
 ## kor-travel-map 공개 API 인증 계약 정합
 
@@ -61,12 +61,11 @@
 - [x] T-302 — Kakao/Naver Local + 통합 `GET /search` source-tagged. **PR #398 머지 완료**(main 4ae8c8a). **ADR-054**.
 - [x] T-303 — feature-request 파이프라인(source/external_ref + auto-fire + reconciliation).
       **PR #399 머지 완료**(main d0a438b). (ADR-054)
-- [~] T-304 — detail-card: `GET /features/{id}/detail-card` kind별 + generic fallback + opt-in 외부
-      enrichment(display-only) + in-bounds `price` kind.
-      **구현 완료·검증(ruff/mypy/pytest + web) 통과, 단일 리뷰 후 PR 대기.**
-      `agent/claude-tdr-detail-card`. **ADR-056**.
-- [ ] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
-      re-seed(파생-date only) + 완료 시그널 + e2e seed/provider mock. (ADR-055)
+- [x] T-304 — detail-card kind별 + generic fallback + opt-in enrichment + in-bounds price.
+      **PR #400 머지 완료**(main 77aedbd). **ADR-056**.
+- [~] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
+      re-seed + 완료 시그널. **구현 완료·검증·단일 리뷰(ETL 경합 P2 반영) 통과, PR #401 대기.**
+      `agent/claude-tdr-day-rise-set`. (ADR-055)
 
 ### 웹 UI (T-306~T-309c) — T-306a 모달 기반은 #396 머지 완료
 
@@ -80,9 +79,8 @@
       debounce + attribution(F3-UI). (dep T-302) (ADR-054)
 - [ ] T-309b — 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(F4-UI).
       (dep T-303) (ADR-054)
-- [ ] T-309c — `FeatureDetailModal` **본문**(T-306a shell 소비, kind별 detail-card, opt-in enrichment
-      링크+attribution, 마커 팝업→detail→modal 양 지도, price kind, weather 제외)(F5-UI).
-      (dep T-304, T-306a) (ADR-056)
+- [x] T-309c — `FeatureDetailModal` 본문 + 마커→상세 모달(양 지도, opt-in enrichment, weather 제외).
+      **PR #402 머지 완료**. feature-less POI 모달은 T-309b 통합. (ADR-056)
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 

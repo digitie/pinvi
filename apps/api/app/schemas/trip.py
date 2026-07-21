@@ -251,6 +251,9 @@ class TripViewDay(BaseModel):
     title: str | None
     version: int
     holidays: list[TripDayHoliday] = Field(default_factory=list)
+    # ADR-055 §6: 일자 단위 일출/일몰(전용 table) + "XX 장소 기준" 라벨.
+    rise_set: PoiRiseSetResponse | None = None
+    rise_set_reference: str | None = None
     pois: list[TripViewPoi]
 
 

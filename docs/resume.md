@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-07-21 (claude) — TDR T-305(일자 rise/set backend) + T-309c(상세 모달) — backend 완료
+
+**TDR Claude 단독 진행, 병행 착수.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
+T-304(#400), **T-309c(#402 상세 모달 본문)**. **T-305(PR #401, backend 마지막)** 구현·검증·리뷰 완료
+(ETL lost-update 경합 P2 반영: fill UPDATE snapshot guard) — CI green, 머지 대기.
+전용 `app.trip_day_rise_sets`(centroid 기준좌표) + `sync_trip_day_rise_sets`(get_trip 유지) +
+build_trip_view emit + Dagster asset(KASI 배치 fill, 20분) + py/zod 계약. 부수: latent domain vitest
+회귀(featureRequest source/external_ref) 수정.
+**TDR backend(T-301~305) 전부 완료. 남은 것 = web UI + N150 live e2e.**
+**다음 한 작업**: #401 머지 확인 후 남은 web UI 착수 —
+  - **T-306**(dep T-301,T-306a): day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
+    배너/아이콘(F1). `TripDayControls`/`TripDetail`.
+  - **T-307**(dep T-301): per-day 색 picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트
+    뱃지 parity) + PoiEditor F7 + fit-bounds(F6/F7).
+  - **T-308**(dep T-301,T-305): 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰
+    (`rise_set`/`rise_set_reference`)) + SharedTripView 렌더.
+  - **T-309a**(dep T-302): `MapSearchBox` onSelect union + address + source 아이콘 + 정렬 + attribution.
+  - **T-309b**(dep T-303): 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(+ T-309c의
+    feature-less POI 모달 통합).
+  T-306/307/308은 trip-detail 파일(TripDetail/TripDayControls/TripDayHeader)에서 겹치므로 순차, T-309a/b는
+  분리 가능. 검증 [[wsl-verify-gate]], live e2e는 N150.
+
 ## 2026-07-21 (claude) — TDR T-304 feature detail-card + 외부 enrichment (PR 대기)
 
 **TDR Claude 단독 진행.** 머지: T-306a(#396), T-301(#397), T-302(#398), T-303(#399).
@@ -9,9 +31,22 @@ T-304(ADR-056) 구현·검증 완료: `GET /features/{id}/detail-card` kind별 d
 display-only, degraded_providers), `price` in-bounds 추가, py+zod+api-client 계약. WSL: ruff/mypy
 --strict(195)/detail-card 13 pytest + web typecheck/lint/build/vitest 통과. 단일 적대적 리뷰 진행 중.
 브랜치 `agent/claude-tdr-detail-card`.
-**다음 한 작업**: 리뷰 반영 → T-304 PR·CI·머지 → **T-305**(전용 `app.trip_day_rise_sets` table +
-ETL asset + day-level rise/set read + batched re-seed(파생-date only) + 완료 시그널, ADR-055).
-이후 web UI(T-306/307/308/309a-c) → N150 live e2e.
+**T-304는 PR #400로 머지 완료**(main 77aedbd). **다음 한 작업 = T-305**(ADR-055 §6, backend 마지막).
+스코프(그라운딩 완료, 브랜치 `agent/claude-tdr-day-rise-set`):
+  1) 마이그레이션 신규 `app.trip_day_rise_sets` key `(trip_id, day_index)` — `TripPoiRiseSet`
+     (`app/models/kasi.py`) 미러하되 day-keyed + reference_poi_id/reference_label 추가.
+  2) **결정적 기준 좌표**: 그 일자 POI centroid → 없으면 created_at-earliest(first-added) POI →
+     없으면 pending_coord. locdate = effective_date(파생).
+  3) 서비스: day 생성 시 seed + effective_date 변경 시 **파생-date 일자에만 scope된 단일 batched
+     UPDATE로 re-seed**(ADR-055). `build_initial_poi_rise_set`(`services/kasi.py`) 패턴 참고.
+  4) **Dagster asset** `pinvi_trip_day_rise_sets` — `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
+     미러(KasiResource + RetryPolicy + PinviDatabaseResource), pending 행을 KASI 출몰시각으로 fill.
+     `assets/__init__.py`·`definitions.py`·`jobs.py`·`schedules.py`에 등록. (현재 poi rise/set fill
+     asset은 없음 — day asset 신설.) 완료 시그널.
+  5) 읽기: `build_trip_view`가 `TripViewDay.rise_set` + `rise_set_reference`("XX 장소 기준") emit.
+     py+zod 계약(`schemas/trip.py` + `packages/schemas/src/trip.ts`).
+  6) 테스트: 기준좌표 해석 단위 + reseed + build_trip_view day rise/set + ETL asset(KASI provider mock).
+이후 **web UI: T-306/307/308/309a-c** → N150 live e2e. 검증 [[wsl-verify-gate]] + apps/api pytest/ruff/mypy.
 
 ## 2026-07-21 (claude) — TDR T-303 외부 pick feature-request 파이프라인 (PR 대기)
 

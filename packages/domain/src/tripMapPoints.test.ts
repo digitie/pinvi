@@ -137,6 +137,8 @@ describe('tripMapPoints', () => {
         title: '1일차',
         version: 1,
         holidays: [],
+        rise_set: null,
+        rise_set_reference: null,
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),
           poi({ feature: {} }), // 제외
@@ -151,6 +153,8 @@ describe('tripMapPoints', () => {
         title: '2일차',
         version: 1,
         holidays: [],
+        rise_set: null,
+        rise_set_reference: null,
         pois: [poi({ feature: { coord: { lon: 129.0, lat: 35.1 } } })],
       },
     ];
@@ -171,6 +175,8 @@ describe('tripMapPoints', () => {
         title: null,
         version: 1,
         holidays: [],
+        rise_set: null,
+        rise_set_reference: null,
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),
           poi({ feature: { coord: { lon: 129.0, lat: 35.1 } } }),

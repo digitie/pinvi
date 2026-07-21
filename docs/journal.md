@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-21 09:40 (claude) — TDR T-305(일자 rise/set backend) + T-309c(상세 모달 본문) 병행
+
+- 사용자 지시 "병행 가능한 task는 병행해" → T-301~T-304 머지로 web UI가 unblock돼, **T-305(backend)를
+  직접 + T-309c(web, disjoint 파일)를 fork(내 컨텍스트 상속) worktree agent로 동시 진행**.
+- **T-309c(PR #402 머지 완료)**: #396 shell 위 kind별 detail-card 본문 + 마커→상세 모달(양 지도, 모바일
+  bottom-sheet, weather 제외) + 옵트인 enrichment UI(attribution+back-link, matched=false 처리).
+  fork 산출물을 cherry-pick verify(typecheck/lint/vitest 82/build) + 링크 보안(rel=noopener)·훅 abort
+  검토 후 머지. 6파일(hook/body/controller/2 map view/test).
+- **T-305(PR #401, backend 마지막)**: 전용 `app.trip_day_rise_sets`(day-keyed, centroid 기준좌표 +
+  created_at-earliest 대표 라벨) + 마이그레이션 0040 + `sync_trip_day_rise_sets`(get_trip 열람 시 유지,
+  좌표/날짜 변경분만 stale+pending_fetch) + `build_trip_view` emit + py/zod 계약 + Dagster asset
+  `pinvi_trip_day_rise_sets`(KASI `location_rise_set` 배치 fill, 20분 schedule).
+- **단일 적대적 리뷰**(T-305) P2 반영: ETL fill의 lost-update/TOCTOU 경합 — select~fill 사이 좌표 변경 시
+  stale 좌표로 덮어써 굳는 문제 → UPDATE WHERE에 snapshot guard(locdate/lon/lat 일치) 추가(변경 시 no-op,
+  다음 run 재fill). 나머지(float 안정성/locdate 일치/mid-GET sync 안전/PK race self-heal/계약/마이그레이션)는
+  sound.
+- **부수 수정**: T-303(#399) 이후 slip된 latent domain vitest 회귀(featureRequest source/external_ref) +
+  tripMapPoints 픽스처 — CI가 `packages/domain` vitest 미실행으로 놓친 것.
+- 검증(WSL): api ruff/mypy --strict(196)/rise-set 11 + etl ruff/mypy/pytest 5(guard 포함) + web
+  typecheck/lint/vitest(domain62,web82)/build. 양 PR CI green.
+- **다음**: 남은 web UI — T-306(day-delete confirm F2 + out-of-range F1), T-307(일자 색 picker +
+  display_marker_color 렌더), T-308(`TripDayHeader` effective date+공휴일+일출/일몰), T-309a(autocomplete),
+  T-309b(외부 pick add-POI). 이후 N150 live e2e.
+
 ## 2026-07-21 08:40 (claude) — TDR T-304 feature detail-card + 외부 enrichment
 
 - T-303 PR #399 머지 완료(main d0a438b). 이어 T-304(ADR-056) 착수.
