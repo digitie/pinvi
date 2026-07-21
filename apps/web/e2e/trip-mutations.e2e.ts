@@ -234,3 +234,57 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
   await editor.getByRole('button', { name: '저장' }).click();
   await expect(editor).toBeHidden();
 });
+
+test('POI가 있는 일자 삭제는 확인 후 force로 함께 삭제된다 (F2)', async ({ page }) => {
+  let forceDeleted = false;
+  await commonRoutes(page);
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() === 'DELETE') {
+      if (request.url().includes('force=true')) {
+        forceDeleted = true;
+        await route.fulfill({ status: 204, body: '' });
+      } else {
+        // POI가 있는 일자는 force 없이는 409 DAY_HAS_POIS(poi_count 포함).
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: { code: 'DAY_HAS_POIS', message: 'POI가 있습니다.', poi_count: 1 },
+          }),
+        });
+      }
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          trip: trip(),
+          days: forceDeleted ? [] : [day([poi()])],
+          companions: [],
+          share_links: [],
+          broken_feature_count: 0,
+        },
+      }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByTestId('trip-day-delete').first().click();
+
+  // 확인 다이얼로그가 POI 개수를 경고한다.
+  const confirm = page.getByTestId('day-delete-confirm');
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText('POI 1곳');
+
+  // 확인하면 force 삭제되어 일자가 사라진다.
+  await page.getByTestId('day-delete-confirm-confirm').click();
+  await expect(page.getByTestId('trip-day-delete')).toHaveCount(0);
+});
