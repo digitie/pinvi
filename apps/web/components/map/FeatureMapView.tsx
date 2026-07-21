@@ -8,6 +8,7 @@ import type {
   FeaturesInBoundsResponse,
   FeatureSummary,
   FeatureWeatherCard,
+  PlaceSearchResult,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
@@ -114,32 +115,6 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
     count: c.feature_count,
   }));
   return [...features, ...clusters];
-}
-
-function featureToPoint(f: FeatureSummary): MapPoint | null {
-  if (!f.coord) return null;
-  const style = resolveMarkerStyle({
-    upstreamColor: f.marker_color,
-    upstreamIcon: f.marker_icon,
-    upstreamCategory: f.category,
-    upstreamKind: f.kind,
-  });
-  return {
-    id: f.feature_id,
-    lngLat: [f.coord.lon, f.coord.lat],
-    kind: 'feature',
-    color: style.hex,
-    markerColor: style.color,
-    markerSource: style.source,
-    icon: style.icon,
-    title: f.name,
-    lon: f.coord.lon,
-    lat: f.coord.lat,
-    category: style.category,
-    status: f.status ?? null,
-    featureId: f.feature_id,
-    featureKind: f.kind,
-  };
 }
 
 function weatherConditionFromIcon(icon: string | null | undefined): WeatherCondition {
@@ -373,12 +348,38 @@ export function FeatureMapView({
     [flyTo, mobileLayout],
   );
 
+  // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
   const handleSearchSelect = useCallback(
-    (feature: FeatureSummary) => {
-      const point = featureToPoint(feature);
-      if (!point) return;
-      setSelected(point);
-      flyTo(point.lon, point.lat, 15);
+    (result: PlaceSearchResult) => {
+      const coord = result.coord;
+      if (!coord) return;
+      if (result.feature_id != null) {
+        const style = resolveMarkerStyle({
+          upstreamColor: result.marker_color,
+          upstreamIcon: result.marker_icon,
+          upstreamCategory: result.category,
+        });
+        setSelected({
+          id: result.feature_id,
+          lngLat: [coord.lon, coord.lat],
+          kind: 'feature',
+          color: style.hex,
+          markerColor: style.color,
+          markerSource: style.source,
+          icon: style.icon,
+          title: result.name,
+          lon: coord.lon,
+          lat: coord.lat,
+          category: style.category,
+          status: null,
+          featureId: result.feature_id,
+          featureKind: undefined,
+        });
+      } else {
+        // 외부/주소 결과는 feature 상세가 없으므로 선택 해제하고 이동만 한다.
+        setSelected(null);
+      }
+      flyTo(coord.lon, coord.lat, 15);
     },
     [flyTo],
   );
