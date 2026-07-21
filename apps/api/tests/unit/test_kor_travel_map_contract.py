@@ -776,7 +776,7 @@ def test_public_curation_collection_item_group_pin_required_types_and_enums() ->
         },
         refs={"feature": "CurationFeatureView"},
     )
-    group_curations = _spec()["components"]["schemas"]["FeatureCurationGroupView"]["properties"][
+    group_curations = spec["components"]["schemas"]["FeatureCurationGroupView"]["properties"][
         "curations"
     ]["items"]
     assert group_curations == {"$ref": "#/components/schemas/PublicCurationItemView"}
