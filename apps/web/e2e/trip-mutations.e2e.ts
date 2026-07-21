@@ -246,12 +246,13 @@ test('POI가 있는 일자 삭제는 확인 후 force로 함께 삭제된다 (F2
         forceDeleted = true;
         await route.fulfill({ status: 204, body: '' });
       } else {
-        // POI가 있는 일자는 force 없이는 409 DAY_HAS_POIS(poi_count 포함).
+        // POI가 있는 일자는 force 없이는 409 DAY_HAS_POIS. 실제 API의 error envelope 셰입
+        // ({error:{code,message,details}})을 그대로 써서 ErrorEnvelopeSchema 파싱 경로를 검증한다.
         await route.fulfill({
           status: 409,
           contentType: 'application/json',
           body: JSON.stringify({
-            detail: { code: 'DAY_HAS_POIS', message: 'POI가 있습니다.', poi_count: 1 },
+            error: { code: 'DAY_HAS_POIS', message: 'POI가 있습니다.', details: { poi_count: 1 } },
           }),
         });
       }
