@@ -60,6 +60,32 @@ describe('tripMapPoints', () => {
     });
   });
 
+  it('tripPoiToMapPoint: display_marker_color(서버 계산)를 우선 사용해 지도/리스트 parity', () => {
+    // display_marker_color = 서버가 custom(POI) > 일자색 > resolved로 계산한 값. marker_color보다 우선.
+    const point = tripPoiToMapPoint(
+      poi({
+        marker_color: 'P-09',
+        display_marker_color: 'P-05',
+        feature: { coord: { lon: 126.977, lat: 37.5796 } },
+      }),
+      1,
+    );
+    expect(point?.markerColor).toBe('P-05');
+    expect(point?.color).toBe('#43A047'); // P-05 hex
+  });
+
+  it('tripPoiToMapPoint: display_marker_color가 null이면 marker_color로 fallback', () => {
+    const point = tripPoiToMapPoint(
+      poi({
+        marker_color: 'P-09',
+        display_marker_color: null,
+        feature: { coord: { lon: 126.977, lat: 37.5796 } },
+      }),
+      1,
+    );
+    expect(point?.markerColor).toBe('P-09');
+  });
+
   it('tripPoiToMapPoint: marker가 없으면 snapshot marker를 사용', () => {
     const point = tripPoiToMapPoint(
       poi({

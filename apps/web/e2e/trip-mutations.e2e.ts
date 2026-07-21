@@ -289,3 +289,61 @@ test('POI가 있는 일자 삭제는 확인 후 force로 함께 삭제된다 (F2
   await page.getByTestId('day-delete-confirm-confirm').click();
   await expect(page.getByTestId('trip-day-delete')).toHaveCount(0);
 });
+
+test('일자 설정에서 색을 고르면 marker_color가 PATCH된다 (F6)', async ({ page }) => {
+  let patchedColor: string | null | undefined;
+  await commonRoutes(page);
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON() as { marker_color?: string | null };
+      patchedColor = body.marker_color;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            trip_id: tripId,
+            day_index: 1,
+            date: null,
+            title: '1일차',
+            note: null,
+            marker_color: patchedColor ?? null,
+            version: 2,
+            created_at: '2026-06-01T09:00:00+09:00',
+            updated_at: '2026-06-01T09:05:00+09:00',
+          },
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          trip: trip(),
+          days: [day([poi()])],
+          companions: [],
+          share_links: [],
+          broken_feature_count: 0,
+        },
+      }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByTestId('trip-day-rename').first().click();
+  await expect(page.getByTestId('trip-day-color-picker')).toBeVisible();
+  await page.getByTestId('trip-day-color-P-05').click();
+  await page
+    .getByTestId('trip-day-title-dialog')
+    .getByRole('button', { name: '저장' })
+    .click();
+
+  await expect.poll(() => patchedColor).toBe('P-05');
+});

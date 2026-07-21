@@ -815,7 +815,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleUpdateDay = (
     dayIndex: number,
-    next: { title: string; date: string | null },
+    next: { title: string; date: string | null; marker_color: string | null },
   ) => {
     if (!view) return;
     const day = view.days.find((d) => d.day_index === dayIndex);
@@ -829,6 +829,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const nextTitle = next.title || null;
     if (nextTitle !== day.title) patch.title = nextTitle;
     if (next.date !== day.date) patch.date = next.date;
+    // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
+    if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
     if (!hasPatchFields(patch)) return;
     void runMutation(
       () => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch),

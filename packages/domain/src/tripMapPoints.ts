@@ -43,7 +43,9 @@ export function tripPoiToMapPoint(poi: TripViewPoi, dayIndex: number): TripMapPo
   }
   const snapshot = poi.feature && typeof poi.feature === 'object' ? poi.feature : {};
   const style = resolveMarkerStyle({
-    resolvedColor: poi.marker_color,
+    // ADR-055: 서버가 custom(POI) > 일자색 > resolved로 계산한 display_marker_color를 우선 쓴다.
+    // 지도 핀과 목록 뱃지가 동일한 서버 값을 써서 색이 어긋나지 않는다(parity).
+    resolvedColor: poi.display_marker_color ?? poi.marker_color,
     resolvedIcon: poi.marker_icon,
     snapshot,
   });

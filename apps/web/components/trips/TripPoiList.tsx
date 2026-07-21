@@ -124,7 +124,8 @@ export function TripPoiList({
                 >
                   <span
                     className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: paletteHex(poi.marker_color) }}
+                    // ADR-055: 지도 핀과 동일한 서버 계산 display_marker_color로 뱃지 색을 맞춘다(parity).
+                    style={{ backgroundColor: paletteHex(poi.display_marker_color ?? poi.marker_color) }}
                     aria-hidden="true"
                   >
                     {index + 1}
