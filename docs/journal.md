@@ -17,7 +17,7 @@
   내부 ID/표시 타입 검증, broad exception 제거, cached+uncached outage와 composed real-client 회귀를
   모두 반영했다. PR #840 이후 Claude Code PR 전문 리뷰 결과도 반영했고 5-state는 `T-VN-11-P`로 추적한다.
 - **검증**: 변경 전 opaque ID 절단과 false-broken 2건을 red로 재현했다. 최종 n150 gate는 API
-  **1,070 passed, 4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 93,
+  **1,070 passed, 4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 97,
   schemas 8, domain 65, 전체 TypeScript workspace typecheck를 통과했다. 새 Web image의 mocked Trip
   Playwright는 **14 passed, 1 VWorld-canvas 환경 skip**이다. prod DB linked POI 1행 중 legacy `@` ID는
   **0행**이다.
@@ -29,12 +29,16 @@
   UI로 실제 여행을 생성하고 API로 실데이터 POI를 붙인 뒤 실 feature `found` + opaque ID `missing` → Map proxy 강제 503에서
   둘 다 `unverified`/snapshot 유지/broken 0 → 복구 후 `found|missing`/broken 1을 검증했다. test trip은
   soft-delete해 활성 데이터에서 제거했다(DB row/POI는 retention 대상). cache-disabled sentinel,
-  고유 run prefix, batch 재호출 증가, 지도 popup/집계까지 보강한 최종 **Playwright 1 passed (14.5s)**다.
+  고유 run prefix, batch 재호출 증가, 지도 popup/집계까지 보강했다. CI 후속 Web image 재빌드 뒤 새
+  prefix로 재실행한 최신 결과도 **Playwright 1 passed (17.4s)**다.
 - **최종 재리뷰 1차 반영**: 두 리뷰어가 찾은 batch 4xx/404 500 누출, 비유한 JSON 수 cache poison,
   지도·집계의 삭제/연결 끊김 오표현, live cache/동시 실행/무조건 proxy 정리, Trip API 문서 drift를
   수정하고 회귀를 추가했다.
+- **PR #409 CI 후속**: 첫 Web E2E는 VWorld key가 없는 CI fallback에서 MapLibre popup이 마운트되지
+  않는데 mocked test가 popup을 요구해 실패했다. 상태→문구를 공유 순수 함수로 수렴하고 4-state
+  Vitest를 추가했으며, Web workflow에 `npm test --workspace @pinvi/web` 정규 gate를 신설했다.
 - **최종 승인**: 동일 exact diff를 두 적대 리뷰어가 재재검토해 모두 P0/P1/P2 없음으로 승인했다.
-- **다음**: 보안 감사 → PR → CI green → 머지.
+- **다음**: PR #409 후속 CI green 확인 → 머지.
 
 ## 2026-07-26 12:20 (claude) — T-ADM-C6c 후속: cancel-path 음성 계약 하드닝 + #392 판정
 

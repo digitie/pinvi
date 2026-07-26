@@ -26,6 +26,7 @@ import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { pointsBounds, resolveMarkerStyle, type TripMapPoint } from '@pinvi/domain';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
@@ -47,14 +48,6 @@ function makiIconName(icon: string): string {
 
 function makiIconUrl(icon: string): string {
   return `${MAKI_ICON_BASE_URL}/${encodeURIComponent(icon)}.svg`;
-}
-
-function featureResolutionNotice(point: TripMapPoint): string | null {
-  if (point.featureResolutionState === 'missing') return '장소 정보 사용 불가';
-  if (point.featureResolutionState === 'unverified') {
-    return '저장된 정보 · 최신 상태 확인 실패';
-  }
-  return null;
 }
 
 function isKoreaCoord(coord: { lon: number; lat: number }): boolean {
@@ -274,6 +267,9 @@ export function TripMapView({
     () => points.find((p) => p.poiId === selectedPoiId) ?? null,
     [points, selectedPoiId],
   );
+  const selectedResolutionNotice = selected
+    ? featureResolutionNotice(selected.featureResolutionState)
+    : null;
 
   useEffect(() => {
     if (selectedFeature && hiddenFeatureIds?.has(selectedFeature.feature_id)) {
@@ -408,6 +404,7 @@ export function TripMapView({
             maxZoom={16}
             renderMarker={(clusterPoint) => {
               const marker = clusterPoint as MarkerPoint;
+              const resolutionNotice = featureResolutionNotice(marker.point.featureResolutionState);
               return (
                 <PinMarker
                   key={marker.point.poiId}
@@ -418,8 +415,8 @@ export function TripMapView({
                   showInnerCircle={false}
                   className="trip-map-marker"
                   title={
-                    featureResolutionNotice(marker.point)
-                      ? `${marker.point.title} (${featureResolutionNotice(marker.point)})`
+                    resolutionNotice
+                      ? `${marker.point.title} (${resolutionNotice})`
                       : marker.point.title
                   }
                   selected={marker.point.poiId === selectedPoiId}
@@ -469,8 +466,8 @@ export function TripMapView({
             <Popup lngLat={[selected.lon, selected.lat]} maxWidth="240px" closeButton={false}>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ink">{selected.title}</p>
-                {featureResolutionNotice(selected) && (
-                  <p className="text-xs text-error-text">{featureResolutionNotice(selected)}</p>
+                {selectedResolutionNotice && (
+                  <p className="text-xs text-error-text">{selectedResolutionNotice}</p>
                 )}
               </div>
             </Popup>

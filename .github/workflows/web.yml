@@ -3,18 +3,18 @@ name: web
 on:
   pull_request:
     paths:
-      - "apps/web/**"
-      - "packages/**"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.base.json"
-      - ".github/workflows/web.yml"
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.base.json'
+      - '.github/workflows/web.yml'
   push:
     branches: [main]
     paths:
-      - "apps/web/**"
-      - "packages/**"
-      - ".github/workflows/web.yml"
+      - 'apps/web/**'
+      - 'packages/**'
+      - '.github/workflows/web.yml'
 
 concurrency:
   group: web-${{ github.ref }}
@@ -30,7 +30,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
           cache: npm
 
       - name: Install dependencies
@@ -41,6 +41,9 @@ jobs:
 
       - name: Typecheck (workspaces)
         run: npm run typecheck
+
+      - name: Unit tests (web)
+        run: npm test --workspace @pinvi/web
 
       - name: Build (workspaces)
         env:
@@ -56,7 +59,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
           cache: npm
 
       - name: Install dependencies

@@ -15,7 +15,7 @@ degrade해 batch 인증/4xx/404/transport/contract 실패를 `unverified`로 두
 비유한 JSON 수는 decode 경계에서 거부해 cache poison을 막는다. cache hit+uncached outage, future 5-state key,
 내부 ID 불일치/invalid field, duplicate JSON member, multi-chunk all-or-nothing, 동일 feature 중복 POI count,
 실제 HTTP client→typed TripView fallback을 회귀로 고정했다. 최종 n150 gate는 API **1,070 passed,
-4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 93, schemas 8, domain 65,
+4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 97, schemas 8, domain 65,
 전체 TS workspace typecheck, 새 Web image mocked Trip Playwright **14 passed/1 VWorld-canvas skip**다.
 5-state typed consumer는 `T-VN-11-P`, 발견한 `vitest` critical major 갱신은 `T-VN-SEC-01`로 추적한다.
 
@@ -24,10 +24,13 @@ n150 격리 branch API/Web image를 실제 PinVi DB와 kor-travel-map API에 연
 실 feature `found` + opaque ID `missing` → 강제 503에서 둘 다 `unverified`/snapshot 유지/broken 0 →
 복구 후 `found|missing`/broken 1을 확인했다. test trip은 soft-delete해 활성 데이터에서 제거했고
 row/POI는 retention 대상이다. cache-disabled sentinel, 고유 prefix, batch 재호출 증가, 지도 popup/집계까지
-보강한 최종 **Live Playwright 1 passed (14.5s)**다. 동일 exact diff를 두 리뷰어가 재재검토해 모두
-P0/P1/P2 없음으로 승인했다.
+보강했다. CI 후속 Web image 재빌드 뒤 새 prefix 실행도 **Live Playwright 1 passed (17.4s)**다.
 
-**다음 한 작업**: 보안 감사 후 PR을 만들고 CI green에서 머지한다.
+PR #409 첫 Web E2E는 VWorld key 없는 fallback에서 MapLibre popup이 마운트되지 않아 환경 의존 assertion이
+실패했다. 상태→문구를 공유 순수 함수와 4-state Vitest로 고정하고 Web Actions에
+`npm test --workspace @pinvi/web` 정규 gate를 추가했다. mocked 상태 E2E 5회 반복도 통과했다.
+
+**다음 한 작업**: PR #409 후속 CI green을 확인해 머지하고 T-VN-11로 이동한다.
 
 ## 2026-07-21 (claude) — TDR T-309a+T-309b(통합 검색 autocomplete + 외부 pick add-POI) — web UI 마지막
 

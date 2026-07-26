@@ -7,6 +7,7 @@ import { arrayMove, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 
 function formatTime(value: string | null): string | null {
   if (!value) return null;
@@ -85,6 +86,7 @@ export function TripPoiList({
         const arrival = formatTime(poi.planned_arrival_at);
         const selected = poi.poi_id === selectedPoiId;
         const editing = poi.poi_id === editingPoiId;
+        const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
         return (
           <li
             key={poi.poi_id}
@@ -140,13 +142,13 @@ export function TripPoiList({
                       {poi.feature_resolution_state === 'missing' && (
                         <AlertTriangle
                           className="h-3.5 w-3.5 shrink-0 text-error-text"
-                          aria-label="장소 정보 사용 불가"
+                          aria-label={resolutionNotice ?? undefined}
                         />
                       )}
                       {poi.feature_resolution_state === 'unverified' && (
                         <CloudOff
                           className="h-3.5 w-3.5 shrink-0 text-muted"
-                          aria-label="저장된 정보 · 최신 상태 확인 실패"
+                          aria-label={resolutionNotice ?? undefined}
                         />
                       )}
                     </span>

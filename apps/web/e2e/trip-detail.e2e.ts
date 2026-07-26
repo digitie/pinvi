@@ -587,7 +587,6 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
     .getByRole('button', { name: /공지 broken/ })
     .click();
   await expect(broken).toHaveAttribute('data-marker-selected', 'true');
-  await expect(page.getByText('장소 정보 사용 불가', { exact: true })).toBeVisible();
   await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
 
   await page
@@ -595,7 +594,9 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
     .getByRole('button', { name: /저장된 미확인 장소/ })
     .click();
   await expect(unverified).toHaveAttribute('data-marker-selected', 'true');
-  await expect(page.getByText('저장된 정보 · 최신 상태 확인 실패', { exact: true })).toBeVisible();
+
+  // GitHub CI는 VWorld key 없이 fallback을 렌더링하므로 MapLibre Popup이 마운트되지 않는다.
+  // 실제 popup 문구는 trip-feature-resolution-live-mutating.live.ts에서 검증한다.
 });
 
 test('여행 목록은 missing과 transport unverified를 다른 안내로 표시한다', async ({ page }) => {
