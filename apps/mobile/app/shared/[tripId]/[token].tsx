@@ -66,7 +66,9 @@ export default function SharedTripScreen() {
           <Heading>{trip.title}</Heading>
           <Muted>{dateRange(trip.start_date, trip.end_date)}</Muted>
           {trip.description ? <Body>{trip.description}</Body> : null}
-          {broken_feature_count > 0 ? <Badge label={`연결 끊김 ${broken_feature_count}`} /> : null}
+          {broken_feature_count > 0 ? (
+            <Badge label={`정보 사용 불가 ${broken_feature_count}`} />
+          ) : null}
         </View>
 
         {days.length === 0 ? (
@@ -91,6 +93,11 @@ export default function SharedTripScreen() {
                       />
                       <Body className="flex-1 font-medium text-ink">
                         {poi.title ?? '제목 없는 장소'}
+                        {poi.feature_resolution_state === 'missing'
+                          ? ' · (장소 정보 사용 불가)'
+                          : poi.feature_resolution_state === 'unverified'
+                            ? ' · (저장된 정보 · 최신 상태 확인 실패)'
+                            : ''}
                       </Body>
                     </View>
                   ))}

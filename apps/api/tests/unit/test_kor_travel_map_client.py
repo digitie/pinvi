@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -11,7 +12,8 @@ import pytest
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapClient,
-    KorTravelMapFeatureNotFound,
+    KorTravelMapContractError,
+    KorTravelMapError,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
@@ -104,7 +106,7 @@ async def test_get_features_chunks_and_merges() -> None:
         body = _json.loads(request.content)
         ids = body["feature_ids"]
         calls.append(ids)
-        found = {fid: {"feature_id": fid} for fid in ids if fid != "f_missing"}
+        found = {fid: {"feature_id": fid, "name": fid} for fid in ids if fid != "f_missing"}
         missing = [fid for fid in ids if fid == "f_missing"]
         # ADR-048: id-keyed map 키는 `found`(구 `items`).
         return httpx.Response(200, json={"data": {"found": found, "missing": missing}, "meta": {}})
@@ -115,6 +117,139 @@ async def test_get_features_chunks_and_merges() -> None:
     assert len(calls) == 2  # 2 + 1 청크
     assert set(data["found"]) == {"f_1", "f_2"}
     assert data["missing"] == ["f_missing"]
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "batch_data",
+    [
+        {"found": {}, "missing": []},
+        {"found": {"f_1": {"feature_id": "f_1", "name": "장소"}}, "missing": ["f_1"]},
+        {"found": {}, "missing": ["f_1", "f_1"]},
+        {"found": {}, "missing": ["f_other"]},
+        {"found": {"f_1": "not-an-object"}, "missing": []},
+        {"found": {"f_1": {"feature_id": "f_other", "name": "장소"}}, "missing": []},
+        {"found": {"f_1": {"feature_id": "f_1"}}, "missing": []},
+        {"found": {"f_1": {"feature_id": "f_1", "name": {"bad": True}}}, "missing": []},
+        {
+            "found": {"f_1": {"feature_id": "f_1", "name": "장소", "marker_color": {}}},
+            "missing": [],
+        },
+        {"found": {}, "missing": ["f_1"], "retired": [], "revision": 1},
+    ],
+    ids=[
+        "incomplete",
+        "overlap",
+        "duplicate",
+        "unknown",
+        "invalid-detail",
+        "mismatched-detail-id",
+        "missing-name",
+        "invalid-name",
+        "invalid-marker",
+        "future-state",
+    ],
+)
+async def test_get_features_rejects_invalid_response_partition(
+    batch_data: dict[str, Any],
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": batch_data, "meta": {}},
+        )
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapError, match=r"partition|정확히 분할"):
+        await client.get_features(["f_1"])
+    await client.aclose()
+
+
+async def test_get_features_deduplicates_input_and_skips_empty_request() -> None:
+    calls: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        feature_ids = _json.loads(request.content)["feature_ids"]
+        calls.append(feature_ids)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "found": {
+                        feature_id: {"feature_id": feature_id, "name": feature_id}
+                        for feature_id in feature_ids
+                    },
+                    "missing": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    assert await client.get_features([]) == {"found": {}, "missing": []}
+    assert calls == []
+    assert await client.get_features(["f_1", "f_1"]) == {
+        "found": {"f_1": {"feature_id": "f_1", "name": "f_1"}},
+        "missing": [],
+    }
+    assert calls == [["f_1"]]
+    await client.aclose()
+
+
+async def test_get_features_rejects_duplicate_found_json_member() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=(
+                b'{"data":{"found":{"f_1":{"feature_id":"f_1","name":"first"},'
+                b'"f_1":{"feature_id":"f_1","name":"second"}},"missing":[]},"meta":{}}'
+            ),
+            headers={"content-type": "application/json"},
+        )
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapError, match="중복 key"):
+        await client.get_features(["f_1"])
+    await client.aclose()
+
+
+@pytest.mark.parametrize("raw_number", ["NaN", "Infinity", "-Infinity", "1e400"])
+async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=(
+                '{"data":{"found":{"f_1":{"feature_id":"f_1","name":"장소","lon":'
+                f"{raw_number}"
+                '}},"missing":[]},"meta":{}}'
+            ).encode(),
+            headers={"content-type": "application/json"},
+        )
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapContractError, match=r"비유한 수|범위를 벗어난 실수"):
+        await client.get_features(["f_1"])
+    await client.aclose()
+
+
+async def test_get_features_is_all_or_nothing_across_chunks() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            data = {"found": {"f_1": {"feature_id": "f_1", "name": "first"}}, "missing": []}
+        else:
+            data = {"found": {}, "missing": [], "retired": ["f_2"]}
+        return httpx.Response(200, json={"data": data, "meta": {}})
+
+    client = _client(handler, batch_chunk_size=1)
+    with pytest.raises(KorTravelMapError, match="partition"):
+        await client.get_features(["f_1", "f_2"])
+    assert calls == 2
     await client.aclose()
 
 
@@ -393,13 +528,13 @@ async def test_422_raises_bad_request_with_code() -> None:
     await client.aclose()
 
 
-async def test_batch_404_path_raises_not_found() -> None:
-    # batch는 get_feature와 달리 404를 도메인 예외로 올린다(셰입 보장).
+async def test_batch_404_path_raises_contract_error() -> None:
+    # batch endpoint 자체 404는 item-level missing이 아니라 배포/계약 skew다.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"error": {"code": "FEATURE_NOT_FOUND"}})
 
     client = _client(handler)
-    with pytest.raises(KorTravelMapFeatureNotFound):
+    with pytest.raises(KorTravelMapContractError, match="batch endpoint"):
         await client.get_features(["f_1"])
     await client.aclose()
 

@@ -6,6 +6,7 @@ const poiId = '44444444-4444-4444-8444-444444444444';
 const snapshotPoiId = '44444444-4444-4444-8444-444444444445';
 const brokenPoiId = '44444444-4444-4444-8444-444444444446';
 const manualPoiId = '44444444-4444-4444-8444-444444444447';
+const unverifiedPoiId = '44444444-4444-4444-8444-444444444448';
 const companionId = '55555555-5555-4555-8555-555555555555';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
@@ -42,7 +43,7 @@ const TRIP_VIEW = {
           feature: { coord: { lon: 129.16, lat: 35.158 } },
           marker_color: 'P-07',
           marker_icon: 'swimming',
-          is_broken: false,
+          feature_resolution_state: 'found',
           user_note: null,
           planned_arrival_at: null,
           planned_departure_at: null,
@@ -147,8 +148,19 @@ const MARKER_VIEW = {
           feature: { coord: { lon: 127.02, lat: 37.56 }, category: '공지' },
           marker_color: null,
           marker_icon: null,
-          is_broken: true,
+          feature_resolution_state: 'missing',
           feature_link_broken_at: '2026-06-28T09:00:00+09:00',
+        },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: unverifiedPoiId,
+          feature_id: 'feat-transport-unverified',
+          title: '저장된 미확인 장소',
+          feature: { coord: { lon: 127.03, lat: 37.57 }, category: '관광지' },
+          marker_color: null,
+          marker_icon: null,
+          feature_resolution_state: 'unverified',
+          feature_link_broken_at: null,
         },
       ],
     },
@@ -287,7 +299,7 @@ async function mockTripDetailRoutes(
     const data =
       typeof options.featuresInBounds === 'function'
         ? options.featuresInBounds()
-        : options.featuresInBounds ?? emptyFeaturesInBounds();
+        : (options.featuresInBounds ?? emptyFeaturesInBounds());
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data }),
@@ -530,9 +542,7 @@ test('상세 지도는 왼쪽 일자 레이어 표시 상태만 반영하고 오
   await expect(page.getByTestId('trip-detail-map').locator('aside')).toHaveCount(0);
 });
 
-test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상태를 노출한다', async ({
-  page,
-}) => {
+test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다', async ({ page }) => {
   await mockTripDetailRoutes(page, MARKER_VIEW);
 
   await page.goto(`/trips/${tripId}`);
@@ -543,6 +553,9 @@ test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상�
   );
   const broken = page.locator(
     `[data-testid="trip-map-marker-style"][data-poi-id="${brokenPoiId}"]`,
+  );
+  const unverified = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${unverifiedPoiId}"]`,
   );
 
   await expect(custom).toHaveAttribute('data-marker-color', 'P-10');
@@ -563,13 +576,36 @@ test('여행 지도 marker는 resolved/snapshot/category와 selected/broken 상�
   await expect(broken).toHaveAttribute('data-marker-rendered-icon', 'danger');
   await expect(broken).toHaveAttribute('data-marker-size', '27');
   await expect(broken).toHaveAttribute('data-marker-source', 'category');
-  await expect(broken).toHaveAttribute('data-marker-broken', 'true');
+  await expect(broken).toHaveAttribute('data-feature-resolution-state', 'missing');
+
+  await expect(unverified).toHaveAttribute('data-feature-resolution-state', 'unverified');
+  await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
+  await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
 
   await page
     .getByTestId('trip-poi-list')
-    .getByRole('button', { name: /해운대 custom/ })
+    .getByRole('button', { name: /공지 broken/ })
     .click();
-  await expect(custom).toHaveAttribute('data-marker-selected', 'true');
+  await expect(broken).toHaveAttribute('data-marker-selected', 'true');
+  await expect(page.getByText('장소 정보 사용 불가', { exact: true })).toBeVisible();
+  await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
+
+  await page
+    .getByTestId('trip-poi-list')
+    .getByRole('button', { name: /저장된 미확인 장소/ })
+    .click();
+  await expect(unverified).toHaveAttribute('data-marker-selected', 'true');
+  await expect(page.getByText('저장된 정보 · 최신 상태 확인 실패', { exact: true })).toBeVisible();
+});
+
+test('여행 목록은 missing과 transport unverified를 다른 안내로 표시한다', async ({ page }) => {
+  await mockTripDetailRoutes(page, MARKER_VIEW);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
+  await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
+  await expect(page.getByText('정보 사용 불가 1곳').first()).toBeVisible();
 });
 
 test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI를 생성한다', async ({ page }) => {
@@ -684,9 +720,9 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
 
   await page.goto(`/trips/${tripId}`);
   await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator('[data-testid="trip-map-feature-style"][data-feature-id="feat-biff"]')).toHaveText(
-    'BIFF 광장',
-  );
+  await expect(
+    page.locator('[data-testid="trip-map-feature-style"][data-feature-id="feat-biff"]'),
+  ).toHaveText('BIFF 광장');
 
   const canvas = page.locator('.maplibregl-canvas').first();
   const box = await canvas.boundingBox();
@@ -702,9 +738,9 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
   await expect(page.getByTestId('manual-poi-address')).toContainText('부산 중구 비프광장로 36');
   await page.getByTestId('manual-poi-submit').click();
 
-  await expect(page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${manualPoiId}"]`)).toHaveText(
-    '부산 중구 비프광장로 36',
-  );
+  await expect(
+    page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${manualPoiId}"]`),
+  ).toHaveText('부산 중구 비프광장로 36');
   expect(createdBody).not.toBeNull();
   const submittedBody = createdBody as unknown as Record<string, unknown>;
   expect(submittedBody).toMatchObject({

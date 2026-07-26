@@ -14,10 +14,7 @@ const ids = {
 };
 const now = '2026-06-08T12:00:00+09:00';
 
-const roundTrip = (
-  schema: { parse: (value: unknown) => unknown },
-  value: unknown,
-): unknown => {
+const roundTrip = (schema: { parse: (value: unknown) => unknown }, value: unknown): unknown => {
   const parsed = schema.parse(value);
   return schema.parse(JSON.parse(JSON.stringify(parsed)));
 };
@@ -82,7 +79,7 @@ describe('money response schemas', () => {
       feature: { name: '광안리' },
       marker_color: null,
       marker_icon: null,
-      is_broken: false,
+      feature_resolution_state: 'found',
       user_note: null,
       planned_arrival_at: null,
       planned_departure_at: null,

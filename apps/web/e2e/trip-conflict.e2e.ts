@@ -34,7 +34,7 @@ function poiResponse(note: string | null, version: number) {
     feature: { coord: { lon: 126.977, lat: 37.5796 } },
     marker_color: 'P-09',
     marker_icon: 'museum',
-    is_broken: false,
+    feature_resolution_state: 'found',
     user_note: note,
     planned_arrival_at: null,
     planned_departure_at: null,
@@ -99,7 +99,11 @@ test('여행 정보 409 충돌에서 내 값 전체를 최신 version으로 다�
       if (patchCount === 1) {
         expect(request.headers()['if-match']).toBe('1');
         serverChanged = true;
-        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify(conflictBody()) });
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify(conflictBody()),
+        });
         return;
       }
       expect(request.headers()['if-match']).toBe('2');
@@ -152,7 +156,11 @@ test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한�
     if (patchCount === 1) {
       expect(request.headers()['if-match']).toBe('1');
       serverChanged = true;
-      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify(conflictBody()) });
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify(conflictBody()),
+      });
       return;
     }
     expect(request.headers()['if-match']).toBe('2');
@@ -160,7 +168,9 @@ test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한�
     clientWon = true;
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ data: { ...poiResponse('내 메모', 3), attachment_id: poiId, trip_id: tripId, day_index: 1 } }),
+      body: JSON.stringify({
+        data: { ...poiResponse('내 메모', 3), attachment_id: poiId, trip_id: tripId, day_index: 1 },
+      }),
     });
   });
 

@@ -15,12 +15,15 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.kor_travel_map import KorTravelMapClient
+from app.clients.kor_travel_map import (
+    KorTravelMapClient,
+    KorTravelMapError,
+)
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
 from app.models.companion import TripCompanion
@@ -48,8 +51,10 @@ async def build_trip_view(
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
     3. `kor_travel_map_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
-    4. POI에 feature 정보 merge — `feature_link_broken_at` 처리 (kor_travel_map에서 사라진
-       feature 는 `is_broken=True` 표시)
+    4. POI에 feature 정보 merge — `found|missing|unverified|not_linked` 해석 상태를 명시
+
+    transport 실패나 불완전 응답은 feature 부재의 근거가 아니다. 이 경우 저장 snapshot을
+    유지하고 `feature_resolution_state=unverified`로 둔다.
 
     kor_travel_map client가 미주입 (`kor_travel_map_client=None`) 인 경우 — POI의 stored `feature_snapshot`
     만 사용 (fresh fetch 없음). 사용자에게 stale 경고 표시.
@@ -157,54 +162,56 @@ async def build_trip_view(
     feature_ids: list[str] = []
     seen: set[str] = set()
     for poi in pois:
-        fid_str = _canonical_feature_id(poi.feature_id)
-        if fid_str is None:
+        feature_id = poi.feature_id
+        if feature_id is None:
             continue
-        if fid_str not in seen:
-            seen.add(fid_str)
-            feature_ids.append(fid_str)
+        if feature_id not in seen:
+            seen.add(feature_id)
+            feature_ids.append(feature_id)
 
     # kor_travel_map batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
     # kor_travel_map `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
     fresh_features: dict[str, dict[str, Any]] = {}
+    explicitly_missing: set[str] = set()
     if kor_travel_map_client is not None and feature_ids:
         use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
-            cached, missing = feature_cache.get_many(feature_ids)
+            cached, uncached_ids = feature_cache.get_many(feature_ids)
             fresh_features.update(cached)
         else:
-            missing = feature_ids
-        if missing:
+            uncached_ids = feature_ids
+        if uncached_ids:
             try:
-                batch = await kor_travel_map_client.get_features(missing)
-                found_map: dict[str, Any] = batch.get("found") or {}
-                fetched: dict[str, dict[str, Any]] = {}
-                for fid, feature in found_map.items():
-                    if not isinstance(feature, dict):
-                        continue
-                    canonical_id = _canonical_feature_id(str(fid))
-                    if canonical_id is not None:
-                        fetched[canonical_id] = feature
+                batch = await kor_travel_map_client.get_features(uncached_ids)
+                fetched = cast(dict[str, dict[str, Any]], batch["found"])
                 fresh_features.update(fetched)
                 if use_cache and fetched:
                     feature_cache.put_many(fetched)
-            except Exception as exc:
-                logger.error("get_features batch 실패: %s — snapshot으로 fallback", exc)
+                explicitly_missing.update(cast(list[str], batch["missing"]))
+            except KorTravelMapError as exc:
+                logger.error("get_features batch 실패: %s — snapshot 링크 상태 미확인", exc)
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
     broken_count = 0
     for poi in pois:
-        feature_id = _canonical_feature_id(poi.feature_id)
+        feature_id = poi.feature_id
         fresh = fresh_features.get(feature_id) if feature_id is not None else None
-        is_broken = feature_id is not None and kor_travel_map_client is not None and fresh is None
-        if is_broken:
+        if feature_id is None:
+            resolution_state = "not_linked"
+        elif fresh is not None:
+            resolution_state = "found"
+        elif feature_id in explicitly_missing:
+            resolution_state = "missing"
+        else:
+            resolution_state = "unverified"
+        if resolution_state == "missing":
             broken_count += 1
 
         feature_view = fresh or poi.feature_snapshot or {}
         title = None
         if isinstance(feature_view, dict):
-            title = feature_view.get("title") or feature_view.get("name")
+            title = feature_view.get("name") or feature_view.get("title")
 
         pois_by_day_index.setdefault(poi.day_index, []).append(
             {
@@ -223,7 +230,7 @@ async def build_trip_view(
                     day_color_override.get(poi.day_index),
                     poi.custom_marker_color,
                 ),
-                "is_broken": is_broken,
+                "feature_resolution_state": resolution_state,
                 "user_note": poi.user_note,
                 "planned_arrival_at": poi.planned_arrival_at,
                 "planned_departure_at": poi.planned_departure_at,
@@ -332,13 +339,6 @@ async def _load_holidays_by_date(
             }
         )
     return holidays_by_date
-
-
-def _canonical_feature_id(feature_id: str | None) -> str | None:
-    """저장 snapshot suffix를 제외하고 kor_travel_map feature_id 문자열을 보존한다."""
-    if feature_id is None:
-        return None
-    return feature_id.split("@", 1)[0]
 
 
 def _companion_to_dict(companion: TripCompanion, *, include_management: bool) -> dict[str, Any]:

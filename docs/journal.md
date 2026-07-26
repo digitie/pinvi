@@ -2,6 +2,40 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-26 (codex agent B) — T-VN-08 false-broken 계약·UI hardening
+
+- **작업**: trip view batch의 `found|missing|unverified|not_linked` 해석 상태를 분리하고,
+  `feature_id`를 exact 불투명 문자열로 처리했다. 중복 표현이던 POI `is_broken`은 제거하고 UI/지도는
+  `feature_resolution_state`에서 missing 여부를 파생한다.
+- **계약**: `KorTravelMapClient.get_features`는 2-state exact key 집합, chunk 완전·배타 partition,
+  요청 ID, detail 내부 exact `feature_id`와 직접 소비 필드 타입, 중복 JSON member를 fail-closed로
+  검증한다. future 5-state key가 섞이면 일부를 조용히 수용하지 않고 전용 contract error로 거부한다.
+- **degrade**: builder는 typed `KorTravelMapError`만 저장 snapshot으로 fallback한다. batch의
+  transport/rate-limit/계약/인증·4xx는 `unverified`지만 Python 코딩 오류는 숨기지 않는다. cache hit과 uncached outage가 섞여도 각각
+  `found|unverified`로 구분되며 잘못된 detail은 캐시에 들어가지 않는다.
+- **적대 리뷰 반영**: 독립 리뷰어 2명이 요청한 unverified API/UI 표현, 미래 계약의 원자적 cutover,
+  내부 ID/표시 타입 검증, broad exception 제거, cached+uncached outage와 composed real-client 회귀를
+  모두 반영했다. PR #840 이후 Claude Code PR 전문 리뷰 결과도 반영했고 5-state는 `T-VN-11-P`로 추적한다.
+- **검증**: 변경 전 opaque ID 절단과 false-broken 2건을 red로 재현했다. 최종 n150 gate는 API
+  **1,070 passed, 4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 93,
+  schemas 8, domain 65, 전체 TypeScript workspace typecheck를 통과했다. 새 Web image의 mocked Trip
+  Playwright는 **14 passed, 1 VWorld-canvas 환경 skip**이다. prod DB linked POI 1행 중 legacy `@` ID는
+  **0행**이다.
+- **발견 task**: `npm audit` 25건 중 dev direct `vitest` critical major 전환을 `T-VN-SEC-01`로,
+  root `format:check` 기존 218파일 baseline 정리를 `T-VN-STYLE-01`로 추가했다. 현재 변경 파일 scoped
+  Prettier check와 Web lint는 통과했다.
+- **실데이터 live**: n150 격리 branch API/Web image를 실제 PinVi DB와 kor-travel-map API에
+  연결했다. 운영 DB가 Alembic 0037에 머문 drift를 발견해 정식 0038→0039→0040 migration을 적용했다.
+  UI로 실제 여행을 생성하고 API로 실데이터 POI를 붙인 뒤 실 feature `found` + opaque ID `missing` → Map proxy 강제 503에서
+  둘 다 `unverified`/snapshot 유지/broken 0 → 복구 후 `found|missing`/broken 1을 검증했다. test trip은
+  soft-delete해 활성 데이터에서 제거했다(DB row/POI는 retention 대상). cache-disabled sentinel,
+  고유 run prefix, batch 재호출 증가, 지도 popup/집계까지 보강한 최종 **Playwright 1 passed (14.5s)**다.
+- **최종 재리뷰 1차 반영**: 두 리뷰어가 찾은 batch 4xx/404 500 누출, 비유한 JSON 수 cache poison,
+  지도·집계의 삭제/연결 끊김 오표현, live cache/동시 실행/무조건 proxy 정리, Trip API 문서 drift를
+  수정하고 회귀를 추가했다.
+- **최종 승인**: 동일 exact diff를 두 적대 리뷰어가 재재검토해 모두 P0/P1/P2 없음으로 승인했다.
+- **다음**: 보안 감사 → PR → CI green → 머지.
+
 ## 2026-07-26 12:20 (claude) — T-ADM-C6c 후속: cancel-path 음성 계약 하드닝 + #392 판정
 
 - C6c ops-caller cutover(PR #387 datasets/pipeline + #393 관측 read principal 결선)는 머지·2차 적대 검토
@@ -237,7 +271,6 @@
   운영자가 최신 상태를 새로고침하고 재검토할 수 있게 한다. 자동 재시도나 stale overwrite는 하지 않는다.
 - 리뷰 후 Admin client 단위 110건, focused ETag/412 단위 4건, change-request 412/no-audit 통합
   1건과 Ruff·strict mypy 188개 소스를 통과했다.
-
 
 ## 2026-07-19 (codex) — kor-travel-map PR #748 소비자 clean-cut 후속
 

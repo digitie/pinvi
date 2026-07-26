@@ -48,7 +48,7 @@ async function mockTripDetail(page: Page) {
                   feature: { coord: { lon: 126.977, lat: 37.5796 }, category: '국가유산' },
                   marker_color: 'P-03',
                   marker_icon: 'monument',
-                  is_broken: false,
+                  feature_resolution_state: 'found',
                   user_note: null,
                   planned_arrival_at: null,
                   planned_departure_at: null,
@@ -162,10 +162,7 @@ test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 �
 
   await page.goto('/trips');
 
-  await expect(page.getByRole('tab', { name: '예정' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(page.getByRole('tab', { name: '예정' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('trip-list').locator('h2')).toHaveText([
     '강릉 당일치기',
     '부산 1박 2일',

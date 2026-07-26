@@ -1,5 +1,34 @@
 # resume.md
 
+## 2026-07-26 (codex agent B) — T-VN-08 실데이터 live 통과·최종 재리뷰
+
+PinVi trip view가 kor-travel-map batch 실패를 public projection unavailable로 오인하던 false-broken을
+clean-cut했다. POI 계약은 중복 boolean 대신
+`feature_resolution_state=not_linked|found|missing|unverified`를 정본으로 쓰며, UI도 missing의 “장소 정보
+사용 불가”와 transport/contract 실패의 “저장된 정보 · 최신 상태 확인 실패”를 구분한다. 현재 2-state
+decoder는 exact `found|missing` key, 완전·배타 partition, detail exact ID/표시 필드 타입, 중복 JSON key를
+fail-closed로 검증한다. `feature_id.split("@")`를 제거해 opaque ID를 exact 왕복하며, prod DB linked POI
+1행 중 legacy `@` ID는 0행임을 감사했다.
+
+독립 적대 리뷰 2인의 P1/P2를 모두 반영했다. builder는 typed `KorTravelMapError`만 snapshot으로
+degrade해 batch 인증/4xx/404/transport/contract 실패를 `unverified`로 두고 Python 코딩 오류는 숨기지 않는다.
+비유한 JSON 수는 decode 경계에서 거부해 cache poison을 막는다. cache hit+uncached outage, future 5-state key,
+내부 ID 불일치/invalid field, duplicate JSON member, multi-chunk all-or-nothing, 동일 feature 중복 POI count,
+실제 HTTP client→typed TripView fallback을 회귀로 고정했다. 최종 n150 gate는 API **1,070 passed,
+4 skipped**, Ruff check/format 301 files, strict mypy 196 files, Web unit 93, schemas 8, domain 65,
+전체 TS workspace typecheck, 새 Web image mocked Trip Playwright **14 passed/1 VWorld-canvas skip**다.
+5-state typed consumer는 `T-VN-11-P`, 발견한 `vitest` critical major 갱신은 `T-VN-SEC-01`로 추적한다.
+
+n150 격리 branch API/Web image를 실제 PinVi DB와 kor-travel-map API에 연결했다. DB가 Alembic
+0037에 머문 drift를 발견해 정식 0038→0039→0040 migration을 적용했고, UI로 실제 여행을 만들고 API로 실데이터 POI를 붙인 뒤
+실 feature `found` + opaque ID `missing` → 강제 503에서 둘 다 `unverified`/snapshot 유지/broken 0 →
+복구 후 `found|missing`/broken 1을 확인했다. test trip은 soft-delete해 활성 데이터에서 제거했고
+row/POI는 retention 대상이다. cache-disabled sentinel, 고유 prefix, batch 재호출 증가, 지도 popup/집계까지
+보강한 최종 **Live Playwright 1 passed (14.5s)**다. 동일 exact diff를 두 리뷰어가 재재검토해 모두
+P0/P1/P2 없음으로 승인했다.
+
+**다음 한 작업**: 보안 감사 후 PR을 만들고 CI green에서 머지한다.
+
 ## 2026-07-21 (claude) — TDR T-309a+T-309b(통합 검색 autocomplete + 외부 pick add-POI) — web UI 마지막
 
 **TDR Claude 단독 진행.** web UI DAG 전부 구현 완료: T-306(#404), T-307(#405), T-308(#406),
@@ -25,15 +54,16 @@ build_trip_view emit + Dagster asset(KASI 배치 fill, 20분) + py/zod 계약. �
 회귀(featureRequest source/external_ref) 수정.
 **TDR backend(T-301~305) 전부 완료. 남은 것 = web UI + N150 live e2e.**
 **다음 한 작업**: #401 머지 확인 후 남은 web UI 착수 —
-  - **T-306**(dep T-301,T-306a): day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
-    배너/아이콘(F1). `TripDayControls`/`TripDetail`.
-  - **T-307**(dep T-301): per-day 색 picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트
-    뱃지 parity) + PoiEditor F7 + fit-bounds(F6/F7).
-  - **T-308**(dep T-301,T-305): 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰
-    (`rise_set`/`rise_set_reference`)) + SharedTripView 렌더.
-  - **T-309a**(dep T-302): `MapSearchBox` onSelect union + address + source 아이콘 + 정렬 + attribution.
-  - **T-309b**(dep T-303): 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(+ T-309c의
-    feature-less POI 모달 통합).
+
+- **T-306**(dep T-301,T-306a): day-delete confirm(F2, `ConfirmDialog` 소비) + out-of-range actionable
+  배너/아이콘(F1). `TripDayControls`/`TripDetail`.
+- **T-307**(dep T-301): per-day 색 picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트
+  뱃지 parity) + PoiEditor F7 + fit-bounds(F6/F7).
+- **T-308**(dep T-301,T-305): 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰
+  (`rise_set`/`rise_set_reference`)) + SharedTripView 렌더.
+- **T-309a**(dep T-302): `MapSearchBox` onSelect union + address + source 아이콘 + 정렬 + attribution.
+- **T-309b**(dep T-303): 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더(+ T-309c의
+  feature-less POI 모달 통합).
   T-306/307/308은 trip-detail 파일(TripDetail/TripDayControls/TripDayHeader)에서 겹치므로 순차, T-309a/b는
   분리 가능. 검증 [[wsl-verify-gate]], live e2e는 N150.
 
@@ -48,20 +78,21 @@ display-only, degraded_providers), `price` in-bounds 추가, py+zod+api-client �
 브랜치 `agent/claude-tdr-detail-card`.
 **T-304는 PR #400로 머지 완료**(main 77aedbd). **다음 한 작업 = T-305**(ADR-055 §6, backend 마지막).
 스코프(그라운딩 완료, 브랜치 `agent/claude-tdr-day-rise-set`):
-  1) 마이그레이션 신규 `app.trip_day_rise_sets` key `(trip_id, day_index)` — `TripPoiRiseSet`
-     (`app/models/kasi.py`) 미러하되 day-keyed + reference_poi_id/reference_label 추가.
-  2) **결정적 기준 좌표**: 그 일자 POI centroid → 없으면 created_at-earliest(first-added) POI →
-     없으면 pending_coord. locdate = effective_date(파생).
-  3) 서비스: day 생성 시 seed + effective_date 변경 시 **파생-date 일자에만 scope된 단일 batched
-     UPDATE로 re-seed**(ADR-055). `build_initial_poi_rise_set`(`services/kasi.py`) 패턴 참고.
-  4) **Dagster asset** `pinvi_trip_day_rise_sets` — `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
-     미러(KasiResource + RetryPolicy + PinviDatabaseResource), pending 행을 KASI 출몰시각으로 fill.
-     `assets/__init__.py`·`definitions.py`·`jobs.py`·`schedules.py`에 등록. (현재 poi rise/set fill
-     asset은 없음 — day asset 신설.) 완료 시그널.
-  5) 읽기: `build_trip_view`가 `TripViewDay.rise_set` + `rise_set_reference`("XX 장소 기준") emit.
-     py+zod 계약(`schemas/trip.py` + `packages/schemas/src/trip.ts`).
-  6) 테스트: 기준좌표 해석 단위 + reseed + build_trip_view day rise/set + ETL asset(KASI provider mock).
-이후 **web UI: T-306/307/308/309a-c** → N150 live e2e. 검증 [[wsl-verify-gate]] + apps/api pytest/ruff/mypy.
+
+1. 마이그레이션 신규 `app.trip_day_rise_sets` key `(trip_id, day_index)` — `TripPoiRiseSet`
+   (`app/models/kasi.py`) 미러하되 day-keyed + reference_poi_id/reference_label 추가.
+2. **결정적 기준 좌표**: 그 일자 POI centroid → 없으면 created_at-earliest(first-added) POI →
+   없으면 pending_coord. locdate = effective_date(파생).
+3. 서비스: day 생성 시 seed + effective_date 변경 시 **파생-date 일자에만 scope된 단일 batched
+   UPDATE로 re-seed**(ADR-055). `build_initial_poi_rise_set`(`services/kasi.py`) 패턴 참고.
+4. **Dagster asset** `pinvi_trip_day_rise_sets` — `apps/etl/pinvi/etl/assets/pinvi_kasi_special_days.py`
+   미러(KasiResource + RetryPolicy + PinviDatabaseResource), pending 행을 KASI 출몰시각으로 fill.
+   `assets/__init__.py`·`definitions.py`·`jobs.py`·`schedules.py`에 등록. (현재 poi rise/set fill
+   asset은 없음 — day asset 신설.) 완료 시그널.
+5. 읽기: `build_trip_view`가 `TripViewDay.rise_set` + `rise_set_reference`("XX 장소 기준") emit.
+   py+zod 계약(`schemas/trip.py` + `packages/schemas/src/trip.ts`).
+6. 테스트: 기준좌표 해석 단위 + reseed + build_trip_view day rise/set + ETL asset(KASI provider mock).
+   이후 **web UI: T-306/307/308/309a-c** → N150 live e2e. 검증 [[wsl-verify-gate]] + apps/api pytest/ruff/mypy.
 
 ## 2026-07-21 (claude) — TDR T-303 외부 pick feature-request 파이프라인 (PR 대기)
 
@@ -153,7 +184,6 @@ PR #772의 단일 전문 리뷰 결과에 따라 Admin feature PATCH/DELETE가 �
 수정했다. upstream 412는 PinVi API에서도 412 `PRECONDITION_FAILED`로 보존하며 자동 재시도하지
 않는다. **다음 한 작업**은 API gate·보안 감사를 통과시킨 소비자 PR을 main에 먼저 머지하고,
 kor-travel-map PR #772를 `integration/t-vn`에 머지하는 것이다.
-
 
 ## 2026-07-19 (codex) — T-ADM-C7P API image provenance 머지 완료
 

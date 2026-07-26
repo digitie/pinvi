@@ -15,14 +15,14 @@
 
 ## 2. 권한
 
-| 액션 | owner | companion (editor) | companion (viewer) | shared link | anon |
-|------|-------|-------------------|-------------------|-------------|------|
-| 조회 | ✓ | ✓ | ✓ | token + read perm | ✗ |
-| 메타 편집 | ✓ | ✓ | ✗ | ✗ | ✗ |
-| POI CRUD | ✓ | ✓ | ✗ | ✗ | ✗ |
-| 삭제 / 이관 | ✓ | ✗ | ✗ | ✗ | ✗ |
-| 동반자 추가/제거 | ✓ | ✗ | ✗ | ✗ | ✗ |
-| 공유 발급/취소 | ✓ | ✗ | ✗ | ✗ | ✗ |
+| 액션             | owner | companion (editor) | companion (viewer) | shared link       | anon |
+| ---------------- | ----- | ------------------ | ------------------ | ----------------- | ---- |
+| 조회             | ✓     | ✓                  | ✓                  | token + read perm | ✗    |
+| 메타 편집        | ✓     | ✓                  | ✗                  | ✗                 | ✗    |
+| POI CRUD         | ✓     | ✓                  | ✗                  | ✗                 | ✗    |
+| 삭제 / 이관      | ✓     | ✗                  | ✗                  | ✗                 | ✗    |
+| 동반자 추가/제거 | ✓     | ✗                  | ✗                  | ✗                 | ✗    |
+| 공유 발급/취소   | ✓     | ✗                  | ✗                  | ✗                 | ✗    |
 
 ## 3. Trip CRUD
 
@@ -45,14 +45,12 @@ Cookie: pinvi_access=...
 
 ```jsonc
 {
-  "data": [
-    { "trip_id": "uuid", "title": "부산 2박 3일", "...": "TripResponse" }
-  ],
+  "data": [{ "trip_id": "uuid", "title": "부산 2박 3일", "...": "TripResponse" }],
   "meta": {
     "cursor": "eyJ2IjoxLCJvZmZzZXQiOjIwfQ", // 다음 페이지가 없으면 null
     "has_more": true,
-    "limit": 20
-  }
+    "limit": 20,
+  },
 }
 ```
 
@@ -99,7 +97,10 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 (없거나 조회 실패 시 `feature_snapshot` 사용). feature 없는 POI는 snapshot만 사용한다.
 `rise_set`은 POI 생성 시 KASI 위치별 해달
 출몰시각 row가 있으면 포함하며, 아직 처리 전이면 `pending_*` 상태로 내려간다. row가
-없으면 `rise_set`은 `null`이다.
+없으면 `rise_set`은 `null`이다. `feature_resolution_state`는 `not_linked|found|missing|unverified`다.
+`missing`은 kor-travel-map public projection에서 정보 사용이 불가능하다는 뜻이고,
+`unverified`는 transport/인증/계약 실패로 최신 상태를 확인하지 못해 저장 snapshot을 썼다는 뜻이다.
+`broken_feature_count`는 `missing`만 집계한다.
 
 응답 shape:
 
@@ -121,7 +122,7 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
             "feature": { "...": "snapshot 또는 최신 feature" },
             "marker_color": "P-01",
             "marker_icon": "beach",
-            "is_broken": false,
+            "feature_resolution_state": "found",
             "user_note": null,
             "planned_arrival_at": null,
             "planned_departure_at": null,
@@ -230,8 +231,8 @@ Content-Type: application/json
     "created_trip": true,
     "copied_day_count": 2,
     "copied_poi_count": 5,
-    "copied_attachment_count": 3
-  }
+    "copied_attachment_count": 3,
+  },
 }
 ```
 
@@ -350,8 +351,8 @@ Content-Type: application/json
     "token": "<43-char URL-safe base64>",
     "url": "https://pinvi.example.com/trips/<trip_id>/shared/<token>",
     "visibility": "...",
-    "expires_at": "..."
-  }
+    "expires_at": "...",
+  },
 }
 ```
 
@@ -376,8 +377,8 @@ token 검증 (`revoked_at IS NULL`, `expires_at > now()`). `last_used_at = now()
     "visibility": "view_only",
     "trip": { "...": "TripResponse" },
     "days": [{ "day_index": 1, "pois": [{ "...": "TripViewPoi" }] }],
-    "broken_feature_count": 0
-  }
+    "broken_feature_count": 0,
+  },
 }
 ```
 
@@ -405,13 +406,13 @@ Cookie: pinvi_access=...
       "trip_id": "uuid",
       "author_user_id": "uuid",
       "body": "일정 확인했습니다.",
-      "target_type": "trip",   // trip | day | poi
+      "target_type": "trip", // trip | day | poi
       "target_id": null,
       "day_index": null,
       "created_at": "2026-06-06T12:00:00+09:00",
-      "updated_at": "2026-06-06T12:00:00+09:00"
-    }
-  ]
+      "updated_at": "2026-06-06T12:00:00+09:00",
+    },
+  ],
 }
 ```
 
@@ -480,11 +481,11 @@ meter 정수 또는 좌표 누락 시 `null`을 반환한다. optimize는 `neare
 kor-travel-map live lookup을 수행하지 않는다. feature 최신 정보가 없어도
 `feature_snapshot`, POI 메모, 일정 순서만으로 출력 가능해야 한다.
 
-| 형식 | 초기 구현 | 권한 | 비고 |
-|------|-----------|------|------|
-| print | Web route `/trips/{trip_id}/print` | owner/editor/viewer + share `view_only` | 브라우저 print/PDF 저장의 원천 |
-| PDF | print route 기반 브라우저 PDF 저장 우선, server PDF는 후속 | owner/editor/viewer | 서버 생성 시 저장 없이 stream |
-| GPX | API file response | owner/editor/viewer | share token은 v1.0 초기 제외 |
+| 형식  | 초기 구현                                                  | 권한                                    | 비고                           |
+| ----- | ---------------------------------------------------------- | --------------------------------------- | ------------------------------ |
+| print | Web route `/trips/{trip_id}/print`                         | owner/editor/viewer + share `view_only` | 브라우저 print/PDF 저장의 원천 |
+| PDF   | print route 기반 브라우저 PDF 저장 우선, server PDF는 후속 | owner/editor/viewer                     | 서버 생성 시 저장 없이 stream  |
+| GPX   | API file response                                          | owner/editor/viewer                     | share token은 v1.0 초기 제외   |
 
 ### 11.1 `GET /trips/{trip_id}/exports/print-data`
 
@@ -517,13 +518,13 @@ presigned read URL 또는 thumbnail URL만 포함한다.
             "coord": { "lon": 129.0319, "lat": 35.1009 },
             "planned_arrival_at": "2026-06-01T14:00:00+09:00",
             "user_note": "...",
-            "rise_set": { "status": "success", "sunset_at": "..." }
-          }
-        ]
-      }
+            "rise_set": { "status": "success", "sunset_at": "..." },
+          },
+        ],
+      },
     ],
-    "warnings": []
-  }
+    "warnings": [],
+  },
 }
 ```
 

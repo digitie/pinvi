@@ -16,7 +16,9 @@ in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -37,6 +39,10 @@ _PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
 
 class KorTravelMapError(Exception):
     """kor-travel-map 호출 일반 오류."""
+
+
+class KorTravelMapContractError(KorTravelMapError):
+    """성공 HTTP 응답이 합의한 JSON/데이터 계약을 위반함."""
 
 
 class KorTravelMapUnavailable(KorTravelMapError):
@@ -203,10 +209,22 @@ class KorTravelMapClient:
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
             raise KorTravelMapBadRequest(f"kor-travel-map {sc}", code=_error_code(resp))
-        payload = resp.json()
+        try:
+            payload = json.loads(
+                resp.content,
+                object_pairs_hook=_object_without_duplicates,
+                parse_constant=_reject_non_finite_constant,
+                parse_float=_finite_json_float,
+            )
+        except KorTravelMapContractError:
+            raise
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise KorTravelMapContractError(
+                f"kor-travel-map JSON 응답을 해석할 수 없습니다({resp.request.url.path})"
+            ) from exc
         data = payload.get("data") if isinstance(payload, Mapping) else None
         if not isinstance(data, dict):
-            raise KorTravelMapError(f"예상치 못한 응답 셰입({resp.request.url.path})")
+            raise KorTravelMapContractError(f"예상치 못한 응답 셰입({resp.request.url.path})")
         meta = payload.get("meta") if isinstance(payload, Mapping) else None
         return data, meta if isinstance(meta, dict) else {}
 
@@ -284,23 +302,59 @@ class KorTravelMapClient:
         """배치 조회 — cap 초과 시 청크 분할. data = {found: {id: detail}, missing: [id]}.
 
         id-keyed map 키는 ADR-048에서 `items`→`found`로 확정(list `items[]`와 타입 분리).
-        inactive feature(reject/tombstone/deactivate)는 `missing`이 아니라 `found`에
-        status와 함께 옴(kor_travel_map D-12) — 호출자(snapshot fallback)가 "철회/폐업" 분기.
+        현재 2-state public projection에서 조회할 수 없는 ID는 원인 구분 없이 `missing`이다.
+        상태 원인을 구분하는 5-state 계약은 T-VN-11과 같은 cutover에서 적용한다.
         """
         unique = list(dict.fromkeys(feature_ids))
         found: dict[str, Any] = {}
         missing: list[str] = []
         for start in range(0, len(unique), self._batch_chunk_size):
             chunk = unique[start : start + self._batch_chunk_size]
-            data = self._data(
-                await self._send("POST", "/v1/features/batch", json={"feature_ids": chunk})
-            )
+            response = await self._send("POST", "/v1/features/batch", json={"feature_ids": chunk})
+            if response.status_code == status.HTTP_404_NOT_FOUND:
+                raise KorTravelMapContractError("feature batch endpoint가 404를 반환했습니다.")
+            data = self._data(response)
             chunk_found = data.get("found")
-            if isinstance(chunk_found, dict):
-                found.update(chunk_found)
             chunk_missing = data.get("missing")
-            if isinstance(chunk_missing, list):
-                missing.extend(str(x) for x in chunk_missing)
+            if (
+                set(data) != {"found", "missing"}
+                or not isinstance(chunk_found, dict)
+                or not all(
+                    isinstance(feature_id, str)
+                    and isinstance(feature, dict)
+                    and feature.get("feature_id") == feature_id
+                    and isinstance(feature.get("name"), str)
+                    and (
+                        feature.get("marker_color") is None
+                        or isinstance(feature.get("marker_color"), str)
+                    )
+                    and (
+                        feature.get("marker_icon") is None
+                        or isinstance(feature.get("marker_icon"), str)
+                    )
+                    for feature_id, feature in chunk_found.items()
+                )
+                or not isinstance(chunk_missing, list)
+                or not all(isinstance(feature_id, str) for feature_id in chunk_missing)
+            ):
+                raise KorTravelMapContractError(
+                    "feature batch 응답 partition 셰입이 올바르지 않습니다."
+                )
+
+            requested_ids = set(chunk)
+            found_ids = set(chunk_found)
+            missing_ids = set(chunk_missing)
+            if (
+                len(missing_ids) != len(chunk_missing)
+                or found_ids & missing_ids
+                or found_ids | missing_ids != requested_ids
+            ):
+                raise KorTravelMapContractError(
+                    "feature batch 응답이 요청 ID를 found/missing으로 정확히 분할하지 않습니다."
+                )
+
+            found.update(chunk_found)
+            missing.extend(chunk_missing)
         return {"found": found, "missing": missing}
 
     async def features_nearby(
@@ -554,6 +608,31 @@ class KorTravelMapClient:
         resp = await self._send("GET", "/health")
         body = resp.json()
         return body if isinstance(body, dict) else {"status": "unknown"}
+
+
+def _reject_non_finite_constant(value: str) -> Any:
+    raise KorTravelMapContractError(f"kor-travel-map JSON 응답에 비유한 수가 있습니다: {value}")
+
+
+def _finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise KorTravelMapContractError(
+            f"kor-travel-map JSON 응답에 범위를 벗어난 실수가 있습니다: {value}"
+        )
+    return parsed
+
+
+def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """JSON object의 중복 member를 마지막 값으로 조용히 덮어쓰지 않는다."""
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise KorTravelMapContractError(
+                f"kor-travel-map JSON 응답에 중복 key가 있습니다: {key}"
+            )
+        value[key] = item
+    return value
 
 
 def _error_code(resp: httpx.Response) -> str | None:

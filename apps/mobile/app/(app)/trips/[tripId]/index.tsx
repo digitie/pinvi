@@ -88,7 +88,10 @@ export default function TripDetailScreen() {
   if (tripQuery.isError || !tripQuery.data) {
     return (
       <Screen>
-        <ErrorView message={friendlyErrorText(tripQuery.error)} onRetry={() => tripQuery.refetch()} />
+        <ErrorView
+          message={friendlyErrorText(tripQuery.error)}
+          onRetry={() => tripQuery.refetch()}
+        />
       </Screen>
     );
   }
@@ -104,7 +107,9 @@ export default function TripDetailScreen() {
           {trip.description ? <Body>{trip.description}</Body> : null}
           <View className="flex-row flex-wrap gap-2 pt-1">
             <Badge label={STATUS_LABELS[trip.status] ?? trip.status} />
-            {broken_feature_count > 0 ? <Badge label={`연결 끊김 ${broken_feature_count}`} /> : null}
+            {broken_feature_count > 0 ? (
+              <Badge label={`정보 사용 불가 ${broken_feature_count}`} />
+            ) : null}
           </View>
           <Button
             label="편집"
@@ -136,7 +141,11 @@ export default function TripDetailScreen() {
                       <View className="flex-1">
                         <Body className="font-medium text-ink">
                           {poi.title ?? '제목 없는 장소'}
-                          {poi.is_broken ? ' · (연결 끊김)' : ''}
+                          {poi.feature_resolution_state === 'missing'
+                            ? ' · (장소 정보 사용 불가)'
+                            : poi.feature_resolution_state === 'unverified'
+                              ? ' · (저장된 정보 · 최신 상태 확인 실패)'
+                              : ''}
                         </Body>
                         {poi.user_note ? <Muted>{poi.user_note}</Muted> : null}
                       </View>
@@ -173,7 +182,10 @@ export default function TripDetailScreen() {
                     <Button
                       label="해제"
                       variant="secondary"
-                      loading={revokeShareMutation.isPending && revokeShareMutation.variables === link.share_id}
+                      loading={
+                        revokeShareMutation.isPending &&
+                        revokeShareMutation.variables === link.share_id
+                      }
                       onPress={() => confirmRevoke(link.share_id)}
                     />
                   ) : null}
@@ -187,9 +199,7 @@ export default function TripDetailScreen() {
               <Text selectable className="text-sm text-ink">
                 {issuedShareUrl}
               </Text>
-              <Muted>
-                이 링크는 지금만 표시됩니다. 길게 눌러 복사해 안전한 곳에 보관하세요.
-              </Muted>
+              <Muted>이 링크는 지금만 표시됩니다. 길게 눌러 복사해 안전한 곳에 보관하세요.</Muted>
               <Button label="숨기기" variant="ghost" onPress={() => setIssuedShareUrl(null)} />
             </View>
           ) : null}

@@ -23,7 +23,7 @@ export interface TripMapPoint {
   icon: string;
   category: string | null;
   kind: string | null;
-  isBroken: boolean;
+  featureResolutionState: TripViewPoi['feature_resolution_state'];
 }
 
 /** opaque feature dict 에서 `coord.{lon,lat}` 를 안전하게 추출. 실패 시 null. */
@@ -62,7 +62,7 @@ export function tripPoiToMapPoint(poi: TripViewPoi, dayIndex: number): TripMapPo
     icon: style.icon,
     category: style.category,
     kind: style.kind,
-    isBroken: poi.is_broken,
+    featureResolutionState: poi.feature_resolution_state,
   };
 }
 

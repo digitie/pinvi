@@ -15,7 +15,7 @@ function poi(over: Partial<TripViewPoi> & { feature: Record<string, unknown> }):
     title: '경복궁',
     marker_color: 'P-09',
     marker_icon: 'museum',
-    is_broken: false,
+    feature_resolution_state: 'found',
     user_note: null,
     planned_arrival_at: null,
     planned_departure_at: null,
@@ -56,8 +56,27 @@ describe('tripMapPoints', () => {
       markerColor: 'P-09',
       markerSource: 'resolved',
       icon: 'museum',
-      isBroken: false,
+      featureResolutionState: 'found',
     });
+  });
+
+  it('tripPoiToMapPoint: missing/unverified 해석 상태를 지도까지 보존', () => {
+    const missing = tripPoiToMapPoint(
+      poi({
+        feature_resolution_state: 'missing',
+        feature: { coord: { lon: 126.977, lat: 37.5796 } },
+      }),
+      1,
+    );
+    const unverified = tripPoiToMapPoint(
+      poi({
+        feature_resolution_state: 'unverified',
+        feature: { coord: { lon: 126.978, lat: 37.58 } },
+      }),
+      1,
+    );
+    expect(missing?.featureResolutionState).toBe('missing');
+    expect(unverified?.featureResolutionState).toBe('unverified');
   });
 
   it('tripPoiToMapPoint: display_marker_color(서버 계산)를 우선 사용해 지도/리스트 parity', () => {

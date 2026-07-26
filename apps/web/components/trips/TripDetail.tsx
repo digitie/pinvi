@@ -150,9 +150,7 @@ function validDateValue(value: string | null): boolean {
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }
 
@@ -703,7 +701,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const addPoiToSelectedDay = (input: {
     feature_id: string | null;
     source: 'feature' | 'manual' | 'kakao' | 'naver';
-    external_ref: { provider: 'kakao' | 'naver'; external_id: string; deep_link_url: string | null } | null;
+    external_ref: {
+      provider: 'kakao' | 'naver';
+      external_id: string;
+      deep_link_url: string | null;
+    } | null;
     coord: { lon: number; lat: number };
     name: string;
     category: string | null;
@@ -910,10 +912,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
     if (!hasPatchFields(patch)) return;
-    void runMutation(
-      () => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch),
-      { onConflict: dayConflictNotice },
-    );
+    void runMutation(() => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch), {
+      onConflict: dayConflictNotice,
+    });
   };
 
   const dayVersion = (dayIndex: number) =>
@@ -939,8 +940,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         await reload();
       } catch (err) {
         if (err instanceof ApiError && err.status === 409 && err.code === 'DAY_HAS_POIS') {
-          const poiCount =
-            typeof err.details?.poi_count === 'number' ? err.details.poi_count : 0;
+          const poiCount = typeof err.details?.poi_count === 'number' ? err.details.poi_count : 0;
           setDayDeleteConfirm({ dayIndex, poiCount });
           return;
         }
@@ -1351,7 +1351,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               {view.broken_feature_count > 0 && (
                 <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
                   <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                  끊긴 장소 {view.broken_feature_count}곳
+                  정보 사용 불가 {view.broken_feature_count}곳
                 </p>
               )}
               <p
@@ -1478,7 +1478,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 {view.broken_feature_count > 0 && (
                   <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
                     <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                    끊긴 장소 {view.broken_feature_count}곳
+                    정보 사용 불가 {view.broken_feature_count}곳
                   </p>
                 )}
                 <p

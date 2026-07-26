@@ -144,7 +144,9 @@ export const TripResponseSchema = z.object({
 export type TripResponse = z.infer<typeof TripResponseSchema>;
 
 // 일자/POI 마커 색 override — 팔레트 키 P-01~P-16 (ADR-055).
-const MarkerColorKeySchema = z.string().regex(/^P-(0[1-9]|1[0-6])$/, 'marker color는 P-01~P-16 형식.');
+const MarkerColorKeySchema = z
+  .string()
+  .regex(/^P-(0[1-9]|1[0-6])$/, 'marker color는 P-01~P-16 형식.');
 
 export const TripDayCreateSchema = z.object({
   day_index: z.number().int().min(1).optional(),
@@ -229,7 +231,7 @@ export const TripViewPoiSchema = z.object({
   marker_icon: z.string().nullable(),
   // 지도 핀·목록 뱃지 parity용 서버 계산 색(custom > 일자색). 항상 유효 팔레트 키(ADR-055).
   display_marker_color: z.string().nullable().default(null),
-  is_broken: z.boolean(),
+  feature_resolution_state: z.enum(['not_linked', 'found', 'missing', 'unverified']),
   user_note: z.string().nullable(),
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
