@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-26 12:20 (claude) — T-ADM-C6c 후속: cancel-path 음성 계약 하드닝 + #392 판정
+
+- C6c ops-caller cutover(PR #387 datasets/pipeline + #393 관측 read principal 결선)는 머지·2차 적대 검토
+  완료. 본 작업은 검토가 남긴 소규모 후속만 처리.
+- **cancel-path 음성 계약 보강**: `test_cancel_ops_pipeline_execution_uses_cancel_principal`이 admin BFF
+  자격증명 없이 client를 만들어 admin 헤더 부재를 검증하지 않았다 → cancel 요청에 admin proxy-secret/actor/
+  service-token이 additive로 병합되는 회귀가 통과할 여지. read-path 테스트
+  (`test_ops_pipeline_overview_uses_read_principal_only`)를 미러: client를 `admin_proxy_secret`/`admin_actor`
+  sentinel로 구성하고 세 admin 헤더 부재를 assert(기존 scope==ops:cancel / cancel-token / body 검증 유지).
+  `_ops_headers`가 admin 헤더를 방출하지 않으므로 green.
+- **stale 문서(선택 task) — skip**: resume.md ~2293 / execplan admin-console-gap-plan.md ~270의 deprecated
+  route 서술은 2026-06-27 날짜 이력(T-220 저널 / T-211 완료 plan)이며 그 시점엔 정확했다. 현행 문서
+  (resume.md:141, tasks.md:42, integrations/kor-travel-map-rest-api.md:41)는 이미 canonical 전환을 정확히
+  기술한다. 날짜 이력을 in-place로 고쳐쓰면 C6c cutover 이력을 흐려 falsify → 미변경(history+current 쌍이 이미 정합).
+- **#392 판정 — OPEN 유지**: 코드 컷오버(관측 read 4 caller `ops:read` 결선, admin/service/BFF fallback 부재,
+  metrics/health-deep 부재 계약)는 #393로 완료. 그러나 #392 완료조건은 exact-pair manifest v4 + n150 prod
+  live + 교차 리뷰 등 **운영 활성화**(docker-manager 배포 단위)를 포함 → 코드 완료+검증 / 활성화 대기 코멘트 후 OPEN 유지.
+- 게이트(WSL 미러, pinvi-claude venv): `ruff check .` / `ruff format --check`(343) / `mypy --strict app`(196) /
+  `pytest tests/unit` **664 passed·1 skipped**.
+
 ## 2026-07-21 11:10 (claude) — TDR T-309a+T-309b(통합 검색 autocomplete + 외부 pick add-POI, web UI 마지막)
 
 - T-302/T-303 backend 계약이 머지돼 unblock. 두 task는 `MapSearchBox`/`TripDetail`를 공유해 커플링이

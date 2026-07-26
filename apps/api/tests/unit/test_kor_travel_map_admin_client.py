@@ -741,6 +741,7 @@ async def test_cancel_ops_pipeline_execution_uses_cancel_principal() -> None:
         seen["scope"] = request.headers.get("X-Kor-Travel-Map-Ops-Scope")
         seen["token"] = request.headers.get("X-Kor-Travel-Map-Ops-Token")
         seen["request_id"] = request.headers.get("X-Request-Id")
+        seen["headers"] = dict(request.headers)
         return httpx.Response(
             200,
             json={
@@ -756,7 +757,11 @@ async def test_cancel_ops_pipeline_execution_uses_cancel_principal() -> None:
             },
         )
 
-    client = _client(handler)
+    client = _client(
+        handler,
+        admin_proxy_secret="must-not-leak",
+        admin_actor="must-not-leak",
+    )
     scoped = client.with_request_id("00000000-0000-4000-8000-000000000321")
     data = await scoped.cancel_ops_pipeline_execution(
         "11111111-1111-4111-8111-111111111111",
@@ -770,6 +775,9 @@ async def test_cancel_ops_pipeline_execution_uses_cancel_principal() -> None:
     assert seen["scope"] == "ops:cancel"
     assert seen["token"] == "ops-cancel-tok"
     assert seen["request_id"] == "00000000-0000-4000-8000-000000000321"
+    assert "x-kor-travel-map-admin-proxy-secret" not in seen["headers"]
+    assert "x-kor-travel-map-actor" not in seen["headers"]
+    assert "x-kor-travel-map-service-token" not in seen["headers"]
     assert data["status"] == "completed"
     await client.aclose()
 
