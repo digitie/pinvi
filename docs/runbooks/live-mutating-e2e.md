@@ -9,6 +9,7 @@ Windows runner를 fallback으로 사용한다.
 
 - `apps/web/e2e/trip-realtime-live-mutating.live.ts`
 - `apps/web/e2e/trip-day-hole-live-mutating.live.ts`
+- `apps/web/e2e/trip-feature-resolution-live-mutating.live.ts`
 - `apps/web/e2e/admin-backup-live-mutating.live.ts`
 - verified 사용자 계정으로 두 browser context를 로그인한다.
 - test prefix가 붙은 임시 Trip을 생성하고, 실제 `WS /ws/trips/{trip_id}` 연결 상태를 확인한다.
@@ -16,7 +17,10 @@ Windows runner를 fallback으로 사용한다.
   reload로 반영되는지 확인한다.
 - browser에서 WebSocket을 닫아 client reconnect를 유도한 뒤, 두 번째 mutation이 최신 snapshot으로
   보이는지 확인한다.
-- 종료 시 생성한 Trip은 사용자 API `DELETE /trips/{trip_id}` `soft_delete`로 정리한다.
+- 종료 시 생성한 Trip은 사용자 API `DELETE /trips/{trip_id}` `soft_delete`로 활성 데이터에서
+  제거한다. DB row와 POI는 retention 정책 대상이며 즉시 hard-delete하지 않는다.
+- Feature resolution suite는 실 Map feature와 opaque ID POI를 생성해 `found|missing`, proxy 강제 503의
+  `unverified`, 복구를 owner 목록·지도 popup·집계에서 확인한다. 격리 API는 feature cache를 반드시 끈다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
@@ -82,6 +86,33 @@ PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
 PINVI_LIVE_SCREENSHOT_DIR="$PWD/../../.codex_tmp/live-e2e/trip-day-hole" \
 npm run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
 ```
+
+### Feature resolution 단건
+
+동시 실행이 다른 run을 정리하지 않도록 `PINVI_LIVE_TRIP_PREFIX`는 run마다 고유해야 한다. 격리 API는
+`PINVI_FEATURE_CACHE_ENABLED=false`로 기동하고, 테스트 프로세스에는 확인 sentinel을 전달한다. 테스트는
+batch 요청 횟수와 상태 전환을 함께 검증하므로 cache가 켜졌거나 proxy를 우회하면 실패한다.
+
+```bash
+# 격리 API container/server 환경
+export PINVI_FEATURE_CACHE_ENABLED=false
+export PINVI_KOR_TRAVEL_MAP_API_BASE_URL=http://127.0.0.1:13701
+
+# Playwright 환경
+PINVI_LIVE_FEATURE_RESOLUTION_E2E=1 \
+PINVI_LIVE_FEATURE_CACHE_DISABLED=1 \
+PINVI_LIVE_TRIP_PREFIX="[codex-tvn08-<unique-run-id>]" \
+PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
+PINVI_LIVE_API_URL=http://127.0.0.1:13801 \
+PINVI_LIVE_MAP_PROXY_PORT=13701 \
+PINVI_LIVE_MAP_UPSTREAM_PORT=12701 \
+PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
+PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
+npm run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
+```
+
+격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 실패 시 현재 run이 출력한
+고유 prefix로 활성 Trip만 수동 soft-delete하며, 다른 prefix의 Trip을 일괄 삭제하지 않는다.
 
 Backup staging:
 

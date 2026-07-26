@@ -35,7 +35,7 @@ function poi() {
     feature: { coord: { lon: 126.977, lat: 37.5796 } },
     marker_color: 'P-09',
     marker_icon: 'museum',
-    is_broken: false,
+    feature_resolution_state: 'found',
     user_note: null,
     planned_arrival_at: null,
     planned_departure_at: null,
@@ -121,7 +121,10 @@ test('동반자를 초대하면 목록에 나타난다', async ({ page }) => {
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/members$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     invited = true;
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: companion() }) });
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: companion() }),
+    });
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
@@ -340,10 +343,7 @@ test('일자 설정에서 색을 고르면 marker_color가 PATCH된다 (F6)', as
   await page.getByTestId('trip-day-rename').first().click();
   await expect(page.getByTestId('trip-day-color-picker')).toBeVisible();
   await page.getByTestId('trip-day-color-P-05').click();
-  await page
-    .getByTestId('trip-day-title-dialog')
-    .getByRole('button', { name: '저장' })
-    .click();
+  await page.getByTestId('trip-day-title-dialog').getByRole('button', { name: '저장' }).click();
 
   await expect.poll(() => patchedColor).toBe('P-05');
 });

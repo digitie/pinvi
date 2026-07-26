@@ -84,20 +84,20 @@
 **구현 완료**됐다. kor-travel-map은 `packages/kor-travel-map-api`(FastAPI, 포트 **12701**)에
 Pinvi-facing `openapi.user.json`을 export하고, 다음 사용자 표면 엔드포인트를 제공한다:
 
-| 능력 | 엔드포인트 | 직전 상태 → 현재 |
-|------|-----------|------------------|
-| bbox + 클러스터 | `GET /features/in-bounds` | 클러스터 미지원 → **서버 클러스터(`cluster_unit`) 지원** |
-| 단건 상세 | `GET /features/{feature_id}` | ✅ |
-| **배치** | `POST /v1/features/batch` (구 `/pinvi/features/batch`) | ❌ → **✅(cap ≤200, 응답 `data.found`)** |
-| 반경 | `GET /features/nearby` / `/nearby/by-target` | ❌ → **✅(cursor)** |
-| 텍스트 검색 | `GET /features/search` | ❌ → **✅(cursor)** |
-| 날씨 카드 | `GET /features/{feature_id}/weather` | 미구현 → **✅(metric 목록)** |
-| 카테고리 | `GET /categories` | export만 → **✅ HTTP** |
-| 공개 해수욕장 | `GET /v1/public/beaches*` | kor_travel_map T-222b → **✅(목록·상세·marker)** |
-| 공개 축제 | `GET /v1/public/festivals*` | kor_travel_map T-222b → **✅(월별 목록·상세·marker)** |
-| feature 갱신요청 | `POST /v1/admin/feature-update-requests` + `GET .../{id}` (kor_travel_map 운영자 전용, §2.8) | ❌ → **✅** |
-| provider 신선도 | `GET /providers/{provider}/last-sync` | — → ✅ |
-| health/version | `GET /health`, `GET /version` | — → ✅ |
+| 능력             | 엔드포인트                                                                                   | 직전 상태 → 현재                                         |
+| ---------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| bbox + 클러스터  | `GET /features/in-bounds`                                                                    | 클러스터 미지원 → **서버 클러스터(`cluster_unit`) 지원** |
+| 단건 상세        | `GET /features/{feature_id}`                                                                 | ✅                                                       |
+| **배치**         | `POST /v1/features/batch` (구 `/pinvi/features/batch`)                                       | ❌ → **✅(cap ≤200, 응답 `data.found`)**                 |
+| 반경             | `GET /features/nearby` / `/nearby/by-target`                                                 | ❌ → **✅(cursor)**                                      |
+| 텍스트 검색      | `GET /features/search`                                                                       | ❌ → **✅(cursor)**                                      |
+| 날씨 카드        | `GET /features/{feature_id}/weather`                                                         | 미구현 → **✅(metric 목록)**                             |
+| 카테고리         | `GET /categories`                                                                            | export만 → **✅ HTTP**                                   |
+| 공개 해수욕장    | `GET /v1/public/beaches*`                                                                    | kor_travel_map T-222b → **✅(목록·상세·marker)**         |
+| 공개 축제        | `GET /v1/public/festivals*`                                                                  | kor_travel_map T-222b → **✅(월별 목록·상세·marker)**    |
+| feature 갱신요청 | `POST /v1/admin/feature-update-requests` + `GET .../{id}` (kor_travel_map 운영자 전용, §2.8) | ❌ → **✅**                                              |
+| provider 신선도  | `GET /providers/{provider}/last-sync`                                                        | — → ✅                                                   |
+| health/version   | `GET /health`, `GET /version`                                                                | — → ✅                                                   |
 
 Pinvi는 feature read cutover와 drift gate를 완료했고, 2026-06-12에는 public
 beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-repo 소비 작업은 kor_travel_map
@@ -196,6 +196,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 각 항목: 호출 형태 → 응답 핵심 셰입 → Pinvi 소비처 → 매핑/주의.
 
 ### 2.1 `GET /v1/features/in-bounds` — 지도 viewport
+
 - **params**: `min_lon* min_lat* max_lon* max_lat*`(number), `kind`(repeat), `category`,
   `zoom`, `cluster_unit`, `max_items`(≤2000, 기본 1000 — 구 `limit` 폐기).
 - **200 `FeaturesInBoundsResponse`**: `data:{ clusters:[ClusterSummary], items:[FeatureSummary] }, meta:{duration_ms, request_id, cluster?:{cluster_unit}}`
@@ -209,28 +210,41 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   Pinvi 현재 schema(`cluster_id/center/feature_count/sample_kinds/bbox`)와 다름 → 정렬 필요.
 
 ### 2.2 `GET /v1/features/{feature_id}` — 단건 상세
+
 - **params**: `feature_id*`(**string** path).
 - **200 `FeatureDetailEnvelopeResponse`**: `data:FeatureDetailResponse` =
   `{ feature_id, kind, name, category, lon|null, lat|null, address(object), legal_dong_code|null,
-  sido_code|null, sigungu_code|null, marker_color|null, marker_icon|null, urls(object),
-  detail(object), status, updated_at }`.
+sido_code|null, sigungu_code|null, marker_color|null, marker_icon|null, urls(object),
+detail(object), status, updated_at }`.
 - **소비처**: 마커 클릭 상세, POI 추가 시 검증. 404 = `FEATURE_NOT_FOUND`.
 - **주의**: `name`(Pinvi 코드의 `title` 아님), `address`는 **구조화 객체**(평면
   `address_road/address_jibun` 아님) → schema 정렬(§6-D).
 
 ### 2.3 `POST /v1/features/batch` — 배치 조회 (성능 핵심)
+
 - **body `FeatureBatchRequest`**: `{ feature_ids: [string] }` (**cap ≤200**, 초과 시 `TOO_MANY_IDS`).
 - **200 `FeatureBatchResponse`**: `data:{ found: { <feature_id>: <FeatureDetail> }, missing:[string] }, meta:{...}`.
   (2026-06-10: id-keyed map 키가 `items`→**`found`**로 확정 — list `items[]`(배열)와
   타입 분리, 우리 §7 제안 수용. **client `_data().get("items")` 파싱은 T-181에서 `found`로
   교체 필수** — 현재는 전 결과가 조용히 missing 처리됨.)
 - **소비처**: `GET /trips/{id}`의 `trip_view_builder` — trip POI들의 `feature_id[]`로 최신
-  feature 일괄 조회(N+1 방지). `missing`은 삭제/없음 → POI `feature_snapshot` fallback + `is_broken`.
-- **주의**: 200개 초과 trip은 **client에서 청크 분할** 호출. Pinvi
-  `trip_view_builder`가 기대하는 `features_by_ids(list[uuid]) -> list` (UUID·list)를
-  `{items,missing}` map·string으로 교체(§6-F).
+  feature 일괄 조회(N+1 방지). 성공 응답은 요청 ID 전체를 서로 겹치지 않는 `found|missing`으로
+  정확히 분할해야 한다. 현재 public 2-state의 `missing`은 물리 삭제가 아니라 public projection에서
+  조회할 수 없다는 뜻이다. PinVi는 POI별 `feature_resolution_state`를
+  `not_linked|found|missing|unverified`로 노출하고 missing POI만 broken count에 포함한다.
+  transport/rate-limit/contract 실패는 snapshot을 유지한 `unverified`다(T-VN-08).
+- **fail-closed**: 현 decoder는 data key가 exact `found|missing`이어야 한다. detail 내부
+  `feature_id`는 outer key와 exact 일치하고 `name`/`marker_*` 직접 소비 필드 타입이 유효해야 하며,
+  JSON object 중복 member도 거부한다. T-VN-11 key가 일부 섞인 응답을 조용히 부분 수용하지 않는다.
+- **주의**: 200개 초과 trip은 **client에서 청크 분할** 호출.
+- **식별자**: `feature_id`는 `@` 같은 문자를 포함할 수 있는 불투명 문자열이다. PinVi는 suffix를
+  분리하거나 포맷을 해석하지 않고 저장값과 응답 key를 exact 비교한다.
+- **후속(T-VN-11-P)**: kor-travel-map의 5-state
+  `found|retired|suppressed|missing|unchanged + revision` 전환과 같은 cutover에서 typed consumer
+  계약을 적용한다. transport 실패는 upstream state로 축약하지 않고 소비자 `unverified`로 둔다.
 
 ### 2.4 `GET /v1/features/nearby` — 반경 + `…/nearby/by-target`
+
 - **nearby params**: `lon* lat* radius_m*`, `kind` `category` `status` `provider`,
   `page_size`, `cursor`, `sort`(기본 distance).
 - **200 `FeaturesNearbyResponse`**: `data:{ origin:NearbyOriginSummary, items:[NearbyFeatureSummary] }, meta:{..., page:{page_size, next_cursor, total}}`.
@@ -242,6 +256,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 - **소비처**: "내 위치/POI 주변 N km". cursor 페이지네이션.
 
 ### 2.5 `GET /v1/features/search` — 텍스트 검색
+
 - **params**: `q`, `kind`, `category`, 분리 4-float bbox(`min_lon/min_lat/max_lon/max_lat`),
   `page_size`, `cursor`, `include_total`(opt-in) — q 또는 bbox 필요. (구 `limit`/CSV bbox 폐기.)
 - **200 `FeatureSearchResponse`**: `data:{ items:[FeatureSummary] }, meta:{..., page:{page_size, next_cursor, total|null}}`.
@@ -249,11 +264,12 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   **kor-travel-geo v2 직접**(ADR-025), 내 POI는 Pinvi 로컬 — 합쳐서 응답.
 
 ### 2.6 `GET /v1/features/{feature_id}/weather` — 날씨 카드
+
 - **params**: `feature_id*`, `asof`(선택).
 - **200 `FeatureWeatherResponse`**: `data:WeatherCardData` =
   `{ feature_id, asof|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
   `WeatherMetricOut` = `{ metric_key, metric_name|null, forecast_style, timeline_bucket|null,
-  valid_at|null, issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
+valid_at|null, issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
 - **소비처**: feature 상세 날씨, 텔레그램 brief.
 - **주의(셰입 대수술)**: kor_travel_map는 **평탄한 metric 목록 + forecast_style 태그**를 준다.
   Pinvi 현재 schema는 `{short_term[], daily[], sources[]}`, features.md는
@@ -262,11 +278,12 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   (변환은 Pinvi 표현 계층, KMA provider 변환 직접 작성 아님 — 금지룰 준수)(§6-D).
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
+
 - **params**: `include_counts`, `active_only`.
 - **200 `CategoriesResponse`**: `data:{ items:[CategorySummary] }` (+`include_counts` 관련
   필드는 최신 `openapi.user.json` 확인 — `count`류는 envelope 표준화로 폐기 계열).
   `CategorySummary` = `{ code(8자리), label, parent_code|null, depth, path:[str], maki_icon,
-  tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null }`.
+tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null }`.
 - **소비처**: 마커 범례, 필터 칩, Admin 카테고리 매핑. 저빈도 → 클라이언트 캐시(긴 TTL).
 
 ### 2.8 재적재 vs 사용자 제안 — 완전히 별개 (DEC-05 확정, 2026-06-08)
@@ -274,6 +291,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 **둘은 다른 작업이고 서로 연결되지 않는다.**
 
 **(A) 재적재(feature-update-request) = kor-travel-map Admin — Pinvi 제품 무관**
+
 - **경로 변경(kor_travel_map PR #317)**: `/pinvi/feature-update-requests*` alias **제거** →
   **`/v1/admin/feature-update-requests*`** 로 고정(admin spec — **API는 :12701**).
   `POST`(create/dry-run) / `GET /{id}` / `POST /{id}/cancel` / `POST /{id}/run-now`.
@@ -282,6 +300,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   Pinvi 제품은 surface하지 않는다.
 
 **(B) 사용자 feature 제안 = Pinvi 소유 → 승인 시 kor_travel_map feature change API로 반영**
+
 - ① **사용자 제안 큐** (user 도메인, T-177 완료): `app.feature_suggestions` +
   `POST /features/requests`(즉시 201) + `GET /features/requests/{id}`.
   rate-limit/dedup. **kor_travel_map 직접 호출 X.**
@@ -295,13 +314,13 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 `place`/`event`만 대상. **kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로
 공식 승인** — 별도 suggestions API는 만들지 않는다.
 
-| 동작 | 호출 | body 핵심 | 응답 |
-|------|------|-----------|------|
-| 추가 | `POST /admin/features` | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `marker_color*`, `marker_icon*`, `reason*`, `coord{lat,lon}`, address/코드, `detail`, `urls`, `status(draft\|active\|inactive\|hidden)`, `feature_id?`, `idempotency_key?`, `operator?` | `AdminFeatureChangeResponse` |
-| 수정 | `PATCH /admin/features/{feature_id}` | `AdminFeaturePatchRequest`: 전 필드 optional + `reason*` | 〃 |
-| 삭제(soft) | `DELETE /admin/features/{feature_id}` | `AdminFeatureDeleteRequest`: `reason*`, `operator?` | 〃 |
-| 비활성 | `POST /admin/features/{feature_id}/deactivate` | `AdminFeatureDeactivateRequest` | — |
-| 검수 큐 | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason) | 〃 |
+| 동작       | 호출                                                                   | body 핵심                                                                                                                                                                                                                                                         | 응답                         |
+| ---------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `marker_color*`, `marker_icon*`, `reason*`, `coord{lat,lon}`, address/코드, `detail`, `urls`, `status(draft\|active\|inactive\|hidden)`, `feature_id?`, `idempotency_key?`, `operator?` | `AdminFeatureChangeResponse` |
+| 수정       | `PATCH /admin/features/{feature_id}`                                   | `AdminFeaturePatchRequest`: 전 필드 optional + `reason*`                                                                                                                                                                                                          | 〃                           |
+| 삭제(soft) | `DELETE /admin/features/{feature_id}`                                  | `AdminFeatureDeleteRequest`: `reason*`, `operator?`                                                                                                                                                                                                               | 〃                           |
+| 비활성     | `POST /admin/features/{feature_id}/deactivate`                         | `AdminFeatureDeactivateRequest`                                                                                                                                                                                                                                   | —                            |
+| 검수 큐    | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason)                                                                                                                                                                                                                | 〃                           |
 
 - **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
   `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
@@ -311,7 +330,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   변경을 재검토·재제출하게 한다. change-request approve는 제출 당시 kor_travel_map이 저장한
   `base_row_revision`을 사용하므로 Pinvi가 별도 `If-Match`를 보내지 않는다.
 - **응답 `data.request`(AdminFeatureChangeRequestRecord)**: `feature_id, request_id, action,
-  state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, created_at`. → Pinvi는
+state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, created_at`. → Pinvi는
   `feature_id`+`request_id`를 `feature_suggestions` row에 저장하고 state로 확정 추적.
 - **review_mode(kor_travel_map 설정 `KOR_TRAVEL_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`, 기본 `require_review`)**:
   `require_review`=`ops.feature_change_requests`에 pending → kor_travel_map 운영자 approve 후 적용.
@@ -323,6 +342,7 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
 - **closure**: "영구 폐업" = `DELETE`(soft) 또는 `/{id}/deactivate` — kor_travel_map 권장 확정 필요(§7).
 
 ### 2.10 `GET /v1/providers/{provider}/last-sync`, `GET /health`, `GET /version`
+
 - provider 신선도(brief/Admin 상태판), liveness, 버전. Pinvi Admin 상태판·헬스 체크용.
   `/health`·`/version`만 비버전 경로 (구 `/debug/health|version`은 kor_travel_map T-214h로 제거).
 
@@ -352,15 +372,15 @@ updated_at/theme/source/items[]는 그대로다.
 
 Pinvi import 매핑:
 
-| kor_travel_map | Pinvi |
-|--------|----------|
-| curated feature 1건 | `app.curated_trip_plans` 1건 |
-| curated feature item/POI | `app.curated_plan_pois` |
-| item `feature_id` | `curated_plan_pois.feature_id` nullable 저장 |
-| item 표시 snapshot | `feature_snapshot` |
-| item day/order | `day_index` / `sort_order` |
+| kor_travel_map              | Pinvi                                            |
+| --------------------------- | ------------------------------------------------ |
+| curated feature 1건         | `app.curated_trip_plans` 1건                     |
+| curated feature item/POI    | `app.curated_plan_pois`                          |
+| item `feature_id`           | `curated_plan_pois.feature_id` nullable 저장     |
+| item 표시 snapshot          | `feature_snapshot`                               |
+| item day/order              | `day_index` / `sort_order`                       |
 | snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
-| item id | `source_curated_feature_item_id` |
+| item id                     | `source_curated_feature_item_id`                 |
 
 Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Python 패키지 import나 DB
 직접 접근은 금지한다. `kor-travel-concierge`는 Pinvi curated trip plan 생성 흐름에 관여하지
@@ -370,17 +390,17 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 
 ## 3. 데이터 계약 (반드시 맞출 것)
 
-| 항목 | kor_travel_map 실제(정본) | Pinvi 현재 | 조치 |
-|------|-------------------|----------------|------|
-| **feature_id** | `f_{bjd\|global}_{kind[0]}_{sha1[:16]}` **문자열**(예 `f_1168010100_p_3c0c2820e96d28d3`) — UUID 아님 | #87로 opaque string 1차 반영 | 잔여 `uuid.UUID(...)` 캐스트 전수 제거 확인(§6-C) |
-| 표시명 | `name` | 일부 `title` | `name`으로 통일 |
-| 좌표(목록) | 평면 `lon`/`lat` | ✅ T-182 완료(2026-06-09) — Pinvi 정본도 `lon`/`lat` 채택 | 잔여: 구모델 매핑(`coord.longitude`) 제거는 T-173 라우터 cutover에서 |
-| 주소 | 구조화 `address` 객체 + `legal_dong_code/sido_code/sigungu_code` | 평면 `address_road/jibun` | schema 정렬 |
-| category | 8자리 코드(`"01070100"`) + 카탈로그 label | 한글명 가정 흔적 | 코드 저장 + `/categories` label 조회 |
-| marker | `marker_icon`(maki), `marker_color`(`P-01`~`P-16`) | 동일 | OK |
-| 클러스터 | `{cluster_key, feature_count, lon, lat}` | `{cluster_id, center, feature_count, sample_kinds, bbox}` | 서버 셰입으로 정렬 |
-| 날씨 | metric 목록 + `forecast_style` 태그 | `{short_term,daily}` / `{nowcast,…}` | 그룹핑 변환 |
-| envelope | `{data, meta}` — `data`=payload만(목록 `{items}`, batch `{found,missing}`), pagination은 `meta.page.next_cursor` | 자체 `{data}` + client가 `data`만 반환 | client에서 `meta.page` threading 후 재투영(T-181) |
+| 항목           | kor_travel_map 실제(정본)                                                                                        | Pinvi 현재                                                | 조치                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| **feature_id** | `f_{bjd\|global}_{kind[0]}_{sha1[:16]}` **문자열**(예 `f_1168010100_p_3c0c2820e96d28d3`) — UUID 아님             | #87로 opaque string 1차 반영                              | 잔여 `uuid.UUID(...)` 캐스트 전수 제거 확인(§6-C)                    |
+| 표시명         | `name`                                                                                                           | 일부 `title`                                              | `name`으로 통일                                                      |
+| 좌표(목록)     | 평면 `lon`/`lat`                                                                                                 | ✅ T-182 완료(2026-06-09) — Pinvi 정본도 `lon`/`lat` 채택 | 잔여: 구모델 매핑(`coord.longitude`) 제거는 T-173 라우터 cutover에서 |
+| 주소           | 구조화 `address` 객체 + `legal_dong_code/sido_code/sigungu_code`                                                 | 평면 `address_road/jibun`                                 | schema 정렬                                                          |
+| category       | 8자리 코드(`"01070100"`) + 카탈로그 label                                                                        | 한글명 가정 흔적                                          | 코드 저장 + `/categories` label 조회                                 |
+| marker         | `marker_icon`(maki), `marker_color`(`P-01`~`P-16`)                                                               | 동일                                                      | OK                                                                   |
+| 클러스터       | `{cluster_key, feature_count, lon, lat}`                                                                         | `{cluster_id, center, feature_count, sample_kinds, bbox}` | 서버 셰입으로 정렬                                                   |
+| 날씨           | metric 목록 + `forecast_style` 태그                                                                              | `{short_term,daily}` / `{nowcast,…}`                      | 그룹핑 변환                                                          |
+| envelope       | `{data, meta}` — `data`=payload만(목록 `{items}`, batch `{found,missing}`), pagination은 `meta.page.next_cursor` | 자체 `{data}` + client가 `data`만 반환                    | client에서 `meta.page` threading 후 재투영(T-181)                    |
 
 ---
 
@@ -407,12 +427,12 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
    `/pinvi/*` namespace는 kor_travel_map에서 **제거됨**(kor_travel_map는 Pinvi 전용이 아님).
    by-target nearby 쓸 때 등록 흐름은 admin flow로 협의.
 4. **DEC-05 — K-15 해소(kor_travel_map PR #317)**: feature change API(`POST/PATCH/DELETE
-   /v1/admin/features*`) 신설됨 → T-179 완료. **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11,
+/v1/admin/features*`) 신설됨 → T-179 완료. **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11,
    kor_travel_map `decisions.md` ADR-051)** + Pinvi 반영 완료:
    1. **review_mode**: 기본 `require_review` 2단 검토(Pinvi 1차 + kor_travel_map 운영자 최종). →
       Pinvi는 record status `applied`→`added`, 그 외→`approved`.
    2. **idempotency_key** = `suggestion_id`(request_id) → kor_travel_map `make_feature_id(user_request,
-      idempotency_key)`로 결정적 feature_id, 재시도 동일.
+idempotency_key)`로 결정적 feature_id, 재시도 동일.
    3. **출처 태깅**: operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) + reason
       `[suggestion:<request_id>]` prefix(change-requests 큐가 출처 표시).
    4. **admin 인증**: 12701 `/v1/admin/*`, 코드 인증은 kor_travel_map `admin_destructive_enabled`
@@ -428,17 +448,20 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 > 권장 순서: A→B→C 먼저(연결 토대), 이후 D~H 병행. 각 항목 제안 Task.
 
 - **[A] ✅ T-170 — httpx client 신설** (완료 PR #102): `apps/api/app/clients/kor_travel_map.py`
-  + lifespan/dependency + MockTransport 계약 테스트.
+  - lifespan/dependency + MockTransport 계약 테스트.
 - **[B] ✅ T-171 — config 배선** (완료 PR #102): `Settings` `pinvi_kor_travel_map_*` + `.env.example`.
-- **[C] T-172 — feature_id 문자열 정합 마감**: #87 후속, `features.py`/`schemas/feature.py`/
-  `trip_view_builder`의 잔여 `uuid.UUID` 캐스트·`split("@")` 가정 제거(감사 C-09).
+- **[C] 구현·검증 중 T-172/T-VN-08 — feature_id 문자열 정합 마감**: #87 후속,
+  `features.py`/`schemas/feature.py`/`trip_view_builder`의 `uuid.UUID` 캐스트·`split("@")` 가정을
+  제거하고 batch 요청/응답 key를 exact 불투명 문자열로 처리한다. 구현·적대 리뷰 반영과 n150
+  실데이터 정상→503 outage→복구 live UI는 통과했으며, 최종 재리뷰/PR/CI/머지 후 완료로 전환한다.
 - **[D] T-173 — 응답 셰입 정렬**: `schemas/feature.py` + `docs/api/features.md`를 kor_travel_map
   실제 계약(`name`/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입)에 맞춤.
 - **[E] T-174 — 클러스터링 서버 위임**: `/features/in-bounds`가 kor_travel_map `cluster_unit` 결과를
   쓰도록 변경. `services/cluster_query.py`(직접 `feature` schema SQL — 경계 위반) **제거**.
 - **[F] T-175 — trip view 배치 연결**: `GET /trips/{id}`에 `trip_view_builder` 연결(감사 C-05) +
   `POST /v1/features/batch`(string ids, cap 200 청크) 호출 + `{found,missing}` → snapshot
-  fallback 매핑 (inactive feature는 `found`+status로 옴 — "철회/폐업" 표시 분기, kor_travel_map D-12).
+  fallback 매핑. 현재 2-state public projection의 unavailable은 원인 구분 없이 `missing`이며,
+  retired/suppressed 세분화는 T-VN-11 5-state cutover에서 함께 적용한다.
 - **[G] T-176 — 검색/날씨/카테고리/근접 라우터 실연결**: `/features/{id}/weather`(metric 그룹핑),
   `/search`(feature=kor_travel_map + 주소=kor-travel-geo + 내 POI), `/features/nearby`, `/categories` 캐시.
 - **[H1 완료] T-177 — 사용자 feature 제안 큐(DEC-05, user 도메인)**:
@@ -462,7 +485,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   `X-Kor-Travel-Map-Service-Token`(`pinvi_kor_travel_map_admin_service_token`, 미설정 시 공용 토큰 fallback).
   lifespan/`get_kor_travel_map_admin_client` 의존성 + MockTransport 계약 테스트. **승인 시 호출 배선은 T-179.**
 - **[공통] T-178 — 에러/저하 정책**: kor_travel_map 5xx/timeout → Pinvi `503 FEATURE_SERVICE_UNAVAILABLE`
-  + POI snapshot fallback(read), `LOCK_BUSY`/`RATE_LIMITED`는 Retry-After 존중.
+  - POI snapshot fallback(read), `LOCK_BUSY`/`RATE_LIMITED`는 Retry-After 존중.
 - **[표준 추종] T-181 — ADR-048(kor_travel_map PR #316) 표준 추종 (hard cutover lockstep)**: kor_travel_map
   외부 표면 `/v1` + RFC7807 + 파라미터/좌표명 정렬이 안정되는 **cut commit에 맞춰 T-170 client를
   lockstep 일괄 교체** — (1) base path `/v1`(config-driven, **이중지원 의존 안 함**), (2)
@@ -512,7 +535,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   - **F. `/vN` 거버넌스 ✅(#13)**: pre-1.0 in-place break → v1.0.0 GA에 `/v1` 동결 → `/v2`+N-1.
   - **추가 수용**: kor_travel_map 2차의 **envelope payload/meta 완전 분리(#2)** — `data`=payload만
     (목록 `{items:[]}`), pagination/추적은 `meta{duration_ms,request_id,page{page_size,next_cursor,
-    total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + action sub-resource 규약(#8) +
+total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + action sub-resource 규약(#8) +
     단일 정본 수렴(#9, `rest-api.md`=전 표면 정본 / `pinvi-rest-api.md`=소비 매핑 view).
 - **ADR-048 3차 검토 — 잔여 정합성 2건 → ✅ 전부 수용·머지됨(kor_travel_map 0e45bd7, 2026-06-10)**:
   1. **batch `found` 채택**: `POST /v1/features/batch` 응답이 `data={found{}, missing[]}`로
@@ -522,7 +545,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 - **DEC-07 좌표명 하위결정(신규, B 선결)**: Pinvi 정본 좌표 필드를 `lon`/`lat`(kor_travel_map 정렬,
   terse) vs `longitude`/`latitude`(현 DEC-07 유지, kor_travel_map가 맞춤) 중 택1. 권고: **`lon`/`lat`로
   정렬**(kor_travel_map가 대용량 feature read 소유 + 바이트·파싱 유리). 결정 시 DEC-07 + `schemas/feature`
-  + web Zod 정렬.
+  - web Zod 정렬.
 - frontend codegen(T-210e): kor_travel_map `openapi.user.json` → `openapi-typescript` + Zod mirror +
   CI drift gate. (백엔드 client는 수기 httpx로 충분, kor_travel_map 권고.)
 - `docs/kor-travel-map-integration.md`의 "목표(미존재)" 표현을 "구현됨"으로 갱신(후속 문서 PR) —
@@ -549,7 +572,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
   `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
   1. 검토한 upstream exact commit에서 `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
-     apps/api/tests/contract/kor-travel-map-openapi-user.json`
+apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `_UPSTREAM_COMMIT`과 `_SNAPSHOT_SHA256`을 같은 원본으로 갱신한다.
   3. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py`를 실행한다.
   4. 실패하면 사라진/바뀐 경로·필드·query/security를 `clients/kor_travel_map.py` +

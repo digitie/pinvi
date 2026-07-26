@@ -43,7 +43,7 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
                   feature: { coord: { lon: 129.16, lat: 35.158 } },
                   marker_color: 'P-07',
                   marker_icon: 'swimming',
-                  is_broken: false,
+                  feature_resolution_state: 'found',
                   user_note: null,
                   planned_arrival_at: null,
                   planned_departure_at: null,

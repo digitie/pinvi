@@ -26,6 +26,7 @@ import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { pointsBounds, resolveMarkerStyle, type TripMapPoint } from '@pinvi/domain';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
@@ -266,6 +267,9 @@ export function TripMapView({
     () => points.find((p) => p.poiId === selectedPoiId) ?? null,
     [points, selectedPoiId],
   );
+  const selectedResolutionNotice = selected
+    ? featureResolutionNotice(selected.featureResolutionState)
+    : null;
 
   useEffect(() => {
     if (selectedFeature && hiddenFeatureIds?.has(selectedFeature.feature_id)) {
@@ -400,6 +404,7 @@ export function TripMapView({
             maxZoom={16}
             renderMarker={(clusterPoint) => {
               const marker = clusterPoint as MarkerPoint;
+              const resolutionNotice = featureResolutionNotice(marker.point.featureResolutionState);
               return (
                 <PinMarker
                   key={marker.point.poiId}
@@ -410,10 +415,12 @@ export function TripMapView({
                   showInnerCircle={false}
                   className="trip-map-marker"
                   title={
-                    marker.point.isBroken ? `${marker.point.title} (링크 끊김)` : marker.point.title
+                    resolutionNotice
+                      ? `${marker.point.title} (${resolutionNotice})`
+                      : marker.point.title
                   }
                   selected={marker.point.poiId === selectedPoiId}
-                  highlighted={marker.point.isBroken}
+                  highlighted={marker.point.featureResolutionState === 'missing'}
                   ariaLabel={marker.point.title}
                   onClick={() => onSelectPoi?.(marker.point.poiId)}
                   onContextMenu={(event) => {
@@ -459,8 +466,8 @@ export function TripMapView({
             <Popup lngLat={[selected.lon, selected.lat]} maxWidth="240px" closeButton={false}>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ink">{selected.title}</p>
-                {selected.isBroken && (
-                  <p className="text-xs text-error-text">링크 끊김 — 라이브러리에서 삭제된 장소</p>
+                {selectedResolutionNotice && (
+                  <p className="text-xs text-error-text">{selectedResolutionNotice}</p>
                 )}
               </div>
             </Popup>
@@ -529,7 +536,7 @@ export function TripMapView({
               data-marker-size={TRIP_MAP_MARKER_SIZE}
               data-marker-source={point.markerSource}
               data-marker-selected={point.poiId === selectedPoiId ? 'true' : 'false'}
-              data-marker-broken={point.isBroken ? 'true' : 'false'}
+              data-feature-resolution-state={point.featureResolutionState}
               data-marker-category={point.category ?? ''}
               data-marker-kind={point.kind ?? ''}
             >

@@ -34,7 +34,7 @@ function poi(id: string, sort: string, title: string, lon: number) {
     feature: { coord: { lon, lat: 37.5 } },
     marker_color: 'P-01',
     marker_icon: 'marker',
-    is_broken: false,
+    feature_resolution_state: 'found',
     user_note: null,
     planned_arrival_at: null,
     planned_departure_at: null,
@@ -88,7 +88,7 @@ async function commonRoutes(
     shareLinks?: unknown[];
     getTripView?: () => unknown;
     onTripGet?: () => void;
-  } = {}
+  } = {},
 ) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
@@ -148,7 +148,9 @@ async function installControllableWebSocket(page: Page) {
       close() {
         if (this.readyState === ControlledWebSocket.CLOSED) return;
         this.readyState = ControlledWebSocket.CLOSED;
-        this.dispatchEvent(new CloseEvent('close', { code: 1000, reason: 'manual', wasClean: true }));
+        this.dispatchEvent(
+          new CloseEvent('close', { code: 1000, reason: 'manual', wasClean: true }),
+        );
       }
 
       __serverMessage(event: unknown) {
@@ -172,22 +174,20 @@ async function installControllableWebSocket(page: Page) {
 }
 
 async function waitForSocketCount(page: Page, count: number) {
-  await page.waitForFunction(
-    (expected) => {
-      const sockets = (window as unknown as { __tripWsSockets?: { readyState: number }[] })
-        .__tripWsSockets;
-      const all = sockets ?? [];
-      return all.length >= expected && all[all.length - 1]?.readyState === WebSocket.OPEN;
-    },
-    count,
-  );
+  await page.waitForFunction((expected) => {
+    const sockets = (window as unknown as { __tripWsSockets?: { readyState: number }[] })
+      .__tripWsSockets;
+    const all = sockets ?? [];
+    return all.length >= expected && all[all.length - 1]?.readyState === WebSocket.OPEN;
+  }, count);
 }
 
 async function sendServerEvent(page: Page, event: unknown, socketIndex = -1) {
   await page.evaluate(
     ({ event: payload, socketIndex: index }) => {
-      const sockets = (window as unknown as { __tripWsSockets: { __serverMessage(event: unknown): void }[] })
-        .__tripWsSockets;
+      const sockets = (
+        window as unknown as { __tripWsSockets: { __serverMessage(event: unknown): void }[] }
+      ).__tripWsSockets;
       const target = index < 0 ? sockets[sockets.length + index] : sockets[index];
       if (!target) throw new Error(`No fake WebSocket at index ${index}`);
       target.__serverMessage(payload);
@@ -199,9 +199,11 @@ async function sendServerEvent(page: Page, event: unknown, socketIndex = -1) {
 async function closeServerSocket(page: Page, code: number, reason: string, socketIndex = -1) {
   await page.evaluate(
     ({ code: closeCode, reason: closeReason, socketIndex: index }) => {
-      const sockets = (window as unknown as {
-        __tripWsSockets: { __serverClose(code: number, reason: string): void }[];
-      }).__tripWsSockets;
+      const sockets = (
+        window as unknown as {
+          __tripWsSockets: { __serverClose(code: number, reason: string): void }[];
+        }
+      ).__tripWsSockets;
       const target = index < 0 ? sockets[sockets.length + index] : sockets[index];
       if (!target) throw new Error(`No fake WebSocket at index ${index}`);
       target.__serverClose(closeCode, closeReason);
@@ -245,7 +247,7 @@ test('공유 링크를 만들면 생성된 URL이 1회 표시된다', async ({ p
   await expect(banner).toContainText(`/shared/${tripId}/tok-abc`);
   await expect(banner.getByRole('link', { name: '열기' })).toHaveAttribute(
     'href',
-    `/shared/${tripId}/tok-abc`
+    `/shared/${tripId}/tok-abc`,
   );
 });
 
@@ -360,16 +362,13 @@ test('재연결 후 수신한 broadcast가 최신 HTTP snapshot으로 갱신된�
   title = '재연결 뒤 최신 여행';
   await waitForSocketCount(page, 2);
   await expect(page.getByTestId('trip-realtime-status')).toContainText('연결됨');
-  await sendServerEvent(
-    page,
-    {
-      type: 'poi.updated',
-      trip_id: tripId,
-      actor_user_id: '33333333-3333-4333-8333-333333333333',
-      version: 2,
-      payload: { poi_id: '44444444-4444-4444-8444-444444444444' },
-    }
-  );
+  await sendServerEvent(page, {
+    type: 'poi.updated',
+    trip_id: tripId,
+    actor_user_id: '33333333-3333-4333-8333-333333333333',
+    version: 2,
+    payload: { poi_id: '44444444-4444-4444-8444-444444444444' },
+  });
 
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
 });

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { AlertTriangle, CloudOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
 import { arrayMove, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 
 function formatTime(value: string | null): string | null {
   if (!value) return null;
@@ -85,6 +86,7 @@ export function TripPoiList({
         const arrival = formatTime(poi.planned_arrival_at);
         const selected = poi.poi_id === selectedPoiId;
         const editing = poi.poi_id === editingPoiId;
+        const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
         return (
           <li
             key={poi.poi_id}
@@ -125,7 +127,9 @@ export function TripPoiList({
                   <span
                     className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     // ADR-055: 지도 핀과 동일한 서버 계산 display_marker_color로 뱃지 색을 맞춘다(parity).
-                    style={{ backgroundColor: paletteHex(poi.display_marker_color ?? poi.marker_color) }}
+                    style={{
+                      backgroundColor: paletteHex(poi.display_marker_color ?? poi.marker_color),
+                    }}
                     aria-hidden="true"
                   >
                     {index + 1}
@@ -135,10 +139,16 @@ export function TripPoiList({
                       <span className="truncate text-sm font-semibold text-ink">
                         {poi.title ?? poi.feature_id ?? '장소'}
                       </span>
-                      {poi.is_broken && (
+                      {poi.feature_resolution_state === 'missing' && (
                         <AlertTriangle
                           className="h-3.5 w-3.5 shrink-0 text-error-text"
-                          aria-label="링크 끊김"
+                          aria-label={resolutionNotice ?? undefined}
+                        />
+                      )}
+                      {poi.feature_resolution_state === 'unverified' && (
+                        <CloudOff
+                          className="h-3.5 w-3.5 shrink-0 text-muted"
+                          aria-label={resolutionNotice ?? undefined}
                         />
                       )}
                     </span>

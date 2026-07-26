@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+- 여행 상세의 kor-travel-map batch 조회가 실패하거나 불완전한 응답을 받았을 때 저장된 장소를
+  사용할 수 없는 장소로 잘못 표시하지 않는다. 명시적인 `missing`은 “장소 정보 사용 불가”,
+  transport/계약 실패는 저장본을 유지한 “최신 상태 확인 실패”로 구분한다. `@`를 포함한
+  `feature_id`도 포맷을 해석하지 않는 불투명 문자열로 그대로 조회하며, 응답 ID가 다르거나 표시
+  필드가 잘못된 detail은 캐시에 넣지 않는다.
 - kor-travel-map public API key를 URL `key` query에 노출하지 않고
   `X-Kor-Travel-Map-Api-Key` header로만 전송한다. service token이 설정된 호출은 기존처럼 우선하며
   public API key를 함께 보내지 않는다. `POST /v1/features/batch`는 service token 전용으로 유지하고,

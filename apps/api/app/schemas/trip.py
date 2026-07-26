@@ -212,7 +212,7 @@ class TripViewPoi(BaseModel):
     marker_icon: str | None
     # ADR-055: 지도 핀·목록 뱃지 parity용 서버 계산 색(custom > 일자색). 항상 유효 팔레트 키.
     display_marker_color: str | None = None
-    is_broken: bool
+    feature_resolution_state: Literal["not_linked", "found", "missing", "unverified"]
     user_note: str | None
     planned_arrival_at: datetime | None
     planned_departure_at: datetime | None
