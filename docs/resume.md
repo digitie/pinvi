@@ -3,7 +3,7 @@
 ## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 완료
 
 **방금**: **T-VN-SEC-02** — `next` 15.5.18→15.5.22로 web CVE 8건(Server Actions DoS·SSRF·cache confusion·
-Server Function 노출 등, 전부 `<15.5.21` fixed) 제거(PR #TBD). **SEC-01의 "Next 16 major" 전제는 npm audit
+Server Function 노출 등, 전부 `<15.5.21` fixed) 제거(PR #414). **SEC-01의 "Next 16 major" 전제는 npm audit
 union range 오독**이었고 실제 fix는 in-range 15.x 패치였다. next build/typecheck/lint/vitest 통과. 잔여
 `next high`는 next가 exact-pin한 build-time postcss@8.4.31 + 미사용 optional sharp(앱 `next/image` 미사용)
 전파분(exploit 불가) → T-VN-SEC-03로 이관. 적대적 리뷰 2명 approve.

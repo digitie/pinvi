@@ -6,7 +6,7 @@
 
 ## 2026-07-28
 
-- [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #TBD, claude)
+- [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)
       App Router Server Actions DoS(GHSA-m99w-x7hq-7vfj)·custom server SSRF(89xv-2m56-2m9x)·cache
       confusion(68g3-v927-f742, 4633-3j49-mh5q)·Edge unbounded payload(4c39-4ccg-62r3)·rewrite SSRF
       (p9j2-gv94-2wf4)·Image SVG DoS(q8wf-6r8g-63ch)·Server Function endpoint 노출(955p-x3mx-jcvp) —

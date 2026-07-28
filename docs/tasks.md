@@ -52,7 +52,7 @@
       npm audit는 여전히 `next high`로 표시하는데, 이는 next가 exact-pin한 build-time postcss@8.4.31 +
       미사용 optional sharp@0.34.5(앱은 `next/image` 미사용, 자체 postcss는 이미 8.5.23)을 전파하기
       때문이며 앱에서 exploit 불가다. override는 next의 exact pin을 만족 못 해 `npm ci`가 거부→불가.
-      해당 전파분은 T-VN-SEC-03로 이관. (완료: 2026-07-28, PR #TBD, claude → tasks-done.md)
+      해당 전파분은 T-VN-SEC-03로 이관. (완료: 2026-07-28, PR #414, claude → tasks-done.md)
 
 - [ ] **T-VN-SEC-03** — next-전파 transitive(exact-pin build-time postcss@8.4.31 + 미사용 optional
       sharp@0.34.5)와 Expo SDK-56 build-tooling transitive(brace-expansion/form-data/js-yaml/shell-quote)를
