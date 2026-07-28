@@ -6,6 +6,14 @@
 
 ## 2026-07-28
 
+- [x] **T-VN-STYLE-01** — Prettier baseline 219개 파일 일괄 포맷. (완료: 2026-07-28, PR #TBD, claude)
+      `npm run format:check`가 실패하던 baseline(TS/TSX 108·MD 103·JSON/JS 7)을 포맷 전용으로 정리했다.
+      TS/TSX는 AST 보존(typecheck+lint+vitest 통과), JSON/JS는 값 바이트 동일, MD는 따옴표/표 패딩/코드펜스
+      JS/빈 줄 정규화(산문 손실 0). **P0 자체 차단**: `apps/api/tests/contract/kor-travel-map-openapi-user.json`은
+      `test_kor_travel_map_contract.py`가 SHA-256(`91b30f40…`)으로 핀 고정한 vendored 스냅샷이라 Prettier
+      재포맷이 핀 해시를 깼다 → 원본 바이트 복원 + 신규 `.prettierignore`(`apps/api/tests/contract/`)로 영구 제외.
+      적대적 리뷰 2명(byte-sensitive-consumers·scope-ignore-completeness) 승인. `git diff --check`/format:check clean.
+
 - [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #412, claude)
       critical은 dev direct dependency `vitest<=3.2.5`. apps/web·packages/domain·packages/schemas 3개
       workspace를 `vitest@^4.1.10`로 올렸다. vitest 4는 rolldown-vite/oxc를 쓰는데 esbuild 기반

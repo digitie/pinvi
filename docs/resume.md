@@ -1,16 +1,18 @@
 # resume.md
 
-## 2026-07-28 (claude) — T-VN-SEC-01 완료, 다음은 T-VN-STYLE-01
+## 2026-07-28 (claude) — T-VN-SEC-01 + T-VN-STYLE-01 완료
 
-**방금**: `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로 제거(PR #412).
-rolldown/oxc와 충돌하는 `@vitejs/plugin-react`를 `oxc.jsx`로 대체. audit 25→20(critical 0). 잔여 20은
-breaking 전용(Next 16 major=T-VN-SEC-02, Expo SDK-56 transitive=T-VN-SEC-03)이라 분리. web 97/domain 65/
-schemas 8 vitest pass, web typecheck+lint pass, 적대적 리뷰 2명 approve.
+**방금(2)**: **T-VN-STYLE-01** — Prettier baseline 219개 일괄 포맷(포맷 전용, PR #TBD). P0 자체 차단:
+`apps/api/tests/contract/*.json`은 SHA-256 핀 vendored 스냅샷이라 재포맷이 핀 해시를 깨서 원본 복원 +
+`.prettierignore` 영구 제외. 적대적 리뷰 2명 approve, format:check clean.
 
-**다음 한 작업**: **T-VN-STYLE-01** — root `npm run format:check`가 기존 218개 파일에서 실패하는 Prettier
-baseline을 기능 변경 없이 일괄 정리(standalone PR). 그 뒤 남은 blocker는 **map issue #868**(map-api가
-canonical admin-proxy env 채택 후 rebuild) 해제 시 c6c 마이그레이션 적용 → prod domain live e2e(TDR +
-WebSocket C7 edge) → 머지.
+**방금(1)**: **T-VN-SEC-01** — `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로
+제거(PR #412). rolldown/oxc 충돌 `@vitejs/plugin-react`를 `oxc.jsx`로 대체. audit 25→20(critical 0). 잔여
+20은 breaking 전용 → T-VN-SEC-02(Next 16)/T-VN-SEC-03(Expo)로 분리. 적대적 리뷰 2명 approve.
+
+**다음 한 작업**: 남은 blocker는 **map issue #868**(map-api가 canonical admin-proxy env 채택 후 rebuild)
+해제다. 해제되면 c6c 마이그레이션 적용 → prod domain live e2e(TDR + WebSocket C7 edge) → 머지. 그 외 열린
+task: T-VN-SEC-02(Next 16 major), T-VN-SEC-03(Expo SDK-56 transitive), T-VN-11-P(map 5-state).
 
 ## 2026-07-26 (codex agent B) — T-VN-08 실데이터 live 통과·최종 재리뷰
 
