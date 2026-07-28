@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-07-28 (claude) — T-VN-SEC-01 완료, 다음은 T-VN-STYLE-01
+
+**방금**: `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로 제거(PR #TBD).
+rolldown/oxc와 충돌하는 `@vitejs/plugin-react`를 `oxc.jsx`로 대체. audit 25→20(critical 0). 잔여 20은
+breaking 전용(Next 16 major=T-VN-SEC-02, Expo SDK-56 transitive=T-VN-SEC-03)이라 분리. web 97/domain 65/
+schemas 8 vitest pass, web typecheck+lint pass, 적대적 리뷰 2명 approve.
+
+**다음 한 작업**: **T-VN-STYLE-01** — root `npm run format:check`가 기존 218개 파일에서 실패하는 Prettier
+baseline을 기능 변경 없이 일괄 정리(standalone PR). 그 뒤 남은 blocker는 **map issue #868**(map-api가
+canonical admin-proxy env 채택 후 rebuild) 해제 시 c6c 마이그레이션 적용 → prod domain live e2e(TDR +
+WebSocket C7 edge) → 머지.
+
 ## 2026-07-26 (codex agent B) — T-VN-08 실데이터 live 통과·최종 재리뷰
 
 PinVi trip view가 kor-travel-map batch 실패를 public projection unavailable로 오인하던 false-broken을

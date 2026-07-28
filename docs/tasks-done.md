@@ -4,6 +4,29 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-28
+
+- [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #TBD, claude)
+      critical은 dev direct dependency `vitest<=3.2.5`. apps/web·packages/domain·packages/schemas 3개
+      workspace를 `vitest@^4.1.10`로 올렸다. vitest 4는 rolldown-vite/oxc를 쓰는데 esbuild 기반
+      `@vitejs/plugin-react`가 주입한 JSX 옵션이 무시돼 `.tsx` 7개 suite가 import-analysis parse에서 깨졌다.
+      plugin-react를 제거하고 `oxc.jsx`(automatic runtime, importSource react)로 대체했다. v3에서 삭제된
+      `environmentMatchGlobs`도 jsdom 단일 환경으로 정리했다. audit 25→20(critical 0). 잔여 20(high 7/
+      moderate 13)은 `next` 15→16 major와 Expo SDK-56 build-tooling transitive뿐이라 breaking →
+      T-VN-SEC-02/T-VN-SEC-03로 분리했다. 검증: web 97 / domain 65 / schemas 8 vitest pass, web
+      typecheck+lint pass, lockfile에 sub-v4 vitest 잔존 0. 적대적 리뷰 2명(correctness·security-scope)
+      승인, P3 stale comment 1건 반영.
+
+- [x] **T-WS-C7** — trip WebSocket reject close code가 프록시 edge를 넘게 settle. (완료: 2026-07-28, PR #410, claude)
+      reject(`accept→close`)에 env-tunable settle(기본 0.25s)을 넣어 101 handshake를 flush → close
+      code(4401/4403/4408/4429)가 리버스 프록시 edge를 건너 살아남는다. 미적용 시 브라우저 1006 오분류.
+      kor-travel-map C7 #809/#820 동일 계층 포팅. 미인증 reject flood 동시 settle cap(기본 64)으로 FD 증폭
+      차단. 적대적 리뷰 2명(P2 DoS cap·P3 test-order) 반영. edge-특정 검증은 prod(map #868 해제 후).
+
+- [x] **T-307(후속)** — 색/이름만 바꾸는 일자 업데이트에 날짜 강제 제거. (완료: 2026-07-28, PR #411, claude)
+      `TripDetail.handleUpdateDay`가 `date` 미변경 시 날짜 검증·PATCH를 건너뛰게 해, 기간 있는 여행 +
+      날짜 없는 일자에서 색만 저장할 때 "일자 날짜 필요" 오류가 뜨던 friction을 제거했다. e2e 회귀 추가.
+
 ## 2026-07-21
 
 - [x] **T-309c** — FeatureDetailModal 본문 + 마커→상세 모달. (완료: 2026-07-21, PR #402, claude)
