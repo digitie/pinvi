@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-29 (claude) — T-VN-H29: 통합검색에서 map-import POI 좌표가 null이던 버그 수정
+
+**결론**: kor-travel-map curated import로 들어온 POI가 `GET /search`에서만 좌표 null이던 실제
+버그를 고쳤다. 발견 경위는 T-VN-H07D 적대 리뷰(소비자 전수 감사)다.
+
+- **근인**: `api/v1/search.py::_snapshot_coord`가 중첩 `feature_snapshot["coord"]`만 읽었다.
+  그런데 Map 생성부(`CuratedFeatureDetailFeatureSnapshotView`)는 `extra="forbid"`이고 `coord`
+  property가 **아예 없어**(T-VN-H07D에서 typed view로 고정) 좌표는 **top-level `lon`/`lat`**에
+  온다 → 이 read는 **구조적으로 항상 None**이었다.
+- **비대칭이 힌트였다**: 같은 payload를 `services/admin_pois.py::extract_feature_coord`와
+  `services/kasi.py::extract_feature_coordinates`는 정상 해석하고 있었다. 즉 admin/일출입 화면은
+  좌표가 보이는데 통합검색만 null이었다.
+- **수정**: 다섯 번째 추출기를 만들지 않고 정본 `extract_feature_coord`에 위임한다. top-level +
+  `coord`/`coordinate`/`location`/`geometry` 중첩, `lon`/`lng`/`longitude`/`x` 별칭, 숫자 강제
+  변환까지 처리하므로 기존 동작의 **상위집합**이다.
+- **회귀 위험 검증(적대 리뷰 2명)**: PinVi가 쓰는 비-map snapshot(kakao/naver/수동)은 전부 중첩
+  `coord`로 저장되고 top-level `x`/`y`/`geometry`/`location` payload는 저장소에 0건이다. 응답 계약도
+  기존에 `_coord`/`_float`가 이미 강제 변환·부분좌표 None 처리를 하고 있어 변화 없다. 같은
+  `TripDayPoi.feature_snapshot` 컬럼에 `api/v1/admin/trips.py`가 이미 같은 추출기를 쓰고 있어
+  오히려 표면 간 해석이 일치하게 됐다.
+- **회귀 테스트**: 실제 Map payload key 집합, 중첩 `coord` 호환, required-but-nullable(`lon`/`lat`
+  null) payload, 0.0 좌표 보존, 부분/부재 좌표, 그리고 결과 dict→`PlaceSearchResult.coord` 배선.
+- 계약 게이트와 통합 문서에 남아 있던 "알려진 열화" 서술을 해소 기록으로 정정했다.
+
 ## 2026-07-29 (codex) — curated detail snapshot canonical 경로 전환
 
 - **작업**: `KorTravelMapAdminClient.get_curated_detail_snapshot()`이 OpenAPI에 없는 hidden

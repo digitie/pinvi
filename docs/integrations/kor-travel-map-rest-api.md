@@ -585,10 +585,14 @@ admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에
   ② `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256` 갱신, ③ 계약 테스트 실행, ④ 실패하면 client/매핑과
   `_CONSUMED_FIELD_CONTRACTS`를 함께 고친다.
 
-> **알려진 열화(계약 위반 아님)**: `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
-> 읽는데 Map view는 `extra="forbid"`이고 `coord` property가 없다 — 이 read는 구조적으로 항상 None이라
-> map-curated import로 들어온 POI는 통합 검색에서 좌표가 null이다. 좌표 자체는 top-level `lon`/`lat`에
-> 있고 `admin_pois`/`kasi`는 거기서 정상적으로 읽는다. 런타임 수정은 별도 task로 추적한다.
+> **해소됨 (T-VN-H29)**: 과거 `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
+> 읽었는데 Map view는 `extra="forbid"`이고 `coord` property가 없어 이 read가 **구조적으로 항상
+> None**이었고, map-curated import POI가 통합 검색에서만 좌표 null이었다(좌표는 top-level
+> `lon`/`lat`에 있고 `admin_pois`/`kasi`는 정상 해석). 이제 같은 정본 추출기
+> `services/admin_pois.py::extract_feature_coord`에 위임한다 — top-level과
+> `coord`/`coordinate`/`location`/`geometry` 중첩, `lon`/`lng`/`longitude`/`x` 별칭, 숫자 강제
+> 변환을 모두 처리하므로 기존 동작의 상위집합이다. 회귀 테스트는
+> `apps/api/tests/unit/test_search_snapshot_coord.py`.
 
 ## 8. 드리프트 게이트 (T-210e, 2026-06-11)
 
