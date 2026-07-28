@@ -1,7 +1,7 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map PR #794 merge commit의 전체 스냅샷을 byte-for-byte vendor하고 pinned SHA-256으로
-수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
+kor_travel_map main(`8880c29b`, Map PR #814/T-VN-H07A 포함)의 전체 스냅샷을 byte-for-byte
+vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 매핑(`api/v1/features.py _*_from_kor_travel_map`)이 의존하는 **경로·응답
 필드**가 존재하는지 검증한다.
 
@@ -21,8 +21,8 @@ from typing import Any
 import pytest
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "cf1f0bba6a2ea18f23eb647216236b84fc7b5a80"
-_SNAPSHOT_SHA256 = "91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f"
+_UPSTREAM_COMMIT = "8880c29bdfbcd7805c89eafe0645f3c447f27530"
+_SNAPSHOT_SHA256 = "0a7f16847ef7620c168cac61b4a7221747ede747b19d8531c4345d5add4b2116"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
