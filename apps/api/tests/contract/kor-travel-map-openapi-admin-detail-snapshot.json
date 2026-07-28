@@ -1,0 +1,638 @@
+{
+  "components": {
+    "schemas": {
+      "ClusterMeta": {
+        "additionalProperties": false,
+        "description": "Map clustering metadata.",
+        "properties": {
+          "cluster_unit": {
+            "description": "현재 응답의 행정구역 cluster 단위.",
+            "enum": [
+              "sido",
+              "sigungu",
+              "eupmyeondong"
+            ],
+            "title": "Cluster Unit",
+            "type": "string"
+          },
+          "drill_down_unit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sido",
+                  "sigungu",
+                  "eupmyeondong"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "한 단계 확대 시 요청할 다음 cluster_unit. eupmyeondong 다음은 개별 feature이므로 null.",
+            "title": "Drill Down Unit"
+          }
+        },
+        "required": [
+          "cluster_unit",
+          "drill_down_unit"
+        ],
+        "title": "ClusterMeta",
+        "type": "object"
+      },
+      "CuratedFeatureDetailContentView": {
+        "additionalProperties": false,
+        "description": "detail-snapshot plan-level payload (T-VN-H07D).\n\nPinVi curated import(`services/notice_plan.py`)가 plan title/category/summary/destination을\n여기서 읽는다. 모든 key는 항상 존재하며(생성부가 고정 key로 만든다) 값만 nullable이다.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "curation_status": {
+            "title": "Curation Status",
+            "type": "string"
+          },
+          "destination_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Name"
+          },
+          "region_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Code"
+          },
+          "reuse_policy": {
+            "title": "Reuse Policy",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "destination_name",
+          "region_code",
+          "category",
+          "curation_status",
+          "reuse_policy"
+        ],
+        "title": "CuratedFeatureDetailContentView",
+        "type": "object"
+      },
+      "CuratedFeatureDetailFeatureSnapshotView": {
+        "additionalProperties": false,
+        "description": "detail-snapshot item의 feature 투영 (T-VN-H07D).\n\n소비자 PinVi가 이 안에서 `name`/`lon`/`lat`/`address`를 직접 읽는다\n(`services/admin_pois.py` label/coord/address 추출기, `api/v1/search.py`의\n`feature_snapshot[\"name\"]` SQL 술어). 생성부가 고정 key로 만들므로 typed view로 고정한다.\n`address`/`detail`은 provider 원본 투영이라 free-form으로 남긴다.",
+        "properties": {
+          "address": {
+            "additionalProperties": true,
+            "title": "Address",
+            "type": "object"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "feature_id": {
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "legal_dong_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Dong Code"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sido_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sido Code"
+          },
+          "sigungu_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigungu Code"
+          }
+        },
+        "required": [
+          "feature_id",
+          "name",
+          "category",
+          "kind",
+          "lon",
+          "lat",
+          "sido_code",
+          "sigungu_code",
+          "legal_dong_code",
+          "address",
+          "detail"
+        ],
+        "title": "CuratedFeatureDetailFeatureSnapshotView",
+        "type": "object"
+      },
+      "CuratedFeatureDetailItemView": {
+        "additionalProperties": false,
+        "description": "curated feature detail item.\n\nT-VN-H07D: `day_index`/`memo`/`source_record_key`는 생성부가 **항상** 내보내는 key인데\ndefault 때문에 스펙상 optional로 표기됐다. snapshot view와 같은 규약(모든 key는 항상 존재,\n값만 nullable)으로 맞춰 default를 제거한다.",
+        "properties": {
+          "curated_feature_item_id": {
+            "title": "Curated Feature Item Id",
+            "type": "string"
+          },
+          "day_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Index"
+          },
+          "feature_id": {
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "feature_snapshot": {
+            "$ref": "#/components/schemas/CuratedFeatureDetailFeatureSnapshotView"
+          },
+          "memo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memo"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "source_record_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Key"
+          }
+        },
+        "required": [
+          "curated_feature_item_id",
+          "feature_id",
+          "relation",
+          "sort_order",
+          "day_index",
+          "memo",
+          "feature_snapshot",
+          "source_record_key"
+        ],
+        "title": "CuratedFeatureDetailItemView",
+        "type": "object"
+      },
+      "CuratedFeatureDetailSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CuratedFeatureDetailSnapshotView"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "CuratedFeatureDetailSnapshotResponse",
+        "type": "object"
+      },
+      "CuratedFeatureDetailSnapshotView": {
+        "additionalProperties": false,
+        "description": "curated feature detail snapshot.\n\nT-VN-H07D: `theme`/`content`/`source`는 과거 free-form ``dict[str, Any]``이라 OpenAPI에\n`{\"type\": \"object\"}`로만 노출됐고, 소비자(PinVi)가 실제로 의존하는 plan-level 필드를 계약으로\n고정할 방법이 없었다. 생성부가 고정 key로 만드는 값이므로 typed view로 전환한다.\n``items[].feature_snapshot``도 소비자가 내부 key(`name`/`lon`/`lat`/`address`)를 실제로\n읽으므로 함께 typed view로 고정한다.",
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/CuratedFeatureDetailContentView"
+          },
+          "curated_feature_id": {
+            "title": "Curated Feature Id",
+            "type": "string"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CuratedFeatureDetailItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CuratedFeatureDetailSourceView"
+          },
+          "theme": {
+            "$ref": "#/components/schemas/CuratedFeatureDetailThemeView"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "curated_feature_id",
+          "version",
+          "etag",
+          "updated_at",
+          "theme",
+          "content",
+          "source",
+          "items"
+        ],
+        "title": "CuratedFeatureDetailSnapshotView",
+        "type": "object"
+      },
+      "CuratedFeatureDetailSourceView": {
+        "additionalProperties": false,
+        "description": "detail-snapshot source payload (T-VN-H07D).",
+        "properties": {
+          "dataset_key": {
+            "title": "Dataset Key",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "required": [
+          "provider",
+          "dataset_key",
+          "source_name",
+          "source_url"
+        ],
+        "title": "CuratedFeatureDetailSourceView",
+        "type": "object"
+      },
+      "CuratedFeatureDetailThemeView": {
+        "additionalProperties": false,
+        "description": "detail-snapshot theme payload (T-VN-H07D — 소비자 PinVi가 category fallback으로 읽는다).",
+        "properties": {
+          "theme_name": {
+            "title": "Theme Name",
+            "type": "string"
+          },
+          "theme_slug": {
+            "title": "Theme Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme_slug",
+          "theme_name"
+        ],
+        "title": "CuratedFeatureDetailThemeView",
+        "type": "object"
+      },
+      "Meta": {
+        "additionalProperties": false,
+        "description": "전 REST 표면에서 공유하는 성공 응답 metadata.",
+        "properties": {
+          "cluster": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClusterMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request_id": {
+            "default": "",
+            "description": "X-Request-ID와 같은 요청 ID.",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_ms"
+        ],
+        "title": "Meta",
+        "type": "object"
+      },
+      "PageMeta": {
+        "additionalProperties": false,
+        "description": "Cursor pagination metadata.\n\n``next_cursor``는 페이지가 끝났을 때도 ``null``로 항상 직렬화한다.",
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "required": [
+          "page_size"
+        ],
+        "title": "PageMeta",
+        "type": "object"
+      },
+      "ProblemDetail": {
+        "additionalProperties": true,
+        "description": "RFC7807 ``application/problem+json`` 에러 본문 (중앙 핸들러 정본, §1.5).\n\n중앙 예외 핸들러(`app._error_response`)가 모든 4xx/5xx를 이 형식으로 통일한다.\n``code``·``request_id``는 소비자 파싱 위치 고정용 top-level 확장 멤버다.",
+        "properties": {
+          "code": {
+            "description": "기계 판독용 오류 코드(§4 enum 확장). 예: NOT_FOUND.",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "description": "이 발생 건에 대한 사람이 읽는 설명.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "description": "필드 단위 검증 오류 목록(검증 실패 시 비어 있지 않다).",
+            "items": {
+              "$ref": "#/components/schemas/ProblemDetailError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "request_id": {
+            "description": "요청 상관추적 ID(`X-Request-ID`/`meta.request_id`와 동일).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP 상태 코드.",
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "description": "사람이 읽는 짧은 요약(= detail).",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "description": "오류 유형 URI. 예: https://kor-travel-map/errors/not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "request_id"
+        ],
+        "title": "ProblemDetail",
+        "type": "object"
+      },
+      "ProblemDetailError": {
+        "additionalProperties": true,
+        "description": "RFC7807 problem 본문 ``errors`` 항목 (필드 단위 오류).\n\n§1.5 산문 계약은 ``{field, message}``를 정의하지만, 검증 실패(422)는 pydantic\n원본 오류(``loc``/``msg``/``type`` 등)를 그대로 싣는다. 두 형태를 모두 허용하도록\n추가 키를 열어 둔다(``extra='allow'``).",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "오류가 발생한 입력 필드.",
+            "title": "Field"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "사람이 읽는 오류 메시지.",
+            "title": "Message"
+          }
+        },
+        "title": "ProblemDetailError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "kor-travel-map admin detail-snapshot contract subset",
+    "version": "0.2.0-dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/admin/features/curated/{curated_feature_id}/detail-snapshot": {
+      "get": {
+        "operationId": "get_admin_curated_feature_detail_snapshot_route_v1_admin_features_curated__curated_feature_id__detail_snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "curated_feature_id",
+            "required": true,
+            "schema": {
+              "title": "Curated Feature Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuratedFeatureDetailSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "RFC7807 `application/problem+json` 에러 본문. 모든 4xx/5xx는 중앙 예외 핸들러가 동일 형식(`code`/`request_id` 확장 멤버 포함)으로 반환한다 (docs/architecture/rest-api.md §1.5)."
+          }
+        },
+        "security": [
+          {
+            "AdminBFF": []
+          }
+        ],
+        "summary": "Get Admin Curated Feature Detail Snapshot Route",
+        "tags": [
+          "admin-curated"
+        ]
+      }
+    }
+  }
+}
