@@ -236,7 +236,8 @@ import 원칙:
 
 - Pinvi가 kor-travel-map admin REST API
   `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`으로
-  (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) detail snapshot을 조회한다 (ADR-049).
+  detail snapshot을 조회한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고 service
+  token은 별도 pass-through다(local dev만 gate opt-out)(ADR-049).
 - kor_travel_map curated feature 1건을 Pinvi `curated_trip_plans` 1건으로 1:1 복사한다.
 - 하위 항목/POI는 `curated_plan_pois`로 복사한다.
 - kor_travel_map 항목이 `feature_id`를 제공하면 feature-backed POI로 저장하고, 없으면

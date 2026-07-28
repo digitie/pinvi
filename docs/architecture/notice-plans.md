@@ -34,7 +34,8 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 - Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 Pinvi-native plan 작성
 - Pinvi가 kor-travel-map `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`을
-  (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) 조회해
+  조회한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고 service token은
+  별도 pass-through다(local dev만 gate opt-out).
   `curated_trip_plans` / `curated_plan_pois`로 1:1 복사 (ADR-049)
 - POI를 day별로 sort_order에 따라 배치 — 사용자 trip과 동일한 구조
 - POI는 `feature_id` 없이도 존재 가능. 단 kor-travel-map import가 feature를 제공하면

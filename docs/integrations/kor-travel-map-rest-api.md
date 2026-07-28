@@ -353,8 +353,9 @@ state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, crea
 **상태**: Pinvi가 kor-travel-map `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`을
 소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다. 구 public 경로
 `GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐고, item을
-담은 snapshot은 이제 admin 표면(`/v1/admin/*`, 헤더 `X-Kor-Travel-Map-Service-Token` 필요)에만
-존재한다(ADR-049).
+담은 snapshot은 이제 admin 표면(`/v1/admin/*`)에만 존재한다. AdminBFF gate가 켜진 환경은
+proxy secret과 actor가 필수이고 local dev에서만 opt-out한다. service token은 이와 별개의
+server-to-server pass-through 자격이다(ADR-049).
 
 제품 의미:
 
@@ -363,7 +364,8 @@ state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, crea
   `curated_trip_plans` 1건으로 1:1 복사한다.
 - 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
 
-사용하는 kor_travel_map REST 표면 (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요):
+사용하는 kor_travel_map REST 표면(admin base :12701, 운영은 AdminBFF proxy secret + actor 필수,
+service token은 별도 pass-through):
 
 ```http
 GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot

@@ -1,9 +1,8 @@
 """kor_travel_map admin OpenAPI에서 detail-snapshot 계약 subset을 결정적으로 추출한다 (T-VN-H07D).
 
-Pinvi 런타임이 소비하는 admin 표면은 `GET /v1/admin/curated-features/{id}/detail-snapshot`
-(kor_travel_map 쪽 문서 경로는 `/v1/admin/features/curated/{id}/detail-snapshot`이고 Pinvi가
-호출하는 경로는 같은 핸들러의 `include_in_schema=False` 호환 alias다). Map full 스펙은 1 MB가
-넘어 통째로 vendor하면 무관한 변경마다 diff가 나므로, **그 경로와 응답 스키마의 전이적 폐포만**
+Pinvi 런타임과 kor_travel_map OpenAPI가 공유하는 admin 표면은
+`GET /v1/admin/features/curated/{id}/detail-snapshot`이다. Map full 스펙은 1 MB가 넘어
+통째로 vendor하면 무관한 변경마다 diff가 나므로, **그 경로와 응답 스키마의 전이적 폐포만**
 잘라 vendor한다.
 
 추출은 결정적이다(정렬된 key, 고정 indent) — 같은 입력이면 같은 바이트가 나오므로 CI가 같은

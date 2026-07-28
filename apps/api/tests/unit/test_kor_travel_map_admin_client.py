@@ -546,14 +546,16 @@ async def test_5xx_retries_then_raises_unavailable() -> None:
     await client.aclose()
 
 
-async def test_curated_detail_snapshot_uses_canonical_admin_path_and_token() -> None:
-    """큐레이션 import는 OpenAPI에 공개된 canonical admin snapshot을 호출한다."""
+async def test_curated_detail_snapshot_uses_canonical_admin_path_and_credentials() -> None:
+    """큐레이션 import는 canonical 경로와 AdminBFF·service 자격을 함께 사용한다."""
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["method"] = request.method
         seen["path"] = request.url.path
-        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        seen["service_token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
+        seen["proxy_secret"] = request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", "")
+        seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
         return httpx.Response(
             200,
             json={
@@ -571,11 +573,17 @@ async def test_curated_detail_snapshot_uses_canonical_admin_path_and_token() -> 
             },
         )
 
-    client = _client(handler)
+    client = _client(
+        handler,
+        admin_proxy_secret="proxy-secret",
+        admin_actor="pinvi-curation-import",
+    )
     snapshot = await client.get_curated_detail_snapshot("cf_1")
     assert seen["method"] == "GET"
     assert seen["path"] == "/v1/admin/features/curated/cf_1/detail-snapshot"
-    assert seen["token"] == "svc-tok"
+    assert seen["service_token"] == "svc-tok"
+    assert seen["proxy_secret"] == "proxy-secret"
+    assert seen["actor"] == "pinvi-curation-import"
     assert snapshot["curated_feature_id"] == "cf_1"
     assert snapshot["content"] == {"title": "부산 코스"}
     await client.aclose()

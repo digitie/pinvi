@@ -4,9 +4,10 @@
 
 **방금**: kor-travel-map Claude PR 사후 감사 issue #881에서 발견한 runtime/OpenAPI 분기를
 소비자 우선으로 해소했다. `KorTravelMapAdminClient.get_curated_detail_snapshot()`은 이제
-문서화된 `/v1/admin/features/curated/{id}/detail-snapshot`을 호출하며, exact path·service
-token 단위 계약과 active 통합 문서를 함께 갱신했다. n150 관련 테스트 **123 passed,
-1 skipped**, strict mypy와 Ruff check/format을 통과했다.
+문서화된 `/v1/admin/features/curated/{id}/detail-snapshot`을 호출한다. 적대 리뷰 P2 3건을
+반영해 exact path·AdminBFF proxy secret + actor·별도 service token을 함께 검증하고,
+ADR-049와 active 통합 문서를 운영 gate/local-dev opt-out 경계로 정렬했다. n150 관련 테스트
+**123 passed, 1 skipped**, strict mypy와 Ruff check/format을 통과했다.
 
 **다음 한 작업**: 이 작은 소비자 PR을 CI green 후 머지하고, kor-travel-map 작업 브랜치에서
 hidden alias를 제거한다. 이후 기존 정본의 다음 작업인 **TDR-mobile**로 복귀한다.

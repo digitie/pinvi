@@ -7,8 +7,11 @@
 - **작업**: `KorTravelMapAdminClient.get_curated_detail_snapshot()`이 OpenAPI에 없는 hidden
   alias(`/v1/admin/curated-features/{id}/detail-snapshot`) 대신 문서화된 canonical
   `/v1/admin/features/curated/{id}/detail-snapshot`을 호출하도록 전환했다.
-- **계약**: transport 단위 테스트가 exact canonical path와 service token을 함께 고정한다.
-  active API·통합 문서도 같은 경로로 정렬했고, historical ADR/journal 기록은 변경하지 않았다.
+- **계약**: transport 단위 테스트가 exact canonical path, AdminBFF proxy secret + actor,
+  별도 service token을 함께 고정한다. ADR-049는 2026-07-29 보정으로 canonical 경로와
+  운영 AdminBFF/local-dev opt-out 경계를 정본화했고, active API·통합 문서도 정렬했다.
+- **적대 리뷰**: hidden alias를 여전히 정본으로 둔 ADR·contract 주석·vendor 스크립트와
+  service-token-only false-green을 지적한 P2 3건을 모두 반영했다.
 - **검증**: n150에서 관련 unit/contract **123 passed, 1 skipped**, strict mypy 통과,
   Ruff check/format 통과. kor-travel-map Claude PR 사후 감사 issue #881의 소비자 선행 수정이다.
 - **다음**: PinVi PR을 CI green 후 머지하고, kor-travel-map에서 hidden alias와 alias 전용

@@ -411,7 +411,8 @@ Pinvi `/public/festivals/monthly`(+`/{id}`, `/festivals/map-markers`)가 노출�
 
 > **상태 (2026-06-12)**: kor-travel-map의
 > `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot` 계약을 Pinvi가
-> 소비한다(admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`). 구 public 경로
+> 소비한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고 service token은
+> 별도 pass-through다(local dev만 gate opt-out). 구 public 경로
 > `GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐다(ADR-049).
 > 본 절은 해당 detail snapshot 계약과 Pinvi 저장 매핑을 기록한다.
 
@@ -438,9 +439,10 @@ Pinvi가 사용하는 최소 능력:
 | 증분 확인 | `updated_at` 또는 version/etag 기반으로 Pinvi import stale 여부 판단 |
 | 안정 id   | 같은 kor_travel_map curated feature와 item을 재조회해도 동일 id 유지 |
 
-admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요. snapshot plan-level 객체
-키는 `plan` → `content`로 개명됐다(ADR-049). version/etag/updated_at/theme/source/items[]는
-그대로다.
+admin base :12701을 사용한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고,
+service token은 이를 대신하지 않는 별도 server-to-server pass-through다. local dev에서만
+gate opt-out을 허용한다. snapshot plan-level 객체 키는 `plan` → `content`로 개명됐다(ADR-049).
+version/etag/updated_at/theme/source/items[]는 그대로다.
 
 ```http
 GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot
