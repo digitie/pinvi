@@ -53,9 +53,10 @@
       js-yaml/shell-quote 등)를 정리한다. `npm audit fix`가 `@pinvi/mobile` Expo peer graph ERESOLVE로
       막히므로 Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다.
 
-- [x] **T-VN-STYLE-01** — `npm run format:check` baseline 219개 파일을 Prettier로 일괄 포맷했다(포맷
-      전용, 기능 변경 0). vendored byte-pinned 스냅샷(`apps/api/tests/contract/`)은 SHA-256 핀이 깨지지
-      않게 원본 유지 + `.prettierignore`로 영구 제외했다. (완료: 2026-07-28, PR #413, claude → tasks-done.md)
+- [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능
+      변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
+      `.claude/skills/` pg-aiguide 세트)는 원본 유지 + `.prettierignore`로 영구 제외했다.
+      (완료: 2026-07-28, PR #413, claude → tasks-done.md)
 
 ## kor-travel-map 공개 API 인증 계약 정합
 

@@ -6,13 +6,16 @@
 
 ## 2026-07-28
 
-- [x] **T-VN-STYLE-01** — Prettier baseline 219개 파일 일괄 포맷. (완료: 2026-07-28, PR #413, claude)
-      `npm run format:check`가 실패하던 baseline(TS/TSX 108·MD 103·JSON/JS 7)을 포맷 전용으로 정리했다.
+- [x] **T-VN-STYLE-01** — Prettier baseline 일괄 포맷(포맷 207개). (완료: 2026-07-28, PR #413, claude)
+      `npm run format:check`가 실패하던 baseline 중 포맷 전용 207개(TS/TSX 108·MD 92·JSON/JS 7)를 정리했다.
       TS/TSX는 AST 보존(typecheck+lint+vitest 통과), JSON/JS는 값 바이트 동일, MD는 따옴표/표 패딩/코드펜스
-      JS/빈 줄 정규화(산문 손실 0). **P0 자체 차단**: `apps/api/tests/contract/kor-travel-map-openapi-user.json`은
-      `test_kor_travel_map_contract.py`가 SHA-256(`91b30f40…`)으로 핀 고정한 vendored 스냅샷이라 Prettier
-      재포맷이 핀 해시를 깼다 → 원본 바이트 복원 + 신규 `.prettierignore`(`apps/api/tests/contract/`)로 영구 제외.
-      적대적 리뷰 2명(byte-sensitive-consumers·scope-ignore-completeness) 승인. `git diff --check`/format:check clean.
+      JS/빈 줄 정규화(산문 손실 0). **Vendored 파일은 byte-fidelity 위해 `.prettierignore`로 제외**(12개):
+      (1) **P0 자체 차단** — `apps/api/tests/contract/`는 `test_kor_travel_map_contract.py`가 SHA-256
+      (`91b30f40…`)으로 핀 고정한 upstream 스냅샷이라 재포맷이 핀 해시를 깼다 → 원본 복원 + ignore.
+      (2) `.agents/skills/`·`.claude/skills/` — timescale/pg-aiguide vendored skill 세트(`> 원본:` 프로버넌스)
+      11개를 원본 바이트로 복원 + ignore(재-vendoring diff noise 방지). `.claude/agents/*.md`는 마커 없는
+      repo-owned이라 포맷 유지. 적대적 리뷰 2명(byte-sensitive-consumers·scope-ignore-completeness) 승인.
+      `git diff --check`/format:check clean.
 
 - [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #412, claude)
       critical은 dev direct dependency `vitest<=3.2.5`. apps/web·packages/domain·packages/schemas 3개
