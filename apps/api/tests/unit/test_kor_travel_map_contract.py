@@ -2,8 +2,9 @@
 
 kor_travel_map main(`8880c29b`, Map PR #814/T-VN-H07A 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
-(`clients/kor_travel_map.py`) + 매핑(`api/v1/features.py _*_from_kor_travel_map`)이 의존하는 **경로·응답
-필드**가 존재하는지 검증한다.
+(`clients/kor_travel_map.py`) + 매핑(`api/v1/features.py _*_from_kor_travel_map`, `api/v1/public.py`,
+`services/place_search.py`)이 의존하는 **경로·응답 필드**가 존재하는지, 그리고 그 필드의 **타입
+계약**(type/format/enum/item/map value/required/nullable)이 유지되는지 검증한다(T-VN-H07B).
 
 운영: kor_travel_map 스펙이 갱신되면 스냅샷을 교체(`docs/integrations/kor-travel-map-rest-api.md`
 "드리프트 게이트" 절)하고 본 테스트를 돌린다. 우리 가정이 깨졌으면 여기서 실패 → client/매핑을
@@ -19,6 +20,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
+
+from app.schemas.public import (
+    PublicBeachView,
+    PublicFestivalMonth,
+    PublicFestivalView,
+    PublicMapMarker,
+    PublicMapMarkerLayer,
+)
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
 _UPSTREAM_COMMIT = "8880c29bdfbcd7805c89eafe0645f3c447f27530"
@@ -61,83 +71,204 @@ _PUBLIC_API_KEY_SCHEME = {
 }
 _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 
-# 매핑(`features.py _*_from_kor_travel_map`)이 읽는 응답 필드 — 스키마별 필수 존재.
-_SCHEMA_FIELDS: dict[str, set[str]] = {
+# --- kor_travel_map user 표면에서 Pinvi가 실제로 소비하는 필드의 typed contract (T-VN-H07B) ---
+#
+# 소스(전수 감사): user client `clients/kor_travel_map.py`, 매핑
+# `api/v1/features.py _*_from_kor_travel_map`, `api/v1/public.py`, `services/place_search.py`.
+# 각 필드의 JSON type·format·enum·array item(type/`$ref`)·map value(`$ref`)·required·nullable을
+# 스냅샷 기준으로 고정한다. 존재 검사용 `_SCHEMA_FIELDS`는 이 표에서 파생되므로 두 표가 서로
+# 어긋날 수 없다(과거처럼 손으로 두 벌을 유지하지 않는다).
+#
+# `/v1/public/*`는 `PublicBeachView`/`PublicFestivalView`/`PublicMapMarkerLayer`.model_validate로
+# **객체 전체**를 검증하므로(`api/v1/public.py`) 해당 Pydantic 모델이 선언한 모든 필드가 소비
+# 대상이다 — `test_public_view_contracts_cover_every_validated_model_field`가 이를 강제한다.
+#
+# **exact property 집합은 의도적으로 고정하지 않는다.** producer(Map) 쪽 exact 집합·
+# `additionalProperties` 고정은 T-VN-H07A(Map PR #814)가 소유한다. consumer가 이를 중복 고정하면
+# Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map migration 0066의
+# `external_component_id` 추가가 실제 사례). consumer는 "우리가 읽는 필드의 shape"만 본다.
+#
+# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다 — user client가 호출하지
+# 않으며(ADR-049, Map PR #533이 public `*-copy` 폐지), Pinvi의 큐레이션 런타임 표면은 admin
+# `/v1/admin/curated-features/{id}/detail-snapshot`이라 T-VN-H07D(#815)가 소유한다.
+#
+# 참고: `_summary_from_kor_travel_map`의 `dto.get("title")`과
+# `place_search.feature_item_to_result`의 `item.get("address")`는 user 표면 스키마에 해당
+# property 자체가 없어 항상 None인 방어 코드다 — 고정할 계약이 없어 표에 넣지 않는다.
+_CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     "FeatureSummary": {
-        "feature_id",
-        "kind",
-        "name",
-        "lon",
-        "lat",
-        "marker_color",
-        "marker_icon",
-        "status",
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "kind": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": True},
+        "lat": {"type": "number", "required": True, "nullable": True},
+        "category": {"type": "string", "required": True, "nullable": False},
+        "marker_color": {"type": "string", "required": False, "nullable": True},
+        "marker_icon": {"type": "string", "required": False, "nullable": True},
+        "status": {"type": "string", "required": True, "nullable": False},
     },
-    "ClusterSummary": {"cluster_key", "lon", "lat", "feature_count"},
+    "NearbyFeatureSummary": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "kind": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": False},
+        "lat": {"type": "number", "required": True, "nullable": False},
+        "category": {"type": "string", "required": True, "nullable": False},
+        "status": {"type": "string", "required": True, "nullable": False},
+        "distance_m": {"type": "number", "required": True, "nullable": False},
+    },
+    "ClusterSummary": {
+        "cluster_key": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": False},
+        "lat": {"type": "number", "required": True, "nullable": False},
+        "feature_count": {"type": "integer", "required": True, "nullable": False},
+    },
     "FeatureDetailResponse": {
-        "feature_id",
-        "kind",
-        "name",
-        "lon",
-        "lat",
-        "address",
-        "legal_dong_code",
-        "sido_code",
-        "sigungu_code",
-        "marker_color",
-        "marker_icon",
-        "urls",
-        "detail",
-        "status",
-        "updated_at",
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "kind": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": False, "nullable": True},
+        "lat": {"type": "number", "required": False, "nullable": True},
+        "category": {"type": "string", "required": True, "nullable": False},
+        "address": {"type": "object", "required": True, "nullable": False},
+        "legal_dong_code": {"type": "string", "required": False, "nullable": True},
+        "sido_code": {"type": "string", "required": False, "nullable": True},
+        "sigungu_code": {"type": "string", "required": False, "nullable": True},
+        "marker_color": {"type": "string", "required": False, "nullable": True},
+        "marker_icon": {"type": "string", "required": False, "nullable": True},
+        "urls": {"type": "object", "required": True, "nullable": False},
+        "detail": {"type": "object", "required": True, "nullable": False},
+        "status": {"type": "string", "required": True, "nullable": False},
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
     },
-    "WeatherCardData": {"feature_id", "is_stale", "source_styles", "metrics"},
-    "WeatherMetricOut": {"metric_key", "forecast_style", "value_number", "unit"},
-    "CategorySummary": {"code", "label", "maki_icon", "path", "depth", "is_active", "sort_order"},
-    "FeatureBatchData": {"found", "missing"},
+    "WeatherCardData": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "asof": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "is_stale": {"type": "boolean", "required": True, "nullable": False},
+        "source_styles": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "metrics": {"type": "array", "items_ref": "WeatherMetricOut", "required": True, "nullable": False},
+    },
+    "WeatherMetricOut": {
+        "metric_key": {"type": "string", "required": True, "nullable": False},
+        "metric_name": {"type": "string", "required": False, "nullable": True},
+        "forecast_style": {"type": "string", "required": True, "nullable": False},
+        "timeline_bucket": {"type": "string", "required": False, "nullable": True},
+        "valid_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "issued_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "observed_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "value_number": {"type": "number", "required": False, "nullable": True},
+        "value_text": {"type": "string", "required": False, "nullable": True},
+        "unit": {"type": "string", "required": False, "nullable": True},
+        "severity": {"type": "string", "required": False, "nullable": True},
+    },
+    "CategorySummary": {
+        "code": {"type": "string", "required": True, "nullable": False},
+        "label": {"type": "string", "required": True, "nullable": False},
+        "parent_code": {"type": "string", "required": True, "nullable": True},
+        "maki_icon": {"type": "string", "required": True, "nullable": False},
+        "path": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "depth": {"type": "integer", "required": True, "nullable": False},
+        "is_active": {"type": "boolean", "required": True, "nullable": False},
+        "sort_order": {"type": "integer", "required": True, "nullable": False},
+    },
+    "FeatureBatchData": {
+        "found": {"type": "object", "values_ref": "FeatureDetailResponse", "required": True, "nullable": False},
+        "missing": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+    },
     "BeachPublicView": {
-        "feature_id",
-        "display_name",
-        "address",
-        "source_providers",
-        "updated_at",
-        "lon",
-        "lat",
-        "road_address",
-        "sido_code",
-        "sigungu_code",
-        "beach_width_m",
-        "beach_length_m",
-        "beach_material",
-        "latest_water_quality",
-        "upcoming_index_forecasts",
-        "latest_weather",
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "display_name": {"type": "string", "required": True, "nullable": False},
+        "address": {"type": "object", "required": True, "nullable": False},
+        "source_providers": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
+        "beach_kind": {"type": "string", "required": False, "nullable": True},
+        "beach_width_m": {"type": "number", "required": False, "nullable": True},
+        "beach_length_m": {"type": "number", "required": False, "nullable": True},
+        "beach_material": {"type": "string", "required": False, "nullable": True},
+        "emergency_contact": {"type": "string", "required": False, "nullable": True},
+        "homepage_url": {"type": "string", "required": False, "nullable": True},
+        "image_url": {"type": "string", "required": False, "nullable": True},
+        "road_address": {"type": "string", "required": False, "nullable": True},
+        "jibun_address": {"type": "string", "required": False, "nullable": True},
+        "legal_dong_code": {"type": "string", "required": False, "nullable": True},
+        "sido_code": {"type": "string", "required": False, "nullable": True},
+        "sigungu_code": {"type": "string", "required": False, "nullable": True},
+        "lon": {"type": "number", "required": False, "nullable": True},
+        "lat": {"type": "number", "required": False, "nullable": True},
+        "marker_color": {"type": "string", "required": False, "nullable": True},
+        "marker_icon": {"type": "string", "required": False, "nullable": True},
+        "latest_water_quality": {"type": "object", "required": False, "nullable": True},
+        "latest_weather": {"type": "object", "required": False, "nullable": True},
+        "upcoming_index_forecasts": {"type": "array", "items_type": "object", "required": False, "nullable": False},
     },
-    "PublicBeachListData": {"items"},
+    "PublicBeachListData": {
+        "items": {"type": "array", "items_ref": "BeachPublicView", "required": True, "nullable": False},
+    },
     "FestivalPublicView": {
-        "feature_id",
-        "festival_name",
-        "event_status",
-        "address",
-        "source_providers",
-        "updated_at",
-        "event_start_date",
-        "event_end_date",
-        "venue_name",
-        "lon",
-        "lat",
-        "homepage_url",
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "festival_name": {"type": "string", "required": True, "nullable": False},
+        "event_status": {"type": "string", "enum": {"ended", "ongoing", "scheduled", "unknown"}, "required": True, "nullable": False},
+        "address": {"type": "object", "required": True, "nullable": False},
+        "source_providers": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
+        "event_start_date": {"type": "string", "format": "date", "required": False, "nullable": True},
+        "event_end_date": {"type": "string", "format": "date", "required": False, "nullable": True},
+        "venue_name": {"type": "string", "required": False, "nullable": True},
+        "road_address": {"type": "string", "required": False, "nullable": True},
+        "jibun_address": {"type": "string", "required": False, "nullable": True},
+        "sido_code": {"type": "string", "required": False, "nullable": True},
+        "sigungu_code": {"type": "string", "required": False, "nullable": True},
+        "lon": {"type": "number", "required": False, "nullable": True},
+        "lat": {"type": "number", "required": False, "nullable": True},
+        "homepage_url": {"type": "string", "required": False, "nullable": True},
+        "festival_content": {"type": "string", "required": False, "nullable": True},
+        "organizer_name": {"type": "string", "required": False, "nullable": True},
+        "auspc_instt_name": {"type": "string", "required": False, "nullable": True},
+        "suprt_instt_name": {"type": "string", "required": False, "nullable": True},
+        "phone_number": {"type": "string", "required": False, "nullable": True},
+        "provider_org_name": {"type": "string", "required": False, "nullable": True},
+        "reference_date": {"type": "string", "format": "date", "required": False, "nullable": True},
+        "marker_color": {"type": "string", "required": False, "nullable": True},
+        "marker_icon": {"type": "string", "required": False, "nullable": True},
     },
-    "PublicFestivalMonth": {"year", "month", "count"},
-    "PublicFestivalMonthlyData": {"months", "items"},
-    "PublicMapMarker": {"feature_id", "name", "lon", "lat"},
+    "PublicFestivalMonth": {
+        "year": {"type": "integer", "required": True, "nullable": False},
+        "month": {"type": "integer", "required": True, "nullable": False},
+        "count": {"type": "integer", "required": True, "nullable": False},
+    },
+    "PublicFestivalMonthlyData": {
+        "months": {"type": "array", "items_ref": "PublicFestivalMonth", "required": True, "nullable": False},
+        "items": {"type": "array", "items_ref": "FestivalPublicView", "required": True, "nullable": False},
+    },
+    "PublicMapMarker": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": False},
+        "lat": {"type": "number", "required": True, "nullable": False},
+        "sigungu_code": {"type": "string", "required": False, "nullable": True},
+    },
     "PublicMapMarkerLayerData": {
-        "layer_key",
-        "display_name",
-        "marker_icon",
-        "marker_color",
-        "items",
+        "layer_key": {"type": "string", "enum": {"beach", "festival"}, "required": True, "nullable": False},
+        "display_name": {"type": "string", "required": True, "nullable": False},
+        "marker_icon": {"type": "string", "required": True, "nullable": False},
+        "marker_color": {"type": "string", "required": True, "nullable": False},
+        "items": {"type": "array", "items_ref": "PublicMapMarker", "required": True, "nullable": False},
     },
+}
+
+# 존재 검사(`test_mapped_response_fields_exist_in_snapshot`)용 파생 집합 — 위 계약 표가 정본.
+_SCHEMA_FIELDS: dict[str, set[str]] = {
+    name: set(fields) for name, fields in _CONSUMED_FIELD_CONTRACTS.items()
+}
+
+# `model_validate`로 upstream 객체 전체를 검증하는 표면 → (스냅샷 schema, Pinvi 소비 모델).
+_VALIDATED_PUBLIC_MODELS: dict[str, type[BaseModel]] = {
+    "BeachPublicView": PublicBeachView,
+    "FestivalPublicView": PublicFestivalView,
+    "PublicFestivalMonth": PublicFestivalMonth,
+    "PublicMapMarker": PublicMapMarker,
+    "PublicMapMarkerLayerData": PublicMapMarkerLayer,
 }
 
 
@@ -289,258 +420,50 @@ def test_vendored_snapshot_matches_live_kor_travel_map() -> None:
     )
 
 
-# --- T-VN-H07B: PinVi가 실제로 읽는 필드의 typed consumer contract ---
-#
-# main의 `test_mapped_response_fields_exist_in_snapshot`은 "필드 존재"만 본다. 아래는 같은
-# `_SCHEMA_FIELDS` 집합(= user client `clients/kor_travel_map.py` + 매핑
-# `api/v1/features.py _*_from_kor_travel_map`이 실제로 읽는 필드)에 대해 JSON type·format·
-# enum·array item·required/nullable까지 vendored 스냅샷 기준으로 고정한다.
-#
-# **exact property 집합은 의도적으로 고정하지 않는다.** producer(Map) 쪽 exact 집합·
-# additionalProperties 고정은 T-VN-H07A(Map PR #814)가 소유한다. consumer가 같은 집합을 다시
-# 고정하면 Map의 무해한 additive 변경마다 PinVi가 false-red가 된다 — 실제로 Map migration
-# 0066이 `PublicCurationItemView.external_component_id`를 추가했을 때가 그 사례였다. consumer
-# 계약은 "우리가 읽는 필드의 shape"만 고정해 breaking change에만 반응한다.
-#
-# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 여기서 다루지 않는다. PinVi user
-# client는 해당 경로를 호출하지 않으며(`_CLIENT_PATHS` 주석·ADR-049 — Map PR #533이 public
-# `*-copy` 표면 폐지), 실제 큐레이션 런타임 표면은 admin
-# `/v1/admin/curated-features/{id}/detail-snapshot`이라 그 필드레벨 계약은 T-VN-H07D(#815)가
-# 소유한다.
+def _resolve_property(prop: dict[str, Any], where: str) -> tuple[dict[str, Any], bool]:
+    """nullable wrapper를 벗겨 ``(실제 schema, nullable)``을 돌려준다.
 
-_CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
-    "FeatureSummary": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "kind": {"type": "string", "required": True, "nullable": False},
-        "name": {"type": "string", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
-        # 좌표는 required이지만 nullable — 매핑이 None을 반드시 처리해야 한다.
-        "lon": {"type": "number", "required": True, "nullable": True},
-        "lat": {"type": "number", "required": True, "nullable": True},
-        "marker_color": {"type": "string", "required": False, "nullable": True},
-        "marker_icon": {"type": "string", "required": False, "nullable": True},
-    },
-    "ClusterSummary": {
-        "cluster_key": {"type": "string", "required": True, "nullable": False},
-        "feature_count": {"type": "integer", "required": True, "nullable": False},
-        "lon": {"type": "number", "required": True, "nullable": False},
-        "lat": {"type": "number", "required": True, "nullable": False},
-    },
-    "FeatureDetailResponse": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "kind": {"type": "string", "required": True, "nullable": False},
-        "name": {"type": "string", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
-        "address": {"type": "object", "required": True, "nullable": False},
-        "detail": {"type": "object", "required": True, "nullable": False},
-        "urls": {"type": "object", "required": True, "nullable": False},
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "lon": {"type": "number", "required": False, "nullable": True},
-        "lat": {"type": "number", "required": False, "nullable": True},
-        "legal_dong_code": {"type": "string", "required": False, "nullable": True},
-        "sido_code": {"type": "string", "required": False, "nullable": True},
-        "sigungu_code": {"type": "string", "required": False, "nullable": True},
-        "marker_color": {"type": "string", "required": False, "nullable": True},
-        "marker_icon": {"type": "string", "required": False, "nullable": True},
-    },
-    "WeatherCardData": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "is_stale": {"type": "boolean", "required": True, "nullable": False},
-        "source_styles": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "metrics": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherMetricOut": {
-        "metric_key": {"type": "string", "required": True, "nullable": False},
-        "forecast_style": {"type": "string", "required": True, "nullable": False},
-        "value_number": {"type": "number", "required": False, "nullable": True},
-        "unit": {"type": "string", "required": False, "nullable": True},
-    },
-    "CategorySummary": {
-        "code": {"type": "string", "required": True, "nullable": False},
-        "label": {"type": "string", "required": True, "nullable": False},
-        "maki_icon": {"type": "string", "required": True, "nullable": False},
-        "path": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "depth": {"type": "integer", "required": True, "nullable": False},
-        "is_active": {"type": "boolean", "required": True, "nullable": False},
-        "sort_order": {"type": "integer", "required": True, "nullable": False},
-    },
-    "FeatureBatchData": {
-        # T-VN-11이 5-state로 바꿀 표면 — 현재 계약은 found map + missing 목록이다.
-        "found": {"type": "object", "required": True, "nullable": False},
-        "missing": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "BeachPublicView": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "display_name": {"type": "string", "required": True, "nullable": False},
-        "address": {"type": "object", "required": True, "nullable": False},
-        "source_providers": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "lon": {"type": "number", "required": False, "nullable": True},
-        "lat": {"type": "number", "required": False, "nullable": True},
-        "road_address": {"type": "string", "required": False, "nullable": True},
-        "sido_code": {"type": "string", "required": False, "nullable": True},
-        "sigungu_code": {"type": "string", "required": False, "nullable": True},
-        "beach_width_m": {"type": "number", "required": False, "nullable": True},
-        "beach_length_m": {"type": "number", "required": False, "nullable": True},
-        "beach_material": {"type": "string", "required": False, "nullable": True},
-        "latest_water_quality": {"type": "object", "required": False, "nullable": True},
-        "latest_weather": {"type": "object", "required": False, "nullable": True},
-        "upcoming_index_forecasts": {
-            "type": "array",
-            "items_type": "object",
-            "required": False,
-            "nullable": False,
-        },
-    },
-    "PublicBeachListData": {
-        "items": {
-            "type": "array",
-            "items_ref": "BeachPublicView",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "FestivalPublicView": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "festival_name": {"type": "string", "required": True, "nullable": False},
-        # 매핑이 분기하는 상태 값 — enum 축소/확장은 PinVi breaking change다.
-        "event_status": {
-            "type": "string",
-            "enum": {"scheduled", "ongoing", "ended", "unknown"},
-            "required": True,
-            "nullable": False,
-        },
-        "address": {"type": "object", "required": True, "nullable": False},
-        "source_providers": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "event_start_date": {
-            "type": "string",
-            "format": "date",
-            "required": False,
-            "nullable": True,
-        },
-        "event_end_date": {
-            "type": "string",
-            "format": "date",
-            "required": False,
-            "nullable": True,
-        },
-        "venue_name": {"type": "string", "required": False, "nullable": True},
-        "lon": {"type": "number", "required": False, "nullable": True},
-        "lat": {"type": "number", "required": False, "nullable": True},
-        "homepage_url": {"type": "string", "required": False, "nullable": True},
-    },
-    "PublicFestivalMonth": {
-        "year": {"type": "integer", "required": True, "nullable": False},
-        "month": {"type": "integer", "required": True, "nullable": False},
-        "count": {"type": "integer", "required": True, "nullable": False},
-    },
-    "PublicFestivalMonthlyData": {
-        "months": {
-            "type": "array",
-            "items_ref": "PublicFestivalMonth",
-            "required": True,
-            "nullable": False,
-        },
-        "items": {
-            "type": "array",
-            "items_ref": "FestivalPublicView",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "PublicMapMarker": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "name": {"type": "string", "required": True, "nullable": False},
-        "lon": {"type": "number", "required": True, "nullable": False},
-        "lat": {"type": "number", "required": True, "nullable": False},
-    },
-    "PublicMapMarkerLayerData": {
-        # 지도 레이어 분기 키 — 값 집합이 곧 PinVi가 처리하는 레이어 종류다.
-        "layer_key": {
-            "type": "string",
-            "enum": {"beach", "festival"},
-            "required": True,
-            "nullable": False,
-        },
-        "display_name": {"type": "string", "required": True, "nullable": False},
-        "marker_icon": {"type": "string", "required": True, "nullable": False},
-        "marker_color": {"type": "string", "required": True, "nullable": False},
-        "items": {
-            "type": "array",
-            "items_ref": "PublicMapMarker",
-            "required": True,
-            "nullable": False,
-        },
-    },
-}
-
-
-def _resolve_property(prop: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """``X | None``이 만드는 ``anyOf`` nullable shape를 벗겨 (실제 schema, nullable)."""
+    ``X | None``이 만드는 ``anyOf`` 형태와 OpenAPI 3.1 list-form(``"type": ["string","null"]``)을
+    같은 의미로 정규화한다. 두 경우 모두 non-null 분기가 2개 이상이면 producer가 필드를
+    union으로 넓힌 것이고, 이는 consumer breaking change이므로 그렇게 보고한다.
+    """
     branches = prop.get("anyOf")
-    if not isinstance(branches, list):
-        return prop, False
-    non_null = [b for b in branches if isinstance(b, dict) and b.get("type") != "null"]
-    nullable = any(isinstance(b, dict) and b.get("type") == "null" for b in branches)
-    assert len(non_null) == 1, f"다중 non-null anyOf는 consumer 계약 대상이 아님: {prop!r}"
-    return non_null[0], nullable
+    if isinstance(branches, list):
+        non_null = [b for b in branches if isinstance(b, dict) and b.get("type") != "null"]
+        nullable = any(isinstance(b, dict) and b.get("type") == "null" for b in branches)
+        assert len(non_null) == 1, (
+            f"{where}: 스냅샷 필드가 union으로 넓어졌다(consumer breaking) — {prop!r}"
+        )
+        return non_null[0], nullable
+    declared = prop.get("type")
+    if isinstance(declared, list):
+        non_null_types = [t for t in declared if t != "null"]
+        assert len(non_null_types) == 1, (
+            f"{where}: 스냅샷 type이 union으로 넓어졌다(consumer breaking) — {declared!r}"
+        )
+        return {**prop, "type": non_null_types[0]}, "null" in declared
+    return prop, False
+
+
+def _deref(spec: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    """단일 ``$ref``면 component schema로 한 단계 따라간다(inline enum → named enum 대응)."""
+    ref = schema.get("$ref")
+    if not isinstance(ref, str):
+        return schema
+    resolved = spec["components"]["schemas"].get(ref.rsplit("/", 1)[-1])
+    return resolved if isinstance(resolved, dict) else schema
 
 
 def _assert_consumed_field(
     spec: dict[str, Any], schema_name: str, field: str, expected: dict[str, Any]
 ) -> None:
-    """PinVi가 읽는 필드 하나의 shape를 스냅샷 기준으로 고정한다."""
+    """Pinvi가 읽는 필드 하나의 shape를 스냅샷 기준으로 고정한다."""
     schema = spec["components"]["schemas"][schema_name]
     properties = schema["properties"]
     where = f"{schema_name}.{field}"
-    assert field in properties, f"{where}: 스냅샷에 없음"
-    resolved, nullable = _resolve_property(properties[field])
+    assert field in properties, f"{where}: 스냅샷에 없음(consumer breaking)"
+    resolved, nullable = _resolve_property(properties[field], where)
+    resolved = _deref(spec, resolved)
 
     assert resolved.get("type") == expected["type"], (where, "type", resolved.get("type"))
     assert nullable is expected["nullable"], (where, "nullable", nullable)
@@ -557,31 +480,45 @@ def _assert_consumed_field(
         enum = resolved.get("enum")
         assert isinstance(enum, list), (where, "enum 아님", enum)
         assert set(enum) == expected["enum"], (where, "enum", enum)
-    if "items_type" in expected:
-        assert resolved["items"].get("type") == expected["items_type"], (
+    if "items_type" in expected or "items_ref" in expected:
+        items = resolved.get("items")
+        assert isinstance(items, dict), (where, "array items 아님", resolved.get("type"))
+        if "items_type" in expected:
+            assert items.get("type") == expected["items_type"], (where, "items.type", items)
+        if "items_ref" in expected:
+            ref = str(items.get("$ref", ""))
+            assert ref.rsplit("/", 1)[-1] == expected["items_ref"], (where, "items.$ref", ref)
+    if "values_ref" in expected:
+        values = resolved.get("additionalProperties")
+        assert isinstance(values, dict), (where, "map value schema 아님", values)
+        ref = str(values.get("$ref", ""))
+        assert ref.rsplit("/", 1)[-1] == expected["values_ref"], (
             where,
-            "items.type",
-            resolved.get("items"),
+            "additionalProperties.$ref",
+            ref,
         )
-    if "items_ref" in expected:
-        ref = str(resolved["items"].get("$ref", ""))
-        assert ref.rsplit("/", 1)[-1] == expected["items_ref"], (where, "items.$ref", ref)
-
-
-def test_consumed_field_contract_covers_exactly_the_mapped_fields() -> None:
-    """계약 표와 매핑 의존 필드 목록이 서로 드리프트하지 않게 한다.
-
-    매핑이 새 필드를 읽기 시작하면 ``_SCHEMA_FIELDS``에 추가되는데, 그때 타입 계약도 함께
-    적어야 이 테스트가 통과한다(존재 검사만 하고 shape를 비워두는 경로를 막는다).
-    """
-    assert set(_CONSUMED_FIELD_CONTRACTS) == set(_SCHEMA_FIELDS)
-    for schema_name, fields in _SCHEMA_FIELDS.items():
-        assert set(_CONSUMED_FIELD_CONTRACTS[schema_name]) == fields, schema_name
 
 
 def test_consumed_response_fields_pin_types_formats_and_enums() -> None:
-    """PinVi가 읽는 모든 필드의 type/format/enum/item/required/nullable을 고정한다."""
+    """Pinvi가 읽는 모든 필드의 type/format/enum/item/map value/required/nullable을 고정한다."""
     spec = _spec()
     for schema_name, fields in _CONSUMED_FIELD_CONTRACTS.items():
         for field, expected in fields.items():
             _assert_consumed_field(spec, schema_name, field, expected)
+
+
+def test_public_view_contracts_cover_every_validated_model_field() -> None:
+    """`model_validate`로 전체 객체를 검증하는 표면은 모델 선언 필드가 모두 계약에 있어야 한다.
+
+    `api/v1/public.py`는 upstream 객체를 통째로 Pinvi 모델에 검증시키므로, 모델이 선언한
+    필드 중 하나라도 producer가 타입을 바꾸면 ValidationError(500)가 난다. 이 테스트는 계약
+    표를 **실제 소비 모델**(`app/schemas/public.py`)에 결합해, 모델에 필드를 추가하면 타입
+    계약도 함께 적어야 통과하게 만든다(표끼리만 비교하는 자기참조 검사가 아니다).
+    """
+    for snapshot_schema, model in _VALIDATED_PUBLIC_MODELS.items():
+        declared = set(model.model_fields)
+        pinned = set(_CONSUMED_FIELD_CONTRACTS[snapshot_schema])
+        assert declared <= pinned, (
+            f"{snapshot_schema}: {model.__name__}가 검증하는 필드가 계약에 없음 — "
+            f"{sorted(declared - pinned)}"
+        )
