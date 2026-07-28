@@ -696,6 +696,9 @@ def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
     """
     spec = _spec()
     schemas = spec["components"]["schemas"]
+    assert {path for _method, path in _ENDPOINT_DATA_SCHEMAS} == set(_CLIENT_PATHS), (
+        "client 경로와 컨테이너 link 표가 어긋남"
+    )
     for (method, path), expected_container in _ENDPOINT_DATA_SCHEMAS.items():
         operation = spec["paths"][path][method]
         response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
@@ -710,6 +713,31 @@ def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
             path,
             f"{expected_container}에 필드 계약이 없음",
         )
+
+
+def test_response_meta_binds_to_pinned_meta_schemas() -> None:
+    """envelope `meta` 사슬도 고정한다 — client가 여기서 값을 꺼내 `data`로 re-projection한다.
+
+    `data` 쪽과 대칭으로, 응답→`Meta`와 `Meta.cluster`/`Meta.page`→`ClusterMeta`/`PageMeta`
+    link이 없으면 `ClusterMeta`/`PageMeta` 필드 계약이 응답과 결합되지 않는다.
+    """
+    spec = _spec()
+    schemas = spec["components"]["schemas"]
+    for method, path in _ENDPOINT_DATA_SCHEMAS:
+        operation = spec["paths"][path][method]
+        response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        response_name = str(response_schema.get("$ref", "")).rsplit("/", 1)[-1]
+        meta_property = schemas[response_name]["properties"]["meta"]
+        resolved, _nullable = _resolve_property(meta_property, f"{response_name}.meta")
+        assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == "Meta", (method, path, "meta")
+
+    for field, expected in (("cluster", "ClusterMeta"), ("page", "PageMeta")):
+        resolved, nullable = _resolve_property(
+            schemas["Meta"]["properties"][field], f"Meta.{field}"
+        )
+        assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == expected, (field, expected)
+        assert nullable is True, (field, "nullable")
+        assert expected in _CONSUMED_FIELD_CONTRACTS, (field, f"{expected} 필드 계약 없음")
 
 
 def test_public_view_contracts_cover_every_validated_model_field() -> None:
