@@ -578,7 +578,9 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (`additionalProperties.$ref`)·required/nullable을 스냅샷 기준으로 고정한다. 존재 검사용
   `_SCHEMA_FIELDS`는 이 표에서 **파생**되므로 두 표가 어긋날 수 없다. 응답 컨테이너
   (`PublicFeatureListData`/`FeaturesNearbyData`/`FeatureSearchData`/`CategoriesData`/
-  `FeatureBatchData`)의 item·map value `$ref`도 고정해 endpoint↔item 스키마 결합을 지킨다.
+  `FeatureBatchData`)의 item·map value `$ref`와 경로→컨테이너 link(`_ENDPOINT_DATA_SCHEMAS`)를
+  함께 고정해 경로부터 필드까지 하나의 사슬로 묶는다. envelope `meta`의 `ClusterMeta.cluster_unit`·
+  `PageMeta.next_cursor`/`total`도 client가 `data`로 re-projection해 소비하므로 함께 고정한다.
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
