@@ -51,13 +51,16 @@ _SNAPSHOT_PATH = "/v1/admin/features/curated/{curated_feature_id}/detail-snapsho
 #     - name    : services/admin_pois.py::extract_feature_label,
 #                 api/v1/search.py의 `TripDayPoi.feature_snapshot["name"]` SQL 술어
 #     - lon/lat : services/admin_pois.py::extract_feature_coord,
-#                 services/kasi.py::extract_feature_coordinates (**top-level** lon/lat)
+#                 services/kasi.py::extract_feature_coordinates,
+#                 api/v1/search.py::_snapshot_coord (T-VN-H29 이후 같은 추출기에 위임)
+#                 — 모두 **top-level** lon/lat을 읽는다
 #     - address : services/admin_pois.py::extract_feature_address_label
 #
-# 알려진 열화(계약 위반 아님): `api/v1/search.py::_snapshot_coord`는 top-level lon/lat이 아니라
-# `feature_snapshot["coord"]`만 읽는다. Map view는 `extra="forbid"`이고 `coord` property가 없어
-# 이 read는 **구조적으로 항상 None**이며, map-curated import로 들어온 POI는 통합 검색에서 좌표가
-# null로 나온다. 런타임 수정은 이 계약 PR 범위 밖이라 별도 backlog로 추적한다.
+# (해소됨, T-VN-H29) 과거 `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
+# 읽어, Map view가 `extra="forbid"` + `coord` 미보유인 탓에 **구조적으로 항상 None**이었고
+# map-curated import POI가 통합 검색에서 좌표 null이었다. 이제 같은 정본 추출기
+# `services/admin_pois.py::extract_feature_coord`에 위임한다
+# (회귀 테스트: `tests/unit/test_search_snapshot_coord.py`).
 _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     "CuratedFeatureDetailSnapshotView": {
         "curated_feature_id": {"type": "string", "required": True, "nullable": False},
