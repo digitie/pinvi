@@ -1,18 +1,20 @@
 # resume.md
 
-## 2026-07-28 (claude) — T-VN-SEC-01 + T-VN-STYLE-01 완료
+## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 완료
 
-**방금(2)**: **T-VN-STYLE-01** — Prettier baseline 219개 일괄 포맷(포맷 전용, PR #413). P0 자체 차단:
-`apps/api/tests/contract/*.json`은 SHA-256 핀 vendored 스냅샷이라 재포맷이 핀 해시를 깨서 원본 복원 +
-`.prettierignore` 영구 제외. 적대적 리뷰 2명 approve, format:check clean.
+**방금**: **T-VN-SEC-02** — `next` 15.5.18→15.5.22로 web CVE 8건(Server Actions DoS·SSRF·cache confusion·
+Server Function 노출 등, 전부 `<15.5.21` fixed) 제거(PR #TBD). **SEC-01의 "Next 16 major" 전제는 npm audit
+union range 오독**이었고 실제 fix는 in-range 15.x 패치였다. next build/typecheck/lint/vitest 통과. 잔여
+`next high`는 next가 exact-pin한 build-time postcss@8.4.31 + 미사용 optional sharp(앱 `next/image` 미사용)
+전파분(exploit 불가) → T-VN-SEC-03로 이관. 적대적 리뷰 2명 approve.
 
-**방금(1)**: **T-VN-SEC-01** — `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로
-제거(PR #412). rolldown/oxc 충돌 `@vitejs/plugin-react`를 `oxc.jsx`로 대체. audit 25→20(critical 0). 잔여
-20은 breaking 전용 → T-VN-SEC-02(Next 16)/T-VN-SEC-03(Expo)로 분리. 적대적 리뷰 2명 approve.
+이전 완료: **T-VN-SEC-01**(vitest v4, critical 제거, PR #412), **T-VN-STYLE-01**(Prettier baseline 207개 +
+vendored 12개 `.prettierignore`, PR #413).
 
-**다음 한 작업**: 남은 blocker는 **map issue #868**(map-api가 canonical admin-proxy env 채택 후 rebuild)
-해제다. 해제되면 c6c 마이그레이션 적용 → prod domain live e2e(TDR + WebSocket C7 edge) → 머지. 그 외 열린
-task: T-VN-SEC-02(Next 16 major), T-VN-SEC-03(Expo SDK-56 transitive), T-VN-11-P(map 5-state).
+**다음 한 작업**: 사용자 지시 순서상 **TDR-mobile**(TDR web 완료 → day-color/공휴일/일출·일몰을 apps/mobile에
+mirror, Sprint M-1 train). 그 외 blocker: **map issue #868**(canonical admin-proxy env 채택 후 rebuild) 해제
+시 c6c 마이그레이션 → prod domain live e2e(TDR + WebSocket C7 edge) → 머지. 열린 task: T-VN-SEC-03(next-전파
+transitive + Expo SDK-56), T-VN-11-P(map 5-state).
 
 ## 2026-07-26 (codex agent B) — T-VN-08 실데이터 live 통과·최종 재리뷰
 
