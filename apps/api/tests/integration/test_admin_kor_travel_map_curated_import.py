@@ -98,9 +98,7 @@ def _snapshot() -> dict[str, Any]:
                 "sort_order": 1,
                 "day_index": 1,
                 "memo": "대표 축제",
-                "feature_snapshot": _feature_snapshot(
-                    name="부산 축제", lon=129.118, lat=35.153
-                ),
+                "feature_snapshot": _feature_snapshot(name="부산 축제", lon=129.118, lat=35.153),
                 "source_record_key": "festival-2026",
             },
             {
