@@ -233,6 +233,14 @@ class Settings(BaseSettings):
     pinvi_ws_max_connections_per_trip: int = 10
     pinvi_ws_max_connections_total: int = 200
     pinvi_ws_send_timeout_seconds: float = 2.0
+    # handshake-time reject(accept→close) 사이 settle. 101 upgrade를 별도 backend write로
+    # flush해 close code가 리버스 프록시 edge를 건너 살아남게 한다(미적용 시 브라우저가
+    # 4401/4403 등 대신 1006을 관측 — kor-travel-map C7 #809/#820과 동일 계층 문제). 0..5s.
+    pinvi_ws_handshake_close_settle_seconds: float = 0.25
+    # settle은 accept 이후(cap/rate-limit 이전) 소켓을 잠깐 붙잡으므로, 미인증 reject flood가
+    # settle로 FD를 증폭하지 못하게 동시 settle 수를 cap한다(초과분은 settle 없이 즉시 닫음).
+    # 0이면 무제한. 정상 reject는 저volume이라 항상 cap 안에 든다.
+    pinvi_ws_max_concurrent_reject_settles: int = 64
 
     # Sentry
     pinvi_sentry_dsn: str = ""
