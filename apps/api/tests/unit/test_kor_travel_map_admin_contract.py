@@ -52,10 +52,30 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "curated_feature_id": {"type": "string", "required": True, "nullable": False},
         "version": {"type": "integer", "required": True, "nullable": False},
         "etag": {"type": "string", "required": True, "nullable": False},
-        "theme": {"type": "$ref", "ref": "CuratedFeatureDetailThemeView", "required": True, "nullable": False},
-        "content": {"type": "$ref", "ref": "CuratedFeatureDetailContentView", "required": True, "nullable": False},
-        "source": {"type": "$ref", "ref": "CuratedFeatureDetailSourceView", "required": True, "nullable": False},
-        "items": {"type": "array", "items_ref": "CuratedFeatureDetailItemView", "required": True, "nullable": False},
+        "theme": {
+            "type": "$ref",
+            "ref": "CuratedFeatureDetailThemeView",
+            "required": True,
+            "nullable": False,
+        },
+        "content": {
+            "type": "$ref",
+            "ref": "CuratedFeatureDetailContentView",
+            "required": True,
+            "nullable": False,
+        },
+        "source": {
+            "type": "$ref",
+            "ref": "CuratedFeatureDetailSourceView",
+            "required": True,
+            "nullable": False,
+        },
+        "items": {
+            "type": "array",
+            "items_ref": "CuratedFeatureDetailItemView",
+            "required": True,
+            "nullable": False,
+        },
     },
     "CuratedFeatureDetailThemeView": {
         "theme_slug": {"type": "string", "required": True, "nullable": False},
@@ -154,9 +174,7 @@ def test_admin_snapshot_response_binds_pinned_view() -> None:
     assert response_name == "CuratedFeatureDetailSnapshotResponse"
     data_property = spec["components"]["schemas"][response_name]["properties"]["data"]
     resolved, _nullable = _resolve_property(data_property, f"{response_name}.data")
-    assert (
-        str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == "CuratedFeatureDetailSnapshotView"
-    )
+    assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == "CuratedFeatureDetailSnapshotView"
 
 
 def test_consumed_admin_snapshot_fields_pin_types_and_nullability() -> None:
