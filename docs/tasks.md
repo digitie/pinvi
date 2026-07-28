@@ -39,9 +39,19 @@
 
 ## 보안·의존성
 
-- [ ] **T-VN-SEC-01** — 2026-07-26 `npm audit`의 25건(critical 1/high 8/moderate 16)을 정리한다.
-      critical은 dev direct dependency `vitest<=3.2.5`이며 fix가 v4 major이므로 workspace 전체 test/API
-      호환성을 검증해 일괄 전환한다. T-VN-08 배포 artifact의 runtime dependency와는 분리한다.
+- [x] **T-VN-SEC-01** — `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳(apps/web·packages/domain·
+      packages/schemas) 일괄 vitest v4 전환으로 제거했다. rolldown-vite/oxc 충돌하는 `@vitejs/plugin-react`를
+      제거하고 `oxc.jsx` automatic 런타임으로 대체했다. audit 25→20(critical 0). 잔여 20(high 7/moderate 13)은
+      breaking 전용이라 T-VN-SEC-02(Next 16 major)·T-VN-SEC-03(Expo SDK-56 transitive)로 분리했다.
+      (완료: 2026-07-28, PR #412, claude → 상세는 tasks-done.md)
+
+- [ ] **T-VN-SEC-02** — 잔여 `npm audit` web-runtime high(`next` ≤16.3.0-preview.7, next-bundled postcss)을
+      Next.js 15→16 major 마이그레이션으로 정리한다. breaking이므로 독립 PR + 전체 Web e2e 회귀 필수.
+      T-VN-SEC-01에서 배포 artifact runtime dep과 분리한 잔여분이다.
+
+- [ ] **T-VN-SEC-03** — Expo SDK-56 build-tooling transitive high/moderate(sharp/brace-expansion/form-data/
+      js-yaml/shell-quote 등)를 정리한다. `npm audit fix`가 `@pinvi/mobile` Expo peer graph ERESOLVE로
+      막히므로 Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다.
 
 - [ ] **T-VN-STYLE-01** — root `npm run format:check`가 기존 218개 파일에서 실패하는 Prettier
       baseline을 별도 일괄 정리한다. T-VN-08 변경 파일은 scoped Prettier check를 통과했으며, formatter
@@ -100,6 +110,7 @@
       배너/아이콘(F1). **PR #404 머지 완료**. (dep T-301, T-306a) (ADR-056/055)
 - [x] T-307 — per-day color picker(`TripDayControls`) + `display_marker_color` 렌더(지도+리스트 뱃지
       parity) + PoiEditor F7 polish + fit-bounds 확인(F6/F7). **PR #405 머지 완료**. (dep T-301) (ADR-055)
+      후속: 색/이름만 바꾸는 일자 업데이트에 날짜를 강제하지 않는 friction 수정 **PR #411 머지 완료**.
 - [x] T-308 — 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) +
       SharedTripView 렌더(F8-UI, F1 empty-date). **PR #406 머지 완료**. (dep T-301, T-305) (ADR-055)
 - [x] T-309a — autocomplete 재작성: `MapSearchBox` `onSelect` union + address + source 아이콘 + 정렬 +
@@ -115,7 +126,7 @@
       handshake를 flush → close code(4401/4403/4408 등)가 리버스 프록시 edge를 건너 살아남게 한다.
       미적용 시 브라우저가 1006으로 관측 → 클라이언트가 auth-refresh/stop을 오분류(kor-travel-map C7
       #809/#820 동일 계층, 포팅). 미인증 reject flood가 settle로 FD 증폭하지 못하게 동시 settle cap.
-      **적대적 리뷰 2명(P2 DoS cap·P3 test-order 반영) 통과. PR 대기.** edge-특정 검증은 prod(#868 해제 후).
+      **적대적 리뷰 2명(P2 DoS cap·P3 test-order 반영) 통과. PR #410 머지 완료.** edge-특정 검증은 prod(#868 해제 후).
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 

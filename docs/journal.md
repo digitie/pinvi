@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-28 (claude) — T-VN-SEC-01 vitest v2→v4로 npm audit critical 제거
+
+- **작업**: `npm audit` critical(dev direct dependency `vitest<=3.2.5`)을 apps/web·packages/domain·
+  packages/schemas 3개 workspace를 `vitest@^4.1.10`로 일괄 올려 제거했다. 이 3곳이 vitest를 선언한 전부이며
+  root/apps/mobile은 미선언이다.
+- **rolldown/oxc 충돌 해결**: vitest 4는 rolldown-vite를 번들하고 변환은 oxc가 담당한다. esbuild 기반
+  `@vitejs/plugin-react`가 주입한 JSX 옵션이 rolldown에서 무시("oxc will be used and esbuild ignored")돼
+  `.tsx` 7개 suite가 `vite:import-analysis`에서 미변환 상태로 parse 실패했다. plugin-react를 제거하고
+  `oxc.jsx`(automatic runtime, importSource `react`)로 직접 변환하도록 바꿔 전부 통과시켰다. React 19의
+  automatic runtime과 정합하고, importSource가 틀리면 조용히 통과하지 않고 transform/import에서 hard-fail한다.
+- **환경 정리**: vitest v3에서 삭제된 `environmentMatchGlobs`를 제거하고 jsdom 단일 환경으로 통일했다.
+  순수 로직 `.test.ts`도 jsdom에서 동일하게 통과한다(DOM 미사용). RTL 자동 cleanup은 `globals:true`로 유지.
+- **잔여 audit 정직한 분리**: audit 25(critical 1/high 8/moderate 16) → 20(critical 0/high 7/moderate 13).
+  잔여 high는 (1) `next` ≤16.3.0-preview.7 — apps/web `^15`(설치 15.5.18), 정리엔 Next 16 major(breaking),
+  (2) next-bundled postcss(apps/web 자체 postcss@8.5.23은 이미 패치됨), (3) Expo SDK-56 build-tooling
+  transitive(sharp/brace-expansion/form-data/js-yaml/shell-quote)로 `npm audit fix`가 `@pinvi/mobile`
+  Expo peer graph ERESOLVE로 막힌다. 모두 breaking 전용이라 T-VN-SEC-02(Next 16)·T-VN-SEC-03(Expo)로
+  분리했다. task 본문이 "critical=vitest, 배포 artifact runtime dep은 분리"로 규정한 범위와 일치한다.
+- **검증**: web vitest 16 files/97 tests, domain 17/65, schemas 4/8 pass. web `tsc --noEmit` + `next lint`
+  무경고. lockfile에 vitest/@vitest/* 는 단일 4.1.10 dedupe, sub-v4 잔존 0. 적대적 리뷰 2명
+  (correctness-regression·security-scope) 모두 approve. 유일 지적 P3(vitest.setup.ts stale comment) 반영.
+- **문서**: 사용자 지시("머지시 tasks 관련 문서도 업데이트")에 따라 tasks.md/tasks-done.md/resume.md/journal.md를
+  갱신했다. 최근 doc 없이 머지됐던 T-WS-C7(#410)·T-307 friction 후속(#411)도 소급 아카이브했다.
+
 ## 2026-07-26 (codex agent B) — T-VN-08 false-broken 계약·UI hardening
 
 - **작업**: trip view batch의 `found|missing|unverified|not_linked` 해석 상태를 분리하고,
