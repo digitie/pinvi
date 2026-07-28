@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 (Next 16 major 아님)
+
+- **작업**: `apps/web`의 `next`를 15.5.18→15.5.22(`^15.5.21` floor)로 올려 request-path web CVE 8건을
+  제거했다: App Router Server Actions DoS·custom server SSRF·cache confusion(2건)·Edge unbounded payload·
+  rewrite SSRF·Image SVG DoS·Server Function endpoint 노출. 8건 모두 advisory fixed range `<15.5.21`이라
+  in-range 15.x 패치로 해결된다.
+- **SEC-01 전제 정정(중요)**: SEC-01에서 "next high는 Next 16 major 필요"라고 적었는데, 이는 npm audit가
+  여러 advisory를 합쳐 보여준 union range(`9.3.4-canary.0 - 16.3.0-preview.7`)를 오독한 것이다. 개별
+  advisory를 확인하니 전부 `<15.5.21` fixed였다. 실제로 Next 16 stable(16.2.12)조차 union range 안이라
+  더 나빴을 것이고, major 마이그레이션은 불필요·부적절했다. next-intl/`next lint`/async params 변경도 불필요.
+- **검증**: next typecheck·lint(무경고)·build(Compiled 14.5s, 57 static pages)·vitest(97) 통과. lock diff는
+  `next`+`@next/*`(swc 바이너리/env/eslint-plugin) subtree 한정(48/48 lines).
+- **잔여 정직 표기**: npm audit는 여전히 `next high`로 센다(총 7 high 불변). 그러나 이는 next가 **직접**
+  취약한 게 아니라(`via=[postcss,sharp]`, direct advisory 0), next가 **exact-pin**한 build-time
+  postcss@8.4.31 + **미사용** optional sharp@0.34.5(앱은 `next/image` 미사용, 자체 postcss는 8.5.23)을
+  전파하기 때문이다. 앱 request-path에서 exploit 불가. npm `overrides`는 next의 exact pin(`postcss:8.4.31`,
+  `sharp:^0.34.3`)을 만족 못 해 "invalid overridden" 상태가 되고 `npm ci`가 거부하므로 적용하지 않았다.
+  이 전파분은 next 상위 릴리스가 pin을 올릴 때 풀리며 T-VN-SEC-03로 이관했다.
+- **문서**: tasks.md/tasks-done.md/resume.md/journal.md 갱신. SEC-01 항목의 "Next 16 major" 표기도 정정.
+
 ## 2026-07-28 (claude) — T-VN-STYLE-01 Prettier baseline 일괄 포맷
 
 - **작업**: `npm run format:check`가 실패하던 219개 파일을 Prettier로 일괄 포맷했다(포맷 전용, 기능 변경 0).

@@ -6,6 +6,19 @@
 
 ## 2026-07-28
 
+- [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)
+      App Router Server Actions DoS(GHSA-m99w-x7hq-7vfj)·custom server SSRF(89xv-2m56-2m9x)·cache
+      confusion(68g3-v927-f742, 4633-3j49-mh5q)·Edge unbounded payload(4c39-4ccg-62r3)·rewrite SSRF
+      (p9j2-gv94-2wf4)·Image SVG DoS(q8wf-6r8g-63ch)·Server Function endpoint 노출(955p-x3mx-jcvp) —
+      전부 `<15.5.21` fixed라 in-range 15.x 패치로 제거했다(`^15.5.21`). **SEC-01의 "Next 16 major" 전제
+      정정**: npm audit union range(…-16.3.0-preview.7)를 오독한 것이고 실제 fix는 15.5.21. next
+      typecheck/lint/build(57 static pages)/vitest(97) 통과, lock diff는 next+`@next/*` subtree 한정.
+      npm audit `next high` 잔존은 next가 exact-pin한 build-time postcss@8.4.31 + 미사용 optional
+      sharp@0.34.5 전파분(앱은 `next/image` 미사용·자체 postcss 8.5.23, exploit 불가). **global** override는
+      next exact pin과 충돌해 "invalid overridden"으로 미적용됐고(scoped nested override는 미시도), 전파분은
+      T-VN-SEC-03로 이관. 적대적 리뷰 2명 승인(추가로 리뷰어가 GHSA-6gpp-xcg3-4w24 middleware-bypass는
+      16.x 전용이라 Next 16行이 오히려 더 취약했을 것임을 확인).
+
 - [x] **T-VN-STYLE-01** — Prettier baseline 일괄 포맷(포맷 207개). (완료: 2026-07-28, PR #413, claude)
       `npm run format:check`가 실패하던 baseline 중 포맷 전용 207개(TS/TSX 108·MD 92·JSON/JS 7)를 정리했다.
       TS/TSX는 AST 보존(typecheck+lint+vitest 통과), JSON/JS는 값 바이트 동일, MD는 따옴표/표 패딩/코드펜스

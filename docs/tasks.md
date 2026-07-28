@@ -42,16 +42,24 @@
 - [x] **T-VN-SEC-01** — `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳(apps/web·packages/domain·
       packages/schemas) 일괄 vitest v4 전환으로 제거했다. rolldown-vite/oxc 충돌하는 `@vitejs/plugin-react`를
       제거하고 `oxc.jsx` automatic 런타임으로 대체했다. audit 25→20(critical 0). 잔여 20(high 7/moderate 13)은
-      breaking 전용이라 T-VN-SEC-02(Next 16 major)·T-VN-SEC-03(Expo SDK-56 transitive)로 분리했다.
+      후속으로 T-VN-SEC-02(next 15.x 보안 패치)·T-VN-SEC-03(next-전파 transitive + Expo SDK-56)로 분리했다.
       (완료: 2026-07-28, PR #412, claude → 상세는 tasks-done.md)
 
-- [ ] **T-VN-SEC-02** — 잔여 `npm audit` web-runtime high(`next` ≤16.3.0-preview.7, next-bundled postcss)을
-      Next.js 15→16 major 마이그레이션으로 정리한다. breaking이므로 독립 PR + 전체 Web e2e 회귀 필수.
-      T-VN-SEC-01에서 배포 artifact runtime dep과 분리한 잔여분이다.
+- [x] **T-VN-SEC-02** — `next`를 15.5.18→**15.5.22**로 올려 request-path web CVE 8건(App Router
+      Server Actions DoS·SSRF·cache confusion·Server Function endpoint 노출 등, 전부 `<15.5.21` fixed)을
+      제거했다. **정정**: SEC-01의 "Next 16 major 필요" 전제는 npm audit union range(…-16.3.0-preview.7)
+      오독이었고, 실제 fix는 in-range 15.x 패치다. next build/typecheck/lint/vitest 통과.
+      npm audit는 여전히 `next high`로 표시하는데, 이는 next가 exact-pin한 build-time postcss@8.4.31 +
+      미사용 optional sharp@0.34.5(앱은 `next/image` 미사용, 자체 postcss는 이미 8.5.23)을 전파하기
+      때문이며 앱에서 exploit 불가다. override는 next의 exact pin을 만족 못 해 `npm ci`가 거부→불가.
+      해당 전파분은 T-VN-SEC-03로 이관. (완료: 2026-07-28, PR #414, claude → tasks-done.md)
 
-- [ ] **T-VN-SEC-03** — Expo SDK-56 build-tooling transitive high/moderate(sharp/brace-expansion/form-data/
-      js-yaml/shell-quote 등)를 정리한다. `npm audit fix`가 `@pinvi/mobile` Expo peer graph ERESOLVE로
-      막히므로 Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다.
+- [ ] **T-VN-SEC-03** — next-전파 transitive(exact-pin build-time postcss@8.4.31 + 미사용 optional
+      sharp@0.34.5)와 Expo SDK-56 build-tooling transitive(brace-expansion/form-data/js-yaml/shell-quote)를
+      정리한다. 전자는 next 상위 릴리스가 pin을 올릴 때 자연 해소되거나, **scoped nested override**
+      (`overrides.next.{postcss,sharp}`)로 audit-green 시도 가능(단 next build 회귀 검증 + `npm ci` 수용 확인
+      필수 — global override는 이미 미적용 확인). 후자는 `@pinvi/mobile` Expo peer graph ERESOLVE 때문에
+      Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다. 모두 앱 request-path 미노출/미사용.
 
 - [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능
       변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
