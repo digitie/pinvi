@@ -900,15 +900,20 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (!view) return;
     const day = view.days.find((d) => d.day_index === dayIndex);
     if (!day) return;
-    const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
-    if (validationMessage) {
-      setMutationError(validationMessage);
-      return;
+    // 날짜는 실제로 바뀔 때만 검증한다. 색/이름만 바꾸는 업데이트는 파생 effective_date(ADR-055)를
+    // 쓰는 일자에서 명시 날짜를 강제하면 안 된다(날짜 필드가 빈 채 색만 저장 시 "날짜 필요" 오류 방지).
+    const dateChanged = next.date !== (day.date ?? null);
+    if (dateChanged) {
+      const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
+      if (validationMessage) {
+        setMutationError(validationMessage);
+        return;
+      }
     }
     const patch: TripDayUpdate = {};
     const nextTitle = next.title || null;
     if (nextTitle !== day.title) patch.title = nextTitle;
-    if (next.date !== day.date) patch.date = next.date;
+    if (dateChanged) patch.date = next.date;
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
     if (!hasPatchFields(patch)) return;

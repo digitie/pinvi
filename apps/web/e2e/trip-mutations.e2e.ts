@@ -347,3 +347,67 @@ test('일자 설정에서 색을 고르면 marker_color가 PATCH된다 (F6)', as
 
   await expect.poll(() => patchedColor).toBe('P-05');
 });
+
+test('기간 있는 여행 + 날짜 없는 일자에서 색만 저장하면 날짜 강제 없이 PATCH된다 (T-307)', async ({
+  page,
+}) => {
+  // 파생 effective_date(ADR-055)를 쓰는 일자는 명시 날짜가 비어 있어도 색/이름만 저장할 수 있어야 한다.
+  // 이전에는 dayDateUpdateValidation이 무조건 실행돼 "여행 기간이 있는 경우 일자 날짜가 필요합니다"로 막혔다.
+  let patchedColor: string | null | undefined;
+  let patchIncludedDate = false;
+  await commonRoutes(page);
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON() as { marker_color?: string | null; date?: string | null };
+      patchedColor = body.marker_color;
+      patchIncludedDate = 'date' in body;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            trip_id: tripId,
+            day_index: 1,
+            date: null,
+            title: '1일차',
+            note: null,
+            marker_color: patchedColor ?? null,
+            version: 2,
+            created_at: '2026-06-01T09:00:00+09:00',
+            updated_at: '2026-06-01T09:05:00+09:00',
+          },
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          // 여행에 기간이 있고, 일자에는 명시 날짜가 없다(파생 date).
+          trip: { ...trip(), start_date: '2026-07-01', end_date: '2026-07-03' },
+          days: [day([poi()])],
+          companions: [],
+          share_links: [],
+          broken_feature_count: 0,
+        },
+      }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByTestId('trip-day-rename').first().click();
+  await expect(page.getByTestId('trip-day-color-picker')).toBeVisible();
+  await page.getByTestId('trip-day-color-P-05').click();
+  await page.getByTestId('trip-day-title-dialog').getByRole('button', { name: '저장' }).click();
+
+  // 색만 PATCH되고(날짜 미포함), "날짜 필요" 오류로 막히지 않는다.
+  await expect.poll(() => patchedColor).toBe('P-05');
+  expect(patchIncludedDate).toBe(false);
+});
