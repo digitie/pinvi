@@ -556,6 +556,39 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 
 ---
 
+## 8-A. admin detail-snapshot 계약 게이트 (T-VN-H07D, map#815, 2026-07-28)
+
+§8은 **user** 표면을 덮는다. 그런데 Pinvi의 큐레이션 import 런타임이 실제로 소비하는 것은
+admin `GET /v1/admin/curated-features/{id}/detail-snapshot`이고, 이 표면에는 그동안 **어떤 계약
+게이트도 없었다**.
+
+- **vendored 정본**: `apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json`.
+  Map full 스펙(1 MB+) 전체가 아니라 해당 경로와 응답 스키마의 **전이적 폐포 + 필요한
+  securityScheme**만 잘라낸 subset(약 19 KB)이다. 추출기
+  `apps/api/scripts/vendor_kor_travel_map_admin_snapshot.py`는 정렬 key·고정 indent로
+  **결정적**이라 같은 입력이면 같은 바이트가 나온다.
+- **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_admin_contract.py` —
+  pinned SHA-256, Pinvi가 실제로 읽는 필드의 type/nullable/required, 경로→200→`data` 결합,
+  admin 인증 헤더(`X-Kor-Travel-Map-Admin-Proxy-Secret`) header-only 계약.
+  exact property 집합은 고정하지 **않는다**(producer 소유 — consumer가 중복 고정하면 Map의 무해한
+  additive 변경마다 false-red).
+- **CI 게이트 2종**(`.github/workflows/api.yml`):
+  - `contract-pin-consistency` — **차단**(`aggregate-ci.yml`의 required check에 포함). Map을
+    **핀 커밋**으로 체크아웃해 user 표면은 byte 비교, admin 표면은 재추출 비교를 실제로 실행한다.
+    과거 live-compare가 sibling 체크아웃 부재로 skip되어 항상 green이던 맹점을 없앤다.
+    증명 대상은 **핀↔vendored 자기정합**(수기 graft·재-vendor 없는 핀 상승)이지 "최신"이 아니다.
+  - `contract-staleness` — 예약(매일)·비차단(PR에는 아예 돌지 않음). Map **main**과 비교해 핀
+    자체가 뒤처졌는지 알린다. 핀 기준 비교로는 구조상 알 수 없는 종류(T-VN-H07B에서 user
+    스냅샷이 174 commits 뒤처진 걸 뒤늦게 발견한 사례)를 담당한다.
+- **갱신 절차**: Map 스펙 변경 시 ① 추출기를 새 Map 커밋으로 재실행,
+  ② `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256` 갱신, ③ 계약 테스트 실행, ④ 실패하면 client/매핑과
+  `_CONSUMED_FIELD_CONTRACTS`를 함께 고친다.
+
+> **알려진 열화(계약 위반 아님)**: `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
+> 읽는데 Map view는 `extra="forbid"`이고 `coord` property가 없다 — 이 read는 구조적으로 항상 None이라
+> map-curated import로 들어온 POI는 통합 검색에서 좌표가 null이다. 좌표 자체는 top-level `lon`/`lat`에
+> 있고 `admin_pois`/`kasi`는 거기서 정상적으로 읽는다. 런타임 수정은 별도 task로 추적한다.
+
 ## 8. 드리프트 게이트 (T-210e, 2026-06-11)
 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
