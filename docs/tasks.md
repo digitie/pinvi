@@ -43,7 +43,7 @@
       packages/schemas) 일괄 vitest v4 전환으로 제거했다. rolldown-vite/oxc 충돌하는 `@vitejs/plugin-react`를
       제거하고 `oxc.jsx` automatic 런타임으로 대체했다. audit 25→20(critical 0). 잔여 20(high 7/moderate 13)은
       breaking 전용이라 T-VN-SEC-02(Next 16 major)·T-VN-SEC-03(Expo SDK-56 transitive)로 분리했다.
-      (완료: 2026-07-28, PR #TBD, claude → 상세는 tasks-done.md)
+      (완료: 2026-07-28, PR #412, claude → 상세는 tasks-done.md)
 
 - [ ] **T-VN-SEC-02** — 잔여 `npm audit` web-runtime high(`next` ≤16.3.0-preview.7, next-bundled postcss)을
       Next.js 15→16 major 마이그레이션으로 정리한다. breaking이므로 독립 PR + 전체 Web e2e 회귀 필수.

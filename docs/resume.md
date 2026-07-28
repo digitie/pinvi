@@ -2,7 +2,7 @@
 
 ## 2026-07-28 (claude) — T-VN-SEC-01 완료, 다음은 T-VN-STYLE-01
 
-**방금**: `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로 제거(PR #TBD).
+**방금**: `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳 vitest v4 일괄 전환으로 제거(PR #412).
 rolldown/oxc와 충돌하는 `@vitejs/plugin-react`를 `oxc.jsx`로 대체. audit 25→20(critical 0). 잔여 20은
 breaking 전용(Next 16 major=T-VN-SEC-02, Expo SDK-56 transitive=T-VN-SEC-03)이라 분리. web 97/domain 65/
 schemas 8 vitest pass, web typecheck+lint pass, 적대적 리뷰 2명 approve.

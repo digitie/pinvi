@@ -6,7 +6,7 @@
 
 ## 2026-07-28
 
-- [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #TBD, claude)
+- [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #412, claude)
       critical은 dev direct dependency `vitest<=3.2.5`. apps/web·packages/domain·packages/schemas 3개
       workspace를 `vitest@^4.1.10`로 올렸다. vitest 4는 rolldown-vite/oxc를 쓰는데 esbuild 기반
       `@vitejs/plugin-react`가 주입한 JSX 옵션이 무시돼 `.tsx` 7개 suite가 import-analysis parse에서 깨졌다.
