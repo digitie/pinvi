@@ -28,10 +28,13 @@
 > PR #533으로 admin `/v1/admin/curated-features/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> T-VN-20 vendored 정본은 kor-travel-map PR #794 merge commit
-> `cf1f0bba6a2ea18f23eb647216236b84fc7b5a80`의 전체 파일이며 SHA-256은
-> `91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f`다. 2026-07-20 최신
-> `origin/main`도 같은 hash임을 확인했다. Pinvi contract gate는 이 pinned hash와 선택적 live 전체
+> vendored 정본은 **2026-07-28(T-VN-H07B) 기준 kor-travel-map `main`
+> `8880c29bdfbcd7805c89eafe0645f3c447f27530`**(Map PR #814/T-VN-H07A 포함)의 전체 파일이며
+> SHA-256은 `0a7f16847ef7620c168cac61b4a7221747ede747b19d8531c4345d5add4b2116`다.
+> (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
+> 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration
+> 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
+> Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
@@ -558,8 +561,8 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map PR #794 merge commit의 **전체 파일**. pinned SHA-256은 본 문서 상단과
-  `test_kor_travel_map_contract.py`가 함께 고정한다.
+  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8880c29b`, T-VN-H07B에서 재동기화).
+  pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -569,14 +572,34 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (4) public route `PublicApiKey|ServiceToken` header security와 batch `ServiceToken`-only,
   (5) pinned SHA-256 및 표준 workspace sibling `kor-travel-map-*` 전체 파일 byte equality
   (sibling이 없는 CI에서는 pinned hash는 항상 실행, live equality만 skip —
-  `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
+  `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능),
+  (6) **(T-VN-H07B) typed consumer contract** — `_CONSUMED_FIELD_CONTRACTS`가 **단일 정본**이며,
+  Pinvi가 읽는 각 필드의 JSON type·format·enum·array item(type/`$ref`)·map value
+  (`additionalProperties.$ref`)·required/nullable을 스냅샷 기준으로 고정한다. 존재 검사용
+  `_SCHEMA_FIELDS`는 이 표에서 **파생**되므로 두 표가 어긋날 수 없다. 응답 컨테이너
+  (`PublicFeatureListData`/`FeaturesNearbyData`/`FeatureSearchData`/`CategoriesData`/
+  `FeatureBatchData`)의 item·map value `$ref`와 경로→컨테이너 link(`_ENDPOINT_DATA_SCHEMAS`)를
+  함께 고정해 경로부터 필드까지 하나의 사슬로 묶는다. envelope `meta`의 `ClusterMeta.cluster_unit`·
+  `PageMeta.next_cursor`/`total`도 client가 `data`로 re-projection해 소비하므로 함께 고정한다.
+  `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
+  `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
+  모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
+
+  > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
+  > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를
+  > 중복 고정하면 Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map 0066의
+  > `external_component_id` 추가가 실제 사례). 공개 curated 표면(`PublicCurated*`/
+  > `PublicCuration*`)도 user client가 호출하지 않으므로 본 gate 대상이 아니다 — Pinvi의 실제
+  > 큐레이션 런타임 표면은 admin `/v1/admin/curated-features/{id}/detail-snapshot`이고 그
+  > 필드레벨 계약은 T-VN-H07D(#815)가 소유한다.
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
   1. 검토한 upstream exact commit에서 `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
 apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `_UPSTREAM_COMMIT`과 `_SNAPSHOT_SHA256`을 같은 원본으로 갱신한다.
   3. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py`를 실행한다.
-  4. 실패하면 사라진/바뀐 경로·필드·query/security를 `clients/kor_travel_map.py` +
+  4. 실패하면 사라진/바뀐 경로·필드·타입·query/security를 `clients/kor_travel_map.py` +
      `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
-     `_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_CONSUMED_FIELD_CONTRACTS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_SCHEMA_FIELDS`는 파생 집합이므로 직접 편집하지 않는다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).
