@@ -40,7 +40,34 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
         return str(user.user_id)
 
 
+def _feature_snapshot(*, name: str, lon: float, lat: float) -> dict[str, Any]:
+    """Map `CuratedFeatureDetailFeatureSnapshotView`가 실제로 내보내는 key 집합.
+
+    T-VN-H07D 이전 fixture는 `{"display_name": ...}`였는데, Map view가 `extra="forbid"`로
+    타입화되면서 그 shape는 **더 이상 나올 수 없다**. 실제 payload와 어긋난 fixture는
+    소비자 회귀(예: `extract_feature_label`이 `name`을 읽는다)를 통과시켜 버린다.
+    """
+    return {
+        "feature_id": "feature::festival::busan",
+        "name": name,
+        "category": "festival",
+        "kind": "event",
+        "lon": lon,
+        "lat": lat,
+        "sido_code": "26",
+        "sigungu_code": "26350",
+        "legal_dong_code": None,
+        "address": {"road": "부산광역시 수영구 광안해변로"},
+        "detail": {},
+    }
+
+
 def _snapshot() -> dict[str, Any]:
+    """Map admin detail-snapshot의 **핀된 계약 shape**를 그대로 따르는 fixture.
+
+    계약은 `apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json`가 정본이고
+    `tests/unit/test_kor_travel_map_admin_contract.py`가 고정한다.
+    """
     return {
         "curated_feature_id": "festival::busan::2026",
         "version": 7,
@@ -53,11 +80,15 @@ def _snapshot() -> dict[str, Any]:
             "destination_name": "부산",
             "region_code": "26",
             "category": "festival",
+            # T-VN-H07D: typed view에서 required가 된 key(생성부가 항상 내보낸다).
+            "curation_status": "curated",
+            "reuse_policy": "allowed",
         },
         "source": {
             "provider": "kor-travel-map",
             "source_name": "kor_travel_map curated",
             "dataset_key": "curated_features",
+            "source_url": None,
         },
         "items": [
             {
@@ -67,7 +98,9 @@ def _snapshot() -> dict[str, Any]:
                 "sort_order": 1,
                 "day_index": 1,
                 "memo": "대표 축제",
-                "feature_snapshot": {"display_name": "부산 축제"},
+                "feature_snapshot": _feature_snapshot(
+                    name="부산 축제", lon=129.118, lat=35.153
+                ),
                 "source_record_key": "festival-2026",
             },
             {
@@ -77,7 +110,10 @@ def _snapshot() -> dict[str, Any]:
                 "sort_order": 2,
                 "day_index": 1,
                 "memo": "근처 산책",
-                "feature_snapshot": {"display_name": "광안리"},
+                "feature_snapshot": {
+                    **_feature_snapshot(name="광안리", lon=129.128, lat=35.153),
+                    "feature_id": "feature::gwangalli",
+                },
                 "source_record_key": "gwangalli",
             },
         ],

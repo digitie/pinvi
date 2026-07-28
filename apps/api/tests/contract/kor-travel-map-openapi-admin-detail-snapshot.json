@@ -569,6 +569,14 @@
         "title": "ProblemDetailError",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "AdminBFF": {
+        "description": "trusted admin frontend BFF가 주입하는 server-only secret. 허용된 peer CIDR과 X-Kor-Travel-Map-Actor actor header도 함께 검증한다.",
+        "in": "header",
+        "name": "X-Kor-Travel-Map-Admin-Proxy-Secret",
+        "type": "apiKey"
+      }
     }
   },
   "info": {

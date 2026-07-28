@@ -10,9 +10,13 @@ vendored 정본은 Map full 스펙(1 MB+) 전체가 아니라 **해당 경로와
 잘라낸 subset이다(`scripts/vendor_kor_travel_map_admin_snapshot.py`가 결정적으로 추출). 무관한
 Map 변경마다 diff가 나지 않으면서 계약 회귀는 그대로 잡는다.
 
-**freshness**: 추출이 결정적이므로 CI가 Map을 핀 커밋으로 체크아웃해 같은 스크립트를 다시 돌리고
-byte 비교한다(`.github/workflows/api.yml`의 `contract-freshness`). 과거처럼 sibling 체크아웃이
-없다고 skip되어 green이 되는 경로를 없앤다.
+CI 게이트 두 가지(`.github/workflows/api.yml`)로 나뉜다.
+
+- `contract-pin-consistency`(차단, `Aggregate CI gate`의 required check): Map을 **핀 커밋**으로
+  체크아웃해 vendored 파일을 실제로 비교한다. 과거처럼 sibling 체크아웃이 없다고 skip되어 green이
+  되는 경로를 없앤다. 증명 대상은 **핀↔vendored 자기정합**(수기 graft·재-vendor 없는 핀 상승)이다.
+- `contract-staleness`(예약, 비차단): Map **main**과 비교해 핀 자체가 뒤처졌는지 알린다.
+  핀 기준 비교로는 구조상 알 수 없는 종류(H07B의 174-commit 뒤처짐)를 담당한다.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ _SNAPSHOT = (
 )
 # 추출 원본 — kor-travel-map main. 갱신 절차는 docs/integrations/kor-travel-map-rest-api.md §8.
 _UPSTREAM_COMMIT = "5c0e0cae0cdb6009eb81c7c9030dcf5baf2719a2"
-_SNAPSHOT_SHA256 = "c28608480f6b52f06297c433ca84beaa21a6bd85b845fd570483887fba710ee3"
+_SNAPSHOT_SHA256 = "43afeba9ced588e5cd0fce410add45b4f3eaaef4a1c44227c5ff0dd245bd98b8"
 
 # Map 문서 경로. Pinvi가 호출하는 것은 같은 핸들러의 alias(`/v1/admin/curated-features/...`)이며
 # `include_in_schema=False`라 스펙에 없다 — alias 존재 자체는 Map 쪽
@@ -46,7 +50,17 @@ _PINVI_CLIENT_PATH = "/v1/admin/curated-features/{curated_feature_id}/detail-sna
 #   source     : source_name/provider
 #   theme      : theme_slug
 #   item       : curated_feature_item_id/day_index/sort_order/feature_id/memo/feature_snapshot
-#   feature_snapshot: name/lon/lat/address (services/admin_pois.py 추출기 + api/v1/search.py SQL)
+#   feature_snapshot:
+#     - name    : services/admin_pois.py::extract_feature_label,
+#                 api/v1/search.py의 `TripDayPoi.feature_snapshot["name"]` SQL 술어
+#     - lon/lat : services/admin_pois.py::extract_feature_coord,
+#                 services/kasi.py::extract_feature_coordinates (**top-level** lon/lat)
+#     - address : services/admin_pois.py::extract_feature_address_label
+#
+# 알려진 열화(계약 위반 아님): `api/v1/search.py::_snapshot_coord`는 top-level lon/lat이 아니라
+# `feature_snapshot["coord"]`만 읽는다. Map view는 `extra="forbid"`이고 `coord` property가 없어
+# 이 read는 **구조적으로 항상 None**이며, map-curated import로 들어온 POI는 통합 검색에서 좌표가
+# null로 나온다. 런타임 수정은 이 계약 PR 범위 밖이라 별도 backlog로 추적한다.
 _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     "CuratedFeatureDetailSnapshotView": {
         "curated_feature_id": {"type": "string", "required": True, "nullable": False},
@@ -185,19 +199,33 @@ def test_consumed_admin_snapshot_fields_pin_types_and_nullability() -> None:
             _assert_consumed_field(spec, schema_name, field, expected)
 
 
-def test_client_calls_the_alias_path_of_the_pinned_operation() -> None:
-    """client가 호출하는 경로 문자열이 계약 대상 operation의 alias와 일치하는지 고정한다.
+def test_admin_auth_scheme_is_header_only() -> None:
+    """admin 표면의 인증 헤더 계약을 고정한다(user 표면 게이트가 이미 하는 것과 대칭).
 
-    alias는 Map에서 `include_in_schema=False`라 스펙에 없다. 문자열이 조용히 바뀌면 404가 되므로
-    client 소스의 실제 경로와 여기 기록한 alias를 대조한다.
+    subset은 operation의 `security` 요구와 함께 해당 securityScheme도 잘라 담는다. 이게 없으면
+    `security`가 매달린 참조가 되고 Map이 헤더 이름을 바꿔도 여기서 안 걸린다 — client는
+    `clients/kor_travel_map_admin.py`가 그 헤더로 요청을 보낸다.
     """
+    spec = _spec()
+    operation = spec["paths"][_SNAPSHOT_PATH]["get"]
+    requirements = operation.get("security") or []
+    scheme_names = sorted({name for requirement in requirements for name in requirement})
+    assert scheme_names, "admin operation에 security 요구가 없다"
+
+    schemes = spec["components"]["securitySchemes"]
+    for name in scheme_names:
+        scheme = schemes[name]
+        assert scheme["type"] == "apiKey", (name, scheme)
+        assert scheme["in"] == "header", (name, "query/cookie 인증은 계약 위반")
+
     client_source = (
         Path(__file__).resolve().parents[2] / "app" / "clients" / "kor_travel_map_admin.py"
     ).read_text(encoding="utf-8")
-    literal = _PINVI_CLIENT_PATH.replace("{curated_feature_id}", "{curated_feature_id}")
-    assert literal in client_source, (
-        "admin client의 detail-snapshot 경로가 계약에 기록된 alias와 다르다"
-    )
+    for name in scheme_names:
+        header = schemes[name]["name"]
+        assert header in client_source, (
+            f"Map이 요구하는 인증 헤더 {header!r}를 admin client가 보내지 않는다"
+        )
 
 
 @pytest.mark.parametrize(

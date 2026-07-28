@@ -61,6 +61,18 @@ def _closure(schemas: dict[str, Any], seeds: list[str]) -> dict[str, Any]:
     return {name: schemas[name] for name in sorted(seen)}
 
 
+def _security_scheme_names(operation: dict[str, Any]) -> list[str]:
+    """operation의 `security` 요구에 등장하는 scheme 이름."""
+    names: set[str] = set()
+    for method in operation.values():
+        if not isinstance(method, dict):
+            continue
+        for requirement in method.get("security", []) or []:
+            if isinstance(requirement, dict):
+                names.update(requirement)
+    return sorted(names)
+
+
 def build_subset(source: dict[str, Any]) -> dict[str, Any]:
     paths = source.get("paths", {})
     if SNAPSHOT_PATH not in paths:
@@ -68,6 +80,17 @@ def build_subset(source: dict[str, Any]) -> dict[str, Any]:
     operation = paths[SNAPSHOT_PATH]
     schemas = source["components"]["schemas"]
     subset_schemas = _closure(schemas, _iter_refs(operation))
+
+    # operation이 요구하는 securityScheme도 함께 잘라낸다. 빠뜨리면 subset의 `security`가
+    # 매달린 참조가 되고, admin 인증 헤더 계약(`X-Kor-Travel-Map-Admin-Proxy-Secret`)이
+    # 게이트 밖에 남는다 — user 표면 게이트는 같은 계약을 이미 고정하고 있다.
+    source_schemes = source.get("components", {}).get("securitySchemes", {})
+    scheme_names = _security_scheme_names(operation)
+    missing = [name for name in scheme_names if name not in source_schemes]
+    if missing:
+        raise SystemExit(f"source 스펙에 securityScheme 없음: {missing}")
+    subset_schemes = {name: source_schemes[name] for name in scheme_names}
+
     return {
         "openapi": source.get("openapi"),
         "info": {
@@ -75,7 +98,7 @@ def build_subset(source: dict[str, Any]) -> dict[str, Any]:
             "version": source.get("info", {}).get("version"),
         },
         "paths": {SNAPSHOT_PATH: operation},
-        "components": {"schemas": subset_schemas},
+        "components": {"schemas": subset_schemas, "securitySchemes": subset_schemes},
     }
 
 
