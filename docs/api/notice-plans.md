@@ -235,7 +235,7 @@ Pinvi가 자체적으로 직접 만든 curated trip plan을 대체하지 않는�
 import 원칙:
 
 - Pinvi가 kor-travel-map admin REST API
-  `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`으로
+  `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`으로
   (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`) detail snapshot을 조회한다 (ADR-049).
 - kor_travel_map curated feature 1건을 Pinvi `curated_trip_plans` 1건으로 1:1 복사한다.
 - 하위 항목/POI는 `curated_plan_pois`로 복사한다.

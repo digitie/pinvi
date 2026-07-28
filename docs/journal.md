@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-29 (codex) — curated detail snapshot canonical 경로 전환
+
+- **작업**: `KorTravelMapAdminClient.get_curated_detail_snapshot()`이 OpenAPI에 없는 hidden
+  alias(`/v1/admin/curated-features/{id}/detail-snapshot`) 대신 문서화된 canonical
+  `/v1/admin/features/curated/{id}/detail-snapshot`을 호출하도록 전환했다.
+- **계약**: transport 단위 테스트가 exact canonical path와 service token을 함께 고정한다.
+  active API·통합 문서도 같은 경로로 정렬했고, historical ADR/journal 기록은 변경하지 않았다.
+- **검증**: n150에서 관련 unit/contract **123 passed, 1 skipped**, strict mypy 통과,
+  Ruff check/format 통과. kor-travel-map Claude PR 사후 감사 issue #881의 소비자 선행 수정이다.
+- **다음**: PinVi PR을 CI green 후 머지하고, kor-travel-map에서 hidden alias와 alias 전용
+  회귀를 제거한다.
+
 ## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 (Next 16 major 아님)
 
 - **작업**: `apps/web`의 `next`를 15.5.18→15.5.22(`^15.5.21` floor)로 올려 request-path web CVE 8건을

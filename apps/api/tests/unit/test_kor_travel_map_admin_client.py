@@ -546,8 +546,8 @@ async def test_5xx_retries_then_raises_unavailable() -> None:
     await client.aclose()
 
 
-async def test_curated_detail_snapshot_uses_admin_path_and_token() -> None:
-    """ADR-049: 큐레이션 import snapshot은 admin detail-snapshot 표면(서비스 토큰)에서 온다."""
+async def test_curated_detail_snapshot_uses_canonical_admin_path_and_token() -> None:
+    """큐레이션 import는 OpenAPI에 공개된 canonical admin snapshot을 호출한다."""
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -574,7 +574,7 @@ async def test_curated_detail_snapshot_uses_admin_path_and_token() -> None:
     client = _client(handler)
     snapshot = await client.get_curated_detail_snapshot("cf_1")
     assert seen["method"] == "GET"
-    assert seen["path"] == "/v1/admin/curated-features/cf_1/detail-snapshot"
+    assert seen["path"] == "/v1/admin/features/curated/cf_1/detail-snapshot"
     assert seen["token"] == "svc-tok"
     assert snapshot["curated_feature_id"] == "cf_1"
     assert snapshot["content"] == {"title": "부산 코스"}

@@ -410,7 +410,7 @@ Pinvi `/public/festivals/monthly`(+`/{id}`, `/festivals/map-markers`)가 노출�
 ## 7. `curated_features` → Pinvi curated trip plans import 요구사항
 
 > **상태 (2026-06-12)**: kor-travel-map의
-> `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot` 계약을 Pinvi가
+> `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot` 계약을 Pinvi가
 > 소비한다(admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token`). 구 public 경로
 > `GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐다(ADR-049).
 > 본 절은 해당 detail snapshot 계약과 Pinvi 저장 매핑을 기록한다.
@@ -443,7 +443,7 @@ admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요. snapshot plan
 그대로다.
 
 ```http
-GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot
+GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot
 ```
 
 ### 7.3 데이터 매핑

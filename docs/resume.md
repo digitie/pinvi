@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-07-29 (codex) — curated detail snapshot canonical 경로 전환
+
+**방금**: kor-travel-map Claude PR 사후 감사 issue #881에서 발견한 runtime/OpenAPI 분기를
+소비자 우선으로 해소했다. `KorTravelMapAdminClient.get_curated_detail_snapshot()`은 이제
+문서화된 `/v1/admin/features/curated/{id}/detail-snapshot`을 호출하며, exact path·service
+token 단위 계약과 active 통합 문서를 함께 갱신했다. n150 관련 테스트 **123 passed,
+1 skipped**, strict mypy와 Ruff check/format을 통과했다.
+
+**다음 한 작업**: 이 작은 소비자 PR을 CI green 후 머지하고, kor-travel-map 작업 브랜치에서
+hidden alias를 제거한다. 이후 기존 정본의 다음 작업인 **TDR-mobile**로 복귀한다.
+
 ## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 완료
 
 **방금**: **T-VN-SEC-02** — `next` 15.5.18→15.5.22로 web CVE 8건(Server Actions DoS·SSRF·cache confusion·
