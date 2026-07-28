@@ -8,6 +8,7 @@
 ---
 
 ## DEC-01 — kor-travel-map 통합 모델 (가장 중요) ☐
+
 **배경**: Pinvi는 ADR-026(2026-06-04)로 "kor-travel-map = OpenAPI HTTP 계약(포트
 12301)"으로 전환 선언했으나, kor-travel-map 저장소는 9개월간 **in-process 함수
 라이브러리**(ADR-003, "HTTP 없음")로 만들어졌고 HTTP는 인증 없는 debug-UI(8087,
@@ -16,6 +17,7 @@ kor_travel_map 산출물(`kor-travel-map-admin` 패키지, `openapi.user.json`, 
 `/pinvi/features/batch`)은 **실재하지 않는다**. (상세 `docs/kor-travel-map-requirements.md` §0)
 
 **선택지**
+
 - **(A) in-process 라이브러리로 복귀** — ADR-026 철회, Pinvi가 `kor-travel-map`
   의존 + `AsyncKorTravelMapClient` DI + feature DB engine 주입. kor_travel_map는 HTTP 불요,
   누락 client 메서드만 채움. 네트워크 hop 0(단일 노드 유리). 단 Pinvi가 feature
@@ -35,6 +37,7 @@ SPRINT-4 재작성(T-148), C-01 client 구현 방향 확정.
 ---
 
 ## DEC-02 — 정규 `feature_id` 포맷 ☐
+
 **배경**: 3곳이 다름 — Pinvi 문서 `f_{bjd}_{kind[0]}_{sha1[:16]}`, kor_travel_map 실제
 `{kind}:{hash}`(추정, 확인요망), Pinvi **코드는 UUID**(버그).
 **선택지**: (A) kor_travel_map `make_feature_id` 출력이 정본(권고 — feature 소유자가 kor_travel_map) /
@@ -44,6 +47,7 @@ SPRINT-4 재작성(T-148), C-01 client 구현 방향 확정.
 ---
 
 ## DEC-03 — `notice_plans` 명칭 충돌 ☐
+
 **배경**: `app.notice_plans`가 "큐레이션 여행 템플릿"(slug/destination/notice_pois)과
 "시스템 공지"(body/priority/audiences) 두 뜻으로 동명 정의 충돌(D-01/04).
 **선택지**: (A) 큐레이션을 `app.curated_trip_plans`로 개명, `notice_plans`는 공지
@@ -54,6 +58,7 @@ SPRINT-4 재작성(T-148), C-01 client 구현 방향 확정.
 ---
 
 ## DEC-04 — 지도 클러스터링 책임 ☐
+
 **배경**: `/features/in-bounds`가 zoom별 시도/시군구/읍면동 클러스터를 기대하나 kor_travel_map
 client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 있으나 미연결.
 **선택지**: (A) kor_travel_map DB 집계로 서버에서 클러스터(권고 — 단일 노드 대역폭·성능) /
@@ -63,16 +68,19 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## DEC-05 — 사용자 feature 제안 (재적재와 완전 분리) ☑ (확정 2026-06-08)
+
 **핵심 교정**: **재적재(feature-update-request)와 사용자 제안은 완전히 다른 작업이다.**
 이 둘을 묶지 않는다.
 
 **(A) 재적재 = kor-travel-map Admin 기능 — Pinvi 사용자 제품과 무관**
+
 - `POST /admin/feature-update-requests`(= scope 재적재/Dagster job)는 **kor-travel-map 운영자**가
   kor-travel-map admin API/콘솔에서 쓰는 기능이다.
 - **Pinvi 일반 사용자에게 노출되지 않으며, 사용자 제안 흐름에도 들어가지 않는다.**
   Pinvi 제품은 재적재를 surface하지 않는다(필요 시 kor_travel_map admin이 직접 운영).
 
 **(B) 사용자 제안 = Pinvi가 소유, 승인 시 kor_travel_map "feature 추가 API"로 추가**
+
 - **(레이어 1) 사용자 제안 큐 — Pinvi `app`(user 도메인)**: `app.feature_suggestions`
   (requester_user_id, type[new_place|correction|closure], target_feature_id?, name, coord,
   categories[], note, status[pending|approved|rejected|added|duplicate], reviewed_by_admin_id?,
@@ -87,6 +95,7 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 1(user) 분리 + 재적재 보존. 응답에 `feature_id`/`request_id`/state. (계약 §
 `docs/integrations/kor-travel-map-rest-api.md` §2.9, 요구사항 K-15.) → T-179 actionable.
 **남은 하위 결정(연동 합의, kor_travel_map PR #317 코멘트로 질의 중)**:
+
 - **review_mode**: kor_travel_map 기본 `require_review`인데 Pinvi가 이미 Admin 검수 → 이중 검수 방지.
   kor_travel_map `immediate` / Pinvi `create→approve` 2-step / 요청 단위 override 중 합의.
 - idempotency_key 멱등, 출처 태깅, admin 인증, closure(DELETE vs deactivate).
@@ -96,6 +105,7 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## DEC-06 — v0.1.0 출시 게이트 ☐
+
 **배경**: v0.1.0 DoD가 kor_travel_map HTTP client + 라이브 feature read(T-066, 보류)에 묶임.
 **선택지**: (A) snapshot-only로 v0.1.0 출시(라이브 feature는 v0.2.0) / (B) kor_travel_map
 연동까지 v0.1.0 보류.
@@ -105,9 +115,11 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## DEC-07 — 외부 API 규약 정본 ☐
+
 **배경**: envelope 4종, pagination 4종, 좌표 4종, datetime 2종, id 명명, 버전 prefix
 (`/` vs `/v1`), 에러 taxonomy가 제각각(A-03/04/07/08/10/22 등).
 **제안 정본**(승인/수정 요망):
+
 - list = `{"data": [...], "meta": {...}}`(배열 직접), 단건 = `{"data": {...}}`
 - 사용자 list 페이지네이션 = **cursor**; admin/S3 예외만 명문
 - 좌표 = `{"longitude":..,"latitude":..}`(lng-first, 6자리)
@@ -115,11 +127,12 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 - id 필드 = `<entity>_id`
 - URL 버전 prefix = **`/v1` 노출**(라우터가 이미 `api/v1`) ← 또는 `/` 무prefix 중 택1
 - 생성 성공 = 영속 리소스 생성 시 `201`, 그 외 `200`
-**결정 시 후속**: ADR-030, `common.md`/`api-contract.md` 정본화 + per-domain 일괄정렬.
+  **결정 시 후속**: ADR-030, `common.md`/`api-contract.md` 정본화 + per-domain 일괄정렬.
 
 ---
 
 ## DEC-08 — POI delete 정책 ☐
+
 **배경**: pois.md "미정", admin.md "hard delete"로 충돌(A-15).
 **선택지**: (A) soft delete(deleted_at) — 복구/공유 안정 / (B) hard delete.
 **권고**: (A) soft. ADR-031.
@@ -127,6 +140,7 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## DEC-09 — `trip_day_pois.feature_id` nullable ☐
+
 **배경**: 현재 NOT NULL → kor_travel_map에 없는 "자유 메모 장소"를 일정에 못 넣음(D-18).
 **선택지**: (A) nullable + 사용자 좌표 경로 허용(권고 — 기본 계획 UX) / (B) 유지.
 **권고**: (A). ADR-031 부속.
@@ -134,6 +148,7 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## DEC-10 — LBS 위치로그 보존 vs 해시체인 ☐
+
 **배경**: 6개월 보존 DELETE가 `location_access_log` tamper-evident 해시체인을 깨뜨림.
 정책 미결(D-12).
 **선택지**: (A) archive 테이블로 이동 후 체인 연속 보장(권고) / (B) delete + rehash.
@@ -142,18 +157,19 @@ client는 클러스터링 안 함(개별 행만). Pinvi `cluster_query.py`는 �
 ---
 
 ## 결정 기록란
-| DEC | 결정 | 날짜 | 비고 |
-|-----|------|------|------|
-| DEC-01 | ☑ **(B) 운영급 HTTP 서비스** | 2026-06-06 | 사용자. ADR-027. kor_travel_map가 HTTP 신설 필요 |
-| DEC-02 | ☑ kor_travel_map `make_feature_id` 정본(문자열) | 2026-06-06 | 권고 기본값 적용. ADR-028 |
-| DEC-03 | ☑ 큐레이션→`curated_trip_plans` 분리 | 2026-06-06 | 사용자. ADR-029 |
-| DEC-04 | ☑ 서버(kor_travel_map DB 집계) 클러스터링 | 2026-06-06 | 권고 기본값 적용. ADR-027 부속 |
+
+| DEC    | 결정                                                                                                                                         | 날짜       | 비고                                                                                                                                            |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEC-01 | ☑ **(B) 운영급 HTTP 서비스**                                                                                                                 | 2026-06-06 | 사용자. ADR-027. kor_travel_map가 HTTP 신설 필요                                                                                                |
+| DEC-02 | ☑ kor_travel_map `make_feature_id` 정본(문자열)                                                                                              | 2026-06-06 | 권고 기본값 적용. ADR-028                                                                                                                       |
+| DEC-03 | ☑ 큐레이션→`curated_trip_plans` 분리                                                                                                         | 2026-06-06 | 사용자. ADR-029                                                                                                                                 |
+| DEC-04 | ☑ 서버(kor_travel_map DB 집계) 클러스터링                                                                                                    | 2026-06-06 | 권고 기본값 적용. ADR-027 부속                                                                                                                  |
 | DEC-05 | ☑ **재적재(kor_travel_map admin, 비노출)와 사용자 제안 완전 분리**. 사용자 제안=Pinvi→Admin 검사/승인→kor_travel_map feature 추가 API로 반영 | 2026-06-08 | 사용자 확정. feature 추가 API = **kor_travel_map PR #317로 구현됨(2026-06-09)** → T-179 actionable. review_mode 등 연동 합의 진행. §DEC-05 본문 |
-| DEC-06 | ☑ **kor_travel_map 연동까지 대기**(snapshot 조기출시 안 함) | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트 |
-| DEC-07 | ☑ 제안 기본값 + `/v1` 노출. **좌표 필드명 = `lon`/`lat`(ADR-048 B, 2026-06-09 정렬)** | 2026-06-06 | 사용자. ADR-030. 좌표는 kor_travel_map 정렬로 `lon`/`lat` 채택(T-182) |
-| DEC-08 | ☑ POI **soft delete** | 2026-06-06 | 권고 기본값 적용. ADR-031(예정) |
-| DEC-09 | ☑ `trip_day_pois.feature_id` **nullable** | 2026-06-06 | 권고 기본값 적용. ADR-031 부속(예정) |
-| DEC-10 | ☑ 위치로그 **archive 테이블** 이동 + 체인 연속 | 2026-06-06 | 권고 기본값 적용. T-142 인접 |
+| DEC-06 | ☑ **kor_travel_map 연동까지 대기**(snapshot 조기출시 안 함)                                                                                  | 2026-06-06 | 사용자. sprints/README v0.1.0 게이트                                                                                                            |
+| DEC-07 | ☑ 제안 기본값 + `/v1` 노출. **좌표 필드명 = `lon`/`lat`(ADR-048 B, 2026-06-09 정렬)**                                                        | 2026-06-06 | 사용자. ADR-030. 좌표는 kor_travel_map 정렬로 `lon`/`lat` 채택(T-182)                                                                           |
+| DEC-08 | ☑ POI **soft delete**                                                                                                                        | 2026-06-06 | 권고 기본값 적용. ADR-031(예정)                                                                                                                 |
+| DEC-09 | ☑ `trip_day_pois.feature_id` **nullable**                                                                                                    | 2026-06-06 | 권고 기본값 적용. ADR-031 부속(예정)                                                                                                            |
+| DEC-10 | ☑ 위치로그 **archive 테이블** 이동 + 체인 연속                                                                                               | 2026-06-06 | 권고 기본값 적용. T-142 인접                                                                                                                    |
 
 > DEC-02/04/05/08/09/10은 저위험 권고 기본값으로 채택했다. DEC-05(요청 큐 소유권)와
 > DEC-08~10은 구현 진입(T-137/T-138/T-142) 시 이견이 있으면 재론 가능.

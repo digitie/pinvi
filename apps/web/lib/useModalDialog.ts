@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useId, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from 'react';
 
 /**
  * 모달 다이얼로그의 공통 a11y·상호작용을 한 곳에 모은다(TDR, ADR-056).

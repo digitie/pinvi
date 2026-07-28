@@ -28,7 +28,7 @@ release 전환과 `v0.2.0` tag/GitHub Release 생성으로 gate를 닫았다.
 | N150 Playwright             | 통과      | host Chromium은 shared library 누락으로 실패했지만 Docker runner에서 smoke, 200, 2000 gate 통과                           |
 | Windows Playwright fallback | 통과      | N150 Docker runner 장시간 SIGKILL 이후 full catalog 잔여 구간과 transient 실패 focused rerun 통과                         |
 | Admin live 200/2000         | 통과      | N150 local-only credential과 public HTTPS Web origin으로 Docker runner 207/2007건 통과                                    |
-| Admin live full catalog     | 통과      | `6343 tests in 5 files`. N150 우선 실행 후 N150 runtime 한계 구간만 Windows fallback으로 닫고 focused rerun 4건 통과       |
+| Admin live full catalog     | 통과      | `6343 tests in 5 files`. N150 우선 실행 후 N150 runtime 한계 구간만 Windows fallback으로 닫고 focused rerun 4건 통과      |
 | Restore staging drill       | 통과      | N150 disposable PostgreSQL/PostGIS staging target에서 latest snapshot restore/checksum/audit chain 검증 성공              |
 | 최신 main CI/evidence       | 통과      | `4a1b71e` API push CI 통과. `5c0a39b` WSL ext4 clean install 기반 Web lint/typecheck/build 통과                           |
 | Release note/tag            | 통과      | `CHANGELOG.md`를 `v0.2.0` release 상태로 전환하고 tag/GitHub Release 생성                                                 |

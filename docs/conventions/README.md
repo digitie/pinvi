@@ -5,13 +5,13 @@
 
 ## 1. 인덱스
 
-| 파일 | 범위 |
-|------|------|
-| [coding-style.md](./coding-style.md) | Python (FastAPI/Pydantic/SQLAlchemy) + TypeScript (Next.js) 규칙 |
-| [database.md](./database.md) | PostgreSQL/PostGIS/Alembic 규칙 (Pinvi app schema) |
-| [testing.md](./testing.md) | pytest / Vitest / Playwright 매트릭스 |
-| [geospatial.md](./geospatial.md) | 좌표 / SRID / lon-lat / fuzzy 금지 |
-| [normalization.md](./normalization.md) | 정규화 패턴 (1NF~BCNF + denorm) |
+| 파일                                   | 범위                                                             |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| [coding-style.md](./coding-style.md)   | Python (FastAPI/Pydantic/SQLAlchemy) + TypeScript (Next.js) 규칙 |
+| [database.md](./database.md)           | PostgreSQL/PostGIS/Alembic 규칙 (Pinvi app schema)               |
+| [testing.md](./testing.md)             | pytest / Vitest / Playwright 매트릭스                            |
+| [geospatial.md](./geospatial.md)       | 좌표 / SRID / lon-lat / fuzzy 금지                               |
+| [normalization.md](./normalization.md) | 정규화 패턴 (1NF~BCNF + denorm)                                  |
 
 ## 2. 우선순위
 

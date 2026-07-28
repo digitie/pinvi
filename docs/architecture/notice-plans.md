@@ -20,10 +20,10 @@ v1
 v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐다. v2에서는 다음과 같이
 분리·명시한다.
 
-| 개념 | 어디에 있나 | 소유 | 약어 |
-|------|-----------|------|------|
-| 공지 / 자연현상 feature (사고·시설 통제·바다갈라짐·만조/간조) | `feature.notices` (혹은 `feature.features WHERE kind='notice'`) | `kor-travel-map` | **notice feature** |
-| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.curated_trip_plans` + `app.curated_plan_pois` | Pinvi | **curated trip plan** |
+| 개념                                                             | 어디에 있나                                                     | 소유             | 약어                  |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- | ---------------- | --------------------- |
+| 공지 / 자연현상 feature (사고·시설 통제·바다갈라짐·만조/간조)    | `feature.notices` (혹은 `feature.features WHERE kind='notice'`) | `kor-travel-map` | **notice feature**    |
+| Admin이 작성한 추천 여행 plan (사용자가 자기 trip으로 copy 가능) | `app.curated_trip_plans` + `app.curated_plan_pois`              | Pinvi            | **curated trip plan** |
 
 본 문서는 후자(**curated trip plan**)를 다룬다. 전자는 SPEC V8 D-10 +
 `docs/spec/v8/01-data.md` §3 (라이브러리 위임 — 7 Feature 중 `notice` kind).
@@ -54,28 +54,28 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 
 ### 3.1 `app.curated_trip_plans`
 
-| 컬럼 | 타입 | 비고 |
-|------|------|------|
-| `curated_plan_id` | `uuid` (PK) | |
-| `slug` | `text` | URL-safe, partial unique on `deleted_at IS NULL` |
-| `title` | `text` NOT NULL | |
-| `category` | `text` | 예: `recommended`, `themed`, `seasonal` |
-| `summary` | `text` | nullable |
-| `source_name` | `text` | "한국관광공사 추천 코스" 등 |
-| `destination` | `text` | "부산", "강원" 등 자유 텍스트 |
-| `starts_on` | `date` | nullable. 함께 채우거나 함께 비움 (CHECK) |
-| `ends_on` | `date` | nullable |
-| `is_published` | `boolean` NOT NULL DEFAULT false | |
-| `created_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
-| `updated_by_admin_id` | `uuid` FK `app.users` | RESTRICT |
-| `version` | `int` NOT NULL DEFAULT 1 | optimistic lock |
-| `source_system` | `text` | nullable. 예: `kor-travel-map` |
-| `source_curated_feature_id` | `text` | nullable. kor_travel_map curated feature 원천 id |
-| `source_curated_feature_version` | `int` | nullable. kor_travel_map copy snapshot version |
-| `source_etag` | `text` | nullable. kor_travel_map copy snapshot etag |
-| `source_imported_at` | `timestamptz` | nullable. 마지막 import 시각 |
-| `deleted_at` | `timestamptz` | soft delete |
-| `created_at`, `updated_at` | `timestamptz` | |
+| 컬럼                             | 타입                             | 비고                                             |
+| -------------------------------- | -------------------------------- | ------------------------------------------------ |
+| `curated_plan_id`                | `uuid` (PK)                      |                                                  |
+| `slug`                           | `text`                           | URL-safe, partial unique on `deleted_at IS NULL` |
+| `title`                          | `text` NOT NULL                  |                                                  |
+| `category`                       | `text`                           | 예: `recommended`, `themed`, `seasonal`          |
+| `summary`                        | `text`                           | nullable                                         |
+| `source_name`                    | `text`                           | "한국관광공사 추천 코스" 등                      |
+| `destination`                    | `text`                           | "부산", "강원" 등 자유 텍스트                    |
+| `starts_on`                      | `date`                           | nullable. 함께 채우거나 함께 비움 (CHECK)        |
+| `ends_on`                        | `date`                           | nullable                                         |
+| `is_published`                   | `boolean` NOT NULL DEFAULT false |                                                  |
+| `created_by_admin_id`            | `uuid` FK `app.users`            | RESTRICT                                         |
+| `updated_by_admin_id`            | `uuid` FK `app.users`            | RESTRICT                                         |
+| `version`                        | `int` NOT NULL DEFAULT 1         | optimistic lock                                  |
+| `source_system`                  | `text`                           | nullable. 예: `kor-travel-map`                   |
+| `source_curated_feature_id`      | `text`                           | nullable. kor_travel_map curated feature 원천 id |
+| `source_curated_feature_version` | `int`                            | nullable. kor_travel_map copy snapshot version   |
+| `source_etag`                    | `text`                           | nullable. kor_travel_map copy snapshot etag      |
+| `source_imported_at`             | `timestamptz`                    | nullable. 마지막 import 시각                     |
+| `deleted_at`                     | `timestamptz`                    | soft delete                                      |
+| `created_at`, `updated_at`       | `timestamptz`                    |                                                  |
 
 인덱스:
 
@@ -94,26 +94,26 @@ CHECK:
 
 추천 plan의 POI들. 구조가 `app.trip_pois`와 거의 동일.
 
-| 컬럼 | 타입 | 비고 |
-|------|------|------|
-| `curated_poi_id` | `uuid` (PK) | |
-| `curated_plan_id` | `uuid` FK | CASCADE |
-| `day_index` | `int` NOT NULL DEFAULT 1 | |
-| `sort_order` | `text COLLATE "C"` NOT NULL | LexoRank — SPEC V8 E-6 |
-| `feature_id` | `text` | nullable. kor_travel_map `feature.features.feature_id` reference (FK 없음, ADR-003/036) |
-| `map_feature_id` | `uuid` | v1 호환용 (라이브러리 UUID 시절 cursor — v2에서는 미사용 후보) |
-| `feature_snapshot` | `jsonb` | feature 캐시 (이름/좌표/카테고리) |
-| `memo` | `text` | |
-| `budget` | `numeric(12,2)` | |
-| `currency` | `char(3)` NOT NULL DEFAULT 'KRW' | |
-| `user_url` | `text` | 추천자가 참조할 외부 링크 |
-| `custom_marker_color` | `text` | P-01~P-16 |
-| `custom_marker_icon` | `text` | maki id |
-| `source_curated_feature_id` | `text` | nullable. kor_travel_map curated feature 원천 id |
-| `source_curated_feature_item_id` | `text` | nullable. kor_travel_map copy item 원천 id |
-| `version` | `int` NOT NULL DEFAULT 1 | |
-| `deleted_at` | `timestamptz` | |
-| `created_at`, `updated_at` | `timestamptz` | |
+| 컬럼                             | 타입                             | 비고                                                                                    |
+| -------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------- |
+| `curated_poi_id`                 | `uuid` (PK)                      |                                                                                         |
+| `curated_plan_id`                | `uuid` FK                        | CASCADE                                                                                 |
+| `day_index`                      | `int` NOT NULL DEFAULT 1         |                                                                                         |
+| `sort_order`                     | `text COLLATE "C"` NOT NULL      | LexoRank — SPEC V8 E-6                                                                  |
+| `feature_id`                     | `text`                           | nullable. kor_travel_map `feature.features.feature_id` reference (FK 없음, ADR-003/036) |
+| `map_feature_id`                 | `uuid`                           | v1 호환용 (라이브러리 UUID 시절 cursor — v2에서는 미사용 후보)                          |
+| `feature_snapshot`               | `jsonb`                          | feature 캐시 (이름/좌표/카테고리)                                                       |
+| `memo`                           | `text`                           |                                                                                         |
+| `budget`                         | `numeric(12,2)`                  |                                                                                         |
+| `currency`                       | `char(3)` NOT NULL DEFAULT 'KRW' |                                                                                         |
+| `user_url`                       | `text`                           | 추천자가 참조할 외부 링크                                                               |
+| `custom_marker_color`            | `text`                           | P-01~P-16                                                                               |
+| `custom_marker_icon`             | `text`                           | maki id                                                                                 |
+| `source_curated_feature_id`      | `text`                           | nullable. kor_travel_map curated feature 원천 id                                        |
+| `source_curated_feature_item_id` | `text`                           | nullable. kor_travel_map copy item 원천 id                                              |
+| `version`                        | `int` NOT NULL DEFAULT 1         |                                                                                         |
+| `deleted_at`                     | `timestamptz`                    |                                                                                         |
+| `created_at`, `updated_at`       | `timestamptz`                    |                                                                                         |
 
 인덱스:
 
@@ -132,22 +132,22 @@ CHECK:
 
 Curated trip plan의 생성 소스는 하나로 제한하지 않는다.
 
-| 소스 | 설명 | 현재 상태 |
-|------|------|----------|
-| Pinvi-native 큐레이션 | Admin/운영자가 Pinvi 안에서 직접 기획·작성한 추천 여행 plan | 현재 정본 흐름 |
-| kor_travel_map `curated_features` import | Pinvi가 kor-travel-map REST API로 curated feature copy snapshot을 가져와 Pinvi plan으로 1:1 복사 | 구현 완료 |
+| 소스                                     | 설명                                                                                             | 현재 상태      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------- |
+| Pinvi-native 큐레이션                    | Admin/운영자가 Pinvi 안에서 직접 기획·작성한 추천 여행 plan                                      | 현재 정본 흐름 |
+| kor_travel_map `curated_features` import | Pinvi가 kor-travel-map REST API로 curated feature copy snapshot을 가져와 Pinvi plan으로 1:1 복사 | 구현 완료      |
 
 kor_travel_map import 매핑은 다음 원칙을 따른다.
 
-| kor-travel-map | Pinvi |
-|------------|----------|
-| curated feature 1건 | `app.curated_trip_plans` 1건 |
-| curated feature의 하위 항목/POI | `app.curated_plan_pois` 여러 건 |
-| 하위 항목의 `feature_id` | `curated_plan_pois.feature_id`에 nullable 저장 |
-| 하위 항목의 표시명/좌표/카테고리 snapshot | `curated_plan_pois.feature_snapshot` |
-| 순서/일차 정보 | `day_index`, `sort_order` |
-| snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
-| copy item id | `source_curated_feature_item_id` |
+| kor-travel-map                            | Pinvi                                            |
+| ----------------------------------------- | ------------------------------------------------ |
+| curated feature 1건                       | `app.curated_trip_plans` 1건                     |
+| curated feature의 하위 항목/POI           | `app.curated_plan_pois` 여러 건                  |
+| 하위 항목의 `feature_id`                  | `curated_plan_pois.feature_id`에 nullable 저장   |
+| 하위 항목의 표시명/좌표/카테고리 snapshot | `curated_plan_pois.feature_snapshot`             |
+| 순서/일차 정보                            | `day_index`, `sort_order`                        |
+| snapshot `version` / `etag`               | `source_curated_feature_version` / `source_etag` |
+| copy item id                              | `source_curated_feature_item_id`                 |
 
 이 import는 Pinvi-native 큐레이션을 대체하지 않는다. kor_travel_map `curated_features`는
 추가 소스이며, Pinvi가 자체적으로 직접 만든 추천 plan도 같은 테이블에 계속 저장한다.
@@ -160,27 +160,27 @@ Pinvi는 kor-travel-map을 HTTP로만 호출하며, kor-travel-map DB나 Python 
 v1의 핵심 결정: **4개 대상(사용자 trip, 사용자 trip_poi, curated_plan, curated_poi)의
 파일 첨부를 한 테이블에서 관리**.
 
-| 컬럼 | 타입 | 비고 |
-|------|------|------|
-| `attachment_id` | `uuid` (PK) | |
-| `trip_id` | `uuid` FK `app.trips` | CASCADE — 단일 대상 |
-| `trip_poi_id` | `uuid` FK `app.trip_pois` (또는 `trip_day_pois`) | CASCADE |
-| `curated_plan_id` | `uuid` FK `app.curated_trip_plans` | CASCADE |
-| `curated_poi_id` | `uuid` FK `app.curated_plan_pois` | CASCADE |
-| `source_attachment_id` | `uuid` self FK | SET NULL — notice → trip copy 시 원본 추적 |
-| `bucket` | `text` NOT NULL | RustFS bucket (`pinvi-media` 기본) |
-| `storage_key` | `text` NOT NULL | RustFS object key |
-| `original_filename` | `text` NOT NULL | |
-| `content_type` | `text` NOT NULL | |
-| `byte_size` | `bigint` NOT NULL | `> 0` |
-| `public_url` | `text` | public base URL 파생 |
-| `checksum_sha256` | `text` | 클라이언트 옵션 |
-| `role` | `text` NOT NULL DEFAULT 'attachment' | `attachment` / `image` / `document` / `reference` |
-| `description` | `text` | |
-| `sort_order` | `int` NOT NULL DEFAULT 0 | `>= 0` |
-| `uploaded_by_user_id` | `uuid` FK `app.users` | |
-| `deleted_at` | `timestamptz` | |
-| `created_at`, `updated_at` | `timestamptz` | |
+| 컬럼                       | 타입                                             | 비고                                              |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `attachment_id`            | `uuid` (PK)                                      |                                                   |
+| `trip_id`                  | `uuid` FK `app.trips`                            | CASCADE — 단일 대상                               |
+| `trip_poi_id`              | `uuid` FK `app.trip_pois` (또는 `trip_day_pois`) | CASCADE                                           |
+| `curated_plan_id`          | `uuid` FK `app.curated_trip_plans`               | CASCADE                                           |
+| `curated_poi_id`           | `uuid` FK `app.curated_plan_pois`                | CASCADE                                           |
+| `source_attachment_id`     | `uuid` self FK                                   | SET NULL — notice → trip copy 시 원본 추적        |
+| `bucket`                   | `text` NOT NULL                                  | RustFS bucket (`pinvi-media` 기본)                |
+| `storage_key`              | `text` NOT NULL                                  | RustFS object key                                 |
+| `original_filename`        | `text` NOT NULL                                  |                                                   |
+| `content_type`             | `text` NOT NULL                                  |                                                   |
+| `byte_size`                | `bigint` NOT NULL                                | `> 0`                                             |
+| `public_url`               | `text`                                           | public base URL 파생                              |
+| `checksum_sha256`          | `text`                                           | 클라이언트 옵션                                   |
+| `role`                     | `text` NOT NULL DEFAULT 'attachment'             | `attachment` / `image` / `document` / `reference` |
+| `description`              | `text`                                           |                                                   |
+| `sort_order`               | `int` NOT NULL DEFAULT 0                         | `>= 0`                                            |
+| `uploaded_by_user_id`      | `uuid` FK `app.users`                            |                                                   |
+| `deleted_at`               | `timestamptz`                                    |                                                   |
+| `created_at`, `updated_at` | `timestamptz`                                    |                                                   |
 
 핵심 CHECK:
 
@@ -268,13 +268,13 @@ body: {
 
 ## 6. RustFS 설정 (v1 정합)
 
-| 환경변수 | 비고 |
-|---------|------|
-| `PINVI_RUSTFS_ENDPOINT_URL` | 내부 API endpoint (FastAPI ↔ RustFS) |
+| 환경변수                           | 비고                                             |
+| ---------------------------------- | ------------------------------------------------ |
+| `PINVI_RUSTFS_ENDPOINT_URL`        | 내부 API endpoint (FastAPI ↔ RustFS)             |
 | `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | 브라우저 presigned PUT (보통 reverse proxy 경로) |
-| `PINVI_RUSTFS_BUCKET` | `pinvi-media` 기본 |
-| `PINVI_RUSTFS_ACCESS_KEY_ID` | |
-| `PINVI_RUSTFS_SECRET_ACCESS_KEY` | |
+| `PINVI_RUSTFS_BUCKET`              | `pinvi-media` 기본                               |
+| `PINVI_RUSTFS_ACCESS_KEY_ID`       |                                                  |
+| `PINVI_RUSTFS_SECRET_ACCESS_KEY`   |                                                  |
 
 object key 패턴: `user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}`.
 
@@ -288,24 +288,24 @@ presigned PUT: `AWS4-HMAC-SHA256` + `UNSIGNED-PAYLOAD`.
 
 ## 7. SPEC V8 정합
 
-| SPEC V8 항목 | 본 문서 |
-|------|---------|
-| D-10 notice feature (공지·자연현상) | 본 문서와 **별개 개념** (라이브러리 소유). 본 §1 표 참고 |
-| H-3 Trip API + POI 첨부 | 본 §4 |
-| M-2 `/admin/notice-plans` (잠재 페이지) | 본 §4.2 (Admin 페이지 — Sprint 6에서 박음) |
-| O-6 admin_audit_log | curated trip plan 변경 시 자동 기록 (POST/PATCH/DELETE) |
+| SPEC V8 항목                            | 본 문서                                                  |
+| --------------------------------------- | -------------------------------------------------------- |
+| D-10 notice feature (공지·자연현상)     | 본 문서와 **별개 개념** (라이브러리 소유). 본 §1 표 참고 |
+| H-3 Trip API + POI 첨부                 | 본 §4                                                    |
+| M-2 `/admin/notice-plans` (잠재 페이지) | 본 §4.2 (Admin 페이지 — Sprint 6에서 박음)               |
+| O-6 admin_audit_log                     | curated trip plan 변경 시 자동 기록 (POST/PATCH/DELETE)  |
 
 ## 8. Sprint 매핑
 
-| 항목 | Sprint | 산출물 |
-|------|--------|--------|
+| 항목                                                   | Sprint   | 산출물                                                                                   |
+| ------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------- |
 | `app.curated_trip_plans` + `curated_plan_pois` Alembic | Sprint 2 | `apps/api/alembic/versions/20260602_0005_notice_plans_and_attachments.py` + T-137 rename |
-| `app.curated_plan_attachments` (단일 테이블 4 대상) | Sprint 2 | `apps/api/alembic/versions/20260607_0011_curated_trip_plans.py` |
-| 사용자 `GET /notice-plans`, `/copy` | Sprint 4 | `apps/api/app/api/v1/notice_plans.py` |
-| Admin `/admin/notice-plans/*` | Sprint 6 | `apps/api/app/api/v1/admin/notice_plans.py` + UI |
-| `POST /storage/upload-urls` presigned PUT | Sprint 2 | `apps/api/app/api/v1/storage.py` |
-| 사용자 UI: notice plan 카드 + 가져오기 다이얼로그 | Sprint 4 | `apps/web/app/(app)/notice-plans/...` |
-| Admin UI: notice plan 작성기 | Sprint 6 | `apps/web/app/admin/notice-plans/...` |
+| `app.curated_plan_attachments` (단일 테이블 4 대상)    | Sprint 2 | `apps/api/alembic/versions/20260607_0011_curated_trip_plans.py`                          |
+| 사용자 `GET /notice-plans`, `/copy`                    | Sprint 4 | `apps/api/app/api/v1/notice_plans.py`                                                    |
+| Admin `/admin/notice-plans/*`                          | Sprint 6 | `apps/api/app/api/v1/admin/notice_plans.py` + UI                                         |
+| `POST /storage/upload-urls` presigned PUT              | Sprint 2 | `apps/api/app/api/v1/storage.py`                                                         |
+| 사용자 UI: notice plan 카드 + 가져오기 다이얼로그      | Sprint 4 | `apps/web/app/(app)/notice-plans/...`                                                    |
+| Admin UI: notice plan 작성기                           | Sprint 6 | `apps/web/app/admin/notice-plans/...`                                                    |
 
 ## 9. v1 → v2 이전 매핑
 
@@ -328,9 +328,9 @@ v2 이전 절차 (Sprint 2 진입 시):
    `docs/postgres-schema.md` 기준으로 재작성** — schema 정합성과 import-linter
    계약 준수 위해.
 2. v1의 `map_feature_id UUID` 컬럼은 v2에서 제거 후보. 라이브러리의 `feature_id
-   TEXT`만 reference.
+TEXT`만 reference.
 3. v1의 `trip_pois`에서 `position INT` → v2 `trip_day_pois.sort_order TEXT
-   COLLATE "C"` (SPEC V8 E-6) 변경 반영.
+COLLATE "C"` (SPEC V8 E-6) 변경 반영.
 4. v1 테스트는 `apps/api/tests/integration/test_notice_plans_api.py`로 이전 시
    ASGI 직접 호출 패턴 사용.
 

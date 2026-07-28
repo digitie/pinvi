@@ -13,15 +13,15 @@ Dagster (apps/etl) 3 곳에 통합.
 
 ## 2. 환경변수
 
-| 환경변수 | 비고 |
-|----------|------|
-| `PINVI_SENTRY_DSN` | 백엔드 / Dagster |
-| `NEXT_PUBLIC_SENTRY_DSN` | 프론트 (빌드 타임 embed) |
-| `PINVI_SENTRY_ENVIRONMENT` | `production` / `staging` / `development` |
-| `PINVI_SENTRY_RELEASE` | git short sha (CI 주입) |
-| `PINVI_SENTRY_TRACES_SAMPLE_RATE` | `0.1` (10%, Odroid 부하 고려) |
-| `PINVI_SENTRY_PROFILES_SAMPLE_RATE` | `0.0` (ARM 프로파일링 제한) |
-| `SENTRY_AUTH_TOKEN` | source map 업로드용 (CI) |
+| 환경변수                            | 비고                                     |
+| ----------------------------------- | ---------------------------------------- |
+| `PINVI_SENTRY_DSN`                  | 백엔드 / Dagster                         |
+| `NEXT_PUBLIC_SENTRY_DSN`            | 프론트 (빌드 타임 embed)                 |
+| `PINVI_SENTRY_ENVIRONMENT`          | `production` / `staging` / `development` |
+| `PINVI_SENTRY_RELEASE`              | git short sha (CI 주입)                  |
+| `PINVI_SENTRY_TRACES_SAMPLE_RATE`   | `0.1` (10%, Odroid 부하 고려)            |
+| `PINVI_SENTRY_PROFILES_SAMPLE_RATE` | `0.0` (ARM 프로파일링 제한)              |
+| `SENTRY_AUTH_TOKEN`                 | source map 업로드용 (CI)                 |
 
 ## 3. 백엔드 (FastAPI + SQLAlchemy + Dagster)
 
@@ -118,7 +118,7 @@ def report_dagster_failure(context: RunFailureSensorContext):
 
 ```ts
 // apps/web/sentry.client.config.ts
-import * as Sentry from "@sentry/nextjs";
+import * as Sentry from '@sentry/nextjs';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -126,18 +126,18 @@ Sentry.init({
   release: process.env.NEXT_PUBLIC_PINVI_RELEASE,
   tracesSampleRate: 0.1,
   replaysSessionSampleRate: 0.0,
-  replaysOnErrorSampleRate: 1.0,            // 에러 직전 30초 replay 캡처
+  replaysOnErrorSampleRate: 1.0, // 에러 직전 30초 replay 캡처
   beforeSend(event) {
     if (event.request?.url) {
       event.request.url = event.request.url
-        .replace(/lat=[\d.-]+/g, "lat=[filtered]")
-        .replace(/lng=[\d.-]+/g, "lng=[filtered]");
+        .replace(/lat=[\d.-]+/g, 'lat=[filtered]')
+        .replace(/lng=[\d.-]+/g, 'lng=[filtered]');
     }
     return event;
   },
   ignoreErrors: [
     // (legacy) "kakao is not defined" — Kakao SDK 사용 시. ADR-015/046으로 vworld-map-web 전환 후 불필요
-    "ResizeObserver loop",
+    'ResizeObserver loop',
     /Network request failed/,
   ],
 });
@@ -145,7 +145,7 @@ Sentry.init({
 
 ```ts
 // apps/web/sentry.server.config.ts
-import * as Sentry from "@sentry/nextjs";
+import * as Sentry from '@sentry/nextjs';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -157,8 +157,8 @@ Sentry.init({
 ```ts
 // apps/web/instrumentation.ts
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("./sentry.server.config");
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('./sentry.server.config');
   }
 }
 ```
@@ -167,13 +167,13 @@ source map: `@sentry/nextjs` webpack 플러그인 자동 (`SENTRY_AUTH_TOKEN` �
 
 ## 5. 알림 정책
 
-| 트리거 | 알림 채널 | 즉시도 |
-|--------|-----------|--------|
-| New issue (새 종류) | Slack #alerts 또는 이메일 | 즉시 |
-| Regression (해결된 issue 재발) | 즉시 | |
-| Spike (평균 5배 이상) | 30분 후 | 잠깐 글리치 무시 |
-| Critical 표시한 issue | 이메일 + Telegram bot | 즉시 + 반복 |
-| 야간 (00:00 ~ 08:00 KST) | Critical만 즉시. 나머지는 morning digest | |
+| 트리거                         | 알림 채널                                | 즉시도           |
+| ------------------------------ | ---------------------------------------- | ---------------- |
+| New issue (새 종류)            | Slack #alerts 또는 이메일                | 즉시             |
+| Regression (해결된 issue 재발) | 즉시                                     |                  |
+| Spike (평균 5배 이상)          | 30분 후                                  | 잠깐 글리치 무시 |
+| Critical 표시한 issue          | 이메일 + Telegram bot                    | 즉시 + 반복      |
+| 야간 (00:00 ~ 08:00 KST)       | Critical만 즉시. 나머지는 morning digest |                  |
 
 Telegram 봇 token은 `PINVI_TELEGRAM_BOT_TOKEN_DEFAULT` (위 [`telegram.md`](./telegram.md)).
 

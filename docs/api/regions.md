@@ -35,9 +35,9 @@ GET /regions/covering-point?lon=129.118&lat=35.155&boundary_level=emd
       "region_name": "광안동",
       "sig_cd": "26500",
       "bjd_cd": "2650010100",
-      "full_region_name": "부산광역시 수영구 광안동"
-    }
-  }
+      "full_region_name": "부산광역시 수영구 광안동",
+    },
+  },
 }
 ```
 
@@ -64,14 +64,12 @@ GET /regions/within-radius?lon=129.118&lat=35.155&radius_km=2.0&levels=sigungu&l
     "center": { "lon": 129.118, "lat": 35.155 },
     "radius_km": 2.0,
     "sido": [],
-    "sigungu": [
-      { "code": "26500", "name": "수영구", "relation": "contains" }
-    ],
+    "sigungu": [{ "code": "26500", "name": "수영구", "relation": "contains" }],
     "emd": [
       { "code": "2650010100", "name": "광안동", "relation": "contains" },
-      { "code": "2650010200", "name": "민락동", "relation": "overlaps" }
-    ]
-  }
+      { "code": "2650010200", "name": "민락동", "relation": "overlaps" },
+    ],
+  },
 }
 ```
 

@@ -18,12 +18,12 @@ fallback을 추가하지 않는다. 경로와 응답 DTO는 유지하고 transpo
 datasets/pipeline 호출은 이를 사용한다. 그러나 다음 네 메서드는 일반 `_send()`를 호출해
 admin proxy/service header를 보낸다.
 
-| client method | upstream | 직접 소비 |
-|---|---|---|
-| `list_integrity_issues` | `GET /v1/ops/consistency/issues` | Admin integrity API |
-| `list_consistency_reports` | `GET /v1/ops/consistency/reports` | Admin integrity API |
-| `list_system_logs` | `GET /v1/ops/system-logs` | Admin debug-log API, request timeline |
-| `list_ops_api_call_logs` | `GET /v1/ops/api-call-logs` | Admin debug-log API, request timeline |
+| client method              | upstream                          | 직접 소비                             |
+| -------------------------- | --------------------------------- | ------------------------------------- |
+| `list_integrity_issues`    | `GET /v1/ops/consistency/issues`  | Admin integrity API                   |
+| `list_consistency_reports` | `GET /v1/ops/consistency/reports` | Admin integrity API                   |
+| `list_system_logs`         | `GET /v1/ops/system-logs`         | Admin debug-log API, request timeline |
+| `list_ops_api_call_logs`   | `GET /v1/ops/api-call-logs`       | Admin debug-log API, request timeline |
 
 repository 전체 exact route 문자열 inventory에서 `GET /v1/ops/metrics`와
 `GET /v1/ops/health-deep`의 PinVi runtime direct caller는 없다. 문서 목록만 존재하며 이 task에서

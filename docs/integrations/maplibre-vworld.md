@@ -13,15 +13,15 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 
 ## 1. 라이브러리 식별자
 
-| 항목 | 값 |
-|------|-----|
-| 저장소 | `maplibre-vworld-react` |
-| Web 패키지 | `vworld-map-web` |
-| 공통 패키지 | `vworld-map-core` |
-| Mobile 패키지 | `vworld-map-rn` |
-| 의존 (peer) | `react`, `react-dom`, `maplibre-gl`, `zod@^4.4.3` |
-| 라이선스 | MIT |
-| 빌드 산출 | 각 package tarball을 Pinvi `apps/{web,mobile}/vendor/`에 보관 |
+| 항목          | 값                                                            |
+| ------------- | ------------------------------------------------------------- |
+| 저장소        | `maplibre-vworld-react`                                       |
+| Web 패키지    | `vworld-map-web`                                              |
+| 공통 패키지   | `vworld-map-core`                                             |
+| Mobile 패키지 | `vworld-map-rn`                                               |
+| 의존 (peer)   | `react`, `react-dom`, `maplibre-gl`, `zod@^4.4.3`             |
+| 라이선스      | MIT                                                           |
+| 빌드 산출     | 각 package tarball을 Pinvi `apps/{web,mobile}/vendor/`에 보관 |
 
 설치 (Pinvi `apps/web/package.json`):
 
@@ -38,21 +38,21 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 
 ## 2. 정책 (Kakao 대비 변경점)
 
-| 항목 | Kakao Maps SDK (이전) | `vworld-map-web` (v2) |
-|------|---------------------|------------------------|
-| 엔진 | Kakao Maps JavaScript SDK | MapLibre GL JS (WebGL GPU) |
-| 데이터 | Kakao 지도 타일 | VWorld WMTS (국토부) |
-| 캐싱 | 약관상 오프라인 캐싱 금지 | 표준 HTTP 캐싱 가능 (VWorld TOS 별도 확인) |
-| SDK 키 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | Web: `NEXT_PUBLIC_VWORLD_API_KEY`, Mobile: server-issued token |
-| 도메인 제한 | Kakao 콘솔 origin 화이트리스트 | Web은 VWorld 개발자 센터 도메인 등록, Mobile은 Pinvi API 발급/프록시 정책 |
-| 선언형 API | 명령형 `map.panTo()` 등 혼용 | **순수 선언형 (props만)** |
-| 좌표 순서 | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — Pinvi 표준과 일치 |
-| 마커 | `MapMarker` (이미지 src) | React Portal 컴포넌트 직접 주입 |
-| 클러스터링 | supercluster 별도 구현 | `ClusterLayer` 내장 (KDBush) |
-| Polygon/Route | 별도 구현 | `PolygonArea`, `RouteLine` 내장 |
-| 16색 팔레트 매핑 | Pinvi가 직접 구현 | Pinvi가 직접 구현 (이전 `PINVI_MARKER_PALETTE` / `PinviFeatureLayer` 라이브러리에서 제거됨 — generic primitive만 제공) |
-| Local 검색 | Kakao Local API (server) | **없음** — Pinvi `/search` 라이브러리 경유 |
-| 경로 안내 | Kakao 모빌리티 길찾기 | **없음** — Sprint 6 OR-Tools 직선 거리 또는 라이브러리 경유 |
+| 항목             | Kakao Maps SDK (이전)                     | `vworld-map-web` (v2)                                                                                                  |
+| ---------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 엔진             | Kakao Maps JavaScript SDK                 | MapLibre GL JS (WebGL GPU)                                                                                             |
+| 데이터           | Kakao 지도 타일                           | VWorld WMTS (국토부)                                                                                                   |
+| 캐싱             | 약관상 오프라인 캐싱 금지                 | 표준 HTTP 캐싱 가능 (VWorld TOS 별도 확인)                                                                             |
+| SDK 키           | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`           | Web: `NEXT_PUBLIC_VWORLD_API_KEY`, Mobile: server-issued token                                                         |
+| 도메인 제한      | Kakao 콘솔 origin 화이트리스트            | Web은 VWorld 개발자 센터 도메인 등록, Mobile은 Pinvi API 발급/프록시 정책                                              |
+| 선언형 API       | 명령형 `map.panTo()` 등 혼용              | **순수 선언형 (props만)**                                                                                              |
+| 좌표 순서        | `kakao.maps.LatLng(lat, lng)` 어댑터 필요 | `[lng, lat]` (GeoJSON 순서) — Pinvi 표준과 일치                                                                        |
+| 마커             | `MapMarker` (이미지 src)                  | React Portal 컴포넌트 직접 주입                                                                                        |
+| 클러스터링       | supercluster 별도 구현                    | `ClusterLayer` 내장 (KDBush)                                                                                           |
+| Polygon/Route    | 별도 구현                                 | `PolygonArea`, `RouteLine` 내장                                                                                        |
+| 16색 팔레트 매핑 | Pinvi가 직접 구현                         | Pinvi가 직접 구현 (이전 `PINVI_MARKER_PALETTE` / `PinviFeatureLayer` 라이브러리에서 제거됨 — generic primitive만 제공) |
+| Local 검색       | Kakao Local API (server)                  | **없음** — Pinvi `/search` 라이브러리 경유                                                                             |
+| 경로 안내        | Kakao 모빌리티 길찾기                     | **없음** — Sprint 6 OR-Tools 직선 거리 또는 라이브러리 경유                                                            |
 
 핵심 이득:
 
@@ -75,13 +75,13 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 
 ### 3.2 환경변수 / 앱 설정
 
-| 설정 | 위치 | 비고 |
-|------|------|------|
-| `NEXT_PUBLIC_VWORLD_API_KEY` | `apps/web` (빌드 타임 embed) | 브라우저 노출 가능 (도메인 화이트리스트로 보호) |
-| `PINVI_VWORLD_API_KEY` | `apps/api` (선택) | 모바일 token/proxy 발급 또는 백엔드 VWorld 조회가 필요할 때만 서버에서 사용 |
-| `PINVI_VWORLD_PROXY_PATH` | `apps/web` | 사내망 / 보안 정책으로 직접 호출 막힐 때 reverse proxy 경로 (옵션) |
-| `EXPO_PUBLIC_PINVI_API_URL` | `apps/mobile` | 모바일 앱이 Pinvi API를 찾기 위한 public base URL |
-| `app.json` `extra.pinvi.vworld.tokenPath` | `apps/mobile` | VWorld key가 아니라 Pinvi API의 server-issued token endpoint |
+| 설정                                      | 위치                         | 비고                                                                        |
+| ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_VWORLD_API_KEY`              | `apps/web` (빌드 타임 embed) | 브라우저 노출 가능 (도메인 화이트리스트로 보호)                             |
+| `PINVI_VWORLD_API_KEY`                    | `apps/api` (선택)            | 모바일 token/proxy 발급 또는 백엔드 VWorld 조회가 필요할 때만 서버에서 사용 |
+| `PINVI_VWORLD_PROXY_PATH`                 | `apps/web`                   | 사내망 / 보안 정책으로 직접 호출 막힐 때 reverse proxy 경로 (옵션)          |
+| `EXPO_PUBLIC_PINVI_API_URL`               | `apps/mobile`                | 모바일 앱이 Pinvi API를 찾기 위한 public base URL                           |
+| `app.json` `extra.pinvi.vworld.tokenPath` | `apps/mobile`                | VWorld key가 아니라 Pinvi API의 server-issued token endpoint                |
 
 키 정규화: `<VWorldMap apiKey={...}>`은 입력의 공백/개행 자동 제거 + URL-encode.
 복사·붙여넣기 사고 회피.
@@ -130,15 +130,14 @@ import type { ComponentType } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { VWorldMapViewProps } from 'vworld-map-web';
 
-const VWorldMap = dynamic(
-  () => import('vworld-map-web').then((m) => m.VWorldMapView),
-  { ssr: false, loading: () => <MapLoadingSkeleton /> }
-) as ComponentType<VWorldMapViewProps>;
+const VWorldMap = dynamic(() => import('vworld-map-web').then((m) => m.VWorldMapView), {
+  ssr: false,
+  loading: () => <MapLoadingSkeleton />,
+}) as ComponentType<VWorldMapViewProps>;
 
-const PlaceMarker = dynamic(
-  () => import('vworld-map-web').then((m) => m.PlaceMarker),
-  { ssr: false }
-);
+const PlaceMarker = dynamic(() => import('vworld-map-web').then((m) => m.PlaceMarker), {
+  ssr: false,
+});
 ```
 
 ```tsx
@@ -153,8 +152,8 @@ export function MapView({ initialCenter, pois }: Props) {
       layerType="Base"
       center={initialCenter}
       zoom={14}
-      onClick={(e) => handleMapClick(e.lngLat)}              // raw MapMouseEvent
-      onError={(e) => trackMapError(e)}                       // raw MapLibre error
+      onClick={(e) => handleMapClick(e.lngLat)} // raw MapMouseEvent
+      onError={(e) => trackMapError(e)} // raw MapLibre error
       onMoveEnd={(e: MapLibreEvent) => setBounds(e.target.getBounds())}
       animateCameraChanges
     >
@@ -172,6 +171,7 @@ export function MapView({ initialCenter, pois }: Props) {
 ```
 
 > **변경 요약** (이전 API → 새 API)
+>
 > - `onMapClick` → `onClick`, `onMapLoad` → `onLoad`, `onMapError` → `onError`, `onMapContextMenu` → `onContextMenu`
 > - `onViewportChange` 제거 → 필요한 시점별로 `onMoveEnd` / `onZoomEnd` / `onIdle` (각각 raw `MapLibreEvent`) 분리
 > - `showNavigationControl` / `showGeolocateControl` / `showScaleControl` → `navigation` / `geolocate` / `scale`
@@ -350,75 +350,75 @@ Pinvi에 wrapper 만들지 않고 라이브러리에 보강).
 
 ### 6.1 viewport 이벤트
 
-| 기능 | 사용처 | 현재 상태 |
-|------|--------|----------|
-| `onMoveEnd` / `onZoomEnd` / `onIdle` callback | viewport feature fetch trigger / cluster_unit 결정 | ✅ 제공 (raw `MapLibreEvent`) |
-| viewport state subscription | TanStack Query invalidation | ✅ `useMapSelector(selector)` 로 zoom/bounds 등 구독 가능 |
+| 기능                                          | 사용처                                             | 현재 상태                                                 |
+| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| `onMoveEnd` / `onZoomEnd` / `onIdle` callback | viewport feature fetch trigger / cluster_unit 결정 | ✅ 제공 (raw `MapLibreEvent`)                             |
+| viewport state subscription                   | TanStack Query invalidation                        | ✅ `useMapSelector(selector)` 로 zoom/bounds 등 구독 가능 |
 
 debounce는 Pinvi 측에서 (250ms + AbortController).
 
 ### 6.2 사용자 위치
 
-| 기능 | 사용처 | 현재 상태 |
-|------|--------|----------|
-| `<UserLocationMarker lngLat accuracy_m />` | `useUserLocation` hook 결과 표시 | ✅ 제공 (`PulsingMarker` 합성) |
-| `flyToUserLocation` prop pattern | "내 위치로 이동" 버튼 | ✅ 선언형 `center` prop 변경 또는 `flyToOptions` 사용 |
+| 기능                                       | 사용처                           | 현재 상태                                             |
+| ------------------------------------------ | -------------------------------- | ----------------------------------------------------- |
+| `<UserLocationMarker lngLat accuracy_m />` | `useUserLocation` hook 결과 표시 | ✅ 제공 (`PulsingMarker` 합성)                        |
+| `flyToUserLocation` prop pattern           | "내 위치로 이동" 버튼            | ✅ 선언형 `center` prop 변경 또는 `flyToOptions` 사용 |
 
 ### 6.3 우클릭 메뉴
 
-| 기능 | 사용처 | 현재 상태 |
-|------|--------|----------|
-| `onContextMenu(e)` 지도 우클릭 | 우클릭 메뉴 (계획 추가/주변/날씨/요청) | ✅ 제공 (raw `MapMouseEvent`) |
-| `<MakiMarker onContextMenu>` 마커 우클릭 | 마커 색/아이콘 변경 메뉴 | ✅ `MarkerProps.onContextMenu` 상속 |
+| 기능                                     | 사용처                                 | 현재 상태                           |
+| ---------------------------------------- | -------------------------------------- | ----------------------------------- |
+| `onContextMenu(e)` 지도 우클릭           | 우클릭 메뉴 (계획 추가/주변/날씨/요청) | ✅ 제공 (raw `MapMouseEvent`)       |
+| `<MakiMarker onContextMenu>` 마커 우클릭 | 마커 색/아이콘 변경 메뉴               | ✅ `MarkerProps.onContextMenu` 상속 |
 
 ### 6.4 Place / Price / Weather 마커 props 확장
 
-| 컴포넌트 | 현재 처리 | 비고 |
-|----------|----------|------|
-| `PlaceMarker` | ✅ `title`, `description`, `category`, `photoUrl`, `link` | marker card / popup |
-| `PriceMarker` | ✅ `price`, `PriceItem[]`, `currency`, LOD | 유종/단위 label은 Pinvi 데이터 매핑 |
-| `WeatherMarker` | ✅ `temperature`, `condition`, `hourlyForecast` | KMA condition/강수확률은 Pinvi에서 매핑 |
-| `EventMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
-| `NoticeMarker` | ✅ 라이브러리 예제 | API 컴포넌트가 아니라 consumer wrapper 예제 |
+| 컴포넌트        | 현재 처리                                                 | 비고                                        |
+| --------------- | --------------------------------------------------------- | ------------------------------------------- |
+| `PlaceMarker`   | ✅ `title`, `description`, `category`, `photoUrl`, `link` | marker card / popup                         |
+| `PriceMarker`   | ✅ `price`, `PriceItem[]`, `currency`, LOD                | 유종/단위 label은 Pinvi 데이터 매핑         |
+| `WeatherMarker` | ✅ `temperature`, `condition`, `hourlyForecast`           | KMA condition/강수확률은 Pinvi에서 매핑     |
+| `EventMarker`   | ✅ 라이브러리 예제                                        | API 컴포넌트가 아니라 consumer wrapper 예제 |
+| `NoticeMarker`  | ✅ 라이브러리 예제                                        | API 컴포넌트가 아니라 consumer wrapper 예제 |
 
 ### 6.5 Tooltip / Popup
 
-| 기능 | 비고 |
-|------|------|
-| 마커 hover tooltip | ✅ `Marker`의 `title` / `description` / `imageUrl` prop |
-| 마커 click popup | `Popup` 컴포넌트 제공 (이전 `MapPopup` 에서 이름 변경) |
-| 양방향 연동 — 패널 ↔ 마커 selection | ✅ `selected` / `highlighted` prop으로 강조 |
+| 기능                                | 비고                                                    |
+| ----------------------------------- | ------------------------------------------------------- |
+| 마커 hover tooltip                  | ✅ `Marker`의 `title` / `description` / `imageUrl` prop |
+| 마커 click popup                    | `Popup` 컴포넌트 제공 (이전 `MapPopup` 에서 이름 변경)  |
+| 양방향 연동 — 패널 ↔ 마커 selection | ✅ `selected` / `highlighted` prop으로 강조             |
 
 ### 6.6 카메라 / 애니메이션 제어
 
-| 기능 | 비고 |
-|------|------|
-| `cameraTarget` prop — `{center, zoom, bearing, pitch}` | ✅ 선언형 flyTo |
+| 기능                                                       | 비고               |
+| ---------------------------------------------------------- | ------------------ |
+| `cameraTarget` prop — `{center, zoom, bearing, pitch}`     | ✅ 선언형 flyTo    |
 | `cameraTransition` prop — `instant` / `smooth` / `flyOver` | ✅ 애니메이션 종류 |
-| `bbox` prop — `fitBounds` 등가 | ✅ viewport reset |
+| `bbox` prop — `fitBounds` 등가                             | ✅ viewport reset  |
 
 ### 6.7 거리 / 측정
 
-| 기능 | 비고 |
-|------|------|
-| `<MeasureLine points={...}>` | ✅ 사용자 측정 도구 |
-| `haversine(a, b)` utility | ✅ 라이브러리 export — 클라이언트 직선 거리 |
+| 기능                         | 비고                                        |
+| ---------------------------- | ------------------------------------------- |
+| `<MeasureLine points={...}>` | ✅ 사용자 측정 도구                         |
+| `haversine(a, b)` utility    | ✅ 라이브러리 export — 클라이언트 직선 거리 |
 
 ### 6.8 좌표 / 검증
 
-| 기능 | 비고 |
-|------|------|
-| `LngLatSchema` zod | 이미 export — Pinvi `packages/schemas`에서 import |
+| 기능                | 비고                                                                                                                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LngLatSchema` zod  | 이미 export — Pinvi `packages/schemas`에서 import                                                                                                                                                                           |
 | 한국 좌표 범위 검증 | `makeBoundedLngLatSchema([124, 132], [33, 43])` factory 로 직접 생성 (이전 `KoreaLngLatSchema` / `KoreaBoundsSchema` / `KOREA_LNG_RANGE` / `KOREA_LAT_RANGE` 상수는 라이브러리에서 제거됨 — Pinvi 측에서 1회 생성해 재사용) |
-| `BBoxSchema` | viewport bounds 검증 |
-| Point 스키마 확장 | `PointSchema` (이전 `BasePointDataSchema`) / `extendPointSchema` (이전 `createPointDataSchema`) — Pinvi POI 스키마 정의에 활용 |
+| `BBoxSchema`        | viewport bounds 검증                                                                                                                                                                                                        |
+| Point 스키마 확장   | `PointSchema` (이전 `BasePointDataSchema`) / `extendPointSchema` (이전 `createPointDataSchema`) — Pinvi POI 스키마 정의에 활용                                                                                              |
 
 ### 6.9 SSR / hydration
 
-| 기능 | 비고 |
-|------|------|
-| `loadingSkeleton` ✓ | 이미 있음 |
-| `fallback` ✓ | 이미 있음 |
+| 기능                         | 비고                                                            |
+| ---------------------------- | --------------------------------------------------------------- |
+| `loadingSkeleton` ✓          | 이미 있음                                                       |
+| `fallback` ✓                 | 이미 있음                                                       |
 | Server Component import 차단 | 빌드 시 에러 (현재 dynamic import로 회피 — `'use client'` 강제) |
 
 ### 6.10 PWA / 오프라인
@@ -439,12 +439,12 @@ v2 후보. VWorld TOS 확인 후 라이브러리에 PWA 가이드 추가:
 
 라이브러리가 제공하는 hook:
 
-| Hook | 반환 | 용도 |
-|------|------|------|
-| `useMap()` | `MapLibreMap \| null` 직접 반환 | 명령형 fallback (대부분 props로 충분, 마지막 수단) |
-| `useMapLoaded()` | `boolean` | style/타일 로드 완료 시점 — 마커 mount 조건 |
-| `useMapSelector(selector)` | selector 결과 | zoom/bounds 등 derived state subscription (useSyncExternalStore 기반) |
-| `useEvent(handler)` | stable callback | 리렌더 안 타는 이벤트 핸들러 |
+| Hook                       | 반환                            | 용도                                                                  |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `useMap()`                 | `MapLibreMap \| null` 직접 반환 | 명령형 fallback (대부분 props로 충분, 마지막 수단)                    |
+| `useMapLoaded()`           | `boolean`                       | style/타일 로드 완료 시점 — 마커 mount 조건                           |
+| `useMapSelector(selector)` | selector 결과                   | zoom/bounds 등 derived state subscription (useSyncExternalStore 기반) |
+| `useEvent(handler)`        | stable callback                 | 리렌더 안 타는 이벤트 핸들러                                          |
 
 이전 `useMapContext()` 는 제거, `useMap()` 시그니처가 `{ map, semanticZoomThreshold }`
 객체가 아닌 `MapLibreMap | null` 직접 반환으로 바뀜.
@@ -461,13 +461,15 @@ export function useFeatureMarkers(kinds: FeatureKind[]) {
   const bounds = useMapSelector((s) => s.bounds);
   const zoom = useMapSelector((s) => s.zoom);
   const { data } = useFeaturesInBounds({ bounds, zoom, kinds });
-  return data?.items.map((item) => ({
-    id: item.feature_id,
-    lngLat: [item.coord.longitude, item.coord.latitude],
-    marker_color: item.marker_color,
-    maki_icon: item.marker_icon,
-    kind: item.kind,
-  })) ?? [];
+  return (
+    data?.items.map((item) => ({
+      id: item.feature_id,
+      lngLat: [item.coord.longitude, item.coord.latitude],
+      marker_color: item.marker_color,
+      maki_icon: item.marker_icon,
+      kind: item.kind,
+    })) ?? []
+  );
 }
 ```
 
@@ -510,16 +512,16 @@ Pinvi 클라이언트 정책:
 
 ## 10. v1 → v2 변경 매핑
 
-| v1 자산 | v2 처리 |
-|---------|---------|
-| `react-kakao-maps-sdk` 의존 | 제거 → `vworld-map-web` 추가 |
-| `KAKAO_REST_API_KEY` 백엔드 사용 | 제거 (Local 검색은 라이브러리 경유) |
-| `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
-| `apps/web/lib/coordAdapter.ts` (Kakao lat-lng 변환) | 제거 (VWorld는 `(lng, lat)`) |
-| `apps/web/lib/kakao.ts` SDK 로드 | 제거 |
-| `apps/web/scripts/sync-maki-icons.mjs` | 유지 — 라이브러리는 Maki 외부 의존 — Pinvi self-host |
-| 백엔드 `apps/api/app/services/kakao_local.py` | **`/search` 구현 변경** — 라이브러리 (`kor-travel-map`의 `search`) 경유 |
-| `docs/integrations/kakao-map.md` | 폐기 → 본 문서 |
+| v1 자산                                             | v2 처리                                                                 |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| `react-kakao-maps-sdk` 의존                         | 제거 → `vworld-map-web` 추가                                            |
+| `KAKAO_REST_API_KEY` 백엔드 사용                    | 제거 (Local 검색은 라이브러리 경유)                                     |
+| `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`                     | `NEXT_PUBLIC_VWORLD_API_KEY`                                            |
+| `apps/web/lib/coordAdapter.ts` (Kakao lat-lng 변환) | 제거 (VWorld는 `(lng, lat)`)                                            |
+| `apps/web/lib/kakao.ts` SDK 로드                    | 제거                                                                    |
+| `apps/web/scripts/sync-maki-icons.mjs`              | 유지 — 라이브러리는 Maki 외부 의존 — Pinvi self-host                    |
+| 백엔드 `apps/api/app/services/kakao_local.py`       | **`/search` 구현 변경** — 라이브러리 (`kor-travel-map`의 `search`) 경유 |
+| `docs/integrations/kakao-map.md`                    | 폐기 → 본 문서                                                          |
 
 ## 11. 작업 체크리스트 (AI agent)
 
@@ -544,13 +546,13 @@ Pinvi 클라이언트 정책:
 
 - [x] `maplibre-vworld-js` PR #37 — T-033~T-037 소비자 공통 기능 구현 완료.
 - [x] `maplibre-vworld-js` PR #46 — `docs/consumer-feature-catalog.md` source of
-  truth 정합화, `build-and-test` green, merge `f1dd74b9`.
+      truth 정합화, `build-and-test` green, merge `f1dd74b9`.
 - [x] Pinvi §6 snapshot을 라이브러리 카탈로그의 현재 상태와 동기화.
 - [x] Pinvi frontend PR-C에서 `apps/web/package.json`에 `maplibre-vworld`
-  GitHub archive tarball URL을 pin하고 lockfile을 갱신.
+      GitHub archive tarball URL을 pin하고 lockfile을 갱신.
 - [x] Pinvi frontend PR-C에서 `apps/web/components/map/*` 실제 import / e2e 검증.
-  T-074에서 `/trips/map-shell`을 추가하고 Windows Playwright smoke로
-  `/features/in-bounds` / kor-travel-map API `12701` 미호출을 확인했다.
+      T-074에서 `/trips/map-shell`을 추가하고 Windows Playwright smoke로
+      `/features/in-bounds` / kor-travel-map API `12701` 미호출을 확인했다.
 
 > T-074 메모: `maplibre-vworld` dist의 development JSX runtime은 Next dev 브라우저
 > chunk에서 `require("react")`를 호출한다. Pinvi는 production build가 정상인 것을
@@ -561,12 +563,12 @@ Pinvi 클라이언트 정책:
 
 - [x] `apps/web/package.json`에서 `maplibre-vworld` / `maplibre-vworld-js` 의존성을 제거.
 - [x] `apps/web/vendor/vworld-map-web-1.0.0.tgz`를 Web package `file:` 의존으로 추가하고,
-  `vworld-map-core`는 기존 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz` file spec을 공유.
+      `vworld-map-core`는 기존 `apps/mobile/vendor/vworld-map-core-1.0.0.tgz` file spec을 공유.
 - [x] `apps/web/components/map/vworldPrimitives.tsx`가 `vworld-map-web`의
-  `VWorldMapView` / `ClusterLayer` / `MakiMarker` / `Popup` /
-  `UserLocationMarker` / `MapContextMenu`를 lazy import한다.
+      `VWorldMapView` / `ClusterLayer` / `MakiMarker` / `Popup` /
+      `UserLocationMarker` / `MapContextMenu`를 lazy import한다.
 - [x] `maplibre-vworld/style.css`와 T-074의 dev React `require` shim을 제거하고,
-  MapLibre 기본 CSS(`maplibre-gl/dist/maplibre-gl.css`)만 import한다.
+      MapLibre 기본 CSS(`maplibre-gl/dist/maplibre-gl.css`)만 import한다.
 
 ## 12. AI 에이전트 (Codex / Antigravity) 대응
 

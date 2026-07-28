@@ -161,7 +161,9 @@ test('Admin abuse page가 bucket 조회, override 생성, rollback을 처리한�
 
   await page.getByTestId('admin-abuse-filter').selectOption('auth_low');
   await expect
-    .poll(() => requests.some((url) => url.includes('/admin/abuse') && url.includes('limit_name=auth_low')))
+    .poll(() =>
+      requests.some((url) => url.includes('/admin/abuse') && url.includes('limit_name=auth_low')),
+    )
     .toBe(true);
 
   await page.getByTestId('admin-abuse-email').fill('blocked@example.com');

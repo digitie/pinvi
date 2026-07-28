@@ -4,32 +4,32 @@
 
 ## 1. 필수 결정 6건 (A-1, 모두 확정)
 
-| # | 항목 | 결정 | Pinvi v2 매핑 |
-|---|------|------|------------------|
-| 1 | vworld 법정동코드 파일 | vworld.kr txt 사용 | `kor-travel-geo`가 임포트 (L장 / `kor-travel-map` ADR-006) |
-| 2 | 참여자 동의 UI | 프로필 입력 시 통합. 필수/선택 분리 | G-5 4 분리 동의 (`docs/spec/v8/02-backend.md` §4.2) |
-| 3 | 소셜 로그인 매칭 | 이메일 인증 방식. verify 후만 활성/연결 | G-4 안전 매칭 (F-3) |
-| 4 | ~~카카오맵 SDK~~ → **`vworld-map-web`** (ADR-015/046로 정정) | `vworld-map-web` (`maplibre-vworld-react`, VWorld + MapLibre GL JS) 직접 사용 | 좌표 lon-lat 일관 + 선언형 + 16색 마커 + Place/Price/Weather 마커 라이브러리에 내장 |
-| 5 | 운영 환경 | Odroid M1S + Ubuntu 24.04 + Docker. 셀프호스팅 | N-7 (`docs/spec/v8/00-infrastructure.md` §2.1) |
-| 6 | 이메일 발송 | Resend (React Email + SPF/DKIM/DMARC + webhook) | G-6 (`docs/spec/v8/02-backend.md` §4.3) |
+| #   | 항목                                                         | 결정                                                                          | Pinvi v2 매핑                                                                       |
+| --- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1   | vworld 법정동코드 파일                                       | vworld.kr txt 사용                                                            | `kor-travel-geo`가 임포트 (L장 / `kor-travel-map` ADR-006)                          |
+| 2   | 참여자 동의 UI                                               | 프로필 입력 시 통합. 필수/선택 분리                                           | G-5 4 분리 동의 (`docs/spec/v8/02-backend.md` §4.2)                                 |
+| 3   | 소셜 로그인 매칭                                             | 이메일 인증 방식. verify 후만 활성/연결                                       | G-4 안전 매칭 (F-3)                                                                 |
+| 4   | ~~카카오맵 SDK~~ → **`vworld-map-web`** (ADR-015/046로 정정) | `vworld-map-web` (`maplibre-vworld-react`, VWorld + MapLibre GL JS) 직접 사용 | 좌표 lon-lat 일관 + 선언형 + 16색 마커 + Place/Price/Weather 마커 라이브러리에 내장 |
+| 5   | 운영 환경                                                    | Odroid M1S + Ubuntu 24.04 + Docker. 셀프호스팅                                | N-7 (`docs/spec/v8/00-infrastructure.md` §2.1)                                      |
+| 6   | 이메일 발송                                                  | Resend (React Email + SPF/DKIM/DMARC + webhook)                               | G-6 (`docs/spec/v8/02-backend.md` §4.3)                                             |
 
 ## 2. 권장 채택 (A-2)
 
-| 영역 | 채택 |
-|------|------|
-| 백엔드 | FastAPI + SQLAlchemy 2 + Alembic + PostGIS + Dagster (Redis 없음) |
-| 프론트 | Next.js 15 + Zustand + TanStack Query v5 + RHF + Zod + dnd-kit + Tailwind |
-| 인증 | JWT (15m + 7d) + email verify + Google OAuth (verified_email) |
-| 16색 팔레트 | P-01 ~ P-16 (브랜드 색 확정 전 임시) |
-| 동시 편집 | LWW + optimistic lock + fractional indexing |
-| 공유 링크 | 256bit + 30일 기본 + revoke |
-| PWA | v1 미포함 (카카오맵 약관 차원) |
-| 실시간 수평 확장 | v1 단일 (v2: Redis Streams) |
-| 알림 | v1 이메일만. push는 v2 |
-| 사진 업로드 | v1 아바타만. RustFS. 여행 사진 v2 |
-| ETL 모니터링 | v1 Dagit 임베드. 자체 UI v2 |
-| 다국어 | ko 만. next-intl i18n-ready |
-| 동반자 권한 | POI/일정 편집만. 동반자 추가/공유 발급은 리더만 |
+| 영역             | 채택                                                                      |
+| ---------------- | ------------------------------------------------------------------------- |
+| 백엔드           | FastAPI + SQLAlchemy 2 + Alembic + PostGIS + Dagster (Redis 없음)         |
+| 프론트           | Next.js 15 + Zustand + TanStack Query v5 + RHF + Zod + dnd-kit + Tailwind |
+| 인증             | JWT (15m + 7d) + email verify + Google OAuth (verified_email)             |
+| 16색 팔레트      | P-01 ~ P-16 (브랜드 색 확정 전 임시)                                      |
+| 동시 편집        | LWW + optimistic lock + fractional indexing                               |
+| 공유 링크        | 256bit + 30일 기본 + revoke                                               |
+| PWA              | v1 미포함 (카카오맵 약관 차원)                                            |
+| 실시간 수평 확장 | v1 단일 (v2: Redis Streams)                                               |
+| 알림             | v1 이메일만. push는 v2                                                    |
+| 사진 업로드      | v1 아바타만. RustFS. 여행 사진 v2                                         |
+| ETL 모니터링     | v1 Dagit 임베드. 자체 UI v2                                               |
+| 다국어           | ko 만. next-intl i18n-ready                                               |
+| 동반자 권한      | POI/일정 편집만. 동반자 추가/공유 발급은 리더만                           |
 
 ## 3. Sprint 계획 (P장)
 
@@ -119,37 +119,37 @@ DoD: 외부 정식 출시 가능 상태.
 
 ### C-1 즉시 (Sprint 1 시작 전)
 
-| 항목 | 상태 | 메모 |
-|------|------|------|
-| 도메인 + 브랜드명 | ❓ 대기 | manifest / Resend / OAuth redirect / 이메일 발신자에 모두 필요 |
-| 외부 API 인증키 일괄 신청 | ❓ 대기 | VWORLD / TourAPI / 기상청 / 행안부 / 카카오 / OpiNet / KHOA / 천문연 / KASI |
-| Resend 가입 + 도메인 | ❓ 대기 | 도메인 결정 후 |
-| Git 리포지토리 | ✓ `pinvi` | 본 저장소 + `kor-travel-map` 별 저장소 |
-| CI/CD 플랫폼 | ✓ GitHub Actions | Sprint 1에서 활성화 |
-| Container Registry | ❓ 대기 | GHCR 권장 |
-| Odroid NVMe 용량 | ❓ 대기 | 256GB 시작 권장 |
+| 항목                      | 상태             | 메모                                                                        |
+| ------------------------- | ---------------- | --------------------------------------------------------------------------- |
+| 도메인 + 브랜드명         | ❓ 대기          | manifest / Resend / OAuth redirect / 이메일 발신자에 모두 필요              |
+| 외부 API 인증키 일괄 신청 | ❓ 대기          | VWORLD / TourAPI / 기상청 / 행안부 / 카카오 / OpiNet / KHOA / 천문연 / KASI |
+| Resend 가입 + 도메인      | ❓ 대기          | 도메인 결정 후                                                              |
+| Git 리포지토리            | ✓ `pinvi`        | 본 저장소 + `kor-travel-map` 별 저장소                                      |
+| CI/CD 플랫폼              | ✓ GitHub Actions | Sprint 1에서 활성화                                                         |
+| Container Registry        | ❓ 대기          | GHCR 권장                                                                   |
+| Odroid NVMe 용량          | ❓ 대기          | 256GB 시작 권장                                                             |
 
 ### C-2 Sprint 2~4 사이
 
-| 항목 | 권장 |
-|------|------|
-| Uptime 모니터 | UptimeRobot 무료 또는 Better Stack |
-| Sentry release 정책 | main 머지 시 자동 + git short sha |
-| DB 마이그레이션 정책 | v1 단순 alembic + 30초 503 허용 |
-| 공유 링크 보안 강화 | v2 비밀번호/PIN |
-| 이메일 발송 rate limit | Resend + 자체 1분 5회 |
+| 항목                   | 권장                               |
+| ---------------------- | ---------------------------------- |
+| Uptime 모니터          | UptimeRobot 무료 또는 Better Stack |
+| Sentry release 정책    | main 머지 시 자동 + git short sha  |
+| DB 마이그레이션 정책   | v1 단순 alembic + 30초 503 허용    |
+| 공유 링크 보안 강화    | v2 비밀번호/PIN                    |
+| 이메일 발송 rate limit | Resend + 자체 1분 5회              |
 
 ### C-3 출시 직전 (Sprint 5~6)
 
-| 항목 | 비고 |
-|------|------|
-| 사업자 등록 | LBS 신고 필수. 개인사업자 빠름 |
-| 법무 4 문서 | 변호사 검토 권장 |
-| 고객 지원 채널 | v1: 이메일 + FAQ |
-| 분석 도구 | Plausible/Umami 자체호스팅 (PII 친화) |
-| HTTPS 인증서 | Let's Encrypt + certbot 자동 갱신 |
-| 백업 외부 위치 | BackBlaze B2 권장 |
-| RTO/RPO | RPO 24h / RTO 1h / 분기 1회 훈련 |
+| 항목           | 비고                                  |
+| -------------- | ------------------------------------- |
+| 사업자 등록    | LBS 신고 필수. 개인사업자 빠름        |
+| 법무 4 문서    | 변호사 검토 권장                      |
+| 고객 지원 채널 | v1: 이메일 + FAQ                      |
+| 분석 도구      | Plausible/Umami 자체호스팅 (PII 친화) |
+| HTTPS 인증서   | Let's Encrypt + certbot 자동 갱신     |
+| 백업 외부 위치 | BackBlaze B2 권장                     |
+| RTO/RPO        | RPO 24h / RTO 1h / 분기 1회 훈련      |
 
 ### C-4 v2 / 장기
 

@@ -52,9 +52,7 @@ test('Seed 페이지가 scenario dry-run을 실행한다', async ({ page }) => {
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === '/admin/seed/scenarios/new_user_first_trip',
+    (url) => url.port === '12801' && url.pathname === '/admin/seed/scenarios/new_user_first_trip',
     async (route) => {
       dryRunBody = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({

@@ -19,9 +19,7 @@ export const expoLocationAdapter: LocationAdapter = {
     }
 
     const position = await Location.getCurrentPositionAsync({
-      accuracy: opts?.high_accuracy
-        ? Location.Accuracy.High
-        : Location.Accuracy.Balanced,
+      accuracy: opts?.high_accuracy ? Location.Accuracy.High : Location.Accuracy.Balanced,
     });
 
     return {

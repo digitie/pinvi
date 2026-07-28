@@ -7,7 +7,13 @@ import { formatKstTime, formatTripDate } from '@/lib/tripDateLabels';
 export interface TripDayHeaderProps {
   day: Pick<
     TripViewDay,
-    'day_index' | 'date' | 'effective_date' | 'out_of_range' | 'holidays' | 'rise_set' | 'rise_set_reference'
+    | 'day_index'
+    | 'date'
+    | 'effective_date'
+    | 'out_of_range'
+    | 'holidays'
+    | 'rise_set'
+    | 'rise_set_reference'
   >;
   className?: string;
   /**
@@ -23,9 +29,7 @@ export interface TripDayHeaderProps {
  */
 export function TripDayHeader({ day, className, showSummary = true }: TripDayHeaderProps) {
   const dateLabel = formatTripDate(day.effective_date ?? day.date);
-  const holidayNames = Array.from(
-    new Set(day.holidays.map((h) => h.name).filter(Boolean)),
-  );
+  const holidayNames = Array.from(new Set(day.holidays.map((h) => h.name).filter(Boolean)));
   return (
     <div className={className} data-testid="trip-day-header">
       {showSummary && (

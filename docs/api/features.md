@@ -44,24 +44,24 @@ Cookie: pinvi_access=...
         "feature_id": "f_2611000000_p_abc123...",
         "kind": "place",
         "name": "광안리 해수욕장",
-        "coord": { "lon": 129.118, "lat": 35.155 },   // null 가능
+        "coord": { "lon": 129.118, "lat": 35.155 }, // null 가능
         "category": "해수욕장",
         "marker_color": "P-07",
         "marker_icon": "swimming",
-        "status": "active"
-      }
+        "status": "active",
+      },
     ],
     "clusters": [
       {
-        "cluster_key": "11680",                        // 행정구역 코드(자연키)
+        "cluster_key": "11680", // 행정구역 코드(자연키)
         "coord": { "lon": 127.04, "lat": 37.52 },
-        "feature_count": 47
-      }
+        "feature_count": 47,
+      },
     ],
     "cluster_unit": "sigungu",
     "zoom": 12,
-    "bbox": { "lng_min": 129.0, "lat_min": 35.0, "lng_max": 129.2, "lat_max": 35.2 }
-  }
+    "bbox": { "lng_min": 129.0, "lat_min": 35.0, "lng_max": 129.2, "lat_max": 35.2 },
+  },
 }
 ```
 
@@ -84,10 +84,12 @@ GET /features/f_2611000000_p_abc123...
   "data": {
     "feature_id": "f_2611000000_p_abc123...",
     "kind": "place",
-    "name": "...",                               // 표시명 (kor_travel_map `name`)
-    "coord": { "lon": 129.0, "lat": 35.0 },      // null 가능
+    "name": "...", // 표시명 (kor_travel_map `name`)
+    "coord": { "lon": 129.0, "lat": 35.0 }, // null 가능
     "category": "01070100",
-    "address": { /* 구조화 주소 객체 (kor_travel_map 원본) */ },
+    "address": {
+      /* 구조화 주소 객체 (kor_travel_map 원본) */
+    },
     "legal_dong_code": "1168010100",
     "sido_code": "11",
     "sigungu_code": "11680",
@@ -96,11 +98,11 @@ GET /features/f_2611000000_p_abc123...
     "urls": { "homepage": "...", "review_naver": null },
     "detail": {
       // kind+category별 payload (kor_travel_map PlaceDetail / EventDetail / ...)
-      "phones": ["051-..."]
+      "phones": ["051-..."],
     },
     "status": "active",
-    "updated_at": "..."
-  }
+    "updated_at": "...",
+  },
 }
 ```
 
@@ -123,21 +125,26 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 {
   "data": {
     "feature_id": "...",
-    "asof": "2026-06-10T12:00:00+09:00",          // null 가능
-    "latest_at": "2026-06-10T11:00:00+09:00",     // null 가능
+    "asof": "2026-06-10T12:00:00+09:00", // null 가능
+    "latest_at": "2026-06-10T11:00:00+09:00", // null 가능
     "is_stale": false,
     "source_styles": ["nowcast", "short"],
     "metrics": [
       {
         "metric_key": "T1H",
         "metric_name": "기온",
-        "forecast_style": "nowcast",              // nowcast|ultra_short|short|mid|observed|index|advisory
+        "forecast_style": "nowcast", // nowcast|ultra_short|short|mid|observed|index|advisory
         "timeline_bucket": null,
-        "valid_at": "...", "issued_at": null, "observed_at": null,
-        "value_number": 23.0, "value_text": null, "unit": "℃", "severity": null
-      }
-    ]
-  }
+        "valid_at": "...",
+        "issued_at": null,
+        "observed_at": null,
+        "value_number": 23.0,
+        "value_text": null,
+        "unit": "℃",
+        "severity": null,
+      },
+    ],
+  },
 }
 ```
 
@@ -209,8 +216,8 @@ Cookie: pinvi_access=...
     "note": "...",
     "target_feature_id": null,
     "created_at": "2026-06-09T11:10:00+09:00",
-    "resolved_at": null
-  }
+    "resolved_at": null,
+  },
 }
 ```
 
@@ -250,13 +257,13 @@ Cookie: pinvi_access=...
       "feature_id": "f_2611000000_p_abc123...",
       "kind": "place",
       "name": "광안리 해수욕장",
-      "coord": { "lon": 129.118, "lat": 35.155 },   // null 가능
+      "coord": { "lon": 129.118, "lat": 35.155 }, // null 가능
       "category": "해수욕장",
       "marker_color": "P-07",
       "marker_icon": "swimming",
-      "status": "active"
-    }
-  ]
+      "status": "active",
+    },
+  ],
 }
 ```
 
@@ -278,16 +285,16 @@ Cookie: pinvi_access=...
 {
   "data": [
     {
-      "code": "01070100",         // 8자리 카테고리 코드
+      "code": "01070100", // 8자리 카테고리 코드
       "label": "해수욕장",
       "parent_code": "010701",
       "depth": 3,
       "path": ["자연", "해안", "해수욕장"],
       "maki_icon": "swimming",
       "is_active": true,
-      "sort_order": 5
-    }
-  ]
+      "sort_order": 5,
+    },
+  ],
 }
 ```
 
@@ -306,11 +313,19 @@ Cookie: pinvi_access=...
 ```jsonc
 {
   "data": {
-    "trips": [/* app.trips 검색 결과 */],
-    "my_pois": [/* 접근 가능한 trip_day_pois 검색 결과 */],
-    "features": [/* /features/search 결과 */],
-    "addresses": [/* kor-travel-geo v2 REST search 결과 */]
-  }
+    "trips": [
+      /* app.trips 검색 결과 */
+    ],
+    "my_pois": [
+      /* 접근 가능한 trip_day_pois 검색 결과 */
+    ],
+    "features": [
+      /* /features/search 결과 */
+    ],
+    "addresses": [
+      /* kor-travel-geo v2 REST search 결과 */
+    ],
+  },
 }
 ```
 

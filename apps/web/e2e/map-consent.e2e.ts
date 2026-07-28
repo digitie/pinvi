@@ -18,7 +18,12 @@ test('내 위치는 위치 동의 후에만 동작한다', async ({ page }) => {
         contentType: 'application/json',
         body: JSON.stringify({
           data: [
-            { consent_type: 'lbs_tos', version: 'v1.0', agreed_at: '2026-06-10T00:00:00Z', withdrawn_at: null },
+            {
+              consent_type: 'lbs_tos',
+              version: 'v1.0',
+              agreed_at: '2026-06-10T00:00:00Z',
+              withdrawn_at: null,
+            },
             {
               consent_type: 'location_collection',
               version: 'v1.0',
@@ -33,7 +38,18 @@ test('내 위치는 위치 동의 후에만 동작한다', async ({ page }) => {
     // GET — 최초엔 미동의(빈 목록).
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ data: consented ? [{ consent_type: 'lbs_tos', version: 'v1.0', agreed_at: '2026-06-10T00:00:00Z', withdrawn_at: null }] : [] }),
+      body: JSON.stringify({
+        data: consented
+          ? [
+              {
+                consent_type: 'lbs_tos',
+                version: 'v1.0',
+                agreed_at: '2026-06-10T00:00:00Z',
+                withdrawn_at: null,
+              },
+            ]
+          : [],
+      }),
     });
   });
 

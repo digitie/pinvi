@@ -17,22 +17,22 @@
 ```ts
 // packages/design-tokens/src/colors.ts
 export const MARKER_PALETTE = {
-  'P-01': { hex: '#E53935', name: '빨강' },       // 음식점
-  'P-02': { hex: '#FB8C00', name: '주황' },       // 주유소
-  'P-03': { hex: '#FDD835', name: '노랑' },       // 사찰/문화유산
-  'P-04': { hex: '#7CB342', name: '연두' },       // 편의점/마트
-  'P-05': { hex: '#43A047', name: '초록' },       // 골프장 / 휴양림 / 국립공원
-  'P-06': { hex: '#00897B', name: '청록' },       // 트래킹 route
-  'P-07': { hex: '#00ACC1', name: '하늘색' },     // 해수욕장
+  'P-01': { hex: '#E53935', name: '빨강' }, // 음식점
+  'P-02': { hex: '#FB8C00', name: '주황' }, // 주유소
+  'P-03': { hex: '#FDD835', name: '노랑' }, // 사찰/문화유산
+  'P-04': { hex: '#7CB342', name: '연두' }, // 편의점/마트
+  'P-05': { hex: '#43A047', name: '초록' }, // 골프장 / 휴양림 / 국립공원
+  'P-06': { hex: '#00897B', name: '청록' }, // 트래킹 route
+  'P-07': { hex: '#00ACC1', name: '하늘색' }, // 해수욕장
   'P-08': { hex: '#1E88E5', name: '파랑' },
-  'P-09': { hex: '#3949AB', name: '남색' },       // 미술관/박물관
-  'P-10': { hex: '#8E24AA', name: '보라' },       // 숙박
-  'P-11': { hex: '#D81B60', name: '자홍' },       // 관광명소 / event(축제)
-  'P-12': { hex: '#6D4C41', name: '갈색' },       // 카페
-  'P-13': { hex: '#757575', name: '회색' },       // 주차장
-  'P-14': { hex: '#212121', name: '검정' },       // notice(공지)
-  'P-15': { hex: '#F4511E', name: '주홍' },       // 휴게소
-  'P-16': { hex: '#039BE5', name: '청색' },       // 약국/병원
+  'P-09': { hex: '#3949AB', name: '남색' }, // 미술관/박물관
+  'P-10': { hex: '#8E24AA', name: '보라' }, // 숙박
+  'P-11': { hex: '#D81B60', name: '자홍' }, // 관광명소 / event(축제)
+  'P-12': { hex: '#6D4C41', name: '갈색' }, // 카페
+  'P-13': { hex: '#757575', name: '회색' }, // 주차장
+  'P-14': { hex: '#212121', name: '검정' }, // notice(공지)
+  'P-15': { hex: '#F4511E', name: '주홍' }, // 휴게소
+  'P-16': { hex: '#039BE5', name: '청색' }, // 약국/병원
 } as const;
 ```
 
@@ -50,10 +50,25 @@ import { copyFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 
 const ICONS_NEEDED = [
-  'restaurant', 'fuel', 'religious-buddhist', 'grocery', 'golf',
-  'swimming', 'museum', 'lodging', 'attraction', 'star',
-  'cafe', 'parking', 'alert', 'car', 'hospital',
-  'park-alt1', 'monument', 'walking', 'park',
+  'restaurant',
+  'fuel',
+  'religious-buddhist',
+  'grocery',
+  'golf',
+  'swimming',
+  'museum',
+  'lodging',
+  'attraction',
+  'star',
+  'cafe',
+  'parking',
+  'alert',
+  'car',
+  'hospital',
+  'park-alt1',
+  'monument',
+  'walking',
+  'park',
 ];
 
 const src = resolve('node_modules/@mapbox/maki/icons');
@@ -79,10 +94,12 @@ console.log(`Synced ${ICONS_NEEDED.length} icons to public/maki/`);
 ### 4.1 레이아웃
 
 **데스크탑 (≥ 768px)**:
+
 - 좌측 50% — 축제 / 추천 plan / 마커 미리보기 카드 grid
 - 우측 50% — 로그인 폼
 
 **모바일 (< 768px)**:
+
 - 상단 — 로그인 폼 (full-width)
 - 하단 — 축제 / 추천 plan (스크롤)
 

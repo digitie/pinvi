@@ -18,11 +18,7 @@ export async function generateMetadata({
   return { title: `${doc.title} | Pinvi`, description: doc.summary };
 }
 
-export default async function LegalDocPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function LegalDocPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const doc = getLegalDoc(slug);
   if (!doc) notFound();

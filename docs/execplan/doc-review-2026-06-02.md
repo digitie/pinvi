@@ -27,7 +27,7 @@
 - stale 문구 `rg` 검색: 완료.
 - `git diff --check`: 통과.
 - Markdown lint: `npx markdownlint-cli2 "README.md" "AGENTS.md" "CLAUDE.md"
-  "SKILL.md" "docs/**/*.md"` 실행. 저장소 기존 스타일 위반(테이블 spacing, 80자
+"SKILL.md" "docs/**/*.md"` 실행. 저장소 기존 스타일 위반(테이블 spacing, 80자
   제한 등) 1,977건으로 실패. 이번 PR 범위 밖의 기존 문서 스타일 부채로 보고
   별도 정리 필요.
 - 신규 파일 `docs/execplan/doc-review-2026-06-02.md` 단독 markdownlint: 통과.

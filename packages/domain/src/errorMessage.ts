@@ -14,7 +14,8 @@ export function friendlyErrorText(error: unknown): string {
     if (error.status === 401) return '로그인이 필요하거나 세션이 만료되었습니다.';
     if (error.status === 403) return '이 작업을 수행할 권한이 없습니다.';
     if (error.status === 404) return '요청한 항목을 찾을 수 없습니다.';
-    if (error.status >= 500) return '서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+    if (error.status >= 500)
+      return '서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
     return error.message || '요청을 처리하지 못했습니다.';
   }
   if (error instanceof Error && error.message) {

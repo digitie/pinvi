@@ -99,11 +99,17 @@ export default function McpTokensSettingsScreen() {
               })}
             </View>
           </View>
-          <Button label="발급" onPress={() => issueMutation.mutate()} loading={issueMutation.isPending} />
+          <Button
+            label="발급"
+            onPress={() => issueMutation.mutate()}
+            loading={issueMutation.isPending}
+          />
 
           {issued ? (
             <View className="gap-1.5 rounded-md bg-success-bg p-3">
-              <Body className="text-success-text">발급된 토큰 (지금만 표시됩니다 — 길게 눌러 복사):</Body>
+              <Body className="text-success-text">
+                발급된 토큰 (지금만 표시됩니다 — 길게 눌러 복사):
+              </Body>
               <Text selectable className="font-mono text-xs text-ink">
                 {issued}
               </Text>
@@ -114,7 +120,10 @@ export default function McpTokensSettingsScreen() {
         {tokensQuery.isPending ? (
           <Loading />
         ) : tokensQuery.isError ? (
-          <ErrorView message={friendlyErrorText(tokensQuery.error)} onRetry={() => tokensQuery.refetch()} />
+          <ErrorView
+            message={friendlyErrorText(tokensQuery.error)}
+            onRetry={() => tokensQuery.refetch()}
+          />
         ) : tokensQuery.data.length === 0 ? (
           <Muted>발급된 토큰이 없습니다.</Muted>
         ) : (
@@ -133,7 +142,9 @@ export default function McpTokensSettingsScreen() {
                     <Button
                       label="회수"
                       variant="danger"
-                      loading={revokeMutation.isPending && revokeMutation.variables === token.token_id}
+                      loading={
+                        revokeMutation.isPending && revokeMutation.variables === token.token_id
+                      }
                       onPress={() => revokeMutation.mutate(token.token_id)}
                     />
                   ) : null}

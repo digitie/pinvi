@@ -94,10 +94,11 @@ export const featureApi = (client: ApiClient) => ({
     if (params.providers && params.providers.length > 0) {
       qs.set('providers', params.providers.join(','));
     }
-    return client.request(
-      `/features/${featureId}/detail-card${qs.toString() ? `?${qs}` : ''}`,
-      { method: 'GET', schema: FeatureDetailCardSchema, signal: opts?.signal },
-    );
+    return client.request(`/features/${featureId}/detail-card${qs.toString() ? `?${qs}` : ''}`, {
+      method: 'GET',
+      schema: FeatureDetailCardSchema,
+      signal: opts?.signal,
+    });
   },
 
   /** KMA 시간축 weather card. */

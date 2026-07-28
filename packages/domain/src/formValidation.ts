@@ -21,7 +21,10 @@ const LABELS: Record<string, string> = {
  * Zod issue 하나를 사용자 친화적 한국어 메시지로 변환한다.
  * 스키마의 기본 메시지는 영어이므로 필드·코드 기준으로 직접 매핑한다.
  */
-function messageFor(field: string, issue: { code: string; message: string; minimum?: unknown }): string {
+function messageFor(
+  field: string,
+  issue: { code: string; message: string; minimum?: unknown },
+): string {
   const label = LABELS[field] ?? field;
   if (field === 'email') return '올바른 이메일 주소를 입력해 주세요.';
   if (issue.code === 'too_small') {
@@ -50,7 +53,10 @@ export function validateForm<T>(schema: ZodType<T>, values: unknown): ValidateRe
     const raw = issue.path[0];
     const field = typeof raw === 'string' ? raw : raw != null ? String(raw) : '';
     if (!field || fieldErrors[field]) continue;
-    fieldErrors[field] = messageFor(field, issue as { code: string; message: string; minimum?: unknown });
+    fieldErrors[field] = messageFor(
+      field,
+      issue as { code: string; message: string; minimum?: unknown },
+    );
     if (firstField === null) firstField = field;
   }
   return { success: false, data: null, fieldErrors, firstField };

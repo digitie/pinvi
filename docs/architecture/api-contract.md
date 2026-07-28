@@ -33,20 +33,20 @@
 
 ## 2. 표준 에러 코드
 
-| Code | HTTP | 의미 |
-|------|------|------|
-| `AUTH_INVALID_CREDENTIALS` | 401 | 로그인 실패 (enumeration 차단) |
-| `EMAIL_NOT_VERIFIED` | 401 | 미인증 로그인 |
-| `EMAIL_ALREADY_USED` | 409 | 가입 시 중복 |
-| `TOKEN_EXPIRED` | 401 | access/refresh 만료 |
-| `TOKEN_INVALID` | 401 | 서명 불일치 |
-| `PERMISSION_DENIED` | 403 | RBAC 거부. Admin은 404 변환 가능 |
-| `RESOURCE_NOT_FOUND` | 404 | 단일 리소스 없음 |
-| `VERSION_CONFLICT` | 409 | `If-Match` 불일치 |
-| `RATE_LIMITED` | 429 | SlowAPI 한도 |
-| `VALIDATION_ERROR` | 422 | Pydantic 검증 |
-| `INTERNAL_ERROR` | 500 | 예외 (Sentry) |
-| `SERVICE_UNAVAILABLE` | 503 | 외부 의존 실패 |
+| Code                       | HTTP | 의미                             |
+| -------------------------- | ---- | -------------------------------- |
+| `AUTH_INVALID_CREDENTIALS` | 401  | 로그인 실패 (enumeration 차단)   |
+| `EMAIL_NOT_VERIFIED`       | 401  | 미인증 로그인                    |
+| `EMAIL_ALREADY_USED`       | 409  | 가입 시 중복                     |
+| `TOKEN_EXPIRED`            | 401  | access/refresh 만료              |
+| `TOKEN_INVALID`            | 401  | 서명 불일치                      |
+| `PERMISSION_DENIED`        | 403  | RBAC 거부. Admin은 404 변환 가능 |
+| `RESOURCE_NOT_FOUND`       | 404  | 단일 리소스 없음                 |
+| `VERSION_CONFLICT`         | 409  | `If-Match` 불일치                |
+| `RATE_LIMITED`             | 429  | SlowAPI 한도                     |
+| `VALIDATION_ERROR`         | 422  | Pydantic 검증                    |
+| `INTERNAL_ERROR`           | 500  | 예외 (Sentry)                    |
+| `SERVICE_UNAVAILABLE`      | 503  | 외부 의존 실패                   |
 
 도메인별 추가:
 
@@ -125,13 +125,13 @@ Authorization: Bearer <jwt>
 
 ## 8. 응답 헤더
 
-| 헤더 | 의미 |
-|------|------|
-| `X-Request-Id` | request 추적 (모든 응답) |
-| `If-Match` (요청) / `ETag` (응답) | optimistic lock |
-| `Retry-After` (429) | rate limit |
-| `Deprecation`, `Sunset` (옵션) | 폐기 예정 |
-| `Cache-Control` | public 응답만 |
+| 헤더                              | 의미                     |
+| --------------------------------- | ------------------------ |
+| `X-Request-Id`                    | request 추적 (모든 응답) |
+| `If-Match` (요청) / `ETag` (응답) | optimistic lock          |
+| `Retry-After` (429)               | rate limit               |
+| `Deprecation`, `Sunset` (옵션)    | 폐기 예정                |
+| `Cache-Control`                   | public 응답만            |
 
 ## 9. CORS / 보안 헤더
 

@@ -114,7 +114,7 @@
 - [x] Admin RBAC: ADR-033 기준(`users.roles[]` + 백엔드 dependency, 매트릭스는 후속).
 - [x] 이메일 검증 발신: Sprint 1 console-log mock, Sprint 2/T-070에서 Resend 통합.
 - [x] 소셜 로그인: Sprint 1은 이메일/비밀번호만, 현재 활성 provider는 Google만 사용.
-  Naver/Kakao는 T-122 future provider로 보류(ADR-032).
+      Naver/Kakao는 T-122 future provider로 보류(ADR-032).
 
 ## 5. 회귀 방지
 

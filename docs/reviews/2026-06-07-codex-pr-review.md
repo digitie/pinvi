@@ -26,6 +26,7 @@
 ## 1. 긴급성순 통합 TODO
 
 ### 🔴 높음 (보안·무결성·가용성·계약)
+
 1. **[#70] resend webhook fail-open 제거** — `PINVI_RESEND_WEBHOOK_SECRET` 미설정 시
    서명검증을 통째로 건너뜀(`config.py:43` 기본 `""`). 운영 누락 시 C-22 취약점 재현 →
    미설정이면 fail-closed(401/503), dev만 `settings.debug` 게이트.
@@ -51,6 +52,7 @@
    감사 누락(해시체인 위배). 단일 트랜잭션으로. (#50/#52도 같은 패턴)
 
 ### 🟡 중간 (정합성·누락 기능·테스트)
+
 - **[#54] README `GET /search` 앵커 깨짐** — `#26-get-search`→`#27-get-search`(A-14 fix가
   도입한 dangling).
 - **[#70] svix-id replay dedup** 도입(멱등 보강).
@@ -75,6 +77,7 @@
 - **[#52] admin 엔드포인트별 RBAC(403)·404 테스트 + #53 동일.**
 
 ### 🟢 낮음 (품질·문서)
+
 - [#50] q LIKE 와일드카드 이스케이프 + reason 길이 검증; 음성 테스트.
 - [#52] `_to_detail` owner email KeyError 방어 + status/visibility enum 검증.
 - [#53] snapshot ilike 검색 인덱스 전략.
@@ -94,28 +97,28 @@
 
 ## 2. PR별 요약
 
-| PR | Task | 감사항목 | 머지판단 | 핵심 잔존 |
-|----|------|----------|----------|-----------|
-| #50 | T-119 admin users | C-08/C-17 | 조건부 적정 | access_reason PII URL(높음), reveal RBAC/POST(중) |
-| #52 | T-120 admin trips | C-08 | 적정 | status+audit 원자성, 권한 테스트 |
-| #53 | T-121 admin pois | C-08 | 적정 | audit 원자성(높음), 낙관락 |
-| #54 | T-123 doc 정합 | A-14 등 | 적정(1건 잔존) | README `/search` 앵커 깨짐 |
-| #55 | T-149 gemini | P-03 | 적정 | data-sources/pipa 잔존 표현 |
-| #56 | T-150 추적정합 | P-04~21 | 적정 | Sprint5 셀 T-067 등 미세 |
-| #57 | T-151 ADR 백필 | P-07/08 | 적정 | 번호 혼동 주석 |
-| #58 | T-143 지도/소셜 | D-15/21/22 | 적정 | CLAUDE §4 kor-travel-geo |
-| #59 | T-147 doc tail | D-23/25 | 적정 | Alembic 인덱스 반영 |
-| #60 | T-142 geofence | D-13/24 | 적정(보안 후속) | header spoof 우회(높음) |
-| #61 | T-144 검색/내보내기 | D-16/17 | 적정 | snapshot 키 통일 |
-| #62 | T-145 backup swap | D-19 | 적정 | 디스크 가드 기준, restore 가드 |
-| #63 | T-128 realtime WS | C-03/D-05 | 조건부 승인 | rate limit·backpressure(높음) |
-| #64 | T-138 security schema | D-02/03/09 | 적정 | 제약명/PII 보존/incidents 구현 |
-| #65 | T-139 comments | D-06 | 적정 | visibility 경로·limit |
-| #67 | T-140 budget | D-10 | 적정 | Zod money 타입(높음) |
-| #68 | (pr-monitor MCP) | — | 적정 | 중복 댓글 레이스 |
-| #69 | T-141 trip region | D-11 | 적정 | version 증가·region 검증 |
-| #70 | T-136 resend webhook | C-22 | **조건부(미완결)** | fail-open + base64 버그(높음) |
-| #71 | T-134 auth refresh | C-14 | 적정(보안 후속) | reset 미폐기(높음) |
+| PR  | Task                  | 감사항목   | 머지판단           | 핵심 잔존                                         |
+| --- | --------------------- | ---------- | ------------------ | ------------------------------------------------- |
+| #50 | T-119 admin users     | C-08/C-17  | 조건부 적정        | access_reason PII URL(높음), reveal RBAC/POST(중) |
+| #52 | T-120 admin trips     | C-08       | 적정               | status+audit 원자성, 권한 테스트                  |
+| #53 | T-121 admin pois      | C-08       | 적정               | audit 원자성(높음), 낙관락                        |
+| #54 | T-123 doc 정합        | A-14 등    | 적정(1건 잔존)     | README `/search` 앵커 깨짐                        |
+| #55 | T-149 gemini          | P-03       | 적정               | data-sources/pipa 잔존 표현                       |
+| #56 | T-150 추적정합        | P-04~21    | 적정               | Sprint5 셀 T-067 등 미세                          |
+| #57 | T-151 ADR 백필        | P-07/08    | 적정               | 번호 혼동 주석                                    |
+| #58 | T-143 지도/소셜       | D-15/21/22 | 적정               | CLAUDE §4 kor-travel-geo                          |
+| #59 | T-147 doc tail        | D-23/25    | 적정               | Alembic 인덱스 반영                               |
+| #60 | T-142 geofence        | D-13/24    | 적정(보안 후속)    | header spoof 우회(높음)                           |
+| #61 | T-144 검색/내보내기   | D-16/17    | 적정               | snapshot 키 통일                                  |
+| #62 | T-145 backup swap     | D-19       | 적정               | 디스크 가드 기준, restore 가드                    |
+| #63 | T-128 realtime WS     | C-03/D-05  | 조건부 승인        | rate limit·backpressure(높음)                     |
+| #64 | T-138 security schema | D-02/03/09 | 적정               | 제약명/PII 보존/incidents 구현                    |
+| #65 | T-139 comments        | D-06       | 적정               | visibility 경로·limit                             |
+| #67 | T-140 budget          | D-10       | 적정               | Zod money 타입(높음)                              |
+| #68 | (pr-monitor MCP)      | —          | 적정               | 중복 댓글 레이스                                  |
+| #69 | T-141 trip region     | D-11       | 적정               | version 증가·region 검증                          |
+| #70 | T-136 resend webhook  | C-22       | **조건부(미완결)** | fail-open + base64 버그(높음)                     |
+| #71 | T-134 auth refresh    | C-14       | 적정(보안 후속)    | reset 미폐기(높음)                                |
 
 ---
 

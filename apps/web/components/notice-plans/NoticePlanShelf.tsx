@@ -1,13 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  CopyPlus,
-  Loader2,
-  MapPin,
-  Newspaper,
-  RefreshCw,
-} from 'lucide-react';
+import { CopyPlus, Loader2, MapPin, Newspaper, RefreshCw } from 'lucide-react';
 import { ApiError, noticePlanApi } from '@pinvi/api-client';
 import type { NoticePlan } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
@@ -90,9 +84,7 @@ export function NoticePlanShelf() {
       </header>
 
       {message && (
-        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
-          {message}
-        </p>
+        <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
       {error && (
         <p
@@ -135,9 +127,15 @@ export function NoticePlanShelf() {
           <p className="mt-1 text-xs text-muted">공개된 추천 여행이 생기면 이곳에 나타납니다.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="notice-plan-list">
+        <div
+          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+          data-testid="notice-plan-list"
+        >
           {visiblePlans.map((plan) => (
-            <article key={plan.notice_plan_id} className="rounded-sm border border-hairline bg-white p-4">
+            <article
+              key={plan.notice_plan_id}
+              className="rounded-sm border border-hairline bg-white p-4"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold text-ink">{plan.title}</h2>
@@ -150,7 +148,9 @@ export function NoticePlanShelf() {
                   {plan.category}
                 </span>
               </div>
-              {plan.summary && <p className="mt-3 line-clamp-3 text-sm text-body">{plan.summary}</p>}
+              {plan.summary && (
+                <p className="mt-3 line-clamp-3 text-sm text-body">{plan.summary}</p>
+              )}
               <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted">
                 <span>
                   {formatDate(plan.starts_on)} - {formatDate(plan.ends_on)}
@@ -163,8 +163,7 @@ export function NoticePlanShelf() {
                 className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white"
                 data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
               >
-                <CopyPlus className="h-4 w-4" aria-hidden="true" />
-                내 여행으로 가져오기
+                <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기
               </button>
             </article>
           ))}
@@ -179,7 +178,7 @@ export function NoticePlanShelf() {
             setMessage(
               result.created_trip
                 ? '추천 여행으로 새 여행을 만들었습니다.'
-                : '선택한 여행에 추천 여행을 추가했습니다.'
+                : '선택한 여행에 추천 여행을 추가했습니다.',
             )
           }
         />

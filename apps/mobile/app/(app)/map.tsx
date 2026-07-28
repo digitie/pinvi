@@ -51,8 +51,8 @@ export default function MapScreen() {
           <Card className="gap-2">
             <Subheading>지도를 불러올 수 없습니다</Subheading>
             <Muted>
-              VWorld 지도 키를 발급받지 못했습니다. API 서버 연결과 키 설정(`PINVI_VWORLD_API_KEY`)을
-              확인한 뒤 다시 시도하세요.
+              VWorld 지도 키를 발급받지 못했습니다. API 서버 연결과 키
+              설정(`PINVI_VWORLD_API_KEY`)을 확인한 뒤 다시 시도하세요.
             </Muted>
             <Button label="다시 시도" variant="secondary" onPress={() => tokenQuery.refetch()} />
           </Card>
@@ -74,9 +74,7 @@ export default function MapScreen() {
         ]
       : [];
 
-  const center: [number, number] = location
-    ? [location.coord.lon, location.coord.lat]
-    : SEOUL;
+  const center: [number, number] = location ? [location.coord.lon, location.coord.lat] : SEOUL;
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={['bottom']}>

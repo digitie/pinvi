@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { UserConsent } from '@pinvi/schemas';
 import { hasLocationConsent, locationConsentItems } from './locationConsent';
 
-function consent(over: Partial<UserConsent> & { consent_type: UserConsent['consent_type'] }): UserConsent {
+function consent(
+  over: Partial<UserConsent> & { consent_type: UserConsent['consent_type'] },
+): UserConsent {
   return {
     version: 'v1.0',
     agreed_at: '2026-06-10T00:00:00Z',
@@ -17,7 +19,7 @@ describe('locationConsent', () => {
       hasLocationConsent([
         consent({ consent_type: 'lbs_tos' }),
         consent({ consent_type: 'location_collection' }),
-      ])
+      ]),
     ).toBe(true);
   });
 
@@ -26,7 +28,7 @@ describe('locationConsent', () => {
       hasLocationConsent([
         consent({ consent_type: 'lbs_tos' }),
         consent({ consent_type: 'location_collection', withdrawn_at: '2026-06-11T00:00:00Z' }),
-      ])
+      ]),
     ).toBe(false);
   });
 

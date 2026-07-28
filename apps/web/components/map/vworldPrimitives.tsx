@@ -58,40 +58,40 @@ export function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
 
 export const VWorldMap = dynamic<VWorldMapViewProps>(
   () => import('vworld-map-web').then((module) => module.VWorldMapView),
-  { ssr: false, loading: () => <MapLoadingSkeleton /> }
+  { ssr: false, loading: () => <MapLoadingSkeleton /> },
 );
 
 export const ClusterLayer = dynamic<ClusterLayerProps>(
   () => import('vworld-map-web').then((module) => module.ClusterLayer),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const MakiMarker = dynamic<MakiMarkerProps>(
   () => import('vworld-map-web').then((module) => module.MakiMarker),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const PinMarker = dynamic<PinMarkerProps>(
   () => import('vworld-map-web').then((module) => module.PinMarker),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const Popup = dynamic<PopupProps>(
   () => import('vworld-map-web').then((module) => module.Popup),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
   () => import('vworld-map-web').then((module) => module.UserLocationMarker),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const WeatherMarker = dynamic<WeatherMarkerProps>(
   () => import('vworld-map-web').then((module) => module.WeatherMarker),
-  { ssr: false }
+  { ssr: false },
 );
 
 export const MapContextMenu = dynamic<MapContextMenuProps>(
   () => import('vworld-map-web').then((module) => module.MapContextMenu),
-  { ssr: false }
+  { ssr: false },
 );

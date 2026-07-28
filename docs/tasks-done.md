@@ -6,6 +6,17 @@
 
 ## 2026-07-28
 
+- [x] **T-VN-STYLE-01** — Prettier baseline 일괄 포맷(포맷 207개). (완료: 2026-07-28, PR #413, claude)
+      `npm run format:check`가 실패하던 baseline 중 포맷 전용 207개(TS/TSX 108·MD 92·JSON/JS 7)를 정리했다.
+      TS/TSX는 AST 보존(typecheck+lint+vitest 통과), JSON/JS는 값 바이트 동일, MD는 따옴표/표 패딩/코드펜스
+      JS/빈 줄 정규화(산문 손실 0). **Vendored 파일은 byte-fidelity 위해 `.prettierignore`로 제외**(12개):
+      (1) **P0 자체 차단** — `apps/api/tests/contract/`는 `test_kor_travel_map_contract.py`가 SHA-256
+      (`91b30f40…`)으로 핀 고정한 upstream 스냅샷이라 재포맷이 핀 해시를 깼다 → 원본 복원 + ignore.
+      (2) `.agents/skills/`·`.claude/skills/` — timescale/pg-aiguide vendored skill 세트(`> 원본:` 프로버넌스)
+      11개를 원본 바이트로 복원 + ignore(재-vendoring diff noise 방지). `.claude/agents/*.md`는 마커 없는
+      repo-owned이라 포맷 유지. 적대적 리뷰 2명(byte-sensitive-consumers·scope-ignore-completeness) 승인.
+      `git diff --check`/format:check clean.
+
 - [x] **T-VN-SEC-01** — `npm audit` critical 제거(vitest v2→v4 일괄 전환). (완료: 2026-07-28, PR #412, claude)
       critical은 dev direct dependency `vitest<=3.2.5`. apps/web·packages/domain·packages/schemas 3개
       workspace를 `vitest@^4.1.10`로 올렸다. vitest 4는 rolldown-vite/oxc를 쓰는데 esbuild 기반
@@ -137,7 +148,7 @@
 - [x] T-268 — 한국 전용 geofencing 3중 안전망. (완료: 2026-06-29, PR #323, claude)
       middleware(3차 fallback)는 구현/배선/테스트 완료였고, runbook이 inline으로만 기술하던 Cloudflare
       WAF(1차)·nginx GeoIP2(선택 edge)·GeoIP 갱신을 실제 아티팩트로 구체화. `infra/cloudflare/
-      waf-korea-only.md`, `infra/nginx/{Dockerfile,conf.d/geo-kr*.conf,README}`, `scripts/update-geoip.sh`,
+waf-korea-only.md`, `infra/nginx/{Dockerfile,conf.d/geo-kr*.conf,README}`, `scripts/update-geoip.sh`,
       `scripts/verify-geofence.sh`(T-273 게이트용) 추가 + korea-only 문서 DRY 정리.
 
 - [x] T-269 — LBS / 법무 4문서 + 동의 UX. (완료: 2026-06-29, PR #324, claude)
@@ -156,7 +167,7 @@
 - [x] T-287 — Trip Day optimistic lock API / conflict UX. (완료: 2026-06-29, claude)
       day rename/delete 동시성을 trip/POI와 동일한 정수 version optimistic lock(`If-Match` 헤더)으로
       도입. migration 0036으로 `app.trip_days.version` 추가(server_default 1), `PATCH/DELETE
-      /trips/{id}/days/{day_index}`가 If-Match version을 검증해 불일치 시 409 `VERSION_CONFLICT`.
+/trips/{id}/days/{day_index}`가 If-Match version을 검증해 불일치 시 409 `VERSION_CONFLICT`.
       TripDay/TripView/CRUD 응답 + zod/api-client에 version 노출, TripDetail rename/delete가 version
       전달 + 충돌 시 reload+안내, mobile deleteDay도 version 전달. 통합 테스트(stale If-Match 409 +
       정상 204/version bump) 추가. live e2e는 T-259 게이트에서.
@@ -582,34 +593,34 @@
 
 ### 머지 히스토리
 
-| PR | 제목 | merge 일 | 비고 |
-| --- | --- | --- | --- |
-| PR #9 | Sprint 1 진입 PR | 2026-05-26 | T-030 ~ T-035 |
-| PR #10 | Sprint 2 진입 PR | 2026-05-26 | 사용자/Trip/POI/동의/Storage |
-| PR #11 | Sprint 3 진입 PR | 2026-05-26 | Admin + RBAC + audit chain |
-| PR #14 | docs: Sprint 4~~6 plan + ADR-018~~023 | 2026-05-27 | 릴리즈 마일스톤 정리 |
-| PR #15 | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A) | 2026-06-05 | T-114/T-065 |
-| PR #16 | feat: 백엔드 features API + kor-travel-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부 |
-| PR #52 | feat: add admin trip management | 2026-06-06 | T-120 |
-| PR #53 | feat: add admin POI management | 2026-06-06 | T-121 |
-| PR #54 | docs: fix T-123 consistency gaps | 2026-06-06 | T-123 |
-| PR #55 | docs: align Gemini responsibility boundary | 2026-06-06 | T-149 |
-| PR #56 | docs: align tracking docs with merged work | 2026-06-06 | T-150 |
-| PR #57 | docs: backfill auth rbac audit ADRs | 2026-06-06 | T-151 |
-| PR #58 | docs: align map social kor-travel-geo docs | 2026-06-06 | T-143 |
-| PR #59 | docs: fix rise set and gemini SQL docs | 2026-06-06 | T-147 |
-| PR #60 | fix: use db roles for geofence admin bypass | 2026-06-06 | T-142 |
-| PR #61 | docs: define trip search and export UX | 2026-06-06 | T-144 |
-| PR #62 | docs: finalize backup schema-swap restore | 2026-06-06 | T-145 |
-| PR #63 | feat: add trip realtime websocket broker | 2026-06-06 | T-128 |
-| PR #64 | feat: add security incidents schema | 2026-06-06 | T-138 |
-| PR #65 | feat: add trip companion comments flow | 2026-06-06 | T-139 |
-| PR #67 | feat: add trip budget constraints | 2026-06-06 | T-140 |
-| PR #69 | feat: add trip primary region | 2026-06-07 | T-141 |
-| PR #70 | feat: verify resend webhook signatures | 2026-06-07 | T-136 |
-| PR #71 | feat: persist refresh sessions | 2026-06-07 | T-134 |
-| PR #120~~#123 | feat: T-105 첨부 도메인 | 2026-06-10 | T-105 |
-| PR #125 | feat: RustFS presigned 실서명 활성화 | 2026-06-10 | storage |
-| PR #126~~#131 | feat: Sprint 4 PR-C 지도 프론트 1차 | 2026-06-10 | T-060 |
-| PR #132~~#135 | feat: notice copy / 공유 링크 / 첨부 업로드 / feature 제안 | 2026-06-10 | T-060 |
-| PR #136~~#139 | feat: 댓글 / 동반자 / 동선 최적화 / POI 상세 편집 | 2026-06-10 | T-060 |
+| PR            | 제목                                                                             | merge 일   | 비고                         |
+| ------------- | -------------------------------------------------------------------------------- | ---------- | ---------------------------- |
+| PR #9         | Sprint 1 진입 PR                                                                 | 2026-05-26 | T-030 ~ T-035                |
+| PR #10        | Sprint 2 진입 PR                                                                 | 2026-05-26 | 사용자/Trip/POI/동의/Storage |
+| PR #11        | Sprint 3 진입 PR                                                                 | 2026-05-26 | Admin + RBAC + audit chain   |
+| PR #14        | docs: Sprint 4~~6 plan + ADR-018~~023                                            | 2026-05-27 | 릴리즈 마일스톤 정리         |
+| PR #15        | ci: GitHub Actions workflow 복원 (Sprint 4 PR-A)                                 | 2026-06-05 | T-114/T-065                  |
+| PR #16        | feat: 백엔드 features API + kor-travel-map Protocol + cluster + trip view (PR-B) | 2026-06-05 | T-060 일부                   |
+| PR #52        | feat: add admin trip management                                                  | 2026-06-06 | T-120                        |
+| PR #53        | feat: add admin POI management                                                   | 2026-06-06 | T-121                        |
+| PR #54        | docs: fix T-123 consistency gaps                                                 | 2026-06-06 | T-123                        |
+| PR #55        | docs: align Gemini responsibility boundary                                       | 2026-06-06 | T-149                        |
+| PR #56        | docs: align tracking docs with merged work                                       | 2026-06-06 | T-150                        |
+| PR #57        | docs: backfill auth rbac audit ADRs                                              | 2026-06-06 | T-151                        |
+| PR #58        | docs: align map social kor-travel-geo docs                                       | 2026-06-06 | T-143                        |
+| PR #59        | docs: fix rise set and gemini SQL docs                                           | 2026-06-06 | T-147                        |
+| PR #60        | fix: use db roles for geofence admin bypass                                      | 2026-06-06 | T-142                        |
+| PR #61        | docs: define trip search and export UX                                           | 2026-06-06 | T-144                        |
+| PR #62        | docs: finalize backup schema-swap restore                                        | 2026-06-06 | T-145                        |
+| PR #63        | feat: add trip realtime websocket broker                                         | 2026-06-06 | T-128                        |
+| PR #64        | feat: add security incidents schema                                              | 2026-06-06 | T-138                        |
+| PR #65        | feat: add trip companion comments flow                                           | 2026-06-06 | T-139                        |
+| PR #67        | feat: add trip budget constraints                                                | 2026-06-06 | T-140                        |
+| PR #69        | feat: add trip primary region                                                    | 2026-06-07 | T-141                        |
+| PR #70        | feat: verify resend webhook signatures                                           | 2026-06-07 | T-136                        |
+| PR #71        | feat: persist refresh sessions                                                   | 2026-06-07 | T-134                        |
+| PR #120~~#123 | feat: T-105 첨부 도메인                                                          | 2026-06-10 | T-105                        |
+| PR #125       | feat: RustFS presigned 실서명 활성화                                             | 2026-06-10 | storage                      |
+| PR #126~~#131 | feat: Sprint 4 PR-C 지도 프론트 1차                                              | 2026-06-10 | T-060                        |
+| PR #132~~#135 | feat: notice copy / 공유 링크 / 첨부 업로드 / feature 제안                       | 2026-06-10 | T-060                        |
+| PR #136~~#139 | feat: 댓글 / 동반자 / 동선 최적화 / POI 상세 편집                                | 2026-06-10 | T-060                        |

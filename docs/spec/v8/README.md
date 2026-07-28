@@ -15,14 +15,14 @@ Pinvi v2 컨텍스트로 재구성한 적용 노트다. 원본 docx는 운영자
 
 ## 본 디렉토리 구성
 
-| 파일 | 원본 | 다루는 범위 |
-|------|------|-----------|
-| [00-infrastructure.md](./00-infrastructure.md) | spec #0 | Odroid M1S, RustFS, Sentry, Loki, 위치정보법, PIPA |
-| [01-data.md](./01-data.md) | spec #1 | 7 Feature 모델, PostGIS DDL, Record Linkage, vworld 임포트 |
-| [02-backend.md](./02-backend.md) | spec #2 | FastAPI 스택, JWT/OAuth, Resend, API 명세, OR-Tools |
-| [03-frontend.md](./03-frontend.md) | spec #3 | Next.js 15, 16색 팔레트, 우클릭, 실시간 동기화 |
-| [04-admin.md](./04-admin.md) | spec #4 | Admin 13페이지, CRUD 패턴, Record Linkage 검토 |
-| [05-execution.md](./05-execution.md) | spec #5 | 결정 6건, Sprint 1~6, 잔여 확인 |
+| 파일                                           | 원본    | 다루는 범위                                                |
+| ---------------------------------------------- | ------- | ---------------------------------------------------------- |
+| [00-infrastructure.md](./00-infrastructure.md) | spec #0 | Odroid M1S, RustFS, Sentry, Loki, 위치정보법, PIPA         |
+| [01-data.md](./01-data.md)                     | spec #1 | 7 Feature 모델, PostGIS DDL, Record Linkage, vworld 임포트 |
+| [02-backend.md](./02-backend.md)               | spec #2 | FastAPI 스택, JWT/OAuth, Resend, API 명세, OR-Tools        |
+| [03-frontend.md](./03-frontend.md)             | spec #3 | Next.js 15, 16색 팔레트, 우클릭, 실시간 동기화             |
+| [04-admin.md](./04-admin.md)                   | spec #4 | Admin 13페이지, CRUD 패턴, Record Linkage 검토             |
+| [05-execution.md](./05-execution.md)           | spec #5 | 결정 6건, Sprint 1~6, 잔여 확인                            |
 
 ## SPEC V8 ↔ Pinvi v2 ↔ kor-travel-map 책임 매핑
 

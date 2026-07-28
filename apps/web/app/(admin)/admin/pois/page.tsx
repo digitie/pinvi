@@ -151,7 +151,10 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
       setFormError('좌표는 lon과 lat을 함께 입력하세요.');
       return;
     }
-    if ((parsedLon !== null && Number.isNaN(parsedLon)) || (parsedLat !== null && Number.isNaN(parsedLat))) {
+    if (
+      (parsedLon !== null && Number.isNaN(parsedLon)) ||
+      (parsedLat !== null && Number.isNaN(parsedLat))
+    ) {
       setFormError('좌표는 숫자로 입력하세요.');
       return;
     }
@@ -281,7 +284,10 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
         )}
 
         {selectedTrip && (
-          <p className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm" data-testid="admin-poi-trip-selected">
+          <p
+            className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
+            data-testid="admin-poi-trip-selected"
+          >
             선택: {selectedTrip.title} · {selectedTrip.trip_id}
           </p>
         )}
@@ -560,7 +566,9 @@ export default function AdminPoisPage() {
             조회
           </button>
         </form>
-        <label htmlFor="admin-pois-broken-filter" className="text-xs text-muted">연결</label>
+        <label htmlFor="admin-pois-broken-filter" className="text-xs text-muted">
+          연결
+        </label>
         <select
           id="admin-pois-broken-filter"
           value={linkFilter}
@@ -581,7 +589,11 @@ export default function AdminPoisPage() {
       </FilterBar>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-pois-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-pois-error"
+        >
           {error}
         </p>
       )}

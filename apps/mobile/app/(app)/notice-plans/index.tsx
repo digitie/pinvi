@@ -60,9 +60,15 @@ export default function NoticePlansScreen() {
         {plansQuery.isPending ? (
           <Loading />
         ) : plansQuery.isError ? (
-          <ErrorView message={friendlyErrorText(plansQuery.error)} onRetry={() => plansQuery.refetch()} />
+          <ErrorView
+            message={friendlyErrorText(plansQuery.error)}
+            onRetry={() => plansQuery.refetch()}
+          />
         ) : plansQuery.data.length === 0 ? (
-          <EmptyState title="추천 여행이 아직 없습니다" description="새로운 큐레이션 일정이 곧 추가됩니다." />
+          <EmptyState
+            title="추천 여행이 아직 없습니다"
+            description="새로운 큐레이션 일정이 곧 추가됩니다."
+          />
         ) : (
           <View className="gap-3">
             {plansQuery.data.map((plan) => {

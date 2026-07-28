@@ -29,15 +29,15 @@
 
 ## 1. 공용 패키지 소비 (모바일이 그대로 가져가는 것)
 
-| 패키지 | 모바일에서 | 비고 |
-|--------|-----------|------|
-| `@pinvi/schemas` | API I/O Zod + 폼 validator | 웹과 동일 |
-| `@pinvi/api-client` | `ApiClient`(fetch wrapper) + TanStack Query key | 어댑터 주입(토큰/baseUrl) |
-| `@pinvi/state` | `createAuthStore` 등 store factory | AsyncStorage 주입(`lib/stores.ts` ✓) |
-| `@pinvi/domain` | 거리/정렬(LexoRank)/폼검증/공유링크/업로드/마커 스타일 | **신규 — 화면 로직 재사용 핵심** |
-| `@pinvi/design-tokens` | 색/타이포/간격 + `MARKER_PALETTE` + NativeWind preset | `tailwind.config.js` ✓ |
-| `@pinvi/hooks` | `useUserLocation(LocationAdapter)` 등 | `lib/location.ts` 어댑터 ✓ |
-| `@pinvi/i18n` | 메시지 카탈로그 | |
+| 패키지                 | 모바일에서                                             | 비고                                 |
+| ---------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `@pinvi/schemas`       | API I/O Zod + 폼 validator                             | 웹과 동일                            |
+| `@pinvi/api-client`    | `ApiClient`(fetch wrapper) + TanStack Query key        | 어댑터 주입(토큰/baseUrl)            |
+| `@pinvi/state`         | `createAuthStore` 등 store factory                     | AsyncStorage 주입(`lib/stores.ts` ✓) |
+| `@pinvi/domain`        | 거리/정렬(LexoRank)/폼검증/공유링크/업로드/마커 스타일 | **신규 — 화면 로직 재사용 핵심**     |
+| `@pinvi/design-tokens` | 색/타이포/간격 + `MARKER_PALETTE` + NativeWind preset  | `tailwind.config.js` ✓               |
+| `@pinvi/hooks`         | `useUserLocation(LocationAdapter)` 등                  | `lib/location.ts` 어댑터 ✓           |
+| `@pinvi/i18n`          | 메시지 카탈로그                                        |                                      |
 
 → **추가구현 없음**(이미 공유 가능). 화면에서 위 패키지를 import해 조립만 하면 된다.
 
@@ -46,18 +46,18 @@
 웹은 shadcn/ui(DOM), 모바일은 NativeWind RN view로 **각자 구현**한다(`frontend.md` §2.1).
 라우트 파일명은 웹과 같게 유지한다(`frontend.md` §8). admin은 웹 전용 — 모바일 제외.
 
-| 모바일 라우트 | 웹 대응 | 상태 | 핵심 재사용 |
-|--------------|---------|------|------------|
-| `app/(auth)/login.tsx` | `(auth)/login` | ✅ 구현 | `LoginRequestSchema` + `validateForm` + **Google 로그인**(`expo-web-browser` 딥링크 → `/mobile/auth/oauth/exchange`) |
-| `app/(auth)/signup.tsx` | `(auth)/signup` | ✅ 구현 | 약관 4종 동의 + `RegisterRequestSchema` |
-| `app/(auth)/verify-email.tsx` | `(auth)/verify-email` | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`) |
-| `app/(app)/profile.tsx` | `(auth)/profile` `profile-complete` | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속) |
-| `app/(app)/index.tsx`(home) + `map.tsx` | `(app)/map` | ✅ 구현 | home=네비 타일, map=`VWorldMapView`(`vworld-map-rn`) + server-issued 키(ADR-044) + 내 위치 마커/`flyTo` |
-| `app/(app)/trips/index.tsx` + `new.tsx` | `(app)/trips` | ✅ 구현 | 목록 `tripApi.listPage` + 검색(`useDebounce`) + 생성(`tripApi.create`) |
-| `app/(app)/trips/[tripId]/{index,edit,poi/[poiId]}.tsx` | `(app)/trips/[tripId]` | ✅ 구현 | 상세(읽기, **공유 링크 생성/해제**) + 편집(메타 `buildTripUpdate`/If-Match, POI 재정렬 `reorderMoves`·삭제, 일자 추가/삭제, **여행 삭제**) + POI 필드 편집(메모/예산). 지도·POI 추가(feature 검색)는 후속 |
-| `app/(app)/notice-plans/index.tsx` | `(app)/notice-plans` | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`) |
-| `app/(app)/settings/index.tsx` + `telegram`·`consents`·`mcp-tokens` | `(app)/settings/{telegram,consents,mcp-tokens}` | ✅ 구현 | `telegramApi`/`userApi`(consents·mcp-tokens) — 목록·발급/연결·철회/회수 |
-| `app/shared/[tripId]/[token].tsx` | `shared/[tripId]/[token]` | ✅ 구현 | 익명 공유 뷰(가드 밖, `buildShareUrl` deep link) |
+| 모바일 라우트                                                       | 웹 대응                                         | 상태    | 핵심 재사용                                                                                                                                                                                               |
+| ------------------------------------------------------------------- | ----------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(auth)/login.tsx`                                              | `(auth)/login`                                  | ✅ 구현 | `LoginRequestSchema` + `validateForm` + **Google 로그인**(`expo-web-browser` 딥링크 → `/mobile/auth/oauth/exchange`)                                                                                      |
+| `app/(auth)/signup.tsx`                                             | `(auth)/signup`                                 | ✅ 구현 | 약관 4종 동의 + `RegisterRequestSchema`                                                                                                                                                                   |
+| `app/(auth)/verify-email.tsx`                                       | `(auth)/verify-email`                           | ✅ 구현 | deep link 토큰 검증(`pinvi://verify-email?token=`)                                                                                                                                                        |
+| `app/(app)/profile.tsx`                                             | `(auth)/profile` `profile-complete`             | ✅ 구현 | 계정 표시 + Google 연결 해제(연결 시작은 후속)                                                                                                                                                            |
+| `app/(app)/index.tsx`(home) + `map.tsx`                             | `(app)/map`                                     | ✅ 구현 | home=네비 타일, map=`VWorldMapView`(`vworld-map-rn`) + server-issued 키(ADR-044) + 내 위치 마커/`flyTo`                                                                                                   |
+| `app/(app)/trips/index.tsx` + `new.tsx`                             | `(app)/trips`                                   | ✅ 구현 | 목록 `tripApi.listPage` + 검색(`useDebounce`) + 생성(`tripApi.create`)                                                                                                                                    |
+| `app/(app)/trips/[tripId]/{index,edit,poi/[poiId]}.tsx`             | `(app)/trips/[tripId]`                          | ✅ 구현 | 상세(읽기, **공유 링크 생성/해제**) + 편집(메타 `buildTripUpdate`/If-Match, POI 재정렬 `reorderMoves`·삭제, 일자 추가/삭제, **여행 삭제**) + POI 필드 편집(메모/예산). 지도·POI 추가(feature 검색)는 후속 |
+| `app/(app)/notice-plans/index.tsx`                                  | `(app)/notice-plans`                            | ✅ 구현 | `noticePlanApi` + copy(`buildCopyRequest`)                                                                                                                                                                |
+| `app/(app)/settings/index.tsx` + `telegram`·`consents`·`mcp-tokens` | `(app)/settings/{telegram,consents,mcp-tokens}` | ✅ 구현 | `telegramApi`/`userApi`(consents·mcp-tokens) — 목록·발급/연결·철회/회수                                                                                                                                   |
+| `app/shared/[tripId]/[token].tsx`                                   | `shared/[tripId]/[token]`                       | ✅ 구현 | 익명 공유 뷰(가드 밖, `buildShareUrl` deep link)                                                                                                                                                          |
 
 > **라우트 그룹 주의**: 모바일은 클라이언트 가드를 위해 `(app)`=인증 필요,
 > `(auth)`=비인증, `shared/`=공개로 나눈다. 프로필/계정은 인증이 필요하므로 웹의
@@ -71,15 +71,15 @@ push/offline.
 
 ## 3. 플랫폼 어댑터 (`apps/mobile/lib`)
 
-| 어댑터 | 상태 | 추가구현 |
-|--------|------|---------|
-| `api.ts` (ApiClient + SecureStore 토큰) | ✅ | refresh 토큰 회전/401 자동 재시도 구현(`lib/tokens.ts` + `refreshingFetcher`). 동시 401은 single-flight refresh |
-| `auth.tsx` (AuthProvider/useAuth) | ✅ | 부팅 복구(me→refresh) + login/adoptSession/logout, `createAuthStore` 연동 |
-| `location.ts` (expo-location → LocationAdapter) | ✓ | 권한 거부 fallback UI, 백그라운드 위치(보류) |
-| `storage.ts` (AsyncStorage → StateStorage) | ✓ | — |
-| `stores.ts` (`createAuthStore` 주입) | ✓ | UI store 등 추가 store 주입 |
-| `config.ts` (Expo extra + VWorld token URL) | ✓ | §4 백엔드 endpoint 의존 |
-| 푸시 알림 | 없음 | `expo-notifications` + 토큰 등록 endpoint(후속) |
+| 어댑터                                          | 상태 | 추가구현                                                                                                        |
+| ----------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------- |
+| `api.ts` (ApiClient + SecureStore 토큰)         | ✅   | refresh 토큰 회전/401 자동 재시도 구현(`lib/tokens.ts` + `refreshingFetcher`). 동시 401은 single-flight refresh |
+| `auth.tsx` (AuthProvider/useAuth)               | ✅   | 부팅 복구(me→refresh) + login/adoptSession/logout, `createAuthStore` 연동                                       |
+| `location.ts` (expo-location → LocationAdapter) | ✓    | 권한 거부 fallback UI, 백그라운드 위치(보류)                                                                    |
+| `storage.ts` (AsyncStorage → StateStorage)      | ✓    | —                                                                                                               |
+| `stores.ts` (`createAuthStore` 주입)            | ✓    | UI store 등 추가 store 주입                                                                                     |
+| `config.ts` (Expo extra + VWorld token URL)     | ✓    | §4 백엔드 endpoint 의존                                                                                         |
+| 푸시 알림                                       | 없음 | `expo-notifications` + 토큰 등록 endpoint(후속)                                                                 |
 
 ## 4. 지도 연동 — `maplibre-vworld-react` (✅ 통합 완료, ADR-044)
 
@@ -94,17 +94,17 @@ config plugin이 필요해 **EAS Dev Client 빌드에서만** 동작한다.
 이슈→PR→머지(#21)로 고쳐 16색 마커 parity를 확보했다. 아래는 해소된 선결 이슈 이력이다
 (`digitie/maplibre-vworld-react` #2~#10, 모두 closed).
 
-| 차단/필요 | 이슈 | 영향 |
-|-----------|------|------|
-| **VWorld 키 번들링** — RN 어댑터가 평문 키를 타일 URL에 embed | **#3 (blocker)** | **ADR-043 위반**. 키 proxy/token 주입 훅 필요 |
-| 키 로그 redaction 부재 | #4 | 에러 로그에 키 노출 |
-| git-URL/tarball 설치 경로 미확정 (`vworld-map-core` `*` 의존 + `dist` 번들) | #2 | npm 발행은 **의도적 미실시**(§4.2). 단 git-URL 한 줄 설치가 깨짐 |
-| Popup/Place/Price/Weather 프리미티브 누락 | #5 | 도메인 마커 재현 불가 |
-| `ClusterLayer` 아이콘 미등록(`pin-red`) | #6 | unclustered 포인트 미렌더 |
-| Expo SDK 타깃 정합 | #7 ✅ closed | Pinvi가 **SDK 56로 정합**(example과 일치). maintainer가 지원 SDK range도 명시(#17) |
-| controlled camera/flyTo/fitBounds 부재 | #8 | "선택 장소로 이동"/한국 경계 clamp 불가 |
-| root README 부재 | #9 | 소비 방법 미문서 |
-| `Marker` prop parity(color/selected/zIndex) | #10 | 16색 팔레트/상태 재현 제약 |
+| 차단/필요                                                                   | 이슈             | 영향                                                                               |
+| --------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| **VWorld 키 번들링** — RN 어댑터가 평문 키를 타일 URL에 embed               | **#3 (blocker)** | **ADR-043 위반**. 키 proxy/token 주입 훅 필요                                      |
+| 키 로그 redaction 부재                                                      | #4               | 에러 로그에 키 노출                                                                |
+| git-URL/tarball 설치 경로 미확정 (`vworld-map-core` `*` 의존 + `dist` 번들) | #2               | npm 발행은 **의도적 미실시**(§4.2). 단 git-URL 한 줄 설치가 깨짐                   |
+| Popup/Place/Price/Weather 프리미티브 누락                                   | #5               | 도메인 마커 재현 불가                                                              |
+| `ClusterLayer` 아이콘 미등록(`pin-red`)                                     | #6               | unclustered 포인트 미렌더                                                          |
+| Expo SDK 타깃 정합                                                          | #7 ✅ closed     | Pinvi가 **SDK 56로 정합**(example과 일치). maintainer가 지원 SDK range도 명시(#17) |
+| controlled camera/flyTo/fitBounds 부재                                      | #8               | "선택 장소로 이동"/한국 경계 clamp 불가                                            |
+| root README 부재                                                            | #9               | 소비 방법 미문서                                                                   |
+| `Marker` prop parity(color/selected/zIndex)                                 | #10              | 16색 팔레트/상태 재현 제약                                                         |
 
 ### 4.1 VWorld 키 = server-issued (ADR-043)
 
@@ -168,8 +168,7 @@ Web/Mobile이 공유한다(ADR-044/046). CI가 외부 git archive나 release ass
    POI 필드(메모/비용) 편집·일자 CRUD는 후속.
 
 > **CI**: 모바일 전용 변경도 게이트되도록 `.github/workflows/mobile.yml`(루트 `npm --workspace @pinvi/mobile run typecheck`)을
-> 추가하고 `aggregate-ci.yml`이 `apps/mobile/**`·`packages/**` 변경 시 `mobile-typecheck`를 요구하게 했다(2026-06-16).
-6. **푸시/오프라인** 등 부가 기능은 후속.
+> 추가하고 `aggregate-ci.yml`이 `apps/mobile/**`·`packages/**` 변경 시 `mobile-typecheck`를 요구하게 했다(2026-06-16). 6. **푸시/오프라인** 등 부가 기능은 후속.
 
 ## 8. 관련 문서
 

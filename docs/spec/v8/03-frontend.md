@@ -11,19 +11,19 @@
 
 ## 1. 스택 채택
 
-| 계층 | 채택 |
-|------|------|
-| 프레임워크 (웹) | **Next.js 15** (App Router) + **React 19** |
-| 프레임워크 (모바일, v2) | **Expo SDK 56+** (React Native + Expo Router) |
-| UI 컴포넌트 (웹) | **shadcn/ui** + Radix Primitives (Tailwind 기반 vendoring) |
-| 스타일 | **Tailwind CSS 3.4+** (NativeWind로 모바일 공유) |
-| 상태(클라이언트) | **Zustand** (공용 `packages/state`) |
-| 상태(서버) | **TanStack Query v5** (공용 `packages/api-client`) |
-| 폼 | **React Hook Form** + **Zod** resolver (schema는 공용 `packages/schemas`) |
-| D&D (웹) | dnd-kit |
-| 지도 (웹) | **`vworld-map-web`** (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS) — ADR-015/046으로 SPEC V8 A-1 #4 (Kakao Maps SDK) superseded |
-| 마커 | 16색 팔레트 P-01~P-16 + maki 아이콘 (`docs/design/marker-palette.md`) |
-| 디자인 톤 | 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html` (단일 기준) |
+| 계층                    | 채택                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 프레임워크 (웹)         | **Next.js 15** (App Router) + **React 19**                                                                                                      |
+| 프레임워크 (모바일, v2) | **Expo SDK 56+** (React Native + Expo Router)                                                                                                   |
+| UI 컴포넌트 (웹)        | **shadcn/ui** + Radix Primitives (Tailwind 기반 vendoring)                                                                                      |
+| 스타일                  | **Tailwind CSS 3.4+** (NativeWind로 모바일 공유)                                                                                                |
+| 상태(클라이언트)        | **Zustand** (공용 `packages/state`)                                                                                                             |
+| 상태(서버)              | **TanStack Query v5** (공용 `packages/api-client`)                                                                                              |
+| 폼                      | **React Hook Form** + **Zod** resolver (schema는 공용 `packages/schemas`)                                                                       |
+| D&D (웹)                | dnd-kit                                                                                                                                         |
+| 지도 (웹)               | **`vworld-map-web`** (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS) — ADR-015/046으로 SPEC V8 A-1 #4 (Kakao Maps SDK) superseded |
+| 마커                    | 16색 팔레트 P-01~P-16 + maki 아이콘 (`docs/design/marker-palette.md`)                                                                           |
+| 디자인 톤               | 본 저장소 루트 `DESIGN.md` + `airbnb-marker-palette.html` (단일 기준)                                                                           |
 
 자세한 스택·디자인 토큰·공용 패키지 구조는 [`docs/architecture/frontend.md`](../../architecture/frontend.md).
 
@@ -116,13 +116,13 @@ My Maps 스타일: 데스크탑 좌측 사이드 패널 + 지도. 모바일 bott
 
 ## 3. 상태 관리 (I-3)
 
-| 스토어 | 도구 | 관리 |
-|--------|------|-----|
-| 서버 상태 | TanStack Query | trips/features/POIs/weather. 캐시·invalidate |
-| UI 상태 | Zustand | 선택 day/POI, 사이드 패널, 모달 큐 |
-| 지도 viewport | Zustand 별도 | center/zoom/bounds → feature fetch trigger |
-| 실시간 | WebSocket → invalidate | 이벤트 수신 시 해당 query key |
-| 폼 | React Hook Form + Zod | 회원가입 / POI / 공유 설정 |
+| 스토어        | 도구                   | 관리                                         |
+| ------------- | ---------------------- | -------------------------------------------- |
+| 서버 상태     | TanStack Query         | trips/features/POIs/weather. 캐시·invalidate |
+| UI 상태       | Zustand                | 선택 day/POI, 사이드 패널, 모달 큐           |
+| 지도 viewport | Zustand 별도           | center/zoom/bounds → feature fetch trigger   |
+| 실시간        | WebSocket → invalidate | 이벤트 수신 시 해당 query key                |
+| 폼            | React Hook Form + Zod  | 회원가입 / POI / 공유 설정                   |
 
 ## 4. viewport 기반 로딩 (I-4)
 
@@ -219,12 +219,12 @@ default 상수 fallback.
 
 ### 10.2 충돌 해결 (J-2)
 
-| 전략 | 적용 |
-|------|------|
-| Last-Write-Wins (필드 단위) | POI memo/budget/marker_color 단순 필드 |
-| Optimistic Lock (POI 단위) | `version` 컬럼 + `If-Match`. 409 → 다이얼로그 |
-| Fractional Indexing | `sort_order` — D&D 충돌 안 남 (E-6 COLLATE "C" 필수) |
-| Presence | 5초 heartbeat / 30초 무응답 offline |
+| 전략                        | 적용                                                 |
+| --------------------------- | ---------------------------------------------------- |
+| Last-Write-Wins (필드 단위) | POI memo/budget/marker_color 단순 필드               |
+| Optimistic Lock (POI 단위)  | `version` 컬럼 + `If-Match`. 409 → 다이얼로그        |
+| Fractional Indexing         | `sort_order` — D&D 충돌 안 남 (E-6 COLLATE "C" 필수) |
+| Presence                    | 5초 heartbeat / 30초 무응답 offline                  |
 
 ### 10.3 국가유산 area UI (K)
 
@@ -239,19 +239,19 @@ ADR-015 이후 Pinvi 지도 클라이언트는 VWorld + MapLibre 계열이고, A
 
 ## 12. Sprint 매핑
 
-| SPEC V8 항목 | Sprint | 본 저장소 산출물 |
-|------|--------|------------------|
-| `apps/web` scaffolding | Sprint 1 | `apps/web/package.json` + App Router skeleton |
-| 로그인/가입/verify UI (G-2 와이어프레임) | Sprint 1 | `apps/web/app/(auth)/...` |
-| Trip 대시보드 + 미래/과거 아코디언 (I-2) | Sprint 4 | `apps/web/app/(app)/page.tsx` |
-| 지도 + `vworld-map-web` (I-2 ~ I-5) | Sprint 4 + T-201 | `apps/web/components/map/...` |
-| 16색 팔레트 + maki (I-6) | Sprint 4 | `apps/web/lib/markerPalette.ts` |
-| viewport 로딩 + 클러스터 (I-4) | Sprint 4 | `apps/web/components/map/ViewportFeatureLayer.tsx` |
-| 우클릭 메뉴 (I-7) | Sprint 4 | `apps/web/components/map/RightClickMenu.tsx` |
-| 여행 검색 / 장소 검색 drawer / print·GPX export | Sprint 4 | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView` |
-| Admin 콘솔 (M-3) | Sprint 3 | `apps/web/app/admin/...` |
-| WebSocket 클라이언트 (J-1) | Sprint 5 | `apps/web/lib/websocket.ts` |
-| 스마트 정렬 UI (I-8) | Sprint 6 | `apps/web/components/poi/OptimizeDialog.tsx` |
+| SPEC V8 항목                                    | Sprint           | 본 저장소 산출물                                                        |
+| ----------------------------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `apps/web` scaffolding                          | Sprint 1         | `apps/web/package.json` + App Router skeleton                           |
+| 로그인/가입/verify UI (G-2 와이어프레임)        | Sprint 1         | `apps/web/app/(auth)/...`                                               |
+| Trip 대시보드 + 미래/과거 아코디언 (I-2)        | Sprint 4         | `apps/web/app/(app)/page.tsx`                                           |
+| 지도 + `vworld-map-web` (I-2 ~ I-5)             | Sprint 4 + T-201 | `apps/web/components/map/...`                                           |
+| 16색 팔레트 + maki (I-6)                        | Sprint 4         | `apps/web/lib/markerPalette.ts`                                         |
+| viewport 로딩 + 클러스터 (I-4)                  | Sprint 4         | `apps/web/components/map/ViewportFeatureLayer.tsx`                      |
+| 우클릭 메뉴 (I-7)                               | Sprint 4         | `apps/web/components/map/RightClickMenu.tsx`                            |
+| 여행 검색 / 장소 검색 drawer / print·GPX export | Sprint 4         | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView` |
+| Admin 콘솔 (M-3)                                | Sprint 3         | `apps/web/app/admin/...`                                                |
+| WebSocket 클라이언트 (J-1)                      | Sprint 5         | `apps/web/lib/websocket.ts`                                             |
+| 스마트 정렬 UI (I-8)                            | Sprint 6         | `apps/web/components/poi/OptimizeDialog.tsx`                            |
 
 ## 13. 관련 문서
 

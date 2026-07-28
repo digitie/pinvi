@@ -5,12 +5,12 @@ v1 `skills/normalization-patterns.ko.md` 정리.
 
 ## 1. 정규형 요약
 
-| Form | 핵심 룰 |
-|------|---------|
-| **1NF** | atomic 값. 다중 값 컬럼 X (배열은 케이스별) |
-| **2NF** | composite PK에 부분 의존 X |
-| **3NF** | 비 PK → 비 PK 전이 의존 X |
-| **BCNF** | 모든 determinant가 candidate key |
+| Form     | 핵심 룰                                     |
+| -------- | ------------------------------------------- |
+| **1NF**  | atomic 값. 다중 값 컬럼 X (배열은 케이스별) |
+| **2NF**  | composite PK에 부분 의존 X                  |
+| **3NF**  | 비 PK → 비 PK 전이 의존 X                   |
+| **BCNF** | 모든 determinant가 candidate key            |
 
 ## 2. Pinvi 적용
 
@@ -38,14 +38,14 @@ v1 `skills/normalization-patterns.ko.md` 정리.
 
 ## 3. Denormalization 패턴
 
-| 패턴 | 용도 | 예 |
-|------|------|----|
-| 파생 컬럼 | 자주 계산되는 값 캐시 | `trips.poi_count` (옵션) |
-| 중복 컬럼 | join 회피 | `trip_pois.feature_snapshot.coord` |
-| 사전 조인 테이블 | 복잡한 view | `area_feature_counts` (라이브러리) |
-| 히스토리 스냅샷 | 시점 데이터 보존 | `trip_pois.feature_snapshot` |
-| 카운터 컬럼 | aggregate 없이 빠른 조회 | `notice_plans.poi_count` (cron 갱신) |
-| JSON/JSONB | 가변 shape | `trip_pois.feature_snapshot`, `gemini_research_runs.result_sections` |
+| 패턴             | 용도                     | 예                                                                   |
+| ---------------- | ------------------------ | -------------------------------------------------------------------- |
+| 파생 컬럼        | 자주 계산되는 값 캐시    | `trips.poi_count` (옵션)                                             |
+| 중복 컬럼        | join 회피                | `trip_pois.feature_snapshot.coord`                                   |
+| 사전 조인 테이블 | 복잡한 view              | `area_feature_counts` (라이브러리)                                   |
+| 히스토리 스냅샷  | 시점 데이터 보존         | `trip_pois.feature_snapshot`                                         |
+| 카운터 컬럼      | aggregate 없이 빠른 조회 | `notice_plans.poi_count` (cron 갱신)                                 |
+| JSON/JSONB       | 가변 shape               | `trip_pois.feature_snapshot`, `gemini_research_runs.result_sections` |
 
 원칙:
 
@@ -57,13 +57,13 @@ v1 `skills/normalization-patterns.ko.md` 정리.
 
 모든 테이블 표준:
 
-| 컬럼 | 비고 |
-|------|------|
-| `<x>_id UUID PRIMARY KEY DEFAULT gen_random_uuid()` | natural key 없는 경우 |
-| `created_at TIMESTAMPTZ NOT NULL DEFAULT now()` | |
-| `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()` | trigger 자동 갱신 |
-| `deleted_at TIMESTAMPTZ NULL` | soft delete (필요 시) |
-| `version INTEGER NOT NULL DEFAULT 1` | optimistic lock 필요 시 |
+| 컬럼                                                | 비고                    |
+| --------------------------------------------------- | ----------------------- |
+| `<x>_id UUID PRIMARY KEY DEFAULT gen_random_uuid()` | natural key 없는 경우   |
+| `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`     |                         |
+| `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`     | trigger 자동 갱신       |
+| `deleted_at TIMESTAMPTZ NULL`                       | soft delete (필요 시)   |
+| `version INTEGER NOT NULL DEFAULT 1`                | optimistic lock 필요 시 |
 
 ## 5. 다국어 (v2)
 

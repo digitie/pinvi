@@ -47,17 +47,17 @@
 
 ## 1. 결정 필요 (요약 — 본문은 `docs/decisions-needed-2026-06-06.md`)
 
-| DEC | 주제 | 막는 것 | 제안 ADR |
-|-----|------|---------|----------|
-| DEC-01 | kor-travel-map 통합 모델: in-process vs 운영 HTTP | feature 전 기능 | ADR-027 |
-| DEC-02 | 정규 `feature_id` 포맷(3곳 불일치) | feature read 전부 | ADR-028 |
-| DEC-03 | `notice_plans` 명칭 충돌 해소(큐레이션 vs 공지) | notice/공지 도메인 | ADR-029 |
-| DEC-04 | 지도 클러스터링 책임(kor_travel_map DB 집계 vs Pinvi 로컬) | in-bounds 성능 | ADR-027 부속 |
-| DEC-05 | feature 갱신요청 큐 소유권(kor_travel_map vs Pinvi app) | feature request | ADR-027 부속 |
-| DEC-06 | v0.1.0 출시 게이트: snapshot-only 출시 vs kor_travel_map 연동 대기 | 릴리즈 | — |
-| DEC-07 | 외부 API 규약 정본(envelope/pagination/coord/datetime/버전 prefix) | API 전반 | ADR-030 |
-| DEC-08 | POI delete 정책(soft vs hard) | POI/Admin | ADR-031 |
-| DEC-09 | `trip_day_pois.feature_id` nullable(자유 메모 POI 허용) | 계획 UX | ADR-031 부속 |
+| DEC    | 주제                                                               | 막는 것            | 제안 ADR     |
+| ------ | ------------------------------------------------------------------ | ------------------ | ------------ |
+| DEC-01 | kor-travel-map 통합 모델: in-process vs 운영 HTTP                  | feature 전 기능    | ADR-027      |
+| DEC-02 | 정규 `feature_id` 포맷(3곳 불일치)                                 | feature read 전부  | ADR-028      |
+| DEC-03 | `notice_plans` 명칭 충돌 해소(큐레이션 vs 공지)                    | notice/공지 도메인 | ADR-029      |
+| DEC-04 | 지도 클러스터링 책임(kor_travel_map DB 집계 vs Pinvi 로컬)         | in-bounds 성능     | ADR-027 부속 |
+| DEC-05 | feature 갱신요청 큐 소유권(kor_travel_map vs Pinvi app)            | feature request    | ADR-027 부속 |
+| DEC-06 | v0.1.0 출시 게이트: snapshot-only 출시 vs kor_travel_map 연동 대기 | 릴리즈             | —            |
+| DEC-07 | 외부 API 규약 정본(envelope/pagination/coord/datetime/버전 prefix) | API 전반           | ADR-030      |
+| DEC-08 | POI delete 정책(soft vs hard)                                      | POI/Admin          | ADR-031      |
+| DEC-09 | `trip_day_pois.feature_id` nullable(자유 메모 POI 허용)            | 계획 UX            | ADR-031 부속 |
 
 ---
 
@@ -66,63 +66,65 @@
 → 전용 문서 `docs/kor-travel-map-requirements.md`로 분리(kor-travel-map 에이전트용).
 여기서는 Pinvi 측 정정 항목만:
 
-| ID | 심각도 | 문제 | 제안 |
-|----|--------|------|------|
-| C-01 | high | feature HTTP client(`clients/kor_travel_map.py`) 미존재, etl_bridge stub만 → `/features/*` 503 | T-066 구현(DEC-01 후) |
-| A-05/D-07 | high | `docs/kor-travel-map-integration.md`·`features.md`가 실재하지 않는 kor_travel_map 산출물(포트 9011, `openapi.user.json`, `/pinvi/features/batch`) 참조 | DEC-01 확정 후 통합 문서 재작성 |
-| C-07 | high | `/features/in-bounds` 파라미터(`bbox=` 단일 vs `sw_/ne_` 4개)·응답(`{features,clusters}` vs `{cluster_unit,items}`) 코드↔문서 불일치 | T-124 |
-| C-09 | med | 코드가 `feature_id`를 UUID로 취급(`features.py`, `trip_view_builder.py:90` `uuid.UUID(...)`) — 문자열이어야 함 | T-125(DEC-02) |
-| C-10/11/12 | med | FeatureSummary/weather/feature-request 필드명 코드↔문서 불일치 | T-124 |
+| ID         | 심각도 | 문제                                                                                                                                                   | 제안                            |
+| ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| C-01       | high   | feature HTTP client(`clients/kor_travel_map.py`) 미존재, etl_bridge stub만 → `/features/*` 503                                                         | T-066 구현(DEC-01 후)           |
+| A-05/D-07  | high   | `docs/kor-travel-map-integration.md`·`features.md`가 실재하지 않는 kor_travel_map 산출물(포트 9011, `openapi.user.json`, `/pinvi/features/batch`) 참조 | DEC-01 확정 후 통합 문서 재작성 |
+| C-07       | high   | `/features/in-bounds` 파라미터(`bbox=` 단일 vs `sw_/ne_` 4개)·응답(`{features,clusters}` vs `{cluster_unit,items}`) 코드↔문서 불일치                   | T-124                           |
+| C-09       | med    | 코드가 `feature_id`를 UUID로 취급(`features.py`, `trip_view_builder.py:90` `uuid.UUID(...)`) — 문자열이어야 함                                         | T-125(DEC-02)                   |
+| C-10/11/12 | med    | FeatureSummary/weather/feature-request 필드명 코드↔문서 불일치                                                                                         | T-124                           |
 
 ---
 
 ## 3. 외부 노출 API 일관성·완결성
 
 ### 3.1 일관성 (규약 정본 필요 — DEC-07)
-| ID | 심각도 | 문제 | 정본 제안 |
-|----|--------|------|-----------|
-| A-03 | high | list envelope 4종 혼재(`data`배열/`data.items`/`data.<plural>`/`data.rows`) | `data`=배열 + `meta` 하나로 |
-| A-04 | high | 페이지네이션 4종(cursor/page+limit/limit+offset/continuation) | 사용자 list=cursor, 예외만 명시 |
-| A-07 | med | 좌표 표현 4종(`{longitude,latitude}`/`[lng,lat]`/평면/GeoJSON), WS는 `{lat,lng}` lat-first | `{longitude,latitude}` 객체, lng-first |
-| A-08 | med | datetime `+09:00` vs `Z`(admin) 혼재 | `+09:00` 통일(또는 admin 예외 명문) |
-| A-09 | med | 현재 사용자 객체 `data`(flat) vs `data.user`(nested) | `data.user`로 통일 |
-| A-16/17 | med | id 필드 `<entity>_id` vs bare `id`; POI 라벨 `title_snapshot`/`name`/`label`/`memo` 4종 | 명칭 표준화 |
-| A-18/19 | med | admin 쿼리 문법 2종, `lng,lat,radius_m` vs `longitude,latitude,radius_meters` | 파라미터명 통일 |
-| A-10 | med | API 버전 prefix `/` vs `/v1` 미확정(README/common/api-contract 3곳 불일치) | DEC-07에 포함 |
-| A-22/24/11 | med | `410 TRIPS_OWNED`·`SORT_ORDER_CONFLICT`·`DB_UNAVAILABLE` 등 표준 에러표 밖 코드 | 에러 taxonomy 정비 |
+
+| ID         | 심각도 | 문제                                                                                       | 정본 제안                              |
+| ---------- | ------ | ------------------------------------------------------------------------------------------ | -------------------------------------- |
+| A-03       | high   | list envelope 4종 혼재(`data`배열/`data.items`/`data.<plural>`/`data.rows`)                | `data`=배열 + `meta` 하나로            |
+| A-04       | high   | 페이지네이션 4종(cursor/page+limit/limit+offset/continuation)                              | 사용자 list=cursor, 예외만 명시        |
+| A-07       | med    | 좌표 표현 4종(`{longitude,latitude}`/`[lng,lat]`/평면/GeoJSON), WS는 `{lat,lng}` lat-first | `{longitude,latitude}` 객체, lng-first |
+| A-08       | med    | datetime `+09:00` vs `Z`(admin) 혼재                                                       | `+09:00` 통일(또는 admin 예외 명문)    |
+| A-09       | med    | 현재 사용자 객체 `data`(flat) vs `data.user`(nested)                                       | `data.user`로 통일                     |
+| A-16/17    | med    | id 필드 `<entity>_id` vs bare `id`; POI 라벨 `title_snapshot`/`name`/`label`/`memo` 4종    | 명칭 표준화                            |
+| A-18/19    | med    | admin 쿼리 문법 2종, `lng,lat,radius_m` vs `longitude,latitude,radius_meters`              | 파라미터명 통일                        |
+| A-10       | med    | API 버전 prefix `/` vs `/v1` 미확정(README/common/api-contract 3곳 불일치)                 | DEC-07에 포함                          |
+| A-22/24/11 | med    | `410 TRIPS_OWNED`·`SORT_ORDER_CONFLICT`·`DB_UNAVAILABLE` 등 표준 에러표 밖 코드            | 에러 taxonomy 정비                     |
 
 ### 3.2 완결성 / 빠진 기능
-| ID | 심각도 | 문제 | 제안 Task |
-|----|--------|------|-----------|
-| A-01/C-16 | high | POI 생성 경로 이중(`POST /trips/{id}/pois` vs `/trips/{id}/days/{day_index}/items`) — 두 API 문서가 서로 다름 | T-126(경로 1개로) |
-| A-02/C-? | high | MCP 문서 2종이 상호 모순(mcp-server.md=읽기전용 5툴 vs mcp-tools.md=DB쓰기 admin툴) | T-127(ADR-019 정본화) |
-| A-06 | high | MCP `list_trips` status enum(`draft/active/archived`)이 실제 trip status(`draft/planned/in_progress/completed/archived`)와 불일치 | T-127 |
-| C-03 | high | WebSocket 실시간 계층 전무(`ws.py`/broker 없음) — trips/pois 문서의 broadcast 약속 미구현 | T-128(Sprint 5) |
-| A-12 | med | MCP 토큰 발급/회수 엔드포인트(`/users/me/mcp-tokens`,`/admin/mcp-tokens`) 미명세 | T-127 |
-| A-13/C-02 | med | `/geo/*`(ADR-025) 및 `/regions/*` 엔드포인트 미명세·미구현 | T-129 |
-| A-14 | low | README index에 `GET /search`·`/health/external` 누락 | T-123(문서) |
-| A-15/C-? | med | POI delete soft vs hard 미결(pois.md "미정" vs admin.md "hard") | DEC-08 |
-| A-25/29 | low | avatar 업로드 2모드 미결, 201 vs 200 규칙 부재 | DEC-07 부속 |
+
+| ID        | 심각도 | 문제                                                                                                                              | 제안 Task             |
+| --------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| A-01/C-16 | high   | POI 생성 경로 이중(`POST /trips/{id}/pois` vs `/trips/{id}/days/{day_index}/items`) — 두 API 문서가 서로 다름                     | T-126(경로 1개로)     |
+| A-02/C-?  | high   | MCP 문서 2종이 상호 모순(mcp-server.md=읽기전용 5툴 vs mcp-tools.md=DB쓰기 admin툴)                                               | T-127(ADR-019 정본화) |
+| A-06      | high   | MCP `list_trips` status enum(`draft/active/archived`)이 실제 trip status(`draft/planned/in_progress/completed/archived`)와 불일치 | T-127                 |
+| C-03      | high   | WebSocket 실시간 계층 전무(`ws.py`/broker 없음) — trips/pois 문서의 broadcast 약속 미구현                                         | T-128(Sprint 5)       |
+| A-12      | med    | MCP 토큰 발급/회수 엔드포인트(`/users/me/mcp-tokens`,`/admin/mcp-tokens`) 미명세                                                  | T-127                 |
+| A-13/C-02 | med    | `/geo/*`(ADR-025) 및 `/regions/*` 엔드포인트 미명세·미구현                                                                        | T-129                 |
+| A-14      | low    | README index에 `GET /search`·`/health/external` 누락                                                                              | T-123(문서)           |
+| A-15/C-?  | med    | POI delete soft vs hard 미결(pois.md "미정" vs admin.md "hard")                                                                   | DEC-08                |
+| A-25/29   | low    | avatar 업로드 2모드 미결, 201 vs 200 규칙 부재                                                                                    | DEC-07 부속           |
 
 ---
 
 ## 4. 코드 vs 문서 (동작 가능성)
 
-| ID | 심각도 | 문제 | 제안 |
-|----|--------|------|------|
-| C-04 | high | `/public/*`(해변/축제) 라우터·서비스 미존재 | T-130(kor_travel_map 연동 후) |
-| C-05 | high | `GET /trips/{id}`가 trip 메타만 반환. `trip_view_builder.build_trip_view`는 완성됐으나 **어떤 라우터도 호출 안 함**(dead code) | T-131(builder 연결) |
-| C-06 | high | trip 하위 리소스(DELETE/copy/days/day-items/members/shared view/attachments/optimize) 대부분 미구현 | T-132(분할) |
-| C-08 | high | Admin(T-050/T-104 "완료")이 상당수 placeholder(`/admin/{trips,pois,features,etl,seed,reset,...}` 페이지가 `Placeholder.tsx`; priority-3 엔드포인트 미구현) | P-05 정정 + T-133 |
-| C-14 | med | `POST /auth/refresh` 미구현 + refresh 토큰이 `user_sessions`에 미저장 → 문서상 refresh 흐름 불가 | T-134 |
-| C-15 | med | `GET /trips` 페이지네이션 코드(`limit`만) vs 문서(`bucket`+`cursor`) | T-124 |
-| C-17 | med | `GET /admin/audit/location`(CPO) 미구현 — 미들웨어는 쓰는데 읽는 라우터 없음 | T-133 |
-| C-18 | med | POI 응답 `rise_set` 필드 미노출(데이터·ETL은 있으나 schema/응답에 없음) | T-135 |
-| C-13 | med | 통합 `GET /search`(features+addresses+my_pois) 미구현(코드는 features만) | T-129 |
-| C-19 | med | `services/cluster_query.py` 어디서도 호출 안 함(테스트만) | DEC-04 후 연결/삭제 |
-| C-20 | low | OAuth `GET /auth/oauth/providers`·`DELETE /auth/oauth/google` 구현됐으나 미문서화 | T-123(문서) |
-| C-21 | low | share-link 호스트 하드코딩(`app.pinvi.local`), zoom 하한 코드(5) vs 문서(7) | T-123 |
-| C-22 | med | Resend webhook 서명 검증 no-op(미인증 입력으로 `email_queue` 변경) | T-136(보안) |
+| ID   | 심각도 | 문제                                                                                                                                                       | 제안                          |
+| ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| C-04 | high   | `/public/*`(해변/축제) 라우터·서비스 미존재                                                                                                                | T-130(kor_travel_map 연동 후) |
+| C-05 | high   | `GET /trips/{id}`가 trip 메타만 반환. `trip_view_builder.build_trip_view`는 완성됐으나 **어떤 라우터도 호출 안 함**(dead code)                             | T-131(builder 연결)           |
+| C-06 | high   | trip 하위 리소스(DELETE/copy/days/day-items/members/shared view/attachments/optimize) 대부분 미구현                                                        | T-132(분할)                   |
+| C-08 | high   | Admin(T-050/T-104 "완료")이 상당수 placeholder(`/admin/{trips,pois,features,etl,seed,reset,...}` 페이지가 `Placeholder.tsx`; priority-3 엔드포인트 미구현) | P-05 정정 + T-133             |
+| C-14 | med    | `POST /auth/refresh` 미구현 + refresh 토큰이 `user_sessions`에 미저장 → 문서상 refresh 흐름 불가                                                           | T-134                         |
+| C-15 | med    | `GET /trips` 페이지네이션 코드(`limit`만) vs 문서(`bucket`+`cursor`)                                                                                       | T-124                         |
+| C-17 | med    | `GET /admin/audit/location`(CPO) 미구현 — 미들웨어는 쓰는데 읽는 라우터 없음                                                                               | T-133                         |
+| C-18 | med    | POI 응답 `rise_set` 필드 미노출(데이터·ETL은 있으나 schema/응답에 없음)                                                                                    | T-135                         |
+| C-13 | med    | 통합 `GET /search`(features+addresses+my_pois) 미구현(코드는 features만)                                                                                   | T-129                         |
+| C-19 | med    | `services/cluster_query.py` 어디서도 호출 안 함(테스트만)                                                                                                  | DEC-04 후 연결/삭제           |
+| C-20 | low    | OAuth `GET /auth/oauth/providers`·`DELETE /auth/oauth/google` 구현됐으나 미문서화                                                                          | T-123(문서)                   |
+| C-21 | low    | share-link 호스트 하드코딩(`app.pinvi.local`), zoom 하한 코드(5) vs 문서(7)                                                                                | T-123                         |
+| C-22 | med    | Resend webhook 서명 검증 no-op(미인증 입력으로 `email_queue` 변경)                                                                                         | T-136(보안)                   |
 
 > **동작하는 것(오탐 방지)**: auth(register/verify/login/logout/me/password-reset),
 > Google OAuth(start/callback/link/unlink/providers), consents, trips
@@ -134,45 +136,45 @@
 
 ## 5. 기능/도메인 완결성·최적화
 
-| ID | 심각도 | 문제 | 제안 |
-|----|--------|------|------|
-| D-01 | high | `app.notice_plans` 두 정의 충돌(큐레이션 템플릿 vs 시스템 공지) | DEC-03 → T-137 |
-| D-02 | high | PIPA/auth가 쓰는 `users` 컬럼(`password_hash,nickname,gender,birth_year_month,residence_sigungu_code`) 스키마에 없음 | T-138 |
-| D-03 | high | `app.security_incidents` 테이블 미정의(침해통지/`/admin/incidents`가 참조) | T-138 |
-| D-04 | high | 큐레이션 plan 테이블(`notice_pois`,`plan_poi_attachments`) 정본 스키마에 없음; 첨부 모델 2종(단일 4-target vs polymorphic) 공존 | DEC-03 → T-137 |
-| D-05 | high | 실시간 협업 백엔드(presence/충돌해소) 설계 문서 없음. `trip_day_pois`는 단일 작성자 optimistic lock뿐 | T-128(Sprint 5 설계) |
-| D-06 | high | `trip_companions`·`trip_invite` 템플릿 있으나 **초대 흐름 엔드포인트 없음**; `share_links.visibility='comment'`인데 댓글 모델/ API 없음 | T-132/T-139 |
-| D-08 | med | kor_travel_map 계약에 없는 소비처 호출(`/features/nearby`,`/{id}/weather`,`/regions/*`,`/features/requests`) | kor_travel_map-requirements K-3/K-6/K-8 |
-| D-10 | med | `notice_pois.budget`가 복사 대상 `trip_day_pois`에 컬럼 없음 → 예산 silently drop, 여행 예산 기능 자체 부재 | T-140 |
-| D-11 | med | trip↔지역 구조적 연결 없음(`region_hint` 자유텍스트뿐) → 텔레그램 brief의 지역 날씨/주유 질의 불가 | T-141 |
-| D-12 | med | LBS 6개월 보존 DELETE가 `location_access_log` 해시체인 깨뜨림 — 보존/체인연속 정책 미결 | DEC-10 |
-| D-13 | med | korea-only 3단 geofence admin 우회가 토큰 `roles` claim 의존인데 토큰엔 subject만(DB RBAC) → 출장 admin이 451 | T-142 |
-| D-15/21 | med | social-login(Google-only) vs map-marker-design(3버튼); frontend.md가 ADR-015로 삭제된 Kakao 어댑터 잔존 | T-143(문서정정) |
-| D-16/17 | med | 여행/장소 검색 UX 문서 없음; 여행 내보내기(PDF/GPX/print) 설계 없음(기록·공유 제품인데) | T-144 |
-| D-18 | med | `trip_day_pois.feature_id` NOT NULL → kor_travel_map에 없는 자유 메모 POI 불가 | DEC-09 |
-| D-19 | med | backup 핫스왑이 2× DB(2× 디스크/RAM) 전제 — Odroid M1S에서 비현실적 | T-145(동일호스트 schema-swap 확정) |
-| D-20/26 | med | location-audit 동기 체인해시 + trip view마다 kor_travel_map batch+join(캐시 없음) — 단일 노드 hotspot | T-146(async outbox + feature 캐시) |
-| D-22 | med | kor-travel-geo v2(ADR-025) integration 문서·CLAUDE 의존성 누락 | T-143 (※ `kor-travel-geo.md`는 이미 존재 — CLAUDE §4 stack에만 추가) |
-| D-24 | low | korea-only 3중 geofence(WAF+nginx GeoIP2+app)가 단일 Cloudflare tunnel 뒤에선 과잉 | T-142 |
-| D-23/D-25 | low | rise/set 재계산 정책 미결; gemini.md의 `UNIQUE ... WHERE` 인라인은 invalid PG 문법 | T-147(문서정정) |
+| ID        | 심각도 | 문제                                                                                                                                    | 제안                                                                 |
+| --------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| D-01      | high   | `app.notice_plans` 두 정의 충돌(큐레이션 템플릿 vs 시스템 공지)                                                                         | DEC-03 → T-137                                                       |
+| D-02      | high   | PIPA/auth가 쓰는 `users` 컬럼(`password_hash,nickname,gender,birth_year_month,residence_sigungu_code`) 스키마에 없음                    | T-138                                                                |
+| D-03      | high   | `app.security_incidents` 테이블 미정의(침해통지/`/admin/incidents`가 참조)                                                              | T-138                                                                |
+| D-04      | high   | 큐레이션 plan 테이블(`notice_pois`,`plan_poi_attachments`) 정본 스키마에 없음; 첨부 모델 2종(단일 4-target vs polymorphic) 공존         | DEC-03 → T-137                                                       |
+| D-05      | high   | 실시간 협업 백엔드(presence/충돌해소) 설계 문서 없음. `trip_day_pois`는 단일 작성자 optimistic lock뿐                                   | T-128(Sprint 5 설계)                                                 |
+| D-06      | high   | `trip_companions`·`trip_invite` 템플릿 있으나 **초대 흐름 엔드포인트 없음**; `share_links.visibility='comment'`인데 댓글 모델/ API 없음 | T-132/T-139                                                          |
+| D-08      | med    | kor_travel_map 계약에 없는 소비처 호출(`/features/nearby`,`/{id}/weather`,`/regions/*`,`/features/requests`)                            | kor_travel_map-requirements K-3/K-6/K-8                              |
+| D-10      | med    | `notice_pois.budget`가 복사 대상 `trip_day_pois`에 컬럼 없음 → 예산 silently drop, 여행 예산 기능 자체 부재                             | T-140                                                                |
+| D-11      | med    | trip↔지역 구조적 연결 없음(`region_hint` 자유텍스트뿐) → 텔레그램 brief의 지역 날씨/주유 질의 불가                                      | T-141                                                                |
+| D-12      | med    | LBS 6개월 보존 DELETE가 `location_access_log` 해시체인 깨뜨림 — 보존/체인연속 정책 미결                                                 | DEC-10                                                               |
+| D-13      | med    | korea-only 3단 geofence admin 우회가 토큰 `roles` claim 의존인데 토큰엔 subject만(DB RBAC) → 출장 admin이 451                           | T-142                                                                |
+| D-15/21   | med    | social-login(Google-only) vs map-marker-design(3버튼); frontend.md가 ADR-015로 삭제된 Kakao 어댑터 잔존                                 | T-143(문서정정)                                                      |
+| D-16/17   | med    | 여행/장소 검색 UX 문서 없음; 여행 내보내기(PDF/GPX/print) 설계 없음(기록·공유 제품인데)                                                 | T-144                                                                |
+| D-18      | med    | `trip_day_pois.feature_id` NOT NULL → kor_travel_map에 없는 자유 메모 POI 불가                                                          | DEC-09                                                               |
+| D-19      | med    | backup 핫스왑이 2× DB(2× 디스크/RAM) 전제 — Odroid M1S에서 비현실적                                                                     | T-145(동일호스트 schema-swap 확정)                                   |
+| D-20/26   | med    | location-audit 동기 체인해시 + trip view마다 kor_travel_map batch+join(캐시 없음) — 단일 노드 hotspot                                   | T-146(async outbox + feature 캐시)                                   |
+| D-22      | med    | kor-travel-geo v2(ADR-025) integration 문서·CLAUDE 의존성 누락                                                                          | T-143 (※ `kor-travel-geo.md`는 이미 존재 — CLAUDE §4 stack에만 추가) |
+| D-24      | low    | korea-only 3중 geofence(WAF+nginx GeoIP2+app)가 단일 Cloudflare tunnel 뒤에선 과잉                                                      | T-142                                                                |
+| D-23/D-25 | low    | rise/set 재계산 정책 미결; gemini.md의 `UNIQUE ... WHERE` 인라인은 invalid PG 문법                                                      | T-147(문서정정)                                                      |
 
 ---
 
 ## 6. 계획/프로세스 정합성
 
-| ID | 심각도 | 문제 | 제안 |
-|----|--------|------|------|
-| P-01 | high | SPRINT-4 backend가 in-DB spatial/`feature` schema join 전제 — ADR-026(HTTP, feature schema 직접접근 금지)와 충돌 | T-148(DEC-01 후 SPRINT-4 재작성) |
-| P-03 | high | Gemini가 README/AGENTS/SKILL의 현재 책임 목록에 남음 — ADR-020(별 repo 분리)·T-107 deferred와 충돌 | T-149(문서정정) |
-| P-04 | high | sprint 상태 drift: README는 Sprint4~6 "proposed"인데 PR #15/#16 merged, T-109/110/115 done; sprint 헤더 status가 머지 현실과 불일치 | T-150 |
-| P-05 | med | `tasks.md` "보류"에 `[x]` 완료 항목(T-100~104,107) 혼재 — 보류와 완료 동시 불가 | T-150 |
-| P-06 | med | T-111이 `tasks.md`에 2번 정의 | T-150 |
-| P-07/08 | med | auth-token/RBAC/audit-chain ADR 미기록; SPRINT 문서 곳곳 `ADR-NNN` placeholder 미할당 | T-151(ADR 백필) |
-| P-02/14/19 | med | SPRINT-1 ADR 참조 번호 오류(ADR-010/011/016↔실제); ADR-011 지도항목 supersede 표기 누락 | T-150/T-151 |
-| P-09/15/20 | med | resume.md "박힌 ADR"가 016에서 끊김(017~026 누락); 헤드라인 상태 구식; 죽은 ADR-028 후보 | T-150 |
-| P-10/13/17/18/21 | low | `release-plan.md` dangling link; 머지표 PR#15/16 누락; `python-kraddr-map` 오타; agent-guide 잔여 bullet/구식 trailer; MCP 토큰 경로 3곳 불일치 | T-150 |
-| P-11 | low | SPRINT-5 Dagster asset 수(4 vs 5~6) 불일치 | T-150 |
-| P-12 | med | v0.1.0 게이트가 보류 항목(T-066, kor_travel_map client)에 의존 | DEC-06 |
+| ID               | 심각도 | 문제                                                                                                                                            | 제안                             |
+| ---------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| P-01             | high   | SPRINT-4 backend가 in-DB spatial/`feature` schema join 전제 — ADR-026(HTTP, feature schema 직접접근 금지)와 충돌                                | T-148(DEC-01 후 SPRINT-4 재작성) |
+| P-03             | high   | Gemini가 README/AGENTS/SKILL의 현재 책임 목록에 남음 — ADR-020(별 repo 분리)·T-107 deferred와 충돌                                              | T-149(문서정정)                  |
+| P-04             | high   | sprint 상태 drift: README는 Sprint4~6 "proposed"인데 PR #15/#16 merged, T-109/110/115 done; sprint 헤더 status가 머지 현실과 불일치             | T-150                            |
+| P-05             | med    | `tasks.md` "보류"에 `[x]` 완료 항목(T-100~104,107) 혼재 — 보류와 완료 동시 불가                                                                 | T-150                            |
+| P-06             | med    | T-111이 `tasks.md`에 2번 정의                                                                                                                   | T-150                            |
+| P-07/08          | med    | auth-token/RBAC/audit-chain ADR 미기록; SPRINT 문서 곳곳 `ADR-NNN` placeholder 미할당                                                           | T-151(ADR 백필)                  |
+| P-02/14/19       | med    | SPRINT-1 ADR 참조 번호 오류(ADR-010/011/016↔실제); ADR-011 지도항목 supersede 표기 누락                                                         | T-150/T-151                      |
+| P-09/15/20       | med    | resume.md "박힌 ADR"가 016에서 끊김(017~026 누락); 헤드라인 상태 구식; 죽은 ADR-028 후보                                                        | T-150                            |
+| P-10/13/17/18/21 | low    | `release-plan.md` dangling link; 머지표 PR#15/16 누락; `python-kraddr-map` 오타; agent-guide 잔여 bullet/구식 trailer; MCP 토큰 경로 3곳 불일치 | T-150                            |
+| P-11             | low    | SPRINT-5 Dagster asset 수(4 vs 5~6) 불일치                                                                                                      | T-150                            |
+| P-12             | med    | v0.1.0 게이트가 보류 항목(T-066, kor_travel_map client)에 의존                                                                                  | DEC-06                           |
 
 ---
 
@@ -194,6 +196,7 @@
 ## 8. 병합 매핑표 (→ `docs/tasks.md` / `docs/decisions.md`로 lift)
 
 ### 8.1 제안 Task (그대로 `tasks.md`에 붙일 수 있는 형식)
+
 > 번호는 기존 최고치(T-122) 다음부터. 실제 병합 시 충돌하면 재배정.
 
 ```
@@ -229,6 +232,7 @@
 ```
 
 ### 8.2 제안 ADR (→ `docs/decisions.md`, 다음 번호 ADR-027~)
+
 ```
 - ADR-027 — kor-travel-map 통합 모델 확정(in-process vs 운영 HTTP) + 클러스터링/요청큐 소유권  (DEC-01/04/05)
 - ADR-028 — 정규 feature_id 포맷  (DEC-02)
@@ -238,12 +242,14 @@
 ```
 
 ### 8.3 결정 필요(별도 문서)
+
 → `docs/decisions-needed-2026-06-06.md` (DEC-01 ~ DEC-10). 사용자 결정 후 위
 ADR/Task에 반영.
 
 ---
 
 ## 9. 부록 — 증거 ID ↔ 원천
-P-* = 계획/프로세스 감사, A-* = 외부 API 감사, C-* = 코드 vs 문서 감사,
-D-* = 기능/도메인 감사. 각 발견의 file:line은 감사 당시 본문 기준이며 병합 시
+
+P-_ = 계획/프로세스 감사, A-_ = 외부 API 감사, C-_ = 코드 vs 문서 감사,
+D-_ = 기능/도메인 감사. 각 발견의 file:line은 감사 당시 본문 기준이며 병합 시
 재확인한다. kor-travel-map 대조는 `kor-travel-map` HEAD `b775c74` 기준.

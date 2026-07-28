@@ -20,34 +20,37 @@
   대부분 낮음(문서·테스트·방어심화).
 
 ### PR별 verdict 요약
-| PR | 주제 | verdict | 최고 잔존 |
-|----|------|---------|-----------|
-| #85 | trip detail view builder | 견고하나 companion에 PII/공유메타 노출 scope 확장 | 중간 |
-| #86 | resend webhook opt-in | fail-open을 명시 opt-in으로 정확히 반전, clean | 낮음 |
-| #87 | feature_id opaque string | read/Protocol/schema/builder 일관, 무결 | 낮음 |
-| #89 | reset 후 access token 무효화 | 견고, fail-open/bypass 없음 | 낮음 |
-| #90 | geofence trusted-proxy | fail-closed 정확, 단 단일헤더 strict 약점 | 중간 |
-| #91 | ws backpressure 분리 | 의도 달성, 부하 시 잔존 2건 | 중간 |
-| #92 | admin audit hash chain | advisory lock+UNIQUE 이중방어, race 닫힘 | 낮음 |
-| #93 | money response string | 응답 표현 완전 통일, clean | 낮음 |
-| #94 | storage attachment alias | 대칭 구현 정합 | 낮음 |
-| #96 | trip list cursor parity | 형식 견고하나 offset cursor + 기본 bucket 변경 | 중간 |
-| #99 | POI rise/set 노출 | N+1 회피·일관, clean | 낮음 |
-| #100 | backup restore hotswap | 입력안전·골격 양호, cut-over 무결성/가용성 리스크 다수 | **높음** |
-| #101 | trip subresource APIs | IDOR 차단 OK, 쓰기권한/입력신뢰/shared 보강 필요 | 중간 |
-| #107 | admin priority3 views | RBAC·마스킹·테스트 견고, chain 풀스캔 개선점 | 중간 |
+
+| PR   | 주제                         | verdict                                                | 최고 잔존 |
+| ---- | ---------------------------- | ------------------------------------------------------ | --------- |
+| #85  | trip detail view builder     | 견고하나 companion에 PII/공유메타 노출 scope 확장      | 중간      |
+| #86  | resend webhook opt-in        | fail-open을 명시 opt-in으로 정확히 반전, clean         | 낮음      |
+| #87  | feature_id opaque string     | read/Protocol/schema/builder 일관, 무결                | 낮음      |
+| #89  | reset 후 access token 무효화 | 견고, fail-open/bypass 없음                            | 낮음      |
+| #90  | geofence trusted-proxy       | fail-closed 정확, 단 단일헤더 strict 약점              | 중간      |
+| #91  | ws backpressure 분리         | 의도 달성, 부하 시 잔존 2건                            | 중간      |
+| #92  | admin audit hash chain       | advisory lock+UNIQUE 이중방어, race 닫힘               | 낮음      |
+| #93  | money response string        | 응답 표현 완전 통일, clean                             | 낮음      |
+| #94  | storage attachment alias     | 대칭 구현 정합                                         | 낮음      |
+| #96  | trip list cursor parity      | 형식 견고하나 offset cursor + 기본 bucket 변경         | 중간      |
+| #99  | POI rise/set 노출            | N+1 회피·일관, clean                                   | 낮음      |
+| #100 | backup restore hotswap       | 입력안전·골격 양호, cut-over 무결성/가용성 리스크 다수 | **높음**  |
+| #101 | trip subresource APIs        | IDOR 차단 OK, 쓰기권한/입력신뢰/shared 보강 필요       | 중간      |
+| #107 | admin priority3 views        | RBAC·마스킹·테스트 견고, chain 풀스캔 개선점           | 중간      |
 
 ---
 
 ## 1. 긴급성순 통합 TODO
 
 ### 🔴 높음 (#100 — 운영 활성화 전 선결, → T-183)
+
 1. **cut-over 후 GRANT 미복원** — `pg_dump --no-privileges`로 복원 → 앱 role이 신 스키마 owner가
    아니면 switch 직후 `permission denied`. switch 후 GRANT 재적용 또는 단일 owner 전제 명시.
 2. **FK 적재 순서 실패** — `--schema-only`(FK 포함) 먼저, `--data-only`를 트리거/FK 비활성 없이
    적재 → FK 순서·순환 시 적재 실패. `SET session_replication_role = replica` 또는 제약을 데이터 후 생성.
 
 ### 🟡 중간
+
 3. **[#101] companion 쓰기권한 미강제** (→ T-184) — `_is_companion` viewer가 day 삭제(POI cascade)·
    첨부·재정렬 가능. editor/co_owner 이상만 쓰기 허용하는 권한 헬퍼 도입.
 4. **[#101] 첨부 metadata 클라 입력 무검증** (→ T-184) — `public_url`/`storage_key`/`bucket` 무검증
@@ -77,6 +80,7 @@
     검증 또는 별도 캐시 엔드포인트.
 
 ### 🟢 낮음 (코드/문서/테스트 — 일부만 코드 반영, 나머지 문서 표기)
+
 - [#86] `.env.example` 2개 `ALLOW_UNSIGNED=true` 출하 → example 기본 false. **(코드 반영)**
 - [#93] money 지수표기 직렬화 가설 → 백엔드 `Decimal` quantize 보장. **(코드 반영)**
 - [#99] `poi_rise_set_to_dict` 수동 필드 중복 → `model_validate`로 단일화. **(코드 반영)**
@@ -113,11 +117,12 @@
 > 코드 반영 결과는 후속 PR에 기록하고 본 문서의 항목별 ✅로 추적한다.
 
 ### 코드 반영 결과 (2026-06-09, 동일 PR)
+
 - ✅ **T-184** (#101/#85): `get_trip_for_user_write`(owner/co_owner/editor) — day/attachment/
   trip-update/optimize(persist) 쓰기 게이트, viewer read-only. `build_trip_view(include_management)`
   로 비-owner에 `invited_email` 마스킹 + share_links 비노출. `AttachmentCreate` bucket pattern +
   storage_key traversal 거부 + public_url http(s) 검증. shared `last_used_at` 1분 throttle. +회귀 테스트.
-- ✅ **T-186** (#96): 기본 `-updated_at` keyset cursor(updated_at,trip_id) 전환 + `ilike` %/_/\ 이스케이프.
+- ✅ **T-186** (#96): 기본 `-updated_at` keyset cursor(updated*at,trip_id) 전환 + `ilike` %/*/\ 이스케이프.
 - ✅ **T-185** (#91): rate-limit grace 동안 broker 슬롯 유지(cap 우회/FD 누수 차단) + `RealtimeConnection.send_lock`
   연결별 송신 직렬화. 기존 테스트를 새 불변식으로 갱신.
 - ✅ **T-187** (#90/#107): geofence strict 모드 mTLS-header 신뢰에 CIDR 앵커 강제. 위치감사 chain

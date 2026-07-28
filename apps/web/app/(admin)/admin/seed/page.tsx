@@ -27,7 +27,8 @@ export default function AdminSeedPage() {
   });
   const data = scenariosQuery.data ?? null;
   const scenarios = useMemo(() => data?.scenarios ?? [], [data?.scenarios]);
-  const selected = scenarios.find((scenario) => scenario.key === selectedKey) ?? scenarios[0] ?? null;
+  const selected =
+    scenarios.find((scenario) => scenario.key === selectedKey) ?? scenarios[0] ?? null;
   const unavailable =
     scenariosQuery.isError &&
     scenariosQuery.error instanceof ApiError &&

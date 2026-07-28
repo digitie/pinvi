@@ -61,9 +61,7 @@ describe('ConfirmDialog', () => {
   });
 
   it('busy면 버튼을 비활성화한다', () => {
-    render(
-      <ConfirmDialog open busy title="삭제할까요?" onConfirm={vi.fn()} onCancel={vi.fn()} />,
-    );
+    render(<ConfirmDialog open busy title="삭제할까요?" onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByTestId('confirm-dialog-confirm')).toBeDisabled();
     expect(screen.getByTestId('confirm-dialog-cancel')).toBeDisabled();
   });

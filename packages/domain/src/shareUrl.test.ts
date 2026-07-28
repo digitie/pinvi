@@ -4,7 +4,7 @@ import { buildShareUrl } from './shareUrl';
 describe('shareUrl', () => {
   it('buildShareUrl: origin + /shared/{tripId}/{token}', () => {
     expect(buildShareUrl('https://pinvi.app', 'trip-1', 'tok-9')).toBe(
-      'https://pinvi.app/shared/trip-1/tok-9'
+      'https://pinvi.app/shared/trip-1/tok-9',
     );
   });
 });

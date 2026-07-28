@@ -6,15 +6,15 @@
 
 ## 1. 테스트 계층
 
-| 계층 | 범위 | 도구 | 위치 | DB |
-|------|------|------|------|----|
-| 단위 (`unit`) | 순수 함수, 서비스 로직, schema validation | `pytest` | `apps/api/tests/unit/` | 사용 X |
-| 통합 (`integration`) | 라우터 + DB + 외부 HTTP 계약 | `pytest` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/` | 실제 PostGIS |
-| e2e (`e2e`) | 백엔드 ↔ 프론트 (HTTP 시나리오) | `pytest` + `httpx` + `playwright` | `apps/api/tests/e2e/`, `apps/web/tests/` | 실제 PostGIS |
-| UI smoke | 프론트 화면 렌더링 | Playwright | `apps/web/tests/*.test.mjs` | 모의/실제 |
-| kor-travel-map 계약 | `kor-travel-map` OpenAPI와의 계약 | `pytest` + `httpx.MockTransport` + 선택적 live | `apps/api/tests/integration/kor_travel_map/` | 선택 |
-| Dagster asset | 단일 asset 실행 (dry-run) | Dagster runner | `apps/etl/tests/` | 실제/임시 |
-| 정합성 게이트 | OpenAPI drift, import-linter, coverage | CI workflow | `.github/workflows/` | — |
+| 계층                 | 범위                                      | 도구                                                      | 위치                                         | DB           |
+| -------------------- | ----------------------------------------- | --------------------------------------------------------- | -------------------------------------------- | ------------ |
+| 단위 (`unit`)        | 순수 함수, 서비스 로직, schema validation | `pytest`                                                  | `apps/api/tests/unit/`                       | 사용 X       |
+| 통합 (`integration`) | 라우터 + DB + 외부 HTTP 계약              | `pytest` + testcontainers PostGIS + `httpx.MockTransport` | `apps/api/tests/integration/`                | 실제 PostGIS |
+| e2e (`e2e`)          | 백엔드 ↔ 프론트 (HTTP 시나리오)           | `pytest` + `httpx` + `playwright`                         | `apps/api/tests/e2e/`, `apps/web/tests/`     | 실제 PostGIS |
+| UI smoke             | 프론트 화면 렌더링                        | Playwright                                                | `apps/web/tests/*.test.mjs`                  | 모의/실제    |
+| kor-travel-map 계약  | `kor-travel-map` OpenAPI와의 계약         | `pytest` + `httpx.MockTransport` + 선택적 live            | `apps/api/tests/integration/kor_travel_map/` | 선택         |
+| Dagster asset        | 단일 asset 실행 (dry-run)                 | Dagster runner                                            | `apps/etl/tests/`                            | 실제/임시    |
+| 정합성 게이트        | OpenAPI drift, import-linter, coverage    | CI workflow                                               | `.github/workflows/`                         | —            |
 
 ## 2. 단위 테스트 (`unit`)
 
@@ -80,18 +80,18 @@ URL `key` query가 생성되지 않는 것도 outbound request에서 확인한�
 
 코드 작성 단계 진입 후 박는다.
 
-| 게이트 | 워크플로 | 실패 정책 |
-|--------|----------|-----------|
-| `pytest apps/api/tests/unit` | `.github/workflows/api.yml` | blocker |
-| `pytest apps/api/tests/integration` | `.github/workflows/api.yml` | blocker (PostGIS 컨테이너) |
-| `ruff check` / `mypy --strict` | `.github/workflows/api.yml` | blocker |
-| `import-linter` (의존 방향) | `.github/workflows/api.yml` | blocker |
-| `npm lint typecheck build` | `.github/workflows/web.yml` | blocker |
-| Playwright smoke | `.github/workflows/web.yml` | blocker (3분 budget) |
-| OpenAPI drift | `.github/workflows/openapi.yml` | blocker |
-| Coverage (단계적) | `.github/workflows/api.yml` | warn → blocker (Sprint별 상향) |
-| security (bandit + npm audit) | `.github/workflows/security.yml` | warn |
-| Dagster asset registry sanity | `.github/workflows/etl.yml` | blocker |
+| 게이트                              | 워크플로                         | 실패 정책                      |
+| ----------------------------------- | -------------------------------- | ------------------------------ |
+| `pytest apps/api/tests/unit`        | `.github/workflows/api.yml`      | blocker                        |
+| `pytest apps/api/tests/integration` | `.github/workflows/api.yml`      | blocker (PostGIS 컨테이너)     |
+| `ruff check` / `mypy --strict`      | `.github/workflows/api.yml`      | blocker                        |
+| `import-linter` (의존 방향)         | `.github/workflows/api.yml`      | blocker                        |
+| `npm lint typecheck build`          | `.github/workflows/web.yml`      | blocker                        |
+| Playwright smoke                    | `.github/workflows/web.yml`      | blocker (3분 budget)           |
+| OpenAPI drift                       | `.github/workflows/openapi.yml`  | blocker                        |
+| Coverage (단계적)                   | `.github/workflows/api.yml`      | warn → blocker (Sprint별 상향) |
+| security (bandit + npm audit)       | `.github/workflows/security.yml` | warn                           |
+| Dagster asset registry sanity       | `.github/workflows/etl.yml`      | blocker                        |
 
 ## 9. 우선순위 (테스트 작성 순서)
 

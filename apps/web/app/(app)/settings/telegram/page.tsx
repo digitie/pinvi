@@ -60,7 +60,10 @@ export default function TelegramTargetsSettingsPage() {
         telegram_label: label.trim() || null,
         is_default: isDefault,
       });
-      setTargets((prev) => [created, ...prev.map((t) => (created.is_default ? { ...t, is_default: false } : t))]);
+      setTargets((prev) => [
+        created,
+        ...prev.map((t) => (created.is_default ? { ...t, is_default: false } : t)),
+      ]);
       setChatId('');
       setLabel('');
     } catch (err) {
@@ -87,21 +90,18 @@ export default function TelegramTargetsSettingsPage() {
     [load],
   );
 
-  const onDelete = useCallback(
-    async (targetId: string) => {
-      setBusyTargetId(targetId);
-      setError(null);
-      try {
-        await telegramApi(apiClient).deleteTarget(targetId);
-        setTargets((prev) => prev.filter((t) => t.id !== targetId));
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : '삭제 실패');
-      } finally {
-        setBusyTargetId(null);
-      }
-    },
-    [],
-  );
+  const onDelete = useCallback(async (targetId: string) => {
+    setBusyTargetId(targetId);
+    setError(null);
+    try {
+      await telegramApi(apiClient).deleteTarget(targetId);
+      setTargets((prev) => prev.filter((t) => t.id !== targetId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '삭제 실패');
+    } finally {
+      setBusyTargetId(null);
+    }
+  }, []);
 
   const columns = useMemo<DataTableColumn<TelegramTarget>[]>(
     () => [
@@ -167,8 +167,8 @@ export default function TelegramTargetsSettingsPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-bold text-ink">Telegram 알림</h1>
         <p className="text-sm text-muted">
-          여행 생성·동반자 초대 알림을 받을 Telegram chat을 연결합니다. Pinvi 봇을 chat에
-          추가한 뒤 chat ID를 등록하세요.
+          여행 생성·동반자 초대 알림을 받을 Telegram chat을 연결합니다. Pinvi 봇을 chat에 추가한 뒤
+          chat ID를 등록하세요.
         </p>
         <p className="text-xs text-muted">
           ⚠️ 그룹/채널을 연결하면 그 방의 다른 사람도 알림을 볼 수 있습니다.
@@ -176,13 +176,21 @@ export default function TelegramTargetsSettingsPage() {
       </header>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="telegram-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="telegram-error"
+        >
           {error}
         </p>
       )}
 
       <Section title="새 대상 연결">
-        <form onSubmit={onCreate} className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]" noValidate>
+        <form
+          onSubmit={onCreate}
+          className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]"
+          noValidate
+        >
           <FormField
             ref={chatIdRef}
             id="telegram-chat-id"
@@ -203,7 +211,10 @@ export default function TelegramTargetsSettingsPage() {
             placeholder="가족 단톡"
             data-testid="telegram-label"
           />
-          <label htmlFor="telegram-default" className="mt-7 inline-flex h-9 items-center gap-2 text-sm text-ink">
+          <label
+            htmlFor="telegram-default"
+            className="mt-7 inline-flex h-9 items-center gap-2 text-sm text-ink"
+          >
             <input
               id="telegram-default"
               type="checkbox"

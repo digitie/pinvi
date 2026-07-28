@@ -9,10 +9,7 @@ import {
   queryKeys,
   type AdminCategoryMappingListParams,
 } from '@pinvi/api-client';
-import type {
-  AdminCategoryMappingItem,
-  AdminCategoryMappingUpdateRequest,
-} from '@pinvi/schemas';
+import type { AdminCategoryMappingItem, AdminCategoryMappingUpdateRequest } from '@pinvi/schemas';
 import { CATEGORY_MARKER, markerStyleFor, paletteHex, paletteLabelColor } from '@pinvi/domain';
 import { Download, Edit3, RefreshCw, RotateCcw, Save, Search, X } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';

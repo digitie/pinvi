@@ -4,11 +4,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
 import { MARKER_PALETTE, type MarkerColorKey } from '@pinvi/design-tokens';
-import {
-  buildPoiDetailPatch,
-  isoToDatetimeLocal,
-  type PoiDetailForm,
-} from '@pinvi/domain';
+import { buildPoiDetailPatch, isoToDatetimeLocal, type PoiDetailForm } from '@pinvi/domain';
 import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
@@ -43,7 +39,10 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
   const update = (patch: Partial<PoiDetailForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
   return (
-    <div className="mt-2 space-y-3 rounded-sm border border-hairline bg-white p-3" data-testid="poi-editor">
+    <div
+      className="mt-2 space-y-3 rounded-sm border border-hairline bg-white p-3"
+      data-testid="poi-editor"
+    >
       <div>
         <p className="mb-1.5 text-xs font-semibold text-ink">마커 색</p>
         <div className="grid grid-cols-8 gap-1.5">

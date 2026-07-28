@@ -65,7 +65,9 @@ export function TripActions({ tripId }: TripActionsProps) {
               data-testid="trip-delete-confirm"
               className="inline-flex h-8 items-center gap-1 rounded-sm bg-error-text px-2.5 text-xs font-semibold text-white disabled:opacity-50"
             >
-              {busy === 'delete' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {busy === 'delete' && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              )}
               삭제 확인
             </button>
             <button

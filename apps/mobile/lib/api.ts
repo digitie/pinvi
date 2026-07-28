@@ -53,9 +53,7 @@ export async function refreshSession(): Promise<boolean> {
         return false;
       }
       const json: unknown = await res.json();
-      const parsed = MobileAuthResponseSchema.safeParse(
-        (json as { data?: unknown }).data ?? json,
-      );
+      const parsed = MobileAuthResponseSchema.safeParse((json as { data?: unknown }).data ?? json);
       if (!parsed.success) {
         return false;
       }

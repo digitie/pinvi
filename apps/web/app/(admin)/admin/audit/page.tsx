@@ -21,8 +21,18 @@ const columns: AdminTableColumn<AdminAuditEntry>[] = [
     sortValue: (r) => r.log_id,
     cell: (r) => r.log_id,
   },
-  { key: 'action', header: 'Action', sortable: true, sortValue: (r) => r.action, cell: (r) => r.action },
-  { key: 'resource', header: 'Resource', cell: (r) => `${r.resource_type}/${r.resource_id ?? '—'}` },
+  {
+    key: 'action',
+    header: 'Action',
+    sortable: true,
+    sortValue: (r) => r.action,
+    cell: (r) => r.action,
+  },
+  {
+    key: 'resource',
+    header: 'Resource',
+    cell: (r) => `${r.resource_type}/${r.resource_id ?? '—'}`,
+  },
   { key: 'reason', header: '사유', cell: (r) => r.access_reason ?? '—' },
   {
     key: 'hash',
@@ -101,9 +111,7 @@ export default function AdminAuditPage() {
         <Section title="chain 검증 결과">
           <p
             className={
-              verify.valid
-                ? 'text-sm text-success-text'
-                : 'text-sm font-bold text-error-text'
+              verify.valid ? 'text-sm text-success-text' : 'text-sm font-bold text-error-text'
             }
             data-testid="admin-audit-verify-result"
           >
@@ -114,9 +122,7 @@ export default function AdminAuditPage() {
         </Section>
       )}
 
-      {error && (
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
-      )}
+      {error && <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>}
 
       <AdminTable
         columns={columns}

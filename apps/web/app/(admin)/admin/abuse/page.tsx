@@ -147,27 +147,109 @@ export default function AdminAbusePage() {
       sortValue: (row) => row.bucket_hash_prefix,
       cell: (row) => <span className="font-mono text-xs">{row.bucket_hash_prefix}</span>,
     },
-    { key: 'policy', header: 'Policy', sortable: true, sortValue: (row) => row.limit_name, cell: (row) => row.limit_name },
-    { key: 'count', header: 'Count', sortable: true, sortValue: (row) => row.count, cell: (row) => `${row.count}/${row.limit}` },
-    { key: 'remaining', header: 'Remaining', sortable: true, sortValue: (row) => row.remaining, cell: (row) => row.remaining },
-    { key: 'status', header: 'Status', sortable: true, sortValue: (row) => row.status, cell: (row) => <StatusPill status={row.status} /> },
-    { key: 'expires', header: 'Expires', sortable: true, sortValue: (row) => new Date(row.expires_at).getTime(), cell: (row) => formatDateTime(row.expires_at) },
+    {
+      key: 'policy',
+      header: 'Policy',
+      sortable: true,
+      sortValue: (row) => row.limit_name,
+      cell: (row) => row.limit_name,
+    },
+    {
+      key: 'count',
+      header: 'Count',
+      sortable: true,
+      sortValue: (row) => row.count,
+      cell: (row) => `${row.count}/${row.limit}`,
+    },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      sortable: true,
+      sortValue: (row) => row.remaining,
+      cell: (row) => row.remaining,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: (row) => row.status,
+      cell: (row) => <StatusPill status={row.status} />,
+    },
+    {
+      key: 'expires',
+      header: 'Expires',
+      sortable: true,
+      sortValue: (row) => new Date(row.expires_at).getTime(),
+      cell: (row) => formatDateTime(row.expires_at),
+    },
   ];
 
   const suspiciousColumns: AdminTableColumn<AdminRateLimitSuspiciousActivityRecord>[] = [
-    { key: 'signal', header: 'Signal', sortable: true, sortValue: (row) => row.signal, cell: (row) => row.signal },
-    { key: 'policy', header: 'Policy', sortable: true, sortValue: (row) => row.bucket.limit_name, cell: (row) => row.bucket.limit_name },
-    { key: 'bucket', header: 'Bucket', cell: (row) => <span className="font-mono text-xs">{row.bucket.bucket_hash_prefix}</span> },
-    { key: 'count', header: 'Count', sortable: true, sortValue: (row) => row.bucket.count, cell: (row) => `${row.bucket.count}/${row.bucket.limit}` },
+    {
+      key: 'signal',
+      header: 'Signal',
+      sortable: true,
+      sortValue: (row) => row.signal,
+      cell: (row) => row.signal,
+    },
+    {
+      key: 'policy',
+      header: 'Policy',
+      sortable: true,
+      sortValue: (row) => row.bucket.limit_name,
+      cell: (row) => row.bucket.limit_name,
+    },
+    {
+      key: 'bucket',
+      header: 'Bucket',
+      cell: (row) => <span className="font-mono text-xs">{row.bucket.bucket_hash_prefix}</span>,
+    },
+    {
+      key: 'count',
+      header: 'Count',
+      sortable: true,
+      sortValue: (row) => row.bucket.count,
+      cell: (row) => `${row.bucket.count}/${row.bucket.limit}`,
+    },
     { key: 'status', header: 'Status', cell: (row) => <StatusPill status={row.bucket.status} /> },
   ];
 
   const overrideColumns: AdminTableColumn<AdminRateLimitOverrideRecord>[] = [
-    { key: 'identity', header: 'Identity', sortable: true, sortValue: (row) => row.identity_label, cell: (row) => <span className="font-mono text-xs">{row.identity_label}</span> },
-    { key: 'policy', header: 'Policy', sortable: true, sortValue: (row) => row.limit_name, cell: (row) => row.limit_name },
-    { key: 'action', header: 'Action', sortable: true, sortValue: (row) => row.action, cell: (row) => <StatusPill status={row.action} /> },
-    { key: 'status', header: 'Status', sortable: true, sortValue: (row) => row.status, cell: (row) => row.status },
-    { key: 'expires', header: 'Expires', sortable: true, sortValue: (row) => new Date(row.expires_at).getTime(), cell: (row) => formatDateTime(row.expires_at) },
+    {
+      key: 'identity',
+      header: 'Identity',
+      sortable: true,
+      sortValue: (row) => row.identity_label,
+      cell: (row) => <span className="font-mono text-xs">{row.identity_label}</span>,
+    },
+    {
+      key: 'policy',
+      header: 'Policy',
+      sortable: true,
+      sortValue: (row) => row.limit_name,
+      cell: (row) => row.limit_name,
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      sortable: true,
+      sortValue: (row) => row.action,
+      cell: (row) => <StatusPill status={row.action} />,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      sortValue: (row) => row.status,
+      cell: (row) => row.status,
+    },
+    {
+      key: 'expires',
+      header: 'Expires',
+      sortable: true,
+      sortValue: (row) => new Date(row.expires_at).getTime(),
+      cell: (row) => formatDateTime(row.expires_at),
+    },
     {
       key: 'rollback',
       header: 'Rollback',
@@ -215,7 +297,9 @@ export default function AdminAbusePage() {
       actions={
         <button
           type="button"
-          onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.admin.rateLimitAbuseAll() })}
+          onClick={() =>
+            queryClient.invalidateQueries({ queryKey: queryKeys.admin.rateLimitAbuseAll() })
+          }
           className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
           data-testid="admin-abuse-refresh"
         >
@@ -230,15 +314,25 @@ export default function AdminAbusePage() {
         </p>
       )}
       {notice && (
-        <p className="rounded-sm bg-success-bg p-3 text-sm text-success-text" data-testid="admin-abuse-notice">
+        <p
+          className="rounded-sm bg-success-bg p-3 text-sm text-success-text"
+          data-testid="admin-abuse-notice"
+        >
           {notice}
         </p>
       )}
 
       <Section title="상태">
-        <div className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5" data-testid="admin-abuse-status">
+        <div
+          className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5"
+          data-testid="admin-abuse-status"
+        >
           <MetricBox label="backend" value={summary?.backend.effective_backend} />
-          <MetricBox label="store" value={summary?.backend.store_status} testId="admin-abuse-store-status" />
+          <MetricBox
+            label="store"
+            value={summary?.backend.store_status}
+            testId="admin-abuse-store-status"
+          />
           <MetricBox label="fail-closed" value={summary?.backend.fail_closed ? 'true' : 'false'} />
           <MetricBox label="429 buckets" value={summary?.rate_limited_bucket_count ?? 0} />
           <MetricBox label="active overrides" value={summary?.active_override_count ?? 0} />
@@ -259,7 +353,10 @@ export default function AdminAbusePage() {
             aria-label="Policy"
             data-testid="admin-abuse-policy"
           >
-            {(policies.length ? policies : Object.keys(POLICY_IDENTITY).map((name) => ({ name }))).map((policy) => (
+            {(policies.length
+              ? policies
+              : Object.keys(POLICY_IDENTITY).map((name) => ({ name }))
+            ).map((policy) => (
               <option key={policy.name} value={policy.name}>
                 {policy.name}
               </option>

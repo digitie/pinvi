@@ -1,7 +1,4 @@
-import {
-  TelegramTargetCreateSchema,
-  TelegramTargetSchema,
-} from '@pinvi/schemas';
+import { TelegramTargetCreateSchema, TelegramTargetSchema } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 

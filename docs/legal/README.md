@@ -3,11 +3,11 @@
 Pinvi v1.0 출시에 필요한 법무 4문서의 **초안(placeholder)**이다. 모든 문서는 **변호사 검토
 전**이며 법적 효력이 없다. 시행일·사업자 정보·관할은 출시 직전 확정한다(T-274).
 
-| 문서 | 파일 | 동의 type | 웹 경로 |
-|---|---|---|---|
-| 이용약관 | `terms-of-service.md` | `tos` | `/legal/terms-of-service` |
-| 개인정보 처리방침 | `privacy-policy.md` | `privacy` | `/legal/privacy-policy` |
-| 위치기반서비스 이용약관 | `lbs-terms.md` | `lbs_tos` | `/legal/lbs-terms` |
+| 문서                        | 파일                  | 동의 type             | 웹 경로                   |
+| --------------------------- | --------------------- | --------------------- | ------------------------- |
+| 이용약관                    | `terms-of-service.md` | `tos`                 | `/legal/terms-of-service` |
+| 개인정보 처리방침           | `privacy-policy.md`   | `privacy`             | `/legal/privacy-policy`   |
+| 위치기반서비스 이용약관     | `lbs-terms.md`        | `lbs_tos`             | `/legal/lbs-terms`        |
 | 개인위치정보 수집·이용 동의 | `location-consent.md` | `location_collection` | `/legal/location-consent` |
 
 ## 정본 / 동기

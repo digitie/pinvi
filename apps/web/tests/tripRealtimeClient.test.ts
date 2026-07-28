@@ -29,8 +29,13 @@ class FakeWebSocket implements WebSocketLike {
     this.listeners[type].push(listener as never);
   }
 
-  removeEventListener<T extends keyof ListenerMap>(type: T, listener: ListenerMap[T][number]): void {
-    this.listeners[type] = this.listeners[type].filter((item) => item !== listener) as ListenerMap[T];
+  removeEventListener<T extends keyof ListenerMap>(
+    type: T,
+    listener: ListenerMap[T][number],
+  ): void {
+    this.listeners[type] = this.listeners[type].filter(
+      (item) => item !== listener,
+    ) as ListenerMap[T];
   }
 
   send(data: string): void {
@@ -357,6 +362,8 @@ describe('TripRealtimeClient', () => {
       ['trips'],
       ['trips', 'detail', 'trip-1'],
     ]);
-    expect(tripRealtimeInvalidationKeys({ type: 'presence.update', trip_id: 'trip-1' })).toEqual([]);
+    expect(tripRealtimeInvalidationKeys({ type: 'presence.update', trip_id: 'trip-1' })).toEqual(
+      [],
+    );
   });
 });

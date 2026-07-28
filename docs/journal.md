@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-28 (claude) — T-VN-STYLE-01 Prettier baseline 일괄 포맷
+
+- **작업**: `npm run format:check`가 실패하던 219개 파일을 Prettier로 일괄 포맷했다(포맷 전용, 기능 변경 0).
+  대상은 TS/TSX 108, MD 103, JSON/JS 7. `prettier --write`를 매칭 glob 그대로 적용하고 package-lock/
+  vendored/generated는 건드리지 않았다.
+- **P0 자체 차단(핵심)**: `apps/api/tests/contract/kor-travel-map-openapi-user.json`은 upstream 스냅샷을
+  byte-for-byte vendor하고 `test_kor_travel_map_contract.py`가 SHA-256(`91b30f40…`)으로 핀 고정해 수기
+  graft를 차단하는 파일이다. Prettier 재포맷이 그 핀 해시를 깨서 contract 테스트를 red로 만들 뻔했다.
+  원본 바이트로 복원(HEAD 해시 = `91b30f40…` 재확인)하고 신규 `.prettierignore`(`apps/api/tests/contract/`)로
+  영구 제외했다. Web-only gate만 돌렸다면 놓쳤을 API pytest 파괴를 사전 차단했다.
+- **무결성 검증**: TS/TSX는 AST 보존(따옴표/세미콜론/trailing comma/arrow paren/줄바꿈)이며
+  typecheck+lint+vitest(web 97/domain 65/schemas 8) 통과. JSON/JS는 배열 레이아웃만 정규화(값 바이트 동일).
+  MD는 YAML frontmatter 따옴표·표 구분자 패딩·코드펜스 내부 JS 포맷·빈 줄 정규화뿐이고 산문 손실은 0
+  (ignore-all-space diff 확인). `git diff --check` clean, 최종 format:check clean, `.py`/`apps/api` 파일
+  변경 0(contract JSON 복원 후).
+- **적대 리뷰**: 독립 2명(byte-sensitive-consumers·scope-ignore-completeness)이 두 번째 byte-핀 소비자
+  존재 여부와 `.prettierignore` 적정성을 재검증. format:check는 CI gate가 아니므로(현재 ruff format만
+  게이팅) 기능 PR과 분리한 선제 정리다.
+- **문서**: tasks.md/tasks-done.md/resume.md/journal.md 갱신(머지 시 tasks 문서 갱신 지시 준수).
+
 ## 2026-07-28 (claude) — T-VN-SEC-01 vitest v2→v4로 npm audit critical 제거
 
 - **작업**: `npm audit` critical(dev direct dependency `vitest<=3.2.5`)을 apps/web·packages/domain·
@@ -21,7 +41,7 @@
   Expo peer graph ERESOLVE로 막힌다. 모두 breaking 전용이라 T-VN-SEC-02(Next 16)·T-VN-SEC-03(Expo)로
   분리했다. task 본문이 "critical=vitest, 배포 artifact runtime dep은 분리"로 규정한 범위와 일치한다.
 - **검증**: web vitest 16 files/97 tests, domain 17/65, schemas 4/8 pass. web `tsc --noEmit` + `next lint`
-  무경고. lockfile에 vitest/@vitest/* 는 단일 4.1.10 dedupe, sub-v4 잔존 0. 적대적 리뷰 2명
+  무경고. lockfile에 vitest/@vitest/\* 는 단일 4.1.10 dedupe, sub-v4 잔존 0. 적대적 리뷰 2명
   (correctness-regression·security-scope) 모두 approve. 유일 지적 P3(vitest.setup.ts stale comment) 반영.
 - **문서**: 사용자 지시("머지시 tasks 관련 문서도 업데이트")에 따라 tasks.md/tasks-done.md/resume.md/journal.md를
   갱신했다. 최근 doc 없이 머지됐던 T-WS-C7(#410)·T-307 friction 후속(#411)도 소급 아카이브했다.

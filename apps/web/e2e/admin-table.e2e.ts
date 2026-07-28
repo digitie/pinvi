@@ -89,7 +89,10 @@ async function mockApiCalls(page: Page, count: number) {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/api-calls',
     async (route) => {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: rows }) });
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: rows }),
+      });
     },
   );
 }
@@ -172,7 +175,9 @@ test('가상화 테이블(로그) 헤더는 sticky로 고정된다', async ({ pa
   expect(position).toBe('sticky');
 });
 
-test('가상화: 큰 로그 목록은 보이는 행만 DOM에 두고 스크롤 시 후행을 렌더한다', async ({ page }) => {
+test('가상화: 큰 로그 목록은 보이는 행만 DOM에 두고 스크롤 시 후행을 렌더한다', async ({
+  page,
+}) => {
   await mockApiCalls(page, 200);
   await page.goto('/admin/api-calls');
   await expect(page.getByTestId(apiCallsRowId(0))).toBeVisible();

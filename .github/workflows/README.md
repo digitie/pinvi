@@ -4,15 +4,15 @@
 
 ## 인덱스
 
-| Workflow | 트리거 | 목적 | Sprint |
-|----------|--------|------|--------|
-| [api.yml](./api.yml) | `apps/api/**` PR / push | ruff + ruff format check + mypy --strict + pytest (unit) + alembic upgrade (PostGIS service) | 4+ |
-| [web.yml](./web.yml) | `apps/web/**` / `packages/**` PR / push | lint (next + ESLint) + tsc --noEmit + next build | 4+ |
-| [etl.yml](./etl.yml) | `apps/etl/**` PR / push | ruff check + Dagster definitions load test (placeholder, Sprint 5 본격) | 5+ |
-| [aggregate-ci.yml](./aggregate-ci.yml) | 모든 PR | 변경 파일 기준 필요한 path-filtered check를 기다리는 required gate | 4+ |
-| [docker-images.yml](./docker-images.yml) | tag `v*` push / 수동 실행 | API/Web `linux/amd64,linux/arm64` image를 GHCR에 push (T-108) | 6+ |
-| [codex-pr-review.yml](./codex-pr-review.yml) | PR opened / ready_for_review / reopened / synchronize | 외부 API key 없이 MCP 기반 review 필요 알림 + head SHA 마커 댓글 | 4+ |
-| [codex-pr-monitor.yml](./codex-pr-monitor.yml) | 5분 cron / 수동 실행 | 머지되지 않은 PR 중 최신 head SHA에 review reminder 마커가 없으면 MCP 기반 알림 댓글 | 4+ |
+| Workflow                                       | 트리거                                                | 목적                                                                                         | Sprint |
+| ---------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------ |
+| [api.yml](./api.yml)                           | `apps/api/**` PR / push                               | ruff + ruff format check + mypy --strict + pytest (unit) + alembic upgrade (PostGIS service) | 4+     |
+| [web.yml](./web.yml)                           | `apps/web/**` / `packages/**` PR / push               | lint (next + ESLint) + tsc --noEmit + next build                                             | 4+     |
+| [etl.yml](./etl.yml)                           | `apps/etl/**` PR / push                               | ruff check + Dagster definitions load test (placeholder, Sprint 5 본격)                      | 5+     |
+| [aggregate-ci.yml](./aggregate-ci.yml)         | 모든 PR                                               | 변경 파일 기준 필요한 path-filtered check를 기다리는 required gate                           | 4+     |
+| [docker-images.yml](./docker-images.yml)       | tag `v*` push / 수동 실행                             | API/Web `linux/amd64,linux/arm64` image를 GHCR에 push (T-108)                                | 6+     |
+| [codex-pr-review.yml](./codex-pr-review.yml)   | PR opened / ready_for_review / reopened / synchronize | 외부 API key 없이 MCP 기반 review 필요 알림 + head SHA 마커 댓글                             | 4+     |
+| [codex-pr-monitor.yml](./codex-pr-monitor.yml) | 5분 cron / 수동 실행                                  | 머지되지 않은 PR 중 최신 head SHA에 review reminder 마커가 없으면 MCP 기반 알림 댓글         | 4+     |
 
 ## 필요 secret
 

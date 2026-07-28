@@ -487,7 +487,9 @@ export default function AdminTripsPage() {
             조회
           </button>
         </form>
-        <label htmlFor="admin-trips-status-filter" className="text-xs text-muted">상태</label>
+        <label htmlFor="admin-trips-status-filter" className="text-xs text-muted">
+          상태
+        </label>
         <select
           id="admin-trips-status-filter"
           value={statusFilter}
@@ -504,7 +506,9 @@ export default function AdminTripsPage() {
             </option>
           ))}
         </select>
-        <label htmlFor="admin-trips-visibility-filter" className="text-xs text-muted">공개</label>
+        <label htmlFor="admin-trips-visibility-filter" className="text-xs text-muted">
+          공개
+        </label>
         <select
           id="admin-trips-visibility-filter"
           value={visibilityFilter}

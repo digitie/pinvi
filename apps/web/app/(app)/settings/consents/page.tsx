@@ -84,11 +84,17 @@ export default function ConsentsSettingsPage() {
           <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
           동의 관리
         </h1>
-        <p className="mt-1 text-sm text-muted">동의 현황을 확인하고 선택 항목을 철회할 수 있습니다.</p>
+        <p className="mt-1 text-sm text-muted">
+          동의 현황을 확인하고 선택 항목을 철회할 수 있습니다.
+        </p>
       </header>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text" data-testid="consents-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="consents-error"
+        >
           {error}
         </p>
       )}

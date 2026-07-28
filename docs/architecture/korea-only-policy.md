@@ -37,6 +37,7 @@ External Internet
 ```
 
 선택 추가 룰 (보안):
+
 - known VPN/Tor exit node 차단 (Cloudflare bot management)
 - ASN 기반 - 모바일 통신사 외 차단 (옵션)
 
@@ -105,9 +106,9 @@ HTTP 451 Unavailable For Legal Reasons (RFC 7725).
     "message": "Pinvi는 대한민국 거주자 전용 서비스입니다. (Service available only in Republic of Korea.)",
     "details": {
       "detected_country": "US",
-      "contact": "support@pinvi.kr"
-    }
-  }
+      "contact": "support@pinvi.kr",
+    },
+  },
 }
 ```
 

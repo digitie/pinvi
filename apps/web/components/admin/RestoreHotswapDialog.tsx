@@ -47,11 +47,7 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
   return <span className="h-4 w-4 rounded-full border border-hairline" aria-hidden="true" />;
 }
 
-export function RestoreHotswapDialog({
-  snapshot,
-  onClose,
-  onComplete,
-}: RestoreHotswapDialogProps) {
+export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreHotswapDialogProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -191,7 +187,8 @@ export function RestoreHotswapDialog({
   const phases = run?.phases ?? (restoring ? pendingPhases : []);
   const confirmationText = snapshot.filename;
   const confirmationMatches = confirmation.trim() === confirmationText;
-  const canSubmit = Boolean(reason.trim()) && confirmed && confirmationMatches && !restoring && !run;
+  const canSubmit =
+    Boolean(reason.trim()) && confirmed && confirmationMatches && !restoring && !run;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -332,7 +329,10 @@ export function RestoreHotswapDialog({
           </label>
 
           {phases.length > 0 && (
-            <div className="space-y-3 rounded-sm border border-hairline p-3" data-testid="restore-progress">
+            <div
+              className="space-y-3 rounded-sm border border-hairline p-3"
+              data-testid="restore-progress"
+            >
               <div className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <ShieldAlert className="h-4 w-4" aria-hidden="true" />
                 <span data-testid="restore-run-id">

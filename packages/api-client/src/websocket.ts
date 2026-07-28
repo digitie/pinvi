@@ -95,7 +95,11 @@ export interface TripRealtimeClientOptions {
 
 const OPEN = 1;
 
-export function tripWebSocketUrl(apiBaseUrl: string, tripId: string, token?: string | null): string {
+export function tripWebSocketUrl(
+  apiBaseUrl: string,
+  tripId: string,
+  token?: string | null,
+): string {
   const url = new URL(apiBaseUrl);
   const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const basePath = url.pathname.replace(/\/$/, '');
@@ -107,7 +111,9 @@ export function tripWebSocketUrl(apiBaseUrl: string, tripId: string, token?: str
   }`;
 }
 
-export function classifyTripRealtimeClose(event: Partial<TripRealtimeCloseEvent>): TripRealtimeCloseInfo {
+export function classifyTripRealtimeClose(
+  event: Partial<TripRealtimeCloseEvent>,
+): TripRealtimeCloseInfo {
   const code = typeof event.code === 'number' ? event.code : null;
   const reason = typeof event.reason === 'string' ? event.reason : '';
 
@@ -208,7 +214,9 @@ export class TripRealtimeClient {
     }
 
     this.emitStatus('connecting');
-    const socket = new Ctor(tripWebSocketUrl(this.opts.apiBaseUrl, this.opts.tripId, this.opts.token));
+    const socket = new Ctor(
+      tripWebSocketUrl(this.opts.apiBaseUrl, this.opts.tripId, this.opts.token),
+    );
     this.socket = socket;
 
     socket.addEventListener('open', this.handleOpen);
@@ -306,7 +314,8 @@ export class TripRealtimeClient {
             ? event.actor_user_id
             : undefined,
         ts: typeof event.ts === 'string' ? event.ts : undefined,
-        version: typeof event.version === 'number' || event.version === null ? event.version : undefined,
+        version:
+          typeof event.version === 'number' || event.version === null ? event.version : undefined,
         payload:
           event.payload != null && typeof event.payload === 'object'
             ? (event.payload as Record<string, unknown>)
@@ -339,7 +348,8 @@ export class TripRealtimeClient {
       }
       // First refresh reconnects promptly; repeats back off (with jitter) instead of
       // a zero-delay loop.
-      const delay = this.authRefreshAttempts <= 1 ? 0 : this.backoffDelay(this.authRefreshAttempts - 1);
+      const delay =
+        this.authRefreshAttempts <= 1 ? 0 : this.backoffDelay(this.authRefreshAttempts - 1);
       this.scheduleReconnect(delay);
     } catch (error) {
       this.opts.onError?.(error);
@@ -380,7 +390,10 @@ export class TripRealtimeClient {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.opts.heartbeatIntervalMs ?? 5000);
+    this.heartbeatTimer = setInterval(
+      () => this.sendHeartbeat(),
+      this.opts.heartbeatIntervalMs ?? 5000,
+    );
   }
 
   private stopHeartbeat(): void {

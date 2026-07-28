@@ -48,12 +48,7 @@ export function TripDayControls({
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
     setSettingsOpen(false);
-  }, [
-    selectedDay?.date,
-    selectedDay?.day_index,
-    selectedDay?.title,
-    selectedDay?.marker_color,
-  ]);
+  }, [selectedDay?.date, selectedDay?.day_index, selectedDay?.title, selectedDay?.marker_color]);
 
   const saveSettings = () => {
     if (!selectedDay) return;
@@ -217,7 +212,12 @@ function DaySettingsDialog({
           className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
         />
         <span className="block text-sm font-semibold text-ink">일자 색</span>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="일자 마커 색" data-testid="trip-day-color-picker">
+        <div
+          className="flex flex-wrap gap-1.5"
+          role="group"
+          aria-label="일자 마커 색"
+          data-testid="trip-day-color-picker"
+        >
           {/* 기본색(팔레트 순환) = null override 제거. */}
           <button
             type="button"

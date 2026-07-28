@@ -185,10 +185,10 @@ curl -fsS http://127.0.0.1:12805/admin/login >/dev/null || echo "Web down"
 
 Production public URL:
 
-| 서비스 | 내부/host 포트 | 공개 URL |
-|--------|---------------|----------|
-| API | `12801` | `https://pinvi-api.example.com` |
-| Web | `12805` | `https://pinvi.example.com` |
+| 서비스 | 내부/host 포트 | 공개 URL                        |
+| ------ | -------------- | ------------------------------- |
+| API    | `12801`        | `https://pinvi-api.example.com` |
+| Web    | `12805`        | `https://pinvi.example.com`     |
 
 운영 `.env` 필수 URL/security 값:
 
@@ -347,14 +347,14 @@ sudo systemctl status certbot.timer
 
 ## 14. 트러블슈팅
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `exec format error` | x86_64 이미지 pull | ARM64 manifest 확인 (`docker buildx imagetools inspect`) |
-| `chown` 거부 | NVMe owner 불일치 | `sudo chown -R pinvi:pinvi /mnt/nvme` |
-| Dagster OOM | 동시 ETL | `DAGSTER_MAX_CONCURRENT_RUNS=1` |
-| Postgres slow | swap 부족 | swapfile 16GB 추가 |
-| HTTPS 인증서 갱신 실패 | DNS / 포트 막힘 | `certbot renew --dry-run` |
-| Cloudflare Tunnel 끊김 | systemd 미설정 | `cloudflared service install` |
+| 증상                   | 원인               | 해결                                                     |
+| ---------------------- | ------------------ | -------------------------------------------------------- |
+| `exec format error`    | x86_64 이미지 pull | ARM64 manifest 확인 (`docker buildx imagetools inspect`) |
+| `chown` 거부           | NVMe owner 불일치  | `sudo chown -R pinvi:pinvi /mnt/nvme`                    |
+| Dagster OOM            | 동시 ETL           | `DAGSTER_MAX_CONCURRENT_RUNS=1`                          |
+| Postgres slow          | swap 부족          | swapfile 16GB 추가                                       |
+| HTTPS 인증서 갱신 실패 | DNS / 포트 막힘    | `certbot renew --dry-run`                                |
+| Cloudflare Tunnel 끊김 | systemd 미설정     | `cloudflared service install`                            |
 
 ## 15. 관련 문서
 

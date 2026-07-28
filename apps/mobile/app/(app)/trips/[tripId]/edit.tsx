@@ -62,15 +62,16 @@ export default function TripEditScreen() {
   useEffect(() => {
     if (!tripQuery.data) return;
     const { trip, days } = tripQuery.data;
-    setForm((current) =>
-      current ?? {
-        title: trip.title,
-        regionHint: trip.region_hint ?? '',
-        startDate: trip.start_date ?? '',
-        endDate: trip.end_date ?? '',
-        visibility: trip.visibility,
-        status: trip.status,
-      },
+    setForm(
+      (current) =>
+        current ?? {
+          title: trip.title,
+          regionHint: trip.region_hint ?? '',
+          startDate: trip.start_date ?? '',
+          endDate: trip.end_date ?? '',
+          visibility: trip.visibility,
+          status: trip.status,
+        },
     );
     setOrder((current) => {
       if (Object.keys(current).length > 0) return current;
@@ -140,7 +141,10 @@ export default function TripEditScreen() {
   if (tripQuery.isError || !tripQuery.data) {
     return (
       <Screen>
-        <ErrorView message={friendlyErrorText(tripQuery.error)} onRetry={() => tripQuery.refetch()} />
+        <ErrorView
+          message={friendlyErrorText(tripQuery.error)}
+          onRetry={() => tripQuery.refetch()}
+        />
       </Screen>
     );
   }
@@ -265,7 +269,9 @@ export default function TripEditScreen() {
 
         <View className="gap-1">
           <Subheading>일정 · 장소</Subheading>
-          <Muted>↑/↓로 순서 변경, 장소를 눌러 메모/예산 편집, 삭제로 제거. 변경은 즉시 저장됩니다.</Muted>
+          <Muted>
+            ↑/↓로 순서 변경, 장소를 눌러 메모/예산 편집, 삭제로 제거. 변경은 즉시 저장됩니다.
+          </Muted>
         </View>
 
         {days.length === 0 ? (

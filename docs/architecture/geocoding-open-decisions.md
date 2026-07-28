@@ -92,16 +92,16 @@
 
 ## 결정 로그
 
-| ID | 상태 | 결정/ADR |
-|----|------|----------|
-| D1 | open (잠정 A) | — |
-| D2 | open (잠정 none) | — |
-| D3 | open (잠정 in-proc TTL) | — |
-| D4 | open (잠정 5자리) | — |
-| D5 | decided | ADR-049 — `POST /v2/regions/within-radius` 미러(`radius_km`+`levels[]`, 그룹 응답) |
-| D6 | open (잠정 미포함) | — |
-| D7 | decided | ADR-048 |
-| D8 | open (잠정 최소 활용) | — |
+| ID  | 상태                    | 결정/ADR                                                                           |
+| --- | ----------------------- | ---------------------------------------------------------------------------------- |
+| D1  | open (잠정 A)           | —                                                                                  |
+| D2  | open (잠정 none)        | —                                                                                  |
+| D3  | open (잠정 in-proc TTL) | —                                                                                  |
+| D4  | open (잠정 5자리)       | —                                                                                  |
+| D5  | decided                 | ADR-049 — `POST /v2/regions/within-radius` 미러(`radius_km`+`levels[]`, 그룹 응답) |
+| D6  | open (잠정 미포함)      | —                                                                                  |
+| D7  | decided                 | ADR-048                                                                            |
+| D8  | open (잠정 최소 활용)   | —                                                                                  |
 
 ## 관련 문서
 

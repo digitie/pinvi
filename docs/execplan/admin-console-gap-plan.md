@@ -49,35 +49,35 @@ T-229는 별도 기능 추가가 아니라 완료 상태와 사용자 명시 요
 
 ### 초기 gap 해소 상태
 
-| 초기 gap | 해소 Task | 현재 상태 |
-| -------- | --------- | --------- |
-| `/admin/features` placeholder | T-209 | `kor-travel-map` admin feature list/detail read proxy와 Web table/detail 구현 |
-| `/admin/etl` placeholder | T-220 | Pinvi ETL registry, Dagster 상태, upstream provider sync/read proxy 구현 |
-| `/admin/provider-sync` placeholder | T-220 | provider별 상태와 import job 필터/table 구현 |
-| `/admin/category-mapping` placeholder | T-213 | `kor-travel-map` `/v1/categories` read-only source of truth와 drift/export 화면 구현 |
-| `/admin/seed`, `/admin/reset` placeholder | T-214 | dev/staging dry-run + audit, production router 미등록/404 정책 구현 |
-| `packages/api-client` admin endpoint 부족 | T-209~T-228 | feature/change/dedup/integrity/ETL/system/trip/POI/avatar/file operation endpoint 추가 |
-| `KorTravelMapAdminClient` proxy 부족 | T-209, T-210, T-212, T-220, T-226, T-227 | feature, change request, dedup, consistency, ops, logs, issue action proxy 추가 |
-| Admin live matrix가 placeholder를 허용 | T-215 | table/ready marker 기반 live route matrix와 N150 authenticated gate로 전환 |
+| 초기 gap                                  | 해소 Task                                | 현재 상태                                                                              |
+| ----------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| `/admin/features` placeholder             | T-209                                    | `kor-travel-map` admin feature list/detail read proxy와 Web table/detail 구현          |
+| `/admin/etl` placeholder                  | T-220                                    | Pinvi ETL registry, Dagster 상태, upstream provider sync/read proxy 구현               |
+| `/admin/provider-sync` placeholder        | T-220                                    | provider별 상태와 import job 필터/table 구현                                           |
+| `/admin/category-mapping` placeholder     | T-213                                    | `kor-travel-map` `/v1/categories` read-only source of truth와 drift/export 화면 구현   |
+| `/admin/seed`, `/admin/reset` placeholder | T-214                                    | dev/staging dry-run + audit, production router 미등록/404 정책 구현                    |
+| `packages/api-client` admin endpoint 부족 | T-209~T-228                              | feature/change/dedup/integrity/ETL/system/trip/POI/avatar/file operation endpoint 추가 |
+| `KorTravelMapAdminClient` proxy 부족      | T-209, T-210, T-212, T-220, T-226, T-227 | feature, change request, dedup, consistency, ops, logs, issue action proxy 추가        |
+| Admin live matrix가 placeholder를 허용    | T-215                                    | table/ready marker 기반 live route matrix와 N150 authenticated gate로 전환             |
 
 ### 사용자 명시 요구사항 완료 감사
 
-| 요청 | 완료 Task | 구현/검증 증거 |
-| ---- | --------- | -------------- |
-| 1. 여행 상세 제목에 여행계획명 표시 | T-216 | `/admin/trips/{trip_id}` Web detail, `admin-trips.e2e.ts` |
-| 2. 사용자 클릭 시 사용자 정보 이동 | T-216 | owner/동반자/POI 추가자 user link, `AdminTripDetail` companion 응답 |
-| 3. 초청받은 미가입자 표시 | T-216 | `TripCompanion` 기반 미가입 초대 표시와 e2e assertion |
-| 4. 상세 계획 day/POI listing, POI dialog 지도/상세/link | T-216 | `admin-trip-pois`, `admin-trip-poi-dialog`, `admin-trip-poi-map`, POI detail link e2e |
-| 5. Admin 여행계획 직접 생성 | T-217 | `POST /admin/trips`, `trip.create` audit, API integration/e2e |
-| 6. prod Grafana 주소 반영 | T-218 | Web Docker/env/compose `NEXT_PUBLIC_GRAFANA_URL`, placeholder-only prod example |
-| 7. Admin POI 직접 생성 | T-219 | `POST /admin/pois`, `poi.create` audit, API integration/e2e |
-| 8. 실제 구동 ETL 노출 | T-220 | `/admin/etl/summary`, Pinvi ETL registry, Dagster/provider sync e2e |
-| 9. 대시보드 상세/그래프/부하/용량 | T-221 | `/admin/stats/overview`, dashboard series/load/capacity e2e |
-| 10. 시스템 Docker/의존 API 상태 | T-222 | `/admin/system/detail`, dependency + Docker container 화면/e2e |
-| 11. 좌측 메뉴 active state와 축소 가능 sidebar | T-216, T-228 | route-specific active href, 기본 expanded + compact toggle/localStorage e2e |
-| 12. 사용자 아바타 RustFS 저장/조회/삭제/교체/전역 크기 | T-223 | avatar upload/apply/download/delete API, Admin settings, audit/e2e |
-| 13. 여행/날짜/POI 파일 업로드·삭제·모아보기·quota override | T-224 | trip/day/POI attachments, `/users/me/files`, `/admin/files`, storage quota tests/e2e |
-| 14. 여행/날짜/POI 복사·이동·삭제와 하위 처리 dialog | T-225 | operation-impact/copy/move/delete API, orphan 불가 사유, target search dialog/e2e |
+| 요청                                                       | 완료 Task    | 구현/검증 증거                                                                        |
+| ---------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------- |
+| 1. 여행 상세 제목에 여행계획명 표시                        | T-216        | `/admin/trips/{trip_id}` Web detail, `admin-trips.e2e.ts`                             |
+| 2. 사용자 클릭 시 사용자 정보 이동                         | T-216        | owner/동반자/POI 추가자 user link, `AdminTripDetail` companion 응답                   |
+| 3. 초청받은 미가입자 표시                                  | T-216        | `TripCompanion` 기반 미가입 초대 표시와 e2e assertion                                 |
+| 4. 상세 계획 day/POI listing, POI dialog 지도/상세/link    | T-216        | `admin-trip-pois`, `admin-trip-poi-dialog`, `admin-trip-poi-map`, POI detail link e2e |
+| 5. Admin 여행계획 직접 생성                                | T-217        | `POST /admin/trips`, `trip.create` audit, API integration/e2e                         |
+| 6. prod Grafana 주소 반영                                  | T-218        | Web Docker/env/compose `NEXT_PUBLIC_GRAFANA_URL`, placeholder-only prod example       |
+| 7. Admin POI 직접 생성                                     | T-219        | `POST /admin/pois`, `poi.create` audit, API integration/e2e                           |
+| 8. 실제 구동 ETL 노출                                      | T-220        | `/admin/etl/summary`, Pinvi ETL registry, Dagster/provider sync e2e                   |
+| 9. 대시보드 상세/그래프/부하/용량                          | T-221        | `/admin/stats/overview`, dashboard series/load/capacity e2e                           |
+| 10. 시스템 Docker/의존 API 상태                            | T-222        | `/admin/system/detail`, dependency + Docker container 화면/e2e                        |
+| 11. 좌측 메뉴 active state와 축소 가능 sidebar             | T-216, T-228 | route-specific active href, 기본 expanded + compact toggle/localStorage e2e           |
+| 12. 사용자 아바타 RustFS 저장/조회/삭제/교체/전역 크기     | T-223        | avatar upload/apply/download/delete API, Admin settings, audit/e2e                    |
+| 13. 여행/날짜/POI 파일 업로드·삭제·모아보기·quota override | T-224        | trip/day/POI attachments, `/users/me/files`, `/admin/files`, storage quota tests/e2e  |
+| 14. 여행/날짜/POI 복사·이동·삭제와 하위 처리 dialog        | T-225        | operation-impact/copy/move/delete API, orphan 불가 사유, target search dialog/e2e     |
 
 ## `kor-travel-map` Admin에서 참고할 기능
 

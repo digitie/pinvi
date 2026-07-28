@@ -23,6 +23,7 @@ Custom Response:
 ```
 
 추가 옵션:
+
 - "Threat Score > 0" 으로 known VPN/Tor 차단
 - ASN 화이트리스트 (한국 통신 3사 만 허용 — 옵션)
 
@@ -218,14 +219,14 @@ docker logs pinvi-nginx | tail -20
 > 등) — KR 통과 / 비KR 451 / 헬스체크 bypass를 확인한다. Cloudflare 1차는 KR 외 실 IP(또는
 > VPN)로 직접 요청해 451 + 본문/상태를 확인한다. T-273 라이브 게이트의 geofence 검증 항목.
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| 한국 사용자가 451 받음 | GeoIP DB 오래됨 / 잘못된 매핑 | DB 강제 갱신 + 사용자 IP MaxMind 직접 조회 |
-| 모든 트래픽 451 | Cloudflare WAF rule 오설정 (KR 매칭 실패) | 룰 expression 점검 + WAF 일시 disable |
-| `CF-IPCountry=KR`인데 451 UNKNOWN | trusted proxy secret/header 누락 또는 CIDR/mTLS 불일치 | proxy header 주입, `PINVI_GEOFENCE_TRUSTED_PROXY_SECRET`, `PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS`, mTLS verified header 확인 |
-| nginx 502 | nginx geoip 모듈 누락 / DB 경로 잘못 | nginx GeoIP2 선택 계층이면 `nginx -t` + 모듈 설치 |
-| admin이 451 우회 안 됨 | Cloudflare/nginx에서 먼저 block / DB role 확인 실패 / 인증 토큰 미전달 | WAF/Access allowlist 확인 + request_id로 Loki 추적 |
-| 일일 차단 카운트 0 | rule 비활성? 모니터링 데이터 누락? | 직접 비KR IP로 curl 테스트 |
+| 증상                              | 원인                                                                   | 해결                                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 한국 사용자가 451 받음            | GeoIP DB 오래됨 / 잘못된 매핑                                          | DB 강제 갱신 + 사용자 IP MaxMind 직접 조회                                                                                |
+| 모든 트래픽 451                   | Cloudflare WAF rule 오설정 (KR 매칭 실패)                              | 룰 expression 점검 + WAF 일시 disable                                                                                     |
+| `CF-IPCountry=KR`인데 451 UNKNOWN | trusted proxy secret/header 누락 또는 CIDR/mTLS 불일치                 | proxy header 주입, `PINVI_GEOFENCE_TRUSTED_PROXY_SECRET`, `PINVI_GEOFENCE_TRUSTED_PROXY_CIDRS`, mTLS verified header 확인 |
+| nginx 502                         | nginx geoip 모듈 누락 / DB 경로 잘못                                   | nginx GeoIP2 선택 계층이면 `nginx -t` + 모듈 설치                                                                         |
+| admin이 451 우회 안 됨            | Cloudflare/nginx에서 먼저 block / DB role 확인 실패 / 인증 토큰 미전달 | WAF/Access allowlist 확인 + request_id로 Loki 추적                                                                        |
+| 일일 차단 카운트 0                | rule 비활성? 모니터링 데이터 누락?                                     | 직접 비KR IP로 curl 테스트                                                                                                |
 
 ## 6. 해외 진출 시
 

@@ -4,14 +4,14 @@
 
 ## 1. 적용 범위
 
-| 항목 | 본 저장소 | `kor-travel-map` | 비고 |
-|------|-----------|---------------------|------|
-| docker-compose / Odroid 운영 manifest | ✓ | — | `infra/docker-compose.yml`은 Pinvi 소유. 라이브러리는 import만 |
-| Sentry SaaS Free 통합 | ✓ | ✓ | 양쪽 모두 동일 DSN + environment 태그 |
-| Loki+Promtail+Grafana | ✓ | — | `apps/api` / `apps/web` / `apps/etl` 로그 수집 |
-| RustFS 객체 저장소 | ✓ | — | Pinvi가 운영. 라이브러리는 `file_store` 주입 받음 |
-| 백업 (pg_dump + WAL) | ✓ | — | DB는 단일. Pinvi alembic + 라이브러리 alembic 모두 백업 대상 |
-| 위치정보법 / PIPA 컴플라이언스 | ✓ | — | 호출 측 책임 — 라이브러리는 schema 미설치 |
+| 항목                                  | 본 저장소 | `kor-travel-map` | 비고                                                           |
+| ------------------------------------- | --------- | ---------------- | -------------------------------------------------------------- |
+| docker-compose / Odroid 운영 manifest | ✓         | —                | `infra/docker-compose.yml`은 Pinvi 소유. 라이브러리는 import만 |
+| Sentry SaaS Free 통합                 | ✓         | ✓                | 양쪽 모두 동일 DSN + environment 태그                          |
+| Loki+Promtail+Grafana                 | ✓         | —                | `apps/api` / `apps/web` / `apps/etl` 로그 수집                 |
+| RustFS 객체 저장소                    | ✓         | —                | Pinvi가 운영. 라이브러리는 `file_store` 주입 받음              |
+| 백업 (pg_dump + WAL)                  | ✓         | —                | DB는 단일. Pinvi alembic + 라이브러리 alembic 모두 백업 대상   |
+| 위치정보법 / PIPA 컴플라이언스        | ✓         | —                | 호출 측 책임 — 라이브러리는 schema 미설치                      |
 
 ## 2. 핵심 채택 (Pinvi v2)
 
@@ -49,11 +49,11 @@ ADR-024로 확정된 v2의 단일 모델. SPEC V8의 N-7.2 "WSL ext4 직접 작�
 export"와 차이가 있다 — v2는 **NTFS worktree에서 git/편집/commit**, **WSL ext4
 미러에서 테스트/Docker 실행**.
 
-| SPEC V8 원본 | v2 채택 (ADR-024) |
-|------|------|
-| 코드는 ext4 `~/projects/trip-service` | 코드는 agent별 NTFS worktree `F:\dev\pinvi-<agent>`, 실행은 WSL 미러 `~/pinvi-workspaces/pinvi-<agent>` |
-| 산출물(tar)은 NTFS `/mnt/c/Users/Me/artifacts/` | 산출물은 ext4 build/, 배포 시 scp 또는 GHCR pull |
-| Windows 손상 시 산출물 NTFS 보존 | git origin이 단일 진실 공급원, 산출물은 임시 |
+| SPEC V8 원본                                    | v2 채택 (ADR-024)                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 코드는 ext4 `~/projects/trip-service`           | 코드는 agent별 NTFS worktree `F:\dev\pinvi-<agent>`, 실행은 WSL 미러 `~/pinvi-workspaces/pinvi-<agent>` |
+| 산출물(tar)은 NTFS `/mnt/c/Users/Me/artifacts/` | 산출물은 ext4 build/, 배포 시 scp 또는 GHCR pull                                                        |
+| Windows 손상 시 산출물 NTFS 보존                | git origin이 단일 진실 공급원, 산출물은 임시                                                            |
 
 SPEC V8 N-7.2의 "코드 ext4 / 산출물 NTFS" 모델은 v1에서 운영 중 NTFS ↔ ext4
 양방향 동기 모호함이 발생해 v2에서 단순화했다. 본 정정은 `docs/decisions.md`
@@ -213,21 +213,21 @@ PR 템플릿에 통합:
 
 ## 4. 본 저장소 적용 작업 (Sprint 매핑)
 
-| SPEC V8 항목 | Sprint | 산출물 |
-|------|--------|--------|
-| `infra/docker-compose.yml` (N-7) | Sprint 1 | `infra/docker-compose.yml` + `.app.yml` |
-| ARM64 multi-arch (N-7.1) | Sprint 1 | `.github/workflows/api.yml` + `web.yml` |
-| Sentry FastAPI/Next 통합 (N-8) | Sprint 2 | `apps/api/app/core/sentry.py` + `apps/web/sentry.client.config.ts` |
-| Loki+Promtail+Grafana (N-9) | Sprint 5 | `infra/docker-compose.yml`에 추가 + Promtail config |
-| structlog JSON (N-9) | Sprint 1 | `apps/api/app/core/logging.py` |
-| `request_id` middleware (M-12) | Sprint 1 | `apps/api/app/middleware/request_id.py` |
-| 백업 (N-3) | Sprint 5 | `scripts/backup-db.sh` + WAL 정책 |
-| LBS 신고 (O-1) | Sprint 6 | 서류 준비 + 신고 |
-| 위치 동의 (O-2) | Sprint 2 | G-5 UI + `user_consents` |
-| 위치 감사 로그 (O-3) | Sprint 2 | `app.location_access_log` + 미들웨어 |
-| PIPA 자동 트리거 (O-4) | Sprint 5 | 이상 접근 감지 / export 알림 |
-| Admin 접근 통제 (O-6) | Sprint 3 | `roles`, audit chain, 마스킹, 사유 입력 |
-| 처리방침 (O-7) | Sprint 6 | 4개 법무 문서 |
+| SPEC V8 항목                     | Sprint   | 산출물                                                             |
+| -------------------------------- | -------- | ------------------------------------------------------------------ |
+| `infra/docker-compose.yml` (N-7) | Sprint 1 | `infra/docker-compose.yml` + `.app.yml`                            |
+| ARM64 multi-arch (N-7.1)         | Sprint 1 | `.github/workflows/api.yml` + `web.yml`                            |
+| Sentry FastAPI/Next 통합 (N-8)   | Sprint 2 | `apps/api/app/core/sentry.py` + `apps/web/sentry.client.config.ts` |
+| Loki+Promtail+Grafana (N-9)      | Sprint 5 | `infra/docker-compose.yml`에 추가 + Promtail config                |
+| structlog JSON (N-9)             | Sprint 1 | `apps/api/app/core/logging.py`                                     |
+| `request_id` middleware (M-12)   | Sprint 1 | `apps/api/app/middleware/request_id.py`                            |
+| 백업 (N-3)                       | Sprint 5 | `scripts/backup-db.sh` + WAL 정책                                  |
+| LBS 신고 (O-1)                   | Sprint 6 | 서류 준비 + 신고                                                   |
+| 위치 동의 (O-2)                  | Sprint 2 | G-5 UI + `user_consents`                                           |
+| 위치 감사 로그 (O-3)             | Sprint 2 | `app.location_access_log` + 미들웨어                               |
+| PIPA 자동 트리거 (O-4)           | Sprint 5 | 이상 접근 감지 / export 알림                                       |
+| Admin 접근 통제 (O-6)            | Sprint 3 | `roles`, audit chain, 마스킹, 사유 입력                            |
+| 처리방침 (O-7)                   | Sprint 6 | 4개 법무 문서                                                      |
 
 ## 5. 관련 문서
 

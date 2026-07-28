@@ -45,7 +45,9 @@ export function LocationConsentDialog({
           </p>
         </div>
         {error && (
-          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
+          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+            {error}
+          </p>
         )}
         <div className="flex justify-end gap-2">
           <button

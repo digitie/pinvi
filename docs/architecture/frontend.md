@@ -6,35 +6,35 @@
 
 ## 1. 스택 (v1.0 확정)
 
-| 영역 | 채택 | 비고 |
-|------|------|------|
-| 언어 | TypeScript (strict) | `tsconfig.json` `strict: true` + `noUncheckedIndexedAccess` |
-| 프레임워크 (웹) | **Next.js 15** (App Router) + **React 19** | RSC + Server Actions 일부 사용 |
-| 프레임워크 (모바일) | **Expo SDK 56+ Dev Client** (React Native + Expo Router) | Expo Go 미사용, `apps/mobile` 활성 Sprint M-1 track. `v1.0.0` Web/API/Admin release blocker에서는 제외(T-284) — ADR-041/043 |
-| UI 컴포넌트 (웹) | **shadcn/ui** + Radix Primitives | Tailwind 기반, copy-paste vendoring |
-| UI 컴포넌트 (모바일) | **Tamagui** 또는 native + Tailwind (NativeWind) | Sprint 결정 후보 |
-| 스타일 (웹) | **Tailwind CSS 3.4+** | `tailwind.config.ts`에서 디자인 토큰 import |
-| 스타일 (모바일) | **NativeWind** (Tailwind for RN) | 디자인 토큰 동일 import |
-| 폼 | **React Hook Form** + **Zod** resolver | schema는 공용 패키지 (`packages/schemas`) |
-| 데이터 검증 | **Zod** | 공용 |
-| 클라이언트 상태 | **Zustand** | 공용 store는 `packages/state` |
-| 서버 상태 | **TanStack Query v5** | 공용 query keys + queryFn |
-| 라우팅 (웹) | Next.js App Router | `app/` |
-| 라우팅 (모바일) | Expo Router (파일 기반) | `apps/mobile/app/` (동일 구조) |
-| HTTP | **`fetch`** + 공용 wrapper (`lib/api/client.ts`) | 인증 토큰 자동 부착 |
-| D&D (웹) | **dnd-kit** | |
-| D&D (모바일) | `react-native-draggable-flatlist` | |
-| 지도 (웹) | **`vworld-map-web`** (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS) | ADR-046 (ADR-015의 Kakao 폐기 결정은 유지) |
-| 지도 (모바일) | **`vworld-map-rn`** (`maplibre-vworld-react` RN 패키지) + VWorld server-issued token | ADR-044/045. VWorld key 앱 번들 금지 — ADR-043 |
-| 아이콘 | **Mapbox Maki 8** + Lucide (UI 일반 아이콘) | maki는 `apps/web/public/maki/` |
-| 날짜 | **date-fns** | 공용. `date-fns-tz`로 KST aware |
-| WebSocket | **native WebSocket API** | 공용 wrapper `lib/websocket.ts` |
-| 위치 (웹) | **`navigator.geolocation`** + 공용 hook | 본 문서 §6 |
-| 위치 (모바일) | **`expo-location`** | 공용 hook |
-| 테스트 (웹) | **Vitest** (단위) + **Playwright** (E2E) | |
-| 테스트 (모바일) | **Jest** + Detox 또는 Maestro (E2E) | |
-| 빌드 (웹) | Next.js standalone (Docker arm64+amd64) | |
-| 빌드 (모바일) | **EAS Build** | Dev Client development build + preview/production — ADR-043 |
+| 영역                 | 채택                                                                                 | 비고                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 언어                 | TypeScript (strict)                                                                  | `tsconfig.json` `strict: true` + `noUncheckedIndexedAccess`                                                                 |
+| 프레임워크 (웹)      | **Next.js 15** (App Router) + **React 19**                                           | RSC + Server Actions 일부 사용                                                                                              |
+| 프레임워크 (모바일)  | **Expo SDK 56+ Dev Client** (React Native + Expo Router)                             | Expo Go 미사용, `apps/mobile` 활성 Sprint M-1 track. `v1.0.0` Web/API/Admin release blocker에서는 제외(T-284) — ADR-041/043 |
+| UI 컴포넌트 (웹)     | **shadcn/ui** + Radix Primitives                                                     | Tailwind 기반, copy-paste vendoring                                                                                         |
+| UI 컴포넌트 (모바일) | **Tamagui** 또는 native + Tailwind (NativeWind)                                      | Sprint 결정 후보                                                                                                            |
+| 스타일 (웹)          | **Tailwind CSS 3.4+**                                                                | `tailwind.config.ts`에서 디자인 토큰 import                                                                                 |
+| 스타일 (모바일)      | **NativeWind** (Tailwind for RN)                                                     | 디자인 토큰 동일 import                                                                                                     |
+| 폼                   | **React Hook Form** + **Zod** resolver                                               | schema는 공용 패키지 (`packages/schemas`)                                                                                   |
+| 데이터 검증          | **Zod**                                                                              | 공용                                                                                                                        |
+| 클라이언트 상태      | **Zustand**                                                                          | 공용 store는 `packages/state`                                                                                               |
+| 서버 상태            | **TanStack Query v5**                                                                | 공용 query keys + queryFn                                                                                                   |
+| 라우팅 (웹)          | Next.js App Router                                                                   | `app/`                                                                                                                      |
+| 라우팅 (모바일)      | Expo Router (파일 기반)                                                              | `apps/mobile/app/` (동일 구조)                                                                                              |
+| HTTP                 | **`fetch`** + 공용 wrapper (`lib/api/client.ts`)                                     | 인증 토큰 자동 부착                                                                                                         |
+| D&D (웹)             | **dnd-kit**                                                                          |                                                                                                                             |
+| D&D (모바일)         | `react-native-draggable-flatlist`                                                    |                                                                                                                             |
+| 지도 (웹)            | **`vworld-map-web`** (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS)   | ADR-046 (ADR-015의 Kakao 폐기 결정은 유지)                                                                                  |
+| 지도 (모바일)        | **`vworld-map-rn`** (`maplibre-vworld-react` RN 패키지) + VWorld server-issued token | ADR-044/045. VWorld key 앱 번들 금지 — ADR-043                                                                              |
+| 아이콘               | **Mapbox Maki 8** + Lucide (UI 일반 아이콘)                                          | maki는 `apps/web/public/maki/`                                                                                              |
+| 날짜                 | **date-fns**                                                                         | 공용. `date-fns-tz`로 KST aware                                                                                             |
+| WebSocket            | **native WebSocket API**                                                             | 공용 wrapper `lib/websocket.ts`                                                                                             |
+| 위치 (웹)            | **`navigator.geolocation`** + 공용 hook                                              | 본 문서 §6                                                                                                                  |
+| 위치 (모바일)        | **`expo-location`**                                                                  | 공용 hook                                                                                                                   |
+| 테스트 (웹)          | **Vitest** (단위) + **Playwright** (E2E)                                             |                                                                                                                             |
+| 테스트 (모바일)      | **Jest** + Detox 또는 Maestro (E2E)                                                  |                                                                                                                             |
+| 빌드 (웹)            | Next.js standalone (Docker arm64+amd64)                                              |                                                                                                                             |
+| 빌드 (모바일)        | **EAS Build**                                                                        | Dev Client development build + preview/production — ADR-043                                                                 |
 
 ## 2. Monorepo 구조 — Next.js / Expo 공용 코드
 
@@ -121,20 +121,20 @@ packages/                        # Next.js / Expo 공용
 
 ### 2.1 공용 vs 전용 판단 룰
 
-| 종류 | 위치 | 이유 |
-|------|------|------|
-| **Zod schema** | `packages/schemas` ✓ 공용 | API 계약은 단일 진실 |
-| **API 클라이언트 함수** | `packages/api-client` ✓ 공용 | endpoint URL + 응답 파싱 동일 |
-| **TanStack Query key factory** | `packages/api-client` ✓ 공용 | invalidation 일관성 |
-| **Zustand store** | `packages/state` ✓ 공용 | storage adapter만 주입 (web: localStorage, mobile: AsyncStorage) |
-| **순수 비즈니스 로직** | **`packages/domain`** ✓ 공용 (2026-06-16 신설) | 거리/정렬(LexoRank)/폼 검증/공유링크/업로드/마커 스타일 등 — 웹·Expo 공유. DOM/next/react-native import 금지 |
-| **디자인 토큰** | `packages/design-tokens` ✓ 공용 | Tailwind preset 양쪽 사용 |
-| **i18n 메시지** | `packages/i18n` ✓ 공용 | |
-| **공용 hook (생명주기 무관)** | `packages/hooks` ✓ 공용 | useDebounce 등 |
-| **UI 컴포넌트** | `apps/{web,mobile}/components` ✗ 전용 | shadcn/ui (DOM) ≠ RN view |
-| **라우팅** | `apps/{web,mobile}/app` ✗ 전용 | App Router vs Expo Router 파일 명명만 호환 |
-| **플랫폼 어댑터** (지도, 위치, 푸시) | `apps/{web,mobile}/lib` ✗ 전용 | API 표면이 다름 — `packages/hooks` 안 추상화로 가림 |
-| **스토리지 어댑터** | `apps/{web,mobile}/lib` ✗ 전용 | localStorage vs AsyncStorage |
+| 종류                                 | 위치                                           | 이유                                                                                                         |
+| ------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Zod schema**                       | `packages/schemas` ✓ 공용                      | API 계약은 단일 진실                                                                                         |
+| **API 클라이언트 함수**              | `packages/api-client` ✓ 공용                   | endpoint URL + 응답 파싱 동일                                                                                |
+| **TanStack Query key factory**       | `packages/api-client` ✓ 공용                   | invalidation 일관성                                                                                          |
+| **Zustand store**                    | `packages/state` ✓ 공용                        | storage adapter만 주입 (web: localStorage, mobile: AsyncStorage)                                             |
+| **순수 비즈니스 로직**               | **`packages/domain`** ✓ 공용 (2026-06-16 신설) | 거리/정렬(LexoRank)/폼 검증/공유링크/업로드/마커 스타일 등 — 웹·Expo 공유. DOM/next/react-native import 금지 |
+| **디자인 토큰**                      | `packages/design-tokens` ✓ 공용                | Tailwind preset 양쪽 사용                                                                                    |
+| **i18n 메시지**                      | `packages/i18n` ✓ 공용                         |                                                                                                              |
+| **공용 hook (생명주기 무관)**        | `packages/hooks` ✓ 공용                        | useDebounce 등                                                                                               |
+| **UI 컴포넌트**                      | `apps/{web,mobile}/components` ✗ 전용          | shadcn/ui (DOM) ≠ RN view                                                                                    |
+| **라우팅**                           | `apps/{web,mobile}/app` ✗ 전용                 | App Router vs Expo Router 파일 명명만 호환                                                                   |
+| **플랫폼 어댑터** (지도, 위치, 푸시) | `apps/{web,mobile}/lib` ✗ 전용                 | API 표면이 다름 — `packages/hooks` 안 추상화로 가림                                                          |
+| **스토리지 어댑터**                  | `apps/{web,mobile}/lib` ✗ 전용                 | localStorage vs AsyncStorage                                                                                 |
 
 ### 2.2 의존 방향
 
@@ -180,44 +180,56 @@ CI에서 `import-linter` 또는 `madge` 등으로 강제 (Sprint 1 진입 후).
 // packages/design-tokens/src/colors.ts
 export const colors = {
   // 브랜드 (DESIGN.md "Brand & Accent")
-  primary: '#ff385c',           // Rausch — 모든 primary CTA / 검색 orb / heart save
-  'primary-active': '#e00b41',  // press / pointer-down
+  primary: '#ff385c', // Rausch — 모든 primary CTA / 검색 orb / heart save
+  'primary-active': '#e00b41', // press / pointer-down
   'primary-disabled': '#ffd1da',
-  luxe: '#460479',              // sub-brand (Luxe 맥락에서만)
-  plus: '#92174d',              // sub-brand (Plus 맥락에서만)
+  luxe: '#460479', // sub-brand (Luxe 맥락에서만)
+  plus: '#92174d', // sub-brand (Plus 맥락에서만)
 
   // 표면
-  canvas: '#ffffff',            // 페이지 기본 (다크 모드 없음 v1)
-  'surface-soft': '#f7f7f7',    // 비활성 필드 / 서브 nav hover / 필터 밴드
-  'surface-strong': '#f2f2f2',  // 원형 아이콘 버튼
+  canvas: '#ffffff', // 페이지 기본 (다크 모드 없음 v1)
+  'surface-soft': '#f7f7f7', // 비활성 필드 / 서브 nav hover / 필터 밴드
+  'surface-strong': '#f2f2f2', // 원형 아이콘 버튼
 
   // 헤어라인 / 보더
-  hairline: '#dddddd',          // 1px 기본
+  hairline: '#dddddd', // 1px 기본
   'hairline-soft': '#ebebeb',
   'border-strong': '#c1c1c1',
 
   // 텍스트
-  ink: '#222222',               // headlines / body / nav (순 검정 X)
+  ink: '#222222', // headlines / body / nav (순 검정 X)
   body: '#3f3f3f',
   muted: '#6a6a6a',
   'muted-soft': '#929292',
-  'star-rating': '#222222',     // 별점은 ink — 노란 별 금지 (브랜드 결정)
+  'star-rating': '#222222', // 별점은 ink — 노란 별 금지 (브랜드 결정)
   'on-primary': '#ffffff',
 
   // 시맨틱
   'error-text': '#c13515',
   'error-text-hover': '#b32505',
-  'legal-link': '#428bff',      // 법무 텍스트 inline link 한정
+  'legal-link': '#428bff', // 법무 텍스트 inline link 한정
 
   // 스크림
-  scrim: '#000000',             // modal backdrop. opacity 50%는 render 시점
+  scrim: '#000000', // modal backdrop. opacity 50%는 render 시점
 
   // 마커 16색 (P-01 ~ P-16)
   marker: {
-    'P-01': '#E53935', 'P-02': '#FB8C00', 'P-03': '#FDD835', 'P-04': '#7CB342',
-    'P-05': '#43A047', 'P-06': '#00897B', 'P-07': '#00ACC1', 'P-08': '#1E88E5',
-    'P-09': '#3949AB', 'P-10': '#8E24AA', 'P-11': '#D81B60', 'P-12': '#6D4C41',
-    'P-13': '#757575', 'P-14': '#212121', 'P-15': '#F4511E', 'P-16': '#039BE5',
+    'P-01': '#E53935',
+    'P-02': '#FB8C00',
+    'P-03': '#FDD835',
+    'P-04': '#7CB342',
+    'P-05': '#43A047',
+    'P-06': '#00897B',
+    'P-07': '#00ACC1',
+    'P-08': '#1E88E5',
+    'P-09': '#3949AB',
+    'P-10': '#8E24AA',
+    'P-11': '#D81B60',
+    'P-12': '#6D4C41',
+    'P-13': '#757575',
+    'P-14': '#212121',
+    'P-15': '#F4511E',
+    'P-16': '#039BE5',
   },
 } as const;
 ```
@@ -232,19 +244,28 @@ fallback chain에 system stack을 둔다. 사용자 브랜드 확정 시 ADR로 
 // packages/design-tokens/src/typography.ts
 export const fonts = {
   sans: 'Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif',
-  display: 'Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif',  // 동일 패밀리
+  display: 'Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif', // 동일 패밀리
   mono: '"JetBrains Mono", ui-monospace, "SF Mono", monospace',
 } as const;
 
 // 스케일 — DESIGN.md "modest weights, photography-led" 방향
 export const fontSize = {
-  xs: 12, sm: 14, base: 16, lg: 18, xl: 20,
-  '2xl': 24, '3xl': 28,        // hero h1: 28px / weight 700 (DESIGN.md)
-  '4xl': 32, '5xl': 40,
+  xs: 12,
+  sm: 14,
+  base: 16,
+  lg: 18,
+  xl: 20,
+  '2xl': 24,
+  '3xl': 28, // hero h1: 28px / weight 700 (DESIGN.md)
+  '4xl': 32,
+  '5xl': 40,
 } as const;
 
 export const fontWeight = {
-  normal: 400, medium: 500, semibold: 600, bold: 700,  // 700+ heavy 피함
+  normal: 400,
+  medium: 500,
+  semibold: 600,
+  bold: 700, // 700+ heavy 피함
 } as const;
 ```
 
@@ -252,10 +273,10 @@ export const fontWeight = {
 
 ```ts
 export const radii = {
-  sm: 8,      // 버튼
-  md: 14,     // 카드
+  sm: 8, // 버튼
+  md: 14, // 카드
   lg: 20,
-  xl: 32,     // 카테고리 strip
+  xl: 32, // 카테고리 strip
   full: 9999, // 검색 바 (pill) / heart 원 / 검색 orb
 } as const;
 
@@ -266,8 +287,17 @@ export const shadows = {
 
 export const spacing = {
   // 8px base
-  0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48,
-  16: 64,    // 'section' — DESIGN.md "generous 64px section gap"
+  0: 0,
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+  6: 24,
+  8: 32,
+  10: 40,
+  12: 48,
+  16: 64, // 'section' — DESIGN.md "generous 64px section gap"
 } as const;
 ```
 
@@ -295,7 +325,7 @@ shadcn/ui를 vendoring한 후 다음을 Airbnb 톤으로 customizing:
 - **Card**: `radii.md` (14px) + `shadows.card` + photo-first (이미지 swipe 가능
   carousel)
 - **SearchBar (지도 검색)**: pill (`radii.full`) + 흰 배경 + 1px hairline divider
-  + Rausch 검색 orb
+  - Rausch 검색 orb
 - **NavTab**: underline rule (active) + `colors.muted` (inactive)
 - **HeartButton**: 원형 (`radii.full`) + `colors.primary` save state
 - **Dropdown**: 흰 캔버스 + `shadows.card` (드롭다운은 카드 X)
@@ -361,7 +391,10 @@ export const NoticePoiSchema = z.object({
 
 export const NoticePlanSchema = z.object({
   id: z.string().uuid(),
-  slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(160),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .max(160),
   title: z.string().min(1).max(200),
   category: z.string().min(1).max(80),
   summary: z.string().nullable(),
@@ -443,16 +476,22 @@ export const queryKeys = {
     list: (params: ListParams) => ['notice-plans', 'list', params] as const,
     detail: (planId: string) => ['notice-plans', 'detail', planId] as const,
   },
-  trips: { /* ... */ },
-  pois: { /* ... */ },
-  features: { /* ... */ },
+  trips: {
+    /* ... */
+  },
+  pois: {
+    /* ... */
+  },
+  features: {
+    /* ... */
+  },
 } as const;
 
 // packages/api-client/src/hooks.ts (공용 hook)
 import { useQuery } from '@tanstack/react-query';
 
 export const useNoticePlan = (planId: string, opts?: { enabled?: boolean }) => {
-  const api = useApi();   // context로 ApiClient 주입
+  const api = useApi(); // context로 ApiClient 주입
   return useQuery({
     queryKey: queryKeys.noticePlans.detail(planId),
     queryFn: () => api.noticePlans.get(planId),
@@ -469,17 +508,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
 
-export const createAuthStore = (storage: StateStorage) => create(
-  persist(
-    (set) => ({
-      accessToken: null as string | null,
-      refreshToken: null as string | null,
-      setTokens: (a: string, r: string) => set({ accessToken: a, refreshToken: r }),
-      clear: () => set({ accessToken: null, refreshToken: null }),
-    }),
-    { name: 'pinvi-auth', storage: createJSONStorage(() => storage) }
-  )
-);
+export const createAuthStore = (storage: StateStorage) =>
+  create(
+    persist(
+      (set) => ({
+        accessToken: null as string | null,
+        refreshToken: null as string | null,
+        setTokens: (a: string, r: string) => set({ accessToken: a, refreshToken: r }),
+        clear: () => set({ accessToken: null, refreshToken: null }),
+      }),
+      { name: 'pinvi-auth', storage: createJSONStorage(() => storage) },
+    ),
+  );
 
 // apps/web/lib/stores.ts
 import { createAuthStore } from '@pinvi/state';
@@ -552,11 +592,11 @@ queryKeys.trips.list({
 
 Trip 상세/지도 화면의 "장소 추가" drawer는 segmented control로 검색 소스를 나눈다.
 
-| 탭 | 호출 | 의존 | 선택 시 |
-|----|------|------|---------|
-| 장소 | `GET /features/search` | kor-travel-map HTTP | `POST /trips/{trip_id}/pois`에 `feature_id` + snapshot |
-| 주소 | T-129 `GET /search` 또는 `/geo/search` | `kor-travel-geo` v2 REST | 좌표 preview 후 feature 요청 후보 |
-| 내 POI | Pinvi `app.trip_day_pois` 검색 | Pinvi DB | 기존 POI 복사/참조 |
+| 탭     | 호출                                   | 의존                     | 선택 시                                                |
+| ------ | -------------------------------------- | ------------------------ | ------------------------------------------------------ |
+| 장소   | `GET /features/search`                 | kor-travel-map HTTP      | `POST /trips/{trip_id}/pois`에 `feature_id` + snapshot |
+| 주소   | T-129 `GET /search` 또는 `/geo/search` | `kor-travel-geo` v2 REST | 좌표 preview 후 feature 요청 후보                      |
+| 내 POI | Pinvi `app.trip_day_pois` 검색         | Pinvi DB                 | 기존 POI 복사/참조                                     |
 
 장소 탭은 250ms debounce + AbortController를 사용하고, 현재 map viewport가 있으면 `bbox`
 bias를 전달한다. kor-travel-map이 503이면 "장소 검색 불가" 상태를 보여주되 Naver/Kakao
@@ -578,11 +618,11 @@ kor-travel-map 최신 조회가 실패해도 일정 화면이 깨지지 않게 �
 
 Trip 상세 화면의 action menu에 내보내기 항목을 둔다.
 
-| 액션 | UI | 처리 |
-|------|----|------|
-| 인쇄 | `Printer` icon | `/trips/[tripId]/print` route open |
-| PDF | `FileDown` icon | 초기에는 print route에서 브라우저 PDF 저장. 서버 PDF는 Sprint 6 |
-| GPX | `Route` 또는 `Map` icon | `GET /trips/{trip_id}/exports/gpx` 다운로드 |
+| 액션 | UI                      | 처리                                                            |
+| ---- | ----------------------- | --------------------------------------------------------------- |
+| 인쇄 | `Printer` icon          | `/trips/[tripId]/print` route open                              |
+| PDF  | `FileDown` icon         | 초기에는 print route에서 브라우저 PDF 저장. 서버 PDF는 Sprint 6 |
+| GPX  | `Route` 또는 `Map` icon | `GET /trips/{trip_id}/exports/gpx` 다운로드                     |
 
 Print route는 `GET /trips/{trip_id}/exports/print-data` 응답을 렌더링하고
 `@media print` CSS를 별도 유지한다. 화면용 지도 컴포넌트를 그대로 캡처하지 않고,
@@ -599,12 +639,12 @@ Print route는 `GET /trips/{trip_id}/exports/print-data` 응답을 렌더링하�
 
 ### 5.5 구현 컴포넌트 후보
 
-| 컴포넌트 | 위치 | 책임 |
-|----------|------|------|
-| `TripSearchBar` | `apps/web/components/trips/` | `/trips` 목록 검색/필터 상태 |
-| `PlaceSearchDrawer` | `apps/web/components/poi/` | `/features/search` + day 선택 + POI 생성 |
-| `TripExportMenu` | `apps/web/components/trips/` | print/PDF/GPX action menu |
-| `TripPrintView` | `apps/web/components/trips/` | print-data 렌더링 + print CSS |
+| 컴포넌트            | 위치                         | 책임                                     |
+| ------------------- | ---------------------------- | ---------------------------------------- |
+| `TripSearchBar`     | `apps/web/components/trips/` | `/trips` 목록 검색/필터 상태             |
+| `PlaceSearchDrawer` | `apps/web/components/poi/`   | `/features/search` + day 선택 + POI 생성 |
+| `TripExportMenu`    | `apps/web/components/trips/` | print/PDF/GPX action menu                |
+| `TripPrintView`     | `apps/web/components/trips/` | print-data 렌더링 + print CSS            |
 
 ## 6. Expo 대응 — 점진적 전환
 
@@ -716,27 +756,27 @@ apps/web/app/                    apps/mobile/app/
 
 ## 10. Sprint 매핑
 
-| 항목 | Sprint | 산출물 |
-|------|--------|--------|
-| `apps/web` Next.js scaffolding | Sprint 1 | `apps/web/package.json` + App Router skeleton |
-| `packages/{schemas,api-client,state,design-tokens,hooks,i18n}` 초기 | Sprint 1 | 빈 패키지 + `npm workspaces` 등록 |
-| 디자인 토큰 + Tailwind preset | Sprint 1 | `packages/design-tokens/tailwind-preset.cjs` |
-| shadcn/ui vendoring + Airbnb 톤 wrapper | Sprint 1 | `apps/web/components/ui/*` |
-| 로그인/가입/verify-email 화면 (G-2 와이어프레임) | Sprint 1 | `apps/web/app/(auth)/...` |
-| Zod schema 공용 (User/Consent/Trip/Poi 등) | Sprint 1~2 | `packages/schemas/src/*` |
-| 공용 API 클라이언트 + TanStack Query keys | Sprint 1 | `packages/api-client` |
-| Zustand store (auth / ui / selected-poi / map-viewport) | Sprint 1~2 | `packages/state` |
-| `useUserLocation` 공용 hook | Sprint 2 | `packages/hooks/src/useUserLocation.ts` + 웹 어댑터 |
-| Admin 콘솔 (`apps/web/app/admin/...`) | Sprint 3 | shadcn/ui DataTable / FilterBar |
-| 지도 + `vworld-map-web` | Sprint 4 + T-201 | `apps/web/components/map/*` + `apps/web/lib/{vworldMap,locationAdapter}.ts` |
-| 여행 검색 + 장소 검색 drawer + print/GPX export | Sprint 4 | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView` |
-| Notice plan UI (사용자 listing + copy 다이얼로그) | Sprint 4 | `apps/web/app/(app)/notice-plans/...` |
-| Notice plan UI (Admin 작성기) | Sprint 6 | `apps/web/app/admin/notice-plans/...` |
-| WebSocket 클라이언트 (공용 wrapper) | Sprint 5 | `packages/api-client/src/websocket.ts` |
-| 스마트 정렬 미리보기 다이얼로그 | Sprint 6 | `apps/web/components/poi/OptimizeDialog.tsx` |
-| **Expo `apps/mobile/` 구조 스캐폴드** | 2026-06-13 (ADR-041) | `apps/mobile` Expo 골격 + 플랫폼 어댑터 + 공용 패키지 wiring (CI-safe, 미설치) |
-| **Expo Dev Client / EAS 기준선** | 2026-06-15 (ADR-043) | Expo Go 미사용, EAS profile, New Architecture, Android minSdk 24, VWorld server-issued key 구조 |
-| **Expo `apps/mobile/` 활성화** | 2026-06-16 (Sprint M-1) | workspaces 등록 + install + 핵심 화면/지도 1차 구현 완료. EAS build, 실기기 smoke, store 제출은 T-284에 따라 `v1.0.0` release blocker에서 제외 |
+| 항목                                                                | Sprint                  | 산출물                                                                                                                                         |
+| ------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web` Next.js scaffolding                                      | Sprint 1                | `apps/web/package.json` + App Router skeleton                                                                                                  |
+| `packages/{schemas,api-client,state,design-tokens,hooks,i18n}` 초기 | Sprint 1                | 빈 패키지 + `npm workspaces` 등록                                                                                                              |
+| 디자인 토큰 + Tailwind preset                                       | Sprint 1                | `packages/design-tokens/tailwind-preset.cjs`                                                                                                   |
+| shadcn/ui vendoring + Airbnb 톤 wrapper                             | Sprint 1                | `apps/web/components/ui/*`                                                                                                                     |
+| 로그인/가입/verify-email 화면 (G-2 와이어프레임)                    | Sprint 1                | `apps/web/app/(auth)/...`                                                                                                                      |
+| Zod schema 공용 (User/Consent/Trip/Poi 등)                          | Sprint 1~2              | `packages/schemas/src/*`                                                                                                                       |
+| 공용 API 클라이언트 + TanStack Query keys                           | Sprint 1                | `packages/api-client`                                                                                                                          |
+| Zustand store (auth / ui / selected-poi / map-viewport)             | Sprint 1~2              | `packages/state`                                                                                                                               |
+| `useUserLocation` 공용 hook                                         | Sprint 2                | `packages/hooks/src/useUserLocation.ts` + 웹 어댑터                                                                                            |
+| Admin 콘솔 (`apps/web/app/admin/...`)                               | Sprint 3                | shadcn/ui DataTable / FilterBar                                                                                                                |
+| 지도 + `vworld-map-web`                                             | Sprint 4 + T-201        | `apps/web/components/map/*` + `apps/web/lib/{vworldMap,locationAdapter}.ts`                                                                    |
+| 여행 검색 + 장소 검색 drawer + print/GPX export                     | Sprint 4                | `TripSearchBar`, `PlaceSearchDrawer`, `TripExportMenu`, `TripPrintView`                                                                        |
+| Notice plan UI (사용자 listing + copy 다이얼로그)                   | Sprint 4                | `apps/web/app/(app)/notice-plans/...`                                                                                                          |
+| Notice plan UI (Admin 작성기)                                       | Sprint 6                | `apps/web/app/admin/notice-plans/...`                                                                                                          |
+| WebSocket 클라이언트 (공용 wrapper)                                 | Sprint 5                | `packages/api-client/src/websocket.ts`                                                                                                         |
+| 스마트 정렬 미리보기 다이얼로그                                     | Sprint 6                | `apps/web/components/poi/OptimizeDialog.tsx`                                                                                                   |
+| **Expo `apps/mobile/` 구조 스캐폴드**                               | 2026-06-13 (ADR-041)    | `apps/mobile` Expo 골격 + 플랫폼 어댑터 + 공용 패키지 wiring (CI-safe, 미설치)                                                                 |
+| **Expo Dev Client / EAS 기준선**                                    | 2026-06-15 (ADR-043)    | Expo Go 미사용, EAS profile, New Architecture, Android minSdk 24, VWorld server-issued key 구조                                                |
+| **Expo `apps/mobile/` 활성화**                                      | 2026-06-16 (Sprint M-1) | workspaces 등록 + install + 핵심 화면/지도 1차 구현 완료. EAS build, 실기기 smoke, store 제출은 T-284에 따라 `v1.0.0` release blocker에서 제외 |
 
 ## 11. 관련 문서
 

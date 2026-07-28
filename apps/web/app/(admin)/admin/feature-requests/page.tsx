@@ -56,8 +56,7 @@ function ReviewPanel({
         marker_icon: markerIcon.trim() || undefined,
       }),
     onSuccess: () => onDone('제안을 승인해 kor_travel_map에 전달했습니다.'),
-    onError: (error) =>
-      setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.'),
+    onError: (error) => setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.'),
   });
 
   const rejectMutation = useMutation({
@@ -66,8 +65,7 @@ function ReviewPanel({
         access_reason: accessReason.trim(),
       }),
     onSuccess: () => onDone('제안을 거절했습니다.'),
-    onError: (error) =>
-      setErr(error instanceof ApiError ? error.message : '거절에 실패했습니다.'),
+    onError: (error) => setErr(error instanceof ApiError ? error.message : '거절에 실패했습니다.'),
   });
 
   const busy = approveMutation.isPending || rejectMutation.isPending;
@@ -106,7 +104,8 @@ function ReviewPanel({
     >
       <header className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">
-          {request.name} <span className="text-muted">({TYPE_LABEL[request.type] ?? request.type})</span>
+          {request.name}{' '}
+          <span className="text-muted">({TYPE_LABEL[request.type] ?? request.type})</span>
         </h2>
         <button type="button" onClick={onClose} className="text-xs text-muted hover:text-ink">
           닫기
@@ -331,12 +330,19 @@ export default function AdminFeatureRequestsPage() {
       </FilterBar>
 
       {notice && (
-        <p className="rounded-sm bg-surface-soft p-3 text-sm text-body" data-testid="admin-fr-notice">
+        <p
+          className="rounded-sm bg-surface-soft p-3 text-sm text-body"
+          data-testid="admin-fr-notice"
+        >
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text" data-testid="admin-fr-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-fr-error"
+        >
           {error}
         </p>
       )}

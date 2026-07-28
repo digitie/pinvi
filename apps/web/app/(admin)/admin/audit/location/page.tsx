@@ -29,7 +29,13 @@ const columns: AdminTableColumn<AdminLocationAuditEntry>[] = [
       </span>
     ),
   },
-  { key: 'purpose', header: 'Purpose', sortable: true, sortValue: (row) => row.purpose, cell: (row) => row.purpose },
+  {
+    key: 'purpose',
+    header: 'Purpose',
+    sortable: true,
+    sortValue: (row) => row.purpose,
+    cell: (row) => row.purpose,
+  },
   {
     key: 'endpoint',
     header: 'Endpoint',
@@ -166,7 +172,9 @@ export default function AdminLocationAuditPage() {
       </FilterBar>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
+          {error}
+        </p>
       )}
 
       <AdminTable

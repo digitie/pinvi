@@ -59,11 +59,18 @@ export default function TripsScreen() {
         {tripsQuery.isPending ? (
           <Loading />
         ) : tripsQuery.isError ? (
-          <ErrorView message={friendlyErrorText(tripsQuery.error)} onRetry={() => tripsQuery.refetch()} />
+          <ErrorView
+            message={friendlyErrorText(tripsQuery.error)}
+            onRetry={() => tripsQuery.refetch()}
+          />
         ) : tripsQuery.data.items.length === 0 ? (
           <EmptyState
             title={debounced ? '검색 결과가 없습니다' : '아직 여행이 없습니다'}
-            description={debounced ? '다른 검색어를 시도해 보세요.' : '추천 여행에서 일정을 복사해 시작해 보세요.'}
+            description={
+              debounced
+                ? '다른 검색어를 시도해 보세요.'
+                : '추천 여행에서 일정을 복사해 시작해 보세요.'
+            }
           />
         ) : (
           <View className="gap-3">

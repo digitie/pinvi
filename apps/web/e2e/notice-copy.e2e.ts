@@ -73,6 +73,6 @@ test('추천 여행을 새 여행으로 복사하면 결과 링크가 표시된�
   await expect(dialog).toContainText('새 여행을 만들었습니다.');
   await expect(dialog.getByRole('link', { name: '여행 열기' })).toHaveAttribute(
     'href',
-    `/trips/${tripId}`
+    `/trips/${tripId}`,
   );
 });

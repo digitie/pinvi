@@ -41,7 +41,12 @@ describe('MapSearchBox', () => {
   it('2자 이상 입력 시 디바운스 후 검색하고 source별 배지/주소로 렌더한다', async () => {
     searchPlaces.mockResolvedValue({
       results: [
-        makeResult({ source: 'feature', name: '광안리', feature_id: 'f1', road_address: '부산 수영구' }),
+        makeResult({
+          source: 'feature',
+          name: '광안리',
+          feature_id: 'f1',
+          road_address: '부산 수영구',
+        }),
         makeResult({
           source: 'kakao',
           name: '광안리 카페',

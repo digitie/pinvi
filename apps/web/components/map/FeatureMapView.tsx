@@ -128,7 +128,7 @@ function weatherConditionFromIcon(icon: string | null | undefined): WeatherCondi
 function rememberViewport(
   cache: Map<string, ViewportCacheEntry>,
   key: string,
-  data: FeaturesInBoundsResponse
+  data: FeaturesInBoundsResponse,
 ) {
   if (cache.has(key)) cache.delete(key);
   cache.set(key, { data, cachedAt: Date.now() });
@@ -141,7 +141,7 @@ function rememberViewport(
 
 function cachedViewport(
   cache: Map<string, ViewportCacheEntry>,
-  key: string
+  key: string,
 ): FeaturesInBoundsResponse | null {
   const entry = cache.get(key);
   if (!entry) return null;

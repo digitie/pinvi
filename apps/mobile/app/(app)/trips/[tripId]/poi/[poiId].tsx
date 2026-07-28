@@ -76,7 +76,10 @@ export default function PoiEditScreen() {
   if (tripQuery.isError) {
     return (
       <Screen>
-        <ErrorView message={friendlyErrorText(tripQuery.error)} onRetry={() => tripQuery.refetch()} />
+        <ErrorView
+          message={friendlyErrorText(tripQuery.error)}
+          onRetry={() => tripQuery.refetch()}
+        />
       </Screen>
     );
   }

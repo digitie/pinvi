@@ -14,16 +14,16 @@ Pinvi가 DDL/import/`feature_id` 발급/provider→DTO 작성 금지). 검증됨
 
 ### 8개 feature (상태)
 
-| # | feature | 상태 |
-| - | ------- | ---- |
-| F1 | 여행 기간 축소 시 범위 밖(out-of-range) 일자 경고 | net-new (서버 필드 + UI) |
-| F2 | POI가 있는 day 삭제 확인 | net-new (client confirm + 서버 409 guard) |
-| F3 | autocomplete가 ADDRESS 표시 + Kakao/Naver 병합(source 아이콘, internal-first) | net-new (검색 통합 + provider) |
-| F4 | non-feature Kakao/Naver pick 추가 시 place feature-request 자동 발화 | partial (요청 파이프라인 존재, source/external_ref/auto-fire 확장) |
-| F5 | 지도 viewport feature(place/event/notice/price) white-maki 마커 → 팝업 → 전체화면 kind별 detail modal | partial (`FeatureMapView` viewport+마커+팝업 존재, price kind·detail-card·modal net-new) |
-| F6 | trip 지도가 모든 POI에 fit + DAY별 16색 마커(생성 시 기본, override 가능) | partial (fit-bounds 존재, day-color net-new) |
-| F7 | POI별 마커 색/아이콘 override | **done** (`trip_day_pois.custom_marker_color/icon` + `PoiEditor` + `resolveMarkerStyle` custom tier) |
-| F8 | day row에 공휴일 + 일출/일몰 표시 | partial (공휴일 read-path는 **PR #383로 main 머지 완료** — day 일출/일몰 + effective_date 재키잉 net-new) |
+| #   | feature                                                                                               | 상태                                                                                                      |
+| --- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| F1  | 여행 기간 축소 시 범위 밖(out-of-range) 일자 경고                                                     | net-new (서버 필드 + UI)                                                                                  |
+| F2  | POI가 있는 day 삭제 확인                                                                              | net-new (client confirm + 서버 409 guard)                                                                 |
+| F3  | autocomplete가 ADDRESS 표시 + Kakao/Naver 병합(source 아이콘, internal-first)                         | net-new (검색 통합 + provider)                                                                            |
+| F4  | non-feature Kakao/Naver pick 추가 시 place feature-request 자동 발화                                  | partial (요청 파이프라인 존재, source/external_ref/auto-fire 확장)                                        |
+| F5  | 지도 viewport feature(place/event/notice/price) white-maki 마커 → 팝업 → 전체화면 kind별 detail modal | partial (`FeatureMapView` viewport+마커+팝업 존재, price kind·detail-card·modal net-new)                  |
+| F6  | trip 지도가 모든 POI에 fit + DAY별 16색 마커(생성 시 기본, override 가능)                             | partial (fit-bounds 존재, day-color net-new)                                                              |
+| F7  | POI별 마커 색/아이콘 override                                                                         | **done** (`trip_day_pois.custom_marker_color/icon` + `PoiEditor` + `resolveMarkerStyle` custom tier)      |
+| F8  | day row에 공휴일 + 일출/일몰 표시                                                                     | partial (공휴일 read-path는 **PR #383로 main 머지 완료** — day 일출/일몰 + effective_date 재키잉 net-new) |
 
 ## 2. 최종 설계 결정 (FINAL — 재개봉 금지)
 
@@ -32,7 +32,7 @@ Pinvi가 DDL/import/`feature_id` 발급/provider→DTO 작성 금지). 검증됨
 ### 2.1 데이터 모델 & 서버 계산 → **ADR-055**
 
 - **effective_date**: `services/poi.py#ensure_trip_day`(≈58-60행)에서 `trip_days.date = trip.start_date +
-  (day_index-1)` **materialize 중단**(`date=None` 저장). `trip_days.date` = 명시적 per-day OVERRIDE
+(day_index-1)` **materialize 중단**(`date=None` 저장). `trip_days.date` = 명시적 per-day OVERRIDE
   전용. 서버가 **항상** `effective_date = date ?? (start_date + (day_index-1))` 파생, start_date null이면
   null. start_date 편집은 파생 day 전체를 reflow. `day_index >= 1` CHECK 추가; day_index는 영구적으로
   sparse/gappy(reorder op 없음). 모든 민간 날짜는 Asia/Seoul plain DATE, `now()` 파생 금지.
@@ -96,9 +96,9 @@ Pinvi가 DDL/import/`feature_id` 발급/provider→DTO 작성 금지). 검증됨
   일치하는 모든 `trip_day_pois`에 attach, snapshot-only 상태 clear. create_feature에는 user-authored
   name+coord+note + external_ref만 forward — provider 콘텐츠 절대 금지.
 - **검색 통합 (ONE endpoint)**: path `GET /search` 유지. typed `{results: PlaceSearchResult[],
-  degraded_sources: []}` 반환, `source ∈ {feature, my_poi, kakao, naver, address}`. `PlaceSearchResult` =
+degraded_sources: []}` 반환, `source ∈ {feature, my_poi, kakao, naver, address}`. `PlaceSearchResult` =
   `{source, feature_id?, external_id?, name, address, road_address?, coord{lon,lat}, category?,
-  marker_color?, marker_icon?, provider_url?, phone?(display-only, 미persist)}`. 정렬: feature+my_poi+address
+marker_color?, marker_icon?, provider_url?, phone?(display-only, 미persist)}`. 정렬: feature+my_poi+address
   (internal) 먼저, 그다음 kakao, 그다음 naver; 부분 degradation에도 stable. `GET /features/search`
   DELETE(source=feature와 동일). `/search/places` 신설 금지. 기존 `unified_search`/`UnifiedSearchResult`는
   untyped `list[dict]` leak을 이 typed 계약으로 대체.
@@ -116,7 +116,7 @@ Pinvi가 DDL/import/`feature_id` 발급/provider→DTO 작성 금지). 검증됨
   history/popstate back-button close). `ConfirmDialog`, `FeatureDetailModal`, refactor된 `ConflictDialog`를
   이 훅으로 route(현 ConflictDialog는 trap/restoration 없음 — WCAG 2.4.3 / 2.1.2). FeatureDetailModal =
   mobile에서 bottom sheet(drag-handle + thumb-zone X, `overflow-y-auto overscroll-contain`, `padding:
-  max(1rem, env(safe-area-inset-*))`); mobile에선 마커 탭이 sheet 직접 open(nested 아이콘 없음).
+max(1rem, env(safe-area-inset-*))`); mobile에선 마커 탭이 sheet 직접 open(nested 아이콘 없음).
 - **onSelect union**: `MapSearchBox` `onSelect: (result: PlaceSearchResult) => void`(source-tagged union)를
   autocomplete 재작성 **전에** 정의. FeatureMapView는 모든 source에서 `result.coord`로 flyTo; TripDetail은
   `result.source` 분기(feature/my_poi → feature_id POI-create; kakao/naver → external_ref POI-create). 명시적
@@ -134,20 +134,20 @@ Pinvi가 DDL/import/`feature_id` 발급/provider→DTO 작성 금지). 검증됨
 ADR-055 in T-301, ADR-054 in T-302, ADR-056 in T-304. 테스트 + doc/OpenAPI slice는 각 backend PR과 함께
 탑승(tasks-rule §7).
 
-| task | 레인 | 소유자 | 한 줄 범위 | 의존 | 주요 파일 | ADR |
-| ---- | ---- | ------ | ---------- | ---- | -------- | --- |
-| ~~T-300~~ | B | Codex | **DONE (PR #383)** — holiday read-path(`TripViewDay.holidays[]` + KASI join + `tripDateLabels.ts`)가 main에 머지됨. Lane A gate 충족. T-301이 holiday join을 `effective_date` 기준으로 재키잉 | — | `TripDayHoliday`, `services/trip_view_builder.py`, `lib/tripDateLabels.ts` | — |
-| T-301 | B | Codex | day presentation backend: marker_color nullable+inherit, effective_date/out_of_range, POI별 display_marker_color, DELETE 409 guard, day schema 양 언어, shared-view emit | T-300 | `services/poi.py#ensure_trip_day`, `services/trip.py#update_trip`, `services/trip_view_builder.py`, `packages/schemas`, migrations | **055** |
-| T-302 | B | Codex | Kakao/Naver client + config + `GET /search` typed source-tagged(address 포함) + location_audit + quota/cache + api-client | T-300 | `clients/kakao_local.py`·`clients/naver_local.py`(신규), `core/config.py`, `middleware/location_audit.py`, `packages/api-client`, `docs/integrations/kakao-naver-local.md`, `docs/api/search.md` | **054** |
-| T-303 | B | Codex | feature-request 파이프라인: source/external_ref first-class, best-effort decoupled auto-fire, global dedup, reconciliation | T-300 | `models/feature_suggestion.py`, `services/poi.py`, `api/v1/admin/feature_requests.py`, `clients/kor_travel_map`, migrations | 054 |
-| T-304 | B | Codex | detail-card kind별 + generic fallback + opt-in 외부 보강 + price kind | T-300 | `api/v1/features.py`(`GET /features/{id}/detail-card`), `packages/schemas`(`FeatureDetailCard`), `GET /features/in-bounds` | **056** |
-| T-305 | B | Codex | 전용 `trip_day_rise_sets` table + ETL asset + day rise/set read + batched re-seed + 완료 시그널 + e2e seed/provider mock | T-301 | `app.trip_day_rise_sets`(migration), `apps/etl` asset, `services/kasi.py`, `services/trip_view_builder.py` | 055 |
-| T-306 | A | Claude | useModalDialog + ConfirmDialog + day-delete confirm + out-of-range actionable 배너/아이콘 | T-300, T-301 | `components/ui/useModalDialog.ts`·`ConfirmDialog.tsx`(신규), `TripDetail.tsx`(경고 전용 edit) | 056 |
-| T-307 | A | Claude | per-day color picker + display_marker_color 렌더(지도+리스트 뱃지 parity) + PoiEditor F7 polish + fit-bounds 확인 | T-301 | `TripDayControls.tsx`(day-color picker), `TripPoiList`, `TripMapView`, `PoiEditor`, `packages/domain/src/marker.ts` | 055 |
-| T-308 | A | Claude | 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) + SharedTripView 렌더 | T-301 | `components/.../TripDayHeader.tsx`(신규), `SharedTripView.tsx`, `packages/domain` | 055 |
-| T-309a | A | Claude | autocomplete 재작성: onSelect union, address+source 아이콘+정렬+debounce, attribution | T-302 | `MapSearchBox`, `FeatureMapView`, `TripDetail.tsx` 분기 | 054 |
-| T-309b | A | Claude | 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더 | T-303 | `TripDetail.tsx`, POI-create 경로, snapshot 렌더 | 054 |
-| T-309c | A | Claude | FeatureDetailModal(bottom sheet, kind별, opt-in 보강 링크+attribution, 마커 팝업→detail→modal 양 지도, price kind, weather 제외) | T-304 | `FeatureDetailModal.tsx`(신규), `FeatureMapView`, `TripMapView` | 056 |
+| task      | 레인 | 소유자 | 한 줄 범위                                                                                                                                                                                    | 의존         | 주요 파일                                                                                                                                                                                        | ADR     |
+| --------- | ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| ~~T-300~~ | B    | Codex  | **DONE (PR #383)** — holiday read-path(`TripViewDay.holidays[]` + KASI join + `tripDateLabels.ts`)가 main에 머지됨. Lane A gate 충족. T-301이 holiday join을 `effective_date` 기준으로 재키잉 | —            | `TripDayHoliday`, `services/trip_view_builder.py`, `lib/tripDateLabels.ts`                                                                                                                       | —       |
+| T-301     | B    | Codex  | day presentation backend: marker_color nullable+inherit, effective_date/out_of_range, POI별 display_marker_color, DELETE 409 guard, day schema 양 언어, shared-view emit                      | T-300        | `services/poi.py#ensure_trip_day`, `services/trip.py#update_trip`, `services/trip_view_builder.py`, `packages/schemas`, migrations                                                               | **055** |
+| T-302     | B    | Codex  | Kakao/Naver client + config + `GET /search` typed source-tagged(address 포함) + location_audit + quota/cache + api-client                                                                     | T-300        | `clients/kakao_local.py`·`clients/naver_local.py`(신규), `core/config.py`, `middleware/location_audit.py`, `packages/api-client`, `docs/integrations/kakao-naver-local.md`, `docs/api/search.md` | **054** |
+| T-303     | B    | Codex  | feature-request 파이프라인: source/external_ref first-class, best-effort decoupled auto-fire, global dedup, reconciliation                                                                    | T-300        | `models/feature_suggestion.py`, `services/poi.py`, `api/v1/admin/feature_requests.py`, `clients/kor_travel_map`, migrations                                                                      | 054     |
+| T-304     | B    | Codex  | detail-card kind별 + generic fallback + opt-in 외부 보강 + price kind                                                                                                                         | T-300        | `api/v1/features.py`(`GET /features/{id}/detail-card`), `packages/schemas`(`FeatureDetailCard`), `GET /features/in-bounds`                                                                       | **056** |
+| T-305     | B    | Codex  | 전용 `trip_day_rise_sets` table + ETL asset + day rise/set read + batched re-seed + 완료 시그널 + e2e seed/provider mock                                                                      | T-301        | `app.trip_day_rise_sets`(migration), `apps/etl` asset, `services/kasi.py`, `services/trip_view_builder.py`                                                                                       | 055     |
+| T-306     | A    | Claude | useModalDialog + ConfirmDialog + day-delete confirm + out-of-range actionable 배너/아이콘                                                                                                     | T-300, T-301 | `components/ui/useModalDialog.ts`·`ConfirmDialog.tsx`(신규), `TripDetail.tsx`(경고 전용 edit)                                                                                                    | 056     |
+| T-307     | A    | Claude | per-day color picker + display_marker_color 렌더(지도+리스트 뱃지 parity) + PoiEditor F7 polish + fit-bounds 확인                                                                             | T-301        | `TripDayControls.tsx`(day-color picker), `TripPoiList`, `TripMapView`, `PoiEditor`, `packages/domain/src/marker.ts`                                                                              | 055     |
+| T-308     | A    | Claude | 신규 `TripDayHeader.tsx`(effective date + 공휴일 뱃지 + 일출/일몰 pending) + SharedTripView 렌더                                                                                              | T-301        | `components/.../TripDayHeader.tsx`(신규), `SharedTripView.tsx`, `packages/domain`                                                                                                                | 055     |
+| T-309a    | A    | Claude | autocomplete 재작성: onSelect union, address+source 아이콘+정렬+debounce, attribution                                                                                                         | T-302        | `MapSearchBox`, `FeatureMapView`, `TripDetail.tsx` 분기                                                                                                                                          | 054     |
+| T-309b    | A    | Claude | 외부 pick add-POI + best-effort auto-request UX + snapshot POI 렌더                                                                                                                           | T-303        | `TripDetail.tsx`, POI-create 경로, snapshot 렌더                                                                                                                                                 | 054     |
+| T-309c    | A    | Claude | FeatureDetailModal(bottom sheet, kind별, opt-in 보강 링크+attribution, 마커 팝업→detail→modal 양 지도, price kind, weather 제외)                                                              | T-304        | `FeatureDetailModal.tsx`(신규), `FeatureMapView`, `TripMapView`                                                                                                                                  | 056     |
 
 ### 3.1 의존성 DAG
 
@@ -184,7 +184,7 @@ T-300 (holiday 머지)
 ## 4. 테스트 / 롤아웃 게이트
 
 1. **per-PR**: backend PR = `pytest -q` + `ruff check` + `mypy --strict`(apps/api); web PR = `npm run
-   typecheck` + `npm run lint`(apps/web) + `packages/domain` vitest. (Linux 기준, CLAUDE.md §6.)
+typecheck` + `npm run lint`(apps/web) + `packages/domain` vitest. (Linux 기준, CLAUDE.md §6.)
 2. **adversarial review 2인**: 각 PR은 테스트 전 **2명의 adversarial reviewer**를 거친다.
 3. **live UI e2e (destructive-allowed)**: WSL → SSH → N150 경로로 실 UI e2e. dev DB 대상 mutating 허용.
    Playwright는 N150 우선, Windows fallback(ADR-051).

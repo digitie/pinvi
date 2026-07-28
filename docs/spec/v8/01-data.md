@@ -8,26 +8,26 @@
 
 ## 1. 책임 분담
 
-| 영역 | 본 저장소 | `kor-travel-map` | SPEC V8 출처 |
-|------|-----------|---------------------|--------------|
-| 7 Feature 모델(place/event/notice/price/weather/route/area) | — | ✓ | D-1 ~ D-13 |
-| `feature_id` 생성 (`f_{bjd}_{kind[0]}_{sha1[:16]}`) | — | ✓ | D-2 |
-| 트리(`parent_feature_id`) / sibling | — | ✓ | D-3 |
-| `feature.detail` Pydantic 모델 | — | ✓ | D-4, D-8 ~ D-12 |
-| `price_points` / `price_values` 시계열 | — | ✓ | D-5, E-3 |
-| `WeatherValue` / `feature_weather_values` | — | ✓ | D-6, N(2026-05-16) |
-| **POI** snapshot + sort_order | ✓ | — | D-7, E-3 |
-| `bjd_lookup` (법정동코드 마스터) | — | ✓ | E-3, L장 (kor-travel-geo) |
-| `features.geom` GIST 인덱스 | — | ✓ | E-3 |
-| Record Linkage (100m blocking / 0.45/0.35/0.20 / 0.85) | — | ✓ | D-14, K-4 |
-| `dedup_review_queue` schema | — | ✓ | K-4 |
-| vworld 법정동코드 임포트 본체 | — | ✓ (`kor-travel-geo`) | L장 |
-| vworld 임포트 트리거 UI | ✓ | — | L-3 |
-| `app.trips` / `app.trip_days` / `app.trip_pois` | ✓ | — | E-3 |
-| **POI sort_order COLLATE "C"** | ✓ | — | E-6 (Critical) |
-| `app.users` / `app.user_consents` / `app.user_oauth_identities` | ✓ | — | E-2 |
-| `app.location_access_log` audit chain | ✓ | — | O-3 |
-| `app.admin_audit_log` audit chain | ✓ | — | O-6, M-14 |
+| 영역                                                            | 본 저장소 | `kor-travel-map`     | SPEC V8 출처              |
+| --------------------------------------------------------------- | --------- | -------------------- | ------------------------- |
+| 7 Feature 모델(place/event/notice/price/weather/route/area)     | —         | ✓                    | D-1 ~ D-13                |
+| `feature_id` 생성 (`f_{bjd}_{kind[0]}_{sha1[:16]}`)             | —         | ✓                    | D-2                       |
+| 트리(`parent_feature_id`) / sibling                             | —         | ✓                    | D-3                       |
+| `feature.detail` Pydantic 모델                                  | —         | ✓                    | D-4, D-8 ~ D-12           |
+| `price_points` / `price_values` 시계열                          | —         | ✓                    | D-5, E-3                  |
+| `WeatherValue` / `feature_weather_values`                       | —         | ✓                    | D-6, N(2026-05-16)        |
+| **POI** snapshot + sort_order                                   | ✓         | —                    | D-7, E-3                  |
+| `bjd_lookup` (법정동코드 마스터)                                | —         | ✓                    | E-3, L장 (kor-travel-geo) |
+| `features.geom` GIST 인덱스                                     | —         | ✓                    | E-3                       |
+| Record Linkage (100m blocking / 0.45/0.35/0.20 / 0.85)          | —         | ✓                    | D-14, K-4                 |
+| `dedup_review_queue` schema                                     | —         | ✓                    | K-4                       |
+| vworld 법정동코드 임포트 본체                                   | —         | ✓ (`kor-travel-geo`) | L장                       |
+| vworld 임포트 트리거 UI                                         | ✓         | —                    | L-3                       |
+| `app.trips` / `app.trip_days` / `app.trip_pois`                 | ✓         | —                    | E-3                       |
+| **POI sort_order COLLATE "C"**                                  | ✓         | —                    | E-6 (Critical)            |
+| `app.users` / `app.user_consents` / `app.user_oauth_identities` | ✓         | —                    | E-2                       |
+| `app.location_access_log` audit chain                           | ✓         | —                    | O-3                       |
+| `app.admin_audit_log` audit chain                               | ✓         | —                    | O-6, M-14                 |
 
 ## 2. Pinvi가 직접 박는 항목
 
@@ -191,22 +191,22 @@ Pinvi Admin `/admin/provider-sync`에서 재시도/일시정지/재개 (M-15).
 
 ## 4. Sprint 매핑
 
-| SPEC V8 항목 | Sprint | 본 저장소 산출물 |
-|------|--------|------------------|
-| `app.users` + email verify (E-2, G-3) | Sprint 1 | `apps/api/alembic/versions/0001_initial_app.py` |
-| `app.user_consents` + 4 분리 동의 (G-5) | Sprint 2 | `apps/api/app/services/consent.py` |
-| `app.trips` + `trip_days` (E-3) | Sprint 2 | `apps/api/alembic/.../0002_trips.py` |
-| `app.trip_pois` + COLLATE "C" (E-6) | Sprint 2 | `apps/api/alembic/.../0003_pois.py` |
-| `app.location_access_log` chain (O-3) | Sprint 2 | `apps/api/app/middleware/location_audit.py` |
-| `app.admin_audit_log` chain (M-14) | Sprint 3 | `apps/api/app/middleware/admin_audit.py` |
-| `app.email_queue` (M-6) | Sprint 1 | DDL + worker (Sprint 2) |
-| `app.api_call_log` (M-6) | Sprint 2 | httpx middleware |
-| `app.import_jobs` (M-6) | Sprint 5 | Dagster sensor |
-| `app.feature_suggestions` (H-6 / DEC-05) | Sprint 3 | 사용자 제안 API + Admin 페이지 |
-| `app.category_mappings` (M-2) | Sprint 3 | Admin 페이지 |
-| 라이브러리 `feature.*` 사용 (모든 read API) | Sprint 4 | `apps/api/app/etl_bridge/kor_travel_map.py` |
-| vworld 임포트 trigger UI (L-3) | Sprint 5 | Admin `/admin/etl/vworld-import` |
-| Record Linkage 검토 큐 UI (K-4) | Sprint 5 | Admin `/admin/dedup-review` |
+| SPEC V8 항목                                | Sprint   | 본 저장소 산출물                                |
+| ------------------------------------------- | -------- | ----------------------------------------------- |
+| `app.users` + email verify (E-2, G-3)       | Sprint 1 | `apps/api/alembic/versions/0001_initial_app.py` |
+| `app.user_consents` + 4 분리 동의 (G-5)     | Sprint 2 | `apps/api/app/services/consent.py`              |
+| `app.trips` + `trip_days` (E-3)             | Sprint 2 | `apps/api/alembic/.../0002_trips.py`            |
+| `app.trip_pois` + COLLATE "C" (E-6)         | Sprint 2 | `apps/api/alembic/.../0003_pois.py`             |
+| `app.location_access_log` chain (O-3)       | Sprint 2 | `apps/api/app/middleware/location_audit.py`     |
+| `app.admin_audit_log` chain (M-14)          | Sprint 3 | `apps/api/app/middleware/admin_audit.py`        |
+| `app.email_queue` (M-6)                     | Sprint 1 | DDL + worker (Sprint 2)                         |
+| `app.api_call_log` (M-6)                    | Sprint 2 | httpx middleware                                |
+| `app.import_jobs` (M-6)                     | Sprint 5 | Dagster sensor                                  |
+| `app.feature_suggestions` (H-6 / DEC-05)    | Sprint 3 | 사용자 제안 API + Admin 페이지                  |
+| `app.category_mappings` (M-2)               | Sprint 3 | Admin 페이지                                    |
+| 라이브러리 `feature.*` 사용 (모든 read API) | Sprint 4 | `apps/api/app/etl_bridge/kor_travel_map.py`     |
+| vworld 임포트 trigger UI (L-3)              | Sprint 5 | Admin `/admin/etl/vworld-import`                |
+| Record Linkage 검토 큐 UI (K-4)             | Sprint 5 | Admin `/admin/dedup-review`                     |
 
 ## 5. 관련 문서
 

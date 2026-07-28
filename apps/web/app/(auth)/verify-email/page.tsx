@@ -49,7 +49,9 @@ function VerifyEmailContent() {
       } catch (err) {
         setStatus('error');
         if (err instanceof ApiError) {
-          setError(err.code === 'VALIDATION_ERROR' ? '토큰이 잘못되었거나 만료되었습니다.' : err.message);
+          setError(
+            err.code === 'VALIDATION_ERROR' ? '토큰이 잘못되었거나 만료되었습니다.' : err.message,
+          );
         } else {
           setError('알 수 없는 오류가 발생했습니다.');
         }

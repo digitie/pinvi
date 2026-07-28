@@ -184,7 +184,7 @@ export function TripManualPoiDialog({
             className="min-h-9 rounded-sm border border-hairline bg-white px-3 py-2 text-sm text-body"
             data-testid="manual-poi-address"
           >
-            {geoLoading ? '주소 확인 중' : addressLabel ?? '주소 결과 없음'}
+            {geoLoading ? '주소 확인 중' : (addressLabel ?? '주소 결과 없음')}
           </p>
           {geoError && <p className="text-xs text-error-text">{geoError}</p>}
         </div>

@@ -235,7 +235,9 @@ export default function AdminFilesPage() {
                 className="h-10 w-full rounded-sm border border-hairline px-3"
                 data-testid={`admin-file-setting-${key}`}
               />
-              {settings && <span className="mt-1 block text-xs text-muted">{formatBytes(settings[key])}</span>}
+              {settings && (
+                <span className="mt-1 block text-xs text-muted">{formatBytes(settings[key])}</span>
+              )}
             </label>
           ))}
           <div className="space-y-2">

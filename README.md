@@ -85,13 +85,13 @@ import하지 않는다. 자세히는 `docs/kor-travel-map-integration.md`.
 
 ## 운영 URL
 
-| 서비스 | 로컬 고정 포트 | Production URL |
-|--------|---------------|----------------|
-| API | `12801` | `https://pinvi-api.example.com` |
-| Web | `12805` | `https://pinvi.example.com` |
-| PostgreSQL | `5432` | 내부망 |
-| RustFS API / console | `12101` / `12105` | 내부망 |
-| kor-travel-map API/Admin API | `12701` | 별도 저장소 |
+| 서비스                       | 로컬 고정 포트    | Production URL                  |
+| ---------------------------- | ----------------- | ------------------------------- |
+| API                          | `12801`           | `https://pinvi-api.example.com` |
+| Web                          | `12805`           | `https://pinvi.example.com`     |
+| PostgreSQL                   | `5432`            | 내부망                          |
+| RustFS API / console         | `12101` / `12105` | 내부망                          |
+| kor-travel-map API/Admin API | `12701`           | 별도 저장소                     |
 
 운영 OAuth callback은 API 도메인 기준
 `https://pinvi-api.example.com/auth/oauth/{provider}/callback`이며, Google
@@ -154,6 +154,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 상세 문서 (역할별):
 
 **진입 / 작업 가이드**
+
 - 작업·문서화 가이드: [`docs/agent-guide.md`](docs/agent-guide.md)
 - 개발 환경: [`docs/agent-workflow.md`](docs/agent-workflow.md) /
   [`docs/dev-environment.md`](docs/dev-environment.md) /
@@ -162,6 +163,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - 현재 상태 추적: [`docs/resume.md`](docs/resume.md) / [`docs/tasks.md`](docs/tasks.md)
 
 **아키텍처**
+
 - 큰 그림: [`docs/architecture.md`](docs/architecture.md)
 - Frontend (Next.js + Expo Dev Client 공용 monorepo): [`docs/architecture/frontend.md`](docs/architecture/frontend.md)
 - 사용자 위치 정보: [`docs/architecture/user-location.md`](docs/architecture/user-location.md)
@@ -173,37 +175,44 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - YouTube intelligence (v2): [`docs/architecture/youtube-travel-intelligence.md`](docs/architecture/youtube-travel-intelligence.md)
 
 **데이터**
+
 - Pinvi `app` 도메인: [`docs/data-model.md`](docs/data-model.md)
 - Postgres schema 골격: [`docs/postgres-schema.md`](docs/postgres-schema.md)
 - 데이터 소스 인덱스: [`docs/data-sources/README.md`](docs/data-sources/README.md)
 
 **API**
+
 - 인덱스 + 공통 규약: [`docs/api/README.md`](docs/api/README.md) / [`docs/api/common.md`](docs/api/common.md)
 - 도메인별: [`auth`](docs/api/auth.md) / [`users`](docs/api/users.md) / [`trips`](docs/api/trips.md) / [`pois`](docs/api/pois.md) / [`features`](docs/api/features.md) / [`notice-plans`](docs/api/notice-plans.md) / [`storage`](docs/api/storage.md) / [`admin`](docs/api/admin.md) / [`public`](docs/api/public.md) / [`regions`](docs/api/regions.md) / [`health`](docs/api/health.md) / [`websocket`](docs/api/websocket.md)
 - 교차 검색 / 외부 상태: [`GET /search`](docs/api/features.md#27-get-search),
   [`GET /health/external`](docs/api/health.md#13-get-healthexternal)
 
 **외부 통합**
+
 - 인덱스: [`docs/integrations/README.md`](docs/integrations/README.md)
 - Resend / 소셜 로그인 (현재 Google만 활성, Naver/Kakao는 future provider) /
   AI companion 호출 계약(ADR-020, provider 구현은 별도 repo) / Telegram /
   [vworld-map-web](docs/integrations/maplibre-vworld.md) / Sentry / Loki
 
 **규약 (코딩 / DB / 테스트)**
+
 - 인덱스: [`docs/conventions/README.md`](docs/conventions/README.md)
 - [`coding-style`](docs/conventions/coding-style.md) / [`database`](docs/conventions/database.md) / [`testing`](docs/conventions/testing.md) / [`geospatial`](docs/conventions/geospatial.md) / [`normalization`](docs/conventions/normalization.md)
 
 **운영 Runbook**
+
 - 인덱스: [`docs/runbooks/README.md`](docs/runbooks/README.md)
 - [`local-dev`](docs/runbooks/local-dev.md) / [`docker-app`](docs/runbooks/docker-app.md) / [`etl`](docs/runbooks/etl.md) / [`admin`](docs/runbooks/admin.md) / [`file-storage`](docs/runbooks/file-storage.md) / [`odroid-docker`](docs/runbooks/odroid-docker.md)
 
 **컴플라이언스 / 법무**
+
 - 인덱스: [`docs/compliance/README.md`](docs/compliance/README.md)
 - 위치정보법: [`docs/compliance/lbs-act.md`](docs/compliance/lbs-act.md)
 - PIPA 2024: [`docs/compliance/pipa.md`](docs/compliance/pipa.md)
 - Provider 데이터 정책: [`docs/compliance/data-policy.md`](docs/compliance/data-policy.md)
 
 **Sprint / 결정**
+
 - Sprint 계획: [`docs/sprints/README.md`](docs/sprints/README.md)
 - 의사결정 (ADR): [`docs/decisions.md`](docs/decisions.md)
 - 작업 일지: [`docs/journal.md`](docs/journal.md)
@@ -211,12 +220,15 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 - 백로그: [`docs/tasks.md`](docs/tasks.md)
 
 **라이브러리 연계**
+
 - [`docs/kor-travel-map-integration.md`](docs/kor-travel-map-integration.md)
 
 **SPEC V8 적용 노트** (외부 문서 기반)
+
 - [`docs/spec/v8/`](docs/spec/v8/README.md)
 
 **디자인**
+
 - 마커 팔레트 (16색 + maki): [`docs/design/marker-palette.md`](docs/design/marker-palette.md)
 - 루트 `DESIGN.md` — Airbnb 디자인 톤 reference
 - 루트 `airbnb-marker-palette.html` — 16색 시각 미리보기
