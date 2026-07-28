@@ -660,9 +660,7 @@ export const AdminKorTravelMapEtlSummarySchema = z.object({
   sensor_count: z.number().int().nullable().default(null),
   run_counts: z.record(z.string(), z.number().int()).default({}),
   dagster_errors: z.array(z.string()).default([]),
-  operations_by_status: z
-    .partialRecord(AdminOperationStateSchema, z.number().int())
-    .default({}),
+  operations_by_status: z.partialRecord(AdminOperationStateSchema, z.number().int()).default({}),
   active_operations: z.number().int().nullable().default(null),
   failed_operations_24h: z.number().int().nullable().default(null),
   recent_runs: z.array(AdminDagsterRunSummarySchema).default([]),
@@ -1015,12 +1013,7 @@ export type AdminSecurityIncidentCloseRequest = z.infer<
   typeof AdminSecurityIncidentCloseRequestSchema
 >;
 
-export const AdminRateLimitIdentityKindSchema = z.enum([
-  'ip',
-  'ip_email',
-  'user',
-  'shared_token',
-]);
+export const AdminRateLimitIdentityKindSchema = z.enum(['ip', 'ip_email', 'user', 'shared_token']);
 export type AdminRateLimitIdentityKind = z.infer<typeof AdminRateLimitIdentityKindSchema>;
 
 export const AdminRateLimitOverrideActionSchema = z.enum(['blocked', 'allowed']);

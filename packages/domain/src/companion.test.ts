@@ -6,7 +6,7 @@ describe('companion', () => {
     expect(companionDisplayName({ invited_nickname: '민수', invited_email: 'a@b.c' })).toBe('민수');
     expect(companionDisplayName({ invited_nickname: null, invited_email: 'a@b.c' })).toBe('a@b.c');
     expect(companionDisplayName({ invited_nickname: null, invited_email: null })).toBe(
-      '알 수 없는 사용자'
+      '알 수 없는 사용자',
     );
   });
 

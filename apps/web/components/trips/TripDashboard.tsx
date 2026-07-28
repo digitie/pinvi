@@ -311,9 +311,7 @@ export function TripDashboard() {
       )}
 
       <div
-        className={
-          mobileWebLayout ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]'
-        }
+        className={mobileWebLayout ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]'}
       >
         <section
           className={
@@ -362,10 +360,7 @@ export function TripDashboard() {
           )}
         </section>
 
-        <aside
-          className="space-y-4"
-          aria-label="여행 관리"
-        >
+        <aside className="space-y-4" aria-label="여행 관리">
           <section
             id="trip-dashboard-create"
             className={`${

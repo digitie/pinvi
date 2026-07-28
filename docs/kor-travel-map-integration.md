@@ -73,19 +73,19 @@ read/cancel token 모두 32자 이상·Unicode whitespace 없음·서로 다름�
 
 최신 `openapi.user.json`의 Pinvi 사용 표면:
 
-| 메서드 | 경로 | Pinvi 용도 |
-|--------|------|---------------|
-| `GET` | `/v1/features/in-bounds` | 지도 viewport feature 조회 (서버 클러스터, `max_items`) |
-| `GET` | `/v1/features/search` | feature 텍스트 검색 |
-| `GET` | `/v1/features/nearby` (+`/by-target`) | 반경/기준 feature 주변 조회 |
-| `GET` | `/v1/features/{feature_id}` | feature 상세 조회 |
-| `GET` | `/v1/features/{feature_id}/weather` | 날씨 카드 |
-| `POST` | `/v1/features/batch` | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
-| `GET` | `/v1/categories` | 카테고리 카탈로그 |
-| `GET` | `/v1/public/beaches*` | Pinvi `/public/beaches*` 공개 해수욕장 목록·상세·marker |
-| `GET` | `/v1/public/festivals*` | Pinvi `/public/festivals*` 공개 축제 월별 목록·상세·marker |
-| `POST` | `/v1/admin/features*` (change API) | Pinvi Admin 승인 제안 반영 (admin 도메인 전용, §2.9 of integrations doc) |
-| `POST/GET` | `/v1/admin/feature-update-requests*` | 재적재 — kor_travel_map 운영자 전용, Pinvi 제품 비노출 (DEC-05) |
+| 메서드     | 경로                                  | Pinvi 용도                                                                  |
+| ---------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| `GET`      | `/v1/features/in-bounds`              | 지도 viewport feature 조회 (서버 클러스터, `max_items`)                     |
+| `GET`      | `/v1/features/search`                 | feature 텍스트 검색                                                         |
+| `GET`      | `/v1/features/nearby` (+`/by-target`) | 반경/기준 feature 주변 조회                                                 |
+| `GET`      | `/v1/features/{feature_id}`           | feature 상세 조회                                                           |
+| `GET`      | `/v1/features/{feature_id}/weather`   | 날씨 카드                                                                   |
+| `POST`     | `/v1/features/batch`                  | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
+| `GET`      | `/v1/categories`                      | 카테고리 카탈로그                                                           |
+| `GET`      | `/v1/public/beaches*`                 | Pinvi `/public/beaches*` 공개 해수욕장 목록·상세·marker                     |
+| `GET`      | `/v1/public/festivals*`               | Pinvi `/public/festivals*` 공개 축제 월별 목록·상세·marker                  |
+| `POST`     | `/v1/admin/features*` (change API)    | Pinvi Admin 승인 제안 반영 (admin 도메인 전용, §2.9 of integrations doc)    |
+| `POST/GET` | `/v1/admin/feature-update-requests*`  | 재적재 — kor_travel_map 운영자 전용, Pinvi 제품 비노출 (DEC-05)             |
 
 응답 envelope는 kor-travel-map 계약의 `{data, meta}`를 따른다. Pinvi는 이 응답을
 자기 API 응답 셰입으로 다시 감싸거나 필요한 필드만 투영할 수 있지만, 원천 필드명
@@ -99,19 +99,19 @@ read/cancel token 모두 32자 이상·Unicode whitespace 없음·서로 다름�
 최신 `openapi.json`에는 user-facing 표면 외에 다음 운영 표면이 있다. Pinvi
 Admin이 직접 프록시할 때만 사용하고, 일반 사용자 API에서는 노출하지 않는다.
 
-| 영역 | 대표 경로 |
-|------|----------|
-| feature update request | `/v1/admin/feature-update-requests`, `/run-now`, `/cancel` |
-| dedup/enrichment review | `/v1/admin/dedup-reviews`, `/v1/admin/enrichment-reviews` |
-| feature 관리 | `/v1/admin/features*`(change API 포함), `/v1/admin/features/{id}/deactivate` |
-| 이슈 큐 | `/v1/admin/issues*` |
-| offline upload | `/v1/admin/offline-uploads/*` |
-| POI cache target | `/v1/admin/poi-cache-targets/*` |
-| backup/restore | `/v1/admin/backups*`, `/v1/admin/restore/*` |
-| ops/consistency | `/v1/ops/consistency/*`, `/v1/ops/health-deep` — T-VN-03부터 모든 runtime read는 `ops:read`; `health-deep` direct caller는 현재 없음 |
-| ops/logs | `/v1/ops/system-logs`, `/v1/ops/api-call-logs` — `ops:read` 전용, Admin BFF/service credential fallback 없음 |
-| dataset/pipeline | `/v1/ops/datasets*`, `/v1/ops/pipeline/{overview,executions}`와 canonical cancellation |
-| debug | `/v1/debug/etl/*`; kor-travel-map `/v1/debug/mois-license` raw projection은 PinVi가 소비하지 않음 |
+| 영역                    | 대표 경로                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| feature update request  | `/v1/admin/feature-update-requests`, `/run-now`, `/cancel`                                                                           |
+| dedup/enrichment review | `/v1/admin/dedup-reviews`, `/v1/admin/enrichment-reviews`                                                                            |
+| feature 관리            | `/v1/admin/features*`(change API 포함), `/v1/admin/features/{id}/deactivate`                                                         |
+| 이슈 큐                 | `/v1/admin/issues*`                                                                                                                  |
+| offline upload          | `/v1/admin/offline-uploads/*`                                                                                                        |
+| POI cache target        | `/v1/admin/poi-cache-targets/*`                                                                                                      |
+| backup/restore          | `/v1/admin/backups*`, `/v1/admin/restore/*`                                                                                          |
+| ops/consistency         | `/v1/ops/consistency/*`, `/v1/ops/health-deep` — T-VN-03부터 모든 runtime read는 `ops:read`; `health-deep` direct caller는 현재 없음 |
+| ops/logs                | `/v1/ops/system-logs`, `/v1/ops/api-call-logs` — `ops:read` 전용, Admin BFF/service credential fallback 없음                         |
+| dataset/pipeline        | `/v1/ops/datasets*`, `/v1/ops/pipeline/{overview,executions}`와 canonical cancellation                                               |
+| debug                   | `/v1/debug/etl/*`; kor-travel-map `/v1/debug/mois-license` raw projection은 PinVi가 소비하지 않음                                    |
 
 T-VN-03 배포 source 정본은 PinVi
 [PR #393](https://github.com/digitie/pinvi/pull/393)와 kor-travel-map
@@ -124,15 +124,15 @@ T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이�
 
 ## 5. Pinvi API 매핑
 
-| Pinvi API | kor-travel-map 호출 | 비고 |
-|--------------|----------------|------|
-| `GET /features/in-bounds` | `GET /v1/features/in-bounds` | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
-| `GET /features/{feature_id}` | `GET /v1/features/{feature_id}` | 상세 화면 |
-| `GET /features/nearby` | `GET /v1/features/nearby` (기준 feature 시 `/by-target`) | cursor 페이지네이션 |
-| `GET /search` feature 영역 | `GET /v1/features/search` | 주소 후보는 `kor-travel-geo` v2 search |
-| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch` | `feature_id[]` batch, 응답 `data.found`/`missing` |
-| POI 생성 feature 검증 | `POST /v1/features/batch` | `missing`이면 snapshot fallback 정책 적용 |
-| 사용자 feature 제안 승인 반영 | `POST/PATCH/DELETE /v1/admin/features*` (change API) | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180) |
+| Pinvi API                       | kor-travel-map 호출                                      | 비고                                                                  |
+| ------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| `GET /features/in-bounds`       | `GET /v1/features/in-bounds`                             | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
+| `GET /features/{feature_id}`    | `GET /v1/features/{feature_id}`                          | 상세 화면                                                             |
+| `GET /features/nearby`          | `GET /v1/features/nearby` (기준 feature 시 `/by-target`) | cursor 페이지네이션                                                   |
+| `GET /search` feature 영역      | `GET /v1/features/search`                                | 주소 후보는 `kor-travel-geo` v2 search                                |
+| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
+| POI 생성 feature 검증           | `POST /v1/features/batch`                                | `missing`이면 snapshot fallback 정책 적용                             |
+| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)     | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
 
 ## 6. HTTP client 패턴
 

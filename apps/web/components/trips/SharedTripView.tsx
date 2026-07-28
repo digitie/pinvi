@@ -131,7 +131,9 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
                 }
               >
                 {day.title ?? `${day.day_index}일차`}
-                {dayHolidayLabel && <span className="ml-2 text-xs opacity-85">{dayHolidayLabel}</span>}
+                {dayHolidayLabel && (
+                  <span className="ml-2 text-xs opacity-85">{dayHolidayLabel}</span>
+                )}
               </button>
             );
           })}

@@ -10,6 +10,7 @@ agent (Claude Code / Claude Desktop / Codex / Antigravity 등)가 사용자 본�
 trip / poi / feature / profile 데이터를 read-only로 조회할 수 있다.
 
 **사용 시나리오**:
+
 - 사용자가 Claude Desktop에 "내 부산 여행 일정 보여줘" → MCP tool `get_trip` 호출
 - 사용자가 Codex CLI에 "다음 여행에 추가할 만한 한적한 카페 추천" →
   `search_features(q="한적 카페", bounds=내 trip 영역)` + `list_pois(trip_id)`
@@ -18,10 +19,10 @@ trip / poi / feature / profile 데이터를 read-only로 조회할 수 있다.
 
 ## 2. 트랜스포트
 
-| 트랜스포트 | 사용처 | 엔드포인트 |
-|----------|--------|----------|
-| **stdio** | Claude Desktop (로컬) — `~/.claude.json`에 등록 | `codegraph install` 패턴과 동일하게 wrapper script 제공 |
-| **SSE (Server-Sent Events)** | Claude Code remote / web client / 사용자 자동화 | `GET /mcp/sse` (Bearer 토큰) |
+| 트랜스포트                   | 사용처                                          | 엔드포인트                                              |
+| ---------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
+| **stdio**                    | Claude Desktop (로컬) — `~/.claude.json`에 등록 | `codegraph install` 패턴과 동일하게 wrapper script 제공 |
+| **SSE (Server-Sent Events)** | Claude Code remote / web client / 사용자 자동화 | `GET /mcp/sse` (Bearer 토큰)                            |
 
 stdio wrapper는 후속 작업에서 `apps/api/scripts/mcp-stdio-bridge.sh`로 추가한다.
 환경변수로 토큰을 받아 `/mcp/sse`로 프록시하는 형태를 유지한다.
@@ -78,29 +79,29 @@ Authorization: Bearer mcp_<JWT>
     "properties": {
       "status": {
         "type": "string",
-        "enum": ["draft", "planned", "in_progress", "completed", "archived"]
+        "enum": ["draft", "planned", "in_progress", "completed", "archived"],
       },
       "bucket": {
         "type": "string",
         "enum": ["future", "past", "all"],
-        "default": "future"
+        "default": "future",
       },
       "q": { "type": "string", "minLength": 2, "maxLength": 120 },
       "visibility": {
         "type": "string",
-        "enum": ["private", "unlisted", "public"]
+        "enum": ["private", "unlisted", "public"],
       },
       "date_from": { "type": "string", "format": "date" },
       "date_to": { "type": "string", "format": "date" },
       "sort": {
         "type": "string",
         "enum": ["-updated_at", "start_date", "-start_date", "title"],
-        "default": "-updated_at"
+        "default": "-updated_at",
       },
       "limit": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 },
-      "cursor": { "type": "string" }
-    }
-  }
+      "cursor": { "type": "string" },
+    },
+  },
 }
 ```
 
@@ -119,12 +120,18 @@ T-112 1차 구현은 `GET /mcp/sse`에서 tool descriptor 이벤트를 제공하
 ```jsonc
 {
   "items": [
-    { "trip_id": "uuid", "title": "부산 2박 3일", "status": "planned",
-      "start_date": "2026-06-01", "end_date": "2026-06-03",
-      "day_count": 3, "poi_count": 12 }
+    {
+      "trip_id": "uuid",
+      "title": "부산 2박 3일",
+      "status": "planned",
+      "start_date": "2026-06-01",
+      "end_date": "2026-06-03",
+      "day_count": 3,
+      "poi_count": 12,
+    },
   ],
   "next_cursor": "opaque-or-null",
-  "has_more": true
+  "has_more": true,
 }
 ```
 
@@ -137,8 +144,8 @@ T-112 1차 구현은 `GET /mcp/sse`에서 tool descriptor 이벤트를 제공하
   "inputSchema": {
     "type": "object",
     "properties": { "trip_id": { "type": "string", "format": "uuid" } },
-    "required": ["trip_id"]
-  }
+    "required": ["trip_id"],
+  },
 }
 ```
 

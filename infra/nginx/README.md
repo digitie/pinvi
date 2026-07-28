@@ -7,11 +7,11 @@
 
 ## 파일
 
-| 파일 | 역할 |
-|---|---|
-| `Dockerfile` | nginx + `libnginx-mod-http-geoip2` 모듈 로드 이미지 |
-| `conf.d/geo-kr.conf` | http 컨텍스트 map 정의(`$resolved_country`/`$is_kr`/`$geo_block`) |
-| `conf.d/geo-kr-server.example.conf` | server 블록 적용 예시(451 + fallback 신호 주입) |
+| 파일                                | 역할                                                              |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `Dockerfile`                        | nginx + `libnginx-mod-http-geoip2` 모듈 로드 이미지               |
+| `conf.d/geo-kr.conf`                | http 컨텍스트 map 정의(`$resolved_country`/`$is_kr`/`$geo_block`) |
+| `conf.d/geo-kr-server.example.conf` | server 블록 적용 예시(451 + fallback 신호 주입)                   |
 
 ## 활성 절차
 

@@ -8,7 +8,7 @@ export type ShareStatus = 'active' | 'expired' | 'revoked';
 
 export function shareLinkStatus(
   link: { expires_at: string | null; revoked_at: string | null },
-  now: number = Date.now()
+  now: number = Date.now(),
 ): ShareStatus {
   if (link.revoked_at) return 'revoked';
   if (link.expires_at && new Date(link.expires_at).getTime() <= now) return 'expired';

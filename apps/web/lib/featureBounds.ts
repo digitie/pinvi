@@ -31,7 +31,7 @@ export function toBboxParam(
   south: number,
   east: number,
   north: number,
-  precision = 5
+  precision = 5,
 ): string {
   const p = Math.max(0, Math.min(5, Math.floor(precision)));
   const factor = 10 ** p;
@@ -62,7 +62,7 @@ export function boundsToBbox(bounds: maplibregl.LngLatBounds, zoom?: number): st
     bounds.getSouth(),
     bounds.getEast(),
     bounds.getNorth(),
-    precision
+    precision,
   );
 }
 

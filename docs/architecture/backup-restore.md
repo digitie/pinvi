@@ -8,11 +8,11 @@ Pinvi 데이터의 일관성 / 무중단 복구. SPEC V8 RTO 1h / RPO 24h.
 
 ## 2. 책임 분리
 
-| 데이터 | 책임 | 백업 방식 |
-|--------|------|----------|
-| `app` schema (사용자 / trip / poi / 동의 / audit_log) | Pinvi | pg_dump --custom |
-| `feature` / `provider_sync` schema | `kor-travel-map` (별 저장소) | 별 저장소가 관리 — 본 PR 범위 외 |
-| RustFS (사용자 첨부 + feature 미디어) | Pinvi + 라이브러리 | RustFS native snapshot 또는 rsync |
+| 데이터                                                | 책임                         | 백업 방식                         |
+| ----------------------------------------------------- | ---------------------------- | --------------------------------- |
+| `app` schema (사용자 / trip / poi / 동의 / audit_log) | Pinvi                        | pg_dump --custom                  |
+| `feature` / `provider_sync` schema                    | `kor-travel-map` (별 저장소) | 별 저장소가 관리 — 본 PR 범위 외  |
+| RustFS (사용자 첨부 + feature 미디어)                 | Pinvi + 라이브러리           | RustFS native snapshot 또는 rsync |
 
 본 문서는 **Pinvi 측 `app` schema + 사용자 첨부 RustFS 버킷**에 한정.
 
@@ -56,6 +56,7 @@ UI: `/admin/backup` 페이지에서 "지금 백업" 버튼과 snapshot 목록을
 ### 3.3 검증
 
 매 backup 후:
+
 - `pg_restore --list backup.dump`이 성공 (corruption 없음)
 - `app.users` 행 수 / `app.trips` 행 수 백업 직전과 일치 (또는 ±10%)
 - Grafana 메트릭: backup_size_bytes, backup_duration_seconds, last_backup_at
@@ -129,6 +130,7 @@ restore 준비 시간을 사용자 트래픽과 병렬로 처리하고, 쓰기 �
 ### 5.2 UI 흐름
 
 `/admin/backup`:
+
 - snapshot 목록 (날짜 / 크기 / 검증 상태)
 - "Restore (schema-swap)" 버튼 → `RestoreHotswapDialog`
 - 다이얼로그:
@@ -157,19 +159,20 @@ canonical chain에서 사라지고, previous schema에 forensic 목적으로 보
 
 ### 5.4 실패 / rollback
 
-| 실패 지점 | 자동 처리 |
-|----------|----------|
-| precheck 실패 | abort, 기존 `app` 유지 |
-| restore schema 준비 실패 | abort, 기존 `app` 유지 |
-| pg_restore 실패 | restore schema DROP, 기존 `app` 유지 |
-| healthcheck 실패 | restore schema DROP, 기존 `app` 유지 |
-| cut-over 전 drain 실패 | abort, 기존 `app` 유지 |
-| cut-over 후 app 오류 | API/Web 정지 → `app`을 `app_failed_<ts>`로, `app_previous_<ts>`를 `app`으로 rename → 재시작 |
-| cut-over 후 1시간 내 audit chain 깨짐 발견 | manual intervention (운영자 판단) |
+| 실패 지점                                  | 자동 처리                                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| precheck 실패                              | abort, 기존 `app` 유지                                                                      |
+| restore schema 준비 실패                   | abort, 기존 `app` 유지                                                                      |
+| pg_restore 실패                            | restore schema DROP, 기존 `app` 유지                                                        |
+| healthcheck 실패                           | restore schema DROP, 기존 `app` 유지                                                        |
+| cut-over 전 drain 실패                     | abort, 기존 `app` 유지                                                                      |
+| cut-over 후 app 오류                       | API/Web 정지 → `app`을 `app_failed_<ts>`로, `app_previous_<ts>`를 `app`으로 rename → 재시작 |
+| cut-over 후 1시간 내 audit chain 깨짐 발견 | manual intervention (운영자 판단)                                                           |
 
 ## 6. 분기 훈련
 
 분기 1회 staging에서 핫스왑 훈련. Sprint 6 종료 시 1회 prod 훈련:
+
 - 사용자 안내 (가족 베타 — Telegram 알림 + 메일)
 - read-only mode 30분 (실제로는 핫스왑이라 무중단이지만 안전을 위해)
 - 훈련 후 reflection: `docs/journal.md` + 절차 갱신

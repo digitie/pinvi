@@ -48,7 +48,9 @@ GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cur
         "road_address": "...",
         "road_name_code": "...",
         "road_address_management_no": "...",
-        "address_snapshot": { /* ... */ },
+        "address_snapshot": {
+          /* ... */
+        },
         "address_mapping_method": "road_exact",
         "beach_width_m": 80,
         "beach_length_m": 1400,
@@ -57,19 +59,27 @@ GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cur
         "image_url": "...",
         "emergency_contact": "...",
         "source_providers": ["data_go_kr", "khoa", "kma"],
-        "latest_observation": { /* 최근 관측 */ },
-        "latest_water_quality": { /* 수질 */ },
-        "upcoming_index_forecasts": [/* KHOA 예보 */],
-        "latest_weather": { /* KMA */ }
-      }
-    ]
+        "latest_observation": {
+          /* 최근 관측 */
+        },
+        "latest_water_quality": {
+          /* 수질 */
+        },
+        "upcoming_index_forecasts": [
+          /* KHOA 예보 */
+        ],
+        "latest_weather": {
+          /* KMA */
+        },
+      },
+    ],
   },
   "meta": {
     "cursor": "next-cursor-or-null",
     "has_more": true,
     "total": 50,
-    "limit": 50
-  }
+    "limit": 50,
+  },
 }
 ```
 
@@ -98,10 +108,10 @@ GET /public/beaches/map-markers?max_items=500
         "name": "광안리 해수욕장",
         "lon": 129.118,
         "lat": 35.155,
-        "sigungu_code": "26110"
-      }
-    ]
-  }
+        "sigungu_code": "26110",
+      },
+    ],
+  },
 }
 ```
 
@@ -126,7 +136,7 @@ GET /public/festivals/monthly?year=2026&month=6&page_size=12
     "months": [
       { "year": 2026, "month": 5, "count": 23 },
       { "year": 2026, "month": 6, "count": 47 },
-      { "year": 2026, "month": 7, "count": 31 }
+      { "year": 2026, "month": 7, "count": 31 },
     ],
     "items": [
       {
@@ -142,16 +152,16 @@ GET /public/festivals/monthly?year=2026&month=6&page_size=12
         "sido_code": "26",
         "lon": 129.118,
         "lat": 35.155,
-        "homepage_url": "..."
-      }
-    ]
+        "homepage_url": "...",
+      },
+    ],
   },
   "meta": {
     "cursor": null,
     "has_more": false,
     "total": 47,
-    "limit": 12
-  }
+    "limit": 12,
+  },
 }
 ```
 
@@ -169,8 +179,10 @@ GET /public/festivals/map-markers?max_items=500
     "layer_key": "festival",
     "marker_color": "P-11",
     "marker_icon": "star",
-    "items": [/* feature_id + name + lon + lat */]
-  }
+    "items": [
+      /* feature_id + name + lon + lat */
+    ],
+  },
 }
 ```
 
@@ -191,8 +203,8 @@ GET /public/festivals/map-markers?max_items=500
     "provider_institution_name": "...",
     "reference_date": "2026-05-01",
     "marker_color": "P-11",
-    "marker_icon": "star"
-  }
+    "marker_icon": "star",
+  },
 }
 ```
 

@@ -15,7 +15,9 @@ describe('error recovery helpers (T-278)', () => {
     expect(
       isLikelyRecoverableNextRuntimeError(new Error('Importing a module script failed.')),
     ).toBe(true);
-    expect(isLikelyRecoverableNextRuntimeError(new Error('Failed to fetch RSC payload'))).toBe(true);
+    expect(isLikelyRecoverableNextRuntimeError(new Error('Failed to fetch RSC payload'))).toBe(
+      true,
+    );
   });
 
   it('일반 화면 코드 오류는 자동 reload 후보로 보지 않는다', () => {

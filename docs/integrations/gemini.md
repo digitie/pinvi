@@ -81,9 +81,7 @@ CREATE INDEX gemini_runs_status_idx ON app.gemini_research_runs (status) WHERE s
   "교통/주차": "...",
   "가족/아이 동반 적합성": "...",
   "비 오는 날 대안": "...",
-  "출처/근거": [
-    { "url": "...", "title": "...", "accessed_at": "..." }
-  ]
+  "출처/근거": [{ "url": "...", "title": "...", "accessed_at": "..." }],
 }
 ```
 

@@ -6,7 +6,7 @@
 import { CoordSchema } from '@pinvi/schemas';
 
 export function parseSuggestParam(
-  raw: string | string[] | undefined | null
+  raw: string | string[] | undefined | null,
 ): { lon: number; lat: number } | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value) return null;

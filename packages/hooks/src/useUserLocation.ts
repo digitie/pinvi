@@ -48,10 +48,7 @@ export interface UseUserLocationOptions extends LocationOptions {
  * 공용 위치 hook — `docs/architecture/user-location.md` §3.3.
  * 어댑터를 인자로 받아 web/mobile 분기 회피.
  */
-export function useUserLocation(
-  adapter: LocationAdapter,
-  opts: UseUserLocationOptions = {},
-) {
+export function useUserLocation(adapter: LocationAdapter, opts: UseUserLocationOptions = {}) {
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [error, setError] = useState<LocationError | null>(null);
   const [loading, setLoading] = useState(false);
@@ -65,9 +62,10 @@ export function useUserLocation(
       setLocation(loc);
       opts.on_success?.(loc);
     } catch (rawError) {
-      const err = rawError instanceof LocationError
-        ? rawError
-        : new LocationError('UNKNOWN', String(rawError));
+      const err =
+        rawError instanceof LocationError
+          ? rawError
+          : new LocationError('UNKNOWN', String(rawError));
       setError(err);
       opts.on_error?.(err);
     } finally {

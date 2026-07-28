@@ -5,6 +5,7 @@
 패턴이다. ADR-025 기준.
 
 > **경계 한 줄 요약**
+>
 > - **Feature 데이터**(place/event/weather/...) → `kor-travel-map` **OpenAPI
 >   HTTP 계약**(ADR-026). → `docs/kor-travel-map-integration.md`.
 > - **Geocoding/주소/행정구역** → `kor-travel-geo` **v2 REST API HTTP 호출**(ADR-025).
@@ -72,19 +73,20 @@ Pinvi의 server-to-server client는 모든 v2 요청에 `?key=<PINVI_VWORLD_API_
 
 요청:
 
-| 필드 | 타입 | 기본 | 비고 |
-|------|------|------|------|
-| `lon` | float | 필수 | 경도 |
-| `lat` | float | 필수 | 위도 |
-| `crs` | string | `EPSG:4326` | |
-| `radius_m` | int | `200` | 검색 반경 |
-| `include_region` | bool | `true` | region 보강 |
-| `include_zipcode` | bool | `true` | 우편번호 보강 |
-| `sig_cd`/`bjd_cd` | string | — | hint |
+| 필드              | 타입   | 기본        | 비고          |
+| ----------------- | ------ | ----------- | ------------- |
+| `lon`             | float  | 필수        | 경도          |
+| `lat`             | float  | 필수        | 위도          |
+| `crs`             | string | `EPSG:4326` |               |
+| `radius_m`        | int    | `200`       | 검색 반경     |
+| `include_region`  | bool   | `true`      | region 보강   |
+| `include_zipcode` | bool   | `true`      | 우편번호 보강 |
+| `sig_cd`/`bjd_cd` | string | —           | hint          |
 
 응답 `candidates[]` 항목: `match_kind`(`road`/`parcel`/`keyword`/`region`/`sppn`/`poi`),
 `address`, `point{lon,lat}`, `region{sig_cd,bjd_cd,...}`, `source`, `distance_m`,
 `confidence`.
+
 - `confidence = 1 - distance_m/radius_m` (반경 내 근접도).
 - 국가지점번호 의무지역이면 `match_kind="sppn"` 후보가 함께 올 수 있다(`address`
   없을 수 있음). Pinvi region label 용도로는 `sppn`을 무시한다.
@@ -130,12 +132,12 @@ curl -X POST "$KOR_TRAVEL_GEO/v2/search" -H 'Content-Type: application/json' \
 
 요청:
 
-| 필드 | 타입 | 기본 | 비고 |
-|------|------|------|------|
-| `lon` | float | 필수 | 경도 |
-| `lat` | float | 필수 | 위도 |
-| `radius_km` | float | `3.0` | 검색 반경(km), 최대 `500` |
-| `levels` | string[] | `[sigungu, emd]` | `sido`\|`sigungu`\|`emd` 중 요청할 level 배열 |
+| 필드        | 타입     | 기본             | 비고                                          |
+| ----------- | -------- | ---------------- | --------------------------------------------- |
+| `lon`       | float    | 필수             | 경도                                          |
+| `lat`       | float    | 필수             | 위도                                          |
+| `radius_km` | float    | `3.0`            | 검색 반경(km), 최대 `500`                     |
+| `levels`    | string[] | `[sigungu, emd]` | `sido`\|`sigungu`\|`emd` 중 요청할 level 배열 |
 
 응답: 공통 헤더 `{status, query_id, input}` + `center{lon,lat}` + `radius_km` +
 level별 그룹 배열 `sido[]`/`sigungu[]`/`emd[]`. 각 항목은 `{code, name, relation}`이며
@@ -158,14 +160,14 @@ curl -X POST "$KOR_TRAVEL_GEO/v2/regions/within-radius" -H 'Content-Type: applic
 
 최신 `openapi.json`의 public v1 legacy 표면:
 
-| 메서드 | 경로 |
-|--------|------|
-| `GET` | `/v1/healthz` |
-| `GET` | `/v1/address/geocode` |
-| `GET` | `/v1/address/reverse` |
-| `GET` | `/v1/address/search` |
-| `GET` | `/v1/address/zipcode` |
-| `GET` | `/v1/address/pobox` |
+| 메서드 | 경로                  |
+| ------ | --------------------- |
+| `GET`  | `/v1/healthz`         |
+| `GET`  | `/v1/address/geocode` |
+| `GET`  | `/v1/address/reverse` |
+| `GET`  | `/v1/address/search`  |
+| `GET`  | `/v1/address/zipcode` |
+| `GET`  | `/v1/address/pobox`   |
 
 Admin/ops 표면에는 uploads/jobs/tables/logs/normalize/explain/load-sources,
 backup/restore, consistency, audit/snapshot/release/maintenance, cache metrics,
@@ -179,11 +181,11 @@ Pinvi는 이 admin 표면을 사용자 API에서 호출하지 않는다. kor-tra
 v2 candidate를 Pinvi 표준 응답 `{data, meta}`(`docs/api/common.md`)로 래핑한다.
 라우터: `apps/api/app/api/v1/geo.py`.
 
-| Pinvi endpoint | 호출 | 용도 |
-|-------------------|------|------|
-| `GET /geo/search?q=&type=&size=` | `POST /v2/search` | 주소/장소 자동완성 (Trip 만들 때 목적지 검색, POI 수동 추가) |
-| `GET /geo/reverse?lon=&lat=&radius_m=` | `POST /v2/reverse` | 지도 클릭/내 위치 → 주소·행정구역 label |
-| `GET /geo/geocode?q=` | `POST /v2/geocode` | 주소 문자열 → 좌표 (공유 링크/딥링크 주소 입력) |
+| Pinvi endpoint                         | 호출               | 용도                                                         |
+| -------------------------------------- | ------------------ | ------------------------------------------------------------ |
+| `GET /geo/search?q=&type=&size=`       | `POST /v2/search`  | 주소/장소 자동완성 (Trip 만들 때 목적지 검색, POI 수동 추가) |
+| `GET /geo/reverse?lon=&lat=&radius_m=` | `POST /v2/reverse` | 지도 클릭/내 위치 → 주소·행정구역 label                      |
+| `GET /geo/geocode?q=`                  | `POST /v2/geocode` | 주소 문자열 → 좌표 (공유 링크/딥링크 주소 입력)              |
 
 GET 쿼리스트링 → 서비스에서 v2 POST body로 변환한다(클라이언트는 GET이 캐시·
 링크 친화적). 좌표를 받는 `/geo/reverse`는 **위치 감사 대상**(§8).
@@ -315,26 +317,26 @@ async def geo_reverse(lon: float, lat: float, geo: GeocodingDep,
 
 ## 9. 에러 매핑
 
-| 상황 | Pinvi 응답 |
-|------|---------------|
+| 상황                                     | Pinvi 응답                                                    |
+| ---------------------------------------- | ------------------------------------------------------------- |
 | kor-travel-geo 5xx / 네트워크 / 타임아웃 | `503 GEOCODING_UNAVAILABLE` (degrade — 지도/검색은 빈 결과로) |
-| v2 `status != "OK"` 또는 candidates 빈 | `200 {data: {candidates: []}}` (정상 빈 결과) |
-| 잘못된 좌표/파라미터(한국 범위 밖 등) | `422 VALIDATION_ERROR` (Pinvi가 먼저 검증) |
-| `pinvi_kor_travel_geo_enabled=false` | `503 GEOCODING_UNAVAILABLE` |
+| v2 `status != "OK"` 또는 candidates 빈   | `200 {data: {candidates: []}}` (정상 빈 결과)                 |
+| 잘못된 좌표/파라미터(한국 범위 밖 등)    | `422 VALIDATION_ERROR` (Pinvi가 먼저 검증)                    |
+| `pinvi_kor_travel_geo_enabled=false`     | `503 GEOCODING_UNAVAILABLE`                                   |
 
 geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful degrade**가 기본
 (검색창은 "검색 일시 불가" 안내, 지도 클릭 label은 좌표만 표시).
 
 ## 10. 사용처 (Pinvi 기능 매핑)
 
-| 기능 | endpoint | 비고 |
-|------|----------|------|
-| Trip 목적지 검색 / POI 수동 추가 자동완성 | `/geo/search?type=address\|place` | 디바운스 + 캐시 |
-| 지도 클릭/우클릭 "이 지점 주소" | `/geo/reverse` | 위치 감사 |
-| "내 위치" → 현재 행정구역 label | `/geo/reverse` (`include_region`) | user-location §4.2 |
-| 행정구역 단위 탐색(시군구 선택) | `/geo/search?type=district` | 대표점 = `ST_PointOnSurface` |
-| 좌표 주변 행정구역 후보 | `/geo/regions/within-radius` | kor-travel-geo `/v2/regions/within-radius` |
-| 공유 링크/딥링크 주소 → 지도 이동 | `/geo/geocode` | |
+| 기능                                      | endpoint                          | 비고                                       |
+| ----------------------------------------- | --------------------------------- | ------------------------------------------ |
+| Trip 목적지 검색 / POI 수동 추가 자동완성 | `/geo/search?type=address\|place` | 디바운스 + 캐시                            |
+| 지도 클릭/우클릭 "이 지점 주소"           | `/geo/reverse`                    | 위치 감사                                  |
+| "내 위치" → 현재 행정구역 label           | `/geo/reverse` (`include_region`) | user-location §4.2                         |
+| 행정구역 단위 탐색(시군구 선택)           | `/geo/search?type=district`       | 대표점 = `ST_PointOnSurface`               |
+| 좌표 주변 행정구역 후보                   | `/geo/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
+| 공유 링크/딥링크 주소 → 지도 이동         | `/geo/geocode`                    |                                            |
 
 > feature(관광지/주유소/날씨 등) 검색은 geocoding이 아니다 — kor-travel-map
 > OpenAPI HTTP 계약. 주소·행정구역·장소명만 본 문서 경로.

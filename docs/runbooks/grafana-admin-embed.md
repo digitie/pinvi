@@ -115,12 +115,12 @@ admin 로그인 (별 계정 — `/admin/grafana/login` 별 라우트, infra 운�
 
 ## 5. 트러블슈팅
 
-| 증상                                  | 원인                       | 해결                                                             |
-| ------------------------------------- | -------------------------- | ---------------------------------------------------------------- |
-| iframe 빈 화면                        | `frame-ancestors` CSP 누락 | grafana.ini + nginx 헤더 모두 점검                               |
-| iframe 안에서 "embedding not allowed" | `allow_embedding=false`    | grafana.ini 갱신 + 재시작                                        |
-| 401 / 로그인 폼                       | anonymous 비활성           | `[auth.anonymous] enabled=true`                                  |
-| 데이터 없음                           | datasource 미연결          | Loki / Prometheus URL 확인                                       |
+| 증상                                  | 원인                       | 해결                                                              |
+| ------------------------------------- | -------------------------- | ----------------------------------------------------------------- |
+| iframe 빈 화면                        | `frame-ancestors` CSP 누락 | grafana.ini + nginx 헤더 모두 점검                                |
+| iframe 안에서 "embedding not allowed" | `allow_embedding=false`    | grafana.ini 갱신 + 재시작                                         |
+| 401 / 로그인 폼                       | anonymous 비활성           | `[auth.anonymous] enabled=true`                                   |
+| 데이터 없음                           | datasource 미연결          | Loki / Prometheus URL 확인                                        |
 | Admin health 상태 `강등`              | Grafana `/api/health` 실패 | Grafana container, reverse proxy, `PINVI_GRAFANA_HEALTH_URL` 확인 |
 
 ## 6. 참조

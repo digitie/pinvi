@@ -194,7 +194,7 @@ POST /admin/abuse/overrides/<override_id>/rollback
   "email": "user@example.com",
   "action": "blocked",
   "ttl_minutes": 60,
-  "access_reason": "credential stuffing 대응"
+  "access_reason": "credential stuffing 대응",
 }
 ```
 

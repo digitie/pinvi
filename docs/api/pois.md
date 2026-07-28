@@ -74,8 +74,8 @@ Content-Type: application/json
     "moonrise_at": "...",
     "moonset_at": "...",
     "fetched_at": "2026-06-01T21:00:00Z",
-    "updated_at": "2026-06-01T21:00:00Z"
-  }
+    "updated_at": "2026-06-01T21:00:00Z",
+  },
 }
 ```
 
@@ -123,8 +123,8 @@ Content-Type: application/json
 {
   "moves": [
     { "poi_id": "uuid-1", "new_sort_order": "b1" },
-    { "poi_id": "uuid-2", "new_sort_order": "b2" }
-  ]
+    { "poi_id": "uuid-2", "new_sort_order": "b2" },
+  ],
 }
 ```
 
@@ -145,11 +145,11 @@ WebSocket broadcast: `poi.reordered` + `version`.
 
 라이브러리 `feature.features`가 갱신되면 POI snapshot을 다시 채울지 정책:
 
-| 정책 | 동작 |
-|------|------|
-| **lazy** (기본) | UI 표시 시 kor-travel-map batch 조회. snapshot은 fallback |
-| **eager** (선택) | Dagster job 일 1회 + `WHERE feature_id IN (...)` |
-| **on-write** | POI write 시점 kor-travel-map batch 조회 → snapshot upsert |
+| 정책             | 동작                                                       |
+| ---------------- | ---------------------------------------------------------- |
+| **lazy** (기본)  | UI 표시 시 kor-travel-map batch 조회. snapshot은 fallback  |
+| **eager** (선택) | Dagster job 일 1회 + `WHERE feature_id IN (...)`           |
+| **on-write**     | POI write 시점 kor-travel-map batch 조회 → snapshot upsert |
 
 v1.0은 **lazy**. Sprint 5에서 eager rebuild Dagster job 검토.
 

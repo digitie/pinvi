@@ -2,9 +2,7 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 const liveEnabled = process.env.PINVI_LIVE_MUTATING_E2E === '1';
 const webBaseUrl =
-  process.env.PINVI_LIVE_WEB_URL ??
-  process.env.PLAYWRIGHT_BASE_URL ??
-  'http://127.0.0.1:12805';
+  process.env.PINVI_LIVE_WEB_URL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:12805';
 const apiBaseUrl = process.env.PINVI_LIVE_API_URL ?? 'http://127.0.0.1:12801';
 const liveEmail = process.env.PINVI_LIVE_EMAIL;
 const livePassword = process.env.PINVI_LIVE_PASSWORD;
@@ -72,21 +70,19 @@ async function installLiveWebSocketRecorder(page: Page) {
 
 async function liveSocketCount(page: Page) {
   return page.evaluate(() => {
-    return ((window as unknown as { __pinviLiveWebSockets?: WebSocket[] }).__pinviLiveWebSockets ?? [])
-      .length;
+    return (
+      (window as unknown as { __pinviLiveWebSockets?: WebSocket[] }).__pinviLiveWebSockets ?? []
+    ).length;
   });
 }
 
 async function waitForLiveSocket(page: Page, minCount: number) {
-  await page.waitForFunction(
-    (expected) => {
-      const sockets =
-        (window as unknown as { __pinviLiveWebSockets?: { readyState: number }[] })
-          .__pinviLiveWebSockets ?? [];
-      return sockets.length >= expected && sockets[sockets.length - 1]?.readyState === WebSocket.OPEN;
-    },
-    minCount,
-  );
+  await page.waitForFunction((expected) => {
+    const sockets =
+      (window as unknown as { __pinviLiveWebSockets?: { readyState: number }[] })
+        .__pinviLiveWebSockets ?? [];
+    return sockets.length >= expected && sockets[sockets.length - 1]?.readyState === WebSocket.OPEN;
+  }, minCount);
 }
 
 async function closeLatestLiveSocket(page: Page) {
@@ -131,7 +127,9 @@ async function cleanupTrip(context: BrowserContext, tripId: string) {
 test.describe('Trip WebSocket live mutating smoke', () => {
   test.skip(!liveEnabled, 'PINVI_LIVE_MUTATING_E2E=1 일 때만 live mutating e2e를 실행합니다.');
 
-  test('실제 WebSocket broadcast와 재연결 뒤 Trip snapshot reload가 동작한다', async ({ browser }) => {
+  test('실제 WebSocket broadcast와 재연결 뒤 Trip snapshot reload가 동작한다', async ({
+    browser,
+  }) => {
     assertLiveEnv();
 
     const contextA = await browser.newContext({ baseURL: webBaseUrl, ignoreHTTPSErrors: true });

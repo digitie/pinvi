@@ -33,29 +33,29 @@ Pinvi `app` schema 작업 규칙. v1 `skills/database-architect.ko.md` +
 
 ### 3.2 명명 규약
 
-| 종류 | 패턴 | 예 |
-|------|------|-----|
-| Table | `<plural_snake>` | `users`, `trip_day_pois` |
-| Column | `<snake>` | `email_verified_at`, `legal_dong_code` |
-| PK | `pk_<table>` | `pk_users` |
-| FK | `fk_<src_table>_<src_col>` (≤40자) | `fk_trip_day_pois_day_id` |
-| Index | `ix_<table>_<col>[_<col>]` 또는 `idx_<table>_<short>` | `ix_users_email`, `idx_trip_day_pois_sort` |
-| Unique | `uq_<table>_<col>[_<col>][_<scope>]` | `uq_notice_plans_slug_active` (partial) |
-| Check | `ck_<table>_<short>` | `ck_trips_date_range_order` |
-| Trigger | `trg_<table>_<event>` | `trg_users_touch_updated_at` |
+| 종류    | 패턴                                                  | 예                                         |
+| ------- | ----------------------------------------------------- | ------------------------------------------ |
+| Table   | `<plural_snake>`                                      | `users`, `trip_day_pois`                   |
+| Column  | `<snake>`                                             | `email_verified_at`, `legal_dong_code`     |
+| PK      | `pk_<table>`                                          | `pk_users`                                 |
+| FK      | `fk_<src_table>_<src_col>` (≤40자)                    | `fk_trip_day_pois_day_id`                  |
+| Index   | `ix_<table>_<col>[_<col>]` 또는 `idx_<table>_<short>` | `ix_users_email`, `idx_trip_day_pois_sort` |
+| Unique  | `uq_<table>_<col>[_<col>][_<scope>]`                  | `uq_notice_plans_slug_active` (partial)    |
+| Check   | `ck_<table>_<short>`                                  | `ck_trips_date_range_order`                |
+| Trigger | `trg_<table>_<event>`                                 | `trg_users_touch_updated_at`               |
 
 ### 3.3 짧은 alias 표
 
 긴 테이블 이름은 별칭 — `docs/decisions/20260425-postgres-migration-constraints.md` mirror:
 
-| Table | alias (≤6자) |
-|-------|-------------|
-| `trip_day_pois` | `tdp` |
-| `curated_trip_plans` | `ctp` |
-| `curated_plan_pois` | `cpp` |
-| `curated_plan_attachments` | `cpa` |
-| `user_oauth_identities` | `uoi` |
-| `user_email_verifications` | `uev` |
+| Table                      | alias (≤6자) |
+| -------------------------- | ------------ |
+| `trip_day_pois`            | `tdp`        |
+| `curated_trip_plans`       | `ctp`        |
+| `curated_plan_pois`        | `cpp`        |
+| `curated_plan_attachments` | `cpa`        |
+| `user_oauth_identities`    | `uoi`        |
+| `user_email_verifications` | `uev`        |
 
 예시: `fk_cpa_trip_id` (= `fk_curated_plan_attachments_trip_id`, 35자).
 
@@ -273,13 +273,13 @@ op.execute("CREATE EXTENSION IF NOT EXISTS postgis SCHEMA x_extension")
 
 ## 15. 자주 묻는 패턴
 
-| 패턴 | 예 |
-|------|-----|
-| optimistic lock | `version INTEGER NOT NULL DEFAULT 1` + `If-Match` 헤더 |
-| audit chain | `prev_hash CHAR(64) UNIQUE + content_hash CHAR(64)` + append-only trigger + advisory lock |
-| 시계열 (가격/날씨) | BRIN(observed_at) + (feature_id, item_key, observed_at) PK — 라이브러리 |
-| 큐 (email_queue) | `status` enum + `SKIP LOCKED` |
-| 폴리모픽 1:N | 4 FK 중 1 NOT NULL CHECK |
+| 패턴               | 예                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| optimistic lock    | `version INTEGER NOT NULL DEFAULT 1` + `If-Match` 헤더                                    |
+| audit chain        | `prev_hash CHAR(64) UNIQUE + content_hash CHAR(64)` + append-only trigger + advisory lock |
+| 시계열 (가격/날씨) | BRIN(observed_at) + (feature_id, item_key, observed_at) PK — 라이브러리                   |
+| 큐 (email_queue)   | `status` enum + `SKIP LOCKED`                                                             |
+| 폴리모픽 1:N       | 4 FK 중 1 NOT NULL CHECK                                                                  |
 
 ## 16. AI agent 체크리스트
 

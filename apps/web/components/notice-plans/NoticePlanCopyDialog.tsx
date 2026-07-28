@@ -88,8 +88,9 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
           <div className="space-y-3">
             <p className="flex items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              {result.created_trip ? '새 여행을 만들었습니다.' : '기존 여행에 추가했습니다.'} 장소{' '}
-              {result.copied_poi_ids.length}곳 복사.
+              {result.created_trip
+                ? '새 여행을 만들었습니다.'
+                : '기존 여행에 추가했습니다.'} 장소 {result.copied_poi_ids.length}곳 복사.
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -192,7 +193,9 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
             )}
 
             {error && (
-              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>
+              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+                {error}
+              </p>
             )}
 
             <div className="flex justify-end gap-2">

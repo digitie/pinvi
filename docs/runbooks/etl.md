@@ -7,15 +7,15 @@ Dagster는 Pinvi `app` schema 소유 job(KASI 특일/출몰시각, 알림, 보�
 
 ## 1. 책임 분담
 
-| 영역 | 본 저장소 (`apps/etl`) | `kor-travel-map` |
-|------|----------------------|---------------------|
-| Dagster code location | `app` schema job | feature provider job |
-| KASI 특일/출몰시각 | ✓ | ✗ |
-| 알림/outbox/PII retention | ✓ | ✗ |
-| Schedule / Sensor | ✓ | 자체 운영 |
-| 변환 (provider raw → DTO) | ✗ | ✓ |
-| 적재 (`feature.*` schema) | ✗ | ✓ |
-| Record Linkage | ✗ | ✓ |
+| 영역                      | 본 저장소 (`apps/etl`) | `kor-travel-map`     |
+| ------------------------- | ---------------------- | -------------------- |
+| Dagster code location     | `app` schema job       | feature provider job |
+| KASI 특일/출몰시각        | ✓                      | ✗                    |
+| 알림/outbox/PII retention | ✓                      | ✗                    |
+| Schedule / Sensor         | ✓                      | 자체 운영            |
+| 변환 (provider raw → DTO) | ✗                      | ✓                    |
+| 적재 (`feature.*` schema) | ✗                      | ✓                    |
+| Record Linkage            | ✗                      | ✓                    |
 
 ## 2. 구조
 
@@ -73,7 +73,7 @@ pinvi/etl/
   lazy 생성한다.
 - schedule은 항상 `execution_timezone="Asia/Seoul"`을 명시한다.
 - transient failure가 가능한 job은 기본 `RetryPolicy(max_retries=3, delay=60,
-  backoff=Backoff.EXPONENTIAL)`를 쓴다. queue worker/provider client가 이미 retry를 하면
+backoff=Backoff.EXPONENTIAL)`를 쓴다. queue worker/provider client가 이미 retry를 하면
   이중 retry를 피한다.
 - mutating job은 idempotency key를 갖는다. 예: daily/month bucket, provider business key,
   `(category, idempotency_key)` unique key, 또는 `FOR UPDATE SKIP LOCKED` queue claim.
@@ -239,19 +239,19 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 
 ## 6. 환경변수 (Dagster 컨테이너)
 
-| 환경변수 | 예시 |
-|----------|------|
-| `PINVI_DATABASE_URL` | `postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi` |
-| `PINVI_DAGSTER_DOWNLOAD_DIR` | `/opt/pinvi/.tmp/dagster-downloads` |
-| `PINVI_DAGSTER_LOG_DIR` | `/opt/pinvi/.tmp/dagster-logs` |
-| `PINVI_DAGSTER_HOME` | `/opt/pinvi/.tmp/dagster` |
-| `PINVI_ETL_CONFIG_PATH` | `/opt/pinvi/config/etl-datasets.json` |
-| `PINVI_RUSTFS_ENDPOINT_URL` | `http://rustfs:9000` |
-| `PINVI_RUSTFS_BUCKET_FEATURE` | `pinvi-feature-media` |
-| `DATA_GO_KR_SERVICE_KEY` | KASI 등 data.go.kr 공통 서비스키 |
-| `PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS` | `6` |
-| `PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS` | `18` |
-| `PINVI_SENTRY_DSN` | (선택) |
+| 환경변수                                   | 예시                                                      |
+| ------------------------------------------ | --------------------------------------------------------- |
+| `PINVI_DATABASE_URL`                       | `postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi` |
+| `PINVI_DAGSTER_DOWNLOAD_DIR`               | `/opt/pinvi/.tmp/dagster-downloads`                       |
+| `PINVI_DAGSTER_LOG_DIR`                    | `/opt/pinvi/.tmp/dagster-logs`                            |
+| `PINVI_DAGSTER_HOME`                       | `/opt/pinvi/.tmp/dagster`                                 |
+| `PINVI_ETL_CONFIG_PATH`                    | `/opt/pinvi/config/etl-datasets.json`                     |
+| `PINVI_RUSTFS_ENDPOINT_URL`                | `http://rustfs:9000`                                      |
+| `PINVI_RUSTFS_BUCKET_FEATURE`              | `pinvi-feature-media`                                     |
+| `DATA_GO_KR_SERVICE_KEY`                   | KASI 등 data.go.kr 공통 서비스키                          |
+| `PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS`  | `6`                                                       |
+| `PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS` | `18`                                                      |
+| `PINVI_SENTRY_DSN`                         | (선택)                                                    |
 
 `DATA_GO_KR_SERVICE_KEY`가 없으면 KASI live job은 skip/fail-fast 정책 중 하나를
 명시한다. OpenAI API key는 사용하지 않는다.
@@ -276,7 +276,7 @@ services:
     build: ./apps/etl
     depends_on: [postgres]
     ports:
-      - "12802:3000"
+      - '12802:3000'
     environment:
       PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi
       PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:9000
@@ -384,13 +384,13 @@ retry 소진된 마지막 시도에서만 발송 (`RetryPolicy(max_retries=3)` �
 
 ## 12. 트러블슈팅
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `dagster dev` 시작 안 됨 | 의존성 누락 | `uv pip install -e .` 후 pyproject 확인 |
-| Schedule이 cron에 안 맞춰 실행 | timezone 미설정 | `execution_timezone="Asia/Seoul"` 명시 |
-| Asset 실패 무한 재시도 | `RetryPolicy` 미설정 | 명시 + Sentry 알림 |
-| `import time DB/network access` 경고 | `definitions.py`에서 직접 호출 | resource로 분리 |
-| Soak `started-at` marker 없음 | `etl-soak-reset` 안 함 | `scripts/etl-soak-reset-and-start.sh --yes` |
+| 증상                                 | 원인                           | 해결                                        |
+| ------------------------------------ | ------------------------------ | ------------------------------------------- |
+| `dagster dev` 시작 안 됨             | 의존성 누락                    | `uv pip install -e .` 후 pyproject 확인     |
+| Schedule이 cron에 안 맞춰 실행       | timezone 미설정                | `execution_timezone="Asia/Seoul"` 명시      |
+| Asset 실패 무한 재시도               | `RetryPolicy` 미설정           | 명시 + Sentry 알림                          |
+| `import time DB/network access` 경고 | `definitions.py`에서 직접 호출 | resource로 분리                             |
+| Soak `started-at` marker 없음        | `etl-soak-reset` 안 함         | `scripts/etl-soak-reset-and-start.sh --yes` |
 
 ## 13. 관련 문서
 

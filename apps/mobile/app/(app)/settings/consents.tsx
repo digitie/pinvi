@@ -69,7 +69,10 @@ export default function ConsentsSettingsScreen() {
         {consentsQuery.isPending ? (
           <Loading />
         ) : consentsQuery.isError ? (
-          <ErrorView message={friendlyErrorText(consentsQuery.error)} onRetry={() => consentsQuery.refetch()} />
+          <ErrorView
+            message={friendlyErrorText(consentsQuery.error)}
+            onRetry={() => consentsQuery.refetch()}
+          />
         ) : (
           <View className="gap-3">
             {CONSENTS.map((meta) => {
@@ -89,7 +92,9 @@ export default function ConsentsSettingsScreen() {
                     <Button
                       label="철회"
                       variant="secondary"
-                      loading={withdrawMutation.isPending && withdrawMutation.variables === meta.type}
+                      loading={
+                        withdrawMutation.isPending && withdrawMutation.variables === meta.type
+                      }
                       onPress={() => withdrawMutation.mutate(meta.type)}
                     />
                   ) : null}

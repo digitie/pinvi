@@ -30,12 +30,12 @@ services:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
       RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: ":9000"
-      RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_ADDRESS: ':9000'
+      RUSTFS_CONSOLE_ENABLE: 'true'
+      RUSTFS_CONSOLE_ADDRESS: ':9001'
     ports:
-      - "${PINVI_RUSTFS_PORT:-12101}:12101"
-      - "${PINVI_RUSTFS_CONSOLE_PORT:-12105}:12105"
+      - '${PINVI_RUSTFS_PORT:-12101}:12101'
+      - '${PINVI_RUSTFS_CONSOLE_PORT:-12105}:12105'
     volumes:
       - /mnt/nvme/rustfs:/data
     # 컨테이너 내부 사용자 UID = 10001 → 호스트 디렉토리 owner도 같게
@@ -67,9 +67,9 @@ PINVI_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
 
 ## 3. Bucket 정책
 
-| Bucket | 용도 | 소유 |
-|--------|------|------|
-| `pinvi-media` | 사용자 첨부 + Admin notice 첨부 | Pinvi |
+| Bucket                             | 용도                                  | 소유           |
+| ---------------------------------- | ------------------------------------- | -------------- |
+| `pinvi-media`                      | 사용자 첨부 + Admin notice 첨부       | Pinvi          |
 | `pinvi-feature-media` (라이브러리) | feature 미디어 (krheritage 이미지 등) | kor-travel-map |
 
 bucket 분리 — schema 책임 분담과 동일 (ADR-003).
@@ -87,18 +87,18 @@ user-uploads/{purpose}/{user_id}/yyyy/mm/{uuid}.{ext}
 
 ## 5. 환경변수
 
-| 환경변수 | 위치 | 비고 |
-|----------|------|------|
-| `PINVI_RUSTFS_ENDPOINT_URL` | API container | 내부 (예: `http://rustfs:9000`) |
-| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL` | API container | 브라우저용 (예: `http://127.0.0.1:12101`) |
-| `PINVI_RUSTFS_BUCKET` | API | `pinvi-media` |
-| `PINVI_RUSTFS_ACCESS_KEY_ID` | API | |
-| `PINVI_RUSTFS_SECRET_ACCESS_KEY` | API | |
-| `PINVI_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | API | `900` |
-| `PINVI_RUSTFS_MAX_UPLOAD_BYTES` | API | `10485760` (10MB) |
-| `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES` | API | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` |
-| `PINVI_RUSTFS_PUBLIC_BASE_URL` | API | 선택 (CDN) |
-| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | RustFS container | 컨테이너 내부 |
+| 환경변수                                     | 위치             | 비고                                                                                |
+| -------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| `PINVI_RUSTFS_ENDPOINT_URL`                  | API container    | 내부 (예: `http://rustfs:9000`)                                                     |
+| `PINVI_RUSTFS_PUBLIC_ENDPOINT_URL`           | API container    | 브라우저용 (예: `http://127.0.0.1:12101`)                                           |
+| `PINVI_RUSTFS_BUCKET`                        | API              | `pinvi-media`                                                                       |
+| `PINVI_RUSTFS_ACCESS_KEY_ID`                 | API              |                                                                                     |
+| `PINVI_RUSTFS_SECRET_ACCESS_KEY`             | API              |                                                                                     |
+| `PINVI_RUSTFS_PRESIGNED_URL_EXPIRES_SECONDS` | API              | `900`                                                                               |
+| `PINVI_RUSTFS_MAX_UPLOAD_BYTES`              | API              | `10485760` (10MB)                                                                   |
+| `PINVI_RUSTFS_ALLOWED_CONTENT_TYPES`         | API              | `["image/jpeg","image/png","image/webp","image/gif","video/mp4","application/pdf"]` |
+| `PINVI_RUSTFS_PUBLIC_BASE_URL`               | API              | 선택 (CDN)                                                                          |
+| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`    | RustFS container | 컨테이너 내부                                                                       |
 
 ## 6. CORS
 
@@ -187,13 +187,13 @@ mc du --recursive local/pinvi-media/user-uploads/
 
 ## 11. 트러블슈팅
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `12101` port already in use | kor-travel-map RustFS와 충돌 | 한 쪽만 실행. 환경변수로 통일 |
-| 브라우저 PUT 403 | CORS / 서명 host 불일치 | `PUBLIC_ENDPOINT_URL` = presigned host 확인 |
-| `chmod` / `chown` 오류 | RustFS UID 10001 ≠ 호스트 owner | `chown -R 10001:10001 /mnt/nvme/rustfs` |
-| disk full | retention 정책 미적용 | 정리 job 실행 / lifecycle 정책 |
-| ListObjectsV2 응답 비었음 | bucket 권한 / prefix 오타 | `mc ls local/pinvi-media/user-uploads/` |
+| 증상                        | 원인                            | 해결                                        |
+| --------------------------- | ------------------------------- | ------------------------------------------- |
+| `12101` port already in use | kor-travel-map RustFS와 충돌    | 한 쪽만 실행. 환경변수로 통일               |
+| 브라우저 PUT 403            | CORS / 서명 host 불일치         | `PUBLIC_ENDPOINT_URL` = presigned host 확인 |
+| `chmod` / `chown` 오류      | RustFS UID 10001 ≠ 호스트 owner | `chown -R 10001:10001 /mnt/nvme/rustfs`     |
+| disk full                   | retention 정책 미적용           | 정리 job 실행 / lifecycle 정책              |
+| ListObjectsV2 응답 비었음   | bucket 권한 / prefix 오타       | `mc ls local/pinvi-media/user-uploads/`     |
 
 ## 12. AI agent 작업 체크리스트
 

@@ -55,7 +55,10 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
   };
 
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4" aria-label="동반자">
+    <section
+      className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+      aria-label="동반자"
+    >
       <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
         <Users className="h-4 w-4 text-primary" aria-hidden="true" />
         동반자 ({companions.length})
@@ -101,7 +104,11 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
         </button>
       </div>
 
-      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && (
+        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+          {error}
+        </p>
+      )}
 
       {companions.length > 0 && (
         <ul className="space-y-1" data-testid="companion-list">

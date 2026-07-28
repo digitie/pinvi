@@ -16,7 +16,10 @@ test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
     async (route) => {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: adminUser }) });
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: adminUser }),
+      });
     },
   );
   // 포트 12801(API)로 한정 — 12805 페이지 내비게이션을 가로채지 않도록.

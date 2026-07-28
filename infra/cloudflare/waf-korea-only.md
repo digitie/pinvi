@@ -12,18 +12,23 @@ Cloudflare 설정은 대시보드/계정 상태라 리포에서 자동 적용되
 
 대시보드 → Security → WAF → Custom rules → Create rule:
 
-| 항목 | 값 |
-|---|---|
-| Rule name | `KR-only block` |
+| 항목               | 값                           |
+| ------------------ | ---------------------------- |
+| Rule name          | `KR-only block`              |
 | Field / Expression | `(ip.geoip.country ne "KR")` |
-| Action | `Block` |
-| Response type | Custom response |
-| Response code | `451` |
-| Content-Type | `application/json` |
-| Body | 아래 JSON |
+| Action             | `Block`                      |
+| Response type      | Custom response              |
+| Response code      | `451`                        |
+| Content-Type       | `application/json`           |
+| Body               | 아래 JSON                    |
 
 ```json
-{"error":{"code":"GEO_BLOCKED","message":"Pinvi는 대한민국 거주자 전용 서비스입니다. (Service available only in Republic of Korea.)"}}
+{
+  "error": {
+    "code": "GEO_BLOCKED",
+    "message": "Pinvi는 대한민국 거주자 전용 서비스입니다. (Service available only in Republic of Korea.)"
+  }
+}
 ```
 
 > 본문 계약은 FastAPI `_blocked_response`(`apps/api/app/middleware/geofence.py`)와 동일하게

@@ -6,7 +6,7 @@
 
 export function canDeleteComment(
   comment: { author_user_id: string | null },
-  currentUserId: string | null
+  currentUserId: string | null,
 ): boolean {
   return currentUserId != null && comment.author_user_id === currentUserId;
 }

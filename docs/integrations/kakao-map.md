@@ -18,15 +18,15 @@
 
 ## 이전 가이드
 
-| 항목 | 이전 (Kakao) | 신규 (`vworld-map-web`) |
-|------|------------|----------------------|
-| 환경변수 | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY` | `NEXT_PUBLIC_VWORLD_API_KEY` |
-| 라이브러리 | `react-kakao-maps-sdk` | `vworld-map-web` (`maplibre-vworld-react`) |
-| 좌표 변환 어댑터 | `apps/web/lib/coordAdapter.ts` | **제거** — `(lng, lat)` 그대로 |
-| CSP | `https://dapi.kakao.com` + `https://t1.daumcdn.net` | `https://api.vworld.kr` |
-| 도메인 등록 | Kakao Developers 콘솔 | VWorld 개발자 센터 |
-| Local 검색 | `KAKAO_REST_API_KEY` 백엔드 호출 | **`/search` endpoint 구현 변경** — 라이브러리(`kor-travel-map.search`) 경유 |
-| 길찾기 (Sprint 6) | Kakao 모빌리티 API | OR-Tools 직선 거리 또는 라이브러리 추가 |
+| 항목              | 이전 (Kakao)                                        | 신규 (`vworld-map-web`)                                                     |
+| ----------------- | --------------------------------------------------- | --------------------------------------------------------------------------- |
+| 환경변수          | `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`                     | `NEXT_PUBLIC_VWORLD_API_KEY`                                                |
+| 라이브러리        | `react-kakao-maps-sdk`                              | `vworld-map-web` (`maplibre-vworld-react`)                                  |
+| 좌표 변환 어댑터  | `apps/web/lib/coordAdapter.ts`                      | **제거** — `(lng, lat)` 그대로                                              |
+| CSP               | `https://dapi.kakao.com` + `https://t1.daumcdn.net` | `https://api.vworld.kr`                                                     |
+| 도메인 등록       | Kakao Developers 콘솔                               | VWorld 개발자 센터                                                          |
+| Local 검색        | `KAKAO_REST_API_KEY` 백엔드 호출                    | **`/search` endpoint 구현 변경** — 라이브러리(`kor-travel-map.search`) 경유 |
+| 길찾기 (Sprint 6) | Kakao 모빌리티 API                                  | OR-Tools 직선 거리 또는 라이브러리 추가                                     |
 
 자세히는 [`maplibre-vworld.md`](./maplibre-vworld.md) §10 v1→v2 매핑.
 

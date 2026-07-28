@@ -78,26 +78,26 @@
 
 ## 2. PR별 요약
 
-| PR | 주제 | verdict | 후속 |
-|----|------|---------|------|
-| #84 | Codex PR 2라운드 리뷰 종합 | 적정 | 없음 |
-| #88 | kor-travel-map REST 계약 청사진 | 적정 | T-170~T-178 queue 유지 |
-| #95 | DEC-05 feature 제안/재적재 분리 | 적정 | 없음 |
-| #97 | DEC-05 correction + K-15 필요 | 적정 | kor_travel_map feature change queue 유지 |
-| #98 | RustFS settings 배선 | 적정 | 첨부 metadata 검증은 #120~#123 후속에서 처리 |
-| #102 | T-170/T-171 kor_travel_map client/config | 적정 | router cutover는 기존 T-173/T-174 |
-| #103~#106 | kor_travel_map PR #316/#317 반영 문서 | 적정 | 없음 |
-| #109 | Codex 3라운드 후속 정리 | 적정 | 없음 |
-| #110 | feature 제안 type/target 노출 | 적정 | 없음 |
-| #113 | 외부 `/v1` hard cutover | 적정 | kor_travel_map 미머지 envelope/problem+json 추종 대기 |
-| #114/#115 | kor-travel-geo `/geo/*`·`/regions/*` | 적정 | 없음 |
-| #116 | location-audit outbox | **수정 필요** | 인증 user/request id state 저장 |
-| #117 | feature TTL cache | 적정 | 없음 |
-| #118 | 리뷰 잔여 낮음 묶음 | 적정 | 없음 |
-| #119 | 좌표 `lon`/`lat` 정렬 | **수정 필요** | `/features/nearby` query `lon` |
-| #120/#121 | trip/POI 첨부 하드닝/download-url | **수정 필요** | storage ref 검증 |
-| #122 | `/admin/rustfs/*` 객체 관리 | 적정 | 없음 |
-| #123 | admin 큐레이션 첨부 | **수정 필요** | storage ref 검증 + curated upload admin gate |
+| PR        | 주제                                     | verdict       | 후속                                                  |
+| --------- | ---------------------------------------- | ------------- | ----------------------------------------------------- |
+| #84       | Codex PR 2라운드 리뷰 종합               | 적정          | 없음                                                  |
+| #88       | kor-travel-map REST 계약 청사진          | 적정          | T-170~T-178 queue 유지                                |
+| #95       | DEC-05 feature 제안/재적재 분리          | 적정          | 없음                                                  |
+| #97       | DEC-05 correction + K-15 필요            | 적정          | kor_travel_map feature change queue 유지              |
+| #98       | RustFS settings 배선                     | 적정          | 첨부 metadata 검증은 #120~#123 후속에서 처리          |
+| #102      | T-170/T-171 kor_travel_map client/config | 적정          | router cutover는 기존 T-173/T-174                     |
+| #103~#106 | kor_travel_map PR #316/#317 반영 문서    | 적정          | 없음                                                  |
+| #109      | Codex 3라운드 후속 정리                  | 적정          | 없음                                                  |
+| #110      | feature 제안 type/target 노출            | 적정          | 없음                                                  |
+| #113      | 외부 `/v1` hard cutover                  | 적정          | kor_travel_map 미머지 envelope/problem+json 추종 대기 |
+| #114/#115 | kor-travel-geo `/geo/*`·`/regions/*`     | 적정          | 없음                                                  |
+| #116      | location-audit outbox                    | **수정 필요** | 인증 user/request id state 저장                       |
+| #117      | feature TTL cache                        | 적정          | 없음                                                  |
+| #118      | 리뷰 잔여 낮음 묶음                      | 적정          | 없음                                                  |
+| #119      | 좌표 `lon`/`lat` 정렬                    | **수정 필요** | `/features/nearby` query `lon`                        |
+| #120/#121 | trip/POI 첨부 하드닝/download-url        | **수정 필요** | storage ref 검증                                      |
+| #122      | `/admin/rustfs/*` 객체 관리              | 적정          | 없음                                                  |
+| #123      | admin 큐레이션 첨부                      | **수정 필요** | storage ref 검증 + curated upload admin gate          |
 
 ---
 

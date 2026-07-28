@@ -5,6 +5,7 @@
 계약이다. ADR-054 기준(**ADR-015 `docs/integrations/kakao-map.md`를 supersede** — §12).
 
 > **경계 한 줄 요약 (ADR-026/054)**
+>
 > - **정본 feature 데이터**(place/event/notice/price) → `kor-travel-map` **OpenAPI HTTP
 >   계약**. Kakao/Naver는 정본 소스가 **아니다**. → `docs/kor-travel-map-integration.md`.
 > - **주소/좌표/행정구역 geocoding** → `kor-travel-geo` **v2 REST**(ADR-025).
@@ -72,27 +73,27 @@ Kakao/Naver를 표시 전용으로 들이는 이유는 **kor-travel-geo + kor-tr
 
 요청 query 파라미터:
 
-| 파라미터 | 타입 | 비고 |
-|----------|------|------|
-| `query` | string | 필수. 검색 키워드 |
-| `x` / `y` | float | 중심 경도/위도. "내 주변 검색"일 때만(§9) |
-| `radius` | int | `x`/`y`와 함께. m 단위(≤20000) |
-| `size` | int | 페이지당(≤15). Pinvi는 K 보강분만 |
-| `sort` | string | `accuracy`(기본) / `distance` |
+| 파라미터  | 타입   | 비고                                      |
+| --------- | ------ | ----------------------------------------- |
+| `query`   | string | 필수. 검색 키워드                         |
+| `x` / `y` | float  | 중심 경도/위도. "내 주변 검색"일 때만(§9) |
+| `radius`  | int    | `x`/`y`와 함께. m 단위(≤20000)            |
+| `size`    | int    | 페이지당(≤15). Pinvi는 K 보강분만         |
+| `sort`    | string | `accuracy`(기본) / `distance`             |
 
 응답: `meta{total_count, pageable_count, is_end}` + `documents[]`. 각 document 필드와
 Pinvi 매핑:
 
-| Kakao 필드 | 의미 | Pinvi 매핑(`PlaceSearchResult`) |
-|-----------|------|------------------------------|
-| `id` | 장소 ID(문자열) | `external_id` (opaque, 저장 대상은 §7의 external_ref만) |
-| `place_name` | 상호명 | `name` |
-| `address_name` | 지번 주소 | `address` |
-| `road_address_name` | 도로명 주소 | `road_address` |
-| `x` / `y` | 경도 / 위도(WGS84) | `coord{lon:x, lat:y}` |
-| `category_name` / `category_group_name` | 카테고리 | `category` (표시 전용) |
-| `phone` | 전화 | `phone` (**표시 전용, 미저장**) |
-| `place_url` | 카카오맵 상세 URL | `provider_url` (back-link), `external_ref.deep_link_url` |
+| Kakao 필드                              | 의미               | Pinvi 매핑(`PlaceSearchResult`)                          |
+| --------------------------------------- | ------------------ | -------------------------------------------------------- |
+| `id`                                    | 장소 ID(문자열)    | `external_id` (opaque, 저장 대상은 §7의 external_ref만)  |
+| `place_name`                            | 상호명             | `name`                                                   |
+| `address_name`                          | 지번 주소          | `address`                                                |
+| `road_address_name`                     | 도로명 주소        | `road_address`                                           |
+| `x` / `y`                               | 경도 / 위도(WGS84) | `coord{lon:x, lat:y}`                                    |
+| `category_name` / `category_group_name` | 카테고리           | `category` (표시 전용)                                   |
+| `phone`                                 | 전화               | `phone` (**표시 전용, 미저장**)                          |
+| `place_url`                             | 카카오맵 상세 URL  | `provider_url` (back-link), `external_ref.deep_link_url` |
 
 ### 3.2 Naver Local — 지역 검색
 
@@ -101,27 +102,27 @@ Pinvi 매핑:
 
 요청 query 파라미터:
 
-| 파라미터 | 타입 | 비고 |
-|----------|------|------|
-| `query` | string | 필수. 검색어 |
-| `display` | int | 결과 수(**최대 5**). Naver Local 상한이 낮음 |
-| `start` | int | 시작(최대 1) |
-| `sort` | string | `random`(기본) / `comment` |
+| 파라미터  | 타입   | 비고                                         |
+| --------- | ------ | -------------------------------------------- |
+| `query`   | string | 필수. 검색어                                 |
+| `display` | int    | 결과 수(**최대 5**). Naver Local 상한이 낮음 |
+| `start`   | int    | 시작(최대 1)                                 |
+| `sort`    | string | `random`(기본) / `comment`                   |
 
 > Naver Local은 좌표 중심(radius) 파라미터가 **없다** — "내 주변" 반경 필터는 지원
 > 안 함. 좌표는 Kakao에만 전달하고, Naver는 키워드로만 조회한다.
 
 응답: `total, start, display` + `items[]`. 각 item 필드와 Pinvi 매핑:
 
-| Naver 필드 | 의미 | Pinvi 매핑(`PlaceSearchResult`) |
-|-----------|------|------------------------------|
-| `title` | 상호명(**`<b>` 태그 포함 HTML**) | `name` — **태그 strip + 언이스케이프 후** |
-| `address` | 지번 주소 | `address` |
-| `roadAddress` | 도로명 주소 | `road_address` |
-| `mapx` / `mapy` | 경도 / 위도, **WGS84 × 10⁷ 정수** | `coord{lon:mapx/1e7, lat:mapy/1e7}` |
-| `category` | 카테고리 | `category` (표시 전용) |
-| `telephone` | 전화(보통 빈 문자열) | `phone` (**표시 전용, 미저장**) |
-| `link` | 업체 링크 URL | `provider_url` (back-link), `external_ref.deep_link_url` |
+| Naver 필드      | 의미                              | Pinvi 매핑(`PlaceSearchResult`)                          |
+| --------------- | --------------------------------- | -------------------------------------------------------- |
+| `title`         | 상호명(**`<b>` 태그 포함 HTML**)  | `name` — **태그 strip + 언이스케이프 후**                |
+| `address`       | 지번 주소                         | `address`                                                |
+| `roadAddress`   | 도로명 주소                       | `road_address`                                           |
+| `mapx` / `mapy` | 경도 / 위도, **WGS84 × 10⁷ 정수** | `coord{lon:mapx/1e7, lat:mapy/1e7}`                      |
+| `category`      | 카테고리                          | `category` (표시 전용)                                   |
+| `telephone`     | 전화(보통 빈 문자열)              | `phone` (**표시 전용, 미저장**)                          |
+| `link`          | 업체 링크 URL                     | `provider_url` (back-link), `external_ref.deep_link_url` |
 
 - **좌표 스케일 주의**: Naver `mapx`/`mapy`는 정수 `WGS84 × 10⁷`이다. `/1e7` 후
   `(lon, lat)`로 쓴다(구 KATEC 가정 금지). 파싱 실패 항목은 좌표 없는 후보로 버린다.
@@ -148,7 +149,7 @@ coord{lon,lat}, category?, marker_color?, marker_icon?, provider_url?, phone?}`.
   등 **provider 파생 콘텐츠를 DB에 persist하거나 다른 서비스로 forward하지 않는다**.
 - POI/feature-request로 넘어가 **저장하는 것은**: 사용자가 타이핑/유지한 **name**,
   사용자가 찍은 **coord**, 사용자 **note**, 그리고 opaque **`{provider, external_id,
-  deep_link_url}` = external_ref**뿐이다.
+deep_link_url}` = external_ref**뿐이다.
 - 상세를 볼 때 provider 정보는 **매번 라이브 재조회**한다(캐시된 콘텐츠 재표시 금지,
   §10 캐시는 단기 검색 응답 완화용일 뿐 콘텐츠 영속화가 아님).
 
@@ -167,11 +168,11 @@ coord{lon,lat}, category?, marker_color?, marker_icon?, provider_url?, phone?}`.
 
 ## 6. Secret 관리 (ADR-054 M18)
 
-| 값 | 설정 키 | 타입 | 비고 |
-|----|---------|------|------|
-| Kakao REST 키 | `pinvi_kakao_oauth_rest_api_key` | `str` (기존) | **기존 OAuth 앱 키 재사용** — Kakao 콘솔에서 `로컬` 제품만 추가 활성. 중복 Kakao 키 발급 금지 |
-| Naver Search Client ID | `pinvi_naver_search_client_id` | `SecretStr` (신규) | OAuth용 `pinvi_naver_oauth_client_id`와 **별개 앱**(검색 API 전용) |
-| Naver Search Client Secret | `pinvi_naver_search_client_secret` | `SecretStr` (신규) | 위와 세트 |
+| 값                         | 설정 키                            | 타입               | 비고                                                                                          |
+| -------------------------- | ---------------------------------- | ------------------ | --------------------------------------------------------------------------------------------- |
+| Kakao REST 키              | `pinvi_kakao_oauth_rest_api_key`   | `str` (기존)       | **기존 OAuth 앱 키 재사용** — Kakao 콘솔에서 `로컬` 제품만 추가 활성. 중복 Kakao 키 발급 금지 |
+| Naver Search Client ID     | `pinvi_naver_search_client_id`     | `SecretStr` (신규) | OAuth용 `pinvi_naver_oauth_client_id`와 **별개 앱**(검색 API 전용)                            |
+| Naver Search Client Secret | `pinvi_naver_search_client_secret` | `SecretStr` (신규) | 위와 세트                                                                                     |
 
 - Kakao 인증은 `Authorization: KakaoAK {키}` **헤더**, Naver는 `X-Naver-Client-Id` /
   `X-Naver-Client-Secret` **헤더**로 실린다. secret이 query가 아니라 헤더에 있으므로

@@ -57,7 +57,9 @@ function AdminLoginForm() {
       const hasAdmin = user.roles.some((r) => ADMIN_ROLES.has(r));
       if (!hasAdmin) {
         setError('관리자 권한이 없는 계정입니다.');
-        await authApi(apiClient).logout().catch(() => undefined);
+        await authApi(apiClient)
+          .logout()
+          .catch(() => undefined);
         return;
       }
       router.push('/admin');
@@ -83,9 +85,7 @@ function AdminLoginForm() {
       <div className="w-full max-w-sm space-y-6 rounded-sm border border-hairline bg-white p-8">
         <header>
           <h1 className="text-xl font-bold text-ink">Pinvi Admin</h1>
-          <p className="mt-1 text-xs text-muted">
-            관리자/운영자/CPO 계정으로 로그인하세요.
-          </p>
+          <p className="mt-1 text-xs text-muted">관리자/운영자/CPO 계정으로 로그인하세요.</p>
         </header>
 
         <form onSubmit={onSubmit} className="space-y-4" data-testid="admin-login-form" noValidate>

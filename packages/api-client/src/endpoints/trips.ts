@@ -174,13 +174,10 @@ export const tripApi = (client: ApiClient) => ({
 
   // force=true면 POI가 있어도 함께 삭제한다(DAY_HAS_POIS 확인 후 재요청, ADR-055 F2).
   deleteDay: (tripId: string, dayIndex: number, version: number, opts: { force?: boolean } = {}) =>
-    client.requestNoContent(
-      `/trips/${tripId}/days/${dayIndex}${opts.force ? '?force=true' : ''}`,
-      {
-        method: 'DELETE',
-        headers: { 'If-Match': String(version) },
-      },
-    ),
+    client.requestNoContent(`/trips/${tripId}/days/${dayIndex}${opts.force ? '?force=true' : ''}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': String(version) },
+    }),
 
   getShared: (tripId: string, token: string) =>
     client.request(`/trips/${tripId}/shared/${token}`, {
@@ -231,13 +228,10 @@ export const tripApi = (client: ApiClient) => ({
     }),
 
   dayAttachmentDownloadUrl: (tripId: string, dayIndex: number, attachmentId: string) =>
-    client.request(
-      `/trips/${tripId}/days/${dayIndex}/attachments/${attachmentId}/download-url`,
-      {
-        method: 'GET',
-        schema: DownloadUrlResponseSchema,
-      }
-    ),
+    client.request(`/trips/${tripId}/days/${dayIndex}/attachments/${attachmentId}/download-url`, {
+      method: 'GET',
+      schema: DownloadUrlResponseSchema,
+    }),
 
   listPoiAttachments: (tripId: string, poiId: string) =>
     client.request(`/trips/${tripId}/pois/${poiId}/attachments`, {

@@ -141,7 +141,9 @@ export default function SignupScreen() {
 
         <Card className="gap-1">
           <Subheading>필수 약관 동의</Subheading>
-          {fieldErrors.consents ? <Muted className="text-error-text">{fieldErrors.consents}</Muted> : null}
+          {fieldErrors.consents ? (
+            <Muted className="text-error-text">{fieldErrors.consents}</Muted>
+          ) : null}
           {REQUIRED_CONSENTS.map((item) => (
             <Checkbox
               key={item.type}

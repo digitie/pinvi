@@ -21,12 +21,16 @@ export function formatKstTime(value: string | null | undefined): string | null {
 }
 
 export function holidayLabel(holidays: TripDayHoliday[] | undefined): string | null {
-  const names = Array.from(new Set((holidays ?? []).map((holiday) => holiday.name).filter(Boolean)));
+  const names = Array.from(
+    new Set((holidays ?? []).map((holiday) => holiday.name).filter(Boolean)),
+  );
   if (names.length === 0) return null;
   return `공휴일 · ${names.join(', ')}`;
 }
 
-export function holidaysByDate(days: Pick<TripViewDay, 'date' | 'holidays'>[]): Map<string, TripDayHoliday[]> {
+export function holidaysByDate(
+  days: Pick<TripViewDay, 'date' | 'holidays'>[],
+): Map<string, TripDayHoliday[]> {
   const map = new Map<string, TripDayHoliday[]>();
   for (const day of days) {
     if (!day.date || day.holidays.length === 0) continue;

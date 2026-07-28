@@ -6,7 +6,12 @@ import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripShareLinkVisibility, TripViewShareLink } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { SHARE_STATUS_LABEL, SHARE_VISIBILITY_LABEL, shareLinkStatus, buildShareUrl } from '@pinvi/domain';
+import {
+  SHARE_STATUS_LABEL,
+  SHARE_VISIBILITY_LABEL,
+  shareLinkStatus,
+  buildShareUrl,
+} from '@pinvi/domain';
 
 const VISIBILITIES: TripShareLinkVisibility[] = ['view_only', 'comment', 'edit'];
 
@@ -66,7 +71,10 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
   };
 
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4" aria-label="공유 링크">
+    <section
+      className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+      aria-label="공유 링크"
+    >
       <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
         <Link2 className="h-4 w-4 text-primary" aria-hidden="true" />
         공유 링크
@@ -107,7 +115,11 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
         </button>
       </div>
 
-      {error && <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">{error}</p>}
+      {error && (
+        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+          {error}
+        </p>
+      )}
 
       {newUrl && (
         <div className="space-y-1 rounded-sm bg-success-bg px-3 py-2" data-testid="new-share-url">

@@ -101,7 +101,11 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
       </p>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text" data-testid="trip-telegram-error">
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+          data-testid="trip-telegram-error"
+        >
           {error}
         </p>
       )}
@@ -161,7 +165,9 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
                   className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm"
                 >
                   <span className="flex items-center gap-2 text-ink">
-                    {t.is_default && <Star className="h-3.5 w-3.5 text-primary" aria-label="기본" />}
+                    {t.is_default && (
+                      <Star className="h-3.5 w-3.5 text-primary" aria-label="기본" />
+                    )}
                     <span className="font-medium">{targetName(t)}</span>
                     <span className="font-mono text-xs text-muted">{t.telegram_chat_id}</span>
                   </span>

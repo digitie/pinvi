@@ -10,35 +10,35 @@
 
 ## 2. 13개 페이지 (M-2)
 
-| 경로 | 내용 | Sprint |
-|------|------|--------|
-| `/admin` | 대시보드 (지표 카드 8개) | 3 |
-| `/admin/users` / `/admin/users/{id}` | 사용자 목록/상세 + 디버그 액션 | 3 |
-| `/admin/trips` / `/admin/trips/{id}` | 여행 목록/상세 + 멤버/POI/공유 토큰 | 3 |
-| `/admin/features` | 라이브러리 feature 검색 (read-only, kor-travel-map admin API 결선 후) | 3 |
-| `/admin/pois` | POI 검색 (`feature_link_broken_at` 필터) | 3 |
-| `/admin/etl` | Dagit reverse-proxy + 자체 요약 | 5 |
-| `/admin/api-calls` | 외부 API 호출 로그 (`app.api_call_log`) | 3 |
-| `/admin/emails` | `app.email_queue` 목록 + 재발송 | 3 |
-| `/admin/audit` | `app.admin_audit_log` (read-only, chain 검증) | 3 |
-| `/admin/feature-requests` | 사용자 feature 요청 큐 → 라이브러리 적재 trigger | 6 |
-| `/admin/category-mapping` | `app.category_mappings` | 6 |
-| `/admin/seed` (dev only) | 8 시나리오 샘플 (운영 환경 차단 안전장치 후 결선) | 3 |
-| `/admin/reset` (dev only) | DB 전체 reset (확인 다이얼로그/운영 라우트 미등록 후 결선) | 3 |
+| 경로                                 | 내용                                                                  | Sprint |
+| ------------------------------------ | --------------------------------------------------------------------- | ------ |
+| `/admin`                             | 대시보드 (지표 카드 8개)                                              | 3      |
+| `/admin/users` / `/admin/users/{id}` | 사용자 목록/상세 + 디버그 액션                                        | 3      |
+| `/admin/trips` / `/admin/trips/{id}` | 여행 목록/상세 + 멤버/POI/공유 토큰                                   | 3      |
+| `/admin/features`                    | 라이브러리 feature 검색 (read-only, kor-travel-map admin API 결선 후) | 3      |
+| `/admin/pois`                        | POI 검색 (`feature_link_broken_at` 필터)                              | 3      |
+| `/admin/etl`                         | Dagit reverse-proxy + 자체 요약                                       | 5      |
+| `/admin/api-calls`                   | 외부 API 호출 로그 (`app.api_call_log`)                               | 3      |
+| `/admin/emails`                      | `app.email_queue` 목록 + 재발송                                       | 3      |
+| `/admin/audit`                       | `app.admin_audit_log` (read-only, chain 검증)                         | 3      |
+| `/admin/feature-requests`            | 사용자 feature 요청 큐 → 라이브러리 적재 trigger                      | 6      |
+| `/admin/category-mapping`            | `app.category_mappings`                                               | 6      |
+| `/admin/seed` (dev only)             | 8 시나리오 샘플 (운영 환경 차단 안전장치 후 결선)                     | 3      |
+| `/admin/reset` (dev only)            | DB 전체 reset (확인 다이얼로그/운영 라우트 미등록 후 결선)            | 3      |
 
 추가 (M-15) — `kor-travel-map` schema 가시화:
 
-| 경로 | 내용 | Sprint |
-|------|------|--------|
-| `/admin/features/{id}/sources` | `feature.source_links` 표시 (source_role 필터) | 5 |
-| `/admin/features/{id}/overrides` | `feature.overrides` (correction 이력) | 5 |
-| `/admin/features/{id}/weather-values` | KMA 시간축 timeline | 5 |
-| `/admin/weather-values` | 통합 weather 검색 | 5 |
-| `/admin/provider-sync` | `provider_sync.state` 재시도/일시정지/재개 | 5 |
-| `/admin/dedup-review` | Record Linkage 의심 쌍 좌우 비교 (K-4) | 5 |
-| `/admin/integrity` | `app.data_integrity_violations` | 5 |
-| `/admin/debug/logs` | Loki LogQL stream (WebSocket) | 5 |
-| `/admin/debug/request/{request_id}` | 단일 요청 타임라인 추적 | 5 |
+| 경로                                  | 내용                                           | Sprint |
+| ------------------------------------- | ---------------------------------------------- | ------ |
+| `/admin/features/{id}/sources`        | `feature.source_links` 표시 (source_role 필터) | 5      |
+| `/admin/features/{id}/overrides`      | `feature.overrides` (correction 이력)          | 5      |
+| `/admin/features/{id}/weather-values` | KMA 시간축 timeline                            | 5      |
+| `/admin/weather-values`               | 통합 weather 검색                              | 5      |
+| `/admin/provider-sync`                | `provider_sync.state` 재시도/일시정지/재개     | 5      |
+| `/admin/dedup-review`                 | Record Linkage 의심 쌍 좌우 비교 (K-4)         | 5      |
+| `/admin/integrity`                    | `app.data_integrity_violations`                | 5      |
+| `/admin/debug/logs`                   | Loki LogQL stream (WebSocket)                  | 5      |
+| `/admin/debug/request/{request_id}`   | 단일 요청 타임라인 추적                        | 5      |
 
 ## 3. 공통 UI 패턴 (M-3)
 
@@ -75,15 +75,15 @@
 
 ## 5. CRUD 권한 매트릭스 (M-8)
 
-| 리소스 | C | R | U | D | 비고 |
-|--------|---|---|---|---|------|
-| users | ✗ | ✓ | ✓ | ○ | 생성=가입. 삭제=soft + 30일 후 hard |
-| trips | ✗ | ✓ | ✓ | ○ | 임의 생성 X |
-| features | ✓ | ✓ | ✓ | ○ | 라이브러리에 위임 — Pinvi는 trigger만 |
-| category_mappings | ✓ | ✓ | ✓ | ✓ | 자유 편집 |
-| api_call_log | ✗ | ✓ | ✗ | ✗ | read-only |
-| location_access_log | ✗ | ◐ | ✗ | ✗ | CPO만. chain 검증 |
-| admin_audit_log | ✗ | ✓ | ✗ | ✗ | append-only |
+| 리소스              | C   | R   | U   | D   | 비고                                  |
+| ------------------- | --- | --- | --- | --- | ------------------------------------- |
+| users               | ✗   | ✓   | ✓   | ○   | 생성=가입. 삭제=soft + 30일 후 hard   |
+| trips               | ✗   | ✓   | ✓   | ○   | 임의 생성 X                           |
+| features            | ✓   | ✓   | ✓   | ○   | 라이브러리에 위임 — Pinvi는 trigger만 |
+| category_mappings   | ✓   | ✓   | ✓   | ✓   | 자유 편집                             |
+| api_call_log        | ✗   | ✓   | ✗   | ✗   | read-only                             |
+| location_access_log | ✗   | ◐   | ✗   | ✗   | CPO만. chain 검증                     |
+| admin_audit_log     | ✗   | ✓   | ✗   | ✗   | append-only                           |
 
 `○` 조건부 / `◐` 사유 입력 등.
 
@@ -131,18 +131,18 @@ faceted 필터 + 저장된 뷰 (개인 + 팀 공유). URL 쿼리 동기화.
 
 룰 예시 (10건):
 
-| 룰 | 대상 schema | 자동수정 |
-|------|------|---------|
-| orphan POI | app | ✓ |
-| sort_order 중복 | app | ✓ |
-| 일자 범위 초과 POI | app | ✗ |
-| 이메일 미인증 7일 경과 | app | ✓ |
-| audit log chain 깨짐 | app | ✗ (즉시 CPO 알림) |
-| dangling parent_feature_id | feature (라이브러리에서 처리) | ○ |
-| 동일 좌표 multiple features | feature | ○ |
-| 권한 없는 동반자 | app | ○ |
-| vworld bjd_lookup 누락 | feature | ✗ |
-| price_values retention 위반 | feature | ✓ |
+| 룰                          | 대상 schema                   | 자동수정          |
+| --------------------------- | ----------------------------- | ----------------- |
+| orphan POI                  | app                           | ✓                 |
+| sort_order 중복             | app                           | ✓                 |
+| 일자 범위 초과 POI          | app                           | ✗                 |
+| 이메일 미인증 7일 경과      | app                           | ✓                 |
+| audit log chain 깨짐        | app                           | ✗ (즉시 CPO 알림) |
+| dangling parent_feature_id  | feature (라이브러리에서 처리) | ○                 |
+| 동일 좌표 multiple features | feature                       | ○                 |
+| 권한 없는 동반자            | app                           | ○                 |
+| vworld bjd_lookup 누락      | feature                       | ✗                 |
+| price_values retention 위반 | feature                       | ✓                 |
 
 자동수정 가능: [자동 수정] → `admin_audit_log` 기록. 불가: 케이스별 수동.
 
@@ -197,22 +197,22 @@ PR 머지 전 verify checklist로 활용:
 
 ## 13. Sprint 매핑
 
-| SPEC V8 항목 | Sprint | 본 저장소 산출물 |
-|------|--------|------------------|
-| Admin 뼈대 (M-3) | Sprint 3 | `apps/web/app/admin/layout.tsx` + 공통 컴포넌트 |
-| `/admin/users` ~ `/admin/pois` (M-2) | Sprint 3 | `apps/web/app/admin/{users,trips,features,pois}/...` |
-| `roles` RBAC (M-14) | Sprint 3 | `apps/api/app/api/v1/admin/deps.py` |
-| `admin_audit_log` chain (M-14) | Sprint 3 | `apps/api/app/middleware/admin_audit.py` |
-| `/admin/api-calls`, `/admin/emails`, `/admin/audit`, `/admin/audit/location` | Sprint 3 | `apps/web/app/admin/...` |
-| `/admin/seed` + 안전장치 (M-13) | Sprint 3 | 환경 조건 + 8 시나리오 |
-| `/admin/etl` Dagit 임베드 (M-10) | Sprint 5 | reverse proxy + 자체 요약 |
-| `/admin/dedup-review` (K-4) | Sprint 5 | `dedup_review_queue` 호출 |
-| `/admin/features/{id}/sources/overrides/weather` (M-15) | Sprint 5 | 라이브러리 schema 가시화 |
-| `/admin/provider-sync` (M-15) | Sprint 5 | `provider_sync.state` 관리 |
-| `/admin/integrity` (M-11) | Sprint 5 | `data_integrity_violations` |
-| `/admin/debug/logs` Loki stream (M-12) | Sprint 5 | WebSocket LogQL |
-| `/admin/debug/request/{id}` (M-12) | Sprint 5 | X-Request-Id 타임라인 |
-| `/admin/feature-requests`, `/admin/category-mapping` | Sprint 6 | 라이브러리 trigger UI |
+| SPEC V8 항목                                                                 | Sprint   | 본 저장소 산출물                                     |
+| ---------------------------------------------------------------------------- | -------- | ---------------------------------------------------- |
+| Admin 뼈대 (M-3)                                                             | Sprint 3 | `apps/web/app/admin/layout.tsx` + 공통 컴포넌트      |
+| `/admin/users` ~ `/admin/pois` (M-2)                                         | Sprint 3 | `apps/web/app/admin/{users,trips,features,pois}/...` |
+| `roles` RBAC (M-14)                                                          | Sprint 3 | `apps/api/app/api/v1/admin/deps.py`                  |
+| `admin_audit_log` chain (M-14)                                               | Sprint 3 | `apps/api/app/middleware/admin_audit.py`             |
+| `/admin/api-calls`, `/admin/emails`, `/admin/audit`, `/admin/audit/location` | Sprint 3 | `apps/web/app/admin/...`                             |
+| `/admin/seed` + 안전장치 (M-13)                                              | Sprint 3 | 환경 조건 + 8 시나리오                               |
+| `/admin/etl` Dagit 임베드 (M-10)                                             | Sprint 5 | reverse proxy + 자체 요약                            |
+| `/admin/dedup-review` (K-4)                                                  | Sprint 5 | `dedup_review_queue` 호출                            |
+| `/admin/features/{id}/sources/overrides/weather` (M-15)                      | Sprint 5 | 라이브러리 schema 가시화                             |
+| `/admin/provider-sync` (M-15)                                                | Sprint 5 | `provider_sync.state` 관리                           |
+| `/admin/integrity` (M-11)                                                    | Sprint 5 | `data_integrity_violations`                          |
+| `/admin/debug/logs` Loki stream (M-12)                                       | Sprint 5 | WebSocket LogQL                                      |
+| `/admin/debug/request/{id}` (M-12)                                           | Sprint 5 | X-Request-Id 타임라인                                |
+| `/admin/feature-requests`, `/admin/category-mapping`                         | Sprint 6 | 라이브러리 trigger UI                                |
 
 ## 14. 관련 문서
 

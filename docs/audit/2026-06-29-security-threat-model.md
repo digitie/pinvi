@@ -5,14 +5,14 @@
 T-283은 Sprint 6 출시 전 보안 경계 1차 점검이다. 대상은 Web/API/Admin 운영 출시 경계 중
 다음 surface로 한정한다.
 
-| 영역 | 주요 자산 | 신뢰 경계 |
-|------|-----------|-----------|
-| Auth / session | access JWT, refresh session, `access_token_version` | Web cookie / mobile Bearer → FastAPI dependency |
-| MCP | `mcp_*` Bearer token, `mcp:read` scope, token hash | 외부 AI client → `/mcp/*` |
-| Share token | 여행 공유 raw token, token hash | 비로그인 공유 URL → `/trips/{id}/shared/{token}` |
-| Rate limit / abuse | bucket hash, override, fail-closed 정책 | public/auth/storage/share 요청 → middleware |
-| Storage | presigned PUT URL, storage key, quota | user/admin → `/storage/upload-urls` |
-| Admin RBAC / incidents | admin/operator/cpo role, audit log, PIPA incident | authenticated user → `/admin/*` |
+| 영역                   | 주요 자산                                           | 신뢰 경계                                        |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------------ |
+| Auth / session         | access JWT, refresh session, `access_token_version` | Web cookie / mobile Bearer → FastAPI dependency  |
+| MCP                    | `mcp_*` Bearer token, `mcp:read` scope, token hash  | 외부 AI client → `/mcp/*`                        |
+| Share token            | 여행 공유 raw token, token hash                     | 비로그인 공유 URL → `/trips/{id}/shared/{token}` |
+| Rate limit / abuse     | bucket hash, override, fail-closed 정책             | public/auth/storage/share 요청 → middleware      |
+| Storage                | presigned PUT URL, storage key, quota               | user/admin → `/storage/upload-urls`              |
+| Admin RBAC / incidents | admin/operator/cpo role, audit log, PIPA incident   | authenticated user → `/admin/*`                  |
 
 최근 2일 PR review 확인:
 
@@ -22,18 +22,18 @@ T-283은 Sprint 6 출시 전 보안 경계 1차 점검이다. 대상은 Web/API/
 
 ## Threat Model
 
-| 위협 | 기대 방어 | 확인 증거 |
-|------|-----------|-----------|
-| MCP 토큰을 일반 API access token으로 재사용 | `get_current_user_id`는 Pinvi access JWT만 수락하고 MCP prefix/JWT는 `TOKEN_INVALID` | `test_mcp_token_and_web_access_token_are_not_interchangeable` |
-| Web access JWT를 MCP Bearer로 재사용 | MCP dependency는 `mcp_` prefix, MCP JWT secret, DB token hash, `mcp:read` scope를 검증 | `test_mcp_token_and_web_access_token_are_not_interchangeable`, 기존 `test_mcp_tokens_api.py` |
-| 공유 raw token이 owner detail/Admin list에 노출 | 생성 응답 이후 조회 응답은 `share_id`, `visibility`, 상태만 반환하고 raw token은 숨김 | `test_share_token_is_route_scoped_hidden_and_revocable`, 기존 `test_share_link_uses_web_base_url` |
-| 공유 token을 다른 trip id에 replay | token hash와 `trip_id`를 함께 검증하고 실패 시 404 | `test_share_token_is_route_scoped_hidden_and_revocable` |
-| revoke된 공유 link 재사용 | `revoked_at`이 있는 share token은 shared endpoint에서 404 | `test_share_token_is_route_scoped_hidden_and_revocable` |
-| 일반 사용자 또는 MCP token이 curated/admin storage presign 발급 | `curated_*` purpose는 admin role만 허용하고 권한 없음은 404로 숨김. MCP Bearer는 web access token이 아니므로 401 | `test_admin_only_storage_upload_purpose_rejects_user_and_mcp_credentials` |
-| Storage path traversal / 임의 object key 주입 | upload URL은 서버가 key를 생성하고 attachment schema는 절대경로/역슬래시/`..`를 거부 | 기존 `test_trips_api.py`, `test_admin_curated_attachments_api.py` |
-| Admin incident workflow를 operator가 조회/전이 | incident list/create는 admin/cpo, 상태 전이는 cpo only, 권한 없음은 404 | `test_security_incident_console_hides_from_operator_role`, 기존 `test_admin_incidents_api.py` |
-| Rate-limit 우회 또는 abuse override 오용 | policy별 identity dimension, Postgres bucket, fail-closed, TTL block/allow override, 감사 로그 | 기존 `test_rate_limit_middleware.py`, `test_admin_abuse_api.py` |
-| disabled/pending_delete/deleted 사용자 token 재사용 | auth dependency, refresh session, MCP token 검증에서 사용자 상태와 token version을 확인 | 기존 `test_admin_users_api.py`, `test_mcp_tokens_api.py` |
+| 위협                                                            | 기대 방어                                                                                                        | 확인 증거                                                                                         |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| MCP 토큰을 일반 API access token으로 재사용                     | `get_current_user_id`는 Pinvi access JWT만 수락하고 MCP prefix/JWT는 `TOKEN_INVALID`                             | `test_mcp_token_and_web_access_token_are_not_interchangeable`                                     |
+| Web access JWT를 MCP Bearer로 재사용                            | MCP dependency는 `mcp_` prefix, MCP JWT secret, DB token hash, `mcp:read` scope를 검증                           | `test_mcp_token_and_web_access_token_are_not_interchangeable`, 기존 `test_mcp_tokens_api.py`      |
+| 공유 raw token이 owner detail/Admin list에 노출                 | 생성 응답 이후 조회 응답은 `share_id`, `visibility`, 상태만 반환하고 raw token은 숨김                            | `test_share_token_is_route_scoped_hidden_and_revocable`, 기존 `test_share_link_uses_web_base_url` |
+| 공유 token을 다른 trip id에 replay                              | token hash와 `trip_id`를 함께 검증하고 실패 시 404                                                               | `test_share_token_is_route_scoped_hidden_and_revocable`                                           |
+| revoke된 공유 link 재사용                                       | `revoked_at`이 있는 share token은 shared endpoint에서 404                                                        | `test_share_token_is_route_scoped_hidden_and_revocable`                                           |
+| 일반 사용자 또는 MCP token이 curated/admin storage presign 발급 | `curated_*` purpose는 admin role만 허용하고 권한 없음은 404로 숨김. MCP Bearer는 web access token이 아니므로 401 | `test_admin_only_storage_upload_purpose_rejects_user_and_mcp_credentials`                         |
+| Storage path traversal / 임의 object key 주입                   | upload URL은 서버가 key를 생성하고 attachment schema는 절대경로/역슬래시/`..`를 거부                             | 기존 `test_trips_api.py`, `test_admin_curated_attachments_api.py`                                 |
+| Admin incident workflow를 operator가 조회/전이                  | incident list/create는 admin/cpo, 상태 전이는 cpo only, 권한 없음은 404                                          | `test_security_incident_console_hides_from_operator_role`, 기존 `test_admin_incidents_api.py`     |
+| Rate-limit 우회 또는 abuse override 오용                        | policy별 identity dimension, Postgres bucket, fail-closed, TTL block/allow override, 감사 로그                   | 기존 `test_rate_limit_middleware.py`, `test_admin_abuse_api.py`                                   |
+| disabled/pending_delete/deleted 사용자 token 재사용             | auth dependency, refresh session, MCP token 검증에서 사용자 상태와 token version을 확인                          | 기존 `test_admin_users_api.py`, `test_mcp_tokens_api.py`                                          |
 
 ## 1차 점검 결과
 

@@ -1,0 +1,15 @@
+# Vendored byte-for-byte upstream 스냅샷 — SHA-256으로 핀 고정(수기 graft 차단).
+# `apps/api/tests/unit/test_kor_travel_map_contract.py`가 파일 해시를 검증하므로
+# Prettier가 재포맷하면 핀 해시가 깨진다. 절대 포맷하지 않는다.
+apps/api/tests/contract/
+
+# Vendored upstream skill 세트(timescale/pg-aiguide, `> 원본:` 프로버넌스 마커).
+# 재-vendoring 시 upstream과 byte-fidelity 유지 위해 재포맷하지 않는다.
+.agents/skills/
+.claude/skills/
+
+# Prettier가 기본으로 무시하지만 명시해 둔다.
+node_modules/
+**/.next/
+**/dist/
+**/build/

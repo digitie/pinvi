@@ -1,11 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import type {
-  ClusterPoint,
-  MapLibreEvent,
-  MapLibreMap,
-} from '@/components/map/vworldPrimitives';
+import type { ClusterPoint, MapLibreEvent, MapLibreMap } from '@/components/map/vworldPrimitives';
 import {
   ClusterLayer,
   MakiMarker,
@@ -94,13 +90,13 @@ export function MapView({
     lastEvent: 'init',
   }));
   const [selectedPointId, setSelectedPointId] = useState<string>(
-    DEFAULT_SELECTED_POINT.id.toString()
+    DEFAULT_SELECTED_POINT.id.toString(),
   );
   const selectedPoint = useMemo(
     () =>
       SHELL_POINTS.find((point) => point.id.toString() === selectedPointId) ??
       DEFAULT_SELECTED_POINT,
-    [selectedPointId]
+    [selectedPointId],
   );
 
   const handleMapLoad = useCallback((map: MapLibreMap) => {

@@ -5,29 +5,29 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 
 ## 1. 인덱스
 
-| 파일                                               | 범위                                                             | Sprint   |
-| -------------------------------------------------- | ---------------------------------------------------------------- | -------- |
-| [local-dev.md](./local-dev.md)                     | Linux 개발·git·검증 명령 카탈로그                                | 1        |
-| [docker-app.md](./docker-app.md)                   | App 컨테이너 smoke test (`docker-compose.app.yml`)               | 1        |
-| [etl.md](./etl.md)                                 | Dagster `apps/etl` 운영 + soak                                   | 5        |
-| [admin.md](./admin.md)                             | Admin 콘솔 운영 (RBAC / seed / 시나리오)                         | 3        |
-| [v100-live-gate.md](./v100-live-gate.md)           | v1.0.0 E2E / live gate 오케스트레이션                            | 6        |
-| [admin-live-e2e.md](./admin-live-e2e.md)           | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
-| [live-mutating-e2e.md](./live-mutating-e2e.md)     | N150/live 상태 변경 e2e 실행                                     | 5~6      |
-| [file-storage.md](./file-storage.md)               | RustFS 운영 + kor-travel-map 공유                                | 2        |
-| [odroid-docker.md](./odroid-docker.md)             | Odroid M1S 배포 + ARM64 빌드                                     | 6        |
-| [backup-restore.md](./backup-restore.md)           | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |
-| [deploy.md](./deploy.md)                           | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
-| [observability.md](./observability.md)             | Prometheus + cAdvisor + Grafana 운영                             | 5        |
+| 파일                                                           | 범위                                                             | Sprint   |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- | -------- |
+| [local-dev.md](./local-dev.md)                                 | Linux 개발·git·검증 명령 카탈로그                                | 1        |
+| [docker-app.md](./docker-app.md)                               | App 컨테이너 smoke test (`docker-compose.app.yml`)               | 1        |
+| [etl.md](./etl.md)                                             | Dagster `apps/etl` 운영 + soak                                   | 5        |
+| [admin.md](./admin.md)                                         | Admin 콘솔 운영 (RBAC / seed / 시나리오)                         | 3        |
+| [v100-live-gate.md](./v100-live-gate.md)                       | v1.0.0 E2E / live gate 오케스트레이션                            | 6        |
+| [admin-live-e2e.md](./admin-live-e2e.md)                       | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
+| [live-mutating-e2e.md](./live-mutating-e2e.md)                 | N150/live 상태 변경 e2e 실행                                     | 5~6      |
+| [file-storage.md](./file-storage.md)                           | RustFS 운영 + kor-travel-map 공유                                | 2        |
+| [odroid-docker.md](./odroid-docker.md)                         | Odroid M1S 배포 + ARM64 빌드                                     | 6        |
+| [backup-restore.md](./backup-restore.md)                       | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |
+| [deploy.md](./deploy.md)                                       | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
+| [observability.md](./observability.md)                         | Prometheus + cAdvisor + Grafana 운영                             | 5        |
 | [performance-security-gate.md](./performance-security-gate.md) | 성능 / 부하 / 보안 smoke gate                                    | 6        |
-| [security-incidents.md](./security-incidents.md)   | 인시던트 대응 + PIPA 통지                                        | 6        |
-| [retention-execution.md](./retention-execution.md) | PII/위치 로그 보존기간 dry-run/execute                           | 6        |
-| [codegraph-worktrees.md](./codegraph-worktrees.md) | CodeGraph + agent별 고정 worktree (ADR-017)                      | 0 (상시) |
-| [pr-review-sprint4.md](./pr-review-sprint4.md)     | Sprint 4까지 PR 리뷰·머지 운영                                   | 1~4      |
-| [mcp-server.md](./mcp-server.md)                   | Pinvi MCP 외부 인터페이스 운영 (ADR-019)                         | 6        |
-| [korea-only.md](./korea-only.md)                   | 한국 전용 geofencing 3중 안전망 (ADR-018)                        | 6        |
-| [grafana-admin-embed.md](./grafana-admin-embed.md) | Admin Grafana iframe embed                                       | 5        |
-| [secrets.md](./secrets.md)                         | GitHub Actions secrets 카탈로그 (ADR-021)                        | 4 (상시) |
+| [security-incidents.md](./security-incidents.md)               | 인시던트 대응 + PIPA 통지                                        | 6        |
+| [retention-execution.md](./retention-execution.md)             | PII/위치 로그 보존기간 dry-run/execute                           | 6        |
+| [codegraph-worktrees.md](./codegraph-worktrees.md)             | CodeGraph + agent별 고정 worktree (ADR-017)                      | 0 (상시) |
+| [pr-review-sprint4.md](./pr-review-sprint4.md)                 | Sprint 4까지 PR 리뷰·머지 운영                                   | 1~4      |
+| [mcp-server.md](./mcp-server.md)                               | Pinvi MCP 외부 인터페이스 운영 (ADR-019)                         | 6        |
+| [korea-only.md](./korea-only.md)                               | 한국 전용 geofencing 3중 안전망 (ADR-018)                        | 6        |
+| [grafana-admin-embed.md](./grafana-admin-embed.md)             | Admin Grafana iframe embed                                       | 5        |
+| [secrets.md](./secrets.md)                                     | GitHub Actions secrets 카탈로그 (ADR-021)                        | 4 (상시) |
 
 ## 2. 공통 정책
 

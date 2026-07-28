@@ -29,9 +29,10 @@ describe('noticePlanCopy', () => {
   });
 
   it('buildCopyRequest: 기존 여행 → target_trip_id 만', () => {
-    expect(
-      buildCopyRequest({ ...base, mode: 'existing', targetTripId: 'trip-1' })
-    ).toEqual({ target_trip_id: 'trip-1', poi_ids: [] });
+    expect(buildCopyRequest({ ...base, mode: 'existing', targetTripId: 'trip-1' })).toEqual({
+      target_trip_id: 'trip-1',
+      poi_ids: [],
+    });
   });
 
   it('canCopy: 새=제목 필요, 기존=trip 선택 필요', () => {

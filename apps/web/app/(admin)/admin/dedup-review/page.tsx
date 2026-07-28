@@ -60,9 +60,8 @@ export default function AdminDedupReviewPage() {
   const queryClient = useQueryClient();
   const [queryInput, setQueryInput] = useState('');
   const [submittedQ, setSubmittedQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>(
-    'pending',
-  );
+  const [statusFilter, setStatusFilter] =
+    useState<(typeof STATUS_OPTIONS)[number]['value']>('pending');
   const [minScore, setMinScore] = useState('70');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [decision, setDecision] = useState<AdminDedupDecision>('merged');
@@ -121,7 +120,9 @@ export default function AdminDedupReviewPage() {
       setMutationNotice(null);
     },
     onError: (error) => {
-      setMutationError(error instanceof ApiError ? error.message : 'dedup verdict 처리에 실패했습니다.');
+      setMutationError(
+        error instanceof ApiError ? error.message : 'dedup verdict 처리에 실패했습니다.',
+      );
     },
     onSuccess: (result) => {
       setMutationNotice(
@@ -304,8 +305,8 @@ export default function AdminDedupReviewPage() {
               <div>
                 <h2 className="text-sm font-semibold text-ink">{selected.review_id}</h2>
                 <p className="text-xs text-muted">
-                  total {score(selected.total_score)} / name {score(selected.name_score)} /
-                  spatial {score(selected.spatial_score)}
+                  total {score(selected.total_score)} / name {score(selected.name_score)} / spatial{' '}
+                  {score(selected.spatial_score)}
                 </p>
               </div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
@@ -315,8 +316,8 @@ export default function AdminDedupReviewPage() {
                 <dd>{featureLabel(selected.feature_b)}</dd>
                 <dt className="text-muted">provider</dt>
                 <dd>
-                  {(selected.feature_a.provider ?? '—')}/{selected.feature_a.dataset_key ?? '—'} ·{' '}
-                  {(selected.feature_b.provider ?? '—')}/{selected.feature_b.dataset_key ?? '—'}
+                  {selected.feature_a.provider ?? '—'}/{selected.feature_a.dataset_key ?? '—'} ·{' '}
+                  {selected.feature_b.provider ?? '—'}/{selected.feature_b.dataset_key ?? '—'}
                 </dd>
                 <dt className="text-muted">reviewed</dt>
                 <dd>{formatDateTime(selected.reviewed_at)}</dd>

@@ -40,13 +40,15 @@ Cookie: pinvi_access=...
         "destination": "부산",
         "starts_on": "2026-06-01",
         "ends_on": "2026-06-03",
-        "cover_attachment": { /* image attachment */ },
+        "cover_attachment": {
+          /* image attachment */
+        },
         "poi_count": 8,
-        "updated_at": "..."
-      }
-    ]
+        "updated_at": "...",
+      },
+    ],
   },
-  "meta": { "page": 1, "limit": 20, "total": 42 }
+  "meta": { "page": 1, "limit": 20, "total": 42 },
 }
 ```
 
@@ -76,8 +78,8 @@ Cookie: pinvi_access=...
         "storage_key": "...",
         "content_type": "image/jpeg",
         "role": "image",
-        "sort_order": 0
-      }
+        "sort_order": 0,
+      },
     ],
     "pois": [
       {
@@ -85,14 +87,21 @@ Cookie: pinvi_access=...
         "day_index": 1,
         "sort_order": "a1",
         "feature_id": "f_2611000000_p_...", // null 가능
-        "feature_snapshot": { "name": "광안리 해수욕장", "coord": [129.118, 35.155], "category": "해수욕장", "marker_color": "P-07" },
+        "feature_snapshot": {
+          "name": "광안리 해수욕장",
+          "coord": [129.118, 35.155],
+          "category": "해수욕장",
+          "marker_color": "P-07",
+        },
         "memo": "일출 명소",
         "budget": null,
         "user_url": null,
-        "attachments": [/* ... */]
-      }
-    ]
-  }
+        "attachments": [
+          /* ... */
+        ],
+      },
+    ],
+  },
 }
 ```
 
@@ -268,8 +277,8 @@ Content-Type: application/json
     "source_version": 3,
     "source_etag": "sha256:...",
     "copied_poi_count": 8,
-    "reused_feature_backed_poi_count": 1
-  }
+    "reused_feature_backed_poi_count": 1,
+  },
 }
 ```
 
@@ -293,17 +302,17 @@ alias `notice_plan_id` / `notice_poi_id`를 함께 제공한다. 두 필드는 �
 
 ## 3. 권한 매트릭스
 
-| 액션 | 인증 사용자 | admin | operator | cpo |
-|------|------------|-------|----------|-----|
-| `GET /notice-plans` (published) | ✓ | ✓ | ✓ | ✓ |
-| `GET /notice-plans/{id}` (published) | ✓ | ✓ | ✓ | ✓ |
-| `POST /notice-plans/{id}/copy` | ✓ | ✓ | ✓ | ✓ |
-| `GET /admin/notice-plans` (all) | ✗ | ✓ | ✓ | ✓ |
-| `POST /admin/notice-plans` | ✗ | ✓ | ✓ | ✗ |
-| `PATCH /admin/notice-plans/{id}` | ✗ | ✓ | ✓ | ✗ |
-| `DELETE /admin/notice-plans/{id}` | ✗ | ✓ | ✗ | ✗ |
-| `POST /admin/notice-plans/{id}/pois` | ✗ | ✓ | ✓ | ✗ |
-| `*/attachments` (admin) | ✗ | ✓ | ✓ | ✗ |
+| 액션                                 | 인증 사용자 | admin | operator | cpo |
+| ------------------------------------ | ----------- | ----- | -------- | --- |
+| `GET /notice-plans` (published)      | ✓           | ✓     | ✓        | ✓   |
+| `GET /notice-plans/{id}` (published) | ✓           | ✓     | ✓        | ✓   |
+| `POST /notice-plans/{id}/copy`       | ✓           | ✓     | ✓        | ✓   |
+| `GET /admin/notice-plans` (all)      | ✗           | ✓     | ✓        | ✓   |
+| `POST /admin/notice-plans`           | ✗           | ✓     | ✓        | ✗   |
+| `PATCH /admin/notice-plans/{id}`     | ✗           | ✓     | ✓        | ✗   |
+| `DELETE /admin/notice-plans/{id}`    | ✗           | ✓     | ✗        | ✗   |
+| `POST /admin/notice-plans/{id}/pois` | ✗           | ✓     | ✓        | ✗   |
+| `*/attachments` (admin)              | ✗           | ✓     | ✓        | ✗   |
 
 ## 4. AI agent 구현 체크리스트
 

@@ -556,8 +556,7 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       seenCancelBodies.push(route.request().postDataJSON());
       await route.fulfill({
@@ -583,9 +582,7 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       reconciliationCalls += 1;
       const status = reconciliationCalls === 1 ? 'in_progress' : 'retryable';
@@ -659,9 +656,7 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await expect(page.getByTestId('admin-provider-cancel-warning')).toContainText(
     'HTTP 503 · PIPELINE_CANCELLATION_OUTCOME_UNCERTAIN',
   );
-  await expect(page.getByTestId('admin-provider-cancel-warning')).toContainText(
-    '7초 후 조회 가능',
-  );
+  await expect(page.getByTestId('admin-provider-cancel-warning')).toContainText('7초 후 조회 가능');
   await expect(page.getByTestId(`admin-provider-job-cancel-${jobId}`)).toBeDisabled();
   await expect(page.getByTestId(`admin-provider-job-cancel-${jobId}`)).toContainText(
     '상태 확인 중',
@@ -669,9 +664,7 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await expect(page.getByTestId(`admin-provider-job-cancel-${jobId}`)).toBeEnabled({
     timeout: 5_000,
   });
-  await expect(page.getByTestId(`admin-provider-job-cancel-${jobId}`)).toContainText(
-    '취소 재시도',
-  );
+  await expect(page.getByTestId(`admin-provider-job-cancel-${jobId}`)).toContainText('취소 재시도');
   expect(reconciliationCalls).toBeGreaterThanOrEqual(2);
   expect(seenProviderUrls.length).toBeGreaterThan(providerCallsBeforeCancel);
   expect(seenJobUrls.length).toBeGreaterThan(jobCallsBeforeCancel);
@@ -715,8 +708,7 @@ test('취소 422 거절은 polling과 행 잠금 없이 입력을 보존하고 �
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       if (cancelCalls === 1) {
@@ -753,9 +745,7 @@ test('취소 422 거절은 polling과 행 잠금 없이 입력을 보존하고 �
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       await route.fulfill({
@@ -839,8 +829,7 @@ test('정확한 execution-not-found 404는 polling 없이 입력을 보존하고
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       await route.fulfill({
@@ -856,9 +845,7 @@ test('정확한 execution-not-found 404는 polling 없이 입력을 보존하고
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       await route.fulfill({
@@ -921,8 +908,7 @@ test('code가 다른 일반 404는 결과 미확정으로 잠그고 reconciliati
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       await route.fulfill({
@@ -938,9 +924,7 @@ test('code가 다른 일반 404는 결과 미확정으로 잠그고 reconciliati
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       await route.fulfill({
@@ -1062,8 +1046,7 @@ test('취소 성공 뒤 stale 목록이 running이어도 fresh 상세 확인 전
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       await route.fulfill({
@@ -1087,9 +1070,7 @@ test('취소 성공 뒤 stale 목록이 running이어도 fresh 상세 확인 전
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       const completed = detailCalls >= 2;
@@ -1169,17 +1150,14 @@ test('브라우저 응답 유실은 blind retry 없이 detail/list/grid reconcil
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       await route.abort('failed');
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       await route.fulfill({
@@ -1219,9 +1197,7 @@ test('브라우저 응답 유실은 blind retry 없이 detail/list/grid reconcil
   expect(listCalls).toBeGreaterThanOrEqual(2);
 });
 
-test('Pinvi 감사 실패 500도 terminal로 오인하지 않고 reconciliation을 잠근다', async ({
-  page,
-}) => {
+test('Pinvi 감사 실패 500도 terminal로 오인하지 않고 reconciliation을 잠근다', async ({ page }) => {
   let providerCalls = 0;
   let listCalls = 0;
   let detailCalls = 0;
@@ -1255,8 +1231,7 @@ test('Pinvi 감사 실패 500도 terminal로 오인하지 않고 reconciliation�
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       cancelCalls += 1;
       await route.fulfill({
@@ -1272,9 +1247,7 @@ test('Pinvi 감사 실패 500도 terminal로 오인하지 않고 reconciliation�
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       detailCalls += 1;
       await route.fulfill({
@@ -1351,8 +1324,7 @@ test('취소 reconciliation은 해당 job 행만 잠근다', async ({ page }) =>
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}/cancel`,
     async (route) => {
       await route.fulfill({
         status: 503,
@@ -1367,9 +1339,7 @@ test('취소 reconciliation은 해당 job 행만 잠근다', async ({ page }) =>
     },
   );
   await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
+    (url) => url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${jobId}`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -1409,8 +1379,7 @@ test('취소 reconciliation은 해당 job 행만 잠근다', async ({ page }) =>
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${otherJobId}`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${otherJobId}`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -1597,8 +1566,7 @@ test('cursor 페이지네이션으로 50개 이후 job도 조회하고 취소한
   );
   await page.route(
     (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/provider-sync/import-jobs/${lateJobId}`,
+      url.port === '12801' && url.pathname === `/admin/provider-sync/import-jobs/${lateJobId}`,
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',

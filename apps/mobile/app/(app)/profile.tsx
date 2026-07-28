@@ -89,9 +89,7 @@ export default function ProfileScreen() {
           <Subheading>소셜 연결</Subheading>
           {google ? (
             <View className="gap-2">
-              <Body>
-                Google · {google.provider_email ?? google.display_name ?? '연결됨'}
-              </Body>
+              <Body>Google · {google.provider_email ?? google.display_name ?? '연결됨'}</Body>
               <Button
                 label="Google 연결 해제"
                 variant="secondary"

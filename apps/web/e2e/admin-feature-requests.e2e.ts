@@ -56,7 +56,8 @@ test.beforeEach(async ({ page }) => {
 test('Admin이 feature 제안을 승인하면 kor_travel_map 전달 API를 호출한다', async ({ page }) => {
   let approveBody: Record<string, unknown> | null = null;
   await page.route(
-    (url) => url.port === '12801' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
+    (url) =>
+      url.port === '12801' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
     async (route) => {
       approveBody = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({

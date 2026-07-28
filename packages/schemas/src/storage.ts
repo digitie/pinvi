@@ -149,13 +149,7 @@ export const AttachmentResponseSchema = AttachmentResponseBaseSchema.transform((
 });
 export type AttachmentResponse = z.infer<typeof AttachmentResponseSchema>;
 
-export const AttachmentScopeSchema = z.enum([
-  'trip',
-  'day',
-  'poi',
-  'curated_plan',
-  'curated_poi',
-]);
+export const AttachmentScopeSchema = z.enum(['trip', 'day', 'poi', 'curated_plan', 'curated_poi']);
 export type AttachmentScope = z.infer<typeof AttachmentScopeSchema>;
 
 export const AttachmentLibraryItemSchema = AttachmentResponseSchema.and(
@@ -165,7 +159,7 @@ export const AttachmentLibraryItemSchema = AttachmentResponseSchema.and(
     uploaded_by_email_masked: z.string().nullable().optional(),
     trip_title: z.string().nullable().optional(),
     poi_label: z.string().nullable().optional(),
-  })
+  }),
 );
 export type AttachmentLibraryItem = z.infer<typeof AttachmentLibraryItemSchema>;
 

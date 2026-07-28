@@ -1,9 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL =
-  process.env.PINVI_LIVE_WEB_URL ??
-  process.env.PLAYWRIGHT_BASE_URL ??
-  'http://127.0.0.1:12805';
+  process.env.PINVI_LIVE_WEB_URL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:12805';
 const testTimeoutMs = Number(process.env.PINVI_LIVE_TEST_TIMEOUT_MS ?? '120000');
 
 export default defineConfig({

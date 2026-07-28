@@ -22,13 +22,13 @@ ADR-019 amendment 또는 후속 ADR, scope 설계, 사용자 UI/보안 검토가
 
 ## 2. 권한 모델
 
-| 후보 tool | 상태 | 권한 기준 |
-|----------|------|----------|
-| `address_code_lookup` | 후보. 구현 시 `kor-travel-geo` v2 REST 경유 | 사용자 본인 read-only |
-| `youtube_place_import` | 후보. dry-run 또는 pending 후보 적재만 | 운영자 + 사용자 trigger |
-| `gemini_research` | 후보. 사용자 본인 키 사용 | 사용자 본인 |
-| `pinvi_db_admin` | 외부 MCP 금지. Admin HTTP/UI로만 처리 | CPO + admin |
-| `search_features` | ADR-019 1차 정본 tool | 사용자 본인 read-only |
+| 후보 tool              | 상태                                        | 권한 기준               |
+| ---------------------- | ------------------------------------------- | ----------------------- |
+| `address_code_lookup`  | 후보. 구현 시 `kor-travel-geo` v2 REST 경유 | 사용자 본인 read-only   |
+| `youtube_place_import` | 후보. dry-run 또는 pending 후보 적재만      | 운영자 + 사용자 trigger |
+| `gemini_research`      | 후보. 사용자 본인 키 사용                   | 사용자 본인             |
+| `pinvi_db_admin`       | 외부 MCP 금지. Admin HTTP/UI로만 처리       | CPO + admin             |
+| `search_features`      | ADR-019 1차 정본 tool                       | 사용자 본인 read-only   |
 
 ## 3. `address_code_lookup` (v2)
 
@@ -85,9 +85,9 @@ YouTube URL → 장소 후보 추출.
 {
   "video_urls": ["https://youtube.com/watch?v=..."],
   "prompt_version": "v1",
-  "dry_run": true,                     // 기본 true
-  "use_user_key": true,                // 사용자 본인 키 사용 (false면 시스템 키 — admin only)
-  "user_id": "uuid"
+  "dry_run": true, // 기본 true
+  "use_user_key": true, // 사용자 본인 키 사용 (false면 시스템 키 — admin only)
+  "user_id": "uuid",
 }
 ```
 
@@ -104,11 +104,11 @@ YouTube URL → 장소 후보 추출.
       "latitude": 35.155,
       "evidence": "10분 25초 화면 간판",
       "confidence": 0.85,
-      "address_match_method": "road_exact"
-    }
+      "address_match_method": "road_exact",
+    },
   ],
   "analysis_run_id": "uuid",
-  "dry_run": true                       // dry_run=false면 app.youtube_place_candidates에 적재
+  "dry_run": true, // dry_run=false면 app.youtube_place_candidates에 적재
 }
 ```
 

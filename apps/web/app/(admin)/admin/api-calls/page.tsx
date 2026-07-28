@@ -144,7 +144,9 @@ export default function AdminApiCallsPage() {
       </FilterBar>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
+          {error}
+        </p>
       )}
 
       <AdminTable

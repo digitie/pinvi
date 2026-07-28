@@ -19,25 +19,27 @@
   관점에서 우선 닫는 게 좋다.
 
 ### 직전 [높음] → 이번 검증 결과
-| 후속 | PR | 결과 |
-|------|----|------|
-| T-154 resend C-22 | #74 | ✅ fail-closed + base64 둘 다 수정 (잔존: env 기본 fail-open 中) |
-| T-155 access reason PII | #75 | ✅ 완전 해소 (header→reject query, URL 미포함 e2e) |
-| T-156 reset 세션 폐기 | #76 | ✅ refresh 전부 폐기 (잔존: access 15분 창·refresh race 中) |
-| T-157 geofence origin | #77 | ✅ Cloudflare 발신 HMAC 검증 (잔존: outage 가드·IP/mTLS 中) |
-| T-158 WS guards | #78 | ✅ rate limit·cursor·backpressure·cap 4종 (잔존: grace 슬롯·coupling 中) |
-| T-159 money zod | #79 | ✅ 응답 string 정규식 (잔존: admin union·schema 테스트 中) |
-| T-160 audit atomic | #80 | ✅ 6개 호출처 단일 트랜잭션 (잔존: hash-chain head fork 中) |
-| T-161 search anchor | #82 | ✅ 완전 해소 (TODO 없음) |
-| T-137 curated plans | #73 | ✅ 안전 rename 마이그레이션 (잔존: storage 필드 alias 中) |
-| T-126 POI route 정본 | #81 | ✅ 단일 경로 + 코드 일치 (잔존: §5.1 중복 文 低) |
-| T-127 MCP 정본 | #83 | ✅ A-02/06/12/20 정합 (잔존: list_trips parity 中) |
+
+| 후속                    | PR  | 결과                                                                     |
+| ----------------------- | --- | ------------------------------------------------------------------------ |
+| T-154 resend C-22       | #74 | ✅ fail-closed + base64 둘 다 수정 (잔존: env 기본 fail-open 中)         |
+| T-155 access reason PII | #75 | ✅ 완전 해소 (header→reject query, URL 미포함 e2e)                       |
+| T-156 reset 세션 폐기   | #76 | ✅ refresh 전부 폐기 (잔존: access 15분 창·refresh race 中)              |
+| T-157 geofence origin   | #77 | ✅ Cloudflare 발신 HMAC 검증 (잔존: outage 가드·IP/mTLS 中)              |
+| T-158 WS guards         | #78 | ✅ rate limit·cursor·backpressure·cap 4종 (잔존: grace 슬롯·coupling 中) |
+| T-159 money zod         | #79 | ✅ 응답 string 정규식 (잔존: admin union·schema 테스트 中)               |
+| T-160 audit atomic      | #80 | ✅ 6개 호출처 단일 트랜잭션 (잔존: hash-chain head fork 中)              |
+| T-161 search anchor     | #82 | ✅ 완전 해소 (TODO 없음)                                                 |
+| T-137 curated plans     | #73 | ✅ 안전 rename 마이그레이션 (잔존: storage 필드 alias 中)                |
+| T-126 POI route 정본    | #81 | ✅ 단일 경로 + 코드 일치 (잔존: §5.1 중복 文 低)                         |
+| T-127 MCP 정본          | #83 | ✅ A-02/06/12/20 정합 (잔존: list_trips parity 中)                       |
 
 ---
 
 ## 1. 긴급성순 통합 TODO (잔존)
 
 ### 🟡 중간 (보안·무결성·가용성 잔존)
+
 1. **[#74] resend 운영 fail-open 잔존** — `_allows_unsigned_resend_webhook`가 환경 문자열
    게이트인데 `pinvi_environment` 기본이 `"development"` → 운영이 명시적으로 덮어쓰지
    않으면 무서명 통과. allow-list(opt-out)→opt-in 플래그 또는 prod secret 강제로 반전.
@@ -63,6 +65,7 @@
     search_features HTTP(ADR-026) vs stale "함수 직접 호출" 표현 정리.
 
 ### 🟢 낮음 (문서·테스트·정규화)
+
 - [#74] svix-id replay dedup. [#75] reveal query 파라미터 제거·명시 거부.
 - [#76] 로그인-상태 비번 변경 시 helper 강제; reset 후 구 refresh 401 e2e.
 - [#77] block_unknown 기본 False 재검토; `_roles_set` casing 정규화(DB 대문자 role 우회 실패).

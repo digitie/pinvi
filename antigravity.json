@@ -2,36 +2,23 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-playwright"
-      ],
+      "args": ["-y", "@modelcontextprotocol/server-playwright"],
       "env": {
         "PLAYWRIGHT_HEADLESS": "true"
       }
     },
     "sequential-thinking": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
     "codegraph": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@colbymchenry/codegraph",
-        "serve",
-        "--mcp"
-      ],
+      "args": ["-y", "@colbymchenry/codegraph", "serve", "--mcp"],
       "cwd": "F:\\dev\\pinvi-antigravity"
     },
     "mcp-telegram": {
       "command": "C:\\Python314\\python.exe",
-      "args": [
-        "scripts\\mcp_telegram_start.py"
-      ],
+      "args": ["scripts\\mcp_telegram_start.py"],
       "cwd": "F:\\dev\\pinvi-antigravity"
     }
   }

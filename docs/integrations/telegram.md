@@ -73,12 +73,12 @@ CREATE TABLE app.telegram_system_notification_outbox (
 
 ## 3. 환경변수
 
-| 환경변수 | 비고 |
-|----------|------|
+| 환경변수                           | 비고                           |
+| ---------------------------------- | ------------------------------ |
 | `PINVI_TELEGRAM_BOT_TOKEN_DEFAULT` | Pinvi 시스템 봇 (Admin 채널용) |
-| `PINVI_TELEGRAM_ADMIN_CHAT_ID` | 운영자 채널 ID |
-| `PINVI_TELEGRAM_API_BASE` | `https://api.telegram.org` |
-| `PINVI_TELEGRAM_TIMEOUT_SECONDS` | `5` |
+| `PINVI_TELEGRAM_ADMIN_CHAT_ID`     | 운영자 채널 ID                 |
+| `PINVI_TELEGRAM_API_BASE`          | `https://api.telegram.org`     |
+| `PINVI_TELEGRAM_TIMEOUT_SECONDS`   | `5`                            |
 
 사용자 봇 토큰은 vault 또는 사용자별 env 변수에 (`telegram_bot_token_ref`).
 
@@ -108,15 +108,15 @@ async def verify_target(token: str, chat_id: str) -> dict:
 
 ## 5. 실패 분류
 
-| 코드 | 의미 | 응답 |
-|------|------|------|
-| `missing_chat_id` | chat_id 빈값 | 422 |
-| `bot_forbidden` | bot이 chat에서 차단됨 | 403, target `is_enabled=false` |
-| `invalid_chat` | chat_id 잘못됨 | 422 |
-| `invalid_topic` | thread_id 잘못됨 | 422 |
-| `rate_limited` | Telegram 429 | 429 + Retry-After |
-| `network_error` | timeout / connection | 503 |
-| `unknown_error` | 그 외 | 500 |
+| 코드              | 의미                  | 응답                           |
+| ----------------- | --------------------- | ------------------------------ |
+| `missing_chat_id` | chat_id 빈값          | 422                            |
+| `bot_forbidden`   | bot이 chat에서 차단됨 | 403, target `is_enabled=false` |
+| `invalid_chat`    | chat_id 잘못됨        | 422                            |
+| `invalid_topic`   | thread_id 잘못됨      | 422                            |
+| `rate_limited`    | Telegram 429          | 429 + Retry-After              |
+| `network_error`   | timeout / connection  | 503                            |
+| `unknown_error`   | 그 외                 | 500                            |
 
 ## 6. API endpoint
 
@@ -124,11 +124,11 @@ async def verify_target(token: str, chat_id: str) -> dict:
 
 ```jsonc
 {
-  "telegram_bot_token": "...",       // body로만, 즉시 vault에 저장
+  "telegram_bot_token": "...", // body로만, 즉시 vault에 저장
   "telegram_chat_id": "123456789",
   "telegram_label": "가족 단톡",
   "telegram_message_thread_id": null,
-  "is_default": true
+  "is_default": true,
 }
 ```
 

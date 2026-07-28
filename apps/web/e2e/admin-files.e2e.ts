@@ -152,19 +152,19 @@ test('Admin 파일 화면에서 정책 저장, 검색, 다운로드, 삭제를 �
   await page.getByTestId('admin-file-setting-user_attachment_quota_bytes').fill('16384');
   await page.getByLabel('사유').fill('전역 파일 정책 조정');
   await page.getByTestId('admin-file-settings-save').click();
-  await expect.poll(() => settingsBody).toMatchObject({
-    attachment_max_upload_bytes: 4096,
-    trip_attachment_quota_bytes: 8192,
-    user_attachment_quota_bytes: 16384,
-    access_reason: '전역 파일 정책 조정',
-  });
+  await expect
+    .poll(() => settingsBody)
+    .toMatchObject({
+      attachment_max_upload_bytes: 4096,
+      trip_attachment_quota_bytes: 8192,
+      user_attachment_quota_bytes: 16384,
+      access_reason: '전역 파일 정책 조정',
+    });
 
   await page.getByTestId('admin-files-search').fill('receipt');
   await page.getByTestId('admin-files-scope').selectOption('trip');
   await page.getByTestId('admin-files-search-submit').click();
-  await expect
-    .poll(() => lastFilesUrl)
-    .toContain('q=receipt');
+  await expect.poll(() => lastFilesUrl).toContain('q=receipt');
   expect(lastFilesUrl).toContain('scope=trip');
 
   await page.getByRole('button', { name: '다운로드' }).click();

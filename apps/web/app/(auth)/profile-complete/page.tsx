@@ -58,11 +58,15 @@ export default function ProfileCompletePage() {
     }
     const consents = [
       ...REQUIRED.filter((c) => required[c.type]).map((c) => ({
-        consent_type: c.type as z.infer<typeof ProfileCompleteRequestSchema>['consents'][number]['consent_type'],
+        consent_type: c.type as z.infer<
+          typeof ProfileCompleteRequestSchema
+        >['consents'][number]['consent_type'],
         version: CONSENT_VERSION,
       })),
       ...OPTIONAL.filter((c) => optional[c.type]).map((c) => ({
-        consent_type: c.type as z.infer<typeof ProfileCompleteRequestSchema>['consents'][number]['consent_type'],
+        consent_type: c.type as z.infer<
+          typeof ProfileCompleteRequestSchema
+        >['consents'][number]['consent_type'],
         version: CONSENT_VERSION,
       })),
     ];
@@ -96,7 +100,12 @@ export default function ProfileCompletePage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-ink">프로필 완성하기</h1>
-      <form onSubmit={onSubmit} className="space-y-5" data-testid="profile-complete-form" noValidate>
+      <form
+        onSubmit={onSubmit}
+        className="space-y-5"
+        data-testid="profile-complete-form"
+        noValidate
+      >
         <FormField
           ref={nicknameRef}
           id="profile-nickname"
@@ -117,9 +126,7 @@ export default function ProfileCompletePage() {
               <input
                 type="checkbox"
                 checked={required[c.type] ?? false}
-                onChange={(e) =>
-                  setRequired((prev) => ({ ...prev, [c.type]: e.target.checked }))
-                }
+                onChange={(e) => setRequired((prev) => ({ ...prev, [c.type]: e.target.checked }))}
                 data-testid={`consent-required-${c.type}`}
               />
               <span>(필수) {c.label}</span>
@@ -145,9 +152,7 @@ export default function ProfileCompletePage() {
               <input
                 type="checkbox"
                 checked={optional[c.type] ?? false}
-                onChange={(e) =>
-                  setOptional((prev) => ({ ...prev, [c.type]: e.target.checked }))
-                }
+                onChange={(e) => setOptional((prev) => ({ ...prev, [c.type]: e.target.checked }))}
                 data-testid={`consent-optional-${c.type}`}
               />
               <span>(선택) {c.label}</span>

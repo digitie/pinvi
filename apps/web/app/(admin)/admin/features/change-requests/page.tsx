@@ -127,10 +127,9 @@ function DetailPanel({
       await queryClient.cancelQueries({
         queryKey: queryKeys.admin.featureChangeRequestsAll(),
       });
-      const previous =
-        queryClient.getQueriesData<AdminFeatureChangeRequestPagedResponse>({
-          queryKey: queryKeys.admin.featureChangeRequestsAll(),
-        });
+      const previous = queryClient.getQueriesData<AdminFeatureChangeRequestPagedResponse>({
+        queryKey: queryKeys.admin.featureChangeRequestsAll(),
+      });
       queryClient.setQueriesData<AdminFeatureChangeRequestPagedResponse>(
         { queryKey: queryKeys.admin.featureChangeRequestsAll() },
         (old) =>
@@ -305,12 +304,9 @@ function DetailPanel({
 export default function AdminFeatureChangeRequestsPage() {
   const [queryInput, setQueryInput] = useState('');
   const [submittedQ, setSubmittedQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>(
-    'pending',
-  );
-  const [actionFilter, setActionFilter] = useState<(typeof ACTION_OPTIONS)[number]['value']>(
-    'all',
-  );
+  const [statusFilter, setStatusFilter] =
+    useState<(typeof STATUS_OPTIONS)[number]['value']>('pending');
+  const [actionFilter, setActionFilter] = useState<(typeof ACTION_OPTIONS)[number]['value']>('all');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -495,8 +491,7 @@ export default function AdminFeatureChangeRequestsPage() {
           갱신
         </button>
         <span className="ml-auto text-xs text-muted">
-          {data?.items.length ?? 0}행
-          {data?.review_mode ? ` / ${data.review_mode}` : ''}
+          {data?.items.length ?? 0}행{data?.review_mode ? ` / ${data.review_mode}` : ''}
         </span>
       </FilterBar>
 

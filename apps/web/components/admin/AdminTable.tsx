@@ -198,7 +198,12 @@ export function AdminTable<R>({
     );
   } else if (useVirtual) {
     body = (
-      <VirtualRows scrollRef={scrollRef} rows={tableRows} renderRow={renderRow} colCount={colCount} />
+      <VirtualRows
+        scrollRef={scrollRef}
+        rows={tableRows}
+        renderRow={renderRow}
+        colCount={colCount}
+      />
     );
   } else {
     body = tableRows.map((row) => renderRow(row));
@@ -229,10 +234,7 @@ export function AdminTable<R>({
                 const canSort = header.column.getCanSort();
                 const sorted = header.column.getIsSorted();
                 const align = (header.column.columnDef.meta as AdminColumnMeta | undefined)?.align;
-                const headerNode = flexRender(
-                  header.column.columnDef.header,
-                  header.getContext(),
-                );
+                const headerNode = flexRender(header.column.columnDef.header, header.getContext());
                 return (
                   <th
                     key={header.id}

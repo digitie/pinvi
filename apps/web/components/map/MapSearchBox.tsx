@@ -18,13 +18,14 @@ const MIN_CHARS = 2;
 const DEBOUNCE_MS = 250;
 
 // source별 표시 배지 — kakao/naver는 약관상 가시적 attribution이 필수(ADR-054 M19).
-const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pin' | 'bookmark' }> = {
-  feature: { label: '장소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
-  my_poi: { label: '내 여행', badgeClass: 'bg-primary/10 text-primary', icon: 'bookmark' },
-  address: { label: '주소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
-  kakao: { label: '카카오', badgeClass: 'bg-marker-p-03/20 text-ink', icon: 'pin' },
-  naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },
-};
+const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pin' | 'bookmark' }> =
+  {
+    feature: { label: '장소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
+    my_poi: { label: '내 여행', badgeClass: 'bg-primary/10 text-primary', icon: 'bookmark' },
+    address: { label: '주소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
+    kakao: { label: '카카오', badgeClass: 'bg-marker-p-03/20 text-ink', icon: 'pin' },
+    naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },
+  };
 
 function resultKey(r: PlaceSearchResult, index: number): string {
   return `${r.source}-${r.feature_id ?? r.poi_id ?? r.external_id ?? index}`;
@@ -102,10 +103,14 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
           aria-label="장소·주소 검색"
           className="h-9 w-full bg-transparent text-sm text-ink outline-none"
         />
-        {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden="true" />}
+        {loading && (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden="true" />
+        )}
       </form>
       {error && (
-        <p role="alert" className="mt-1 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">{error}</p>
+        <p role="alert" className="mt-1 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
+          {error}
+        </p>
       )}
       {results.length > 0 && (
         <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-white shadow-sm">

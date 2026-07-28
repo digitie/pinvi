@@ -4,7 +4,7 @@
   live feature read/kor_travel_map HTTP cutover/CI gate를 충족한 뒤 tag + GitHub Release를 생성했다.
 - **선행**: Sprint 3 DoD 완료 (Admin으로 데이터 흐름 검증 완료)
 - **목표**: 사용자 대면 지도 UI 완성 + `kor-travel-map` OpenAPI read 활성화
-  + **`vworld-map-web` 전환 → v0.1.0 릴리즈**
+  - **`vworld-map-web` 전환 → v0.1.0 릴리즈**
 - **릴리즈**: `v0.1.0` (Sprint 4 종료 tag). 사용자 대면 지도/여행 흐름 첫
   사용 가능한 상태로 2026-06-13에 tag와 GitHub Release를 완료했다.
 - **DoD**:
@@ -98,9 +98,9 @@
 - [ ] 사용자가 PC와 모바일에서 가입 → 여행 생성 → POI 추가 → 지도 확인 가능
 - [x] `kor-travel-map` HTTP read/admin 연동 cutover + drift gate 통과
 - [x] **`maplibre-vworld-js` 라이브러리 PR 모두 머지** (§5) — PR #37 구현 +
-  PR #46 카탈로그 정합화 완료
+      PR #46 카탈로그 정합화 완료
 - [x] **Web 지도 의존성 `vworld-map-web` 전환** (ADR-046/T-201) — 기존
-  `maplibre-vworld` 의존성 제거 + vendored tarball `file:` 핀
+      `maplibre-vworld` 의존성 제거 + vendored tarball `file:` 핀
 - [x] **GitHub Actions CI/CD 게이트 복원** (ADR-021; 최종 릴리즈 전 최신 run 확인)
 - [ ] `docs/journal.md` Sprint 4 종료 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" → Sprint 5

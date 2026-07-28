@@ -149,7 +149,13 @@ export default function AdminMcpTokensPage() {
         header: 'User',
         cell: (t) => <span className="font-mono text-xs">{t.user_id ?? '—'}</span>,
       },
-      { key: 'name', header: '이름', sortable: true, sortValue: (t) => t.name, cell: (t) => t.name },
+      {
+        key: 'name',
+        header: '이름',
+        sortable: true,
+        sortValue: (t) => t.name,
+        cell: (t) => t.name,
+      },
       {
         key: 'masked',
         header: '토큰',
@@ -242,7 +248,10 @@ export default function AdminMcpTokensPage() {
       )}
 
       <Section title="대리 발급">
-        <form onSubmit={onIssue} className="grid items-start gap-3 lg:grid-cols-[1.2fr_1fr_120px_1.2fr_auto]">
+        <form
+          onSubmit={onIssue}
+          className="grid items-start gap-3 lg:grid-cols-[1.2fr_1fr_120px_1.2fr_auto]"
+        >
           <FormField
             ref={userIdRef}
             id="admin-mcp-user"

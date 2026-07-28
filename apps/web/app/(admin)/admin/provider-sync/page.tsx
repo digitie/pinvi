@@ -104,9 +104,7 @@ function cancellationWarning(error: ApiError) {
   const details = error.details ?? {};
   const detailStatus = typeof details.status === 'string' ? details.status : null;
   const unresolved =
-    typeof details.unresolved_member_count === 'number'
-      ? details.unresolved_member_count
-      : null;
+    typeof details.unresolved_member_count === 'number' ? details.unresolved_member_count : null;
   const warnings = Array.isArray(details.warnings)
     ? details.warnings.filter((item): item is string => typeof item === 'string')
     : [];
@@ -222,9 +220,7 @@ export default function AdminProviderSyncPage() {
       queryKey: queryKeys.admin.providerImportJob(jobId),
       exact: true,
     });
-    setReconciliationJobIds((current) =>
-      current.includes(jobId) ? current : [...current, jobId],
-    );
+    setReconciliationJobIds((current) => (current.includes(jobId) ? current : [...current, jobId]));
     if (refreshLists) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.providerImportJobsAll() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.providerSyncAll() });
@@ -370,9 +366,7 @@ export default function AdminProviderSyncPage() {
       header: '다음 예약',
       sortable: true,
       sortValue: (item) =>
-        item.schedule_next_scheduled_at
-          ? new Date(item.schedule_next_scheduled_at).getTime()
-          : 0,
+        item.schedule_next_scheduled_at ? new Date(item.schedule_next_scheduled_at).getTime() : 0,
       cell: (item) => formatDateTime(item.schedule_next_scheduled_at),
     },
   ];
@@ -439,8 +433,7 @@ export default function AdminProviderSyncPage() {
       key: 'actions',
       header: '작업',
       cell: (item) => {
-        const reconciling =
-          jobPaginationLocked || reconciliationLockedJobIds.has(item.job_id);
+        const reconciling = jobPaginationLocked || reconciliationLockedJobIds.has(item.job_id);
         const action = cancelAction(item, reconciling, canCancel);
         return action ? (
           <button
@@ -490,7 +483,9 @@ export default function AdminProviderSyncPage() {
       return;
     }
     if (mapReason.length > CANCEL_REASON_MAX_LENGTH) {
-      setMutationError(`kor_travel_map 전달 사유는 ${CANCEL_REASON_MAX_LENGTH}자 이하로 입력하세요.`);
+      setMutationError(
+        `kor_travel_map 전달 사유는 ${CANCEL_REASON_MAX_LENGTH}자 이하로 입력하세요.`,
+      );
       return;
     }
     cancelMutation.mutate({ item: cancelJob });
@@ -622,18 +617,10 @@ export default function AdminProviderSyncPage() {
         );
       })}
       {reconciliationJobIds
-        .filter(
-          (reconciliationJobId) =>
-            reconciliationByJobId.get(reconciliationJobId)?.isError,
-        )
+        .filter((reconciliationJobId) => reconciliationByJobId.get(reconciliationJobId)?.isError)
         .map((reconciliationJobId) => (
-          <div
-            key={reconciliationJobId}
-            data-reconciliation-job-id={reconciliationJobId}
-          >
-            <ErrorBox
-              message="취소 결과 상세 조회에 실패했습니다. 안전을 위해 재시도는 계속 잠겨 있습니다."
-            />
+          <div key={reconciliationJobId} data-reconciliation-job-id={reconciliationJobId}>
+            <ErrorBox message="취소 결과 상세 조회에 실패했습니다. 안전을 위해 재시도는 계속 잠겨 있습니다." />
           </div>
         ))}
 
@@ -663,9 +650,7 @@ export default function AdminProviderSyncPage() {
           >
             이전
           </button>
-          <span data-testid="admin-provider-jobs-page">
-            {jobCursorHistory.length + 1} 페이지
-          </span>
+          <span data-testid="admin-provider-jobs-page">{jobCursorHistory.length + 1} 페이지</span>
           <button
             type="button"
             disabled={jobPaginationLocked || !jobsQuery.data?.next_cursor}

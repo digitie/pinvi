@@ -14,11 +14,11 @@ provider 계약·약관은 `docs/integrations/kakao-naver-local.md`, feature 경
 GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 ```
 
-| 파라미터 | 타입 | 필수 | 비고 |
-|----------|------|------|------|
-| `q` | string(2–120) | 필수 | 검색어(최소 2자). 클라이언트는 디바운스·in-flight 취소 유지 |
-| `limit` | int(1–50) | 아니오 | 소스별 상한(기본 10). Naver는 자체 상한 5로 clamp |
-| `lat` / `lon` | float | 아니오 | **"내 주변 검색"일 때만**. 함께 와야 하며 좌표를 **Kakao에만** 전달(§위치 감사) |
+| 파라미터      | 타입          | 필수   | 비고                                                                            |
+| ------------- | ------------- | ------ | ------------------------------------------------------------------------------- |
+| `q`           | string(2–120) | 필수   | 검색어(최소 2자). 클라이언트는 디바운스·in-flight 취소 유지                     |
+| `limit`       | int(1–50)     | 아니오 | 소스별 상한(기본 10). Naver는 자체 상한 5로 clamp                               |
+| `lat` / `lon` | float         | 아니오 | **"내 주변 검색"일 때만**. 함께 와야 하며 좌표를 **Kakao에만** 전달(§위치 감사) |
 
 인증 필요(로그인 쿠키). 좌표가 오면 위치정보 제3자 제공으로 감사된다(아래).
 
@@ -27,27 +27,29 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 ```jsonc
 {
   "data": {
-    "results": [ /* PlaceSearchResult, internal → kakao → naver 순 */ ],
-    "degraded_sources": ["kakao"]   // 5xx/타임아웃/키 미설정/쿼터로 비운 소스
-  }
+    "results": [
+      /* PlaceSearchResult, internal → kakao → naver 순 */
+    ],
+    "degraded_sources": ["kakao"], // 5xx/타임아웃/키 미설정/쿼터로 비운 소스
+  },
 }
 ```
 
 ### `PlaceSearchResult`
 
-| 필드 | 타입 | 채워지는 source | 비고 |
-|------|------|------------------|------|
-| `source` | `feature\|my_poi\|address\|kakao\|naver` | 전부 | 결과 출처 태그 |
-| `name` | string | 전부 | 표시명(Naver는 `<b>` 태그 strip 후) |
-| `coord` | `{lon,lat}\|null` | 대부분 | 좌표 미상이면 리스트 표시만(지도 핀 불가) |
-| `feature_id` | string\|null | feature, feature-linked my_poi | 정본 feature 참조 |
-| `poi_id`·`trip_id`·`trip_title` | string\|null | my_poi | 내 POI 역참조 |
-| `external_id` | string\|null | kakao, naver | provider opaque id(Naver는 `link` 정규화). 저장은 external_ref만 |
-| `address`·`road_address` | string\|null | address, kakao, naver | 지번/도로명 |
-| `category` | string\|null | feature, kakao, naver | 표시 전용 |
-| `marker_color`·`marker_icon` | string\|null | feature | 팔레트/maki |
-| `provider_url` | string\|null | kakao, naver | 카카오맵/네이버 지도 back-link(attribution 필수) |
-| `phone` | string\|null | kakao, naver | **표시 전용, 절대 저장 금지**(ADR-054 §7) |
+| 필드                            | 타입                                     | 채워지는 source                | 비고                                                             |
+| ------------------------------- | ---------------------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| `source`                        | `feature\|my_poi\|address\|kakao\|naver` | 전부                           | 결과 출처 태그                                                   |
+| `name`                          | string                                   | 전부                           | 표시명(Naver는 `<b>` 태그 strip 후)                              |
+| `coord`                         | `{lon,lat}\|null`                        | 대부분                         | 좌표 미상이면 리스트 표시만(지도 핀 불가)                        |
+| `feature_id`                    | string\|null                             | feature, feature-linked my_poi | 정본 feature 참조                                                |
+| `poi_id`·`trip_id`·`trip_title` | string\|null                             | my_poi                         | 내 POI 역참조                                                    |
+| `external_id`                   | string\|null                             | kakao, naver                   | provider opaque id(Naver는 `link` 정규화). 저장은 external_ref만 |
+| `address`·`road_address`        | string\|null                             | address, kakao, naver          | 지번/도로명                                                      |
+| `category`                      | string\|null                             | feature, kakao, naver          | 표시 전용                                                        |
+| `marker_color`·`marker_icon`    | string\|null                             | feature                        | 팔레트/maki                                                      |
+| `provider_url`                  | string\|null                             | kakao, naver                   | 카카오맵/네이버 지도 back-link(attribution 필수)                 |
+| `phone`                         | string\|null                             | kakao, naver                   | **표시 전용, 절대 저장 금지**(ADR-054 §7)                        |
 
 ## 동작
 

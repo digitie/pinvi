@@ -139,7 +139,10 @@ export function FeatureDetailCardBody({
             </Row>
           )}
           {card.body && (
-            <p className="whitespace-pre-line text-sm text-ink" data-testid={`${testId}-notice-body`}>
+            <p
+              className="whitespace-pre-line text-sm text-ink"
+              data-testid={`${testId}-notice-body`}
+            >
               {card.body}
             </p>
           )}
@@ -147,7 +150,10 @@ export function FeatureDetailCardBody({
       )}
 
       {card.kind === 'price' && card.items.length > 0 && (
-        <ul className="divide-y divide-hairline rounded-sm border border-hairline" data-testid={`${testId}-price`}>
+        <ul
+          className="divide-y divide-hairline rounded-sm border border-hairline"
+          data-testid={`${testId}-price`}
+        >
           {card.items.map((item, i) => (
             <li key={`${item.name}-${i}`} className="flex justify-between gap-2 px-3 py-2 text-sm">
               <span className="text-ink">{item.name}</span>

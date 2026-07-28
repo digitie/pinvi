@@ -3,12 +3,7 @@
 import { useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { TripResponse, TripStatus, TripUpdate, TripVisibility } from '@pinvi/schemas';
-import {
-  STATUS_LABEL,
-  VISIBILITY_LABEL,
-  buildTripUpdate,
-  type TripEditForm,
-} from '@pinvi/domain';
+import { STATUS_LABEL, VISIBILITY_LABEL, buildTripUpdate, type TripEditForm } from '@pinvi/domain';
 import { useEscapeKey } from '@/lib/useEscapeKey';
 import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { FormField } from '@/components/forms/FormField';
@@ -27,7 +22,13 @@ export interface TripEditDialogProps {
   onClose: () => void;
 }
 
-export function TripEditDialog({ trip, saving = false, error = null, onSave, onClose }: TripEditDialogProps) {
+export function TripEditDialog({
+  trip,
+  saving = false,
+  error = null,
+  onSave,
+  onClose,
+}: TripEditDialogProps) {
   useEscapeKey(onClose);
   const titleRef = useRef<HTMLInputElement>(null);
   useDialogAutoFocus(titleRef);

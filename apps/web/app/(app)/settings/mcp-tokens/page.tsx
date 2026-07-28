@@ -138,11 +138,16 @@ export default function McpTokensSettingsPage() {
       </header>
 
       {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
+          {error}
+        </p>
       )}
 
       <Section title="새 토큰">
-        <form onSubmit={onIssue} className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto]">
+        <form
+          onSubmit={onIssue}
+          className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto]"
+        >
           <FormField
             id="settings-mcp-name"
             label="토큰 이름"

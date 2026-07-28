@@ -11,16 +11,16 @@
 
 ## 2. 선택 secret (필요 시)
 
-| Secret | 사용처 | 값 형식 | 비고 |
-|--------|--------|--------|------|
-| `RESEND_API_KEY_TEST` | api.yml 의 통합 테스트 (이메일 발송 sandbox) | `re_...` | Resend `test` 모드 키 |
-| `MAXMIND_LICENSE_KEY` | (Sprint 6) GeoIP DB 갱신 cron | UUID | ADR-018 한국 전용 |
-| `CODECOV_TOKEN` | (선택) 커버리지 업로드 | UUID | 본 저장소는 공개라면 불필요 |
+| Secret                | 사용처                                       | 값 형식  | 비고                        |
+| --------------------- | -------------------------------------------- | -------- | --------------------------- |
+| `RESEND_API_KEY_TEST` | api.yml 의 통합 테스트 (이메일 발송 sandbox) | `re_...` | Resend `test` 모드 키       |
+| `MAXMIND_LICENSE_KEY` | (Sprint 6) GeoIP DB 갱신 cron                | UUID     | ADR-018 한국 전용           |
+| `CODECOV_TOKEN`       | (선택) 커버리지 업로드                       | UUID     | 본 저장소는 공개라면 불필요 |
 
 ## 3. 사용하지 않는 값
 
-| Secret | 정책 |
-|--------|------|
+| Secret           | 정책                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OPENAI_API_KEY` | GitHub Actions에서 외부 LLM API key를 사용하지 않는 사용자 지시에 따라 등록하지 않는다. `codex-pr-review.yml` / `codex-pr-monitor.yml`은 API key 없이 review reminder만 남긴다. |
 
 ## 4. CI 전용 (workflow 내부에서만 사용)

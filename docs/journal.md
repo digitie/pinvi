@@ -21,7 +21,7 @@
   Expo peer graph ERESOLVE로 막힌다. 모두 breaking 전용이라 T-VN-SEC-02(Next 16)·T-VN-SEC-03(Expo)로
   분리했다. task 본문이 "critical=vitest, 배포 artifact runtime dep은 분리"로 규정한 범위와 일치한다.
 - **검증**: web vitest 16 files/97 tests, domain 17/65, schemas 4/8 pass. web `tsc --noEmit` + `next lint`
-  무경고. lockfile에 vitest/@vitest/* 는 단일 4.1.10 dedupe, sub-v4 잔존 0. 적대적 리뷰 2명
+  무경고. lockfile에 vitest/@vitest/\* 는 단일 4.1.10 dedupe, sub-v4 잔존 0. 적대적 리뷰 2명
   (correctness-regression·security-scope) 모두 approve. 유일 지적 P3(vitest.setup.ts stale comment) 반영.
 - **문서**: 사용자 지시("머지시 tasks 관련 문서도 업데이트")에 따라 tasks.md/tasks-done.md/resume.md/journal.md를
   갱신했다. 최근 doc 없이 머지됐던 T-WS-C7(#410)·T-307 friction 후속(#411)도 소급 아카이브했다.

@@ -26,7 +26,7 @@ export function parseCategories(raw: string): string[] {
 
 export function buildNewPlaceRequest(
   form: NewPlaceForm,
-  coord: { lon: number; lat: number }
+  coord: { lon: number; lat: number },
 ): FeatureRequestCreate {
   return {
     type: 'new_place',

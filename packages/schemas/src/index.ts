@@ -185,7 +185,13 @@ export {
   PoiResponseSchema,
   PoiSourceSchema,
 } from './poi';
-export type { PoiCreate, PoiResponse, PoiRiseSetResponse, PoiRiseSetStatus, PoiSource } from './poi';
+export type {
+  PoiCreate,
+  PoiResponse,
+  PoiRiseSetResponse,
+  PoiRiseSetStatus,
+  PoiSource,
+} from './poi';
 export type { PoiReorderRequest, PoiUpdate } from './poi';
 
 export {

@@ -107,18 +107,14 @@ test('Admin POI 목록이 검색어와 연결 필터를 API에 전달한다', as
   await page.getByTestId('admin-pois-broken-filter').selectOption('false');
   await expect
     .poll(() =>
-      requests.some(
-        (url) => url.includes('q=haeundae') && url.includes('has_broken_link=false'),
-      ),
+      requests.some((url) => url.includes('q=haeundae') && url.includes('has_broken_link=false')),
     )
     .toBe(true);
 
   await page.getByTestId('admin-pois-broken-filter').selectOption('true');
   await expect
     .poll(() =>
-      requests.some(
-        (url) => url.includes('q=haeundae') && url.includes('has_broken_link=true'),
-      ),
+      requests.some((url) => url.includes('q=haeundae') && url.includes('has_broken_link=true')),
     )
     .toBe(true);
 
@@ -358,9 +354,7 @@ test('Admin POI 상세가 연결 상태 변경 audit을 표시한다', async ({ 
   await page.getByTestId('admin-poi-action-reason').fill('feature_id 점검 결과 끊김');
   await page.getByTestId('admin-poi-action-confirm').click();
 
-  await expect(page.getByTestId('admin-poi-audit-list')).toContainText(
-    'poi.update_link_status',
-  );
+  await expect(page.getByTestId('admin-poi-audit-list')).toContainText('poi.update_link_status');
   expect(patchReason).toBe('feature_id 점검 결과 끊김');
   expect(requests.some((url) => url.includes('/features/'))).toBe(false);
   expect(requests.some((url) => url.includes('12701'))).toBe(false);

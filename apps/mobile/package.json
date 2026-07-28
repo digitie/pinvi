@@ -6,7 +6,11 @@
   "main": "expo-router/entry",
   "expo": {
     "install": {
-      "exclude": ["typescript", "react", "react-dom"]
+      "exclude": [
+        "typescript",
+        "react",
+        "react-dom"
+      ]
     }
   },
   "scripts": {

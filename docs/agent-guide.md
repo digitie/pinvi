@@ -29,14 +29,14 @@
 
 ## 2. 결정·기록 5종 (필수 유지)
 
-| 파일 | 역할 | 갱신 시점 |
-|------|------|----------|
-| `docs/decisions.md` | ADR 누적 | 결정이 발생할 때마다 |
-| `docs/resume.md` | 진척도 + "다음 한 작업" | 작업 마무리마다 |
-| `docs/journal.md` | 작업 로그 (역시간순 append) | 작업 끝낼 때마다 |
-| `docs/tasks.md` | 열린 진행/예정(`[ ]`) 백로그 + 상단 인덱스 | 작업 추가/시작 시 |
-| `docs/tasks-done.md` | 완료·폐기 아카이브(`[x]`) + 머지 history 표 | 작업 완료/포기 시 + PR 머지 시 |
-| `docs/sprints/SPRINT-N.md` | Sprint별 진입/산출물/DoD | Sprint 진입/종료 PR마다 |
+| 파일                       | 역할                                        | 갱신 시점                      |
+| -------------------------- | ------------------------------------------- | ------------------------------ |
+| `docs/decisions.md`        | ADR 누적                                    | 결정이 발생할 때마다           |
+| `docs/resume.md`           | 진척도 + "다음 한 작업"                     | 작업 마무리마다                |
+| `docs/journal.md`          | 작업 로그 (역시간순 append)                 | 작업 끝낼 때마다               |
+| `docs/tasks.md`            | 열린 진행/예정(`[ ]`) 백로그 + 상단 인덱스  | 작업 추가/시작 시              |
+| `docs/tasks-done.md`       | 완료·폐기 아카이브(`[x]`) + 머지 history 표 | 작업 완료/포기 시 + PR 머지 시 |
+| `docs/sprints/SPRINT-N.md` | Sprint별 진입/산출물/DoD                    | Sprint 진입/종료 PR마다        |
 
 코드/문서를 바꿨는데 위 5개 중 관련된 것이 하나도 갱신되지 않았다면 그
 PR은 불완전하다.
@@ -53,21 +53,27 @@ PR은 불완전하다.
 - 결정자: <agent | human> 또는 둘 모두
 
 ### 컨텍스트
+
 무엇이 문제였고 왜 결정이 필요했는지.
 
 ### 결정
+
 무엇을 하기로 했는지. 구체적으로.
 
 ### 근거
+
 왜 이 결정인지. 대안과의 비교.
 
 ### 결과 (긍정)
+
 - ...
 
 ### 결과 (부정)
+
 - ...
 
 ### 후속
+
 - 어떤 코드/문서/테스트가 변경되어야 하는지.
 - (필요 시) `kor-travel-map`의 ADR-XXX 참조.
 ```
@@ -86,14 +92,16 @@ PR은 불완전하다.
 
 ```markdown
 ## 2026-05-25 14:30 (claude)
+
 **작업**: ADR-002 추가 (`kor-travel-map` 함수 호출 경계 명문화)
 **변경 파일**:
+
 - docs/decisions.md (ADR-002 추가)
 - docs/architecture.md §3 갱신
 - docs/resume.md 진척도 갱신
-**결정**: Pinvi ↔ 라이브러리는 함수 직접 호출. wrapper 추가 금지.
-**발견**: v1에는 `KorTravelMapGateway` 같은 어댑터가 있었으나 ADR-005로 제거.
-**다음**: 코드 작성 단계 진입 전 사용자 검토 받기
+  **결정**: Pinvi ↔ 라이브러리는 함수 직접 호출. wrapper 추가 금지.
+  **발견**: v1에는 `KorTravelMapGateway` 같은 어댑터가 있었으나 ADR-005로 제거.
+  **다음**: 코드 작성 단계 진입 전 사용자 검토 받기
 ```
 
 `작업/변경/결정/발견/다음` 5개 필드를 유지. 빈 필드는 생략 가능.
@@ -104,12 +112,15 @@ PR은 불완전하다.
 # resume.md
 
 ## 현재 상태
+
 Sprint 1~3 머지 완료. Sprint 4 릴리즈 게이트 충족, v0.1.0 tag/Release notes 정리 단계.
 
 ## 다음 한 작업
+
 Sprint 4 PR-B2 — `kor-travel-map` OpenAPI HTTP client + features read 동작 검증.
 
 ## 진척도
+
 - [x] README / AGENTS / CLAUDE / SKILL
 - [x] docs/architecture, agent-guide, dev-environment
 - [x] docs/decisions(ADR-001~026)
@@ -117,9 +128,11 @@ Sprint 4 PR-B2 — `kor-travel-map` OpenAPI HTTP client + features read 동작 �
 - [ ] Sprint 4 map UI + `vworld-map-web` integration
 
 ## 다음 ADR 후보
+
 - ADR-027: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
 
 ## 차단 사유 / 결정 대기
+
 - GitHub secret / branch protection 실제 적용 상태 미확인
 ```
 
@@ -259,15 +272,15 @@ EOF
 
 ### 8.4 브랜치 명명 규약
 
-| prefix | 용도 |
-|--------|------|
-| `feat/` | 새 기능 (라우터, 화면, asset, schema 추가 등) |
-| `fix/` | 버그 수정 |
-| `chore/` | 의존성, 설정, CI, 빌드 등 |
-| `docs/` | 문서만 |
-| `refactor/` | 동작 변경 없는 재구조화 |
-| `adr/` | 결정 단독 PR |
-| `agent/<id>/<topic>` | 다중 에이전트가 병행 작업할 때 |
+| prefix               | 용도                                          |
+| -------------------- | --------------------------------------------- |
+| `feat/`              | 새 기능 (라우터, 화면, asset, schema 추가 등) |
+| `fix/`               | 버그 수정                                     |
+| `chore/`             | 의존성, 설정, CI, 빌드 등                     |
+| `docs/`              | 문서만                                        |
+| `refactor/`          | 동작 변경 없는 재구조화                       |
+| `adr/`               | 결정 단독 PR                                  |
+| `agent/<id>/<topic>` | 다중 에이전트가 병행 작업할 때                |
 
 ### 8.5 리뷰 / merge
 

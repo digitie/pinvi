@@ -5,10 +5,7 @@ import {
   PublicFestivalViewSchema,
   PublicMapMarkerLayerSchema,
 } from '@pinvi/schemas';
-import type {
-  PublicBeachList,
-  PublicFestivalMonthly,
-} from '@pinvi/schemas';
+import type { PublicBeachList, PublicFestivalMonthly } from '@pinvi/schemas';
 import type { ApiClient } from '../client';
 
 export interface PublicBeachListParams {
@@ -39,7 +36,10 @@ export interface PublicMarkerParams {
   max_items?: number;
 }
 
-export interface PublicFestivalMarkerParams extends Omit<PublicMarkerParams, 'sido_code' | 'sigungu_code'> {
+export interface PublicFestivalMarkerParams extends Omit<
+  PublicMarkerParams,
+  'sido_code' | 'sigungu_code'
+> {
   year?: number;
   month?: number;
 }

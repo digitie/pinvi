@@ -1,8 +1,5 @@
 export { useDebounce } from './useDebounce';
-export {
-  useUserLocation,
-  LocationError,
-} from './useUserLocation';
+export { useUserLocation, LocationError } from './useUserLocation';
 export type {
   UserLocation,
   LocationOptions,

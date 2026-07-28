@@ -4,9 +4,7 @@ import path from 'node:path';
 
 const liveEnabled = process.env.PINVI_LIVE_MUTATING_E2E === '1';
 const webBaseUrl =
-  process.env.PINVI_LIVE_WEB_URL ??
-  process.env.PLAYWRIGHT_BASE_URL ??
-  'http://127.0.0.1:12805';
+  process.env.PINVI_LIVE_WEB_URL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:12805';
 const apiBaseUrl = process.env.PINVI_LIVE_API_URL ?? 'http://127.0.0.1:12801';
 const liveEmail = process.env.PINVI_LIVE_EMAIL;
 const livePassword = process.env.PINVI_LIVE_PASSWORD;

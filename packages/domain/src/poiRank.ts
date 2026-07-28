@@ -47,7 +47,7 @@ export interface PoiMove {
  */
 export function reorderMoves(
   orderedPoiIds: string[],
-  currentSortById: Map<string, string>
+  currentSortById: Map<string, string>,
 ): PoiMove[] {
   const ranks = evenRanks(orderedPoiIds.length);
   const moves: PoiMove[] = [];

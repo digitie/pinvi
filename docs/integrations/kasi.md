@@ -6,14 +6,14 @@
 
 ## 1. 사용 API
 
-| Pinvi 기능 | `python-kasi-api` 함수 | KASI operation |
-|---------------|------------------------|----------------|
-| 특일 정보 | `special_days.holidays` | `getRestDeInfo` |
-| 국경일 정보 | `special_days.national_holidays` | `getHoliDeInfo` |
-| 기념일 정보 | `special_days.anniversaries` | `getAnniversaryInfo` |
-| 24절기 정보 | `special_days.solar_terms_24` | `get24DivisionsInfo` |
-| 잡절 정보 | `special_days.sundry_days` | `getSundryDayInfo` |
-| 위치별 해·달 출몰시각 | `rise_set.location` | `getLCRiseSetInfo` |
+| Pinvi 기능            | `python-kasi-api` 함수           | KASI operation       |
+| --------------------- | -------------------------------- | -------------------- |
+| 특일 정보             | `special_days.holidays`          | `getRestDeInfo`      |
+| 국경일 정보           | `special_days.national_holidays` | `getHoliDeInfo`      |
+| 기념일 정보           | `special_days.anniversaries`     | `getAnniversaryInfo` |
+| 24절기 정보           | `special_days.solar_terms_24`    | `get24DivisionsInfo` |
+| 잡절 정보             | `special_days.sundry_days`       | `getSundryDayInfo`   |
+| 위치별 해·달 출몰시각 | `rise_set.location`              | `getLCRiseSetInfo`   |
 
 사용자가 별도 축소 범위를 지정하지 않았으므로 "특일 정보"는 위 특일 계열 5개
 dataset을 모두 수집 대상으로 본다.
@@ -72,17 +72,17 @@ Pinvi 여행계획 POI 생성 시 한 번만 `위치별 해달 출몰시각 정�
 
 `app.trip_poi_rise_sets` 권장 컬럼:
 
-| 컬럼 | 비고 |
-|------|------|
-| `poi_id` | `app.trip_day_pois.attachment_id` 참조, PK |
-| `locdate` | 조회 기준일 |
-| `longitude`, `latitude` | 요청 좌표 snapshot |
-| `sunrise_at`, `sunset_at` | 해 출몰시각. 파싱 가능할 때 `timestamptz` |
-| `moonrise_at`, `moonset_at` | 달 출몰시각. 파싱 가능할 때 `timestamptz` |
-| `raw_payload` | KASI 원문 payload |
-| `status` | `pending_date` / `pending_coord` / `pending_fetch` / `success` / `failed` |
-| `fetched_at` | 마지막 호출 시각 |
-| `error` | 실패 시 redacted error |
+| 컬럼                        | 비고                                                                      |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `poi_id`                    | `app.trip_day_pois.attachment_id` 참조, PK                                |
+| `locdate`                   | 조회 기준일                                                               |
+| `longitude`, `latitude`     | 요청 좌표 snapshot                                                        |
+| `sunrise_at`, `sunset_at`   | 해 출몰시각. 파싱 가능할 때 `timestamptz`                                 |
+| `moonrise_at`, `moonset_at` | 달 출몰시각. 파싱 가능할 때 `timestamptz`                                 |
+| `raw_payload`               | KASI 원문 payload                                                         |
+| `status`                    | `pending_date` / `pending_coord` / `pending_fetch` / `success` / `failed` |
+| `fetched_at`                | 마지막 호출 시각                                                          |
+| `error`                     | 실패 시 redacted error                                                    |
 
 응답 셰입에서는 POI 항목에 `rise_set`을 선택 필드로 붙인다. 값이 없거나
 `pending_*`이면 클라이언트는 해당 정보를 숨긴다.

@@ -84,7 +84,7 @@
   - schema 간 외래키 참조 시 alembic dependency 순서를 잘 정해야 한다.
 - **후속**:
   - 운영 절차에 `kor-travel-map alembic upgrade head` → `pinvi alembic
-    upgrade head` 순서 박음.
+upgrade head` 순서 박음.
   - `docs/postgres-schema.md`에 `app` schema만 기록. `feature` / `provider_sync`는
     그쪽 저장소의 `docs/postgres-schema.md`를 참조.
 
@@ -97,7 +97,7 @@
   - 모델 A — WSL ext4 직접 작업본 (`~/dev/pinvi`)과 NTFS export
     (`/mnt/f/dev/pinvi`)
   - 모델 B — NTFS 직접 작업 + WSL 미러 테스트
-  v1의 마지막 상태(codex/wsl-test-mirror-docs)는 모델 B로 정렬되어 있다.
+    v1의 마지막 상태(codex/wsl-test-mirror-docs)는 모델 B로 정렬되어 있다.
 - **결정**: **모델 B (WSL 미러)**를 v2의 표준으로 박는다.
   - 작업 디렉토리는 NTFS (`F:\dev\pinvi`) — 사용자의 일상 작업 위치.
   - WSL2 미러 (`~/pinvi-workspaces/pinvi`) — `git`/`pytest`/`docker`/`npm`
@@ -257,7 +257,7 @@
     갱신 시 동기 비용.
 - **후속**:
   - `docs/spec/v8/{README, 00-infrastructure, 01-data, 02-backend, 03-frontend,
-    04-admin, 05-execution}.md` 신규 작성 (본 PR).
+04-admin, 05-execution}.md` 신규 작성 (본 PR).
   - `docs/sprints/SPRINT-{2,3,4,5,6}.md` 신규 작성 (본 PR).
   - `docs/design/marker-palette.md` 신규 + 저장소 루트 `DESIGN.md` /
     `airbnb-marker-palette.html` 복원 (본 PR).
@@ -291,7 +291,7 @@
   - 플랫폼 어댑터 패턴: 스토리지(localStorage/AsyncStorage), 위치(navigator/
     expo-location), 지도(kakao-maps-sdk/react-native-maps) 등은 `apps/*/lib/`에
     두고, 공용 코드는 어댑터를 함수 인자로 받음
-  - `packages/*`에서 DOM / Node / next/* / react-native/* import 금지
+  - `packages/*`에서 DOM / Node / next/_ / react-native/_ import 금지
     (ESLint `no-restricted-imports`)
 - **근거**:
   - shadcn/ui는 Tailwind 기반 vendoring 모델 — DESIGN.md의 Airbnb 톤을 컴포넌트
@@ -366,8 +366,8 @@
     `curated_plan_pois`, `curated_plan_attachments`로 개명하면서 supersede했다.
     `/notice-plans` API 경로와 `notice_plan_id` 응답 필드는 Sprint 4 호환 alias로
     유지한다.
-  사용자가 "v1에서 notice poi 관련 문서/코드 확인해서 보강할 것" 요청. 또한
-  같은 단어 "notice"가 두 개의 별개 개념에 쓰여 혼동:
+    사용자가 "v1에서 notice poi 관련 문서/코드 확인해서 보강할 것" 요청. 또한
+    같은 단어 "notice"가 두 개의 별개 개념에 쓰여 혼동:
   1. **notice feature** — 지도 위 공지/자연현상 (SPEC V8 D-10, kind=notice,
      `kor-travel-map` 소유)
   2. **notice plan** — Admin이 작성한 추천 여행 plan (Pinvi `app` schema)
@@ -383,7 +383,7 @@
   - v1 컬럼 `position INT` (trip_pois)는 v2의 `sort_order TEXT COLLATE "C"`로
     교체 (SPEC V8 E-6 Critical).
   - v1의 `map_feature_id UUID` 컬럼은 v2에서 제거 후보 (라이브러리 `feature_id
-    TEXT`만 reference).
+TEXT`만 reference).
   - 단일 테이블 4 대상 모델은 v1과 동일하게 유지 (`num_nonnulls(...) = 1`
     CHECK).
   - RustFS 설정은 v1 환경변수 패턴 그대로 유지.
@@ -566,7 +566,7 @@
   편집한다. 도구마다 별도 worktree를 쓰지 않으면 (1) 같은 디렉터리에 두 도구가
   체크아웃 충돌, (2) `.next` / `.venv` / IDE 캐시 / 인덱스가 서로 덮어쓰기,
   (3) AI 도구마다 작업 흐름·체크아웃 상태가 불투명해진다. 동시에 `colbymchenry/
-  codegraph`는 SQLite 기반 코드 지식 그래프로 Claude Code의 grep / Read fan-out
+codegraph`는 SQLite 기반 코드 지식 그래프로 Claude Code의 grep / Read fan-out
   비용을 ~35% / 70% 줄여준다 (저자 벤치). codegraph는 worktree마다 `.codegraph/`
   로컬 인덱스를 두며 1회 init 후 incremental sync로 유지된다.
 - **결정**:
@@ -581,12 +581,9 @@
       (로컬 `main` ref는 trunk가 점유 — worktree에서는 `origin/main`을 직접 기준 ref로 쓴다.
       자세한 사유는 `docs/runbooks/codegraph-worktrees.md` §3.3.)
     - 즉 worktree는 영속, 브랜치만 task마다 새로.
-  - **CodeGraph**:
-    - worktree마다 **1회** `codegraph init -i` (interactive — `npx
-      @colbymchenry/codegraph` 또는 글로벌 `codegraph init -i`).
-    - 이후 task 시작 시 `codegraph sync` (incremental).
-    - `.codegraph/` 디렉터리는 `.gitignore`에 박힘 (로컬 SQLite, 머신 / worktree
-      마다 별개).
+  - **CodeGraph**: - worktree마다 **1회** `codegraph init -i` (interactive — `npx
+@colbymchenry/codegraph` 또는 글로벌 `codegraph init -i`). - 이후 task 시작 시 `codegraph sync` (incremental). - `.codegraph/` 디렉터리는 `.gitignore`에 박힘 (로컬 SQLite, 머신 / worktree
+    마다 별개).
   - **사람이 직접 만지는 trunk** `F:/dev/pinvi` (메인 checkout)은 자유.
     AI 도구는 절대 trunk를 직접 만지지 않고 각자의 worktree만 사용.
   - **runbook** `docs/runbooks/codegraph-worktrees.md`가 1차 reference.
@@ -594,7 +591,7 @@
   - 도구 동시 사용은 ADR-016이 이미 인정. 별 worktree 없이 운영하면 fact drift가
     아니라 file drift / lock 충돌이 직접 발생한다.
   - codegraph는 100% 로컬 (네트워크 호출 없음), MIT, 한 번 init 후 `codegraph
-    sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
+sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
   - branch만 새로 따는 패턴은 worktree create / delete 비용을 0으로 만든다.
   - `.codegraph/`를 ignore하면 도구 / OS / worktree마다 인덱스가 격리되어
     충돌이 발생하지 않는다 (SQLite WAL 파일 포함).
@@ -828,7 +825,7 @@
 - **결정**:
   - **2단계 구현**:
     - **Sprint 5 (1차)**: `scripts/backup-db.sh` + `scripts/restore-db.sh`
-      + `POST /admin/backup/snapshot` (manual trigger). UI는 없음.
+      - `POST /admin/backup/snapshot` (manual trigger). UI는 없음.
     - **Sprint 6 (finalize)**: Backup/Restore UI + 핫스왑 워크플로
       (`/admin/backup` 페이지).
   - **Backup**:
@@ -840,10 +837,10 @@
     - **수동**: `POST /admin/backup/snapshot` (admin role 전용, audit log).
   - **Restore (핫스왑)**:
     - 1. `pg_restore`를 같은 Postgres database의 임시 schema
-      `app_restore_<ts>`에 적용한다. 신규 DB instance 방식은 쓰지 않는다.
+         `app_restore_<ts>`에 적용한다. 신규 DB instance 방식은 쓰지 않는다.
     - 2. restored schema가 healthy하면 짧은 write drain 후 schema rename으로
-      cut-over한다: `app` → `app_previous_<ts>`,
-      `app_restore_<ts>` → `app`.
+         cut-over한다: `app` → `app_previous_<ts>`,
+         `app_restore_<ts>` → `app`.
     - 3. previous schema는 N150/staging 7일, Odroid M1S 24시간 보존 후 자동 삭제한다.
     - 핫스왑은 무중단이 아니라 near-zero downtime(목표 30~90초) schema-swap이다.
   - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
@@ -891,8 +888,8 @@
     - **Odroid M1S** (ARM64) — 기존 위치. dev/staging 또는 백업 운영.
     - **N150 16GB + NVMe 1TB** (x86_64) — primary 운영. Ubuntu 26.04 LTS.
   - **이미지**: `apps/api/Dockerfile`을 multi-platform build로 — `linux/amd64`
-    + `linux/arm64`. GitHub Actions에서 `docker buildx`로 두 플랫폼 빌드 후
-    GHCR push.
+    - `linux/arm64`. GitHub Actions에서 `docker buildx`로 두 플랫폼 빌드 후
+      GHCR push.
   - **데이터 운영**:
     - Postgres streaming replication은 사용하지 않는다(ADR-039).
     - 장애 대응은 backup/restore 후 수동 DNS / nginx upstream switch로 제한한다.
@@ -951,8 +948,8 @@
     헤맸다. 특히 rsync 왕복 중 파일 일부에 중복/오염이 섞이는 사고가 있었다.
   - **WSL에서 Windows 도구 PATH 오염**: `npm`/`git`이 `/mnt/c/...`의 Windows
     shim으로 잡혀 `node: not found`, UNC 경로 경고, 잘못된 경로 전달이 발생.
-  같은 NTFS+WSL 혼용 문제를 별 저장소 `kor-travel-geo`가 ADR-041로 이미
-  해결했고(동일 패턴), 본 저장소도 그 패턴으로 통일한다.
+    같은 NTFS+WSL 혼용 문제를 별 저장소 `kor-travel-geo`가 ADR-041로 이미
+    해결했고(동일 패턴), 본 저장소도 그 패턴으로 통일한다.
 - **결정**:
   - **git source of truth = NTFS worktree**. 코드 편집 / branch / commit / push /
     PR은 NTFS worktree(`F:/dev/pinvi-<agent>`)에서 Windows git(`git.exe`)으로만
@@ -968,7 +965,7 @@
     sync-back 후 `git diff`로 확인).
   - **worktree는 환경 전용**: 각 worktree의 git은 한 환경에서만 다룬다. 같은
     worktree를 Windows git과 WSL git으로 번갈아 조작하지 않는다. `git worktree
-    prune`은 그 worktree를 운용하는 환경에서만 실행한다. 환경을 바꿔야 하면 먼저
+prune`은 그 worktree를 운용하는 환경에서만 실행한다. 환경을 바꿔야 하면 먼저
     `git worktree repair <경로>`로 포인터를 그 환경 기준으로 맞춘다.
   - **데이터(`dataset/`, `refdocs/`)**는 NTFS 원본을 기준으로 두고 ext4 미러에서는
     절대경로 또는 심볼릭 링크로 참조한다(ext4에서 변경 금지).
@@ -1003,12 +1000,12 @@
   2. **Geocoding/주소**(주소→좌표 geocode, 좌표→주소 reverse, 주소/장소 search,
      행정구역 region 조회) — 사용자가 "geocoding 관련 기능은 kor-travel-geo v2 API에
      직접 접근"하라고 지시.
-  그런데 기존 문서(`docs/api/regions.md`, `docs/kor-travel-map-integration.md`)는
-  region/주소 조회를 **kor-travel-map 함수 호출 경유**로 서술해, 지시와 어긋났다.
-  한편 `kor-travel-geo`는 이미 v2 REST API(`POST /v2/geocode|reverse|search`,
-  candidate 목록 표면)를 제공하고, kor-travel-map도 자기 ETL 적재 시 이 v2 REST를
-  HTTP로 호출한다(kor-travel-map `address-geocoding.md`, ADR-006). 즉 v2 REST가
-  geocoding의 공식 표면이다.
+     그런데 기존 문서(`docs/api/regions.md`, `docs/kor-travel-map-integration.md`)는
+     region/주소 조회를 **kor-travel-map 함수 호출 경유**로 서술해, 지시와 어긋났다.
+     한편 `kor-travel-geo`는 이미 v2 REST API(`POST /v2/geocode|reverse|search`,
+     candidate 목록 표면)를 제공하고, kor-travel-map도 자기 ETL 적재 시 이 v2 REST를
+     HTTP로 호출한다(kor-travel-map `address-geocoding.md`, ADR-006). 즉 v2 REST가
+     geocoding의 공식 표면이다.
 - **결정**:
   - **Pinvi 사용자 대면 geocoding은 `kor-travel-geo` v2 REST API를 직접 HTTP 호출**
     한다. `apps/api`가 `httpx.AsyncClient`로 `POST /v2/geocode|reverse|search`를
@@ -1020,9 +1017,9 @@
   - **경계**: Pinvi는 kor-travel-geo의 **v2 REST 표면만** 의존한다. python 패키지
     (`kor_travel_geo`) in-process import나 DB 직접 접근을 사용자 대면 경로에서 쓰지
     않는다(kor-travel-map이 ETL 내부에서 쓰는 것과 별개). v1 vworld-호환 표면(`/v1/
-    address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
+address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
   - **region 조회**(시도/시군구/법정동)도 v2로 수렴: 좌표→행정구역은 `POST
-    /v2/reverse`(`include_region=true`)의 `candidates[].region`, 행정구역 검색은
+/v2/reverse`(`include_region=true`)의 `candidates[].region`, 행정구역 검색은
     `POST /v2/search`(`type="district"`)로 처리한다. 기존 `regions.md`의 kor-travel-map
     경유 서술은 본 ADR로 정정한다.
   - **VWorld/juso/epost 등 외부 API 직접 호출 금지** — 모두 kor-travel-geo REST 내부
@@ -1455,8 +1452,8 @@
   `kor-travel-concierge`, `kor-travel-geo`와 공용이다. 이 공용 인프라는 별도 저장소
   `kor-travel-docker-manager`가 `ktdctl` CLI / API / 대시보드와
   `config/docker-targets.yml` target registry로 일괄 관리한다(`docker compose up -d`
-  + idempotent 초기화). 그동안 Pinvi 문서는 `scripts/docker-app.sh`만 Docker 진입으로
-  안내해 공용 인프라와 앱 컨테이너 경로가 분리되지 않았다.
+  - idempotent 초기화). 그동안 Pinvi 문서는 `scripts/docker-app.sh`만 Docker 진입으로
+    안내해 공용 인프라와 앱 컨테이너 경로가 분리되지 않았다.
 - **결정**:
   - **Docker 빌드/실행의 1차 경로는 `kor-travel-docker-manager`**다. 공용 의존 인프라와
     Pinvi API/Web 앱 컨테이너는 `ktdctl srv --build`로 올린다(`srv`는 `pinvi` target의
@@ -2344,10 +2341,10 @@ Naver Local(검색)을 Pinvi 서버에서 **직접, 단 display-only로** 호출
 #### 8. 통합 검색 계약 — `GET /search` 단일화 (M14/D1, 계약 정본은 검색 doc)
 
 - 경로는 `GET /search` 하나만 유지한다. 응답은 타입드 `{results: PlaceSearchResult[],
-  degraded_sources: string[]}`. `PlaceSearchResult`는 **source-tagged union**:
+degraded_sources: string[]}`. `PlaceSearchResult`는 **source-tagged union**:
   `source ∈ {feature, my_poi, kakao, naver, address}`.
   필드 = `{source, feature_id?, external_id?, name, address, road_address?, coord{lon,lat},
-  category?, marker_color?, marker_icon?, provider_url?, phone?}` — 단 `phone`은 display-only이며
+category?, marker_color?, marker_icon?, provider_url?, phone?}` — 단 `phone`은 display-only이며
   절대 영속하지 않는다.
 - **ordering**: 내부(feature + my_poi + address) 먼저, 그다음 kakao, 그다음 naver. 부분 degradation
   에서도 순서 안정.
@@ -2359,7 +2356,7 @@ Naver Local(검색)을 Pinvi 서버에서 **직접, 단 display-only로** 호출
 #### 9. feature-request 파이프라인 확장 (M2/M3)
 
 - `source`(`feature|kakao|naver|manual`) + 불투명 `external_ref({provider, external_id,
-  deep_link_url})`를 **`FeatureSuggestion`과 `trip_day_pois` 둘 다**에 둔다. POI 쪽은 snapshot에
+deep_link_url})`를 **`FeatureSuggestion`과 `trip_day_pois` 둘 다**에 둔다. POI 쪽은 snapshot에
   묻지 않고 **1급 컬럼**으로 둔다(reconciliation·조회 성능).
 - **자동 발화(auto-fire)는 best-effort이며 POI 생성과 디커플**한다: 비-feature Kakao/Naver pick으로
   POI를 만들면 POI 생성은 **항상 성공**하고, feature-request enqueue는 rate-limit/중복 시 조용히
@@ -2424,7 +2421,7 @@ Trip detail 재작성(TDR)의 6·8번 feature는 (a) trip 지도가 POI를 **일
 표시 모델**이다. 현재 구현에는 이 모델을 깨뜨리는 결함이 있다.
 
 - `services/poi.py#ensure_trip_day`(≈58–60행)는 auto-생성 일자에 대해 `trip_days.date =
-  trip.start_date + (day_index-1)`을 **materialize**한다. 반면 `services/trip.py#update_trip`은
+trip.start_date + (day_index-1)`을 **materialize**한다. 반면 `services/trip.py#update_trip`은
   start_date 편집 시 기존 일자의 `date`를 건드리지 않는다. 결과적으로 `trip_days.date`는
   **frozen 값 + NULL이 섞인 상태**가 되어, `date ?? derived` 류의 어떤 로직도 틀린다(start_date를
   바꿔도 예전에 만들어진 일자는 옛 날짜를 그대로 보인다).
@@ -2488,7 +2485,7 @@ custom(POI) > dayColor > resolved > upstream > snapshot > category > kind > fall
 #### 5. display_marker_color: 서버가 POI마다 1개 계산 (지도 = 리스트 badge)
 
 - `TripView`의 각 POI에 서버가 `display_marker_color`를 계산한다(`custom > dayColor > resolved >
-  upstream` 축약 — §4 체인의 색 부분).
+upstream` 축약 — §4 체인의 색 부분).
 - 웹은 이 값을 **지도 핀과 `TripPoiList` 번호 badge 양쪽에 동일하게** 렌더한다. 클라이언트 측
   우선순위 계산 없음 → 지도/리스트 색 parity 보장, mobile-safe.
 
@@ -2519,14 +2516,14 @@ custom(POI) > dayColor > resolved > upstream > snapshot > category > kind > fall
 
 `SharedTripView.tsx`(공개 read-only)와 shared endpoint view-builder는 아래를 따른다:
 
-| feature | trip detail(소유자) | SharedTripView(공개) |
-| --- | --- | --- |
-| 일자 색 마커(display_marker_color) | O | O |
-| 공휴일 badge(holidays[]) | O | O |
-| 일출/일몰(rise_set) | O | O |
-| out_of_range 경고/연장 배너 | O | **X** |
-| F4 자동 feature-request | O | **X** |
-| F3 검색/autocomplete | O | **X** |
+| feature                            | trip detail(소유자) | SharedTripView(공개) |
+| ---------------------------------- | ------------------- | -------------------- |
+| 일자 색 마커(display_marker_color) | O                   | O                    |
+| 공휴일 badge(holidays[])           | O                   | O                    |
+| 일출/일몰(rise_set)                | O                   | O                    |
+| out_of_range 경고/연장 배너        | O                   | **X**                |
+| F4 자동 feature-request            | O                   | **X**                |
+| F3 검색/autocomplete               | O                   | **X**                |
 
 shared endpoint view-builder는 소유자 뷰와 **동일한 일자 필드**(effective_date, display_marker_color,
 holidays, rise_set/reference)를 emit한다.
@@ -2552,9 +2549,9 @@ holidays, rise_set/reference)를 emit한다.
 ### 결과
 
 - `trip_days`: `date` 의미 변경(override-only) + `CHECK (day_index >= 1)` + nullable `marker_color
-  String(16)`. `ensure_trip_day`는 `date=None`으로 생성.
+String(16)`. `ensure_trip_day`는 `date=None`으로 생성.
 - 신규 table `app.trip_day_rise_sets(trip_id, day_index, status, stale, rise_set 값, reference…)`
-  + 전용 ETL asset + batched re-seed + 완료 signal(T-305).
+  - 전용 ETL asset + batched re-seed + 완료 signal(T-305).
 - `resolveMarkerStyle`에 `dayColor` optional tier 추가(순수 유지). `trip_view_builder.py`가 팔레트
   파생·display_marker_color·effective_date·out_of_range를 mirror/계산.
 - `TripViewDay` 확장: `effective_date`, `out_of_range`, `marker_color`(effective), `holidays[]`,
@@ -2602,14 +2599,14 @@ soft-delete / ADR-054 외부 소스 스냅샷 POI)은 참조할 feature가 없�
 
 - **`GET /features/{id}/detail-card`를 THE 사용자 상세 읽기로 신설한다.** 응답 스키마
   `FeatureDetailCard`는 **kind로 판별하는 discriminated union**(Pydantic `Field(discriminator=
-  "kind")`, `packages/schemas` Zod 미러)이며, kind별 arm은 **일반 사용자 노출 필드만** 담는다:
+"kind")`, `packages/schemas` Zod 미러)이며, kind별 arm은 **일반 사용자 노출 필드만** 담는다:
   - `place` — name/category/address(한 줄 표시용 정규화)/marker/좌표/영업정보 등 일반 필드
   - `event` — name/기간/장소/카테고리
   - `notice` — name/공지 본문·기간
   - `price` — name/품목·가격 표시 필드
   - **GENERIC FALLBACK arm** — `name`/`category`/`address`/`kind`만. `weather`/`route`/`area`는
     이 fallback으로 처리하고 kind별 리치 arm을 만들지 않는다(현 스프린트 스코프 밖).
-  원본 `detail`/`urls` 불투명 dict는 이 응답에 그대로 노출하지 않는다(서버가 투영·정제).
+    원본 `detail`/`urls` 불투명 dict는 이 응답에 그대로 노출하지 않는다(서버가 투영·정제).
 - **`GET /features/{id}`(`FeatureDetail`)는 raw/debug passthrough로 강등한다.** 불투명 dict를
   그대로 반환하는 이 엔드포인트는 디버그/관리 용도로만 유지하고, 사용자 경로(모달·팝업)는
   `detail-card`로 전환한다. `FeatureMapView`의 클라이언트 파서(`addressLine`/`currentTempC`

@@ -52,13 +52,22 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
 
   await page.route(/.*\/auth\/me$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { user_id: userId } }) });
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { user_id: userId } }),
+    });
   });
   for (const sub of ['comments', 'attachments']) {
-    await page.route(new RegExp(`.*/trips/[0-9a-f-]{36}/${sub}(\\?.*)?$`), async (route, request) => {
-      if (!isFetch(request.resourceType())) return route.continue();
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
-    });
+    await page.route(
+      new RegExp(`.*/trips/[0-9a-f-]{36}/${sub}(\\?.*)?$`),
+      async (route, request) => {
+        if (!isFetch(request.resourceType())) return route.continue();
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [] }),
+        });
+      },
+    );
   }
   await page.route(/.*\/users\/me\/telegram-targets$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
@@ -71,22 +80,32 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
       const body = JSON.parse(request.postData() ?? '{}');
       linked.push(body.telegram_target_id);
       const t = ALL.find((x) => x.id === body.telegram_target_id);
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ data: t }) });
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: t }),
+      });
       return;
     }
     const rows = ALL.filter((t) => linked.includes(t.id));
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: rows }) });
   });
-  await page.route(/.*\/trips\/[0-9a-f-]{36}\/telegram-targets\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (request.method() !== 'DELETE') return route.continue();
-    const id = request.url().split('/').pop() ?? '';
-    const idx = linked.indexOf(id);
-    if (idx >= 0) linked.splice(idx, 1);
-    await route.fulfill({ status: 204, body: '' });
-  });
+  await page.route(
+    /.*\/trips\/[0-9a-f-]{36}\/telegram-targets\/[0-9a-f-]{36}$/,
+    async (route, request) => {
+      if (request.method() !== 'DELETE') return route.continue();
+      const id = request.url().split('/').pop() ?? '';
+      const idx = linked.indexOf(id);
+      if (idx >= 0) linked.splice(idx, 1);
+      await route.fulfill({ status: 204, body: '' });
+    },
+  );
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: TRIP_VIEW }) });
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: TRIP_VIEW }),
+    });
   });
 
   await page.goto(`/trips/${tripId}`);

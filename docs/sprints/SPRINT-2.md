@@ -87,21 +87,22 @@
 DoD 항목별:
 
 - [x] `app.trips` / `trip_days` / `trip_day_pois` (COLLATE "C") + 공유 토큰 Alembic
-  — 0001~0005 적용 + 실 PostGIS 통합 테스트 검증.
+      — 0001~0005 적용 + 실 PostGIS 통합 테스트 검증.
 - [x] `POST /trips`, `/trips/{id}/pois`, `/pois/reorder` — `test_trips_api.py` /
-  `test_pois_reorder.py` (낙관적 락 + COLLATE "C" UNIQUE 충돌 → 409).
+      `test_pois_reorder.py` (낙관적 락 + COLLATE "C" UNIQUE 충돌 → 409).
 - [x] 4 분리 동의 + 철회 부작용 — `test_consent_flow.py` (`PUT /users/me/consents`,
-  `DELETE /users/me/consents/{type}` 신규 REST endpoint).
+      `DELETE /users/me/consents/{type}` 신규 REST endpoint).
 - [x] Google OAuth 안전 매칭 (G-4) — `oauth_google.resolve_google_login` +
-  `test_oauth_google.py` (login / 안전 연결 / 미인증 비연결 / 신규).
+      `test_oauth_google.py` (login / 안전 연결 / 미인증 비연결 / 신규).
 - [x] Notice plan → trip copy (ADR-013) — `notice_plan.copy_plan_to_trip` +
-  `notice_plans.py` 라우터 + `test_notice_plan_copy.py`.
+      `notice_plans.py` 라우터 + `test_notice_plan_copy.py`.
 - [x] Webhook `/webhooks/resend` — delivered / bounced / complained
-  (`test_resend_webhook.py`). **Svix 서명 실검증은 Sprint 5** (기존 결정 유지).
+      (`test_resend_webhook.py`). **Svix 서명 실검증은 Sprint 5** (기존 결정 유지).
 - [x] `app.location_access_log` content_hash chain — `test_location_audit_chain.py`.
 - [x] `pytest tests/integration` — **27 passed** (PostGIS testcontainer harness).
 
 부수 수정:
+
 - **`alembic/env.py`**: async 마이그레이션 경로에서 DDL 트랜잭션이 커밋되지 않던
   잠재 버그 수정 (`connection.commit()` 추가). CI 는 exit code 만 봐서 미검출이었음.
 - `services/poi.py`: sort_order UNIQUE 위반을 `SortOrderConflictError`(409)로 변환.
@@ -109,13 +110,13 @@ DoD 항목별:
 ## 잔여 (후속 PR)
 
 - [ ] **위치 감사 자동 적재 via `/features/in-bounds`** — 미들웨어/체인 로직은 완료·
-  검증됐으나 endpoint 자동 트리거는 `kor-travel-map` client 주입(**Sprint 4
-  PR-B**) 의존. Sprint 4에서 e2e 연결.
+      검증됐으나 endpoint 자동 트리거는 `kor-travel-map` client 주입(**Sprint 4
+      PR-B**) 의존. Sprint 4에서 e2e 연결.
 - [x] **`email_queue` SKIP LOCKED worker** + 비밀번호 재설정 메일 흐름
-  (`process_pending_email_batch`, `/auth/password/reset-request`,
-  `/auth/password/reset`).
+      (`process_pending_email_batch`, `/auth/password/reset-request`,
+      `/auth/password/reset`).
 - [x] `app.api_call_log` 미들웨어 통합 테스트
-  (`tests/integration/test_api_call_logging.py`).
+      (`tests/integration/test_api_call_logging.py`).
 - [ ] Resend 도메인 인증 (SPF/DKIM/DMARC) — 실제 도메인 확정 필요.
 - [ ] Google OAuth client secret + 콜백 HTTP 교환 e2e — 도메인 확정 후.
 

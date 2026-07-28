@@ -49,8 +49,8 @@ GET /health/external
     "kor_travel_map": { "status": "ok", "latency_ms": 12 },
     "rustfs": { "status": "ok", "latency_ms": 8 },
     "resend": { "status": "ok", "rate_limit_remaining": 95 },
-    "kakao_map": { "status": "ok" }
-  }
+    "kakao_map": { "status": "ok" },
+  },
 }
 ```
 

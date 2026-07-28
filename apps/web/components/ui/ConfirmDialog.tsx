@@ -76,7 +76,11 @@ export function ConfirmDialog({
             </span>
           )}
           <div className="min-w-0">
-            <h2 id={titleId} className="text-base font-bold text-ink" data-testid={`${testId}-title`}>
+            <h2
+              id={titleId}
+              className="text-base font-bold text-ink"
+              data-testid={`${testId}-title`}
+            >
               {title}
             </h2>
             {description != null && <p className="mt-1 text-sm text-muted">{description}</p>}

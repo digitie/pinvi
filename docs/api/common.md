@@ -6,6 +6,7 @@
 > **정본 규약 (ADR-030, 2026-06-06 확정)** — 외부 API는 다음을 단일 정본으로 한다.
 > 현재 per-domain 문서/코드에 혼재하는 변형은 T-123/T-124/T-126에서 본 규약으로
 > 정렬한다(감사 `docs/audit/2026-06-06-doc-impl-audit.md` §3).
+>
 > - **URL 버전 prefix**: `/v1` 노출(라우터가 이미 `api/v1`). 예: `GET /v1/trips`.
 > - **list 응답**: `{"data": [...], "meta": {...}}` (data는 **배열 직접**). 단건은
 >   `{"data": {...}}`. `data.items`/`data.<plural>`/`data.rows` 변형은 폐기.
@@ -20,20 +21,20 @@
 
 ## 1. Base URL / 환경별
 
-| 환경 | URL |
-|------|-----|
-| 로컬 dev | `http://localhost:12801` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:12801` |
-| 스테이징 | TBD (Sprint 6) |
-| 운영 | `https://pinvi-api.example.com` |
+| 환경                    | URL                             |
+| ----------------------- | ------------------------------- |
+| 로컬 dev                | `http://localhost:12801`        |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12801`        |
+| 스테이징                | TBD (Sprint 6)                  |
+| 운영                    | `https://pinvi-api.example.com` |
 
 웹 origin:
 
-| 환경 | URL |
-|------|-----|
-| 로컬 dev | `http://localhost:12805` |
-| 로컬 dev (Docker smoke) | `http://127.0.0.1:12805` |
-| 운영 | `https://pinvi.example.com` |
+| 환경                    | URL                         |
+| ----------------------- | --------------------------- |
+| 로컬 dev                | `http://localhost:12805`    |
+| 로컬 dev (Docker smoke) | `http://127.0.0.1:12805`    |
+| 운영                    | `https://pinvi.example.com` |
 
 OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
@@ -43,13 +44,15 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
 ```jsonc
 {
-  "data": { /* resource or list */ },
+  "data": {
+    /* resource or list */
+  },
   "meta": {
-    "cursor": "...",      // pagination 시
-    "has_more": true,     // pagination 시
-    "total": 100,         // Admin 일부에서만
-    "version": 42         // optimistic lock 대상
-  }
+    "cursor": "...", // pagination 시
+    "has_more": true, // pagination 시
+    "total": 100, // Admin 일부에서만
+    "version": 42, // optimistic lock 대상
+  },
 }
 ```
 
@@ -62,8 +65,10 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
   "error": {
     "code": "EMAIL_NOT_VERIFIED",
     "message": "이메일 인증이 필요합니다.",
-    "details": { /* validation errors per field, optional */ }
-  }
+    "details": {
+      /* validation errors per field, optional */
+    },
+  },
 }
 ```
 
@@ -72,20 +77,20 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
 ### 2.3 표준 에러 코드
 
-| Code | HTTP | 상황 |
-|------|------|------|
-| `AUTH_INVALID_CREDENTIALS` | 401 | 이메일/비밀번호 불일치 |
-| `EMAIL_NOT_VERIFIED` | 401 | 미인증 상태 로그인 시도. body에 `verification_email_dispatched` |
-| `EMAIL_ALREADY_USED` | 409 | 가입 시 이메일 중복 |
-| `TOKEN_EXPIRED` | 401 | access/refresh 만료 |
-| `TOKEN_INVALID` | 401 | 서명 불일치/위변조 |
-| `PERMISSION_DENIED` | 403 | RBAC 거부. Admin은 의도적으로 404로 변환 가능 |
-| `RESOURCE_NOT_FOUND` | 404 | 단일 리소스 없음 |
-| `VERSION_CONFLICT` | 409 | optimistic lock `If-Match` 불일치 |
-| `RATE_LIMITED` | 429 | SlowAPI 한도 초과 |
-| `VALIDATION_ERROR` | 422 | Pydantic 검증 실패. `details`에 필드별 |
-| `INTERNAL_ERROR` | 500 | 처리 중 예외 (Sentry로 전달) |
-| `SERVICE_UNAVAILABLE` | 503 | 외부 의존 (Resend/RustFS) 실패 |
+| Code                       | HTTP | 상황                                                            |
+| -------------------------- | ---- | --------------------------------------------------------------- |
+| `AUTH_INVALID_CREDENTIALS` | 401  | 이메일/비밀번호 불일치                                          |
+| `EMAIL_NOT_VERIFIED`       | 401  | 미인증 상태 로그인 시도. body에 `verification_email_dispatched` |
+| `EMAIL_ALREADY_USED`       | 409  | 가입 시 이메일 중복                                             |
+| `TOKEN_EXPIRED`            | 401  | access/refresh 만료                                             |
+| `TOKEN_INVALID`            | 401  | 서명 불일치/위변조                                              |
+| `PERMISSION_DENIED`        | 403  | RBAC 거부. Admin은 의도적으로 404로 변환 가능                   |
+| `RESOURCE_NOT_FOUND`       | 404  | 단일 리소스 없음                                                |
+| `VERSION_CONFLICT`         | 409  | optimistic lock `If-Match` 불일치                               |
+| `RATE_LIMITED`             | 429  | SlowAPI 한도 초과                                               |
+| `VALIDATION_ERROR`         | 422  | Pydantic 검증 실패. `details`에 필드별                          |
+| `INTERNAL_ERROR`           | 500  | 처리 중 예외 (Sentry로 전달)                                    |
+| `SERVICE_UNAVAILABLE`      | 503  | 외부 의존 (Resend/RustFS) 실패                                  |
 
 도메인별 추가 코드는 각 API 문서에 명시.
 
@@ -93,10 +98,10 @@ OpenAPI 자동 생성: `<base>/docs` (FastAPI), `<base>/redoc`.
 
 ### 3.1 Cookie 기반 (사용자 + Admin)
 
-| Cookie | 용도 | 속성 |
-|--------|------|------|
-| `pinvi_access` | JWT access | HttpOnly, Secure, SameSite=Lax, 15분 |
-| `pinvi_refresh` | refresh handle (opaque) | HttpOnly, Secure, SameSite=Lax, 7일 |
+| Cookie          | 용도                    | 속성                                 |
+| --------------- | ----------------------- | ------------------------------------ |
+| `pinvi_access`  | JWT access              | HttpOnly, Secure, SameSite=Lax, 15분 |
+| `pinvi_refresh` | refresh handle (opaque) | HttpOnly, Secure, SameSite=Lax, 7일  |
 
 - DB에는 access 토큰을 저장하지 않음 (stateless JWT).
 - `pinvi_refresh`는 `app.user_sessions`에 hash로만 저장
@@ -153,11 +158,13 @@ GET /trips?limit=20&cursor=eyJ1cGRhdGVkX2F0Ijoi...
 
 ```jsonc
 {
-  "data": [/* ... */],
+  "data": [
+    /* ... */
+  ],
   "meta": {
     "cursor": "next-cursor-token",
-    "has_more": true
-  }
+    "has_more": true,
+  },
 }
 ```
 
@@ -175,13 +182,15 @@ GET /admin/users?page=3&limit=100
 
 ```jsonc
 {
-  "data": [/* ... */],
+  "data": [
+    /* ... */
+  ],
   "meta": {
     "page": 3,
     "limit": 100,
     "total": 287,
-    "total_pages": 3
-  }
+    "total_pages": 3,
+  },
 }
 ```
 
@@ -215,17 +224,17 @@ GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
 
 ## 8. Rate Limit
 
-| 카테고리 | 한도 | 키 |
-|---------|------|-----|
-| 로그인 / 가입 / 재설정 / verify | 분당 5회 | IP + 이메일(JSON body에 이메일이 있으면 포함) |
-| OAuth start / callback | 분당 10회 | IP |
-| `/storage/upload-urls` | 분당 30회 | user_id |
-| `/public/*` | 분당 60회 | IP |
-| `/features/in-bounds` | 분당 60회 | user_id 또는 IP |
-| `/features/search`, `/search` | 분당 60회 | user_id 또는 IP |
-| `/trips/{id}/exports/*` | 분당 20회 | user_id |
-| 그 외 인증 사용자 경로 | 분당 60회 | user_id 또는 token |
-| 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token |
+| 카테고리                                      | 한도      | 키                                            |
+| --------------------------------------------- | --------- | --------------------------------------------- |
+| 로그인 / 가입 / 재설정 / verify               | 분당 5회  | IP + 이메일(JSON body에 이메일이 있으면 포함) |
+| OAuth start / callback                        | 분당 10회 | IP                                            |
+| `/storage/upload-urls`                        | 분당 30회 | user_id                                       |
+| `/public/*`                                   | 분당 60회 | IP                                            |
+| `/features/in-bounds`                         | 분당 60회 | user_id 또는 IP                               |
+| `/features/search`, `/search`                 | 분당 60회 | user_id 또는 IP                               |
+| `/trips/{id}/exports/*`                       | 분당 20회 | user_id                                       |
+| 그 외 인증 사용자 경로                        | 분당 60회 | user_id 또는 token                            |
+| 공유 토큰 접근 (`/trips/{id}/shared/{token}`) | 분당 60회 | token                                         |
 
 초과 시 `429 RATE_LIMITED` + `Retry-After` 헤더. Admin `/admin/abuse`에서 생성한 active
 `blocked` override는 `429 RATE_LIMIT_BLOCKED`, active `allowed` override는 TTL 동안 counter hit
@@ -244,12 +253,12 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 
 ## 9. Webhook
 
-| Path | 발신자 | 검증 |
-|------|--------|------|
-| `POST /webhooks/resend` | Resend | Svix 서명 (`svix-id` / `svix-timestamp` / `svix-signature`), secret 미설정 시 기본 `503`; 로컬 unsigned는 명시 opt-in 필요 |
-| `POST /webhooks/oauth/{provider}/callback` | Google 활성, Naver/Kakao future provider | state + PKCE |
-| (v2) `POST /webhooks/telegram/{trip_id}` | Telegram bot | HMAC |
-| (v2) `POST /webhooks/gemini/job` | 사용자 키 호출 콜백 | idempotency_key |
+| Path                                       | 발신자                                   | 검증                                                                                                                       |
+| ------------------------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST /webhooks/resend`                    | Resend                                   | Svix 서명 (`svix-id` / `svix-timestamp` / `svix-signature`), secret 미설정 시 기본 `503`; 로컬 unsigned는 명시 opt-in 필요 |
+| `POST /webhooks/oauth/{provider}/callback` | Google 활성, Naver/Kakao future provider | state + PKCE                                                                                                               |
+| (v2) `POST /webhooks/telegram/{trip_id}`   | Telegram bot                             | HMAC                                                                                                                       |
+| (v2) `POST /webhooks/gemini/job`           | 사용자 키 호출 콜백                      | idempotency_key                                                                                                            |
 
 서명 검증 실패 시 `401`. Resend webhook secret이 없거나 잘못된 형식이면 기본
 `503 WEBHOOK_SIGNATURE_NOT_CONFIGURED`로 fail-closed한다. 서명 없는 Resend webhook은
@@ -258,12 +267,12 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 
 ## 10. CORS
 
-| 환경 | 허용 Origin |
-|------|------------|
-| 로컬 dev | `http://localhost:12805`, `http://127.0.0.1:12805` |
-| Docker smoke | `http://127.0.0.1:12805` |
-| 스테이징 | TBD |
-| 운영 | `https://pinvi.example.com` |
+| 환경         | 허용 Origin                                        |
+| ------------ | -------------------------------------------------- |
+| 로컬 dev     | `http://localhost:12805`, `http://127.0.0.1:12805` |
+| Docker smoke | `http://127.0.0.1:12805`                           |
+| 스테이징     | TBD                                                |
+| 운영         | `https://pinvi.example.com`                        |
 
 `Access-Control-Allow-Credentials: true` (cookie 전송).
 
@@ -281,9 +290,9 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{nonce}'
-  ; img-src 'self' data: https://api.vworld.kr https://...;
-  connect-src 'self' http://localhost:12801 https://pinvi-api.example.com
-  https://api.resend.com https://api.vworld.kr`
+; img-src 'self' data: https://api.vworld.kr https://...;
+connect-src 'self' http://localhost:12801 https://pinvi-api.example.com
+https://api.resend.com https://api.vworld.kr`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: geolocation=(self)` (위치 권한 origin)

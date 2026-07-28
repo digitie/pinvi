@@ -37,7 +37,10 @@ export default function TelegramSettingsScreen() {
   const [isDefault, setIsDefault] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const targetsQuery = useQuery({ queryKey: TELEGRAM_KEY, queryFn: () => api.telegram.listTargets() });
+  const targetsQuery = useQuery({
+    queryKey: TELEGRAM_KEY,
+    queryFn: () => api.telegram.listTargets(),
+  });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: TELEGRAM_KEY });
 
   const createMutation = useMutation({
@@ -120,15 +123,23 @@ export default function TelegramSettingsScreen() {
         {targetsQuery.isPending ? (
           <Loading />
         ) : targetsQuery.isError ? (
-          <ErrorView message={friendlyErrorText(targetsQuery.error)} onRetry={() => targetsQuery.refetch()} />
+          <ErrorView
+            message={friendlyErrorText(targetsQuery.error)}
+            onRetry={() => targetsQuery.refetch()}
+          />
         ) : targetsQuery.data.length === 0 ? (
-          <EmptyState title="연결된 대상이 없습니다" description="위에서 chat ID를 등록해 보세요." />
+          <EmptyState
+            title="연결된 대상이 없습니다"
+            description="위에서 chat ID를 등록해 보세요."
+          />
         ) : (
           <View className="gap-3">
             {targetsQuery.data.map((t) => (
               <Card key={t.id} className="gap-2">
                 <View className="flex-row items-start justify-between gap-2">
-                  <Subheading className="flex-1">{t.telegram_label ?? t.telegram_chat_id}</Subheading>
+                  <Subheading className="flex-1">
+                    {t.telegram_label ?? t.telegram_chat_id}
+                  </Subheading>
                   <View className="flex-row gap-1.5">
                     {t.is_default ? <Badge label="기본" /> : null}
                     <Badge label={statusOf(t)} />

@@ -26,7 +26,9 @@ function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> 
 describe('FeatureDetailCardBody', () => {
   it('place 카드의 일반 필드를 렌더한다', () => {
     render(<FeatureDetailCardBody card={placeCard()} />);
-    expect(screen.getByTestId('feature-detail-card-body-address')).toHaveTextContent('부산 광안로 1');
+    expect(screen.getByTestId('feature-detail-card-body-address')).toHaveTextContent(
+      '부산 광안로 1',
+    );
     expect(screen.getByTestId('feature-detail-card-body-phone')).toHaveTextContent('051-000-0000');
     expect(screen.getByTestId('feature-detail-card-body-hours')).toHaveTextContent('09:00-22:00');
     expect(screen.getByTestId('feature-detail-card-body-category')).toHaveTextContent('카페');
@@ -52,12 +54,7 @@ describe('FeatureDetailCardBody', () => {
         external_id: 'k1',
       },
     ];
-    render(
-      <FeatureDetailCardBody
-        card={placeCard({ enrichment })}
-        enrichmentRequested
-      />,
-    );
+    render(<FeatureDetailCardBody card={placeCard({ enrichment })} enrichmentRequested />);
     const row = screen.getByTestId('feature-detail-enrichment-kakao');
     expect(row).toHaveTextContent('카카오');
     expect(row).toHaveTextContent('051-111-2222');
@@ -69,7 +66,15 @@ describe('FeatureDetailCardBody', () => {
 
   it('matched=false면 "일치하는 외부 정보 없음"을 보인다', () => {
     const enrichment: ExternalEnrichment[] = [
-      { provider: 'naver', matched: false, name: null, address: null, phone: null, provider_url: null, external_id: null },
+      {
+        provider: 'naver',
+        matched: false,
+        name: null,
+        address: null,
+        phone: null,
+        provider_url: null,
+        external_id: null,
+      },
     ];
     render(<FeatureDetailCardBody card={placeCard({ enrichment })} enrichmentRequested />);
     expect(screen.getByTestId('feature-detail-enrichment-naver')).toHaveTextContent(
@@ -107,6 +112,8 @@ describe('FeatureDetailCardBody', () => {
     render(<FeatureDetailCardBody card={price} />);
     expect(screen.getByTestId('feature-detail-card-body-price')).toHaveTextContent('휘발유');
     // place 전용 enrichment 버튼은 없다.
-    expect(screen.queryByTestId('feature-detail-card-body-load-enrichment')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('feature-detail-card-body-load-enrichment'),
+    ).not.toBeInTheDocument();
   });
 });

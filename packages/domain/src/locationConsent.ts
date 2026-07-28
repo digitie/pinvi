@@ -14,7 +14,7 @@ export const CONSENT_VERSION = 'v1.0';
 /** 위치 동의 2종이 모두 유효(철회 안 됨)한가. */
 export function hasLocationConsent(consents: UserConsent[]): boolean {
   return LOCATION_CONSENT_TYPES.every((type) =>
-    consents.some((c) => c.consent_type === type && c.withdrawn_at == null)
+    consents.some((c) => c.consent_type === type && c.withdrawn_at == null),
   );
 }
 

@@ -256,8 +256,8 @@ export default function SignupPage() {
       </p>
 
       <p className="text-xs text-muted-soft">
-        회원가입 후 이메일 인증을 거치면 여행계획을 만들 수 있습니다. Google OAuth는 로그인
-        화면에서 시작할 수 있습니다.
+        회원가입 후 이메일 인증을 거치면 여행계획을 만들 수 있습니다. Google OAuth는 로그인 화면에서
+        시작할 수 있습니다.
       </p>
     </div>
   );
