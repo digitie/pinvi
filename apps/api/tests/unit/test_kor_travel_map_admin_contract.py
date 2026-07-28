@@ -1,7 +1,7 @@
 """kor_travel_map **admin** detail-snapshot 계약 드리프트 게이트 (T-VN-H07D, map#815).
 
 `test_kor_travel_map_contract.py`(T-210e/T-VN-H07B)가 **user** 표면을 덮는 반면, Pinvi의 큐레이션
-import 런타임은 admin `GET /v1/admin/curated-features/{id}/detail-snapshot`을 쓴다
+import 런타임은 admin `GET /v1/admin/features/curated/{id}/detail-snapshot`을 쓴다
 (`clients/kor_travel_map_admin.py::get_curated_detail_snapshot` →
 `services/notice_plan.py::import_kor_travel_map_curated_feature`). 이 표면은 지금까지 어떤
 계약 게이트도 없었다.
@@ -37,11 +37,8 @@ _SNAPSHOT = (
 _UPSTREAM_COMMIT = "5c0e0cae0cdb6009eb81c7c9030dcf5baf2719a2"
 _SNAPSHOT_SHA256 = "43afeba9ced588e5cd0fce410add45b4f3eaaef4a1c44227c5ff0dd245bd98b8"
 
-# Map 문서 경로. Pinvi가 호출하는 것은 같은 핸들러의 alias(`/v1/admin/curated-features/...`)이며
-# `include_in_schema=False`라 스펙에 없다 — alias 존재 자체는 Map 쪽
-# `test_admin_curated_snapshot_contract.py`가 라우트 등록 수준에서 고정한다.
+# Map OpenAPI와 Pinvi 런타임이 함께 사용하는 canonical 경로.
 _SNAPSHOT_PATH = "/v1/admin/features/curated/{curated_feature_id}/detail-snapshot"
-_PINVI_CLIENT_PATH = "/v1/admin/curated-features/{curated_feature_id}/detail-snapshot"
 
 # Pinvi가 실제로 읽는 필드만 고정한다(consumer 계약 — producer의 무해한 additive 변경에
 # false-red가 나지 않게 exact property 집합은 고정하지 않는다. exact 집합은 Map 쪽 소유).

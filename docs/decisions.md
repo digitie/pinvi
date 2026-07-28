@@ -1963,6 +1963,8 @@ ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
 
 - **상태**: accepted
 - **날짜**: 2026-06-25
+- **보정**: 2026-07-29 — issue #881에서 발견한 hidden alias/OpenAPI 분기를 제거하고
+  canonical 경로와 AdminBFF 인증 경계를 정본화
 - **결정자**: 사용자 + Claude
 
 ### 컨텍스트
@@ -1985,10 +1987,12 @@ ADR-043/045)을 위해 `PINVI_VWORLD_API_KEY`를 갖고 있다. 여기서 별도
 
 - **큐레이션 import**: snapshot 조회를 user client에서 admin client
   (`KorTravelMapAdminClient.get_curated_detail_snapshot`)로 옮긴다.
-  `GET /v1/admin/curated-features/{id}/detail-snapshot`를 admin base
-  (`PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`) + `X-Kor-Travel-Map-Service-Token`으로 호출한다.
-  즉 큐레이션 import는 이제 **admin 서비스 토큰 작업**이다(import 라우터는 이미 admin RBAC
-  아래에서 동작하므로 권한 경계가 일관적이다). snapshot의 plan-level 객체는 `content` 키로 읽는다.
+  `GET /v1/admin/features/curated/{id}/detail-snapshot`를 admin base
+  (`PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`)로 호출한다. AdminBFF gate가 켜진 환경에서는
+  `X-Kor-Travel-Map-Admin-Proxy-Secret`과 `X-Kor-Travel-Map-Actor`가 필수이며, local dev에서만
+  gate opt-out을 허용한다. `X-Kor-Travel-Map-Service-Token`은 별도의 server-to-server
+  pass-through 자격이며 AdminBFF 자격을 대신하지 않는다. import 라우터는 이미 admin RBAC
+  아래에서 동작하므로 권한 경계가 일관적이다. snapshot의 plan-level 객체는 `content` 키로 읽는다.
 - **geo within-radius**: Pinvi `/regions/within-radius`는 **endpoint 경로는 유지**하되 v2
   계약을 그대로 반영한다 — 요청 query를 `radius_km`(≤500) + `levels[]`(sido|sigungu|emd,
   기본 `[sigungu, emd]`)로, 응답을 level별 그룹(`RegionsWithinRadius`)으로 바꾼다.
