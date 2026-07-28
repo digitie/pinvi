@@ -142,6 +142,92 @@ async def test_ws_trip_channel_rejects_non_member(
     ) == (close_before + 1)
 
 
+async def test_handshake_close_settle_seconds_clamps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1.ws import _handshake_close_settle_seconds
+
+    monkeypatch.setattr(settings, "pinvi_ws_handshake_close_settle_seconds", -1.0)
+    assert _handshake_close_settle_seconds() == 0.0
+    monkeypatch.setattr(settings, "pinvi_ws_handshake_close_settle_seconds", 10.0)
+    assert _handshake_close_settle_seconds() == 5.0
+    monkeypatch.setattr(settings, "pinvi_ws_handshake_close_settle_seconds", 0.25)
+    assert _handshake_close_settle_seconds() == 0.25
+
+
+async def test_ws_trip_channel_reject_settles_before_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """reject는 settle을 close **이전에** 넣어 close code가 edge를 건너게 한다(C7 #820).
+
+    단순히 sleep이 호출됐는지가 아니라 settle→close **순서**를 검증한다(리뷰 P3).
+    """
+    import app.api.v1.ws as ws_module
+    from app.main import app
+
+    await realtime_broker.reset()
+    monkeypatch.setattr(settings, "pinvi_ws_handshake_close_settle_seconds", 0.031)
+    ws_module._reject_settle_inflight[0] = 0
+    events: list[str] = []
+    real_sleep = asyncio.sleep
+    real_close = ws_module._close_websocket
+
+    async def recording_sleep(delay: float, *args: object, **kwargs: object) -> None:
+        if delay == 0.031:
+            events.append("settle")
+        await real_sleep(delay)
+
+    async def recording_close(*args: object, **kwargs: object) -> None:
+        events.append("close")
+        await real_close(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ws_module.asyncio, "sleep", recording_sleep)
+    monkeypatch.setattr(ws_module, "_close_websocket", recording_close)
+
+    with TestClient(app) as sync_client:
+        trip_id = uuid.uuid4()
+        with sync_client.websocket_connect(
+            f"/ws/trips/{trip_id}?token=not-a-valid-token"
+        ) as websocket:
+            rejected = websocket.receive_json()
+            assert rejected == {"code": 4401, "reason": "token_invalid"}
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
+            assert exc_info.value.code == 4401
+    # settle이 close 이전에(정확히 이 순서로) 적용됐다.
+    assert events == ["settle", "close"]
+
+
+async def test_reject_settle_concurrency_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """동시 settle이 cap을 넘으면 settle을 생략한다(미인증 flood 증폭 방지, 리뷰 P2)."""
+    import app.api.v1.ws as ws_module
+
+    monkeypatch.setattr(settings, "pinvi_ws_handshake_close_settle_seconds", 0.05)
+    monkeypatch.setattr(settings, "pinvi_ws_max_concurrent_reject_settles", 1)
+    slept: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def recording_sleep(delay: float, *args: object, **kwargs: object) -> None:
+        slept.append(delay)
+        await real_sleep(delay)
+
+    monkeypatch.setattr(ws_module.asyncio, "sleep", recording_sleep)
+
+    # cap 미만: settle 적용 + inflight 카운터가 올랐다 내려온다.
+    ws_module._reject_settle_inflight[0] = 0
+    await ws_module._settle_before_reject_close()
+    assert slept == [0.05]
+    assert ws_module._reject_settle_inflight[0] == 0
+
+    # cap 도달(inflight == 1 == cap): settle 생략.
+    ws_module._reject_settle_inflight[0] = 1
+    await ws_module._settle_before_reject_close()
+    assert slept == [0.05]  # 추가 sleep 없음
+    ws_module._reject_settle_inflight[0] = 0
+
+
 async def test_ws_trip_channel_rate_limits_client_messages(
     session_factory,
     verified_user,

@@ -34,6 +34,43 @@ _CLOSE_RATE_LIMITED = 4429
 _HEARTBEAT_TIMEOUT_SECONDS = 35
 
 
+def _handshake_close_settle_seconds() -> float:
+    """handshake-time reject의 accept→close 사이 settle(초), 0..5s로 clamp.
+
+    kor-travel-map C7(#820)과 동일 계층: 101 upgrade와 close frame이 같은 backend
+    write로 합쳐지면 리버스 프록시가 close code를 떨궈 브라우저가 1006을 관측한다.
+    accept 뒤 이 시간만큼 yield하면 101이 별도 write로 flush돼 close code가 살아남는다.
+    """
+    raw = settings.pinvi_ws_handshake_close_settle_seconds
+    if raw < 0:
+        return 0.0
+    if raw > 5.0:
+        return 5.0
+    return raw
+
+
+# 동시 reject-settle 수. settle은 broker cap/rate-limit 이전(accept 직후) 소켓을 붙잡으므로,
+# 미인증 reject flood가 settle로 FD를 증폭하지 못하게 이 수로 상한을 둔다(단일 event loop → lock 불필요).
+_reject_settle_inflight = [0]
+
+
+async def _settle_before_reject_close() -> None:
+    """reject의 accept→close 사이 settle. 동시 settle 수를 cap해(리뷰 P2) 미인증 flood가
+    settle로 소켓/코루틴을 무제한 붙잡는 증폭을 막는다. cap 초과 시 settle 없이 즉시 진행한다.
+    """
+    settle = _handshake_close_settle_seconds()
+    if settle <= 0.0:
+        return
+    cap = settings.pinvi_ws_max_concurrent_reject_settles
+    if cap > 0 and _reject_settle_inflight[0] >= cap:
+        return
+    _reject_settle_inflight[0] += 1
+    try:
+        await asyncio.sleep(settle)
+    finally:
+        _reject_settle_inflight[0] -= 1
+
+
 @router.websocket("/trips/{trip_id}")
 async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
     user_id = await _authenticate(websocket, trip_id=trip_id)
@@ -57,6 +94,8 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
     try:
         connection = await realtime_broker.connect(websocket, trip_id=trip_id, user_id=user_id)
     except RealtimeConnectionLimitError as exc:
+        # C7(#820): accept(위)와 close 사이 settle로 4408 close code가 edge를 건너게 한다.
+        await _settle_before_reject_close()
         await websocket.send_json({"code": _CLOSE_CONNECTION_LIMIT, "reason": exc.reason})
         await _close_websocket(
             websocket,
@@ -269,7 +308,13 @@ async def _reject(
     user_id: uuid.UUID | None = None,
 ) -> None:
     realtime_metrics.record_ws_connection_rejected(reason=reason)
-    await websocket.accept()
+    try:
+        await websocket.accept()
+    except Exception:  # accept 실패면 소켓이 죽었으므로 close를 호출하지 않는다(C7 #809)
+        return
+    # C7(#809/#820): 101 handshake를 flush한 뒤 close해야 close code가 리버스 프록시 edge를
+    # 건너 살아남는다(미적용 시 브라우저가 4401/4403 대신 1006 관측 → 클라이언트 오분류).
+    await _settle_before_reject_close()
     await websocket.send_json({"code": code, "reason": reason})
     await _close_websocket(
         websocket,

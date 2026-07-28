@@ -109,6 +109,14 @@
 - [x] T-309c — `FeatureDetailModal` 본문 + 마커→상세 모달(양 지도, opt-in enrichment, weather 제외).
       **PR #402 머지 완료**. feature-less POI 모달은 T-309b 통합. (ADR-056)
 
+## 실시간 WebSocket
+
+- [x] T-WS-C7 — trip WebSocket reject(`accept→close`)에 env-tunable settle(기본 0.25s)을 넣어 101
+      handshake를 flush → close code(4401/4403/4408 등)가 리버스 프록시 edge를 건너 살아남게 한다.
+      미적용 시 브라우저가 1006으로 관측 → 클라이언트가 auth-refresh/stop을 오분류(kor-travel-map C7
+      #809/#820 동일 계층, 포팅). 미인증 reject flood가 settle로 FD 증폭하지 못하게 동시 settle cap.
+      **적대적 리뷰 2명(P2 DoS cap·P3 test-order 반영) 통과. PR 대기.** edge-특정 검증은 prod(#868 해제 후).
+
 ## Sprint 6 / v1.0.0 후속 Task 초안
 
 - [ ] T-273 — v1.0.0 E2E / Live Gate. 남은 hard blocker는 geofence 운영 설정이다.
