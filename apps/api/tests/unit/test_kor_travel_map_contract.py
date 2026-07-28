@@ -73,8 +73,13 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 
 # --- kor_travel_map user 표면에서 Pinvi가 실제로 소비하는 필드의 typed contract (T-VN-H07B) ---
 #
-# 소스(전수 감사): user client `clients/kor_travel_map.py`, 매핑
-# `api/v1/features.py _*_from_kor_travel_map`, `api/v1/public.py`, `services/place_search.py`.
+# 소스(전수 감사): user client `clients/kor_travel_map.py`와 그 소비자 —
+# `api/v1/features.py`(`_*_from_kor_travel_map`), `api/v1/public.py`, `api/v1/search.py`,
+# `api/v1/admin/category_mappings.py`(같은 user client의 categories 소비),
+# `services/place_search.py`, `services/feature_detail.py`.
+# 응답 **컨테이너**(`PublicFeatureListData`/`FeaturesNearbyData`/`FeatureSearchData`/
+# `CategoriesData`/`FeatureBatchData`)의 item·map value `$ref`도 함께 고정한다 — 이게 없으면
+# item 스키마 계약이 endpoint와 결합되지 않아 producer가 `items.$ref`를 갈아끼워도 통과한다.
 # 각 필드의 JSON type·format·enum·array item(type/`$ref`)·map value(`$ref`)·required·nullable을
 # 스냅샷 기준으로 고정한다. 존재 검사용 `_SCHEMA_FIELDS`는 이 표에서 파생되므로 두 표가 서로
 # 어긋날 수 없다(과거처럼 손으로 두 벌을 유지하지 않는다).
@@ -92,9 +97,14 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # 않으며(ADR-049, Map PR #533이 public `*-copy` 폐지), Pinvi의 큐레이션 런타임 표면은 admin
 # `/v1/admin/curated-features/{id}/detail-snapshot`이라 T-VN-H07D(#815)가 소유한다.
 #
-# 참고: `_summary_from_kor_travel_map`의 `dto.get("title")`과
-# `place_search.feature_item_to_result`의 `item.get("address")`는 user 표면 스키마에 해당
-# property 자체가 없어 항상 None인 방어 코드다 — 고정할 계약이 없어 표에 넣지 않는다.
+# 참고(항상 None인 방어적 read — 대응 property가 user 표면에 없어 고정할 계약이 없다):
+#   * `dto.get("title")` — `_summary_from_kor_travel_map`/`_detail_from_kor_travel_map`/
+#     `feature_detail.build_detail_card`/`place_search.feature_item_to_result` 네 곳 모두.
+#     `FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse`에 `title`이 없다.
+#   * `item.get("address")` — `place_search.feature_item_to_result`. `FeatureSummary`에 없다.
+#   * `data.get("cluster_unit")` — `features.py` in-bounds 응답. `cluster_unit`은
+#     `PublicFeatureListData`가 아니라 `ClusterMeta`에 있어 이 read는 항상 None이다
+#     (Pinvi 측 잠재 버그 — 런타임 수정은 본 test-only 변경 범위 밖).
 _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     "FeatureSummary": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
@@ -139,30 +149,15 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "urls": {"type": "object", "required": True, "nullable": False},
         "detail": {"type": "object", "required": True, "nullable": False},
         "status": {"type": "string", "required": True, "nullable": False},
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
     },
     "WeatherCardData": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "asof": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "is_stale": {"type": "boolean", "required": True, "nullable": False},
-        "source_styles": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "metrics": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
+        "source_styles": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "metrics": {"type": "array", "items_ref": "WeatherMetricOut", "required": True, "nullable": False},
     },
     "WeatherMetricOut": {
         "metric_key": {"type": "string", "required": True, "nullable": False},
@@ -171,12 +166,7 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "timeline_bucket": {"type": "string", "required": False, "nullable": True},
         "valid_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "issued_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
-        "observed_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
+        "observed_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "value_number": {"type": "number", "required": False, "nullable": True},
         "value_text": {"type": "string", "required": False, "nullable": True},
         "unit": {"type": "string", "required": False, "nullable": True},
@@ -191,32 +181,41 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "depth": {"type": "integer", "required": True, "nullable": False},
         "is_active": {"type": "boolean", "required": True, "nullable": False},
         "sort_order": {"type": "integer", "required": True, "nullable": False},
+        "tier1_code": {"type": "string", "required": True, "nullable": False},
+        "tier1_name": {"type": "string", "required": True, "nullable": False},
+        "tier2_code": {"type": "string", "required": True, "nullable": False},
+        "tier2_name": {"type": "string", "required": True, "nullable": True},
+        "tier3_code": {"type": "string", "required": True, "nullable": False},
+        "tier3_name": {"type": "string", "required": True, "nullable": True},
+        "tier4_code": {"type": "string", "required": True, "nullable": False},
+        "tier4_name": {"type": "string", "required": True, "nullable": True},
+        "db_active": {"type": "boolean", "required": False, "nullable": True},
+        "db_feature_count": {"type": "integer", "required": False, "nullable": True},
     },
     "FeatureBatchData": {
-        "found": {
-            "type": "object",
-            "values_ref": "FeatureDetailResponse",
-            "required": True,
-            "nullable": False,
-        },
+        "found": {"type": "object", "values_ref": "FeatureDetailResponse", "required": True, "nullable": False},
         "missing": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+    },
+    "PublicFeatureListData": {
+        "items": {"type": "array", "items_ref": "FeatureSummary", "required": False, "nullable": False},
+        "clusters": {"type": "array", "items_ref": "ClusterSummary", "required": False, "nullable": False},
+    },
+    "FeaturesNearbyData": {
+        "items": {"type": "array", "items_ref": "NearbyFeatureSummary", "required": True, "nullable": False},
+    },
+    "FeatureSearchData": {
+        "items": {"type": "array", "items_ref": "FeatureSummary", "required": True, "nullable": False},
+    },
+    "CategoriesData": {
+        "items": {"type": "array", "items_ref": "CategorySummary", "required": True, "nullable": False},
+        "include_counts": {"type": "boolean", "required": True, "nullable": False},
     },
     "BeachPublicView": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "display_name": {"type": "string", "required": True, "nullable": False},
         "address": {"type": "object", "required": True, "nullable": False},
-        "source_providers": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
+        "source_providers": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
         "beach_kind": {"type": "string", "required": False, "nullable": True},
         "beach_width_m": {"type": "number", "required": False, "nullable": True},
         "beach_length_m": {"type": "number", "required": False, "nullable": True},
@@ -235,49 +234,19 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "marker_icon": {"type": "string", "required": False, "nullable": True},
         "latest_water_quality": {"type": "object", "required": False, "nullable": True},
         "latest_weather": {"type": "object", "required": False, "nullable": True},
-        "upcoming_index_forecasts": {
-            "type": "array",
-            "items_type": "object",
-            "required": False,
-            "nullable": False,
-        },
+        "upcoming_index_forecasts": {"type": "array", "items_type": "object", "required": False, "nullable": False},
     },
     "PublicBeachListData": {
-        "items": {
-            "type": "array",
-            "items_ref": "BeachPublicView",
-            "required": True,
-            "nullable": False,
-        },
+        "items": {"type": "array", "items_ref": "BeachPublicView", "required": True, "nullable": False},
     },
     "FestivalPublicView": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "festival_name": {"type": "string", "required": True, "nullable": False},
-        "event_status": {
-            "type": "string",
-            "enum": {"ended", "ongoing", "scheduled", "unknown"},
-            "required": True,
-            "nullable": False,
-        },
+        "event_status": {"type": "string", "enum": {"ended", "ongoing", "scheduled", "unknown"}, "required": True, "nullable": False},
         "address": {"type": "object", "required": True, "nullable": False},
-        "source_providers": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "event_start_date": {
-            "type": "string",
-            "format": "date",
-            "required": False,
-            "nullable": True,
-        },
+        "source_providers": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "updated_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
+        "event_start_date": {"type": "string", "format": "date", "required": False, "nullable": True},
         "event_end_date": {"type": "string", "format": "date", "required": False, "nullable": True},
         "venue_name": {"type": "string", "required": False, "nullable": True},
         "road_address": {"type": "string", "required": False, "nullable": True},
@@ -303,18 +272,8 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "count": {"type": "integer", "required": True, "nullable": False},
     },
     "PublicFestivalMonthlyData": {
-        "months": {
-            "type": "array",
-            "items_ref": "PublicFestivalMonth",
-            "required": True,
-            "nullable": False,
-        },
-        "items": {
-            "type": "array",
-            "items_ref": "FestivalPublicView",
-            "required": True,
-            "nullable": False,
-        },
+        "months": {"type": "array", "items_ref": "PublicFestivalMonth", "required": True, "nullable": False},
+        "items": {"type": "array", "items_ref": "FestivalPublicView", "required": True, "nullable": False},
     },
     "PublicMapMarker": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
@@ -324,21 +283,11 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "sigungu_code": {"type": "string", "required": False, "nullable": True},
     },
     "PublicMapMarkerLayerData": {
-        "layer_key": {
-            "type": "string",
-            "enum": {"beach", "festival"},
-            "required": True,
-            "nullable": False,
-        },
+        "layer_key": {"type": "string", "enum": {"beach", "festival"}, "required": True, "nullable": False},
         "display_name": {"type": "string", "required": True, "nullable": False},
         "marker_icon": {"type": "string", "required": True, "nullable": False},
         "marker_color": {"type": "string", "required": True, "nullable": False},
-        "items": {
-            "type": "array",
-            "items_ref": "PublicMapMarker",
-            "required": True,
-            "nullable": False,
-        },
+        "items": {"type": "array", "items_ref": "PublicMapMarker", "required": True, "nullable": False},
     },
 }
 

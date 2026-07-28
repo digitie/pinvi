@@ -573,10 +573,15 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (5) pinned SHA-256 및 표준 workspace sibling `kor-travel-map-*` 전체 파일 byte equality
   (sibling이 없는 CI에서는 pinned hash는 항상 실행, live equality만 skip —
   `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능),
-  (6) **(T-VN-H07B) typed consumer contract** — `_SCHEMA_FIELDS`의 각 필드에 대해 JSON
-  type·format·enum·array item(type/`$ref`)·required/nullable을 스냅샷 기준으로 고정
-  (`_CONSUMED_FIELD_CONTRACTS`). 계약 표는 `_SCHEMA_FIELDS`와 exact 일치가 강제되므로
-  매핑이 새 필드를 읽기 시작하면 타입 계약도 함께 적어야 한다.
+  (6) **(T-VN-H07B) typed consumer contract** — `_CONSUMED_FIELD_CONTRACTS`가 **단일 정본**이며,
+  Pinvi가 읽는 각 필드의 JSON type·format·enum·array item(type/`$ref`)·map value
+  (`additionalProperties.$ref`)·required/nullable을 스냅샷 기준으로 고정한다. 존재 검사용
+  `_SCHEMA_FIELDS`는 이 표에서 **파생**되므로 두 표가 어긋날 수 없다. 응답 컨테이너
+  (`PublicFeatureListData`/`FeaturesNearbyData`/`FeatureSearchData`/`CategoriesData`/
+  `FeatureBatchData`)의 item·map value `$ref`도 고정해 endpoint↔item 스키마 결합을 지킨다.
+  `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
+  `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
+  모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를
@@ -590,8 +595,9 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `_UPSTREAM_COMMIT`과 `_SNAPSHOT_SHA256`을 같은 원본으로 갱신한다.
   3. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py`를 실행한다.
-  4. 실패하면 사라진/바뀐 경로·필드·query/security를 `clients/kor_travel_map.py` +
+  4. 실패하면 사라진/바뀐 경로·필드·타입·query/security를 `clients/kor_travel_map.py` +
      `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
-     `_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_CONSUMED_FIELD_CONTRACTS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_SCHEMA_FIELDS`는 파생 집합이므로 직접 편집하지 않는다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).
