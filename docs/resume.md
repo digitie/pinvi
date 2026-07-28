@@ -2,7 +2,7 @@
 
 ## 2026-07-28 (claude) — T-VN-SEC-01 + T-VN-STYLE-01 완료
 
-**방금(2)**: **T-VN-STYLE-01** — Prettier baseline 219개 일괄 포맷(포맷 전용, PR #TBD). P0 자체 차단:
+**방금(2)**: **T-VN-STYLE-01** — Prettier baseline 219개 일괄 포맷(포맷 전용, PR #413). P0 자체 차단:
 `apps/api/tests/contract/*.json`은 SHA-256 핀 vendored 스냅샷이라 재포맷이 핀 해시를 깨서 원본 복원 +
 `.prettierignore` 영구 제외. 적대적 리뷰 2명 approve, format:check clean.
 

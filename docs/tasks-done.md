@@ -6,7 +6,7 @@
 
 ## 2026-07-28
 
-- [x] **T-VN-STYLE-01** — Prettier baseline 219개 파일 일괄 포맷. (완료: 2026-07-28, PR #TBD, claude)
+- [x] **T-VN-STYLE-01** — Prettier baseline 219개 파일 일괄 포맷. (완료: 2026-07-28, PR #413, claude)
       `npm run format:check`가 실패하던 baseline(TS/TSX 108·MD 103·JSON/JS 7)을 포맷 전용으로 정리했다.
       TS/TSX는 AST 보존(typecheck+lint+vitest 통과), JSON/JS는 값 바이트 동일, MD는 따옴표/표 패딩/코드펜스
       JS/빈 줄 정규화(산문 손실 0). **P0 자체 차단**: `apps/api/tests/contract/kor-travel-map-openapi-user.json`은
