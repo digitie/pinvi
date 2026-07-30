@@ -862,7 +862,7 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
     };
     currentView = {
       ...currentView,
-      days: [{ ...day, pois: [] }],
+      days: [{ ...day, weather_by_feature_id: {}, pois: [] }],
     };
     await route.fulfill({
       contentType: 'application/json',
@@ -960,6 +960,7 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
     const updatedDay = {
       ...currentDay,
       ...patchedBody,
+      effective_date: patchedBody.date,
       trip_id: tripId,
       note: null,
       version: 2,
