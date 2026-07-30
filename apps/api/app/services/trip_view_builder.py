@@ -63,16 +63,14 @@ def _weather_resolution(
 ) -> dict[str, Any]:
     if isinstance(item, FoundWeatherBatchItem):
         card = item.card
-        weather_cards.setdefault(
-            card.card_key,
-            {
+        if card.card_key not in weather_cards:
+            weather_cards[card.card_key] = {
                 "asof": target_at,
                 "latest_at": card.latest_at,
                 "is_stale": card.is_stale,
                 "source_styles": list(card.source_styles),
                 "metrics": [metric.as_dict() for metric in (*card.current, *card.timeline)],
-            },
-        )
+            }
         return {
             "state": "found",
             "card_key": card.card_key,

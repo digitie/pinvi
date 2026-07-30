@@ -39,6 +39,20 @@ describe('TripViewDaySchema weather partition', () => {
     expect(Object.keys(parsed.weather_cards)).toEqual(['card:seoul']);
   });
 
+  it.each(['', 'x'.repeat(257)])('생산자의 제약 없는 card_key %j를 보존한다', (cardKey) => {
+    const parsed = TripViewDaySchema.parse(
+      dayWeather(
+        { [cardKey]: weatherCard },
+        { 'weather:a': { state: 'found', card_key: cardKey } },
+      ),
+    );
+
+    expect(parsed.weather_by_feature_id['weather:a']).toEqual({
+      state: 'found',
+      card_key: cardKey,
+    });
+  });
+
   it.each([
     dayWeather({}, { 'weather:a': { state: 'found', card_key: 'card:missing' } }),
     dayWeather({ 'card:orphan': weatherCard }, {}),

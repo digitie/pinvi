@@ -53,12 +53,29 @@ type TripViewPoi = {
 type TripView = {
   days: Array<{
     pois: TripViewPoi[];
-    weather_cards: Record<string, unknown>;
-    weather_by_feature_id: Record<
+    weather_cards: Record<
       string,
       {
-        state: 'found' | 'no_data' | 'retired' | 'suppressed' | 'missing' | 'unavailable';
+        metrics: Array<{
+          metric_key: string;
+          metric_name?: string | null;
+          forecast_style: string;
+          timeline_bucket?: string | null;
+          unit?: string | null;
+          effective_at?: string | null;
+          valid_at?: string | null;
+          observed_at?: string | null;
+          valid_from?: string | null;
+          value_number?: number | null;
+          value_text?: string | null;
+          severity?: string | null;
+        }>;
       }
+    >;
+    weather_by_feature_id: Record<
+      string,
+      | { state: 'found'; card_key: string }
+      | { state: 'no_data' | 'retired' | 'suppressed' | 'missing' | 'unavailable' }
     >;
   }>;
   broken_feature_count: number;
@@ -72,6 +89,61 @@ function offsetIsoDate(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+const liveSeoulDateFormatter = new Intl.DateTimeFormat('en', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function liveMetricDate(
+  metric: TripView['days'][number]['weather_cards'][string]['metrics'][number],
+) {
+  const instant =
+    metric.effective_at ?? metric.valid_at ?? metric.observed_at ?? metric.valid_from ?? null;
+  if (!instant) return null;
+  const value = new Date(instant);
+  if (Number.isNaN(value.getTime())) return null;
+  const parts = Object.fromEntries(
+    liveSeoulDateFormatter.formatToParts(value).map(({ type, value: part }) => [type, part]),
+  );
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
+}
+
+function isRenderableWeatherMetric(
+  metric: TripView['days'][number]['weather_cards'][string]['metrics'][number],
+  expectedDate: string,
+) {
+  if (liveMetricDate(metric) !== expectedDate) return false;
+  if (metric.value_text == null && metric.value_number == null && metric.severity == null) {
+    return false;
+  }
+  const haystack = [
+    metric.metric_key,
+    metric.metric_name,
+    metric.forecast_style,
+    metric.timeline_bucket,
+    metric.unit,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const current = /observed|nowcast|current/i.test(metric.forecast_style);
+  return (
+    /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i.test(haystack) ||
+    (current &&
+      /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i.test(
+        haystack,
+      )) ||
+    (!current &&
+      (/ultra|short|mid|forecast/i.test(metric.forecast_style) ||
+        /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i.test(
+          haystack,
+        )))
+  );
 }
 
 type BrowserApiResponse = {
@@ -543,9 +615,26 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(finalDayCard).not.toContainText('날씨 서비스를 일시적으로 사용할 수 없습니다.');
       const finalWeather = finalDayCard.getByLabel('장소 날씨').first();
       await expect(finalWeather).toBeVisible();
-      await expect(finalWeather).toContainText(
-        /현재|예보|미세먼지|이 날짜의 날씨 정보가 없습니다\./,
-      );
+      const finalApiDay = healthy.days[longTripDayCount - 1]!;
+      const finalResolution = finalApiDay.weather_by_feature_id[weatherFeatureId!];
+      if (finalResolution?.state === 'found') {
+        const finalCard = finalApiDay.weather_cards[finalResolution.card_key];
+        expect(finalCard, `40일차 card ${finalResolution.card_key} 누락`).toBeDefined();
+        const hasRenderableMetric = finalCard!.metrics.some((metric) =>
+          isRenderableWeatherMetric(metric, offsetIsoDate(weatherDate!, longTripDayCount - 1)),
+        );
+        if (hasRenderableMetric) {
+          await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-summary');
+          await expect(finalWeather).toContainText(/현재|예보|미세먼지/);
+        } else {
+          await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-status');
+          await expect(finalWeather).toHaveText('이 날짜의 날씨 정보가 없습니다.');
+        }
+      } else {
+        expect(finalResolution?.state).toBe('no_data');
+        await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-status');
+        await expect(finalWeather).toHaveText('이 날짜의 날씨 정보가 없습니다.');
+      }
 
       const healthyWeatherBatchCount = proxy.weatherBatchRequests.length;
       proxy.setWeatherOutage(true);

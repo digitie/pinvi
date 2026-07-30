@@ -320,6 +320,7 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
 
 async def test_build_trip_view_batches_weather_once_per_unique_date(
     session_factory,  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.models.poi import TripDayPoi
     from app.models.trip import Trip
@@ -333,6 +334,15 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     user_id = uuid.uuid4()
     trip_id = uuid.uuid4()
     now = datetime.now(UTC)
+    metric_projection_count = 0
+    original_as_dict = WeatherBatchMetric.as_dict
+
+    def counting_as_dict(metric: WeatherBatchMetric) -> dict[str, Any]:
+        nonlocal metric_projection_count
+        metric_projection_count += 1
+        return original_as_dict(metric)
+
+    monkeypatch.setattr(WeatherBatchMetric, "as_dict", counting_as_dict)
 
     async with session_factory() as db:
         db.add(
@@ -407,6 +417,7 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     assert isinstance(found_peer, TripFeatureWeatherFound)
     assert found.card_key == found_peer.card_key
     assert len(typed.days[0].weather_cards) == 1
+    assert metric_projection_count == 2
     assert typed.days[0].weather_cards[found.card_key].metrics[0].provider == "python-kma-api"
     assert all(
         "card" not in resolution for resolution in view["days"][0]["weather_by_feature_id"].values()

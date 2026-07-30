@@ -266,7 +266,7 @@ class TripWeatherCard(BaseModel):
 
 class TripFeatureWeatherFound(BaseModel):
     state: Literal["found"] = "found"
-    card_key: str = Field(min_length=1, max_length=256)
+    card_key: str
 
 
 TripFeatureWeatherResolution = Annotated[

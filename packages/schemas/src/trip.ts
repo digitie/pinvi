@@ -280,7 +280,7 @@ export type TripWeatherCard = z.infer<typeof TripWeatherCardSchema>;
 export const TripWeatherResolutionSchema = z.discriminatedUnion('state', [
   z.object({
     state: z.literal('found'),
-    card_key: z.string().min(1).max(256),
+    card_key: z.string(),
   }),
   z.object({ state: z.literal('no_data') }),
   z.object({ state: z.literal('retired') }),
