@@ -14,9 +14,11 @@ out-of-order cache rollback, 동일 revision의 비공개→공개 복구를 막
 200개 초과 chunk 설정, stale API 문서를 찾았다. snapshot을 canonical `coord`로 고치고,
 최신 refresh의 동일 revision·missing 뒤 낮은 revision 재생성을 허용하는 상태 전이와 설정
 경계 회귀를 추가했다. vendored Map OpenAPI는
-생산자 `d5ac84033c72879757f1a0c609966b7970e0bf94`,
-SHA-256 `3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a`에
-고정했다.
+생산자 `c8060abf27f9c5e437970c42db46cb6e16fba148`,
+SHA-256 `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`에
+고정했다. 생산자 최종 리뷰에서 DB 장애가 generic 500으로 새고 200개 planner-default
+gate가 작은 seed에서 실제 실패한 점도 고쳐, 소비자가 의존하는 503 unavailable 계약과
+운영 규모 PK-index plan을 함께 확정했다.
 
 n150에서는 재사용 `ktm-tvn45-db`를 새 clone·migration·downgrade 없이 사용했다. 실제
 `found|retired|suppressed|missing|unchanged`, 강제 503 `unverified`, 복구와 지도 포인트

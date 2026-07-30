@@ -18,12 +18,16 @@
   fence가 같은 revision의 authoritative `found`를 영구 차단하는 문제를 재현했다. 최신 refresh
   generation은 동일 revision과 missing 뒤 낮은 revision 재생성을 허용하고, 이전 generation과
   무순서 write만 fence로 막도록 고정했다.
+- 생산자 재리뷰에서는 DB `OperationalError`가 계약된 503 대신 generic 500으로 새고,
+  200개 planner-default perf target이 3,200행 seed에서 실제 Seq Scan을 고르는 점도 확인했다.
+  Map이 `FEATURE_BATCH_UNAVAILABLE` 503과 1.56% selectivity PK-index gate로 보강한 새 OpenAPI를
+  다시 vendor했다.
 - n150 재사용 `ktm-tvn45-db`의 실데이터로 다섯 원천 상태와 강제 503·회복을 검증했다.
   첫 재실행은 접근성 snapshot의 합쳐진 문구를 한 DOM element로 오인한 locator만 실패했다.
   실제 sibling 경계인 `1일 표시`와 `장소 4곳`으로 나눠 실패 지점부터 재실행해 **1 passed**다.
   fixture는 원복하고 soft-delete 여행·격리 서비스·listener를 정리했다.
-- Map OpenAPI snapshot은 commit `d5ac84033c72879757f1a0c609966b7970e0bf94`,
-  SHA-256 `3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a`에
+- Map OpenAPI snapshot은 commit `c8060abf27f9c5e437970c42db46cb6e16fba148`,
+  SHA-256 `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`에
   고정했다. 저장소별 PR을 호환 쌍으로 취급해 Map → PinVi 순서로 머지한다.
 
 ## 2026-07-29 (claude) — T-VN-H29: 통합검색에서 map-import POI 좌표가 null이던 버그 수정

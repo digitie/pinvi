@@ -12,8 +12,8 @@
       out-of-order rollback을 막았다. transport 실패만 stale snapshot을 `unverified`로
       재사용한다. Web·Map·Mobile 공용 resolver와 canonical `coord` snapshot을 적용했다.
       독립 적대 리뷰가 지도 마커 소실·cache rollback·동일 revision 복구를 막는 negative
-      fence·chunk 상한·문서 drift를 찾아 모두 보강했다. n150 재사용 실데이터 DB의 다섯
-      상태·503·복구와 지도 포인트 4곳을 파괴적
+      fence·chunk 상한·생산자 DB 장애 500 누출·실패한 planner gate·문서 drift를 찾아 모두
+      보강했다. n150 재사용 실데이터 DB의 다섯 상태·503·복구와 지도 포인트 4곳을 파괴적
       Live UI로 통과하고 fixture·격리 자원을 정리했다. Map 생산자와 저장소별 호환 PR 쌍으로
       Map → PinVi 순서에 따라 landing한다.
 

@@ -29,9 +29,10 @@
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > vendored 정본은 **2026-07-30(T-VN-11A/B) 기준 kor-travel-map
-> `d5ac84033c72879757f1a0c609966b7970e0bf94`**(5-state service batch와 int64 상한 포함)의
+> `c8060abf27f9c5e437970c42db46cb6e16fba148`**(5-state service batch, int64 상한,
+> DB 장애 503 포함)의
 > 전체 파일이며 SHA-256은
-> `3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a`다.
+> `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`다.
 > (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
 > 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체

@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `d5ac8403`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `c8060abf`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -32,8 +32,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "d5ac84033c72879757f1a0c609966b7970e0bf94"
-_SNAPSHOT_SHA256 = "3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a"
+_UPSTREAM_COMMIT = "c8060abf27f9c5e437970c42db46cb6e16fba148"
+_SNAPSHOT_SHA256 = "84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -910,6 +910,13 @@ def test_feature_batch_request_binds_to_pinned_container() -> None:
     assert actual == "FeatureBatchRequest"
     assert "FeatureBatchRequest" in _CONSUMED_FIELD_CONTRACTS
     assert "FeatureBatchRequestItem" in _CONSUMED_FIELD_CONTRACTS
+
+
+def test_feature_batch_declares_service_unavailable_problem() -> None:
+    """DB/transport 장애는 원천 상태가 아니라 명시적 RFC7807 503이다."""
+    response = _spec()["paths"]["/v1/features/batch"]["post"]["responses"]["503"]
+    schema = response["content"]["application/problem+json"]["schema"]
+    assert schema["$ref"].rsplit("/", 1)[-1] == "ProblemDetail"
 
 
 def test_response_meta_binds_to_pinned_meta_schemas() -> None:
