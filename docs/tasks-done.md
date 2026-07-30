@@ -7,7 +7,7 @@
 ## 2026-07-30
 
 - [x] **T-VN-16C** — PinVi 다중 날짜 weather batch 소비 전환.
-      (완료: 2026-07-30, PR 예정, codex)
+      (완료: 2026-07-30, PR #421, codex)
       Map PR #902의 sparse `targets[{target_at, feature_ids}]`와 target-local
       `cards[]`/`card_key` 계약을 한 Trip view당 `POST /v1/features/weather/batch` 1회로
       소비한다. target 366개·target당 ID 200개·전체 pair 2,000개·

@@ -37,7 +37,7 @@ summary/no-data arm을 직접 결합해 **1 passed (11.9s)**다. 첫 재실행�
 producer보다 좁은 `card_key`, 40일차 false-green과 문서 drift를 확인했다. 회귀를 반영한
 최종 재검토는 두 리뷰어 모두 P0~P3 0건이다.
 
-**다음 한 작업**: 최종 gate를 마치고 PR CI green 후 셀프 머지한다.
+**다음 한 작업**: PR #421 CI green 후 셀프 머지한다.
 
 ## 2026-07-30 (codex) — T-VN-16B weather batch 소비 구현·격리 검증 완료
 

@@ -4,6 +4,7 @@
 
 ## 2026-07-30 (codex) — T-VN-16C weather 다중 날짜 단일 호출 소비
 
+- PinVi PR #421.
 - Map PR #902의 sparse `targets[{target_at, feature_ids}]`와 target-local
   `cards[]`/`card_key` 계약으로 전환했다. 날짜별 worker fanout을 제거하고 한 Trip view를
   weather POST 한 번으로 조립한다.
