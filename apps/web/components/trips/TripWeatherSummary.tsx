@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { CloudSun, Wind } from 'lucide-react';
-import { featureApi } from '@pinvi/api-client';
-import type { FeatureWeatherCard, WeatherMetric } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import type { FeatureWeatherResolution, WeatherMetric } from '@pinvi/schemas';
 
 const WEATHER_LABELS: Record<string, string> = {
   T1H: '기온',
@@ -34,10 +32,6 @@ function metricDate(metric: WeatherMetric): string | null {
     metric.issued_at?.slice(0, 10) ??
     null
   );
-}
-
-function weatherAsof(date: string): string {
-  return `${date}T23:59:59+09:00`;
 }
 
 function metricHaystack(metric: WeatherMetric): string {
@@ -106,41 +100,19 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
 }
 
 export interface TripWeatherSummaryProps {
-  featureId?: string | null;
+  weather?: FeatureWeatherResolution | null;
   date?: string | null;
   label?: string;
   compact?: boolean;
 }
 
 export function TripWeatherSummary({
-  featureId,
+  weather,
   date,
   label = '날씨',
   compact = false,
 }: TripWeatherSummaryProps) {
-  const [card, setCard] = useState<FeatureWeatherCard | null>(null);
-
-  useEffect(() => {
-    if (!featureId || !date) {
-      setCard(null);
-      return;
-    }
-
-    let active = true;
-    setCard(null);
-    void featureApi(apiClient)
-      .weather(featureId, { asof: weatherAsof(date) })
-      .then((next) => {
-        if (active) setCard(next);
-      })
-      .catch(() => {
-        if (active) setCard(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [date, featureId]);
+  const card = weather?.state === 'found' ? weather.card : null;
 
   const groups = useMemo(() => {
     if (!card || !date) return [];
@@ -152,7 +124,28 @@ export function TripWeatherSummary({
     ].filter((group) => group.items.length > 0);
   }, [card, date]);
 
-  if (!featureId || !date || groups.length === 0) return null;
+  if (!date || !weather) return null;
+  if (weather.state !== 'found') {
+    const statusText = {
+      no_data: '이 날짜의 날씨 정보가 없습니다.',
+      retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
+      unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
+    }[weather.state];
+    return (
+      <section
+        className={
+          compact
+            ? 'rounded-sm bg-surface-soft/70 px-2 py-1.5'
+            : 'rounded-sm bg-surface-soft px-3 py-2'
+        }
+        aria-label={label}
+        data-testid="trip-weather-status"
+      >
+        <p className="text-[11px] text-muted">{statusText}</p>
+      </section>
+    );
+  }
+  if (groups.length === 0) return null;
 
   return (
     <section

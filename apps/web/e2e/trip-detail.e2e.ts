@@ -34,8 +34,10 @@ const TRIP_VIEW = {
     {
       day_index: 1,
       date: '2026-07-01',
+      effective_date: '2026-07-01',
       title: '1일차',
       holidays: [],
+      weather_by_feature_id: {},
       pois: [
         {
           poi_id: poiId,
@@ -247,7 +249,6 @@ type MutableTripDetailView = Omit<typeof TRIP_VIEW, 'trip' | 'days'> & {
 
 interface MockTripDetailOptions {
   attachmentsByPath?: (pathname: string) => unknown[];
-  weatherByFeatureId?: Record<string, unknown>;
   onWeatherRequest?: (url: URL) => void;
   featuresInBounds?: unknown | (() => unknown);
 }
@@ -306,7 +307,7 @@ async function mockTripDetailRoutes(
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        data: options.weatherByFeatureId?.[featureId] ?? {
+        data: {
           feature_id: featureId,
           asof: null,
           latest_at: null,
@@ -985,75 +986,84 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
 
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
   const weatherRequests: URL[] = [];
-  await mockTripDetailRoutes(page, TRIP_VIEW, {
+  const weatherCard = {
+    feature_id: 'feat-haeundae',
+    asof: '2026-07-01T23:59:59+09:00',
+    latest_at: '2026-07-01T09:00:00+09:00',
+    is_stale: false,
+    source_styles: ['observed', 'short'],
+    metrics: [
+      {
+        metric_key: 'T1H',
+        metric_name: '기온',
+        forecast_style: 'observed',
+        timeline_bucket: 'now',
+        valid_at: null,
+        issued_at: null,
+        observed_at: '2026-07-01T09:00:00+09:00',
+        value_number: 24,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+      {
+        metric_key: 'TMP',
+        metric_name: '기온',
+        forecast_style: 'short',
+        timeline_bucket: 'forecast',
+        valid_at: '2026-07-01T15:00:00+09:00',
+        issued_at: '2026-07-01T05:00:00+09:00',
+        observed_at: null,
+        value_number: 27,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+      {
+        metric_key: 'PM10',
+        metric_name: '미세',
+        forecast_style: 'observed',
+        timeline_bucket: 'now',
+        valid_at: null,
+        issued_at: null,
+        observed_at: '2026-07-01T09:00:00+09:00',
+        value_number: 32,
+        value_text: null,
+        unit: '㎍/㎥',
+        severity: '보통',
+      },
+      {
+        metric_key: 'TMP',
+        metric_name: '기온',
+        forecast_style: 'short',
+        timeline_bucket: 'forecast',
+        valid_at: '2026-07-02T15:00:00+09:00',
+        issued_at: '2026-07-01T05:00:00+09:00',
+        observed_at: null,
+        value_number: 99,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+    ],
+  };
+  const weatherView = {
+    ...TRIP_VIEW,
+    days: [
+      {
+        ...BASE_MARKER_DAY,
+        weather_by_feature_id: {
+          'feat-haeundae': { state: 'found', card: weatherCard },
+        },
+      },
+    ],
+  };
+  await mockTripDetailRoutes(page, weatherView, {
     onWeatherRequest: (url) => weatherRequests.push(url),
     attachmentsByPath: (pathname) => {
       if (pathname.endsWith('/days/1/attachments')) return [DAY_ATTACHMENT];
       if (pathname.endsWith(`/pois/${poiId}/attachments`)) return [POI_ATTACHMENT];
       return [];
-    },
-    weatherByFeatureId: {
-      'feat-haeundae': {
-        feature_id: 'feat-haeundae',
-        asof: '2026-07-01T09:00:00+09:00',
-        latest_at: '2026-07-01T09:00:00+09:00',
-        is_stale: false,
-        source_styles: ['observed', 'short'],
-        metrics: [
-          {
-            metric_key: 'T1H',
-            metric_name: '기온',
-            forecast_style: 'observed',
-            timeline_bucket: 'now',
-            valid_at: null,
-            issued_at: null,
-            observed_at: '2026-07-01T09:00:00+09:00',
-            value_number: 24,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-          {
-            metric_key: 'TMP',
-            metric_name: '기온',
-            forecast_style: 'short',
-            timeline_bucket: 'forecast',
-            valid_at: '2026-07-01T15:00:00+09:00',
-            issued_at: '2026-07-01T05:00:00+09:00',
-            observed_at: null,
-            value_number: 27,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-          {
-            metric_key: 'PM10',
-            metric_name: '미세',
-            forecast_style: 'observed',
-            timeline_bucket: 'now',
-            valid_at: null,
-            issued_at: null,
-            observed_at: '2026-07-01T09:00:00+09:00',
-            value_number: 32,
-            value_text: null,
-            unit: '㎍/㎥',
-            severity: '보통',
-          },
-          {
-            metric_key: 'TMP',
-            metric_name: '기온',
-            forecast_style: 'short',
-            timeline_bucket: 'forecast',
-            valid_at: '2026-07-02T15:00:00+09:00',
-            issued_at: '2026-07-01T05:00:00+09:00',
-            observed_at: null,
-            value_number: 99,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-        ],
-      },
     },
   });
 
@@ -1069,9 +1079,7 @@ test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보
   await expect(plan).toContainText('예보');
   await expect(plan).toContainText('미세먼지');
   await expect(plan).not.toContainText('99℃');
-  expect(
-    weatherRequests.some((url) => url.searchParams.get('asof') === '2026-07-01T23:59:59+09:00'),
-  ).toBe(true);
+  expect(weatherRequests).toHaveLength(0);
 });
 
 test('실시간 권한 상실 close는 안내와 여행 목록 이동 링크를 보여준다', async ({ page }) => {
