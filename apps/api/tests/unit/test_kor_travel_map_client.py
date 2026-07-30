@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 from app.clients.kor_travel_map import (
     FeatureTripCard,
     FoundFeatureBatchItem,
+    FoundWeatherBatchItem,
     KorTravelMapBadRequest,
     KorTravelMapClient,
     KorTravelMapContractError,
@@ -20,7 +22,9 @@ from app.clients.kor_travel_map import (
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
     MissingFeatureBatchItem,
+    NoDataWeatherBatchItem,
     RetiredFeatureBatchItem,
+    RetiredWeatherBatchItem,
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
 )
@@ -50,6 +54,27 @@ def _trip_card(feature_id: str, *, lon: float | None = 126.977) -> dict[str, Any
         "address": {"road_address": "서울특별시 종로구"},
         "marker_icon": "monument",
         "marker_color": "P-01",
+    }
+
+
+def _weather_metric() -> dict[str, Any]:
+    return {
+        "forecast_style": "short",
+        "metric_key": "TMP",
+        "metric_name": "기온",
+        "timeline_bucket": "forecast",
+        "value_number": 24.5,
+        "value_text": None,
+        "unit": "℃",
+        "severity": None,
+        "issued_at": "2026-07-30T00:00:00Z",
+        "valid_at": "2026-07-30T03:00:00Z",
+        "valid_from": "2026-07-30T03:00:00Z",
+        "valid_until": "2026-07-30T04:00:00Z",
+        "observed_at": None,
+        "effective_at": "2026-07-30T03:00:00Z",
+        "provider": "python-kma-api",
+        "weather_domain": "forecast",
     }
 
 
@@ -446,6 +471,159 @@ async def test_get_features_is_all_or_nothing_across_chunks() -> None:
     with pytest.raises(KorTravelMapContractError, match="state"):
         await client.get_features(["f_1", "f_2"])
     assert calls == 2
+    await client.aclose()
+
+
+async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
+    target_at = datetime(2026, 7, 30, tzinfo=UTC)
+    known_at = datetime(2026, 7, 29, 12, tzinfo=UTC)
+    calls: list[dict[str, Any]] = []
+    headers: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        body = _json.loads(request.content)
+        calls.append(body)
+        headers.append(dict(request.headers))
+        items: list[dict[str, Any]] = []
+        for feature_id in body["feature_ids"]:
+            if feature_id == "found":
+                items.append(
+                    {
+                        "state": "found",
+                        "feature_id": feature_id,
+                        "source_styles": ["short"],
+                        "current": [_weather_metric()],
+                        "timeline": [{**_weather_metric(), "valid_at": "2026-07-31T00:00:00Z"}],
+                        "latest_at": "2026-07-30T03:00:00Z",
+                        "is_stale": False,
+                    }
+                )
+            else:
+                items.append({"state": feature_id, "feature_id": feature_id})
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "target_at": "2026-07-30T00:00:00Z",
+                    "known_at": "2026-07-29T12:00:00Z",
+                    "timeline_until": "2026-07-31T00:00:00Z",
+                    "items": items,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(
+        handler,
+        service_token="service-token",
+        public_api_key="must-not-leak",
+        batch_chunk_size=2,
+    )
+    result = await client.get_weather_batch(
+        ["found", "no_data", "retired", "found"],
+        target_at=target_at,
+        known_at=known_at,
+    )
+
+    assert [call["feature_ids"] for call in calls] == [["found", "no_data"], ["retired"]]
+    assert all(call["target_at"] == target_at.isoformat() for call in calls)
+    assert all(call["known_at"] == known_at.isoformat() for call in calls)
+    assert all(header["x-kor-travel-map-service-token"] == "service-token" for header in headers)
+    assert all("x-kor-travel-map-api-key" not in header for header in headers)
+    assert isinstance(found := result["found"], FoundWeatherBatchItem)
+    assert found.current[0].as_dict() == {
+        "forecast_style": "short",
+        "metric_key": "TMP",
+        "metric_name": "기온",
+        "timeline_bucket": "forecast",
+        "value_number": 24.5,
+        "value_text": None,
+        "unit": "℃",
+        "severity": None,
+        "issued_at": datetime(2026, 7, 30, tzinfo=UTC),
+        "valid_at": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "valid_from": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "valid_until": datetime(2026, 7, 30, 4, tzinfo=UTC),
+        "observed_at": None,
+        "effective_at": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "provider": "python-kma-api",
+        "weather_domain": "forecast",
+    }
+    assert isinstance(result["no_data"], NoDataWeatherBatchItem)
+    assert isinstance(result["retired"], RetiredWeatherBatchItem)
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda data: data.update({"unexpected": True}),
+        lambda data: data.update({"timeline_until": "2026-08-01T00:00:00Z"}),
+        lambda data: data["items"][0].update({"unexpected": True}),
+        lambda data: data["items"][0]["current"][0].pop("metric_key"),
+        lambda data: data["items"][0]["current"][0].update({"value_number": True}),
+        lambda data: data["items"][0].update({"feature_id": "other"}),
+    ],
+    ids=[
+        "extra-data-field",
+        "wrong-timeline-horizon",
+        "extra-found-field",
+        "missing-required-metric-field",
+        "boolean-number",
+        "mismatched-order",
+    ],
+)
+async def test_get_weather_batch_rejects_field_and_partition_drift(
+    mutate: Callable[[dict[str, Any]], object],
+) -> None:
+    target_at = datetime(2026, 7, 30, tzinfo=UTC)
+    known_at = datetime(2026, 7, 29, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        data = {
+            "target_at": target_at.isoformat(),
+            "known_at": known_at.isoformat(),
+            "timeline_until": (target_at + timedelta(days=1)).isoformat(),
+            "items": [
+                {
+                    "state": "found",
+                    "feature_id": "found",
+                    "source_styles": ["short"],
+                    "current": [_weather_metric()],
+                    "timeline": [],
+                    "latest_at": None,
+                    "is_stale": False,
+                }
+            ],
+        }
+        mutate(data)
+        return httpx.Response(200, json={"data": data, "meta": {}})
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapContractError):
+        await client.get_weather_batch(
+            ["found"],
+            target_at=target_at,
+            known_at=known_at,
+        )
+    await client.aclose()
+
+
+async def test_get_weather_batch_rejects_naive_cutoffs_and_skips_empty_request() -> None:
+    client = _client(lambda request: httpx.Response(500))
+    assert await client.get_weather_batch(
+        [],
+        target_at=datetime(2026, 7, 30, tzinfo=UTC),
+        known_at=datetime(2026, 7, 29, tzinfo=UTC),
+    ) == {}
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.get_weather_batch(
+            ["f_1"],
+            target_at=datetime(2026, 7, 30),
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
     await client.aclose()
 
 

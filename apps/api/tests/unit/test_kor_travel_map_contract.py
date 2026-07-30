@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `c8060abf`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `6650aa71`(T-VN-16A weather batch 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -32,8 +32,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "a738cd5529e5a301d3176cffddad2d3824f23d48"
-_SNAPSHOT_SHA256 = "84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924"
+_UPSTREAM_COMMIT = "6650aa71dbe2d6f940789f91e562ac3eec4702a6"
+_SNAPSHOT_SHA256 = "87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -43,6 +43,7 @@ _CLIENT_PATHS = [
     "/v1/features/{feature_id}",
     "/v1/features/{feature_id}/weather",
     "/v1/features/batch",
+    "/v1/features/weather/batch",
     "/v1/categories",
     "/v1/public/beaches",
     "/v1/public/beaches/map-markers",
@@ -187,6 +188,18 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "forecast_style": {"type": "string", "required": True, "nullable": False},
         "timeline_bucket": {"type": "string", "required": False, "nullable": True},
         "valid_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
+        "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
         "issued_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "observed_at": {
             "type": "string",
@@ -194,10 +207,127 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "required": False,
             "nullable": True,
         },
+        "effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
+        "provider": {"type": "string", "required": False, "nullable": True},
+        "weather_domain": {"type": "string", "required": False, "nullable": True},
         "value_number": {"type": "number", "required": False, "nullable": True},
         "value_text": {"type": "string", "required": False, "nullable": True},
         "unit": {"type": "string", "required": False, "nullable": True},
         "severity": {"type": "string", "required": False, "nullable": True},
+    },
+    "WeatherBatchRequest": {
+        "feature_ids": {
+            "type": "array",
+            "items_type": "string",
+            "min_items": 1,
+            "max_items": 200,
+            "required": True,
+            "nullable": False,
+        },
+        "target_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+        "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "WeatherBatchData": {
+        "target_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+        "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+        "timeline_until": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+        "items": {
+            "type": "array",
+            "items_one_of_refs": {
+                "WeatherBatchFoundItem",
+                "WeatherBatchNoDataItem",
+                "WeatherBatchRetiredItem",
+            },
+            "items_discriminator": {
+                "found": "WeatherBatchFoundItem",
+                "no_data": "WeatherBatchNoDataItem",
+                "retired": "WeatherBatchRetiredItem",
+            },
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "WeatherBatchFoundItem": {
+        "state": {
+            "type": "string",
+            "const": "found",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "source_styles": {
+            "type": "array",
+            "items_type": "string",
+            "required": True,
+            "nullable": False,
+        },
+        "current": {
+            "type": "array",
+            "items_ref": "WeatherMetricOut",
+            "required": True,
+            "nullable": False,
+        },
+        "timeline": {
+            "type": "array",
+            "items_ref": "WeatherMetricOut",
+            "required": True,
+            "nullable": False,
+        },
+        "latest_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
+        "is_stale": {"type": "boolean", "required": True, "nullable": False},
+    },
+    "WeatherBatchNoDataItem": {
+        "state": {
+            "type": "string",
+            "const": "no_data",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+    },
+    "WeatherBatchRetiredItem": {
+        "state": {
+            "type": "string",
+            "const": "retired",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
     },
     "CategorySummary": {
         "code": {"type": "string", "required": True, "nullable": False},
@@ -558,6 +688,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/features/{feature_id}"): "FeatureDetailResponse",
     ("get", "/v1/features/{feature_id}/weather"): "WeatherCardData",
     ("post", "/v1/features/batch"): "FeatureBatchData",
+    ("post", "/v1/features/weather/batch"): "WeatherBatchData",
     ("get", "/v1/categories"): "CategoriesData",
     ("get", "/v1/public/beaches"): "PublicBeachListData",
     ("get", "/v1/public/beaches/map-markers"): "PublicMapMarkerLayerData",
@@ -641,7 +772,7 @@ def test_public_api_key_contract_is_header_only() -> None:
     security_problems = {
         path: operation.get("security")
         for path in _CLIENT_PATHS
-        if path != "/v1/features/batch"
+        if path not in {"/v1/features/batch", "/v1/features/weather/batch"}
         for method, operation in spec["paths"][path].items()
         if method in {"get", "post"}
         if operation.get("security") != _PUBLIC_API_KEY_SECURITY
@@ -650,7 +781,8 @@ def test_public_api_key_contract_is_header_only() -> None:
         f"public client 경로의 header security 계약이 다름: {security_problems}"
     )
 
-    assert spec["paths"]["/v1/features/batch"]["post"].get("security") == [{"ServiceToken": []}]
+    for path in ("/v1/features/batch", "/v1/features/weather/batch"):
+        assert spec["paths"][path]["post"].get("security") == [{"ServiceToken": []}]
 
 
 def test_mapped_response_fields_exist_in_snapshot() -> None:
@@ -912,11 +1044,24 @@ def test_feature_batch_request_binds_to_pinned_container() -> None:
     assert "FeatureBatchRequestItem" in _CONSUMED_FIELD_CONTRACTS
 
 
+def test_weather_batch_request_binds_to_pinned_container() -> None:
+    """weather batch body가 bitemporal request component에 결합되는지 고정한다."""
+    spec = _spec()
+    request_schema = spec["paths"]["/v1/features/weather/batch"]["post"]["requestBody"][
+        "content"
+    ]["application/json"]["schema"]
+    actual = str(request_schema.get("$ref", "")).rsplit("/", 1)[-1]
+    assert actual == "WeatherBatchRequest"
+    assert "WeatherBatchRequest" in _CONSUMED_FIELD_CONTRACTS
+
+
 def test_feature_batch_declares_service_unavailable_problem() -> None:
-    """DB/transport 장애는 원천 상태가 아니라 명시적 RFC7807 503이다."""
-    response = _spec()["paths"]["/v1/features/batch"]["post"]["responses"]["503"]
-    schema = response["content"]["application/problem+json"]["schema"]
-    assert schema["$ref"].rsplit("/", 1)[-1] == "ProblemDetail"
+    """batch DB/transport 장애는 원천 상태가 아니라 명시적 RFC7807 503이다."""
+    spec = _spec()
+    for path in ("/v1/features/batch", "/v1/features/weather/batch"):
+        response = spec["paths"][path]["post"]["responses"]["503"]
+        schema = response["content"]["application/problem+json"]["schema"]
+        assert schema["$ref"].rsplit("/", 1)[-1] == "ProblemDetail"
 
 
 def test_response_meta_binds_to_pinned_meta_schemas() -> None:
