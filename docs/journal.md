@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-30 (codex) — T-VN-16B weather batch 소비 cutover
+
+- Map T-VN-16A의 `POST /v1/features/weather/batch`를 strict transport로 소비한다.
+  요청 ID dedupe·200개 chunk, aware `target_at/known_at`, 정확한 1일 horizon,
+  응답 순서/ID와 `found|no_data|retired`, metric optional field 타입을 fail-closed한다.
+- 날씨를 POI 영구 속성으로 두지 않고 `TripViewDay.weather_by_feature_id`에 둔다. 같은
+  feature도 여행 날짜가 다르면 별도 snapshot이며, 같은 날짜의 중복 POI는 한 번만 조회한다.
+  한국 시각 자정을 target으로 보내 해당 날짜 timeline을 받고 view 전체는 한 `known_at`을 쓴다.
+- Web `TripWeatherSummary`의 effect 기반 단건 호출을 제거했다. 서버가 준
+  `found|no_data|retired|unavailable` union만 렌더하고 세 비정상 상태를 별도 한국어 안내로
+  표시한다. 상세/공유 API가 같은 server-side batch 경계를 사용한다.
+- Map OpenAPI 전체 파일을 main `6650aa71dbe2d6f940789f91e562ac3eec4702a6`,
+  SHA-256 `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`로
+  갱신하고 path→request/response→union arm→metric field 계약을 고정했다.
+- n150 중간 gate: client/contract/schema unit **95 passed, 1 skipped**, trip-view integration
+  **21 passed**, schemas 8, Web typecheck·pure UI 4건, 격리 mocked Playwright 1건.
+  첫 mocked 실행은 다른 branch의 기존 12805 서버를 재사용해 과거 `is_broken` 계약으로
+  실패했다. 해당 서버를 중단하지 않고 bridge network Docker runner로 실패 지점만 재실행해
+  통과했다.
+- 보존 `ktm-tvn45-db`는 head가 맞고 weather 실데이터 범위도 확인돼 그대로 재사용한다.
+  새 clone/checkpoint/dump와 Alembic downgrade는 만들지 않는다. 남은 gate는 실데이터
+  weather-only 503→복구 Live, 적대 리뷰 2인, 전체 gate·CI다.
+
 ## 2026-07-30 (codex) — T-VN-11-P typed consumer·revision cache·Live 완료
 
 - kor-travel-map 다섯 상태 batch를 frozen `trip_card`와 PostgreSQL `bigint` revision으로

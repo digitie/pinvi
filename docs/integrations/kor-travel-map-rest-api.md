@@ -28,11 +28,11 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-07-30(T-VN-11A/B) 기준 kor-travel-map
-> main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`**(5-state service batch, int64 상한,
-> DB 장애 503 포함)의
+> vendored 정본은 **2026-07-30(T-VN-16A/B) 기준 kor-travel-map
+> main commit `6650aa71dbe2d6f940789f91e562ac3eec4702a6`**(5-state service batch +
+> bitemporal weather batch, int64 상한, DB 장애 503 포함)의
 > 전체 파일이며 SHA-256은
-> `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`다.
+> `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`다.
 > (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
 > 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
@@ -272,13 +272,32 @@ detail(object), status, updated_at }`.
 - **200 `FeatureWeatherResponse`**: `data:WeatherCardData` =
   `{ feature_id, asof|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
   `WeatherMetricOut` = `{ metric_key, metric_name|null, forecast_style, timeline_bucket|null,
-valid_at|null, issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
+provider|null, weather_domain|null, valid_at|null, valid_from|null, valid_until|null, effective_at|null,
+issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
 - **소비처**: feature 상세 날씨, 텔레그램 brief.
 - **주의(셰입 대수술)**: kor_travel_map는 **평탄한 metric 목록 + forecast_style 태그**를 준다.
   Pinvi 현재 schema는 `{short_term[], daily[], sources[]}`, features.md는
   `{nowcast, ultra_short, short, mid, advisories}`. → Pinvi가 `forecast_style`
   (nowcast/ultra_short/short/mid/observed/index/advisory)별로 metric을 **그룹핑해 카드 구성**
   (변환은 Pinvi 표현 계층, KMA provider 변환 직접 작성 아님 — 금지룰 준수)(§6-D).
+
+### 2.6a `POST /v1/features/weather/batch` — 여행 일자 날씨
+
+- **인증**: `ServiceToken` 전용. 브라우저가 Map 자격을 가지지 않고 PinVi API만 호출한다.
+- **요청**: `{ feature_ids:[1..200 unique], target_at, known_at }`. 두 시각은 UTC offset이
+  필수다. PinVi는 여행 `effective_date`의 한국 시각 자정을 `target_at`으로, 한 Trip view를
+  만드는 시각을 단일 `known_at`으로 보낸다.
+- **200**: `data:{ target_at, known_at, timeline_until, items }`. item은 요청 순서대로
+  `found|no_data|retired` discriminated union이다. `found`는
+  `{ source_styles, current:[WeatherMetricOut], timeline:[WeatherMetricOut], latest_at, is_stale }`,
+  나머지 두 arm은 `{state, feature_id}`다.
+- **PinVi 투영**: `TripViewDay.weather_by_feature_id`에
+  `found(card)|no_data|retired|unavailable`을 저장한다. 같은 날짜의 중복 feature는 한 번만
+  요청하고, 200개를 넘으면 producer cap으로 chunk한다. transport·인증·계약 실패는 parent
+  상태로 추측하지 않고 `unavailable`로 둔다.
+- **UI**: `TripWeatherSummary`는 Trip view만 렌더하며 단건
+  `GET /features/{feature_id}/weather`를 호출하지 않는다. `no_data`, retired parent,
+  transport 실패 안내를 서로 다르게 표시한다.
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
 

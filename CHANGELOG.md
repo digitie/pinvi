@@ -51,7 +51,10 @@
   feature는 중복 표시하지 않고, feature marker 팝업에서 선택 일자에 추가할 수 있다. feature가 없는
   지도 지점은 PC 우클릭 또는 모바일 long-touch로 POI 생성 다이얼로그를 열고, `/geo/reverse` 주소를
   보여준 뒤 `feature_snapshot.address_label/address/region`에 저장한다.
-- 여행 상세 Day Plan의 날씨 조회가 `kor-travel-map` weather API의 `asof` 기준 조회를 사용한다.
+- 여행 상세 Day Plan의 POI별 단건 날씨 요청을 제거하고, 같은 여행 날짜의 feature를 최대
+  200개씩 `kor-travel-map` bitemporal weather batch로 조회한다. 공개 parent지만 날씨가 없는
+  상태, 종료된 parent, transport 실패를 각각 다른 안내로 표시하며 같은 Trip view 안에서는
+  단일 `known_at` snapshot을 사용한다.
   화면에서는 중복된 레이어/일정 문구와 빈 장소 안내 문구를 제거하고, 일자 이름 변경은 별도 팝업에서
   처리한다. 모바일 상세 상단의 겹침을 줄이고, 여행 기간이 잘못된 상태에서는 일자를 추가하지 못하게
   검증한다. 모바일 드로워 상단에는 `일자 추가`를 `편집`/복사/삭제 액션 옆으로 올리고, 일자별
