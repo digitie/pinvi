@@ -143,6 +143,7 @@ export function TripWeatherSummary({
       suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
       missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
       unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
+      not_requested: '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
     }[weather.state];
     return (
       <section

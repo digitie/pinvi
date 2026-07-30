@@ -262,13 +262,18 @@ class FeatureWeatherUnavailable(BaseModel):
     state: Literal["unavailable"] = "unavailable"
 
 
+class FeatureWeatherNotRequested(BaseModel):
+    state: Literal["not_requested"] = "not_requested"
+
+
 FeatureWeatherResolution = Annotated[
     FeatureWeatherFound
     | FeatureWeatherNoData
     | FeatureWeatherRetired
     | FeatureWeatherSuppressed
     | FeatureWeatherMissing
-    | FeatureWeatherUnavailable,
+    | FeatureWeatherUnavailable
+    | FeatureWeatherNotRequested,
     Field(discriminator="state"),
 ]
 

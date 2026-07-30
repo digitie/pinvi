@@ -475,9 +475,9 @@ async def test_build_trip_view_bounds_weather_date_fanout(
         "found",
         "found",
         "found",
-        "unavailable",
-        "unavailable",
-        "unavailable",
+        "not_requested",
+        "not_requested",
+        "not_requested",
     ]
 
 
@@ -501,6 +501,31 @@ async def test_build_trip_view_enforces_total_weather_budget(
     assert {day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]} == {
         "unavailable"
     }
+
+
+async def test_build_trip_view_cancels_weather_workers_with_parent_request(
+    session_factory,  # type: ignore[no-untyped-def]
+) -> None:
+    client = _WeatherFeatureClient(weather_delay_seconds=60.0)
+    task = asyncio.create_task(
+        _build_weather_date_view(
+            session_factory,
+            effective_dates=[date(2026, 10, day) for day in range(1, 7)],
+            client=client,
+        )
+    )
+    for _ in range(100):
+        if client.active_weather_calls == 4:
+            break
+        await asyncio.sleep(0.01)
+    assert client.active_weather_calls == 4
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert client.active_weather_calls == 0
+    assert len(client.weather_calls) == 4
 
 
 async def test_build_trip_view_degrades_unrepresentable_weather_horizon(

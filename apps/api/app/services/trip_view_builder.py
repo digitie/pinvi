@@ -316,12 +316,17 @@ async def build_trip_view(
         assert weather_client is not None
         weather_dates = sorted(pending_weather)
         bounded_dates = weather_dates[:_WEATHER_BATCH_MAX_DATES_PER_VIEW]
-        if len(weather_dates) > len(bounded_dates):
+        not_requested_dates = weather_dates[len(bounded_dates) :]
+        if not_requested_dates:
             logger.warning(
-                "Trip weather 날짜 %d개 중 view budget 상한 %d개만 조회",
+                "Trip weather 날짜 %d개 중 요청 상한 %d개만 조회",
                 len(weather_dates),
                 _WEATHER_BATCH_MAX_DATES_PER_VIEW,
             )
+            for effective_date in not_requested_dates:
+                for feature_id, day_indexes in pending_weather[effective_date].items():
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = {"state": "not_requested"}
         weather_date_iterator = iter(bounded_dates)
         weather_service_failed = asyncio.Event()
 
@@ -358,23 +363,29 @@ async def build_trip_view(
             asyncio.create_task(fetch_weather_dates())
             for _ in range(min(_WEATHER_BATCH_MAX_CONCURRENCY, len(bounded_dates)))
         ]
-        done, unfinished = await asyncio.wait(
-            workers,
-            timeout=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
-        )
-        if unfinished:
-            weather_service_failed.set()
-            logger.error(
-                "Trip weather view budget %.1f초 초과 — 미결 일자 unavailable 처리",
-                _WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+        try:
+            done, unfinished = await asyncio.wait(
+                workers,
+                timeout=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
             )
-        for worker in unfinished:
-            worker.cancel()
-        await asyncio.gather(*unfinished, return_exceptions=True)
-        for worker in done:
-            worker.result()
+            if unfinished:
+                weather_service_failed.set()
+                logger.error(
+                    "Trip weather view budget %.1f초 초과 — 미결 일자 unavailable 처리",
+                    _WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+                )
+            for worker in unfinished:
+                worker.cancel()
+            await asyncio.gather(*unfinished, return_exceptions=True)
+            for worker in done:
+                worker.result()
+        finally:
+            for worker in workers:
+                if not worker.done():
+                    worker.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
 
-        for effective_date in weather_dates:
+        for effective_date in bounded_dates:
             slots = pending_weather[effective_date]
             for feature_id, day_indexes in slots.items():
                 for day_index in day_indexes:

@@ -292,12 +292,16 @@ issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null,
   `{ source_styles, current:[WeatherMetricOut], timeline:[WeatherMetricOut], latest_at, is_stale }`,
   나머지 두 arm은 `{state, feature_id}`다.
 - **PinVi 투영**: `TripViewDay.weather_by_feature_id`에
-  `found(card)|no_data|retired|unavailable`을 저장한다. 같은 날짜의 중복 feature는 한 번만
-  요청하고, 200개를 넘으면 producer cap으로 chunk한다. transport·인증·계약 실패는 parent
-  상태로 추측하지 않고 `unavailable`로 둔다.
+  `found(card)|no_data|retired|suppressed|missing|unavailable|not_requested`를 저장한다.
+  `suppressed|missing`은 선행 feature batch의 parent 상태를 보존하며 weather 요청에 넣지 않는다.
+  같은 날짜의 중복 feature는 한 번만 요청하고, 200개를 넘으면 producer cap으로 chunk한다.
+  한 view는 고유 날짜 최대 31개, 동시 worker 4개, 전체 10초로 제한한다. transport·인증·계약
+  실패와 시간 budget 미결은 parent 상태로 추측하지 않고 `unavailable`, 31개를 넘겨 의도적으로
+  조회하지 않은 날짜는 `not_requested`로 둔다. 부모 요청이 취소되면 진행 중 worker도 함께
+  cancel/gather한다.
 - **UI**: `TripWeatherSummary`는 Trip view만 렌더하며 단건
-  `GET /features/{feature_id}/weather`를 호출하지 않는다. `no_data`, retired parent,
-  transport 실패 안내를 서로 다르게 표시한다.
+  `GET /features/{feature_id}/weather`를 호출하지 않는다. weather 없음, parent lifecycle,
+  transport 실패, 날짜 상한 미조회 안내를 서로 다르게 표시한다.
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
 

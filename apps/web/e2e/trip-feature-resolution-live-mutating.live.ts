@@ -54,7 +54,16 @@ type TripView = {
     pois: TripViewPoi[];
     weather_by_feature_id: Record<
       string,
-      { state: 'found' | 'no_data' | 'retired' | 'suppressed' | 'missing' | 'unavailable' }
+      {
+        state:
+          | 'found'
+          | 'no_data'
+          | 'retired'
+          | 'suppressed'
+          | 'missing'
+          | 'unavailable'
+          | 'not_requested';
+      }
     >;
   }>;
   broken_feature_count: number;
