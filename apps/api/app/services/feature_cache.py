@@ -103,8 +103,11 @@ class FeatureCache:
                     and current.feature.row_revision > feature.row_revision
                 ):
                     continue
+                # refresh generation이 일치하면 현재 authoritative snapshot이다. 이전 요청은
+                # latest_refresh 비교에서 이미 차단되므로 negative fence는 무순서 write만 막는다.
                 if (
                     current.revision_fence is not None
+                    and refresh is None
                     and current.revision_fence >= feature.row_revision
                 ):
                     continue

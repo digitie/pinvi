@@ -82,6 +82,32 @@ def test_terminal_revision_fence_blocks_late_found_and_allows_newer_revision() -
     assert cache.get_many(["a"]) == ({"a": recovered}, {}, [])
 
 
+def test_new_refresh_recovers_same_revision_after_terminal_state() -> None:
+    cache = FeatureCache(ttl_seconds=100.0, max_size=10)
+    terminal_refresh = cache.begin_refresh(["a"])
+    cache.invalidate_many({"a": 2}, refresh=terminal_refresh)
+
+    recovered_refresh = cache.begin_refresh(["a"])
+    recovered = CachedFeature(trip_card={"feature_id": "a"}, row_revision=2)
+    cache.put_many({"a": recovered}, refresh=recovered_refresh)
+
+    assert cache.get_many(["a"]) == ({"a": recovered}, {}, [])
+
+
+def test_new_refresh_recovers_lower_revision_after_missing_recreation() -> None:
+    cache = FeatureCache(ttl_seconds=100.0, max_size=10)
+    terminal_refresh = cache.begin_refresh(["a"])
+    cache.invalidate_many({"a": 3}, refresh=terminal_refresh)
+    missing_refresh = cache.begin_refresh(["a"])
+    cache.invalidate_many({"a": None}, refresh=missing_refresh)
+
+    recovered_refresh = cache.begin_refresh(["a"])
+    recovered = CachedFeature(trip_card={"feature_id": "a"}, row_revision=1)
+    cache.put_many({"a": recovered}, refresh=recovered_refresh)
+
+    assert cache.get_many(["a"]) == ({"a": recovered}, {}, [])
+
+
 def test_missing_refresh_blocks_older_in_flight_found_without_revision() -> None:
     cache = FeatureCache(ttl_seconds=100.0, max_size=10)
     old_refresh = cache.begin_refresh(["a"])

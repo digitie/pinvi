@@ -10,8 +10,10 @@ consumer로 전환했다. `KorTravelMapClient`는 `1..200` 설정을 fail-fast�
 만료 snapshot을 `unverified`로 재사용하며, Web·Map·Mobile은 공용 resolver를 쓴다.
 
 적대 리뷰에서 복원 snapshot의 flat `lon/lat` 때문에 지도 포인트가 전부 사라지는 결함,
-out-of-order cache rollback, 200개 초과 chunk 설정, stale API 문서를 찾았다. snapshot을
-canonical `coord`로 고치고 상태 전이·설정 경계 회귀를 추가했다. vendored Map OpenAPI는
+out-of-order cache rollback, 동일 revision의 비공개→공개 복구를 막는 negative fence,
+200개 초과 chunk 설정, stale API 문서를 찾았다. snapshot을 canonical `coord`로 고치고,
+최신 refresh의 동일 revision·missing 뒤 낮은 revision 재생성을 허용하는 상태 전이와 설정
+경계 회귀를 추가했다. vendored Map OpenAPI는
 생산자 `d5ac84033c72879757f1a0c609966b7970e0bf94`,
 SHA-256 `3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a`에
 고정했다.

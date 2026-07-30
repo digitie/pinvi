@@ -14,6 +14,10 @@
   `coord: {lon, lat}`를 방출한다. Web·Map·Mobile 상태 문구는 한 domain resolver로 통합했다.
 - 독립 적대 리뷰에서 flat 좌표로 인한 복원 마커 소실, out-of-order cache rollback,
   chunk 상한과 trips API 문서 drift를 찾아 모두 회귀와 함께 수정했다.
+- 최종 재리뷰는 Map 공개 가시성 변화가 base revision을 올리지 않아도 되는데 negative
+  fence가 같은 revision의 authoritative `found`를 영구 차단하는 문제를 재현했다. 최신 refresh
+  generation은 동일 revision과 missing 뒤 낮은 revision 재생성을 허용하고, 이전 generation과
+  무순서 write만 fence로 막도록 고정했다.
 - n150 재사용 `ktm-tvn45-db`의 실데이터로 다섯 원천 상태와 강제 503·회복을 검증했다.
   첫 재실행은 접근성 snapshot의 합쳐진 문구를 한 DOM element로 오인한 locator만 실패했다.
   실제 sibling 경계인 `1일 표시`와 `장소 4곳`으로 나눠 실패 지점부터 재실행해 **1 passed**다.
