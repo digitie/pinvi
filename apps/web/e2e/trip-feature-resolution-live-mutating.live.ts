@@ -9,6 +9,10 @@ const livePassword = process.env.PINVI_LIVE_PASSWORD;
 const mapProxyPort = Number(process.env.PINVI_LIVE_MAP_PROXY_PORT ?? '13701');
 const mapUpstreamPort = Number(process.env.PINVI_LIVE_MAP_UPSTREAM_PORT ?? '12701');
 const testPrefix = process.env.PINVI_LIVE_TRIP_PREFIX;
+const foundFeatureId = process.env.PINVI_LIVE_FOUND_FEATURE_ID;
+const foundFeatureName = process.env.PINVI_LIVE_FOUND_FEATURE_NAME;
+const foundFeatureLon = Number(process.env.PINVI_LIVE_FOUND_FEATURE_LON);
+const foundFeatureLat = Number(process.env.PINVI_LIVE_FOUND_FEATURE_LAT);
 const retiredFeatureId = process.env.PINVI_LIVE_RETIRED_FEATURE_ID;
 const suppressedFeatureId = process.env.PINVI_LIVE_SUPPRESSED_FEATURE_ID;
 const missingFeatureId = process.env.PINVI_LIVE_MISSING_FEATURE_ID;
@@ -82,6 +86,10 @@ function assertLiveEnv() {
     ['PINVI_LIVE_EMAIL', liveEmail],
     ['PINVI_LIVE_PASSWORD', livePassword],
     ['PINVI_LIVE_TRIP_PREFIX', testPrefix],
+    ['PINVI_LIVE_FOUND_FEATURE_ID', foundFeatureId],
+    ['PINVI_LIVE_FOUND_FEATURE_NAME', foundFeatureName],
+    ['PINVI_LIVE_FOUND_FEATURE_LON', process.env.PINVI_LIVE_FOUND_FEATURE_LON],
+    ['PINVI_LIVE_FOUND_FEATURE_LAT', process.env.PINVI_LIVE_FOUND_FEATURE_LAT],
     ['PINVI_LIVE_RETIRED_FEATURE_ID', retiredFeatureId],
     ['PINVI_LIVE_SUPPRESSED_FEATURE_ID', suppressedFeatureId],
     ['PINVI_LIVE_MISSING_FEATURE_ID', missingFeatureId],
@@ -94,6 +102,9 @@ function assertLiveEnv() {
       '격리 API를 짧은 TTL의 feature cache로 기동하고 PINVI_LIVE_FEATURE_CACHE_REVALIDATION=1을 설정해야 합니다.',
     );
   }
+  if (!Number.isFinite(foundFeatureLon) || !Number.isFinite(foundFeatureLat)) {
+    throw new Error('found feature 경도·위도는 유한한 실수여야 합니다.');
+  }
   if (
     !Number.isInteger(mapProxyPort) ||
     !Number.isInteger(mapUpstreamPort) ||
@@ -102,8 +113,10 @@ function assertLiveEnv() {
   ) {
     throw new Error('map proxy/upstream port와 cache wait는 양의 정수여야 합니다.');
   }
-  if (new Set([retiredFeatureId, suppressedFeatureId, missingFeatureId]).size !== 3) {
-    throw new Error('retired/suppressed/missing feature ID는 서로 달라야 합니다.');
+  if (
+    new Set([foundFeatureId, retiredFeatureId, suppressedFeatureId, missingFeatureId]).size !== 4
+  ) {
+    throw new Error('found/retired/suppressed/missing feature ID는 서로 달라야 합니다.');
   }
 }
 
@@ -165,26 +178,6 @@ async function readTrip(page: Page, tripId: string): Promise<TripView> {
 
 function poisByFeatureId(view: TripView) {
   return new Map(view.days.flatMap((day) => day.pois).map((poi) => [poi.feature_id, poi]));
-}
-
-async function findRealFeature(page: Page): Promise<FeatureSummary> {
-  const response = await browserApiRequest(
-    page,
-    'GET',
-    '/features/nearby?lon=126.978&lat=37.5665&radius_m=1000&limit=50',
-  );
-  expect(response.ok, response.body).toBe(true);
-  const items = responseData<FeatureSummary[]>(response);
-  const feature = items.find(
-    (item) =>
-      typeof item.feature_id === 'string' &&
-      item.feature_id.length > 0 &&
-      typeof item.name === 'string' &&
-      item.name.length > 0 &&
-      item.coord !== null,
-  );
-  if (!feature) throw new Error('서울 반경 실데이터에서 좌표가 있는 feature를 찾지 못했습니다.');
-  return feature;
 }
 
 async function addFeaturePoi(
@@ -328,7 +321,11 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await login(page);
       const created = await createTrip(page, title);
       tripId = created.tripId;
-      const realFeature = await findRealFeature(page);
+      const realFeature: FeatureSummary = {
+        feature_id: foundFeatureId!,
+        name: foundFeatureName!,
+        coord: { lon: foundFeatureLon, lat: foundFeatureLat },
+      };
 
       await addFeaturePoi(page, tripId, realFeature, realFeature.feature_id, 'a0');
       await addFeaturePoi(
@@ -360,11 +357,6 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
       await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
       await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
-      await page
-        .getByTestId('trip-poi-list')
-        .getByRole('button', { name: /suppressed 실데이터 저장본/ })
-        .click();
-      await expect(page.getByText('비공개 장소 정보', { exact: true })).toBeVisible();
       await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
 
       const healthy = await readTrip(page, tripId);
@@ -411,14 +403,6 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
       await expect(page.getByText(realFeature.name).first()).toBeVisible();
       await expect(page.getByText(/정보 사용 불가 [0-9]+곳/)).toHaveCount(0);
-      await page
-        .getByTestId('trip-poi-list')
-        .getByRole('button', { name: realFeature.name })
-        .first()
-        .click();
-      await expect(
-        page.getByText('저장된 정보 · 최신 상태 확인 실패', { exact: true }),
-      ).toBeVisible();
       expect(proxy.batchRequests.length).toBeGreaterThan(revalidatedBatchCount);
       const outageBatchCount = proxy.batchRequests.length;
       const outage = await readTrip(page, tripId);

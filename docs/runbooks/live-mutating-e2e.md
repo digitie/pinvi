@@ -19,8 +19,9 @@ Windows runner를 fallback으로 사용한다.
   보이는지 확인한다.
 - 종료 시 생성한 Trip은 사용자 API `DELETE /trips/{trip_id}` `soft_delete`로 활성 데이터에서
   제거한다. DB row와 POI는 retention 정책 대상이며 즉시 hard-delete하지 않는다.
-- Feature resolution suite는 실 Map feature와 opaque ID POI를 생성해 `found|missing`, proxy 강제 503의
-  `unverified`, 복구를 owner 목록·지도 popup·집계에서 확인한다. 격리 API는 feature cache를 반드시 끈다.
+- Feature resolution suite는 실 Map DB의 `found|retired|suppressed|missing` fixture를 Trip POI로
+  연결하고, 만료 cache의 `row_revision` 재검증(`unchanged`), proxy 강제 503의 `unverified`, 복구를
+  owner 목록·API 상태·집계에서 확인한다. 격리 API는 짧은 TTL의 feature cache를 반드시 켠다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
@@ -90,18 +91,31 @@ npm run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=
 ### Feature resolution 단건
 
 동시 실행이 다른 run을 정리하지 않도록 `PINVI_LIVE_TRIP_PREFIX`는 run마다 고유해야 한다. 격리 API는
-`PINVI_FEATURE_CACHE_ENABLED=false`로 기동하고, 테스트 프로세스에는 확인 sentinel을 전달한다. 테스트는
-batch 요청 횟수와 상태 전환을 함께 검증하므로 cache가 켜졌거나 proxy를 우회하면 실패한다.
+feature cache를 켜고 TTL을 짧게 설정한다. Map DB에서 확인한 서로 다른
+`found|retired|suppressed|missing` ID와 `found` projection의 이름·좌표를 테스트 프로세스에
+전달한다. 격리 API에는 Map API와 같은 service token을 설정한다. 테스트는 batch validator와
+`unchanged` 응답을 함께 검증하므로 cache가 꺼졌거나 proxy를 우회하거나 service token이 다르면
+실패한다.
 
 ```bash
 # 격리 API container/server 환경
-export PINVI_FEATURE_CACHE_ENABLED=false
+export PINVI_FEATURE_CACHE_ENABLED=true
+export PINVI_FEATURE_CACHE_TTL_SECONDS=0.1
 export PINVI_KOR_TRAVEL_MAP_API_BASE_URL=http://127.0.0.1:13701
+export PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN="<same-token-as-isolated-map-api>"
 
 # Playwright 환경
 PINVI_LIVE_FEATURE_RESOLUTION_E2E=1 \
-PINVI_LIVE_FEATURE_CACHE_DISABLED=1 \
-PINVI_LIVE_TRIP_PREFIX="[codex-tvn08-<unique-run-id>]" \
+PINVI_LIVE_FEATURE_CACHE_REVALIDATION=1 \
+PINVI_LIVE_FEATURE_CACHE_WAIT_MS=250 \
+PINVI_LIVE_FOUND_FEATURE_ID="<fixture-found-id>" \
+PINVI_LIVE_FOUND_FEATURE_NAME="<fixture-found-name>" \
+PINVI_LIVE_FOUND_FEATURE_LON="<fixture-found-lon>" \
+PINVI_LIVE_FOUND_FEATURE_LAT="<fixture-found-lat>" \
+PINVI_LIVE_RETIRED_FEATURE_ID="<fixture-retired-id>" \
+PINVI_LIVE_SUPPRESSED_FEATURE_ID="<fixture-suppressed-id>" \
+PINVI_LIVE_MISSING_FEATURE_ID="<fixture-missing-id>" \
+PINVI_LIVE_TRIP_PREFIX="[codex-tvn11-<unique-run-id>]" \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
 PINVI_LIVE_API_URL=http://127.0.0.1:13801 \
 PINVI_LIVE_MAP_PROXY_PORT=13701 \
@@ -112,7 +126,9 @@ npm run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts 
 ```
 
 격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 실패 시 현재 run이 출력한
-고유 prefix로 활성 Trip만 수동 soft-delete하며, 다른 prefix의 Trip을 일괄 삭제하지 않는다.
+고유 prefix로 활성 Trip만 수동 soft-delete하며, 다른 prefix의 Trip을 일괄 삭제하지 않는다. VWorld
+key가 없는 fallback 환경에서는 지도 popup이 마운트되지 않으므로 상태 문구는 owner 목록의 접근성
+label로 검증하고 지도 좌표·marker 상태는 숨김 legend와 API 상태 검증으로 보완한다.
 
 Backup staging:
 
