@@ -1047,9 +1047,9 @@ def test_feature_batch_request_binds_to_pinned_container() -> None:
 def test_weather_batch_request_binds_to_pinned_container() -> None:
     """weather batch body가 bitemporal request component에 결합되는지 고정한다."""
     spec = _spec()
-    request_schema = spec["paths"]["/v1/features/weather/batch"]["post"]["requestBody"][
-        "content"
-    ]["application/json"]["schema"]
+    request_schema = spec["paths"]["/v1/features/weather/batch"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
     actual = str(request_schema.get("$ref", "")).rsplit("/", 1)[-1]
     assert actual == "WeatherBatchRequest"
     assert "WeatherBatchRequest" in _CONSUMED_FIELD_CONTRACTS

@@ -67,9 +67,7 @@ def _weather_resolution(
                 "latest_at": item.latest_at,
                 "is_stale": item.is_stale,
                 "source_styles": list(item.source_styles),
-                "metrics": [
-                    metric.as_dict() for metric in (*item.current, *item.timeline)
-                ],
+                "metrics": [metric.as_dict() for metric in (*item.current, *item.timeline)],
             },
         }
     if isinstance(item, NoDataWeatherBatchItem):
@@ -235,7 +233,7 @@ async def build_trip_view(
         if refresh_ids:
             refresh = feature_cache.begin_refresh(refresh_ids) if use_cache else None
             try:
-                batch = await kor_travel_map_client.get_features(
+                feature_batch = await kor_travel_map_client.get_features(
                     refresh_ids,
                     known_row_revisions={
                         feature_id: stale_cache[feature_id].row_revision
@@ -246,7 +244,7 @@ async def build_trip_view(
                 cache_updates: dict[str, CachedFeature] = {}
                 invalidated: dict[str, int | None] = {}
                 for feature_id in refresh_ids:
-                    item = batch[feature_id]
+                    item = feature_batch[feature_id]
                     if isinstance(item, FoundFeatureBatchItem):
                         snapshot = item.trip_card.as_snapshot()
                         resolved_features[feature_id] = snapshot
@@ -290,9 +288,7 @@ async def build_trip_view(
 
     # weather는 POI의 영구 속성이 아니라 일자별 feature snapshot이다. 같은 날짜에 같은
     # feature가 여러 번 등장해도 한 번만 요청하고, 동일 날짜의 여러 day에도 결과를 공유한다.
-    weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
-        day.day_index: {} for day in days
-    }
+    weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {day.day_index: {} for day in days}
     pending_weather: dict[date, dict[str, list[int]]] = {}
     for poi in pois:
         feature_id = poi.feature_id
@@ -313,35 +309,36 @@ async def build_trip_view(
     weather_service_failed = False
     known_at = datetime.now(UTC)
     if pending_weather:
-        assert kor_travel_map_client is not None
-    for effective_date in sorted(pending_weather):
-        slots = pending_weather[effective_date]
-        if weather_service_failed:
+        weather_client = kor_travel_map_client
+        assert weather_client is not None
+        for effective_date in sorted(pending_weather):
+            slots = pending_weather[effective_date]
+            if weather_service_failed:
+                for feature_id, day_indexes in slots.items():
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
+                continue
+            target_at = _weather_target_at(effective_date)
+            try:
+                weather_batch = await weather_client.get_weather_batch(
+                    list(slots),
+                    target_at=target_at,
+                    known_at=known_at,
+                )
+            except KorTravelMapError as exc:
+                weather_service_failed = True
+                logger.error(
+                    "get_weather_batch 실패: %s — 남은 일자 weather를 unavailable 처리",
+                    exc,
+                )
+                for feature_id, day_indexes in slots.items():
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
+                continue
             for feature_id, day_indexes in slots.items():
+                resolution = _weather_resolution(weather_batch[feature_id], target_at=target_at)
                 for day_index in day_indexes:
-                    weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
-            continue
-        target_at = _weather_target_at(effective_date)
-        try:
-            batch = await kor_travel_map_client.get_weather_batch(
-                list(slots),
-                target_at=target_at,
-                known_at=known_at,
-            )
-        except KorTravelMapError as exc:
-            weather_service_failed = True
-            logger.error(
-                "get_weather_batch 실패: %s — 남은 일자 weather를 unavailable 처리",
-                exc,
-            )
-            for feature_id, day_indexes in slots.items():
-                for day_index in day_indexes:
-                    weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
-            continue
-        for feature_id, day_indexes in slots.items():
-            resolution = _weather_resolution(batch[feature_id], target_at=target_at)
-            for day_index in day_indexes:
-                weather_by_day_index[day_index][feature_id] = resolution
+                    weather_by_day_index[day_index][feature_id] = resolution
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}

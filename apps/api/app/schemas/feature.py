@@ -255,10 +255,7 @@ class FeatureWeatherUnavailable(BaseModel):
 
 
 FeatureWeatherResolution = Annotated[
-    FeatureWeatherFound
-    | FeatureWeatherNoData
-    | FeatureWeatherRetired
-    | FeatureWeatherUnavailable,
+    FeatureWeatherFound | FeatureWeatherNoData | FeatureWeatherRetired | FeatureWeatherUnavailable,
     Field(discriminator="state"),
 ]
 

@@ -613,11 +613,14 @@ async def test_get_weather_batch_rejects_field_and_partition_drift(
 
 async def test_get_weather_batch_rejects_naive_cutoffs_and_skips_empty_request() -> None:
     client = _client(lambda request: httpx.Response(500))
-    assert await client.get_weather_batch(
-        [],
-        target_at=datetime(2026, 7, 30, tzinfo=UTC),
-        known_at=datetime(2026, 7, 29, tzinfo=UTC),
-    ) == {}
+    assert (
+        await client.get_weather_batch(
+            [],
+            target_at=datetime(2026, 7, 30, tzinfo=UTC),
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+        == {}
+    )
     with pytest.raises(ValueError, match="UTC offset"):
         await client.get_weather_batch(
             ["f_1"],

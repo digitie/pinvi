@@ -363,9 +363,10 @@ async def test_build_trip_view_stops_weather_retries_after_transport_failure(
         view = await build_trip_view(db, trip=trip, kor_travel_map_client=client)
 
     assert len(client.weather_calls) == 1
-    assert [
-        day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]
-    ] == ["unavailable", "unavailable"]
+    assert [day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]] == [
+        "unavailable",
+        "unavailable",
+    ]
     feature_cache.clear()
 
 
