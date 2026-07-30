@@ -145,6 +145,7 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
     assert built_poi["feature_id"] == "place:abc123@raw"
     assert built_poi["feature_resolution_state"] == "found"
     assert built_poi["title"] == "최신 경복궁"
+    assert built_poi["feature"]["coord"] == {"lon": 126.977, "lat": 37.579}
     assert built_poi["rise_set"]["status"] == "success"
     assert built_poi["rise_set"]["locdate"] == date(2026, 5, 6)
     assert built_poi["rise_set"]["sunrise_at"] == datetime(2026, 5, 6, 5, 30, tzinfo=UTC)

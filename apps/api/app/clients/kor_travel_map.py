@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 _PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
+_POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
 
 
 class KorTravelMapError(Exception):
@@ -141,8 +142,11 @@ class FeatureTripCard:
             "kind": self.kind,
             "name": self.name,
             "category": self.category,
-            "lon": self.lon,
-            "lat": self.lat,
+            "coord": (
+                {"lon": self.lon, "lat": self.lat}
+                if self.lon is not None and self.lat is not None
+                else None
+            ),
             "address": dict(self.address),
             "marker_icon": self.marker_icon,
             "marker_color": self.marker_color,
@@ -257,8 +261,14 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
     if state not in {"found", "retired", "suppressed", "unchanged"}:
         raise KorTravelMapContractError(f"알 수 없는 feature batch state입니다: {state!r}")
     row_revision = raw.get("row_revision")
-    if isinstance(row_revision, bool) or not isinstance(row_revision, int) or row_revision < 1:
-        raise KorTravelMapContractError("feature batch row_revision이 양의 정수가 아닙니다.")
+    if (
+        isinstance(row_revision, bool)
+        or not isinstance(row_revision, int)
+        or not 1 <= row_revision <= _POSTGRES_BIGINT_MAX
+    ):
+        raise KorTravelMapContractError(
+            "feature batch row_revision이 PostgreSQL bigint 범위의 양의 정수가 아닙니다."
+        )
     if state == "found":
         if set(raw) != {"state", "feature_id", "row_revision", "trip_card"}:
             raise KorTravelMapContractError("feature batch found item 셰입이 올바르지 않습니다.")
@@ -293,7 +303,9 @@ class KorTravelMapClient:
         self._service_token = service_token.strip()
         self._public_api_key = public_api_key.strip()
         self._max_attempts = max(1, max_attempts)
-        self._batch_chunk_size = max(1, batch_chunk_size)
+        if not 1 <= batch_chunk_size <= 200:
+            raise ValueError("batch_chunk_size는 producer cap 범위(1..200)여야 합니다.")
+        self._batch_chunk_size = batch_chunk_size
         self._backoff_base_seconds = backoff_base_seconds
 
     async def aclose(self) -> None:
@@ -464,10 +476,14 @@ class KorTravelMapClient:
         unique = list(dict.fromkeys(feature_ids))
         revisions = dict(known_row_revisions or {})
         if not set(revisions) <= set(unique) or any(
-            isinstance(revision, bool) or not isinstance(revision, int) or revision < 1
+            isinstance(revision, bool)
+            or not isinstance(revision, int)
+            or not 1 <= revision <= _POSTGRES_BIGINT_MAX
             for revision in revisions.values()
         ):
-            raise ValueError("known_row_revisions는 요청 ID의 양의 정수 revision이어야 합니다.")
+            raise ValueError(
+                "known_row_revisions는 요청 ID의 PostgreSQL bigint 범위 양의 정수여야 합니다."
+            )
         decoded: dict[str, FeatureBatchItem] = {}
         for start in range(0, len(unique), self._batch_chunk_size):
             chunk = unique[start : start + self._batch_chunk_size]

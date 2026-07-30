@@ -195,6 +195,7 @@ async def build_trip_view(
             if feature_id in stale_cache or feature_id in missing_ids
         ]
         if refresh_ids:
+            refresh = feature_cache.begin_refresh(refresh_ids) if use_cache else None
             try:
                 batch = await kor_travel_map_client.get_features(
                     refresh_ids,
@@ -205,7 +206,7 @@ async def build_trip_view(
                     },
                 )
                 cache_updates: dict[str, CachedFeature] = {}
-                invalidated: list[str] = []
+                invalidated: dict[str, int | None] = {}
                 for feature_id in refresh_ids:
                     item = batch[feature_id]
                     if isinstance(item, FoundFeatureBatchItem):
@@ -223,18 +224,23 @@ async def build_trip_view(
                         cache_updates[feature_id] = cached
                     elif isinstance(item, RetiredFeatureBatchItem):
                         resolution_states[feature_id] = "retired"
-                        invalidated.append(feature_id)
+                        invalidated[feature_id] = item.row_revision
                     elif isinstance(item, SuppressedFeatureBatchItem):
                         resolution_states[feature_id] = "suppressed"
-                        invalidated.append(feature_id)
+                        invalidated[feature_id] = item.row_revision
                     elif isinstance(item, MissingFeatureBatchItem):
                         resolution_states[feature_id] = "missing"
-                        invalidated.append(feature_id)
+                        invalidated[feature_id] = (
+                            stale_cache[feature_id].row_revision
+                            if feature_id in stale_cache
+                            else None
+                        )
                     else:
                         assert_never(item)
                 if use_cache:
-                    feature_cache.discard_many(invalidated)
-                    feature_cache.put_many(cache_updates)
+                    assert refresh is not None
+                    feature_cache.invalidate_many(invalidated, refresh=refresh)
+                    feature_cache.put_many(cache_updates, refresh=refresh)
             except KorTravelMapError as exc:
                 logger.error("get_features batch 실패: %s — snapshot 링크 상태 미확인", exc)
                 for feature_id in refresh_ids:

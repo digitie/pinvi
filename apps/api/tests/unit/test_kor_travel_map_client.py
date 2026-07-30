@@ -8,8 +8,10 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.clients.kor_travel_map import (
+    FeatureTripCard,
     FoundFeatureBatchItem,
     KorTravelMapBadRequest,
     KorTravelMapClient,
@@ -22,6 +24,7 @@ from app.clients.kor_travel_map import (
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
 )
+from app.core.config import Settings
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -48,6 +51,48 @@ def _trip_card(feature_id: str, *, lon: float | None = 126.977) -> dict[str, Any
         "marker_icon": "monument",
         "marker_color": "P-01",
     }
+
+
+def test_feature_trip_card_snapshot_uses_trip_map_coordinate_shape() -> None:
+    snapshot = FeatureTripCard(
+        feature_id="f_1",
+        kind="place",
+        name="장소",
+        category="attraction",
+        lon=126.977,
+        lat=37.579,
+        address={"road": "서울"},
+        marker_icon="monument",
+        marker_color="P-01",
+    ).as_snapshot()
+
+    assert snapshot["coord"] == {"lon": 126.977, "lat": 37.579}
+    assert "lon" not in snapshot
+    assert "lat" not in snapshot
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_client_rejects_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValueError, match=r"1\.\.200"):
+        _client(lambda request: httpx.Response(500), batch_chunk_size=batch_chunk_size)
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_settings_reject_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            pinvi_kor_travel_map_batch_chunk_size=batch_chunk_size,
+        )
+
+
+async def test_client_accepts_producer_batch_cap() -> None:
+    client = _client(lambda request: httpx.Response(500), batch_chunk_size=200)
+    await client.aclose()
 
 
 async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
@@ -231,6 +276,19 @@ async def test_get_features_chunks_and_merges() -> None:
                     {
                         "state": "found",
                         "feature_id": "f_1",
+                        "row_revision": 9_223_372_036_854_775_808,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
                         "row_revision": 1,
                         "trip_card": _trip_card("f_1"),
                     }
@@ -250,6 +308,7 @@ async def test_get_features_chunks_and_merges() -> None:
         "mismatched-trip-card-id",
         "extra-trip-card-field",
         "wrong-unchanged-validator",
+        "row-revision-outside-bigint",
         "ignored-matching-validator",
     ],
 )
@@ -350,6 +409,7 @@ async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> 
         {"f_other": 1},
         {"f_1": 0},
         {"f_1": True},
+        {"f_1": 9_223_372_036_854_775_808},
     ],
 )
 async def test_get_features_rejects_invalid_known_revisions(

@@ -357,6 +357,7 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
       await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
       await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
+      await expect(page.getByText('1일 표시 장소 4곳').first()).toBeVisible();
       await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
 
       const healthy = await readTrip(page, tripId);

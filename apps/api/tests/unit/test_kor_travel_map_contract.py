@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `579629d1`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `d5ac8403`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -32,8 +32,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "579629d137b886267ffaee28f54eba6ccf9cf19a"
-_SNAPSHOT_SHA256 = "30e7717af68f9b0317ae6676bce1b4a5cc29bfe5a65931d65819ad6db6994ff4"
+_UPSTREAM_COMMIT = "d5ac84033c72879757f1a0c609966b7970e0bf94"
+_SNAPSHOT_SHA256 = "3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -239,6 +239,7 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "known_row_revision": {
             "type": "integer",
+            "format": "int64",
             "minimum": 1,
             "required": False,
             "nullable": True,
@@ -796,6 +797,12 @@ def _assert_consumed_field(
             where,
             "minimum",
             resolved.get("minimum"),
+        )
+    if "maximum" in expected:
+        assert resolved.get("maximum") == expected["maximum"], (
+            where,
+            "maximum",
+            resolved.get("maximum"),
         )
     if "ref" in expected:
         ref = str(unresolved.get("$ref", ""))
