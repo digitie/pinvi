@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-07-30 (codex) — T-VN-11-P 5상태 batch 소비자 완료
+
+kor-travel-map의 `found|retired|suppressed|missing|unchanged` batch와 revision을 typed
+consumer로 전환했다. `KorTravelMapClient`는 `1..200` 설정을 fail-fast하고 요청을 최대
+200개씩 나눈다. 응답 ID·순서·arm·`trip_card`·PostgreSQL `bigint` revision을 엄격히
+검증한다. process-local bounded LRU cache는 refresh generation과 revision fence를 함께
+사용해 늦게 도착한 응답이 최신 card나 tombstone을 되돌리지 못하게 한다. transport 실패만
+만료 snapshot을 `unverified`로 재사용하며, Web·Map·Mobile은 공용 resolver를 쓴다.
+
+적대 리뷰에서 복원 snapshot의 flat `lon/lat` 때문에 지도 포인트가 전부 사라지는 결함,
+out-of-order cache rollback, 200개 초과 chunk 설정, stale API 문서를 찾았다. snapshot을
+canonical `coord`로 고치고 상태 전이·설정 경계 회귀를 추가했다. vendored Map OpenAPI는
+생산자 `d5ac84033c72879757f1a0c609966b7970e0bf94`,
+SHA-256 `3b4c42b2d09e1a299c89a2c3936accff3dac874a9698ae014b10ce5c41ed074a`에
+고정했다.
+
+n150에서는 재사용 `ktm-tvn45-db`를 새 clone·migration·downgrade 없이 사용했다. 실제
+`found|retired|suppressed|missing|unchanged`, 강제 503 `unverified`, 복구와 지도 포인트
+4곳을 파괴적 Live UI로 검증했다. 여행은 매 실행 soft-delete하고 Map fixture는 원복했으며
+격리 API/Web/proxy와 listener는 모두 제거했다.
+
+**다음 한 작업**: Map 생산자 PR이 CI green으로 머지된 뒤 이 소비자 PR을 CI green·셀프
+머지한다. 그 뒤 사용자 규칙대로 별도 Claude Code PR 사후 감사를 수행하고 Map Lane B
+`T-VN-H37`로 이동한다.
+
 ## 2026-07-29 (codex) — curated detail snapshot canonical 경로 전환
 
 **방금**: kor-travel-map Claude PR 사후 감사 issue #881에서 발견한 runtime/OpenAPI 분기를

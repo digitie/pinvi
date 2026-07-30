@@ -1,5 +1,10 @@
 # T-VN-11 kor-travel-map 5상태 batch 소비자 전환 실행 계획
 
+## 상태
+
+2026-07-30 구현·계약·파괴적 Live UI 완료. Map 생산자 → PinVi 소비자 PR 순서로
+landing한다. 실데이터 fixture와 격리 서비스는 정리했고 재사용 DB는 healthy 상태로 보존했다.
+
 ## 목표
 
 kor-travel-map T-VN-11A의 고정 `trip_card` projection과

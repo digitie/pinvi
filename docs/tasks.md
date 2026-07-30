@@ -7,11 +7,6 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-VN-11-P = Codex**(`feat/t-vn-11-service-batch-consumer`):
-  batch client/builder와 revision cache, 공용 Trip schema/domain, Web·Mobile Trip 표시,
-  관련 unit/integration/Live E2E 및 계약 문서를 수정한다. TDR 검색 기능과 C6c admin client는
-  건드리지 않는다. 실행 계획은
-  [`docs/execplan/t-vn-11-service-batch-consumer.md`](execplan/t-vn-11-service-batch-consumer.md).
 - **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
   `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
   수정한다. service token 우선순위는 유지하고 `key` query를 제거하며
@@ -24,14 +19,6 @@
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
   브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
   T-304(#400), T-309c(#402). 진행: T-305(PR #401 대기). **backend(T-301~305) 완료 임박, 남은 것=web UI.**
-
-## kor-travel-map batch 상태 계약
-
-- [~] **T-VN-11-P** — kor-travel-map `T-VN-11`의
-  `found|retired|suppressed|missing|unchanged + revision` batch 응답을 typed PinVi consumer 계약으로
-  같은 cutover에서 전환한다. transport 실패는 upstream 상태값으로 축약하지 않고 소비자
-  `unverified` 경계를 유지한다. 구현 중이며 호환 producer branch는 kor-travel-map
-  `feat/t-vn-11-service-batch`다.
 
 ## 보안·의존성
 
