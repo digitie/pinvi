@@ -13,19 +13,24 @@ SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, assert_never
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map import (
     FoundFeatureBatchItem,
+    FoundWeatherBatchItem,
     KorTravelMapClient,
     KorTravelMapError,
     MissingFeatureBatchItem,
+    NoDataWeatherBatchItem,
     RetiredFeatureBatchItem,
+    RetiredWeatherBatchItem,
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
 )
@@ -41,6 +46,39 @@ from app.services.feature_cache import CachedFeature, feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
+_SEOUL = ZoneInfo("Asia/Seoul")
+_WEATHER_BATCH_MAX_CONCURRENCY = 4
+_WEATHER_BATCH_MAX_DATES_PER_VIEW = 31
+_WEATHER_BATCH_VIEW_BUDGET_SECONDS = 10.0
+
+
+def _weather_target_at(value: date) -> datetime:
+    """해당 한국 일자의 24시간 timeline이 시작되는 aware datetime을 만든다."""
+    return datetime.combine(value, time.min, tzinfo=_SEOUL)
+
+
+def _weather_resolution(
+    item: FoundWeatherBatchItem | NoDataWeatherBatchItem | RetiredWeatherBatchItem,
+    *,
+    target_at: datetime,
+) -> dict[str, Any]:
+    if isinstance(item, FoundWeatherBatchItem):
+        return {
+            "state": "found",
+            "card": {
+                "feature_id": item.feature_id,
+                "asof": target_at,
+                "latest_at": item.latest_at,
+                "is_stale": item.is_stale,
+                "source_styles": list(item.source_styles),
+                "metrics": [metric.as_dict() for metric in (*item.current, *item.timeline)],
+            },
+        }
+    if isinstance(item, NoDataWeatherBatchItem):
+        return {"state": "no_data"}
+    if isinstance(item, RetiredWeatherBatchItem):
+        return {"state": "retired"}
+    assert_never(item)
 
 
 async def build_trip_view(
@@ -56,7 +94,8 @@ async def build_trip_view(
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
     3. `kor_travel_map_client.get_features(ids, known_row_revisions=...)` 1회 batch 호출
-    4. POI에 feature 정보 merge — upstream 5-state를 소비자 상태로 exhaustively 투영
+    4. unique effective date별 weather batch 호출(각 cap 200) 후 일자별 feature 상태 투영
+    5. POI에 feature 정보 merge — upstream 5-state를 소비자 상태로 exhaustively 투영
 
     transport 실패나 불완전 응답은 feature 부재의 근거가 아니다. 이 경우 저장 snapshot을
     유지하고 `feature_resolution_state=unverified`로 둔다.
@@ -179,6 +218,7 @@ async def build_trip_view(
     # set-based batch로 합치며 upstream 상태를 추측하지 않는다.
     resolved_features: dict[str, dict[str, Any]] = {}
     resolution_states: dict[str, str] = {}
+    feature_batch_failed = False
     if kor_travel_map_client is not None and feature_ids:
         use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
@@ -197,7 +237,7 @@ async def build_trip_view(
         if refresh_ids:
             refresh = feature_cache.begin_refresh(refresh_ids) if use_cache else None
             try:
-                batch = await kor_travel_map_client.get_features(
+                feature_batch = await kor_travel_map_client.get_features(
                     refresh_ids,
                     known_row_revisions={
                         feature_id: stale_cache[feature_id].row_revision
@@ -208,7 +248,7 @@ async def build_trip_view(
                 cache_updates: dict[str, CachedFeature] = {}
                 invalidated: dict[str, int | None] = {}
                 for feature_id in refresh_ids:
-                    item = batch[feature_id]
+                    item = feature_batch[feature_id]
                     if isinstance(item, FoundFeatureBatchItem):
                         snapshot = item.trip_card.as_snapshot()
                         resolved_features[feature_id] = snapshot
@@ -242,12 +282,117 @@ async def build_trip_view(
                     feature_cache.invalidate_many(invalidated, refresh=refresh)
                     feature_cache.put_many(cache_updates, refresh=refresh)
             except KorTravelMapError as exc:
+                feature_batch_failed = True
                 logger.error("get_features batch 실패: %s — snapshot 링크 상태 미확인", exc)
                 for feature_id in refresh_ids:
                     resolution_states[feature_id] = "unverified"
                     stale_feature = stale_cache.get(feature_id)
                     if stale_feature is not None:
                         resolved_features[feature_id] = stale_feature.trip_card
+
+    # weather는 POI의 영구 속성이 아니라 일자별 feature snapshot이다. 같은 날짜에 같은
+    # feature가 여러 번 등장해도 한 번만 요청하고, 동일 날짜의 여러 day에도 결과를 공유한다.
+    weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {day.day_index: {} for day in days}
+    pending_weather: dict[date, dict[str, list[int]]] = {}
+    for poi in pois:
+        feature_id = poi.feature_id
+        effective_date = day_effective_date.get(poi.day_index)
+        if feature_id is None or effective_date is None:
+            continue
+        resolution_state = resolution_states.get(feature_id, "unverified")
+        if resolution_state in {"missing", "retired", "suppressed"}:
+            weather_by_day_index[poi.day_index][feature_id] = {"state": resolution_state}
+            continue
+        if kor_travel_map_client is None or feature_batch_failed:
+            weather_by_day_index[poi.day_index][feature_id] = {"state": "unavailable"}
+            continue
+        day_indexes = pending_weather.setdefault(effective_date, {}).setdefault(feature_id, [])
+        if poi.day_index not in day_indexes:
+            day_indexes.append(poi.day_index)
+
+    known_at = datetime.now(UTC)
+    if pending_weather:
+        weather_client = kor_travel_map_client
+        assert weather_client is not None
+        weather_dates = sorted(pending_weather)
+        bounded_dates = weather_dates[:_WEATHER_BATCH_MAX_DATES_PER_VIEW]
+        not_requested_dates = weather_dates[len(bounded_dates) :]
+        if not_requested_dates:
+            logger.warning(
+                "Trip weather 날짜 %d개 중 요청 상한 %d개만 조회",
+                len(weather_dates),
+                _WEATHER_BATCH_MAX_DATES_PER_VIEW,
+            )
+            for effective_date in not_requested_dates:
+                for feature_id, day_indexes in pending_weather[effective_date].items():
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = {"state": "not_requested"}
+        weather_date_iterator = iter(bounded_dates)
+        weather_service_failed = asyncio.Event()
+
+        async def fetch_weather_dates() -> None:
+            while not weather_service_failed.is_set():
+                try:
+                    effective_date = next(weather_date_iterator)
+                except StopIteration:
+                    return
+                slots = pending_weather[effective_date]
+                try:
+                    target_at = _weather_target_at(effective_date)
+                    weather_batch = await weather_client.get_weather_batch(
+                        list(slots),
+                        target_at=target_at,
+                        known_at=known_at,
+                    )
+                except (KorTravelMapError, OverflowError, ValueError) as exc:
+                    weather_service_failed.set()
+                    logger.error(
+                        "get_weather_batch 실패: %s — 미결 일자 weather를 unavailable 처리",
+                        exc,
+                    )
+                    return
+                for feature_id, day_indexes in slots.items():
+                    resolution = _weather_resolution(
+                        weather_batch[feature_id],
+                        target_at=target_at,
+                    )
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = resolution
+
+        workers = [
+            asyncio.create_task(fetch_weather_dates())
+            for _ in range(min(_WEATHER_BATCH_MAX_CONCURRENCY, len(bounded_dates)))
+        ]
+        try:
+            done, unfinished = await asyncio.wait(
+                workers,
+                timeout=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+            )
+            if unfinished:
+                weather_service_failed.set()
+                logger.error(
+                    "Trip weather view budget %.1f초 초과 — 미결 일자 unavailable 처리",
+                    _WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+                )
+            for worker in unfinished:
+                worker.cancel()
+            await asyncio.gather(*unfinished, return_exceptions=True)
+            for worker in done:
+                worker.result()
+        finally:
+            for worker in workers:
+                if not worker.done():
+                    worker.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+
+        for effective_date in bounded_dates:
+            slots = pending_weather[effective_date]
+            for feature_id, day_indexes in slots.items():
+                for day_index in day_indexes:
+                    weather_by_day_index[day_index].setdefault(
+                        feature_id,
+                        {"state": "unavailable"},
+                    )
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
@@ -319,6 +464,7 @@ async def build_trip_view(
                 "rise_set_reference": (
                     ref.reference_label if (ref := day_rise_sets.get(d.day_index)) else None
                 ),
+                "weather_by_feature_id": weather_by_day_index[d.day_index],
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days

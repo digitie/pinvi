@@ -2,6 +2,41 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-30 (codex) — T-VN-16B weather batch 소비 cutover
+
+- Map T-VN-16A의 `POST /v1/features/weather/batch`를 strict transport로 소비한다.
+  요청 ID dedupe·200개 chunk, aware `target_at/known_at`, 정확한 1일 horizon,
+  응답 순서/ID와 `found|no_data|retired`, metric optional field 타입을 fail-closed한다.
+- 날씨를 POI 영구 속성으로 두지 않고 `TripViewDay.weather_by_feature_id`에 둔다. 같은
+  feature도 여행 날짜가 다르면 별도 snapshot이며, 같은 날짜의 중복 POI는 한 번만 조회한다.
+  한국 시각 자정을 target으로 보내 해당 날짜 timeline을 받고 view 전체는 한 `known_at`을 쓴다.
+- Web `TripWeatherSummary`의 effect 기반 단건 호출을 제거했다. 서버가 준
+  `found|no_data|retired|suppressed|missing|unavailable|not_requested` union만 렌더하고
+  원천 lifecycle·서비스 장애·조회 상한을 별도 한국어 안내로 표시한다. 상세/공유 API가 같은
+  server-side batch 경계를 사용한다.
+- 적대 리뷰 2인이 무제한 날짜 fanout, 날짜 경계 500, 거대 JSON 정수 overflow, UTC 날짜
+  오분류, lifecycle 의미 소실, global locator false-green, 부모 취소 뒤 orphan worker를
+  확인했다. 고유 날짜 31개·worker 4개·전체 10초 상한, `not_requested`, KST effective 시각,
+  feature-scoped locator, cancel/gather와 각각의 회귀를 반영했다.
+- Map OpenAPI 전체 파일을 main `6650aa71dbe2d6f940789f91e562ac3eec4702a6`,
+  SHA-256 `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`로
+  갱신하고 path→request/response→union arm→metric field 계약을 고정했다.
+- n150 최종 gate: API unit **734 passed, 1 skipped**, Ruff **303 files**, strict mypy
+  **196 files**, Web **100**, schemas **8**, domain **71**, 전체 workspace lint/typecheck·
+  production build. 사전 전체 integration **397 passed, 3 skipped** 뒤 리뷰 수정 표적
+  trip-view integration **25**, Web weather UI **7**, 격리 mocked Playwright **1**도 통과했다.
+  첫 mocked 실행은 다른 branch의 기존 12805 서버를 재사용해 과거 `is_broken` 계약으로
+  실패했다. 해당 서버를 중단하지 않고 bridge network Docker runner로 실패 지점만 재실행해
+  통과했다.
+- 보존 `ktm-tvn45-db`는 head가 맞고 weather 실데이터 범위도 확인돼 그대로 재사용한다.
+  새 clone/checkpoint/dump와 Alembic downgrade는 만들지 않았다. 리뷰 수정분의 파괴적 Live는
+  실제 여섯 parent 상태, weather found/no_data/retired, weather-only 503→복구, 단건 weather
+  0회를 UI에서 확인해 **1 passed (8.1s)**이며 활성 Trip 잔존은 0건이다.
+- Live 재실행은 실패 체크포인트부터 복구했다. host 격리 API가 container 전용
+  `PROMETHEUS_MULTIPROC_DIR`을 상속해 모든 요청을 500으로 만든 문제는 단일 worker에서 해당 env를
+  해제했고, 예약 이메일 도메인의 422는 정식 `EmailStr` 통과 계정으로 교체했다. 이후 API CORS와
+  direct login 200을 선행 확인하고 UI 단계만 재실행했다.
+
 ## 2026-07-30 (codex) — T-VN-11-P typed consumer·revision cache·Live 완료
 
 - kor-travel-map 다섯 상태 batch를 frozen `trip_card`와 PostgreSQL `bigint` revision으로

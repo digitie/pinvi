@@ -6,6 +6,20 @@
 
 ## 2026-07-30
 
+- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR 예정, codex)
+      Trip view가 unique `effective_date`별로 `POST /v1/features/weather/batch`를 호출하고
+      날짜 안의 feature를 200개씩 dedupe한다. 브라우저 단건 N+1은 제거했으며
+      `found|no_data|retired|suppressed|missing|unavailable|not_requested`을 day-scoped
+      discriminated union으로 전달한다. 고유 날짜 31개·worker 4개·전체 10초 상한과 부모
+      요청 취소 전파로 outbound를 제한하고, 상한 초과와 실제 장애를 구분한다.
+      strict transport decoder와 vendored Map OpenAPI field contract, query-count integration,
+      pure UI 상태 test, 단건 요청 0회 mocked Playwright를 고정했다. 적대 리뷰 2인이 날짜
+      fanout·경계값 500·거대 JSON 정수·KST metric 선택·lifecycle 의미 소실·Live false-green·
+      부모 취소 orphan을 찾아 회귀와 함께 수정했다. 최종 실데이터 Live와 CI·merge evidence는
+      재사용 `ktm-tvn45-db`에서 여섯 parent 상태, weather found/no_data/retired,
+      weather-only 503→복구, 단건 weather 0회를 UI로 통과했으며 활성 Trip 잔존은 0건이다.
+      CI·merge evidence는 PR landing 뒤 journal에 보강한다.
+
 - [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
       `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict
       decode하고, `1..200` chunk·bounded LRU·generation/revision fence로 최신 상태의

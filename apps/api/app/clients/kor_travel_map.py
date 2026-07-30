@@ -22,7 +22,7 @@ import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -195,6 +195,242 @@ FeatureBatchItem = (
     | MissingFeatureBatchItem
     | UnchangedFeatureBatchItem
 )
+
+
+@dataclass(frozen=True)
+class WeatherBatchMetric:
+    """weather batch의 고정 metric projection."""
+
+    forecast_style: str
+    metric_key: str
+    metric_name: str | None
+    timeline_bucket: str | None
+    value_number: float | None
+    value_text: str | None
+    unit: str | None
+    severity: str | None
+    issued_at: datetime | None
+    valid_at: datetime | None
+    valid_from: datetime | None
+    valid_until: datetime | None
+    observed_at: datetime | None
+    effective_at: datetime | None
+    provider: str | None
+    weather_domain: str | None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "forecast_style": self.forecast_style,
+            "metric_key": self.metric_key,
+            "metric_name": self.metric_name,
+            "timeline_bucket": self.timeline_bucket,
+            "value_number": self.value_number,
+            "value_text": self.value_text,
+            "unit": self.unit,
+            "severity": self.severity,
+            "issued_at": self.issued_at,
+            "valid_at": self.valid_at,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
+            "observed_at": self.observed_at,
+            "effective_at": self.effective_at,
+            "provider": self.provider,
+            "weather_domain": self.weather_domain,
+        }
+
+
+@dataclass(frozen=True)
+class FoundWeatherBatchItem:
+    feature_id: str
+    source_styles: tuple[str, ...]
+    current: tuple[WeatherBatchMetric, ...]
+    timeline: tuple[WeatherBatchMetric, ...]
+    latest_at: datetime | None
+    is_stale: bool
+    state: Literal["found"] = "found"
+
+
+@dataclass(frozen=True)
+class NoDataWeatherBatchItem:
+    feature_id: str
+    state: Literal["no_data"] = "no_data"
+
+
+@dataclass(frozen=True)
+class RetiredWeatherBatchItem:
+    feature_id: str
+    state: Literal["retired"] = "retired"
+
+
+WeatherBatchItem = FoundWeatherBatchItem | NoDataWeatherBatchItem | RetiredWeatherBatchItem
+
+
+_WEATHER_METRIC_FIELDS = {
+    "forecast_style",
+    "metric_key",
+    "metric_name",
+    "timeline_bucket",
+    "value_number",
+    "value_text",
+    "unit",
+    "severity",
+    "issued_at",
+    "valid_at",
+    "valid_from",
+    "valid_until",
+    "observed_at",
+    "effective_at",
+    "provider",
+    "weather_domain",
+}
+_WEATHER_METRIC_OPTIONAL_STRINGS = {
+    "metric_name",
+    "timeline_bucket",
+    "value_text",
+    "unit",
+    "severity",
+    "provider",
+    "weather_domain",
+}
+_WEATHER_METRIC_DATETIMES = {
+    "issued_at",
+    "valid_at",
+    "valid_from",
+    "valid_until",
+    "observed_at",
+    "effective_at",
+}
+
+
+def _decode_aware_datetime(raw: object, *, field: str) -> datetime:
+    if not isinstance(raw, str):
+        raise KorTravelMapContractError(f"weather batch {field}가 문자열이 아닙니다.")
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise KorTravelMapContractError(
+            f"weather batch {field}가 ISO 8601 datetime이 아닙니다."
+        ) from exc
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise KorTravelMapContractError(f"weather batch {field}에 UTC offset이 없습니다.")
+    return value
+
+
+def _decode_weather_metric(raw: object) -> WeatherBatchMetric:
+    if (
+        not isinstance(raw, Mapping)
+        or not {"forecast_style", "metric_key"} <= set(raw)
+        or not set(raw) <= _WEATHER_METRIC_FIELDS
+    ):
+        raise KorTravelMapContractError("weather batch metric 필드 집합이 올바르지 않습니다.")
+    if not all(isinstance(raw[field], str) for field in ("forecast_style", "metric_key")):
+        raise KorTravelMapContractError("weather batch metric 필수 문자열이 올바르지 않습니다.")
+    if not all(
+        raw.get(field) is None or isinstance(raw[field], str)
+        for field in _WEATHER_METRIC_OPTIONAL_STRINGS
+    ):
+        raise KorTravelMapContractError("weather batch metric 선택 문자열이 올바르지 않습니다.")
+    value_number = raw.get("value_number")
+    decoded_value_number: float | None = None
+    if value_number is not None:
+        if isinstance(value_number, bool) or not isinstance(value_number, (int, float)):
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            )
+        try:
+            decoded_value_number = float(value_number)
+        except OverflowError as exc:
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            ) from exc
+        if not math.isfinite(decoded_value_number):
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            )
+    datetimes = {
+        field: (
+            None
+            if raw.get(field) is None
+            else _decode_aware_datetime(raw[field], field=f"metric.{field}")
+        )
+        for field in _WEATHER_METRIC_DATETIMES
+    }
+    return WeatherBatchMetric(
+        forecast_style=raw["forecast_style"],
+        metric_key=raw["metric_key"],
+        metric_name=raw.get("metric_name"),
+        timeline_bucket=raw.get("timeline_bucket"),
+        value_number=decoded_value_number,
+        value_text=raw.get("value_text"),
+        unit=raw.get("unit"),
+        severity=raw.get("severity"),
+        issued_at=datetimes["issued_at"],
+        valid_at=datetimes["valid_at"],
+        valid_from=datetimes["valid_from"],
+        valid_until=datetimes["valid_until"],
+        observed_at=datetimes["observed_at"],
+        effective_at=datetimes["effective_at"],
+        provider=raw.get("provider"),
+        weather_domain=raw.get("weather_domain"),
+    )
+
+
+def _decode_weather_batch_item(raw: object) -> WeatherBatchItem:
+    if not isinstance(raw, Mapping):
+        raise KorTravelMapContractError("weather batch item이 객체가 아닙니다.")
+    state = raw.get("state")
+    feature_id = raw.get("feature_id")
+    if not isinstance(feature_id, str) or not feature_id:
+        raise KorTravelMapContractError("weather batch item feature_id가 빈 문자열입니다.")
+    if state == "no_data":
+        if set(raw) != {"state", "feature_id"}:
+            raise KorTravelMapContractError("weather batch no_data item 셰입이 올바르지 않습니다.")
+        return NoDataWeatherBatchItem(feature_id=feature_id)
+    if state == "retired":
+        if set(raw) != {"state", "feature_id"}:
+            raise KorTravelMapContractError("weather batch retired item 셰입이 올바르지 않습니다.")
+        return RetiredWeatherBatchItem(feature_id=feature_id)
+    if state != "found":
+        raise KorTravelMapContractError(f"알 수 없는 weather batch state입니다: {state!r}")
+    required = {
+        "state",
+        "feature_id",
+        "source_styles",
+        "current",
+        "timeline",
+        "is_stale",
+    }
+    if not required <= set(raw) or not set(raw) <= required | {"latest_at"}:
+        raise KorTravelMapContractError("weather batch found item 셰입이 올바르지 않습니다.")
+    source_styles = raw["source_styles"]
+    current = raw["current"]
+    timeline = raw["timeline"]
+    if not isinstance(source_styles, list) or not all(
+        isinstance(style, str) for style in source_styles
+    ):
+        raise KorTravelMapContractError("weather batch source_styles가 문자열 배열이 아닙니다.")
+    if not isinstance(current, list) or not isinstance(timeline, list):
+        raise KorTravelMapContractError("weather batch metric 목록이 배열이 아닙니다.")
+    if not isinstance(raw["is_stale"], bool):
+        raise KorTravelMapContractError("weather batch is_stale이 boolean이 아닙니다.")
+    latest_at = (
+        None
+        if raw.get("latest_at") is None
+        else _decode_aware_datetime(raw["latest_at"], field="latest_at")
+    )
+    return FoundWeatherBatchItem(
+        feature_id=feature_id,
+        source_styles=tuple(source_styles),
+        current=tuple(_decode_weather_metric(metric) for metric in current),
+        timeline=tuple(_decode_weather_metric(metric) for metric in timeline),
+        latest_at=latest_at,
+        is_stale=raw["is_stale"],
+    )
+
+
+def _require_aware_datetime(value: datetime, *, field: str) -> None:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field}에는 UTC offset이 필요합니다.")
 
 
 def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
@@ -528,6 +764,65 @@ class KorTravelMapClient:
                         "feature batch found item이 일치하는 validator를 무시했습니다."
                     )
                 decoded[item.feature_id] = item
+        return decoded
+
+    async def get_weather_batch(
+        self,
+        feature_ids: Sequence[str],
+        *,
+        target_at: datetime,
+        known_at: datetime,
+    ) -> dict[str, WeatherBatchItem]:
+        """bitemporal weather snapshot을 cap 단위로 조회하고 exhaustively 검증한다."""
+        _require_aware_datetime(target_at, field="target_at")
+        _require_aware_datetime(known_at, field="known_at")
+        try:
+            timeline_until_expected = target_at + timedelta(days=1)
+        except OverflowError as exc:
+            raise ValueError("target_at은 1일 timeline을 계산할 수 있어야 합니다.") from exc
+
+        unique = list(dict.fromkeys(feature_ids))
+        if any(not isinstance(feature_id, str) or not feature_id for feature_id in unique):
+            raise ValueError("feature_ids는 빈 문자열일 수 없습니다.")
+
+        decoded: dict[str, WeatherBatchItem] = {}
+        for start in range(0, len(unique), self._batch_chunk_size):
+            chunk = unique[start : start + self._batch_chunk_size]
+            response = await self._send(
+                "POST",
+                "/v1/features/weather/batch",
+                json={
+                    "feature_ids": chunk,
+                    "target_at": target_at.isoformat(),
+                    "known_at": known_at.isoformat(),
+                },
+            )
+            if response.status_code == status.HTTP_404_NOT_FOUND:
+                raise KorTravelMapContractError("weather batch endpoint가 404를 반환했습니다.")
+            data = self._data(response)
+            if set(data) != {"target_at", "known_at", "timeline_until", "items"}:
+                raise KorTravelMapContractError("weather batch data 필드 집합이 올바르지 않습니다.")
+            raw_items = data["items"]
+            if not isinstance(raw_items, list):
+                raise KorTravelMapContractError("weather batch items가 배열이 아닙니다.")
+            response_target_at = _decode_aware_datetime(data["target_at"], field="target_at")
+            response_known_at = _decode_aware_datetime(data["known_at"], field="known_at")
+            timeline_until = _decode_aware_datetime(
+                data["timeline_until"],
+                field="timeline_until",
+            )
+            if response_target_at != target_at or response_known_at != known_at:
+                raise KorTravelMapContractError(
+                    "weather batch 응답의 bitemporal cutoff가 요청과 다릅니다."
+                )
+            if timeline_until != timeline_until_expected:
+                raise KorTravelMapContractError("weather batch timeline 지평선이 1일이 아닙니다.")
+            chunk_items = [_decode_weather_batch_item(item) for item in raw_items]
+            if [item.feature_id for item in chunk_items] != chunk:
+                raise KorTravelMapContractError(
+                    "weather batch 응답이 요청 ID와 순서를 정확히 보존하지 않습니다."
+                )
+            decoded.update((item.feature_id, item) for item in chunk_items)
         return decoded
 
     async def features_nearby(

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
+import { FeatureWeatherResolutionSchema } from './feature';
 import { PoiRiseSetResponseSchema } from './poi';
 import { AttachmentCreateSchema, AttachmentResponseSchema } from './storage';
 
@@ -283,6 +284,8 @@ export const TripViewDaySchema = z.object({
   // ADR-055 §6: 일자 단위 일출/일몰 + "XX 장소 기준" 라벨.
   rise_set: PoiRiseSetResponseSchema.nullable().default(null),
   rise_set_reference: z.string().nullable().default(null),
+  // 날씨는 같은 feature라도 여행 날짜마다 달라지므로 day 범위에서 keyed projection으로 둔다.
+  weather_by_feature_id: z.record(z.string(), FeatureWeatherResolutionSchema),
   pois: z.array(TripViewPoiSchema),
 });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;

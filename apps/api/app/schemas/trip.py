@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
+from app.schemas.feature import FeatureWeatherResolution
 from app.schemas.poi import PoiRiseSetResponse
 from app.schemas.storage import AttachmentResponse
 
@@ -261,6 +262,8 @@ class TripViewDay(BaseModel):
     # ADR-055 §6: 일자 단위 일출/일몰(전용 table) + "XX 장소 기준" 라벨.
     rise_set: PoiRiseSetResponse | None = None
     rise_set_reference: str | None = None
+    # 날씨는 POI 속성이 아니라 해당 일자별 feature snapshot이다.
+    weather_by_feature_id: dict[str, FeatureWeatherResolution]
     pois: list[TripViewPoi]
 
 

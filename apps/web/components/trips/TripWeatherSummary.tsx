@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { CloudSun, Wind } from 'lucide-react';
-import { featureApi } from '@pinvi/api-client';
-import type { FeatureWeatherCard, WeatherMetric } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import type { FeatureWeatherResolution, WeatherMetric } from '@pinvi/schemas';
 
 const WEATHER_LABELS: Record<string, string> = {
   T1H: '기온',
@@ -26,18 +24,25 @@ const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;
 const DUST_RE = /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i;
 const WEATHER_RE =
   /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i;
+const SEOUL_DATE_FORMATTER = new Intl.DateTimeFormat('en', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 function metricDate(metric: WeatherMetric): string | null {
-  return (
-    metric.valid_at?.slice(0, 10) ??
-    metric.observed_at?.slice(0, 10) ??
-    metric.issued_at?.slice(0, 10) ??
-    null
+  const instant =
+    metric.effective_at ?? metric.valid_at ?? metric.observed_at ?? metric.valid_from ?? null;
+  if (!instant) return null;
+  const value = new Date(instant);
+  if (Number.isNaN(value.getTime())) return null;
+  const parts = Object.fromEntries(
+    SEOUL_DATE_FORMATTER.formatToParts(value).map(({ type, value: part }) => [type, part]),
   );
-}
-
-function weatherAsof(date: string): string {
-  return `${date}T23:59:59+09:00`;
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
 }
 
 function metricHaystack(metric: WeatherMetric): string {
@@ -106,41 +111,19 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
 }
 
 export interface TripWeatherSummaryProps {
-  featureId?: string | null;
+  weather?: FeatureWeatherResolution | null;
   date?: string | null;
   label?: string;
   compact?: boolean;
 }
 
 export function TripWeatherSummary({
-  featureId,
+  weather,
   date,
   label = '날씨',
   compact = false,
 }: TripWeatherSummaryProps) {
-  const [card, setCard] = useState<FeatureWeatherCard | null>(null);
-
-  useEffect(() => {
-    if (!featureId || !date) {
-      setCard(null);
-      return;
-    }
-
-    let active = true;
-    setCard(null);
-    void featureApi(apiClient)
-      .weather(featureId, { asof: weatherAsof(date) })
-      .then((next) => {
-        if (active) setCard(next);
-      })
-      .catch(() => {
-        if (active) setCard(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [date, featureId]);
+  const card = weather?.state === 'found' ? weather.card : null;
 
   const groups = useMemo(() => {
     if (!card || !date) return [];
@@ -152,7 +135,31 @@ export function TripWeatherSummary({
     ].filter((group) => group.items.length > 0);
   }, [card, date]);
 
-  if (!featureId || !date || groups.length === 0) return null;
+  if (!date || !weather) return null;
+  if (weather.state !== 'found') {
+    const statusText = {
+      no_data: '이 날짜의 날씨 정보가 없습니다.',
+      retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
+      suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
+      missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
+      unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
+      not_requested: '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
+    }[weather.state];
+    return (
+      <section
+        className={
+          compact
+            ? 'rounded-sm bg-surface-soft/70 px-2 py-1.5'
+            : 'rounded-sm bg-surface-soft px-3 py-2'
+        }
+        aria-label={label}
+        data-testid="trip-weather-status"
+      >
+        <p className="text-[11px] text-muted">{statusText}</p>
+      </section>
+    );
+  }
+  if (groups.length === 0) return null;
 
   return (
     <section

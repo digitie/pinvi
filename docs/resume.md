@@ -1,5 +1,35 @@
 # resume.md
 
+## 2026-07-30 (codex) — T-VN-16B weather batch 소비 구현·격리 검증 완료
+
+Trip 상세/공유 view의 POI별 단건 weather 요청을 서버 batch projection으로 전환했다.
+`KorTravelMapClient.get_weather_batch`는 Map의 200개 cap으로 dedupe/chunk하고 bitemporal
+cutoff, 1일 timeline, 요청 순서/ID, 세 arm과 `WeatherMetricOut` 필드·aware datetime·유한수를
+엄격히 검증한다. 여행 날짜의 한국 시각 자정을 `target_at`으로 사용해 그 날짜 24시간
+timeline을 받고, 한 view의 모든 날짜는 같은 `known_at`을 사용한다.
+
+`TripViewDay.weather_by_feature_id`는 같은 feature가 다른 날짜에 있을 때 값을 섞지 않으며
+`found(card)|no_data|retired|suppressed|missing|unavailable|not_requested` 조합을 강제한다.
+고유 날짜 최대 31개, worker 4개, view 전체 10초 budget으로 outbound를 제한하며 상한 초과는
+서비스 장애와 다른 `not_requested`다. 부모 request cancellation은 worker에 전파한다. Web은 이
+view만 렌더해 단건 `/features/{id}/weather` 호출을 하지 않고 weather 없음·parent lifecycle·
+서비스 실패·날짜 상한 미조회를 구분한다.
+Map OpenAPI는 생산자 main `6650aa71dbe2d6f940789f91e562ac3eec4702a6`, SHA-256
+`87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`에 갱신했다.
+
+현재 n150에서 최종 API unit **734 passed, 1 skipped**, Ruff **303 files**, strict mypy
+**196 files**, Web **100**, schemas **8**, domain **71**, 전체 workspace lint/typecheck와
+production build가 통과했다. 사전 전체 integration **397 passed, 3 skipped** 뒤 리뷰 수정
+표적 trip-view integration **25**, Web weather UI **7**, 격리 mocked Playwright **1**도
+통과했다. 보존 중인 Map 실데이터 clone은 schema head가 맞아 재사용하며 새 clone, checkpoint,
+Alembic downgrade를 만들지 않는다.
+
+리뷰 수정 head의 파괴적 Live UI는 재사용 clone과 격리 Map/PinVi stack에서 **1 passed
+(8.1s)**다. 실제 여섯 parent 상태, weather found/no_data/retired, weather-only 503→복구,
+단건 weather 요청 0회와 활성 Trip 잔존 0건을 확인했다.
+
+**다음 한 작업**: 최종 정적·단위 gate와 main rebase를 마치고 PR CI green 후 셀프 머지한다.
+
 ## 2026-07-30 (codex) — T-VN-11-P 5상태 batch 소비자 완료
 
 kor-travel-map의 `found|retired|suppressed|missing|unchanged` batch와 revision을 typed
