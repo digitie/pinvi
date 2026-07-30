@@ -208,7 +208,12 @@ class WeatherMetric(BaseModel):
     metric_name: str | None = None
     forecast_style: str  # nowcast / ultra_short / short / mid / observed / index / advisory
     timeline_bucket: str | None = None
+    provider: str | None = None
+    weather_domain: str | None = None
     valid_at: datetime | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    effective_at: datetime | None = None
     issued_at: datetime | None = None
     observed_at: datetime | None = None
     value_number: float | None = None
@@ -230,6 +235,32 @@ class FeatureWeatherCard(BaseModel):
     is_stale: bool = False
     source_styles: list[str] = Field(default_factory=list)
     metrics: list[WeatherMetric] = Field(default_factory=list)
+
+
+class FeatureWeatherFound(BaseModel):
+    state: Literal["found"] = "found"
+    card: FeatureWeatherCard
+
+
+class FeatureWeatherNoData(BaseModel):
+    state: Literal["no_data"] = "no_data"
+
+
+class FeatureWeatherRetired(BaseModel):
+    state: Literal["retired"] = "retired"
+
+
+class FeatureWeatherUnavailable(BaseModel):
+    state: Literal["unavailable"] = "unavailable"
+
+
+FeatureWeatherResolution = Annotated[
+    FeatureWeatherFound
+    | FeatureWeatherNoData
+    | FeatureWeatherRetired
+    | FeatureWeatherUnavailable,
+    Field(discriminator="state"),
+]
 
 
 class FeatureCategory(BaseModel):

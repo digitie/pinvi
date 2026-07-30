@@ -13,12 +13,17 @@ from app.clients.kor_travel_map import (
     FeatureBatchItem,
     FeatureTripCard,
     FoundFeatureBatchItem,
+    FoundWeatherBatchItem,
     KorTravelMapClient,
     KorTravelMapUnavailable,
     MissingFeatureBatchItem,
+    NoDataWeatherBatchItem,
     RetiredFeatureBatchItem,
+    RetiredWeatherBatchItem,
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
+    WeatherBatchItem,
+    WeatherBatchMetric,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -80,6 +85,75 @@ class _BatchOutcomeFeatureClient:
             raise self.error
         assert self.response is not None
         return self.response
+
+
+class _WeatherFeatureClient:
+    def __init__(self, *, weather_unavailable: bool = False) -> None:
+        self.feature_call_count = 0
+        self.weather_calls: list[tuple[list[str], datetime, datetime]] = []
+        self.weather_unavailable = weather_unavailable
+
+    async def get_features(
+        self,
+        feature_ids: list[str],
+        *,
+        known_row_revisions: Mapping[str, int] | None = None,
+    ) -> dict[str, FeatureBatchItem]:
+        self.feature_call_count += 1
+        assert known_row_revisions == {}
+        return {
+            feature_id: FoundFeatureBatchItem(
+                feature_id=feature_id,
+                row_revision=index + 1,
+                trip_card=_feature_card(feature_id, f"{feature_id} 장소"),
+            )
+            for index, feature_id in enumerate(feature_ids)
+        }
+
+    async def get_weather_batch(
+        self,
+        feature_ids: list[str],
+        *,
+        target_at: datetime,
+        known_at: datetime,
+    ) -> dict[str, WeatherBatchItem]:
+        self.weather_calls.append((list(feature_ids), target_at, known_at))
+        if self.weather_unavailable:
+            raise KorTravelMapUnavailable("weather transport down")
+        items: dict[str, WeatherBatchItem] = {}
+        for feature_id in feature_ids:
+            if feature_id == "weather:no-data":
+                items[feature_id] = NoDataWeatherBatchItem(feature_id=feature_id)
+            elif feature_id == "weather:retired":
+                items[feature_id] = RetiredWeatherBatchItem(feature_id=feature_id)
+            else:
+                metric = WeatherBatchMetric(
+                    forecast_style="short",
+                    metric_key="TMP",
+                    metric_name="기온",
+                    timeline_bucket="forecast",
+                    value_number=24.0,
+                    value_text=None,
+                    unit="℃",
+                    severity=None,
+                    issued_at=known_at,
+                    valid_at=target_at,
+                    valid_from=target_at,
+                    valid_until=target_at,
+                    observed_at=None,
+                    effective_at=target_at,
+                    provider="python-kma-api",
+                    weather_domain="forecast",
+                )
+                items[feature_id] = FoundWeatherBatchItem(
+                    feature_id=feature_id,
+                    source_styles=("short",),
+                    current=(metric,),
+                    timeline=(),
+                    latest_at=target_at,
+                    is_stale=False,
+                )
+        return items
 
 
 async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -149,6 +223,150 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
     assert built_poi["rise_set"]["status"] == "success"
     assert built_poi["rise_set"]["locdate"] == date(2026, 5, 6)
     assert built_poi["rise_set"]["sunrise_at"] == datetime(2026, 5, 6, 5, 30, tzinfo=UTC)
+
+
+async def test_build_trip_view_batches_weather_once_per_unique_date(
+    session_factory,  # type: ignore[no-untyped-def]
+) -> None:
+    from app.models.poi import TripDayPoi
+    from app.models.trip import Trip
+    from app.models.trip_day import TripDay
+    from app.models.user import User
+    from app.schemas.trip import TripView
+    from app.services.feature_cache import feature_cache
+    from app.services.trip_view_builder import build_trip_view
+
+    feature_cache.clear()
+    user_id = uuid.uuid4()
+    trip_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=user_id,
+                email=f"weather_batch_{uuid.uuid4().hex[:8]}@pinvi.test",
+                status="active",
+                email_verified_at=now,
+            )
+        )
+        await db.flush()
+        trip = Trip(trip_id=trip_id, owner_user_id=user_id, title="날씨 배치 여행")
+        db.add_all(
+            [
+                trip,
+                TripDay(trip_id=trip_id, day_index=1, date=date(2026, 7, 30)),
+                TripDay(trip_id=trip_id, day_index=2, date=date(2026, 7, 30)),
+                TripDay(trip_id=trip_id, day_index=3, date=date(2026, 7, 31)),
+            ]
+        )
+        await db.flush()
+        db.add_all(
+            [
+                TripDayPoi(
+                    trip_id=trip_id,
+                    day_index=day_index,
+                    sort_order=f"a{index}",
+                    feature_id=feature_id,
+                    feature_snapshot={"title": feature_id},
+                    added_by_user_id=user_id,
+                    currency="KRW",
+                )
+                for index, (day_index, feature_id) in enumerate(
+                    [
+                        (1, "weather:found"),
+                        (1, "weather:found"),
+                        (1, "weather:no-data"),
+                        (2, "weather:retired"),
+                        (3, "weather:found"),
+                    ]
+                )
+            ]
+        )
+        await db.commit()
+        await db.refresh(trip)
+
+        client = _WeatherFeatureClient()
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=client)
+
+    typed = TripView.model_validate(view)
+    assert client.feature_call_count == 1
+    assert [call[0] for call in client.weather_calls] == [
+        ["weather:found", "weather:no-data", "weather:retired"],
+        ["weather:found"],
+    ]
+    assert client.weather_calls[0][2] == client.weather_calls[1][2]
+    assert client.weather_calls[0][1].isoformat() == "2026-07-30T23:59:59+09:00"
+    assert client.weather_calls[1][1].isoformat() == "2026-07-31T23:59:59+09:00"
+
+    first_day = typed.days[0].weather_by_feature_id
+    assert first_day["weather:found"].state == "found"
+    assert first_day["weather:found"].card.metrics[0].provider == "python-kma-api"
+    assert first_day["weather:no-data"].state == "no_data"
+    assert typed.days[1].weather_by_feature_id["weather:retired"].state == "retired"
+    assert typed.days[2].weather_by_feature_id["weather:found"].state == "found"
+    feature_cache.clear()
+
+
+async def test_build_trip_view_stops_weather_retries_after_transport_failure(
+    session_factory,  # type: ignore[no-untyped-def]
+) -> None:
+    from app.models.poi import TripDayPoi
+    from app.models.trip import Trip
+    from app.models.trip_day import TripDay
+    from app.models.user import User
+    from app.services.feature_cache import feature_cache
+    from app.services.trip_view_builder import build_trip_view
+
+    feature_cache.clear()
+    user_id = uuid.uuid4()
+    trip_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=user_id,
+                email=f"weather_down_{uuid.uuid4().hex[:8]}@pinvi.test",
+                status="active",
+                email_verified_at=now,
+            )
+        )
+        await db.flush()
+        trip = Trip(trip_id=trip_id, owner_user_id=user_id, title="날씨 장애 여행")
+        db.add_all(
+            [
+                trip,
+                TripDay(trip_id=trip_id, day_index=1, date=date(2026, 8, 1)),
+                TripDay(trip_id=trip_id, day_index=2, date=date(2026, 8, 2)),
+            ]
+        )
+        await db.flush()
+        db.add_all(
+            [
+                TripDayPoi(
+                    trip_id=trip_id,
+                    day_index=day_index,
+                    sort_order="a0",
+                    feature_id="weather:found",
+                    feature_snapshot={"title": "저장본"},
+                    added_by_user_id=user_id,
+                    currency="KRW",
+                )
+                for day_index in (1, 2)
+            ]
+        )
+        await db.commit()
+        await db.refresh(trip)
+
+        client = _WeatherFeatureClient(weather_unavailable=True)
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=client)
+
+    assert len(client.weather_calls) == 1
+    assert [
+        day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]
+    ] == ["unavailable", "unavailable"]
+    feature_cache.clear()
 
 
 @pytest.mark.parametrize(
