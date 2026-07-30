@@ -15,14 +15,19 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import Any, cast
+from typing import Any, assert_never
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map import (
+    FoundFeatureBatchItem,
     KorTravelMapClient,
     KorTravelMapError,
+    MissingFeatureBatchItem,
+    RetiredFeatureBatchItem,
+    SuppressedFeatureBatchItem,
+    UnchangedFeatureBatchItem,
 )
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
@@ -32,7 +37,7 @@ from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
-from app.services.feature_cache import feature_cache
+from app.services.feature_cache import CachedFeature, feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
@@ -50,8 +55,8 @@ async def build_trip_view(
     동작:
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
-    3. `kor_travel_map_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
-    4. POI에 feature 정보 merge — `found|missing|unverified|not_linked` 해석 상태를 명시
+    3. `kor_travel_map_client.get_features(ids, known_row_revisions=...)` 1회 batch 호출
+    4. POI에 feature 정보 merge — upstream 5-state를 소비자 상태로 exhaustively 투영
 
     transport 실패나 불완전 응답은 feature 부재의 근거가 아니다. 이 경우 저장 snapshot을
     유지하고 `feature_resolution_state=unverified`로 둔다.
@@ -169,46 +174,92 @@ async def build_trip_view(
             seen.add(feature_id)
             feature_ids.append(feature_id)
 
-    # kor_travel_map batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
-    # kor_travel_map `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
-    fresh_features: dict[str, dict[str, Any]] = {}
-    explicitly_missing: set[str] = set()
+    # process-local cache의 fresh hit는 그대로 쓰고, 만료 entry는 row_revision을
+    # validator로 보내 unchanged payload를 생략한다. cache miss와 stale을 한
+    # set-based batch로 합치며 upstream 상태를 추측하지 않는다.
+    resolved_features: dict[str, dict[str, Any]] = {}
+    resolution_states: dict[str, str] = {}
     if kor_travel_map_client is not None and feature_ids:
         use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
-            cached, uncached_ids = feature_cache.get_many(feature_ids)
-            fresh_features.update(cached)
+            fresh_cache, stale_cache, missing_ids = feature_cache.get_many(feature_ids)
+            for feature_id, cached in fresh_cache.items():
+                resolved_features[feature_id] = cached.trip_card
+                resolution_states[feature_id] = "found"
         else:
-            uncached_ids = feature_ids
-        if uncached_ids:
+            stale_cache = {}
+            missing_ids = feature_ids
+        refresh_ids = [
+            feature_id
+            for feature_id in feature_ids
+            if feature_id in stale_cache or feature_id in missing_ids
+        ]
+        if refresh_ids:
             try:
-                batch = await kor_travel_map_client.get_features(uncached_ids)
-                fetched = cast(dict[str, dict[str, Any]], batch["found"])
-                fresh_features.update(fetched)
-                if use_cache and fetched:
-                    feature_cache.put_many(fetched)
-                explicitly_missing.update(cast(list[str], batch["missing"]))
+                batch = await kor_travel_map_client.get_features(
+                    refresh_ids,
+                    known_row_revisions={
+                        feature_id: stale_cache[feature_id].row_revision
+                        for feature_id in refresh_ids
+                        if feature_id in stale_cache
+                    },
+                )
+                cache_updates: dict[str, CachedFeature] = {}
+                invalidated: list[str] = []
+                for feature_id in refresh_ids:
+                    item = batch[feature_id]
+                    if isinstance(item, FoundFeatureBatchItem):
+                        snapshot = item.trip_card.as_snapshot()
+                        resolved_features[feature_id] = snapshot
+                        resolution_states[feature_id] = "found"
+                        cache_updates[feature_id] = CachedFeature(
+                            trip_card=snapshot,
+                            row_revision=item.row_revision,
+                        )
+                    elif isinstance(item, UnchangedFeatureBatchItem):
+                        cached = stale_cache[feature_id]
+                        resolved_features[feature_id] = cached.trip_card
+                        resolution_states[feature_id] = "found"
+                        cache_updates[feature_id] = cached
+                    elif isinstance(item, RetiredFeatureBatchItem):
+                        resolution_states[feature_id] = "retired"
+                        invalidated.append(feature_id)
+                    elif isinstance(item, SuppressedFeatureBatchItem):
+                        resolution_states[feature_id] = "suppressed"
+                        invalidated.append(feature_id)
+                    elif isinstance(item, MissingFeatureBatchItem):
+                        resolution_states[feature_id] = "missing"
+                        invalidated.append(feature_id)
+                    else:
+                        assert_never(item)
+                if use_cache:
+                    feature_cache.discard_many(invalidated)
+                    feature_cache.put_many(cache_updates)
             except KorTravelMapError as exc:
                 logger.error("get_features batch 실패: %s — snapshot 링크 상태 미확인", exc)
+                for feature_id in refresh_ids:
+                    resolution_states[feature_id] = "unverified"
+                    stale_feature = stale_cache.get(feature_id)
+                    if stale_feature is not None:
+                        resolved_features[feature_id] = stale_feature.trip_card
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
     broken_count = 0
     for poi in pois:
         feature_id = poi.feature_id
-        fresh = fresh_features.get(feature_id) if feature_id is not None else None
         if feature_id is None:
             resolution_state = "not_linked"
-        elif fresh is not None:
-            resolution_state = "found"
-        elif feature_id in explicitly_missing:
-            resolution_state = "missing"
         else:
-            resolution_state = "unverified"
-        if resolution_state == "missing":
+            resolution_state = resolution_states.get(feature_id, "unverified")
+        if resolution_state in {"missing", "retired"}:
             broken_count += 1
 
-        feature_view = fresh or poi.feature_snapshot or {}
+        feature_view = (
+            (resolved_features.get(feature_id, {}) if feature_id is not None else {})
+            or poi.feature_snapshot
+            or {}
+        )
         title = None
         if isinstance(feature_view, dict):
             title = feature_view.get("name") or feature_view.get("title")

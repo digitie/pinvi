@@ -4,6 +4,13 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-30
+
+- [x] **T-VN-08** — kor-travel-map batch 실패 false-broken 방지. (완료: 2026-07-26, PR #409, codex)
+      `feature_resolution_state=not_linked|found|missing|unverified`를 도입하고 transport·인증·계약
+      실패는 저장 snapshot을 유지한 `unverified`로 분리했다. 불투명 `feature_id` exact 왕복,
+      중복 JSON member·비유한 수 fail-closed, n150 실데이터 정상→503→복구 Live UI를 검증했다.
+
 ## 2026-07-28
 
 - [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)

@@ -1,13 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, CloudOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
-import { arrayMove, paletteHex } from '@pinvi/domain';
+import { arrayMove, featureResolutionNotice, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
-import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 
 function formatTime(value: string | null): string | null {
   if (!value) return null;
@@ -139,9 +138,16 @@ export function TripPoiList({
                       <span className="truncate text-sm font-semibold text-ink">
                         {poi.title ?? poi.feature_id ?? '장소'}
                       </span>
-                      {poi.feature_resolution_state === 'missing' && (
+                      {(poi.feature_resolution_state === 'missing' ||
+                        poi.feature_resolution_state === 'retired') && (
                         <AlertTriangle
                           className="h-3.5 w-3.5 shrink-0 text-error-text"
+                          aria-label={resolutionNotice ?? undefined}
+                        />
+                      )}
+                      {poi.feature_resolution_state === 'suppressed' && (
+                        <EyeOff
+                          className="h-3.5 w-3.5 shrink-0 text-muted"
                           aria-label={resolutionNotice ?? undefined}
                         />
                       )}

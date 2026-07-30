@@ -24,9 +24,13 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { pointsBounds, resolveMarkerStyle, type TripMapPoint } from '@pinvi/domain';
+import {
+  featureResolutionNotice,
+  pointsBounds,
+  resolveMarkerStyle,
+  type TripMapPoint,
+} from '@pinvi/domain';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
-import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).

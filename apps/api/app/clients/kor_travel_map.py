@@ -21,8 +21,9 @@ import logging
 import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -118,6 +119,161 @@ class KorTravelMapRateLimited(KorTravelMapError):
     def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+
+@dataclass(frozen=True)
+class FeatureTripCard:
+    """kor-travel-map service batch의 고정 ``trip_card`` projection."""
+
+    feature_id: str
+    kind: str
+    name: str
+    category: str
+    lon: float | None
+    lat: float | None
+    address: dict[str, Any]
+    marker_icon: str | None
+    marker_color: str | None
+
+    def as_snapshot(self) -> dict[str, Any]:
+        return {
+            "feature_id": self.feature_id,
+            "kind": self.kind,
+            "name": self.name,
+            "category": self.category,
+            "lon": self.lon,
+            "lat": self.lat,
+            "address": dict(self.address),
+            "marker_icon": self.marker_icon,
+            "marker_color": self.marker_color,
+        }
+
+
+@dataclass(frozen=True)
+class FoundFeatureBatchItem:
+    feature_id: str
+    row_revision: int
+    trip_card: FeatureTripCard
+    state: Literal["found"] = "found"
+
+
+@dataclass(frozen=True)
+class RetiredFeatureBatchItem:
+    feature_id: str
+    row_revision: int
+    state: Literal["retired"] = "retired"
+
+
+@dataclass(frozen=True)
+class SuppressedFeatureBatchItem:
+    feature_id: str
+    row_revision: int
+    state: Literal["suppressed"] = "suppressed"
+
+
+@dataclass(frozen=True)
+class MissingFeatureBatchItem:
+    feature_id: str
+    state: Literal["missing"] = "missing"
+
+
+@dataclass(frozen=True)
+class UnchangedFeatureBatchItem:
+    feature_id: str
+    row_revision: int
+    state: Literal["unchanged"] = "unchanged"
+
+
+FeatureBatchItem = (
+    FoundFeatureBatchItem
+    | RetiredFeatureBatchItem
+    | SuppressedFeatureBatchItem
+    | MissingFeatureBatchItem
+    | UnchangedFeatureBatchItem
+)
+
+
+def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
+    if not isinstance(raw, Mapping):
+        raise KorTravelMapContractError("feature batch found item의 trip_card가 객체가 아닙니다.")
+    required = {
+        "feature_id",
+        "kind",
+        "name",
+        "category",
+        "lon",
+        "lat",
+        "address",
+        "marker_icon",
+        "marker_color",
+    }
+    if not required <= set(raw):
+        raise KorTravelMapContractError("feature batch trip_card 필수 필드가 누락되었습니다.")
+    if raw["feature_id"] != feature_id:
+        raise KorTravelMapContractError("feature batch item과 trip_card feature_id가 다릅니다.")
+    if not all(isinstance(raw[field], str) for field in ("kind", "name", "category")):
+        raise KorTravelMapContractError("feature batch trip_card 문자열 필드가 올바르지 않습니다.")
+    if not isinstance(raw["address"], dict):
+        raise KorTravelMapContractError("feature batch trip_card address가 객체가 아닙니다.")
+    if not all(
+        raw[field] is None or isinstance(raw[field], str)
+        for field in ("marker_icon", "marker_color")
+    ):
+        raise KorTravelMapContractError("feature batch trip_card marker 필드가 올바르지 않습니다.")
+    for field in ("lon", "lat"):
+        value = raw[field]
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise KorTravelMapContractError(
+                f"feature batch trip_card {field}이 유한한 숫자가 아닙니다."
+            )
+    return FeatureTripCard(
+        feature_id=feature_id,
+        kind=raw["kind"],
+        name=raw["name"],
+        category=raw["category"],
+        lon=float(raw["lon"]) if raw["lon"] is not None else None,
+        lat=float(raw["lat"]) if raw["lat"] is not None else None,
+        address=dict(raw["address"]),
+        marker_icon=raw["marker_icon"],
+        marker_color=raw["marker_color"],
+    )
+
+
+def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
+    if not isinstance(raw, Mapping):
+        raise KorTravelMapContractError("feature batch item이 객체가 아닙니다.")
+    state = raw.get("state")
+    feature_id = raw.get("feature_id")
+    if not isinstance(feature_id, str):
+        raise KorTravelMapContractError("feature batch item feature_id가 문자열이 아닙니다.")
+    if state == "missing":
+        if set(raw) != {"state", "feature_id"}:
+            raise KorTravelMapContractError("feature batch missing item 셰입이 올바르지 않습니다.")
+        return MissingFeatureBatchItem(feature_id=feature_id)
+    if state not in {"found", "retired", "suppressed", "unchanged"}:
+        raise KorTravelMapContractError(f"알 수 없는 feature batch state입니다: {state!r}")
+    row_revision = raw.get("row_revision")
+    if isinstance(row_revision, bool) or not isinstance(row_revision, int) or row_revision < 1:
+        raise KorTravelMapContractError("feature batch row_revision이 양의 정수가 아닙니다.")
+    if state == "found":
+        if set(raw) != {"state", "feature_id", "row_revision", "trip_card"}:
+            raise KorTravelMapContractError("feature batch found item 셰입이 올바르지 않습니다.")
+        return FoundFeatureBatchItem(
+            feature_id=feature_id,
+            row_revision=row_revision,
+            trip_card=_decode_feature_trip_card(raw["trip_card"], feature_id),
+        )
+    if set(raw) != {"state", "feature_id", "row_revision"}:
+        raise KorTravelMapContractError(f"feature batch {state} item 셰입이 올바르지 않습니다.")
+    if state == "retired":
+        return RetiredFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
+    if state == "suppressed":
+        return SuppressedFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
+    return UnchangedFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
 
 
 class KorTravelMapClient:
@@ -298,64 +454,65 @@ class KorTravelMapClient:
             return None
         return self._data(resp)
 
-    async def get_features(self, feature_ids: Sequence[str]) -> dict[str, Any]:
-        """배치 조회 — cap 초과 시 청크 분할. data = {found: {id: detail}, missing: [id]}.
-
-        id-keyed map 키는 ADR-048에서 `items`→`found`로 확정(list `items[]`와 타입 분리).
-        현재 2-state public projection에서 조회할 수 없는 ID는 원인 구분 없이 `missing`이다.
-        상태 원인을 구분하는 5-state 계약은 T-VN-11과 같은 cutover에서 적용한다.
-        """
+    async def get_features(
+        self,
+        feature_ids: Sequence[str],
+        *,
+        known_row_revisions: Mapping[str, int] | None = None,
+    ) -> dict[str, FeatureBatchItem]:
+        """5-state ``trip_card`` batch를 cap 단위로 조회하고 exhaustively 검증한다."""
         unique = list(dict.fromkeys(feature_ids))
-        found: dict[str, Any] = {}
-        missing: list[str] = []
+        revisions = dict(known_row_revisions or {})
+        if not set(revisions) <= set(unique) or any(
+            isinstance(revision, bool) or not isinstance(revision, int) or revision < 1
+            for revision in revisions.values()
+        ):
+            raise ValueError("known_row_revisions는 요청 ID의 양의 정수 revision이어야 합니다.")
+        decoded: dict[str, FeatureBatchItem] = {}
         for start in range(0, len(unique), self._batch_chunk_size):
             chunk = unique[start : start + self._batch_chunk_size]
-            response = await self._send("POST", "/v1/features/batch", json={"feature_ids": chunk})
+            request_items = [
+                {
+                    "feature_id": feature_id,
+                    **(
+                        {"known_row_revision": revisions[feature_id]}
+                        if feature_id in revisions
+                        else {}
+                    ),
+                }
+                for feature_id in chunk
+            ]
+            response = await self._send(
+                "POST",
+                "/v1/features/batch",
+                json={"items": request_items, "projection": "trip_card"},
+            )
             if response.status_code == status.HTTP_404_NOT_FOUND:
                 raise KorTravelMapContractError("feature batch endpoint가 404를 반환했습니다.")
             data = self._data(response)
-            chunk_found = data.get("found")
-            chunk_missing = data.get("missing")
-            if (
-                set(data) != {"found", "missing"}
-                or not isinstance(chunk_found, dict)
-                or not all(
-                    isinstance(feature_id, str)
-                    and isinstance(feature, dict)
-                    and feature.get("feature_id") == feature_id
-                    and isinstance(feature.get("name"), str)
-                    and (
-                        feature.get("marker_color") is None
-                        or isinstance(feature.get("marker_color"), str)
-                    )
-                    and (
-                        feature.get("marker_icon") is None
-                        or isinstance(feature.get("marker_icon"), str)
-                    )
-                    for feature_id, feature in chunk_found.items()
-                )
-                or not isinstance(chunk_missing, list)
-                or not all(isinstance(feature_id, str) for feature_id in chunk_missing)
-            ):
+            raw_items = data.get("items")
+            if set(data) != {"items"} or not isinstance(raw_items, list):
+                raise KorTravelMapContractError("feature batch data 셰입이 올바르지 않습니다.")
+            chunk_items = [_decode_feature_batch_item(item) for item in raw_items]
+            if [item.feature_id for item in chunk_items] != chunk:
                 raise KorTravelMapContractError(
-                    "feature batch 응답 partition 셰입이 올바르지 않습니다."
+                    "feature batch 응답이 요청 ID와 순서를 정확히 보존하지 않습니다."
                 )
-
-            requested_ids = set(chunk)
-            found_ids = set(chunk_found)
-            missing_ids = set(chunk_missing)
-            if (
-                len(missing_ids) != len(chunk_missing)
-                or found_ids & missing_ids
-                or found_ids | missing_ids != requested_ids
-            ):
-                raise KorTravelMapContractError(
-                    "feature batch 응답이 요청 ID를 found/missing으로 정확히 분할하지 않습니다."
-                )
-
-            found.update(chunk_found)
-            missing.extend(chunk_missing)
-        return {"found": found, "missing": missing}
+            for item in chunk_items:
+                known_revision = revisions.get(item.feature_id)
+                if isinstance(item, UnchangedFeatureBatchItem):
+                    if known_revision != item.row_revision:
+                        raise KorTravelMapContractError(
+                            "feature batch unchanged revision이 요청 validator와 다릅니다."
+                        )
+                elif (
+                    isinstance(item, FoundFeatureBatchItem) and known_revision == item.row_revision
+                ):
+                    raise KorTravelMapContractError(
+                        "feature batch found item이 일치하는 validator를 무시했습니다."
+                    )
+                decoded[item.feature_id] = item
+        return decoded
 
     async def features_nearby(
         self,

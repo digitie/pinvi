@@ -7,9 +7,11 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-VN-08 = Codex**(`fix/t-vn-08-false-broken`):
-  batch client/builder와 공용 Trip schema/domain, Web·Mobile Trip 표시, 관련 unit/integration/
-  mocked/live E2E 및 계약 문서를 수정한다. TDR 검색 기능과 C6c admin client는 건드리지 않는다.
+- **T-VN-11-P = Codex**(`feat/t-vn-11-service-batch-consumer`):
+  batch client/builder와 revision cache, 공용 Trip schema/domain, Web·Mobile Trip 표시,
+  관련 unit/integration/Live E2E 및 계약 문서를 수정한다. TDR 검색 기능과 C6c admin client는
+  건드리지 않는다. 실행 계획은
+  [`docs/execplan/t-vn-11-service-batch-consumer.md`](execplan/t-vn-11-service-batch-consumer.md).
 - **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
   `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
   수정한다. service token 우선순위는 유지하고 `key` query를 제거하며
@@ -25,17 +27,11 @@
 
 ## kor-travel-map batch 상태 계약
 
-- [ ] **T-VN-08** — trip view의 batch transport/contract 실패를 feature 부재로 오인하지 않고
-      저장 snapshot을 유지한다. POI별 `feature_resolution_state`를
-      `not_linked|found|missing|unverified`로 노출하고, `missing`만 broken count에 반영한다.
-      `feature_id`는 `@`를 포함해 어떤 포맷도 해석하지 않는 불투명 문자열로 전달한다. 현재 2-state
-      decoder는 exact `found|missing` key와 완전·배타 partition, detail 내부 exact ID/표시 필드,
-      중복 JSON member를 fail-closed로 검증한다.
-
-- [ ] **T-VN-11-P** — kor-travel-map `T-VN-11`의
-      `found|retired|suppressed|missing|unchanged + revision` batch 응답을 typed PinVi consumer 계약으로
-      같은 cutover에서 전환한다. transport 실패는 upstream 상태값으로 축약하지 않고 소비자
-      `unverified` 경계를 유지하며, 현재 2-state exact partition 테스트를 5-state partition 테스트로 교체한다.
+- [~] **T-VN-11-P** — kor-travel-map `T-VN-11`의
+  `found|retired|suppressed|missing|unchanged + revision` batch 응답을 typed PinVi consumer 계약으로
+  같은 cutover에서 전환한다. transport 실패는 upstream 상태값으로 축약하지 않고 소비자
+  `unverified` 경계를 유지한다. 구현 중이며 호환 producer branch는 kor-travel-map
+  `feat/t-vn-11-service-batch`다.
 
 ## 보안·의존성
 
