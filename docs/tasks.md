@@ -7,6 +7,10 @@
 
 ## 현재 선점 / 충돌 회피
 
+- **T-VN-16C = Codex Agent B**(`feat/t-vn-16c-weather-multidate-consumer`):
+  `apps/api`의 kor-travel-map weather batch client·Trip view builder·계약/통합 테스트와
+  `packages/schemas`의 폐기 상태 정리, 관련 통합 문서만 수정한다. T-VN-20/C6c/TDR 선점
+  파일과 겹치면 해당 작업 변경을 보존하고 T-VN-16C 작성 diff만 리뷰한다.
 - **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
   `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
   수정한다. service token 우선순위는 유지하고 `key` query를 제거하며

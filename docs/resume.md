@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-30 (codex) — T-VN-16C PinVi 다중 날짜 weather batch 소비 진행
+
+kor-travel-map producer PR #902가 sparse `targets[{target_at, feature_ids}]` 요청과
+target-local `cards[]`/`card_key` 응답을 머지했다. PinVi는
+`feat/t-vn-16c-weather-multidate-consumer`에서 날짜별 fanout을 한 Trip view당 단일 요청으로
+전환한다. 작성 범위는 `KorTravelMapClient`의 strict decoder, Trip view 투영, 계약·통합 테스트,
+31일 전용 `not_requested` 상태 제거와 vendored OpenAPI·통합 문서 동기화다.
+
+검증은 n150 정적/단위/통합 gate, Map 재사용 clone을 연결한 32일 초과 실데이터 장기 여행의
+파괴적 Live UI, 작성 diff 적대 리뷰 2인 순서로 진행한다. DB schema 변경은 없고 기존 clone의
+head가 맞으면 새 clone/checkpoint/downgrade 없이 재사용한다.
+
+**다음 한 작업**: 다중 target strict decoder와 Trip view 단일 호출 회귀를 먼저 구현한다.
+
 ## 2026-07-30 (codex) — T-VN-16B weather batch 소비 구현·격리 검증 완료
 
 Trip 상세/공유 view의 POI별 단건 weather 요청을 서버 batch projection으로 전환했다.
