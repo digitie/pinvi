@@ -455,10 +455,11 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(
         proxy.weatherBatchRequests.some(
           (featureIds) =>
-            featureIds.includes(weatherFeatureId!) &&
-            featureIds.includes(noDataFeatureId!) &&
-            featureIds.includes(retiredFeatureId!),
+            featureIds.includes(weatherFeatureId!) && featureIds.includes(noDataFeatureId!),
         ),
+      ).toBe(true);
+      expect(
+        proxy.weatherBatchRequests.every((featureIds) => !featureIds.includes(retiredFeatureId!)),
       ).toBe(true);
       expect(proxy.singleWeatherRequestCount).toBe(0);
 
