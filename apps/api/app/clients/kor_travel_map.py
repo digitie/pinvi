@@ -331,12 +331,22 @@ def _decode_weather_metric(raw: object) -> WeatherBatchMetric:
     ):
         raise KorTravelMapContractError("weather batch metric 선택 문자열이 올바르지 않습니다.")
     value_number = raw.get("value_number")
-    if value_number is not None and (
-        isinstance(value_number, bool)
-        or not isinstance(value_number, (int, float))
-        or not math.isfinite(value_number)
-    ):
-        raise KorTravelMapContractError("weather batch metric value_number가 유한수가 아닙니다.")
+    decoded_value_number: float | None = None
+    if value_number is not None:
+        if isinstance(value_number, bool) or not isinstance(value_number, (int, float)):
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            )
+        try:
+            decoded_value_number = float(value_number)
+        except OverflowError as exc:
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            ) from exc
+        if not math.isfinite(decoded_value_number):
+            raise KorTravelMapContractError(
+                "weather batch metric value_number가 유한수가 아닙니다."
+            )
     datetimes = {
         field: (
             None
@@ -350,7 +360,7 @@ def _decode_weather_metric(raw: object) -> WeatherBatchMetric:
         metric_key=raw["metric_key"],
         metric_name=raw.get("metric_name"),
         timeline_bucket=raw.get("timeline_bucket"),
-        value_number=float(value_number) if value_number is not None else None,
+        value_number=decoded_value_number,
         value_text=raw.get("value_text"),
         unit=raw.get("unit"),
         severity=raw.get("severity"),

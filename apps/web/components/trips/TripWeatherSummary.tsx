@@ -24,14 +24,25 @@ const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;
 const DUST_RE = /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i;
 const WEATHER_RE =
   /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i;
+const SEOUL_DATE_FORMATTER = new Intl.DateTimeFormat('en', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 function metricDate(metric: WeatherMetric): string | null {
-  return (
-    metric.valid_at?.slice(0, 10) ??
-    metric.observed_at?.slice(0, 10) ??
-    metric.issued_at?.slice(0, 10) ??
-    null
+  const instant =
+    metric.effective_at ?? metric.valid_at ?? metric.observed_at ?? metric.valid_from ?? null;
+  if (!instant) return null;
+  const value = new Date(instant);
+  if (Number.isNaN(value.getTime())) return null;
+  const parts = Object.fromEntries(
+    SEOUL_DATE_FORMATTER.formatToParts(value).map(({ type, value: part }) => [type, part]),
   );
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
 }
 
 function metricHaystack(metric: WeatherMetric): string {
@@ -129,6 +140,8 @@ export function TripWeatherSummary({
     const statusText = {
       no_data: '이 날짜의 날씨 정보가 없습니다.',
       retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
+      suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
+      missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
       unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
     }[weather.state];
     return (

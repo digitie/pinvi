@@ -195,6 +195,8 @@ export const FeatureWeatherResolutionSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('found'), card: FeatureWeatherCardSchema }),
   z.object({ state: z.literal('no_data') }),
   z.object({ state: z.literal('retired') }),
+  z.object({ state: z.literal('suppressed') }),
+  z.object({ state: z.literal('missing') }),
   z.object({ state: z.literal('unavailable') }),
 ]);
 export type FeatureWeatherResolution = z.infer<typeof FeatureWeatherResolutionSchema>;

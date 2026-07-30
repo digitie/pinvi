@@ -54,7 +54,7 @@ type TripView = {
     pois: TripViewPoi[];
     weather_by_feature_id: Record<
       string,
-      { state: 'found' | 'no_data' | 'retired' | 'unavailable' }
+      { state: 'found' | 'no_data' | 'retired' | 'suppressed' | 'missing' | 'unavailable' }
     >;
   }>;
   broken_feature_count: number;
@@ -218,6 +218,10 @@ async function readTrip(page: Page, tripId: string): Promise<TripView> {
 
 function poisByFeatureId(view: TripView) {
   return new Map(view.days.flatMap((day) => day.pois).map((poi) => [poi.feature_id, poi]));
+}
+
+function poiListItem(page: Page, name: string) {
+  return page.getByTestId('trip-poi-list').locator('li').filter({ hasText: name }).first();
 }
 
 async function addFeaturePoi(
@@ -435,10 +439,23 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(tripMap.getByText('1일 표시', { exact: true })).toBeVisible();
       await expect(tripMap.getByText('장소 6곳', { exact: true })).toBeVisible();
       await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
-      await expect(page.getByTestId('trip-weather-summary').first()).toBeVisible();
-      await expect(page.getByText('이 날짜의 날씨 정보가 없습니다.').first()).toBeVisible();
+      const weatherPoiItem = poiListItem(page, realWeatherFeature.name);
+      const noDataPoiItem = poiListItem(page, realNoDataFeature.name);
+      const retiredPoiItem = poiListItem(page, 'retired 실데이터 저장본');
+      const suppressedPoiItem = poiListItem(page, 'suppressed 실데이터 저장본');
+      const missingPoiItem = poiListItem(page, 'missing exact 저장본');
+      const weatherSummary = weatherPoiItem.getByTestId('trip-weather-summary');
+      await expect(weatherSummary).toBeVisible();
+      await expect(weatherSummary).toContainText(/기온|하늘|강수|습도|바람|미세/);
+      await expect(noDataPoiItem).toContainText('이 날짜의 날씨 정보가 없습니다.');
       await expect(
-        page.getByText('장소 상태가 종료되어 날씨를 확인할 수 없습니다.').first(),
+        retiredPoiItem.getByText('장소 상태가 종료되어 날씨를 확인할 수 없습니다.'),
+      ).toBeVisible();
+      await expect(
+        suppressedPoiItem.getByText('비공개 장소는 날씨를 확인할 수 없습니다.'),
+      ).toBeVisible();
+      await expect(
+        missingPoiItem.getByText('장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.'),
       ).toBeVisible();
 
       const healthy = await readTrip(page, tripId);
@@ -452,6 +469,8 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(healthyWeather[weatherFeatureId!]?.state).toBe('found');
       expect(healthyWeather[noDataFeatureId!]?.state).toBe('no_data');
       expect(healthyWeather[retiredFeatureId!]?.state).toBe('retired');
+      expect(healthyWeather[suppressedFeatureId!]?.state).toBe('suppressed');
+      expect(healthyWeather[missingFeatureId!]?.state).toBe('missing');
       expect(
         proxy.weatherBatchRequests.some(
           (featureIds) =>
@@ -459,7 +478,12 @@ test.describe('Trip feature resolution live mutating flow', () => {
         ),
       ).toBe(true);
       expect(
-        proxy.weatherBatchRequests.every((featureIds) => !featureIds.includes(retiredFeatureId!)),
+        proxy.weatherBatchRequests.every(
+          (featureIds) =>
+            !featureIds.includes(retiredFeatureId!) &&
+            !featureIds.includes(suppressedFeatureId!) &&
+            !featureIds.includes(missingFeatureId!),
+        ),
       ).toBe(true);
       expect(proxy.singleWeatherRequestCount).toBe(0);
 
@@ -467,7 +491,7 @@ test.describe('Trip feature resolution live mutating flow', () => {
       proxy.setWeatherOutage(true);
       await page.reload();
       await expect(
-        page.getByText('날씨 서비스를 일시적으로 사용할 수 없습니다.').first(),
+        weatherPoiItem.getByText('날씨 서비스를 일시적으로 사용할 수 없습니다.'),
       ).toBeVisible();
       expect(proxy.weatherBatchRequests.length).toBeGreaterThan(healthyWeatherBatchCount);
       const weatherOutage = await readTrip(page, tripId);
@@ -484,8 +508,9 @@ test.describe('Trip feature resolution live mutating flow', () => {
 
       proxy.setWeatherOutage(false);
       await page.reload();
-      await expect(page.getByTestId('trip-weather-summary').first()).toBeVisible();
-      await expect(page.getByText('이 날짜의 날씨 정보가 없습니다.').first()).toBeVisible();
+      await expect(weatherSummary).toBeVisible();
+      await expect(weatherSummary).toContainText(/기온|하늘|강수|습도|바람|미세/);
+      await expect(noDataPoiItem).toContainText('이 날짜의 날씨 정보가 없습니다.');
       expect(
         proxy.batchRequests.some((items) =>
           items.some((item) => item.feature_id === missingFeatureId),

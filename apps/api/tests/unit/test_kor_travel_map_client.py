@@ -564,6 +564,7 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
         lambda data: data["items"][0].update({"unexpected": True}),
         lambda data: data["items"][0]["current"][0].pop("metric_key"),
         lambda data: data["items"][0]["current"][0].update({"value_number": True}),
+        lambda data: data["items"][0]["current"][0].update({"value_number": 10**309}),
         lambda data: data["items"][0].update({"feature_id": "other"}),
     ],
     ids=[
@@ -572,6 +573,7 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
         "extra-found-field",
         "missing-required-metric-field",
         "boolean-number",
+        "overflowing-integer",
         "mismatched-order",
     ],
 )

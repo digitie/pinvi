@@ -250,12 +250,25 @@ class FeatureWeatherRetired(BaseModel):
     state: Literal["retired"] = "retired"
 
 
+class FeatureWeatherSuppressed(BaseModel):
+    state: Literal["suppressed"] = "suppressed"
+
+
+class FeatureWeatherMissing(BaseModel):
+    state: Literal["missing"] = "missing"
+
+
 class FeatureWeatherUnavailable(BaseModel):
     state: Literal["unavailable"] = "unavailable"
 
 
 FeatureWeatherResolution = Annotated[
-    FeatureWeatherFound | FeatureWeatherNoData | FeatureWeatherRetired | FeatureWeatherUnavailable,
+    FeatureWeatherFound
+    | FeatureWeatherNoData
+    | FeatureWeatherRetired
+    | FeatureWeatherSuppressed
+    | FeatureWeatherMissing
+    | FeatureWeatherUnavailable,
     Field(discriminator="state"),
 ]
 
