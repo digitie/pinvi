@@ -21,16 +21,21 @@
 - Map OpenAPI 전체 파일을 main `6650aa71dbe2d6f940789f91e562ac3eec4702a6`,
   SHA-256 `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`로
   갱신하고 path→request/response→union arm→metric field 계약을 고정했다.
-- n150 사전 전체 gate: API unit **733 passed, 1 skipped**, integration **397 passed, 3 skipped**,
-  Web **97**, schemas **8**, domain **71**, 전체 workspace typecheck·production build. 리뷰
-  수정 뒤 표적 trip-view integration **25**, Web weather UI **7**, strict mypy **196 files**,
-  격리 mocked Playwright **1**도 통과했다.
+- n150 최종 gate: API unit **734 passed, 1 skipped**, Ruff **303 files**, strict mypy
+  **196 files**, Web **100**, schemas **8**, domain **71**, 전체 workspace lint/typecheck·
+  production build. 사전 전체 integration **397 passed, 3 skipped** 뒤 리뷰 수정 표적
+  trip-view integration **25**, Web weather UI **7**, 격리 mocked Playwright **1**도 통과했다.
   첫 mocked 실행은 다른 branch의 기존 12805 서버를 재사용해 과거 `is_broken` 계약으로
   실패했다. 해당 서버를 중단하지 않고 bridge network Docker runner로 실패 지점만 재실행해
   통과했다.
 - 보존 `ktm-tvn45-db`는 head가 맞고 weather 실데이터 범위도 확인돼 그대로 재사용한다.
-  새 clone/checkpoint/dump와 Alembic downgrade는 만들지 않는다. 남은 gate는 리뷰 수정분의
-  실데이터 weather-only 503→복구 Live 재실행, 최종 전체 gate·CI다.
+  새 clone/checkpoint/dump와 Alembic downgrade는 만들지 않았다. 리뷰 수정분의 파괴적 Live는
+  실제 여섯 parent 상태, weather found/no_data/retired, weather-only 503→복구, 단건 weather
+  0회를 UI에서 확인해 **1 passed (8.1s)**이며 활성 Trip 잔존은 0건이다.
+- Live 재실행은 실패 체크포인트부터 복구했다. host 격리 API가 container 전용
+  `PROMETHEUS_MULTIPROC_DIR`을 상속해 모든 요청을 500으로 만든 문제는 단일 worker에서 해당 env를
+  해제했고, 예약 이메일 도메인의 422는 정식 `EmailStr` 통과 계정으로 교체했다. 이후 API CORS와
+  direct login 200을 선행 확인하고 UI 단계만 재실행했다.
 
 ## 2026-07-30 (codex) — T-VN-11-P typed consumer·revision cache·Live 완료
 

@@ -16,7 +16,9 @@
       pure UI 상태 test, 단건 요청 0회 mocked Playwright를 고정했다. 적대 리뷰 2인이 날짜
       fanout·경계값 500·거대 JSON 정수·KST metric 선택·lifecycle 의미 소실·Live false-green·
       부모 취소 orphan을 찾아 회귀와 함께 수정했다. 최종 실데이터 Live와 CI·merge evidence는
-      PR landing 전에 본 항목과 journal에 보강한다.
+      재사용 `ktm-tvn45-db`에서 여섯 parent 상태, weather found/no_data/retired,
+      weather-only 503→복구, 단건 weather 0회를 UI로 통과했으며 활성 Trip 잔존은 0건이다.
+      CI·merge evidence는 PR landing 뒤 journal에 보강한다.
 
 - [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
       `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict

@@ -162,6 +162,14 @@ npm run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
 ## 4. 실패 처리
 
 - 로그인 실패: test 계정의 이메일 인증, 비밀번호, CORS/cookie 설정을 확인한다.
+- host에서 격리 API를 직접 띄우며 운영 container env를 재사용할 때
+  `PROMETHEUS_MULTIPROC_DIR`가 container 내부 전용 경로면 해제하거나 실제 writable 디렉터리로
+  바꾼다. 그렇지 않으면 health는 통과해도 첫 metric label 생성 요청부터 500이 날 수 있다.
+- Live 계정은 `EmailStr`이 허용하는 실제 형식의 도메인을 써야 한다. 예약·special-use 도메인은
+  DB에 직접 만든 계정이어도 login request validation에서 422가 된다.
+- 긴 UI timeout 전에 같은 Origin의 OAuth provider GET·login POST를 직접 확인해 CORS, API 생존,
+  계정 계약을 checkpoint로 고정한다. 실패 시 clone/build부터 반복하지 않고 이 checkpoint부터
+  재개한다.
 - Trip 생성 실패: 계정 상태, API rate limit, `POST /trips` 응답을 확인한다.
 - WebSocket 연결 실패: Web build의 `NEXT_PUBLIC_PINVI_API_URL`, API `/ws/trips/{trip_id}`
   cookie 전달, reverse proxy WebSocket upgrade 설정을 확인한다.

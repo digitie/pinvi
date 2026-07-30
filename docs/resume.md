@@ -17,15 +17,18 @@ view만 렌더해 단건 `/features/{id}/weather` 호출을 하지 않고 weathe
 Map OpenAPI는 생산자 main `6650aa71dbe2d6f940789f91e562ac3eec4702a6`, SHA-256
 `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`에 갱신했다.
 
-현재 n150에서 전체 사전 gate는 API unit **733 passed, 1 skipped**, integration **397 passed,
-3 skipped**, Web **97**, schemas **8**, domain **71**, 전체 workspace typecheck와 production
-build가 통과했다. 리뷰 수정 뒤 표적 trip-view integration **25**, Web weather UI **7**,
-격리 mocked Playwright **1**도 통과했다. 보존 중인 Map 실데이터 clone은 schema head가 맞아
-재사용하며 새 clone, checkpoint, Alembic downgrade를 만들지 않는다.
+현재 n150에서 최종 API unit **734 passed, 1 skipped**, Ruff **303 files**, strict mypy
+**196 files**, Web **100**, schemas **8**, domain **71**, 전체 workspace lint/typecheck와
+production build가 통과했다. 사전 전체 integration **397 passed, 3 skipped** 뒤 리뷰 수정
+표적 trip-view integration **25**, Web weather UI **7**, 격리 mocked Playwright **1**도
+통과했다. 보존 중인 Map 실데이터 clone은 schema head가 맞아 재사용하며 새 clone, checkpoint,
+Alembic downgrade를 만들지 않는다.
 
-**다음 한 작업**: 리뷰 수정 head를 재사용 clone에 연결한 격리 Map/PinVi stack으로
-found·no_data·retired·suppressed·missing·weather-only 503→복구를 파괴적 Live UI에서 다시
-확인한다. 그 뒤 최종 gate와 CI green 후 셀프 머지한다.
+리뷰 수정 head의 파괴적 Live UI는 재사용 clone과 격리 Map/PinVi stack에서 **1 passed
+(8.1s)**다. 실제 여섯 parent 상태, weather found/no_data/retired, weather-only 503→복구,
+단건 weather 요청 0회와 활성 Trip 잔존 0건을 확인했다.
+
+**다음 한 작업**: 최종 정적·단위 gate와 main rebase를 마치고 PR CI green 후 셀프 머지한다.
 
 ## 2026-07-30 (codex) — T-VN-11-P 5상태 batch 소비자 완료
 
