@@ -207,8 +207,8 @@ def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
         "marker_icon",
         "marker_color",
     }
-    if not required <= set(raw):
-        raise KorTravelMapContractError("feature batch trip_card 필수 필드가 누락되었습니다.")
+    if set(raw) != required:
+        raise KorTravelMapContractError("feature batch trip_card 필드 집합이 올바르지 않습니다.")
     if raw["feature_id"] != feature_id:
         raise KorTravelMapContractError("feature batch item과 trip_card feature_id가 다릅니다.")
     if not all(isinstance(raw[field], str) for field in ("kind", "name", "category")):

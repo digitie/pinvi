@@ -209,6 +209,19 @@ async def test_get_features_chunks_and_merges() -> None:
             None,
         ),
         (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": {**_trip_card("f_1"), "private_payload": "leak"},
+                    }
+                ]
+            },
+            None,
+        ),
+        (
             {"items": [{"state": "unchanged", "feature_id": "f_1", "row_revision": 2}]},
             {"f_1": 1},
         ),
@@ -235,6 +248,7 @@ async def test_get_features_chunks_and_merges() -> None:
         "future-state",
         "incomplete-trip-card",
         "mismatched-trip-card-id",
+        "extra-trip-card-field",
         "wrong-unchanged-validator",
         "ignored-matching-validator",
     ],
