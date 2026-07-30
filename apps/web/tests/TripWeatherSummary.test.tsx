@@ -9,7 +9,7 @@ function foundWeather(): FeatureWeatherResolution {
     state: 'found',
     card: {
       feature_id: 'weather:found',
-      asof: '2026-07-30T23:59:59+09:00',
+      asof: '2026-07-30T00:00:00+09:00',
       latest_at: '2026-07-30T15:00:00+09:00',
       is_stale: false,
       source_styles: ['observed', 'short'],

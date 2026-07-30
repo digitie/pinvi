@@ -296,8 +296,8 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
         ["weather:found"],
     ]
     assert client.weather_calls[0][2] == client.weather_calls[1][2]
-    assert client.weather_calls[0][1].isoformat() == "2026-07-30T23:59:59+09:00"
-    assert client.weather_calls[1][1].isoformat() == "2026-07-31T23:59:59+09:00"
+    assert client.weather_calls[0][1].isoformat() == "2026-07-30T00:00:00+09:00"
+    assert client.weather_calls[1][1].isoformat() == "2026-07-31T00:00:00+09:00"
 
     first_day = typed.days[0].weather_by_feature_id
     assert first_day["weather:found"].state == "found"

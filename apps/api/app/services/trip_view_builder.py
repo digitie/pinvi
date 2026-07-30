@@ -49,8 +49,8 @@ _SEOUL = ZoneInfo("Asia/Seoul")
 
 
 def _weather_target_at(value: date) -> datetime:
-    """기존 UI 계약과 같은 한국 시각 일자 끝을 aware datetime으로 만든다."""
-    return datetime.combine(value, time(23, 59, 59), tzinfo=_SEOUL)
+    """해당 한국 일자의 24시간 timeline이 시작되는 aware datetime을 만든다."""
+    return datetime.combine(value, time.min, tzinfo=_SEOUL)
 
 
 def _weather_resolution(

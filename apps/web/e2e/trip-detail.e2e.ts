@@ -988,7 +988,7 @@ test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보
   const weatherRequests: URL[] = [];
   const weatherCard = {
     feature_id: 'feat-haeundae',
-    asof: '2026-07-01T23:59:59+09:00',
+    asof: '2026-07-01T00:00:00+09:00',
     latest_at: '2026-07-01T09:00:00+09:00',
     is_stale: false,
     source_styles: ['observed', 'short'],
