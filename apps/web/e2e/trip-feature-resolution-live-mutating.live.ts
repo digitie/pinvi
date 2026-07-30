@@ -535,12 +535,11 @@ test.describe('Trip feature resolution live mutating flow', () => {
       const finalDayTab = page.getByRole('tab', { name: `${longTripDayCount}일차` });
       await finalDayTab.click();
       const finalDayCard = finalDayTab.locator('xpath=ancestor::article');
-      await expect(
-        finalDayCard.locator(
-          '[data-testid="trip-weather-summary"], [data-testid="trip-weather-status"]',
-        ),
-      ).toBeVisible();
-      await expect(finalDayCard).not.toContainText('날씨를 조회하지 않았습니다.');
+      await expect(finalDayCard.getByText(realWeatherFeature.name)).toBeVisible();
+      await expect(finalDayCard).not.toContainText(
+        '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
+      );
+      await expect(finalDayCard).not.toContainText('날씨 서비스를 일시적으로 사용할 수 없습니다.');
 
       const healthyWeatherBatchCount = proxy.weatherBatchRequests.length;
       proxy.setWeatherOutage(true);
