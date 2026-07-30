@@ -7,6 +7,8 @@ const snapshotPoiId = '44444444-4444-4444-8444-444444444445';
 const brokenPoiId = '44444444-4444-4444-8444-444444444446';
 const manualPoiId = '44444444-4444-4444-8444-444444444447';
 const unverifiedPoiId = '44444444-4444-4444-8444-444444444448';
+const retiredPoiId = '44444444-4444-4444-8444-444444444449';
+const suppressedPoiId = '44444444-4444-4444-8444-444444444450';
 const companionId = '55555555-5555-4555-8555-555555555555';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
@@ -162,10 +164,32 @@ const MARKER_VIEW = {
           feature_resolution_state: 'unverified',
           feature_link_broken_at: null,
         },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: retiredPoiId,
+          feature_id: 'feat-retired',
+          title: '종료된 장소 저장본',
+          feature: { coord: { lon: 127.04, lat: 37.58 }, category: '관광지' },
+          marker_color: null,
+          marker_icon: null,
+          feature_resolution_state: 'retired',
+          feature_link_broken_at: '2026-06-29T09:00:00+09:00',
+        },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: suppressedPoiId,
+          feature_id: 'feat-suppressed',
+          title: '비공개 장소 저장본',
+          feature: { coord: { lon: 127.05, lat: 37.59 }, category: '관광지' },
+          marker_color: null,
+          marker_icon: null,
+          feature_resolution_state: 'suppressed',
+          feature_link_broken_at: null,
+        },
       ],
     },
   ],
-  broken_feature_count: 1,
+  broken_feature_count: 2,
 };
 
 const LAYER_VIEW = {
@@ -542,7 +566,7 @@ test('상세 지도는 왼쪽 일자 레이어 표시 상태만 반영하고 오
   await expect(page.getByTestId('trip-detail-map').locator('aside')).toHaveCount(0);
 });
 
-test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다', async ({ page }) => {
+test('여행 지도 marker는 5상태와 transport unverified를 구분한다', async ({ page }) => {
   await mockTripDetailRoutes(page, MARKER_VIEW);
 
   await page.goto(`/trips/${tripId}`);
@@ -556,6 +580,12 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   );
   const unverified = page.locator(
     `[data-testid="trip-map-marker-style"][data-poi-id="${unverifiedPoiId}"]`,
+  );
+  const retired = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${retiredPoiId}"]`,
+  );
+  const suppressed = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${suppressedPoiId}"]`,
   );
 
   await expect(custom).toHaveAttribute('data-marker-color', 'P-10');
@@ -579,6 +609,10 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   await expect(broken).toHaveAttribute('data-feature-resolution-state', 'missing');
 
   await expect(unverified).toHaveAttribute('data-feature-resolution-state', 'unverified');
+  await expect(retired).toHaveAttribute('data-feature-resolution-state', 'retired');
+  await expect(suppressed).toHaveAttribute('data-feature-resolution-state', 'suppressed');
+  await expect(page.getByLabel('종료된 장소 정보').first()).toBeVisible();
+  await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
   await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
   await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
 
@@ -599,14 +633,18 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   // 실제 popup 문구는 trip-feature-resolution-live-mutating.live.ts에서 검증한다.
 });
 
-test('여행 목록은 missing과 transport unverified를 다른 안내로 표시한다', async ({ page }) => {
+test('여행 목록은 retired/suppressed/missing/unverified 안내와 broken count를 구분한다', async ({
+  page,
+}) => {
   await mockTripDetailRoutes(page, MARKER_VIEW);
 
   await page.goto(`/trips/${tripId}`);
 
+  await expect(page.getByLabel('종료된 장소 정보').first()).toBeVisible();
+  await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
   await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
   await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
-  await expect(page.getByText('정보 사용 불가 1곳').first()).toBeVisible();
+  await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
 });
 
 test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI를 생성한다', async ({ page }) => {
