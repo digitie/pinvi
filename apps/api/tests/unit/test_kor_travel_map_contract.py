@@ -32,7 +32,7 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "c8060abf27f9c5e437970c42db46cb6e16fba148"
+_UPSTREAM_COMMIT = "a738cd5529e5a301d3176cffddad2d3824f23d48"
 _SNAPSHOT_SHA256 = "84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.

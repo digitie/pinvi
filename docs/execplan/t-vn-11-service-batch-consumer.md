@@ -15,7 +15,7 @@ kor-travel-map T-VN-11A의 고정 `trip_card` projection과
 
 - 생산자: `kor-travel-map` `feat/t-vn-11-service-batch`
 - 소비자: PinVi `feat/t-vn-11-service-batch-consumer`
-- 계약 스냅샷: 생산자 `c8060abf27f9c5e437970c42db46cb6e16fba148`
+- 계약 스냅샷: 생산자 main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`
   `openapi.user.json`
 
 서로 다른 저장소이므로 PR은 각각 만들되, 같은 계약 스냅샷과 Live 시나리오를 통과한

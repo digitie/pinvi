@@ -26,7 +26,7 @@
   첫 재실행은 접근성 snapshot의 합쳐진 문구를 한 DOM element로 오인한 locator만 실패했다.
   실제 sibling 경계인 `1일 표시`와 `장소 4곳`으로 나눠 실패 지점부터 재실행해 **1 passed**다.
   fixture는 원복하고 soft-delete 여행·격리 서비스·listener를 정리했다.
-- Map OpenAPI snapshot은 commit `c8060abf27f9c5e437970c42db46cb6e16fba148`,
+- Map OpenAPI snapshot은 main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`,
   SHA-256 `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`에
   고정했다. 저장소별 PR을 호환 쌍으로 취급해 Map → PinVi 순서로 머지한다.
 

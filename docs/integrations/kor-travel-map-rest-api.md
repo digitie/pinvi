@@ -29,7 +29,7 @@
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
 > vendored 정본은 **2026-07-30(T-VN-11A/B) 기준 kor-travel-map
-> `c8060abf27f9c5e437970c42db46cb6e16fba148`**(5-state service batch, int64 상한,
+> main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`**(5-state service batch, int64 상한,
 > DB 장애 503 포함)의
 > 전체 파일이며 SHA-256은
 > `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`다.
