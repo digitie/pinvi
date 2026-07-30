@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { friendlyErrorText, paletteHex } from '@pinvi/domain';
+import { featureResolutionNotice, friendlyErrorText, paletteHex } from '@pinvi/domain';
 import { api } from '../../../lib/api';
 import {
   Badge,
@@ -85,22 +85,21 @@ export default function SharedTripScreen() {
                 <Muted>이 날의 장소가 없습니다.</Muted>
               ) : (
                 <View className="gap-2.5">
-                  {day.pois.map((poi) => (
-                    <View key={poi.poi_id} className="flex-row items-start gap-3">
-                      <View
-                        className="mt-1 h-3 w-3 rounded-full"
-                        style={{ backgroundColor: paletteHex(poi.marker_color) }}
-                      />
-                      <Body className="flex-1 font-medium text-ink">
-                        {poi.title ?? '제목 없는 장소'}
-                        {poi.feature_resolution_state === 'missing'
-                          ? ' · (장소 정보 사용 불가)'
-                          : poi.feature_resolution_state === 'unverified'
-                            ? ' · (저장된 정보 · 최신 상태 확인 실패)'
-                            : ''}
-                      </Body>
-                    </View>
-                  ))}
+                  {day.pois.map((poi) => {
+                    const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
+                    return (
+                      <View key={poi.poi_id} className="flex-row items-start gap-3">
+                        <View
+                          className="mt-1 h-3 w-3 rounded-full"
+                          style={{ backgroundColor: paletteHex(poi.marker_color) }}
+                        />
+                        <Body className="flex-1 font-medium text-ink">
+                          {poi.title ?? '제목 없는 장소'}
+                          {resolutionNotice ? ` · (${resolutionNotice})` : ''}
+                        </Body>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </Card>

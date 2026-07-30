@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map main(`8880c29b`, Map PR #814/T-VN-H07A 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `c8060abf`(T-VN-11A 5-state service batch 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -32,8 +32,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "8880c29bdfbcd7805c89eafe0645f3c447f27530"
-_SNAPSHOT_SHA256 = "0a7f16847ef7620c168cac61b4a7221747ede747b19d8531c4345d5add4b2116"
+_UPSTREAM_COMMIT = "a738cd5529e5a301d3176cffddad2d3824f23d48"
+_SNAPSHOT_SHA256 = "84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -219,14 +219,138 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "db_active": {"type": "boolean", "required": False, "nullable": True},
         "db_feature_count": {"type": "integer", "required": False, "nullable": True},
     },
-    "FeatureBatchData": {
-        "found": {
-            "type": "object",
-            "values_ref": "FeatureDetailResponse",
+    "FeatureBatchRequest": {
+        "items": {
+            "type": "array",
+            "items_ref": "FeatureBatchRequestItem",
+            "min_items": 1,
+            "max_items": 200,
             "required": True,
             "nullable": False,
         },
-        "missing": {"type": "array", "items_type": "string", "required": True, "nullable": False},
+        "projection": {
+            "type": "string",
+            "const": "trip_card",
+            "required": False,
+            "nullable": False,
+        },
+    },
+    "FeatureBatchRequestItem": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "known_row_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "required": False,
+            "nullable": True,
+        },
+    },
+    "FeatureBatchData": {
+        "items": {
+            "type": "array",
+            "items_one_of_refs": {
+                "FeatureBatchFoundItem",
+                "FeatureBatchRetiredItem",
+                "FeatureBatchSuppressedItem",
+                "FeatureBatchMissingItem",
+                "FeatureBatchUnchangedItem",
+            },
+            "items_discriminator": {
+                "found": "FeatureBatchFoundItem",
+                "retired": "FeatureBatchRetiredItem",
+                "suppressed": "FeatureBatchSuppressedItem",
+                "missing": "FeatureBatchMissingItem",
+                "unchanged": "FeatureBatchUnchangedItem",
+            },
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureBatchFoundItem": {
+        "state": {
+            "type": "string",
+            "const": "found",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "row_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "required": True,
+            "nullable": False,
+        },
+        "trip_card": {
+            "type": "object",
+            "ref": "FeatureTripCard",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureBatchRetiredItem": {
+        "state": {
+            "type": "string",
+            "const": "retired",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "row_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureBatchSuppressedItem": {
+        "state": {
+            "type": "string",
+            "const": "suppressed",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "row_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureBatchMissingItem": {
+        "state": {
+            "type": "string",
+            "const": "missing",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+    },
+    "FeatureBatchUnchangedItem": {
+        "state": {
+            "type": "string",
+            "const": "unchanged",
+            "required": True,
+            "nullable": False,
+        },
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "row_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureTripCard": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "kind": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "category": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": True},
+        "lat": {"type": "number", "required": True, "nullable": True},
+        "address": {"type": "object", "required": True, "nullable": False},
+        "marker_icon": {"type": "string", "required": True, "nullable": True},
+        "marker_color": {"type": "string", "required": True, "nullable": True},
     },
     "PublicFeatureListData": {
         "items": {
@@ -644,6 +768,7 @@ def _assert_consumed_field(
     where = f"{schema_name}.{field}"
     assert field in properties, f"{where}: 스냅샷에 없음(consumer breaking)"
     resolved, nullable = _resolve_property(properties[field], where)
+    unresolved = resolved
     resolved = _deref(spec, resolved)
 
     assert resolved.get("type") == expected["type"], (where, "type", resolved.get("type"))
@@ -661,7 +786,28 @@ def _assert_consumed_field(
         enum = resolved.get("enum")
         assert isinstance(enum, list), (where, "enum 아님", enum)
         assert set(enum) == expected["enum"], (where, "enum", enum)
-    if "items_type" in expected or "items_ref" in expected:
+    if "const" in expected:
+        assert resolved.get("const") == expected["const"], (
+            where,
+            "const",
+            resolved.get("const"),
+        )
+    if "minimum" in expected:
+        assert resolved.get("minimum") == expected["minimum"], (
+            where,
+            "minimum",
+            resolved.get("minimum"),
+        )
+    if "maximum" in expected:
+        assert resolved.get("maximum") == expected["maximum"], (
+            where,
+            "maximum",
+            resolved.get("maximum"),
+        )
+    if "ref" in expected:
+        ref = str(unresolved.get("$ref", ""))
+        assert ref.rsplit("/", 1)[-1] == expected["ref"], (where, "$ref", ref)
+    if "items_type" in expected or "items_ref" in expected or "items_one_of_refs" in expected:
         items = resolved.get("items")
         assert isinstance(items, dict), (where, "array items 아님", resolved.get("type"))
         if "items_type" in expected:
@@ -669,6 +815,45 @@ def _assert_consumed_field(
         if "items_ref" in expected:
             ref = str(items.get("$ref", ""))
             assert ref.rsplit("/", 1)[-1] == expected["items_ref"], (where, "items.$ref", ref)
+        if "items_one_of_refs" in expected:
+            one_of = items.get("oneOf")
+            assert isinstance(one_of, list), (where, "items.oneOf 아님", items)
+            actual_refs = {
+                str(item.get("$ref", "")).rsplit("/", 1)[-1]
+                for item in one_of
+                if isinstance(item, dict)
+            }
+            assert actual_refs == expected["items_one_of_refs"], (
+                where,
+                "items.oneOf.$ref",
+                actual_refs,
+            )
+            discriminator = items.get("discriminator")
+            assert isinstance(discriminator, dict), (where, "items.discriminator 아님")
+            assert discriminator.get("propertyName") == "state", (
+                where,
+                "items.discriminator.propertyName",
+            )
+            mapping = discriminator.get("mapping")
+            assert isinstance(mapping, dict), (where, "items.discriminator.mapping 아님")
+            actual_mapping = {state: str(ref).rsplit("/", 1)[-1] for state, ref in mapping.items()}
+            assert actual_mapping == expected["items_discriminator"], (
+                where,
+                "items.discriminator.mapping",
+                actual_mapping,
+            )
+    if "min_items" in expected:
+        assert resolved.get("minItems") == expected["min_items"], (
+            where,
+            "minItems",
+            resolved.get("minItems"),
+        )
+    if "max_items" in expected:
+        assert resolved.get("maxItems") == expected["max_items"], (
+            where,
+            "maxItems",
+            resolved.get("maxItems"),
+        )
     if "values_ref" in expected:
         values = resolved.get("additionalProperties")
         assert isinstance(values, dict), (where, "map value schema 아님", values)
@@ -713,6 +898,25 @@ def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
             path,
             f"{expected_container}에 필드 계약이 없음",
         )
+
+
+def test_feature_batch_request_binds_to_pinned_container() -> None:
+    """batch 요청 body도 5-state validator 계약의 request component에 결합한다."""
+    spec = _spec()
+    request_schema = spec["paths"]["/v1/features/batch"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
+    actual = str(request_schema.get("$ref", "")).rsplit("/", 1)[-1]
+    assert actual == "FeatureBatchRequest"
+    assert "FeatureBatchRequest" in _CONSUMED_FIELD_CONTRACTS
+    assert "FeatureBatchRequestItem" in _CONSUMED_FIELD_CONTRACTS
+
+
+def test_feature_batch_declares_service_unavailable_problem() -> None:
+    """DB/transport 장애는 원천 상태가 아니라 명시적 RFC7807 503이다."""
+    response = _spec()["paths"]["/v1/features/batch"]["post"]["responses"]["503"]
+    schema = response["content"]["application/problem+json"]["schema"]
+    assert schema["$ref"].rsplit("/", 1)[-1] == "ProblemDetail"
 
 
 def test_response_meta_binds_to_pinned_meta_schemas() -> None:

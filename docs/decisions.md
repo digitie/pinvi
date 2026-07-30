@@ -2676,7 +2676,58 @@ soft-delete / ADR-054 외부 소스 스냅샷 POI)은 참조할 feature가 없�
 - match-confidence 임계값은 운영 데이터로 튜닝하고, 임계 근처 로그를 남겨 오귀속/누락 비율을 관측한다.
 - `prefers-reduced-motion`(시트 슬라이드/flyTo)은 알려진 갭으로 남기고 후속에서 다룬다(ADR-055 후속과 동일).
 
+## ADR-057: 여행 POI의 원천 feature 상태는 5상태 batch로 읽고 revision-aware stale cache로 재검증한다
+
+- **상태**: accepted
+- **날짜**: 2026-07-30
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+기존 PinVi batch 소비자는 kor-travel-map 응답을 `found|missing` 두 상태로만 해석했다.
+이 구조에서는 삭제된 feature, 존재하지만 공개가 억제된 feature, 저장소에 없는 ID를
+구분할 수 없고, 전송·인증·계약 실패까지 `missing`으로 오인할 위험이 있었다. process-local
+TTL cache도 projection revision을 저장하지 않아 만료 때 전체 표시 payload를 다시 전송받았다.
+
+### 결정
+
+- kor-travel-map `POST /v1/features/batch`의 고정 `trip_card` projection과
+  `found|retired|suppressed|missing|unchanged` discriminated union을 typed consumer
+  계약으로 사용한다. 요청·응답 ID와 순서는 정확히 일치해야 한다.
+- PinVi `feature_resolution_state`는
+  `not_linked|found|retired|suppressed|missing|unverified`로 고정한다.
+  `unchanged`는 유효한 stale card가 있을 때만 `found`로 투영한다.
+- `retired|missing` POI만 `broken_feature_count`에 포함한다. `suppressed`는 현재 공개
+  불가 상태이지 참조 무결성 파손이 아니며, `unverified`는 장애 때문에 판정하지 못한
+  상태이므로 둘 다 broken으로 세지 않는다.
+- cache는 `trip_card + row_revision`을 저장한다. fresh hit는 batch를 생략하고 만료
+  entry는 삭제하지 않은 채 `known_row_revision` validator로 보낸다. `unchanged`이면
+  payload를 재사용하고 TTL을 갱신한다.
+- `retired|suppressed|missing`은 cache를 폐기한다. transport·인증·계약 실패 시 만료
+  card가 있으면 표시만 유지하되 상태는 반드시 `unverified`로 노출한다.
+- Web·Mobile 안내 문구는 `@pinvi/domain`의 exhaustiveness-checked resolver 하나를
+  공유한다.
+
+### 근거
+
+존재, lifecycle, 공개 가시성, 전송 신뢰도를 서로 다른 축으로 보존해야 사용자에게
+"종료", "비공개", "없음", "확인 실패"를 정확히 설명할 수 있다. revision validator는
+변경되지 않은 카드 payload와 parsing을 생략하면서도 cache freshness를 갱신한다.
+process-local cache는 read path에 영속 부작용을 만들지 않고 기존 bounded LRU 운용 경계를
+유지한다.
+
+### 결과
+
+- Python client는 다섯 원천 arm을 dataclass union으로 decode하고 알 수 없는 미래 상태를
+  fail-closed 처리한다.
+- Trip builder는 원천 상태를 exhaustive하게 투영하며 transport 실패를 원천 상태로
+  축약하지 않는다.
+- Pydantic/Zod/Web/Mobile 계약이 여섯 소비자 상태를 공유한다.
+- 상세 실행·검증은
+  [`docs/execplan/t-vn-11-service-batch-consumer.md`](execplan/t-vn-11-service-batch-consumer.md)를
+  따른다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-057**
+- 다음 신규 ADR = **ADR-058**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

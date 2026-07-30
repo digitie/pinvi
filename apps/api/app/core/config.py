@@ -134,7 +134,11 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
     pinvi_kor_travel_map_timeout_seconds: float = 5.0
     pinvi_kor_travel_map_max_attempts: int = 3
-    pinvi_kor_travel_map_batch_chunk_size: int = 200  # /v1/features/batch cap
+    pinvi_kor_travel_map_batch_chunk_size: int = Field(
+        default=200,
+        ge=1,
+        le=200,
+    )  # /v1/features/batch cap
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"

@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-30 (codex) — T-VN-11-P typed consumer·revision cache·Live 완료
+
+- kor-travel-map 다섯 상태 batch를 frozen `trip_card`와 PostgreSQL `bigint` revision으로
+  엄격히 decode한다. 미지 arm, 요청 순서/ID 불일치, 잘못된 card, 중복 JSON member,
+  유한하지 않은 수와 범위 밖 revision은 fail-closed한다.
+- `PINVI_KOR_TRAVEL_MAP_BATCH_CHUNK_SIZE`는 `1..200`만 허용한다. cache는 LRU 제한,
+  refresh generation, monotonic revision fence를 함께 저장해 병렬 요청의 늦은 응답과
+  terminal/missing rollback을 막는다. 전송 실패만 stale snapshot을 `unverified`로 보여준다.
+- `FeatureTripCard.as_snapshot()`은 공용 `tripMapPoints`가 읽는 canonical
+  `coord: {lon, lat}`를 방출한다. Web·Map·Mobile 상태 문구는 한 domain resolver로 통합했다.
+- 독립 적대 리뷰에서 flat 좌표로 인한 복원 마커 소실, out-of-order cache rollback,
+  chunk 상한과 trips API 문서 drift를 찾아 모두 회귀와 함께 수정했다.
+- 최종 재리뷰는 Map 공개 가시성 변화가 base revision을 올리지 않아도 되는데 negative
+  fence가 같은 revision의 authoritative `found`를 영구 차단하는 문제를 재현했다. 최신 refresh
+  generation은 동일 revision과 missing 뒤 낮은 revision 재생성을 허용하고, 이전 generation과
+  무순서 write만 fence로 막도록 고정했다.
+- 생산자 재리뷰에서는 DB `OperationalError`가 계약된 503 대신 generic 500으로 새고,
+  200개 planner-default perf target이 3,200행 seed에서 실제 Seq Scan을 고르는 점도 확인했다.
+  Map이 `FEATURE_BATCH_UNAVAILABLE` 503과 1.56% selectivity PK-index gate로 보강한 새 OpenAPI를
+  다시 vendor했다.
+- n150 재사용 `ktm-tvn45-db`의 실데이터로 다섯 원천 상태와 강제 503·회복을 검증했다.
+  첫 재실행은 접근성 snapshot의 합쳐진 문구를 한 DOM element로 오인한 locator만 실패했다.
+  실제 sibling 경계인 `1일 표시`와 `장소 4곳`으로 나눠 실패 지점부터 재실행해 **1 passed**다.
+  fixture는 원복하고 soft-delete 여행·격리 서비스·listener를 정리했다.
+- Map OpenAPI snapshot은 main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`,
+  SHA-256 `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`에
+  고정했다. 저장소별 PR을 호환 쌍으로 취급해 Map → PinVi 순서로 머지한다.
+
 ## 2026-07-29 (claude) — T-VN-H29: 통합검색에서 map-import POI 좌표가 null이던 버그 수정
 
 **결론**: kor-travel-map curated import로 들어온 POI가 `GET /search`에서만 좌표 null이던 실제

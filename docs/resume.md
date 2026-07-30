@@ -1,5 +1,34 @@
 # resume.md
 
+## 2026-07-30 (codex) — T-VN-11-P 5상태 batch 소비자 완료
+
+kor-travel-map의 `found|retired|suppressed|missing|unchanged` batch와 revision을 typed
+consumer로 전환했다. `KorTravelMapClient`는 `1..200` 설정을 fail-fast하고 요청을 최대
+200개씩 나눈다. 응답 ID·순서·arm·`trip_card`·PostgreSQL `bigint` revision을 엄격히
+검증한다. process-local bounded LRU cache는 refresh generation과 revision fence를 함께
+사용해 늦게 도착한 응답이 최신 card나 tombstone을 되돌리지 못하게 한다. transport 실패만
+만료 snapshot을 `unverified`로 재사용하며, Web·Map·Mobile은 공용 resolver를 쓴다.
+
+적대 리뷰에서 복원 snapshot의 flat `lon/lat` 때문에 지도 포인트가 전부 사라지는 결함,
+out-of-order cache rollback, 동일 revision의 비공개→공개 복구를 막는 negative fence,
+200개 초과 chunk 설정, stale API 문서를 찾았다. snapshot을 canonical `coord`로 고치고,
+최신 refresh의 동일 revision·missing 뒤 낮은 revision 재생성을 허용하는 상태 전이와 설정
+경계 회귀를 추가했다. vendored Map OpenAPI는
+생산자 main commit `a738cd5529e5a301d3176cffddad2d3824f23d48`,
+SHA-256 `84a23c59032e96d9aafb5ca13ddd4a285c7312457b5121f25618c5f1cae77924`에
+고정했다. 생산자 최종 리뷰에서 DB 장애가 generic 500으로 새고 200개 planner-default
+gate가 작은 seed에서 실제 실패한 점도 고쳐, 소비자가 의존하는 503 unavailable 계약과
+운영 규모 PK-index plan을 함께 확정했다.
+
+n150에서는 재사용 `ktm-tvn45-db`를 새 clone·migration·downgrade 없이 사용했다. 실제
+`found|retired|suppressed|missing|unchanged`, 강제 503 `unverified`, 복구와 지도 포인트
+4곳을 파괴적 Live UI로 검증했다. 여행은 매 실행 soft-delete하고 Map fixture는 원복했으며
+격리 API/Web/proxy와 listener는 모두 제거했다.
+
+**다음 한 작업**: Map 생산자 PR이 CI green으로 머지된 뒤 이 소비자 PR을 CI green·셀프
+머지한다. 그 뒤 사용자 규칙대로 별도 Claude Code PR 사후 감사를 수행하고 Map Lane B
+`T-VN-H37`로 이동한다.
+
 ## 2026-07-29 (codex) — curated detail snapshot canonical 경로 전환
 
 **방금**: kor-travel-map Claude PR 사후 감사 issue #881에서 발견한 runtime/OpenAPI 분기를

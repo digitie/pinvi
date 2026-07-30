@@ -8,15 +8,23 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.clients.kor_travel_map import (
+    FeatureTripCard,
+    FoundFeatureBatchItem,
     KorTravelMapBadRequest,
     KorTravelMapClient,
     KorTravelMapContractError,
     KorTravelMapError,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
+    MissingFeatureBatchItem,
+    RetiredFeatureBatchItem,
+    SuppressedFeatureBatchItem,
+    UnchangedFeatureBatchItem,
 )
+from app.core.config import Settings
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -29,6 +37,62 @@ def _client(handler: Handler, **kwargs: object) -> KorTravelMapClient:
     params: dict[str, object] = {"max_attempts": 2, "backoff_base_seconds": 0.0}
     params.update(kwargs)
     return KorTravelMapClient(http, **params)  # type: ignore[arg-type]
+
+
+def _trip_card(feature_id: str, *, lon: float | None = 126.977) -> dict[str, Any]:
+    return {
+        "feature_id": feature_id,
+        "kind": "place",
+        "name": f"{feature_id} 이름",
+        "category": "attraction",
+        "lon": lon,
+        "lat": 37.579,
+        "address": {"road_address": "서울특별시 종로구"},
+        "marker_icon": "monument",
+        "marker_color": "P-01",
+    }
+
+
+def test_feature_trip_card_snapshot_uses_trip_map_coordinate_shape() -> None:
+    snapshot = FeatureTripCard(
+        feature_id="f_1",
+        kind="place",
+        name="장소",
+        category="attraction",
+        lon=126.977,
+        lat=37.579,
+        address={"road": "서울"},
+        marker_icon="monument",
+        marker_color="P-01",
+    ).as_snapshot()
+
+    assert snapshot["coord"] == {"lon": 126.977, "lat": 37.579}
+    assert "lon" not in snapshot
+    assert "lat" not in snapshot
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_client_rejects_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValueError, match=r"1\.\.200"):
+        _client(lambda request: httpx.Response(500), batch_chunk_size=batch_chunk_size)
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_settings_reject_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            pinvi_kor_travel_map_batch_chunk_size=batch_chunk_size,
+        )
+
+
+async def test_client_accepts_producer_batch_cap() -> None:
+    client = _client(lambda request: httpx.Response(500), batch_chunk_size=200)
+    await client.aclose()
 
 
 async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
@@ -95,7 +159,7 @@ async def test_get_feature_returns_data() -> None:
 
 
 async def test_get_features_chunks_and_merges() -> None:
-    calls: list[list[str]] = []
+    calls: list[dict[str, Any]] = []
 
     seen_path: dict[str, str] = {}
 
@@ -104,54 +168,153 @@ async def test_get_features_chunks_and_merges() -> None:
 
         seen_path["path"] = request.url.path
         body = _json.loads(request.content)
-        ids = body["feature_ids"]
-        calls.append(ids)
-        found = {fid: {"feature_id": fid, "name": fid} for fid in ids if fid != "f_missing"}
-        missing = [fid for fid in ids if fid == "f_missing"]
-        # ADR-048: id-keyed map 키는 `found`(구 `items`).
-        return httpx.Response(200, json={"data": {"found": found, "missing": missing}, "meta": {}})
+        calls.append(body)
+        items = []
+        for request_item in body["items"]:
+            feature_id = request_item["feature_id"]
+            if feature_id == "f_found":
+                items.append(
+                    {
+                        "state": "found",
+                        "feature_id": feature_id,
+                        "row_revision": 10,
+                        "trip_card": _trip_card(feature_id),
+                    }
+                )
+            elif feature_id == "f_retired":
+                items.append({"state": "retired", "feature_id": feature_id, "row_revision": 11})
+            elif feature_id == "f_suppressed":
+                items.append({"state": "suppressed", "feature_id": feature_id, "row_revision": 12})
+            elif feature_id == "f_missing":
+                items.append({"state": "missing", "feature_id": feature_id})
+            else:
+                items.append(
+                    {
+                        "state": "unchanged",
+                        "feature_id": feature_id,
+                        "row_revision": request_item["known_row_revision"],
+                    }
+                )
+        return httpx.Response(200, json={"data": {"items": items}, "meta": {}})
 
     client = _client(handler, batch_chunk_size=2)
-    data = await client.get_features(["f_1", "f_2", "f_missing"])
+    data = await client.get_features(
+        ["f_found", "f_retired", "f_suppressed", "f_missing", "f_unchanged"],
+        known_row_revisions={"f_unchanged": 13},
+    )
     assert seen_path["path"] == "/v1/features/batch"  # #318: /pinvi 제거
-    assert len(calls) == 2  # 2 + 1 청크
-    assert set(data["found"]) == {"f_1", "f_2"}
-    assert data["missing"] == ["f_missing"]
+    assert len(calls) == 3
+    assert all(call["projection"] == "trip_card" for call in calls)
+    assert calls[-1]["items"] == [{"feature_id": "f_unchanged", "known_row_revision": 13}]
+    assert isinstance(data["f_found"], FoundFeatureBatchItem)
+    assert data["f_found"].trip_card.name == "f_found 이름"
+    assert isinstance(data["f_retired"], RetiredFeatureBatchItem)
+    assert isinstance(data["f_suppressed"], SuppressedFeatureBatchItem)
+    assert isinstance(data["f_missing"], MissingFeatureBatchItem)
+    assert isinstance(data["f_unchanged"], UnchangedFeatureBatchItem)
     await client.aclose()
 
 
 @pytest.mark.parametrize(
-    "batch_data",
+    ("batch_data", "known_row_revisions"),
     [
-        {"found": {}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1", "name": "장소"}}, "missing": ["f_1"]},
-        {"found": {}, "missing": ["f_1", "f_1"]},
-        {"found": {}, "missing": ["f_other"]},
-        {"found": {"f_1": "not-an-object"}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_other", "name": "장소"}}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1"}}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1", "name": {"bad": True}}}, "missing": []},
-        {
-            "found": {"f_1": {"feature_id": "f_1", "name": "장소", "marker_color": {}}},
-            "missing": [],
-        },
-        {"found": {}, "missing": ["f_1"], "retired": [], "revision": 1},
+        ({}, None),
+        ({"items": "not-an-array"}, None),
+        ({"items": []}, None),
+        ({"items": [{"state": "missing", "feature_id": "f_other"}]}, None),
+        (
+            {"items": [{"state": "missing", "feature_id": "f_1", "row_revision": 1}]},
+            None,
+        ),
+        ({"items": [{"state": "future", "feature_id": "f_1"}]}, None),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": {"feature_id": "f_1"},
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_other"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": {**_trip_card("f_1"), "private_payload": "leak"},
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {"items": [{"state": "unchanged", "feature_id": "f_1", "row_revision": 2}]},
+            {"f_1": 1},
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 9_223_372_036_854_775_808,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            {"f_1": 1},
+        ),
     ],
     ids=[
-        "incomplete",
-        "overlap",
-        "duplicate",
-        "unknown",
-        "invalid-detail",
-        "mismatched-detail-id",
-        "missing-name",
-        "invalid-name",
-        "invalid-marker",
+        "missing-items",
+        "items-not-array",
+        "incomplete-partition",
+        "unknown-id",
+        "missing-extra-key",
         "future-state",
+        "incomplete-trip-card",
+        "mismatched-trip-card-id",
+        "extra-trip-card-field",
+        "wrong-unchanged-validator",
+        "row-revision-outside-bigint",
+        "ignored-matching-validator",
     ],
 )
 async def test_get_features_rejects_invalid_response_partition(
     batch_data: dict[str, Any],
+    known_row_revisions: dict[str, int] | None,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -160,41 +323,44 @@ async def test_get_features_rejects_invalid_response_partition(
         )
 
     client = _client(handler)
-    with pytest.raises(KorTravelMapError, match=r"partition|정확히 분할"):
-        await client.get_features(["f_1"])
+    with pytest.raises(KorTravelMapContractError):
+        await client.get_features(["f_1"], known_row_revisions=known_row_revisions)
     await client.aclose()
 
 
 async def test_get_features_deduplicates_input_and_skips_empty_request() -> None:
-    calls: list[list[str]] = []
+    calls: list[list[dict[str, Any]]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         import json as _json
 
-        feature_ids = _json.loads(request.content)["feature_ids"]
-        calls.append(feature_ids)
+        request_items = _json.loads(request.content)["items"]
+        calls.append(request_items)
         return httpx.Response(
             200,
             json={
                 "data": {
-                    "found": {
-                        feature_id: {"feature_id": feature_id, "name": feature_id}
-                        for feature_id in feature_ids
-                    },
-                    "missing": [],
+                    "items": [
+                        {
+                            "state": "found",
+                            "feature_id": item["feature_id"],
+                            "row_revision": 1,
+                            "trip_card": _trip_card(item["feature_id"]),
+                        }
+                        for item in request_items
+                    ],
                 },
                 "meta": {},
             },
         )
 
     client = _client(handler)
-    assert await client.get_features([]) == {"found": {}, "missing": []}
+    assert await client.get_features([]) == {}
     assert calls == []
-    assert await client.get_features(["f_1", "f_1"]) == {
-        "found": {"f_1": {"feature_id": "f_1", "name": "f_1"}},
-        "missing": [],
-    }
-    assert calls == [["f_1"]]
+    result = await client.get_features(["f_1", "f_1"])
+    assert list(result) == ["f_1"]
+    assert isinstance(result["f_1"], FoundFeatureBatchItem)
+    assert calls == [[{"feature_id": "f_1"}]]
     await client.aclose()
 
 
@@ -203,8 +369,8 @@ async def test_get_features_rejects_duplicate_found_json_member() -> None:
         return httpx.Response(
             200,
             content=(
-                b'{"data":{"found":{"f_1":{"feature_id":"f_1","name":"first"},'
-                b'"f_1":{"feature_id":"f_1","name":"second"}},"missing":[]},"meta":{}}'
+                b'{"data":{"items":[{"state":"missing","state":"found",'
+                b'"feature_id":"f_1"}]},"meta":{}}'
             ),
             headers={"content-type": "application/json"},
         )
@@ -221,9 +387,12 @@ async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> 
         return httpx.Response(
             200,
             content=(
-                '{"data":{"found":{"f_1":{"feature_id":"f_1","name":"장소","lon":'
+                '{"data":{"items":[{"state":"found","feature_id":"f_1","row_revision":1,'
+                '"trip_card":{"feature_id":"f_1","kind":"place","name":"장소",'
+                '"category":"attraction","lon":'
                 f"{raw_number}"
-                '}},"missing":[]},"meta":{}}'
+                ',"lat":37.5,"address":{},"marker_icon":null,"marker_color":null}}]},'
+                '"meta":{}}'
             ).encode(),
             headers={"content-type": "application/json"},
         )
@@ -234,6 +403,24 @@ async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> 
     await client.aclose()
 
 
+@pytest.mark.parametrize(
+    "known_row_revisions",
+    [
+        {"f_other": 1},
+        {"f_1": 0},
+        {"f_1": True},
+        {"f_1": 9_223_372_036_854_775_808},
+    ],
+)
+async def test_get_features_rejects_invalid_known_revisions(
+    known_row_revisions: dict[str, int],
+) -> None:
+    client = _client(lambda request: httpx.Response(500))
+    with pytest.raises(ValueError, match="known_row_revisions"):
+        await client.get_features(["f_1"], known_row_revisions=known_row_revisions)
+    await client.aclose()
+
+
 async def test_get_features_is_all_or_nothing_across_chunks() -> None:
     calls = 0
 
@@ -241,13 +428,22 @@ async def test_get_features_is_all_or_nothing_across_chunks() -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
-            data = {"found": {"f_1": {"feature_id": "f_1", "name": "first"}}, "missing": []}
+            data = {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            }
         else:
-            data = {"found": {}, "missing": [], "retired": ["f_2"]}
+            data = {"items": [{"state": "future", "feature_id": "f_2"}]}
         return httpx.Response(200, json={"data": data, "meta": {}})
 
     client = _client(handler, batch_chunk_size=1)
-    with pytest.raises(KorTravelMapError, match="partition"):
+    with pytest.raises(KorTravelMapContractError, match="state"):
         await client.get_features(["f_1", "f_2"])
     assert calls == 2
     await client.aclose()
@@ -609,7 +805,10 @@ async def test_batch_is_service_token_only(
         seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
         return httpx.Response(
             200,
-            json={"data": {"found": {}, "missing": ["f_1"]}, "meta": {}},
+            json={
+                "data": {"items": [{"state": "missing", "feature_id": "f_1"}]},
+                "meta": {},
+            },
         )
 
     client = _client(
@@ -617,7 +816,8 @@ async def test_batch_is_service_token_only(
         service_token=service_token,
         public_api_key=public_api_key,
     )
-    assert await client.get_features(["f_1"]) == {"found": {}, "missing": ["f_1"]}
+    result = await client.get_features(["f_1"])
+    assert isinstance(result["f_1"], MissingFeatureBatchItem)
     assert seen == {"query_key": None, "api_key": None, "token": expected_token}
     await client.aclose()
 

@@ -4,6 +4,24 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-30
+
+- [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
+      `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict
+      decode하고, `1..200` chunk·bounded LRU·generation/revision fence로 최신 상태의
+      out-of-order rollback을 막았다. transport 실패만 stale snapshot을 `unverified`로
+      재사용한다. Web·Map·Mobile 공용 resolver와 canonical `coord` snapshot을 적용했다.
+      독립 적대 리뷰가 지도 마커 소실·cache rollback·동일 revision 복구를 막는 negative
+      fence·chunk 상한·생산자 DB 장애 500 누출·실패한 planner gate·문서 drift를 찾아 모두
+      보강했다. n150 재사용 실데이터 DB의 다섯 상태·503·복구와 지도 포인트 4곳을 파괴적
+      Live UI로 통과하고 fixture·격리 자원을 정리했다. Map 생산자와 저장소별 호환 PR 쌍으로
+      Map → PinVi 순서에 따라 landing한다.
+
+- [x] **T-VN-08** — kor-travel-map batch 실패 false-broken 방지. (완료: 2026-07-26, PR #409, codex)
+      `feature_resolution_state=not_linked|found|missing|unverified`를 도입하고 transport·인증·계약
+      실패는 저장 snapshot을 유지한 `unverified`로 분리했다. 불투명 `feature_id` exact 왕복,
+      중복 JSON member·비유한 수 fail-closed, n150 실데이터 정상→503→복구 Live UI를 검증했다.
+
 ## 2026-07-28
 
 - [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)

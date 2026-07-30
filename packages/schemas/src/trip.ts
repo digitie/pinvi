@@ -231,7 +231,14 @@ export const TripViewPoiSchema = z.object({
   marker_icon: z.string().nullable(),
   // 지도 핀·목록 뱃지 parity용 서버 계산 색(custom > 일자색). 항상 유효 팔레트 키(ADR-055).
   display_marker_color: z.string().nullable().default(null),
-  feature_resolution_state: z.enum(['not_linked', 'found', 'missing', 'unverified']),
+  feature_resolution_state: z.enum([
+    'not_linked',
+    'found',
+    'retired',
+    'suppressed',
+    'missing',
+    'unverified',
+  ]),
   user_note: z.string().nullable(),
   planned_arrival_at: Iso8601Schema.nullable(),
   planned_departure_at: Iso8601Schema.nullable(),
