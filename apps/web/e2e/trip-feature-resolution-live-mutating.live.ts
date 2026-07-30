@@ -16,6 +16,15 @@ const foundFeatureLat = Number(process.env.PINVI_LIVE_FOUND_FEATURE_LAT);
 const retiredFeatureId = process.env.PINVI_LIVE_RETIRED_FEATURE_ID;
 const suppressedFeatureId = process.env.PINVI_LIVE_SUPPRESSED_FEATURE_ID;
 const missingFeatureId = process.env.PINVI_LIVE_MISSING_FEATURE_ID;
+const weatherDate = process.env.PINVI_LIVE_WEATHER_DATE;
+const weatherFeatureId = process.env.PINVI_LIVE_WEATHER_FEATURE_ID;
+const weatherFeatureName = process.env.PINVI_LIVE_WEATHER_FEATURE_NAME;
+const weatherFeatureLon = Number(process.env.PINVI_LIVE_WEATHER_FEATURE_LON);
+const weatherFeatureLat = Number(process.env.PINVI_LIVE_WEATHER_FEATURE_LAT);
+const noDataFeatureId = process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_ID;
+const noDataFeatureName = process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_NAME;
+const noDataFeatureLon = Number(process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LON);
+const noDataFeatureLat = Number(process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT);
 const cacheWaitMs = Number(process.env.PINVI_LIVE_FEATURE_CACHE_WAIT_MS ?? '250');
 const featureCacheRevalidationConfirmed = process.env.PINVI_LIVE_FEATURE_CACHE_REVALIDATION === '1';
 
@@ -41,7 +50,13 @@ type TripViewPoi = {
 };
 
 type TripView = {
-  days: Array<{ pois: TripViewPoi[] }>;
+  days: Array<{
+    pois: TripViewPoi[];
+    weather_by_feature_id: Record<
+      string,
+      { state: 'found' | 'no_data' | 'retired' | 'unavailable' }
+    >;
+  }>;
   broken_feature_count: number;
 };
 
@@ -93,6 +108,15 @@ function assertLiveEnv() {
     ['PINVI_LIVE_RETIRED_FEATURE_ID', retiredFeatureId],
     ['PINVI_LIVE_SUPPRESSED_FEATURE_ID', suppressedFeatureId],
     ['PINVI_LIVE_MISSING_FEATURE_ID', missingFeatureId],
+    ['PINVI_LIVE_WEATHER_DATE', weatherDate],
+    ['PINVI_LIVE_WEATHER_FEATURE_ID', weatherFeatureId],
+    ['PINVI_LIVE_WEATHER_FEATURE_NAME', weatherFeatureName],
+    ['PINVI_LIVE_WEATHER_FEATURE_LON', process.env.PINVI_LIVE_WEATHER_FEATURE_LON],
+    ['PINVI_LIVE_WEATHER_FEATURE_LAT', process.env.PINVI_LIVE_WEATHER_FEATURE_LAT],
+    ['PINVI_LIVE_WEATHER_NO_DATA_FEATURE_ID', noDataFeatureId],
+    ['PINVI_LIVE_WEATHER_NO_DATA_FEATURE_NAME', noDataFeatureName],
+    ['PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LON', process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LON],
+    ['PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT', process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT],
   ].filter(([, value]) => !value);
   if (missing.length > 0) {
     throw new Error(`${missing.map(([name]) => name).join(', ')} 환경변수가 필요합니다.`);
@@ -102,8 +126,17 @@ function assertLiveEnv() {
       '격리 API를 짧은 TTL의 feature cache로 기동하고 PINVI_LIVE_FEATURE_CACHE_REVALIDATION=1을 설정해야 합니다.',
     );
   }
-  if (!Number.isFinite(foundFeatureLon) || !Number.isFinite(foundFeatureLat)) {
-    throw new Error('found feature 경도·위도는 유한한 실수여야 합니다.');
+  if (
+    ![
+      foundFeatureLon,
+      foundFeatureLat,
+      weatherFeatureLon,
+      weatherFeatureLat,
+      noDataFeatureLon,
+      noDataFeatureLat,
+    ].every(Number.isFinite)
+  ) {
+    throw new Error('live feature 경도·위도는 유한한 실수여야 합니다.');
   }
   if (
     !Number.isInteger(mapProxyPort) ||
@@ -114,9 +147,16 @@ function assertLiveEnv() {
     throw new Error('map proxy/upstream port와 cache wait는 양의 정수여야 합니다.');
   }
   if (
-    new Set([foundFeatureId, retiredFeatureId, suppressedFeatureId, missingFeatureId]).size !== 4
+    new Set([
+      foundFeatureId,
+      retiredFeatureId,
+      suppressedFeatureId,
+      missingFeatureId,
+      weatherFeatureId,
+      noDataFeatureId,
+    ]).size !== 6
   ) {
-    throw new Error('found/retired/suppressed/missing feature ID는 서로 달라야 합니다.');
+    throw new Error('live feature ID 6개는 서로 달라야 합니다.');
   }
 }
 
@@ -147,9 +187,9 @@ async function createTrip(page: Page, title: string) {
   const managementButton = page.getByRole('button', { name: '관리 열기' });
   if (await managementButton.isVisible()) await managementButton.click();
   await page.getByTestId('trip-create-title').fill(title);
-  await page.getByTestId('trip-create-region').fill('T-VN-11 실데이터 검증');
-  await page.getByTestId('trip-create-start').fill('2026-12-01');
-  await page.getByTestId('trip-create-end').fill('2026-12-01');
+  await page.getByTestId('trip-create-region').fill('T-VN-11/16 실데이터 검증');
+  await page.getByTestId('trip-create-start').fill(weatherDate!);
+  await page.getByTestId('trip-create-end').fill(weatherDate!);
   await page.getByTestId('trip-create-submit').click();
   await expect(page.getByText('초안 여행을 저장했습니다.')).toBeVisible();
 
@@ -201,11 +241,14 @@ async function addFeaturePoi(
 }
 
 async function startMapProxy() {
-  let outage = false;
+  let featureOutage = false;
+  let weatherOutage = false;
   type BatchRequestItem = { feature_id: string; known_row_revision?: number };
   type BatchResponseItem = { feature_id: string; state: string };
   const batchRequests: BatchRequestItem[][] = [];
   const batchResponses: BatchResponseItem[][] = [];
+  const weatherBatchRequests: string[][] = [];
+  let singleWeatherRequestCount = 0;
 
   const server = http.createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -214,6 +257,9 @@ async function startMapProxy() {
     }
     const body = Buffer.concat(chunks);
     const isBatch = request.url?.startsWith('/v1/features/batch') ?? false;
+    const isWeatherBatch = request.url?.startsWith('/v1/features/weather/batch') ?? false;
+    const isSingleWeather =
+      /^\/v1\/features\/[^/]+\/weather(?:\?|$)/.test(request.url ?? '') && !isWeatherBatch;
     if (isBatch && body.length > 0) {
       const parsed = JSON.parse(body.toString('utf8')) as { items?: unknown };
       if (Array.isArray(parsed.items)) {
@@ -227,8 +273,17 @@ async function startMapProxy() {
         );
       }
     }
+    if (isWeatherBatch && body.length > 0) {
+      const parsed = JSON.parse(body.toString('utf8')) as { feature_ids?: unknown };
+      if (Array.isArray(parsed.feature_ids)) {
+        weatherBatchRequests.push(
+          parsed.feature_ids.filter((value): value is string => typeof value === 'string'),
+        );
+      }
+    }
+    if (isSingleWeather) singleWeatherRequestCount += 1;
 
-    if (outage) {
+    if (featureOutage || (weatherOutage && isWeatherBatch)) {
       response.writeHead(503, { 'content-type': 'application/problem+json', connection: 'close' });
       response.end(JSON.stringify({ code: 'LIVE_TRANSPORT_OUTAGE', title: 'live outage' }));
       return;
@@ -290,8 +345,15 @@ async function startMapProxy() {
   return {
     batchRequests,
     batchResponses,
+    weatherBatchRequests,
+    get singleWeatherRequestCount() {
+      return singleWeatherRequestCount;
+    },
     setOutage(value: boolean) {
-      outage = value;
+      featureOutage = value;
+    },
+    setWeatherOutage(value: boolean) {
+      weatherOutage = value;
     },
     async close() {
       await new Promise<void>((resolve, reject) => {
@@ -326,8 +388,20 @@ test.describe('Trip feature resolution live mutating flow', () => {
         name: foundFeatureName!,
         coord: { lon: foundFeatureLon, lat: foundFeatureLat },
       };
+      const realWeatherFeature: FeatureSummary = {
+        feature_id: weatherFeatureId!,
+        name: weatherFeatureName!,
+        coord: { lon: weatherFeatureLon, lat: weatherFeatureLat },
+      };
+      const realNoDataFeature: FeatureSummary = {
+        feature_id: noDataFeatureId!,
+        name: noDataFeatureName!,
+        coord: { lon: noDataFeatureLon, lat: noDataFeatureLat },
+      };
 
       await addFeaturePoi(page, tripId, realFeature, realFeature.feature_id, 'a0');
+      await addFeaturePoi(page, tripId, realWeatherFeature, realWeatherFeature.feature_id, 'a01');
+      await addFeaturePoi(page, tripId, realNoDataFeature, realNoDataFeature.feature_id, 'a02');
       await addFeaturePoi(
         page,
         tripId,
@@ -359,8 +433,13 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
       const tripMap = page.getByRole('region', { name: '여행 지도' });
       await expect(tripMap.getByText('1일 표시', { exact: true })).toBeVisible();
-      await expect(tripMap.getByText('장소 4곳', { exact: true })).toBeVisible();
+      await expect(tripMap.getByText('장소 6곳', { exact: true })).toBeVisible();
       await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
+      await expect(page.getByTestId('trip-weather-summary').first()).toBeVisible();
+      await expect(page.getByText('이 날짜의 날씨 정보가 없습니다.').first()).toBeVisible();
+      await expect(
+        page.getByText('장소 상태가 종료되어 날씨를 확인할 수 없습니다.').first(),
+      ).toBeVisible();
 
       const healthy = await readTrip(page, tripId);
       const healthyPois = poisByFeatureId(healthy);
@@ -369,6 +448,43 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(healthyPois.get(suppressedFeatureId!)?.feature_resolution_state).toBe('suppressed');
       expect(healthyPois.get(missingFeatureId!)?.feature_resolution_state).toBe('missing');
       expect(healthy.broken_feature_count).toBe(2);
+      const healthyWeather = healthy.days[0]!.weather_by_feature_id;
+      expect(healthyWeather[weatherFeatureId!]?.state).toBe('found');
+      expect(healthyWeather[noDataFeatureId!]?.state).toBe('no_data');
+      expect(healthyWeather[retiredFeatureId!]?.state).toBe('retired');
+      expect(
+        proxy.weatherBatchRequests.some(
+          (featureIds) =>
+            featureIds.includes(weatherFeatureId!) &&
+            featureIds.includes(noDataFeatureId!) &&
+            featureIds.includes(retiredFeatureId!),
+        ),
+      ).toBe(true);
+      expect(proxy.singleWeatherRequestCount).toBe(0);
+
+      const healthyWeatherBatchCount = proxy.weatherBatchRequests.length;
+      proxy.setWeatherOutage(true);
+      await page.reload();
+      await expect(
+        page.getByText('날씨 서비스를 일시적으로 사용할 수 없습니다.').first(),
+      ).toBeVisible();
+      expect(proxy.weatherBatchRequests.length).toBeGreaterThan(healthyWeatherBatchCount);
+      const weatherOutage = await readTrip(page, tripId);
+      expect(weatherOutage.days[0]!.weather_by_feature_id[weatherFeatureId!]?.state).toBe(
+        'unavailable',
+      );
+      expect(weatherOutage.days[0]!.weather_by_feature_id[noDataFeatureId!]?.state).toBe(
+        'unavailable',
+      );
+      expect(weatherOutage.days[0]!.weather_by_feature_id[retiredFeatureId!]?.state).toBe(
+        'retired',
+      );
+      expect(proxy.singleWeatherRequestCount).toBe(0);
+
+      proxy.setWeatherOutage(false);
+      await page.reload();
+      await expect(page.getByTestId('trip-weather-summary').first()).toBeVisible();
+      await expect(page.getByText('이 날짜의 날씨 정보가 없습니다.').first()).toBeVisible();
       expect(
         proxy.batchRequests.some((items) =>
           items.some((item) => item.feature_id === missingFeatureId),
@@ -414,6 +530,8 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(outagePois.get(retiredFeatureId!)?.feature_resolution_state).toBe('unverified');
       expect(outagePois.get(suppressedFeatureId!)?.feature_resolution_state).toBe('unverified');
       expect(outagePois.get(missingFeatureId!)?.feature_resolution_state).toBe('unverified');
+      expect(outagePois.get(weatherFeatureId!)?.feature_resolution_state).toBe('unverified');
+      expect(outagePois.get(noDataFeatureId!)?.feature_resolution_state).toBe('unverified');
       expect(outage.broken_feature_count).toBe(0);
 
       proxy.setOutage(false);
@@ -429,9 +547,15 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(recoveredPois.get(retiredFeatureId!)?.feature_resolution_state).toBe('retired');
       expect(recoveredPois.get(suppressedFeatureId!)?.feature_resolution_state).toBe('suppressed');
       expect(recoveredPois.get(missingFeatureId!)?.feature_resolution_state).toBe('missing');
+      expect(recoveredPois.get(weatherFeatureId!)?.feature_resolution_state).toBe('found');
+      expect(recoveredPois.get(noDataFeatureId!)?.feature_resolution_state).toBe('found');
       expect(recovered.broken_feature_count).toBe(2);
+      expect(recovered.days[0]!.weather_by_feature_id[weatherFeatureId!]?.state).toBe('found');
+      expect(recovered.days[0]!.weather_by_feature_id[noDataFeatureId!]?.state).toBe('no_data');
+      expect(proxy.singleWeatherRequestCount).toBe(0);
     } finally {
       proxy.setOutage(false);
+      proxy.setWeatherOutage(false);
       try {
         if (tripId) await cleanupTrip(page, tripId);
       } finally {
