@@ -27,6 +27,7 @@ const noDataFeatureLon = Number(process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_L
 const noDataFeatureLat = Number(process.env.PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT);
 const cacheWaitMs = Number(process.env.PINVI_LIVE_FEATURE_CACHE_WAIT_MS ?? '250');
 const featureCacheRevalidationConfirmed = process.env.PINVI_LIVE_FEATURE_CACHE_REVALIDATION === '1';
+const longTripDayCount = 40;
 
 type FeatureSummary = {
   feature_id: string;
@@ -52,18 +53,29 @@ type TripViewPoi = {
 type TripView = {
   days: Array<{
     pois: TripViewPoi[];
-    weather_by_feature_id: Record<
+    weather_cards: Record<
       string,
       {
-        state:
-          | 'found'
-          | 'no_data'
-          | 'retired'
-          | 'suppressed'
-          | 'missing'
-          | 'unavailable'
-          | 'not_requested';
+        metrics: Array<{
+          metric_key: string;
+          metric_name?: string | null;
+          forecast_style: string;
+          timeline_bucket?: string | null;
+          unit?: string | null;
+          effective_at?: string | null;
+          valid_at?: string | null;
+          observed_at?: string | null;
+          valid_from?: string | null;
+          value_number?: number | null;
+          value_text?: string | null;
+          severity?: string | null;
+        }>;
       }
+    >;
+    weather_by_feature_id: Record<
+      string,
+      | { state: 'found'; card_key: string }
+      | { state: 'no_data' | 'retired' | 'suppressed' | 'missing' | 'unavailable' }
     >;
   }>;
   broken_feature_count: number;
@@ -71,6 +83,67 @@ type TripView = {
 
 function apiUrl(pathname: string) {
   return new URL(pathname, apiBaseUrl).toString();
+}
+
+function offsetIsoDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const liveSeoulDateFormatter = new Intl.DateTimeFormat('en', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function liveMetricDate(
+  metric: TripView['days'][number]['weather_cards'][string]['metrics'][number],
+) {
+  const instant =
+    metric.effective_at ?? metric.valid_at ?? metric.observed_at ?? metric.valid_from ?? null;
+  if (!instant) return null;
+  const value = new Date(instant);
+  if (Number.isNaN(value.getTime())) return null;
+  const parts = Object.fromEntries(
+    liveSeoulDateFormatter.formatToParts(value).map(({ type, value: part }) => [type, part]),
+  );
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
+}
+
+function isRenderableWeatherMetric(
+  metric: TripView['days'][number]['weather_cards'][string]['metrics'][number],
+  expectedDate: string,
+) {
+  if (liveMetricDate(metric) !== expectedDate) return false;
+  if (metric.value_text == null && metric.value_number == null && metric.severity == null) {
+    return false;
+  }
+  const haystack = [
+    metric.metric_key,
+    metric.metric_name,
+    metric.forecast_style,
+    metric.timeline_bucket,
+    metric.unit,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const current = /observed|nowcast|current/i.test(metric.forecast_style);
+  return (
+    /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i.test(haystack) ||
+    (current &&
+      /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i.test(
+        haystack,
+      )) ||
+    (!current &&
+      (/ultra|short|mid|forecast/i.test(metric.forecast_style) ||
+        /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i.test(
+          haystack,
+        )))
+  );
 }
 
 type BrowserApiResponse = {
@@ -198,7 +271,7 @@ async function createTrip(page: Page, title: string) {
   await page.getByTestId('trip-create-title').fill(title);
   await page.getByTestId('trip-create-region').fill('T-VN-11/16 실데이터 검증');
   await page.getByTestId('trip-create-start').fill(weatherDate!);
-  await page.getByTestId('trip-create-end').fill(weatherDate!);
+  await page.getByTestId('trip-create-end').fill(offsetIsoDate(weatherDate!, longTripDayCount - 1));
   await page.getByTestId('trip-create-submit').click();
   await expect(page.getByText('초안 여행을 저장했습니다.')).toBeVisible();
 
@@ -239,9 +312,10 @@ async function addFeaturePoi(
   feature: FeatureSummary,
   featureId: string,
   sortOrder: string,
+  dayIndex = 1,
 ) {
   const response = await browserApiRequest(page, 'POST', `/trips/${tripId}/pois`, {
-    day_index: 1,
+    day_index: dayIndex,
     sort_order: sortOrder,
     feature_id: featureId,
     feature_snapshot: feature,
@@ -258,9 +332,10 @@ async function startMapProxy() {
   let weatherOutage = false;
   type BatchRequestItem = { feature_id: string; known_row_revision?: number };
   type BatchResponseItem = { feature_id: string; state: string };
+  type WeatherBatchRequestTarget = { target_at: string; feature_ids: string[] };
   const batchRequests: BatchRequestItem[][] = [];
   const batchResponses: BatchResponseItem[][] = [];
-  const weatherBatchRequests: string[][] = [];
+  const weatherBatchRequests: WeatherBatchRequestTarget[][] = [];
   let singleWeatherRequestCount = 0;
 
   const server = http.createServer(async (request, response) => {
@@ -287,10 +362,19 @@ async function startMapProxy() {
       }
     }
     if (isWeatherBatch && body.length > 0) {
-      const parsed = JSON.parse(body.toString('utf8')) as { feature_ids?: unknown };
-      if (Array.isArray(parsed.feature_ids)) {
+      const parsed = JSON.parse(body.toString('utf8')) as { targets?: unknown };
+      if (Array.isArray(parsed.targets)) {
         weatherBatchRequests.push(
-          parsed.feature_ids.filter((value): value is string => typeof value === 'string'),
+          parsed.targets.filter(
+            (value): value is WeatherBatchRequestTarget =>
+              typeof value === 'object' &&
+              value !== null &&
+              typeof (value as { target_at?: unknown }).target_at === 'string' &&
+              Array.isArray((value as { feature_ids?: unknown }).feature_ids) &&
+              (value as { feature_ids: unknown[] }).feature_ids.every(
+                (featureId) => typeof featureId === 'string',
+              ),
+          ),
         );
       }
     }
@@ -415,6 +499,16 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await addFeaturePoi(page, tripId, realFeature, realFeature.feature_id, 'a0');
       await addFeaturePoi(page, tripId, realWeatherFeature, realWeatherFeature.feature_id, 'a01');
       await addFeaturePoi(page, tripId, realNoDataFeature, realNoDataFeature.feature_id, 'a02');
+      for (let dayIndex = 2; dayIndex <= longTripDayCount; dayIndex += 1) {
+        await addFeaturePoi(
+          page,
+          tripId,
+          realWeatherFeature,
+          realWeatherFeature.feature_id,
+          'a0',
+          dayIndex,
+        );
+      }
       await addFeaturePoi(
         page,
         tripId,
@@ -445,8 +539,10 @@ test.describe('Trip feature resolution live mutating flow', () => {
       await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
       await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
       const tripMap = page.getByRole('region', { name: '여행 지도' });
-      await expect(tripMap.getByText('1일 표시', { exact: true })).toBeVisible();
-      await expect(tripMap.getByText('장소 6곳', { exact: true })).toBeVisible();
+      await expect(tripMap.getByText(`${longTripDayCount}일 표시`, { exact: true })).toBeVisible();
+      await expect(
+        tripMap.getByText(`장소 ${longTripDayCount + 5}곳`, { exact: true }),
+      ).toBeVisible();
       await expect(page.getByText(/라이브러리에서 삭제된 장소/)).toHaveCount(0);
       const weatherPoiItem = poiListItem(page, realWeatherFeature.name);
       const noDataPoiItem = poiListItem(page, realNoDataFeature.name);
@@ -467,7 +563,9 @@ test.describe('Trip feature resolution live mutating flow', () => {
         missingPoiItem.getByText('장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.'),
       ).toBeVisible();
 
+      const weatherBatchCountBeforeDirectRead = proxy.weatherBatchRequests.length;
       const healthy = await readTrip(page, tripId);
+      expect(proxy.weatherBatchRequests).toHaveLength(weatherBatchCountBeforeDirectRead + 1);
       const healthyPois = poisByFeatureId(healthy);
       expect(healthyPois.get(realFeature.feature_id)?.feature_resolution_state).toBe('found');
       expect(healthyPois.get(retiredFeatureId!)?.feature_resolution_state).toBe('retired');
@@ -480,21 +578,63 @@ test.describe('Trip feature resolution live mutating flow', () => {
       expect(healthyWeather[retiredFeatureId!]?.state).toBe('retired');
       expect(healthyWeather[suppressedFeatureId!]?.state).toBe('suppressed');
       expect(healthyWeather[missingFeatureId!]?.state).toBe('missing');
+      expect(healthy.days).toHaveLength(longTripDayCount);
+      expect(
+        healthy.days.every((day) => {
+          const state = day.weather_by_feature_id[weatherFeatureId!]?.state;
+          return state === 'found' || state === 'no_data';
+        }),
+      ).toBe(true);
       expect(
         proxy.weatherBatchRequests.some(
-          (featureIds) =>
-            featureIds.includes(weatherFeatureId!) && featureIds.includes(noDataFeatureId!),
+          (targets) =>
+            targets.length === longTripDayCount &&
+            targets[0]?.feature_ids.includes(weatherFeatureId!) &&
+            targets[0]?.feature_ids.includes(noDataFeatureId!),
         ),
       ).toBe(true);
       expect(
-        proxy.weatherBatchRequests.every(
-          (featureIds) =>
-            !featureIds.includes(retiredFeatureId!) &&
-            !featureIds.includes(suppressedFeatureId!) &&
-            !featureIds.includes(missingFeatureId!),
+        proxy.weatherBatchRequests.every((targets) =>
+          targets.every(
+            ({ feature_ids: featureIds }) =>
+              !featureIds.includes(retiredFeatureId!) &&
+              !featureIds.includes(suppressedFeatureId!) &&
+              !featureIds.includes(missingFeatureId!),
+          ),
         ),
       ).toBe(true);
       expect(proxy.singleWeatherRequestCount).toBe(0);
+
+      const finalDayTab = page.getByRole('tab', { name: `${longTripDayCount}일차` });
+      await finalDayTab.click();
+      const finalDayCard = finalDayTab.locator('xpath=ancestor::article');
+      await expect(finalDayCard.getByText(realWeatherFeature.name)).toBeVisible();
+      await expect(finalDayCard).not.toContainText(
+        '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
+      );
+      await expect(finalDayCard).not.toContainText('날씨 서비스를 일시적으로 사용할 수 없습니다.');
+      const finalWeather = finalDayCard.getByLabel('장소 날씨').first();
+      await expect(finalWeather).toBeVisible();
+      const finalApiDay = healthy.days[longTripDayCount - 1]!;
+      const finalResolution = finalApiDay.weather_by_feature_id[weatherFeatureId!];
+      if (finalResolution?.state === 'found') {
+        const finalCard = finalApiDay.weather_cards[finalResolution.card_key];
+        expect(finalCard, `40일차 card ${finalResolution.card_key} 누락`).toBeDefined();
+        const hasRenderableMetric = finalCard!.metrics.some((metric) =>
+          isRenderableWeatherMetric(metric, offsetIsoDate(weatherDate!, longTripDayCount - 1)),
+        );
+        if (hasRenderableMetric) {
+          await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-summary');
+          await expect(finalWeather).toContainText(/현재|예보|미세먼지/);
+        } else {
+          await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-status');
+          await expect(finalWeather).toHaveText('이 날짜의 날씨 정보가 없습니다.');
+        }
+      } else {
+        expect(finalResolution?.state).toBe('no_data');
+        await expect(finalWeather).toHaveAttribute('data-testid', 'trip-weather-status');
+        await expect(finalWeather).toHaveText('이 날짜의 날씨 정보가 없습니다.');
+      }
 
       const healthyWeatherBatchCount = proxy.weatherBatchRequests.length;
       proxy.setWeatherOutage(true);

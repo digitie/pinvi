@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Mapping
-from datetime import UTC, date, datetime
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -24,6 +24,7 @@ from app.clients.kor_travel_map import (
     RetiredWeatherBatchItem,
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
+    WeatherBatchCard,
     WeatherBatchItem,
     WeatherBatchMetric,
 )
@@ -98,7 +99,7 @@ class _WeatherFeatureClient:
         rejected_target_dates: frozenset[date] = frozenset(),
     ) -> None:
         self.feature_call_count = 0
-        self.weather_calls: list[tuple[list[str], datetime, datetime]] = []
+        self.weather_calls: list[tuple[dict[datetime, list[str]], datetime]] = []
         self.weather_unavailable = weather_unavailable
         self.weather_delay_seconds = weather_delay_seconds
         self.rejected_target_dates = rejected_target_dates
@@ -124,12 +125,14 @@ class _WeatherFeatureClient:
 
     async def get_weather_batch(
         self,
-        feature_ids: list[str],
+        targets: Mapping[datetime, Sequence[str]],
         *,
-        target_at: datetime,
         known_at: datetime,
-    ) -> dict[str, WeatherBatchItem]:
-        self.weather_calls.append((list(feature_ids), target_at, known_at))
+    ) -> dict[datetime, dict[str, WeatherBatchItem]]:
+        requested_targets = {
+            target_at: list(feature_ids) for target_at, feature_ids in targets.items()
+        }
+        self.weather_calls.append((requested_targets, known_at))
         self.active_weather_calls += 1
         self.max_active_weather_calls = max(
             self.max_active_weather_calls,
@@ -138,44 +141,53 @@ class _WeatherFeatureClient:
         try:
             if self.weather_delay_seconds:
                 await asyncio.sleep(self.weather_delay_seconds)
-            if target_at.date() in self.rejected_target_dates:
+            if any(
+                target_at.date() in self.rejected_target_dates for target_at in requested_targets
+            ):
                 raise ValueError("target_at은 1일 timeline을 계산할 수 있어야 합니다.")
             if self.weather_unavailable:
                 raise KorTravelMapUnavailable("weather transport down")
-            items: dict[str, WeatherBatchItem] = {}
-            for feature_id in feature_ids:
-                if feature_id == "weather:no-data":
-                    items[feature_id] = NoDataWeatherBatchItem(feature_id=feature_id)
-                elif feature_id == "weather:retired":
-                    items[feature_id] = RetiredWeatherBatchItem(feature_id=feature_id)
-                else:
-                    metric = WeatherBatchMetric(
-                        forecast_style="short",
-                        metric_key="TMP",
-                        metric_name="기온",
-                        timeline_bucket="forecast",
-                        value_number=24.0,
-                        value_text=None,
-                        unit="℃",
-                        severity=None,
-                        issued_at=known_at,
-                        valid_at=target_at,
-                        valid_from=target_at,
-                        valid_until=target_at,
-                        observed_at=None,
-                        effective_at=target_at,
-                        provider="python-kma-api",
-                        weather_domain="forecast",
-                    )
-                    items[feature_id] = FoundWeatherBatchItem(
-                        feature_id=feature_id,
-                        source_styles=("short",),
-                        current=(metric,),
-                        timeline=(),
-                        latest_at=target_at,
-                        is_stale=False,
-                    )
-            return items
+            result: dict[datetime, dict[str, WeatherBatchItem]] = {}
+            for target_at, feature_ids in requested_targets.items():
+                metric = WeatherBatchMetric(
+                    forecast_style="short",
+                    metric_key="TMP",
+                    metric_name="기온",
+                    timeline_bucket="forecast",
+                    value_number=24.0,
+                    value_text=None,
+                    unit="℃",
+                    severity=None,
+                    issued_at=known_at,
+                    valid_at=target_at,
+                    valid_from=target_at,
+                    valid_until=target_at,
+                    observed_at=None,
+                    effective_at=target_at,
+                    provider="python-kma-api",
+                    weather_domain="forecast",
+                )
+                shared_card = WeatherBatchCard(
+                    card_key=f"card:{target_at.isoformat()}",
+                    source_styles=("short",),
+                    current=(metric,),
+                    timeline=(),
+                    latest_at=target_at,
+                    is_stale=False,
+                )
+                items: dict[str, WeatherBatchItem] = {}
+                for feature_id in feature_ids:
+                    if feature_id == "weather:no-data":
+                        items[feature_id] = NoDataWeatherBatchItem(feature_id=feature_id)
+                    elif feature_id == "weather:retired":
+                        items[feature_id] = RetiredWeatherBatchItem(feature_id=feature_id)
+                    else:
+                        items[feature_id] = FoundWeatherBatchItem(
+                            feature_id=feature_id,
+                            card=shared_card,
+                        )
+                result[target_at] = items
+            return result
         finally:
             self.active_weather_calls -= 1
 
@@ -308,12 +320,13 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
 
 async def test_build_trip_view_batches_weather_once_per_unique_date(
     session_factory,  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.models.poi import TripDayPoi
     from app.models.trip import Trip
     from app.models.trip_day import TripDay
     from app.models.user import User
-    from app.schemas.trip import TripView
+    from app.schemas.trip import TripFeatureWeatherFound, TripView
     from app.services.feature_cache import feature_cache
     from app.services.trip_view_builder import build_trip_view
 
@@ -321,6 +334,15 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     user_id = uuid.uuid4()
     trip_id = uuid.uuid4()
     now = datetime.now(UTC)
+    metric_projection_count = 0
+    original_as_dict = WeatherBatchMetric.as_dict
+
+    def counting_as_dict(metric: WeatherBatchMetric) -> dict[str, Any]:
+        nonlocal metric_projection_count
+        metric_projection_count += 1
+        return original_as_dict(metric)
+
+    monkeypatch.setattr(WeatherBatchMetric, "as_dict", counting_as_dict)
 
     async with session_factory() as db:
         db.add(
@@ -357,6 +379,7 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
                     [
                         (1, "weather:found"),
                         (1, "weather:found"),
+                        (1, "weather:found-peer"),
                         (1, "weather:no-data"),
                         (2, "weather:retired"),
                         (3, "weather:found"),
@@ -372,17 +395,33 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
 
     typed = TripView.model_validate(view)
     assert client.feature_call_count == 1
-    assert [call[0] for call in client.weather_calls] == [
-        ["weather:found", "weather:no-data", "weather:retired"],
-        ["weather:found"],
-    ]
-    assert client.weather_calls[0][2] == client.weather_calls[1][2]
-    assert client.weather_calls[0][1].isoformat() == "2026-07-30T00:00:00+09:00"
-    assert client.weather_calls[1][1].isoformat() == "2026-07-31T00:00:00+09:00"
+    assert len(client.weather_calls) == 1
+    requested_targets, known_at = client.weather_calls[0]
+    assert {
+        target_at.isoformat(): feature_ids for target_at, feature_ids in requested_targets.items()
+    } == {
+        "2026-07-30T00:00:00+09:00": [
+            "weather:found",
+            "weather:found-peer",
+            "weather:no-data",
+            "weather:retired",
+        ],
+        "2026-07-31T00:00:00+09:00": ["weather:found"],
+    }
+    assert known_at.tzinfo is not None
 
     first_day = typed.days[0].weather_by_feature_id
-    assert first_day["weather:found"].state == "found"
-    assert first_day["weather:found"].card.metrics[0].provider == "python-kma-api"
+    found = first_day["weather:found"]
+    found_peer = first_day["weather:found-peer"]
+    assert isinstance(found, TripFeatureWeatherFound)
+    assert isinstance(found_peer, TripFeatureWeatherFound)
+    assert found.card_key == found_peer.card_key
+    assert len(typed.days[0].weather_cards) == 1
+    assert metric_projection_count == 2
+    assert typed.days[0].weather_cards[found.card_key].metrics[0].provider == "python-kma-api"
+    assert all(
+        "card" not in resolution for resolution in view["days"][0]["weather_by_feature_id"].values()
+    )
     assert first_day["weather:no-data"].state == "no_data"
     assert typed.days[1].weather_by_feature_id["weather:retired"].state == "retired"
     assert typed.days[2].weather_by_feature_id["weather:found"].state == "found"
@@ -451,16 +490,10 @@ async def test_build_trip_view_stops_weather_retries_after_transport_failure(
     feature_cache.clear()
 
 
-async def test_build_trip_view_bounds_weather_date_fanout(
+async def test_build_trip_view_batches_long_trip_once_without_date_omission(
     session_factory,  # type: ignore[no-untyped-def]
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import trip_view_builder
-
-    monkeypatch.setattr(trip_view_builder, "_WEATHER_BATCH_MAX_CONCURRENCY", 2)
-    monkeypatch.setattr(trip_view_builder, "_WEATHER_BATCH_MAX_DATES_PER_VIEW", 3)
-    monkeypatch.setattr(trip_view_builder, "_WEATHER_BATCH_VIEW_BUDGET_SECONDS", 1.0)
-    effective_dates = [date(2026, 8, day) for day in range(1, 7)]
+    effective_dates = [date(2026, 8, 1) + timedelta(days=offset) for offset in range(40)]
     client = _WeatherFeatureClient(weather_delay_seconds=0.01)
 
     view = await _build_weather_date_view(
@@ -469,16 +502,13 @@ async def test_build_trip_view_bounds_weather_date_fanout(
         client=client,
     )
 
-    assert len(client.weather_calls) == 3
-    assert client.max_active_weather_calls == 2
-    assert [day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]] == [
-        "found",
-        "found",
-        "found",
-        "not_requested",
-        "not_requested",
-        "not_requested",
-    ]
+    assert len(client.weather_calls) == 1
+    assert len(client.weather_calls[0][0]) == 40
+    assert client.max_active_weather_calls == 1
+    assert {day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]} == {
+        "found"
+    }
+    assert all(len(day["weather_cards"]) == 1 for day in view["days"])
 
 
 async def test_build_trip_view_enforces_total_weather_budget(
@@ -496,8 +526,8 @@ async def test_build_trip_view_enforces_total_weather_budget(
         client=client,
     )
 
-    assert len(client.weather_calls) == 4
-    assert client.max_active_weather_calls == 4
+    assert len(client.weather_calls) == 1
+    assert client.max_active_weather_calls == 1
     assert {day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]} == {
         "unavailable"
     }
@@ -515,17 +545,17 @@ async def test_build_trip_view_cancels_weather_workers_with_parent_request(
         )
     )
     for _ in range(100):
-        if client.active_weather_calls == 4:
+        if client.active_weather_calls == 1:
             break
         await asyncio.sleep(0.01)
-    assert client.active_weather_calls == 4
+    assert client.active_weather_calls == 1
 
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
     assert client.active_weather_calls == 0
-    assert len(client.weather_calls) == 4
+    assert len(client.weather_calls) == 1
 
 
 async def test_build_trip_view_degrades_unrepresentable_weather_horizon(

@@ -5,6 +5,10 @@
 2026-07-30 구현·계약·mocked UI, 적대 리뷰 2인, 리뷰 수정 실데이터 Live까지 완료했다.
 최종 gate와 PR landing만 남았다.
 
+> 후속 T-VN-16C가 날짜별 fanout·31일 `not_requested` 설계를 sparse 다중 날짜 단일 요청으로
+> 대체했다. 아래 설계는 T-VN-16B 시점의 구현 근거를 보존하는 역사 기록이며 현재 계약은
+> `docs/integrations/kor-travel-map-rest-api.md` §2.6a를 따른다.
+
 ## 목표
 
 Trip 상세/공유 응답이 POI마다 Map 단건 weather API를 호출하던 N+1을 없앤다. 같은 여행

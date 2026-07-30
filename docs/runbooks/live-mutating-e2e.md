@@ -22,9 +22,11 @@ Windows runner를 fallback으로 사용한다.
 - Feature resolution suite는 실 Map DB의 `found|retired|suppressed|missing` fixture를 Trip POI로
   연결하고, 만료 cache의 `row_revision` 재검증(`unchanged`), proxy 강제 503의 `unverified`, 복구를
   owner 목록·API 상태·집계에서 확인한다. 같은 suite가 실 weather 값이 있는 feature, 공개 parent지만
-  weather가 없는 feature, retired parent를 한 날짜의 batch로 조회한다. weather batch만 강제 503으로
-  바꿔 `unavailable`과 복구를 검증하고 단건 weather 요청이 0회인지 확인한다. 격리 API는 짧은 TTL의
-  feature cache를 반드시 켠다.
+  weather가 없는 feature, retired parent를 40일 여행의 sparse 다중 날짜 batch로 조회한다.
+  직접 Trip read 한 번당 weather batch POST가 정확히 1회인지, 40일차가 과거 31일 상한으로
+  생략되지 않는지 검증한다. weather batch만 강제 503으로 바꿔 `unavailable`과 복구를 확인하고
+  단건 weather 요청이 0회인지도 고정한다. 격리 API는 짧은 TTL의 feature cache를 켜고, 40일
+  fixture 생성 요청이 일반 사용자 rate limit을 소진하지 않도록 rate limit을 비활성화한다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
@@ -104,6 +106,7 @@ feature cache를 켜고 TTL을 짧게 설정한다. Map DB에서 확인한 서�
 # 격리 API container/server 환경
 export PINVI_FEATURE_CACHE_ENABLED=true
 export PINVI_FEATURE_CACHE_TTL_SECONDS=0.1
+export PINVI_RATE_LIMIT_ENABLED=false
 export PINVI_KOR_TRAVEL_MAP_API_BASE_URL=http://127.0.0.1:13701
 export PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN="<same-token-as-isolated-map-api>"
 
@@ -131,7 +134,7 @@ PINVI_LIVE_TRIP_PREFIX="[codex-tvn11-<unique-run-id>]" \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
 PINVI_LIVE_API_URL=http://127.0.0.1:13801 \
 PINVI_LIVE_MAP_PROXY_PORT=13701 \
-PINVI_LIVE_MAP_UPSTREAM_PORT=12701 \
+PINVI_LIVE_MAP_UPSTREAM_PORT="<isolated-map-api-port>" \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
 npm run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
@@ -143,6 +146,9 @@ key가 없는 fallback 환경에서는 지도 popup이 마운트되지 않으므
 label로 검증하고 지도 좌표·marker 상태는 숨김 legend와 API 상태 검증으로 보완한다.
 weather 날짜는 fixture의 `valid_at|observed_at|issued_at` 범위 안에서 고른다. `weather found`와
 `no_data` feature는 공개 parent여야 하고, retired fixture는 현재 공개 parent가 아니어야 한다.
+`PINVI_RATE_LIMIT_ENABLED=false`는 격리 API에만 적용한다. 40일 여행 생성은 39개의 추가 POI
+mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 검증이 아니라 마지막 cleanup이
+429로 실패할 수 있다.
 
 Backup staging:
 

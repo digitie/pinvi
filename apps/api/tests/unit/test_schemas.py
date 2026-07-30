@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app.schemas.auth import LoginRequest, RegisterRequest, VerifyEmailRequest
 from app.schemas.storage import AttachmentResponse
+from app.schemas.trip import TripFeatureWeatherFound, TripViewDay
 
 
 def _register_consents() -> list[dict[str, str]]:
@@ -81,6 +82,68 @@ def test_verify_email_request_token_length() -> None:
 def test_login_request_valid() -> None:
     req = LoginRequest(email="user@example.com", password="x")
     assert req.password == "x"
+
+
+@pytest.mark.parametrize(
+    ("weather_cards", "weather_by_feature_id"),
+    [
+        ({}, {"weather:found": {"state": "found", "card_key": "card:seoul"}}),
+        (
+            {
+                "card:orphan": {
+                    "asof": "2026-07-30T00:00:00+09:00",
+                    "latest_at": None,
+                    "is_stale": False,
+                    "source_styles": [],
+                    "metrics": [],
+                }
+            },
+            {},
+        ),
+    ],
+    ids=["missing-card", "orphan-card"],
+)
+def test_trip_view_day_rejects_weather_card_partition_drift(
+    weather_cards: dict[str, object],
+    weather_by_feature_id: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError, match="weather card 참조 집합"):
+        TripViewDay(
+            day_index=1,
+            date=None,
+            title=None,
+            version=1,
+            weather_cards=weather_cards,
+            weather_by_feature_id=weather_by_feature_id,
+            pois=[],
+        )
+
+
+@pytest.mark.parametrize("card_key", ["", "x" * 257], ids=["empty", "long"])
+def test_trip_view_day_preserves_unconstrained_producer_card_key(card_key: str) -> None:
+    parsed = TripViewDay(
+        day_index=1,
+        date=None,
+        title=None,
+        version=1,
+        weather_cards={
+            card_key: {
+                "asof": "2026-07-30T00:00:00+09:00",
+                "latest_at": None,
+                "is_stale": False,
+                "source_styles": [],
+                "metrics": [],
+            }
+        },
+        weather_by_feature_id={
+            "weather:found": {"state": "found", "card_key": card_key},
+        },
+        pois=[],
+    )
+
+    resolution = parsed.weather_by_feature_id["weather:found"]
+    assert isinstance(resolution, TripFeatureWeatherFound)
+    assert resolution.card_key == card_key
 
 
 def test_attachment_response_syncs_notice_aliases() -> None:

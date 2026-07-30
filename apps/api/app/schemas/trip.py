@@ -10,7 +10,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
-from app.schemas.feature import FeatureWeatherResolution
+from app.schemas.feature import (
+    FeatureWeatherMissing,
+    FeatureWeatherNoData,
+    FeatureWeatherRetired,
+    FeatureWeatherSuppressed,
+    FeatureWeatherUnavailable,
+    WeatherMetric,
+)
 from app.schemas.poi import PoiRiseSetResponse
 from app.schemas.storage import AttachmentResponse
 
@@ -247,6 +254,32 @@ class TripDayHoliday(BaseModel):
     ]
 
 
+class TripWeatherCard(BaseModel):
+    """한 여행 일자의 여러 feature가 공유하는 정규화된 날씨 카드."""
+
+    asof: datetime
+    latest_at: datetime | None = None
+    is_stale: bool = False
+    source_styles: list[str] = Field(default_factory=list)
+    metrics: list[WeatherMetric] = Field(default_factory=list)
+
+
+class TripFeatureWeatherFound(BaseModel):
+    state: Literal["found"] = "found"
+    card_key: str
+
+
+TripFeatureWeatherResolution = Annotated[
+    TripFeatureWeatherFound
+    | FeatureWeatherNoData
+    | FeatureWeatherRetired
+    | FeatureWeatherSuppressed
+    | FeatureWeatherMissing
+    | FeatureWeatherUnavailable,
+    Field(discriminator="state"),
+]
+
+
 class TripViewDay(BaseModel):
     day_index: int
     date: Date | None
@@ -262,9 +295,27 @@ class TripViewDay(BaseModel):
     # ADR-055 §6: 일자 단위 일출/일몰(전용 table) + "XX 장소 기준" 라벨.
     rise_set: PoiRiseSetResponse | None = None
     rise_set_reference: str | None = None
-    # 날씨는 POI 속성이 아니라 해당 일자별 feature snapshot이다.
-    weather_by_feature_id: dict[str, FeatureWeatherResolution]
+    # 동일한 일자·기상 격자의 여러 feature는 하나의 card를 참조한다.
+    weather_cards: dict[str, TripWeatherCard]
+    weather_by_feature_id: dict[str, TripFeatureWeatherResolution]
     pois: list[TripViewPoi]
+
+    @model_validator(mode="after")
+    def _check_weather_card_partition(self) -> TripViewDay:
+        referenced = {
+            resolution.card_key
+            for resolution in self.weather_by_feature_id.values()
+            if isinstance(resolution, TripFeatureWeatherFound)
+        }
+        card_keys = set(self.weather_cards)
+        if referenced != card_keys:
+            missing = sorted(referenced - card_keys)
+            orphaned = sorted(card_keys - referenced)
+            raise ValueError(
+                "weather card 참조 집합이 일치하지 않습니다. "
+                f"missing={missing}, orphaned={orphaned}"
+            )
+        return self
 
 
 class TripViewShareLink(BaseModel):

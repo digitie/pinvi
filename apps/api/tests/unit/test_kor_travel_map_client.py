@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -474,8 +475,9 @@ async def test_get_features_is_all_or_nothing_across_chunks() -> None:
     await client.aclose()
 
 
-async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
-    target_at = datetime(2026, 7, 30, tzinfo=UTC)
+async def test_get_weather_batch_decodes_sparse_targets_and_shared_cards() -> None:
+    first_target_at = datetime(2026, 7, 30, tzinfo=UTC)
+    second_target_at = datetime(2026, 7, 31, tzinfo=UTC)
     known_at = datetime(2026, 7, 29, 12, tzinfo=UTC)
     calls: list[dict[str, Any]] = []
     headers: list[dict[str, str]] = []
@@ -486,30 +488,60 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
         body = _json.loads(request.content)
         calls.append(body)
         headers.append(dict(request.headers))
-        items: list[dict[str, Any]] = []
-        for feature_id in body["feature_ids"]:
-            if feature_id == "found":
-                items.append(
-                    {
+        target_results: list[dict[str, Any]] = []
+        for target_index, target in enumerate(body["targets"]):
+            target_at = datetime.fromisoformat(target["target_at"])
+            found_ids = [
+                feature_id
+                for feature_id in target["feature_ids"]
+                if feature_id not in {"no_data", "retired"}
+            ]
+            card_key = f"card-{target_index}"
+            items = [
+                (
+                    {"state": feature_id, "feature_id": feature_id}
+                    if feature_id in {"no_data", "retired"}
+                    else {
                         "state": "found",
                         "feature_id": feature_id,
-                        "source_styles": ["short"],
-                        "current": [_weather_metric()],
-                        "timeline": [{**_weather_metric(), "valid_at": "2026-07-31T00:00:00Z"}],
-                        "latest_at": "2026-07-30T03:00:00Z",
-                        "is_stale": False,
+                        "card_key": card_key,
                     }
                 )
-            else:
-                items.append({"state": feature_id, "feature_id": feature_id})
+                for feature_id in target["feature_ids"]
+            ]
+            cards = (
+                [
+                    {
+                        "card_key": card_key,
+                        "source_styles": ["short"],
+                        "current": [_weather_metric()],
+                        "timeline": [
+                            {
+                                **_weather_metric(),
+                                "valid_at": (target_at + timedelta(hours=3)).isoformat(),
+                            }
+                        ],
+                        "latest_at": (target_at + timedelta(hours=3)).isoformat(),
+                        "is_stale": False,
+                    }
+                ]
+                if found_ids
+                else []
+            )
+            target_results.append(
+                {
+                    "target_at": target["target_at"],
+                    "timeline_until": (target_at + timedelta(days=1)).isoformat(),
+                    "items": items,
+                    "cards": cards,
+                }
+            )
         return httpx.Response(
             200,
             json={
                 "data": {
-                    "target_at": "2026-07-30T00:00:00Z",
                     "known_at": "2026-07-29T12:00:00Z",
-                    "timeline_until": "2026-07-31T00:00:00Z",
-                    "items": items,
+                    "targets": target_results,
                 },
                 "meta": {},
             },
@@ -519,21 +551,36 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
         handler,
         service_token="service-token",
         public_api_key="must-not-leak",
-        batch_chunk_size=2,
     )
     result = await client.get_weather_batch(
-        ["found", "no_data", "retired", "found"],
-        target_at=target_at,
+        {
+            second_target_at: ["retired", "found-a"],
+            first_target_at: ["found-a", "found-b", "no_data", "found-a"],
+        },
         known_at=known_at,
     )
 
-    assert [call["feature_ids"] for call in calls] == [["found", "no_data"], ["retired"]]
-    assert all(call["target_at"] == target_at.isoformat() for call in calls)
-    assert all(call["known_at"] == known_at.isoformat() for call in calls)
+    assert calls == [
+        {
+            "targets": [
+                {
+                    "target_at": first_target_at.isoformat(),
+                    "feature_ids": ["found-a", "found-b", "no_data"],
+                },
+                {
+                    "target_at": second_target_at.isoformat(),
+                    "feature_ids": ["retired", "found-a"],
+                },
+            ],
+            "known_at": known_at.isoformat(),
+        }
+    ]
     assert all(header["x-kor-travel-map-service-token"] == "service-token" for header in headers)
     assert all("x-kor-travel-map-api-key" not in header for header in headers)
-    assert isinstance(found := result["found"], FoundWeatherBatchItem)
-    assert found.current[0].as_dict() == {
+    assert isinstance(found := result[first_target_at]["found-a"], FoundWeatherBatchItem)
+    assert isinstance(found_peer := result[first_target_at]["found-b"], FoundWeatherBatchItem)
+    assert found.card is found_peer.card
+    assert found.card.current[0].as_dict() == {
         "forecast_style": "short",
         "metric_key": "TMP",
         "metric_name": "기온",
@@ -551,8 +598,45 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
         "provider": "python-kma-api",
         "weather_domain": "forecast",
     }
-    assert isinstance(result["no_data"], NoDataWeatherBatchItem)
-    assert isinstance(result["retired"], RetiredWeatherBatchItem)
+    assert isinstance(result[first_target_at]["no_data"], NoDataWeatherBatchItem)
+    assert isinstance(result[second_target_at]["retired"], RetiredWeatherBatchItem)
+    await client.aclose()
+
+
+async def test_get_weather_batch_accepts_fixed_offset_timeline_across_dst_boundary() -> None:
+    target_at = datetime(2026, 3, 8, tzinfo=ZoneInfo("America/New_York"))
+    known_at = datetime(2026, 3, 7, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        body = _json.loads(request.content)
+        response_target_at = datetime.fromisoformat(body["targets"][0]["target_at"])
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "known_at": body["known_at"],
+                    "targets": [
+                        {
+                            "target_at": response_target_at.isoformat(),
+                            "timeline_until": (response_target_at + timedelta(days=1)).isoformat(),
+                            "items": [{"state": "no_data", "feature_id": "weather:none"}],
+                            "cards": [],
+                        }
+                    ],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    result = await client.get_weather_batch(
+        {target_at: ["weather:none"]},
+        known_at=known_at,
+    )
+
+    assert isinstance(result[target_at]["weather:none"], NoDataWeatherBatchItem)
     await client.aclose()
 
 
@@ -560,21 +644,36 @@ async def test_get_weather_batch_chunks_and_decodes_exact_contract() -> None:
     "mutate",
     [
         lambda data: data.update({"unexpected": True}),
-        lambda data: data.update({"timeline_until": "2026-08-01T00:00:00Z"}),
-        lambda data: data["items"][0].update({"unexpected": True}),
-        lambda data: data["items"][0]["current"][0].pop("metric_key"),
-        lambda data: data["items"][0]["current"][0].update({"value_number": True}),
-        lambda data: data["items"][0]["current"][0].update({"value_number": 10**309}),
-        lambda data: data["items"][0].update({"feature_id": "other"}),
+        lambda data: data.update({"known_at": "2026-07-28T12:00:00Z"}),
+        lambda data: data["targets"][0].update({"target_at": "2026-07-29T00:00:00Z"}),
+        lambda data: data["targets"][0].update({"timeline_until": "2026-08-01T00:00:00Z"}),
+        lambda data: data["targets"][0]["items"][0].update({"unexpected": True}),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].pop("metric_key"),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].update({"value_number": True}),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].update({"value_number": 10**309}),
+        lambda data: data["targets"][0]["items"][0].update({"feature_id": "other"}),
+        lambda data: data["targets"][0]["items"][0].update({"card_key": "missing"}),
+        lambda data: data["targets"][0]["cards"].append({**data["targets"][0]["cards"][0]}),
+        lambda data: data["targets"][0]["cards"].append(
+            {
+                **data["targets"][0]["cards"][0],
+                "card_key": "orphan",
+            }
+        ),
     ],
     ids=[
         "extra-data-field",
+        "wrong-known-at",
+        "wrong-target-at",
         "wrong-timeline-horizon",
         "extra-found-field",
         "missing-required-metric-field",
         "boolean-number",
         "overflowing-integer",
         "mismatched-order",
+        "missing-card-reference",
+        "duplicate-card-key",
+        "orphan-card",
     ],
 )
 async def test_get_weather_batch_rejects_field_and_partition_drift(
@@ -585,18 +684,28 @@ async def test_get_weather_batch_rejects_field_and_partition_drift(
 
     def handler(request: httpx.Request) -> httpx.Response:
         data = {
-            "target_at": target_at.isoformat(),
             "known_at": known_at.isoformat(),
-            "timeline_until": (target_at + timedelta(days=1)).isoformat(),
-            "items": [
+            "targets": [
                 {
-                    "state": "found",
-                    "feature_id": "found",
-                    "source_styles": ["short"],
-                    "current": [_weather_metric()],
-                    "timeline": [],
-                    "latest_at": None,
-                    "is_stale": False,
+                    "target_at": target_at.isoformat(),
+                    "timeline_until": (target_at + timedelta(days=1)).isoformat(),
+                    "items": [
+                        {
+                            "state": "found",
+                            "feature_id": "found",
+                            "card_key": "card-1",
+                        }
+                    ],
+                    "cards": [
+                        {
+                            "card_key": "card-1",
+                            "source_styles": ["short"],
+                            "current": [_weather_metric()],
+                            "timeline": [],
+                            "latest_at": None,
+                            "is_stale": False,
+                        }
+                    ],
                 }
             ],
         }
@@ -606,28 +715,73 @@ async def test_get_weather_batch_rejects_field_and_partition_drift(
     client = _client(handler)
     with pytest.raises(KorTravelMapContractError):
         await client.get_weather_batch(
-            ["found"],
-            target_at=target_at,
+            {target_at: ["found"]},
             known_at=known_at,
         )
     await client.aclose()
 
 
-async def test_get_weather_batch_rejects_naive_cutoffs_and_skips_empty_request() -> None:
+async def test_get_weather_batch_rejects_invalid_targets_and_skips_empty_request() -> None:
     client = _client(lambda request: httpx.Response(500))
     assert (
         await client.get_weather_batch(
-            [],
-            target_at=datetime(2026, 7, 30, tzinfo=UTC),
+            {},
             known_at=datetime(2026, 7, 29, tzinfo=UTC),
         )
         == {}
     )
     with pytest.raises(ValueError, match="UTC offset"):
         await client.get_weather_batch(
-            ["f_1"],
-            target_at=datetime(2026, 7, 30),
+            {},
+            known_at=datetime(2026, 7, 29),
+        )
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30): ["f_1"]},
             known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="비어"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30, tzinfo=UTC): []},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="1~256자"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30, tzinfo=UTC): ["x" * 257]},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    await client.aclose()
+
+
+async def test_get_weather_batch_rejects_producer_budget_overflow_before_http() -> None:
+    client = _client(lambda request: httpx.Response(500))
+    known_at = datetime(2026, 7, 29, tzinfo=UTC)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="target은 최대 366개"):
+        await client.get_weather_batch(
+            {start + timedelta(days=offset): ["same"] for offset in range(367)},
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="target별 feature_id"):
+        await client.get_weather_batch(
+            {start: [f"f-{index}" for index in range(201)]},
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="pair"):
+        await client.get_weather_batch(
+            {
+                start + timedelta(days=offset): [f"f-{index}" for index in range(200)]
+                for offset in range(11)
+            },
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="planning work"):
+        await client.get_weather_batch(
+            {
+                start + timedelta(days=offset): [f"f-{offset}-{index}" for index in range(20)]
+                for offset in range(50)
+            },
+            known_at=known_at,
         )
     await client.aclose()
 

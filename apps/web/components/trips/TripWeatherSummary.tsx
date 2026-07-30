@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { CloudSun, Wind } from 'lucide-react';
-import type { FeatureWeatherResolution, WeatherMetric } from '@pinvi/schemas';
+import type { TripWeatherCard, TripWeatherResolution, WeatherMetric } from '@pinvi/schemas';
 
 const WEATHER_LABELS: Record<string, string> = {
   T1H: '기온',
@@ -111,7 +111,8 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
 }
 
 export interface TripWeatherSummaryProps {
-  weather?: FeatureWeatherResolution | null;
+  weather?: TripWeatherResolution | null;
+  weatherCards?: Record<string, TripWeatherCard>;
   date?: string | null;
   label?: string;
   compact?: boolean;
@@ -119,11 +120,12 @@ export interface TripWeatherSummaryProps {
 
 export function TripWeatherSummary({
   weather,
+  weatherCards = {},
   date,
   label = '날씨',
   compact = false,
 }: TripWeatherSummaryProps) {
-  const card = weather?.state === 'found' ? weather.card : null;
+  const card = weather?.state === 'found' ? (weatherCards[weather.card_key] ?? null) : null;
 
   const groups = useMemo(() => {
     if (!card || !date) return [];
@@ -136,15 +138,19 @@ export function TripWeatherSummary({
   }, [card, date]);
 
   if (!date || !weather) return null;
-  if (weather.state !== 'found') {
-    const statusText = {
-      no_data: '이 날짜의 날씨 정보가 없습니다.',
-      retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
-      suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
-      missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
-      unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
-      not_requested: '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
-    }[weather.state];
+  if (weather.state !== 'found' || !card || groups.length === 0) {
+    const statusText =
+      weather.state === 'found'
+        ? card
+          ? '이 날짜의 날씨 정보가 없습니다.'
+          : '날씨 서비스를 일시적으로 사용할 수 없습니다.'
+        : {
+            no_data: '이 날짜의 날씨 정보가 없습니다.',
+            retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
+            suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
+            missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
+            unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
+          }[weather.state];
     return (
       <section
         className={
@@ -159,7 +165,6 @@ export function TripWeatherSummary({
       </section>
     );
   }
-  if (groups.length === 0) return null;
 
   return (
     <section

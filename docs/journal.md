@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-30 (codex) — T-VN-16C weather 다중 날짜 단일 호출 소비
+
+- PinVi PR #421.
+- Map PR #902의 sparse `targets[{target_at, feature_ids}]`와 target-local
+  `cards[]`/`card_key` 계약으로 전환했다. 날짜별 worker fanout을 제거하고 한 Trip view를
+  weather POST 한 번으로 조립한다.
+- client는 target 366개·target당 ID 200개·전체 pair 2,000개·
+  `pair + 5 × unique feature` planning work 2,500·ID 256자 상한을 preflight한다.
+  `known_at`, target 순서·시각·1일 horizon, item ID·순서, card의 정확한 참조 집합과 metric을
+  strict decode하며 부분 성공은 노출하지 않는다.
+- 10초 view budget과 부모 cancellation은 유지했다. transport·timeout·입력·계약 실패는
+  미결 weather 전체를 `unavailable`로 두고, 31일 cap과 `not_requested` 상태는
+  Python/Zod/Web에서 제거했다.
+- 적대 리뷰에서 같은 card metric을 feature마다 반복 직렬화하는 응답 증폭, DST 전환일의
+  `ZoneInfo` 다음 날 offset 비교 오류, 40일차 날씨 component 자체가 없어도 통과하는
+  Live false-green을 확인했다. 일자별 `weather_cards` + `found(card_key)`로 정규화하고
+  참조 집합 검증, 고정 offset horizon 회귀, 날씨 영역 가시성·내용 assertion을 추가했다.
+- 재리뷰에서 `dict.setdefault` 인수 선평가로 metric 변환 자체는 반복되는 문제,
+  producer OpenAPI보다 좁은 `card_key` 길이, 공유 화면의 weather props 미배선, 40일차
+  API 상태와 UI arm의 느슨한 OR assertion을 추가로 찾았다. 명시적 membership guard와
+  호출 횟수 회귀, 길이 제약 제거, 공유 화면 found card E2E, API card metric 기반 arm
+  assertion으로 닫았으며 두 리뷰어의 최종 재검토는 P0~P3 0건이다.
+- Map OpenAPI 전체 파일을 main `94ace1a9a27d204fabb9645d1ffd43c47ea60079`,
+  SHA-256 `0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`으로
+  교체하고 path→request/response→target/card/item/metric 계약을 고정했다.
+- n150 `ktm-tvn45-db`의 migration head `0069_weather_series_catalog`와 실데이터 fixture를
+  재확인해 clone·checkpoint·downgrade 없이 재사용했다. 40일·45 POI 파괴적 Live UI는
+  한 직접 Trip read당 weather POST 1회, 다섯 parent 상태, weather found/no_data,
+  weather-only 503→복구, 단건 weather 0회와 활성 Trip 잔존 0건을 확인해
+  리뷰 전 **1 passed (26.5s)**, 리뷰 수정 head 최종 **1 passed (11.9s)**다. 최종 실행은
+  40일차 API resolution·card metric과 UI summary/no-data arm이 일치함도 확인했다.
+- Live는 실패한 지점부터 재개했다. 첫 실패는 fixture 이름에 좌표까지 포함한 실행값,
+  두 번째는 40일 fixture 생성이 격리 API의 분당 60회 제한을 소진해 마지막 cleanup만
+  429가 난 문제였다. 해당 prefix 한 건만 soft-delete하고 격리 API rate limit을 끈 뒤
+  Playwright 단계만 재실행했다.
+- 공유 mocked E2E 첫 재실행은 병렬 리뷰어의 exact-head build가 같은 worktree `.next`를
+  갱신한 뒤 기존 Web process가 이전 manifest를 들고 있어 static chunk hash가 어긋났다.
+  코드나 DB를 반복하지 않고 현재 build에 Web process만 다시 맞춘 뒤 실패 spec만
+  **1 passed (2.7s)**로 통과했다.
+
 ## 2026-07-30 (codex) — T-VN-16B weather batch 소비 cutover
 
 - Map T-VN-16A의 `POST /v1/features/weather/batch`를 strict transport로 소비한다.

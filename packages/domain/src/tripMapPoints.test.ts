@@ -184,6 +184,7 @@ describe('tripMapPoints', () => {
         holidays: [],
         rise_set: null,
         rise_set_reference: null,
+        weather_cards: {},
         weather_by_feature_id: {},
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),
@@ -201,6 +202,7 @@ describe('tripMapPoints', () => {
         holidays: [],
         rise_set: null,
         rise_set_reference: null,
+        weather_cards: {},
         weather_by_feature_id: {},
         pois: [poi({ feature: { coord: { lon: 129.0, lat: 35.1 } } })],
       },
@@ -224,6 +226,7 @@ describe('tripMapPoints', () => {
         holidays: [],
         rise_set: null,
         rise_set_reference: null,
+        weather_cards: {},
         weather_by_feature_id: {},
         pois: [
           poi({ feature: { coord: { lon: 126.9, lat: 37.5 } } }),

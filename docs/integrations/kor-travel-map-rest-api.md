@@ -28,11 +28,11 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-07-30(T-VN-16A/B) 기준 kor-travel-map
-> main commit `6650aa71dbe2d6f940789f91e562ac3eec4702a6`**(5-state service batch +
-> bitemporal weather batch, int64 상한, DB 장애 503 포함)의
+> vendored 정본은 **2026-07-30(T-VN-16C) 기준 kor-travel-map
+> main commit `94ace1a9a27d204fabb9645d1ffd43c47ea60079`**(5-state service batch +
+> sparse 다중 날짜 bitemporal weather batch, int64 상한, DB 장애 503 포함)의
 > 전체 파일이며 SHA-256은
-> `87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d`다.
+> `0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`다.
 > (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
 > 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
@@ -284,24 +284,34 @@ issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null,
 ### 2.6a `POST /v1/features/weather/batch` — 여행 일자 날씨
 
 - **인증**: `ServiceToken` 전용. 브라우저가 Map 자격을 가지지 않고 PinVi API만 호출한다.
-- **요청**: `{ feature_ids:[1..200 unique], target_at, known_at }`. 두 시각은 UTC offset이
-  필수다. PinVi는 여행 `effective_date`의 한국 시각 자정을 `target_at`으로, 한 Trip view를
-  만드는 시각을 단일 `known_at`으로 보낸다.
-- **200**: `data:{ target_at, known_at, timeline_until, items }`. item은 요청 순서대로
-  `found|no_data|retired` discriminated union이다. `found`는
-  `{ source_styles, current:[WeatherMetricOut], timeline:[WeatherMetricOut], latest_at, is_stale }`,
-  나머지 두 arm은 `{state, feature_id}`다.
-- **PinVi 투영**: `TripViewDay.weather_by_feature_id`에
-  `found(card)|no_data|retired|suppressed|missing|unavailable|not_requested`를 저장한다.
+- **요청**: `{ known_at, targets:[{target_at, feature_ids:[1..200 unique]}] }`. 두 시각은
+  UTC offset이 필수다. target은 최대 366개, 전체 `target × feature` pair는 2,000개,
+  planning work `pair + 5 × unique feature`는 2,500, ID는 256자까지다. target은
+  `target_at` 오름차순이어야 하고 시각 중복은 허용하지 않는다. PinVi는 여행
+  `effective_date`의 한국 시각 자정을 `target_at`으로, 한 Trip view를 만드는 시각을
+  단일 `known_at`으로 보낸다.
+- **200**: `data:{ known_at, targets:[{target_at, timeline_until, items, cards}] }`.
+  target과 item은 요청 순서대로이며 item은 `found|no_data|retired` discriminated union이다.
+  `found` item은 target-local `card_key`를 참조한다. card는
+  `{card_key, source_styles, current:[WeatherMetricOut], timeline:[WeatherMetricOut],
+latest_at, is_stale}`이고, 나머지 두 item arm은 `{state, feature_id}`다. card는 같은
+  target 안의 중복 payload만 공유하며 target 경계를 넘어 참조하지 않는다.
+- **413**: target·ID·pair·planning work 또는 예상 metric row budget 초과다. 소비자는
+  producer가 거절하기 전에 같은 공개 상한을 검증한다.
+- **PinVi 투영**: `TripViewDay.weather_by_feature_id`에는
+  `found(card_key)|no_data|retired|suppressed|missing|unavailable`을 저장하고,
+  일자별 `weather_cards`에는 feature ID가 없는 card 본문을 한 번만 둔다. 같은
+  일자·기상 격자의 여러 feature는 같은 `card_key`를 참조하며, 누락·고아 card를
+  Python과 Zod 경계에서 거부한다.
   `suppressed|missing`은 선행 feature batch의 parent 상태를 보존하며 weather 요청에 넣지 않는다.
-  같은 날짜의 중복 feature는 한 번만 요청하고, 200개를 넘으면 producer cap으로 chunk한다.
-  한 view는 고유 날짜 최대 31개, 동시 worker 4개, 전체 10초로 제한한다. transport·인증·계약
-  실패와 시간 budget 미결은 parent 상태로 추측하지 않고 `unavailable`, 31개를 넘겨 의도적으로
-  조회하지 않은 날짜는 `not_requested`로 둔다. 부모 요청이 취소되면 진행 중 worker도 함께
-  cancel/gather한다.
-- **UI**: `TripWeatherSummary`는 Trip view만 렌더하며 단건
+  같은 날짜의 중복 feature는 한 번만 요청한다. 한 view의 모든 날짜를 한 요청으로 보내며
+  전체 10초 budget을 적용한다. transport·인증·입력·계약 실패와 시간 budget 미결은 parent
+  상태로 추측하지 않고 미결 weather 전체를 `unavailable`로 둔다. 성공 응답도 target/card/item
+  전체가 strict decode된 뒤에만 투영해 부분 결과를 섞지 않는다. 부모 요청 cancellation은
+  단일 outbound 요청으로 전파된다.
+- **UI**: 소유자·공유 여행의 `TripWeatherSummary`는 Trip view만 렌더하며 단건
   `GET /features/{feature_id}/weather`를 호출하지 않는다. weather 없음, parent lifecycle,
-  transport 실패, 날짜 상한 미조회 안내를 서로 다르게 표시한다.
+  transport 실패를 서로 다르게 표시한다.
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
 

@@ -6,6 +6,27 @@
 
 ## 2026-07-30
 
+- [x] **T-VN-16C** — PinVi 다중 날짜 weather batch 소비 전환.
+      (완료: 2026-07-30, PR #421, codex)
+      Map PR #902의 sparse `targets[{target_at, feature_ids}]`와 target-local
+      `cards[]`/`card_key` 계약을 한 Trip view당 `POST /v1/features/weather/batch` 1회로
+      소비한다. target 366개·target당 ID 200개·전체 pair 2,000개·
+      `pair + 5 × unique feature` planning work 2,500·ID 256자 상한을 전송 전에
+      검증하고, target/card/item 순서·정확한 참조 집합·metric 타입과 aware datetime을
+      fail-closed한다. 성공 응답을 전부 decode한 뒤에만 투영하며 transport·timeout·계약
+      실패는 미결 weather 전체를 `unavailable`로 둔다. 날짜별 worker fanout과 31일 상한,
+      `not_requested` 상태를 제거했으며 10초 view budget과 부모 cancellation 전파는 유지한다.
+      Trip 응답은 일자별 `weather_cards`와 feature별 `found(card_key)`로 정규화해 같은
+      기상 격자의 metric payload를 feature 수만큼 반복하지 않으며, 누락·고아 참조를 거부한다.
+      DST 전환일의 1일 horizon은 응답의 고정 offset을 기준으로 검증한다.
+      소유자와 공유 여행 화면이 같은 정규화 계약을 렌더하며, producer OpenAPI의 제약 없는
+      `card_key`를 임의로 좁히지 않는다. 적대 리뷰 2인의 최종 재검토는 P0~P3 0건이다.
+      vendored OpenAPI는 Map main `94ace1a9…`, SHA-256 `0a7cabb3…`에 고정했다.
+      n150 재사용 `ktm-tvn45-db`의 40일·45 POI 파괴적 Live UI에서 한 view당 weather POST
+      1회, 다섯 parent 상태, weather found/no_data, weather-only 503→복구, 단건 weather
+      0회, 40일차 API 상태와 UI arm 일치, 활성 Trip 잔존 0건을 최종 **1 passed (11.9s)**로
+      확인했다. schema migration·새 clone·checkpoint·downgrade는 만들지 않았다.
+
 - [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR 예정, codex)
       Trip view가 unique `effective_date`별로 `POST /v1/features/weather/batch`를 호출하고
       날짜 안의 feature를 200개씩 dedupe한다. 브라우저 단건 N+1은 제거했으며
