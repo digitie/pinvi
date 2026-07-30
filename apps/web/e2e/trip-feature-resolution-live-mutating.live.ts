@@ -61,8 +61,7 @@ type TripView = {
           | 'retired'
           | 'suppressed'
           | 'missing'
-          | 'unavailable'
-          | 'not_requested';
+          | 'unavailable';
       }
     >;
   }>;

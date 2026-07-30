@@ -61,7 +61,6 @@ describe('TripWeatherSummary', () => {
     ['suppressed', '비공개 장소는 날씨를 확인할 수 없습니다.'],
     ['missing', '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.'],
     ['unavailable', '날씨 서비스를 일시적으로 사용할 수 없습니다.'],
-    ['not_requested', '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.'],
   ] as const)('%s 상태를 구분해 표시한다', (state, message) => {
     render(<TripWeatherSummary weather={{ state }} date="2026-07-30" />);
 

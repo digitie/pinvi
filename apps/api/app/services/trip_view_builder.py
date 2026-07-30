@@ -47,8 +47,6 @@ from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
-_WEATHER_BATCH_MAX_CONCURRENCY = 4
-_WEATHER_BATCH_MAX_DATES_PER_VIEW = 31
 _WEATHER_BATCH_VIEW_BUDGET_SECONDS = 10.0
 
 
@@ -63,15 +61,16 @@ def _weather_resolution(
     target_at: datetime,
 ) -> dict[str, Any]:
     if isinstance(item, FoundWeatherBatchItem):
+        card = item.card
         return {
             "state": "found",
             "card": {
                 "feature_id": item.feature_id,
                 "asof": target_at,
-                "latest_at": item.latest_at,
-                "is_stale": item.is_stale,
-                "source_styles": list(item.source_styles),
-                "metrics": [metric.as_dict() for metric in (*item.current, *item.timeline)],
+                "latest_at": card.latest_at,
+                "is_stale": card.is_stale,
+                "source_styles": list(card.source_styles),
+                "metrics": [metric.as_dict() for metric in (*card.current, *card.timeline)],
             },
         }
     if isinstance(item, NoDataWeatherBatchItem):
@@ -94,7 +93,7 @@ async def build_trip_view(
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
     3. `kor_travel_map_client.get_features(ids, known_row_revisions=...)` 1회 batch 호출
-    4. unique effective date별 weather batch 호출(각 cap 200) 후 일자별 feature 상태 투영
+    4. unique effective date를 sparse multi-target weather batch 1회로 조회 후 일자별 상태 투영
     5. POI에 feature 정보 merge — upstream 5-state를 소비자 상태로 exhaustively 투영
 
     transport 실패나 불완전 응답은 feature 부재의 근거가 아니다. 이 경우 저장 snapshot을
@@ -315,43 +314,28 @@ async def build_trip_view(
         weather_client = kor_travel_map_client
         assert weather_client is not None
         weather_dates = sorted(pending_weather)
-        bounded_dates = weather_dates[:_WEATHER_BATCH_MAX_DATES_PER_VIEW]
-        not_requested_dates = weather_dates[len(bounded_dates) :]
-        if not_requested_dates:
-            logger.warning(
-                "Trip weather 날짜 %d개 중 요청 상한 %d개만 조회",
-                len(weather_dates),
-                _WEATHER_BATCH_MAX_DATES_PER_VIEW,
+        target_at_by_date = {
+            effective_date: _weather_target_at(effective_date) for effective_date in weather_dates
+        }
+        try:
+            async with asyncio.timeout(_WEATHER_BATCH_VIEW_BUDGET_SECONDS):
+                weather_batch_by_target = await weather_client.get_weather_batch(
+                    {
+                        target_at_by_date[effective_date]: list(pending_weather[effective_date])
+                        for effective_date in weather_dates
+                    },
+                    known_at=known_at,
+                )
+        except (KorTravelMapError, OverflowError, TimeoutError, ValueError) as exc:
+            logger.error(
+                "get_weather_batch 실패: %s — 전체 미결 weather를 unavailable 처리",
+                exc,
             )
-            for effective_date in not_requested_dates:
+        else:
+            for effective_date in weather_dates:
+                target_at = target_at_by_date[effective_date]
+                weather_batch = weather_batch_by_target[target_at]
                 for feature_id, day_indexes in pending_weather[effective_date].items():
-                    for day_index in day_indexes:
-                        weather_by_day_index[day_index][feature_id] = {"state": "not_requested"}
-        weather_date_iterator = iter(bounded_dates)
-        weather_service_failed = asyncio.Event()
-
-        async def fetch_weather_dates() -> None:
-            while not weather_service_failed.is_set():
-                try:
-                    effective_date = next(weather_date_iterator)
-                except StopIteration:
-                    return
-                slots = pending_weather[effective_date]
-                try:
-                    target_at = _weather_target_at(effective_date)
-                    weather_batch = await weather_client.get_weather_batch(
-                        list(slots),
-                        target_at=target_at,
-                        known_at=known_at,
-                    )
-                except (KorTravelMapError, OverflowError, ValueError) as exc:
-                    weather_service_failed.set()
-                    logger.error(
-                        "get_weather_batch 실패: %s — 미결 일자 weather를 unavailable 처리",
-                        exc,
-                    )
-                    return
-                for feature_id, day_indexes in slots.items():
                     resolution = _weather_resolution(
                         weather_batch[feature_id],
                         target_at=target_at,
@@ -359,33 +343,7 @@ async def build_trip_view(
                     for day_index in day_indexes:
                         weather_by_day_index[day_index][feature_id] = resolution
 
-        workers = [
-            asyncio.create_task(fetch_weather_dates())
-            for _ in range(min(_WEATHER_BATCH_MAX_CONCURRENCY, len(bounded_dates)))
-        ]
-        try:
-            done, unfinished = await asyncio.wait(
-                workers,
-                timeout=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
-            )
-            if unfinished:
-                weather_service_failed.set()
-                logger.error(
-                    "Trip weather view budget %.1f초 초과 — 미결 일자 unavailable 처리",
-                    _WEATHER_BATCH_VIEW_BUDGET_SECONDS,
-                )
-            for worker in unfinished:
-                worker.cancel()
-            await asyncio.gather(*unfinished, return_exceptions=True)
-            for worker in done:
-                worker.result()
-        finally:
-            for worker in workers:
-                if not worker.done():
-                    worker.cancel()
-            await asyncio.gather(*workers, return_exceptions=True)
-
-        for effective_date in bounded_dates:
+        for effective_date in weather_dates:
             slots = pending_weather[effective_date]
             for feature_id, day_indexes in slots.items():
                 for day_index in day_indexes:

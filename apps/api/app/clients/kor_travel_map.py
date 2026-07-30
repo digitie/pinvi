@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 _PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
 _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
+_WEATHER_BATCH_MAX_TARGETS = 366
+_WEATHER_BATCH_MAX_FEATURES_PER_TARGET = 200
+_WEATHER_BATCH_MAX_FEATURE_ID_LENGTH = 256
+_WEATHER_BATCH_MAX_PAIRS = 2_000
+_WEATHER_BATCH_MAX_PLANNING_WORK = 2_500
+_WEATHER_BATCH_UNIQUE_FEATURE_WEIGHT = 5
 
 
 class KorTravelMapError(Exception):
@@ -240,13 +246,21 @@ class WeatherBatchMetric:
 
 
 @dataclass(frozen=True)
-class FoundWeatherBatchItem:
-    feature_id: str
+class WeatherBatchCard:
+    """한 target 안에서 여러 feature가 공유할 수 있는 weather card."""
+
+    card_key: str
     source_styles: tuple[str, ...]
     current: tuple[WeatherBatchMetric, ...]
     timeline: tuple[WeatherBatchMetric, ...]
     latest_at: datetime | None
     is_stale: bool
+
+
+@dataclass(frozen=True)
+class FoundWeatherBatchItem:
+    feature_id: str
+    card: WeatherBatchCard
     state: Literal["found"] = "found"
 
 
@@ -375,7 +389,52 @@ def _decode_weather_metric(raw: object) -> WeatherBatchMetric:
     )
 
 
-def _decode_weather_batch_item(raw: object) -> WeatherBatchItem:
+def _decode_weather_batch_card(raw: object) -> WeatherBatchCard:
+    if not isinstance(raw, Mapping):
+        raise KorTravelMapContractError("weather batch card가 객체가 아닙니다.")
+    required = {
+        "card_key",
+        "source_styles",
+        "current",
+        "timeline",
+        "is_stale",
+    }
+    if not required <= set(raw) or not set(raw) <= required | {"latest_at"}:
+        raise KorTravelMapContractError("weather batch card 셰입이 올바르지 않습니다.")
+    card_key = raw["card_key"]
+    source_styles = raw["source_styles"]
+    current = raw["current"]
+    timeline = raw["timeline"]
+    if not isinstance(card_key, str):
+        raise KorTravelMapContractError("weather batch card_key가 문자열이 아닙니다.")
+    if not isinstance(source_styles, list) or not all(
+        isinstance(style, str) for style in source_styles
+    ):
+        raise KorTravelMapContractError("weather batch source_styles가 문자열 배열이 아닙니다.")
+    if not isinstance(current, list) or not isinstance(timeline, list):
+        raise KorTravelMapContractError("weather batch metric 목록이 배열이 아닙니다.")
+    if not isinstance(raw["is_stale"], bool):
+        raise KorTravelMapContractError("weather batch is_stale이 boolean이 아닙니다.")
+    latest_at = (
+        None
+        if raw.get("latest_at") is None
+        else _decode_aware_datetime(raw["latest_at"], field="latest_at")
+    )
+    return WeatherBatchCard(
+        card_key=card_key,
+        source_styles=tuple(source_styles),
+        current=tuple(_decode_weather_metric(metric) for metric in current),
+        timeline=tuple(_decode_weather_metric(metric) for metric in timeline),
+        latest_at=latest_at,
+        is_stale=raw["is_stale"],
+    )
+
+
+def _decode_weather_batch_item(
+    raw: object,
+    *,
+    cards: Mapping[str, WeatherBatchCard],
+) -> WeatherBatchItem:
     if not isinstance(raw, Mapping):
         raise KorTravelMapContractError("weather batch item이 객체가 아닙니다.")
     state = raw.get("state")
@@ -392,45 +451,81 @@ def _decode_weather_batch_item(raw: object) -> WeatherBatchItem:
         return RetiredWeatherBatchItem(feature_id=feature_id)
     if state != "found":
         raise KorTravelMapContractError(f"알 수 없는 weather batch state입니다: {state!r}")
-    required = {
-        "state",
-        "feature_id",
-        "source_styles",
-        "current",
-        "timeline",
-        "is_stale",
-    }
-    if not required <= set(raw) or not set(raw) <= required | {"latest_at"}:
+    if set(raw) != {"state", "feature_id", "card_key"}:
         raise KorTravelMapContractError("weather batch found item 셰입이 올바르지 않습니다.")
-    source_styles = raw["source_styles"]
-    current = raw["current"]
-    timeline = raw["timeline"]
-    if not isinstance(source_styles, list) or not all(
-        isinstance(style, str) for style in source_styles
-    ):
-        raise KorTravelMapContractError("weather batch source_styles가 문자열 배열이 아닙니다.")
-    if not isinstance(current, list) or not isinstance(timeline, list):
-        raise KorTravelMapContractError("weather batch metric 목록이 배열이 아닙니다.")
-    if not isinstance(raw["is_stale"], bool):
-        raise KorTravelMapContractError("weather batch is_stale이 boolean이 아닙니다.")
-    latest_at = (
-        None
-        if raw.get("latest_at") is None
-        else _decode_aware_datetime(raw["latest_at"], field="latest_at")
-    )
+    card_key = raw["card_key"]
+    if not isinstance(card_key, str):
+        raise KorTravelMapContractError("weather batch found card_key가 문자열이 아닙니다.")
+    card = cards.get(card_key)
+    if card is None:
+        raise KorTravelMapContractError(
+            "weather batch found item이 target-local card를 참조하지 못합니다."
+        )
     return FoundWeatherBatchItem(
         feature_id=feature_id,
-        source_styles=tuple(source_styles),
-        current=tuple(_decode_weather_metric(metric) for metric in current),
-        timeline=tuple(_decode_weather_metric(metric) for metric in timeline),
-        latest_at=latest_at,
-        is_stale=raw["is_stale"],
+        card=card,
     )
 
 
 def _require_aware_datetime(value: datetime, *, field: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field}에는 UTC offset이 필요합니다.")
+
+
+def _prepare_weather_batch_targets(
+    targets: Mapping[datetime, Sequence[str]],
+) -> list[tuple[datetime, list[str]]]:
+    if len(targets) > _WEATHER_BATCH_MAX_TARGETS:
+        raise ValueError(
+            f"weather batch target은 최대 {_WEATHER_BATCH_MAX_TARGETS}개까지 허용됩니다."
+        )
+
+    prepared: list[tuple[datetime, list[str]]] = []
+    all_feature_ids: set[str] = set()
+    pair_count = 0
+    for target_at, feature_ids in targets.items():
+        if not isinstance(target_at, datetime):
+            raise ValueError("weather batch target_at은 datetime이어야 합니다.")
+        _require_aware_datetime(target_at, field="target_at")
+        try:
+            target_at + timedelta(days=1)
+        except OverflowError as exc:
+            raise ValueError("target_at은 1일 timeline을 계산할 수 있어야 합니다.") from exc
+        if isinstance(feature_ids, (str, bytes)):
+            raise ValueError("weather batch feature_ids는 문자열 배열이어야 합니다.")
+        unique = list(dict.fromkeys(feature_ids))
+        if not unique:
+            raise ValueError("weather batch target의 feature_ids는 비어 있을 수 없습니다.")
+        if len(unique) > _WEATHER_BATCH_MAX_FEATURES_PER_TARGET:
+            raise ValueError(
+                "weather batch target별 feature_id는 "
+                f"최대 {_WEATHER_BATCH_MAX_FEATURES_PER_TARGET}개까지 허용됩니다."
+            )
+        if any(
+            not isinstance(feature_id, str)
+            or not feature_id
+            or len(feature_id) > _WEATHER_BATCH_MAX_FEATURE_ID_LENGTH
+            for feature_id in unique
+        ):
+            raise ValueError(
+                "weather batch feature_id는 1~"
+                f"{_WEATHER_BATCH_MAX_FEATURE_ID_LENGTH}자 문자열이어야 합니다."
+            )
+        pair_count += len(unique)
+        all_feature_ids.update(unique)
+        prepared.append((target_at, unique))
+
+    planning_work = pair_count + _WEATHER_BATCH_UNIQUE_FEATURE_WEIGHT * len(all_feature_ids)
+    if pair_count > _WEATHER_BATCH_MAX_PAIRS:
+        raise ValueError(
+            f"weather batch target-feature pair는 최대 {_WEATHER_BATCH_MAX_PAIRS}개까지 허용됩니다."
+        )
+    if planning_work > _WEATHER_BATCH_MAX_PLANNING_WORK:
+        raise ValueError(
+            f"weather batch planning work가 {_WEATHER_BATCH_MAX_PLANNING_WORK} 한도를 초과했습니다."
+        )
+    prepared.sort(key=lambda target: target[0])
+    return prepared
 
 
 def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
@@ -768,61 +863,104 @@ class KorTravelMapClient:
 
     async def get_weather_batch(
         self,
-        feature_ids: Sequence[str],
+        targets: Mapping[datetime, Sequence[str]],
         *,
-        target_at: datetime,
         known_at: datetime,
-    ) -> dict[str, WeatherBatchItem]:
-        """bitemporal weather snapshot을 cap 단위로 조회하고 exhaustively 검증한다."""
-        _require_aware_datetime(target_at, field="target_at")
+    ) -> dict[datetime, dict[str, WeatherBatchItem]]:
+        """여러 target의 sparse weather snapshot을 한 요청으로 조회·검증한다."""
         _require_aware_datetime(known_at, field="known_at")
-        try:
-            timeline_until_expected = target_at + timedelta(days=1)
-        except OverflowError as exc:
-            raise ValueError("target_at은 1일 timeline을 계산할 수 있어야 합니다.") from exc
+        prepared = _prepare_weather_batch_targets(targets)
+        if not prepared:
+            return {}
 
-        unique = list(dict.fromkeys(feature_ids))
-        if any(not isinstance(feature_id, str) or not feature_id for feature_id in unique):
-            raise ValueError("feature_ids는 빈 문자열일 수 없습니다.")
+        response = await self._send(
+            "POST",
+            "/v1/features/weather/batch",
+            json={
+                "targets": [
+                    {
+                        "target_at": target_at.isoformat(),
+                        "feature_ids": feature_ids,
+                    }
+                    for target_at, feature_ids in prepared
+                ],
+                "known_at": known_at.isoformat(),
+            },
+        )
+        if response.status_code == status.HTTP_404_NOT_FOUND:
+            raise KorTravelMapContractError("weather batch endpoint가 404를 반환했습니다.")
+        data = self._data(response)
+        if set(data) != {"known_at", "targets"}:
+            raise KorTravelMapContractError("weather batch data 필드 집합이 올바르지 않습니다.")
+        raw_targets = data["targets"]
+        if not isinstance(raw_targets, list):
+            raise KorTravelMapContractError("weather batch targets가 배열이 아닙니다.")
+        response_known_at = _decode_aware_datetime(data["known_at"], field="known_at")
+        if response_known_at != known_at:
+            raise KorTravelMapContractError("weather batch 응답 known_at이 요청과 다릅니다.")
+        if len(raw_targets) != len(prepared):
+            raise KorTravelMapContractError("weather batch 응답 target 수가 요청과 다릅니다.")
 
-        decoded: dict[str, WeatherBatchItem] = {}
-        for start in range(0, len(unique), self._batch_chunk_size):
-            chunk = unique[start : start + self._batch_chunk_size]
-            response = await self._send(
-                "POST",
-                "/v1/features/weather/batch",
-                json={
-                    "feature_ids": chunk,
-                    "target_at": target_at.isoformat(),
-                    "known_at": known_at.isoformat(),
-                },
+        decoded: dict[datetime, dict[str, WeatherBatchItem]] = {}
+        for (target_at, feature_ids), raw_target in zip(
+            prepared,
+            raw_targets,
+            strict=True,
+        ):
+            if not isinstance(raw_target, Mapping) or set(raw_target) != {
+                "target_at",
+                "timeline_until",
+                "items",
+                "cards",
+            }:
+                raise KorTravelMapContractError(
+                    "weather batch target data 셰입이 올바르지 않습니다."
+                )
+            response_target_at = _decode_aware_datetime(
+                raw_target["target_at"],
+                field="target.target_at",
             )
-            if response.status_code == status.HTTP_404_NOT_FOUND:
-                raise KorTravelMapContractError("weather batch endpoint가 404를 반환했습니다.")
-            data = self._data(response)
-            if set(data) != {"target_at", "known_at", "timeline_until", "items"}:
-                raise KorTravelMapContractError("weather batch data 필드 집합이 올바르지 않습니다.")
-            raw_items = data["items"]
-            if not isinstance(raw_items, list):
-                raise KorTravelMapContractError("weather batch items가 배열이 아닙니다.")
-            response_target_at = _decode_aware_datetime(data["target_at"], field="target_at")
-            response_known_at = _decode_aware_datetime(data["known_at"], field="known_at")
             timeline_until = _decode_aware_datetime(
-                data["timeline_until"],
-                field="timeline_until",
+                raw_target["timeline_until"],
+                field="target.timeline_until",
             )
-            if response_target_at != target_at or response_known_at != known_at:
+            if response_target_at != target_at:
                 raise KorTravelMapContractError(
-                    "weather batch 응답의 bitemporal cutoff가 요청과 다릅니다."
+                    "weather batch 응답 target 순서나 시각이 요청과 다릅니다."
                 )
-            if timeline_until != timeline_until_expected:
-                raise KorTravelMapContractError("weather batch timeline 지평선이 1일이 아닙니다.")
-            chunk_items = [_decode_weather_batch_item(item) for item in raw_items]
-            if [item.feature_id for item in chunk_items] != chunk:
+            if timeline_until != target_at + timedelta(days=1):
                 raise KorTravelMapContractError(
-                    "weather batch 응답이 요청 ID와 순서를 정확히 보존하지 않습니다."
+                    "weather batch target timeline 지평선이 1일이 아닙니다."
                 )
-            decoded.update((item.feature_id, item) for item in chunk_items)
+
+            raw_cards = raw_target["cards"]
+            raw_items = raw_target["items"]
+            if not isinstance(raw_cards, list) or not isinstance(raw_items, list):
+                raise KorTravelMapContractError(
+                    "weather batch target items/cards가 배열이 아닙니다."
+                )
+            cards: dict[str, WeatherBatchCard] = {}
+            for raw_card in raw_cards:
+                card = _decode_weather_batch_card(raw_card)
+                if card.card_key in cards:
+                    raise KorTravelMapContractError("weather batch target card_key가 중복됐습니다.")
+                cards[card.card_key] = card
+
+            target_items = [_decode_weather_batch_item(item, cards=cards) for item in raw_items]
+            if [item.feature_id for item in target_items] != feature_ids:
+                raise KorTravelMapContractError(
+                    "weather batch 응답이 target별 요청 ID와 순서를 정확히 보존하지 않습니다."
+                )
+            referenced_card_keys = {
+                item.card.card_key
+                for item in target_items
+                if isinstance(item, FoundWeatherBatchItem)
+            }
+            if referenced_card_keys != set(cards):
+                raise KorTravelMapContractError(
+                    "weather batch target cards와 found 참조가 정확히 일치하지 않습니다."
+                )
+            decoded[target_at] = {item.feature_id: item for item in target_items}
         return decoded
 
     async def features_nearby(

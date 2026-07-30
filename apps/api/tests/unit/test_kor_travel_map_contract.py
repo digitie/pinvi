@@ -32,8 +32,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "6650aa71dbe2d6f940789f91e562ac3eec4702a6"
-_SNAPSHOT_SHA256 = "87780f6642e7eb258c88ba62aa0d81fcd046b24917b21b1d03e22be14819436d"
+_UPSTREAM_COMMIT = "94ace1a9a27d204fabb9645d1ffd43c47ea60079"
+_SNAPSHOT_SHA256 = "0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990"
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -221,17 +221,11 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "severity": {"type": "string", "required": False, "nullable": True},
     },
     "WeatherBatchRequest": {
-        "feature_ids": {
+        "targets": {
             "type": "array",
-            "items_type": "string",
+            "items_ref": "WeatherBatchTargetRequest",
             "min_items": 1,
-            "max_items": 200,
-            "required": True,
-            "nullable": False,
-        },
-        "target_at": {
-            "type": "string",
-            "format": "date-time",
+            "max_items": 366,
             "required": True,
             "nullable": False,
         },
@@ -242,14 +236,40 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "nullable": False,
         },
     },
-    "WeatherBatchData": {
+    "WeatherBatchTargetRequest": {
         "target_at": {
             "type": "string",
             "format": "date-time",
             "required": True,
             "nullable": False,
         },
+        "feature_ids": {
+            "type": "array",
+            "items_type": "string",
+            "items_max_length": 256,
+            "unique_items": True,
+            "min_items": 1,
+            "max_items": 200,
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "WeatherBatchData": {
         "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": True,
+            "nullable": False,
+        },
+        "targets": {
+            "type": "array",
+            "items_ref": "WeatherBatchTargetData",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "WeatherBatchTargetData": {
+        "target_at": {
             "type": "string",
             "format": "date-time",
             "required": True,
@@ -276,6 +296,12 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "required": True,
             "nullable": False,
         },
+        "cards": {
+            "type": "array",
+            "items_ref": "WeatherBatchCardOut",
+            "required": True,
+            "nullable": False,
+        },
     },
     "WeatherBatchFoundItem": {
         "state": {
@@ -285,6 +311,10 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "nullable": False,
         },
         "feature_id": {"type": "string", "required": True, "nullable": False},
+        "card_key": {"type": "string", "required": True, "nullable": False},
+    },
+    "WeatherBatchCardOut": {
+        "card_key": {"type": "string", "required": True, "nullable": False},
         "source_styles": {
             "type": "array",
             "items_type": "string",
@@ -995,6 +1025,20 @@ def _assert_consumed_field(
             "additionalProperties.$ref",
             ref,
         )
+    if "items_max_length" in expected:
+        items = resolved.get("items")
+        assert isinstance(items, dict), (where, "array items 아님", resolved.get("type"))
+        assert items.get("maxLength") == expected["items_max_length"], (
+            where,
+            "items.maxLength",
+            items.get("maxLength"),
+        )
+    if "unique_items" in expected:
+        assert resolved.get("uniqueItems") is expected["unique_items"], (
+            where,
+            "uniqueItems",
+            resolved.get("uniqueItems"),
+        )
 
 
 def test_consumed_response_fields_pin_types_formats_and_enums() -> None:
@@ -1053,6 +1097,7 @@ def test_weather_batch_request_binds_to_pinned_container() -> None:
     actual = str(request_schema.get("$ref", "")).rsplit("/", 1)[-1]
     assert actual == "WeatherBatchRequest"
     assert "WeatherBatchRequest" in _CONSUMED_FIELD_CONTRACTS
+    assert "WeatherBatchTargetRequest" in _CONSUMED_FIELD_CONTRACTS
 
 
 def test_feature_batch_declares_service_unavailable_problem() -> None:
