@@ -1,14 +1,21 @@
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { FeatureWeatherResolution } from '@pinvi/schemas';
+import type { TripWeatherCard, TripWeatherResolution } from '@pinvi/schemas';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 
-function foundWeather(): FeatureWeatherResolution {
+const CARD_KEY = 'weather-card:seoul';
+
+function foundWeather(): TripWeatherResolution {
   return {
     state: 'found',
-    card: {
-      feature_id: 'weather:found',
+    card_key: CARD_KEY,
+  };
+}
+
+function weatherCards(): Record<string, TripWeatherCard> {
+  return {
+    [CARD_KEY]: {
       asof: '2026-07-30T00:00:00+09:00',
       latest_at: '2026-07-30T15:00:00+09:00',
       is_stale: false,
@@ -46,13 +53,33 @@ function foundWeather(): FeatureWeatherResolution {
 
 describe('TripWeatherSummary', () => {
   it('서버 batch의 found card를 별도 요청 없이 표시한다', () => {
-    render(<TripWeatherSummary weather={foundWeather()} date="2026-07-30" />);
+    render(
+      <TripWeatherSummary
+        weather={foundWeather()}
+        weatherCards={weatherCards()}
+        date="2026-07-30"
+      />,
+    );
 
     expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('현재');
     expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('24℃');
     expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('예보');
     expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('27℃');
     expect(screen.getByTestId('trip-weather-summary')).not.toHaveTextContent('99℃');
+  });
+
+  it('found card에 해당 날짜 metric이 없으면 명시적인 no-data 상태를 표시한다', () => {
+    render(
+      <TripWeatherSummary
+        weather={foundWeather()}
+        weatherCards={weatherCards()}
+        date="2026-09-30"
+      />,
+    );
+
+    expect(screen.getByTestId('trip-weather-status')).toHaveTextContent(
+      '이 날짜의 날씨 정보가 없습니다.',
+    );
   });
 
   it.each([

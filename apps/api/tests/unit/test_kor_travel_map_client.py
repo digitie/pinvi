@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -599,6 +600,43 @@ async def test_get_weather_batch_decodes_sparse_targets_and_shared_cards() -> No
     }
     assert isinstance(result[first_target_at]["no_data"], NoDataWeatherBatchItem)
     assert isinstance(result[second_target_at]["retired"], RetiredWeatherBatchItem)
+    await client.aclose()
+
+
+async def test_get_weather_batch_accepts_fixed_offset_timeline_across_dst_boundary() -> None:
+    target_at = datetime(2026, 3, 8, tzinfo=ZoneInfo("America/New_York"))
+    known_at = datetime(2026, 3, 7, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        body = _json.loads(request.content)
+        response_target_at = datetime.fromisoformat(body["targets"][0]["target_at"])
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "known_at": body["known_at"],
+                    "targets": [
+                        {
+                            "target_at": response_target_at.isoformat(),
+                            "timeline_until": (response_target_at + timedelta(days=1)).isoformat(),
+                            "items": [{"state": "no_data", "feature_id": "weather:none"}],
+                            "cards": [],
+                        }
+                    ],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    result = await client.get_weather_batch(
+        {target_at: ["weather:none"]},
+        known_at=known_at,
+    )
+
+    assert isinstance(result[target_at]["weather:none"], NoDataWeatherBatchItem)
     await client.aclose()
 
 

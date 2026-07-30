@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `6650aa71`(T-VN-16A weather batch 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `94ace1a9`(T-VN-16C 다중 날짜 weather batch 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는

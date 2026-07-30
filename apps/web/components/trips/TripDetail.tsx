@@ -1647,6 +1647,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       ? (day.weather_by_feature_id[day.pois[0].feature_id] ?? null)
                                       : null
                                   }
+                                  weatherCards={day.weather_cards}
                                   date={day.effective_date}
                                   label="날짜 날씨"
                                   compact={mobileWebLayout}
@@ -1688,6 +1689,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   onSelectPoi={handleSelectPoi}
                                   tripId={tripId}
                                   dayDate={day.effective_date}
+                                  weatherCards={day.weather_cards}
                                   weatherByFeatureId={day.weather_by_feature_id}
                                   showInlineAttachments
                                   showWeather

@@ -928,7 +928,7 @@ class KorTravelMapClient:
                 raise KorTravelMapContractError(
                     "weather batch 응답 target 순서나 시각이 요청과 다릅니다."
                 )
-            if timeline_until != target_at + timedelta(days=1):
+            if timeline_until != response_target_at + timedelta(days=1):
                 raise KorTravelMapContractError(
                     "weather batch target timeline 지평선이 1일이 아닙니다."
                 )

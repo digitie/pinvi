@@ -1,18 +1,37 @@
 # resume.md
 
-## 2026-07-30 (codex) — T-VN-16C PinVi 다중 날짜 weather batch 소비 진행
+## 2026-07-30 (codex) — T-VN-16C PinVi 다중 날짜 weather batch 소비 완료
 
-kor-travel-map producer PR #902가 sparse `targets[{target_at, feature_ids}]` 요청과
-target-local `cards[]`/`card_key` 응답을 머지했다. PinVi는
-`feat/t-vn-16c-weather-multidate-consumer`에서 날짜별 fanout을 한 Trip view당 단일 요청으로
-전환한다. 작성 범위는 `KorTravelMapClient`의 strict decoder, Trip view 투영, 계약·통합 테스트,
-31일 전용 `not_requested` 상태 제거와 vendored OpenAPI·통합 문서 동기화다.
+kor-travel-map producer PR #902의 sparse `targets[{target_at, feature_ids}]` 요청과
+target-local `cards[]`/`card_key` 응답을 소비한다. 날짜별 outbound worker를 없애고 한 Trip
+view의 모든 날짜를 `POST /v1/features/weather/batch` 한 번에 보낸다. 전송 전에 target
+366개, target당 ID 200개, 전체 pair 2,000개, `pair + 5 × unique feature` planning work
+2,500, ID 256자 상한을 검증한다. 응답의 `known_at`, target 순서·시각·1일 horizon,
+item ID·순서, card 참조·고아/누락/중복, metric 타입·aware datetime을 모두 decode한 뒤에만
+투영한다.
 
-검증은 n150 정적/단위/통합 gate, Map 재사용 clone을 연결한 32일 초과 실데이터 장기 여행의
-파괴적 Live UI, 작성 diff 적대 리뷰 2인 순서로 진행한다. DB schema 변경은 없고 기존 clone의
-head가 맞으면 새 clone/checkpoint/downgrade 없이 재사용한다.
+Trip 응답은 일자별 `weather_cards`와 feature별 `found(card_key)`로 정규화한다. 같은
+일자·기상 격자의 metric payload는 한 번만 직렬화하며 Python/Zod가 참조 card의 누락과
+고아 card를 함께 거부한다. DST 전환일의 timeline horizon은 요청 `ZoneInfo`의 다음 날
+offset이 아니라 응답으로 왕복한 고정 offset 기준 24시간으로 검증한다. found card에 해당
+날짜 metric이 없어도 UI가 사라지지 않고 명시적인 날씨 없음 상태를 표시한다.
 
-**다음 한 작업**: 다중 target strict decoder와 Trip view 단일 호출 회귀를 먼저 구현한다.
+Trip view의 10초 budget과 부모 cancellation 전파는 유지한다. transport·timeout·입력·계약
+실패는 부분 결과를 노출하지 않고 미결 weather 전체를 `unavailable`로 둔다. 31일 cap과
+`not_requested`는 Python/Zod/Web에서 제거했다. vendored OpenAPI는 Map main
+`94ace1a9a27d204fabb9645d1ffd43c47ea60079`, SHA-256
+`0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`에 고정했다.
+
+n150 재사용 `ktm-tvn45-db`는 migration head `0069_weather_series_catalog`와 fixture 범위가
+맞아 새 clone·checkpoint·downgrade 없이 사용했다. 40일·45 POI 파괴적 Live UI는 한 직접
+Trip read당 weather POST 정확히 1회, 다섯 parent 상태, weather found/no_data,
+weather-only 503→복구, 단건 weather 0회, 40일차의 31일 생략 문구 부재와 활성 Trip 잔존
+0건을 확인해 **1 passed (26.5s)**다. 첫 재실행은 fixture 이름에 좌표까지 붙인 실행 설정,
+두 번째는 격리 API 기본 분당 60회 제한 때문에 cleanup만 실패했다. DB/build를 반복하지 않고
+이름을 정정하고 rate limit을 끈 격리 API에서 실패 단계부터 재개했다.
+
+**다음 한 작업**: 작성 diff 적대 리뷰 2인의 지적을 반영하고 최종 gate·PR CI green 후
+셀프 머지한다.
 
 ## 2026-07-30 (codex) — T-VN-16B weather batch 소비 구현·격리 검증 완료
 

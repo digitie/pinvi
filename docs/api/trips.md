@@ -105,6 +105,10 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 확인하지 못해 저장 snapshot을 썼다는 뜻이다. `broken_feature_count`는 사용자가 고쳐야 하는
 `retired|missing`만 집계하며 `suppressed|unverified`는 포함하지 않는다.
 
+일자 날씨는 `weather_by_feature_id`의 상태와 `weather_cards`의 정규화된 카드로 나뉜다.
+`found` 상태는 `card_key`만 가지며, 같은 일자·기상 격자의 여러 feature가 같은 카드를
+참조한다. 참조된 card가 빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
+
 응답 shape:
 
 ```json
@@ -116,6 +120,18 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
         "day_index": 1,
         "date": "2026-06-01",
         "title": "1일차",
+        "weather_cards": {
+          "weather-card-key": {
+            "asof": "2026-06-01T00:00:00+09:00",
+            "latest_at": "2026-06-01T09:00:00+09:00",
+            "is_stale": false,
+            "source_styles": ["observed", "short"],
+            "metrics": []
+          }
+        },
+        "weather_by_feature_id": {
+          "feature-id": { "state": "found", "card_key": "weather-card-key" }
+        },
         "pois": [
           {
             "poi_id": "uuid",

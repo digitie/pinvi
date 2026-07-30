@@ -81,6 +81,7 @@ read/cancel token 모두 32자 이상·Unicode whitespace 없음·서로 다름�
 | `GET`      | `/v1/features/{feature_id}`           | feature 상세 조회                                                           |
 | `GET`      | `/v1/features/{feature_id}/weather`   | 날씨 카드                                                                   |
 | `POST`     | `/v1/features/batch`                  | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
+| `POST`     | `/v1/features/weather/batch`          | Trip 전체 날짜의 sparse 날씨 batch 조회 (ServiceToken)                      |
 | `GET`      | `/v1/categories`                      | 카테고리 카탈로그                                                           |
 | `GET`      | `/v1/public/beaches*`                 | Pinvi `/public/beaches*` 공개 해수욕장 목록·상세·marker                     |
 | `GET`      | `/v1/public/festivals*`               | Pinvi `/public/festivals*` 공개 축제 월별 목록·상세·marker                  |

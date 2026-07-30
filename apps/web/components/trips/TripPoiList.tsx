@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
-import type { FeatureWeatherResolution, PoiUpdate, TripViewPoi } from '@pinvi/schemas';
+import type {
+  PoiUpdate,
+  TripViewPoi,
+  TripWeatherCard,
+  TripWeatherResolution,
+} from '@pinvi/schemas';
 import { arrayMove, featureResolutionNotice, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
@@ -21,7 +26,8 @@ export interface TripPoiListProps {
   onSelectPoi?: (poiId: string) => void;
   tripId?: string;
   dayDate?: string | null;
-  weatherByFeatureId?: Record<string, FeatureWeatherResolution>;
+  weatherCards?: Record<string, TripWeatherCard>;
+  weatherByFeatureId?: Record<string, TripWeatherResolution>;
   showInlineAttachments?: boolean;
   showWeather?: boolean;
   compact?: boolean;
@@ -42,6 +48,7 @@ export function TripPoiList({
   onSelectPoi,
   tripId,
   dayDate = null,
+  weatherCards = {},
   weatherByFeatureId = {},
   showInlineAttachments = false,
   showWeather = false,
@@ -221,6 +228,7 @@ export function TripPoiList({
                   {showWeather && (
                     <TripWeatherSummary
                       weather={poi.feature_id ? (weatherByFeatureId[poi.feature_id] ?? null) : null}
+                      weatherCards={weatherCards}
                       date={dayDate}
                       label="장소 날씨"
                       compact

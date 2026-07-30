@@ -59,19 +59,23 @@ def _weather_resolution(
     item: FoundWeatherBatchItem | NoDataWeatherBatchItem | RetiredWeatherBatchItem,
     *,
     target_at: datetime,
+    weather_cards: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     if isinstance(item, FoundWeatherBatchItem):
         card = item.card
-        return {
-            "state": "found",
-            "card": {
-                "feature_id": item.feature_id,
+        weather_cards.setdefault(
+            card.card_key,
+            {
                 "asof": target_at,
                 "latest_at": card.latest_at,
                 "is_stale": card.is_stale,
                 "source_styles": list(card.source_styles),
                 "metrics": [metric.as_dict() for metric in (*card.current, *card.timeline)],
             },
+        )
+        return {
+            "state": "found",
+            "card_key": card.card_key,
         }
     if isinstance(item, NoDataWeatherBatchItem):
         return {"state": "no_data"}
@@ -292,6 +296,9 @@ async def build_trip_view(
     # weather는 POI의 영구 속성이 아니라 일자별 feature snapshot이다. 같은 날짜에 같은
     # feature가 여러 번 등장해도 한 번만 요청하고, 동일 날짜의 여러 day에도 결과를 공유한다.
     weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {day.day_index: {} for day in days}
+    weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
+        day.day_index: {} for day in days
+    }
     pending_weather: dict[date, dict[str, list[int]]] = {}
     for poi in pois:
         feature_id = poi.feature_id
@@ -335,13 +342,20 @@ async def build_trip_view(
             for effective_date in weather_dates:
                 target_at = target_at_by_date[effective_date]
                 weather_batch = weather_batch_by_target[target_at]
+                target_weather_cards: dict[str, dict[str, Any]] = {}
                 for feature_id, day_indexes in pending_weather[effective_date].items():
                     resolution = _weather_resolution(
                         weather_batch[feature_id],
                         target_at=target_at,
+                        weather_cards=target_weather_cards,
                     )
                     for day_index in day_indexes:
                         weather_by_day_index[day_index][feature_id] = resolution
+                        if resolution["state"] == "found":
+                            card_key = resolution["card_key"]
+                            weather_cards_by_day_index[day_index][card_key] = target_weather_cards[
+                                card_key
+                            ]
 
         for effective_date in weather_dates:
             slots = pending_weather[effective_date]
@@ -422,6 +436,7 @@ async def build_trip_view(
                 "rise_set_reference": (
                     ref.reference_label if (ref := day_rise_sets.get(d.day_index)) else None
                 ),
+                "weather_cards": weather_cards_by_day_index[d.day_index],
                 "weather_by_feature_id": weather_by_day_index[d.day_index],
                 "pois": pois_by_day_index.get(d.day_index, []),
             }

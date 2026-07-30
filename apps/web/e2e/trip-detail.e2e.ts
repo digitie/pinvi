@@ -37,6 +37,7 @@ const TRIP_VIEW = {
       effective_date: '2026-07-01',
       title: '1일차',
       holidays: [],
+      weather_cards: {},
       weather_by_feature_id: {},
       pois: [
         {
@@ -862,7 +863,7 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
     };
     currentView = {
       ...currentView,
-      days: [{ ...day, weather_by_feature_id: {}, pois: [] }],
+      days: [{ ...day, weather_cards: {}, weather_by_feature_id: {}, pois: [] }],
     };
     await route.fulfill({
       contentType: 'application/json',
@@ -987,8 +988,8 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
 
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
   const weatherRequests: URL[] = [];
+  const weatherCardKey = 'weather-card:haeundae';
   const weatherCard = {
-    feature_id: 'feat-haeundae',
     asof: '2026-07-01T00:00:00+09:00',
     latest_at: '2026-07-01T09:00:00+09:00',
     is_stale: false,
@@ -1053,8 +1054,9 @@ test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보
     days: [
       {
         ...BASE_MARKER_DAY,
+        weather_cards: { [weatherCardKey]: weatherCard },
         weather_by_feature_id: {
-          'feat-haeundae': { state: 'found', card: weatherCard },
+          'feat-haeundae': { state: 'found', card_key: weatherCardKey },
         },
       },
     ],

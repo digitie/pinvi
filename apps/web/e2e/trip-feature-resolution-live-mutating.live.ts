@@ -53,6 +53,7 @@ type TripViewPoi = {
 type TripView = {
   days: Array<{
     pois: TripViewPoi[];
+    weather_cards: Record<string, unknown>;
     weather_by_feature_id: Record<
       string,
       {
@@ -540,6 +541,11 @@ test.describe('Trip feature resolution live mutating flow', () => {
         '여행 날짜가 많아 이 날짜의 날씨는 표시하지 않습니다.',
       );
       await expect(finalDayCard).not.toContainText('날씨 서비스를 일시적으로 사용할 수 없습니다.');
+      const finalWeather = finalDayCard.getByLabel('장소 날씨').first();
+      await expect(finalWeather).toBeVisible();
+      await expect(finalWeather).toContainText(
+        /현재|예보|미세먼지|이 날짜의 날씨 정보가 없습니다\./,
+      );
 
       const healthyWeatherBatchCount = proxy.weatherBatchRequests.length;
       proxy.setWeatherOutage(true);

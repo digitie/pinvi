@@ -34,6 +34,7 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
               day_index: 1,
               date: '2026-07-01',
               title: '1일차',
+              weather_cards: {},
               weather_by_feature_id: {},
               pois: [
                 {

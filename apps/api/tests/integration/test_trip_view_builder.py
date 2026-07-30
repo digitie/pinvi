@@ -325,7 +325,7 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     from app.models.trip import Trip
     from app.models.trip_day import TripDay
     from app.models.user import User
-    from app.schemas.trip import TripView
+    from app.schemas.trip import TripFeatureWeatherFound, TripView
     from app.services.feature_cache import feature_cache
     from app.services.trip_view_builder import build_trip_view
 
@@ -369,6 +369,7 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
                     [
                         (1, "weather:found"),
                         (1, "weather:found"),
+                        (1, "weather:found-peer"),
                         (1, "weather:no-data"),
                         (2, "weather:retired"),
                         (3, "weather:found"),
@@ -391,6 +392,7 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     } == {
         "2026-07-30T00:00:00+09:00": [
             "weather:found",
+            "weather:found-peer",
             "weather:no-data",
             "weather:retired",
         ],
@@ -399,8 +401,16 @@ async def test_build_trip_view_batches_weather_once_per_unique_date(
     assert known_at.tzinfo is not None
 
     first_day = typed.days[0].weather_by_feature_id
-    assert first_day["weather:found"].state == "found"
-    assert first_day["weather:found"].card.metrics[0].provider == "python-kma-api"
+    found = first_day["weather:found"]
+    found_peer = first_day["weather:found-peer"]
+    assert isinstance(found, TripFeatureWeatherFound)
+    assert isinstance(found_peer, TripFeatureWeatherFound)
+    assert found.card_key == found_peer.card_key
+    assert len(typed.days[0].weather_cards) == 1
+    assert typed.days[0].weather_cards[found.card_key].metrics[0].provider == "python-kma-api"
+    assert all(
+        "card" not in resolution for resolution in view["days"][0]["weather_by_feature_id"].values()
+    )
     assert first_day["weather:no-data"].state == "no_data"
     assert typed.days[1].weather_by_feature_id["weather:retired"].state == "retired"
     assert typed.days[2].weather_by_feature_id["weather:found"].state == "found"
@@ -487,6 +497,7 @@ async def test_build_trip_view_batches_long_trip_once_without_date_omission(
     assert {day["weather_by_feature_id"]["weather:found"]["state"] for day in view["days"]} == {
         "found"
     }
+    assert all(len(day["weather_cards"]) == 1 for day in view["days"])
 
 
 async def test_build_trip_view_enforces_total_weather_budget(

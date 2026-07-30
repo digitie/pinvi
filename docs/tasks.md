@@ -7,10 +7,6 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-VN-16C = Codex Agent B**(`feat/t-vn-16c-weather-multidate-consumer`):
-  `apps/api`의 kor-travel-map weather batch client·Trip view builder·계약/통합 테스트와
-  `packages/schemas`의 폐기 상태 정리, 관련 통합 문서만 수정한다. T-VN-20/C6c/TDR 선점
-  파일과 겹치면 해당 작업 변경을 보존하고 T-VN-16C 작성 diff만 리뷰한다.
 - **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
   `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
   수정한다. service token 우선순위는 유지하고 `key` query를 제거하며
@@ -23,15 +19,6 @@
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
   브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
   T-304(#400), T-309c(#402). 진행: T-305(PR #401 대기). **backend(T-301~305) 완료 임박, 남은 것=web UI.**
-
-## kor-travel-map 날씨 다중 날짜 batch 후속
-
-- [ ] **T-VN-16C** — Map weather batch가 단일 `target_at`만 받아 Trip의 unique 날짜 수만큼
-      호출해야 하는 현재 경계를 다중 날짜 계약으로 확장한다. 생산자는
-      `feature_ids × target_at[]`의 크기·정렬·중복·전체 metric row budget을 명시하고, 소비자는
-      한 Trip view를 한 bounded 호출로 합쳐 현재 31일 `not_requested` 상한을 제거한다. Map
-      producer → PinVi consumer 순으로 구현하고, query plan·payload cap·부분 실패 금지·실데이터
-      장기 여행 Live를 완료 조건으로 한다. (T-VN-16B 적대 리뷰 후속, Agent B)
 
 ## 보안·의존성
 

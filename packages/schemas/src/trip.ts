@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Iso8601Schema, NonNegativeDecimalStringSchema } from './common';
-import { FeatureWeatherResolutionSchema } from './feature';
+import { WeatherMetricSchema } from './feature';
 import { PoiRiseSetResponseSchema } from './poi';
 import { AttachmentCreateSchema, AttachmentResponseSchema } from './storage';
 
@@ -268,26 +268,70 @@ export const TripDayHolidaySchema = z.object({
 });
 export type TripDayHoliday = z.infer<typeof TripDayHolidaySchema>;
 
-export const TripViewDaySchema = z.object({
-  day_index: z.number().int(),
-  date: z.string().date().nullable(),
-  // date는 override-only, effective_date는 파생(override 또는 start_date+day_index) — ADR-055.
-  effective_date: z.string().date().nullable().default(null),
-  // effective_date가 여행 [start,end] 밖이면 true(F1: 기간 축소 시 경고).
-  out_of_range: z.boolean().default(false),
-  // 일자 색 override(팔레트 키). NULL이면 인덱스 기본색으로 파생.
-  marker_color: z.string().nullable().default(null),
-  title: z.string().nullable(),
-  // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
-  version: z.number().int().default(1),
-  holidays: z.array(TripDayHolidaySchema).default([]),
-  // ADR-055 §6: 일자 단위 일출/일몰 + "XX 장소 기준" 라벨.
-  rise_set: PoiRiseSetResponseSchema.nullable().default(null),
-  rise_set_reference: z.string().nullable().default(null),
-  // 날씨는 같은 feature라도 여행 날짜마다 달라지므로 day 범위에서 keyed projection으로 둔다.
-  weather_by_feature_id: z.record(z.string(), FeatureWeatherResolutionSchema),
-  pois: z.array(TripViewPoiSchema),
+export const TripWeatherCardSchema = z.object({
+  asof: Iso8601Schema,
+  latest_at: Iso8601Schema.nullable(),
+  is_stale: z.boolean(),
+  source_styles: z.array(z.string()),
+  metrics: z.array(WeatherMetricSchema),
 });
+export type TripWeatherCard = z.infer<typeof TripWeatherCardSchema>;
+
+export const TripWeatherResolutionSchema = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('found'),
+    card_key: z.string().min(1).max(256),
+  }),
+  z.object({ state: z.literal('no_data') }),
+  z.object({ state: z.literal('retired') }),
+  z.object({ state: z.literal('suppressed') }),
+  z.object({ state: z.literal('missing') }),
+  z.object({ state: z.literal('unavailable') }),
+]);
+export type TripWeatherResolution = z.infer<typeof TripWeatherResolutionSchema>;
+
+export const TripViewDaySchema = z
+  .object({
+    day_index: z.number().int(),
+    date: z.string().date().nullable(),
+    // date는 override-only, effective_date는 파생(override 또는 start_date+day_index) — ADR-055.
+    effective_date: z.string().date().nullable().default(null),
+    // effective_date가 여행 [start,end] 밖이면 true(F1: 기간 축소 시 경고).
+    out_of_range: z.boolean().default(false),
+    // 일자 색 override(팔레트 키). NULL이면 인덱스 기본색으로 파생.
+    marker_color: z.string().nullable().default(null),
+    title: z.string().nullable(),
+    // backend는 항상 version을 보낸다. default는 version 컬럼 도입(T-287) 이전 응답/목업 호환용.
+    version: z.number().int().default(1),
+    holidays: z.array(TripDayHolidaySchema).default([]),
+    // ADR-055 §6: 일자 단위 일출/일몰 + "XX 장소 기준" 라벨.
+    rise_set: PoiRiseSetResponseSchema.nullable().default(null),
+    rise_set_reference: z.string().nullable().default(null),
+    // 동일한 일자·기상 격자의 여러 feature는 하나의 card를 참조한다.
+    weather_cards: z.record(z.string(), TripWeatherCardSchema),
+    weather_by_feature_id: z.record(z.string(), TripWeatherResolutionSchema),
+    pois: z.array(TripViewPoiSchema),
+  })
+  .superRefine((value, ctx) => {
+    const referenced = new Set(
+      Object.values(value.weather_by_feature_id)
+        .filter(
+          (resolution): resolution is Extract<TripWeatherResolution, { state: 'found' }> =>
+            resolution.state === 'found',
+        )
+        .map((resolution) => resolution.card_key),
+    );
+    const cardKeys = new Set(Object.keys(value.weather_cards));
+    const missing = [...referenced].filter((cardKey) => !cardKeys.has(cardKey));
+    const orphaned = [...cardKeys].filter((cardKey) => !referenced.has(cardKey));
+    if (missing.length > 0 || orphaned.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['weather_cards'],
+        message: `weather card 참조 집합 불일치: missing=${missing.join(',')}, orphaned=${orphaned.join(',')}`,
+      });
+    }
+  });
 export type TripViewDay = z.infer<typeof TripViewDaySchema>;
 
 export const TripViewShareLinkSchema = z.object({
