@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 06:27 (codex agent B) — C6c/T-VN 완료 추적 정리
+
+**작업**: 완료된 T-VN-20/#394, T-VN-03-P/#392, T-ADM-C6c를 열린 백로그에서
+완료 아카이브로 이관했다.
+
+**변경**:
+
+- `docs/tasks.md`에서 세 완료 항목과 만료된 Codex 선점을 제거했다.
+- `docs/tasks-done.md`에 PR merge commit, 로컬/CI gate, n150 production exact-pair
+  principal 경계 증거를 task별로 기록했다.
+- `docs/resume.md` 상단에 현재 상태와 다음 열린 작업을 갱신했다.
+
+**결정**: 코드 merge만으로 닫지 않았던 T-VN-03-P/C6c는 n150에서 PinVi-origin
+관측 read `ops:read` **200** / token 없음 **401**, 전체 principal 경계 **14/14**를
+확인한 시점을 운영 완료로 삼는다. T-VN-20은 PR #395의 merge·green CI와 후속 public
+key lifecycle 검증을 완료 증거로 사용한다.
+
+**발견**: issue #394는 2026-07-20, issue #392는 2026-07-27에 이미 닫혔지만
+`docs/tasks.md`의 열린 항목과 선점 표기가 동기화되지 않았다.
+
+**다음**: 문서 전용 PR을 CI green으로 병합한 뒤 T-VN-SEC-03을 독립 작업으로 진행한다.
+
 ## 2026-07-30 (codex) — T-VN-16C weather 다중 날짜 단일 호출 소비
 
 - PinVi PR #421.

@@ -4,6 +4,42 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-07-31
+
+- [x] **T-VN-20 / issue #394** — kor-travel-map 공개 API key의 header-only 소비 전환.
+      (완료: 2026-07-20, PR #395, codex)
+      URL의 `key` query를 제거하고 public read allowlist에서만
+      `X-Kor-Travel-Map-Api-Key`를 전송한다. service token 우선순위와 batch의
+      ServiceToken-only 경계를 고정했으며, Map PR #794 merge commit의 전체 user OpenAPI를
+      SHA-256 및 byte equality로 vendor했다. focused **32 passed, 4 skipped**, API unit
+      **616 passed, 1 skipped**, Ruff·strict mypy·Compose·CI가 통과했고 단일 적대적 리뷰가
+      P0~P2 없음으로 승인했다. PR #395 merge commit은 `e60d1711…`이며 issue #394는 병합 뒤
+      닫혔다. 후속 n150 production 경계 검증에서도 public key의
+      valid **200** / wrong **401** / revoke **200** / revoked **401** lifecycle을 확인했다.
+
+- [x] **T-VN-03-P / issue #392** — 잔여 관측 read caller의 `ops:read` principal 결선.
+      (완료: 2026-07-27, PR #393·#408, codex)
+      `consistency/{issues,reports}`, `system-logs`, `api-call-logs` 네 caller를 닫힌
+      `ops:read` registry로 전환하고 Admin BFF/service/actor fallback 부재와
+      `/ops/metrics`·`health-deep` direct caller 부재를 계약으로 고정했다. PR #393
+      merge commit `61820f0a…`와 cancel 음성 계약을 보강한 PR #408 merge commit
+      `6a035695…`가 main에 반영됐다. n150 production exact pair
+      (Map `c8ed6164…` / PinVi `6a035695…`)에서 PinVi container-origin
+      `GET /v1/ops/consistency/reports`가 `ops:read`로 **200**, token 없이 **401**을
+      반환해 운영 활성화를 실증했고 issue #392를 닫았다.
+
+- [x] **T-ADM-C6c** — canonical dataset/pipeline caller와 production compatible-pair 활성화.
+      (완료: 2026-07-27, PR #387·#393·#408, codex)
+      삭제된 Dagster/provider/import-job 호출을 `/v1/ops/datasets`와
+      `/v1/ops/pipeline/{overview,executions}` 및 canonical cancellation으로 clean-cut하고,
+      read/cancel principal 분리, 취소 reconciliation, schedule source degraded projection을
+      완결했다. PR #387 merge commit `1b833ce8…` 뒤 #393/#408의 잔여 principal 계약까지
+      반영했으며 API unit/integration·Ruff·strict mypy·Web lint/typecheck/Vitest/build와 CI가
+      통과했다. n150 production에서 exact Map/PinVi source pair와 healthy runtime을 확인하고
+      public/ops/debug principal 경계 **14/14**를 통과했다. 삭제 route 복원·shim·route policy
+      예외는 모두 0건이며, 이 운영 증거로 canonical caller와 production activation 완료 조건을
+      닫았다.
+
 ## 2026-07-30
 
 - [x] **T-VN-16C** — PinVi 다중 날짜 weather batch 소비 전환.

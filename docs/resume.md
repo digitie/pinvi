@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-07-31 (codex agent B) — C6c/T-VN 운영 완료 항목 아카이브
+
+`docs/tasks.md`에 구현·머지·운영 검증이 끝난 뒤에도 열린 채 남아 있던
+T-VN-20/#394, T-VN-03-P/#392, T-ADM-C6c를 제거하고 `docs/tasks-done.md`로 이관했다.
+T-VN-20은 PR #395의 header-only public API key 소비, exact OpenAPI vendor 및 green
+CI를 근거로 닫혔다. T-VN-03-P와 C6c는 PR #387/#393/#408의 canonical caller/principal
+계약에 더해 n150 production exact pair의 PinVi-origin 관측 read
+`ops:read` **200** / token 없음 **401**과 전체 principal 경계 **14/14** 통과를 최종
+증거로 삼았다. issue #394와 #392는 모두 닫힌 상태다.
+
+이번 변경은 추적 문서만 정리하며 코드·runtime·OpenAPI·DB schema를 바꾸지 않는다.
+
+**다음 한 작업**: 이 문서 전용 PR을 CI green으로 병합한 뒤, 열린 백로그 정본
+`docs/tasks.md`의 T-VN-SEC-03을 독립 PR로 진행한다.
+
 ## 2026-07-30 (codex) — T-VN-16C PinVi 다중 날짜 weather batch 소비 완료
 
 kor-travel-map producer PR #902의 sparse `targets[{target_at, feature_ids}]` 요청과
