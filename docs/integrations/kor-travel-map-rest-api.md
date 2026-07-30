@@ -309,7 +309,7 @@ latest_at, is_stale}`이고, 나머지 두 item arm은 `{state, feature_id}`다.
   상태로 추측하지 않고 미결 weather 전체를 `unavailable`로 둔다. 성공 응답도 target/card/item
   전체가 strict decode된 뒤에만 투영해 부분 결과를 섞지 않는다. 부모 요청 cancellation은
   단일 outbound 요청으로 전파된다.
-- **UI**: `TripWeatherSummary`는 Trip view만 렌더하며 단건
+- **UI**: 소유자·공유 여행의 `TripWeatherSummary`는 Trip view만 렌더하며 단건
   `GET /features/{feature_id}/weather`를 호출하지 않는다. weather 없음, parent lifecycle,
   transport 실패를 서로 다르게 표시한다.
 

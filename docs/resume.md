@@ -14,7 +14,9 @@ Trip 응답은 일자별 `weather_cards`와 feature별 `found(card_key)`로 정�
 일자·기상 격자의 metric payload는 한 번만 직렬화하며 Python/Zod가 참조 card의 누락과
 고아 card를 함께 거부한다. DST 전환일의 timeline horizon은 요청 `ZoneInfo`의 다음 날
 offset이 아니라 응답으로 왕복한 고정 offset 기준 24시간으로 검증한다. found card에 해당
-날짜 metric이 없어도 UI가 사라지지 않고 명시적인 날씨 없음 상태를 표시한다.
+날짜 metric이 없어도 UI가 사라지지 않고 명시적인 날씨 없음 상태를 표시한다. 소유자와
+공유 여행 화면이 같은 계약을 사용하며, `card_key`는 producer OpenAPI처럼 길이 제약 없는
+문자열로 보존한다.
 
 Trip view의 10초 budget과 부모 cancellation 전파는 유지한다. transport·timeout·입력·계약
 실패는 부분 결과를 노출하지 않고 미결 weather 전체를 `unavailable`로 둔다. 31일 cap과
@@ -26,12 +28,16 @@ n150 재사용 `ktm-tvn45-db`는 migration head `0069_weather_series_catalog`와
 맞아 새 clone·checkpoint·downgrade 없이 사용했다. 40일·45 POI 파괴적 Live UI는 한 직접
 Trip read당 weather POST 정확히 1회, 다섯 parent 상태, weather found/no_data,
 weather-only 503→복구, 단건 weather 0회, 40일차의 31일 생략 문구 부재와 활성 Trip 잔존
-0건을 확인해 **1 passed (26.5s)**다. 첫 재실행은 fixture 이름에 좌표까지 붙인 실행 설정,
+0건을 확인했다. 리뷰 수정 head의 최종 실행은 40일차 API 상태·card metric과 UI
+summary/no-data arm을 직접 결합해 **1 passed (11.9s)**다. 첫 재실행은 fixture 이름에 좌표까지 붙인 실행 설정,
 두 번째는 격리 API 기본 분당 60회 제한 때문에 cleanup만 실패했다. DB/build를 반복하지 않고
 이름을 정정하고 rate limit을 끈 격리 API에서 실패 단계부터 재개했다.
 
-**다음 한 작업**: 작성 diff 적대 리뷰 2인의 지적을 반영하고 최종 gate·PR CI green 후
-셀프 머지한다.
+적대 리뷰 2인은 중복 card metric의 feature별 재변환, DST offset 오류, 공유 UI 미배선,
+producer보다 좁은 `card_key`, 40일차 false-green과 문서 drift를 확인했다. 회귀를 반영한
+최종 재검토는 두 리뷰어 모두 P0~P3 0건이다.
+
+**다음 한 작업**: 최종 gate를 마치고 PR CI green 후 셀프 머지한다.
 
 ## 2026-07-30 (codex) — T-VN-16B weather batch 소비 구현·격리 검증 완료
 
