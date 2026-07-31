@@ -91,7 +91,7 @@ class CacheTargetEventRecord(_StrictModel):
     target_sequence: int | None = Field(default=None, gt=0)
     relay_order: int = Field(gt=0)
     cursor: str = Field(min_length=1)
-    source_payload_fingerprint: str | None = None
+    source_payload_fingerprint: str
     payload_fingerprint: str
     payload: dict[str, Any]
     occurred_at: datetime
@@ -109,18 +109,16 @@ class CacheTargetEventRecord(_StrictModel):
 
     @field_validator("source_payload_fingerprint", "payload_fingerprint")
     @classmethod
-    def validate_fingerprint(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
+    def validate_fingerprint(cls, value: str) -> str:
         return _validate_sha256_hex(value)
 
     @model_validator(mode="after")
     def validate_scope_tuple(self) -> Self:
         target_tuple = (
             self.target_key,
+            self.target_id,
             self.source_generation,
             self.target_sequence,
-            self.source_payload_fingerprint,
         )
         if self.event_type == "cache_target.reconciled":
             if (
@@ -230,9 +228,7 @@ def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
         event.source_generation,
         event.target_sequence,
         event.relay_order,
-        bytes.fromhex(event.source_payload_fingerprint)
-        if event.source_payload_fingerprint is not None
-        else None,
+        bytes.fromhex(event.source_payload_fingerprint),
         bytes.fromhex(event.payload_fingerprint),
         event.occurred_at,
         event.payload,
@@ -371,11 +367,7 @@ async def apply_cache_target_claim(
                 source_generation=event.source_generation,
                 target_sequence=event.target_sequence,
                 relay_order=event.relay_order,
-                source_payload_fingerprint=(
-                    bytes.fromhex(event.source_payload_fingerprint)
-                    if event.source_payload_fingerprint is not None
-                    else None
-                ),
+                source_payload_fingerprint=bytes.fromhex(event.source_payload_fingerprint),
                 payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
                 occurred_at=event.occurred_at,
                 payload=event.payload,
@@ -430,12 +422,7 @@ async def apply_cache_target_claim(
 
 
 async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord) -> None:
-    if (
-        event.target_key is None
-        or event.source_payload_fingerprint is None
-        or event.source_generation is None
-        or event.target_sequence is None
-    ):
+    if event.target_key is None or event.source_generation is None or event.target_sequence is None:
         raise CacheTargetEventConflictError("target event tuple이 없습니다.")
     head = await db.get(KtmCacheTargetHead, uuid.UUID(event.target_key))
     if head is None:
@@ -470,36 +457,41 @@ def _apply_stream_reconciled(
     consumer: KtmCacheTargetConsumer, *, event: CacheTargetEventRecord
 ) -> None:
     payload = event.payload
-    required = {"snapshot_id", "count", "merkle_root", "high_watermark_cursor"}
+    required = {
+        "actual_merkle_root",
+        "expected_merkle_root",
+        "snapshot_id",
+        "status",
+        "version",
+    }
     if set(payload) != required:
         raise CacheTargetEventConflictError("stream reconciled payload field가 다릅니다.")
     snapshot_id = payload["snapshot_id"]
-    count = payload["count"]
-    merkle_root = payload["merkle_root"]
-    high_watermark_cursor = payload["high_watermark_cursor"]
+    actual_merkle_root = payload["actual_merkle_root"]
+    expected_merkle_root = payload["expected_merkle_root"]
     if (
         not isinstance(snapshot_id, str)
         or not snapshot_id
-        or isinstance(count, bool)
-        or not isinstance(count, int)
-        or count < 0
-        or not isinstance(merkle_root, str)
-        or not isinstance(high_watermark_cursor, str)
+        or not isinstance(actual_merkle_root, str)
+        or not isinstance(expected_merkle_root, str)
+        or payload["status"] != "succeeded"
+        or payload["version"] != "cache-target-reconciliation-v1"
     ):
         raise CacheTargetEventConflictError("stream reconciled payload 타입이 다릅니다.")
     try:
-        root = bytes.fromhex(_validate_sha256_hex(merkle_root))
+        actual_root = bytes.fromhex(_validate_sha256_hex(actual_merkle_root))
+        expected_root = bytes.fromhex(_validate_sha256_hex(expected_merkle_root))
     except ValueError as exc:
         raise CacheTargetEventConflictError("stream reconciled Merkle root가 다릅니다.") from exc
     if (
         consumer.snapshot_id != snapshot_id
-        or consumer.snapshot_count != count
-        or consumer.snapshot_merkle_root != root
+        or actual_root != expected_root
+        or expected_root != bytes.fromhex(event.source_payload_fingerprint)
+        or consumer.snapshot_merkle_root != expected_root
     ):
         raise CacheTargetEventConflictError(
             "stream reconciled receipt가 fixed snapshot과 다릅니다."
         )
-    consumer.high_watermark_cursor = high_watermark_cursor
     consumer.reconcile_status = "matched"
 
 

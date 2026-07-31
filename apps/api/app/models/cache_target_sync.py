@@ -180,12 +180,12 @@ class KtmCacheTargetEvent(Base):
         ),
         CheckConstraint("restore_epoch > 0", name=conv("ck_ktm_ct_events_epoch")),
         CheckConstraint(
+            "octet_length(source_payload_fingerprint) = 32 AND ("
             "(event_type = 'cache_target.reconciled' AND target_key IS NULL AND "
-            "target_id IS NULL AND source_generation IS NULL AND target_sequence IS NULL AND "
-            "source_payload_fingerprint IS NULL) OR "
+            "target_id IS NULL AND source_generation IS NULL AND target_sequence IS NULL) OR "
             "(event_type <> 'cache_target.reconciled' AND target_key IS NOT NULL AND "
-            "source_generation > 0 AND target_sequence > 0 AND "
-            "octet_length(source_payload_fingerprint) = 32)",
+            "target_id IS NOT NULL AND "
+            "source_generation > 0 AND target_sequence > 0))",
             name=conv("ck_ktm_ct_events_scope_tuple"),
         ),
         CheckConstraint("relay_order > 0", name=conv("ck_ktm_ct_events_relay_order")),
@@ -221,7 +221,7 @@ class KtmCacheTargetEvent(Base):
     source_generation: Mapped[int | None] = mapped_column(BigInteger)
     target_sequence: Mapped[int | None] = mapped_column(BigInteger)
     relay_order: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    source_payload_fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
+    source_payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

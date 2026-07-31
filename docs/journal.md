@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 n150 stream receipt 계약/health 보정
+
+**작업**: n150 crash/reclaim에서 마지막 50-event lease가 만료돼도 재처리되지 않는 현상을 producer
+DB row와 consumer wire validation까지 추적했다.
+
+**원인**: Map ADR-081/OpenAPI는 `cache_target.reconciled`의
+`source_payload_fingerprint`를 fixed snapshot Merkle root로 필수화했지만 PinVi가 이를 nullable target
+tuple로 잘못 모델링했다. Pydantic `ValidationError`는 consumer loop의 transport 예외 범위 밖이라 task만
+조용히 종료됐고 DB readiness는 `matched/ready`로 남았다.
+
+**변경**:
+
+- stream receipt에서도 source fingerprint lowercase SHA-256을 필수로 검증하고 inbox에 그대로 저장한다.
+- 실제 Map wire의 `snapshot_id/expected_merkle_root/actual_merkle_root/status/version`만 허용하고
+  snapshot Merkle/source fingerprint exact equality를 확인한다. count/high-watermark는 이미 채택한
+  request-bound snapshot 값을 유지한다.
+- `20260801_0046` migration이 기존 valid payload Merkle를 backfill한 뒤 column `NOT NULL`과 32-byte
+  scope CHECK를 강제한다. downgrade는 구 계약의 nullable/null receipt를 명시적으로 복원한다.
+- 예상하지 못한 consumer 예외는 로그를 남기고 durable `ready=false/reconcile_status=blocked`로
+  전환해 health false-green을 차단한다.
+- execplan의 잘못된 nullable wire 설명을 Map ADR-081과 일치시켰다.
+
+**검증**: 관련 PostGIS 22건, Ruff, strict mypy 통과. fresh DB에서 구 null stream receipt를 넣고
+`0045 → 0046 → 0045 → 0046` 왕복해 Merkle backfill, nullable 전환, Alembic head를 확인했다.
+
 ## 2026-08-01 (codex) — T-VN-41 n150 image command packaging 보정
 
 **작업**: n150 exact candidate image에서 정식 initial-cutover console command가 source package를

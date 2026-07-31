@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 n150 stream receipt fail-closed 보강
+
+n150 crash/reclaim에서 relay 201~250 claim이 만료된 채 멈춘 원인을 확인했다. Map ADR-081과 pinned
+service OpenAPI는 stream-scoped `cache_target.reconciled.source_payload_fingerprint`에 fixed snapshot
+Merkle root를 필수로 보내지만, PinVi DTO/DB/execplan이 이 필드를 target tuple로 잘못 분류해 `null`만
+허용했다. claim response Pydantic 검증 예외가 consumer task를 종료하면서 durable health는 계속
+`ready=true`였으므로 false-green도 함께 있었다.
+
+DTO와 inbox를 producer 정본에 맞추고 `20260801_0046`에서 기존 stream receipt는 payload Merkle root로
+backfill한 뒤 fingerprint를 `NOT NULL` 32-byte로 강제한다. 예상하지 못한 consumer 예외는 durable
+consumer를 `blocked`로 닫아 health가 fail-closed가 되게 했다. reconciled payload도 Map의 실제
+`snapshot_id/expected_merkle_root/actual_merkle_root/status/version` exact receipt로 검증하고, count와
+high-watermark는 앞서 채택한 request-bound snapshot 값을 유지한다.
+
+**검증**: cache-target consumer/schema/worker PostGIS 집중 22건, Ruff, strict mypy가 통과했다. fresh
+PostGIS에서 `0045(null receipt) → 0046(backfill+NOT NULL) → 0045(nullable+null) → 0046` 왕복과
+version/컬럼/지문을 확인했다.
+
+**다음 한 작업**: 새 exact production image를 n150 isolated DB의 `0046`으로 올리고 만료 lease reclaim이
+250까지 ACK되는지 확인한 뒤 destructive Live UI recovery gate를 실행한다.
+
 ## 2026-08-01 (codex) — T-VN-41 n150 image command packaging
 
 n150 exact candidate image에서 `pinvi-cache-target-initial-cutover`가 `app`을 import하지 못하는 결함을

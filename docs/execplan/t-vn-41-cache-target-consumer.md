@@ -65,9 +65,11 @@ source_payload_fingerprint, occurred_at, typed payload
 ```
 
 `cache_target.reconciled`는 `event_scope=stream`인 stream receipt다. `target_key`, `target_id`,
-`source_generation`, `target_sequence`, `source_payload_fingerprint`는 모두 `null`이며 가짜 target
-identity를 만들지 않는다. payload의 fixed snapshot ID/count/Merkle root와 high-watermark를 검증해
-consumer checkpoint만 전진시키고 POI head나 feature cache generation은 변경하지 않는다.
+`source_generation`, `target_sequence`는 모두 `null`이며 가짜 target identity를 만들지 않는다.
+`source_payload_fingerprint`는 Map ADR-081에 따라 비교를 통과한 fixed snapshot Merkle root를 담는다.
+payload의 fixed snapshot ID와 expected/actual Merkle root, 성공 status, version을 검증한다. count와
+high-watermark는 앞서 채택한 request-bound snapshot 값을 유지한다. receipt는 consumer checkpoint만
+전진시키고 POI head나 feature cache generation은 변경하지 않는다.
 
 `event_type` discriminator와 허용 값은 exact하다.
 

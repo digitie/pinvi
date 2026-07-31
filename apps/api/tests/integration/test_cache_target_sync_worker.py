@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -9,14 +10,17 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
 )
-from app.models.cache_target_sync import KtmCacheTargetConsumer
+from app.core.config import settings
+from app.models.cache_target_sync import KtmCacheTargetConsumer, KtmCacheTargetEvent
 from app.services.cache_target_event_consumer import CacheTargetClaim, CacheTargetEventRecord
 from app.services.cache_target_sync_worker import (
+    _consumer_loop,
     bootstrap_cache_target_sync,
     consume_cache_target_once,
 )
@@ -58,13 +62,14 @@ def _claim_with_mid_stream_poison() -> CacheTargetClaim:
             "target_sequence": None,
             "relay_order": 2,
             "cursor": "cursor-2",
-            "source_payload_fingerprint": None,
+            "source_payload_fingerprint": "72" * 32,
             "payload_fingerprint": "71" * 32,
             "payload": {
+                "actual_merkle_root": "72" * 32,
+                "expected_merkle_root": "72" * 32,
                 "snapshot_id": "wrong-snapshot",
-                "count": 0,
-                "merkle_root": (b"r" * 32).hex(),
-                "high_watermark_cursor": "cursor-2",
+                "status": "succeeded",
+                "version": "cache-target-reconciliation-v1",
             },
             "occurred_at": occurred_at,
         }
@@ -101,6 +106,160 @@ async def _seed_ready_consumer(session_factory) -> None:  # type: ignore[no-unty
             )
         )
         await db.commit()
+
+
+async def test_unexpected_consumer_failure_marks_durable_readiness_blocked(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_ready_consumer(session_factory)
+
+    class InvalidClaimClient:
+        async def claim_events(self, **kwargs: object) -> None:
+            del kwargs
+            raise ValueError("producer contract validation failed")
+
+    config = settings.model_copy(update={"pinvi_kor_travel_map_cache_target_poll_seconds": 0.1})
+    task = asyncio.create_task(
+        _consumer_loop(
+            InvalidClaimClient(),  # type: ignore[arg-type]
+            config,
+            session_factory=session_factory,
+        )
+    )
+    try:
+        for _ in range(100):
+            async with session_factory() as db:
+                consumer = await db.get(
+                    KtmCacheTargetConsumer,
+                    "pinvi-cache-target-consumer",
+                )
+                if consumer is not None and not consumer.ready:
+                    break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("consumer fatal failure가 durable readiness를 닫지 않았습니다.")
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        assert consumer.ready is False
+        assert consumer.reconcile_status == "blocked"
+
+
+async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_ready_consumer(session_factory)
+    claim_id = uuid.uuid4()
+    lease_token = uuid.uuid4()
+    reconciled_event_id = uuid.uuid4()
+    target_event_id = uuid.uuid4()
+    target_key = uuid.uuid4()
+    root = (b"r" * 32).hex()
+    occurred_at = datetime.now(UTC).isoformat()
+    calls: list[tuple[str, dict[str, object]]] = []
+    claim = {
+        "claim_id": str(claim_id),
+        "external_system": "pinvi",
+        "consumer_id": "pinvi-cache-target-consumer",
+        "lease_token": str(lease_token),
+        "status": "active",
+        "first_relay_order": 1,
+        "last_relay_order": 2,
+        "acked_through": None,
+        "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+        "events": [
+            {
+                "event_id": str(reconciled_event_id),
+                "event_type": "cache_target.reconciled",
+                "event_scope": "stream",
+                "external_system": "pinvi",
+                "target_key": None,
+                "target_id": None,
+                "restore_epoch": 7,
+                "source_generation": None,
+                "target_sequence": None,
+                "relay_order": 1,
+                "cursor": "cursor-1",
+                "source_payload_fingerprint": root,
+                "payload_fingerprint": "70" * 32,
+                "payload": {
+                    "actual_merkle_root": root,
+                    "expected_merkle_root": root,
+                    "snapshot_id": "expected-snapshot",
+                    "status": "succeeded",
+                    "version": "cache-target-reconciliation-v1",
+                },
+                "occurred_at": occurred_at,
+            },
+            {
+                "event_id": str(target_event_id),
+                "event_type": "cache_target.state_applied",
+                "event_scope": "target",
+                "external_system": "pinvi",
+                "target_key": str(target_key),
+                "target_id": str(uuid.uuid4()),
+                "restore_epoch": 7,
+                "source_generation": 1,
+                "target_sequence": 1,
+                "relay_order": 2,
+                "cursor": "cursor-2",
+                "source_payload_fingerprint": "73" * 32,
+                "payload_fingerprint": "71" * 32,
+                "payload": {"status": "applied"},
+                "occurred_at": occurred_at,
+            },
+        ],
+        "idempotent_replay": False,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append((request.url.path, body))
+        if request.url.path.endswith("event-claims"):
+            return httpx.Response(200, json={"data": claim, "meta": {}})
+        assert request.url.path.endswith("event-acks")
+        return httpx.Response(200, json={"data": {"status": "ok"}, "meta": {}})
+
+    client = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler)),
+        role="consumer",
+        token="u" * 32,
+    )
+    try:
+        assert await consume_cache_target_once(
+            session_factory,
+            client=client,
+            consumer_id="pinvi-cache-target-consumer",
+            batch_size=100,
+            lease_seconds=60,
+            max_attempts=5,
+        )
+    finally:
+        await client.aclose()
+
+    assert [path for path, _ in calls] == [
+        "/v1/service/cache-target-event-claims",
+        "/v1/service/cache-target-event-acks",
+    ]
+    assert calls[1][1]["through_cursor"] == "cursor-2"
+    applied = calls[1][1]["applied"]
+    assert isinstance(applied, list)
+    assert len(applied) == 2
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        inbox = list(
+            await db.scalars(select(KtmCacheTargetEvent).order_by(KtmCacheTargetEvent.relay_order))
+        )
+        assert consumer is not None
+        assert consumer.local_applied_cursor == "cursor-2"
+        assert consumer.remote_acked_cursor == "cursor-2"
+        assert consumer.feature_cache_generation == 1
+        assert [event.event_id for event in inbox] == [reconciled_event_id, target_event_id]
 
 
 async def test_bootstrap_adopts_new_epoch_and_matching_empty_snapshot(session_factory) -> None:  # type: ignore[no-untyped-def]

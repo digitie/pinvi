@@ -255,13 +255,14 @@ async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_gene
             "target_sequence": None,
             "relay_order": 1,
             "cursor": "cursor-1",
-            "source_payload_fingerprint": None,
+            "source_payload_fingerprint": root.hex(),
             "payload_fingerprint": "70" * 32,
             "payload": {
+                "actual_merkle_root": root.hex(),
+                "expected_merkle_root": root.hex(),
                 "snapshot_id": "snapshot-7",
-                "count": 0,
-                "merkle_root": root.hex(),
-                "high_watermark_cursor": "cursor-1",
+                "status": "succeeded",
+                "version": "cache-target-reconciliation-v1",
             },
             "occurred_at": datetime.now(UTC).isoformat(),
         }
@@ -274,6 +275,7 @@ async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_gene
         stored = await db.get(KtmCacheTargetEvent, event.event_id)
         consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
         assert stored is not None and stored.target_key is None
+        assert stored.source_payload_fingerprint == root
         assert consumer is not None
         assert consumer.feature_cache_generation == 0
-        assert consumer.high_watermark_cursor == "cursor-1"
+        assert consumer.high_watermark_cursor is None

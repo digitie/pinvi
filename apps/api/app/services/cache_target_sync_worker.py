@@ -353,11 +353,16 @@ async def consume_cache_target_once(
     return True
 
 
-async def _consumer_loop(client: CacheTargetServiceClient, config: Settings) -> None:
+async def _consumer_loop(
+    client: CacheTargetServiceClient,
+    config: Settings,
+    *,
+    session_factory: async_sessionmaker[AsyncSession] = db_session.async_session_factory,
+) -> None:
     while True:
         try:
             worked = await consume_cache_target_once(
-                db_session.async_session_factory,
+                session_factory,
                 client=client,
                 consumer_id=config.pinvi_kor_travel_map_cache_target_consumer_id,
                 batch_size=config.pinvi_kor_travel_map_cache_target_batch_size,
@@ -370,6 +375,16 @@ async def _consumer_loop(client: CacheTargetServiceClient, config: Settings) -> 
             raise
         except (CacheTargetNetworkError, CacheTargetServiceProblem):
             logger.warning("cache target consumer transport failure", exc_info=True)
+            await asyncio.sleep(config.pinvi_kor_travel_map_cache_target_poll_seconds)
+        except Exception:
+            logger.exception("cache target consumer fatal failure")
+            try:
+                await _block_cache_target_consumer(
+                    session_factory,
+                    consumer_id=config.pinvi_kor_travel_map_cache_target_consumer_id,
+                )
+            except Exception:
+                logger.exception("cache target consumer fail-closed state update failed")
             await asyncio.sleep(config.pinvi_kor_travel_map_cache_target_poll_seconds)
 
 
@@ -433,7 +448,13 @@ async def cache_target_sync_worker_lifespan(app: FastAPI) -> AsyncIterator[None]
         )
         tasks = [
             asyncio.create_task(_command_loop(command_client, settings)),
-            asyncio.create_task(_consumer_loop(consumer_client, settings)),
+            asyncio.create_task(
+                _consumer_loop(
+                    consumer_client,
+                    settings,
+                    session_factory=db_session.async_session_factory,
+                )
+            ),
         ]
         yield
     finally:

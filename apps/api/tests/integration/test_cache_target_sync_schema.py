@@ -268,6 +268,7 @@ async def test_reclaim_keeps_one_immutable_event_and_distinct_claim_receipts(
                 event_type="cache_target.state_applied",
                 external_system="pinvi",
                 target_key=str(uuid.uuid4()),
+                target_id=uuid.uuid4(),
                 restore_epoch=1,
                 source_generation=1,
                 target_sequence=1,
@@ -329,3 +330,34 @@ async def test_reclaim_keeps_one_immutable_event_and_distinct_claim_receipts(
         ).all()
         assert inbox_event is not None
         assert len(receipts) == 2
+
+
+async def test_stream_event_snapshot_fingerprint_is_database_required(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        db.add(
+            KtmCacheTargetEvent(
+                event_id=uuid.uuid4(),
+                event_type="cache_target.reconciled",
+                external_system="pinvi",
+                target_key=None,
+                target_id=None,
+                restore_epoch=1,
+                source_generation=None,
+                target_sequence=None,
+                relay_order=9_999_999,
+                source_payload_fingerprint=None,  # type: ignore[arg-type]
+                payload_fingerprint=b"p" * 32,
+                occurred_at=datetime.now(UTC),
+                payload={
+                    "actual_merkle_root": (b"r" * 32).hex(),
+                    "expected_merkle_root": (b"r" * 32).hex(),
+                    "snapshot_id": str(uuid.uuid4()),
+                    "status": "succeeded",
+                    "version": "cache-target-reconciliation-v1",
+                },
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await db.commit()
