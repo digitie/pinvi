@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P commit-before-ACK inbox 체크포인트
+
+**작업**: Map claim을 strict하게 검증한 뒤 event inbox, target tuple, cache generation과 local
+checkpoint를 한 transaction에 commit하고 원격 ACK body를 그 이후에만 만드는 경계를 구현했다.
+
+**변경**:
+
+- Map-produced `payload_fingerprint`를 재계산하지 않는 lowercase SHA-256 opaque receipt로 event와
+  reclaim item 양쪽에 보존하고, `(external_system, restore_epoch, relay_order)`도 유일하게 고정했다.
+- 같은 `event_id`의 immutable material이 다르면 전체 claim을 거부한다. 같은 event의 새 claim/lease
+  재전달은 inbox side effect와 cache generation을 반복하지 않고 새 delivery receipt만 남긴다.
+- claim 내부와 직전 local prefix 다음의 `relay_order` gap, active epoch와 다른 event를 전부 rollback한다.
+- fixed snapshot의 선언 count/root, 전달 item Merkle, PinVi active+tombstone head Merkle를 함께 비교하고
+  불일치 시 `ready=false`, `reconcile_status=mismatched`를 durable하게 보존한다.
+
+**검증**: Ruff, strict mypy와 실제 PostGIS 통합 **4 passed**. local commit 뒤 ACK 전 crash,
+duplicate reclaim, claim gap, stale epoch, snapshot checksum mismatch를 검증했다.
+
+**다음**: principal별 strict service transport, command lease/retry/DLQ publisher와 remote ACK/NACK
+worker를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P source generation/outbox 체크포인트
 
 **작업**: Map shared `cache-target-source-v1` byte 계약을 pin하고 모든 PinVi POI writer를

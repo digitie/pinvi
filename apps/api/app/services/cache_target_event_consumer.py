@@ -1,0 +1,459 @@
+"""Map cache-target relay의 strict inbox, local checkpoint, snapshot reconcile."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from typing import Any, Literal, Self
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.cache_target_contract import (
+    CacheTargetMerkleRow,
+    cache_target_snapshot_merkle_root,
+)
+from app.models.cache_target_sync import (
+    KtmCacheTargetConsumer,
+    KtmCacheTargetEvent,
+    KtmCacheTargetEventClaim,
+    KtmCacheTargetEventClaimItem,
+    KtmCacheTargetHead,
+)
+
+EventType = Literal[
+    "cache_target.state_applied",
+    "cache_target.links_reconciled",
+    "refresh_request.status_changed",
+    "cache_target.reconciled",
+]
+TargetState = Literal["active", "deleted"]
+
+
+class CacheTargetConsumerError(ValueError):
+    """ACK하지 않고 typed NACK로 변환해야 하는 relay 불변식 위반."""
+
+
+class CacheTargetEventGapError(CacheTargetConsumerError):
+    """claim 내부 또는 직전 local prefix 다음의 relay order가 비연속임."""
+
+
+class CacheTargetStaleEpochError(CacheTargetConsumerError):
+    """active restore epoch와 다른 event/snapshot을 관측함."""
+
+
+class CacheTargetEventConflictError(CacheTargetConsumerError):
+    """같은 event identity가 다른 immutable material로 재전달됨."""
+
+
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+def _validate_sha256_hex(value: str) -> str:
+    if len(value) != 64 or value != value.lower():
+        raise ValueError("fingerprint는 lowercase SHA-256 hex여야 합니다.")
+    try:
+        bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError("fingerprint는 lowercase SHA-256 hex여야 합니다.") from exc
+    return value
+
+
+class CacheTargetEventRecord(_StrictModel):
+    """Map event envelope. payload fingerprint는 opaque receipt로 검증한다."""
+
+    event_id: uuid.UUID
+    event_type: EventType
+    external_system: Literal["pinvi"]
+    target_key: str = Field(min_length=36, max_length=36)
+    target_id: uuid.UUID | None = None
+    restore_epoch: int = Field(gt=0)
+    source_generation: int = Field(gt=0)
+    target_sequence: int = Field(gt=0)
+    relay_order: int = Field(gt=0)
+    cursor: str = Field(min_length=1)
+    source_payload_fingerprint: str
+    payload_fingerprint: str
+    payload: dict[str, Any]
+    occurred_at: datetime
+
+    @field_validator("target_key")
+    @classmethod
+    def validate_target_key(cls, value: str) -> str:
+        parsed = uuid.UUID(value)
+        canonical = str(parsed)
+        if value != canonical:
+            raise ValueError("target_key는 lowercase canonical UUID여야 합니다.")
+        return value
+
+    @field_validator("source_payload_fingerprint", "payload_fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, value: str) -> str:
+        return _validate_sha256_hex(value)
+
+
+class CacheTargetClaim(_StrictModel):
+    """claim endpoint의 non-empty response data."""
+
+    claim_id: uuid.UUID
+    external_system: Literal["pinvi"]
+    consumer_id: str = Field(min_length=1, max_length=64)
+    lease_token: uuid.UUID
+    status: Literal["active"]
+    first_relay_order: int | None = Field(default=None, gt=0)
+    last_relay_order: int | None = Field(default=None, gt=0)
+    acked_through: str | None = None
+    lease_expires_at: datetime
+    events: list[CacheTargetEventRecord] = Field(min_length=1)
+    idempotent_replay: bool
+
+    @model_validator(mode="after")
+    def validate_event_bounds(self) -> Self:
+        first = self.events[0].relay_order
+        last = self.events[-1].relay_order
+        if self.first_relay_order is not None and self.first_relay_order != first:
+            raise ValueError("first_relay_order가 events와 다릅니다.")
+        if self.last_relay_order is not None and self.last_relay_order != last:
+            raise ValueError("last_relay_order가 events와 다릅니다.")
+        if any(event.external_system != self.external_system for event in self.events):
+            raise ValueError("claim과 event external_system이 다릅니다.")
+        cursors = [event.cursor for event in self.events]
+        if len(set(cursors)) != len(cursors):
+            raise ValueError("claim event cursor가 중복됩니다.")
+        return self
+
+
+class CacheTargetAppliedReceipt(_StrictModel):
+    event_id: uuid.UUID
+    payload_fingerprint: str
+
+    @field_validator("payload_fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, value: str) -> str:
+        return _validate_sha256_hex(value)
+
+
+class CacheTargetAck(_StrictModel):
+    consumer_id: str
+    claim_id: uuid.UUID
+    lease_token: uuid.UUID
+    through_cursor: str
+    applied: list[CacheTargetAppliedReceipt]
+
+
+class CacheTargetSnapshotItem(_StrictModel):
+    external_system: Literal["pinvi"]
+    target_key: str = Field(min_length=1)
+    state: TargetState
+    source_generation: int = Field(gt=0)
+    source_payload_fingerprint: str
+
+    @field_validator("target_key")
+    @classmethod
+    def validate_target_key(cls, value: str) -> str:
+        parsed = uuid.UUID(value)
+        canonical = str(parsed)
+        if value != canonical:
+            raise ValueError("target_key는 lowercase canonical UUID여야 합니다.")
+        return value
+
+    @field_validator("source_payload_fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, value: str) -> str:
+        return _validate_sha256_hex(value)
+
+
+class CacheTargetSnapshot(_StrictModel):
+    snapshot_id: str = Field(min_length=1)
+    restore_epoch: int = Field(gt=0)
+    high_watermark_cursor: str
+    count: int = Field(ge=0)
+    merkle_root: str
+    items: list[CacheTargetSnapshotItem]
+
+    @field_validator("merkle_root")
+    @classmethod
+    def validate_merkle_root(cls, value: str) -> str:
+        return _validate_sha256_hex(value)
+
+
+def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
+    return (
+        event.event_type,
+        event.external_system,
+        event.target_key,
+        event.target_id,
+        event.restore_epoch,
+        event.source_generation,
+        event.target_sequence,
+        event.relay_order,
+        bytes.fromhex(event.source_payload_fingerprint),
+        bytes.fromhex(event.payload_fingerprint),
+        event.occurred_at,
+        event.payload,
+    )
+
+
+def _stored_event_material(event: KtmCacheTargetEvent) -> tuple[object, ...]:
+    return (
+        event.event_type,
+        event.external_system,
+        event.target_key,
+        event.target_id,
+        event.restore_epoch,
+        event.source_generation,
+        event.target_sequence,
+        event.relay_order,
+        event.source_payload_fingerprint,
+        event.payload_fingerprint,
+        event.occurred_at,
+        event.payload,
+    )
+
+
+async def _validate_existing_claim(
+    db: AsyncSession,
+    *,
+    claim: CacheTargetClaim,
+    existing: KtmCacheTargetEventClaim,
+) -> None:
+    if (
+        existing.consumer_id != claim.consumer_id
+        or existing.lease_token != claim.lease_token
+        or existing.lease_expires_at != claim.lease_expires_at
+    ):
+        raise CacheTargetEventConflictError("같은 claim_id의 lease material이 다릅니다.")
+    items = list(
+        await db.scalars(
+            select(KtmCacheTargetEventClaimItem)
+            .where(KtmCacheTargetEventClaimItem.claim_id == claim.claim_id)
+            .order_by(KtmCacheTargetEventClaimItem.position)
+        )
+    )
+    expected = [
+        (position, event.event_id, event.cursor, bytes.fromhex(event.payload_fingerprint))
+        for position, event in enumerate(claim.events, start=1)
+    ]
+    actual = [
+        (item.position, item.event_id, item.delivery_cursor, item.payload_fingerprint)
+        for item in items
+    ]
+    if actual != expected:
+        raise CacheTargetEventConflictError("같은 claim_id의 event receipt가 다릅니다.")
+
+
+async def apply_cache_target_claim(
+    db: AsyncSession,
+    claim: CacheTargetClaim,
+    *,
+    now: datetime | None = None,
+) -> CacheTargetAck:
+    """한 claim을 전부 local commit 가능한 상태로 만들고 ACK body를 반환한다.
+
+    이 함수는 원격 ACK를 호출하지 않는다. 호출자는 이 transaction을 먼저 commit한 뒤
+    ACK transport를 호출해야 한다.
+    """
+    current = now or datetime.now(UTC)
+    consumer = await db.scalar(
+        select(KtmCacheTargetConsumer)
+        .where(KtmCacheTargetConsumer.consumer_id == claim.consumer_id)
+        .with_for_update()
+    )
+    if consumer is None or consumer.external_system != claim.external_system:
+        raise CacheTargetConsumerError("등록되지 않은 consumer claim입니다.")
+    if consumer.active_restore_epoch is None:
+        raise CacheTargetConsumerError("active restore epoch가 초기화되지 않았습니다.")
+    if claim.lease_expires_at <= current:
+        raise CacheTargetConsumerError("claim lease가 이미 만료되었습니다.")
+    if any(event.restore_epoch != consumer.active_restore_epoch for event in claim.events):
+        raise CacheTargetStaleEpochError("claim event가 active restore epoch와 다릅니다.")
+    for previous, event in zip(claim.events, claim.events[1:], strict=False):
+        if event.relay_order != previous.relay_order + 1:
+            raise CacheTargetEventGapError("claim 내부 relay_order가 연속적이지 않습니다.")
+
+    existing_claim = await db.get(KtmCacheTargetEventClaim, claim.claim_id)
+    if existing_claim is not None:
+        await _validate_existing_claim(db, claim=claim, existing=existing_claim)
+        return _ack_for_claim(claim)
+
+    last_applied_order = await db.scalar(
+        select(func.max(KtmCacheTargetEvent.relay_order)).where(
+            KtmCacheTargetEvent.external_system == claim.external_system,
+            KtmCacheTargetEvent.restore_epoch == consumer.active_restore_epoch,
+            KtmCacheTargetEvent.applied_at.is_not(None),
+        )
+    )
+    last_order = int(last_applied_order or 0)
+    new_event_count = 0
+    stored_events: list[KtmCacheTargetEvent] = []
+
+    for event in claim.events:
+        stored = await db.get(KtmCacheTargetEvent, event.event_id)
+        if stored is not None:
+            if _stored_event_material(stored) != _event_material(event):
+                raise CacheTargetEventConflictError(
+                    "같은 event_id의 immutable material이 다릅니다."
+                )
+            stored_events.append(stored)
+            continue
+        if last_order and event.relay_order != last_order + 1:
+            raise CacheTargetEventGapError("local applied prefix 다음 relay_order가 누락되었습니다.")
+        stored = KtmCacheTargetEvent(
+            event_id=event.event_id,
+            event_type=event.event_type,
+            external_system=event.external_system,
+            target_key=event.target_key,
+            target_id=event.target_id,
+            restore_epoch=event.restore_epoch,
+            source_generation=event.source_generation,
+            target_sequence=event.target_sequence,
+            relay_order=event.relay_order,
+            source_payload_fingerprint=bytes.fromhex(event.source_payload_fingerprint),
+            payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
+            occurred_at=event.occurred_at,
+            payload=event.payload,
+            applied_at=current,
+        )
+        db.add(stored)
+        stored_events.append(stored)
+        new_event_count += 1
+        last_order = event.relay_order
+        await _apply_target_tuple(db, event=event)
+
+    db.add(
+        KtmCacheTargetEventClaim(
+            claim_id=claim.claim_id,
+            consumer_id=claim.consumer_id,
+            lease_token=claim.lease_token,
+            lease_expires_at=claim.lease_expires_at,
+            status="active",
+        )
+    )
+    await db.flush()
+    for position, (event, stored) in enumerate(
+        zip(claim.events, stored_events, strict=True), start=1
+    ):
+        db.add(
+            KtmCacheTargetEventClaimItem(
+                claim_id=claim.claim_id,
+                event_id=stored.event_id,
+                position=position,
+                delivery_cursor=event.cursor,
+                payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
+            )
+        )
+    if new_event_count:
+        consumer.feature_cache_generation += 1
+        consumer.local_applied_cursor = claim.events[-1].cursor
+    await db.flush()
+    return _ack_for_claim(claim)
+
+
+async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord) -> None:
+    head = await db.get(KtmCacheTargetHead, uuid.UUID(event.target_key))
+    if head is None:
+        return
+    source_fingerprint = bytes.fromhex(event.source_payload_fingerprint)
+    if event.source_generation > head.source_generation:
+        raise CacheTargetEventConflictError("Map source_generation이 PinVi desired head보다 큽니다.")
+    if (
+        event.source_generation == head.source_generation
+        and source_fingerprint != head.source_payload_fingerprint
+    ):
+        raise CacheTargetEventConflictError("같은 source_generation의 fingerprint가 다릅니다.")
+    current_tuple = (
+        head.remote_restore_epoch or 0,
+        head.remote_source_generation or 0,
+        head.remote_target_sequence or 0,
+    )
+    incoming_tuple = (event.restore_epoch, event.source_generation, event.target_sequence)
+    if incoming_tuple <= current_tuple:
+        return
+    head.remote_target_id = event.target_id
+    head.remote_restore_epoch = event.restore_epoch
+    head.remote_source_generation = event.source_generation
+    head.remote_target_sequence = event.target_sequence
+    status = event.payload.get("status")
+    head.remote_status = str(status)[:32] if status is not None else event.event_type[:32]
+
+
+def _ack_for_claim(claim: CacheTargetClaim) -> CacheTargetAck:
+    return CacheTargetAck(
+        consumer_id=claim.consumer_id,
+        claim_id=claim.claim_id,
+        lease_token=claim.lease_token,
+        through_cursor=claim.events[-1].cursor,
+        applied=[
+            CacheTargetAppliedReceipt(
+                event_id=event.event_id,
+                payload_fingerprint=event.payload_fingerprint,
+            )
+            for event in claim.events
+        ],
+    )
+
+
+async def reconcile_cache_target_snapshot(
+    db: AsyncSession,
+    snapshot: CacheTargetSnapshot,
+    *,
+    consumer_id: str = "pinvi-cache-target-consumer",
+) -> bool:
+    """remote fixed snapshot 자체 checksum과 PinVi desired head root를 함께 비교한다."""
+    consumer = await db.scalar(
+        select(KtmCacheTargetConsumer)
+        .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+        .with_for_update()
+    )
+    if consumer is None:
+        raise CacheTargetConsumerError("등록되지 않은 consumer snapshot입니다.")
+    if snapshot.restore_epoch != consumer.active_restore_epoch:
+        raise CacheTargetStaleEpochError("snapshot이 active restore epoch와 다릅니다.")
+
+    remote_rows = [
+        CacheTargetMerkleRow(
+            external_system=item.external_system,
+            target_key=item.target_key,
+            state=item.state,
+            source_generation=item.source_generation,
+            source_payload_fingerprint=bytes.fromhex(item.source_payload_fingerprint),
+        )
+        for item in snapshot.items
+    ]
+    heads = list(
+        await db.scalars(
+            select(KtmCacheTargetHead).order_by(
+                KtmCacheTargetHead.external_system,
+                KtmCacheTargetHead.target_key,
+            )
+        )
+    )
+    local_rows = [
+        CacheTargetMerkleRow(
+            external_system=head.external_system,
+            target_key=head.target_key,
+            state=head.desired_state,  # type: ignore[arg-type]
+            source_generation=head.source_generation,
+            source_payload_fingerprint=head.source_payload_fingerprint,
+        )
+        for head in heads
+    ]
+    declared_root = bytes.fromhex(snapshot.merkle_root)
+    matched = (
+        snapshot.count == len(remote_rows)
+        and snapshot.count == len(local_rows)
+        and cache_target_snapshot_merkle_root(remote_rows) == declared_root
+        and cache_target_snapshot_merkle_root(local_rows) == declared_root
+    )
+    consumer.snapshot_id = snapshot.snapshot_id
+    consumer.snapshot_count = snapshot.count
+    consumer.snapshot_merkle_root = declared_root
+    consumer.high_watermark_cursor = snapshot.high_watermark_cursor
+    consumer.reconcile_status = "matched" if matched else "mismatched"
+    consumer.ready = matched
+    if matched:
+        consumer.feature_cache_generation += 1
+    await db.flush()
+    return matched

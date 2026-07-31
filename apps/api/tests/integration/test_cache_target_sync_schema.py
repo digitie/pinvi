@@ -251,6 +251,7 @@ async def test_reclaim_keeps_one_immutable_event_and_distinct_claim_receipts(
                 target_sequence=1,
                 relay_order=1,
                 source_payload_fingerprint=b"s" * 32,
+                payload_fingerprint=b"p" * 32,
                 occurred_at=now,
                 payload={"status": "applied"},
             )

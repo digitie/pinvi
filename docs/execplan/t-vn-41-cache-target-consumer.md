@@ -242,5 +242,6 @@ event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 cre
 - [x] Map producer source golden fixture pin + PinVi 독립 source/Merkle vector
 - [x] PinVi DB/source projection/command outbox
 - [ ] Map producer service OpenAPI pin
-- [ ] relay consumer/epoch/reconcile/cache/gate
+- [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
+- [ ] service transport/worker, command publisher, cache/gate
 - [ ] paired CI와 n150 live proof

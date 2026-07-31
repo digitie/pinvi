@@ -194,6 +194,16 @@ class KtmCacheTargetEvent(Base):
             "octet_length(source_payload_fingerprint) = 32",
             name=conv("ck_ktm_ct_events_fingerprint"),
         ),
+        CheckConstraint(
+            "octet_length(payload_fingerprint) = 32",
+            name=conv("ck_ktm_ct_events_payload_fingerprint"),
+        ),
+        UniqueConstraint(
+            "external_system",
+            "restore_epoch",
+            "relay_order",
+            name="uq_ktm_ct_events_stream_order",
+        ),
         Index("ix_ktm_ct_events_epoch_relay", "restore_epoch", "relay_order"),
     )
 
@@ -207,6 +217,7 @@ class KtmCacheTargetEvent(Base):
     target_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     relay_order: Mapped[int] = mapped_column(BigInteger, nullable=False)
     source_payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     received_at: Mapped[datetime] = mapped_column(

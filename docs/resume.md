@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P commit-before-ACK inbox 구현
+
+Map claim의 exact event type, canonical target key, 양수 epoch/generation/sequence/order, lowercase
+SHA-256 receipt를 strict decode한다. event inbox·target remote tuple·cache generation·local applied
+cursor와 reclaim별 claim/item receipt를 한 DB transaction에 반영한 뒤에만 ACK body를 만든다.
+따라서 local commit 후 ACK 전 process crash가 나도 새 claim은 inbox side effect를 반복하지 않는다.
+
+event payload fingerprint는 아직 공개 canonicalizer가 없으므로 Map이 생성한 opaque receipt로만
+`event_id`/delivery/ACK에 결박한다. 동일 ID의 material 충돌, relay gap, stale epoch는 전체 claim을
+rollback한다. fixed snapshot은 remote item 자체 Merkle와 PinVi desired head Merkle가 선언 count/root에
+동시에 일치할 때만 `ready=true`가 된다.
+
+Ruff/strict mypy와 실제 PostGIS crash-window·duplicate·gap·stale epoch·checksum 통합 **4 passed**다.
+network worker는 여전히 default-off이며 exact OpenAPI fixture는 Map API lane 완료 뒤 pin한다.
+
+**다음 한 작업**: 역할별 ServiceToken transport와 command lease/retry/DLQ publisher, ACK/NACK worker를
+연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P source generation/outbox 구현 완료
 
 Map `5222536e55720103514852a0bb139fd2b4d488da`의 shared golden fixture를 exact bytes로 vendor하고
