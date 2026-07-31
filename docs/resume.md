@@ -2,10 +2,11 @@
 
 ## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery
 
-Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의 service OpenAPI exact bytes를
-SHA-256 `09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`로 고정했다. enable은
-이 SHA/artifact owner revision/contract generation `1`만 허용하고 기본값은 계속 off다. owner revision은
-배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는다.
+Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의 service OpenAPI exact bytes를
+SHA-256 `11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`로 고정했다. enable은
+이 SHA, functional artifact owner `686a9b05beed384a8a9b202a515790c7770dd834`, contract generation `1`만
+허용하고 기본값은 계속 off다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git
+SHA와 비교하지 않는다.
 
 active reconciliation descriptor가 있으면 request-bound snapshot을 끝까지 page하고 descriptor와 exact
 검증한다. local commit 뒤 completion을 보내고 Map stream의 ready 전환과 descriptor 제거를 다시 확인해야
@@ -16,12 +17,13 @@ NACK하며, prefix guard `409`는 local blocked 상태로 fail-close한다.
 source-writer advisory fence와 전용 initial-cutover runner로 닫았다. runner만 checking/unready 상태에서
 PUT을 generation 순서로 drain하고, recovery begin의 stream ETag와 seal의 reconciliation ETag를 분리한다.
 cutover/request/source identity와 precondition ETag는 durable하며 같은 UUID ledger로 crash resume한다.
+원격 completion 뒤 마지막 local ready commit이 유실돼도 durable snapshot identity를 검증해 재개한다.
 ordinary worker gate와 sync default-off, ordinary 컨테이너 recovery-token 금지는 유지한다.
 
-**검증**: cache-target 전체 60건, 전체 unit 778건, 전체 PostGIS integration 429건(환경 의존 3건 skip),
-Ruff, strict mypy(204개 source), Prettier가 통과했다. fresh DB `0045 → 0044 → 0045` 왕복과 package
-command `--help`, default-off도 확인했다. Map functional service artifact repin 뒤 계약 gate를 다시
-실행한다.
+**검증**: cache-target 전체 61건, 전체 unit 778건, 전체 PostGIS integration 431건(환경 의존 3건 skip),
+Ruff, strict mypy(205개 source), Prettier가 통과했다. fresh DB `0045 → 0044 → 0045` 왕복과 package
+command `--help`, default-off, Map export commit blob과 vendored service artifact의 byte equality 및
+SHA-256도 확인했다.
 
 **다음 한 작업**: paired PR CI를 확인한다. n150 isolated proof는 별도 후속 단계이며 현재 실행하지 않는다.
 

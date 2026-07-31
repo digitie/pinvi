@@ -174,11 +174,12 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의
+서비스 계약은 Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`이고, sync enable 설정의
-artifact owner revision과 contract generation `1`도 exact하게 고정한다. owner revision은 배포 Map
-이미지나 `/version`의 git SHA와 비교하지 않는 provenance다. startup에서 stream control에
+`11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`이고, sync enable 설정의
+functional artifact owner revision `686a9b05beed384a8a9b202a515790c7770dd834`과 contract generation `1`도
+exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
+않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한

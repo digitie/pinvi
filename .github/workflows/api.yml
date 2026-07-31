@@ -3,17 +3,17 @@ name: api
 on:
   pull_request:
     paths:
-      - "apps/api/**"
-      - ".github/workflows/api.yml"
-      - "pyproject.toml"
+      - 'apps/api/**'
+      - '.github/workflows/api.yml'
+      - 'pyproject.toml'
   push:
     branches: [main]
     paths:
-      - "apps/api/**"
-      - ".github/workflows/api.yml"
+      - 'apps/api/**'
+      - '.github/workflows/api.yml'
   # T-VN-H07D: vendored 스냅샷이 kor-travel-map main보다 뒤처졌는지 매일 비차단으로 확인한다.
   schedule:
-    - cron: "17 20 * * *"
+    - cron: '17 20 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
           cache: pip
 
       - name: Install dependencies
@@ -105,9 +105,12 @@ jobs:
             apps/api/tests/unit/test_kor_travel_map_contract.py)
           admin_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_admin_contract.py)
+          service_pin=$(grep -oP '_ARTIFACT_COMMIT = "\K[0-9a-f]{40}' \
+            apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
           echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
-          echo "user=$user_pin admin=$admin_pin"
+          echo "service_pin=$service_pin" >> "$GITHUB_OUTPUT"
+          echo "user=$user_pin admin=$admin_pin service=$service_pin"
 
       - name: Checkout kor-travel-map at the user-surface pin
         uses: actions/checkout@v4
@@ -123,9 +126,16 @@ jobs:
           ref: ${{ steps.pins.outputs.admin_pin }}
           path: .ktm-admin-pin
 
+      - name: Checkout kor-travel-map at the service-surface pin
+        uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-map
+          ref: ${{ steps.pins.outputs.service_pin }}
+          path: .ktm-service-pin
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
       # user 표면: vendored 전체 파일이 핀 커밋 원본과 byte 동일해야 한다.
       - name: user snapshot byte equality vs pinned commit
@@ -141,6 +151,12 @@ jobs:
             --source .ktm-admin-pin/packages/kor-travel-map-api/openapi.json \
             --output apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json \
             --check
+
+      - name: service snapshot byte equality vs pinned commit
+        run: |
+          diff -q \
+            apps/api/tests/contract/kor-travel-map-openapi-service.json \
+            .ktm-service-pin/packages/kor-travel-map-api/openapi.service.json
 
   # staleness 신호: 핀이 Map main보다 뒤처졌는지 매일 확인한다. `if:` 가드로 PR/push에는 아예
   # 돌지 않으므로 PR을 막지 않는다(막으면 Map의 무관한 OpenAPI 변경마다 Pinvi PR이 red가 된다).
@@ -161,7 +177,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
       - name: Report vendored-vs-main drift
         run: |
@@ -176,6 +192,11 @@ jobs:
                  --output apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json \
                  --check; then
             echo "::warning::admin subset이 kor-travel-map main과 다르다 — 재-vendor 필요"
+            status=1
+          fi
+          if ! diff -q apps/api/tests/contract/kor-travel-map-openapi-service.json \
+                       .ktm-main/packages/kor-travel-map-api/openapi.service.json; then
+            echo "::warning::service 스냅샷이 kor-travel-map main과 다르다 — 재-vendor 필요"
             status=1
           fi
           if [ "$status" = 0 ]; then

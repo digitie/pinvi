@@ -9,10 +9,11 @@ request-bound snapshot부터 completion과 ready 확인까지 startup 복구를 
 
 **변경**:
 
-- Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의 `openapi.service.json`을
-  SHA-256 `09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`로 vendor하고 CI에서
-  producer bytes와 직접 비교한다. enable 설정도 이 SHA/artifact owner revision/generation `1`만 허용하며
-  owner revision을 배포 이미지 SHA와 비교하지 않는다.
+- Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의 `openapi.service.json`을
+  SHA-256 `11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`로 vendor하고
+  CI에서 producer bytes와 직접 비교한다. enable 설정은 이 SHA, functional artifact owner
+  `686a9b05beed384a8a9b202a515790c7770dd834`, generation `1`만 허용하며 owner revision을 export
+  commit이나 배포 이미지 SHA와 비교하지 않는다.
 - stream control descriptor가 있으면 request ID에 묶인 snapshot을 cursor 끝까지 읽고 고정 header와
   count/Merkle/high-watermark를 검증한다. local snapshot을 atomic commit한 뒤 deterministic completion을
   보내고 Map의 `ready`와 descriptor 제거를 다시 확인해야 local readiness를 연다.
@@ -23,11 +24,13 @@ request-bound snapshot부터 completion과 ready 확인까지 startup 복구를 
   cutover/request/source identity를 추가하고, 전용 runner가 recovery begin(preparing) → PUT-only ordered
   drain → 별도 reconciliation ETag seal(running) → request-bound snapshot/completion 순서를 실행한다.
   ordinary readiness gate와 default-off는 그대로 유지하고 recovery token은 전용 runner에만 주입한다.
+- 원격 completion 성공 뒤 마지막 local `ready` commit 전에 종료돼도 durable request/epoch/snapshot
+  count·Merkle·matched 상태를 재검증해 같은 cutover를 안전하게 완료한다.
 
-**검증**: cache-target 전체 60건, 전체 unit 778건, 전체 PostGIS integration 429건(환경 의존 3건 skip),
-Ruff, strict mypy(204개 source), Prettier가 통과했다. fresh DB의 `0045 head → 0044 → 0045 head` 왕복에서
+**검증**: cache-target 전체 61건, 전체 unit 778건, 전체 PostGIS integration 431건(환경 의존 3건 skip),
+Ruff, strict mypy(205개 source), Prettier가 통과했다. fresh DB의 `0045 head → 0044 → 0045 head` 왕복에서
 컬럼과 writer-fence trigger의 생성·제거·재생성을 확인했고 package command `--help`와 default-off도
-확인했다. Map functional service artifact repin 뒤 계약 gate를 다시 실행한다.
+확인했다. Map export commit blob과 vendored service artifact의 byte equality 및 SHA-256도 다시 확인했다.
 
 **다음**: paired PR CI를 확인한다. n150 isolated proof는 별도 승인된 후속 단계로 남기며 sync 기본값은
 계속 off다.

@@ -53,6 +53,42 @@ class InitialCutoverResult:
     published: int
 
 
+async def _finish_remote_completed_cutover(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    consumer_id: str,
+    cutover_id: uuid.UUID,
+    request_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+    stream_entity_tag: str,
+) -> None:
+    """원격 completion 뒤 유실된 마지막 local ready commit만 복구한다."""
+    async with session_factory() as db:
+        consumer = await db.scalar(
+            select(KtmCacheTargetConsumer)
+            .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+            .with_for_update()
+        )
+        if (
+            consumer is None
+            or consumer.initial_cutover_id != cutover_id
+            or consumer.initial_reconciliation_request_id != request_id
+            or consumer.active_restore_epoch != expected_restore_epoch
+            or consumer.snapshot_id is None
+            or consumer.snapshot_count != source.count
+            or consumer.snapshot_merkle_root != bytes.fromhex(source.merkle_root)
+            or consumer.reconcile_status != "matched"
+        ):
+            raise RuntimeError("원격 completion 뒤 local snapshot identity가 다릅니다.")
+        consumer.stream_control_etag = stream_entity_tag
+        consumer.ready = True
+        consumer.initial_cutover_completed_at = (
+            consumer.initial_cutover_completed_at or datetime.now(UTC)
+        )
+        await db.commit()
+
+
 async def read_cache_target_source_identity(db: AsyncSession) -> CacheTargetSourceIdentity:
     heads = list(
         await db.scalars(
@@ -266,21 +302,19 @@ async def run_initial_cache_target_cutover(
         if preparing_stream.restore_epoch != expected_restore_epoch:
             raise RuntimeError("begin 뒤 reconciliation restore epoch이 다릅니다.")
         if active is None:
-            async with session_factory() as db:
-                consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
-                if (
-                    preparing_stream.state != "ready"
-                    or consumer is None
-                    or consumer.initial_reconciliation_request_id != request_id
-                    or not consumer.ready
-                ):
-                    raise RuntimeError(
-                        "active descriptor 없는 initial cutover resume state가 다릅니다."
-                    )
-                consumer.initial_cutover_completed_at = (
-                    consumer.initial_cutover_completed_at or datetime.now(UTC)
+            if preparing_stream.state != "ready":
+                raise RuntimeError(
+                    "active descriptor 없는 initial cutover stream이 ready가 아닙니다."
                 )
-                await db.commit()
+            await _finish_remote_completed_cutover(
+                session_factory,
+                consumer_id=consumer_id,
+                cutover_id=cutover_id,
+                request_id=request_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+                stream_entity_tag=preparing_stream.entity_tag,
+            )
             return InitialCutoverResult(cutover_id, request_id, source, 0)
         if active.request_id != request_id or not isinstance(
             active,
@@ -322,14 +356,15 @@ async def run_initial_cache_target_cutover(
         running_stream = await consumer_client.get_stream()
         running = running_stream.active_reconciliation
         if running is None and running_stream.state == "ready":
-            async with session_factory() as db:
-                consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
-                if consumer is None or not consumer.ready:
-                    raise RuntimeError("completion replay 뒤 local ready state가 없습니다.")
-                consumer.initial_cutover_completed_at = (
-                    consumer.initial_cutover_completed_at or datetime.now(UTC)
-                )
-                await db.commit()
+            await _finish_remote_completed_cutover(
+                session_factory,
+                consumer_id=consumer_id,
+                cutover_id=cutover_id,
+                request_id=request_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+                stream_entity_tag=running_stream.entity_tag,
+            )
             return InitialCutoverResult(cutover_id, request_id, source, drained.succeeded)
         if (
             not isinstance(running, CacheTargetRunningReconciliation)

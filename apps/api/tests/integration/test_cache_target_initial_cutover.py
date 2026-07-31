@@ -30,7 +30,13 @@ pytestmark = pytest.mark.asyncio
 
 
 class _CutoverStub:
-    def __init__(self, *, target_key: str, merkle_root: str) -> None:
+    def __init__(
+        self,
+        *,
+        target_key: str,
+        merkle_root: str,
+        preserve_completed_begin_replay: bool = False,
+    ) -> None:
         self.phase = "initial"
         self.request_id = uuid.uuid4()
         self.snapshot_id = uuid.uuid4()
@@ -38,6 +44,7 @@ class _CutoverStub:
         self.target_key = target_key
         self.merkle_root = merkle_root
         self.puts = 0
+        self.preserve_completed_begin_replay = preserve_completed_begin_replay
 
     async def get_stream(self) -> CacheTargetStreamState:
         active: CacheTargetPreparingReconciliation | CacheTargetRunningReconciliation | None
@@ -83,7 +90,8 @@ class _CutoverStub:
 
     async def begin_initial_reconciliation(self, **kwargs: object) -> CacheTargetRecoveryResult:
         assert kwargs["stream_etag"] == '"pinvi:1"'
-        self.phase = "preparing"
+        if not (self.preserve_completed_begin_replay and self.phase == "completed"):
+            self.phase = "preparing"
         return CacheTargetRecoveryResult(
             operation=CacheTargetRecoveryOperation(
                 operation_id=self.request_id,
@@ -253,3 +261,87 @@ async def test_initial_cutover_closes_zero_to_nonempty_bootstrap_and_is_durable(
     )
     assert resumed.published == 0
     assert stub.puts == 1
+
+
+async def test_initial_cutover_recovers_ready_commit_after_remote_completion(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    poi_id = uuid.uuid4()
+    fingerprint = bytes.fromhex("73" * 32)
+    merkle_root = cache_target_snapshot_merkle_root(
+        [
+            CacheTargetMerkleRow(
+                external_system="pinvi",
+                target_key=str(poi_id),
+                state="active",
+                source_generation=1,
+                source_payload_fingerprint=fingerprint,
+            )
+        ]
+    ).hex()
+    cutover_id = uuid.uuid4()
+    stub = _CutoverStub(
+        target_key=str(poi_id),
+        merkle_root=merkle_root,
+        preserve_completed_begin_replay=True,
+    )
+    stub.phase = "completed"
+    async with session_factory() as db:
+        db.add(
+            KtmCacheTargetHead(
+                poi_id=poi_id,
+                external_system="pinvi",
+                target_key=str(poi_id),
+                desired_state="active",
+                source_generation=1,
+                source_payload_fingerprint=fingerprint,
+                lon="126",
+                lat="37",
+                radius_km="5",
+                update_enabled=True,
+            )
+        )
+        db.add(
+            KtmCacheTargetConsumer(
+                consumer_id="pinvi-cache-target-consumer",
+                external_system="pinvi",
+                active_restore_epoch=7,
+                stream_control_etag='"pinvi:3"',
+                snapshot_id=str(stub.snapshot_id),
+                snapshot_count=1,
+                snapshot_merkle_root=bytes.fromhex(merkle_root),
+                reconcile_status="matched",
+                ready=False,
+                initial_cutover_id=cutover_id,
+                initial_reconciliation_request_id=stub.request_id,
+                initial_begin_stream_etag='"pinvi:1"',
+                initial_reconciliation_etag=f'"{stub.request_id}:2"',
+                initial_source_count=1,
+                initial_source_merkle_root=bytes.fromhex(merkle_root),
+            )
+        )
+        await db.commit()
+
+    result = await run_initial_cache_target_cutover(
+        session_factory,
+        session_factory.kw["bind"],
+        command_client=stub,  # type: ignore[arg-type]
+        consumer_client=stub,  # type: ignore[arg-type]
+        recovery_client=stub,  # type: ignore[arg-type]
+        consumer_id="pinvi-cache-target-consumer",
+        cutover_id=cutover_id,
+        expected_restore_epoch=7,
+        reason="initial backfill",
+        batch_size=100,
+        lease_seconds=60,
+        max_attempts=5,
+    )
+
+    assert result.published == 0
+    assert stub.puts == 0
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        assert consumer.ready is True
+        assert consumer.stream_control_etag == '"pinvi:4"'
+        assert consumer.initial_cutover_completed_at is not None
