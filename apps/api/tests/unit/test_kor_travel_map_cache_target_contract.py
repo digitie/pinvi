@@ -16,8 +16,8 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "e315bfc4dcc58e466b11f93b3991d91e7b446cdf"
-_FUNCTIONAL_OWNER_COMMIT = "c999a82c0e889806613e1af0e251337873e41fcc"
+_ARTIFACT_COMMIT = "04673716e33ff4d57ef5a5dd84933a7e74077525"
+_FUNCTIONAL_OWNER_COMMIT = "62db824ad759201bed8ed3a08dcb4dad2e6c6795"
 _SNAPSHOT_SHA256 = "af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab"
 
 
@@ -31,7 +31,7 @@ def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 2
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 3
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:

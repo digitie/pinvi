@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 restore epoch delivery 경계 generation 3
+
+**적대적 리뷰 발견**: Map restore fence가 epoch만 증가시키고 이전 epoch의
+`pending/retry/leased/dead` delivery를 남겨 전역 claim·dead 판정을 오염시켰다. PinVi의 올바른 stale epoch
+영구 NACK과 결합하면 새 epoch가 영구 차단될 수 있었다.
+
+**계약 갱신**: Map functional owner `62db824ad759201bed8ed3a08dcb4dad2e6c6795`, export artifact
+`04673716e33ff4d57ef5a5dd84933a7e74077525`를 contract generation `3`으로 재핀했다. service OpenAPI exact
+bytes의 SHA-256은 계속 `af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`다. generation
+3은 restore fence가 이전 epoch의 미종결 delivery를 terminal `superseded`로 원자적으로 닫고 새 epoch만
+claim·DLQ·replay·완료 판정에 노출하는 의미 계약이다. 이 보장이 없는 producer에는 sync를 열지 않는다.
+
 ## 2026-08-01 (codex) — T-VN-41 request-bound reconciliation expectation 분리
 
 **실환경 발견**: n150에서 만료 lease 50건 중 target event 49건은 회수·ACK됐지만 마지막
