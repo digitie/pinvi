@@ -181,6 +181,115 @@ async def test_bootstrap_adopts_new_epoch_and_matching_empty_snapshot(session_fa
         assert consumer.ready is True
 
 
+async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+    empty_root = hashlib.sha256(b"KTMCTEMPTY\x00").hexdigest()
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/v1/service/cache-target-streams/pinvi":
+            completed = calls.count(request.url.path) == 2
+            etag = '"pinvi:8"' if completed else '"pinvi:7"'
+            return httpx.Response(
+                200,
+                headers={"ETag": etag},
+                json={
+                    "data": {
+                        "external_system": "pinvi",
+                        "restore_epoch": 7,
+                        "control_version": 8 if completed else 7,
+                        "entity_tag": etag,
+                        "state": "ready" if completed else "fenced",
+                        "consumer_id": "pinvi-cache-target-consumer",
+                        "blocked_event_id": None,
+                        "active_reconciliation": (
+                            None
+                            if completed
+                            else {
+                                "request_id": str(request_id),
+                                "status": "running",
+                                "snapshot_id": str(snapshot_id),
+                                "restore_epoch": 7,
+                                "count": 0,
+                                "merkle_root": empty_root,
+                                "high_watermark_cursor": "cursor-0",
+                                "created_at": "2026-07-31T00:00:00Z",
+                            }
+                        ),
+                        "updated_at": "2026-07-31T00:00:00Z",
+                    },
+                    "meta": {},
+                },
+            )
+        if request.url.path.endswith(f"/{request_id}/snapshot"):
+            assert dict(request.url.params) == {"page_size": "1000"}
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "snapshot_id": str(snapshot_id),
+                        "restore_epoch": 7,
+                        "high_watermark_cursor": "cursor-0",
+                        "count": 0,
+                        "merkle_root": empty_root,
+                        "items": [],
+                    },
+                    "meta": {"page": {"next_cursor": None}},
+                },
+            )
+        assert request.url.path.endswith(f"/{request_id}/completions")
+        completion = json.loads(request.content)
+        assert completion == {
+            "external_system": "pinvi",
+            "consumer_id": "pinvi-cache-target-consumer",
+            "snapshot_id": str(snapshot_id),
+            "expected_restore_epoch": 7,
+            "actual_merkle_root": empty_root,
+        }
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "operation_id": str(request_id),
+                    "status": "succeeded",
+                    "status_url": None,
+                },
+                "meta": {},
+            },
+        )
+
+    client = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler)),
+        role="consumer",
+        token="u" * 32,
+    )
+    try:
+        await bootstrap_cache_target_sync(
+            session_factory,
+            consumer_client=client,
+            consumer_id="pinvi-cache-target-consumer",
+        )
+    finally:
+        await client.aclose()
+
+    assert calls == [
+        "/v1/service/cache-target-streams/pinvi",
+        f"/v1/service/cache-target-reconciliations/{request_id}/snapshot",
+        f"/v1/service/cache-target-reconciliations/{request_id}/completions",
+        "/v1/service/cache-target-streams/pinvi",
+    ]
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        assert consumer.snapshot_id == str(snapshot_id)
+        assert consumer.ready is True
+        assert consumer.stream_control_etag == '"pinvi:8"'
+
+
 async def test_mid_claim_permanent_failure_acks_prefix_before_nack(session_factory) -> None:  # type: ignore[no-untyped-def]
     await _seed_ready_consumer(session_factory)
     claim = _claim_with_mid_stream_poison()

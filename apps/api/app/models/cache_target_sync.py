@@ -257,6 +257,15 @@ class KtmCacheTargetConsumer(Base, TimestampMixin):
             "snapshot_merkle_root IS NULL OR octet_length(snapshot_merkle_root) = 32",
             name=conv("ck_ktm_ct_consumers_merkle"),
         ),
+        CheckConstraint(
+            "(initial_cutover_id IS NULL AND initial_reconciliation_request_id IS NULL "
+            "AND initial_begin_stream_etag IS NULL AND initial_reconciliation_etag IS NULL "
+            "AND initial_source_count IS NULL AND initial_source_merkle_root IS NULL "
+            "AND initial_cutover_completed_at IS NULL) OR "
+            "(initial_cutover_id IS NOT NULL AND initial_source_count >= 0 "
+            "AND octet_length(initial_source_merkle_root) = 32)",
+            name=conv("ck_ktm_ct_consumers_initial_cutover"),
+        ),
     )
 
     consumer_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -276,6 +285,15 @@ class KtmCacheTargetConsumer(Base, TimestampMixin):
         BigInteger, nullable=False, server_default="0"
     )
     ready: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    initial_cutover_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    initial_reconciliation_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True)
+    )
+    initial_begin_stream_etag: Mapped[str | None] = mapped_column(Text)
+    initial_reconciliation_etag: Mapped[str | None] = mapped_column(Text)
+    initial_source_count: Mapped[int | None] = mapped_column(BigInteger)
+    initial_source_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
+    initial_cutover_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KtmCacheTargetEventClaim(Base):

@@ -150,19 +150,21 @@ T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이�
 
 ## 5. Pinvi API 매핑
 
-| Pinvi API                       | kor-travel-map 호출                                        | 비고                                                                  |
-| ------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET /features/in-bounds`       | `GET /v1/features/in-bounds`                               | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
-| `GET /features/{feature_id}`    | `GET /v1/features/{feature_id}`                            | 상세 화면                                                             |
-| `GET /features/nearby`          | `GET /v1/features/nearby` (기준 feature 시 `/by-target`)   | cursor 페이지네이션                                                   |
-| `GET /search` feature 영역      | `GET /v1/features/search`                                  | 주소 후보는 `kor-travel-geo` v2 search                                |
-| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                  | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
-| POI 생성 feature 검증           | `POST /v1/features/batch`                                  | `missing`이면 snapshot fallback 정책 적용                             |
-| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)       | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
-| POI cache target desired state  | `/v1/service/cache-targets/{external_system}/{target_key}` | command outbox worker, ServiceToken only                              |
-| cache target claim              | `POST /v1/service/cache-target-event-claims`               | global prefix pull                                                    |
-| cache target ACK                | `POST /v1/service/cache-target-event-acks`                 | local DB commit 뒤 contiguous prefix ACK                              |
-| cache target NACK               | `POST /v1/service/cache-target-event-nacks`                | retry 또는 poison stream block                                        |
+| Pinvi API                       | kor-travel-map 호출                                                      | 비고                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `GET /features/in-bounds`       | `GET /v1/features/in-bounds`                                             | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
+| `GET /features/{feature_id}`    | `GET /v1/features/{feature_id}`                                          | 상세 화면                                                             |
+| `GET /features/nearby`          | `GET /v1/features/nearby` (기준 feature 시 `/by-target`)                 | cursor 페이지네이션                                                   |
+| `GET /search` feature 영역      | `GET /v1/features/search`                                                | 주소 후보는 `kor-travel-geo` v2 search                                |
+| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                                | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
+| POI 생성 feature 검증           | `POST /v1/features/batch`                                                | `missing`이면 snapshot fallback 정책 적용                             |
+| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)                     | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
+| POI cache target desired state  | `/v1/service/cache-targets/{external_system}/{target_key}`               | command outbox worker, ServiceToken only                              |
+| cache target claim              | `POST /v1/service/cache-target-event-claims`                             | global prefix pull                                                    |
+| cache target ACK                | `POST /v1/service/cache-target-event-acks`                               | local DB commit 뒤 contiguous prefix ACK                              |
+| cache target NACK               | `POST /v1/service/cache-target-event-nacks`                              | retry 또는 poison stream block                                        |
+| reconciliation snapshot         | `GET /v1/service/cache-target-reconciliations/{request_id}/snapshot`     | active request에 고정된 paged snapshot                                |
+| reconciliation completion       | `POST /v1/service/cache-target-reconciliations/{request_id}/completions` | local snapshot commit 뒤 완료 보고                                    |
 
 T-VN-41 source byte 계약은 Map commit
 `5222536e55720103514852a0bb139fd2b4d488da`의
@@ -171,6 +173,23 @@ T-VN-41 source byte 계약은 Map commit
 복제하지 않고 별도 Python/SQL serializer를 구현하며, source canonical UTF-8/fingerprint와 Merkle
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
+
+서비스 계약은 Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의
+`packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
+`09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`이고, sync enable 설정의
+artifact owner revision과 contract generation `1`도 exact하게 고정한다. owner revision은 배포 Map
+이미지나 `/version`의 git SHA와 비교하지 않는 provenance다. startup에서 stream control에
+`active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
+epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
+idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
+뒤에만 PinVi consumer를 ready로 연다.
+
+최초 Map 0건·PinVi N건 cutover는 일반 worker startup으로 해결하지 않는다. 전용 runner가 PinVi DB writer
+fence를 보유한 동안 recovery begin(`preparing`) → pending PUT drain → reconciliation ETag 기반 seal
+(`running`) → request-bound snapshot/completion 순서로 실행한다. begin의 precondition은 기존 stream control
+ETag(없으면 `If-None-Match: *`)이고 seal의 precondition은 별도 reconciliation ETag다. 두 ETag를 혼용하지
+않으며 source count/Merkle와 cutover/request ID를 durable하게 저장해 응답 유실 뒤 같은 ledger command를
+재생한다. ordinary API 컨테이너에는 recovery token을 주입하지 않고 sync flag도 완료 전까지 off다.
 
 ## 6. HTTP client 패턴
 

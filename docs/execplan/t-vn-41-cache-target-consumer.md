@@ -46,6 +46,8 @@ admin route에 접근하지 않고 OpenAPI HTTP와 자기 `app` schema만 사용
 - `GET /v1/service/cache-target-event-dead-letters/{dead_letter_id}`
 - `POST /v1/service/cache-target-event-dead-letters/{dead_letter_id}/replays`
 - `GET /v1/service/cache-target-snapshots/{external_system}`
+- `GET /v1/service/cache-target-reconciliations/{request_id}/snapshot`
+- `POST /v1/service/cache-target-reconciliations/{request_id}/completions`
 
 create는 `If-None-Match: *`, update/delete와 restore/replay CAS는 받은 raw strong
 `If-Match`를 그대로 쓴다. mutation은 UUID `Idempotency-Key`를 요구한다. 같은 key와 canonical
@@ -75,7 +77,9 @@ consumer checkpoint만 전진시키고 POI head나 feature cache generation은 �
 - `cache_target.reconciled`
 
 알 수 없는 type/field, 중복 JSON member, 잘못된 fingerprint, nonpositive integer, cursor gap은
-부분 적용하지 않는다. local transaction을 rollback하고 NACK하며 ACK prefix를 전진시키지 않는다.
+부분 적용하지 않는다. batch 중간의 semantic poison이면 최초 local transaction 전체를 rollback한 뒤
+poison 앞의 성공한 contiguous prefix만 새 transaction으로 다시 적용·commit·ACK하고, 첫 미ACK poison
+event를 NACK한다. poison 뒤 event를 적용하거나 ACK하지 않는다.
 
 ## 3. PinVi DB 설계
 
@@ -143,8 +147,10 @@ receipt의 checksum/high-watermark 적용, **local applied checkpoint**는 한 t
 동일 global prefix ACK를 재전송한다. local applied cursor와 remote acknowledged cursor를 한 값으로
 축약하지 않는다.
 
-NACK는 claim/event/fingerprint와 transient/permanent typed failure를 보낸다. permanent 또는 max attempt
-event는 Map DLQ에서 global prefix를 block하며 뒤 event를 skip-ACK하지 않는다. recovery principal의
+NACK는 claim/event/fingerprint와 transient/permanent typed failure를 보낸다. NACK 대상은 언제나 claim의
+첫 미ACK event다. permanent 또는 max attempt event는 Map DLQ에서 global prefix를 block하며 뒤 event를
+skip-ACK하지 않는다. Map이 `409 dead_letter_requires_prefix_ack`를 반환하면 PinVi도 consumer를
+`ready=false`, `reconcile_status=blocked`로 바꾸고 fail-close한다. recovery principal의
 Idempotency-Key+If-Match replay는 같은 event ID/relay order/semantic tuple/fingerprint만 재활성화한다.
 
 ### 3.4 epoch 격리
@@ -186,15 +192,21 @@ OpenAPI/source revision과 함께 drift를 차단한다. 양쪽 fixture를 같�
 
 ordinary API runtime에는 역할별 credential만 주입한다.
 
-| principal        | 허용 범위                                             |
-| ---------------- | ----------------------------------------------------- |
-| command producer | target PUT/GET/DELETE와 refresh create/read           |
-| consumer         | stream read, claim/ack/nack, fixed snapshot           |
-| restore fence    | stream restore-fence CAS만; restore job에만 단기 주입 |
-| recovery replay  | 자기 stream DLQ read/replay만; 일반 worker에 미주입   |
+| principal        | 허용 범위                                                                      |
+| ---------------- | ------------------------------------------------------------------------------ |
+| command producer | target PUT/GET/DELETE와 refresh create/read                                    |
+| consumer         | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
+| restore fence    | stream restore-fence CAS만; restore job에만 단기 주입                          |
+| recovery replay  | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
+
+서비스 계약은 Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의
+`packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
+`09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`다. sync를 켤 때 이 SHA,
+artifact owner revision, contract generation `1`이 모두 exact하게 맞아야 한다. owner revision은
+vendored artifact의 provenance이며 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible
@@ -202,6 +214,16 @@ manifest/source revisions/contract generation, migration head, active epoch hand
 fixed snapshot count/root/high-watermark 일치를 모두 요구한다. 하나라도 없거나 다르면 startup readiness를
 fail-closed하고 조용히 degraded mode로 내려가지 않는다. restore/recovery credential은 ordinary startup
 요건이 아니며 해당 command 실행 시 별도 요구한다.
+
+최초 0→N backfill은 ordinary lifespan이 bootstrap보다 먼저 command를 lease하도록 우회하지 않는다.
+sync flag를 off로 둔 전용 `scripts/run_cache_target_initial_cutover.py`만 실행한다. migration `0045`의
+statement trigger는 모든 `trip_day_pois` source write transaction에서 shared advisory lock을 잡고 runner는
+같은 key의 exclusive session lock을 얻어 선행 writer 종료와 신규 writer 차단을 함께 보장한다. runner는
+고정 UUID cutover ID와 source count/Merkle를 DB에 기록하고 recovery principal로 preparing begin을 만든다.
+ordinary readiness gate를 유지한 채 pending PUT만 generation 순서로 drain하고, begin의 reconciliation
+ETag로 expected epoch/count/root seal을 보낸다. running request-bound snapshot을 local atomic reconcile한 뒤
+completion과 Map ready를 확인해야 완료된다. crash 뒤에는 같은 cutover ID, begin/seal UUID
+Idempotency-Key, 원래 stream/reconciliation ETag와 command UUID ledger로 정확히 재개한다.
 
 ## 6. 구현 순서
 
@@ -248,8 +270,8 @@ event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 cre
 - [x] 2026-07-31: docs-first ADR/execplan 계약 작성
 - [x] Map producer source golden fixture pin + PinVi 독립 source/Merkle vector
 - [x] PinVi DB/source projection/command outbox
-- [ ] Map producer service OpenAPI pin
+- [x] Map producer service OpenAPI pin
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
 - [x] service transport/worker, command publisher, default-off principal gate
-- [ ] final OpenAPI pin, cache generation observer
+- [x] final OpenAPI pin, cache generation observer
 - [ ] paired CI와 n150 live proof

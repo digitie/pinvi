@@ -65,6 +65,7 @@ async def lease_cache_target_commands(
     limit: int,
     lease_seconds: int,
     max_attempts: int,
+    initial_cutover: bool = False,
     now: datetime | None = None,
 ) -> list[LeasedCacheTargetCommand]:
     """network 밖의 짧은 transaction에서 target별 가장 이른 command만 lease한다."""
@@ -74,13 +75,22 @@ async def lease_cache_target_commands(
         .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
         .with_for_update()
     )
-    if (
-        consumer is None
-        or not consumer.ready
-        or consumer.reconcile_status != "matched"
-        or consumer.active_restore_epoch is None
-    ):
+    ordinary_ready = (
+        consumer is not None
+        and consumer.ready
+        and consumer.reconcile_status == "matched"
+        and consumer.active_restore_epoch is not None
+    )
+    initial_ready = (
+        consumer is not None
+        and not consumer.ready
+        and consumer.reconcile_status == "checking"
+        and consumer.active_restore_epoch is not None
+    )
+    if not (initial_ready if initial_cutover else ordinary_ready):
         return []
+    assert consumer is not None
+    assert consumer.active_restore_epoch is not None
 
     earlier = aliased(KtmCacheTargetCommand)
     blocked_by_earlier = (
@@ -96,7 +106,11 @@ async def lease_cache_target_commands(
         await db.scalars(
             select(KtmCacheTargetCommand)
             .where(
-                KtmCacheTargetCommand.operation.in_(("put", "delete")),
+                (
+                    KtmCacheTargetCommand.operation == "put"
+                    if initial_cutover
+                    else KtmCacheTargetCommand.operation.in_(("put", "delete"))
+                ),
                 or_(
                     (KtmCacheTargetCommand.status == "pending")
                     & (KtmCacheTargetCommand.available_at <= current),
@@ -262,6 +276,7 @@ async def publish_cache_target_batch(
     limit: int,
     lease_seconds: int,
     max_attempts: int,
+    initial_cutover: bool = False,
 ) -> CacheTargetPublishBatchResult:
     """lease commit → HTTP → CAS outcome commit 순서로 한 batch를 보낸다."""
     async with session_factory() as db:
@@ -272,6 +287,7 @@ async def publish_cache_target_batch(
             limit=limit,
             lease_seconds=lease_seconds,
             max_attempts=max_attempts,
+            initial_cutover=initial_cutover,
         )
         await db.commit()
     succeeded = retried = dead_lettered = 0

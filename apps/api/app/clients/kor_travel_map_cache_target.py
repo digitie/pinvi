@@ -113,6 +113,54 @@ class CacheTargetStateResult(BaseModel):
         return self
 
 
+class CacheTargetRunningReconciliation(BaseModel):
+    """stream read가 노출하는 request-bound fixed snapshot identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: uuid.UUID
+    status: Literal["running"]
+    snapshot_id: uuid.UUID
+    restore_epoch: int = Field(gt=0)
+    count: int = Field(ge=0)
+    merkle_root: str
+    high_watermark_cursor: str
+    created_at: datetime
+
+    @field_validator("merkle_root")
+    @classmethod
+    def validate_merkle_root(cls, value: str) -> str:
+        if len(value) != 64 or value != value.lower():
+            raise ValueError("active reconciliation Merkle root가 lowercase SHA-256이 아닙니다.")
+        try:
+            bytes.fromhex(value)
+        except ValueError as exc:
+            raise ValueError(
+                "active reconciliation Merkle root가 lowercase SHA-256이 아닙니다."
+            ) from exc
+        return value
+
+
+class CacheTargetPreparingReconciliation(BaseModel):
+    """begin 뒤 seal 전에는 snapshot identity가 아직 없다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: uuid.UUID
+    status: Literal["preparing"]
+    snapshot_id: None = None
+    restore_epoch: int = Field(gt=0)
+    count: None = None
+    merkle_root: None = None
+    high_watermark_cursor: None = None
+    created_at: datetime
+
+
+CacheTargetActiveReconciliation = (
+    CacheTargetPreparingReconciliation | CacheTargetRunningReconciliation
+)
+
+
 class CacheTargetStreamState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -123,7 +171,11 @@ class CacheTargetStreamState(BaseModel):
     state: str
     consumer_id: str | None = None
     blocked_event_id: uuid.UUID | None = None
-    updated_at: datetime
+    active_reconciliation: CacheTargetActiveReconciliation | None = Field(
+        default=None,
+        discriminator="status",
+    )
+    updated_at: datetime | None = None
 
 
 class CacheTargetRecoveryOperation(BaseModel):
@@ -131,9 +183,16 @@ class CacheTargetRecoveryOperation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    operation_id: str = Field(min_length=1)
-    status: str = Field(min_length=1)
+    operation_id: uuid.UUID
+    status: Literal["preparing", "running", "succeeded", "failed"]
     status_url: str | None = None
+    stream_entity_tag: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetRecoveryResult:
+    operation: CacheTargetRecoveryOperation
+    etag: str
 
 
 def _retry_after(response: httpx.Response) -> int | None:
@@ -155,7 +214,7 @@ def _problem_code(response: httpx.Response) -> str:
     return code if isinstance(code, str) and code else "UNSPECIFIED_PROBLEM"
 
 
-def _unwrap_data(response: httpx.Response) -> Any:
+def _unwrap_envelope(response: httpx.Response) -> tuple[Any, dict[str, Any]]:
     try:
         payload = response.json()
     except ValueError as exc:
@@ -164,7 +223,24 @@ def _unwrap_data(response: httpx.Response) -> Any:
         raise CacheTargetContractError("service response envelope가 exact {data,meta}가 아닙니다.")
     if not isinstance(payload["meta"], dict):
         raise CacheTargetContractError("service response meta가 object가 아닙니다.")
-    return payload["data"]
+    return payload["data"], payload["meta"]
+
+
+def _unwrap_data(response: httpx.Response) -> Any:
+    data, _ = _unwrap_envelope(response)
+    return data
+
+
+def _next_cursor(meta: dict[str, Any]) -> str | None:
+    page = meta.get("page")
+    if page is None:
+        return None
+    if not isinstance(page, dict):
+        raise CacheTargetContractError("service response meta.page가 object가 아닙니다.")
+    cursor = page.get("next_cursor")
+    if cursor is not None and (not isinstance(cursor, str) or not cursor):
+        raise CacheTargetContractError("service response next_cursor가 유효하지 않습니다.")
+    return cursor
 
 
 def _occurred_at(value: datetime) -> str:
@@ -283,6 +359,7 @@ class CacheTargetServiceClient:
         path: str,
         *,
         body: dict[str, Any] | None = None,
+        params: dict[str, str | int] | None = None,
         idempotency_key: uuid.UUID | None = None,
         if_match: str | None = None,
         if_none_match: bool = False,
@@ -299,7 +376,13 @@ class CacheTargetServiceClient:
         if if_none_match:
             headers["If-None-Match"] = "*"
         try:
-            response = await self._http.request(method, path, json=body, headers=headers)
+            response = await self._http.request(
+                method,
+                path,
+                json=body,
+                params=params,
+                headers=headers,
+            )
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise CacheTargetNetworkError(
                 "kor-travel-map cache-target outcome이 불확실합니다."
@@ -465,6 +548,74 @@ class CacheTargetServiceClient:
         )
         _unwrap_data(response)
 
+    async def begin_initial_reconciliation(
+        self,
+        *,
+        consumer_id: str,
+        expected_restore_epoch: int,
+        reason: str,
+        idempotency_key: uuid.UUID,
+        stream_etag: str | None,
+    ) -> CacheTargetRecoveryResult:
+        self._require_role("recovery")
+        response = await self._send(
+            "POST",
+            "/v1/service/cache-target-reconciliations",
+            body={
+                "external_system": "pinvi",
+                "consumer_id": consumer_id,
+                "expected_restore_epoch": expected_restore_epoch,
+                "reason": reason,
+            },
+            idempotency_key=idempotency_key,
+            if_match=stream_etag,
+            if_none_match=stream_etag is None,
+        )
+        return self._recovery_result(response, expected_status="preparing")
+
+    async def seal_initial_reconciliation(
+        self,
+        *,
+        request_id: uuid.UUID,
+        consumer_id: str,
+        expected_restore_epoch: int,
+        expected_item_count: int,
+        expected_merkle_root: str,
+        idempotency_key: uuid.UUID,
+        stream_etag: str,
+    ) -> CacheTargetRecoveryResult:
+        self._require_role("recovery")
+        response = await self._send(
+            "POST",
+            f"/v1/service/cache-target-reconciliations/{request_id}/seals",
+            body={
+                "external_system": "pinvi",
+                "consumer_id": consumer_id,
+                "expected_restore_epoch": expected_restore_epoch,
+                "expected_item_count": expected_item_count,
+                "expected_merkle_root": expected_merkle_root,
+            },
+            idempotency_key=idempotency_key,
+            if_match=stream_etag,
+        )
+        return self._recovery_result(response, expected_status="running")
+
+    @staticmethod
+    def _recovery_result(
+        response: httpx.Response,
+        *,
+        expected_status: Literal["preparing", "running"],
+    ) -> CacheTargetRecoveryResult:
+        operation = CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
+        etag = response.headers.get("ETag")
+        if (
+            operation.status != expected_status
+            or etag is None
+            or operation.stream_entity_tag is None
+        ):
+            raise CacheTargetContractError("reconciliation operation status/ETag가 다릅니다.")
+        return CacheTargetRecoveryResult(operation=operation, etag=etag)
+
     async def complete_reconciliation(
         self,
         *,
@@ -490,8 +641,50 @@ class CacheTargetServiceClient:
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
         self._require_role("consumer")
-        response = await self._send("GET", "/v1/service/cache-target-snapshots/pinvi")
-        return CacheTargetSnapshot.model_validate(_unwrap_data(response))
+        return await self._get_snapshot_pages("/v1/service/cache-target-snapshots/pinvi")
+
+    async def get_reconciliation_snapshot(
+        self,
+        request_id: uuid.UUID,
+    ) -> CacheTargetSnapshot:
+        self._require_role("consumer")
+        return await self._get_snapshot_pages(
+            f"/v1/service/cache-target-reconciliations/{request_id}/snapshot"
+        )
+
+    async def _get_snapshot_pages(self, path: str) -> CacheTargetSnapshot:
+        first: CacheTargetSnapshot | None = None
+        items: list[Any] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            params: dict[str, str | int] = {"page_size": 1000}
+            if cursor is not None:
+                params["cursor"] = cursor
+            response = await self._send("GET", path, params=params)
+            raw_data, meta = _unwrap_envelope(response)
+            page = CacheTargetSnapshot.model_validate(raw_data)
+            if first is None:
+                first = page
+            elif (
+                page.snapshot_id != first.snapshot_id
+                or page.restore_epoch != first.restore_epoch
+                or page.high_watermark_cursor != first.high_watermark_cursor
+                or page.count != first.count
+                or page.merkle_root != first.merkle_root
+            ):
+                raise CacheTargetContractError("fixed snapshot page header가 바뀌었습니다.")
+            items.extend(page.items)
+            next_cursor = _next_cursor(meta)
+            if next_cursor is None:
+                break
+            if next_cursor in seen_cursors:
+                raise CacheTargetContractError("fixed snapshot cursor가 반복됩니다.")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+        if first is None or len(items) != first.count:
+            raise CacheTargetContractError("fixed snapshot item count가 선언과 다릅니다.")
+        return first.model_copy(update={"items": items})
 
     async def get_stream(self) -> CacheTargetStreamState:
         self._require_role("consumer")

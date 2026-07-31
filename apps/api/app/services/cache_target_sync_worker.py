@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetNetworkError,
+    CacheTargetPreparingReconciliation,
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
     CacheTargetStreamState,
@@ -38,6 +39,7 @@ from app.services.cache_target_event_consumer import (
 )
 
 logger = logging.getLogger(__name__)
+_RECONCILIATION_COMPLETION_NAMESPACE = uuid.UUID("6dd91420-bdf2-4e50-896e-3a6509d55f3d")
 
 
 def _claim_prefix(claim: CacheTargetClaim, *, event_count: int) -> CacheTargetClaim:
@@ -140,17 +142,80 @@ async def bootstrap_cache_target_sync(
     stream = await consumer_client.get_stream()
     if stream.consumer_id is not None and stream.consumer_id != consumer_id:
         raise RuntimeError("Map stream principal consumer_id가 PinVi 설정과 다릅니다.")
-    if stream.state != "active" or stream.blocked_event_id is not None:
-        raise RuntimeError("Map cache target stream이 active/unblocked 상태가 아닙니다.")
-    snapshot = await consumer_client.get_snapshot()
+    if stream.blocked_event_id is not None:
+        raise RuntimeError("Map cache target stream이 blocked 상태입니다.")
+    active = stream.active_reconciliation
+    if active is None:
+        if stream.state not in {"active", "ready"}:
+            raise RuntimeError("Map cache target stream이 ready 상태가 아닙니다.")
+        snapshot = await consumer_client.get_snapshot()
+    else:
+        if isinstance(active, CacheTargetPreparingReconciliation):
+            raise RuntimeError(
+                "preparing reconciliation은 전용 initial-cutover runner가 seal해야 합니다."
+            )
+        if stream.state != "fenced":
+            raise RuntimeError("active reconciliation stream이 fenced 상태가 아닙니다.")
+        snapshot = await consumer_client.get_reconciliation_snapshot(active.request_id)
+        if (
+            snapshot.snapshot_id != str(active.snapshot_id)
+            or snapshot.restore_epoch != active.restore_epoch
+            or snapshot.high_watermark_cursor != active.high_watermark_cursor
+            or snapshot.count != active.count
+            or snapshot.merkle_root != active.merkle_root
+        ):
+            raise RuntimeError("request-bound fixed snapshot이 stream descriptor와 다릅니다.")
     if snapshot.restore_epoch != stream.restore_epoch:
         raise RuntimeError("Map stream과 fixed snapshot restore epoch가 다릅니다.")
     async with session_factory() as db:
         await _adopt_stream_epoch(db, stream=stream, consumer_id=consumer_id)
         matched = await reconcile_cache_target_snapshot(db, snapshot, consumer_id=consumer_id)
+        if active is not None:
+            consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
+            if consumer is None:
+                raise RuntimeError("reconciliation consumer가 사라졌습니다.")
+            consumer.ready = False
         if not matched:
             await db.commit()
             raise RuntimeError("PinVi/Map cache target fixed snapshot Merkle가 다릅니다.")
+        await db.commit()
+    if active is None:
+        return
+    completion = await consumer_client.complete_reconciliation(
+        request_id=active.request_id,
+        consumer_id=consumer_id,
+        snapshot=snapshot,
+        idempotency_key=uuid.uuid5(
+            _RECONCILIATION_COMPLETION_NAMESPACE,
+            str(active.request_id),
+        ),
+    )
+    if completion.status != "succeeded":
+        raise RuntimeError("Map reconciliation completion이 succeeded가 아닙니다.")
+    confirmed = await consumer_client.get_stream()
+    if (
+        confirmed.consumer_id not in {None, consumer_id}
+        or confirmed.restore_epoch != stream.restore_epoch
+        or confirmed.state != "ready"
+        or confirmed.blocked_event_id is not None
+        or confirmed.active_reconciliation is not None
+    ):
+        raise RuntimeError("Map reconciliation completion 뒤 ready 전이가 확인되지 않았습니다.")
+    async with session_factory() as db:
+        consumer = await db.scalar(
+            select(KtmCacheTargetConsumer)
+            .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+            .with_for_update()
+        )
+        if (
+            consumer is None
+            or consumer.active_restore_epoch != snapshot.restore_epoch
+            or consumer.snapshot_id != snapshot.snapshot_id
+            or consumer.snapshot_merkle_root != bytes.fromhex(snapshot.merkle_root)
+        ):
+            raise RuntimeError("completion 뒤 local snapshot identity가 바뀌었습니다.")
+        consumer.stream_control_etag = confirmed.entity_tag
+        consumer.ready = True
         await db.commit()
 
 

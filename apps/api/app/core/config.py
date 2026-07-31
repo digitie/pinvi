@@ -13,6 +13,12 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
+CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
+    "09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35"
+)
+# Vendored artifact의 immutable provenance다. 배포 이미지나 Map /version의 git SHA와 비교하지 않는다.
+CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "2d57203b34fe85706853018bcd78ffb56bd1319a"
+CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 1
 
 
 class Settings(BaseSettings):
@@ -154,7 +160,8 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_cache_target_lease_seconds: int = Field(default=60, ge=10, le=300)
     pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
     pinvi_kor_travel_map_cache_target_max_attempts: int = Field(default=5, ge=1, le=20)
-    # paired OpenAPI가 확정될 때 배포 manifest가 exact 값을 넣는다. 빈 값으로 enable할 수 없다.
+    # paired OpenAPI가 확정될 때 배포 manifest가 exact 값을 넣는다. source revision은 vendored artifact
+    # owner provenance이며 배포 이미지/Map /version revision이 아니다. 빈 값으로 enable할 수 없다.
     pinvi_kor_travel_map_cache_target_expected_openapi_sha256: str = ""
     pinvi_kor_travel_map_cache_target_expected_source_revision: str = ""
     pinvi_kor_travel_map_cache_target_expected_contract_generation: int | None = Field(
@@ -446,6 +453,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must be lowercase SHA-256 hex"
             ) from exc
+        if openapi_sha != CACHE_TARGET_SERVICE_OPENAPI_SHA256:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must match the vendored service contract"
+            )
         source_revision = self.pinvi_kor_travel_map_cache_target_expected_source_revision
         if (
             len(source_revision) != 40
@@ -455,9 +466,16 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must be a full lowercase git SHA"
             )
-        if self.pinvi_kor_travel_map_cache_target_expected_contract_generation is None:
+        if source_revision != CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION:
             raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION is required"
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the vendored service contract artifact owner revision"
+            )
+        if (
+            self.pinvi_kor_travel_map_cache_target_expected_contract_generation
+            != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
+        ):
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION must match the vendored service contract"
             )
         return self
 

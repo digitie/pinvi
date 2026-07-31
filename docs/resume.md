@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery
+
+Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의 service OpenAPI exact bytes를
+SHA-256 `09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`로 고정했다. enable은
+이 SHA/artifact owner revision/contract generation `1`만 허용하고 기본값은 계속 off다. owner revision은
+배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는다.
+
+active reconciliation descriptor가 있으면 request-bound snapshot을 끝까지 page하고 descriptor와 exact
+검증한다. local commit 뒤 completion을 보내고 Map stream의 ready 전환과 descriptor 제거를 다시 확인해야
+local consumer가 ready가 된다. mid-claim semantic poison은 성공 prefix만 commit·ACK한 뒤 첫 미ACK event를
+NACK하며, prefix guard `409`는 local blocked 상태로 fail-close한다.
+
+최초 Map 0건·PinVi N건에서 ordinary bootstrap과 publisher가 서로 기다리던 교착은 `0045` DB
+source-writer advisory fence와 전용 initial-cutover runner로 닫았다. runner만 checking/unready 상태에서
+PUT을 generation 순서로 drain하고, recovery begin의 stream ETag와 seal의 reconciliation ETag를 분리한다.
+cutover/request/source identity와 precondition ETag는 durable하며 같은 UUID ledger로 crash resume한다.
+ordinary worker gate와 sync default-off, ordinary 컨테이너 recovery-token 금지는 유지한다.
+
+**검증**: initial cutover 집중 gate를 실행 중이며 Map functional service artifact repin 뒤 전체 수치를
+확정한다.
+
+**다음 한 작업**: paired PR CI를 확인한다. n150 isolated proof는 별도 후속 단계이며 현재 실행하지 않는다.
+
 ## 2026-07-31 (codex) — T-VN-41-P cache generation observer/health
 
 각 API process는 Trip feature cache를 읽기 전에 DB의 `(restore_epoch, feature_cache_generation)`을

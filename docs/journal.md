@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery 체크포인트
+
+**작업**: Map producer의 최종 service OpenAPI를 exact bytes로 고정하고 active reconciliation의
+request-bound snapshot부터 completion과 ready 확인까지 startup 복구를 닫았다.
+
+**변경**:
+
+- Map commit `2d57203b34fe85706853018bcd78ffb56bd1319a`의 `openapi.service.json`을
+  SHA-256 `09ea43cbf3567eeccd236a1e5164aaf05eecf9eca703ad158d5c86e5ac807f35`로 vendor하고 CI에서
+  producer bytes와 직접 비교한다. enable 설정도 이 SHA/artifact owner revision/generation `1`만 허용하며
+  owner revision을 배포 이미지 SHA와 비교하지 않는다.
+- stream control descriptor가 있으면 request ID에 묶인 snapshot을 cursor 끝까지 읽고 고정 header와
+  count/Merkle/high-watermark를 검증한다. local snapshot을 atomic commit한 뒤 deterministic completion을
+  보내고 Map의 `ready`와 descriptor 제거를 다시 확인해야 local readiness를 연다.
+- batch 중간 semantic poison은 전체 transaction rollback 뒤 성공 prefix만 재적용·commit·ACK하고 첫
+  미ACK event를 permanent NACK한다. `dead_letter_requires_prefix_ack`는 local consumer도 blocked로
+  fail-close한다.
+- 최초 Map 0건·PinVi N건의 bootstrap 교착을 제거했다. `0045` DB trigger/advisory writer fence와 durable
+  cutover/request/source identity를 추가하고, 전용 runner가 recovery begin(preparing) → PUT-only ordered
+  drain → 별도 reconciliation ETag seal(running) → request-bound snapshot/completion 순서를 실행한다.
+  ordinary readiness gate와 default-off는 그대로 유지하고 recovery token은 전용 runner에만 주입한다.
+
+**검증**: initial cutover transport·writer fence·publisher·end-to-end 상태기계 포함 집중 PostGIS/단위
+게이트를 실행 중이다. Map functional service artifact repin 뒤 전체 수치를 확정한다.
+
+**다음**: paired PR CI를 확인한다. n150 isolated proof는 별도 승인된 후속 단계로 남기며 sync 기본값은
+계속 off다.
+
 ## 2026-07-31 (codex) — T-VN-41-P cache observer/health 체크포인트
 
 **작업**: DB cache generation을 각 API process가 독립 관찰해 local feature cache를 비우고 paired

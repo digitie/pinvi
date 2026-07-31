@@ -2754,12 +2754,22 @@ transactional하게 투영되지 않는다. Map 결과도 process-local cache re
   ID/count/Merkle root와 high-watermark만 적용하며 가짜 target key나 POI mutation을 만들지 않는다.
 - inbox insert, target tuple CAS, durable cache generation, local applied checkpoint를 한 transaction에 commit한
   뒤 ACK한다. ACK 전 crash의 재전달은 같은 event ID로 side effect 없이 처리한다.
+- batch 중간 semantic poison은 전체 local transaction을 rollback하고 성공한 contiguous prefix만 다시
+  commit·ACK한 뒤 첫 미ACK event를 permanent NACK한다. Map의
+  `409 dead_letter_requires_prefix_ack`는 local consumer도 blocked로 fail-close한다.
 - Map-owned positive `restore_epoch`의 CAS/idempotent restore fence 뒤에만 restored writer를 열고, epoch가
   바뀌면 old inbox/checkpoint/cache observation을 active state에서 격리한 뒤 fixed snapshot을 채택한다.
+- stream control의 `active_reconciliation` descriptor가 있으면 request-bound paged snapshot만 채택한다.
+  descriptor 일치와 local atomic commit 뒤 completion을 보내고, Map이 `ready`이며 descriptor를 제거한 것을
+  다시 확인하기 전에는 PinVi consumer를 ready로 열지 않는다.
 - command producer, consumer, restore fence, recovery replay principal을 서로 다른 credential/scope로 분리한다.
   PinVi는 admin route나 AdminBFF credential을 사용하지 않는다.
 - relay는 기본 off다. compatible manifest, pinned OpenAPI/source revision, epoch handshake, backlog/DLQ,
   active+tombstone Merkle count/root가 모두 맞을 때만 fail-closed로 켠다.
+- 최초 Map 0건·PinVi N건 backfill은 ordinary ready gate를 완화하지 않는다. 전용 runner가 DB source-writer
+  advisory fence를 잡고 recovery begin(preparing) → PUT drain → reconciliation ETag seal(running) → bound
+  snapshot/completion을 수행한다. cutover UUID와 source identity/precondition ETag를 durable하게 기록해
+  idempotent resume하며 ordinary API에는 recovery credential을 주입하지 않는다.
 - source serializer와 Merkle v1 정본은 Map ADR-081이고 PinVi는 byte fixture를 vendor한 독립 구현을 CI에서
   계산한다.
 

@@ -116,6 +116,44 @@ async def test_short_lease_commits_before_network_and_transient_requeues(session
         assert head.remote_etag is None
 
 
+async def test_initial_cutover_leases_put_while_ordinary_unready_gate_stays_closed(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed(session_factory)
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        consumer.ready = False
+        consumer.reconcile_status = "checking"
+        await db.commit()
+
+    async with session_factory() as db:
+        ordinary = await lease_cache_target_commands(
+            db,
+            lease_owner="ordinary-worker",
+            consumer_id="pinvi-cache-target-consumer",
+            limit=10,
+            lease_seconds=60,
+            max_attempts=5,
+        )
+        await db.commit()
+    assert ordinary == []
+
+    async with session_factory() as db:
+        initial = await lease_cache_target_commands(
+            db,
+            lease_owner="initial-cutover",
+            consumer_id="pinvi-cache-target-consumer",
+            limit=10,
+            lease_seconds=60,
+            max_attempts=5,
+            initial_cutover=True,
+        )
+        await db.commit()
+    assert len(initial) == 1
+    assert initial[0].operation == "put"
+
+
 async def test_auth_failure_dead_letters_and_halts_consumer(session_factory) -> None:  # type: ignore[no-untyped-def]
     await _seed(session_factory)
     async with session_factory() as db:

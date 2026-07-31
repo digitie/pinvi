@@ -234,6 +234,137 @@ async def test_reconciliation_completion_binds_request_snapshot_epoch_root_and_k
     assert result.status == "succeeded"
 
 
+@pytest.mark.asyncio
+async def test_initial_reconciliation_begin_and_seal_keep_distinct_etags_and_exact_bodies() -> None:
+    request_id = uuid.uuid4()
+    begin_key = uuid.uuid4()
+    seal_key = uuid.uuid4()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            assert request.url.path == "/v1/service/cache-target-reconciliations"
+            assert request.headers["If-Match"] == '"pinvi:7"'
+            assert request.headers["Idempotency-Key"] == str(begin_key)
+            assert json.loads(request.content) == {
+                "external_system": "pinvi",
+                "consumer_id": "pinvi-cache-target-consumer",
+                "expected_restore_epoch": 7,
+                "reason": "initial backfill",
+            }
+            status = "preparing"
+            etag = f'"{request_id}:1"'
+        else:
+            assert (
+                request.url.path == f"/v1/service/cache-target-reconciliations/{request_id}/seals"
+            )
+            assert request.headers["If-Match"] == f'"{request_id}:1"'
+            assert request.headers["Idempotency-Key"] == str(seal_key)
+            assert json.loads(request.content) == {
+                "external_system": "pinvi",
+                "consumer_id": "pinvi-cache-target-consumer",
+                "expected_restore_epoch": 7,
+                "expected_item_count": 249,
+                "expected_merkle_root": "72" * 32,
+            }
+            status = "running"
+            etag = f'"{request_id}:2"'
+        return httpx.Response(
+            201 if calls == 1 else 200,
+            headers={"ETag": etag},
+            json={
+                "data": {
+                    "operation_id": str(request_id),
+                    "status": status,
+                    "status_url": f"/v1/service/cache-target-reconciliations/{request_id}",
+                    "stream_entity_tag": '"pinvi:8"',
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("recovery", handler)
+    try:
+        begin = await client.begin_initial_reconciliation(
+            consumer_id="pinvi-cache-target-consumer",
+            expected_restore_epoch=7,
+            reason="initial backfill",
+            idempotency_key=begin_key,
+            stream_etag='"pinvi:7"',
+        )
+        seal = await client.seal_initial_reconciliation(
+            request_id=request_id,
+            consumer_id="pinvi-cache-target-consumer",
+            expected_restore_epoch=7,
+            expected_item_count=249,
+            expected_merkle_root="72" * 32,
+            idempotency_key=seal_key,
+            stream_etag=begin.etag,
+        )
+    finally:
+        await client.aclose()
+
+    assert begin.operation.status == "preparing"
+    assert begin.etag == f'"{request_id}:1"'
+    assert seal.operation.status == "running"
+    assert seal.etag == f'"{request_id}:2"'
+
+
+@pytest.mark.asyncio
+async def test_request_bound_snapshot_pages_keep_one_header_and_collect_all_items() -> None:
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+    target_keys = [uuid.uuid4(), uuid.uuid4()]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.url.path.endswith(f"/{request_id}/snapshot")
+        assert request.url.params["page_size"] == "1000"
+        if calls == 1:
+            assert "cursor" not in request.url.params
+            index = 0
+            next_cursor = "opaque-next"
+        else:
+            assert request.url.params["cursor"] == "opaque-next"
+            index = 1
+            next_cursor = None
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "snapshot_id": str(snapshot_id),
+                    "restore_epoch": 7,
+                    "high_watermark_cursor": "cursor-2",
+                    "count": 2,
+                    "merkle_root": "72" * 32,
+                    "items": [
+                        {
+                            "external_system": "pinvi",
+                            "target_key": str(target_keys[index]),
+                            "state": "active",
+                            "source_generation": 1,
+                            "source_payload_fingerprint": "73" * 32,
+                        }
+                    ],
+                },
+                "meta": {"page": {"next_cursor": next_cursor}},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        snapshot = await client.get_reconciliation_snapshot(request_id)
+    finally:
+        await client.aclose()
+
+    assert calls == 2
+    assert [item.target_key for item in snapshot.items] == [str(key) for key in target_keys]
+
+
 @pytest.mark.parametrize(
     ("permanent", "expected"),
     [(True, "permanent"), (False, "transient")],

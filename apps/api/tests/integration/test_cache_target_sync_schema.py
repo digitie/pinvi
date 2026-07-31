@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core.cache_target_contract import (
@@ -31,6 +32,27 @@ from app.models.trip_day import TripDay
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_initial_cutover_advisory_fence_blocks_source_projection_writes(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    async with engine.connect() as fence:
+        await fence.execute(text("SELECT pg_advisory_lock(1263816009, 41)"))
+        writer = asyncio.create_task(
+            _seed_poi(
+                session_factory,
+                snapshot={"coord": {"lon": 129.1, "lat": 35.1}},
+            )
+        )
+        try:
+            await asyncio.sleep(0.1)
+            assert not writer.done()
+        finally:
+            await fence.execute(text("SELECT pg_advisory_unlock(1263816009, 41)"))
+        poi = await asyncio.wait_for(writer, timeout=5)
+        assert poi.attachment_id is not None
 
 
 async def _seed_poi(
