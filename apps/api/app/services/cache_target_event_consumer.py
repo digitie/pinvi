@@ -47,6 +47,22 @@ class CacheTargetEventConflictError(CacheTargetConsumerError):
     """같은 event identity가 다른 immutable material로 재전달됨."""
 
 
+class CacheTargetEventApplyError(CacheTargetConsumerError):
+    """claim 중간 event의 semantic apply가 실패해 앞 prefix만 ACK할 수 있음."""
+
+    def __init__(
+        self,
+        *,
+        event_index: int,
+        event: CacheTargetEventRecord,
+        cause: CacheTargetConsumerError,
+    ) -> None:
+        super().__init__(str(cause))
+        self.event_index = event_index
+        self.event = event
+        self.cause = cause
+
+
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -331,48 +347,57 @@ async def apply_cache_target_claim(
     target_event_count = 0
     stored_events: list[KtmCacheTargetEvent] = []
 
-    for event in claim.events:
-        stored = await db.get(KtmCacheTargetEvent, event.event_id)
-        if stored is not None:
-            if _stored_event_material(stored) != _event_material(event):
-                raise CacheTargetEventConflictError(
-                    "같은 event_id의 immutable material이 다릅니다."
+    for event_index, event in enumerate(claim.events):
+        try:
+            stored = await db.get(KtmCacheTargetEvent, event.event_id)
+            if stored is not None:
+                if _stored_event_material(stored) != _event_material(event):
+                    raise CacheTargetEventConflictError(
+                        "같은 event_id의 immutable material이 다릅니다."
+                    )
+                stored_events.append(stored)
+                continue
+            if last_order and event.relay_order != last_order + 1:
+                raise CacheTargetEventGapError(
+                    "local applied prefix 다음 relay_order가 누락되었습니다."
                 )
-            stored_events.append(stored)
-            continue
-        if last_order and event.relay_order != last_order + 1:
-            raise CacheTargetEventGapError(
-                "local applied prefix 다음 relay_order가 누락되었습니다."
+            stored = KtmCacheTargetEvent(
+                event_id=event.event_id,
+                event_type=event.event_type,
+                external_system=event.external_system,
+                target_key=event.target_key,
+                target_id=event.target_id,
+                restore_epoch=event.restore_epoch,
+                source_generation=event.source_generation,
+                target_sequence=event.target_sequence,
+                relay_order=event.relay_order,
+                source_payload_fingerprint=(
+                    bytes.fromhex(event.source_payload_fingerprint)
+                    if event.source_payload_fingerprint is not None
+                    else None
+                ),
+                payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
+                occurred_at=event.occurred_at,
+                payload=event.payload,
+                applied_at=current,
             )
-        stored = KtmCacheTargetEvent(
-            event_id=event.event_id,
-            event_type=event.event_type,
-            external_system=event.external_system,
-            target_key=event.target_key,
-            target_id=event.target_id,
-            restore_epoch=event.restore_epoch,
-            source_generation=event.source_generation,
-            target_sequence=event.target_sequence,
-            relay_order=event.relay_order,
-            source_payload_fingerprint=(
-                bytes.fromhex(event.source_payload_fingerprint)
-                if event.source_payload_fingerprint is not None
-                else None
-            ),
-            payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
-            occurred_at=event.occurred_at,
-            payload=event.payload,
-            applied_at=current,
-        )
-        db.add(stored)
-        stored_events.append(stored)
-        new_event_count += 1
-        last_order = event.relay_order
-        if event.event_scope == "target":
-            await _apply_target_tuple(db, event=event)
-            target_event_count += 1
-        else:
-            _apply_stream_reconciled(consumer, event=event)
+            db.add(stored)
+            stored_events.append(stored)
+            new_event_count += 1
+            last_order = event.relay_order
+            if event.event_scope == "target":
+                await _apply_target_tuple(db, event=event)
+                target_event_count += 1
+            else:
+                _apply_stream_reconciled(consumer, event=event)
+        except CacheTargetEventApplyError:
+            raise
+        except CacheTargetConsumerError as exc:
+            raise CacheTargetEventApplyError(
+                event_index=event_index,
+                event=event,
+                cause=exc,
+            ) from exc
 
     db.add(
         KtmCacheTargetEventClaim(

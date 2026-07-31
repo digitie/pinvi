@@ -126,6 +126,16 @@ class CacheTargetStreamState(BaseModel):
     updated_at: datetime
 
 
+class CacheTargetRecoveryOperation(BaseModel):
+    """reconciliation completion의 strict operation receipt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    status_url: str | None = None
+
+
 def _retry_after(response: httpx.Response) -> int | None:
     value = response.headers.get("Retry-After")
     if value is None or not value.isascii() or not value.isdigit():
@@ -454,6 +464,29 @@ class CacheTargetServiceClient:
             body=body,
         )
         _unwrap_data(response)
+
+    async def complete_reconciliation(
+        self,
+        *,
+        request_id: uuid.UUID,
+        consumer_id: str,
+        snapshot: CacheTargetSnapshot,
+        idempotency_key: uuid.UUID,
+    ) -> CacheTargetRecoveryOperation:
+        self._require_role("consumer")
+        response = await self._send(
+            "POST",
+            f"/v1/service/cache-target-reconciliations/{request_id}/completions",
+            body={
+                "external_system": "pinvi",
+                "consumer_id": consumer_id,
+                "snapshot_id": str(uuid.UUID(snapshot.snapshot_id)),
+                "expected_restore_epoch": snapshot.restore_epoch,
+                "actual_merkle_root": snapshot.merkle_root,
+            },
+            idempotency_key=idempotency_key,
+        )
+        return CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
         self._require_role("consumer")

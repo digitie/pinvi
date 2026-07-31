@@ -27,7 +27,10 @@ from app.db import session as db_session
 from app.models.cache_target_sync import KtmCacheTargetConsumer, KtmCacheTargetHead
 from app.services.cache_target_command_publisher import publish_cache_target_batch
 from app.services.cache_target_event_consumer import (
+    CacheTargetAck,
+    CacheTargetClaim,
     CacheTargetConsumerError,
+    CacheTargetEventApplyError,
     apply_cache_target_claim,
     load_pending_cache_target_ack,
     mark_cache_target_acknowledged,
@@ -35,6 +38,47 @@ from app.services.cache_target_event_consumer import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _claim_prefix(claim: CacheTargetClaim, *, event_count: int) -> CacheTargetClaim:
+    if not 0 < event_count < len(claim.events):
+        raise ValueError("claim prefix는 전체 claim보다 짧은 non-empty prefix여야 합니다.")
+    events = claim.events[:event_count]
+    material = claim.model_dump(mode="json")
+    material["events"] = [event.model_dump(mode="json") for event in events]
+    material["last_relay_order"] = events[-1].relay_order
+    material["acked_through"] = None
+    return CacheTargetClaim.model_validate(material)
+
+
+async def _commit_claim_prefix(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    claim: CacheTargetClaim,
+    event_count: int,
+) -> CacheTargetAck:
+    prefix = _claim_prefix(claim, event_count=event_count)
+    async with session_factory() as db:
+        ack = await apply_cache_target_claim(db, prefix)
+        await db.commit()
+    return ack
+
+
+async def _block_cache_target_consumer(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    consumer_id: str,
+) -> None:
+    async with session_factory() as db:
+        consumer = await db.scalar(
+            select(KtmCacheTargetConsumer)
+            .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+            .with_for_update()
+        )
+        if consumer is not None:
+            consumer.ready = False
+            consumer.reconcile_status = "blocked"
+        await db.commit()
 
 
 async def _adopt_stream_epoch(
@@ -178,6 +222,38 @@ async def consume_cache_target_once(
         async with session_factory() as db:
             ack = await apply_cache_target_claim(db, claim)
             await db.commit()
+    except CacheTargetEventApplyError as exc:
+        if exc.event_index:
+            prefix_ack = await _commit_claim_prefix(
+                session_factory,
+                claim=claim,
+                event_count=exc.event_index,
+            )
+            await client.ack_events(prefix_ack)
+            async with session_factory() as db:
+                await mark_cache_target_acknowledged(db, prefix_ack)
+                await db.commit()
+        try:
+            await client.nack_event(
+                build_cache_target_nack(
+                    claim_id=claim.claim_id,
+                    lease_token=claim.lease_token,
+                    event_id=exc.event.event_id,
+                    consumer_id=consumer_id,
+                    error=exc.cause,
+                    permanent=True,
+                    max_attempts=max_attempts,
+                )
+            )
+        except CacheTargetServiceProblem as problem:
+            if problem.status_code == 409 and problem.code == "dead_letter_requires_prefix_ack":
+                await _block_cache_target_consumer(
+                    session_factory,
+                    consumer_id=consumer_id,
+                )
+            raise
+        await _block_cache_target_consumer(session_factory, consumer_id=consumer_id)
+        return True
     except CacheTargetConsumerError as exc:
         await client.nack_event(
             build_cache_target_nack(
@@ -190,16 +266,7 @@ async def consume_cache_target_once(
                 max_attempts=max_attempts,
             )
         )
-        async with session_factory() as db:
-            consumer = await db.scalar(
-                select(KtmCacheTargetConsumer)
-                .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
-                .with_for_update()
-            )
-            if consumer is not None:
-                consumer.ready = False
-                consumer.reconcile_status = "blocked"
-            await db.commit()
+        await _block_cache_target_consumer(session_factory, consumer_id=consumer_id)
         return True
     except DBAPIError as exc:
         await client.nack_event(

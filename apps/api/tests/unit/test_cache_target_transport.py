@@ -20,6 +20,7 @@ from app.core.cache_target_contract import (
     ActiveCacheTargetSource,
     cache_target_source_fingerprint,
 )
+from app.services.cache_target_event_consumer import CacheTargetSnapshot
 from app.services.cache_target_sync_worker import build_cache_target_nack
 
 Handler = Callable[[httpx.Request], httpx.Response]
@@ -179,6 +180,58 @@ async def test_problem_preserves_typed_status_code_without_secret_body_logging()
     assert caught.value.status_code == 409
     assert caught.value.code == "CACHE_TARGET_IDEMPOTENCY_CONFLICT"
     assert caught.value.disposition == "dead_letter"
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_completion_binds_request_snapshot_epoch_root_and_key() -> None:
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+    idempotency_key = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == (
+            f"/v1/service/cache-target-reconciliations/{request_id}/completions"
+        )
+        assert request.headers["Idempotency-Key"] == str(idempotency_key)
+        assert json.loads(request.content) == {
+            "external_system": "pinvi",
+            "consumer_id": "pinvi-cache-target-consumer",
+            "snapshot_id": str(snapshot_id),
+            "expected_restore_epoch": 7,
+            "actual_merkle_root": "72" * 32,
+        }
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "operation_id": str(request_id),
+                    "status": "succeeded",
+                    "status_url": None,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        result = await client.complete_reconciliation(
+            request_id=request_id,
+            consumer_id="pinvi-cache-target-consumer",
+            snapshot=CacheTargetSnapshot(
+                snapshot_id=str(snapshot_id),
+                restore_epoch=7,
+                high_watermark_cursor="cursor-0",
+                count=0,
+                merkle_root="72" * 32,
+                items=[],
+            ),
+            idempotency_key=idempotency_key,
+        )
+    finally:
+        await client.aclose()
+
+    assert result.status == "succeeded"
 
 
 @pytest.mark.parametrize(
