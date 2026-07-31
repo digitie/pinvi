@@ -102,9 +102,23 @@ async def lease_cache_target_commands(
         )
         .exists()
     )
+    order_by = (
+        (
+            KtmCacheTargetHead.target_key,
+            KtmCacheTargetCommand.source_generation,
+            KtmCacheTargetCommand.command_id,
+        )
+        if initial_cutover
+        else (
+            KtmCacheTargetCommand.available_at,
+            KtmCacheTargetCommand.source_generation,
+            KtmCacheTargetCommand.command_id,
+        )
+    )
     rows = list(
         await db.scalars(
             select(KtmCacheTargetCommand)
+            .join(KtmCacheTargetHead, KtmCacheTargetHead.poi_id == KtmCacheTargetCommand.poi_id)
             .where(
                 (
                     KtmCacheTargetCommand.operation == "put"
@@ -119,11 +133,7 @@ async def lease_cache_target_commands(
                 ),
                 ~blocked_by_earlier,
             )
-            .order_by(
-                KtmCacheTargetCommand.available_at,
-                KtmCacheTargetCommand.source_generation,
-                KtmCacheTargetCommand.command_id,
-            )
+            .order_by(*order_by)
             .limit(limit)
             .with_for_update(skip_locked=True)
         )

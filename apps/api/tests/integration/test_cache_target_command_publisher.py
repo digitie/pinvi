@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -152,6 +152,78 @@ async def test_initial_cutover_leases_put_while_ordinary_unready_gate_stays_clos
         await db.commit()
     assert len(initial) == 1
     assert initial[0].operation == "put"
+
+
+async def test_initial_cutover_drain_order_is_target_generation_command_not_due_time(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    earlier_key = uuid.UUID(int=1)
+    later_key = uuid.UUID(int=2)
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        db.add(
+            KtmCacheTargetConsumer(
+                consumer_id="pinvi-cache-target-consumer",
+                external_system="pinvi",
+                active_restore_epoch=7,
+                reconcile_status="checking",
+                ready=False,
+            )
+        )
+        for poi_id in (later_key, earlier_key):
+            db.add(
+                KtmCacheTargetHead(
+                    poi_id=poi_id,
+                    external_system="pinvi",
+                    target_key=str(poi_id),
+                    desired_state="active",
+                    source_generation=1,
+                    source_payload_fingerprint=b"s" * 32,
+                    lon="126",
+                    lat="37",
+                    radius_km="5",
+                    update_enabled=True,
+                )
+            )
+        await db.flush()
+        for poi_id, available_at in (
+            (later_key, now - timedelta(minutes=2)),
+            (earlier_key, now - timedelta(minutes=1)),
+        ):
+            db.add(
+                KtmCacheTargetCommand(
+                    command_id=uuid.uuid4(),
+                    poi_id=poi_id,
+                    operation="put",
+                    source_generation=1,
+                    payload={
+                        "version": "cache-target-source-v1",
+                        "state": "active",
+                        "coord": {"lon_e6": 126000000, "lat_e6": 37000000},
+                        "radius_m": 5000,
+                        "update_enabled": True,
+                    },
+                    payload_fingerprint=b"s" * 32,
+                    status="pending",
+                    available_at=available_at,
+                )
+            )
+        await db.commit()
+
+    async with session_factory() as db:
+        leased = await lease_cache_target_commands(
+            db,
+            lease_owner="initial-cutover",
+            consumer_id="pinvi-cache-target-consumer",
+            limit=10,
+            lease_seconds=60,
+            max_attempts=5,
+            initial_cutover=True,
+            now=now,
+        )
+        await db.commit()
+
+    assert [row.target_key for row in leased] == [str(earlier_key), str(later_key)]
 
 
 async def test_auth_failure_dead_letters_and_halts_consumer(session_factory) -> None:  # type: ignore[no-untyped-def]
