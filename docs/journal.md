@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P bootstrap/worker orchestration 체크포인트
+
+**작업**: startup fixed snapshot bootstrap과 command/consumer background loop를 FastAPI lifespan에
+연결했다.
+
+**변경**:
+
+- enable startup은 role-bound consumer로 stream control과 snapshot을 transaction 밖에서 읽고,
+  principal-bound consumer ID, active/unblocked stream, 동일 epoch, remote item/local desired Merkle를
+  확인한다. 하나라도 다르면 startup을 실패시킨다.
+- epoch가 바뀌면 old local/applied cursor, snapshot marker와 head remote tuple을 재사용하지 않고
+  cache generation을 증가시킨 뒤 새 snapshot을 atomic 채택한다.
+- consumer는 restart durable ACK를 새 claim보다 우선 전송한다. 새 claim은 local commit 후 ACK하고,
+  invariant 오류는 permanent NACK+block, DB transient는 transient NACK한다.
+- lifespan은 command/consumer task를 각각 하나만 만들고 shutdown 시 cancel 후 5초 bounded drain,
+  HTTP client close를 수행한다. default-off면 client/task/network를 만들지 않는다.
+
+**검증**: Ruff, strict mypy와 role transport/NACK, epoch bootstrap, crash/reclaim/gap/checksum,
+command classification을 묶은 focused **16 passed**.
+
+**다음**: final Map OpenAPI fixture/SHA pin, cache generation multi-worker 관찰과 전체 gate/n150 proof.
+
 ## 2026-07-31 (codex) — T-VN-41-P desired command publisher 체크포인트
 
 **작업**: command outbox를 short DB lease 뒤 network 밖에서 보내고 별도 CAS transaction으로

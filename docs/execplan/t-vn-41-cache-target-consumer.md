@@ -243,5 +243,6 @@ event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 cre
 - [x] PinVi DB/source projection/command outbox
 - [ ] Map producer service OpenAPI pin
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
-- [ ] service transport/worker, command publisher, cache/gate
+- [x] service transport/worker, command publisher, default-off principal gate
+- [ ] final OpenAPI pin, cache generation observer
 - [ ] paired CI와 n150 live proof

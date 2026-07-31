@@ -113,6 +113,19 @@ class CacheTargetStateResult(BaseModel):
         return self
 
 
+class CacheTargetStreamState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    external_system: Literal["pinvi"]
+    restore_epoch: int = Field(gt=0)
+    control_version: int = Field(gt=0)
+    entity_tag: str
+    state: str
+    consumer_id: str | None = None
+    blocked_event_id: uuid.UUID | None = None
+    updated_at: datetime
+
+
 def _retry_after(response: httpx.Response) -> int | None:
     value = response.headers.get("Retry-After")
     if value is None or not value.isascii() or not value.isdigit():
@@ -442,3 +455,11 @@ class CacheTargetServiceClient:
         self._require_role("consumer")
         response = await self._send("GET", "/v1/service/cache-target-snapshots/pinvi")
         return CacheTargetSnapshot.model_validate(_unwrap_data(response))
+
+    async def get_stream(self) -> CacheTargetStreamState:
+        self._require_role("consumer")
+        response = await self._send("GET", "/v1/service/cache-target-streams/pinvi")
+        data = CacheTargetStreamState.model_validate(_unwrap_data(response))
+        if response.headers.get("ETag") != data.entity_tag:
+            raise CacheTargetContractError("stream ETag header/body가 다릅니다.")
+        return data

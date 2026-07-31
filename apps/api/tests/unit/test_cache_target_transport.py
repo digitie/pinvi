@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from collections.abc import Callable
@@ -19,6 +20,7 @@ from app.core.cache_target_contract import (
     ActiveCacheTargetSource,
     cache_target_source_fingerprint,
 )
+from app.services.cache_target_sync_worker import build_cache_target_nack
 
 Handler = Callable[[httpx.Request], httpx.Response]
 TOKEN = "t" * 32
@@ -177,3 +179,25 @@ async def test_problem_preserves_typed_status_code_without_secret_body_logging()
     assert caught.value.status_code == 409
     assert caught.value.code == "CACHE_TARGET_IDEMPOTENCY_CONFLICT"
     assert caught.value.disposition == "dead_letter"
+
+
+@pytest.mark.parametrize(
+    ("permanent", "expected"),
+    [(True, "permanent"), (False, "transient")],
+)
+def test_nack_disposition_and_error_fingerprint_are_typed(
+    permanent: bool, expected: str
+) -> None:
+    body = build_cache_target_nack(
+        claim_id=uuid.uuid4(),
+        lease_token=uuid.uuid4(),
+        event_id=uuid.uuid4(),
+        consumer_id="pinvi-cache-target-consumer",
+        error=RuntimeError("credential must never enter the receipt"),
+        permanent=permanent,
+        max_attempts=5,
+    )
+
+    assert body["disposition"] == expected
+    assert body["error_fingerprint"] == hashlib.sha256(b"RuntimeError").hexdigest()
+    assert "credential" not in str(body)

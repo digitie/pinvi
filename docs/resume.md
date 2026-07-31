@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P startup bootstrap/worker 연결
+
+FastAPI lifespan에 default-off cache target paired worker를 연결했다. enable startup은 stream
+principal/active state/epoch와 fixed snapshot을 먼저 읽고 remote snapshot 자체 Merkle와 PinVi
+active+tombstone desired Merkle가 모두 맞아야 `ready=true`로 채택한다. epoch 전환은 old cursor,
+snapshot marker, remote head tuple을 격리하고 cache generation을 증가시킨다.
+
+consumer는 restart durable ACK를 claim보다 먼저 재전송한다. 새 claim은 inbox/local checkpoint commit
+뒤 ACK하며 invariant는 permanent NACK+block, DB transient는 transient NACK한다. command/consumer task는
+각 하나이고 shutdown은 cancel 후 5초 bounded drain과 client close를 보장한다. focused transport+
+PostGIS **16 passed**, Ruff/strict mypy가 통과했다.
+
+**다음 한 작업**: final Map OpenAPI fixture/SHA를 pin하고 cache generation multi-worker 관찰,
+전체 gate와 n150 isolated proof를 완료한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P desired command publisher core
 
 outbox command는 snapshot `matched+ready`와 active epoch가 있을 때만 target별 generation 순서로 short
