@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P paired consumer docs-first 진입
+
+Map `T-VN-41A/B/C`의 source generation, restore epoch, transaction-coupled result outbox를
+소비하는 PinVi paired PR에 진입했다. CodeGraph로 `TripDayPoi` 영향 78 symbols와 user 함수 밖의
+admin/notice/copy direct writer를 확인했으며 application hook만으로는 누락을 막을 수 없어 DB canonical
+source projection과 command outbox를 같은 transaction 경계로 고정했다.
+
+ADR-058과 execplan은 exact service path, 네 event type, global relay prefix와 target semantic tuple,
+ACK crash window, poison/DLQ/replay, old epoch inbox/checkpoint/cache 격리, 역할별 principal, Merkle v1
+공동 fixture CI와 default-off fail-closed gate를 정본화한다.
+
+**다음 한 작업**: Map paired OpenAPI·Merkle golden fixture를 pin한 뒤 PinVi DDL/source projection과
+78-symbol write-path fail-hard integration gate를 구현한다.
+
 ## 2026-07-31 (codex agent B) — C6c/T-VN 운영 완료 항목 아카이브
 
 `docs/tasks.md`에 구현·머지·운영 검증이 끝난 뒤에도 열린 채 남아 있던

@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P generation/outbox paired 계획 확정
+
+**작업**: Map ADR-081과 호환되는 PinVi cache target producer/consumer의 ADR-058과 실행 계획을
+docs-first로 확정했다.
+
+**변경**:
+
+- exact service path와 `event_type` 네 값, global relay prefix ACK, restore fence와
+  active+tombstone Merkle v1을 PinVi 통합 계약에 반영했다.
+- `TripDayPoi` 78-symbol write graph를 DB projection trigger와 inventory test로 fail-hard하는 구현 순서를
+  고정했다.
+- command outbox retry/DLQ/replay/idempotency, local apply 후 ACK 전 crash, epoch 전환 시 old
+  inbox/checkpoint/cache 격리, principal 4종 분리와 default-off gate를 완료 조건으로 박았다.
+
+**결정**: PinVi 사용자 write에서 Map HTTP를 호출하지 않는다. command는 PinVi DB outbox에서 보내고
+Map 결과는 ServiceToken pull stream으로 소비한다. admin 인증·callback push·direct Map DB 접근은 없다.
+
+**발견**: 기존 `FeatureCache`는 process-local이고 여러 POI writer가 user POI service를 우회하므로 한
+함수 hook이나 한 worker의 `clear()`만으로는 paired consumer correctness를 보장할 수 없다.
+
+**다음**: draft paired PR을 열고 pinned Map OpenAPI/golden fixture부터 증분 구현한다.
+
 ## 2026-07-31 06:27 (codex agent B) — C6c/T-VN 완료 추적 정리
 
 **작업**: 완료된 T-VN-20/#394, T-VN-03-P/#392, T-ADM-C6c를 열린 백로그에서
