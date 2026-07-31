@@ -24,8 +24,10 @@ request-bound snapshot부터 completion과 ready 확인까지 startup 복구를 
   drain → 별도 reconciliation ETag seal(running) → request-bound snapshot/completion 순서를 실행한다.
   ordinary readiness gate와 default-off는 그대로 유지하고 recovery token은 전용 runner에만 주입한다.
 
-**검증**: initial cutover transport·writer fence·publisher·end-to-end 상태기계 포함 집중 PostGIS/단위
-게이트를 실행 중이다. Map functional service artifact repin 뒤 전체 수치를 확정한다.
+**검증**: cache-target 전체 60건, 전체 unit 778건, 전체 PostGIS integration 429건(환경 의존 3건 skip),
+Ruff, strict mypy(204개 source), Prettier가 통과했다. fresh DB의 `0045 head → 0044 → 0045 head` 왕복에서
+컬럼과 writer-fence trigger의 생성·제거·재생성을 확인했고 package command `--help`와 default-off도
+확인했다. Map functional service artifact repin 뒤 계약 gate를 다시 실행한다.
 
 **다음**: paired PR CI를 확인한다. n150 isolated proof는 별도 승인된 후속 단계로 남기며 sync 기본값은
 계속 off다.

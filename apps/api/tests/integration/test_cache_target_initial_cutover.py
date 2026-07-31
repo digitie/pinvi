@@ -46,6 +46,8 @@ class _CutoverStub:
                 request_id=self.request_id,
                 status="preparing",
                 restore_epoch=7,
+                entity_tag=f'"{self.request_id}:1"',
+                stream_entity_tag='"pinvi:2"',
                 created_at=datetime.now(UTC),
             )
             state = "fenced"
@@ -59,6 +61,8 @@ class _CutoverStub:
                 count=1,
                 merkle_root=self.merkle_root,
                 high_watermark_cursor="cursor-1",
+                entity_tag=f'"{self.request_id}:2"',
+                stream_entity_tag='"pinvi:3"',
                 created_at=datetime.now(UTC),
             )
             state = "fenced"
@@ -85,6 +89,7 @@ class _CutoverStub:
                 operation_id=self.request_id,
                 status="preparing",
                 status_url=None,
+                entity_tag=f'"{self.request_id}:1"',
                 stream_entity_tag='"pinvi:2"',
             ),
             etag=f'"{self.request_id}:1"',
@@ -118,6 +123,7 @@ class _CutoverStub:
                 operation_id=self.request_id,
                 status="running",
                 status_url=None,
+                entity_tag=f'"{self.request_id}:2"',
                 stream_entity_tag='"pinvi:3"',
             ),
             etag=f'"{self.request_id}:2"',

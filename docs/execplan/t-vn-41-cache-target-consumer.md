@@ -216,7 +216,8 @@ fail-closed하고 조용히 degraded mode로 내려가지 않는다. restore/rec
 요건이 아니며 해당 command 실행 시 별도 요구한다.
 
 최초 0→N backfill은 ordinary lifespan이 bootstrap보다 먼저 command를 lease하도록 우회하지 않는다.
-sync flag를 off로 둔 전용 `scripts/run_cache_target_initial_cutover.py`만 실행한다. migration `0045`의
+sync flag를 off로 둔 전용 `pinvi-cache-target-initial-cutover` package command만 실행한다. 개발 checkout은
+`python -m app.commands.cache_target_initial_cutover --help`로 같은 entrypoint를 확인한다. migration `0045`의
 statement trigger는 모든 `trip_day_pois` source write transaction에서 shared advisory lock을 잡고 runner는
 같은 key의 exclusive session lock을 얻어 선행 writer 종료와 신규 writer 차단을 함께 보장한다. runner는
 고정 UUID cutover ID와 source count/Merkle를 DB에 기록하고 recovery principal로 preparing begin을 만든다.

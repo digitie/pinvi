@@ -217,6 +217,8 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                                 "count": 0,
                                 "merkle_root": empty_root,
                                 "high_watermark_cursor": "cursor-0",
+                                "entity_tag": f'"{request_id}:2"',
+                                "stream_entity_tag": etag,
                                 "created_at": "2026-07-31T00:00:00Z",
                             }
                         ),

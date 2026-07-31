@@ -18,8 +18,10 @@ PUT을 generation 순서로 drain하고, recovery begin의 stream ETag와 seal�
 cutover/request/source identity와 precondition ETag는 durable하며 같은 UUID ledger로 crash resume한다.
 ordinary worker gate와 sync default-off, ordinary 컨테이너 recovery-token 금지는 유지한다.
 
-**검증**: initial cutover 집중 gate를 실행 중이며 Map functional service artifact repin 뒤 전체 수치를
-확정한다.
+**검증**: cache-target 전체 60건, 전체 unit 778건, 전체 PostGIS integration 429건(환경 의존 3건 skip),
+Ruff, strict mypy(204개 source), Prettier가 통과했다. fresh DB `0045 → 0044 → 0045` 왕복과 package
+command `--help`, default-off도 확인했다. Map functional service artifact repin 뒤 계약 gate를 다시
+실행한다.
 
 **다음 한 작업**: paired PR CI를 확인한다. n150 isolated proof는 별도 후속 단계이며 현재 실행하지 않는다.
 

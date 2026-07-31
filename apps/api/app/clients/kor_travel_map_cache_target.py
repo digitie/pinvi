@@ -125,6 +125,8 @@ class CacheTargetRunningReconciliation(BaseModel):
     count: int = Field(ge=0)
     merkle_root: str
     high_watermark_cursor: str
+    entity_tag: str
+    stream_entity_tag: str
     created_at: datetime
 
     @field_validator("merkle_root")
@@ -148,11 +150,9 @@ class CacheTargetPreparingReconciliation(BaseModel):
 
     request_id: uuid.UUID
     status: Literal["preparing"]
-    snapshot_id: None = None
     restore_epoch: int = Field(gt=0)
-    count: None = None
-    merkle_root: None = None
-    high_watermark_cursor: None = None
+    entity_tag: str
+    stream_entity_tag: str
     created_at: datetime
 
 
@@ -186,6 +186,7 @@ class CacheTargetRecoveryOperation(BaseModel):
     operation_id: uuid.UUID
     status: Literal["preparing", "running", "succeeded", "failed"]
     status_url: str | None = None
+    entity_tag: str | None = None
     stream_entity_tag: str | None = None
 
 
@@ -611,6 +612,7 @@ class CacheTargetServiceClient:
         if (
             operation.status != expected_status
             or etag is None
+            or operation.entity_tag != etag
             or operation.stream_entity_tag is None
         ):
             raise CacheTargetContractError("reconciliation operation status/ETag가 다릅니다.")

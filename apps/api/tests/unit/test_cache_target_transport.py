@@ -279,6 +279,7 @@ async def test_initial_reconciliation_begin_and_seal_keep_distinct_etags_and_exa
                     "operation_id": str(request_id),
                     "status": status,
                     "status_url": f"/v1/service/cache-target-reconciliations/{request_id}",
+                    "entity_tag": etag,
                     "stream_entity_tag": '"pinvi:8"',
                 },
                 "meta": {},
