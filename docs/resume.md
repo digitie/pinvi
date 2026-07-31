@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P source generation/outbox 구현 완료
+
+Map `5222536e55720103514852a0bb139fd2b4d488da`의 shared golden fixture를 exact bytes로 vendor하고
+SHA-256 `4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`로 고정했다. PinVi 독립
+Python/SQL serializer가 source canonical UTF-8, fingerprint, NFC leaf order, empty/odd-promotion
+Merkle root 전체 vector를 통과한다.
+
+`20260731_0042` DB trigger는 user/admin/notice/copy/direct SQL을 포함한 모든 POI write에서 canonical
+fingerprint가 바뀔 때만 source generation을 증가시키고 같은 transaction에 PUT/DELETE command를
+남긴다. unrelated update는 no-op이며 hard-delete 뒤 tombstone도 남는다. 기존 active coordinate POI는
+generation 1 + PUT으로 idempotent backfill한다. source decimal을 column scale로 먼저 반올림하지 않고
+serializer에서만 `ROUND_HALF_EVEN`한다.
+
+Ruff/strict mypy, shared vector와 5개 direct-writer inventory, 실제 PostGIS trigger integration
+**14 passed**다. fresh PostGIS의 exact golden backfill과 `0041→0042→0041→0042`, 전체
+`0042→0040` cleanup catalog, 최종 head 복귀도 통과했다. network worker는 아직 default-off다.
+
+**다음 한 작업**: Map service OpenAPI/event fixture를 exact pin하고 strict command transport의
+lease/retry/DLQ/replay를 구현한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P durable schema 검증 완료
 
 PinVi desired source를 모든 `TripDayPoi` writer에서 동일하게 얻도록 snapshot 좌표를 DB

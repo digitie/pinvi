@@ -261,11 +261,11 @@ CREATE TABLE app.trip_day_pois (
   feature_id           text,                          -- nullable. feature.features.feature_id 참조 (FK 없음)
   feature_link_broken_at timestamptz,
   feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
-  cache_target_lon     numeric(10,7) GENERATED ALWAYS AS
-    (coalesce(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric(10,7)) STORED,
-  cache_target_lat     numeric(9,7) GENERATED ALWAYS AS
-    (coalesce(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric(9,7)) STORED,
-  cache_target_radius_km numeric(6,3) NOT NULL DEFAULT 5.000,
+  cache_target_lon     numeric GENERATED ALWAYS AS
+    (coalesce(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric) STORED,
+  cache_target_lat     numeric GENERATED ALWAYS AS
+    (coalesce(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric) STORED,
+  cache_target_radius_km numeric NOT NULL DEFAULT 5.000,
   cache_target_update_enabled boolean NOT NULL DEFAULT true,
   custom_marker_color  text,                          -- 사용자 override (P-01..P-16)
   custom_marker_icon   text,                          -- 사용자 override (maki id)
@@ -298,13 +298,13 @@ CREATE TABLE app.trip_day_pois (
     CHECK (cache_target_radius_km > 0 AND cache_target_radius_km <= 100),
   CONSTRAINT ck_tdp_cache_lon_consistent CHECK (
     feature_snapshot #>> '{coord,lon}' IS NULL OR feature_snapshot ->> 'lon' IS NULL OR
-    (feature_snapshot #>> '{coord,lon}')::numeric(10,7) =
-      (feature_snapshot ->> 'lon')::numeric(10,7)
+    (feature_snapshot #>> '{coord,lon}')::numeric =
+      (feature_snapshot ->> 'lon')::numeric
   ),
   CONSTRAINT ck_tdp_cache_lat_consistent CHECK (
     feature_snapshot #>> '{coord,lat}' IS NULL OR feature_snapshot ->> 'lat' IS NULL OR
-    (feature_snapshot #>> '{coord,lat}')::numeric(9,7) =
-      (feature_snapshot ->> 'lat')::numeric(9,7)
+    (feature_snapshot #>> '{coord,lat}')::numeric =
+      (feature_snapshot ->> 'lat')::numeric
   )
 );
 
@@ -357,7 +357,10 @@ POI 생성 시 `python-kasi-api`의 위치별 해달 출몰시각 정보조회 �
 `app.trip_day_pois`의 두 canonical snapshot 형태(`coord.{lon,lat}`와 top-level
 `lon,lat`)를 generated column으로 한 번만 정규화한다. 두 형태가 함께 있으면 같은
 `numeric` 값이어야 하며, 일부 좌표·숫자가 아닌 좌표·대한민국 경계 밖 좌표는 DB write를
-거부한다. 따라서 user/admin/notice/copy 등 어느 writer도 projection을 우회할 수 없다.
+거부한다. source column은 scale 없는 `numeric`으로 원문 decimal을 보존하고, shared
+`cache-target-source-v1` serializer에서만 `ROUND_HALF_EVEN`을 적용한다. DB column cast가 먼저
+다른 방식으로 반올림해 canonical fingerprint를 바꾸면 안 된다. 따라서 user/admin/notice/copy 등
+어느 writer도 projection을 우회할 수 없다.
 
 | 테이블                                   | 역할                                                            | 핵심 불변식                                                                                                                                                                 |
 | ---------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -368,8 +371,11 @@ POI 생성 시 `python-kasi-api`의 위치별 해달 출몰시각 정보조회 �
 | `app.ktm_cache_target_event_claims`      | pull claim별 mutable lease와 ACK prefix                         | reclaim마다 새 claim/lease token, active lease expiry index, 완료 상태와 완료 시각 결박                                                                                     |
 | `app.ktm_cache_target_event_claim_items` | claim-event별 delivery/ACK receipt                              | 같은 immutable event의 여러 reclaim 허용, claim 안 cursor/position 유일, payload fingerprint 32바이트, 미ACK gap index                                                      |
 
-이 여섯 테이블은 내구 상태만 정의한다. source serializer·generation trigger/backfill과 network
-relay/consumer는 Map 공유 golden fixture를 고정한 후 후속 마이그레이션에서 활성화한다.
+`20260731_0042`는 shared v1 byte 계약을 독립 SQL로 구현한다. POI INSERT/UPDATE/DELETE의 AFTER
+trigger가 canonical fingerprint가 바뀔 때만 자연키별 source generation을 올리고 같은 transaction에
+PUT/DELETE command를 기록한다. unrelated update는 generation과 outbox를 늘리지 않는다. 기존 active
+좌표 POI는 migration에서 generation 1 + PUT으로 backfill하고, 기존 head와 충돌하면 중복 command를
+만들지 않는다. network relay/consumer는 여전히 default-off다.
 
 ### 3.4 `app.trip_companions`
 

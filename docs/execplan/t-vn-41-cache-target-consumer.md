@@ -239,7 +239,8 @@ event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 cre
 
 - [x] 2026-07-31: CodeGraph 영향 평가와 paired adversarial plan 승인
 - [x] 2026-07-31: docs-first ADR/execplan 계약 작성
-- [ ] Map producer OpenAPI·golden fixture pin
-- [ ] PinVi DB/source projection/command outbox
+- [x] Map producer source golden fixture pin + PinVi 독립 source/Merkle vector
+- [x] PinVi DB/source projection/command outbox
+- [ ] Map producer service OpenAPI pin
 - [ ] relay consumer/epoch/reconcile/cache/gate
 - [ ] paired CI와 n150 live proof

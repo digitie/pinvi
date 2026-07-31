@@ -150,19 +150,27 @@ T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이�
 
 ## 5. Pinvi API 매핑
 
-| Pinvi API                       | kor-travel-map 호출                                                     | 비고                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET /features/in-bounds`       | `GET /v1/features/in-bounds`                                            | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
-| `GET /features/{feature_id}`    | `GET /v1/features/{feature_id}`                                         | 상세 화면                                                             |
-| `GET /features/nearby`          | `GET /v1/features/nearby` (기준 feature 시 `/by-target`)                | cursor 페이지네이션                                                   |
-| `GET /search` feature 영역      | `GET /v1/features/search`                                               | 주소 후보는 `kor-travel-geo` v2 search                                |
-| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                               | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
-| POI 생성 feature 검증           | `POST /v1/features/batch`                                               | `missing`이면 snapshot fallback 정책 적용                             |
-| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)                    | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
-| POI cache target desired state  | `/v1/service/cache-targets/{external_system}/{target_key}`              | command outbox worker, ServiceToken only                              |
-| cache target claim              | `POST /v1/service/cache-target-event-claims`                           | global prefix pull                                                    |
-| cache target ACK                | `POST /v1/service/cache-target-event-acks`                             | local DB commit 뒤 contiguous prefix ACK                              |
-| cache target NACK               | `POST /v1/service/cache-target-event-nacks`                            | retry 또는 poison stream block                                       |
+| Pinvi API                       | kor-travel-map 호출                                        | 비고                                                                  |
+| ------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
+| `GET /features/in-bounds`       | `GET /v1/features/in-bounds`                               | query passthrough 후 Pinvi 응답으로 투영 (`max_items`, 서버 클러스터) |
+| `GET /features/{feature_id}`    | `GET /v1/features/{feature_id}`                            | 상세 화면                                                             |
+| `GET /features/nearby`          | `GET /v1/features/nearby` (기준 feature 시 `/by-target`)   | cursor 페이지네이션                                                   |
+| `GET /search` feature 영역      | `GET /v1/features/search`                                  | 주소 후보는 `kor-travel-geo` v2 search                                |
+| `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                  | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
+| POI 생성 feature 검증           | `POST /v1/features/batch`                                  | `missing`이면 snapshot fallback 정책 적용                             |
+| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)       | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
+| POI cache target desired state  | `/v1/service/cache-targets/{external_system}/{target_key}` | command outbox worker, ServiceToken only                              |
+| cache target claim              | `POST /v1/service/cache-target-event-claims`               | global prefix pull                                                    |
+| cache target ACK                | `POST /v1/service/cache-target-event-acks`                 | local DB commit 뒤 contiguous prefix ACK                              |
+| cache target NACK               | `POST /v1/service/cache-target-event-nacks`                | retry 또는 poison stream block                                        |
+
+T-VN-41 source byte 계약은 Map commit
+`5222536e55720103514852a0bb139fd2b4d488da`의
+`contracts/cache-target-source-v1-golden.json`을 exact bytes로 vendor한다. PinVi snapshot SHA-256은
+`4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`다. PinVi는 Map 구현을 import하거나
+복제하지 않고 별도 Python/SQL serializer를 구현하며, source canonical UTF-8/fingerprint와 Merkle
+leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
+commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
 ## 6. HTTP client 패턴
 
@@ -200,6 +208,8 @@ class KorTravelMapClient:
   수정하지 않는다. 필요 시 feature update request를 생성한다.
 - cache target source head/command/event inbox/checkpoint는 PinVi 소유 `app` schema에만
   저장한다. Map의 target/outbox table에 FK나 direct SQL을 두지 않는다.
+- `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`여도 PinVi DB source projection과 command
+  outbox는 transaction 안에서 기록한다. 이 값은 network relay/consumer만 제어한다.
 
 ## 8. AI agent 체크리스트
 

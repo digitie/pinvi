@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.core.cache_target_contract import (
+    DeletedCacheTargetSource,
+    cache_target_source_fingerprint,
+    canonical_cache_target_source_bytes,
+    normalize_active_cache_target_source,
+)
 from app.models.cache_target_sync import (
+    KtmCacheTargetCommand,
     KtmCacheTargetConsumer,
     KtmCacheTargetEvent,
     KtmCacheTargetEventClaim,
@@ -25,7 +33,12 @@ from app.models.user import User
 pytestmark = pytest.mark.asyncio
 
 
-async def _seed_poi(session_factory, *, snapshot: dict[str, object]) -> TripDayPoi:  # type: ignore[no-untyped-def]
+async def _seed_poi(
+    session_factory,
+    *,
+    snapshot: dict[str, object],
+    radius_km: Decimal = Decimal("5"),
+) -> TripDayPoi:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
         user = User(email=f"cache-target-{uuid.uuid4()}@pinvi.test", status="active")
         db.add(user)
@@ -40,6 +53,7 @@ async def _seed_poi(session_factory, *, snapshot: dict[str, object]) -> TripDayP
             day_index=1,
             sort_order="a0",
             feature_snapshot=snapshot,
+            cache_target_radius_km=radius_km,
             added_by_user_id=user.user_id,
         )
         db.add(poi)
@@ -51,18 +65,19 @@ async def _seed_poi(session_factory, *, snapshot: dict[str, object]) -> TripDayP
 async def test_generated_cache_target_coord_accepts_both_canonical_shapes(session_factory) -> None:  # type: ignore[no-untyped-def]
     nested = await _seed_poi(
         session_factory,
-        snapshot={"coord": {"lon": 129.1234567, "lat": 35.1234567}},
+        snapshot={"coord": {"lon": 129.12345651, "lat": 35.12345651}},
+        radius_km=Decimal("1.2345"),
     )
     top_level = await _seed_poi(
         session_factory,
         snapshot={"lon": 126.9876543, "lat": 37.1234567},
     )
 
-    assert nested.cache_target_lon == Decimal("129.1234567")
-    assert nested.cache_target_lat == Decimal("35.1234567")
+    assert nested.cache_target_lon == Decimal("129.12345651")
+    assert nested.cache_target_lat == Decimal("35.12345651")
     assert top_level.cache_target_lon == Decimal("126.9876543")
     assert top_level.cache_target_lat == Decimal("37.1234567")
-    assert nested.cache_target_radius_km == Decimal("5.000")
+    assert nested.cache_target_radius_km == Decimal("1.2345")
     assert nested.cache_target_update_enabled is True
 
 
@@ -93,26 +108,33 @@ async def test_generated_cache_target_coord_fails_hard_on_conflicting_shapes(
         )
 
 
+async def test_source_projection_failure_rolls_back_poi_and_outbox(session_factory) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DBAPIError, match="rounds to zero metres"):
+        await _seed_poi(
+            session_factory,
+            snapshot={"coord": {"lon": 129.1, "lat": 35.1}},
+            radius_km=Decimal("0.0004"),
+        )
+
+    async with session_factory() as db:
+        poi_count = await db.scalar(select(func.count()).select_from(TripDayPoi))
+        head_count = await db.scalar(select(func.count()).select_from(KtmCacheTargetHead))
+        command_count = await db.scalar(select(func.count()).select_from(KtmCacheTargetCommand))
+        assert poi_count == 0
+        assert head_count == 0
+        assert command_count == 0
+
+
 async def test_cache_target_tombstone_can_outlive_hard_deleted_poi(session_factory) -> None:  # type: ignore[no-untyped-def]
     poi = await _seed_poi(
         session_factory,
         snapshot={"coord": {"lon": 129.1, "lat": 35.1}},
     )
     async with session_factory() as db:
-        head = KtmCacheTargetHead(
-            poi_id=poi.attachment_id,
-            external_system="pinvi",
-            target_key=str(poi.attachment_id).lower(),
-            desired_state="deleted",
-            source_generation=2,
-            source_payload_fingerprint=b"d" * 32,
-            lon=poi.cache_target_lon,
-            lat=poi.cache_target_lat,
-            radius_km=poi.cache_target_radius_km,
-            update_enabled=False,
-        )
-        db.add(head)
-        await db.flush()
+        active_head = await db.get(KtmCacheTargetHead, poi.attachment_id)
+        assert active_head is not None
+        assert active_head.desired_state == "active"
+        assert active_head.source_generation == 1
         persisted_poi = await db.scalar(
             select(TripDayPoi).where(TripDayPoi.attachment_id == poi.attachment_id)
         )
@@ -124,6 +146,84 @@ async def test_cache_target_tombstone_can_outlive_hard_deleted_poi(session_facto
         retained_head = await db.get(KtmCacheTargetHead, poi.attachment_id)
         assert retained_head is not None
         assert retained_head.desired_state == "deleted"
+        assert retained_head.source_generation == 2
+        assert retained_head.source_payload_fingerprint == cache_target_source_fingerprint(
+            DeletedCacheTargetSource()
+        )
+
+
+async def test_cache_target_projection_matches_golden_and_ignores_unrelated_update(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    poi = await _seed_poi(
+        session_factory,
+        snapshot={"coord": {"lon": 126.1234565, "lat": 37.1234575}},
+        radius_km=Decimal("1.2345"),
+    )
+    expected_source = normalize_active_cache_target_source(
+        lon="126.1234565",
+        lat="37.1234575",
+        radius_km="1.2345",
+        update_enabled=True,
+    )
+    expected_fingerprint = cache_target_source_fingerprint(expected_source)
+
+    async with session_factory() as db:
+        head = await db.get(KtmCacheTargetHead, poi.attachment_id)
+        commands = (
+            await db.scalars(
+                select(KtmCacheTargetCommand).where(
+                    KtmCacheTargetCommand.poi_id == poi.attachment_id
+                )
+            )
+        ).all()
+        assert head is not None
+        assert head.source_generation == 1
+        assert head.lon == Decimal("126.123456")
+        assert head.lat == Decimal("37.123458")
+        assert head.radius_km == Decimal("1.234")
+        assert head.source_payload_fingerprint == expected_fingerprint
+        assert len(commands) == 1
+        assert commands[0].payload == json.loads(
+            canonical_cache_target_source_bytes(expected_source)
+        )
+        assert commands[0].payload_fingerprint == expected_fingerprint
+
+        persisted_poi = await db.get(TripDayPoi, poi.attachment_id)
+        assert persisted_poi is not None
+        persisted_poi.user_note = "fingerprint와 무관한 변경"
+        await db.commit()
+
+    async with session_factory() as db:
+        unchanged_head = await db.get(KtmCacheTargetHead, poi.attachment_id)
+        commands = (
+            await db.scalars(
+                select(KtmCacheTargetCommand).where(
+                    KtmCacheTargetCommand.poi_id == poi.attachment_id
+                )
+            )
+        ).all()
+        assert unchanged_head is not None
+        assert unchanged_head.source_generation == 1
+        assert len(commands) == 1
+
+        persisted_poi = await db.get(TripDayPoi, poi.attachment_id)
+        assert persisted_poi is not None
+        persisted_poi.feature_snapshot = {"coord": {"lon": 126.1234575, "lat": 37.1234575}}
+        await db.commit()
+
+    async with session_factory() as db:
+        changed_head = await db.get(KtmCacheTargetHead, poi.attachment_id)
+        commands = (
+            await db.scalars(
+                select(KtmCacheTargetCommand).where(
+                    KtmCacheTargetCommand.poi_id == poi.attachment_id
+                )
+            )
+        ).all()
+        assert changed_head is not None
+        assert changed_head.source_generation == 2
+        assert len(commands) == 2
 
 
 async def test_reclaim_keeps_one_immutable_event_and_distinct_claim_receipts(

@@ -64,14 +64,14 @@ class TripDayPoi(Base, TimestampMixin):
         ),
         CheckConstraint(
             "feature_snapshot #>> '{coord,lon}' IS NULL OR feature_snapshot ->> 'lon' IS NULL "
-            "OR (feature_snapshot #>> '{coord,lon}')::numeric(10,7) = "
-            "(feature_snapshot ->> 'lon')::numeric(10,7)",
+            "OR (feature_snapshot #>> '{coord,lon}')::numeric = "
+            "(feature_snapshot ->> 'lon')::numeric",
             name=conv("ck_tdp_cache_lon_consistent"),
         ),
         CheckConstraint(
             "feature_snapshot #>> '{coord,lat}' IS NULL OR feature_snapshot ->> 'lat' IS NULL "
-            "OR (feature_snapshot #>> '{coord,lat}')::numeric(9,7) = "
-            "(feature_snapshot ->> 'lat')::numeric(9,7)",
+            "OR (feature_snapshot #>> '{coord,lat}')::numeric = "
+            "(feature_snapshot ->> 'lat')::numeric",
             name=conv("ck_tdp_cache_lat_consistent"),
         ),
     )
@@ -95,21 +95,21 @@ class TripDayPoi(Base, TimestampMixin):
     # Map/외부 snapshot 두 canonical shape(`coord.{lon,lat}`와 top-level `lon,lat`)를
     # DB generated column 하나로 접는다. 숫자가 아닌 좌표는 cast 단계에서 write를 거부한다.
     cache_target_lon: Mapped[Decimal | None] = mapped_column(
-        Numeric(10, 7),
+        Numeric(),
         Computed(
-            "COALESCE(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric(10,7)",
+            "COALESCE(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric",
             persisted=True,
         ),
     )
     cache_target_lat: Mapped[Decimal | None] = mapped_column(
-        Numeric(9, 7),
+        Numeric(),
         Computed(
-            "COALESCE(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric(9,7)",
+            "COALESCE(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric",
             persisted=True,
         ),
     )
     cache_target_radius_km: Mapped[Decimal] = mapped_column(
-        Numeric(6, 3),
+        Numeric(),
         nullable=False,
         server_default=text("5.000"),
     )

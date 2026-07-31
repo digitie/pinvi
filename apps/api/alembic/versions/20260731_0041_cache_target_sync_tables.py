@@ -44,10 +44,9 @@ def _add_trip_day_poi_columns() -> None:
         "trip_day_pois",
         sa.Column(
             "cache_target_lon",
-            sa.Numeric(10, 7),
+            sa.Numeric(),
             sa.Computed(
-                "COALESCE(feature_snapshot #>> '{coord,lon}', "
-                "feature_snapshot ->> 'lon')::numeric(10,7)",
+                "COALESCE(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric",
                 persisted=True,
             ),
         ),
@@ -57,10 +56,9 @@ def _add_trip_day_poi_columns() -> None:
         "trip_day_pois",
         sa.Column(
             "cache_target_lat",
-            sa.Numeric(9, 7),
+            sa.Numeric(),
             sa.Computed(
-                "COALESCE(feature_snapshot #>> '{coord,lat}', "
-                "feature_snapshot ->> 'lat')::numeric(9,7)",
+                "COALESCE(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric",
                 persisted=True,
             ),
         ),
@@ -70,7 +68,7 @@ def _add_trip_day_poi_columns() -> None:
         "trip_day_pois",
         sa.Column(
             "cache_target_radius_km",
-            sa.Numeric(6, 3),
+            sa.Numeric(),
             nullable=False,
             server_default=sa.text("5.000"),
         ),
@@ -106,14 +104,14 @@ def _add_trip_day_poi_columns() -> None:
         (
             "ck_tdp_cache_lon_consistent",
             "feature_snapshot #>> '{coord,lon}' IS NULL OR feature_snapshot ->> 'lon' IS NULL "
-            "OR (feature_snapshot #>> '{coord,lon}')::numeric(10,7) = "
-            "(feature_snapshot ->> 'lon')::numeric(10,7)",
+            "OR (feature_snapshot #>> '{coord,lon}')::numeric = "
+            "(feature_snapshot ->> 'lon')::numeric",
         ),
         (
             "ck_tdp_cache_lat_consistent",
             "feature_snapshot #>> '{coord,lat}' IS NULL OR feature_snapshot ->> 'lat' IS NULL "
-            "OR (feature_snapshot #>> '{coord,lat}')::numeric(9,7) = "
-            "(feature_snapshot ->> 'lat')::numeric(9,7)",
+            "OR (feature_snapshot #>> '{coord,lat}')::numeric = "
+            "(feature_snapshot ->> 'lat')::numeric",
         ),
     )
     for name, condition in checks:
@@ -129,9 +127,9 @@ def _create_head() -> None:
         sa.Column("desired_state", sa.String(16), nullable=False),
         sa.Column("source_generation", sa.BigInteger(), nullable=False),
         sa.Column("source_payload_fingerprint", sa.LargeBinary(), nullable=False),
-        sa.Column("lon", sa.Numeric(10, 7)),
-        sa.Column("lat", sa.Numeric(9, 7)),
-        sa.Column("radius_km", sa.Numeric(6, 3), nullable=False),
+        sa.Column("lon", sa.Numeric()),
+        sa.Column("lat", sa.Numeric()),
+        sa.Column("radius_km", sa.Numeric(), nullable=False),
         sa.Column("update_enabled", sa.Boolean(), nullable=False),
         sa.Column("remote_target_id", PgUUID(as_uuid=True)),
         sa.Column("remote_etag", sa.Text()),
