@@ -17,7 +17,8 @@ inbox transaction에서 received로 종결한다. restore epoch 변경은 남은
 
 **검증**: 최신 generic snapshot이 바뀐 뒤에도 expectation이 유지되는 bootstrap 회귀, 실제 Map wire
 receipt→target 연속 ACK, lease 만료 뒤 같은 event 새 claim의 0회 추가 cache generation을 포함한 PostGIS
-23건과 Ruff/strict mypy를 통과했다.
+23건과 Ruff/strict mypy를 통과했다. 별도 migration 회귀는 `0045→0046` actual/legacy Merkle backfill,
+invalid NULL의 원자적 upgrade 거부, `0046→0045→0046` nullable/CHECK 복원을 실제 PostGIS에서 고정한다.
 
 ## 2026-08-01 (codex) — T-VN-41 n150 stream receipt 계약/health 보정
 

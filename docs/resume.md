@@ -17,7 +17,8 @@ expectation을 원자적으로 소비하게 바꿨다. 예상하지 못한 consu
 
 **검증**: generic snapshot overwrite 회귀와 lease-expiry/new-claim 중복 side effect 방지를 포함한
 cache-target consumer/schema/worker PostGIS 집중 23건, Ruff, strict mypy가 통과했다. `0046`까지의 기존
-fingerprint migration 왕복도 통과했다.
+fingerprint migration은 actual/legacy backfill, invalid NULL fail-close, downgrade CHECK 복원과 재upgrade를
+커밋된 PostGIS 회귀 테스트로 고정했다.
 
 **다음 한 작업**: Map `request_id` producer 계약과 PinVi `0047` exact image를 n150 isolated 환경에 올려
 relay 250 receipt까지 ACK되는지 재확인한 뒤 destructive Live UI recovery gate를 실행한다.
