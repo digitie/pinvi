@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P desired command publisher 체크포인트
+
+**작업**: command outbox를 short DB lease 뒤 network 밖에서 보내고 별도 CAS transaction으로
+성공/retry/DLQ/halt를 기록하는 publisher core를 구현했다.
+
+**변경**:
+
+- consumer snapshot이 `matched+ready`이고 active epoch가 있을 때만 target별 가장 이른 nonterminal
+  generation을 `FOR UPDATE SKIP LOCKED`로 lease한다. 앞 generation의 pending/leased/DLQ는 뒤를 막는다.
+- attempt는 network 전에 durable하게 증가하며 lease expiry 뒤 reclaim된다. timeout과
+  `408|425|429|5xx`만 bounded deterministic jitter/Retry-After로 재시도하고 budget 소진 시 DLQ다.
+- `401|403`과 generation/epoch 계열 409는 command DLQ와 consumer global halt, `412`는 reconcile
+  mismatch, validation/idempotency conflict는 DLQ이며 blind retry하지 않는다.
+- 성공 response/ETag와 Map target tuple은 command receipt와 head에 같은 transaction으로 기록한다.
+
+**검증**: Ruff, strict mypy와 실제 PostGIS short-lease/transient/auth-halt/412/422/409 integration
+**5 passed**.
+
+**다음**: startup snapshot bootstrap과 command/claim/ACK-NACK lifespan loop를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P role-bound transport/ACK 복구 체크포인트
 
 **작업**: command/consumer principal을 생성 시 고정하는 direct Map HTTP transport와 restart 뒤

@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P desired command publisher core
+
+outbox command는 snapshot `matched+ready`와 active epoch가 있을 때만 target별 generation 순서로 short
+lease된다. attempt/lease를 먼저 commit하고 HTTP는 lock/transaction 밖에서 실행하며 성공 또는
+retry/DLQ/halt 결과를 별도 CAS transaction에 기록한다. transient status와 network outcome만 bounded
+retry하고 401/403·409 generation/epoch·412·422·idempotency conflict는 각각 halt/reconcile/DLQ로
+고정해 blind retry를 막는다.
+
+성공 Map response와 ETag/target tuple은 command receipt와 head에 함께 반영한다. Ruff/strict mypy와
+실제 PostGIS publisher integration **5 passed**다.
+
+**다음 한 작업**: startup snapshot bootstrap과 command/claim/ACK-NACK lifespan loop를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P role-bound transport와 durable ACK 복구
 
 command/consumer role에 고정된 direct Map service transport를 추가했다. target mutation은 UUID
