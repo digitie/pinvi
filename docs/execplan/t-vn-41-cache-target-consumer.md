@@ -117,9 +117,15 @@ command를 만드는 두 경우를 구분하고 audit receipt를 남긴다.
 
 ### 3.3 event inbox와 checkpoint
 
-`app.ktm_cache_target_events`는 `event_id` PK, exact envelope/payload/fingerprint, claim/cursor와
-`applied_at`을 저장하고 `(external_system,target_key,restore_epoch,target_sequence)`를 unique로 둔다.
+`app.ktm_cache_target_events`는 `event_id` PK, exact immutable envelope/payload/fingerprint와
+`applied_at`을 저장하고
+`(external_system,target_key,restore_epoch,source_generation,target_sequence)`를 unique로 둔다.
 같은 ID+fingerprint 재전달은 no-op이고 같은 ID+다른 fingerprint는 invariant failure다.
+
+lease expiry/reclaim마다 `claim_id`와 `lease_token`은 달라지므로 event inbox에 claim 권한을
+덮어쓰지 않는다. `app.ktm_cache_target_event_claims`가 claim별 lease/완료/ACK prefix를,
+`app.ktm_cache_target_event_claim_items`가 claim-event별 cursor/payload fingerprint/ACK receipt를
+보존한다. 같은 immutable event가 여러 claim item에서 참조되는 것이 정상이다.
 
 `app.ktm_cache_target_consumer_state`는 consumer, active epoch, acknowledged cursor, applied
 high-watermark, reconcile snapshot/count/root/status, stream control ETag, `feature_cache_generation`을 가진다.

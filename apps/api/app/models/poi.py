@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -21,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import conv
 
 from app.db.base import Base
 from app.models.mixins import TimestampMixin
@@ -44,6 +46,34 @@ class TripDayPoi(Base, TimestampMixin):
             name="ck_trip_day_pois_actual_nonnegative",
         ),
         CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_trip_day_pois_currency"),
+        CheckConstraint(
+            "(cache_target_lon IS NULL) = (cache_target_lat IS NULL)",
+            name=conv("ck_trip_day_pois_cache_coord_pair"),
+        ),
+        CheckConstraint(
+            "cache_target_lon IS NULL OR cache_target_lon BETWEEN 124 AND 132",
+            name=conv("ck_trip_day_pois_cache_lon_korea"),
+        ),
+        CheckConstraint(
+            "cache_target_lat IS NULL OR cache_target_lat BETWEEN 33 AND 39.5",
+            name=conv("ck_trip_day_pois_cache_lat_korea"),
+        ),
+        CheckConstraint(
+            "cache_target_radius_km > 0 AND cache_target_radius_km <= 100",
+            name=conv("ck_trip_day_pois_cache_radius"),
+        ),
+        CheckConstraint(
+            "feature_snapshot #>> '{coord,lon}' IS NULL OR feature_snapshot ->> 'lon' IS NULL "
+            "OR (feature_snapshot #>> '{coord,lon}')::numeric(10,7) = "
+            "(feature_snapshot ->> 'lon')::numeric(10,7)",
+            name=conv("ck_tdp_cache_lon_consistent"),
+        ),
+        CheckConstraint(
+            "feature_snapshot #>> '{coord,lat}' IS NULL OR feature_snapshot ->> 'lat' IS NULL "
+            "OR (feature_snapshot #>> '{coord,lat}')::numeric(9,7) = "
+            "(feature_snapshot ->> 'lat')::numeric(9,7)",
+            name=conv("ck_tdp_cache_lat_consistent"),
+        ),
     )
 
     attachment_id: Mapped[uuid.UUID] = mapped_column(
@@ -61,6 +91,31 @@ class TripDayPoi(Base, TimestampMixin):
         JSONB(astext_type=Text()),
         nullable=False,
         server_default=text("'{}'::jsonb"),
+    )
+    # Map/외부 snapshot 두 canonical shape(`coord.{lon,lat}`와 top-level `lon,lat`)를
+    # DB generated column 하나로 접는다. 숫자가 아닌 좌표는 cast 단계에서 write를 거부한다.
+    cache_target_lon: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 7),
+        Computed(
+            "COALESCE(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric(10,7)",
+            persisted=True,
+        ),
+    )
+    cache_target_lat: Mapped[Decimal | None] = mapped_column(
+        Numeric(9, 7),
+        Computed(
+            "COALESCE(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric(9,7)",
+            persisted=True,
+        ),
+    )
+    cache_target_radius_km: Mapped[Decimal] = mapped_column(
+        Numeric(6, 3),
+        nullable=False,
+        server_default=text("5.000"),
+    )
+    cache_target_update_enabled: Mapped[bool] = mapped_column(
+        nullable=False,
+        server_default=text("true"),
     )
     custom_marker_color: Mapped[str | None] = mapped_column(String(16))
     custom_marker_icon: Mapped[str | None] = mapped_column(String(64))

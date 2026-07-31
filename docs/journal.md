@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P durable schema 체크포인트
+
+**작업**: paired 계약의 DB 경계를 실제 PostGIS migration과 ORM으로 구현했다.
+
+**변경**:
+
+- `trip_day_pois.feature_snapshot`의 nested/top-level 좌표를 generated `numeric` column으로
+  정규화하고 부분 좌표, 상충하는 두 형태, 비숫자와 대한민국 경계 밖 값을 fail-hard한다.
+- POI desired/tombstone head, command outbox, immutable event inbox, local apply와 remote ACK를
+  분리한 consumer checkpoint, reclaim별 claim/item receipt 여섯 테이블을 추가했다.
+- 일자 cascade hard-delete 뒤에도 delete command와 tombstone이 남도록 head의 POI 식별자는
+  논리 참조로 두고 물리 FK를 만들지 않았다.
+- generation을 포함한 target tuple 유일성, 만료 lease 회수 index, opaque snapshot ID와
+  reconciliation/cache generation 기본 차단 상태를 DB constraint로 고정했다.
+
+**검증**: Ruff와 strict mypy 통과, 실제 PostGIS integration 6개 통과, fresh DB의
+`upgrade head → downgrade 20260721_0040 → upgrade head` 왕복 후 head
+`20260731_0041`을 확인했다.
+
+**다음**: Map 공유 `cache-target-source-v1` golden fixture SHA를 vendor하고 독립 serializer,
+source generation trigger/backfill과 78-symbol writer inventory gate를 구현한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P generation/outbox paired 계획 확정
 
 **작업**: Map ADR-081과 호환되는 PinVi cache target producer/consumer의 ADR-058과 실행 계획을

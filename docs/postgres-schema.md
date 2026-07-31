@@ -261,6 +261,12 @@ CREATE TABLE app.trip_day_pois (
   feature_id           text,                          -- nullable. feature.features.feature_id 참조 (FK 없음)
   feature_link_broken_at timestamptz,
   feature_snapshot     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  cache_target_lon     numeric(10,7) GENERATED ALWAYS AS
+    (coalesce(feature_snapshot #>> '{coord,lon}', feature_snapshot ->> 'lon')::numeric(10,7)) STORED,
+  cache_target_lat     numeric(9,7) GENERATED ALWAYS AS
+    (coalesce(feature_snapshot #>> '{coord,lat}', feature_snapshot ->> 'lat')::numeric(9,7)) STORED,
+  cache_target_radius_km numeric(6,3) NOT NULL DEFAULT 5.000,
+  cache_target_update_enabled boolean NOT NULL DEFAULT true,
   custom_marker_color  text,                          -- 사용자 override (P-01..P-16)
   custom_marker_icon   text,                          -- 사용자 override (maki id)
   planned_arrival_at   timestamptz,
@@ -281,7 +287,25 @@ CREATE TABLE app.trip_day_pois (
     CHECK (budget_amount IS NULL OR budget_amount >= 0),
   CONSTRAINT ck_trip_day_pois_actual_nonnegative
     CHECK (actual_amount IS NULL OR actual_amount >= 0),
-  CONSTRAINT ck_trip_day_pois_currency CHECK (currency ~ '^[A-Z]{3}$')
+  CONSTRAINT ck_trip_day_pois_currency CHECK (currency ~ '^[A-Z]{3}$'),
+  CONSTRAINT ck_trip_day_pois_cache_coord_pair
+    CHECK ((cache_target_lon IS NULL) = (cache_target_lat IS NULL)),
+  CONSTRAINT ck_trip_day_pois_cache_lon_korea
+    CHECK (cache_target_lon IS NULL OR cache_target_lon BETWEEN 124 AND 132),
+  CONSTRAINT ck_trip_day_pois_cache_lat_korea
+    CHECK (cache_target_lat IS NULL OR cache_target_lat BETWEEN 33 AND 39.5),
+  CONSTRAINT ck_trip_day_pois_cache_radius
+    CHECK (cache_target_radius_km > 0 AND cache_target_radius_km <= 100),
+  CONSTRAINT ck_tdp_cache_lon_consistent CHECK (
+    feature_snapshot #>> '{coord,lon}' IS NULL OR feature_snapshot ->> 'lon' IS NULL OR
+    (feature_snapshot #>> '{coord,lon}')::numeric(10,7) =
+      (feature_snapshot ->> 'lon')::numeric(10,7)
+  ),
+  CONSTRAINT ck_tdp_cache_lat_consistent CHECK (
+    feature_snapshot #>> '{coord,lat}' IS NULL OR feature_snapshot ->> 'lat' IS NULL OR
+    (feature_snapshot #>> '{coord,lat}')::numeric(9,7) =
+      (feature_snapshot ->> 'lat')::numeric(9,7)
+  )
 );
 
 -- 정렬·중복 방지: ASCII 바이트 순서 강제 (en_US.utf8 정렬과 다름)
@@ -327,6 +351,25 @@ FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 
 POI 생성 시 `python-kasi-api`의 위치별 해달 출몰시각 정보조회 결과를 1회 저장한다.
 별도 주기 재조회는 없다.
+
+### 3.3.2 kor-travel-map cache target 동기화 상태
+
+`app.trip_day_pois`의 두 canonical snapshot 형태(`coord.{lon,lat}`와 top-level
+`lon,lat`)를 generated column으로 한 번만 정규화한다. 두 형태가 함께 있으면 같은
+`numeric` 값이어야 하며, 일부 좌표·숫자가 아닌 좌표·대한민국 경계 밖 좌표는 DB write를
+거부한다. 따라서 user/admin/notice/copy 등 어느 writer도 projection을 우회할 수 없다.
+
+| 테이블                                   | 역할                                                            | 핵심 불변식                                                                                                                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.ktm_cache_target_heads`             | POI별 desired active/tombstone head와 마지막 Map 적용 tuple     | `(external_system, target_key)` 유일, `target_key=lower(poi_id::text)`, source generation 양수, fingerprint 32바이트, hard-delete 뒤 tombstone 보존을 위해 POI 물리 FK 없음 |
+| `app.ktm_cache_target_commands`          | 사용자 transaction과 결합되는 PUT/DELETE/refresh command outbox | POI·generation·상태 명령 유일, pending/leased due index, lease expiry index, 응답·오류 보존                                                                                 |
+| `app.ktm_cache_target_events`            | Map at-least-once 결과의 immutable inbox                        | `event_id` PK, `(system,key,restore_epoch,source_generation,target_sequence)` 유일, exact `event_type` 4종, relay order 양수                                                |
+| `app.ktm_cache_target_consumers`         | 전역 stream checkpoint와 reconciliation gate                    | local applied/remote ACK cursor 분리, opaque snapshot ID, snapshot count/Merkle root, feature cache generation, `ready` 기본 false                                          |
+| `app.ktm_cache_target_event_claims`      | pull claim별 mutable lease와 ACK prefix                         | reclaim마다 새 claim/lease token, active lease expiry index, 완료 상태와 완료 시각 결박                                                                                     |
+| `app.ktm_cache_target_event_claim_items` | claim-event별 delivery/ACK receipt                              | 같은 immutable event의 여러 reclaim 허용, claim 안 cursor/position 유일, payload fingerprint 32바이트, 미ACK gap index                                                      |
+
+이 여섯 테이블은 내구 상태만 정의한다. source serializer·generation trigger/backfill과 network
+relay/consumer는 Map 공유 golden fixture를 고정한 후 후속 마이그레이션에서 활성화한다.
 
 ### 3.4 `app.trip_companions`
 

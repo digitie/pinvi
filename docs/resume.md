@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P durable schema 검증 완료
+
+PinVi desired source를 모든 `TripDayPoi` writer에서 동일하게 얻도록 snapshot 좌표를 DB
+generated column으로 정규화했다. nested/top-level 형태가 충돌하거나 좌표 pair·숫자·대한민국
+경계 계약을 어기면 write 자체가 실패한다. POI별 active/tombstone head, command outbox,
+at-least-once immutable inbox, local applied/remote ACK cursor를 분리한 consumer checkpoint도
+`20260731_0041` migration에 추가했다. head는 일자 cascade hard-delete 뒤 tombstone/outbox를
+보존하도록 POI UUID를 논리 참조하며 물리 FK를 두지 않는다. reclaim의 새 claim/lease는
+immutable event를 덮지 않고 claim/item receipt로 별도 보존한다.
+
+Ruff와 strict mypy, 실제 PostGIS integration **6 passed**, fresh DB의
+`upgrade head → downgrade 20260721_0040 → upgrade head` 왕복이 통과했다. network worker와
+projection trigger는 아직 활성화하지 않았으며 `ready=false`가 기본이다.
+
+**다음 한 작업**: Map 공유 `cache-target-source-v1` golden fixture의 commit SHA와 hash를
+고정한 뒤 PinVi 독립 serializer, source generation trigger/backfill, 78-symbol writer inventory
+gate를 구현한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P paired consumer docs-first 진입
 
 Map `T-VN-41A/B/C`의 source generation, restore epoch, transaction-coupled result outbox를
