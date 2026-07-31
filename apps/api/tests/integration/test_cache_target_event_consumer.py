@@ -26,6 +26,8 @@ from app.services.cache_target_event_consumer import (
     CacheTargetSnapshotItem,
     CacheTargetStaleEpochError,
     apply_cache_target_claim,
+    load_pending_cache_target_ack,
+    mark_cache_target_acknowledged,
     reconcile_cache_target_snapshot,
 )
 
@@ -192,3 +194,36 @@ async def test_snapshot_checksum_mismatch_keeps_consumer_fail_closed(session_fac
         assert consumer.reconcile_status == "mismatched"
         assert consumer.snapshot_id == "snapshot-1"
         assert consumer.snapshot_merkle_root == b"x" * 32
+
+
+async def test_restart_reuses_durable_applied_receipts_for_exact_ack(session_factory) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    event = _event(relay_order=1)
+    claim = _claim(event)
+    async with session_factory() as db:
+        expected = await apply_cache_target_claim(db, claim)
+        await db.commit()
+
+    async with session_factory() as db:
+        restarted_ack = await load_pending_cache_target_ack(db)
+
+    assert restarted_ack == expected
+    assert restarted_ack is not None
+    async with session_factory() as db:
+        await mark_cache_target_acknowledged(db, restarted_ack)
+        await db.commit()
+
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        persisted_claim = await db.get(KtmCacheTargetEventClaim, claim.claim_id)
+        item = await db.scalar(
+            select(KtmCacheTargetEventClaimItem).where(
+                KtmCacheTargetEventClaimItem.claim_id == claim.claim_id
+            )
+        )
+        assert consumer is not None
+        assert persisted_claim is not None
+        assert item is not None
+        assert consumer.remote_acked_cursor == "cursor-1"
+        assert persisted_claim.status == "acked"
+        assert item.acked_at is not None

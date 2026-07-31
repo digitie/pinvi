@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P role-bound transport/ACK 복구 체크포인트
+
+**작업**: command/consumer principal을 생성 시 고정하는 direct Map HTTP transport와 restart 뒤
+durable claim receipt에서 ACK body를 복원하는 경계를 구현했다.
+
+**변경**:
+
+- PUT은 create `If-None-Match: *`, update는 raw strong `If-Match`, DELETE는 strong `If-Match`만
+  허용한다. UUID idempotency key와 역할 token 외의 인증 header는 보내지 않는다.
+- canonical source 정수는 float를 만들지 않고 고정 6/3자리 decimal string wire body로 변환한다.
+  response의 target identity, epoch/generation/source fingerprint와 ETag header/body가 모두 요청과
+  일치해야 성공으로 받아들인다.
+- 401/403과 non-idempotency 409는 global halt, idempotency 409와 422/428은 DLQ, 412는 reconcile,
+  408/425/429/5xx는 retry로 분류한다.
+- local commit 후 ACK 전에 재시작하면 active lease의 durable item 순서와 payload fingerprint를 inbox와
+  다시 대조해 exact applied list를 복원한다. ACK 성공 뒤에만 remote cursor와 claim/item을 완료한다.
+
+**검증**: transport unit **10 passed**, ACK restart를 포함한 실제 PostGIS consumer **5 passed**,
+Ruff와 strict mypy 통과.
+
+**다음**: command short lease/retry/DLQ publisher와 claim/apply/ACK-NACK loop를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P default-off principal gate 체크포인트
 
 **작업**: cache target network worker를 기본 비활성화하고 역할별 credential/paired revision이

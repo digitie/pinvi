@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P role-bound transport와 durable ACK 복구
+
+command/consumer role에 고정된 direct Map service transport를 추가했다. target mutation은 UUID
+idempotency key와 create/update/delete별 exact precondition만 보내며 source 정수를 float 없이 decimal
+string wire DTO로 바꾼다. response target identity, epoch/generation, canonical source fingerprint,
+ETag header/body가 모두 맞아야 성공이다. 인증·충돌·precondition·validation·transient status는
+halt/DLQ/reconcile/retry로 명시 분류한다.
+
+local commit 뒤 ACK 전에 재시작해도 durable claim/item/inbox receipt로 exact ACK applied list를 복원한다.
+원격 ACK 성공 전에는 remote cursor나 acked marker를 갱신하지 않는다. transport unit **10 passed**,
+restart ACK를 포함한 실제 PostGIS consumer **5 passed**, Ruff/strict mypy가 통과했다.
+
+**다음 한 작업**: command short lease/retry/DLQ publisher와 claim/apply/ACK-NACK worker loop를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P default-off principal gate 구현
 
 cache target HTTP worker는 기본 `false`이고 command/consumer credential과 exact OpenAPI SHA-256,

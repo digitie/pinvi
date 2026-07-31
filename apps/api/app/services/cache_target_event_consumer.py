@@ -278,6 +278,19 @@ async def apply_cache_target_claim(
         await _validate_existing_claim(db, claim=claim, existing=existing_claim)
         return _ack_for_claim(claim)
 
+    expired_claims = list(
+        await db.scalars(
+            select(KtmCacheTargetEventClaim).where(
+                KtmCacheTargetEventClaim.consumer_id == claim.consumer_id,
+                KtmCacheTargetEventClaim.status == "active",
+                KtmCacheTargetEventClaim.lease_expires_at <= current,
+            )
+        )
+    )
+    for expired_claim in expired_claims:
+        expired_claim.status = "expired"
+        expired_claim.completed_at = current
+
     last_applied_order = await db.scalar(
         select(func.max(KtmCacheTargetEvent.relay_order)).where(
             KtmCacheTargetEvent.external_system == claim.external_system,
@@ -393,6 +406,125 @@ def _ack_for_claim(claim: CacheTargetClaim) -> CacheTargetAck:
             for event in claim.events
         ],
     )
+
+
+async def load_pending_cache_target_ack(
+    db: AsyncSession,
+    *,
+    consumer_id: str = "pinvi-cache-target-consumer",
+    now: datetime | None = None,
+) -> CacheTargetAck | None:
+    """restart 뒤 아직 유효한 local-applied claim의 exact ACK receipt를 복원한다."""
+    current = now or datetime.now(UTC)
+    claims = list(
+        await db.scalars(
+            select(KtmCacheTargetEventClaim)
+            .where(
+                KtmCacheTargetEventClaim.consumer_id == consumer_id,
+                KtmCacheTargetEventClaim.status == "active",
+            )
+            .order_by(KtmCacheTargetEventClaim.received_at, KtmCacheTargetEventClaim.claim_id)
+            .with_for_update()
+        )
+    )
+    for claim in claims:
+        if claim.lease_expires_at <= current:
+            claim.status = "expired"
+            claim.completed_at = current
+            continue
+        items = list(
+            await db.scalars(
+                select(KtmCacheTargetEventClaimItem)
+                .where(KtmCacheTargetEventClaimItem.claim_id == claim.claim_id)
+                .order_by(KtmCacheTargetEventClaimItem.position)
+            )
+        )
+        if not items or [item.position for item in items] != list(range(1, len(items) + 1)):
+            raise CacheTargetEventGapError("durable claim receipt position이 연속적이지 않습니다.")
+        events_by_id = {
+            event.event_id: event
+            for event in await db.scalars(
+                select(KtmCacheTargetEvent).where(
+                    KtmCacheTargetEvent.event_id.in_([item.event_id for item in items])
+                )
+            )
+        }
+        applied: list[CacheTargetAppliedReceipt] = []
+        for item in items:
+            event = events_by_id.get(item.event_id)
+            if (
+                event is None
+                or event.applied_at is None
+                or event.payload_fingerprint != item.payload_fingerprint
+            ):
+                raise CacheTargetEventConflictError(
+                    "durable ACK receipt가 applied inbox와 일치하지 않습니다."
+                )
+            applied.append(
+                CacheTargetAppliedReceipt(
+                    event_id=event.event_id,
+                    payload_fingerprint=item.payload_fingerprint.hex(),
+                )
+            )
+        await db.flush()
+        return CacheTargetAck(
+            consumer_id=claim.consumer_id,
+            claim_id=claim.claim_id,
+            lease_token=claim.lease_token,
+            through_cursor=items[-1].delivery_cursor,
+            applied=applied,
+        )
+    await db.flush()
+    return None
+
+
+async def mark_cache_target_acknowledged(
+    db: AsyncSession,
+    ack: CacheTargetAck,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """원격 ACK 성공 뒤 local remote cursor와 claim/item receipt를 CAS 완료한다."""
+    current = now or datetime.now(UTC)
+    claim = await db.scalar(
+        select(KtmCacheTargetEventClaim)
+        .where(KtmCacheTargetEventClaim.claim_id == ack.claim_id)
+        .with_for_update()
+    )
+    if claim is None or claim.consumer_id != ack.consumer_id or claim.lease_token != ack.lease_token:
+        raise CacheTargetEventConflictError("ACK claim/lease identity가 durable receipt와 다릅니다.")
+    if claim.status == "acked":
+        if claim.acked_through_cursor != ack.through_cursor:
+            raise CacheTargetEventConflictError("완료된 claim의 ACK cursor가 다릅니다.")
+        return
+    if claim.status != "active" or claim.lease_expires_at <= current:
+        raise CacheTargetConsumerError("ACK할 active lease가 없습니다.")
+    items = list(
+        await db.scalars(
+            select(KtmCacheTargetEventClaimItem)
+            .where(KtmCacheTargetEventClaimItem.claim_id == ack.claim_id)
+            .order_by(KtmCacheTargetEventClaimItem.position)
+            .with_for_update()
+        )
+    )
+    expected = [(item.event_id, item.payload_fingerprint.hex()) for item in items]
+    actual = [(receipt.event_id, receipt.payload_fingerprint) for receipt in ack.applied]
+    if not items or expected != actual or items[-1].delivery_cursor != ack.through_cursor:
+        raise CacheTargetEventConflictError("ACK body가 durable applied receipt와 다릅니다.")
+    for item in items:
+        item.acked_at = current
+    claim.status = "acked"
+    claim.acked_through_cursor = ack.through_cursor
+    claim.completed_at = current
+    consumer = await db.scalar(
+        select(KtmCacheTargetConsumer)
+        .where(KtmCacheTargetConsumer.consumer_id == ack.consumer_id)
+        .with_for_update()
+    )
+    if consumer is None:
+        raise CacheTargetConsumerError("ACK consumer가 없습니다.")
+    consumer.remote_acked_cursor = ack.through_cursor
+    await db.flush()
 
 
 async def reconcile_cache_target_snapshot(

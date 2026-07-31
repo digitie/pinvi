@@ -1,0 +1,444 @@
+"""kor-travel-map cache-target service 전용 role-bound HTTP transport."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, Literal, Self
+from urllib.parse import quote
+
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.services.cache_target_event_consumer import (
+    CacheTargetAck,
+    CacheTargetClaim,
+    CacheTargetSnapshot,
+)
+
+CacheTargetRole = Literal["command", "consumer", "restore", "recovery"]
+FailureDisposition = Literal["retry", "halt", "reconcile", "dead_letter"]
+
+_SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - header name
+_IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+
+
+def classify_cache_target_failure(*, status_code: int, code: str) -> FailureDisposition:
+    """HTTP/problem code를 retry budget과 operator action으로 분류한다."""
+    if status_code in {408, 425, 429} or status_code >= 500:
+        return "retry"
+    if status_code in {401, 403}:
+        return "halt"
+    if status_code == 412:
+        return "reconcile"
+    if status_code in {400, 404, 422, 428}:
+        return "dead_letter"
+    if status_code == 409:
+        if code in {
+            "CACHE_TARGET_IDEMPOTENCY_CONFLICT",
+            "IDEMPOTENCY_KEY_REUSED",
+            "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        }:
+            return "dead_letter"
+        return "halt"
+    return "dead_letter"
+
+
+class CacheTargetNetworkError(RuntimeError):
+    """응답을 받지 못해 outcome이 불확실한 transient transport failure."""
+
+
+class CacheTargetContractError(ValueError):
+    """Map service 응답이 pinned envelope/DTO 계약과 다름."""
+
+
+class CacheTargetServiceProblem(RuntimeError):
+    """Map RFC7807 응답의 typed status/code."""
+
+    def __init__(self, *, status_code: int, code: str, retry_after: int | None) -> None:
+        super().__init__(f"kor-travel-map cache-target problem: {status_code} {code}")
+        self.status_code = status_code
+        self.code = code
+        self.retry_after = retry_after
+        self.disposition = classify_cache_target_failure(status_code=status_code, code=code)
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetMutationResult:
+    status_code: int
+    data: CacheTargetStateResult
+    etag: str | None
+
+
+class CacheTargetStateResult(BaseModel):
+    """PUT/DELETE response data의 pinned strict projection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_system: Literal["pinvi"]
+    target_key: str
+    state: Literal["active", "deleted"]
+    restore_epoch: int = Field(gt=0)
+    source_generation: int = Field(gt=0)
+    source_payload_fingerprint: str
+    entity_tag: str
+    target_id: uuid.UUID
+    target_sequence: int = Field(gt=0)
+    occurred_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_validator("source_payload_fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, value: str) -> str:
+        if len(value) != 64 or value != value.lower():
+            raise ValueError("source_payload_fingerprint가 lowercase SHA-256 hex가 아닙니다.")
+        try:
+            bytes.fromhex(value)
+        except ValueError as exc:
+            raise ValueError(
+                "source_payload_fingerprint가 lowercase SHA-256 hex가 아닙니다."
+            ) from exc
+        return value
+
+    @model_validator(mode="after")
+    def validate_identity_and_etag(self) -> Self:
+        if self.target_key != str(uuid.UUID(self.target_key)):
+            raise ValueError("target_key가 canonical UUID가 아닙니다.")
+        prefix = f'"{self.target_id}:'
+        if not self.entity_tag.startswith(prefix) or not self.entity_tag.endswith('"'):
+            raise ValueError("entity_tag가 target strong ETag 형식이 아닙니다.")
+        return self
+
+
+def _retry_after(response: httpx.Response) -> int | None:
+    value = response.headers.get("Retry-After")
+    if value is None or not value.isascii() or not value.isdigit():
+        return None
+    seconds = int(value)
+    return seconds if 1 <= seconds <= 300 else None
+
+
+def _problem_code(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return "UNPARSEABLE_PROBLEM"
+    if not isinstance(payload, dict):
+        return "UNPARSEABLE_PROBLEM"
+    code = payload.get("code")
+    return code if isinstance(code, str) and code else "UNSPECIFIED_PROBLEM"
+
+
+def _unwrap_data(response: httpx.Response) -> Any:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise CacheTargetContractError("service response가 JSON이 아닙니다.") from exc
+    if not isinstance(payload, dict) or set(payload) != {"data", "meta"}:
+        raise CacheTargetContractError("service response envelope가 exact {data,meta}가 아닙니다.")
+    if not isinstance(payload["meta"], dict):
+        raise CacheTargetContractError("service response meta가 object가 아닙니다.")
+    return payload["data"]
+
+
+def _occurred_at(value: datetime) -> str:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("occurred_at은 timezone-aware datetime이어야 합니다.")
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _canonical_source_fingerprint(source_payload: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        source_payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _scaled_decimal_string(value: int, *, scale: int, digits: int) -> str:
+    sign = "-" if value < 0 else ""
+    magnitude = abs(value)
+    whole, fraction = divmod(magnitude, scale)
+    return f"{sign}{whole}.{fraction:0{digits}d}"
+
+
+def _active_wire_body(
+    *,
+    source_payload: dict[str, Any],
+    command_id: uuid.UUID,
+    restore_epoch: int,
+    source_generation: int,
+    occurred_at: datetime,
+) -> dict[str, Any]:
+    if set(source_payload) != {"version", "state", "coord", "radius_m", "update_enabled"}:
+        raise ValueError("active source payload field가 exact v1 계약과 다릅니다.")
+    if source_payload.get("version") != "cache-target-source-v1" or source_payload.get(
+        "state"
+    ) != "active":
+        raise ValueError("active source payload version/state가 다릅니다.")
+    coord = source_payload.get("coord")
+    if not isinstance(coord, dict) or set(coord) != {"lon_e6", "lat_e6"}:
+        raise ValueError("active source coord가 exact v1 계약과 다릅니다.")
+    lon_e6 = coord.get("lon_e6")
+    lat_e6 = coord.get("lat_e6")
+    radius_m = source_payload.get("radius_m")
+    update_enabled = source_payload.get("update_enabled")
+    if (
+        isinstance(lon_e6, bool)
+        or not isinstance(lon_e6, int)
+        or isinstance(lat_e6, bool)
+        or not isinstance(lat_e6, int)
+        or isinstance(radius_m, bool)
+        or not isinstance(radius_m, int)
+        or not isinstance(update_enabled, bool)
+    ):
+        raise ValueError("active source 정수/bool field 타입이 다릅니다.")
+    if not -180_000_000 <= lon_e6 <= 180_000_000 or not -90_000_000 <= lat_e6 <= 90_000_000:
+        raise ValueError("active source coord가 범위를 벗어났습니다.")
+    if not 1 <= radius_m <= 100_000:
+        raise ValueError("active source radius_m이 범위를 벗어났습니다.")
+    return {
+        "source_event_id": str(command_id),
+        "restore_epoch": restore_epoch,
+        "source_generation": source_generation,
+        "coord": {
+            "lon": _scaled_decimal_string(lon_e6, scale=1_000_000, digits=6),
+            "lat": _scaled_decimal_string(lat_e6, scale=1_000_000, digits=6),
+        },
+        "radius_km": _scaled_decimal_string(radius_m, scale=1_000, digits=3),
+        "update_enabled": update_enabled,
+        "occurred_at": _occurred_at(occurred_at),
+    }
+
+
+def _deleted_wire_body(
+    *,
+    source_payload: dict[str, Any],
+    command_id: uuid.UUID,
+    restore_epoch: int,
+    source_generation: int,
+    occurred_at: datetime,
+) -> dict[str, Any]:
+    if source_payload != {"state": "deleted", "version": "cache-target-source-v1"}:
+        raise ValueError("deleted source payload가 exact v1 계약과 다릅니다.")
+    return {
+        "source_event_id": str(command_id),
+        "restore_epoch": restore_epoch,
+        "source_generation": source_generation,
+        "occurred_at": _occurred_at(occurred_at),
+    }
+
+
+class CacheTargetServiceClient:
+    """생성 시 한 principal role에 고정되는 service OpenAPI transport."""
+
+    def __init__(self, http: httpx.AsyncClient, *, role: CacheTargetRole, token: str) -> None:
+        normalized = token.strip()
+        if len(normalized) < 32 or any(character.isspace() for character in normalized):
+            raise ValueError("cache target service token은 whitespace 없는 32자 이상이어야 합니다.")
+        self._http = http
+        self._role = role
+        self._token = normalized
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    def _require_role(self, expected: CacheTargetRole) -> None:
+        if self._role != expected:
+            raise PermissionError(f"{expected} principal 전용 cache-target surface입니다.")
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: dict[str, Any] | None = None,
+        idempotency_key: uuid.UUID | None = None,
+        if_match: str | None = None,
+        if_none_match: bool = False,
+    ) -> httpx.Response:
+        headers = {_SERVICE_TOKEN_HEADER: self._token}
+        if idempotency_key is not None:
+            headers[_IDEMPOTENCY_KEY_HEADER] = str(idempotency_key)
+        if if_match is not None:
+            if if_match.startswith("W/") or not (
+                len(if_match) >= 2 and if_match.startswith('"') and if_match.endswith('"')
+            ):
+                raise ValueError("If-Match는 Map이 발급한 raw strong ETag여야 합니다.")
+            headers["If-Match"] = if_match
+        if if_none_match:
+            headers["If-None-Match"] = "*"
+        try:
+            response = await self._http.request(method, path, json=body, headers=headers)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            raise CacheTargetNetworkError("kor-travel-map cache-target outcome이 불확실합니다.") from exc
+        if response.is_error:
+            raise CacheTargetServiceProblem(
+                status_code=response.status_code,
+                code=_problem_code(response),
+                retry_after=_retry_after(response),
+            )
+        return response
+
+    async def put_target(
+        self,
+        *,
+        external_system: Literal["pinvi"],
+        target_key: str,
+        command_id: uuid.UUID,
+        restore_epoch: int,
+        source_generation: int,
+        occurred_at: datetime,
+        source_payload: dict[str, Any],
+        expected_etag: str | None,
+    ) -> CacheTargetMutationResult:
+        self._require_role("command")
+        body = _active_wire_body(
+            source_payload=source_payload,
+            command_id=command_id,
+            restore_epoch=restore_epoch,
+            source_generation=source_generation,
+            occurred_at=occurred_at,
+        )
+        path = (
+            f"/v1/service/cache-targets/{quote(external_system, safe='')}"
+            f"/{quote(target_key, safe='')}"
+        )
+        response = await self._send(
+            "PUT",
+            path,
+            body=body,
+            idempotency_key=command_id,
+            if_match=expected_etag,
+            if_none_match=expected_etag is None,
+        )
+        data = CacheTargetStateResult.model_validate(_unwrap_data(response))
+        self._validate_mutation_result(
+            data=data,
+            response=response,
+            target_key=target_key,
+            state="active",
+            restore_epoch=restore_epoch,
+            source_generation=source_generation,
+            source_payload=source_payload,
+        )
+        return CacheTargetMutationResult(response.status_code, data, response.headers.get("ETag"))
+
+    async def delete_target(
+        self,
+        *,
+        external_system: Literal["pinvi"],
+        target_key: str,
+        command_id: uuid.UUID,
+        restore_epoch: int,
+        source_generation: int,
+        occurred_at: datetime,
+        source_payload: dict[str, Any],
+        expected_etag: str,
+    ) -> CacheTargetMutationResult:
+        self._require_role("command")
+        body = _deleted_wire_body(
+            source_payload=source_payload,
+            command_id=command_id,
+            restore_epoch=restore_epoch,
+            source_generation=source_generation,
+            occurred_at=occurred_at,
+        )
+        path = (
+            f"/v1/service/cache-targets/{quote(external_system, safe='')}"
+            f"/{quote(target_key, safe='')}"
+        )
+        response = await self._send(
+            "DELETE",
+            path,
+            body=body,
+            idempotency_key=command_id,
+            if_match=expected_etag,
+        )
+        data = CacheTargetStateResult.model_validate(_unwrap_data(response))
+        self._validate_mutation_result(
+            data=data,
+            response=response,
+            target_key=target_key,
+            state="deleted",
+            restore_epoch=restore_epoch,
+            source_generation=source_generation,
+            source_payload=source_payload,
+        )
+        return CacheTargetMutationResult(response.status_code, data, response.headers.get("ETag"))
+
+    @staticmethod
+    def _validate_mutation_result(
+        *,
+        data: CacheTargetStateResult,
+        response: httpx.Response,
+        target_key: str,
+        state: Literal["active", "deleted"],
+        restore_epoch: int,
+        source_generation: int,
+        source_payload: dict[str, Any],
+    ) -> None:
+        if (
+            data.target_key != target_key
+            or data.state != state
+            or data.restore_epoch != restore_epoch
+            or data.source_generation != source_generation
+            or data.source_payload_fingerprint
+            != _canonical_source_fingerprint(source_payload)
+        ):
+            raise CacheTargetContractError("target mutation response가 요청 source identity와 다릅니다.")
+        response_etag = response.headers.get("ETag")
+        if response_etag is None or response_etag != data.entity_tag:
+            raise CacheTargetContractError("target mutation ETag header/body가 다릅니다.")
+
+    async def claim_events(
+        self,
+        *,
+        consumer_id: str,
+        limit: int,
+        lease_seconds: int,
+        idempotency_key: uuid.UUID,
+    ) -> CacheTargetClaim | None:
+        self._require_role("consumer")
+        response = await self._send(
+            "POST",
+            "/v1/service/cache-target-event-claims",
+            body={
+                "external_system": "pinvi",
+                "consumer_id": consumer_id,
+                "limit": limit,
+                "lease_seconds": lease_seconds,
+            },
+            idempotency_key=idempotency_key,
+        )
+        data = _unwrap_data(response)
+        return None if data is None else CacheTargetClaim.model_validate(data)
+
+    async def ack_events(self, ack: CacheTargetAck) -> None:
+        self._require_role("consumer")
+        response = await self._send(
+            "POST",
+            "/v1/service/cache-target-event-acks",
+            body=ack.model_dump(mode="json"),
+        )
+        _unwrap_data(response)
+
+    async def nack_event(self, body: dict[str, Any]) -> None:
+        self._require_role("consumer")
+        response = await self._send(
+            "POST",
+            "/v1/service/cache-target-event-nacks",
+            body=body,
+        )
+        _unwrap_data(response)
+
+    async def get_snapshot(self) -> CacheTargetSnapshot:
+        self._require_role("consumer")
+        response = await self._send("GET", "/v1/service/cache-target-snapshots/pinvi")
+        return CacheTargetSnapshot.model_validate(_unwrap_data(response))
