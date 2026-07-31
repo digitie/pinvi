@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P cache generation observer/health
+
+각 API process는 Trip feature cache를 읽기 전에 DB의 `(restore_epoch, feature_cache_generation)`을
+독립 관찰하고 값이 바뀌면 자기 process-local cache를 전부 비운다. `/health/cache-target-sync`는
+default-off/disabled reason, epoch, local/remote cursor, 실제 미ACK applied gap, pending/DLQ command,
+snapshot checksum과 reconcile/error code를 credential/host/detail 없이 보여 준다.
+
+Map correction에 따라 `cache_target.reconciled`는 target tuple이 없는 stream receipt로 검증·저장하고,
+fixed snapshot checksum/high-watermark만 적용한다. target event만 POI head와 cache generation을
+변경한다.
+
+cache-target 집중 33건, 전체 unit 772건, 전체 PostGIS integration 423건(환경 의존 3건 skip), 0044
+빈 스키마 downgrade/upgrade 왕복, Ruff format/check, Prettier, strict mypy(202개 source)가 통과했다.
+
+**다음 한 작업**: 전체 local gate 뒤 final Map OpenAPI fixture/SHA와 source revision을 pin한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P startup bootstrap/worker 연결
 
 FastAPI lifespan에 default-off cache target paired worker를 연결했다. enable startup은 stream

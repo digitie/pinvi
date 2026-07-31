@@ -42,7 +42,7 @@ from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
-from app.services.feature_cache import CachedFeature, feature_cache
+from app.services.feature_cache import CachedFeature, cache_generation_observer, feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
@@ -223,6 +223,10 @@ async def build_trip_view(
     if kor_travel_map_client is not None and feature_ids:
         use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
+            await cache_generation_observer.observe(
+                db,
+                consumer_id=settings.pinvi_kor_travel_map_cache_target_consumer_id,
+            )
             fresh_cache, stale_cache, missing_ids = feature_cache.get_many(feature_ids)
             for feature_id, cached in fresh_cache.items():
                 resolved_features[feature_id] = cached.trip_card

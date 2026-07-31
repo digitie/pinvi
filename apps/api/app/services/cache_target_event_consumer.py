@@ -66,22 +66,25 @@ class CacheTargetEventRecord(_StrictModel):
 
     event_id: uuid.UUID
     event_type: EventType
+    event_scope: Literal["target", "stream"]
     external_system: Literal["pinvi"]
-    target_key: str = Field(min_length=36, max_length=36)
+    target_key: str | None = Field(default=None, min_length=36, max_length=36)
     target_id: uuid.UUID | None = None
     restore_epoch: int = Field(gt=0)
-    source_generation: int = Field(gt=0)
-    target_sequence: int = Field(gt=0)
+    source_generation: int | None = Field(default=None, gt=0)
+    target_sequence: int | None = Field(default=None, gt=0)
     relay_order: int = Field(gt=0)
     cursor: str = Field(min_length=1)
-    source_payload_fingerprint: str
+    source_payload_fingerprint: str | None = None
     payload_fingerprint: str
     payload: dict[str, Any]
     occurred_at: datetime
 
     @field_validator("target_key")
     @classmethod
-    def validate_target_key(cls, value: str) -> str:
+    def validate_target_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         parsed = uuid.UUID(value)
         canonical = str(parsed)
         if value != canonical:
@@ -90,8 +93,29 @@ class CacheTargetEventRecord(_StrictModel):
 
     @field_validator("source_payload_fingerprint", "payload_fingerprint")
     @classmethod
-    def validate_fingerprint(cls, value: str) -> str:
+    def validate_fingerprint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return _validate_sha256_hex(value)
+
+    @model_validator(mode="after")
+    def validate_scope_tuple(self) -> Self:
+        target_tuple = (
+            self.target_key,
+            self.source_generation,
+            self.target_sequence,
+            self.source_payload_fingerprint,
+        )
+        if self.event_type == "cache_target.reconciled":
+            if (
+                self.event_scope != "stream"
+                or self.target_id is not None
+                or any(value is not None for value in target_tuple)
+            ):
+                raise ValueError("reconciled는 target tuple이 없는 stream event여야 합니다.")
+        elif self.event_scope != "target" or any(value is None for value in target_tuple):
+            raise ValueError("target event는 완전한 target tuple이 필요합니다.")
+        return self
 
 
 class CacheTargetClaim(_StrictModel):
@@ -182,6 +206,7 @@ class CacheTargetSnapshot(_StrictModel):
 def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
     return (
         event.event_type,
+        event.event_scope,
         event.external_system,
         event.target_key,
         event.target_id,
@@ -189,7 +214,9 @@ def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
         event.source_generation,
         event.target_sequence,
         event.relay_order,
-        bytes.fromhex(event.source_payload_fingerprint),
+        bytes.fromhex(event.source_payload_fingerprint)
+        if event.source_payload_fingerprint is not None
+        else None,
         bytes.fromhex(event.payload_fingerprint),
         event.occurred_at,
         event.payload,
@@ -199,6 +226,7 @@ def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
 def _stored_event_material(event: KtmCacheTargetEvent) -> tuple[object, ...]:
     return (
         event.event_type,
+        "stream" if event.event_type == "cache_target.reconciled" else "target",
         event.external_system,
         event.target_key,
         event.target_id,
@@ -300,6 +328,7 @@ async def apply_cache_target_claim(
     )
     last_order = int(last_applied_order or 0)
     new_event_count = 0
+    target_event_count = 0
     stored_events: list[KtmCacheTargetEvent] = []
 
     for event in claim.events:
@@ -325,7 +354,11 @@ async def apply_cache_target_claim(
             source_generation=event.source_generation,
             target_sequence=event.target_sequence,
             relay_order=event.relay_order,
-            source_payload_fingerprint=bytes.fromhex(event.source_payload_fingerprint),
+            source_payload_fingerprint=(
+                bytes.fromhex(event.source_payload_fingerprint)
+                if event.source_payload_fingerprint is not None
+                else None
+            ),
             payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
             occurred_at=event.occurred_at,
             payload=event.payload,
@@ -335,7 +368,11 @@ async def apply_cache_target_claim(
         stored_events.append(stored)
         new_event_count += 1
         last_order = event.relay_order
-        await _apply_target_tuple(db, event=event)
+        if event.event_scope == "target":
+            await _apply_target_tuple(db, event=event)
+            target_event_count += 1
+        else:
+            _apply_stream_reconciled(consumer, event=event)
 
     db.add(
         KtmCacheTargetEventClaim(
@@ -359,14 +396,22 @@ async def apply_cache_target_claim(
                 payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
             )
         )
-    if new_event_count:
+    if target_event_count:
         consumer.feature_cache_generation += 1
+    if new_event_count:
         consumer.local_applied_cursor = claim.events[-1].cursor
     await db.flush()
     return _ack_for_claim(claim)
 
 
 async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord) -> None:
+    if (
+        event.target_key is None
+        or event.source_payload_fingerprint is None
+        or event.source_generation is None
+        or event.target_sequence is None
+    ):
+        raise CacheTargetEventConflictError("target event tuple이 없습니다.")
     head = await db.get(KtmCacheTargetHead, uuid.UUID(event.target_key))
     if head is None:
         return
@@ -394,6 +439,43 @@ async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord
     head.remote_target_sequence = event.target_sequence
     status = event.payload.get("status")
     head.remote_status = str(status)[:32] if status is not None else event.event_type[:32]
+
+
+def _apply_stream_reconciled(
+    consumer: KtmCacheTargetConsumer, *, event: CacheTargetEventRecord
+) -> None:
+    payload = event.payload
+    required = {"snapshot_id", "count", "merkle_root", "high_watermark_cursor"}
+    if set(payload) != required:
+        raise CacheTargetEventConflictError("stream reconciled payload field가 다릅니다.")
+    snapshot_id = payload["snapshot_id"]
+    count = payload["count"]
+    merkle_root = payload["merkle_root"]
+    high_watermark_cursor = payload["high_watermark_cursor"]
+    if (
+        not isinstance(snapshot_id, str)
+        or not snapshot_id
+        or isinstance(count, bool)
+        or not isinstance(count, int)
+        or count < 0
+        or not isinstance(merkle_root, str)
+        or not isinstance(high_watermark_cursor, str)
+    ):
+        raise CacheTargetEventConflictError("stream reconciled payload 타입이 다릅니다.")
+    try:
+        root = bytes.fromhex(_validate_sha256_hex(merkle_root))
+    except ValueError as exc:
+        raise CacheTargetEventConflictError("stream reconciled Merkle root가 다릅니다.") from exc
+    if (
+        consumer.snapshot_id != snapshot_id
+        or consumer.snapshot_count != count
+        or consumer.snapshot_merkle_root != root
+    ):
+        raise CacheTargetEventConflictError(
+            "stream reconciled receipt가 fixed snapshot과 다릅니다."
+        )
+    consumer.high_watermark_cursor = high_watermark_cursor
+    consumer.reconcile_status = "matched"
 
 
 def _ack_for_claim(claim: CacheTargetClaim) -> CacheTargetAck:

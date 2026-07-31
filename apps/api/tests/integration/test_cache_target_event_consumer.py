@@ -40,6 +40,7 @@ def _event(*, relay_order: int, restore_epoch: int = 7) -> CacheTargetEventRecor
         {
             "event_id": str(event_id),
             "event_type": "cache_target.state_applied",
+            "event_scope": "target",
             "external_system": "pinvi",
             "target_key": str(uuid.uuid4()),
             "target_id": str(uuid.uuid4()),
@@ -227,3 +228,52 @@ async def test_restart_reuses_durable_applied_receipts_for_exact_ack(session_fac
         assert consumer.remote_acked_cursor == "cursor-1"
         assert persisted_claim.status == "acked"
         assert item.acked_at is not None
+
+
+async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_generation(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    root = b"r" * 32
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        consumer.snapshot_id = "snapshot-7"
+        consumer.snapshot_count = 0
+        consumer.snapshot_merkle_root = root
+        await db.commit()
+    event = CacheTargetEventRecord.model_validate(
+        {
+            "event_id": str(uuid.uuid4()),
+            "event_type": "cache_target.reconciled",
+            "event_scope": "stream",
+            "external_system": "pinvi",
+            "target_key": None,
+            "target_id": None,
+            "restore_epoch": 7,
+            "source_generation": None,
+            "target_sequence": None,
+            "relay_order": 1,
+            "cursor": "cursor-1",
+            "source_payload_fingerprint": None,
+            "payload_fingerprint": "70" * 32,
+            "payload": {
+                "snapshot_id": "snapshot-7",
+                "count": 0,
+                "merkle_root": root.hex(),
+                "high_watermark_cursor": "cursor-1",
+            },
+            "occurred_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    claim = _claim(event)
+    async with session_factory() as db:
+        await apply_cache_target_claim(db, claim)
+        await db.commit()
+    async with session_factory() as db:
+        stored = await db.get(KtmCacheTargetEvent, event.event_id)
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert stored is not None and stored.target_key is None
+        assert consumer is not None
+        assert consumer.feature_cache_generation == 0
+        assert consumer.high_watermark_cursor == "cursor-1"

@@ -54,13 +54,18 @@ rebase하지 않고 GET/snapshot reconcile 뒤 현재 desired row에서 새 comm
 
 ### 2.3 event envelope
 
-필수 필드는 다음과 같다.
+target-scoped event의 필수 필드는 다음과 같다.
 
 ```text
-event_id, event_type, external_system, target_key, target_id?,
+event_id, event_type, event_scope=target, external_system, target_key, target_id?,
 restore_epoch, source_generation, target_sequence, relay_order,
 source_payload_fingerprint, occurred_at, typed payload
 ```
+
+`cache_target.reconciled`는 `event_scope=stream`인 stream receipt다. `target_key`, `target_id`,
+`source_generation`, `target_sequence`, `source_payload_fingerprint`는 모두 `null`이며 가짜 target
+identity를 만들지 않는다. payload의 fixed snapshot ID/count/Merkle root와 high-watermark를 검증해
+consumer checkpoint만 전진시키고 POI head나 feature cache generation은 변경하지 않는다.
 
 `event_type` discriminator와 허용 값은 exact하다.
 
@@ -118,8 +123,9 @@ command를 만드는 두 경우를 구분하고 audit receipt를 남긴다.
 ### 3.3 event inbox와 checkpoint
 
 `app.ktm_cache_target_events`는 `event_id` PK, exact immutable envelope/payload/fingerprint와
-`applied_at`을 저장하고
-`(external_system,target_key,restore_epoch,source_generation,target_sequence)`를 unique로 둔다.
+`applied_at`을 저장한다. target-scoped event만
+`(external_system,target_key,restore_epoch,source_generation,target_sequence)` partial unique로 두고,
+stream-scoped `cache_target.reconciled`는 target tuple 없이 전역 relay order로 식별한다.
 같은 ID+fingerprint 재전달은 no-op이고 같은 ID+다른 fingerprint는 invariant failure다.
 
 lease expiry/reclaim마다 `claim_id`와 `lease_token`은 달라지므로 event inbox에 claim 권한을
@@ -130,8 +136,9 @@ lease expiry/reclaim마다 `claim_id`와 `lease_token`은 달라지므로 event 
 `app.ktm_cache_target_consumer_state`는 consumer, active epoch, acknowledged cursor, applied
 high-watermark, reconcile snapshot/count/root/status, stream control ETag, `feature_cache_generation`을 가진다.
 
-event batch의 inbox insert, target tuple CAS, result projection, cache generation 증가, **local applied
-checkpoint**는 한 transaction이다. Map ACK는 그 뒤 호출한다. PinVi가 local commit 후 ACK 전에 죽으면
+event batch의 inbox insert, target event의 tuple CAS/result projection/cache generation 증가와 stream
+receipt의 checksum/high-watermark 적용, **local applied checkpoint**는 한 transaction이다. Map ACK는 그
+뒤 호출한다. PinVi가 local commit 후 ACK 전에 죽으면
 해당 inbox와 applied checkpoint를 보존하고 같은 `event_id` 재전달을 0회 추가 side effect로 처리한 뒤
 동일 global prefix ACK를 재전송한다. local applied cursor와 remote acknowledged cursor를 한 값으로
 축약하지 않는다.

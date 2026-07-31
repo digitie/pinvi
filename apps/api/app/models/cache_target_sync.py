@@ -171,14 +171,6 @@ class KtmCacheTargetEvent(Base):
 
     __tablename__ = "ktm_cache_target_events"
     __table_args__ = (
-        UniqueConstraint(
-            "external_system",
-            "target_key",
-            "restore_epoch",
-            "source_generation",
-            "target_sequence",
-            name="uq_ktm_ct_events_target_sequence",
-        ),
         CheckConstraint("external_system = 'pinvi'", name=conv("ck_ktm_ct_events_system")),
         CheckConstraint(
             "event_type IN ('cache_target.state_applied', "
@@ -187,13 +179,16 @@ class KtmCacheTargetEvent(Base):
             name=conv("ck_ktm_ct_events_type"),
         ),
         CheckConstraint("restore_epoch > 0", name=conv("ck_ktm_ct_events_epoch")),
-        CheckConstraint("source_generation > 0", name=conv("ck_ktm_ct_events_generation")),
-        CheckConstraint("target_sequence > 0", name=conv("ck_ktm_ct_events_sequence")),
-        CheckConstraint("relay_order > 0", name=conv("ck_ktm_ct_events_relay_order")),
         CheckConstraint(
-            "octet_length(source_payload_fingerprint) = 32",
-            name=conv("ck_ktm_ct_events_fingerprint"),
+            "(event_type = 'cache_target.reconciled' AND target_key IS NULL AND "
+            "target_id IS NULL AND source_generation IS NULL AND target_sequence IS NULL AND "
+            "source_payload_fingerprint IS NULL) OR "
+            "(event_type <> 'cache_target.reconciled' AND target_key IS NOT NULL AND "
+            "source_generation > 0 AND target_sequence > 0 AND "
+            "octet_length(source_payload_fingerprint) = 32)",
+            name=conv("ck_ktm_ct_events_scope_tuple"),
         ),
+        CheckConstraint("relay_order > 0", name=conv("ck_ktm_ct_events_relay_order")),
         CheckConstraint(
             "octet_length(payload_fingerprint) = 32",
             name=conv("ck_ktm_ct_events_payload_fingerprint"),
@@ -204,19 +199,29 @@ class KtmCacheTargetEvent(Base):
             "relay_order",
             name="uq_ktm_ct_events_stream_order",
         ),
+        Index(
+            "uq_ktm_ct_events_target_sequence",
+            "external_system",
+            "target_key",
+            "restore_epoch",
+            "source_generation",
+            "target_sequence",
+            unique=True,
+            postgresql_where=text("target_key IS NOT NULL"),
+        ),
         Index("ix_ktm_ct_events_epoch_relay", "restore_epoch", "relay_order"),
     )
 
     event_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     external_system: Mapped[str] = mapped_column(String(32), nullable=False)
-    target_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    target_key: Mapped[str | None] = mapped_column(String(36))
     target_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     restore_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    source_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    target_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_generation: Mapped[int | None] = mapped_column(BigInteger)
+    target_sequence: Mapped[int | None] = mapped_column(BigInteger)
     relay_order: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    source_payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    source_payload_fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
     payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

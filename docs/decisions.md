@@ -2750,6 +2750,8 @@ transactional하게 투영되지 않는다. Map 결과도 process-local cache re
 - Map result는 callback이 아니라 external system별 단일 전역 pull stream으로 소비한다. delivery ACK는
   `relay_order` contiguous prefix이고 target 상태 비교는
   `(restore_epoch, source_generation, target_sequence)`다.
+- `cache_target.reconciled`는 target tuple을 갖지 않는 stream-scoped receipt다. fixed snapshot
+  ID/count/Merkle root와 high-watermark만 적용하며 가짜 target key나 POI mutation을 만들지 않는다.
 - inbox insert, target tuple CAS, durable cache generation, local applied checkpoint를 한 transaction에 commit한
   뒤 ACK한다. ACK 전 crash의 재전달은 같은 event ID로 side effect 없이 처리한다.
 - Map-owned positive `restore_epoch`의 CAS/idempotent restore fence 뒤에만 restored writer를 열고, epoch가
