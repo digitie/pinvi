@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 n150 image command packaging 보정
+
+**작업**: n150 exact candidate image에서 정식 initial-cutover console command가 source package를
+찾지 못하는 배포 패키징 결함을 재현하고 수정했다.
+
+**변경**: Docker dependency cache layer는 유지하되 `app` source copy 뒤 project를 `--no-deps` editable
+install로 다시 등록한다. 이로써 `pinvi-cache-target-initial-cutover`가 작업 디렉터리의 암묵적 import
+path에 의존하지 않는다. Dockerfile 순서를 고정하는 회귀 테스트를 추가했다.
+
+**검증**: unit/Ruff 이후 exact production image를 다시 빌드하고 image console command `--help`와 n150
+initial cutover를 실행한다. ordinary API에는 recovery/restore token을 주입하지 않는 경계를 유지한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery 체크포인트
 
 **작업**: Map producer의 최종 service OpenAPI를 exact bytes로 고정하고 active reconciliation의

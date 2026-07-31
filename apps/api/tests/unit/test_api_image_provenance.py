@@ -296,6 +296,15 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     assert "pinvi_verify_api_image_provenance" in deploy
 
 
+def test_api_image_installs_console_scripts_after_copying_app_source() -> None:
+    dockerfile = (ROOT / "apps/api/Dockerfile").read_text(encoding="utf-8")
+
+    source_copy = dockerfile.index("COPY apps/api/app ./app")
+    project_install = dockerfile.index("RUN pip install --no-deps -e .")
+
+    assert source_copy < project_install
+
+
 def test_immutable_context_uses_exact_archive_and_excludes_worktree_drift(
     tmp_path: Path,
 ) -> None:

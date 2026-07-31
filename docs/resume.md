@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 n150 image command packaging
+
+n150 exact candidate image에서 `pinvi-cache-target-initial-cutover`가 `app`을 import하지 못하는 결함을
+재현했다. Docker dependency cache layer의 조기 editable install은 source가 없는 상태라 console script만
+만들고 package mapping을 등록하지 못했다. source copy 뒤 `pip install --no-deps -e .`로 project mapping을
+다시 등록하고 Dockerfile 순서 회귀 테스트를 추가했다.
+
+**다음 한 작업**: unit/Ruff와 exact production image의 console command `--help`를 확인한 뒤 n150
+initial cutover·crash/replay·Live UI gate를 계속한다. sync 기본값은 계속 off다.
+
 ## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery
 
 Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의 service OpenAPI exact bytes를
