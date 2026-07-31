@@ -2751,8 +2751,10 @@ transactional하게 투영되지 않는다. Map 결과도 process-local cache re
   `relay_order` contiguous prefix이고 target 상태 비교는
   `(restore_epoch, source_generation, target_sequence)`다.
 - `cache_target.reconciled`는 target tuple을 갖지 않는 stream-scoped receipt다. source fingerprint와
-  payload의 fixed snapshot ID/expected·actual Merkle root를 앞서 채택한 request-bound snapshot에
-  대조하며, count/high-watermark는 snapshot 값을 유지하고 가짜 target key나 POI mutation을 만들지 않는다.
+  payload의 request ID/fixed snapshot ID/expected·actual Merkle root를 앞서 고정한 durable reconciliation
+  expectation에 대조한다. 최신 일반 snapshot은 별도 관측값이므로 expectation을 덮어쓰지 않는다.
+  count/high-watermark는 expectation의 request-bound snapshot 값을 유지하고 가짜 target key나 POI
+  mutation을 만들지 않는다.
 - inbox insert, target tuple CAS, durable cache generation, local applied checkpoint를 한 transaction에 commit한
   뒤 ACK한다. ACK 전 crash의 재전달은 같은 event ID로 side effect 없이 처리한다.
 - batch 중간 semantic poison은 전체 local transaction을 rollback하고 성공한 contiguous prefix만 다시

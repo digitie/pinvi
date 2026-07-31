@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 request-bound reconciliation expectation 분리
+
+**실환경 발견**: n150에서 만료 lease 50건 중 target event 49건은 회수·ACK됐지만 마지막
+`cache_target.reconciled`가 dead-letter 됐다. completion 시 채택한 request-bound snapshot ID와 ordinary
+startup이 새로 만든 generic snapshot ID는 root/count가 같아도 서로 달랐고, 단일 consumer snapshot
+컬럼을 terminal receipt 기대값으로 재사용한 것이 원인이었다.
+
+**변경**: Map receipt의 `request_id`까지 exact contract로 받는다. `20260801_0047`에서
+`app.ktm_cache_target_reconciliation_expectations`를 추가해 request/snapshot/epoch/count/root/high-watermark를
+generic snapshot과 분리해 고정한다. receipt는 pending expectation을 잠가 exact identity를 검증한 뒤 같은
+inbox transaction에서 received로 종결한다. restore epoch 변경은 남은 pending expectation을 invalidated로
+닫는다.
+
+**검증**: 최신 generic snapshot이 바뀐 뒤에도 expectation이 유지되는 bootstrap 회귀, 실제 Map wire
+receipt→target 연속 ACK, lease 만료 뒤 같은 event 새 claim의 0회 추가 cache generation을 포함한 PostGIS
+23건과 Ruff/strict mypy를 통과했다.
+
 ## 2026-08-01 (codex) — T-VN-41 n150 stream receipt 계약/health 보정
 
 **작업**: n150 crash/reclaim에서 마지막 50-event lease가 만료돼도 재처리되지 않는 현상을 producer

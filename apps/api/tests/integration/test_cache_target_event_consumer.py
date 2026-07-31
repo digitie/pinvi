@@ -17,6 +17,7 @@ from app.models.cache_target_sync import (
     KtmCacheTargetEvent,
     KtmCacheTargetEventClaim,
     KtmCacheTargetEventClaimItem,
+    KtmCacheTargetReconciliationExpectation,
 )
 from app.services.cache_target_event_consumer import (
     CacheTargetClaim,
@@ -235,12 +236,26 @@ async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_gene
 ) -> None:  # type: ignore[no-untyped-def]
     await _seed_consumer(session_factory)
     root = b"r" * 32
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
     async with session_factory() as db:
         consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
         assert consumer is not None
-        consumer.snapshot_id = "snapshot-7"
+        consumer.snapshot_id = "newer-generic-snapshot"
         consumer.snapshot_count = 0
         consumer.snapshot_merkle_root = root
+        db.add(
+            KtmCacheTargetReconciliationExpectation(
+                request_id=request_id,
+                external_system="pinvi",
+                snapshot_id=snapshot_id,
+                restore_epoch=7,
+                snapshot_count=0,
+                snapshot_merkle_root=root,
+                high_watermark_cursor="cursor-0",
+                status="pending",
+            )
+        )
         await db.commit()
     event = CacheTargetEventRecord.model_validate(
         {
@@ -260,7 +275,8 @@ async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_gene
             "payload": {
                 "actual_merkle_root": root.hex(),
                 "expected_merkle_root": root.hex(),
-                "snapshot_id": "snapshot-7",
+                "request_id": str(request_id),
+                "snapshot_id": str(snapshot_id),
                 "status": "succeeded",
                 "version": "cache-target-reconciliation-v1",
             },
@@ -279,3 +295,7 @@ async def test_stream_reconciled_has_no_fake_target_and_does_not_bump_cache_gene
         assert consumer is not None
         assert consumer.feature_cache_generation == 0
         assert consumer.high_watermark_cursor is None
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        assert expectation is not None
+        assert expectation.status == "received"
+        assert expectation.receipt_event_id == event.event_id

@@ -296,6 +296,77 @@ class KtmCacheTargetConsumer(Base, TimestampMixin):
     initial_cutover_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class KtmCacheTargetReconciliationExpectation(Base, TimestampMixin):
+    """request-bound fixed snapshot과 terminal stream receipt의 durable 결박."""
+
+    __tablename__ = "ktm_cache_target_reconciliation_expectations"
+    __table_args__ = (
+        CheckConstraint(
+            "external_system = 'pinvi'",
+            name=conv("ck_ktm_ct_reconcile_expectations_system"),
+        ),
+        CheckConstraint(
+            "restore_epoch > 0",
+            name=conv("ck_ktm_ct_reconcile_expectations_epoch"),
+        ),
+        CheckConstraint(
+            "snapshot_count >= 0",
+            name=conv("ck_ktm_ct_reconcile_expectations_count"),
+        ),
+        CheckConstraint(
+            "octet_length(snapshot_merkle_root) = 32",
+            name=conv("ck_ktm_ct_reconcile_expectations_root"),
+        ),
+        CheckConstraint(
+            "length(high_watermark_cursor) > 0",
+            name=conv("ck_ktm_ct_reconcile_expectations_cursor"),
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'received', 'invalidated')",
+            name=conv("ck_ktm_ct_reconcile_expectations_status"),
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND receipt_event_id IS NULL AND resolved_at IS NULL) OR "
+            "(status = 'received' AND receipt_event_id IS NOT NULL AND resolved_at IS NOT NULL) OR "
+            "(status = 'invalidated' AND receipt_event_id IS NULL AND resolved_at IS NOT NULL)",
+            name=conv("ck_ktm_ct_reconcile_expectations_resolution"),
+        ),
+        UniqueConstraint(
+            "snapshot_id",
+            name="uq_ktm_ct_reconcile_expectations_snapshot",
+        ),
+        UniqueConstraint(
+            "receipt_event_id",
+            name="uq_ktm_ct_reconcile_expectations_receipt",
+        ),
+        Index(
+            "ix_ktm_ct_reconcile_expectations_pending",
+            "external_system",
+            "restore_epoch",
+            "created_at",
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    request_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    external_system: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pinvi")
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    restore_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    snapshot_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    snapshot_merkle_root: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    high_watermark_cursor: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    receipt_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "app.ktm_cache_target_events.event_id",
+            ondelete="RESTRICT",
+            name="fk_ktm_ct_reconcile_expectations_receipt",
+        ),
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class KtmCacheTargetEventClaim(Base):
     """한 pull lease의 mutable ACK 권한과 완료 상태."""
 

@@ -1,6 +1,6 @@
 # resume.md
 
-## 2026-08-01 (codex) — T-VN-41 n150 stream receipt fail-closed 보강
+## 2026-08-01 (codex) — T-VN-41 request-bound receipt expectation 보강
 
 n150 crash/reclaim에서 relay 201~250 claim이 만료된 채 멈춘 원인을 확인했다. Map ADR-081과 pinned
 service OpenAPI는 stream-scoped `cache_target.reconciled.source_payload_fingerprint`에 fixed snapshot
@@ -8,18 +8,19 @@ Merkle root를 필수로 보내지만, PinVi DTO/DB/execplan이 이 필드를 ta
 허용했다. claim response Pydantic 검증 예외가 consumer task를 종료하면서 durable health는 계속
 `ready=true`였으므로 false-green도 함께 있었다.
 
-DTO와 inbox를 producer 정본에 맞추고 `20260801_0046`에서 기존 stream receipt는 payload Merkle root로
-backfill한 뒤 fingerprint를 `NOT NULL` 32-byte로 강제한다. 예상하지 못한 consumer 예외는 durable
-consumer를 `blocked`로 닫아 health가 fail-closed가 되게 했다. reconciled payload도 Map의 실제
-`snapshot_id/expected_merkle_root/actual_merkle_root/status/version` exact receipt로 검증하고, count와
-high-watermark는 앞서 채택한 request-bound snapshot 값을 유지한다.
+DTO와 inbox를 producer 정본에 맞추고 `20260801_0046`에서 stream fingerprint를 `NOT NULL` 32-byte로
+강제했다. 이어 n150에서 request-bound snapshot ID가 ordinary startup의 generic snapshot ID로
+덮어써지는 두 번째 결함을 실증했다. `20260801_0047`의 durable reconciliation expectation 테이블에
+`request_id/snapshot_id/epoch/count/root/high-watermark`를 별도로 고정하고, Map terminal receipt가 exact
+expectation을 원자적으로 소비하게 바꿨다. 예상하지 못한 consumer 예외도 durable consumer를
+`blocked`로 닫아 health false-green을 차단한다.
 
-**검증**: cache-target consumer/schema/worker PostGIS 집중 22건, Ruff, strict mypy가 통과했다. fresh
-PostGIS에서 `0045(null receipt) → 0046(backfill+NOT NULL) → 0045(nullable+null) → 0046` 왕복과
-version/컬럼/지문을 확인했다.
+**검증**: generic snapshot overwrite 회귀와 lease-expiry/new-claim 중복 side effect 방지를 포함한
+cache-target consumer/schema/worker PostGIS 집중 23건, Ruff, strict mypy가 통과했다. `0046`까지의 기존
+fingerprint migration 왕복도 통과했다.
 
-**다음 한 작업**: 새 exact production image를 n150 isolated DB의 `0046`으로 올리고 만료 lease reclaim이
-250까지 ACK되는지 확인한 뒤 destructive Live UI recovery gate를 실행한다.
+**다음 한 작업**: Map `request_id` producer 계약과 PinVi `0047` exact image를 n150 isolated 환경에 올려
+relay 250 receipt까지 ACK되는지 재확인한 뒤 destructive Live UI recovery gate를 실행한다.
 
 ## 2026-08-01 (codex) — T-VN-41 n150 image command packaging
 

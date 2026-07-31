@@ -20,6 +20,7 @@ from app.models.cache_target_sync import (
     KtmCacheTargetEventClaim,
     KtmCacheTargetEventClaimItem,
     KtmCacheTargetHead,
+    KtmCacheTargetReconciliationExpectation,
 )
 
 EventType = Literal[
@@ -217,6 +218,76 @@ class CacheTargetSnapshot(_StrictModel):
         return _validate_sha256_hex(value)
 
 
+async def record_cache_target_reconciliation_expectation(
+    db: AsyncSession,
+    *,
+    request_id: uuid.UUID,
+    snapshot: CacheTargetSnapshot,
+) -> KtmCacheTargetReconciliationExpectation:
+    """active request의 fixed snapshot identity를 terminal receipt보다 먼저 고정한다."""
+    try:
+        snapshot_id = uuid.UUID(snapshot.snapshot_id)
+    except ValueError as exc:
+        raise CacheTargetEventConflictError(
+            "reconciliation snapshot_id가 UUID가 아닙니다."
+        ) from exc
+    if str(snapshot_id) != snapshot.snapshot_id:
+        raise CacheTargetEventConflictError(
+            "reconciliation snapshot_id가 canonical UUID가 아닙니다."
+        )
+    material = (
+        snapshot_id,
+        snapshot.restore_epoch,
+        snapshot.count,
+        bytes.fromhex(snapshot.merkle_root),
+        snapshot.high_watermark_cursor,
+    )
+    expectation = await db.scalar(
+        select(KtmCacheTargetReconciliationExpectation)
+        .where(KtmCacheTargetReconciliationExpectation.request_id == request_id)
+        .with_for_update()
+    )
+    if expectation is None:
+        snapshot_owner = await db.scalar(
+            select(KtmCacheTargetReconciliationExpectation.request_id).where(
+                KtmCacheTargetReconciliationExpectation.snapshot_id == snapshot_id
+            )
+        )
+        if snapshot_owner is not None:
+            raise CacheTargetEventConflictError(
+                "reconciliation snapshot_id가 다른 request에 이미 결박됐습니다."
+            )
+        expectation = KtmCacheTargetReconciliationExpectation(
+            request_id=request_id,
+            external_system="pinvi",
+            snapshot_id=snapshot_id,
+            restore_epoch=snapshot.restore_epoch,
+            snapshot_count=snapshot.count,
+            snapshot_merkle_root=bytes.fromhex(snapshot.merkle_root),
+            high_watermark_cursor=snapshot.high_watermark_cursor,
+            status="pending",
+        )
+        db.add(expectation)
+        await db.flush()
+        return expectation
+    existing_material = (
+        expectation.snapshot_id,
+        expectation.restore_epoch,
+        expectation.snapshot_count,
+        expectation.snapshot_merkle_root,
+        expectation.high_watermark_cursor,
+    )
+    if existing_material != material or expectation.external_system != "pinvi":
+        raise CacheTargetEventConflictError(
+            "같은 reconciliation request의 fixed snapshot identity가 바뀌었습니다."
+        )
+    if expectation.status != "pending":
+        raise CacheTargetEventConflictError(
+            "종결된 reconciliation expectation을 다시 active로 채택할 수 없습니다."
+        )
+    return expectation
+
+
 def _event_material(event: CacheTargetEventRecord) -> tuple[object, ...]:
     return (
         event.event_type,
@@ -381,7 +452,12 @@ async def apply_cache_target_claim(
                 await _apply_target_tuple(db, event=event)
                 target_event_count += 1
             else:
-                _apply_stream_reconciled(consumer, event=event)
+                await _apply_stream_reconciled(
+                    db,
+                    consumer,
+                    event=event,
+                    resolved_at=current,
+                )
         except CacheTargetEventApplyError:
             raise
         except CacheTargetConsumerError as exc:
@@ -453,25 +529,31 @@ async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord
     head.remote_status = str(status)[:32] if status is not None else event.event_type[:32]
 
 
-def _apply_stream_reconciled(
-    consumer: KtmCacheTargetConsumer, *, event: CacheTargetEventRecord
+async def _apply_stream_reconciled(
+    db: AsyncSession,
+    consumer: KtmCacheTargetConsumer,
+    *,
+    event: CacheTargetEventRecord,
+    resolved_at: datetime,
 ) -> None:
     payload = event.payload
     required = {
         "actual_merkle_root",
         "expected_merkle_root",
+        "request_id",
         "snapshot_id",
         "status",
         "version",
     }
     if set(payload) != required:
         raise CacheTargetEventConflictError("stream reconciled payload field가 다릅니다.")
-    snapshot_id = payload["snapshot_id"]
+    request_id_value = payload["request_id"]
+    snapshot_id_value = payload["snapshot_id"]
     actual_merkle_root = payload["actual_merkle_root"]
     expected_merkle_root = payload["expected_merkle_root"]
     if (
-        not isinstance(snapshot_id, str)
-        or not snapshot_id
+        not isinstance(request_id_value, str)
+        or not isinstance(snapshot_id_value, str)
         or not isinstance(actual_merkle_root, str)
         or not isinstance(expected_merkle_root, str)
         or payload["status"] != "succeeded"
@@ -479,19 +561,40 @@ def _apply_stream_reconciled(
     ):
         raise CacheTargetEventConflictError("stream reconciled payload 타입이 다릅니다.")
     try:
+        request_id = uuid.UUID(request_id_value)
+        snapshot_id = uuid.UUID(snapshot_id_value)
         actual_root = bytes.fromhex(_validate_sha256_hex(actual_merkle_root))
         expected_root = bytes.fromhex(_validate_sha256_hex(expected_merkle_root))
     except ValueError as exc:
-        raise CacheTargetEventConflictError("stream reconciled Merkle root가 다릅니다.") from exc
+        raise CacheTargetEventConflictError(
+            "stream reconciled request/snapshot/root가 canonical하지 않습니다."
+        ) from exc
     if (
-        consumer.snapshot_id != snapshot_id
+        str(request_id) != request_id_value
+        or str(snapshot_id) != snapshot_id_value
         or actual_root != expected_root
         or expected_root != bytes.fromhex(event.source_payload_fingerprint)
-        or consumer.snapshot_merkle_root != expected_root
+    ):
+        raise CacheTargetEventConflictError("stream reconciled receipt material이 서로 다릅니다.")
+    expectation = await db.scalar(
+        select(KtmCacheTargetReconciliationExpectation)
+        .where(KtmCacheTargetReconciliationExpectation.request_id == request_id)
+        .with_for_update()
+    )
+    if (
+        expectation is None
+        or expectation.status != "pending"
+        or expectation.external_system != event.external_system
+        or expectation.snapshot_id != snapshot_id
+        or expectation.restore_epoch != event.restore_epoch
+        or expectation.snapshot_merkle_root != expected_root
     ):
         raise CacheTargetEventConflictError(
-            "stream reconciled receipt가 fixed snapshot과 다릅니다."
+            "stream reconciled receipt가 durable request-bound expectation과 다릅니다."
         )
+    expectation.status = "received"
+    expectation.receipt_event_id = event.event_id
+    expectation.resolved_at = resolved_at
     consumer.reconcile_status = "matched"
 
 

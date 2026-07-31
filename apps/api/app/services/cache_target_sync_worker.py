@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager, suppress
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -25,7 +25,11 @@ from app.clients.kor_travel_map_cache_target import (
 )
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.models.cache_target_sync import KtmCacheTargetConsumer, KtmCacheTargetHead
+from app.models.cache_target_sync import (
+    KtmCacheTargetConsumer,
+    KtmCacheTargetHead,
+    KtmCacheTargetReconciliationExpectation,
+)
 from app.services.cache_target_command_publisher import publish_cache_target_batch
 from app.services.cache_target_event_consumer import (
     CacheTargetAck,
@@ -36,6 +40,7 @@ from app.services.cache_target_event_consumer import (
     load_pending_cache_target_ack,
     mark_cache_target_acknowledged,
     reconcile_cache_target_snapshot,
+    record_cache_target_reconciliation_expectation,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,6 +112,11 @@ async def _adopt_stream_epoch(
         await db.flush()
         return consumer
     if consumer.active_restore_epoch != stream.restore_epoch:
+        await db.execute(
+            update(KtmCacheTargetReconciliationExpectation)
+            .where(KtmCacheTargetReconciliationExpectation.status == "pending")
+            .values(status="invalidated", resolved_at=func.now())
+        )
         consumer.active_restore_epoch = stream.restore_epoch
         consumer.local_applied_cursor = None
         consumer.remote_acked_cursor = None
@@ -169,6 +179,12 @@ async def bootstrap_cache_target_sync(
         raise RuntimeError("Map stream과 fixed snapshot restore epoch가 다릅니다.")
     async with session_factory() as db:
         await _adopt_stream_epoch(db, stream=stream, consumer_id=consumer_id)
+        if active is not None:
+            await record_cache_target_reconciliation_expectation(
+                db,
+                request_id=active.request_id,
+                snapshot=snapshot,
+            )
         matched = await reconcile_cache_target_snapshot(db, snapshot, consumer_id=consumer_id)
         if active is not None:
             consumer = await db.get(KtmCacheTargetConsumer, consumer_id)

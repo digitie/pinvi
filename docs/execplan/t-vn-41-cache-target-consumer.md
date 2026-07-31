@@ -67,9 +67,11 @@ source_payload_fingerprint, occurred_at, typed payload
 `cache_target.reconciled`는 `event_scope=stream`인 stream receipt다. `target_key`, `target_id`,
 `source_generation`, `target_sequence`는 모두 `null`이며 가짜 target identity를 만들지 않는다.
 `source_payload_fingerprint`는 Map ADR-081에 따라 비교를 통과한 fixed snapshot Merkle root를 담는다.
-payload의 fixed snapshot ID와 expected/actual Merkle root, 성공 status, version을 검증한다. count와
-high-watermark는 앞서 채택한 request-bound snapshot 값을 유지한다. receipt는 consumer checkpoint만
-전진시키고 POI head나 feature cache generation은 변경하지 않는다.
+payload의 reconciliation request ID, fixed snapshot ID, expected/actual Merkle root, 성공 status, version을
+검증한다. active descriptor를 읽을 때 request-bound snapshot identity를 durable expectation으로 먼저
+고정하며, 이후 일반 snapshot bootstrap이 최신 snapshot ID를 바꾸더라도 이 expectation은 보존한다.
+receipt는 exact expectation을 transaction 안에서 소비하고 consumer checkpoint만 전진시키며, POI head나
+feature cache generation은 변경하지 않는다.
 
 `event_type` discriminator와 허용 값은 exact하다.
 
@@ -139,8 +141,12 @@ lease expiry/reclaim마다 `claim_id`와 `lease_token`은 달라지므로 event 
 `app.ktm_cache_target_event_claim_items`가 claim-event별 cursor/payload fingerprint/ACK receipt를
 보존한다. 같은 immutable event가 여러 claim item에서 참조되는 것이 정상이다.
 
-`app.ktm_cache_target_consumer_state`는 consumer, active epoch, acknowledged cursor, applied
-high-watermark, reconcile snapshot/count/root/status, stream control ETag, `feature_cache_generation`을 가진다.
+`app.ktm_cache_target_consumers`는 consumer, active epoch, acknowledged cursor, applied high-watermark,
+최신 일반 snapshot/count/root/status, stream control ETag, `feature_cache_generation`을 가진다.
+`app.ktm_cache_target_reconciliation_expectations`는 request ID를 PK로 fixed snapshot ID/epoch/count/root/
+high-watermark를 고정한다. terminal receipt는 payload의 request ID로 pending expectation을 잠그고 exact
+snapshot/root를 검증한 뒤 `received + receipt_event_id + resolved_at`으로 원자적으로 종결한다. restore
+epoch 전환은 미수신 expectation을 `invalidated`로 닫는다.
 
 event batch의 inbox insert, target event의 tuple CAS/result projection/cache generation 증가와 stream
 receipt의 checksum/high-watermark 적용, **local applied checkpoint**는 한 transaction이다. Map ACK는 그

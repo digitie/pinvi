@@ -353,6 +353,7 @@ async def test_stream_event_snapshot_fingerprint_is_database_required(
                 payload={
                     "actual_merkle_root": (b"r" * 32).hex(),
                     "expected_merkle_root": (b"r" * 32).hex(),
+                    "request_id": str(uuid.uuid4()),
                     "snapshot_id": str(uuid.uuid4()),
                     "status": "succeeded",
                     "version": "cache-target-reconciliation-v1",

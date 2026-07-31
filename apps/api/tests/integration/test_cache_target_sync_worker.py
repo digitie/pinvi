@@ -17,8 +17,17 @@ from app.clients.kor_travel_map_cache_target import (
     CacheTargetServiceProblem,
 )
 from app.core.config import settings
-from app.models.cache_target_sync import KtmCacheTargetConsumer, KtmCacheTargetEvent
-from app.services.cache_target_event_consumer import CacheTargetClaim, CacheTargetEventRecord
+from app.models.cache_target_sync import (
+    KtmCacheTargetConsumer,
+    KtmCacheTargetEvent,
+    KtmCacheTargetEventClaim,
+    KtmCacheTargetReconciliationExpectation,
+)
+from app.services.cache_target_event_consumer import (
+    CacheTargetClaim,
+    CacheTargetEventRecord,
+    apply_cache_target_claim,
+)
 from app.services.cache_target_sync_worker import (
     _consumer_loop,
     bootstrap_cache_target_sync,
@@ -67,6 +76,7 @@ def _claim_with_mid_stream_poison() -> CacheTargetClaim:
             "payload": {
                 "actual_merkle_root": "72" * 32,
                 "expected_merkle_root": "72" * 32,
+                "request_id": str(uuid.uuid4()),
                 "snapshot_id": "wrong-snapshot",
                 "status": "succeeded",
                 "version": "cache-target-reconciliation-v1",
@@ -159,9 +169,25 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
     reconciled_event_id = uuid.uuid4()
     target_event_id = uuid.uuid4()
     target_key = uuid.uuid4()
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
     root = (b"r" * 32).hex()
     occurred_at = datetime.now(UTC).isoformat()
     calls: list[tuple[str, dict[str, object]]] = []
+    async with session_factory() as db:
+        db.add(
+            KtmCacheTargetReconciliationExpectation(
+                request_id=request_id,
+                external_system="pinvi",
+                snapshot_id=snapshot_id,
+                restore_epoch=7,
+                snapshot_count=0,
+                snapshot_merkle_root=bytes.fromhex(root),
+                high_watermark_cursor="cursor-0",
+                status="pending",
+            )
+        )
+        await db.commit()
     claim = {
         "claim_id": str(claim_id),
         "external_system": "pinvi",
@@ -190,7 +216,8 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
                 "payload": {
                     "actual_merkle_root": root,
                     "expected_merkle_root": root,
-                    "snapshot_id": "expected-snapshot",
+                    "request_id": str(request_id),
+                    "snapshot_id": str(snapshot_id),
                     "status": "succeeded",
                     "version": "cache-target-reconciliation-v1",
                 },
@@ -260,6 +287,105 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
         assert consumer.remote_acked_cursor == "cursor-2"
         assert consumer.feature_cache_generation == 1
         assert [event.event_id for event in inbox] == [reconciled_event_id, target_event_id]
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        assert expectation is not None
+        assert expectation.status == "received"
+        assert expectation.receipt_event_id == reconciled_event_id
+
+
+async def test_expired_claim_reclaim_deduplicates_target_side_effect(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_ready_consumer(session_factory)
+    event_id = uuid.uuid4()
+    target_key = uuid.uuid4()
+    event = {
+        "event_id": str(event_id),
+        "event_type": "cache_target.state_applied",
+        "event_scope": "target",
+        "external_system": "pinvi",
+        "target_key": str(target_key),
+        "target_id": str(uuid.uuid4()),
+        "restore_epoch": 7,
+        "source_generation": 1,
+        "target_sequence": 1,
+        "relay_order": 1,
+        "cursor": "cursor-1",
+        "source_payload_fingerprint": "73" * 32,
+        "payload_fingerprint": "70" * 32,
+        "payload": {"status": "applied"},
+        "occurred_at": datetime.now(UTC).isoformat(),
+    }
+    now = datetime.now(UTC)
+    first_claim = CacheTargetClaim.model_validate(
+        {
+            "claim_id": str(uuid.uuid4()),
+            "external_system": "pinvi",
+            "consumer_id": "pinvi-cache-target-consumer",
+            "lease_token": str(uuid.uuid4()),
+            "status": "active",
+            "first_relay_order": 1,
+            "last_relay_order": 1,
+            "acked_through": None,
+            "lease_expires_at": (now + timedelta(milliseconds=20)).isoformat(),
+            "events": [event],
+            "idempotent_replay": False,
+        }
+    )
+    async with session_factory() as db:
+        await apply_cache_target_claim(db, first_claim, now=now)
+        await db.commit()
+    await asyncio.sleep(0.03)
+
+    second_claim = {
+        **first_claim.model_dump(mode="json"),
+        "claim_id": str(uuid.uuid4()),
+        "lease_token": str(uuid.uuid4()),
+        "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+    }
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("event-claims"):
+            return httpx.Response(200, json={"data": second_claim, "meta": {}})
+        assert request.url.path.endswith("event-acks")
+        return httpx.Response(200, json={"data": {"status": "ok"}, "meta": {}})
+
+    client = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler)),
+        role="consumer",
+        token="u" * 32,
+    )
+    try:
+        assert await consume_cache_target_once(
+            session_factory,
+            client=client,
+            consumer_id="pinvi-cache-target-consumer",
+            batch_size=100,
+            lease_seconds=60,
+            max_attempts=5,
+        )
+    finally:
+        await client.aclose()
+
+    assert calls == [
+        "/v1/service/cache-target-event-claims",
+        "/v1/service/cache-target-event-acks",
+    ]
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        event_count = len(list(await db.scalars(select(KtmCacheTargetEvent))))
+        claims = list(
+            await db.scalars(
+                select(KtmCacheTargetEventClaim).order_by(KtmCacheTargetEventClaim.received_at)
+            )
+        )
+        assert consumer is not None
+        assert consumer.feature_cache_generation == 1
+        assert consumer.remote_acked_cursor == "cursor-1"
+        assert event_count == 1
+        assert [claim.status for claim in claims] == ["expired", "acked"]
 
 
 async def test_bootstrap_adopts_new_epoch_and_matching_empty_snapshot(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -345,13 +471,14 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
 ) -> None:  # type: ignore[no-untyped-def]
     request_id = uuid.uuid4()
     snapshot_id = uuid.uuid4()
+    generic_snapshot_id = uuid.uuid4()
     empty_root = hashlib.sha256(b"KTMCTEMPTY\x00").hexdigest()
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request.url.path)
         if request.url.path == "/v1/service/cache-target-streams/pinvi":
-            completed = calls.count(request.url.path) == 2
+            completed = calls.count(request.url.path) >= 2
             etag = '"pinvi:8"' if completed else '"pinvi:7"'
             return httpx.Response(
                 200,
@@ -402,6 +529,21 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                     "meta": {"page": {"next_cursor": None}},
                 },
             )
+        if request.url.path == "/v1/service/cache-target-snapshots/pinvi":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "snapshot_id": str(generic_snapshot_id),
+                        "restore_epoch": 7,
+                        "high_watermark_cursor": "cursor-1",
+                        "count": 0,
+                        "merkle_root": empty_root,
+                        "items": [],
+                    },
+                    "meta": {},
+                },
+            )
         assert request.url.path.endswith(f"/{request_id}/completions")
         completion = json.loads(request.content)
         assert completion == {
@@ -434,6 +576,11 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
             consumer_client=client,
             consumer_id="pinvi-cache-target-consumer",
         )
+        await bootstrap_cache_target_sync(
+            session_factory,
+            consumer_client=client,
+            consumer_id="pinvi-cache-target-consumer",
+        )
     finally:
         await client.aclose()
 
@@ -442,13 +589,20 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
         f"/v1/service/cache-target-reconciliations/{request_id}/snapshot",
         f"/v1/service/cache-target-reconciliations/{request_id}/completions",
         "/v1/service/cache-target-streams/pinvi",
+        "/v1/service/cache-target-streams/pinvi",
+        "/v1/service/cache-target-snapshots/pinvi",
     ]
     async with session_factory() as db:
         consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
         assert consumer is not None
-        assert consumer.snapshot_id == str(snapshot_id)
+        assert consumer.snapshot_id == str(generic_snapshot_id)
         assert consumer.ready is True
         assert consumer.stream_control_etag == '"pinvi:8"'
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        assert expectation is not None
+        assert expectation.snapshot_id == snapshot_id
+        assert expectation.snapshot_merkle_root == bytes.fromhex(empty_root)
+        assert expectation.status == "pending"
 
 
 async def test_mid_claim_permanent_failure_acks_prefix_before_nack(session_factory) -> None:  # type: ignore[no-untyped-def]
