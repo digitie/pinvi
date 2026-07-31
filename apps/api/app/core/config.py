@@ -14,11 +14,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
-    "11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a"
+    "af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab"
 )
 # Vendored artifact의 immutable provenance다. 배포 이미지나 Map /version의 git SHA와 비교하지 않는다.
-CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "686a9b05beed384a8a9b202a515790c7770dd834"
-CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 1
+CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "c999a82c0e889806613e1af0e251337873e41fcc"
+CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 2
 
 
 class Settings(BaseSettings):

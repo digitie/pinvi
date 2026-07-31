@@ -15,6 +15,12 @@ generic snapshot과 분리해 고정한다. receipt는 pending expectation을 �
 inbox transaction에서 received로 종결한다. restore epoch 변경은 남은 pending expectation을 invalidated로
 닫는다.
 
+Map functional owner `c999a82c0e889806613e1af0e251337873e41fcc`, export artifact
+`e315bfc4dcc58e466b11f93b3991d91e7b446cdf`의 service OpenAPI exact bytes를
+SHA-256 `af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`, contract generation
+`2`로 재핀했다. generation 2는 required receipt `request_id`와 recovery operation의 nullable
+request-bound `snapshot_id`를 포함한다.
+
 **검증**: 최신 generic snapshot이 바뀐 뒤에도 expectation이 유지되는 bootstrap 회귀, 실제 Map wire
 receipt→target 연속 ACK, lease 만료 뒤 같은 event 새 claim의 0회 추가 cache generation을 포함한 PostGIS
 23건과 Ruff/strict mypy를 통과했다. 별도 migration 회귀는 `0045→0046` actual/legacy Merkle backfill,

@@ -15,6 +15,10 @@ DTO와 inbox를 producer 정본에 맞추고 `20260801_0046`에서 stream finger
 expectation을 원자적으로 소비하게 바꿨다. 예상하지 못한 consumer 예외도 durable consumer를
 `blocked`로 닫아 health false-green을 차단한다.
 
+Map functional owner `c999a82c0e889806613e1af0e251337873e41fcc`와 export artifact
+`e315bfc4dcc58e466b11f93b3991d91e7b446cdf`의 exact service OpenAPI를 generation `2`, SHA-256
+`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`로 재핀했다.
+
 **검증**: generic snapshot overwrite 회귀와 lease-expiry/new-claim 중복 side effect 방지를 포함한
 cache-target consumer/schema/worker PostGIS 집중 23건, Ruff, strict mypy가 통과했다. `0046`까지의 기존
 fingerprint migration은 actual/legacy backfill, invalid NULL fail-close, downgrade CHECK 복원과 재upgrade를

@@ -174,16 +174,20 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의
+서비스 계약은 Map export commit `e315bfc4dcc58e466b11f93b3991d91e7b446cdf`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`이고, sync enable 설정의
-functional artifact owner revision `686a9b05beed384a8a9b202a515790c7770dd834`과 contract generation `1`도
+`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`이고, sync enable 설정의
+functional artifact owner revision `c999a82c0e889806613e1af0e251337873e41fcc`과 contract generation `2`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
 뒤에만 PinVi consumer를 ready로 연다.
+
+generation 2는 terminal `cache_target.reconciled` payload의 required `request_id`와 admin recovery
+operation receipt의 nullable request-bound `snapshot_id`를 추가한 breaking 계약이다. PinVi는 receipt의
+request/snapshot/epoch/root를 durable expectation과 exact 대조하며 generic snapshot identity와 섞지 않는다.
 
 최초 Map 0건·PinVi N건 cutover는 일반 worker startup으로 해결하지 않는다. 전용 runner가 PinVi DB writer
 fence를 보유한 동안 recovery begin(`preparing`) → pending PUT drain → reconciliation ETag 기반 seal

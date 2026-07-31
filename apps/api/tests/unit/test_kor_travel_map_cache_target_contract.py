@@ -9,15 +9,16 @@ from typing import Any
 
 from app.core.config import (
     CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
+    CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
     CACHE_TARGET_SERVICE_OPENAPI_SHA256,
 )
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "b54ea8aa450800e1ad5db1a71d14310a24cceb5b"
-_FUNCTIONAL_OWNER_COMMIT = "686a9b05beed384a8a9b202a515790c7770dd834"
-_SNAPSHOT_SHA256 = "11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a"
+_ARTIFACT_COMMIT = "e315bfc4dcc58e466b11f93b3991d91e7b446cdf"
+_FUNCTIONAL_OWNER_COMMIT = "c999a82c0e889806613e1af0e251337873e41fcc"
+_SNAPSHOT_SHA256 = "af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab"
 
 
 def _spec() -> dict[str, Any]:
@@ -30,6 +31,7 @@ def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 2
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -161,6 +163,31 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         "actual_merkle_root",
     }
     assert completion["properties"]["actual_merkle_root"]["pattern"] == "^[0-9a-f]{64}$"
+
+    reconciled = schemas["CacheTargetReconciledPayload"]
+    assert reconciled["additionalProperties"] is False
+    assert set(reconciled["required"]) == {
+        "request_id",
+        "snapshot_id",
+        "actual_merkle_root",
+        "expected_merkle_root",
+        "status",
+        "version",
+    }
+    assert reconciled["properties"]["request_id"]["format"] == "uuid"
+    assert reconciled["properties"]["snapshot_id"]["format"] == "uuid"
+    for field in ("actual_merkle_root", "expected_merkle_root"):
+        assert reconciled["properties"][field]["pattern"] == "^[0-9a-f]{64}$"
+    assert reconciled["properties"]["status"]["const"] == "succeeded"
+    assert reconciled["properties"]["version"]["const"] == "cache-target-reconciliation-v1"
+
+    operation = schemas["CacheTargetRecoveryOperationRecord"]
+    assert operation["additionalProperties"] is False
+    assert set(operation["required"]) == {"operation_id", "status"}
+    assert operation["properties"]["snapshot_id"]["anyOf"] == [
+        {"format": "uuid", "type": "string"},
+        {"type": "null"},
+    ]
 
     service_token = spec["components"]["securitySchemes"]["ServiceToken"]
     assert service_token["type"] == "apiKey"

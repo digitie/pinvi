@@ -210,12 +210,16 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의
+서비스 계약은 Map export commit `e315bfc4dcc58e466b11f93b3991d91e7b446cdf`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `686a9b05beed384a8a9b202a515790c7770dd834`, contract generation `1`이
+`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`다. sync를 켤 때 이 SHA,
+functional artifact owner revision `c999a82c0e889806613e1af0e251337873e41fcc`, contract generation `2`가
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
+
+generation 2는 `cache_target.reconciled.request_id`와 recovery operation의 request-bound
+`snapshot_id`를 고정한다. consumer는 terminal receipt를 mutable generic snapshot이 아니라 durable
+request expectation과 대조하고 inbox transaction에서 한 번만 received로 종결한다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible
