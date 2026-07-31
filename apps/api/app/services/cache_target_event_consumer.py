@@ -312,7 +312,9 @@ async def apply_cache_target_claim(
             stored_events.append(stored)
             continue
         if last_order and event.relay_order != last_order + 1:
-            raise CacheTargetEventGapError("local applied prefix 다음 relay_order가 누락되었습니다.")
+            raise CacheTargetEventGapError(
+                "local applied prefix 다음 relay_order가 누락되었습니다."
+            )
         stored = KtmCacheTargetEvent(
             event_id=event.event_id,
             event_type=event.event_type,
@@ -370,7 +372,9 @@ async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord
         return
     source_fingerprint = bytes.fromhex(event.source_payload_fingerprint)
     if event.source_generation > head.source_generation:
-        raise CacheTargetEventConflictError("Map source_generation이 PinVi desired head보다 큽니다.")
+        raise CacheTargetEventConflictError(
+            "Map source_generation이 PinVi desired head보다 큽니다."
+        )
     if (
         event.source_generation == head.source_generation
         and source_fingerprint != head.source_payload_fingerprint
@@ -491,8 +495,14 @@ async def mark_cache_target_acknowledged(
         .where(KtmCacheTargetEventClaim.claim_id == ack.claim_id)
         .with_for_update()
     )
-    if claim is None or claim.consumer_id != ack.consumer_id or claim.lease_token != ack.lease_token:
-        raise CacheTargetEventConflictError("ACK claim/lease identity가 durable receipt와 다릅니다.")
+    if (
+        claim is None
+        or claim.consumer_id != ack.consumer_id
+        or claim.lease_token != ack.lease_token
+    ):
+        raise CacheTargetEventConflictError(
+            "ACK claim/lease identity가 durable receipt와 다릅니다."
+        )
     if claim.status == "acked":
         if claim.acked_through_cursor != ack.through_cursor:
             raise CacheTargetEventConflictError("완료된 claim의 ACK cursor가 다릅니다.")

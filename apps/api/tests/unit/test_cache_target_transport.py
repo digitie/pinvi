@@ -185,9 +185,7 @@ async def test_problem_preserves_typed_status_code_without_secret_body_logging()
     ("permanent", "expected"),
     [(True, "permanent"), (False, "transient")],
 )
-def test_nack_disposition_and_error_fingerprint_are_typed(
-    permanent: bool, expected: str
-) -> None:
+def test_nack_disposition_and_error_fingerprint_are_typed(permanent: bool, expected: str) -> None:
     body = build_cache_target_nack(
         claim_id=uuid.uuid4(),
         lease_token=uuid.uuid4(),

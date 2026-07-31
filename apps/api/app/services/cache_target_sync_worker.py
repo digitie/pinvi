@@ -103,9 +103,7 @@ async def bootstrap_cache_target_sync(
         raise RuntimeError("Map stream과 fixed snapshot restore epoch가 다릅니다.")
     async with session_factory() as db:
         await _adopt_stream_epoch(db, stream=stream, consumer_id=consumer_id)
-        matched = await reconcile_cache_target_snapshot(
-            db, snapshot, consumer_id=consumer_id
-        )
+        matched = await reconcile_cache_target_snapshot(db, snapshot, consumer_id=consumer_id)
         if not matched:
             await db.commit()
             raise RuntimeError("PinVi/Map cache target fixed snapshot Merkle가 다릅니다.")

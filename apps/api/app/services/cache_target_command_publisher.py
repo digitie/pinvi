@@ -231,8 +231,10 @@ async def fail_cache_target_command(
     row.lease_until = None
     if disposition == "retry" and row.attempts < max_attempts:
         row.status = "pending"
-        delay = timedelta(seconds=retry_after) if retry_after is not None else _retry_delay(
-            row.command_id, row.attempts
+        delay = (
+            timedelta(seconds=retry_after)
+            if retry_after is not None
+            else _retry_delay(row.command_id, row.attempts)
         )
         row.available_at = current + delay
         await db.flush()
@@ -300,7 +302,11 @@ async def publish_cache_target_batch(
                     source_payload=leased.payload,
                     expected_etag=leased.expected_etag,
                 )
-        except (CacheTargetNetworkError, CacheTargetContractError, CacheTargetServiceProblem) as exc:
+        except (
+            CacheTargetNetworkError,
+            CacheTargetContractError,
+            CacheTargetServiceProblem,
+        ) as exc:
             async with session_factory() as db:
                 outcome = await fail_cache_target_command(
                     db,

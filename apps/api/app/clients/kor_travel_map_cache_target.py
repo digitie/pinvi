@@ -191,9 +191,10 @@ def _active_wire_body(
 ) -> dict[str, Any]:
     if set(source_payload) != {"version", "state", "coord", "radius_m", "update_enabled"}:
         raise ValueError("active source payload field가 exact v1 계약과 다릅니다.")
-    if source_payload.get("version") != "cache-target-source-v1" or source_payload.get(
-        "state"
-    ) != "active":
+    if (
+        source_payload.get("version") != "cache-target-source-v1"
+        or source_payload.get("state") != "active"
+    ):
         raise ValueError("active source payload version/state가 다릅니다.")
     coord = source_payload.get("coord")
     if not isinstance(coord, dict) or set(coord) != {"lon_e6", "lat_e6"}:
@@ -290,7 +291,9 @@ class CacheTargetServiceClient:
         try:
             response = await self._http.request(method, path, json=body, headers=headers)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
-            raise CacheTargetNetworkError("kor-travel-map cache-target outcome이 불확실합니다.") from exc
+            raise CacheTargetNetworkError(
+                "kor-travel-map cache-target outcome이 불확실합니다."
+            ) from exc
         if response.is_error:
             raise CacheTargetServiceProblem(
                 status_code=response.status_code,
@@ -402,10 +405,11 @@ class CacheTargetServiceClient:
             or data.state != state
             or data.restore_epoch != restore_epoch
             or data.source_generation != source_generation
-            or data.source_payload_fingerprint
-            != _canonical_source_fingerprint(source_payload)
+            or data.source_payload_fingerprint != _canonical_source_fingerprint(source_payload)
         ):
-            raise CacheTargetContractError("target mutation response가 요청 source identity와 다릅니다.")
+            raise CacheTargetContractError(
+                "target mutation response가 요청 source identity와 다릅니다."
+            )
         response_etag = response.headers.get("ETag")
         if response_etag is None or response_etag != data.entity_tag:
             raise CacheTargetContractError("target mutation ETag header/body가 다릅니다.")

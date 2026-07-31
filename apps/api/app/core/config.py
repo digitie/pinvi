@@ -419,10 +419,16 @@ class Settings(BaseSettings):
             if value
         }
         if any(token in legacy_tokens for _, token in role_tokens):
-            raise ValueError("cache target role tokens must not reuse legacy admin/ops/service tokens")
+            raise ValueError(
+                "cache target role tokens must not reuse legacy admin/ops/service tokens"
+            )
 
-        if any(character.isspace() for character in self.pinvi_kor_travel_map_cache_target_consumer_id):
-            raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_ID must not contain whitespace")
+        if any(
+            character.isspace() for character in self.pinvi_kor_travel_map_cache_target_consumer_id
+        ):
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_ID must not contain whitespace"
+            )
         if not self.pinvi_kor_travel_map_cache_target_sync_enabled:
             return self
         if self.pinvi_kor_travel_map_cache_target_command_token is None:
