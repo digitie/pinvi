@@ -140,6 +140,27 @@ class Settings(BaseSettings):
         le=200,
     )  # /v1/features/batch cap
 
+    # cache target generation/outbox paired worker (ADR-058). false여도 DB projection은 계속된다.
+    pinvi_kor_travel_map_cache_target_sync_enabled: bool = False
+    pinvi_kor_travel_map_cache_target_command_token: SecretStr | None = None
+    pinvi_kor_travel_map_cache_target_consumer_token: SecretStr | None = None
+    # restore/recovery job 전용이며 ordinary API runtime에는 주입하지 않는다.
+    pinvi_kor_travel_map_cache_target_restore_fence_token: SecretStr | None = None
+    pinvi_kor_travel_map_cache_target_recovery_token: SecretStr | None = None
+    pinvi_kor_travel_map_cache_target_consumer_id: str = Field(
+        default="pinvi-cache-target-consumer", min_length=1, max_length=64
+    )
+    pinvi_kor_travel_map_cache_target_batch_size: int = Field(default=100, ge=1, le=500)
+    pinvi_kor_travel_map_cache_target_lease_seconds: int = Field(default=60, ge=10, le=300)
+    pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    pinvi_kor_travel_map_cache_target_max_attempts: int = Field(default=5, ge=1, le=20)
+    # paired OpenAPI가 확정될 때 배포 manifest가 exact 값을 넣는다. 빈 값으로 enable할 수 없다.
+    pinvi_kor_travel_map_cache_target_expected_openapi_sha256: str = ""
+    pinvi_kor_travel_map_cache_target_expected_source_revision: str = ""
+    pinvi_kor_travel_map_cache_target_expected_contract_generation: int | None = Field(
+        default=None, gt=0
+    )
+
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
@@ -345,6 +366,93 @@ class Settings(BaseSettings):
                 raise ValueError(f"{env_name} must not contain whitespace")
         if read_token == cancel_token:
             raise ValueError("kor-travel-map ops read/cancel tokens must differ")
+        return self
+
+    @model_validator(mode="after")
+    def validate_cache_target_sync(self) -> Self:
+        """paired worker credential과 exact contract pin을 fallback 없이 검증한다."""
+
+        role_fields = (
+            (
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN",
+                self.pinvi_kor_travel_map_cache_target_command_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN",
+                self.pinvi_kor_travel_map_cache_target_consumer_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RESTORE_FENCE_TOKEN",
+                self.pinvi_kor_travel_map_cache_target_restore_fence_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RECOVERY_TOKEN",
+                self.pinvi_kor_travel_map_cache_target_recovery_token,
+            ),
+        )
+        role_tokens: list[tuple[str, str]] = []
+        for env_name, secret in role_fields:
+            if secret is None:
+                continue
+            token = secret.get_secret_value()
+            if len(token) < 32:
+                raise ValueError(f"{env_name} must contain at least 32 characters")
+            if any(character.isspace() for character in token):
+                raise ValueError(f"{env_name} must not contain whitespace")
+            role_tokens.append((env_name, token))
+        token_values = [token for _, token in role_tokens]
+        if len(set(token_values)) != len(token_values):
+            raise ValueError("kor-travel-map cache target role tokens must all differ")
+
+        legacy_tokens = {
+            value
+            for value in (
+                self.pinvi_kor_travel_map_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_service_token.strip(),
+                self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_read_token is not None
+                else "",
+                self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_cancel_token is not None
+                else "",
+            )
+            if value
+        }
+        if any(token in legacy_tokens for _, token in role_tokens):
+            raise ValueError("cache target role tokens must not reuse legacy admin/ops/service tokens")
+
+        if any(character.isspace() for character in self.pinvi_kor_travel_map_cache_target_consumer_id):
+            raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_ID must not contain whitespace")
+        if not self.pinvi_kor_travel_map_cache_target_sync_enabled:
+            return self
+        if self.pinvi_kor_travel_map_cache_target_command_token is None:
+            raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN is required")
+        if self.pinvi_kor_travel_map_cache_target_consumer_token is None:
+            raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN is required")
+        openapi_sha = self.pinvi_kor_travel_map_cache_target_expected_openapi_sha256
+        if len(openapi_sha) != 64 or openapi_sha != openapi_sha.lower():
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must be lowercase SHA-256 hex"
+            )
+        try:
+            bytes.fromhex(openapi_sha)
+        except ValueError as exc:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must be lowercase SHA-256 hex"
+            ) from exc
+        source_revision = self.pinvi_kor_travel_map_cache_target_expected_source_revision
+        if (
+            len(source_revision) != 40
+            or source_revision != source_revision.lower()
+            or any(character not in "0123456789abcdef" for character in source_revision)
+        ):
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must be a full lowercase git SHA"
+            )
+        if self.pinvi_kor_travel_map_cache_target_expected_contract_generation is None:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION is required"
+            )
         return self
 
 

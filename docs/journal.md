@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-07-31 (codex) — T-VN-41-P default-off principal gate 체크포인트
+
+**작업**: cache target network worker를 기본 비활성화하고 역할별 credential/paired revision이
+완전할 때만 설정 단계에서 활성화를 허용하도록 fail-closed gate를 추가했다.
+
+**변경**:
+
+- command/consumer/restore/recovery token은 각각 32자 이상, whitespace 없음, 상호 불일치이며 기존
+  shared service/admin/ops token과도 같을 수 없다. 어떤 fallback도 없다.
+- ordinary API compose에는 command/consumer만 전달하고 restore-fence/recovery token은 의도적으로
+  전달하지 않는다.
+- enable에는 command/consumer token과 exact OpenAPI SHA-256, full Map source revision, 양수 contract
+  generation을 모두 요구한다. 빈 pin으로 worker를 켤 수 없다.
+
+**검증**: Ruff, strict mypy와 기존 ops 설정 회귀를 포함한 unit **44 passed**.
+
+**다음**: role-bound HTTP transport와 command/consumer worker를 연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P commit-before-ACK inbox 체크포인트
 
 **작업**: Map claim을 strict하게 검증한 뒤 event inbox, target tuple, cache generation과 local

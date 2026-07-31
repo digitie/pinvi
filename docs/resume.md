@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-07-31 (codex) — T-VN-41-P default-off principal gate 구현
+
+cache target HTTP worker는 기본 `false`이고 command/consumer credential과 exact OpenAPI SHA-256,
+full Map source revision, 양수 contract generation이 모두 없으면 enable 자체가 설정 검증에서 실패한다.
+command/consumer/restore/recovery token은 약한 값·whitespace·역할 간 재사용·기존 shared
+service/admin/ops token 재사용을 거부한다. ordinary API compose에는 command/consumer만 전달하며
+restore/recovery credential은 전용 job 경계에 남겼다.
+
+Ruff/strict mypy와 기존 ops 설정 회귀를 포함한 unit **44 passed**다. network worker는 아직 연결하지
+않았으므로 runtime outbound call은 없다.
+
+**다음 한 작업**: role-bound strict HTTP transport와 command publisher/claim ACK-NACK worker를
+연결한다.
+
 ## 2026-07-31 (codex) — T-VN-41-P commit-before-ACK inbox 구현
 
 Map claim의 exact event type, canonical target key, 양수 epoch/generation/sequence/order, lowercase
