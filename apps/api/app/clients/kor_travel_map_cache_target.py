@@ -39,9 +39,9 @@ _SNAPSHOT_RETRYABLE_PROBLEMS = frozenset(
         (503, "SNAPSHOT_TTL_TOO_SHORT"),
     }
 )
-_SNAPSHOT_LOCKS: WeakKeyDictionary[
-    AbstractEventLoop, WeakValueDictionary[str, Lock]
-] = WeakKeyDictionary()
+_SNAPSHOT_LOCKS: WeakKeyDictionary[AbstractEventLoop, WeakValueDictionary[str, Lock]] = (
+    WeakKeyDictionary()
+)
 
 
 def _snapshot_lock(external_system: str) -> Lock:

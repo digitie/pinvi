@@ -73,9 +73,9 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         "type": "string",
     }
 
-    source_parameters = paths[
-        "/v1/service/cache-targets/{external_system}/{target_key}"
-    ]["put"]["parameters"]
+    source_parameters = paths["/v1/service/cache-targets/{external_system}/{target_key}"]["put"][
+        "parameters"
+    ]
     identities = {
         parameter["name"]: parameter
         for parameter in source_parameters
