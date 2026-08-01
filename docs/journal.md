@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 remote-completed cutover expectation gate
+
+**적대적 리뷰 발견**: initial cutover가 원격 completion 뒤 local ready commit을 복구할 때 consumer의
+snapshot identity만 확인해, request-bound reconciliation expectation이 유실돼도 `ready=true`를 열 수 있었다.
+`0047` migration은 새 테이블을 비운 채 생성하므로 이는 0045/0046 상태에서 실제로 가능한 upgrade 경로다.
+그대로 열면 뒤따르는 terminal receipt를 exact request/snapshot에 결박할 정본이 없다.
+
+**변경**: 복구 transaction은 consumer를 잠그고 canonical snapshot UUID와 source identity를 검증한 뒤 해당
+request expectation을 잠근다. row가 없으면 snapshot owner 충돌을 확인하고 exact `pending` row를 먼저
+재구성한다. 기존 row는 material을 exact 대조하고, `received`이면 FK로 결박된 applied inbox receipt까지
+검증한다. 그 뒤에만 stream ETag, ready, cutover 완료 시각을 함께 commit한다. 불일치·invalidated 상태는
+fail-close한다. 기존 정규화 테이블이 이미 필요한 정본을 가지므로 migration은 추가하지 않았다.
+
+**검증**: expectation이 있는 crash replay, 0047 upgrade를 모사한 expectation 부재→재구성, received inbox
+결박, mismatch fail-close를 실제 PostGIS에서 고정했다. initial-cutover integration 5건과 집중 unit 35건,
+Ruff, 대상 파일 strict mypy를 통과했다.
+
 ## 2026-08-01 (codex) — T-VN-41 restore epoch delivery 경계 generation 3
 
 **적대적 리뷰 발견**: Map restore fence가 epoch만 증가시키고 이전 epoch의

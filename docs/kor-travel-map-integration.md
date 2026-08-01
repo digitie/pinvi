@@ -183,7 +183,12 @@ exact하게 고정한다. owner revision은 export commit이나 배포 Map 이�
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
-뒤에만 PinVi consumer를 ready로 연다.
+뒤에만 PinVi consumer를 ready로 연다. completion 응답 뒤 local commit 전에 종료된 재개 경로도 consumer의
+durable cutover/request/snapshot identity를 모두 검증한다. `0047` 이전 상태라 expectation이 없으면 같은
+transaction에서 snapshot owner 충돌을 확인하고 exact `pending` expectation을 먼저 복원한다. 기존
+expectation은 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면
+적용된 inbox receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정하고, 불일치는 원격 ready
+상태에서도 fail-close한다.
 
 generation 3은 terminal receipt의 request-bound identity에 더해 restore epoch의 배달 경계를 고정한
 breaking 계약이다. Map restore fence는 이전 epoch의 미완료·재시도·lease·dead delivery를 terminal

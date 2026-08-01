@@ -15,6 +15,12 @@
 strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
 snapshot identity 및 operation ID를 요청과 exact 대조한다.
 
+첫 재리뷰의 추가 P1에 따라 remote-completed initial cutover 재개도 request-bound durable expectation을
+필수화했다. `0047` 이전 upgrade 상태처럼 row가 없으면 durable consumer의 canonical
+request/snapshot/epoch/count/root/high-watermark를 검증해 같은 transaction에서 `pending` row를 복원한다.
+기존 row는 exact material을, `received` row는 applied inbox receipt 결박까지 확인한 뒤 ready와 완료 시각을
+원자적으로 확정한다. 불일치·invalidated 상태는 원격 ready 상태에서도 fail-close한다.
+
 **다음 한 작업**: 양쪽 exact head를 두 독립 리뷰어가 재검토해 P1 종결을 확인한 뒤 n150 isolated
 cutover·crash/reclaim·destructive Live UI recovery를 실행한다.
 

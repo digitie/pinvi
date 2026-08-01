@@ -244,7 +244,11 @@ statement trigger는 모든 `trip_day_pois` source write transaction에서 share
 ordinary readiness gate를 유지한 채 pending PUT만 generation 순서로 drain하고, begin의 reconciliation
 ETag로 expected epoch/count/root seal을 보낸다. running request-bound snapshot을 local atomic reconcile한 뒤
 completion과 Map ready를 확인해야 완료된다. crash 뒤에는 같은 cutover ID, begin/seal UUID
-Idempotency-Key, 원래 stream/reconciliation ETag와 command UUID ledger로 정확히 재개한다.
+Idempotency-Key, 원래 stream/reconciliation ETag와 command UUID ledger로 정확히 재개한다. 원격 completion
+뒤 local ready commit만 유실된 경우에는 consumer의 durable request/snapshot/epoch/count/root/high-watermark를
+검증한다. `0047` 이전 상태라 expectation이 없으면 snapshot owner 충돌을 확인하고 동일 transaction에서 exact
+`pending` row를 복원한다. 기존 `pending` row는 exact material을, `received` row는 적용된 inbox receipt까지
+결박해 검증한다. 불일치·invalidated 상태는 원격 stream이 ready여도 fail-close한다.
 
 ## 6. 구현 순서
 

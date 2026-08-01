@@ -21,10 +21,16 @@ from app.core.cache_target_contract import CacheTargetMerkleRow, cache_target_sn
 from app.models.cache_target_sync import (
     KtmCacheTargetCommand,
     KtmCacheTargetConsumer,
+    KtmCacheTargetEvent,
     KtmCacheTargetHead,
+    KtmCacheTargetReconciliationExpectation,
 )
 from app.services.cache_target_event_consumer import CacheTargetSnapshot
-from app.services.cache_target_initial_cutover import run_initial_cache_target_cutover
+from app.services.cache_target_initial_cutover import (
+    CacheTargetSourceIdentity,
+    _finish_remote_completed_cutover,
+    run_initial_cache_target_cutover,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -167,6 +173,125 @@ class _CutoverStub:
         )
 
 
+def _one_target_source_identity(poi_id: uuid.UUID) -> tuple[bytes, str]:
+    fingerprint = bytes.fromhex("73" * 32)
+    merkle_root = cache_target_snapshot_merkle_root(
+        [
+            CacheTargetMerkleRow(
+                external_system="pinvi",
+                target_key=str(poi_id),
+                state="active",
+                source_generation=1,
+                source_payload_fingerprint=fingerprint,
+            )
+        ]
+    ).hex()
+    return fingerprint, merkle_root
+
+
+async def _seed_remote_completed_local_state(
+    session_factory,
+    *,
+    cutover_id: uuid.UUID,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    merkle_root: str,
+    poi_id: uuid.UUID | None = None,
+    fingerprint: bytes | None = None,
+    ready: bool = False,
+) -> None:  # type: ignore[no-untyped-def]
+    if (poi_id is None) != (fingerprint is None):
+        raise ValueError("source head identity는 poi_id와 fingerprint를 함께 지정해야 합니다.")
+    async with session_factory() as db:
+        if poi_id is not None and fingerprint is not None:
+            db.add(
+                KtmCacheTargetHead(
+                    poi_id=poi_id,
+                    external_system="pinvi",
+                    target_key=str(poi_id),
+                    desired_state="active",
+                    source_generation=1,
+                    source_payload_fingerprint=fingerprint,
+                    lon="126",
+                    lat="37",
+                    radius_km="5",
+                    update_enabled=True,
+                )
+            )
+        db.add(
+            KtmCacheTargetConsumer(
+                consumer_id="pinvi-cache-target-consumer",
+                external_system="pinvi",
+                active_restore_epoch=7,
+                stream_control_etag='"pinvi:3"',
+                snapshot_id=str(snapshot_id),
+                snapshot_count=1,
+                snapshot_merkle_root=bytes.fromhex(merkle_root),
+                high_watermark_cursor="cursor-1",
+                reconcile_status="matched",
+                ready=ready,
+                initial_cutover_id=cutover_id,
+                initial_reconciliation_request_id=request_id,
+                initial_begin_stream_etag='"pinvi:1"',
+                initial_reconciliation_etag=f'"{request_id}:2"',
+                initial_source_count=1,
+                initial_source_merkle_root=bytes.fromhex(merkle_root),
+            )
+        )
+        await db.commit()
+
+
+async def _seed_reconciliation_expectation(
+    session_factory,
+    *,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    merkle_root: str,
+    high_watermark_cursor: str = "cursor-1",
+    received: bool = False,
+) -> None:  # type: ignore[no-untyped-def]
+    resolved_at = datetime.now(UTC)
+    receipt_event_id = uuid.uuid4() if received else None
+    async with session_factory() as db:
+        if receipt_event_id is not None:
+            db.add(
+                KtmCacheTargetEvent(
+                    event_id=receipt_event_id,
+                    event_type="cache_target.reconciled",
+                    external_system="pinvi",
+                    restore_epoch=7,
+                    relay_order=1,
+                    source_payload_fingerprint=bytes.fromhex(merkle_root),
+                    payload_fingerprint=bytes.fromhex("74" * 32),
+                    occurred_at=resolved_at,
+                    payload={
+                        "actual_merkle_root": merkle_root,
+                        "expected_merkle_root": merkle_root,
+                        "request_id": str(request_id),
+                        "snapshot_id": str(snapshot_id),
+                        "status": "succeeded",
+                        "version": "cache-target-reconciliation-v1",
+                    },
+                    applied_at=resolved_at,
+                )
+            )
+        db.add(
+            KtmCacheTargetReconciliationExpectation(
+                request_id=request_id,
+                external_system="pinvi",
+                snapshot_id=snapshot_id,
+                restore_epoch=7,
+                snapshot_count=1,
+                snapshot_merkle_root=bytes.fromhex(merkle_root),
+                high_watermark_cursor=high_watermark_cursor,
+                status="received" if received else "pending",
+                receipt_event_id=receipt_event_id,
+                resolved_at=resolved_at if received else None,
+            )
+        )
+        await db.commit()
+
+
 async def test_initial_cutover_closes_zero_to_nonempty_bootstrap_and_is_durable(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -269,18 +394,7 @@ async def test_initial_cutover_recovers_ready_commit_after_remote_completion(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
     poi_id = uuid.uuid4()
-    fingerprint = bytes.fromhex("73" * 32)
-    merkle_root = cache_target_snapshot_merkle_root(
-        [
-            CacheTargetMerkleRow(
-                external_system="pinvi",
-                target_key=str(poi_id),
-                state="active",
-                source_generation=1,
-                source_payload_fingerprint=fingerprint,
-            )
-        ]
-    ).hex()
+    fingerprint, merkle_root = _one_target_source_identity(poi_id)
     cutover_id = uuid.uuid4()
     stub = _CutoverStub(
         target_key=str(poi_id),
@@ -288,41 +402,21 @@ async def test_initial_cutover_recovers_ready_commit_after_remote_completion(
         preserve_completed_begin_replay=True,
     )
     stub.phase = "completed"
-    async with session_factory() as db:
-        db.add(
-            KtmCacheTargetHead(
-                poi_id=poi_id,
-                external_system="pinvi",
-                target_key=str(poi_id),
-                desired_state="active",
-                source_generation=1,
-                source_payload_fingerprint=fingerprint,
-                lon="126",
-                lat="37",
-                radius_km="5",
-                update_enabled=True,
-            )
-        )
-        db.add(
-            KtmCacheTargetConsumer(
-                consumer_id="pinvi-cache-target-consumer",
-                external_system="pinvi",
-                active_restore_epoch=7,
-                stream_control_etag='"pinvi:3"',
-                snapshot_id=str(stub.snapshot_id),
-                snapshot_count=1,
-                snapshot_merkle_root=bytes.fromhex(merkle_root),
-                reconcile_status="matched",
-                ready=False,
-                initial_cutover_id=cutover_id,
-                initial_reconciliation_request_id=stub.request_id,
-                initial_begin_stream_etag='"pinvi:1"',
-                initial_reconciliation_etag=f'"{stub.request_id}:2"',
-                initial_source_count=1,
-                initial_source_merkle_root=bytes.fromhex(merkle_root),
-            )
-        )
-        await db.commit()
+    await _seed_remote_completed_local_state(
+        session_factory,
+        cutover_id=cutover_id,
+        request_id=stub.request_id,
+        snapshot_id=stub.snapshot_id,
+        merkle_root=merkle_root,
+        poi_id=poi_id,
+        fingerprint=fingerprint,
+    )
+    await _seed_reconciliation_expectation(
+        session_factory,
+        request_id=stub.request_id,
+        snapshot_id=stub.snapshot_id,
+        merkle_root=merkle_root,
+    )
 
     result = await run_initial_cache_target_cutover(
         session_factory,
@@ -347,3 +441,124 @@ async def test_initial_cutover_recovers_ready_commit_after_remote_completion(
         assert consumer.ready is True
         assert consumer.stream_control_etag == '"pinvi:4"'
         assert consumer.initial_cutover_completed_at is not None
+
+
+@pytest.mark.parametrize(
+    ("received", "high_watermark_cursor", "succeeds"),
+    [
+        pytest.param(True, "cursor-1", True, id="received-exact-inbox"),
+        pytest.param(False, "other-cursor", False, id="pending-mismatch"),
+    ],
+)
+async def test_remote_completed_cutover_validates_existing_expectation(
+    session_factory,
+    received: bool,
+    high_watermark_cursor: str,
+    succeeds: bool,
+) -> None:  # type: ignore[no-untyped-def]
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+    cutover_id = uuid.uuid4()
+    root = "73" * 32
+    await _seed_remote_completed_local_state(
+        session_factory,
+        cutover_id=cutover_id,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        merkle_root=root,
+        ready=received,
+    )
+    await _seed_reconciliation_expectation(
+        session_factory,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        merkle_root=root,
+        high_watermark_cursor=high_watermark_cursor,
+        received=received,
+    )
+
+    if succeeds:
+        await _finish_remote_completed_cutover(
+            session_factory,
+            consumer_id="pinvi-cache-target-consumer",
+            cutover_id=cutover_id,
+            request_id=request_id,
+            expected_restore_epoch=7,
+            source=CacheTargetSourceIdentity(count=1, merkle_root=root),
+            stream_entity_tag='"pinvi:4"',
+        )
+    else:
+        with pytest.raises(RuntimeError, match="durable expectation"):
+            await _finish_remote_completed_cutover(
+                session_factory,
+                consumer_id="pinvi-cache-target-consumer",
+                cutover_id=cutover_id,
+                request_id=request_id,
+                expected_restore_epoch=7,
+                source=CacheTargetSourceIdentity(count=1, merkle_root=root),
+                stream_entity_tag='"pinvi:4"',
+            )
+
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert consumer is not None
+        assert consumer.ready is succeeds
+        assert consumer.stream_control_etag == ('"pinvi:4"' if succeeds else '"pinvi:3"')
+        assert (consumer.initial_cutover_completed_at is not None) is succeeds
+
+
+async def test_initial_cutover_remote_completion_reconstructs_missing_expectation(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    poi_id = uuid.uuid4()
+    fingerprint, merkle_root = _one_target_source_identity(poi_id)
+    cutover_id = uuid.uuid4()
+    stub = _CutoverStub(
+        target_key=str(poi_id),
+        merkle_root=merkle_root,
+        preserve_completed_begin_replay=True,
+    )
+    stub.phase = "completed"
+    await _seed_remote_completed_local_state(
+        session_factory,
+        cutover_id=cutover_id,
+        request_id=stub.request_id,
+        snapshot_id=stub.snapshot_id,
+        merkle_root=merkle_root,
+        poi_id=poi_id,
+        fingerprint=fingerprint,
+    )
+
+    result = await run_initial_cache_target_cutover(
+        session_factory,
+        session_factory.kw["bind"],
+        command_client=stub,  # type: ignore[arg-type]
+        consumer_client=stub,  # type: ignore[arg-type]
+        recovery_client=stub,  # type: ignore[arg-type]
+        consumer_id="pinvi-cache-target-consumer",
+        cutover_id=cutover_id,
+        expected_restore_epoch=7,
+        reason="initial backfill",
+        batch_size=100,
+        lease_seconds=60,
+        max_attempts=5,
+    )
+
+    async with session_factory() as db:
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        expectation = await db.get(
+            KtmCacheTargetReconciliationExpectation,
+            stub.request_id,
+        )
+        assert consumer is not None
+        assert consumer.ready is True
+        assert consumer.stream_control_etag == '"pinvi:4"'
+        assert consumer.initial_cutover_completed_at is not None
+        assert expectation is not None
+        assert expectation.snapshot_id == stub.snapshot_id
+        assert expectation.restore_epoch == 7
+        assert expectation.snapshot_count == 1
+        assert expectation.snapshot_merkle_root == bytes.fromhex(merkle_root)
+        assert expectation.high_watermark_cursor == "cursor-1"
+        assert expectation.status == "pending"
+    assert result.published == 0

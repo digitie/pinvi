@@ -21,7 +21,9 @@ from app.core.cache_target_contract import CacheTargetMerkleRow, cache_target_sn
 from app.models.cache_target_sync import (
     KtmCacheTargetCommand,
     KtmCacheTargetConsumer,
+    KtmCacheTargetEvent,
     KtmCacheTargetHead,
+    KtmCacheTargetReconciliationExpectation,
 )
 from app.services.cache_target_command_publisher import publish_cache_target_batch
 from app.services.cache_target_sync_worker import _adopt_stream_epoch, bootstrap_cache_target_sync
@@ -70,6 +72,7 @@ async def _finish_remote_completed_cutover(
             .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
             .with_for_update()
         )
+        source_root = bytes.fromhex(source.merkle_root)
         if (
             consumer is None
             or consumer.initial_cutover_id != cutover_id
@@ -77,10 +80,89 @@ async def _finish_remote_completed_cutover(
             or consumer.active_restore_epoch != expected_restore_epoch
             or consumer.snapshot_id is None
             or consumer.snapshot_count != source.count
-            or consumer.snapshot_merkle_root != bytes.fromhex(source.merkle_root)
+            or consumer.snapshot_merkle_root != source_root
+            or not consumer.high_watermark_cursor
             or consumer.reconcile_status != "matched"
         ):
             raise RuntimeError("원격 completion 뒤 local snapshot identity가 다릅니다.")
+        try:
+            snapshot_id = uuid.UUID(consumer.snapshot_id)
+        except ValueError as exc:
+            raise RuntimeError(
+                "원격 completion 뒤 local snapshot ID가 canonical UUID가 아닙니다."
+            ) from exc
+        if str(snapshot_id) != consumer.snapshot_id:
+            raise RuntimeError("원격 completion 뒤 local snapshot ID가 canonical UUID가 아닙니다.")
+        expectation = await db.scalar(
+            select(KtmCacheTargetReconciliationExpectation)
+            .where(KtmCacheTargetReconciliationExpectation.request_id == request_id)
+            .with_for_update()
+        )
+        if expectation is None:
+            snapshot_owner = await db.scalar(
+                select(KtmCacheTargetReconciliationExpectation.request_id).where(
+                    KtmCacheTargetReconciliationExpectation.snapshot_id == snapshot_id
+                )
+            )
+            if snapshot_owner is not None:
+                raise RuntimeError(
+                    "원격 completion snapshot이 다른 durable expectation에 결박됐습니다."
+                )
+            expectation = KtmCacheTargetReconciliationExpectation(
+                request_id=request_id,
+                external_system=consumer.external_system,
+                snapshot_id=snapshot_id,
+                restore_epoch=expected_restore_epoch,
+                snapshot_count=source.count,
+                snapshot_merkle_root=source_root,
+                high_watermark_cursor=consumer.high_watermark_cursor,
+                status="pending",
+            )
+            db.add(expectation)
+            await db.flush()
+        if (
+            expectation.external_system != consumer.external_system
+            or expectation.snapshot_id != snapshot_id
+            or expectation.restore_epoch != expected_restore_epoch
+            or expectation.snapshot_count != source.count
+            or expectation.snapshot_merkle_root != source_root
+            or expectation.high_watermark_cursor != consumer.high_watermark_cursor
+        ):
+            raise RuntimeError("원격 completion 뒤 request-bound durable expectation이 다릅니다.")
+        if expectation.status == "received":
+            receipt = (
+                await db.scalar(
+                    select(KtmCacheTargetEvent)
+                    .where(KtmCacheTargetEvent.event_id == expectation.receipt_event_id)
+                    .with_for_update()
+                )
+                if expectation.receipt_event_id is not None
+                else None
+            )
+            if (
+                receipt is None
+                or receipt.event_type != "cache_target.reconciled"
+                or receipt.external_system != consumer.external_system
+                or receipt.restore_epoch != expected_restore_epoch
+                or receipt.source_payload_fingerprint != source_root
+                or receipt.applied_at is None
+                or receipt.payload
+                != {
+                    "actual_merkle_root": source.merkle_root,
+                    "expected_merkle_root": source.merkle_root,
+                    "request_id": str(request_id),
+                    "snapshot_id": str(snapshot_id),
+                    "status": "succeeded",
+                    "version": "cache-target-reconciliation-v1",
+                }
+            ):
+                raise RuntimeError(
+                    "원격 completion의 received expectation이 durable inbox와 다릅니다."
+                )
+        elif expectation.status != "pending":
+            raise RuntimeError(
+                "원격 completion 뒤 request-bound durable expectation이 종결됐습니다."
+            )
         consumer.stream_control_etag = stream_entity_tag
         consumer.ready = True
         consumer.initial_cutover_completed_at = (
