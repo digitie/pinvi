@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -272,7 +273,11 @@ async def read_cache_target_source_identity(db: AsyncSession) -> CacheTargetSour
 @asynccontextmanager
 async def cache_target_source_writer_fence(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
     """DB trigger의 shared xact lock과 짝인 session-level exclusive cutover lock."""
-    async with engine.connect() as connection:
+    connection = engine.connect()
+    started = False
+    try:
+        await connection.start()
+        started = True
         acquired = await connection.scalar(
             text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
             {"namespace": _SOURCE_FENCE_NAMESPACE, "resource": _SOURCE_FENCE_RESOURCE},
@@ -281,15 +286,27 @@ async def cache_target_source_writer_fence(engine: AsyncEngine) -> AsyncIterator
             raise RuntimeError(
                 "cache target source writer가 active이거나 cutover가 이미 실행 중입니다."
             )
-        try:
-            yield connection
-        finally:
-            released = await connection.scalar(
-                text("SELECT pg_advisory_unlock(:namespace, :resource)"),
-                {"namespace": _SOURCE_FENCE_NAMESPACE, "resource": _SOURCE_FENCE_RESOURCE},
-            )
-            if released is not True:
-                raise RuntimeError("cache target source writer fence 해제에 실패했습니다.")
+        # Lock 획득 직후 transaction을 종료해 body의 암묵적 transaction과
+        # session lock의 수명을 분리한다.
+        await connection.commit()
+        yield connection
+    finally:
+        if started:
+            # unlock query와 pool check-in 사이에 cancellation 창을 만들지 않는다.
+            # 획득/커밋/body 어느 경계에서 취소되든 전용 physical
+            # session을 폐기해 PostgreSQL이 session lock을 해제하게 한다.
+            async def discard_connection() -> None:
+                try:
+                    await connection.invalidate()
+                finally:
+                    await connection.close()
+
+            discard = asyncio.create_task(discard_connection())
+            try:
+                await asyncio.shield(discard)
+            except asyncio.CancelledError:
+                await discard
+                raise
 
 
 async def drain_initial_cache_target_puts(

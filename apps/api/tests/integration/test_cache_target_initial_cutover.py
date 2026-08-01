@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetMutationResult,
@@ -35,10 +37,100 @@ from app.services.cache_target_event_consumer import (
 from app.services.cache_target_initial_cutover import (
     CacheTargetSourceIdentity,
     _finish_remote_completed_cutover,
+    cache_target_source_writer_fence,
     run_initial_cache_target_cutover,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _assert_writer_fence_can_be_reacquired(engine) -> int:  # type: ignore[no-untyped-def]
+    async with asyncio.timeout(5):
+        async with cache_target_source_writer_fence(engine) as connection:
+            assert await connection.scalar(text("SELECT 1")) == 1
+            backend_pid = await connection.scalar(text("SELECT pg_backend_pid()"))
+            assert isinstance(backend_pid, int)
+            return backend_pid
+
+
+async def test_writer_fence_reacquires_after_acquire_immediate_cancellation(
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    original_scalar = AsyncConnection.scalar
+    cancel_once = True
+    cancelled_backend_pid: int | None = None
+
+    async def cancel_after_acquire(self, statement, parameters=None, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal cancel_once, cancelled_backend_pid
+        result = await original_scalar(self, statement, parameters, **kwargs)
+        if cancel_once and "pg_try_advisory_lock" in str(statement):
+            cancel_once = False
+            cancelled_backend_pid = await original_scalar(self, text("SELECT pg_backend_pid()"))
+            raise asyncio.CancelledError
+        return result
+
+    monkeypatch.setattr(AsyncConnection, "scalar", cancel_after_acquire)
+    with pytest.raises(asyncio.CancelledError):
+        async with cache_target_source_writer_fence(engine):
+            raise AssertionError("acquire 직후 cancellation이면 body에 진입할 수 없습니다.")
+
+    reacquired_backend_pid = await _assert_writer_fence_can_be_reacquired(engine)
+    assert cancelled_backend_pid is not None
+    assert reacquired_backend_pid != cancelled_backend_pid
+
+
+async def test_writer_fence_reacquires_after_commit_window_cancellation(
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    original_commit = AsyncConnection.commit
+    original_scalar = AsyncConnection.scalar
+    cancel_once = True
+    cancelled_backend_pid: int | None = None
+
+    async def cancel_after_commit(self) -> None:  # type: ignore[no-untyped-def]
+        nonlocal cancel_once, cancelled_backend_pid
+        if cancel_once:
+            cancelled_backend_pid = await original_scalar(self, text("SELECT pg_backend_pid()"))
+        await original_commit(self)
+        if cancel_once:
+            cancel_once = False
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(AsyncConnection, "commit", cancel_after_commit)
+    with pytest.raises(asyncio.CancelledError):
+        async with cache_target_source_writer_fence(engine):
+            raise AssertionError("commit 직후 cancellation이면 body에 진입할 수 없습니다.")
+
+    reacquired_backend_pid = await _assert_writer_fence_can_be_reacquired(engine)
+    assert cancelled_backend_pid is not None
+    assert reacquired_backend_pid != cancelled_backend_pid
+
+
+async def test_writer_fence_reacquires_after_body_cancellation(session_factory) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    entered = asyncio.Event()
+    cancelled_backend_pid: int | None = None
+
+    async def hold_fence() -> None:
+        nonlocal cancelled_backend_pid
+        async with cache_target_source_writer_fence(engine) as connection:
+            cancelled_backend_pid = await connection.scalar(text("SELECT pg_backend_pid()"))
+            entered.set()
+            await asyncio.Event().wait()
+
+    holder = asyncio.create_task(hold_fence())
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    holder.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await holder
+
+    reacquired_backend_pid = await _assert_writer_fence_can_be_reacquired(engine)
+    assert cancelled_backend_pid is not None
+    assert reacquired_backend_pid != cancelled_backend_pid
 
 
 class _CutoverStub:
