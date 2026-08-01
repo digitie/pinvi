@@ -203,9 +203,9 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         {"type": "null"},
     ]
 
-    restore_path = paths[
-        "/v1/service/cache-target-streams/{external_system}/restore-fences"
-    ]["post"]
+    restore_path = paths["/v1/service/cache-target-streams/{external_system}/restore-fences"][
+        "post"
+    ]
     assert restore_path["security"] == [{"ServiceToken": []}]
     restore_headers = {parameter["name"]: parameter for parameter in restore_path["parameters"]}
     assert restore_headers["Idempotency-Key"]["required"] is True
@@ -236,7 +236,12 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         "superseded_reconciliation_request_id",
     }
     assert restore_record["properties"]["fence_id"]["format"] == "uuid"
-    for field in ("restore_epoch", "control_version", "previous_restore_epoch", "previous_control_version"):
+    for field in (
+        "restore_epoch",
+        "control_version",
+        "previous_restore_epoch",
+        "previous_control_version",
+    ):
         assert restore_record["properties"][field]["minimum"] == 1
     for field in ("invalidated_claim_count", "superseded_delivery_count"):
         assert restore_record["properties"][field]["minimum"] == 0
