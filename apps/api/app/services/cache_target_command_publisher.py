@@ -46,6 +46,7 @@ class LeasedCacheTargetCommand:
 class CacheTargetPublishBatchResult:
     claimed: int
     succeeded: int
+    superseded: int
     retried: int
     dead_lettered: int
     halted: bool
@@ -135,12 +136,16 @@ async def lease_cache_target_commands(
             )
             .order_by(*order_by)
             .limit(limit)
-            .with_for_update(skip_locked=True)
+            .with_for_update(skip_locked=True, of=KtmCacheTargetCommand)
         )
     )
     leased: list[LeasedCacheTargetCommand] = []
     for row in rows:
-        head = await db.get(KtmCacheTargetHead, row.poi_id)
+        head = await db.scalar(
+            select(KtmCacheTargetHead)
+            .where(KtmCacheTargetHead.poi_id == row.poi_id)
+            .with_for_update()
+        )
         if head is None:
             row.status = "dead_letter"
             row.error_code = "MISSING_TARGET_HEAD"
@@ -185,35 +190,99 @@ async def complete_cache_target_command(
     *,
     leased: LeasedCacheTargetCommand,
     result: CacheTargetMutationResult,
+    consumer_id: str,
     now: datetime | None = None,
-) -> None:
+) -> Literal["succeeded", "stale_epoch"]:
     current = now or datetime.now(UTC)
+    consumer = await db.scalar(
+        select(KtmCacheTargetConsumer)
+        .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+        .with_for_update()
+    )
+    if consumer is None or consumer.external_system != leased.external_system:
+        raise RuntimeError("command completion consumer binding이 다릅니다.")
     row = await db.scalar(
         select(KtmCacheTargetCommand)
         .where(KtmCacheTargetCommand.command_id == leased.command_id)
         .with_for_update()
     )
-    if row is None or row.status != "leased" or row.lease_owner != leased.lease_owner:
+    if row is None:
+        raise RuntimeError("command가 사라졌습니다.")
+    expected_state = "active" if row.operation == "put" else "deleted"
+    if (
+        row.poi_id != leased.poi_id
+        or row.source_generation != leased.source_generation
+        or result.data.target_key != leased.target_key
+        or result.data.state != expected_state
+        or result.data.restore_epoch != leased.restore_epoch
+        or result.data.source_generation != leased.source_generation
+        or bytes.fromhex(result.data.source_payload_fingerprint) != row.payload_fingerprint
+    ):
+        raise RuntimeError("command completion identity가 local command와 다릅니다.")
+    if consumer.active_restore_epoch != leased.restore_epoch:
+        if row.status == "leased" and row.lease_owner == leased.lease_owner:
+            row.status = "superseded"
+            row.response_status = result.status_code
+            row.response_body = result.data.model_dump(mode="json")
+            row.response_etag = result.etag
+            row.error_code = "STALE_RESTORE_EPOCH"
+            row.error_detail = {
+                "active_restore_epoch": consumer.active_restore_epoch,
+                "response_restore_epoch": result.data.restore_epoch,
+            }
+            row.completed_at = current
+            row.lease_owner = None
+            row.lease_until = None
+        elif row.status == "superseded":
+            return "stale_epoch"
+        elif row.status != "succeeded":
+            raise RuntimeError("stale epoch command lease ownership이 바뀌었습니다.")
+        await db.flush()
+        return "stale_epoch"
+    already_succeeded = row.status == "succeeded"
+    if not already_succeeded and (row.status != "leased" or row.lease_owner != leased.lease_owner):
         raise RuntimeError("command lease ownership이 바뀌었습니다.")
-    row.status = "succeeded"
-    row.response_status = result.status_code
-    row.response_body = result.data.model_dump(mode="json")
-    row.response_etag = result.etag
-    row.error_code = None
-    row.error_detail = None
-    row.completed_at = current
-    row.lease_owner = None
-    row.lease_until = None
-    head = await db.get(KtmCacheTargetHead, leased.poi_id)
+    if not already_succeeded:
+        row.status = "succeeded"
+        row.response_status = result.status_code
+        row.response_body = result.data.model_dump(mode="json")
+        row.response_etag = result.etag
+        row.error_code = None
+        row.error_detail = None
+        row.completed_at = current
+        row.lease_owner = None
+        row.lease_until = None
+    head = await db.scalar(
+        select(KtmCacheTargetHead)
+        .where(KtmCacheTargetHead.poi_id == leased.poi_id)
+        .with_for_update()
+    )
     if head is None:
         raise RuntimeError("command target head가 사라졌습니다.")
-    head.remote_target_id = result.data.target_id
-    head.remote_etag = result.etag
-    head.remote_restore_epoch = result.data.restore_epoch
-    head.remote_source_generation = result.data.source_generation
-    head.remote_target_sequence = result.data.target_sequence
-    head.remote_status = result.data.state
+    # DELETE 응답의 target identity/ETag는 방금 tombstone 처리한 historical row를
+    # 가리킨다. 이를 active precondition으로 보존하면 뒤이은 PUT이 stale If-Match를
+    # 보내므로, deleted head는 다음 PUT이 If-None-Match로 재생성하도록 비운다.
+    current_tuple = (
+        head.remote_restore_epoch or 0,
+        head.remote_source_generation or 0,
+        head.remote_target_sequence or 0,
+    )
+    incoming_tuple = (
+        result.data.restore_epoch,
+        result.data.source_generation,
+        result.data.target_sequence,
+    )
+    if incoming_tuple >= current_tuple:
+        # equal tuple도 이전 구현이 남긴 tombstone ETag를 canonical state로
+        # 정규화한다. 더 최신 tuple만 identity 회귀를 막기 위해 보존한다.
+        head.remote_target_id = result.data.target_id if result.data.state == "active" else None
+        head.remote_etag = result.etag if result.data.state == "active" else None
+        head.remote_restore_epoch = result.data.restore_epoch
+        head.remote_source_generation = result.data.source_generation
+        head.remote_target_sequence = result.data.target_sequence
+        head.remote_status = result.data.state
     await db.flush()
+    return "succeeded"
 
 
 async def fail_cache_target_command(
@@ -224,15 +293,8 @@ async def fail_cache_target_command(
     max_attempts: int,
     consumer_id: str,
     now: datetime | None = None,
-) -> Literal["retry", "dead_letter", "halt", "reconcile"]:
+) -> Literal["succeeded", "superseded", "retry", "dead_letter", "halt", "reconcile"]:
     current = now or datetime.now(UTC)
-    row = await db.scalar(
-        select(KtmCacheTargetCommand)
-        .where(KtmCacheTargetCommand.command_id == leased.command_id)
-        .with_for_update()
-    )
-    if row is None or row.status != "leased" or row.lease_owner != leased.lease_owner:
-        raise RuntimeError("command lease ownership이 바뀌었습니다.")
     if isinstance(error, CacheTargetServiceProblem):
         disposition = error.disposition
         code = error.code
@@ -248,6 +310,40 @@ async def fail_cache_target_command(
         code = "RESPONSE_CONTRACT_MISMATCH"
         response_status = None
         retry_after = None
+    consumer = await db.scalar(
+        select(KtmCacheTargetConsumer)
+        .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+        .with_for_update()
+    )
+    if consumer is None or consumer.external_system != leased.external_system:
+        raise RuntimeError("command failure consumer binding이 다릅니다.")
+    row = await db.scalar(
+        select(KtmCacheTargetCommand)
+        .where(KtmCacheTargetCommand.command_id == leased.command_id)
+        .with_for_update()
+    )
+    if row is not None and row.status == "succeeded":
+        return "succeeded"
+    if consumer.active_restore_epoch != leased.restore_epoch:
+        if row is not None and row.status == "leased" and row.lease_owner == leased.lease_owner:
+            row.status = "superseded"
+            row.response_status = response_status
+            row.error_code = "STALE_RESTORE_EPOCH"
+            row.error_detail = {
+                "active_restore_epoch": consumer.active_restore_epoch,
+                "failure_code": code,
+                "response_restore_epoch": leased.restore_epoch,
+            }
+            row.completed_at = current
+            row.lease_owner = None
+            row.lease_until = None
+            await db.flush()
+            return "superseded"
+        if row is not None and row.status == "superseded":
+            return "superseded"
+        raise RuntimeError("stale epoch command lease ownership이 바뀌었습니다.")
+    if row is None or row.status != "leased" or row.lease_owner != leased.lease_owner:
+        raise RuntimeError("command lease ownership이 바뀌었습니다.")
     row.response_status = response_status
     row.error_code = code
     row.error_detail = {"disposition": disposition}
@@ -265,12 +361,7 @@ async def fail_cache_target_command(
         return "retry"
     row.status = "dead_letter"
     row.completed_at = current
-    consumer = await db.scalar(
-        select(KtmCacheTargetConsumer)
-        .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
-        .with_for_update()
-    )
-    if consumer is not None and disposition in {"halt", "reconcile"}:
+    if disposition in {"halt", "reconcile"}:
         consumer.ready = False
         consumer.reconcile_status = "blocked" if disposition == "halt" else "mismatched"
     await db.flush()
@@ -300,7 +391,7 @@ async def publish_cache_target_batch(
             initial_cutover=initial_cutover,
         )
         await db.commit()
-    succeeded = retried = dead_lettered = 0
+    succeeded = superseded = retried = dead_lettered = 0
     halted = False
     for leased in leased_rows:
         try:
@@ -342,7 +433,13 @@ async def publish_cache_target_batch(
                     consumer_id=consumer_id,
                 )
                 await db.commit()
-            if outcome == "retry":
+            if outcome == "succeeded":
+                succeeded += 1
+            elif outcome == "superseded":
+                superseded += 1
+                halted = True
+                break
+            elif outcome == "retry":
                 retried += 1
             else:
                 dead_lettered += 1
@@ -351,12 +448,23 @@ async def publish_cache_target_batch(
                 break
         else:
             async with session_factory() as db:
-                await complete_cache_target_command(db, leased=leased, result=result)
+                completion_outcome = await complete_cache_target_command(
+                    db,
+                    leased=leased,
+                    result=result,
+                    consumer_id=consumer_id,
+                )
                 await db.commit()
-            succeeded += 1
+            if completion_outcome == "succeeded":
+                succeeded += 1
+            else:
+                superseded += 1
+                halted = True
+                break
     return CacheTargetPublishBatchResult(
         claimed=len(leased_rows),
         succeeded=succeeded,
+        superseded=superseded,
         retried=retried,
         dead_lettered=dead_lettered,
         halted=halted,

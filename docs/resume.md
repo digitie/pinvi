@@ -1,5 +1,43 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 Map generation 4 exact pin
+
+Map PR #917의 immutable mutation receipt 보강을 commit
+`8af695efc69dffb8778be16a574c6e5c4828c169`로 확정했다. PinVi는 이 commit의 service OpenAPI
+SHA-256 `9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`를 vendor하고
+contract generation `4`를 요구한다. PUT/DELETE response는 commit된 target incarnation의 UUID와
+strong ETag, positive `target_sequence`가 항상 존재하고, GET tombstone projection만 nullable
+identity를 허용한다. If-Match PUT/DELETE는 응답 UUID를 요청 ETag의 target incarnation과 exact
+결박하고, 다른 UUID의 자기 일관적인 receipt도 fail-close한다. 집중 테스트 **74 passed**, Ruff,
+strict mypy, exact artifact 검사가 통과했고 두 독립 적대적 리뷰 모두 P0–P2 0으로 종료됐다.
+
+**다음 한 작업**: PR #423에 latest exact pin을 push한 뒤, Map/PinVi exact image로 n150 isolated
+destructive Live UI recovery E2E를 완료한다.
+
+## 2026-08-01 (codex) — T-VN-41 delete→put precondition lifecycle 정정
+
+n150 exact-image fixture에서 실제 DB trigger가 만든 DELETE→PUT을 publisher로 보낸 결과, DELETE 뒤
+PUT이 412로 멈추는 lifecycle 결함을 확인했다. tombstone 응답의 target ID/ETag는 더 이상 active
+resource precondition이 아니므로 DELETE completion은 remote generation/status/sequence만 보존하고
+`remote_target_id/remote_etag`를 비운다. 다음 PUT은 stale historical `If-Match` 대신
+`If-None-Match: *`로 재생성된다. event-first crash 경계는 strict `state_applied` receipt의
+`source_event_id`를 local command identity와 결박해 causal success로 종결하며, active/deleted
+identity와 ETag를 wire state에 맞게 원자적으로 반영한다. publisher/event consumer의 lock 순서는
+consumer→command→head로 통일했다. restore epoch 전환 뒤 돌아온 구 epoch HTTP 성공/실패는 command를
+terminal `superseded`로 닫고 publisher를 halt하며 old tuple이나 failure disposition을 새 epoch
+head/consumer에 적용하지 않는다. `state_applied`의 numeric/bool material과 ETag version은 coercion
+없이 exact 검증하며 direct HTTP mutation receipt도 strict int, lowercase canonical target UUID,
+positive canonical-decimal ETag version을 동일하게 강제한다. event envelope의 epoch/generation/sequence/
+relay order와 event/target UUID도 같은 exact wire 원칙으로 검증한다.
+
+실제 PostGIS 회귀 테스트가 direct completion과 event-first/late-completion 양쪽의 causal tuple 보존,
+active identity 제거, 다음 PUT lease의 `expected_etag=NULL`을 함께 검증한다. publisher/event
+consumer/sync worker **39 passed**, strict transport unit **19 passed**, Ruff, strict mypy가 통과했다.
+
+**다음 한 작업**: Map의 exact DELETE replay receipt 보강과 두 독립 적대적 재리뷰를 완료해 PR
+#917/#423에 incremental commit/push하고 exact image를 재빌드한 뒤, n150의 중단된 PUT command를 새
+semantics로 복구해 blocked fixture와 Live UI E2E를 완료한다.
+
 ## 2026-08-01 (codex) — T-VN-41 Map rebase provenance 재핀
 
 Map PR #917을 최신 main에 rebase하고 cache-target migration을 단일 Alembic head `0075`로

@@ -6,7 +6,16 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +24,7 @@ from app.core.cache_target_contract import (
     cache_target_snapshot_merkle_root,
 )
 from app.models.cache_target_sync import (
+    KtmCacheTargetCommand,
     KtmCacheTargetConsumer,
     KtmCacheTargetEvent,
     KtmCacheTargetEventClaim,
@@ -68,6 +78,63 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _CacheTargetEventCoordinate(_StrictModel):
+    lon_e6: StrictInt
+    lat_e6: StrictInt
+
+
+class _CacheTargetStateAppliedTarget(_StrictModel):
+    target_id: uuid.UUID
+    entity_tag: str
+    coord: _CacheTargetEventCoordinate
+    radius_m: StrictInt = Field(ge=0)
+    update_enabled: StrictBool
+
+    @field_validator("target_id", mode="before")
+    @classmethod
+    def validate_target_id(cls, value: object) -> object:
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError("state_applied target_id가 canonical UUID가 아닙니다.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_entity_tag(self) -> Self:
+        prefix = f'"{self.target_id}:'
+        if not self.entity_tag.startswith(prefix) or not self.entity_tag.endswith('"'):
+            raise ValueError("state_applied target entity_tag 형식이 다릅니다.")
+        version = self.entity_tag[len(prefix) : -1]
+        if (
+            not version.isascii()
+            or not version.isdigit()
+            or int(version) < 1
+            or str(int(version)) != version
+        ):
+            raise ValueError("state_applied target entity_tag version이 canonical하지 않습니다.")
+        return self
+
+
+class _CacheTargetStateAppliedPayload(_StrictModel):
+    version: Literal["cache-target-event-v1"]
+    state: TargetState
+    source_event_id: uuid.UUID
+    target: _CacheTargetStateAppliedTarget | None
+
+    @field_validator("source_event_id", mode="before")
+    @classmethod
+    def validate_source_event_id(cls, value: object) -> object:
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError("state_applied source_event_id가 canonical UUID가 아닙니다.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_target_state(self) -> Self:
+        if self.state == "active" and self.target is None:
+            raise ValueError("active state_applied event에는 target이 필요합니다.")
+        if self.state == "deleted" and self.target is not None:
+            raise ValueError("deleted state_applied event의 target은 null이어야 합니다.")
+        return self
+
+
 def _validate_sha256_hex(value: str) -> str:
     if len(value) != 64 or value != value.lower():
         raise ValueError("fingerprint는 lowercase SHA-256 hex여야 합니다.")
@@ -87,15 +154,26 @@ class CacheTargetEventRecord(_StrictModel):
     external_system: Literal["pinvi"]
     target_key: str | None = Field(default=None, min_length=36, max_length=36)
     target_id: uuid.UUID | None = None
-    restore_epoch: int = Field(gt=0)
-    source_generation: int | None = Field(default=None, gt=0)
-    target_sequence: int | None = Field(default=None, gt=0)
-    relay_order: int = Field(gt=0)
+    restore_epoch: StrictInt = Field(gt=0)
+    source_generation: StrictInt | None = Field(default=None, gt=0)
+    target_sequence: StrictInt | None = Field(default=None, gt=0)
+    relay_order: StrictInt = Field(gt=0)
     cursor: str = Field(min_length=1)
     source_payload_fingerprint: str
     payload_fingerprint: str
     payload: dict[str, Any]
     occurred_at: datetime
+
+    @field_validator("event_id", "target_id", mode="before")
+    @classmethod
+    def validate_uuid_identity(cls, value: object, info: Any) -> object:
+        if value is None and info.field_name == "target_id":
+            return value
+        if isinstance(value, uuid.UUID):
+            return value
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError(f"{info.field_name}는 lowercase canonical UUID여야 합니다.")
+        return value
 
     @field_validator("target_key")
     @classmethod
@@ -449,7 +527,7 @@ async def apply_cache_target_claim(
             new_event_count += 1
             last_order = event.relay_order
             if event.event_scope == "target":
-                await _apply_target_tuple(db, event=event)
+                await _apply_target_tuple(db, event=event, applied_at=current)
                 target_event_count += 1
             else:
                 await _apply_stream_reconciled(
@@ -497,11 +575,61 @@ async def apply_cache_target_claim(
     return _ack_for_claim(claim)
 
 
-async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord) -> None:
+def _state_applied_payload(event: CacheTargetEventRecord) -> _CacheTargetStateAppliedPayload:
+    try:
+        payload = _CacheTargetStateAppliedPayload.model_validate(event.payload)
+    except ValidationError as exc:
+        raise CacheTargetEventConflictError(
+            "state_applied payload가 exact v1 계약과 다릅니다."
+        ) from exc
+    if payload.state == "active":
+        assert payload.target is not None
+        if payload.target.target_id != event.target_id:
+            raise CacheTargetEventConflictError(
+                "state_applied envelope/payload target_id가 다릅니다."
+            )
+    return payload
+
+
+async def _apply_target_tuple(
+    db: AsyncSession,
+    *,
+    event: CacheTargetEventRecord,
+    applied_at: datetime,
+) -> None:
     if event.target_key is None or event.source_generation is None or event.target_sequence is None:
         raise CacheTargetEventConflictError("target event tuple이 없습니다.")
-    head = await db.get(KtmCacheTargetHead, uuid.UUID(event.target_key))
+    poi_id = uuid.UUID(event.target_key)
+    payload = (
+        _state_applied_payload(event) if event.event_type == "cache_target.state_applied" else None
+    )
+    command = None
+    if payload is not None:
+        command = await db.scalar(
+            select(KtmCacheTargetCommand)
+            .where(KtmCacheTargetCommand.command_id == payload.source_event_id)
+            .with_for_update()
+        )
+        expected_operation = "put" if payload.state == "active" else "delete"
+        source_fingerprint = bytes.fromhex(event.source_payload_fingerprint)
+        if (
+            command is None
+            or command.poi_id != poi_id
+            or command.operation != expected_operation
+            or command.source_generation != event.source_generation
+            or command.payload_fingerprint != source_fingerprint
+        ):
+            raise CacheTargetEventConflictError(
+                "state_applied source_event_id가 local command identity와 다릅니다."
+            )
+    head = await db.scalar(
+        select(KtmCacheTargetHead).where(KtmCacheTargetHead.poi_id == poi_id).with_for_update()
+    )
     if head is None:
+        if payload is not None:
+            raise CacheTargetEventConflictError(
+                "state_applied source_event_id에 대응하는 local head가 없습니다."
+            )
         return
     source_fingerprint = bytes.fromhex(event.source_payload_fingerprint)
     if event.source_generation > head.source_generation:
@@ -519,14 +647,41 @@ async def _apply_target_tuple(db: AsyncSession, *, event: CacheTargetEventRecord
         head.remote_target_sequence or 0,
     )
     incoming_tuple = (event.restore_epoch, event.source_generation, event.target_sequence)
-    if incoming_tuple <= current_tuple:
+    if command is not None:
+        if command.status != "succeeded":
+            command.status = "succeeded"
+            command.response_status = None
+            command.response_body = {
+                "completion_source": "cache_target.state_applied",
+                "event_id": str(event.event_id),
+                "payload_fingerprint": event.payload_fingerprint,
+            }
+            command.response_etag = (
+                payload.target.entity_tag if payload and payload.target else None
+            )
+            command.error_code = None
+            command.error_detail = None
+            command.completed_at = applied_at
+            command.lease_owner = None
+            command.lease_until = None
+    if incoming_tuple < current_tuple:
         return
-    head.remote_target_id = event.target_id
+    if payload is None:
+        head.remote_target_id = event.target_id
+        status = event.payload.get("status")
+        head.remote_status = str(status)[:32] if status is not None else event.event_type[:32]
+    elif payload.state == "active":
+        assert payload.target is not None
+        head.remote_target_id = payload.target.target_id
+        head.remote_etag = payload.target.entity_tag
+        head.remote_status = "active"
+    else:
+        head.remote_target_id = None
+        head.remote_etag = None
+        head.remote_status = "deleted"
     head.remote_restore_epoch = event.restore_epoch
     head.remote_source_generation = event.source_generation
     head.remote_target_sequence = event.target_sequence
-    status = event.payload.get("status")
-    head.remote_status = str(status)[:32] if status is not None else event.event_type[:32]
 
 
 async def _apply_stream_reconciled(

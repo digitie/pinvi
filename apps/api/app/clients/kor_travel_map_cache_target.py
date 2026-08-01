@@ -11,7 +11,7 @@ from typing import Any, Literal, Self
 from urllib.parse import quote
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from app.services.cache_target_event_consumer import (
     CacheTargetAck,
@@ -81,12 +81,12 @@ class CacheTargetStateResult(BaseModel):
     external_system: Literal["pinvi"]
     target_key: str
     state: Literal["active", "deleted"]
-    restore_epoch: int = Field(gt=0)
-    source_generation: int = Field(gt=0)
+    restore_epoch: StrictInt = Field(gt=0)
+    source_generation: StrictInt = Field(gt=0)
     source_payload_fingerprint: str
     entity_tag: str
     target_id: uuid.UUID
-    target_sequence: int = Field(gt=0)
+    target_sequence: StrictInt = Field(gt=0)
     occurred_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -103,6 +103,15 @@ class CacheTargetStateResult(BaseModel):
             ) from exc
         return value
 
+    @field_validator("target_id", mode="before")
+    @classmethod
+    def validate_target_id(cls, value: object) -> object:
+        if isinstance(value, uuid.UUID):
+            return value
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError("target_id가 lowercase canonical UUID가 아닙니다.")
+        return value
+
     @model_validator(mode="after")
     def validate_identity_and_etag(self) -> Self:
         if self.target_key != str(uuid.UUID(self.target_key)):
@@ -110,6 +119,14 @@ class CacheTargetStateResult(BaseModel):
         prefix = f'"{self.target_id}:'
         if not self.entity_tag.startswith(prefix) or not self.entity_tag.endswith('"'):
             raise ValueError("entity_tag가 target strong ETag 형식이 아닙니다.")
+        version = self.entity_tag[len(prefix) : -1]
+        if (
+            not version.isascii()
+            or not version.isdigit()
+            or int(version) < 1
+            or str(int(version)) != version
+        ):
+            raise ValueError("entity_tag version이 canonical positive decimal이 아닙니다.")
         return self
 
 
@@ -438,6 +455,7 @@ class CacheTargetServiceClient:
             restore_epoch=restore_epoch,
             source_generation=source_generation,
             source_payload=source_payload,
+            expected_etag=expected_etag,
         )
         return CacheTargetMutationResult(response.status_code, data, response.headers.get("ETag"))
 
@@ -481,6 +499,7 @@ class CacheTargetServiceClient:
             restore_epoch=restore_epoch,
             source_generation=source_generation,
             source_payload=source_payload,
+            expected_etag=expected_etag,
         )
         return CacheTargetMutationResult(response.status_code, data, response.headers.get("ETag"))
 
@@ -494,6 +513,7 @@ class CacheTargetServiceClient:
         restore_epoch: int,
         source_generation: int,
         source_payload: dict[str, Any],
+        expected_etag: str | None,
     ) -> None:
         if (
             data.target_key != target_key
@@ -508,6 +528,12 @@ class CacheTargetServiceClient:
         response_etag = response.headers.get("ETag")
         if response_etag is None or response_etag != data.entity_tag:
             raise CacheTargetContractError("target mutation ETag header/body가 다릅니다.")
+        if expected_etag is not None:
+            expected_target_id, separator, _version = expected_etag[1:-1].rpartition(":")
+            if separator != ":" or expected_target_id != str(data.target_id):
+                raise CacheTargetContractError(
+                    "target mutation receipt가 If-Match target incarnation과 다릅니다."
+                )
 
     async def claim_events(
         self,

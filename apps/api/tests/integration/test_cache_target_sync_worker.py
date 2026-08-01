@@ -39,16 +39,28 @@ from app.services.cache_target_sync_worker import (
 pytestmark = pytest.mark.asyncio
 
 
+def _links_reconciled_payload(target_id: uuid.UUID) -> dict[str, object]:
+    return {
+        "version": "cache-target-event-v1",
+        "request_id": str(uuid.uuid4()),
+        "job_id": str(uuid.uuid4()),
+        "status": "reconciled",
+        "target_id": str(target_id),
+        "active_link_count": 0,
+    }
+
+
 def _claim_with_mid_stream_poison() -> CacheTargetClaim:
     occurred_at = datetime.now(UTC).isoformat()
+    target_id = uuid.uuid4()
     first = CacheTargetEventRecord.model_validate(
         {
             "event_id": str(uuid.uuid4()),
-            "event_type": "cache_target.state_applied",
+            "event_type": "cache_target.links_reconciled",
             "event_scope": "target",
             "external_system": "pinvi",
             "target_key": str(uuid.uuid4()),
-            "target_id": str(uuid.uuid4()),
+            "target_id": str(target_id),
             "restore_epoch": 7,
             "source_generation": 1,
             "target_sequence": 1,
@@ -56,7 +68,7 @@ def _claim_with_mid_stream_poison() -> CacheTargetClaim:
             "cursor": "cursor-1",
             "source_payload_fingerprint": "73" * 32,
             "payload_fingerprint": "70" * 32,
-            "payload": {"status": "applied"},
+            "payload": _links_reconciled_payload(target_id),
             "occurred_at": occurred_at,
         }
     )
@@ -171,6 +183,7 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
     reconciled_event_id = uuid.uuid4()
     target_event_id = uuid.uuid4()
     target_key = uuid.uuid4()
+    map_target_id = uuid.uuid4()
     request_id = uuid.uuid4()
     snapshot_id = uuid.uuid4()
     root = (b"r" * 32).hex()
@@ -227,11 +240,11 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
             },
             {
                 "event_id": str(target_event_id),
-                "event_type": "cache_target.state_applied",
+                "event_type": "cache_target.links_reconciled",
                 "event_scope": "target",
                 "external_system": "pinvi",
                 "target_key": str(target_key),
-                "target_id": str(uuid.uuid4()),
+                "target_id": str(map_target_id),
                 "restore_epoch": 7,
                 "source_generation": 1,
                 "target_sequence": 1,
@@ -239,7 +252,7 @@ async def test_actual_map_reconciled_wire_then_target_is_applied_and_acked(
                 "cursor": "cursor-2",
                 "source_payload_fingerprint": "73" * 32,
                 "payload_fingerprint": "71" * 32,
-                "payload": {"status": "applied"},
+                "payload": _links_reconciled_payload(map_target_id),
                 "occurred_at": occurred_at,
             },
         ],
@@ -301,13 +314,14 @@ async def test_expired_claim_reclaim_deduplicates_target_side_effect(
     await _seed_ready_consumer(session_factory)
     event_id = uuid.uuid4()
     target_key = uuid.uuid4()
+    map_target_id = uuid.uuid4()
     event = {
         "event_id": str(event_id),
-        "event_type": "cache_target.state_applied",
+        "event_type": "cache_target.links_reconciled",
         "event_scope": "target",
         "external_system": "pinvi",
         "target_key": str(target_key),
-        "target_id": str(uuid.uuid4()),
+        "target_id": str(map_target_id),
         "restore_epoch": 7,
         "source_generation": 1,
         "target_sequence": 1,
@@ -315,7 +329,7 @@ async def test_expired_claim_reclaim_deduplicates_target_side_effect(
         "cursor": "cursor-1",
         "source_payload_fingerprint": "73" * 32,
         "payload_fingerprint": "70" * 32,
-        "payload": {"status": "applied"},
+        "payload": _links_reconciled_payload(map_target_id),
         "occurred_at": datetime.now(UTC).isoformat(),
     }
     now = datetime.now(UTC)
@@ -480,6 +494,7 @@ async def test_bootstrap_resumes_completed_reconciliation_drain_before_local_rea
     request_id = uuid.uuid4()
     expected_snapshot_id = uuid.uuid4()
     replay_target_id = uuid.uuid4()
+    replay_map_target_id = uuid.uuid4()
     empty_root = hashlib.sha256(b"KTMCTEMPTY\x00").hexdigest()
     occurred_at = datetime.now(UTC).isoformat()
     async with session_factory() as db:
@@ -520,11 +535,11 @@ async def test_bootstrap_resumes_completed_reconciliation_drain_before_local_rea
             "events": [
                 {
                     "event_id": str(uuid.uuid4()),
-                    "event_type": "cache_target.state_applied",
+                    "event_type": "cache_target.links_reconciled",
                     "event_scope": "target",
                     "external_system": "pinvi",
                     "target_key": str(replay_target_id),
-                    "target_id": str(uuid.uuid4()),
+                    "target_id": str(replay_map_target_id),
                     "restore_epoch": 7,
                     "source_generation": 1,
                     "target_sequence": 1,
@@ -532,7 +547,7 @@ async def test_bootstrap_resumes_completed_reconciliation_drain_before_local_rea
                     "cursor": "cursor-replayed",
                     "source_payload_fingerprint": "73" * 32,
                     "payload_fingerprint": "70" * 32,
-                    "payload": {"status": "applied"},
+                    "payload": _links_reconciled_payload(replay_map_target_id),
                     "occurred_at": occurred_at,
                 },
                 {
@@ -857,6 +872,8 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
     generic_snapshot_id = uuid.uuid4()
     empty_root = hashlib.sha256(b"KTMCTEMPTY\x00").hexdigest()
     calls: list[str] = []
+    replay_target_key = uuid.uuid4()
+    replay_map_target_id = uuid.uuid4()
     replay_claim = CacheTargetClaim.model_validate(
         {
             "claim_id": str(uuid.uuid4()),
@@ -871,11 +888,11 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
             "events": [
                 {
                     "event_id": str(uuid.uuid4()),
-                    "event_type": "cache_target.state_applied",
+                    "event_type": "cache_target.links_reconciled",
                     "event_scope": "target",
                     "external_system": "pinvi",
-                    "target_key": str(uuid.uuid4()),
-                    "target_id": str(uuid.uuid4()),
+                    "target_key": str(replay_target_key),
+                    "target_id": str(replay_map_target_id),
                     "restore_epoch": 7,
                     "source_generation": 1,
                     "target_sequence": 1,
@@ -883,7 +900,7 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                     "cursor": "cursor-replayed",
                     "source_payload_fingerprint": "73" * 32,
                     "payload_fingerprint": "70" * 32,
-                    "payload": {"status": "applied"},
+                    "payload": _links_reconciled_payload(replay_map_target_id),
                     "occurred_at": datetime.now(UTC).isoformat(),
                 },
                 {

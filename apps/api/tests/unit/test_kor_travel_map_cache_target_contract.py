@@ -16,9 +16,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7"
-_FUNCTIONAL_OWNER_COMMIT = "1f14bede3622615634bb3273fd6c6d2acd72fdae"
-_SNAPSHOT_SHA256 = "4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066"
+_ARTIFACT_COMMIT = "8af695efc69dffb8778be16a574c6e5c4828c169"
+_FUNCTIONAL_OWNER_COMMIT = "8af695efc69dffb8778be16a574c6e5c4828c169"
+_SNAPSHOT_SHA256 = "9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985"
 
 
 def _spec() -> dict[str, Any]:
@@ -31,7 +31,7 @@ def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 3
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 4
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -53,6 +53,32 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         assert method in paths[path]
 
     schemas = spec["components"]["schemas"]
+    mutation_response = schemas["CacheTargetSourceMutationResponse"]
+    assert mutation_response["properties"]["data"] == {
+        "$ref": "#/components/schemas/CacheTargetSourceMutationRecord"
+    }
+    mutation_record = schemas["CacheTargetSourceMutationRecord"]
+    assert {"target_id", "entity_tag", "target_sequence"} <= set(mutation_record["required"])
+    assert mutation_record["properties"]["target_id"] == {
+        "format": "uuid",
+        "title": "Target Id",
+        "type": "string",
+    }
+    assert mutation_record["properties"]["entity_tag"]["type"] == "string"
+    assert mutation_record["properties"]["target_sequence"] == {
+        "minimum": 1.0,
+        "title": "Target Sequence",
+        "type": "integer",
+    }
+
+    read_response = schemas["CacheTargetSourceReadResponse"]
+    assert read_response["properties"]["data"] == {
+        "$ref": "#/components/schemas/CacheTargetSourceRecord"
+    }
+    read_record = schemas["CacheTargetSourceRecord"]
+    assert read_record["properties"]["target_id"]["anyOf"][-1] == {"type": "null"}
+    assert read_record["properties"]["entity_tag"]["anyOf"][-1] == {"type": "null"}
+
     preparing = schemas["CacheTargetReconciliationPreparing"]
     assert preparing["additionalProperties"] is False
     assert set(preparing["required"]) == {

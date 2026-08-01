@@ -4,6 +4,15 @@
 
 ## Unreleased
 
+- Cache-target source가 삭제된 뒤 다시 활성화될 때 tombstone target의 historical ETag를 재사용하지
+  않는다. DELETE completion은 active target identity를 비워 다음 PUT이 `If-None-Match: *`로 새
+  target을 생성하게 하며, stale `If-Match` 412로 전파가 중단되던 문제를 수정했다. HTTP 성공 뒤
+  local completion 전에 event가 도착하는 crash 경계에서는 strict `state_applied` receipt가
+  `source_event_id`의 command를 causal success로 종결하고 active identity를 복원한다. restore epoch
+  전환 뒤 도착한 구 epoch HTTP 성공/실패는 command를 terminal `superseded`로 닫고 새 head나 consumer
+  readiness를 오염시키지 않는다. Map generation 4 계약을 exact pin해 PUT/DELETE receipt의 target
+  UUID·strong ETag·positive target sequence는 필수로, GET tombstone projection만 nullable로 검증한다. If-Match PUT/DELETE
+  receipt는 요청 precondition의 target UUID와도 exact하게 같아야 성공으로 수용한다.
 - 여행 상세의 kor-travel-map batch 조회가 실패하거나 불완전한 응답을 받았을 때 저장된 장소를
   사용할 수 없는 장소로 잘못 표시하지 않는다. 명시적인 `missing`은 “장소 정보 사용 불가”,
   transport/계약 실패는 저장본을 유지한 “최신 상태 확인 실패”로 구분한다. `@`를 포함한

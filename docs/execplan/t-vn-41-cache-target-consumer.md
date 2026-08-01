@@ -219,14 +219,16 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export commit `42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`의
+서비스 계약은 Map export/functional owner commit `8af695efc69dffb8778be16a574c6e5c4828c169`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `1f14bede3622615634bb3273fd6c6d2acd72fdae`, contract generation `3`이
+`9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`다. sync를 켤 때 이 SHA,
+functional artifact owner revision, contract generation `4`가
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
 
-generation 3은 generation 2의 request-bound receipt 계약에 복원 epoch 경계를 추가한다. Map은 restore
+generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
+PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted
+tombstone identity의 null을 허용한다. Map은 restore
 fence transaction에서 이전 epoch의 `pending/retry/leased/dead` delivery를 terminal `superseded`로 닫고 새
 epoch만 claim·DLQ·replay·완료 판정에 노출한다. 동시에 active preparing/running reconciliation을 terminal
 `superseded(error_code=restore_fenced)`로 닫고 request ID와 영향 count를 fence receipt에 영속화해 새 epoch

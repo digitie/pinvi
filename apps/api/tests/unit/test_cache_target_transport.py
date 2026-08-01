@@ -7,6 +7,7 @@ import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import pytest
@@ -15,6 +16,7 @@ from app.clients.kor_travel_map_cache_target import (
     CacheTargetContractError,
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
+    CacheTargetStateResult,
     classify_cache_target_failure,
 )
 from app.core.cache_target_contract import (
@@ -50,6 +52,31 @@ def _client(role: str, handler: Handler) -> CacheTargetServiceClient:
 )
 def test_failure_classification(status_code: int, code: str, expected: str) -> None:
     assert classify_cache_target_failure(status_code=status_code, code=code) == expected
+
+
+def test_mutation_result_rejects_coerced_tuple_and_noncanonical_etag() -> None:
+    target_id = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    valid = {
+        "external_system": "pinvi",
+        "target_key": str(uuid.uuid4()),
+        "state": "active",
+        "restore_epoch": 7,
+        "source_generation": 1,
+        "source_payload_fingerprint": "a" * 64,
+        "entity_tag": f'"{target_id}:1"',
+        "target_id": str(target_id),
+        "target_sequence": 1,
+    }
+    invalid_results = [
+        {**valid, "restore_epoch": "7"},
+        {**valid, "target_sequence": True},
+        {**valid, "entity_tag": f'"{target_id}:not-a-version"'},
+        {**valid, "entity_tag": f'"{target_id}:01"'},
+        {**valid, "target_id": str(target_id).upper()},
+    ]
+    for invalid in invalid_results:
+        with pytest.raises(ValueError):
+            CacheTargetStateResult.model_validate(invalid)
 
 
 @pytest.mark.asyncio
@@ -131,6 +158,87 @@ async def test_command_transport_sends_only_role_token_and_exact_preconditions()
     assert result.status_code == 200
     assert result.etag == f'"{target_id}:1"'
     assert result.data.target_id == target_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["put", "delete"])
+async def test_if_match_mutation_rejects_other_target_incarnation(operation: str) -> None:
+    command_id = uuid.uuid4()
+    target_key = str(uuid.uuid4())
+    expected_target_id = uuid.uuid4()
+    other_target_id = uuid.uuid4()
+    occurred_at = datetime(2026, 7, 31, tzinfo=UTC)
+    source_payload: dict[str, Any]
+    state: str
+    if operation == "put":
+        state = "active"
+        source_payload = {
+            "version": "cache-target-source-v1",
+            "state": "active",
+            "coord": {"lon_e6": 126_000_000, "lat_e6": 37_000_000},
+            "radius_m": 5000,
+            "update_enabled": True,
+        }
+    else:
+        state = "deleted"
+        source_payload = {"version": "cache-target-source-v1", "state": "deleted"}
+    source_fingerprint = hashlib.sha256(
+        json.dumps(
+            source_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["If-Match"] == f'"{expected_target_id}:7"'
+        return httpx.Response(
+            200,
+            headers={"ETag": f'"{other_target_id}:8"'},
+            json={
+                "data": {
+                    "external_system": "pinvi",
+                    "target_key": target_key,
+                    "state": state,
+                    "restore_epoch": 7,
+                    "source_generation": 2,
+                    "source_payload_fingerprint": source_fingerprint,
+                    "entity_tag": f'"{other_target_id}:8"',
+                    "target_id": str(other_target_id),
+                    "target_sequence": 2,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("command", handler)
+    try:
+        with pytest.raises(CacheTargetContractError, match="If-Match target incarnation"):
+            if operation == "put":
+                await client.put_target(
+                    external_system="pinvi",
+                    target_key=target_key,
+                    command_id=command_id,
+                    restore_epoch=7,
+                    source_generation=2,
+                    occurred_at=occurred_at,
+                    source_payload=source_payload,
+                    expected_etag=f'"{expected_target_id}:7"',
+                )
+            else:
+                await client.delete_target(
+                    external_system="pinvi",
+                    target_key=target_key,
+                    command_id=command_id,
+                    restore_epoch=7,
+                    source_generation=2,
+                    occurred_at=occurred_at,
+                    source_payload=source_payload,
+                    expected_etag=f'"{expected_target_id}:7"',
+                )
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio

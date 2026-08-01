@@ -2,6 +2,52 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 generation 4 mutation receipt 계약 핀
+
+Map `8af695efc69dffb8778be16a574c6e5c4828c169`가 source ledger에 apply 시점 target
+lock version을 불변 receipt로 저장하고 PUT/DELETE 응답과 GET projection DTO를 분리했다. PinVi는 해당
+service OpenAPI exact bytes(`9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`)를
+vendor하고 contract generation을 `4`로 올렸다. 계약 테스트는 mutation response가 non-null UUID
+`target_id`, strong `entity_tag`, positive `target_sequence`를 사용하고 read response만 nullable
+identity를 허용함을 별도로 고정한다. PinVi HTTP 경계는 If-Match PUT/DELETE의 receipt target UUID가
+precondition ETag의 target incarnation UUID와 exact하게 같은지도 검증한다. create PUT은
+If-None-Match이므로 새 UUID를 허용한다.
+
+PinVi runtime은 DELETE completion에서 historical target identity를 비우고 다음 PUT을
+`If-None-Match: *`로 발행하므로 새 producer receipt 의미와 일치한다. 두 독립 적대적 리뷰는 Map의
+immutable replay와 PinVi의 causal completion·restore epoch fence·lock order를 최신 코드 기준으로
+재검토했고 P0–P2가 없었다. 최종 집중 게이트는 transport·contract·config·publisher·event
+consumer·sync worker **74 passed**, Ruff, strict mypy **205 source files**, vendored byte/SHA exact
+검사를 통과했다.
+
+## 2026-08-01 (codex) — T-VN-41 delete→put active precondition 복원
+
+n150 isolated 제품 경로에서 POI를 soft-delete한 뒤 즉시 복원하자 DELETE는 성공했지만 다음 PUT이
+`TARGET_PRECONDITION_FAILED` 412로 멈췄다. DELETE 응답의 target ID/ETag는 tombstone 처리된
+historical row를 가리키는데, publisher가 이를 active target precondition으로 저장해 뒤따르는 PUT이
+stale `If-Match`를 보낸 것이 원인이었다.
+
+DELETE 완료 시 remote generation/status/sequence는 보존하되 active target ID/ETag는 `NULL`로
+전이한다. 따라서 다음 PUT은 `If-None-Match: *`로 새 active target을 생성한다. HTTP 성공 뒤 local
+completion 전에 event consumer가 먼저 commit하는 경계도 함께 닫았다. actual
+`cache-target-event-v1` payload의 state/source_event_id/active target ETag를 strict 검증하고,
+source event UUID·generation·operation·source fingerprint가 모두 일치하는 local command만 같은
+transaction에서 causal success로 종결한다. deleted receipt는 active identity를 비우고, active
+receipt는 payload target ID/ETag를 복원한다. consumer→command→head 락 순서를 고정했으며 늦게
+도착한 동일 HTTP completion은 idempotent no-op이다. restore fence로 active epoch가 바뀐 뒤 도착한
+구 epoch HTTP 성공/실패는 같은 UUID를 새 epoch에 재발행하지 않고 command를 terminal
+`superseded`로 종결하며 batch를 halt해 bootstrap 재검증으로 돌아간다. event target material은
+정수/bool coercion과 non-canonical ETag version을 거부한다. direct HTTP mutation DTO도 동일하게
+tuple strict int, lowercase canonical target UUID, positive canonical-decimal ETag version을 강제한다.
+event envelope 자체도 epoch/generation/sequence/order strict int와 lowercase canonical event/target UUID를
+요구해 malformed tuple을 저장·ACK하지 않는다.
+
+실제 PostGIS 회귀는 direct DELETE completion과 event-first crash 양쪽에서 epoch/generation/sequence
+보존, active identity 제거, following PUT `expected_etag=NULL`, late HTTP completion 무해성, 구 epoch
+성공/실패의 supersede와 head/consumer 비오염을 고정한다.
+publisher/event consumer/sync worker PostGIS **39 passed**, transport unit **19 passed**와
+Ruff·strict mypy가 통과했다.
+
 ## 2026-08-01 (codex) — T-VN-41 Map rebase provenance 정합화
 
 Map PR #917의 최신 main rebase로 export/functional commit SHA가 바뀌었다. OpenAPI exact bytes

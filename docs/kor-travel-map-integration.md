@@ -174,10 +174,10 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export commit `42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`의
+서비스 계약은 Map export/functional owner commit `8af695efc69dffb8778be16a574c6e5c4828c169`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`이고, sync enable 설정의
-functional artifact owner revision `1f14bede3622615634bb3273fd6c6d2acd72fdae`와 contract generation `3`도
+`9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`이고, sync enable 설정의
+functional artifact owner revision과 contract generation `4`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -191,8 +191,11 @@ transaction에서 snapshot owner 충돌을 확인한다. 같은 request의 exact
 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면 적용된 inbox
 receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정한다.
 
-generation 3은 terminal receipt의 request-bound identity에 더해 restore epoch의 배달 경계를 고정한
-breaking 계약이다. Map restore fence는 이전 epoch의 미완료·재시도·lease·dead delivery를 terminal
+generation 4는 generation 3의 restore epoch 배달 경계에 mutation/read 응답 의미를 분리한 breaking
+계약이다. PUT/DELETE receipt는 방금 commit된 target incarnation의 UUID, strong ETag, positive
+`target_sequence`를 항상 반환하고,
+GET projection만 deleted tombstone의 nullable target identity를 허용한다. Map restore fence는 이전
+epoch의 미완료·재시도·lease·dead delivery를 terminal
 `superseded`로 원자적으로 닫고, 새 epoch만 claim·DLQ·replay·완료 판정에 포함한다. PinVi는 receipt의
 request/snapshot/epoch/root를 durable expectation과 exact 대조하고 stale epoch event는 계속 영구 NACK하며,
 generic snapshot identity와 섞지 않는다. fence는 active preparing/running reconciliation도 terminal
