@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetMutationResult,
@@ -25,7 +25,13 @@ from app.models.cache_target_sync import (
     KtmCacheTargetHead,
     KtmCacheTargetReconciliationExpectation,
 )
-from app.services.cache_target_event_consumer import CacheTargetSnapshot
+from app.services.cache_target_event_consumer import (
+    CacheTargetClaim,
+    CacheTargetEventRecord,
+    CacheTargetSnapshot,
+    apply_cache_target_claim,
+    mark_cache_target_acknowledged,
+)
 from app.services.cache_target_initial_cutover import (
     CacheTargetSourceIdentity,
     _finish_remote_completed_cutover,
@@ -249,47 +255,148 @@ async def _seed_reconciliation_expectation(
     merkle_root: str,
     high_watermark_cursor: str = "cursor-1",
     received: bool = False,
-) -> None:  # type: ignore[no-untyped-def]
+    create_expectation: bool = True,
+    relay_order: int = 1,
+    applied: bool = True,
+) -> CacheTargetEventRecord | None:  # type: ignore[no-untyped-def]
     resolved_at = datetime.now(UTC)
-    receipt_event_id = uuid.uuid4() if received else None
+    event = (
+        _reconciled_event(
+            event_id=uuid.uuid4(),
+            request_id=request_id,
+            snapshot_id=snapshot_id,
+            merkle_root=merkle_root,
+            relay_order=relay_order,
+            occurred_at=resolved_at,
+        )
+        if received or not create_expectation
+        else None
+    )
     async with session_factory() as db:
-        if receipt_event_id is not None:
+        if event is not None:
             db.add(
                 KtmCacheTargetEvent(
-                    event_id=receipt_event_id,
-                    event_type="cache_target.reconciled",
-                    external_system="pinvi",
-                    restore_epoch=7,
-                    relay_order=1,
-                    source_payload_fingerprint=bytes.fromhex(merkle_root),
-                    payload_fingerprint=bytes.fromhex("74" * 32),
-                    occurred_at=resolved_at,
-                    payload={
-                        "actual_merkle_root": merkle_root,
-                        "expected_merkle_root": merkle_root,
-                        "request_id": str(request_id),
-                        "snapshot_id": str(snapshot_id),
-                        "status": "succeeded",
-                        "version": "cache-target-reconciliation-v1",
-                    },
-                    applied_at=resolved_at,
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    external_system=event.external_system,
+                    restore_epoch=event.restore_epoch,
+                    relay_order=event.relay_order,
+                    source_payload_fingerprint=bytes.fromhex(event.source_payload_fingerprint),
+                    payload_fingerprint=bytes.fromhex(event.payload_fingerprint),
+                    occurred_at=event.occurred_at,
+                    payload=event.payload,
+                    applied_at=resolved_at if applied else None,
                 )
             )
-        db.add(
-            KtmCacheTargetReconciliationExpectation(
-                request_id=request_id,
-                external_system="pinvi",
-                snapshot_id=snapshot_id,
-                restore_epoch=7,
-                snapshot_count=1,
-                snapshot_merkle_root=bytes.fromhex(merkle_root),
-                high_watermark_cursor=high_watermark_cursor,
-                status="received" if received else "pending",
-                receipt_event_id=receipt_event_id,
-                resolved_at=resolved_at if received else None,
+        if create_expectation:
+            db.add(
+                KtmCacheTargetReconciliationExpectation(
+                    request_id=request_id,
+                    external_system="pinvi",
+                    snapshot_id=snapshot_id,
+                    restore_epoch=7,
+                    snapshot_count=1,
+                    snapshot_merkle_root=bytes.fromhex(merkle_root),
+                    high_watermark_cursor=high_watermark_cursor,
+                    status="received" if received else "pending",
+                    receipt_event_id=event.event_id if received and event is not None else None,
+                    resolved_at=resolved_at if received else None,
+                )
             )
-        )
         await db.commit()
+    return event
+
+
+def _reconciled_event(
+    *,
+    event_id: uuid.UUID,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    merkle_root: str,
+    relay_order: int,
+    occurred_at: datetime,
+) -> CacheTargetEventRecord:
+    return CacheTargetEventRecord.model_validate(
+        {
+            "event_id": str(event_id),
+            "event_type": "cache_target.reconciled",
+            "event_scope": "stream",
+            "external_system": "pinvi",
+            "target_key": None,
+            "target_id": None,
+            "restore_epoch": 7,
+            "source_generation": None,
+            "target_sequence": None,
+            "relay_order": relay_order,
+            "cursor": f"cursor-{relay_order}",
+            "source_payload_fingerprint": merkle_root,
+            "payload_fingerprint": "74" * 32,
+            "payload": {
+                "actual_merkle_root": merkle_root,
+                "expected_merkle_root": merkle_root,
+                "request_id": str(request_id),
+                "snapshot_id": str(snapshot_id),
+                "status": "succeeded",
+                "version": "cache-target-reconciliation-v1",
+            },
+            "occurred_at": occurred_at.isoformat(),
+        }
+    )
+
+
+def _claim(event: CacheTargetEventRecord, *, cursor: str | None = None) -> CacheTargetClaim:
+    material = event.model_dump(mode="json")
+    material["cursor"] = cursor or event.cursor
+    return CacheTargetClaim.model_validate(
+        {
+            "claim_id": str(uuid.uuid4()),
+            "external_system": "pinvi",
+            "consumer_id": "pinvi-cache-target-consumer",
+            "lease_token": str(uuid.uuid4()),
+            "status": "active",
+            "first_relay_order": event.relay_order,
+            "last_relay_order": event.relay_order,
+            "acked_through": None,
+            "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+            "events": [material],
+            "idempotent_replay": False,
+        }
+    )
+
+
+async def _seed_remote_completion_case(
+    session_factory,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, str]:  # type: ignore[no-untyped-def]
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+    cutover_id = uuid.uuid4()
+    root = "73" * 32
+    await _seed_remote_completed_local_state(
+        session_factory,
+        cutover_id=cutover_id,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        merkle_root=root,
+    )
+    return request_id, snapshot_id, cutover_id, root
+
+
+async def _finish_remote_completion_case(
+    session_factory,
+    *,
+    request_id: uuid.UUID,
+    cutover_id: uuid.UUID,
+    root: str,
+) -> None:  # type: ignore[no-untyped-def]
+    await _finish_remote_completed_cutover(
+        session_factory,
+        consumer_id="pinvi-cache-target-consumer",
+        cutover_id=cutover_id,
+        request_id=request_id,
+        expected_restore_epoch=7,
+        source=CacheTargetSourceIdentity(count=1, merkle_root=root),
+        stream_entity_tag='"pinvi:4"',
+    )
 
 
 async def test_initial_cutover_closes_zero_to_nonempty_bootstrap_and_is_durable(
@@ -562,3 +669,92 @@ async def test_initial_cutover_remote_completion_reconstructs_missing_expectatio
         assert expectation.high_watermark_cursor == "cursor-1"
         assert expectation.status == "pending"
     assert result.published == 0
+
+
+async def test_remote_completion_recovers_applied_inbox_as_received_and_redelivery_is_noop(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    request_id, snapshot_id, cutover_id, root = await _seed_remote_completion_case(session_factory)
+    event = await _seed_reconciliation_expectation(
+        session_factory,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        merkle_root=root,
+        create_expectation=False,
+    )
+    assert event is not None
+
+    await _finish_remote_completion_case(
+        session_factory,
+        cutover_id=cutover_id,
+        request_id=request_id,
+        root=root,
+    )
+
+    async with session_factory() as db:
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        assert expectation is not None
+        assert expectation.status == "received"
+        assert expectation.receipt_event_id == event.event_id
+        assert expectation.resolved_at is not None
+
+    redelivery = _claim(event, cursor="cursor-redelivery")
+    async with session_factory() as db:
+        ack = await apply_cache_target_claim(db, redelivery)
+        await db.commit()
+    async with session_factory() as db:
+        await mark_cache_target_acknowledged(db, ack)
+        await db.commit()
+
+    async with session_factory() as db:
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert expectation is not None
+        assert expectation.status == "received"
+        assert expectation.receipt_event_id == event.event_id
+        assert consumer is not None
+        assert consumer.ready is True
+        assert await db.scalar(select(func.count()).select_from(KtmCacheTargetEvent)) == 1
+
+
+@pytest.mark.parametrize(
+    "candidate_state",
+    [
+        pytest.param("snapshot_mismatch", id="snapshot-mismatch"),
+        pytest.param("unapplied", id="unapplied-partial"),
+        pytest.param("multiple", id="multiple"),
+    ],
+)
+async def test_remote_completion_rejects_non_exact_applied_inbox_candidates(
+    session_factory,
+    candidate_state: str,
+) -> None:  # type: ignore[no-untyped-def]
+    request_id, snapshot_id, cutover_id, root = await _seed_remote_completion_case(session_factory)
+    candidate_count = 2 if candidate_state == "multiple" else 1
+    for relay_order in range(1, candidate_count + 1):
+        event = await _seed_reconciliation_expectation(
+            session_factory,
+            request_id=request_id,
+            snapshot_id=(uuid.uuid4() if candidate_state == "snapshot_mismatch" else snapshot_id),
+            merkle_root=root,
+            create_expectation=False,
+            relay_order=relay_order,
+            applied=candidate_state != "unapplied",
+        )
+        assert event is not None
+
+    with pytest.raises(RuntimeError, match="applied inbox receipt"):
+        await _finish_remote_completion_case(
+            session_factory,
+            cutover_id=cutover_id,
+            request_id=request_id,
+            root=root,
+        )
+
+    async with session_factory() as db:
+        expectation = await db.get(KtmCacheTargetReconciliationExpectation, request_id)
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert expectation is None
+        assert consumer is not None
+        assert consumer.ready is False
+        assert consumer.stream_control_etag == '"pinvi:3"'

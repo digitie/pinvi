@@ -148,6 +148,15 @@ high-watermark를 고정한다. terminal receipt는 payload의 request ID로 pen
 snapshot/root를 검증한 뒤 `received + receipt_event_id + resolved_at`으로 원자적으로 종결한다. restore
 epoch 전환은 미수신 expectation을 `invalidated`로 닫는다.
 
+initial cutover가 Map completion 뒤 local ready commit 전에 중단되면 복구 transaction은
+consumer→expectation→event 순서로 잠근다. expectation이 없을 때 같은 request의 reconciled inbox가 없으면
+`pending`을 복원하고, 유일한 applied inbox가 있으면 stream tuple/system/epoch/source root/exact payload를
+검증해 그 event와 `received`로 복원한다. 같은 request 후보가 복수이거나 material이 다르거나
+`applied_at`이 없는 부분 상태면 ready를 열지 않는다. local apply는 원격 ACK보다 먼저 commit되므로
+`received` 복원은 ACK 여부가 아니라 immutable inbox의 applied marker를 정본으로 삼으며, 남은 ACK는 기존
+durable claim receipt 재전송 경로가 담당한다. 이 조회는 crash recovery 저빈도 경로이므로 기존 JSONB
+payload 정본으로 충분하고 별도 request/snapshot 중복 컬럼이나 migration은 만들지 않는다.
+
 event batch의 inbox insert, target event의 tuple CAS/result projection/cache generation 증가와 stream
 receipt의 checksum/high-watermark 적용, **local applied checkpoint**는 한 transaction이다. Map ACK는 그
 뒤 호출한다. PinVi가 local commit 후 ACK 전에 죽으면

@@ -55,6 +55,77 @@ class InitialCutoverResult:
     published: int
 
 
+def _validate_reconciliation_receipt(
+    receipt: KtmCacheTargetEvent,
+    *,
+    external_system: str,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+) -> None:
+    source_root = bytes.fromhex(source.merkle_root)
+    if (
+        receipt.event_type != "cache_target.reconciled"
+        or receipt.external_system != external_system
+        or receipt.target_key is not None
+        or receipt.target_id is not None
+        or receipt.source_generation is not None
+        or receipt.target_sequence is not None
+        or receipt.restore_epoch != expected_restore_epoch
+        or receipt.source_payload_fingerprint != source_root
+        or receipt.applied_at is None
+        or receipt.payload
+        != {
+            "actual_merkle_root": source.merkle_root,
+            "expected_merkle_root": source.merkle_root,
+            "request_id": str(request_id),
+            "snapshot_id": str(snapshot_id),
+            "status": "succeeded",
+            "version": "cache-target-reconciliation-v1",
+        }
+    ):
+        raise RuntimeError("원격 completion의 applied inbox receipt가 다릅니다.")
+
+
+async def _find_reconciliation_receipt(
+    db: AsyncSession,
+    *,
+    external_system: str,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+) -> KtmCacheTargetEvent | None:
+    """같은 request의 유일한 applied terminal inbox를 잠가 복구 정본으로 채택한다."""
+    receipts = list(
+        await db.scalars(
+            select(KtmCacheTargetEvent)
+            .where(
+                KtmCacheTargetEvent.event_type == "cache_target.reconciled",
+                KtmCacheTargetEvent.payload.contains({"request_id": str(request_id)}),
+            )
+            .order_by(KtmCacheTargetEvent.relay_order, KtmCacheTargetEvent.event_id)
+            .limit(2)
+            .with_for_update()
+        )
+    )
+    if not receipts:
+        return None
+    if len(receipts) != 1:
+        raise RuntimeError("원격 completion request의 applied inbox receipt가 복수입니다.")
+    receipt = receipts[0]
+    _validate_reconciliation_receipt(
+        receipt,
+        external_system=external_system,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        expected_restore_epoch=expected_restore_epoch,
+        source=source,
+    )
+    return receipt
+
+
 async def _finish_remote_completed_cutover(
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -100,14 +171,22 @@ async def _finish_remote_completed_cutover(
         )
         if expectation is None:
             snapshot_owner = await db.scalar(
-                select(KtmCacheTargetReconciliationExpectation.request_id).where(
-                    KtmCacheTargetReconciliationExpectation.snapshot_id == snapshot_id
-                )
+                select(KtmCacheTargetReconciliationExpectation.request_id)
+                .where(KtmCacheTargetReconciliationExpectation.snapshot_id == snapshot_id)
+                .with_for_update()
             )
             if snapshot_owner is not None:
                 raise RuntimeError(
                     "원격 completion snapshot이 다른 durable expectation에 결박됐습니다."
                 )
+            receipt = await _find_reconciliation_receipt(
+                db,
+                external_system=consumer.external_system,
+                request_id=request_id,
+                snapshot_id=snapshot_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+            )
             expectation = KtmCacheTargetReconciliationExpectation(
                 request_id=request_id,
                 external_system=consumer.external_system,
@@ -116,7 +195,9 @@ async def _finish_remote_completed_cutover(
                 snapshot_count=source.count,
                 snapshot_merkle_root=source_root,
                 high_watermark_cursor=consumer.high_watermark_cursor,
-                status="pending",
+                status="received" if receipt is not None else "pending",
+                receipt_event_id=receipt.event_id if receipt is not None else None,
+                resolved_at=receipt.applied_at if receipt is not None else None,
             )
             db.add(expectation)
             await db.flush()
@@ -139,26 +220,18 @@ async def _finish_remote_completed_cutover(
                 if expectation.receipt_event_id is not None
                 else None
             )
-            if (
-                receipt is None
-                or receipt.event_type != "cache_target.reconciled"
-                or receipt.external_system != consumer.external_system
-                or receipt.restore_epoch != expected_restore_epoch
-                or receipt.source_payload_fingerprint != source_root
-                or receipt.applied_at is None
-                or receipt.payload
-                != {
-                    "actual_merkle_root": source.merkle_root,
-                    "expected_merkle_root": source.merkle_root,
-                    "request_id": str(request_id),
-                    "snapshot_id": str(snapshot_id),
-                    "status": "succeeded",
-                    "version": "cache-target-reconciliation-v1",
-                }
-            ):
+            if receipt is None:
                 raise RuntimeError(
                     "원격 completion의 received expectation이 durable inbox와 다릅니다."
                 )
+            _validate_reconciliation_receipt(
+                receipt,
+                external_system=consumer.external_system,
+                request_id=request_id,
+                snapshot_id=snapshot_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+            )
         elif expectation.status != "pending":
             raise RuntimeError(
                 "원격 completion 뒤 request-bound durable expectation이 종결됐습니다."
