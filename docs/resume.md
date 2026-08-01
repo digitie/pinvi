@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 Map rebase provenance 재핀
+
+Map PR #917을 최신 main에 rebase하고 cache-target migration을 단일 Alembic head `0075`로
+선형화했다. 서비스 OpenAPI exact bytes와 generation `3` 의미 계약은 변하지 않았지만 pre-rebase
+commit은 더 이상 release ancestry가 아니므로, export artifact를
+`42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`, functional owner를
+`1f14bede3622615634bb3273fd6c6d2acd72fdae`, source golden을
+`2aa4e4bb121995612f7df9396b1639a52496a145`로 재핀한다. CI는 세 commit을 실제 checkout하고
+service artifact→functional owner ancestry와 두 vendored artifact의 exact bytes를 검증한다.
+
+**다음 한 작업**: 독립 적대적 리뷰어 2명의 provenance 계약 검토와 양쪽 exact-head CI를
+통과한 뒤 n150 isolated Live UI recovery E2E를 재실행한다.
+
 ## 2026-08-01 (codex) — T-VN-41 blocked recovery crash-safe drain
 
 n150 destructive Live UI 회복에서 admin replay가 blocked delivery를 `retry`로 되돌린 뒤
@@ -30,10 +43,11 @@ fixture를 재구성해 최종 Live UI replay·reconciliation·drain을 재검�
 
 추가 적대적 리뷰에서 active reconciliation도 restore fence 뒤 남아 old completion과 new begin을 동시에
 막는 P1을 발견했다. Map은 preparing/running request를 terminal `superseded`로 원자 종결하고 fence receipt에
-영향 count와 request ID를 영속화한다. PinVi는 Map functional owner
+영향 count와 request ID를 영속화한다. PinVi는 당시 Map functional owner
 `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`, generation `3`, service OpenAPI SHA-256
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 exact pin한다.
+최신 main rebase 뒤 현행 provenance는 이 문서 상단의 재핀 항목이 정본이다.
 strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
 snapshot identity 및 operation ID를 요청과 exact 대조한다. restore fence receipt의 superseded
 reconciliation count와 nullable request ID도 machine-readable `oneOf`에서 `0/null` 또는
@@ -208,7 +222,8 @@ network worker는 여전히 default-off이며 exact OpenAPI fixture는 Map API l
 
 ## 2026-07-31 (codex) — T-VN-41-P source generation/outbox 구현 완료
 
-Map `5222536e55720103514852a0bb139fd2b4d488da`의 shared golden fixture를 exact bytes로 vendor하고
+당시 Map `5222536e55720103514852a0bb139fd2b4d488da`의 shared golden fixture를 exact bytes로 vendor했고,
+최신 main rebase 뒤 현행 source pin은 이 문서 상단의 재핀 항목이 정본이다. fixture의
 SHA-256 `4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`로 고정했다. PinVi 독립
 Python/SQL serializer가 source canonical UTF-8, fingerprint, NFC leaf order, empty/odd-promotion
 Merkle root 전체 vector를 통과한다.

@@ -219,10 +219,10 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export commit `7451df426ce50efb0c6d753a9353f9bd74a08f0a`의
+서비스 계약은 Map export commit `42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, contract generation `3`이
+functional artifact owner revision `1f14bede3622615634bb3273fd6c6d2acd72fdae`, contract generation `3`이
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
 

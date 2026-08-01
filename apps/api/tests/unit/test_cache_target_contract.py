@@ -22,7 +22,7 @@ from app.core.cache_target_contract import (
 )
 
 _GOLDEN = Path(__file__).resolve().parent.parent / "contract" / "cache-target-source-v1-golden.json"
-_UPSTREAM_MAP_COMMIT = "5222536e55720103514852a0bb139fd2b4d488da"
+_UPSTREAM_MAP_COMMIT = "2aa4e4bb121995612f7df9396b1639a52496a145"
 _GOLDEN_SHA256 = "4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5"
 
 

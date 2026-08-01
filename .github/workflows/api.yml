@@ -107,10 +107,16 @@ jobs:
             apps/api/tests/unit/test_kor_travel_map_admin_contract.py)
           service_pin=$(grep -oP '_ARTIFACT_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
+          service_owner=$(grep -oP '_FUNCTIONAL_OWNER_COMMIT = "\K[0-9a-f]{40}' \
+            apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
+          source_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
+            apps/api/tests/unit/test_cache_target_contract.py)
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
           echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
           echo "service_pin=$service_pin" >> "$GITHUB_OUTPUT"
-          echo "user=$user_pin admin=$admin_pin service=$service_pin"
+          echo "service_owner=$service_owner" >> "$GITHUB_OUTPUT"
+          echo "source_pin=$source_pin" >> "$GITHUB_OUTPUT"
+          echo "user=$user_pin admin=$admin_pin service=$service_pin owner=$service_owner source=$source_pin"
 
       - name: Checkout kor-travel-map at the user-surface pin
         uses: actions/checkout@v4
@@ -132,6 +138,21 @@ jobs:
           repository: digitie/kor-travel-map
           ref: ${{ steps.pins.outputs.service_pin }}
           path: .ktm-service-pin
+
+      - name: Checkout kor-travel-map at the service functional owner
+        uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-map
+          ref: ${{ steps.pins.outputs.service_owner }}
+          fetch-depth: 0
+          path: .ktm-service-owner
+
+      - name: Checkout kor-travel-map at the cache-target source pin
+        uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-map
+          ref: ${{ steps.pins.outputs.source_pin }}
+          path: .ktm-cache-target-source-pin
 
       - uses: actions/setup-python@v5
         with:
@@ -157,6 +178,18 @@ jobs:
           diff -q \
             apps/api/tests/contract/kor-travel-map-openapi-service.json \
             .ktm-service-pin/packages/kor-travel-map-api/openapi.service.json
+
+      - name: service artifact is an ancestor of the functional owner
+        run: |
+          git -C .ktm-service-owner merge-base --is-ancestor \
+            "${{ steps.pins.outputs.service_pin }}" \
+            "${{ steps.pins.outputs.service_owner }}"
+
+      - name: cache-target source bytes equal the pinned commit
+        run: |
+          diff -q \
+            apps/api/tests/contract/cache-target-source-v1-golden.json \
+            .ktm-cache-target-source-pin/contracts/cache-target-source-v1-golden.json
 
   # staleness 신호: 핀이 Map main보다 뒤처졌는지 매일 확인한다. `if:` 가드로 PR/push에는 아예
   # 돌지 않으므로 PR을 막지 않는다(막으면 Map의 무관한 OpenAPI 변경마다 Pinvi PR이 red가 된다).

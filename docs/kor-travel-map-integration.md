@@ -167,17 +167,17 @@ T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이�
 | reconciliation completion       | `POST /v1/service/cache-target-reconciliations/{request_id}/completions` | local snapshot commit 뒤 완료 보고                                    |
 
 T-VN-41 source byte 계약은 Map commit
-`5222536e55720103514852a0bb139fd2b4d488da`의
+`2aa4e4bb121995612f7df9396b1639a52496a145`의
 `contracts/cache-target-source-v1-golden.json`을 exact bytes로 vendor한다. PinVi snapshot SHA-256은
 `4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`다. PinVi는 Map 구현을 import하거나
 복제하지 않고 별도 Python/SQL serializer를 구현하며, source canonical UTF-8/fingerprint와 Merkle
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export commit `7451df426ce50efb0c6d753a9353f9bd74a08f0a`의
+서비스 계약은 Map export commit `42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`이고, sync enable 설정의
-functional artifact owner revision `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`와 contract generation `3`도
+functional artifact owner revision `1f14bede3622615634bb3273fd6c6d2acd72fdae`와 contract generation `3`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,

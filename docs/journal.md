@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 Map rebase provenance 정합화
+
+Map PR #917의 최신 main rebase로 export/functional commit SHA가 바뀌었다. OpenAPI exact bytes
+SHA-256 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`과 contract
+generation `3`은 그대로지만, CI checkout과 immutable provenance가 release ancestry를 가리키도록
+export artifact를 `42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`, functional owner를
+`1f14bede3622615634bb3273fd6c6d2acd72fdae`, source golden을
+`2aa4e4bb121995612f7df9396b1639a52496a145`로 재핀했다. CI는 실제 checkout으로 service
+artifact→functional owner ancestry와 service/source vendored bytes를 함께 검증한다.
+
 ## 2026-08-01 (codex) — T-VN-41 blocked replay readiness 교착 종결
 
 **Live 발견**: n150의 실제 admin UI에서 dead delivery replay와 reconciliation을 요청하면 Map은
@@ -33,11 +43,12 @@ exact applied receipt면 event ID와 `received`를 복원한다. 복수·불일�
 apply가 ACK보다 먼저 commit되므로 immutable inbox `applied_at`이 received 정본이고 ACK는 기존 claim 복구가
 담당한다. Map 계약은 restore pair를 object-level `oneOf`로 표현하고 operation ID를 UUID로 좁혔다.
 
-**계약/검증**: Map functional `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
+**계약/검증**: 당시 Map functional `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`, service SHA-256
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 generation `3`으로 exact
 pin한다. PinVi PostGIS initial-cutover 9건·event consumer 6건, contract/transport unit 20건과 Map
 JSON Schema/router/export 회귀가 통과했다.
+최신 main rebase 뒤 현행 provenance는 이 문서 상단의 재핀 항목이 정본이다.
 Map DB는 fence receipt와 superseded reconciliation을 `(external_system, request_id)` composite FK로
 결박해 cross-stream causal link도 raw SQL 단계에서 거부한다.
 
@@ -64,12 +75,13 @@ Ruff, 대상 파일 strict mypy를 통과했다.
 `pending/retry/leased/dead` delivery를 남겨 전역 claim·dead 판정을 오염시켰다. PinVi의 올바른 stale epoch
 영구 NACK과 결합하면 새 epoch가 영구 차단될 수 있었다.
 
-**계약 갱신**: Map functional owner `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, export artifact
+**계약 갱신**: 당시 Map functional owner `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, export artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`를 contract generation `3`으로 재핀했다. service OpenAPI exact
 bytes의 SHA-256은 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. generation
 3은 restore fence가 이전 epoch의 미종결 delivery와 active reconciliation을 terminal `superseded`로
 원자적으로 닫고 새 epoch만 claim·DLQ·replay·완료 판정에 노출하는 의미 계약이다. fence receipt는 영향
 count와 대체한 reconciliation request ID를 영속화한다. 이 보장이 없는 producer에는 sync를 열지 않는다.
+최신 main rebase 뒤 현행 provenance는 이 문서 상단의 재핀 항목이 정본이다.
 service OpenAPI와 strict contract test는 해당 count가 `0`일 때 request ID `null`, `1`일 때 UUID인
 상관 불변식을 machine-readable `oneOf`로 고정하고 recovery operation ID도 UUID로 제한한다.
 
@@ -309,7 +321,8 @@ transaction-coupled generation/outbox로 연결했다.
 
 **변경**:
 
-- Map `5222536e55720103514852a0bb139fd2b4d488da`의 2,958-byte golden fixture를 exact vendor하고
+- 당시 Map `5222536e55720103514852a0bb139fd2b4d488da`의 2,958-byte golden fixture를 exact vendor했고,
+  최신 main rebase 뒤 현행 source pin은 이 문서 상단의 재핀 항목이 정본이다.
   SHA-256 `4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`로 고정했다.
 - PinVi 독립 Python serializer/Merkle v1과 SQL serializer를 구현했다. source decimal은 scale 없는
   `numeric`으로 보존하고 serializer에서만 `ROUND_HALF_EVEN`을 적용한다.
