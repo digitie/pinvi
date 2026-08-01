@@ -130,6 +130,7 @@ class _CutoverStub:
             operation=CacheTargetRecoveryOperation(
                 operation_id=self.request_id,
                 status="running",
+                snapshot_id=self.snapshot_id,
                 status_url=None,
                 entity_tag=f'"{self.request_id}:2"',
                 stream_entity_tag='"pinvi:3"',
@@ -161,6 +162,7 @@ class _CutoverStub:
         return CacheTargetRecoveryOperation(
             operation_id=self.request_id,
             status="succeeded",
+            snapshot_id=self.snapshot_id,
             status_url=None,
         )
 

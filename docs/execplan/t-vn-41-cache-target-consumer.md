@@ -210,19 +210,22 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export commit `04673716e33ff4d57ef5a5dd84933a7e74077525`의
+서비스 계약은 Map export commit `e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `62db824ad759201bed8ed3a08dcb4dad2e6c6795`, contract generation `3`이
+`ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`다. sync를 켤 때 이 SHA,
+functional artifact owner revision `eaa3fca99374b58cf9caeb87c3295b600ab878c7`, contract generation `3`이
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
 
 generation 3은 generation 2의 request-bound receipt 계약에 복원 epoch 경계를 추가한다. Map은 restore
 fence transaction에서 이전 epoch의 `pending/retry/leased/dead` delivery를 terminal `superseded`로 닫고 새
-epoch만 claim·DLQ·replay·완료 판정에 노출한다. PinVi는 여전히 epoch가 다른 event를 영구 NACK해 fail-close
-하므로, 이 producer 보장이 없는 generation에는 sync를 열지 않는다. consumer는 terminal receipt를
+epoch만 claim·DLQ·replay·완료 판정에 노출한다. 동시에 active preparing/running reconciliation을 terminal
+`superseded(error_code=restore_fenced)`로 닫고 request ID와 영향 count를 fence receipt에 영속화해 새 epoch
+reconciliation을 즉시 허용한다. PinVi는 여전히 epoch가 다른 event를 영구 NACK해 fail-close하므로, 이
+producer 보장이 없는 generation에는 sync를 열지 않는다. consumer는 terminal receipt를
 mutable generic snapshot이 아니라 durable request expectation과 대조하고 inbox transaction에서 한 번만
-received로 종결한다.
+received로 종결한다. begin은 nullable snapshot, seal/completion은 request-bound snapshot UUID를 strict하게
+검증하며 다른 snapshot receipt를 거부한다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible

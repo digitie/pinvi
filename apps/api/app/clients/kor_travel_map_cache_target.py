@@ -184,7 +184,8 @@ class CacheTargetRecoveryOperation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation_id: uuid.UUID
-    status: Literal["preparing", "running", "succeeded", "failed"]
+    status: Literal["preparing", "running", "succeeded", "failed", "superseded"]
+    snapshot_id: uuid.UUID | None = None
     status_url: str | None = None
     entity_tag: str | None = None
     stream_entity_tag: str | None = None
@@ -609,8 +610,14 @@ class CacheTargetServiceClient:
     ) -> CacheTargetRecoveryResult:
         operation = CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
         etag = response.headers.get("ETag")
+        snapshot_identity_matches_phase = (
+            operation.snapshot_id is None
+            if expected_status == "preparing"
+            else operation.snapshot_id is not None
+        )
         if (
             operation.status != expected_status
+            or not snapshot_identity_matches_phase
             or etag is None
             or operation.entity_tag != etag
             or operation.stream_entity_tag is None
@@ -639,7 +646,12 @@ class CacheTargetServiceClient:
             },
             idempotency_key=idempotency_key,
         )
-        return CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
+        operation = CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
+        if operation.snapshot_id != uuid.UUID(snapshot.snapshot_id):
+            raise CacheTargetContractError(
+                "reconciliation completion snapshot identity가 다릅니다."
+            )
+        return operation
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
         self._require_role("consumer")

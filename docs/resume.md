@@ -6,9 +6,14 @@
 `pending/retry/leased/dead` delivery가 남아 새 epoch claim과 dead 판정을 오염시키므로, Map은 이를 terminal
 `superseded`로 원자적으로 종결하고 현재 epoch만 운영 집계에 포함하도록 수정했다.
 
-PinVi는 Map functional owner `62db824ad759201bed8ed3a08dcb4dad2e6c6795`, artifact
-`04673716e33ff4d57ef5a5dd84933a7e74077525`, generation `3`을 exact pin한다. service OpenAPI 바이트는
-변하지 않아 SHA-256은 `af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`를 유지한다.
+추가 적대적 리뷰에서 active reconciliation도 restore fence 뒤 남아 old completion과 new begin을 동시에
+막는 P1을 발견했다. Map은 preparing/running request를 terminal `superseded`로 원자 종결하고 fence receipt에
+영향 count와 request ID를 영속화한다. PinVi는 Map functional owner
+`eaa3fca99374b58cf9caeb87c3295b600ab878c7`, artifact
+`e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`, generation `3`, service OpenAPI SHA-256
+`ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`을 exact pin한다.
+strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
+snapshot identity를 요청과 exact 대조한다.
 
 **다음 한 작업**: 양쪽 exact head를 두 독립 리뷰어가 재검토해 P1 종결을 확인한 뒤 n150 isolated
 cutover·crash/reclaim·destructive Live UI recovery를 실행한다.

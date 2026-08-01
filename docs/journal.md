@@ -8,11 +8,16 @@
 `pending/retry/leased/dead` delivery를 남겨 전역 claim·dead 판정을 오염시켰다. PinVi의 올바른 stale epoch
 영구 NACK과 결합하면 새 epoch가 영구 차단될 수 있었다.
 
-**계약 갱신**: Map functional owner `62db824ad759201bed8ed3a08dcb4dad2e6c6795`, export artifact
-`04673716e33ff4d57ef5a5dd84933a7e74077525`를 contract generation `3`으로 재핀했다. service OpenAPI exact
-bytes의 SHA-256은 계속 `af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`다. generation
-3은 restore fence가 이전 epoch의 미종결 delivery를 terminal `superseded`로 원자적으로 닫고 새 epoch만
-claim·DLQ·replay·완료 판정에 노출하는 의미 계약이다. 이 보장이 없는 producer에는 sync를 열지 않는다.
+**계약 갱신**: Map functional owner `eaa3fca99374b58cf9caeb87c3295b600ab878c7`, export artifact
+`e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`를 contract generation `3`으로 재핀했다. service OpenAPI exact
+bytes의 SHA-256은 `ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`다. generation
+3은 restore fence가 이전 epoch의 미종결 delivery와 active reconciliation을 terminal `superseded`로
+원자적으로 닫고 새 epoch만 claim·DLQ·replay·완료 판정에 노출하는 의미 계약이다. fence receipt는 영향
+count와 대체한 reconciliation request ID를 영속화한다. 이 보장이 없는 producer에는 sync를 열지 않는다.
+
+PinVi strict recovery DTO에 Map wire의 nullable `snapshot_id`와 terminal `superseded`를 추가했다. begin은
+snapshot 없음, seal은 snapshot 있음, completion은 요청한 snapshot과 exact 일치를 요구해 mock이 감췄던
+실응답 `extra_forbidden`과 다른 snapshot receipt 수용을 함께 차단했다.
 
 ## 2026-08-01 (codex) — T-VN-41 request-bound reconciliation expectation 분리
 

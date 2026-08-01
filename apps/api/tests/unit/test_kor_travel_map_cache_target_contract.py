@@ -16,9 +16,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "04673716e33ff4d57ef5a5dd84933a7e74077525"
-_FUNCTIONAL_OWNER_COMMIT = "62db824ad759201bed8ed3a08dcb4dad2e6c6795"
-_SNAPSHOT_SHA256 = "af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab"
+_ARTIFACT_COMMIT = "e7794a609e08c3ee23bff4e7d1e86e9e79a3112b"
+_FUNCTIONAL_OWNER_COMMIT = "eaa3fca99374b58cf9caeb87c3295b600ab878c7"
+_SNAPSHOT_SHA256 = "ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1"
 
 
 def _spec() -> dict[str, Any]:
@@ -39,6 +39,7 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     paths = spec["paths"]
     required_methods = {
         "/v1/service/cache-target-streams/{external_system}": "get",
+        "/v1/service/cache-target-streams/{external_system}/restore-fences": "post",
         "/v1/service/cache-target-event-claims": "post",
         "/v1/service/cache-target-event-acks": "post",
         "/v1/service/cache-target-event-nacks": "post",
@@ -184,7 +185,65 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     operation = schemas["CacheTargetRecoveryOperationRecord"]
     assert operation["additionalProperties"] is False
     assert set(operation["required"]) == {"operation_id", "status"}
+    assert operation["properties"]["status"]["enum"] == [
+        "accepted",
+        "pending",
+        "leased",
+        "retry",
+        "dead",
+        "delivered",
+        "preparing",
+        "running",
+        "succeeded",
+        "failed",
+        "superseded",
+    ]
     assert operation["properties"]["snapshot_id"]["anyOf"] == [
+        {"format": "uuid", "type": "string"},
+        {"type": "null"},
+    ]
+
+    restore_path = paths[
+        "/v1/service/cache-target-streams/{external_system}/restore-fences"
+    ]["post"]
+    assert restore_path["security"] == [{"ServiceToken": []}]
+    restore_headers = {parameter["name"]: parameter for parameter in restore_path["parameters"]}
+    assert restore_headers["Idempotency-Key"]["required"] is True
+    assert restore_headers["Idempotency-Key"]["schema"]["format"] == "uuid"
+    assert restore_headers["If-Match"]["required"] is True
+    assert "ETag" in restore_path["responses"]["201"]["headers"]
+    assert {"412", "428", "default"} <= set(restore_path["responses"])
+    assert restore_path["responses"]["201"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
+    }
+    restore_response = schemas["CacheTargetRestoreFenceResponse"]
+    assert restore_response["properties"]["data"] == {
+        "$ref": "#/components/schemas/CacheTargetRestoreFenceRecord"
+    }
+    restore_record = schemas["CacheTargetRestoreFenceRecord"]
+    assert restore_record["additionalProperties"] is False
+    assert set(restore_record["required"]) == {
+        "external_system",
+        "restore_epoch",
+        "control_version",
+        "entity_tag",
+        "fence_id",
+        "previous_restore_epoch",
+        "previous_control_version",
+        "invalidated_claim_count",
+        "superseded_delivery_count",
+        "superseded_reconciliation_count",
+        "superseded_reconciliation_request_id",
+    }
+    assert restore_record["properties"]["fence_id"]["format"] == "uuid"
+    for field in ("restore_epoch", "control_version", "previous_restore_epoch", "previous_control_version"):
+        assert restore_record["properties"][field]["minimum"] == 1
+    for field in ("invalidated_claim_count", "superseded_delivery_count"):
+        assert restore_record["properties"][field]["minimum"] == 0
+    reconciliation_count = restore_record["properties"]["superseded_reconciliation_count"]
+    assert reconciliation_count["minimum"] == 0
+    assert reconciliation_count["maximum"] == 1
+    assert restore_record["properties"]["superseded_reconciliation_request_id"]["anyOf"] == [
         {"format": "uuid", "type": "string"},
         {"type": "null"},
     ]

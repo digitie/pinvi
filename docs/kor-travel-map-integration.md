@@ -174,10 +174,10 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export commit `04673716e33ff4d57ef5a5dd84933a7e74077525`의
+서비스 계약은 Map export commit `e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`이고, sync enable 설정의
-functional artifact owner revision `62db824ad759201bed8ed3a08dcb4dad2e6c6795`와 contract generation `3`도
+`ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`이고, sync enable 설정의
+functional artifact owner revision `eaa3fca99374b58cf9caeb87c3295b600ab878c7`와 contract generation `3`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -189,7 +189,10 @@ generation 3은 terminal receipt의 request-bound identity에 더해 restore epo
 breaking 계약이다. Map restore fence는 이전 epoch의 미완료·재시도·lease·dead delivery를 terminal
 `superseded`로 원자적으로 닫고, 새 epoch만 claim·DLQ·replay·완료 판정에 포함한다. PinVi는 receipt의
 request/snapshot/epoch/root를 durable expectation과 exact 대조하고 stale epoch event는 계속 영구 NACK하며,
-generic snapshot identity와 섞지 않는다.
+generic snapshot identity와 섞지 않는다. fence는 active preparing/running reconciliation도 terminal
+`superseded`로 종결하고 receipt에 해당 request ID를 남겨 새 epoch의 begin을 막지 않는다. PinVi recovery
+DTO는 nullable `snapshot_id`와 terminal `superseded`를 strict 파싱하며 seal/completion snapshot identity를
+요청과 exact 대조한다.
 
 최초 Map 0건·PinVi N건 cutover는 일반 worker startup으로 해결하지 않는다. 전용 runner가 PinVi DB writer
 fence를 보유한 동안 recovery begin(`preparing`) → pending PUT drain → reconciliation ETag 기반 seal

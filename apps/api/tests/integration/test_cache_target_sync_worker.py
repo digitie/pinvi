@@ -559,6 +559,7 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                 "data": {
                     "operation_id": str(request_id),
                     "status": "succeeded",
+                    "snapshot_id": str(snapshot_id),
                     "status_url": None,
                 },
                 "meta": {},

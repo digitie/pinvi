@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from app.clients.kor_travel_map_cache_target import (
+    CacheTargetContractError,
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
     classify_cache_target_failure,
@@ -207,6 +208,7 @@ async def test_reconciliation_completion_binds_request_snapshot_epoch_root_and_k
                 "data": {
                     "operation_id": str(request_id),
                     "status": "succeeded",
+                    "snapshot_id": str(snapshot_id),
                     "status_url": None,
                 },
                 "meta": {},
@@ -232,6 +234,46 @@ async def test_reconciliation_completion_binds_request_snapshot_epoch_root_and_k
         await client.aclose()
 
     assert result.status == "succeeded"
+    assert result.snapshot_id == snapshot_id
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_completion_rejects_other_snapshot_receipt() -> None:
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "operation_id": str(request_id),
+                    "status": "succeeded",
+                    "snapshot_id": str(uuid.uuid4()),
+                    "status_url": None,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetContractError, match="snapshot identity"):
+            await client.complete_reconciliation(
+                request_id=request_id,
+                consumer_id="pinvi-cache-target-consumer",
+                snapshot=CacheTargetSnapshot(
+                    snapshot_id=str(snapshot_id),
+                    restore_epoch=7,
+                    high_watermark_cursor="cursor-0",
+                    count=0,
+                    merkle_root="72" * 32,
+                    items=[],
+                ),
+                idempotency_key=uuid.uuid4(),
+            )
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -278,6 +320,7 @@ async def test_initial_reconciliation_begin_and_seal_keep_distinct_etags_and_exa
                 "data": {
                     "operation_id": str(request_id),
                     "status": status,
+                    "snapshot_id": None if calls == 1 else str(request_id),
                     "status_url": f"/v1/service/cache-target-reconciliations/{request_id}",
                     "entity_tag": etag,
                     "stream_entity_tag": '"pinvi:8"',
@@ -310,6 +353,7 @@ async def test_initial_reconciliation_begin_and_seal_keep_distinct_etags_and_exa
     assert begin.operation.status == "preparing"
     assert begin.etag == f'"{request_id}:1"'
     assert seal.operation.status == "running"
+    assert seal.operation.snapshot_id == request_id
     assert seal.etag == f'"{request_id}:2"'
 
 
