@@ -8,8 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import (
-    CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
     CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
+    CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION,
     CACHE_TARGET_SERVICE_OPENAPI_SHA256,
     Settings,
 )
@@ -53,7 +53,7 @@ def test_enabled_cache_target_sync_accepts_only_exact_vendored_service_pin() -> 
             CACHE_TARGET_SERVICE_OPENAPI_SHA256
         ),
         pinvi_kor_travel_map_cache_target_expected_source_revision=(
-            CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION
+            CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION
         ),
         pinvi_kor_travel_map_cache_target_expected_contract_generation=(
             CACHE_TARGET_SERVICE_CONTRACT_GENERATION
@@ -69,7 +69,7 @@ def test_enabled_cache_target_sync_accepts_only_exact_vendored_service_pin() -> 
             pinvi_kor_travel_map_cache_target_consumer_token=CONSUMER,
             pinvi_kor_travel_map_cache_target_expected_openapi_sha256="a" * 64,
             pinvi_kor_travel_map_cache_target_expected_source_revision=(
-                CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION
+                CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION
             ),
             pinvi_kor_travel_map_cache_target_expected_contract_generation=(
                 CACHE_TARGET_SERVICE_CONTRACT_GENERATION

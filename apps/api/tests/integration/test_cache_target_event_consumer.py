@@ -450,6 +450,8 @@ async def test_snapshot_checksum_mismatch_keeps_consumer_fail_closed(session_fac
         high_watermark_cursor="cursor-0",
         count=1,
         merkle_root=(b"x" * 32).hex(),
+        created_at=datetime(2026, 8, 1, tzinfo=UTC),
+        expires_at=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=2),
         items=[item],
     )
     assert actual_root.hex() != snapshot.merkle_root

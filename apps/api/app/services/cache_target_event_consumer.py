@@ -288,12 +288,22 @@ class CacheTargetSnapshot(_StrictModel):
     high_watermark_cursor: str
     count: int = Field(ge=0)
     merkle_root: str
+    created_at: datetime
+    expires_at: datetime
     items: list[CacheTargetSnapshotItem]
 
     @field_validator("merkle_root")
     @classmethod
     def validate_merkle_root(cls, value: str) -> str:
         return _validate_sha256_hex(value)
+
+    @model_validator(mode="after")
+    def validate_snapshot_window(self) -> Self:
+        if self.created_at.tzinfo is None or self.expires_at.tzinfo is None:
+            raise ValueError("snapshot created_at/expires_at은 timezone-aware여야 합니다.")
+        if self.expires_at <= self.created_at:
+            raise ValueError("snapshot expires_at은 created_at보다 뒤여야 합니다.")
+        return self
 
 
 async def record_cache_target_reconciliation_expectation(

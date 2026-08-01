@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 Map generation 5 snapshot lifetime 계약
+
+Map PR #917의 generic snapshot 내구성 보강에 맞춰 service OpenAPI artifact owner를
+`2f7d5911eb7a377d02e71c4ef06b0003a748f301`, SHA-256을
+`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`로 갱신하고 contract
+generation을 `5`로 올렸다. PinVi는 모든 snapshot page에서 timezone-aware `created_at`/`expires_at`을
+요구하고 동일 snapshot의 page header가 바뀌면 거부한다. generic snapshot 첫 페이지는 최소 1시간의
+잔여 traversal window가 필요하지만 request-bound snapshot은 running reconciliation의 durable receipt이므로
+만료시각이 지나도 읽을 수 있다. artifact owner와 후속 functional owner는 분리해 CI ancestry로 결박한다.
+
+**다음 한 작업**: Map background snapshot GC의 exact final commit을 functional owner로 재핀하고 focused
+PostGIS/transport gate와 두 독립 적대적 리뷰를 마친 뒤 n150 isolated destructive Live UI E2E를 실행한다.
+
 ## 2026-08-01 (codex) — T-VN-41 Map generation 4 exact pin
 
 Map PR #917의 immutable mutation receipt 보강을 commit

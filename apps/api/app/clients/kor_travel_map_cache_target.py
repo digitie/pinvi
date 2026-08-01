@@ -6,7 +6,7 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Self
 from urllib.parse import quote
 
@@ -700,7 +700,10 @@ class CacheTargetServiceClient:
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
         self._require_role("consumer")
-        return await self._get_snapshot_pages("/v1/service/cache-target-snapshots/pinvi")
+        return await self._get_snapshot_pages(
+            "/v1/service/cache-target-snapshots/pinvi",
+            minimum_remaining=timedelta(hours=1),
+        )
 
     async def get_reconciliation_snapshot(
         self,
@@ -711,7 +714,12 @@ class CacheTargetServiceClient:
             f"/v1/service/cache-target-reconciliations/{request_id}/snapshot"
         )
 
-    async def _get_snapshot_pages(self, path: str) -> CacheTargetSnapshot:
+    async def _get_snapshot_pages(
+        self,
+        path: str,
+        *,
+        minimum_remaining: timedelta | None = None,
+    ) -> CacheTargetSnapshot:
         first: CacheTargetSnapshot | None = None
         items: list[Any] = []
         cursor: str | None = None
@@ -725,12 +733,21 @@ class CacheTargetServiceClient:
             page = CacheTargetSnapshot.model_validate(raw_data)
             if first is None:
                 first = page
+                if (
+                    minimum_remaining is not None
+                    and page.expires_at - datetime.now(UTC) < minimum_remaining
+                ):
+                    raise CacheTargetContractError(
+                        "generic snapshot traversal window가 1시간보다 짧습니다."
+                    )
             elif (
                 page.snapshot_id != first.snapshot_id
                 or page.restore_epoch != first.restore_epoch
                 or page.high_watermark_cursor != first.high_watermark_cursor
                 or page.count != first.count
                 or page.merkle_root != first.merkle_root
+                or page.created_at != first.created_at
+                or page.expires_at != first.expires_at
             ):
                 raise CacheTargetContractError("fixed snapshot page header가 바뀌었습니다.")
             items.extend(page.items)

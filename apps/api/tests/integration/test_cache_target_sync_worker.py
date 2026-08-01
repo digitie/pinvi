@@ -36,6 +36,14 @@ from app.services.cache_target_sync_worker import (
     consume_cache_target_once,
 )
 
+
+def _snapshot_window() -> dict[str, str]:
+    created_at = datetime.now(UTC)
+    return {
+        "created_at": created_at.isoformat(),
+        "expires_at": (created_at + timedelta(hours=2)).isoformat(),
+    }
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -451,6 +459,7 @@ async def test_bootstrap_adopts_new_epoch_and_matching_empty_snapshot(session_fa
                     "high_watermark_cursor": "cursor-0",
                     "count": 0,
                     "merkle_root": empty_root,
+                    **_snapshot_window(),
                     "items": [],
                 },
                 "meta": {},
@@ -614,6 +623,7 @@ async def test_bootstrap_resumes_completed_reconciliation_drain_before_local_rea
                         "high_watermark_cursor": "cursor-0",
                         "count": 0,
                         "merkle_root": empty_root,
+                        **_snapshot_window(),
                         "items": [],
                     },
                     "meta": {},
@@ -801,6 +811,7 @@ async def test_bootstrap_opens_after_local_receipt_apply_then_reacks_durably(
                         "high_watermark_cursor": "cursor-0",
                         "count": 0,
                         "merkle_root": empty_root,
+                        **_snapshot_window(),
                         "items": [],
                     },
                     "meta": {},
@@ -983,6 +994,7 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                         "high_watermark_cursor": "cursor-0",
                         "count": 0,
                         "merkle_root": empty_root,
+                        **_snapshot_window(),
                         "items": [],
                     },
                     "meta": {"page": {"next_cursor": None}},
@@ -998,6 +1010,7 @@ async def test_bootstrap_completes_request_bound_snapshot_before_local_ready(
                         "high_watermark_cursor": "cursor-1",
                         "count": 0,
                         "merkle_root": empty_root,
+                        **_snapshot_window(),
                         "items": [],
                     },
                     "meta": {},
@@ -1280,6 +1293,7 @@ async def test_bootstrap_terminal_race_keeps_local_consumer_unready(
                         "high_watermark_cursor": "cursor-0",
                         "count": 0,
                         "merkle_root": empty_root,
+                        **_snapshot_window(),
                         "items": [],
                     },
                     "meta": {"page": {"next_cursor": None}},

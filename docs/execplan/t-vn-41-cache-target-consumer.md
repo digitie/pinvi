@@ -219,12 +219,18 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export/functional owner commit `8af695efc69dffb8778be16a574c6e5c4828c169`의
+서비스 계약은 Map artifact owner commit `2f7d5911eb7a377d02e71c4ef06b0003a748f301`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`다. sync를 켤 때 이 SHA,
-functional artifact owner revision, contract generation `4`가
-모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
-이미지, `/version`의 git SHA와 비교하지 않는다.
+`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`다. 현재 functional owner는
+`2f7d5911eb7a377d02e71c4ef06b0003a748f301`이며, sync를 켤 때 이 SHA, functional owner revision,
+contract generation `5`가 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
+ancestor임을 검증한다. functional owner는 기능 계약의 provenance이며 배포 Map 이미지나 `/version`의
+git SHA와 비교하지 않는다.
+
+generation 5는 generation 4에 snapshot의 timezone-aware `created_at`/`expires_at`을 필수화한다.
+generic snapshot은 첫 페이지 수신 시 최소 1시간의 traversal window가 남아야 하고, 이후 모든 페이지의
+두 시각이 첫 페이지와 같아야 한다. request-bound reconciliation snapshot은 durable request receipt이므로
+해당 request가 running인 동안 `expires_at`이 지나도 읽을 수 있다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
 PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted

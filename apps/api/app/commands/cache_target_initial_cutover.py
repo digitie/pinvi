@@ -10,8 +10,8 @@ import httpx
 
 from app.clients.kor_travel_map_cache_target import CacheTargetServiceClient
 from app.core.config import (
-    CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
     CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
+    CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION,
     CACHE_TARGET_SERVICE_OPENAPI_SHA256,
     settings,
 )
@@ -28,7 +28,7 @@ async def _run(args: argparse.Namespace) -> None:
         settings.pinvi_kor_travel_map_cache_target_expected_openapi_sha256
         != CACHE_TARGET_SERVICE_OPENAPI_SHA256
         or settings.pinvi_kor_travel_map_cache_target_expected_source_revision
-        != CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION
+        != CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION
         or settings.pinvi_kor_travel_map_cache_target_expected_contract_generation
         != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
     ):

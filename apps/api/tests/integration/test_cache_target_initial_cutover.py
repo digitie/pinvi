@@ -158,6 +158,8 @@ class _CutoverStub:
             high_watermark_cursor="cursor-1",
             count=1,
             merkle_root=self.merkle_root,
+            created_at=datetime(2026, 8, 1, tzinfo=UTC),
+            expires_at=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=2),
             items=[
                 {
                     "external_system": "pinvi",

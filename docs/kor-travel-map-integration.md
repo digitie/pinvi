@@ -174,12 +174,13 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export/functional owner commit `8af695efc69dffb8778be16a574c6e5c4828c169`의
+서비스 계약은 Map artifact owner commit `2f7d5911eb7a377d02e71c4ef06b0003a748f301`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`이고, sync enable 설정의
-functional artifact owner revision과 contract generation `4`도
-exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
-않는 기능 계약 provenance다. startup에서 stream control에
+`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`이고, 현재 functional owner는
+`2f7d5911eb7a377d02e71c4ef06b0003a748f301`이다. sync enable 설정은 functional owner revision과
+contract generation `5`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
+검증한다. functional owner는 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는 기능 계약
+provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
@@ -190,6 +191,11 @@ transaction에서 snapshot owner 충돌을 확인한다. 같은 request의 exact
 복원한다. 후보가 복수이거나 material이 다르거나 `applied_at`이 없으면 fail-close한다. 기존 expectation은
 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면 적용된 inbox
 receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정한다.
+
+generation 5는 snapshot page의 timezone-aware `created_at`/`expires_at`을 필수화한다. generic snapshot은
+첫 페이지에서 최소 1시간의 잔여 traversal window를 요구하고 모든 page header의 두 시각을 exact
+대조한다. request-bound reconciliation snapshot은 running request의 durable receipt이므로
+`expires_at`이 지나도 읽을 수 있다.
 
 generation 4는 generation 3의 restore epoch 배달 경계에 mutation/read 응답 의미를 분리한 breaking
 계약이다. PUT/DELETE receipt는 방금 commit된 target incarnation의 UUID, strong ETag, positive

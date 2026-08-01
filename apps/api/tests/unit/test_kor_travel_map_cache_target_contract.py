@@ -10,15 +10,16 @@ from typing import Any
 from app.core.config import (
     CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
     CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
+    CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION,
     CACHE_TARGET_SERVICE_OPENAPI_SHA256,
 )
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "8af695efc69dffb8778be16a574c6e5c4828c169"
-_FUNCTIONAL_OWNER_COMMIT = "8af695efc69dffb8778be16a574c6e5c4828c169"
-_SNAPSHOT_SHA256 = "9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985"
+_ARTIFACT_COMMIT = "2f7d5911eb7a377d02e71c4ef06b0003a748f301"
+_FUNCTIONAL_OWNER_COMMIT = "2f7d5911eb7a377d02e71c4ef06b0003a748f301"
+_SNAPSHOT_SHA256 = "12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73"
 
 
 def _spec() -> dict[str, Any]:
@@ -30,8 +31,9 @@ def _spec() -> dict[str, Any]:
 def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -> None:
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 4
+    assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _ARTIFACT_COMMIT
+    assert CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 5
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -53,6 +55,13 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         assert method in paths[path]
 
     schemas = spec["components"]["schemas"]
+    snapshot = schemas["CacheTargetSnapshotData"]
+    assert {"created_at", "expires_at"} <= set(snapshot["required"])
+    assert snapshot["properties"]["created_at"]["format"] == "date-time"
+    assert snapshot["properties"]["expires_at"]["format"] == "date-time"
+    assert "최소 1시간" in snapshot["properties"]["expires_at"]["description"]
+    assert "reconciliation-bound" in snapshot["properties"]["expires_at"]["description"]
+
     mutation_response = schemas["CacheTargetSourceMutationResponse"]
     assert mutation_response["properties"]["data"] == {
         "$ref": "#/components/schemas/CacheTargetSourceMutationRecord"

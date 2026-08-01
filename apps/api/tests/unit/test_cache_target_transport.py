@@ -6,7 +6,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -334,6 +334,8 @@ async def test_reconciliation_completion_binds_request_snapshot_epoch_root_and_k
                 high_watermark_cursor="cursor-0",
                 count=0,
                 merkle_root="72" * 32,
+                created_at=datetime(2026, 8, 1, tzinfo=UTC),
+                expires_at=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=2),
                 items=[],
             ),
             idempotency_key=idempotency_key,
@@ -376,6 +378,9 @@ async def test_reconciliation_completion_rejects_other_snapshot_receipt() -> Non
                     high_watermark_cursor="cursor-0",
                     count=0,
                     merkle_root="72" * 32,
+                    created_at=datetime(2026, 8, 1, tzinfo=UTC),
+                    expires_at=datetime(2026, 8, 1, tzinfo=UTC)
+                    + timedelta(hours=2),
                     items=[],
                 ),
                 idempotency_key=uuid.uuid4(),
@@ -523,6 +528,9 @@ async def test_reconciliation_completion_rejects_other_operation_receipt() -> No
                     high_watermark_cursor="cursor-0",
                     count=0,
                     merkle_root="72" * 32,
+                    created_at=datetime(2026, 8, 1, tzinfo=UTC),
+                    expires_at=datetime(2026, 8, 1, tzinfo=UTC)
+                    + timedelta(hours=2),
                     items=[],
                 ),
                 idempotency_key=uuid.uuid4(),
@@ -537,6 +545,11 @@ async def test_request_bound_snapshot_pages_keep_one_header_and_collect_all_item
     snapshot_id = uuid.uuid4()
     target_keys = [uuid.uuid4(), uuid.uuid4()]
     calls = 0
+    created_at = datetime.now(UTC) - timedelta(hours=3)
+    window = {
+        "created_at": created_at.isoformat(),
+        "expires_at": (created_at + timedelta(hours=2)).isoformat(),
+    }
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
@@ -560,6 +573,7 @@ async def test_request_bound_snapshot_pages_keep_one_header_and_collect_all_item
                     "high_watermark_cursor": "cursor-2",
                     "count": 2,
                     "merkle_root": "72" * 32,
+                    **window,
                     "items": [
                         {
                             "external_system": "pinvi",
@@ -582,6 +596,64 @@ async def test_request_bound_snapshot_pages_keep_one_header_and_collect_all_item
 
     assert calls == 2
     assert [item.target_key for item in snapshot.items] == [str(key) for key in target_keys]
+
+
+@pytest.mark.asyncio
+async def test_generic_snapshot_rejects_less_than_one_hour_traversal_window() -> None:
+    created_at = datetime.now(UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/service/cache-target-snapshots/pinvi"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "snapshot_id": str(uuid.uuid4()),
+                    "restore_epoch": 7,
+                    "high_watermark_cursor": "cursor-0",
+                    "count": 0,
+                    "merkle_root": "72" * 32,
+                    "created_at": created_at.isoformat(),
+                    "expires_at": (created_at + timedelta(minutes=59)).isoformat(),
+                    "items": [],
+                },
+                "meta": {"page": {"next_cursor": None}},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetContractError, match="1시간보다 짧습니다"):
+            await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("created_at", "expires_at"),
+    [
+        (datetime(2026, 8, 1), datetime(2026, 8, 1, 1)),
+        (
+            datetime(2026, 8, 1, tzinfo=UTC),
+            datetime(2026, 8, 1, tzinfo=UTC),
+        ),
+    ],
+)
+def test_snapshot_rejects_invalid_lifetime(
+    created_at: datetime,
+    expires_at: datetime,
+) -> None:
+    with pytest.raises(ValueError, match="snapshot"):
+        CacheTargetSnapshot(
+            snapshot_id=str(uuid.uuid4()),
+            restore_epoch=7,
+            high_watermark_cursor="cursor-0",
+            count=0,
+            merkle_root="72" * 32,
+            created_at=created_at,
+            expires_at=expires_at,
+            items=[],
+        )
 
 
 @pytest.mark.parametrize(

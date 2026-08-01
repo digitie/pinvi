@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 generation 5 snapshot lifetime 계약
+
+Map의 service snapshot DTO가 `created_at`/`expires_at`을 필수화하고 generic 첫 페이지에 최소 1시간의
+잔여 traversal window를 보장하도록 바뀌었다. PinVi는 새 service OpenAPI exact bytes
+(`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`)를 vendor하고 두 시각의
+timezone/lifetime 순서와 page 간 불변성을 strict 검증한다. generic snapshot은 1시간 미만이면
+fail-close하지만 request-bound reconciliation snapshot은 running request의 durable receipt이므로
+`expires_at` 이후에도 page할 수 있는 경계를 별도 테스트로 고정했다.
+
+서비스 artifact owner `2f7d5911eb7a377d02e71c4ef06b0003a748f301`과 functional owner를 별도 상수로
+분리했다. CI는 vendored bytes를 artifact owner와 비교하고 artifact→functional ancestry를 검증하며,
+runtime enable 설정은 generation `5`와 functional owner를 exact하게 요구한다. Map background GC가
+완성되면 기능 보강 exact commit만 functional owner로 재핀한다.
+
 ## 2026-08-01 (codex) — T-VN-41 generation 4 mutation receipt 계약 핀
 
 Map `8af695efc69dffb8778be16a574c6e5c4828c169`가 source ledger에 apply 시점 target
@@ -1925,7 +1939,7 @@ SQL/audit split 완료 상태를 최신 main 기준으로 정리했다.
 
 **변경**: T-266 — `test_mcp_read_only_tool_scenario`(read-only tool 5종 + 404/422/회수 401, KTM client
 stub), `scripts/verify-mcp.sh`, runbook §8(#326). T-286 — `legal-ops-review-gap-crosswalk.md` §6
-closure 재감사(G-001~044 + R-001~009 머지 확인). T-291-etl-sql-tests(#327)도 closed로 반영해
+closure 재감사(G-001~~044 + R-001~~009 머지 확인). T-291-etl-sql-tests(#327)도 closed로 반영해
 R-005 잔여 표기를 제거했다.
 
 **검증**: T-266 ruff/py_compile/bash -n OK + api CI 통과(#326 머지). T-286/#328 docs-only CI 통과.
@@ -6434,7 +6448,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-copy 시 `storage_key` 공유).
+  copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).
