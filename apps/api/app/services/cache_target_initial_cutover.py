@@ -533,6 +533,9 @@ async def run_initial_cache_target_cutover(
             session_factory,
             consumer_client=consumer_client,
             consumer_id=consumer_id,
+            batch_size=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
         )
         async with session_factory() as db:
             consumer = await db.scalar(

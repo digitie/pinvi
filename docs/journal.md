@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 blocked replay readiness 교착 종결
+
+**Live 발견**: n150의 실제 admin UI에서 dead delivery replay와 reconciliation을 요청하면 Map은
+`blocked + active running`을 노출했지만 PinVi ordinary bootstrap은 blocked marker만 보고 거부했다.
+completion이 되어야 block이 제거되고, bootstrap이 돼야 completion을 보낼 수 있어 회복이 영구
+교착했다.
+
+**변경**: blocked와 running descriptor가 exact하게 결박된 경우만 request-bound snapshot을 채택한다.
+completion과 remote ready 확인 뒤 local ready를 계속 닫은 채 consumer-only replay drain을 수행하고,
+current-epoch pending expectation이 0이어야 최종 ready를 원자적으로 연다. completion 후
+drain 전 crash은 local unready + same-epoch pending expectation으로 추론해 재시작에서 재개한다.
+receipt가 retry backoff 중이거나 도중 DB apply가 실패하면 ready를 열지 않는다. 반면 receipt
+local apply만 commit되고 ACK가 실패한 경우는 durable active claim으로 exact ACK를 우선
+재전송하므로 local-applied readiness 의미를 유지한다.
+
+**리뷰/검증**: 두 독립 적대적 리뷰가 crash window, epoch/state mismatch, pending marker
+false-positive/negative, ACK/NACK 순서를 재검토해 잔여 P0–P2 0건으로 종료했다. 실제
+PostGIS sync worker·initial cutover 28건과 Ruff·strict mypy·diff check가 통과했다.
+
 ## 2026-08-01 (codex) — T-VN-41 applied receipt 복구와 machine-readable 계약
 
 **적대적 리뷰 발견**: expectation이 없는 remote-completed 복구가 같은 request의 exact applied inbox를

@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-08-01 (codex) — T-VN-41 blocked recovery crash-safe drain
+
+n150 destructive Live UI 회복에서 admin replay가 blocked delivery를 `retry`로 되돌린 뒤
+reconciliation을 `running`으로 열어도, PinVi bootstrap이 blocked stream을 무조건 거부해
+completion과 replay가 서로를 기다리는 교착을 확인했다. active running reconciliation과 exact하게
+결박된 blocked 상태만 회복 경로로 허용하고, request-bound snapshot 일치·completion·remote
+ready 확인 뒤 command publisher를 열지 않은 consumer-only drain으로 replay를 먼저 적용한다.
+
+Map completion 직후 drain 전 crash는 same-epoch `pending` reconciliation expectation을 durable 재개
+표식으로 삼아 `active_reconciliation=null` 재시작에서도 같은 drain을 강제한다. drain 후
+current-epoch expectation이 하나라도 `pending`이면, 예를 들어 transient NACK backoff로 receipt가
+아직 claim되지 않은 경우, local ready를 열지 않고 startup을 fail-close한다. local receipt
+apply commit 뒤 remote ACK 전 crash은 `received` expectation과 durable active claim을 유지하며,
+ordinary consumer가 command claim 없이 exact ACK를 먼저 재전송한다.
+
+**검증**: cache-target sync worker·initial cutover 실제 PostGIS **28 passed**, Ruff, strict mypy,
+`git diff --check`가 통과했다. 두 독립 적대적 리뷰의 런타임·설계·DB durable
+state·event receipt 계약 재검토에서 잔여 P0–P2는 없다.
+
+**다음 한 작업**: PinVi exact head를 PR #423에 push하고 CI green 후 n150 isolated blocked
+fixture를 재구성해 최종 Live UI replay·reconciliation·drain을 재검증한다.
+
 ## 2026-08-01 (codex) — T-VN-41 restore epoch generation 3 pin
 
 두 독립 적대적 리뷰가 같은 P1을 발견했다. Map restore fence 뒤에도 이전 epoch의

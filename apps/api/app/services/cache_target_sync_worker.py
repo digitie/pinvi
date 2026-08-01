@@ -147,14 +147,18 @@ async def bootstrap_cache_target_sync(
     *,
     consumer_client: CacheTargetServiceClient,
     consumer_id: str,
+    batch_size: int,
+    lease_seconds: int,
+    max_attempts: int,
 ) -> None:
     """remote stream/snapshot을 DB transaction 밖에서 읽고 atomic하게 채택한다."""
     stream = await consumer_client.get_stream()
     if stream.consumer_id is not None and stream.consumer_id != consumer_id:
         raise RuntimeError("Map stream principal consumer_id가 PinVi 설정과 다릅니다.")
-    if stream.blocked_event_id is not None:
-        raise RuntimeError("Map cache target stream이 blocked 상태입니다.")
     active = stream.active_reconciliation
+    recovering_blocked_stream = stream.blocked_event_id is not None
+    if recovering_blocked_stream and active is None:
+        raise RuntimeError("Map cache target stream이 blocked 상태입니다.")
     if active is None:
         if stream.state not in {"active", "ready"}:
             raise RuntimeError("Map cache target stream이 ready 상태가 아닙니다.")
@@ -164,8 +168,9 @@ async def bootstrap_cache_target_sync(
             raise RuntimeError(
                 "preparing reconciliation은 전용 initial-cutover runner가 seal해야 합니다."
             )
-        if stream.state != "fenced":
-            raise RuntimeError("active reconciliation stream이 fenced 상태가 아닙니다.")
+        expected_state = "blocked" if stream.blocked_event_id is not None else "fenced"
+        if stream.state != expected_state:
+            raise RuntimeError(f"active reconciliation stream이 {expected_state} 상태가 아닙니다.")
         snapshot = await consumer_client.get_reconciliation_snapshot(active.request_id)
         if (
             snapshot.snapshot_id != str(active.snapshot_id)
@@ -177,7 +182,36 @@ async def bootstrap_cache_target_sync(
             raise RuntimeError("request-bound fixed snapshot이 stream descriptor와 다릅니다.")
     if snapshot.restore_epoch != stream.restore_epoch:
         raise RuntimeError("Map stream과 fixed snapshot restore epoch가 다릅니다.")
+    resume_recovery_drain = False
     async with session_factory() as db:
+        if active is None:
+            consumer = await db.scalar(
+                select(KtmCacheTargetConsumer)
+                .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+                .with_for_update()
+            )
+            if (
+                consumer is not None
+                and not consumer.ready
+                and consumer.active_restore_epoch == stream.restore_epoch
+            ):
+                pending_request_id = await db.scalar(
+                    select(KtmCacheTargetReconciliationExpectation.request_id)
+                    .where(
+                        KtmCacheTargetReconciliationExpectation.external_system == "pinvi",
+                        KtmCacheTargetReconciliationExpectation.restore_epoch
+                        == stream.restore_epoch,
+                        KtmCacheTargetReconciliationExpectation.status == "pending",
+                    )
+                    .limit(1)
+                )
+                if pending_request_id is not None:
+                    if stream.state != "ready":
+                        raise RuntimeError(
+                            "unfinished reconciliation recovery의 Map stream이 ready 상태가 "
+                            "아닙니다."
+                        )
+                    resume_recovery_drain = True
         await _adopt_stream_epoch(db, stream=stream, consumer_id=consumer_id)
         if active is not None:
             await record_cache_target_reconciliation_expectation(
@@ -186,7 +220,7 @@ async def bootstrap_cache_target_sync(
                 snapshot=snapshot,
             )
         matched = await reconcile_cache_target_snapshot(db, snapshot, consumer_id=consumer_id)
-        if active is not None:
+        if active is not None or resume_recovery_drain:
             consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
             if consumer is None:
                 raise RuntimeError("reconciliation consumer가 사라졌습니다.")
@@ -195,39 +229,78 @@ async def bootstrap_cache_target_sync(
             await db.commit()
             raise RuntimeError("PinVi/Map cache target fixed snapshot Merkle가 다릅니다.")
         await db.commit()
-    if active is None:
+    if active is None and not resume_recovery_drain:
         return
-    completion = await consumer_client.complete_reconciliation(
-        request_id=active.request_id,
-        consumer_id=consumer_id,
-        snapshot=snapshot,
-        idempotency_key=uuid.uuid5(
-            _RECONCILIATION_COMPLETION_NAMESPACE,
-            str(active.request_id),
-        ),
-    )
-    if completion.status != "succeeded":
-        raise RuntimeError("Map reconciliation completion이 succeeded가 아닙니다.")
-    confirmed = await consumer_client.get_stream()
-    if (
-        confirmed.consumer_id not in {None, consumer_id}
-        or confirmed.restore_epoch != stream.restore_epoch
-        or confirmed.state != "ready"
-        or confirmed.blocked_event_id is not None
-        or confirmed.active_reconciliation is not None
-    ):
-        raise RuntimeError("Map reconciliation completion 뒤 ready 전이가 확인되지 않았습니다.")
+    confirmed = stream
+    if active is not None:
+        completion = await consumer_client.complete_reconciliation(
+            request_id=active.request_id,
+            consumer_id=consumer_id,
+            snapshot=snapshot,
+            idempotency_key=uuid.uuid5(
+                _RECONCILIATION_COMPLETION_NAMESPACE,
+                str(active.request_id),
+            ),
+        )
+        if completion.status != "succeeded":
+            raise RuntimeError("Map reconciliation completion이 succeeded가 아닙니다.")
+        confirmed = await consumer_client.get_stream()
+        if (
+            confirmed.consumer_id not in {None, consumer_id}
+            or confirmed.restore_epoch != stream.restore_epoch
+            or confirmed.state != "ready"
+            or confirmed.blocked_event_id is not None
+            or confirmed.active_reconciliation is not None
+        ):
+            raise RuntimeError("Map reconciliation completion 뒤 ready 전이가 확인되지 않았습니다.")
+    if recovering_blocked_stream or resume_recovery_drain:
+        while await consume_cache_target_once(
+            session_factory,
+            client=consumer_client,
+            consumer_id=consumer_id,
+            batch_size=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
+            recovery_drain=True,
+        ):
+            pass
+        confirmed = await consumer_client.get_stream()
+        if (
+            confirmed.consumer_id not in {None, consumer_id}
+            or confirmed.restore_epoch != stream.restore_epoch
+            or confirmed.state != "ready"
+            or confirmed.blocked_event_id is not None
+            or confirmed.active_reconciliation is not None
+        ):
+            raise RuntimeError("recovery replay drain 뒤 Map stream이 ready 상태가 아닙니다.")
     async with session_factory() as db:
         consumer = await db.scalar(
             select(KtmCacheTargetConsumer)
             .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
             .with_for_update()
         )
+        pending_request_id = None
+        if recovering_blocked_stream or resume_recovery_drain:
+            pending_request_id = await db.scalar(
+                select(KtmCacheTargetReconciliationExpectation.request_id)
+                .where(
+                    KtmCacheTargetReconciliationExpectation.external_system == "pinvi",
+                    KtmCacheTargetReconciliationExpectation.restore_epoch == snapshot.restore_epoch,
+                    KtmCacheTargetReconciliationExpectation.status == "pending",
+                )
+                .limit(1)
+            )
+        if pending_request_id is not None:
+            raise RuntimeError(
+                "recovery replay drain 뒤 reconciliation receipt가 미수신 상태입니다."
+            )
         if (
             consumer is None
             or consumer.active_restore_epoch != snapshot.restore_epoch
             or consumer.snapshot_id != snapshot.snapshot_id
             or consumer.snapshot_merkle_root != bytes.fromhex(snapshot.merkle_root)
+            or consumer.reconcile_status != "matched"
+            or consumer.ready
         ):
             raise RuntimeError("completion 뒤 local snapshot identity가 바뀌었습니다.")
         consumer.stream_control_etag = confirmed.entity_tag
@@ -270,6 +343,7 @@ async def consume_cache_target_once(
     batch_size: int,
     lease_seconds: int,
     max_attempts: int,
+    recovery_drain: bool = False,
 ) -> bool:
     """durable 재ACK를 우선하고 없으면 한 claim을 apply→ACK한다."""
     async with session_factory() as db:
@@ -283,12 +357,12 @@ async def consume_cache_target_once(
         return True
 
     async with session_factory() as db:
-        consumer_ready = await db.scalar(
-            select(KtmCacheTargetConsumer.ready).where(
-                KtmCacheTargetConsumer.consumer_id == consumer_id
-            )
+        consumer = await db.scalar(
+            select(KtmCacheTargetConsumer).where(KtmCacheTargetConsumer.consumer_id == consumer_id)
         )
-    if consumer_ready is not True:
+    if consumer is None or (
+        not consumer.ready and not (recovery_drain and consumer.reconcile_status == "matched")
+    ):
         return False
 
     claim = await client.claim_events(
@@ -361,6 +435,14 @@ async def consume_cache_target_once(
                 max_attempts=max_attempts,
             )
         )
+        if recovery_drain:
+            await _block_cache_target_consumer(
+                session_factory,
+                consumer_id=consumer_id,
+            )
+            raise CacheTargetConsumerError(
+                "blocked replay drain의 local DB apply가 실패했습니다."
+            ) from exc
         return True
     await client.ack_events(ack)
     async with session_factory() as db:
@@ -461,6 +543,9 @@ async def cache_target_sync_worker_lifespan(app: FastAPI) -> AsyncIterator[None]
             db_session.async_session_factory,
             consumer_client=consumer_client,
             consumer_id=settings.pinvi_kor_travel_map_cache_target_consumer_id,
+            batch_size=settings.pinvi_kor_travel_map_cache_target_batch_size,
+            lease_seconds=settings.pinvi_kor_travel_map_cache_target_lease_seconds,
+            max_attempts=settings.pinvi_kor_travel_map_cache_target_max_attempts,
         )
         tasks = [
             asyncio.create_task(_command_loop(command_client, settings)),
