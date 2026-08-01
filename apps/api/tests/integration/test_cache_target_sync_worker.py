@@ -44,6 +44,7 @@ def _snapshot_window() -> dict[str, str]:
         "expires_at": (created_at + timedelta(hours=2)).isoformat(),
     }
 
+
 pytestmark = pytest.mark.asyncio
 
 

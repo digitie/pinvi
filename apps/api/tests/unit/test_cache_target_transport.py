@@ -379,8 +379,7 @@ async def test_reconciliation_completion_rejects_other_snapshot_receipt() -> Non
                     count=0,
                     merkle_root="72" * 32,
                     created_at=datetime(2026, 8, 1, tzinfo=UTC),
-                    expires_at=datetime(2026, 8, 1, tzinfo=UTC)
-                    + timedelta(hours=2),
+                    expires_at=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=2),
                     items=[],
                 ),
                 idempotency_key=uuid.uuid4(),
@@ -529,8 +528,7 @@ async def test_reconciliation_completion_rejects_other_operation_receipt() -> No
                     count=0,
                     merkle_root="72" * 32,
                     created_at=datetime(2026, 8, 1, tzinfo=UTC),
-                    expires_at=datetime(2026, 8, 1, tzinfo=UTC)
-                    + timedelta(hours=2),
+                    expires_at=datetime(2026, 8, 1, tzinfo=UTC) + timedelta(hours=2),
                     items=[],
                 ),
                 idempotency_key=uuid.uuid4(),
