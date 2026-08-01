@@ -13,7 +13,7 @@
 `e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`, generation `3`, service OpenAPI SHA-256
 `ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`을 exact pin한다.
 strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
-snapshot identity를 요청과 exact 대조한다.
+snapshot identity 및 operation ID를 요청과 exact 대조한다.
 
 **다음 한 작업**: 양쪽 exact head를 두 독립 리뷰어가 재검토해 P1 종결을 확인한 뒤 n150 isolated
 cutover·crash/reclaim·destructive Live UI recovery를 실행한다.

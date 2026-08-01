@@ -225,7 +225,8 @@ reconciliation을 즉시 허용한다. PinVi는 여전히 epoch가 다른 event�
 producer 보장이 없는 generation에는 sync를 열지 않는다. consumer는 terminal receipt를
 mutable generic snapshot이 아니라 durable request expectation과 대조하고 inbox transaction에서 한 번만
 received로 종결한다. begin은 nullable snapshot, seal/completion은 request-bound snapshot UUID를 strict하게
-검증하며 다른 snapshot receipt를 거부한다.
+검증하며 seal/completion의 operation ID도 요청 request ID와 exact 대조해 다른 reconciliation receipt를
+거부한다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible

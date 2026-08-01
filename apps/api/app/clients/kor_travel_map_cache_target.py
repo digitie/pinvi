@@ -573,7 +573,11 @@ class CacheTargetServiceClient:
             if_match=stream_etag,
             if_none_match=stream_etag is None,
         )
-        return self._recovery_result(response, expected_status="preparing")
+        return self._recovery_result(
+            response,
+            expected_status="preparing",
+            expected_operation_id=None,
+        )
 
     async def seal_initial_reconciliation(
         self,
@@ -600,13 +604,18 @@ class CacheTargetServiceClient:
             idempotency_key=idempotency_key,
             if_match=stream_etag,
         )
-        return self._recovery_result(response, expected_status="running")
+        return self._recovery_result(
+            response,
+            expected_status="running",
+            expected_operation_id=request_id,
+        )
 
     @staticmethod
     def _recovery_result(
         response: httpx.Response,
         *,
         expected_status: Literal["preparing", "running"],
+        expected_operation_id: uuid.UUID | None,
     ) -> CacheTargetRecoveryResult:
         operation = CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
         etag = response.headers.get("ETag")
@@ -617,12 +626,18 @@ class CacheTargetServiceClient:
         )
         if (
             operation.status != expected_status
+            or (
+                expected_operation_id is not None
+                and operation.operation_id != expected_operation_id
+            )
             or not snapshot_identity_matches_phase
             or etag is None
             or operation.entity_tag != etag
             or operation.stream_entity_tag is None
         ):
-            raise CacheTargetContractError("reconciliation operation status/ETag가 다릅니다.")
+            raise CacheTargetContractError(
+                "reconciliation operation identity/status/ETag가 다릅니다."
+            )
         return CacheTargetRecoveryResult(operation=operation, etag=etag)
 
     async def complete_reconciliation(
@@ -647,6 +662,10 @@ class CacheTargetServiceClient:
             idempotency_key=idempotency_key,
         )
         operation = CacheTargetRecoveryOperation.model_validate(_unwrap_data(response))
+        if operation.operation_id != request_id:
+            raise CacheTargetContractError(
+                "reconciliation completion operation identity가 다릅니다."
+            )
         if operation.snapshot_id != uuid.UUID(snapshot.snapshot_id):
             raise CacheTargetContractError(
                 "reconciliation completion snapshot identity가 다릅니다."

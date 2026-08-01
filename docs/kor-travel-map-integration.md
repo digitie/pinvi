@@ -192,7 +192,7 @@ request/snapshot/epoch/root를 durable expectation과 exact 대조하고 stale e
 generic snapshot identity와 섞지 않는다. fence는 active preparing/running reconciliation도 terminal
 `superseded`로 종결하고 receipt에 해당 request ID를 남겨 새 epoch의 begin을 막지 않는다. PinVi recovery
 DTO는 nullable `snapshot_id`와 terminal `superseded`를 strict 파싱하며 seal/completion snapshot identity를
-요청과 exact 대조한다.
+요청과 exact 대조하고 operation ID도 요청 request ID와 일치해야 한다.
 
 최초 Map 0건·PinVi N건 cutover는 일반 worker startup으로 해결하지 않는다. 전용 runner가 PinVi DB writer
 fence를 보유한 동안 recovery begin(`preparing`) → pending PUT drain → reconciliation ETag 기반 seal

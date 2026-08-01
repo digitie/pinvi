@@ -357,6 +357,72 @@ async def test_initial_reconciliation_begin_and_seal_keep_distinct_etags_and_exa
     assert seal.etag == f'"{request_id}:2"'
 
 
+def test_seal_reconciliation_rejects_other_operation_receipt() -> None:
+    request_id = uuid.uuid4()
+    etag = f'"{request_id}:2"'
+    response = httpx.Response(
+        200,
+        headers={"ETag": etag},
+        json={
+            "data": {
+                "operation_id": str(uuid.uuid4()),
+                "status": "running",
+                "snapshot_id": str(uuid.uuid4()),
+                "status_url": None,
+                "entity_tag": etag,
+                "stream_entity_tag": '"pinvi:8"',
+            },
+            "meta": {},
+        },
+    )
+
+    with pytest.raises(CacheTargetContractError, match="identity/status/ETag"):
+        CacheTargetServiceClient._recovery_result(
+            response,
+            expected_status="running",
+            expected_operation_id=request_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_completion_rejects_other_operation_receipt() -> None:
+    request_id = uuid.uuid4()
+    snapshot_id = uuid.uuid4()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "operation_id": str(uuid.uuid4()),
+                    "status": "succeeded",
+                    "snapshot_id": str(snapshot_id),
+                    "status_url": None,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetContractError, match="operation identity"):
+            await client.complete_reconciliation(
+                request_id=request_id,
+                consumer_id="pinvi-cache-target-consumer",
+                snapshot=CacheTargetSnapshot(
+                    snapshot_id=str(snapshot_id),
+                    restore_epoch=7,
+                    high_watermark_cursor="cursor-0",
+                    count=0,
+                    merkle_root="72" * 32,
+                    items=[],
+                ),
+                idempotency_key=uuid.uuid4(),
+            )
+    finally:
+        await client.aclose()
+
+
 @pytest.mark.asyncio
 async def test_request_bound_snapshot_pages_keep_one_header_and_collect_all_items() -> None:
     request_id = uuid.uuid4()

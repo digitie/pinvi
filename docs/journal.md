@@ -19,6 +19,10 @@ PinVi strict recovery DTO에 Map wire의 nullable `snapshot_id`와 terminal `sup
 snapshot 없음, seal은 snapshot 있음, completion은 요청한 snapshot과 exact 일치를 요구해 mock이 감췄던
 실응답 `extra_forbidden`과 다른 snapshot receipt 수용을 함께 차단했다.
 
+추가 재리뷰에서 seal/completion의 operation ID를 요청 request ID와 비교하지 않는 P2를 발견했다. 두 응답은
+snapshot identity뿐 아니라 operation identity도 exact 대조하며, 다른 reconciliation receipt는 local 상태를
+바꾸기 전에 계약 오류로 거부한다.
+
 ## 2026-08-01 (codex) — T-VN-41 request-bound reconciliation expectation 분리
 
 **실환경 발견**: n150에서 만료 lease 50건 중 target event 49건은 회수·ACK됐지만 마지막
