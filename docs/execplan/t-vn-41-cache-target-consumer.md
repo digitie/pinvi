@@ -222,7 +222,7 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 서비스 계약은 Map export commit `7451df426ce50efb0c6d753a9353f9bd74a08f0a`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `80d79edbbd3e8f979582af07e8a49ac70d2976e9`, contract generation `3`이
+functional artifact owner revision `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, contract generation `3`이
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
 
@@ -237,6 +237,8 @@ received로 종결한다. begin은 nullable snapshot, seal/completion은 request
 검증하며 seal/completion의 operation ID도 요청 request ID와 exact 대조해 다른 reconciliation receipt를
 거부한다. restore fence receipt는 superseded reconciliation count `0`/request ID `null` 또는
 count `1`/UUID request ID의 두 조합만 machine-readable `oneOf`로 허용하고 operation ID도 UUID다.
+fence audit의 superseded request는 Map DB composite FK로 같은 `external_system`의 reconciliation만
+참조할 수 있다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible

@@ -9,13 +9,15 @@
 추가 적대적 리뷰에서 active reconciliation도 restore fence 뒤 남아 old completion과 new begin을 동시에
 막는 P1을 발견했다. Map은 preparing/running request를 terminal `superseded`로 원자 종결하고 fence receipt에
 영향 count와 request ID를 영속화한다. PinVi는 Map functional owner
-`80d79edbbd3e8f979582af07e8a49ac70d2976e9`, artifact
+`96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`, generation `3`, service OpenAPI SHA-256
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 exact pin한다.
 strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
 snapshot identity 및 operation ID를 요청과 exact 대조한다. restore fence receipt의 superseded
 reconciliation count와 nullable request ID도 machine-readable `oneOf`에서 `0/null` 또는
 `1/UUID`로만 허용하며 recovery operation ID 자체도 UUID다.
+Map의 immutable fence audit와 superseded reconciliation은 `(external_system, request_id)` composite
+FK로 같은 stream에 결박된다.
 
 첫 재리뷰의 추가 P1에 따라 remote-completed initial cutover 재개도 request-bound durable expectation을
 필수화했다. `0047` 이전 upgrade 상태처럼 row가 없으면 durable consumer의 canonical

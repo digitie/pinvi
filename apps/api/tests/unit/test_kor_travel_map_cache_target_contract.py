@@ -17,7 +17,7 @@ _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
 _ARTIFACT_COMMIT = "7451df426ce50efb0c6d753a9353f9bd74a08f0a"
-_FUNCTIONAL_OWNER_COMMIT = "80d79edbbd3e8f979582af07e8a49ac70d2976e9"
+_FUNCTIONAL_OWNER_COMMIT = "96ce969cea2560972d0f6125a4b56dcbd75ba7c2"
 _SNAPSHOT_SHA256 = "4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066"
 
 

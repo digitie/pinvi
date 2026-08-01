@@ -177,7 +177,7 @@ commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통�
 서비스 계약은 Map export commit `7451df426ce50efb0c6d753a9353f9bd74a08f0a`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`이고, sync enable 설정의
-functional artifact owner revision `80d79edbbd3e8f979582af07e8a49ac70d2976e9`와 contract generation `3`도
+functional artifact owner revision `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`와 contract generation `3`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -199,6 +199,8 @@ generic snapshot identity와 섞지 않는다. fence는 active preparing/running
 `superseded`로 종결하고 receipt에 해당 request ID를 남겨 새 epoch의 begin을 막지 않는다. PinVi recovery
 계약은 fence receipt에서 superseded reconciliation count `0`과 request ID `null`, count `1`과 non-null
 UUID request ID의 짝만 machine-readable `oneOf`로 허용하고 recovery `operation_id`도 UUID로 제한한다.
+Map DB는 fence와 superseded reconciliation을 `(external_system, request_id)` composite FK로 결박해
+다른 stream request가 immutable fence audit에 연결되는 상태도 거부한다.
 DTO는 nullable `snapshot_id`와 terminal `superseded`를 strict 파싱하며 seal/completion snapshot identity를
 요청과 exact 대조하고 operation ID도 요청 request ID와 일치해야 한다.
 

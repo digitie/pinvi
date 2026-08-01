@@ -14,11 +14,13 @@ exact applied receipt면 event ID와 `received`를 복원한다. 복수·불일�
 apply가 ACK보다 먼저 commit되므로 immutable inbox `applied_at`이 received 정본이고 ACK는 기존 claim 복구가
 담당한다. Map 계약은 restore pair를 object-level `oneOf`로 표현하고 operation ID를 UUID로 좁혔다.
 
-**계약/검증**: Map functional `80d79edbbd3e8f979582af07e8a49ac70d2976e9`, artifact
+**계약/검증**: Map functional `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`, service SHA-256
 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 generation `3`으로 exact
 pin한다. PinVi PostGIS initial-cutover 9건·event consumer 6건, contract/transport unit 20건과 Map
 JSON Schema/router/export 회귀가 통과했다.
+Map DB는 fence receipt와 superseded reconciliation을 `(external_system, request_id)` composite FK로
+결박해 cross-stream causal link도 raw SQL 단계에서 거부한다.
 
 ## 2026-08-01 (codex) — T-VN-41 remote-completed cutover expectation gate
 
@@ -43,7 +45,7 @@ Ruff, 대상 파일 strict mypy를 통과했다.
 `pending/retry/leased/dead` delivery를 남겨 전역 claim·dead 판정을 오염시켰다. PinVi의 올바른 stale epoch
 영구 NACK과 결합하면 새 epoch가 영구 차단될 수 있었다.
 
-**계약 갱신**: Map functional owner `80d79edbbd3e8f979582af07e8a49ac70d2976e9`, export artifact
+**계약 갱신**: Map functional owner `96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, export artifact
 `7451df426ce50efb0c6d753a9353f9bd74a08f0a`를 contract generation `3`으로 재핀했다. service OpenAPI exact
 bytes의 SHA-256은 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. generation
 3은 restore fence가 이전 epoch의 미종결 delivery와 active reconciliation을 terminal `superseded`로
