@@ -285,7 +285,13 @@ class CacheTargetSnapshotItem(_StrictModel):
 class CacheTargetSnapshot(_StrictModel):
     snapshot_id: str = Field(min_length=1)
     restore_epoch: int = Field(gt=0)
-    high_watermark_cursor: str
+    high_watermark_cursor: str = Field(
+        min_length=1,
+        description=(
+            "external_system-scoped commit-safe replay lower-bound. "
+            "이후 claim의 event 중복을 허용하고 immutable inbox event_id로 dedupe한다."
+        ),
+    )
     count: int = Field(ge=0)
     merkle_root: str
     created_at: datetime

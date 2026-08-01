@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
+from asyncio import AbstractEventLoop, Lock
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Self
 from urllib.parse import quote
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -24,6 +27,28 @@ FailureDisposition = Literal["retry", "halt", "reconcile", "dead_letter"]
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - header name
 _IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+_SNAPSHOT_MAX_ATTEMPTS = 3
+_SNAPSHOT_RETRY_AFTER_MAX_SECONDS = 7_200
+_SNAPSHOT_REQUEST_TIMEOUT = httpx.Timeout(70.0, connect=5.0, write=5.0, pool=5.0)
+_SNAPSHOT_RETRYABLE_PROBLEMS = frozenset(
+    {
+        (429, "SNAPSHOT_CAPACITY_EXCEEDED"),
+        (503, "SNAPSHOT_BARRIER_TIMEOUT"),
+        (503, "SNAPSHOT_BUILD_TIMEOUT"),
+        (503, "SNAPSHOT_BUSY"),
+        (503, "SNAPSHOT_TTL_TOO_SHORT"),
+    }
+)
+_SNAPSHOT_LOCKS: WeakKeyDictionary[
+    AbstractEventLoop, WeakValueDictionary[str, Lock]
+] = WeakKeyDictionary()
+
+
+def _snapshot_lock(external_system: str) -> Lock:
+    """한 process/event loop 안에서 system별 snapshot traversal을 하나로 제한한다."""
+    loop = asyncio.get_running_loop()
+    system_locks = _SNAPSHOT_LOCKS.setdefault(loop, WeakValueDictionary())
+    return system_locks.setdefault(external_system, Lock())
 
 
 def classify_cache_target_failure(*, status_code: int, code: str) -> FailureDisposition:
@@ -214,12 +239,12 @@ class CacheTargetRecoveryResult:
     etag: str
 
 
-def _retry_after(response: httpx.Response) -> int | None:
+def _retry_after(response: httpx.Response, *, maximum_seconds: int = 300) -> int | None:
     value = response.headers.get("Retry-After")
     if value is None or not value.isascii() or not value.isdigit():
         return None
     seconds = int(value)
-    return seconds if 1 <= seconds <= 300 else None
+    return seconds if 1 <= seconds <= maximum_seconds else None
 
 
 def _problem_code(response: httpx.Response) -> str:
@@ -382,6 +407,8 @@ class CacheTargetServiceClient:
         idempotency_key: uuid.UUID | None = None,
         if_match: str | None = None,
         if_none_match: bool = False,
+        retry_after_max_seconds: int = 300,
+        request_timeout: httpx.Timeout | None = None,
     ) -> httpx.Response:
         headers = {_SERVICE_TOKEN_HEADER: self._token}
         if idempotency_key is not None:
@@ -395,13 +422,14 @@ class CacheTargetServiceClient:
         if if_none_match:
             headers["If-None-Match"] = "*"
         try:
-            response = await self._http.request(
-                method,
-                path,
-                json=body,
-                params=params,
-                headers=headers,
-            )
+            request_kwargs: dict[str, Any] = {
+                "json": body,
+                "params": params,
+                "headers": headers,
+            }
+            if request_timeout is not None:
+                request_kwargs["timeout"] = request_timeout
+            response = await self._http.request(method, path, **request_kwargs)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise CacheTargetNetworkError(
                 "kor-travel-map cache-target outcome이 불확실합니다."
@@ -410,7 +438,10 @@ class CacheTargetServiceClient:
             raise CacheTargetServiceProblem(
                 status_code=response.status_code,
                 code=_problem_code(response),
-                retry_after=_retry_after(response),
+                retry_after=_retry_after(
+                    response,
+                    maximum_seconds=retry_after_max_seconds,
+                ),
             )
         return response
 
@@ -700,19 +731,50 @@ class CacheTargetServiceClient:
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
         self._require_role("consumer")
-        return await self._get_snapshot_pages(
-            "/v1/service/cache-target-snapshots/pinvi",
-            minimum_remaining=timedelta(hours=1),
-        )
+        async with _snapshot_lock("pinvi"):
+            return await self._get_snapshot_pages(
+                "/v1/service/cache-target-snapshots/pinvi",
+                minimum_remaining=timedelta(hours=1),
+            )
 
     async def get_reconciliation_snapshot(
         self,
         request_id: uuid.UUID,
     ) -> CacheTargetSnapshot:
         self._require_role("consumer")
-        return await self._get_snapshot_pages(
-            f"/v1/service/cache-target-reconciliations/{request_id}/snapshot"
-        )
+        async with _snapshot_lock("pinvi"):
+            return await self._get_snapshot_pages(
+                f"/v1/service/cache-target-reconciliations/{request_id}/snapshot"
+            )
+
+    async def _get_snapshot_page(
+        self,
+        path: str,
+        *,
+        params: dict[str, str | int],
+    ) -> httpx.Response:
+        """Map이 명시한 snapshot 경합만 Retry-After에 따라 bounded retry한다."""
+        for attempt in range(1, _SNAPSHOT_MAX_ATTEMPTS + 1):
+            try:
+                return await self._send(
+                    "GET",
+                    path,
+                    params=params,
+                    retry_after_max_seconds=_SNAPSHOT_RETRY_AFTER_MAX_SECONDS,
+                    request_timeout=_SNAPSHOT_REQUEST_TIMEOUT,
+                )
+            except CacheTargetServiceProblem as problem:
+                identity = (problem.status_code, problem.code)
+                if identity not in _SNAPSHOT_RETRYABLE_PROBLEMS:
+                    raise
+                if problem.retry_after is None:
+                    raise CacheTargetContractError(
+                        "retryable snapshot 응답에 canonical Retry-After가 없습니다."
+                    ) from problem
+                if attempt == _SNAPSHOT_MAX_ATTEMPTS:
+                    raise
+                await asyncio.sleep(problem.retry_after)
+        raise AssertionError("snapshot retry loop가 종결되지 않았습니다.")
 
     async def _get_snapshot_pages(
         self,
@@ -728,7 +790,7 @@ class CacheTargetServiceClient:
             params: dict[str, str | int] = {"page_size": 1000}
             if cursor is not None:
                 params["cursor"] = cursor
-            response = await self._send("GET", path, params=params)
+            response = await self._get_snapshot_page(path, params=params)
             raw_data, meta = _unwrap_envelope(response)
             page = CacheTargetSnapshot.model_validate(raw_data)
             if first is None:

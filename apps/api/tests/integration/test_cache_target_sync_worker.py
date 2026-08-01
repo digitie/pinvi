@@ -12,6 +12,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetServiceClient,
@@ -32,6 +33,7 @@ from app.services.cache_target_event_consumer import (
 )
 from app.services.cache_target_sync_worker import (
     _consumer_loop,
+    _snapshot_traversal_lock,
     bootstrap_cache_target_sync,
     consume_cache_target_once,
 )
@@ -46,6 +48,70 @@ def _snapshot_window() -> dict[str, str]:
 
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_snapshot_traversal_lock_serializes_connections_and_releases_on_cancel(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    second_entered = asyncio.Event()
+
+    async def first() -> None:
+        async with _snapshot_traversal_lock(engine):
+            first_entered.set()
+            await release_first.wait()
+
+    async def second() -> None:
+        await first_entered.wait()
+        async with _snapshot_traversal_lock(engine):
+            second_entered.set()
+
+    first_task = asyncio.create_task(first())
+    second_task = asyncio.create_task(second())
+    try:
+        await asyncio.wait_for(first_entered.wait(), timeout=5)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(second_task), timeout=0.2)
+        first_task.cancel()
+        await asyncio.gather(first_task, return_exceptions=True)
+        await asyncio.wait_for(second_entered.wait(), timeout=5)
+        await asyncio.wait_for(second_task, timeout=5)
+    finally:
+        release_first.set()
+        for task in (first_task, second_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(first_task, second_task, return_exceptions=True)
+
+
+async def test_snapshot_traversal_lock_releases_when_cancelled_after_db_acquire(
+    session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # type: ignore[no-untyped-def]
+    engine = session_factory.kw["bind"]
+    original_execute = AsyncConnection.execute
+    cancel_once = True
+
+    async def cancel_after_acquire(self, statement, parameters=None, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal cancel_once
+        result = await original_execute(self, statement, parameters, **kwargs)
+        if cancel_once and "pg_advisory_lock" in str(statement):
+            cancel_once = False
+            raise asyncio.CancelledError
+        return result
+
+    monkeypatch.setattr(AsyncConnection, "execute", cancel_after_acquire)
+    with pytest.raises(asyncio.CancelledError):
+        async with _snapshot_traversal_lock(engine):
+            raise AssertionError("acquire 직후 cancellation이면 body에 진입할 수 없습니다.")
+
+    entered = asyncio.Event()
+    async with asyncio.timeout(5):
+        async with _snapshot_traversal_lock(engine):
+            entered.set()
+    assert entered.is_set()
 
 
 def _links_reconciled_payload(target_id: uuid.UUID) -> dict[str, object]:

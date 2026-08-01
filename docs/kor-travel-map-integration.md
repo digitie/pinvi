@@ -174,11 +174,11 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map artifact owner commit `2f7d5911eb7a377d02e71c4ef06b0003a748f301`의
+서비스 계약은 Map artifact owner commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`이고, 현재 functional owner는
-`2f7d5911eb7a377d02e71c4ef06b0003a748f301`이다. sync enable 설정은 functional owner revision과
-contract generation `5`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
+`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`이고, 현재 functional owner는
+`5d9c42dfc7d908ace1129c7ca2682bac54d572d7`이다. sync enable 설정은 functional owner revision과
+contract generation `6`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
 검증한다. functional owner는 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는 기능 계약
 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -192,10 +192,30 @@ transaction에서 snapshot owner 충돌을 확인한다. 같은 request의 exact
 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면 적용된 inbox
 receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정한다.
 
-generation 5는 snapshot page의 timezone-aware `created_at`/`expires_at`을 필수화한다. generic snapshot은
+generation 6은 trim된 Unicode NFC identity와 512자 `target_key`, 중복 없는 refresh key 배열,
+typed snapshot backpressure 오류를 고정한다. generation 5는 snapshot page의 timezone-aware
+`created_at`/`expires_at`을 필수화했다. generic snapshot은
 첫 페이지에서 최소 1시간의 잔여 traversal window를 요구하고 모든 page header의 두 시각을 exact
 대조한다. request-bound reconciliation snapshot은 running request의 durable receipt이므로
 `expires_at`이 지나도 읽을 수 있다.
+
+`high_watermark_cursor`는 snapshot 전체와 정확히 같은 시점이라는 뜻이 아니라, 해당
+`external_system` outbox의 commit-safe replay lower-bound다. 따라서 그 cursor 이후 claim에는 snapshot에
+이미 반영됐거나 PinVi inbox에 이미 적용된 event가 다시 포함될 수 있다. PinVi는 cursor를 새 event
+dedupe key로 사용하지 않고 immutable `event_id`와 payload fingerprint를 inbox 정본으로 삼아 중복을
+ACK하되 side effect와 cache generation은 한 번만 반영한다.
+
+generic/request-bound snapshot traversal은 PinVi DB session advisory lock으로 모든 process/event loop에서
+동시 1개로 제한한다. lock 전용 connection은 획득 직후 commit해 idle transaction을 남기지 않고,
+정상·예외·취소에는 unlock query 대신 physical DB session을 invalidate/close해 stale pooled lock을 막는다.
+process-local system lock은 같은
+event loop의 중복 작업을 먼저 합치는 이중 방어다. snapshot 요청은 공용 5초 timeout을 쓰지 않고 70초
+전용 read timeout을 사용해 Map의 최대 5초 barrier와 30초 build budget을 포괄한다.
+Map의 `429 SNAPSHOT_CAPACITY_EXCEEDED`와 `503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_TIMEOUT,BUSY,TTL_TOO_SHORT}`만
+canonical `Retry-After`를 그대로 기다려 최대 3회 시도한다. header 누락·범위 위반은 계약 오류이고,
+`413 SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 자동 재시도 없이 startup을 fail-close한다. 이 동작과 Map의
+100,000-item ceiling을 n150 production enable 전 live gate에서 확인한다. 정확히 100,000개 성공의 wall
+latency와 API/DB peak RSS를 함께 기록하고, 100,001개 `413` non-retry와 구분한다.
 
 generation 4는 generation 3의 restore epoch 배달 경계에 mutation/read 응답 의미를 분리한 breaking
 계약이다. PUT/DELETE receipt는 방금 commit된 target incarnation의 UUID, strong ETag, positive

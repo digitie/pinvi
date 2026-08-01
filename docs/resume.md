@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 snapshot replay/backpressure 소비자 게이트
+
+Map snapshot의 `high_watermark_cursor`를 `external_system`-scoped commit-safe replay lower-bound로
+해석한다. cursor 뒤 claim이 snapshot/local inbox와 겹칠 수 있으므로 immutable event ID와 payload
+fingerprint로 ACK를 재구성하고 side effect/cache generation은 한 번만 반영한다. generic/request-bound
+snapshot traversal은 PinVi DB session advisory lock으로 process/event loop 전체에서 직렬화하고 local
+system lock을 이중 방어로 둔다. snapshot 전용 70초 timeout은 Map 5초 barrier/30초 build budget을
+포괄한다. typed `429/503`만 canonical `Retry-After`를 지켜 최대 3회 재시도하고 `413
+SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 즉시 fail-close한다. n150에서는 exact 100,000 성공의 latency/RSS와
+100,001 non-retry를 모두 측정한다. lock connection은 acquire 직후 commit해 idle transaction을 닫고,
+acquire/commit/body cancellation에도 physical session을 invalidate/close해 pool에 stale lock을 남기지 않는다.
+
+Map final service OpenAPI를 commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`, SHA-256
+`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`, contract generation `6`으로
+exact 재핀했다. generation 6은 trim/NFC identity, 512자 key, refresh key uniqueness와 typed snapshot
+backpressure를 함께 고정한다.
+
+**다음 한 작업**: 양쪽 exact head 리뷰·CI와 n150 production-enable live gate를 완료한다.
+
 ## 2026-08-01 (codex) — T-VN-41 Map generation 5 snapshot lifetime 계약
 
 Map PR #917의 generic snapshot 내구성 보강에 맞춰 service OpenAPI artifact owner를

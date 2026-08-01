@@ -12,9 +12,9 @@ from contextlib import asynccontextmanager, suppress
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.clients.kor_travel_map_cache_target import (
     CacheTargetNetworkError,
@@ -45,6 +45,34 @@ from app.services.cache_target_event_consumer import (
 
 logger = logging.getLogger(__name__)
 _RECONCILIATION_COMPLETION_NAMESPACE = uuid.UUID("6dd91420-bdf2-4e50-896e-3a6509d55f3d")
+_SNAPSHOT_TRAVERSAL_LOCK_NAMESPACE = 1_263_816_009
+_SNAPSHOT_TRAVERSAL_LOCK_RESOURCE = 42
+
+
+@asynccontextmanager
+async def _snapshot_traversal_lock(engine: AsyncEngine) -> AsyncIterator[None]:
+    """Pin DB 하나에서 process/event-loop 전체 snapshot traversal을 직렬화한다."""
+    async with engine.connect() as connection:
+        try:
+            await connection.execute(
+                text("SELECT pg_advisory_lock(:namespace, :resource)"),
+                {
+                    "namespace": _SNAPSHOT_TRAVERSAL_LOCK_NAMESPACE,
+                    "resource": _SNAPSHOT_TRAVERSAL_LOCK_RESOURCE,
+                },
+            )
+            await connection.commit()
+            yield
+        finally:
+            # unlock query와 pool check-in 사이의 cancellation 창을 만들지 않는다.
+            # 전용 physical DB session 자체를 닫으면 PostgreSQL이 session lock을
+            # 정상·예외·취소 경로에서 동일하게 해제한다.
+            invalidation = asyncio.create_task(connection.invalidate())
+            try:
+                await asyncio.shield(invalidation)
+            except asyncio.CancelledError:
+                await invalidation
+                raise
 
 
 def _claim_prefix(claim: CacheTargetClaim, *, event_count: int) -> CacheTargetClaim:
@@ -142,7 +170,7 @@ async def _adopt_stream_epoch(
     return consumer
 
 
-async def bootstrap_cache_target_sync(
+async def _bootstrap_cache_target_sync_locked(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     consumer_client: CacheTargetServiceClient,
@@ -306,6 +334,30 @@ async def bootstrap_cache_target_sync(
         consumer.stream_control_etag = confirmed.entity_tag
         consumer.ready = True
         await db.commit()
+
+
+async def bootstrap_cache_target_sync(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    consumer_client: CacheTargetServiceClient,
+    consumer_id: str,
+    batch_size: int,
+    lease_seconds: int,
+    max_attempts: int,
+) -> None:
+    """Pin DB advisory lock 안에서 system snapshot bootstrap을 한 번씩 실행한다."""
+    bind = session_factory.kw.get("bind")
+    if not isinstance(bind, AsyncEngine):
+        raise RuntimeError("cache target snapshot lock에 AsyncEngine bind가 필요합니다.")
+    async with _snapshot_traversal_lock(bind):
+        await _bootstrap_cache_target_sync_locked(
+            session_factory,
+            consumer_client=consumer_client,
+            consumer_id=consumer_id,
+            batch_size=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
+        )
 
 
 def build_cache_target_nack(

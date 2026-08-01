@@ -219,18 +219,33 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map artifact owner commit `2f7d5911eb7a377d02e71c4ef06b0003a748f301`의
+서비스 계약은 Map artifact owner commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`다. 현재 functional owner는
-`2f7d5911eb7a377d02e71c4ef06b0003a748f301`이며, sync를 켤 때 이 SHA, functional owner revision,
-contract generation `5`가 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
+`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`다. 현재 functional owner는
+`5d9c42dfc7d908ace1129c7ca2682bac54d572d7`이며, sync를 켤 때 이 SHA, functional owner revision,
+contract generation `6`이 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
 ancestor임을 검증한다. functional owner는 기능 계약의 provenance이며 배포 Map 이미지나 `/version`의
 git SHA와 비교하지 않는다.
 
-generation 5는 generation 4에 snapshot의 timezone-aware `created_at`/`expires_at`을 필수화한다.
+generation 6은 generation 5의 snapshot lifetime 계약에 trim된 Unicode NFC identity, 512자
+`target_key`, 중복 없는 refresh key 배열과 typed snapshot backpressure 오류 계약을 추가한다.
+generation 5는 generation 4에 snapshot의 timezone-aware `created_at`/`expires_at`을 필수화했다.
 generic snapshot은 첫 페이지 수신 시 최소 1시간의 traversal window가 남아야 하고, 이후 모든 페이지의
 두 시각이 첫 페이지와 같아야 한다. request-bound reconciliation snapshot은 durable request receipt이므로
 해당 request가 running인 동안 `expires_at`이 지나도 읽을 수 있다.
+
+snapshot `high_watermark_cursor`는 해당 `external_system` outbox의 commit-safe replay lower-bound다.
+snapshot과 동일한 exact cutover 시점으로 해석하지 않으며, 이후 claim에 snapshot 또는 local inbox와
+겹치는 event가 포함될 수 있다. consumer는 immutable `event_id`/payload fingerprint inbox dedupe로 이를
+ACK하고 이미 적용한 side effect와 cache generation을 반복하지 않는다. generic/request-bound snapshot
+traversal은 PinVi DB의 session advisory lock으로 모든 API process/event loop를 통틀어 한 번만 허용한다.
+lock 전용 connection은 획득 직후 transaction을 commit하고, bootstrap 종료·예외·취소에는 pool로 돌려보내지
+않고 physical session을 invalidate/close해 PostgreSQL 자체가 lock을 해제한다. process-local system lock을
+이중 방어로 둔다. snapshot 전용 HTTP read timeout은 70초로 고정해 Map의
+5초 barrier와 30초 build budget보다 충분히 길게 유지한다. `429 SNAPSHOT_CAPACITY_EXCEEDED`와
+`503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_TIMEOUT,BUSY,TTL_TOO_SHORT}`는 canonical `Retry-After`를 지켜 최대
+3회 시도하고, header가 잘못됐거나 budget이 끝나면 fail-close한다. `413
+SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 운영 개입이 필요한 materialization ceiling이므로 자동 재시도하지 않는다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
 PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted
@@ -291,11 +306,14 @@ Idempotency-Key, 원래 stream/reconciliation ETag와 command UUID ledger로 정
 - writer coverage: user/admin/notice/trip/day/POI copy와 soft delete/recreate; irrelevant update no generation
 - command: exact header/body/ETag/idempotency, retry budget, lease expiry, DLQ/replay, applied response persistence
 - consumer: strict four event types, duplicate, gap, out-of-order tuple, local commit/ACK crash window,
-  NACK poison/block/replay
+  NACK poison/block/replay, snapshot replay lower-bound와 inbox overlap dedupe
 - epoch: old cursor conflict, old inbox/checkpoint/cache isolation, snapshot atomic adopt, already-higher fence
 - Merkle: shared golden vectors, active+tombstone, count/root mismatch와 paged fixed snapshot 수렴
 - cache: 두 개 이상의 `FeatureCache` instance가 DB generation/epoch 전이를 각각 관측해 clear
 - gate: default off, credential 역할 중복, manifest/OpenAPI/epoch/checksum mismatch fail-closed
+- snapshot gate: DB session advisory cross-process single-flight와 acquire/commit/body 취소 시 physical
+  session close, 70초 snapshot timeout,
+  typed 429/503 Retry-After bounded backoff, 413 non-retry
 - full: API unit/integration, Ruff, strict mypy, Alembic head/check, OpenAPI vendor check와 관련 workspace gate
 
 ## 8. n150 live 증명
@@ -308,6 +326,10 @@ synthetic private POI로 create/move/delete/refresh를 실행한다. ACK 전 동
 generation 1회만 만든다. consumer pause 중 변경으로 backlog/checksum mismatch를 만들고 resume/reconcile 후
 lag=0, DLQ=0, count/root 일치를 확인한다. 증거에는 두 repo commit/image ID/contract generation, epoch,
 event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 credential·host·domain은 redaction한다.
+서로 다른 API process에서 동시에 bootstrap해도 PinVi 발신 traversal은 DB 전체에서 1임을 확인하고,
+synthetic `429/503`은 `Retry-After` 뒤 재시도되는 증거를 남긴다. 정확히 100,000개 snapshot은 성공해야
+하며 wall latency와 API/DB container peak RSS를 기록한다. 100,001개는 `413` 뒤 재요청 없이 startup이
+닫혀야 한다.
 
 ## 9. 진행 기록
 

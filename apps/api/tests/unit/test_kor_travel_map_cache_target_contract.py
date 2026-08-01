@@ -17,9 +17,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "2f7d5911eb7a377d02e71c4ef06b0003a748f301"
-_FUNCTIONAL_OWNER_COMMIT = "2f7d5911eb7a377d02e71c4ef06b0003a748f301"
-_SNAPSHOT_SHA256 = "12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73"
+_ARTIFACT_COMMIT = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
+_FUNCTIONAL_OWNER_COMMIT = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
+_SNAPSHOT_SHA256 = "aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3"
 
 
 def _spec() -> dict[str, Any]:
@@ -33,7 +33,7 @@ def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _ARTIFACT_COMMIT
     assert CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 5
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 6
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -59,8 +59,41 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert {"created_at", "expires_at"} <= set(snapshot["required"])
     assert snapshot["properties"]["created_at"]["format"] == "date-time"
     assert snapshot["properties"]["expires_at"]["format"] == "date-time"
-    assert "최소 1시간" in snapshot["properties"]["expires_at"]["description"]
+    assert "최소 60분" in snapshot["properties"]["expires_at"]["description"]
     assert "reconciliation-bound" in snapshot["properties"]["expires_at"]["description"]
+
+    refresh_keys = schemas["CacheTargetRefreshRequest"]["properties"]["target_keys"]
+    assert refresh_keys["minItems"] == 1
+    assert refresh_keys["maxItems"] == 500
+    assert refresh_keys["uniqueItems"] is True
+    assert refresh_keys["items"] == {
+        "description": "Trimmed Unicode NFC canonical cache target identity.",
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string",
+    }
+
+    source_parameters = paths[
+        "/v1/service/cache-targets/{external_system}/{target_key}"
+    ]["put"]["parameters"]
+    identities = {
+        parameter["name"]: parameter
+        for parameter in source_parameters
+        if parameter["name"] in {"external_system", "target_key"}
+    }
+    assert identities["external_system"]["description"] == (
+        "Trimmed Unicode NFC canonical external system identity."
+    )
+    assert identities["external_system"]["schema"]["maxLength"] == 112
+    assert identities["target_key"]["description"] == (
+        "Trimmed Unicode NFC canonical cache target identity."
+    )
+    assert identities["target_key"]["schema"]["maxLength"] == 512
+
+    generic_snapshot = paths["/v1/service/cache-target-snapshots/{external_system}"]["get"]
+    assert {"413", "429", "503"} <= set(generic_snapshot["responses"])
+    for response_code in ("429", "503"):
+        assert "Retry-After" in generic_snapshot["responses"][response_code]["headers"]
 
     mutation_response = schemas["CacheTargetSourceMutationResponse"]
     assert mutation_response["properties"]["data"] == {

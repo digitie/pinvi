@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 snapshot lower-bound/backpressure 소비 계약
+
+Map snapshot high-watermark는 exact snapshot cutover가 아니라 system-scoped safe replay lower-bound다.
+PinVi는 lower-bound 이후 겹치는 event를 inbox `event_id`/payload fingerprint로 재검증하고 duplicate
+side effect와 cache generation 증가를 막는다. snapshot HTTP traversal은 PinVi DB session advisory
+lock으로 process/event loop 전체를 직렬화하고 local system lock을 이중 방어로 유지했다. snapshot 전용
+70초 timeout은 Map의 5초 barrier와 30초 build budget을 포괄한다. `429 SNAPSHOT_CAPACITY_EXCEEDED`와
+명시된 `503` snapshot 경합/timeout만
+canonical `Retry-After`로 최대 3회 재시도하며, header 오류와 budget 소진은 fail-close한다. `413
+SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 한 번만 호출하고 운영 개입 대상으로 남긴다. 운영 gate에는 exact
+100,000개 성공의 wall latency/API·DB peak RSS와 100,001개 413 non-retry를 함께 남긴다. lock 획득 직후
+transaction은 commit하고 acquire/commit/body cancellation에는 전용 physical session을 invalidate/close해
+pooled session에 stale lock을 남기지 않는다.
+
+Map final commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의 service OpenAPI exact bytes를
+SHA-256 `aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`, contract generation `6`으로
+재핀했다. generation 6은 trim/NFC identity, 512자 key, refresh key uniqueness와 typed snapshot
+backpressure를 함께 고정한다. n150 live 증거만 남았다.
+
 ## 2026-08-01 (codex) — T-VN-41 generation 5 snapshot lifetime 계약
 
 Map의 service snapshot DTO가 `created_at`/`expires_at`을 필수화하고 generic 첫 페이지에 최소 1시간의

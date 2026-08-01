@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import gc
 import hashlib
 import json
 import uuid
+import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -17,6 +21,7 @@ from app.clients.kor_travel_map_cache_target import (
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
     CacheTargetStateResult,
+    _snapshot_lock,
     classify_cache_target_failure,
 )
 from app.core.cache_target_contract import (
@@ -36,6 +41,23 @@ def _client(role: str, handler: Handler) -> CacheTargetServiceClient:
         transport=httpx.MockTransport(handler),
     )
     return CacheTargetServiceClient(http, role=role, token=TOKEN)  # type: ignore[arg-type]
+
+
+def _empty_snapshot_response() -> dict[str, object]:
+    created_at = datetime.now(UTC)
+    return {
+        "data": {
+            "snapshot_id": str(uuid.uuid4()),
+            "restore_epoch": 7,
+            "high_watermark_cursor": "cursor-0",
+            "count": 0,
+            "merkle_root": "72" * 32,
+            "created_at": created_at.isoformat(),
+            "expires_at": (created_at + timedelta(hours=2)).isoformat(),
+            "items": [],
+        },
+        "meta": {"page": {"next_cursor": None}},
+    }
 
 
 @pytest.mark.parametrize(
@@ -627,6 +649,232 @@ async def test_generic_snapshot_rejects_less_than_one_hour_traversal_window() ->
         await client.aclose()
 
 
+@pytest.mark.asyncio
+async def test_snapshot_requests_are_single_flight_per_external_system() -> None:
+    active = 0
+    maximum_active = 0
+    both_entered = asyncio.Event()
+    request_id = uuid.uuid4()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, maximum_active
+        assert request.url.path in {
+            "/v1/service/cache-target-snapshots/pinvi",
+            f"/v1/service/cache-target-reconciliations/{request_id}/snapshot",
+        }
+        active += 1
+        maximum_active = max(maximum_active, active)
+        if maximum_active > 1:
+            both_entered.set()
+        await asyncio.sleep(0)
+        active -= 1
+        return httpx.Response(200, json=_empty_snapshot_response())
+
+    clients = [
+        CacheTargetServiceClient(
+            httpx.AsyncClient(
+                base_url="http://map.test",
+                transport=httpx.MockTransport(handler),
+            ),
+            role="consumer",
+            token=TOKEN,
+        )
+        for _ in range(2)
+    ]
+    try:
+        await asyncio.gather(
+            clients[0].get_snapshot(),
+            clients[1].get_reconciliation_snapshot(request_id),
+        )
+    finally:
+        await asyncio.gather(*(client.aclose() for client in clients))
+
+    assert maximum_active == 1
+    assert not both_entered.is_set()
+
+
+def test_snapshot_lock_registry_does_not_retain_closed_event_loop() -> None:
+    async def contend() -> None:
+        owner_entered = asyncio.Event()
+        release_owner = asyncio.Event()
+
+        async def owner() -> None:
+            async with _snapshot_lock("pinvi"):
+                owner_entered.set()
+                await release_owner.wait()
+
+        async def waiter() -> None:
+            await owner_entered.wait()
+            async with _snapshot_lock("pinvi"):
+                pass
+
+        owner_task = asyncio.create_task(owner())
+        waiter_task = asyncio.create_task(waiter())
+        await owner_entered.wait()
+        await asyncio.sleep(0)
+        assert not waiter_task.done()
+        release_owner.set()
+        await asyncio.gather(owner_task, waiter_task)
+
+    loop = asyncio.new_event_loop()
+    loop_reference = weakref.ref(loop)
+    try:
+        loop.run_until_complete(contend())
+    finally:
+        loop.close()
+    del loop
+    gc.collect()
+
+    assert loop_reference() is None
+
+
+@pytest.mark.asyncio
+async def test_snapshot_request_uses_map_build_timeout_margin() -> None:
+    observed_timeout: dict[str, float] | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal observed_timeout
+        observed_timeout = request.extensions.get("timeout")
+        return httpx.Response(200, json=_empty_snapshot_response())
+
+    client = _client("consumer", handler)
+    try:
+        await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+    assert observed_timeout == {
+        "connect": 5.0,
+        "read": 70.0,
+        "write": 5.0,
+        "pool": 5.0,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "code", "retry_after"),
+    [
+        (429, "SNAPSHOT_CAPACITY_EXCEEDED", "2701"),
+        (503, "SNAPSHOT_BARRIER_TIMEOUT", "1"),
+        (503, "SNAPSHOT_BUILD_TIMEOUT", "1"),
+        (503, "SNAPSHOT_BUSY", "1"),
+        (503, "SNAPSHOT_TTL_TOO_SHORT", "1"),
+    ],
+)
+async def test_snapshot_retries_only_typed_capacity_and_unavailable_problems(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+    code: str,
+    retry_after: str,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                status_code,
+                headers={"Retry-After": retry_after},
+                json={"code": code},
+            )
+        return httpx.Response(200, json=_empty_snapshot_response())
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(
+        "app.clients.kor_travel_map_cache_target.asyncio.sleep",
+        sleep,
+    )
+    client = _client("consumer", handler)
+    try:
+        await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+    assert calls == 2
+    sleep.assert_awaited_once_with(int(retry_after))
+
+
+@pytest.mark.asyncio
+async def test_snapshot_item_limit_is_non_retryable_and_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            413,
+            json={"code": "SNAPSHOT_ITEM_LIMIT_EXCEEDED"},
+        )
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(
+        "app.clients.kor_travel_map_cache_target.asyncio.sleep",
+        sleep,
+    )
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetServiceProblem) as raised:
+            await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+    assert calls == 1
+    assert raised.value.status_code == 413
+    assert raised.value.code == "SNAPSHOT_ITEM_LIMIT_EXCEEDED"
+    assert raised.value.disposition == "dead_letter"
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retryable_snapshot_problem_requires_canonical_retry_after() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            503,
+            json={"code": "SNAPSHOT_BUSY"},
+        )
+
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetContractError, match="Retry-After"):
+            await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_retry_budget_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            429,
+            headers={"Retry-After": "1"},
+            json={"code": "SNAPSHOT_CAPACITY_EXCEEDED"},
+        )
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(
+        "app.clients.kor_travel_map_cache_target.asyncio.sleep",
+        sleep,
+    )
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetServiceProblem) as raised:
+            await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+    assert calls == 3
+    assert raised.value.code == "SNAPSHOT_CAPACITY_EXCEEDED"
+    assert sleep.await_count == 2
+
+
 @pytest.mark.parametrize(
     ("created_at", "expires_at"),
     [
@@ -652,6 +900,16 @@ def test_snapshot_rejects_invalid_lifetime(
             expires_at=expires_at,
             items=[],
         )
+
+
+def test_snapshot_contract_declares_high_watermark_as_replay_lower_bound() -> None:
+    description = CacheTargetSnapshot.model_json_schema()["properties"]["high_watermark_cursor"][
+        "description"
+    ]
+
+    assert "replay lower-bound" in description
+    assert "event_id" in description
+    assert "dedupe" in description
 
 
 @pytest.mark.parametrize(

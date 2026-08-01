@@ -172,6 +172,51 @@ async def test_local_commit_precedes_ack_and_duplicate_reclaim_is_noop(session_f
         assert consumer.feature_cache_generation == 1
 
 
+async def test_snapshot_high_watermark_is_safe_lower_bound_and_replay_deduplicates_inbox(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """snapshot cursor 뒤에는 이미 적용한 event도 올 수 있으며 event_id로 한 번만 적용한다."""
+    await _seed_consumer(session_factory)
+    overlapping = _event(relay_order=6)
+    following = _event(relay_order=7)
+
+    async with session_factory() as db:
+        await apply_cache_target_claim(db, _claim(overlapping))
+        await db.commit()
+
+    empty_root = cache_target_snapshot_merkle_root([]).hex()
+    created_at = datetime.now(UTC)
+    snapshot = CacheTargetSnapshot(
+        snapshot_id=str(uuid.uuid4()),
+        restore_epoch=7,
+        high_watermark_cursor="cursor-5",
+        count=0,
+        merkle_root=empty_root,
+        created_at=created_at,
+        expires_at=created_at + timedelta(hours=2),
+        items=[],
+    )
+    async with session_factory() as db:
+        assert await reconcile_cache_target_snapshot(db, snapshot)
+        await db.commit()
+
+    async with session_factory() as db:
+        replay_ack = await apply_cache_target_claim(db, _claim(overlapping, following))
+        await db.commit()
+
+    assert replay_ack.through_cursor == "cursor-7"
+    async with session_factory() as db:
+        inbox = list(
+            await db.scalars(select(KtmCacheTargetEvent).order_by(KtmCacheTargetEvent.relay_order))
+        )
+        consumer = await db.get(KtmCacheTargetConsumer, "pinvi-cache-target-consumer")
+        assert [event.event_id for event in inbox] == [overlapping.event_id, following.event_id]
+        assert consumer is not None
+        assert consumer.high_watermark_cursor == "cursor-5"
+        assert consumer.local_applied_cursor == "cursor-7"
+        assert consumer.feature_cache_generation == 3
+
+
 async def test_deleted_event_causally_completes_command_before_late_http_result(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
