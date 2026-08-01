@@ -210,10 +210,10 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다.
 
-서비스 계약은 Map export commit `e7794a609e08c3ee23bff4e7d1e86e9e79a3112b`의
+서비스 계약은 Map export commit `7919990fbd8bd224a4d369897ba616e44244de8b`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1`다. sync를 켤 때 이 SHA,
-functional artifact owner revision `eaa3fca99374b58cf9caeb87c3295b600ab878c7`, contract generation `3`이
+`2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919`다. sync를 켤 때 이 SHA,
+functional artifact owner revision `92ce855c94bfc68fa62c466312b28f1133a317c5`, contract generation `3`이
 모두 exact하게 맞아야 한다. owner revision은 기능 계약의 provenance이며 export commit이나 배포 Map
 이미지, `/version`의 git SHA와 비교하지 않는다.
 
@@ -226,7 +226,8 @@ producer 보장이 없는 generation에는 sync를 열지 않는다. consumer는
 mutable generic snapshot이 아니라 durable request expectation과 대조하고 inbox transaction에서 한 번만
 received로 종결한다. begin은 nullable snapshot, seal/completion은 request-bound snapshot UUID를 strict하게
 검증하며 seal/completion의 operation ID도 요청 request ID와 exact 대조해 다른 reconciliation receipt를
-거부한다.
+거부한다. restore fence receipt는 superseded reconciliation count `0`/request ID `null` 또는
+count `1`/request ID non-null의 두 조합만 허용한다.
 
 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`가 기본이다. false여도 DB projection/outbox와
 backfill은 작동하고 network worker만 꺼진다. true이면 command/consumer credential, expected compatible

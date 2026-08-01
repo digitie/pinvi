@@ -16,9 +16,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "e7794a609e08c3ee23bff4e7d1e86e9e79a3112b"
-_FUNCTIONAL_OWNER_COMMIT = "eaa3fca99374b58cf9caeb87c3295b600ab878c7"
-_SNAPSHOT_SHA256 = "ed946a9b11cc4f8b4e0d3b645cf9e4e5cb15dec533119919c9cd19fe63c324c1"
+_ARTIFACT_COMMIT = "7919990fbd8bd224a4d369897ba616e44244de8b"
+_FUNCTIONAL_OWNER_COMMIT = "92ce855c94bfc68fa62c466312b28f1133a317c5"
+_SNAPSHOT_SHA256 = "2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919"
 
 
 def _spec() -> dict[str, Any]:
@@ -222,6 +222,12 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     }
     restore_record = schemas["CacheTargetRestoreFenceRecord"]
     assert restore_record["additionalProperties"] is False
+    assert restore_record["description"] == (
+        "Restore-fence control state와 durable effect receipt.\n\n"
+        "불변조건: `superseded_reconciliation_count == 0` iff\n"
+        "`superseded_reconciliation_request_id == null`이고, count가 `1` iff "
+        "request ID가\nnon-null이다."
+    )
     assert set(restore_record["required"]) == {
         "external_system",
         "restore_epoch",
