@@ -174,10 +174,10 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map export commit `7919990fbd8bd224a4d369897ba616e44244de8b`의
+서비스 계약은 Map export commit `7451df426ce50efb0c6d753a9353f9bd74a08f0a`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919`이고, sync enable 설정의
-functional artifact owner revision `92ce855c94bfc68fa62c466312b28f1133a317c5`와 contract generation `3`도
+`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`이고, sync enable 설정의
+functional artifact owner revision `80d79edbbd3e8f979582af07e8a49ac70d2976e9`와 contract generation `3`도
 exact하게 고정한다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git SHA와 비교하지
 않는 기능 계약 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -185,10 +185,11 @@ epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
 뒤에만 PinVi consumer를 ready로 연다. completion 응답 뒤 local commit 전에 종료된 재개 경로도 consumer의
 durable cutover/request/snapshot identity를 모두 검증한다. `0047` 이전 상태라 expectation이 없으면 같은
-transaction에서 snapshot owner 충돌을 확인하고 exact `pending` expectation을 먼저 복원한다. 기존
-expectation은 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면
-적용된 inbox receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정하고, 불일치는 원격 ready
-상태에서도 fail-close한다.
+transaction에서 snapshot owner 충돌을 확인한다. 같은 request의 exact applied inbox가 없을 때만
+`pending` expectation을 만들고, 유일한 exact applied receipt가 있으면 event ID와 `received` 상태를
+복원한다. 후보가 복수이거나 material이 다르거나 `applied_at`이 없으면 fail-close한다. 기존 expectation은
+snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면 적용된 inbox
+receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정한다.
 
 generation 3은 terminal receipt의 request-bound identity에 더해 restore epoch의 배달 경계를 고정한
 breaking 계약이다. Map restore fence는 이전 epoch의 미완료·재시도·lease·dead delivery를 terminal
@@ -197,7 +198,7 @@ request/snapshot/epoch/root를 durable expectation과 exact 대조하고 stale e
 generic snapshot identity와 섞지 않는다. fence는 active preparing/running reconciliation도 terminal
 `superseded`로 종결하고 receipt에 해당 request ID를 남겨 새 epoch의 begin을 막지 않는다. PinVi recovery
 계약은 fence receipt에서 superseded reconciliation count `0`과 request ID `null`, count `1`과 non-null
-request ID의 짝만 허용한다.
+UUID request ID의 짝만 machine-readable `oneOf`로 허용하고 recovery `operation_id`도 UUID로 제한한다.
 DTO는 nullable `snapshot_id`와 terminal `superseded`를 strict 파싱하며 seal/completion snapshot identity를
 요청과 exact 대조하고 operation ID도 요청 request ID와 일치해야 한다.
 

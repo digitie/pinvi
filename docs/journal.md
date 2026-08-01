@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-01 (codex) — T-VN-41 applied receipt 복구와 machine-readable 계약
+
+**적대적 리뷰 발견**: expectation이 없는 remote-completed 복구가 같은 request의 exact applied inbox를
+확인하지 않고 무조건 `pending` row를 만들었다. 이미 ACK된 duplicate event는 inbox에서 no-op이므로 해당
+expectation이 영구 `pending`에 남을 수 있었다. Map OpenAPI도 restore count/request 상관관계를 설명문으로만
+표현했고 recovery `operation_id`를 일반 문자열로 광고했다.
+
+**변경**: 복구는 consumer→expectation→event 순서로 잠그고 같은 request 후보가 없으면 `pending`, 유일한
+exact applied receipt면 event ID와 `received`를 복원한다. 복수·불일치·미적용 후보는 fail-close한다. local
+apply가 ACK보다 먼저 commit되므로 immutable inbox `applied_at`이 received 정본이고 ACK는 기존 claim 복구가
+담당한다. Map 계약은 restore pair를 object-level `oneOf`로 표현하고 operation ID를 UUID로 좁혔다.
+
+**계약/검증**: Map functional `80d79edbbd3e8f979582af07e8a49ac70d2976e9`, artifact
+`7451df426ce50efb0c6d753a9353f9bd74a08f0a`, service SHA-256
+`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 generation `3`으로 exact
+pin한다. PinVi PostGIS initial-cutover 9건·event consumer 6건, contract/transport unit 20건과 Map
+JSON Schema/router/export 회귀가 통과했다.
+
 ## 2026-08-01 (codex) — T-VN-41 remote-completed cutover expectation gate
 
 **적대적 리뷰 발견**: initial cutover가 원격 completion 뒤 local ready commit을 복구할 때 consumer의
@@ -25,14 +43,14 @@ Ruff, 대상 파일 strict mypy를 통과했다.
 `pending/retry/leased/dead` delivery를 남겨 전역 claim·dead 판정을 오염시켰다. PinVi의 올바른 stale epoch
 영구 NACK과 결합하면 새 epoch가 영구 차단될 수 있었다.
 
-**계약 갱신**: Map functional owner `92ce855c94bfc68fa62c466312b28f1133a317c5`, export artifact
-`7919990fbd8bd224a4d369897ba616e44244de8b`를 contract generation `3`으로 재핀했다. service OpenAPI exact
-bytes의 SHA-256은 `2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919`다. generation
+**계약 갱신**: Map functional owner `80d79edbbd3e8f979582af07e8a49ac70d2976e9`, export artifact
+`7451df426ce50efb0c6d753a9353f9bd74a08f0a`를 contract generation `3`으로 재핀했다. service OpenAPI exact
+bytes의 SHA-256은 `4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`다. generation
 3은 restore fence가 이전 epoch의 미종결 delivery와 active reconciliation을 terminal `superseded`로
 원자적으로 닫고 새 epoch만 claim·DLQ·replay·완료 판정에 노출하는 의미 계약이다. fence receipt는 영향
 count와 대체한 reconciliation request ID를 영속화한다. 이 보장이 없는 producer에는 sync를 열지 않는다.
-service OpenAPI와 strict contract test는 해당 count가 `0`일 때 request ID `null`, `1`일 때 non-null인
-상관 불변식도 exact description으로 고정한다.
+service OpenAPI와 strict contract test는 해당 count가 `0`일 때 request ID `null`, `1`일 때 UUID인
+상관 불변식을 machine-readable `oneOf`로 고정하고 recovery operation ID도 UUID로 제한한다.
 
 PinVi strict recovery DTO에 Map wire의 nullable `snapshot_id`와 terminal `superseded`를 추가했다. begin은
 snapshot 없음, seal은 snapshot 있음, completion은 요청한 snapshot과 exact 일치를 요구해 mock이 감췄던

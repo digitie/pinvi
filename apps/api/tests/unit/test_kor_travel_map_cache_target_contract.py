@@ -16,9 +16,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "7919990fbd8bd224a4d369897ba616e44244de8b"
-_FUNCTIONAL_OWNER_COMMIT = "92ce855c94bfc68fa62c466312b28f1133a317c5"
-_SNAPSHOT_SHA256 = "2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919"
+_ARTIFACT_COMMIT = "7451df426ce50efb0c6d753a9353f9bd74a08f0a"
+_FUNCTIONAL_OWNER_COMMIT = "80d79edbbd3e8f979582af07e8a49ac70d2976e9"
+_SNAPSHOT_SHA256 = "4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066"
 
 
 def _spec() -> dict[str, Any]:
@@ -185,6 +185,11 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     operation = schemas["CacheTargetRecoveryOperationRecord"]
     assert operation["additionalProperties"] is False
     assert set(operation["required"]) == {"operation_id", "status"}
+    assert operation["properties"]["operation_id"] == {
+        "format": "uuid",
+        "title": "Operation Id",
+        "type": "string",
+    }
     assert operation["properties"]["status"]["enum"] == [
         "accepted",
         "pending",
@@ -222,12 +227,31 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     }
     restore_record = schemas["CacheTargetRestoreFenceRecord"]
     assert restore_record["additionalProperties"] is False
-    assert restore_record["description"] == (
-        "Restore-fence control state와 durable effect receipt.\n\n"
-        "불변조건: `superseded_reconciliation_count == 0` iff\n"
-        "`superseded_reconciliation_request_id == null`이고, count가 `1` iff "
-        "request ID가\nnon-null이다."
-    )
+    assert restore_record["oneOf"] == [
+        {
+            "properties": {
+                "superseded_reconciliation_count": {"const": 0},
+                "superseded_reconciliation_request_id": {"type": "null"},
+            },
+            "required": [
+                "superseded_reconciliation_count",
+                "superseded_reconciliation_request_id",
+            ],
+        },
+        {
+            "properties": {
+                "superseded_reconciliation_count": {"const": 1},
+                "superseded_reconciliation_request_id": {
+                    "format": "uuid",
+                    "type": "string",
+                },
+            },
+            "required": [
+                "superseded_reconciliation_count",
+                "superseded_reconciliation_request_id",
+            ],
+        },
+    ]
     assert set(restore_record["required"]) == {
         "external_system",
         "restore_epoch",

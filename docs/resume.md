@@ -9,18 +9,21 @@
 추가 적대적 리뷰에서 active reconciliation도 restore fence 뒤 남아 old completion과 new begin을 동시에
 막는 P1을 발견했다. Map은 preparing/running request를 terminal `superseded`로 원자 종결하고 fence receipt에
 영향 count와 request ID를 영속화한다. PinVi는 Map functional owner
-`92ce855c94bfc68fa62c466312b28f1133a317c5`, artifact
-`7919990fbd8bd224a4d369897ba616e44244de8b`, generation `3`, service OpenAPI SHA-256
-`2dd7f37f28e841bd31165ac91c6078a2f74bcffcef5fde1224a7f77e91820919`을 exact pin한다.
+`80d79edbbd3e8f979582af07e8a49ac70d2976e9`, artifact
+`7451df426ce50efb0c6d753a9353f9bd74a08f0a`, generation `3`, service OpenAPI SHA-256
+`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 exact pin한다.
 strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
 snapshot identity 및 operation ID를 요청과 exact 대조한다. restore fence receipt의 superseded
-reconciliation count와 nullable request ID도 `0/null` 또는 `1/non-null`로만 허용한다.
+reconciliation count와 nullable request ID도 machine-readable `oneOf`에서 `0/null` 또는
+`1/UUID`로만 허용하며 recovery operation ID 자체도 UUID다.
 
 첫 재리뷰의 추가 P1에 따라 remote-completed initial cutover 재개도 request-bound durable expectation을
 필수화했다. `0047` 이전 upgrade 상태처럼 row가 없으면 durable consumer의 canonical
 request/snapshot/epoch/count/root/high-watermark를 검증해 같은 transaction에서 `pending` row를 복원한다.
 기존 row는 exact material을, `received` row는 applied inbox receipt 결박까지 확인한 뒤 ready와 완료 시각을
 원자적으로 확정한다. 불일치·invalidated 상태는 원격 ready 상태에서도 fail-close한다.
+expectation이 없더라도 동일 request의 exact applied inbox receipt가 이미 있으면 `received`와 receipt
+event ID를 복원하며, exact 후보가 없을 때만 `pending`을 만든다. 다중·불일치·미적용 후보는 fail-close한다.
 
 **다음 한 작업**: 양쪽 exact head를 두 독립 리뷰어가 재검토해 P1 종결을 확인한 뒤 n150 isolated
 cutover·crash/reclaim·destructive Live UI recovery를 실행한다.
