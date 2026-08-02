@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 final writer fence 이후 무-HTTP 증거 경계
+
+**작업**: forward commit 직전의 stopped-Map/Pin 증거와 commit 응답 유실 replay를 fail-close하도록 production
+boundary helper와 append-only audit를 구현했다.
+**변경**: `preflight|finalize` strict JSON 계약, exact schema 0047/0048, Pin DB identity/in-flight 검증,
+initial/canary 전체 provenance, app queue 실제 count, Map final typed evidence를 결박했다. final request의
+canonical SHA-256, initial/final writer fence, Map/prior/evidence SHA-256을 audit row에 저장하고 모든 mutation을
+trigger로 거부한다. concurrent finalize는 선행 `SHARE ROW EXCLUSIVE` lock과 전용 helper session 식별로
+직렬화하며 동일 request/audit만 replay한다. causal 공통 검증은 전용 evidence 모듈로 분리했다.
+**검증**: Ruff, strict mypy 210 source, 관련 unit 142건, 실제 PostgreSQL causal/schema 37건과
+0047→0048→0047→0048 migration cycle이 통과했다.
+**다음**: 전체 gate, exact HEAD 독립 적대적 리뷰 1건, n150 paired live proof.
+
+## 2026-08-02 (codex) — T-VN-41 atomic finalization과 remote cursor 독립 증거
+
+**작업**: 적대적 리뷰 A/B가 발견한 net-zero 미소비 remote event와 최초 success provenance race를
+fail-close하도록 causal receipt 경계를 보강했다.
+**변경**: 성공 transaction이 local mutable table을 bounded writer-fence한 채 PUT/DELETE
+command→state-applied event→claim item ACK→claim terminal tuple를 fresh 재검증하고, Map
+`get_stream→get_snapshot→get_stream`을 bracket한다. remote restore epoch/control version/ETag와 HTTP snapshot
+high-watermark를 local applied/ACK mirror와 별도 typed column으로 저장하며 세 cursor exact 수렴을 요구한다.
+migration `0048`은 source command generated UUID, command/event fingerprint, ACK cursor/fingerprint/시각,
+claim consumer/status/completion composite FK와 phase/final explicit NULL all-or-none CHECK를 갖는다. CLI parse
+오류는 raw argv/usage 없이 typed JSON 한 줄, config/CLI/service timeout NaN/±Inf는 advisory lock 전에 거부한다.
+**검증**: CLI/config/service 단위 72건, 실제 PostgreSQL causal/schema 32건 중 remote-cursor test timeout을
+보정한 단독 재검증이 통과했다. full PostgreSQL focused 재실행과 strict mypy/CI 동등 gate가 남았다.
+**다음**: 전체 gate 후 exact head를 push하고 A/B 재리뷰와 n150 live proof를 수행한다.
+
 ## 2026-08-02 (codex) — T-VN-41 적대적 리뷰 A/B NO-GO 반영
 
 **작업**: 성공한 동일 run의 stale receipt, 증거 column 복제, provenance/credential/CLI 누출 경계를

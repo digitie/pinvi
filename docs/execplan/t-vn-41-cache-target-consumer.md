@@ -270,11 +270,13 @@ restore/recovery token을 요구하거나 읽지 않는다. supplied UUID는 매
 수정하지 않는다.
 
 migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. 실행별 `run_id` PK, 고정 synthetic
-target UUID, deterministic PUT/DELETE command UUID, 각 source generation, state-applied event/claim ACK/relay order,
-baseline/final cache generation, local/remote cursor·count·Merkle root, pending/leased/dead-letter 실제 관측값,
-phase, terminal error와 시각을 typed column으로 보존한다. command `(ID, target, generation)`, event
-`(ID, generation)`, ACK `(claim ID, event ID)`를 composite FK로 결박하고 final 관측값은 all-or-none 및
-local/remote equality/backlog zero CHECK로 고정한다. raw payload나 credential은 저장하지 않는다.
+target UUID, consumer ID, deterministic PUT/DELETE command UUID, 각 source generation/fingerprint,
+state-applied event source command/fingerprint, claim ACK cursor/fingerprint/ACK·완료 시각,
+baseline/final cache generation, local applied/local ACK mirror/remote snapshot cursor, 양쪽 count·Merkle root,
+pending/leased/dead-letter 실제 관측값, remote restore epoch/control version/ETag, phase, terminal error와 시각을
+typed column으로 보존한다. command, event source command/fingerprint, claim item ACK terminal tuple과 claim
+terminal tuple을 composite FK로 결박하고 phase/final 관측값은 explicit all-or-none 및 equality/backlog zero
+CHECK로 고정한다. raw payload나 credential은 저장하지 않는다.
 같은 run ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. 이미 성공한 run ID도 저장 receipt를
 그대로 재출력하지 않고 current stable tombstone head, command/event/claim ACK provenance, ready consumer와
 epoch/cursor/cache generation, 실제 backlog, 새 Map snapshot의 self-Merkle와 local/remote identity가 저장된
@@ -293,11 +295,15 @@ fail-close한다.
    해당 claim item을 ACK하며 `feature_cache_generation`을 증가시킬 때까지 bounded wait한다.
 3. 같은 방식으로 tombstone generation과 deterministic DELETE를 enqueue하고 DELETE event apply/ACK/cache
    generation 증가를 bounded wait한다.
-4. stable tombstone의 exact generation/fingerprint/remote deleted tuple, local desired head 전체 count/Merkle와
-   Map generic snapshot self-root 및 exact count/root, consumer ready와 snapshot restore epoch 일치,
-   `local_applied_cursor == remote_acked_cursor`를 확인한다. snapshot high-watermark는 앞서 고정한
-   commit-safe replay lower-bound 의미를 유지한다. 전역
-   pending/leased/dead-letter command 0을 확인한다.
+4. 성공 직전 transaction에서 consumer/command/head/event/claim/claim-item writer를 bounded `SHARE` table
+   lock으로 고정하고 PUT·DELETE command→event→ACK provenance를 fresh 재검증한다. 이 transaction 안에서
+   Map `get_stream → get_snapshot → get_stream`을 읽어 두 stream control tuple이 같고 ready이며 active
+   reconciliation이 없음을 증명한다. stable tombstone의 exact generation/fingerprint/remote deleted tuple,
+   local desired head 전체 count/Merkle와 Map generic snapshot self-root 및 exact count/root, remote stream과
+   snapshot 및 local consumer의 restore epoch/ETag를 대조한다. 일반 소비 계약에서 snapshot
+   high-watermark는 commit-safe replay lower-bound지만, 고립된 canary 성공 순간에는 미소비 event가 없어야
+   하므로 `local_applied == local_remote_acked == remote_snapshot_high_watermark` exact 수렴을 추가로 요구한다.
+   전역 pending/leased/dead-letter command 0도 같은 성공 transaction에 저장한다.
 
 bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
 `running`으로 보존하고 nonzero로 끝내 같은 run ID가 정확한 phase부터 재개한다. dead/halt와
@@ -305,12 +311,40 @@ event/command/provenance 불변식 위반, snapshot 자체 checksum 위반만 te
 synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout의 secret-free 단일 JSON은
 `status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
 pending/leased/dead-letter command 수는 성공 transaction에서 각각 관측·저장한 typed column로,
-local/remote cursor·count·Merkle root도 각 관측 column에서 그대로 담는다.
+remote stream epoch/control version/ETag, local applied/local ACK mirror/remote snapshot high-watermark cursor와
+local/remote count·Merkle root도 각 독립 관측 column에서 그대로 담는다.
 typed canary failure는 stderr에 `error_code`와 `phase`만 단일 JSON line으로 출력한다. 그 밖의 Pydantic,
 URL, token parsing 및 예상하지 못한 `Exception`도 raw cause/traceback 없이 고정
 `internal_error/runtime` JSON으로 닫고, process cancellation과 `SystemExit`은 삼키지 않는다.
+argparse 자체의 UUID/float/unknown option 오류도 supplied argv와 usage를 echo하지 않고
+`invalid_arguments/startup` JSON 한 줄과 exit code `2`로 닫는다. timeout/poll은 config·CLI·service에서
+finite 양수만 허용해 advisory lock을 잡기 전에 NaN/±Inf를 거부한다.
 양쪽 값을 하나의 필드로 축약하지 않으며 URL, token, raw payload는 포함하지 않는다. 운영 절차는
 [`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
+
+forward commit 직전의 quiescence 증명은 destructive causal canary와 분리한
+`pinvi-cache-target-final-boundary {preflight,finalize}`가 소유한다. 이 명령은 subcommand 외 argv를 받지 않고
+stdin의 strict JSON 한 개만 읽어 stdout에 secret-free JSON 한 줄만 쓴다. `preflight`는 schema `0047`에서
+고정 5-writer registry digest와 manager의 initial writer-fence digest를 결박하고 Pin DB의 다른 in-flight
+transaction과 generation 7 command/event/claim material이 모두 0인지 read-only로 확인한다. 이후 Manager는
+`csv5 → Map H35 gc → final all-writer fence → Map final evidence → Pin finalize` 순서를 지킨다. `finalize`는
+HTTP를 호출하지 않는다. schema `0048`에서 initial reconciliation 1건과 causal canary PUT/DELETE 2건의
+command/event/terminal ACK provenance만 존재하는지 전수 확인하고, writer가 멈춘 Map DB에서 Map-owned
+helper가 만든 `ktm-cache-target-final-evidence/v1` typed object와 SHA-256을 fresh Pin local evidence에
+대조한 뒤 append-only terminal audit row를 기록한다.
+
+두 operation의 request는 `pinvi-cache-target-final-boundary/v1`, outer `transaction_id`/`cutover_id`, Pin image
+`source_revision`, `h35-db-identity-v1(role=pinvi)` digest, writer registry, initial/final fence, manager prior
+receipt digest를 exact field로 받는다. `finalize`만 `canary_run_id`, Map final evidence object/digest가 필수다.
+receipt는 입력
+identity, schema revision, command backlog와 DB in-flight, expected/unexpected generation 7 count, initial/canary/
+local-remote evidence SHA-256, `audit_id`, canonical 13-field `audit_request_sha256`, `audit_row_count=1`, 전체
+`evidence_sha256`, runtime/external mutation 0을 exact field set으로 반환한다. 같은 outer transaction과
+동일 request/evidence 재호출만 exact replay하며, 다른 material은 conflict다. Manager는 receipt만 신뢰하지
+않고 `app.ktm_cache_target_boundary_audits`에서 `transaction_id=audit_id`인 정확히 한 행을 fresh 조회해 request/
+evidence/Map/fence/prior digest를 대조한다. audit
+DELETE/rollback helper는 두지 않는다. forward boundary 전 rollback은 docker-manager가 schema `0047` Pin DB
+전체 backup을 복원해 `0048` table/row를 함께 제거한다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
 PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted

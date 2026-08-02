@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -21,6 +22,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -105,6 +107,7 @@ class KtmCacheTargetCommand(Base, TimestampMixin):
             "command_id",
             "poi_id",
             "source_generation",
+            "payload_fingerprint",
             name="uq_ktm_ct_commands_provenance",
         ),
         CheckConstraint(
@@ -182,60 +185,156 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
         UniqueConstraint("delete_command_id", name="uq_ktm_ct_canary_delete_command"),
         UniqueConstraint("put_event_id", name="uq_ktm_ct_canary_put_event"),
         UniqueConstraint("delete_event_id", name="uq_ktm_ct_canary_delete_event"),
+        UniqueConstraint(
+            "run_id",
+            "canary_provenance_sha256",
+            "final_evidence_sha256",
+            name="uq_ktm_ct_canary_final_evidence",
+        ),
         ForeignKeyConstraint(
-            ["put_command_id", "target_poi_id", "put_generation"],
+            ["consumer_id"],
+            ["app.ktm_cache_target_consumers.consumer_id"],
+            name="fk_ktm_ct_canary_consumer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "put_command_id",
+                "target_poi_id",
+                "put_generation",
+                "put_source_payload_fingerprint",
+            ],
             [
                 "app.ktm_cache_target_commands.command_id",
                 "app.ktm_cache_target_commands.poi_id",
                 "app.ktm_cache_target_commands.source_generation",
+                "app.ktm_cache_target_commands.payload_fingerprint",
             ],
             name="fk_ktm_ct_canary_put_command",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["delete_command_id", "target_poi_id", "delete_generation"],
+            [
+                "delete_command_id",
+                "target_poi_id",
+                "delete_generation",
+                "delete_source_payload_fingerprint",
+            ],
             [
                 "app.ktm_cache_target_commands.command_id",
                 "app.ktm_cache_target_commands.poi_id",
                 "app.ktm_cache_target_commands.source_generation",
+                "app.ktm_cache_target_commands.payload_fingerprint",
             ],
             name="fk_ktm_ct_canary_delete_command",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["put_event_id", "put_generation"],
+            [
+                "put_event_id",
+                "put_command_id",
+                "put_generation",
+                "put_source_payload_fingerprint",
+                "put_event_payload_fingerprint",
+            ],
             [
                 "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_event_id",
                 "app.ktm_cache_target_events.source_generation",
+                "app.ktm_cache_target_events.source_payload_fingerprint",
+                "app.ktm_cache_target_events.payload_fingerprint",
             ],
             name="fk_ktm_ct_canary_put_event",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["delete_event_id", "delete_generation"],
+            [
+                "delete_event_id",
+                "delete_command_id",
+                "delete_generation",
+                "delete_source_payload_fingerprint",
+                "delete_event_payload_fingerprint",
+            ],
             [
                 "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_event_id",
                 "app.ktm_cache_target_events.source_generation",
+                "app.ktm_cache_target_events.source_payload_fingerprint",
+                "app.ktm_cache_target_events.payload_fingerprint",
             ],
             name="fk_ktm_ct_canary_delete_event",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["put_claim_id", "put_event_id"],
+            [
+                "put_claim_id",
+                "put_event_id",
+                "put_cursor",
+                "put_event_payload_fingerprint",
+                "put_acked_at",
+            ],
             [
                 "app.ktm_cache_target_event_claim_items.claim_id",
                 "app.ktm_cache_target_event_claim_items.event_id",
+                "app.ktm_cache_target_event_claim_items.delivery_cursor",
+                "app.ktm_cache_target_event_claim_items.payload_fingerprint",
+                "app.ktm_cache_target_event_claim_items.acked_at",
             ],
             name="fk_ktm_ct_canary_put_ack",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["delete_claim_id", "delete_event_id"],
+            [
+                "delete_claim_id",
+                "delete_event_id",
+                "delete_cursor",
+                "delete_event_payload_fingerprint",
+                "delete_acked_at",
+            ],
             [
                 "app.ktm_cache_target_event_claim_items.claim_id",
                 "app.ktm_cache_target_event_claim_items.event_id",
+                "app.ktm_cache_target_event_claim_items.delivery_cursor",
+                "app.ktm_cache_target_event_claim_items.payload_fingerprint",
+                "app.ktm_cache_target_event_claim_items.acked_at",
             ],
             name="fk_ktm_ct_canary_delete_ack",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "put_claim_id",
+                "consumer_id",
+                "put_claim_status",
+                "put_cursor",
+                "put_claim_completed_at",
+            ],
+            [
+                "app.ktm_cache_target_event_claims.claim_id",
+                "app.ktm_cache_target_event_claims.consumer_id",
+                "app.ktm_cache_target_event_claims.status",
+                "app.ktm_cache_target_event_claims.acked_through_cursor",
+                "app.ktm_cache_target_event_claims.completed_at",
+            ],
+            name="fk_ktm_ct_canary_put_claim_terminal",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "delete_claim_id",
+                "consumer_id",
+                "delete_claim_status",
+                "delete_cursor",
+                "delete_claim_completed_at",
+            ],
+            [
+                "app.ktm_cache_target_event_claims.claim_id",
+                "app.ktm_cache_target_event_claims.consumer_id",
+                "app.ktm_cache_target_event_claims.status",
+                "app.ktm_cache_target_event_claims.acked_through_cursor",
+                "app.ktm_cache_target_event_claims.completed_at",
+            ],
+            name="fk_ktm_ct_canary_delete_claim_terminal",
             ondelete="RESTRICT",
         ),
         Index(
@@ -258,7 +357,10 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
             name=conv("ck_ktm_ct_canary_phase"),
         ),
         CheckConstraint(
-            "put_generation > 0 AND delete_generation = put_generation + 1",
+            "put_generation > 0 AND delete_generation = put_generation + 1 "
+            "AND octet_length(put_source_payload_fingerprint) = 32 "
+            "AND octet_length(delete_source_payload_fingerprint) = 32 "
+            "AND put_source_payload_fingerprint <> delete_source_payload_fingerprint",
             name=conv("ck_ktm_ct_canary_generations"),
         ),
         CheckConstraint(
@@ -267,53 +369,122 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
             name=conv("ck_ktm_ct_canary_baseline"),
         ),
         CheckConstraint(
-            "(put_event_id IS NULL AND put_claim_id IS NULL AND put_relay_order IS NULL "
-            "AND put_cache_generation IS NULL AND put_cursor IS NULL) OR "
-            "(put_event_id IS NOT NULL AND put_claim_id IS NOT NULL AND put_relay_order > 0 "
-            "AND put_cache_generation > baseline_cache_generation AND length(put_cursor) > 0)",
+            "num_nonnulls(put_event_id, put_claim_id, put_relay_order, "
+            "put_cache_generation, put_cursor, encode(put_event_payload_fingerprint, 'hex'), "
+            "put_claim_status, put_acked_at, put_claim_completed_at) IN (0, 9) AND ("
+            "put_event_id IS NULL OR (put_event_id IS NOT NULL AND put_claim_id IS NOT NULL "
+            "AND put_relay_order IS NOT NULL AND put_relay_order > 0 "
+            "AND put_cache_generation IS NOT NULL "
+            "AND put_cache_generation > baseline_cache_generation "
+            "AND put_cursor IS NOT NULL AND length(put_cursor) > 0 "
+            "AND put_event_payload_fingerprint IS NOT NULL "
+            "AND octet_length(put_event_payload_fingerprint) = 32 "
+            "AND put_claim_status = 'acked' AND put_acked_at IS NOT NULL "
+            "AND put_claim_completed_at IS NOT NULL))",
             name=conv("ck_ktm_ct_canary_put_material"),
         ),
         CheckConstraint(
-            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL "
-            "AND delete_cursor IS NULL) OR "
-            "(delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
-            "AND delete_relay_order > put_relay_order AND length(delete_cursor) > 0)",
+            "num_nonnulls(delete_event_id, delete_claim_id, delete_relay_order, delete_cursor, "
+            "encode(delete_event_payload_fingerprint, 'hex'), delete_claim_status, "
+            "delete_acked_at, delete_claim_completed_at) IN (0, 8) AND ("
+            "delete_event_id IS NULL OR (delete_event_id IS NOT NULL "
+            "AND delete_claim_id IS NOT NULL AND delete_relay_order IS NOT NULL "
+            "AND put_relay_order IS NOT NULL AND delete_relay_order > put_relay_order "
+            "AND delete_cursor IS NOT NULL AND length(delete_cursor) > 0 "
+            "AND delete_event_payload_fingerprint IS NOT NULL "
+            "AND octet_length(delete_event_payload_fingerprint) = 32 "
+            "AND delete_claim_status = 'acked' AND delete_acked_at IS NOT NULL "
+            "AND delete_claim_completed_at IS NOT NULL))",
             name=conv("ck_ktm_ct_canary_delete_material"),
         ),
         CheckConstraint(
-            "num_nonnulls(final_cache_generation::text, final_local_cursor, final_remote_cursor, "
+            "num_nonnulls(final_cache_generation::text, final_restore_epoch::text, "
+            "final_stream_control_version::text, final_stream_control_etag, "
+            "final_local_applied_cursor, final_local_remote_acked_cursor, "
+            "final_remote_snapshot_high_watermark_cursor, "
             "final_local_count::text, final_remote_count::text, "
             "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
             "final_pending_commands::text, final_leased_commands::text, "
-            "final_dead_letter_commands::text) = 0 OR "
-            "(num_nonnulls(final_cache_generation::text, final_local_cursor, "
-            "final_remote_cursor, final_local_count::text, final_remote_count::text, "
+            "final_dead_letter_commands::text, "
+            "encode(canary_provenance_sha256, 'hex'), "
+            "encode(final_evidence_sha256, 'hex')) = 0 OR "
+            "(num_nonnulls(final_cache_generation::text, final_restore_epoch::text, "
+            "final_stream_control_version::text, final_stream_control_etag, "
+            "final_local_applied_cursor, final_local_remote_acked_cursor, "
+            "final_remote_snapshot_high_watermark_cursor, final_local_count::text, "
+            "final_remote_count::text, "
             "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
             "final_pending_commands::text, final_leased_commands::text, "
-            "final_dead_letter_commands::text) = 10 "
+            "final_dead_letter_commands::text, "
+            "encode(canary_provenance_sha256, 'hex'), "
+            "encode(final_evidence_sha256, 'hex')) = 16 "
             "AND final_cache_generation > put_cache_generation "
-            "AND length(final_local_cursor) > 0 "
-            "AND final_local_cursor = final_remote_cursor "
+            "AND final_restore_epoch > 0 AND final_stream_control_version > 0 "
+            "AND length(final_stream_control_etag) > 0 "
+            "AND length(final_local_applied_cursor) > 0 "
+            "AND length(final_local_remote_acked_cursor) > 0 "
+            "AND length(final_remote_snapshot_high_watermark_cursor) > 0 "
+            "AND final_local_applied_cursor = final_local_remote_acked_cursor "
+            "AND final_local_remote_acked_cursor = final_remote_snapshot_high_watermark_cursor "
             "AND final_local_count >= 0 AND final_local_count = final_remote_count "
             "AND octet_length(final_local_merkle_root) = 32 "
             "AND final_local_merkle_root = final_remote_merkle_root "
+            "AND octet_length(canary_provenance_sha256) = 32 "
+            "AND octet_length(final_evidence_sha256) = 32 "
             "AND final_pending_commands = 0 AND final_leased_commands = 0 "
             "AND final_dead_letter_commands = 0)",
             name=conv("ck_ktm_ct_canary_final_material"),
         ),
         CheckConstraint(
-            "(phase = 'put_enqueued' AND put_event_id IS NULL AND delete_command_id IS NULL "
-            "AND delete_event_id IS NULL AND final_cache_generation IS NULL) OR "
-            "(phase = 'put_applied' AND put_event_id IS NOT NULL AND delete_command_id IS NULL "
-            "AND delete_event_id IS NULL AND final_cache_generation IS NULL) OR "
+            "(phase = 'put_enqueued' AND put_event_id IS NULL AND put_claim_id IS NULL "
+            "AND put_relay_order IS NULL AND put_cache_generation IS NULL AND put_cursor IS NULL "
+            "AND put_event_payload_fingerprint IS NULL AND put_claim_status IS NULL "
+            "AND put_acked_at IS NULL AND put_claim_completed_at IS NULL "
+            "AND delete_command_id IS NULL AND delete_event_id IS NULL "
+            "AND delete_claim_id IS NULL AND delete_relay_order IS NULL AND delete_cursor IS NULL "
+            "AND delete_event_payload_fingerprint IS NULL AND delete_claim_status IS NULL "
+            "AND delete_acked_at IS NULL AND delete_claim_completed_at IS NULL "
+            "AND final_cache_generation IS NULL) OR "
+            "(phase = 'put_applied' AND put_event_id IS NOT NULL AND put_claim_id IS NOT NULL "
+            "AND put_relay_order IS NOT NULL AND put_cache_generation IS NOT NULL "
+            "AND put_cursor IS NOT NULL AND put_event_payload_fingerprint IS NOT NULL "
+            "AND put_claim_status IS NOT NULL AND put_acked_at IS NOT NULL "
+            "AND put_claim_completed_at IS NOT NULL AND delete_command_id IS NULL "
+            "AND delete_event_id IS NULL AND delete_claim_id IS NULL "
+            "AND delete_relay_order IS NULL AND delete_cursor IS NULL "
+            "AND delete_event_payload_fingerprint IS NULL AND delete_claim_status IS NULL "
+            "AND delete_acked_at IS NULL AND delete_claim_completed_at IS NULL "
+            "AND final_cache_generation IS NULL) OR "
             "(phase = 'delete_enqueued' AND put_event_id IS NOT NULL "
+            "AND put_claim_id IS NOT NULL AND put_relay_order IS NOT NULL "
+            "AND put_cache_generation IS NOT NULL AND put_cursor IS NOT NULL "
+            "AND put_event_payload_fingerprint IS NOT NULL AND put_claim_status IS NOT NULL "
+            "AND put_acked_at IS NOT NULL AND put_claim_completed_at IS NOT NULL "
             "AND delete_command_id IS NOT NULL AND delete_event_id IS NULL "
-            "AND final_cache_generation IS NULL) OR "
+            "AND delete_claim_id IS NULL AND delete_relay_order IS NULL "
+            "AND delete_cursor IS NULL AND delete_event_payload_fingerprint IS NULL "
+            "AND delete_claim_status IS NULL AND delete_acked_at IS NULL "
+            "AND delete_claim_completed_at IS NULL AND final_cache_generation IS NULL) OR "
             "(phase = 'delete_applied' AND put_event_id IS NOT NULL "
+            "AND put_claim_id IS NOT NULL AND put_relay_order IS NOT NULL "
+            "AND put_cache_generation IS NOT NULL AND put_cursor IS NOT NULL "
+            "AND put_event_payload_fingerprint IS NOT NULL AND put_claim_status IS NOT NULL "
+            "AND put_acked_at IS NOT NULL AND put_claim_completed_at IS NOT NULL "
             "AND delete_command_id IS NOT NULL AND delete_event_id IS NOT NULL "
-            "AND final_cache_generation IS NULL) OR "
-            "(phase = 'completed' AND put_event_id IS NOT NULL "
-            "AND delete_command_id IS NOT NULL AND delete_event_id IS NOT NULL "
+            "AND delete_claim_id IS NOT NULL AND delete_relay_order IS NOT NULL "
+            "AND delete_cursor IS NOT NULL AND delete_event_payload_fingerprint IS NOT NULL "
+            "AND delete_claim_status IS NOT NULL AND delete_acked_at IS NOT NULL "
+            "AND delete_claim_completed_at IS NOT NULL AND final_cache_generation IS NULL) OR "
+            "(phase = 'completed' AND put_event_id IS NOT NULL AND put_claim_id IS NOT NULL "
+            "AND put_relay_order IS NOT NULL AND put_cache_generation IS NOT NULL "
+            "AND put_cursor IS NOT NULL AND put_event_payload_fingerprint IS NOT NULL "
+            "AND put_claim_status IS NOT NULL AND put_acked_at IS NOT NULL "
+            "AND put_claim_completed_at IS NOT NULL AND delete_command_id IS NOT NULL "
+            "AND delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
+            "AND delete_relay_order IS NOT NULL AND delete_cursor IS NOT NULL "
+            "AND delete_event_payload_fingerprint IS NOT NULL "
+            "AND delete_claim_status IS NOT NULL AND delete_acked_at IS NOT NULL "
+            "AND delete_claim_completed_at IS NOT NULL "
             "AND final_cache_generation IS NOT NULL)",
             name=conv("ck_ktm_ct_canary_phase_material"),
         ),
@@ -334,6 +505,7 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
         ForeignKey("app.ktm_cache_target_heads.poi_id", ondelete="RESTRICT"),
         nullable=False,
     )
+    consumer_id: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="running")
     phase: Mapped[str] = mapped_column(Text, nullable=False, server_default="put_enqueued")
     put_command_id: Mapped[uuid.UUID] = mapped_column(
@@ -353,16 +525,30 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
     delete_claim_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     put_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     delete_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    put_source_payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    delete_source_payload_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    put_event_payload_fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
+    delete_event_payload_fingerprint: Mapped[bytes | None] = mapped_column(LargeBinary)
+    put_claim_status: Mapped[str | None] = mapped_column(Text)
+    delete_claim_status: Mapped[str | None] = mapped_column(Text)
+    put_acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    put_claim_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_claim_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     put_relay_order: Mapped[int | None] = mapped_column(BigInteger)
     delete_relay_order: Mapped[int | None] = mapped_column(BigInteger)
     baseline_cache_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     put_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
     final_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
+    final_restore_epoch: Mapped[int | None] = mapped_column(BigInteger)
+    final_stream_control_version: Mapped[int | None] = mapped_column(BigInteger)
+    final_stream_control_etag: Mapped[str | None] = mapped_column(Text)
     baseline_cursor: Mapped[str] = mapped_column(Text, nullable=False)
     put_cursor: Mapped[str | None] = mapped_column(Text)
     delete_cursor: Mapped[str | None] = mapped_column(Text)
-    final_local_cursor: Mapped[str | None] = mapped_column(Text)
-    final_remote_cursor: Mapped[str | None] = mapped_column(Text)
+    final_local_applied_cursor: Mapped[str | None] = mapped_column(Text)
+    final_local_remote_acked_cursor: Mapped[str | None] = mapped_column(Text)
+    final_remote_snapshot_high_watermark_cursor: Mapped[str | None] = mapped_column(Text)
     baseline_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     baseline_merkle_root: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     final_local_count: Mapped[int | None] = mapped_column(BigInteger)
@@ -372,9 +558,150 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
     final_pending_commands: Mapped[int | None] = mapped_column(BigInteger)
     final_leased_commands: Mapped[int | None] = mapped_column(BigInteger)
     final_dead_letter_commands: Mapped[int | None] = mapped_column(BigInteger)
+    canary_provenance_sha256: Mapped[bytes | None] = mapped_column(LargeBinary)
+    final_evidence_sha256: Mapped[bytes | None] = mapped_column(LargeBinary)
     terminal_error_code: Mapped[str | None] = mapped_column(Text)
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KtmCacheTargetBoundaryAudit(Base):
+    """forward commit 직전의 append-only Pin-owned final boundary receipt."""
+
+    __tablename__ = "ktm_cache_target_boundary_audits"
+    __table_args__ = (
+        UniqueConstraint("cutover_id", name="uq_ktm_ct_boundary_cutover"),
+        ForeignKeyConstraint(
+            ["canary_run_id", "canary_provenance_sha256", "final_local_remote_evidence_sha256"],
+            [
+                "app.ktm_cache_target_canary_runs.run_id",
+                "app.ktm_cache_target_canary_runs.canary_provenance_sha256",
+                "app.ktm_cache_target_canary_runs.final_evidence_sha256",
+            ],
+            name="fk_ktm_ct_boundary_canary_evidence",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["consumer_id", "initial_cutover_id", "initial_reconciliation_request_id"],
+            [
+                "app.ktm_cache_target_consumers.consumer_id",
+                "app.ktm_cache_target_consumers.initial_cutover_id",
+                "app.ktm_cache_target_consumers.initial_reconciliation_request_id",
+            ],
+            name="fk_ktm_ct_boundary_initial_consumer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "initial_reconciliation_request_id",
+                "initial_receipt_event_id",
+                "initial_expectation_status",
+            ],
+            [
+                "app.ktm_cache_target_reconciliation_expectations.request_id",
+                "app.ktm_cache_target_reconciliation_expectations.receipt_event_id",
+                "app.ktm_cache_target_reconciliation_expectations.status",
+            ],
+            name="fk_ktm_ct_boundary_initial_receipt",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "contract_version = 'pinvi-cache-target-final-boundary/v1' "
+            "AND status = 'succeeded' AND schema_revision = '20260802_0048'",
+            name=conv("ck_ktm_ct_boundary_contract"),
+        ),
+        CheckConstraint(
+            "source_revision ~ '^[0-9a-f]{40}$' "
+            "AND octet_length(database_identity) = 32 "
+            "AND octet_length(writer_registry_sha256) = 32 "
+            "AND octet_length(initial_writer_fence_sha256) = 32 "
+            "AND octet_length(final_writer_fence_sha256) = 32 "
+            "AND initial_writer_fence_sha256 <> final_writer_fence_sha256 "
+            "AND octet_length(map_final_evidence_sha256) = 32 "
+            "AND octet_length(audit_request_sha256) = 32 "
+            "AND octet_length(prior_receipt_sha256) = 32",
+            name=conv("ck_ktm_ct_boundary_identity"),
+        ),
+        CheckConstraint(
+            "initial_expectation_status = 'received' "
+            "AND expected_initial_command_count >= 0 "
+            "AND expected_initial_event_count = expected_initial_command_count + 1 "
+            "AND expected_initial_claim_item_count = expected_initial_command_count + 1 "
+            "AND expected_synthetic_command_count = 2 "
+            "AND expected_synthetic_event_count = 2 "
+            "AND expected_synthetic_claim_count = 2 "
+            "AND pending_command_count = 0 AND leased_command_count = 0 "
+            "AND dead_letter_command_count = 0 AND in_flight_command_count = 0 "
+            "AND database_in_flight_transaction_count = 0 "
+            "AND unexpected_generation7_command_count = 0 "
+            "AND unexpected_non_synthetic_event_count = 0 "
+            "AND unexpected_non_synthetic_claim_count = 0",
+            name=conv("ck_ktm_ct_boundary_zero_counts"),
+        ),
+        CheckConstraint(
+            "octet_length(initial_evidence_sha256) = 32 "
+            "AND octet_length(canary_provenance_sha256) = 32 "
+            "AND octet_length(final_local_remote_evidence_sha256) = 32 "
+            "AND octet_length(evidence_sha256) = 32 "
+            "AND runtime_mutation_count = 0 AND external_mutation_count = 0",
+            name=conv("ck_ktm_ct_boundary_evidence"),
+        ),
+        CheckConstraint(
+            "email_queue_pending_count >= 0 AND telegram_outbox_pending_count >= 0 "
+            "AND location_audit_outbox_pending_count >= 0",
+            name=conv("ck_ktm_ct_boundary_app_queue_counts"),
+        ),
+    )
+
+    transaction_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    cutover_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    contract_version: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    source_revision: Mapped[str] = mapped_column(Text, nullable=False)
+    database_identity: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    writer_registry_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    initial_writer_fence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    final_writer_fence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    map_final_evidence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    audit_request_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    prior_receipt_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    schema_revision: Mapped[str] = mapped_column(Text, nullable=False)
+    canary_run_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    consumer_id: Mapped[str] = mapped_column(Text, nullable=False)
+    initial_cutover_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    initial_reconciliation_request_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False
+    )
+    initial_receipt_event_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False
+    )
+    initial_expectation_status: Mapped[str] = mapped_column(Text, nullable=False)
+    pending_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    leased_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    dead_letter_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    in_flight_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    database_in_flight_transaction_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    email_queue_pending_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    telegram_outbox_pending_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    location_audit_outbox_pending_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_initial_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_initial_event_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_initial_claim_item_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_synthetic_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_synthetic_event_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_synthetic_claim_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    unexpected_generation7_command_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    unexpected_non_synthetic_event_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    unexpected_non_synthetic_claim_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    initial_evidence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    canary_provenance_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    final_local_remote_evidence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    evidence_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    runtime_mutation_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    external_mutation_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class KtmCacheTargetEvent(Base):
@@ -384,7 +711,10 @@ class KtmCacheTargetEvent(Base):
     __table_args__ = (
         UniqueConstraint(
             "event_id",
+            "source_event_id",
             "source_generation",
+            "source_payload_fingerprint",
+            "payload_fingerprint",
             name="uq_ktm_ct_events_provenance",
         ),
         CheckConstraint("external_system = 'pinvi'", name=conv("ck_ktm_ct_events_system")),
@@ -429,6 +759,14 @@ class KtmCacheTargetEvent(Base):
     )
 
     event_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    source_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        Computed(
+            "CASE WHEN event_type = 'cache_target.state_applied' "
+            "THEN (payload ->> 'source_event_id')::uuid ELSE NULL END",
+            persisted=True,
+        ),
+    )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     external_system: Mapped[str] = mapped_column(String(32), nullable=False)
     target_key: Mapped[str | None] = mapped_column(String(36))
@@ -452,6 +790,12 @@ class KtmCacheTargetConsumer(Base, TimestampMixin):
 
     __tablename__ = "ktm_cache_target_consumers"
     __table_args__ = (
+        UniqueConstraint(
+            "consumer_id",
+            "initial_cutover_id",
+            "initial_reconciliation_request_id",
+            name="uq_ktm_ct_consumers_initial_boundary",
+        ),
         CheckConstraint("external_system = 'pinvi'", name=conv("ck_ktm_ct_consumers_system")),
         CheckConstraint(
             "active_restore_epoch IS NULL OR active_restore_epoch > 0",
@@ -517,6 +861,12 @@ class KtmCacheTargetReconciliationExpectation(Base, TimestampMixin):
 
     __tablename__ = "ktm_cache_target_reconciliation_expectations"
     __table_args__ = (
+        UniqueConstraint(
+            "request_id",
+            "receipt_event_id",
+            "status",
+            name="uq_ktm_ct_reconcile_expectations_boundary",
+        ),
         CheckConstraint(
             "external_system = 'pinvi'",
             name=conv("ck_ktm_ct_reconcile_expectations_system"),
@@ -589,6 +939,14 @@ class KtmCacheTargetEventClaim(Base):
     __tablename__ = "ktm_cache_target_event_claims"
     __table_args__ = (
         UniqueConstraint("lease_token", name="uq_ktm_ct_event_claims_lease_token"),
+        UniqueConstraint(
+            "claim_id",
+            "consumer_id",
+            "status",
+            "acked_through_cursor",
+            "completed_at",
+            name="uq_ktm_ct_claims_terminal_provenance",
+        ),
         CheckConstraint(
             "status IN ('active', 'acked', 'expired', 'invalidated')",
             name=conv("ck_ktm_ct_event_claims_status"),
@@ -636,6 +994,14 @@ class KtmCacheTargetEventClaimItem(Base):
             "claim_id",
             "position",
             name="uq_ktm_ct_claim_items_position",
+        ),
+        UniqueConstraint(
+            "claim_id",
+            "event_id",
+            "delivery_cursor",
+            "payload_fingerprint",
+            "acked_at",
+            name="uq_ktm_ct_claim_items_terminal_provenance",
         ),
         CheckConstraint("position > 0", name=conv("ck_ktm_ct_claim_items_position")),
         CheckConstraint(

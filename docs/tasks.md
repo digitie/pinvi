@@ -26,8 +26,12 @@
       command=`cache-target:command`, consumer 역할=`cache-target:read/claim/ack/nack/snapshot` exact
       5개 배열로 clean-cut하고 legacy `cache-target:consumer` scope와 generation 6 조합, token swap을
       fail-close한다(ADR-059). migration 0048의 durable run 정본과 ordinary command/consumer token만 쓰는
-      `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 최종
-      count/Merkle/cursor/pending·dead 0을 production에서 증명한다.
+      `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 성공 transaction의
+      fresh command/event/ACK provenance, remote stream-before/snapshot/stream-after control, local/remote
+      cursor 3종·count·Merkle 및 pending/leased/dead 0을 production에서 증명한다. final commit은
+      `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize` 순서이며 finalize는
+      HTTP 없이 stopped-Map evidence와 fresh Pin DB evidence를 대조한다. canonical request/Map/fence/evidence는
+      append-only audit 한 행과 fresh Manager 재조회로 결박한다.
       - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
         `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
         `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime

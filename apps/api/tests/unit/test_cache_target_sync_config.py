@@ -38,6 +38,22 @@ def test_cache_target_network_is_default_off_without_credentials() -> None:
     assert loaded.pinvi_kor_travel_map_cache_target_consumer_token is None
 
 
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf"), 0.0, -1.0))
+@pytest.mark.parametrize(
+    "field",
+    (
+        "pinvi_kor_travel_map_timeout_seconds",
+        "pinvi_kor_travel_map_cache_target_poll_seconds",
+    ),
+)
+def test_cache_target_timeout_config_rejects_non_finite_or_non_positive_values(
+    field: str,
+    value: float,
+) -> None:
+    with pytest.raises(ValidationError):
+        _settings(**{field: value})
+
+
 def test_enabled_cache_target_sync_requires_runtime_pair_and_contract_pins() -> None:
     with pytest.raises(ValidationError, match="COMMAND_TOKEN"):
         _settings(pinvi_kor_travel_map_cache_target_sync_enabled=True)

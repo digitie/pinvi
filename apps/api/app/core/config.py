@@ -140,7 +140,11 @@ class Settings(BaseSettings):
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
     pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
-    pinvi_kor_travel_map_timeout_seconds: float = 5.0
+    pinvi_kor_travel_map_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
     pinvi_kor_travel_map_max_attempts: int = 3
     pinvi_kor_travel_map_batch_chunk_size: int = Field(
         default=200,
@@ -160,7 +164,12 @@ class Settings(BaseSettings):
     )
     pinvi_kor_travel_map_cache_target_batch_size: int = Field(default=100, ge=1, le=500)
     pinvi_kor_travel_map_cache_target_lease_seconds: int = Field(default=60, ge=10, le=300)
-    pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=60,
+        allow_inf_nan=False,
+    )
     pinvi_kor_travel_map_cache_target_max_attempts: int = Field(default=5, ge=1, le=20)
     # paired OpenAPI가 확정될 때 배포 manifest가 exact 값을 넣는다. source revision은 vendored artifact
     # owner provenance이며 배포 이미지/Map /version revision이 아니다. 빈 값으로 enable할 수 없다.

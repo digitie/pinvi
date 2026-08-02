@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import sys
 import uuid
+from collections.abc import Sequence
+from typing import Never
 
 import httpx
 
@@ -43,6 +46,11 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
     # command token은 ordinary background worker만 사용한다. 존재 여부만 확인하고
     # canary process에서는 recovery/restore credential과 함께 읽거나 전달하지 않는다.
     command.get_secret_value()
+    if (
+        not math.isfinite(settings.pinvi_kor_travel_map_timeout_seconds)
+        or settings.pinvi_kor_travel_map_timeout_seconds <= 0
+    ):
+        raise CacheTargetCanaryFailure("invalid_timeout_config", "startup")
     client = CacheTargetServiceClient(
         httpx.AsyncClient(
             base_url=settings.pinvi_kor_travel_map_api_base_url,
@@ -66,13 +74,25 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
         await db_session.engine.dispose()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+class _SecretFreeArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> Never:
+        del message
+        print('{"error_code":"invalid_arguments","phase":"startup"}', file=sys.stderr)
+        raise SystemExit(2)
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = _SecretFreeArgumentParser(description=__doc__)
     parser.add_argument("--run-id", type=uuid.UUID, required=True)
     parser.add_argument("--timeout-seconds", type=float, default=180.0)
-    args = parser.parse_args()
-    if args.timeout_seconds <= 0:
-        parser.error("--timeout-seconds must be positive")
+    args = parser.parse_args(argv)
+    if not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0:
+        parser.error("invalid timeout")
+    return args
+
+
+def main() -> None:
+    args = _parse_args()
     try:
         receipt = asyncio.run(_run(args))
     except CacheTargetCanaryFailure as exc:

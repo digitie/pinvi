@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 stopped-Map final boundary와 append-only audit
+
+generation 7 forward 경계를 `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize`로
+고정했다. strict final request는 initial/final fence, prior receipt, canary run과
+`ktm-cache-target-final-evidence/v1` object/SHA-256을 결박한다. Pin finalize는 HTTP를 호출하지 않고 fresh
+initial/canary command→event→terminal ACK, local cursor/count/Merkle와 stopped-Map evidence를 하나의
+repeatable-read transaction에서 대조한다. 성공은 canonical 13-field request SHA-256과 전체 evidence를
+UPDATE/DELETE/TRUNCATE 불가 audit 한 행에 저장하며 concurrent/replay는 동일 행으로만 수렴한다. strict mypy
+210 source, 관련 unit 142건, PostgreSQL causal/schema 37건과 0047→0048→0047→0048 migration cycle이 통과했다.
+
+**다음 한 작업**: final exact HEAD 독립 적대적 리뷰 1건을 통과한 뒤 n150 paired live proof를 수행한다.
+
+## 2026-08-02 (codex) — T-VN-41 atomic remote-attested causal receipt 보강
+
+적대적 리뷰 A/B의 추가 NO-GO를 반영했다. 성공/replay는 bounded final transaction에서 mutable local
+consumer/command/head/event/claim tables를 writer-fence하고 command→event→ACK provenance를 fresh
+재검증한다. 그 안에서 consumer-role HTTP `stream→snapshot→stream` control을 bracket해 restore
+epoch/control version/ETag와 실제 snapshot high-watermark를 local mirror와 독립 저장한다. 일반 snapshot
+lower-bound 계약과 달리 isolated canary 성공은 local applied/local ACK mirror/remote high-watermark cursor
+3종 exact 수렴을 요구한다. migration `0048`은 event source command/fingerprint와 claim item/claim terminal
+tuple composite FK, explicit phase/final NULL all-or-none CHECK로 강화했다. malformed argparse와
+timeout NaN/±Inf도 advisory lock 전에 secret-free fail-close한다.
+
+**다음 한 작업**: full gate와 새 exact head A/B 적대적 재리뷰 뒤 n150 paired live proof를 수행한다.
+
 ## 2026-08-02 (codex) — T-VN-41 리뷰 NO-GO 보강 완료
 
 적대적 리뷰 A/B의 NO-GO를 반영했다. migration `0048`은 final local/remote 관측값과 backlog 3종을 각각

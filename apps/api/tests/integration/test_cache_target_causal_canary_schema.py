@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.cache_target_sync import (
     KtmCacheTargetCanaryRun,
     KtmCacheTargetCommand,
+    KtmCacheTargetConsumer,
     KtmCacheTargetHead,
 )
 
@@ -59,11 +60,14 @@ def _run(
     return KtmCacheTargetCanaryRun(
         run_id=run_id,
         target_poi_id=target_id,
+        consumer_id="pinvi-cache-target-consumer",
         status="running",
         phase=phase,
         put_command_id=command_id,
         put_generation=generation,
         delete_generation=generation + 1,
+        put_source_payload_fingerprint=b"s" * 32,
+        delete_source_payload_fingerprint=b"d" * 32,
         baseline_cache_generation=7,
         baseline_cursor="cursor-7",
         baseline_count=0,
@@ -71,9 +75,23 @@ def _run(
     )
 
 
+def _consumer() -> KtmCacheTargetConsumer:
+    return KtmCacheTargetConsumer(
+        consumer_id="pinvi-cache-target-consumer",
+        external_system="pinvi",
+        active_restore_epoch=1,
+        local_applied_cursor="cursor-0",
+        remote_acked_cursor="cursor-0",
+        reconcile_status="matched",
+        feature_cache_generation=0,
+        ready=True,
+    )
+
+
 async def test_canary_run_accepts_stable_target_and_multiple_run_identity(session_factory) -> None:  # type: ignore[no-untyped-def]
     first_command = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add(_head(STABLE_TARGET_ID, generation=1))
         await db.flush()
         db.add(_command(STABLE_TARGET_ID, first_command, generation=1))
@@ -95,6 +113,7 @@ async def test_canary_run_rejects_foreign_target_and_incomplete_phase_material(
     foreign_target = uuid.uuid4()
     foreign_command = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add(_head(foreign_target, generation=1))
         await db.flush()
         db.add(_command(foreign_target, foreign_command, generation=1))
@@ -112,6 +131,7 @@ async def test_canary_run_rejects_foreign_target_and_incomplete_phase_material(
 
     incomplete_command = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add(_head(STABLE_TARGET_ID, generation=3))
         await db.flush()
         db.add(_command(STABLE_TARGET_ID, incomplete_command, generation=3))
@@ -135,6 +155,7 @@ async def test_canary_run_allows_only_one_running_row_for_stable_target(
     first_command = uuid.uuid4()
     second_command = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add(_head(STABLE_TARGET_ID, generation=3))
         await db.flush()
         db.add_all(
@@ -168,6 +189,7 @@ async def test_canary_run_command_fk_binds_target_and_generation(session_factory
     foreign_target = uuid.uuid4()
     foreign_command = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add_all(
             [
                 _head(STABLE_TARGET_ID, generation=1),
@@ -192,6 +214,7 @@ async def test_canary_run_command_fk_binds_target_and_generation(session_factory
 async def test_canary_run_final_evidence_is_all_or_none(session_factory) -> None:  # type: ignore[no-untyped-def]
     command_id = uuid.uuid4()
     async with session_factory() as db:
+        db.add(_consumer())
         db.add(_head(STABLE_TARGET_ID, generation=1))
         await db.flush()
         db.add(_command(STABLE_TARGET_ID, command_id, generation=1))
@@ -202,7 +225,7 @@ async def test_canary_run_final_evidence_is_all_or_none(session_factory) -> None
             command_id=command_id,
             generation=1,
         )
-        run.final_local_cursor = "cursor-without-other-evidence"
+        run.final_local_applied_cursor = "cursor-without-other-evidence"
         db.add(run)
         with pytest.raises(IntegrityError, match="ck_ktm_ct_canary_final_material"):
             await db.commit()

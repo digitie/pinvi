@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import math
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Literal
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.clients.kor_travel_map_cache_target import (
@@ -23,15 +23,7 @@ from app.clients.kor_travel_map_cache_target import (
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
 )
-from app.core.cache_target_contract import (
-    CacheTargetMerkleRow,
-    CacheTargetSource,
-    DeletedCacheTargetSource,
-    cache_target_snapshot_merkle_root,
-    cache_target_source_fingerprint,
-    canonical_cache_target_source_bytes,
-    normalize_active_cache_target_source,
-)
+from app.core.cache_target_contract import cache_target_source_fingerprint
 from app.models.cache_target_sync import (
     KtmCacheTargetCanaryRun,
     KtmCacheTargetCommand,
@@ -41,29 +33,57 @@ from app.models.cache_target_sync import (
     KtmCacheTargetEventClaimItem,
     KtmCacheTargetHead,
 )
-from app.services.cache_target_event_consumer import CacheTargetSnapshot
+from app.services.cache_target_boundary_evidence import (
+    ACTIVE_SOURCE as _ACTIVE_SOURCE,
+)
+from app.services.cache_target_boundary_evidence import (
+    CANARY_PHASES as _PHASES,
+)
+from app.services.cache_target_boundary_evidence import (
+    DELETED_SOURCE as _DELETED_SOURCE,
+)
+from app.services.cache_target_boundary_evidence import (
+    STABLE_TARGET_ID,
+    canary_final_evidence_sha256,
+    canary_provenance_sha256,
+)
+from app.services.cache_target_boundary_evidence import (
+    CacheTargetCanaryFailure as CacheTargetCanaryFailure,
+)
+from app.services.cache_target_boundary_evidence import (
+    cache_target_canary_command_id as _command_id,
+)
+from app.services.cache_target_boundary_evidence import (
+    cache_target_command_backlog as _command_backlog,
+)
+from app.services.cache_target_boundary_evidence import (
+    cache_target_snapshot_identity as _snapshot_identity,
+)
+from app.services.cache_target_boundary_evidence import (
+    cache_target_source_payload as _source_payload,
+)
+from app.services.cache_target_boundary_evidence import (
+    cache_target_stream_control_identity as _stream_control_identity,
+)
+from app.services.cache_target_boundary_evidence import (
+    require_ready_cache_target_consumer as _require_ready_consumer,
+)
+from app.services.cache_target_boundary_evidence import (
+    validate_canary_command as _validate_command,
+)
+from app.services.cache_target_boundary_evidence import (
+    validate_canary_event_material as _validate_event_material,
+)
+from app.services.cache_target_boundary_evidence import (
+    validate_canary_final_head as _validate_final_head,
+)
+from app.services.cache_target_boundary_evidence import (
+    validate_stored_canary_run as _validate_existing_run,
+)
 from app.services.cache_target_initial_cutover import read_cache_target_source_identity
-
-STABLE_TARGET_ID = uuid.UUID("15f98050-27d7-5f85-be21-dc53eded5d7d")
 
 _LOCK_NAMESPACE = 1263816009
 _LOCK_RESOURCE = 42
-_PUT_COMMAND_NAMESPACE = uuid.UUID("26ed64a8-1024-5cb1-aaed-185b507647c2")
-_DELETE_COMMAND_NAMESPACE = uuid.UUID("34b214b2-b76f-53ef-b990-3742bcb1c998")
-_ACTIVE_SOURCE = normalize_active_cache_target_source(
-    lon=Decimal("127"),
-    lat=Decimal("37"),
-    radius_km=Decimal("5"),
-    update_enabled=True,
-)
-_DELETED_SOURCE = DeletedCacheTargetSource()
-_PHASES = {
-    "put_enqueued": 0,
-    "put_applied": 1,
-    "delete_enqueued": 2,
-    "delete_applied": 3,
-    "completed": 4,
-}
 _RESUMABLE_FAILURES = frozenset(
     {
         "active_run_conflict",
@@ -74,15 +94,16 @@ _RESUMABLE_FAILURES = frozenset(
         "run_already_failed",
     }
 )
-
-
-class CacheTargetCanaryFailure(RuntimeError):
-    """credential과 raw 응답을 포함하지 않는 typed terminal failure."""
-
-    def __init__(self, code: str, phase: str) -> None:
-        super().__init__(code)
-        self.code = code
-        self.phase = phase
+_FINALIZATION_TABLE_LOCK = text(
+    "LOCK TABLE "
+    "app.ktm_cache_target_consumers, "
+    "app.ktm_cache_target_commands, "
+    "app.ktm_cache_target_heads, "
+    "app.ktm_cache_target_events, "
+    "app.ktm_cache_target_event_claims, "
+    "app.ktm_cache_target_event_claim_items "
+    "IN SHARE MODE"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,11 +122,15 @@ class CacheTargetCanaryReceipt:
     baseline_cache_generation: int
     put_cache_generation: int
     final_cache_generation: int
+    final_restore_epoch: int
+    final_stream_control_version: int
+    final_stream_control_etag: str
     pending_commands: int
     leased_commands: int
     dead_letter_commands: int
     local_applied_cursor: str
-    remote_acked_cursor: str
+    local_remote_acked_cursor: str
+    remote_snapshot_high_watermark_cursor: str
     local_count: int
     remote_count: int
     local_merkle_root: str
@@ -127,11 +152,15 @@ class CacheTargetCanaryReceipt:
             "baseline_cache_generation": self.baseline_cache_generation,
             "put_cache_generation": self.put_cache_generation,
             "final_cache_generation": self.final_cache_generation,
+            "final_restore_epoch": self.final_restore_epoch,
+            "final_stream_control_version": self.final_stream_control_version,
+            "final_stream_control_etag": self.final_stream_control_etag,
             "pending_commands": self.pending_commands,
             "leased_commands": self.leased_commands,
             "dead_letter_commands": self.dead_letter_commands,
             "local_applied_cursor": self.local_applied_cursor,
-            "remote_acked_cursor": self.remote_acked_cursor,
+            "local_remote_acked_cursor": self.local_remote_acked_cursor,
+            "remote_snapshot_high_watermark_cursor": (self.remote_snapshot_high_watermark_cursor),
             "local_count": self.local_count,
             "remote_count": self.remote_count,
             "local_merkle_root": self.local_merkle_root,
@@ -146,18 +175,10 @@ class _AppliedObservation:
     relay_order: int
     cache_generation: int
     cursor: str
-
-
-def _source_payload(source: CacheTargetSource) -> dict[str, object]:
-    decoded = json.loads(canonical_cache_target_source_bytes(source))
-    if not isinstance(decoded, dict):
-        raise AssertionError("canonical cache target source는 JSON object여야 합니다.")
-    return decoded
-
-
-def _command_id(run_id: uuid.UUID, operation: Literal["put", "delete"]) -> uuid.UUID:
-    namespace = _PUT_COMMAND_NAMESPACE if operation == "put" else _DELETE_COMMAND_NAMESPACE
-    return uuid.uuid5(namespace, str(run_id))
+    event_payload_fingerprint: bytes
+    acked_at: datetime
+    claim_status: Literal["acked"]
+    claim_completed_at: datetime
 
 
 @asynccontextmanager
@@ -191,196 +212,6 @@ async def _canary_lock(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
             except asyncio.CancelledError:
                 await discard
                 raise
-
-
-async def _command_backlog(db: AsyncSession) -> tuple[int, int, int]:
-    counts: list[int] = []
-    for status in ("pending", "leased", "dead_letter"):
-        count = await db.scalar(
-            select(func.count())
-            .select_from(KtmCacheTargetCommand)
-            .where(KtmCacheTargetCommand.status == status)
-        )
-        counts.append(int(count or 0))
-    return counts[0], counts[1], counts[2]
-
-
-def _require_ready_consumer(
-    consumer: KtmCacheTargetConsumer | None,
-    *,
-    phase: str,
-) -> KtmCacheTargetConsumer:
-    if (
-        consumer is None
-        or not consumer.ready
-        or consumer.reconcile_status != "matched"
-        or consumer.active_restore_epoch is None
-    ):
-        raise CacheTargetCanaryFailure("consumer_not_ready", phase)
-    return consumer
-
-
-def _validate_command(
-    command: KtmCacheTargetCommand | None,
-    *,
-    run_id: uuid.UUID,
-    operation: Literal["put", "delete"],
-    generation: int,
-    phase: str,
-) -> KtmCacheTargetCommand:
-    source = _ACTIVE_SOURCE if operation == "put" else _DELETED_SOURCE
-    expected_payload = _source_payload(source)
-    expected_fingerprint = cache_target_source_fingerprint(source)
-    if (
-        command is None
-        or command.command_id != _command_id(run_id, operation)
-        or command.poi_id != STABLE_TARGET_ID
-        or command.operation != operation
-        or command.source_generation != generation
-        or command.payload != expected_payload
-        or command.payload_fingerprint != expected_fingerprint
-    ):
-        raise CacheTargetCanaryFailure("command_identity_mismatch", phase)
-    return command
-
-
-def _validate_event_material(
-    event: KtmCacheTargetEvent | None,
-    *,
-    command_id: uuid.UUID,
-    operation: Literal["put", "delete"],
-    generation: int,
-    phase: str,
-    event_id: uuid.UUID | None = None,
-    relay_order: int | None = None,
-) -> KtmCacheTargetEvent:
-    source = _ACTIVE_SOURCE if operation == "put" else _DELETED_SOURCE
-    expected_state = "active" if operation == "put" else "deleted"
-    if (
-        event is None
-        or (event_id is not None and event.event_id != event_id)
-        or event.event_type != "cache_target.state_applied"
-        or event.external_system != "pinvi"
-        or event.target_key != str(STABLE_TARGET_ID)
-        or event.source_generation != generation
-        or event.source_payload_fingerprint != cache_target_source_fingerprint(source)
-        or event.payload.get("version") != "cache-target-event-v1"
-        or event.payload.get("state") != expected_state
-        or event.payload.get("source_event_id") != str(command_id)
-        or event.restore_epoch <= 0
-        or event.applied_at is None
-        or (relay_order is not None and event.relay_order != relay_order)
-    ):
-        raise CacheTargetCanaryFailure("event_provenance_mismatch", phase)
-    target = event.payload.get("target")
-    if operation == "put":
-        if not isinstance(target, dict) or target.get("target_id") != str(event.target_id):
-            raise CacheTargetCanaryFailure("event_provenance_mismatch", phase)
-        if (
-            target.get("coord") != {"lon_e6": 127000000, "lat_e6": 37000000}
-            or target.get("radius_m") != 5000
-            or target.get("update_enabled") is not True
-        ):
-            raise CacheTargetCanaryFailure("event_provenance_mismatch", phase)
-    elif target is not None:
-        raise CacheTargetCanaryFailure("event_provenance_mismatch", phase)
-    return event
-
-
-async def _validate_stored_observation(
-    db: AsyncSession,
-    run: KtmCacheTargetCanaryRun,
-    *,
-    consumer_id: str,
-    operation: Literal["put", "delete"],
-) -> None:
-    event_id = run.put_event_id if operation == "put" else run.delete_event_id
-    claim_id = run.put_claim_id if operation == "put" else run.delete_claim_id
-    relay_order = run.put_relay_order if operation == "put" else run.delete_relay_order
-    cursor = run.put_cursor if operation == "put" else run.delete_cursor
-    command_id = run.put_command_id if operation == "put" else run.delete_command_id
-    generation = run.put_generation if operation == "put" else run.delete_generation
-    if None in (event_id, claim_id, relay_order, cursor, command_id):
-        raise CacheTargetCanaryFailure("run_material_mismatch", run.phase)
-    assert event_id is not None
-    assert claim_id is not None
-    assert relay_order is not None
-    assert cursor is not None
-    assert command_id is not None
-    event = _validate_event_material(
-        await db.get(KtmCacheTargetEvent, event_id),
-        command_id=command_id,
-        operation=operation,
-        generation=generation,
-        phase=run.phase,
-        event_id=event_id,
-        relay_order=relay_order,
-    )
-    item = await db.scalar(
-        select(KtmCacheTargetEventClaimItem).where(
-            KtmCacheTargetEventClaimItem.claim_id == claim_id,
-            KtmCacheTargetEventClaimItem.event_id == event_id,
-        )
-    )
-    claim = await db.get(KtmCacheTargetEventClaim, claim_id)
-    consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
-    if consumer is None or consumer.active_restore_epoch != event.restore_epoch:
-        raise CacheTargetCanaryFailure("event_provenance_mismatch", run.phase)
-    if (
-        item is None
-        or item.acked_at is None
-        or item.delivery_cursor != cursor
-        or item.payload_fingerprint != event.payload_fingerprint
-        or claim is None
-        or claim.consumer_id != consumer_id
-        or claim.status != "acked"
-        or not claim.acked_through_cursor
-        or claim.completed_at is None
-    ):
-        raise CacheTargetCanaryFailure("ack_provenance_mismatch", run.phase)
-
-
-async def _validate_existing_run(
-    db: AsyncSession,
-    run: KtmCacheTargetCanaryRun,
-    *,
-    consumer_id: str,
-) -> None:
-    put_command = _validate_command(
-        await db.get(KtmCacheTargetCommand, run.put_command_id),
-        run_id=run.run_id,
-        operation="put",
-        generation=run.put_generation,
-        phase=run.phase,
-    )
-    if _PHASES[run.phase] >= _PHASES["put_applied"] and put_command.status != "succeeded":
-        raise CacheTargetCanaryFailure("command_provenance_mismatch", run.phase)
-    if _PHASES[run.phase] >= _PHASES["delete_enqueued"]:
-        if run.delete_command_id is None:
-            raise CacheTargetCanaryFailure("run_material_mismatch", run.phase)
-        delete_command = _validate_command(
-            await db.get(KtmCacheTargetCommand, run.delete_command_id),
-            run_id=run.run_id,
-            operation="delete",
-            generation=run.delete_generation,
-            phase=run.phase,
-        )
-        if _PHASES[run.phase] >= _PHASES["delete_applied"] and delete_command.status != "succeeded":
-            raise CacheTargetCanaryFailure("command_provenance_mismatch", run.phase)
-    if _PHASES[run.phase] >= _PHASES["put_applied"]:
-        await _validate_stored_observation(
-            db,
-            run,
-            consumer_id=consumer_id,
-            operation="put",
-        )
-    if _PHASES[run.phase] >= _PHASES["delete_applied"]:
-        await _validate_stored_observation(
-            db,
-            run,
-            consumer_id=consumer_id,
-            operation="delete",
-        )
 
 
 async def _bootstrap_run(
@@ -493,11 +324,14 @@ async def _bootstrap_run(
         run = KtmCacheTargetCanaryRun(
             run_id=run_id,
             target_poi_id=STABLE_TARGET_ID,
+            consumer_id=consumer_id,
             status="running",
             phase="put_enqueued",
             put_command_id=put_command_id,
             put_generation=generation,
             delete_generation=generation + 1,
+            put_source_payload_fingerprint=active_fingerprint,
+            delete_source_payload_fingerprint=deleted_fingerprint,
             baseline_cache_generation=consumer.feature_cache_generation,
             baseline_cursor=consumer.local_applied_cursor,
             baseline_count=baseline.count,
@@ -597,12 +431,18 @@ async def _observe_acknowledged_event(
             return None
         if command.status != "succeeded":
             return None
+        assert claim_item.acked_at is not None
+        assert claim.completed_at is not None
         return _AppliedObservation(
             event_id=event.event_id,
             claim_id=claim_item.claim_id,
             relay_order=event.relay_order,
             cache_generation=consumer.feature_cache_generation,
             cursor=claim_item.delivery_cursor,
+            event_payload_fingerprint=event.payload_fingerprint,
+            acked_at=claim_item.acked_at,
+            claim_status="acked",
+            claim_completed_at=claim.completed_at,
         )
 
 
@@ -658,11 +498,19 @@ async def _record_observation(
             run.put_relay_order = observation.relay_order
             run.put_cache_generation = observation.cache_generation
             run.put_cursor = observation.cursor
+            run.put_event_payload_fingerprint = observation.event_payload_fingerprint
+            run.put_claim_status = observation.claim_status
+            run.put_acked_at = observation.acked_at
+            run.put_claim_completed_at = observation.claim_completed_at
         else:
             run.delete_event_id = observation.event_id
             run.delete_claim_id = observation.claim_id
             run.delete_relay_order = observation.relay_order
             run.delete_cursor = observation.cursor
+            run.delete_event_payload_fingerprint = observation.event_payload_fingerprint
+            run.delete_claim_status = observation.claim_status
+            run.delete_acked_at = observation.acked_at
+            run.delete_claim_completed_at = observation.claim_completed_at
         run.phase = next_phase
         await db.commit()
 
@@ -724,21 +572,6 @@ async def _enqueue_delete(
         await db.commit()
 
 
-def _snapshot_identity(snapshot: CacheTargetSnapshot) -> tuple[int, bytes]:
-    items = snapshot.items
-    rows = [
-        CacheTargetMerkleRow(
-            external_system=item.external_system,
-            target_key=item.target_key,
-            state=item.state,
-            source_generation=item.source_generation,
-            source_payload_fingerprint=bytes.fromhex(item.source_payload_fingerprint),
-        )
-        for item in items
-    ]
-    return len(rows), cache_target_snapshot_merkle_root(rows)
-
-
 def _receipt(run: KtmCacheTargetCanaryRun) -> CacheTargetCanaryReceipt:
     required = (
         run.delete_command_id,
@@ -748,8 +581,12 @@ def _receipt(run: KtmCacheTargetCanaryRun) -> CacheTargetCanaryReceipt:
         run.delete_relay_order,
         run.put_cache_generation,
         run.final_cache_generation,
-        run.final_local_cursor,
-        run.final_remote_cursor,
+        run.final_restore_epoch,
+        run.final_stream_control_version,
+        run.final_stream_control_etag,
+        run.final_local_applied_cursor,
+        run.final_local_remote_acked_cursor,
+        run.final_remote_snapshot_high_watermark_cursor,
         run.final_local_count,
         run.final_remote_count,
         run.final_local_merkle_root,
@@ -767,8 +604,12 @@ def _receipt(run: KtmCacheTargetCanaryRun) -> CacheTargetCanaryReceipt:
     assert run.delete_relay_order is not None
     assert run.put_cache_generation is not None
     assert run.final_cache_generation is not None
-    assert run.final_local_cursor is not None
-    assert run.final_remote_cursor is not None
+    assert run.final_restore_epoch is not None
+    assert run.final_stream_control_version is not None
+    assert run.final_stream_control_etag is not None
+    assert run.final_local_applied_cursor is not None
+    assert run.final_local_remote_acked_cursor is not None
+    assert run.final_remote_snapshot_high_watermark_cursor is not None
     assert run.final_local_count is not None
     assert run.final_remote_count is not None
     assert run.final_local_merkle_root is not None
@@ -791,45 +632,20 @@ def _receipt(run: KtmCacheTargetCanaryRun) -> CacheTargetCanaryReceipt:
         baseline_cache_generation=run.baseline_cache_generation,
         put_cache_generation=run.put_cache_generation,
         final_cache_generation=run.final_cache_generation,
+        final_restore_epoch=run.final_restore_epoch,
+        final_stream_control_version=run.final_stream_control_version,
+        final_stream_control_etag=run.final_stream_control_etag,
         pending_commands=run.final_pending_commands,
         leased_commands=run.final_leased_commands,
         dead_letter_commands=run.final_dead_letter_commands,
-        local_applied_cursor=run.final_local_cursor,
-        remote_acked_cursor=run.final_remote_cursor,
+        local_applied_cursor=run.final_local_applied_cursor,
+        local_remote_acked_cursor=run.final_local_remote_acked_cursor,
+        remote_snapshot_high_watermark_cursor=(run.final_remote_snapshot_high_watermark_cursor),
         local_count=run.final_local_count,
         remote_count=run.final_remote_count,
         local_merkle_root=run.final_local_merkle_root.hex(),
         remote_merkle_root=run.final_remote_merkle_root.hex(),
     )
-
-
-def _validate_final_head(
-    head: KtmCacheTargetHead | None,
-    *,
-    run: KtmCacheTargetCanaryRun,
-    restore_epoch: int,
-    failure_code: str = "final_head_mismatch",
-) -> None:
-    if (
-        head is None
-        or head.poi_id != STABLE_TARGET_ID
-        or head.external_system != "pinvi"
-        or head.target_key != str(STABLE_TARGET_ID)
-        or head.desired_state != "deleted"
-        or head.source_generation != run.delete_generation
-        or head.source_payload_fingerprint != cache_target_source_fingerprint(_DELETED_SOURCE)
-        or head.lon is not None
-        or head.lat is not None
-        or head.radius_km != Decimal("5")
-        or head.update_enabled is not False
-        or head.remote_target_id is not None
-        or head.remote_etag is not None
-        or head.remote_restore_epoch != restore_epoch
-        or head.remote_source_generation != run.delete_generation
-        or head.remote_target_sequence is None
-        or head.remote_status != "deleted"
-    ):
-        raise CacheTargetCanaryFailure(failure_code, run.phase)
 
 
 async def _finish_run(
@@ -838,20 +654,17 @@ async def _finish_run(
     consumer_id: str,
     run_id: uuid.UUID,
     consumer_client: CacheTargetServiceClient,
+    deadline: float,
 ) -> CacheTargetCanaryReceipt | None:
-    try:
-        snapshot = await consumer_client.get_snapshot()
-    except (CacheTargetContractError, CacheTargetNetworkError, CacheTargetServiceProblem) as exc:
-        raise CacheTargetCanaryFailure("final_snapshot_unavailable", "delete_applied") from exc
-    except ValidationError:
-        raise CacheTargetCanaryFailure("final_snapshot_invalid", "delete_applied") from None
-    try:
-        remote_count, remote_root = _snapshot_identity(snapshot)
-    except (TypeError, ValueError):
-        raise CacheTargetCanaryFailure("final_snapshot_invalid", "delete_applied") from None
-    if remote_count != snapshot.count or remote_root.hex() != snapshot.merkle_root:
-        raise CacheTargetCanaryFailure("remote_snapshot_merkle_mismatch", "delete_applied")
     async with session_factory() as db:
+        remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+        if deadline <= time.monotonic():
+            return None
+        await db.execute(
+            text("SELECT set_config('lock_timeout', :timeout, true)"),
+            {"timeout": f"{remaining_ms}ms"},
+        )
+        await db.execute(_FINALIZATION_TABLE_LOCK)
         run = await db.scalar(
             select(KtmCacheTargetCanaryRun)
             .where(KtmCacheTargetCanaryRun.run_id == run_id)
@@ -862,6 +675,7 @@ async def _finish_run(
         completed_replay = run.status == "succeeded" and run.phase == "completed"
         if not completed_replay and (run.status != "running" or run.phase != "delete_applied"):
             raise CacheTargetCanaryFailure("phase_transition_mismatch", run.phase)
+        failure_code = "completed_run_drift" if completed_replay else None
         try:
             consumer = _require_ready_consumer(
                 await db.scalar(
@@ -871,13 +685,12 @@ async def _finish_run(
                 ),
                 phase=run.phase,
             )
+            await _validate_existing_run(db, run, consumer_id=consumer_id)
         except CacheTargetCanaryFailure:
             if completed_replay:
                 raise CacheTargetCanaryFailure("completed_run_drift", run.phase) from None
             raise
-        if consumer.active_restore_epoch != snapshot.restore_epoch:
-            code = "completed_run_drift" if completed_replay else "restore_epoch_changed"
-            raise CacheTargetCanaryFailure(code, run.phase)
+        assert consumer.active_restore_epoch is not None
         _validate_final_head(
             await db.scalar(
                 select(KtmCacheTargetHead)
@@ -886,7 +699,7 @@ async def _finish_run(
             ),
             run=run,
             restore_epoch=consumer.active_restore_epoch,
-            failure_code="completed_run_drift" if completed_replay else "final_head_mismatch",
+            failure_code=failure_code or "final_head_mismatch",
         )
         if (
             not consumer.local_applied_cursor
@@ -901,6 +714,62 @@ async def _finish_run(
                 raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
             return None
         local = await read_cache_target_source_identity(db)
+        try:
+            stream_before = await consumer_client.get_stream()
+            snapshot = await consumer_client.get_snapshot()
+            stream_after = await consumer_client.get_stream()
+        except (
+            CacheTargetContractError,
+            CacheTargetNetworkError,
+            CacheTargetServiceProblem,
+        ) as exc:
+            raise CacheTargetCanaryFailure("final_snapshot_unavailable", run.phase) from exc
+        except ValidationError:
+            raise CacheTargetCanaryFailure("final_snapshot_invalid", run.phase) from None
+        try:
+            remote_count, remote_root = _snapshot_identity(snapshot)
+        except (TypeError, ValueError):
+            raise CacheTargetCanaryFailure("final_snapshot_invalid", run.phase) from None
+        if remote_count != snapshot.count or remote_root.hex() != snapshot.merkle_root:
+            raise CacheTargetCanaryFailure("remote_snapshot_merkle_mismatch", run.phase)
+        if stream_before.consumer_id not in {None, consumer_id} or stream_after.consumer_id not in {
+            None,
+            consumer_id,
+        }:
+            code = failure_code or "remote_stream_identity_mismatch"
+            raise CacheTargetCanaryFailure(code, run.phase)
+        remote_control_stable = _stream_control_identity(stream_before) == _stream_control_identity(
+            stream_after
+        )
+        remote_ready = (
+            stream_after.state in {"active", "ready"}
+            and stream_after.blocked_event_id is None
+            and stream_after.active_reconciliation is None
+        )
+        if not remote_control_stable or not remote_ready:
+            if completed_replay:
+                raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
+            return None
+        if snapshot.restore_epoch != stream_after.restore_epoch:
+            raise CacheTargetCanaryFailure(
+                failure_code or "final_snapshot_invalid",
+                run.phase,
+            )
+        if consumer.active_restore_epoch != stream_after.restore_epoch:
+            code = failure_code or "restore_epoch_changed"
+            raise CacheTargetCanaryFailure(code, run.phase)
+        if consumer.stream_control_etag != stream_after.entity_tag:
+            if completed_replay:
+                raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
+            return None
+        if (
+            not snapshot.high_watermark_cursor
+            or snapshot.high_watermark_cursor != consumer.local_applied_cursor
+            or snapshot.high_watermark_cursor != consumer.remote_acked_cursor
+        ):
+            if completed_replay:
+                raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
+            return None
         if local.count != remote_count or bytes.fromhex(local.merkle_root) != remote_root:
             if completed_replay:
                 raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
@@ -908,9 +777,15 @@ async def _finish_run(
         if completed_replay:
             receipt = _receipt(run)
             if (
-                consumer.feature_cache_generation != run.final_cache_generation
-                or consumer.local_applied_cursor != run.final_local_cursor
-                or consumer.remote_acked_cursor != run.final_remote_cursor
+                run.canary_provenance_sha256 != canary_provenance_sha256(run)
+                or run.final_evidence_sha256 != canary_final_evidence_sha256(run)
+                or consumer.feature_cache_generation != run.final_cache_generation
+                or stream_after.restore_epoch != run.final_restore_epoch
+                or stream_after.control_version != run.final_stream_control_version
+                or stream_after.entity_tag != run.final_stream_control_etag
+                or consumer.local_applied_cursor != run.final_local_applied_cursor
+                or consumer.remote_acked_cursor != run.final_local_remote_acked_cursor
+                or snapshot.high_watermark_cursor != run.final_remote_snapshot_high_watermark_cursor
                 or local.count != run.final_local_count
                 or remote_count != run.final_remote_count
                 or bytes.fromhex(local.merkle_root) != run.final_local_merkle_root
@@ -931,8 +806,12 @@ async def _finish_run(
         run.status = "succeeded"
         run.phase = "completed"
         run.final_cache_generation = consumer.feature_cache_generation
-        run.final_local_cursor = consumer.local_applied_cursor
-        run.final_remote_cursor = consumer.remote_acked_cursor
+        run.final_restore_epoch = stream_after.restore_epoch
+        run.final_stream_control_version = stream_after.control_version
+        run.final_stream_control_etag = stream_after.entity_tag
+        run.final_local_applied_cursor = consumer.local_applied_cursor
+        run.final_local_remote_acked_cursor = consumer.remote_acked_cursor
+        run.final_remote_snapshot_high_watermark_cursor = snapshot.high_watermark_cursor
         run.final_local_count = local.count
         run.final_remote_count = remote_count
         run.final_local_merkle_root = bytes.fromhex(local.merkle_root)
@@ -943,6 +822,8 @@ async def _finish_run(
             run.final_dead_letter_commands,
         ) = backlog
         run.completed_at = datetime.now(UTC)
+        run.canary_provenance_sha256 = canary_provenance_sha256(run)
+        run.final_evidence_sha256 = canary_final_evidence_sha256(run)
         await db.commit()
         return _receipt(run)
 
@@ -963,6 +844,7 @@ async def _wait_for_final_convergence(
                 consumer_id=consumer_id,
                 run_id=run_id,
                 consumer_client=consumer_client,
+                deadline=deadline,
             )
         except CacheTargetCanaryFailure as exc:
             if exc.code != "final_snapshot_unavailable":
@@ -1011,6 +893,7 @@ async def _run_locked(
             consumer_id=consumer_id,
             run_id=run_id,
             consumer_client=consumer_client,
+            deadline=deadline,
         )
         if receipt is None:
             raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
@@ -1073,8 +956,13 @@ async def run_cache_target_causal_canary(
     poll_seconds: float = 0.5,
 ) -> CacheTargetCanaryReceipt:
     """같은 run ID를 crash-safe하게 재개하고 secret-free receipt를 반환한다."""
-    if timeout_seconds <= 0 or poll_seconds <= 0:
-        raise ValueError("canary timeout/poll은 양수여야 합니다.")
+    if (
+        not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+        or not math.isfinite(poll_seconds)
+        or poll_seconds <= 0
+    ):
+        raise ValueError("canary timeout/poll은 finite 양수여야 합니다.")
     deadline = time.monotonic() + timeout_seconds
     async with _canary_lock(engine):
         try:
