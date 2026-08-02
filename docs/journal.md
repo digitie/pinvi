@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 적대적 리뷰 A/B NO-GO 반영
+
+**작업**: 성공한 동일 run의 stale receipt, 증거 column 복제, provenance/credential/CLI 누출 경계를
+fail-close하도록 보강했다.
+**변경**: 성공 재호출도 current stable tombstone, command/event/claim ACK, ready/epoch/cursor/cache,
+backlog와 fresh snapshot self-Merkle 및 local/remote identity를 저장 성공 관측값에 다시 대조한다. receipt는
+분리된 local/remote/backlog typed column에서만 출력한다. 네 cache-target 역할은 서로뿐 아니라 service,
+admin service/proxy, ops, public API, VWorld credential과도 달라야 한다. CLI의 예상하지 못한 Pydantic/URL/token
+오류는 raw cause/traceback 없이 고정 internal error JSON 한 줄로 닫는다.
+**검증**: strict mypy 207 source, focused unit 50건, PostgreSQL focused 23건을 통과했다. 성공 직후 출력 유실
+재호출과 head/ready/epoch/cursor/cache/backlog/valid snapshot identity/self-root drift, command/event/ACK 변조,
+DB final evidence/FK 위반을 포함한다.
+**다음**: 새 exact head의 CI와 두 독립 적대적 재리뷰를 통과한 뒤 n150 paired live proof를 수행한다.
+
 ## 2026-08-02 (codex) — T-VN-41 causal receipt·provenance 재설계
 
 **작업**: 적대적 리뷰에서 확인된 stale same-run receipt와 증거 복제 가능성을 없애도록 migration `0048`의

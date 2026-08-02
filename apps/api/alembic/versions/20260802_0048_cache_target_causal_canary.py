@@ -54,6 +54,7 @@ def upgrade() -> None:
         sa.Column("final_cache_generation", sa.BigInteger(), nullable=True),
         sa.Column("baseline_cursor", sa.Text(), nullable=False),
         sa.Column("put_cursor", sa.Text(), nullable=True),
+        sa.Column("delete_cursor", sa.Text(), nullable=True),
         sa.Column("final_local_cursor", sa.Text(), nullable=True),
         sa.Column("final_remote_cursor", sa.Text(), nullable=True),
         sa.Column("baseline_count", sa.BigInteger(), nullable=False),
@@ -171,18 +172,24 @@ def upgrade() -> None:
             name="ck_ktm_ct_canary_put_material",
         ),
         sa.CheckConstraint(
-            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL) OR "
+            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL "
+            "AND delete_cursor IS NULL) OR "
             "(delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
-            "AND delete_relay_order > put_relay_order)",
+            "AND delete_relay_order > put_relay_order AND length(delete_cursor) > 0)",
             name="ck_ktm_ct_canary_delete_material",
         ),
         sa.CheckConstraint(
-            "(final_cache_generation IS NULL AND final_local_cursor IS NULL "
-            "AND final_remote_cursor IS NULL AND final_local_count IS NULL "
-            "AND final_remote_count IS NULL AND final_local_merkle_root IS NULL "
-            "AND final_remote_merkle_root IS NULL AND final_pending_commands IS NULL "
-            "AND final_leased_commands IS NULL AND final_dead_letter_commands IS NULL) OR "
-            "(final_cache_generation > put_cache_generation "
+            "num_nonnulls(final_cache_generation::text, final_local_cursor, final_remote_cursor, "
+            "final_local_count::text, final_remote_count::text, "
+            "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
+            "final_pending_commands::text, final_leased_commands::text, "
+            "final_dead_letter_commands::text) = 0 OR "
+            "(num_nonnulls(final_cache_generation::text, final_local_cursor, "
+            "final_remote_cursor, final_local_count::text, final_remote_count::text, "
+            "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
+            "final_pending_commands::text, final_leased_commands::text, "
+            "final_dead_letter_commands::text) = 10 "
+            "AND final_cache_generation > put_cache_generation "
             "AND length(final_local_cursor) > 0 "
             "AND final_local_cursor = final_remote_cursor "
             "AND final_local_count >= 0 AND final_local_count = final_remote_count "

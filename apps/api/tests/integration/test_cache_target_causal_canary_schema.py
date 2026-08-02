@@ -162,3 +162,47 @@ async def test_canary_run_allows_only_one_running_row_for_stable_target(
         )
         with pytest.raises(IntegrityError, match="uq_ktm_ct_canary_running_target"):
             await db.commit()
+
+
+async def test_canary_run_command_fk_binds_target_and_generation(session_factory) -> None:  # type: ignore[no-untyped-def]
+    foreign_target = uuid.uuid4()
+    foreign_command = uuid.uuid4()
+    async with session_factory() as db:
+        db.add_all(
+            [
+                _head(STABLE_TARGET_ID, generation=1),
+                _head(foreign_target, generation=1),
+            ]
+        )
+        await db.flush()
+        db.add(_command(foreign_target, foreign_command, generation=1))
+        await db.flush()
+        db.add(
+            _run(
+                run_id=uuid.uuid4(),
+                target_id=STABLE_TARGET_ID,
+                command_id=foreign_command,
+                generation=1,
+            )
+        )
+        with pytest.raises(IntegrityError, match="fk_ktm_ct_canary_put_command"):
+            await db.commit()
+
+
+async def test_canary_run_final_evidence_is_all_or_none(session_factory) -> None:  # type: ignore[no-untyped-def]
+    command_id = uuid.uuid4()
+    async with session_factory() as db:
+        db.add(_head(STABLE_TARGET_ID, generation=1))
+        await db.flush()
+        db.add(_command(STABLE_TARGET_ID, command_id, generation=1))
+        await db.flush()
+        run = _run(
+            run_id=uuid.uuid4(),
+            target_id=STABLE_TARGET_ID,
+            command_id=command_id,
+            generation=1,
+        )
+        run.final_local_cursor = "cursor-without-other-evidence"
+        db.add(run)
+        with pytest.raises(IntegrityError, match="ck_ktm_ct_canary_final_material"):
+            await db.commit()

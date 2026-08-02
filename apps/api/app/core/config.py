@@ -413,11 +413,14 @@ class Settings(BaseSettings):
         if len(set(token_values)) != len(token_values):
             raise ValueError("kor-travel-map cache target role tokens must all differ")
 
-        legacy_tokens = {
+        protected_map_credentials = {
             value
             for value in (
                 self.pinvi_kor_travel_map_service_token.strip(),
                 self.pinvi_kor_travel_map_admin_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
+                self.pinvi_kor_travel_map_public_api_key.strip(),
+                self.pinvi_vworld_api_key.strip(),
                 self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_read_token is not None
                 else "",
@@ -427,9 +430,9 @@ class Settings(BaseSettings):
             )
             if value
         }
-        if any(token in legacy_tokens for _, token in role_tokens):
+        if any(token in protected_map_credentials for _, token in role_tokens):
             raise ValueError(
-                "cache target role tokens must not reuse legacy admin/ops/service tokens"
+                "cache target role tokens must not reuse another Map trust-boundary credential"
             )
 
         if any(

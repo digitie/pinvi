@@ -85,6 +85,12 @@ def main() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1) from None
+    except Exception:
+        print(
+            '{"error_code":"internal_error","phase":"runtime"}',
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
     print(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
 
 

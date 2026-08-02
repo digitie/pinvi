@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.cache_target_contract import CacheTargetMerkleRow, cache_target_snapshot_merkle_root
 from app.models.cache_target_sync import (
@@ -36,8 +37,10 @@ class _SnapshotClient:
     def __init__(self, session_factory, *, corrupt_root: bool = False) -> None:  # type: ignore[no-untyped-def]
         self._session_factory = session_factory
         self._corrupt_root = corrupt_root
+        self.calls = 0
 
     async def get_snapshot(self) -> CacheTargetSnapshot:
+        self.calls += 1
         async with self._session_factory() as db:
             heads = list(
                 await db.scalars(
@@ -81,6 +84,49 @@ class _SnapshotClient:
                 )
                 for head in heads
             ],
+        )
+
+
+class _MalformedSnapshotClient:
+    def __init__(self, marker: str) -> None:
+        self._marker = marker
+
+    async def get_snapshot(self) -> CacheTargetSnapshot:
+        return CacheTargetSnapshot.model_validate(
+            {
+                "snapshot_id": self._marker,
+                "restore_epoch": "not-an-integer",
+                "raw_url": f"https://user:{self._marker}@invalid.test",
+                "items": [],
+            }
+        )
+
+
+class _IdentityDriftSnapshotClient(_SnapshotClient):
+    async def get_snapshot(self) -> CacheTargetSnapshot:
+        snapshot = await super().get_snapshot()
+        extra = CacheTargetSnapshotItem(
+            external_system="pinvi",
+            target_key=str(uuid.uuid4()),
+            state="deleted",
+            source_generation=1,
+            source_payload_fingerprint=("11" * 32),
+        )
+        items = [*snapshot.items, extra]
+        root = cache_target_snapshot_merkle_root(
+            [
+                CacheTargetMerkleRow(
+                    external_system=item.external_system,
+                    target_key=item.target_key,
+                    state=item.state,
+                    source_generation=item.source_generation,
+                    source_payload_fingerprint=bytes.fromhex(item.source_payload_fingerprint),
+                )
+                for item in items
+            ]
+        ).hex()
+        return snapshot.model_copy(
+            update={"items": items, "count": len(items), "merkle_root": root}
         )
 
 
@@ -253,6 +299,27 @@ async def _ack_claim(session_factory, claim_id: uuid.UUID, relay_order: int) -> 
         await db.commit()
 
 
+async def _complete_run(session_factory) -> tuple[uuid.UUID, _SnapshotClient]:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    run_id = uuid.uuid4()
+    client = _SnapshotClient(session_factory)
+    task = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=client,  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=5,
+            poll_seconds=0.01,
+        )
+    )
+    await _apply_command(session_factory, "put", 1)
+    await _apply_command(session_factory, "delete", 2)
+    await task
+    return run_id, client
+
+
 async def test_put_timeout_keeps_running_and_same_run_resumes_through_delete(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -386,3 +453,214 @@ async def test_global_canary_lock_rejects_concurrent_runner_without_creating_run
             )
     async with session_factory() as db:
         assert await db.get(KtmCacheTargetCanaryRun, run_id) is None
+
+
+async def test_crash_after_success_replay_fetches_fresh_snapshot_before_receipt(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    run_id, client = await _complete_run(session_factory)
+    calls_after_commit = client.calls
+
+    receipt = await run_cache_target_causal_canary(
+        session_factory,
+        session_factory.kw["bind"],
+        consumer_client=client,  # type: ignore[arg-type]
+        consumer_id=CONSUMER_ID,
+        run_id=run_id,
+        timeout_seconds=1,
+        poll_seconds=0.01,
+    )
+
+    assert receipt.run_id == run_id
+    assert client.calls == calls_after_commit + 1
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.final_local_cursor == run.final_remote_cursor
+        assert run.final_local_count == run.final_remote_count
+        assert run.final_local_merkle_root == run.final_remote_merkle_root
+        assert (
+            run.final_pending_commands,
+            run.final_leased_commands,
+            run.final_dead_letter_commands,
+        ) == (0, 0, 0)
+
+
+async def test_database_rejects_success_evidence_divergence(session_factory) -> None:  # type: ignore[no-untyped-def]
+    run_id, _ = await _complete_run(session_factory)
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.final_remote_count is not None
+        run.final_remote_count += 1
+        with pytest.raises(IntegrityError, match="ck_ktm_ct_canary_final_material"):
+            await db.commit()
+
+
+@pytest.mark.parametrize(
+    "drift",
+    (
+        "head",
+        "ready",
+        "epoch",
+        "cursor",
+        "cache-generation",
+        "backlog",
+        "snapshot-identity",
+        "snapshot-self-root",
+    ),
+)
+async def test_crash_after_success_replay_rejects_current_state_drift(
+    session_factory,
+    drift: str,
+) -> None:  # type: ignore[no-untyped-def]
+    run_id, client = await _complete_run(session_factory)
+    replay_client: object = client
+    async with session_factory() as db:
+        head = await db.get(KtmCacheTargetHead, STABLE_TARGET_ID)
+        consumer = await db.get(KtmCacheTargetConsumer, CONSUMER_ID)
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert head is not None
+        assert consumer is not None
+        assert run is not None
+        if drift == "head":
+            head.remote_status = "active"
+        elif drift == "ready":
+            consumer.ready = False
+        elif drift == "epoch":
+            consumer.active_restore_epoch += 1
+        elif drift == "cursor":
+            consumer.local_applied_cursor = "cursor-drift"
+            consumer.remote_acked_cursor = "cursor-drift"
+        elif drift == "cache-generation":
+            consumer.feature_cache_generation += 1
+        elif drift == "backlog":
+            db.add(
+                KtmCacheTargetCommand(
+                    command_id=uuid.uuid4(),
+                    poi_id=STABLE_TARGET_ID,
+                    operation="refresh",
+                    source_generation=run.delete_generation,
+                    payload={"version": "cache-target-refresh-v1"},
+                    payload_fingerprint=b"b" * 32,
+                    status="pending",
+                )
+            )
+        elif drift == "snapshot-identity":
+            replay_client = _IdentityDriftSnapshotClient(session_factory)
+        elif drift == "snapshot-self-root":
+            replay_client = _SnapshotClient(session_factory, corrupt_root=True)
+        else:
+            raise AssertionError(f"unknown drift: {drift}")
+        await db.commit()
+
+    with pytest.raises(
+        CacheTargetCanaryFailure,
+        match=(r"completed_run_drift|event_provenance_mismatch|remote_snapshot_merkle_mismatch"),
+    ):
+        await run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=replay_client,  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=1,
+            poll_seconds=0.01,
+        )
+
+
+async def test_malformed_remote_snapshot_is_terminal_without_raw_input(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    run_id = uuid.uuid4()
+    marker = "DO-NOT-LEAK-TOKEN-OR-URL"
+    task = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=_MalformedSnapshotClient(marker),  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=5,
+            poll_seconds=0.01,
+        )
+    )
+    await _apply_command(session_factory, "put", 1)
+    await _apply_command(session_factory, "delete", 2)
+
+    with pytest.raises(CacheTargetCanaryFailure, match="final_snapshot_invalid") as raised:
+        await task
+    assert marker not in str(raised.value)
+    assert raised.value.__suppress_context__ is True
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.status == "failed"
+        assert run.terminal_error_code == "final_snapshot_invalid"
+
+
+@pytest.mark.parametrize(
+    ("corruption", "expected_code"),
+    (
+        ("command", "command_identity_mismatch"),
+        ("event", "event_provenance_mismatch"),
+        ("ack", "ack_provenance_mismatch"),
+    ),
+)
+async def test_resume_revalidates_stored_command_event_and_ack_provenance(
+    session_factory,
+    corruption: str,
+    expected_code: str,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    run_id = uuid.uuid4()
+    first = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=_SnapshotClient(session_factory),  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=1,
+            poll_seconds=0.01,
+        )
+    )
+    await _apply_command(session_factory, "put", 1)
+    with pytest.raises(CacheTargetCanaryFailure, match="causal_wait_timeout"):
+        await first
+
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.put_event_id is not None
+        assert run.put_claim_id is not None
+        if corruption == "command":
+            command = await db.get(KtmCacheTargetCommand, run.put_command_id)
+            assert command is not None
+            command.payload = {"version": "corrupted"}
+        elif corruption == "event":
+            event = await db.get(KtmCacheTargetEvent, run.put_event_id)
+            assert event is not None
+            event.payload = {**event.payload, "source_event_id": str(uuid.uuid4())}
+        elif corruption == "ack":
+            item = await db.scalar(
+                select(KtmCacheTargetEventClaimItem).where(
+                    KtmCacheTargetEventClaimItem.claim_id == run.put_claim_id,
+                    KtmCacheTargetEventClaimItem.event_id == run.put_event_id,
+                )
+            )
+            assert item is not None
+            item.acked_at = None
+        await db.commit()
+
+    with pytest.raises(CacheTargetCanaryFailure, match=expected_code):
+        await run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=_SnapshotClient(session_factory),  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=1,
+            poll_seconds=0.01,
+        )

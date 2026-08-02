@@ -274,18 +274,24 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
             name=conv("ck_ktm_ct_canary_put_material"),
         ),
         CheckConstraint(
-            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL) OR "
+            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL "
+            "AND delete_cursor IS NULL) OR "
             "(delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
-            "AND delete_relay_order > put_relay_order)",
+            "AND delete_relay_order > put_relay_order AND length(delete_cursor) > 0)",
             name=conv("ck_ktm_ct_canary_delete_material"),
         ),
         CheckConstraint(
-            "(final_cache_generation IS NULL AND final_local_cursor IS NULL "
-            "AND final_remote_cursor IS NULL AND final_local_count IS NULL "
-            "AND final_remote_count IS NULL AND final_local_merkle_root IS NULL "
-            "AND final_remote_merkle_root IS NULL AND final_pending_commands IS NULL "
-            "AND final_leased_commands IS NULL AND final_dead_letter_commands IS NULL) OR "
-            "(final_cache_generation > put_cache_generation "
+            "num_nonnulls(final_cache_generation::text, final_local_cursor, final_remote_cursor, "
+            "final_local_count::text, final_remote_count::text, "
+            "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
+            "final_pending_commands::text, final_leased_commands::text, "
+            "final_dead_letter_commands::text) = 0 OR "
+            "(num_nonnulls(final_cache_generation::text, final_local_cursor, "
+            "final_remote_cursor, final_local_count::text, final_remote_count::text, "
+            "encode(final_local_merkle_root, 'hex'), encode(final_remote_merkle_root, 'hex'), "
+            "final_pending_commands::text, final_leased_commands::text, "
+            "final_dead_letter_commands::text) = 10 "
+            "AND final_cache_generation > put_cache_generation "
             "AND length(final_local_cursor) > 0 "
             "AND final_local_cursor = final_remote_cursor "
             "AND final_local_count >= 0 AND final_local_count = final_remote_count "
@@ -354,6 +360,7 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
     final_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
     baseline_cursor: Mapped[str] = mapped_column(Text, nullable=False)
     put_cursor: Mapped[str | None] = mapped_column(Text)
+    delete_cursor: Mapped[str | None] = mapped_column(Text)
     final_local_cursor: Mapped[str | None] = mapped_column(Text)
     final_remote_cursor: Mapped[str | None] = mapped_column(Text)
     baseline_count: Mapped[int] = mapped_column(BigInteger, nullable=False)

@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import uuid
 
-from app.services.cache_target_causal_canary import CacheTargetCanaryReceipt
+import httpx
+import pytest
+from pydantic import ValidationError
+
+from app.commands import cache_target_causal_canary as command
+from app.services.cache_target_causal_canary import (
+    CacheTargetCanaryFailure,
+    CacheTargetCanaryReceipt,
+)
+from app.services.cache_target_event_consumer import CacheTargetSnapshot
 
 
 def test_success_receipt_keeps_both_sides_and_backlog_counts_explicit() -> None:
@@ -59,3 +70,90 @@ def test_success_receipt_keeps_both_sides_and_backlog_counts_explicit() -> None:
         "local_merkle_root",
         "remote_merkle_root",
     }
+
+
+def _snapshot_validation_error(marker: str) -> ValidationError:
+    try:
+        CacheTargetSnapshot.model_validate(
+            {
+                "snapshot_id": marker,
+                "restore_epoch": "invalid",
+                "raw_url": f"https://user:{marker}@invalid.test",
+            }
+        )
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("invalid snapshot이 ValidationError를 내지 않았습니다.")
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        _snapshot_validation_error("PYDANTIC-RAW-SECRET"),
+        httpx.InvalidURL("https://user:URL-SECRET@invalid test"),
+        ValueError("TOKEN-SECRET"),
+    ),
+    ids=("pydantic", "url", "token"),
+)
+def test_cli_unexpected_failure_is_exact_one_line_without_raw_cause(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: Exception,
+) -> None:
+    async def fail(_args: object) -> dict[str, int | str]:
+        raise failure
+
+    monkeypatch.setattr(command, "_run", fail)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pinvi-cache-target-causal-canary", "--run-id", str(uuid.uuid4())],
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        command.main()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == '{"error_code":"internal_error","phase":"runtime"}\n'
+    assert "Traceback" not in captured.err
+    assert "SECRET" not in captured.err
+
+
+def test_cli_typed_failure_keeps_only_code_and_phase(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def fail(_args: object) -> dict[str, int | str]:
+        raise CacheTargetCanaryFailure("final_snapshot_invalid", "delete_applied")
+
+    monkeypatch.setattr(command, "_run", fail)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pinvi-cache-target-causal-canary", "--run-id", str(uuid.uuid4())],
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        command.main()
+    assert capsys.readouterr().err == (
+        '{"error_code":"final_snapshot_invalid","phase":"delete_applied"}\n'
+    )
+
+
+@pytest.mark.parametrize("control", (asyncio.CancelledError(), SystemExit(7)))
+def test_cli_does_not_swallow_cancellation_or_system_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    control: BaseException,
+) -> None:
+    async def stop(_args: object) -> dict[str, int | str]:
+        raise control
+
+    monkeypatch.setattr(command, "_run", stop)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pinvi-cache-target-causal-canary", "--run-id", str(uuid.uuid4())],
+    )
+
+    with pytest.raises(type(control)):
+        command.main()

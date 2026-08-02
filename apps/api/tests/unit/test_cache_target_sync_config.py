@@ -18,6 +18,12 @@ COMMAND = "c" * 32
 CONSUMER = "u" * 32
 RESTORE = "r" * 32
 RECOVERY = "v" * 32
+ROLE_FIELDS = (
+    "pinvi_kor_travel_map_cache_target_command_token",
+    "pinvi_kor_travel_map_cache_target_consumer_token",
+    "pinvi_kor_travel_map_cache_target_restore_fence_token",
+    "pinvi_kor_travel_map_cache_target_recovery_token",
+)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -133,6 +139,65 @@ def test_cache_target_role_credentials_are_distinct_and_restore_recovery_optiona
 
     assert loaded.pinvi_kor_travel_map_cache_target_restore_fence_token is not None
     assert loaded.pinvi_kor_travel_map_cache_target_recovery_token is not None
+
+
+@pytest.mark.parametrize("role_field", ROLE_FIELDS)
+@pytest.mark.parametrize(
+    "protected_credentials",
+    [
+        {"pinvi_kor_travel_map_public_api_key": COMMAND},
+        {"pinvi_vworld_api_key": COMMAND},
+        {
+            "pinvi_kor_travel_map_public_api_key": "p" * 32,
+            "pinvi_vworld_api_key": COMMAND,
+        },
+        {"pinvi_kor_travel_map_admin_proxy_secret": COMMAND},
+        {"pinvi_kor_travel_map_service_token": COMMAND},
+        {"pinvi_kor_travel_map_admin_service_token": COMMAND},
+        {
+            "pinvi_kor_travel_map_ops_read_token": COMMAND,
+            "pinvi_kor_travel_map_ops_cancel_token": "z" * 32,
+        },
+        {
+            "pinvi_kor_travel_map_ops_read_token": "o" * 32,
+            "pinvi_kor_travel_map_ops_cancel_token": COMMAND,
+        },
+    ],
+    ids=(
+        "explicit-public",
+        "vworld-fallback",
+        "vworld-exposed",
+        "admin-proxy",
+        "service",
+        "admin-service",
+        "ops-read",
+        "ops-cancel",
+    ),
+)
+def test_each_cache_target_role_rejects_protected_map_credential_reuse(
+    role_field: str,
+    protected_credentials: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError, match="trust-boundary credential"):
+        _settings(**{role_field: COMMAND}, **protected_credentials)
+
+
+def test_all_cache_target_roles_accept_distinct_map_boundary_credentials() -> None:
+    loaded = _settings(
+        pinvi_kor_travel_map_cache_target_command_token=COMMAND,
+        pinvi_kor_travel_map_cache_target_consumer_token=CONSUMER,
+        pinvi_kor_travel_map_cache_target_restore_fence_token=RESTORE,
+        pinvi_kor_travel_map_cache_target_recovery_token=RECOVERY,
+        pinvi_kor_travel_map_service_token="s" * 32,
+        pinvi_kor_travel_map_admin_service_token="a" * 32,
+        pinvi_kor_travel_map_admin_proxy_secret="x" * 32,
+        pinvi_kor_travel_map_public_api_key="p" * 32,
+        pinvi_vworld_api_key="w" * 32,
+        pinvi_kor_travel_map_ops_read_token="o" * 32,
+        pinvi_kor_travel_map_ops_cancel_token="z" * 32,
+    )
+
+    assert loaded.pinvi_kor_travel_map_cache_target_command_token is not None
 
 
 def test_ordinary_api_manifest_passes_only_command_and_consumer_roles() -> None:

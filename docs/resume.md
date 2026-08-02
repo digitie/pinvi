@@ -1,13 +1,14 @@
 # resume.md
 
-## 2026-08-02 (codex) — T-VN-41 리뷰 NO-GO 보강 진행
+## 2026-08-02 (codex) — T-VN-41 리뷰 NO-GO 보강 완료
 
-적대적 리뷰 A/B의 NO-GO를 반영 중이다. migration `0048`은 final local/remote 관측값과 backlog 3종을
-각각 저장하고 command/event/claim ACK provenance를 composite FK로 결박하도록 재설계했다. 동일 성공 run은
-fresh current state와 snapshot을 다시 증명해야 하며, 다음은 서비스 상태기계·credential collision·CLI
-sanitization 회귀 구현과 PostgreSQL gate다.
+적대적 리뷰 A/B의 NO-GO를 반영했다. migration `0048`은 final local/remote 관측값과 backlog 3종을 각각
+저장하고 command/event/claim ACK provenance를 composite FK로 결박한다. 동일 성공 run도 fresh current
+head/consumer/backlog/snapshot을 저장 관측값에 다시 증명한다. 네 역할과 service/admin/ops/public/VWorld
+credential 충돌은 sync off에서도 startup fail-close하며 CLI unexpected error는 raw traceback 없이 단일 JSON으로
+닫는다. strict mypy 207 source, focused unit 50건, PostgreSQL focused 23건이 통과했다.
 
-**다음 한 작업**: causal canary service/tests 보강 커밋을 만든다.
+**다음 한 작업**: functional exact head를 push하고 두 독립 적대적 재리뷰를 받는다.
 
 ## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
 

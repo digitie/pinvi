@@ -216,8 +216,11 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 | restore fence    | `cache-target:restore-fence`                                                                    | stream restore-fence CAS만; restore job에만 단기 주입                          |
 | recovery replay  | `cache-target:recovery`, `cache-target:recovery-replay`                                            | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
-한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
-없다. generation 7에서는 legacy `cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. 여기서
+한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. 네 역할 token은 service/admin
+service/ops credential뿐 아니라 admin proxy secret, explicit Map public API key, 모바일에 노출되는 VWorld
+key와도 달라야 한다. explicit public key가 있더라도 VWorld key는 별도 lower-trust 경계이므로 비교에서
+제외하지 않는다. admin/ops credential fallback은 없다. generation 7에서는 legacy
+`cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. 여기서
 consumer는 PinVi 역할 이름일 뿐 scope 문자열이 아니다. command transport가 consumer 역할 token으로
 성공하거나 consumer transport가 command token으로 성공하는 배포는 호환 대상으로 다루지 않고
 startup/live gate에서 거부한다.
@@ -291,8 +294,9 @@ fail-close한다.
 3. 같은 방식으로 tombstone generation과 deterministic DELETE를 enqueue하고 DELETE event apply/ACK/cache
    generation 증가를 bounded wait한다.
 4. stable tombstone의 exact generation/fingerprint/remote deleted tuple, local desired head 전체 count/Merkle와
-   Map generic snapshot self-root 및 exact count/root, consumer ready/epoch와
-   `local_applied_cursor == remote_acked_cursor == snapshot.high_watermark_cursor`, 전역
+   Map generic snapshot self-root 및 exact count/root, consumer ready와 snapshot restore epoch 일치,
+   `local_applied_cursor == remote_acked_cursor`를 확인한다. snapshot high-watermark는 앞서 고정한
+   commit-safe replay lower-bound 의미를 유지한다. 전역
    pending/leased/dead-letter command 0을 확인한다.
 
 bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
@@ -302,6 +306,9 @@ synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는�
 `status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
 pending/leased/dead-letter command 수는 성공 transaction에서 각각 관측·저장한 typed column로,
 local/remote cursor·count·Merkle root도 각 관측 column에서 그대로 담는다.
+typed canary failure는 stderr에 `error_code`와 `phase`만 단일 JSON line으로 출력한다. 그 밖의 Pydantic,
+URL, token parsing 및 예상하지 못한 `Exception`도 raw cause/traceback 없이 고정
+`internal_error/runtime` JSON으로 닫고, process cancellation과 `SystemExit`은 삼키지 않는다.
 양쪽 값을 하나의 필드로 축약하지 않으며 URL, token, raw payload는 포함하지 않는다. 운영 절차는
 [`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
 

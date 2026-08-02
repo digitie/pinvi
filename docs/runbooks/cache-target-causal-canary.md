@@ -30,7 +30,9 @@ docker exec <pinvi-api-container> \
 ```
 
 성공은 exit code `0`과 단일 JSON object다. stderr의 실패 메시지는 error code와 phase만 포함하며
-credential이나 원격 응답 body를 포함하지 않는다. 동일 run ID가 중단됐다면 같은 명령으로 재개한다.
+credential이나 원격 응답 body를 포함하지 않는다. 예상하지 못한 Pydantic/URL/token parsing 오류도
+`{"error_code":"internal_error","phase":"runtime"}` 한 줄만 남기고 raw cause/traceback을 숨긴다.
+process cancellation과 `SystemExit`은 보존한다. 동일 run ID가 중단됐다면 같은 명령으로 재개한다.
 
 ## 4. 성공 조건
 
@@ -39,8 +41,8 @@ credential이나 원격 응답 body를 포함하지 않는다. 동일 run ID가 
 - PUT과 DELETE 뒤 `feature_cache_generation`이 각각 증가한다.
 - synthetic stable head가 exact DELETE generation/fingerprint와 remote deleted tuple을 유지한다.
 - local desired head 전체 count/Merkle와 Map generic snapshot self-root/count/root가 exact 일치한다.
-- consumer가 ready이고 restore epoch가 snapshot과 같으며 local applied cursor, remote ACK cursor,
-  snapshot high-watermark cursor가 같다.
+- consumer가 ready이고 restore epoch가 snapshot과 같으며 local applied cursor와 remote ACK cursor가 같다.
+  snapshot high-watermark는 exact cutover cursor가 아니라 commit-safe replay lower-bound로만 해석한다.
 - pending/leased/dead command가 모두 0이다.
 
 성공 JSON은 `status=succeeded`, run/target/PUT·DELETE command/event ID, generation, relay order,
