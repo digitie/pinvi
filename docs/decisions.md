@@ -2816,8 +2816,8 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
 
 ### 결정
 
-- generation 7은 target PUT/GET/DELETE와 refresh create/read를 exact
-  `cache-target:command` scope에만 허용한다.
+- generation 7은 target PUT/DELETE와 refresh create를 exact `cache-target:command` scope에만 허용하고,
+  target GET과 refresh status GET은 consumer의 `cache-target:read`로 분리한다.
 - legacy `cache-target:consumer` scope 자체를 enum/auth에서 clean-cut 삭제한다. consumer는 PinVi 역할
   이름일 뿐 scope 문자열이 아니다.
 - consumer 역할에는 `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
@@ -2843,7 +2843,7 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
 
 ### 후속
 
-- paired Map exact scope/OpenAPI 변경을 확정하고 PinVi provenance 상수와 vendored artifact를 재핀한다.
+- paired Map exact scope/OpenAPI 변경을 확정하고 PinVi provenance 상수와 vendored artifact를 재핀했다.
 - config/contract/transport negative test와 n150 token swap live gate를 통과한다.
 
 ## 다음 ADR 번호

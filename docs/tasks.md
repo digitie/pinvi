@@ -28,6 +28,12 @@
       fail-close한다(ADR-059). migration 0048의 durable run 정본과 ordinary command/consumer token만 쓰는
       `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 최종
       count/Merkle/cursor/pending·dead 0을 production에서 증명한다.
+      - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+        `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
+        `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
+        generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
+        음성 gate를 고정했다.
+      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
 
 ## 보안·의존성
 

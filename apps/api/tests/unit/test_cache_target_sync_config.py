@@ -77,6 +77,22 @@ def test_enabled_cache_target_sync_accepts_only_exact_vendored_service_pin() -> 
         )
 
 
+def test_generation6_manifest_is_not_a_compatible_fallback() -> None:
+    with pytest.raises(ValidationError, match="EXPECTED_CONTRACT_GENERATION"):
+        _settings(
+            pinvi_kor_travel_map_cache_target_sync_enabled=True,
+            pinvi_kor_travel_map_cache_target_command_token=COMMAND,
+            pinvi_kor_travel_map_cache_target_consumer_token=CONSUMER,
+            pinvi_kor_travel_map_cache_target_expected_openapi_sha256=(
+                CACHE_TARGET_SERVICE_OPENAPI_SHA256
+            ),
+            pinvi_kor_travel_map_cache_target_expected_source_revision=(
+                CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION
+            ),
+            pinvi_kor_travel_map_cache_target_expected_contract_generation=6,
+        )
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
+
+**작업**: 두 독립 적대적 리뷰가 GO한 Map 계약을 PinVi runtime과 vendored service OpenAPI에 exact pin했다.
+**변경**: artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, OpenAPI SHA-256
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`, contract generation `7`을 함께
+갱신했다. generation 6은 config에서 거부하고 17-route scope/caller inventory와 command/consumer token
+swap `403`을 음성 회귀로 고정했다.
+**다음**: full gate와 n150 live token-swap/causal canary evidence를 완료한다.
+
 ## 2026-08-02 (codex) — T-VN-41 command/consumer 전환 transport 완결
 
 **작업**: generation 7 역할 분리에서 빠져 있던 target source GET, refresh 생성, refresh status GET을

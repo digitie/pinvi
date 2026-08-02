@@ -180,11 +180,11 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map artifact owner commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의
+서비스 계약은 Map artifact owner commit `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`이고, 현재 functional owner는
-`5d9c42dfc7d908ace1129c7ca2682bac54d572d7`이다. sync enable 설정은 functional owner revision과
-contract generation `6`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`이고, functional owner는
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`이다. sync enable 설정은 functional owner revision과
+contract generation `7`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
 검증한다. functional owner는 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는 기능 계약
 provenance다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
@@ -198,19 +198,19 @@ transaction에서 snapshot owner 충돌을 확인한다. 같은 request의 exact
 snapshot ID, epoch, count, Merkle root, high-watermark가 모두 일치해야 하며 `received`이면 적용된 inbox
 receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정한다.
 
-generation 6은 trim된 Unicode NFC identity와 512자 `target_key`, 중복 없는 refresh key 배열,
+generation 7은 source PUT/DELETE·refresh create의 exact command scope와 target/refresh GET의 consumer
+credential 전환, 17-route machine-readable scope를 고정한다. generation 6은 trim된 Unicode NFC identity와 512자 `target_key`, 중복 없는 refresh key 배열,
 typed snapshot backpressure 오류를 고정한다. generation 5는 snapshot page의 timezone-aware
 `created_at`/`expires_at`을 필수화했다. generic snapshot은
 첫 페이지에서 최소 1시간의 잔여 traversal window를 요구하고 모든 page header의 두 시각을 exact
 대조한다. request-bound reconciliation snapshot은 running request의 durable receipt이므로
 `expires_at`이 지나도 읽을 수 있다.
 
-후속 generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고
+generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고
 legacy `cache-target:consumer` umbrella scope를 enum/auth에서 clean-cut 삭제한다. consumer 역할은 exact
 `cache-target:read/claim/ack/nack/snapshot` 5개 scope 배열만 받는다. PinVi는 이미 분리된 role-bound
-transport와 token을 유지하되 generation 6을 호환 fallback으로 허용하지 않는다. paired Map final
-functional owner와 service OpenAPI bytes가 확정되기 전에는 임시 provenance 값을 기록하지 않으며, 확정
-시 artifact owner·functional owner·OpenAPI SHA-256·generation 7을 동시에 재핀한다.
+transport와 token을 유지하되 generation 6을 호환 fallback으로 허용하지 않는다. 위 artifact owner,
+functional owner, OpenAPI SHA-256과 generation 7은 두 독립 exact-head 리뷰 GO 뒤 함께 재핀했다.
 
 `high_watermark_cursor`는 snapshot 전체와 정확히 같은 시점이라는 뜻이 아니라, 해당
 `external_system` outbox의 commit-safe replay lower-bound다. 따라서 그 cursor 이후 claim에는 snapshot에

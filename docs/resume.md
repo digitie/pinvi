@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
+
+Map exact head `11d678167e2739b517b8c675f9a43304c985b6d9`의 두 독립 적대적 리뷰가 GO했다. OpenAPI
+artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, 보안 경계 functional owner
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service SHA-256
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`, contract generation `7`을 runtime,
+vendored bytes와 `.env.example`에 함께 pin했다. generation 6 manifest, 17-route scope/caller drift와
+command/consumer token swap을 음성 gate로 고정했다.
+
+**다음 한 작업**: full gate를 끝낸 뒤 n150에서 generation 7 token-swap 음성과 causal canary를 실행한다.
+
 ## 2026-08-02 (codex) — T-VN-41 command/consumer 전환 transport 완결
 
 generation 7의 endpoint 소유권을 PinVi role-bound client 전체에 적용했다. command token은 target

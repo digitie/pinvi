@@ -481,6 +481,57 @@ async def test_command_consumer_transition_surfaces_fail_closed_before_http() ->
 
 
 @pytest.mark.asyncio
+async def test_generation7_swapped_server_credentials_fail_closed() -> None:
+    command_token = "c" * 32
+    consumer_token = "r" * 32
+    seen_tokens: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_tokens.append(request.headers["X-Kor-Travel-Map-Service-Token"])
+        return httpx.Response(
+            403,
+            json={
+                "type": "about:blank",
+                "title": "Forbidden",
+                "status": 403,
+                "code": "CACHE_TARGET_SCOPE_FORBIDDEN",
+                "detail": "wrong generation 7 role credential",
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    swapped_command = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=transport),
+        role="command",
+        token=consumer_token,
+    )
+    swapped_consumer = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=transport),
+        role="consumer",
+        token=command_token,
+    )
+    try:
+        with pytest.raises(CacheTargetServiceProblem) as command_problem:
+            await swapped_command.create_refresh_request(
+                external_system="pinvi",
+                target_keys=[str(uuid.uuid4())],
+                reason="token swap negative gate",
+                idempotency_key=uuid.uuid4(),
+            )
+        with pytest.raises(CacheTargetServiceProblem) as consumer_problem:
+            await swapped_consumer.get_refresh_request(request_id=uuid.uuid4())
+    finally:
+        await swapped_command.aclose()
+        await swapped_consumer.aclose()
+
+    assert command_problem.value.status_code == 403
+    assert command_problem.value.code == "CACHE_TARGET_SCOPE_FORBIDDEN"
+    assert consumer_problem.value.status_code == 403
+    assert consumer_problem.value.code == "CACHE_TARGET_SCOPE_FORBIDDEN"
+    assert seen_tokens == [consumer_token, command_token]
+
+
+@pytest.mark.asyncio
 async def test_problem_preserves_typed_status_code_without_secret_body_logging() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

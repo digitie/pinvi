@@ -225,20 +225,20 @@ startup/live gate에서 거부한다.
 generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고 legacy
 `cache-target:consumer` umbrella scope를 clean-cut 삭제한다. consumer 역할에는 exact
 `read/claim/ack/nack/snapshot` 5개 scope 배열만 부여한다. PinVi role-bound client의 command/consumer
-transport와 token은 계속 분리하며 generation 6 manifest/source 조합으로 sync를 켜지 않는다. paired Map
-functional owner와 service OpenAPI artifact가 확정되기 전에는 임시 SHA나 placeholder를 runtime pin에 넣지
-않는다. 최종 pin commit에서 artifact owner, functional owner, OpenAPI SHA-256, contract generation 7을
-한 transaction처럼 함께 갱신하고 exact byte/ancestry/config negative test를 통과시킨다.
+transport와 token은 계속 분리하며 generation 6 manifest/source 조합으로 sync를 켜지 않는다. 두 독립
+적대적 리뷰가 GO한 Map exact head에서 artifact owner, functional owner, OpenAPI SHA-256, contract
+generation 7을 한 transaction처럼 함께 갱신하고 exact byte/ancestry/config negative test를 통과시킨다.
 
-서비스 계약은 Map artifact owner commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의
+서비스 계약은 Map artifact owner commit `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`다. 현재 functional owner는
-`5d9c42dfc7d908ace1129c7ca2682bac54d572d7`이며, sync를 켤 때 이 SHA, functional owner revision,
-contract generation `6`이 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`다. functional owner는
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`이며, sync를 켤 때 이 SHA, functional owner revision,
+contract generation `7`이 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
 ancestor임을 검증한다. functional owner는 기능 계약의 provenance이며 배포 Map 이미지나 `/version`의
 git SHA와 비교하지 않는다.
 
-generation 6은 generation 5의 snapshot lifetime 계약에 trim된 Unicode NFC identity, 512자
+generation 7은 generation 6 계약에 exact command/consumer 역할 분리와 17-route
+`x-required-service-scope` inventory를 추가한다. generation 6은 generation 5의 snapshot lifetime 계약에 trim된 Unicode NFC identity, 512자
 `target_key`, 중복 없는 refresh key 배열과 typed snapshot backpressure 오류 계약을 추가한다.
 generation 5는 generation 4에 snapshot의 timezone-aware `created_at`/`expires_at`을 필수화했다.
 generic snapshot은 첫 페이지 수신 시 최소 1시간의 traversal window가 남아야 하고, 이후 모든 페이지의
