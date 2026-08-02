@@ -2800,7 +2800,51 @@ stale resurrection과 event omission을 검증한다.
 - paired Map OpenAPI와 Merkle golden fixture를 pin하고 DB/client/worker/cache gate를 구현한다.
 - n150 isolated restore clone과 synthetic private POI로 duplicate/omission/epoch/checksum을 증명한다.
 
+## ADR-059: cache target command와 consumer 권한을 generation 7에서 clean-cut 분리한다
+
+- **상태**: accepted
+- **날짜**: 2026-08-02
+- **결정자**: 사용자 + Codex
+- **참조**: ADR-058, `T-VN-41-P`
+
+### 컨텍스트
+
+generation 6까지 Map의 `cache-target:consumer` scope는 event 소비뿐 아니라 target mutation과 refresh
+command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer token과 transport를 이미 나눴지만,
+서버 scope가 이를 강제하지 않으면 credential 오배치가 정상 동작하고 침해 반경도 역할 경계를 넘는다.
+아직 서비스 전 단계이므로 기존 umbrella 계약을 호환 유지할 이유가 없다.
+
+### 결정
+
+- generation 7은 target PUT/GET/DELETE와 refresh create/read를 exact
+  `cache-target:command` scope에만 허용한다.
+- `cache-target:consumer`는 stream read, claim/ack/nack, snapshot과 reconciliation completion만 허용하고
+  command endpoint 권한을 clean-cut 삭제한다.
+- PinVi ordinary runtime은 서로 다른 command/consumer token과 role-bound client를 유지한다. 두 token의
+  상호 교환 성공을 negative live/config gate 실패로 취급한다.
+- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final artifact가
+  확정될 때 artifact owner, functional owner, OpenAPI SHA-256, generation 7을 함께 exact 재핀한다.
+- Map final provenance가 확정되기 전에는 placeholder나 임시 SHA를 runtime 상수에 넣지 않는다.
+
+### 근거
+
+클라이언트 구조뿐 아니라 서버 authorization까지 역할 경계를 강제해야 token 오배치와 탈취의 침해 반경을
+실제로 줄일 수 있다. 호환 shim 없이 세대를 올리면 잘못된 manifest가 조용히 권한을 넓히는 상태를
+방지하고 배포 pair를 단일한 검증 가능한 계약으로 유지한다.
+
+### 결과
+
+- **긍정**: command와 consumer credential의 최소 권한이 HTTP authorization에서 강제된다.
+- **긍정**: generation/source/OpenAPI 불일치가 startup 전에 명확히 실패한다.
+- **부정**: Map과 PinVi와 docker-manager manifest를 같은 cutover 단위로 갱신해야 한다.
+- **부정**: generation 6 배포와 혼합 운영할 수 없다.
+
+### 후속
+
+- paired Map exact scope/OpenAPI 변경을 확정하고 PinVi provenance 상수와 vendored artifact를 재핀한다.
+- config/contract/transport negative test와 n150 token swap live gate를 통과한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-059**
+- 다음 신규 ADR = **ADR-060**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

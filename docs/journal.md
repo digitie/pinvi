@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 generation 7 최소 권한 계약
+
+**작업**: command endpoint를 exact `cache-target:command`로 분리하고
+`cache-target:consumer` umbrella 권한을 clean-cut 삭제하는 generation 7 계획을 문서화했다.
+**변경**: ADR-059, T-VN-41 execplan, Map integration, tasks/resume를 같은 계약으로 정렬했다.
+**결정**: generation 6은 호환 fallback으로 인정하지 않고 command/consumer token swap도 실패해야 한다.
+Map final artifact가 확정되기 전에는 placeholder나 임시 provenance를 코드에 넣지 않는다.
+**다음**: exact OpenAPI/functional owner를 받은 뒤 runtime pin과 negative test를 추가하고 두 독립 적대적
+리뷰를 통과한다.
+
 ## 2026-08-02 (codex) — T-VN-41 snapshot lower-bound/backpressure 소비 계약
 
 Map snapshot high-watermark는 exact snapshot cutover가 아니라 system-scoped safe replay lower-bound다.

@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 generation 7 command scope clean-cut
+
+Map generation 7은 target mutation/refresh command를 exact `cache-target:command` scope로 분리하고,
+`cache-target:consumer`의 legacy command umbrella 권한을 삭제한다. PinVi는 기존 role-bound
+command/consumer transport와 서로 다른 token을 유지하며 generation 6 manifest/source 조합과 token swap을
+fail-close한다. paired Map final functional owner와 service OpenAPI bytes가 아직 확정되지 않았으므로 임시
+SHA나 placeholder는 runtime pin에 넣지 않는다.
+
+**다음 한 작업**: Map final artifact가 확정되면 OpenAPI bytes/provenance/generation 7을 한 번에 재핀하고
+config·contract·transport negative gate와 두 독립 적대적 exact-head 리뷰를 완료한다.
+
 ## 2026-08-02 (codex) — T-VN-41 snapshot replay/backpressure 소비자 게이트
 
 Map snapshot의 `high_watermark_cursor`를 `external_system`-scoped commit-safe replay lower-bound로
