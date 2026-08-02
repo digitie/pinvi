@@ -39,6 +39,12 @@ credential이나 원격 응답 body를 포함하지 않는다. 동일 run ID가 
 - consumer의 local applied cursor와 remote ACK cursor가 같다.
 - pending/leased/dead command가 모두 0이다.
 
-timeout, dead/halt, ACK 미완료, foreign/mismatched durable row, Merkle/cursor 불일치는 nonzero로
-fail-close한다. 실패 ID는 terminal audit row로 남으므로 원인을 수정한 뒤 새 UUID를 사용한다. process
-crash처럼 terminal failure를 기록하지 못한 중단만 같은 ID로 재개한다.
+성공 JSON은 `status=succeeded`, run/target/PUT·DELETE command/event ID, generation, relay order,
+baseline/PUT/final cache generation을 포함한다. 또한 `pending_commands`, `leased_commands`,
+`dead_letter_commands`가 각각 `0`이고, `local_applied_cursor == remote_acked_cursor`,
+`local_count == remote_count`, `local_merkle_root == remote_merkle_root`임을 서로 다른 필드로 증명한다.
+
+bounded timeout, ACK 미완료, generic snapshot 일시 실패, final backlog/cursor/Merkle 미수렴은 nonzero로
+fail-close하되 row를 `running`으로 보존한다. 원인을 해소한 뒤 반드시 같은 run ID로 재개한다. dead/halt,
+foreign/mismatched durable material과 snapshot 자체 checksum 위반은 terminal `failed`이며 수동 개입 없이는
+다른 run ID로 덮어쓰지 않는다.

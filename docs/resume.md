@@ -2,15 +2,17 @@
 
 ## 2026-08-02 (codex) — T-VN-41 durable causal production canary 설계
 
-running ordinary API container에서 실행하는 `pinvi-cache-target-causal-canary`를 설계했다. supplied run
+running ordinary API container에서 실행하는 `pinvi-cache-target-causal-canary`를 구현했다. supplied run
 UUID와 모든 실행이 공유하는 deterministic synthetic head를 분리해 PUT→matching state-applied apply→claim ACK→cache generation 증가→DELETE를
 검증하고, 마지막에 local/Map count·Merkle와 applied/ACK cursor, pending/dead 0을 exact 대조한다. migration
 0048의 typed audit row가 phase와 command/event identity를 보존해 같은 run ID crash 재개를 command row
 추측 없이 수행한다. ordinary command/consumer token만 사용하고 user POI와 restore/recovery credential은
-건드리지 않는다.
+건드리지 않는다. bounded timeout/ACK gap/일시적 final 수렴 실패는 `running`을 보존하며, 성공 JSON은
+local/remote cursor·count·Merkle와 pending/leased/dead-letter 수를 각각 노출한다. 실제 PostgreSQL focused
+schema 3건과 causal 상태기계 4건이 통과했다.
 
-**다음 한 작업**: migration/model/service/console과 unit·Postgres crash/timeout/ACK/Merkle/concurrency gate를
-구현한 뒤 두 독립 적대적 exact-head 리뷰를 받는다.
+**다음 한 작업**: Map generation 7 exact artifact 확정 뒤 pin/OpenAPI fixture와 negative gate를 완성하고 두
+독립 적대적 exact-head 리뷰를 받는다.
 
 ## 2026-08-02 (codex) — T-VN-41 generation 7 command scope clean-cut
 

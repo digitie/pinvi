@@ -7,12 +7,16 @@
 **작업**: docker-manager가 running ordinary API container에서 호출하는 causal canary 계약과 운영 runbook을
 추가했다.
 **변경**: migration 0048의 typed durable run 정본, 고정 target advisory lock, run별 deterministic PUT/DELETE,
-state-applied apply·ACK·cache generation과 최종 count/Merkle/cursor/backlog 검증을 정의했다.
+state-applied apply·ACK·cache generation과 최종 count/Merkle/cursor/backlog 검증을 구현했다. timeout과 일시적
+최종 수렴 실패는 running을 보존해 같은 run ID로 재개하고 material/snapshot checksum 위반만 terminal로
+분류한다. Docker 독립 검증용 JSON은 양쪽 cursor/count/root와 backlog 3종을 각각 노출한다.
 **결정**: run UUID와 모든 실행이 재사용하는 deterministic target UUID를 분리해 tombstone 누적 없이
 user POI를 건드리지 않는다. stable synthetic tombstone과 실행 감사 row는 유지한다. ordinary
 command/consumer token만 사용하며 recovery registry scope는 exact `cache-target:recovery`와
 `cache-target:recovery-replay` 두 개다.
-**다음**: migration/model/service/console과 crash/timeout/ACK/Merkle/concurrency 테스트를 구현한다.
+**검증**: 실제 PostgreSQL에서 schema CHECK 3건과 PUT timeout 재개, ACK gap 재개, corrupt Merkle fail-close,
+concurrent advisory lock 4건이 통과했다.
+**다음**: Map generation 7 exact artifact 확정 뒤 pin/OpenAPI negative gate와 두 독립 적대적 리뷰를 완료한다.
 
 ## 2026-08-02 (codex) — T-VN-41 generation 7 최소 권한 계약
 

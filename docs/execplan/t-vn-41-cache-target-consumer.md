@@ -287,10 +287,13 @@ fail-close한다.
 4. local desired head 전체 count/Merkle와 Map generic snapshot exact count/root, consumer
    `local_applied_cursor == remote_acked_cursor`, 전역 pending/dead command 0을 확인한다.
 
-timeout, dead/halt, ACK 미완료, event/command mismatch, Merkle/cursor 불일치는 terminal failure다. 성공한
-synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout은 canary/command/event ID,
-generation, relay order, cursor, cache generation before/after, count/root만 포함한 secret-free 단일 JSON
-receipt이고 URL, token, raw payload는 포함하지 않는다. 운영 절차는
+bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
+`running`으로 보존하고 nonzero로 끝내 같은 run ID가 정확한 phase부터 재개한다. dead/halt와
+event/command/provenance 불변식 위반, snapshot 자체 checksum 위반만 terminal `failed`로 남긴다. 성공한
+synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout의 secret-free 단일 JSON은
+`status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
+pending/leased/dead-letter command 수를 각각 `0`으로, local/remote cursor·count·Merkle root를 각각 담는다.
+양쪽 값을 하나의 필드로 축약하지 않으며 URL, token, raw payload는 포함하지 않는다. 운영 절차는
 [`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
